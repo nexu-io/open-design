@@ -32,12 +32,13 @@
 //   --no-pet-share      Skip the petshare catalog.
 //   --no-hatchery       Skip the hatchery catalog.
 
-import { mkdir, stat, writeFile } from 'node:fs/promises';
+import { mkdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 
 const PETSHARE_BASE = 'https://ihzwckyzfcuktrljwpha.supabase.co/functions/v1/petshare';
 const HATCHERY_LIST = 'https://j20.nz/hatchery/api/pets.json';
+const FETCH_TIMEOUT_MS = 30_000;
 
 interface Args {
   out: string;
@@ -158,6 +159,10 @@ async function pathExists(p: string): Promise<boolean> {
   }
 }
 
+async function fetchWithTimeout(url: string): Promise<Response> {
+  return fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+}
+
 interface PetSharePet {
   id: string;
   displayName: string;
@@ -182,7 +187,7 @@ async function listPetSharePets(limit: number | null): Promise<PetTask[]> {
   const pageSize = 24;
   for (;;) {
     const url = `${PETSHARE_BASE}/api/pets?page=${page}&pageSize=${pageSize}`;
-    const resp = await fetch(url);
+    const resp = await fetchWithTimeout(url);
     if (!resp.ok) {
       throw new Error(`petshare list page ${page} failed: ${resp.status} ${resp.statusText}`);
     }
@@ -239,7 +244,7 @@ interface HatcheryResponse {
 }
 
 async function listHatcheryPets(limit: number | null): Promise<PetTask[]> {
-  const resp = await fetch(HATCHERY_LIST);
+  const resp = await fetchWithTimeout(HATCHERY_LIST);
   if (!resp.ok) {
     throw new Error(`hatchery list failed: ${resp.status} ${resp.statusText}`);
   }
@@ -274,7 +279,7 @@ async function listHatcheryPets(limit: number | null): Promise<PetTask[]> {
 }
 
 async function downloadBinary(url: string): Promise<Buffer> {
-  const resp = await fetch(url);
+  const resp = await fetchWithTimeout(url);
   if (!resp.ok) {
     throw new Error(`download ${url} failed: ${resp.status} ${resp.statusText}`);
   }
@@ -309,8 +314,20 @@ async function writePet(
   if (!isWebp && !isPng && !isGif) {
     throw new Error(`${task.folder}: spritesheet is not webp/png/gif`);
   }
-  await writeFile(sheetPath, bytes);
-  await writeFile(manifestPath, JSON.stringify(task.manifest, null, 2) + '\n', 'utf8');
+  const suffix = `${process.pid}.${Math.random().toString(16).slice(2)}.tmp`;
+  const sheetTempPath = `${sheetPath}.${suffix}`;
+  const manifestTempPath = `${manifestPath}.${suffix}`;
+  try {
+    await writeFile(sheetTempPath, bytes);
+    await writeFile(manifestTempPath, JSON.stringify(task.manifest, null, 2) + '\n', 'utf8');
+    await rename(sheetTempPath, sheetPath);
+    await rename(manifestTempPath, manifestPath);
+  } finally {
+    await Promise.all([
+      rm(sheetTempPath, { force: true }),
+      rm(manifestTempPath, { force: true }),
+    ]);
+  }
   return 'wrote';
 }
 
