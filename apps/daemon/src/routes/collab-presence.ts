@@ -65,8 +65,14 @@ export interface RegisterCollabPresenceRoutesDeps {
 
 export interface CollabPresenceRoutesControl {
   /**
-   * Drop cached list results for one project after a hub presence-changed
-   * signal. `workspaceId` keeps invalidation scoped when it is known.
+   * Preserve the last authorized roster but make it due for background
+   * refresh. Presence-change events use this path so their own relay echo
+   * cannot turn the next UI read into a cold, blocking Vela request.
+   */
+  markPresenceStale(projectId: string, workspaceId?: string): void;
+  /**
+   * Drop cached list results for one project after a share-authority change.
+   * `workspaceId` keeps invalidation scoped when it is known.
    */
   invalidatePresence(projectId: string, workspaceId?: string): void;
 }
@@ -198,6 +204,18 @@ function createPresenceListCache(options: {
         settledAt: options.now(),
         inflight: null,
       });
+    },
+
+    markStale(projectId: string, workspaceId?: string): void {
+      const exactWorkspaceId = workspaceId?.trim();
+      for (const entry of entries.values()) {
+        if (entry.projectId !== projectId) continue;
+        if (exactWorkspaceId && entry.workspaceId !== exactWorkspaceId) continue;
+        // Keep the last authorized roster for the immediate caller. The next
+        // read starts one background refresh and returns without waiting on
+        // the Vela process.
+        entry.settledAt = Number.NEGATIVE_INFINITY;
+      }
     },
 
     invalidate(projectId: string, workspaceId?: string): void {
@@ -548,6 +566,8 @@ export function registerCollabPresenceRoutes(
   });
 
   return {
+    markPresenceStale: (projectId, workspaceId) =>
+      presenceLists.markStale(projectId, workspaceId),
     invalidatePresence: (projectId, workspaceId) =>
       presenceLists.invalidate(projectId, workspaceId),
   };

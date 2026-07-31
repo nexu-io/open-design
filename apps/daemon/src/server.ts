@@ -3163,6 +3163,10 @@ export async function startServer({
     _projectId: string,
     _workspaceId?: string,
   ): void => {};
+  let markPresenceReadCacheStale = (
+    _projectId: string,
+    _workspaceId?: string,
+  ): void => {};
   const collab = createCollabRuntime({
     workspaceContext,
     canPublishProjectContent: (projectId) =>
@@ -3186,7 +3190,7 @@ export async function startServer({
     // `presence-changed` onto the project's existing events SSE so the open
     // project view re-fetches presence instead of waiting for its poll tick.
     onPresenceChange: ({ projectId }) => {
-      invalidatePresenceReadCache(projectId);
+      markPresenceReadCacheStale(projectId);
       emitProjectEvent(projectId, { type: 'presence-changed', projectId, at: Date.now() });
     },
   });
@@ -3758,6 +3762,7 @@ export async function startServer({
     },
   });
   invalidatePresenceReadCache = presenceRoutes.invalidatePresence;
+  markPresenceReadCacheStale = presenceRoutes.markPresenceStale;
   // Author-side publish TRIGGER (C spec §D1): watch the projects THIS daemon's
   // member owns + has shared, and coalesce every file edit into a debounced
   // publish. The read-only gate (team-shared AND owner === me) means a member's
@@ -4664,7 +4669,7 @@ export async function startServer({
         case 'presence-changed': {
           if (event.projectId) {
             const projectId = event.projectId;
-            invalidatePresenceReadCache(projectId, eventWorkspaceId);
+            markPresenceReadCacheStale(projectId, eventWorkspaceId);
             void resolveBoundProjectWorkspaceContext(projectId)
               .then((context) => {
                 if (context?.workspaceId !== eventWorkspaceId) return;

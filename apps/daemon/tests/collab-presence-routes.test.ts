@@ -406,6 +406,86 @@ describe('collab presence routes', () => {
     expect(listPresence).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps the last authorized roster non-blocking across presence-change events while refreshing once in the background', async () => {
+    const context = teamContext();
+    let resolveRefresh:
+      | ((present: Array<{ memberId: string }>) => void)
+      | undefined;
+    const refresh = new Promise<Array<{ memberId: string }>>((resolve) => {
+      resolveRefresh = resolve;
+    });
+    const listPresence = vi
+      .fn()
+      .mockResolvedValueOnce([{ memberId: 'before-event' }])
+      .mockReturnValueOnce(refresh);
+    const api = await startPresenceServer(
+      {
+        heartbeatPresence: vi.fn(async () => []),
+        listPresence,
+        leavePresence: vi.fn(async () => []),
+      },
+      {
+        verifyWorkspaceReadRequest: async () => ({ ok: true, context }),
+        cloudAuthorizesProjectPresence: () => true,
+      },
+    );
+
+    expect((await api.json('/api/projects/p1/presence')).body.present).toEqual([
+      { memberId: 'before-event' },
+    ]);
+    api.routes.markPresenceStale('p1', context.workspaceId);
+
+    const firstAfterEvent = await api.json('/api/projects/p1/presence');
+    const concurrentAfterEvent = await api.json('/api/projects/p1/presence');
+    expect(firstAfterEvent.body.present).toEqual([
+      { memberId: 'before-event' },
+    ]);
+    expect(concurrentAfterEvent.body.present).toEqual([
+      { memberId: 'before-event' },
+    ]);
+    expect(listPresence).toHaveBeenCalledTimes(2);
+
+    resolveRefresh!([{ memberId: 'after-event' }]);
+    await refresh;
+    await new Promise((resolve) => setImmediate(resolve));
+    expect((await api.json('/api/projects/p1/presence')).body.present).toEqual([
+      { memberId: 'after-event' },
+    ]);
+    expect(listPresence).toHaveBeenCalledTimes(2);
+  });
+
+  it('still hard-invalidates a soft-stale roster on share authority changes', async () => {
+    const context = teamContext();
+    let shared = true;
+    const isProjectShared = vi.fn(async () => shared);
+    const listPresence = vi.fn(async () => [{ memberId: 'cached' }]);
+    const api = await startPresenceServer(
+      {
+        heartbeatPresence: vi.fn(async () => []),
+        listPresence,
+        leavePresence: vi.fn(async () => []),
+      },
+      {
+        verifyWorkspaceReadRequest: async () => ({ ok: true, context }),
+        isProjectShared,
+        cloudAuthorizesProjectPresence: () => false,
+      },
+    );
+
+    expect((await api.json('/api/projects/p1/presence')).body.present).toEqual([
+      { memberId: 'cached' },
+    ]);
+    api.routes.markPresenceStale('p1', context.workspaceId);
+    shared = false;
+    api.routes.invalidatePresence('p1', context.workspaceId);
+
+    expect((await api.json('/api/projects/p1/presence')).body.present).toEqual(
+      [],
+    );
+    expect(isProjectShared).toHaveBeenCalledTimes(2);
+    expect(listPresence).toHaveBeenCalledTimes(1);
+  });
+
   it('rechecks the shared-project fallback on TTL refresh without an invalidation event', async () => {
     const context = teamContext();
     let now = 1_000;
