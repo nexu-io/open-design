@@ -75,7 +75,7 @@ export async function testSavedByokProfile(
 ): Promise<ConnectionTestResponse> {
   const start = Date.now();
   try {
-    const response = await fetch(
+    const response = await apiFetch(
       `/api/byok/profiles/${encodeURIComponent(profileId)}/test`,
       { method: 'POST', signal },
     );

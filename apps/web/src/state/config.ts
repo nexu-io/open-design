@@ -841,7 +841,7 @@ export async function fetchByokCredentialProfilesFromDaemon(): Promise<
   ByokCredentialProfilesResponse | null
 > {
   try {
-    const response = await fetch('/api/byok/profiles');
+    const response = await apiFetch('/api/byok/profiles');
     if (!response.ok) return null;
     return await response.json() as ByokCredentialProfilesResponse;
   } catch {
@@ -852,7 +852,7 @@ export async function fetchByokCredentialProfilesFromDaemon(): Promise<
 export async function persistByokCredentialProfileToDaemon(
   input: UpsertByokCredentialProfileRequest,
 ): Promise<ByokCredentialProfile> {
-  const response = await fetch('/api/byok/profiles', {
+  const response = await apiFetch('/api/byok/profiles', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(input),
