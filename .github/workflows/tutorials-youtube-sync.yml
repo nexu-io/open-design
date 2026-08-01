@@ -39,12 +39,23 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6.0.2
+        # v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Setup pnpm
+        # v6.0.8
+        uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093
+        with:
+          version: 10.33.2
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        # v4.4.0
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '24'
+
+      - name: Install workspace dependencies
+        run: pnpm install --frozen-lockfile --filter @open-design/landing-page...
 
       - name: Discover candidates and post Feishu digest
         working-directory: apps/landing-page
@@ -59,7 +70,7 @@ jobs:
           DAYS_OVERRIDE: ${{ github.event.inputs.days }}
         run: |
           if [ -n "$DAYS_OVERRIDE" ]; then
-            npx --yes tsx@4.22.3 scripts/youtube-tutorials/notify-candidates.ts --days "$DAYS_OVERRIDE"
+            pnpm exec tsx scripts/youtube-tutorials/notify-candidates.ts --days "$DAYS_OVERRIDE"
           else
-            npx --yes tsx@4.22.3 scripts/youtube-tutorials/notify-candidates.ts
+            pnpm exec tsx scripts/youtube-tutorials/notify-candidates.ts
           fi

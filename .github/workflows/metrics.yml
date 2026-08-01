@@ -16,7 +16,8 @@ jobs:
     steps:
       - name: Generate Open Design bot token
         id: open-design-bot-token
-        uses: actions/create-github-app-token@v2
+        # v2.0.0
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349
         with:
           app-id: ${{ secrets.BOT_APP_ID }}
           private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
@@ -28,7 +29,8 @@ jobs:
           permission-pull-requests: read
 
       - name: Generate issue and PR activity
-        uses: lowlighter/metrics@latest
+        # v3.34
+        uses: lowlighter/metrics@65836723097537a54cd8eb90f61839426b4266b6
         with:
           # Render into the action workspace only. The upload step publishes the
           # SVG to repository-assets R2 so generated metrics never write back to
