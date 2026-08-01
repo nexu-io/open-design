@@ -427,6 +427,9 @@ importers:
       '@open-design/contracts':
         specifier: workspace:*
         version: link:../packages/contracts
+      '@open-design/platform':
+        specifier: workspace:*
+        version: link:../packages/platform
       '@open-design/release':
         specifier: workspace:*
         version: link:../packages/release

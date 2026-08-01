@@ -1,17 +1,51 @@
 import { execFile } from 'node:child_process';
-import { extname } from 'node:path';
 import { promisify } from 'node:util';
+
+import { createCommandInvocation, createPackageManagerInvocation } from '@open-design/platform';
+import type { CommandInvocation } from '@open-design/platform';
 
 import type { ToolsDevSuiteSpec } from './types.ts';
 
 const execFileAsync = promisify(execFile);
-const pnpmCommand = process.env.OD_E2E_PNPM_COMMAND ?? 'pnpm';
-const pnpmExecPath = process.env.npm_execpath;
-const nodeLoadablePackageManagerExtensions = new Set(['.js', '.cjs', '.mjs']);
 
 export type RunToolsDevJsonOptions = {
   timeoutMs?: number;
 };
+
+/**
+ * Build the invocation that runs `pnpm tools-dev <args>` for a suite.
+ *
+ * Windows resolves `pnpm` to a `.cmd` shim, which cannot be spawned directly.
+ * The tempting fix is `shell: true`, but `execFile` then concatenates argv into
+ * one command line without quoting anything, so a workspace checked out to a
+ * path containing a space (`C:\Dev\open design\...`) is re-split and reaches
+ * tools-dev as two arguments — failing with `unsupported tools-dev app:
+ * design\.tmp\...` and taking the whole e2e suite down.
+ *
+ * Quoting that by hand here is a trap: cmd.exe wants doubled quotes rather than
+ * `\"`, it needs `windowsVerbatimArguments` so Node does not re-escape the line,
+ * and it expands `%NAME%` *inside* double quotes — so a path like
+ * `C:\work\%USERNAME%\open design` would have an environment value substituted
+ * in before tools-dev ever saw it. `@open-design/platform` already owns all
+ * three rules, and is what every `runPnpm` helper in `tools/pack` goes through.
+ * Use it here too instead of keeping a second, weaker copy.
+ *
+ * `OD_E2E_PNPM_COMMAND` overrides the package-manager discovery. On Windows it
+ * must name something spawnable — a `.cmd`/`.bat` shim (wrapped for you) or an
+ * absolute path — because no shell is involved any more.
+ *
+ * Exported so the composition can be pinned without spawning a process.
+ */
+export function toolsDevInvocation(
+  args: string[],
+  env: NodeJS.ProcessEnv = process.env,
+): CommandInvocation {
+  const commandArgs = ['tools-dev', ...args];
+  const override = env.OD_E2E_PNPM_COMMAND;
+  return override == null
+    ? createPackageManagerInvocation(commandArgs, env)
+    : createCommandInvocation({ args: commandArgs, command: override, env });
+}
 
 export async function runToolsDevJson<T>(
   workspaceRoot: string,
@@ -20,16 +54,8 @@ export async function runToolsDevJson<T>(
   extraEnv: Record<string, string | undefined> = {},
   options: RunToolsDevJsonOptions = {},
 ): Promise<T> {
-  const useNpmExecPathWithNode = process.env.OD_E2E_PNPM_COMMAND == null
-    && pnpmExecPath != null
-    && nodeLoadablePackageManagerExtensions.has(extname(pnpmExecPath).toLowerCase());
-  const command = useNpmExecPathWithNode
-    ? process.execPath
-    : (process.env.OD_E2E_PNPM_COMMAND == null && pnpmExecPath ? pnpmExecPath : pnpmCommand);
-  const commandArgs = useNpmExecPathWithNode
-    ? [pnpmExecPath, 'tools-dev', ...args]
-    : ['tools-dev', ...args];
-  const { stdout } = await execFileAsync(command, commandArgs, {
+  const invocation = toolsDevInvocation(args);
+  const { stdout } = await execFileAsync(invocation.command, invocation.args, {
     cwd: workspaceRoot,
     env: {
       ...process.env,
@@ -39,8 +65,8 @@ export async function runToolsDevJson<T>(
       OD_MEDIA_CONFIG_DIR: suite.dataDir,
     },
     maxBuffer: 20 * 1024 * 1024,
-    shell: process.platform === 'win32' && command !== process.execPath,
     timeout: options.timeoutMs,
+    windowsVerbatimArguments: invocation.windowsVerbatimArguments,
   });
   return parseJsonOutput<T>(stdout);
 }
