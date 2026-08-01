@@ -76,6 +76,7 @@ export type ToolTokenValidationResult =
 interface StoredToolTokenGrant extends ToolTokenGrant {
   tokenHash: string;
   expiresAtMs: number;
+  ttlMs: number;
   timer: NodeJS.Timeout;
 }
 
@@ -88,7 +89,13 @@ function createOpaqueToolToken(): string {
 }
 
 function asPublicGrant(stored: StoredToolTokenGrant): ToolTokenGrant {
-  const { tokenHash: _tokenHash, expiresAtMs: _expiresAtMs, timer: _timer, ...grant } = stored;
+  const {
+    tokenHash: _tokenHash,
+    expiresAtMs: _expiresAtMs,
+    ttlMs: _ttlMs,
+    timer: _timer,
+    ...grant
+  } = stored;
   return grant;
 }
 
@@ -150,6 +157,7 @@ export class ToolTokenRegistry {
       issuedAt: new Date(nowMs).toISOString(),
       expiresAt: new Date(expiresAtMs).toISOString(),
       expiresAtMs,
+      ttlMs,
       timer,
       ...(options.pluginSnapshotId ? { pluginSnapshotId: options.pluginSnapshotId } : {}),
       ...(options.pluginTrust ? { pluginTrust: options.pluginTrust } : {}),
@@ -193,6 +201,31 @@ export class ToolTokenRegistry {
     }
 
     return { ok: true, grant: asPublicGrant(stored) };
+  }
+
+  refreshRun(runId: string, nowMs = Date.now()): number {
+    const runTokens = this.#tokenHashesByRunId.get(runId);
+    if (!runTokens) return 0;
+
+    let refreshed = 0;
+    for (const hash of [...runTokens]) {
+      const stored = this.#byTokenHash.get(hash);
+      if (!stored) continue;
+      if (nowMs >= stored.expiresAtMs) {
+        this.revokeToken(stored.token, 'ttl_expired');
+        continue;
+      }
+
+      clearTimeout(stored.timer);
+      stored.expiresAtMs = nowMs + stored.ttlMs;
+      stored.expiresAt = new Date(stored.expiresAtMs).toISOString();
+      stored.timer = setTimeout(() => {
+        this.revokeToken(stored.token, 'ttl_expired');
+      }, stored.ttlMs);
+      stored.timer.unref?.();
+      refreshed += 1;
+    }
+    return refreshed;
   }
 
   revokeToken(token: string | null | undefined, _reason: ToolTokenRevocationReason = 'manual'): boolean {

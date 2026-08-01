@@ -6606,6 +6606,7 @@ export async function startServer({
       // E-lite: stamp the last-activity clock BEFORE the disabled-watchdog bail
       // so `last_progress_age_ms` is recorded even when the watchdog is off.
       run.lastAgentActivityAt = Date.now();
+      toolTokenRegistry.refreshRun(toolTokenGrant?.runId ?? runId);
       const delay = activeInactivityTimeoutMs();
       if (delay <= 0) return;
       clearInactivityWatchdog();
