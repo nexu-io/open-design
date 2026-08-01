@@ -163,7 +163,16 @@ Rationale:
 - **`history.jsonl` not SQLite** → append-only, git-friendly, greppable. [Open CoDesign][ocod] uses SQLite; we deliberately don't.
 - **Sessions separate from artifacts** → sessions are ephemeral UI state; artifacts are durable.
 
-### 3.7 Export pipeline
+### 3.7 Daemon SQLite schema
+
+The daemon stores metadata in `app.sqlite`. Schema changes are applied through the ordered
+`schema_migrations` table and SQLite `user_version`; each pending migration runs in one
+transaction. Existing databases are copied to a collision-safe, same-directory
+`.pre-migration-*.bak` file before the first pending migration. A failed migration leaves the
+last valid database and its backup available for recovery, while an unsupported future schema
+version fails closed before the daemon writes.
+
+### 3.8 Export pipeline
 
 | Format | How |
 |---|---|

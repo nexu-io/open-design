@@ -22,6 +22,16 @@ type ChatSessionMode = 'design' | 'chat';
 let dbInstance: SqliteDb | null = null;
 let dbFile: string | null = null;
 
+const CURRENT_SCHEMA_VERSION = 1;
+const MIGRATION_TABLE = 'schema_migrations';
+
+type DbLogger = Pick<Console, 'info' | 'warn'>;
+type Migration = {
+  version: number;
+  name: string;
+  up: (db: SqliteDb) => void;
+};
+
 function row(value: unknown): DbRow | null {
   return value && typeof value === 'object' ? value as DbRow : null;
 }
@@ -30,16 +40,26 @@ function rows(value: unknown[]): DbRow[] {
   return value.map((item) => row(item) ?? {});
 }
 
-export function openDatabase(projectRoot: string, { dataDir }: { dataDir?: string } = {}): SqliteDb {
+export function openDatabase(
+  projectRoot: string,
+  { dataDir, logger = console }: { dataDir?: string; logger?: DbLogger } = {},
+): SqliteDb {
   const dir = dataDir ? path.resolve(dataDir) : path.join(projectRoot, '.od');
   const file = path.join(dir, 'app.sqlite');
   if (dbInstance && dbFile === file) return dbInstance;
   if (dbInstance) closeDatabase();
   fs.mkdirSync(dir, { recursive: true });
+  const existed = fs.existsSync(file);
   const db = new Database(file);
-  db.pragma('journal_mode = WAL');
-  db.pragma('foreign_keys = ON');
-  migrate(db);
+  try {
+    assertSupportedSchemaVersion(db);
+    db.pragma('journal_mode = WAL');
+    db.pragma('foreign_keys = ON');
+    migrate(db, file, existed, logger);
+  } catch (error) {
+    db.close();
+    throw error;
+  }
   dbInstance = db;
   dbFile = file;
   return db;
@@ -52,7 +72,107 @@ export function closeDatabase() {
   dbFile = null;
 }
 
-function migrate(db: SqliteDb): void {
+const MIGRATIONS: Migration[] = [
+  {
+    version: 1,
+    name: 'initial-schema-and-domain-tables',
+    up: migrateLegacySchema,
+  },
+];
+
+function assertSupportedSchemaVersion(db: SqliteDb): void {
+  const version = Number(db.pragma('user_version', { simple: true }));
+  if (!Number.isInteger(version) || version < 0) {
+    throw new Error(`Open Design database has invalid schema version ${String(version)}; refusing to write.`);
+  }
+  if (version > CURRENT_SCHEMA_VERSION) {
+    throw new Error(
+      `Open Design database schema version ${version} is newer than supported version ${CURRENT_SCHEMA_VERSION}; ` +
+      'upgrade the daemon before opening this database.',
+    );
+  }
+}
+
+function migrationTableExists(db: SqliteDb): boolean {
+  return Boolean(db.prepare(
+    `SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?`,
+  ).get(MIGRATION_TABLE));
+}
+
+function backupBeforeMigration(db: SqliteDb, file: string, targetVersion: number): string {
+  db.pragma('wal_checkpoint(TRUNCATE)');
+  const stamp = `${Date.now()}-${randomUUID()}`;
+  const backup = `${file}.pre-migration-v${targetVersion}-${stamp}.bak`;
+  const temp = `${backup}.tmp`;
+  try {
+    fs.copyFileSync(file, temp, fs.constants.COPYFILE_EXCL);
+    fs.renameSync(temp, backup);
+    return backup;
+  } catch (error) {
+    try { fs.unlinkSync(temp); } catch (cleanupError) {
+      if ((cleanupError as NodeJS.ErrnoException).code !== 'ENOENT') throw cleanupError;
+    }
+    throw new Error(`Failed to create migration backup for ${file}: ${(error as Error).message}`, { cause: error });
+  }
+}
+
+function migrate(db: SqliteDb, file: string, existed: boolean, logger: DbLogger): void {
+  const version = Number(db.pragma('user_version', { simple: true }));
+  const tableExists = migrationTableExists(db);
+  const applied = tableExists
+    ? db.prepare(`SELECT version FROM ${MIGRATION_TABLE} ORDER BY version`).all() as Array<{ version: number }>
+    : [];
+  const appliedVersions = applied.map((entry) => Number(entry.version));
+  const highestApplied = appliedVersions.at(-1) ?? 0;
+  if (highestApplied !== version) {
+    throw new Error(
+      `Open Design database migration metadata disagrees with PRAGMA user_version (${highestApplied} vs ${version}); ` +
+      'restore the last valid backup before retrying.',
+    );
+  }
+  if (appliedVersions.some((entry, index) => entry !== index + 1)) {
+    throw new Error('Open Design database migration metadata is not a contiguous ordered sequence; refusing to write.');
+  }
+  for (const entry of applied) {
+    const migration = MIGRATIONS.find((candidate) => candidate.version === Number(entry.version));
+    if (!migration) {
+      throw new Error(`Open Design database records unsupported migration version ${String(entry.version)}; refusing to write.`);
+    }
+    const recorded = db.prepare(`SELECT name FROM ${MIGRATION_TABLE} WHERE version = ?`).get(entry.version) as { name?: string } | undefined;
+    if (recorded?.name !== migration.name) {
+      throw new Error(`Open Design database migration ${String(entry.version)} has unexpected metadata; refusing to write.`);
+    }
+  }
+
+  const pending = MIGRATIONS.filter((migration) => migration.version > version);
+  if (pending.length === 0) return;
+  if (existed) {
+    const firstPending = pending.at(0);
+    if (!firstPending) throw new Error('Open Design found pending migrations but no first migration; refusing to write.');
+    const backup = backupBeforeMigration(db, file, firstPending.version);
+    logger.info(`[db] backed up ${file} to ${backup} before schema migration`);
+  }
+
+  const apply = db.transaction(() => {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS ${MIGRATION_TABLE} (
+        version INTEGER PRIMARY KEY,
+        name TEXT NOT NULL,
+        applied_at INTEGER NOT NULL
+      )
+    `);
+    for (const migration of pending) {
+      logger.info(`[db] applying migration ${migration.version}: ${migration.name}`);
+      migration.up(db);
+      db.prepare(`INSERT INTO ${MIGRATION_TABLE} (version, name, applied_at) VALUES (?, ?, ?)`)
+        .run(migration.version, migration.name, Date.now());
+      db.pragma(`user_version = ${migration.version}`);
+    }
+  });
+  apply();
+}
+
+function migrateLegacySchema(db: SqliteDb): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS projects (
       id TEXT PRIMARY KEY,
