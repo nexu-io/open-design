@@ -81,9 +81,15 @@ Success looks like:
 ## Step 6: Open Open Design in Your Browser
 
 Open:
-- `http://localhost:7456/`
+- `http://127.0.0.1:7456/`
 
 You should see the Open Design interface.
+
+Use `127.0.0.1`, not `localhost`. The daemon reserves whichever of the two
+names it is *not* bound to as the powered-preview origin, so browsing via that
+other name makes the daemon treat the tab as a sandboxed preview and reject its
+`/api` calls with `403`. Both Compose files bind a `127.0.0.1`-equivalent host,
+which leaves `localhost` as the reserved name.
 
 ![Open Design home (desktop)](../screenshots/deployment/docker/01-open-design-home.png)
 ![Open Design home (mobile)](../screenshots/deployment/docker/03-open-design-mobile.png)
@@ -96,3 +102,4 @@ You should see the Open Design interface.
 - `pull access denied` or `authentication required` for `ghcr.io/nexu-io/od`: the GHCR package must be public for anonymous Docker, Compose, and Dokploy pulls. An organization maintainer must open GitHub -> Packages -> `od` -> Package settings and change visibility to Public.
 - reverse proxy + `OD_API_TOKEN`: either inject `Authorization: Bearer <OD_API_TOKEN>` at the proxy, or set `OPEN_DESIGN_DISABLE_API_AUTH=1` only when that proxy already authenticates every request and the daemon is not directly exposed.
 - `Authorization: Bearer <OD_API_TOKEN> required` on macOS: Docker Desktop bridge networking makes the daemon see requests as non-loopback. See [Docker Desktop on macOS](../../deploy/README.md#docker-desktop-on-macos) for the host networking workaround.
+- **Empty project list in the browser while `curl` returns real projects**: you are browsing `http://localhost:7456` instead of `http://127.0.0.1:7456`. The daemon reserves the loopback name it is not bound to for powered previews, so `/api/projects` answers `403 {"error":"Powered preview origin cannot access this API route"}`. `curl` and MCP clients send no `sec-fetch-*` headers and are unaffected, which is why the failure looks like missing data rather than a blocked request. Confirm in DevTools -> Network, then reopen on `127.0.0.1`.

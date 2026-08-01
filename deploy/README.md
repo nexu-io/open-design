@@ -109,6 +109,13 @@ OPEN_DESIGN_IMAGE=open-design-local
 docker compose -f docker-compose.yml -f docker-compose.linux.yml up -d --no-build
 ```
 
+Then open **`http://127.0.0.1:7456`** in the browser — not `http://localhost:7456`.
+The Linux override binds the daemon to `127.0.0.1`, which leaves `localhost` as
+the reserved powered-preview origin: a tab on that name has its `/api` requests
+answered with `403 Powered preview origin cannot access this API route`, and the
+project list comes up empty even though the projects exist. `curl` and MCP
+clients are unaffected, since the guard keys off browser `sec-fetch-*` headers.
+
 Common install paths:
 
 | CLI | Default path |
