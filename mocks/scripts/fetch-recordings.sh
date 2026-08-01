@@ -27,6 +27,9 @@ FILTER_SKILL=""
 CONCURRENCY=8
 FORCE=0
 CACHE_DIR="${OD_MOCKS_CACHE_DIR:-$MOCKS_DIR/recordings}"
+CURL_CONNECT_TIMEOUT="${OD_MOCKS_CURL_CONNECT_TIMEOUT:-10}"
+CURL_MAX_TIME="${OD_MOCKS_CURL_MAX_TIME:-120}"
+CURL_RETRY_MAX_TIME="${OD_MOCKS_CURL_RETRY_MAX_TIME:-180}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -48,6 +51,11 @@ if [ ! -f "$MANIFEST" ]; then
 fi
 
 mkdir -p "$CACHE_DIR"
+
+# A worker normally removes its own temporary file on exit. Files older than
+# the bounded transfer window can only be leftovers from a killed invocation;
+# remove those before starting new workers without racing a live download.
+find "$CACHE_DIR" -maxdepth 1 -type f -name '.*.jsonl.tmp.*' -mmin +60 -exec rm -f -- {} + 2>/dev/null || true
 
 # Use node to walk the manifest — sturdier than shell JSON parsing.
 PUBLIC_URL=$(node -e '
@@ -93,51 +101,79 @@ echo
 fetch_one() {
   local id="$1" sha="$2" bytes="$3"
   local dest="$CACHE_DIR/$id.jsonl"
+  local tmp=""
+  trap 'if [ -n "${tmp:-}" ]; then rm -f -- "$tmp"; fi' HUP INT TERM
   if [ "$FORCE" -ne 1 ] && [ -f "$dest" ]; then
     local existing
+    local existing_bytes
     existing=$(shasum -a 256 "$dest" 2>/dev/null | awk '{print $1}')
-    if [ "$existing" = "$sha" ]; then
+    existing_bytes=$(wc -c < "$dest" | tr -d '[:space:]')
+    if [ "$existing" = "$sha" ] && [ "$existing_bytes" = "$bytes" ]; then
       echo "• $id"
       return 0
     fi
   fi
   local url="${PUBLIC_URL}${id}.jsonl"
-  if ! curl -sf -o "$dest.tmp" "$url"; then
+  tmp=$(mktemp "$CACHE_DIR/.$id.jsonl.tmp.XXXXXX") || {
+    echo "✗ $id (could not create same-directory temporary file)"
+    return 1
+  }
+  if ! curl --fail --show-error --silent --location \
+      --connect-timeout "$CURL_CONNECT_TIMEOUT" \
+      --max-time "$CURL_MAX_TIME" \
+      --retry 3 --retry-delay 1 --retry-max-time "$CURL_RETRY_MAX_TIME" \
+      --output "$tmp" "$url"; then
     echo "✗ $id (download failed)"
-    rm -f "$dest.tmp"
+    rm -f -- "$tmp"
+    tmp=""
+    return 1
+  fi
+  local got_bytes
+  got_bytes=$(wc -c < "$tmp" | tr -d '[:space:]')
+  if [ "$got_bytes" != "$bytes" ]; then
+    echo "✗ $id (byte count mismatch: got $got_bytes expected $bytes)"
+    rm -f -- "$tmp"
+    tmp=""
     return 1
   fi
   local got
-  got=$(shasum -a 256 "$dest.tmp" | awk '{print $1}')
+  got=$(shasum -a 256 "$tmp" | awk '{print $1}')
   if [ "$got" != "$sha" ]; then
     echo "✗ $id (sha256 mismatch: got $got expected $sha)"
-    rm -f "$dest.tmp"
+    rm -f -- "$tmp"
+    tmp=""
     return 1
   fi
-  mv "$dest.tmp" "$dest"
+  mv -f -- "$tmp" "$dest"
+  tmp=""
   echo "✓ $id"
 }
 
-export PUBLIC_URL CACHE_DIR FORCE
+export PUBLIC_URL CACHE_DIR FORCE CURL_CONNECT_TIMEOUT CURL_MAX_TIME CURL_RETRY_MAX_TIME
 export -f fetch_one
 
+PROGRESS_LOG=$(mktemp "${TMPDIR:-/tmp}/od-mocks-fetch-progress.XXXXXX")
+set +e
 printf '%s\n' "$ENTRIES_TSV" \
   | xargs -P "$CONCURRENCY" -L 1 bash -c 'fetch_one "$1" "$2" "$3"' _ \
-  > /tmp/od-mocks-fetch-progress.txt 2>&1
+  > "$PROGRESS_LOG" 2>&1
+fetch_status=$?
+set -e
 
-new=$(grep -c "^✓"  /tmp/od-mocks-fetch-progress.txt || true)
-skip=$(grep -c "^•" /tmp/od-mocks-fetch-progress.txt || true)
-fail=$(grep -c "^✗" /tmp/od-mocks-fetch-progress.txt || true)
+new=$(grep -c "^✓"  "$PROGRESS_LOG" || true)
+skip=$(grep -c "^•" "$PROGRESS_LOG" || true)
+fail=$(grep -c "^✗" "$PROGRESS_LOG" || true)
 
 echo "  ✓ fetched: $new"
 echo "  • cached:  $skip"
-if [ "$fail" -gt 0 ]; then
+if [ "$fail" -gt 0 ] || [ "$fetch_status" -ne 0 ]; then
   echo "  ✗ failed:  $fail"
   echo
-  grep "^✗" /tmp/od-mocks-fetch-progress.txt | head -5
-  echo "  …(full log /tmp/od-mocks-fetch-progress.txt)"
+  grep "^✗" "$PROGRESS_LOG" | head -5
+  echo "  …(full log $PROGRESS_LOG)"
   exit 1
 fi
+rm -f -- "$PROGRESS_LOG"
 
 # Symlink (or copy) into mocks/recordings/ when cache lives elsewhere so
 # the mock-agent recording-picker keeps working without env overrides.

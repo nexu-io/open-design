@@ -82,6 +82,13 @@ bash mocks/scripts/fetch-recordings.sh --skill agent-browser
 OD_MOCKS_CACHE_DIR=~/.cache/od-mocks bash mocks/scripts/fetch-recordings.sh
 ```
 
+The fetcher downloads each recording into a unique same-directory temporary
+file, enforces connection and transfer time bounds, validates both manifest
+byte count and sha256, then atomically promotes it. Failed workers clean up
+their own temporary files, so an interrupted or concurrent fetch cannot leave
+partial recordings behind. Run the deterministic local-server fixtures with
+`bash mocks/scripts/fetch-recordings.test.sh`.
+
 Manifest at `mocks/manifest.json` is the committed source of truth —
 it lists every recording's `trace_id`, `sha256`, `bytes`, `agent`,
 `outcome`, `skills`, `multi_turn`, plus histograms over the corpus.
@@ -444,6 +451,7 @@ mocks/
 ├── scripts/
 │   ├── smoke-test.sh             ← 21 checks; auto-fetches recordings if empty
 │   ├── fetch-recordings.sh       ← pull from R2 (parallel, sha256-verified, idempotent)
+│   ├── fetch-recordings.test.sh  ← deterministic downloader safety fixtures
 │   ├── upload-recording.sh       ← maintainer-local: validate + wrangler put + manifest update
 │   ├── contract-check.sh         ← real-CLI vs mock protocol drift check (manual)
 │   └── lib/
