@@ -256,7 +256,7 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
   {
     label: 'Novita AI',
     protocol: 'openai',
-    baseUrl: 'https://api.novita.ai/v3/openai',
+    baseUrl: 'https://api.novita.ai/openai',
     preferredModels: [
       'deepseek/deepseek-v4-pro',
       'deepseek/deepseek-v3.2',
