@@ -1,0 +1,61 @@
+{
+  "candidateId": "87009401-8168-4ac6-980c-57d498e87b06",
+  "projectId": "32868623-9bc6-488d-8aed-50b0ea6af75c",
+  "runId": "fd0c79f3-06a3-45d3-9c5e-e9b883c84a1b",
+  "conversationId": "acc48ceb-6d10-40e7-bbb2-ecaf8379a937",
+  "provenance": {
+    "summary": "Detected from creative-director-review.md, plugin-source/creative-director-review-ms9qcka2/references/source-1-creative-director-review.md, plugin-source/creative-director-review-ms9qcka2/SKILL.md, plugin-source/creative-director-review-ms9qcge0/references/source-1-creative-director-review.md, plugin-source/creative-director-review-ms9qcge0/SKILL.md, plugin-source/creative-director-review-ms9qbj9q/references/source-1-creative-director-review.md, plugin-source/creative-director-review-ms9qbj9q/SKILL.md after a successful run.",
+    "detectedAt": 1785550215138
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "creative-director-review.md",
+      "label": "creative-director-review.md",
+      "size": 9252,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "plugin-source/creative-director-review-ms9qcka2/references/source-1-creative-director-review.md",
+      "label": "plugin-source/creative-director-review-ms9qcka2/references/source-1-creative-director-review.md",
+      "size": 9252,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "plugin-source/creative-director-review-ms9qcka2/SKILL.md",
+      "label": "plugin-source/creative-director-review-ms9qcka2/SKILL.md",
+      "size": 9348,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "plugin-source/creative-director-review-ms9qcge0/references/source-1-creative-director-review.md",
+      "label": "plugin-source/creative-director-review-ms9qcge0/references/source-1-creative-director-review.md",
+      "size": 9252,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "plugin-source/creative-director-review-ms9qcge0/SKILL.md",
+      "label": "plugin-source/creative-director-review-ms9qcge0/SKILL.md",
+      "size": 9348,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "plugin-source/creative-director-review-ms9qbj9q/references/source-1-creative-director-review.md",
+      "label": "plugin-source/creative-director-review-ms9qbj9q/references/source-1-creative-director-review.md",
+      "size": 9252,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "plugin-source/creative-director-review-ms9qbj9q/SKILL.md",
+      "label": "plugin-source/creative-director-review-ms9qbj9q/SKILL.md",
+      "size": 9348,
+      "copied": true
+    }
+  ]
+}
