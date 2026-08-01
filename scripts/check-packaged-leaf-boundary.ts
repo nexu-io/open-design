@@ -79,6 +79,27 @@ const requiredWorkspaceUnitBlock = `if [ "\${{ needs.scopes.outputs.tools_dev_te
             fi
           fi`;
 
+/** Normalize CRLF→LF so the multi-line workflow comparison is EOL-agnostic
+ *  (Windows core.autocrlf=true checks the LF-stored workflow out as CRLF).
+ *  Mirrors the helper in check-design-system-manifests.ts. See #5175 / #6192. */
+function normalizeEol(text: string): string {
+  return text.replace(/\r\n/g, "\n");
+}
+
+/**
+ * Does the workflow still carry the guarded command block?
+ *
+ * `requiredWorkspaceUnitBlock` is a multi-line template literal, so it always
+ * holds LF. A Windows working tree holds the workflow as CRLF, and a raw
+ * multi-line `includes()` can then never match — reporting a violation on a
+ * clean tree while CI stays green. Normalizing BOTH sides keeps the comparison
+ * about content. Exported so the CRLF case can be pinned without a real
+ * Windows checkout.
+ */
+export function workflowContainsGuardedCommandBlock(workflow: string): boolean {
+  return normalizeEol(workflow).includes(normalizeEol(requiredWorkspaceUnitBlock));
+}
+
 export type PackagedLeafConsumptionViolation = {
   filePath: string;
   lineNumber: number;
@@ -249,7 +270,7 @@ export async function checkPackagedLeafBoundary(): Promise<boolean> {
 
   const workflow = await readFile(path.join(repoRoot, ".github/workflows/ci.yml"), "utf8");
   const errors = scopeBoundaryErrors();
-  if (!workflow.includes(requiredWorkspaceUnitBlock)) {
+  if (!workflowContainsGuardedCommandBlock(workflow)) {
     errors.push("ci.yml no longer contains the guarded tools-dev, packaged unit, and focused E2E command block");
   }
 
