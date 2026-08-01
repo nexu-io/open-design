@@ -516,7 +516,7 @@ function manualEditPersistedValueMatchesSavedSnapshot(
 }
 
 const MANUAL_EDIT_RECT_AFFECTING_STYLE_PROPS = new Set<keyof ManualEditStyles>([
-  'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'lineHeight', 'letterSpacing',
+  'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'lineHeight', 'textTransform', 'letterSpacing', 'wordSpacing',
   'display', 'position', 'left', 'top', 'right', 'bottom', 'width', 'height', 'minHeight',
   'gap', 'flexDirection', 'justifyContent', 'alignItems', 'transform',
   'padding', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',

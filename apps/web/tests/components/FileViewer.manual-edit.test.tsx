@@ -191,6 +191,73 @@ describe('FileViewer manual edit regressions', () => {
     expect(screen.queryByText('PAGE')).toBeNull();
   });
 
+  it('previews and saves manual-edit word spacing', async () => {
+    const source = '<!doctype html><html><body><main data-od-id="hero">Two words</main></body></html>';
+    const { fetchMock, savedBodies } = manualEditWriteMock(source);
+    vi.stubGlobal('fetch', fetchMock);
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
+        liveHtml={source}
+      />,
+    );
+
+    clickManualTool('manual-edit-mode-toggle');
+    const frame = await previewFrame();
+    await selectManualEditTarget();
+    const postSpy = vi.spyOn(frame.contentWindow!, 'postMessage');
+    fireEvent.change(await findStyleInput('Word spacing'), { target: { value: '-2' } });
+    expect(postSpy).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'od-edit-preview-style', styles: expect.objectContaining({ wordSpacing: '-2px' }),
+    }), '*');
+
+    fireEvent.click(within(document.querySelector('.manual-edit-modal') as HTMLElement)
+      .getByRole('button', { name: /^Save$/ }));
+    await waitFor(() => expect(savedBodies).toHaveLength(1));
+    expect(savedBodies[0]!.content).toContain('word-spacing: -2px');
+  });
+
+  it('previews, saves, and clears manual-edit text transform', async () => {
+    const source = '<!doctype html><html><body><main data-od-id="hero">Two words</main></body></html>';
+    const { fetchMock, savedBodies } = manualEditWriteMock(source);
+    vi.stubGlobal('fetch', fetchMock);
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
+        liveHtml={source}
+      />,
+    );
+
+    clickManualTool('manual-edit-mode-toggle');
+    const frame = await previewFrame();
+    await selectManualEditTarget();
+    const postSpy = vi.spyOn(frame.contentWindow!, 'postMessage');
+    const findTransformSelect = () => Array.from(document.querySelectorAll('.cc-row'))
+      .find((row) => row.querySelector('.cc-label')?.textContent === 'Transform')
+      ?.querySelector('select') as HTMLSelectElement;
+    let transformSelect = findTransformSelect();
+    fireEvent.change(transformSelect, { target: { value: 'lowercase' } });
+    expect(postSpy).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'od-edit-preview-style', styles: expect.objectContaining({ textTransform: 'lowercase' }),
+    }), '*');
+
+    fireEvent.click(within(document.querySelector('.manual-edit-modal') as HTMLElement)
+      .getByRole('button', { name: /^Save$/ }));
+    await waitFor(() => expect(savedBodies).toHaveLength(1));
+    expect(savedBodies[0]!.content).toContain('text-transform: lowercase');
+
+    await selectManualEditTarget();
+    transformSelect = findTransformSelect();
+    transformSelect.value = '';
+    fireEvent.change(transformSelect);
+    expect(postSpy).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'od-edit-preview-style', styles: expect.objectContaining({ textTransform: '' }),
+    }), '*');
+
+    fireEvent.click(within(document.querySelector('.manual-edit-modal') as HTMLElement)
+      .getByRole('button', { name: /^Save$/ }));
+    await waitFor(() => expect(savedBodies).toHaveLength(2));
+    expect(savedBodies[1]!.content).not.toMatch(/text-transform\s*:/);
+  });
+
   it('re-enters edit mode on the latest source after an external rewrite', async () => {
     const v1 = '<!doctype html><html><body><main data-od-id="hero">Version One</main></body></html>';
     const v2 = '<!doctype html><html><body><main data-od-id="hero">Version Two</main></body></html>';

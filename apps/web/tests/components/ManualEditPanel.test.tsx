@@ -203,6 +203,25 @@ describe('ManualEditPanel', () => {
       expect.objectContaining({ fontSize: '32px', color: '#111111', paddingTop: '8px' }),
       'Style: Hero Title',
     );
+
+    const transformRow = Array.from(host.querySelectorAll('.cc-row'))
+      .find((row) => row.querySelector('.cc-label')?.textContent === 'Transform');
+    const transformSelect = transformRow?.querySelector('select') as HTMLSelectElement | null;
+    if (!transformSelect) throw new Error('Transform select not found');
+
+    expect(Array.from(transformSelect.options).map((option) => [option.text, option.value])).toEqual([
+      ['-', ''], ['Uppercase', 'uppercase'], ['Lowercase', 'lowercase'], ['Capitalize', 'capitalize'], ['None', 'none'],
+    ]);
+    act(() => {
+      transformSelect.value = 'uppercase';
+      transformSelect.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+    });
+    expect(onStyleChange).toHaveBeenCalledWith('hero-title', { textTransform: 'uppercase' }, 'Style: Hero Title');
+    act(() => {
+      transformSelect.value = '';
+      transformSelect.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+    });
+    expect(onStyleChange).toHaveBeenCalledWith('hero-title', { textTransform: '' }, 'Style: Hero Title');
   });
 
   it('shows px-backed values without px in numeric inputs', () => {
@@ -230,23 +249,30 @@ describe('ManualEditPanel', () => {
         fontSize: '32px',
         lineHeight: '1.4',
         letterSpacing: '1px',
+        wordSpacing: '1px',
       },
     });
 
     const sizeIncrease = host.querySelector('button[aria-label="Size increase"]') as HTMLButtonElement | null;
-    const lineIncrease = host.querySelector('button[aria-label="Line increase"]') as HTMLButtonElement | null;
-    const trackingDecrease = host.querySelector('button[aria-label="Tracking decrease"]') as HTMLButtonElement | null;
-    if (!sizeIncrease || !lineIncrease || !trackingDecrease) throw new Error('Stepper button not found');
+    const lineIncrease = host.querySelector('button[aria-label="Line height increase"]') as HTMLButtonElement | null;
+    const letterDecrease = host.querySelector('button[aria-label="Letter spacing decrease"]') as HTMLButtonElement | null;
+    const wordsIncrease = host.querySelector('button[aria-label="Word spacing increase"]') as HTMLButtonElement | null;
+    if (!sizeIncrease || !lineIncrease || !letterDecrease || !wordsIncrease) throw new Error('Stepper button not found');
 
     act(() => {
       sizeIncrease.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
       lineIncrease.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
-      trackingDecrease.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+      letterDecrease.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
     });
+    act(() => wordsIncrease.click());
 
     expect(onStyleChange).toHaveBeenCalledWith('hero-title', { fontSize: '33px' }, 'Style: Hero Title');
     expect(onStyleChange).toHaveBeenCalledWith('hero-title', { lineHeight: '1.5' }, 'Style: Hero Title');
     expect(onStyleChange).toHaveBeenCalledWith('hero-title', { letterSpacing: '0px' }, 'Style: Hero Title');
+    expect(onStyleChange).toHaveBeenCalledWith('hero-title', { wordSpacing: '2px' }, 'Style: Hero Title');
+    expect(host.textContent).toContain('Letter spacing');
+    expect(host.textContent).toContain('Word spacing');
+    expect(host.textContent).not.toContain('Tracking');
     expect(host.textContent).not.toContain('Opacity');
     expect(host.textContent).not.toContain('Padding');
   });
@@ -286,6 +312,10 @@ describe('ManualEditPanel', () => {
       ok: true,
       styles: { lineHeight: '49px' },
     });
+    expect(normalizeManualEditStyles({ wordSpacing: '-1.5' }, { layoutEnabled: true })).toEqual({
+      ok: true,
+      styles: { wordSpacing: '-1.5px' },
+    });
   });
 
   it('rejects invalid style values before host preview/persistence', () => {
@@ -297,6 +327,12 @@ describe('ManualEditPanel', () => {
       ok: false,
       error: 'Line height must be a positive number or px value.',
     });
+    expect(normalizeManualEditStyles({ wordSpacing: '1em' }, { layoutEnabled: true })).toEqual({
+      ok: false,
+      error: 'word spacing must be a number or px value.',
+    });
+    expect(normalizeManualEditStyles({ textTransform: 'full-width' }, { layoutEnabled: true }))
+      .toEqual({ ok: false, error: 'text transform has an unsupported value.' });
   });
 
   it('treats empty values as inline style clears', () => {

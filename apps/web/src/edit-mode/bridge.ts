@@ -195,7 +195,7 @@ export function buildManualEditBridge(enabled: boolean): string {
   var discoverySelector = ${JSON.stringify(MANUAL_EDIT_DISCOVERY_SELECTOR)};
   var hostNodeSelector = ${JSON.stringify(MANUAL_EDIT_HOST_NODE_SELECTOR)};
   var sourcePathAttr = ${JSON.stringify(MANUAL_EDIT_SOURCE_PATH_ATTR)};
-  var styleProps = ['fontFamily','fontSize','fontWeight','fontStyle','textDecorationLine','color','textAlign','lineHeight','letterSpacing','whiteSpace','display','position','left','top','right','bottom','zIndex','width','height','minHeight','gap','flexDirection','justifyContent','alignItems','backgroundColor','opacity','transform','padding','paddingTop','paddingRight','paddingBottom','paddingLeft','margin','marginTop','marginRight','marginBottom','marginLeft','border','borderTopWidth','borderRightWidth','borderBottomWidth','borderLeftWidth','borderStyle','borderColor','borderRadius'];
+  var styleProps = ['fontFamily','fontSize','fontWeight','fontStyle','textDecorationLine','color','textAlign','lineHeight','textTransform','letterSpacing','wordSpacing','whiteSpace','display','position','left','top','right','bottom','zIndex','width','height','minHeight','gap','flexDirection','justifyContent','alignItems','backgroundColor','opacity','transform','padding','paddingTop','paddingRight','paddingBottom','paddingLeft','margin','marginTop','marginRight','marginBottom','marginLeft','border','borderTopWidth','borderRightWidth','borderBottomWidth','borderLeftWidth','borderStyle','borderColor','borderRadius'];
   var inlineTextTags = ${JSON.stringify(MANUAL_EDIT_INLINE_TEXT_TAGS)};
   function isHostNode(el){
     return !!(el && el.matches && el.matches(hostNodeSelector));
@@ -360,6 +360,7 @@ export function buildManualEditBridge(enabled: boolean): string {
     var computed = window.getComputedStyle(el);
     var styles = {};
     styleProps.forEach(function(prop){ styles[prop] = el.style[prop] || computed[prop] || ''; });
+    if (!el.style.textTransform && styles.textTransform === 'none') styles.textTransform = '';
     // Gesture math (move/resize) adds pointer deltas to these values, so they
     // must be RESOLVED px — an authored 'left: 43%' would otherwise be read as
     // 43px and teleport the element on the first drag. Computed left/top are

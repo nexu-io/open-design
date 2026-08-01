@@ -513,6 +513,14 @@ const FONT_OPTS = [
 ] as const;
 const WEIGHT_OPTS = ['', '100', '200', '300', '400', '500', '600', '700', '800', '900'];
 const ALIGN_OPTS = ['', 'left', 'center', 'right', 'justify', 'start', 'end'];
+const TEXT_TRANSFORM_OPTS = ['', 'uppercase', 'lowercase', 'capitalize', 'none'];
+const TEXT_TRANSFORM_LABELS: Record<string, string> = {
+  '': '-',
+  uppercase: 'Uppercase',
+  lowercase: 'Lowercase',
+  capitalize: 'Capitalize',
+  none: 'None',
+};
 const DIRECTION_OPTS = ['', 'row', 'column', 'row-reverse', 'column-reverse'];
 const JUSTIFY_OPTS = ['', 'flex-start', 'center', 'flex-end', 'space-between', 'space-around'];
 const ITEMS_OPTS = ['', 'stretch', 'flex-start', 'center', 'flex-end', 'baseline'];
@@ -537,7 +545,7 @@ type NormalizeResult =
   | { ok: false; error: string };
 
 const PX_STYLE_PROPS = new Set<keyof ManualEditStyles>([
-  'fontSize', 'letterSpacing', 'width', 'height', 'minHeight', 'gap',
+  'fontSize', 'letterSpacing', 'wordSpacing', 'width', 'height', 'minHeight', 'gap',
   'padding', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
   'margin', 'marginTop', 'marginRight', 'marginBottom', 'marginLeft',
   'border', 'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth',
@@ -548,6 +556,7 @@ const SELECT_STYLE_OPTIONS: Partial<Record<keyof ManualEditStyles, ReadonlyArray
   fontFamily: FONT_OPTS.map((option) => option.value),
   fontWeight: WEIGHT_OPTS,
   textAlign: ALIGN_OPTS,
+  textTransform: TEXT_TRANSFORM_OPTS,
   flexDirection: DIRECTION_OPTS,
   justifyContent: JUSTIFY_OPTS,
   alignItems: ITEMS_OPTS,
@@ -662,8 +671,12 @@ function StyleInspector({
             <DropdownRow label="Align" value={styles.textAlign} onChange={(v) => u('textAlign', v)} options={ALIGN_OPTS} />
           </PairRow>
           <PairRow>
-            <UnitRow label="Line" value={styles.lineHeight} onChange={(v) => u('lineHeight', v)} unit="" />
-            <UnitRow label="Tracking" value={styles.letterSpacing} onChange={(v) => u('letterSpacing', v)} unit="px" autoUnit />
+            <UnitRow label="Line height" value={styles.lineHeight} onChange={(v) => u('lineHeight', v)} unit="" />
+            <DropdownRow label="Transform" value={styles.textTransform} onChange={(v) => u('textTransform', v)} options={TEXT_TRANSFORM_OPTS} optionLabels={TEXT_TRANSFORM_LABELS} />
+          </PairRow>
+          <PairRow>
+            <UnitRow label="Letter spacing" value={styles.letterSpacing} onChange={(v) => u('letterSpacing', v)} unit="px" autoUnit />
+            <UnitRow label="Word spacing" value={styles.wordSpacing} onChange={(v) => u('wordSpacing', v)} unit="px" autoUnit />
           </PairRow>
         </Section>
       ) : null}
@@ -768,9 +781,10 @@ function UnitRow({ label, value, onChange, unit, autoUnit, disabled }: {
   );
 }
 
-function DropdownRow({ label, value, onChange, options, placeholder, disabled }: {
+function DropdownRow({ label, value, onChange, options, placeholder, disabled, optionLabels }: {
   label: string; value: string; onChange: (v: string) => void;
   options: ReadonlyArray<string>; placeholder?: string; disabled?: boolean;
+  optionLabels?: Readonly<Record<string, string>>;
 }) {
   return (
     <label className="cc-row">
@@ -778,7 +792,7 @@ function DropdownRow({ label, value, onChange, options, placeholder, disabled }:
       <span className="cc-value cc-select">
         <select value={value} disabled={disabled} onChange={(e) => onChange(e.currentTarget.value)}>
           {!options.includes(value) && value ? <option value={value}>{value}</option> : null}
-          {options.map((opt) => <option key={opt || '__'} value={opt}>{opt || (placeholder ?? '–')}</option>)}
+          {options.map((opt) => <option key={opt || '__'} value={opt}>{optionLabels?.[opt] ?? (opt || (placeholder ?? '–'))}</option>)}
         </select>
         <em className="cc-chevron">▾</em>
       </span>
