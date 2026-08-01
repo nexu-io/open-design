@@ -54,7 +54,7 @@ describe('od artifacts CLI', () => {
 
   it('creates an artifact in an explicit project', async () => {
     const inputPath = await makeFile('deck.html', '<!doctype html><h1>Deck</h1>');
-    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+    fetchMock.mockImplementation(async (url: string, _init?: RequestInit) => {
       if (url.endsWith('/api/projects')) {
         return new Response(JSON.stringify({ projects: [{ id: 'project-1', name: 'Demo' }] }), { status: 200 });
       }
@@ -122,7 +122,7 @@ describe('od artifacts CLI', () => {
       exports: ['md', 'html', 'pdf', 'zip'],
       title: 'Report',
     }));
-    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+    fetchMock.mockImplementation(async (url: string, _init?: RequestInit) => {
       if (url.endsWith('/api/projects')) {
         return new Response(JSON.stringify({ projects: [{ id: 'project-1', name: 'Demo' }] }), { status: 200 });
       }

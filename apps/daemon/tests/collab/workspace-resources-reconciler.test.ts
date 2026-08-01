@@ -203,7 +203,7 @@ describe('reconcileWorkspaceResourcesWithRemote (orchestrator)', () => {
           { resourceId: 'b', workspaceId: WORKSPACE_ID, visibility: 'team', resourceState: 'active' },
         ],
         listRemoteTeamResources: async () => [],
-        applyRetire: (workspaceId: string, resourceId: string) => {
+        applyRetire: (_workspaceId: string, resourceId: string) => {
           if (resourceId === 'a') throw new Error('sqlite busy');
           applied.push(resourceId);
         },

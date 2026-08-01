@@ -488,7 +488,7 @@ describe('OrbitService', () => {
         body: `${skillId} body`,
         designSystemRequired: false,
       }));
-      service.setRunHandler(async (request) => {
+      service.setRunHandler(async (_request) => {
         runCount += 1;
         return {
           projectId: `project-${runCount}`,

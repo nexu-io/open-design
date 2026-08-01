@@ -266,7 +266,7 @@ describe('AMR persisted project Workspace scope', () => {
   it.each(['claude', 'codex', 'opencode', 'byok-opencode'])(
     'does not add Workspace scope or read project binding for the %s runtime',
     async (agentId) => {
-      const db = seedProject({
+      seedProject({
         projectId: 'project-a',
         workspaceId: 'workspace-a',
         memberId: 'member-a',

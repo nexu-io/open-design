@@ -1591,7 +1591,7 @@ function rewriteHtmlAttributes(rawAttrs: string, tagName: string, attrs: Map<str
   const shouldRewriteHref = shouldCollectHref(tagName, attrs);
   return String(rawAttrs).replace(
     /([^\s"'<>/=]+)(\s*=\s*)("([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/g,
-    (full, rawName, equals, rawValue, doubleQuoted, singleQuoted, unquoted) => {
+    (full, rawName, equals, _rawValue, doubleQuoted, singleQuoted, unquoted) => {
       const name = String(rawName).toLowerCase();
       if (
         name !== 'src' &&

@@ -2426,7 +2426,7 @@ describe('ALL /api/integrations/vela/message-center/*', () => {
   });
 
   it('guards upstream response-stream errors after headers without crashing the daemon', async () => {
-    const requestSpy = vi.spyOn(http, 'request').mockImplementation(((target, options, callback) => {
+    const requestSpy = vi.spyOn(http, 'request').mockImplementation(((_target, _options, callback) => {
       const req = new PassThrough() as any;
       req.on('finish', () => {
         const upstreamRes = new PassThrough() as any;

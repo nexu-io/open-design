@@ -54,7 +54,7 @@ const fixtureFile = {
 };
 
 const stubFetch = (response: { ok?: boolean; status?: number; statusText?: string; body?: unknown; text?: string }) => {
-  return vi.fn(async (_url: string, init?: { headers?: Record<string, string> }) => {
+  return vi.fn(async (_url: string, _init?: { headers?: Record<string, string> }) => {
     return {
       ok: response.ok ?? true,
       status: response.status ?? 200,

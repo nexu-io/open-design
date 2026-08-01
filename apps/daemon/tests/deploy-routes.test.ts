@@ -977,7 +977,7 @@ describe('deploy provider routes', () => {
    * Returns the projectId so callers can POST to /deploy.
    */
   async function setupProjectAndCfConfig(
-    stateRoot: string,
+    _stateRoot: string,
     projectIdPrefix: string,
     projectName: string,
   ): Promise<string> {

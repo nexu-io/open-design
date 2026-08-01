@@ -61,7 +61,7 @@ export interface RegisterChatRoutesDeps extends RouteDeps<'db' | 'design' | 'htt
 }
 
 export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
-  const { db } = ctx;
+  const { db, design } = ctx;
   const { sendApiError, createSseResponse } = ctx.http;
   const { readAppConfig } = ctx.appConfig;
   const { testProviderConnection, testAgentConnection, getAgentDef, isKnownModel, isKnownServiceTier, sanitizeCustomModel, listProviderModels } = ctx.agents;

@@ -135,7 +135,7 @@ describe('readCodexRolloutFirstCall', () => {
     );
     return home;
   }
-  const rollout = (sid: string) => [
+  const rollout = (_sid: string) => [
     JSON.stringify({ type: 'event_msg', payload: { type: 'task_started' } }),
     JSON.stringify({
       type: 'event_msg',

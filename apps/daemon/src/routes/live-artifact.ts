@@ -16,7 +16,7 @@ export function registerLiveArtifactRoutes(app: Express, ctx: RegisterLiveArtifa
   const { PROJECTS_DIR } = ctx.paths;
   const { authorizeToolRequest, requestProjectOverride, requestRunOverride } = ctx.auth;
   const { createLiveArtifact, listLiveArtifacts, updateLiveArtifact, refreshLiveArtifact, emitLiveArtifactEvent, emitLiveArtifactRefreshEvent, readLiveArtifactCode, setLiveArtifactCodeHeaders, ensureLiveArtifactPreview, setLiveArtifactPreviewHeaders, getLiveArtifact, listLiveArtifactRefreshLogEntries, deleteLiveArtifact } = ctx.liveArtifacts;
-  const { getProject, updateProject } = ctx.projectStore;
+  const { updateProject } = ctx.projectStore;
   const authorizeProject = async (
     req: any,
     res: any,

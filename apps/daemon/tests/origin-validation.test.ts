@@ -103,11 +103,11 @@ function makeTestApp(port: number, host = '127.0.0.1') {
     res.json({ file: req.params.name });
   });
   app.post('/api/projects', (req, res) => res.json({ project: req.body }));
-  app.post('/api/library/ingest', (req, res) => res.json({ ingested: true }));
+  app.post('/api/library/ingest', (_req, res) => res.json({ ingested: true }));
   app.get('/api/library/clipper-probe', (_req, res) => res.json({ ok: true }));
   app.get('/api/library/assets', (_req, res) => res.json({ assets: [] }));
   app.get('/api/library/assets/:id/raw', (req, res) => res.type('text/plain').send(req.params.id));
-  app.delete('/api/projects/:id', (req, res) => res.json({ ok: true }));
+  app.delete('/api/projects/:id', (_req, res) => res.json({ ok: true }));
   app.get('/api/codex-pets/:id/spritesheet', (req, res) => {
     // Mimics the real spritesheet route that sets CORS for Origin: null
     if (req.headers.origin === 'null') {

@@ -607,7 +607,7 @@ export class ConnectorService {
     return this.statusService.getCredential(connectorId);
   }
 
-  async listConnectors(signal?: AbortSignal): Promise<ConnectorDetail[]> {
+  async listConnectors(_signal?: AbortSignal): Promise<ConnectorDetail[]> {
     return this.listFastDefinitions().map((definition) => this.toDetail(definition));
   }
 

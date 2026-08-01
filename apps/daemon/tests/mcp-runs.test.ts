@@ -139,7 +139,7 @@ describe('public MCP discovery + generation tools', () => {
   });
 
   it('start_run POSTs skillId to /api/runs when skill is provided', async () => {
-    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+    const fetchMock = vi.fn(async (url: string, _init?: RequestInit) => {
       if (url.endsWith('/api/projects')) {
         return new Response(JSON.stringify({ projects: [{ id: 'project-1', name: 'Demo' }] }), { status: 200 });
       }
@@ -169,7 +169,7 @@ describe('public MCP discovery + generation tools', () => {
   });
 
   it('start_run POSTs skills[] as skillIds to /api/runs when skills is provided', async () => {
-    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+    const fetchMock = vi.fn(async (url: string, _init?: RequestInit) => {
       if (url.endsWith('/api/projects')) {
         return new Response(JSON.stringify({ projects: [{ id: 'project-1', name: 'Demo' }] }), { status: 200 });
       }
@@ -201,7 +201,7 @@ describe('public MCP discovery + generation tools', () => {
   });
 
   it('start_run omits skillIds from POST body when skills is not provided', async () => {
-    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+    const fetchMock = vi.fn(async (url: string, _init?: RequestInit) => {
       if (url.endsWith('/api/active')) {
         return new Response(JSON.stringify({ active: true, projectId: 'proj-a', projectName: 'A', fileName: null }), { status: 200 });
       }
@@ -227,7 +227,7 @@ describe('public MCP discovery + generation tools', () => {
   });
 
   it('start_run omits agentId from POST body when agent arg is not provided', async () => {
-    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+    const fetchMock = vi.fn(async (url: string, _init?: RequestInit) => {
       if (url.endsWith('/api/active')) {
         return new Response(JSON.stringify({ active: true, projectId: 'proj-a', projectName: 'A', fileName: null }), { status: 200 });
       }

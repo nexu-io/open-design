@@ -512,7 +512,7 @@ describe('reconcileWorkspaceProjectsWithRemote (orchestrator, fake deps)', () =>
           { projectId: 'b', workspaceId: WORKSPACE_ID, visibility: 'team', createdByWorkspaceMemberId: null, resourceHubResourceId: null },
         ],
         listRemoteTeamProjects: async () => [],
-        applyRevoke: vi.fn((workspaceId: string, projectId: string) => {
+        applyRevoke: vi.fn((_workspaceId: string, projectId: string) => {
           if (projectId === 'a') throw new Error('sqlite busy');
           applyRevoke(projectId);
         }),

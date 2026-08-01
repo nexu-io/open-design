@@ -19,7 +19,8 @@
     "resolveJsonModule": true,
     "skipLibCheck": true,
     "types": ["node", "vitest"],
-    "noUnusedLocals": true
+    "noUnusedLocals": true,
+    "noUnusedParameters": true
   },
   "include": [
     "src/**/*.ts",

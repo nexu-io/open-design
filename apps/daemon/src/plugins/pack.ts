@@ -114,7 +114,7 @@ export async function packPlugin(input: PackPluginInput): Promise<PackPluginResu
       // an author from packing a symlink and only finding out at
       // install. The walker also pre-filters them; this is a
       // belt-and-suspenders pass.
-      filter: (entryPath, stat) => {
+      filter: (_entryPath, stat) => {
         const candidate = stat as { isSymbolicLink?: () => boolean };
         if (typeof candidate.isSymbolicLink === 'function' && candidate.isSymbolicLink()) return false;
         return true;

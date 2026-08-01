@@ -59,7 +59,7 @@ export const piAgentDef = {
       _imagePaths,
       extraAllowedDirs = [],
       options = {},
-      runtimeContext = {},
+      _runtimeContext = {},
     ) => {
       const args = ['--mode', 'rpc'];
       if (options.model && options.model !== 'default') {
