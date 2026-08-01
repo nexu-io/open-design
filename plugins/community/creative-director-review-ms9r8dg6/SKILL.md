@@ -1,4 +1,9 @@
-ric# Creative Director Review · Ally Clone
+---
+name: creative-director-review-ms9r8dg6
+description: Comprehensive creative direction review covering aesthetics, typography, color, layout, components, motion, accessibility, and craft.
+---
+
+# Creative Director Review
 
 ## Aesthetic Bar
 
