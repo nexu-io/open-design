@@ -868,6 +868,16 @@ export function composeSystemPrompt({
         ...(streamFormat === 'plain' ? [API_MODE_OVERRIDE, '\n\n---\n\n'] : []),
         renderSlimCoreCharter(
           executionProfile ?? executionProfileFromStreamFormat(streamFormat),
+          {
+            // A project that arrives with a settled brief gets
+            // SKIP_DISCOVERY_BRIEF_OVERRIDE further down, which states the
+            // conclusion this policy exists to reach. Shipping the decision
+            // procedure as well means paying, on every run of that project,
+            // for a question its caller already answered. The always-on rules
+            // and the form-authoring contract stay — the override still
+            // permits one concise follow-up.
+            includeClarificationPolicy: metadata?.skipDiscoveryBrief !== true,
+          },
         ),
         '\n\n---\n\n',
       ]

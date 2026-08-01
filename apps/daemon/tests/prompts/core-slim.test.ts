@@ -683,3 +683,109 @@ describe('composeSystemPrompt — slim layered ordering (cache-stable prefix)', 
     expect(classic.indexOf('# Plan mode')).toBeLessThan(classic.indexOf('# OD core directives'));
   });
 });
+
+/**
+ * A project created with `metadata.skipDiscoveryBrief` has already answered
+ * the question the clarification policy exists to answer, and
+ * SKIP_DISCOVERY_BRIEF_OVERRIDE states that answer explicitly. The decision
+ * procedure is therefore dead weight on every run of such a project — but the
+ * rules that govern EVERY turn, and the contract for writing a form at all,
+ * are not, because the override still permits one concise follow-up.
+ */
+describe('settled-brief clarification opt-out', () => {
+  const full = renderSlimCoreCharter();
+  const settled = renderSlimCoreCharter('filesystem', { includeClarificationPolicy: false });
+
+  const FRESH_BRIEF_ONLY = [
+    'decide whether **requirements clarification** is needed',
+    'It is not a mandatory step for every new project.',
+    '- **Enough information is available:**',
+    '- **Critical information is missing:**',
+    '- **The user asks you to build immediately:**',
+  ];
+
+  const ALWAYS_ON = [
+    '## Requirements Clarification Phase',
+    '- **The request is a local revision:**',
+    '- **Form answers have already been returned:**',
+  ];
+
+  it('drops the fresh-brief decision procedure and nothing else', () => {
+    for (const dropped of FRESH_BRIEF_ONLY) {
+      expect(full).toContain(dropped);
+      expect(settled).not.toContain(dropped);
+    }
+
+    for (const survivor of ALWAYS_ON) {
+      expect(settled).toContain(survivor);
+    }
+  });
+
+  it('keeps the form-authoring contract, which the override still depends on', () => {
+    // The override permits "one concise follow-up"; authorising a form while
+    // deleting the spec for writing one would be worse than shipping both.
+    for (const survivor of [
+      '### `<question-form>` Writing Guidelines',
+      'The content inside the tags must be valid JSON',
+      'maxSelections',
+      'direction-cards',
+    ]) {
+      expect(settled).toContain(survivor);
+    }
+  });
+
+  it('leaves every section outside the clarification phase untouched', () => {
+    for (const other of [
+      '## Role',
+      '## Instruction Priority',
+      '## Artifact Design Phase',
+      '## Design Craft',
+      '## Technical Contract',
+    ]) {
+      expect(settled).toContain(other);
+    }
+  });
+
+  it('saves a material share of the charter budget', () => {
+    const saved = Buffer.byteLength(full, 'utf8') - Buffer.byteLength(settled, 'utf8');
+    expect(saved).toBeGreaterThan(1_000);
+  });
+
+  it('never leaves a placeholder behind, in any combination', () => {
+    for (const profile of ['filesystem', 'text_artifact'] as const) {
+      for (const include of [true, false]) {
+        expect(
+          renderSlimCoreCharter(profile, { includeClarificationPolicy: include }),
+        ).not.toContain('%%OD_SLIM_');
+      }
+    }
+  });
+
+  it('defaults to shipping the full policy', () => {
+    expect(renderSlimCoreCharter('filesystem', {})).toBe(full);
+    expect(renderSlimCoreCharter('filesystem', { includeClarificationPolicy: true })).toBe(full);
+  });
+
+  it('composes the trimmed policy only when the project skips the brief', () => {
+    // `slim` is what the daemon ships by default (server.ts selects it unless
+    // OD_PROMPT_CORE=classic); the composer's own default is still classic,
+    // so the variant has to be explicit here.
+    const normal = composeSystemPrompt({
+      promptCoreVariant: 'slim',
+      metadata: { kind: 'prototype' },
+    });
+    const skipped = composeSystemPrompt({
+      promptCoreVariant: 'slim',
+      metadata: { kind: 'prototype', skipDiscoveryBrief: true },
+    });
+
+    expect(normal).toContain('- **Enough information is available:**');
+    expect(skipped).not.toContain('- **Enough information is available:**');
+
+    // The override that replaces it is present, and so are the rules it
+    // does not restate.
+    expect(skipped).toContain('# Automated project mode');
+    expect(skipped).toContain('- **Form answers have already been returned:**');
+    expect(skipped).toContain('### `<question-form>` Writing Guidelines');
+  });
+});
