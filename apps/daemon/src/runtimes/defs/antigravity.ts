@@ -5,7 +5,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { readFile as fsReadFile } from 'node:fs/promises';
-import { homedir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
 import { DEFAULT_MODEL_OPTION } from './shared.js';
@@ -215,39 +215,24 @@ export const antigravityAgentDef = {
         runtimeContext.antigravitySettingsPath,
       );
     }
-    // We invoke agy via `-p -` (print mode + stdin sentinel), NOT
-    // `chat -`. Verified against `agy --help` on v1.0.3 — the
-    // `Available subcommands` list is `changelog / help / install /
-    // plugin / update`, and `chat` is NOT among them. `-p` is the
-    // documented print-mode flag (`Short alias for --print`) and
-    // `agy -p -` reads the prompt from stdin. The looper reviewer
-    // bot's environment runs a different agy build that may have
-    // renamed the entry point; until upstream confirms a stable
-    // headless subcommand (see google-antigravity/antigravity-cli#119)
-    // and the change actually ships in the auto-update channel that
-    // packaged OD users get, `-p -` is the contract that actually
-    // produces a print-mode reply on the installed CLI.
+    // We no longer use `-p -` because recent `agy` versions treat `-` as a literal 
+    // prompt string instead of reading from stdin (see issue #5495).
+    // Instead, we write the full transcript to a temporary file and instruct 
+    // `agy` to read and execute it, avoiding Windows command-line length limits.
+    // We use a PID-bound filename so it safely overwrites itself on each turn
+    // without bloating the OS temp directory over time.
+    const tempFile = join(tmpdir(), `od_agy_prompt_${process.pid}.md`);
+    writeFileSync(tempFile, _prompt);
+
     const args: string[] = [];
-    // Always opt into `--log-file` when the daemon supplied a path so
-    // it can post-exit grep for the actual upstream failure shape
-    // (auth missing vs quota reached vs upstream error) — without it
-    // the chat surfaces a generic "empty response" because print mode
-    // never echoes those errors on stdout. See server.ts empty-output
-    // guard for the consumer.
-    //
-    // Flag order is load-bearing on agy v1.0.3: `agy -p --log-file
-    // /tmp/x -` runs successfully but leaves /tmp/x empty, while `agy
-    // --log-file /tmp/x -p -` captures the diagnostic log, including
-    // `Propagating selected model override to backend: label="<model>"`
-    // and auth/quota failures.
     if (runtimeContext.agentLogFilePath) {
       args.push('--log-file', runtimeContext.agentLogFilePath);
     }
     args.push('-p');
-    args.push('-');
+    args.push(`Read the system instructions, conversation history, and user request from the file ${tempFile}. Follow the instructions strictly and provide the final response to the user's latest request.`);
     return args;
   },
-  promptViaStdin: true,
+  promptViaStdin: false,
   streamFormat: 'plain',
   installUrl: 'https://antigravity.google/cli',
   docsUrl: 'https://antigravity.google/docs/cli-overview',
