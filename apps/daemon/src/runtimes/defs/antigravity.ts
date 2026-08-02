@@ -5,7 +5,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { readFile as fsReadFile } from 'node:fs/promises';
-import { homedir, tmpdir } from 'node:os';
+import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 
 import { DEFAULT_MODEL_OPTION } from './shared.js';
@@ -217,22 +217,22 @@ export const antigravityAgentDef = {
     }
     // We no longer use `-p -` because recent `agy` versions treat `-` as a literal 
     // prompt string instead of reading from stdin (see issue #5495).
-    // Instead, we write the full transcript to a temporary file and instruct 
-    // `agy` to read and execute it, avoiding Windows command-line length limits.
-    // We use a PID-bound filename so it safely overwrites itself on each turn
-    // without bloating the OS temp directory over time.
-    const tempFile = join(tmpdir(), `od_agy_prompt_${process.pid}.md`);
-    writeFileSync(tempFile, _prompt);
+    // Instead, we use `promptViaFile: true` so the daemon securely prepares a 
+    // managed temp file per-run and cleans it up after the agent exits.
+    if (!runtimeContext.promptFilePath) {
+      throw new Error('antigravity requires runtimeContext.promptFilePath when promptViaFile is true');
+    }
 
     const args: string[] = [];
     if (runtimeContext.agentLogFilePath) {
       args.push('--log-file', runtimeContext.agentLogFilePath);
     }
     args.push('-p');
-    args.push(`Read the system instructions, conversation history, and user request from the file ${tempFile}. Follow the instructions strictly and provide the final response to the user's latest request.`);
+    args.push(`Read the system instructions, conversation history, and user request from the file ${runtimeContext.promptFilePath}. Follow the instructions strictly and provide the final response to the user's latest request.`);
     return args;
   },
   promptViaStdin: false,
+  promptViaFile: true,
   streamFormat: 'plain',
   installUrl: 'https://antigravity.google/cli',
   docsUrl: 'https://antigravity.google/docs/cli-overview',
