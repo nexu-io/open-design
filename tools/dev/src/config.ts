@@ -73,11 +73,25 @@ function resolveTsxCliPath(): string {
   return require.resolve("tsx/cli");
 }
 
-function resolveElectronBinaryPath(workspaceRoot: string): string {
+/**
+ * The `electron` package resolves its own binary by reading `path.txt` verbatim,
+ * without trimming, so any surrounding whitespace becomes part of the path it
+ * exports. A path carrying a trailing newline names no real file and makes
+ * `spawn` fail with ENOENT even though the binary is present and executable, so
+ * whatever reaches a child process must name a file that exists on disk.
+ * Returns null when the value cannot serve as a binary path.
+ */
+function normalizeElectronBinaryPath(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : null;
+}
+
+export function resolveElectronBinaryPath(workspaceRoot: string): string {
   const packageJsonPath = path.join(workspaceRoot, "apps/desktop/package.json");
   const require = createRequire(packageJsonPath);
-  const electron = require("electron") as unknown;
-  if (typeof electron === "string" && electron.length > 0) return electron;
+  const electron = normalizeElectronBinaryPath(require("electron"));
+  if (electron != null) return electron;
   return require.resolve("electron/cli.js");
 }
 
