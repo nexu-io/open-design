@@ -1,0 +1,733 @@
+/**
+ * Run cost decomposition — the arithmetic behind `GET /api/runs/:id/cost`,
+ * `od run cost`, and the web cost panel.
+ *
+ * WHY THIS EXISTS. A run's price is not "the model is expensive"; it is a
+ * handful of separable terms, and which one dominates decides whether a given
+ * optimisation can possibly pay. Five plausible savings ideas (trimming the
+ * preamble, isolating context across sub-agents, chasing cache churn, cutting
+ * output verbosity, deduplicating intake) were each measured against real runs
+ * and each turned out to be worth between nothing and ~4%. That result is only
+ * reachable with a decomposition, so the decomposition is the tool.
+ *
+ * THE ONE NON-OBVIOUS INPUT. The size of the model's context at step *i* is its
+ * cache read PLUS its uncached input. A persisted `events.jsonl` therefore
+ * already contains the run's full context-growth curve — no instrumentation, no
+ * re-running, no spend. Everything here is derived from that curve plus the
+ * tool traffic around it.
+ *
+ * The cache read alone is NOT that curve, and reading it as one is the defect
+ * this module shipped with (#6264). A cache read is the part of the context that
+ * happened to be served from cache, so on the first call of every run — the one
+ * call with nothing cached yet — it reports a near-empty context for a prompt
+ * that was in fact fully loaded. Because the preamble term is the FLOOR of the
+ * curve, that one bad point dragged the floor down for the whole run, and the
+ * difference landed on the transcript term. It inverted the headline verdict on
+ * 6 of 9 real runs.
+ *
+ * WHY THE SUM IS THE RIGHT READING. By construction: what the model read is what
+ * came from cache plus what did not. `uncachedInputForConvention` is what makes
+ * the second part trustworthy across providers.
+ *
+ * Corroborating it, on runs that hold still, is that what step *i* put in front
+ * of the model is what step *i+1* then finds in its cache:
+ *
+ *     input_i + cacheRead_i  ~=  cacheRead_{i+1}
+ *
+ * That is CORROBORATION AND NOT A LAW, and the difference matters because it is
+ * tempting to reach for it as an invariant. Measured across the persisted runs it
+ * holds tightly on some and breaks on others, in three distinct ways:
+ *
+ *   - Cache reads are quantized to block boundaries (`4e5ec86a` reports reads
+ *     that are exact multiples of 256), so the read trails the context by up to
+ *     a block.
+ *   - When content produced between two calls is cached BEFORE the next call
+ *     rather than arriving as its uncached input, step *i+1* reads more than
+ *     step *i* held (`5504607f`, drifting to -4,551).
+ *   - Invalidation and compaction move the cached prefix independently of the
+ *     context (`79057c35`, +51,814 then -66,055 around one invalidation).
+ *
+ * So it is pinned as a test on a run where it does hold, as evidence for the
+ * additive reading — not asserted here as a property of all runs.
+ *
+ * WHAT THIS CANNOT MEASURE. The curve only exists if the log carries one usage
+ * frame PER MODEL CALL. Only the `json-event-stream` family (OpenCode) does:
+ * `claude-stream`, `copilot-stream`, `qoder-stream`, the ACP session, and the
+ * pi RPC bridge all emit usage once, from the terminal `result` frame, as a
+ * whole-run aggregate. Feeding an aggregate through the per-call arithmetic does
+ * not degrade gracefully — it silently reports a one-point curve, which pins
+ * 100% of the read cost on the preamble term and zeroes the transcript term.
+ * `usageScope` therefore reports what the log can support and callers gate on
+ * it; see `detectUsageScope`.
+ *
+ * PURITY. This module is pure TypeScript by contract: no Node APIs, no
+ * filesystem, no `Buffer`. Byte counts go through `TextEncoder` so the same
+ * arithmetic runs in the daemon and in the browser and cannot drift between
+ * them. Callers supply already-parsed JSONL lines.
+ */
+import {
+  detectUsageAccountingConvention,
+  extractUsageCacheFields,
+  uncachedInputForConvention,
+  type UsageAccountingConvention,
+  type UsageCacheFields,
+} from './usage-accounting.js';
+
+/** Per-million-token prices used to turn token counts into dollars. */
+export interface RunCostRates {
+  /** Uncached input tokens. */
+  inputPerMTok: number;
+  /** Cache reads — the cheap re-read of an established prefix. */
+  cachedReadPerMTok: number;
+  /** Cache writes — placing new content into the cache, billed above input. */
+  cacheWritePerMTok: number;
+  /** Generated tokens. The most expensive per unit, by a wide margin. */
+  outputPerMTok: number;
+}
+
+/**
+ * Anthropic's published multipliers relative to a $3.00/1M input model, which
+ * is the shape two independent least-squares fits against real Open Design runs
+ * agreed on.
+ *
+ * These are an ESTIMATE keyed to one rate card. Any figure this module reports
+ * in dollars is "what this run would cost at these rates", not a billing fact —
+ * a run on a different model or provider needs its own rates passed in.
+ */
+export const DEFAULT_RUN_COST_RATES: RunCostRates = {
+  inputPerMTok: 3.0,
+  cachedReadPerMTok: 0.3,
+  cacheWritePerMTok: 3.75,
+  outputPerMTok: 15.0,
+};
+
+/** One model call, as reported by a `usage` frame. */
+export interface RunCostStep {
+  /** Zero-based position in the run's usage sequence. */
+  index: number;
+  /**
+   * Everything the model had in front of it on this call: `cachedReadTokens +
+   * inputTokens`. This is the curve the preamble/transcript split is taken over.
+   */
+  contextTokens: number;
+  /**
+   * The part of that context served from cache, read through the shared provider
+   * alias matrix (`extractUsageCacheFields`) rather than off one literal field
+   * name. Anthropic reports this as `cache_read_input_tokens` and OpenAI-style
+   * runtimes as `cached_input_tokens`; a raw `cached_read_tokens` lookup silently
+   * reports ZERO for both.
+   *
+   * Reason about the CACHED PREFIX with this field and about the CONTEXT with
+   * `contextTokens`. Cache health and the invalidation/compaction split want this
+   * one: a cache write is judged against what the next call finds in cache, not
+   * against how much the conversation grew.
+   */
+  cachedReadTokens: number;
+  cacheWriteTokens: number;
+  /**
+   * Input tokens that were NOT served from cache, normalized across the two
+   * incompatible accounting conventions: additive (Anthropic — `input_tokens`
+   * is already the uncached remainder) and inclusive (OpenAI — `input_tokens`
+   * contains the cache-read subset and must have it subtracted). Pricing the
+   * raw field bills an inclusive payload's cached tokens twice, once at the
+   * uncached rate.
+   */
+  inputTokens: number;
+  outputTokens: number;
+  /** Wall-clock milliseconds since the previous step; `null` on the first. */
+  gapMs: number | null;
+  /** True when this step's write matched the next step's context growth. */
+  incremental: boolean;
+}
+
+export interface RunCostTerms {
+  /**
+   * The context floor, re-read once per step. Splitting a run across isolated
+   * sub-agents does NOT reduce this term — every step still re-reads its own
+   * preamble — which is why context isolation cannot pay off when it dominates.
+   */
+  preambleTokens: number;
+  /**
+   * The part of the preamble that was NOT served from cache, and so was bought
+   * at the uncached input rate rather than the cache-read one.
+   *
+   * Exposed because without it `usd.preamble` is unauditable: it is not
+   * `preambleTokens x cachedReadPerMTok` and never can be, since establishing
+   * the floor on the first call is paid at the input rate. A surface showing the
+   * dollar figure next to the token count needs this to explain the difference.
+   * The cached remainder is `preambleTokens - preambleUncachedTokens`, and the
+   * transcript's own split falls out of `uncachedInputTokens` the same way.
+   */
+  preambleUncachedTokens: number;
+  /** Everything read above the floor: genuine conversation accumulation. */
+  transcriptTokens: number;
+  cacheWriteTokens: number;
+  uncachedInputTokens: number;
+  outputTokens: number;
+}
+
+export interface RunCostUsd {
+  preamble: number;
+  transcript: number;
+  cachedRead: number;
+  cacheWrite: number;
+  uncachedInput: number;
+  output: number;
+  total: number;
+}
+
+export type RunCostAnomalyKind =
+  /** Cached prefix shrank while the content stayed — it must be re-written. */
+  | 'cache-invalidation'
+  /** The history itself was summarised away. Cheap, and not a defect. */
+  | 'compaction'
+  /** A step wrote materially more than the next step read as new context. */
+  | 'cache-rewrite';
+
+export interface RunCostAnomaly {
+  kind: RunCostAnomalyKind;
+  /** Step the anomaly is attributed to. */
+  stepIndex: number;
+  /** Tokens the anomaly cost beyond the optimal path. */
+  tokens: number;
+  /** Human-readable one-liner for CLI/UI surfacing. */
+  detail: string;
+}
+
+export interface RunCostToolBytes {
+  tool: string;
+  bytes: number;
+  /** Fraction of the category total, 0..1. */
+  share: number;
+}
+
+export interface RunCostOutput {
+  /** Bytes the model emitted as tool_use inputs, grouped by tool. */
+  byTool: RunCostToolBytes[];
+  /** Bytes of prose addressed to the user. */
+  proseBytes: number;
+  /** Bytes of exposed reasoning. */
+  thinkingBytes: number;
+  totalBytes: number;
+}
+
+export interface RunCostIntakeItem {
+  tool: string;
+  /** File path for reads, command for shells, else the serialized input. */
+  label: string;
+  bytes: number;
+  /** Index of the model call that PRODUCED the result. */
+  stepIndex: number;
+  /**
+   * `bytes x calls that re-read it` — excluding the call that produced it, and
+   * zero for a result with no later call. The ordering lever: content pulled in
+   * early is dragged through every later call, so a large late read can cost
+   * less than a small early one.
+   */
+  dragBytes: number;
+}
+
+export interface RunCostIntake {
+  byTool: RunCostToolBytes[];
+  items: RunCostIntakeItem[];
+  totalBytes: number;
+  /** Total `bytes x remaining steps` across every result. */
+  totalDragBytes: number;
+  /**
+   * Calls whose ENTIRE input repeated a previous one. Deduping on file path
+   * alone reports paginated reads (same path, different offset/limit) as
+   * redundant, which is a false positive.
+   */
+  duplicateCalls: number;
+  duplicateBytes: number;
+}
+
+export interface RunCostCacheHealth {
+  /** Steps whose write matched the next step's context growth exactly. */
+  incrementalSteps: number;
+  /** Steps eligible for the comparison (i.e. having a successor). */
+  comparableSteps: number;
+  /** Tokens written beyond what the next step actually read as new. */
+  rewrittenTokens: number;
+}
+
+/**
+ * Whether the log's `usage` frames are one-per-model-call (the curve exists) or
+ * one whole-run aggregate (it does not).
+ */
+export type RunCostUsageScope = 'per-call' | 'aggregate';
+
+export interface RunCostReport {
+  /**
+   * What the underlying log can support. `aggregate` means every per-call term
+   * below is meaningless and the report must not be shown; callers gate on this
+   * rather than second-guessing the numbers.
+   */
+  usageScope: RunCostUsageScope;
+  /**
+   * Which `input_tokens` convention the run's provider was read under. Surfaced
+   * because it changes the uncached-input term materially and is otherwise
+   * invisible: diagnosing a suspicious figure meant reconstructing this by hand
+   * from the raw frames.
+   */
+  usageConvention: UsageAccountingConvention;
+  steps: RunCostStep[];
+  terms: RunCostTerms;
+  usd: RunCostUsd;
+  cacheHealth: RunCostCacheHealth;
+  anomalies: RunCostAnomaly[];
+  output: RunCostOutput;
+  intake: RunCostIntake;
+  rates: RunCostRates;
+}
+
+export interface AnalyzeRunCostOptions {
+  rates?: RunCostRates;
+}
+
+/** Body of `GET /api/runs/:id/cost`. */
+export interface RunCostResponse {
+  runId: string;
+  /**
+   * Absent when the run predates event-log persistence or its log was pruned —
+   * a run with no recoverable events is reported, not treated as missing.
+   */
+  report: RunCostReport | null;
+  /**
+   * Why `report` is null, for a surface to explain rather than show nothing.
+   *
+   * `no-usage-frames` means the log carried no usage at all — NOT that the run
+   * made no model call. A run that never reached the model and a stream family
+   * that reports nothing land here identically, and the two are
+   * indistinguishable from the log alone. Surfaces must name both causes.
+   *
+   * `aggregate-usage-only` means usage WAS reported, but once for the whole run
+   * instead of once per model call, so there is no context curve to decompose.
+   * This is a property of the agent's stream family, not of the run: every
+   * runtime except the `json-event-stream` family (OpenCode) reports this way
+   * today. Reporting it as unavailable is deliberate — the per-call arithmetic
+   * applied to an aggregate produces confident, wrong numbers.
+   */
+  unavailableReason?: 'no-event-log' | 'no-usage-frames' | 'aggregate-usage-only';
+}
+
+const encoder = new TextEncoder();
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function num(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
+function byteLength(value: string): number {
+  return encoder.encode(value).length;
+}
+
+/** Key-sorted JSON so two structurally equal inputs hash the same. */
+function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'null';
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
+  const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) =>
+    a < b ? -1 : a > b ? 1 : 0,
+  );
+  return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${stableStringify(v)}`).join(',')}}`;
+}
+
+function serializedBytes(value: unknown): number {
+  if (value === undefined) return 0;
+  if (typeof value === 'string') return byteLength(value);
+  return byteLength(stableStringify(value));
+}
+
+/** The `data` payload of one persisted event line, whatever wrapper it came in. */
+function eventPayload(line: unknown): Record<string, unknown> | null {
+  if (!isRecord(line)) return null;
+  const data = line.data;
+  return isRecord(data) ? data : null;
+}
+
+function intakeLabel(tool: string, input: unknown): string {
+  if (!isRecord(input)) return tool;
+  const path = input.filePath ?? input.file_path ?? input.path;
+  if (typeof path === 'string' && path.length > 0) return path;
+  const command = input.command;
+  if (typeof command === 'string' && command.length > 0) {
+    return command.replace(/\s+/g, ' ').trim();
+  }
+  return stableStringify(input);
+}
+
+function toShares(totals: Map<string, number>): RunCostToolBytes[] {
+  const total = [...totals.values()].reduce((a, b) => a + b, 0);
+  return [...totals.entries()]
+    .map(([tool, bytes]) => ({ tool, bytes, share: total > 0 ? bytes / total : 0 }))
+    .sort((a, b) => b.bytes - a.bytes);
+}
+
+/**
+ * A write is "incremental" when it matches what the next step reads as new
+ * context: written once, then re-read cheaply forever. The tolerance absorbs
+ * tokenizer rounding on small deltas without letting a real rewrite through.
+ */
+function writeMatchesDelta(write: number, delta: number): boolean {
+  return Math.abs(write - delta) <= Math.max(64, write * 0.02);
+}
+
+/**
+ * How many model calls re-read a tool result produced by call `producingStep`.
+ *
+ * A result cannot be re-read by the call that PRODUCED it. In the persisted
+ * order the result is written before that call's usage frame — OpenCode's
+ * `tool_use` part emits the result as soon as its state reaches `completed`,
+ * and the `step_finish` carrying the call's tokens arrives after it — so
+ * `producingStep` indexes the producing call itself, and only the calls after
+ * it drag the bytes forward.
+ *
+ * The consequence at the boundaries is what makes this worth naming: a result
+ * from the FIRST call is dragged through `n - 1` calls, not `n`, and a result
+ * with no later call at all is dragged nowhere, so its drag is zero rather than
+ * one. Both ends matter because this number ranks which intake to attack first.
+ */
+function callsThatReRead(producingStep: number, totalSteps: number): number {
+  return Math.max(0, totalSteps - 1 - producingStep);
+}
+
+/**
+ * Whether a log's `usage` frames are per-model-call or one whole-run aggregate.
+ *
+ * An aggregate is emitted from the terminal `result` frame, which happens once,
+ * so an aggregate log carries EXACTLY ONE usage frame. Two or more frames means
+ * a curve exists, however short.
+ *
+ * The discriminator for a single frame is arithmetic: a run that emitted a
+ * `tool_use` made at least two model calls — one to emit it, one to consume its
+ * result — so a single frame cannot be per-call and must be a close-of-run
+ * summary. That is the shape of `claude-stream`, `copilot-stream`,
+ * `qoder-stream`, the ACP session and the pi bridge. A run with no tool calls is
+ * per-call by definition: its one frame IS its one call.
+ *
+ * WHY NOT A POSITIONAL TEST. This first checked whether any `tool_use` appeared
+ * AFTER the first usage frame, reasoning that a per-call log interleaves usage
+ * with work. Real persisted runs falsified it: a legitimate two-call OpenCode
+ * run whose first call emitted both of its tools has every `tool_use` before the
+ * first frame, and was gated away despite carrying a real 1,792 → 28,864 curve.
+ * The positional test was guarding a hypothetical (a terminal-frame runtime
+ * emitting two frames) at the cost of real runs, and even in that hypothetical
+ * the damage is a two-point curve rather than the one-point collapse this gate
+ * exists to prevent.
+ *
+ * The remaining conservative edge is a one-call run that used tools and never
+ * consumed the result — a cancellation. It reads as aggregate, which errs
+ * toward refusing to report rather than reporting a one-point curve.
+ */
+export function detectUsageScope(args: {
+  usageFrames: number;
+  toolUseFrames: number;
+}): RunCostUsageScope {
+  if (args.usageFrames >= 2) return 'per-call';
+  return args.toolUseFrames > 0 ? 'aggregate' : 'per-call';
+}
+
+/**
+ * Decompose a run's persisted event lines into cost terms, cache health,
+ * output composition, and intake drag.
+ *
+ * `lines` are the parsed entries of `<runsDir>/<runId>/events.jsonl`. Malformed
+ * entries are skipped rather than throwing: the file is append-only JSONL
+ * written across daemon versions, so a report must degrade rather than fail.
+ */
+export function analyzeRunCost(
+  lines: readonly unknown[],
+  options: AnalyzeRunCostOptions = {},
+): RunCostReport {
+  const rates = options.rates ?? DEFAULT_RUN_COST_RATES;
+
+  const steps: RunCostStep[] = [];
+  const outputByTool = new Map<string, number>();
+  const intakeByTool = new Map<string, number>();
+  const intakeItems: Array<Omit<RunCostIntakeItem, 'dragBytes'>> = [];
+  const toolNameById = new Map<string, string>();
+  const toolInputById = new Map<string, unknown>();
+  const seenInputs = new Set<string>();
+  let proseBytes = 0;
+  let thinkingBytes = 0;
+  let duplicateCalls = 0;
+  let duplicateBytes = 0;
+  let lastTimestamp: number | null = null;
+  // Scope discriminator inputs. See `detectUsageScope`.
+  let toolUseFrames = 0;
+  // Raw cache fields per usage frame, parallel to `steps`. Held so the
+  // additive-vs-inclusive convention can be settled across the whole run.
+  const usageFields: UsageCacheFields[] = [];
+
+  for (const line of Array.isArray(lines) ? lines : []) {
+    const data = eventPayload(line);
+    if (!data) continue;
+    const type = data.type;
+
+    if (type === 'usage') {
+      const usage = isRecord(data.usage) ? data.usage : null;
+      if (!usage) continue;
+      const timestamp = isRecord(line) && typeof line.timestamp === 'number' ? line.timestamp : null;
+      // Read through the shared provider matrix, never off literal field names:
+      // Anthropic ships `cache_read_input_tokens`, OpenAI-style runtimes ship
+      // `cached_input_tokens`, and a raw lookup reports zero for both.
+      //
+      // `inputTokens` — and therefore `contextTokens`, which contains it — are
+      // filled in AFTER the loop: whether `input_tokens` is additive or
+      // inclusive is a property of the provider, so it takes every frame of the
+      // run to decide and cannot be settled one frame at a time.
+      const fields = extractUsageCacheFields(usage);
+      usageFields.push(fields);
+      steps.push({
+        index: steps.length,
+        contextTokens: 0,
+        cachedReadTokens: fields.cacheReadInputTokens ?? 0,
+        cacheWriteTokens: fields.cacheCreationInputTokens ?? 0,
+        inputTokens: 0,
+        outputTokens: fields.outputTokens ?? 0,
+        gapMs: timestamp !== null && lastTimestamp !== null ? timestamp - lastTimestamp : null,
+        incremental: false,
+      });
+      if (timestamp !== null) lastTimestamp = timestamp;
+      continue;
+    }
+
+    if (type === 'text_delta' && typeof data.delta === 'string') {
+      proseBytes += byteLength(data.delta);
+      continue;
+    }
+    if (type === 'thinking_delta' && typeof data.delta === 'string') {
+      thinkingBytes += byteLength(data.delta);
+      continue;
+    }
+
+    if (type === 'tool_use' && typeof data.name === 'string') {
+      const tool = data.name;
+      toolUseFrames += 1;
+      outputByTool.set(tool, (outputByTool.get(tool) ?? 0) + serializedBytes(data.input));
+      if (typeof data.id === 'string') {
+        toolNameById.set(data.id, tool);
+        toolInputById.set(data.id, data.input);
+      }
+      continue;
+    }
+
+    if (type === 'tool_result' && typeof data.toolUseId === 'string') {
+      const tool = toolNameById.get(data.toolUseId) ?? 'unknown';
+      const input = toolInputById.get(data.toolUseId);
+      const bytes = serializedBytes(data.content);
+      intakeByTool.set(tool, (intakeByTool.get(tool) ?? 0) + bytes);
+      intakeItems.push({
+        tool,
+        label: intakeLabel(tool, input),
+        bytes,
+        stepIndex: steps.length,
+      });
+      const key = `${tool}::${stableStringify(input ?? null)}`;
+      if (seenInputs.has(key)) {
+        duplicateCalls += 1;
+        duplicateBytes += bytes;
+      } else {
+        seenInputs.add(key);
+      }
+    }
+  }
+
+  // --- Uncached input and the context curve, once the whole run has been seen
+  // Deciding the convention per frame gives one run two answers: a first call
+  // with a barely-warm cache looks inclusive even when the provider is additive.
+  // See `detectUsageAccountingConvention`.
+  //
+  // The context curve can only be built here, for the same reason: it is the
+  // cache read plus the UNCACHED input, and which part of `input_tokens` is
+  // uncached is exactly what the convention decides.
+  const usageConvention = detectUsageAccountingConvention(usageFields);
+  for (let i = 0; i < steps.length; i += 1) {
+    const step = steps[i];
+    const fields = usageFields[i];
+    if (!step || !fields) continue;
+    step.inputTokens = uncachedInputForConvention(fields, usageConvention);
+    step.contextTokens = step.cachedReadTokens + step.inputTokens;
+  }
+
+  // --- Cache health and anomalies -----------------------------------------
+  const anomalies: RunCostAnomaly[] = [];
+  let incrementalSteps = 0;
+  let comparableSteps = 0;
+  let rewrittenTokens = 0;
+
+  // Cache health reads the CACHED PREFIX, not the context. A write's job is to
+  // put content where the next call can read it cheaply, so the only honest
+  // measure of whether it did that is the next call's cache read. Judging it
+  // against context growth would score a step for uncached input that the write
+  // never claimed to cover, and every write would look like a partial rewrite.
+  for (let i = 0; i < steps.length - 1; i += 1) {
+    const step = steps[i];
+    const next = steps[i + 1];
+    if (!step || !next) continue;
+    const delta = next.cachedReadTokens - step.cachedReadTokens;
+    // A negative delta is a context DROP, classified below. Scoring it as a
+    // rewrite would blame the step before the drop for the drop itself.
+    if (delta < 0) continue;
+    const write = step.cacheWriteTokens;
+    if (write <= 0) continue;
+    comparableSteps += 1;
+    if (writeMatchesDelta(write, delta)) {
+      step.incremental = true;
+      incrementalSteps += 1;
+    } else if (write > delta) {
+      const excess = write - delta;
+      rewrittenTokens += excess;
+      anomalies.push({
+        kind: 'cache-rewrite',
+        stepIndex: i,
+        tokens: excess,
+        detail: `wrote ${write} tokens but the next step only read ${delta} as new context`,
+      });
+    }
+  }
+
+  for (let i = 1; i < steps.length; i += 1) {
+    const step = steps[i];
+    const before = steps[i - 1];
+    if (!step || !before) continue;
+    // Also the cached prefix, for the same reason: both outcomes below are
+    // statements about the CACHE shrinking. The uncached input of the call that
+    // observed the drop is a consequence of it, so folding that input in here
+    // would partly mask the very fall being classified.
+    const previous = before.cachedReadTokens;
+    const current = step.cachedReadTokens;
+    if (current >= previous) continue;
+    // A frame reporting no cached read at all did not make a comparable model
+    // call — runs close with exactly such a summary frame. Reading its fall to
+    // zero as lost history invents an anomaly at the end of every healthy run.
+    if (current === 0) continue;
+    // Did the CONTENT leave, or only its cached copy? If the step wrote back
+    // roughly what vanished, the conversation is intact and we merely paid to
+    // re-cache it. If nothing came back, the history was summarised away.
+    const held = current + step.cacheWriteTokens;
+    if (held >= previous * 0.9) {
+      anomalies.push({
+        kind: 'cache-invalidation',
+        stepIndex: i,
+        tokens: previous - current,
+        detail: `cached prefix fell ${previous} -> ${current} while the context held at ~${held}; re-cached, not compacted`,
+      });
+    } else {
+      anomalies.push({
+        kind: 'compaction',
+        stepIndex: i,
+        tokens: previous - current,
+        detail: `context shrank ${previous} -> ${current} and was not written back; history was summarised`,
+      });
+    }
+  }
+
+  // --- Term decomposition --------------------------------------------------
+  // The preamble is the floor of the CONTEXT curve, re-read once per step.
+  // Steps with no context at all are excluded — a frame reporting neither a
+  // cache read nor uncached input made no comparable model call, and runs close
+  // with exactly such a summary frame.
+  const withContext = steps.filter((s) => s.contextTokens > 0);
+  const floor = withContext.length > 0
+    ? Math.min(...withContext.map((s) => s.contextTokens))
+    : 0;
+  const contextTotal = withContext.reduce((a, s) => a + s.contextTokens, 0);
+  const preambleTokens = floor * withContext.length;
+  const transcriptTokens = Math.max(0, contextTotal - preambleTokens);
+
+  // How much of the floor was bought at which rate. A cache serves the PREFIX of
+  // a context, and the floor IS that prefix, so a step's floor is cached exactly
+  // as far as its cache read reaches and the shortfall was paid as fresh input.
+  // Proportional attribution would be the other candidate, and it is wrong for a
+  // concrete reason: on a first call it would spread the floor across a cache
+  // that demonstrably held almost none of it.
+  //
+  // Both parts are exact — `min` never exceeds the floor, and the shortfall can
+  // never exceed the step's own uncached input because `floor <= context` — so
+  // the two rows stay an exact subdivision of `cachedRead + uncachedInput` and
+  // the run total is untouched. This defect was only ever a misattribution
+  // BETWEEN rows; no run was ever mispriced.
+  let preambleCachedTokens = 0;
+  let preambleUncachedTokens = 0;
+  for (const step of withContext) {
+    const cached = Math.min(floor, step.cachedReadTokens);
+    preambleCachedTokens += cached;
+    preambleUncachedTokens += floor - cached;
+  }
+
+  const cachedReadTotal = steps.reduce((a, s) => a + s.cachedReadTokens, 0);
+
+  const terms: RunCostTerms = {
+    preambleTokens,
+    preambleUncachedTokens,
+    transcriptTokens,
+    cacheWriteTokens: steps.reduce((a, s) => a + s.cacheWriteTokens, 0),
+    uncachedInputTokens: steps.reduce((a, s) => a + s.inputTokens, 0),
+    outputTokens: steps.reduce((a, s) => a + s.outputTokens, 0),
+  };
+
+  const perM = (tokens: number, rate: number) => (tokens / 1_000_000) * rate;
+  const blended = (cached: number, uncached: number) =>
+    perM(cached, rates.cachedReadPerMTok) + perM(uncached, rates.inputPerMTok);
+  const usd: RunCostUsd = {
+    preamble: blended(preambleCachedTokens, preambleUncachedTokens),
+    transcript: blended(
+      cachedReadTotal - preambleCachedTokens,
+      terms.uncachedInputTokens - preambleUncachedTokens,
+    ),
+    cachedRead: perM(cachedReadTotal, rates.cachedReadPerMTok),
+    cacheWrite: perM(terms.cacheWriteTokens, rates.cacheWritePerMTok),
+    uncachedInput: perM(terms.uncachedInputTokens, rates.inputPerMTok),
+    output: perM(terms.outputTokens, rates.outputPerMTok),
+    total: 0,
+  };
+  usd.total = usd.cachedRead + usd.cacheWrite + usd.uncachedInput + usd.output;
+
+  // --- Intake drag ---------------------------------------------------------
+  const totalSteps = steps.length;
+  const items: RunCostIntakeItem[] = intakeItems
+    .map((item) => ({
+      ...item,
+      dragBytes: item.bytes * callsThatReRead(item.stepIndex, totalSteps),
+    }))
+    .sort((a, b) => b.dragBytes - a.dragBytes);
+
+  const outputToolBytes = [...outputByTool.values()].reduce((a, b) => a + b, 0);
+  const outputTotalBytes = outputToolBytes + proseBytes + thinkingBytes;
+  const outputByToolShared: RunCostToolBytes[] = [...outputByTool.entries()]
+    .map(([tool, bytes]) => ({
+      tool,
+      bytes,
+      share: outputTotalBytes > 0 ? bytes / outputTotalBytes : 0,
+    }))
+    .sort((a, b) => b.bytes - a.bytes);
+
+  return {
+    usageScope: detectUsageScope({ usageFrames: steps.length, toolUseFrames }),
+    usageConvention,
+    steps,
+    terms,
+    usd,
+    cacheHealth: { incrementalSteps, comparableSteps, rewrittenTokens },
+    anomalies,
+    output: {
+      byTool: outputByToolShared,
+      proseBytes,
+      thinkingBytes,
+      totalBytes: outputTotalBytes,
+    },
+    intake: {
+      byTool: toShares(intakeByTool),
+      items,
+      totalBytes: items.reduce((a, i) => a + i.bytes, 0),
+      totalDragBytes: items.reduce((a, i) => a + i.dragBytes, 0),
+      duplicateCalls,
+      duplicateBytes,
+    },
+    rates,
+  };
+}

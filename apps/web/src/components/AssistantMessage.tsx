@@ -72,6 +72,7 @@ import {
 } from "./design-files/pluginFolders";
 import type { PluginFolderAgentAction } from "./design-files/pluginFolderActions";
 import { Icon, type IconName } from "./Icon";
+import { RunCostPanel } from "./RunCostPanel";
 import { UserActionCard } from "./UserActionCard";
 import { NextStepActions, type NextStepActionsVariant } from "./NextStepActions";
 import type { DesignToolboxActionId } from "../runtime/design-toolbox";
@@ -1059,6 +1060,7 @@ function AssistantMessageImpl({
                     taskActivity !== null ||
                     hasTodoSnapshot ||
                     message.id === errorCardOwnerId,
+                  runId: message.runId ?? null,
                 }}
               />
             ) : (
@@ -1072,6 +1074,7 @@ function AssistantMessageImpl({
                 onFork={canFork ? onForkFromMessage : undefined}
                 forking={forking}
                 isLast={!!isLast}
+                runId={message.runId ?? null}
                 hideRunStatus={
                   taskActivity !== null ||
                   hasTodoSnapshot ||
@@ -1521,6 +1524,10 @@ interface AssistantFooterProps {
   // When the turn has an execution disclosure, its run state lives at the top
   // of the answer. The footer keeps only actions so run state is not repeated.
   hideRunStatus?: boolean;
+  // Enables the cost-breakdown disclosure once the run has finished. The
+  // report is derived from the persisted event log, so it stays available for
+  // runs that completed long ago — but it is meaningless mid-stream.
+  runId?: string | null;
 }
 
 function AssistantFooter({
@@ -1536,18 +1543,23 @@ function AssistantFooter({
   forceVisible = false,
   isLast = false,
   hideRunStatus = false,
+  runId = null,
 }: AssistantFooterProps) {
   const t = useT();
+  const [costOpen, setCostOpen] = useState(false);
+  const canShowCost = !streaming && !!runId;
   if (
     !forceVisible &&
     !streaming &&
     !hasUnfinishedTodos &&
     !hasEmptyResponse &&
     !copyMarkdown &&
-    !onFork
+    !onFork &&
+    !canShowCost
   )
     return null;
   return (
+    <>
     <div
       className="assistant-footer"
       data-unfinished={hasUnfinishedTodos ? "true" : "false"}
@@ -1572,7 +1584,7 @@ function AssistantFooter({
           </span>
         </>
       ) : null}
-      {copyMarkdown || onFork || feedbackControls ? (
+      {copyMarkdown || onFork || feedbackControls || canShowCost ? (
         <span className="assistant-footer-controls">
           {copyMarkdown ? <AssistantMarkdownCopyButton markdown={copyMarkdown} /> : null}
           {onFork ? (
@@ -1581,10 +1593,33 @@ function AssistantFooter({
               onFork={onFork}
             />
           ) : null}
+          {canShowCost ? (
+            <button
+              type="button"
+              className="assistant-copy-button od-tooltip"
+              data-testid="assistant-run-cost-toggle"
+              data-tooltip={t('runCost.toggle')}
+              data-tooltip-placement="top"
+              aria-expanded={costOpen}
+              aria-label={t('runCost.toggle')}
+              title={t('runCost.toggle')}
+              onClick={() => setCostOpen((open) => !open)}
+            >
+              <Icon name="kanban" size={13} />
+            </button>
+          ) : null}
           {feedbackControls}
         </span>
       ) : null}
     </div>
+    {/* Kept mounted and toggled by class so the disclosure keeps its exit
+        transition; an unmount would skip it entirely. */}
+    <div className={`accordion-collapsible${costOpen ? ' open' : ''}`}>
+      <div className="accordion-collapsible-inner">
+        {costOpen && runId ? <RunCostPanel runId={runId} /> : null}
+      </div>
+    </div>
+    </>
   );
 }
 
