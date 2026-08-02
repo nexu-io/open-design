@@ -1,0 +1,22 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "douvery-design-system-msc0r0zs",
+  "title": "Douvery Design System",
+  "version": "0.1.0",
+  "description": "Paquete reutilizable para crear interfaces de comercio claras, confiables y tranquilas.",
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  }
+}

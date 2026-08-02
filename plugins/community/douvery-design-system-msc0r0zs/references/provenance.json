@@ -1,0 +1,26 @@
+{
+  "candidateId": "cb921ef7-5233-4a49-b89f-b4ce0b9b5941",
+  "projectId": "brand-douvery-c9ffd9",
+  "runId": "e159478a-359c-48f5-8a72-f204c0bb7bd3",
+  "conversationId": "b236d581-b239-4fc7-b06d-bde823ec86b5",
+  "provenance": {
+    "summary": "Detected from README.md, SKILL.md after a successful run.",
+    "detectedAt": 1785686590362
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "README.md",
+      "label": "README.md",
+      "size": 1451,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "SKILL.md",
+      "label": "SKILL.md",
+      "size": 1037,
+      "copied": true
+    }
+  ]
+}
