@@ -87,6 +87,7 @@ import {
   mimeFor,
   sanitizeName,
   sanitizePath,
+  resolveSafeReal,
 } from '../projects.js';
 import {
   AIHUBMIX_DEFAULT_BASE_URL,
@@ -460,10 +461,16 @@ export async function generateMedia(args: {
   // `./` BEFORE path validation to mirror how shells normalize relative
   // paths. The auto-generated fallback is always a bare filename, so it
   // stays on `sanitizeName`.
-  const safeOut = output
-    ? sanitizePath(output.replace(/^\.\//, ''))
-    : sanitizeName(autoOutputName(surface, model, resolvedAudioKind));
-  const target = path.join(dir, safeOut);
+  const rawOut = output || autoOutputName(surface, model, resolvedAudioKind);
+  // resolveSafeReal() applies the SAME symlink-aware confinement used by
+  // writeProjectFile() / deleteProjectFile(): it realpath()s the resolved
+  // candidate (or its existing prefix, for writes that haven't created
+  // the file yet) and re-validates against the realpath of `dir`. Without
+  // this, a project subdirectory set up as a symlink to a path outside
+  // the project root would let a caller-supplied `output` escape the
+  // sandbox by following the link (#6339 review).
+  const safeOut = output ? sanitizePath(output.replace(/^\.\//, '')) : sanitizeName(rawOut);
+  const target = await resolveSafeReal(dir, safeOut);
   await mkdir(path.dirname(target), { recursive: true });
 
   // Reference image for image-to-video / image-edit flows. The agent

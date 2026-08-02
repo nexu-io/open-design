@@ -1334,7 +1334,15 @@ function resolveSafe(dir, name) {
 // candidate (or its existing prefix, for writes that haven't created
 // the file yet) and re-validates against the realpath of dir, so
 // descendant symlinks can't reach outside the project.
-async function resolveSafeReal(dir, name) {
+//
+// Exported so callers that build their own file targets (e.g. the media
+// generator's `output` field, which accepts nested paths like
+// `assets/foo.png`) can reuse the same confinement used by
+// `writeProjectFile` / `deleteProjectFile`. Without this, a project
+// subdirectory set up as a symlink to a path outside the project root
+// would let a caller-supplied `output` escape the sandbox by following
+// the link (#6339 review).
+export async function resolveSafeReal(dir, name) {
   const candidate = resolveSafe(dir, name);
   const rootReal = await realpath(dir).catch(() => dir);
   let real;
