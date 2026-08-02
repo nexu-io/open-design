@@ -1553,7 +1553,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
 
   app.post('/api/projects', async (req, res) => {
     try {
-      const { id, name, projectLocationId, skillId, designSystemId, pendingPrompt, metadata, customInstructions, skipDiscoveryBrief } =
+      const { id, name, projectLocationId, skillId, skillIds, designSystemId, pendingPrompt, metadata, customInstructions, skipDiscoveryBrief } =
         req.body || {};
       if (typeof id !== 'string' || !isSafeId(id)) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'invalid project id');
@@ -1622,11 +1622,38 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         );
       }
       const normalizedDesignSystemId = designSystemValidation.id;
-      const skillValidation = await validateProjectSkillId(skillId);
-      if (!skillValidation.ok) {
-        return sendApiError(res, 400, skillValidation.code, skillValidation.message);
+      // Validate all skillIds and resolve the primary (first entry) as
+      // the project-level skillId.  Empty arrays and absent arrays are
+      // equivalent to no skill selection.
+      let normalizedSkillId: string | null = null;
+      if (skillIds != null && Array.isArray(skillIds) && skillIds.length > 0) {
+        const firstId = skillIds[0];
+        if (typeof firstId !== 'string' || !firstId.trim()) {
+          return sendApiError(res, 400, 'INVALID_SKILL_ID', 'skillIds must contain non-empty strings');
+        }
+        const firstValidation = await validateProjectSkillId(firstId);
+        if (!firstValidation.ok) {
+          return sendApiError(res, 400, firstValidation.code, firstValidation.message);
+        }
+        normalizedSkillId = firstValidation.id;
+        const rest = skillIds.slice(1);
+        for (const sid of rest) {
+          if (typeof sid !== 'string' || !sid.trim()) {
+            return sendApiError(res, 400, 'INVALID_SKILL_ID', 'skillIds must contain non-empty strings');
+          }
+          const sv = await validateProjectSkillId(sid);
+          if (!sv.ok) {
+            return sendApiError(res, 400, sv.code, sv.message);
+          }
+        }
+      } else if (skillId != null) {
+        // Legacy singular skillId path — validate it directly.
+        const skillValidation = await validateProjectSkillId(skillId);
+        if (!skillValidation.ok) {
+          return sendApiError(res, 400, skillValidation.code, skillValidation.message);
+        }
+        normalizedSkillId = skillValidation.id;
       }
-      const normalizedSkillId = skillValidation.id;
       const selectedLocationId = await resolveCreateProjectLocationId(projectLocationId);
       let externalProjectDir: string | null = null;
       if (selectedLocationId !== BUILT_IN_PROJECT_LOCATION_ID) {

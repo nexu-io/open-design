@@ -368,7 +368,13 @@ export function HomeView({
     chipId: string | null;
   } | null>(null);
   const [sessionMode, setSessionMode] = useState<ChatSessionMode>('design');
-  const [activeSkill, setActiveSkill] = useState<SkillSummary | null>(null);
+  // 5824: Home homepage @-mention should support multiple skills, not just
+  // silently keep the last picked one. The active selection is now an
+  // ordered array mirroring the @-mention order; the first entry becomes
+  // the project's primary skill and the rest ride along as `## Composed
+  // skill` blocks via the daemon's `skillIds` field. Empty array means no
+  // skill selected.
+  const [activeSkills, setActiveSkills] = useState<SkillSummary[]>([]);
   const [selectedPluginContexts, setSelectedPluginContexts] = useState<SelectedPluginContext[]>([]);
   const [selectedMcpContexts, setSelectedMcpContexts] = useState<SelectedMcpContext[]>([]);
   const [selectedConnectorContexts, setSelectedConnectorContexts] = useState<SelectedConnectorContext[]>([]);
@@ -663,7 +669,7 @@ export function HomeView({
     }
 
     setActive(null);
-    setActiveSkill(null);
+    setActiveSkills([]);
     setSelectedPluginContexts([]);
     setSelectedMcpContexts([]);
     setSelectedConnectorContexts([]);
@@ -844,7 +850,7 @@ export function HomeView({
   ): Promise<boolean> {
     const applyRequestId = activePluginApplyRequestRef.current + 1;
     activePluginApplyRequestRef.current = applyRequestId;
-    setActiveSkill(null);
+    setActiveSkills([]);
     const shouldResolveImmediately = options?.deferApply !== true;
     const inputFields = options?.inputFields ?? record.manifest?.od?.inputs ?? [];
     const optimisticInputs = hydratePluginInputs(
@@ -1548,7 +1554,16 @@ export function HomeView({
     setPendingApplyId(null);
     setFallbackProjectKind(null);
     setFallbackProjectMetadata(null);
-    setActiveSkill(skill);
+    // 5824: accumulate skills as an ordered array so multiple @-mentions
+    // survive into the project run. Picking the same skill twice is a
+    // no-op (idempotent dedupe). Picking a different skill appends rather
+    // than overwrites, matching the project-internal ChatComposer contract.
+    setActiveSkills((current) => {
+      if (current.some((s) => s.id === skill.id)) {
+        return current;
+      }
+      return [...current, skill];
+    });
     setError(null);
     const replacement = nextPrompt ?? localizeSkillPrompt(locale, skill) ?? '';
     if (replacement.trim().length > 0) {
@@ -1556,6 +1571,14 @@ export function HomeView({
       setPromptEditedByUser(false);
     }
     focusPromptAtEnd();
+  }
+
+  function clearActiveSkill() {
+    setActiveSkills([]);
+  }
+
+  function removeActiveSkill(skillId: string) {
+    setActiveSkills((current) => current.filter((s) => s.id !== skillId));
   }
 
   function useMcpServer(_server: McpServerConfig, nextPrompt: string) {
@@ -1610,7 +1633,7 @@ export function HomeView({
     const nextPrompt = buildPluginAuthoringPromptForInputs(nextInputs);
     runWithReplacementConfirmation('Plugin authoring', nextPrompt, async () => {
       setActive(null);
-      setActiveSkill(null);
+      setActiveSkills([]);
       setFallbackProjectKind('other');
       setFallbackProjectMetadata(null);
       setError(null);
@@ -1977,7 +2000,7 @@ export function HomeView({
       }
       const contextLinkedDirs = contextLinkedDirCandidates;
       const submittedProjectKind =
-        submittedActive?.projectKind ?? fallbackProjectKind ?? projectKindForSkill(activeSkill) ?? 'other';
+        submittedActive?.projectKind ?? fallbackProjectKind ?? projectKindForSkill(activeSkills[0] ?? null) ?? 'other';
       const submittedProjectMetadata = submittedActive?.mediaSurface
         ? metadataForHomeMediaComposer(submittedActive.mediaSurface, submittedActive.inputs, promptTemplates)
         : homeCreateProjectMetadata(
@@ -1989,7 +2012,14 @@ export function HomeView({
       // mutually exclusive routing sources. In Design mode, free-form prompts
       // route through the default design router; in Ask mode they stay plain
       // chat conversations with no hidden router plugin.
-      const resolvedSkillId = submittedActive ? null : activeSkill?.id ?? null;
+      // 5824: Collect every active skill id (in @-mention order) into an
+      // array. The first entry is the project's primary skill; later
+      // entries ride along as `## Composed skill` blocks via the daemon's
+      // `skillIds` field. When a scenario plugin is active we suppress
+      // the skill array entirely (same mutual-exclusivity rule that
+      // previously governed the singular skillId field).
+      const resolvedSkillIds =
+        submittedActive ? [] : activeSkills.map((s) => s.id).filter(Boolean);
       const routedPluginId =
         sessionMode === 'design'
           ? submittedActive?.record.id ?? DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID
@@ -2006,7 +2036,8 @@ export function HomeView({
         prompt: trimmed,
         pluginId: routedPluginId,
         pluginType: submittedActive?.record.marketplaceTrust ?? (routedPluginId ? 'official' : null),
-        skillId: resolvedSkillId,
+        skillId: resolvedSkillIds[0] ?? null,
+        skillIds: resolvedSkillIds.length > 1 ? resolvedSkillIds : null,
         appliedPluginSnapshotId: submittedActive?.result?.appliedPlugin?.snapshotId ?? null,
         pluginTitle: submittedActive?.record.title ?? null,
         taskKind: submittedActive?.result?.appliedPlugin?.taskKind ?? null,
@@ -2072,14 +2103,14 @@ export function HomeView({
         activePluginTitle={activeBadgeTitle}
         activePluginIsExplicit={activePluginIsExplicit}
         activePluginRecord={active?.record ?? null}
-        activeSkillId={activeSkill?.id ?? null}
-        activeSkillTitle={activeSkill ? localizeSkillName(locale, activeSkill) : null}
-        activeSkillRecord={activeSkill}
+        activeSkillId={activeSkills[0]?.id ?? null}
+        activeSkillTitle={activeSkills[0] ? localizeSkillName(locale, activeSkills[0]) : null}
+        activeSkillRecord={activeSkills[0] ?? null}
         activeChipId={active?.chipId ?? null}
         showActivePluginChip={showActivePluginChip}
         onClearActivePlugin={clearActivePlugin}
         onClearActiveChip={clearActiveChipSelection}
-        onClearActiveSkill={() => setActiveSkill(null)}
+        onClearActiveSkill={clearActiveSkill}
         selectedPluginContexts={selectedPluginContexts.map((item) => item.record)}
         selectedMcpContexts={selectedMcpContexts.map((item) => item.server)}
         selectedConnectorContexts={selectedConnectorContexts.map((item) => item.connector)}

@@ -279,7 +279,30 @@ export interface CreateProjectRequest {
   name: string;
   /** Optional project library location id. Omit or use `default` for .od/projects. */
   projectLocationId?: string;
+  /**
+   * Optional primary skill id. Stored on the project row as `skillId`. When
+   * `skillIds` is also supplied, the array's first entry wins as the primary;
+   * the remaining ids ride along as composed skills for the run's system
+   * prompt (see `composeDaemonSystemPrompt`'s `## Composed skill` blocks).
+   * Kept for backwards compatibility with callers that only select one skill
+   * (e.g. project PATCH /api/projects/:id and the legacy single-skill Home
+   * pick path).
+   */
   skillId?: string | null;
+  /**
+   * Optional ordered list of skill ids. On the daemon side, the first entry
+   * becomes the project's primary `skillId` and every subsequent entry is
+   * appended to the run's system prompt as a `## Composed skill — <name>`
+   * block, mirroring the project-internal ChatComposer path
+   * (`apps/web/src/components/ChatComposer.tsx`). When `skillId` is absent
+   * and `skillIds` is present, the first array entry is used as the primary.
+   * Empty arrays are equivalent to omitting the field.
+   *
+   * Background: Home used to pass only `skillId` (singular), so @-mentioning
+   * multiple skills silently dropped all but the last (#5824). Project-internal
+   * chat already sent `skillIds`; this field lets Home match that contract.
+   */
+  skillIds?: string[];
   designSystemId?: string | null;
   pendingPrompt?: string;
   metadata?: ProjectMetadata;

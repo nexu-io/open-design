@@ -1547,6 +1547,7 @@ function AppInner() {
         result = await createProject({
           name: input.name,
           skillId: input.skillId,
+          skillIds: input.skillIds,
           designSystemId: input.designSystemId,
           pendingPrompt: derivedPendingPrompt,
           metadata,
