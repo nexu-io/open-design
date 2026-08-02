@@ -94,3 +94,29 @@ test('title marker stripper strips across per-run instances when shouldEmitTitle
     '\n\nMore');
   assert.deepEqual(turn2.titles, []);
 });
+
+test('title marker stripper strips every marker inside one delta (post-close remainder keeps scanning)', () => {
+  // Regression for the mrcfps non-blocking thread on #6342 round-2 review
+  // (2026-08-02): the prior implementation did
+  //   `visible += buffer; buffer = '';`
+  // immediately after the first close tag, which forwarded the post-close
+  // remainder without scanning it. Stream delta boundaries are
+  // transport-dependent, so identical model output could leak a raw
+  // `<od-title>Two</od-title>` depending on adapter chunking — breaking
+  // the "scanner remains active" invariant this PR introduced.
+  //
+  // After the fix, the stripper keeps the post-close remainder in `buffer`
+  // and continues the loop instead of flushing visible text and clearing,
+  // so multiple markers in one delta are all stripped in the same pass.
+  const { stripper, titles } = createStripper();
+
+  assert.equal(
+    stripper.strip('<od-title>One</od-title>A<od-title>Two</od-title>B'),
+    'AB',
+  );
+  // `emitted` only de-dupes title events from a single stripper instance;
+  // the first marker wins, and the second is silently stripped without
+  // firing a duplicate title (mirrors the multi-turn behavior above).
+  assert.deepEqual(titles, ['One']);
+  assert.equal(stripper.flush(), '');
+});

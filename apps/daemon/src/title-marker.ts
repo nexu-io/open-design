@@ -94,11 +94,12 @@ export function createAgentTitleMarkerStripper(
 
       emitTitle(buffer.slice(titleStart, closeIndex));
       buffer = buffer.slice(closeIndex + TITLE_CLOSE_TAG.length);
-      // Keep scanning so subsequent markers in the same run are also
-      // stripped. `emitted` prevents duplicate title events within
-      // this stripper instance.
-      visible += buffer;
-      buffer = '';
+      // Keep scanning so subsequent markers in the same run are
+      // also stripped. `emitted` prevents duplicate title events
+      // within this stripper instance. The while loop continues
+      // with the remaining buffer, so a second marker in the same
+      // delta is handled without leaking the raw tag through.
+      continue;
     }
 
     return visible;
