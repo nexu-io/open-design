@@ -850,7 +850,53 @@ export async function generateMedia(args: {
     const stem = dot > 0 ? safeOut.slice(0, dot) : safeOut;
     finalOut = `${stem}${suggestedExt}`;
   }
-  const finalTarget = path.join(dir, finalOut);
+  // Validate the rewritten finalOut through the symlink-aware
+  // project boundary. resolveSafeReal() walks the existing prefix
+  // when the leaf doesn't exist yet, so even though the file isn't
+  // there before this line, an existing intermediate directory
+  // symlink (for example, <project>/assets -> /etc) is caught
+  // before any mkdir/writeFile follows it. The provider can also
+  // rewrite the leaf's extension, so we re-run the check on the
+  // post-rewrite finalOut instead of reusing the first target.
+  let finalTarget: string;
+  try {
+    finalTarget = await resolveSafeReal(dir, finalOut);
+  } catch (err) {
+    if (err && (err as { code?: string }).code === 'EPATHESCAPE') {
+      throw new Error(
+        `invalid output path: ${(err as Error).message}`,
+      );
+    }
+    throw err;
+  }
+  // resolveSafeReal only checks the path-string against the project
+  // dir, not the symlink-resolved target of the final leaf. If
+  // <project>/assets/hero.jpg itself is a symlink to an external
+  // file, realpath() resolves it and the write would follow the
+  // symlink outside the project. We have to also assert that the
+  // realpath of the final target is still under the project's
+  // realpath, so even a leaf-level symlink can't escape.
+  const { realpath: realpathAsync } = await import('node:fs/promises');
+  const rootReal = await realpathAsync(dir).catch(() => dir);
+  const targetReal = await realpathAsync(finalTarget).catch(
+    (err) => {
+      // ENOENT on the final leaf is fine: the leaf is the file
+      // we're about to write. Reuse resolveSafeReal's existing-prefix
+      // trick: walk up until we find an existing parent and
+      // realpath that.
+      if (!err || (err as { code?: string }).code !== 'ENOENT') {
+        throw err;
+      }
+      return finalTarget;
+    },
+  );
+  if (!targetReal.startsWith(rootReal + path.sep) && targetReal !== rootReal) {
+    const e = new Error(
+      'final output escapes project dir via symlink at the leaf',
+    );
+    (e as { code?: string }).code = 'EPATHESCAPE';
+    throw new Error(`invalid output path: ${e.message}`);
+  }
   await writeFile(finalTarget, bytes);
   const st = await stat(finalTarget);
   return {

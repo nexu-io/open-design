@@ -43,6 +43,22 @@ async function withStubbedFetch(
 
 function minimaxPngResponse(): Response {
   const bytes = Buffer.from(PNG_BASE64, 'base64');
+  return minimaxBytesResponse(bytes);
+}
+
+function minimaxJpegResponse(): Response {
+  // Minimal valid JPEG file: 0xFF 0xD8 0xFF (SOI + APP0 marker start) + 0xE0
+  // (JFIF APP0 marker) + 16 bytes of zero padding + 0xFF 0xD9 (EOI).
+  // This is enough for sniffImageExt to identify it as JPEG and let the
+  // call site rewrite finalOut's extension to .jpg.
+  const bytes = Buffer.from([
+    0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00,
+    0x01, 0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0xff, 0xd9,
+  ]);
+  return minimaxBytesResponse(bytes);
+}
+
+function minimaxBytesResponse(bytes: Buffer): Response {
   return new Response(
     JSON.stringify({
       data: { image_base64: [bytes.toString('base64')] },
@@ -61,6 +77,8 @@ describe('media generator output path resolution (#6336)', () => {
   const realFetch = globalThis.fetch;
   const originalMinimaxApiKey = process.env.OD_MINIMAX_API_KEY;
   const originalImageBaseUrl = process.env.OD_MINIMAX_IMAGE_BASE_URL;
+  const originalMediaConfigDir = process.env.OD_MEDIA_CONFIG_DIR;
+  const originalDataDir = process.env.OD_DATA_DIR;
 
   beforeEach(async () => {
     root = await mkdtemp(path.join(tmpdir(), 'od-media-output-'));
@@ -68,6 +86,8 @@ describe('media generator output path resolution (#6336)', () => {
     projectsRoot = path.join(projectRoot, '.od', 'projects');
     projectId = 'demo';
     await mkdir(projectsRoot, { recursive: true });
+    delete process.env.OD_MEDIA_CONFIG_DIR;
+    delete process.env.OD_DATA_DIR;
     process.env.OD_MINIMAX_API_KEY = 'minimax-test-key';
     process.env.OD_MINIMAX_IMAGE_BASE_URL = TEST_MINIMAX_DEFAULT_BASE_URL;
   });
@@ -83,6 +103,16 @@ describe('media generator output path resolution (#6336)', () => {
       delete process.env.OD_MINIMAX_IMAGE_BASE_URL;
     } else {
       process.env.OD_MINIMAX_IMAGE_BASE_URL = originalImageBaseUrl;
+    }
+    if (originalMediaConfigDir == null) {
+      delete process.env.OD_MEDIA_CONFIG_DIR;
+    } else {
+      process.env.OD_MEDIA_CONFIG_DIR = originalMediaConfigDir;
+    }
+    if (originalDataDir == null) {
+      delete process.env.OD_DATA_DIR;
+    } else {
+      process.env.OD_DATA_DIR = originalDataDir;
     }
     await rm(root, { recursive: true, force: true });
   });
@@ -262,5 +292,63 @@ describe('media generator output path resolution (#6336)', () => {
         () => false,
       ),
     ).resolves.toBe(false);
+  });
+
+  it('refuses a symlink escape introduced by the provider extension rewrite', async () => {
+    // External directory with a pre-existing real file there; the
+    // symlink at the leaf points at this real file, so resolveSafeReal
+    // and a follow-up realpath check on the leaf both have something
+    // concrete to walk to.
+    const outsideDir = path.join(root, 'outside-rewrite');
+    await mkdir(outsideDir, { recursive: true });
+    const outsideJpg = path.join(outsideDir, 'hero.jpg');
+    await writeFile(outsideJpg, 'preexisting external content');
+
+    // Plant <project>/assets/hero.jpg as a symlink to the external
+    // file. The caller asks for .png, but the response sniff detects
+    // the body as JPEG (FF D8 FF) so suggestedExt becomes .jpg and
+    // the call site rewrites finalOut to "assets/hero.jpg" after
+    // the first symlink check has already passed. The re-validation
+    // step in the call site must catch the leaf symlink.
+    const projectDir = path.join(projectsRoot, projectId);
+    await mkdir(projectDir, { recursive: true });
+    const jpgLink = path.join(projectDir, 'assets', 'hero.jpg');
+    await mkdir(path.dirname(jpgLink), { recursive: true });
+    await symlink(outsideJpg, jpgLink, 'file');
+
+    const jpegStubResponse = minimaxJpegResponse();
+
+    let captured: Error | null = null;
+    let calledFetch = false;
+    await withStubbedFetch(
+      () => {
+        calledFetch = true;
+        return jpegStubResponse;
+      },
+      async () => {
+        try {
+          await generateMedia({
+            projectRoot,
+            projectsRoot,
+            projectId,
+            surface: 'image',
+            model: 'minimax-image-01',
+            prompt: 'attempt escape via extension rewrite',
+            output: 'assets/hero.png',
+          });
+        } catch (err) {
+          captured = err as Error;
+        }
+      },
+    );
+
+    expect(calledFetch).toBe(true);
+    expect(captured).not.toBeNull();
+    expect(captured!.message).toMatch(/invalid output path/);
+    // The external file must NOT have been overwritten with provider
+    // bytes. If the call site catches the leaf symlink, the original
+    // "preexisting external content" remains intact.
+    const content = await readFile(outsideJpg, 'utf-8');
+    expect(content).toBe('preexisting external content');
   });
 });
