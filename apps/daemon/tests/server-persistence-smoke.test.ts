@@ -131,7 +131,8 @@ it('[P0] starts on an existing data dir with legacy app config and persisted pro
     body: JSON.stringify({ byokProvider: custom }),
   });
   expect(validCustom.status).toBe(200);
-  expect((await validCustom.json()).config.byokProvider).toEqual(custom);
+  const validCustomBody = await validCustom.json() as { config: { byokProvider?: unknown } };
+  expect(validCustomBody.config.byokProvider).toEqual(custom);
 }, 60_000);
 
 async function startIsolatedServer(root: string): Promise<StartedServer> {
