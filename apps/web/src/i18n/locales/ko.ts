@@ -3822,7 +3822,7 @@ export const ko: Dict = {
   'settings.designSystemsImportedStatus': '{title} 가져옴',
   'settings.designSystemsViewImported': '가져온 디자인 시스템 보기',
   'settings.designSystemsImportErrorInvalid': '디자인 시스템을 가져올 수 없습니다. 경로 또는 URL을 확인하고 다시 시도하세요.',
-  'settings.designSystemsImportErrorInternal': '낸부 오류로 인해 디자인 시스템을 가져올 수 없습니다. 다시 시도하세요.',
+  'settings.designSystemsImportErrorInternal': '내부 오류로 인해 디자인 시스템을 가져올 수 없습니다. 다시 시도하세요.',
   'settings.designSystemsImportErrorDetails': '세부 정보',
   'settings.designSystemsCategory': '카테고리',
   'settings.designSystemsAllCategories': '모든 카테고리',

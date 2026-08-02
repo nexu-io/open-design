@@ -470,13 +470,13 @@ export function DesignSystemsSection({
               </div>
             </div>
             {importError ? (
-              <p className="library-install-error">
-                {importErrorKey ? t(importErrorKey) : importError.message}
+              <div className="library-install-error">
+                <p>{importErrorKey ? t(importErrorKey) : importError.message}</p>
                 <details className="library-install-error-detail">
                   <summary>{t('settings.designSystemsImportErrorDetails')}</summary>
                   <code>{importError.message}</code>
                 </details>
-              </p>
+              </div>
             ) : null}
             {importMessage ? (
               <p className="library-install-status">
