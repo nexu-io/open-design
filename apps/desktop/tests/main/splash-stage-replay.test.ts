@@ -29,9 +29,11 @@ function createMockSplash(): MockSplash {
   const executed: string[] = [];
   let didFinishLoad: (() => void) | null = null;
   let destroyed = false;
+  let webContentsDestroyed = false;
   const surface: SplashStageSurface = {
     isDestroyed: () => destroyed,
     webContents: {
+      isDestroyed: () => webContentsDestroyed,
       executeJavaScript: (code: string) => {
         executed.push(code);
         return Promise.resolve(undefined);
@@ -47,6 +49,7 @@ function createMockSplash(): MockSplash {
     emitDidFinishLoad: () => didFinishLoad?.(),
     destroy: () => {
       destroyed = true;
+      webContentsDestroyed = true;
     },
   };
 }
@@ -98,6 +101,45 @@ describe('splash boot-stage replay guard', () => {
 
     setSplashStage(splash.surface, 'engine');
     expect(splash.executed).toEqual([]);
+  });
+
+  // Race 1: stage deferred before load, splash destroyed before did-finish-load.
+  // Without the guard in registerSplashStageTracking, the replay callback
+  // would call applySplashStage and then executeJavaScript on a dead surface.
+  test('is a no-op when the splash is destroyed before did-finish-load', () => {
+    const splash = createMockSplash();
+    registerSplashStageTracking(splash.surface);
+
+    setSplashStage(splash.surface, 'engine');
+    expect(splash.executed).toEqual([]);
+
+    // Destroy the splash after the stage is stashed but before load fires.
+    splash.destroy();
+    splash.emitDidFinishLoad();
+    expect(splash.executed).toEqual([]);
+  });
+
+  // Race 2: the webContents throws `TypeError("Object has been destroyed")`
+  // synchronously (not returning a rejected Promise) during executeJavaScript.
+  // The existing `.catch` only handles Promise rejections — a sync throw
+  // escapes and can crash the process. The try/catch in applySplashStage must
+  // swallow this sync throw, mirroring the existing Promise-rejection contract.
+  test('tolerates a destroyed webContents mid-flight instead of throwing', () => {
+    const surface: SplashStageSurface = {
+      isDestroyed: () => false,
+      webContents: {
+        isDestroyed: () => false,
+        executeJavaScript: () => {
+          // Simulate the teardown race: throw before returning a Promise.
+          throw new TypeError('Object has been destroyed');
+        },
+        once: () => { /* no-op */ },
+      },
+    };
+
+    // No throw — the sync exception is swallowed the same way an
+    // executeJavaScript rejection would be.
+    expect(() => setSplashStage(surface, 'engine')).not.toThrow();
   });
 
   // Slow-cold-boot UX: the splash must tell the user WHICH step of how many is

@@ -1308,10 +1308,19 @@ function splashStagePayload(stage: SplashBootStage): { step: number; total: numb
  * Narrow view of the splash window that the stage updater needs. A real
  * `BrowserWindow` satisfies this structurally; tests pass a mock so the
  * load-ready/replay logic is exercisable without a live Electron renderer.
+ *
+ * `webContents.isDestroyed()` is part of the contract because Electron can
+ * tear a window's underlying `webContents` down before (or in between) the
+ * `isDestroyed()`-and-`executeJavaScript` boundary in `setSplashStage` /
+ * `applySplashStage`; without that probe, the synchronous
+ * `executeJavaScript` call throws `TypeError("Object has been destroyed")`
+ * — a rejection that escapes the existing `.catch` because no Promise is
+ * returned in the synchronous-throw case. See issue #6136.
  */
 export type SplashStageSurface = {
   isDestroyed(): boolean;
   webContents: {
+    isDestroyed(): boolean;
     executeJavaScript(code: string, userGesture?: boolean): Promise<unknown>;
     once(event: "did-finish-load", listener: () => void): void;
   };
@@ -1324,12 +1333,26 @@ type SplashStageState = { ready: boolean; pending: SplashBootStage | null };
 const splashStageState = new WeakMap<SplashStageSurface, SplashStageState>();
 
 function applySplashStage(splash: SplashStageSurface, stage: SplashBootStage): void {
-  void splash.webContents
-    .executeJavaScript(
-      `window.__odSplashSetStage && window.__odSplashSetStage(${JSON.stringify(splashStagePayload(stage))});`,
-      true,
-    )
-    .catch(() => undefined);
+  // Guard against the teardown race: `setSplashStage` checks
+  // `splash.isDestroyed()` before calling here, but the window can
+  // be destroyed between that check and this call (see #6136).
+  // `webContents.isDestroyed()` covers the case where the renderer
+  // tears down before the wrapper BrowserWindow is reaped.
+  if (splash.isDestroyed() || splash.webContents.isDestroyed()) return;
+  try {
+    void splash.webContents
+      .executeJavaScript(
+        `window.__odSplashSetStage && window.__odSplashSetStage(${JSON.stringify(splashStagePayload(stage))});`,
+        true,
+      )
+      .catch(() => undefined);
+  } catch {
+    // Electron can throw `TypeError("Object has been destroyed")`
+    // synchronously from executeJavaScript in the residual teardown
+    // race not covered by the isDestroyed() checks above. Mirror the
+    // Promise-rejection contract: this path is best-effort, never a
+    // process-killing uncaught exception.
+  }
 }
 
 /**
@@ -1345,6 +1368,11 @@ export function registerSplashStageTracking(splash: SplashStageSurface): void {
   const state: SplashStageState = { ready: false, pending: null };
   splashStageState.set(splash, state);
   splash.webContents.once("did-finish-load", () => {
+    // The splash or its webContents may have been destroyed between
+    // the stage being stashed and the load event firing (race 1).
+    // Bail out early rather than calling executeJavaScript on a
+    // dead renderer.
+    if (splash.isDestroyed() || splash.webContents.isDestroyed()) return;
     state.ready = true;
     if (state.pending != null) {
       const stage = state.pending;
