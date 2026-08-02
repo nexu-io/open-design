@@ -553,16 +553,20 @@ export async function createJsonIpcServer({
         socket.destroy();
         return;
       }
-      buffer = Buffer.concat([buffer, chunk]);
-      const newlineIndex = buffer.indexOf(0x0a);
-      if (newlineIndex < 0) {
-        if (buffer.length > frameLimit) socket.destroy();
+      const chunkNewlineIndex = chunk.indexOf(0x0a);
+      if (chunkNewlineIndex < 0) {
+        // Reject before concatenating an attacker-controlled chunk so the
+        // frame limit also bounds transient buffering, not just publication.
+        if (buffer.length + chunk.length > frameLimit) socket.destroy();
+        else buffer = Buffer.concat([buffer, chunk]);
         return;
       }
-      if (newlineIndex > frameLimit || buffer.length > newlineIndex + 1) {
+      if (chunkNewlineIndex !== chunk.length - 1 || buffer.length + chunkNewlineIndex > frameLimit) {
         socket.destroy();
         return;
       }
+      buffer = Buffer.concat([buffer, chunk]);
+      const newlineIndex = buffer.indexOf(0x0a);
       const frame = buffer.subarray(0, newlineIndex);
       buffer = Buffer.alloc(0);
       processing = true;
@@ -614,6 +618,13 @@ export async function requestJsonIpc<T = any>(
   { maxFrameBytes = DEFAULT_JSON_IPC_MAX_FRAME_BYTES, timeoutMs = 1500 }: { maxFrameBytes?: number; timeoutMs?: number } = {},
 ): Promise<T> {
   const frameLimit = normalizeJsonIpcMaxFrameBytes(maxFrameBytes);
+  const serializedPayload = JSON.stringify(payload);
+  if (typeof serializedPayload !== "string") {
+    throw new Error("IPC request payload must be JSON-serializable");
+  }
+  if (Buffer.byteLength(serializedPayload, "utf8") > frameLimit) {
+    throw new Error(`IPC request exceeded ${frameLimit} bytes for ${socketPath}`);
+  }
   return await new Promise<T>((resolveRequest, rejectRequest) => {
     const socket = createConnection(socketPath);
     let settled = false;
@@ -630,23 +641,26 @@ export async function requestJsonIpc<T = any>(
     }, timeoutMs);
 
     socket.on("connect", () => {
-      socket.write(`${JSON.stringify(payload)}\n`);
+      socket.write(`${serializedPayload}\n`);
     });
     socket.on("data", (chunk) => {
-      buffer = Buffer.concat([buffer, chunk]);
-      const newlineIndex = buffer.indexOf(0x0a);
-      if (newlineIndex < 0) {
-        if (buffer.length > frameLimit) {
+      const chunkNewlineIndex = chunk.indexOf(0x0a);
+      if (chunkNewlineIndex < 0) {
+        if (buffer.length + chunk.length > frameLimit) {
           socket.destroy();
           settle(() => rejectRequest(new Error(`IPC response exceeded ${frameLimit} bytes from ${socketPath}`)));
+        } else {
+          buffer = Buffer.concat([buffer, chunk]);
         }
         return;
       }
-      if (newlineIndex > frameLimit || buffer.length > newlineIndex + 1) {
+      if (chunkNewlineIndex !== chunk.length - 1 || buffer.length + chunkNewlineIndex > frameLimit) {
         socket.destroy();
         settle(() => rejectRequest(new Error(`invalid IPC response framing from ${socketPath}`)));
         return;
       }
+      buffer = Buffer.concat([buffer, chunk]);
+      const newlineIndex = buffer.indexOf(0x0a);
       socket.end();
       settle(() => {
         let response: { error?: { message?: string }; ok: boolean; result?: T };

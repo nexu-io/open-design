@@ -234,6 +234,36 @@ describe("JSON IPC transport", () => {
     }
   });
 
+  it("rejects an oversized request before opening the IPC socket", async () => {
+    await expect(
+      requestJsonIpc("/tmp/open-design-sidecar-no-connect.sock", { prompt: "x".repeat(128) }, { maxFrameBytes: 32 }),
+    ).rejects.toThrow(/IPC request exceeded 32 bytes/);
+  });
+
+  it("rejects a single oversized network chunk without invoking the handler", async () => {
+    const tempRoot = await mkdtemp(join(tmpdir(), "open-design-sidecar-"));
+    const socketPath = join(tempRoot, "oversized-chunk.sock");
+    let calls = 0;
+    const handle = await createJsonIpcServer({
+      handler: () => { calls += 1; return null; },
+      maxFrameBytes: 8,
+      socketPath,
+    });
+
+    try {
+      await new Promise<void>((resolveClose) => {
+        const socket = createConnection(socketPath);
+        socket.on("connect", () => socket.write(Buffer.alloc(1024, 0x78)));
+        socket.on("close", () => resolveClose());
+        socket.on("error", () => {});
+      });
+      expect(calls).toBe(0);
+    } finally {
+      await handle.close();
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
   it("times out and cleans up a response with no newline", async () => {
     const tempRoot = await mkdtemp(join(tmpdir(), "open-design-sidecar-"));
     const socketPath = join(tempRoot, "no-newline.sock");
