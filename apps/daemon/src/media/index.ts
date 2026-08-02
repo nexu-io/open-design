@@ -830,7 +830,26 @@ export async function generateMedia(args: {
     const stem = dot > 0 ? safeOut.slice(0, dot) : safeOut;
     finalOut = `${stem}${suggestedExt}`;
   }
-  const finalTarget = path.join(dir, finalOut);
+  // Re-run the symlink-aware confinement on the FINAL path immediately
+  // before persistence. Two failure modes the earlier `resolveSafeReal`
+  // does NOT cover on its own:
+  //   1. Provider-suggested extension swap. `safeOut` was validated above
+  //      as `assets/result.tmp`, but `finalOut` may now be
+  //      `assets/result.png` and that fresh `.png` name has never been
+  //      checked. An attacker who pre-creates `assets/result.png` as a
+  //      symlink to /etc/cron.d/foo gets `writeFile` following that
+  //      unchecked link and writing the generated image outside the
+  //      project root.
+  //   2. TOCTOU. The earlier `resolveSafeReal` and the provider call
+  //      straddle an await, so an `assets` directory that existed as a
+  //      real directory at validation time can have been swapped for a
+  //      symlink to an external location between the two — and the
+  //      bare `path.join` would happily follow it.
+  // Re-running `resolveSafeReal` here closes both: it realpath()s the
+  // final candidate (re-validating against the symlinked subdirectory
+  // regardless of when the swap happened) and against any extension
+  // the provider introduced. (#6339 second review.)
+  const finalTarget = await resolveSafeReal(dir, finalOut);
   await writeFile(finalTarget, bytes);
   const st = await stat(finalTarget);
   return {

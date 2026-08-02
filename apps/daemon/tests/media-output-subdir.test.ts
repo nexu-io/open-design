@@ -84,15 +84,19 @@ describe('media generate output subdirectory path handling', () => {
     await writeFile(file, JSON.stringify(data), 'utf8');
   }
 
-  function installMinimaxFetchMock() {
+  function installMinimaxFetchMock(overrides?: { suggestedExt?: string }) {
     const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
       expect(String(input)).toBe(`${TEST_MINIMAX_DEFAULT_BASE_URL}/v1/image_generation`);
       expect(init?.method).toBe('POST');
+      const body: { base_resp: object; data: { image_base64: string[]; suggested_ext?: string } } = {
+        base_resp: { status_code: 0, status_msg: 'success' },
+        data: { image_base64: [PNG_BASE64] },
+      };
+      if (overrides?.suggestedExt) {
+        body.data.suggested_ext = overrides.suggestedExt;
+      }
       return new Response(
-        JSON.stringify({
-          base_resp: { status_code: 0, status_msg: 'success' },
-          data: { image_base64: [PNG_BASE64] },
-        }),
+        JSON.stringify(body),
         { status: 200, headers: { 'content-type': 'application/json' } },
       );
     });
@@ -256,5 +260,66 @@ describe('media generate output subdirectory path handling', () => {
 
     // Nothing landed in the outside target.
     await expect(readFile(path.join(outsideTarget, 'foo.png'))).rejects.toThrow();
+  });
+
+  it('rejects an extension-swapped final path that follows an external symlink', async () => {
+    // Second-order regression (PR #6339 second review): the initial
+    // `resolveSafeReal(dir, safeOut)` validates the raw requested
+    // path, but `suggestedExt` from the provider can change the final
+    // extension — so `assets/foo.tmp` may be a non-existent (clean)
+    // path at validation time, while the eventual write to
+    // `assets/foo.png` (via extension swap) follows an external
+    // symlink that was never checked. Re-running `resolveSafeReal`
+    // on `finalOut` closes that gap by realpath()ing the final
+    // candidate immediately before persistence.
+    await writeConfig({ providers: { minimax: {} } });
+    installMinimaxFetchMock();
+
+    // Lay out:
+    //   <projectDir>/assets/                  (real directory)
+    //   <projectDir>/assets/foo.png           (symlink -> <root>/outside.png)
+    //   <output>: 'assets/foo.tmp'             (clean, non-existent)
+    //
+    // The initial validation sees `assets/foo.tmp` as a non-existent
+    // file under a real directory (passes). The provider returns a PNG
+    // (`suggestedExt = '.png'`), so the final target becomes
+    // `assets/foo.png` — which is the external symlink. Without the
+    // re-check, `writeFile` would follow the link and write to
+    // `<root>/outside.png`.
+    const outsidePng = path.join(root, 'outside.png');
+    await writeFile(outsidePng, 'old outside content');
+    const projectDir = path.join(projectsRoot, 'project-1');
+    await mkdir(projectDir, { recursive: true });
+    const assetsDir = path.join(projectDir, 'assets');
+    await mkdir(assetsDir, { recursive: true });
+    const linkFile = path.join(assetsDir, 'foo.png');
+    try {
+      await symlink(outsidePng, linkFile);
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException)?.code;
+      if (code === 'EPERM' || code === 'EACCES' || code === 'ENOSYS') {
+        return;
+      }
+      throw err;
+    }
+
+    await expect(
+      generateMedia({
+        projectRoot,
+        projectsRoot,
+        projectId: 'project-1',
+        surface: 'image',
+        model: 'minimax-image-01',
+        prompt: 'a cute cartoon bear',
+        aspect: '16:9',
+        output: 'assets/foo.tmp',
+      }),
+    ).rejects.toThrow();
+
+    // The outside file must not have been overwritten with the
+    // generated image bytes — its content stays as the original
+    // sentinel value.
+    const bytes = await readFile(outsidePng, 'utf8');
+    expect(bytes).toBe('old outside content');
   });
 });
