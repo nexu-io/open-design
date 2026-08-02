@@ -142,6 +142,7 @@ import { NewProjectModal } from './NewProjectModal';
 import { PluginsView } from './PluginsView';
 import type { CreateInput, CreateTab, ImportClaudeDesignOutcome } from './NewProjectPanel';
 import type { PluginLoopSubmit } from './PluginLoopHome';
+import { buildCreateProjectArgsFromPluginLoopSubmit } from './plugin-loop-submit';
 import {
   createProject,
   type PluginShareAction,
@@ -814,28 +815,16 @@ export function EntryShell({
       } : {}),
     };
     return onCreateProject({
-      name,
-      skillId: payload.skillId ?? null,
-      designSystemId: payload.designSystemId ?? null,
+      ...buildCreateProjectArgsFromPluginLoopSubmit(payload, {
+        name,
+        amrGatePrechecked,
+      }),
       metadata,
-      pendingPrompt: payload.prompt,
-      ...(payload.pluginId ? { pluginId: payload.pluginId } : {}),
-      ...(payload.pluginType ? { pluginType: payload.pluginType } : {}),
-      ...(payload.appliedPluginSnapshotId
-        ? { appliedPluginSnapshotId: payload.appliedPluginSnapshotId }
-        : {}),
-      ...(payload.pluginInputs ? { pluginInputs: payload.pluginInputs } : {}),
-      ...(payload.initialRunContext ? { initialRunContext: payload.initialRunContext } : {}),
-      ...(payload.conversationMode ? { conversationMode: payload.conversationMode } : {}),
-      ...(payload.attachments && payload.attachments.length > 0
-        ? { pendingFiles: payload.attachments }
-        : {}),
-      // No `userWorkingDirToken`: linkedDirs grant read-only `--add-dir`
-      // access and are validated by the daemon at create time, so they do
-      // not need the desktop main-process trust token that baseDir imports
-      // require for write access.
-      autoSendFirstMessage: true,
-      amrGatePrechecked,
+      ...(payload.examplePromptContext ? {
+        examplePrompt: true,
+        examplePromptTitle: payload.examplePromptContext.title,
+        examplePromptBrief: payload.examplePromptContext.brief,
+      } : {}),
     });
   }
 

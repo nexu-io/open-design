@@ -32,6 +32,15 @@ export interface PluginLoopSubmit {
   // to attribute project_create_result to a plugin type. Null when no plugin.
   pluginType?: string | null;
   skillId?: string | null;
+  // 5824: Home @-mention can stage multiple skills at once. The first
+  // entry is the project's primary `skillId` above; later entries ride
+  // along as composed-skill blocks via the daemon's `skillIds` field.
+  // Null/absent means single-skill (or no-skill) flow. Forwarded by
+  // EntryShell.handlePluginLoopSubmit into onCreateProject so the
+  // multi-skill compose list reaches POST /api/projects (and the
+  // Home auto-send hand-off in App.handleCreateProject) instead of
+  // being silently dropped at this submit seam.
+  skillIds?: string[] | null;
   appliedPluginSnapshotId: string | null;
   pluginTitle: string | null;
   taskKind: string | null;
