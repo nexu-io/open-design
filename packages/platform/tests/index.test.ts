@@ -805,15 +805,17 @@ describe("wellKnownUserToolchainBins", () => {
   });
 
   // Non-Node user toolchains that still ship agent CLIs (or their deps):
-  // Deno's install root, Go's default GOBIN, and pyenv's shim dir. GUI
-  // launches inherit a stripped PATH, so these must be searched explicitly.
-  it("includes Deno, Go, and pyenv user toolchain dirs", () => {
+  // Deno's install root, Go's default GOBIN, pyenv's shim dir, and the
+  // per-user Nix profile. GUI launches inherit a stripped PATH, so these
+  // must be searched explicitly.
+  it("includes Deno, Go, pyenv, and ~/.nix-profile/bin user toolchain dirs", () => {
     const home = mkdtempSync(join(tmpdir(), "wkutb-extra-"));
     try {
       const dirs = wellKnownUserToolchainBins({ home, env: {}, includeSystemBins: false });
       expect(dirs).toContain(join(home, ".deno", "bin"));
       expect(dirs).toContain(join(home, "go", "bin"));
       expect(dirs).toContain(join(home, ".pyenv", "shims"));
+      expect(dirs).toContain(join(home, ".nix-profile", "bin"));
     } finally {
       rmSync(home, { recursive: true, force: true });
     }
@@ -1112,23 +1114,25 @@ describe("wellKnownUserToolchainBins", () => {
     }
   });
 
-  it("includes /opt/homebrew/bin and /usr/local/bin when includeSystemBins is true", () => {
+  it("includes /opt/homebrew/bin and /usr/local/bin and /run/current-system/sw/bin when includeSystemBins is true", () => {
     const home = mkdtempSync(join(tmpdir(), "wkutb-sys-"));
     try {
       const dirs = wellKnownUserToolchainBins({ home, env: {}, includeSystemBins: true });
       expect(dirs).toContain("/opt/homebrew/bin");
       expect(dirs).toContain("/usr/local/bin");
+      expect(dirs).toContain("/run/current-system/sw/bin");
     } finally {
       rmSync(home, { recursive: true, force: true });
     }
   });
 
-  it("omits /opt/homebrew/bin and /usr/local/bin when includeSystemBins is false", () => {
+  it("omits /opt/homebrew/bin, /usr/local/bin, and /run/current-system/sw/bin when includeSystemBins is false", () => {
     const home = mkdtempSync(join(tmpdir(), "wkutb-nosys-"));
     try {
       const dirs = wellKnownUserToolchainBins({ home, env: {}, includeSystemBins: false });
       expect(dirs).not.toContain("/opt/homebrew/bin");
       expect(dirs).not.toContain("/usr/local/bin");
+      expect(dirs).not.toContain("/run/current-system/sw/bin");
     } finally {
       rmSync(home, { recursive: true, force: true });
     }

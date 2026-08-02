@@ -135,11 +135,15 @@ export function wellKnownUserToolchainBins(
     join(home, ".npm-packages", "bin"),
     // Other common user-level toolchains that install CLI shims outside the
     // Node ecosystem but still ship agent CLIs (or their dependencies):
-    // Deno's install root, Go's default GOBIN, and pyenv's shim dir. All are
-    // best-effort — a missing dir contributes nothing.
+    // Deno's install root, Go's default GOBIN, pyenv's shim dir, and the
+    // per-user Nix profile. All are best-effort — a missing dir contributes
+    // nothing. The Nix profile covers `nix profile install`'d CLIs for hosts
+    // (single-user installs or HOME-managed profiles) without
+    // /run/current-system/sw/bin.
     join(home, ".deno", "bin"),
     join(home, "go", "bin"),
     join(home, ".pyenv", "shims"),
+    join(home, ".nix-profile", "bin"),
   );
 
   // Windows-only user install roots that GUI launches miss. Scoop drops
@@ -167,7 +171,15 @@ export function wellKnownUserToolchainBins(
   }
 
   if (includeSystemBins) {
-    dirs.push("/opt/homebrew/bin", "/usr/local/bin");
+    dirs.push(
+      "/opt/homebrew/bin",
+      "/usr/local/bin",
+      // NixOS and nix-darwin expose system-installed CLIs here.
+      // GUI-launched daemons inherit a minimal PATH that omits
+      // this path even though user-installed agent CLIs (codex,
+      // claude, gemini, …) live here.
+      "/run/current-system/sw/bin",
+    );
   }
   // Per-version Node toolchains: scan the install root and surface every
   // version directory's bin folder. Best-effort — missing roots simply
