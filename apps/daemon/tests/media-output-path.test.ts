@@ -18,20 +18,14 @@ import { generateMedia } from '../src/media/index.js';
 const PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+X2uoAAAAASUVORK5CYII=';
 const TEST_MINIMAX_DEFAULT_BASE_URL = 'https://api.minimax.io';
 
-interface FetchCall {
-  url: string;
-  init: RequestInit | undefined;
-}
-
 async function withStubbedFetch(
-  handler: (call: FetchCall) => Promise<Response> | Response,
+  handler: (call: { url: string; init: Parameters<typeof fetch>[1] | undefined }) => Promise<Response> | Response,
   run: () => Promise<void>,
 ): Promise<void> {
-  const calls: FetchCall[] = [];
   const realFetch = globalThis.fetch;
-  globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+  globalThis.fetch = vi.fn(async (...args: Parameters<typeof fetch>) => {
+    const [input, init] = args;
     const url = typeof input === 'string' ? input : input.toString();
-    calls.push({ url, init });
     return handler({ url, init });
   }) as unknown as typeof fetch;
   try {
