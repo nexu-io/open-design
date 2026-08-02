@@ -7376,13 +7376,18 @@ Common options:
       return;
     }
     case 'info': {
-      const id = rest.find((a) => !a.startsWith('-'));
-      if (!id) {
-        console.error('Usage: od conversation info <conversationId>');
+      const projectId = typeof flags.project === 'string' && flags.project
+        ? flags.project
+        : null;
+      const id = positionalArgs(rest, PROJECT_STRING_FLAGS)[0];
+      if (!projectId || !id) {
+        console.error('Usage: od conversation info --project <projectId> <conversationId>');
         process.exit(2);
       }
-      const resp = await fetch(`${base}/api/conversations/${encodeURIComponent(id)}`);
-      if (!resp.ok) return structuredHttpFailure(resp);
+      const resp = await fetch(
+        `${base}/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(id)}`,
+      );
+      if (!resp.ok) return structuredHttpFailure(resp, resp.status === 404 ? 'not-found' : 'daemon-not-running');
       const data = await resp.json();
       process.stdout.write(JSON.stringify(data, null, 2) + '\n');
       return;
