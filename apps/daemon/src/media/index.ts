@@ -85,6 +85,7 @@ import {
   ensureProject,
   kindFor,
   mimeFor,
+  resolveSafeReal,
   sanitizeName,
   sanitizePath,
 } from '../projects.js';
@@ -471,7 +472,25 @@ export async function generateMedia(args: {
       `invalid output path: ${(err as Error).message}`,
     );
   }
-  const target = path.join(dir, safeOut);
+  // After lexical validation, walk the resolved path through
+  // resolveSafeReal() so that a symlinked intermediate directory
+  // pointing outside the project cannot turn the validated path into
+  // a write that escapes the project root. The existing helpers in
+  // projects.ts already use this for every file write under the
+  // project; media generation must do the same. The bound is
+  // `dir` (the project root), not a deeper path — anything inside
+  // is fine as long as the resolved real path is contained.
+  let target: string;
+  try {
+    target = await resolveSafeReal(dir, safeOut);
+  } catch (err) {
+    if (err && (err as { code?: string }).code === 'EPATHESCAPE') {
+      throw new Error(
+        `invalid output path: ${(err as Error).message}`,
+      );
+    }
+    throw err;
+  }
   await mkdir(path.dirname(target), { recursive: true });
 
   // Reference image for image-to-video / image-edit flows. The agent

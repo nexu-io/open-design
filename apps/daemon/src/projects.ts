@@ -1358,7 +1358,7 @@ function resolveSafe(dir, name) {
 // candidate (or its existing prefix, for writes that haven't created
 // the file yet) and re-validates against the realpath of dir, so
 // descendant symlinks can't reach outside the project.
-async function resolveSafeReal(dir, name) {
+export async function resolveSafeReal(dir, name) {
   const candidate = resolveSafe(dir, name);
   const rootReal = await realpath(dir).catch(() => dir);
   let real;

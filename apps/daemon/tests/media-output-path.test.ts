@@ -7,7 +7,7 @@
 // directory separator) while bare filenames continue using sanitizeName()
 // for byte-level sanity. This file pins that contract.
 
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -213,5 +213,54 @@ describe('media generator output path resolution (#6336)', () => {
     }
     expect(writtenPath).not.toBeNull();
     expect(originalReaddir).toBe(realReaddir);
+  });
+
+  it('refuses to write through a symlinked subdirectory that escapes the project', async () => {
+    // External directory the symlink will point at.
+    const outsideDir = path.join(root, 'outside');
+    await mkdir(outsideDir, { recursive: true });
+
+    // Create the project directory up-front so we can plant a symlink
+    // inside it; ensureProject() inside generateMedia() will then find
+    // an existing dir and the call is a no-op (we can plant the symlink).
+    const projectDir = path.join(projectsRoot, projectId);
+    await mkdir(projectDir, { recursive: true });
+    const assetsLink = path.join(projectDir, 'assets');
+    await symlink(outsideDir, assetsLink, 'dir');
+
+    // The path-lexical sanitizer is happy (no "../" in the input), but
+    // the symlink-aware project-confined resolver must reject the
+    // resolved real path which is `<outsideDir>/hero.png` instead of
+    // `<projectDir>/assets/hero.png`.
+    const externalTarget = path.join(outsideDir, 'hero.png');
+    let captured: Error | null = null;
+    await withStubbedFetch(
+      () => minimaxPngResponse(),
+      async () => {
+        try {
+          await generateMedia({
+            projectRoot,
+            projectsRoot,
+            projectId,
+            surface: 'image',
+            model: 'minimax-image-01',
+            prompt: 'attempt escape',
+            output: 'assets/hero.png',
+          });
+        } catch (err) {
+          captured = err as Error;
+        }
+      },
+    );
+
+    expect(captured).not.toBeNull();
+    expect(captured!.message).toMatch(/invalid output path/);
+    // Crucially: the external directory must NOT have been written to.
+    await expect(
+      readFile(externalTarget).then(
+        () => true,
+        () => false,
+      ),
+    ).resolves.toBe(false);
   });
 });
