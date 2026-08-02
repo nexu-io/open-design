@@ -1309,8 +1309,16 @@ Result of `od project create --json`:
 ```
 od conversation list <projectId> [--json]
 od conversation new  <projectId> [--title "<title>"] [--json]
-od conversation info <conversationId> [--json]
+od conversation info --project <projectId> <conversationId> [--json]
 ```
+
+`od conversation info`'s argument shape is intentionally different from `list` and
+`new`: those consume `<projectId>` as the first positional argument, while
+`info` takes it as `--project <projectId>` followed by the `<conversationId>`
+positional. The discrepancy mirrors the embedded `od conversation help` block
+(`apps/daemon/src/cli.ts`) and is asserted by the
+`docs/plugins-spec.md and the embedded help block advertise the new --project flag for info`
+regression in `apps/daemon/tests/conversation-info-cli.test.ts`.
 
 #### Run / task lifecycle (new)
 

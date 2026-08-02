@@ -140,4 +140,41 @@ describe('od conversation info CLI', () => {
     expect(r.stdout).toContain('od conversation info --project <projectId>');
     expect(r.stdout).not.toContain('od conversation info <conversationId>');
   });
+
+  it('published docs/plugins-spec.md and zh-CN keep `conversation info` in sync with the embedded help block', async () => {
+    // Per #6341 round-2 review (lefarcen, 2026-08-02): the published
+    // command reference under `docs/plugins-spec.md` and
+    // `docs/plugins-spec.zh-CN.md` had drifted to advertise the old
+    // `od conversation info <conversationId>` form while the CLI required
+    // `--project <projectId> <conversationId>`. This guard reads both
+    // markdown files and the embedded help block emitted by the CLI and
+    // asserts that the `conversation info` line stays aligned across all
+    // three surfaces. If you legitimately change the invocation, update
+    // every site in the same change.
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const repoRoot = path.resolve(fileURLToPath(import.meta.url), '../../../..');
+    const enDoc = fs.readFileSync(path.join(repoRoot, 'docs/plugins-spec.md'), 'utf8');
+    const zhDoc = fs.readFileSync(path.join(repoRoot, 'docs/plugins-spec.zh-CN.md'), 'utf8');
+
+    // The new required shape must appear in both docs; the legacy bare
+    // `<conversationId>` invocation must not.
+    expect(enDoc).toContain('od conversation info --project <projectId> <conversationId>');
+    expect(enDoc).not.toMatch(/od conversation info <conversationId>/);
+    expect(zhDoc).toContain('od conversation info --project <projectId> <conversationId>');
+    expect(zhDoc).not.toMatch(/od conversation info <conversationId>/);
+
+    // Reuse the help emitter to anchor the docs against the same source
+    // of truth the help block test above uses.
+    const r = await execFileAsync(
+      process.execPath,
+      ['--import', 'tsx', cliEntry, 'conversation', 'help', '--json'],
+    );
+    const helpBlock = r.stdout;
+    expect(helpBlock).toContain('od conversation info --project <projectId>');
+    // The docs surface the full required form, the help block emits a
+    // shorter hint; both must agree on the `--project` prefix and must
+    // never resurrect the bare `<conversationId>` invocation.
+    expect(helpBlock).not.toContain('od conversation info <conversationId>');
+  });
 });

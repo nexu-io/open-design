@@ -1304,8 +1304,10 @@ od project open   <id>                                 # opens browser at /proje
 ```
 od conversation list <projectId> [--json]
 od conversation new  <projectId> [--title "<title>"] [--json]
-od conversation info <conversationId> [--json]
+od conversation info --project <projectId> <conversationId> [--json]
 ```
+
+`od conversation info` 的参数形态与 `list` 和 `new` 不同：后两者把 `<projectId>` 作为第一个位置参数，而 `info` 把它放在 `--project <projectId>` 上，再带 `<conversationId>` 位置参数。该差异与 `apps/daemon/src/cli.ts` 中内嵌的 `od conversation help` 文本一致，并由 `apps/daemon/tests/conversation-info-cli.test.ts` 中的 `docs/plugins-spec.md and the embedded help block advertise the new --project flag for info` 回归测试断言，以防文档再次与 CLI drift。
 
 #### Run / task lifecycle（新增）
 
