@@ -290,6 +290,40 @@ describe('syncConfigToDaemon', () => {
     });
   });
 
+  it('preserves a browser-local key when daemon round-trip trims the same Base URL', () => {
+    const localApiKey = ['browser', 'credential'].join('-');
+    const daemonBaseUrl = 'https://apihub.agnes-ai.com/v1';
+    const merged = mergeDaemonConfig(
+      {
+        ...DEFAULT_CONFIG,
+        mode: 'api',
+        apiProtocol: 'openai',
+        apiKey: localApiKey,
+        baseUrl: `  ${daemonBaseUrl}  `,
+        model: 'stale-model',
+        apiProtocolConfigs: {
+          openai: {
+            apiKey: localApiKey,
+            baseUrl: `  ${daemonBaseUrl}  `,
+            model: 'stale-model',
+            apiVersion: '',
+          },
+        },
+      },
+      {
+        byokProvider: {
+          protocol: 'openai',
+          baseUrl: daemonBaseUrl,
+          model: 'agnes-2.0-flash',
+        },
+      },
+    );
+
+    expect(merged.apiKey).toBe(localApiKey);
+    expect(merged.apiProtocolConfigs?.openai?.apiKey).toBe(localApiKey);
+    expect(merged.baseUrl).toBe(daemonBaseUrl);
+  });
+
   it('hydrates a valid custom BYOK endpoint without treating it as a known provider', () => {
     const merged = mergeDaemonConfig(
       { ...DEFAULT_CONFIG, mode: 'daemon' },
@@ -337,6 +371,44 @@ describe('syncConfigToDaemon', () => {
       { ...DEFAULT_CONFIG, mode: 'daemon' },
       { byokProvider: null },
     ).mode).toBe('daemon');
+  });
+
+  it('hydrates an explicit daemon clear as Local CLI without discarding the browser provider draft', async () => {
+    const fetchMock = vi.fn(async () => new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const localApiKey = ['browser', 'credential'].join('-');
+    const draftKey = 'openai:https://apihub.agnes-ai.com/v1';
+    const localConfig: AppConfig = {
+      ...DEFAULT_CONFIG,
+      mode: 'api',
+      apiProtocol: 'openai',
+      apiKey: localApiKey,
+      baseUrl: 'https://apihub.agnes-ai.com/v1',
+      model: 'agnes-2.0-flash',
+      byokPendingProviderKey: draftKey,
+      byokProviderConfigDrafts: {
+        [draftKey]: {
+          apiConfig: {
+            apiKey: localApiKey,
+            baseUrl: 'https://apihub.agnes-ai.com/v1',
+            model: 'agnes-2.0-flash',
+          },
+        },
+      },
+    };
+
+    const merged = mergeDaemonConfig(localConfig, { byokProvider: null });
+
+    expect(merged.mode).toBe('daemon');
+    expect(merged.byokPendingProviderKey).toBe(draftKey);
+    expect(merged.byokProviderConfigDrafts).toEqual(localConfig.byokProviderConfigDrafts);
+
+    await syncConfigToDaemon(merged);
+
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    const body = JSON.parse(String(init.body));
+    expect(body).not.toHaveProperty('byokProvider');
+    expect(JSON.stringify(body)).not.toContain(localApiKey);
   });
 
   it('syncs CLI API key env values and intent to daemon app config while localStorage strips them', async () => {

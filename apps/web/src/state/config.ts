@@ -1563,6 +1563,10 @@ export function saveConfig(config: AppConfig): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(sanitized));
 }
 
+function normalizeByokProviderIdentityBaseUrl(baseUrl: string): string {
+  return baseUrl.trim();
+}
+
 export function mergeDaemonConfig(
   localConfig: AppConfig,
   daemonConfig: AppConfigPrefs | null,
@@ -1570,13 +1574,22 @@ export function mergeDaemonConfig(
   const next = { ...localConfig };
   if (!daemonConfig) return next;
 
+  const hasDaemonByokProvider = Object.prototype.hasOwnProperty.call(
+    daemonConfig,
+    'byokProvider',
+  );
   const daemonByokProvider = daemonConfig.byokProvider;
+  const daemonByokProviderBaseUrl = daemonByokProvider
+    ? normalizeByokProviderIdentityBaseUrl(daemonByokProvider.baseUrl)
+    : '';
   const knownDaemonByokProvider = daemonByokProvider && KNOWN_PROVIDERS.find(
     (provider) =>
       provider.protocol === daemonByokProvider.protocol &&
-      provider.baseUrl === daemonByokProvider.baseUrl,
+      normalizeByokProviderIdentityBaseUrl(provider.baseUrl) === daemonByokProviderBaseUrl,
   );
-  if (
+  if (hasDaemonByokProvider && daemonByokProvider === null) {
+    next.mode = 'daemon';
+  } else if (
     daemonByokProvider &&
     isByokProviderProtocol(daemonByokProvider.protocol) &&
     daemonByokProvider.model.trim()
@@ -1584,11 +1597,11 @@ export function mergeDaemonConfig(
     const sameProviderIdentity =
       localConfig.mode === 'api' &&
       localConfig.apiProtocol === daemonByokProvider.protocol &&
-      localConfig.baseUrl === daemonByokProvider.baseUrl;
+      normalizeByokProviderIdentityBaseUrl(localConfig.baseUrl) === daemonByokProviderBaseUrl;
     const apiKey = sameProviderIdentity ? localConfig.apiKey : '';
     const apiConfig: ApiProtocolConfig = {
       apiKey,
-      baseUrl: daemonByokProvider.baseUrl,
+      baseUrl: daemonByokProviderBaseUrl,
       model: daemonByokProvider.model.trim(),
       apiVersion: '',
       apiProviderBaseUrl: knownDaemonByokProvider?.baseUrl ?? null,
