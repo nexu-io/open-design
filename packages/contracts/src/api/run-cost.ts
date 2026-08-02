@@ -10,11 +10,45 @@
  * and each turned out to be worth between nothing and ~4%. That result is only
  * reachable with a decomposition, so the decomposition is the tool.
  *
- * THE ONE NON-OBVIOUS INPUT. `usage.cached_read_tokens` on step *i* IS the size
- * of the model's context at step *i*. A persisted `events.jsonl` therefore
+ * THE ONE NON-OBVIOUS INPUT. The size of the model's context at step *i* is its
+ * cache read PLUS its uncached input. A persisted `events.jsonl` therefore
  * already contains the run's full context-growth curve — no instrumentation, no
  * re-running, no spend. Everything here is derived from that curve plus the
  * tool traffic around it.
+ *
+ * The cache read alone is NOT that curve, and reading it as one is the defect
+ * this module shipped with (#6264). A cache read is the part of the context that
+ * happened to be served from cache, so on the first call of every run — the one
+ * call with nothing cached yet — it reports a near-empty context for a prompt
+ * that was in fact fully loaded. Because the preamble term is the FLOOR of the
+ * curve, that one bad point dragged the floor down for the whole run, and the
+ * difference landed on the transcript term. It inverted the headline verdict on
+ * 6 of 9 real runs.
+ *
+ * WHY THE SUM IS THE RIGHT READING. By construction: what the model read is what
+ * came from cache plus what did not. `uncachedInputForConvention` is what makes
+ * the second part trustworthy across providers.
+ *
+ * Corroborating it, on runs that hold still, is that what step *i* put in front
+ * of the model is what step *i+1* then finds in its cache:
+ *
+ *     input_i + cacheRead_i  ~=  cacheRead_{i+1}
+ *
+ * That is CORROBORATION AND NOT A LAW, and the difference matters because it is
+ * tempting to reach for it as an invariant. Measured across the persisted runs it
+ * holds tightly on some and breaks on others, in three distinct ways:
+ *
+ *   - Cache reads are quantized to block boundaries (`4e5ec86a` reports reads
+ *     that are exact multiples of 256), so the read trails the context by up to
+ *     a block.
+ *   - When content produced between two calls is cached BEFORE the next call
+ *     rather than arriving as its uncached input, step *i+1* reads more than
+ *     step *i* held (`5504607f`, drifting to -4,551).
+ *   - Invalidation and compaction move the cached prefix independently of the
+ *     context (`79057c35`, +51,814 then -66,055 around one invalidation).
+ *
+ * So it is pinned as a test on a run where it does hold, as evidence for the
+ * additive reading — not asserted here as a property of all runs.
  *
  * WHAT THIS CANNOT MEASURE. The curve only exists if the log carries one usage
  * frame PER MODEL CALL. Only the `json-event-stream` family (OpenCode) does:
@@ -72,13 +106,23 @@ export interface RunCostStep {
   /** Zero-based position in the run's usage sequence. */
   index: number;
   /**
-   * The context the model re-read on this call, read through the shared
-   * provider alias matrix (`extractUsageCacheFields`) rather than off one
-   * literal field name. Anthropic reports this as `cache_read_input_tokens`
-   * and OpenAI-style runtimes as `cached_input_tokens`; a raw
-   * `cached_read_tokens` lookup silently reports ZERO for both.
+   * Everything the model had in front of it on this call: `cachedReadTokens +
+   * inputTokens`. This is the curve the preamble/transcript split is taken over.
    */
   contextTokens: number;
+  /**
+   * The part of that context served from cache, read through the shared provider
+   * alias matrix (`extractUsageCacheFields`) rather than off one literal field
+   * name. Anthropic reports this as `cache_read_input_tokens` and OpenAI-style
+   * runtimes as `cached_input_tokens`; a raw `cached_read_tokens` lookup silently
+   * reports ZERO for both.
+   *
+   * Reason about the CACHED PREFIX with this field and about the CONTEXT with
+   * `contextTokens`. Cache health and the invalidation/compaction split want this
+   * one: a cache write is judged against what the next call finds in cache, not
+   * against how much the conversation grew.
+   */
+  cachedReadTokens: number;
   cacheWriteTokens: number;
   /**
    * Input tokens that were NOT served from cache, normalized across the two
@@ -103,6 +147,18 @@ export interface RunCostTerms {
    * preamble — which is why context isolation cannot pay off when it dominates.
    */
   preambleTokens: number;
+  /**
+   * The part of the preamble that was NOT served from cache, and so was bought
+   * at the uncached input rate rather than the cache-read one.
+   *
+   * Exposed because without it `usd.preamble` is unauditable: it is not
+   * `preambleTokens x cachedReadPerMTok` and never can be, since establishing
+   * the floor on the first call is paid at the input rate. A surface showing the
+   * dollar figure next to the token count needs this to explain the difference.
+   * The cached remainder is `preambleTokens - preambleUncachedTokens`, and the
+   * transcript's own split falls out of `uncachedInputTokens` the same way.
+   */
+  preambleUncachedTokens: number;
   /** Everything read above the floor: genuine conversation accumulation. */
   transcriptTokens: number;
   cacheWriteTokens: number;
@@ -419,14 +475,16 @@ export function analyzeRunCost(
       // Anthropic ships `cache_read_input_tokens`, OpenAI-style runtimes ship
       // `cached_input_tokens`, and a raw lookup reports zero for both.
       //
-      // `inputTokens` is filled in AFTER the loop: whether `input_tokens` is
-      // additive or inclusive is a property of the provider, so it takes every
-      // frame of the run to decide and cannot be settled one frame at a time.
+      // `inputTokens` — and therefore `contextTokens`, which contains it — are
+      // filled in AFTER the loop: whether `input_tokens` is additive or
+      // inclusive is a property of the provider, so it takes every frame of the
+      // run to decide and cannot be settled one frame at a time.
       const fields = extractUsageCacheFields(usage);
       usageFields.push(fields);
       steps.push({
         index: steps.length,
-        contextTokens: fields.cacheReadInputTokens ?? 0,
+        contextTokens: 0,
+        cachedReadTokens: fields.cacheReadInputTokens ?? 0,
         cacheWriteTokens: fields.cacheCreationInputTokens ?? 0,
         inputTokens: 0,
         outputTokens: fields.outputTokens ?? 0,
@@ -478,16 +536,21 @@ export function analyzeRunCost(
     }
   }
 
-  // --- Uncached input, once the whole run has been seen --------------------
-  // Deciding this per frame gives one run two answers: a first call with a
-  // barely-warm cache looks inclusive even when the provider is additive. See
-  // `detectUsageAccountingConvention`.
+  // --- Uncached input and the context curve, once the whole run has been seen
+  // Deciding the convention per frame gives one run two answers: a first call
+  // with a barely-warm cache looks inclusive even when the provider is additive.
+  // See `detectUsageAccountingConvention`.
+  //
+  // The context curve can only be built here, for the same reason: it is the
+  // cache read plus the UNCACHED input, and which part of `input_tokens` is
+  // uncached is exactly what the convention decides.
   const usageConvention = detectUsageAccountingConvention(usageFields);
   for (let i = 0; i < steps.length; i += 1) {
     const step = steps[i];
     const fields = usageFields[i];
     if (!step || !fields) continue;
     step.inputTokens = uncachedInputForConvention(fields, usageConvention);
+    step.contextTokens = step.cachedReadTokens + step.inputTokens;
   }
 
   // --- Cache health and anomalies -----------------------------------------
@@ -496,11 +559,16 @@ export function analyzeRunCost(
   let comparableSteps = 0;
   let rewrittenTokens = 0;
 
+  // Cache health reads the CACHED PREFIX, not the context. A write's job is to
+  // put content where the next call can read it cheaply, so the only honest
+  // measure of whether it did that is the next call's cache read. Judging it
+  // against context growth would score a step for uncached input that the write
+  // never claimed to cover, and every write would look like a partial rewrite.
   for (let i = 0; i < steps.length - 1; i += 1) {
     const step = steps[i];
     const next = steps[i + 1];
     if (!step || !next) continue;
-    const delta = next.contextTokens - step.contextTokens;
+    const delta = next.cachedReadTokens - step.cachedReadTokens;
     // A negative delta is a context DROP, classified below. Scoring it as a
     // rewrite would blame the step before the drop for the drop itself.
     if (delta < 0) continue;
@@ -526,8 +594,12 @@ export function analyzeRunCost(
     const step = steps[i];
     const before = steps[i - 1];
     if (!step || !before) continue;
-    const previous = before.contextTokens;
-    const current = step.contextTokens;
+    // Also the cached prefix, for the same reason: both outcomes below are
+    // statements about the CACHE shrinking. The uncached input of the call that
+    // observed the drop is a consequence of it, so folding that input in here
+    // would partly mask the very fall being classified.
+    const previous = before.cachedReadTokens;
+    const current = step.cachedReadTokens;
     if (current >= previous) continue;
     // A frame reporting no cached read at all did not make a comparable model
     // call — runs close with exactly such a summary frame. Reading its fall to
@@ -555,20 +627,43 @@ export function analyzeRunCost(
   }
 
   // --- Term decomposition --------------------------------------------------
-  // The preamble is the floor of the curve. Zero-context steps (the first call
-  // of a run, before anything is cached) are excluded: treating one as the
-  // floor zeroes the preamble term and misattributes the whole curve to
-  // transcript accumulation.
+  // The preamble is the floor of the CONTEXT curve, re-read once per step.
+  // Steps with no context at all are excluded — a frame reporting neither a
+  // cache read nor uncached input made no comparable model call, and runs close
+  // with exactly such a summary frame.
   const withContext = steps.filter((s) => s.contextTokens > 0);
   const floor = withContext.length > 0
     ? Math.min(...withContext.map((s) => s.contextTokens))
     : 0;
-  const readTotal = withContext.reduce((a, s) => a + s.contextTokens, 0);
+  const contextTotal = withContext.reduce((a, s) => a + s.contextTokens, 0);
   const preambleTokens = floor * withContext.length;
-  const transcriptTokens = Math.max(0, readTotal - preambleTokens);
+  const transcriptTokens = Math.max(0, contextTotal - preambleTokens);
+
+  // How much of the floor was bought at which rate. A cache serves the PREFIX of
+  // a context, and the floor IS that prefix, so a step's floor is cached exactly
+  // as far as its cache read reaches and the shortfall was paid as fresh input.
+  // Proportional attribution would be the other candidate, and it is wrong for a
+  // concrete reason: on a first call it would spread the floor across a cache
+  // that demonstrably held almost none of it.
+  //
+  // Both parts are exact — `min` never exceeds the floor, and the shortfall can
+  // never exceed the step's own uncached input because `floor <= context` — so
+  // the two rows stay an exact subdivision of `cachedRead + uncachedInput` and
+  // the run total is untouched. This defect was only ever a misattribution
+  // BETWEEN rows; no run was ever mispriced.
+  let preambleCachedTokens = 0;
+  let preambleUncachedTokens = 0;
+  for (const step of withContext) {
+    const cached = Math.min(floor, step.cachedReadTokens);
+    preambleCachedTokens += cached;
+    preambleUncachedTokens += floor - cached;
+  }
+
+  const cachedReadTotal = steps.reduce((a, s) => a + s.cachedReadTokens, 0);
 
   const terms: RunCostTerms = {
     preambleTokens,
+    preambleUncachedTokens,
     transcriptTokens,
     cacheWriteTokens: steps.reduce((a, s) => a + s.cacheWriteTokens, 0),
     uncachedInputTokens: steps.reduce((a, s) => a + s.inputTokens, 0),
@@ -576,10 +671,15 @@ export function analyzeRunCost(
   };
 
   const perM = (tokens: number, rate: number) => (tokens / 1_000_000) * rate;
+  const blended = (cached: number, uncached: number) =>
+    perM(cached, rates.cachedReadPerMTok) + perM(uncached, rates.inputPerMTok);
   const usd: RunCostUsd = {
-    preamble: perM(terms.preambleTokens, rates.cachedReadPerMTok),
-    transcript: perM(terms.transcriptTokens, rates.cachedReadPerMTok),
-    cachedRead: perM(readTotal, rates.cachedReadPerMTok),
+    preamble: blended(preambleCachedTokens, preambleUncachedTokens),
+    transcript: blended(
+      cachedReadTotal - preambleCachedTokens,
+      terms.uncachedInputTokens - preambleUncachedTokens,
+    ),
+    cachedRead: perM(cachedReadTotal, rates.cachedReadPerMTok),
     cacheWrite: perM(terms.cacheWriteTokens, rates.cacheWritePerMTok),
     uncachedInput: perM(terms.uncachedInputTokens, rates.inputPerMTok),
     output: perM(terms.outputTokens, rates.outputPerMTok),

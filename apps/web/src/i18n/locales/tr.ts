@@ -4299,6 +4299,7 @@ export const tr: Dict = {
   'runCost.transcript': 'Transcript',
   'runCost.cacheWrite': 'Cache write',
   'runCost.uncachedInput': 'Uncached input',
+  'runCost.uncachedInputHint': 'Yukarıdaki iki bağlam satırında zaten sayıldı.',
   'runCost.output': 'Output',
   'runCost.total': 'Total',
   'runCost.cacheHealth': 'Cache health',

@@ -6371,12 +6371,18 @@ function printRunCostReport(body) {
   console.log('  (input / cached read / cache write / output — not a billing figure)');
   const row = (label, value, extra) =>
     console.log(`    ${label.padEnd(22)}${fmtUsd(value).padStart(10)}  ${share(value).padStart(6)}  ${extra ?? ''}`);
-  row('preamble re-read', usd.preamble, `${fmtInt(terms.preambleTokens)} tok — a context split does NOT reduce this`);
-  row('transcript', usd.transcript, `${fmtInt(terms.transcriptTokens)} tok`);
+  // The two context rows span BOTH the cache reads and the uncached input —
+  // establishing the floor on the first call is paid at the input rate. Listing
+  // uncached input as a peer row as well would count it twice and the table
+  // would stop adding up to the total; it is printed below as a memo instead.
+  row('context — preamble', usd.preamble, `${fmtInt(terms.preambleTokens)} tok — a context split does NOT reduce this`);
+  row('context — transcript', usd.transcript, `${fmtInt(terms.transcriptTokens)} tok`);
   row('cache write', usd.cacheWrite, `${fmtInt(terms.cacheWriteTokens)} tok`);
-  row('uncached input', usd.uncachedInput, `${fmtInt(terms.uncachedInputTokens)} tok`);
   row('output', usd.output, `${fmtInt(terms.outputTokens)} tok`);
   console.log(`    ${'total'.padEnd(22)}${fmtUsd(usd.total).padStart(10)}`);
+  console.log(
+    `    ${'(memo) uncached input'.padEnd(22)}${fmtUsd(usd.uncachedInput).padStart(10)}  ${share(usd.uncachedInput).padStart(6)}  ${fmtInt(terms.uncachedInputTokens)} tok, of which ${fmtInt(terms.preambleUncachedTokens)} bought the preamble — already inside the rows above`,
+  );
 
   if (cacheHealth.comparableSteps === 0) {
     // Zero comparable steps has TWO causes and the message must not assert the

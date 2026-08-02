@@ -4299,6 +4299,7 @@ export const esES: Dict = {
   'runCost.transcript': 'Transcripción',
   'runCost.cacheWrite': 'Escritura de caché',
   'runCost.uncachedInput': 'Entrada sin caché',
+  'runCost.uncachedInputHint': 'Ya contabilizado en las dos filas de contexto de arriba.',
   'runCost.output': 'Salida',
   'runCost.total': 'Total',
   'runCost.cacheHealth': 'Salud de la caché',

@@ -29,11 +29,12 @@ function report(overrides: Partial<RunCostReport> = {}): RunCostReport {
     // (900/500), which is impossible under inclusive accounting.
     usageConvention: 'additive',
     steps: [
-      { index: 0, contextTokens: 12_000, cacheWriteTokens: 4_000, inputTokens: 900, outputTokens: 300, gapMs: null, incremental: true },
-      { index: 1, contextTokens: 34_000, cacheWriteTokens: 0, inputTokens: 500, outputTokens: 200, gapMs: 1_200, incremental: false },
+      { index: 0, contextTokens: 12_900, cachedReadTokens: 12_000, cacheWriteTokens: 4_000, inputTokens: 900, outputTokens: 300, gapMs: null, incremental: true },
+      { index: 1, contextTokens: 34_500, cachedReadTokens: 34_000, cacheWriteTokens: 0, inputTokens: 500, outputTokens: 200, gapMs: 1_200, incremental: false },
     ],
     terms: {
       preambleTokens: 20_000,
+      preambleUncachedTokens: 900,
       transcriptTokens: 10_000,
       cacheWriteTokens: 4_000,
       uncachedInputTokens: 1_400,
@@ -142,8 +143,10 @@ describe('RunCostPanel', () => {
     const text = container.textContent ?? '';
     expect(text).toContain(en['runCost.estimateNote']);
     expect(text).toContain('2 model calls');
-    // Peak, not last: step 1 is the largest context of the run.
-    expect(text).toContain('context peaked at 34,000 tokens');
+    // Peak, not last: step 1 is the largest context of the run. 34,500 and not
+    // 34,000 — the peak is the CONTEXT, so it includes the 500 uncached input
+    // that step carried alongside its 34,000 cache read.
+    expect(text).toContain('context peaked at 34,500 tokens');
   });
 
   it('dashes out the shares when the run cost nothing, instead of dividing by zero', async () => {
@@ -178,7 +181,7 @@ describe('RunCostPanel', () => {
     stubFetch({
       runId: 'run-1',
       report: report({
-        terms: { preambleTokens: 20_000, transcriptTokens: 0, cacheWriteTokens: 4_000, uncachedInputTokens: 0, outputTokens: 500 },
+        terms: { preambleTokens: 20_000, preambleUncachedTokens: 0, transcriptTokens: 0, cacheWriteTokens: 4_000, uncachedInputTokens: 0, outputTokens: 500 },
         cacheHealth: { incrementalSteps: 0, comparableSteps: 0, rewrittenTokens: 0 },
       }),
     });
@@ -192,7 +195,7 @@ describe('RunCostPanel', () => {
     stubFetch({
       runId: 'run-1',
       report: report({
-        terms: { preambleTokens: 20_000, transcriptTokens: 0, cacheWriteTokens: 0, uncachedInputTokens: 0, outputTokens: 500 },
+        terms: { preambleTokens: 20_000, preambleUncachedTokens: 0, transcriptTokens: 0, cacheWriteTokens: 0, uncachedInputTokens: 0, outputTokens: 500 },
         cacheHealth: { incrementalSteps: 0, comparableSteps: 0, rewrittenTokens: 0 },
       }),
     });

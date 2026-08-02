@@ -4299,6 +4299,7 @@ export const fr: Dict = {
   'runCost.transcript': 'Transcription',
   'runCost.cacheWrite': 'Écriture de cache',
   'runCost.uncachedInput': 'Entrée non mise en cache',
+  'runCost.uncachedInputHint': 'Déjà comptabilisé dans les deux lignes de contexte ci-dessus.',
   'runCost.output': 'Sortie',
   'runCost.total': 'Total',
   'runCost.cacheHealth': 'Santé du cache',

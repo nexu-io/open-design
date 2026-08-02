@@ -58,6 +58,13 @@
   opacity: 1;
 }
 
+/* A figure already contained in the rows above, shown for reference only. Dimmed
+   so it does not read as another addend of the total. */
+.memo {
+  opacity: 0.55;
+  font-style: italic;
+}
+
 .hint {
   grid-column: 1 / -1;
   margin: 2px 0 0;

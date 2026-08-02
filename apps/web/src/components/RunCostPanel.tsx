@@ -96,7 +96,6 @@ export function RunCostPanel({ runId }: { runId: string }) {
     },
     { key: 'transcript', label: t('runCost.transcript'), value: cost.transcript },
     { key: 'cacheWrite', label: t('runCost.cacheWrite'), value: cost.cacheWrite },
-    { key: 'uncachedInput', label: t('runCost.uncachedInput'), value: cost.uncachedInput },
     { key: 'output', label: t('runCost.output'), value: cost.output },
   ];
 
@@ -115,6 +114,15 @@ export function RunCostPanel({ runId }: { runId: string }) {
           <span className={`${styles.label} ${styles.total}`}>{t('runCost.total')}</span>
           <span className={`${styles.value} ${styles.total}`}>{usd(cost.total)}</span>
           <span className={styles.share} />
+          {/* A MEMO, not a peer row. The preamble and transcript rows span both
+              the cache reads and the uncached input — establishing the floor on
+              the first call is paid at the input rate — so this figure is
+              already inside them. Rendering it as a fifth summing row would
+              double-count it and the rows would stop matching the total. */}
+          <span className={`${styles.label} ${styles.memo}`}>{t('runCost.uncachedInput')}</span>
+          <span className={`${styles.value} ${styles.memo}`}>{usd(cost.uncachedInput)}</span>
+          <span className={`${styles.share} ${styles.memo}`}>{share(cost.uncachedInput)}</span>
+          <p className={styles.hint}>{t('runCost.uncachedInputHint')}</p>
         </div>
       </div>
 

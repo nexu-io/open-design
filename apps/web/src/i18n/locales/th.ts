@@ -4299,6 +4299,7 @@ export const th: Dict = {
   'runCost.transcript': 'Transcript',
   'runCost.cacheWrite': 'Cache write',
   'runCost.uncachedInput': 'Uncached input',
+  'runCost.uncachedInputHint': 'นับรวมอยู่ในสองแถวบริบทด้านบนแล้ว',
   'runCost.output': 'Output',
   'runCost.total': 'Total',
   'runCost.cacheHealth': 'Cache health',

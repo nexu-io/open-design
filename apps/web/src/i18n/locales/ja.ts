@@ -4299,6 +4299,7 @@ export const ja: Dict = {
   'runCost.transcript': 'Transcript',
   'runCost.cacheWrite': 'Cache write',
   'runCost.uncachedInput': 'Uncached input',
+  'runCost.uncachedInputHint': '上の 2 つのコンテキスト行にすでに含まれています。',
   'runCost.output': 'Output',
   'runCost.total': 'Total',
   'runCost.cacheHealth': 'Cache health',

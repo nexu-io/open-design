@@ -4299,6 +4299,7 @@ export const id: Dict = {
   'runCost.transcript': 'Transcript',
   'runCost.cacheWrite': 'Cache write',
   'runCost.uncachedInput': 'Uncached input',
+  'runCost.uncachedInputHint': 'Sudah dihitung dalam dua baris konteks di atas.',
   'runCost.output': 'Output',
   'runCost.total': 'Total',
   'runCost.cacheHealth': 'Cache health',

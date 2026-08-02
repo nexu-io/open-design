@@ -4442,6 +4442,7 @@ export interface Dict {
   'runCost.transcript': string;
   'runCost.cacheWrite': string;
   'runCost.uncachedInput': string;
+  'runCost.uncachedInputHint': string;
   'runCost.output': string;
   'runCost.total': string;
   'runCost.cacheHealth': string;

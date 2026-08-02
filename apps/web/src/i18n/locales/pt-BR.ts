@@ -4299,6 +4299,7 @@ export const ptBR: Dict = {
   'runCost.transcript': 'Transcrição',
   'runCost.cacheWrite': 'Escrita de cache',
   'runCost.uncachedInput': 'Entrada sem cache',
+  'runCost.uncachedInputHint': 'Já contabilizado nas duas linhas de contexto acima.',
   'runCost.output': 'Saída',
   'runCost.total': 'Total',
   'runCost.cacheHealth': 'Saúde do cache',

@@ -45,15 +45,25 @@ function textDelta(delta: string, timestamp = 0) {
 }
 
 describe('analyzeRunCost — step curve', () => {
-  it('reads the context curve off cached_read_tokens, one entry per usage frame', () => {
+  it('reads the context curve as uncached input plus cache read, one entry per usage frame', () => {
+    // The cache read alone is NOT the context: it is only the part of it that
+    // was served from cache. A call carrying 900 uncached input against a cold
+    // cache still put 900 tokens in front of the model. Frame 2 reports a read
+    // (100) above its input (20), which proves the provider additive, so every
+    // frame's `input_tokens` is the uncached remainder and the context is the
+    // sum. See `detectUsageAccountingConvention`.
     const report = analyzeRunCost([
-      usageEvent({ cached_read_tokens: 0, cached_write_tokens: 100, output_tokens: 10 }, 1000),
-      usageEvent({ cached_read_tokens: 100, cached_write_tokens: 50, output_tokens: 20 }, 3000),
-      usageEvent({ cached_read_tokens: 150, cached_write_tokens: 25, output_tokens: 30 }, 6000),
+      usageEvent({ cached_read_tokens: 0, cached_write_tokens: 100, output_tokens: 10, input_tokens: 900 }, 1000),
+      usageEvent({ cached_read_tokens: 100, cached_write_tokens: 50, output_tokens: 20, input_tokens: 20 }, 3000),
+      usageEvent({ cached_read_tokens: 150, cached_write_tokens: 25, output_tokens: 30, input_tokens: 30 }, 6000),
     ]);
 
     expect(report.steps).toHaveLength(3);
-    expect(report.steps.map((s) => s.contextTokens)).toEqual([0, 100, 150]);
+    expect(report.steps.map((s) => s.contextTokens)).toEqual([900, 120, 180]);
+    // The cache-read figure stays available under its own name, because cache
+    // health and the invalidation/compaction split reason about the cached
+    // prefix specifically, not about the context as a whole.
+    expect(report.steps.map((s) => s.cachedReadTokens)).toEqual([0, 100, 150]);
     expect(report.steps.map((s) => s.cacheWriteTokens)).toEqual([100, 50, 25]);
     // Gap is null on the first step (nothing to measure against) and the
     // wall-clock delta thereafter — a gap over the cache TTL explains a rewrite.
@@ -76,7 +86,7 @@ describe('analyzeRunCost — step curve', () => {
       usageEvent({ cached_read_tokens: 10, output_tokens: 5 }),
     ]);
     expect(report.steps).toHaveLength(1);
-    expect(report.steps[0]?.contextTokens).toBe(10);
+    expect(report.steps[0]?.cachedReadTokens).toBe(10);
   });
 });
 
@@ -95,10 +105,16 @@ describe('analyzeRunCost — term decomposition', () => {
     expect(report.terms.transcriptTokens).toBe(700);
   });
 
-  it('excludes zero-context steps from the preamble floor', () => {
-    // The first usage frame of a run reports cached_read 0 (nothing cached
-    // yet). Treating that as the floor would zero out the preamble term and
-    // misattribute the whole curve to transcript accumulation.
+  it('excludes frames with no context at all from the preamble floor', () => {
+    // A frame reporting neither uncached input nor a cache read did not make a
+    // comparable model call — runs close with exactly such a summary frame.
+    //
+    // This exclusion used to be load-bearing for a different reason: it hid the
+    // first call of every run, whose cache read is near zero, because letting it
+    // set the floor collapsed the preamble term. That was a symptom of reading
+    // the cache read as the context. A first call now carries its uncached input
+    // and sets an honest floor, so this guard is back to covering only the
+    // genuinely empty frame.
     const report = analyzeRunCost([
       usageEvent({ cached_read_tokens: 0 }),
       usageEvent({ cached_read_tokens: 500 }),
@@ -136,6 +152,145 @@ describe('analyzeRunCost — term decomposition', () => {
   it('defaults to the validated rate card when none is supplied', () => {
     const report = analyzeRunCost([usageEvent({ output_tokens: 1_000_000 })]);
     expect(report.usd.output).toBeCloseTo(DEFAULT_RUN_COST_RATES.outputPerMTok, 6);
+  });
+});
+
+describe('analyzeRunCost — preamble floor over effective context', () => {
+  /**
+   * Frames of the real six-call run `3d081d9b`, which reported a 3% preamble
+   * while re-reading an established ~123k context on all six calls. Frames 1..5
+   * report a read above their input, proving the provider additive.
+   */
+  const sixCallRun = [
+    rawUsageEvent({ input_tokens: 120_443, cached_read_tokens: 3_072, output_tokens: 90 }),
+    rawUsageEvent({ input_tokens: 351, cached_read_tokens: 123_456, output_tokens: 90 }),
+    rawUsageEvent({ input_tokens: 1_904, cached_read_tokens: 123_776, output_tokens: 92 }),
+    rawUsageEvent({ input_tokens: 1_685, cached_read_tokens: 125_632, output_tokens: 91 }),
+    rawUsageEvent({ input_tokens: 1_749, cached_read_tokens: 127_296, output_tokens: 220 }),
+    rawUsageEvent({ input_tokens: 795, cached_read_tokens: 129_024, output_tokens: 75 }),
+  ];
+
+  it('reports the preamble as dominant on a run whose context is re-read six times', () => {
+    // Effective contexts: 123515, 123807, 125680, 127317, 129045, 129819.
+    // The floor of THAT curve is 123,515, re-read by all six calls, so the
+    // preamble is 741,090 of the 759,183 total and only 18,093 is accumulation.
+    // Read off the cache curve instead, the floor is the first call's barely-warm
+    // 3,072 and the run reports a 3% preamble against a 97% transcript.
+    const report = analyzeRunCost(sixCallRun);
+
+    expect(report.usageConvention).toBe('additive');
+    expect(report.terms.preambleTokens).toBe(741_090);
+    expect(report.terms.transcriptTokens).toBe(18_093);
+    expect(report.terms.preambleTokens).toBeGreaterThan(report.terms.transcriptTokens);
+  });
+
+  it('shows the effective-context identity on a run that holds still', () => {
+    // What step i put in front of the model is what step i+1 finds in cache.
+    // This is the evidence that the cache read is a SUBSET of the context rather
+    // than the context itself.
+    //
+    // Scoped to THIS run on purpose. The identity is corroboration, not a law:
+    // block-quantized reads, content cached between calls, and invalidation all
+    // break it on other persisted runs, and asserting it globally would be
+    // asserting something false. The arithmetic does not rest on it — a context
+    // is its cached plus its uncached part by construction. See the module
+    // docblock.
+    const report = analyzeRunCost(sixCallRun);
+
+    for (let i = 0; i < report.steps.length - 1; i += 1) {
+      const drift = Math.abs(report.steps[i]!.contextTokens - report.steps[i + 1]!.cachedReadTokens);
+      expect(drift).toBeLessThan(100);
+    }
+  });
+
+  it('moves a warm-floor run only marginally, without flipping its verdict', () => {
+    // The bounding case, and the reason the negative case cannot be "nothing
+    // moves": the floor shifts whenever ANY step carries uncached input, which
+    // is always. Here it goes 50,000 -> 50,100, a 0.2% shift, and the preamble
+    // dominated before and still dominates after.
+    const report = analyzeRunCost([
+      rawUsageEvent({ input_tokens: 100, cached_read_tokens: 50_000 }),
+      rawUsageEvent({ input_tokens: 100, cached_read_tokens: 50_500 }),
+      rawUsageEvent({ input_tokens: 100, cached_read_tokens: 51_000 }),
+    ]);
+
+    expect(report.terms.preambleTokens).toBe(150_300);
+    expect(report.terms.transcriptTokens).toBe(1_500);
+    expect(report.terms.preambleTokens).toBeGreaterThan(report.terms.transcriptTokens);
+  });
+
+  it('still decomposes a run from a provider that caches nothing', () => {
+    // No cache fields at all, which is what several runtimes report. The run
+    // still has a context curve and still re-reads a floor on every call — it
+    // just pays for all of it at the uncached rate. Selecting the steps by their
+    // cache read instead of their context would find NONE of them here and
+    // report a run with zero preamble and zero transcript.
+    const report = analyzeRunCost([
+      rawUsageEvent({ input_tokens: 1_000, output_tokens: 10 }),
+      rawUsageEvent({ input_tokens: 1_200, output_tokens: 10 }),
+      rawUsageEvent({ input_tokens: 1_500, output_tokens: 10 }),
+    ]);
+
+    expect(report.steps.map((s) => s.contextTokens)).toEqual([1_000, 1_200, 1_500]);
+    expect(report.terms.preambleTokens).toBe(3_000);
+    expect(report.terms.transcriptTokens).toBe(700);
+    // Nothing was cached, so the whole floor was bought at the input rate.
+    expect(report.terms.preambleUncachedTokens).toBe(3_000);
+    expect(report.usd.preamble).toBeCloseTo(
+      (3_000 * report.rates.inputPerMTok) / 1_000_000,
+      9,
+    );
+  });
+
+  it('leaves a transcript-dominated run transcript-dominated', () => {
+    // The other negative case: a cheap first call and genuine accumulation. The
+    // correction moves the floor 1,000 -> 1,100 and the verdict does not budge.
+    // Without this the change could be a blanket rewrite that reports every run
+    // as preamble-dominated and nobody would notice.
+    const report = analyzeRunCost([
+      rawUsageEvent({ input_tokens: 100, cached_read_tokens: 1_000 }),
+      rawUsageEvent({ input_tokens: 100, cached_read_tokens: 40_000 }),
+      rawUsageEvent({ input_tokens: 100, cached_read_tokens: 80_000 }),
+      rawUsageEvent({ input_tokens: 100, cached_read_tokens: 120_000 }),
+    ]);
+
+    expect(report.terms.preambleTokens).toBe(4_400);
+    expect(report.terms.transcriptTokens).toBe(237_000);
+    expect(report.terms.transcriptTokens).toBeGreaterThan(report.terms.preambleTokens);
+  });
+
+  it('values the floor prefix-first, so the dollar rows still reconcile', () => {
+    // A cache serves the PREFIX of the context, and the floor IS that prefix, so
+    // a step's floor is cached exactly as far as its cache read reaches:
+    // `min(floor, cacheRead)`, with the shortfall paid at the uncached rate.
+    //
+    // On this run that shortfall is almost entirely the first call, which
+    // established the 123,515-token floor with nothing cached: 120,502 of the
+    // 741,090 preamble tokens were bought at the input rate, not the cached one.
+    // That is why `usd.preamble` cannot be `preambleTokens x cachedReadPerMTok`
+    // any more — doing so under-reports this run's preamble by 3.7x.
+    const report = analyzeRunCost(sixCallRun);
+    const { usd, terms, rates } = report;
+
+    expect(terms.preambleUncachedTokens).toBe(120_502);
+    expect(usd.preamble).toBeCloseTo(
+      (620_588 * rates.cachedReadPerMTok + 120_502 * rates.inputPerMTok) / 1_000_000,
+      9,
+    );
+    expect(usd.preamble).not.toBeCloseTo(
+      (terms.preambleTokens * rates.cachedReadPerMTok) / 1_000_000,
+      6,
+    );
+
+    // The two rows remain an exact subdivision — of the read AND input terms
+    // together now, where they used to subdivide the read term alone.
+    expect(usd.preamble + usd.transcript).toBeCloseTo(usd.cachedRead + usd.uncachedInput, 9);
+    // And the headline total is untouched: this defect was always an attribution
+    // error between rows, never a mispriced run.
+    expect(usd.total).toBeCloseTo(
+      usd.cachedRead + usd.cacheWrite + usd.uncachedInput + usd.output,
+      9,
+    );
   });
 });
 
@@ -189,6 +344,44 @@ describe('analyzeRunCost — cache health', () => {
 
     expect(report.cacheHealth.rewrittenTokens).toBe(4500);
     expect(report.anomalies.some((a) => a.kind === 'cache-rewrite')).toBe(true);
+  });
+
+  it('judges a write against the next CACHE read, not against context growth', () => {
+    // Discriminating fixture: the two readings disagree. Step 0 writes 1,000 and
+    // step 1 finds exactly 1,000 more in cache — a textbook incremental write.
+    // But step 1 also carries 500 of fresh uncached input, so the CONTEXT only
+    // grew by 500, and judging the write against that would report this healthy
+    // write as a 500-token rewrite.
+    //
+    // A write's job is to put content where the next call can read it cheaply,
+    // so the cache read is the only honest measure of whether it did that.
+    const report = analyzeRunCost([
+      rawUsageEvent({ input_tokens: 1_000, cached_read_tokens: 0, cached_write_tokens: 1_000 }),
+      rawUsageEvent({ input_tokens: 500, cached_read_tokens: 1_000, cached_write_tokens: 0 }),
+    ]);
+
+    expect(report.steps.map((s) => s.contextTokens)).toEqual([1_000, 1_500]);
+    expect(report.cacheHealth.incrementalSteps).toBe(1);
+    expect(report.cacheHealth.rewrittenTokens).toBe(0);
+    expect(report.anomalies).toEqual([]);
+  });
+
+  it('sees a cache invalidation even while the conversation kept growing', () => {
+    // The sharpest case for the same boundary. The cached prefix collapses
+    // 8,000 -> 2,000 and is written back, which is an invalidation — but the
+    // context RISES 8,100 -> 9,000 across the same pair, because the call that
+    // observed the collapse also carried 7,000 of fresh input. Classifying off
+    // the context would see no drop at all and report nothing.
+    const report = analyzeRunCost([
+      rawUsageEvent({ input_tokens: 100, cached_read_tokens: 8_000 }),
+      rawUsageEvent({ input_tokens: 7_000, cached_read_tokens: 2_000, cached_write_tokens: 6_500 }),
+    ]);
+
+    expect(report.steps.map((s) => s.contextTokens)).toEqual([8_100, 9_000]);
+    const drop = report.anomalies.find((a) => a.kind === 'cache-invalidation');
+    expect(drop).toBeDefined();
+    expect(drop?.stepIndex).toBe(1);
+    expect(drop?.tokens).toBe(6_000);
   });
 
   it('calls a context drop an invalidation when the total context held steady', () => {
@@ -357,10 +550,12 @@ describe('analyzeRunCost — provider accounting', () => {
     ]);
 
     const step = report.steps[0]!;
-    expect(step.contextTokens).toBe(8000);
+    expect(step.cachedReadTokens).toBe(8000);
     expect(step.cacheWriteTokens).toBe(200);
     expect(step.inputTokens).toBe(100);
     expect(step.outputTokens).toBe(50);
+    // Both parts under the alias matrix, so the context is their sum.
+    expect(step.contextTokens).toBe(8100);
   });
 
   it('subtracts the cached subset from an OpenAI-style inclusive input', () => {
@@ -372,8 +567,13 @@ describe('analyzeRunCost — provider accounting', () => {
     ]);
 
     const step = report.steps[0]!;
-    expect(step.contextTokens).toBe(120);
+    expect(step.cachedReadTokens).toBe(120);
     expect(step.inputTokens).toBe(280);
+    // 400 total, of which 120 came from cache: the context is the 400 the
+    // provider already reported, not 520. Under INCLUSIVE accounting the sum
+    // must not double-count the cached subset, and this is the case that proves
+    // `contextTokens` respects the convention rather than blindly adding.
+    expect(step.contextTokens).toBe(400);
   });
 
   it('treats an OpenAI-style payload as additive when the cached read exceeds input', () => {
@@ -384,8 +584,9 @@ describe('analyzeRunCost — provider accounting', () => {
     ]);
 
     const step = report.steps[0]!;
-    expect(step.contextTokens).toBe(9000);
+    expect(step.cachedReadTokens).toBe(9000);
     expect(step.inputTokens).toBe(100);
+    expect(step.contextTokens).toBe(9100);
   });
 
   it('reads the OpenAI nested cached_tokens detail', () => {
@@ -398,9 +599,11 @@ describe('analyzeRunCost — provider accounting', () => {
     ]);
 
     const step = report.steps[0]!;
-    expect(step.contextTokens).toBe(200);
+    expect(step.cachedReadTokens).toBe(200);
     expect(step.inputTokens).toBe(300);
     expect(step.outputTokens).toBe(30);
+    // `prompt_tokens` is inclusive, so the context is the 500 reported.
+    expect(step.contextTokens).toBe(500);
   });
 
   it('reads camelCase and cache_creation nested aliases', () => {
@@ -414,9 +617,10 @@ describe('analyzeRunCost — provider accounting', () => {
     ]);
 
     const step = report.steps[0]!;
-    expect(step.contextTokens).toBe(4000);
+    expect(step.cachedReadTokens).toBe(4000);
     expect(step.cacheWriteTokens).toBe(90);
     expect(step.inputTokens).toBe(60);
+    expect(step.contextTokens).toBe(4060);
   });
 
   it('settles the convention across the run, not per frame', () => {
@@ -451,8 +655,8 @@ describe('analyzeRunCost — provider accounting', () => {
     ]);
 
     const first = report.steps[0]!;
-    const effectiveContext = first.inputTokens + first.contextTokens;
-    expect(Math.abs(effectiveContext - report.steps[1]!.contextTokens)).toBeLessThan(100);
+    expect(first.contextTokens).toBe(87_284);
+    expect(Math.abs(first.contextTokens - report.steps[1]!.cachedReadTokens)).toBeLessThan(100);
   });
 
   it('keeps a single inclusive frame inclusive when nothing disproves it', () => {
@@ -479,9 +683,10 @@ describe('analyzeRunCost — provider accounting', () => {
     ]);
 
     const step = report.steps[0]!;
-    expect(step.contextTokens).toBe(1000);
+    expect(step.cachedReadTokens).toBe(1000);
     expect(step.cacheWriteTokens).toBe(50);
     expect(step.inputTokens).toBe(20);
+    expect(step.contextTokens).toBe(1020);
   });
 
   it('prices an Anthropic run without double-charging the cached context', () => {
@@ -533,7 +738,7 @@ describe('analyzeRunCost — usage scope', () => {
     // REGRESSION, from a persisted run (0bb4f727). An earlier positional
     // discriminator asked whether any tool_use appeared AFTER the first usage
     // frame, and gated this shape away — but it is a legitimate two-call
-    // OpenCode run carrying a real 1,792 -> 28,864 context curve. Both of its
+    // OpenCode run carrying a real 28,930 -> 38,202 context curve. Both of its
     // tools simply came out of call 0, which says nothing about scope.
     const report = analyzeRunCost([
       toolUse('t1', 'engram_mem_context', {}),
@@ -546,7 +751,14 @@ describe('analyzeRunCost — usage scope', () => {
     ]);
 
     expect(report.usageScope).toBe('per-call');
-    expect(report.steps.map((s) => s.contextTokens)).toEqual([1_792, 28_864]);
+    expect(report.steps.map((s) => s.cachedReadTokens)).toEqual([1_792, 28_864]);
+    expect(report.steps.map((s) => s.contextTokens)).toEqual([28_930, 38_202]);
+    // The identity again, on a second real run: call 1 held 28,930 and call 2
+    // found 28,864 of it in cache, 66 apart. Read off the cache figure alone,
+    // this run's floor would be call 1's cold 1,792 rather than its true 28,930.
+    expect(
+      Math.abs(report.steps[0]!.contextTokens - report.steps[1]!.cachedReadTokens),
+    ).toBeLessThan(100);
     // Call 2 (9,338 input against 28,864 cached) proves the provider additive,
     // so call 1 keeps all 27,138 of its input rather than losing 1,792 to an
     // inclusive reading it never earned.
@@ -592,7 +804,9 @@ describe('analyzeRunCost — usage scope', () => {
     ]);
 
     expect(report.usageScope).toBe('aggregate');
-    expect(report.terms.preambleTokens).toBe(40_000);
+    // A one-point curve has nowhere to put anything but the floor, whatever the
+    // floor is measured over: 40,100 of effective context, 0 of accumulation.
+    expect(report.terms.preambleTokens).toBe(40_100);
     expect(report.terms.transcriptTokens).toBe(0);
     expect(report.cacheHealth.comparableSteps).toBe(0);
   });
