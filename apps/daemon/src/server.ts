@@ -6828,7 +6828,7 @@ export async function startServer({
     let runWarned = false;
     const visibleStdoutControlStripper = new TerminalControlSequenceStripper();
     const titleMarkerStripper = createAgentTitleMarkerStripper({
-      enabled: Boolean(titleGenerationRequested),
+      shouldEmitTitle: Boolean(titleGenerationRequested),
       emitTitle: (title) => send('agent', { type: 'conversation_title', title }),
     });
 

@@ -4,8 +4,16 @@ export interface AgentTitleMarkerStripper {
 }
 
 export interface AgentTitleMarkerStripperOptions {
+  // Always strip markers from the visible stream so users never see raw
+  // `<od-title>...</od-title>` — even when the daemon did not explicitly
+  // request a title for this turn. (Models occasionally emit the marker
+  // on subsequent turns after the prompt-time title task is gone.)
   emitTitle: (title: string) => void;
-  enabled: boolean;
+  // Whether to invoke `emitTitle` when a marker is matched. When `false`
+  // the stripper still strips, but does not fire a title event — useful
+  // when the daemon did not send the title-generation prompt this turn
+  // and the client would drop the duplicate anyway.
+  shouldEmitTitle: boolean;
   maxScanLength?: number;
 }
 
@@ -28,12 +36,18 @@ export function createAgentTitleMarkerStripper(
   options: AgentTitleMarkerStripperOptions,
 ): AgentTitleMarkerStripper {
   const maxScanLength = options.maxScanLength ?? DEFAULT_TITLE_MARKER_SCAN_LIMIT;
+  // We always scan/strip markers — `shouldEmitTitle` only gates whether
+  // emitting a title event fires, not whether the marker hits the
+  // visible stream. This keeps subsequent turns from leaking raw
+  // `<od-title>...</od-title>` to the chat pane when the daemon did
+  // not request a title for that turn (issue #6326).
   let buffer = '';
-  let scanning = options.enabled;
+  let scanning = true;
   let emitted = false;
 
   const emitTitle = (value: string) => {
     if (emitted) return;
+    if (!options.shouldEmitTitle) return;
     const title = sanitizeAgentGeneratedTitle(value);
     if (!title) return;
     emitted = true;
@@ -80,7 +94,9 @@ export function createAgentTitleMarkerStripper(
 
       emitTitle(buffer.slice(titleStart, closeIndex));
       buffer = buffer.slice(closeIndex + TITLE_CLOSE_TAG.length);
-      scanning = false;
+      // Keep scanning so subsequent markers in the same run are also
+      // stripped. `emitted` prevents duplicate title events within
+      // this stripper instance.
       visible += buffer;
       buffer = '';
     }
