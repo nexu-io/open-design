@@ -86,6 +86,7 @@ import {
   kindFor,
   mimeFor,
   sanitizeName,
+  sanitizePath,
 } from '../projects.js';
 import {
   AIHUBMIX_DEFAULT_BASE_URL,
@@ -447,9 +448,21 @@ export async function generateMedia(args: {
   const warnings = [lengthClamp.warning, durationClamp.warning].filter(Boolean);
 
   const dir = await ensureProject(projectsRoot, projectId);
-  const safeOut = sanitizeName(
-    output || autoOutputName(surface, model, resolvedAudioKind),
-  );
+  // The caller-supplied `output` may include a subdirectory (e.g.
+  // `assets/foo.png`). `sanitizeName` collapses every `/` into `_`,
+  // silently dropping the directory and writing `assets_foo.png` to the
+  // project root (issue #6336). `sanitizePath` validates the relative
+  // path (rejecting `..`, absolute paths, control chars) and re-joins the
+  // surviving segments, so `assets/foo.png` resolves to
+  // `<projectRoot>/assets/foo.png` — matching `write_file` / MCP
+  // `create_artifact` semantics. `validateProjectPath` rejects a leading
+  // `./` because the lone `.` segment matches FORBIDDEN_SEGMENT, so strip
+  // `./` BEFORE path validation to mirror how shells normalize relative
+  // paths. The auto-generated fallback is always a bare filename, so it
+  // stays on `sanitizeName`.
+  const safeOut = output
+    ? sanitizePath(output.replace(/^\.\//, ''))
+    : sanitizeName(autoOutputName(surface, model, resolvedAudioKind));
   const target = path.join(dir, safeOut);
   await mkdir(path.dirname(target), { recursive: true });
 
