@@ -125,4 +125,19 @@ describe('od conversation info CLI', () => {
     const stderr = (result as { stderr?: string }).stderr ?? '';
     expect(stderr).toContain('Usage: od conversation info --project <projectId> <conversationId>');
   });
+
+  it('embedded help block advertises the new --project flag for `info`', async () => {
+    // Per #6341 review: the help block (printed by `od conversation help`
+    // or any time the subcommand is invoked with --help/-h or no args)
+    // must stay in sync with the actual invocation. Before the fix the
+    // help block said `od conversation info <conversationId>` while the
+    // real invocation required `--project <projectId> <conversationId>`.
+    const r = await execFileAsync(
+      process.execPath,
+      ['--import', 'tsx', cliEntry, 'conversation', 'help', '--json'],
+    );
+    expect(r.exitCode ?? 0).toBe(0);
+    expect(r.stdout).toContain('od conversation info --project <projectId>');
+    expect(r.stdout).not.toContain('od conversation info <conversationId>');
+  });
 });

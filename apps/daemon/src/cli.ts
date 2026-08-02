@@ -7319,7 +7319,8 @@ async function runConversation(args) {
                                            --fork-after stops the copy at one
                                            source message.
   od conversation list <projectId>           List conversations in a project.
-  od conversation info <conversationId>      Print one conversation.
+  od conversation info --project <projectId> <conversationId>
+                                           Print one conversation.
 
 Common options:
   --daemon-url <url>   Open Design daemon HTTP base.
