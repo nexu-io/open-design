@@ -361,6 +361,7 @@ export const th: Dict = {
   'settings.modeApiMeta': 'BYOK',
   'settings.byokNoFileToolsNotice': 'BYOK ไม่สามารถอ่าน เขียน หรือแก้ไขไฟล์โปรเจกต์ได้ ใช้ Local CLI เมื่อคุณต้องการเปลี่ยนแปลงโค้ด',
   'settings.byokDraftNotice': 'การตั้งค่านี้จะยังเป็นฉบับร่างจนกว่าจะกรอกช่องที่จำเป็นครบ การตั้งค่าการทำงานปัจจุบันจะยังคงใช้งานอยู่',
+  'settings.byokStorageUnavailableNotice': 'การจัดเก็บคีย์ BYOK อย่างปลอดภัยไม่พร้อมใช้งานในระบบนี้ ดังนั้นจึงไม่สามารถบันทึกคีย์ API BYOK ที่นี่ได้ การทำงานจะกลับไปใช้การเรียกเก็บเงินของ Open Design Cloud',
   'settings.codeAgent': 'เอเจนต์โค้ด',
   'settings.codeAgentHint': 'ตรวจพบจากการสแกน PATH ของคุณ เลือก CLI ที่คุณต้องการให้ระบบใช้งาน',
   'settings.rescan': '↻ สแกนใหม่',

@@ -361,6 +361,7 @@ export const id: Dict = {
   'settings.modeApiMeta': 'BYOK',
   'settings.byokNoFileToolsNotice': 'BYOK tidak dapat membaca, menulis, atau mengedit file proyek. Gunakan Local CLI saat Anda perlu mengubah kode.',
   'settings.byokDraftNotice': 'Konfigurasi ini tetap sebagai draf hingga semua bidang wajib dilengkapi. Konfigurasi eksekusi saat ini tetap aktif.',
+  'settings.byokStorageUnavailableNotice': 'Penyimpanan kunci BYOK yang aman tidak tersedia di sistem ini, sehingga kunci API BYOK tidak dapat disimpan di sini. Eksekusi akan kembali ke penagihan Open Design Cloud.',
   'settings.codeAgent': 'Agent kode',
   'settings.codeAgentHint': 'Terdeteksi dari PATH. Pilih CLI yang ingin dipakai untuk menjalankan generasi.',
   'settings.rescan': 'Pindai ulang',

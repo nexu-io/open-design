@@ -361,6 +361,7 @@ export const en: Dict = {
   'settings.modeApiMeta': 'BYOK',
   'settings.byokNoFileToolsNotice': 'BYOK can\'t read, write, or edit project files. Use Local CLI when you need code changes.',
   'settings.byokDraftNotice': 'This setup remains a draft until the required fields are complete. Your current execution setup stays active.',
+  'settings.byokStorageUnavailableNotice': 'Secure BYOK credential storage is unavailable on this system, so BYOK API keys can\'t be saved here. Runs will fall back to Open Design Cloud billing.',
   'settings.codeAgent': 'Code agent',
   'settings.codeAgentHint': 'Pick the CLI that runs your prompts.',
   'settings.rescan': '↻ Rescan',

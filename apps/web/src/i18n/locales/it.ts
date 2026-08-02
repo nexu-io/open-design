@@ -361,6 +361,7 @@ export const it: Dict = {
   'settings.modeApiMeta': 'BYOK',
   'settings.byokNoFileToolsNotice': 'BYOK non può leggere, scrivere o modificare i file del progetto. Usa la Local CLI quando hai bisogno di modifiche al codice.',
   'settings.byokDraftNotice': 'Questa configurazione resta una bozza finché i campi obbligatori non sono completi. La configurazione di esecuzione attuale rimane attiva.',
+  'settings.byokStorageUnavailableNotice': 'L\'archiviazione sicura delle chiavi BYOK non è disponibile su questo sistema, quindi le chiavi API BYOK non possono essere salvate qui. Le esecuzioni torneranno alla fatturazione Open Design Cloud.',
   'settings.codeAgent': 'Agente di codice',
   'settings.codeAgentHint': 'Rilevato analizzando il tuo PATH. Scegli la CLI attraverso cui verranno eseguite le generazioni.',
   'settings.rescan': '↻ Rianalizza',

@@ -361,6 +361,7 @@ export const ko: Dict = {
   'settings.modeApiMeta': 'BYOK',
   'settings.byokNoFileToolsNotice': 'BYOK는 프로젝트 파일을 읽거나 쓰거나 편집할 수 없습니다. 코드 변경이 필요한 경우 Local CLI를 사용하세요.',
   'settings.byokDraftNotice': '필수 항목을 모두 입력할 때까지 이 설정은 초안으로 유지됩니다. 현재 실행 설정은 계속 활성 상태로 유지됩니다.',
+  'settings.byokStorageUnavailableNotice': '이 시스템에서는 안전한 BYOK 키 저장소를 사용할 수 없으므로 여기에 BYOK API 키를 저장할 수 없습니다. 실행은 Open Design Cloud 청구로 대체됩니다.',
   'settings.codeAgent': '코드 에이전트',
   'settings.codeAgentHint': 'PATH 환경 변수 스캔을 통해 감지됩니다. 생성을 처리할 CLI를 선택하세요.',
   'settings.rescan': '↻ 다시 스캔',
