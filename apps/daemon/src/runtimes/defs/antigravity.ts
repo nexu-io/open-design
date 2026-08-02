@@ -228,9 +228,7 @@ export const antigravityAgentDef = {
       args.push('--log-file', runtimeContext.agentLogFilePath);
     }
     
-    if (runtimeContext.cwd) {
-      args.push('--add-dir', runtimeContext.cwd);
-    }
+    args.push('--add-dir', dirname(runtimeContext.promptFilePath));
 
     args.push('-p');
     args.push(`Read the system instructions, conversation history, and user request from the file ${runtimeContext.promptFilePath}. Follow the instructions strictly and provide the final response to the user's latest request.`);

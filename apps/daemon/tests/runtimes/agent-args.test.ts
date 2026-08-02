@@ -549,19 +549,13 @@ test('antigravity delivers prompt via managed temp file instead of stdin', () =>
   const args = antigravity.buildArgs('write hello world', [], [], {}, {
     promptFilePath: '/tmp/managed-prompt.md'
   });
-  assert.deepEqual(args, ['-p', expectedFileText]);
+  assert.deepEqual(args, ['--add-dir', '/tmp', '-p', expectedFileText]);
 
   const argsWithLog = antigravity.buildArgs('write hello world', [], [], {}, {
     agentLogFilePath: '/tmp/od-agy-test.log',
     promptFilePath: '/tmp/managed-prompt.md'
   });
-  assert.deepEqual(argsWithLog, ['--log-file', '/tmp/od-agy-test.log', '-p', expectedFileText]);
-
-  const argsWithCwd = antigravity.buildArgs('write hello world', [], [], {}, {
-    cwd: '/fake/project/dir',
-    promptFilePath: '/tmp/managed-prompt.md'
-  });
-  assert.deepEqual(argsWithCwd, ['--add-dir', '/fake/project/dir', '-p', expectedFileText]);
+  assert.deepEqual(argsWithLog, ['--log-file', '/tmp/od-agy-test.log', '--add-dir', '/tmp', '-p', expectedFileText]);
 
   // No `--model` flag exists upstream, so buildArgs argv must stay the
   // same regardless of which label the user picks.
