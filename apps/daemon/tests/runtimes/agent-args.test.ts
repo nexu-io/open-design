@@ -571,7 +571,7 @@ test('antigravity delivers prompt via managed temp file instead of stdin', () =>
       promptFilePath: '/tmp/managed-prompt.md'
     });
     assert.equal(withModel.includes('--model'), false);
-    assert.deepEqual(withModel, ['--log-file', '/tmp/od-agy-test.log', '-p', expectedFileText]);
+    assert.deepEqual(withModel, ['--log-file', '/tmp/od-agy-test.log', '--add-dir', '/tmp', '-p', expectedFileText]);
   } finally {
     rmSync(settingsDir, { recursive: true, force: true });
   }
@@ -588,14 +588,14 @@ test('antigravity delivers prompt via managed temp file instead of stdin', () =>
     hasPriorAssistantTurn: true,
     promptFilePath: '/tmp/managed-prompt.md'
   });
-  assert.deepEqual(followUp, ['-p', expectedFileText]);
+  assert.deepEqual(followUp, ['--add-dir', '/tmp', '-p', expectedFileText]);
   assert.equal(followUp.includes('-c'), false);
 
   const firstTurn = antigravity.buildArgs('first', [], [], {}, {
     hasPriorAssistantTurn: false,
     promptFilePath: '/tmp/managed-prompt.md'
   });
-  assert.deepEqual(firstTurn, ['-p', expectedFileText]);
+  assert.deepEqual(firstTurn, ['--add-dir', '/tmp', '-p', expectedFileText]);
   assert.equal(antigravity.resumesSessionViaCli, undefined);
 
   assert.equal(antigravity.maxPromptArgBytes, undefined);
