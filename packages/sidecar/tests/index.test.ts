@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
-import { createServer } from "node:net";
+import { createConnection, createServer } from "node:net";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 
 import {
   bootstrapSidecarRuntime,
+  createJsonIpcServer,
+  normalizeJsonIpcMaxFrameBytes,
   requestJsonIpc,
   createSidecarLaunchEnv,
   resolveAppIpcPath,
@@ -115,6 +117,138 @@ describe("generic sidecar path boundary", () => {
 });
 
 describe("JSON IPC transport", () => {
+  it("accepts split chunks and a frame exactly at the byte limit", async () => {
+    const tempRoot = await mkdtemp(join(tmpdir(), "open-design-sidecar-"));
+    const socketPath = join(tempRoot, "bounded.sock");
+    const payload = JSON.stringify("x".repeat(62));
+    expect(Buffer.byteLength(payload)).toBe(64);
+    const handle = await createJsonIpcServer({
+      handler: () => null,
+      maxFrameBytes: 64,
+      socketPath,
+    });
+
+    try {
+      const response = await new Promise<string>((resolveResponse, rejectResponse) => {
+        const socket = createConnection(socketPath);
+        let data = "";
+        socket.on("connect", () => {
+          socket.write(payload.slice(0, 11));
+          setTimeout(() => socket.write(`${payload.slice(11)}\n`), 5);
+        });
+        socket.on("data", (chunk) => { data += chunk.toString("utf8"); });
+        socket.on("end", () => resolveResponse(data));
+        socket.on("error", rejectResponse);
+      });
+      expect(JSON.parse(response)).toEqual({ ok: true, result: null });
+    } finally {
+      await handle.close();
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects invalid limits and oversized unterminated requests", async () => {
+    expect(() => normalizeJsonIpcMaxFrameBytes(0)).toThrow(/between 1/);
+    expect(() => normalizeJsonIpcMaxFrameBytes(16 * 1024 * 1024 + 1)).toThrow(/between 1/);
+    const tempRoot = await mkdtemp(join(tmpdir(), "open-design-sidecar-"));
+    const socketPath = join(tempRoot, "oversized.sock");
+    let calls = 0;
+    const handle = await createJsonIpcServer({
+      handler: () => { calls += 1; return null; },
+      maxFrameBytes: 8,
+      socketPath,
+    });
+
+    try {
+      await new Promise<void>((resolveClose) => {
+        const socket = createConnection(socketPath);
+        socket.on("connect", () => socket.write("1234567890"));
+        socket.on("close", () => resolveClose());
+        socket.on("error", () => {});
+      });
+      expect(calls).toBe(0);
+    } finally {
+      await handle.close();
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects an oversized response and does not re-enter a handler for multiple frames", async () => {
+    const tempRoot = await mkdtemp(join(tmpdir(), "open-design-sidecar-"));
+    const oversizedPath = join(tempRoot, "response-too-large.sock");
+    const oversized = await createJsonIpcServer({
+      handler: () => "x".repeat(100),
+      maxFrameBytes: 32,
+      socketPath: oversizedPath,
+    });
+    try {
+      await expect(requestJsonIpc(oversizedPath, {}, { maxFrameBytes: 32 })).rejects.toThrow();
+    } finally {
+      await oversized.close();
+    }
+
+    const multiPath = join(tempRoot, "multiple.sock");
+    let calls = 0;
+    const multi = await createJsonIpcServer({
+      handler: () => { calls += 1; return null; },
+      socketPath: multiPath,
+    });
+    try {
+      await new Promise<void>((resolveClose) => {
+        const socket = createConnection(multiPath);
+        socket.on("connect", () => socket.write("{}\n{}\n"));
+        socket.on("close", () => resolveClose());
+        socket.on("error", () => {});
+      });
+      expect(calls).toBe(0);
+    } finally {
+      await multi.close();
+    }
+
+    const concurrentPath = join(tempRoot, "concurrent.sock");
+    let concurrentCalls = 0;
+    let releaseHandler!: () => void;
+    const concurrent = await createJsonIpcServer({
+      handler: async () => {
+        concurrentCalls += 1;
+        await new Promise<void>((resolve) => { releaseHandler = resolve; });
+        return null;
+      },
+      socketPath: concurrentPath,
+    });
+    try {
+      await new Promise<void>((resolveClose) => {
+        const socket = createConnection(concurrentPath);
+        socket.on("connect", () => {
+          socket.write("{}\n");
+          setTimeout(() => socket.write("{}\n"), 10);
+          setTimeout(() => releaseHandler(), 20);
+        });
+        socket.on("close", () => resolveClose());
+        socket.on("error", () => {});
+      });
+      expect(concurrentCalls).toBe(1);
+    } finally {
+      await concurrent.close();
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("times out and cleans up a response with no newline", async () => {
+    const tempRoot = await mkdtemp(join(tmpdir(), "open-design-sidecar-"));
+    const socketPath = join(tempRoot, "no-newline.sock");
+    const server = createServer((socket) => {
+      socket.on("data", () => socket.write("partial-response"));
+    });
+    try {
+      await listen(server, socketPath);
+      await expect(requestJsonIpc(socketPath, { op: "status" }, { timeoutMs: 20 })).rejects.toThrow(/timed out/);
+    } finally {
+      await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
   it("rejects malformed server responses instead of throwing from the socket callback", async () => {
     const tempRoot = await mkdtemp(join(tmpdir(), "open-design-sidecar-"));
     const socketPath = join(tempRoot, "malformed.sock");

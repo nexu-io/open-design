@@ -111,6 +111,16 @@ export type PortRequest = {
 
 export type JsonIpcHandler = (message: any) => unknown | Promise<unknown>;
 
+/** Maximum decoded JSON payload size; the terminating newline is not counted. */
+export const DEFAULT_JSON_IPC_MAX_FRAME_BYTES = 1024 * 1024;
+
+export function normalizeJsonIpcMaxFrameBytes(value: unknown = DEFAULT_JSON_IPC_MAX_FRAME_BYTES): number {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 1 || value > 16 * 1024 * 1024) {
+    throw new Error("IPC max frame bytes must be an integer between 1 and 16777216");
+  }
+  return value;
+}
+
 export type JsonIpcServerHandle = {
   close(): Promise<void>;
 };
@@ -524,32 +534,61 @@ async function prepareIpcPath(socketPath: string): Promise<void> {
 
 export async function createJsonIpcServer({
   handler,
+  maxFrameBytes = DEFAULT_JSON_IPC_MAX_FRAME_BYTES,
   socketPath,
 }: {
   handler: JsonIpcHandler;
+  maxFrameBytes?: number;
   socketPath: string;
 }): Promise<JsonIpcServerHandle> {
+  const frameLimit = normalizeJsonIpcMaxFrameBytes(maxFrameBytes);
   await prepareIpcPath(socketPath);
   const server = createNetServer((socket) => {
-    let buffer = "";
+    let buffer = Buffer.alloc(0);
+    let processing = false;
+    let completed = false;
     socket.on("error", () => {});
-    socket.on("data", async (chunk) => {
-      buffer += chunk.toString();
-      const newlineIndex = buffer.indexOf("\n");
-      if (newlineIndex < 0) return;
-      const frame = buffer.slice(0, newlineIndex);
-      buffer = buffer.slice(newlineIndex + 1);
-      try {
-        const result = await handler(JSON.parse(frame));
-        socket.end(`${JSON.stringify({ ok: true, result })}\n`);
-      } catch (error) {
-        socket.end(
-          `${JSON.stringify({
+    socket.on("data", (chunk: Buffer) => {
+      if (processing || completed) {
+        socket.destroy();
+        return;
+      }
+      buffer = Buffer.concat([buffer, chunk]);
+      const newlineIndex = buffer.indexOf(0x0a);
+      if (newlineIndex < 0) {
+        if (buffer.length > frameLimit) socket.destroy();
+        return;
+      }
+      if (newlineIndex > frameLimit || buffer.length > newlineIndex + 1) {
+        socket.destroy();
+        return;
+      }
+      const frame = buffer.subarray(0, newlineIndex);
+      buffer = Buffer.alloc(0);
+      processing = true;
+      void (async () => {
+        try {
+          const result = await handler(JSON.parse(frame.toString("utf8")));
+          const response = `${JSON.stringify({ ok: true, result })}\n`;
+          if (Buffer.byteLength(response, "utf8") - 1 > frameLimit) {
+            socket.destroy();
+            return;
+          }
+          completed = true;
+          socket.end(response);
+        } catch (error) {
+          const response = `${JSON.stringify({
             ok: false,
             error: jsonIpcError(error),
-          })}\n`,
-        );
-      }
+          })}\n`;
+          if (Buffer.byteLength(response, "utf8") - 1 > frameLimit) {
+            socket.destroy();
+            return;
+          }
+          completed = true;
+          socket.end(response);
+        }
+      })();
     });
   });
 
@@ -572,12 +611,13 @@ export async function createJsonIpcServer({
 export async function requestJsonIpc<T = any>(
   socketPath: string,
   payload: unknown,
-  { timeoutMs = 1500 }: { timeoutMs?: number } = {},
+  { maxFrameBytes = DEFAULT_JSON_IPC_MAX_FRAME_BYTES, timeoutMs = 1500 }: { maxFrameBytes?: number; timeoutMs?: number } = {},
 ): Promise<T> {
+  const frameLimit = normalizeJsonIpcMaxFrameBytes(maxFrameBytes);
   return await new Promise<T>((resolveRequest, rejectRequest) => {
     const socket = createConnection(socketPath);
     let settled = false;
-    let buffer = "";
+    let buffer = Buffer.alloc(0);
     const settle = (callback: () => void) => {
       if (settled) return;
       settled = true;
@@ -593,14 +633,25 @@ export async function requestJsonIpc<T = any>(
       socket.write(`${JSON.stringify(payload)}\n`);
     });
     socket.on("data", (chunk) => {
-      buffer += chunk.toString();
-      const newlineIndex = buffer.indexOf("\n");
-      if (newlineIndex < 0) return;
+      buffer = Buffer.concat([buffer, chunk]);
+      const newlineIndex = buffer.indexOf(0x0a);
+      if (newlineIndex < 0) {
+        if (buffer.length > frameLimit) {
+          socket.destroy();
+          settle(() => rejectRequest(new Error(`IPC response exceeded ${frameLimit} bytes from ${socketPath}`)));
+        }
+        return;
+      }
+      if (newlineIndex > frameLimit || buffer.length > newlineIndex + 1) {
+        socket.destroy();
+        settle(() => rejectRequest(new Error(`invalid IPC response framing from ${socketPath}`)));
+        return;
+      }
       socket.end();
       settle(() => {
         let response: { error?: { message?: string }; ok: boolean; result?: T };
         try {
-          response = JSON.parse(buffer.slice(0, newlineIndex)) as typeof response;
+          response = JSON.parse(buffer.subarray(0, newlineIndex).toString("utf8")) as typeof response;
         } catch (error) {
           rejectRequest(new Error(`invalid IPC response from ${socketPath}: ${error instanceof Error ? error.message : String(error)}`));
           return;
