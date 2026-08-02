@@ -1399,6 +1399,86 @@ describe('ProjectView daemon cleanup', () => {
     }
   });
 
+  it('auto-sends the Home-carried multi-skill compose list to the first daemon run', async () => {
+    // Regression for PR #6333 review: the Home auto-send hand-off used to
+    // only carry prompt/attachments/context to ProjectView, so the
+    // extra composed skills (`@skill-a @skill-b`) were silently dropped
+    // — the first daemon run launched with only `project.skillId`
+    // (the primary). Stash `od:auto-send-skillIds:<projectId>` at Home
+    // create time, then ProjectView puts the array back into
+    // `meta.skillIds` on the first handleSend, and `streamViaDaemon`
+    // receives the full list rather than an empty one.
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    streamViaDaemon.mockResolvedValue(undefined);
+
+    window.sessionStorage.setItem('od:auto-send-first:project-skill-ids', '1');
+    window.sessionStorage.setItem(
+      'od:auto-send-skillIds:project-skill-ids',
+      JSON.stringify(['deck-builder', 'pdf-designer']),
+    );
+
+    try {
+      render(
+        <ProjectView
+          project={{
+            id: 'project-skill-ids',
+            name: 'Project',
+            skillId: 'deck-builder',
+            designSystemId: null,
+            pendingPrompt: 'Make a deck and a PDF.',
+            createdAt: 1,
+            updatedAt: 1,
+          }}
+          routeFileName={null}
+          config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+          agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+          skills={[]}
+          designTemplates={[]}
+          designSystems={[]}
+          daemonLive
+          onModeChange={() => {}}
+          onAgentChange={() => {}}
+          onAgentModelChange={() => {}}
+          onRefreshAgents={() => {}}
+          onOpenSettings={() => {}}
+          onBack={() => {}}
+          onClearPendingPrompt={() => {}}
+          onTouchProject={() => {}}
+          onProjectChange={() => {}}
+          onProjectsRefresh={() => {}}
+        />,
+      );
+
+      await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+      const daemonCall = streamViaDaemon.mock.calls[0]?.[0] as {
+        projectId: string;
+        skillId: string | null;
+        skillIds: string[];
+      };
+      expect(daemonCall.projectId).toBe('project-skill-ids');
+      // The primary skill stays on `skillId` (the existing single-skill
+      // contract); the full multi-skill compose list lands on `skillIds`.
+      expect(daemonCall.skillId).toBe('deck-builder');
+      expect(daemonCall.skillIds).toEqual(['deck-builder', 'pdf-designer']);
+      // The auto-send session flag is cleared after the first dispatch so a
+      // reload after the run starts never re-fires.
+      expect(window.sessionStorage.getItem('od:auto-send-skillIds:project-skill-ids')).toBeNull();
+      expect(window.sessionStorage.getItem('od:auto-send-first:project-skill-ids')).toBeNull();
+    } finally {
+      window.sessionStorage.removeItem('od:auto-send-first:project-skill-ids');
+      window.sessionStorage.removeItem('od:auto-send-skillIds:project-skill-ids');
+    }
+  });
+
   it('queues board comment attachments while the current daemon run is still busy', async () => {
     listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
     listMessages.mockResolvedValue([]);

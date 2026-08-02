@@ -817,6 +817,18 @@ function autoSendContextKey(projectId: string): string {
   return `od:auto-send-context:${projectId}`;
 }
 
+/**
+ * Home → Studio auto-send handoff for the multi-skill (`@skill-a @skill-b`)
+ * compose list. Without this key, `ProjectView`'s auto-send hand-off fires
+ * the first run with only `project.skillId` (the primary), silently
+ * dropping the extra composed skills even though `handleCreateProject`
+ * already forwarded `input.skillIds` to `POST /api/projects`. See #5824
+ * and PR #6333 review.
+ */
+function autoSendSkillIdsKey(projectId: string): string {
+  return `od:auto-send-skillIds:${projectId}`;
+}
+
 /** Set by the home create flow when its submit already ran the Open Design
  * Cloud balance gate — the first auto-send must not re-prompt the user. */
 function autoSendAmrGateOkKey(projectId: string): string {
@@ -852,6 +864,19 @@ function readAutoSendContext(projectId: string): RunContextSelection | null {
   }
 }
 
+/** Reads back the multi-skill `skillIds` array stashed at Home create time. */
+function readAutoSendSkillIds(projectId: string): string[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = window.sessionStorage.getItem(autoSendSkillIdsKey(projectId));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    return isStoredStringArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
 function clearAutoSendSession(projectId: string): void {
   if (typeof window === 'undefined') return;
   try {
@@ -859,6 +884,7 @@ function clearAutoSendSession(projectId: string): void {
     window.sessionStorage.removeItem(autoSendAttachmentsKey(projectId));
     window.sessionStorage.removeItem(autoSendContextKey(projectId));
     window.sessionStorage.removeItem(autoSendAmrGateOkKey(projectId));
+    window.sessionStorage.removeItem(autoSendSkillIdsKey(projectId));
   } catch {
     /* ignore */
   }
@@ -7741,6 +7767,7 @@ export function ProjectView({
   const autoSendSeedRef = useRef<string | null>(null);
   const autoSendAttachmentsRef = useRef<ChatAttachment[] | null>(null);
   const autoSendContextRef = useRef<RunContextSelection | null>(null);
+  const autoSendSkillIdsRef = useRef<string[] | null>(null);
   const autoSendFirstMessageRef = useRef(false);
   const autoSendAmrGateOkRef = useRef(false);
   if (autoSendSeedRef.current === null) {
@@ -7761,6 +7788,7 @@ export function ProjectView({
     autoSendSeedRef.current = isAutoSend ? (project.pendingPrompt ?? '') : '';
     autoSendAttachmentsRef.current = isAutoSend ? readAutoSendAttachments(project.id) : [];
     autoSendContextRef.current = isAutoSend ? readAutoSendContext(project.id) : null;
+    autoSendSkillIdsRef.current = isAutoSend ? readAutoSendSkillIds(project.id) : [];
   }
   const initialWorkspaceContexts = autoSendContextRef.current?.workspaceItems ?? [];
   const brandEnrichmentEligibleForProject =
@@ -8410,12 +8438,15 @@ export function ProjectView({
       markDesignSystemAuditAutoRepairEligible(project.id);
     }
     clearAutoSendSession(project.id);
+    const skillIds = autoSendSkillIdsRef.current ?? [];
     autoSendAttachmentsRef.current = [];
+    autoSendSkillIdsRef.current = [];
     void handleSend(seed, attachments, [], {
       ...(context ? { context } : {}),
       // The home submit already gated this exact task (and the user answered
       // any soft warning there); asking again would double-prompt.
       ...(autoSendAmrGateOkRef.current ? { amrGatePrechecked: true } : {}),
+      ...(skillIds.length > 0 ? { skillIds } : {}),
     });
   }, [
     activeConversationId,

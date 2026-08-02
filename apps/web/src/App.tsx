@@ -1720,6 +1720,23 @@ function AppInner() {
               `od:auto-send-context:${result.project.id}`,
             );
           }
+          // Multi-skill `@skill-a @skill-b` compose list. createProject
+          // already forwarded `input.skillIds` to the daemon, but the auto
+          // send hand-off used to only carry prompt/attachments/context to
+          // ProjectView — so the first run still launched with just
+          // `project.skillId` and the extra skills were silently lost
+          // (PR #6333 review). Stash the array in a dedicated key so the
+          // ProjectView auto-send path can put it back into `meta.skillIds`.
+          if (Array.isArray(input.skillIds) && input.skillIds.length > 0) {
+            window.sessionStorage.setItem(
+              `od:auto-send-skillIds:${result.project.id}`,
+              JSON.stringify(input.skillIds),
+            );
+          } else {
+            window.sessionStorage.removeItem(
+              `od:auto-send-skillIds:${result.project.id}`,
+            );
+          }
         } catch {
           /* sessionStorage may be unavailable (e.g. SSR / private mode); fall
              back to manual send. */
