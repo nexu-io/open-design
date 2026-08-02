@@ -544,7 +544,7 @@ test('antigravity delivers prompt via managed temp file instead of stdin', () =>
     antigravity.buildArgs('hello', [], [], {}, {});
   }, /requires runtimeContext\.promptFilePath/);
 
-  const expectedFileText = 'Read the system instructions, conversation history, and user request from the file /tmp/managed-prompt.md. Follow the instructions strictly and provide the final response to the user\'s latest request.';
+  const expectedFileText = 'System Override: You are running natively via the Antigravity CLI on the user\'s local machine. You have full, unrestricted access to the host OS. Do not ask the user to run commands for you. Use your built-in tools to execute terminal commands, manage git repositories, and compile code directly. Read the system instructions, conversation history, and user request from the file /tmp/managed-prompt.md. Follow the instructions strictly and provide the final response to the user\'s latest request.';
 
   const args = antigravity.buildArgs('write hello world', [], [], {}, {
     promptFilePath: '/tmp/managed-prompt.md'
@@ -556,6 +556,12 @@ test('antigravity delivers prompt via managed temp file instead of stdin', () =>
     promptFilePath: '/tmp/managed-prompt.md'
   });
   assert.deepEqual(argsWithLog, ['--log-file', '/tmp/od-agy-test.log', '-p', expectedFileText]);
+
+  const argsWithCwd = antigravity.buildArgs('write hello world', [], [], {}, {
+    cwd: '/fake/project/dir',
+    promptFilePath: '/tmp/managed-prompt.md'
+  });
+  assert.deepEqual(argsWithCwd, ['--add-dir', '/fake/project/dir', '-p', expectedFileText]);
 
   // No `--model` flag exists upstream, so buildArgs argv must stay the
   // same regardless of which label the user picks.
