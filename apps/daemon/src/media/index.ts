@@ -86,6 +86,7 @@ import {
   kindFor,
   mimeFor,
   sanitizeName,
+  sanitizePath,
 } from '../projects.js';
 import {
   AIHUBMIX_DEFAULT_BASE_URL,
@@ -448,9 +449,28 @@ export async function generateMedia(args: {
   const warnings = [lengthClamp.warning, durationClamp.warning].filter(Boolean);
 
   const dir = await ensureProject(projectsRoot, projectId);
-  const safeOut = sanitizeName(
-    output || autoOutputName(surface, model, resolvedAudioKind),
-  );
+  // Resolve the desired output name. Path-bearing names ("assets/hero.png")
+  // are routed through sanitizePath() so the subdirectory survives; bare
+  // filenames keep using sanitizeName() for byte-level sanity. When the
+  // caller does not pass an output we fall back to autoOutputName() (a
+  // bare filename, sanitized for character safety).
+  let safeOut: string;
+  try {
+    const requested =
+      output || autoOutputName(surface, model, resolvedAudioKind);
+    if (requested.includes('/') || requested.includes('\\')) {
+      safeOut = sanitizePath(requested);
+    } else {
+      safeOut = sanitizeName(requested);
+    }
+  } catch (err) {
+    // sanitizePath() throws on traversal attempts and reserved paths.
+    // Re-throw with a friendlier message so the CLI/HTTP error reflects
+    // the caller's actual input.
+    throw new Error(
+      `invalid output path: ${(err as Error).message}`,
+    );
+  }
   const target = path.join(dir, safeOut);
   await mkdir(path.dirname(target), { recursive: true });
 
