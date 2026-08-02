@@ -75,56 +75,84 @@ const COMPONENT_GROUPS: ComponentGroupDefinition[] = [
   {
     id: 'buttons',
     label: 'Buttons and calls to action',
-    selectorMatchers: [/\bbutton\b/i, /\.btn(?:\b|[-_:])/i, /\[type=["']?(?:button|submit|reset)/i],
+    selectorMatchers: [/^(?:\.)?button(?:$|[-_:])/i, /\.btn(?:$|[-_:])/i, /\[type=["']?(?:button|submit|reset)/i],
     classMatchers: [/^btn(?:$|-)/i, /^button(?:$|-)/i, /^cta(?:$|-)/i],
     elementMatchers: [/^button$/i],
   },
   {
     id: 'inputs',
     label: 'Form fields and controls',
-    selectorMatchers: [/\binput\b/i, /\btextarea\b/i, /\bselect\b/i, /\.field(?:\b|[-_:])/i, /\blabel\b/i],
+    selectorMatchers: [
+      // Anchor element names so prefix-sharing classnames such as
+      // `.form-input-prepend` are not admitted through `\binput\b`; classMatchers
+      // already anchor their tokens, this mirrors that boundary rule on the
+      // selector side (PR #6250 PerishCode round-2 follow-up).
+      /^(?:\.)?input(?:$|[-_:])/i,
+      /^(?:\.)?textarea(?:$|[-_:])/i,
+      /^(?:\.)?select(?:$|[-_:])/i,
+      /^(?:\.)?label(?:$|[-_:])/i,
+      /\.field(?:$|[-_:])/i,
+    ],
     classMatchers: [/^field(?:$|-)/i, /^input(?:$|-)/i, /^control(?:$|-)/i, /^form(?:$|-)/i],
     elementMatchers: [/^(input|textarea|select|label|form)$/i],
   },
   {
     id: 'cards',
     label: 'Cards and panels',
-    selectorMatchers: [/\.card(?:\b|[-_:])/i, /\.panel(?:\b|[-_:])/i, /\.tile(?:\b|[-_:])/i],
+    selectorMatchers: [/\.card(?:$|[-_:])/i, /\.panel(?:$|[-_:])/i, /\.tile(?:$|[-_:])/i],
     classMatchers: [/^card(?:$|-)/i, /^panel(?:$|-)/i, /^tile(?:$|-)/i],
     elementMatchers: [],
   },
   {
     id: 'badges',
     label: 'Badges, chips, and status labels',
-    selectorMatchers: [/\.badge(?:\b|[-_:])/i, /\.chip(?:\b|[-_:])/i, /\.tag(?:\b|[-_:])/i, /\.pill(?:\b|[-_:])/i],
+    selectorMatchers: [
+      /\.badge(?:$|[-_:])/i,
+      /\.chip(?:$|[-_:])/i,
+      /\.tag(?:$|[-_:])/i,
+      /\.pill(?:$|[-_:])/i,
+    ],
     classMatchers: [/^badge(?:$|-)/i, /^chip(?:$|-)/i, /^tag(?:$|-)/i, /^pill(?:$|-)/i, /^status(?:$|-)/i],
     elementMatchers: [],
   },
   {
     id: 'links',
     label: 'Links and inline actions',
-    selectorMatchers: [/\ba\b/i, /\.link(?:\b|[-_:])/i],
+    selectorMatchers: [
+      // Anchor the bare `a` element matcher so prefix-sharing classnames such as
+      // `.navbar-extra` no longer leak through `\ba\b` (PerishCode round-2
+      // follow-up: same boundary rule as buttons/inputs).
+      /^(?:\.)?a(?:$|[-_:])/i,
+      /\.link(?:$|[-_:])/i,
+    ],
     classMatchers: [/^link(?:$|-)/i],
     elementMatchers: [/^a$/i],
   },
   {
     id: 'keyboard',
     label: 'Keyboard hints',
-    selectorMatchers: [/\bkbd\b/i, /\.kbd(?:\b|[-_:])/i],
+    selectorMatchers: [/^(?:\.)?kbd(?:$|[-_:])/i, /\.kbd(?:$|[-_:])/i],
     classMatchers: [/^kbd(?:$|-)/i, /^keyboard(?:$|-)/i, /^shortcut(?:$|-)/i],
     elementMatchers: [/^kbd$/i],
   },
   {
     id: 'icons',
     label: 'Icon slots',
-    selectorMatchers: [/\.icon(?:\b|[-_:])/i, /\[aria-hidden=["']true["']\]/i],
+    selectorMatchers: [/\.icon(?:$|[-_:])/i, /\[aria-hidden=["']true["']\]/i],
     classMatchers: [/^icon(?:$|-)/i],
     elementMatchers: [/^svg$/i],
   },
   {
     id: 'typography',
     label: 'Typography scale and text utilities',
-    selectorMatchers: [/\bh[1-6]\b/i, /\.lead(?:\b|[-_:])/i, /\.eyebrow(?:\b|[-_:])/i, /\.body-(?:muted|sm|small)\b/i],
+    selectorMatchers: [
+      // Anchor `h1`–`h6` element names; `.lead`/`.eyebrow`/`.body-*` already
+      // handle their class tokens (PerishCode round-2 follow-up).
+      /^(?:\.)?h[1-6](?:$|[-_:])/i,
+      /\.lead(?:$|[-_:])/i,
+      /\.eyebrow(?:$|[-_:])/i,
+      /\.body-(?:muted|sm|small)(?:$|[-_:])/i,
+    ],
     classMatchers: [/^lead$/i, /^eyebrow$/i, /^body-(?:muted|sm|small)$/i, /^caption(?:$|-)/i],
     elementMatchers: [/^h[1-6]$/i, /^p$/i],
   },
@@ -132,12 +160,14 @@ const COMPONENT_GROUPS: ComponentGroupDefinition[] = [
     id: 'layout',
     label: 'Layout primitives',
     selectorMatchers: [
-      /\.container(?:\b|[-_:])/i,
-      /\.stack-\d+\b/i,
-      /\.row-(?:between|center|start|end)\b/i,
-      /\bsection\b/i,
-      /\bmain\b/i,
-      /\bnav\b/i,
+      /\.container(?:$|[-_:])/i,
+      /\.stack-\d+(?:$|[-_:])/i,
+      /\.row-(?:between|center|start|end)(?:$|[-_:])/i,
+      // Anchor element names so prefix-sharing classnames such as
+      // `.navbar-section-link` or `.main-content-extra` no longer enter the
+      // layout group through `\bsection\b`/`\bmain\b`/`\bnav\b` (PerishCode
+      // round-2 follow-up).
+      /^(?:\.)?(?:section|main|nav)(?:$|[-_:])/i,
     ],
     classMatchers: [/^container$/i, /^stack-\d+$/i, /^row-(?:between|center|start|end)$/i, /^grid(?:$|-)/i, /^layout(?:$|-)/i],
     elementMatchers: [/^(main|section|nav|header|footer)$/i],

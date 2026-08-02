@@ -105,6 +105,100 @@ describe('components manifest extraction (#6224 regression suite)', () => {
     expect(inputsClasses).not.toContain('platform-form');
   });
 
+  it('closes the selector-matcher leak for prefix-sharing classnames across all anchored groups (#6250 PerishCode round-2)', () => {
+    // PerishCode CHANGES_REQUESTED on PR #6250:
+    //   "Anchoring this `classMatchers` entry removes `navbar-button-thing`
+    //    from `Buttons.classes`, but `buildGroup` independently filters CSS
+    //    selectors through the unchanged `\\bbutton\\b` matcher immediately
+    //    above; hyphens are word boundaries, so `.navbar-button-thing
+    //    { color: var(--tone) }` still appears in `Buttons.selectors` and
+    //    contributes `--tone` to `Buttons.tokenReferences`. Tighten the
+    //    selector matcher so element names and anchored class tokens are
+    //    distinguished (and apply the same boundary rule to the other
+    //    affected groups), then extend `components-manifest-6224.test.ts`
+    //    to assert the unwanted names are absent from group `selectors` and
+    //    `tokenReferences`, not only from `classes`."
+    //
+    // Each fixture below plants one prefix-sharing classname that previously
+    // leaked through `\\bword\\b` selectorMatchers; with the anchored
+    // `(?:^|\\.?)word(?:$|[-_:])` boundary rule the selector must NOT enter
+    // the group's `selectors` AND its token must NOT enter the group's
+    // `tokenReferences`.
+    const manifest = extractComponentsManifest({
+      brandId: 'anchored-selectors',
+      tokensCss: ':root { --tone: black; }',
+      fixtureHtml: `
+        <style>
+          .navbar-button-thing { color: var(--tone); }
+          .form-input-prepend { color: var(--tone); }
+          .navbar-status-thing { color: var(--tone); }
+          .navbar-extra-link { color: var(--tone); }
+          .footer-section-link { color: var(--tone); }
+          .desktop-headline-7 { color: var(--tone); }
+          .hero-cta-banner { color: var(--tone); }
+          .icon-prefix-thing { color: var(--tone); }
+        </style>
+        <button class="navbar-button-thing"></button>
+        <input class="form-input-prepend" />
+        <span class="navbar-status-thing">badge</span>
+        <a class="navbar-extra-link">link</a>
+        <nav class="footer-section-link">nav</nav>
+        <h3 class="desktop-headline-7">Title</h3>
+        <span class="hero-cta-banner">cta</span>
+        <svg class="icon-prefix-thing"></svg>
+      `,
+    });
+
+    // Each entry pairs an anchored group with a classname that contains the
+    // group's anchor word but is NOT itself anchored as a token of that group:
+    //   - buttons: `navbar-button-thing` — `button` is mid-token, classMatcher
+    //     `/^button(?:$|-)/i` and selectorMatcher `/^(?:\\.)?button(?:$|[-_:])/i`
+    //     both reject it.
+    //   - inputs: `form-input-prepend` — `input` is mid-token, neither matcher
+    //     anchored on `^input(?:$|[-_:])` nor `\\.field...` admits it.
+    //   - badges: `navbar-status-thing` — `status` is mid-token; badges's
+    //     selectorMatchers (`.badge`/`.chip`/`.tag`/`.pill`) don't list it and
+    //     classMatchers `/^status(?:$|-)/i` rejects the mid-token form.
+    //   - links: `navbar-extra-link` — `link` is a suffix only; selectorMatcher
+    //     `\\.link(?:$|[-_:])` rejects (link is preceded by `-extra-`).
+    //   - layout: `footer-section-link` — `section` is mid-token; selectorMatcher
+    //     `/^(?:\\.\\.)?(?:section|main|nav)(?:$|[-_:])/i` rejects.
+    //   - typography: `desktop-headline-7` — `h[1-6]` is mid-token; anchored
+    //     selectorMatcher `/^(?:\\.)?h[1-6](?:$|[-_:])/i` rejects.
+    //   - icons: `icon-prefix-thing` — `icon` is a prefix of `icon-prefix-thing`,
+    //     which IS a legitimate `.icon-*` class token, so this case asserts that
+    //     the icons group *does* admit it (the test documentation is about NOT
+    //     admitting prefix-*sharing* names — `icon-prefix-thing` shares characters
+    //     but is a prefix-anchored token, not a prefix-shared leak). Move it out
+    //     of the wantAbsent list to keep the assertion honest.
+    const wantAbsent = [
+      { id: 'buttons', selector: '.navbar-button-thing' },
+      { id: 'inputs', selector: '.form-input-prepend' },
+      { id: 'badges', selector: '.navbar-status-thing' },
+      { id: 'links', selector: '.navbar-extra-link' },
+      { id: 'layout', selector: '.footer-section-link' },
+      { id: 'typography', selector: '.desktop-headline-7' },
+      { id: 'keyboard', selector: '.hero-cta-banner' },
+    ];
+
+    for (const { id, selector } of wantAbsent) {
+      const group = manifest.groups.find((g) => g.id === id);
+      expect(group, `group ${id} should exist`).toBeDefined();
+      expect(
+        group?.selectors,
+        `group ${id} selectors must not admit prefix-sharing ${selector}`,
+      ).not.toContain(selector);
+      expect(
+        group?.tokenReferences,
+        `group ${id} tokenReferences must not inherit --tone from prefix-sharing ${selector}`,
+      ).not.toContain('--tone');
+    }
+
+    // Sanity: legitimate prefix-anchored class tokens still classify correctly.
+    const iconsSelectors = manifest.groups.find((g) => g.id === 'icons')?.selectors ?? [];
+    expect(iconsSelectors).toContain('.icon-prefix-thing');
+  });
+
   it('keeps traversing supported at-rule bodies for token attribution (#6250 reviewer #1)', () => {
     // PerishCode CHANGES_REQUESTED on PR #6250:
     //   "keep traversing supported at-rule bodies for token attribution"
