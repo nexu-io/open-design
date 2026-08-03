@@ -122,10 +122,11 @@ const COMPONENT_GROUPS: ComponentGroupDefinition[] = [
     attributeMatchers: [
       // Genuine inputs attribute predicates (round-5 follow-up): `[role=checkbox]`
       // and `[role=radio]` describe inputs components via attribute rather than
-      // element name, and they appear verbatim in the compound; tokenizeCompound
-      // would lose the attribute value (only the bracket text is skipped), so
-      // we run them against the raw selector.
-      /\[role=["']?(?:checkbox|radio|textbox|search|spinbutton)["']?/i,
+      // element name. Anchor to the complete parsed attribute token with ^ and
+      // trailing ] so an unrelated attribute whose value contains role text
+      // (e.g. `[data-label="[role=checkbox]"]`) is not admitted to Inputs —
+      // same round-6 fix that landed on Buttons and Icons.
+      /^\[role=["']?(?:checkbox|radio|textbox|search|spinbutton)["']?\]/i,
     ],
     // `^form(?:$|-)` was too permissive once class tokens were matched per-token
     // (PerishCode round-3 follow-up #6250): it admitted `.form-input-prepend`

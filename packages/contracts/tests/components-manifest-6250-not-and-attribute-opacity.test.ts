@@ -57,8 +57,12 @@ describe('#6250 round-5 — :not() and attribute-value opacity', () => {
   :not([type="submit"]) { color: var(--tone-button-not-attr) }
   :not([aria-hidden="true"]) { color: var(--tone-icon-not-attr) }
   [data-label="[type=submit]"] { color: var(--tone-button-attr-leak) }
+  [role="checkbox"] { color: var(--tone-input-role-attr) }
+  :not([role="checkbox"]) { color: var(--tone-input-role-not-attr) }
+  [data-label="[role=checkbox]"] { color: var(--tone-input-role-attr-leak) }
 </style>
 <button>real button</button>
+<input type="checkbox" />
 `;
 
   const manifest = extractComponentsManifest({
@@ -137,5 +141,28 @@ describe('#6250 round-5 — :not() and attribute-value opacity', () => {
     const icons = findGroup(manifest, 'icons');
     expect(icons).toBeDefined();
     expect(icons!.tokenReferences.some((r) => r === '--tone-icon')).toBe(true);
+  });
+
+  // ----- Round-7: Inputs role attribute predicate opacity (PerishCode round-7 blocker) -----
+
+  it(':not([role="checkbox"]) is NOT admitted to Inputs — :not() erases attribute too', () => {
+    const inputs = findGroup(manifest, 'inputs');
+    expect(inputs).toBeDefined();
+    expect(inputs!.selectors.some((s) => s.includes(':not([role="checkbox"])'))).toBe(false);
+    expect(inputs!.tokenReferences.some((r) => r === 'tone-input-role-not-attr' || r === '--tone-input-role-not-attr')).toBe(false);
+  });
+
+  it('[data-label="[role=checkbox]"] is NOT admitted to Inputs — value text is not a real predicate', () => {
+    const inputs = findGroup(manifest, 'inputs');
+    expect(inputs).toBeDefined();
+    expect(inputs!.selectors.some((s) => s.includes('[data-label="[role=checkbox]"]'))).toBe(false);
+    expect(inputs!.tokenReferences.some((r) => r === 'tone-input-role-attr-leak' || r === '--tone-input-role-attr-leak')).toBe(false);
+  });
+
+  it('positive control: [role="checkbox"] still admits to Inputs and contributes tokenReferences', () => {
+    const inputs = findGroup(manifest, 'inputs');
+    expect(inputs).toBeDefined();
+    expect(inputs!.selectors.some((s) => s.includes('[role="checkbox"]'))).toBe(true);
+    expect(inputs!.tokenReferences.some((r) => r === '--tone-input-role-attr')).toBe(true);
   });
 });
