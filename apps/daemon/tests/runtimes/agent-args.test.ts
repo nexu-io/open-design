@@ -549,13 +549,13 @@ test('antigravity delivers prompt via managed temp file instead of stdin', () =>
   const args = antigravity.buildArgs('write hello world', [], [], {}, {
     promptFilePath: '/tmp/managed-prompt.md'
   });
-  assert.deepEqual(args, ['--add-dir', '/tmp', '-p', expectedFileText]);
+  assert.deepEqual(args, ['--add-dir=/tmp', '-p', expectedFileText]);
 
   const argsWithLog = antigravity.buildArgs('write hello world', [], [], {}, {
     agentLogFilePath: '/tmp/od-agy-test.log',
     promptFilePath: '/tmp/managed-prompt.md'
   });
-  assert.deepEqual(argsWithLog, ['--log-file', '/tmp/od-agy-test.log', '--add-dir', '/tmp', '-p', expectedFileText]);
+  assert.deepEqual(argsWithLog, ['--log-file=/tmp/od-agy-test.log', '--add-dir=/tmp', '-p', expectedFileText]);
 
   // No `--model` flag exists upstream, so buildArgs argv must stay the
   // same regardless of which label the user picks.
@@ -571,7 +571,7 @@ test('antigravity delivers prompt via managed temp file instead of stdin', () =>
       promptFilePath: '/tmp/managed-prompt.md'
     });
     assert.equal(withModel.includes('--model'), false);
-    assert.deepEqual(withModel, ['--log-file', '/tmp/od-agy-test.log', '--add-dir', '/tmp', '-p', expectedFileText]);
+    assert.deepEqual(withModel, ['--log-file=/tmp/od-agy-test.log', '--add-dir=/tmp', '-p', expectedFileText]);
   } finally {
     rmSync(settingsDir, { recursive: true, force: true });
   }
@@ -588,14 +588,14 @@ test('antigravity delivers prompt via managed temp file instead of stdin', () =>
     hasPriorAssistantTurn: true,
     promptFilePath: '/tmp/managed-prompt.md'
   });
-  assert.deepEqual(followUp, ['--add-dir', '/tmp', '-p', expectedFileText]);
+  assert.deepEqual(followUp, ['--add-dir=/tmp', '-p', expectedFileText]);
   assert.equal(followUp.includes('-c'), false);
 
   const firstTurn = antigravity.buildArgs('first', [], [], {}, {
     hasPriorAssistantTurn: false,
     promptFilePath: '/tmp/managed-prompt.md'
   });
-  assert.deepEqual(firstTurn, ['--add-dir', '/tmp', '-p', expectedFileText]);
+  assert.deepEqual(firstTurn, ['--add-dir=/tmp', '-p', expectedFileText]);
   assert.equal(antigravity.resumesSessionViaCli, undefined);
 
   assert.equal(antigravity.maxPromptArgBytes, undefined);

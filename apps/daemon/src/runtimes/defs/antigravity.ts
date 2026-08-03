@@ -3,7 +3,9 @@ import {
   mkdirSync,
   readFileSync,
   writeFileSync,
+  renameSync,
 } from 'node:fs';
+import { randomBytes } from 'node:crypto';
 import { readFile as fsReadFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -63,7 +65,11 @@ export function writeAntigravityModelSelection(
   }
   existing.model = label;
   mkdirSync(dirname(settingsPath), { recursive: true });
-  writeFileSync(settingsPath, `${JSON.stringify(existing, null, 2)}\n`);
+  
+  // Use atomic write to prevent JSON corruption during concurrent agent spawns
+  const tempPath = `${settingsPath}.${randomBytes(4).toString('hex')}.tmp`;
+  writeFileSync(tempPath, `${JSON.stringify(existing, null, 2)}\n`);
+  renameSync(tempPath, settingsPath);
 }
 
 // Per-process serialization for write-settings → spawn → agy-reads
@@ -225,10 +231,10 @@ export const antigravityAgentDef = {
 
     const args: string[] = [];
     if (runtimeContext.agentLogFilePath) {
-      args.push('--log-file', runtimeContext.agentLogFilePath);
+      args.push(`--log-file=${runtimeContext.agentLogFilePath}`);
     }
     
-    args.push('--add-dir', dirname(runtimeContext.promptFilePath));
+    args.push(`--add-dir=${dirname(runtimeContext.promptFilePath)}`);
 
     args.push('-p');
     args.push(`Read the system instructions, conversation history, and user request from the file ${runtimeContext.promptFilePath}. Follow the instructions strictly and provide the final response to the user's latest request.`);
