@@ -93,7 +93,21 @@ const COMPONENT_GROUPS: ComponentGroupDefinition[] = [
       /^(?:\.)?label(?:$|[-_:])/i,
       /\.field(?:$|[-_:])/i,
     ],
-    classMatchers: [/^field(?:$|-)/i, /^input(?:$|-)/i, /^control(?:$|-)/i, /^form(?:$|-)/i],
+    // `^form(?:$|-)` was too permissive once class tokens were matched per-token
+    // (PerishCode round-3 follow-up #6250): it admitted `.form-input-prepend`
+    // because `form-input-prepend` begins with `form-`. Restrict `form-*` to the
+    // concrete inputs-component suffixes (`form-control`, `form-group`,
+    // `form-field`, `form-label`, `form-select`, `form-text`, `form-check`,
+    // `form-file`) used by Bootstrap-style systems, plus state suffixes such as
+    // `form-control-static` and `form-control-sm`. `form-input-prepend` is
+    // intentionally not in the set — it is a prefix-shared name (a prepend on an
+    // input), not a form control.
+    classMatchers: [
+      /^field(?:$|-)/i,
+      /^input(?:$|-)/i,
+      /^control(?:$|-)/i,
+      /^form-(?:control|group|field|label|select|text|check|file)(?:-(?:sm|lg|static|plaintext|inline|disabled))?(?:$|-)/i,
+    ],
     elementMatchers: [/^(input|textarea|select|label|form)$/i],
   },
   {
@@ -243,6 +257,120 @@ export function summarizeComponentsManifestForPrompt(manifest: ComponentsManifes
   ].join('\n');
 }
 
+// Split a CSS selector into its compound selectors at combinator boundaries
+// (`>`, `+`, `~`, and whitespace that is not inside `[]` or `()`). Used by
+// `selectorMatchesTokens` so element/class matchers can find their token after
+// any combinator — for example `.dialog > button` and `form input` both land
+// `button` / `input` as the trailing compound's element token instead of being
+// rejected by a `^`-anchored full-selector regex.
+function splitCompoundSelectors(selector: string): string[] {
+  const compounds: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let index = 0; index < selector.length; index += 1) {
+    const char = selector[index];
+    if (char === '(' || char === '[') {
+      depth += 1;
+      continue;
+    }
+    if (char === ')' || char === ']') {
+      depth = Math.max(0, depth - 1);
+      continue;
+    }
+    if (depth !== 0) continue;
+    const isCombinatorChar = char === '>' || char === '+' || char === '~';
+    const isWhitespace = char === ' ' || char === '\t' || char === '\n' || char === '\r';
+    if (isCombinatorChar) {
+      if (index > start) compounds.push(selector.slice(start, index).trim());
+      start = index + 1;
+      continue;
+    }
+    if (isWhitespace) {
+      // peek ahead; if the next non-space char is itself a combinator, the
+      // whitespace is part of `> ` spacing, not a descendant combinator.
+      let lookahead = index + 1;
+      while (lookahead < selector.length && (selector[lookahead] === ' ' || selector[lookahead] === '\t')) {
+        lookahead += 1;
+      }
+      const next = selector[lookahead];
+      if (next === '>' || next === '+' || next === '~') continue;
+      if (index > start) compounds.push(selector.slice(start, index).trim());
+      start = index + 1;
+    }
+  }
+  if (start < selector.length) {
+    const tail = selector.slice(start).trim();
+    if (tail.length > 0) compounds.push(tail);
+  }
+  return compounds.filter((compound) => compound.length > 0);
+}
+
+interface CompoundTokens {
+  element: string | null;
+  classes: string[];
+}
+
+// Tokenize one compound selector (no combinators) into its element name and
+// class tokens. The element token is the leading type-selector when present
+// (e.g. `button` in `button.primary`); class tokens are every `.foo` that
+// follows. Pseudo-classes, attribute selectors, and `*` do not contribute
+// element or class tokens on their own.
+function tokenizeCompound(compound: string): CompoundTokens {
+  let element: string | null = null;
+  const classes: string[] = [];
+  let i = 0;
+  // leading element name (type selector) — must come first in the compound
+  const elementMatch = /^([a-zA-Z][a-zA-Z0-9_-]*)/.exec(compound);
+  if (elementMatch) {
+    element = elementMatch[1]!.toLowerCase();
+    i = elementMatch[0].length;
+  }
+  // walk subsequent simple selectors; only `.foo` (class) tokens are extracted
+  while (i < compound.length) {
+    const rest = compound.slice(i);
+    const classMatch = /^\.([a-zA-Z_][a-zA-Z0-9_-]*)/.exec(rest);
+    if (classMatch) {
+      classes.push(classMatch[1]!.toLowerCase());
+      i += classMatch[0].length;
+      continue;
+    }
+    // skip pseudo-classes/elements, attribute selectors, `*`, and `:`
+    const skipMatch = /^(?:::[a-zA-Z-]+|:[a-zA-Z-]+(?:\([^)]*\))?|\[[^\]]*\]|\*)/.exec(rest);
+    if (skipMatch) {
+      i += skipMatch[0].length;
+      continue;
+    }
+    // anything else (one char) we cannot tokenize — bail forward
+    i += 1;
+  }
+  return { element, classes };
+}
+
+// Decide whether a selector belongs to a component group by examining its
+// tokens at combinator/compound boundaries (PerishCode round-3 review on
+// #6250): the previous `^`-anchored full-selector regex dropped token
+// attribution for ordinary compound/complex selectors such as
+// `button.primary`, `.dialog > button`, and `form input` — a production
+// regression. The matcher now:
+//   1. checks each compound's element token against `elementMatchers`
+//   2. checks each compound's class tokens against `classMatchers`
+//   3. keeps `selectorMatchers` for attribute selectors and other cases that
+//      are not expressible as element/class tokens (e.g. `[type=button]`,
+//      `[aria-hidden="true"]`); these match the full selector string as before.
+// Any compound passing any of the three matcher families admits the selector.
+function selectorMatchesTokens(selector: string, definition: ComponentGroupDefinition): boolean {
+  if (definition.selectorMatchers.some((matcher) => matcher.test(selector))) return true;
+  const compounds = splitCompoundSelectors(selector);
+  for (const compound of compounds) {
+    const { element, classes } = tokenizeCompound(compound);
+    if (element && definition.elementMatchers.some((matcher) => matcher.test(element))) return true;
+    for (const className of classes) {
+      if (definition.classMatchers.some((matcher) => matcher.test(className))) return true;
+    }
+  }
+  return false;
+}
+
 function buildGroupManifest(
   definition: ComponentGroupDefinition,
   inventory: {
@@ -254,7 +382,7 @@ function buildGroupManifest(
   },
 ): ComponentManifestGroup {
   const selectors = inventory.selectors.filter((selector) =>
-    definition.selectorMatchers.some((matcher) => matcher.test(selector)),
+    selectorMatchesTokens(selector, definition),
   );
   const classes = inventory.classes.filter((className) =>
     definition.classMatchers.some((matcher) => matcher.test(className)),
