@@ -1127,6 +1127,12 @@ export function attachAcpSession({
       // Hostinger tool calls only -- see the comment above
       // PERMISSION_ANSWER_TIMEOUT_MS for why.
       const optionId = chooseAutoApprovedOptionId(params?.options);
+      // TEMP DEBUG (remove before merging): isolating the ACP edit-approval
+      // stall -- see whether the daemon ever sends a response at all, and
+      // exactly when, to correlate against Hermes' own edit_approval.py timing.
+      console.error(
+        `[ACP-DEBUG] auto-approve tool=${extractAcpToolName(params) ?? '(none)'} optionId=${optionId ?? '(none)'} jsonRpcId=${String(jsonRpcId)} at=${new Date().toISOString()}`,
+      );
       if (!optionId) {
         fail(`unhandled ACP permission request: ${JSON.stringify(raw)}`);
         return;
@@ -1135,7 +1141,13 @@ export function attachAcpSession({
         sendRpcResult(stdin, jsonRpcId, {
           outcome: { outcome: 'selected', optionId },
         });
+        console.error(
+          `[ACP-DEBUG] sendRpcResult called jsonRpcId=${String(jsonRpcId)} at=${new Date().toISOString()}`,
+        );
       } catch (err) {
+        console.error(
+          `[ACP-DEBUG] sendRpcResult THREW jsonRpcId=${String(jsonRpcId)} err=${errorMessage(err)} at=${new Date().toISOString()}`,
+        );
         fail(`stdin write failed: ${errorMessage(err)}`);
       }
       return;
