@@ -372,6 +372,40 @@ describe('public MCP discovery + generation tools', () => {
     );
   });
 
+  it('get_run success hint makes previewUrl the primary deliverable and studioUrl optional', async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.endsWith('/api/mcp/install-info')) {
+        return new Response(JSON.stringify({ webBaseUrl: 'http://127.0.0.1:65321' }), { status: 200 });
+      }
+      if (url.endsWith('/api/runs/run-42')) {
+        return new Response(JSON.stringify({
+          id: 'run-42',
+          status: 'succeeded',
+          projectId: 'project-1',
+          conversationId: 'conv-9',
+        }), { status: 200 });
+      }
+      if (url.endsWith('/api/projects/project-1')) {
+        return new Response(JSON.stringify({ project: { id: 'project-1', metadata: { entryFile: 'index.html' } } }), { status: 200 });
+      }
+      if (url.endsWith('/api/runs/run-42/events')) {
+        return new Response('', { status: 200 });
+      }
+      throw new Error('unexpected url ' + url);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await handleMcpToolCall('http://127.0.0.1:17456', 'get_run', { runId: 'run-42' });
+    const parsed = JSON.parse(firstText(result));
+
+    expect(parsed.previewUrl).toBe(buildProjectRawFileUrl('http://127.0.0.1:17456', 'project-1', 'index.html'));
+    expect(parsed.studioUrl).toBe('http://127.0.0.1:65321/projects/project-1/conversations/conv-9/files/index.html');
+    expect(parsed.hint).toContain('previewUrl is the primary stable rendered artifact link');
+    expect(parsed.hint).toContain('studioUrl, when present, is an optional Open Design workspace/editing link');
+    expect(parsed.hint).toContain('fall back to previewUrl');
+    expect(parsed.hint).not.toContain('BEST link');
+    expect(parsed.hint).not.toContain('ALWAYS render studioUrl');
+  });
   it('get_run uses the newly registered web port on the next delivery lookup', async () => {
     let webBaseUrl = 'http://127.0.0.1:65321';
     const fetchMock = vi.fn(async (url: string) => {
