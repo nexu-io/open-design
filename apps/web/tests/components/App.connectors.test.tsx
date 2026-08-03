@@ -550,6 +550,9 @@ describe('App connectors settings flows', () => {
       expect.objectContaining({
         onboardingCompleted: true,
       }),
+      expect.objectContaining({
+        byokProviderIntent: 'preserve',
+      }),
     );
     expect(mockedSaveConfig.mock.calls.at(-1)?.[0]).toMatchObject({
       onboardingCompleted: true,
