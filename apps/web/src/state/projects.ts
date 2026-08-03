@@ -369,10 +369,12 @@ export async function deleteProject(id: string): Promise<boolean> {
     const resp = await fetch(`/api/projects/${encodeURIComponent(id)}`, {
       method: 'DELETE',
     });
-    // Drop the project's local tab-state cache once it is gone server-side, so
-    // the `open-design:project-tabs:*` keys don't accumulate in localStorage
-    // for the lifetime of the browser profile as projects are deleted.
-    if (resp.ok) removeCachedTabs(id);
+    // Drop per-project browser caches once the project is gone server-side so
+    // they do not accumulate in localStorage for the lifetime of the profile.
+    if (resp.ok) {
+      removeCachedTabs(id);
+      removeDesignBrowserProjectCache(id);
+    }
     return resp.ok;
   } catch {
     return false;
@@ -677,6 +679,18 @@ function removeCachedTabs(projectId: string): void {
   if (typeof window === 'undefined') return;
   try {
     window.localStorage.removeItem(tabsCacheKey(projectId));
+  } catch {
+    // Ignore private-mode/quota errors; the cache entry is best-effort.
+  }
+}
+
+// Keep key shapes in sync with DesignBrowserPanel historyStorageKey /
+// viewportStorageKey. Cleared here so deleteProject does not import the panel.
+function removeDesignBrowserProjectCache(projectId: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.removeItem(`od:design-browser:${projectId}:history:v1`);
+    window.localStorage.removeItem(`od:design-browser:${projectId}:viewport:v1`);
   } catch {
     // Ignore private-mode/quota errors; the cache entry is best-effort.
   }
