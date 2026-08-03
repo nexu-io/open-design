@@ -66,7 +66,32 @@ export type ExtractComponentsManifestInput = {
 type ComponentGroupDefinition = {
   id: ComponentManifestGroupId;
   label: string;
+  /**
+   * Class/word regexes that match raw selectors containing `:not(...)`,
+   * `[data-x="..."]`, `.foo` etc. — DEPRECATED: kept for backwards
+   * compatibility with the pre-round-5 schema, but no longer consulted by
+   * `selectorMatchesTokens`. Use `attributeMatchers` for genuine selector-wide
+   * attribute predicates (`[type=button]`, `[aria-hidden="true"]`); element
+   * and class matching is performed strictly against parsed tokens via
+   * `tokenizeCompound` (PerishCode round-5 review on #6250).
+   */
   selectorMatchers: RegExp[];
+  /**
+   * Genuine attribute-predicate regexes that match the *raw* selector string.
+   * Only patterns anchored on a `[` (attribute selector) belong here — these
+   * describe selectors that pick components via an attribute, such as
+   * `[type=button]` for buttons, `[aria-hidden="true"]` for icons, and
+   * `[role=checkbox]` for inputs. They run against the unmodified raw selector
+   * because attribute predicate text appears verbatim in the compound;
+   * tokenizing it would lose the attribute value entirely.
+   *
+   * Do NOT use this family to match element names (`button`, `input`, …) or
+   * class tokens (`.btn`, `.card`, …) — those matchers must live on
+   * `elementMatchers` / `classMatchers` so they only fire on parsed tokens,
+   * preventing `:not(.btn)` and `[data-label=".card"]` from cross-attributing
+   * tokens to groups they do not select (PerishCode round-5 review on #6250).
+   */
+  attributeMatchers: RegExp[];
   classMatchers: RegExp[];
   elementMatchers: RegExp[];
 };
@@ -76,6 +101,7 @@ const COMPONENT_GROUPS: ComponentGroupDefinition[] = [
     id: 'buttons',
     label: 'Buttons and calls to action',
     selectorMatchers: [/^(?:\.)?button(?:$|[-_:])/i, /\.btn(?:$|[-_:])/i, /\[type=["']?(?:button|submit|reset)/i],
+    attributeMatchers: [/\[type=["']?(?:button|submit|reset)/i],
     classMatchers: [/^btn(?:$|-)/i, /^button(?:$|-)/i, /^cta(?:$|-)/i],
     elementMatchers: [/^button$/i],
   },
@@ -92,6 +118,14 @@ const COMPONENT_GROUPS: ComponentGroupDefinition[] = [
       /^(?:\.)?select(?:$|[-_:])/i,
       /^(?:\.)?label(?:$|[-_:])/i,
       /\.field(?:$|[-_:])/i,
+    ],
+    attributeMatchers: [
+      // Genuine inputs attribute predicates (round-5 follow-up): `[role=checkbox]`
+      // and `[role=radio]` describe inputs components via attribute rather than
+      // element name, and they appear verbatim in the compound; tokenizeCompound
+      // would lose the attribute value (only the bracket text is skipped), so
+      // we run them against the raw selector.
+      /\[role=["']?(?:checkbox|radio|textbox|search|spinbutton)["']?/i,
     ],
     // `^form(?:$|-)` was too permissive once class tokens were matched per-token
     // (PerishCode round-3 follow-up #6250): it admitted `.form-input-prepend`
@@ -114,6 +148,7 @@ const COMPONENT_GROUPS: ComponentGroupDefinition[] = [
     id: 'cards',
     label: 'Cards and panels',
     selectorMatchers: [/\.card(?:$|[-_:])/i, /\.panel(?:$|[-_:])/i, /\.tile(?:$|[-_:])/i],
+    attributeMatchers: [],
     classMatchers: [/^card(?:$|-)/i, /^panel(?:$|-)/i, /^tile(?:$|-)/i],
     elementMatchers: [],
   },
@@ -126,6 +161,7 @@ const COMPONENT_GROUPS: ComponentGroupDefinition[] = [
       /\.tag(?:$|[-_:])/i,
       /\.pill(?:$|[-_:])/i,
     ],
+    attributeMatchers: [],
     classMatchers: [/^badge(?:$|-)/i, /^chip(?:$|-)/i, /^tag(?:$|-)/i, /^pill(?:$|-)/i, /^status(?:$|-)/i],
     elementMatchers: [],
   },
@@ -139,6 +175,7 @@ const COMPONENT_GROUPS: ComponentGroupDefinition[] = [
       /^(?:\.)?a(?:$|[-_:])/i,
       /\.link(?:$|[-_:])/i,
     ],
+    attributeMatchers: [],
     classMatchers: [/^link(?:$|-)/i],
     elementMatchers: [/^a$/i],
   },
@@ -146,6 +183,7 @@ const COMPONENT_GROUPS: ComponentGroupDefinition[] = [
     id: 'keyboard',
     label: 'Keyboard hints',
     selectorMatchers: [/^(?:\.)?kbd(?:$|[-_:])/i, /\.kbd(?:$|[-_:])/i],
+    attributeMatchers: [],
     classMatchers: [/^kbd(?:$|-)/i, /^keyboard(?:$|-)/i, /^shortcut(?:$|-)/i],
     elementMatchers: [/^kbd$/i],
   },
@@ -153,6 +191,7 @@ const COMPONENT_GROUPS: ComponentGroupDefinition[] = [
     id: 'icons',
     label: 'Icon slots',
     selectorMatchers: [/\.icon(?:$|[-_:])/i, /\[aria-hidden=["']true["']\]/i],
+    attributeMatchers: [/\[aria-hidden=["']true["']\]/i],
     classMatchers: [/^icon(?:$|-)/i],
     elementMatchers: [/^svg$/i],
   },
@@ -167,6 +206,7 @@ const COMPONENT_GROUPS: ComponentGroupDefinition[] = [
       /\.eyebrow(?:$|[-_:])/i,
       /\.body-(?:muted|sm|small)(?:$|[-_:])/i,
     ],
+    attributeMatchers: [],
     classMatchers: [/^lead$/i, /^eyebrow$/i, /^body-(?:muted|sm|small)$/i, /^caption(?:$|-)/i],
     elementMatchers: [/^h[1-6]$/i, /^p$/i],
   },
@@ -183,6 +223,7 @@ const COMPONENT_GROUPS: ComponentGroupDefinition[] = [
       // round-2 follow-up).
       /^(?:\.)?(?:section|main|nav)(?:$|[-_:])/i,
     ],
+    attributeMatchers: [],
     classMatchers: [/^container$/i, /^stack-\d+$/i, /^row-(?:between|center|start|end)$/i, /^grid(?:$|-)/i, /^layout(?:$|-)/i],
     elementMatchers: [/^(main|section|nav|header|footer)$/i],
   },
@@ -421,7 +462,12 @@ function tokenizeCompound(compound: string): CompoundTokens {
 //      `[aria-hidden="true"]`); these match the full selector string as before.
 // Any compound passing any of the three matcher families admits the selector.
 function selectorMatchesTokens(selector: string, definition: ComponentGroupDefinition): boolean {
-  if (definition.selectorMatchers.some((matcher) => matcher.test(selector))) return true;
+  // Attribute predicate matchers run against the raw selector because
+  // attribute values appear verbatim in the compound (e.g. `[type="button"]`
+  // contains the class-like text `.button` inside the attribute value);
+  // tokenizing would lose that context and the predicate must run on the
+  // unmodified text.
+  if (definition.attributeMatchers.some((matcher) => matcher.test(selector))) return true;
   const compounds = splitCompoundSelectors(selector);
   for (const compound of compounds) {
     const { element, classes, extraElements } = tokenizeCompound(compound);
