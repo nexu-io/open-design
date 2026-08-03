@@ -27,33 +27,7 @@ export interface ProjectLocationPrefs {
   path: string;
 }
 
-/** Supported protocols for non-secret provider metadata shared by BYOK UI and CLI clients. */
-export const BYOK_PROVIDER_PROTOCOLS = [
-  'anthropic',
-  'openai',
-  'azure',
-  'google',
-  'ollama',
-  'senseaudio',
-  'aihubmix',
-  'bedrock',
-] as const;
-
-export type ByokProviderProtocol = (typeof BYOK_PROVIDER_PROTOCOLS)[number];
-
-export function isByokProviderProtocol(value: string): value is ByokProviderProtocol {
-  return (BYOK_PROVIDER_PROTOCOLS as readonly string[]).includes(value);
-}
-
-export interface ByokProviderPrefs {
-  protocol: ByokProviderProtocol;
-  baseUrl: string;
-  model: string;
-}
-
 export interface AppConfigPrefs {
-  /** Provider selection only. API keys stay in the existing credential flow. */
-  byokProvider?: ByokProviderPrefs | null;
   onboardingCompleted?: boolean;
   agentId?: string | null;
   agentModels?: Record<string, AgentModelPrefs>;

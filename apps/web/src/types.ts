@@ -15,7 +15,6 @@ import type {
   ChatAttachment,
   ChatCommentAttachment,
   ChatCommentSelectionKind,
-  ByokProviderProtocol,
   ChatMessageFeedback,
   ChatMessageFeedbackRating,
   ChatMessageFeedbackReasonCode,
@@ -109,7 +108,15 @@ export type {
 } from '@open-design/contracts';
 
 export type ExecMode = 'daemon' | 'api';
-export type ApiProtocol = ByokProviderProtocol;
+export type ApiProtocol =
+  | 'anthropic'
+  | 'openai'
+  | 'azure'
+  | 'google'
+  | 'ollama'
+  | 'senseaudio'
+  | 'aihubmix'
+  | 'bedrock';
 
 export type LiveArtifactTabId = `live:${string}`;
 // Tab ids are arbitrary strings; the template-literal members below are
@@ -374,10 +381,6 @@ export interface PetConfig {
 export interface AppConfig {
   mode: ExecMode;
   apiKey: string;
-  /** Non-secret daemon-owned credential profile selected for BYOK runs. */
-  byokProfileId?: string;
-  byokCredentialConfigured?: boolean;
-  byokCredentialTail?: string;
   baseUrl: string;
   model: string;
   apiProtocol?: ApiProtocol;

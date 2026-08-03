@@ -30,7 +30,6 @@ import {
   writeInstallationFile,
   type InstallationFilePatch,
 } from './installation.js';
-import { isByokProviderProtocol, type ByokProviderPrefs as SharedByokProviderPrefs } from '@open-design/contracts';
 
 // Plugin-system env knobs. See docs/plans/plugins-implementation.md F6 / F9.
 // Phase 1 only reads them; the GC worker that enforces snapshot expiry lands
@@ -102,19 +101,7 @@ export interface ProjectLocationPrefs {
   path: string;
 }
 
-export type ByokProviderPrefs = SharedByokProviderPrefs;
-
-export class InvalidByokProviderError extends Error {
-  readonly code = 'INVALID_BYOK_PROVIDER';
-
-  constructor() {
-    super('invalid BYOK provider selection');
-  }
-}
-
 export interface AppConfigPrefs {
-  // Deliberately non-secret: BYOK credentials do not belong in app-config.
-  byokProvider?: ByokProviderPrefs | null;
   onboardingCompleted?: boolean;
   agentId?: string | null;
   agentModels?: Record<string, AgentModelPrefs>;
@@ -144,7 +131,6 @@ export interface AppConfigPrefs {
 export const RECENT_LINKED_DIRS_MAX = 5;
 
 const ALLOWED_KEYS: ReadonlySet<keyof AppConfigPrefs> = new Set([
-  'byokProvider',
   'onboardingCompleted',
   'agentId',
   'agentModels',
@@ -164,40 +150,6 @@ const ALLOWED_KEYS: ReadonlySet<keyof AppConfigPrefs> = new Set([
   'defaultProjectLocationId',
   'recentLinkedDirs',
 ] as const);
-
-function validateByokProvider(raw: unknown): ByokProviderPrefs | undefined {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
-  const value = raw as Record<string, unknown>;
-  if (
-    typeof value.protocol !== 'string' ||
-    typeof value.baseUrl !== 'string' ||
-    typeof value.model !== 'string'
-  ) return undefined;
-  const protocol = value.protocol.trim();
-  const baseUrl = value.baseUrl.trim();
-  const model = value.model.trim();
-  if (
-    !protocol ||
-    !baseUrl ||
-    !model ||
-    baseUrl.length > 2_048 ||
-    model.length > 256 ||
-    !isByokProviderProtocol(protocol)
-  ) return undefined;
-  try {
-    const url = new URL(baseUrl);
-    if (
-      (url.protocol !== 'https:' && url.protocol !== 'http:') ||
-      url.username.length > 0 ||
-      url.password.length > 0 ||
-      url.search.length > 0 ||
-      url.hash.length > 0
-    ) return undefined;
-  } catch {
-    return undefined;
-  }
-  return { protocol, baseUrl, model };
-}
 
 function configFile(dataDir: string): string {
   return path.join(dataDir, 'app-config.json');
@@ -555,16 +507,6 @@ function applyConfigValue(
   key: keyof AppConfigPrefs,
   value: unknown,
 ): void {
-  if (key === 'byokProvider') {
-    if (value === null) {
-      target[key] = null;
-    } else {
-      const validated = validateByokProvider(value);
-      if (validated !== undefined) target[key] = validated;
-      else delete target[key];
-    }
-    return;
-  }
   if (key === 'onboardingCompleted') {
     if (typeof value === 'boolean') target[key] = value;
     return;
@@ -838,13 +780,6 @@ async function doWrite(
   dataDir: string,
   partial: Record<string, unknown>,
 ): Promise<AppConfigPrefs> {
-  if (
-    Object.prototype.hasOwnProperty.call(partial, 'byokProvider') &&
-    partial.byokProvider !== null &&
-    validateByokProvider(partial.byokProvider) === undefined
-  ) {
-    throw new InvalidByokProviderError();
-  }
   const existing = await readAppConfig(dataDir);
   const next: Record<string, unknown> = { ...existing };
   for (const key of Object.keys(partial)) {

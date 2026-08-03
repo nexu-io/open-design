@@ -663,8 +663,8 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     sceneLabel: '场景',
     allChip: '全部',
     category: {
-      prototype: { label: '原型', description: '交互式产品稿——仪表盘、应用、落地页、内部工具。任何能交给 stakeholder 点击的东西。' },
-      'live-artifact': { label: '实时产物', description: '可刷新、感知数据的产物，底层数据变化时自动重新渲染。实时仪表盘、监控板、周期跟踪。' },
+      prototype: { label: '原型', description: '交互式产品稿——数据看板、应用、落地页、内部工具。任何能交给 stakeholder 点击的东西。' },
+      'live-artifact': { label: '实时产物', description: '可刷新、感知数据的产物，底层数据变化时自动重新渲染。实时数据看板、监控板、周期跟踪。' },
       deck: { label: '幻灯片', description: '从叙事简报生成的精致 deck——融资 deck、课程模块、周报、产品发布。' },
       image: { label: '图像', description: '从结构化创意指令生成的图像——UI 稿、品牌视觉、分镜、社媒、插画。' },
       video: { label: '视频', description: '视频提示词、分镜与可渲染的动态产物——短视频、营销片段、动效图形、电影感故事。' },
@@ -672,7 +672,7 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
       audio: { label: '音频', description: '从简报生成的音频、人声与声音设计——播客片头、音乐衬底、环境音。' },
     },
     subcategory: {
-      'business-dashboards': '仪表盘', 'app-prototypes': '应用', 'landing-marketing': '落地页 / 营销',
+      'business-dashboards': '数据看板', 'app-prototypes': '应用', 'landing-marketing': '落地页 / 营销',
       'developer-tools': '开发者工具', 'docs-reports': '文档 / 报告', 'brand-design': '品牌 / 设计',
       'pitch-business': '路演 / 商业', 'course-training': '课程 / 培训', 'reports-briefings': '报告 / 简报',
       'product-sales': '产品 / 销售', 'engineering-talks': '工程演讲', 'creative-decks': '创意 deck',

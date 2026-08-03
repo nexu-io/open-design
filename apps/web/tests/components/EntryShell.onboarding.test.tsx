@@ -120,19 +120,6 @@ function renderOnboarding(
     onRenameProject: vi.fn(),
     onChangeDefaultDesignSystem: vi.fn(),
     onPersistComposioKey: vi.fn(),
-    onPersistByokCredential: vi.fn(async (input) => ({
-      id: input.id ?? 'byok-onboarding-test',
-      label: input.label,
-      protocol: input.protocol,
-      baseUrl: input.baseUrl,
-      model: input.model,
-      apiVersion: input.apiVersion,
-      requiresApiKey: input.requiresApiKey ?? true,
-      configured: true,
-      keyTail: input.apiKey?.slice(-4),
-      createdAt: 1,
-      updatedAt: 1,
-    })),
     onOpenSettings: vi.fn(),
     onCompleteOnboarding: vi.fn(),
     ...overrides,
@@ -1676,11 +1663,10 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     expect(props.onApiModelChange).not.toHaveBeenCalledWith('upstream-first');
   });
 
-  it('clears the prior provider key when Agnes AI is selected during BYOK onboarding', async () => {
-    const props = renderOnboarding({
+  it('prefills Agnes AI values when selected during BYOK onboarding', async () => {
+    renderOnboarding({
       config: baseConfig({
         apiProtocol: 'openai',
-        apiKey: 'openai-key-that-must-not-leave-the-provider',
         baseUrl: 'https://api.openai.com/v1',
         model: 'gpt-4o',
         apiProviderBaseUrl: 'https://api.openai.com/v1',
@@ -1691,17 +1677,10 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     chooseOnboardingOption('Quick fill provider', /Agnes AI/i);
 
     await waitFor(() => {
-      expect((screen.getByLabelText('API key') as HTMLInputElement).value).toBe('');
       expect((screen.getByLabelText('Base URL') as HTMLInputElement).value).toBe(
         'https://apihub.agnes-ai.com/v1',
       );
       expect(screen.getByRole('button', { name: 'agnes-2.0-flash' })).toBeTruthy();
-    });
-    expect((props.onConfigPersist as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0]).toMatchObject({
-      apiKey: '',
-      baseUrl: 'https://apihub.agnes-ai.com/v1',
-      model: 'agnes-2.0-flash',
-      apiProviderBaseUrl: 'https://apihub.agnes-ai.com/v1',
     });
   });
 
@@ -1764,12 +1743,6 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
 
     expect(props.onModeChange).toHaveBeenCalledWith('api');
     expect(props.onApiModelChange).toHaveBeenCalledWith('claude-opus-4-8');
-    expect(props.onPersistByokCredential).toHaveBeenCalledWith(expect.objectContaining({
-      protocol: 'anthropic',
-      apiKey: 'test-api-key',
-      baseUrl: 'https://api.anthropic.com',
-      model: 'claude-opus-4-8',
-    }));
     expect(props.onConfigPersist).toHaveBeenCalled();
     await waitFor(() => {
       expect(props.onCompleteOnboarding).toHaveBeenCalledTimes(1);
@@ -1777,13 +1750,10 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     expect((props.onConfigPersist as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0]).toMatchObject({
       mode: 'api',
       apiProtocol: 'anthropic',
-      apiKey: '',
+      apiKey: 'test-api-key',
       baseUrl: 'https://api.anthropic.com',
       model: 'claude-opus-4-8',
       apiProviderBaseUrl: null,
-      byokProfileId: 'byok-onboarding-test',
-      byokCredentialConfigured: true,
-      byokCredentialTail: '-key',
     });
   });
 

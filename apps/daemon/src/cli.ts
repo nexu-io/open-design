@@ -12,7 +12,6 @@ import { DESIGN_SYSTEMS_USAGE, isDesignSystemsHelpArg } from './cli-help/index.j
 import { BRAND_USAGE, isBrandHelpArg } from './cli-help/index.js';
 import { parseDesignSystemRenameArgs } from './design-systems/rename-args.js';
 import { runLiveArtifactsToolCli } from './tools-live-artifacts-cli.js';
-import { runByokToolCli } from './tools-byok-cli.js';
 import { splitResearchSubcommand } from './research/cli-args.js';
 import { resolveDaemonUrl } from './daemon-url.js';
 import { requestJsonIpc } from '@open-design/sidecar';
@@ -334,7 +333,6 @@ const SUBCOMMAND_MAP = {
   artifacts: runArtifacts,
   media: runMedia,
   mcp: runMcp,
-  byok: runByok,
   amr: runAmr,
   'message-center': runMessageCenter,
   research: runResearch,
@@ -1473,15 +1471,6 @@ files folder so the FileViewer can preview them immediately.`);
 }
 
 // ---------------------------------------------------------------------------
-// Subcommand: od byok
-// ---------------------------------------------------------------------------
-
-async function runByok(args) {
-  const result = await runByokToolCli(args);
-  if (result.exitCode !== 0) process.exit(result.exitCode);
-}
-
-// ---------------------------------------------------------------------------
 // Subcommand: od mcp
 // ---------------------------------------------------------------------------
 
@@ -1839,7 +1828,7 @@ function exitWithStructuredError({ code, message, data }) {
 // structured envelope instead of collapsing to `HTTP <status>: `, which
 // would drop the only diagnostic the daemon actually returned to a
 // headless caller.
-async function structuredHttpFailure(resp, fallbackCode = 'daemon-not-running', codeMap) {
+async function structuredHttpFailure(resp, fallbackCode = 'daemon-not-running') {
   let raw = '';
   let parsed;
   try {
@@ -1852,8 +1841,7 @@ async function structuredHttpFailure(resp, fallbackCode = 'daemon-not-running', 
     typeof parsed?.error === 'string'
       ? { message: parsed.error }
       : parsed?.error;
-  const errCode = codeMap?.[errorObj?.code]
-    ?? normalizeRecoverableErrorCode(errorObj?.code, errorObj?.message);
+  const errCode = normalizeRecoverableErrorCode(errorObj?.code, errorObj?.message);
   if (errCode) {
     exitWithStructuredError({
       code:    errCode,
@@ -8630,9 +8618,6 @@ async function runConfig(args) {
   od config set <key> --value-json '<json>'
                                        Set a key to a JSON value.
   od config unset <key>               Remove a top-level key.
-  od config byok get                  Print the selected non-secret BYOK provider.
-  od config byok set <protocol> <base-url> <model>
-                                       Persist provider metadata only; never an API key.
 
 Common options:
   --daemon-url <url>   Open Design daemon HTTP base.
@@ -8656,46 +8641,11 @@ Common options:
       headers: { 'content-type': 'application/json' },
       body:    JSON.stringify(next),
     });
-    if (!resp.ok) return structuredHttpFailure(resp, 'daemon-not-running', {
-      BAD_REQUEST: 'missing-input',
-    });
+    if (!resp.ok) return structuredHttpFailure(resp);
     return (await resp.json())?.config ?? next;
   };
 
   switch (sub) {
-    case 'byok': {
-      const action = rest[0];
-      if (action === 'get') {
-        const positional = rest.slice(1).filter(
-          (arg, index, values) =>
-            !arg.startsWith('-') && values[index - 1] !== '--daemon-url',
-        );
-        if (positional.length !== 0) {
-          console.error('Usage: od config byok get');
-          process.exit(2);
-        }
-        const provider = (await fetchConfig())?.byokProvider ?? null;
-        process.stdout.write(JSON.stringify(provider, null, 2) + '\n');
-        return;
-      }
-      if (action === 'set') {
-        const positional = rest.slice(1).filter(
-          (arg, index, values) =>
-            !arg.startsWith('-') && values[index - 1] !== '--daemon-url',
-        );
-        const [protocol, baseUrl, model] = positional;
-        if (!protocol || !baseUrl || !model || positional.length !== 3) {
-          console.error('Usage: od config byok set <protocol> <base-url> <model> (exactly three non-secret values)');
-          process.exit(2);
-        }
-        const written = await writeConfig({ byokProvider: { protocol, baseUrl, model } });
-        const provider = written?.byokProvider ?? null;
-        process.stdout.write(JSON.stringify(provider, null, 2) + '\n');
-        return;
-      }
-      console.error('Usage: od config byok get | od config byok set <protocol> <base-url> <model>');
-      process.exit(2);
-    }
     case 'list': {
       const cfg = await fetchConfig();
       process.stdout.write(JSON.stringify(cfg, null, 2) + '\n');

@@ -4,7 +4,6 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { OpenDesignHostUpdaterStatusSnapshot } from '@open-design/host';
 import { installMockOpenDesignHost } from '@open-design/host/testing';
-import type { UpsertByokCredentialProfileRequest } from '@open-design/contracts';
 import { en } from '../../src/i18n/locales/en';
 
 function optionNames(container: HTMLElement): string[] {
@@ -112,7 +111,6 @@ import { reconcileAmrProfileEnv } from '../../src/components/SettingsDialog';
 import { providerModelsCacheKey } from '../../src/components/providerModelsCache';
 import { I18nProvider } from '../../src/i18n';
 import { LOCALES } from '../../src/i18n/types';
-import { ByokCredentialProfileHttpError } from '../../src/state/config';
 import { MAX_MAX_TOKENS, MIN_MAX_TOKENS } from '../../src/state/maxTokens';
 import type {
   AgentInfo,
@@ -286,19 +284,6 @@ function renderSettingsDialog(
 ) {
   const onPersist = vi.fn();
   const onPersistComposioKey = vi.fn();
-  const onPersistByokCredential = vi.fn(async (input: UpsertByokCredentialProfileRequest) => ({
-    id: input.id ?? 'byok-test-profile',
-    label: input.label,
-    protocol: input.protocol,
-    baseUrl: input.baseUrl,
-    model: input.model,
-    apiVersion: input.apiVersion,
-    requiresApiKey: input.requiresApiKey ?? true,
-    configured: true,
-    keyTail: input.apiKey?.slice(-4),
-    createdAt: 1,
-    updatedAt: 1,
-  }));
   const onSilentUpdatePreferenceChange: (allowSilentUpdates: boolean) => Promise<void> =
     options.onSilentUpdatePreferenceChange
     ?? (async () => undefined);
@@ -317,7 +302,6 @@ function renderSettingsDialog(
       onPersist={onPersist}
       onSilentUpdatePreferenceChange={onSilentUpdatePreferenceChange}
       onPersistComposioKey={onPersistComposioKey}
-      onPersistByokCredential={onPersistByokCredential}
       onClose={onClose}
       onRefreshAgents={onRefreshAgents}
     />,
@@ -327,7 +311,6 @@ function renderSettingsDialog(
     onPersist,
     onSilentUpdatePreferenceChange,
     onPersistComposioKey,
-    onPersistByokCredential,
     onClose,
     onRefreshAgents,
     ...view,
@@ -569,8 +552,8 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     expect(dialog.classList.contains('settings-fullscreen')).toBe(false);
   });
 
-  it('renders BYOK provider preset tabs and toggles API key visibility', async () => {
-    const { onPersist } = renderSettingsDialog();
+  it('renders BYOK provider preset tabs and toggles API key visibility', () => {
+    renderSettingsDialog();
 
     expect(screen.getByRole('tablist', { name: en['settings.protocolAria'] })).toBeTruthy();
     expect(screen.getByRole('tab', { name: 'Anthropic' }).getAttribute('aria-selected')).toBe('true');
@@ -618,31 +601,6 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
         .getByRole('link', { name: 'Get key ↗' })
         .getAttribute('href'),
     ).toBe('https://platform.openai.com/api-keys');
-
-    fireEvent.click(screen.getByRole('tab', { name: 'Agnes AI' }));
-    expect((screen.getByLabelText('Base URL') as HTMLInputElement).value).toBe(
-      'https://apihub.agnes-ai.com/v1',
-    );
-    await waitFor(() => {
-      expect(onPersist).toHaveBeenLastCalledWith(
-        expect.objectContaining({
-          byokProviderConfigDrafts: expect.objectContaining({
-            'openai:https://apihub.agnes-ai.com/v1': expect.objectContaining({
-              apiConfig: expect.objectContaining({
-                baseUrl: 'https://apihub.agnes-ai.com/v1',
-                model: 'agnes-2.0-flash',
-              }),
-            }),
-          }),
-        }),
-        expect.anything(),
-      );
-    });
-    expect(
-      screen
-        .getByRole('link', { name: 'Get key ↗' })
-        .getAttribute('href'),
-    ).toBe('https://platform.agnes-ai.com');
   });
 
   it('isolates API key draft and visibility by BYOK provider preset', () => {
@@ -666,6 +624,17 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     expect((screen.getByLabelText('Base URL') as HTMLInputElement).value).toBe(
       'https://api.deepseek.com',
     );
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Agnes AI' }));
+
+    expect(apiKeyInput.value).toBe('');
+    expect(apiKeyInput.type).toBe('password');
+    expect((screen.getByLabelText('Base URL') as HTMLInputElement).value).toBe(
+      'https://apihub.agnes-ai.com/v1',
+    );
+    expect(screen.getByRole('combobox', { name: 'Model' }).textContent).toContain('agnes-2.0-flash');
+
+    fireEvent.click(screen.getByRole('tab', { name: 'DeepSeek' }));
 
     fireEvent.change(apiKeyInput, { target: { value: 'sk-deepseek-provider' } });
     fireEvent.click(screen.getByRole('tab', { name: 'OpenAI' }));
@@ -2418,60 +2387,6 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
       }),
       undefined,
     );
-  });
-
-  it('reports secure profile persistence failures with stable BYOK telemetry', async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      const url = input.toString();
-      if (url === '/api/memory') {
-        return new Response(
-          JSON.stringify({ enabled: true, memories: [], extraction: null }),
-          { status: 200, headers: { 'content-type': 'application/json' } },
-        );
-      }
-      expect(url).toBe('/api/test/connection');
-      return new Response(
-        JSON.stringify({
-          ok: true,
-          kind: 'ok',
-          latencyMs: 20,
-          model: 'claude-sonnet-4-5',
-          sample: 'pong',
-        }),
-        { status: 200, headers: { 'content-type': 'application/json' } },
-      );
-    });
-    vi.stubGlobal('fetch', fetchMock);
-
-    const { onPersistByokCredential } = renderSettingsDialog({
-      apiKey: 'sk-ant-test-provider',
-    });
-    onPersistByokCredential.mockRejectedValueOnce(
-      new ByokCredentialProfileHttpError(
-        400,
-        'Invalid secure profile',
-        'VALIDATION_FAILED',
-      ),
-    );
-
-    fireEvent.click(screen.getByRole('button', { name: 'Test' }));
-
-    await waitFor(() => {
-      expect(analyticsTrackMock).toHaveBeenCalledWith(
-        'settings_byok_test_result',
-        expect.objectContaining({
-          page_name: 'settings',
-          area: 'execution_model',
-          provider_id: 'anthropic',
-          result: 'failed',
-          error_code: 'VALIDATION_FAILED',
-          error_kind: 'unknown',
-          field_missing: 'none',
-          success_after_action: false,
-        }),
-        undefined,
-      );
-    });
   });
 
   it('renders invalid Base URL test failures on the Base URL field', async () => {
