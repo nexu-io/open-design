@@ -194,6 +194,8 @@ interface Props {
   onInvite?: () => void;
   /** Start the cloud sign-in / team flow from the local-state callout. */
   onSignInCloud?: () => void;
+  /** Return the shell to the Cloud sign-in screen after a confirmed logout. */
+  onSignedOut?: () => void;
   /**
    * The update-ready host (`UpdaterPopup`), which renders nothing until the
    * updater reports a downloaded, unopened installer.
@@ -550,6 +552,7 @@ export function EntryNavRail({
   billing,
   balanceUsd,
   onOpenSettings,
+  onSignedOut,
   updaterSlot,
   footerNotice,
 }: Props) {
@@ -1155,6 +1158,7 @@ export function EntryNavRail({
                     notifyWorkspaceContextRefresh();
                     notifyWorkspaceBillingRefresh();
                     notifyTeamProjectsChanged();
+                    onSignedOut?.();
                   });
                 }}
               />

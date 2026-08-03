@@ -225,6 +225,7 @@ import {
 } from './entryRailBridge';
 import { enterpriseUrl } from './enterpriseUrl';
 import { resolveByokModelPreference } from './byok/validation';
+import onboardingSourceStyles from './OnboardingModelSource.module.css';
 
 // Persist the entry nav-rail open/collapsed state so it survives both a
 // home -> project -> home navigation (EntryShell unmounts on the project
@@ -1456,6 +1457,7 @@ export function EntryShell({
           onOpenSettings={onOpenSettings}
           onInvite={() => changeView('members')}
           onSignInCloud={() => navigate({ kind: 'home', view: 'onboarding' })}
+          onSignedOut={() => changeView('onboarding')}
           updaterSlot={updaterSlot}
           // A loading or unavailable workspace read is not proof of sign-out.
           // Keep the account slot neutral until Cloud answers successfully;
@@ -1876,6 +1878,7 @@ function OnboardingView({
   const analytics = useAnalytics();
   const [step, setStep] = useState(0);
   const [runtime, setRuntime] = useState<'amr' | 'local' | 'byok' | null>(null);
+  const [modelSource, setModelSource] = useState<'amr' | 'local' | 'byok'>('amr');
   // Connect step (step 0) faces: the minimal cloud sign-in landing (null), or
   // a single dedicated setup page for the local CLI or BYOK that the landing's
   // two secondary links open directly. AMR has no card anymore — it signs in
@@ -2065,14 +2068,15 @@ function OnboardingView({
     (runtime === 'amr' && amrSignedIn) ||
     (runtime === 'local' && selectedAgent !== null) ||
     (runtime === 'byok' && byokConnectionVerified);
+  const runtimeSetupStep = step === 2;
   const connectStepBlocked =
-    step === 0 && !amrSelectedAndSignedOut && !connectStepRuntimeReady;
+    runtimeSetupStep && !amrSelectedAndSignedOut && !connectStepRuntimeReady;
   // Which Connect gate is in the way, for the Continue tooltip. The three
   // "blocked" reasons hold Continue disabled; `amr_signed_out` is the
   // "Sign in to continue" CTA — still clickable, but the tooltip explains why
   // the next steps need a runtime first.
   const connectGateReason: 'no_runtime' | 'amr_signed_out' | 'local_agent_unavailable' | 'byok_unverified' | null =
-    step !== 0
+    !runtimeSetupStep
       ? null
       : amrSelectedAndSignedOut
         ? 'amr_signed_out'
@@ -2319,7 +2323,10 @@ function OnboardingView({
     });
   }
 
-  const isLastStep = step === 3;
+  // The streamlined demo ends after model-source setup. Legacy survey,
+  // newsletter, and design-system panels stay unreachable below so this
+  // branch can be reviewed without deleting their production implementation.
+  const isLastStep = step === 103;
 
   const roleOptions = [
     { value: 'agency', label: t('settings.onboardingRoleAgency') },
@@ -2610,15 +2617,66 @@ function OnboardingView({
     // `skipped` events, was removed when Skip was dropped; those enums are now
     // deprecated and unused. See packages/contracts/src/analytics/events.ts.)
     emitOnboardingClick('back', 'back');
+    if (runtimeSetupStep) {
+      clearAgentRevealTimers();
+      setConnectExpanded(null);
+      setRuntime(null);
+      setStep(1);
+      return;
+    }
     setStep((current) => current - 1);
   }
+
+  function finishDemoOnboarding(): void {
+    clearOnboardingSessionId();
+    onFinish();
+  }
+
+  function advanceAfterCloudSignIn(): void {
+    // A completed onboarding reached from sign-out is a re-authentication
+    // gate, not a fresh setup. Its persisted Local Agent / BYOK selection is
+    // already in `config`, so return to Home without overwriting it.
+    if (config.onboardingCompleted === true) {
+      finishDemoOnboarding();
+      return;
+    }
+    setStep(1);
+  }
+
+  function continueWithModelSource(): void {
+    if (modelSource === 'amr') {
+      emitOnboardingClick('amr_cloud', 'select_runtime', { runtime_type: 'amr_cloud' });
+      setRuntime('amr');
+      onModeChange('daemon');
+      onAgentChange('amr');
+      finishDemoOnboarding();
+      return;
+    }
+
+    if (modelSource === 'local') {
+      emitOnboardingClick('local_coding_agent', 'select_runtime', { runtime_type: 'local_cli' });
+      setRuntime('local');
+      setConnectExpanded('local');
+      onModeChange('daemon');
+      void scanCliAgents({ preferExisting: true });
+      setStep(2);
+      return;
+    }
+
+    emitOnboardingClick('byok', 'select_runtime', { runtime_type: 'byok' });
+    setRuntime('byok');
+    setConnectExpanded('byok');
+    onModeChange('api');
+    setStep(2);
+  }
+
   async function handlePrimaryAction() {
     if (newsletterSubmitting || byokPersistPending) return;
     // Connect gate: the button is `aria-disabled` (not natively disabled, so it
     // can still surface its tooltip on hover), so guard the click here — a
     // blocked Continue must not advance past the Connect step.
     if (connectStepBlocked) return;
-    if (step === 0 && amrSelectedAndSignedOut) {
+    if (runtimeSetupStep && amrSelectedAndSignedOut) {
       const attribution = recordAmrEntry(
         analytics.track,
         'onboarding_amr_sign_in_continue',
@@ -2631,7 +2689,7 @@ function OnboardingView({
       void handleAmrSignInToContinue(attribution);
       return;
     }
-    if (step === 0 && runtime === 'byok') {
+    if (runtimeSetupStep && runtime === 'byok') {
       if (!byokConnectionVerified) return;
       if (apiProtocol === 'bedrock') {
         setProviderTestState({
@@ -2677,7 +2735,7 @@ function OnboardingView({
         });
         await onConfigPersist(applySavedByokCredentialProfile(config, profile));
         emitOnboardingClick('continue', 'continue');
-        setStep((current) => current + 1);
+        finishDemoOnboarding();
       } catch (error) {
         setProviderTestState({
           status: 'done',
@@ -2695,6 +2753,11 @@ function OnboardingView({
       } finally {
         setByokPersistPending(false);
       }
+      return;
+    }
+    if (runtimeSetupStep && runtime === 'local') {
+      emitOnboardingClick('continue', 'continue');
+      finishDemoOnboarding();
       return;
     }
     if (isLastStep) {
@@ -2724,9 +2787,6 @@ function OnboardingView({
       new Date(),
       { metricsConsent: config.telemetry?.metrics === true },
     );
-    setRuntime('amr');
-    onModeChange('daemon');
-    onAgentChange('amr');
     const attribution = recordAmrEntry(
       analytics.track,
       'onboarding_amr_sign_in_continue',
@@ -2795,7 +2855,7 @@ function OnboardingView({
       if (amrLoginPollCancelledRef.current) return;
       if (currentStatus) setAmrStatus(currentStatus);
       if (currentStatus?.loggedIn) {
-        setStep((current) => current + 1);
+        advanceAfterCloudSignIn();
         return;
       }
       if (amrLoginPollCancelledRef.current) return;
@@ -2896,7 +2956,7 @@ function OnboardingView({
         return;
       }
       if (await pollAmrLoginCompletion()) {
-        setStep((current) => current + 1);
+        advanceAfterCloudSignIn();
       }
     } finally {
       setAmrLoginPending(false);
@@ -3278,7 +3338,7 @@ function OnboardingView({
   }
 
   useEffect(() => {
-    if (runtime !== 'byok' || step !== 0) return;
+    if (runtime !== 'byok' || !runtimeSetupStep) return;
     if (!canFetchProviderModels) return;
     if (providerModelsState.status === 'running') return;
     if (providerModelsAutoFetchKeyRef.current === providerModelsInputKey) return;
@@ -3295,7 +3355,7 @@ function OnboardingView({
   ]);
 
   useEffect(() => {
-    if (runtime !== 'byok' || step !== 0) return;
+    if (runtime !== 'byok' || !runtimeSetupStep) return;
     if (!canTestProvider) return;
     if (providerTestState.status === 'running') return;
     if (providerAutoTestKeyRef.current === providerTestInputKey) return;
@@ -3327,7 +3387,7 @@ function OnboardingView({
   // Connect step, default face: a minimal, centered Open Design Cloud sign-in
   // landing. No stepper, no runtime cards — just the cloud CTA, a secondary
   // link into the full runtime chooser, and a footer language switcher.
-  if (step === 0 && connectExpanded === null) {
+  if (step === 0) {
     const cloudBusy = amrLoginPending;
     const amrStatusResolving = !amrStatusResolved;
     return (
@@ -3348,9 +3408,6 @@ function OnboardingView({
                   recordAmrEntry(analytics.track, 'onboarding_amr_card', new Date(), {
                     metricsConsent: config.telemetry?.metrics === true,
                   });
-                  setRuntime('amr');
-                  onModeChange('daemon');
-                  onAgentChange('amr');
                   recordAmrEntry(
                     analytics.track,
                     'onboarding_amr_sign_in_continue',
@@ -3360,7 +3417,7 @@ function OnboardingView({
                       reuseExistingFrom: ['onboarding_amr_card'],
                     },
                   );
-                  setStep((current) => current + 1);
+                  advanceAfterCloudSignIn();
                   return;
                 }
                 void handleCloudSignIn();
@@ -3424,42 +3481,82 @@ function OnboardingView({
               >
                 {t('settings.amrCancelSignIn')}
               </button>
-            ) : (
-              <div className="onboarding-cloud__alts">
-                <Button
-                  variant="subtle"
-                  className="onboarding-cloud__alt-btn"
-                  onClick={() => {
-                    emitOnboardingClick('local_coding_agent', 'select_runtime', {
-                      runtime_type: 'local_cli',
-                    });
-                    setRuntime('local');
-                    onModeChange('daemon');
-                    void scanCliAgents({ preferExisting: true });
-                    setConnectExpanded('local');
-                  }}
-                >
-                  <Icon name="robot" size={16} />
-                  {t('settings.onboardingLocalTitle')}
-                </Button>
-                <span className="onboarding-cloud__alts-or">
-                  {t('settings.onboardingCloudOr')}
+            ) : null}
+          </div>
+          <footer className="onboarding-cloud__footer">
+            <LanguageMenu placement="up" align="start" />
+            <span>
+              © {new Date().getFullYear()} Open Design · {t('settings.onboardingCloudRights')}
+            </span>
+          </footer>
+        </div>
+        <div className="onboarding-cloud__art" aria-hidden="true">
+          <img src="/onboarding/onboarding-cloud-art.webp" alt="" />
+        </div>
+      </section>
+    );
+  }
+
+  if (step === 1) {
+    return (
+      <section
+        className="onboarding-view onboarding-view--cloud"
+        aria-label={t('settings.onboardingExecutionTitle')}
+      >
+        <div className={`onboarding-cloud__pane ${onboardingSourceStyles.pane}`}>
+          <div className={`onboarding-cloud__center ${onboardingSourceStyles.center}`}>
+            <h1 className="onboarding-cloud__title">{t('settings.onboardingExecutionTitle')}</h1>
+            <p className="onboarding-cloud__body">{t('settings.onboardingExecutionBody')}</p>
+            <div className={onboardingSourceStyles.options} role="radiogroup" aria-label={t('settings.onboardingExecutionTitle')}>
+              <Button
+                variant="subtle"
+                role="radio"
+                aria-checked={modelSource === 'amr'}
+                className={`${onboardingSourceStyles.option} ${onboardingSourceStyles.hostedOption} ${modelSource === 'amr' ? onboardingSourceStyles.optionActive : ''}`}
+                onClick={() => setModelSource('amr')}
+              >
+                <span className={onboardingSourceStyles.optionIcon}><Icon name="sparkles" size={17} /></span>
+                <span className={onboardingSourceStyles.optionCopy}>
+                  <span className={onboardingSourceStyles.optionHeading}>
+                    <strong className={onboardingSourceStyles.optionTitle}>{t('settings.onboardingAmrModelSourceLabel')}</strong>
+                    <span className={onboardingSourceStyles.recommendedBadge}>{t('settings.onboardingRecommended')}</span>
+                  </span>
+                  <span className={onboardingSourceStyles.optionBody}>{t('settings.onboardingAmrCloudBenefitModels')}</span>
                 </span>
-                <Button
-                  variant="subtle"
-                  className="onboarding-cloud__alt-btn"
-                  onClick={() => {
-                    emitOnboardingClick('byok', 'select_runtime', { runtime_type: 'byok' });
-                    setRuntime('byok');
-                    onModeChange('api');
-                    setConnectExpanded('byok');
-                  }}
-                >
-                  <Icon name="key" size={16} />
-                  {t('settings.onboardingByokTitle')}
-                </Button>
-              </div>
-            )}
+                <span className={onboardingSourceStyles.radio} aria-hidden="true" />
+              </Button>
+              <Button
+                variant="subtle"
+                role="radio"
+                aria-checked={modelSource === 'local'}
+                className={`${onboardingSourceStyles.option} ${modelSource === 'local' ? onboardingSourceStyles.optionActive : ''}`}
+                onClick={() => setModelSource('local')}
+              >
+                <span className={onboardingSourceStyles.optionIcon}><Icon name="robot" size={17} /></span>
+                <span className={onboardingSourceStyles.optionCopy}>
+                  <strong className={onboardingSourceStyles.optionTitle}>{t('settings.onboardingLocalTitle')}</strong>
+                  <span className={onboardingSourceStyles.optionBody}>{t('settings.onboardingLocalBody')}</span>
+                </span>
+                <span className={onboardingSourceStyles.radio} aria-hidden="true" />
+              </Button>
+              <Button
+                variant="subtle"
+                role="radio"
+                aria-checked={modelSource === 'byok'}
+                className={`${onboardingSourceStyles.option} ${modelSource === 'byok' ? onboardingSourceStyles.optionActive : ''}`}
+                onClick={() => setModelSource('byok')}
+              >
+                <span className={onboardingSourceStyles.optionIcon}><Icon name="key" size={17} /></span>
+                <span className={onboardingSourceStyles.optionCopy}>
+                  <strong className={onboardingSourceStyles.optionTitle}>{t('settings.onboardingByokTitle')}</strong>
+                  <span className={onboardingSourceStyles.optionBody}>{t('settings.onboardingByokBody')}</span>
+                </span>
+                <span className={onboardingSourceStyles.radio} aria-hidden="true" />
+              </Button>
+            </div>
+            <button type="button" className="onboarding-cloud__primary" onClick={continueWithModelSource}>
+              {t('settings.onboardingContinue')}
+            </button>
           </div>
           <footer className="onboarding-cloud__footer">
             <LanguageMenu placement="up" align="start" />
@@ -3487,12 +3584,12 @@ function OnboardingView({
       ) : null}
       <div className="onboarding-view__body">
         <div className="onboarding-view__content">
-          {step === 0 ? (
+          {runtimeSetupStep ? (
             <div className="onboarding-view__panel">
               <button
                 type="button"
                 className="onboarding-view__back-to-cloud"
-                onClick={() => setConnectExpanded(null)}
+                onClick={handleBackWithTracking}
               >
                 <Icon name="chevron-left" size={14} />
                 <span>{t('settings.onboardingBack')}</span>
@@ -3583,7 +3680,7 @@ function OnboardingView({
             </div>
           ) : null}
 
-          {step === 1 ? (
+          {step === 101 ? (
             <div className="onboarding-view__panel">
               <button
                 type="button"
@@ -3698,7 +3795,7 @@ function OnboardingView({
             </div>
           ) : null}
 
-          {step === 2 ? (
+          {step === 102 ? (
             <div className="onboarding-view__panel onboarding-view__panel--newsletter">
               <button
                 type="button"
@@ -3732,7 +3829,7 @@ function OnboardingView({
             </div>
           ) : null}
 
-          {step === 3 ? (
+          {step === 103 ? (
             <div className="onboarding-view__panel onboarding-view__build">
               <span className="onboarding-view__build-badge">
                 <Icon name="sparkles" size={13} aria-hidden />
@@ -3829,14 +3926,14 @@ function OnboardingView({
             </div>
           ) : null}
 
-          {step === 3 ? null : (
+          {runtimeSetupStep ? (
             <div className="onboarding-view__actions">
-              {step === 0 && amrLoginError ? (
+              {runtimeSetupStep && amrLoginError ? (
                 <span className="onboarding-view__action-status is-error" role="alert">
                   {amrLoginError}
                 </span>
               ) : null}
-              {step === 0 && amrLoginPending ? (
+              {runtimeSetupStep && amrLoginPending ? (
                 <button
                   type="button"
                   className="onboarding-view__secondary"
@@ -3861,7 +3958,7 @@ function OnboardingView({
                 <span>{primaryActionLabel}</span>
               </button>
             </div>
-          )}
+          ) : null}
         </div>
       </div>
     </section>

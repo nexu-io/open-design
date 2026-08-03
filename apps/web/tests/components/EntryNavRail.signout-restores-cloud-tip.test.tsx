@@ -65,6 +65,7 @@ describe('EntryNavRail sign-out (recvqbkcLqIFH7)', () => {
     // some earlier point — the exact stale state that hides the sign-in
     // entry point after a later real sign-out.
     window.localStorage.setItem(DISMISSED_KEY, '1');
+    const onSignedOut = vi.fn();
 
     render(
       <I18nProvider initial="zh-CN">
@@ -74,6 +75,7 @@ describe('EntryNavRail sign-out (recvqbkcLqIFH7)', () => {
           onNewProject={() => {}}
           open
           context={context()}
+          onSignedOut={onSignedOut}
         />
       </I18nProvider>,
     );
@@ -89,6 +91,7 @@ describe('EntryNavRail sign-out (recvqbkcLqIFH7)', () => {
     // inside `velaLogout().then(...)`, so it lands after a microtask tick.
     await waitFor(() => {
       expect(window.localStorage.getItem(DISMISSED_KEY)).toBeNull();
+      expect(onSignedOut).toHaveBeenCalledTimes(1);
     });
   });
 

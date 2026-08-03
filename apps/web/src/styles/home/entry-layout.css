@@ -2436,7 +2436,7 @@
   justify-content: center;
   min-width: 0;
   min-height: 0;
-  padding: 72px 64px 64px;
+  padding: 72px clamp(32px, 5vw, 64px) 64px;
 }
 
 /* `min-height: 0` (alongside `min-width: 0`) opts this grid item out of its
@@ -2461,13 +2461,18 @@
   object-fit: cover;
 }
 
-/* Below this width, the two-column grid can no longer give the text pane its
-   full designed width (.onboarding-cloud__center's 440px) alongside the art
-   panel — half the viewport minus the pane's 64px side padding drops under
-   440px once the viewport is narrower than 2 * (440 + 64 + 64) = 1136px.
-   Stack to a single column and hide the art before the text pane gets
-   cramped, rather than waiting until it visibly wraps. */
+/* Keep the artwork visible through normal desktop-client widths. The text
+   column gives up a little width first while the right panel retains enough
+   space for the painting to read as a deliberate half of the composition. */
 @media (max-width: 1136px) {
+  .onboarding-view.onboarding-view--cloud {
+    grid-template-columns: minmax(0, 0.95fr) minmax(280px, 1.05fr);
+  }
+}
+
+/* At genuinely compact widths there is no longer a meaningful "right side".
+   Collapse to the focused single-column form only at that point. */
+@media (max-width: 800px) {
   .onboarding-view.onboarding-view--cloud {
     grid-template-columns: 1fr;
   }
@@ -2681,7 +2686,7 @@
 
 .onboarding-cloud__footer {
   position: absolute;
-  left: 64px;
+  left: clamp(32px, 5vw, 64px);
   right: 24px;
   /* An absolutely positioned child's containing block is the ancestor's
      padding box, so this offset is NOT added on top of .onboarding-cloud__pane's
