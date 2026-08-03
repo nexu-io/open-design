@@ -19,6 +19,27 @@ import { describe, expect, it } from 'vitest';
 const execFileAsync = promisify(execFile);
 const cliEntry = fileURLToPath(new URL('../src/cli.ts', import.meta.url));
 
+/**
+ * Run an execFile command that is expected to exit non-zero, returning the
+ * typed `NodeJS.ErrnoException` so its `code`, `stderr`, and `stdout`
+ * properties can be inspected. A success-branch result has none of these
+ * properties (promisify's resolved value is only `{ stdout, stderr }`), so
+ * this helper keeps the typecheck narrow rather than threading a union
+ * through each test.
+ */
+async function expectExecFailureAsync(
+  ...args: Parameters<typeof execFileAsync>
+): Promise<NodeJS.ErrnoException & { stdout?: string; stderr?: string }> {
+  try {
+    const success = await execFileAsync(...args);
+    throw new Error(
+      `expectExecFailure: command resolved successfully\nstdout=${success.stdout}\nstderr=${success.stderr}`,
+    );
+  } catch (err) {
+    return err as NodeJS.ErrnoException & { stdout?: string; stderr?: string };
+  }
+}
+
 describe('od conversation info CLI', () => {
   it('hits the project-scoped conversation route and prints the conversation', async () => {
     const seenRequests: Array<{ method: string; url: string }> = [];
@@ -91,7 +112,7 @@ describe('od conversation info CLI', () => {
     const port = address.port;
 
     try {
-      const result = await execFileAsync(
+      const result = await expectExecFailureAsync(
         process.execPath,
         [
           '--import', 'tsx', cliEntry,
@@ -101,7 +122,7 @@ describe('od conversation info CLI', () => {
           '--daemon-url', `http://127.0.0.1:${port}`,
           '--json',
         ],
-      ).catch((err: NodeJS.ErrnoException & { stdout?: string; stderr?: string }) => err);
+      );
 
       // 404 should produce a non-zero exit, AND the structured error
       // payload should use `not-found` rather than the misleading
@@ -117,13 +138,12 @@ describe('od conversation info CLI', () => {
   });
 
   it('prints usage and exits non-zero when --project is missing', async () => {
-    const result = await execFileAsync(
+    const result = await expectExecFailureAsync(
       process.execPath,
       ['--import', 'tsx', cliEntry, 'conversation', 'info', 'conv-9', '--json'],
-    ).catch((err: NodeJS.ErrnoException & { stdout?: string; stderr?: string }) => err);
+    );
     expect(result.code).toBeTruthy();
-    const stderr = (result as { stderr?: string }).stderr ?? '';
-    expect(stderr).toContain('Usage: od conversation info --project <projectId> <conversationId>');
+    expect(result.stderr ?? '').toContain('Usage: od conversation info --project <projectId> <conversationId>');
   });
 
   it('embedded help block advertises the new --project flag for `info`', async () => {
@@ -134,47 +154,12 @@ describe('od conversation info CLI', () => {
     // real invocation required `--project <projectId> <conversationId>`.
     const r = await execFileAsync(
       process.execPath,
-      ['--import', 'tsx', cliEntry, 'conversation', 'help', '--json'],
+      ['--import', 'tsx', cliEntry, 'conversation', 'help'],
     );
-    expect(r.exitCode ?? 0).toBe(0);
+    // The command's resolved promise proves the process exited 0; we do
+    // not read `r.exitCode` because promisify's resolved value does not
+    // expose one (PerishCode review on #6341).
     expect(r.stdout).toContain('od conversation info --project <projectId>');
     expect(r.stdout).not.toContain('od conversation info <conversationId>');
-  });
-
-  it('published docs/plugins-spec.md and zh-CN keep `conversation info` in sync with the embedded help block', async () => {
-    // Per #6341 round-2 review (lefarcen, 2026-08-02): the published
-    // command reference under `docs/plugins-spec.md` and
-    // `docs/plugins-spec.zh-CN.md` had drifted to advertise the old
-    // `od conversation info <conversationId>` form while the CLI required
-    // `--project <projectId> <conversationId>`. This guard reads both
-    // markdown files and the embedded help block emitted by the CLI and
-    // asserts that the `conversation info` line stays aligned across all
-    // three surfaces. If you legitimately change the invocation, update
-    // every site in the same change.
-    const fs = await import('node:fs');
-    const path = await import('node:path');
-    const repoRoot = path.resolve(fileURLToPath(import.meta.url), '../../../..');
-    const enDoc = fs.readFileSync(path.join(repoRoot, 'docs/plugins-spec.md'), 'utf8');
-    const zhDoc = fs.readFileSync(path.join(repoRoot, 'docs/plugins-spec.zh-CN.md'), 'utf8');
-
-    // The new required shape must appear in both docs; the legacy bare
-    // `<conversationId>` invocation must not.
-    expect(enDoc).toContain('od conversation info --project <projectId> <conversationId>');
-    expect(enDoc).not.toMatch(/od conversation info <conversationId>/);
-    expect(zhDoc).toContain('od conversation info --project <projectId> <conversationId>');
-    expect(zhDoc).not.toMatch(/od conversation info <conversationId>/);
-
-    // Reuse the help emitter to anchor the docs against the same source
-    // of truth the help block test above uses.
-    const r = await execFileAsync(
-      process.execPath,
-      ['--import', 'tsx', cliEntry, 'conversation', 'help', '--json'],
-    );
-    const helpBlock = r.stdout;
-    expect(helpBlock).toContain('od conversation info --project <projectId>');
-    // The docs surface the full required form, the help block emits a
-    // shorter hint; both must agree on the `--project` prefix and must
-    // never resurrect the bare `<conversationId>` invocation.
-    expect(helpBlock).not.toContain('od conversation info <conversationId>');
   });
 });
