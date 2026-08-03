@@ -12,6 +12,7 @@ Before changing GitHub automation, read the current versions of:
 - `.github/workflows/report.atom.yml`
 - `.github/scripts/handoff.py`
 - `scripts/scopes.ts`
+- `specs/current/ci.md` when changing scope rules, confidence tiers, or guards
 - `e2e/tests/packaged-smoke-workflow.test.ts`
 - `scripts/approve-fork-pr-workflows.ts` and `e2e/tests/scripts/approve-fork-pr-workflows.test.ts` when touching fork PR approval behavior
 

@@ -1,6 +1,6 @@
 import { expect, test } from '@/playwright/suite';
 import { openNewProjectModal as openNewProjectModalFromProjects } from '@/playwright/rail';
-import { routeAgents } from '@/playwright/mock-factory';
+import { routeAgents, routeSuccessfulRuns, successfulRunEventBody } from '@/playwright/mock-factory';
 import { clickDeckNextSlide, clickDeckPreviousSlide, openAllProjectFiles } from '@/playwright/workspace';
 import type { Dialog, Locator, Page, Request, Response } from '@playwright/test';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -178,138 +178,95 @@ for (const entry of automatedUiScenarios().filter(
     }
 
     if (entry.mockArtifact) {
-      await page.route('**/api/runs', async (route) => {
-        await route.fulfill({ status: 202, contentType: 'application/json', body: '{"runId":"mock-run"}' });
-      });
-      await page.route('**/api/runs/*/events', async (route) => {
-        const artifact =
-          `<artifact identifier="${entry.mockArtifact!.identifier}" type="text/html" title="${entry.mockArtifact!.title}">` +
-          entry.mockArtifact!.html +
-          '</artifact>';
-        const body = [
+      const artifact =
+        `<artifact identifier="${entry.mockArtifact.identifier}" type="text/html" title="${entry.mockArtifact.title}">` +
+        entry.mockArtifact.html +
+        '</artifact>';
+      await routeSuccessfulRuns(page, {
+        runIdPrefix: 'mock-run',
+        eventBody: successfulRunEventBody([
           'event: start',
           'data: {"bin":"mock-agent"}',
           '',
           'event: stdout',
           `data: ${JSON.stringify({ chunk: artifact })}`,
           '',
-          'event: end',
-          'data: {"code":0}',
-          '',
-          '',
-        ].join('\n');
-
-        await route.fulfill({
-          status: 200,
-          headers: {
-            'content-type': 'text/event-stream',
-            'cache-control': 'no-cache',
-          },
-          body,
-        });
+        ]),
       });
     }
 
     if (entry.flow === 'question-form-single-selection') {
-      await page.route('**/api/runs', async (route) => {
-        await route.fulfill({ status: 202, contentType: 'application/json', body: '{"runId":"mock-run"}' });
-      });
-      await page.route('**/api/runs/*/events', async (route) => {
-        const form = [
-          '<question-form id="discovery" title="Quick brief — 30 seconds">',
-          JSON.stringify(
-            {
-              description: "I'll lock these in before building.",
-              questions: [
-                {
-                  id: 'tone',
-                  label: 'Visual tone',
-                  type: 'radio',
-                  options: ['Editorial / magazine', 'Modern minimal', 'Soft / warm'],
-                  required: true,
-                },
-              ],
-            },
-            null,
-            2,
-          ),
-          '</question-form>',
-        ].join('\n');
-        const body = [
+      const form = [
+        '<question-form id="discovery" title="Quick brief — 30 seconds">',
+        JSON.stringify(
+          {
+            description: "I'll lock these in before building.",
+            questions: [
+              {
+                id: 'tone',
+                label: 'Visual tone',
+                type: 'radio',
+                options: ['Editorial / magazine', 'Modern minimal', 'Soft / warm'],
+                required: true,
+              },
+            ],
+          },
+          null,
+          2,
+        ),
+        '</question-form>',
+      ].join('\n');
+      await routeSuccessfulRuns(page, {
+        runIdPrefix: 'mock-run',
+        eventBody: successfulRunEventBody([
           'event: start',
           'data: {"bin":"mock-agent"}',
           '',
           'event: stdout',
           `data: ${JSON.stringify({ chunk: form })}`,
           '',
-          'event: end',
-          'data: {"code":0}',
-          '',
-          '',
-        ].join('\n');
-
-        await route.fulfill({
-          status: 200,
-          headers: {
-            'content-type': 'text/event-stream',
-            'cache-control': 'no-cache',
-          },
-          body,
-        });
+        ]),
       });
     }
 
     if (entry.flow === 'question-form-submit-persistence') {
       let requestCount = 0;
-      await page.route('**/api/runs', async (route) => {
-        await route.fulfill({ status: 202, contentType: 'application/json', body: '{"runId":"mock-run"}' });
-      });
-      await page.route('**/api/runs/*/events', async (route) => {
-        requestCount += 1;
-        const chunk =
-          requestCount === 1
-            ? [
-                '<question-form id="discovery" title="Quick brief — 30 seconds">',
-                JSON.stringify(
-                  {
-                    description: "I'll lock these in before building.",
-                    questions: [
-                      {
-                        id: 'tone',
-                        label: 'Visual tone',
-                        type: 'radio',
-                        options: ['Editorial / magazine', 'Modern minimal', 'Soft / warm'],
-                        required: true,
-                      },
-                    ],
-                  },
-                  null,
-                  2,
-                ),
-                '</question-form>',
-              ].join('\n')
-            : 'Thanks — I will use these answers for the next draft.';
-        const body = [
-          'event: start',
-          'data: {"bin":"mock-agent"}',
-          '',
-          'event: stdout',
-          `data: ${JSON.stringify({ chunk })}`,
-          '',
-          'event: end',
-          'data: {"code":0,"status":"succeeded"}',
-          '',
-          '',
-        ].join('\n');
-
-        await route.fulfill({
-          status: 200,
-          headers: {
-            'content-type': 'text/event-stream',
-            'cache-control': 'no-cache',
-          },
-          body,
-        });
+      await routeSuccessfulRuns(page, {
+        runIdPrefix: 'mock-run',
+        eventBody: () => {
+          requestCount += 1;
+          const chunk =
+            requestCount === 1
+              ? [
+                  '<question-form id="discovery" title="Quick brief — 30 seconds">',
+                  JSON.stringify(
+                    {
+                      description: "I'll lock these in before building.",
+                      questions: [
+                        {
+                          id: 'tone',
+                          label: 'Visual tone',
+                          type: 'radio',
+                          options: ['Editorial / magazine', 'Modern minimal', 'Soft / warm'],
+                          required: true,
+                        },
+                      ],
+                    },
+                    null,
+                    2,
+                  ),
+                  '</question-form>',
+                ].join('\n')
+              : 'Thanks — I will use these answers for the next draft.';
+          return successfulRunEventBody([
+            'event: start',
+            'data: {"bin":"mock-agent"}',
+            '',
+            'event: stdout',
+            `data: ${JSON.stringify({ chunk })}`,
+            '',
+          ]);
+        },
       });
     }
 
@@ -408,31 +365,13 @@ test('[P0] @critical comment attachment flow attaches preview comments to the ne
   }
 
   await routeMockAgents(page);
-  await page.route('**/api/runs', async (route) => {
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: JSON.stringify({ runId: 'comment-attachment-run' }),
-    });
-  });
-  await page.route('**/api/runs/*/events', async (route) => {
-    const body = [
+  await routeSuccessfulRuns(page, {
+    runIdPrefix: 'comment-attachment-run',
+    eventBody: successfulRunEventBody([
       'event: start',
       'data: {"bin":"mock-agent"}',
       '',
-      'event: end',
-      'data: {"code":0,"status":"succeeded"}',
-      '',
-      '',
-    ].join('\n');
-    await route.fulfill({
-      status: 200,
-      headers: {
-        'content-type': 'text/event-stream',
-        'cache-control': 'no-cache',
-      },
-      body,
-    });
+    ]),
   });
 
   const projectId = await createEmptyProject(page, 'Comment attachment flow');
@@ -461,44 +400,25 @@ test('[P0] sending preview comments opens the refreshed follow-up artifact', asy
 
   await routeMockAgents(page);
 
-  let requestCount = 0;
-  await page.route('**/api/runs', async (route) => {
-    requestCount += 1;
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: JSON.stringify({ runId: `mock-run-${requestCount}` }),
-    });
-  });
-  await page.route('**/api/runs/*/events', async (route) => {
-    const artifactTitle = entry.mockArtifact!.title;
-    const artifactHtml = revisedHtml;
-    const body = [
-      'event: start',
-      'data: {"bin":"mock-agent"}',
-      '',
-      'event: stdout',
-      `data: ${JSON.stringify({
-        chunk:
-          `<artifact identifier="${entry.mockArtifact!.identifier}" type="text/html" title="${artifactTitle}">` +
-          artifactHtml +
-          '</artifact>',
-      })}`,
-      '',
-      'event: end',
-      'data: {"code":0,"status":"succeeded"}',
-      '',
-      '',
-    ].join('\n');
-
-    await route.fulfill({
-      status: 200,
-      headers: {
-        'content-type': 'text/event-stream',
-        'cache-control': 'no-cache',
-      },
-      body,
-    });
+  await routeSuccessfulRuns(page, {
+    runIdPrefix: 'mock-run',
+    eventBody: () => {
+      const artifactTitle = entry.mockArtifact!.title;
+      const artifactHtml = revisedHtml;
+      return successfulRunEventBody([
+        'event: start',
+        'data: {"bin":"mock-agent"}',
+        '',
+        'event: stdout',
+        `data: ${JSON.stringify({
+          chunk:
+            `<artifact identifier="${entry.mockArtifact!.identifier}" type="text/html" title="${artifactTitle}">` +
+            artifactHtml +
+            '</artifact>',
+        })}`,
+        '',
+      ]);
+    },
   });
 
   const projectId = await createEmptyProject(page, 'Comment preview follow-up');
@@ -513,8 +433,7 @@ test('[P0] sending preview comments opens the refreshed follow-up artifact', asy
 
   await page.getByTestId('board-mode-toggle').click();
   await page.getByTestId('comment-panel-toggle').click();
-  const frame = artifactPreviewFrame(page);
-  await frame.locator('[data-od-id="hero-title"]').click();
+  await clickCommentTargetInPreview(page, '[data-od-id="hero-title"]');
   await expect(page.getByTestId('comment-popover')).toBeVisible();
   await page.getByTestId('comment-popover-input').fill('Make the headline more specific.');
   await page.getByTestId('comment-popover-save').click();
@@ -621,35 +540,16 @@ function mergeExtraScenarioTag(entry: UiScenario): string {
 }
 
 async function routeMockSuccessfulRun(page: Page, runId: string) {
-  await page.route('**/api/runs', async (route) => {
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: JSON.stringify({ runId }),
-    });
-  });
-  await page.route('**/api/runs/*/events', async (route) => {
-    const body = [
+  await routeSuccessfulRuns(page, {
+    runIdPrefix: runId,
+    eventBody: successfulRunEventBody([
       'event: start',
       'data: {"bin":"mock-agent"}',
       '',
       'event: stdout',
       'data: {"chunk":"Plugin flow completed."}',
       '',
-      'event: end',
-      'data: {"code":0,"status":"succeeded"}',
-      '',
-      '',
-    ].join('\n');
-
-    await route.fulfill({
-      status: 200,
-      headers: {
-        'content-type': 'text/event-stream',
-        'cache-control': 'no-cache',
-      },
-      body,
-    });
+    ]),
   });
 }
 
@@ -1104,14 +1004,22 @@ async function runGenerationDoesNotCreateExtraFileFlow(
   await expectScenarioProjectState(page, entry, projectId);
 }
 
+async function clickCommentTargetInPreview(page: Page, selector: string) {
+  const target = artifactPreviewFrame(page).locator(selector);
+  await expect(target).toBeVisible();
+  // Auto-fit zoom + comment-bridge injection can keep the iframe target
+  // moving for long enough that Playwright's stability check never settles
+  // (CI: "element is not stable" until test timeout). Force once visible.
+  await target.click({ force: true });
+}
+
 async function runCommentAttachmentFlow(
   page: Page,
   entry: UiScenario,
 ) {
   await page.getByTestId('board-mode-toggle').click();
   await page.getByTestId('comment-panel-toggle').click();
-  const frame = artifactPreviewFrame(page);
-  await frame.locator('[data-od-id="hero-title"]').click();
+  await clickCommentTargetInPreview(page, '[data-od-id="hero-title"]');
   await expect(page.getByTestId('comment-popover')).toBeVisible();
   await page.getByTestId('comment-popover-input').fill('Make the headline more specific.');
   await page.getByTestId('comment-popover-save').click();

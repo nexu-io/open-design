@@ -8,10 +8,14 @@ import { appendMessageStatusEvent } from '../db.js';
 import { classifyRunFailure } from '../run-failure-classification.js';
 import { deriveRunErrorCode, runResultFromStatus } from '../run-result.js';
 import { runAskedUserQuestion } from './run-artifacts.js';
+import {
+  interruptDurableRunAfterDaemonRestart,
+  RESTART_ERROR_CODE,
+  RESTART_ERROR_MESSAGE,
+  type RestartRecoverableDurableRunState,
+} from './run-restart-recovery.js';
 
 const TERMINAL_STATUSES = new Set(['succeeded', 'failed', 'canceled']);
-const RESTART_ERROR_CODE = 'DAEMON_RESTARTED';
-const RESTART_ERROR_MESSAGE = 'Run interrupted because the daemon restarted.';
 const RECONCILED_STATUS_MESSAGE = 'Run terminal state reconciled after daemon restart.';
 
 interface AnalyticsRecovery {
@@ -21,20 +25,14 @@ interface AnalyticsRecovery {
   completedAt?: number;
 }
 
-interface DurableRunState {
+interface DurableRunState extends RestartRecoverableDurableRunState {
   schemaVersion: 1;
   id: string;
   projectId: string | null;
   conversationId: string | null;
   assistantMessageId: string | null;
   agentId: string | null;
-  status: string;
   createdAt: number;
-  updatedAt: number;
-  exitCode?: number | null;
-  signal?: string | null;
-  error?: string | null;
-  errorCode?: string | null;
   artifactCount?: number;
   endedWithUnfinishedWork?: boolean;
   userPrompt?: string;
@@ -52,7 +50,6 @@ interface DurableRunState {
   promptCache?: Record<string, unknown>;
   analyticsRecovery?: AnalyticsRecovery;
   langfuseCompletedAt?: number;
-  terminalRecoveryReason?: 'daemon_restart' | 'analytics_incomplete';
 }
 
 interface AnalyticsLike {
@@ -228,14 +225,7 @@ export async function reconcileDurableRunTerminals(
   const now = Date.now();
 
   for (const entry of states) {
-    if (TERMINAL_STATUSES.has(entry.state.status)) continue;
-    entry.state.status = 'failed';
-    entry.state.updatedAt = now;
-    entry.state.exitCode = 1;
-    entry.state.signal = null;
-    entry.state.error = RESTART_ERROR_MESSAGE;
-    entry.state.errorCode = RESTART_ERROR_CODE;
-    entry.state.terminalRecoveryReason = 'daemon_restart';
+    if (!interruptDurableRunAfterDaemonRestart(entry.state, now)) continue;
     writeState(entry.filePath, entry.state);
     result.interrupted += 1;
   }

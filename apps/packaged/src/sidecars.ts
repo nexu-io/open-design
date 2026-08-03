@@ -12,6 +12,7 @@ import {
   SIDECAR_MODES,
   type AppKey,
   type DaemonStatusSnapshot,
+  type RegisterWebUrlResult,
   type SidecarStamp,
   type WebStatusSnapshot,
 } from "@open-design/sidecar-proto";
@@ -41,6 +42,7 @@ import {
 
 const require = createRequire(import.meta.url);
 const PACKAGED_CHILD_ENV_ALLOWLIST = [
+  "CODEX_HOME",
   "HOME",
   "HTTP_PROXY",
   "HTTPS_PROXY",
@@ -475,6 +477,8 @@ export type PackagedDaemonSpawnEnvOptions = {
   amrProfile?: string | null;
   daemonCliEntry: string | null;
   desktopHandoffEnv?: NodeJS.ProcessEnv;
+  mcpBootstrapArgs?: readonly string[];
+  mcpBootstrapCommand?: string | null;
   nodeCommand?: string | null;
   /**
    * PR #974 round-5 (lefarcen P2): only pin the daemon's import-folder
@@ -525,6 +529,13 @@ export function buildPackagedDaemonSpawnEnv(
       ? {}
       : { OPEN_DESIGN_AMR_PROFILE: options.amrProfile }),
     ...(options.appVersion == null ? {} : { OD_APP_VERSION: options.appVersion }),
+    ...(options.mcpBootstrapCommand == null
+      || options.mcpBootstrapCommand.length === 0
+      ? {}
+      : { OD_MCP_BOOTSTRAP_COMMAND: options.mcpBootstrapCommand }),
+    ...(options.mcpBootstrapArgs == null
+      ? {}
+      : { OD_MCP_BOOTSTRAP_ARGS: JSON.stringify(options.mcpBootstrapArgs) }),
     ...pickPackagedDesktopHandoffEnv(options.desktopHandoffEnv ?? {}),
     ...(options.telemetryRelayUrl == null || options.telemetryRelayUrl.length === 0
       ? {}
@@ -660,6 +671,23 @@ async function closeManagedChild(child: ManagedSidecarChild): Promise<void> {
   await child.logHandle.close().catch(() => undefined);
 }
 
+export async function registerPackagedWebUrl(
+  daemonIpcPath: string,
+  webUrl: string,
+): Promise<void> {
+  const result = await requestJsonIpc<RegisterWebUrlResult>(
+    daemonIpcPath,
+    {
+      input: { url: webUrl },
+      type: SIDECAR_MESSAGES.REGISTER_WEB_URL,
+    },
+    { timeoutMs: 1_200 },
+  );
+  if (result.accepted !== true) {
+    throw new Error("daemon rejected packaged web URL registration");
+  }
+}
+
 export async function startPackagedSidecars(
   runtime: SidecarRuntimeContext<SidecarStamp>,
   paths: PackagedNamespacePaths,
@@ -670,6 +698,8 @@ export async function startPackagedSidecars(
     daemonSidecarEntry: string | null;
     electronNodeCommand: string | null;
     nodeCommand: string | null;
+    mcpBootstrapCommand: string | null;
+    mcpBootstrapArgs: readonly string[];
     telemetryRelayUrl: string | null;
     posthogKey: string | null;
     posthogHost: string | null;
@@ -743,6 +773,8 @@ export async function startPackagedSidecars(
         daemonCliEntry: options.daemonCliEntry,
         desktopHandoffEnv: process.env,
         legacyDataDir: process.env.OD_LEGACY_DATA_DIR ?? null,
+        mcpBootstrapArgs: options.mcpBootstrapArgs,
+        mcpBootstrapCommand: options.mcpBootstrapCommand,
         nodeCommand: options.nodeCommand,
         requireDesktopAuth: options.requireDesktopAuth,
         telemetryRelayUrl: options.telemetryRelayUrl,
@@ -820,6 +852,7 @@ export async function startPackagedSidecars(
         { child: web.child, logPath: logPathFor(paths, APP_KEYS.WEB) },
       );
       if (status.url == null) throw new Error("web did not report a URL");
+      await registerPackagedWebUrl(daemon.ipcPath, status.url);
       currentWebUrl = status.url;
 
       // Supervise the child. The web sidecar can die on its own — an

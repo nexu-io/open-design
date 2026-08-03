@@ -63,6 +63,7 @@ jobs:
       run_playwright_critical: ${{ steps.detect.outputs.run_playwright_critical }}
       run_playwright_visual: ${{ steps.detect.outputs.run_playwright_visual }}
       run_preflight: ${{ steps.detect.outputs.run_preflight }}
+      run_preflight_typecheck: ${{ steps.detect.outputs.run_preflight_typecheck }}
       run_ui_p0: ${{ steps.detect.outputs.run_ui_p0 }}
       run_web_workspace_tests: ${{ steps.detect.outputs.run_web_workspace_tests }}
       run_windows_tools_pack_payload_tests: ${{ steps.detect.outputs.run_windows_tools_pack_payload_tests }}
@@ -255,12 +256,14 @@ jobs:
       # If postinstall grows a targeted app type-generation phase covering these
       # three exports without broad app builds, this CI prebuild can be removed.
       - name: Prebuild workspace type declarations
+        if: ${{ needs.scopes.outputs.run_preflight_typecheck == 'true' }}
         run: |
           pnpm --filter @open-design/daemon build
           pnpm --filter @open-design/desktop build
           pnpm --filter @open-design/web build:sidecar
 
       - name: Typecheck workspaces
+        if: ${{ needs.scopes.outputs.run_preflight_typecheck == 'true' }}
         run: |
           pnpm -r --filter '!open-design' --filter '!@open-design/landing-page' --workspace-concurrency="${OPEN_DESIGN_WORKSPACE_CONCURRENCY:-1}" --if-present run typecheck
           pnpm exec tsc -p scripts/tsconfig.json --noEmit
@@ -301,7 +304,13 @@ jobs:
             pnpm --filter @open-design/tools-dev test
           fi
           if [ "${{ needs.scopes.outputs.tools_pack_tests_required }}" = "true" ]; then
+            pnpm --filter @open-design/desktop build
+            pnpm --filter @open-design/desktop test
+            pnpm --filter @open-design/packaged test
             pnpm --filter @open-design/tools-pack test
+            if [ "${{ needs.scopes.outputs.run_e2e_vitest }}" != "true" ]; then
+              pnpm --filter @open-design/e2e test tests/packaged-launcher-update-loop.test.ts
+            fi
           fi
 
       - name: Probe watcher environment

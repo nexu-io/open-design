@@ -1,5 +1,6 @@
 import { expect, test } from '@/playwright/suite';
 import { ensureRailOpen, openNewProjectModal } from '@/playwright/rail';
+import { expectStableCount } from '@/playwright/assertions';
 import { routeAgents } from '@/playwright/mock-factory';
 import { T } from '@/timeouts';
 import type { Locator, Page } from '@playwright/test';
@@ -319,15 +320,21 @@ test('[P1] typing a draft replacement Composio key does not trigger global autos
   await expect(settingsDialog.getByTestId('connector-grid-wrap')).toBeVisible();
   await expect(settingsDialog.getByText('Saved · ••••1234')).toBeVisible();
 
-  await page.waitForTimeout(1200);
-  const appConfigPersistCountBeforeDraftEdit = appConfigPersistBodies.length;
+  const appConfigPersistCountBeforeDraftEdit = await expectQuietCount(
+    () => appConfigPersistBodies.length,
+    {
+      timeout: 1_200,
+    },
+  );
 
   const replacementInput = settingsDialog.getByPlaceholder('Paste a new key to replace the saved one');
   await replacementInput.fill('cmp-draft-secret-9999');
   await expect(settingsDialog.getByRole('button', { name: 'Save key', exact: true })).toBeEnabled();
 
-  await page.waitForTimeout(900);
-  expect(appConfigPersistBodies).toHaveLength(appConfigPersistCountBeforeDraftEdit);
+  await expectStableCount(() => appConfigPersistBodies.length, appConfigPersistCountBeforeDraftEdit, {
+    timeout: 900,
+    message: 'typing a draft Composio replacement key should not trigger global app-config autosave',
+  });
   const savedConfig = await readSavedConfig(page);
   expect(savedConfig?.composio).toMatchObject({
     apiKey: '',
@@ -335,6 +342,24 @@ test('[P1] typing a draft replacement Composio key does not trigger global autos
     apiKeyTail: '1234',
   });
 });
+
+async function expectQuietCount(
+  readCount: () => number | Promise<number>,
+  options: { timeout: number; interval?: number },
+): Promise<number> {
+  let settledCount = await readCount();
+  const interval = options.interval ?? 100;
+  let quietDeadline = Date.now() + options.timeout;
+  while (Date.now() < quietDeadline) {
+    await new Promise((resolve) => setTimeout(resolve, interval));
+    const currentCount = await readCount();
+    if (currentCount !== settledCount) {
+      settledCount = currentCount;
+      quietDeadline = Date.now() + options.timeout;
+    }
+  }
+  return settledCount;
+}
 
 async function routeConnectors(page: Page, connectors: typeof CONNECTORS) {
   await page.route('**/api/connectors', async (route) => {

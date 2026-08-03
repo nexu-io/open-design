@@ -59,6 +59,34 @@ export interface ProjectFilesResponse {
 export type ProjectFileVersionSource = 'ai' | 'manual' | 'restore';
 export type ProjectFileVersionPromptSource = 'message' | 'project' | 'manual' | 'restore';
 
+export type ArtifactOriginEntrySurface =
+  | 'open_design_ui'
+  | 'od_cli'
+  | 'external_mcp'
+  | 'unknown';
+
+/**
+ * Bounded provenance for the content lineage of an HTML file version.
+ *
+ * This is deliberately distinct from `ProjectFileVersion.source`: `source`
+ * records how this checkpoint was created, while `origin` records where the
+ * content lineage began. Prompts, file paths, account data, and credentials
+ * must never be stored here.
+ */
+export interface ArtifactOrigin {
+  entrySurface: ArtifactOriginEntrySurface;
+  externalPluginId?: string;
+  pluginWorkflowId?: string;
+  runId?: string;
+}
+
+export type ArtifactOriginStatus =
+  | 'matched'
+  | 'missing_version'
+  | 'digest_mismatch'
+  | 'invalid_origin'
+  | 'unknown';
+
 export interface ProjectFileVersion {
   id: string;
   fileName: string;
@@ -73,6 +101,9 @@ export interface ProjectFileVersion {
   mime: string;
   kind: ProjectFileKind;
   current: boolean;
+  contentDigest?: string;
+  parentVersionId?: string;
+  origin?: ArtifactOrigin;
 }
 
 export interface ProjectFileVersionsResponse {
@@ -89,6 +120,7 @@ export interface CreateProjectFileVersionRequest {
   prompt?: string | null;
   label?: string | null;
   source?: ProjectFileVersionSource;
+  parentVersionId?: string;
 }
 
 export interface CreateProjectFileVersionResponse {
@@ -182,6 +214,7 @@ export interface ProjectPreviewIsolationResponse {
 
 export interface ProjectFileResponse {
   file: ProjectFile;
+  version?: ProjectFileVersion | null;
   versionWarning?: ProjectFileVersionWarning;
 }
 

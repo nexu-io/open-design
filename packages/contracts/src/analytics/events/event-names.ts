@@ -19,6 +19,10 @@ export type AnalyticsEventName =
   | 'langfuse_report_result'
   | 'run_retry_attempted'
   | 'run_retry_finished'
+  // Local MCP / external-plugin lifecycle (schema v3).
+  | 'mcp_session_initialized'
+  | 'mcp_tool_started'
+  | 'mcp_tool_finished'
   // Paid media provider request outcome and bounded response retry.
   | 'media_generation_result'
   // Packaged updater lifecycle
@@ -55,6 +59,7 @@ export type AnalyticsEventName =
   | 'byok_preflight_blocked'
   | 'settings_connector_auth_result'
   // AMR (hosted model) account auth result.
+  | 'amr_auth_stage'
   | 'amr_auth_result'
   // Onboarding-only result events. UI clicks + page_views inside the
   // onboarding flow reuse the generic `ui_click` / `page_view` shapes

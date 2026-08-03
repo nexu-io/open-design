@@ -41,6 +41,11 @@ import { recordFirstLoopStep } from '../onboarding/first-loop';
 import { MarkdownRenderer, artifactRendererRegistry } from '../artifacts/renderer-registry';
 import { renderMarkdownToSafeHtml } from '../artifacts/markdown';
 import {
+  artifactExportOriginProps,
+  matchingArtifactVersionId,
+  type ArtifactExportOriginProps,
+} from '../artifacts/version-origin';
+import {
   buildScrollAnchors,
   extractMarkdownBlockLines,
   mapScrollPosition,
@@ -135,6 +140,7 @@ import {
   PRESENTER_WINDOW_MIN_HEIGHT,
   PRESENTER_WINDOW_MIN_WIDTH,
   removeSpeakerNotesFromHtml,
+  sourcesDifferOnlyInSpeakerNotes,
   upsertSpeakerNotesInHtml,
 } from '../runtime/speaker-notes';
 import {
@@ -199,15 +205,25 @@ import type {
   PreviewCommentTarget,
 } from '../types';
 import { ManualEditPanel, emptyManualEditDraft, type ManualEditDraft } from './ManualEditPanel';
+import { ManualEditSelectionOverlay, type ManualEditCropRegion } from './ManualEditSelectionOverlay';
+import { ManualEditTextToolbar } from './ManualEditTextToolbar';
 import {
   applyManualEditPatch,
+  isManualEditRuntimeRenderedSource,
   isManualEditFullHtmlDocument,
+  manualEditTargetHasNestedMarkup,
   readManualEditAttributes,
   readManualEditFields,
+  readManualEditInsertedSibling,
   readManualEditOuterHtml,
+  readManualEditRestoreDescriptor,
+  readManualEditRuntimeInnerHtml,
+  readManualEditRuntimeOuterHtml,
+  readManualEditSavedStyles,
   readManualEditStyles,
 } from '../edit-mode/source-patches';
-import { MANUAL_EDIT_STYLE_PROPS, type ManualEditBridgeMessage, type ManualEditHistoryEntry, type ManualEditPatch, type ManualEditStyles, type ManualEditTarget } from '../edit-mode/types';
+import { MANUAL_EDIT_STYLE_PROPS, manualEditTargetsLightEqual, type ManualEditBridgeMessage, type ManualEditHistoryEntry, type ManualEditPatch, type ManualEditPreviewStyles, type ManualEditRect, type ManualEditStyles, type ManualEditTarget, type ManualEditTextSelectionFormat } from '../edit-mode/types';
+import { manualEditTooltip } from '../edit-mode/shortcuts';
 import { isRenderableSketchJson, SketchPreview } from './SketchPreview';
 
 function resolveChromeActionsHost(): HTMLElement | null {
@@ -504,6 +520,20 @@ function manualEditPersistedValueMatchesSavedSnapshot(
   return canonicalManualEditStyleValue(key, persistedValue) === canonicalManualEditStyleValue(key, savedValue);
 }
 
+const MANUAL_EDIT_RECT_AFFECTING_STYLE_PROPS = new Set<keyof ManualEditStyles>([
+  'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'lineHeight', 'letterSpacing',
+  'display', 'position', 'left', 'top', 'right', 'bottom', 'width', 'height', 'minHeight',
+  'gap', 'flexDirection', 'justifyContent', 'alignItems', 'transform',
+  'padding', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
+  'margin', 'marginTop', 'marginRight', 'marginBottom', 'marginLeft',
+  'border', 'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth', 'borderStyle',
+]);
+
+function manualEditStylesMayAffectRect(styles: Partial<ManualEditStyles>): boolean {
+  return (Object.keys(styles) as Array<keyof ManualEditStyles>)
+    .some((key) => MANUAL_EDIT_RECT_AFFECTING_STYLE_PROPS.has(key));
+}
+
 function canonicalManualEditStyleValue(key: keyof ManualEditStyles, value: string): string {
   const normalized = manualEditInspectorStyleValue(key, value).trim();
   if (!normalized) return '';
@@ -738,6 +768,13 @@ function escapeHtmlAttribute(value: string): string {
   return value
     .replace(/&/g, '&amp;')
     .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function escapeHtmlTextContent(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
 }
@@ -1123,31 +1160,8 @@ function manualEditFloatingPanelStyle(
   };
 }
 
-// Anchors the hover "edit params" affordance to the top-right corner of the
-// hovered element, just inside its bounds so moving the cursor from the
-// element onto the icon does not drop the hover. Uses the same iframe→canvas
-// coordinate basis as the floating inspector panel.
-function manualEditHoverIconStyle(
-  target: ManualEditTarget,
-  previewScale: number,
-  canvasSize: PreviewCanvasSize | undefined,
-): CSSProperties {
-  const scale = Number.isFinite(previewScale) && previewScale > 0 ? previewScale : 1;
-  const iconSize = 26;
-  const inset = 4;
-  const canvasWidth = canvasSize?.width ?? 1200;
-  const canvasHeight = canvasSize?.height ?? 800;
-  const targetTop = target.rect.y * scale;
-  const targetRight = (target.rect.x + target.rect.width) * scale;
-  const left = Math.max(
-    inset,
-    Math.min(targetRight - iconSize - inset, canvasWidth - iconSize - inset),
-  );
-  const top = Math.max(
-    inset,
-    Math.min(targetTop + inset, canvasHeight - iconSize - inset),
-  );
-  return { left, top, width: iconSize, height: iconSize };
+function escapeManualEditAttr(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 }
 
 export function cancelManualEditPendingStyleSnapshot(
@@ -2717,6 +2731,7 @@ type HtmlVersionExportContext = {
   content: string;
   title: string;
   versionId?: string;
+  version?: ProjectFileVersion;
 };
 
 type ExportToastState = {
@@ -3199,6 +3214,7 @@ function FileVersionManagerModal({
     const context: HtmlVersionExportContext = {
       content,
       title: version.current ? file.name.replace(/\.html?$/i, '') || file.name : fileVersionExportTitle(file.name, version),
+      version,
       ...(version.current ? {} : { versionId: version.id }),
     };
     setVersionExportToast(null);
@@ -5988,6 +6004,38 @@ function HtmlViewer({
   // Latest per-slide capture progress for the programmatic exporters, read by
   // the loading-toast ticker in fireShareExport to render elapsed time + ETA.
   const exportProgressRef = useRef<{ done: number; total: number } | null>(null);
+  const unknownExportOrigin = (
+    status: ArtifactExportOriginProps['artifact_origin_status'] = 'missing_version',
+  ): ArtifactExportOriginProps => ({
+    entry_surface: 'open_design_ui',
+    artifact_origin_status: status,
+    origin_entry_surface: 'unknown',
+  });
+  const resolveArtifactExportOrigin = async (
+    context?: HtmlVersionExportContext | null,
+  ): Promise<ArtifactExportOriginProps> => {
+    const content = context?.content ?? sourceRef.current;
+    if (content == null) return unknownExportOrigin();
+    let version = context?.version ?? null;
+    if (!version) {
+      const result = await fetchProjectFileVersions(projectId, file.name);
+      version = result?.versions.find((candidate) => candidate.current) ?? null;
+    }
+    return artifactExportOriginProps(content, version);
+  };
+  const resolveManualEditParentVersionId = async (
+    content: string,
+  ): Promise<string | undefined> => {
+    try {
+      const result = await fetchProjectFileVersions(projectId, file.name);
+      const currentVersion = result?.versions?.find((candidate) => candidate.current) ?? null;
+      return matchingArtifactVersionId(content, currentVersion);
+    } catch {
+      // Provenance is fail-closed: inability to prove the parent must not
+      // block a user edit, but it also must not inherit an origin.
+      return undefined;
+    }
+  };
   // Shared helper for the share menu: emit studio_click share_option on
   // entry and artifact_export_result on resolution. Sync exports report
   // success immediately after the call returns; async exports get .then
@@ -6005,6 +6053,7 @@ function HtmlViewer({
       | 'share_link'
       | 'share_page',
     fn: () => Promise<unknown> | unknown,
+    context?: HtmlVersionExportContext | null,
   ) => {
     const requestId = analytics.newRequestId();
     const artifactId = anonymizeArtifactId({ projectId, fileName: file.name });
@@ -6024,7 +6073,10 @@ function HtmlViewer({
       { requestId },
     );
     const started = performance.now();
-    const finish = (result: 'success' | 'failed' | 'cancelled', errorCode?: string) => {
+    const originPromise = resolveArtifactExportOrigin(context)
+      .catch(() => unknownExportOrigin());
+    const finish = async (result: 'success' | 'failed' | 'cancelled', errorCode?: string) => {
+      const originProps = await originPromise;
       trackArtifactExportResult(
         analytics.track,
         {
@@ -6036,6 +6088,7 @@ function HtmlViewer({
           project_kind: projectKind,
           export_format: trackingFormat,
           result,
+          ...originProps,
           ...(errorCode ? { error_code: errorCode } : {}),
           export_duration_ms: Math.round(performance.now() - started),
         },
@@ -6097,30 +6150,30 @@ function HtmlViewer({
           (result) => {
             stopTicker();
             if (result === 'cancelled') {
-              finish('cancelled');
+              void finish('cancelled');
               if (toastFormats.has(format)) setExportToast(null);
               return;
             }
-            finish('success');
+            void finish('success');
             if (toastFormats.has(format)) setExportToast({ message: t('fileViewer.exportDone'), tone: 'success' });
           },
           (err) => {
-            finish('failed', exportErrorCode(err));
+            void finish('failed', exportErrorCode(err));
             failToast(err);
           },
         );
       } else {
         stopTicker();
         if (out === 'cancelled') {
-          finish('cancelled');
+          void finish('cancelled');
           if (toastFormats.has(format)) setExportToast(null);
           return;
         }
-        finish('success');
+        void finish('success');
         if (toastFormats.has(format)) setExportToast({ message: t('fileViewer.exportDone'), tone: 'success' });
       }
     } catch (err) {
-      finish('failed', exportErrorCode(err));
+      void finish('failed', exportErrorCode(err));
       failToast(err);
     }
   };
@@ -6191,7 +6244,13 @@ function HtmlViewer({
     });
   };
   const firePresentPopoverClick = (
-    element: 'in_this_tab' | 'fullscreen' | 'new_tab',
+    element:
+      | 'in_this_tab'
+      | 'fullscreen'
+      | 'new_tab'
+      | 'start_from_beginning'
+      | 'start_from_current'
+      | 'presenter_mode',
   ) => {
     trackPresentPopoverClick(analytics.track, {
       page_name: 'artifact',
@@ -6529,21 +6588,49 @@ function HtmlViewer({
         }, '*');
       } catch {}
     };
+    // Pages that render from script (brand kit, data-driven docs) have no
+    // height yet on the early attempts — scrollTo clamps to 0 and a fixed
+    // three-shot restore gives up before the content exists, landing the
+    // canvas at the top. Keep retrying on a backoff ladder until the target
+    // takes, the user scrolls past it, or the snapshot expires; each retry is
+    // guarded so a newer snapshot or a manual scroll stops the ladder.
+    const stillClampedBelowTarget = () => {
+      try {
+        const frameDocument = iframeRef.current?.contentWindow?.document;
+        const frameTop = frameDocument?.scrollingElement?.scrollTop ?? 0;
+        const canvasTop = frameDocument?.querySelector<HTMLElement>('.design-canvas')?.scrollTop ?? 0;
+        return (
+          (snapshot.frameTop > 0 && frameTop + 2 < snapshot.frameTop) ||
+          (snapshot.canvasTop > 0 && canvasTop + 2 < snapshot.canvasTop)
+        );
+      } catch {
+        return false;
+      }
+    };
     window.requestAnimationFrame(() => {
       window.requestAnimationFrame(() => {
         apply();
-        window.setTimeout(apply, 80);
-        window.setTimeout(() => {
-          if (previewScrollRestoreRef.current === snapshot) {
+        for (const delay of [80, 260]) {
+          window.setTimeout(() => {
+            if (previewScrollRestoreRef.current === snapshot) apply();
+          }, delay);
+        }
+        // Late retries only while the target is still clamped (content not
+        // tall enough yet) — never override a user scroll made after 260ms.
+        for (const delay of [600, 1200, 2400, 4000]) {
+          window.setTimeout(() => {
+            if (previewScrollRestoreRef.current !== snapshot) return;
+            if (Date.now() > snapshot.expiresAt) return;
+            if (!stillClampedBelowTarget()) return;
             apply();
-          }
-        }, 260);
+          }, delay);
+        }
       });
     });
   }, []);
   const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([]);
   const [selectedManualEditTarget, setSelectedManualEditTarget] = useState<ManualEditTarget | null>(null);
-  const [manualEditHoverTarget, setManualEditHoverTarget] = useState<ManualEditTarget | null>(null);
+  const selectedManualEditTargetRef = useRef<ManualEditTarget | null>(null);
   const [manualEditPageStylesOpen, setManualEditPageStylesOpen] = useState(false);
   const [manualEditPanelPosition, setManualEditPanelPosition] = useState<{ left: number; top: number } | null>(null);
   const [manualEditDraftDirty, setManualEditDraftDirty] = useState(false);
@@ -6558,14 +6645,67 @@ function HtmlViewer({
   const manualEditTextCommitInFlightRef = useRef<Promise<unknown> | null>(null);
   const manualEditTextCommitSequenceRef = useRef(0);
   const [manualEditDraft, setManualEditDraft] = useState<ManualEditDraft>(() => emptyManualEditDraft());
+  useEffect(() => {
+    selectedManualEditTargetRef.current = selectedManualEditTarget;
+  }, [selectedManualEditTarget]);
+  // Direct-manipulation chrome: crop mode on the selected image, and the live
+  // caret/selection state of the inline text session (drives whether toolbar
+  // formatting applies to the range or the whole element).
+  const [manualEditCropActive, setManualEditCropActive] = useState(false);
+  const [manualEditTextSelection, setManualEditTextSelection] = useState<
+    { id: string; hasRange: boolean; format?: ManualEditTextSelectionFormat | null } | null
+  >(null);
+  // A drag gesture is live on the canvas — floating chrome (text toolbar)
+  // hides so it never occludes the alignment guides mid-move.
+  const [manualEditGestureActive, setManualEditGestureActive] = useState(false);
+  // The full inspector panel is opt-in (action-bar / hover affordance); plain
+  // element clicks only raise the lightweight selection chrome.
+  const [manualEditInspectorOpen, setManualEditInspectorOpen] = useState(false);
+  // Coalesces per-pointer-event toolbar style bursts into one apply per frame.
+  const manualEditToolbarBurstRef = useRef<{ styles: Partial<ManualEditStyles>; label: string } | null>(null);
+  // Resolver for the pending od-edit-apply-dom ack (in-place undo/redo).
+  const manualEditApplyDomAckRef = useRef<{ version: number; resolve: (ok: boolean) => void } | null>(null);
+  // Selection hand-off for a freshly inserted/duplicated element. Kept until
+  // that exact id is announced because images may be filtered from the first
+  // target pass while their asset is still 0x0.
+  const manualEditPendingSelectIdRef = useRef<string | null>(null);
   const [manualEditHistory, setManualEditHistory] = useState<ManualEditHistoryEntry[]>([]);
   const [manualEditUndone, setManualEditUndone] = useState<ManualEditHistoryEntry[]>([]);
+  // Ref mirrors of the undo/redo stacks. Undo/redo first settle any pending
+  // text/style commit (awaits that may PUSH a new entry); the state values
+  // captured by the calling closure would be stale by then and would pop the
+  // wrong entry — or drop the entry the settle itself just recorded. Every
+  // stack write goes through updateManualEditHistoryStack /
+  // updateManualEditUndoneStack so ref and state never diverge.
+  const manualEditHistoryRef = useRef<ManualEditHistoryEntry[]>([]);
+  const manualEditUndoneRef = useRef<ManualEditHistoryEntry[]>([]);
   const [manualEditError, setManualEditError] = useState<string | null>(null);
   const [manualEditSaving, setManualEditSaving] = useState(false);
   const manualEditSavingRef = useRef(false);
+  // Serializes forward manual-edit writes. Inline text commits arrive from
+  // the iframe independently of toolbar autosaves, so a commit that lands
+  // during a slow style write must wait and apply against that saved source
+  // instead of being dropped by the generic saving guard.
+  const manualEditSaveInFlightRef = useRef<Promise<boolean> | null>(null);
   const manualEditPendingStyleRef = useRef<ManualEditPendingStyleSave | null>(null);
+  // The last source written by THIS manual-edit session (style/text patches,
+  // undo/redo). Distinguishes our own file writes — whose live effect already
+  // flowed through the preview channel and must NOT reload the frozen canvas —
+  // from external rewrites (an agent run, another session) that the frozen
+  // snapshot must follow.
+  const manualEditOwnSourceWriteRef = useRef<string | null>(null);
+  // Bumped when an edit interaction settles (text session end, save finished,
+  // draft cancelled) so the external-rewrite follow effect re-evaluates: a
+  // rewrite deferred mid-interaction must flush in once the user is idle.
+  const [manualEditIdleTick, setManualEditIdleTick] = useState(0);
+  // Copy buffer for element-level Cmd/Ctrl+C / +V: the copied element's
+  // source outerHTML plus its id as a paste-anchor fallback.
+  const manualEditClipboardRef = useRef<{ html: string; fromId: string } | null>(null);
   const manualEditStyleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const manualEditPreviewVersionRef = useRef(0);
+  const manualEditPreviewAckRef = useRef<
+    { version: number; onApplied: (rect: ManualEditRect | null) => void } | null
+  >(null);
   const sourceRef = useRef<string | null>(source);
   // Holds the last-good source snapshot taken just before reloadHtmlPreview
   // clears source to null on the srcDoc path.  The fetch effect restores this
@@ -6706,6 +6846,7 @@ function HtmlViewer({
   // export is a separate modal flow, so it owns its own request id / start.
   const imageExportRequestIdRef = useRef<string | null>(null);
   const imageExportStartedRef = useRef(0);
+  const imageExportOriginPromiseRef = useRef<Promise<ArtifactExportOriginProps> | null>(null);
   // Guards against double-emitting the image export result: each modal
   // session (reset in openImageExportModal) resolves to exactly one
   // success / failed / cancelled, no matter which exit path runs.
@@ -6714,6 +6855,7 @@ function HtmlViewer({
   // export result only after the template is actually saved (not on open).
   const templateExportRequestIdRef = useRef<string | null>(null);
   const templateExportStartedRef = useRef(0);
+  const templateExportOriginPromiseRef = useRef<Promise<ArtifactExportOriginProps> | null>(null);
   // Same one-terminal-result guard as image export: a template session
   // (reset in openSaveAsTemplateModal) emits exactly one success/failed/
   // cancelled, whether it ends in a save or a modal dismiss.
@@ -6721,6 +6863,10 @@ function HtmlViewer({
   const screenshotInFlightRef = useRef(false);
   const imageExportInFlightRef = useRef(false);
   const [exportToast, setExportToast] = useState<ExportToastState | null>(null);
+  const [manualEditImageToast, setManualEditImageToast] = useState<
+    (ExportToastState & { id: number }) | null
+  >(null);
+  const manualEditImageToastIdRef = useRef(0);
   const [shareLinkFeedback, setShareLinkFeedback] = useState<'copied' | 'failed' | null>(null);
   const [shareGuideToast, setShareGuideToast] = useState<string | null>(null);
   const [selectedSideCommentIds, setSelectedSideCommentIds] = useState<Set<string>>(() => new Set());
@@ -6881,7 +7027,6 @@ function HtmlViewer({
   const presenterWindowRef = useRef<Window | null>(null);
   const presentOverlayRef = useRef<HTMLDivElement | null>(null);
   const presentFullscreenRequestedRef = useRef(false);
-  const [presentFullscreenPending, setPresentFullscreenPending] = useState(false);
   // Brief "Press Esc to exit" hint shown in the main window whenever a
   // presentation (fullscreen stage + presenter popup) starts.
   const [presentEscHint, setPresentEscHint] = useState(false);
@@ -7189,6 +7334,28 @@ function HtmlViewer({
       setManualEditFrozenSource(livePreviewSource);
     }
   }, [manualEditMode, manualEditFrozenSource, livePreviewSource]);
+  // While Edit mode is open, follow EXTERNAL rewrites (an agent run, another
+  // session) into the frozen snapshot so the canvas never keeps editing an
+  // outdated page. Writes made by this edit session itself are excluded —
+  // their visual effect already streamed through the preview channel, and
+  // re-freezing would reload the iframe on every style save. Deferred while
+  // an interaction is in flight; the save-time freshness guard still catches
+  // true conflicts.
+  useEffect(() => {
+    if (!manualEditMode || manualEditFrozenSource === null) return;
+    if (source == null || livePreviewSource == null) return;
+    if (source === manualEditOwnSourceWriteRef.current) return;
+    if (livePreviewSource === manualEditFrozenSource) return;
+    if (
+      manualEditSavingRef.current ||
+      manualEditPendingStyleRef.current !== null ||
+      manualEditTextSessionIdRef.current !== null ||
+      manualEditGestureActive
+    ) return;
+    setManualEditFrozenSource(livePreviewSource);
+    // manualEditIdleTick re-runs this check when a deferring interaction ends.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [manualEditMode, manualEditFrozenSource, source, livePreviewSource, manualEditGestureActive, manualEditIdleTick]);
   // Capture / release the annotation snapshot at mode entry / exit. Captured
   // once (the `=== null` guard), so a mid-pass file change can't slip a fresh
   // snapshot in; cleared on exit so `previewSource` falls back to the latest
@@ -7940,10 +8107,22 @@ function HtmlViewer({
     postSelectedManualEditTargetToIframe(manualEditMode ? selectedManualEditTarget?.id ?? null : null);
   }, [manualEditMode, selectedManualEditTarget?.id, srcDoc, useUrlLoadPreview]);
 
-  const previewStyleToIframe = useCallback((id: string, styles: Partial<ManualEditStyles>, version: number) => {
+  // `onApplied` is resolved by the bridge's `od-edit-preview-style-applied`
+  // ack, carrying the rect the element settled at for layout-changing previews
+  // (a resize needs the height its reflowed content took). One pending entry
+  // per version; a superseded frame's callback is dropped, never queued.
+  const previewStyleToIframe = useCallback((
+    id: string,
+    styles: ManualEditPreviewStyles,
+    version: number,
+    onApplied?: (rect: ManualEditRect | null) => void,
+  ) => {
     const win = iframeRef.current?.contentWindow;
     if (!win) return false;
-    win.postMessage({ type: 'od-edit-preview-style', id, styles, version }, '*');
+    // Every newer preview supersedes the prior callback, including a
+    // compositor-only move that does not need a measurement of its own.
+    manualEditPreviewAckRef.current = onApplied ? { version, onApplied } : null;
+    win.postMessage({ type: 'od-edit-preview-style', id, styles, version, measureRect: Boolean(onApplied) }, '*');
     return true;
   }, []);
 
@@ -8048,13 +8227,13 @@ function HtmlViewer({
     setSelectedManualEditTarget(null);
     setManualEditPanelPosition(null);
     selectedManualEditTargetIdRef.current = null;
+    manualEditPendingSelectIdRef.current = null;
     setManualEditDraft(emptyManualEditDraft());
     setManualEditDraftDirty(false);
-    setManualEditHistory([]);
-    setManualEditUndone([]);
+    resetManualEditHistory();
     setManualEditError(null);
-    manualEditPendingStyleRef.current = null;
-    clearManualEditStyleTimer();
+    manualEditImageToastIdRef.current += 1;
+    setManualEditImageToast(null);
   }, [file.name]);
 
   // Selecting a new file or turning inspect/comment-inspect off resets the panel target.
@@ -8297,7 +8476,11 @@ function HtmlViewer({
     if (!manualEditMode) {
       setManualEditTargets([]);
       setSelectedManualEditTarget(null);
-      setManualEditHoverTarget(null);
+      // Release the edit-entry snapshot so the NEXT edit session freezes the
+      // file as it is then — otherwise an agent rewrite between two edit
+      // sessions would silently be invisible in edit mode.
+      setManualEditFrozenSource(null);
+      manualEditOwnSourceWriteRef.current = null;
       setManualEditPageStylesOpen(false);
       setManualEditPanelPosition(null);
       setManualEditDraftDirty(false);
@@ -8306,8 +8489,16 @@ function HtmlViewer({
       manualEditTextSessionIdRef.current = null;
       manualEditTextFinishRef.current = null;
       manualEditTextCommitInFlightRef.current = null;
+      manualEditPendingSelectIdRef.current = null;
+      setManualEditCropActive(false);
+      setManualEditTextSelection(null);
+      setManualEditGestureActive(false);
+      setManualEditInspectorOpen(false);
+      manualEditToolbarBurstRef.current = null;
+      manualEditApplyDomAckRef.current = null;
       setManualEditError(null);
       manualEditPendingStyleRef.current = null;
+      manualEditPreviewAckRef.current = null;
       if (manualEditStyleTimerRef.current) {
         clearTimeout(manualEditStyleTimerRef.current);
         manualEditStyleTimerRef.current = null;
@@ -8319,56 +8510,63 @@ function HtmlViewer({
       const data = ev.data as ManualEditBridgeMessage | null;
       if (!data?.type) return;
       if (data.type === 'od-edit-targets' && Array.isArray(data.targets)) {
-        setManualEditTargets(data.targets);
+        // Broadcasts fire on scroll settle, resize, and mutation bursts; keep
+        // the previous array identity when nothing the host renders changed so
+        // a no-op re-post doesn't re-render the whole viewer.
+        setManualEditTargets((current) =>
+          manualEditTargetsLightEqual(current, data.targets) ? current : data.targets,
+        );
+        // An insert/duplicate hands the selection to the new element once the
+        // fresh targets (in-place re-broadcast or reload) announce it.
+        const pendingId = manualEditPendingSelectIdRef.current;
+        if (pendingId) {
+          const pending = data.targets.find((target) => target.id === pendingId);
+          if (pending) {
+            manualEditPendingSelectIdRef.current = null;
+            void selectManualEditTarget(pending);
+            return;
+          }
+        }
         // Target broadcasts can be briefly empty while the iframe/save path is
         // settling; keep the user's inspector selection unless a fresh copy is
-        // available to update its metadata.
-        setSelectedManualEditTarget((current) =>
-          current ? data.targets.find((target) => target.id === current.id) ?? current : current,
-        );
+        // available to update its metadata — and keep the object identity when
+        // that copy is unchanged.
+        setSelectedManualEditTarget((current) => {
+          if (!current) return current;
+          const fresh = data.targets.find((target) => target.id === current.id);
+          if (!fresh) return current;
+          return JSON.stringify(fresh) === JSON.stringify(current) ? current : fresh;
+        });
         const selectedId = selectedManualEditTargetIdRef.current;
         if (selectedId) setTimeout(() => postSelectedManualEditTargetToIframe(selectedId), 0);
         return;
       }
       if (data.type === 'od-edit-select') {
-        setManualEditHoverTarget(null);
         void selectManualEditTarget(data.target);
-        return;
-      }
-      if (data.type === 'od-edit-hover') {
-        // While an inline text edit is live, hovering must not surface or switch
-        // any affordance — that instability is the other half of #3646.
-        if (manualEditTextSessionIdRef.current) return;
-        // Hover only surfaces a lightweight "edit params" affordance; it must
-        // NOT switch the pinned inspector. The panel changes only when the
-        // user clicks that affordance (or a container/image body), so moving
-        // the cursor across the canvas never yanks the panel away mid-edit.
-        setManualEditHoverTarget(
-          data.target.id === selectedManualEditTargetIdRef.current ? null : data.target,
-        );
         return;
       }
       if (data.type === 'od-edit-background') {
         // Clicking empty canvas deselects and opens the compact page-styles
         // card — only meaningful for full HTML documents.
-        setManualEditHoverTarget(null);
         if (typeof source === 'string' && isManualEditFullHtmlDocument(source)) {
           void clearManualEditTargetSelection();
           setManualEditPageStylesOpen(true);
         }
         return;
       }
-      if (data.type === 'od-edit-text-commit') {
+      if (data.type === 'od-edit-text-commit' || data.type === 'od-edit-html-commit') {
         // Keep the apply promise reachable so any teardown (host- or
         // iframe-initiated) can await it and honor a failed save before tearing
         // down. It self-clears once resolved, keyed to identity so a newer
-        // commit is never clobbered.
+        // commit is never clobbered. Sessions that produced inline formatting
+        // arrive as innerHTML commits so the markup survives the round trip.
         manualEditTextCommitSequenceRef.current += 1;
-        const commit = applyManualEdit({
-          id: String(data.id),
-          kind: 'set-text',
-          value: String(data.value),
-        }, 'Edit text');
+        const commit = applyManualEdit(
+          data.type === 'od-edit-html-commit'
+            ? { id: String(data.id), kind: 'set-inner-html', html: String(data.value) }
+            : { id: String(data.id), kind: 'set-text', value: String(data.value) },
+          'Edit text',
+        );
         manualEditTextCommitInFlightRef.current = commit;
         void (async () => {
           try { await commit; } catch { /* failure honored by teardown / surfaced by applyManualEdit */ }
@@ -8376,6 +8574,64 @@ function HtmlViewer({
             manualEditTextCommitInFlightRef.current = null;
           }
         })();
+        return;
+      }
+      if (data.type === 'od-edit-text-selection') {
+        setManualEditTextSelection({
+          id: String(data.id),
+          hasRange: Boolean(data.hasRange),
+          format: data.format ?? null,
+        });
+        return;
+      }
+      if (data.type === 'od-edit-preview-style-applied') {
+        const ack = manualEditPreviewAckRef.current;
+        if (ack && ack.version === data.version) {
+          manualEditPreviewAckRef.current = null;
+          if (data.ok) ack.onApplied(data.rect ?? null);
+        }
+        return;
+      }
+      if (data.type === 'od-edit-apply-dom-result') {
+        const pendingAck = manualEditApplyDomAckRef.current;
+        if (pendingAck && pendingAck.version === data.version) {
+          manualEditApplyDomAckRef.current = null;
+          pendingAck.resolve(Boolean(data.ok));
+        }
+        return;
+      }
+      if (data.type === 'od-edit-history') {
+        if (data.op === 'redo') void redoManualEdit();
+        else void undoManualEdit();
+        return;
+      }
+      if (data.type === 'od-edit-delete-request') {
+        void removeManualEditTarget(String(data.id));
+        return;
+      }
+      if (data.type === 'od-edit-duplicate-request') {
+        void duplicateManualEditTarget(String(data.id));
+        return;
+      }
+      if (data.type === 'od-edit-copy-request') {
+        void copyManualEditElement(String(data.id || ''));
+        return;
+      }
+      if (data.type === 'od-edit-paste-request') {
+        void pasteManualEditElement(String(data.id || ''));
+        return;
+      }
+      if (data.type === 'od-edit-paste-image') {
+        // Bytes, not a File handle — clipboard/drag handles can be neutered
+        // after the event turn, failing the upload (ERR_UPLOAD_FILE_CHANGED).
+        if (data.buffer instanceof ArrayBuffer && data.buffer.byteLength > 0) {
+          const name = typeof data.name === 'string' && data.name ? data.name : 'pasted-image.png';
+          const mime = typeof data.mime === 'string' && data.mime ? data.mime : 'image/png';
+          void insertManualEditImage(
+            String(data.id || ''),
+            new File([data.buffer], name, { type: mime }),
+          );
+        }
         return;
       }
       if (data.type === 'od-edit-text-session') {
@@ -8387,6 +8643,8 @@ function HtmlViewer({
         if (manualEditTextSessionIdRef.current === sessionId) {
           manualEditTextSessionIdRef.current = null;
         }
+        setManualEditTextSelection((current) => (current?.id === sessionId ? null : current));
+        setManualEditIdleTick((tick) => tick + 1);
         const pending = manualEditTextFinishRef.current;
         if (pending) {
           // settle() awaits the in-flight commit before resolving the caller's
@@ -8404,6 +8662,29 @@ function HtmlViewer({
     return () => window.removeEventListener('message', onMessage);
   }, [isOurPreviewIframeSource, manualEditMode, source]);
 
+  // Crop mode is scoped to one image selection; any selection change exits it.
+  useEffect(() => {
+    setManualEditCropActive(false);
+  }, [selectedManualEditTarget?.id]);
+
+  // Undo/redo shortcuts while edit mode is active and host chrome has focus.
+  // Keys pressed inside the preview iframe are forwarded by the edit bridge
+  // as `od-edit-history` messages instead — a host listener cannot see them.
+  useEffect(() => {
+    if (!manualEditMode) return;
+    function onKeyDown(ev: KeyboardEvent) {
+      if (!(ev.metaKey || ev.ctrlKey) || ev.altKey) return;
+      if (ev.key.toLowerCase() !== 'z') return;
+      const target = ev.target as HTMLElement | null;
+      if (target && (target.isContentEditable || /^(input|textarea|select)$/i.test(target.tagName))) return;
+      ev.preventDefault();
+      if (ev.shiftKey) void redoManualEdit();
+      else void undoManualEdit();
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  });
+
   function nextManualEditPreviewVersion(): number {
     manualEditPreviewVersionRef.current += 1;
     return manualEditPreviewVersionRef.current;
@@ -8419,14 +8700,25 @@ function HtmlViewer({
     savedStyles: Partial<ManualEditStyles>,
     savedSource: string,
   ) {
-    if (id !== '__body__' && !readManualEditOuterHtml(savedSource, id)) {
+    // Runtime-only targets never have saved markup — their set-style save
+    // persists into the runtime override rule, so an empty outer-HTML read
+    // alone must not be treated as "target vanished" (that path drops the
+    // selection and reloads the canvas the runtime pages must never flash).
+    // Runtime-backed is a property of the document, not of currently owning
+    // an override rule: clearing the last declaration deletes the rule while
+    // the target stays rendered.
+    if (
+      id !== '__body__'
+      && !readManualEditOuterHtml(savedSource, id)
+      && !isManualEditRuntimeRenderedSource(savedSource)
+    ) {
       setManualEditError('The selected target no longer exists in the saved source. Refreshing the preview.');
       setSelectedManualEditTarget(null);
       setManualEditFrozenSource(null);
       setReloadKey((key) => key + 1);
       return;
     }
-    const sourceStyles = readManualEditStyles(savedSource, id);
+    const sourceStyles = readManualEditSavedStyles(savedSource, id);
     const supersededStyles = manualEditPendingStyleRef.current?.id === id
       ? manualEditPendingStyleRef.current.styles
       : {};
@@ -8463,7 +8755,16 @@ function HtmlViewer({
     manualEditPendingStyleRef.current = nextPending;
   }
 
-  async function handleManualEditStyleChange(id: string, styles: Partial<ManualEditStyles>, label: string) {
+  async function handleManualEditStyleChange(
+    id: string,
+    styles: Partial<ManualEditStyles>,
+    label: string,
+    // Preview-only extras ride along in the same message (one style recalc in
+    // the iframe) but never reach the persisted set-style patch — the gesture
+    // pipeline uses this to clear its translate() preview atomically with the
+    // final left/top styles.
+    previewExtras?: ManualEditPreviewStyles,
+  ) {
     const version = nextManualEditPreviewVersion();
     const currentPending = manualEditPendingStyleRef.current;
     const pendingStyles = currentPending?.id === id
@@ -8472,13 +8773,29 @@ function HtmlViewer({
     const pending: ManualEditPendingStyleSave = { id, styles: pendingStyles, label, version };
     manualEditPendingStyleRef.current = pending;
     setManualEditError(null);
-    previewStyleToIframe(id, styles, version);
+    const previewStyles = previewExtras ? { ...styles, ...previewExtras } : styles;
+    const onApplied = id !== '__body__' && manualEditStylesMayAffectRect(styles)
+      ? (rect: ManualEditRect | null) => {
+          if (!rect) return;
+          setManualEditTargets((current) => current.map((target) => target.id === id
+            ? { ...target, rect }
+            : target));
+          setSelectedManualEditTarget((current) => current?.id === id
+            ? { ...current, rect }
+            : current);
+        }
+      : undefined;
+    previewStyleToIframe(id, previewStyles, version, onApplied);
   }
 
   async function flushManualEditStyleSave(): Promise<boolean> {
     const pending = manualEditPendingStyleRef.current;
     if (!pending) return true;
-    if (manualEditSavingRef.current) return false;
+    // Forward writes can safely queue behind one another. Keep the pending
+    // snapshot intact only when an undo/redo write (which does not use the
+    // forward-save queue) owns the saving lock.
+    if (manualEditSavingRef.current && !manualEditSaveInFlightRef.current) return false;
+    clearManualEditStyleTimer();
     manualEditPendingStyleRef.current = null;
     return applyManualEdit({ id: pending.id, kind: 'set-style', styles: pending.styles }, pending.label);
   }
@@ -8510,6 +8827,7 @@ function HtmlViewer({
       }));
     }
     setManualEditError(null);
+    setManualEditIdleTick((tick) => tick + 1);
   }
 
   // Ends the iframe's inline text edit and resolves only once it acks (and any
@@ -8591,25 +8909,24 @@ function HtmlViewer({
     return true;
   }
 
-  // Clears the hover affordance and re-arms the iframe's per-element hover
-  // dedupe so re-entering the same element re-announces it. Called from the
-  // workspace's own mouseleave (host-side), NOT the iframe's mouseleave — the
-  // affordance overlays the iframe, so reacting to the iframe leaving would
-  // yank it out from under the cursor and strobe on/off.
-  function clearManualEditHover() {
-    setManualEditHoverTarget(null);
-    const win = iframeRef.current?.contentWindow;
-    if (win) win.postMessage({ type: 'od-edit-hover-reset' }, '*');
-  }
-
-  async function selectManualEditTarget(target: ManualEditTarget) {
+  async function selectManualEditTarget(
+    target: ManualEditTarget,
+    options?: { openInspector?: boolean },
+  ) {
+    const changingTarget = selectedManualEditTargetIdRef.current !== target.id;
+    const pendingStyleBelongsElsewhere = Boolean(
+      manualEditPendingStyleRef.current && manualEditPendingStyleRef.current.id !== target.id,
+    );
+    if ((changingTarget || pendingStyleBelongsElsewhere) && !(await settleManualEditHistoryBoundary())) return;
     setManualEditPageStylesOpen(false);
-    if (manualEditPendingStyleRef.current?.id !== target.id) cancelManualEditStyleDraft();
     const base = sourceRef.current ?? '';
     const nextDraft = manualEditDraftForTarget(target, base);
     selectedManualEditTargetIdRef.current = target.id;
     manualEditSelectionDraftRef.current = { id: target.id, draft: nextDraft };
     setSelectedManualEditTarget(target);
+    // Plain canvas clicks keep the inspector in whatever state it is in; the
+    // hover affordance / action-bar params button opt into opening it.
+    if (options?.openInspector) setManualEditInspectorOpen(true);
     setManualEditDraft(nextDraft);
     setManualEditDraftDirty(false);
     setManualEditError(null);
@@ -8633,14 +8950,14 @@ function HtmlViewer({
     // If an inline edit is still live (e.g. clearing the selection from the
     // panel mid-edit), commit it first so it is not lost. Keep the selection
     // and the error if that commit fails.
-    if (!(await settlePendingManualEditCommit())) {
+    if (!(await settleManualEditHistoryBoundary())) {
       return;
     }
-    cancelManualEditStyleDraft();
     selectedManualEditTargetIdRef.current = null;
     manualEditSelectionDraftRef.current = null;
     manualEditTextSessionIdRef.current = null;
     setSelectedManualEditTarget(null);
+    setManualEditInspectorOpen(false);
     setManualEditPanelPosition(null);
     setManualEditDraft(emptyManualEditDraft(sourceRef.current ?? ''));
     setManualEditDraftDirty(false);
@@ -8648,9 +8965,9 @@ function HtmlViewer({
   }
 
   // The inspector is scoped to one element (or the page). Closing it should
-  // only collapse the panel and keep the user in edit mode — exiting edit is
-  // the toolbar toggle's job. Dismiss flushes any in-flight tweak first so
-  // nothing is lost; cancel reverts the in-flight unsaved tweak instead.
+  // only collapse the panel — the element stays selected with its lightweight
+  // chrome, and exiting edit is the toolbar toggle's job. Dismiss flushes any
+  // in-flight tweak first so nothing is lost.
   async function dismissManualEditPanel() {
     // Closing the panel must not swallow a failed text commit: keep it open
     // with the error if the pending edit could not be saved.
@@ -8659,7 +8976,7 @@ function HtmlViewer({
     }
     const ok = await flushManualEditStyleSave();
     if (!ok) return;
-    if (selectedManualEditTarget) void clearManualEditTargetSelection();
+    if (selectedManualEditTarget) setManualEditInspectorOpen(false);
     else setManualEditPageStylesOpen(false);
   }
 
@@ -8672,7 +8989,14 @@ function HtmlViewer({
     if (target.kind === 'text' || target.kind === 'token') {
       const currentText = fields.text ?? target.fields.text ?? target.text;
       if (draft.text !== currentText) {
-        return { patch: { id: target.id, kind: 'set-text', value: draft.text }, label: t('manualEdit.applyContent') };
+        const hasNestedMarkup = manualEditTargetHasNestedMarkup(base, target.id)
+          || readManualEditRuntimeInnerHtml(base, target.id) !== null;
+        return {
+          patch: hasNestedMarkup
+            ? { id: target.id, kind: 'set-inner-html', html: escapeHtmlTextContent(draft.text) }
+            : { id: target.id, kind: 'set-text', value: draft.text },
+          label: t('manualEdit.applyContent'),
+        };
       }
       return null;
     }
@@ -8756,6 +9080,9 @@ function HtmlViewer({
   async function cancelManualEditPanel() {
     if (manualEditTextSessionIdRef.current) await finishManualEditTextSession(false);
     if (selectedManualEditTarget) {
+      // Cancel is the explicit discard path. Other selection-clearing gestures
+      // (background click / target switch) flush the toolbar's autosave first.
+      cancelManualEditStyleDraft();
       void clearManualEditTargetSelection();
     } else {
       cancelManualEditStyleDraft();
@@ -8763,14 +9090,210 @@ function HtmlViewer({
     }
   }
 
+  // Sends one in-place DOM mutation to the bridge and resolves with its ack.
+  // 'replace' swaps an element's outerHTML for its saved-source version;
+  // 'insert-after'/'append-child'/'prepend-child'/'insert-at-index' add a
+  // saved element in place; 'remove' deletes one; 'apply-content' mirrors
+  // patch fields onto a runtime-annotated element the saved source has no
+  // markup for (brand-kit targets). A detached/navigated iframe never acks —
+  // times out to false so the caller can fall back to a frozen-source reload.
+  function applyManualEditDomOp(
+    id: string,
+    html: string,
+    op: 'replace' | 'insert-after' | 'append-child' | 'prepend-child' | 'insert-at-index' | 'remove' | 'apply-content',
+    fields?: Record<string, unknown>,
+  ): Promise<boolean> {
+    const win = iframeRef.current?.contentWindow;
+    if (!win) return Promise.resolve(false);
+    return new Promise<boolean>((resolve) => {
+      const version = nextManualEditPreviewVersion();
+      manualEditApplyDomAckRef.current = { version, resolve };
+      win.postMessage({ type: 'od-edit-apply-dom', id, html, op, fields, version }, '*');
+      setTimeout(() => {
+        if (manualEditApplyDomAckRef.current?.version === version) {
+          manualEditApplyDomAckRef.current = null;
+          resolve(false);
+        }
+      }, 800);
+    });
+  }
+
+  // Content of a patch expressed as live-element fields, for targets whose
+  // markup never appears in the saved source (brand-kit runtime ids persist
+  // into the payload / runtime overrides instead). null = not expressible;
+  // the caller falls back to the reload path.
+  function manualEditPatchContentFields(
+    patch: ManualEditPatch,
+    destSource: string,
+  ): Record<string, unknown> | null {
+    if (patch.kind === 'set-text') return { text: patch.value };
+    if (patch.kind === 'set-link') return { text: patch.text, href: patch.href };
+    if (patch.kind === 'set-image') return { src: patch.src, alt: patch.alt };
+    if (patch.kind === 'set-inner-html') {
+      const html = readManualEditRuntimeInnerHtml(destSource, patch.id);
+      return html == null ? null : { html };
+    }
+    if (patch.kind === 'set-attributes') return { attributes: patch.attributes };
+    return null;
+  }
+
+  function manualEditTargetContentFields(
+    patch: ManualEditPatch,
+    target: ManualEditTarget | null,
+  ): Record<string, unknown> | null {
+    if (!target || !('id' in patch) || target.id !== patch.id) return null;
+    if (patch.kind === 'set-text') {
+      return { text: target.fields.text ?? target.text };
+    }
+    if (patch.kind === 'set-link') {
+      return {
+        text: target.fields.text ?? target.text,
+        href: target.fields.href ?? '',
+      };
+    }
+    if (patch.kind === 'set-image') {
+      return {
+        src: target.fields.src ?? '',
+        alt: target.fields.alt ?? '',
+      };
+    }
+    if (patch.kind === 'set-inner-html') {
+      const doc = new DOMParser().parseFromString(target.outerHtml, 'text/html');
+      return { html: doc.body.firstElementChild?.innerHTML ?? target.text };
+    }
+    if (patch.kind === 'set-attributes') {
+      const attributes = Object.fromEntries(
+        Object.keys(patch.attributes).map((name) => [name, target.attributes[name] ?? '']),
+      );
+      return { attributes };
+    }
+    if (patch.kind === 'set-outer-html') return { html: target.outerHtml };
+    return null;
+  }
+
+  function manualEditRuntimeContentSnapshot(
+    patch: ManualEditPatch,
+    source: string,
+    target: ManualEditTarget | null,
+  ): Record<string, unknown> | null {
+    if (!('id' in patch) || readManualEditOuterHtml(source, patch.id)) return null;
+    return manualEditTargetContentFields(patch, target);
+  }
+
+  function manualEditSavedRuntimeContentFields(
+    patch: ManualEditPatch,
+    destSource: string,
+  ): Record<string, unknown> | null {
+    if (patch.kind === 'set-outer-html') {
+      const html = readManualEditRuntimeOuterHtml(destSource, patch.id);
+      return html ? { html } : null;
+    }
+    return manualEditPatchContentFields(patch, destSource);
+  }
+
+  /**
+   * Reflect a just-saved content patch in the live iframe WITHOUT a srcDoc
+   * reload — the reload flashes white, resets scroll to the top, and re-runs
+   * page scripts. Every element-scoped content patch takes this path:
+   * text/link/image/attribute/outer-html commits reconcile the element to its
+   * SAVED markup (op replace — so the DOM always equals the persisted,
+   * sanitized source), paste/duplicate insert the saved sibling in place, and
+   * delete removes in place. Page-scoped patches (`__body__`, set-token,
+   * set-full-source) return false, as does any bridge failure — the caller
+   * then falls back to the always-correct frozen-source reload.
+   */
+  async function applyManualEditContentInPlace(
+    patch: ManualEditPatch,
+    destSource: string,
+  ): Promise<boolean> {
+    if (!iframeRef.current?.contentWindow) return false;
+    if (!('id' in patch) || !patch.id || patch.id === '__body__') {
+      // The single exception: pasting with nothing selected appends to the
+      // body end, which is still an element-scoped insert.
+      if (patch.kind !== 'insert-html' || patch.id !== '__body__') return false;
+    }
+    if (
+      patch.kind === 'set-text' ||
+      patch.kind === 'set-inner-html' ||
+      patch.kind === 'set-link' ||
+      patch.kind === 'set-image' ||
+      patch.kind === 'set-attributes' ||
+      patch.kind === 'set-outer-html'
+    ) {
+      const html = readManualEditOuterHtml(destSource, patch.id);
+      if (html) return applyManualEditDomOp(patch.id, html, 'replace');
+      // No markup for this id in the saved source → a runtime-annotated
+      // target (brand kit): the save landed in the payload / runtime
+      // overrides. Mirror the patch straight onto the live element instead of
+      // reloading — a brand-page reload flashes AND re-renders async, so the
+      // scroll restore window misses and the canvas jumps to the top.
+      if (patch.kind === 'set-outer-html') {
+        const html = readManualEditRuntimeOuterHtml(destSource, patch.id);
+        return html ? applyManualEditDomOp(patch.id, html, 'replace') : false;
+      }
+      const fields = manualEditPatchContentFields(patch, destSource);
+      if (!fields) return false;
+      return applyManualEditDomOp(patch.id, '', 'apply-content', fields);
+    }
+    if (patch.kind === 'insert-html' || patch.kind === 'duplicate-element') {
+      const inserted = readManualEditInsertedSibling(destSource, patch.id);
+      if (!inserted) return false;
+      // Arm the selection hand-off BEFORE the bridge re-broadcasts targets —
+      // the id is read back from the saved source, so it is correct for both
+      // positional-path and authored data-od-id anchors, and it also resolves
+      // after a fallback reload should the in-place apply fail.
+      manualEditPendingSelectIdRef.current = inserted.id;
+      const op = patch.kind === 'insert-html' && patch.id === '__body__' ? 'append-child' : 'insert-after';
+      return applyManualEditDomOp(patch.id, inserted.html, op);
+    }
+    if (patch.kind === 'remove-element') {
+      return applyManualEditDomOp(patch.id, '', 'remove');
+    }
+    return false;
+  }
+
   async function applyManualEdit(patch: ManualEditPatch, label: string): Promise<boolean> {
+    const sourceKey = sourceFileKeyRef.current;
+    // More than one iframe/toolbar event can observe the same active save.
+    // Loop (rather than await once) so every waiter re-checks the ref and only
+    // one continuation acquires the slot for the next write.
+    while (manualEditSaveInFlightRef.current) {
+      try { await manualEditSaveInFlightRef.current; } catch { /* the next write may still be retried */ }
+    }
+    // Never let a queued write from the previous artifact cross a file switch.
+    if (sourceFileKeyRef.current !== sourceKey) return false;
+    // Undo/redo still owns its separate history write lock.
     if (manualEditSavingRef.current) return false;
+    const save = performManualEdit(patch, label);
+    manualEditSaveInFlightRef.current = save;
+    try {
+      return await save;
+    } finally {
+      if (manualEditSaveInFlightRef.current === save) {
+        manualEditSaveInFlightRef.current = null;
+      }
+    }
+  }
+
+  async function performManualEdit(patch: ManualEditPatch, label: string): Promise<boolean> {
     if (sourceRef.current == null) return false;
+    if (
+      (patch.kind === 'insert-html' || patch.kind === 'duplicate-element')
+      && !manualEditSupportsStructuralAnchor(patch.id)
+    ) {
+      setManualEditError('Runtime-rendered elements cannot be duplicated or used as insertion points.');
+      return false;
+    }
     manualEditSavingRef.current = true;
     setManualEditSaving(true);
     setManualEditError(null);
     try {
       const baseSource = sourceRef.current;
+      const runtimeBeforeFields = manualEditRuntimeContentSnapshot(
+        patch,
+        baseSource,
+        selectedManualEditTargetRef.current,
+      );
       const result = applyManualEditPatch(baseSource, patch);
       if (!result.ok) {
         setManualEditError(result.error ?? 'Could not apply edit.');
@@ -8780,10 +9303,12 @@ function HtmlViewer({
         baseSource,
         'The file changed outside manual edit mode. Refreshing before applying manual edits.',
       ))) return false;
+      const parentVersionId = await resolveManualEditParentVersionId(baseSource);
       const saved = await writeProjectTextFileDetailed(projectId, file.name, result.source, {
         artifactManifest: file.artifactManifest,
         versionSource: 'manual',
         versionLabel: label,
+        ...(parentVersionId ? { parentVersionId } : {}),
       });
       if (!saved.ok) {
         const status = 'status' in saved ? saved.status : undefined;
@@ -8795,21 +9320,37 @@ function HtmlViewer({
         return false;
       }
       const entry: ManualEditHistoryEntry = {
-        id: `${Date.now()}-${manualEditHistory.length}`,
+        id: `${Date.now()}-${manualEditHistoryRef.current.length}`,
         label,
         patch,
         beforeSource: baseSource,
         afterSource: result.source,
+        ...(runtimeBeforeFields ? { runtimeBeforeFields } : {}),
+        ...(runtimeBeforeFields
+          ? {
+              runtimeAfterFields: manualEditSavedRuntimeContentFields(patch, result.source)
+                ?? runtimeBeforeFields,
+            }
+          : {}),
         createdAt: Date.now(),
       };
       setSource(result.source);
       sourceRef.current = result.source;
+      manualEditOwnSourceWriteRef.current = result.source;
       setInlinedSource(null);
       if (patch.kind !== 'set-style') {
-        setManualEditFrozenSource(result.source);
+        // Image replace/crop/insert apply straight to the live DOM so the
+        // canvas never reloads (no white flash, no scroll-to-top jump). Every
+        // other content patch — and any in-place failure — reloads via the
+        // frozen source, capturing scroll first so it still lands in place.
+        const appliedInPlace = await applyManualEditContentInPlace(patch, result.source);
+        if (!appliedInPlace) {
+          capturePreviewScrollPosition();
+          setManualEditFrozenSource(result.source);
+        }
       }
-      setManualEditHistory((current) => [entry, ...current]);
-      setManualEditUndone([]);
+      updateManualEditHistoryStack((current) => [entry, ...current]);
+      updateManualEditUndoneStack(() => []);
       setManualEditDraft((current) => ({ ...current, fullSource: result.source }));
       if (patch.kind === 'set-text') {
         setSelectedManualEditTarget((current) => current?.id === patch.id
@@ -8858,7 +9399,62 @@ function HtmlViewer({
     } finally {
       manualEditSavingRef.current = false;
       setManualEditSaving(false);
+      setManualEditIdleTick((tick) => tick + 1);
     }
+  }
+
+  // Single write path for the undo/redo stacks: keeps the ref mirror (read by
+  // undo/redo after their settle awaits) and the state (read by the toolbar
+  // enablement + history panel) in lockstep.
+  function updateManualEditHistoryStack(
+    updater: (current: ManualEditHistoryEntry[]) => ManualEditHistoryEntry[],
+  ) {
+    manualEditHistoryRef.current = updater(manualEditHistoryRef.current);
+    setManualEditHistory(manualEditHistoryRef.current);
+  }
+
+  function updateManualEditUndoneStack(
+    updater: (current: ManualEditHistoryEntry[]) => ManualEditHistoryEntry[],
+  ) {
+    manualEditUndoneRef.current = updater(manualEditUndoneRef.current);
+    setManualEditUndone(manualEditUndoneRef.current);
+  }
+
+  /** Drops the undo/redo chain and any edit still pending against it. */
+  function resetManualEditHistory() {
+    updateManualEditHistoryStack(() => []);
+    updateManualEditUndoneStack(() => []);
+    manualEditPendingStyleRef.current = null;
+    clearManualEditStyleTimer();
+  }
+
+  /**
+   * Folds a whole-file write that did NOT flow through applyManualEdit — today
+   * the speaker-notes editor — into the manual-edit history.
+   *
+   * Invariant: while edit mode is live, every write to this file must be
+   * represented in the history. Undo compares the persisted bytes against the
+   * entry it is about to revert; bytes it never recorded read as an external
+   * rewrite, and it defensively CLEARS the entire chain. Recording the write
+   * keeps one continuous undo chain across every surface that edits the file,
+   * and marks it as our own so the frozen canvas does not reload behind it.
+   */
+  function recordManualEditHostSourceWrite(beforeSource: string, afterSource: string, label: string) {
+    if (!manualEditMode) return;
+    if (beforeSource === afterSource) return;
+    manualEditOwnSourceWriteRef.current = afterSource;
+    updateManualEditHistoryStack((current) => [
+      {
+        id: `${Date.now()}-${current.length}`,
+        label,
+        patch: { kind: 'set-full-source', source: afterSource },
+        beforeSource,
+        afterSource,
+        createdAt: Date.now(),
+      },
+      ...current,
+    ]);
+    updateManualEditUndoneStack(() => []);
   }
 
   async function confirmManualEditHistorySource(expectedSource: string, message: string): Promise<boolean> {
@@ -8870,17 +9466,168 @@ function HtmlViewer({
     setSource(persisted);
     sourceRef.current = persisted;
     setInlinedSource(null);
-    setManualEditHistory([]);
-    setManualEditUndone([]);
-    manualEditPendingStyleRef.current = null;
+    resetManualEditHistory();
     setManualEditDraft((current) => ({ ...current, fullSource: persisted }));
     setManualEditError(message);
     return false;
   }
 
+  /**
+   * Applies a history entry's destination state (before-source for undo,
+   * after-source for redo) to the live iframe without a srcDoc reload — the
+   * reload is what made every undo flash white and re-run page scripts.
+   * Style patches restore the touched inline styles through the preview
+   * channel; content patches (text / innerHTML / link / image) swap the one
+   * element's markup via `od-edit-apply-dom`. Returns false when the patch is
+   * structural (duplicate / remove / outer-html / token / full-source) or the
+   * bridge cannot locate the element — the caller then falls back to the
+   * frozen-source reload, which is always correct.
+   */
+  async function applyManualEditHistoryInPlace(
+    entry: ManualEditHistoryEntry,
+    destSource: string,
+  ): Promise<boolean> {
+    const patch = entry.patch;
+    // A whole-file write confined to the speaker-notes block changes nothing
+    // the browser renders (the notes live in a `<script type="application/json">`),
+    // so the canvas needs no update at all. Reporting it as applied keeps the
+    // reload path — a white flash plus a scroll-restore gamble — from running
+    // for an edit the user cannot see. The check requires the rest of the
+    // document to be byte-identical, so a real visual change still reloads.
+    if (patch.kind === 'set-full-source') {
+      return sourcesDifferOnlyInSpeakerNotes(entry.beforeSource, entry.afterSource);
+    }
+    if (!('id' in patch) || !patch.id) return false;
+    // Page-scoped ids stay on the reload path — except the body-append insert,
+    // which is still one element-scoped mutation.
+    if (patch.id === '__body__' && patch.kind !== 'insert-html') return false;
+    const win = iframeRef.current?.contentWindow;
+    if (!win) return false;
+    const isUndo = destSource === entry.beforeSource;
+    if (patch.kind === 'insert-html' || patch.kind === 'duplicate-element') {
+      // The inserted element's identity and markup live in the AFTER source
+      // (the before source predates it).
+      const inserted = readManualEditInsertedSibling(entry.afterSource, patch.id);
+      if (!inserted) return false;
+      if (isUndo) return applyManualEditDomOp(inserted.id, '', 'remove');
+      manualEditPendingSelectIdRef.current = inserted.id;
+      const op = patch.kind === 'insert-html' && patch.id === '__body__' ? 'append-child' : 'insert-after';
+      return applyManualEditDomOp(patch.id, inserted.html, op);
+    }
+    if (patch.kind === 'remove-element') {
+      if (!isUndo) return applyManualEditDomOp(patch.id, '', 'remove');
+      // Undo of a delete: put the element back where the BEFORE source says it
+      // was — at its exact body index, after its previous sibling, or at the
+      // start of its parent.
+      const restore = readManualEditRestoreDescriptor(entry.beforeSource, patch.id);
+      if (!restore) return false;
+      manualEditPendingSelectIdRef.current = patch.id;
+      return applyManualEditDomOp(
+        restore.anchorId,
+        restore.html,
+        restore.op,
+        restore.op === 'insert-at-index' ? { index: restore.index } : undefined,
+      );
+    }
+    if (patch.kind === 'set-style') {
+      // Saved-styles read, not the inline-only read: runtime-only targets
+      // (brand-kit ids) persist their set-style patch in the
+      // `style[data-od-manual-edit-runtime-overrides]` rule, so redo must
+      // replay those values instead of clearing the touched properties.
+      const sourceStyles = readManualEditSavedStyles(destSource, patch.id);
+      const reset: Partial<ManualEditStyles> = {};
+      for (const key of Object.keys(patch.styles) as Array<keyof ManualEditStyles>) {
+        reset[key] = sourceStyles[key] ?? '';
+      }
+      previewStyleToIframe(patch.id, { ...reset, transform: sourceStyles.transform ?? '' }, nextManualEditPreviewVersion());
+      if (selectedManualEditTargetIdRef.current === patch.id) {
+        setManualEditDraft((current) => ({ ...current, styles: { ...current.styles, ...reset } }));
+      }
+      win.postMessage({ type: 'od-edit-refresh-targets' }, '*');
+      return true;
+    }
+    if (
+      patch.kind === 'set-text' ||
+      patch.kind === 'set-inner-html' ||
+      patch.kind === 'set-link' ||
+      patch.kind === 'set-image' ||
+      patch.kind === 'set-attributes' ||
+      patch.kind === 'set-outer-html'
+    ) {
+      const html = readManualEditOuterHtml(destSource, patch.id);
+      if (!html) {
+        const runtimeFields = (isUndo ? entry.runtimeBeforeFields : entry.runtimeAfterFields)
+          ?? manualEditSavedRuntimeContentFields(patch, destSource);
+        if (!runtimeFields) return false;
+        if (patch.kind === 'set-outer-html') {
+          const runtimeHtml = runtimeFields.html;
+          if (typeof runtimeHtml !== 'string') return false;
+          const ok = await applyManualEditDomOp(patch.id, runtimeHtml, 'replace');
+          if (ok && selectedManualEditTargetIdRef.current === patch.id) {
+            setManualEditDraft((current) => ({ ...current, outerHtml: runtimeHtml }));
+          }
+          return ok;
+        }
+        const ok = await applyManualEditDomOp(patch.id, '', 'apply-content', runtimeFields);
+        if (ok && selectedManualEditTargetIdRef.current === patch.id) {
+          setManualEditDraft((current) => ({
+            ...current,
+            ...(typeof runtimeFields.text === 'string' ? { text: runtimeFields.text } : {}),
+            ...(typeof runtimeFields.href === 'string' ? { href: runtimeFields.href } : {}),
+            ...(typeof runtimeFields.src === 'string' ? { src: runtimeFields.src } : {}),
+            ...(typeof runtimeFields.alt === 'string' ? { alt: runtimeFields.alt } : {}),
+            ...(runtimeFields.attributes && typeof runtimeFields.attributes === 'object'
+              ? { attributesText: JSON.stringify(runtimeFields.attributes, null, 2) }
+              : {}),
+          }));
+        }
+        return ok;
+      }
+      const ok = await applyManualEditDomOp(patch.id, html, 'replace');
+      if (!ok) return false;
+      if (selectedManualEditTargetIdRef.current === patch.id) {
+        const fields = readManualEditFields(destSource, patch.id);
+        setManualEditDraft((current) => ({
+          ...current,
+          text: fields.text ?? current.text,
+          href: fields.href ?? current.href,
+          src: fields.src ?? current.src,
+          alt: fields.alt ?? current.alt,
+          attributesText: JSON.stringify(readManualEditAttributes(destSource, patch.id), null, 2),
+          outerHtml: html,
+        }));
+      }
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Folds whatever edit is still in flight into the history stack before an
+   * undo/redo walks it: a live inline text session (or its pending commit)
+   * and any debounced style save each become their own entry first. This is
+   * what makes the timeline GLOBAL — one Cmd+Z chain walks text edits, style
+   * tweaks, and gesture moves in the exact order they happened, instead of
+   * skipping an uncommitted newest edit or re-applying it after the undo.
+   */
+  async function settleManualEditHistoryBoundary(): Promise<boolean> {
+    if (!(await settlePendingManualEditCommit())) return false;
+    if (!(await flushManualEditStyleSave())) return false;
+    return !manualEditSavingRef.current;
+  }
+
+  function describeManualEditSaveFailure(
+    prefix: string,
+    saved: Exclude<Awaited<ReturnType<typeof writeProjectTextFileDetailed>>, { ok: true }>,
+  ): string {
+    const status = saved.status ? ` (${saved.status}${saved.code ? ` ${saved.code}` : ''})` : '';
+    return `${prefix}${status}: ${saved.message}`;
+  }
+
   async function undoManualEdit() {
     if (manualEditSavingRef.current) return;
-    const [latest, ...rest] = manualEditHistory;
+    if (!(await settleManualEditHistoryBoundary())) return;
+    const [latest, ...rest] = manualEditHistoryRef.current;
     if (!latest) return;
     manualEditSavingRef.current = true;
     setManualEditSaving(true);
@@ -8889,21 +9636,29 @@ function HtmlViewer({
         latest.afterSource,
         'The file changed outside manual edit mode. History was cleared to avoid overwriting newer content.',
       ))) return;
-      const saved = await writeProjectTextFile(projectId, file.name, latest.beforeSource, {
+      const parentVersionId = await resolveManualEditParentVersionId(latest.afterSource);
+      const saved = await writeProjectTextFileDetailed(projectId, file.name, latest.beforeSource, {
         artifactManifest: file.artifactManifest,
         versionSource: 'manual',
         versionLabel: `Undo ${latest.label}`,
+        ...(parentVersionId ? { parentVersionId } : {}),
       });
-      if (!saved) {
-        setManualEditError('Could not save the undo result.');
+      if (!saved.ok) {
+        setManualEditError(describeManualEditSaveFailure('Could not save the undo result', saved));
         return;
       }
       setSource(latest.beforeSource);
       sourceRef.current = latest.beforeSource;
+      manualEditOwnSourceWriteRef.current = latest.beforeSource;
       setInlinedSource(null);
-      setManualEditFrozenSource(latest.beforeSource);
-      setManualEditHistory(rest);
-      setManualEditUndone((current) => [latest, ...current]);
+      if (!(await applyManualEditHistoryInPlace(latest, latest.beforeSource))) {
+        // Fallback reload: hold the scroll position across the srcDoc swap so
+        // an undo never yanks the canvas back to the top.
+        capturePreviewScrollPosition();
+        setManualEditFrozenSource(latest.beforeSource);
+      }
+      updateManualEditHistoryStack(() => rest);
+      updateManualEditUndoneStack((current) => [latest, ...current]);
       setManualEditDraft((current) => ({ ...current, fullSource: latest.beforeSource }));
       await onFileSaved?.();
     } finally {
@@ -8914,7 +9669,8 @@ function HtmlViewer({
 
   async function redoManualEdit() {
     if (manualEditSavingRef.current) return;
-    const [latest, ...rest] = manualEditUndone;
+    if (!(await settleManualEditHistoryBoundary())) return;
+    const [latest, ...rest] = manualEditUndoneRef.current;
     if (!latest) return;
     manualEditSavingRef.current = true;
     setManualEditSaving(true);
@@ -8923,26 +9679,272 @@ function HtmlViewer({
         latest.beforeSource,
         'The file changed outside manual edit mode. History was cleared to avoid overwriting newer content.',
       ))) return;
-      const saved = await writeProjectTextFile(projectId, file.name, latest.afterSource, {
+      const parentVersionId = await resolveManualEditParentVersionId(latest.beforeSource);
+      const saved = await writeProjectTextFileDetailed(projectId, file.name, latest.afterSource, {
         artifactManifest: file.artifactManifest,
         versionSource: 'manual',
         versionLabel: `Redo ${latest.label}`,
+        ...(parentVersionId ? { parentVersionId } : {}),
       });
-      if (!saved) {
-        setManualEditError('Could not save the redo result.');
+      if (!saved.ok) {
+        setManualEditError(describeManualEditSaveFailure('Could not save the redo result', saved));
         return;
       }
       setSource(latest.afterSource);
       sourceRef.current = latest.afterSource;
+      manualEditOwnSourceWriteRef.current = latest.afterSource;
       setInlinedSource(null);
-      setManualEditFrozenSource(latest.afterSource);
-      setManualEditUndone(rest);
-      setManualEditHistory((current) => [latest, ...current]);
+      if (!(await applyManualEditHistoryInPlace(latest, latest.afterSource))) {
+        // Fallback reload: hold the scroll position across the srcDoc swap so
+        // a redo never yanks the canvas back to the top.
+        capturePreviewScrollPosition();
+        setManualEditFrozenSource(latest.afterSource);
+      }
+      updateManualEditUndoneStack(() => rest);
+      updateManualEditHistoryStack((current) => [latest, ...current]);
       setManualEditDraft((current) => ({ ...current, fullSource: latest.afterSource }));
       await onFileSaved?.();
     } finally {
       manualEditSavingRef.current = false;
       setManualEditSaving(false);
+    }
+  }
+
+  async function duplicateManualEditTarget(id: string) {
+    if (!(await settleManualEditHistoryBoundary())) return;
+    // Selection hand-off to the clone is armed inside the in-place apply
+    // layer, which reads the clone's real id back from the saved source (so
+    // it also works for authored data-od-id anchors, and after a fallback
+    // reload).
+    await applyManualEdit({ id, kind: 'duplicate-element' }, t('manualEdit.duplicateElement'));
+  }
+
+  function manualEditSupportsStructuralAnchor(id: string): boolean {
+    return id === '__body__' || Boolean(readManualEditOuterHtml(sourceRef.current ?? '', id));
+  }
+
+  // Element-level clipboard (Cmd/Ctrl+C): stores the selected element's
+  // SOURCE outerHTML — not the runtime DOM — so paste round-trips through the
+  // same sanitized insert path regardless of what page scripts did live.
+  async function copyManualEditElement(id: string) {
+    if (!id || id === '__body__') return;
+    if (!(await settleManualEditHistoryBoundary())) return;
+    const html = readManualEditOuterHtml(sourceRef.current ?? '', id);
+    if (!html) {
+      // Runtime-only targets have no source markup that can safely round-trip
+      // through the structural insert path. Clear any older element first so
+      // the next paste cannot silently insert the wrong previously copied DOM.
+      manualEditClipboardRef.current = null;
+      setManualEditError('Runtime-rendered elements cannot be copied.');
+      return;
+    }
+    manualEditClipboardRef.current = { html, fromId: id };
+    setManualEditError(null);
+  }
+
+  // Cmd/Ctrl+V: paste the copied element as a NEW block after the current
+  // selection (falling back to the copied element itself, then to the end of
+  // the body), never into the element's text content.
+  async function pasteManualEditElement(anchorIdRaw: string) {
+    const buffer = manualEditClipboardRef.current;
+    if (!buffer) return;
+    const anchorId = anchorIdRaw
+      || selectedManualEditTargetIdRef.current
+      || (readManualEditOuterHtml(sourceRef.current ?? '', buffer.fromId) ? buffer.fromId : '__body__');
+    await insertManualEditHtml(anchorId, buffer.html, t('manualEdit.pasteElement'));
+  }
+
+  // Clipboard-pasted or OS-dropped image: upload through the same project
+  // pipeline as image replace, then insert a fresh <img> after the anchor.
+  // The new element is a regular manual-edit target (move/resize/delete/copy).
+  async function insertManualEditImage(anchorIdRaw: string, imageFile: File) {
+    const toastId = (manualEditImageToastIdRef.current += 1);
+    const showToast = (message: string, tone: ExportToastState['tone']) => {
+      if (manualEditImageToastIdRef.current !== toastId) return;
+      setManualEditImageToast({ id: toastId, message, tone });
+    };
+    try {
+      const anchorId = anchorIdRaw || selectedManualEditTargetIdRef.current || '__body__';
+      if (!manualEditSupportsStructuralAnchor(anchorId)) {
+        const message = 'Runtime-rendered elements cannot be used as insertion points.';
+        setManualEditError(message);
+        showToast(message, 'error');
+        return;
+      }
+      showToast(t('manualEdit.uploadingImage'), 'loading');
+      const src = await uploadManualEditImageFile(imageFile);
+      if (!src) {
+        showToast(t('manualEdit.uploadImageFailed'), 'error');
+        return;
+      }
+      showToast(t('manualEdit.processingImage'), 'loading');
+      const html = `<img src="${escapeManualEditAttr(src)}" alt="" style="max-width: 100%;">`;
+      const inserted = await insertManualEditHtml(anchorId, html, t('manualEdit.pasteImage'));
+      showToast(
+        inserted ? t('manualEdit.imageAdded') : t('manualEdit.uploadImageFailed'),
+        inserted ? 'success' : 'error',
+      );
+    } catch {
+      const message = t('manualEdit.uploadImageFailed');
+      setManualEditError(message);
+      showToast(message, 'error');
+    }
+  }
+
+  // Shared insert path: one undoable history entry, then hand selection to
+  // the inserted element (its path id is the anchor's next sibling — the same
+  // derivation duplicate-element uses; '__body__' appends, no hand-off).
+  async function insertManualEditHtml(anchorId: string, html: string, label: string): Promise<boolean> {
+    if (!anchorId) return false;
+    if (!(await settleManualEditHistoryBoundary())) return false;
+    // Selection hand-off to the inserted element is armed inside the in-place
+    // apply layer from the saved source (correct for both positional-path and
+    // authored data-od-id anchors, and across the reload fallback).
+    return applyManualEdit({ id: anchorId, kind: 'insert-html', html }, label);
+  }
+
+  async function removeManualEditTarget(id: string) {
+    if (!(await settleManualEditHistoryBoundary())) return;
+    await applyManualEdit({ id, kind: 'remove-element' }, t('manualEdit.deleteElement'));
+  }
+
+  // Persist a completed drag gesture (move / edge resize) through the same
+  // pending-style pipeline the inspector uses, then flush immediately so every
+  // gesture lands as one undoable history entry and one file version.
+  async function handleManualEditGestureCommit(
+    id: string,
+    stylesPartial: Partial<ManualEditStyles>,
+    nextRect: ManualEditRect,
+    gesture: 'move' | 'resize',
+  ) {
+    const label = gesture === 'move' ? t('manualEdit.moveElement') : t('manualEdit.resizeElement');
+    // Move gestures preview through transform only; resetting it in the same
+    // message that applies the final left/top keeps the swap flicker-free.
+    // Reset to the SOURCE-authored inline transform (usually '') rather than
+    // always clearing — an element whose centering transform lives inline
+    // would otherwise lose it on the first drag.
+    const sourceTransform = readManualEditStyles(sourceRef.current ?? '', id).transform ?? '';
+    await handleManualEditStyleChange(id, stylesPartial, label, { transform: sourceTransform });
+    const ok = await flushManualEditStyleSave();
+    if (!ok) return;
+    setSelectedManualEditTarget((current) => current?.id === id
+      ? { ...current, rect: nextRect, styles: { ...current.styles, ...stylesPartial } }
+      : current);
+    setManualEditTargets((current) => current.map((item) => item.id === id
+      ? { ...item, rect: nextRect, styles: { ...item.styles, ...stylesPartial } }
+      : item));
+    setManualEditDraft((current) => ({ ...current, styles: { ...current.styles, ...stylesPartial } }));
+    // No iframe reload happens for style patches — ask the bridge for fresh
+    // rects so the selection frame and alignment candidates stay accurate.
+    iframeRef.current?.contentWindow?.postMessage({ type: 'od-edit-refresh-targets' }, '*');
+  }
+
+  // Escape mid-gesture: reset only the previewed inline styles back to what
+  // the saved source declares (an empty value removes the inline property).
+  // The gesture's translate() preview is always cleared alongside.
+  function cancelManualEditGesturePreview(id: string, keys: Array<keyof ManualEditStyles>) {
+    if (keys.length === 0) return;
+    const sourceStyles = readManualEditStyles(sourceRef.current ?? '', id);
+    const reset: ManualEditPreviewStyles = { transform: sourceStyles.transform ?? '' };
+    for (const key of keys) reset[key] = sourceStyles[key] ?? '';
+    previewStyleToIframe(id, reset, nextManualEditPreviewVersion());
+  }
+
+  // Floating-toolbar edits preview instantly and self-persist shortly after
+  // the user stops adjusting — unlike the panel there is no Save button here.
+  // Slider/picker drags fire per pointer event; the first call runs
+  // immediately (clicks stay synchronous) and the rest of the frame's burst
+  // coalesces into one trailing rAF so a drag costs at most one draft update
+  // and one preview message per frame.
+  function handleManualEditToolbarStyle(stylesPartial: Partial<ManualEditStyles>, label: string) {
+    if (!selectedManualEditTarget) return;
+    const pending = manualEditToolbarBurstRef.current;
+    if (pending) {
+      pending.styles = { ...pending.styles, ...stylesPartial };
+      pending.label = label;
+      return;
+    }
+    applyManualEditToolbarStyle(stylesPartial, label);
+    manualEditToolbarBurstRef.current = { styles: {}, label };
+    requestAnimationFrame(() => {
+      const burst = manualEditToolbarBurstRef.current;
+      manualEditToolbarBurstRef.current = null;
+      if (burst && Object.keys(burst.styles).length > 0) {
+        applyManualEditToolbarStyle(burst.styles, burst.label);
+      }
+    });
+  }
+
+  function applyManualEditToolbarStyle(stylesPartial: Partial<ManualEditStyles>, label: string) {
+    const targetId = selectedManualEditTargetIdRef.current;
+    if (!targetId) return;
+    setManualEditDraft((current) => ({ ...current, styles: { ...current.styles, ...stylesPartial } }));
+    setManualEditDraftDirty(true);
+    void handleManualEditStyleChange(targetId, stylesPartial, label);
+    clearManualEditStyleTimer();
+    manualEditStyleTimerRef.current = setTimeout(() => {
+      manualEditStyleTimerRef.current = null;
+      void flushManualEditStyleSave();
+    }, 800);
+  }
+
+  function postManualEditRangeFormat(command: string, value?: string) {
+    iframeRef.current?.contentWindow?.postMessage({ type: 'od-edit-format', command, value }, '*');
+  }
+
+  async function uploadManualEditImageFile(pickedFile: File): Promise<string | null> {
+    const result = await uploadProjectFiles(projectId, [pickedFile]);
+    const uploaded = result.uploaded[0];
+    if (!uploaded?.path) {
+      setManualEditError(result.error ?? t('manualEdit.uploadImageFailed'));
+      return null;
+    }
+    setManualEditError(null);
+    return toOwnerRelativePath(file.name, uploaded.path);
+  }
+
+  async function replaceManualEditImage(target: ManualEditTarget, pickedFile: File) {
+    const src = await uploadManualEditImageFile(pickedFile);
+    if (!src) return;
+    const fields = readManualEditFields(sourceRef.current ?? '', target.id);
+    await applyManualEdit(
+      { id: target.id, kind: 'set-image', src, alt: fields.alt ?? target.fields.alt ?? '' },
+      t('manualEdit.replaceImage'),
+    );
+  }
+
+  // Crop = fetch the current asset, cut the selected region at natural pixel
+  // size, upload the result as a fresh project file, and point the element at
+  // it. The original asset is never mutated, so undo restores it losslessly.
+  async function applyManualEditImageCrop(target: ManualEditTarget, region: ManualEditCropRegion) {
+    const fields = readManualEditFields(sourceRef.current ?? '', target.id);
+    const src = (fields.src ?? target.fields.src ?? '').trim();
+    if (!src) return;
+    try {
+      const url = resolveManualEditCropUrl(projectId, file.name, src);
+      const image = await loadManualEditCropImage(url);
+      const sx = Math.round(clamp01(region.x) * image.width);
+      const sy = Math.round(clamp01(region.y) * image.height);
+      const sw = Math.max(1, Math.round(Math.min(clamp01(region.width), 1 - clamp01(region.x)) * image.width));
+      const sh = Math.max(1, Math.round(Math.min(clamp01(region.height), 1 - clamp01(region.y)) * image.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = sw;
+      canvas.height = sh;
+      const context = canvas.getContext('2d');
+      if (!context) throw new Error('no 2d context');
+      context.drawImage(image.source, sx, sy, sw, sh, 0, 0, sw, sh);
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
+      if (!blob) throw new Error('no crop output');
+      const cropFile = new File([blob], manualEditCropFileName(src), { type: 'image/png' });
+      const nextSrc = await uploadManualEditImageFile(cropFile);
+      if (!nextSrc) return;
+      const ok = await applyManualEdit(
+        { id: target.id, kind: 'set-image', src: nextSrc, alt: fields.alt ?? target.fields.alt ?? '' },
+        t('manualEdit.cropImage'),
+      );
+      if (ok) setManualEditCropActive(false);
+    } catch {
+      setManualEditError(t('manualEdit.cropFailed'));
     }
   }
 
@@ -9059,8 +10061,13 @@ function HtmlViewer({
     try {
       const saved = await writeProjectTextFile(projectId, file.name, nextSource, {
         artifactManifest: file.artifactManifest,
+        // Notes edits are hand authoring like any other manual edit, so they
+        // earn a labeled version instead of writing the file untracked.
+        versionSource: 'manual',
+        versionLabel: t('fileViewer.speakerNotes'),
       });
       if (!saved) throw new Error('speaker_notes_save_failed');
+      recordManualEditHostSourceWrite(currentSource, nextSource, t('fileViewer.speakerNotes'));
       setSource(nextSource);
       sourceRef.current = nextSource;
       setInlinedSource(null);
@@ -9512,27 +10519,8 @@ function HtmlViewer({
     };
   }, [inTabPresent]);
 
-  useEffect(() => {
-    if (!inTabPresent || !presentFullscreenPending) return;
-    const overlay = presentOverlayRef.current;
-    if (!overlay || typeof overlay.requestFullscreen !== 'function') {
-      setPresentFullscreenPending(false);
-      return;
-    }
-    let cancelled = false;
-    overlay.requestFullscreen()
-      .catch(() => undefined)
-      .finally(() => {
-        if (!cancelled) setPresentFullscreenPending(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [inTabPresent, presentFullscreenPending]);
-
   function closeInTabPresentation() {
     setInTabPresent(false);
-    setPresentFullscreenPending(false);
     presentFullscreenRequestedRef.current = false;
     setPresentEscHint(false);
     // Tear the presenter popup down together with the fullscreen stage so one
@@ -9570,6 +10558,8 @@ function HtmlViewer({
     const requestId = analytics.newRequestId();
     templateExportRequestIdRef.current = requestId;
     templateExportStartedRef.current = performance.now();
+    templateExportOriginPromiseRef.current = resolveArtifactExportOrigin()
+      .catch(() => unknownExportOrigin());
     templateExportResolvedRef.current = false;
     trackShareOptionPopoverClick(
       analytics.track,
@@ -9602,22 +10592,27 @@ function HtmlViewer({
     templateExportResolvedRef.current = true;
     const requestId = templateExportRequestIdRef.current ?? analytics.newRequestId();
     const started = templateExportStartedRef.current || performance.now();
-    trackArtifactExportResult(
-      analytics.track,
-      {
-        page_name: 'artifact',
-        area: 'share_option_popover',
-        artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
-        artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
-        export_format: 'template',
-        result,
-        ...(errorCode ? { error_code: errorCode } : {}),
-        export_duration_ms: Math.round(performance.now() - started),
-        project_id: projectId,
-        project_kind: projectKind,
-      },
-      { requestId },
-    );
+    const originPromise = templateExportOriginPromiseRef.current
+      ?? resolveArtifactExportOrigin().catch(() => unknownExportOrigin());
+    void originPromise.then((originProps) => {
+      trackArtifactExportResult(
+        analytics.track,
+        {
+          page_name: 'artifact',
+          area: 'share_option_popover',
+          artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
+          artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
+          export_format: 'template',
+          result,
+          ...originProps,
+          ...(errorCode ? { error_code: errorCode } : {}),
+          export_duration_ms: Math.round(performance.now() - started),
+          project_id: projectId,
+          project_kind: projectKind,
+        },
+        { requestId },
+      );
+    });
     // Onboarding first-loop 交付 step (spec §8.3): only a SUCCESSFUL template
     // export closes the loop. Project-scoped no-op unless started from Home.
     if (result === 'success') recordFirstLoopStep(analytics.track, 'delivered', projectId);
@@ -9919,19 +10914,51 @@ function HtmlViewer({
     setPresentMenuOpen(false);
     presentFullscreenRequestedRef.current = false;
     setMode('preview');
-    if (effectiveDeck) openPresenterWindow();
     setInTabPresent(true);
     setPresentEscHint(true);
   }
 
+  function requestPresentationFullscreen() {
+    const overlay = presentOverlayRef.current;
+    if (!overlay || typeof overlay.requestFullscreen !== 'function') {
+      presentFullscreenRequestedRef.current = false;
+      return;
+    }
+    presentFullscreenRequestedRef.current = true;
+    void overlay.requestFullscreen().catch(() => {
+      // Keep the fixed full-window presentation as a graceful fallback when
+      // the browser or desktop shell refuses native fullscreen.
+      presentFullscreenRequestedRef.current = false;
+    });
+  }
+
+  function presentDeck(
+    startAt: 'beginning' | 'current',
+    options?: { presenter?: boolean },
+  ) {
+    const targetSlide = startAt === 'beginning' ? 0 : activeDeckSlideIndex;
+    setPresentMenuOpen(false);
+    if (targetSlide !== activeDeckSlideIndex) goToSlide(targetSlide);
+    // Fullscreen must be requested during the click's user-activation window.
+    // Mount the overlay synchronously, then request fullscreen on that exact
+    // element instead of waiting for an effect that browsers may reject.
+    flushSync(() => {
+      setMode('preview');
+      setInTabPresent(true);
+      setPresentEscHint(true);
+    });
+    if (options?.presenter) openPresenterWindow();
+    requestPresentationFullscreen();
+  }
+
   function presentFullscreen() {
     setPresentMenuOpen(false);
-    if (effectiveDeck) openPresenterWindow();
-    setMode('preview');
-    presentFullscreenRequestedRef.current = true;
-    setPresentFullscreenPending(true);
-    setInTabPresent(true);
-    setPresentEscHint(true);
+    flushSync(() => {
+      setMode('preview');
+      setInTabPresent(true);
+      setPresentEscHint(true);
+    });
+    requestPresentationFullscreen();
   }
 
   function presentNewTab() {
@@ -9997,6 +11024,12 @@ function HtmlViewer({
   }
 
   async function handleVersionRestored(content: string) {
+    // Restoring a version is a deliberate jump to a different point in the
+    // file's timeline, so the in-session undo chain (anchored to the lineage
+    // being left) no longer applies. Drop it here rather than letting the
+    // next undo discover the mismatch and report it as an EXTERNAL rewrite —
+    // that error blamed an agent/other session for the user's own action.
+    resetManualEditHistory();
     setSource(content);
     sourceRef.current = content;
     setInlinedSource(null);
@@ -10356,7 +11389,7 @@ function HtmlViewer({
   }
 
   function triggerPdfExport(context?: HtmlVersionExportContext) {
-    fireShareExport('pdf', () => exportHtmlPdf(context));
+    fireShareExport('pdf', () => exportHtmlPdf(context), context);
   }
 
   function triggerZipExport(context?: HtmlVersionExportContext) {
@@ -10366,7 +11399,7 @@ function HtmlViewer({
       fallbackHtml: context?.content ?? source ?? '',
       fallbackTitle: context?.title ?? exportTitle,
       ...(context?.versionId ? { versionId: context.versionId } : {}),
-    }));
+    }), context);
   }
 
   function triggerHtmlExport(context?: HtmlVersionExportContext) {
@@ -10376,7 +11409,7 @@ function HtmlViewer({
       fallbackHtml: context?.content ?? source ?? '',
       fallbackTitle: context?.title ?? exportTitle,
       ...(context?.versionId ? { versionId: context.versionId } : {}),
-    }));
+    }), context);
   }
 
   useEffect(() => {
@@ -10629,6 +11662,8 @@ function HtmlViewer({
     const requestId = analytics.newRequestId();
     imageExportRequestIdRef.current = requestId;
     imageExportStartedRef.current = performance.now();
+    imageExportOriginPromiseRef.current = resolveArtifactExportOrigin(context)
+      .catch(() => unknownExportOrigin());
     imageExportResolvedRef.current = false;
     trackShareOptionPopoverClick(
       analytics.track,
@@ -10665,22 +11700,27 @@ function HtmlViewer({
     imageExportResolvedRef.current = true;
     const requestId = imageExportRequestIdRef.current ?? analytics.newRequestId();
     const started = imageExportStartedRef.current || performance.now();
-    trackArtifactExportResult(
-      analytics.track,
-      {
-        page_name: 'artifact',
-        area: 'share_option_popover',
-        artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
-        artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
-        export_format: 'image',
-        result,
-        ...(errorCode ? { error_code: errorCode } : {}),
-        export_duration_ms: Math.round(performance.now() - started),
-        project_id: projectId,
-        project_kind: projectKind,
-      },
-      { requestId },
-    );
+    const originPromise = imageExportOriginPromiseRef.current
+      ?? resolveArtifactExportOrigin().catch(() => unknownExportOrigin());
+    void originPromise.then((originProps) => {
+      trackArtifactExportResult(
+        analytics.track,
+        {
+          page_name: 'artifact',
+          area: 'share_option_popover',
+          artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
+          artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
+          export_format: 'image',
+          result,
+          ...originProps,
+          ...(errorCode ? { error_code: errorCode } : {}),
+          export_duration_ms: Math.round(performance.now() - started),
+          project_id: projectId,
+          project_kind: projectKind,
+        },
+        { requestId },
+      );
+    });
     // Onboarding first-loop 交付 step (spec §8.3): only a SUCCESSFUL image
     // export closes the loop. Project-scoped no-op unless started from Home.
     if (result === 'success') recordFirstLoopStep(analytics.track, 'delivered', projectId);
@@ -11041,13 +12081,14 @@ function HtmlViewer({
     showDeckThumbnailRail ? 'comment-preview-layer-with-deck-rail' : '',
     showDeckThumbnailRail && deckThumbnailsCollapsed ? 'comment-preview-layer-deck-rail-collapsed' : '',
   ].filter(Boolean).join(' ');
-  // Edit mode opens clean: the inspector only appears once the user pins an
-  // element (click its hover affordance / a container) or opens page styles by
-  // clicking the empty canvas. No more full-height panel popping on toggle.
+  // Edit mode opens clean: clicking an element raises only the lightweight
+  // selection chrome (frame + action bar + text toolbar). The full inspector
+  // panel is opt-in — the hover affordance or the action bar's params button
+  // opens it — or the page-styles card via an empty-canvas click.
   const manualEditPageCardActive =
     manualEditMode && !selectedManualEditTarget && manualEditPageStylesOpen;
   const manualEditPanelActive =
-    manualEditMode && (!!selectedManualEditTarget || manualEditPageCardActive);
+    manualEditMode && ((!!selectedManualEditTarget && manualEditInspectorOpen) || manualEditPageCardActive);
   const manualEditResetAvailable = selectedManualEditTarget ? manualEditDraftDirty : false;
   const manualEditPanel = manualEditPanelActive ? (
     <ManualEditPanel
@@ -11121,29 +12162,92 @@ function HtmlViewer({
       }}
     />
   ) : null;
-  const manualEditHoverAffordance =
-    manualEditMode &&
-    manualEditHoverTarget &&
-    manualEditHoverTarget.id !== selectedManualEditTarget?.id ? (
-      <button
-        type="button"
-        className="manual-edit-hover-action"
-        data-testid="manual-edit-hover-open"
-        aria-label={t('manualEdit.editParams')}
-        title={t('manualEdit.editParams')}
-        style={manualEditHoverIconStyle(
-          manualEditHoverTarget,
-          overlayPreviewScale,
-          previewBodySize,
-        )}
-        onClick={() => {
-          const target = manualEditHoverTarget;
-          setManualEditHoverTarget(null);
-          void selectManualEditTarget(target);
+  // One toolbar layer at a time: with a live text RANGE inside the selected
+  // element the floating text toolbar owns the moment; otherwise the action
+  // bar does. Never both stacked.
+  const manualEditTextRangeActive =
+    !!selectedManualEditTarget &&
+    manualEditTextSelection?.id === selectedManualEditTarget.id &&
+    manualEditTextSelection.hasRange;
+  const selectedManualEditTargetSupportsStructure = useMemo(
+    () => !!selectedManualEditTarget
+      && Boolean(readManualEditOuterHtml(source ?? '', selectedManualEditTarget.id)),
+    [selectedManualEditTarget?.id, source],
+  );
+  const manualEditSelectionChrome =
+    manualEditMode && selectedManualEditTarget && selectedManualEditTarget.id !== '__body__' ? (
+      <ManualEditSelectionOverlay
+        target={selectedManualEditTarget}
+        targets={manualEditTargets}
+        scale={overlayPreviewScale}
+        canvasSize={previewBodySize}
+        busy={manualEditSaving}
+        cropActive={manualEditCropActive && selectedManualEditTarget.kind === 'image'}
+        actionBarHidden={manualEditTextRangeActive}
+        onGesturePreview={(partial, onApplied) => {
+          previewStyleToIframe(
+            selectedManualEditTarget.id,
+            partial,
+            nextManualEditPreviewVersion(),
+            onApplied,
+          );
         }}
-      >
-        <Icon name="sliders" size={15} />
-      </button>
+        onGestureCommit={(partial, nextRect, gesture) => {
+          void handleManualEditGestureCommit(selectedManualEditTarget.id, partial, nextRect, gesture);
+        }}
+        onGestureCancel={(keys) => cancelManualEditGesturePreview(selectedManualEditTarget.id, keys)}
+        onGestureActiveChange={setManualEditGestureActive}
+        onOpenInspector={() => setManualEditInspectorOpen(true)}
+        onDuplicate={selectedManualEditTargetSupportsStructure
+          ? () => {
+              void duplicateManualEditTarget(selectedManualEditTarget.id);
+            }
+          : undefined}
+        onDelete={() => {
+          void removeManualEditTarget(selectedManualEditTarget.id);
+        }}
+        onReplaceImage={selectedManualEditTarget.kind === 'image'
+          ? (pickedFile) => {
+              void replaceManualEditImage(selectedManualEditTarget, pickedFile);
+            }
+          : undefined}
+        onCropStart={() => setManualEditCropActive(true)}
+        onCropCancel={() => setManualEditCropActive(false)}
+        onCropApply={(region) => {
+          void applyManualEditImageCrop(selectedManualEditTarget, region);
+        }}
+      />
+    ) : null;
+  const manualEditTextToolbarNode =
+    manualEditMode &&
+    selectedManualEditTarget &&
+    !manualEditCropActive &&
+    !manualEditGestureActive &&
+    manualEditTextRangeActive &&
+    (selectedManualEditTarget.kind === 'text' ||
+      selectedManualEditTarget.kind === 'link' ||
+      selectedManualEditTarget.kind === 'token') ? (
+      <ManualEditTextToolbar
+        target={selectedManualEditTarget}
+        draftStyles={manualEditDraft.styles}
+        scale={overlayPreviewScale}
+        canvasSize={previewBodySize}
+        hasRangeSelection
+        rangeFormat={manualEditTextSelection?.id === selectedManualEditTarget.id
+          ? manualEditTextSelection.format ?? null
+          : null}
+        busy={manualEditSaving}
+        onElementStyle={handleManualEditToolbarStyle}
+        onRangeFormat={postManualEditRangeFormat}
+      />
+    ) : null;
+  // With the inspector opt-in, its error strip is often unmounted — failures
+  // (save/undo/crop) must still surface, so float the same banner on canvas.
+  const manualEditErrorToast =
+    manualEditMode && manualEditError && !manualEditPanelActive ? (
+      <div className="manual-edit-error manual-edit-error-floating" role="alert">
+        {manualEditError}
+      </div>
     ) : null;
   const activeComposerComment = activePreviewCommentId
     ? visibleSideComments.find((comment) => comment.id === activePreviewCommentId) ?? null
@@ -11579,6 +12683,38 @@ function HtmlViewer({
               >
                 <RemixIcon name="edit-line" size={15} />
               </button>
+              {manualEditMode ? (
+                <>
+                  <button
+                    className="viewer-action viewer-action-icon od-tooltip"
+                    type="button"
+                    data-testid="manual-edit-undo"
+                    data-tooltip={manualEditTooltip(t('manualEdit.undo'), 'undo')}
+                    data-tooltip-placement="bottom"
+                    aria-label={t('manualEdit.undo')}
+                    disabled={manualEditSaving || manualEditHistory.length === 0}
+                    onClick={() => {
+                      void undoManualEdit();
+                    }}
+                  >
+                    <RemixIcon name="arrow-go-back-line" size={15} />
+                  </button>
+                  <button
+                    className="viewer-action viewer-action-icon od-tooltip"
+                    type="button"
+                    data-testid="manual-edit-redo"
+                    data-tooltip={manualEditTooltip(t('manualEdit.redo'), 'redo')}
+                    data-tooltip-placement="bottom"
+                    aria-label={t('manualEdit.redo')}
+                    disabled={manualEditSaving || manualEditUndone.length === 0}
+                    onClick={() => {
+                      void redoManualEdit();
+                    }}
+                  >
+                    <RemixIcon name="arrow-go-forward-line" size={15} />
+                  </button>
+                </>
+              ) : null}
               <span className="viewer-toolbar-tool-divider" aria-hidden />
               <button
                 type="button"
@@ -11837,21 +12973,37 @@ function HtmlViewer({
               </button>
               {presentMenuOpen ? (
                 <div className="present-menu" role="menu">
-                  <button role="menuitem" onClick={() => { firePresentPopoverClick('in_this_tab'); presentInThisTab(); }}>
-                    <span className="present-icon"><RemixIcon name="eye-line" size={14} /></span>{' '}
-                    <span className="present-menu-copy">
-                      <span>{t('fileViewer.presentInTab')}</span>
-                      {effectiveDeck ? <small>{t('fileViewer.presentInTabDeckHint')}</small> : null}
-                    </span>
-                  </button>
-                  <button role="menuitem" onClick={() => { firePresentPopoverClick('fullscreen'); presentFullscreen(); }}>
-                    <span className="present-icon"><RemixIcon name="play-line" size={14} /></span>{' '}
-                    {t('fileViewer.presentFullscreen')}
-                  </button>
-                  <button role="menuitem" onClick={() => { firePresentPopoverClick('new_tab'); presentNewTab(); }}>
-                    <span className="present-icon"><RemixIcon name="share-forward-line" size={14} /></span>{' '}
-                    {t('fileViewer.presentNewTab')}
-                  </button>
+                  {effectiveDeck ? (
+                    <>
+                      <button role="menuitem" onClick={() => { firePresentPopoverClick('start_from_beginning'); presentDeck('beginning'); }}>
+                        <span className="present-icon"><RemixIcon name="restart-line" size={14} /></span>{' '}
+                        {t('fileViewer.presentFromBeginning')}
+                      </button>
+                      <button role="menuitem" onClick={() => { firePresentPopoverClick('start_from_current'); presentDeck('current'); }}>
+                        <span className="present-icon"><RemixIcon name="play-line" size={14} /></span>{' '}
+                        {t('fileViewer.presentFromCurrentSlide')}
+                      </button>
+                      <button role="menuitem" onClick={() => { firePresentPopoverClick('presenter_mode'); presentDeck('current', { presenter: true }); }}>
+                        <span className="present-icon"><RemixIcon name="presentation-line" size={14} /></span>{' '}
+                        {t('fileViewer.presenterMode')}
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button role="menuitem" onClick={() => { firePresentPopoverClick('in_this_tab'); presentInThisTab(); }}>
+                        <span className="present-icon"><RemixIcon name="eye-line" size={14} /></span>{' '}
+                        {t('fileViewer.presentInTab')}
+                      </button>
+                      <button role="menuitem" onClick={() => { firePresentPopoverClick('fullscreen'); presentFullscreen(); }}>
+                        <span className="present-icon"><RemixIcon name="play-line" size={14} /></span>{' '}
+                        {t('fileViewer.presentFullscreen')}
+                      </button>
+                      <button role="menuitem" onClick={() => { firePresentPopoverClick('new_tab'); presentNewTab(); }}>
+                        <span className="present-icon"><RemixIcon name="share-forward-line" size={14} /></span>{' '}
+                        {t('fileViewer.presentNewTab')}
+                      </button>
+                    </>
+                  )}
                 </div>
               ) : null}
             </div>
@@ -12179,10 +13331,11 @@ function HtmlViewer({
             data-testid={manualEditMode ? undefined : 'comment-preview-layout'}
             ref={manualEditMode ? undefined : setCommentComposerHostRef}
             style={previewViewportStyle(previewViewport, previewScale, boardPreviewCanvasSize, boardPreviewScaleOptions)}
-            onMouseLeave={manualEditMode ? clearManualEditHover : undefined}
           >
+            {manualEditSelectionChrome}
+            {manualEditTextToolbarNode}
+            {manualEditErrorToast}
             {manualEditPanel}
-            {manualEditHoverAffordance}
             {showDeckThumbnailRail && !deckThumbnailsCollapsed ? (
               <DeckThumbnailRail
                 count={deckSlideTotal}
@@ -12388,7 +13541,24 @@ function HtmlViewer({
               ) : null}
               {/* Portaled to <body> so the screenshot/export toast escapes the
                   preview pane's transform + overflow:hidden. */}
-              {exportToast && !versionModalOpen
+              {manualEditImageToast && !versionModalOpen
+                ? createPortal(
+                    <Toast
+                      key={manualEditImageToast.id}
+                      className="manual-edit-image-toast"
+                      message={manualEditImageToast.message}
+                      tone={manualEditImageToast.tone}
+                      role={manualEditImageToast.tone === 'error' ? 'alert' : 'status'}
+                      ttlMs={manualEditImageToast.tone === 'loading' ? 60000 : 2200}
+                      placement="top"
+                      onDismiss={manualEditImageToast.tone === 'loading'
+                        ? undefined
+                        : () => setManualEditImageToast(null)}
+                    />,
+                    document.body,
+                  )
+                : null}
+              {exportToast && !manualEditImageToast && !versionModalOpen
                 ? createPortal(
                     <Toast
                       message={exportToast.message}
@@ -13254,6 +14424,73 @@ function HtmlViewer({
 function baseDirFor(fileName: string): string {
   const idx = fileName.lastIndexOf('/');
   return idx >= 0 ? fileName.slice(0, idx + 1) : '';
+}
+
+/**
+ * Resolve an asset reference found in the owner HTML file (`img src` etc.)
+ * back to a project-root-relative path — the inverse of toOwnerRelativePath,
+ * needed to fetch the live asset through the project raw route.
+ */
+function resolveOwnerRelativePath(ownerFileName: string, reference: string): string {
+  const cleanReference = reference.split(/[?#]/, 1)[0] ?? reference;
+  const combined = cleanReference.startsWith('/')
+    ? cleanReference
+    : `${baseDirFor(ownerFileName)}${cleanReference}`;
+  const parts: string[] = [];
+  for (const part of combined.split('/')) {
+    if (!part || part === '.') continue;
+    if (part === '..') {
+      if (parts.length > 0) parts.pop();
+      continue;
+    }
+    parts.push(part);
+  }
+  return parts.join('/');
+}
+
+/** Resolve the exact asset URL the preview used before drawing a crop. */
+export function resolveManualEditCropUrl(projectId: string, ownerFileName: string, src: string): string {
+  // Root-relative assets resolve against the web origin inside srcDoc. Turning
+  // `/app-icon.png` into a project raw path makes a visible image impossible
+  // to crop even though the browser already loaded it successfully.
+  if (/^(data:|blob:|https?:|\/)/i.test(src)) return src;
+  return projectRawUrl(projectId, resolveOwnerRelativePath(ownerFileName, src));
+}
+
+function clamp01(value: number): number {
+  return Math.min(1, Math.max(0, value));
+}
+
+
+function manualEditCropFileName(src: string): string {
+  const base = (src.split(/[?#]/, 1)[0] ?? '').split('/').pop() ?? 'image';
+  const stem = base.replace(/\.[a-z0-9]+$/i, '') || 'image';
+  return `${stem}-crop-${Date.now()}.png`;
+}
+
+interface ManualEditCropImage {
+  source: CanvasImageSource;
+  width: number;
+  height: number;
+}
+
+async function loadManualEditCropImage(url: string): Promise<ManualEditCropImage> {
+  try {
+    const response = await fetch(url, { cache: 'no-store' });
+    if (!response.ok) throw new Error(String(response.status));
+    const bitmap = await createImageBitmap(await response.blob());
+    return { source: bitmap, width: bitmap.width, height: bitmap.height };
+  } catch {
+    // Cross-origin assets that reject fetch may still load as a CORS-enabled
+    // image element; a tainted canvas will surface as the crop failing.
+    return await new Promise<ManualEditCropImage>((resolve, reject) => {
+      const image = new Image();
+      image.crossOrigin = 'anonymous';
+      image.onload = () => resolve({ source: image, width: image.naturalWidth, height: image.naturalHeight });
+      image.onerror = () => reject(new Error('Could not load image for cropping'));
+      image.src = url;
+    });
+  }
 }
 
 function toOwnerRelativePath(ownerFileName: string, targetPath: string): string {

@@ -136,15 +136,17 @@ function expectedPlan(opts: {
   const runs = new Set<RunKey>(opts.runs ?? []);
   const plan: Record<string, unknown> = {};
   for (const key of SCOPE_KEYS) plan[key] = scopes.has(key);
+  const runBroadWorkspaceValidation = opts.ciMode === "hot" || scopes.size > 0;
   plan["ci_mode"] = opts.ciMode;
   plan["run_e2e_vitest"] = runs.has("run_e2e_vitest");
   plan["run_playwright_critical"] = runs.has("run_playwright_critical");
   plan["run_playwright_visual"] = runs.has("run_playwright_visual");
   plan["run_preflight"] = true;
+  plan["run_preflight_typecheck"] = runBroadWorkspaceValidation;
   plan["run_ui_p0"] = runs.has("run_ui_p0");
   plan["run_web_workspace_tests"] = runs.has("run_web_workspace_tests");
   plan["run_windows_tools_pack_payload_tests"] = runs.has("run_windows_tools_pack_payload_tests");
-  plan["run_workspace_unit_tests"] = true;
+  plan["run_workspace_unit_tests"] = runBroadWorkspaceValidation;
   plan["ui_p0_matrix"] = UI_P0_MATRIX_JSON;
   plan["visual_matrix"] = VISUAL_MATRIX_JSON;
   return plan;
@@ -287,7 +289,7 @@ const GOLDEN_CASES: readonly GoldenCase[] = [
     files: ["tools/pack/src/build.ts"],
     expected: expectedPlan({
       ciMode: "hot",
-      scopes: ["tools_pack_tests_required", "workspace_validation_required"],
+      scopes: ["tools_dev_tests_required", "tools_pack_tests_required", "workspace_validation_required"],
       runs: ["run_windows_tools_pack_payload_tests"],
     }),
   },
@@ -297,7 +299,7 @@ const GOLDEN_CASES: readonly GoldenCase[] = [
     files: ["apps/desktop/src/main/index.ts"],
     expected: expectedPlan({
       ciMode: "hot",
-      scopes: ["tools_pack_tests_required", "workspace_validation_required"],
+      scopes: ["tools_dev_tests_required", "tools_pack_tests_required", "workspace_validation_required"],
       runs: ["run_windows_tools_pack_payload_tests"],
     }),
   },
@@ -366,6 +368,7 @@ const GOLDEN_CASES: readonly GoldenCase[] = [
       ciMode: "hot",
       scopes: [
         "web_tests_required",
+        "tools_dev_tests_required",
         "tools_pack_tests_required",
         "ui_critical_validation_required",
         "ui_p0_validation_required",
@@ -423,13 +426,69 @@ const GOLDEN_CASES: readonly GoldenCase[] = [
     expected: FULL_PLAN,
   },
   {
-    // While the certain rule set is empty, every queued file sits below the
-    // merge-queue trust threshold and escalates: the queue stays full. The
-    // first certain-rule promotion is the deliberate behavior change that
-    // makes this case diverge.
-    name: "merge_group docs-only group still runs everything at the certain threshold",
+    // Root markdown stays medium-tier (the global md regex is not promotable:
+    // its safety depends on other rules covering runtime-markdown directories),
+    // so one README.md in the group escalates and keeps the queue full even
+    // though docs/ itself is certain-tier.
+    name: "merge_group group with root markdown still runs everything at the certain threshold",
     context: { eventName: "merge_group" },
     files: ["README.md", "docs/architecture.md"],
+    expected: FULL_PLAN,
+  },
+  {
+    // The first certain-tier promotion: a group confined to the certain-exempt
+    // core (docs/, landing-page, editor configs, LICENSE/CODEOWNERS) drops to
+    // the preflight policy floor instead of running everything. Guarded by
+    // the "certain-exempt surface consumption" guard check; methodology in
+    // specs/current/ci.md.
+    name: "merge_group certain-exempt core group drops to the policy floor",
+    context: { eventName: "merge_group" },
+    files: ["docs/architecture.md", "docs/nested/guide.mdx", "apps/landing-page/src/pages/index.astro", "LICENSE", ".github/CODEOWNERS"],
+    expected: expectedPlan({ ciMode: "full" }),
+  },
+  {
+    name: "merge_group packaged-leaf core uses the guarded narrow plan",
+    context: { eventName: "merge_group" },
+    files: [
+      "apps/desktop/src/main/index.ts",
+      "apps/packaged/tests/launcher.test.ts",
+      "tools/pack/resources/linux/open-design.desktop.template",
+    ],
+    expected: expectedPlan({
+      ciMode: "full",
+      scopes: ["tools_dev_tests_required", "tools_pack_tests_required", "workspace_validation_required"],
+      runs: ["run_windows_tools_pack_payload_tests"],
+    }),
+  },
+  {
+    name: "merge_group daemon core keeps behavior coverage without unrelated consumers",
+    context: { eventName: "merge_group" },
+    files: [
+      "apps/daemon/src/server.ts",
+      "apps/daemon/src/routes/chat.ts",
+      "apps/daemon/tests/routes/chat.test.ts",
+    ],
+    expected: expectedPlan({
+      ciMode: "full",
+      scopes: [
+        "daemon_tests_required",
+        "ui_critical_validation_required",
+        "ui_p0_validation_required",
+        "workspace_validation_required",
+      ],
+      runs: ["run_e2e_vitest", "run_ui_p0"],
+    }),
+  },
+  {
+    name: "merge_group excluded daemon surfaces stay full",
+    context: { eventName: "merge_group" },
+    files: ["apps/daemon/src/sidecar/server.ts", "apps/daemon/src/runtimes/defs/claude.ts"],
+    expected: FULL_PLAN,
+  },
+  {
+    name: "merge_group packaged configuration outside the certain core stays full",
+    context: { eventName: "merge_group" },
+    files: ["apps/desktop/package.json", "tools/pack/bin/tools-pack.mjs"],
     expected: FULL_PLAN,
   },
   {
@@ -482,15 +541,244 @@ test("rule ids are unique", async () => {
   assert.deepEqual(ids, [...new Set(ids)]);
 });
 
-test("certain rules must name their enforcing guard", async () => {
+test("certain rules must name a guard that resolves to a real guard check", async () => {
   const { scopeRules } = await import("../../../scripts/scopes.ts");
+  // guard.ts must run through tsx (its check modules use .js-suffixed TS-ESM
+  // specifiers), so go through the root guard script exactly like CI does.
+  const guardCheckNames = new Set(
+    execFileSync("pnpm", ["--silent", "guard", "--list-checks"], { cwd: repoRoot, encoding: "utf8" })
+      .split("\n")
+      .filter(Boolean),
+  );
   for (const rule of scopeRules) {
     if (rule.confidence === "certain") {
       assert.ok(
-        rule.guard != null && rule.guard.length > 0,
-        `rule ${rule.id} is "certain" but names no guard; promotion requires the check that keeps its boundary invariant true`,
+        rule.guard != null && guardCheckNames.has(rule.guard),
+        `rule ${rule.id} is "certain" but its guard ${JSON.stringify(rule.guard)} does not resolve to a scripts/guard.ts check; promotion requires the live check that keeps its boundary invariant true`,
       );
     }
+  }
+});
+
+test("certain-exempt markdown matches only the certain rule (no medium co-match neutralizes the promotion)", async () => {
+  const { scopeRules, matchesRuleMatch } = await import("../../../scripts/scopes.ts");
+  for (const file of ["docs/architecture.md", "docs/nested/guide.mdx", "apps/landing-page/README.md"]) {
+    const matched = scopeRules.filter((rule) => matchesRuleMatch(file, rule.match)).map((rule) => rule.id);
+    assert.deepEqual(matched, ["certain-exempt-surface"], file);
+  }
+});
+
+test("merge-queue threshold trusts the certain-exempt core without escalation", async () => {
+  const { evaluateScopeOutputs, SCOPE_EFFECTS } = await import("../../../scripts/scopes.ts");
+  const atQueue = evaluateScopeOutputs(["docs/architecture.md"], "certain", {
+    deriveWorkspaceValidationFromTestScopes: true,
+  });
+  assert.deepEqual(
+    Object.values(atQueue.outputs),
+    SCOPE_EFFECTS.map(() => false),
+  );
+  assert.deepEqual(atQueue.decisions[0], {
+    file: "docs/architecture.md",
+    matchedRules: ["certain-exempt-surface"],
+    escalated: false,
+  });
+});
+
+test("packaged-leaf core matches only its certain rule with the guarded effects", async () => {
+  const { evaluateScopeOutputs, matchesRuleMatch, scopeRules } = await import("../../../scripts/scopes.ts");
+  const files = [
+    "apps/desktop/src/main.ts",
+    "apps/packaged/tests/main.test.ts",
+    "tools/pack/resources/linux/open-design.desktop.template",
+  ];
+  for (const file of files) {
+    const matched = scopeRules.filter((rule) => matchesRuleMatch(file, rule.match)).map((rule) => rule.id);
+    assert.deepEqual(matched, ["certain-packaged-leaf-sources"], file);
+  }
+  const evaluation = evaluateScopeOutputs(files, "certain", {
+    deriveWorkspaceValidationFromTestScopes: true,
+  });
+  assert.deepEqual(evaluation.decisions.map((decision) => decision.escalated), [false, false, false]);
+  assert.deepEqual(
+    Object.entries(evaluation.outputs)
+      .filter(([, enabled]) => enabled)
+      .map(([effect]) => effect),
+    ["tools_dev_tests_required", "tools_pack_tests_required", "workspace_validation_required"],
+  );
+});
+
+test("daemon core matches only its certain rule while excluded daemon surfaces stay medium", async () => {
+  const { evaluateScopeOutputs, matchesRuleMatch, scopeRules } = await import("../../../scripts/scopes.ts");
+  const files = [
+    "apps/daemon/src/server.ts",
+    "apps/daemon/src/policy.md",
+    "apps/daemon/tests/server.test.ts",
+  ];
+  for (const file of files) {
+    const matched = scopeRules.filter((rule) => matchesRuleMatch(file, rule.match)).map((rule) => rule.id);
+    assert.deepEqual(matched, ["certain-daemon-core"], file);
+  }
+
+  const evaluation = evaluateScopeOutputs(files, "certain", {
+    deriveWorkspaceValidationFromTestScopes: true,
+  });
+  assert.deepEqual(evaluation.decisions.map((decision) => decision.escalated), [false, false, false]);
+  assert.deepEqual(
+    Object.entries(evaluation.outputs)
+      .filter(([, enabled]) => enabled)
+      .map(([effect]) => effect),
+    [
+      "daemon_tests_required",
+      "ui_critical_validation_required",
+      "ui_p0_validation_required",
+      "workspace_validation_required",
+    ],
+  );
+
+  for (const file of [
+    "apps/daemon/src/sidecar/server.ts",
+    "apps/daemon/src/runtimes/defs/claude.ts",
+    "apps/daemon/tests/runtimes/agent-args.test.ts",
+  ]) {
+    const outside = evaluateScopeOutputs([file], "certain", {
+      deriveWorkspaceValidationFromTestScopes: true,
+    });
+    assert.equal(outside.decisions[0]?.escalated, true, file);
+    assert.equal(outside.decisions[0]?.matchedRules.includes("certain-daemon-core"), false, file);
+  }
+});
+
+test("packaged-leaf consumption collector resolves imports, packages, and static paths", async () => {
+  const { collectPackagedLeafConsumptionFromSource } = await import(
+    "../../../scripts/check-packaged-leaf-boundary.ts"
+  );
+  const violations = collectPackagedLeafConsumptionFromSource(
+    "packages/example/src/index.ts",
+    [
+      `import "@open-design/desktop/main";`,
+      `await import("../../../apps/packaged/src/index.ts");`,
+      `const source = path.join(repoRoot, "tools", "pack", "src", "index.ts");`,
+      `const prose = "desktop behavior is packaged elsewhere";`,
+    ].join("\n"),
+  );
+  assert.deepEqual(
+    violations.map((violation) => violation.lineNumber),
+    [1, 2, 3],
+  );
+});
+
+test("the consumption guard folds repository paths while allowing sandbox fixture writers", async () => {
+  const { collectCertainExemptConsumptionFromSource } = await import(
+    "../../../scripts/check-certain-exempt-consumption.ts"
+  );
+
+  // Dot-relative resolution into docs/ is consumption anywhere, tests included.
+  const relative = collectCertainExemptConsumptionFromSource(
+    "apps/daemon/tests/example.test.ts",
+    `const spec = readFileSync("../../../docs/spec.md", "utf8");`,
+  );
+  assert.deepEqual(relative.map((violation) => violation.literal), ["../../../docs/spec.md"]);
+
+  // Bare repo-relative literals are consumption in non-test source...
+  const bareInSource = collectCertainExemptConsumptionFromSource(
+    "tools/example/src/config.ts",
+    `const changelog = "docs/CHANGELOG";`,
+  );
+  assert.deepEqual(bareInSource.map((violation) => violation.literal), ["docs/CHANGELOG"]);
+
+  // ...and in tests when a repo-root helper reads them.
+  const repoReadInTest = collectCertainExemptConsumptionFromSource(
+    "apps/daemon/tests/runtimes/trae-cli.test.ts",
+    `await readRepoFile("docs/agent-adapters.md");`,
+  );
+  assert.deepEqual(repoReadInTest.map((violation) => violation.literal), [
+    "docs/agent-adapters.md",
+  ]);
+
+  const splitJoin = collectCertainExemptConsumptionFromSource(
+    "apps/daemon/src/example.ts",
+    `await readFile(path.join(repoRoot, "docs", "agent-adapters.md"));`,
+  );
+  assert.deepEqual(splitJoin.map((violation) => violation.literal), [
+    `path.join(repoRoot, "docs", "agent-adapters.md")`,
+  ]);
+
+  const splitResolve = collectCertainExemptConsumptionFromSource(
+    "apps/daemon/src/example.ts",
+    `await readFile(path.resolve("docs", "agent-adapters.md"));`,
+  );
+  assert.deepEqual(splitResolve.map((violation) => violation.literal), [
+    `path.resolve("docs", "agent-adapters.md")`,
+  ]);
+
+  const interpolatedPrefix = collectCertainExemptConsumptionFromSource(
+    "apps/daemon/src/example.ts",
+    "await readFile(`docs/${adapter}.md`);",
+  );
+  assert.deepEqual(interpolatedPrefix.map((violation) => violation.literal), [
+    "`docs/${adapter}.md`",
+  ]);
+
+  // Known project writers resolve the same-looking paths inside a sandbox.
+  for (const source of [
+    `await writeProjectFile("docs/empty.md", "");`,
+    `await fixture.writeProjectFile("docs/empty.md", "");`,
+    `await writeProjectFile(path.join("docs", "empty.md"), "");`,
+    "await writeProjectFile(`docs/${name}.md`, \"\");",
+  ]) {
+    const fixtureWrite = collectCertainExemptConsumptionFromSource(
+      "apps/daemon/tests/example.test.ts",
+      source,
+    );
+    assert.deepEqual(fixtureWrite, []);
+  }
+
+  // Prose that merely mentions a docs path does not start with the prefix.
+  const prose = collectCertainExemptConsumptionFromSource(
+    "apps/web/src/copy.ts",
+    `const footer = "Spec: docs/skills-protocol.md covers the adapter surface.";`,
+  );
+  assert.deepEqual(prose, []);
+});
+
+test("the consumption guard requires the narrow daemon test command to be exclusive", async () => {
+  const { daemonTestInvocationsFromWorkflow, workflowRunsOnlyAllowedDaemonTest } = await import(
+    "../../../scripts/check-certain-exempt-consumption.ts"
+  );
+  const narrowCommand =
+    "pnpm --filter @open-design/daemon exec vitest run -c vitest.config.ts tests/project-watchers.test.ts";
+  const narrowOnly = `
+jobs:
+  daemon_tests:
+    steps:
+      - name: Daemon workspace tests
+        run: ${narrowCommand}
+`;
+  assert.deepEqual(daemonTestInvocationsFromWorkflow(narrowOnly), [narrowCommand]);
+  assert.equal(workflowRunsOnlyAllowedDaemonTest(narrowOnly), true);
+
+  for (const broaderCommand of [
+    "pnpm --filter @open-design/daemon test",
+    "pnpm -F @open-design/daemon test",
+    "pnpm --filter=@open-design/daemon test",
+    "pnpm --dir apps/daemon test",
+    "pnpm -C apps/daemon test",
+    "pnpm --filter @open-design/daemon run test",
+    "pnpm --silent --filter @open-design/daemon test",
+    "pnpm -r --filter @open-design/daemon test",
+  ]) {
+    const narrowPlusBroader = `${narrowOnly}
+      - name: Full daemon suite
+        run: ${broaderCommand}
+`;
+    const expectedBroaderInvocation = broaderCommand.includes("run test")
+      ? "pnpm --filter @open-design/daemon run test"
+      : "pnpm --filter @open-design/daemon test";
+    assert.deepEqual(daemonTestInvocationsFromWorkflow(narrowPlusBroader), [
+      narrowCommand,
+      expectedBroaderInvocation,
+    ]);
+    assert.equal(workflowRunsOnlyAllowedDaemonTest(narrowPlusBroader), false);
   }
 });
 
@@ -522,7 +810,8 @@ test("fallback matching honors excludeWhen semantics", async () => {
 
   assert.equal(matchesRuleMatch("README.md", workspaceFallback.match), false);
   assert.equal(matchesRuleMatch("mystery.xyz", workspaceFallback.match), true);
-  assert.equal(matchesRuleMatch("tools/pack/src/build.ts", workspaceFallback.match), true);
+  assert.equal(matchesRuleMatch("tools/pack/src/build.ts", workspaceFallback.match), false);
+  assert.equal(matchesRuleMatch("tools/pack/bin/tools-pack.mjs", workspaceFallback.match), true);
 
   assert.equal(matchesRuleMatch("tools/pack/src/build.ts", uiCriticalFallback.match), false);
   assert.equal(matchesRuleMatch("apps/desktop/src/main.ts", uiCriticalFallback.match), false);
@@ -553,6 +842,48 @@ test("merge-queue threshold escalates medium-confidence files to the full radius
   });
 });
 
+test("runtime-definition changes produce only a three-domain UI P0 shadow candidate", async () => {
+  const { evaluateUiP0Shadow } = await import("../../../scripts/scopes.ts");
+  const decision = evaluateUiP0Shadow([
+    "apps/daemon/src/runtimes/defs/atomcode.ts",
+    "apps/daemon/src/runtimes/metadata.ts",
+    "apps/daemon/tests/runtimes/atomcode.test.ts",
+  ]);
+  assert.equal(decision.mode, "candidate");
+  assert.equal(decision.capability, "daemon-runtime-definition");
+  assert.deepEqual(
+    decision.matrix.map((entry) => entry.name),
+    ["entry-settings", "project-workspace", "project-runtime"],
+  );
+  assert.deepEqual(decision.outsideCapabilityFiles, []);
+});
+
+test("runtime-definition shadow fails closed for mixed, unknown, empty, and unresolved changes", async () => {
+  const { evaluateUiP0Shadow } = await import("../../../scripts/scopes.ts");
+  for (const files of [
+    ["apps/daemon/src/runtimes/defs/atomcode.ts", "apps/daemon/src/server.ts"],
+    ["apps/daemon/src/runtimes/detection.ts"],
+    ["mystery.xyz"],
+    [],
+  ]) {
+    const decision = evaluateUiP0Shadow(files);
+    assert.equal(decision.mode, "full-fallback", files.join(", "));
+    assert.deepEqual(
+      decision.matrix.map((entry) => entry.name),
+      ["entry-settings", "project-workspace", "project-runtime", "workspace-restoration"],
+    );
+  }
+  assert.equal(evaluateUiP0Shadow([], false).reason, "files-unresolved");
+});
+
+test("UI P0 shadow guard pins full applied coverage and closed fallbacks", async () => {
+  const { daemonCoreScopeContractErrors, uiP0ShadowContractErrors } = await import(
+    "../../../scripts/lib/guard/scope.ts"
+  );
+  assert.deepEqual(uiP0ShadowContractErrors(), []);
+  assert.deepEqual(daemonCoreScopeContractErrors(), []);
+});
+
 test("plan command evaluates offline at the pr threshold", () => {
   const stdout = execFileSync(
     process.execPath,
@@ -564,6 +895,33 @@ test("plan command evaluates offline at the pr threshold", () => {
   assert.equal(result.trace["threshold"], "medium");
   assert.equal(result.trace["fileCount"], 2);
   assert.deepEqual(result.trace["escalations"], []);
+});
+
+test("plan trace reports the runtime-definition UI P0 shadow without changing the applied plan", () => {
+  const stdout = execFileSync(
+    process.execPath,
+    [
+      "--experimental-strip-types",
+      scopesScript,
+      "plan",
+      "--context",
+      "pr",
+      "--files",
+      "apps/daemon/src/runtimes/defs/atomcode.ts",
+      "apps/daemon/tests/runtimes/atomcode.test.ts",
+    ],
+    { cwd: repoRoot, encoding: "utf8" },
+  );
+  const result = JSON.parse(stdout) as {
+    plan: Record<string, unknown>;
+    trace: { uiP0Shadow: { mode: string; matrix: Array<{ name: string }> } };
+  };
+  assert.equal(result.plan["ui_p0_matrix"], UI_P0_MATRIX_JSON);
+  assert.equal(result.trace.uiP0Shadow.mode, "candidate");
+  assert.deepEqual(
+    result.trace.uiP0Shadow.matrix.map((entry) => entry.name),
+    ["entry-settings", "project-workspace", "project-runtime"],
+  );
 });
 
 test("plan command surfaces queue-tier escalation and the trust-all shadow column", () => {

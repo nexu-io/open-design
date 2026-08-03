@@ -18,14 +18,58 @@ import {
   ListToolsRequestSchema,
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { buildProjectRawFileUrl } from '@open-design/contracts';
+import {
+  ANALYTICS_HEADER_ATTRIBUTION_QUALITY,
+  ANALYTICS_HEADER_CLIENT_TYPE,
+  ANALYTICS_HEADER_DEVICE_ID,
+  ANALYTICS_HEADER_DISTRIBUTION_MECHANISM,
+  ANALYTICS_HEADER_ENTRY_SURFACE,
+  ANALYTICS_HEADER_EXTERNAL_PLUGIN_ID,
+  ANALYTICS_HEADER_EXTERNAL_PLUGIN_VERSION,
+  ANALYTICS_HEADER_HOST_PRODUCT,
+  ANALYTICS_HEADER_LOCALE,
+  ANALYTICS_HEADER_MCP_SESSION_ID,
+  ANALYTICS_HEADER_PUBLISHER_CLASS,
+  ANALYTICS_HEADER_REQUEST_ID,
+  ANALYTICS_HEADER_SESSION_ID,
+  buildProjectRawFileUrl,
+  type McpAnalyticsContextResponse,
+} from '@open-design/contracts';
 import { randomUUID } from 'node:crypto';
 
 import { postCreateArtifactRequest } from './artifacts/create.js';
+import {
+  createLocalMcpBriefStore as createBriefStore,
+  localMcpBriefResponseCopy,
+  type LocalMcpBriefStore,
+} from './mcp-brief.js';
+import {
+  OPEN_DESIGN_BRIEF_APP_HTML,
+  OPEN_DESIGN_BRIEF_APP_VERSION,
+} from './mcp-apps/brief-resource.js';
+import { DEFAULT_AMR_RECHARGE_URL } from './integrations/vela-errors.js';
+import {
+  type ExternalPluginContext,
+  logicalPluginRequestDigest,
+  mapMcpHostProduct,
+  normalizeExternalPluginRunAnalyticsHints,
+  OPEN_DESIGN_PLUGIN_ID,
+  pluginContractError,
+  resolvePluginGenerationSloWindowMs,
+  validateExternalPluginContext,
+  validatePluginWorkflowId,
+} from './mcp-observability.js';
 
 const SERVER_NAME = 'open-design';
 const SERVER_VERSION = '0.2.0';
 const MCP_STDIO_IDLE_EXIT_MS = 30 * 60 * 1000;
+const OPEN_DESIGN_BRIEF_APP_RESOURCE =
+  'ui://open-design/artifact-card-v6.html';
+
+export const MCP_SERVER_INSTRUCTIONS = [
+  'Use only these product names in user-facing replies: Open Design Cloud, Local Codex, and Secure BYOK.',
+  'Tool names, runtime ids, endpoints, and correlation values are machine protocol. Never repeat them as product copy.',
+].join('\n');
 
 type JsonObject = Record<string, unknown>;
 interface RunMcpOptions { daemonUrl: string | URL }
@@ -40,10 +84,37 @@ interface ProjectPayload { project?: ProjectSummary; id?: string; name?: string;
 interface ActiveContext { active?: boolean; projectId?: string; projectName?: string | null; fileName?: string | null; ageMs?: number | null }
 type ResolvedProject = { id: string; name: string; source: 'uuid' | 'id' | 'exact' | 'slug' | 'substring' };
 interface ProjectListCache { baseUrl: string; t: number; list: ProjectSummary[] }
-interface McpArgs extends JsonObject { project?: unknown; entry?: unknown; include?: unknown; maxBytes?: unknown; path?: unknown; offset?: unknown; limit?: unknown; since?: unknown; query?: unknown; pattern?: unknown; max?: unknown; name?: unknown; content?: unknown; encoding?: unknown; artifactManifest?: unknown; confirm?: unknown; prompt?: unknown; plugin?: unknown; inputs?: unknown; agent?: unknown; model?: unknown; serviceTier?: unknown; runId?: unknown; id?: unknown; designSystem?: unknown; skill?: unknown; includeUnavailable?: unknown }
+interface McpArgs extends JsonObject { project?: unknown; entry?: unknown; include?: unknown; maxBytes?: unknown; path?: unknown; offset?: unknown; limit?: unknown; since?: unknown; query?: unknown; pattern?: unknown; max?: unknown; name?: unknown; content?: unknown; encoding?: unknown; artifactManifest?: unknown; confirm?: unknown; prompt?: unknown; plugin?: unknown; inputs?: unknown; agent?: unknown; model?: unknown; serviceTier?: unknown; byokProfile?: unknown; apiKey?: unknown; requestId?: unknown; resume?: unknown; runId?: unknown; id?: unknown; designSystem?: unknown; skill?: unknown; includeUnavailable?: unknown; artifactType?: unknown; projectTitle?: unknown; locale?: unknown; knownAnswers?: unknown; skip?: unknown; briefDraftId?: unknown; nonce?: unknown; answers?: unknown; externalPluginContext?: unknown; pluginWorkflowId?: unknown }
 interface ProjectFileBundleEntry { name: string; mime: string; size: number | null; content: string | null; binary: boolean }
-interface BundleInput { project: ProjectPayload | ProjectSummary; entry: string; files: ProjectFileBundleEntry[]; truncated: boolean; active: ActiveContext | null; resolved?: ResolvedProject | null }
+interface BundleInput { project: ProjectPayload | ProjectSummary; entry: string; files: ProjectFileBundleEntry[]; truncated: boolean; skippedFileCount?: number; active: ActiveContext | null; resolved?: ResolvedProject | null }
 interface ErrorWithCode { message?: string; code?: string; cause?: { code?: string } }
+interface HandleMcpToolCallOptions {
+  briefStore?: LocalMcpBriefStore;
+  analyticsHeaders?: Record<string, string>;
+  pluginAttribution?: McpPluginAttribution | null;
+  briefState?: 'confirmed' | 'skipped' | 'not_applicable';
+}
+interface McpPluginAttribution {
+  context: ExternalPluginContext;
+  pluginWorkflowId: string;
+}
+interface McpToolCallResult {
+  [key: string]: unknown;
+  content: Array<{ type: 'text'; text: string }>;
+  structuredContent?: JsonObject;
+  isError?: boolean;
+}
+
+export function _localeFromMcpToolMetadata(meta: unknown): string | undefined {
+  if (!meta || typeof meta !== 'object' || Array.isArray(meta)) return undefined;
+  const record = meta as Record<string, unknown>;
+  for (const candidate of [record['openai/locale'], record.locale]) {
+    if (typeof candidate === 'string' && candidate.trim().length > 0) {
+      return candidate.trim();
+    }
+  }
+  return undefined;
+}
 
 interface McpIdleExitControllerOptions {
   idleMs: number;
@@ -150,18 +221,140 @@ const PROJECT_ARG = {
   description: 'Project id (UUID) or name substring. Optional; defaults to the active project (expires after ~5 minutes of no Open Design activity).',
 } as const;
 
-const TOOL_DEFS = [
+const PLUGIN_WORKFLOW_ID_ARG = {
+  type: 'string',
+  description:
+    'Opaque workflow id issued by the local Open Design MCP after the first attributed call. Reuse it for later plugin-attributed calls; never invent or display it.',
+} as const;
+
+const EXTERNAL_PLUGIN_CONTEXT_ARG = {
+  type: 'object',
+  properties: {
+    id: { type: 'string', const: OPEN_DESIGN_PLUGIN_ID },
+    version: { type: 'string' },
+    distributionMechanism: {
+      type: 'string',
+      enum: ['git_marketplace', 'local_repo', 'manual', 'unknown'],
+    },
+    publisherClass: {
+      type: 'string',
+      enum: ['open_design_first_party', 'third_party', 'unknown'],
+    },
+  },
+  required: [
+    'id',
+    'version',
+    'distributionMechanism',
+    'publisherClass',
+  ],
+  additionalProperties: false,
+  description:
+    'Bounded self-reported distribution context. Used for product analytics only, never authorization or billing.',
+} as const;
+
+export const TOOL_DEFS = [
+  {
+    name: 'collect_brief',
+    description:
+      'Open an interactive Open Design brief card for a new artifact. Use the returned human-readable confirmation with any explicit execution mode; never ask the user to copy an internal draft id or nonce.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        artifactType: {
+          type: 'string',
+          enum: [
+            'website',
+            'product-prototype',
+            'presentation',
+            'document',
+            'image',
+            'video',
+            'audio',
+            'design-system',
+          ],
+          description: 'Artifact workflow whose brief should be collected.',
+        },
+        projectTitle: {
+          type: 'string',
+          description: 'Concise human-readable project title.',
+        },
+        locale: {
+          type: 'string',
+          description:
+            'BCP-47 language of the current user request. Prefer the request language over the host UI language; supported values are en, zh-CN, zh-TW, and ja, with English fallback.',
+        },
+        knownAnswers: {
+          type: 'object',
+          additionalProperties: true,
+          description: 'Optional stable question-id answers already supplied by the user.',
+        },
+        skip: {
+          type: 'boolean',
+          description: 'Use recommended defaults without asking. Defaults to false.',
+        },
+        pluginWorkflowId: PLUGIN_WORKFLOW_ID_ARG,
+        externalPluginContext: EXTERNAL_PLUGIN_CONTEXT_ARG,
+      },
+      required: ['artifactType'],
+      additionalProperties: false,
+    },
+    annotations: { ...WRITE_ANNOTATIONS, title: 'Collect Open Design brief' },
+    _meta: {
+      ui: { resourceUri: OPEN_DESIGN_BRIEF_APP_RESOURCE },
+      'ui/resourceUri': OPEN_DESIGN_BRIEF_APP_RESOURCE,
+      'openai/outputTemplate': OPEN_DESIGN_BRIEF_APP_RESOURCE,
+    },
+  },
+  {
+    name: 'confirm_brief',
+    description:
+      'Confirm the choices from the rendered Open Design brief card. Returns a readable summary; draft ids and nonces are internal widget data, never user-facing copy.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        briefDraftId: {
+          type: 'string',
+          description: 'Internal draft id returned by collect_brief.',
+        },
+        nonce: {
+          type: 'string',
+          description: 'Internal nonce returned by collect_brief.',
+        },
+        answers: {
+          type: 'object',
+          additionalProperties: true,
+          description: 'Question-id to selected stable option values.',
+        },
+        locale: {
+          type: 'string',
+          description:
+            'BCP-47 Host locale used only when collect_brief had no request or tool-call locale.',
+        },
+      },
+      required: ['briefDraftId', 'nonce', 'answers'],
+      additionalProperties: false,
+    },
+    annotations: { ...WRITE_ANNOTATIONS, title: 'Confirm Open Design brief' },
+  },
   {
     name: 'list_projects',
     description: 'List every Open Design project on this daemon.',
-    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    inputSchema: {
+      type: 'object',
+      properties: { pluginWorkflowId: PLUGIN_WORKFLOW_ID_ARG },
+      additionalProperties: false,
+    },
     annotations: { ...READ_ANNOTATIONS, title: 'List Open Design projects' },
   },
   {
     name: 'get_active_context',
     description:
       'Project + file the user has open in Open Design right now. Returns {active:false, hint:"..."} when no project is active so the agent can ask the user to interact with Open Design (the active context expires ~5 minutes after the last user interaction). Most tools default to this when project is omitted, so you rarely need to call this directly.',
-    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    inputSchema: {
+      type: 'object',
+      properties: { pluginWorkflowId: PLUGIN_WORKFLOW_ID_ARG },
+      additionalProperties: false,
+    },
     annotations: { ...READ_ANNOTATIONS, title: 'What is the user looking at?' },
   },
   {
@@ -187,6 +380,7 @@ const TOOL_DEFS = [
           description:
             'Soft cap on total text bytes (default 1_500_000). Also capped at 200 files. Excess files are dropped and truncated:true is set.',
         },
+        pluginWorkflowId: PLUGIN_WORKFLOW_ID_ARG,
       },
       additionalProperties: false,
     },
@@ -387,6 +581,7 @@ const TOOL_DEFS = [
           description: 'Optional design system id to attach (see the od://design-systems/... resources).',
         },
         skill: { type: 'string', description: 'Optional skill id to seed the project with.' },
+        pluginWorkflowId: PLUGIN_WORKFLOW_ID_ARG,
       },
       required: ['name'],
       additionalProperties: false,
@@ -404,19 +599,68 @@ const TOOL_DEFS = [
   {
     name: 'list_skills',
     description: 'List Open Design skills you can pass to start_run as a recipe. Discovery only — Open Design runs the skill, not you.',
-    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    inputSchema: {
+      type: 'object',
+      properties: { pluginWorkflowId: PLUGIN_WORKFLOW_ID_ARG },
+      additionalProperties: false,
+    },
     annotations: { ...READ_ANNOTATIONS, title: 'List Open Design skills' },
   },
   {
     name: 'list_plugins',
     description: 'List installed Open Design plugins (packaged design workflows) you can pass to start_run as plugin + inputs.',
-    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    inputSchema: {
+      type: 'object',
+      properties: { pluginWorkflowId: PLUGIN_WORKFLOW_ID_ARG },
+      additionalProperties: false,
+    },
     annotations: { ...READ_ANNOTATIONS, title: 'List Open Design plugins' },
+  },
+  {
+    name: 'list_byok_profiles',
+    description:
+      'List secure local BYOK profile references available to start_run.byokProfile. Returns only non-secret metadata; API keys never cross MCP.',
+    inputSchema: {
+      type: 'object',
+      properties: { pluginWorkflowId: PLUGIN_WORKFLOW_ID_ARG },
+      additionalProperties: false,
+    },
+    annotations: { ...READ_ANNOTATIONS, title: 'List secure BYOK profiles' },
+  },
+  {
+    name: 'start_vela_login',
+    description:
+      'Start Open Design Cloud browser sign-in through the local Open Design daemon. Returns the activation URL and user code when manual browser completion is needed. The tool name is an internal compatibility identifier and must not be repeated to the user.',
+    inputSchema: {
+      type: 'object',
+      properties: { pluginWorkflowId: PLUGIN_WORKFLOW_ID_ARG },
+      additionalProperties: false,
+    },
+    annotations: {
+      ...WRITE_ANNOTATIONS,
+      openWorldHint: true,
+      title: 'Sign in to Open Design Cloud',
+    },
+  },
+  {
+    name: 'get_vela_login_status',
+    description:
+      'Check whether Open Design Cloud browser sign-in is complete. Does not expose credentials. The tool name is an internal compatibility identifier and must not be repeated to the user.',
+    inputSchema: {
+      type: 'object',
+      properties: { pluginWorkflowId: PLUGIN_WORKFLOW_ID_ARG },
+      additionalProperties: false,
+    },
+    annotations: {
+      ...READ_ANNOTATIONS,
+      openWorldHint: true,
+      title: 'Check Open Design Cloud sign-in',
+    },
   },
   {
     name: 'start_run',
     description:
-      'Commission Open Design to generate or refine a design. Open Design spawns its own agent to do the work and returns a runId immediately. Poll get_run(runId) until status is terminal, then get_artifact to pull the result. Project optional; defaults to the active project. Requires an existing project (create one first with create_project).',
+      'Commission Open Design to generate or refine a design. Open Design spawns its own agent to do the work and returns a runId immediately. Poll get_run(runId) until status is terminal; its Preview/Studio reference is the default delivery. Call get_artifact only when source context is genuinely needed. Project optional; defaults to the active project. Requires an existing project (create one first with create_project).',
     inputSchema: {
       type: 'object',
       properties: {
@@ -440,7 +684,8 @@ const TOOL_DEFS = [
         },
         agent: {
           type: 'string',
-          description: "Which agent Open Design should run, e.g. 'claude' | 'codex' | 'opencode'. Optional; defaults to the user's configured agent.",
+          description:
+            'Internal runtime id returned by list_agents. Optional; defaults to the configured runtime. Never display the id as user-facing mode copy.',
         },
         model: {
           type: 'string',
@@ -450,6 +695,22 @@ const TOOL_DEFS = [
           type: 'string',
           description: "Service tier override for the selected model, e.g. 'priority' for Codex Fast. Optional.",
         },
+        byokProfile: {
+          type: 'string',
+          description:
+            'Secure profile id from list_byok_profiles. Selects the local BYOK OpenCode runtime; raw API keys are never accepted by MCP.',
+        },
+        requestId: {
+          type: 'string',
+          description:
+            'Stable id for this confirmed generation action. Generate it once before calling start_run and reuse it verbatim if the tool response is lost or retried; a different payload with the same id is rejected.',
+        },
+        resume: {
+          type: 'boolean',
+          description:
+            'Set true only after the user has topped up a paused Open Design Cloud run. Reuse the exact original requestId and payload; Open Design resumes the same logical run.',
+        },
+        pluginWorkflowId: PLUGIN_WORKFLOW_ID_ARG,
       },
       additionalProperties: false,
     },
@@ -463,6 +724,7 @@ const TOOL_DEFS = [
       type: 'object',
       properties: {
         runId: { type: 'string', description: 'Run id returned by start_run.' },
+        pluginWorkflowId: PLUGIN_WORKFLOW_ID_ARG,
       },
       required: ['runId'],
       additionalProperties: false,
@@ -493,6 +755,7 @@ const TOOL_DEFS = [
           type: 'boolean',
           description: 'When true, include agents whose binary is not installed. Defaults to false.',
         },
+        pluginWorkflowId: PLUGIN_WORKFLOW_ID_ARG,
       },
       additionalProperties: false,
     },
@@ -500,8 +763,805 @@ const TOOL_DEFS = [
   },
 ];
 
+export function localMcpToolDefinitions() {
+  return TOOL_DEFS;
+}
+
+type RuntimeJsonSchema = {
+  type?: string;
+  enum?: unknown[];
+  required?: string[];
+  properties?: Record<string, RuntimeJsonSchema>;
+  items?: RuntimeJsonSchema;
+  additionalProperties?: boolean;
+};
+
+function validateRuntimeJsonSchema(
+  value: unknown,
+  schema: RuntimeJsonSchema,
+  path: string,
+): void {
+  if (schema.enum && !schema.enum.includes(value)) {
+    throw pluginContractError(`${path} is not an allowed value`);
+  }
+  if (schema.type === 'string' && typeof value !== 'string') {
+    throw pluginContractError(`${path} must be a string`);
+  }
+  if (
+    schema.type === 'number'
+    && (typeof value !== 'number' || !Number.isFinite(value))
+  ) {
+    throw pluginContractError(`${path} must be a finite number`);
+  }
+  if (schema.type === 'boolean' && typeof value !== 'boolean') {
+    throw pluginContractError(`${path} must be a boolean`);
+  }
+  if (schema.type === 'array') {
+    if (!Array.isArray(value)) {
+      throw pluginContractError(`${path} must be an array`);
+    }
+    if (schema.items) {
+      value.forEach((item, index) =>
+        validateRuntimeJsonSchema(item, schema.items!, `${path}[${index}]`));
+    }
+    return;
+  }
+  if (schema.type !== 'object') return;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw pluginContractError(`${path} must be an object`);
+  }
+  const record = value as Record<string, unknown>;
+  for (const required of schema.required ?? []) {
+    if (!(required in record)) {
+      throw pluginContractError(`${path}.${required} is required`);
+    }
+  }
+  const properties = schema.properties ?? {};
+  if (schema.additionalProperties === false) {
+    const unsupported = Object.keys(record).find((key) => !(key in properties));
+    if (unsupported) {
+      throw pluginContractError(`${path}.${unsupported} is unsupported`);
+    }
+  }
+  for (const [key, nested] of Object.entries(properties)) {
+    if (record[key] !== undefined) {
+      validateRuntimeJsonSchema(record[key], nested, `${path}.${key}`);
+    }
+  }
+}
+
+function validateMcpToolArgs(name: string, args: McpArgs): void {
+  const definition = TOOL_DEFS.find((tool) => tool.name === name);
+  if (!definition) {
+    throw pluginContractError(`unknown MCP tool: ${name}`);
+  }
+  validateRuntimeJsonSchema(
+    args,
+    definition.inputSchema as RuntimeJsonSchema,
+    name,
+  );
+}
+
+export function localMcpResourceDefinitions() {
+  return [
+    {
+      uri: OPEN_DESIGN_BRIEF_APP_RESOURCE,
+      name: 'Open Design brief',
+      title: 'Choose the artifact direction',
+      description:
+        'Interactive local Open Design brief card shared by Open Design Cloud, Local Codex, and Secure BYOK modes.',
+      mimeType: 'text/html;profile=mcp-app',
+      _meta: {
+        ui: {
+          prefersBorder: true,
+          csp: {
+            connectDomains: [],
+            resourceDomains: [],
+          },
+        },
+        'ui/prefersBorder': true,
+        'ui/csp': {
+          connectDomains: [],
+          resourceDomains: [],
+        },
+        'openai/widgetPrefersBorder': true,
+      },
+    },
+  ];
+}
+
+export function createLocalMcpBriefStore() {
+  return createBriefStore();
+}
+
+interface McpObservedCall {
+  attribution: McpPluginAttribution | null;
+  attemptNumber: number;
+  pollAttemptCount?: number;
+}
+
+class BoundedLruMap<K, V> {
+  private readonly values = new Map<K, V>();
+
+  constructor(private readonly maxEntries: number) {}
+
+  get(key: K): V | undefined {
+    const value = this.values.get(key);
+    if (value === undefined) return undefined;
+    this.values.delete(key);
+    this.values.set(key, value);
+    return value;
+  }
+
+  has(key: K): boolean {
+    return this.values.has(key);
+  }
+
+  set(key: K, value: V): void {
+    this.values.delete(key);
+    this.values.set(key, value);
+    while (this.values.size > this.maxEntries) {
+      const oldest = this.values.keys().next().value as K | undefined;
+      if (oldest === undefined) break;
+      this.values.delete(oldest);
+    }
+  }
+}
+
+interface PersistedPluginWorkflowBinding {
+  runId: string;
+  projectId: string | null;
+  pluginWorkflowId: string;
+  logicalRequestDigest: string;
+  logicalRequestDigestVersion: 1;
+  externalPluginContext: ExternalPluginContext;
+}
+
+function issuePluginWorkflowId(callerValue: unknown): string {
+  if (callerValue !== undefined) {
+    throw pluginContractError(
+      'pluginWorkflowId must be omitted when externalPluginContext starts a workflow',
+    );
+  }
+  return randomUUID();
+}
+
+export class McpObservabilitySession {
+  readonly id = randomUUID();
+  readonly hostProduct;
+  private readonly workflows = new BoundedLruMap<string, ExternalPluginContext>(2_048);
+  private readonly runWorkflows = new BoundedLruMap<string, string>(2_048);
+  private readonly workflowRuns = new BoundedLruMap<string, string>(2_048);
+  private readonly workflowProjects = new BoundedLruMap<string, string>(2_048);
+  private readonly attempts = new BoundedLruMap<string, number>(4_096);
+  private readonly polls = new BoundedLruMap<string, number>(4_096);
+
+  private constructor(
+    private readonly baseUrl: string,
+    private readonly identity: McpAnalyticsContextResponse,
+    clientInfo: { name?: unknown; version?: unknown } | null | undefined,
+  ) {
+    this.hostProduct = mapMcpHostProduct(clientInfo);
+  }
+
+  static async create(
+    baseUrl: string,
+    clientInfo: { name?: unknown; version?: unknown } | null | undefined,
+  ): Promise<McpObservabilitySession> {
+    let identity: McpAnalyticsContextResponse = {
+      enabled: false,
+      deviceId: null,
+      locale: 'en',
+    };
+    try {
+      identity = await postJson<McpAnalyticsContextResponse>(
+        `${baseUrl}/api/analytics/mcp/context`,
+        {},
+      );
+    } catch {
+      // A telemetry bootstrap failure must not block the MCP server.
+    }
+    const session = new McpObservabilitySession(baseUrl, identity, clientInfo);
+    await session.emit('mcp_session_initialized', null, {
+      mcp_session_id: session.id,
+      host_product: session.hostProduct,
+    });
+    return session;
+  }
+
+  private async restoreAcceptedWorkflow(
+    pluginWorkflowId: string,
+  ): Promise<void> {
+    const binding = await getJson<PersistedPluginWorkflowBinding>(
+      `${this.baseUrl}/api/runs/by-plugin-workflow/${encodeURIComponent(pluginWorkflowId)}`,
+    );
+    if (
+      binding.pluginWorkflowId !== pluginWorkflowId
+      || typeof binding.runId !== 'string'
+      || binding.runId.length === 0
+      || (
+        binding.projectId !== null
+        && (typeof binding.projectId !== 'string' || binding.projectId.length === 0)
+      )
+      || binding.logicalRequestDigestVersion !== 1
+      || !/^[0-9a-f]{64}$/u.test(binding.logicalRequestDigest)
+    ) {
+      throw pluginContractError(
+        'persisted plugin workflow binding is invalid',
+      );
+    }
+    const context = validateExternalPluginContext(
+      binding.externalPluginContext,
+    );
+    this.workflows.set(pluginWorkflowId, context);
+    this.rememberRun(
+      binding.runId,
+      binding.projectId ?? undefined,
+      { context, pluginWorkflowId },
+    );
+  }
+
+  async resolveAttribution(
+    name: unknown,
+    args: McpArgs,
+    briefStore: LocalMcpBriefStore,
+  ): Promise<McpPluginAttribution | null> {
+    if (args.externalPluginContext !== undefined) {
+      if (name !== 'collect_brief') {
+        throw pluginContractError(
+          'externalPluginContext may only start a workflow on collect_brief',
+        );
+      }
+      const context = validateExternalPluginContext(
+        args.externalPluginContext,
+      );
+      const pluginWorkflowId = issuePluginWorkflowId(args.pluginWorkflowId);
+      args.pluginWorkflowId = pluginWorkflowId;
+      this.workflows.set(pluginWorkflowId, context);
+      return { context, pluginWorkflowId };
+    }
+
+    if (name === 'confirm_brief') {
+      const inherited = briefStore.attributionForDraft(args.briefDraftId);
+      if (inherited) {
+        this.workflows.set(
+          inherited.pluginWorkflowId,
+          inherited.externalPluginContext,
+        );
+        return {
+          context: inherited.externalPluginContext,
+          pluginWorkflowId: inherited.pluginWorkflowId,
+        };
+      }
+    }
+
+    if (args.pluginWorkflowId !== undefined) {
+      const pluginWorkflowId = validatePluginWorkflowId(
+        args.pluginWorkflowId,
+      );
+      let context = this.workflows.get(pluginWorkflowId);
+      if (!context) {
+        await this.restoreAcceptedWorkflow(pluginWorkflowId);
+        context = this.workflows.get(pluginWorkflowId);
+      }
+      if (!context) {
+        throw pluginContractError(
+          'pluginWorkflowId is unknown in this MCP session',
+        );
+      }
+      return { context, pluginWorkflowId };
+    }
+
+    if (name === 'get_run' && typeof args.runId === 'string') {
+      const pluginWorkflowId = this.runWorkflows.get(args.runId);
+      const context = pluginWorkflowId
+        ? this.workflows.get(pluginWorkflowId)
+        : undefined;
+      if (pluginWorkflowId && context) {
+        return { context, pluginWorkflowId };
+      }
+    }
+    return null;
+  }
+
+  beginCall(
+    name: string,
+    args: McpArgs,
+    attribution: McpPluginAttribution | null,
+  ): McpObservedCall {
+    const attemptKey = `${attribution?.pluginWorkflowId ?? 'ordinary'}:${name}`;
+    const attemptNumber = (this.attempts.get(attemptKey) ?? 0) + 1;
+    this.attempts.set(attemptKey, attemptNumber);
+    let pollAttemptCount: number | undefined;
+    if (name === 'get_run' && typeof args.runId === 'string') {
+      pollAttemptCount = (this.polls.get(args.runId) ?? 0) + 1;
+      this.polls.set(args.runId, pollAttemptCount);
+    }
+    return {
+      attribution,
+      attemptNumber,
+      ...(pollAttemptCount !== undefined ? { pollAttemptCount } : {}),
+    };
+  }
+
+  rememberRun(
+    runId: string,
+    projectId: string | undefined,
+    attribution: McpPluginAttribution,
+  ): void {
+    this.runWorkflows.set(runId, attribution.pluginWorkflowId);
+    this.workflowRuns.set(attribution.pluginWorkflowId, runId);
+    if (projectId) {
+      this.workflowProjects.set(attribution.pluginWorkflowId, projectId);
+    }
+  }
+
+  attributionQuality(
+    name: string,
+    args: McpArgs,
+    attribution: McpPluginAttribution | null,
+    payload: JsonObject | null,
+  ): 'self_reported' | 'session_correlated' {
+    if (!attribution || payload?.analyticsAttributionMismatch === true) {
+      return 'self_reported';
+    }
+    if (name === 'start_run') {
+      return this.workflowRuns.has(attribution.pluginWorkflowId)
+        ? 'session_correlated'
+        : 'self_reported';
+    }
+    if (name === 'get_run' && typeof args.runId === 'string') {
+      return this.runWorkflows.get(args.runId) === attribution.pluginWorkflowId
+        ? 'session_correlated'
+        : 'self_reported';
+    }
+    if (name === 'get_artifact') {
+      return this.workflowProjects.has(attribution.pluginWorkflowId)
+        ? 'session_correlated'
+        : 'self_reported';
+    }
+    return 'self_reported';
+  }
+
+  correlationFacts(
+    name: string,
+    args: McpArgs,
+    attribution: McpPluginAttribution | null,
+    payload: JsonObject | null,
+  ): Record<string, unknown> {
+    if (!attribution) return {};
+    if (payload?.analyticsAttributionMismatch === true) {
+      return {
+        correlation_status: 'run_mismatch',
+        error_code: 'PLUGIN_ATTRIBUTION_MISMATCH',
+      };
+    }
+    if (name === 'get_run' && typeof args.runId === 'string') {
+      return {
+        correlation_status:
+          this.runWorkflows.get(args.runId) === attribution.pluginWorkflowId
+            ? 'matched'
+            : 'run_mismatch',
+      };
+    }
+    if (name === 'get_artifact') {
+      const expectedProject = this.workflowProjects.get(
+        attribution.pluginWorkflowId,
+      );
+      if (!expectedProject) return { correlation_status: 'missing_workflow' };
+      return {
+        correlation_status:
+          payload?.projectId === expectedProject
+            ? 'matched'
+            : 'project_mismatch',
+      };
+    }
+    return { correlation_status: 'matched' };
+  }
+
+  async emit(
+    event:
+      | 'mcp_session_initialized'
+      | 'mcp_tool_started'
+      | 'mcp_tool_finished',
+    attribution: McpPluginAttribution | null,
+    properties: Record<string, unknown>,
+  ): Promise<void> {
+    if (!this.identity.enabled || !this.identity.deviceId) return;
+    try {
+      const attributionQuality =
+        properties.attribution_quality === 'session_correlated'
+          ? 'session_correlated'
+          : 'self_reported';
+      await postJson(
+        `${this.baseUrl}/api/analytics/mcp/event`,
+        {
+          event,
+          eventId: randomUUID(),
+          occurredAt: new Date().toISOString(),
+          properties,
+        },
+        this.headers(attribution, undefined, attributionQuality),
+      );
+    } catch {
+      // Analytics is deliberately best-effort.
+    }
+  }
+
+  headers(
+    attribution: McpPluginAttribution | null,
+    requestId?: string,
+    attributionQuality: 'self_reported' | 'session_correlated' = 'self_reported',
+  ): Record<string, string> {
+    if (!this.identity.enabled || !this.identity.deviceId) return {};
+    return {
+      [ANALYTICS_HEADER_DEVICE_ID]: this.identity.deviceId,
+      [ANALYTICS_HEADER_SESSION_ID]: this.id,
+      [ANALYTICS_HEADER_CLIENT_TYPE]: 'external_mcp',
+      [ANALYTICS_HEADER_ENTRY_SURFACE]: 'external_mcp',
+      [ANALYTICS_HEADER_HOST_PRODUCT]: this.hostProduct,
+      [ANALYTICS_HEADER_LOCALE]: this.identity.locale || 'en',
+      [ANALYTICS_HEADER_MCP_SESSION_ID]: this.id,
+      ...(requestId ? { [ANALYTICS_HEADER_REQUEST_ID]: requestId } : {}),
+      ...(attribution
+        ? {
+            [ANALYTICS_HEADER_EXTERNAL_PLUGIN_ID]:
+              attribution.context.id,
+            [ANALYTICS_HEADER_EXTERNAL_PLUGIN_VERSION]:
+              attribution.context.version,
+            [ANALYTICS_HEADER_DISTRIBUTION_MECHANISM]:
+              attribution.context.distributionMechanism,
+            [ANALYTICS_HEADER_PUBLISHER_CLASS]:
+              attribution.context.publisherClass,
+            [ANALYTICS_HEADER_ATTRIBUTION_QUALITY]: attributionQuality,
+          }
+        : {}),
+    };
+  }
+}
+
+function mcpSourceProperties(
+  session: McpObservabilitySession,
+  attribution: McpPluginAttribution | null,
+  attributionQuality: 'self_reported' | 'session_correlated' = 'self_reported',
+): Record<string, unknown> {
+  return {
+    mcp_session_id: session.id,
+    host_product: session.hostProduct,
+    ...(attribution
+      ? {
+          external_plugin_id: attribution.context.id,
+          external_plugin_version: attribution.context.version,
+          distribution_mechanism:
+            attribution.context.distributionMechanism,
+          publisher_class: attribution.context.publisherClass,
+          attribution_quality: attributionQuality,
+          plugin_workflow_id: attribution.pluginWorkflowId,
+        }
+      : {}),
+  };
+}
+
+function parseMcpResult(result: McpToolCallResult): JsonObject | null {
+  const text = result.content[0]?.text;
+  if (typeof text !== 'string') return null;
+  try {
+    const parsed = JSON.parse(text) as unknown;
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as JsonObject)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function mcpFailureFacts(
+  name: string,
+  result: McpToolCallResult,
+): Record<string, unknown> {
+  if (result.isError !== true) return {};
+  const message = result.content[0]?.text ?? '';
+  const errorCode = message.includes('PLUGIN_CONTRACT_REJECTED')
+    ? 'PLUGIN_CONTRACT_REJECTED'
+    : message.includes('cannot reach the Open Design daemon')
+      ? 'DAEMON_UNREACHABLE'
+      : message.includes('DELIVERABLE_MISSING')
+        ? 'DELIVERABLE_MISSING'
+      : 'MCP_TOOL_FAILED';
+  const failureStage =
+    name === 'collect_brief' || name === 'confirm_brief'
+      ? 'brief'
+      : name.includes('vela_login') || name === 'list_byok_profiles'
+        ? 'auth'
+        : name.includes('project')
+          ? 'project'
+        : name === 'start_run'
+          ? 'run_accept'
+          : name === 'get_artifact' && errorCode === 'DELIVERABLE_MISSING'
+            ? 'artifact_validation'
+          : name === 'get_run'
+            ? 'delivery'
+            : name === 'get_artifact'
+              ? 'delivery'
+              : 'mcp_initialize';
+  const failureSource =
+    errorCode === 'PLUGIN_CONTRACT_REJECTED'
+      ? 'local_mcp'
+      : errorCode === 'DAEMON_UNREACHABLE'
+        ? 'open_design_daemon'
+        : errorCode === 'DELIVERABLE_MISSING'
+          ? 'artifact_store'
+          : message.includes('VELA_') || message.includes('AMR_')
+            ? 'vela_api'
+            : 'open_design_daemon';
+  return {
+    error_code: errorCode,
+    failure_stage: failureStage,
+    failure_source: failureSource,
+    failure_category:
+      errorCode === 'PLUGIN_CONTRACT_REJECTED'
+        ? 'invalid_request'
+        : errorCode === 'DAEMON_UNREACHABLE'
+          ? 'availability'
+          : 'unknown',
+    retryable: errorCode === 'DAEMON_UNREACHABLE',
+    user_action:
+      errorCode === 'PLUGIN_CONTRACT_REJECTED'
+        ? 'fix_plugin'
+        : errorCode === 'DAEMON_UNREACHABLE'
+          ? 'start_open_design'
+          : 'retry',
+  };
+}
+
+async function observeMcpToolCall(
+  session: McpObservabilitySession,
+  briefStore: LocalMcpBriefStore,
+  baseUrl: string,
+  nameValue: unknown,
+  args: McpArgs,
+): Promise<McpToolCallResult> {
+  const name = typeof nameValue === 'string' ? nameValue : 'unknown';
+  const startedAt = Date.now();
+  const toolAttemptId = randomUUID();
+  let attribution: McpPluginAttribution | null = null;
+  try {
+    attribution = await session.resolveAttribution(name, args, briefStore);
+    if (attribution) validateMcpToolArgs(name, args);
+    if (
+      attribution
+      && name === 'get_artifact'
+      && (typeof args.project !== 'string' || args.project.length === 0)
+    ) {
+      throw pluginContractError(
+        'plugin get_artifact must identify the run project explicitly',
+      );
+    }
+  } catch (error) {
+    const observed = session.beginCall(name, args, null);
+    const rawPlugin =
+      args.externalPluginContext
+      && typeof args.externalPluginContext === 'object'
+      && !Array.isArray(args.externalPluginContext)
+      && (args.externalPluginContext as JsonObject).id
+        === OPEN_DESIGN_PLUGIN_ID;
+    const rejected = errorResult(errorMessage(error));
+    const common = {
+      ...mcpSourceProperties(session, null),
+      ...(rawPlugin
+        ? {
+            external_plugin_id: OPEN_DESIGN_PLUGIN_ID,
+            attribution_quality: 'self_reported',
+          }
+        : {}),
+      tool_name: name,
+      tool_attempt_id: toolAttemptId,
+      attempt_number: observed.attemptNumber,
+    };
+    await session.emit('mcp_tool_started', null, common);
+    await session.emit('mcp_tool_finished', null, {
+      ...common,
+      result: 'failed',
+      duration_ms: Math.max(0, Date.now() - startedAt),
+      ...mcpFailureFacts(name, rejected),
+    });
+    return rejected;
+  }
+
+  const observed = session.beginCall(name, args, attribution);
+  const requestId =
+    typeof args.requestId === 'string' && args.requestId ? args.requestId : undefined;
+  const logical =
+    attribution && requestId
+      ? logicalPluginRequestDigest(requestId)
+      : null;
+  const startedAttributionQuality = session.attributionQuality(
+    name,
+    args,
+    attribution,
+    null,
+  );
+  const common = {
+    ...mcpSourceProperties(
+      session,
+      attribution,
+      startedAttributionQuality,
+    ),
+    tool_name: name,
+    tool_attempt_id: toolAttemptId,
+    attempt_number: observed.attemptNumber,
+    ...(typeof args.runId === 'string' ? { run_id: args.runId } : {}),
+    ...(logical
+      ? {
+          logical_request_digest: logical.digest,
+          logical_request_digest_version: logical.version,
+        }
+      : {}),
+  };
+  await session.emit('mcp_tool_started', attribution, common);
+
+  const result = await handleMcpToolCall(baseUrl, name, args, {
+    briefStore,
+    analyticsHeaders: session.headers(attribution, requestId),
+    pluginAttribution: attribution,
+    ...(attribution
+      ? {
+          briefState: briefStore.briefStateForWorkflow(
+            attribution.pluginWorkflowId,
+          ),
+        }
+      : {}),
+  });
+  const payload = parseMcpResult(result);
+  if (
+    name === 'start_run'
+    && attribution
+    && typeof payload?.runId === 'string'
+    && payload.analyticsAttributionMismatch !== true
+  ) {
+    session.rememberRun(
+      payload.runId,
+      typeof payload.projectId === 'string' ? payload.projectId : undefined,
+      attribution,
+    );
+  }
+  const delivery = mcpDeliveryFacts(
+    name,
+    result,
+    payload,
+    observed.pollAttemptCount,
+  );
+  const finishedAttributionQuality = session.attributionQuality(
+    name,
+    args,
+    attribution,
+    payload,
+  );
+  await session.emit('mcp_tool_finished', attribution, {
+    ...common,
+    ...(attribution
+      ? { attribution_quality: finishedAttributionQuality }
+      : {}),
+    result: result.isError === true ? 'failed' : 'success',
+    duration_ms: Math.max(0, Date.now() - startedAt),
+    ...(observed.pollAttemptCount
+      ? { poll_attempt_count: observed.pollAttemptCount }
+      : {}),
+    ...mcpFailureFacts(name, result),
+    ...delivery,
+    ...session.correlationFacts(name, args, attribution, payload),
+  });
+  return result;
+}
+
+function mcpDeliveryFacts(
+  name: string,
+  result: McpToolCallResult,
+  payload: JsonObject | null,
+  pollAttemptCount?: number,
+): Record<string, unknown> {
+  if (
+    name === 'start_run'
+    && payload?.analyticsAttributionMismatch === true
+  ) {
+    return {
+      correlation_status: 'run_mismatch',
+      error_code: 'PLUGIN_ATTRIBUTION_MISMATCH',
+    };
+  }
+  if (name === 'get_artifact') {
+    if (result.isError === true || !payload) {
+      return {
+        delivery_kind: 'artifact_context_bundle',
+        delivery_result: 'failed',
+      };
+    }
+    const partial =
+      payload.truncated === true
+      || (typeof payload.skippedFileCount === 'number'
+        && payload.skippedFileCount > 0);
+    return {
+      delivery_kind: 'artifact_context_bundle',
+      delivery_result: partial ? 'partial' : 'complete',
+      truncated: payload.truncated === true,
+      skipped_file_count:
+        typeof payload.skippedFileCount === 'number'
+          ? payload.skippedFileCount
+          : 0,
+      ...(typeof payload.projectId === 'string'
+        ? { project_id: payload.projectId }
+        : {}),
+    };
+  }
+  if (name !== 'get_run' || !payload) return {};
+  const status = payload.status;
+  const terminal =
+    status === 'succeeded' || status === 'failed' || status === 'canceled';
+  if (!terminal) {
+    return {
+      poll_state: 'non_terminal',
+    };
+  }
+  const hasPreviewReference =
+    typeof payload.previewUrl === 'string'
+    && payload.previewUrl.length > 0
+    && typeof payload.entryFile === 'string'
+    && payload.entryFile.length > 0;
+  const hasStudioReference =
+    typeof payload.studioUrl === 'string'
+    && payload.studioUrl.length > 0;
+  const artifactCount =
+    typeof payload.artifactCount === 'number'
+    && Number.isFinite(payload.artifactCount)
+      ? Math.max(0, Math.floor(payload.artifactCount))
+      : null;
+  const hasAuthoritativeValidation =
+    typeof payload.deliverableValid === 'boolean'
+    || typeof payload.deliverableValidation === 'string';
+  const canonicalEntryMatches =
+    typeof payload.deliverableEntryFile === 'string'
+    && payload.deliverableEntryFile.length > 0
+    && (!hasPreviewReference
+      || payload.deliverableEntryFile === payload.entryFile);
+  // Compatible daemons validate the canonical entry against the filesystem and
+  // project kind. artifactCount alone only proves that this run touched
+  // something; it cannot promote a stale metadata entry or an unrelated file
+  // into a deliverable. The preview fallback is retained only for older,
+  // non-plugin MCP clients that predate the authoritative fields.
+  const hasValidatedArtifact = hasAuthoritativeValidation
+    ? payload.deliverableValid === true
+      && payload.deliverableValidation === 'valid'
+      && canonicalEntryMatches
+    : artifactCount === null
+      ? hasPreviewReference
+      : artifactCount > 0 && hasPreviewReference;
+  const complete =
+    status === 'succeeded'
+    && hasValidatedArtifact
+    && (hasPreviewReference || hasStudioReference);
+  return {
+    poll_state: 'terminal',
+    delivery_kind: 'preview_studio_reference',
+    delivery_result: complete ? 'complete' : 'failed',
+    deliverable_validation: complete ? 'valid' : 'invalid',
+    ...(pollAttemptCount ? { poll_attempt_count: pollAttemptCount } : {}),
+    ...(!complete && status === 'succeeded'
+      ? {
+          error_code: 'DELIVERABLE_MISSING',
+          failure_stage: 'artifact_validation',
+          failure_source: 'artifact_store',
+          failure_category: 'invalid_output',
+          retryable: true,
+          user_action: 'retry',
+        }
+      : {}),
+  };
+}
+
 export async function runMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
   const baseUrl = String(daemonUrl).replace(/\/$/, '');
+  const briefStore = createLocalMcpBriefStore();
+  let observabilityPromise: Promise<McpObservabilitySession> | null = null;
   let closeTransportForIdle: (() => void) | null = null;
   const idleExit = _createMcpIdleExitController({
     idleMs: MCP_STDIO_IDLE_EXIT_MS,
@@ -517,6 +1577,8 @@ export async function runMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
     {
       capabilities: { tools: {}, resources: {} },
       instructions: [
+        MCP_SERVER_INSTRUCTIONS,
+        '',
         'Open Design (OD) is a local-first design workspace. The user typically',
         'has OD running on their machine; each project contains a rendered',
         'artifact (HTML/JSX/CSS) plus its source files.',
@@ -557,14 +1619,32 @@ export async function runMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
         '',
         'To make Open Design GENERATE or refine a design (rather than just',
         'read/edit files), commission a run - you do not run skills yourself:',
+        ' - collect_brief first for a new artifact unless the user explicitly',
+        '    asks to skip questions. Let the user complete the rendered card;',
+        '    confirm_brief returns the readable brief to reuse with Open Design',
+        '    Cloud, Local Codex, or Secure BYOK. Never print or ask the user to copy',
+        '    briefDraftId, nonce, or any other internal correlation value.',
         ' - list_skills / list_plugins to see what you can ask OD to make.',
+        ' - list_byok_profiles returns secure local credential references when',
+        '    the user explicitly chooses Secure BYOK. Never request or pass a',
+        '    raw API key through MCP; pass only start_run.byokProfile.',
+        ' - for Open Design Cloud, call the Cloud login-status tool first.',
+        '    If signed out, call the Cloud sign-in tool once, show its activation',
+        '    URL/code when present, and poll login status until loggedIn:true.',
+        '    The tool and runtime ids are internal protocol; never show them.',
         ' - list_agents when you need to pass start_run.agent — do not',
         '    guess "claude" / "codex" / "opencode"; only agents in the',
         '    returned list will actually spawn on this machine.',
         ' - create_project(name) first if you need a fresh project to',
         '    generate into; start_run requires an existing project.',
-        ' - start_run(prompt, [skill], [plugin], [inputs]) kicks off generation in',
-        '    the active or named project and returns a runId immediately.',
+        ' - start_run(prompt, requestId, [skill], [plugin], [inputs]) kicks off',
+        '    generation in the active or named project and returns a runId.',
+        '    Generate requestId once per confirmed user action and reuse the',
+        '    exact same value after a timeout/lost response. Do not call',
+        '    start_run again while get_run reports the original run in flight.',
+        '    If get_run returns failureAction:"recharge", show rechargeUrl;',
+        '    after the user confirms top-up, call the exact original start_run',
+        '    once with the same requestId and resume:true.',
         '    Open Design spawns its own agent to do the work.',
         ' - get_run(runId) polls until status is succeeded/failed/canceled;',
         '    on success it returns a previewUrl you can open in a browser',
@@ -620,6 +1700,7 @@ export async function runMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
       getJson<DesignSystemsPayload>(`${baseUrl}/api/design-systems`).catch((): DesignSystemsPayload => ({ designSystems: [] })),
     ]);
     const resources = [
+      ...localMcpResourceDefinitions(),
       {
         uri: 'od://focus/active',
         name: 'Active Open Design context',
@@ -648,6 +1729,20 @@ export async function runMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
 
   server.setRequestHandler(ReadResourceRequestSchema, withMcpActivity(async (req) => {
     const uri = req.params?.uri;
+    if (uri === OPEN_DESIGN_BRIEF_APP_RESOURCE) {
+      return {
+        contents: [
+          {
+            uri,
+            mimeType: 'text/html;profile=mcp-app',
+            text: OPEN_DESIGN_BRIEF_APP_HTML,
+            _meta: {
+              version: OPEN_DESIGN_BRIEF_APP_VERSION,
+            },
+          },
+        ],
+      };
+    }
     if (uri === 'od://focus/active') {
       const data = await getJson<ActiveContext>(`${baseUrl}/api/active`);
       return {
@@ -690,8 +1785,27 @@ export async function runMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
 
   server.setRequestHandler(CallToolRequestSchema, withMcpActivity(async (req) => {
     const name = req.params?.name;
-    const args: McpArgs = (req.params?.arguments ?? {}) as McpArgs;
-    return handleMcpToolCall(baseUrl, name, args);
+    const args: McpArgs = {
+      ...((req.params?.arguments ?? {}) as McpArgs),
+    };
+    if (name === 'collect_brief' && args.locale === undefined) {
+      const locale = _localeFromMcpToolMetadata(
+        (req.params as { _meta?: unknown } | undefined)?._meta,
+      );
+      if (locale) args.locale = locale;
+    }
+    observabilityPromise ??= McpObservabilitySession.create(
+      baseUrl,
+      server.getClientVersion(),
+    );
+    const observability = await observabilityPromise;
+    return observeMcpToolCall(
+      observability,
+      briefStore,
+      baseUrl,
+      name,
+      args,
+    );
   }));
 
   const transport = new StdioServerTransport();
@@ -736,13 +1850,13 @@ export async function runMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
   }
 }
 
-function ok(payload: unknown) {
+function ok(payload: unknown): McpToolCallResult {
   const text =
     typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2);
   return { content: [{ type: 'text', text }] };
 }
 
-function errorResult(message: string) {
+function errorResult(message: string): McpToolCallResult {
   return { isError: true, content: [{ type: 'text', text: message }] };
 }
 
@@ -752,9 +1866,73 @@ function requireString(v: unknown, name: string): asserts v is string {
   }
 }
 
-async function handleMcpToolCall(baseUrl: string, name: unknown, args: McpArgs) {
+const MCP_CREDENTIAL_FIELD_PATTERN =
+  /^(?:api[_-]?key|authorization|access[_-]?token|refresh[_-]?token|secret|password)$/iu;
+
+function containsMcpCredentialField(value: unknown, depth = 0): boolean {
+  if (depth > 20) return true;
+  if (!value || typeof value !== 'object') return false;
+  if (Array.isArray(value)) {
+    return value.some((entry) => containsMcpCredentialField(entry, depth + 1));
+  }
+  return Object.entries(value as JsonObject).some(([key, entry]) =>
+    MCP_CREDENTIAL_FIELD_PATTERN.test(key)
+    || containsMcpCredentialField(entry, depth + 1),
+  );
+}
+
+function publicVelaLoginStatus(status: unknown): unknown {
+  if (!status || typeof status !== 'object' || Array.isArray(status)) return status;
+  const { configPath: _configPath, ...publicStatus } = status as JsonObject;
+  return publicStatus;
+}
+
+async function handleMcpToolCall(
+  baseUrl: string,
+  name: unknown,
+  args: McpArgs,
+  options: HandleMcpToolCallOptions = {},
+): Promise<McpToolCallResult> {
   try {
     switch (name) {
+      case 'collect_brief': {
+        const collected = (options.briefStore ?? createLocalMcpBriefStore())
+          .collect(args);
+        const copy = localMcpBriefResponseCopy(collected.locale);
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: copy.completeCard,
+            },
+          ],
+          structuredContent: collected as unknown as JsonObject,
+        };
+      }
+      case 'confirm_brief': {
+        if (!options.briefStore) {
+          throw new Error(
+            'confirm_brief requires the same local MCP session that created the draft',
+          );
+        }
+        const confirmed = options.briefStore.confirm(args);
+        const copy = localMcpBriefResponseCopy(confirmed.locale);
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: [
+                copy.confirmed,
+                '',
+                confirmed.summary,
+                '',
+                copy.continueWithBrief,
+              ].join('\n'),
+            },
+          ],
+          structuredContent: confirmed as unknown as JsonObject,
+        };
+      }
       case 'list_projects':
         return ok(await getJson<ProjectsPayload>(`${baseUrl}/api/projects`));
       case 'get_active_context': {
@@ -859,10 +2037,31 @@ async function handleMcpToolCall(baseUrl: string, name: unknown, args: McpArgs) 
         return ok(await getJson<SkillsPayload>(`${baseUrl}/api/skills`));
       case 'list_plugins':
         return ok(await listPlugins(baseUrl));
+      case 'list_byok_profiles':
+        return ok(await listByokProfiles(baseUrl));
       case 'list_agents':
         return ok(await listAgents(baseUrl, args.includeUnavailable === true));
+      case 'start_vela_login': {
+        const started = await postJson<JsonObject>(
+          `${baseUrl}/api/integrations/vela/login`,
+          options.pluginAttribution
+            ? { pluginWorkflowId: options.pluginAttribution.pluginWorkflowId }
+            : {},
+          options.analyticsHeaders,
+        );
+        const status = publicVelaLoginStatus(
+          await getJson<JsonObject>(`${baseUrl}/api/integrations/vela/status`),
+        );
+        return ok({ started, status });
+      }
+      case 'get_vela_login_status':
+        return ok(
+          publicVelaLoginStatus(
+            await getJson<JsonObject>(`${baseUrl}/api/integrations/vela/status`),
+          ),
+        );
       case 'start_run':
-        return await startRun(baseUrl, args);
+        return await startRun(baseUrl, args, options);
       case 'get_run':
         return await getRun(baseUrl, args);
       case 'cancel_run': {
@@ -965,10 +2164,14 @@ async function formatDaemonError(resp: Response, url: string): Promise<string> {
   return `daemon ${resp.status} on ${url}: ${detail}`;
 }
 
-async function postJson<T>(url: string, body: unknown): Promise<T> {
+async function postJson<T>(
+  url: string,
+  body: unknown,
+  headers: Record<string, string> = {},
+): Promise<T> {
   const resp = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...headers },
     body: JSON.stringify(body ?? {}),
   });
   if (!resp.ok) {
@@ -1060,6 +2263,58 @@ async function listAgents(baseUrl: string, includeUnavailable: boolean): Promise
   return { agents };
 }
 
+async function listByokProfiles(baseUrl: string): Promise<JsonObject> {
+  const payload = await getJson<JsonObject>(`${baseUrl}/api/byok/profiles`);
+  const rawProfiles = Array.isArray(payload.profiles) ? payload.profiles : [];
+  const profiles = rawProfiles.flatMap((value) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
+    const profile = value as JsonObject;
+    if (
+      typeof profile.id !== 'string'
+      || typeof profile.label !== 'string'
+      || typeof profile.protocol !== 'string'
+      || typeof profile.baseUrl !== 'string'
+      || typeof profile.model !== 'string'
+    ) {
+      return [];
+    }
+    try {
+      const parsed = new URL(profile.baseUrl);
+      if (
+        !['http:', 'https:'].includes(parsed.protocol)
+        || parsed.username.length > 0
+        || parsed.password.length > 0
+        || parsed.search.length > 0
+        || parsed.hash.length > 0
+      ) {
+        return [];
+      }
+    } catch {
+      return [];
+    }
+    return [{
+      id: profile.id,
+      label: profile.label,
+      protocol: profile.protocol,
+      baseUrl: profile.baseUrl,
+      model: profile.model,
+      ...(typeof profile.apiVersion === 'string'
+        ? { apiVersion: profile.apiVersion }
+        : {}),
+      requiresApiKey: profile.requiresApiKey === true,
+      configured: profile.configured === true,
+      ...(typeof profile.keyTail === 'string' ? { keyTail: profile.keyTail } : {}),
+      ...(typeof profile.createdAt === 'number' ? { createdAt: profile.createdAt } : {}),
+      ...(typeof profile.updatedAt === 'number' ? { updatedAt: profile.updatedAt } : {}),
+    }];
+  });
+  return {
+    available: payload.available === true,
+    backend: typeof payload.backend === 'string' ? payload.backend : 'unknown',
+    profiles,
+  };
+}
+
 // Derive a valid project id ([A-Za-z0-9._-], <=128) from a display name,
 // with a short random suffix so repeated creates with the same name
 // don't collide on the daemon's primary key.
@@ -1075,9 +2330,62 @@ function slugifyProjectId(name: string): string {
 // Returns the runId immediately so the caller can poll get_run —
 // start+poll because MCP is request/response and generation is
 // minutes-long.
-async function startRun(baseUrl: string, args: McpArgs) {
+async function startRun(
+  baseUrl: string,
+  args: McpArgs,
+  options: HandleMcpToolCallOptions = {},
+) {
+  if (
+    Object.prototype.hasOwnProperty.call(args, 'apiKey')
+    || Object.prototype.hasOwnProperty.call(args, 'byokProvider')
+    || containsMcpCredentialField(args.inputs)
+  ) {
+    throw new Error(
+      'raw API keys are not accepted by Open Design MCP. Save the key through the Open Design UI or `od byok save --api-key-stdin`, then pass only byokProfile.',
+    );
+  }
   const { id, resolved, active } = await resolveProjectArg(baseUrl, args.project);
-  const body: JsonObject = { projectId: id };
+  if (args.requestId !== undefined) requireString(args.requestId, 'requestId');
+  if (
+    options.pluginAttribution
+    && (typeof args.requestId !== 'string' || args.requestId.length === 0)
+  ) {
+    throw pluginContractError(
+      'requestId is required for attributed start_run calls so a lost response can be retried without starting a second logical run',
+    );
+  }
+  const requestId =
+    typeof args.requestId === 'string' && args.requestId.length > 0
+      ? args.requestId
+      : randomUUID();
+  const body: JsonObject = { projectId: id, clientRequestId: requestId };
+  if (options.pluginAttribution) {
+    validatePluginWorkflowId(requestId);
+    const logical = logicalPluginRequestDigest(requestId);
+    body.analyticsHints = {
+      entrySurface: 'external_mcp',
+      hostProduct:
+        options.analyticsHeaders?.[ANALYTICS_HEADER_HOST_PRODUCT] ?? 'unknown',
+      externalPluginId: options.pluginAttribution.context.id,
+      externalPluginVersion:
+        options.pluginAttribution.context.version,
+      distributionMechanism:
+        options.pluginAttribution.context.distributionMechanism,
+      publisherClass: options.pluginAttribution.context.publisherClass,
+      // This payload is client-supplied. The daemon validates it against the
+      // request identity/digest and upgrades to session_correlated only after
+      // the Run/workflow binding is accepted.
+      attributionQuality: 'self_reported',
+      pluginWorkflowId: options.pluginAttribution.pluginWorkflowId,
+      logicalRequestDigest: logical.digest,
+      logicalRequestDigestVersion: logical.version,
+      briefState: options.briefState ?? 'not_applicable',
+    };
+  }
+  if (args.resume !== undefined) {
+    if (typeof args.resume !== 'boolean') throw new Error('resume must be a boolean');
+    body.resume = args.resume;
+  }
   if (typeof args.prompt === 'string' && args.prompt.length > 0) {
     body.message = args.prompt;
     body.currentPrompt = args.prompt;
@@ -1089,13 +2397,29 @@ async function startRun(baseUrl: string, args: McpArgs) {
   if (typeof args.serviceTier === 'string' && args.serviceTier.length > 0) {
     body.serviceTier = args.serviceTier;
   }
+  if (args.byokProfile !== undefined) {
+    requireString(args.byokProfile, 'byokProfile');
+    if (
+      typeof args.agent === 'string'
+      && args.agent.length > 0
+      && args.agent !== 'byok-opencode'
+    ) {
+      throw new Error('byokProfile can only be used with the byok-opencode agent.');
+    }
+    body.agentId = 'byok-opencode';
+    body.byokProfileId = args.byokProfile;
+  }
   if (args.inputs !== undefined) {
     if (args.inputs === null || typeof args.inputs !== 'object' || Array.isArray(args.inputs)) {
       throw new Error('inputs must be an object');
     }
     body.pluginInputs = args.inputs;
   }
-  const created = await postJson<JsonObject>(`${baseUrl}/api/runs`, body);
+  const created = await postJson<JsonObject>(
+    `${baseUrl}/api/runs`,
+    body,
+    options.analyticsHeaders,
+  );
   // Build studioUrl (conversation-level — no entry file yet) so the
   // outer agent has a URL to give the user right away. The daemon
   // returns conversationId in the response now that POST /api/runs
@@ -1106,6 +2430,14 @@ async function startRun(baseUrl: string, args: McpArgs) {
     withActiveEcho(
       {
         ...created,
+        projectId: id,
+        requestId,
+        ...(options.pluginAttribution
+          ? {
+              pluginWorkflowId:
+                options.pluginAttribution.pluginWorkflowId,
+            }
+          : {}),
         ...(studioUrl ? { studioUrl } : {}),
         hint: 'Run started. Open Design generation normally takes 5–30 minutes. Polls showing status:running with no new files / unchanged file mtimes is the inner agent thinking, NOT a hang — DO NOT cancel_run out of impatience and DO NOT substitute write_file to produce the design yourself; OD\'s pipeline is what gives the result its design quality. Poll get_run(runId) every 30–60 seconds; report "still working" to the user between polls and keep waiting. On terminal status the response carries previewUrl + agentMessage which together are the canonical deliverable. When studioUrl is present, ALWAYS show it to the user as a clickable markdown link: `[Open Open Design studio](STUDIO_URL)` — never as inline code or bare text, because Codex / Cursor / Zed render markdown links as navigable in their built-in browser pane and inline code blocks are not clickable.',
       },
@@ -1138,28 +2470,50 @@ async function getRun(baseUrl: string, args: McpArgs) {
     const studioUrl = buildStudioUrl(webBase, status.projectId, status.conversationId, null);
     const enriched: JsonObject = { ...status };
     if (studioUrl) enriched.studioUrl = studioUrl;
+    if (status.failureAction === 'recharge') {
+      enriched.rechargeUrl = DEFAULT_AMR_RECHARGE_URL;
+      enriched.hint =
+        'Open Design Cloud paused this logical run because the account balance is insufficient. Preserve the brief and project, show rechargeUrl to the user, and do not switch modes. After the user confirms the top-up, call start_run once with the exact original payload, the same requestId, and resume:true; Open Design Cloud will resume the existing run and billing operation. Do not expose internal runtime or tool identifiers.';
+    }
     if (typeof status.eventsLogPath === 'string' && status.eventsLogPath.length > 0) {
-      enriched.hint = 'Run still in flight. Tail eventsLogPath in your own shell (e.g. `tail -n 50 -f "' + status.eventsLogPath + '"`) to see live text_delta / tool_use events from the inner agent — that is your in-flight progress signal. Keep polling get_run every 30–60s; do not cancel because file mtimes look static, that is the agent thinking between writes.';
+      if (status.failureAction !== 'recharge') {
+        enriched.hint = 'Run still in flight. Tail eventsLogPath in your own shell (e.g. `tail -n 50 -f "' + status.eventsLogPath + '"`) to see live text_delta / tool_use events from the inner agent — that is your in-flight progress signal. Keep polling get_run every 30–60s; do not cancel because file mtimes look static, that is the agent thinking between writes.';
+      }
       if (studioUrl) {
         enriched.hint += ` Once you have something to show the user, give them a clickable markdown link to studioUrl — render it as \`[Watch progress in Open Design studio](${studioUrl})\`, NEVER as inline code or bare text, so clients like Codex / Cursor / Zed make it navigable in their built-in browser pane.`;
       }
     }
     return ok(enriched);
   }
-  const [previewUrl, agentMessage, webBase] = await Promise.all([
-    buildRunPreviewUrl(baseUrl, status.projectId),
+  const hasAuthoritativeDeliverable =
+    typeof status.deliverableValid === 'boolean'
+    || typeof status.deliverableValidation === 'string';
+  let entryFile =
+    status.deliverableValid === true
+    && status.deliverableValidation === 'valid'
+    && typeof status.deliverableEntryFile === 'string'
+      ? status.deliverableEntryFile
+      : null;
+  // Older daemons do not expose the authoritative deliverable fields. Keep
+  // their established preview behavior for ordinary MCP compatibility, while
+  // never overriding an explicit invalid verdict from a compatible daemon.
+  if (!hasAuthoritativeDeliverable) {
+    entryFile = await resolveLegacyRunEntry(
+      baseUrl,
+      status.projectId,
+    );
+  }
+  const [agentMessage, webBase] = await Promise.all([
     fetchRunAgentMessage(baseUrl, String(status.id ?? args.runId)),
     getWebBaseUrl(baseUrl),
   ]);
-  // Reverse-derive entryFile from previewUrl when present so we can
-  // build a fully-specified studio link (project + conversation +
-  // file) rather than just the conversation-level URL.
-  const entryFile = previewUrl
-    ? decodeURIComponent(previewUrl.split('/raw/')[1] ?? '')
+  const previewUrl = entryFile
+    ? rawPreviewUrl(baseUrl, status.projectId, entryFile)
     : null;
   const studioUrl = buildStudioUrl(webBase, status.projectId, status.conversationId, entryFile);
   const enriched: JsonObject = { ...status };
   if (previewUrl) enriched.previewUrl = previewUrl;
+  if (entryFile) enriched.entryFile = entryFile;
   if (agentMessage) enriched.agentMessage = agentMessage;
   if (studioUrl) enriched.studioUrl = studioUrl;
   enriched.hint = previewUrl
@@ -1207,31 +2561,14 @@ async function fetchRunAgentMessage(baseUrl: string, runId: string): Promise<str
 // Studio deep links (browser-facing OD page that shows the file
 // preview alongside the conversation history for a run). Built from
 // the daemon's advertised webBaseUrl + project + conversation + entry
-// file. The webBaseUrl is exposed by /api/mcp/install-info; we cache
-// it briefly because each get_run/get_project poll otherwise pays for
-// an extra fetch. Returns null when any required piece is missing —
-// callers omit the field rather than emit a half-built URL.
-
-interface WebBaseUrlCache {
-  t: number;
-  url: string | null;
-}
-const WEB_BASE_URL_TTL_MS = 5_000;
-let webBaseUrlCache: WebBaseUrlCache | null = null;
-
-// Internal — for tests only. Module-scoped caches persist across `it`
-// blocks inside the same vitest module load, so an earlier test that
-// returns `null` would otherwise poison subsequent tests for 5s. Test
-// files call this in afterEach to start each case with a clean cache.
-export function _resetWebBaseUrlCache(): void {
-  webBaseUrlCache = null;
-}
+// file. The webBaseUrl is exposed by /api/mcp/install-info. Read it for
+// every delivery lookup: the endpoint already has a small cache keyed by
+// the live packaged web port, while an additional MCP-process cache could
+// return a stale localhost URL immediately after the runtime rebinds.
+// Returns null when any required piece is missing — callers omit the field
+// rather than emit a half-built URL.
 
 async function getWebBaseUrl(daemonBaseUrl: string): Promise<string | null> {
-  const now = Date.now();
-  if (webBaseUrlCache && now - webBaseUrlCache.t < WEB_BASE_URL_TTL_MS) {
-    return webBaseUrlCache.url;
-  }
   try {
     const data = await getJson<{ webBaseUrl?: string | null }>(
       `${daemonBaseUrl}/api/mcp/install-info`,
@@ -1240,10 +2577,8 @@ async function getWebBaseUrl(daemonBaseUrl: string): Promise<string | null> {
       typeof data?.webBaseUrl === 'string' && data.webBaseUrl.length > 0
         ? data.webBaseUrl
         : null;
-    webBaseUrlCache = { t: now, url };
     return url;
   } catch {
-    webBaseUrlCache = { t: now, url: null };
     return null;
   }
 }
@@ -1326,19 +2661,18 @@ function rawPreviewUrl(baseUrl: string, projectId: string, entry: unknown): stri
   return buildProjectRawFileUrl(baseUrl, projectId, entry);
 }
 
-// Best-effort variant for get_run, which only has a projectId: fetch the
-// project, then build the URL. Returns null on any lookup failure — the
-// run result is still reachable via get_artifact, so this is a
-// convenience only.
-async function buildRunPreviewUrl(baseUrl: string, projectId: string): Promise<string | null> {
+async function resolveLegacyRunEntry(
+  baseUrl: string,
+  projectId: string,
+): Promise<string | null> {
   try {
     const data = await getJson<ProjectPayload>(
       `${baseUrl}/api/projects/${encodeURIComponent(projectId)}`,
     );
     const project = data?.project ?? data;
-    const declared = (project as { metadata?: JsonObject } | undefined)?.metadata?.entryFile;
-    const entry = await resolveProjectEntry(baseUrl, projectId, declared);
-    return rawPreviewUrl(baseUrl, projectId, entry);
+    const declared = (project as { metadata?: JsonObject } | undefined)
+      ?.metadata?.entryFile;
+    return resolveProjectEntry(baseUrl, projectId, declared);
   } catch {
     return null;
   }
@@ -1525,8 +2859,8 @@ async function getFile(baseUrl: string, project: string, relPath: string, active
   }
   return {
     content: [
-      ...extra.map((t) => ({ type: 'text', text: t })),
-      { type: 'text', text: slice.join('\n') },
+      ...extra.map((t) => ({ type: 'text' as const, text: t })),
+      { type: 'text' as const, text: slice.join('\n') },
     ],
   };
 }
@@ -1570,7 +2904,9 @@ const MAX_FILES = 200;
 function totalTextBytes(files: ProjectFileBundleEntry[]): number {
   let n = 0;
   for (const f of files) {
-    if (!f.binary && typeof f.content === 'string') n += f.content.length;
+    if (!f.binary && typeof f.content === 'string') {
+      n += Buffer.byteLength(f.content, 'utf8');
+    }
   }
   return n;
 }
@@ -1610,7 +2946,7 @@ async function getArtifact(baseUrl: string, projectArg: unknown, entryArg: unkno
     } catch (err) {
       return errorResult(errorMessage(err));
     }
-    return okBundle({ project, entry, files: [file], truncated: false, active, resolved });
+    return okBundle({ project, entry, files: [file], truncated: false, skippedFileCount: 0, active, resolved });
   }
 
   if (include === 'all') {
@@ -1618,6 +2954,7 @@ async function getArtifact(baseUrl: string, projectArg: unknown, entryArg: unkno
     const allFiles = Array.isArray(meta?.files) ? meta.files : [];
     const fetched: ProjectFileBundleEntry[] = [];
     let truncated = false;
+    let skippedFileCount = 0;
     for (const f of allFiles) {
       if (fetched.length >= MAX_FILES || totalTextBytes(fetched) >= maxBytes) {
         truncated = true;
@@ -1628,10 +2965,11 @@ async function getArtifact(baseUrl: string, projectArg: unknown, entryArg: unkno
         fetched.push(await fetchProjectFile(baseUrl, id, f.name, remaining));
       } catch (err) {
         if (err instanceof BudgetExceededError) truncated = true;
+        else skippedFileCount += 1;
         // Skip files that fail to fetch; keep going.
       }
     }
-    return okBundle({ project, entry, files: fetched, truncated, active, resolved });
+    return okBundle({ project, entry, files: fetched, truncated, skippedFileCount, active, resolved });
   }
 
   // Auto mode: BFS from entry. The entry's own fetch must succeed - 
@@ -1647,6 +2985,7 @@ async function getArtifact(baseUrl: string, projectArg: unknown, entryArg: unkno
   const visited = new Set([entry]);
   const fetched = [entryFile];
   let truncated = false;
+  let skippedFileCount = 0;
   let frontier: string[] = [];
   if (isTextualMime(entryFile.mime)) {
     frontier = extractRelativeRefs(entryFile.content || '', entry, entryFile.mime).filter(
@@ -1668,6 +3007,7 @@ async function getArtifact(baseUrl: string, projectArg: unknown, entryArg: unkno
         file = await fetchProjectFile(baseUrl, id, refPath, remaining);
       } catch (err) {
         if (err instanceof BudgetExceededError) truncated = true;
+        else skippedFileCount += 1;
         continue;
       }
       fetched.push(file);
@@ -1679,7 +3019,7 @@ async function getArtifact(baseUrl: string, projectArg: unknown, entryArg: unkno
     }
     frontier = next;
   }
-  return okBundle({ project, entry, files: fetched, truncated, active, resolved });
+  return okBundle({ project, entry, files: fetched, truncated, skippedFileCount, active, resolved });
 }
 
 // Thrown by fetchProjectFile when the server-advertised content-length exceeds
@@ -1711,7 +3051,13 @@ async function fetchProjectFile(baseUrl: string, projectId: string, relPath: str
     throw new BudgetExceededError(`file ${relPath} (${size} bytes) exceeds remaining budget`);
   }
   const content = await resp.text();
-  return { name: relPath, mime, size: size ?? content.length, content, binary: false };
+  const contentBytes = Buffer.byteLength(content, 'utf8');
+  if (contentBytes > remainingBytes) {
+    throw new BudgetExceededError(
+      `file ${relPath} (${contentBytes} bytes) exceeds remaining budget`,
+    );
+  }
+  return { name: relPath, mime, size: size ?? contentBytes, content, binary: false };
 }
 
 // Patterns common to HTML and CSS (also fine to run on plain markdown).
@@ -1825,6 +3171,7 @@ function okBundle(bundle: BundleInput) {
     projectId: bundle.project?.id,
     projectName: bundle.project?.name,
     truncated: bundle.truncated === true,
+    skippedFileCount: bundle.skippedFileCount ?? 0,
     files: bundle.files.map((f) => ({
       name: f.name,
       mime: f.mime,
@@ -1865,4 +3212,23 @@ function errorMessage(err: unknown): string {
 }
 
 // Exported for unit tests only.
-export { extractRelativeRefs, resolveProjectId, resolveProjectArg, withActiveEcho, fetchProjectFile, getArtifact, getFile, createArtifact, handleMcpToolCall };
+export {
+  createArtifact,
+  extractRelativeRefs,
+  fetchProjectFile,
+  getArtifact,
+  getFile,
+  handleMcpToolCall,
+  logicalPluginRequestDigest,
+  mapMcpHostProduct,
+  normalizeExternalPluginRunAnalyticsHints,
+  mcpDeliveryFacts,
+  mcpFailureFacts,
+  resolvePluginGenerationSloWindowMs,
+  resolveProjectArg,
+  resolveProjectId,
+  validateExternalPluginContext,
+  validateMcpToolArgs,
+  issuePluginWorkflowId,
+  withActiveEcho,
+};

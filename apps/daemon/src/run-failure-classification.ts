@@ -6,6 +6,7 @@ import type {
 } from '@open-design/contracts/analytics';
 
 import { classifyAmrAccountFailure } from './integrations/vela-errors.js';
+import { summarizeRunToolProgress } from './run-diagnostics.js';
 import { classifyAgentServiceFailure } from './runtimes/auth.js';
 import type { RunResult, RunStatusForAnalytics } from './run-result.js';
 
@@ -103,10 +104,8 @@ function inferFailureStageFromEvents(
   fallback: TrackingRunFailureStage,
 ): TrackingRunFailureStage {
   let sawFirstToken = false;
-  let sawToolUse = false;
-  let sawOpenTool = false;
   let sawArtifact = false;
-  const openTools = new Set<string>();
+  const toolProgress = summarizeRunToolProgress(events);
 
   for (const rec of events ?? []) {
     if (rec.event === 'live_artifact') sawArtifact = true;
@@ -120,18 +119,11 @@ function inferFailureStageFromEvents(
     if (data.type === 'artifact' || data.type === 'live_artifact') {
       sawArtifact = true;
     }
-    if (data.type === 'tool_use' && typeof data.id === 'string') {
-      sawToolUse = true;
-      openTools.add(data.id);
-    }
-    if (data.type === 'tool_result' && typeof data.toolUseId === 'string') {
-      openTools.delete(data.toolUseId);
-    }
   }
 
-  sawOpenTool = openTools.size > 0;
   if (sawArtifact) return 'artifact_write';
-  if (sawOpenTool || sawToolUse) return 'tool_execution';
+  if (toolProgress.hasOutstandingTool) return 'tool_outstanding';
+  if (toolProgress.toolCallSeen) return 'post_tool_resume';
   if (sawFirstToken) return 'child_close';
   return fallback;
 }
@@ -344,7 +336,7 @@ function modelUnavailableDetail(text: string): TrackingRunFailureDetail | null {
   if (/\b(no endpoints found that support tool use|provider routing)\b/i.test(text)) {
     return 'provider_routing_error';
   }
-  if (/\b(model .*not supported|not supported model\b|requested model is not supported|supported api model names|not supported when using codex)\b/i.test(text)) {
+  if (/\b(unsupported model\b|model .*not supported|not supported model\b|requested model is not supported|supported api model names|not supported when using codex)\b/i.test(text)) {
     return 'model_not_supported';
   }
   if (/\b(model (?:is )?(?:unavailable|not available|unsupported|not found)|selected model is not available|not have access|no access|model .*not found|no healthy deployments|model .*not in (?:the )?allowed list)\b/i.test(text)) {

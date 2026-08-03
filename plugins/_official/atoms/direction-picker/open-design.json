@@ -5,7 +5,7 @@
   "title": "Direction picker",
   "version": "0.1.0",
   "publishedAt": "2026-05-09T13:00:27Z",
-  "description": "3-5 direction picker that lets the user choose before final generation.",
+  "description": "Optional 3-5 direction picker for users who explicitly ask to compare visual directions.",
   "license": "MIT",
   "author": {
     "name": "Open Design",

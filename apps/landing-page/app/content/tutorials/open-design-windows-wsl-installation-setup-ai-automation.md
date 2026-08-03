@@ -16,7 +16,7 @@ This guide is for Windows users who want to run Open Design on their own machine
 
 ## What is Open Design?
 
-Open Design is an open-source, local-first design platform — an agent-native alternative to Claude Design and Figma. Instead of locking you into one model provider, it runs **on top of the coding agent you already use**: Claude Code, Codex, Cursor, Gemini, Copilot, OpenCode, and a dozen more. It is "bring your own agent" rather than just bring your own key.
+Open Design is an open-source, local-first design platform — an agent-native alternative to Claude Design and Figma. Instead of locking you into one model provider, it runs **on top of the coding agent you already use**: Claude Code, Codex, Cursor, Copilot, OpenCode, Qwen, and a dozen more. It is "bring your own agent" rather than just bring your own key.
 
 A few things that make it worth a look:
 
@@ -111,14 +111,14 @@ Then wire it into your agent:
 
 ```bash
 od mcp install <agent>
-# <agent> = claude | codex | cursor | copilot | gemini | opencode | …
+# <agent> = claude | codex | cursor | copilot | opencode | kiro | …
 ```
 
 Then, inside the agent, just ask: `Use open-design to generate a landing page with the Airbnb design system`.
 
 ## First run: connect your coding agent
 
-The first time the workspace loads, Open Design scans your environment and shows every CLI it found. Because WSL is a real Linux box, it picks up agents installed **inside Ubuntu** — so a Gemini CLI or other agent living in WSL is detected there. Click **rescan** if something does not show up yet.
+The first time the workspace loads, Open Design scans your environment and shows every supported CLI it found. Because WSL is a real Linux box, it picks up agents installed **inside Ubuntu** — for example OpenCode or Qwen. Click **rescan** if something does not show up yet.
 
 - **Pick a default agent and model.** Let the installed CLI drive generation, or point it at a specific provider and model. As the video stresses, a stronger model means noticeably better output, so reach for a capable one when the result matters.
 - **Add media providers (optional).** To generate images, video, or audio, paste your own API keys — bring-your-own-key, only for the providers you actually use.
@@ -170,7 +170,7 @@ Yes — it is open source under the Apache-2.0 license. You can run it locally f
 For most people, the native Windows (x64) desktop build is simpler — no WSL, no Node, no clone. Use the WSL from-source route when you specifically want to read or modify the code. Note that WSL2 is a primary supported path, while Windows-native is best-effort; if you hit friction with one, try the other.
 
 **Which coding agents does it support?**
-21+ agents, including Claude Code, Codex, Cursor, Gemini, GitHub Copilot, and OpenCode. Open Design detects the CLIs already installed on your machine — inside WSL for the source route, or on your Windows `PATH` for the desktop app.
+21+ agents, including Claude Code, Codex, Cursor, GitHub Copilot, OpenCode, and Qwen. Open Design detects the CLIs already installed on your machine — inside WSL for the source route, or on your Windows `PATH` for the desktop app.
 
 **How is it different from Claude Design?**
 Same familiar feel, but open-source, local-first, and agent-pluggable — so you are not locked into one model or burning a fixed credit pool. It also goes beyond prototypes with slide decks, magazine layouts, image generation, and video.

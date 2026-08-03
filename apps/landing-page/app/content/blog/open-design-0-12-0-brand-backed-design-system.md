@@ -3,13 +3,13 @@ title: "Open Design 0.12.0: your brand is a design system"
 date: 2026-06-26
 category: "Product"
 readingTime: 7
-summary: "Tag open-design-v0.12.0 — 103 PRs from 30 contributors in six days. Codename \"Brand-backed Design System.\" Point Open Design at a live site, drop in a Figma file, or clip a page in your browser, and it lifts the real brand — colors, type, voice — into a reusable design system you can build from on every project after."
+summary: "open-design-v0.12.0 — 103 PRs from 30 contributors in six days. Codename \"Brand-backed Design System.\" Point Open Design at a live site, drop in a Figma file, or clip a page in your browser, and it lifts the real brand — colors, type, voice — into a reusable design system you can build from on every project after."
 i18n:
   zh:
     title: 'Open Design 0.12.0：你的品牌就是一套设计系统'
-    summary: '标签 open-design-v0.12.0 —— 六天内 30 位贡献者提交了 103 个 PR。代号「品牌支撑的设计系统」。把 Open Design 对准一个在线站点、丢进一个 Figma 文件，或者在浏览器里剪取一个页面，它就会把真实的品牌 —— 配色、字体、语调 —— 提炼成一套可复用的设计系统，让你在之后的每个项目里都能以它为基础进行构建。'
+    summary: 'open-design-v0.12.0 —— 六天内 30 位贡献者提交了 103 个 PR。代号「品牌支撑的设计系统」。把 Open Design 对准一个在线站点、丢进一个 Figma 文件，或者在浏览器里剪取一个页面，它就会把真实的品牌 —— 配色、字体、语调 —— 提炼成一套可复用的设计系统，让你在之后的每个项目里都能以它为基础进行构建。'
     bodyHtml: |
-      <p>标签 <code>open-design-v0.12.0</code>，于 2026 年 6 月 26 日发布。<strong>六天内 30 位贡献者提交了 103 个 PR。</strong>代号「品牌支撑的设计系统」。过去两个月里，Open Design 从一张白纸出发，<em>为</em>你做设计。而这次发布把它反转过来：<strong>你已经拥有的品牌，变成一套可复用的设计系统。</strong></p>
+      <p><code>open-design-v0.12.0</code>，于 2026 年 6 月 26 日发布。<strong>六天内 30 位贡献者提交了 103 个 PR。</strong>代号「品牌支撑的设计系统」。过去两个月里，Open Design 从一张白纸出发，<em>为</em>你做设计。而这次发布把它反转过来：<strong>你已经拥有的品牌，变成一套可复用的设计系统。</strong></p>
       <p>想看完整版本，可以查阅 <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.12.0">GitHub 上的发布说明</a>。本文是精简版：底层改了什么、你今天能用它做什么，以及从哪里开始。</p>
 
       <h2>你的品牌就是一套设计系统</h2>
@@ -69,9 +69,9 @@ i18n:
       </ul>
   ja:
     title: 'Open Design 0.12.0：あなたのブランドはデザインシステムである'
-    summary: 'タグ open-design-v0.12.0 — 6日間で30人のコントリビューターから103件のPR。コードネームは「ブランドに裏打ちされたデザインシステム」。Open Design を稼働中のサイトに向けるか、Figma ファイルを放り込むか、ブラウザでページをクリップすれば、本物のブランド——色、書体、トーン——を、その後すべてのプロジェクトで土台にできる再利用可能なデザインシステムへと引き上げます。'
+    summary: 'open-design-v0.12.0 — 6日間で30人のコントリビューターから103件のPR。コードネームは「ブランドに裏打ちされたデザインシステム」。Open Design を稼働中のサイトに向けるか、Figma ファイルを放り込むか、ブラウザでページをクリップすれば、本物のブランド——色、書体、トーン——を、その後すべてのプロジェクトで土台にできる再利用可能なデザインシステムへと引き上げます。'
     bodyHtml: |
-      <p>タグ <code>open-design-v0.12.0</code>、2026年6月26日にリリース。<strong>6日間で30人のコントリビューターから103件のPR。</strong>コードネームは「ブランドに裏打ちされたデザインシステム」。この2か月間、Open Design は白紙のページから始めて、あなたの<em>ために</em>デザインしてきました。今回のリリースはそれを反転させます：<strong>あなたがすでに所有しているブランドが、再利用可能なデザインシステムになります。</strong></p>
+      <p><code>open-design-v0.12.0</code>、2026年6月26日にリリース。<strong>6日間で30人のコントリビューターから103件のPR。</strong>コードネームは「ブランドに裏打ちされたデザインシステム」。この2か月間、Open Design は白紙のページから始めて、あなたの<em>ために</em>デザインしてきました。今回のリリースはそれを反転させます：<strong>あなたがすでに所有しているブランドが、再利用可能なデザインシステムになります。</strong></p>
       <p>詳細版が読みたい方は、<a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.12.0">GitHub のリリースノート</a>をご覧ください。本記事は短縮版です：内部で何が変わったか、今日それで何ができるか、そしてどこから始めればよいか。</p>
 
       <h2>あなたのブランドはデザインシステムである</h2>
@@ -131,9 +131,9 @@ i18n:
       </ul>
   ko:
     title: 'Open Design 0.12.0: 당신의 브랜드가 곧 디자인 시스템'
-    summary: '태그 open-design-v0.12.0 — 6일 동안 30명의 기여자가 만든 103개의 PR. 코드명 "브랜드 기반 디자인 시스템(Brand-backed Design System)". Open Design을 라이브 사이트로 향하게 하거나, Figma 파일을 떨궈 넣거나, 브라우저에서 페이지를 클립하면, 실제 브랜드 — 색상, 타이포, 보이스 — 를 이후 모든 프로젝트에서 토대로 삼아 빌드할 수 있는 재사용 가능한 디자인 시스템으로 끌어올립니다.'
+    summary: 'open-design-v0.12.0 — 6일 동안 30명의 기여자가 만든 103개의 PR. 코드명 "브랜드 기반 디자인 시스템(Brand-backed Design System)". Open Design을 라이브 사이트로 향하게 하거나, Figma 파일을 떨궈 넣거나, 브라우저에서 페이지를 클립하면, 실제 브랜드 — 색상, 타이포, 보이스 — 를 이후 모든 프로젝트에서 토대로 삼아 빌드할 수 있는 재사용 가능한 디자인 시스템으로 끌어올립니다.'
     bodyHtml: |
-      <p>태그 <code>open-design-v0.12.0</code>, 2026년 6월 26일 출시. <strong>6일 동안 30명의 기여자가 만든 103개의 PR.</strong> 코드명 "브랜드 기반 디자인 시스템(Brand-backed Design System)". 지난 두 달 동안 Open Design은 빈 페이지에서 시작해 당신을 <em>위해</em> 디자인했습니다. 이번 릴리스는 그것을 뒤집습니다: <strong>당신이 이미 소유한 브랜드가 재사용 가능한 디자인 시스템이 됩니다.</strong></p>
+      <p><code>open-design-v0.12.0</code>, 2026년 6월 26일 출시. <strong>6일 동안 30명의 기여자가 만든 103개의 PR.</strong> 코드명 "브랜드 기반 디자인 시스템(Brand-backed Design System)". 지난 두 달 동안 Open Design은 빈 페이지에서 시작해 당신을 <em>위해</em> 디자인했습니다. 이번 릴리스는 그것을 뒤집습니다: <strong>당신이 이미 소유한 브랜드가 재사용 가능한 디자인 시스템이 됩니다.</strong></p>
       <p>긴 버전이 궁금하다면 <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.12.0">GitHub의 릴리스 노트</a>에 담겨 있습니다. 이 글은 짧은 버전입니다: 내부에서 무엇이 바뀌었는지, 오늘 그것으로 무엇을 할 수 있는지, 그리고 어디서 시작하면 되는지.</p>
 
       <h2>당신의 브랜드가 곧 디자인 시스템입니다</h2>
@@ -193,9 +193,9 @@ i18n:
       </ul>
   de:
     title: 'Open Design 0.12.0: deine Marke ist ein Designsystem'
-    summary: 'Tag open-design-v0.12.0 — 103 PRs von 30 Mitwirkenden in sechs Tagen. Codename „Markengestütztes Designsystem”. Richte Open Design auf eine Live-Site, lege eine Figma-Datei ab oder clippe eine Seite in deinem Browser — und es hebt die echte Marke heraus — Farben, Typografie, Stimme — in ein wiederverwendbares Designsystem, aus dem du in jedem weiteren Projekt aufbauen kannst.'
+    summary: 'open-design-v0.12.0 — 103 PRs von 30 Mitwirkenden in sechs Tagen. Codename „Markengestütztes Designsystem”. Richte Open Design auf eine Live-Site, lege eine Figma-Datei ab oder clippe eine Seite in deinem Browser — und es hebt die echte Marke heraus — Farben, Typografie, Stimme — in ein wiederverwendbares Designsystem, aus dem du in jedem weiteren Projekt aufbauen kannst.'
     bodyHtml: |
-      <p>Tag <code>open-design-v0.12.0</code>, veröffentlicht am 26. Juni 2026. <strong>103 PRs von 30 Mitwirkenden in sechs Tagen.</strong> Codename „Markengestütztes Designsystem”. In den vergangenen zwei Monaten ist Open Design von einer leeren Seite gestartet und hat <em>für</em> dich gestaltet. Dieses Release dreht es um: <strong>die Marke, die du bereits besitzt, wird zu einem wiederverwendbaren Designsystem.</strong></p>
+      <p><code>open-design-v0.12.0</code>, veröffentlicht am 26. Juni 2026. <strong>103 PRs von 30 Mitwirkenden in sechs Tagen.</strong> Codename „Markengestütztes Designsystem”. In den vergangenen zwei Monaten ist Open Design von einer leeren Seite gestartet und hat <em>für</em> dich gestaltet. Dieses Release dreht es um: <strong>die Marke, die du bereits besitzt, wird zu einem wiederverwendbaren Designsystem.</strong></p>
       <p>Wenn du die ausführliche Version möchtest, findest du sie in den <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.12.0">Release Notes auf GitHub</a>. Dieser Beitrag ist die Kurzfassung: was sich unter der Haube geändert hat, was du heute damit machen kannst und wo du anfängst.</p>
 
       <h2>Deine Marke ist ein Designsystem</h2>
@@ -255,9 +255,9 @@ i18n:
       </ul>
   fr:
     title: 'Open Design 0.12.0 : votre marque est un système de design'
-    summary: 'Tag open-design-v0.12.0 — 103 PR de 30 contributeurs en six jours. Nom de code « système de design adossé à la marque ». Pointez Open Design vers un site en ligne, déposez-y un fichier Figma, ou capturez une page dans votre navigateur, et il extrait la vraie marque — couleurs, typographie, voix — en un système de design réutilisable à partir duquel vous pourrez construire sur chaque projet suivant.'
+    summary: 'open-design-v0.12.0 — 103 PR de 30 contributeurs en six jours. Nom de code « système de design adossé à la marque ». Pointez Open Design vers un site en ligne, déposez-y un fichier Figma, ou capturez une page dans votre navigateur, et il extrait la vraie marque — couleurs, typographie, voix — en un système de design réutilisable à partir duquel vous pourrez construire sur chaque projet suivant.'
     bodyHtml: |
-      <p>Tag <code>open-design-v0.12.0</code>, publié le 26 juin 2026. <strong>103 PR de 30 contributeurs en six jours.</strong> Nom de code « système de design adossé à la marque ». Ces deux derniers mois, Open Design partait d'une page blanche et concevait <em>pour</em> vous. Cette version inverse la donne : <strong>la marque que vous possédez déjà devient un système de design réutilisable.</strong></p>
+      <p><code>open-design-v0.12.0</code>, publié le 26 juin 2026. <strong>103 PR de 30 contributeurs en six jours.</strong> Nom de code « système de design adossé à la marque ». Ces deux derniers mois, Open Design partait d'une page blanche et concevait <em>pour</em> vous. Cette version inverse la donne : <strong>la marque que vous possédez déjà devient un système de design réutilisable.</strong></p>
       <p>Si vous voulez la version longue, les <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.12.0">notes de version sur GitHub</a> la contiennent. Cet article est la version courte : ce qui a changé sous le capot, ce que vous pouvez en faire dès aujourd'hui, et par où commencer.</p>
 
       <h2>Votre marque est un système de design</h2>
@@ -317,9 +317,9 @@ i18n:
       </ul>
   ru:
     title: 'Open Design 0.12.0: ваш бренд — это дизайн-система'
-    summary: 'Тег open-design-v0.12.0 — 103 PR от 30 контрибьюторов за шесть дней. Кодовое название «дизайн-система на основе бренда». Наведите Open Design на живой сайт, бросьте в него файл Figma или вырежьте страницу прямо в браузере — и он поднимет реальный бренд: цвета, шрифты, голос — в переиспользуемую дизайн-систему, от которой можно отталкиваться в каждом следующем проекте.'
+    summary: 'open-design-v0.12.0 — 103 PR от 30 контрибьюторов за шесть дней. Кодовое название «дизайн-система на основе бренда». Наведите Open Design на живой сайт, бросьте в него файл Figma или вырежьте страницу прямо в браузере — и он поднимет реальный бренд: цвета, шрифты, голос — в переиспользуемую дизайн-систему, от которой можно отталкиваться в каждом следующем проекте.'
     bodyHtml: |
-      <p>Тег <code>open-design-v0.12.0</code>, выпущен 26 июня 2026 года. <strong>103 PR от 30 контрибьюторов за шесть дней.</strong> Кодовое название «дизайн-система на основе бренда». Последние два месяца Open Design начинал с чистого листа и проектировал <em>для</em> вас. Этот релиз переворачивает это: <strong>бренд, которым вы уже владеете, становится переиспользуемой дизайн-системой.</strong></p>
+      <p><code>open-design-v0.12.0</code>, выпущен 26 июня 2026 года. <strong>103 PR от 30 контрибьюторов за шесть дней.</strong> Кодовое название «дизайн-система на основе бренда». Последние два месяца Open Design начинал с чистого листа и проектировал <em>для</em> вас. Этот релиз переворачивает это: <strong>бренд, которым вы уже владеете, становится переиспользуемой дизайн-системой.</strong></p>
       <p>Если вам нужна развёрнутая версия, она есть в <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.12.0">примечаниях к релизу на GitHub</a>. Этот пост — краткая версия: что изменилось под капотом, что вы можете сделать с этим уже сегодня и с чего начать.</p>
 
       <h2>Ваш бренд — это дизайн-система</h2>
@@ -379,9 +379,9 @@ i18n:
       </ul>
   es:
     title: 'Open Design 0.12.0: tu marca es un sistema de diseño'
-    summary: 'Tag open-design-v0.12.0: 103 PRs de 30 colaboradores en seis días. Nombre en clave «Sistema de Diseño Respaldado por la Marca». Apunta Open Design a un sitio en vivo, suelta un archivo de Figma o recorta una página en tu navegador, y extrae la marca real —colores, tipografía, voz— en un sistema de diseño reutilizable a partir del cual construir en cada proyecto posterior.'
+    summary: 'open-design-v0.12.0: 103 PRs de 30 colaboradores en seis días. Nombre en clave «Sistema de Diseño Respaldado por la Marca». Apunta Open Design a un sitio en vivo, suelta un archivo de Figma o recorta una página en tu navegador, y extrae la marca real —colores, tipografía, voz— en un sistema de diseño reutilizable a partir del cual construir en cada proyecto posterior.'
     bodyHtml: |
-      <p>Tag <code>open-design-v0.12.0</code>, publicado el 26 de junio de 2026. <strong>103 PRs de 30 colaboradores en seis días.</strong> Nombre en clave «Sistema de Diseño Respaldado por la Marca». Durante los últimos dos meses Open Design partía de una página en blanco y diseñaba <em>para</em> ti. Esta versión le da la vuelta: <strong>la marca que ya posees se convierte en un sistema de diseño reutilizable.</strong></p>
+      <p><code>open-design-v0.12.0</code>, publicado el 26 de junio de 2026. <strong>103 PRs de 30 colaboradores en seis días.</strong> Nombre en clave «Sistema de Diseño Respaldado por la Marca». Durante los últimos dos meses Open Design partía de una página en blanco y diseñaba <em>para</em> ti. Esta versión le da la vuelta: <strong>la marca que ya posees se convierte en un sistema de diseño reutilizable.</strong></p>
       <p>Si quieres la versión larga, las <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.12.0">notas de la versión en GitHub</a> la tienen. Esta publicación es la versión corta: qué cambió por dentro, qué puedes hacer con ello hoy y por dónde empezar.</p>
 
       <h2>Tu marca es un sistema de diseño</h2>
@@ -441,9 +441,9 @@ i18n:
       </ul>
   pt-br:
     title: 'Open Design 0.12.0: sua marca é um sistema de design'
-    summary: 'Tag open-design-v0.12.0 — 103 PRs de 30 contribuidores em seis dias. Codinome "Sistema de Design Lastreado na Marca". Aponte o Open Design para um site no ar, solte um arquivo Figma ou recorte uma página no seu navegador, e ele extrai a marca real — cores, tipografia, voz — para um sistema de design reutilizável a partir do qual você pode construir em todo projeto seguinte.'
+    summary: 'open-design-v0.12.0 — 103 PRs de 30 contribuidores em seis dias. Codinome "Sistema de Design Lastreado na Marca". Aponte o Open Design para um site no ar, solte um arquivo Figma ou recorte uma página no seu navegador, e ele extrai a marca real — cores, tipografia, voz — para um sistema de design reutilizável a partir do qual você pode construir em todo projeto seguinte.'
     bodyHtml: |
-      <p>Tag <code>open-design-v0.12.0</code>, lançada em 26 de junho de 2026. <strong>103 PRs de 30 contribuidores em seis dias.</strong> Codinome "Sistema de Design Lastreado na Marca". Nos últimos dois meses, o Open Design partia de uma página em branco e projetava <em>para</em> você. Esta versão inverte isso: <strong>a marca que você já tem se torna um sistema de design reutilizável.</strong></p>
+      <p><code>open-design-v0.12.0</code>, lançada em 26 de junho de 2026. <strong>103 PRs de 30 contribuidores em seis dias.</strong> Codinome "Sistema de Design Lastreado na Marca". Nos últimos dois meses, o Open Design partia de uma página em branco e projetava <em>para</em> você. Esta versão inverte isso: <strong>a marca que você já tem se torna um sistema de design reutilizável.</strong></p>
       <p>Se você quer a versão longa, as <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.12.0">notas de versão no GitHub</a> têm tudo. Este post é a versão curta: o que mudou por baixo dos panos, o que você pode fazer com isso hoje e por onde começar.</p>
 
       <h2>Sua marca é um sistema de design</h2>
@@ -503,9 +503,9 @@ i18n:
       </ul>
   it:
     title: 'Open Design 0.12.0: il tuo brand è un design system'
-    summary: 'Tag open-design-v0.12.0 — 103 PR da 30 contributori in sei giorni. Nome in codice "Design System supportato dal brand". Punta Open Design verso un sito live, trascina dentro un file Figma o ritaglia una pagina nel browser, e solleva il brand reale — colori, caratteri, voce — in un design system riutilizzabile da cui partire in ogni progetto successivo.'
+    summary: 'open-design-v0.12.0 — 103 PR da 30 contributori in sei giorni. Nome in codice "Design System supportato dal brand". Punta Open Design verso un sito live, trascina dentro un file Figma o ritaglia una pagina nel browser, e solleva il brand reale — colori, caratteri, voce — in un design system riutilizzabile da cui partire in ogni progetto successivo.'
     bodyHtml: |
-      <p>Tag <code>open-design-v0.12.0</code>, rilasciato il 26 giugno 2026. <strong>103 PR da 30 contributori in sei giorni.</strong> Nome in codice "Design System supportato dal brand". Negli ultimi due mesi Open Design partiva da una pagina bianca e progettava <em>per</em> te. Questa release ribalta la prospettiva: <strong>il brand che già possiedi diventa un design system riutilizzabile.</strong></p>
+      <p><code>open-design-v0.12.0</code>, rilasciato il 26 giugno 2026. <strong>103 PR da 30 contributori in sei giorni.</strong> Nome in codice "Design System supportato dal brand". Negli ultimi due mesi Open Design partiva da una pagina bianca e progettava <em>per</em> te. Questa release ribalta la prospettiva: <strong>il brand che già possiedi diventa un design system riutilizzabile.</strong></p>
       <p>Se vuoi la versione lunga, le <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.12.0">note di rilascio su GitHub</a> ce l'hanno. Questo post è la versione breve: cosa è cambiato sotto il cofano, cosa puoi farci oggi e da dove iniziare.</p>
 
       <h2>Il tuo brand è un design system</h2>
@@ -565,9 +565,9 @@ i18n:
       </ul>
   tr:
     title: 'Open Design 0.12.0: markanız bir tasarım sistemidir'
-    summary: 'Etiket open-design-v0.12.0 — altı günde 30 katkıda bulunandan 103 PR. Kod adı "Marka Destekli Tasarım Sistemi." Open Design''ı canlı bir siteye yöneltin, bir Figma dosyası bırakın ya da tarayıcınızda bir sayfa kırpın; gerçek markayı — renkleri, yazı tipini, sesi — sonraki her projede üzerine inşa edebileceğiniz, yeniden kullanılabilir bir tasarım sistemine dönüştürsün.'
+    summary: 'open-design-v0.12.0 — altı günde 30 katkıda bulunandan 103 PR. Kod adı "Marka Destekli Tasarım Sistemi." Open Design''ı canlı bir siteye yöneltin, bir Figma dosyası bırakın ya da tarayıcınızda bir sayfa kırpın; gerçek markayı — renkleri, yazı tipini, sesi — sonraki her projede üzerine inşa edebileceğiniz, yeniden kullanılabilir bir tasarım sistemine dönüştürsün.'
     bodyHtml: |
-      <p>Etiket <code>open-design-v0.12.0</code>, 26 Haziran 2026'da yayınlandı. <strong>Altı günde 30 katkıda bulunandan 103 PR.</strong> Kod adı "Marka Destekli Tasarım Sistemi." Son iki aydır Open Design boş bir sayfadan başlıyor ve sizin <em>için</em> tasarlıyordu. Bu sürüm bunu tersine çeviriyor: <strong>hâlihazırda sahip olduğunuz marka, yeniden kullanılabilir bir tasarım sistemine dönüşüyor.</strong></p>
+      <p><code>open-design-v0.12.0</code>, 26 Haziran 2026'da yayınlandı. <strong>Altı günde 30 katkıda bulunandan 103 PR.</strong> Kod adı "Marka Destekli Tasarım Sistemi." Son iki aydır Open Design boş bir sayfadan başlıyor ve sizin <em>için</em> tasarlıyordu. Bu sürüm bunu tersine çeviriyor: <strong>hâlihazırda sahip olduğunuz marka, yeniden kullanılabilir bir tasarım sistemine dönüşüyor.</strong></p>
       <p>Uzun versiyonunu istiyorsanız, <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.12.0">GitHub'daki sürüm notları</a> hepsini içeriyor. Bu yazı kısa versiyon: kaputun altında ne değişti, bununla bugün ne yapabilirsiniz ve nereden başlamalısınız.</p>
 
       <h2>Markanız bir tasarım sistemidir</h2>
@@ -627,7 +627,7 @@ i18n:
       </ul>
 ---
 
-Tag `open-design-v0.12.0`, shipped 26 June 2026. **103 PRs from 30 contributors in six days.** Codename "Brand-backed Design System." For the past two months Open Design started from a blank page and designed *for* you. This release flips it: **the brand you already own becomes a reusable design system.**
+`open-design-v0.12.0`, shipped 26 June 2026. **103 PRs from 30 contributors in six days.** Codename "Brand-backed Design System." For the past two months Open Design started from a blank page and designed *for* you. This release flips it: **the brand you already own becomes a reusable design system.**
 
 If you want the long version, the [release notes on GitHub](https://github.com/nexu-io/open-design/releases/tag/open-design-v0.12.0) have it. This post is the short version: what changed under the hood, what you can do with it today, and where to start.
 

@@ -92,6 +92,10 @@ describe('analytics run_finished contract', () => {
         approval_requested: true,
         stdin_backpressure: false,
         last_progress_age_ms: 610_000,
+        amr_opencode_error_phase: 'timeout',
+        amr_opencode_last_event_type: 'tool_call',
+        amr_opencode_last_tool_status: 'in_progress',
+        amr_opencode_last_tool_kind: 'write',
         artifact_write_seen: false,
         live_artifact_seen: false,
         retry_attempt_count: 1,
@@ -122,6 +126,8 @@ describe('analytics run_finished contract', () => {
     expect(payload.props.approval_requested).toBe(true);
     expect(payload.props.stdin_backpressure).toBe(false);
     expect(payload.props.last_progress_age_ms).toBe(610_000);
+    expect(payload.props.amr_opencode_error_phase).toBe('timeout');
+    expect(payload.props.amr_opencode_last_tool_status).toBe('in_progress');
     expect(payload.props.retry_attempt_count).toBe(1);
     expect(payload.props.retry_final_result).toBe('success');
     expect(payload.props.agent_cli_version).toBe('vela 0.0.26');
@@ -164,6 +170,25 @@ describe('analytics run_finished contract', () => {
     expect(attempted.props.retry_strategy).toBe('same_run_transient');
     expect(finished.props.retry_suppressed_reason).toBe('tool_call_seen');
   });
+
+  it.each(['tool_outstanding', 'post_tool_resume'] as const)(
+    'accepts the %s failure stage for run outcomes',
+    (failureStage) => {
+      const payload = {
+        event: 'run_finished',
+        props: {
+          ...makeBaseRunFinishedProps(),
+          failure_category: 'timeout',
+          failure_detail: 'inactivity_timeout',
+          failure_stage: failureStage,
+          retryable: true,
+          user_action: 'retry',
+        },
+      } satisfies Extract<AnalyticsEventPayload, { event: 'run_finished' }>;
+
+      expect(payload.props.failure_stage).toBe(failureStage);
+    },
+  );
 
   it('accepts Langfuse report result events for actual delivery monitoring', () => {
     const payload = {

@@ -3,14 +3,14 @@ title: "Open Design 0.15.0: cost less, ship faster"
 date: 2026-07-14
 category: "Product"
 readingTime: 7
-summary: "Tag open-design-v0.15.0 — 118 PRs from 34 contributors in four days. Codename \"Cost Less. Ship Faster.\" A leaner Design System Prompt cut time-to-first-token by 49.5%, end-to-end duration by 21.2%, and average input tokens by 25.1% in representative runs. The rest of the release smooths the whole creative loop: decks that feel like a workspace, website clone from a URL, conversations turned into motion, and failures that finally explain what to do next."
+summary: "open-design-v0.15.0 — 118 PRs from 34 contributors in four days. Codename \"Cost Less. Ship Faster.\" A leaner Design System Prompt cut time-to-first-token by 49.5%, end-to-end duration by 21.2%, and average input tokens by 25.1% in representative runs. The rest of the release smooths the whole creative loop: decks that feel like a workspace, website clone from a URL, conversations turned into motion, and failures that finally explain what to do next."
 i18n:
   zh:
     title: 'Open Design 0.15.0：更省成本，更快交付'
-    summary: '标签 open-design-v0.15.0 —— 四天内 34 位贡献者提交了 118 个 PR。代号「更省成本，更快交付（Cost Less. Ship Faster.）」。一个更精简的 Design System Prompt 在代表性运行中把首个 token 的等待时间缩短了 49.5%、端到端时长缩短了 21.2%、平均输入 token 减少了 25.1%。本次发布的其余部分让整条创作循环更顺滑：像工作区一样的演示文稿、从 URL 克隆网站、把对话变成动态效果，以及终于会告诉你下一步该怎么办的失败提示。'
+    summary: 'open-design-v0.15.0 —— 四天内 34 位贡献者提交了 118 个 PR。代号「更省成本，更快交付（Cost Less. Ship Faster.）」。一个更精简的 Design System Prompt 在代表性运行中把首个 token 的等待时间缩短了 49.5%、端到端时长缩短了 21.2%、平均输入 token 减少了 25.1%。本次发布的其余部分让整条创作循环更顺滑：像工作区一样的演示文稿、从 URL 克隆网站、把对话变成动态效果，以及终于会告诉你下一步该怎么办的失败提示。'
     category: '产品'
     bodyHtml: |
-      <p>标签 <code>open-design-v0.15.0</code>，于 2026 年 7 月 14 日发布。<strong>四天内 34 位贡献者提交了 118 个 PR。</strong>代号「更省成本，更快交付（Cost Less. Ship Faster.）」。前两次发布让你的工作在中断之间保持存活，也留住了心流过去容易丢失的想法。这一次针对的是你为每一次运行所付出的「税」：首个 token 之前的等待、抵达那里所花掉的 token，以及一份做完的结果与一份可交付成果之间的摩擦。</p>
+      <p><code>open-design-v0.15.0</code>，于 2026 年 7 月 14 日发布。<strong>四天内 34 位贡献者提交了 118 个 PR。</strong>代号「更省成本，更快交付（Cost Less. Ship Faster.）」。前两次发布让你的工作在中断之间保持存活，也留住了心流过去容易丢失的想法。这一次针对的是你为每一次运行所付出的「税」：首个 token 之前的等待、抵达那里所花掉的 token，以及一份做完的结果与一份可交付成果之间的摩擦。</p>
       <p>想看完整的更新日志？它就在 <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.15.0">GitHub 上的发布说明</a>里。本文是精简版：底层改了什么、你今天能用它做什么，以及从哪里开始。</p>
 
       <h2>更精简的提示，更快的循环</h2>
@@ -74,10 +74,10 @@ i18n:
       </ul>
   ja:
     title: 'Open Design 0.15.0：コストを抑え、より速く届ける'
-    summary: 'タグ open-design-v0.15.0 — 4日間で34人のコントリビューターから118件のPR。コードネームは「Cost Less. Ship Faster.（コストを抑え、より速く届ける）」。よりスリムになった Design System Prompt により、代表的な実行で最初のトークンまでの時間が49.5%、エンドツーエンドの所要時間が21.2%、平均入力トークンが25.1%削減されました。リリースの残りの部分は、クリエイティブなループ全体をなめらかにします：ワークスペースのように扱えるデッキ、URL からのウェブサイトクローン、会話をモーションに変える機能、そしてついに次に何をすべきかを説明してくれる失敗表示。'
+    summary: 'open-design-v0.15.0 — 4日間で34人のコントリビューターから118件のPR。コードネームは「Cost Less. Ship Faster.（コストを抑え、より速く届ける）」。よりスリムになった Design System Prompt により、代表的な実行で最初のトークンまでの時間が49.5%、エンドツーエンドの所要時間が21.2%、平均入力トークンが25.1%削減されました。リリースの残りの部分は、クリエイティブなループ全体をなめらかにします：ワークスペースのように扱えるデッキ、URL からのウェブサイトクローン、会話をモーションに変える機能、そしてついに次に何をすべきかを説明してくれる失敗表示。'
     category: 'プロダクト'
     bodyHtml: |
-      <p>タグ <code>open-design-v0.15.0</code>、2026年7月14日にリリース。<strong>4日間で34人のコントリビューターから118件のPR。</strong>コードネームは「Cost Less. Ship Faster.（コストを抑え、より速く届ける）」。直近の2つのリリースは、中断をまたいであなたの作業を生き続けさせ、フローが失いがちだったアイデアを守りました。今回のリリースが狙うのは、あらゆる実行であなたが支払っている「税」です：最初のトークンまでの待ち時間、そこへたどり着くまでに費やされるトークン、そして完成した結果と出荷された成果物のあいだにある摩擦。</p>
+      <p><code>open-design-v0.15.0</code>、2026年7月14日にリリース。<strong>4日間で34人のコントリビューターから118件のPR。</strong>コードネームは「Cost Less. Ship Faster.（コストを抑え、より速く届ける）」。直近の2つのリリースは、中断をまたいであなたの作業を生き続けさせ、フローが失いがちだったアイデアを守りました。今回のリリースが狙うのは、あらゆる実行であなたが支払っている「税」です：最初のトークンまでの待ち時間、そこへたどり着くまでに費やされるトークン、そして完成した結果と出荷された成果物のあいだにある摩擦。</p>
       <p>詳細な変更履歴が知りたい方は、<a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.15.0">GitHub のリリースノート</a>にあります。本記事は短縮版です：内部で何が変わったか、今日それで何ができるか、そしてどこから始めればよいか。</p>
 
       <h2>よりスリムなプロンプト、より速いループ</h2>
@@ -141,10 +141,10 @@ i18n:
       </ul>
   ko:
     title: 'Open Design 0.15.0: 비용은 줄이고, 더 빠르게 출시하기'
-    summary: '태그 open-design-v0.15.0 — 나흘 동안 34명의 기여자가 만든 118개의 PR. 코드명 "Cost Less. Ship Faster.(비용은 줄이고, 더 빠르게)". 더 가벼워진 Design System Prompt는 대표적인 실행에서 첫 토큰까지의 시간을 49.5%, 엔드투엔드 소요 시간을 21.2%, 평균 입력 토큰을 25.1% 줄였습니다. 이번 릴리스의 나머지는 창작 루프 전체를 매끄럽게 다듬습니다: 작업 공간처럼 다룰 수 있는 덱, URL로부터의 웹사이트 클론, 대화를 모션으로 바꾸기, 그리고 마침내 다음에 무엇을 해야 할지 알려주는 실패 표시.'
+    summary: 'open-design-v0.15.0 — 나흘 동안 34명의 기여자가 만든 118개의 PR. 코드명 "Cost Less. Ship Faster.(비용은 줄이고, 더 빠르게)". 더 가벼워진 Design System Prompt는 대표적인 실행에서 첫 토큰까지의 시간을 49.5%, 엔드투엔드 소요 시간을 21.2%, 평균 입력 토큰을 25.1% 줄였습니다. 이번 릴리스의 나머지는 창작 루프 전체를 매끄럽게 다듬습니다: 작업 공간처럼 다룰 수 있는 덱, URL로부터의 웹사이트 클론, 대화를 모션으로 바꾸기, 그리고 마침내 다음에 무엇을 해야 할지 알려주는 실패 표시.'
     category: '제품'
     bodyHtml: |
-      <p>태그 <code>open-design-v0.15.0</code>, 2026년 7월 14일 출시. <strong>나흘 동안 34명의 기여자가 만든 118개의 PR.</strong> 코드명 "Cost Less. Ship Faster.(비용은 줄이고, 더 빠르게)". 지난 두 번의 릴리스는 중단을 가로질러 당신의 작업을 살아 있게 하고, 흐름이 잃곤 하던 아이디어를 지켜냈습니다. 이번 릴리스는 당신이 매 실행마다 치르는 "세금"을 겨냥합니다: 첫 토큰이 나오기까지의 기다림, 거기에 이르기까지 쓰이는 토큰, 그리고 완성된 결과와 출시된 결과물 사이의 마찰.</p>
+      <p><code>open-design-v0.15.0</code>, 2026년 7월 14일 출시. <strong>나흘 동안 34명의 기여자가 만든 118개의 PR.</strong> 코드명 "Cost Less. Ship Faster.(비용은 줄이고, 더 빠르게)". 지난 두 번의 릴리스는 중단을 가로질러 당신의 작업을 살아 있게 하고, 흐름이 잃곤 하던 아이디어를 지켜냈습니다. 이번 릴리스는 당신이 매 실행마다 치르는 "세금"을 겨냥합니다: 첫 토큰이 나오기까지의 기다림, 거기에 이르기까지 쓰이는 토큰, 그리고 완성된 결과와 출시된 결과물 사이의 마찰.</p>
       <p>전체 변경 로그가 궁금하다면 <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.15.0">GitHub의 릴리스 노트</a>에 담겨 있습니다. 이 글은 짧은 버전입니다: 내부에서 무엇이 바뀌었는지, 오늘 그것으로 무엇을 할 수 있는지, 그리고 어디서 시작하면 되는지.</p>
 
       <h2>더 가벼운 프롬프트, 더 빠른 루프</h2>
@@ -208,10 +208,10 @@ i18n:
       </ul>
   de:
     title: 'Open Design 0.15.0: weniger Kosten, schneller ausliefern'
-    summary: 'Tag open-design-v0.15.0 — 118 PRs von 34 Mitwirkenden in vier Tagen. Codename „Cost Less. Ship Faster." (Weniger Kosten, schneller ausliefern). Ein schlankerer Design System Prompt senkte in repräsentativen Läufen die Zeit bis zum ersten Token um 49.5%, die Ende-zu-Ende-Dauer um 21.2% und die durchschnittlichen Eingabe-Tokens um 25.1%. Der Rest des Releases glättet die gesamte kreative Schleife: Decks, die sich wie ein Arbeitsbereich anfühlen, Website-Klon aus einer URL, in Bewegung verwandelte Gespräche und Fehler, die endlich erklären, was als Nächstes zu tun ist.'
+    summary: 'open-design-v0.15.0 — 118 PRs von 34 Mitwirkenden in vier Tagen. Codename „Cost Less. Ship Faster." (Weniger Kosten, schneller ausliefern). Ein schlankerer Design System Prompt senkte in repräsentativen Läufen die Zeit bis zum ersten Token um 49.5%, die Ende-zu-Ende-Dauer um 21.2% und die durchschnittlichen Eingabe-Tokens um 25.1%. Der Rest des Releases glättet die gesamte kreative Schleife: Decks, die sich wie ein Arbeitsbereich anfühlen, Website-Klon aus einer URL, in Bewegung verwandelte Gespräche und Fehler, die endlich erklären, was als Nächstes zu tun ist.'
     category: 'Produkt'
     bodyHtml: |
-      <p>Tag <code>open-design-v0.15.0</code>, veröffentlicht am 14. Juli 2026. <strong>118 PRs von 34 Mitwirkenden in vier Tagen.</strong> Codename „Cost Less. Ship Faster." (Weniger Kosten, schneller ausliefern). Die letzten beiden Releases hielten deine Arbeit über Unterbrechungen hinweg am Leben und bewahrten die Ideen, die der Flow früher verlor. Dieses hier nimmt sich der Steuer an, die du bei jedem Lauf zahlst: das Warten vor dem ersten Token, die Tokens, die es kostet, dorthin zu gelangen, und die Reibung zwischen einem fertigen Ergebnis und einem ausgelieferten Liefergegenstand.</p>
+      <p><code>open-design-v0.15.0</code>, veröffentlicht am 14. Juli 2026. <strong>118 PRs von 34 Mitwirkenden in vier Tagen.</strong> Codename „Cost Less. Ship Faster." (Weniger Kosten, schneller ausliefern). Die letzten beiden Releases hielten deine Arbeit über Unterbrechungen hinweg am Leben und bewahrten die Ideen, die der Flow früher verlor. Dieses hier nimmt sich der Steuer an, die du bei jedem Lauf zahlst: das Warten vor dem ersten Token, die Tokens, die es kostet, dorthin zu gelangen, und die Reibung zwischen einem fertigen Ergebnis und einem ausgelieferten Liefergegenstand.</p>
       <p>Du willst das vollständige Änderungsprotokoll? Es findet sich in den <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.15.0">Release Notes auf GitHub</a>. Dies ist die Kurzfassung: was sich unter der Haube geändert hat, was du heute damit machen kannst und wo du anfängst.</p>
 
       <h2>Ein schlankerer Prompt, eine schnellere Schleife</h2>
@@ -275,10 +275,10 @@ i18n:
       </ul>
   fr:
     title: 'Open Design 0.15.0 : coûter moins, livrer plus vite'
-    summary: 'Tag open-design-v0.15.0 — 118 PR de 34 contributeurs en quatre jours. Nom de code « Cost Less. Ship Faster. » (Coûter moins, livrer plus vite). Un Design System Prompt allégé a réduit, sur des exécutions représentatives, le temps jusqu''au premier token de 49.5%, la durée de bout en bout de 21.2% et les tokens d''entrée moyens de 25.1%. Le reste de la version fluidifie toute la boucle créative : des decks qui se comportent comme un espace de travail, le clonage de site web depuis une URL, des conversations transformées en animation, et des échecs qui expliquent enfin quoi faire ensuite.'
+    summary: 'open-design-v0.15.0 — 118 PR de 34 contributeurs en quatre jours. Nom de code « Cost Less. Ship Faster. » (Coûter moins, livrer plus vite). Un Design System Prompt allégé a réduit, sur des exécutions représentatives, le temps jusqu''au premier token de 49.5%, la durée de bout en bout de 21.2% et les tokens d''entrée moyens de 25.1%. Le reste de la version fluidifie toute la boucle créative : des decks qui se comportent comme un espace de travail, le clonage de site web depuis une URL, des conversations transformées en animation, et des échecs qui expliquent enfin quoi faire ensuite.'
     category: 'Produit'
     bodyHtml: |
-      <p>Tag <code>open-design-v0.15.0</code>, publié le 14 juillet 2026. <strong>118 PR de 34 contributeurs en quatre jours.</strong> Nom de code « Cost Less. Ship Faster. » (Coûter moins, livrer plus vite). Les deux dernières versions ont gardé votre travail en vie à travers les interruptions et sauvé les idées que le flow avait l'habitude de perdre. Celle-ci s'attaque à l'impôt que vous payez sur chaque exécution : l'attente avant le premier token, les tokens dépensés pour y arriver, et la friction entre un résultat terminé et un livrable expédié.</p>
+      <p><code>open-design-v0.15.0</code>, publié le 14 juillet 2026. <strong>118 PR de 34 contributeurs en quatre jours.</strong> Nom de code « Cost Less. Ship Faster. » (Coûter moins, livrer plus vite). Les deux dernières versions ont gardé votre travail en vie à travers les interruptions et sauvé les idées que le flow avait l'habitude de perdre. Celle-ci s'attaque à l'impôt que vous payez sur chaque exécution : l'attente avant le premier token, les tokens dépensés pour y arriver, et la friction entre un résultat terminé et un livrable expédié.</p>
       <p>Vous voulez le changelog complet ? Il se trouve dans les <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.15.0">notes de version sur GitHub</a>. Ceci est la version courte : ce qui a changé sous le capot, ce que vous pouvez en faire dès aujourd'hui, et par où commencer.</p>
 
       <h2>Un prompt allégé, une boucle plus rapide</h2>
@@ -342,10 +342,10 @@ i18n:
       </ul>
   ru:
     title: 'Open Design 0.15.0: меньше затрат, быстрее релиз'
-    summary: 'Тег open-design-v0.15.0 — 118 PR от 34 контрибьюторов за четыре дня. Кодовое название «Cost Less. Ship Faster.» (Меньше затрат, быстрее релиз). Облегчённый Design System Prompt сократил в репрезентативных запусках время до первого токена на 49.5%, сквозную длительность на 21.2% и среднее число входных токенов на 25.1%. Остальная часть релиза сглаживает весь творческий цикл: презентации, которые ведут себя как рабочее пространство, клонирование сайта по URL, превращение разговоров в анимацию и сбои, которые наконец объясняют, что делать дальше.'
+    summary: 'open-design-v0.15.0 — 118 PR от 34 контрибьюторов за четыре дня. Кодовое название «Cost Less. Ship Faster.» (Меньше затрат, быстрее релиз). Облегчённый Design System Prompt сократил в репрезентативных запусках время до первого токена на 49.5%, сквозную длительность на 21.2% и среднее число входных токенов на 25.1%. Остальная часть релиза сглаживает весь творческий цикл: презентации, которые ведут себя как рабочее пространство, клонирование сайта по URL, превращение разговоров в анимацию и сбои, которые наконец объясняют, что делать дальше.'
     category: 'Продукт'
     bodyHtml: |
-      <p>Тег <code>open-design-v0.15.0</code>, выпущен 14 июля 2026 года. <strong>118 PR от 34 контрибьюторов за четыре дня.</strong> Кодовое название «Cost Less. Ship Faster.» (Меньше затрат, быстрее релиз). Два последних релиза сохраняли вашу работу живой сквозь прерывания и спасали идеи, которые поток раньше терял. Этот нацелен на налог, который вы платите за каждый запуск: ожидание перед первым токеном, токены, потраченные на то, чтобы до него добраться, и трение между готовым результатом и отгруженным продуктом.</p>
+      <p><code>open-design-v0.15.0</code>, выпущен 14 июля 2026 года. <strong>118 PR от 34 контрибьюторов за четыре дня.</strong> Кодовое название «Cost Less. Ship Faster.» (Меньше затрат, быстрее релиз). Два последних релиза сохраняли вашу работу живой сквозь прерывания и спасали идеи, которые поток раньше терял. Этот нацелен на налог, который вы платите за каждый запуск: ожидание перед первым токеном, токены, потраченные на то, чтобы до него добраться, и трение между готовым результатом и отгруженным продуктом.</p>
       <p>Нужен полный список изменений? Он есть в <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.15.0">примечаниях к релизу на GitHub</a>. Это краткая версия: что изменилось под капотом, что вы можете с этим сделать уже сегодня и с чего начать.</p>
 
       <h2>Более лёгкий промпт, более быстрый цикл</h2>
@@ -409,10 +409,10 @@ i18n:
       </ul>
   es:
     title: 'Open Design 0.15.0: cuesta menos, entrega más rápido'
-    summary: 'Etiqueta open-design-v0.15.0 — 118 PR de 34 colaboradores en cuatro días. Nombre en clave «Cost Less. Ship Faster.» (Cuesta menos. Entrega más rápido). Un Design System Prompt más ligero redujo, en ejecuciones representativas, el tiempo hasta el primer token en un 49.5%, la duración de extremo a extremo en un 21.2% y los tokens de entrada promedio en un 25.1%. El resto de la versión suaviza todo el bucle creativo: presentaciones que se sienten como un espacio de trabajo, clonación de sitios web desde una URL, conversaciones convertidas en animación y fallos que por fin explican qué hacer a continuación.'
+    summary: 'open-design-v0.15.0 — 118 PR de 34 colaboradores en cuatro días. Nombre en clave «Cost Less. Ship Faster.» (Cuesta menos. Entrega más rápido). Un Design System Prompt más ligero redujo, en ejecuciones representativas, el tiempo hasta el primer token en un 49.5%, la duración de extremo a extremo en un 21.2% y los tokens de entrada promedio en un 25.1%. El resto de la versión suaviza todo el bucle creativo: presentaciones que se sienten como un espacio de trabajo, clonación de sitios web desde una URL, conversaciones convertidas en animación y fallos que por fin explican qué hacer a continuación.'
     category: 'Producto'
     bodyHtml: |
-      <p>Etiqueta <code>open-design-v0.15.0</code>, publicado el 14 de julio de 2026. <strong>118 PR de 34 colaboradores en cuatro días.</strong> Nombre en clave «Cost Less. Ship Faster.» (Cuesta menos. Entrega más rápido). Las dos últimas versiones mantuvieron tu trabajo vivo a través de las interrupciones y salvaron las ideas que el flow solía perder. Esta va tras el impuesto que pagas en cada ejecución: la espera antes del primer token, los tokens que gastas para llegar allí y la fricción entre un resultado terminado y un entregable enviado.</p>
+      <p><code>open-design-v0.15.0</code>, publicado el 14 de julio de 2026. <strong>118 PR de 34 colaboradores en cuatro días.</strong> Nombre en clave «Cost Less. Ship Faster.» (Cuesta menos. Entrega más rápido). Las dos últimas versiones mantuvieron tu trabajo vivo a través de las interrupciones y salvaron las ideas que el flow solía perder. Esta va tras el impuesto que pagas en cada ejecución: la espera antes del primer token, los tokens que gastas para llegar allí y la fricción entre un resultado terminado y un entregable enviado.</p>
       <p>¿Quieres el registro de cambios completo? Está en las <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.15.0">notas de la versión en GitHub</a>. Esta es la versión corta: qué cambió por debajo, qué puedes hacer con ello hoy y por dónde empezar.</p>
 
       <h2>Un prompt más ligero, un bucle más rápido</h2>
@@ -476,10 +476,10 @@ i18n:
       </ul>
   pt-br:
     title: 'Open Design 0.15.0: custe menos, entregue mais rápido'
-    summary: 'Tag open-design-v0.15.0 — 118 PRs de 34 contribuidores em quatro dias. Codinome «Cost Less. Ship Faster.» (Custe menos. Entregue mais rápido). Um Design System Prompt mais enxuto reduziu, em execuções representativas, o tempo até o primeiro token em 49.5%, a duração de ponta a ponta em 21.2% e os tokens de entrada médios em 25.1%. O resto da versão suaviza todo o ciclo criativo: apresentações que parecem um espaço de trabalho, clonagem de site a partir de uma URL, conversas transformadas em animação e falhas que finalmente explicam o que fazer a seguir.'
+    summary: 'open-design-v0.15.0 — 118 PRs de 34 contribuidores em quatro dias. Codinome «Cost Less. Ship Faster.» (Custe menos. Entregue mais rápido). Um Design System Prompt mais enxuto reduziu, em execuções representativas, o tempo até o primeiro token em 49.5%, a duração de ponta a ponta em 21.2% e os tokens de entrada médios em 25.1%. O resto da versão suaviza todo o ciclo criativo: apresentações que parecem um espaço de trabalho, clonagem de site a partir de uma URL, conversas transformadas em animação e falhas que finalmente explicam o que fazer a seguir.'
     category: 'Produto'
     bodyHtml: |
-      <p>Tag <code>open-design-v0.15.0</code>, publicado em 14 de julho de 2026. <strong>118 PRs de 34 contribuidores em quatro dias.</strong> Codinome «Cost Less. Ship Faster.» (Custe menos. Entregue mais rápido). As duas últimas versões mantiveram seu trabalho vivo através das interrupções e salvaram as ideias que o flow costumava perder. Esta vai atrás do imposto que você paga em cada execução: a espera antes do primeiro token, os tokens gastos para chegar lá e o atrito entre um resultado pronto e um entregável despachado.</p>
+      <p><code>open-design-v0.15.0</code>, publicado em 14 de julho de 2026. <strong>118 PRs de 34 contribuidores em quatro dias.</strong> Codinome «Cost Less. Ship Faster.» (Custe menos. Entregue mais rápido). As duas últimas versões mantiveram seu trabalho vivo através das interrupções e salvaram as ideias que o flow costumava perder. Esta vai atrás do imposto que você paga em cada execução: a espera antes do primeiro token, os tokens gastos para chegar lá e o atrito entre um resultado pronto e um entregável despachado.</p>
       <p>Quer o changelog completo? Ele está nas <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.15.0">notas de versão no GitHub</a>. Esta é a versão curta: o que mudou por baixo, o que você pode fazer com isso hoje e por onde começar.</p>
 
       <h2>Um prompt mais enxuto, um ciclo mais rápido</h2>
@@ -543,10 +543,10 @@ i18n:
       </ul>
   it:
     title: 'Open Design 0.15.0: costa meno, spedisci più veloce'
-    summary: 'Tag open-design-v0.15.0 — 118 PR da 34 contributori in quattro giorni. Nome in codice «Cost Less. Ship Faster.» (Costa meno. Spedisci più veloce). Un Design System Prompt più snello ha ridotto, in esecuzioni rappresentative, il tempo al primo token del 49.5%, la durata end-to-end del 21.2% e i token di input medi del 25.1%. Il resto della release rende più fluido l''intero ciclo creativo: presentazioni che sembrano un''area di lavoro, clonazione di siti web da un URL, conversazioni trasformate in animazione e fallimenti che finalmente spiegano cosa fare dopo.'
+    summary: 'open-design-v0.15.0 — 118 PR da 34 contributori in quattro giorni. Nome in codice «Cost Less. Ship Faster.» (Costa meno. Spedisci più veloce). Un Design System Prompt più snello ha ridotto, in esecuzioni rappresentative, il tempo al primo token del 49.5%, la durata end-to-end del 21.2% e i token di input medi del 25.1%. Il resto della release rende più fluido l''intero ciclo creativo: presentazioni che sembrano un''area di lavoro, clonazione di siti web da un URL, conversazioni trasformate in animazione e fallimenti che finalmente spiegano cosa fare dopo.'
     category: 'Prodotto'
     bodyHtml: |
-      <p>Tag <code>open-design-v0.15.0</code>, pubblicato il 14 luglio 2026. <strong>118 PR da 34 contributori in quattro giorni.</strong> Nome in codice «Cost Less. Ship Faster.» (Costa meno. Spedisci più veloce). Le ultime due release hanno tenuto vivo il tuo lavoro attraverso le interruzioni e salvato le idee che il flow tendeva a perdere. Questa punta alla tassa che paghi a ogni esecuzione: l'attesa prima del primo token, i token spesi per arrivarci e l'attrito tra un risultato finito e un deliverable spedito.</p>
+      <p><code>open-design-v0.15.0</code>, pubblicato il 14 luglio 2026. <strong>118 PR da 34 contributori in quattro giorni.</strong> Nome in codice «Cost Less. Ship Faster.» (Costa meno. Spedisci più veloce). Le ultime due release hanno tenuto vivo il tuo lavoro attraverso le interruzioni e salvato le idee che il flow tendeva a perdere. Questa punta alla tassa che paghi a ogni esecuzione: l'attesa prima del primo token, i token spesi per arrivarci e l'attrito tra un risultato finito e un deliverable spedito.</p>
       <p>Vuoi il changelog completo? Si trova nelle <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.15.0">note di rilascio su GitHub</a>. Questa è la versione breve: cosa è cambiato sotto il cofano, cosa puoi farci oggi e da dove iniziare.</p>
 
       <h2>Un prompt più snello, un ciclo più veloce</h2>
@@ -610,10 +610,10 @@ i18n:
       </ul>
   tr:
     title: 'Open Design 0.15.0: daha az maliyet, daha hızlı teslimat'
-    summary: 'Etiket open-design-v0.15.0 — dört günde 34 katkıda bulunandan 118 PR. Kod adı «Cost Less. Ship Faster.» (Daha az maliyet. Daha hızlı teslimat). Daha yalın bir Design System Prompt, temsili çalışmalarda ilk token''a kadar geçen süreyi 49.5%, uçtan uca süreyi 21.2% ve ortalama girdi token''larını 25.1% azalttı. Sürümün geri kalanı tüm yaratıcı döngüyü pürüzsüzleştiriyor: bir çalışma alanı gibi hissettiren sunumlar, bir URL''den web sitesi klonlama, harekete dönüştürülen sohbetler ve sonunda bundan sonra ne yapılacağını açıklayan hatalar.'
+    summary: 'open-design-v0.15.0 — dört günde 34 katkıda bulunandan 118 PR. Kod adı «Cost Less. Ship Faster.» (Daha az maliyet. Daha hızlı teslimat). Daha yalın bir Design System Prompt, temsili çalışmalarda ilk token''a kadar geçen süreyi 49.5%, uçtan uca süreyi 21.2% ve ortalama girdi token''larını 25.1% azalttı. Sürümün geri kalanı tüm yaratıcı döngüyü pürüzsüzleştiriyor: bir çalışma alanı gibi hissettiren sunumlar, bir URL''den web sitesi klonlama, harekete dönüştürülen sohbetler ve sonunda bundan sonra ne yapılacağını açıklayan hatalar.'
     category: 'Ürün'
     bodyHtml: |
-      <p><code>open-design-v0.15.0</code> etiketi, 14 Temmuz 2026'da yayınlandı. <strong>Dört günde 34 katkıda bulunandan 118 PR.</strong> Kod adı «Cost Less. Ship Faster.» (Daha az maliyet. Daha hızlı teslimat). Son iki sürüm, çalışmanızı kesintiler boyunca canlı tuttu ve akışın eskiden kaybettiği fikirleri kurtardı. Bu sürüm ise her çalışmada ödediğiniz vergiyi hedef alıyor: ilk token'dan önceki bekleme, oraya ulaşmak için harcanan token'lar ve bitmiş bir sonuç ile teslim edilmiş bir çıktı arasındaki sürtünme.</p>
+      <p><code>open-design-v0.15.0</code>, 14 Temmuz 2026'da yayınlandı. <strong>Dört günde 34 katkıda bulunandan 118 PR.</strong> Kod adı «Cost Less. Ship Faster.» (Daha az maliyet. Daha hızlı teslimat). Son iki sürüm, çalışmanızı kesintiler boyunca canlı tuttu ve akışın eskiden kaybettiği fikirleri kurtardı. Bu sürüm ise her çalışmada ödediğiniz vergiyi hedef alıyor: ilk token'dan önceki bekleme, oraya ulaşmak için harcanan token'lar ve bitmiş bir sonuç ile teslim edilmiş bir çıktı arasındaki sürtünme.</p>
       <p>Tam değişiklik günlüğünü mü istiyorsunuz? <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.15.0">GitHub'daki sürüm notlarında</a>. Bu, kısa sürüm: kaputun altında ne değişti, bugün onunla ne yapabilirsiniz ve nereden başlayacaksınız.</p>
 
       <h2>Daha yalın bir prompt, daha hızlı bir döngü</h2>
@@ -677,7 +677,7 @@ i18n:
       </ul>
 ---
 
-Tag `open-design-v0.15.0`, published on July 14, 2026. **118 PRs from 34 contributors in four days.** Codename "Cost Less. Ship Faster." The last two releases kept your work alive across interruptions and saved the ideas flow used to lose. This one goes after the tax you pay on every run: the wait before the first token, the tokens spent getting there, and the friction between a finished result and a shipped deliverable.
+`open-design-v0.15.0`, published on July 14, 2026. **118 PRs from 34 contributors in four days.** Codename "Cost Less. Ship Faster." The last two releases kept your work alive across interruptions and saved the ideas flow used to lose. This one goes after the tax you pay on every run: the wait before the first token, the tokens spent getting there, and the friction between a finished result and a shipped deliverable.
 
 Want the full changelog? It lives in the [release notes on GitHub](https://github.com/nexu-io/open-design/releases/tag/open-design-v0.15.0). This is the short version: what changed underneath, what you can do with it today, and where to start.
 

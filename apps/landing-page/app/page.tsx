@@ -1178,6 +1178,7 @@ export default function Page({
                   <li><a href={href('/')}>Open Design</a></li>
                   <li><a href={href('/html-anything/')}>{ui.footer.htmlAnything}</a></li>
                   <li><a href={href('/html-video/')}>{ui.footer.htmlVideo}</a></li>
+                  <li><a href={href('/codex-slides/')}>Codex Slides</a></li>
                 </ul>
               </div>
 

@@ -274,6 +274,8 @@ export type TrackingRunFailureStage =
   | 'prompt_send'
   | 'first_token_wait'
   | 'tool_execution'
+  | 'tool_outstanding'
+  | 'post_tool_resume'
   | 'artifact_write'
   | 'child_close'
   | 'finalize';
@@ -321,7 +323,9 @@ export type TrackingRunFailureUserAction =
   | 'install_cli'
   | 'fix_config'
   | 'none';
-export type TrackingRunRetryStrategy = 'same_run_transient';
+export type TrackingRunRetryStrategy =
+  | 'same_run_transient'
+  | 'native_session_continue';
 export type TrackingRunRetryFinalResult =
   | 'not_attempted'
   | 'success'
@@ -362,6 +366,33 @@ export type TrackingRunCloseReason =
   | 'fatal_rpc_error'
   | 'empty_output'
   | 'unknown';
+export type TrackingAmrOpenCodeErrorPhase =
+  | 'timeout'
+  | 'event_stream_start'
+  | 'event_stream'
+  | 'prompt_async'
+  | 'other';
+export type TrackingAmrOpenCodeLastEventType =
+  | 'tool_call'
+  | 'tool_call_update'
+  | 'agent_message_chunk'
+  | 'agent_thought_chunk'
+  | 'done'
+  | 'other';
+export type TrackingAmrOpenCodeLastToolStatus =
+  | 'pending'
+  | 'in_progress'
+  | 'completed'
+  | 'failed'
+  | 'other';
+export type TrackingAmrOpenCodeLastToolKind =
+  | 'read'
+  | 'write'
+  | 'edit'
+  | 'search'
+  | 'execute'
+  | 'fetch'
+  | 'other';
 export type TrackingLangfuseDeliveryStatus =
   | 'not_expected'
   | 'queued'

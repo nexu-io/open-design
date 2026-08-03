@@ -26,7 +26,7 @@ Dylan's blunt framing: a closed tool can cost $20–$200/month and *still* rate-
 
 ## Step 1 — Install and pick your engine
 
-Ask your editor's agent to clone and set it up (paste the repo URL and let Claude Code / Codex run it), or grab the desktop app from [open-design.ai/download](https://open-design.ai/download). On first launch it shows every model already installed locally (Codex, Gemini, GitHub Copilot CLI, …) — click **rescan** if you just added one, or bring your own key. Pick the CLI and model, and save.
+Ask your editor's agent to clone and set it up (paste the repo URL and let Claude Code / Codex run it), or grab the desktop app from [open-design.ai/download](https://open-design.ai/download). On first launch it shows every supported runtime already installed locally (Codex, OpenCode, GitHub Copilot CLI, …) — click **rescan** if you just added one, or configure a BYOK provider. Pick the CLI and model, and save.
 
 ## Step 2 — Build the client deliverable
 
@@ -37,7 +37,7 @@ Create a project (Dylan builds a premium sales-analytics dashboard), choose **hi
 
 ## Step 3 — The cost move: switch models mid-project
 
-This is the agency economics. Dylan's rule: **build the structure with a strong model** (it's best at interpreting the design), then **switch to a cheaper model for the details and edits** — change the CLI in the bottom-left from Claude Code to Codex/Gemini and save. For truly low cost, point it at **OpenRouter** and use budget or free models (a DeepSeek-class model is a fraction of the price at ~90–95% of the quality for iteration). You decide where each dollar goes instead of letting one premium model run wild on your credits.
+This is the agency economics. Dylan's rule: **build the structure with a strong model** (it's best at interpreting the design), then **switch to a cheaper model for the details and edits** — in the recording, he changes the CLI in the bottom-left from Claude Code to Codex/Gemini and saves. The direct Gemini runtime is now retired; current releases use Codex/OpenCode here, or Google Gemini configured through BYOK. For truly low cost, point it at **OpenRouter** and use budget or free models (a DeepSeek-class model is a fraction of the price at ~90–95% of the quality for iteration). You decide where each dollar goes instead of letting one premium model run wild on your credits.
 
 You can also add a media provider key (e.g. OpenAI) and drop **generated images** right into the deliverable, then **deploy to Vercel** in one click for client review.
 

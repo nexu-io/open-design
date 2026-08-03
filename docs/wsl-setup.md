@@ -97,7 +97,20 @@ od --no-open
 In another WSL terminal, verify it is reachable:
 
 ```bash
-curl -sSf http://127.0.0.1:7456 >/dev/null && echo "Open Design daemon is reachable"
+curl -sSf http://127.0.0.1:7456/api/health && echo "Open Design daemon is reachable"
+```
+
+Expected output includes `{"ok":true,...}` followed by the echo line.
+
+Do not probe the root URL (`curl http://127.0.0.1:7456`) for this check. The
+root path serves the web UI only after the web package has been built, so on a
+fresh source install it returns 404 even though the daemon is healthy. The MCP
+integrations below do not need the web build. If you also want the browser UI
+at `http://127.0.0.1:7456`, build it once and restart the daemon:
+
+```bash
+cd ~/tools/open-design
+pnpm --filter @open-design/web build
 ```
 
 Leave the daemon terminal running while using MCP integrations.

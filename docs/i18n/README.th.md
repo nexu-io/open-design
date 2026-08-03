@@ -1,7 +1,5 @@
 <h1 align="center">Open Design: ทางเลือกโอเพนซอร์สแทน Claude Design</h1>
 
-> 🔥 **Open Design 0.13.0 — _Stay in Flow_ มาแล้ว.** เซสชันออกแบบยาว ๆ เคยสะดุดทุกครั้งที่ถูกขัดจังหวะ — การรันหลุดตำแหน่ง ตัวเลือกโมเดลทำให้ต้องเดา และการส่งออกต้องอ้อมอีกขั้น 0.13.0 ทำให้เซสชันยังคงอยู่ต่อได้: กลับมารันต่อของ Codex / OpenCode / Pi / Open Design Cloud ข้ามเทิร์น เลือกโมเดลที่ใช่ได้เร็วขึ้น และส่งมอบ PPTX / PDF ที่มีภาพหน้าจอรองรับได้โดยไม่ต้องออกจากแอป [ดาวน์โหลด 0.13.0](https://github.com/nexu-io/open-design/releases) · [บันทึกการอัปเดต](https://github.com/nexu-io/open-design/releases/tag/open-design-v0.13.0)
->
 > ⚡ **Open Design Cloud — บริการโมเดลอย่างเป็นทางการ.** เติมเงินครั้งเดียวเพื่อใช้ GPT, Claude, Gemini และ DeepSeek ใน Open Design: โมเดลระดับ flagship กว่า 20 ตัว, ไม่ต้องตั้งค่า, คิดเงินตาม token ที่ใช้จริง. [ลองใช้ Open Design Cloud](https://open-design.ai/cloud/)
 >
 > 🏅 **Open Design Fellow program เปิดรับแล้ว.** ถ้าคุณเชื่อเหมือนกันว่า design ควรเปิดกว้าง มาเป็น Open Design Fellow, ร่วม shape ผลิตภัณฑ์กับ core team และช่วยให้คนมากขึ้นมีส่วนร่วมกำหนดอนาคตของ design. รายละเอียด → [`MAINTAINERS.th.md`](MAINTAINERS.th.md) และ [Discord](https://discord.gg/qhbcCH8Am4).
@@ -116,10 +114,10 @@ Open Design คือสิ่งที่เกิดขึ้นเมื่�
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | ✅ Supported | `od mcp install claude` |
 | [Codex CLI](https://github.com/openai/codex) | ✅ Supported | `od mcp install codex` |
 | [DeepSeek Reasonix](https://github.com/esengine/DeepSeek-Reasonix) | ✅ Supported | `od mcp install reasonix` |
+| [Raven](https://github.com/EverMind-AI/Raven) | ✅ Supported | `od mcp install raven` |
 | [Cursor](https://www.cursor.com/cli) | ✅ Supported | `od mcp install cursor` |
 | [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ Supported | `od mcp install copilot` |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ Supported | `od mcp install copilot` |
-| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | ✅ Supported | `od mcp install gemini` |
 | [OpenCode](https://opencode.ai/) | ✅ Supported | `od mcp install opencode` |
 | [OpenClaw](https://github.com/openclaw/openclaw) | ✅ Supported | `od mcp install openclaw` |
 | [Antigravity](https://antigravity.google) | ✅ Supported | `od mcp install antigravity` |
@@ -304,8 +302,8 @@ Open Design (OD) คือทางเลือกโอเพนซอร์ส
 ```bash
 # One-line install into the agent you're using:
 curl -fsSL https://open-design.ai/install.sh | sh -s <agent>
-# <agent> = claude | codex | cursor | copilot | openclaw | antigravity | gemini
-#         | pi | vibe | hermes | cline | kimi | trae | opencode
+# <agent> = claude | codex | reasonix | raven | cursor | copilot | openclaw | antigravity
+#         | pi | vibe | hermes | cline | kimi | kiro | trae | opencode
 ```
 
 จากนั้นใน agent:

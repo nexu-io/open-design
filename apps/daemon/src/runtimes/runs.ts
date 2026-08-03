@@ -10,6 +10,12 @@ import {
 } from '../run-tool-bundle.js';
 import { createRunLifecycleTracer } from '../run-lifecycle-tracer.js';
 import { projectWorkspaceProvenance } from '../workspace-contract.js';
+import { OPEN_DESIGN_PLUGIN_ID } from '../mcp-observability.js';
+import {
+  interruptDurableRunAfterDaemonRestart,
+  RESTART_ERROR_CODE,
+  RESTART_ERROR_MESSAGE,
+} from './run-restart-recovery.js';
 
 export const TERMINAL_RUN_STATUSES = new Set(['succeeded', 'failed', 'canceled']);
 
@@ -33,6 +39,8 @@ function durableRunState(run) {
     projectId: run.projectId,
     conversationId: run.conversationId,
     assistantMessageId: run.assistantMessageId,
+    clientRequestId: run.clientRequestId,
+    requestFingerprint: run.requestFingerprint,
     agentId: run.agentId,
     status: run.status,
     createdAt: run.createdAt,
@@ -41,6 +49,10 @@ function durableRunState(run) {
     signal: run.signal,
     error: run.error,
     errorCode: run.errorCode,
+    failureCategory: run.failureCategory ?? null,
+    failureDetail: run.failureDetail ?? null,
+    failureAction: run.failureAction ?? null,
+    resumable: run.resumable ?? false,
     artifactCount: Number.isFinite(run.artifactCount) ? run.artifactCount : 0,
     endedWithUnfinishedWork: Boolean(run.endedWithUnfinishedWork),
     ...(typeof run.userPrompt === 'string' ? { userPrompt: run.userPrompt } : {}),
@@ -63,6 +75,33 @@ function durableRunState(run) {
     ...(run.promptTelemetry ? { promptTelemetry: run.promptTelemetry } : {}),
     ...(run.promptCache ? { promptCache: run.promptCache } : {}),
     ...(run.analyticsRecovery ? { analyticsRecovery: run.analyticsRecovery } : {}),
+    ...(run.externalPluginAnalytics
+      ? { externalPluginAnalytics: run.externalPluginAnalytics }
+      : {}),
+    ...(typeof run.manualResumeAttemptCount === 'number'
+      ? { manualResumeAttemptCount: run.manualResumeAttemptCount }
+      : {}),
+    ...(typeof run.rechargeWaitDurationMs === 'number'
+      ? { rechargeWaitDurationMs: run.rechargeWaitDurationMs }
+      : {}),
+    ...(typeof run.artifactOriginStatus === 'string'
+      ? { artifactOriginStatus: run.artifactOriginStatus }
+      : {}),
+    ...(typeof run.artifactVersionId === 'string'
+      ? { artifactVersionId: run.artifactVersionId }
+      : {}),
+    ...(typeof run.deliverableValid === 'boolean'
+      ? { deliverableValid: run.deliverableValid }
+      : {}),
+    ...(typeof run.deliverableValidation === 'string'
+      ? { deliverableValidation: run.deliverableValidation }
+      : {}),
+    ...(typeof run.deliverableEntryFile === 'string'
+      ? { deliverableEntryFile: run.deliverableEntryFile }
+      : {}),
+    ...(typeof run.deliverableArtifactKind === 'string'
+      ? { deliverableArtifactKind: run.deliverableArtifactKind }
+      : {}),
     ...(typeof run.langfuseCompletedAt === 'number'
       ? { langfuseCompletedAt: run.langfuseCompletedAt }
       : {}),
@@ -80,6 +119,40 @@ function extractErrorDetails(data) {
     error: readString(nested.message) ?? readString(payload.message),
     errorCode: readString(nested.code) ?? readString(payload.code),
   };
+}
+
+function readDurableRunState(statePath) {
+  try {
+    const value = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+    if (
+      !value
+      || typeof value !== 'object'
+      || value.schemaVersion !== RUN_STATE_SCHEMA_VERSION
+      || typeof value.id !== 'string'
+      || typeof value.status !== 'string'
+    ) {
+      return null;
+    }
+    return value;
+  } catch {
+    return null;
+  }
+}
+
+function readDurableRunEvents(eventsLogPath) {
+  try {
+    return fs.readFileSync(eventsLogPath, 'utf8')
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => JSON.parse(line))
+      .filter((record) =>
+        record
+        && typeof record === 'object'
+        && Number.isFinite(record.id)
+        && typeof record.event === 'string');
+  } catch {
+    return [];
+  }
 }
 
 export function createChatRunService({
@@ -103,6 +176,109 @@ export function createChatRunService({
   onEventEmitted = null,
 }) {
   const runs = new Map();
+  const runIdsByClientRequestId = new Map();
+  const runIdsByPluginWorkflowId = new Map();
+
+  if (runsLogDir) {
+    try {
+      for (const entry of fs.readdirSync(runsLogDir, { withFileTypes: true })) {
+        if (!entry.isDirectory()) continue;
+        const state = readDurableRunState(path.join(runsLogDir, entry.name, 'state.json'));
+        if (
+          typeof state?.clientRequestId === 'string'
+          && state.clientRequestId
+          && typeof state.id === 'string'
+        ) {
+          runIdsByClientRequestId.set(state.clientRequestId, state.id);
+        }
+        const pluginWorkflowId =
+          state?.externalPluginAnalytics?.externalPluginId
+            === OPEN_DESIGN_PLUGIN_ID
+          && typeof state.externalPluginAnalytics.pluginWorkflowId === 'string'
+            ? state.externalPluginAnalytics.pluginWorkflowId
+            : null;
+        if (pluginWorkflowId && typeof state.id === 'string') {
+          runIdsByPluginWorkflowId.set(pluginWorkflowId, state.id);
+        }
+      }
+    } catch {
+      // A fresh data root has no runs directory yet.
+    }
+  }
+
+  const hydrateDurableRun = (id) => {
+    if (!runsLogDir || typeof id !== 'string' || !id) return null;
+    const statePath = path.join(runsLogDir, id, 'state.json');
+    const state = readDurableRunState(statePath);
+    if (!state || state.id !== id) return null;
+    const interruptedAfterRestart =
+      interruptDurableRunAfterDaemonRestart(state);
+    if (interruptedAfterRestart) atomicWriteJson(statePath, state);
+    if (!TERMINAL_RUN_STATUSES.has(state.status)) return null;
+    const eventsLogPath = path.join(runsLogDir, id, 'events.jsonl');
+    const events = readDurableRunEvents(eventsLogPath);
+    if (interruptedAfterRestart) {
+      const timestamp = state.updatedAt;
+      const nextEventId =
+        events.reduce((max, record) => Math.max(max, record.id), 0) + 1;
+      events.push(
+        {
+          id: nextEventId,
+          event: 'error',
+          data: {
+            error: {
+              code: RESTART_ERROR_CODE,
+              message: RESTART_ERROR_MESSAGE,
+              retryable: true,
+            },
+          },
+          timestamp,
+        },
+        {
+          id: nextEventId + 1,
+          event: 'end',
+          data: {
+            code: 1,
+            signal: null,
+            status: 'failed',
+            resumable: false,
+            endedWithUnfinishedWork: Boolean(state.endedWithUnfinishedWork),
+          },
+          timestamp,
+        },
+      );
+    }
+    const run = {
+      ...state,
+      projectId: typeof state.projectId === 'string' ? state.projectId : null,
+      conversationId: typeof state.conversationId === 'string' ? state.conversationId : null,
+      assistantMessageId:
+        typeof state.assistantMessageId === 'string' ? state.assistantMessageId : null,
+      clientRequestId:
+        typeof state.clientRequestId === 'string' ? state.clientRequestId : null,
+      requestFingerprint:
+        typeof state.requestFingerprint === 'string' ? state.requestFingerprint : null,
+      agentId: typeof state.agentId === 'string' ? state.agentId : null,
+      projectMetadata: null,
+      events,
+      nextEventId: events.reduce((max, record) => Math.max(max, record.id), 0) + 1,
+      clients: new Set(),
+      waiters: new Set(),
+      child: null,
+      acpSession: null,
+      childPid: null,
+      processGroupId: null,
+      cancelRequested: false,
+      eventsLogPath,
+      statePath,
+      eventsLogStream: null,
+      eventsLogClosed: true,
+      mediaExecution: normalizeMediaExecutionPolicyForRun(null),
+      toolBundle: normalizeRunToolBundleForRun(null),
+    };
+    runs.set(id, run);
+    return run;
+  };
 
   const create = (meta = {}) => {
     const now = Date.now();
@@ -113,6 +289,10 @@ export function createChatRunService({
       conversationId: typeof meta.conversationId === 'string' && meta.conversationId ? meta.conversationId : null,
       assistantMessageId: typeof meta.assistantMessageId === 'string' && meta.assistantMessageId ? meta.assistantMessageId : null,
       clientRequestId: typeof meta.clientRequestId === 'string' && meta.clientRequestId ? meta.clientRequestId : null,
+      requestFingerprint:
+        typeof meta.requestFingerprint === 'string' && meta.requestFingerprint
+          ? meta.requestFingerprint
+          : null,
       agentId: typeof meta.agentId === 'string' && meta.agentId ? meta.agentId : null,
       projectMetadata:
         meta.projectMetadata && typeof meta.projectMetadata === 'object' && !Array.isArray(meta.projectMetadata)
@@ -141,6 +321,29 @@ export function createChatRunService({
         meta.context && typeof meta.context === 'object' && !Array.isArray(meta.context)
           ? meta.context
           : null,
+      externalPluginAnalytics:
+        meta.analyticsHints
+        && typeof meta.analyticsHints === 'object'
+        && !Array.isArray(meta.analyticsHints)
+        && meta.analyticsHints.externalPluginId === OPEN_DESIGN_PLUGIN_ID
+          ? {
+              entrySurface: meta.analyticsHints.entrySurface,
+              hostProduct: meta.analyticsHints.hostProduct,
+              externalPluginId: OPEN_DESIGN_PLUGIN_ID,
+              externalPluginVersion: meta.analyticsHints.externalPluginVersion,
+              distributionMechanism:
+                meta.analyticsHints.distributionMechanism,
+              publisherClass: meta.analyticsHints.publisherClass,
+              attributionQuality: meta.analyticsHints.attributionQuality,
+              pluginWorkflowId: meta.analyticsHints.pluginWorkflowId,
+              logicalRequestDigest: meta.analyticsHints.logicalRequestDigest,
+              logicalRequestDigestVersion:
+                meta.analyticsHints.logicalRequestDigestVersion,
+              briefState: meta.analyticsHints.briefState,
+              generationSloWindowMs:
+                meta.analyticsHints.generationSloWindowMs,
+            }
+          : null,
       status: 'queued',
       createdAt: now,
       updatedAt: now,
@@ -165,6 +368,10 @@ export function createChatRunService({
       // compact analytics snapshot on the shared run until terminal telemetry.
       retryOriginFailure: null,
       retryOriginErrorCode: null,
+      retryStrategy: null,
+      retryMaxAttempts: null,
+      nativeSessionContinueAttemptCount: 0,
+      nativeSessionContinuePending: null,
       stdinOpen: false,
       // E-lite root-cause telemetry. `stdinBackpressure` records whether the
       // prompt write to the child's stdin was queued (pipe buffer full — a
@@ -190,10 +397,50 @@ export function createChatRunService({
       // Set once finish() has closed the log stream, so a late post-finish emit
       // can't lazily re-open a stream nothing will ever close (FD leak).
       eventsLogClosed: false,
+      cleanupGeneration: 0,
+      manualResumeAttemptCount: 0,
+      rechargeWaitDurationMs: 0,
     };
     runs.set(run.id, run);
+    if (run.clientRequestId) runIdsByClientRequestId.set(run.clientRequestId, run.id);
+    if (
+      run.externalPluginAnalytics?.externalPluginId === OPEN_DESIGN_PLUGIN_ID
+      && typeof run.externalPluginAnalytics.pluginWorkflowId === 'string'
+    ) {
+      runIdsByPluginWorkflowId.set(
+        run.externalPluginAnalytics.pluginWorkflowId,
+        run.id,
+      );
+    }
     if (run.statePath) atomicWriteJson(run.statePath, durableRunState(run));
     return run;
+  };
+
+  const createOrReuse = (meta = {}) => {
+    const clientRequestId =
+      typeof meta.clientRequestId === 'string' && meta.clientRequestId
+        ? meta.clientRequestId
+        : null;
+    if (clientRequestId) {
+      const existingId = runIdsByClientRequestId.get(clientRequestId);
+      const existing = existingId
+        ? runs.get(existingId) ?? hydrateDurableRun(existingId)
+        : null;
+      if (existing) {
+        const fingerprint =
+          typeof meta.requestFingerprint === 'string' ? meta.requestFingerprint : null;
+        if (
+          fingerprint
+          && typeof existing.requestFingerprint === 'string'
+          && existing.requestFingerprint
+          && fingerprint !== existing.requestFingerprint
+        ) {
+          return { kind: 'conflict', run: existing };
+        }
+        return { kind: 'reused', run: existing };
+      }
+    }
+    return { kind: 'created', run: create(meta) };
   };
 
   const persistState = (run) => {
@@ -222,12 +469,88 @@ export function createChatRunService({
     persistState(run);
   };
 
-  const get = (id) => runs.get(id) ?? null;
+  const setDeliverableValidation = (run, result) => {
+    if (!run || !result) return;
+    run.deliverableValid = result.valid === true;
+    run.deliverableValidation =
+      typeof result.validation === 'string' ? result.validation : 'entry_missing';
+    run.deliverableEntryFile =
+      typeof result.entryFile === 'string' ? result.entryFile : undefined;
+    run.deliverableArtifactKind =
+      typeof result.artifactKind === 'string' ? result.artifactKind : undefined;
+    persistState(run);
+  };
+
+  const get = (id) => runs.get(id) ?? hydrateDurableRun(id);
+  const findByPluginWorkflowId = (pluginWorkflowId) => {
+    if (typeof pluginWorkflowId !== 'string' || !pluginWorkflowId) return null;
+    const runId = runIdsByPluginWorkflowId.get(pluginWorkflowId);
+    return runId ? get(runId) : null;
+  };
 
   const scheduleCleanup = (run) => {
+    const generation = (run.cleanupGeneration ?? 0) + 1;
+    run.cleanupGeneration = generation;
     setTimeout(() => {
-      if (TERMINAL_RUN_STATUSES.has(run.status)) runs.delete(run.id);
+      if (
+        run.cleanupGeneration === generation
+        && TERMINAL_RUN_STATUSES.has(run.status)
+      ) {
+        runs.delete(run.id);
+      }
     }, ttlMs).unref?.();
+  };
+
+  const prepareRestart = (run) => {
+    if (!run || !TERMINAL_RUN_STATUSES.has(run.status)) return null;
+    const resumedAt = Date.now();
+    const rechargeWaitDurationMs = Math.max(0, resumedAt - run.updatedAt);
+    // Invalidate the cleanup timer scheduled for the prior terminal attempt.
+    run.cleanupGeneration = (run.cleanupGeneration ?? 0) + 1;
+    run.status = 'queued';
+    run.updatedAt = resumedAt;
+    run.exitCode = null;
+    run.signal = null;
+    run.error = null;
+    run.errorCode = null;
+    run.failureCategory = null;
+    run.failureDetail = null;
+    run.failureAction = null;
+    run.resumable = false;
+    run.cancelRequested = false;
+    run.runtimeFailureObservedBeforeCancellation = false;
+    run.retryRestartTimer = null;
+    run.retryAttemptCount = 0;
+    run.retryFinalResult = undefined;
+    run.retrySuppressedReason = undefined;
+    run.retryOriginFailure = null;
+    run.retryOriginErrorCode = null;
+    run.artifactCount = undefined;
+    run.artifactOutcome = undefined;
+    run.deliverableValid = undefined;
+    run.deliverableValidation = undefined;
+    run.deliverableEntryFile = undefined;
+    run.deliverableArtifactKind = undefined;
+    run.endedWithUnfinishedWork = false;
+    run.child = null;
+    run.acpSession = null;
+    run.childPid = null;
+    run.processGroupId = null;
+    run.childExitObservedAt = null;
+    run.stdinOpen = false;
+    run.eventsLogStream = null;
+    run.eventsLogClosed = false;
+    run.manualResumeAttemptCount = (run.manualResumeAttemptCount ?? 0) + 1;
+    run.rechargeWaitDurationMs =
+      (run.rechargeWaitDurationMs ?? 0) + rechargeWaitDurationMs;
+    persistState(run);
+    emit(run, 'run_resume_attempted', {
+      runId: run.id,
+      attempt: run.manualResumeAttemptCount,
+      reason: 'recharge',
+      rechargeWaitDurationMs: run.rechargeWaitDurationMs,
+    });
+    return run;
   };
 
   // Lazily open the per-run event log on first emit. The directory may
@@ -300,6 +623,7 @@ export function createChatRunService({
     projectId: run.projectId,
     conversationId: run.conversationId,
     assistantMessageId: run.assistantMessageId,
+    clientRequestId: run.clientRequestId ?? null,
     agentId: run.agentId,
     designSystemId: run.designSystemId ?? null,
     designSystemRequestedId: run.designSystemRequestedId ?? null,
@@ -321,6 +645,7 @@ export function createChatRunService({
     errorCode: run.errorCode ?? null,
     failureCategory: run.failureCategory ?? null,
     failureDetail: run.failureDetail ?? null,
+    failureAction: run.failureAction ?? null,
     resumable: run.resumable ?? false,
     endedWithUnfinishedWork: !!run.endedWithUnfinishedWork,
     ...(Number.isFinite(run.artifactCount) ? { artifactCount: run.artifactCount } : {}),
@@ -331,6 +656,34 @@ export function createChatRunService({
     ...(run.promptCache ? { promptCache: run.promptCache } : {}),
     ...(run.nativeSessionRecovery ? { nativeSessionRecovery: run.nativeSessionRecovery } : {}),
     ...(run.browserUse ? { browserUse: run.browserUse } : {}),
+    ...(typeof run.clientType === 'string' ? { clientType: run.clientType } : {}),
+    ...(run.externalPluginAnalytics
+      ? { externalPluginAnalytics: run.externalPluginAnalytics }
+      : {}),
+    ...(typeof run.manualResumeAttemptCount === 'number'
+      ? { manualResumeAttemptCount: run.manualResumeAttemptCount }
+      : {}),
+    ...(typeof run.rechargeWaitDurationMs === 'number'
+      ? { rechargeWaitDurationMs: run.rechargeWaitDurationMs }
+      : {}),
+    ...(typeof run.artifactOriginStatus === 'string'
+      ? { artifactOriginStatus: run.artifactOriginStatus }
+      : {}),
+    ...(typeof run.artifactVersionId === 'string'
+      ? { artifactVersionId: run.artifactVersionId }
+      : {}),
+    ...(typeof run.deliverableValid === 'boolean'
+      ? { deliverableValid: run.deliverableValid }
+      : {}),
+    ...(typeof run.deliverableValidation === 'string'
+      ? { deliverableValidation: run.deliverableValidation }
+      : {}),
+    ...(typeof run.deliverableEntryFile === 'string'
+      ? { deliverableEntryFile: run.deliverableEntryFile }
+      : {}),
+    ...(typeof run.deliverableArtifactKind === 'string'
+      ? { deliverableArtifactKind: run.deliverableArtifactKind }
+      : {}),
   });
 
   const finish = (run, status, code: number | null = null, signal: string | null = null) => {
@@ -672,6 +1025,23 @@ export function createChatRunService({
       try { finalize(); } catch { /* best-effort */ }
     }
     runs.delete(run.id);
+    if (
+      run.clientRequestId
+      && runIdsByClientRequestId.get(run.clientRequestId) === run.id
+    ) {
+      runIdsByClientRequestId.delete(run.clientRequestId);
+    }
+    const pluginWorkflowId =
+      run.externalPluginAnalytics?.externalPluginId === OPEN_DESIGN_PLUGIN_ID
+      && typeof run.externalPluginAnalytics.pluginWorkflowId === 'string'
+        ? run.externalPluginAnalytics.pluginWorkflowId
+        : null;
+    if (
+      pluginWorkflowId
+      && runIdsByPluginWorkflowId.get(pluginWorkflowId) === run.id
+    ) {
+      runIdsByPluginWorkflowId.delete(pluginWorkflowId);
+    }
     if (run.statePath) {
       try { fs.unlinkSync(run.statePath); } catch { /* best-effort */ }
     }
@@ -690,8 +1060,11 @@ export function createChatRunService({
 
   return {
     create,
+    createOrReuse,
+    prepareRestart,
     start,
     get,
+    findByPluginWorkflowId,
     list,
     stream,
     cancel,
@@ -702,6 +1075,7 @@ export function createChatRunService({
     setAnalyticsRecovery,
     markAnalyticsCompleted,
     markLangfuseCompleted,
+    setDeliverableValidation,
     finish,
     fail,
     drop,

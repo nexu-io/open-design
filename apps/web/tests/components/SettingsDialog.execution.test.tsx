@@ -4,6 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { OpenDesignHostUpdaterStatusSnapshot } from '@open-design/host';
 import { installMockOpenDesignHost } from '@open-design/host/testing';
+import type { UpsertByokCredentialProfileRequest } from '@open-design/contracts';
 import { en } from '../../src/i18n/locales/en';
 
 function optionNames(container: HTMLElement): string[] {
@@ -111,6 +112,7 @@ import { reconcileAmrProfileEnv } from '../../src/components/SettingsDialog';
 import { providerModelsCacheKey } from '../../src/components/providerModelsCache';
 import { I18nProvider } from '../../src/i18n';
 import { LOCALES } from '../../src/i18n/types';
+import { ByokCredentialProfileHttpError } from '../../src/state/config';
 import { MAX_MAX_TOKENS, MIN_MAX_TOKENS } from '../../src/state/maxTokens';
 import type {
   AgentInfo,
@@ -157,6 +159,8 @@ const amrAgent: AgentInfo = {
   models: [{ id: 'default', label: 'Default' }],
   supportsCustomModel: false,
 };
+
+const inFlightAuthAttemptId = '936da01f-9abd-4d9d-80c7-02af85c822a8';
 
 type OnRefreshAgents = (
   options?: AgentRefreshOptions,
@@ -282,6 +286,19 @@ function renderSettingsDialog(
 ) {
   const onPersist = vi.fn();
   const onPersistComposioKey = vi.fn();
+  const onPersistByokCredential = vi.fn(async (input: UpsertByokCredentialProfileRequest) => ({
+    id: input.id ?? 'byok-test-profile',
+    label: input.label,
+    protocol: input.protocol,
+    baseUrl: input.baseUrl,
+    model: input.model,
+    apiVersion: input.apiVersion,
+    requiresApiKey: input.requiresApiKey ?? true,
+    configured: true,
+    keyTail: input.apiKey?.slice(-4),
+    createdAt: 1,
+    updatedAt: 1,
+  }));
   const onSilentUpdatePreferenceChange: (allowSilentUpdates: boolean) => Promise<void> =
     options.onSilentUpdatePreferenceChange
     ?? (async () => undefined);
@@ -300,6 +317,7 @@ function renderSettingsDialog(
       onPersist={onPersist}
       onSilentUpdatePreferenceChange={onSilentUpdatePreferenceChange}
       onPersistComposioKey={onPersistComposioKey}
+      onPersistByokCredential={onPersistByokCredential}
       onClose={onClose}
       onRefreshAgents={onRefreshAgents}
     />,
@@ -309,6 +327,7 @@ function renderSettingsDialog(
     onPersist,
     onSilentUpdatePreferenceChange,
     onPersistComposioKey,
+    onPersistByokCredential,
     onClose,
     onRefreshAgents,
     ...view,
@@ -1214,10 +1233,8 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     fireEvent.change(screen.getByLabelText('API key'), {
       target: { value: 'azure-key' },
     });
+    expect(screen.queryByLabelText('Custom deployment name')).toBeNull();
     fireEvent.change(screen.getByLabelText('Deployment name'), {
-      target: { value: '__custom__' },
-    });
-    fireEvent.change(screen.getByLabelText('Custom deployment name'), {
       target: { value: 'deployment-one' },
     });
     fireEvent.change(screen.getByLabelText('Base URL'), {
@@ -1240,10 +1257,26 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
         model: 'deployment-one',
         baseUrl: 'https://example.openai.azure.com',
         apiVersion: '2024-10-21',
-        apiProviderBaseUrl: null,
+        apiProviderBaseUrl: '',
       }),
       {},
     );
+
+    const persistedConfig = onPersist.mock.calls.at(-1)?.[0] as AppConfig;
+    cleanup();
+
+    renderSettingsDialog(persistedConfig);
+
+    expect((screen.getByLabelText('Deployment name') as HTMLInputElement).value).toBe(
+      'deployment-one',
+    );
+    expect((screen.getByLabelText('Base URL') as HTMLInputElement).value).toBe(
+      'https://example.openai.azure.com',
+    );
+    expect((screen.getByLabelText('API version') as HTMLInputElement).value).toBe(
+      '2024-10-21',
+    );
+    expect(screen.queryByLabelText('Custom deployment name')).toBeNull();
   });
 
   it('does not fetch provider models while the API key edit is still uncommitted', async () => {
@@ -2362,6 +2395,60 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     );
   });
 
+  it('reports secure profile persistence failures with stable BYOK telemetry', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === '/api/memory') {
+        return new Response(
+          JSON.stringify({ enabled: true, memories: [], extraction: null }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      expect(url).toBe('/api/test/connection');
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          kind: 'ok',
+          latencyMs: 20,
+          model: 'claude-sonnet-4-5',
+          sample: 'pong',
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { onPersistByokCredential } = renderSettingsDialog({
+      apiKey: 'sk-ant-test-provider',
+    });
+    onPersistByokCredential.mockRejectedValueOnce(
+      new ByokCredentialProfileHttpError(
+        400,
+        'Invalid secure profile',
+        'VALIDATION_FAILED',
+      ),
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Test' }));
+
+    await waitFor(() => {
+      expect(analyticsTrackMock).toHaveBeenCalledWith(
+        'settings_byok_test_result',
+        expect.objectContaining({
+          page_name: 'settings',
+          area: 'execution_model',
+          provider_id: 'anthropic',
+          result: 'failed',
+          error_code: 'VALIDATION_FAILED',
+          error_kind: 'unknown',
+          field_missing: 'none',
+          success_after_action: false,
+        }),
+        undefined,
+      );
+    });
+  });
+
   it('renders invalid Base URL test failures on the Base URL field', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = input.toString();
@@ -3258,6 +3345,7 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
               ? {
                   loggedIn: false,
                   loginInFlight: true,
+                  authAttemptId: inFlightAuthAttemptId,
                   profile: 'local',
                   user: null,
                   configPath: '/Users/test/.amr/config.json',
@@ -3265,6 +3353,7 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
               : {
                   loggedIn: false,
                   loginInFlight: false,
+                  authAttemptId: inFlightAuthAttemptId,
                   profile: 'local',
                   user: null,
                   configPath: '/Users/test/.amr/config.json',
@@ -3274,6 +3363,9 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
         );
       }
       if (url === '/api/integrations/vela/login/cancel' && init?.method === 'POST') {
+        expect(JSON.parse(String(init.body))).toEqual({
+          authAttemptId: inFlightAuthAttemptId,
+        });
         statusStage = 'signed-out';
         return new Response(JSON.stringify({ canceled: true }), {
           status: 200,
@@ -3297,7 +3389,13 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
 
     expect(await screen.findByText('Canceled')).toBeTruthy();
-    expect(fetchMock).toHaveBeenCalledWith('/api/integrations/vela/login/cancel', { method: 'POST' });
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/integrations/vela/login/cancel',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ authAttemptId: inFlightAuthAttemptId }),
+      }),
+    );
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Authorize' })).toBeTruthy();
@@ -3331,6 +3429,7 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
           JSON.stringify({
             loggedIn: false,
             loginInFlight: true,
+            authAttemptId: inFlightAuthAttemptId,
             profile: 'local',
             user: null,
             configPath: '/Users/test/.amr/config.json',
@@ -3339,6 +3438,9 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
         );
       }
       if (url === '/api/integrations/vela/login/cancel' && init?.method === 'POST') {
+        expect(JSON.parse(String(init.body))).toEqual({
+          authAttemptId: inFlightAuthAttemptId,
+        });
         cancelReceived = true;
         return new Response(JSON.stringify({ canceled: true }), {
           status: 200,
@@ -3395,31 +3497,37 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
             ? {
                 loggedIn: false,
                 loginInFlight: true,
+                authAttemptId: inFlightAuthAttemptId,
                 profile: 'local',
                 user: null,
                 configPath: '/Users/test/.amr/config.json',
               }
             : statusStage === 'signed-in'
               ? {
-                  loggedIn: true,
-                  loginInFlight: false,
-                  profile: 'local',
-                  user: { id: 'user-1', email: 'late@example.com' },
-                  configPath: '/Users/test/.amr/config.json',
-                }
+                loggedIn: true,
+                loginInFlight: false,
+                authAttemptId: inFlightAuthAttemptId,
+                profile: 'local',
+                user: { id: 'user-1', email: 'late@example.com' },
+                configPath: '/Users/test/.amr/config.json',
+              }
               : {
-                  loggedIn: false,
-                  loginInFlight: false,
-                  profile: 'local',
-                  user: null,
-                  configPath: '/Users/test/.amr/config.json',
-                };
+                loggedIn: false,
+                loginInFlight: false,
+                authAttemptId: inFlightAuthAttemptId,
+                profile: 'local',
+                user: null,
+                configPath: '/Users/test/.amr/config.json',
+              };
         return new Response(JSON.stringify(body), {
           status: 200,
           headers: { 'content-type': 'application/json' },
         });
       }
       if (url === '/api/integrations/vela/login/cancel' && init?.method === 'POST') {
+        expect(JSON.parse(String(init.body))).toEqual({
+          authAttemptId: inFlightAuthAttemptId,
+        });
         statusStage = 'signed-out';
         return new Response(JSON.stringify({ canceled: true }), {
           status: 200,

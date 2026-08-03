@@ -675,37 +675,6 @@
   height: auto;
 }
 
-/* Hover affordance: a small "edit params" handle pinned to the hovered
-   element so click-to-pin selection stays discoverable without the panel
-   chasing the cursor. */
-.manual-edit-workspace > .manual-edit-hover-action {
-  position: absolute;
-  z-index: 31;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border: 1px solid color-mix(in srgb, #2563eb 55%, transparent);
-  border-radius: var(--radius);
-  background: var(--bg-panel);
-  color: #2563eb;
-  cursor: pointer;
-  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.22);
-  opacity: 0;
-  transform: scale(0.9);
-  animation: manual-edit-hover-action-in 160ms cubic-bezier(0.23, 1, 0.32, 1) forwards;
-  pointer-events: auto;
-}
-.manual-edit-workspace > .manual-edit-hover-action:hover {
-  background: color-mix(in srgb, #2563eb 12%, var(--bg-panel));
-}
-@keyframes manual-edit-hover-action-in {
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
 /* Claude Code-style edit inspector panel. */
 .cc-panel { display: flex; flex-direction: column; gap: 0; padding: 8px 0; overflow: hidden; background: var(--bg-panel); }
 .cc-inspector { display: flex; flex-direction: column; gap: 12px; padding: 6px 12px; }
@@ -1350,6 +1319,20 @@
   color: var(--red);
   background: var(--red-bg);
   font-size: 12px;
+}
+
+/* Save/patch failures must stay visible when the inspector panel is closed
+   (the panel is opt-in since edit-mode v2.1): float the same error style at
+   the bottom of the canvas, above the selection chrome. */
+.manual-edit-workspace > .manual-edit-error-floating {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  margin: 0;
+  max-width: min(560px, calc(100% - 24px));
+  z-index: 33;
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.18);
 }
 
 .manual-edit-changes {

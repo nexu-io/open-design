@@ -7,6 +7,7 @@ import {
   PRESENTER_WINDOW_MIN_HEIGHT,
   PRESENTER_WINDOW_MIN_WIDTH,
   removeSpeakerNotesFromHtml,
+  sourcesDifferOnlyInSpeakerNotes,
   upsertSpeakerNotesInHtml,
 } from '../../src/runtime/speaker-notes';
 
@@ -403,5 +404,42 @@ describe('speaker notes HTML helpers', () => {
       expect(tag).toContain('sandbox="allow-scripts"');
       expect(tag).not.toContain('allow-same-origin');
     }
+  });
+});
+
+describe('speaker-notes-only difference detection', () => {
+  // Notes live in a <script type="application/json"> the browser never
+  // renders, so a change confined to it needs no preview repaint. Callers use
+  // this to skip an iframe reload — a white flash and a scroll-restore gamble
+  // — for an edit that is invisible on the page.
+  const page = '<!doctype html><html><body><section class="slide">Hi</section></body></html>';
+
+  it('sees adding notes to a page as notes-only, padding included', () => {
+    // upsertSpeakerNotesInHtml pads its insertion with newlines, so a plain
+    // block removal is NOT its inverse — the padding alone used to make an
+    // added-notes document compare as a real visual change.
+    const withNotes = upsertSpeakerNotesInHtml(page, ['Open on the ask.']);
+    expect(withNotes).not.toBe(page);
+    expect(sourcesDifferOnlyInSpeakerNotes(page, withNotes)).toBe(true);
+    expect(sourcesDifferOnlyInSpeakerNotes(withNotes, page)).toBe(true);
+  });
+
+  it('sees an edit between two notes payloads as notes-only', () => {
+    const first = upsertSpeakerNotesInHtml(page, ['First take']);
+    const second = upsertSpeakerNotesInHtml(page, ['Second take', 'And a next slide']);
+    expect(sourcesDifferOnlyInSpeakerNotes(first, second)).toBe(true);
+  });
+
+  it('never calls a visible body change notes-only', () => {
+    const edited = page.replace('Hi', 'Hello');
+    expect(sourcesDifferOnlyInSpeakerNotes(page, edited)).toBe(false);
+    // Even when the notes change in the SAME write, the body change must win.
+    const editedWithNotes = upsertSpeakerNotesInHtml(edited, ['Note']);
+    const pageWithNotes = upsertSpeakerNotesInHtml(page, ['Other note']);
+    expect(sourcesDifferOnlyInSpeakerNotes(pageWithNotes, editedWithNotes)).toBe(false);
+  });
+
+  it('reports identical documents as not differing at all', () => {
+    expect(sourcesDifferOnlyInSpeakerNotes(page, page)).toBe(false);
   });
 });

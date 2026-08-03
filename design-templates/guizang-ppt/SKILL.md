@@ -71,11 +71,15 @@ This skill's aesthetic is not "corporate PPT," nor "consumer-internet UI": it lo
 
 ## Workflow
 
-### Step 0 · Pick a direction (Direction · the mandatory first step)
+### Step 0 · Infer a direction; ask only when comparison is requested
 
-**Before asking the 6 clarifying questions, first let the user pick one of the 5 magazine directions**. Each direction packages up its "theme color / recommended layouts / chrome style / recommended slide count," and picking a direction answers half the clarifying questions.
+Infer one of the 5 magazine directions from the brief, audience, content, and
+known context. Each direction packages its theme color, recommended layouts,
+chrome style, and slide count. Use the closest fit and continue without asking.
 
-Open `references/styles.md`, **copy the whole section over** to show the user the 1-line summary of the 5 directions, then let them choose:
+Only when the user explicitly asks to see or compare direction options, open
+`references/styles.md` and present the 1-line summaries in one
+`direction-cards` question form:
 
 ```
 1. Monocle Editorial · International magazine style ✦ default
@@ -85,19 +89,28 @@ Open `references/styles.md`, **copy the whole section over** to show the user th
 5. Lab / Reference · Academic + craft manual
 ```
 
-If the user says "I don't know, you recommend": **default to Monocle Editorial**, because it has the lowest failure probability. If the user mentions "AI / benchmark / technical launch": recommend WIRED; "reading / private / social circle": recommend Kinfolk; "design / architecture / portfolio": recommend Domus; "research / academic / methodology": recommend Lab.
+If the user says "I don't know, you recommend" or provides no direction cue:
+**default to Monocle Editorial** without asking, because it has the lowest
+failure probability. If the user mentions "AI / benchmark / technical launch":
+choose WIRED; "reading / private / social circle": choose Kinfolk; "design /
+architecture / portfolio": choose Domus; "research / academic / methodology":
+choose Lab.
 
 After picking a direction, create or update `项目记录.md` (Project Record) in the project folder, with the first line clearly stating direction + theme color + audience + duration (see the template at the end of `styles.md`). **Do not change direction at any point**: switching midway = everything before is wasted.
 
-### Step 1 · Clarify intent (**do before starting**)
+### Step 1 · Resolve intent
 
 **If the user has already given a complete outline + images**, you can skip straight to Step 2.
 
-**If the user only gave a topic or a vague idea**, align on these 6 questions one by one before starting. Don't begin writing slides based on guesses: once the structure is wrong, later rework is very costly:
+Infer the checklist below from the brief, project metadata, supplied content,
+and conversation. If a missing answer would materially change the deck and no
+safe default exists, ask only those unresolved fields in one consolidated
+question form. Do not ask the checklist one by one.
 
 #### 6-question clarifying checklist
 
-> Question 5 is already answered when you pick a direction in Step 0 (direction → theme color). In the 5 questions below, just leave question 5 blank.
+> Direction and theme color are inferred in Step 0 unless the user explicitly
+> asks to compare options.
 
 | # | Question | Why ask it |
 |---|------|-----------|

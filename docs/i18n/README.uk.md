@@ -1,7 +1,5 @@
 <h1 align="center">Open Design: відкрита альтернатива Claude Design</h1>
 
-> 🔥 **Open Design 0.13.0 — _Stay in Flow_ вже тут.** Раніше довгі сесії дизайну зривалися на кожній перерві — запуск втрачав своє місце, вибір моделі змушував гадати, а експорт вимагав ще одного обхідного шляху. 0.13.0 зберігає сесію живою: відновлюйте запуски Codex / OpenCode / Pi / Open Design Cloud між ходами, швидше обирайте потрібну модель і передавайте підкріплені скриншотами PPTX / PDF, не залишаючи застосунок. [Завантажити 0.13.0](https://github.com/nexu-io/open-design/releases) · [Примітки до випуску](https://github.com/nexu-io/open-design/releases/tag/open-design-v0.13.0)
->
 > ⚡ **Open Design Cloud — офіційний сервіс моделей.** Одне поповнення — і GPT, Claude, Gemini та DeepSeek доступні просто в Open Design: 20+ флагманських моделей, нуль налаштувань, оплата за реальне використання токенів. [Спробувати Open Design Cloud](https://open-design.ai/cloud/)
 >
 > 🏅 **Програма Open Design Fellow тепер відкрита.** Якщо ви теж вірите, що дизайн має бути відкритим — станьте Open Design Fellow, формуйте продукт разом із основною командою та допомагайте більшій кількості людей брати участь у визначенні майбутнього дизайну. Деталі → [`MAINTAINERS.md`](../../MAINTAINERS.md) та [Discord](https://discord.gg/mHAjSMV6gz).
@@ -116,10 +114,10 @@ Open Design перетворює цей цикл на **файлову сист�
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | ✅ Підтримується | `od mcp install claude` |
 | [Codex CLI](https://github.com/openai/codex) | ✅ Підтримується | `od mcp install codex` |
 | [DeepSeek Reasonix](https://github.com/esengine/DeepSeek-Reasonix) | ✅ Підтримується | `od mcp install reasonix` |
+| [Raven](https://github.com/EverMind-AI/Raven) | ✅ Підтримується | `od mcp install raven` |
 | [Cursor](https://www.cursor.com/cli) | ✅ Підтримується | `od mcp install cursor` |
 | [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ Підтримується | `od mcp install copilot` |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ Підтримується | `od mcp install copilot` |
-| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | ✅ Підтримується | `od mcp install gemini` |
 | [OpenCode](https://opencode.ai/) | ✅ Підтримується | `od mcp install opencode` |
 | [OpenClaw](https://github.com/openclaw/openclaw) | ✅ Підтримується | `od mcp install openclaw` |
 | [Antigravity](https://antigravity.google) | ✅ Підтримується | `od mcp install antigravity` |
@@ -304,8 +302,8 @@ Open Design (OD) — це альтернатива з відкритим код�
 ```bash
 # One-line install into the agent you're using:
 od mcp install <agent>
-# <agent> = claude | codex | cursor | copilot | openclaw | antigravity | gemini
-#         | pi | vibe | hermes | cline | kimi | trae | opencode
+# <agent> = claude | codex | reasonix | raven | cursor | copilot | openclaw | antigravity
+#         | pi | vibe | hermes | cline | kimi | kiro | trae | opencode
 ```
 
 Потім усередині агента:

@@ -53,7 +53,6 @@ import { requestAmrArtifactUpgrade } from '../runtime/amr-artifact-upgrade';
 import {
   type AmrWalletSnapshot,
   type ByokMediaDefaults,
-  type ByokChatProviderConfig,
   type ByokChatProtocol,
   type ResearchOptions,
 } from '@open-design/contracts';
@@ -239,7 +238,6 @@ import {
 import { buildRepoImportPrompt, designSystemNeedsRepoConnect } from './design-system-github-evidence';
 import { isDesignSystemProject, resolveProjectDesignSystemId } from './design-system-project';
 import { collectReferencedJsxNames } from '../runtime/jsx-module-refs';
-import { KNOWN_PROVIDERS } from '../state/config';
 import { DESIGN_SYSTEM_TAB, FileWorkspace, type BrowserOpenRequest } from './FileWorkspace';
 import {
   type PluginFolderAgentAction,
@@ -272,7 +270,6 @@ import { effectiveMaxTokens } from '../state/maxTokens';
 import { effectiveAgentModelChoice } from './agentModelSelection';
 import { mediaExecutionPolicyForProjectMetadata } from '../media/execution-policy';
 import { mediaModelProviderId } from '../media/models';
-import { byokProviderRequiresApiKey } from '../utils/byokProvider';
 import {
   useByokImageModelOptions,
   useByokVideoModelOptions,
@@ -1239,41 +1236,13 @@ function byokMediaDefaultsForRun(input: {
   };
 }
 
-function byokOpenCodeProviderFromConfig(
+function byokOpenCodeProfileIdFromConfig(
   config: AppConfig,
-): ByokChatProviderConfig | undefined {
+): string | undefined {
   if (!isOpenCodeByokChatProtocol(config.apiProtocol)) return undefined;
-  const selectedProvider = selectedKnownProviderForConfig(config);
-  const model = config.model.trim();
-  if (
-    (byokProviderRequiresApiKey(config.apiProtocol, selectedProvider, config.baseUrl) && !config.apiKey.trim()) ||
-    !model ||
-    model.toLowerCase() === 'default' ||
-    (config.apiProtocol === 'azure' && !config.baseUrl.trim())
-  ) {
-    return undefined;
-  }
-  return {
-    protocol: config.apiProtocol,
-    apiKey: config.apiKey.trim(),
-    baseUrl: config.baseUrl,
-    model: config.model,
-    ...(selectedProvider?.requiresApiKey === false ? { requiresApiKey: false } : {}),
-    apiVersion:
-      config.apiProtocol === 'azure'
-        ? config.apiVersion ?? ''
-        : '',
-  };
-}
-
-function selectedKnownProviderForConfig(config: AppConfig) {
-  if (!config.apiProtocol) return undefined;
-  return KNOWN_PROVIDERS.find(
-    (provider) =>
-      provider.protocol === config.apiProtocol &&
-      provider.baseUrl === config.baseUrl &&
-      (config.apiProviderBaseUrl == null || provider.baseUrl === config.apiProviderBaseUrl),
-  );
+  if (byokPreflightBlockReason(config) !== null) return undefined;
+  if (!config.byokCredentialConfigured) return undefined;
+  return config.byokProfileId?.trim() || undefined;
 }
 
 function isOpenCodeByokChatProtocol(
@@ -1404,7 +1373,15 @@ export function ProjectView({
   const detailedProject = projectDetail.project?.id === project.id ? projectDetail.project : null;
   const currentProject =
     detailedProject && detailedProject.updatedAt >= project.updatedAt ? detailedProject : project;
-  const projectDesignSystemId = resolveProjectDesignSystemId(currentProject);
+  const resolvedProjectDesignSystemId = resolveProjectDesignSystemId(currentProject);
+  // A project can outlive a Design System being disabled in Settings. Keep the
+  // persisted project value intact for recovery, but do not inject a disabled
+  // system into a new runtime turn.
+  const projectDesignSystemId = resolvedProjectDesignSystemId;
+  const runtimeDesignSystemId =
+    projectDesignSystemId && (config.disabledDesignSystems ?? []).includes(projectDesignSystemId)
+      ? null
+      : projectDesignSystemId;
   const projectIsDesignSystemProject = isDesignSystemProject(currentProject);
   // Website-clone turns reproduce a whole multi-page site; auto-open should
   // land on the site entry (index.html), not the last-written subpage. See
@@ -4297,6 +4274,8 @@ export function ProjectView({
               // null the same as an active retryable state and keep the row
               // eligible for future refresh/reattach. Only authoritative
               // terminal statuses seal completedReattachRunsRef.
+              let shouldRefreshConversationAfterCleanup = true;
+              let shouldRetryAfterControllerCleanup = false;
               if (genericDisconnect) {
                 const attempts = (genericDisconnectRetriesRef.current.get(runId) ?? 0) + 1;
                 if (attempts >= MAX_TRANSIENT_RETRIES) {
@@ -4313,15 +4292,18 @@ export function ProjectView({
                     cancelController,
                   );
                   const backoffTimer = scheduleProjectTimeout(() => {
-                    const currentBackoffUntil =
-                      genericDisconnectBackoffUntilRef.current.get(runId) ?? 0;
-                    if (currentBackoffUntil <= Date.now()) {
-                      genericDisconnectBackoffUntilRef.current.delete(runId);
-                    }
+                    genericDisconnectBackoffUntilRef.current.delete(runId);
+                    shouldRetryAfterControllerCleanup = true;
                     setRecoveryTick((t) => t + 1);
                   }, 3000);
                   const latestRunStatus = await fetchChatRunStatus(runId).catch(() => null);
                   if (!latestRunStatus || isActiveRunStatus(latestRunStatus.status)) {
+                    // If the backoff elapsed while this probe was still in
+                    // flight, its recovery tick already ran while the run was
+                    // still registered as reattaching. Re-run recovery after
+                    // controller cleanup so the retry is not stranded until an
+                    // unrelated state change.
+                    shouldRefreshConversationAfterCleanup = false;
                   } else if (latestRunStatus.status === 'succeeded') {
                     if (
                       shouldPublishRunFinishedEvent
@@ -4418,8 +4400,13 @@ export function ProjectView({
               reattachCancelControllersRef.current.delete(runId);
               clearCurrentRunStreamingMarker(reattachConversationId, controller, cancelController);
               if (!skipFinalPersistNow) persistNow({ telemetryFinalized: true });
+              if (shouldRetryAfterControllerCleanup && !shouldRefreshConversationAfterCleanup) {
+                setRecoveryTick((t) => t + 1);
+              }
               if (retryFullReplayAfterCleanup) setRecoveryTick((t) => t + 1);
-              scheduleConversationMessageRefresh(reattachConversationId);
+              if (shouldRefreshConversationAfterCleanup) {
+                scheduleConversationMessageRefresh(reattachConversationId);
+              }
             },
           },
           onRunStatus: (runStatus) => {
@@ -4818,11 +4805,11 @@ export function ProjectView({
           chatAttachmentsFromPreviewCommentImages(attachment.imageAttachments),
         ),
       );
-      const byokOpenCodeProvider = byokOpenCodeProviderFromConfig(config);
+      const byokProfileId = byokOpenCodeProfileIdFromConfig(config);
       const requiresByokPreflight =
         (config.mode === 'api' && config.apiProtocol !== 'bedrock') ||
         (config.mode === 'daemon' && config.agentId === 'byok-opencode');
-      if (requiresByokPreflight && !byokOpenCodeProvider) {
+      if (requiresByokPreflight && !byokProfileId) {
         trackByokPreflightBlocked(analytics.track, {
           source: 'run',
           reason: byokPreflightBlockReason(config) ?? 'config_invalid',
@@ -5699,11 +5686,7 @@ export function ProjectView({
                 genericDisconnectRetriesRef.current.set(runIdForGenericDisconnect, attempts);
                 genericDisconnectBackoffUntilRef.current.set(runIdForGenericDisconnect, backoffUntil);
                 const backoffTimer = scheduleProjectTimeout(() => {
-                  const currentBackoffUntil =
-                    genericDisconnectBackoffUntilRef.current.get(runIdForGenericDisconnect) ?? 0;
-                  if (currentBackoffUntil <= Date.now()) {
-                    genericDisconnectBackoffUntilRef.current.delete(runIdForGenericDisconnect);
-                  }
+                  genericDisconnectBackoffUntilRef.current.delete(runIdForGenericDisconnect);
                   setRecoveryTick((t) => t + 1);
                 }, 3000);
                 const latestRunStatus = await fetchChatRunStatus(runIdForGenericDisconnect).catch(() => null);
@@ -5905,7 +5888,7 @@ export function ProjectView({
           skillId: project.skillId ?? null,
           skillIds: Array.isArray(meta?.skillIds) ? meta.skillIds : [],
           context: runContext,
-          designSystemId: projectDesignSystemId ?? null,
+          designSystemId: runtimeDesignSystemId ?? null,
           attachments: runAttachments.map((a) => a.path),
           commentAttachments: runCommentAttachments,
           sessionMode: runSessionMode,
@@ -5916,8 +5899,8 @@ export function ProjectView({
           model: daemonByokOpenCode ? config.model : choice?.model ?? null,
           reasoning: daemonByokOpenCode ? null : choice?.reasoning ?? null,
           serviceTier: daemonByokOpenCode ? null : choice?.serviceTier ?? null,
-          ...(daemonByokOpenCode && byokOpenCodeProvider
-            ? { byokProvider: byokOpenCodeProvider }
+          ...(daemonByokOpenCode && byokProfileId
+            ? { byokProfileId }
             : {}),
           ...(daemonByokOpenCode
             ? {
@@ -5998,24 +5981,9 @@ export function ProjectView({
         // BYOK users even though the UI saves model + index + entries
         // for that mode.
         const userText = (userMsg.content ?? '').trim();
-        // Snapshot the live BYOK chat config so the daemon can run
-        // "Same as chat" memory extraction against the same vendor /
-        // key / baseUrl / apiVersion the user is chatting with. The
-        // daemon never persists BYOK creds itself, so this per-call
-        // signal is the only way `pickProvider()` can avoid falling
-        // through to env / media-config (which is wrong for BYOK)
-        // when no explicit memory model override is set. The picker
-        // re-syncs an *explicit* override when chat config drifts;
-        // this snapshot covers the implicit "Same as chat" default.
-        const byokChatProvider = byokOpenCodeProvider
-          ? {
-              provider: byokOpenCodeProvider.protocol,
-              apiKey: byokOpenCodeProvider.apiKey,
-              baseUrl: byokOpenCodeProvider.baseUrl,
-              apiVersion: byokOpenCodeProvider.apiVersion,
-              model: byokOpenCodeProvider.model,
-            }
-          : undefined;
+        // Pass only the non-secret profile reference so "Same as chat"
+        // memory extraction resolves the same daemon-owned credential as the
+        // run. Raw provider keys never cross this browser call boundary.
         if (userText.length > 0) {
           try {
             await fetch('/api/memory/extract', {
@@ -6025,7 +5993,7 @@ export function ProjectView({
                 userMessage: userText,
                 projectId: project.id,
                 conversationId: runConversationId,
-                chatProvider: byokChatProvider,
+                byokProfileId,
               }),
             });
           } catch {
@@ -6066,7 +6034,7 @@ export function ProjectView({
           skillId: project.skillId ?? null,
           skillIds: Array.isArray(meta?.skillIds) ? meta.skillIds : [],
           context: runContext,
-          designSystemId: projectDesignSystemId ?? null,
+          designSystemId: runtimeDesignSystemId ?? null,
           attachments: runAttachments.map((a) => a.path),
           commentAttachments: runCommentAttachments,
           sessionMode: runSessionMode,
@@ -6077,7 +6045,7 @@ export function ProjectView({
           model: config.model,
           reasoning: null,
           serviceTier: null,
-          ...(byokOpenCodeProvider ? { byokProvider: byokOpenCodeProvider } : {}),
+          ...(byokProfileId ? { byokProfileId } : {}),
           byokMediaDefaults: byokMediaDefaultsForRun({
             imageModelOverride: byokImageModelOverride,
             videoModelOverride: byokVideoModelOverride,
@@ -6150,6 +6118,7 @@ export function ProjectView({
       onTouchProject,
       project.id,
       projectDesignSystemId,
+      runtimeDesignSystemId,
       project.name,
       projectFiles,
       refreshProjectFiles,
@@ -6546,8 +6515,8 @@ export function ProjectView({
   const commentQueueOnSend = currentConversationBusy && !currentConversationQueueDisabled;
 
   const handleContinueRemainingTasks = useCallback(
-    (_assistantMessage: ChatMessage, todos: TodoItem[]) => {
-      if (currentConversationActionDisabled || todos.length === 0) return;
+    async (_assistantMessage: ChatMessage, todos: TodoItem[]) => {
+      if (currentConversationActionDisabled || todos.length === 0) return false;
       const remainingList = todos
         .map((todo, i) => {
           const label =
@@ -6561,7 +6530,7 @@ export function ProjectView({
         `${remainingList}\n\n` +
         'Before making changes, inspect the current project files as needed. ' +
         'Update TodoWrite as you complete each remaining task.';
-      void handleSend(prompt, [], []);
+      return handleSend(prompt, [], []);
     },
     [currentConversationActionDisabled, handleSend],
   );

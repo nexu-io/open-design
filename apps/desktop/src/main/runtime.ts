@@ -283,6 +283,7 @@ const DESIGN_BROWSER_PARTITION = "persist:open-design-design-browser";
 const UPDATER_IPC_CHANNELS = [
   "od:update:status",
   "od:update:check",
+  "od:update:clear-cache",
   "od:update:download",
   "od:update:install",
   "od:update:quit",
