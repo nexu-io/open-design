@@ -52,6 +52,7 @@ import { useCoalescedCallback } from '../hooks/useCoalescedCallback';
 import { requestAmrArtifactUpgrade } from '../runtime/amr-artifact-upgrade';
 import {
   type AmrWalletSnapshot,
+  type UserByokChatProviderConfig,
   type ByokMediaDefaults,
   type ByokChatProtocol,
   type ResearchOptions,
@@ -101,7 +102,7 @@ import {
 } from '../utils/apiProtocol';
 import { playSound, showCompletionNotification } from '../utils/notifications';
 import { randomUUID } from '../utils/uuid';
-import { DEFAULT_NOTIFICATIONS } from '../state/config';
+import { DEFAULT_NOTIFICATIONS, KNOWN_PROVIDERS } from '../state/config';
 import type { TodoItem } from '../runtime/todos';
 import {
   appendErrorStatusEvent,
@@ -271,6 +272,7 @@ import { effectiveMaxTokens } from '../state/maxTokens';
 import { effectiveAgentModelChoice } from './agentModelSelection';
 import { mediaExecutionPolicyForProjectMetadata } from '../media/execution-policy';
 import { mediaModelProviderId } from '../media/models';
+import { byokProviderRequiresApiKey } from '../utils/byokProvider';
 import {
   useByokImageModelOptions,
   useByokVideoModelOptions,
@@ -1238,21 +1240,61 @@ function byokMediaDefaultsForRun(input: {
   };
 }
 
-type ByokOpenCodeCredential =
-  | { kind: 'deployment' }
-  | { kind: 'profile'; profileId: string };
-
-function byokOpenCodeCredentialFromConfig(
+function byokOpenCodeProviderFromConfig(
   config: AppConfig,
-): ByokOpenCodeCredential | undefined {
+): UserByokChatProviderConfig | undefined {
   if (!isOpenCodeByokChatProtocol(config.apiProtocol)) return undefined;
-  if (byokPreflightBlockReason(config) !== null) return undefined;
   if (config.apiProtocol === 'openai' && config.apiCredentialSource === 'deployment') {
-    return { kind: 'deployment' };
+    return undefined;
   }
-  if (!config.byokCredentialConfigured) return undefined;
-  const profileId = config.byokProfileId?.trim();
-  return profileId ? { kind: 'profile', profileId } : undefined;
+  const selectedProvider = selectedKnownProviderForConfig(config);
+  const model = config.model.trim();
+  if (
+    (byokProviderRequiresApiKey(config.apiProtocol, selectedProvider, config.baseUrl)
+      && !config.apiKey.trim())
+    || !model
+    || model.toLowerCase() === 'default'
+    || (config.apiProtocol === 'azure' && !config.baseUrl.trim())
+  ) {
+    return undefined;
+  }
+  return {
+    protocol: config.apiProtocol,
+    apiKey: config.apiKey.trim(),
+    baseUrl: config.baseUrl.trim(),
+    model,
+    ...(config.apiProtocol === 'azure' && config.apiVersion?.trim()
+      ? { apiVersion: config.apiVersion.trim() }
+      : {}),
+    requiresApiKey: byokProviderRequiresApiKey(
+      config.apiProtocol,
+      selectedProvider,
+      config.baseUrl,
+    ),
+  };
+}
+
+function selectedKnownProviderForConfig(config: AppConfig) {
+  if (!config.apiProtocol) return undefined;
+  return KNOWN_PROVIDERS.find(
+    (provider) =>
+      provider.protocol === config.apiProtocol
+      && provider.baseUrl === config.baseUrl
+      && (
+        config.apiProviderBaseUrl == null
+        || provider.baseUrl === config.apiProviderBaseUrl
+      ),
+  );
+}
+
+function byokOpenCodeCredentialSourceFromConfig(
+  config: AppConfig,
+): 'deployment' | undefined {
+  if (!isOpenCodeByokChatProtocol(config.apiProtocol)) return undefined;
+  if (config.apiProtocol !== 'openai' || config.apiCredentialSource !== 'deployment') {
+    return undefined;
+  }
+  return byokPreflightBlockReason(config) === null ? 'deployment' : undefined;
 }
 
 function isOpenCodeByokChatProtocol(
@@ -4816,17 +4858,12 @@ export function ProjectView({
           chatAttachmentsFromPreviewCommentImages(attachment.imageAttachments),
         ),
       );
-      const byokCredential = byokOpenCodeCredentialFromConfig(config);
-      const byokProfileId = byokCredential?.kind === 'profile'
-        ? byokCredential.profileId
-        : undefined;
-      const byokCredentialSource = byokCredential?.kind === 'deployment'
-        ? 'deployment' as const
-        : undefined;
+      const byokOpenCodeProvider = byokOpenCodeProviderFromConfig(config);
+      const byokCredentialSource = byokOpenCodeCredentialSourceFromConfig(config);
       const requiresByokPreflight =
         (config.mode === 'api' && config.apiProtocol !== 'bedrock') ||
         (config.mode === 'daemon' && config.agentId === 'byok-opencode');
-      if (requiresByokPreflight && !byokCredential) {
+      if (requiresByokPreflight && !byokOpenCodeProvider && !byokCredentialSource) {
         trackByokPreflightBlocked(analytics.track, {
           source: 'run',
           reason: byokPreflightBlockReason(config) ?? 'config_invalid',
@@ -5916,8 +5953,8 @@ export function ProjectView({
           model: daemonByokOpenCode ? config.model : choice?.model ?? null,
           reasoning: daemonByokOpenCode ? null : choice?.reasoning ?? null,
           serviceTier: daemonByokOpenCode ? null : choice?.serviceTier ?? null,
-          ...(daemonByokOpenCode && byokProfileId
-            ? { byokProfileId }
+          ...(daemonByokOpenCode && byokOpenCodeProvider
+            ? { byokProvider: byokOpenCodeProvider }
             : {}),
           ...(daemonByokOpenCode && byokCredentialSource
             ? { byokCredentialSource }
@@ -6001,8 +6038,18 @@ export function ProjectView({
         // BYOK users even though the UI saves model + index + entries
         // for that mode.
         const userText = (userMsg.content ?? '').trim();
-        // Pass only the non-secret profile reference. Deployment credentials
-        // intentionally never cross the browser boundary.
+        // Forward the per-call BYOK provider snapshot so "Same as chat"
+        // memory extraction uses the same vendor, endpoint, key and model as
+        // the run. The daemon consumes it for this request only.
+        const byokChatProvider = byokOpenCodeProvider
+          ? {
+              provider: byokOpenCodeProvider.protocol,
+              apiKey: byokOpenCodeProvider.apiKey,
+              baseUrl: byokOpenCodeProvider.baseUrl,
+              apiVersion: byokOpenCodeProvider.apiVersion,
+              model: byokOpenCodeProvider.model,
+            }
+          : undefined;
         if (userText.length > 0) {
           try {
             await fetch('/api/memory/extract', {
@@ -6012,7 +6059,7 @@ export function ProjectView({
                 userMessage: userText,
                 projectId: project.id,
                 conversationId: runConversationId,
-                byokProfileId,
+                byokChatProvider,
               }),
             });
           } catch {
@@ -6064,7 +6111,7 @@ export function ProjectView({
           model: config.model,
           reasoning: null,
           serviceTier: null,
-          ...(byokProfileId ? { byokProfileId } : {}),
+          ...(byokOpenCodeProvider ? { byokProvider: byokOpenCodeProvider } : {}),
           ...(byokCredentialSource ? { byokCredentialSource } : {}),
           byokMediaDefaults: byokMediaDefaultsForRun({
             imageModelOverride: byokImageModelOverride,

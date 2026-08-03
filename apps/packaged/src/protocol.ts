@@ -153,8 +153,19 @@ export function packagedEntryUrl(): string {
   return OD_ENTRY_URL;
 }
 
-export function registerOdProtocol(webRuntimeUrl: string): void {
+/**
+ * Register `od://` as the renderer entry scheme.
+ *
+ * Takes a resolver rather than a URL string because the web sidecar's
+ * port is not stable for the lifetime of the process: the sidecar can
+ * die and be respawned on a fresh ephemeral port (see the restart
+ * supervisor in `./sidecars.ts`). Snapshotting the URL here pinned the
+ * proxy to the dead port for the rest of the session, so every
+ * renderer fetch returned `OD_PROTOCOL_PROXY_FAILED` until the user
+ * quit and relaunched the app.
+ */
+export function registerOdProtocol(resolveWebRuntimeUrl: () => string): void {
   protocol.handle(OD_SCHEME, async (request) => {
-    return await handleOdRequest(request, webRuntimeUrl);
+    return await handleOdRequest(request, resolveWebRuntimeUrl());
   });
 }

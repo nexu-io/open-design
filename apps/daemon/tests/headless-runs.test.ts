@@ -30,6 +30,14 @@ describe('POST /api/runs headless fallbacks', () => {
     else process.env.OD_AGENT_HOME = oldAgentHome;
   });
 
+  it('does not expose the retired secure BYOK profile API', async () => {
+    started = await startTestServer();
+
+    const response = await fetch(`${started.url}/api/byok/profiles`);
+
+    expect(response.status).toBe(404);
+  });
+
   it('rejects incomplete BYOK OpenCode config before creating a run', async () => {
     started = await startTestServer();
     const incompleteConfigs = [
@@ -81,7 +89,7 @@ describe('POST /api/runs headless fallbacks', () => {
           error: {
             code: 'VALIDATION_FAILED',
             message: expect.stringMatching(
-              /secure credential profile|raw BYOK credentials are not accepted/iu,
+              /complete provider configuration/iu,
             ),
           },
         });

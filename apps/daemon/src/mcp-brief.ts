@@ -51,7 +51,7 @@ const BRIEF_COPY: Record<LocalMcpBriefLocale, LocalizedBriefCopy> = {
     artifactNames: ENGLISH_ARTIFACT_NAMES,
     title: (artifactName) => `Choose the ${artifactName} direction`,
     description:
-      'Choose one option for each decision. The same readable brief can be used with Open Design Cloud, Local Codex, or Secure BYOK.',
+      'Choose one option for each decision. The same readable brief can be used with Open Design Cloud or Local Codex.',
     submitLabel: 'Confirm brief',
     completeCard:
       'Complete the rendered Open Design brief card. The confirmation returns a readable summary; internal correlation values must remain hidden.',

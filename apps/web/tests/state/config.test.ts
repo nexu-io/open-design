@@ -1,24 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  ByokCredentialProfileHttpError,
-  ByokCredentialProfileNetworkError,
   buildMediaProvidersForDaemonSave,
   BYOK_PROVIDER_PRESETS,
-  classifyByokCredentialProfileFailure,
   DEFAULT_CONFIG,
   defaultKnownProviderModel,
-  fetchByokCredentialProfilesFromDaemon,
   fetchMediaProvidersFromDaemon,
   isStoredMediaProviderEntryEmpty,
   isStoredMediaProviderEntryPresent,
   KNOWN_PROVIDERS,
-  legacyByokMigrationErrorPresentation,
   loadConfig,
-  migrateLegacyByokCredentialsToDaemon,
   mergeDaemonConfig,
-  mergeByokCredentialProfiles,
   mergeDaemonMediaProviders,
-  persistByokCredentialProfileToDaemon,
   saveConfig,
   shouldSyncLocalMediaProvidersToDaemon,
   syncComposioConfigToDaemon,
@@ -1109,7 +1101,7 @@ describe('loadConfig', () => {
     const config = loadConfig();
 
     expect(config.apiProtocol).toBe('openai');
-    expect(config.apiKey).toBe('');
+    expect(config.apiKey).toBe('sk-proxy');
     expect(config.apiVersion).toBe('2024-01-01');
     expect(config.baseUrl).toBe('https://proxy.example.com/bedrock-runtime/v1');
     expect(config.model).toBe('gpt-4o');
@@ -1196,7 +1188,7 @@ describe('loadConfig', () => {
     expect(config.apiProviderBaseUrl).toBe(DEFAULT_CONFIG.apiProviderBaseUrl);
     expect(config.apiProtocolConfigs?.bedrock).toBeUndefined();
     expect(config.apiProtocolConfigs?.openai).toEqual({
-      apiKey: '',
+      apiKey: 'sk-openai',
       baseUrl: 'https://api.openai.com/v1',
       model: 'gpt-4o',
     });
@@ -1204,15 +1196,11 @@ describe('loadConfig', () => {
     const persisted = JSON.parse(
       store.get('open-design:config') ?? '{}',
     ) as Partial<AppConfig>;
-    expect(persisted.apiProtocol).toBe('bedrock');
-    expect(persisted.apiKey).toBe('bedrock-secret');
-    expect(persisted.apiVersion).toBe('bedrock-2023-05-31');
-    expect(persisted.baseUrl).toBe(
-      'https://bedrock-runtime.us-east-1.amazonaws.com',
-    );
-    expect(persisted.apiProtocolConfigs?.bedrock?.apiKey).toBe(
-      'nested-bedrock-secret',
-    );
+    expect(persisted.apiProtocol).toBe('anthropic');
+    expect(persisted.apiKey).toBe('');
+    expect(persisted.apiVersion).toBe('');
+    expect(persisted.baseUrl).toBe(DEFAULT_CONFIG.baseUrl);
+    expect(persisted.apiProtocolConfigs?.bedrock).toBeUndefined();
     expect(persisted.apiProtocolConfigs?.openai).toEqual({
       apiKey: 'sk-openai',
       baseUrl: 'https://api.openai.com/v1',
@@ -1331,7 +1319,7 @@ describe('loadConfig', () => {
     const config = loadConfig();
 
     expect(config.mode).toBe('api');
-    expect(config.apiKey).toBe('');
+    expect(config.apiKey).toBe('sk-test');
     expect(config.baseUrl).toBe('https://[broken-ipv6');
     expect(config.model).toBe('custom-model');
     expect(config.apiProtocol).toBe('anthropic');
@@ -1386,8 +1374,8 @@ describe('loadConfig', () => {
 });
 
 describe('saveConfig', () => {
-  it('keeps every BYOK API-key projection out of localStorage while preserving a secure profile reference', () => {
-    saveConfig({
+  it('persists Local BYOK API keys while removing unpublished secure-profile metadata', () => {
+    store.set('open-design:config', JSON.stringify({
       ...DEFAULT_CONFIG,
       mode: 'api',
       apiKey: 'top-level-secret',
@@ -1409,18 +1397,24 @@ describe('saveConfig', () => {
           },
         },
       },
-    });
+    }));
+
+    const loaded = loadConfig();
+    expect(loaded.apiKey).toBe('top-level-secret');
+    expect(loaded.apiProtocolConfigs?.openai?.apiKey).toBe('protocol-secret');
+    expect(loaded.byokProviderConfigDrafts?.openrouter?.apiConfig.apiKey).toBe('draft-secret');
+    saveConfig(loaded);
 
     const raw = store.get('open-design:config') ?? '';
     const saved = JSON.parse(raw);
-    expect(raw).not.toContain('top-level-secret');
-    expect(raw).not.toContain('protocol-secret');
-    expect(raw).not.toContain('draft-secret');
-    expect(saved.apiKey).toBe('');
-    expect(saved.apiProtocolConfigs.openai.apiKey).toBe('');
-    expect(saved.byokProviderConfigDrafts.openrouter.apiConfig.apiKey).toBe('');
-    expect(saved.byokProfileId).toBe('byok-openrouter-1');
-    expect(saved.byokCredentialConfigured).toBe(true);
+    expect(raw).toContain('top-level-secret');
+    expect(raw).toContain('protocol-secret');
+    expect(raw).toContain('draft-secret');
+    expect(saved.apiKey).toBe('top-level-secret');
+    expect(saved.apiProtocolConfigs.openai.apiKey).toBe('protocol-secret');
+    expect(saved.byokProviderConfigDrafts.openrouter.apiConfig.apiKey).toBe('draft-secret');
+    expect(saved.byokProfileId).toBeUndefined();
+    expect(saved.byokCredentialConfigured).toBeUndefined();
   });
 
   it('keeps daemon-owned privacy fields out of localStorage', () => {
@@ -1474,363 +1468,6 @@ describe('saveConfig', () => {
     expect(saved.agentCliEnvIntent).toEqual({
       claude: { apiKeyOverride: true },
       codex: { apiKeyOverride: true },
-    });
-  });
-});
-
-describe('secure BYOK profiles', () => {
-  afterEach(() => {
-    vi.stubGlobal('fetch', originalFetch);
-  });
-
-  it('persists a key only through the daemon profile endpoint and returns non-secret metadata', async () => {
-    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
-      const request = JSON.parse(String(init?.body));
-      expect(request.apiKey).toBe('draft-secret');
-      return Response.json({
-        profile: {
-          id: 'byok-openrouter-1',
-          label: request.label,
-          protocol: request.protocol,
-          baseUrl: request.baseUrl,
-          model: request.model,
-          requiresApiKey: true,
-          configured: true,
-          keyTail: 'cret',
-          createdAt: 1,
-          updatedAt: 1,
-        },
-      });
-    });
-    vi.stubGlobal('fetch', fetchMock);
-
-    const profile = await persistByokCredentialProfileToDaemon({
-      label: 'OpenRouter',
-      protocol: 'openai',
-      baseUrl: 'https://openrouter.ai/api/v1',
-      model: 'openrouter/free',
-      apiKey: 'draft-secret',
-    });
-
-    expect(fetchMock).toHaveBeenCalledWith(
-      '/api/byok/profiles',
-      expect.objectContaining({ method: 'POST' }),
-    );
-    expect(profile).not.toHaveProperty('apiKey');
-    expect(profile.id).toBe('byok-openrouter-1');
-  });
-
-  it('removes legacy browser credentials only after secure profile migration succeeds', async () => {
-    const persisted: Partial<AppConfig> = {
-      ...DEFAULT_CONFIG,
-      mode: 'api',
-      apiKey: 'legacy-secret',
-      apiProtocol: 'openai',
-      baseUrl: 'https://openrouter.ai/api/v1',
-      model: 'openai/gpt-5.4',
-      apiProtocolConfigs: {
-        openai: {
-          apiKey: 'legacy-secret',
-          baseUrl: 'https://openrouter.ai/api/v1',
-          model: 'openai/gpt-5.4',
-        },
-      },
-    };
-    store.set('open-design:config', JSON.stringify(persisted));
-    const loaded = loadConfig();
-    const persistProfile = vi.fn(async (input) => ({
-      id: input.id ?? 'missing',
-      label: input.label,
-      protocol: input.protocol,
-      baseUrl: input.baseUrl,
-      model: input.model,
-      apiVersion: input.apiVersion,
-      requiresApiKey: true,
-      configured: true,
-      keyTail: 'cret',
-      createdAt: 1,
-      updatedAt: 1,
-    }));
-
-    expect(loaded.apiKey).toBe('');
-    expect(store.get('open-design:config')).toContain('legacy-secret');
-
-    const result = await migrateLegacyByokCredentialsToDaemon(
-      loaded,
-      persistProfile,
-    );
-
-    expect(result.status).toBe('migrated');
-    expect(persistProfile).toHaveBeenCalledTimes(1);
-    expect(persistProfile).toHaveBeenCalledWith(expect.objectContaining({
-      id: expect.stringMatching(/^byok-legacy-/),
-      apiKey: 'legacy-secret',
-      protocol: 'openai',
-    }));
-    expect(result.config.apiKey).toBe('');
-    expect(result.config.byokProfileId).toMatch(/^byok-legacy-/);
-    expect(store.get('open-design:config')).not.toContain('legacy-secret');
-  });
-
-  it('preserves legacy browser credentials when secure profile migration fails', async () => {
-    const persisted: Partial<AppConfig> = {
-      ...DEFAULT_CONFIG,
-      mode: 'api',
-      apiKey: 'legacy-secret',
-      apiProtocol: 'openai',
-      baseUrl: 'https://openrouter.ai/api/v1',
-      model: 'openai/gpt-5.4',
-    };
-    store.set('open-design:config', JSON.stringify(persisted));
-    const loaded = loadConfig();
-
-    const result = await migrateLegacyByokCredentialsToDaemon(
-      loaded,
-      async () => {
-        throw new Error('secure backend unavailable');
-      },
-    );
-
-    expect(result).toMatchObject({
-      status: 'failed',
-      error: { message: 'secure backend unavailable' },
-    });
-    expect(result.config.apiKey).toBe('');
-    expect(result.config.byokProfileId).toBeUndefined();
-    expect(store.get('open-design:config')).toContain('legacy-secret');
-
-    saveConfig({
-      ...result.config,
-      theme: 'dark',
-      mode: 'daemon',
-      agentId: 'codex',
-    });
-    const saved = JSON.parse(store.get('open-design:config') ?? '{}');
-    expect(saved.apiKey).toBe('legacy-secret');
-    expect(saved.theme).toBe('dark');
-    expect(saved.mode).toBe('daemon');
-    expect(saved.agentId).toBe('codex');
-  });
-
-  it('surfaces the daemon validation reason and preserves legacy credentials when migration gets a 400', async () => {
-    const validationMessage =
-      'BYOK baseUrl must be an absolute HTTP(S) URL without credentials, query, or fragment.';
-    const persisted: Partial<AppConfig> = {
-      ...DEFAULT_CONFIG,
-      mode: 'api',
-      apiKey: 'legacy-secret',
-      apiProtocol: 'openai',
-      baseUrl: 'not-an-absolute-url',
-      model: 'openai/gpt-5.4',
-    };
-    store.set('open-design:config', JSON.stringify(persisted));
-    const loaded = loadConfig();
-    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
-      expect(JSON.parse(String(init?.body))).toMatchObject({
-        apiKey: 'legacy-secret',
-        baseUrl: 'not-an-absolute-url',
-      });
-      return Response.json({
-        error: {
-          code: 'VALIDATION_FAILED',
-          message: validationMessage,
-        },
-      }, { status: 400 });
-    });
-    vi.stubGlobal('fetch', fetchMock);
-
-    const result = await migrateLegacyByokCredentialsToDaemon(loaded);
-
-    expect(result).toMatchObject({
-      status: 'failed',
-      error: {
-        name: 'ByokCredentialProfileHttpError',
-        status: 400,
-        code: 'VALIDATION_FAILED',
-        message: validationMessage,
-      },
-    });
-    if (result.status !== 'failed') throw new Error('expected migration failure');
-    expect(result.error).toBeInstanceOf(ByokCredentialProfileHttpError);
-    expect(legacyByokMigrationErrorPresentation(
-      result.error,
-      'Local daemon may be offline.',
-    )).toEqual({ message: validationMessage });
-    expect(fetchMock).toHaveBeenCalledWith(
-      '/api/byok/profiles',
-      expect.objectContaining({ method: 'POST' }),
-    );
-    expect(store.get('open-design:config')).toContain('legacy-secret');
-  });
-
-  it('keeps the HTTP status fallback when a daemon error body is not structured JSON', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(
-      '<html>bad gateway</html>',
-      { status: 502, headers: { 'content-type': 'text/html' } },
-    )));
-
-    const promise = persistByokCredentialProfileToDaemon({
-      label: 'OpenRouter',
-      protocol: 'openai',
-      baseUrl: 'https://openrouter.ai/api/v1',
-      model: 'openrouter/free',
-      apiKey: 'draft-secret',
-    });
-
-    await expect(promise).rejects.toMatchObject({
-      name: 'ByokCredentialProfileHttpError',
-      status: 502,
-      message: 'Failed to save BYOK credential (502)',
-    });
-  });
-
-  it('classifies fetch rejection separately from daemon HTTP responses', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => {
-      throw new TypeError('Failed to fetch');
-    }));
-
-    const promise = persistByokCredentialProfileToDaemon({
-      label: 'OpenRouter',
-      protocol: 'openai',
-      baseUrl: 'https://openrouter.ai/api/v1',
-      model: 'openrouter/free',
-      apiKey: 'draft-secret',
-    });
-
-    const error = await promise.catch((cause: unknown) => cause);
-    expect(error).toBeInstanceOf(ByokCredentialProfileNetworkError);
-    expect(error).toMatchObject({
-      name: 'ByokCredentialProfileNetworkError',
-      message: 'Failed to fetch',
-    });
-    if (!(error instanceof Error)) throw new Error('expected network error');
-    expect(legacyByokMigrationErrorPresentation(
-      error,
-      'Local daemon may be offline.',
-    )).toEqual({
-      message: 'Local daemon may be offline.',
-      details: 'Failed to fetch',
-    });
-  });
-
-  it('classifies secure profile persistence failures with stable telemetry values', () => {
-    expect(classifyByokCredentialProfileFailure(
-      new ByokCredentialProfileHttpError(
-        400,
-        'Invalid secure profile',
-        'VALIDATION_FAILED',
-      ),
-    )).toEqual({
-      errorCode: 'VALIDATION_FAILED',
-      errorKind: 'unknown',
-    });
-    expect(classifyByokCredentialProfileFailure(
-      new ByokCredentialProfileHttpError(502, 'Bad gateway'),
-    )).toEqual({
-      errorCode: 'HTTP_502',
-      errorKind: 'unknown',
-    });
-    expect(classifyByokCredentialProfileFailure(
-      new ByokCredentialProfileNetworkError(
-        'Failed to fetch',
-        new TypeError('Failed to fetch'),
-      ),
-    )).toEqual({
-      errorCode: 'DAEMON_UNREACHABLE',
-      errorKind: 'unknown',
-    });
-    expect(classifyByokCredentialProfileFailure(
-      new TypeError('Test request failed'),
-    )).toEqual({
-      errorCode: 'TypeError',
-      errorKind: 'TypeError',
-    });
-  });
-
-  it('hydrates only an explicitly selected secure profile reference', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => Response.json({
-      available: true,
-      backend: 'macos-keychain',
-      profiles: [{
-        id: 'byok-openrouter-1',
-        label: 'OpenRouter',
-        protocol: 'openai',
-        baseUrl: 'https://openrouter.ai/api/v1',
-        model: 'openrouter/free',
-        requiresApiKey: true,
-        configured: true,
-        keyTail: '1234',
-        createdAt: 1,
-        updatedAt: 1,
-      }],
-    })));
-
-    const response = await fetchByokCredentialProfilesFromDaemon();
-    const merged = mergeByokCredentialProfiles({
-      ...DEFAULT_CONFIG,
-      byokProfileId: 'byok-openrouter-1',
-    }, response);
-
-    expect(merged).toMatchObject({
-      byokProfileId: 'byok-openrouter-1',
-      byokCredentialConfigured: true,
-      byokCredentialTail: '1234',
-    });
-    expect(merged.apiKey).toBe('');
-  });
-
-  it('uses daemon profile metadata as authoritative after a CLI update', () => {
-    const merged = mergeByokCredentialProfiles({
-      ...DEFAULT_CONFIG,
-      apiKey: '',
-      apiProtocol: 'anthropic',
-      apiVersion: 'stale-version',
-      baseUrl: 'https://stale.example/v1',
-      model: 'stale-model',
-      byokProfileId: 'byok-openrouter-1',
-      apiProtocolConfigs: {
-        openai: {
-          apiKey: '',
-          apiVersion: 'stale-version',
-          baseUrl: 'https://stale.example/v1',
-          model: 'stale-model',
-        },
-      },
-    }, {
-      available: true,
-      backend: 'macos-keychain',
-      profiles: [{
-        id: 'byok-openrouter-1',
-        label: 'OpenRouter',
-        protocol: 'openai',
-        baseUrl: 'https://openrouter.ai/api/v1',
-        model: 'openai/gpt-5.4',
-        apiVersion: '2026-07-01',
-        requiresApiKey: true,
-        configured: true,
-        keyTail: '1234',
-        createdAt: 1,
-        updatedAt: 2,
-      }],
-    });
-
-    expect(merged).toMatchObject({
-      apiProtocol: 'openai',
-      apiProviderBaseUrl: 'https://openrouter.ai/api/v1',
-      apiVersion: '2026-07-01',
-      baseUrl: 'https://openrouter.ai/api/v1',
-      model: 'openai/gpt-5.4',
-      byokCredentialConfigured: true,
-      byokCredentialTail: '1234',
-      apiProtocolConfigs: {
-        openai: {
-          apiKey: '',
-          apiProviderBaseUrl: 'https://openrouter.ai/api/v1',
-          apiVersion: '2026-07-01',
-          baseUrl: 'https://openrouter.ai/api/v1',
-          model: 'openai/gpt-5.4',
-        },
-      },
     });
   });
 });

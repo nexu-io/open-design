@@ -109,10 +109,11 @@ export interface ChatRequest {
   reasoning?: string | null;
   serviceTier?: string | null;
   /**
-   * Non-secret reference to a daemon-owned BYOK profile. Runtime credentials
-   * are resolved from OS secure storage immediately before child spawn.
+   * Run-scoped BYOK provider credentials for the daemon-backed OpenCode
+   * adapter. The daemon must not persist this object; it is translated into
+   * child env + OPENCODE_CONFIG_CONTENT for the current run only.
    */
-  byokProfileId?: string;
+  byokProvider?: ByokChatProviderConfig;
   /**
    * Selects the administrator-managed deployment provider for a BYOK OpenCode
    * run. This is deliberately a discriminator only: no credential or endpoint

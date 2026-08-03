@@ -31,6 +31,7 @@ import type {
   DaemonAgentPayload,
   AmrModelsResponse,
   AmrWalletSnapshot,
+  ByokChatProviderConfig,
   MediaExecutionPolicy,
   ResearchOptions,
   RunContextSelection,
@@ -311,8 +312,7 @@ export interface DaemonStreamOptions {
   model?: string | null;
   reasoning?: string | null;
   serviceTier?: string | null;
-  /** Non-secret reference resolved by the daemon from the OS credential store. */
-  byokProfileId?: string;
+  byokProvider?: ByokChatProviderConfig;
   /** Selects the daemon-managed deployment provider without exposing its secret. */
   byokCredentialSource?: 'deployment';
   byokMediaDefaults?: ChatRequest['byokMediaDefaults'];
@@ -654,7 +654,7 @@ export async function streamViaDaemon({
   model,
   reasoning,
   serviceTier,
-  byokProfileId,
+  byokProvider,
   byokCredentialSource,
   byokMediaDefaults,
   research,
@@ -694,7 +694,7 @@ export async function streamViaDaemon({
     model: model ?? null,
     reasoning: reasoning ?? null,
     serviceTier: serviceTier ?? null,
-    ...(byokProfileId ? { byokProfileId } : {}),
+    ...(byokProvider ? { byokProvider } : {}),
     ...(byokCredentialSource ? { byokCredentialSource } : {}),
     ...(byokMediaDefaults ? { byokMediaDefaults } : {}),
     locale,

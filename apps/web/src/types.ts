@@ -384,10 +384,6 @@ export interface PetConfig {
 export interface AppConfig {
   mode: ExecMode;
   apiKey: string;
-  /** Non-secret daemon-owned credential profile selected for BYOK runs. */
-  byokProfileId?: string;
-  byokCredentialConfigured?: boolean;
-  byokCredentialTail?: string;
   baseUrl: string;
   model: string;
   apiCredentialSource?: ProviderCredentialSource;

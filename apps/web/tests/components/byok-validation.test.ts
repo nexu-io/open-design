@@ -73,7 +73,7 @@ describe('BYOK draft validation', () => {
     expect(blockingByokDraftFields(missingModel)).toEqual(['model']);
   });
 
-  it('accepts an empty browser key when a daemon secure profile is configured', () => {
+  it('requires a browser key for user-scoped credentials', () => {
     const validation = validateByokDraft(
       'openai',
       {
@@ -83,12 +83,11 @@ describe('BYOK draft validation', () => {
       },
       {
         requiresApiKey: true,
-        credentialConfigured: true,
       },
     );
 
-    expect(validation.ok).toBe(true);
-    expect(validation.issues).not.toEqual(
+    expect(validation.ok).toBe(false);
+    expect(validation.issues).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ code: 'api_key_required' }),
       ]),
