@@ -235,6 +235,42 @@ describe('chat run service shutdown', () => {
     expect(run.events.at(-1)).toMatchObject({ event: 'end', data: { status: 'failed' } });
   });
 
+  it('waits for pending Windows identity capture when a child closes during startup', async () => {
+    let resolveIdentityCapture!: () => void;
+    const terminateProcessTree = vi.fn().mockResolvedValue({
+      attempted: true,
+      childTreeQuiescent: true,
+      forced: false,
+      identityVerified: true,
+      remainingPids: [],
+    });
+    const runs = createRuns({ terminateProcessTree });
+    const run = runs.create({ projectId: 'project-1', conversationId: 'conv-1' });
+    const child = new FakeChildProcess({ closeOn: 'SIGTERM' });
+    run.status = 'running';
+    (run as any).child = child;
+    (run as any).requiresTreeVerification = true;
+    (run as any).processTreeIdentityCapture = new Promise<void>((resolve) => {
+      resolveIdentityCapture = resolve;
+    });
+
+    const cancel = runs.cancel(run);
+    child.exitCode = 0;
+    child.emit('close', 1, null);
+    await Promise.resolve();
+    expect(terminateProcessTree).not.toHaveBeenCalled();
+    expect(run.status).toBe('running');
+
+    (run as any).processTreeRoot = { pid: 100, createdAt: 10 };
+    resolveIdentityCapture();
+
+    await expect(cancel).resolves.toMatchObject({ status: 'canceled' });
+    expect(terminateProcessTree).toHaveBeenCalledWith(
+      { pid: 100, createdAt: 10 },
+      expect.objectContaining({ graceMs: expect.any(Number), forceWaitMs: expect.any(Number) }),
+    );
+  });
+
   it('serializes duplicate cancellation and retries only an unverified termination failure', async () => {
     let resolveTermination!: (value: object) => void;
     const terminateProcessTree = vi.fn(() => new Promise((resolve) => { resolveTermination = resolve; }));

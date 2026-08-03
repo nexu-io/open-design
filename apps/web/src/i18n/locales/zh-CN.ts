@@ -94,6 +94,7 @@ export const zhCN: Dict = {
   "chat.runError.sessionExpiredMessage": "要恢复的会话已过期，已为你重置。重试即可开始一次全新运行。",
   "chat.runError.gitBashMissingMessage": "在 Windows 上运行该智能体需要 Git Bash，但未找到。请安装 Git for Windows 后重试。",
   "chat.runError.cpuUnsupportedMessage": "该智能体的运行时需要此设备处理器不支持的指令集（AVX2），因此无法启动。请将 Open Design 更新到最新版本，新版本附带兼容的运行时。",
+  "chat.runError.retryTerminationCta": "再次尝试停止",
   "common.cancel": "取消",
   "chat.selectFromLibrary": "从资源库导入",
   "chat.importFigma": "从 Figma 导入",

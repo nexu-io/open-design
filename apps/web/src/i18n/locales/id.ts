@@ -88,6 +88,7 @@ export const id: Dict = {
   'chat.runError.sessionExpiredMessage': "Sesi yang dilanjutkan telah kedaluwarsa. Sesi sudah diatur ulang, jadi coba lagi untuk memulai proses baru.",
   'chat.runError.gitBashMissingMessage': "Git Bash diperlukan untuk menjalankan agen ini di Windows, tetapi tidak ditemukan. Pasang Git for Windows, lalu coba lagi.",
   'chat.runError.cpuUnsupportedMessage': "Runtime agen ini memerlukan set instruksi CPU (AVX2) yang tidak dimiliki perangkat ini, sehingga tidak dapat dijalankan. Perbarui Open Design ke versi terbaru yang menyertakan runtime yang kompatibel.",
+  'chat.runError.retryTerminationCta': 'Coba hentikan lagi',
   'common.cancel': 'Batal',
   'chat.selectFromLibrary': 'Impor dari pustaka',
   'chat.importFigma': 'Impor dari Figma',

@@ -88,6 +88,7 @@ export const esES: Dict = {
   'chat.runError.sessionExpiredMessage': "La sesión reanudada había caducado. Se ha restablecido, así que reintenta para iniciar una ejecución nueva.",
   'chat.runError.gitBashMissingMessage': "Se necesita Git Bash para ejecutar este agente en Windows, pero no se encontró. Instala Git para Windows y reintenta.",
   'chat.runError.cpuUnsupportedMessage': "El entorno de ejecución de este agente necesita un conjunto de instrucciones de CPU (AVX2) que este dispositivo no tiene, por lo que no puede iniciarse. Actualiza Open Design a la última versión, que incluye un entorno de ejecución compatible.",
+  'chat.runError.retryTerminationCta': 'Intentar detener de nuevo',
   'common.cancel': 'Cancelar',
   'chat.selectFromLibrary': 'Importar de la biblioteca',
   'chat.importFigma': 'Importar de Figma',

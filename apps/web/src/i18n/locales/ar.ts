@@ -88,6 +88,7 @@ export const ar: Dict = {
   'chat.runError.sessionExpiredMessage': "انتهت صلاحية الجلسة المستأنفة. تمت إعادة ضبطها، لذا أعد المحاولة لبدء تشغيل جديد.",
   'chat.runError.gitBashMissingMessage': "يلزم Git Bash لتشغيل هذا الوكيل على Windows لكنه غير موجود. ثبّت Git for Windows ثم أعد المحاولة.",
   'chat.runError.cpuUnsupportedMessage': "تتطلب بيئة تشغيل هذا الوكيل مجموعة تعليمات للمعالج (AVX2) غير متوفرة في هذا الجهاز، لذا يتعذر تشغيلها. حدِّث Open Design إلى أحدث إصدار الذي يتضمن بيئة تشغيل متوافقة.",
+  'chat.runError.retryTerminationCta': 'حاول الإيقاف مرة أخرى',
   'common.cancel': 'إلغاء',
   'chat.selectFromLibrary': 'استيراد من المكتبة',
   'chat.importFigma': 'استيراد من Figma',

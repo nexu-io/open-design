@@ -274,6 +274,7 @@ export function createChatRunService({
       childPid: null,
       processGroupId: null,
       processTreeRoot: null,
+      processTreeIdentityCapture: null,
       requiresTreeVerification: false,
       cancelRequested: false,
       eventsLogPath,
@@ -363,6 +364,7 @@ export function createChatRunService({
       childPid: null,
       processGroupId: null,
       processTreeRoot: null,
+      processTreeIdentityCapture: null,
       requiresTreeVerification: false,
       childExitObservedAt: null,
       exitCode: null,
@@ -546,6 +548,7 @@ export function createChatRunService({
     run.childPid = null;
     run.processGroupId = null;
     run.processTreeRoot = null;
+    run.processTreeIdentityCapture = null;
     run.requiresTreeVerification = false;
     run.childExitObservedAt = null;
     run.stdinOpen = false;
@@ -912,6 +915,21 @@ export function createChatRunService({
 
   const cannotVerifyWindowsTree = (run) => run.requiresTreeVerification === true && !run.processTreeRoot;
 
+  // Windows identity capture may still be querying the process table when a
+  // stop request arrives. Wait for that owned snapshot before deciding whether
+  // cancellation is verifiable; server.ts installs lifecycle listeners first,
+  // so a fast child exit remains observable while this work is pending.
+  const awaitProcessTreeIdentityCapture = async (run) => {
+    const capture = run.processTreeIdentityCapture;
+    if (!capture) return;
+    try {
+      await capture;
+    } catch {
+      // A failed capture is represented by the missing root and follows the
+      // existing RUN_TERMINATION_UNVERIFIED contract below.
+    }
+  };
+
   // Signal an EXPLICIT child + its captured process group, rather than
   // whatever currently occupies `run.child`. Escalation timers (SIGTERM ->
   // SIGKILL) that outlive a same-run retry MUST target the exact generation
@@ -1046,6 +1064,12 @@ export function createChatRunService({
     run.updatedAt = Date.now();
     clearPendingRetryRestart(run);
     closeRunStdin(run);
+    // Keep non-Windows and already-captured cancellation synchronous up to its
+    // first process signal. Several lifecycle callers intentionally rely on
+    // that immediate handoff.
+    if (run.processTreeIdentityCapture) {
+      await awaitProcessTreeIdentityCapture(run);
+    }
     if (!run.child) {
       if (cannotVerifyWindowsTree(run)) return finishTerminationUnverified(run, 'SIGTERM', null);
       if (run.processTreeRoot) return terminateAndVerifyWindowsTree(run, requestedGraceMs ?? cancelGraceMs(), 'SIGTERM');

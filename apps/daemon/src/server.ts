@@ -6773,6 +6773,18 @@ export async function startServer({
       });
       lifecycle.mark('process_spawned');
       run.child = child;
+      // The Windows process-table query below can yield to the event loop
+      // before this run's canonical lifecycle handlers are assembled. Capture
+      // any terminal event in that window so neither an error goes unhandled
+      // nor a close is lost; the canonical handlers replay it once ready.
+      let earlyChildError: Error | null = null;
+      let earlyChildClose: { code: number | null; signal: NodeJS.Signals | null } | null = null;
+      child.once('error', (err) => {
+        earlyChildError = err;
+      });
+      child.once('close', (code, signal) => {
+        earlyChildClose = { code, signal };
+      });
       run.childPid = typeof child.pid === 'number' ? child.pid : null;
       run.processGroupId =
         process.platform !== 'win32' && typeof child.pid === 'number'
@@ -6782,10 +6794,26 @@ export async function startServer({
       // creation identity while it is alive so cancellation can safely walk its
       // descendants later without ever trusting a recycled PID or process name.
       run.processTreeRoot = null;
+      run.processTreeIdentityCapture = null;
       run.requiresTreeVerification = process.platform === 'win32';
       if (process.platform === 'win32' && typeof child.pid === 'number') {
-        const snapshots = await listProcessSnapshots();
-        run.processTreeRoot = captureOwnedProcessIdentity(snapshots, child.pid);
+        // Do not await this full process-table query before attaching the
+        // canonical child lifecycle handlers below. A CLI can fail or close in
+        // that interval, which would otherwise leave the run unfinalized (and
+        // an error event unhandled). Cancellation awaits this promise before
+        // making its verification decision.
+        const spawnedChild = child;
+        const identityCapture = listProcessSnapshots()
+          .then((snapshots) => {
+            if (run.child !== spawnedChild) return;
+            run.processTreeRoot = captureOwnedProcessIdentity(snapshots, spawnedChild.pid);
+          })
+          .catch(() => {
+            // A missing snapshot is deliberately handled as unverified by the
+            // cancellation gate; do not turn observation failure into a false
+            // claim that the process tree stopped.
+          });
+        run.processTreeIdentityCapture = identityCapture;
       }
       // Schedule release of the antigravity model lock once agy's
       // --log-file confirms the chosen model was propagated to the
@@ -7850,7 +7878,7 @@ export async function startServer({
       return true;
     };
 
-    child.on('error', (err) => {
+    const handleChildError = (err: Error) => {
       clearInactivityWatchdog();
       cleanupPromptFile();
       flushVisibleAgentStderr();
@@ -7859,8 +7887,9 @@ export async function startServer({
       if (finishCanceledIfRequested(1, null)) return;
       send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', err.message));
       finishWithRetryDecision('failed', 1, null);
-    });
-    child.on('close', async (code, signal) => {
+    };
+    child.on('error', handleChildError);
+    const handleChildClose = async (code: number | null, signal: NodeJS.Signals | null) => {
       try {
       clearInactivityWatchdog();
       clearForcedChildShutdown();
@@ -8435,7 +8464,10 @@ export async function startServer({
         }
         cleanupPromptFile();
       }
-    });
+    };
+    child.on('close', handleChildClose);
+    if (earlyChildError) handleChildError(earlyChildError);
+    if (earlyChildClose) void handleChildClose(earlyChildClose.code, earlyChildClose.signal);
     if (writePromptToChildStdin && child.stdin) {
       const promptInputFormat = def.promptInputFormat ?? 'text';
       lifecycle.mark('model_call_start');

@@ -88,6 +88,7 @@ export const fa: Dict = {
   'chat.runError.sessionExpiredMessage': "نشستی که از سر گرفته شد منقضی شده بود. بازنشانی شد، پس برای شروع اجرای تازه دوباره تلاش کنید.",
   'chat.runError.gitBashMissingMessage': "برای اجرای این عامل در ویندوز به Git Bash نیاز است اما یافت نشد. Git for Windows را نصب کنید و دوباره تلاش کنید.",
   'chat.runError.cpuUnsupportedMessage': "محیط اجرای این عامل به مجموعه دستورالعمل پردازنده (AVX2) نیاز دارد که این دستگاه فاقد آن است، بنابراین نمی‌تواند اجرا شود. Open Design را به آخرین نسخه که محیط اجرای سازگار دارد به‌روزرسانی کنید.",
+  'chat.runError.retryTerminationCta': 'دوباره توقف را امتحان کنید',
   'common.cancel': 'لغو',
   'chat.selectFromLibrary': 'وارد کردن از کتابخانه',
   'chat.importFigma': 'وارد کردن از Figma',

@@ -2487,7 +2487,7 @@ export function ChatPane({
                               className="chat-error-action chat-error-retry"
                               onClick={() => onRetryTermination(retryAssistant)}
                             >
-                              Try stopping again
+                              {t('chat.runError.retryTerminationCta')}
                             </button>
                           ) : onRetry && runFailureUi.primaryAction === 'authorize' ? (
                             // Sign in to AMR inline — the pill drives vela login,

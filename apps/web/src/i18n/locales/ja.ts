@@ -88,6 +88,7 @@ export const ja: Dict = {
   'chat.runError.sessionExpiredMessage': "再開しようとしたセッションは期限切れでした。リセット済みなので、再試行すると新しい実行を開始します。",
   'chat.runError.gitBashMissingMessage': "Windows でこのエージェントを実行するには Git Bash が必要ですが、見つかりませんでした。Git for Windows をインストールして再試行してください。",
   'chat.runError.cpuUnsupportedMessage': "このエージェントのランタイムには、この端末の CPU が対応していない命令セット（AVX2）が必要なため、起動できません。互換ランタイムを同梱した最新版の Open Design に更新してください。",
+  'chat.runError.retryTerminationCta': 'もう一度停止を試す',
   'common.cancel': 'キャンセル',
   'chat.selectFromLibrary': 'ライブラリからインポート',
   'chat.importFigma': 'Figma からインポート',
