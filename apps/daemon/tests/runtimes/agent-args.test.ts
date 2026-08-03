@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { test } from 'vitest';
 import {
   AGENT_DEFS, aider, antigravity, assert, claude, codex, copilot, cursorAgent, deepseek, devin, detectAgents, grokBuild, join, kilo, kimi, kiro, mkdtempSync, opencode, pi, qoder, qwen, rmSync, spawnEnvForAgent, tmpdir, vibe, writeFileSync, chmodSync,
@@ -682,6 +682,17 @@ test('antigravity persists model selection to agy settings.json', () => {
     writeAntigravityModelSelection('Gemini 3.5 Flash (Low)', corruptPath);
     const recovered = JSON.parse(readFileSync(corruptPath, 'utf8'));
     assert.equal(recovered.model, 'Gemini 3.5 Flash (Low)');
+    // 5. Atomic replacement must preserve the destination's existing mode
+    //    so sensitive policies in settings.json do not become world-readable.
+    const modePath = join(dir, 'mode-settings.json');
+    writeFileSync(modePath, JSON.stringify({ model: 'old' }));
+    chmodSync(modePath, 0o600);
+    const expectedMode = statSync(modePath).mode & 0o777;
+    
+    writeAntigravityModelSelection('Gemini 3.5 Pro', modePath);
+    
+    const postStat = statSync(modePath);
+    assert.equal(postStat.mode & 0o777, expectedMode);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

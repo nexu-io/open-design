@@ -4,6 +4,7 @@ import {
   readFileSync,
   writeFileSync,
   renameSync,
+  statSync,
 } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { readFile as fsReadFile } from 'node:fs/promises';
@@ -51,9 +52,11 @@ export function writeAntigravityModelSelection(
   label: string,
   settingsPath: string = ANTIGRAVITY_SETTINGS_PATH,
 ): void {
+  let fileMode = 0o600;
   let existing: Record<string, unknown> = {};
   if (existsSync(settingsPath)) {
     try {
+      fileMode = statSync(settingsPath).mode;
       const parsed = JSON.parse(readFileSync(settingsPath, 'utf8')) as unknown;
       if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
         existing = parsed as Record<string, unknown>;
@@ -68,7 +71,7 @@ export function writeAntigravityModelSelection(
   
   // Use atomic write to prevent JSON corruption during concurrent agent spawns
   const tempPath = `${settingsPath}.${randomBytes(4).toString('hex')}.tmp`;
-  writeFileSync(tempPath, `${JSON.stringify(existing, null, 2)}\n`);
+  writeFileSync(tempPath, `${JSON.stringify(existing, null, 2)}\n`, { mode: fileMode });
   renameSync(tempPath, settingsPath);
 }
 
