@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 // New / edit automation modal. The persistence layer is /api/routines; the
 // user-facing model is a scheduled agent conversation that can start in a new
 // project or append a new conversation to an existing project.
@@ -482,7 +483,7 @@ export function NewAutomationModal({
           context: body.context,
         }
         : body;
-      const res = await fetch(url, {
+      const res = await apiFetch(url, {
         method: isEdit ? 'PATCH' : 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(payload),

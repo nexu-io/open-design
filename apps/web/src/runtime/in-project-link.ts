@@ -17,6 +17,8 @@ import { parseRoute } from '../router';
  * Returns the normalized file path when the href looks like an
  * in-project link, or `null` to let the default link behavior win.
  */
+import { stripWebBasePath } from './web-path';
+
 export function asInProjectFilePath(
   href: string | null | undefined,
   projectFileNames?: ReadonlySet<string>,
@@ -27,7 +29,7 @@ export function asInProjectFilePath(
   if (!trimmed) return null;
   if (trimmed.startsWith('#')) return null;
   const normalizedHref = normalizeSameOriginHref(trimmed);
-  const appRoute = extractAppProjectFileRoute(normalizedHref);
+  const appRoute = extractAppProjectFileRoute(stripWebBasePath(normalizedHref) ?? normalizedHref);
   if (appRoute) {
     if (projectId && appRoute.projectId !== projectId) return null;
     return normalizeProjectFilePath(appRoute.filePath);
@@ -98,9 +100,10 @@ export function resolveChatFileLink(
   const trimmed = href.trim();
   if (!trimmed || trimmed.startsWith('#')) return null;
   const normalizedHref = normalizeSameOriginHref(trimmed);
+  const appHref = stripWebBasePath(normalizedHref) ?? normalizedHref;
   // App file routes name their owning project explicitly and are never
   // subject to the basename fallback, so classify them directly.
-  const appRoute = extractAppProjectFileRoute(normalizedHref);
+  const appRoute = extractAppProjectFileRoute(appHref);
   if (appRoute) {
     const filePath = normalizeProjectFilePath(appRoute.filePath);
     if (!filePath) return null;
@@ -243,8 +246,11 @@ export function isPathLikeChatHref(href: string | null | undefined): boolean {
 // rewrites and the daemon's static mounts). Opening these in a new window
 // shows actual content, so they are neither file links nor SPA routes.
 function isDaemonServedPath(path: string): boolean {
+  const appPath = stripWebBasePath(path) ?? path;
   return (
-    path.startsWith('/api/') || path.startsWith('/artifacts/') || path.startsWith('/frames/')
+    appPath.startsWith('/api/') ||
+    appPath.startsWith('/artifacts/') ||
+    appPath.startsWith('/frames/')
   );
 }
 

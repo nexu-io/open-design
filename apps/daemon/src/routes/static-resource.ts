@@ -3,6 +3,7 @@ import type Database from 'better-sqlite3';
 import path from 'node:path';
 import fs from 'node:fs';
 import type { DesignSystemTokenContractRebuildJobResponse } from '@open-design/contracts';
+import { createPathConfig, rewriteKnownInternalBrowserPaths } from '@open-design/path-config';
 import { detectAgents, detectAgentsStream } from '../agents.js';
 import {
   SkillImportError,
@@ -81,6 +82,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
     USER_SKILLS_DIR,
     PROMPT_TEMPLATES_DIR,
     BUNDLED_PETS_DIR,
+    WEB_BASE_PATH,
   } = ctx.paths;
   const {
     listAllSkills,
@@ -317,7 +319,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
   app.get('/api/codex-pets', async (_req, res) => {
     try {
       const result = await listCodexPets({
-        baseUrl: '',
+        baseUrl: WEB_BASE_PATH ?? '',
         bundledRoot: BUNDLED_PETS_DIR,
       });
       res.json(result);
@@ -477,7 +479,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
           const html = await fs.promises.readFile(candidate, 'utf8');
           return res
             .type('text/html')
-            .send(rewriteSkillAssetUrls(html, parent.id));
+            .send(rewriteSkillAssetUrls(html, parent.id, WEB_BASE_PATH));
         }
         return res
           .status(404)
@@ -495,7 +497,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
         const html = await fs.promises.readFile(baked, 'utf8');
         return res
           .type('text/html')
-          .send(rewriteSkillAssetUrls(html, skill.id));
+          .send(rewriteSkillAssetUrls(html, skill.id, WEB_BASE_PATH));
       }
 
       const tpl = path.join(skill.dir, 'assets', 'template.html');
@@ -507,7 +509,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
           const assembled = assembleExample(tplHtml, slidesHtml, skill.name);
           return res
             .type('text/html')
-            .send(rewriteSkillAssetUrls(assembled, skill.id));
+            .send(rewriteSkillAssetUrls(assembled, skill.id, WEB_BASE_PATH));
         } catch {
           // Fall through to raw template on read failure.
         }
@@ -516,14 +518,14 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
         const html = await fs.promises.readFile(tpl, 'utf8');
         return res
           .type('text/html')
-          .send(rewriteSkillAssetUrls(html, skill.id));
+          .send(rewriteSkillAssetUrls(html, skill.id, WEB_BASE_PATH));
       }
       const idx = path.join(skill.dir, 'assets', 'index.html');
       if (fs.existsSync(idx)) {
         const html = await fs.promises.readFile(idx, 'utf8');
         return res
           .type('text/html')
-          .send(rewriteSkillAssetUrls(html, skill.id));
+          .send(rewriteSkillAssetUrls(html, skill.id, WEB_BASE_PATH));
       }
 
       // Friendly fallback for skills that aggregate examples in a sibling
@@ -551,7 +553,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
             const html = await fs.promises.readFile(direct, 'utf8');
             return res
               .type('text/html')
-              .send(rewriteSkillAssetUrls(html, skill.id));
+              .send(rewriteSkillAssetUrls(html, skill.id, WEB_BASE_PATH));
           } catch {
             continue;
           }
@@ -885,14 +887,16 @@ export function assembleExample(templateHtml: string, slidesHtml: string, title:
     .replace(/<title>.*?<\/title>/, `<title>${title} | Open Design Example</title>`);
 }
 
-export function rewriteSkillAssetUrls(html: string, skillId: string) {
+export function rewriteSkillAssetUrls(html: string, skillId: string, webBasePath = '') {
   if (typeof html !== 'string' || html.length === 0) return html;
-  return html.replace(
+  const publicPath = createPathConfig(webBasePath).withBasePath;
+  const rewritten = html.replace(
     /(\s(?:src|href)\s*=\s*)(['"])((?:\.\.\/([^/'"#?]+)\/)?(?:\.\/)?assets\/([^'"#?]+))(\2)/gi,
     (_match, attr, openQuote, _fullPath, siblingSkillId, relPath, closeQuote) => {
       const resolvedSkillId = siblingSkillId || skillId;
-      const prefix = `/api/skills/${encodeURIComponent(resolvedSkillId)}/assets/`;
+      const prefix = publicPath(`/api/skills/${encodeURIComponent(resolvedSkillId)}/assets/`);
       return `${attr}${openQuote}${prefix}${relPath}${closeQuote}`;
     },
   );
+  return rewriteKnownInternalBrowserPaths(rewritten, webBasePath);
 }

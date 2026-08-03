@@ -39,7 +39,48 @@ nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
 nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
 ```
 
-**Path Constraints**: Non-root ingress path prefixes (sub-paths) are explicitly **unsupported** by the proxy routing stack. Ingress paths must be configured as `/`.
+**Path configuration**: Set `config.webBasePath` to one fixed browser-visible
+prefix such as `/open-design`. When the default ingress path is `/`, the chart
+uses that configured prefix automatically; custom ingress paths must match it.
+The prefix cannot begin with the application-owned `/api`, `/_next`,
+`/artifacts`, or `/frames` namespaces.
+The stock `ghcr.io/nexu-io/od:latest` image is built for the root path. A
+non-root deployment must build and publish its own image with the same
+`OD_WEB_BASE_PATH`, select that image in the chart, and declare the baked-in
+path through `image.webBasePath`. Helm rejects a mismatch before creating the
+Deployment, while the daemon also verifies the image's build manifest when it
+starts. Set `config.publicBaseUrl` to the full canonical URL, including the
+prefix.
+
+Example, from the repository root:
+
+```bash
+docker build \
+  --file deploy/Dockerfile \
+  --build-arg OD_WEB_BASE_PATH=/open-design \
+  --tag registry.example.com/open-design:open-design .
+
+OD_HELM_SMOKE_IMAGE=registry.example.com/open-design:open-design \
+OD_HELM_SMOKE_WEB_BASE_PATH=/open-design \
+node --experimental-strip-types --test \
+  charts/open-design/tests/base-path-image-runtime.test.ts
+
+docker push registry.example.com/open-design:open-design
+
+helm upgrade --install open-design ./charts/open-design \
+  --set-string image.repository=registry.example.com/open-design \
+  --set-string image.tag=open-design \
+  --set-string image.webBasePath=/open-design \
+  --set-string config.webBasePath=/open-design \
+  --set-string config.publicBaseUrl=https://example.com/open-design \
+  --set ingress.enabled=true \
+  --set ingress.hosts[0].host=example.com \
+  --set ingress.hosts[0].paths[0].path=/open-design
+```
+
+The chart keeps the root API routes for compatibility while adding the
+prefix-aware proxy location. Ingress and proxy buffering must remain disabled
+for SSE, as shown in the default annotations.
 
 #### Authentication Proxy
 An authentication proxy (NGINX) is introduced to front the application. This proxy runs as a mandatory sidecar container alongside the main application. The Kubernetes Service routes traffic to the proxy, which handles authentication for the API and health checks, proxying valid requests to the application.
@@ -61,6 +102,7 @@ This chart adheres to strict security defaults:
 | `image.repository` | Open Design image repository              | `ghcr.io/nexu-io/od`        |
 | `image.pullPolicy` | Image pull policy                         | `IfNotPresent`               |
 | `image.tag`        | Image tag (overrides AppVersion)          | `latest`                     |
+| `image.webBasePath` | Browser path baked into the selected image through `OD_WEB_BASE_PATH`; must match `config.webBasePath` | `""` |
 
 ### Application Configuration
 
@@ -69,6 +111,7 @@ This chart adheres to strict security defaults:
 | `config.nodeEnv`       | Node.js environment (`production` or `development`)                                                           | `production`                         |
 | `config.allowedOrigins`| CORS allowed origins. Mandatory if service.type is LoadBalancer or NodePort to prevent 403 render failures.   | `""`                                 |
 | `config.publicBaseUrl` | Public base URL used by the application (derived dynamically if empty)                                        | `""`                                 |
+| `config.webBasePath` | Fixed browser-visible Web path; the image must be built with the same `OD_WEB_BASE_PATH` | `""` |
 | `config.nodeOptions`   | V8 engine memory optimizations                                                                                | `--max-old-space-size=192`           |
 | `config.webPort`       | Web server listening port                                                                                     | `7456`                               |
 | `config.bindHost`      | Host to bind the web server to                                                                                | `"127.0.0.1"`                        |

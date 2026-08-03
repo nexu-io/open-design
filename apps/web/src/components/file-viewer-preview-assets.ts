@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 /**
  * Root-relative project asset handling for FileViewer's srcDoc HTML preview.
  *
@@ -286,7 +287,7 @@ export function rewriteInlinedCssAssetRefs(
 
 /**
  * Rewrite project asset refs inside a script that is about to be inlined
- * (`fetch('/reference-assets/data.json')`, `new Worker('./worker.js')`,
+ * (`apiFetch('/reference-assets/data.json')`, `new Worker('./worker.js')`,
  * `import('./chunk.js')` and friends). Scripts are opaque, so this is
  * deliberately the narrowest pass of the three: only plain string literals,
  * only when the literal contains no interpolation or brace characters, and

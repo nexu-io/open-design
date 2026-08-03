@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 // Drives the Continue in CLI button's existence + staleness chip without
 // a daemon-side endpoint. Fetches the project's file list to detect
 // DESIGN.md, downloads its body to parse the `## Provenance` section,
@@ -74,7 +75,7 @@ export function useDesignMdState(projectId: string, refreshKey: number = 0): Des
       const projectIdEnc = encodeURIComponent(projectId);
       setState((prev) => ({ ...prev, loading: true, error: null }));
       try {
-        const filesResp = await fetch(`/api/projects/${projectIdEnc}/files`, { signal });
+        const filesResp = await apiFetch(`/api/projects/${projectIdEnc}/files`, { signal });
         if (!filesResp.ok) {
           throw new Error(`GET files → HTTP ${filesResp.status}`);
         }
@@ -91,7 +92,7 @@ export function useDesignMdState(projectId: string, refreshKey: number = 0): Des
           return;
         }
 
-        const designResp = await fetch(
+        const designResp = await apiFetch(
           `/api/projects/${projectIdEnc}/files/${encodeURIComponent(DESIGN_MD)}`,
           { signal },
         );
@@ -102,7 +103,7 @@ export function useDesignMdState(projectId: string, refreshKey: number = 0): Des
         if (signal?.aborted) return;
         const provenance = parseProvenance(designText);
 
-        const convsResp = await fetch(`/api/projects/${projectIdEnc}/conversations`, {
+        const convsResp = await apiFetch(`/api/projects/${projectIdEnc}/conversations`, {
           signal,
         });
         let convsBody: ConversationsResponseShape = { conversations: [] };

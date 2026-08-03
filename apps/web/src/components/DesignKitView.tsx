@@ -1,3 +1,4 @@
+import { apiFetch, apiPath } from '@/runtime/web-path';
 // DesignKitView — the shared brand.html-style kit layout.
 //
 // Renders a normalized DesignKit (see runtime/design-kit.ts) as the full module
@@ -100,7 +101,7 @@ export function BrandLogo({
 
   const src =
     stage === 'brand' && bid
-      ? `/api/brands/${encodeURIComponent(bid)}/logo`
+      ? apiPath(`/brands/${encodeURIComponent(bid)}/logo`)
       : stage === 'custom' && logoSrc
         ? logoSrc
         : stage === 'favicon' && host
@@ -172,7 +173,7 @@ export function useBrandFonts(
     let styleEl: HTMLStyleElement | null = null;
     void (async () => {
       try {
-        const resp = await fetch(projectRawUrl(projectId, 'fonts/manifest.json'), {
+        const resp = await apiFetch(projectRawUrl(projectId, 'fonts/manifest.json'), {
           cache: 'no-store',
         });
         if (!resp.ok) return;
@@ -447,7 +448,7 @@ function DesignKitViewInner({
     let cancelled = false;
     void (async () => {
       try {
-        const resp = await fetch(url, { cache: 'no-store' });
+        const resp = await apiFetch(url, { cache: 'no-store' });
         if (!resp.ok) return;
         const raw = (await resp.json()) as Record<string, unknown>;
         if (cancelled) return;

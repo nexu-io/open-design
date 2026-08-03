@@ -8,6 +8,7 @@ import {
 } from "@open-design/sidecar-proto";
 
 import {
+  assertPackagedRootWebBasePath,
   PACKAGED_NAMESPACE_ENV,
   type PackagedConfig,
 } from "./config.js";
@@ -75,6 +76,8 @@ const headlessRequest = parsePackagedHeadlessRequest([
   "--headless",
   ...process.argv.slice(2),
 ]);
+
+assertPackagedRootWebBasePath();
 
 void runPackagedHeadless(
   resolveHeadlessConfig(),

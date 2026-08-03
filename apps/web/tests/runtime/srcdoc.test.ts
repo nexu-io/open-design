@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { JSDOM } from 'jsdom';
-import { buildSrcdoc } from '../../src/runtime/srcdoc';
+import { buildSrcdoc, rewriteKnownInternalBrowserPaths } from '../../src/runtime/srcdoc';
 
 const deckHtml = `<!doctype html>
 <html>
@@ -29,6 +29,17 @@ const brokenDeckStageHtml = `<!doctype html>
 </html>`;
 
 describe('buildSrcdoc', () => {
+  it('keeps known daemon URLs inside the configured browser base path', () => {
+    const srcdoc = rewriteKnownInternalBrowserPaths(
+      '<img src="/api/projects/p/raw/a.png"><link href="/frames/p/index.html"><div style="background:url(/artifacts/p/a.png)"></div><img srcset="/api/a 1x, /other 2x">',
+      '/open-design',
+    );
+    expect(srcdoc).toContain('src="/open-design/api/projects/p/raw/a.png"');
+    expect(srcdoc).toContain('href="/open-design/frames/p/index.html"');
+    expect(srcdoc).toContain('url(/open-design/artifacts/p/a.png)');
+    expect(srcdoc).toContain('srcset="/open-design/api/a 1x, /other 2x"');
+  });
+
   it('injects an initial slide index for deck previews', () => {
     const doc = buildSrcdoc(deckHtml, { deck: true, initialSlideIndex: 2 });
 

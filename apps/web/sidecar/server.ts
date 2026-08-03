@@ -26,6 +26,7 @@ import {
   type JsonIpcServerHandle,
   type SidecarRuntimeContext,
 } from "@open-design/sidecar";
+import { createPathConfig, normalizeBasePath, type BasePath } from "@open-design/path-config";
 
 const HOST = process.env.OD_HOST || "127.0.0.1";
 if (process.env.OD_HOST != null && !/^[a-zA-Z0-9._\-:[\]@]+$/.test(process.env.OD_HOST)) {
@@ -217,24 +218,33 @@ function resolveDaemonOrigin(): string | null {
   return port === 0 ? null : `http://${DAEMON_HOST}:${port}`;
 }
 
-function isDaemonProxyPathname(pathname: string): boolean {
+export function resolveWebBasePath(env: Partial<NodeJS.ProcessEnv> = process.env): BasePath {
+  return normalizeBasePath(env.OD_WEB_BASE_PATH);
+}
+
+function isDaemonProxyPathname(pathname: string, basePath: BasePath = resolveWebBasePath()): boolean {
+  const daemonPathname = createPathConfig(basePath).stripBasePath(pathname);
+  if (daemonPathname == null) return false;
   return (
-    pathname === "/api" ||
-    pathname.startsWith("/api/") ||
-    pathname === "/artifacts" ||
-    pathname.startsWith("/artifacts/") ||
-    pathname === "/frames" ||
-    pathname.startsWith("/frames/")
+    daemonPathname === "/api" ||
+    daemonPathname.startsWith("/api/") ||
+    daemonPathname === "/artifacts" ||
+    daemonPathname.startsWith("/artifacts/") ||
+    daemonPathname === "/frames" ||
+    daemonPathname.startsWith("/frames/")
   );
 }
 
 export function resolveDaemonProxyTarget(
   daemonOrigin: string,
   requestUrl: string | undefined,
+  basePath: BasePath = resolveWebBasePath(),
 ): URL | null {
   const target = resolveHttpProxyTarget(daemonOrigin, requestUrl);
-  if (target == null || !isDaemonProxyPathname(target.pathname)) return null;
-  return target;
+  if (target == null || !isDaemonProxyPathname(target.pathname, basePath)) return null;
+  const daemonPathname = createPathConfig(basePath).stripBasePath(target.pathname);
+  if (daemonPathname == null) return null;
+  return new URL(`${daemonPathname}${target.search}`, daemonOrigin);
 }
 
 function resolveHttpProxyTarget(
@@ -808,11 +818,12 @@ async function createWebSidecarHandle(
   isRuntimeRunning?: () => boolean,
 ): Promise<WebSidecarHandle> {
   const port = await listen(httpServer, parsePort(process.env[WEB_PORT_ENV]));
+  const webBasePath = createPathConfig(resolveWebBasePath());
   const state: WebStatusSnapshot = {
     pid: process.pid,
     state: "running",
     updatedAt: new Date().toISOString(),
-    url: `http://${HOST}:${port}`,
+    url: `http://${HOST}:${port}${webBasePath.withBasePath("/")}`,
   };
   let ipcServer: JsonIpcServerHandle | null = null;
   let stopped = false;

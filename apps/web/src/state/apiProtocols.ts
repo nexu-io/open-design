@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 // Shared metadata for the four API protocols the BYOK pickers offer.
 //
 // Originally these tables lived inline in `SettingsDialog.tsx`. The
@@ -241,7 +242,7 @@ export function isFixedOriginGateway(protocol: ApiProtocol): boolean {
 
 // Resolve the effective base URL. Fixed-origin gateways always use their
 // canonical origin: the field is hidden, so an empty stored value must not leak
-// through and break URL-gated logic such as the live model-list fetch (which
+// through and break URL-gated logic such as the live model-list request (which
 // requires a valid base URL and otherwise silently shows only the static list).
 // Idempotent for non-gateway protocols — returns their value unchanged.
 export function resolveFixedOriginBaseUrl(

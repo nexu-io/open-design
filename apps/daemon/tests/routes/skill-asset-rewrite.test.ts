@@ -35,6 +35,18 @@ describe('rewriteSkillAssetUrls', () => {
     );
   });
 
+  it('keeps rewritten asset URLs under the configured browser base path', () => {
+    expect(rewriteSkillAssetUrls(`<img src="./assets/hero.png">`, 'foo', '/open-design')).toBe(
+      `<img src="/open-design/api/skills/foo/assets/hero.png">`,
+    );
+  });
+
+  it('prefixes known root-relative daemon URLs in generated HTML', () => {
+    expect(rewriteSkillAssetUrls(`<img src="/api/projects/p/raw/hero.png">`, 'foo', '/open-design')).toBe(
+      `<img src="/open-design/api/projects/p/raw/hero.png">`,
+    );
+  });
+
   it('returns non-string input unchanged', () => {
     expect(rewriteSkillAssetUrls('', 'foo')).toBe('');
   });

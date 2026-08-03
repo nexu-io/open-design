@@ -84,6 +84,84 @@ The image intentionally does not bundle Claude/Codex/Gemini CLI binaries. Keep
 those outside the image, or build a separate private runtime layer if a server
 deployment needs local code-agent CLIs installed in the container.
 
+## Fixed browser-visible base path
+
+Self-hosted Web/daemon deployments can live under one fixed prefix such as
+`https://example.com/open-design/`. Set the path and canonical URL in `.env`:
+
+```dotenv
+OPEN_DESIGN_WEB_BASE_PATH=/open-design
+OPEN_DESIGN_PUBLIC_BASE_URL=https://example.com/open-design
+OPEN_DESIGN_ALLOWED_ORIGINS=https://example.com
+```
+
+The prefix is a build-time Next.js setting, so build the image locally after
+changing it and start that image:
+
+```bash
+docker compose build
+docker compose up -d
+```
+
+The reverse proxy may preserve `/open-design` when forwarding to the daemon or
+strip it before forwarding; both forms are accepted. It must route the complete
+prefix, including `/open-design/_next/*`, `/open-design/api/*`,
+`/open-design/artifacts/*`, and `/open-design/frames/*`, and SSE responses under
+`/open-design/api/*` must remain unbuffered. `OD_PUBLIC_BASE_URL` must include
+the same path; the daemon rejects a mismatched value at startup.
+
+The packaged desktop runtime remains root-path only. Use this mode for the
+self-hosted Web/daemon deployment surface.
+
+### Reverse-proxy examples
+
+An nginx proxy can preserve the prefix:
+
+```nginx
+location /open-design/ {
+  proxy_pass http://127.0.0.1:7456/open-design/;
+  proxy_http_version 1.1;
+  proxy_set_header Host $host;
+  proxy_set_header X-Forwarded-Proto $scheme;
+  proxy_set_header X-Forwarded-Host $host;
+  proxy_set_header X-Forwarded-Prefix /open-design;
+  proxy_buffering off;
+  gzip off;
+}
+```
+
+To strip the prefix before forwarding, replace the `proxy_pass` block with:
+
+```nginx
+location /open-design/ {
+  rewrite ^/open-design(/.*)$ $1 break;
+  proxy_pass http://127.0.0.1:7456;
+  proxy_http_version 1.1;
+  proxy_set_header Host $host;
+  proxy_set_header X-Forwarded-Proto $scheme;
+  proxy_set_header X-Forwarded-Host $host;
+  proxy_set_header X-Forwarded-Prefix /open-design;
+  proxy_buffering off;
+  gzip off;
+}
+```
+
+For Caddy, `handle_path` provides the stripping form and keeps SSE flushing:
+
+```caddyfile
+example.com {
+  handle_path /open-design/* {
+    reverse_proxy 127.0.0.1:7456 {
+      flush_interval -1
+    }
+  }
+}
+```
+
+If the proxy authenticates requests, either forward `Authorization: Bearer
+<OD_API_TOKEN>` or set `OPEN_DESIGN_DISABLE_API_AUTH=1` while keeping the daemon
+unreachable except through that proxy.
+
 ## Linux: mounting host agent CLIs
 
 On Linux you can mount host-installed agent CLIs (Claude Code, opencode, Codex,

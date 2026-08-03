@@ -10,6 +10,7 @@ const repoRoot = resolve(scriptDir, "..");
 
 const buildTargets = [
   "packages/release",
+  "packages/path-config",
   "packages/contracts",
   "packages/components",
   "packages/platform",

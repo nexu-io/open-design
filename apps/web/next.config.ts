@@ -1,4 +1,5 @@
 import type { NextConfig } from 'next';
+import { normalizeBasePath } from '@open-design/path-config';
 import { existsSync, realpathSync } from 'node:fs';
 import { networkInterfaces } from 'node:os';
 import { dirname, isAbsolute, relative, resolve } from 'node:path';
@@ -10,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 // daemon instance during `next dev`.
 const DAEMON_PORT = Number(process.env.OD_PORT) || 7456;
 const DAEMON_ORIGIN = `http://127.0.0.1:${DAEMON_PORT}`;
+const WEB_BASE_PATH = normalizeBasePath(process.env.OD_WEB_BASE_PATH);
 
 // The regular CLI build still ships as a static export so the `od` daemon can
 // serve a single-process production build. Packaged desktop builds opt into a
@@ -156,6 +158,13 @@ function configuredAllowedDevHosts(): string[] {
 }
 
 const nextConfig: NextConfig = {
+  basePath: WEB_BASE_PATH,
+  // Next automatically prefixes `_next/*` and metadata assets for static
+  // exports when basePath is set. Do not mirror this value in assetPrefix:
+  // that would produce `/open-design/open-design/_next/...`.
+  env: {
+    NEXT_PUBLIC_OD_WEB_BASE_PATH: WEB_BASE_PATH,
+  },
   allowedDevOrigins: configuredAllowedDevHosts(),
   outputFileTracingRoot: WORKSPACE_ROOT,
   reactStrictMode: true,

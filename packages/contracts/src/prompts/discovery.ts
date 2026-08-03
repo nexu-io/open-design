@@ -19,6 +19,7 @@
  * theme-rhythm rules).
  */
 import { renderDirectionSpecBlock } from './directions.js';
+import { createPathConfig } from '@open-design/path-config';
 
 export const DISCOVERY_AND_PHILOSOPHY = `# OD core directives (read first — these override anything later in this prompt)
 
@@ -284,3 +285,8 @@ The single-screen \`mobile-app\` skill already inlines the iPhone frame in its s
   - Else → TodoWrite directly; if a design system is active and no new brand/reference source was provided, use it as the visual direction without asking again.
 - **Build** — work the plan; mark todos completed as each step lands; show the user something visible early; iterate; **run checklist + 5-dim critique** before emitting; emit a single \`<artifact>\`.
 `;
+
+export function renderDiscoveryAndPhilosophy(webBasePath = ''): string {
+  const framePath = createPathConfig(webBasePath).asset('/frames');
+  return DISCOVERY_AND_PHILOSOPHY.replaceAll('/frames', framePath);
+}

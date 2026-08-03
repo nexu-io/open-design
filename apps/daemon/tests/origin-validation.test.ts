@@ -121,6 +121,26 @@ function makeTestApp(port: number, host = '127.0.0.1') {
   return app;
 }
 
+describe('configuredAllowedOrigins', () => {
+  it('rejects entries that contain a browser path', () => {
+    expect(() => configuredAllowedOrigins({ OD_ALLOWED_ORIGINS: 'https://od.example.com/open-design' })).toThrow(
+      'OD_ALLOWED_ORIGINS entries must be origin-only URLs',
+    );
+  });
+
+  it('rejects credentials, queries, and fragments', () => {
+    for (const value of [
+      'https://user:secret@od.example.com',
+      'https://od.example.com?tenant=one',
+      'https://od.example.com#app',
+    ]) {
+      expect(() => configuredAllowedOrigins({ OD_ALLOWED_ORIGINS: value })).toThrow(
+        'OD_ALLOWED_ORIGINS entries must be origin-only URLs',
+      );
+    }
+  });
+});
+
 function request(
   port: number,
   method: string,

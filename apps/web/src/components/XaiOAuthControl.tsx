@@ -13,6 +13,7 @@
 
 'use client';
 
+import { apiFetch } from '@/runtime/web-path';
 import { useEffect, useRef, useState } from 'react';
 
 interface XaiAuthStatus {
@@ -38,7 +39,7 @@ type Busy =
 
 async function fetchStatus(): Promise<XaiAuthStatus | null> {
   try {
-    const r = await fetch('/api/xai/auth/status', { credentials: 'same-origin' });
+    const r = await apiFetch('/api/xai/auth/status', { credentials: 'same-origin' });
     if (!r.ok) return null;
     return (await r.json()) as XaiAuthStatus;
   } catch {
@@ -50,7 +51,7 @@ async function startOAuth(): Promise<
   { ok: true; response: StartResponse } | { ok: false; message: string }
 > {
   try {
-    const r = await fetch('/api/xai/oauth/start', {
+    const r = await apiFetch('/api/xai/oauth/start', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       credentials: 'same-origin',
@@ -75,7 +76,7 @@ async function startOAuth(): Promise<
 
 async function disconnectOAuth(): Promise<boolean> {
   try {
-    const r = await fetch('/api/xai/oauth/disconnect', {
+    const r = await apiFetch('/api/xai/oauth/disconnect', {
       method: 'POST',
       credentials: 'same-origin',
     });
@@ -90,7 +91,7 @@ async function cancelInFlightOAuth(): Promise<void> {
   // self-close on its 30 min timeout; we don't surface a failure to
   // the user because Cancel is a UX affordance, not a critical action.
   try {
-    await fetch('/api/xai/oauth/cancel', {
+    await apiFetch('/api/xai/oauth/cancel', {
       method: 'POST',
       credentials: 'same-origin',
     });
@@ -104,7 +105,7 @@ async function completeOAuthManual(
   code: string,
 ): Promise<{ ok: true } | { ok: false; message: string }> {
   try {
-    const r = await fetch('/api/xai/oauth/complete', {
+    const r = await apiFetch('/api/xai/oauth/complete', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       credentials: 'same-origin',

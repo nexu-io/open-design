@@ -2,7 +2,7 @@ name: Docker image
 
 # Standalone Docker packaging line (not part of core merge validation in ci.yml).
 #
-# - pull_request / workflow_dispatch: smoke build only (push: false, amd64)
+# - pull_request / workflow_dispatch: non-root Helm/runtime smoke (push: false, amd64)
 # - tag v*.*.* / workflow_call from release: multi-arch build + push to ghcr.io
 
 on:
@@ -28,6 +28,11 @@ on:
   pull_request:
     paths:
       - "deploy/**"
+      - "charts/open-design/**"
+      - "packages/path-config/**"
+      - "apps/daemon/src/http/deployment-path.ts"
+      - "apps/web/next.config.ts"
+      - "apps/web/scripts/write-build-manifest.ts"
       - ".dockerignore"
       - "package.json"
       - "pnpm-lock.yaml"
@@ -67,10 +72,13 @@ jobs:
           if [ "$EVENT_NAME" = "push" ] || [ -n "${RELEASE_VERSION:-}" ] || [ "${PUBLISH_LATEST:-}" = "true" ]; then
             echo "publish=true" >> "$GITHUB_OUTPUT"
             echo "platforms=linux/amd64,linux/arm64" >> "$GITHUB_OUTPUT"
+            echo "web_base_path=" >> "$GITHUB_OUTPUT"
           else
-            # pull_request and standalone workflow_dispatch: smoke only
+            # pull_request and standalone workflow_dispatch: build the same
+            # non-root image exercised by the Helm/runtime smoke below.
             echo "publish=false" >> "$GITHUB_OUTPUT"
             echo "platforms=linux/amd64" >> "$GITHUB_OUTPUT"
+            echo "web_base_path=/open-design" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Set up QEMU
@@ -116,6 +124,7 @@ jobs:
           file: deploy/Dockerfile
           platforms: ${{ steps.mode.outputs.platforms }}
           push: ${{ steps.mode.outputs.publish == 'true' }}
+          load: ${{ steps.mode.outputs.publish != 'true' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           # The in-tree Dockerfile uses node:24-alpine + apk for build
@@ -126,8 +135,38 @@ jobs:
           build-args: |
             NODE_IMAGE=public.ecr.aws/docker/library/node:24-alpine
             RUNTIME_IMAGE=public.ecr.aws/docker/library/node:24-alpine
+            OD_WEB_BASE_PATH=${{ steps.mode.outputs.web_base_path }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Setup Node for Helm smoke
+        if: ${{ steps.mode.outputs.publish != 'true' }}
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: package.json
+
+      - name: Setup Helm
+        if: ${{ steps.mode.outputs.publish != 'true' }}
+        uses: azure/setup-helm@v4
+
+      - name: Verify Helm-rendered image and runtime base path
+        if: ${{ steps.mode.outputs.publish != 'true' }}
+        shell: bash
+        env:
+          SMOKE_IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
+          OD_HELM_SMOKE_WEB_BASE_PATH: /open-design
+        run: |
+          set -euo pipefail
+          smoke_image="$(sed -n '1p' <<< "$SMOKE_IMAGE_TAGS")"
+          if [ -z "$smoke_image" ]; then
+            echo "Docker metadata did not produce a smoke image tag." >&2
+            exit 1
+          fi
+          export OD_HELM_SMOKE_IMAGE="$smoke_image"
+          node --experimental-strip-types --test \
+            charts/open-design/tests/ingress-render.test.ts \
+            charts/open-design/tests/base-path-image-render.test.ts \
+            charts/open-design/tests/base-path-image-runtime.test.ts
 
       - name: Verify public GHCR pull access
         if: ${{ steps.mode.outputs.publish == 'true' }}

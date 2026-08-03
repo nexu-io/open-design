@@ -369,4 +369,3 @@ export async function ensureOwnedSubdir(root: string, name: string): Promise<str
   if (!containsPath(root, realDir)) throw new Error(`update subdirectory realpath escaped update root: ${realDir}`);
   return realDir;
 }
-

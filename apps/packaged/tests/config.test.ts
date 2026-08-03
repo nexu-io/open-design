@@ -3,9 +3,23 @@ import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import {
+  assertPackagedRootWebBasePath,
   PACKAGED_NAMESPACE_BASE_ROOT_ENV,
   resolvePackagedNamespaceBaseRoot,
 } from '../src/config.js';
+
+describe('packaged web base path boundary', () => {
+  it('allows the default root deployment', () => {
+    expect(() => assertPackagedRootWebBasePath({})).not.toThrow();
+    expect(() => assertPackagedRootWebBasePath({ OD_WEB_BASE_PATH: '' })).not.toThrow();
+  });
+
+  it('fails clearly when a self-hosted prefix leaks into packaged runtime', () => {
+    expect(() => assertPackagedRootWebBasePath({ OD_WEB_BASE_PATH: '/open-design' })).toThrow(
+      /not supported by the packaged desktop runtime/,
+    );
+  });
+});
 
 describe('resolvePackagedNamespaceBaseRoot', () => {
   it('lets a historical handoff preserve the already-resolved namespace base root', () => {

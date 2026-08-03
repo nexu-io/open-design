@@ -24,6 +24,15 @@ export function configuredAllowedOrigins(env: NodeJS.ProcessEnv = process.env): 
       if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
         throw new Error('OD_ALLOWED_ORIGINS only supports http:// and https:// origins');
       }
+      if (
+        parsed.username !== ''
+        || parsed.password !== ''
+        || parsed.pathname !== '/'
+        || parsed.search !== ''
+        || parsed.hash !== ''
+      ) {
+        throw new Error('OD_ALLOWED_ORIGINS entries must be origin-only URLs without paths, credentials, queries, or fragments');
+      }
       return parsed.origin;
     });
 }

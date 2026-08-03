@@ -1,3 +1,4 @@
+import { apiFetch, publicPath } from '@/runtime/web-path';
 // Lovart-style centered hero for the entry Home view.
 //
 // The prompt textarea is the canonical creation surface: the user
@@ -2259,7 +2260,7 @@ function PluginPromptPresets({
 }
 
 const FIRST_PARTY_WEB_CLONE_SITE_ICONS: Record<string, string> = {
-  'open-design.ai': '/logo.svg',
+  'open-design.ai': publicPath('/logo.svg'),
 };
 
 function webCloneFaviconUrl(domain: string): string {
@@ -2487,7 +2488,7 @@ const LIBRARY_MIME_EXT: Record<string, string> = {
 /** Fetch a library asset's bytes and wrap them in a named File for staging. */
 async function fileFromLibraryAsset(asset: LibraryAsset): Promise<File | null> {
   try {
-    const resp = await fetch(libraryAssetRawUrl(asset.id));
+    const resp = await apiFetch(libraryAssetRawUrl(asset.id));
     if (!resp.ok) return null;
     const blob = await resp.blob();
     let name =
@@ -3085,35 +3086,35 @@ function footerInputValueIcon(field: InputFieldSpec, value: string): IconName | 
 
 function modelOptionIcon(value: string, label: string): ModelOptionIconSpec {
   const normalized = `${value} ${label}`.toLowerCase();
-  if (normalized.includes('dall-e')) return { label: 'OpenAI', tone: 'dalle', src: '/model-icons/openai.svg' };
+  if (normalized.includes('dall-e')) return { label: 'OpenAI', tone: 'dalle', src: publicPath('/model-icons/openai.svg') };
   if (normalized.includes('gpt-image') || normalized.includes('openai') || normalized.includes('sora')) {
-    return { label: 'OpenAI', tone: 'openai', src: '/model-icons/openai.svg' };
+    return { label: 'OpenAI', tone: 'openai', src: publicPath('/model-icons/openai.svg') };
   }
   if (normalized.includes('seedream') || normalized.includes('seededit') || normalized.includes('seedance') || normalized.includes('doubao') || normalized.includes('bytedance')) {
-    return { label: 'ByteDance', tone: 'seed', src: '/model-icons/bytedance.svg' };
+    return { label: 'ByteDance', tone: 'seed', src: publicPath('/model-icons/bytedance.svg') };
   }
   if (normalized.includes('senseaudio')) return { label: 'SA', tone: 'sense' };
   if (normalized.includes('grok') || normalized.includes('xai') || normalized.includes('xai/')) {
-    return { label: 'xAI', tone: 'grok', src: '/model-icons/x.svg' };
+    return { label: 'xAI', tone: 'grok', src: publicPath('/model-icons/x.svg') };
   }
   if (normalized.includes('gemini') || normalized.includes('imagen') || normalized.includes('veo') || normalized.includes('google') || normalized.includes('nano-banana')) {
-    return { label: 'Google Gemini', tone: 'google', src: '/model-icons/google-gemini.svg' };
+    return { label: 'Google Gemini', tone: 'google', src: publicPath('/model-icons/google-gemini.svg') };
   }
   if (normalized.includes('flux') || normalized.includes('bfl') || normalized.includes('black-forest')) {
-    return { label: 'FLUX', tone: 'flux', src: '/model-icons/flux.svg' };
+    return { label: 'FLUX', tone: 'flux', src: publicPath('/model-icons/flux.svg') };
   }
-  if (normalized.includes('openrouter')) return { label: 'OpenRouter', tone: 'router', src: '/model-icons/openrouter.svg' };
+  if (normalized.includes('openrouter')) return { label: 'OpenRouter', tone: 'router', src: publicPath('/model-icons/openrouter.svg') };
   if (normalized.includes('imagerouter') || normalized.includes('/')) return { label: 'IR', tone: 'router' };
   if (normalized.includes('eleven')) {
-    return { label: 'ElevenLabs', tone: 'elevenlabs', src: '/model-icons/elevenlabs.svg' };
+    return { label: 'ElevenLabs', tone: 'elevenlabs', src: publicPath('/model-icons/elevenlabs.svg') };
   }
   if (normalized.includes('fish')) {
-    return { label: 'Fish Audio', tone: 'fishaudio', src: '/model-icons/fishaudio.svg' };
+    return { label: 'Fish Audio', tone: 'fishaudio', src: publicPath('/model-icons/fishaudio.svg') };
   }
   if (normalized.includes('minimax')) {
-    return { label: 'MiniMax', tone: 'minimax', src: '/model-icons/minimax.svg' };
+    return { label: 'MiniMax', tone: 'minimax', src: publicPath('/model-icons/minimax.svg') };
   }
-  if (normalized.includes('suno')) return { label: 'Suno', tone: 'suno', src: '/model-icons/suno.svg' };
+  if (normalized.includes('suno')) return { label: 'Suno', tone: 'suno', src: publicPath('/model-icons/suno.svg') };
   if (
     normalized.includes('udio') ||
     normalized.includes('audio') ||

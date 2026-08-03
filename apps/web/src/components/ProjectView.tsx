@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 import {
   startTransition,
   useCallback,
@@ -2293,7 +2294,7 @@ export function ProjectView({
       const cached = htmlContentCacheRef.current.get(name);
       if (cached && cached.mtime === mtime) return cached.text;
       try {
-        const response = await fetch(projectRawUrl(project.id, name));
+        const response = await apiFetch(projectRawUrl(project.id, name));
         const text = response.ok ? await response.text() : null;
         htmlContentCacheRef.current.set(name, { mtime, text });
         return text;
@@ -5986,7 +5987,7 @@ export function ProjectView({
         // run. Raw provider keys never cross this browser call boundary.
         if (userText.length > 0) {
           try {
-            await fetch('/api/memory/extract', {
+            await apiFetch('/api/memory/extract', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({

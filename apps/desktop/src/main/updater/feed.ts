@@ -443,4 +443,3 @@ export function checksumMatchesCandidate(checksum: ResolvedChecksumSnapshot, can
   if (candidate.checksum.value != null && checksum.value.toLowerCase() !== candidate.checksum.value.toLowerCase()) return false;
   return true;
 }
-

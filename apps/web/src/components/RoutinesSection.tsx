@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import type {
@@ -390,7 +391,7 @@ function RunHistory({
     let cancelled = false;
     void (async () => {
       try {
-        const res = await fetch(`/api/routines/${routineId}/runs?limit=10`);
+        const res = await apiFetch(`/api/routines/${routineId}/runs?limit=10`);
         if (!res.ok) throw new Error(`runs: ${res.status}`);
         const json = await res.json();
         if (!cancelled) setRuns(json.runs ?? []);
@@ -489,8 +490,8 @@ export function RoutinesSection({ onClose }: RoutinesSectionProps) {
   const refresh = async () => {
     try {
       const [rRes, pRes] = await Promise.all([
-        fetch('/api/routines'),
-        fetch('/api/projects'),
+        apiFetch('/api/routines'),
+        apiFetch('/api/projects'),
       ]);
       if (!rRes.ok) throw new Error(`routines: ${rRes.status}`);
       const rJson = await rRes.json();
@@ -547,7 +548,7 @@ export function RoutinesSection({ onClose }: RoutinesSectionProps) {
       const payload = isEdit
         ? { name: body.name, prompt: body.prompt, schedule: body.schedule, target: body.target }
         : body;
-      const res = await fetch(url, {
+      const res = await apiFetch(url, {
         method: isEdit ? 'PATCH' : 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(payload),
@@ -571,7 +572,7 @@ export function RoutinesSection({ onClose }: RoutinesSectionProps) {
     setBusyId(id);
     setError(null);
     try {
-      const res = await fetch(`/api/routines/${id}/run`, { method: 'POST' });
+      const res = await apiFetch(`/api/routines/${id}/run`, { method: 'POST' });
       if (!res.ok && res.status !== 202) {
         const j = await res.json().catch(() => ({}));
         throw new Error(j.error || `run failed: ${res.status}`);
@@ -589,7 +590,7 @@ export function RoutinesSection({ onClose }: RoutinesSectionProps) {
   const toggleEnabled = async (routine: Routine) => {
     setBusyId(routine.id);
     try {
-      const res = await fetch(`/api/routines/${routine.id}`, {
+      const res = await apiFetch(`/api/routines/${routine.id}`, {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ enabled: !routine.enabled }),
@@ -610,7 +611,7 @@ export function RoutinesSection({ onClose }: RoutinesSectionProps) {
     if (!window.confirm(t('routines.confirmDelete'))) return;
     setBusyId(id);
     try {
-      const res = await fetch(`/api/routines/${id}`, { method: 'DELETE' });
+      const res = await apiFetch(`/api/routines/${id}`, { method: 'DELETE' });
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
         throw new Error(j.error || `delete failed: ${res.status}`);

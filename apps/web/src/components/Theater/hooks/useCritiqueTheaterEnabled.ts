@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 import { useEffect, useState } from 'react';
 
 const STORAGE_KEY = 'open-design:config';
@@ -178,7 +179,7 @@ export function setCritiqueTheaterEnabled(
   if (options.projectId) {
     const projectId = options.projectId;
     const fetcher = options.fetchProjectSettings
-      ?? ((url: string, init: RequestInit) => fetch(url, init));
+      ?? ((url: string, init: RequestInit) => apiFetch(url, init));
     const projectUrl = `/api/projects/${encodeURIComponent(projectId)}`;
     (async () => {
       let existingMetadata: Record<string, unknown> = {};

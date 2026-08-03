@@ -2,6 +2,7 @@ import { access, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
 import { SIDECAR_DEFAULTS, normalizeNamespace } from "@open-design/sidecar-proto";
+import { normalizeBasePath } from "@open-design/path-config";
 
 // `electron` is loaded lazily so this module can also be imported from the
 // headless entry, which runs in a plain Node process without the electron
@@ -18,6 +19,22 @@ export const PACKAGED_NAMESPACE_BASE_ROOT_ENV = "OD_PACKAGED_NAMESPACE_BASE_ROOT
 export const PACKAGED_WEB_OUTPUT_MODE_OVERRIDE_ENV = "OD_PACKAGED_ALLOW_WEB_OUTPUT_MODE_OVERRIDE";
 export const PACKAGED_WEB_STANDALONE_ROOT_ENV = "OD_WEB_STANDALONE_ROOT";
 export const PACKAGED_WEB_OUTPUT_MODE_ENV = "OD_WEB_OUTPUT_MODE";
+
+/**
+ * Packaged Electron/headless runtimes are intentionally root-only. The
+ * browser-visible prefix is a self-hosted web/daemon deployment concern; a
+ * packaged app has its own `od://app/` protocol and must not inherit a host
+ * deployment prefix accidentally.
+ */
+export function assertPackagedRootWebBasePath(env: NodeJS.ProcessEnv = process.env): void {
+  const basePath = normalizeBasePath(env.OD_WEB_BASE_PATH);
+  if (basePath !== "") {
+    throw new Error(
+      `OD_WEB_BASE_PATH=${basePath} is not supported by the packaged desktop runtime; ` +
+      "unset it for desktop or run the self-hosted web/daemon deployment instead",
+    );
+  }
+}
 
 export type PackagedWebOutputMode = "server" | "standalone";
 export type PackagedAmrProfile = "prod" | "test" | "local";
@@ -160,6 +177,7 @@ async function resolvePackagedRelativeEntry(value: string | undefined): Promise<
 }
 
 export async function readPackagedConfig(): Promise<PackagedConfig> {
+  assertPackagedRootWebBasePath();
   const raw = await readRawPackagedConfig();
   const namespace = normalizeNamespace(
     process.env[PACKAGED_NAMESPACE_ENV] ?? raw.namespace ?? SIDECAR_DEFAULTS.namespace,

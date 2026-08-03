@@ -34,6 +34,7 @@ import {
   type BrandBrowserPageSnapshotResult,
 } from '../runtime/brand-browser-bridge';
 import { captureHostRegionSnapshot } from '../runtime/exports';
+import { withWebBasePath } from '../runtime/web-path';
 import { buildBoardCommentAttachments, commentsToAttachments } from '../comments';
 import type {
   ChatCommentAttachment,
@@ -3376,7 +3377,7 @@ export function normalizeBrowserAddress(rawAddress: string): string {
   if (/^(127\.0\.0\.1|0\.0\.0\.0)(:\d+)?(\/.*)?$/i.test(value)) return `http://${value}`;
   if (value.startsWith('/')) {
     if (/^\/(api|artifacts|frames)(\/|$)/.test(value) && typeof window !== 'undefined') {
-      return new URL(value, window.location.origin).toString();
+      return new URL(withWebBasePath(value), window.location.origin).toString();
     }
     return `file://${encodeURI(value)}`;
   }

@@ -15,6 +15,7 @@ import { Fragment, useEffect, useRef, useState, type MouseEvent, type ReactNode 
 import { useT } from '../i18n';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { Icon } from '../components/Icon';
+import { ensureWebBasePath } from './web-path';
 
 export type MarkdownLinkClickHandler = (
   href: string,
@@ -509,6 +510,10 @@ function isSafeMarkdownImageSrc(src: string): boolean {
   );
 }
 
+function publicMarkdownPath(value: string): string {
+  return value.startsWith('/') && !value.startsWith('//') ? ensureWebBasePath(value) : value;
+}
+
 const INLINE_CODE_HEX_COLOR_RE = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
 const PROSE_HEX_COLOR_RE = /(^|[^\w#])(#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}))(?![\w-])/g;
 
@@ -594,7 +599,7 @@ function renderInline(text: string, options?: RenderMarkdownOptions): ReactNode 
           <img
             key={key++}
             className="md-image"
-            src={src}
+            src={publicMarkdownPath(src)}
             alt={alt}
             loading="lazy"
             referrerPolicy="no-referrer"
@@ -607,7 +612,7 @@ function renderInline(text: string, options?: RenderMarkdownOptions): ReactNode 
         pushText(out, alt, key++, options);
       }
     } else if (m[4] && m[5]) {
-      const href = m[5];
+      const href = publicMarkdownPath(m[5]);
       out.push(
         <a
           key={key++}

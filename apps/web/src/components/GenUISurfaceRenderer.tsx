@@ -10,6 +10,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { GenUISurfaceSpec } from '@open-design/contracts';
+import { apiPath } from '../runtime/web-path';
 
 export interface PendingSurface {
   // The surface descriptor as declared in `od.genui.surfaces[]`.
@@ -192,10 +193,10 @@ export function GenUISurfaceRenderer(props: Props) {
         </div>
       );
     }
-    const src = `/api/plugins/${encodeURIComponent(pluginId)}/asset/${sanitizedPath
+    const src = apiPath(`/plugins/${encodeURIComponent(pluginId)}/asset/${sanitizedPath
       .split('/')
       .map(encodeURIComponent)
-      .join('/')}`;
+      .join('/')}`);
     return (
       <SandboxedComponentSurface
         runId={props.pending.runId}

@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 import {
   memo,
   useCallback,
@@ -5986,7 +5987,7 @@ function pagePresetPreviewErrorText(value: string): boolean {
 }
 
 async function validatePagePresetRemotePreview(url: string, signal: AbortSignal): Promise<boolean> {
-  const response = await fetch(url, {
+  const response = await apiFetch(url, {
     signal,
     headers: { Accept: 'text/html,*/*' },
   });

@@ -58,6 +58,7 @@ export const INTERNAL_PACKAGES = [
   { directory: "packages/platform", name: "@open-design/platform" },
   { directory: "packages/download", name: "@open-design/download" },
   { directory: "packages/host", name: "@open-design/host" },
+  { directory: "packages/path-config", name: "@open-design/path-config" },
   { directory: "packages/agui-adapter", name: "@open-design/agui-adapter" },
   { directory: "packages/plugin-runtime", name: "@open-design/plugin-runtime" },
   { directory: "packages/diagnostics", name: "@open-design/diagnostics" },
@@ -466,6 +467,7 @@ async function buildWorkspaceArtifacts(config: ToolPackConfig): Promise<void> {
   await runPnpm(config, ["--filter", "@open-design/sidecar", "build"]);
   await runPnpm(config, ["--filter", "@open-design/platform", "build"]);
   await runPnpm(config, ["--filter", "@open-design/host", "build"]);
+  await runPnpm(config, ["--filter", "@open-design/path-config", "build"]);
   await runPnpm(config, ["--filter", "@open-design/download", "build"]);
   await runPnpm(config, ["--filter", "@open-design/agui-adapter", "build"]);
   await runPnpm(config, ["--filter", "@open-design/plugin-runtime", "build"]);

@@ -157,6 +157,18 @@ in {
       '';
     };
 
+    basePath = lib.mkOption {
+      type = lib.types.strMatching "^$|^/[A-Za-z0-9][A-Za-z0-9._~-]*(/[A-Za-z0-9][A-Za-z0-9._~-]*)*/?$";
+      default = "";
+      description = ''
+        Fixed browser-visible Web path, for example `/open-design`. The
+        static package must be built with the same `OD_WEB_BASE_PATH` value;
+        the bundled Caddy server strips this prefix before serving files and
+        proxying API, artifact, and frame requests. A single trailing slash
+        is accepted and normalized away.
+      '';
+    };
+
     port = lib.mkOption {
       type = lib.types.port;
       # Confirmed via QUICKSTART.md examples (`--web-port 5175`) and

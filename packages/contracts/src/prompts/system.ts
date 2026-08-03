@@ -32,7 +32,7 @@
 import type { ChatSessionMode } from '../api/chat.js';
 import type { ProjectMetadata, ProjectTemplate } from '../api/projects.js';
 import { OFFICIAL_DESIGNER_PROMPT, renderOfficialDesignerPrompt } from './official-system.js';
-import { DISCOVERY_AND_PHILOSOPHY } from './discovery.js';
+import { renderDiscoveryAndPhilosophy } from './discovery.js';
 import { DECK_FRAMEWORK_DIRECTIVE } from './deck-framework.js';
 import { MEDIA_GENERATION_CONTRACT } from './media-contract.js';
 
@@ -250,6 +250,8 @@ export interface ComposeInput {
   // Free-form instructions the user set on this specific project.
   // Injected after user-level instructions and before the design system.
   projectInstructions?: string | undefined;
+  // Browser-visible deployment prefix used in generated shared-frame URLs.
+  webBasePath?: string | undefined;
 }
 
 export function composeSystemPrompt({
@@ -271,6 +273,7 @@ export function composeSystemPrompt({
   locale,
   userInstructions,
   projectInstructions,
+  webBasePath,
 }: ComposeInput): string {
   // Discovery + philosophy goes FIRST so its hard rules ("emit a form on
   // requirements decision, brand resolution, and TodoWrite workflow, run
@@ -338,7 +341,7 @@ export function composeSystemPrompt({
   }
 
   if (!isMediaSurfaceEarly && !isAskMode) {
-    parts.push(DISCOVERY_AND_PHILOSOPHY, '\n\n---\n\n');
+    parts.push(renderDiscoveryAndPhilosophy(webBasePath), '\n\n---\n\n');
   }
 
   // Ask mode skips the multi-thousand-token designer charter entirely — the

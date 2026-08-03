@@ -17,6 +17,7 @@
 // classification without touching React.
 
 import type { InstalledPluginRecord } from '@open-design/contracts';
+import { apiPath } from '@/runtime/web-path';
 
 export type PluginPreviewKind = 'media' | 'html' | 'design' | 'text';
 
@@ -248,7 +249,7 @@ export function inferPluginPreview(
     if (t === 'html' && entry) {
       return {
         kind: 'html',
-        src: `/api/plugins/${encodeURIComponent(record.id)}/preview`,
+        src: apiPath(`/plugins/${encodeURIComponent(record.id)}/preview`),
         label: entry.replace(/^\.\//, '').split(/[\\/]/).pop() ?? entry,
         source: 'preview',
       };
@@ -262,7 +263,7 @@ export function inferPluginPreview(
         typeof examples[0]!.title === 'string' ? (examples[0]!.title as string) : stem;
       return {
         kind: 'html',
-        src: `/api/plugins/${encodeURIComponent(record.id)}/example/${encodeURIComponent(stem)}`,
+        src: apiPath(`/plugins/${encodeURIComponent(record.id)}/example/${encodeURIComponent(stem)}`),
         label: title,
         source: 'example',
         exampleStem: stem,

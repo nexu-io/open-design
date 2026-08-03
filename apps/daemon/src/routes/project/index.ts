@@ -2489,7 +2489,8 @@ export function registerProjectArtifactRoutes(app: Express, ctx: RegisterProject
       const findings = lintArtifact(html);
       res.json({
         path: file,
-        url: `/artifacts/${path.basename(dir)}/index.html`,
+        url: ctx.http.getBrowserPath?.(`/artifacts/${path.basename(dir)}/index.html`)
+          ?? `/artifacts/${path.basename(dir)}/index.html`,
         lint: findings,
       });
     } catch (err: any) {
@@ -3190,8 +3191,9 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       );
       const scope = projectPreviewScopes.mint(project.id);
       /** @type {import('@open-design/contracts').ProjectPreviewUrlResponse} */
+      const previewPath = `/api/projects/${encodeURIComponent(project.id)}/preview/${scope}/${encodeProjectPathForUrl(meta.name)}`;
       const body = {
-        url: `/api/projects/${encodeURIComponent(project.id)}/preview/${scope}/${encodeProjectPathForUrl(meta.name)}`,
+        url: ctx.http.getBrowserPath?.(previewPath) ?? previewPath,
         file: meta.name,
         csp: projectPreviewCsp,
         iframeSandbox: projectPreviewIframeSandbox,

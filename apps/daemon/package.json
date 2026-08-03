@@ -40,6 +40,7 @@
     "@open-design/launcher-proto": "workspace:*",
     "@open-design/platform": "workspace:*",
     "@open-design/plugin-runtime": "workspace:*",
+    "@open-design/path-config": "workspace:*",
     "@open-design/registry-protocol": "workspace:*",
     "@open-design/release": "workspace:*",
     "@open-design/sidecar": "workspace:*",

@@ -19,6 +19,7 @@
  * theme-rhythm rules).
  */
 import type { ExecutionProfile } from '@open-design/contracts';
+import { createPathConfig } from '@open-design/path-config';
 
 const HANDOFF_INVARIANT_PLACEHOLDER = '%%OPEN_DESIGN_HANDOFF_INVARIANT%%';
 
@@ -261,12 +262,16 @@ This run has no filesystem tools. When the brief is ready to deliver, emit exact
 
 export function renderDiscoveryAndPhilosophy(
   executionProfile: ExecutionProfile = 'filesystem',
+  webBasePath = '',
 ): string {
   const invariant =
     executionProfile === 'text_artifact'
       ? TEXT_ARTIFACT_HANDOFF_INVARIANT
       : FILESYSTEM_HANDOFF_INVARIANT;
-  return DISCOVERY_AND_PHILOSOPHY.replace(HANDOFF_INVARIANT_PLACEHOLDER, invariant);
+  const framePath = createPathConfig(webBasePath).asset('/frames');
+  return DISCOVERY_AND_PHILOSOPHY
+    .replace(HANDOFF_INVARIANT_PLACEHOLDER, invariant)
+    .replaceAll('/frames', framePath);
 }
 
 /**
@@ -280,16 +285,17 @@ export function renderDiscoveryAndPhilosophy(
  * DISCOVERY_AND_PHILOSOPHY above because a single-platform prototype still
  * needs the contract matching its own platform.
  */
-export function renderSharedFramesBlock(): string {
+export function renderSharedFramesBlock(webBasePath = ''): string {
+  const framePath = createPathConfig(webBasePath).asset('/frames');
   return `## Multi-device / multi-screen — shared frames
 
-When the brief calls for showing the SAME product across multiple devices (desktop + tablet + phone) or showing MULTIPLE screens of the same app side-by-side (onboarding 1 → 2 → 3, or feed → detail → checkout), do NOT re-draw a phone/laptop frame from scratch. The repo ships pixel-accurate shared frames at \`/frames/\` (served as static assets):
+When the brief calls for showing the SAME product across multiple devices (desktop + tablet + phone) or showing MULTIPLE screens of the same app side-by-side (onboarding 1 → 2 → 3, or feed → detail → checkout), do NOT re-draw a phone/laptop frame from scratch. The repo ships pixel-accurate shared frames at \`${framePath}/\` (served as static assets):
 
-- \`/frames/iphone-15-pro.html\`  — 390 × 844, Dynamic Island
-- \`/frames/android-pixel.html\`  — 412 × 900, punch-hole + nav bar
-- \`/frames/ipad-pro.html\`        — iPad Pro 11"
-- \`/frames/macbook.html\`         — MacBook Pro 14" with notch + chin
-- \`/frames/browser-chrome.html\`  — macOS Safari window with traffic lights
+- \`${framePath}/iphone-15-pro.html\`  — 390 × 844, Dynamic Island
+- \`${framePath}/android-pixel.html\`  — 412 × 900, punch-hole + nav bar
+- \`${framePath}/ipad-pro.html\`        — iPad Pro 11"
+- \`${framePath}/macbook.html\`         — MacBook Pro 14" with notch + chin
+- \`${framePath}/browser-chrome.html\`  — macOS Safari window with traffic lights
 
 Each accepts \`?screen=<path>\` and embeds that path inside the device chrome. The recommended pattern for a multi-screen prototype:
 
@@ -305,11 +311,11 @@ project/
 Then in \`index.html\` use:
 
 \`\`\`html
-<iframe src="/frames/iphone-15-pro.html?screen=screens/01-onboarding.html"
+<iframe src="${framePath}/iphone-15-pro.html?screen=screens/01-onboarding.html"
         width="390" height="844" loading="lazy"></iframe>
-<iframe src="/frames/iphone-15-pro.html?screen=screens/02-paywall.html"
+<iframe src="${framePath}/iphone-15-pro.html?screen=screens/02-paywall.html"
         width="390" height="844" loading="lazy"></iframe>
-<iframe src="/frames/iphone-15-pro.html?screen=screens/03-home.html"
+<iframe src="${framePath}/iphone-15-pro.html?screen=screens/03-home.html"
         width="390" height="844" loading="lazy"></iframe>
 \`\`\`
 

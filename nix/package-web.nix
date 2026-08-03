@@ -11,6 +11,7 @@
   src,
   pnpmDepsSrc ? src,
   workspacePaths,
+  webBasePath ? "",
 }:
 # Builds the @open-design/web Next.js static export.
 #
@@ -58,6 +59,7 @@ in
     env = {
       NODE_ENV = "production";
       OD_DAEMON_URL = "";
+      OD_WEB_BASE_PATH = webBasePath;
     };
 
     buildPhase = ''
@@ -82,6 +84,7 @@ in
     passthru = {
       inherit nodejs;
       pnpmDeps = finalAttrs.pnpmDeps;
+      inherit webBasePath;
     };
 
     meta = with lib; {

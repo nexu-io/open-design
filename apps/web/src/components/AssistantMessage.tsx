@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 import { Fragment, memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { TodoCard, ToolCard } from "./ToolCard";
 import { FileOpsSummary } from "./FileOpsSummary";
@@ -218,7 +219,7 @@ function SkillPluginCandidateCard({
       : block.description || t("skillPluginCandidate.repoDescription");
 
   async function post(path: string, body: Record<string, unknown> = {}) {
-    const resp = await fetch(path, {
+    const resp = await apiFetch(path, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),

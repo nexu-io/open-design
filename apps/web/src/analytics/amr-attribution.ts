@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 import type {
   AmrEntryAttribution,
   TrackingAmrEntrySource,
@@ -268,7 +269,7 @@ async function mirrorAmrEntryToAmrAnalytics(
   if (typeof fetch !== 'function') return;
   const sourcePageName = ENTRY_PAGE_BY_SOURCE[attribution.sourceDetail];
   try {
-    await fetch('/api/integrations/vela/analytics-entry', {
+    await apiFetch('/api/integrations/vela/analytics-entry', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -305,7 +306,7 @@ async function mirrorAmrOnboardingProfileToAmrAnalytics(
 ): Promise<void> {
   if (typeof fetch !== 'function') return;
   try {
-    await fetch('/api/integrations/vela/analytics-profile', {
+    await apiFetch('/api/integrations/vela/analytics-profile', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

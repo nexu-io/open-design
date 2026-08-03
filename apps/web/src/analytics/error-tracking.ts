@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 // Direct-fetch safety telemetry transport.
 //
 // Why this exists alongside posthog-js's autocapture
@@ -252,7 +253,7 @@ function dispatch(item: BufferedSafetyEvent): void {
   // important for events that fire during navigation that are followed by
   // a route change a millisecond later.
   try {
-    void fetch(`${context.host.replace(/\/+$/, '')}/i/v0/e/`, {
+    void apiFetch(`${context.host.replace(/\/+$/, '')}/i/v0/e/`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(payload),

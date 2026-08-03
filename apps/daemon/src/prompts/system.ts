@@ -763,6 +763,9 @@ export interface ComposeInput {
   // native tools; text_artifact runs (BYOK/plain) deliver source through
   // assistant-text <artifact> blocks.
   executionProfile?: ExecutionProfile | undefined;
+  // Browser-visible deployment prefix used when generated HTML needs to link
+  // back to daemon-served static assets such as shared device frames.
+  webBasePath?: string | undefined;
   // Whether the outgoing request text reads as a slide-deck brief (see
   // `detectDeckIntentSignal`). Only consulted for the freeform maybe-deck
   // branch: `false` skips the ~20K conditional framework injection,
@@ -824,6 +827,7 @@ export function composeSystemPrompt({
   mediaExecution,
   byokMediaDefaults,
   executionProfile,
+  webBasePath,
   freeformDeckSignal,
   promptCoreVariant,
   mediaHintSignal,
@@ -978,7 +982,10 @@ export function composeSystemPrompt({
 
   if (!isMediaSurfaceEarly && !isAskMode) {
     if (!isSlimCore) {
-      parts.push(renderDiscoveryAndPhilosophy(resolvedExecutionProfile), '\n\n---\n\n');
+      parts.push(
+        renderDiscoveryAndPhilosophy(resolvedExecutionProfile, webBasePath),
+        '\n\n---\n\n',
+      );
     }
     // Direction library is only useful when the agent must pick a visual
     // direction itself. When an active design system is present it is the
@@ -1016,7 +1023,7 @@ export function composeSystemPrompt({
       metadata?.platformTargets?.includes('responsive') ||
       (metadata?.platformTargets?.length ?? 0) > 1;
     if (isMultiTargetProject) {
-      parts.push(renderSharedFramesBlock(), '\n\n---\n\n');
+      parts.push(renderSharedFramesBlock(webBasePath), '\n\n---\n\n');
     }
     // Trigger stability decides position. Metadata is fixed at project
     // creation → the block can sit here in the project-stable zone. The

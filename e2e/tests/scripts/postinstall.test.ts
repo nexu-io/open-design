@@ -249,16 +249,22 @@ describe("postinstall script contract", () => {
     expect(missingTsconfigs).toEqual([]);
     expect(dependencySpecifier(rootManifest, "@open-design/daemon")).toBe("workspace:*");
     expect(targets.indexOf("packages/release")).toBeGreaterThanOrEqual(0);
+    expect(targets.indexOf("packages/path-config")).toBeGreaterThanOrEqual(0);
     expect(targets.indexOf("packages/contracts")).toBeGreaterThanOrEqual(0);
     expect(targets.indexOf("packages/release")).toBeLessThan(targets.indexOf("packages/contracts"));
+    expect(targets.indexOf("packages/path-config")).toBeLessThan(targets.indexOf("packages/contracts"));
   });
 
   it("[P2] skips absent tsconfig targets in partial install contexts on the default path", () => {
     const sandbox = createSandbox();
     try {
       writeTarget(sandbox, "packages/release", { name: "@open-design/release" });
+      writeTarget(sandbox, "packages/path-config", { name: "@open-design/path-config" });
       writeTarget(sandbox, "packages/contracts", {
-        dependencies: { "@open-design/release": "workspace:*" },
+        dependencies: {
+          "@open-design/path-config": "workspace:*",
+          "@open-design/release": "workspace:*",
+        },
         name: "@open-design/contracts",
       });
       writeTarget(sandbox, "packages/components", {
@@ -276,6 +282,7 @@ describe("postinstall script contract", () => {
       const events = readStubEvents(invocationLog);
       expect(events.filter((event) => event.event === "start").map((event) => event.target)).toEqual([
         "packages/release",
+        "packages/path-config",
         "packages/contracts",
         "packages/components",
       ]);

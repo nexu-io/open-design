@@ -1,3 +1,4 @@
+import { apiFetch } from '@/runtime/web-path';
 // Inline renderer for the four <od-card> kinds (display-only siblings of
 // <question-form>). The agent emits these around the harness work so the user
 // can SEE how memory shaped the turn:
@@ -126,7 +127,7 @@ async function validateCachedRuleProposalDecision(
 ): Promise<RuleProposalDecision | null> {
   if (decision.status === 'idle') return decision;
 
-  const resp = await fetch('/api/memory');
+  const resp = await apiFetch('/api/memory');
   if (!resp.ok) return null;
   if (decision.status === 'discarded') return decision;
 
@@ -415,7 +416,7 @@ function RuleProposalCard({
     ];
     if (rationale.trim()) bodyLines.push(`Verified by: ${rationale.trim()}`);
     try {
-      const resp = await fetch('/api/memory', {
+      const resp = await apiFetch('/api/memory', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -43,6 +43,32 @@ If you expose Open Design through a reverse proxy, also set:
 OPEN_DESIGN_ALLOWED_ORIGINS=https://yourdomain.com
 ```
 
+### Serving below a fixed path
+
+To serve the self-hosted Web/daemon deployment below a browser-visible prefix,
+set matching values before building the image:
+
+```dotenv
+OPEN_DESIGN_WEB_BASE_PATH=/open-design
+OPEN_DESIGN_PUBLIC_BASE_URL=https://yourdomain.com/open-design
+OPEN_DESIGN_ALLOWED_ORIGINS=https://yourdomain.com
+```
+
+Then rebuild and start the image:
+
+```bash
+docker compose build
+docker compose up -d
+```
+
+The prefix covers the frontend, Next assets, API, artifacts, frames, and SSE.
+The daemon accepts either a prefix-preserving or prefix-stripping reverse
+proxy. Keep SSE buffering disabled, and make sure the canonical public URL has
+the exact same path. Packaged desktop remains root-path only.
+
+For nginx and Caddy templates covering both proxy modes, see the
+[deployment reverse-proxy examples](../../deploy/README.md#reverse-proxy-examples).
+
 ## Step 3: Start Open Design
 
 ```bash

@@ -46,6 +46,7 @@
       # nix_validation_required filter.
       daemonWorkspacePaths = [
         "packages/release"
+        "packages/path-config"
         "packages/contracts"
         "packages/registry-protocol"
         "packages/agui-adapter"
@@ -61,6 +62,7 @@
       # nix_validation_required filter.
       webWorkspacePaths = [
         "packages/release"
+        "packages/path-config"
         "packages/components"
         "packages/contracts"
         "packages/host"
@@ -178,6 +180,33 @@
       checks = {
         daemon = daemon;
         web = web;
+        moduleBasePath =
+          let
+            evaluated = nixpkgs.lib.nixosSystem {
+              inherit system;
+              modules = [
+                self.nixosModules.default
+                ({...}: {
+                  system.stateVersion = "25.11";
+                  services.open-design = {
+                    enable = true;
+                    webFrontend = {
+                      enable = true;
+                      basePath = "/open-design/";
+                    };
+                  };
+                })
+              ];
+            };
+            webPackage = evaluated.config.services.open-design.webFrontend.package;
+            webBasePath = webPackage.passthru.webBasePath;
+          in
+            assert webBasePath == "/open-design";
+            pkgs.runCommand "open-design-nixos-module-base-path" {} ''
+              test -f ${webPackage}/.open-design-build.json
+              grep -F '"basePath": "/open-design"' ${webPackage}/.open-design-build.json
+              touch $out
+            '';
       };
 
       formatter = pkgs.nixpkgs-fmt;
