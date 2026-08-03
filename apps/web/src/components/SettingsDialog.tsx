@@ -5309,18 +5309,16 @@ export function SettingsDialog({
                   selectedProviderIndex={selectedProviderIndex}
                   onCustomProviderSelect={() => {
                     setApiModelCustomEditing(false);
-                    updateApiConfig({
-                      baseUrl: '',
-                      model: '',
-                      apiProviderBaseUrl: null,
-                    });
+                    setByokProvider(customByokProvider);
                   }}
                   onProviderSelect={(p) => {
                     setApiModelCustomEditing(false);
-                    updateApiConfig({
+                    setByokProvider({
+                      id: `gateway:${p.protocol}:${p.baseUrl}`,
+                      title: p.label,
+                      protocol: p.protocol,
                       baseUrl: p.baseUrl,
-                      model: defaultKnownProviderModel(p),
-                      apiProviderBaseUrl: p.baseUrl,
+                      preferredModels: p.preferredModels,
                     });
                   }}
                 />

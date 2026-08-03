@@ -20,6 +20,8 @@ Agnes AI 作为一个浏览器本地 BYOK 快捷预设接入，不改变 daemon�
 
 Onboarding 与 Settings 选择该预设后，沿用现有通用行为：切换到 `openai`、预填上述 Base URL 和模型，并以 provider identity 隔离浏览器本地的 API Key draft。不同 Base URL 的 OpenAI-compatible provider 不会复用彼此的本地 Key。
 
+最终实现还在 `apps/web/src/components/EntryShell.tsx` 与 `apps/web/src/components/SettingsDialog.tsx` 做组件级 browser-local draft 隔离：Onboarding quick-fill、Settings 顶部预设和 Settings 的 `Gateway preset` picker 都走同一套按 provider 保存与恢复的语义。切到没有历史 draft 的目标 provider 时 Key 为空；重复选择当前 provider 时保留该 provider 的活动配置。
+
 ## 非目标
 
 - 不新增 `agnes` protocol、provider 专用请求分支、流式解析器或模型发现逻辑。
@@ -38,4 +40,4 @@ Onboarding 与 Settings 选择该预设后，沿用现有通用行为：切换�
 - state 测试验证派生出的唯一 `agnes-ai` preset 含固定 protocol、Base URL 与模型。
 - Onboarding 测试验证通过现有 quick-fill 选择后预填 URL 和模型。
 - Settings 测试验证选择 Agnes 时不会复用另一 provider 的浏览器本地 Key。
-- 最终差异相对 `upstream/main` 只允许两份本设计文档、web provider catalogue 与聚焦 web 测试；不得包含 daemon、CLI、contracts 或 MCP 的 Agnes 改动。
+- 最终差异相对 `upstream/main` 只允许两份本设计文档、`apps/web/src/state/config.ts`、`apps/web/src/components/EntryShell.tsx`、`apps/web/src/components/SettingsDialog.tsx` 与聚焦 web 测试；不得包含 daemon、CLI、contracts 或 MCP 的 Agnes 改动。

@@ -521,6 +521,7 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
   afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
+    vi.useRealTimers();
   });
 
   it('collapses the settings sidebar and toggles fullscreen from dialog chrome', () => {
@@ -646,6 +647,67 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
 
     expect(apiKeyInput.value).toBe('sk-deepseek-provider');
     expect(apiKeyInput.type).toBe('password');
+  });
+
+  it('does not send the active OpenAI draft to Agnes from the Gateway preset picker', async () => {
+    const sentinelApiKey = 'settings-provider-sentinel';
+    vi.useFakeTimers();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+      if (input.toString() === '/api/memory') {
+        return new Response(JSON.stringify({ enabled: true, memories: [], extraction: null }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (input.toString() === '/api/test/connection') {
+        return new Response(JSON.stringify({
+          ok: true,
+          kind: 'ok',
+          latencyMs: 10,
+          model: 'agnes-2.0-flash',
+          sample: 'Connected',
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`unexpected fetch: ${input.toString()}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderSettingsDialog({
+      apiProtocol: 'openai',
+      apiKey: sentinelApiKey,
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4o',
+      apiProviderBaseUrl: 'https://api.openai.com/v1',
+    });
+
+    selectGatewayPreset('OpenAI');
+    expect((screen.getByLabelText('API key') as HTMLInputElement).value).toBe(sentinelApiKey);
+
+    selectGatewayPreset('Agnes AI');
+    fetchMock.mockClear();
+    fetchProviderModelsMock.mockClear();
+    fireEvent.blur(screen.getByLabelText('API key'));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+
+    const connectionRequestBodies = fetchMock.mock.calls
+      .filter(([input]) => input.toString() === '/api/test/connection')
+      .map(([, init]) => JSON.parse(String(init?.body ?? '{}')));
+    const modelRequestBodies = fetchProviderModelsMock.mock.calls.map(([input]) => input);
+
+    expect({
+      apiKey: (screen.getByLabelText('API key') as HTMLInputElement).value,
+      modelRequestBodies,
+      connectionRequestBodies,
+    }).toEqual({
+      apiKey: '',
+      modelRequestBodies: [],
+      connectionRequestBodies: [],
+    });
+    expect(JSON.stringify({ modelRequestBodies, connectionRequestBodies })).not.toContain(sentinelApiKey);
   });
 
   it('shows configured status from provider-scoped drafts for same-protocol presets', () => {
