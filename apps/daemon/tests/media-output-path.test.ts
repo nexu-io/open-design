@@ -18,10 +18,10 @@ import { generateMedia } from '../src/media/index.js';
 const PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+X2uoAAAAASUVORK5CYII=';
 const TEST_MINIMAX_DEFAULT_BASE_URL = 'https://api.minimax.io';
 
-async function withStubbedFetch(
+async function withStubbedFetch<T>(
   handler: (call: { url: string; init: Parameters<typeof fetch>[1] | undefined }) => Promise<Response> | Response,
-  run: () => Promise<void>,
-): Promise<void> {
+  run: () => Promise<T>,
+): Promise<T> {
   const realFetch = globalThis.fetch;
   globalThis.fetch = vi.fn(async (...args: Parameters<typeof fetch>) => {
     const [input, init] = args;
@@ -29,7 +29,7 @@ async function withStubbedFetch(
     return handler({ url, init });
   }) as unknown as typeof fetch;
   try {
-    await run();
+    return await run();
   } finally {
     globalThis.fetch = realFetch;
   }
@@ -237,6 +237,40 @@ describe('media generator output path resolution (#6336)', () => {
     }
     expect(writtenPath).not.toBeNull();
     expect(originalReaddir).toBe(realReaddir);
+  });
+
+  it('preserves a dotted parent directory when the provider supplies the extension', async () => {
+    const expected = path.join(
+      projectsRoot,
+      projectId,
+      'assets.v2',
+      'hero.png',
+    );
+
+    const result = await withStubbedFetch(
+      () => minimaxPngResponse(),
+      async () => generateMedia({
+        projectRoot,
+        projectsRoot,
+        projectId,
+        surface: 'image',
+        model: 'minimax-image-01',
+        prompt: 'dotted parent directory',
+        output: 'assets.v2/hero',
+      }),
+    );
+
+    expect(result.name).toBe('assets.v2/hero.png');
+    const buf = await waitForFile(expected);
+    expect(buf.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a');
+
+    const truncated = path.join(projectsRoot, projectId, 'assets.png');
+    await expect(
+      readFile(truncated).then(
+        () => true,
+        () => false,
+      ),
+    ).resolves.toBe(false);
   });
 
   it('refuses to write through a symlinked subdirectory that escapes the project', async () => {

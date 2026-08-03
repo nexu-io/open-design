@@ -846,8 +846,10 @@ export async function generateMedia(args: {
   // (.png vs .jpg vs .webp) before it knows what the model emits.
   let finalOut = safeOut;
   if (suggestedExt) {
-    const dot = safeOut.lastIndexOf('.');
-    const stem = dot > 0 ? safeOut.slice(0, dot) : safeOut;
+    // Scope extension replacement to the basename. A dot in a parent
+    // directory (for example, assets.v2/hero) is not a file extension.
+    const ext = path.posix.extname(safeOut);
+    const stem = ext ? safeOut.slice(0, -ext.length) : safeOut;
     finalOut = `${stem}${suggestedExt}`;
   }
   // Validate the rewritten finalOut through the symlink-aware
