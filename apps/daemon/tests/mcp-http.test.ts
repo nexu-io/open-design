@@ -288,6 +288,26 @@ describe('MCP Streamable HTTP transport', () => {
     expect(rediscoverDaemonUrl).toHaveBeenCalledTimes(1);
   });
 
+  it('returns the rediscovery error when implicit daemon recovery fails', async () => {
+    const unavailable = await unavailableLoopbackUrl();
+    const rediscoverDaemonUrl = vi.fn(async () => {
+      throw new Error('registered Open Design runtime is unavailable');
+    });
+    const handle = await startHttpMcp({
+      daemonUrl: unavailable,
+      rediscoverDaemonUrl,
+    });
+    const connected = await connectClient(handle.url, 'failed-recovery-client');
+
+    await expect(
+      connected.client.callTool({
+        arguments: {},
+        name: 'list_projects',
+      }),
+    ).rejects.toThrow('registered Open Design runtime is unavailable');
+    expect(rediscoverDaemonUrl).toHaveBeenCalledTimes(1);
+  });
+
   it('does not replace a fixed daemon URL when no rediscovery callback is supplied', async () => {
     const unavailable = await unavailableLoopbackUrl();
     const handle = await startHttpMcp({ daemonUrl: unavailable });

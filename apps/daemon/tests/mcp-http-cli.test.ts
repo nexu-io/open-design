@@ -1,9 +1,14 @@
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { execFile, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import http from 'node:http';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { describe, expect, it } from 'vitest';
+
+import { TOOL_DEFS } from '../src/mcp.js';
 
 const execFileAsync = promisify(execFile);
 const currentDir = dirname(fileURLToPath(import.meta.url));
@@ -37,6 +42,35 @@ async function runCli(args: string[]) {
 }
 
 describe('od mcp HTTP CLI', () => {
+  it('keeps stdio as the default transport with the complete tool set', async () => {
+    const transport = new StdioClientTransport({
+      args: [
+        '--import',
+        'tsx',
+        cliEntry,
+        'mcp',
+        '--daemon-url',
+        'http://127.0.0.1:1',
+      ],
+      command: process.execPath,
+      cwd: daemonRoot,
+      env: { ...process.env } as Record<string, string>,
+      stderr: 'pipe',
+    });
+    const client = new Client({ name: 'stdio-default-test', version: '1.0.0' });
+
+    try {
+      await client.connect(transport as unknown as Transport);
+      const tools = await client.listTools();
+
+      expect(tools.tools.map((tool) => tool.name)).toEqual(
+        TOOL_DEFS.map((tool) => tool.name),
+      );
+    } finally {
+      await client.close().catch(() => undefined);
+    }
+  });
+
   it('documents the explicit opt-in configuration and lifecycle', async () => {
     const result = await runCli(['mcp', '--help']);
 
@@ -101,67 +135,75 @@ describe('od mcp HTTP CLI', () => {
     }
   });
 
-  it('prints the endpoint, keeps running, hides credentials, and exits on SIGTERM', async () => {
-    const port = await unusedLoopbackPort();
-    const child = spawn(
-      process.execPath,
-      [
-        '--import',
-        'tsx',
-        cliEntry,
-        'mcp',
-        '--transport',
-        'http',
-        '--port',
-        String(port),
-        '--daemon-url',
-        'http://127.0.0.1:1',
-      ],
-      {
-        cwd: daemonRoot,
-        env: { ...process.env },
-      },
-    );
-    let stderr = '';
-    child.stderr.on('data', (chunk: Buffer) => {
-      stderr += chunk.toString('utf8');
-    });
-
-    try {
-      await waitForOutput(
-        child,
-        new RegExp(`Open Design MCP listening on http://127\\.0\\.0\\.1:${port}/mcp`, 'u'),
-      );
-      expect(child.exitCode).toBeNull();
-
-      const secret = 'Bearer must-not-appear-in-logs';
-      const status = await rawRequest(port, {
-        authorization: secret,
-        host: 'attacker.example',
-      });
-      expect(status).toBe(403);
-      const malformedStatus = await rawRequest(
-        port,
+  it.each(['SIGINT', 'SIGTERM'] as const)(
+    'prints the endpoint, keeps running, hides credentials, and exits on %s',
+    async (shutdownSignal) => {
+      const port = await unusedLoopbackPort();
+      const child = spawn(
+        process.execPath,
+        [
+          '--import',
+          'tsx',
+          cliEntry,
+          'mcp',
+          '--transport',
+          'http',
+          '--port',
+          String(port),
+          '--daemon-url',
+          'http://127.0.0.1:1',
+        ],
         {
-          authorization: secret,
-          'content-type': 'application/json',
-          host: `127.0.0.1:${port}`,
+          cwd: daemonRoot,
+          env: { ...process.env },
         },
-        `{"credential":"${secret}",`,
       );
-      expect(malformedStatus).toBe(400);
-      expect(stderr).not.toContain(secret);
+      let stderr = '';
+      child.stderr.on('data', (chunk: Buffer) => {
+        stderr += chunk.toString('utf8');
+      });
 
-      const exit = waitForExit(child);
-      child.kill('SIGTERM');
-      const outcome = await exit;
-      expect(outcome).toEqual({ code: 0, signal: null });
-      expect(stderr).not.toContain(secret);
-      await expect(fetch(`http://127.0.0.1:${port}/mcp`)).rejects.toThrow();
-    } finally {
-      await terminateChild(child);
-    }
-  });
+      try {
+        await waitForOutput(
+          child,
+          new RegExp(
+            `Open Design MCP listening on http://127\\.0\\.0\\.1:${port}/mcp`,
+            'u',
+          ),
+        );
+        expect(child.exitCode).toBeNull();
+
+        const secret = 'Bearer must-not-appear-in-logs';
+        const rejectedHost = await rawRequest(port, {
+          authorization: secret,
+          host: 'attacker.example',
+        });
+        expect(rejectedHost.status).toBe(403);
+        expect(rejectedHost.body).not.toContain(secret);
+        const malformed = await rawRequest(
+          port,
+          {
+            authorization: secret,
+            'content-type': 'application/json',
+            host: `127.0.0.1:${port}`,
+          },
+          `{"credential":"${secret}",`,
+        );
+        expect(malformed.status).toBe(400);
+        expect(malformed.body).not.toContain(secret);
+        expect(stderr).not.toContain(secret);
+
+        const exit = waitForExit(child);
+        child.kill(shutdownSignal);
+        const outcome = await exit;
+        expect(outcome).toEqual({ code: 0, signal: null });
+        expect(stderr).not.toContain(secret);
+        await expect(fetch(`http://127.0.0.1:${port}/mcp`)).rejects.toThrow();
+      } finally {
+        await terminateChild(child);
+      }
+    },
+  );
 });
 
 async function unusedLoopbackPort(): Promise<number> {
@@ -177,7 +219,7 @@ function rawRequest(
   port: number,
   headers: Record<string, string>,
   body?: string,
-): Promise<number> {
+): Promise<{ body: string; status: number }> {
   return new Promise((resolve, reject) => {
     const request = http.request(
       {
@@ -188,8 +230,14 @@ function rawRequest(
         port,
       },
       (response) => {
-        response.resume();
-        response.once('end', () => resolve(response.statusCode ?? 0));
+        let responseBody = '';
+        response.setEncoding('utf8');
+        response.on('data', (chunk: string) => {
+          responseBody += chunk;
+        });
+        response.once('end', () => {
+          resolve({ body: responseBody, status: response.statusCode ?? 0 });
+        });
       },
     );
     request.once('error', reject);
