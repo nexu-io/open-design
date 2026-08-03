@@ -28,6 +28,8 @@ export {
 
 export type {
   ProcessSnapshot,
+  OwnedProcessIdentity,
+  ProcessTreeTerminationResult,
   ProcessStampContract,
   ProcessStampField,
   ProcessStampShape,
@@ -36,7 +38,9 @@ export type {
   StopProcessesResult,
 } from "./process.js";
 export {
+  captureOwnedProcessIdentity,
   collectProcessTreePids,
+  collectOwnedProcessTreePids,
   createProcessStampArgs,
   isProcessAlive,
   listProcessSnapshots,
@@ -49,6 +53,7 @@ export {
   spawnBackgroundProcess,
   spawnLoggedProcess,
   stopProcesses,
+  terminateOwnedProcessTree,
   waitForProcessExit,
 } from "./process.js";
 

@@ -202,6 +202,62 @@ describe('chat run service shutdown', () => {
     });
   });
 
+  it('persists an explicit failure when Windows tree termination cannot be verified', async () => {
+    const terminateProcessTree = vi.fn().mockResolvedValue({
+      attempted: true,
+      childTreeQuiescent: false,
+      forced: true,
+      identityVerified: true,
+      remainingPids: [200],
+    });
+    const runs = createRuns({ terminateProcessTree });
+    const run = runs.create({ projectId: 'project-1', conversationId: 'conv-1' });
+    run.status = 'running';
+    (run as any).child = new FakeChildProcess({ closeOn: 'SIGTERM' });
+    (run as any).processTreeRoot = { pid: 100, createdAt: 10 };
+
+    const status = await runs.cancel(run);
+
+    expect(terminateProcessTree).toHaveBeenCalledWith(
+      { pid: 100, createdAt: 10 },
+      expect.objectContaining({ graceMs: expect.any(Number), forceWaitMs: expect.any(Number) }),
+    );
+    expect(status).toMatchObject({
+      status: 'failed',
+      errorCode: 'RUN_TERMINATION_UNVERIFIED',
+      failureDetail: 'termination_unverified',
+      termination: {
+        outcome: 'unverified',
+        retryable: true,
+        treeQuiescent: false,
+      },
+    });
+    expect(run.events.at(-1)).toMatchObject({ event: 'end', data: { status: 'failed' } });
+  });
+
+  it('serializes duplicate cancellation and retries only an unverified termination failure', async () => {
+    let resolveTermination!: (value: object) => void;
+    const terminateProcessTree = vi.fn(() => new Promise((resolve) => { resolveTermination = resolve; }));
+    const runs = createRuns({ terminateProcessTree });
+    const run = runs.create({ projectId: 'project-1', conversationId: 'conv-1' });
+    run.status = 'running';
+    (run as any).child = new FakeChildProcess({ closeOn: 'SIGTERM' });
+    (run as any).processTreeRoot = { pid: 100, createdAt: 10 };
+
+    const first = runs.cancel(run);
+    const duplicate = runs.cancel(run);
+    expect(terminateProcessTree).toHaveBeenCalledTimes(1);
+    resolveTermination({ attempted: true, childTreeQuiescent: false, forced: true, identityVerified: true, remainingPids: [200] });
+    await Promise.all([first, duplicate]);
+    expect(run.status).toBe('failed');
+
+    (run as any).child.exitCode = 0;
+    terminateProcessTree.mockResolvedValueOnce({ attempted: true, childTreeQuiescent: true, forced: true, identityVerified: true, remainingPids: [] });
+    await runs.cancel(run);
+    expect(run.status).toBe('canceled');
+    expect(run.termination).toMatchObject({ attempts: 2, outcome: 'verified' });
+  });
+
   describe('cancel kill fallback', () => {
     afterEach(() => {
       vi.useRealTimers();
@@ -689,7 +745,7 @@ describe('chat run service stream replay', () => {
   });
 });
 
-function createRuns() {
+function createRuns(overrides: Record<string, unknown> = {}) {
   return createChatRunService({
     createSseResponse: () => ({
       send: vi.fn(() => true),
@@ -699,6 +755,7 @@ function createRuns() {
     createSseErrorPayload: (code: string, message: string) => ({ error: { code, message } }),
     shutdownGraceMs: 10,
     ttlMs: 60_000,
+    ...overrides,
   });
 }
 

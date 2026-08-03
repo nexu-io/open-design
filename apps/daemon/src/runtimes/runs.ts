@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { todoSnapshotHasUnfinishedWork } from '@open-design/contracts';
+import { terminateOwnedProcessTree } from '@open-design/platform';
 import { normalizeMediaExecutionPolicyForRun } from '../media/policy.js';
 import {
   normalizeRunToolBundleForRun,
@@ -52,6 +53,7 @@ function durableRunState(run) {
     failureCategory: run.failureCategory ?? null,
     failureDetail: run.failureDetail ?? null,
     failureAction: run.failureAction ?? null,
+    ...(run.termination ? { termination: run.termination } : {}),
     resumable: run.resumable ?? false,
     artifactCount: Number.isFinite(run.artifactCount) ? run.artifactCount : 0,
     endedWithUnfinishedWork: Boolean(run.endedWithUnfinishedWork),
@@ -174,6 +176,9 @@ export function createChatRunService({
   // outlives buffer truncation. Kept generic here: this service does not
   // interpret event semantics, it just hands each record to the observer.
   onEventEmitted = null,
+  // Injectable for lifecycle tests; production uses the platform-owned Windows
+  // tree terminator rather than executable-name or direct-child fallbacks.
+  terminateProcessTree = terminateOwnedProcessTree,
 }) {
   const runs = new Map();
   const runIdsByClientRequestId = new Map();
@@ -268,6 +273,8 @@ export function createChatRunService({
       acpSession: null,
       childPid: null,
       processGroupId: null,
+      processTreeRoot: null,
+      requiresTreeVerification: false,
       cancelRequested: false,
       eventsLogPath,
       statePath,
@@ -355,6 +362,8 @@ export function createChatRunService({
       acpSession: null,
       childPid: null,
       processGroupId: null,
+      processTreeRoot: null,
+      requiresTreeVerification: false,
       childExitObservedAt: null,
       exitCode: null,
       signal: null,
@@ -536,6 +545,8 @@ export function createChatRunService({
     run.acpSession = null;
     run.childPid = null;
     run.processGroupId = null;
+    run.processTreeRoot = null;
+    run.requiresTreeVerification = false;
     run.childExitObservedAt = null;
     run.stdinOpen = false;
     run.eventsLogStream = null;
@@ -646,6 +657,7 @@ export function createChatRunService({
     failureCategory: run.failureCategory ?? null,
     failureDetail: run.failureDetail ?? null,
     failureAction: run.failureAction ?? null,
+    ...(run.termination ? { termination: run.termination } : {}),
     resumable: run.resumable ?? false,
     endedWithUnfinishedWork: !!run.endedWithUnfinishedWork,
     ...(Number.isFinite(run.artifactCount) ? { artifactCount: run.artifactCount } : {}),
@@ -719,6 +731,7 @@ export function createChatRunService({
       ...(Number.isFinite(run.artifactCount) ? { artifactCount: run.artifactCount } : {}),
       failureCategory: run.failureCategory ?? null,
       failureDetail: run.failureDetail ?? null,
+      ...(run.termination ? { termination: run.termination } : {}),
     });
     for (const sse of run.clients) sse.end();
     run.clients.clear();
@@ -827,6 +840,77 @@ export function createChatRunService({
     const raw = Number(process.env.OD_CHAT_RUN_CANCEL_FORCE_WAIT_MS);
     return Number.isFinite(raw) && raw > 0 ? raw : 500;
   };
+
+  const finishTerminationUnverified = (run, signal, result) => {
+    run.termination = {
+      attempts: (run.termination?.attempts ?? 0) + 1,
+      outcome: 'unverified',
+      phase: result?.forced ? 'forced' : 'graceful',
+      retryable: true,
+      childExited: childHasExited(run.child),
+      treeQuiescent: false,
+    };
+    run.errorCode = 'RUN_TERMINATION_UNVERIFIED';
+    run.error = 'Open Design could not verify that the runtime process tree stopped.';
+    run.failureCategory = 'process_exit';
+    run.failureDetail = 'termination_unverified';
+    run.failureAction = null;
+    emit(run, 'diagnostic', {
+      type: 'run_termination',
+      phase: run.termination.phase,
+      outcome: run.termination.outcome,
+      attempts: run.termination.attempts,
+      childExited: run.termination.childExited,
+      treeQuiescent: false,
+    });
+    emit(run, 'error', createSseErrorPayload(run.errorCode, run.error, { retryable: true }));
+    finish(run, 'failed', run.child?.exitCode ?? null, signal);
+    return statusBody(run);
+  };
+
+  const terminateAndVerifyWindowsTree = async (run, graceMs, fallbackSignal) => {
+    let result;
+    try {
+      result = await terminateProcessTree(run.processTreeRoot, {
+        graceMs,
+        forceWaitMs: forceWaitMs(),
+      });
+    } catch {
+      // A failed inspection is not proof of a stopped tree. Preserve the
+      // safe failure contract rather than letting an exception leave a run
+      // indefinitely in `running`.
+      result = {
+        attempted: false,
+        childTreeQuiescent: false,
+        forced: false,
+        identityVerified: false,
+        remainingPids: [],
+      };
+    }
+    const childExited = await waitForCanceledChildExit(run, forceWaitMs());
+    if (result.identityVerified && result.childTreeQuiescent && childExited) {
+      run.termination = {
+        attempts: (run.termination?.attempts ?? 0) + 1,
+        outcome: 'verified',
+        phase: result.forced ? 'forced' : 'graceful',
+        retryable: false,
+        childExited: true,
+        treeQuiescent: true,
+      };
+      emit(run, 'diagnostic', {
+        type: 'run_termination',
+        phase: run.termination.phase,
+        outcome: run.termination.outcome,
+        attempts: run.termination.attempts,
+        childExited: true,
+        treeQuiescent: true,
+      });
+      return finishCanceledFromChildState(run, result.forced ? 'SIGKILL' : fallbackSignal);
+    }
+    return finishTerminationUnverified(run, result.forced ? 'SIGKILL' : fallbackSignal, result);
+  };
+
+  const cannotVerifyWindowsTree = (run) => run.requiresTreeVerification === true && !run.processTreeRoot;
 
   // Signal an EXPLICIT child + its captured process group, rather than
   // whatever currently occupies `run.child`. Escalation timers (SIGTERM ->
@@ -940,13 +1024,31 @@ export function createChatRunService({
     }
   };
 
-  const cancel = async (run) => {
-    if (TERMINAL_RUN_STATUSES.has(run.status)) return statusBody(run);
+  const cancel = async (run, { graceMs: requestedGraceMs } = {}) => {
+    if (run.cancelPromise) return run.cancelPromise;
+    const retryingTerminationFailure =
+      run.status === 'failed'
+      && run.errorCode === 'RUN_TERMINATION_UNVERIFIED'
+      && run.termination?.retryable === true;
+    if (TERMINAL_RUN_STATUSES.has(run.status) && !retryingTerminationFailure) return statusBody(run);
+    if (retryingTerminationFailure) {
+      run.cleanupGeneration = (run.cleanupGeneration ?? 0) + 1;
+      run.status = 'running';
+      run.eventsLogClosed = false;
+      run.error = null;
+      run.errorCode = null;
+      run.failureCategory = null;
+      run.failureDetail = null;
+      run.failureAction = null;
+    }
+    const cancellation = (async () => {
     run.cancelRequested = true;
     run.updatedAt = Date.now();
     clearPendingRetryRestart(run);
     closeRunStdin(run);
     if (!run.child) {
+      if (cannotVerifyWindowsTree(run)) return finishTerminationUnverified(run, 'SIGTERM', null);
+      if (run.processTreeRoot) return terminateAndVerifyWindowsTree(run, requestedGraceMs ?? cancelGraceMs(), 'SIGTERM');
       finish(run, 'canceled', null, 'SIGTERM');
       return statusBody(run);
     }
@@ -960,10 +1062,14 @@ export function createChatRunService({
       } catch {
         // Signal fallback below owns eventual process termination.
       }
-      const graceMs = Number(process.env.PI_ABORT_GRACE_MS) || 3000;
+      const graceMs = requestedGraceMs ?? (Number(process.env.PI_ABORT_GRACE_MS) || 3000);
       if (await waitForCanceledChildExit(run, graceMs)) {
+        if (cannotVerifyWindowsTree(run)) return finishTerminationUnverified(run, 'SIGTERM', null);
+        if (run.processTreeRoot) return terminateAndVerifyWindowsTree(run, graceMs, 'SIGTERM');
         return finishCanceledFromChildState(run, 'SIGTERM');
       }
+      if (cannotVerifyWindowsTree(run)) return finishTerminationUnverified(run, 'SIGTERM', null);
+      if (run.processTreeRoot) return terminateAndVerifyWindowsTree(run, graceMs, 'SIGTERM');
       killChild(run, 'SIGTERM');
       if (await waitForCanceledChildExit(run, graceMs)) {
         return finishCanceledFromChildState(run, 'SIGTERM');
@@ -973,36 +1079,30 @@ export function createChatRunService({
       return finishCanceledFromChildState(run, 'SIGKILL');
     }
 
+    if (cannotVerifyWindowsTree(run)) return finishTerminationUnverified(run, 'SIGTERM', null);
+    if (run.processTreeRoot) return terminateAndVerifyWindowsTree(run, requestedGraceMs ?? cancelGraceMs(), 'SIGTERM');
     killChild(run, 'SIGTERM');
-    if (await waitForCanceledChildExit(run, cancelGraceMs())) {
+    if (await waitForCanceledChildExit(run, requestedGraceMs ?? cancelGraceMs())) {
       return finishCanceledFromChildState(run, 'SIGTERM');
     }
     killChild(run, 'SIGKILL');
     await waitForCanceledChildExit(run, forceWaitMs());
     return finishCanceledFromChildState(run, 'SIGKILL');
+    })();
+    run.cancelPromise = cancellation;
+    try {
+      return await cancellation;
+    } finally {
+      if (run.cancelPromise === cancellation) run.cancelPromise = null;
+    }
   };
 
   const shutdownActive = async ({ graceMs = shutdownGraceMs } = {}) => {
-    const activeRuns = Array.from(runs.values()).filter((run) => !TERMINAL_RUN_STATUSES.has(run.status));
-    await Promise.all(activeRuns.map(async (run) => {
-      run.cancelRequested = true;
-      run.updatedAt = Date.now();
-      clearPendingRetryRestart(run);
-      closeRunStdin(run);
-      if (run.acpSession?.abort) {
-        try {
-          run.acpSession.abort();
-        } catch {
-          // Process signals below are the shutdown fallback.
-        }
-      }
-      killChild(run, 'SIGTERM');
-      finish(run, 'canceled', null, 'SIGTERM');
-      if (run.child && !(await waitForChildExit(run.child, graceMs))) {
-        killChild(run, 'SIGKILL');
-        await waitForChildExit(run.child, 500);
-      }
-    }));
+    const activeRuns = Array.from(runs.values()).filter((run) =>
+      !TERMINAL_RUN_STATUSES.has(run.status)
+      || (run.errorCode === 'RUN_TERMINATION_UNVERIFIED' && run.termination?.retryable),
+    );
+    await Promise.all(activeRuns.map((run) => cancel(run, { graceMs })));
   };
 
   const wait = (run) => {

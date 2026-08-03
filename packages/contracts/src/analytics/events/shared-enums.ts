@@ -260,6 +260,7 @@ export type TrackingRunFailureDetail =
   | 'interrupted'
   | 'exit_code'
   | 'terminated_unknown'
+  | 'termination_unverified'
   | 'stream_error'
   | 'exit_nonzero'
   | 'fatal_rpc_error'

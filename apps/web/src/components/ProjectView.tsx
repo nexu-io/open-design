@@ -6423,6 +6423,30 @@ export function ProjectView({
     [currentConversationActionDisabled, handleSend],
   );
 
+  const handleRetryTermination = useCallback(
+    async (assistantMessage: ChatMessage) => {
+      if (!assistantMessage.runId) return;
+      try {
+        const response = await fetch(`/api/runs/${encodeURIComponent(assistantMessage.runId)}/cancel`, {
+          method: 'POST',
+        });
+        if (!response.ok) return;
+        const status = await response.json() as { status?: ChatMessage['runStatus'] };
+        if (status.status === 'canceled') {
+          updateMessageById(
+            assistantMessage.id,
+            (previous) => ({ ...previous, runStatus: 'canceled', endedAt: Date.now() }),
+            true,
+          );
+          setError(null);
+        }
+      } catch {
+        // Keep the persisted unverified-termination card available to retry.
+      }
+    },
+    [updateMessageById],
+  );
+
   // "Continue" on a resumable failed run: send a fresh turn in the same
   // conversation. For a session-resuming runtime (Claude) the daemon persisted
   // the failed run's CLI session, so this turn resumes it (`--resume`) and the
@@ -8598,6 +8622,7 @@ export function ProjectView({
               onDeleteComment={(commentId) => void removePreviewComment(commentId)}
               onSend={handleComposerSend}
               onRetry={handleRetry}
+              onRetryTermination={handleRetryTermination}
               onResumeRun={handleResumeRun}
               onStop={handleStop}
               onRemoveQueuedSend={removeQueuedChatSend}

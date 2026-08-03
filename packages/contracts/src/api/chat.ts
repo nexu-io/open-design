@@ -357,6 +357,19 @@ export const CHAT_RUN_STATUSES = [
 
 export type ChatRunStatus = (typeof CHAT_RUN_STATUSES)[number];
 
+/**
+ * Sanitized lifecycle evidence for an owned runtime shutdown. It deliberately
+ * contains no command, environment, or unrelated process information.
+ */
+export interface RunTerminationStatus {
+  attempts: number;
+  phase: 'cooperative' | 'graceful' | 'forced';
+  outcome: 'verified' | 'unverified';
+  childExited: boolean;
+  treeQuiescent: boolean;
+  retryable: boolean;
+}
+
 /** User-facing result delivery, kept separate from agent-process runStatus. */
 export type ResultDeliveryState = 'delivered' | 'no_result' | 'delivery_failed';
 
@@ -528,6 +541,8 @@ export interface ChatRunStatusResponse {
   failureDetail?: RunFailureDetail | null;
   /** Recommended recovery action derived from the same failure classification. */
   failureAction?: RunFailureAction | null;
+  /** Safe shutdown evidence, present for verified or unverified termination outcomes. */
+  termination?: RunTerminationStatus;
   /** True when this terminal failure can be recovered by resuming the agent's
    *  existing CLI session (a transient upstream drop / inactivity timeout on a
    *  session-resuming runtime), rather than only restarting from scratch. The

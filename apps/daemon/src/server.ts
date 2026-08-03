@@ -181,7 +181,7 @@ export {
 } from './runtimes/run-lifecycle-analytics.js';
 
 export { resolveProjectRoot };
-import { createCommandInvocation } from '@open-design/platform';
+import { captureOwnedProcessIdentity, createCommandInvocation, listProcessSnapshots } from '@open-design/platform';
 import { SIDECAR_ENV } from '@open-design/sidecar-proto';
 import {
   buildLiveArtifactsMcpServersForAgent,
@@ -6778,6 +6778,15 @@ export async function startServer({
         process.platform !== 'win32' && typeof child.pid === 'number'
           ? child.pid
           : null;
+      // Windows has no captured POSIX process group. Record the root's process
+      // creation identity while it is alive so cancellation can safely walk its
+      // descendants later without ever trusting a recycled PID or process name.
+      run.processTreeRoot = null;
+      run.requiresTreeVerification = process.platform === 'win32';
+      if (process.platform === 'win32' && typeof child.pid === 'number') {
+        const snapshots = await listProcessSnapshots();
+        run.processTreeRoot = captureOwnedProcessIdentity(snapshots, child.pid);
+      }
       // Schedule release of the antigravity model lock once agy's
       // --log-file confirms the chosen model was propagated to the
       // backend (the upstream signal that settings.json was read).
@@ -7830,6 +7839,10 @@ export async function startServer({
       signal: NodeJS.Signals | null,
     ): boolean => {
       if (!run.cancelRequested) return false;
+      // The cancellation gate owns the Windows terminal transition until it
+      // has verified that the captured runtime tree is gone. A direct child's
+      // close event is necessary evidence, but it is not sufficient evidence.
+      if (run.requiresTreeVerification === true && run.cancelPromise) return true;
       if (!design.runs.isTerminal(run.status)) {
         markRpcCloseReason('cancel_requested');
         finishWithRetryDecision('canceled', code, signal);
@@ -8403,6 +8416,12 @@ export async function startServer({
         } catch (err) {
           console.warn('[sessions] delivered session persistence failed', err);
         }
+      }
+      // On Windows the cancel gate must make the terminal choice after it
+      // verifies the owned tree. Let a naturally completed run win normally;
+      // defer only the explicit-cancel close race.
+      if (status === 'canceled' && run.requiresTreeVerification === true && run.cancelPromise) {
+        return;
       }
       finishWithRetryDecision(status, code, signal);
       } finally {

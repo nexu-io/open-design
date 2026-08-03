@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  collectOwnedProcessTreePids,
   collectProcessTreePids,
   processCommandExactlyRunsExecutable,
+  type OwnedProcessIdentity,
   type ProcessSnapshot,
 } from "../src/index.js";
 
@@ -41,6 +43,38 @@ describe("collectProcessTreePids", () => {
   it("terminates on parent-child cycles instead of looping forever", () => {
     const processes = [snapshot(100, 200), snapshot(200, 100)];
     expect(collectProcessTreePids(processes, [100])).toEqual([200, 100]);
+  });
+});
+
+describe("collectOwnedProcessTreePids", () => {
+  const owner = (pid: number, createdAt: number): OwnedProcessIdentity => ({ pid, createdAt });
+
+  it("includes descendants after the captured parent has exited", () => {
+    const processes = [
+      { ...snapshot(200, 100), createdAt: 20 },
+      { ...snapshot(300, 200), createdAt: 30 },
+    ];
+
+    expect(collectOwnedProcessTreePids(processes, owner(100, 10))).toEqual([300, 200]);
+  });
+
+  it("rejects a reused root PID instead of targeting its new process tree", () => {
+    const processes = [
+      { ...snapshot(100, 1), createdAt: 99 },
+      { ...snapshot(200, 100), createdAt: 100 },
+    ];
+
+    expect(collectOwnedProcessTreePids(processes, owner(100, 10))).toEqual([]);
+  });
+
+  it("orders descendants before their parents instead of relying on PID order", () => {
+    const processes = [
+      { ...snapshot(100, 1), createdAt: 10 },
+      { ...snapshot(500, 100), createdAt: 20 },
+      { ...snapshot(101, 500), createdAt: 30 },
+    ];
+
+    expect(collectOwnedProcessTreePids(processes, owner(100, 10))).toEqual([101, 500, 100]);
   });
 });
 

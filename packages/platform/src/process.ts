@@ -38,8 +38,25 @@ export type SpawnProcessRequest = CommandInvocationRequest & {
 
 export type ProcessSnapshot = {
   command: string;
+  /** Process creation time in epoch milliseconds when the platform can provide it. */
+  createdAt?: number | null;
   pid: number;
   ppid: number;
+};
+
+/** Stable-enough identity for a daemon-owned process tree. */
+export type OwnedProcessIdentity = {
+  pid: number;
+  /** Required on Windows so a recycled PID cannot be mistaken for our child. */
+  createdAt: number | null;
+};
+
+export type ProcessTreeTerminationResult = {
+  attempted: boolean;
+  childTreeQuiescent: boolean;
+  forced: boolean;
+  identityVerified: boolean;
+  remainingPids: number[];
 };
 
 export type StampedProcessMatchCriteria<TStamp extends ProcessStampShape> = Partial<TStamp>;
@@ -79,9 +96,28 @@ export function processCommandExactlyRunsExecutable(
 
 type WindowsProcessRecord = {
   CommandLine?: string | null;
+  CreationDate?: string | null;
   ParentProcessId?: number | string | null;
   ProcessId?: number | string | null;
 };
+
+function parseProcessCreationDate(value: string | null | undefined): number | null {
+  if (typeof value !== "string" || !value.trim()) return null;
+  // Win32_Process.CreationDate is DMTF datetime (`YYYYMMDDHHmmss.ffffff+ZZZ`),
+  // which Date.parse intentionally does not understand.
+  const dmtf = value.match(/^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})\.(\d{6})([+-])(\d{3})$/);
+  if (dmtf) {
+    const [, year, month, day, hour, minute, second, microseconds, sign, offset] = dmtf;
+    const localUtcMs = Date.UTC(
+      Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), Number(second),
+      Math.floor(Number(microseconds) / 1000),
+    );
+    const offsetMs = Number(offset) * 60_000 * (sign === "+" ? 1 : -1);
+    return Number.isFinite(localUtcMs) ? localUtcMs - offsetMs : null;
+  }
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
 
 /** @internal Extract a Node `error.code` as a string, or `null` when the value carries no code. */
 function errorCode(error: unknown): string | null {
@@ -310,14 +346,14 @@ export async function waitForProcessExit(pid: number | null | undefined, timeout
 
 /** @internal Parse `ps -axo pid=,ppid=,command=` output into process snapshots. */
 function parsePsOutput(stdout: string): ProcessSnapshot[] {
-  return stdout
+  const snapshots: Array<ProcessSnapshot | null> = stdout
     .split(/\r?\n/)
     .map((line) => {
       const match = line.match(/^\s*(\d+)\s+(\d+)\s+(.+)$/);
       if (!match) return null;
-      return { pid: Number(match[1]), ppid: Number(match[2]), command: match[3] };
+      return { pid: Number(match[1]), ppid: Number(match[2]), command: match[3], createdAt: null };
     })
-    .filter((snapshot): snapshot is ProcessSnapshot => snapshot != null);
+  return snapshots.filter((snapshot): snapshot is ProcessSnapshot => snapshot != null);
 }
 
 /** @internal Enumerate process snapshots on POSIX via `ps`. */
@@ -335,7 +371,7 @@ async function listPosixProcessSnapshots(): Promise<ProcessSnapshot[]> {
 async function listWindowsProcessSnapshots(): Promise<ProcessSnapshot[]> {
   const command = [
     "$ErrorActionPreference = 'Stop'",
-    "Get-CimInstance Win32_Process | Select-Object ProcessId, ParentProcessId, CommandLine | ConvertTo-Json -Compress",
+    "Get-CimInstance Win32_Process | Select-Object ProcessId, ParentProcessId, CreationDate, CommandLine | ConvertTo-Json -Compress",
   ].join("; ");
   const stdout = await new Promise<string>((resolveList, rejectList) => {
     execFile("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", command], { encoding: "utf8", maxBuffer: 8 * 1024 * 1024 }, (error, out) => {
@@ -346,15 +382,15 @@ async function listWindowsProcessSnapshots(): Promise<ProcessSnapshot[]> {
   const payload = stdout.trim();
   if (!payload) return [];
   const records = JSON.parse(payload) as WindowsProcessRecord | WindowsProcessRecord[];
-  return (Array.isArray(records) ? records : [records])
+  const snapshots: Array<ProcessSnapshot | null> = (Array.isArray(records) ? records : [records])
     .map((record) => {
       const pid = Number(record.ProcessId);
       const ppid = Number(record.ParentProcessId);
       const commandLine = record.CommandLine?.trim();
       if (!commandLine || Number.isNaN(pid) || Number.isNaN(ppid)) return null;
-      return { command: commandLine, pid, ppid };
+      return { command: commandLine, pid, ppid, createdAt: parseProcessCreationDate(record.CreationDate) };
     })
-    .filter((snapshot): snapshot is ProcessSnapshot => snapshot != null);
+  return snapshots.filter((snapshot): snapshot is ProcessSnapshot => snapshot != null);
 }
 
 /**
@@ -404,6 +440,64 @@ export function collectProcessTreePids(
   return [...visited].sort((left, right) => right - left);
 }
 
+/**
+ * Capture an owned root only when the platform supplied enough identity to make
+ * a later PID-reuse check meaningful. Windows callers must treat `null` as an
+ * unsafe cancellation target rather than falling back to name matching.
+ */
+export function captureOwnedProcessIdentity(
+  processes: ProcessSnapshot[],
+  pid: number | null | undefined,
+): OwnedProcessIdentity | null {
+  if (typeof pid !== "number") return null;
+  const root = processes.find((processInfo) => processInfo.pid === pid);
+  if (!root) return null;
+  return { pid, createdAt: root.createdAt ?? null };
+}
+
+/**
+ * Return only the tree still attributable to an owned root. If a live root PID
+ * has a different creation identity, it has been reused and must never be
+ * signalled. A missing root is allowed: Windows descendants retain their
+ * recorded parent PID after that parent has exited.
+ */
+export function collectOwnedProcessTreePids(
+  processes: ProcessSnapshot[],
+  root: OwnedProcessIdentity,
+): number[] {
+  const currentRoot = processes.find((processInfo) => processInfo.pid === root.pid);
+  if (
+    currentRoot
+    && root.createdAt != null
+    && currentRoot.createdAt !== root.createdAt
+  ) {
+    return [];
+  }
+  const childrenByParent = new Map<number, number[]>();
+  for (const processInfo of processes) {
+    const children = childrenByParent.get(processInfo.ppid) ?? [];
+    children.push(processInfo.pid);
+    childrenByParent.set(processInfo.ppid, children);
+  }
+  const ordered: number[] = [];
+  const visited = new Set<number>();
+  const visit = (pid: number) => {
+    if (visited.has(pid)) return;
+    visited.add(pid);
+    for (const childPid of childrenByParent.get(pid) ?? []) visit(childPid);
+    ordered.push(pid);
+  };
+  visit(root.pid);
+  return ordered.filter((pid) => {
+    // Do not signal a current root that cannot be verified against the captured
+    // Windows creation identity. This is the PID-reuse guard above in the
+    // missing-createdAt case.
+    if (pid !== root.pid) return true;
+    if (!currentRoot) return false;
+    return root.createdAt == null || currentRoot.createdAt === root.createdAt;
+  });
+}
+
 /** @internal Send a signal to each PID, ignoring `ESRCH` (already-dead) but rethrowing other errors. */
 function signalProcesses(pids: number[], signal: NodeJS.Signals): void {
   for (const pid of pids) {
@@ -424,6 +518,88 @@ async function waitForProcessesToExit(pids: number[], timeoutMs = 5000): Promise
     await sleep(100);
   }
   return pids.filter(isProcessAlive);
+}
+
+async function observeOwnedProcessTree(root: OwnedProcessIdentity): Promise<{
+  identityVerified: boolean;
+  pids: number[];
+}> {
+  const processes = await listProcessSnapshots();
+  const currentRoot = processes.find((processInfo) => processInfo.pid === root.pid);
+  if (currentRoot && root.createdAt != null && currentRoot.createdAt !== root.createdAt) {
+    return { identityVerified: false, pids: [] };
+  }
+  return { identityVerified: true, pids: collectOwnedProcessTreePids(processes, root) };
+}
+
+async function waitForOwnedProcessTreeExit(
+  root: OwnedProcessIdentity,
+  timeoutMs: number,
+): Promise<{ identityVerified: boolean; pids: number[] }> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    const observed = await observeOwnedProcessTree(root);
+    if (!observed.identityVerified || observed.pids.length === 0) return observed;
+    await sleep(100);
+  }
+  return observeOwnedProcessTree(root);
+}
+
+/**
+ * Terminate and verify one captured Windows process tree. The caller owns the
+ * POSIX process-group path; this helper deliberately uses only tracked PIDs and
+ * process-parent relationships, never executable-name discovery.
+ */
+export async function terminateOwnedProcessTree(
+  root: OwnedProcessIdentity | null | undefined,
+  options: { forceWaitMs?: number; graceMs?: number } = {},
+): Promise<ProcessTreeTerminationResult> {
+  if (!root || root.createdAt == null) {
+    return {
+      attempted: false,
+      childTreeQuiescent: false,
+      forced: false,
+      identityVerified: false,
+      remainingPids: [],
+    };
+  }
+  const graceMs = options.graceMs ?? 3_000;
+  const forceWaitMs = options.forceWaitMs ?? 500;
+  const first = await observeOwnedProcessTree(root);
+  if (!first.identityVerified) {
+    return { attempted: false, childTreeQuiescent: false, forced: false, identityVerified: false, remainingPids: [] };
+  }
+  if (first.pids.length === 0) {
+    return { attempted: false, childTreeQuiescent: true, forced: false, identityVerified: true, remainingPids: [] };
+  }
+  try {
+    signalProcesses(first.pids, "SIGTERM");
+  } catch {
+    return { attempted: true, childTreeQuiescent: false, forced: false, identityVerified: true, remainingPids: first.pids };
+  }
+  const afterGrace = await waitForOwnedProcessTreeExit(root, graceMs);
+  if (!afterGrace.identityVerified || afterGrace.pids.length === 0) {
+    return {
+      attempted: true,
+      childTreeQuiescent: afterGrace.identityVerified && afterGrace.pids.length === 0,
+      forced: false,
+      identityVerified: afterGrace.identityVerified,
+      remainingPids: afterGrace.pids,
+    };
+  }
+  try {
+    signalProcesses(afterGrace.pids, "SIGKILL");
+  } catch {
+    return { attempted: true, childTreeQuiescent: false, forced: true, identityVerified: true, remainingPids: afterGrace.pids };
+  }
+  const afterForce = await waitForOwnedProcessTreeExit(root, forceWaitMs);
+  return {
+    attempted: true,
+    childTreeQuiescent: afterForce.identityVerified && afterForce.pids.length === 0,
+    forced: true,
+    identityVerified: afterForce.identityVerified,
+    remainingPids: afterForce.pids,
+  };
 }
 
 /**

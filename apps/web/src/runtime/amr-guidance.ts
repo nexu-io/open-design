@@ -76,6 +76,9 @@ const PROMOTE_AMR_CODES = new Set<string>([
 // daemon side).
 export type RunFailurePrimaryAction =
   | 'retry'
+  // The daemon could not prove the owned runtime tree stopped. This retries
+  // teardown through POST /api/runs/:id/cancel; it never starts a new run.
+  | 'retry-termination'
   | 'authorize'
   | 'recharge'
   | 'upgrade'
@@ -177,6 +180,13 @@ function retryWithGuidance(
 // of that taxonomy — a human-readable type name plus a one-line instruction,
 // with the raw upstream string preserved in the card's collapsible source area.
 const AGENT_AGNOSTIC_FAILURE_UI: Record<string, RunFailureUi> = {
+  RUN_TERMINATION_UNVERIFIED: {
+    primaryAction: 'retry-termination',
+    titleKey: 'chat.runError.title.generic',
+    messageKey: null,
+    secondaryRetry: false,
+    showSwitchCard: false,
+  },
   // The run completed but did not leave a deliverable file. Name the actual
   // missing outcome in the compact card and keep the raw reason in details.
   ARTIFACT_NOT_FOUND: retryWithGuidance(
