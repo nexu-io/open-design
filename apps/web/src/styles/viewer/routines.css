@@ -3384,9 +3384,12 @@
 }
 .project-ds-picker-popover {
   position: fixed;
-  /* width + max-height come from the trigger-anchored inline style so the
+  /* width + height come from the trigger-anchored inline style so the
      popover can flip above the trigger (composer-top placement) and stay
-     within the viewport. */
+     within the viewport. The height is fixed, not content-driven: hover
+     swaps the preview pane between very different content heights, and a
+     bottom-anchored popover that resizes on hover shifts rows under the
+     cursor and flickers. */
   background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
