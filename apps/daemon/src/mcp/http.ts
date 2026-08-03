@@ -7,7 +7,10 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 
-import { createOpenDesignMcpServer } from '../mcp.js';
+import {
+  createMcpDaemonConnection,
+  createOpenDesignMcpServer,
+} from '../mcp.js';
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', '::1', 'localhost']);
 const DEFAULT_HOST = '127.0.0.1';
@@ -35,6 +38,8 @@ export interface RunMcpHttpOptions {
 
 export interface StartMcpHttpServerOptions extends RunMcpHttpOptions {
   now?: () => number;
+  /** Internal lifecycle hook for deterministic concurrency tests. */
+  onSessionInitialized?: (sessionId: string) => void | Promise<void>;
 }
 
 export interface McpHttpServerHandle {
@@ -110,6 +115,7 @@ export async function startMcpHttpServer({
   host = DEFAULT_HOST,
   maxSessions = DEFAULT_MAX_SESSIONS,
   now = Date.now,
+  onSessionInitialized,
   port = DEFAULT_PORT,
   rediscoverDaemonUrl,
   sessionIdleTimeoutMs = DEFAULT_SESSION_IDLE_TIMEOUT_MS,
@@ -148,6 +154,10 @@ export async function startMcpHttpServer({
   let cleanupTimer: ReturnType<typeof setInterval> | null = null;
   let closePromise: Promise<void> | null = null;
   let closing = false;
+  const daemonConnection = createMcpDaemonConnection({
+    daemonUrl,
+    ...(rediscoverDaemonUrl ? { rediscoverDaemonUrl } : {}),
+  });
 
   const closeSession = (sessionId: string): Promise<void> => {
     const session = sessions.get(sessionId);
@@ -236,18 +246,28 @@ export async function startMcpHttpServer({
     }
 
     pendingSessions += 1;
+    let pendingReservationActive = true;
+    const releasePendingReservation = () => {
+      if (!pendingReservationActive) return;
+      pendingReservationActive = false;
+      pendingSessions -= 1;
+    };
     let initializedSessionId: string | undefined;
     let session: McpHttpSession | null = null;
     try {
       const server = createOpenDesignMcpServer({
+        daemonConnection,
         daemonUrl,
-        ...(rediscoverDaemonUrl ? { rediscoverDaemonUrl } : {}),
       });
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: randomUUID,
-        onsessioninitialized: (newSessionId) => {
+        onsessioninitialized: async (newSessionId) => {
           initializedSessionId = newSessionId;
-          if (session) sessions.set(newSessionId, session);
+          if (session) {
+            releasePendingReservation();
+            sessions.set(newSessionId, session);
+          }
+          await onSessionInitialized?.(newSessionId);
         },
       });
       session = {
@@ -271,7 +291,7 @@ export async function startMcpHttpServer({
         res.status(response.status).json(response.body);
       }
     } finally {
-      pendingSessions -= 1;
+      releasePendingReservation();
       if (session) {
         session.inFlight -= 1;
         session.lastActivityAt = now();
@@ -327,6 +347,7 @@ export async function startMcpHttpServer({
         listener.close(() => resolve());
       });
       await Promise.all([...sessions.keys()].map(closeSession));
+      listener?.closeAllConnections();
       await listenerClosed;
     })();
     return closePromise;

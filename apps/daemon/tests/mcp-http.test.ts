@@ -204,6 +204,50 @@ describe('MCP Streamable HTTP transport', () => {
     expect(handle.sessionCount()).toBe(1);
   });
 
+  it('does not count an initialized session as both active and pending', async () => {
+    let firstInitialization = true;
+    let releaseFirstInitialization!: () => void;
+    let noteFirstInitialization!: () => void;
+    const firstInitializationGate = new Promise<void>((resolve) => {
+      releaseFirstInitialization = resolve;
+    });
+    const firstInitializationReached = new Promise<void>((resolve) => {
+      noteFirstInitialization = resolve;
+    });
+    const handle = await startHttpMcp({
+      maxSessions: 2,
+      onSessionInitialized: async () => {
+        if (!firstInitialization) return;
+        firstInitialization = false;
+        noteFirstInitialization();
+        await firstInitializationGate;
+      },
+    });
+    const request = (id: number) =>
+      fetch(handle.url, {
+        body: JSON.stringify(initializeBody(id)),
+        headers: {
+          accept: 'application/json, text/event-stream',
+          'content-type': 'application/json',
+        },
+        method: 'POST',
+      });
+
+    const firstRequest = request(1);
+    try {
+      await firstInitializationReached;
+      const secondResponse = await request(2);
+      expect(secondResponse.status).toBe(200);
+      await secondResponse.text();
+    } finally {
+      releaseFirstInitialization();
+    }
+    const firstResponse = await firstRequest;
+    expect(firstResponse.status).toBe(200);
+    await firstResponse.text();
+    expect(handle.sessionCount()).toBe(2);
+  });
+
   it('deletes a session once when the client terminates it', async () => {
     const handle = await startHttpMcp({ maxSessions: 1 });
     const connected = await connectClient(handle.url, 'terminating-client');
@@ -264,6 +308,59 @@ describe('MCP Streamable HTTP transport', () => {
     expect(handle.sessionCount()).toBe(0);
   });
 
+  it('aborts an in-flight daemon request during shutdown', async () => {
+    let releaseProjects!: () => void;
+    let noteProjectsRequested!: () => void;
+    let noteProjectsAborted!: () => void;
+    const projectsGate = new Promise<void>((resolve) => {
+      releaseProjects = resolve;
+    });
+    const projectsRequested = new Promise<void>((resolve) => {
+      noteProjectsRequested = resolve;
+    });
+    const projectsAborted = new Promise<void>((resolve) => {
+      noteProjectsAborted = resolve;
+    });
+    const daemon = await listenDaemon(async (req, res) => {
+      if (req.url === '/api/projects') {
+        req.once('aborted', noteProjectsAborted);
+        noteProjectsRequested();
+        await projectsGate;
+      }
+      res.statusCode = 200;
+      res.setHeader('content-type', 'application/json');
+      res.end(req.url === '/api/projects' ? '{"projects":[]}' : '{}');
+    });
+    const handle = await startHttpMcp({ daemonUrl: daemon.url });
+    const connected = await connectClient(handle.url, 'shutdown-client');
+    const request = connected.client.callTool({
+      arguments: {},
+      name: 'list_projects',
+    }).catch(() => undefined);
+
+    try {
+      await projectsRequested;
+      const closeOutcome = await Promise.race([
+        handle.close().then(() => 'closed'),
+        new Promise<'timed-out'>((resolve) => {
+          setTimeout(() => resolve('timed-out'), 1_000);
+        }),
+      ]);
+      expect(closeOutcome).toBe('closed');
+      const abortOutcome = await Promise.race([
+        projectsAborted.then(() => 'aborted'),
+        new Promise<'timed-out'>((resolve) => {
+          setTimeout(() => resolve('timed-out'), 1_000);
+        }),
+      ]);
+      expect(abortOutcome).toBe('aborted');
+    } finally {
+      releaseProjects();
+    }
+    await connected.client.close().catch(() => undefined);
+    await request;
+  });
+
   it('rediscovers an implicit daemon URL once and retries the failed call', async () => {
     const daemon = await listenDaemon((req, res) => {
       res.statusCode = 200;
@@ -288,6 +385,47 @@ describe('MCP Streamable HTTP transport', () => {
     expect(rediscoverDaemonUrl).toHaveBeenCalledTimes(1);
   });
 
+  it('shares one daemon rediscovery across concurrent client sessions', async () => {
+    let releaseRediscovery!: () => void;
+    let noteRediscoveryStarted!: () => void;
+    const rediscoveryGate = new Promise<void>((resolve) => {
+      releaseRediscovery = resolve;
+    });
+    const rediscoveryStarted = new Promise<void>((resolve) => {
+      noteRediscoveryStarted = resolve;
+    });
+    const daemon = await listenDaemon((req, res) => {
+      res.statusCode = 200;
+      res.setHeader('content-type', 'application/json');
+      res.end(req.url === '/api/projects' ? '{"projects":[]}' : '{}');
+    });
+    const unavailable = await unavailableLoopbackUrl();
+    const rediscoverDaemonUrl = vi.fn(async () => {
+      noteRediscoveryStarted();
+      await rediscoveryGate;
+      return daemon.url;
+    });
+    const handle = await startHttpMcp({
+      daemonUrl: unavailable,
+      rediscoverDaemonUrl,
+    });
+    const connected = await Promise.all(
+      Array.from({ length: 5 }, (_, index) =>
+        connectClient(handle.url, `recovering-client-${index + 1}`),
+      ),
+    );
+
+    const requests = connected.map(({ client }) =>
+      client.callTool({ arguments: {}, name: 'list_projects' }),
+    );
+    await rediscoveryStarted;
+    releaseRediscovery();
+    const results = await Promise.all(requests);
+
+    expect(results.every((result) => result.isError !== true)).toBe(true);
+    expect(rediscoverDaemonUrl).toHaveBeenCalledTimes(1);
+  });
+
   it('returns the rediscovery error when implicit daemon recovery fails', async () => {
     const unavailable = await unavailableLoopbackUrl();
     const rediscoverDaemonUrl = vi.fn(async () => {
@@ -305,6 +443,27 @@ describe('MCP Streamable HTTP transport', () => {
         name: 'list_projects',
       }),
     ).rejects.toThrow('registered Open Design runtime is unavailable');
+    expect(rediscoverDaemonUrl).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns a clear error when the rediscovered daemon is still unavailable', async () => {
+    const unavailable = await unavailableLoopbackUrl();
+    const stillUnavailable = await unavailableLoopbackUrl();
+    const rediscoverDaemonUrl = vi.fn(async () => stillUnavailable);
+    const handle = await startHttpMcp({
+      daemonUrl: unavailable,
+      rediscoverDaemonUrl,
+    });
+    const connected = await connectClient(handle.url, 'unavailable-retry-client');
+
+    await expect(
+      connected.client.callTool({
+        arguments: {},
+        name: 'list_projects',
+      }),
+    ).rejects.toThrow(
+      'retry failed: the rediscovered Open Design daemon is still unreachable',
+    );
     expect(rediscoverDaemonUrl).toHaveBeenCalledTimes(1);
   });
 

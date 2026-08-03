@@ -35,6 +35,7 @@ import {
   buildProjectRawFileUrl,
   type McpAnalyticsContextResponse,
 } from '@open-design/contracts';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 
 import { postCreateArtifactRequest } from './artifacts/create.js';
@@ -66,6 +67,7 @@ const SERVER_VERSION = '0.2.0';
 const MCP_STDIO_IDLE_EXIT_MS = 30 * 60 * 1000;
 const OPEN_DESIGN_BRIEF_APP_RESOURCE =
   'ui://open-design/artifact-card-v6.html';
+const mcpRequestSignal = new AsyncLocalStorage<AbortSignal>();
 
 export const MCP_SERVER_INSTRUCTIONS = [
   'Use only these product names in user-facing replies: Open Design Cloud and Local Codex.',
@@ -1550,48 +1552,116 @@ function mcpDeliveryFacts(
 }
 
 interface CreateOpenDesignMcpServerOptions extends RunMcpOptions {
+  daemonConnection?: McpDaemonConnection;
   rediscoverDaemonUrl?: () => Promise<string | URL>;
   trackRequest?: <T>(fn: () => T | Promise<T>) => Promise<T>;
 }
 
+export interface McpDaemonConnection {
+  readonly recoveryEnabled: boolean;
+  runWithRecovery<Result>(
+    operation: (currentBaseUrl: string) => Promise<Result>,
+  ): Promise<Result>;
+}
+
+interface CreateMcpDaemonConnectionOptions extends RunMcpOptions {
+  rediscoverDaemonUrl?: () => Promise<string | URL>;
+}
+
+export function createMcpDaemonConnection({
+  daemonUrl,
+  rediscoverDaemonUrl,
+}: CreateMcpDaemonConnectionOptions): McpDaemonConnection {
+  let baseUrl = normalizeDaemonUrl(daemonUrl);
+  let rediscovery:
+    | { from: string; promise: Promise<string> }
+    | null = null;
+
+  return {
+    recoveryEnabled: rediscoverDaemonUrl !== undefined,
+    async runWithRecovery<Result>(
+      operation: (currentBaseUrl: string) => Promise<Result>,
+    ): Promise<Result> {
+      const attemptedBaseUrl = baseUrl;
+      try {
+        return await operation(attemptedBaseUrl);
+      } catch (error) {
+        if (
+          !rediscoverDaemonUrl
+          || !isRetryableDaemonConnectionError(error)
+        ) {
+          throw error;
+        }
+
+        if (baseUrl === attemptedBaseUrl) {
+          if (!rediscovery || rediscovery.from !== attemptedBaseUrl) {
+            const activeRediscovery = {
+              from: attemptedBaseUrl,
+              promise: Promise.resolve()
+                .then(rediscoverDaemonUrl)
+                .then((url) => {
+                  const recoveredBaseUrl = normalizeDaemonUrl(url);
+                  if (baseUrl === attemptedBaseUrl) {
+                    baseUrl = recoveredBaseUrl;
+                  }
+                  return baseUrl;
+                }),
+            };
+            rediscovery = activeRediscovery;
+            void activeRediscovery.promise.finally(() => {
+              if (rediscovery === activeRediscovery) rediscovery = null;
+            }).catch(() => {});
+          }
+          await rediscovery.promise;
+        }
+
+        try {
+          return await operation(baseUrl);
+        } catch (retryError) {
+          throw daemonRecoveryRetryError(retryError);
+        }
+      }
+    },
+  };
+}
+
 export function createOpenDesignMcpServer({
+  daemonConnection,
   daemonUrl,
   rediscoverDaemonUrl,
   trackRequest,
 }: CreateOpenDesignMcpServerOptions): Server {
-  let baseUrl = String(daemonUrl).replace(/\/$/, '');
+  const connection = daemonConnection ?? createMcpDaemonConnection({
+    daemonUrl,
+    ...(rediscoverDaemonUrl ? { rediscoverDaemonUrl } : {}),
+  });
   const briefStore = createLocalMcpBriefStore();
   let observabilityPromise: Promise<McpObservabilitySession> | null = null;
-  let rediscoveryPromise: Promise<string> | null = null;
+  let observabilityBaseUrl: string | null = null;
   const withMcpActivity =
     <Args extends unknown[], Result>(handler: (...args: Args) => Result | Promise<Result>) =>
-      (...args: Args) =>
-        trackRequest ? trackRequest(() => handler(...args)) : handler(...args);
+      (...args: Args) => {
+        const execute = () =>
+          trackRequest ? trackRequest(() => handler(...args)) : handler(...args);
+        const requestSignal = (
+          args[1] as { signal?: unknown } | undefined
+        )?.signal;
+        return requestSignal instanceof AbortSignal
+          ? mcpRequestSignal.run(requestSignal, execute)
+          : execute();
+      };
   const withDaemonRecovery = async <Result>(
     operation: (currentBaseUrl: string) => Promise<Result>,
-  ): Promise<Result> => {
-    const attemptedBaseUrl = baseUrl;
-    try {
-      return await operation(attemptedBaseUrl);
-    } catch (error) {
-      if (!rediscoverDaemonUrl || !isRetryableDaemonConnectionError(error)) {
-        throw error;
-      }
-      if (baseUrl === attemptedBaseUrl) {
-        rediscoveryPromise ??= rediscoverDaemonUrl()
-          .then((url) => String(url).replace(/\/$/, ''))
-          .finally(() => {
-            rediscoveryPromise = null;
-          });
-        const recoveredBaseUrl = await rediscoveryPromise;
-        if (baseUrl === attemptedBaseUrl) {
-          baseUrl = recoveredBaseUrl;
+  ): Promise<Result> =>
+    connection.runWithRecovery(async (currentBaseUrl) => {
+      if (observabilityBaseUrl !== currentBaseUrl) {
+        observabilityBaseUrl = currentBaseUrl;
+        if (observabilityPromise) {
           observabilityPromise = null;
         }
       }
-      return operation(baseUrl);
-    }
-  };
+      return operation(currentBaseUrl);
+    });
 
   const server = new Server(
     { name: SERVER_NAME, version: SERVER_VERSION },
@@ -1833,7 +1903,7 @@ export function createOpenDesignMcpServer({
         currentBaseUrl,
         name,
         args,
-        rediscoverDaemonUrl !== undefined,
+        connection.recoveryEnabled,
       );
     });
   }));
@@ -2140,7 +2210,7 @@ async function writeFile(baseUrl: string, args: McpArgs) {
   // the default writeProjectFile path, which overwrites the target. This
   // is the exact shape `od files write` uses (see apps/daemon/src/cli.ts).
   const url = `${baseUrl}/api/projects/${encodeURIComponent(id)}/files`;
-  const resp = await fetch(url, {
+  const resp = await mcpFetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name: args.path, content: args.content, encoding }),
@@ -2163,7 +2233,7 @@ async function deleteFile(baseUrl: string, args: McpArgs) {
     .filter((s) => s.length > 0)
     .map(encodeURIComponent);
   const url = `${baseUrl}/api/projects/${encodeURIComponent(id)}/raw/${segments.join('/')}`;
-  const resp = await fetch(url, { method: 'DELETE' });
+  const resp = await mcpFetch(url, { method: 'DELETE' });
   if (!resp.ok) {
     return errorResult(await formatDaemonError(resp, url));
   }
@@ -2185,7 +2255,7 @@ async function deleteProject(baseUrl: string, args: McpArgs) {
   }
   const { id, resolved } = await resolveProjectArg(baseUrl, args.project);
   const url = `${baseUrl}/api/projects/${encodeURIComponent(id)}`;
-  const resp = await fetch(url, { method: 'DELETE' });
+  const resp = await mcpFetch(url, { method: 'DELETE' });
   if (!resp.ok) {
     return errorResult(await formatDaemonError(resp, url));
   }
@@ -2217,7 +2287,7 @@ async function postJson<T>(
   body: unknown,
   headers: Record<string, string> = {},
 ): Promise<T> {
-  const resp = await fetch(url, {
+  const resp = await mcpFetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...headers },
     body: JSON.stringify(body ?? {}),
@@ -2513,7 +2583,7 @@ async function getRun(baseUrl: string, args: McpArgs) {
 // caller just omits the field.
 async function fetchRunAgentMessage(baseUrl: string, runId: string): Promise<string | null> {
   try {
-    const resp = await fetch(`${baseUrl}/api/runs/${encodeURIComponent(runId)}/events`);
+    const resp = await mcpFetch(`${baseUrl}/api/runs/${encodeURIComponent(runId)}/events`);
     if (!resp.ok) return null;
     const body = await resp.text();
     const parts: string[] = [];
@@ -2794,7 +2864,7 @@ async function resolveProjectId(baseUrl: string, arg: unknown): Promise<Resolved
 }
 
 async function getJson<T>(url: string): Promise<T> {
-  const resp = await fetch(url);
+  const resp = await mcpFetch(url);
   if (!resp.ok) {
     const body = await safeText(resp);
     throw new Error(`daemon ${resp.status} on ${url}: ${body || resp.statusText}`);
@@ -2808,7 +2878,7 @@ async function getFile(baseUrl: string, project: string, relPath: string, active
     .filter((s) => s.length > 0)
     .map(encodeURIComponent);
   const url = `${baseUrl}/api/projects/${encodeURIComponent(project)}/raw/${segments.join('/')}`;
-  const resp = await fetch(url);
+  const resp = await mcpFetch(url);
   if (!resp.ok) {
     const body = await safeText(resp);
     return errorResult(
@@ -3018,7 +3088,7 @@ async function fetchProjectFile(baseUrl: string, projectId: string, relPath: str
     .filter((s) => s.length > 0)
     .map(encodeURIComponent);
   const url = `${baseUrl}/api/projects/${encodeURIComponent(projectId)}/raw/${segments.join('/')}`;
-  const resp = await fetch(url);
+  const resp = await mcpFetch(url);
   if (!resp.ok) {
     const body = await safeText(resp);
     throw new Error(`daemon ${resp.status} on ${url}: ${body || resp.statusText}`);
@@ -3181,6 +3251,19 @@ async function safeText(resp: Response): Promise<string> {
   }
 }
 
+function normalizeDaemonUrl(url: string | URL): string {
+  return String(url).replace(/\/$/, '');
+}
+
+function mcpFetch(
+  input: string | URL | globalThis.Request,
+  init?: RequestInit,
+): Promise<Response> {
+  const inheritedSignal = mcpRequestSignal.getStore();
+  if (!inheritedSignal || init?.signal) return fetch(input, init);
+  return fetch(input, { ...init, signal: inheritedSignal });
+}
+
 function formatError(err: unknown, daemonUrl: string): string {
   const e = err as ErrorWithCode | null | undefined;
   const code = e && (e.cause?.code || e.code);
@@ -3202,6 +3285,16 @@ function isRetryableDaemonConnectionError(error: unknown): boolean {
     candidate = record.cause;
   }
   return false;
+}
+
+function daemonRecoveryRetryError(error: unknown): Error {
+  const detail = isRetryableDaemonConnectionError(error)
+    ? 'the rediscovered Open Design daemon is still unreachable'
+    : errorMessage(error);
+  return new Error(
+    `Open Design daemon recovery completed, but the retry failed: ${detail}`,
+    { cause: error },
+  );
 }
 
 function errorMessage(err: unknown): string {
