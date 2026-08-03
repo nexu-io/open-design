@@ -516,13 +516,34 @@ if (args[0] === 'push') {
   console.log('pushed');
   process.exit(0);
 }
+if (args[0] === 'sparse-checkout') {
+  process.exit(0);
+}
+if (args[0] === 'checkout' && args[1] === '-b' && args[2]) {
+  const branch = spawnSync(
+    process.env.OD_REAL_GIT,
+    ['symbolic-ref', 'HEAD', 'refs/heads/' + args[2]],
+    { cwd: process.cwd(), encoding: 'utf8' },
+  );
+  if (branch.stderr) process.stderr.write(branch.stderr);
+  process.exit(branch.status ?? 0);
+}
 if (args[0] === 'clone') {
   const dest = args[args.length - 1];
   fs.mkdirSync(dest, { recursive: true });
-  const init = spawnSync(process.env.OD_REAL_GIT, ['init', '-b', 'main'], { cwd: dest, encoding: 'utf8' });
+  const init = spawnSync(process.env.OD_REAL_GIT, ['init'], { cwd: dest, encoding: 'utf8' });
   if (init.status !== 0) {
     if (init.stderr) process.stderr.write(init.stderr);
     process.exit(init.status ?? 1);
+  }
+  const branch = spawnSync(
+    process.env.OD_REAL_GIT,
+    ['symbolic-ref', 'HEAD', 'refs/heads/main'],
+    { cwd: dest, encoding: 'utf8' },
+  );
+  if (branch.status !== 0) {
+    if (branch.stderr) process.stderr.write(branch.stderr);
+    process.exit(branch.status ?? 1);
   }
   const remote = args.find((arg) => String(arg).startsWith('https://')) || 'https://github.com/test-user/open-design.git';
   const remoteAdd = spawnSync(process.env.OD_REAL_GIT, ['remote', 'add', 'origin', remote], { cwd: dest, encoding: 'utf8' });
@@ -566,11 +587,16 @@ process.exit(result.status ?? 0);
                   body: JSON.stringify({ path: contributeBody.stagedPath }),
                 },
               );
-              expect(contributeEndpointResp.status).toBe(200);
               const contributeEndpointBody = (await contributeEndpointResp.json()) as {
                 ok: boolean;
                 url?: string;
+                message?: string;
+                log?: string[];
               };
+              expect(
+                contributeEndpointResp.status,
+                JSON.stringify(contributeEndpointBody),
+              ).toBe(200);
               expect(contributeEndpointBody.ok).toBe(true);
               expect(contributeEndpointBody.url).toBe('https://github.com/nexu-io/open-design/pull/123');
             },
