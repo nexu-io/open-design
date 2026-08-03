@@ -77,8 +77,9 @@ COPY craft ./craft
 COPY prompt-templates ./prompt-templates
 COPY assets ./assets
 COPY plugins/_official ./plugins/_official
+COPY deploy/scripts/chromium-od.sh ./deploy/scripts/chromium-od.sh
 
-FROM ${RUNTIME_IMAGE}
+FROM ${RUNTIME_IMAGE} AS runtime
 
 RUN apk add --no-cache tini poppler-utils bash git && \
     addgroup -S -g 1001 open-design && \
@@ -113,3 +114,30 @@ EXPOSE 7456
 USER open-design
 ENTRYPOINT ["/sbin/tini", "--"]
 CMD ["node", "apps/daemon/dist/cli.js", "--no-open"]
+
+# ── Opt-in browser image ────────────────────────────────────────────────────
+# NOT built by default. The default image above stays at 190 MB; this target
+# adds a musl-native Chromium and measures 484 MB (+294 MB).
+#
+#   docker build --target browser -f deploy/Dockerfile -t od:browser .
+#
+# No PLAYWRIGHT_*_EXECUTABLE_PATH wiring is needed. Playwright ignores those,
+# and skills/web-clone/scripts/lib/playwright-loader.mjs already falls back to
+# `channel: "chrome"`, which resolves to /opt/google/chrome/chrome on Linux.
+# Installing the launcher there makes launchChromium() work unmodified.
+FROM runtime AS browser
+USER root
+RUN apk add --no-cache chromium nss freetype harfbuzz ttf-freefont
+COPY --from=build /app/deploy/scripts/chromium-od.sh /usr/local/bin/chromium-od
+RUN chmod 0755 /usr/local/bin/chromium-od && \
+    mkdir -p /opt/google/chrome && \
+    ln -s /usr/local/bin/chromium-od /opt/google/chrome/chrome
+# Playwright's own browsers are glibc-linked and cannot run on musl, so skip the
+# download that would otherwise cost every project install time and bandwidth.
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+USER open-design
+
+# Keep the lean runtime as the FINAL stage. `docker build` with no --target
+# builds the last stage, and deploy/docker-compose.yml sets no target, so this
+# is what guarantees the default image is unchanged by the stage above.
+FROM runtime AS default
