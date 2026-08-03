@@ -1967,7 +1967,9 @@ function OnboardingView({
       nextProviderBaseUrl,
       nextBaseUrl,
     );
-    const savedDraft = config.byokProviderConfigDrafts?.[nextDraftKey]?.apiConfig;
+    const savedDraft = nextDraftKey === currentDraftKey
+      ? currentApiConfig
+      : config.byokProviderConfigDrafts?.[nextDraftKey]?.apiConfig;
     const nextApiConfig: ApiProtocolConfig = savedDraft ?? {
       apiKey: '',
       baseUrl: nextBaseUrl,
