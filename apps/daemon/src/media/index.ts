@@ -826,8 +826,19 @@ export async function generateMedia(args: {
   // (.png vs .jpg vs .webp) before it knows what the model emits.
   let finalOut = safeOut;
   if (suggestedExt) {
-    const dot = safeOut.lastIndexOf('.');
-    const stem = dot > 0 ? safeOut.slice(0, dot) : safeOut;
+    // #6339 round-3 (mrcfps, 2026-08-02 #3699344991, non-blocking):
+    // Use `path.posix.extname` to scope the extension swap to the
+    // basename only. The previous `safeOut.lastIndexOf('.')` scanned
+    // the whole path, so a dotted parent directory such as
+    // `assets.v2/hero` produced `dot` at the inner `.` of
+    // `assets.v2`, picked `assets.v` as the stem, and wrote
+    // `assets.v.png` at the project root instead of the intended
+    // `assets.v2/hero.png` — the nested-output behavior this PR
+    // introduced in `sanitizePath` was therefore broken for dotted
+    // parent directories. `path.posix` (not `path.win32`) matches the
+    // POSIX-flavored segment validation `sanitizePath` performs.
+    const ext = path.posix.extname(safeOut);
+    const stem = ext ? safeOut.slice(0, -ext.length) : safeOut;
     finalOut = `${stem}${suggestedExt}`;
   }
   // Re-run the symlink-aware confinement on the FINAL path immediately

@@ -322,4 +322,55 @@ describe('media generate output subdirectory path handling', () => {
     const bytes = await readFile(outsidePng, 'utf8');
     expect(bytes).toBe('old outside content');
   });
+
+  it('preserves dotted parent directories across a provider extension swap (basename-aware stem lookup)', async () => {
+    // #6339 round-3 (mrcfps, 2026-08-02 #3699344991, non-blocking):
+    // `output: 'assets.v2/hero'` is a valid nested output. When the
+    // provider returns a different extension (here `.png`, snipped
+    // from the test PNG bytes), the extension swap must scope the
+    // dot to the basename only. The previous implementation used
+    // `safeOut.lastIndexOf('.')` across the whole path, which found
+    // the inner `.` of `assets.v2` and truncated the stem to
+    // `assets.v` — finalOut landed at `assets.v.png` at the project
+    // root instead of the intended `assets.v2/hero.png`, breaking
+    // the nested-output workflow this PR introduced.
+    //
+    // The fix uses `path.posix.extname(safeOut)` so the dot is
+    // looked up only on the basename; `assets.v2/hero` has no
+    // basename extension, so the stem stays as `assets.v2/hero`
+    // and the provider-suggested `.png` appends to produce
+    // `assets.v2/hero.png` under the original nested directory.
+    await writeConfig({ providers: { minimax: {} } });
+    installMinimaxFetchMock();
+
+    const result = await generateMedia({
+      projectRoot,
+      projectsRoot,
+      projectId: 'project-1',
+      surface: 'image',
+      model: 'minimax-image-01',
+      prompt: 'a cute cartoon bear',
+      aspect: '16:9',
+      output: 'assets.v2/hero',
+    });
+
+    // The reported name preserves the dotted parent dir + suffix:
+    expect(result.name).toBe('assets.v2/hero.png');
+
+    // The actual file lands under `<projectDir>/assets.v2/hero.png`,
+    // not the broken-flat `assets.v.png` at the project root.
+    const correctFile = path.join(
+      projectsRoot,
+      'project-1',
+      'assets.v2',
+      'hero.png',
+    );
+    const correctBytes = await readFile(correctFile);
+    expect(correctBytes.length).toBeGreaterThan(0);
+
+    // And the mal-via-older-bug flat `assets.v.png` is NOT written.
+    await expect(
+      readFile(path.join(projectsRoot, 'project-1', 'assets.v.png')),
+    ).rejects.toThrow();
+  });
 });
