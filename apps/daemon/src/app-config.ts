@@ -232,6 +232,10 @@ const AGENT_CLI_AUTH_ENV_KEYS: ReadonlyMap<string, {
     auth: new Set(['CODEX_API_KEY', 'OPENAI_API_KEY']),
     baseUrl: new Set(['OPENAI_BASE_URL']),
   }],
+  ['kimchi', {
+    auth: new Set(['KIMCHI_API_KEY']),
+    baseUrl: new Set<string>(),
+  }],
 ]);
 
 function isValidAgentModelEntry(v: unknown): v is AgentModelPrefs {

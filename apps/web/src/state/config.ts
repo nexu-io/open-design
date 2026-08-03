@@ -1449,6 +1449,7 @@ const AGENT_CLI_SECRET_ENV_KEYS = new Set([
   'ANTHROPIC_AUTH_TOKEN',
   'CODEX_API_KEY',
   'OPENAI_API_KEY',
+  'KIMCHI_API_KEY',
 ]);
 
 function sanitizeAgentCliEnv(agentCliEnv: AppConfig['agentCliEnv']): AppConfig['agentCliEnv'] {
