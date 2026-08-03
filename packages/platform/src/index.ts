@@ -28,6 +28,7 @@ export {
 
 export type {
   ProcessSnapshot,
+  ProcessSnapshotObservation,
   OwnedProcessIdentity,
   ProcessTreeTerminationResult,
   ProcessStampContract,
@@ -43,6 +44,7 @@ export {
   collectOwnedProcessTreePids,
   createProcessStampArgs,
   isProcessAlive,
+  readProcessSnapshots,
   listProcessSnapshots,
   matchesProcessStamp,
   matchesStampedProcess,

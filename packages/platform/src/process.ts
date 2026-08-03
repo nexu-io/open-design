@@ -59,6 +59,15 @@ export type ProcessTreeTerminationResult = {
   remainingPids: number[];
 };
 
+/**
+ * The outcome of reading the process table. An observation failure must remain
+ * distinct from a successfully observed empty table: callers that verify
+ * process termination may only treat the latter as evidence of quiescence.
+ */
+export type ProcessSnapshotObservation =
+  | { ok: true; processes: ProcessSnapshot[] }
+  | { ok: false; processes: [] };
+
 export type StampedProcessMatchCriteria<TStamp extends ProcessStampShape> = Partial<TStamp>;
 
 export type StopProcessesResult = {
@@ -400,12 +409,24 @@ async function listWindowsProcessSnapshots(): Promise<ProcessSnapshot[]> {
  * @returns The current process snapshots (empty on error).
  */
 export async function listProcessSnapshots(): Promise<ProcessSnapshot[]> {
+  return (await readProcessSnapshots()).processes;
+}
+
+/**
+ * Enumerate the platform process table while retaining whether the observation
+ * itself succeeded. This is used by verification paths that must not mistake a
+ * failed process-table read for proof that no owned process remains.
+ */
+export async function readProcessSnapshots(): Promise<ProcessSnapshotObservation> {
   try {
-    return process.platform === "win32"
-      ? await listWindowsProcessSnapshots()
-      : await listPosixProcessSnapshots();
+    return {
+      ok: true,
+      processes: process.platform === "win32"
+        ? await listWindowsProcessSnapshots()
+        : await listPosixProcessSnapshots(),
+    };
   } catch {
-    return [];
+    return { ok: false, processes: [] };
   }
 }
 
@@ -520,11 +541,16 @@ async function waitForProcessesToExit(pids: number[], timeoutMs = 5000): Promise
   return pids.filter(isProcessAlive);
 }
 
-async function observeOwnedProcessTree(root: OwnedProcessIdentity): Promise<{
+async function observeOwnedProcessTree(
+  root: OwnedProcessIdentity,
+  readSnapshots: () => Promise<ProcessSnapshotObservation> = readProcessSnapshots,
+): Promise<{
   identityVerified: boolean;
   pids: number[];
 }> {
-  const processes = await listProcessSnapshots();
+  const observation = await readSnapshots();
+  if (!observation.ok) return { identityVerified: false, pids: [] };
+  const processes = observation.processes;
   const currentRoot = processes.find((processInfo) => processInfo.pid === root.pid);
   if (currentRoot && root.createdAt != null && currentRoot.createdAt !== root.createdAt) {
     return { identityVerified: false, pids: [] };
@@ -535,14 +561,15 @@ async function observeOwnedProcessTree(root: OwnedProcessIdentity): Promise<{
 async function waitForOwnedProcessTreeExit(
   root: OwnedProcessIdentity,
   timeoutMs: number,
+  readSnapshots: () => Promise<ProcessSnapshotObservation>,
 ): Promise<{ identityVerified: boolean; pids: number[] }> {
   const startedAt = Date.now();
   while (Date.now() - startedAt < timeoutMs) {
-    const observed = await observeOwnedProcessTree(root);
+    const observed = await observeOwnedProcessTree(root, readSnapshots);
     if (!observed.identityVerified || observed.pids.length === 0) return observed;
     await sleep(100);
   }
-  return observeOwnedProcessTree(root);
+  return observeOwnedProcessTree(root, readSnapshots);
 }
 
 /**
@@ -552,7 +579,12 @@ async function waitForOwnedProcessTreeExit(
  */
 export async function terminateOwnedProcessTree(
   root: OwnedProcessIdentity | null | undefined,
-  options: { forceWaitMs?: number; graceMs?: number } = {},
+  options: {
+    forceWaitMs?: number;
+    graceMs?: number;
+    /** Allows alternate process observers while retaining failure semantics. */
+    readSnapshots?: () => Promise<ProcessSnapshotObservation>;
+  } = {},
 ): Promise<ProcessTreeTerminationResult> {
   if (!root || root.createdAt == null) {
     return {
@@ -565,7 +597,8 @@ export async function terminateOwnedProcessTree(
   }
   const graceMs = options.graceMs ?? 3_000;
   const forceWaitMs = options.forceWaitMs ?? 500;
-  const first = await observeOwnedProcessTree(root);
+  const readSnapshots = options.readSnapshots ?? readProcessSnapshots;
+  const first = await observeOwnedProcessTree(root, readSnapshots);
   if (!first.identityVerified) {
     return { attempted: false, childTreeQuiescent: false, forced: false, identityVerified: false, remainingPids: [] };
   }
@@ -577,7 +610,7 @@ export async function terminateOwnedProcessTree(
   } catch {
     return { attempted: true, childTreeQuiescent: false, forced: false, identityVerified: true, remainingPids: first.pids };
   }
-  const afterGrace = await waitForOwnedProcessTreeExit(root, graceMs);
+  const afterGrace = await waitForOwnedProcessTreeExit(root, graceMs, readSnapshots);
   if (!afterGrace.identityVerified || afterGrace.pids.length === 0) {
     return {
       attempted: true,
@@ -592,7 +625,7 @@ export async function terminateOwnedProcessTree(
   } catch {
     return { attempted: true, childTreeQuiescent: false, forced: true, identityVerified: true, remainingPids: afterGrace.pids };
   }
-  const afterForce = await waitForOwnedProcessTreeExit(root, forceWaitMs);
+  const afterForce = await waitForOwnedProcessTreeExit(root, forceWaitMs, readSnapshots);
   return {
     attempted: true,
     childTreeQuiescent: afterForce.identityVerified && afterForce.pids.length === 0,
