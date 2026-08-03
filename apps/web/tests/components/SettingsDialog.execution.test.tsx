@@ -282,6 +282,7 @@ function renderSettingsDialog(
     providerModelsCache?: Record<string, ProviderModelOption[]>;
     welcome?: boolean;
     onSilentUpdatePreferenceChange?: (allowSilentUpdates: boolean) => Promise<void>;
+    byokCredentialStorageUnavailable?: boolean;
   } = {},
 ) {
   const onPersist = vi.fn();
@@ -318,6 +319,7 @@ function renderSettingsDialog(
       onSilentUpdatePreferenceChange={onSilentUpdatePreferenceChange}
       onPersistComposioKey={onPersistComposioKey}
       onPersistByokCredential={onPersistByokCredential}
+      byokCredentialStorageUnavailable={options.byokCredentialStorageUnavailable}
       onClose={onClose}
       onRefreshAgents={onRefreshAgents}
     />,
@@ -757,6 +759,15 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     renderSettingsDialog({ mode: 'daemon' });
 
     expect(screen.queryByTestId('settings-byok-no-file-tools-notice')).toBeNull();
+  });
+
+  it('surfaces a persistent notice when the daemon reports BYOK credential storage unavailable (issue #6330)', () => {
+    renderSettingsDialog({}, { byokCredentialStorageUnavailable: true });
+
+    const notice = screen.getByTestId('settings-byok-storage-unavailable-notice');
+    expect(notice).toBeTruthy();
+    expect(notice.textContent).toContain('credential storage is unavailable');
+    expect(notice.textContent).toContain('billing');
   });
 
   it('only persists Max tokens overrides within the supported BYOK range', async () => {

@@ -361,6 +361,7 @@ export const ar: Dict = {
   'settings.modeApiMeta': 'BYOK',
   'settings.byokNoFileToolsNotice': 'لا يمكن لـ BYOK قراءة ملفات المشروع أو الكتابة فيها أو تعديلها. استخدم Local CLI عندما تحتاج إلى تغييرات في الكود.',
   'settings.byokDraftNotice': 'يظل هذا الإعداد مسودة حتى تكتمل الحقول المطلوبة. يظل إعداد التنفيذ الحالي نشطًا.',
+  'settings.byokStorageUnavailableNotice': 'تخزين مفاتيح BYOK الآمن غير متاح على هذا النظام، لذا لا يمكن حفظ مفاتيح BYOK هنا. ستتحول عمليات التشغيل إلى فوترة Open Design Cloud.',
   'settings.codeAgent': 'وكيل الكود',
   'settings.codeAgentHint': 'تم اكتشافه عبر مسح PATH الخاص بك. اختر واجهة CLI التي تريد أن تمر الأجيال عبرها.',
   'settings.rescan': '↻ إعادة المسح',

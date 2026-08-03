@@ -311,6 +311,7 @@ export interface Dict {
   'settings.modeApiMeta': string;
   'settings.byokNoFileToolsNotice': string;
   'settings.byokDraftNotice': string;
+  'settings.byokStorageUnavailableNotice': string;
   'settings.codeAgent': string;
   'settings.codeAgentHint': string;
   'settings.rescan': string;

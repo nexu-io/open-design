@@ -359,6 +359,8 @@ export const zhCN: Dict = {
     "BYOK 无法读写或修改项目文件；需要改代码时请使用本机 CLI。",
   "settings.byokDraftNotice":
     "必填项补全前，此配置只会保存为草稿；当前执行配置将继续保持生效。",
+  "settings.byokStorageUnavailableNotice":
+    "此系统无法使用安全的 BYOK 密钥存储，因此无法在此保存 BYOK API 密钥。运行将回退到 Open Design Cloud 计费。",
   "settings.codeAgent": "代码代理",
   "settings.codeAgentHint": "选择用来运行提示词的 CLI。",
   "settings.rescan": "↻ 重新扫描",

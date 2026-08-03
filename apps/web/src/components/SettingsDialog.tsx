@@ -456,6 +456,13 @@ interface Props {
   daemonMediaProviders?: AppConfig['mediaProviders'] | null;
   daemonMediaProvidersFetchState?: 'idle' | 'ok' | 'error';
   mediaProvidersNotice?: string | null;
+  /**
+   * True when the daemon reports that its OS-backed secure credential store
+   * is unavailable (e.g. the Windows `unavailable-win32` backend). Surfaces
+   * a persistent notice in the BYOK panel so users are not silently pushed
+   * back to Open Design Cloud billing when they try to save a key.
+   */
+  byokCredentialStorageUnavailable?: boolean;
   onReloadMediaProviders?: () => Promise<AppConfig['mediaProviders'] | null>;
   onProjectsRefresh?: () => Promise<void> | void;
   /** Same channel for skill registry mutations. */
@@ -1482,6 +1489,7 @@ export function SettingsDialog({
   daemonMediaProviders,
   daemonMediaProvidersFetchState = 'idle',
   mediaProvidersNotice,
+  byokCredentialStorageUnavailable,
   onReloadMediaProviders,
   onProjectsRefresh,
   onDesignSystemsChanged,
@@ -5395,6 +5403,16 @@ export function SettingsDialog({
                   onTestProvider={() => handleTestProvider()}
                 />
               </div>
+              {byokCredentialStorageUnavailable ? (
+                <p
+                  className="settings-test-status error"
+                  role="alert"
+                  aria-live="polite"
+                  data-testid="settings-byok-storage-unavailable-notice"
+                >
+                  {t('settings.byokStorageUnavailableNotice')}
+                </p>
+              ) : null}
               {byokActivationPreflightReason ? (
                 <p
                   className="settings-test-status warn"

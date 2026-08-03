@@ -361,6 +361,7 @@ export const fa: Dict = {
   'settings.modeApiMeta': 'BYOK',
   'settings.byokNoFileToolsNotice': 'BYOK نمی‌تواند فایل‌های پروژه را بخواند، بنویسد یا ویرایش کند. وقتی به تغییرات کد نیاز دارید از Local CLI استفاده کنید.',
   'settings.byokDraftNotice': 'این پیکربندی تا تکمیل فیلدهای الزامی به‌صورت پیش‌نویس می‌ماند. پیکربندی اجرای فعلی فعال باقی می‌ماند.',
+  'settings.byokStorageUnavailableNotice': 'ذخیره‌سازی امن کلید BYOK در این سیستم در دسترس نیست، بنابراین نمی‌توان کلیدهای BYOK را اینجا ذخیره کرد. اجراها به پرداخت ابری Open Design برمی‌گردند.',
   'settings.codeAgent': 'عامل کد',
   'settings.codeAgentHint': 'با اسکن PATH شما شناسایی شده. CLI مورد نظر برای جریان تولیدات را انتخاب کنید.',
   'settings.rescan': '↻ اسکن مجدد',

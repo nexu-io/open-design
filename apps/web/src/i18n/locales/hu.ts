@@ -361,6 +361,7 @@ export const hu: Dict = {
   'settings.modeApiMeta': 'BYOK',
   'settings.byokNoFileToolsNotice': 'A BYOK nem tud projektfájlokat olvasni, írni vagy szerkeszteni. Ha kódmódosításra van szüksége, használja a Local CLI-t.',
   'settings.byokDraftNotice': 'Ez a beállítás piszkozat marad, amíg az összes kötelező mezőt ki nem tölti. A jelenlegi végrehajtási beállítás aktív marad.',
+  'settings.byokStorageUnavailableNotice': 'A biztonságos BYOK kulcstároló nem érhető el ezen a rendszeren, ezért a BYOK API-kulcsok nem menthetők itt. A futtatások az Open Design Cloud számlázására esnek vissza.',
   'settings.codeAgent': 'Kód Agent',
   'settings.codeAgentHint': 'A PATH átvizsgálásával észlelve. Válaszd ki a CLI-t, amelyen át a generálásokat szeretnéd futtatni.',
   'settings.rescan': '↻ Újraellenőrzés',

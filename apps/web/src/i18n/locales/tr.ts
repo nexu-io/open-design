@@ -361,6 +361,7 @@ export const tr: Dict = {
   'settings.modeApiMeta': 'BYOK',
   'settings.byokNoFileToolsNotice': 'BYOK proje dosyalarını okuyamaz, yazamaz veya düzenleyemez. Kod değişiklikleri gerektiğinde Local CLI kullanın.',
   'settings.byokDraftNotice': 'Bu yapılandırma, gerekli alanlar tamamlanana kadar taslak olarak kalır. Mevcut yürütme yapılandırması etkin kalır.',
+  'settings.byokStorageUnavailableNotice': 'Güvenli BYOK anahtar depolaması bu sistemde kullanılamıyor, bu nedenle BYOK API anahtarları buraya kaydedilemez. Çalıştırmalar Open Design Cloud faturalamasına geri döner.',
   'settings.codeAgent': 'Kod ajanı',
   'settings.codeAgentHint': 'Yerel PATH taranarak tespit edildi. Oluşum akışının yaşanacağı CLI aracınızı seçin.',
   'settings.rescan': '↻ Yeniden tara',

@@ -510,6 +510,12 @@ function AppInner() {
     'idle' | 'ok' | 'error'
   >('idle');
   const [mediaProvidersNotice, setMediaProvidersNotice] = useState<string | null>(null);
+  // Mirrors the daemon's `available` bit for the BYOK secure credential store
+  // (false on platforms like Windows with the `unavailable-win32` backend).
+  // Threaded into Settings so the BYOK panel can explain why saving a key
+  // fails instead of silently letting runs fall back to cloud billing.
+  const [byokCredentialStorageUnavailable, setByokCredentialStorageUnavailable] =
+    useState(false);
   // Per-resource loading flags. Each goes false the moment its own fetch
   // resolves so each entry-view tab can render as its data lands instead of
   // every tab waiting on the slowest endpoint (typically `/api/agents`,
@@ -1030,9 +1036,7 @@ function AppInner() {
         fetchDaemonConfig(),
         fetchComposioConfigFromDaemon(),
         fetchMediaProvidersFromDaemon(),
-        migrationBaseConfig.byokProfileId
-          ? fetchByokCredentialProfilesFromDaemon()
-          : Promise.resolve(null),
+        fetchByokCredentialProfilesFromDaemon(),
       ]).then(([
         daemonConfig,
         daemonComposioConfig,
@@ -1040,6 +1044,9 @@ function AppInner() {
         byokCredentialProfiles,
       ]) => {
         if (cancelled) return;
+        setByokCredentialStorageUnavailable(
+          Boolean(byokCredentialProfiles && !byokCredentialProfiles.available),
+        );
         const daemonMediaProvidersLoaded =
           daemonMediaProvidersResult.status === 'ok'
             ? daemonMediaProvidersResult.providers
@@ -2698,6 +2705,7 @@ function AppInner() {
           onDraftChange={handleSettingsDraftChange}
           onPersistComposioKey={handleConfigPersistComposioKey}
           onPersistByokCredential={persistByokCredentialProfileToDaemon}
+          byokCredentialStorageUnavailable={byokCredentialStorageUnavailable}
           onClose={() => {
             // Closing the dialog is the canonical "I'm done" gesture
             // now that there is no global Save button. We mark
