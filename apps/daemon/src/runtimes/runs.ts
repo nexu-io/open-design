@@ -22,6 +22,26 @@ export const TERMINAL_RUN_STATUSES = new Set(['succeeded', 'failed', 'canceled']
 
 const RUN_STATE_SCHEMA_VERSION = 1;
 
+function readOwnedProcessIdentity(value) {
+  if (
+    !value
+    || typeof value !== 'object'
+    || !Number.isInteger(value.pid)
+    || value.pid <= 0
+    || !Number.isFinite(value.createdAt)
+    || value.createdAt < 0
+  ) {
+    return null;
+  }
+  return { pid: value.pid, createdAt: value.createdAt };
+}
+
+function hasRetryableTerminationFailure(run) {
+  return run?.status === 'failed'
+    && run.errorCode === 'RUN_TERMINATION_UNVERIFIED'
+    && run.termination?.retryable === true;
+}
+
 function atomicWriteJson(filePath, value) {
   const tempPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
   try {
@@ -34,6 +54,11 @@ function atomicWriteJson(filePath, value) {
 }
 
 function durableRunState(run) {
+  const retryableTreeRoot =
+    hasRetryableTerminationFailure(run)
+    && run.requiresTreeVerification === true
+      ? readOwnedProcessIdentity(run.processTreeRoot)
+      : null;
   return {
     schemaVersion: RUN_STATE_SCHEMA_VERSION,
     id: run.id,
@@ -54,6 +79,12 @@ function durableRunState(run) {
     failureDetail: run.failureDetail ?? null,
     failureAction: run.failureAction ?? null,
     ...(run.termination ? { termination: run.termination } : {}),
+    ...(retryableTreeRoot
+      ? {
+          processTreeRoot: retryableTreeRoot,
+          requiresTreeVerification: true,
+        }
+      : {}),
     resumable: run.resumable ?? false,
     artifactCount: Number.isFinite(run.artifactCount) ? run.artifactCount : 0,
     endedWithUnfinishedWork: Boolean(run.endedWithUnfinishedWork),
@@ -220,6 +251,18 @@ export function createChatRunService({
       interruptDurableRunAfterDaemonRestart(state);
     if (interruptedAfterRestart) atomicWriteJson(statePath, state);
     if (!TERMINAL_RUN_STATUSES.has(state.status)) return null;
+    const restoredProcessTreeRoot =
+      hasRetryableTerminationFailure(state)
+      && state.requiresTreeVerification === true
+        ? readOwnedProcessIdentity(state.processTreeRoot)
+        : null;
+    // A retry must carry the same process identity that made tree verification
+    // possible before restart. Old, malformed, or incomplete state stays failed
+    // instead of silently taking the no-child canceled path.
+    if (hasRetryableTerminationFailure(state) && !restoredProcessTreeRoot) {
+      state.termination = { ...state.termination, retryable: false };
+      atomicWriteJson(statePath, state);
+    }
     const eventsLogPath = path.join(runsLogDir, id, 'events.jsonl');
     const events = readDurableRunEvents(eventsLogPath);
     if (interruptedAfterRestart) {
@@ -273,9 +316,9 @@ export function createChatRunService({
       acpSession: null,
       childPid: null,
       processGroupId: null,
-      processTreeRoot: null,
+      processTreeRoot: restoredProcessTreeRoot,
       processTreeIdentityCapture: null,
-      requiresTreeVerification: false,
+      requiresTreeVerification: restoredProcessTreeRoot !== null,
       cancelRequested: false,
       eventsLogPath,
       statePath,
@@ -1044,10 +1087,7 @@ export function createChatRunService({
 
   const cancel = async (run, { graceMs: requestedGraceMs } = {}) => {
     if (run.cancelPromise) return run.cancelPromise;
-    const retryingTerminationFailure =
-      run.status === 'failed'
-      && run.errorCode === 'RUN_TERMINATION_UNVERIFIED'
-      && run.termination?.retryable === true;
+    const retryingTerminationFailure = hasRetryableTerminationFailure(run);
     if (TERMINAL_RUN_STATUSES.has(run.status) && !retryingTerminationFailure) return statusBody(run);
     if (retryingTerminationFailure) {
       run.cleanupGeneration = (run.cleanupGeneration ?? 0) + 1;

@@ -874,7 +874,7 @@ describe('run event log persistence', () => {
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* best-effort */ }
   });
 
-  function createRunsWithLog(runsLogDir: string | null) {
+  function createRunsWithLog(runsLogDir: string | null, overrides: Record<string, unknown> = {}) {
     return createChatRunService({
       createSseResponse: () => ({ send: vi.fn(() => true), end: vi.fn(), cleanup: vi.fn() }),
       createSseErrorPayload: (code: string, message: string) => ({ error: { code, message } }),
@@ -885,6 +885,7 @@ describe('run event log persistence', () => {
       // outside; cast to bypass and pass the real string. Production
       // callers (server.ts) use a string path directly.
       runsLogDir: runsLogDir as unknown as null,
+      ...overrides,
     });
   }
 
@@ -966,6 +967,88 @@ describe('run event log persistence', () => {
       },
       langfuseCompletedAt: expect.any(Number),
     });
+  });
+
+  it('retains a retriable Windows tree identity across restart and re-verifies it', async () => {
+    const firstTerminator = vi.fn().mockResolvedValue({
+      attempted: true,
+      childTreeQuiescent: false,
+      forced: true,
+      identityVerified: true,
+      remainingPids: [200],
+    });
+    const beforeRestart = createRunsWithLog(tmpDir, { terminateProcessTree: firstTerminator });
+    const run = beforeRestart.create({ projectId: 'p1' });
+    run.status = 'running';
+    (run as any).child = new FakeChildProcess({ closeOn: 'SIGTERM' });
+    (run as any).processTreeRoot = { pid: 100, createdAt: 10 };
+    (run as any).requiresTreeVerification = true;
+
+    await beforeRestart.cancel(run);
+    expect(run.status).toBe('failed');
+    expect(JSON.parse(fs.readFileSync(path.join(tmpDir, run.id, 'state.json'), 'utf8'))).toMatchObject({
+      processTreeRoot: { pid: 100, createdAt: 10 },
+      requiresTreeVerification: true,
+      termination: { retryable: true },
+    });
+
+    const retryTerminator = vi.fn().mockResolvedValue({
+      attempted: true,
+      childTreeQuiescent: false,
+      forced: true,
+      identityVerified: true,
+      remainingPids: [200],
+    });
+    const afterRestart = createRunsWithLog(tmpDir, { terminateProcessTree: retryTerminator });
+    const hydrated = afterRestart.get(run.id);
+
+    expect(hydrated).toMatchObject({
+      status: 'failed',
+      processTreeRoot: { pid: 100, createdAt: 10 },
+      requiresTreeVerification: true,
+      termination: { retryable: true },
+    });
+    await expect(afterRestart.cancel(hydrated)).resolves.toMatchObject({
+      status: 'failed',
+      errorCode: 'RUN_TERMINATION_UNVERIFIED',
+    });
+    expect(retryTerminator).toHaveBeenCalledWith(
+      { pid: 100, createdAt: 10 },
+      expect.objectContaining({ graceMs: expect.any(Number), forceWaitMs: expect.any(Number) }),
+    );
+  });
+
+  it('fails closed after restart when a retriable Windows failure lacks its tree identity', async () => {
+    const beforeRestart = createRunsWithLog(tmpDir);
+    const run = beforeRestart.create({ projectId: 'p1' });
+    const statePath = path.join(tmpDir, run.id, 'state.json');
+    const initialState = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+    fs.writeFileSync(
+      statePath,
+      JSON.stringify({
+        ...initialState,
+        status: 'failed',
+        errorCode: 'RUN_TERMINATION_UNVERIFIED',
+        termination: { retryable: true },
+      }) + '\n',
+      'utf8',
+    );
+
+    const retryTerminator = vi.fn();
+    const afterRestart = createRunsWithLog(tmpDir, { terminateProcessTree: retryTerminator });
+    const hydrated = afterRestart.get(run.id);
+
+    expect(hydrated).toMatchObject({
+      status: 'failed',
+      processTreeRoot: null,
+      requiresTreeVerification: false,
+      termination: { retryable: false },
+    });
+    await expect(afterRestart.cancel(hydrated)).resolves.toMatchObject({
+      status: 'failed',
+      errorCode: 'RUN_TERMINATION_UNVERIFIED',
+    });
+    expect(retryTerminator).not.toHaveBeenCalled();
   });
 
   it('restores the accepted plugin workflow binding from durable run state', () => {
