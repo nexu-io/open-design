@@ -136,6 +136,46 @@ describe("terminateOwnedProcessTree observation failures", () => {
     });
     expect([...new Set(kill.mock.calls.map(([, signal]) => signal))]).toEqual(signals);
   });
+
+  it("keeps an orphaned grandchild owned after its intermediate parent exits", async () => {
+    const kill = vi.spyOn(process, "kill").mockReturnValue(true);
+    const snapshotReader = observations(
+      {
+        ok: true,
+        processes: [
+          { ...snapshot(100, 1), createdAt: 10 },
+          { ...snapshot(200, 100), createdAt: 20 },
+          { ...snapshot(300, 200), createdAt: 30 },
+        ],
+      },
+      {
+        ok: true,
+        processes: [
+          { ...snapshot(300, 200), createdAt: 30 },
+        ],
+      },
+      { ok: true, processes: [] },
+    );
+
+    const result = await terminateOwnedProcessTree(root, {
+      graceMs: 0,
+      forceWaitMs: 0,
+      readSnapshots: snapshotReader,
+    });
+
+    expect(result).toMatchObject({
+      childTreeQuiescent: true,
+      forced: true,
+      identityVerified: true,
+      remainingPids: [],
+    });
+    expect(kill.mock.calls).toEqual([
+      [300, "SIGTERM"],
+      [200, "SIGTERM"],
+      [100, "SIGTERM"],
+      [300, "SIGKILL"],
+    ]);
+  });
 });
 
 describe("processCommandExactlyRunsExecutable", () => {

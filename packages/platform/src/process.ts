@@ -541,8 +541,36 @@ async function waitForProcessesToExit(pids: number[], timeoutMs = 5000): Promise
   return pids.filter(isProcessAlive);
 }
 
+type OwnedProcessTreeTracker = {
+  identities: Map<number, number>;
+};
+
+function orderTrackedProcessPids(
+  processes: ProcessSnapshot[],
+  livePids: Set<number>,
+): number[] {
+  const childrenByParent = new Map<number, number[]>();
+  for (const processInfo of processes) {
+    if (!livePids.has(processInfo.pid)) continue;
+    const children = childrenByParent.get(processInfo.ppid) ?? [];
+    children.push(processInfo.pid);
+    childrenByParent.set(processInfo.ppid, children);
+  }
+  const ordered: number[] = [];
+  const visited = new Set<number>();
+  const visit = (pid: number) => {
+    if (!livePids.has(pid) || visited.has(pid)) return;
+    visited.add(pid);
+    for (const childPid of childrenByParent.get(pid) ?? []) visit(childPid);
+    ordered.push(pid);
+  };
+  for (const pid of [...livePids].sort((left, right) => left - right)) visit(pid);
+  return ordered;
+}
+
 async function observeOwnedProcessTree(
   root: OwnedProcessIdentity,
+  tracker: OwnedProcessTreeTracker,
   readSnapshots: () => Promise<ProcessSnapshotObservation> = readProcessSnapshots,
 ): Promise<{
   identityVerified: boolean;
@@ -551,25 +579,64 @@ async function observeOwnedProcessTree(
   const observation = await readSnapshots();
   if (!observation.ok) return { identityVerified: false, pids: [] };
   const processes = observation.processes;
-  const currentRoot = processes.find((processInfo) => processInfo.pid === root.pid);
-  if (currentRoot && root.createdAt != null && currentRoot.createdAt !== root.createdAt) {
-    return { identityVerified: false, pids: [] };
+  const snapshotsByPid = new Map(processes.map((processInfo) => [processInfo.pid, processInfo]));
+  for (const [pid, createdAt] of tracker.identities) {
+    const current = snapshotsByPid.get(pid);
+    if (current && current.createdAt !== createdAt) {
+      return { identityVerified: false, pids: [] };
+    }
   }
-  return { identityVerified: true, pids: collectOwnedProcessTreePids(processes, root) };
+
+  // Re-walk from every live owner as well as the original root. Once an
+  // intermediate parent exits, a surviving grandchild is no longer reachable
+  // from only the current root chain; its stored identity keeps it owned, and
+  // its new descendants remain discoverable from the tracked PID.
+  const discoveredPids = collectProcessTreePids(processes, [
+    root.pid,
+    ...tracker.identities.keys(),
+  ]);
+  for (const pid of discoveredPids) {
+    const current = snapshotsByPid.get(pid);
+    if (!current) continue;
+    const createdAt = current.createdAt;
+    if (typeof createdAt !== "number" || !Number.isFinite(createdAt)) {
+      return { identityVerified: false, pids: [] };
+    }
+    const existingCreatedAt = tracker.identities.get(pid);
+    if (existingCreatedAt != null && existingCreatedAt !== createdAt) {
+      return { identityVerified: false, pids: [] };
+    }
+    tracker.identities.set(pid, createdAt);
+  }
+
+  const livePids = new Set<number>();
+  for (const [pid, createdAt] of tracker.identities) {
+    const current = snapshotsByPid.get(pid);
+    if (!current) continue;
+    if (current.createdAt !== createdAt) {
+      return { identityVerified: false, pids: [] };
+    }
+    livePids.add(pid);
+  }
+  return {
+    identityVerified: true,
+    pids: orderTrackedProcessPids(processes, livePids),
+  };
 }
 
 async function waitForOwnedProcessTreeExit(
   root: OwnedProcessIdentity,
+  tracker: OwnedProcessTreeTracker,
   timeoutMs: number,
   readSnapshots: () => Promise<ProcessSnapshotObservation>,
 ): Promise<{ identityVerified: boolean; pids: number[] }> {
   const startedAt = Date.now();
   while (Date.now() - startedAt < timeoutMs) {
-    const observed = await observeOwnedProcessTree(root, readSnapshots);
+    const observed = await observeOwnedProcessTree(root, tracker, readSnapshots);
     if (!observed.identityVerified || observed.pids.length === 0) return observed;
     await sleep(100);
   }
-  return observeOwnedProcessTree(root, readSnapshots);
+  return observeOwnedProcessTree(root, tracker, readSnapshots);
 }
 
 /**
@@ -598,7 +665,10 @@ export async function terminateOwnedProcessTree(
   const graceMs = options.graceMs ?? 3_000;
   const forceWaitMs = options.forceWaitMs ?? 500;
   const readSnapshots = options.readSnapshots ?? readProcessSnapshots;
-  const first = await observeOwnedProcessTree(root, readSnapshots);
+  const tracker: OwnedProcessTreeTracker = {
+    identities: new Map([[root.pid, root.createdAt]]),
+  };
+  const first = await observeOwnedProcessTree(root, tracker, readSnapshots);
   if (!first.identityVerified) {
     return { attempted: false, childTreeQuiescent: false, forced: false, identityVerified: false, remainingPids: [] };
   }
@@ -610,7 +680,7 @@ export async function terminateOwnedProcessTree(
   } catch {
     return { attempted: true, childTreeQuiescent: false, forced: false, identityVerified: true, remainingPids: first.pids };
   }
-  const afterGrace = await waitForOwnedProcessTreeExit(root, graceMs, readSnapshots);
+  const afterGrace = await waitForOwnedProcessTreeExit(root, tracker, graceMs, readSnapshots);
   if (!afterGrace.identityVerified || afterGrace.pids.length === 0) {
     return {
       attempted: true,
@@ -625,7 +695,7 @@ export async function terminateOwnedProcessTree(
   } catch {
     return { attempted: true, childTreeQuiescent: false, forced: true, identityVerified: true, remainingPids: afterGrace.pids };
   }
-  const afterForce = await waitForOwnedProcessTreeExit(root, forceWaitMs, readSnapshots);
+  const afterForce = await waitForOwnedProcessTreeExit(root, tracker, forceWaitMs, readSnapshots);
   return {
     attempted: true,
     childTreeQuiescent: afterForce.identityVerified && afterForce.pids.length === 0,
