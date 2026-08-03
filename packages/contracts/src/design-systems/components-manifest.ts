@@ -101,7 +101,7 @@ const COMPONENT_GROUPS: ComponentGroupDefinition[] = [
     id: 'buttons',
     label: 'Buttons and calls to action',
     selectorMatchers: [/^(?:\.)?button(?:$|[-_:])/i, /\.btn(?:$|[-_:])/i, /\[type=["']?(?:button|submit|reset)/i],
-    attributeMatchers: [/\[type=["']?(?:button|submit|reset)/i],
+    attributeMatchers: [/^\[type=["']?(?:button|submit|reset)["']?\]/i],
     classMatchers: [/^btn(?:$|-)/i, /^button(?:$|-)/i, /^cta(?:$|-)/i],
     elementMatchers: [/^button$/i],
   },
@@ -191,7 +191,7 @@ const COMPONENT_GROUPS: ComponentGroupDefinition[] = [
     id: 'icons',
     label: 'Icon slots',
     selectorMatchers: [/\.icon(?:$|[-_:])/i, /\[aria-hidden=["']true["']\]/i],
-    attributeMatchers: [/\[aria-hidden=["']true["']\]/i],
+    attributeMatchers: [/^\[aria-hidden=["']true["']\]/i],
     classMatchers: [/^icon(?:$|-)/i],
     elementMatchers: [/^svg$/i],
   },
@@ -350,6 +350,17 @@ interface CompoundTokens {
   element: string | null;
   classes: string[];
   extraElements: string[];
+  /**
+   * Attribule-selector tokens parsed from this compound. Each entry is the
+   * verbatim text of one attribute selector (e.g. `[type="submit"]`) WITH
+   * balanced quote/bracket handling — quoted strings inside the attribute
+   * value are respected so a value like `[type="submit]"]` is scanned as a
+   * single token. Tokens from `:not(...)` / `:has(...)` are NOT included:
+   * those pseudos are opaque (their arguments do NOT positively select),
+   * so their attribute predicates must not cross-attribute the selectors
+   * into component groups.
+   */
+  attributeSelectors: string[];
 }
 
 // Tokenize one compound selector (no combinators) into its element name and
@@ -374,6 +385,7 @@ function tokenizeCompound(compound: string): CompoundTokens {
   let element: string | null = null;
   const classes: string[] = [];
   const extraElements: string[] = [];
+  const attributeSelectors: string[] = [];
   let i = 0;
   // leading element name (type selector) — must come first in the compound
   const elementMatch = /^([a-zA-Z][a-zA-Z0-9_-]*)/.exec(compound);
@@ -388,6 +400,30 @@ function tokenizeCompound(compound: string): CompoundTokens {
     if (classMatch) {
       classes.push(classMatch[1]!.toLowerCase());
       i += classMatch[0].length;
+      continue;
+    }
+    // attribute selector: `[name? op? value? flags?]` — scan balanced bracket
+    // and respect quoted strings inside the value so an attribute value that
+    // contains `[...]` itself (e.g. `[data-label="[type=submit]"]`) is captured
+    // as ONE token, not split.
+    const attributeMatch = /^\[/.exec(rest);
+    if (attributeMatch) {
+      let j = 1; // skip leading '['
+      let inQuote: string | null = null;
+      while (j < rest.length) {
+        const c = rest[j];
+        if (inQuote) {
+          if (c === inQuote && rest[j - 1] !== '\\') inQuote = null;
+        } else if (c === '"' || c === '\'') {
+          inQuote = c;
+        } else if (c === ']') {
+          break;
+        }
+        j += 1;
+      }
+      const tokenEnd = j >= rest.length ? rest.length : j + 1; // include closing ']'
+      attributeSelectors.push(rest.slice(0, tokenEnd));
+      i += tokenEnd;
       continue;
     }
     const preserveMatch = /^:(?:is|where)\s*\(/i.exec(rest);
@@ -432,6 +468,7 @@ function tokenizeCompound(compound: string): CompoundTokens {
             if (element == null) element = extra;
             else extraElements.push(extra);
           }
+          for (const attr of subTokens.attributeSelectors) attributeSelectors.push(attr);
         }
       }
       i = j + 1; // consume `:...(...)`
@@ -446,7 +483,7 @@ function tokenizeCompound(compound: string): CompoundTokens {
     // anything else (one char) we cannot tokenize — bail forward
     i += 1;
   }
-  return { element, classes, extraElements };
+  return { element, classes, extraElements, attributeSelectors };
 }
 
 // Decide whether a selector belongs to a component group by examining its
@@ -457,20 +494,16 @@ function tokenizeCompound(compound: string): CompoundTokens {
 // regression. The matcher now:
 //   1. checks each compound's element token against `elementMatchers`
 //   2. checks each compound's class tokens against `classMatchers`
-//   3. keeps `selectorMatchers` for attribute selectors and other cases that
-//      are not expressible as element/class tokens (e.g. `[type=button]`,
-//      `[aria-hidden="true"]`); these match the full selector string as before.
-// Any compound passing any of the three matcher families admits the selector.
+//   3. checks each compound's attribute selectors against `attributeMatchers`
+//      (so `input[type="submit"]` admits the selector to Buttons; previously
+//      the raw selector was matched but tokenization lost the attribute text)
+//   4. keeps `selectorMatchers` for cases that are not expressible as
+//      element/class/attribute tokens; these match the full selector string.
+// Any compound passing any of the four matcher families admits the selector.
 function selectorMatchesTokens(selector: string, definition: ComponentGroupDefinition): boolean {
-  // Attribute predicate matchers run against the raw selector because
-  // attribute values appear verbatim in the compound (e.g. `[type="button"]`
-  // contains the class-like text `.button` inside the attribute value);
-  // tokenizing would lose that context and the predicate must run on the
-  // unmodified text.
-  if (definition.attributeMatchers.some((matcher) => matcher.test(selector))) return true;
   const compounds = splitCompoundSelectors(selector);
   for (const compound of compounds) {
-    const { element, classes, extraElements } = tokenizeCompound(compound);
+    const { element, classes, extraElements, attributeSelectors } = tokenizeCompound(compound);
     // element token (and any extra element tokens pulled out of :is()/:where())
     // joined together so multi-element compounds can match several groups.
     const elementCandidates = element ? [element, ...extraElements] : extraElements;
@@ -479,6 +512,18 @@ function selectorMatchesTokens(selector: string, definition: ComponentGroupDefin
     }
     for (const className of classes) {
       if (definition.classMatchers.some((matcher) => matcher.test(className))) return true;
+    }
+    // Attribute predicates run against the parsed attribute-selector tokens
+    // (e.g. `[type="submit"]`, `[aria-hidden="true"]`) rather than the raw
+    // compound text, so opacity rules still apply: a `[type="submit"]` that
+    // sits *inside* `:not(...)` never reaches this list (tokenizeCompound
+    // leaves `:not()` opaque), and an attribute *value* containing attribute
+    // text (e.g. `[data-label="[type=submit]"]`) is captured as ONE token
+    // — the matcher regex tests the outer bracket, not the inner quoted
+    // bracket — so it does not admit the selector to Buttons just because
+    // the value happens to spell `[type=submit]`.
+    for (const attrToken of attributeSelectors) {
+      if (definition.attributeMatchers.some((matcher) => matcher.test(attrToken))) return true;
     }
   }
   return false;
