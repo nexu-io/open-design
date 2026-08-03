@@ -32,6 +32,7 @@ import type {
   ProjectMetadata,
   ProjectTemplate,
 } from '../types';
+import { removeDesignBrowserProjectCache } from '../components/design-browser-storage';
 
 export type { PluginInstallOutcome } from '@open-design/contracts';
 export type { PluginShareAction } from '@open-design/contracts';
@@ -679,18 +680,6 @@ function removeCachedTabs(projectId: string): void {
   if (typeof window === 'undefined') return;
   try {
     window.localStorage.removeItem(tabsCacheKey(projectId));
-  } catch {
-    // Ignore private-mode/quota errors; the cache entry is best-effort.
-  }
-}
-
-// Keep key shapes in sync with DesignBrowserPanel historyStorageKey /
-// viewportStorageKey. Cleared here so deleteProject does not import the panel.
-function removeDesignBrowserProjectCache(projectId: string): void {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.removeItem(`od:design-browser:${projectId}:history:v1`);
-    window.localStorage.removeItem(`od:design-browser:${projectId}:viewport:v1`);
   } catch {
     // Ignore private-mode/quota errors; the cache entry is best-effort.
   }

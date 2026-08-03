@@ -13,6 +13,10 @@ import {
   pickLocalFolderPath,
   publishGeneratedPluginToGitHub,
 } from '../../src/state/projects';
+import {
+  designBrowserHistoryStorageKey,
+  designBrowserViewportStorageKey,
+} from '../../src/components/design-browser-storage';
 
 describe('applyPlugin', () => {
   afterEach(() => {
@@ -468,9 +472,8 @@ describe('deleteProject local caches', () => {
   });
 
   const tabsKey = 'open-design:project-tabs:v1:p1';
-  // Keep in sync with DesignBrowserPanel historyStorageKey / viewportStorageKey.
-  const historyKey = 'od:design-browser:p1:history:v1';
-  const viewportKey = 'od:design-browser:p1:viewport:v1';
+  const historyKey = designBrowserHistoryStorageKey('p1');
+  const viewportKey = designBrowserViewportStorageKey('p1');
 
   function stubWindowStore(): Map<string, string> {
     const store = new Map<string, string>([
