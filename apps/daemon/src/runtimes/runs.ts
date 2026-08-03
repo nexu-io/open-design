@@ -415,6 +415,7 @@ export function createChatRunService({
       signal: null,
       error: null,
       errorCode: null,
+      termination: null,
       cancelRequested: false,
       runtimeFailureObservedBeforeCancellation: false,
       retryRestartTimer: null,
