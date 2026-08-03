@@ -457,8 +457,13 @@ export async function generateMedia(args: {
   // bare filename, sanitized for character safety).
   let safeOut: string;
   try {
-    const requested =
+    const rawRequested =
       output || autoOutputName(surface, model, resolvedAudioKind);
+    // Treat one leading `./` like a shell-relative prefix. Strip it before
+    // choosing the filename/path sanitizer so `./hero.png` stays at the
+    // project root and `./assets/hero.png` keeps its nested directory. Other
+    // dot segments still reach sanitizePath() and remain invalid.
+    const requested = rawRequested.replace(/^\.\//, '');
     if (requested.includes('/') || requested.includes('\\')) {
       safeOut = sanitizePath(requested);
     } else {

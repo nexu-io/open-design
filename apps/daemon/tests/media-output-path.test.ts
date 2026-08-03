@@ -175,6 +175,27 @@ describe('media generator output path resolution (#6336)', () => {
     expect(buf.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a');
   });
 
+  it('normalizes a leading ./ prefix before resolving the output path', async () => {
+    const expected = path.join(projectsRoot, projectId, 'hero.png');
+    const result = await withStubbedFetch(
+      () => minimaxPngResponse(),
+      () =>
+        generateMedia({
+          projectRoot,
+          projectsRoot,
+          projectId,
+          surface: 'image',
+          model: 'minimax-image-01',
+          prompt: 'cinematic hero',
+          output: './hero.png',
+        }),
+    );
+
+    expect(result.name).toBe('hero.png');
+    const buf = await waitForFile(expected);
+    expect(buf.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a');
+  });
+
   it('rejects a path-traversal attempt with a friendly error', async () => {
     let captured: Error | null = null;
     await withStubbedFetch(
