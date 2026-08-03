@@ -379,7 +379,7 @@ Node `~24`, pnpm `10.33.x`. WSL2 users, see [`docs/wsl-setup.md`](docs/wsl-setup
 
 ## Use Open Design from your coding agent
 
-Open Design ships a **stdio MCP server** and per-agent **install scripts**. Any MCP-compatible agent in another repo can read files from your local Open Design projects directly — tokens CSS, JSX components, entry HTML — as a structured API queryable by name. The agent always sees the live file, not a stale export.
+Open Design ships a default **stdio MCP server**, an opt-in shared **Streamable HTTP MCP server**, and per-agent **install scripts**. Any MCP-compatible agent in another repo can read files from your local Open Design projects directly — tokens CSS, JSX components, entry HTML — as a structured API queryable by name. The agent always sees the live file, not a stale export.
 
 ```bash
 # One-line install (16+ CLIs supported):
@@ -392,6 +392,12 @@ od files read <project-id> <relative-path>
 od plugin list --json
 od skills list --json
 ```
+
+The installer keeps the zero-config `stdio` behavior. If several local agents
+should share one adapter process, start `od mcp --transport http` and configure
+supported clients with `http://127.0.0.1:7457/mcp`. See the
+[`Streamable HTTP guide`](docs/mcp-http.md) for the process model, verified
+client commands, limits, lifecycle, and security boundary.
 
 **Why MCP?** Exporting and re-attaching a zip every iteration breaks flow. MCP exposes the design source directly — the agent always sees the live file.
 
@@ -564,7 +570,7 @@ Plugin registry endpoint: `GET /api/plugins`. Directory overview → [`plugins/R
    │  /api/projects/:id/files/...    │
    │  /api/artifacts/{save,lint}     │
    │  /api/import/claude-design      │
-   │  MCP stdio server                │
+   │  MCP stdio / Streamable HTTP     │
    └─────────┬───────────────────────┘
              │ spawn(cli, [...], { cwd: managed project cwd })
              ▼
