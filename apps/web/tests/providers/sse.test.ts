@@ -5,6 +5,7 @@ import {
   DAEMON_RUN_FINISHED_EVENT,
   latestUserPromptFromHistory,
   reattachDaemonRun,
+  retryRunTermination,
   sanitizePriorAssistantTurnForTranscript,
   streamViaDaemon,
   type DaemonRunFinishedEventDetail,
@@ -35,6 +36,22 @@ describe('parseSseFrame', () => {
 
   it('returns empty for frames without data or comments', () => {
     expect(parseSseFrame('')).toEqual({ kind: 'empty' });
+  });
+});
+
+describe('retryRunTermination', () => {
+  it('unwraps the canceled run returned by the cancel endpoint', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({
+      ok: true,
+      run: { id: 'run-1', status: 'canceled' },
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(retryRunTermination('run-1')).resolves.toMatchObject({
+      id: 'run-1',
+      status: 'canceled',
+    });
+    expect(fetchMock).toHaveBeenCalledWith('/api/runs/run-1/cancel', { method: 'POST' });
   });
 });
 

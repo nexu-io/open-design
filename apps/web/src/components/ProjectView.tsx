@@ -28,6 +28,7 @@ import {
   publishDaemonRunFinishedEvent,
   reattachDaemonRun,
   reportChatRunFeedback,
+  retryRunTermination,
   streamViaDaemon,
 } from '../providers/daemon';
 import { normalizeCustomReason } from '@open-design/contracts/analytics';
@@ -6427,12 +6428,8 @@ export function ProjectView({
     async (assistantMessage: ChatMessage) => {
       if (!assistantMessage.runId) return;
       try {
-        const response = await fetch(`/api/runs/${encodeURIComponent(assistantMessage.runId)}/cancel`, {
-          method: 'POST',
-        });
-        if (!response.ok) return;
-        const status = await response.json() as { status?: ChatMessage['runStatus'] };
-        if (status.status === 'canceled') {
+        const status = await retryRunTermination(assistantMessage.runId);
+        if (status?.status === 'canceled') {
           updateMessageById(
             assistantMessage.id,
             (previous) => ({ ...previous, runStatus: 'canceled', endedAt: Date.now() }),

@@ -20,6 +20,7 @@ import type {
 } from '@open-design/contracts/analytics';
 import type {
   ChatAnalyticsHints,
+  ChatRunCancelResponse,
   ChatRunCreateResponse,
   ChatRunListResponse,
   ChatRunStatus,
@@ -776,6 +777,21 @@ export async function fetchChatRunStatus(runId: string): Promise<ChatRunStatusRe
   } catch {
     return null;
   }
+}
+
+/**
+ * Retry teardown of a runtime tree that could not previously be verified.
+ * The cancel endpoint wraps the authoritative status in `{ ok, run }`; keep
+ * that wire detail here so UI callers cannot accidentally read it as a root
+ * status response.
+ */
+export async function retryRunTermination(runId: string): Promise<ChatRunStatusResponse | null> {
+  const response = await fetch(`/api/runs/${encodeURIComponent(runId)}/cancel`, {
+    method: 'POST',
+  });
+  if (!response.ok) return null;
+  const payload = (await response.json()) as ChatRunCancelResponse;
+  return payload.run ?? null;
 }
 
 // PR #3157: Antigravity's auth banner can offer a one-click "open
