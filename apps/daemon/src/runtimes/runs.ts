@@ -30,10 +30,11 @@ function readOwnedProcessIdentity(value) {
     || value.pid <= 0
     || !Number.isFinite(value.createdAt)
     || value.createdAt < 0
+    || value.ownership !== 'windows-job'
   ) {
     return null;
   }
-  return { pid: value.pid, createdAt: value.createdAt };
+  return { pid: value.pid, createdAt: value.createdAt, ownership: 'windows-job' };
 }
 
 function hasRetryableTerminationFailure(run) {

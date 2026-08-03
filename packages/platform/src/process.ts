@@ -36,6 +36,10 @@ export type SpawnProcessRequest = CommandInvocationRequest & {
   logFd?: number | null;
 };
 
+export type WindowsJobSpawnRequest = SpawnProcessRequest & {
+  stdio: StdioOptions;
+};
+
 export type ProcessSnapshot = {
   command: string;
   /** Process creation time in epoch milliseconds when the platform can provide it. */
@@ -49,6 +53,12 @@ export type OwnedProcessIdentity = {
   pid: number;
   /** Required on Windows so a recycled PID cannot be mistaken for our child. */
   createdAt: number | null;
+  /**
+   * A Windows job is created before this runtime is resumed. Its
+   * kill-on-close policy is the authoritative ownership boundary for every
+   * process the runtime subsequently creates.
+   */
+  ownership?: "windows-job";
 };
 
 export type ProcessTreeTerminationResult = {
@@ -319,6 +329,85 @@ export async function spawnLoggedProcess(request: SpawnProcessRequest): Promise<
   return child;
 }
 
+function quoteWindowsCreateProcessArgument(value: string): string {
+  if (value.length > 0 && !/[\s"]/u.test(value)) return value;
+  let quoted = '"';
+  let backslashes = 0;
+  for (const character of value) {
+    if (character === "\\") {
+      backslashes += 1;
+      continue;
+    }
+    if (character === '"') {
+      quoted += "\\".repeat((backslashes * 2) + 1);
+      quoted += '"';
+      backslashes = 0;
+      continue;
+    }
+    quoted += "\\".repeat(backslashes);
+    quoted += character;
+    backslashes = 0;
+  }
+  return quoted + "\\".repeat(backslashes * 2) + '"';
+}
+
+function createWindowsTargetCommandLine(
+  command: string,
+  args: string[],
+  windowsVerbatimArguments: boolean | undefined,
+): string {
+  const executable = quoteWindowsCreateProcessArgument(command);
+  return windowsVerbatimArguments
+    ? [executable, ...args].join(" ")
+    : [executable, ...args.map(quoteWindowsCreateProcessArgument)].join(" ");
+}
+
+const WINDOWS_JOB_RUNNER_SOURCE = "using System;\nusing System.ComponentModel;\nusing System.Runtime.InteropServices;\nusing System.Text;\n\npublic static class OpenDesignWindowsJobRunner\n{\n    const uint CREATE_SUSPENDED = 0x00000004;\n    const uint JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x00002000;\n    const uint INFINITE = 0xFFFFFFFF;\n    const uint INVALID_DWORD = 0xFFFFFFFF;\n    const int JobObjectExtendedLimitInformation = 9;\n\n    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]\n    struct STARTUPINFO\n    {\n        public int cb;\n        public string lpReserved;\n        public string lpDesktop;\n        public string lpTitle;\n        public int dwX;\n        public int dwY;\n        public int dwXSize;\n        public int dwYSize;\n        public int dwXCountChars;\n        public int dwYCountChars;\n        public int dwFillAttribute;\n        public int dwFlags;\n        public short wShowWindow;\n        public short cbReserved2;\n        public IntPtr lpReserved2;\n        public IntPtr hStdInput;\n        public IntPtr hStdOutput;\n        public IntPtr hStdError;\n    }\n\n    [StructLayout(LayoutKind.Sequential)]\n    struct PROCESS_INFORMATION\n    {\n        public IntPtr hProcess;\n        public IntPtr hThread;\n        public int dwProcessId;\n        public int dwThreadId;\n    }\n\n    [StructLayout(LayoutKind.Sequential)]\n    struct JOBOBJECT_BASIC_LIMIT_INFORMATION\n    {\n        public long PerProcessUserTimeLimit;\n        public long PerJobUserTimeLimit;\n        public uint LimitFlags;\n        public UIntPtr MinimumWorkingSetSize;\n        public UIntPtr MaximumWorkingSetSize;\n        public uint ActiveProcessLimit;\n        public UIntPtr Affinity;\n        public uint PriorityClass;\n        public uint SchedulingClass;\n    }\n\n    [StructLayout(LayoutKind.Sequential)]\n    struct IO_COUNTERS\n    {\n        public ulong ReadOperationCount;\n        public ulong WriteOperationCount;\n        public ulong OtherOperationCount;\n        public ulong ReadTransferCount;\n        public ulong WriteTransferCount;\n        public ulong OtherTransferCount;\n    }\n\n    [StructLayout(LayoutKind.Sequential)]\n    struct JOBOBJECT_EXTENDED_LIMIT_INFORMATION\n    {\n        public JOBOBJECT_BASIC_LIMIT_INFORMATION BasicLimitInformation;\n        public IO_COUNTERS IoInfo;\n        public UIntPtr ProcessMemoryLimit;\n        public UIntPtr JobMemoryLimit;\n        public UIntPtr PeakProcessMemoryUsed;\n        public UIntPtr PeakJobMemoryUsed;\n    }\n\n    [DllImport(\"kernel32.dll\", CharSet = CharSet.Unicode, SetLastError = true)]\n    static extern bool CreateProcess(\n        string applicationName,\n        StringBuilder commandLine,\n        IntPtr processAttributes,\n        IntPtr threadAttributes,\n        bool inheritHandles,\n        uint creationFlags,\n        IntPtr environment,\n        string currentDirectory,\n        ref STARTUPINFO startupInfo,\n        out PROCESS_INFORMATION processInformation);\n\n    [DllImport(\"kernel32.dll\", CharSet = CharSet.Unicode, SetLastError = true)]\n    static extern IntPtr CreateJobObject(IntPtr jobAttributes, string name);\n\n    [DllImport(\"kernel32.dll\", SetLastError = true)]\n    static extern bool SetInformationJobObject(\n        IntPtr job,\n        int informationClass,\n        ref JOBOBJECT_EXTENDED_LIMIT_INFORMATION information,\n        uint informationLength);\n\n    [DllImport(\"kernel32.dll\", SetLastError = true)]\n    static extern bool AssignProcessToJobObject(IntPtr job, IntPtr process);\n\n    [DllImport(\"kernel32.dll\", SetLastError = true)]\n    static extern uint ResumeThread(IntPtr thread);\n\n    [DllImport(\"kernel32.dll\", SetLastError = true)]\n    static extern uint WaitForSingleObject(IntPtr handle, uint milliseconds);\n\n    [DllImport(\"kernel32.dll\", SetLastError = true)]\n    static extern bool GetExitCodeProcess(IntPtr process, out uint exitCode);\n\n    [DllImport(\"kernel32.dll\", SetLastError = true)]\n    static extern bool TerminateProcess(IntPtr process, uint exitCode);\n\n    [DllImport(\"kernel32.dll\", SetLastError = true)]\n    static extern bool CloseHandle(IntPtr handle);\n\n    [DllImport(\"kernel32.dll\")]\n    static extern IntPtr GetStdHandle(int standardHandle);\n\n    [DllImport(\"kernel32.dll\", SetLastError = true)]\n    static extern bool SetHandleInformation(IntPtr handle, uint mask, uint flags);\n\n    static string Decode(string encoded)\n    {\n        return Encoding.UTF8.GetString(Convert.FromBase64String(encoded));\n    }\n\n    public static int Run(string encodedApplicationName, string encodedCommandLine)\n    {\n        IntPtr job = CreateJobObject(IntPtr.Zero, null);\n        if (job == IntPtr.Zero) throw new Win32Exception(Marshal.GetLastWin32Error());\n\n        PROCESS_INFORMATION processInformation = new PROCESS_INFORMATION();\n        bool processCreated = false;\n        bool assigned = false;\n        try\n        {\n            JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits = new JOBOBJECT_EXTENDED_LIMIT_INFORMATION();\n            limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;\n            if (!SetInformationJobObject(\n                job,\n                JobObjectExtendedLimitInformation,\n                ref limits,\n                (uint)Marshal.SizeOf(typeof(JOBOBJECT_EXTENDED_LIMIT_INFORMATION))))\n            {\n                throw new Win32Exception(Marshal.GetLastWin32Error());\n            }\n\n            STARTUPINFO startupInfo = new STARTUPINFO();\n            startupInfo.cb = Marshal.SizeOf(typeof(STARTUPINFO));\n            startupInfo.dwFlags = 0x00000100;\n            startupInfo.hStdInput = GetStdHandle(-10);\n            startupInfo.hStdOutput = GetStdHandle(-11);\n            startupInfo.hStdError = GetStdHandle(-12);\n            SetHandleInformation(startupInfo.hStdInput, 1, 1);\n            SetHandleInformation(startupInfo.hStdOutput, 1, 1);\n            SetHandleInformation(startupInfo.hStdError, 1, 1);\n\n            if (!CreateProcess(\n                Decode(encodedApplicationName),\n                new StringBuilder(Decode(encodedCommandLine)),\n                IntPtr.Zero,\n                IntPtr.Zero,\n                true,\n                CREATE_SUSPENDED,\n                IntPtr.Zero,\n                null,\n                ref startupInfo,\n                out processInformation))\n            {\n                throw new Win32Exception(Marshal.GetLastWin32Error());\n            }\n            processCreated = true;\n            if (!AssignProcessToJobObject(job, processInformation.hProcess))\n            {\n                throw new Win32Exception(Marshal.GetLastWin32Error());\n            }\n            assigned = true;\n            if (ResumeThread(processInformation.hThread) == INVALID_DWORD)\n            {\n                throw new Win32Exception(Marshal.GetLastWin32Error());\n            }\n            if (WaitForSingleObject(processInformation.hProcess, INFINITE) == INVALID_DWORD)\n            {\n                throw new Win32Exception(Marshal.GetLastWin32Error());\n            }\n            uint exitCode;\n            if (!GetExitCodeProcess(processInformation.hProcess, out exitCode))\n            {\n                throw new Win32Exception(Marshal.GetLastWin32Error());\n            }\n            return unchecked((int)exitCode);\n        }\n        finally\n        {\n            if (processCreated && !assigned) TerminateProcess(processInformation.hProcess, 1);\n            if (processInformation.hThread != IntPtr.Zero) CloseHandle(processInformation.hThread);\n            if (processInformation.hProcess != IntPtr.Zero) CloseHandle(processInformation.hProcess);\n            CloseHandle(job);\n        }\n    }\n}\n";
+
+/**
+ * Start a Windows runtime inside a kill-on-close Job Object. The C# runner
+ * creates the target suspended, assigns it to the job, and only then resumes
+ * it, so any descendants inherit membership before application code runs.
+ * The runner's standard handles are inherited by the target, preserving ACP
+ * stdin/stdout/stderr transport.
+ */
+export function spawnWindowsJobProcess(request: WindowsJobSpawnRequest): ChildProcess {
+  if (process.platform !== "win32") {
+    throw new Error("Windows Job Objects are only available on win32");
+  }
+  const invocation = createCommandInvocation(request);
+  const applicationName = Buffer.from(invocation.command, "utf8").toString("base64");
+  const commandLine = Buffer.from(
+    createWindowsTargetCommandLine(
+      invocation.command,
+      invocation.args,
+      invocation.windowsVerbatimArguments,
+    ),
+    "utf8",
+  ).toString("base64");
+  const runnerSource = Buffer.from(WINDOWS_JOB_RUNNER_SOURCE, "utf16le").toString("base64");
+  const runnerCommand = [
+    "$source = [Text.Encoding]::Unicode.GetString([Convert]::FromBase64String('" + runnerSource + "'))",
+    "Add-Type -TypeDefinition $source",
+    "$exitCode = [OpenDesignWindowsJobRunner]::Run('" + applicationName + "', '" + commandLine + "')",
+    "exit $exitCode",
+  ].join("; ");
+  return spawn("powershell.exe", [
+    "-NoLogo",
+    "-NoProfile",
+    "-NonInteractive",
+    "-ExecutionPolicy",
+    "Bypass",
+    "-Command",
+    runnerCommand,
+  ], {
+    cwd: request.cwd,
+    env: request.env,
+    stdio: request.stdio,
+    windowsHide: true,
+  });
+}
+
 /**
  * Probe whether a process is alive via a signal-0 `process.kill`. Treats
  * `ESRCH` as dead and any other error (e.g. `EPERM`) as alive.
@@ -469,11 +558,12 @@ export function collectProcessTreePids(
 export function captureOwnedProcessIdentity(
   processes: ProcessSnapshot[],
   pid: number | null | undefined,
+  options: Pick<OwnedProcessIdentity, "ownership"> = {},
 ): OwnedProcessIdentity | null {
   if (typeof pid !== "number") return null;
   const root = processes.find((processInfo) => processInfo.pid === pid);
   if (!root) return null;
-  return { pid, createdAt: root.createdAt ?? null };
+  return { pid, createdAt: root.createdAt ?? null, ...options };
 }
 
 /**
@@ -545,30 +635,6 @@ type OwnedProcessTreeTracker = {
   identities: Map<number, number>;
 };
 
-/**
- * Detect a process that may be an owned descendant whose short-lived parent
- * disappeared before the first tree observation. Windows preserves the parent
- * PID after that exit, but a parent-chain walk cannot prove whether such an
- * orphan belongs to the root. Treating the snapshot as a complete tree would
- * allow a false "canceled" result, so verification deliberately fails closed.
- */
-function hasAmbiguousInitialTreeOrphan(
-  processes: ProcessSnapshot[],
-  root: OwnedProcessIdentity,
-): boolean {
-  const rootCreatedAt = root.createdAt;
-  if (rootCreatedAt == null) return true;
-  const knownPids = new Set(processes.map((processInfo) => processInfo.pid));
-  return processes.some((processInfo) => (
-    processInfo.pid !== root.pid
-    && processInfo.ppid > 0
-    && !knownPids.has(processInfo.ppid)
-    && typeof processInfo.createdAt === "number"
-    && Number.isFinite(processInfo.createdAt)
-    && processInfo.createdAt >= rootCreatedAt
-  ));
-}
-
 function orderTrackedProcessPids(
   processes: ProcessSnapshot[],
   livePids: Set<number>,
@@ -595,7 +661,6 @@ function orderTrackedProcessPids(
 async function observeOwnedProcessTree(
   root: OwnedProcessIdentity,
   tracker: OwnedProcessTreeTracker,
-  initialObservation: boolean,
   readSnapshots: () => Promise<ProcessSnapshotObservation> = readProcessSnapshots,
 ): Promise<{
   identityVerified: boolean;
@@ -604,9 +669,6 @@ async function observeOwnedProcessTree(
   const observation = await readSnapshots();
   if (!observation.ok) return { identityVerified: false, pids: [] };
   const processes = observation.processes;
-  if (initialObservation && hasAmbiguousInitialTreeOrphan(processes, root)) {
-    return { identityVerified: false, pids: [] };
-  }
   const snapshotsByPid = new Map(processes.map((processInfo) => [processInfo.pid, processInfo]));
   for (const [pid, createdAt] of tracker.identities) {
     const current = snapshotsByPid.get(pid);
@@ -660,11 +722,11 @@ async function waitForOwnedProcessTreeExit(
 ): Promise<{ identityVerified: boolean; pids: number[] }> {
   const startedAt = Date.now();
   while (Date.now() - startedAt < timeoutMs) {
-    const observed = await observeOwnedProcessTree(root, tracker, false, readSnapshots);
+    const observed = await observeOwnedProcessTree(root, tracker, readSnapshots);
     if (!observed.identityVerified || observed.pids.length === 0) return observed;
     await sleep(100);
   }
-  return observeOwnedProcessTree(root, tracker, false, readSnapshots);
+  return observeOwnedProcessTree(root, tracker, readSnapshots);
 }
 
 /**
@@ -690,13 +752,25 @@ export async function terminateOwnedProcessTree(
       remainingPids: [],
     };
   }
+  // Process snapshots only prove a parent-chain closure. Windows runs must
+  // instead start under the job launcher, which establishes the lifetime
+  // ownership boundary before the runtime can create a short-lived helper.
+  if (process.platform === "win32" && root.ownership !== "windows-job") {
+    return {
+      attempted: false,
+      childTreeQuiescent: false,
+      forced: false,
+      identityVerified: false,
+      remainingPids: [],
+    };
+  }
   const graceMs = options.graceMs ?? 3_000;
   const forceWaitMs = options.forceWaitMs ?? 500;
   const readSnapshots = options.readSnapshots ?? readProcessSnapshots;
   const tracker: OwnedProcessTreeTracker = {
     identities: new Map([[root.pid, root.createdAt]]),
   };
-  const first = await observeOwnedProcessTree(root, tracker, true, readSnapshots);
+  const first = await observeOwnedProcessTree(root, tracker, readSnapshots);
   if (!first.identityVerified) {
     return { attempted: false, childTreeQuiescent: false, forced: false, identityVerified: false, remainingPids: [] };
   }

@@ -181,7 +181,12 @@ export {
 } from './runtimes/run-lifecycle-analytics.js';
 
 export { resolveProjectRoot };
-import { captureOwnedProcessIdentity, createCommandInvocation, listProcessSnapshots } from '@open-design/platform';
+import {
+  captureOwnedProcessIdentity,
+  createCommandInvocation,
+  listProcessSnapshots,
+  spawnWindowsJobProcess,
+} from '@open-design/platform';
 import { SIDECAR_ENV } from '@open-design/sidecar-proto';
 import {
   buildLiveArtifactsMcpServersForAgent,
@@ -6760,17 +6765,25 @@ export async function startServer({
       });
       lifecycle.mark('launch_preflight_end');
       lifecycle.mark('process_spawn_start');
-      child = spawn(invocation.command, invocation.args, {
-        env,
-        stdio: [stdinMode, 'pipe', 'pipe'],
-        cwd: effectiveCwd,
-        shell: false,
-        detached: process.platform !== 'win32',
-        // Required when invocation wraps a Windows .cmd/.bat shim through
-        // cmd.exe; without this, Node re-escapes the inner command line and
-        // breaks paths containing spaces (issue #315).
-        windowsVerbatimArguments: invocation.windowsVerbatimArguments,
-      });
+      child = process.platform === 'win32'
+        ? spawnWindowsJobProcess({
+            command: agentLaunch.launchPath,
+            args,
+            env,
+            cwd: effectiveCwd,
+            stdio: [stdinMode, 'pipe', 'pipe'],
+          })
+        : spawn(invocation.command, invocation.args, {
+            env,
+            stdio: [stdinMode, 'pipe', 'pipe'],
+            cwd: effectiveCwd,
+            shell: false,
+            detached: true,
+            // Required when invocation wraps a Windows .cmd/.bat shim through
+            // cmd.exe; without this, Node re-escapes the inner command line and
+            // breaks paths containing spaces (issue #315).
+            windowsVerbatimArguments: invocation.windowsVerbatimArguments,
+          });
       lifecycle.mark('process_spawned');
       run.child = child;
       // The Windows process-table query below can yield to the event loop
@@ -6806,7 +6819,9 @@ export async function startServer({
         const identityCapture = listProcessSnapshots()
           .then((snapshots) => {
             if (run.child !== spawnedChild) return;
-            run.processTreeRoot = captureOwnedProcessIdentity(snapshots, spawnedChild.pid);
+            run.processTreeRoot = captureOwnedProcessIdentity(snapshots, spawnedChild.pid, {
+              ownership: 'windows-job',
+            });
           })
           .catch(() => {
             // A missing snapshot is deliberately handled as unverified by the

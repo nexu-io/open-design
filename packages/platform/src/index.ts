@@ -35,6 +35,7 @@ export type {
   ProcessStampField,
   ProcessStampShape,
   SpawnProcessRequest,
+  WindowsJobSpawnRequest,
   StampedProcessMatchCriteria,
   StopProcessesResult,
 } from "./process.js";
@@ -54,6 +55,7 @@ export {
   readProcessStampFromCommand,
   spawnBackgroundProcess,
   spawnLoggedProcess,
+  spawnWindowsJobProcess,
   stopProcesses,
   terminateOwnedProcessTree,
   waitForProcessExit,

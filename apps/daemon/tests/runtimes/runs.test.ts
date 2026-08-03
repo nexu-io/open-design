@@ -214,12 +214,12 @@ describe('chat run service shutdown', () => {
     const run = runs.create({ projectId: 'project-1', conversationId: 'conv-1' });
     run.status = 'running';
     (run as any).child = new FakeChildProcess({ closeOn: 'SIGTERM' });
-    (run as any).processTreeRoot = { pid: 100, createdAt: 10 };
+    (run as any).processTreeRoot = { pid: 100, createdAt: 10, ownership: 'windows-job' };
 
     const status = await runs.cancel(run);
 
     expect(terminateProcessTree).toHaveBeenCalledWith(
-      { pid: 100, createdAt: 10 },
+      { pid: 100, createdAt: 10, ownership: 'windows-job' },
       expect.objectContaining({ graceMs: expect.any(Number), forceWaitMs: expect.any(Number) }),
     );
     expect(status).toMatchObject({
@@ -261,12 +261,12 @@ describe('chat run service shutdown', () => {
     expect(terminateProcessTree).not.toHaveBeenCalled();
     expect(run.status).toBe('running');
 
-    (run as any).processTreeRoot = { pid: 100, createdAt: 10 };
+    (run as any).processTreeRoot = { pid: 100, createdAt: 10, ownership: 'windows-job' };
     resolveIdentityCapture();
 
     await expect(cancel).resolves.toMatchObject({ status: 'canceled' });
     expect(terminateProcessTree).toHaveBeenCalledWith(
-      { pid: 100, createdAt: 10 },
+      { pid: 100, createdAt: 10, ownership: 'windows-job' },
       expect.objectContaining({ graceMs: expect.any(Number), forceWaitMs: expect.any(Number) }),
     );
   });
@@ -278,7 +278,7 @@ describe('chat run service shutdown', () => {
     const run = runs.create({ projectId: 'project-1', conversationId: 'conv-1' });
     run.status = 'running';
     (run as any).child = new FakeChildProcess({ closeOn: 'SIGTERM' });
-    (run as any).processTreeRoot = { pid: 100, createdAt: 10 };
+    (run as any).processTreeRoot = { pid: 100, createdAt: 10, ownership: 'windows-job' };
 
     const first = runs.cancel(run);
     const duplicate = runs.cancel(run);
@@ -981,13 +981,13 @@ describe('run event log persistence', () => {
     const run = beforeRestart.create({ projectId: 'p1' });
     run.status = 'running';
     (run as any).child = new FakeChildProcess({ closeOn: 'SIGTERM' });
-    (run as any).processTreeRoot = { pid: 100, createdAt: 10 };
+    (run as any).processTreeRoot = { pid: 100, createdAt: 10, ownership: 'windows-job' };
     (run as any).requiresTreeVerification = true;
 
     await beforeRestart.cancel(run);
     expect(run.status).toBe('failed');
     expect(JSON.parse(fs.readFileSync(path.join(tmpDir, run.id, 'state.json'), 'utf8'))).toMatchObject({
-      processTreeRoot: { pid: 100, createdAt: 10 },
+      processTreeRoot: { pid: 100, createdAt: 10, ownership: 'windows-job' },
       requiresTreeVerification: true,
       termination: { retryable: true },
     });
@@ -1004,7 +1004,7 @@ describe('run event log persistence', () => {
 
     expect(hydrated).toMatchObject({
       status: 'failed',
-      processTreeRoot: { pid: 100, createdAt: 10 },
+      processTreeRoot: { pid: 100, createdAt: 10, ownership: 'windows-job' },
       requiresTreeVerification: true,
       termination: { retryable: true },
     });
@@ -1013,7 +1013,7 @@ describe('run event log persistence', () => {
       errorCode: 'RUN_TERMINATION_UNVERIFIED',
     });
     expect(retryTerminator).toHaveBeenCalledWith(
-      { pid: 100, createdAt: 10 },
+      { pid: 100, createdAt: 10, ownership: 'windows-job' },
       expect.objectContaining({ graceMs: expect.any(Number), forceWaitMs: expect.any(Number) }),
     );
   });
@@ -1029,6 +1029,41 @@ describe('run event log persistence', () => {
         ...initialState,
         status: 'failed',
         errorCode: 'RUN_TERMINATION_UNVERIFIED',
+        termination: { retryable: true },
+      }) + '\n',
+      'utf8',
+    );
+
+    const retryTerminator = vi.fn();
+    const afterRestart = createRunsWithLog(tmpDir, { terminateProcessTree: retryTerminator });
+    const hydrated = afterRestart.get(run.id);
+
+    expect(hydrated).toMatchObject({
+      status: 'failed',
+      processTreeRoot: null,
+      requiresTreeVerification: false,
+      termination: { retryable: false },
+    });
+    await expect(afterRestart.cancel(hydrated)).resolves.toMatchObject({
+      status: 'failed',
+      errorCode: 'RUN_TERMINATION_UNVERIFIED',
+    });
+    expect(retryTerminator).not.toHaveBeenCalled();
+  });
+
+  it('fails closed after restart when a retriable Windows failure lacks job ownership', async () => {
+    const beforeRestart = createRunsWithLog(tmpDir);
+    const run = beforeRestart.create({ projectId: 'p1' });
+    const statePath = path.join(tmpDir, run.id, 'state.json');
+    const initialState = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+    fs.writeFileSync(
+      statePath,
+      JSON.stringify({
+        ...initialState,
+        status: 'failed',
+        errorCode: 'RUN_TERMINATION_UNVERIFIED',
+        processTreeRoot: { pid: 100, createdAt: 10 },
+        requiresTreeVerification: true,
         termination: { retryable: true },
       }) + '\n',
       'utf8',
