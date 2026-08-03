@@ -308,6 +308,7 @@ function splitCompoundSelectors(selector: string): string[] {
 interface CompoundTokens {
   element: string | null;
   classes: string[];
+  extraElements: string[];
 }
 
 // Tokenize one compound selector (no combinators) into its element name and
@@ -315,9 +316,23 @@ interface CompoundTokens {
 // (e.g. `button` in `button.primary`); class tokens are every `.foo` that
 // follows. Pseudo-classes, attribute selectors, and `*` do not contribute
 // element or class tokens on their own.
+//
+// `:is(...)` and `:where(...)` are *component-preserving* functional
+// pseudo-classes: SA/RGBA treat them as taking a forgiving selector list, and
+// the matched components must still be tokenized so their tokens enter the
+// group's classifier (see PerishCode round-4 review on #6250 — the next()
+// regex was eating the entire pseudo-class as opaque text, which silently
+// dropped `button` from `:where(button)` and `.btn` from `:is(.btn)`,
+// erasing their `--tone` from `Buttons.tokenReferences`). The selector-list
+// argument is split on commas (depth-aware) and each argument is tokenized as
+// its own compound (recursively, so `:where(:is(button))` still works). Pseudos
+// like `:not(...)`, `:has(...)`, and `:nth-child(...)` are NOT component-
+// preserving — they hide their arguments deliberately — so we leave them as
+// opaque skips.
 function tokenizeCompound(compound: string): CompoundTokens {
   let element: string | null = null;
   const classes: string[] = [];
+  const extraElements: string[] = [];
   let i = 0;
   // leading element name (type selector) — must come first in the compound
   const elementMatch = /^([a-zA-Z][a-zA-Z0-9_-]*)/.exec(compound);
@@ -334,6 +349,53 @@ function tokenizeCompound(compound: string): CompoundTokens {
       i += classMatch[0].length;
       continue;
     }
+    const preserveMatch = /^:(?:is|where)\s*\(/i.exec(rest);
+    if (preserveMatch) {
+      // capture the balanced `(...)` block so nested parens are respected
+      const argsStart = i + preserveMatch[0].length - 1; // index of `(`
+      let depth = 0;
+      let j = argsStart;
+      while (j < compound.length) {
+        const c = compound[j];
+        if (c === '(') depth += 1;
+        else if (c === ')') {
+          depth -= 1;
+          if (depth === 0) break;
+        }
+        j += 1;
+      }
+      const inner = compound.slice(argsStart + 1, j); // contents of `(...)`
+      // split the inner selector-list by commas (depth-aware over `()`/`[]`)
+      for (const arg of splitSelectorList(inner)) {
+        const trimmed = arg.trim();
+        if (trimmed.length === 0) continue;
+        // each argument is a sub-selector; tokenize it (compounds/combinators
+        // included) and union its element / class tokens into ours.
+        const subCompounds = splitCompoundSelectors(trimmed);
+        for (const sub of subCompounds) {
+          const subTokens = tokenizeCompound(sub);
+          if (subTokens.element) {
+            // Collect EVERY element candidate from inside :is()/:where();
+            // a compound selector only has one leading type selector, but
+            // `:where(button, label)` legitimately exposes both `button`
+            // and `label`. The first non-null candidate becomes the
+            // primary element token; the rest go into `extraElements` so
+            // `selectorMatchesTokens` can run elementMatchers against
+            // every candidate and admit the selector to each matching group
+            // (e.g. `:where(button, label)` enters BOTH Buttons and Inputs).
+            if (element == null) element = subTokens.element;
+            else extraElements.push(subTokens.element);
+          }
+          for (const cls of subTokens.classes) classes.push(cls);
+          for (const extra of subTokens.extraElements) {
+            if (element == null) element = extra;
+            else extraElements.push(extra);
+          }
+        }
+      }
+      i = j + 1; // consume `:...(...)`
+      continue;
+    }
     // skip pseudo-classes/elements, attribute selectors, `*`, and `:`
     const skipMatch = /^(?:::[a-zA-Z-]+|:[a-zA-Z-]+(?:\([^)]*\))?|\[[^\]]*\]|\*)/.exec(rest);
     if (skipMatch) {
@@ -343,7 +405,7 @@ function tokenizeCompound(compound: string): CompoundTokens {
     // anything else (one char) we cannot tokenize — bail forward
     i += 1;
   }
-  return { element, classes };
+  return { element, classes, extraElements };
 }
 
 // Decide whether a selector belongs to a component group by examining its
@@ -362,8 +424,13 @@ function selectorMatchesTokens(selector: string, definition: ComponentGroupDefin
   if (definition.selectorMatchers.some((matcher) => matcher.test(selector))) return true;
   const compounds = splitCompoundSelectors(selector);
   for (const compound of compounds) {
-    const { element, classes } = tokenizeCompound(compound);
-    if (element && definition.elementMatchers.some((matcher) => matcher.test(element))) return true;
+    const { element, classes, extraElements } = tokenizeCompound(compound);
+    // element token (and any extra element tokens pulled out of :is()/:where())
+    // joined together so multi-element compounds can match several groups.
+    const elementCandidates = element ? [element, ...extraElements] : extraElements;
+    if (elementCandidates.some((token) => definition.elementMatchers.some((matcher) => matcher.test(token)))) {
+      return true;
+    }
     for (const className of classes) {
       if (definition.classMatchers.some((matcher) => matcher.test(className))) return true;
     }
