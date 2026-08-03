@@ -16,6 +16,7 @@ import type {
   ImportLocalDesignSystemResponse,
   ReplaceProjectWorkingDirResponse,
   ProjectFileTextPreviewResponse,
+  ProjectFileResponse,
   ProjectFileVersion,
   ProjectFileVersionSource,
   ProjectFileVersionResponse,
@@ -1385,11 +1386,13 @@ export async function deployProjectFile(
   fileName: string,
   providerId: WebDeployProviderId = DEFAULT_DEPLOY_PROVIDER_ID,
   cloudflarePages?: WebCloudflarePagesDeploySelection,
+  target?: 'preview' | 'production',
 ): Promise<WebDeployProjectFileResponse> {
   const body = {
     fileName,
     providerId,
     ...(cloudflarePages ? { cloudflarePages } : {}),
+    ...(target ? { target } : {}),
   };
   const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/deploy`, {
     method: 'POST',
@@ -1940,6 +1943,7 @@ export async function writeProjectTextFile(
     versionSource?: ProjectFileVersionSource;
     versionLabel?: string;
     versionPrompt?: string | null;
+    parentVersionId?: string;
   },
 ): Promise<ProjectFile | null> {
   const result = await writeProjectTextFileDetailed(projectId, name, content, options);
@@ -1947,7 +1951,7 @@ export async function writeProjectTextFile(
 }
 
 export type WriteProjectTextFileResult =
-  | { ok: true; file: ProjectFile }
+  | { ok: true; file: ProjectFile; version?: ProjectFileVersion | null }
   | { ok: false; status?: number; code?: string; message: string };
 
 export async function writeProjectTextFileDetailed(
@@ -1959,6 +1963,7 @@ export async function writeProjectTextFileDetailed(
     versionSource?: ProjectFileVersionSource;
     versionLabel?: string;
     versionPrompt?: string | null;
+    parentVersionId?: string;
   },
 ): Promise<WriteProjectTextFileResult> {
   try {
@@ -1972,6 +1977,7 @@ export async function writeProjectTextFileDetailed(
         versionSource: options?.versionSource,
         versionLabel: options?.versionLabel,
         versionPrompt: options?.versionPrompt,
+        parentVersionId: options?.parentVersionId,
       }),
     });
     if (!resp.ok) {
@@ -1983,8 +1989,12 @@ export async function writeProjectTextFileDetailed(
         message: body.message || resp.statusText || 'Save failed',
       };
     }
-    const json = (await resp.json()) as { file: ProjectFile };
-    return { ok: true, file: json.file };
+    const json = (await resp.json()) as ProjectFileResponse;
+    return {
+      ok: true,
+      file: json.file,
+      ...(json.version !== undefined ? { version: json.version } : {}),
+    };
   } catch {
     return { ok: false, message: 'Network error while saving the file' };
   }

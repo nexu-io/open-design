@@ -15,6 +15,7 @@
 //   - Tarball extraction inherits the same caps via tar's strict mode.
 
 import path from 'node:path';
+import { safeExternalFetch } from './plugin-asset-cache.js';
 import fs from 'node:fs';
 import os from 'node:os';
 import { createHash } from 'node:crypto';
@@ -584,7 +585,7 @@ async function* installFromArchiveUrl(
 }
 
 async function defaultFetcher(url: string): ReturnType<ArchiveFetcher> {
-  const response = await fetch(url, { redirect: 'follow' });
+  const response = await safeExternalFetch(url);
   return {
     ok: response.ok,
     status: response.status,
@@ -775,13 +776,35 @@ export interface UninstallResult {
   warning?: string;
 }
 
+// A plugin id must be a single safe folder name (no path separators, no
+// traversal). Exposed so the HTTP layer can reject a malformed id with 400
+// before it reaches any filesystem operation.
+export function isSafePluginId(id: string): boolean {
+  return typeof id === 'string' && SAFE_BASENAME.test(id);
+}
+
 export async function uninstallPlugin(
   db: SqliteDb,
   id: string,
   roots: RegistryRoots = defaultRegistryRoots(),
 ): Promise<UninstallResult> {
+  // A plugin id is a single safe folder name — never a path. Validate it
+  // BEFORE it reaches `path.join(...) + rm -rf`, so an id carrying traversal
+  // segments (e.g. a URL-encoded `../../…`) cannot escape the plugin registry
+  // root and recursively delete an arbitrary directory. This mirrors the guard
+  // the install path already enforces (`SAFE_BASENAME.test(pluginId)`); the
+  // uninstall path was the one rm-capable route that skipped it.
+  if (!isSafePluginId(id)) {
+    return { ok: false, warning: `Plugin id '${id}' is not a safe folder name` };
+  }
   const removed = deleteInstalledPlugin(db, id);
   const folder = path.join(roots.userPluginsRoot, id);
+  // Defence in depth: even a SAFE_BASENAME-passing id must resolve to a direct
+  // child of the registry root. If normalization lands anywhere else, refuse.
+  const registryRoot = path.resolve(roots.userPluginsRoot);
+  if (path.dirname(path.resolve(folder)) !== registryRoot) {
+    return { ok: false, warning: `Plugin id '${id}' does not resolve inside the plugin registry root` };
+  }
   let removedFolder: string | undefined;
   try {
     await fsp.rm(folder, { recursive: true, force: true });

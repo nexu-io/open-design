@@ -1,7 +1,14 @@
-# Open Design — Product Spec
+# Open Design — Historical Product Spec
 
-**Status:** Draft v0.1 · 2026-04-24
+**Status:** Archived Draft v0.1 · 2026-04-24
 **Scope:** Product definition, scenarios, non-goals, high-level modules, and positioning against both [Anthropic's Claude Design][cd] and the existing open-source alternative ([Open CoDesign][ocod]).
+
+> **Historical baseline:** This document predates the implemented desktop and
+> packaged runtimes, plugin marketplace, expanded creation surfaces, runtime
+> registry, and current CLI. Its product bets are retained to explain the
+> project's origin; assertions below are not a source of current behavior.
+> Consult the root `README.md`, `AGENTS.md`, [`architecture.md`](architecture.md),
+> [`agent-adapters.md`](agent-adapters.md), and `specs/current/` instead.
 
 [cd]: https://x.com/claudeai/status/2045156267690213649
 [ocod]: https://github.com/OpenCoworkAI/open-codesign

@@ -108,6 +108,7 @@ export type OpenDesignHostBrowserClearDataOptions = {
 
 export const OPEN_DESIGN_HOST_UPDATER_ACTIONS = Object.freeze({
   CHECK: "check",
+  CLEAR_CACHE: "clear-cache",
   DOWNLOAD: "download",
   INSTALL: "install",
   QUIT: "quit",
@@ -217,7 +218,7 @@ export type OpenDesignHostUpdaterIncomingSnapshot = {
   version: string;
 };
 
-export type OpenDesignHostUpdaterCacheLifecycleTrigger = "cold-start" | "next-version-ready";
+export type OpenDesignHostUpdaterCacheLifecycleTrigger = "cold-start" | "manual" | "next-version-ready";
 
 export type OpenDesignHostUpdaterReleaseLifecycleState =
   | "cleanup-deferred"
@@ -245,6 +246,24 @@ export type OpenDesignHostUpdaterCacheSnapshot = {
   lifecycle?: OpenDesignHostUpdaterCacheLifecycleSummary;
 };
 
+export type OpenDesignHostUpdaterReinstallReason =
+  | "launcher-schema"
+  | "outer-below-min"
+  | "outer-version-unreadable";
+
+/**
+ * Present when the release feed requires a full installer reinstall instead of
+ * an in-place payload update. `installedVersion` is the physically installed
+ * outer package version; `url` is an optional operator-supplied explanation
+ * link.
+ */
+export type OpenDesignHostUpdaterReinstallSnapshot = {
+  installedVersion?: string;
+  minVersion?: string;
+  reason: OpenDesignHostUpdaterReinstallReason;
+  url?: string;
+};
+
 export type OpenDesignHostUpdaterStatusSnapshot = {
   active?: OpenDesignHostUpdaterReleaseSnapshot;
   arch: string;
@@ -267,6 +286,7 @@ export type OpenDesignHostUpdaterStatusSnapshot = {
   paths?: OpenDesignHostUpdaterPathSnapshot;
   platform: string;
   progress?: OpenDesignHostUpdaterProgressSnapshot;
+  reinstall?: OpenDesignHostUpdaterReinstallSnapshot;
   state: OpenDesignHostUpdaterState;
   supported: boolean;
 };
@@ -276,6 +296,21 @@ export type OpenDesignHostUpdaterResult =
   | OpenDesignHostFailure;
 
 export type OpenDesignHostUpdaterStatusListener = (status: OpenDesignHostUpdaterStatusSnapshot) => void;
+
+export type OpenDesignHostUpdaterMenuLabels = {
+  check: string;
+  checking: string;
+  downloading: string;
+  install: string;
+  installing: string;
+  restart: string;
+};
+
+export type OpenDesignHostUpdaterOpenDialogRequest = {
+  source: string;
+};
+
+export type OpenDesignHostUpdaterOpenDialogListener = (request: OpenDesignHostUpdaterOpenDialogRequest) => void;
 
 export type OpenDesignHostBridge = {
   browser: {
@@ -304,11 +339,14 @@ export type OpenDesignHostBridge = {
   };
   updater: {
     check(options?: OpenDesignHostUpdaterActionOptions): Promise<OpenDesignHostUpdaterStatusSnapshot>;
+    "clear-cache"(options?: OpenDesignHostUpdaterActionOptions): Promise<OpenDesignHostUpdaterStatusSnapshot>;
     download(options?: OpenDesignHostUpdaterActionOptions): Promise<OpenDesignHostUpdaterStatusSnapshot>;
     install(options?: OpenDesignHostUpdaterActionOptions): Promise<OpenDesignHostUpdaterStatusSnapshot>;
     quit(options?: OpenDesignHostUpdaterActionOptions): Promise<OpenDesignHostActionResult>;
+    setMenuLabels(labels: OpenDesignHostUpdaterMenuLabels): Promise<OpenDesignHostActionResult>;
     status(options?: OpenDesignHostUpdaterActionOptions): Promise<OpenDesignHostUpdaterStatusSnapshot>;
     subscribe(listener: OpenDesignHostUpdaterStatusListener): () => void;
+    subscribeOpenDialog(listener: OpenDesignHostUpdaterOpenDialogListener): () => void;
   };
   version: typeof OPEN_DESIGN_HOST_VERSION;
 };

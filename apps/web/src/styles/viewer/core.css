@@ -1284,6 +1284,34 @@
   visibility: hidden;
   pointer-events: none;
 }
+.preview-asset-warning {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--warning, #d97706) 34%, var(--border));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--bg-panel) 94%, var(--warning, #d97706) 6%);
+  color: var(--text);
+  box-shadow: 0 10px 28px color-mix(in srgb, var(--shadow-color, #000) 14%, transparent);
+  font-size: 12px;
+  line-height: 1.35;
+}
+.preview-asset-warning strong {
+  flex: 0 0 auto;
+  color: var(--warning, #d97706);
+  font-weight: 600;
+}
+.preview-asset-warning span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 .viewer-viewport-switcher {
   position: relative;
   display: inline-flex;

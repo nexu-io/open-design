@@ -64,6 +64,12 @@ const RUNTIME_OVERRIDE_APPLIER_SOURCE = `
         }
       });
     });
+    Object.keys(data.innerHtml || {}).forEach(function (id) {
+      var el = byId(id);
+      if (!el) return;
+      var value = textValue(data.innerHtml[id]);
+      if (el.innerHTML !== value) el.innerHTML = value;
+    });
     Object.keys(data.html || {}).forEach(function (id) {
       var el = byId(id);
       if (!el) return;
@@ -95,6 +101,7 @@ interface RuntimeContentOverrides {
   links?: Record<string, { text: string; href: string }>;
   images?: Record<string, { src: string; alt: string }>;
   attrs?: Record<string, Record<string, string>>;
+  innerHtml?: Record<string, string>;
   html?: Record<string, string>;
 }
 
@@ -121,6 +128,13 @@ export function applyManualEditPatch(source: string, patch: ManualEditPatch): Ma
 
   const el = findEditableElement(doc, patch.id);
   if (!el) {
+    if (patch.kind === 'insert-html' || patch.kind === 'duplicate-element') {
+      return {
+        ok: false,
+        source,
+        error: 'Structural edits are not supported for runtime-rendered targets.',
+      };
+    }
     const dynamic = applyDynamicBrandKitPatch(doc, patch);
     return dynamic.ok
       ? { ok: true, source: serializeSource(doc, source) }
@@ -158,6 +172,28 @@ export function applyManualEditPatch(source: string, patch: ManualEditPatch): Ma
         error: 'error' in replaced ? replaced.error : 'Could not replace element HTML.',
       };
     }
+  } else if (patch.kind === 'set-inner-html') {
+    el.innerHTML = sanitizeInnerHtml(doc, patch.html);
+  } else if (patch.kind === 'insert-html') {
+    const pasted = parseInsertableElement(doc, patch.html);
+    if (!pasted) {
+      return { ok: false, source, error: 'Pasted HTML must contain exactly one root element.' };
+    }
+    // A `__body__` anchor appends to the end of the page; every element
+    // anchor pastes as the anchor's next sibling (the duplicate-element
+    // position contract, so path-id selection hand-off works the same way).
+    if (el === doc.body) {
+      el.appendChild(pasted);
+    } else if (el.parentElement) {
+      el.insertAdjacentElement('afterend', pasted);
+    } else {
+      return { ok: false, source, error: 'Cannot paste next to the root element.' };
+    }
+  } else if (patch.kind === 'duplicate-element') {
+    if (!el.parentElement) {
+      return { ok: false, source, error: 'Cannot duplicate the root element.' };
+    }
+    el.insertAdjacentElement('afterend', cloneWithoutManualEditIdentity(el));
   } else if (patch.kind === 'remove-element') {
     if (!el.parentElement) {
       return { ok: false, source, error: 'Cannot remove the root element.' };
@@ -191,15 +227,90 @@ export function readManualEditFields(source: string, id: string): ManualEditFiel
   return { text: el.textContent?.trim() ?? '' };
 }
 
+export function manualEditTargetHasNestedMarkup(source: string, id: string): boolean {
+  const doc = parseSource(source);
+  const el = doc ? findEditableElement(doc, id) : null;
+  return Boolean(el && hasElementChildren(el));
+}
+
 export function readManualEditStyles(source: string, id: string): ManualEditStyles {
   const doc = parseSource(source);
   const el = doc ? findEditableElement(doc, id) : null;
   if (!el) return emptyManualEditStyles();
+  return readElementInlineStyles(el);
+}
+
+/**
+ * The style values SOURCE persists for a target, wherever they live: the
+ * element's inline `style` attribute when the target exists in the saved DOM,
+ * otherwise the `style[data-od-manual-edit-runtime-overrides]` rule that
+ * `set-style` patches write for runtime-only targets (brand-kit ids have no
+ * saved markup). History replay must read through this so undo/redo restores
+ * the persisted values instead of treating runtime targets as unstyled.
+ */
+export function readManualEditSavedStyles(source: string, id: string): ManualEditStyles {
+  const doc = parseSource(source);
+  if (!doc) return emptyManualEditStyles();
+  const el = findEditableElement(doc, id);
+  if (el) return readElementInlineStyles(el);
+  return readRuntimeStyleOverride(doc, id);
+}
+
+function readElementInlineStyles(el: Element): ManualEditStyles {
   const style = (el as HTMLElement).style;
   return MANUAL_EDIT_STYLE_PROPS.reduce<ManualEditStyles>((acc, key) => {
     acc[key] = (style[key as unknown as keyof CSSStyleDeclaration] as string | undefined) ?? '';
     return acc;
   }, {} as ManualEditStyles);
+}
+
+/** Whether SOURCE is a runtime-rendered brand-kit document — the pages whose
+ * manual-edit targets can exist only in the runtime DOM. Saves for such
+ * targets persist through the payload or override rules, so an empty
+ * saved-markup read must never be classified as "target vanished". This is
+ * independent of whether the target currently owns an override rule: clearing
+ * a target's last declaration legitimately deletes its rule. */
+export function isManualEditRuntimeRenderedSource(source: string): boolean {
+  const doc = parseSource(source);
+  return Boolean(doc?.getElementById('od-brand-payload'));
+}
+
+/** Whether SOURCE persists a runtime style-override rule for the target —
+ * the persistence a `set-style` save leaves behind when the target has no
+ * saved markup (runtime-only brand-kit ids). */
+export function hasManualEditRuntimeStyleOverride(source: string, id: string): boolean {
+  const doc = parseSource(source);
+  return doc ? runtimeStyleRuleBody(doc, id) != null : false;
+}
+
+function runtimeStyleRuleBody(doc: Document, id: string): string | null {
+  const css = doc.querySelector('style[data-od-manual-edit-runtime-overrides]')?.textContent ?? '';
+  if (!css) return null;
+  const selector = `[data-od-id="${cssStringEscape(id)}"]`;
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return css.match(new RegExp(`${escaped}\\s*\\{([^}]*)\\}`))?.[1] ?? null;
+}
+
+function readRuntimeStyleOverride(doc: Document, id: string): ManualEditStyles {
+  const styles = emptyManualEditStyles();
+  for (const [name, value] of parseRuntimeStyleDeclarations(runtimeStyleRuleBody(doc, id))) {
+    const key = MANUAL_EDIT_STYLE_PROPS.find((prop) => camelToKebab(prop) === name);
+    if (key) styles[key] = value;
+  }
+  return styles;
+}
+
+function parseRuntimeStyleDeclarations(body: string | null): Map<string, string> {
+  const declarations = new Map<string, string>();
+  if (!body) return declarations;
+  for (const declaration of body.split(';')) {
+    const colon = declaration.indexOf(':');
+    if (colon < 0) continue;
+    const name = declaration.slice(0, colon).trim();
+    const value = declaration.slice(colon + 1).replace(/!important\s*$/i, '').trim();
+    if (name && value) declarations.set(name, value);
+  }
+  return declarations;
 }
 
 export function readManualEditAttributes(source: string, id: string): Record<string, string> {
@@ -217,6 +328,114 @@ export function readManualEditAttributes(source: string, id: string): Record<str
 export function readManualEditOuterHtml(source: string, id: string): string {
   const doc = parseSource(source);
   return (doc ? findEditableElement(doc, id)?.outerHTML : '') ?? '';
+}
+
+/** Read the sanitized rich-text override persisted for a runtime-only target. */
+export function readManualEditRuntimeInnerHtml(source: string, id: string): string | null {
+  const doc = parseSource(source);
+  return doc ? readRuntimeContentOverrides(doc).innerHtml?.[id] ?? null : null;
+}
+
+/**
+ * Read the exact element markup the reload-time runtime override applier will
+ * render. Runtime replacements retain their semantic id even when the user's
+ * edited outerHTML omits it, so the live fast path stays addressable too.
+ */
+export function readManualEditRuntimeOuterHtml(source: string, id: string): string | null {
+  const doc = parseSource(source);
+  if (!doc) return null;
+  const html = readRuntimeContentOverrides(doc).html?.[id];
+  if (html == null) return null;
+  const template = doc.createElement('template');
+  template.innerHTML = html;
+  if (template.content.children.length !== 1) return null;
+  const next = template.content.children[0]!;
+  if (!next.getAttribute('data-od-id')) next.setAttribute('data-od-id', id);
+  return next.outerHTML;
+}
+
+/**
+ * Positional path id (`path-a-b-c`) of an element in a parsed SOURCE document
+ * — mirror of `findElementByPath` in reverse, and of the srcDoc build-time
+ * annotators. The source is clean (no injected host nodes), so plain
+ * `parent.children` indexes are the canonical positions.
+ */
+function manualEditPositionalPathId(el: Element): string {
+  const parts: number[] = [];
+  let node: Element | null = el;
+  while (node && node !== node.ownerDocument.body) {
+    const parent: Element | null = node.parentElement;
+    if (!parent) break;
+    parts.unshift(Array.prototype.indexOf.call(parent.children, node));
+    node = parent;
+  }
+  return parts.length ? `path-${parts.join('-')}` : '';
+}
+
+/** The id a freshly saved element will be addressed by: an authored
+ * `data-od-id` when present, otherwise its positional path. */
+function manualEditElementId(el: Element): string {
+  return el.getAttribute('data-od-id') || manualEditPositionalPathId(el);
+}
+
+/**
+ * Reads back the element that an `insert-html` / `duplicate-element` patch
+ * just placed into the SAVED source: the anchor's next sibling, or the last
+ * body child for a `__body__` append. Returns its addressable id (for the
+ * selection hand-off) and its saved outerHTML (for the in-place DOM insert),
+ * so the live DOM can be reconciled to exactly what the source now holds.
+ */
+export function readManualEditInsertedSibling(
+  source: string,
+  anchorId: string,
+): { id: string; html: string } | null {
+  const doc = parseSource(source);
+  if (!doc) return null;
+  const inserted = anchorId === '__body__'
+    ? doc.body.lastElementChild
+    : findEditableElement(doc, anchorId)?.nextElementSibling ?? null;
+  if (!inserted) return null;
+  const id = manualEditElementId(inserted);
+  if (!id) return null;
+  return { id, html: inserted.outerHTML };
+}
+
+/**
+ * How to put a removed element back without reloading the iframe (undo of
+ * `remove-element`): read the element from the BEFORE source and describe the
+ * insertion. Direct body children retain their exact source child index, so
+ * leading non-renderable siblings such as scripts/styles stay ahead of the
+ * restored node. Nested nodes restore after their previous sibling when one
+ * exists, or at the start of their parent. Returns null when the element
+ * cannot be located, in which case the caller falls back to the always-correct
+ * frozen-source reload.
+ */
+export function readManualEditRestoreDescriptor(
+  source: string,
+  removedId: string,
+):
+  | { op: 'insert-after' | 'prepend-child'; anchorId: string; html: string }
+  | { op: 'insert-at-index'; anchorId: '__body__'; index: number; html: string }
+  | null {
+  const doc = parseSource(source);
+  const el = doc ? findEditableElement(doc, removedId) : null;
+  if (!el || el === doc?.body) return null;
+  const parent = el.parentElement;
+  if (!parent) return null;
+  if (parent === doc?.body) {
+    const index = Array.prototype.indexOf.call(parent.children, el) as number;
+    if (index < 0) return null;
+    return { op: 'insert-at-index', anchorId: '__body__', index, html: el.outerHTML };
+  }
+  const previous = el.previousElementSibling;
+  if (previous) {
+    const anchorId = manualEditElementId(previous);
+    if (!anchorId) return null;
+    return { op: 'insert-after', anchorId, html: el.outerHTML };
+  }
+  const anchorId = manualEditElementId(parent);
+  if (!anchorId) return null;
+  return { op: 'prepend-child', anchorId, html: el.outerHTML };
 }
 
 function parseSource(source: string): Document | null {
@@ -441,13 +660,21 @@ function splitBrandListValue(value: string): string[] {
 function setRuntimeContentOverride(doc: Document, patch: ManualEditPatch): { ok: boolean } {
   const overrides = readRuntimeContentOverrides(doc);
   if (patch.kind === 'set-text') {
+    delete overrides.innerHtml?.[patch.id];
     overrides.text = { ...(overrides.text ?? {}), [patch.id]: patch.value };
   } else if (patch.kind === 'set-link') {
+    delete overrides.innerHtml?.[patch.id];
     overrides.links = { ...(overrides.links ?? {}), [patch.id]: { text: patch.text, href: patch.href } };
   } else if (patch.kind === 'set-image') {
     overrides.images = { ...(overrides.images ?? {}), [patch.id]: { src: patch.src, alt: patch.alt } };
   } else if (patch.kind === 'set-attributes') {
     overrides.attrs = { ...(overrides.attrs ?? {}), [patch.id]: patch.attributes };
+  } else if (patch.kind === 'set-inner-html') {
+    delete overrides.text?.[patch.id];
+    overrides.innerHtml = {
+      ...(overrides.innerHtml ?? {}),
+      [patch.id]: sanitizeInnerHtml(doc, patch.html),
+    };
   } else if (patch.kind === 'set-outer-html') {
     overrides.html = { ...(overrides.html ?? {}), [patch.id]: patch.html };
   } else {
@@ -465,6 +692,7 @@ function clearRuntimeContentOverride(doc: Document, id: string): void {
   delete overrides.links?.[id];
   delete overrides.images?.[id];
   delete overrides.attrs?.[id];
+  delete overrides.innerHtml?.[id];
   delete overrides.html?.[id];
   writeRuntimeContentOverrides(doc, overrides);
 }
@@ -492,6 +720,7 @@ function pruneRuntimeContentOverrides(overrides: RuntimeContentOverrides): Runti
   if (overrides.links && Object.keys(overrides.links).length > 0) next.links = overrides.links;
   if (overrides.images && Object.keys(overrides.images).length > 0) next.images = overrides.images;
   if (overrides.attrs && Object.keys(overrides.attrs).length > 0) next.attrs = overrides.attrs;
+  if (overrides.innerHtml && Object.keys(overrides.innerHtml).length > 0) next.innerHtml = overrides.innerHtml;
   if (overrides.html && Object.keys(overrides.html).length > 0) next.html = overrides.html;
   return next;
 }
@@ -548,17 +777,24 @@ function safeJsonForScript(value: unknown): string {
     .replace(/\u2029/g, '\\u2029');
 }
 
+/**
+ * Persist a `set-style` patch for a runtime-only target by MERGING it into the
+ * target's existing override rule. Toolbar autosaves send only the touched
+ * properties, so declarations an earlier save persisted must survive a later
+ * partial patch; an incoming empty value deletes that declaration only. The
+ * rule disappears once its last declaration is deleted.
+ */
 function setRuntimeStyleOverride(doc: Document, id: string, styles: Partial<ManualEditStyles>): void {
   const style = runtimeStyleElement(doc);
   const selector = `[data-od-id="${cssStringEscape(id)}"]`;
+  const merged = parseRuntimeStyleDeclarations(runtimeStyleRuleBody(doc, id));
+  for (const [name, value] of Object.entries(styles)) {
+    const cssName = camelToKebab(name);
+    if (typeof value !== 'string' || value.trim() === '') merged.delete(cssName);
+    else merged.set(cssName, value.trim());
+  }
   const cleaned = removeRuntimeStyleRule(style.textContent ?? '', selector);
-  const body = Object.entries(styles)
-    .map(([name, value]) => {
-      if (typeof value !== 'string' || value.trim() === '') return '';
-      return `  ${camelToKebab(name)}: ${value.trim()} !important;`;
-    })
-    .filter(Boolean)
-    .join('\n');
+  const body = Array.from(merged, ([name, value]) => `  ${name}: ${value} !important;`).join('\n');
   style.textContent = body ? `${cleaned}\n${selector} {\n${body}\n}\n`.trimStart() : cleaned.trim();
 }
 
@@ -610,6 +846,73 @@ function setAttributes(el: Element, attributes: Record<string, string>): void {
     if (value.trim() === '') el.removeAttribute(name);
     else el.setAttribute(name, value);
   }
+}
+
+const MANUAL_EDIT_IDENTITY_ATTRS = [
+  'data-od-id',
+  'data-od-runtime-id',
+  'data-od-source-path',
+  'data-od-edit-selected',
+  'data-od-editing',
+] as const;
+
+function stripDomAndManualEditIdentity(root: Element | DocumentFragment): void {
+  const descendants = Array.from(root.querySelectorAll('*'));
+  const nodes = root.nodeType === 1 ? [root as Element, ...descendants] : descendants;
+  for (const node of nodes) {
+    node.removeAttribute('id');
+    for (const attr of MANUAL_EDIT_IDENTITY_ATTRS) node.removeAttribute(attr);
+  }
+}
+
+/**
+ * Deep-clone an element for `duplicate-element`, stripping ordinary HTML ids
+ * and every manual-edit identity attribute from the clone and its descendants.
+ * Duplicate HTML ids can retarget CSS, scripts, and anchor links, while shared
+ * `data-od-id` values make every later patch ambiguous. Freshly stripped clones
+ * get re-annotated with stable manual-edit ids on the next preview build.
+ */
+function cloneWithoutManualEditIdentity(el: Element): Element {
+  const clone = el.cloneNode(true) as Element;
+  stripDomAndManualEditIdentity(clone);
+  return clone;
+}
+
+/**
+ * Parse the single element an `insert-html` patch pastes, sanitized like an
+ * innerHTML commit and stripped of every manual-edit identity attribute so
+ * the pasted block can never alias an existing target's ids. Returns null
+ * when the HTML does not contain exactly one root element.
+ */
+function parseInsertableElement(doc: Document, html: string): Element | null {
+  const template = doc.createElement('template');
+  template.innerHTML = sanitizeInnerHtml(doc, html.trim());
+  const elements = Array.from(template.content.children);
+  if (elements.length !== 1) return null;
+  return cloneWithoutManualEditIdentity(elements[0]!);
+}
+
+/**
+ * Sanitize an innerHTML commit coming back from the iframe's inline text
+ * session. The session only produces text plus inline formatting, so anything
+ * executable (scripts, inline handlers, javascript: URLs) is hostile input —
+ * strip it rather than persist it into the artifact.
+ */
+function sanitizeInnerHtml(doc: Document, html: string): string {
+  const template = doc.createElement('template');
+  template.innerHTML = html;
+  for (const node of Array.from(template.content.querySelectorAll('script, style, iframe, object, embed, link, meta'))) {
+    node.remove();
+  }
+  for (const node of Array.from(template.content.querySelectorAll('*'))) {
+    for (const attr of Array.from(node.attributes)) {
+      const name = attr.name.toLowerCase();
+      if (name.startsWith('on')) node.removeAttribute(attr.name);
+      else if ((name === 'href' || name === 'src') && /^\s*javascript:/i.test(attr.value)) node.removeAttribute(attr.name);
+    }
+  }
+  stripDomAndManualEditIdentity(template.content);
+  return template.innerHTML;
 }
 
 function replaceOuterHtml(doc: Document, el: Element, html: string): { ok: true } | { ok: false; error: string } {

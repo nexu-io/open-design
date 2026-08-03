@@ -42,6 +42,28 @@ describe('BYOK draft validation', () => {
     ]);
   });
 
+  it('accepts an empty browser key when a daemon secure profile is configured', () => {
+    const validation = validateByokDraft(
+      'openai',
+      {
+        apiKey: '',
+        baseUrl: 'https://openrouter.ai/api/v1',
+        model: 'openrouter/free',
+      },
+      {
+        requiresApiKey: true,
+        credentialConfigured: true,
+      },
+    );
+
+    expect(validation.ok).toBe(true);
+    expect(validation.issues).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'api_key_required' }),
+      ]),
+    );
+  });
+
   it('detects obvious API keys pasted into the wrong first-party tab', () => {
     const anthropic = validateByokDraft('anthropic', {
       apiKey: 'sk-openai-key',
@@ -259,30 +281,44 @@ describe('BYOK draft validation', () => {
     expect(modelFetchDraft.ok).toBe(true);
   });
 
-  it('defines the model preference order for later model-fetch PRs', () => {
+  it('prefers provider-ranked account models without treating upstream order as a default', () => {
     expect(
       resolveByokModelPreference({
         currentModel: 'custom-model',
         accountModels: [{ id: 'account-model', label: 'Account model' }],
-        providerDefaultModel: 'provider-model',
+        providerPreferredModels: ['provider-model'],
       }),
     ).toEqual({ model: 'custom-model', source: 'explicit' });
 
     expect(
       resolveByokModelPreference({
         currentModel: '',
-        accountModels: [{ id: 'account-model', label: 'Account model' }],
-        providerDefaultModel: 'provider-model',
+        accountModels: [
+          { id: 'upstream-first', label: 'Upstream first' },
+          { id: 'provider-model', label: 'Provider model' },
+        ],
+        providerPreferredModels: ['provider-model'],
       }),
-    ).toEqual({ model: 'account-model', source: 'account' });
+    ).toEqual({ model: 'provider-model', source: 'provider_preferred' });
 
     expect(
       resolveByokModelPreference({
         currentModel: '',
         accountModels: [],
-        providerDefaultModel: 'provider-model',
+        providerPreferredModels: ['provider-model'],
       }),
-    ).toEqual({ model: 'provider-model', source: 'provider_default' });
+    ).toEqual({ model: 'provider-model', source: 'provider_preferred' });
+
+    expect(
+      resolveByokModelPreference({
+        currentModel: '',
+        accountModels: [
+          { id: 'upstream-first', label: 'Upstream first' },
+          { id: 'upstream-second', label: 'Upstream second' },
+        ],
+        providerPreferredModels: ['missing-provider-model'],
+      }),
+    ).toEqual({ model: '', source: 'empty' });
   });
 
   it('skips disabled provider models when choosing an automatic preference', () => {
@@ -293,7 +329,7 @@ describe('BYOK draft validation', () => {
           { id: 'disabled-model', label: 'Disabled model', enabled: false },
           { id: 'enabled-model', label: 'Enabled model' },
         ],
-        providerDefaultModel: 'provider-model',
+        providerPreferredModels: ['disabled-model'],
       }),
     ).toEqual({ model: 'enabled-model', source: 'account' });
 
@@ -303,7 +339,7 @@ describe('BYOK draft validation', () => {
         accountModels: [
           { id: 'disabled-default', label: 'Disabled default', enabled: false },
         ],
-        providerDefaultModel: 'disabled-default',
+        providerPreferredModels: ['disabled-default'],
       }),
     ).toEqual({ model: '', source: 'empty' });
   });

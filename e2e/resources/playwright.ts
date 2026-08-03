@@ -433,31 +433,31 @@ export const playwrightUiScenarios: UiScenario[] = [
     ],
   },
   {
-    id: 'question-form-selection-limit',
-    title: 'Question form checkbox limits block selecting more than the allowed maximum',
+    id: 'question-form-single-selection',
+    title: 'Visual style question keeps exactly one selected direction',
     kind: 'workspace',
-    flow: 'question-form-selection-limit',
+    flow: 'question-form-single-selection',
     automated: true,
     description:
-      'Verifies that a discovery-style checkbox question with maxSelections=2 cannot be pushed past two selected options.',
+      'Verifies that choosing another visual style replaces the previous discovery direction.',
     create: {
-      projectName: 'Question form selection limit',
+      projectName: 'Single visual style',
       tab: 'prototype',
     },
     prompt: 'Help me plan a restaurant homepage',
     notes: [
       'Mocks a question-form response instead of an artifact so the test can exercise the inline clarifying UI.',
-      'Confirms both the interaction guard and the rendered checked state stay capped at two options.',
+      'Confirms the visual card picker exposes radio semantics and keeps exactly one selected option.',
     ],
   },
   {
     id: 'question-form-submit-persistence',
-    title: 'Question form answers persist into chat history and reload in a locked state',
+    title: 'Question form answers persist as a chat summary after reload',
     kind: 'workspace',
     flow: 'question-form-submit-persistence',
     automated: true,
     description:
-      'Verifies that answering a question form writes a user follow-up message, then rehydrates the form in an answered and locked state after reload.',
+      'Verifies that answering an inline question form writes a structured follow-up and restores its readable summary after reload.',
     create: {
       projectName: 'Question form submit persistence',
       tab: 'prototype',

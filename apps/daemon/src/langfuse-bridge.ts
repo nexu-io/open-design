@@ -14,12 +14,13 @@ import path from 'node:path';
 
 import { modelIdForTracking } from '@open-design/contracts/analytics';
 
-import { readAppConfig } from './app-config.js';
+import { agentCliEnvForAgent, readAppConfig } from './app-config.js';
 import type { AppVersionInfo } from './app-version.js';
 import { listMessages } from './db.js';
+import { normalizeOpenDesignTelemetryRelayUrl } from './integrations/telemetry-relay.js';
 import {
   deriveLangfuseDeliveryState,
-  readTelemetrySinkConfig,
+  readFeedbackTelemetrySinkConfig,
   reportRunCompleted,
   reportRunFeedback,
   type AgentEventSummary,
@@ -38,6 +39,8 @@ import {
   type TraceObjectSummary,
   type ToolCallSummary,
   type TurnInfo,
+  shouldFullyRedactToolPayload,
+  toolPayloadRedactionPlaceholder,
 } from './langfuse-trace.js';
 import type { PromptStackTelemetry } from './prompt-telemetry.js';
 import { redactSecrets } from './redact.js';
@@ -53,10 +56,14 @@ import {
   collectStdoutTailSummary,
   summarizeRunDiagnosticsForAnalytics,
 } from './run-diagnostics.js';
-import { classifyRunFailure } from './run-failure-classification.js';
+import {
+  classifyRunFailure,
+  type RunFailureClassification,
+} from './run-failure-classification.js';
 import { deriveRunErrorCode, runResultFromStatus } from './run-result.js';
 import { buildTraceObjectManifests } from './trace-object-manifest.js';
 import type { TraceArtifactObjectSource, TraceObjectUploadManifests } from './trace-object-manifest.js';
+import { getDetectedRuntimeVersions } from './runtimes/detection.js';
 
 interface DaemonRunRecord {
   id: string;
@@ -83,6 +90,8 @@ interface DaemonRunRecord {
   // into chatBody / req across the createChatRunService boundary.
   userPrompt?: string;
   model?: string;
+  resolvedModelId?: string | null;
+  preflightAgentCliVersion?: string | null;
   reasoning?: string;
   skillId?: string;
   designSystemId?: string;
@@ -92,11 +101,16 @@ interface DaemonRunRecord {
     stablePromptHash: string;
     hit: boolean;
     missReason: string | null;
+    changedSections?: string[] | null;
   };
   clientType?: 'desktop' | 'web' | 'unknown';
   promptTelemetry?: PromptStackTelemetry;
   projectAttachmentPaths?: string[];
   projectMetadata?: Record<string, unknown> | null;
+  retryAttemptCount?: number;
+  retryFinalResult?: string;
+  retrySuppressedReason?: string;
+  retryOriginalFailure?: RunFailureClassification;
 }
 
 interface TraceSafeManifestResult {
@@ -187,14 +201,21 @@ function inferObjectRegistrationRelayUrl(env: NodeJS.ProcessEnv = process.env): 
   const objectRelayUrl = env.OPEN_DESIGN_OBJECT_RELAY_URL?.trim();
   if (!objectRelayUrl) {
     const telemetryRelayUrl = env.OPEN_DESIGN_TELEMETRY_RELAY_URL?.trim();
-    return telemetryRelayUrl ? telemetryRelayUrl.replace(/\/+$/, '') : null;
+    return telemetryRelayUrl
+      ? normalizeOpenDesignTelemetryRelayUrl(telemetryRelayUrl)
+      : null;
   }
+  const normalizedObjectRelayUrl = normalizeOpenDesignTelemetryRelayUrl(
+    objectRelayUrl,
+  );
   try {
-    const url = new URL(objectRelayUrl);
+    const url = new URL(normalizedObjectRelayUrl);
     url.pathname = url.pathname.replace(/\/api\/objects\/batch\/?$/, '/api/langfuse');
     return url.toString().replace(/\/+$/, '');
   } catch {
-    return objectRelayUrl.replace(/\/api\/objects\/batch\/?$/, '/api/langfuse').replace(/\/+$/, '');
+    return normalizedObjectRelayUrl
+      .replace(/\/api\/objects\/batch\/?$/, '/api/langfuse')
+      .replace(/\/+$/, '');
   }
 }
 
@@ -240,6 +261,8 @@ function turnInfoFromRun(
     turn.model = run.model;
   } else if (agentReportedModel && agentReportedModel.trim().length > 0) {
     turn.model = agentReportedModel.trim();
+  } else if (run.resolvedModelId && run.resolvedModelId.trim().length > 0) {
+    turn.model = run.resolvedModelId.trim();
   } else {
     // Keep Langfuse aligned with PostHog's model bucket when the user selected
     // "Default (CLI config)" and the runtime did not emit a resolved model.
@@ -297,6 +320,7 @@ function messageUsageFromAnalytics(
     usage.input_tokens_effective !== undefined ||
     usage.output_tokens !== undefined ||
     usage.total_tokens !== undefined ||
+    usage.thought_tokens !== undefined ||
     usage.cache_read_input_tokens !== undefined ||
     usage.cache_creation_input_tokens !== undefined ||
     usage.uncached_input_tokens !== undefined ||
@@ -314,6 +338,7 @@ function messageUsageFromAnalytics(
   }
   if (usage.output_tokens !== undefined) out.outputTokens = usage.output_tokens;
   if (usage.total_tokens !== undefined) out.totalTokens = usage.total_tokens;
+  if (usage.thought_tokens !== undefined) out.thoughtTokens = usage.thought_tokens;
   if (usage.cache_read_input_tokens !== undefined) {
     out.cacheReadInputTokens = usage.cache_read_input_tokens;
   }
@@ -342,18 +367,19 @@ function eventTimestamp(
     : fallback;
 }
 
-const CONTENT_TOOL_NAMES = new Set([
-  'Read',
-  'Write',
-  'Edit',
-  'MultiEdit',
-  'NotebookEdit',
-]);
-
 function redactLocalPaths(value: string): string {
+  // macOS /Users, Linux /home + /root, Windows C:\Users — Linux is a primary
+  // supported environment, so Bash inputs like `cat /home/alice/.env` must not
+  // leak home directories into Langfuse tool spans.
   return value
-    .replace(/\/Users\/[^/\s"']+(?:\/[^ \n\r\t"'`<>)]*)?/g, '[REDACTED:local_path]')
-    .replace(/[A-Za-z]:\\Users\\[^\\\s"']+(?:\\[^ \n\r\t"'`<>)]*)?/g, '[REDACTED:local_path]');
+    .replace(
+      /\/(?:Users|home|root)\/[^/\s"']+(?:\/[^ \n\r\t"'`<>)]*)?/g,
+      '[REDACTED:local_path]',
+    )
+    .replace(
+      /[A-Za-z]:\\Users\\[^\\\s"']+(?:\\[^ \n\r\t"'`<>)]*)?/g,
+      '[REDACTED:local_path]',
+    );
 }
 
 function serializeToolPayload(
@@ -361,8 +387,11 @@ function serializeToolPayload(
   opts: { toolName: string; direction: 'input' | 'output' },
 ): string | undefined {
   if (value === undefined || value === null) return undefined;
-  if (CONTENT_TOOL_NAMES.has(opts.toolName)) {
-    return `[REDACTED:tool_${opts.direction}:content_tool:${opts.toolName}]`;
+  // Fail-closed: known content tools AND unknown/custom ACP tool names
+  // (kind:other MCP readers, etc.) fully redact. Only bash-like execute
+  // tools keep secret+path lexical masking.
+  if (shouldFullyRedactToolPayload(opts.toolName)) {
+    return toolPayloadRedactionPlaceholder(opts.toolName, opts.direction);
   }
   if (typeof value === 'string') return redactLocalPaths(redactSecrets(value));
   try {
@@ -393,19 +422,43 @@ function collectToolCalls(
       | null
       | undefined;
     if (data?.type === 'tool_use' && typeof data.id === 'string') {
-      const timestamp = eventTimestamp(rec, runStartedAt + rec.id);
-      const summary: ToolCallSummary = {
-        id: data.id,
-        name: typeof data.name === 'string' && data.name ? data.name : 'unknown',
-        startedAt: timestamp,
-        endedAt: timestamp,
-      };
-      const input = serializeToolPayload(data.input, {
-        toolName: summary.name,
-        direction: 'input',
-      });
-      if (input !== undefined) summary.input = input;
-      tools.set(data.id, summary);
+      const eventTs = eventTimestamp(rec, runStartedAt + rec.id);
+      // Prefer producer-supplied start time (ACP firstSeenAt) over event log ts.
+      const payloadStartedAt =
+        typeof (data as { startedAt?: unknown }).startedAt === 'number' &&
+        Number.isFinite((data as { startedAt: number }).startedAt)
+          ? (data as { startedAt: number }).startedAt
+          : undefined;
+      const timestamp = payloadStartedAt ?? eventTs;
+      const name = typeof data.name === 'string' && data.name ? data.name : 'unknown';
+      const existing = tools.get(data.id);
+      if (existing) {
+        // Second tool_use for the same id: refresh name/input, keep original startedAt.
+        existing.name = name;
+        const input = serializeToolPayload(data.input, {
+          toolName: name,
+          direction: 'input',
+        });
+        if (input !== undefined) existing.input = input;
+        else delete existing.input;
+        // If a later frame carries an earlier startedAt, prefer the earlier one.
+        if (payloadStartedAt !== undefined && payloadStartedAt < existing.startedAt) {
+          existing.startedAt = payloadStartedAt;
+        }
+      } else {
+        const summary: ToolCallSummary = {
+          id: data.id,
+          name,
+          startedAt: timestamp,
+          endedAt: eventTs,
+        };
+        const input = serializeToolPayload(data.input, {
+          toolName: name,
+          direction: 'input',
+        });
+        if (input !== undefined) summary.input = input;
+        tools.set(data.id, summary);
+      }
     } else if (
       data?.type === 'tool_result' &&
       typeof data.toolUseId === 'string'
@@ -941,6 +994,7 @@ export async function reportRunCompletedFromDaemon(
       return deriveLangfuseDeliveryState(prefs, null);
     }
     const installationId = cfg.installationId ?? null;
+    const configuredAmrEnv = agentCliEnvForAgent(cfg.agentCliEnv, 'amr');
 
     let messageContent = '';
     let producedFilesRaw: unknown = undefined;
@@ -1025,6 +1079,10 @@ export async function reportRunCompletedFromDaemon(
     const runtime: RuntimeInfo = {
       ...getRuntimeInfo(opts.appVersion ?? null),
       ...(run.clientType ? { clientType: run.clientType } : {}),
+      ...(getDetectedRuntimeVersions(run.agentId) ?? {}),
+      ...(run.preflightAgentCliVersion
+        ? { agentCliVersion: run.preflightAgentCliVersion }
+        : {}),
     };
     const artifacts = summarizeProducedFiles(traceObjectFilesRaw);
     const diagnostics = summarizeRunDiagnosticsForAnalytics({
@@ -1077,6 +1135,16 @@ export async function reportRunCompletedFromDaemon(
         ...(stderr ? { stderr } : {}),
         ...(stdout ? { stdout } : {}),
         diagnostics,
+        retryAttemptCount: run.retryAttemptCount ?? 0,
+        ...(run.retryFinalResult
+          ? { retryFinalResult: run.retryFinalResult }
+          : {}),
+        ...(run.retrySuppressedReason
+          ? { retrySuppressedReason: run.retrySuppressedReason }
+          : {}),
+        ...(run.retryOriginalFailure
+          ? { retryOriginalFailure: run.retryOriginalFailure }
+          : {}),
       },
       message: {
         messageId: run.assistantMessageId ?? '',
@@ -1114,6 +1182,7 @@ export async function reportRunCompletedFromDaemon(
         buildContext(mergeTraceSafeManifests(manifests, registrationManifests)),
         {
           config: objectRegistrationTelemetryConfig(),
+          deliveryPurpose: 'object-registration',
           ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}),
         },
       );
@@ -1126,7 +1195,10 @@ export async function reportRunCompletedFromDaemon(
         traceObjectFilesRaw,
         ...(uploadedManifests ? { uploaded: uploadedManifests } : {}),
       })),
-      opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {},
+      {
+        configuredEnv: configuredAmrEnv,
+        ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}),
+      },
     );
   } catch (err) {
     console.warn('[langfuse-bridge] report failed:', String(err));
@@ -1179,7 +1251,8 @@ export async function reportRunFeedbackFromDaemon(
   // Pre-resolve the sink before claiming `accepted`. Avoids advertising a
   // successful enqueue to callers when there's no Langfuse endpoint
   // configured to ship the score to.
-  const sink = readTelemetrySinkConfig();
+  const configuredAmrEnv = agentCliEnvForAgent(cfg.agentCliEnv, 'amr');
+  const sink = readFeedbackTelemetrySinkConfig(process.env, configuredAmrEnv);
   if (!sink) {
     return { status: 'skipped_no_sink' };
   }
@@ -1199,7 +1272,10 @@ export async function reportRunFeedbackFromDaemon(
   // telemetry, not a client-facing signal.
   void reportRunFeedback(
     ctx,
-    opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {},
+    {
+      configuredEnv: configuredAmrEnv,
+      ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}),
+    },
   ).catch((err) => {
     console.warn('[langfuse-bridge] feedback report failed:', String(err));
   });

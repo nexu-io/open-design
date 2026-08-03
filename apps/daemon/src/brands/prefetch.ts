@@ -216,9 +216,22 @@ export function isChallengePage(html: string): boolean {
   return false;
 }
 
+/**
+ * Captured pages are stored as READ-ONLY source evidence. Defuse every script
+ * tag so previewing a capture can never run the source site's live code —
+ * auth widgets (Google One Tap sign-in bubbles), analytics beacons, consent
+ * SDKs. The markup stays readable: only execution is disabled, by leading the
+ * tag with a non-JS type attribute (on duplicate attributes the HTML parser
+ * keeps the first, so an original type="module" further right is inert).
+ */
+function defuseScripts(html: string): string {
+  return html.replace(/<script\b/gi, '<script type="text/od-defused-script"');
+}
+
 export function previewablePrefetchHtml(html: string, cap = HTML_CAP): string {
-  const out = html.slice(0, cap);
-  if (/<body\b/i.test(out) || out.length < cap) return out;
+  const raw = html.slice(0, cap);
+  const out = defuseScripts(raw);
+  if (/<body\b/i.test(out) || raw.length < cap) return out;
   const title = decodeEntities(/<title[^>]*>([\s\S]*?)<\/title>/i.exec(out)?.[1] ?? "").trim();
   return [
     "<!doctype html>",

@@ -938,22 +938,34 @@ export function HomeView({
       options?.preserveInputFields ? inputFields : result.inputs ?? inputFields,
       reconciledInputs,
     );
-    setActive((prev) =>
-      prev && prev.record.id === record.id
-        ? {
-            ...prev,
-            result,
-            inputs: reconciledInputs,
-            inputFields: options?.preserveInputFields ? inputFields : result.inputs ?? inputFields,
-            inputsValid: reconciledInputsValid,
-            projectMetadata: homeCreateProjectMetadata(
-              prev.projectKind,
-              reconciledInputs,
-              prev.projectMetadata,
-            ),
-          }
-        : prev,
-    );
+    setActive((prev) => {
+      if (!prev || prev.record.id !== record.id) return prev;
+      // Mirror the prompt-reconcile guard below for the extracted inputs: the
+      // user may have edited the prompt during the apply roundtrip, and
+      // handlePromptChange has already extracted those edits into
+      // prev.inputs. Rebuilding from the bind-time optimistic snapshot would
+      // silently revert them, so merge the apply result's defaults into
+      // prev.inputs instead.
+      const mergedInputs: Record<string, unknown> = { ...prev.inputs };
+      for (const field of result.inputs ?? []) {
+        if (field.default !== undefined && mergedInputs[field.name] === undefined) {
+          mergedInputs[field.name] = field.default;
+        }
+      }
+      const mergedFields = options?.preserveInputFields ? inputFields : result.inputs ?? inputFields;
+      return {
+        ...prev,
+        result,
+        inputs: mergedInputs,
+        inputFields: mergedFields,
+        inputsValid: pluginInputsAreValid(mergedFields, mergedInputs),
+        projectMetadata: homeCreateProjectMetadata(
+          prev.projectKind,
+          mergedInputs,
+          prev.projectMetadata,
+        ),
+      };
+    });
     // The daemon may have filled in `topic`/`audience` defaults the
     // optimistic render didn't know about (the manifest is inspected
     // client-side but field.default lives on the apply result). Re-
@@ -2454,13 +2466,12 @@ export function shouldShowActivePluginChip(active: ActivePlugin | null): boolean
 }
 
 // Prototype/deck-specific settings (fidelity, slide count, speaker notes) are
-// no longer promoted into the home composer footer — the agent asks for those
-// via the first-turn discovery flow, so the prototype/deck footer keeps only
-// the design-system picker. Media surfaces (image/video/audio/hyperframes)
-// now defer the same way: image/video keep only the design-system picker and
-// audio/hyperframes keep nothing, with model / ratio / resolution / duration /
-// audio type collected by the agent via question-form during the run instead
-// of inline pre-flight controls.
+// no longer promoted into the home composer footer, so the prototype/deck
+// footer keeps only the design-system picker. Media surfaces
+// (image/video/audio/hyperframes) defer the same way: image/video keep only
+// the design-system picker and audio/hyperframes keep nothing. The agent
+// infers omitted values and asks during the run only when a missing answer
+// materially changes the output.
 const ARTIFACT_FOOTER_FIELD_NAMES = new Set([
   'fidelity',
   'slideCount',
@@ -2468,9 +2479,9 @@ const ARTIFACT_FOOTER_FIELD_NAMES = new Set([
   // Media surfaces (image/video/audio/hyperframes) defer the same way. These
   // were dropped from the footer but `buildHomeMediaComposer` still seeds them
   // (`model: gpt-image-2`, `ratio: 16:9`, `duration: 5`, `audioType: speech`,
-  // …) so they must be stripped before submission — otherwise the run arrives
-  // with baked-in defaults and the first-turn question-form flow has nothing
-  // left to ask. `subject` / `style` / `aspect` / `mediaKind` are intentionally
+  // …) so they must be stripped before submission. The prompt may infer its
+  // own defaults or ask only when the choice is material. `subject` / `style`
+  // / `aspect` / `mediaKind` are intentionally
   // NOT listed: the od-media-generation apply still validates against them.
   'model',
   'ratio',
@@ -2480,10 +2491,10 @@ const ARTIFACT_FOOTER_FIELD_NAMES = new Set([
   'voice',
 ]);
 
-// The prototype/deck footer no longer exposes these settings, so any plugin
-// default for them must NOT be seeded into the Home composer's inputs — that
-// would forward a prefilled value (e.g. `fidelity: high-fidelity`) to the run
-// instead of leaving it "unknown" for the first-turn discovery flow to ask.
+// The prototype/deck footer no longer exposes these settings, so plugin
+// defaults for them must NOT be seeded into the Home composer's inputs. The
+// runtime should infer or clarify from the actual brief instead of silently
+// treating a hidden footer default as a user choice.
 function stripArtifactFooterInputs(
   inputs: Record<string, unknown>,
 ): Record<string, unknown> {
@@ -2502,8 +2513,8 @@ function footerInputNamesForChip(_chipId: string | null): string[] {
   // The design-system picker moved out of the input-card footer to the
   // persistent row below the composer (next to the working-directory picker),
   // so it is selectable for every product kind — not just prototype/deck. No
-  // other setting is surfaced inline: the agent asks for fidelity / ratio /
-  // duration / model / audio kind via the first-turn question-form flow.
+  // other setting is surfaced inline: the agent infers fidelity / ratio /
+  // duration / model / audio kind and asks only when the choice is material.
   return [];
 }
 
@@ -2516,9 +2527,9 @@ function homeCreateProjectMetadata(
   if (!kind) return existing;
 
   // Artifact-specific settings (fidelity, speaker notes, slide count, …) are no
-  // longer collected in the home composer; the agent asks for them via
-  // question-form, so we only seed `kind` here and let those fields stay
-  // unset (the system prompt then marks them "unknown — ask").
+  // longer collected in the home composer. We only seed `kind`; the prompt
+  // treats other fields as not provided, infers defaults, and asks only when
+  // a missing answer materially changes the result.
   const next: ProjectMetadata = {
     ...(existing ?? {}),
     kind,

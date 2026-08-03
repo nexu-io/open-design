@@ -135,6 +135,28 @@ async function openExecutionSettingsWithAgents(
   await page.route('**/api/health', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' });
   });
+  if (typeof config.byokProfileId === 'string') {
+    await page.route('**/api/byok/profiles', async (route) => {
+      await route.fulfill({
+        json: {
+          available: true,
+          backend: 'test',
+          profiles: [{
+            id: config.byokProfileId,
+            label: 'OpenAI',
+            protocol: config.apiProtocol ?? 'openai',
+            baseUrl: config.baseUrl ?? '',
+            model: config.model ?? '',
+            requiresApiKey: true,
+            configured: true,
+            keyTail: config.byokCredentialTail ?? 'test',
+            createdAt: 1,
+            updatedAt: 1,
+          }],
+        },
+      });
+    });
+  }
   await routeAgents(page, agents);
 
   await gotoEntryHome(page);
@@ -148,7 +170,7 @@ test('[P1] known OpenAI provider is selected and can switch to Anthropic default
     apiProtocol: 'openai',
     apiVersion: '',
     baseUrl: 'https://api.deepseek.com',
-    model: 'deepseek-chat',
+    model: 'deepseek-v4-flash',
     apiProviderBaseUrl: 'https://api.deepseek.com',
     agentId: null,
     skillId: null,
@@ -170,7 +192,7 @@ test('[P1] known OpenAI provider is selected and can switch to Anthropic default
   await expect(deepSeekTab).toHaveAttribute('aria-selected', 'true');
   await expect(dialog.getByRole('heading', { name: 'OpenAI API' })).toBeVisible();
   await expect(baseUrlInput).toHaveValue('https://api.deepseek.com');
-  await expect(modelSelect).toContainText(/deepseek-chat/i);
+  await expect(modelSelect).toContainText(/deepseek-v4-flash/i);
 
   await anthropicTab.click();
 
@@ -240,7 +262,7 @@ test('[P0] @critical BYOK quick fill provider updates fields and saved settings 
   await dialog.getByRole('tab', { name: 'OpenAI', exact: true }).click();
   const providerPicker = providerPresetCombobox(dialog);
   await selectComboboxOption(page, providerPicker, /DeepSeek — OpenAI/i, '[data-testid="settings-byok-provider-preset-popover"]');
-  await expectModelComboboxText(dialog, /deepseek-chat/i);
+  await expectModelComboboxText(dialog, /deepseek-v4-flash/i);
   await expect(dialog.getByLabel('Base URL')).toHaveValue('https://api.deepseek.com');
 
   await dialog.getByRole('button', { name: 'Show' }).click();
@@ -253,9 +275,9 @@ test('[P0] @critical BYOK quick fill provider updates fields and saved settings 
     .toMatchObject({
       mode: 'api',
       apiProtocol: 'openai',
-      apiKey: 'sk-openai-test',
+      apiKey: '',
       baseUrl: 'https://api.deepseek.com',
-      model: 'deepseek-chat',
+      model: 'deepseek-v4-flash',
       apiProviderBaseUrl: 'https://api.deepseek.com',
     });
 
@@ -266,9 +288,9 @@ test('[P0] @critical BYOK quick fill provider updates fields and saved settings 
   expect(savedConfig).toMatchObject({
     mode: 'api',
     apiProtocol: 'openai',
-    apiKey: 'sk-openai-test',
+    apiKey: '',
     baseUrl: 'https://api.deepseek.com',
-    model: 'deepseek-chat',
+    model: 'deepseek-v4-flash',
     apiProviderBaseUrl: 'https://api.deepseek.com',
   });
 
@@ -276,7 +298,7 @@ test('[P0] @critical BYOK quick fill provider updates fields and saved settings 
   const reopenedDialog = page.getByRole('dialog');
   await expect(reopenedDialog.getByRole('tab', { name: 'DeepSeek', exact: true })).toHaveAttribute('aria-selected', 'true');
   await expect(providerPresetCombobox(reopenedDialog)).toContainText(/DeepSeek — OpenAI/i);
-  await expectModelComboboxText(reopenedDialog, /deepseek-chat/i);
+  await expectModelComboboxText(reopenedDialog, /deepseek-v4-flash/i);
   await expect(reopenedDialog.getByLabel('Base URL')).toHaveValue('https://api.deepseek.com');
   await expect(reopenedDialog.getByLabel('API key')).toHaveValue('sk-openai-test');
 });
@@ -312,11 +334,11 @@ test('[P1] BYOK Anthropic gateway preset updates fields and persists after reope
   );
   await expect(providerPresetCombobox(dialog)).toContainText(/DeepSeek — Anthropic/i);
   await expect(dialog.getByLabel('Base URL')).toHaveValue('https://api.deepseek.com/anthropic');
-  await expectModelComboboxText(dialog, /deepseek-chat/i);
+  await expectModelComboboxText(dialog, /deepseek-v4-flash/i);
   await expect.poll(async () => readSavedConfig(page)).toMatchObject({
     apiProtocol: 'anthropic',
     baseUrl: 'https://api.deepseek.com/anthropic',
-    model: 'deepseek-chat',
+    model: 'deepseek-v4-flash',
     apiProviderBaseUrl: 'https://api.deepseek.com/anthropic',
   });
 
@@ -327,7 +349,7 @@ test('[P1] BYOK Anthropic gateway preset updates fields and persists after reope
   const reopenedDialog = page.getByRole('dialog');
   await expect(providerPresetCombobox(reopenedDialog)).toContainText(/DeepSeek — Anthropic/i);
   await expect(reopenedDialog.getByLabel('Base URL')).toHaveValue('https://api.deepseek.com/anthropic');
-  await expectModelComboboxText(reopenedDialog, /deepseek-chat/i);
+  await expectModelComboboxText(reopenedDialog, /deepseek-v4-flash/i);
 });
 
 test('[P1] BYOK Ollama Cloud exposes refreshed model choices and persists selection', async ({ page }) => {
@@ -359,6 +381,7 @@ test('[P1] BYOK Ollama Cloud exposes refreshed model choices and persists select
   await expect(providerPresetCombobox(dialog)).toContainText(/Ollama Cloud \(managed\)/i);
   await expectModelComboboxText(dialog, /gpt-oss:120b/i);
   await expect(dialog.getByLabel('Base URL')).toHaveValue('https://ollama.com');
+  await dialog.getByLabel('API key').fill('ollama-key');
 
   await modelCombobox(dialog).click();
   const popover = page.getByTestId('settings-byok-model-popover');
@@ -473,7 +496,7 @@ test('[P0] BYOK save stays disabled until required fields are valid', async ({ p
   await expect(closeButton).toBeEnabled();
 
   await dialog.getByLabel('API key').fill('sk-openai-test');
-  await expect.poll(async () => readSavedConfig(page)).toMatchObject({ apiKey: 'sk-openai-test' });
+  await expect.poll(async () => readSavedConfig(page)).toMatchObject({ apiKey: '' });
 
   const baseUrlInput = dialog.getByLabel('Base URL');
   // A non-http scheme is still rejected client-side. (An internal-IP URL is no
@@ -484,7 +507,7 @@ test('[P0] BYOK save stays disabled until required fields are valid', async ({ p
 
   await baseUrlInput.fill('http://localhost:11434/v1');
   await expect.poll(async () => readSavedConfig(page)).toMatchObject({
-    apiKey: 'sk-openai-test',
+    apiKey: '',
     baseUrl: 'http://localhost:11434/v1',
   });
 });
@@ -657,6 +680,9 @@ test('[P0] @critical BYOK clearing the API key restores the suggested OpenAI mod
   await apiKeyInput.fill('sk-openai-test');
   await apiKeyInput.blur();
   await expect.poll(() => providerModelRequests.length).toBe(1);
+  await expect.poll(async () => readSavedConfig(page)).toMatchObject({
+    apiKey: '',
+  });
 
   await modelSelect.click();
   await expect(page.locator(MODEL_POPOVER_SELECTOR).last().getByRole('option', {
@@ -1008,12 +1034,15 @@ test('[P0] @critical Settings keeps Local CLI and BYOK model choices isolated af
     page,
     {
       mode: 'api',
-      apiKey: 'sk-openai-test',
+      apiKey: '',
       apiProtocol: 'openai',
       apiVersion: '',
       baseUrl: 'https://api.openai.com/v1',
-      model: 'gpt-4o',
+      model: 'gpt-4o-mini',
       apiProviderBaseUrl: 'https://api.openai.com/v1',
+      byokProfileId: 'byok-settings-model-isolation',
+      byokCredentialConfigured: true,
+      byokCredentialTail: 'test',
       agentId: null,
       skillId: null,
       designSystemId: null,

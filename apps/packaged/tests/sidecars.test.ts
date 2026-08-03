@@ -19,13 +19,15 @@ import { EventEmitter } from 'node:events';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, join, posix } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { createJsonIpcServer, resolveAppIpcPath } from '@open-design/sidecar';
 import { APP_KEYS, OPEN_DESIGN_SIDECAR_CONTRACT } from '@open-design/sidecar-proto';
 
 import {
   buildPackagedDaemonSpawnEnv,
+  createPackagedSidecarSpawnOptions,
+  registerPackagedWebUrl,
   resolveDaemonStatusTimeoutMs,
   resolvePackagedChildBaseEnv,
   resolvePackagedElectronNodeCommand,
@@ -39,9 +41,18 @@ function slashPath(value: string): string {
 }
 
 describe('resolveDaemonStatusTimeoutMs', () => {
-  it('uses the 35-second baseline budget on non-win32 for normal cold boots', () => {
-    expect(resolveDaemonStatusTimeoutMs({}, 'linux')).toBe(35_000);
+  it('uses the 35-second baseline budget on platforms without a known slow-cold-start class', () => {
     expect(resolveDaemonStatusTimeoutMs({}, 'darwin')).toBe(35_000);
+  });
+
+  it('widens the baseline to 90 seconds on linux for AppImage FUSE cold starts', () => {
+    // Every AppImage launch mounts a fresh FUSE squashfs with a cold VFS page
+    // cache, so the daemon demand-pages its bundled node binary through FUSE on
+    // EVERY launch and can blow past the 35s baseline. The prewarm pass cuts the
+    // usual case to a few seconds; the wider budget is the safety net for slow
+    // devices, mirroring the win32 rationale.
+    // https://github.com/nexu-io/open-design/issues/5835
+    expect(resolveDaemonStatusTimeoutMs({}, 'linux')).toBe(90_000);
   });
 
   it('widens the baseline to 90 seconds on win32 for AV-scan-slow first launches', () => {
@@ -53,7 +64,7 @@ describe('resolveDaemonStatusTimeoutMs', () => {
   });
 
   it('treats an empty OD_LEGACY_DATA_DIR as unset', () => {
-    expect(resolveDaemonStatusTimeoutMs({ OD_LEGACY_DATA_DIR: '' }, 'linux')).toBe(35_000);
+    expect(resolveDaemonStatusTimeoutMs({ OD_LEGACY_DATA_DIR: '' }, 'darwin')).toBe(35_000);
   });
 
   it('extends the budget to 30 minutes when OD_LEGACY_DATA_DIR is set', () => {
@@ -75,7 +86,8 @@ describe('resolveDaemonStatusTimeoutMs', () => {
     const original = process.env.OD_LEGACY_DATA_DIR;
     try {
       delete process.env.OD_LEGACY_DATA_DIR;
-      expect(resolveDaemonStatusTimeoutMs(undefined, 'linux')).toBe(35_000);
+      expect(resolveDaemonStatusTimeoutMs(undefined, 'linux')).toBe(90_000);
+      expect(resolveDaemonStatusTimeoutMs(undefined, 'darwin')).toBe(35_000);
       process.env.OD_LEGACY_DATA_DIR = '/some/legacy/path';
       expect(resolveDaemonStatusTimeoutMs(undefined, 'linux')).toBe(30 * 60 * 1000);
     } finally {
@@ -85,7 +97,54 @@ describe('resolveDaemonStatusTimeoutMs', () => {
   });
 });
 
+describe('packaged web URL registration', () => {
+  it('registers the current dynamic web URL with the daemon sidecar and supports a later port', async () => {
+    const namespace = `web-url-${process.pid}-${Date.now()}`;
+    const daemonIpc = resolveAppIpcPath({
+      app: APP_KEYS.DAEMON,
+      contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+      namespace,
+    });
+    const received: unknown[] = [];
+    const server = await createJsonIpcServer({
+      socketPath: daemonIpc,
+      handler: async (message) => {
+        received.push(message);
+        return { accepted: true };
+      },
+    });
+
+    try {
+      await registerPackagedWebUrl(daemonIpc, 'http://127.0.0.1:64248');
+      await registerPackagedWebUrl(daemonIpc, 'http://127.0.0.1:53421');
+      expect(received).toEqual([
+        {
+          input: { url: 'http://127.0.0.1:64248' },
+          type: 'register-web-url',
+        },
+        {
+          input: { url: 'http://127.0.0.1:53421' },
+          type: 'register-web-url',
+        },
+      ]);
+    } finally {
+      await server.close();
+    }
+  });
+});
+
 describe('packaged child Vite+ environment forwarding', () => {
+  it('forwards CODEX_HOME so isolated and managed Codex installs never fall back to another user config', () => {
+    const env = resolvePackagedChildBaseEnv({
+      CODEX_HOME: '/tmp/isolated-codex-home',
+      HOME: '/Users/tester',
+      RANDOM_INTERNAL_FLAG: 'drop-me',
+    });
+
+    expect(env.CODEX_HOME).toBe('/tmp/isolated-codex-home');
+    expect(env.RANDOM_INTERNAL_FLAG).toBeUndefined();
+  });
+
   it('keeps VP_HOME in the packaged child base env without forwarding unrelated variables', () => {
     const env = resolvePackagedChildBaseEnv({
       HOME: '/Users/tester',
@@ -342,6 +401,28 @@ describe('buildPackagedDaemonSpawnEnv', () => {
     };
   }
 
+  it('uses the namespace runtime root for child processes without reading cwd', () => {
+    const cwd = vi.spyOn(process, 'cwd').mockImplementation(() => {
+      throw new Error('uv_cwd');
+    });
+
+    try {
+      expect(createPackagedSidecarSpawnOptions({
+        env: { NODE_ENV: 'production' },
+        logFd: 42,
+        paths: fakePaths(),
+      })).toEqual({
+        cwd: '/tmp/od-pkg/runtime',
+        env: { NODE_ENV: 'production' },
+        stdio: ['ignore', 42, 42],
+        windowsHide: true,
+      });
+      expect(cwd).not.toHaveBeenCalled();
+    } finally {
+      cwd.mockRestore();
+    }
+  });
+
   it('sets OD_REQUIRE_DESKTOP_AUTH=1 when requireDesktopAuth=true (Electron entry)', () => {
     const env = buildPackagedDaemonSpawnEnv(fakePaths(), {
       appVersion: '1.2.3',
@@ -354,6 +435,26 @@ describe('buildPackagedDaemonSpawnEnv', () => {
     expect(env.OD_RESOURCE_ROOT).toBe('/tmp/od-pkg/resources');
     expect(env.OD_APP_VERSION).toBe('1.2.3');
     expect(env.OD_LEGACY_DATA_DIR).toBeUndefined();
+  });
+
+  it('forwards updater controls needed by a historical desktop handoff', () => {
+    const env = buildPackagedDaemonSpawnEnv(fakePaths(), {
+      appVersion: '1.2.3',
+      daemonCliEntry: null,
+      desktopHandoffEnv: {
+        OD_UPDATE_CURRENT_VERSION: '1.2.3',
+        OD_UPDATE_INSTALLED_VERSION: '1.0.0',
+        OD_UPDATE_METADATA_URL: 'http://127.0.0.1:54321/stable/latest/metadata.json',
+        PATH: 'must-not-leak-through-handoff-env',
+      },
+      legacyDataDir: null,
+      requireDesktopAuth: true,
+    });
+
+    expect(env.OD_UPDATE_CURRENT_VERSION).toBe('1.2.3');
+    expect(env.OD_UPDATE_INSTALLED_VERSION).toBe('1.0.0');
+    expect(env.OD_UPDATE_METADATA_URL).toBe('http://127.0.0.1:54321/stable/latest/metadata.json');
+    expect(env.PATH).toBeUndefined();
   });
 
   it('omits OD_REQUIRE_DESKTOP_AUTH entirely when requireDesktopAuth=false (headless)', () => {
@@ -371,6 +472,35 @@ describe('buildPackagedDaemonSpawnEnv', () => {
     expect('OD_REQUIRE_DESKTOP_AUTH' in env).toBe(false);
     expect(env.OD_DATA_DIR).toBe('/tmp/od-pkg/data');
     expect(env.OD_APP_VERSION).toBeUndefined();
+  });
+
+  it('forwards the signed packaged launcher used to bootstrap MCP headlessly', () => {
+    const env = buildPackagedDaemonSpawnEnv(fakePaths(), {
+      appVersion: '1.2.3',
+      daemonCliEntry: '/Applications/Open Design.app/Contents/Resources/app/prebundled/daemon/daemon-cli.mjs',
+      legacyDataDir: null,
+      mcpBootstrapArgs: [
+        '-g',
+        '-j',
+        '/Applications/Open Design.app',
+        '--args',
+        '--headless',
+      ],
+      mcpBootstrapCommand:
+        '/usr/bin/open',
+      requireDesktopAuth: false,
+    });
+
+    expect(env.OD_MCP_BOOTSTRAP_COMMAND).toBe(
+      '/usr/bin/open',
+    );
+    expect(JSON.parse(env.OD_MCP_BOOTSTRAP_ARGS ?? 'null')).toEqual([
+      '-g',
+      '-j',
+      '/Applications/Open Design.app',
+      '--args',
+      '--headless',
+    ]);
   });
 
   it('forwards OD_LEGACY_DATA_DIR only when set, irrespective of requireDesktopAuth', () => {
@@ -401,6 +531,20 @@ describe('buildPackagedDaemonSpawnEnv', () => {
       requireDesktopAuth: true,
     });
     expect(env.OD_DAEMON_CLI_PATH).toBe('/path/to/cli/dist/index.js');
+  });
+
+  it('forwards the packaged node command as OD_NODE_BIN for agent wrapper calls', () => {
+    const env = buildPackagedDaemonSpawnEnv(fakePaths(), {
+      appVersion: null,
+      daemonCliEntry: null,
+      legacyDataDir: null,
+      nodeCommand: 'C:\\Users\\Ada\\AppData\\Local\\Programs\\Open Design\\resources\\open-design\\bin\\node.exe',
+      requireDesktopAuth: true,
+    });
+
+    expect(env.OD_NODE_BIN).toBe(
+      'C:\\Users\\Ada\\AppData\\Local\\Programs\\Open Design\\resources\\open-design\\bin\\node.exe',
+    );
   });
 
   it('forwards the packaged telemetry relay URL to the daemon when configured', () => {

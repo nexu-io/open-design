@@ -7,6 +7,10 @@ import { promisify } from "node:util";
 import { hashJson, hashPath, type CacheNode, ToolPackCache } from "../cache.js";
 import type { ToolPackConfig } from "../config.js";
 import { domToPptxBundleResource } from "../dom-to-pptx-resource.js";
+import {
+  assertNodePtyRuntime,
+  validateNodePtyRuntime,
+} from "../node-pty-runtime.js";
 import { winResources } from "../resources.js";
 import { electronBuilderVersionForAppVersion, versionCoreForAppVersion } from "../versions.js";
 import {
@@ -66,7 +70,7 @@ import type {
 
 const execFileAsync = promisify(execFile);
 const WIN_ARCHIVE_CACHE_VERSION = 3;
-const WIN_ELECTRON_BUILDER_DIR_CACHE_VERSION = 7;
+const WIN_ELECTRON_BUILDER_DIR_CACHE_VERSION = 8;
 const WIN_NSIS_BASE_PAYLOAD_INPUT_HASH_CACHE_VERSION = 2;
 
 async function hashWinNsisInstallerImplementation(config: ToolPackConfig): Promise<string> {
@@ -416,6 +420,26 @@ async function assertMaterializedUnpackedVersionConsistency(
   }
 }
 
+function winUnpackedAppRoot(unpackedRoot: string): string {
+  return join(unpackedRoot, "resources", "app");
+}
+
+async function validateWinUnpackedNodePtyRuntime(unpackedRoot: string): Promise<string | null> {
+  return validateNodePtyRuntime({
+    appRoot: winUnpackedAppRoot(unpackedRoot),
+    arch: "x64",
+    platform: "win32",
+  });
+}
+
+async function assertWinUnpackedNodePtyRuntime(unpackedRoot: string): Promise<void> {
+  await assertNodePtyRuntime({
+    appRoot: winUnpackedAppRoot(unpackedRoot),
+    arch: "x64",
+    platform: "win32",
+  });
+}
+
 export async function materializeCachedUnpackedForInstaller(
   sourceUnpackedRoot: string,
   paths: WinPaths,
@@ -454,6 +478,7 @@ export async function materializeCachedUnpackedForInstaller(
     await rewriteWinExecutableVersion(paths.unpackedExePath, packagedVersion);
     await assertMaterializedUnpackedVersionConsistency(paths.unpackedRoot, packagedVersion);
   }
+  await assertWinUnpackedNodePtyRuntime(paths.unpackedRoot);
   return {
     appBuilderOutputRoot: paths.appBuilderOutputRoot,
     cacheEntryPath: null,
@@ -545,7 +570,12 @@ export async function runElectronBuilder(
     id: "win.electron-builder-dir",
     key,
     outputs: ["builder", ...(config.webOutputMode === "standalone" ? [auditOutput] : [])],
-    invalidate: async () => null,
+    invalidate: async ({ entryRoot }: { entryRoot: string }) => {
+      const validationError = await validateWinUnpackedNodePtyRuntime(
+        join(entryRoot, "builder", "win-unpacked"),
+      );
+      return validationError == null ? null : { reason: validationError };
+    },
     build: async ({ entryRoot }: { entryRoot: string }): Promise<ElectronBuilderDirCacheMetadata> => {
       const packagedAppRoot = await getPackagedAppRoot();
       await runElectronBuilderRaw(
@@ -553,6 +583,7 @@ export async function runElectronBuilder(
         { ...createCacheLocalWinPaths(paths, entryRoot), resourceRoot: resourceTree.resourceRoot },
         packagedAppRoot,
       );
+      await assertWinUnpackedNodePtyRuntime(join(entryRoot, "builder", "win-unpacked"));
       return { packagedAppKey, packagedVersion };
     },
   };
@@ -577,6 +608,7 @@ export async function runElectronBuilder(
                 packagedAppRoot,
               );
               segments.push(...rawSegments);
+              await assertWinUnpackedNodePtyRuntime(join(entryRoot, "builder", "win-unpacked"));
             });
             return { packagedAppKey, packagedVersion };
           },
@@ -588,6 +620,9 @@ export async function runElectronBuilder(
   const cachedBuilderRoot = join(manifest.entryPath, "builder");
   const cachedUnpackedRoot = join(cachedBuilderRoot, "win-unpacked");
   const cachedExecutablePath = join(cachedUnpackedRoot, `${PRODUCT_NAME}.exe`);
+  await runSegment("electron-builder-dir:validate-node-pty-runtime", async () => {
+    await assertWinUnpackedNodePtyRuntime(cachedUnpackedRoot);
+  });
   await runSegment("electron-builder-dir:prepare-namespace", async () => {
     if (shouldBuildWinNsisInstaller(config.to) || shouldBuildWinPortableZip(config.to)) {
       await mkdir(paths.appBuilderOutputRoot, { recursive: true });

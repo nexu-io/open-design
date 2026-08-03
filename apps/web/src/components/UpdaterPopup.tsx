@@ -4,13 +4,17 @@ import type { OpenDesignHostUpdaterStatusSnapshot } from '@open-design/host';
 
 import { Icon } from './Icon';
 import { popoverIn } from '../motion';
+import { openExternalUrl } from '../providers/registry';
 import {
   deriveUpdaterModel,
   openUpdaterInstaller,
   quitAfterUpdaterInstallerOpen,
   readUpdaterStatus,
+  restartSafetyFromActionResult,
+  restartSafetyFromUpdaterStatus,
   subscribeToUpdaterStatus,
   type UpdaterModel,
+  type UpdaterRestartSafety,
 } from '../lib/updater';
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
@@ -24,7 +28,7 @@ import {
 
 const INSTALL_HANDOFF_WATCHDOG_MS = 10_000;
 
-type InstallState = 'idle' | 'opening' | 'handoff' | 'recoverable';
+type InstallState = 'idle' | 'opening' | 'handoff' | 'quitting' | 'recoverable';
 type Translator = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 type UpdaterPopupProps = {
   allowSilentUpdates?: boolean;
@@ -40,6 +44,9 @@ type UpdaterPopupProps = {
 
 function versionText(t: Translator, model: UpdaterModel): string {
   const version = model.availableVersion;
+  if (model.reinstall != null) {
+    return version == null ? t('updater.reinstallReadyGeneric') : t('updater.reinstallReadyVersion', { version });
+  }
   if (model.updateKind === 'payload') {
     return version == null ? t('updater.payloadReadyGeneric') : t('updater.payloadReadyVersion', { version });
   }
@@ -79,6 +86,17 @@ function updaterErrorCode(model: UpdaterModel): string | undefined {
   return model.status?.error?.code;
 }
 
+/**
+ * User-facing copy for a restart-safety preflight denial. The popup keeps
+ * these denials hard-blocked (no force path — that lives in the app-menu
+ * UpdateDialog), but the copy must say why instead of a generic failure.
+ */
+function restartSafetyText(t: Translator, safety: UpdaterRestartSafety): string {
+  return safety.state === 'blocked'
+    ? t('updater.activeRunsBody', { count: safety.activeRunCount })
+    : t('updater.activeRunsUnknownBody');
+}
+
 export function UpdaterPopup({
   allowSilentUpdates,
   silentUpdatePreferenceReady = false,
@@ -91,6 +109,7 @@ export function UpdaterPopup({
   const [model, setModel] = useState<UpdaterModel>(() => deriveUpdaterModel(null));
   const [panelOpen, setPanelOpen] = useState(false);
   const [installState, setInstallState] = useState<InstallState>('idle');
+  const [installError, setInstallError] = useState<string | null>(null);
   const [allowSilentUpdatesChecked, setAllowSilentUpdatesChecked] = useState(() => allowSilentUpdates ?? true);
   const [silentUpdatesPersistError, setSilentUpdatesPersistError] = useState<string | null>(null);
   const [silentUpdatesPersisting, setSilentUpdatesPersisting] = useState(false);
@@ -215,10 +234,16 @@ export function UpdaterPopup({
   }, []);
 
   const ready = model.environment === 'desktop' && model.shouldShowControl;
-  const installBusy = installState === 'opening' || installState === 'handoff';
+  const installBusy = installState === 'opening' || installState === 'handoff' || installState === 'quitting';
+  const quitRecoverable = installState === 'recoverable' || installState === 'quitting';
   const canStartInstall = ready || installState === 'recoverable';
   const showControl = ready || installState !== 'idle';
-  const controlLabel = model.updateKind === 'payload' ? t('updater.installRestart') : t('updater.openInstaller');
+  const installFailureText = model.canOpenInstaller ? t('updater.openFailedFallback') : t('updater.failed');
+  const controlLabel = quitRecoverable
+    ? t('updater.quitButton')
+    : model.updateKind === 'payload'
+      ? t('updater.installRestart')
+      : t('updater.openInstaller');
   const channelLabel = channelLabelFor(model.status?.channel);
   const analytics = useAnalytics();
   const appVersionBefore = useAppVersion();
@@ -293,6 +318,7 @@ export function UpdaterPopup({
     if (actionInFlightRef.current || !canStartInstall) return;
     actionInFlightRef.current = true;
     clearHandoffWatchdog();
+    setInstallError(null);
     setInstallState('opening');
     setPanelOpen(true);
     trackUpdateIndicatorClick(analytics.track, {
@@ -313,6 +339,7 @@ export function UpdaterPopup({
       const result = await openUpdaterInstaller({ payload: { source: 'updater-prompt' } });
       if (!result.ok) {
         actionInFlightRef.current = false;
+        setInstallError(installFailureText);
         setInstallState('idle');
         trackUpdateInstallResult(analytics.track, {
           page_name: 'home',
@@ -324,7 +351,9 @@ export function UpdaterPopup({
         return;
       }
       if (result.model.errorMessage != null) {
+        const safety = restartSafetyFromUpdaterStatus(result.status);
         actionInFlightRef.current = false;
+        setInstallError(safety == null ? installFailureText : restartSafetyText(t, safety));
         setInstallState('idle');
         trackUpdateInstallResult(analytics.track, {
           page_name: 'home',
@@ -336,6 +365,7 @@ export function UpdaterPopup({
         return;
       }
       setModel(result.model);
+      setInstallError(null);
       setInstallState('handoff');
       startHandoffWatchdog();
       trackUpdateInstallResult(analytics.track, {
@@ -346,6 +376,8 @@ export function UpdaterPopup({
       });
       const quitResult = await quitAfterUpdaterInstallerOpen({ payload: { source: 'updater-prompt' } });
       if (!quitResult.ok) {
+        const quitSafety = restartSafetyFromActionResult(quitResult);
+        if (quitSafety != null) setInstallError(restartSafetyText(t, quitSafety));
         clearHandoffWatchdog();
         actionInFlightRef.current = false;
         setInstallState('recoverable');
@@ -354,6 +386,7 @@ export function UpdaterPopup({
     } catch (error) {
       clearHandoffWatchdog();
       actionInFlightRef.current = false;
+      setInstallError(installFailureText);
       setInstallState('idle');
       trackUpdateInstallResult(analytics.track, {
         page_name: 'home',
@@ -363,6 +396,24 @@ export function UpdaterPopup({
         ...versionProps,
       });
     }
+  };
+
+  const retryQuit = async () => {
+    if (actionInFlightRef.current || installState !== 'recoverable') return;
+    actionInFlightRef.current = true;
+    clearHandoffWatchdog();
+    setInstallState('quitting');
+    startHandoffWatchdog();
+    try {
+      const quitResult = await quitAfterUpdaterInstallerOpen({ payload: { source: 'updater-prompt' } });
+      if (quitResult.ok) return;
+    } catch {
+      // Keep the explicit quit recovery action available.
+    }
+    clearHandoffWatchdog();
+    actionInFlightRef.current = false;
+    setInstallState('recoverable');
+    setPanelOpen(true);
   };
 
   if (!showControl) return null;
@@ -403,14 +454,20 @@ export function UpdaterPopup({
           <UpdaterPopupPanel
             allowSilentUpdatesChecked={allowSilentUpdatesChecked}
             channelLabel={channelLabel}
+            installError={installError}
             installBusy={installBusy}
             model={model}
+            quitRecoverable={quitRecoverable}
             silentUpdatesPersistError={silentUpdatesPersistError}
             silentUpdatesPersisting={silentUpdatesPersisting}
             t={t}
             onClose={close}
             onInstall={() => {
-              void installAndQuit();
+              if (installState === 'recoverable') {
+                void retryQuit();
+              } else {
+                void installAndQuit();
+              }
             }}
             onSilentUpdatesChange={(next) => {
               void handleSilentUpdatesChange(next);
@@ -422,11 +479,26 @@ export function UpdaterPopup({
   );
 }
 
+function ReinstallLearnMoreLink({ t, url }: { t: Translator; url: string }) {
+  return (
+    <button
+      className="updater-popup__link"
+      data-testid="updater-reinstall-learn-more"
+      type="button"
+      onClick={() => void openExternalUrl(url)}
+    >
+      {t('updater.reinstallLearnMore')} <Icon name="external-link" size={12} />
+    </button>
+  );
+}
+
 function UpdaterPopupPanel({
   allowSilentUpdatesChecked,
   channelLabel,
+  installError,
   installBusy,
   model,
+  quitRecoverable,
   silentUpdatesPersistError,
   silentUpdatesPersisting,
   t,
@@ -436,8 +508,10 @@ function UpdaterPopupPanel({
 }: {
   allowSilentUpdatesChecked: boolean;
   channelLabel: string | null;
+  installError: string | null;
   installBusy: boolean;
   model: UpdaterModel;
+  quitRecoverable: boolean;
   silentUpdatesPersistError: string | null;
   silentUpdatesPersisting: boolean;
   t: Translator;
@@ -461,12 +535,22 @@ function UpdaterPopupPanel({
         <Icon name="arrow-up" size={20} strokeWidth={2.2} />
       </div>
       <div className="updater-popup__body">
-        <h2 id="updater-popup-title">{t('updater.ready')}</h2>
-        <p>{versionText(t, model)}</p>
+        <h2 id="updater-popup-title">{quitRecoverable ? t('updater.quitFailedTitle') : t('updater.ready')}</h2>
+        {quitRecoverable && model.updateKind === 'payload'
+          ? null
+          : <p>{quitRecoverable ? t('updater.quitFailedBody') : versionText(t, model)}</p>}
+        {!quitRecoverable && model.reinstall?.url != null ? (
+          <ReinstallLearnMoreLink t={t} url={model.reinstall.url} />
+        ) : null}
         {channelLabel != null ? <span className="updater-popup__badge">{channelLabel}</span> : null}
+        {installError != null ? (
+          <p className="updater-popup__error" data-testid="updater-install-error" role="alert">
+            {installError}
+          </p>
+        ) : null}
       </div>
       <div className="updater-popup__footer">
-        <div className="updater-popup__preference">
+        {!quitRecoverable ? <div className="updater-popup__preference">
           <label className="updater-popup__checkbox">
             <input
               checked={allowSilentUpdatesChecked}
@@ -482,7 +566,7 @@ function UpdaterPopupPanel({
               {silentUpdatesPersistError}
             </p>
           ) : null}
-        </div>
+        </div> : null}
         <div className="updater-popup__actions">
           <button className="updater-popup__button" disabled={installBusy} type="button" onClick={onClose}>
             {t('updater.later')}
@@ -494,7 +578,7 @@ function UpdaterPopupPanel({
             type="button"
             onClick={onInstall}
           >
-            {installActionText(t, model, installBusy)}
+            {quitRecoverable ? t('updater.quitButton') : installActionText(t, model, installBusy)}
           </button>
         </div>
       </div>

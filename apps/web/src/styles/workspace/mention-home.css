@@ -388,6 +388,25 @@
   line-height: 1.35;
 }
 
+/* Operator-supplied reinstall explanation link (control.launcher.version.url). */
+.updater-popup__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font-size: 12px;
+  line-height: 1.35;
+  cursor: pointer;
+}
+
+.updater-popup__link:hover {
+  text-decoration: underline;
+}
+
 /* Footer stays a single row: long en labels wrap inside the checkbox column;
    actions stay non-shrinking on the trailing edge. */
 .updater-popup__footer {

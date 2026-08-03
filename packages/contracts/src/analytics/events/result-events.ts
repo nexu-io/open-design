@@ -2,13 +2,45 @@
  * @module analytics/events/result-events
  * *_result event prop types (run, feedback, settings, packaged).
  */
-import type { TrackingRuntimeType } from '../public-params.js';
+import type {
+  AnalyticsAttributionQuality,
+  AnalyticsDistributionMechanism,
+  AnalyticsEntrySurface,
+  AnalyticsHostProduct,
+  AnalyticsPublisherClass,
+  TrackingRuntimeType,
+} from '../public-params.js';
 import type { ReleaseChannel } from '@open-design/release';
+import type { ArtifactOriginEntrySurface, ArtifactOriginStatus } from '../../api/files.js';
 import type { TrackingDesignSystemEditSurface, TrackingDesignSystemKind, TrackingDesignSystemLengthBucket, TrackingDesignSystemOrigin, TrackingDesignSystemRunEntryFrom } from './design-systems.js';
 import type { TrackingSettingsPage } from './event-names.js';
-import type { TrackingArtifactKind, TrackingArtifactWriteSource, TrackingArtifactWriteStatus, TrackingByokProviderId, TrackingCliProviderId, TrackingDesignSystemSource, TrackingExportFormat, TrackingExportResult, TrackingFeedbackAction, TrackingFeedbackProviderId, TrackingFeedbackRating, TrackingFeedbackRatingWithNone, TrackingFeedbackReasonCode, TrackingFidelity, TrackingFileSizeBucket, TrackingFileType, TrackingFirstModelEventType, TrackingLangfuseDeliveryStatus, TrackingLangfuseDropReason, TrackingLangfuseReportResult, TrackingLangfuseReportSkipReason, TrackingProjectKind, TrackingProjectSource, TrackingResult, TrackingRunCloseReason, TrackingRunDiagnosticSource, TrackingRunFailureCategory, TrackingRunFailureDetail, TrackingRunFailureStage, TrackingRunFailureUserAction, TrackingRunLifecyclePhase, TrackingRunPhaseTimingStatus, TrackingRunResult, TrackingRunRetryFinalResult, TrackingRunRetryStrategy, TrackingRunRetrySuppressedReason, TrackingStderrLineCountBucket, TrackingTestResult, TrackingTokenCountSource } from './shared-enums.js';
+import type { TrackingAmrOpenCodeErrorPhase, TrackingAmrOpenCodeLastEventType, TrackingAmrOpenCodeLastToolKind, TrackingAmrOpenCodeLastToolStatus, TrackingArtifactKind, TrackingArtifactWriteSource, TrackingArtifactWriteStatus, TrackingByokPreflightBlockReason, TrackingByokProviderId, TrackingCliProviderId, TrackingDesignSystemSource, TrackingExecutionMode, TrackingExportFormat, TrackingExportResult, TrackingFeedbackAction, TrackingFeedbackProviderId, TrackingFeedbackRating, TrackingFeedbackRatingWithNone, TrackingFeedbackReasonCode, TrackingFidelity, TrackingFileSizeBucket, TrackingFileType, TrackingFirstModelEventType, TrackingLangfuseDeliveryStatus, TrackingLangfuseDropReason, TrackingLangfuseReportResult, TrackingLangfuseReportSkipReason, TrackingProjectKind, TrackingProjectSource, TrackingResult, TrackingRunCloseReason, TrackingRunDiagnosticSource, TrackingRunFailureCategory, TrackingRunFailureDetail, TrackingRunFailureStage, TrackingRunFailureUserAction, TrackingRunLifecyclePhase, TrackingRunPhaseTimingStatus, TrackingRunResult, TrackingRunRetryFinalResult, TrackingRunRetryStrategy, TrackingRunRetrySuppressedReason, TrackingStderrLineCountBucket, TrackingTestResult, TrackingTokenCountSource } from './shared-enums.js';
 import type { TrackingFileVersionSource, TrackingPluginImportSource, TrackingSessionMode, TrackingSettingsArea } from './ui-click.js';
 // ---- Result events -------------------------------------------------------
+
+// Final outcome for the paid provider submission. Keep this envelope free of
+// prompts, response bodies, configured URLs, credentials, and output paths.
+export interface MediaGenerationResultProps {
+  page_name: 'studio';
+  area: 'media_generation';
+  project_id: string;
+  task_id: string;
+  run_id?: string;
+  surface: 'image' | 'video' | 'audio';
+  provider_id: string;
+  model_id: string;
+  result: 'success' | 'failed';
+  initial_response_status?: number;
+  response_status?: number;
+  attempt_count: number;
+  retry_count: number;
+  retry_reason?: 'rate_limit_429' | 'service_unavailable_503';
+  retry_after_ms?: number;
+  retry_delay_ms?: number;
+  retry_final_result: 'not_attempted' | 'success' | 'failed' | 'skipped_retry_after_budget';
+  duration_ms: number;
+  used_stub_fallback: boolean;
+}
 
 export interface ProjectCreateResultProps {
   page_name: 'home';
@@ -76,9 +108,18 @@ export interface PluginImportResultProps {
 }
 
 export interface UpdateInstallResultProps {
-  page_name: 'home';
-  area: 'update_prompt';
+  page_name: 'home' | 'app';
+  area: 'update_prompt' | 'update_dialog';
   result: TrackingResult;
+  app_version_before?: string;
+  app_version_after?: string;
+  error_code?: string;
+}
+
+export interface UpdateCheckResultProps {
+  page_name: 'app';
+  area: 'update_dialog';
+  result: 'available' | 'up_to_date' | 'failed';
   app_version_before?: string;
   app_version_after?: string;
   error_code?: string;
@@ -123,6 +164,10 @@ export interface RunCreatedProps {
   // persists across sessions. Optional: omitted when the client could not
   // compute it (storage unavailable).
   project_turn_index?: number;
+  // Current run's 0-based position within this `conversation_id`. Derived by
+  // the daemon from persisted run-backed assistant messages, so it survives
+  // browser-session resets and daemon restarts. The first run is 0.
+  conversation_turn_index?: number;
   // True when the project already had a generated artifact when this run
   // started (project-scoped) — i.e. the run is an edit, not a first creation.
   has_existing_artifact?: boolean;
@@ -195,6 +240,26 @@ export interface RunCreatedProps {
   mcp_ids?: string[];
   skill_ids?: string[];
   token_count_source: TrackingTokenCountSource;
+  // External MCP/Plugin attribution. These fields are optional so existing UI
+  // and CLI Run producers keep their current contract; the Open Design Cloud
+  // Plugin path validates and supplies the complete subset.
+  entry_surface?: AnalyticsEntrySurface;
+  host_product?: AnalyticsHostProduct;
+  external_plugin_id?: string;
+  external_plugin_version?: string;
+  distribution_mechanism?: AnalyticsDistributionMechanism;
+  publisher_class?: AnalyticsPublisherClass;
+  attribution_quality?: AnalyticsAttributionQuality;
+  plugin_workflow_id?: string;
+  logical_request_digest?: string;
+  logical_request_digest_version?: 1;
+  mcp_session_id?: string;
+  brief_state?: 'confirmed' | 'skipped' | 'not_applicable';
+  deduplicated?: boolean;
+  resume?: boolean;
+  attempt_count?: number;
+  generation_slo_window_ms?: number;
+  recharge_wait_duration_ms?: number;
 }
 
 export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
@@ -206,6 +271,10 @@ export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
   failure_stage?: TrackingRunFailureStage;
   retryable?: boolean;
   user_action?: TrackingRunFailureUserAction;
+  // A daemon boot repaired a terminal state that was interrupted before the
+  // normal PostHog/Langfuse finalization path completed.
+  terminal_reconciled?: boolean;
+  terminal_recovery_reason?: 'daemon_restart' | 'analytics_incomplete';
   langfuse_trace_id?: string;
   langfuse_expected?: boolean;
   langfuse_drop_reason?: TrackingLangfuseDropReason;
@@ -221,6 +290,10 @@ export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
   tool_call_seen?: boolean;
   artifact_write_seen?: boolean;
   live_artifact_seen?: boolean;
+  deliverable_valid?: boolean;
+  deliverable_validation?: 'valid' | 'invalid';
+  artifact_origin_status?: ArtifactOriginStatus;
+  artifact_version_id?: string;
   // Distinct artifact files this run produced OR edited (created + modified),
   // measured agent-agnostically by a filesystem snapshot diff in the daemon
   // (`run-artifact-fs.ts`). An edit-only turn that rewrites an existing file
@@ -295,6 +368,34 @@ export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
   bottleneck_phase?: TrackingRunLifecyclePhase;
   last_observed_phase?: TrackingRunLifecyclePhase;
   phase_timing_status?: TrackingRunPhaseTimingStatus;
+  // E-lite root-cause discriminators. `last_observed_phase` tells us WHICH phase
+  // a stalled run died in (e.g. `tool_execution`); these four tell us WHY, which
+  // the phase alone cannot separate:
+  // - `approval_requested`: an approval/permission gate fired. Only the ACP path
+  //   is daemon-observable — stream/CLI runtimes pass a skip-permissions flag so
+  //   no gate fires, and `false` there means "not observed", not "no approval".
+  // - `stdin_backpressure`: writing the prompt to the child's stdin was queued
+  //   because the OS pipe buffer was full (the child was not draining stdin).
+  // - `tool_result_sent`: every committed tool_use received a matching
+  //   tool_result (paired by id, or by count for degraded events that carry a
+  //   null id on both sides). A stall with `tool_call_seen &&
+  //   !tool_result_sent` means a tool result was never delivered (our bug) vs a
+  //   provider that stalled after every tool result was delivered.
+  // - `last_progress_age_ms`: age of the last agent activity at finish. Near the
+  //   inactivity ceiling on a stall; near zero on a clean finish.
+  approval_requested?: boolean;
+  stdin_backpressure?: boolean;
+  tool_result_sent?: boolean;
+  last_progress_age_ms?: number;
+  // Vela's OpenCode bridge attaches this context to `error.data` when an AMR
+  // prompt fails. Keep only fixed enums in analytics: session/tool call ids,
+  // paths, titles, inputs, and outputs are deliberately not copied.
+  // Together these fields distinguish "tool still pending/running" from
+  // "tool completed, but the agent stream never reached done".
+  amr_opencode_error_phase?: TrackingAmrOpenCodeErrorPhase;
+  amr_opencode_last_event_type?: TrackingAmrOpenCodeLastEventType;
+  amr_opencode_last_tool_status?: TrackingAmrOpenCodeLastToolStatus;
+  amr_opencode_last_tool_kind?: TrackingAmrOpenCodeLastToolKind;
   attempt_index?: number;
   attempt_duration_ms?: number;
   attempt_time_to_first_token_ms?: number;
@@ -309,6 +410,12 @@ export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
   retry_attempt_count?: number;
   retry_final_result?: TrackingRunRetryFinalResult;
   retry_suppressed_reason?: TrackingRunRetrySuppressedReason;
+  agent_cli_version?: string;
+  runtime_companion_name?: string;
+  runtime_companion_version?: string;
+  retry_original_failure_category?: TrackingRunFailureCategory;
+  retry_original_failure_detail?: TrackingRunFailureDetail;
+  retry_original_failure_stage?: TrackingRunFailureStage;
 }
 
 export interface LangfuseReportResultProps {
@@ -350,7 +457,7 @@ export interface RunRetryBaseProps {
 }
 
 export interface RunRetryAttemptedProps extends RunRetryBaseProps {
-  retry_reason: 'transient_failure';
+  retry_reason: 'transient_failure' | 'post_tool_resume';
   // Backoff delay (ms) waited before this retry attempt was restarted.
   retry_delay_ms?: number;
 }
@@ -383,7 +490,7 @@ export interface UpdateApplyObservedProps {
   namespace: string;
   platform: string;
   arch: string;
-  artifact_type: 'dmg' | 'installer';
+  artifact_type: 'dmg' | 'installer' | 'payload';
   from_version: string;
   to_version: string;
   result: TrackingUpdateApplyResult;
@@ -457,6 +564,7 @@ export type FileUploadResultProps = TrackingFileUploadSurface & {
 export interface ArtifactExportResultProps {
   page_name: 'artifact';
   area: 'share_option_popover';
+  entry_surface: 'open_design_ui';
   artifact_id: string;
   artifact_kind: TrackingArtifactKind;
   export_format: TrackingExportFormat;
@@ -465,6 +573,12 @@ export interface ArtifactExportResultProps {
   export_duration_ms: number;
   project_id: string;
   project_kind: TrackingProjectKind | null;
+  artifact_origin_status: ArtifactOriginStatus;
+  artifact_version_id?: string;
+  origin_entry_surface: ArtifactOriginEntrySurface;
+  origin_external_plugin_id?: string;
+  origin_plugin_workflow_id?: string;
+  origin_run_id?: string;
 }
 
 // Fired when the user explicitly clicks "Save" in the Excalidraw sketch editor
@@ -680,6 +794,13 @@ export interface SettingsByokModelsFetchResultProps {
   duration_ms: number;
 }
 
+export interface ByokPreflightBlockedProps {
+  source: 'settings' | 'run';
+  reason: TrackingByokPreflightBlockReason;
+  provider_id: TrackingByokProviderId | 'unknown';
+  active_execution_mode: TrackingExecutionMode;
+}
+
 export interface SettingsConnectorAuthResultProps {
   page_name: TrackingSettingsPage;
   area: 'connectors';
@@ -700,6 +821,13 @@ export type PackagedStartupFailureKind =
   // the daemon cold start), as opposed to a sidecar that exited (`daemon-start` /
   // `web-start`). Split out so this bucket stops hiding inside `unknown`.
   | 'status-timeout'
+  // The sidecar process could not be created at all — Node rejected the spawn
+  // itself (win32 CreateProcess denied by AV quarantine, a locked/partially
+  // written exe, a missing interpreter). Distinct from a sidecar that started
+  // and then died (`daemon-start`) and from one that never reported ready
+  // (`status-timeout`); it used to land in `unknown` with the real cause sitting
+  // unread on the error's `code`/`errno`/`syscall`.
+  | 'spawn-failed'
   | 'unknown';
 
 // Event-specific props for `packaged_runtime_failed`. Emitted by the packaged
@@ -720,6 +848,21 @@ export interface PackagedRuntimeFailedProps {
   // The unresolved module when error_code is a module-resolution failure
   // (e.g. `better-sqlite3` for #4638).
   missing_module: string | null;
+  // The sidecar's own fatal line from the same log tail (e.g.
+  // `SqliteError: database disk image is malformed`), for the daemons that die
+  // of something the `ERR_*` match cannot name. Without it a daemon that threw
+  // any non-`ERR_` error reported error_code=null AND missing_module=null even
+  // though the reason was sitting in a log we had already read. Scrubbed and
+  // truncated like the other free-form fields.
+  daemon_error?: string | null;
+  // Node's system-error triplet read off the THROWN error object, as opposed to
+  // `error_code`, which is parsed out of the sidecar log. A failed spawn or
+  // socket op carries its real cause here (`UNKNOWN`/-4094/`spawn`,
+  // `ENOSPC`/-28/`write`) while `.message` stays generic, so dropping these
+  // collapsed distinct OS-level failures into one opaque bucket.
+  sys_code?: string | null;
+  sys_errno?: number | null;
+  sys_syscall?: string | null;
   // Crash-scene evidence added for the field-crash subset (#4638 follow-up): the
   // shipped build is verified-good, so these separate a machine-side "module
   // missing/unloadable" from a code path, and give the Windows `unknown` bucket
@@ -741,4 +884,3 @@ export interface PackagedRuntimeFailedProps {
   source: string;
   platform: string;
 }
-

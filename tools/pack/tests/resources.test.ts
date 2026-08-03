@@ -199,7 +199,8 @@ describe("copyOptionalVelaCliBinary", () => {
       const target = join(resourceRoot, "bin", process.platform === "win32" ? "vela.exe" : "vela");
       expect(copied?.target).toBe(target);
       await expect(access(target)).resolves.toBeUndefined();
-      await expect(access(join(resourceRoot, "bin", "libexec", "opencode", "opencode"))).resolves.toBeUndefined();
+      const openCodeName = process.platform === "win32" ? "opencode.exe" : "opencode";
+      await expect(access(join(resourceRoot, "bin", "libexec", "opencode", openCodeName))).resolves.toBeUndefined();
     } finally {
       await rm(root, { force: true, recursive: true });
     }

@@ -36,6 +36,9 @@ import { getResolvedDeviceId } from '../analytics/client';
 import { trackExecutionSettingsPopoverClick } from '../analytics/events';
 import {
   beginAmrAuthTracking,
+  confirmAmrAuthTracking,
+  observeAmrAuthTracking,
+  reconcileAmrAuthAttemptId,
   resolveAmrAuthTracking,
 } from '../analytics/amr-auth';
 import { KNOWN_PROVIDERS } from '../state/config';
@@ -90,7 +93,7 @@ interface Props {
   onAgentChange: (id: string) => void;
   onAgentModelChange: (
     id: string,
-    choice: { model?: string; reasoning?: string },
+    choice: { model?: string; reasoning?: string; serviceTier?: string },
   ) => void;
   onApiProtocolChange: (protocol: ApiProtocol) => void;
   onApiModelChange: (model: string) => void;
@@ -172,6 +175,7 @@ export function InlineModelSwitcher({
   const analytics = useAnalytics();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
+  const chipRef = useRef<HTMLButtonElement | null>(null);
   const providerModelsFetchingRef = useRef<Set<string>>(new Set());
   const [amrStatus, setAmrStatus] = useState<VelaLoginStatus | null>(null);
   const [amrWalletSnapshot, setAmrWalletSnapshot] =
@@ -184,6 +188,31 @@ export function InlineModelSwitcher({
     useState(false);
   const amrPollRef = useRef<number | null>(null);
   const amrLoginStartedAtRef = useRef<number | null>(null);
+  const amrLoginStartPendingRef = useRef(false);
+  const amrLoginCancelRequestedRef = useRef(false);
+  const amrAuthAttemptIdRef = useRef<string | null>(null);
+
+  const getModelPopoverBoundary = useCallback(() => {
+    const scrollContainer = wrapRef.current?.closest<HTMLElement>(
+      '.entry-main--scroll',
+    );
+    const scrollRect = scrollContainer?.getBoundingClientRect();
+    const topbarRect = scrollContainer
+      ?.querySelector<HTMLElement>('.entry-main__topbar')
+      ?.getBoundingClientRect();
+    return {
+      top: Math.max(8, (topbarRect?.bottom ?? scrollRect?.top ?? 0) + 8),
+      right: Math.min(
+        window.innerWidth - 8,
+        (scrollRect?.right ?? window.innerWidth) - 8,
+      ),
+      bottom: Math.min(
+        window.innerHeight - 8,
+        (scrollRect?.bottom ?? window.innerHeight) - 8,
+      ),
+      left: Math.max(8, (scrollRect?.left ?? 0) + 8),
+    };
+  }, []);
 
   const stopAmrPolling = useCallback(() => {
     if (amrPollRef.current !== null) {
@@ -194,6 +223,13 @@ export function InlineModelSwitcher({
 
   const refreshAmrStatus = useCallback(async () => {
     const next = await fetchVelaLoginStatus();
+    if (next?.authAttemptId) {
+      amrAuthAttemptIdRef.current = next.authAttemptId;
+    }
+    const authAttemptId = amrAuthAttemptIdRef.current;
+    if (next && authAttemptId) {
+      observeAmrAuthTracking(analytics.track, next, authAttemptId);
+    }
     if (next) {
       setAmrStatus(next);
       const pendingStartup =
@@ -210,18 +246,25 @@ export function InlineModelSwitcher({
       }
     }
     return next;
-  }, []);
+  }, [analytics.track]);
 
-  const startAmrPolling = useCallback((startedAt = Date.now()) => {
+  const startAmrPolling = useCallback((
+    startedAt = Date.now(),
+    authAttemptId = amrAuthAttemptIdRef.current,
+  ) => {
     stopAmrPolling();
     amrLoginStartedAtRef.current = startedAt;
+    if (authAttemptId) amrAuthAttemptIdRef.current = authAttemptId;
     const tick = async () => {
       const next = await refreshAmrStatus();
       const outcome = amrLoginPollOutcome(next, startedAt);
       if (outcome === 'signed-in') {
-        resolveAmrAuthTracking(analytics.track, 'success', undefined, {
-          signedInUserId: next?.user?.id ?? null,
-        });
+        if (authAttemptId) {
+          resolveAmrAuthTracking(analytics.track, 'success', undefined, {
+            authAttemptId,
+            signedInUserId: next?.user?.id ?? null,
+          });
+        }
         notifyAmrLoginStatusChanged();
         stopAmrPolling();
         amrLoginStartedAtRef.current = null;
@@ -231,12 +274,22 @@ export function InlineModelSwitcher({
       if (outcome === 'stopped' || outcome === 'timed-out') {
         stopAmrPolling();
         if (outcome === 'timed-out') {
-          resolveAmrAuthTracking(analytics.track, 'timeout', 'login_timeout');
-          void cancelVelaLogin().then(() =>
-            notifyAmrLoginStatusChanged('login-canceled'),
-          );
+          if (authAttemptId) {
+            resolveAmrAuthTracking(analytics.track, 'timeout', 'login_timeout', {
+              authAttemptId,
+            });
+            void cancelVelaLogin(authAttemptId).then((result) =>
+              notifyAmrLoginStatusChanged(
+                result.canceled === true ? 'login-canceled' : 'status-changed',
+              ),
+            );
+          }
         } else {
-          resolveAmrAuthTracking(analytics.track, 'failed', 'login_stopped');
+          if (authAttemptId) {
+            resolveAmrAuthTracking(analytics.track, 'failed', 'login_stopped', {
+              authAttemptId,
+            });
+          }
         }
         amrLoginStartedAtRef.current = null;
         setAmrLoginPending(false);
@@ -253,42 +306,150 @@ export function InlineModelSwitcher({
   ) => {
     const startedAt = Date.now();
     amrLoginStartedAtRef.current = startedAt;
+    amrLoginCancelRequestedRef.current = false;
     setAmrLoginError(null);
     setAmrLoginPending(true);
-    beginAmrAuthTracking(attribution, startedAt);
+    const provisionalAuthAttemptId = beginAmrAuthTracking(
+      attribution,
+      startedAt,
+    );
+    amrAuthAttemptIdRef.current = provisionalAuthAttemptId;
     const odDeviceId = amrHandoffDeviceId({
       metricsConsent: config.telemetry?.metrics === true,
       resolvedDeviceId: getResolvedDeviceId(),
       installationId: config.installationId,
     });
-    const result = await startVelaLogin(attribution, odDeviceId);
+    amrLoginStartPendingRef.current = true;
+    const result = await startVelaLogin(
+      attribution,
+      odDeviceId,
+      provisionalAuthAttemptId,
+    ).finally(() => {
+      amrLoginStartPendingRef.current = false;
+    });
+    const authAttemptId = reconcileAmrAuthAttemptId(
+      provisionalAuthAttemptId,
+      result.authAttemptId,
+      { joinedExisting: result.alreadyRunning === true },
+    );
+    amrAuthAttemptIdRef.current = authAttemptId;
+    if (result.ok || result.alreadyRunning) {
+      confirmAmrAuthTracking(analytics.track, authAttemptId, {
+        joinedExisting: result.alreadyRunning === true,
+      });
+    }
+    observeAmrAuthTracking(analytics.track, result, authAttemptId);
+    if (amrLoginCancelRequestedRef.current) {
+      if (result.ok || result.alreadyRunning) {
+        const cancelResult = await cancelVelaLogin(authAttemptId);
+        if (!cancelResult.ok) {
+          amrLoginCancelRequestedRef.current = false;
+          amrLoginStartedAtRef.current = null;
+          setAmrLoginPending(false);
+          setAmrLoginError(t('settings.amrLoginErrorCompact'));
+          return;
+        }
+        if (cancelResult.canceled !== true) {
+          const next = await refreshAmrStatus();
+          amrLoginCancelRequestedRef.current = false;
+          if (next?.loginInFlight) {
+            startAmrPolling(
+              startedAt,
+              next.authAttemptId ?? authAttemptId,
+            );
+          }
+          return;
+        }
+        resolveAmrAuthTracking(analytics.track, 'cancelled', undefined, {
+          authAttemptId,
+        });
+        amrLoginCancelRequestedRef.current = false;
+        amrLoginStartedAtRef.current = null;
+        setAmrLoginPending(false);
+        setAmrStatus((current) => (
+          current
+            ? { ...current, loggedIn: false, loginInFlight: false, user: null }
+            : current
+        ));
+        notifyAmrLoginStatusChanged('login-canceled');
+        return;
+      }
+      resolveAmrAuthTracking(analytics.track, 'cancelled', undefined, {
+        authAttemptId,
+      });
+      amrLoginCancelRequestedRef.current = false;
+      amrLoginStartedAtRef.current = null;
+      setAmrLoginPending(false);
+      return;
+    }
     if (!result.ok && !result.alreadyRunning) {
-      resolveAmrAuthTracking(analytics.track, 'failed', 'spawn_failed');
+      resolveAmrAuthTracking(analytics.track, 'failed', 'spawn_failed', {
+        authAttemptId,
+      });
       amrLoginStartedAtRef.current = null;
       setAmrLoginPending(false);
       setAmrLoginError(result.error || t('settings.amrLoginErrorCompact'));
       return;
     }
     notifyAmrLoginStatusChanged('login-started');
-    startAmrPolling(startedAt);
+    startAmrPolling(startedAt, authAttemptId);
   }, [
     analytics.track,
     config.installationId,
     config.telemetry?.metrics,
+    refreshAmrStatus,
     startAmrPolling,
     t,
   ]);
 
   const handleAmrCancelLogin = useCallback(async () => {
-    resolveAmrAuthTracking(analytics.track, 'cancelled');
+    const loginStartPending = amrLoginStartPendingRef.current;
+    const authAttemptId = amrAuthAttemptIdRef.current;
     stopAmrPolling();
-    amrLoginStartedAtRef.current = null;
     setAmrLoginError(null);
+    const result = authAttemptId
+      ? await cancelVelaLogin(authAttemptId)
+      : { ok: false, canceled: false };
+    if (!result.ok) {
+      amrLoginStartedAtRef.current = null;
+      setAmrLoginPending(false);
+      setAmrLoginError(t('settings.amrLoginErrorCompact'));
+      return;
+    }
+    if (result.canceled !== true) {
+      const next = await refreshAmrStatus();
+      if (loginStartPending && next?.loginInFlight !== true) {
+        amrLoginCancelRequestedRef.current = true;
+        return;
+      }
+      if (next?.loginInFlight) {
+        startAmrPolling(
+          amrLoginStartedAtRef.current ?? Date.now(),
+          next.authAttemptId ?? null,
+        );
+      }
+      return;
+    }
+    if (authAttemptId) {
+      resolveAmrAuthTracking(analytics.track, 'cancelled', undefined, {
+        authAttemptId,
+      });
+    }
+    amrLoginStartedAtRef.current = null;
     setAmrLoginPending(false);
-    await cancelVelaLogin();
+    setAmrStatus((current) => (
+      current
+        ? { ...current, loggedIn: false, loginInFlight: false, user: null }
+        : current
+    ));
     notifyAmrLoginStatusChanged('login-canceled');
-    await refreshAmrStatus();
-  }, [analytics.track, refreshAmrStatus, stopAmrPolling]);
+  }, [
+    analytics.track,
+    refreshAmrStatus,
+    startAmrPolling,
+    stopAmrPolling,
+    t,
+  ]);
 
   const handleAgentButtonClick = useCallback(
     async (agentId: string) => {
@@ -355,6 +516,51 @@ export function InlineModelSwitcher({
   }, [open]);
 
   useEffect(() => {
+    if (!open) return;
+    const scrollContainer = wrapRef.current?.closest('.entry-main--scroll');
+    if (!(scrollContainer instanceof HTMLElement)) return;
+    let frame = 0;
+    const updateAnchorVisibility = () => {
+      frame = 0;
+      const trigger = chipRef.current;
+      const triggerRect = trigger?.getBoundingClientRect();
+      if (!triggerRect) return;
+      const scrollRect = scrollContainer.getBoundingClientRect();
+      const topbar = scrollContainer.querySelector<HTMLElement>('.entry-main__topbar');
+      const anchorInTopbar = trigger ? topbar?.contains(trigger) === true : false;
+      const topbarBottom = topbar?.getBoundingClientRect().bottom;
+      const safeTop = anchorInTopbar
+        ? scrollRect.top
+        : Math.max(scrollRect.top, topbarBottom ?? scrollRect.top);
+      const safeBottom = Math.min(window.innerHeight, scrollRect.bottom);
+      const safeLeft = Math.max(0, scrollRect.left);
+      const safeRight = Math.min(window.innerWidth, scrollRect.right);
+      if (
+        triggerRect.bottom <= safeTop ||
+        triggerRect.top >= safeBottom ||
+        triggerRect.right <= safeLeft ||
+        triggerRect.left >= safeRight
+      ) {
+        setOpen(false);
+      }
+    };
+    const scheduleVisibilityUpdate = () => {
+      if (frame !== 0) return;
+      frame = window.requestAnimationFrame(updateAnchorVisibility);
+    };
+    updateAnchorVisibility();
+    scrollContainer.addEventListener('scroll', scheduleVisibilityUpdate, {
+      passive: true,
+    });
+    window.addEventListener('resize', scheduleVisibilityUpdate);
+    return () => {
+      if (frame !== 0) window.cancelAnimationFrame(frame);
+      scrollContainer.removeEventListener('scroll', scheduleVisibilityUpdate);
+      window.removeEventListener('resize', scheduleVisibilityUpdate);
+    };
+  }, [open]);
+
+  useEffect(() => {
     if (open && agents.some((agent) => agent.id === 'amr' && agent.available)) {
       void refreshAmrStatus();
     }
@@ -376,12 +582,20 @@ export function InlineModelSwitcher({
         setAmrLoginPending(false);
       }
       void refreshAmrStatus().then((next) => {
+        if (next?.authAttemptId) {
+          amrAuthAttemptIdRef.current = next.authAttemptId;
+        }
         if (next?.loggedIn) {
           amrLoginStartedAtRef.current = null;
           stopAmrPolling();
           return;
         }
-        if (next?.loginInFlight) startAmrPolling();
+        if (next?.loginInFlight) {
+          startAmrPolling(
+            amrLoginStartedAtRef.current ?? Date.now(),
+            next.authAttemptId ?? null,
+          );
+        }
       });
     };
     window.addEventListener(AMR_LOGIN_STATUS_EVENT, onStatusChange);
@@ -413,6 +627,7 @@ export function InlineModelSwitcher({
   const currentAgentId = currentAgent?.id ?? null;
   const normalizedCurrentModelId = normalizedCurrentChoice?.model ?? null;
   const normalizedCurrentReasoning = normalizedCurrentChoice?.reasoning;
+  const normalizedCurrentServiceTier = normalizedCurrentChoice?.serviceTier;
   const currentAgentModelIds = currentAgent?.models?.map((m) => m.id) ?? [];
   const configuredModelId =
     typeof effectiveCurrentChoice.model === 'string' && effectiveCurrentChoice.model
@@ -425,27 +640,43 @@ export function InlineModelSwitcher({
     !currentAgentModelIds.includes(configuredModelId)
       ? defaultAgentModelId(currentAgent)
       : configuredModelId ?? defaultAgentModelId(currentAgent);
+  const currentModelOption =
+    currentAgent?.models?.find((m) => m.id === currentModelId) ?? null;
 
   useEffect(() => {
     if (!currentAgentId || !normalizedCurrentModelId) return;
-    onAgentModelChange(currentAgentId, {
+    const nextChoice: {
+      model: string;
+      reasoning?: string;
+      serviceTier?: string;
+    } = {
       model: normalizedCurrentModelId,
       reasoning: normalizedCurrentReasoning,
-    });
+    };
+    if (normalizedCurrentServiceTier !== undefined) {
+      nextChoice.serviceTier = normalizedCurrentServiceTier;
+    }
+    onAgentModelChange(currentAgentId, nextChoice);
   }, [
     currentAgentId,
     normalizedCurrentModelId,
     normalizedCurrentReasoning,
+    normalizedCurrentServiceTier,
     onAgentModelChange,
   ]);
 
   const currentModelLabel =
-    currentAgent?.models?.find((m) => m.id === currentModelId)?.label ?? null;
+    currentModelOption?.label ?? null;
   const inlineAgentModelOptions = useMemo(() => {
     const models = currentAgent?.models ?? [];
     if (currentAgent?.id !== 'amr') return models;
     return orderModelOptionsByAvailability(models);
   }, [currentAgent]);
+  const currentServiceTierOptions = currentModelOption?.serviceTierOptions ?? [];
+  const currentServiceTierId =
+    currentServiceTierOptions.some((tier) => tier.id === currentChoice.serviceTier)
+      ? currentChoice.serviceTier!
+      : 'default';
   const amrLoggedIn = amrStatus?.loggedIn === true;
 
   useEffect(() => {
@@ -588,8 +819,8 @@ export function InlineModelSwitcher({
     () =>
       Array.from(
         new Set(
-          providerForProtocol?.models?.length
-            ? providerForProtocol.models
+          providerForProtocol?.preferredModels.length
+            ? providerForProtocol.preferredModels
             : SUGGESTED_MODELS_BY_PROTOCOL[apiProtocol],
         ),
       ),
@@ -652,6 +883,7 @@ export function InlineModelSwitcher({
       data-testid="inline-model-switcher"
     >
       <button
+        ref={chipRef}
         type="button"
         className={
           'inline-switcher__chip od-tooltip' +
@@ -972,6 +1204,7 @@ export function InlineModelSwitcher({
                     searchInputTestId="inline-model-switcher-agent-model-search"
                     popoverTestId="inline-model-switcher-agent-model-popover"
                     searchPlaceholder={t('designs.searchPlaceholder')}
+                    getPopoverBoundary={getModelPopoverBoundary}
                     aria-label={t('inlineSwitcher.modelLabel')}
                     models={inlineAgentModelOptions}
                     value={currentModelId ?? ''}
@@ -985,6 +1218,7 @@ export function InlineModelSwitcher({
                       });
                       onAgentModelChange?.(currentAgent.id, {
                         model: nextValue,
+                        serviceTier: undefined,
                       });
                     }}
                     additionalOptions={
@@ -1044,6 +1278,38 @@ export function InlineModelSwitcher({
                   />
                 </div>
               ) : null}
+              {currentAgent && currentServiceTierOptions.length > 0 ? (
+                <div className="inline-switcher__row">
+                  <span className="inline-switcher__label">
+                    {t('avatar.serviceTierLabel')}
+                  </span>
+                  <select
+                    aria-label={t('avatar.serviceTierLabel')}
+                    className="inline-switcher__select"
+                    data-testid="inline-model-switcher-service-tier"
+                    value={currentServiceTierId}
+                    onChange={(e) => {
+                      trackExecutionSettingsPopoverClick(analytics.track, {
+                        page_name: 'home',
+                        area: 'execution_settings_popover',
+                        element: 'model_dropdown',
+                        execution_mode: 'local_cli',
+                      });
+                      onAgentModelChange?.(currentAgent.id, {
+                        serviceTier:
+                          e.target.value === 'default' ? undefined : e.target.value,
+                      });
+                    }}
+                  >
+                    <option value="default">{t('common.default')}</option>
+                    {currentServiceTierOptions.map((tier) => (
+                      <option key={tier.id} value={tier.id}>
+                        {tier.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : null}
             </>
           ) : (
             <>
@@ -1097,6 +1363,7 @@ export function InlineModelSwitcher({
                     searchInputTestId="inline-model-switcher-api-model-search"
                     popoverTestId="inline-model-switcher-api-model-popover"
                     searchPlaceholder={t('designs.searchPlaceholder')}
+                    getPopoverBoundary={getModelPopoverBoundary}
                     aria-label={t('inlineSwitcher.modelLabel')}
                     models={apiModelChoices}
                     value={config.model}

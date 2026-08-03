@@ -1,13 +1,11 @@
 <h1 align="center">Open Design: 오픈소스 Claude Design 대안</h1>
 
-> 🔥 **Open Design 0.13.0 — _Stay in Flow_ 출시.** 긴 디자인 세션은 지금까지 중단될 때마다 끊겼습니다 — 실행은 진행 위치를 잃고, 모델 선택기는 추측하게 만들고, 내보내기는 한 번 더 우회해야 했습니다. 0.13.0은 세션을 계속 살아 있게 합니다: Codex / OpenCode / Pi / Open Design Cloud 실행을 여러 턴에 걸쳐 재개하고, 알맞은 모델을 더 빠르게 고르며, 스크린샷 기반 PPTX / PDF를 앱을 벗어나지 않고 전달하세요. [0.13.0 다운로드](https://github.com/nexu-io/open-design/releases) · [릴리스 노트](https://github.com/nexu-io/open-design/releases/tag/open-design-v0.13.0)
->
 > ⚡ **Open Design Cloud — 공식 모델 서비스.** 한 번의 충전으로 Open Design 안에서 GPT, Claude, Gemini, DeepSeek를 바로 사용하세요. 20+ 플래그십 모델, 무설정, 실제 토큰 사용량 기반 과금. [Open Design Cloud 사용해 보기](https://open-design.ai/cloud/)
 >
 > 🏅 **Open Design Fellow 프로그램이 지금 열렸습니다.** 디자인은 열려 있어야 한다고 믿으신다면 — Open Design Fellow가 되어 핵심 팀과 함께 제품을 빚어내고, 더 많은 사람이 디자인의 미래를 정의하는 일에 참여하도록 도와주세요. 자세히 → [`MAINTAINERS.md`](../../MAINTAINERS.md) 및 [Discord](https://discord.gg/mHAjSMV6gz).
 
 <p align="center">
-  <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="Open Design — The open-source Claude Design alternative · 150 Design Systems · 261 Plugins · 21 Coding Agents · 14 Media Providers" width="100%" />
+  <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="Open Design hero banner" width="100%" />
 </p>
 
 <p align="center">
@@ -31,9 +29,9 @@
 
 ## Open Design란
 
-🎨 **로컬 우선의 오픈소스 Claude Design 대안.** &nbsp;🖥️ **macOS와 Windows용 네이티브 데스크톱 앱.** &nbsp;⚡ **100개 이상의 스킬** · ✨ **150개의 브랜드급 `DESIGN.md` 시스템** · 📦 **바로 쓸 수 있는 261개의 플러그인.** &nbsp;🖼️ **웹 · 데스크톱 · 모바일 프로토타입**, **라이브 대시보드 / 아티팩트**, **덱**, **이미지**, **비디오**, 그리고 **HyperFrames** 모션 그래픽을 생성합니다. 🔒 샌드박스 iframe 미리보기 · HTML / PDF / PPTX / MP4 내보내기. &nbsp;🤖 **Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Hermes · Kimi · Antigravity 및 21개의 로컬 CLI에서 실행**되며, BYOK를 통해 OpenAI 호환 엔드포인트라면 무엇이든 사용할 수 있습니다.
+🎨 **로컬 우선의 오픈소스 Claude Design 대안.** &nbsp;🖥️ **macOS와 Windows용 네이티브 데스크톱 앱.** &nbsp;⚡ **100개 이상의 기능 스킬 + 별도 렌더링 템플릿 카탈로그** · ✨ **151개의 디자인 시스템 패키지** · 📦 **바로 쓸 수 있는 277개의 플러그인.** &nbsp;🖼️ **웹 · 데스크톱 · 모바일 프로토타입**, **라이브 대시보드 / 아티팩트**, **덱**, **이미지**, **비디오**, 그리고 **HyperFrames** 모션 그래픽을 생성합니다. 🔒 샌드박스 iframe 미리보기 · HTML / PDF / PPTX / MP4 내보내기. &nbsp;🤖 **25개의 고유한 로컬 CLI 실행 파일에서 실행**되며, BYOK를 통해 OpenAI 호환 엔드포인트라면 무엇이든 사용할 수 있습니다.
 
-Open Design는 Anthropic이 Claude Design과 함께 선보인 **에이전트 네이티브** 루프 — 브리프를 파악하고, 방향을 확정하고, 아티팩트를 스트리밍하고, 비평하고, 전달하는 그 흐름 — 이 더 이상 닫혀 있지 않고, 노트북에 이미 있는 코딩 에이전트가 읽고 쓰고 리믹스할 수 있는 **스킬 · 디자인 시스템 · 플러그인의 파일시스템**이 될 때 얻게 되는 결과물입니다. CLI는 디자인 엔진이 되고, 노트북은 스튜디오가 되며, 팀의 `DESIGN.md`는 브랜드 계약서가 됩니다.
+Open Design는 그 루프를 에이전트가 읽고 쓸 수 있는 **기능 스킬 · 렌더링 디자인 템플릿 · 디자인 시스템 · 플러그인의 파일시스템**으로 만듭니다.
 
 또한 이것은 **에이전트 시대를 위한 Figma 대안**입니다 — 캔버스 위에서 픽셀을 밀어 옮기는 대신, 실제 CSS, 실제 폰트, 실제 컴포넌트로 된 단일 페이지 아티팩트를 HTML / PDF / PPTX / MP4로 곧바로 내보내 전달합니다 — 이미 당신의 디자인 시스템으로 빚어졌고, 이미 당신이 매일 쓰는 에이전트 안에서 실행 가능한 상태로요.
 
@@ -116,10 +114,10 @@ Open Design가 무엇이고 무엇을 하는지 빠르게 살펴봅니다. **Hom
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | ✅ 지원됨 | `od mcp install claude` |
 | [Codex CLI](https://github.com/openai/codex) | ✅ 지원됨 | `od mcp install codex` |
 | [DeepSeek Reasonix](https://github.com/esengine/DeepSeek-Reasonix) | ✅ 지원됨 | `od mcp install reasonix` |
+| [Raven](https://github.com/EverMind-AI/Raven) | ✅ 지원됨 | `od mcp install raven` |
 | [Cursor](https://www.cursor.com/cli) | ✅ 지원됨 | `od mcp install cursor` |
 | [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ 지원됨 | `od mcp install copilot` |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ 지원됨 | `od mcp install copilot` |
-| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | ✅ 지원됨 | `od mcp install gemini` |
 | [OpenCode](https://opencode.ai/) | ✅ 지원됨 | `od mcp install opencode` |
 | [OpenClaw](https://github.com/openclaw/openclaw) | ✅ 지원됨 | `od mcp install openclaw` |
 | [Antigravity](https://antigravity.google) | ✅ 지원됨 | `od mcp install antigravity` |
@@ -134,12 +132,12 @@ Open Design가 무엇이고 무엇을 하는지 빠르게 살펴봅니다. **Hom
 `od mcp install <agent> --print`로 드라이런 미리보기 · `--uninstall`로 제거 · 전체 목록은 `od mcp install --help`로 확인.
 
 <p align="center">
-  <img src="https://repo-assets.open-design.ai/resources/images/coding-agents.png" alt="The 21 coding-agent CLIs Open Design supports — Claude Code · Codex · OpenCode · Hermes · Antigravity · Gemini · Grok Build · Kimi · Cursor Agent · Qwen · Qoder · GitHub Copilot · Pi · Kiro · Kilo · Mistral Vibe · DeepSeek · Reasonix · Aider · Devin · Trae" width="100%" />
+  <img src="https://repo-assets.open-design.ai/resources/images/coding-agents.png" alt="The 25 coding-agent CLIs Open Design supports — Claude Code · Codex · OpenCode · Hermes · Antigravity · Vela · Grok Build · Kimi · Cursor Agent · Qwen · Qoder · GitHub Copilot · Pi · Kiro · Kilo · Mistral Vibe · DeepSeek · Reasonix · Aider · Amp · CodeBuddy · Mimo · AtomCode · Devin · Trae" width="100%" />
 </p>
 
 **CLI를 설치하지 않았다고요?** `POST /api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream`의 BYOK 프록시가 동일한 루프(프로세스 스폰 없이)를 제공합니다 — `baseUrl` + `apiKey` + `model`을 붙여넣기만 하면 되며, OpenAI, Anthropic, Azure OpenAI, Google Gemini, Ollama, LM Studio, vLLM 또는 OpenAI 호환 엔드포인트라면 무엇이든 지원합니다. 대상별 SSRF 보호가 데몬 경계에서 내부 IP / 링크 로컬 / CGNAT를 차단합니다.
 
-어댑터 계약과 스트림 파서는 [`apps/daemon/src/agents.ts`](../../apps/daemon/src/agents.ts)에 있습니다. 새 CLI를 추가하는 일은 항목 하나면 됩니다 — [`docs/agent-adapters.md`](../../docs/agent-adapters.md)를 참고하세요.
+Runtime 정의는 [`apps/daemon/src/runtimes/defs/`](../../apps/daemon/src/runtimes/defs/)에 두고 `runtimes/registry.ts`에 등록합니다. 새 wire format일 때만 parser가 추가로 필요합니다 — [`docs/agent-adapters.md`](../../docs/agent-adapters.md)를 참고하세요.
 
 ---
 
@@ -264,9 +262,9 @@ Open Design가 무엇이고 무엇을 하는지 빠르게 살펴봅니다. **Hom
 Open Design(OD)는 그 오픈소스 대안입니다. 같은 루프, 같은 아티팩트 우선의 사고방식, 잠금은 전혀 없이:
 
 - 🤖 **에이전트 네이티브, 모델에 구애받지 않음.** 우리는 에이전트를 제공하지 않습니다. 이미 당신의 `PATH`에 있는 `claude` / `codex` / `cursor-agent` / `copilot` / `hermes` / `kimi`가 디자인 엔진입니다. 한 번의 클릭으로 교체하세요.
-- 🧠 **기본부터 브랜드급.** 모든 렌더는 활성 `DESIGN.md`를 읽습니다 — 팔레트, 타이포그래피, 간격, 모션, 보이스, 안티패턴을 다루는 9개 섹션 스키마입니다. 150개 시스템이 저장소와 함께 제공됩니다(Linear, Stripe, Vercel, Airbnb, Apple, Tesla, Notion, Anthropic, Cursor, Supabase, Figma…). 폴더 하나만 넣으면 피커가 찾아냅니다.
+- 🧠 **기본부터 브랜드급.** 모든 렌더는 활성 패키지의 `DESIGN.md`를 핵심 브랜드 계약으로 읽습니다. 151개 디자인 시스템 패키지가 제공되며, 레거시 패키지는 `DESIGN.md`만 포함할 수 있고 새 패키지는 `manifest.json`, `tokens.css`, 컴포넌트, 에셋, 출처 정보를 더할 수 있습니다. 폴더 하나만 넣으면 피커가 찾아냅니다.
 - 🖥️ **로컬 우선, 모든 계층에서 BYOK.** 네이티브 데스크톱 앱은 클라우드 왕복 없이 로컬 우선을 유지합니다. daemon 데이터 경로를 설명하기 전에 반드시 루트 `AGENTS.md`의 **Daemon data directory contract**를 읽어야 합니다.
-- 🌍 **세 가지 평면에서 조합 가능.** **플러그인**은 실행 가능한 워크플로를 담고 · **스킬**은 에이전트의 디자인 감각을 담으며 · **디자인 시스템**은 브랜드를 담습니다. 세 가지 모두 누구나 작성하고, 버전 관리하고, 게시할 수 있는 평범한 파일입니다.
+- 🌍 **네 가지 평면에서 조합 가능.** **플러그인**은 워크플로, **기능 스킬**은 에이전트 동작, **디자인 템플릿**은 렌더링 청사진, **디자인 시스템**은 브랜드를 담습니다.
 - 🔁 **기존 코드베이스를 새롭게.** `git` 저장소 + `DESIGN.md`를 에이전트에 넘기면 당신의 실제 컴포넌트를 브랜드 사양에 맞게 리팩터링합니다. 전용 플러그인이 Figma / Pencil 워크플로를 React / Next.js / Vue 코드로 마이그레이션합니다.
 - 🔒 **신념에 기반한 프라이버시.** 모든 것은 당신의 데이터가 있는 곳에서 실행됩니다 — 당신의 노트북, 당신 팀의 서버, 당신의 Vercel 프로젝트. 네트워크가 필요할 때 BYOK 프록시는 SSRF로부터 보호됩니다.
 
@@ -275,10 +273,10 @@ Open Design(OD)는 그 오픈소스 대안입니다. 같은 루프, 같은 아�
 | | Claude Design | Figma | Lovable / v0 / Bolt | **Open Design** |
 |---|---|---|---|---|
 | 오픈소스 | ❌ | ❌ | ❌ | **✅ Apache-2.0** |
-| 셀프 호스트 / 데스크톱 | ❌ | ❌ | ❌ | **✅ macOS + Windows + Vercel** |
-| 에이전트 네이티브(당신의 CLI에서 실행) | Anthropic 전용 | ❌ | 클라우드 에이전트 전용 | **✅ 21개 CLI + BYOK** |
-| 브랜드급 `DESIGN.md` | 독점 | 테마 JSON | 제한적 토큰 | **✅ 150개 시스템 제공** |
-| 스킬 / 플러그인 / 템플릿 | 비공개 | 플러그인 스토어 | 비공개 | **✅ 100개 이상 스킬 · 261개 플러그인** |
+| 셀프 호스트 / 데스크톱 | ❌ | ❌ | ❌ | **✅ macOS + Windows + Docker** |
+| 에이전트 네이티브(당신의 CLI에서 실행) | Anthropic 전용 | ❌ | 클라우드 에이전트 전용 | **✅ 25개 CLI + BYOK** |
+| 브랜드급 `DESIGN.md` | 독점 | 테마 JSON | 제한적 토큰 | **✅ 151개 시스템 제공** |
+| 스킬 / 플러그인 / 템플릿 | 비공개 | 플러그인 스토어 | 비공개 | **✅ 100개 이상의 기능 스킬 · 별도 렌더링 템플릿 카탈로그 · 277개 플러그인** |
 | HyperFrames (HTML→MP4) | ❌ | ❌ | ❌ | **✅ 일급 지원** |
 | 기존 저장소를 브랜드에 맞게 새롭게 | ❌ | ❌ | ❌ | **✅ 에이전트 + `DESIGN.md`로** |
 | 최소 결제 | Pro / Max / Team | Pro / Org | Pro / Team | **BYOK · 호환 엔드포인트라면 무엇이든** |
@@ -295,7 +293,7 @@ Open Design를 사용하는 가장 빠른 방법입니다. Node도, pnpm도, 클
 - **Windows** (x64) → [**open-design.ai**](https://open-design.ai/) 또는 [GitHub Releases](https://github.com/nexu-io/open-design/releases)
 - **Linux** (AppImage, 선택적 레인) → [GitHub Releases](https://github.com/nexu-io/open-design/releases)
 
-설치 후: 앱이 당신의 `PATH`에 있는 모든 코딩 에이전트 CLI를 자동으로 감지하고, 100개 이상의 스킬과 150개의 디자인 시스템을 불러오며, entry view에서 브리프를 입력할 수 있게 합니다.
+설치 후: 앱이 당신의 `PATH`에 있는 모든 코딩 에이전트 CLI를 자동으로 감지하고, 100개 이상의 기능 스킬과 별도 렌더링 템플릿 카탈로그, 151개의 디자인 시스템 패키지를 불러오며, entry view에서 브리프를 입력할 수 있게 합니다.
 
 ### 🤖 코딩 에이전트에 설치 (UI 없이)
 
@@ -304,8 +302,8 @@ GUI를 한 번도 열지 않고도 Open Design를 사용할 수 있습니다 —
 ```bash
 # One-line install into the agent you're using:
 od mcp install <agent>
-# <agent> = claude | codex | cursor | copilot | openclaw | antigravity | gemini
-#         | pi | vibe | hermes | cline | kimi | trae | opencode
+# <agent> = claude | codex | reasonix | raven | cursor | copilot | openclaw | antigravity
+#         | pi | vibe | hermes | cline | kimi | kiro | trae | opencode
 ```
 
 그런 다음 에이전트 안에서:
@@ -314,7 +312,7 @@ od mcp install <agent>
 > Use open-design to generate a landing page with the Linear design system
 ```
 
-에이전트는 `skills/`를 읽고, 알맞은 `SKILL.md`를 고르고, 당신이 지정한 `DESIGN.md`를 바인딩한 뒤, `http://localhost:7456`에서 미리볼 수 있는 `<artifact>`를 내보냅니다.
+파일시스템 기반 로컬 CLI 실행에서 에이전트는 선택한 기능 스킬 또는 디자인 템플릿과 `DESIGN.md`를 합성해 정규 프로젝트 파일을 쓰고 Open Design이 이를 미리 봅니다. 파일 도구가 없는 BYOK/API 실행은 완전한 `<artifact>` 블록 하나를 반환합니다.
 
 ### 🐳 Docker로 실행
 
@@ -342,6 +340,8 @@ corepack enable && pnpm install
 pnpm tools-dev run web
 ```
 
+`tools-dev`가 출력한 URL을 여세요. 명시적인 포트 플래그가 없으면 개발 포트는 동적으로 배정됩니다.
+
 Node `~24`, pnpm `10.33.x`. Windows 사용자는 [`docs/windows-troubleshooting.md`](../../docs/windows-troubleshooting.md)를 참고하세요. 전체 빠른 시작, 환경 변수, Nix flake, 패키징 빌드 흐름 → [`QUICKSTART.ko.md`](QUICKSTART.ko.md).
 
 ### 전체 워크플로 — 브리프에서 아티팩트까지
@@ -350,7 +350,7 @@ Node `~24`, pnpm `10.33.x`. Windows 사용자는 [`docs/windows-troubleshooting.
 
 1. **PM이 브리프를 제출합니다.** 플러그인 피커가 랜딩 페이지 · 피치 덱 · 대시보드 · 소셜 포스트 · PM 스펙 · OKR 스코어카드… 를 제안합니다.
 2. **디자이너(또는 에이전트)가 방향을 확정합니다.** 브랜드가 없나요? 엄선된 5가지 방향 중에서 고르세요. 브랜드가 있나요? 스크린샷 / URL을 넣으면 → 에이전트가 GitHub에 연결하고, Figma를 가져오고, 재사용 가능한 `DESIGN.md`로 코드화합니다.
-3. **에이전트가 첫 `<artifact>`를 내보냅니다.** 플러그인 + 스킬 + `DESIGN.md`가 바인딩됩니다. 그것은 샌드박스 iframe으로 스트리밍되어 그 자리에서 편집 가능합니다 — "처음부터 다시 생성"이 아닙니다.
+3. **에이전트가 첫 결과물을 만듭니다.** 파일시스템 기반 CLI 실행은 정규 파일을 쓰고, 파일 도구가 없는 BYOK/API 실행은 완전한 `<artifact>` 블록을 반환합니다.
 4. **엔지니어링으로 넘깁니다.** 아티팩트는 실제 HTML/CSS입니다 — Cursor, Codex, 또는 Claude Code에 넣어 코드로 계속 빌드하세요. 또는 PPTX / PDF / MP4를 마케팅으로 곧바로 내보내세요.
 5. **Open Design는 사용할수록 더 똑똑해집니다.** 당신의 스크린샷, 폰트, 팔레트, 확정된 아티팩트가 다음 세션의 기본값으로 쌓입니다. 재작업도 줄고, 표류도 줄어듭니다.
 
@@ -365,11 +365,11 @@ Open Design는 **stdio MCP 서버**와 에이전트별 **설치 스크립트**�
 od mcp install <agent>
 
 # Then the agent can:
-od search-files "primary button"      # search files across projects
-od get-file design-systems/linear-app/DESIGN.md
-od get-artifact <slug>                # latest rendered artifact
-od plugin run web-prototype --brief "..."
-od skill list --scenario marketing
+od project list --json
+od files list <project-id> --json
+od files read <project-id> <relative-path>
+od plugin list --json
+od skills list --json
 ```
 
 **왜 MCP인가?** 반복할 때마다 zip을 내보내고 다시 첨부하는 일은 흐름을 끊습니다. MCP는 디자인 소스를 직접 노출합니다 — 에이전트는 언제나 살아 있는 파일을 봅니다.
@@ -380,13 +380,13 @@ od skill list --scenario marketing
 
 ---
 
-## 스킬
+## 스킬과 디자인 템플릿
 
-**100개 이상의 스킬이 기본으로 제공됩니다** — 각각은 Claude Code [`SKILL.md`][skill] 관례를 따르는 [`skills/`](../../skills/) 아래의 폴더이며, `od:` 프론트매터(`mode`, `platform`, `scenario`, `preview.type`, `design_system.requires`, `default_for`, `fidelity`, `example_prompt`)로 확장되어 있습니다. 폴더 하나를 넣고 데몬을 재시작하면 피커에 나타납니다.
+**100개 이상의 기능 스킬은 [`skills/`](../../skills/)에 있으며** 재사용 가능한 에이전트 동작, 참조 또는 도구를 제공합니다. 렌더링 가능한 스타터는 [`design-templates/`](../../design-templates/)에 분리되어 기능 스킬 레지스트리가 아닌 템플릿 카탈로그에 표시됩니다.
 
-두 가지 **모드**가 카탈로그를 떠받칩니다: `prototype`(웹/모바일/데스크톱 단일 페이지 아티팩트)와 `deck`(가로 스와이프 프레젠테이션). 그 밖에도 `image`, `video`, `audio`, `template`, `design-system`, `utility` 모드가 있습니다. **`scenario`** 필드는 대상에 따라 그것들을 묶습니다: `design` · `marketing` · `operation` · `engineering` · `product` · `finance` · `hr` · `sale` · `personal`.
+두 가지 **모드**가 템플릿 카탈로그를 떠받칩니다: `prototype`과 `deck`. 다른 템플릿은 `image`, `video`, `audio`, utility 표면을 다룹니다.
 
-| 스킬 | 모드 | 시나리오 | 생성하는 것 |
+| 디자인 템플릿 | 모드 | 시나리오 | 생성하는 것 |
 |---|---|---|---|
 | [`web-prototype`](../../design-templates/web-prototype/) | prototype | design | 기본 랜딩 페이지 / 히어로 |
 | [`saas-landing`](../../design-templates/saas-landing/) | prototype | marketing | 히어로 / 기능 / 가격 / CTA |
@@ -409,13 +409,13 @@ od skill list --scenario marketing
 | [`critique`](../../design-templates/critique/) | utility | design | 5차원 자가 비평 점수표 |
 | [`tweaks`](../../design-templates/tweaks/) | utility | design | AI가 내보낸 tweaks 패널 매니페스트 |
 
-전체 스킬 프로토콜 → [`docs/skills-protocol.md`](../../docs/skills-protocol.md). 스킬 레지스트리 엔드포인트: `GET /api/skills`.
+프로토콜과 디렉터리 분리 → [`docs/skills-protocol.md`](../../docs/skills-protocol.md). 기능 스킬은 `GET /api/skills`, 템플릿은 `GET /api/design-templates`를 사용합니다.
 
 ---
 
 ## 디자인 시스템
 
-**150개의 브랜드급 `DESIGN.md` 시스템**이 저장소와 함께 제공됩니다 — 각각은 9개 섹션 스키마(색상, 타이포그래피, 간격, 레이아웃, 컴포넌트, 모션, 보이스, 브랜드, 안티패턴)를 갖춘 단일 Markdown 파일로, [`VoltAgent/awesome-design-md`][acd2]에서 가져왔습니다. 시스템을 전환하면 → 다음 렌더가 새 토큰을 사용합니다. 테마 JSON은 없습니다.
+**`DESIGN.md` 중심의 151개 디자인 시스템 패키지**가 제공됩니다. 레거시 패키지는 Markdown 계약만 포함할 수 있고, 새 패키지는 `manifest.json`, 컴파일된 `tokens.css`, 컴포넌트 fixture, 자산, 출처 증거도 포함할 수 있습니다. 업스트림 파생 시스템과 프로젝트 고유 추가분이 섞이며 [`design-systems/README.md`](../../design-systems/README.md)가 패키지 형태와 출처를 기록합니다.
 
 <details>
 <summary><b>전체 카탈로그(클릭하여 펼치기)</b></summary>
@@ -448,16 +448,16 @@ od skill list --scenario marketing
 
 ## 플러그인
 
-**261개의 공식 플러그인**이 [`plugins/_official/`](../../plugins/_official/)에 있습니다. 각 플러그인은 **이식 가능한 에이전트 스킬 폴더**입니다 — `SKILL.md`(Agent Skills를 지원하는 어떤 에이전트든 읽을 수 있음)와, Open Design에 마켓플레이스 메타데이터, 입력, 미리보기, 파이프라인, 기능 선언을 제공하는 선택적 `open-design.json` 매니페스트로 구성됩니다. 카테고리로 바로 이동하세요:
+**277개의 공식 플러그인과 183개의 리믹스 가능한 예제**가 [`plugins/_official/`](../../plugins/_official/)에 있습니다. 각 항목은 `open-design.json`과 타입별 payload를 갖는 이식 가능한 디렉터리입니다. 워크플로는 `SKILL.md`, 미디어 템플릿은 `template.json`, 디자인 시스템은 `DESIGN.md`를 사용합니다.
 
 | 카테고리 | 개수 | 내용 |
 |---|---|---|
-| [`scenarios/`](../../plugins/_official/scenarios/) | 11 | 완전한 디자인 시나리오 — [`od-default`](../../plugins/_official/scenarios/od-default/), [`od-design-refine`](../../plugins/_official/scenarios/od-design-refine/), [`od-figma-migration`](../../plugins/_official/scenarios/od-figma-migration/), [`od-code-migration`](../../plugins/_official/scenarios/od-code-migration/), [`od-react-export`](../../plugins/_official/scenarios/od-react-export/), [`od-nextjs-export`](../../plugins/_official/scenarios/od-nextjs-export/), [`od-vue-export`](../../plugins/_official/scenarios/od-vue-export/), [`od-media-generation`](../../plugins/_official/scenarios/od-media-generation/), [`od-new-generation`](../../plugins/_official/scenarios/od-new-generation/), [`od-tune-collab`](../../plugins/_official/scenarios/od-tune-collab/), [`od-plugin-authoring`](../../plugins/_official/scenarios/od-plugin-authoring/) |
+| [`scenarios/`](../../plugins/_official/scenarios/) | 13 | 완전한 디자인 시나리오 — [`od-default`](../../plugins/_official/scenarios/od-default/), [`od-design-refine`](../../plugins/_official/scenarios/od-design-refine/), [`od-figma-migration`](../../plugins/_official/scenarios/od-figma-migration/), [`od-code-migration`](../../plugins/_official/scenarios/od-code-migration/), [`od-react-export`](../../plugins/_official/scenarios/od-react-export/), [`od-nextjs-export`](../../plugins/_official/scenarios/od-nextjs-export/), [`od-vue-export`](../../plugins/_official/scenarios/od-vue-export/), [`od-media-generation`](../../plugins/_official/scenarios/od-media-generation/), [`od-new-generation`](../../plugins/_official/scenarios/od-new-generation/), [`od-tune-collab`](../../plugins/_official/scenarios/od-tune-collab/), [`od-plugin-authoring`](../../plugins/_official/scenarios/od-plugin-authoring/), [`od-share-to-community`](../../plugins/_official/scenarios/od-share-to-community/), [`od-web-effect-extractor`](../../plugins/_official/scenarios/od-web-effect-extractor/) |
 | [`image-templates/`](../../plugins/_official/image-templates/) | 45 | 원샷 이미지 프롬프트 — 에디토리얼, 시네마틱, 제품, 인물 |
-| [`video-templates/`](../../plugins/_official/video-templates/) | 50 | HyperFrames / Seedance / Veo 모션 템플릿 |
-| [`design-systems/`](../../plugins/_official/design-systems/) | 142 | 플러그인으로 감싼 브랜드 `DESIGN.md` |
+| [`video-templates/`](../../plugins/_official/video-templates/) | 63 | HyperFrames / Seedance / Veo 모션 템플릿 |
+| [`design-systems/`](../../plugins/_official/design-systems/) | 143 | 플러그인으로 감싼 브랜드 `DESIGN.md` |
 | [`atoms/`](../../plugins/_official/atoms/) | 13 | 재사용 가능한 UI 조각(버튼, 히어로, KPI 카드) |
-| [`examples/`](../../plugins/_official/examples/) | 140 | 리믹스 가능한 참조 출력물 |
+| [`examples/`](../../plugins/_official/examples/) | 183 | 리믹스 가능한 참조 출력물 |
 
 또한 커뮤니티 플러그인을 위한 [`plugins/community/`](../../plugins/community/)와 게시 흐름을 위한 [`plugins/registry/`](../../plugins/registry/)가 있습니다.
 
@@ -490,18 +490,18 @@ od plugin uninstall od-default       # uninstall
 
 ### 플러그인 만들기
 
-플러그인은 **최소한 `SKILL.md` 하나만 있으면 됩니다**; Open Design 마켓플레이스에 등록하려면 `open-design.json`을 추가하세요:
+Open Design 플러그인에는 `open-design.json`과 타입별 payload가 필요합니다. 스킬과 시나리오는 `SKILL.md`도 포함하고 다른 타입은 자체 payload를 사용합니다:
 
 ```
 my-plugin/
-├── SKILL.md            ← required: YAML frontmatter (name · description) + trigger phrasing + workflow (aim for < 500 lines)
-├── open-design.json    ← needed to list: marketplace metadata + inputs + pipeline + capabilities
+├── open-design.json    ← required: marketplace metadata + inputs + pipeline + capabilities
+├── SKILL.md            ← required for agent-skill/scenario entries; omit for other plugin types
 ├── README.md           ← optional: usage, install, registry links
 ├── preview/            ← optional: index.html / poster.png (strongly recommended for visual plugins)
 └── examples/           ← optional: concrete use cases
 ```
 
-핵심 `open-design.json` 필드: `specVersion`(현재 `1.0.0`), `name`(안정적 ID), `version`(semver), `compat.agentSkills[].path`(`./SKILL.md`를 가리킴), `od.kind`(`skill` / `scenario` / `atom` / `bundle`), `od.taskKind`(`new-generation` / `figma-migration` / `code-migration` / `tune-collab`), `od.mode`(출력 표면, 예: `prototype` / `deck` / `live-artifact` / `image` / `video` / `hyperframes` / `audio` / `design-system` / `scenario`), `od.capabilities[]`(**최소한만 선언하세요** — 제한된 설치는 기본적으로 `prompt:inject`만 부여합니다), `od.inputs[]`(적용 시점 파라미터).
+핵심 필드는 `specVersion`, `name`, `version`, Agent Skill을 공개할 때만 선택적인 `compat.agentSkills[].path`, 그리고 `od.kind`, `od.taskKind`, `od.mode`, `od.capabilities[]`, `od.inputs[]`입니다.
 
 로컬에서 스캐폴드 + 검증:
 
@@ -535,7 +535,7 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
    ┌─────────────────────────────────┐   /api/proxy/{provider}/stream (SSE)
    │  local daemon (Express+SQLite)  │   ─→ any OpenAI-compatible BYOK,
    │                                  │       SSRF-guarded at the edge
-   │  /api/skills    /api/plugins    │
+   │  /api/skills    /api/design-templates    /api/plugins    │
    │  /api/design-systems            │
    │  /api/chat (SSE)   /api/proxy/* │
    │  /api/projects/:id/files/...    │
@@ -546,10 +546,10 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
              │ spawn(cli, [...], { cwd: managed project cwd })
              ▼
    ┌──────────────────────────────────────────────────────────────────┐
-   │  claude · codex · cursor-agent · copilot · openclaw · antigravity ·│
-   │  gemini · opencode · qwen · qoder · hermes (ACP) · kimi (ACP) ·    │
-   │  pi (RPC) · kiro · kilo · vibe (ACP) · cline · trae · deepseek     │
-   │  reads SKILL.md + DESIGN.md, writes artifacts to disk             │
+   │  Base registry: 26 runtime definitions (including byok-opencode),       │
+   │  backed by 25 distinct local CLI executables because byok-opencode      │
+   │  shares the OpenCode executable.                                        │
+   │  Composes a functional skill or design template + DESIGN.md; writes files │
    └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -558,7 +558,7 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 | 프론트엔드 | Next.js 16 App Router + React 18 + TypeScript |
 | 데몬 | Node 24 · Express · SSE 스트리밍 · `better-sqlite3` |
 | 스토리지 | daemon 저장 경로를 변경하거나 문서화하기 전에 반드시 루트 `AGENTS.md`의 **Daemon data directory contract**를 읽어야 합니다. 이 README는 그 내용을 다시 서술해서는 안 됩니다. |
-| 미리보기 | 샌드박스 `srcdoc` iframe + 스트리밍 `<artifact>` 파서 |
+| 미리보기 | filesystem 실행은 정규 파일을 렌더링하고 BYOK/API는 완전한 `<artifact>` 블록을 샌드박스 `srcdoc` iframe으로 파싱합니다 |
 | 내보내기 | HTML(인라인) · PDF(브라우저 인쇄) · PPTX(에이전트 기반) · ZIP · Markdown · MP4(HyperFrames) |
 | 데스크톱 | Electron 셸 + 샌드박스 렌더러 + 사이드카 IPC(STATUS · EVAL · SCREENSHOT · CONSOLE · CLICK · SHUTDOWN) |
 | 라이프사이클 | 단일 진입점: `pnpm tools-dev` (start / stop / run / status / logs / inspect / check) |
@@ -569,9 +569,9 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 
 ## 로드맵
 
-- [x] 데몬 + 21개 코딩 에이전트 CLI 어댑터 + 스킬 레지스트리 + 디자인 시스템 카탈로그
+- [x] 데몬 + 25개 고유 CLI 실행 파일의 26개 runtime 정의 + 스킬/템플릿 레지스트리 + 디자인 시스템 카탈로그
 - [x] 웹 앱 + 챗 + 질문 폼 + 5방향 피커 + 할 일 진행 상황 + 샌드박스 미리보기
-- [x] 100개 이상의 스킬 · 150개의 디자인 시스템 · 5개의 비주얼 방향 · 5개의 디바이스 프레임
+- [x] 100개 이상의 기능 스킬 · 별도 렌더링 템플릿 카탈로그 · 151개 디자인 시스템 패키지 · 5개의 비주얼 방향 · 5개의 디바이스 프레임
 - [x] SQLite 기반 프로젝트 · 대화 · 메시지 · 탭 · 템플릿
 - [x] 다중 프로바이더 BYOK 프록시(`/api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream`) + SSRF 가드
 - [x] Claude Design ZIP 가져오기(`/api/import/claude-design`)
@@ -613,9 +613,9 @@ Open Design가 계속 나아가는 것은 기여자들 — 디자이너, 엔지�
 | 만들고 싶은 것… | 방법 | 위치 |
 |---|---|---|
 | 새 **스킬** | `SKILL.md` + `assets/` + `references/`가 있는 폴더를 넣기 | [`skills/`](../../skills/) · 사양은 [`docs/skills-protocol.md`](../../docs/skills-protocol.md)에 |
-| 새 **디자인 시스템** | 9개 섹션 스키마를 쓴 `DESIGN.md`를 넣기 | [`design-systems/<brand>/`](../../design-systems/) |
-| 새 **플러그인** | 카테고리 폴더 아래에 `open-design.json` + 매니페스트를 넣기 | [`plugins/community/`](../../plugins/community/) · 사양은 [`plugins/spec/SPEC.md`](../../plugins/spec/SPEC.md)에 · 에이전트 개발 가이드는 [`plugins/spec/AGENT-DEVELOPMENT.md`](../../plugins/spec/AGENT-DEVELOPMENT.md)에 |
-| 새 **코딩 에이전트 CLI** 지원 | 어댑터 항목 하나 + 스트림 파서 | [`apps/daemon/src/agents.ts`](../../apps/daemon/src/agents.ts) |
+| 새 **디자인 시스템** | `DESIGN.md` 중심의 패키지를 넣고 필요하면 `manifest.json`, `tokens.css`, 컴포넌트, 에셋, 출처 정보를 추가 | [`design-systems/<brand>/`](../../design-systems/) |
+| 새 **플러그인** | 카테고리 폴더 아래에 `open-design.json` + 유형별 페이로드를 넣기 | [`plugins/community/`](../../plugins/community/) · 사양은 [`plugins/spec/SPEC.md`](../../plugins/spec/SPEC.md)에 · 에이전트 개발 가이드는 [`plugins/spec/AGENT-DEVELOPMENT.md`](../../plugins/spec/AGENT-DEVELOPMENT.md)에 |
+| 새 **코딩 에이전트 CLI** 지원 | Runtime 정의 + registry entry; 새 wire format에만 parser 추가 | [`apps/daemon/src/runtimes/defs/`](../../apps/daemon/src/runtimes/defs/) |
 | 버그 수정 또는 UI 다듬기 | [`good-first-issue`](https://github.com/nexu-io/open-design/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) 라벨 둘러보기 | [Issues →](https://github.com/nexu-io/open-design/issues) |
 | 문서 번역 | `README.<lang>.md` 파일 업데이트 | [`TRANSLATIONS.md`](../../TRANSLATIONS.md) |
 
@@ -679,7 +679,7 @@ gh pr create --fill
 참여해 주신 모든 분께 감사드립니다 — 코드, 문서, 피드백, 날카로운 이슈, 새 스킬, 새 디자인 시스템.
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&max=500&columns=20&anon=1&cache_bust=2026-06-29" alt="Open Design contributors" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&max=500&columns=20&anon=1&cache_bust=2026-07-17" alt="Open Design contributors" />
 </a>
 
 ---
@@ -704,9 +704,9 @@ gh pr create --fill
 
 <a href="https://star-history.com/#nexu-io/open-design&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-06-29" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-06-29" />
-    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-06-29" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-07-17" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-07-17" />
+    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-07-17" />
   </picture>
 </a>
 
@@ -722,7 +722,7 @@ gh pr create --fill
 | [`lewislulu/html-ppt-skill`](https://github.com/lewislulu/html-ppt-skill) | HTML PPT Studio 제품군 — 15개 덱 템플릿, 36개 테마, 31개 페이지 레이아웃, 애니메이션 런타임, 마그네틱 카드 프레젠터 모드. |
 | [`OpenCoworkAI/open-codesign`](https://github.com/OpenCoworkAI/open-codesign) | 최초의 오픈소스 Claude Design 대안; 우리가 빌려온 UX 패턴(스트리밍 아티팩트 루프, 샌드박스 iframe, 라이브 에이전트 패널). |
 | [`multica-ai/multica`](https://github.com/multica-ai/multica) | 데몬 + 어댑터 아키텍처 — PATH 스캔 에이전트 감지, 유일한 특권 프로세스로서의 로컬 데몬. |
-| [`VoltAgent/awesome-design-md`](https://github.com/VoltAgent/awesome-design-md) | 9개 섹션 `DESIGN.md` 스키마와 70개 제품 시스템의 출처. |
+| [`VoltAgent/awesome-design-md`](https://github.com/VoltAgent/awesome-design-md) | 원래 9개 섹션 `DESIGN.md` 스키마와 업스트림에서 파생된 70개 시스템의 역사적 출처이며, 현재 패키지는 이 기반을 확장할 수 있습니다. |
 | [`bergside/awesome-design-skills`](https://github.com/bergside/awesome-design-skills) | `design-systems/` 아래에 추가된 57개 디자인 스킬의 출처. |
 | [`heygen-com/hyperframes`](https://github.com/heygen-com/hyperframes) | HTML→MP4 모션 그래픽 프레임워크로, Open Design에 일급 `hyperframes-html`로 통합됨. |
 | [Claude Code skills][skill] | 우리가 그대로 채택한 `SKILL.md` 관례. |

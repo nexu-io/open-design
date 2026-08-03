@@ -7,7 +7,7 @@ import type { Page } from '@playwright/test';
 
 import { writeFakeVelaBin, seedVelaLoginConfig } from '@/amr';
 import { runErrorCard } from '@/playwright/chat';
-import { routeAgents } from '@/playwright/mock-factory';
+import { routeAgents, trackRunRequests } from '@/playwright/mock-factory';
 import { T } from '@/timeouts';
 import { createFakeAgentRuntimes } from '@/playwright/fake-agents';
 import {
@@ -48,7 +48,10 @@ const ANTIGRAVITY_AGENT = {
   models: [{ id: 'default', label: 'Default' }],
 };
 
-test.describe.configure({ mode: 'serial', timeout: T.xlong });
+// Timeout-only configure: each test stubs its own catalogs/agents/status
+// routes and creates its own project, so order independence holds and the
+// file stays splittable across CI shards (a serial group cannot be split).
+test.describe.configure({ timeout: T.xlong });
 
 async function stubCatalogsEmpty(page: Page) {
   await page.route('**/api/skills', async (route) => {
@@ -355,16 +358,7 @@ test('[P0] @critical non-AMR model failures promote Open Design AMR and auto-ret
     selectedAgentId: 'codex',
   });
   const { conversationId, projectId } = amr;
-  const runRequestBodies: Array<Record<string, unknown>> = [];
-  await page.route('**/api/runs', async (route) => {
-    if (route.request().method() !== 'POST') {
-      await route.fallback();
-      return;
-    }
-    const raw = route.request().postData();
-    if (raw) runRequestBodies.push(JSON.parse(raw) as Record<string, unknown>);
-    await route.fallback();
-  });
+  const runRequests = trackRunRequests(page);
 
   const userMsgId = `u-switch-${projectId}`;
   const userMsgRes = await page.request.put(
@@ -424,7 +418,12 @@ test('[P0] @critical non-AMR model failures promote Open Design AMR and auto-ret
   await settings.getByRole('button', { name: /^(Authorize|Sign in)$/ }).first().click();
 
   await expect.poll(() => loginRequested, { timeout: T.medium }).toBe(true);
-  await expect.poll(() => runRequestBodies.some((body) => body.agentId === 'amr'), { timeout: T.long }).toBe(true);
+  await expect.poll(() => runRequests.bodies.filter((body) => body.agentId === 'amr').length, { timeout: T.long }).toBe(1);
+  expect(runRequests.bodies.filter((body) => body.agentId === 'amr')[0]).toMatchObject({
+    agentId: 'amr',
+    currentPrompt: 'please recover this failed non-AMR model run',
+  });
+  runRequests.dispose?.();
   await expect(page.getByText('AMR promotion retry recovered.').first()).toBeVisible({ timeout: T.long });
 });
 
@@ -871,13 +870,11 @@ test('[P1] zh-CN run failure guidance shows actionable copy and expandable raw s
   await expect(page.getByRole('button', { name: /^重试$/ }).first()).toBeVisible();
   await expect(page.getByRole('button', { name: /Switch to Open Design Cloud & retry/i })).toHaveCount(0);
 
-  const sourceToggle = card.locator('.run-error__source-bar');
+  const sourceToggle = card.getByRole('button', { name: /查看详情/ });
   await expect(sourceToggle).toHaveAttribute('aria-expanded', 'false');
-  await expect(sourceToggle).toHaveAccessibleName(/展开报错源码/);
   await sourceToggle.click();
   await expect(sourceToggle).toHaveAttribute('aria-expanded', 'true');
-  await expect(sourceToggle).toHaveAccessibleName(/收起报错源码/);
-  await expect(card.locator('.run-error__source-full')).toContainText(rawDetail);
+  await expect(card.locator('.run-error__diagnostic')).toContainText(rawDetail);
 });
 
 test('[P0] antigravity rate limits offer terminal model switching without promoting AMR', async ({ page }) => {

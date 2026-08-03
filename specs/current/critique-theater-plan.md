@@ -1901,7 +1901,7 @@ git commit -m "feat(i18n): Critique Theater strings across all 6 locales"
 ### Task 9.3: Settings UI toggle "Critique Theater (beta)"
 
 **Files:**
-- Modify: `apps/web/src/components/Settings/index.tsx` (existing)
+- Modify: `apps/web/src/components/SettingsDialog.tsx` (existing)
 - Modify: `apps/daemon/src/api/settings.ts` (existing)
 
 - [ ] **Step 1–5:** Add the toggle bound to `OD_CRITIQUE_ENABLED`. Persist through the existing settings endpoint. Test that the daemon reads the new value at run start. Commit.
@@ -1916,9 +1916,9 @@ git commit -m "feat(web,daemon): Settings toggle Critique Theater (beta)"
 
 ### Adapter test matrix and pass criteria
 
-The conformance harness runs against every adapter listed `status: production` in `docs/agent-adapters.md`. v1 production adapters: `claude-code`, `codex`, `cursor-agent`, `gemini-cli`, `devin`, `opencode`, `qwen-code`, `copilot-cli`, `hermes-acp`, `kimi-acp`, `pi-rpc`, `kiro-acp`, plus the `byok-proxy` fallback. Adapters in `status: experimental` are run prerelease but do not block the per-adapter green badge.
+The conformance harness resolves its adapter matrix from the current runtime registry and rollout configuration rather than duplicating a static list in this plan. Production adapters block their per-adapter green badge; experimental adapters run in prerelease without blocking it. The retired Gemini local runtime is not part of the matrix; Google Gemini remains a BYOK provider and MCP target.
 
-**Brief templates** (10 templates × 13 adapters = 130 runs per prerelease cycle):
+**Brief templates** (the run count is the template set multiplied by the registry-derived adapter matrix):
 
 | Template | Skill | Stresses |
 | --- | --- | --- |

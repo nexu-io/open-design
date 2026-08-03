@@ -24,6 +24,18 @@ const codexAgent: AgentInfo = {
   ],
 };
 
+const codexFastAgent: AgentInfo = {
+  ...codexAgent,
+  models: [
+    { id: 'default', label: 'Default (CLI config)' },
+    {
+      id: 'gpt-5.5',
+      label: 'gpt-5.5',
+      serviceTierOptions: [{ id: 'priority', label: 'Fast' }],
+    },
+  ],
+};
+
 const claudeAgent: AgentInfo = {
   id: 'claude',
   name: 'Claude Code',
@@ -58,7 +70,7 @@ type ModeChangeHandler = (mode: ExecMode) => void;
 type AgentChangeHandler = (id: string) => void;
 type AgentModelChangeHandler = (
   id: string,
-  choice: { model?: string; reasoning?: string },
+  choice: { model?: string; reasoning?: string; serviceTier?: string },
 ) => void;
 type VoidHandler = () => void;
 type OpenSettingsHandler = (section?: 'execution') => void;
@@ -114,6 +126,46 @@ describe('AvatarMenu', () => {
     vi.unstubAllGlobals();
     window.localStorage.clear();
     vi.clearAllMocks();
+  });
+
+  // Regression for: the composer's compact provider trigger kept showing the
+  // last-used local CLI agent's icon after switching to `Use API · BYOK`,
+  // because the icon was picked purely from `currentAgent` (derived from
+  // `config.agentId`) without checking `config.mode` — the same check every
+  // other mode-aware element in this file (and InlineModelSwitcher's chip)
+  // already makes.
+  it('shows the BYOK glyph, not the stale CLI agent icon, once mode switches to api', () => {
+    const trigger = () => screen.getByRole('button', { name: 'avatar.title' });
+
+    const { rerender } = render(
+      <AvatarMenu
+        config={baseConfig}
+        agents={[codexAgent, claudeAgent]}
+        daemonLive
+        onModeChange={vi.fn()}
+        onAgentChange={vi.fn()}
+        onAgentModelChange={vi.fn()}
+        onOpenSettings={vi.fn()}
+        onRefreshAgents={vi.fn()}
+      />,
+    );
+    expect(trigger().querySelector('img.agent-icon')).toBeTruthy();
+    expect(trigger().querySelector('.ri-link')).toBeNull();
+
+    rerender(
+      <AvatarMenu
+        config={{ ...baseConfig, mode: 'api' }}
+        agents={[codexAgent, claudeAgent]}
+        daemonLive
+        onModeChange={vi.fn()}
+        onAgentChange={vi.fn()}
+        onAgentModelChange={vi.fn()}
+        onOpenSettings={vi.fn()}
+        onRefreshAgents={vi.fn()}
+      />,
+    );
+    expect(trigger().querySelector('img.agent-icon')).toBeNull();
+    expect(trigger().querySelector('.ri-link')).toBeTruthy();
   });
 
   it('opens execution settings when Local CLI is selected while the daemon is offline', () => {
@@ -226,6 +278,40 @@ describe('AvatarMenu', () => {
 
     expect(onAgentModelChange).toHaveBeenCalledWith('codex', {
       reasoning: 'high',
+    });
+  });
+
+  it('routes service tier selection changes through onAgentModelChange', () => {
+    const onAgentModelChange = vi.fn();
+    renderMenu({
+      config: {
+        ...baseConfig,
+        agentModels: {
+          codex: { model: 'gpt-5.5', reasoning: 'default' },
+        },
+      },
+      agents: [codexFastAgent, claudeAgent],
+      onAgentModelChange,
+    });
+
+    openMenu();
+    const tierSelect = screen.getAllByRole('combobox')[2] as HTMLSelectElement;
+    expect(Array.from(tierSelect.options).map((option) => option.textContent)).toEqual([
+      'common.default',
+      'Fast',
+    ]);
+
+    fireEvent.change(tierSelect, { target: { value: 'priority' } });
+
+    expect(onAgentModelChange).toHaveBeenCalledWith('codex', {
+      serviceTier: 'priority',
+    });
+
+    onAgentModelChange.mockClear();
+    fireEvent.change(tierSelect, { target: { value: 'default' } });
+
+    expect(onAgentModelChange).toHaveBeenCalledWith('codex', {
+      serviceTier: undefined,
     });
   });
 

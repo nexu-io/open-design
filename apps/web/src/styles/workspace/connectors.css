@@ -137,6 +137,25 @@
   from { opacity: 0; transform: translateY(-4px); }
   to { opacity: 1; transform: translateY(0); }
 }
+.ds-picker-popover-portal {
+  position: fixed;
+  right: auto;
+  z-index: 1000;
+}
+.ds-picker-popover-portal .ds-picker-list {
+  max-height: none;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+/* Portaled brand flyout: fixed to the viewport beside the popover (JS supplies
+   top/bottom/left), overriding the inline `absolute` offsets it uses when the
+   picker is not portaled. */
+.ds-picker-brand-flyout-portal {
+  position: fixed;
+  top: auto;
+  left: auto;
+  z-index: 1000;
+}
 /* Rich brand preview flyout — a side panel anchored to the popover that shows
    the compact Brand Kit card for the hovered / selected brand. It sits OUTSIDE
    the `overflow: hidden` popover (as a sibling) so it is not clipped, and to

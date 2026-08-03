@@ -63,6 +63,7 @@ jobs:
       run_playwright_critical: ${{ steps.detect.outputs.run_playwright_critical }}
       run_playwright_visual: ${{ steps.detect.outputs.run_playwright_visual }}
       run_preflight: ${{ steps.detect.outputs.run_preflight }}
+      run_preflight_typecheck: ${{ steps.detect.outputs.run_preflight_typecheck }}
       run_ui_p0: ${{ steps.detect.outputs.run_ui_p0 }}
       run_web_workspace_tests: ${{ steps.detect.outputs.run_web_workspace_tests }}
       run_windows_tools_pack_payload_tests: ${{ steps.detect.outputs.run_windows_tools_pack_payload_tests }}
@@ -136,21 +137,31 @@ jobs:
     timeout-minutes: 10
     env:
       ACTIONLINT_VERSION: 1.7.12
+      SHELLCHECK_VERSION: 0.11.0
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
 
-      - name: Install actionlint
+      - name: Install actionlint and ShellCheck
         run: |
           case "$(uname -m)" in
-            x86_64) actionlint_arch=amd64 ;;
-            aarch64|arm64) actionlint_arch=arm64 ;;
+            x86_64)
+              actionlint_arch=amd64
+              shellcheck_arch=x86_64
+              ;;
+            aarch64|arm64)
+              actionlint_arch=arm64
+              shellcheck_arch=aarch64
+              ;;
             *) echo "Unsupported actionlint architecture: $(uname -m)" >&2; exit 1 ;;
           esac
           curl -fsSL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_${actionlint_arch}.tar.gz" \
             | tar -xz actionlint
+          curl -fsSL "https://github.com/koalaman/shellcheck/releases/download/v${SHELLCHECK_VERSION}/shellcheck-v${SHELLCHECK_VERSION}.linux.${shellcheck_arch}.tar.gz" \
+            | tar -xz --strip-components=1 "shellcheck-v${SHELLCHECK_VERSION}/shellcheck"
           sudo install -m 0755 actionlint /usr/local/bin/actionlint
+          sudo install -m 0755 shellcheck /usr/local/bin/shellcheck
 
       - name: Check workflow files
         run: actionlint -color
@@ -245,12 +256,14 @@ jobs:
       # If postinstall grows a targeted app type-generation phase covering these
       # three exports without broad app builds, this CI prebuild can be removed.
       - name: Prebuild workspace type declarations
+        if: ${{ needs.scopes.outputs.run_preflight_typecheck == 'true' }}
         run: |
           pnpm --filter @open-design/daemon build
           pnpm --filter @open-design/desktop build
           pnpm --filter @open-design/web build:sidecar
 
       - name: Typecheck workspaces
+        if: ${{ needs.scopes.outputs.run_preflight_typecheck == 'true' }}
         run: |
           pnpm -r --filter '!open-design' --filter '!@open-design/landing-page' --workspace-concurrency="${OPEN_DESIGN_WORKSPACE_CONCURRENCY:-1}" --if-present run typecheck
           pnpm exec tsc -p scripts/tsconfig.json --noEmit
@@ -291,7 +304,13 @@ jobs:
             pnpm --filter @open-design/tools-dev test
           fi
           if [ "${{ needs.scopes.outputs.tools_pack_tests_required }}" = "true" ]; then
+            pnpm --filter @open-design/desktop build
+            pnpm --filter @open-design/desktop test
+            pnpm --filter @open-design/packaged test
             pnpm --filter @open-design/tools-pack test
+            if [ "${{ needs.scopes.outputs.run_e2e_vitest }}" != "true" ]; then
+              pnpm --filter @open-design/e2e test tests/packaged-launcher-update-loop.test.ts
+            fi
           fi
 
       - name: Probe watcher environment
@@ -441,57 +460,6 @@ jobs:
           OD_PLAYWRIGHT_FULLY_PARALLEL: "1"
         run: pnpm -C e2e exec playwright test -c playwright.config.ts ${{ matrix.files }} --grep '@critical'
 
-  ui_p0_smoke:
-    name: UI P0 smoke
-    needs: [scopes, runners]
-    if: ${{ needs.scopes.outputs.run_ui_p0 == 'true' }}
-    runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).ui_hot }}
-    timeout-minutes: 30
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6.0.2
-
-      - name: Configure CI parallelism
-        uses: ./.github/actions/configure-ci-parallelism
-
-      - name: Setup workspace
-        uses: ./.github/actions/setup-workspace
-        with:
-          runner-labels: ${{ toJSON(fromJSON(needs.runners.outputs.runs_on).ui_hot) }}
-
-      - name: Setup Playwright
-        uses: ./.github/actions/setup-playwright
-        with:
-          package-json-path: e2e/package.json
-          install-command: pnpm -C e2e exec playwright install --with-deps chromium
-          runner-labels: ${{ toJSON(fromJSON(needs.runners.outputs.runs_on).ui_hot) }}
-
-      - name: Prebuild workspace type declarations
-        run: |
-          pnpm --filter @open-design/daemon build
-          pnpm --filter @open-design/desktop build
-          pnpm --filter @open-design/web build:sidecar
-
-      - name: Clean Playwright state
-        run: pnpm -C e2e exec tsx scripts/playwright.ts clean
-
-      - name: Run UI shell smoke
-        run: pnpm -C e2e exec tsx scripts/playwright.ts run-ui-group smoke
-
-      - name: Upload Playwright debug artifact
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: ui-p0-ci-${{ github.run_id }}-smoke
-          path: |
-            e2e/ui/reports/playwright-html-report
-            e2e/ui/reports/test-results
-            e2e/ui/reports/results.json
-            e2e/ui/test-results
-          if-no-files-found: ignore
-          retention-days: 7
-
   ui_p0:
     name: UI P0 (${{ matrix.name }})
     needs: [scopes, runners]
@@ -533,6 +501,23 @@ jobs:
 
       - name: Run UI P0 domain
         run: pnpm -C e2e exec tsx scripts/playwright.ts run-ui-group ${{ matrix.shard }}
+
+      - name: Preserve project-runtime domain artifact
+        if: ${{ success() && matrix.shard == 'project-runtime' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: ui-p0-ci-${{ github.run_id }}-${{ matrix.name }}-domain
+          path: |
+            e2e/ui/reports/playwright-html-report
+            e2e/ui/reports/test-results
+            e2e/ui/reports/results.json
+            e2e/ui/test-results
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Run UI critical extras
+        if: ${{ matrix.shard == 'project-runtime' }}
+        run: pnpm -C e2e exec tsx scripts/playwright.ts run-ui-group critical-extras
 
       - name: Upload Playwright debug artifact
         if: ${{ always() }}
@@ -648,7 +633,6 @@ jobs:
       - web_workspace_tests
       - e2e_vitest
       - playwright_critical
-      - ui_p0_smoke
       - ui_p0
       - playwright_visual
     if: ${{ always() }}
@@ -695,7 +679,7 @@ jobs:
               + when($out.run_web_workspace_tests == "true"; ["web_workspace_tests"])
               + when($out.run_e2e_vitest == "true"; ["e2e_vitest"])
               + when($out.run_playwright_critical == "true"; ["playwright_critical"])
-              + when($out.run_ui_p0 == "true"; ["ui_p0_smoke", "ui_p0"])
+              + when($out.run_ui_p0 == "true"; ["ui_p0"])
               + when($out.run_playwright_visual == "true"; ["playwright_visual"])
             )[]
             | select(($needs[.].result // "missing") != "success")
@@ -758,8 +742,11 @@ jobs:
               marker="<!-- merge-queue-needs-validation -->"
               {
                 printf '%s\n' "$marker"
+                # Markdown code spans are intentional literal text.
+                # shellcheck disable=SC2016
                 printf 'Ejected from the merge queue: this PR still carries the `needs-validation` label.\n\n'
                 printf 'The merge queue gate ([run %s](%s/%s/actions/runs/%s)) blocked the queued group because of the label. That failure runs on the queue'"'"'s transient ref, so it never appears in this PR'"'"'s own checks — they stay green, and this notice is the only visible trace on the PR.\n\n' "$RUN_ID" "$GITHUB_SERVER_URL" "$REPO" "$RUN_ID"
+                # shellcheck disable=SC2016
                 printf 'To land this PR: complete the QA pass the label is tracking, remove the `needs-validation` label, then add the PR back to the merge queue.\n'
               } > "$handoff_dir/body.md"
               jq -n \

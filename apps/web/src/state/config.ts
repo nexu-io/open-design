@@ -1,8 +1,14 @@
-import type { AppConfigPrefs } from '@open-design/contracts';
+import type {
+  AppConfigPrefs,
+  ByokCredentialProfile,
+  ByokCredentialProfilesResponse,
+  UpsertByokCredentialProfileRequest,
+} from '@open-design/contracts';
 import { MEDIA_PROVIDERS } from '../media/models';
 import { isOpenAICompatible } from '../providers/openai-compatible';
 import type {
   ApiProtocol,
+  ApiProtocolConfig,
   AppConfig,
   MediaProviderCredentials,
   NotificationsConfig,
@@ -21,7 +27,7 @@ import {
 import { randomUUID } from '../utils/uuid';
 
 const STORAGE_KEY = 'open-design:config';
-const CONFIG_MIGRATION_VERSION = 1;
+const CONFIG_MIGRATION_VERSION = 2;
 
 // Hatched out of the box, but tucked away — the user has to go through
 // either the entry-view "adopt a pet" callout or Settings → Pets to
@@ -104,10 +110,10 @@ export interface KnownProvider {
   label: string;
   protocol: ApiProtocol;
   baseUrl: string;
-  /** Default model to apply when the provider is selected. */
-  model: string;
-  /** Optional provider-specific model choices shown in Settings. */
-  models?: string[];
+  /** Ranked provider-owned preferences, matched against the live account catalogue. */
+  preferredModels: string[];
+  /** Model ids that Open Design previously preselected but the provider retired. */
+  retiredModels?: string[];
   /** Optional provider-specific key console link shown in Settings. */
   apiKeyConsoleLink?: { host: string; url: string };
   /** Some local/self-hosted endpoints do not require bearer credentials. */
@@ -120,36 +126,45 @@ export interface KnownProvider {
 // UI can scope quick-fill presets and model suggestions to the selected
 // protocol.
 //
-// Model lists are hand-curated from provider docs/current public presets rather
-// than fetched dynamically. To add a provider, include a user-facing label, the
-// protocol that determines request routing, the base URL, a default model, and
-// optional provider-specific model choices.
+// Preferred model lists are hand-curated from provider docs/current public
+// presets and are reconciled with the live account catalogue before automatic
+// selection. They are not a replacement for provider model discovery.
 export const KNOWN_PROVIDERS: KnownProvider[] = [
   {
     label: 'Anthropic (Claude)',
     protocol: 'anthropic',
     baseUrl: 'https://api.anthropic.com',
-    model: 'claude-sonnet-4-5',
-    models: ['claude-sonnet-4-5', 'claude-opus-4-5', 'claude-haiku-4-5'],
+    preferredModels: ['claude-sonnet-4-5', 'claude-opus-4-5', 'claude-haiku-4-5'],
   },
   {
     label: 'DeepSeek — Anthropic',
     protocol: 'anthropic',
     baseUrl: 'https://api.deepseek.com/anthropic',
-    model: 'deepseek-chat',
-    models: [
-      'deepseek-chat',
-      'deepseek-reasoner',
+    preferredModels: [
       'deepseek-v4-flash',
       'deepseek-v4-pro',
     ],
+    retiredModels: ['deepseek-chat', 'deepseek-reasoner'],
   },
   {
     label: 'MiniMax — Anthropic',
     protocol: 'anthropic',
     baseUrl: 'https://api.minimax.io/anthropic',
-    model: 'MiniMax-M2.7-highspeed',
-    models: [
+    preferredModels: [
+      'MiniMax-M2.7-highspeed',
+      'MiniMax-M2.7',
+      'MiniMax-M2.5-highspeed',
+      'MiniMax-M2.5',
+      'MiniMax-M2.1-highspeed',
+      'MiniMax-M2.1',
+      'MiniMax-M2',
+    ],
+  },
+  {
+    label: 'MiniMax — Anthropic (CN)',
+    protocol: 'anthropic',
+    baseUrl: 'https://api.minimaxi.com/anthropic',
+    preferredModels: [
       'MiniMax-M2.7-highspeed',
       'MiniMax-M2.7',
       'MiniMax-M2.5-highspeed',
@@ -163,15 +178,13 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     label: 'OpenAI',
     protocol: 'openai',
     baseUrl: 'https://api.openai.com/v1',
-    model: 'gpt-4o',
-    models: ['gpt-4o', 'gpt-4o-mini', 'o3', 'o4-mini'],
+    preferredModels: ['gpt-4o', 'gpt-4o-mini', 'o3', 'o4-mini'],
   },
   {
     label: 'Atlas Cloud',
     protocol: 'openai',
     baseUrl: 'https://api.atlascloud.ai/v1',
-    model: 'qwen/qwen3.5-flash',
-    models: [
+    preferredModels: [
       'qwen/qwen3.5-flash',
       'qwen/qwen3.5-plus',
       'qwen/qwen3.7-plus',
@@ -188,8 +201,7 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     label: 'OpenRouter',
     protocol: 'openai',
     baseUrl: 'https://openrouter.ai/api/v1',
-    model: 'anthropic/claude-3.7-sonnet',
-    models: [
+    preferredModels: [
       'anthropic/claude-3.7-sonnet',
       'anthropic/claude-3.5-sonnet',
       'google/gemini-2.5-flash',
@@ -204,15 +216,13 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     label: 'Azure OpenAI',
     protocol: 'azure',
     baseUrl: '',
-    model: '',
-    models: [],
+    preferredModels: [],
   },
   {
     label: 'Google Gemini',
     protocol: 'google',
     baseUrl: 'https://generativelanguage.googleapis.com',
-    model: 'gemini-3.5-flash',
-    models: [
+    preferredModels: [
       'gemini-3.5-flash',
       'gemini-3.1-pro-preview',
       'gemini-3-flash-preview',
@@ -226,8 +236,7 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     label: 'SiliconFlow (CN)',
     protocol: 'openai',
     baseUrl: 'https://api.siliconflow.cn/v1',
-    model: 'deepseek-ai/DeepSeek-V3.1',
-    models: [
+    preferredModels: [
       'deepseek-ai/DeepSeek-V3.1',
       'deepseek-ai/DeepSeek-R1',
       'Qwen/Qwen3-Coder-480B-A35B-Instruct',
@@ -237,8 +246,7 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     label: 'SiliconFlow (Global)',
     protocol: 'openai',
     baseUrl: 'https://api.siliconflow.com/v1',
-    model: 'deepseek-ai/DeepSeek-V3.1',
-    models: [
+    preferredModels: [
       'deepseek-ai/DeepSeek-V3.1',
       'deepseek-ai/DeepSeek-R1',
       'Qwen/Qwen3-Coder-480B-A35B-Instruct',
@@ -248,15 +256,13 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     label: 'PPIO',
     protocol: 'openai',
     baseUrl: 'https://api.ppinfra.com/v3/openai',
-    model: 'deepseek/deepseek-v3.1',
-    models: ['deepseek/deepseek-v3.1', 'deepseek/deepseek-r1'],
+    preferredModels: ['deepseek/deepseek-v3.1', 'deepseek/deepseek-r1'],
   },
   {
     label: 'NVIDIA',
     protocol: 'openai',
     baseUrl: 'https://integrate.api.nvidia.com/v1',
-    model: 'openai/gpt-oss-120b',
-    models: [
+    preferredModels: [
       'openai/gpt-oss-120b',
       'meta/llama-3.1-405b-instruct',
       'nvidia/llama-3.1-nemotron-70b-instruct',
@@ -266,41 +272,35 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     label: 'StepFun',
     protocol: 'openai',
     baseUrl: 'https://api.stepfun.ai/v1',
-    model: 'step-2-mini',
-    models: ['step-2-mini', 'step-1-8k', 'step-1-32k'],
+    preferredModels: ['step-2-mini', 'step-1-8k', 'step-1-32k'],
   },
   {
     label: 'DeepSeek — OpenAI',
     protocol: 'openai',
     baseUrl: 'https://api.deepseek.com',
-    model: 'deepseek-chat',
-    models: [
-      'deepseek-chat',
-      'deepseek-reasoner',
+    preferredModels: [
       'deepseek-v4-flash',
       'deepseek-v4-pro',
     ],
+    retiredModels: ['deepseek-chat', 'deepseek-reasoner'],
   },
   {
     label: 'Mistral AI',
     protocol: 'openai',
     baseUrl: 'https://api.mistral.ai/v1',
-    model: 'mistral-large-latest',
-    models: ['mistral-large-latest', 'ministral-8b-latest', 'ministral-3b-latest'],
+    preferredModels: ['mistral-large-latest', 'ministral-8b-latest', 'ministral-3b-latest'],
   },
   {
     label: 'xAI',
     protocol: 'openai',
     baseUrl: 'https://api.x.ai/v1',
-    model: 'grok-4',
-    models: ['grok-4', 'grok-3', 'grok-3-mini'],
+    preferredModels: ['grok-4', 'grok-3', 'grok-3-mini'],
   },
   {
     label: 'Together AI',
     protocol: 'openai',
     baseUrl: 'https://api.together.xyz/v1',
-    model: 'meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo',
-    models: [
+    preferredModels: [
       'meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo',
       'meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo',
       'Qwen/Qwen2.5-Coder-32B-Instruct',
@@ -310,8 +310,7 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     label: 'Hugging Face',
     protocol: 'openai',
     baseUrl: 'https://router.huggingface.co/v1',
-    model: 'openai/gpt-oss-120b',
-    models: [
+    preferredModels: [
       'openai/gpt-oss-120b',
       'Qwen/Qwen3-Coder-480B-A35B-Instruct',
       'meta-llama/Llama-3.1-8B-Instruct',
@@ -321,37 +320,32 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     label: 'Qwen',
     protocol: 'openai',
     baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-    model: 'qwen-plus',
-    models: ['qwen-plus', 'qwen-turbo', 'qwen-max', 'qwen3-coder-plus'],
+    preferredModels: ['qwen-plus', 'qwen-turbo', 'qwen-max', 'qwen3-coder-plus'],
   },
   {
     label: 'Volcengine Ark',
     protocol: 'openai',
     baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
-    model: 'doubao-seed-1-6',
-    models: ['doubao-seed-1-6', 'doubao-seed-1-6-thinking', 'deepseek-v3'],
+    preferredModels: ['doubao-seed-1-6', 'doubao-seed-1-6-thinking', 'deepseek-v3'],
   },
   {
     label: 'Baidu Qianfan',
     protocol: 'openai',
     baseUrl: 'https://qianfan.baidubce.com/v2',
-    model: 'ernie-4.5-turbo-128k',
-    models: ['ernie-4.5-turbo-128k', 'ernie-4.5-8k-preview'],
+    preferredModels: ['ernie-4.5-turbo-128k', 'ernie-4.5-8k-preview'],
   },
   {
     label: 'vLLM',
     protocol: 'openai',
     baseUrl: 'http://127.0.0.1:8000/v1',
-    model: 'model',
-    models: ['model', 'llama3', 'qwen3'],
+    preferredModels: ['model', 'llama3', 'qwen3'],
     requiresApiKey: false,
   },
   {
     label: 'MiniMax — OpenAI',
     protocol: 'openai',
     baseUrl: 'https://api.minimax.io/v1',
-    model: 'MiniMax-M2.7-highspeed',
-    models: [
+    preferredModels: [
       'MiniMax-M2.7-highspeed',
       'MiniMax-M2.7',
       'MiniMax-M2.5-highspeed',
@@ -365,29 +359,35 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     label: 'MiMo (Xiaomi) — OpenAI',
     protocol: 'openai',
     baseUrl: 'https://token-plan-cn.xiaomimimo.com/v1',
-    model: 'mimo-v2.5-pro',
-    models: ['mimo-v2.5-pro'],
+    preferredModels: ['mimo-v2.5-pro'],
   },
   {
     label: 'Moonshot',
     protocol: 'openai',
     baseUrl: 'https://api.moonshot.cn/v1',
-    model: 'kimi-k2-0711-preview',
-    models: ['kimi-k2-0711-preview', 'moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k'],
+    preferredModels: [
+      'kimi-k2.6',
+      'kimi-k2.7-code',
+      'kimi-k2.7-code-highspeed',
+      'kimi-k2.5',
+      'moonshot-v1-8k',
+      'moonshot-v1-32k',
+      'moonshot-v1-128k',
+    ],
+    retiredModels: ['kimi-k2-0711-preview'],
   },
   {
     label: 'Zhipu',
     protocol: 'openai',
     baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
-    model: 'glm-4.6',
-    models: ['glm-4.6', 'glm-4-plus', 'glm-4-air'],
+    preferredModels: ['glm-4.6', 'glm-4-plus', 'glm-4-air'],
   },
   {
     label: 'Ollama Cloud (managed)',
     protocol: 'ollama',
     baseUrl: 'https://ollama.com',
-    model: 'gpt-oss:120b',
-    models: [
+    preferredModels: [
+      'gpt-oss:120b',
       'cogito-2.1:671b',
       'deepseek-v3.1:671b',
       'deepseek-v3.2',
@@ -406,7 +406,6 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
       'glm-5.1',
       'glm-5.2',
       'gpt-oss:20b',
-      'gpt-oss:120b',
       'kimi-k2:1t',
       'kimi-k2-thinking',
       'kimi-k2.5',
@@ -437,23 +436,20 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     label: 'Ollama Self-hosted (local)',
     protocol: 'ollama',
     baseUrl: 'http://localhost:11434',
-    model: 'gemma3:4b',
-    models: ['gemma3:4b', 'gemma3:12b', 'gemma3:27b', 'gpt-oss:20b'],
+    preferredModels: ['gemma3:4b', 'gemma3:12b', 'gemma3:27b', 'gpt-oss:20b'],
     requiresApiKey: false,
   },
   {
     label: 'MiMo (Xiaomi) — Anthropic',
     protocol: 'anthropic',
     baseUrl: 'https://token-plan-cn.xiaomimimo.com/anthropic',
-    model: 'mimo-v2.5-pro',
-    models: ['mimo-v2.5-pro'],
+    preferredModels: ['mimo-v2.5-pro'],
   },
   {
     label: 'SenseAudio',
     protocol: 'senseaudio',
     baseUrl: 'https://api.senseaudio.cn',
-    model: 'senseaudio-s2',
-    models: [
+    preferredModels: [
       'senseaudio-s2',
       'senseaudio-s2-flash',
       'deepseek-v4-flash',
@@ -468,8 +464,7 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     label: 'AIHubMix',
     protocol: 'aihubmix',
     baseUrl: 'https://aihubmix.com/v1',
-    model: 'gpt-5.5',
-    models: [
+    preferredModels: [
       'gpt-5.5',
       'gpt-4o',
       'gpt-4o-mini',
@@ -482,6 +477,67 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     ],
   },
 ];
+
+export function defaultKnownProviderModel(
+  provider: Pick<KnownProvider, 'preferredModels'> | null | undefined,
+): string {
+  return provider?.preferredModels[0]?.trim() ?? '';
+}
+
+export interface ByokProviderPresetConfig {
+  id: string;
+  title: string;
+  protocol: ApiProtocol;
+  baseUrl: string;
+  preferredModels: readonly string[];
+}
+
+const BYOK_PROVIDER_PRESET_SPECS = [
+  { id: 'anthropic', title: 'Anthropic', providerLabel: 'Anthropic (Claude)' },
+  { id: 'openai', title: 'OpenAI', providerLabel: 'OpenAI' },
+  { id: 'atlascloud', title: 'Atlas Cloud', providerLabel: 'Atlas Cloud' },
+  { id: 'google-ai-studio', title: 'Google Gemini', providerLabel: 'Google Gemini' },
+  { id: 'ollama', title: 'Ollama Cloud', providerLabel: 'Ollama Cloud (managed)' },
+  { id: 'azure', title: 'Azure OpenAI', providerLabel: 'Azure OpenAI' },
+  { id: 'siliconflow-cn', title: 'SiliconFlow (CN)', providerLabel: 'SiliconFlow (CN)' },
+  {
+    id: 'siliconflow-global',
+    title: 'SiliconFlow (Global)',
+    providerLabel: 'SiliconFlow (Global)',
+  },
+  { id: 'ppio', title: 'PPIO', providerLabel: 'PPIO' },
+  { id: 'nvidia', title: 'NVIDIA', providerLabel: 'NVIDIA' },
+  { id: 'stepfun', title: 'StepFun', providerLabel: 'StepFun' },
+  { id: 'deepseek', title: 'DeepSeek', providerLabel: 'DeepSeek — OpenAI' },
+  { id: 'openrouter', title: 'OpenRouter', providerLabel: 'OpenRouter' },
+  { id: 'mistral', title: 'Mistral AI', providerLabel: 'Mistral AI' },
+  { id: 'xai', title: 'xAI', providerLabel: 'xAI' },
+  { id: 'together', title: 'Together AI', providerLabel: 'Together AI' },
+  { id: 'huggingface', title: 'Hugging Face', providerLabel: 'Hugging Face' },
+  { id: 'qwen', title: 'Qwen', providerLabel: 'Qwen' },
+  { id: 'volcengine', title: 'Volcengine Ark', providerLabel: 'Volcengine Ark' },
+  { id: 'qianfan', title: 'Baidu Qianfan', providerLabel: 'Baidu Qianfan' },
+  { id: 'vllm', title: 'vLLM', providerLabel: 'vLLM' },
+  { id: 'mimo', title: 'Xiaomi MiMo', providerLabel: 'MiMo (Xiaomi) — OpenAI' },
+  { id: 'minimax', title: 'MiniMax', providerLabel: 'MiniMax — Anthropic (CN)' },
+  { id: 'moonshot', title: 'Moonshot', providerLabel: 'Moonshot' },
+  { id: 'zhipu', title: 'Zhipu AI', providerLabel: 'Zhipu' },
+] as const;
+
+export const BYOK_PROVIDER_PRESETS: ReadonlyArray<ByokProviderPresetConfig> =
+  BYOK_PROVIDER_PRESET_SPECS.map(({ id, title, providerLabel }) => {
+    const provider = KNOWN_PROVIDERS.find((item) => item.label === providerLabel);
+    if (!provider) {
+      throw new Error(`Missing known provider for BYOK preset: ${providerLabel}`);
+    }
+    return {
+      id,
+      title,
+      protocol: provider.protocol,
+      baseUrl: provider.baseUrl,
+      preferredModels: provider.preferredModels,
+    };
+  });
 
 function normalizePet(input: Partial<PetConfig> | undefined): PetConfig {
   if (!input) return { ...DEFAULT_PET, custom: { ...DEFAULT_PET.custom } };
@@ -569,6 +625,39 @@ function inferApiProtocol(model: string, baseUrl: string): ApiProtocol {
   }
 }
 
+function hasLegacyByokSecret(config: AppConfig): boolean {
+  return Boolean(
+    config.apiKey?.trim()
+    || Object.values(config.apiProtocolConfigs ?? {}).some(
+      (entry) => Boolean(entry?.apiKey?.trim()),
+    )
+    || Object.values(config.byokProviderConfigDrafts ?? {}).some(
+      (draft) => Boolean(draft?.apiConfig.apiKey?.trim()),
+    ),
+  );
+}
+
+function migrateRetiredKnownProviderModel(
+  protocol: ApiProtocol,
+  config: Pick<
+    ApiProtocolConfig,
+    'baseUrl' | 'model' | 'apiProviderBaseUrl'
+  >,
+): boolean {
+  const provider = KNOWN_PROVIDERS.find((candidate) =>
+    candidate.protocol === protocol &&
+    (
+      candidate.baseUrl === config.apiProviderBaseUrl ||
+      candidate.baseUrl === config.baseUrl
+    ),
+  );
+  if (!provider?.retiredModels?.includes(config.model)) return false;
+  const replacement = defaultKnownProviderModel(provider);
+  if (!replacement || replacement === config.model) return false;
+  config.model = replacement;
+  return true;
+}
+
 export function loadConfig(): AppConfig {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -606,13 +695,52 @@ export function loadConfig(): AppConfig {
       notifications: normalizeNotifications(parsed.notifications),
       orbit: normalizeOrbit(parsed.orbit),
     };
+    // Browser storage is allowed to remember which non-secret profile the
+    // user selected, but never to assert that the credential still exists.
+    // Startup hydration re-enables it only after the daemon confirms the
+    // secure-store entry.
+    if (merged.byokProfileId) {
+      merged.byokCredentialConfigured = false;
+      merged.byokCredentialTail = undefined;
+    }
 
-    if (parsed.configMigrationVersion !== CONFIG_MIGRATION_VERSION) {
+    let migratedConfig = false;
+    // Older builds stored BYOK credentials in browser storage. Keep those
+    // values intact until migrateLegacyByokCredentialsToDaemon has confirmed
+    // every secure-profile write; deleting them synchronously here would lose
+    // the user's only credential when the daemon or OS store is unavailable.
+    const hadLegacyByokSecret = hasLegacyByokSecret(merged);
+    if (hadLegacyByokSecret) {
+      // Keep the browser record untouched until the async secure-store
+      // migration succeeds, but do not hydrate plaintext credentials into the
+      // long-lived application state.
+      merged.apiKey = '';
+      merged.apiProtocolConfigs = Object.fromEntries(
+        Object.entries(merged.apiProtocolConfigs ?? {}).map(([protocol, entry]) => [
+          protocol,
+          entry ? { ...entry, apiKey: '' } : entry,
+        ]),
+      ) as AppConfig['apiProtocolConfigs'];
+      merged.byokProviderConfigDrafts = Object.fromEntries(
+        Object.entries(merged.byokProviderConfigDrafts ?? {}).map(([key, draft]) => [
+          key,
+          {
+            ...draft,
+            apiConfig: { ...draft.apiConfig, apiKey: '' },
+          },
+        ]),
+      );
+    }
+    const parsedMigrationVersion =
+      typeof parsed.configMigrationVersion === 'number'
+        ? parsed.configMigrationVersion
+        : 0;
+    if (parsedMigrationVersion !== CONFIG_MIGRATION_VERSION) {
       // Migration v1: configs saved before apiProtocol existed need an explicit
       // protocol so old OpenAI-compatible endpoints keep routing correctly.
       // This is version-gated instead of only field-gated so a later imported
       // legacy config can be migrated when it is loaded.
-      if (!parsedHasApiProtocol) {
+      if (parsedMigrationVersion < 1 && !parsedHasApiProtocol) {
         merged.apiProtocol = inferApiProtocol(merged.model, merged.baseUrl);
         // Ollama Cloud legacy configs may carry a base URL that includes
         // /api or /api/ — normalize to the host root so the daemon's own
@@ -631,6 +759,37 @@ export function loadConfig(): AppConfig {
         );
         merged.apiProviderBaseUrl = knownProvider?.baseUrl ?? null;
       }
+
+      // Migration v2: replace model ids that were previously shipped as
+      // provider defaults but have since been retired. Apply it to every saved
+      // BYOK slot so switching protocols/providers cannot restore a stale id.
+      if (parsedMigrationVersion < 2) {
+        const activeProtocol = merged.apiProtocol ?? inferApiProtocol(
+          merged.model,
+          merged.baseUrl,
+        );
+        migratedConfig = migrateRetiredKnownProviderModel(activeProtocol, merged)
+          || migratedConfig;
+        for (const [protocol, apiConfig] of Object.entries(
+          merged.apiProtocolConfigs ?? {},
+        )) {
+          if (!apiConfig) continue;
+          migratedConfig = migrateRetiredKnownProviderModel(
+            protocol as ApiProtocol,
+            apiConfig,
+          ) || migratedConfig;
+        }
+        for (const [draftKey, draft] of Object.entries(
+          merged.byokProviderConfigDrafts ?? {},
+        )) {
+          const separator = draftKey.indexOf(':');
+          if (separator <= 0) continue;
+          migratedConfig = migrateRetiredKnownProviderModel(
+            draftKey.slice(0, separator) as ApiProtocol,
+            draft.apiConfig,
+          ) || migratedConfig;
+        }
+      }
       merged.configMigrationVersion = CONFIG_MIGRATION_VERSION;
     }
 
@@ -646,8 +805,19 @@ export function loadConfig(): AppConfig {
       merged.baseUrl = resolveFixedOriginBaseUrl(merged.apiProtocol, merged.baseUrl);
     }
 
-    if (downgradedUnsupportedChatProtocol) {
-      saveConfig(merged);
+    if (
+      !hadLegacyByokSecret
+      && (migratedConfig || downgradedUnsupportedChatProtocol)
+    ) {
+      // Best-effort re-persist of the migrated / downgraded config. A localStorage
+      // write failure here (quota exceeded, private-mode storage disabled) must not
+      // fall through to the outer catch and discard the valid config we just
+      // parsed — that would silently reset the user to defaults for the session.
+      try {
+        saveConfig(merged);
+      } catch {
+        // keep the parsed config even if it could not be written back
+      }
     }
 
     return merged;
@@ -664,6 +834,422 @@ export function loadConfig(): AppConfig {
 interface PublicComposioConfigResponse {
   configured?: boolean;
   apiKeyTail?: string;
+}
+
+export async function fetchByokCredentialProfilesFromDaemon(): Promise<
+  ByokCredentialProfilesResponse | null
+> {
+  try {
+    const response = await fetch('/api/byok/profiles');
+    if (!response.ok) return null;
+    return await response.json() as ByokCredentialProfilesResponse;
+  } catch {
+    return null;
+  }
+}
+
+export class ByokCredentialProfileHttpError extends Error {
+  readonly status: number;
+  readonly code?: string;
+
+  constructor(status: number, message: string, code?: string) {
+    super(message);
+    this.name = 'ByokCredentialProfileHttpError';
+    this.status = status;
+    this.code = code;
+  }
+}
+
+export class ByokCredentialProfileNetworkError extends Error {
+  constructor(message: string, cause: unknown) {
+    super(message, { cause });
+    this.name = 'ByokCredentialProfileNetworkError';
+  }
+}
+
+export function classifyByokCredentialProfileFailure(error: unknown): {
+  errorCode: string;
+  errorKind: string;
+} {
+  if (error instanceof ByokCredentialProfileHttpError) {
+    return {
+      errorCode: error.code || `HTTP_${error.status}`,
+      errorKind: 'unknown',
+    };
+  }
+  if (error instanceof ByokCredentialProfileNetworkError) {
+    return {
+      errorCode: 'DAEMON_UNREACHABLE',
+      errorKind: 'unknown',
+    };
+  }
+  const fallback = error instanceof Error ? error.name : 'UNKNOWN';
+  return { errorCode: fallback, errorKind: fallback };
+}
+
+export function legacyByokMigrationErrorPresentation(
+  error: Error,
+  daemonUnavailableMessage: string,
+): { message: string; details?: string } {
+  if (error instanceof ByokCredentialProfileNetworkError) {
+    return {
+      message: daemonUnavailableMessage,
+      details: error.message,
+    };
+  }
+  return { message: error.message };
+}
+
+async function byokCredentialProfileHttpError(
+  response: Response,
+): Promise<ByokCredentialProfileHttpError> {
+  const fallback = `Failed to save BYOK credential (${response.status})`;
+  try {
+    const payload = await response.json() as unknown;
+    if (
+      payload
+      && typeof payload === 'object'
+      && 'error' in payload
+      && payload.error
+      && typeof payload.error === 'object'
+    ) {
+      const message = 'message' in payload.error
+        && typeof payload.error.message === 'string'
+        ? payload.error.message.trim()
+        : '';
+      const code = 'code' in payload.error
+        && typeof payload.error.code === 'string'
+        ? payload.error.code.trim()
+        : '';
+      if (message) {
+        return new ByokCredentialProfileHttpError(
+          response.status,
+          message,
+          code || undefined,
+        );
+      }
+    }
+  } catch {
+    // Keep the status-bearing fallback when the daemon/proxy body is invalid.
+  }
+  return new ByokCredentialProfileHttpError(response.status, fallback);
+}
+
+export async function persistByokCredentialProfileToDaemon(
+  input: UpsertByokCredentialProfileRequest,
+): Promise<ByokCredentialProfile> {
+  let response: Response;
+  try {
+    response = await fetch('/api/byok/profiles', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+  } catch (error) {
+    const message = error instanceof Error && error.message.trim()
+      ? error.message
+      : 'Failed to reach the local daemon while saving the BYOK credential.';
+    throw new ByokCredentialProfileNetworkError(message, error);
+  }
+  if (!response.ok) {
+    throw await byokCredentialProfileHttpError(response);
+  }
+  const payload = await response.json() as { profile?: ByokCredentialProfile };
+  if (!payload.profile?.id || !payload.profile.configured) {
+    throw new Error('Daemon did not confirm the BYOK credential profile');
+  }
+  return payload.profile;
+}
+
+export type LegacyByokCredentialMigrationResult =
+  | { status: 'not-needed'; config: AppConfig }
+  | { status: 'migrated'; config: AppConfig }
+  | { status: 'failed'; config: AppConfig; error: Error };
+
+interface LegacyByokCredentialCandidate {
+  input: UpsertByokCredentialProfileRequest & { id: string };
+  signature: string;
+}
+
+const BYOK_PROTOCOLS = new Set<ApiProtocol>([
+  'anthropic',
+  'openai',
+  'azure',
+  'google',
+  'ollama',
+  'senseaudio',
+  'aihubmix',
+]);
+
+function legacyByokProfileId(source: string): string {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < source.length; index += 1) {
+    hash ^= source.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return `byok-legacy-${(hash >>> 0).toString(36)}`;
+}
+
+function legacyByokCandidate(
+  source: string,
+  protocol: ApiProtocol | undefined,
+  apiConfig: Pick<ApiProtocolConfig, 'apiKey' | 'apiVersion' | 'baseUrl' | 'model'>,
+): LegacyByokCredentialCandidate | null {
+  const apiKey = apiConfig.apiKey?.trim();
+  if (!apiKey || !protocol || !BYOK_PROTOCOLS.has(protocol)) return null;
+  const knownProvider = KNOWN_PROVIDERS.find(
+    (candidate) =>
+      candidate.protocol === protocol
+      && candidate.baseUrl === apiConfig.baseUrl,
+  );
+  const signature = [
+    protocol,
+    apiConfig.baseUrl,
+    apiConfig.model,
+    apiConfig.apiVersion ?? '',
+    apiKey,
+  ].join('\u0000');
+  return {
+    signature,
+    input: {
+      id: legacyByokProfileId(source),
+      label: knownProvider?.label ?? `Imported ${protocol} profile`,
+      protocol: protocol as UpsertByokCredentialProfileRequest['protocol'],
+      baseUrl: apiConfig.baseUrl,
+      model: apiConfig.model,
+      apiKey,
+      ...(apiConfig.apiVersion
+        ? { apiVersion: apiConfig.apiVersion }
+        : {}),
+    },
+  };
+}
+
+function legacyByokCredentialCandidates(
+  config: AppConfig,
+): LegacyByokCredentialCandidate[] {
+  const activeProtocol = isBedrockRuntimeBaseUrl(config.baseUrl)
+    ? 'bedrock'
+    : config.apiProtocol ?? inferApiProtocol(config.model, config.baseUrl);
+  const candidates: Array<LegacyByokCredentialCandidate | null> = [
+    legacyByokCandidate('active', activeProtocol, config),
+    ...Object.entries(config.apiProtocolConfigs ?? {}).map(
+      ([protocol, apiConfig]) =>
+        apiConfig
+          ? legacyByokCandidate(
+              `protocol:${protocol}`,
+              protocol as ApiProtocol,
+              apiConfig,
+            )
+          : null,
+    ),
+    ...Object.entries(config.byokProviderConfigDrafts ?? {}).map(
+      ([draftKey, draft]) => {
+        const separator = draftKey.indexOf(':');
+        const protocol = (
+          separator > 0 ? draftKey.slice(0, separator) : activeProtocol
+        ) as ApiProtocol;
+        return legacyByokCandidate(
+          `draft:${draftKey}`,
+          protocol,
+          draft.apiConfig,
+        );
+      },
+    ),
+  ];
+  const unique = new Map<string, LegacyByokCredentialCandidate>();
+  for (const candidate of candidates) {
+    if (candidate && !unique.has(candidate.signature)) {
+      unique.set(candidate.signature, candidate);
+    }
+  }
+  return [...unique.values()];
+}
+
+function hasUnsupportedLegacyByokSecret(config: AppConfig): boolean {
+  const activeProtocol = isBedrockRuntimeBaseUrl(config.baseUrl)
+    ? 'bedrock'
+    : config.apiProtocol ?? inferApiProtocol(config.model, config.baseUrl);
+  if (
+    config.apiKey?.trim()
+    && !BYOK_PROTOCOLS.has(activeProtocol)
+  ) {
+    return true;
+  }
+  if (
+    Object.entries(config.apiProtocolConfigs ?? {}).some(
+      ([protocol, entry]) =>
+        Boolean(entry?.apiKey?.trim())
+        && !BYOK_PROTOCOLS.has(protocol as ApiProtocol),
+    )
+  ) {
+    return true;
+  }
+  return Object.entries(config.byokProviderConfigDrafts ?? {}).some(
+    ([draftKey, draft]) => {
+      if (!draft.apiConfig.apiKey?.trim()) return false;
+      const separator = draftKey.indexOf(':');
+      const protocol = (
+        separator > 0 ? draftKey.slice(0, separator) : activeProtocol
+      ) as ApiProtocol;
+      return !BYOK_PROTOCOLS.has(protocol);
+    },
+  );
+}
+
+function legacyByokMigrationSource(config: AppConfig): AppConfig {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return config;
+    const parsed = JSON.parse(raw) as Partial<AppConfig>;
+    return {
+      ...config,
+      ...parsed,
+      apiProtocol: parsed.apiProtocol ?? config.apiProtocol,
+      apiProtocolConfigs: {
+        ...(config.apiProtocolConfigs ?? {}),
+        ...(parsed.apiProtocolConfigs ?? {}),
+      },
+      byokProviderConfigDrafts: {
+        ...(config.byokProviderConfigDrafts ?? {}),
+        ...(parsed.byokProviderConfigDrafts ?? {}),
+      },
+    };
+  } catch {
+    return config;
+  }
+}
+
+export function applySavedByokCredentialProfile(
+  config: AppConfig,
+  selectedProfile: ByokCredentialProfile,
+): AppConfig {
+  return {
+    ...config,
+    apiKey: '',
+    byokProfileId: selectedProfile.id,
+    byokCredentialConfigured: selectedProfile.configured,
+    byokCredentialTail: selectedProfile.keyTail,
+    apiProtocolConfigs: Object.fromEntries(
+      Object.entries(config.apiProtocolConfigs ?? {}).map(([protocol, entry]) => [
+        protocol,
+        entry ? { ...entry, apiKey: '' } : entry,
+      ]),
+    ) as AppConfig['apiProtocolConfigs'],
+    byokProviderConfigDrafts: Object.fromEntries(
+      Object.entries(config.byokProviderConfigDrafts ?? {}).map(
+        ([key, draft]) => [
+          key,
+          {
+            ...draft,
+            apiConfig: { ...draft.apiConfig, apiKey: '' },
+          },
+        ],
+      ),
+    ),
+  };
+}
+
+export async function migrateLegacyByokCredentialsToDaemon(
+  config: AppConfig,
+  persistProfile: (
+    input: UpsertByokCredentialProfileRequest,
+  ) => Promise<ByokCredentialProfile> =
+    persistByokCredentialProfileToDaemon,
+): Promise<LegacyByokCredentialMigrationResult> {
+  const migrationSource = legacyByokMigrationSource(config);
+  const hasLegacySecret = hasLegacyByokSecret(migrationSource);
+  if (!hasLegacySecret) return { status: 'not-needed', config };
+
+  if (hasUnsupportedLegacyByokSecret(migrationSource)) {
+    return {
+      status: 'failed',
+      config,
+      error: new Error(
+        'The saved BYOK credential uses an unsupported legacy provider. Re-enter it in Settings.',
+      ),
+    };
+  }
+  const candidates = legacyByokCredentialCandidates(migrationSource);
+  if (candidates.length === 0) {
+    return {
+      status: 'failed',
+      config,
+      error: new Error(
+        'The saved BYOK credential uses an unsupported legacy provider. Re-enter it in Settings.',
+      ),
+    };
+  }
+
+  try {
+    const profiles: ByokCredentialProfile[] = [];
+    for (const candidate of candidates) {
+      profiles.push(await persistProfile(candidate.input));
+    }
+    const selectedProfile = profiles[0];
+    if (!selectedProfile?.configured) {
+      throw new Error('Secure credential migration did not produce a usable profile.');
+    }
+    const migrated = applySavedByokCredentialProfile(config, selectedProfile);
+    saveConfig(migrated);
+    return { status: 'migrated', config: migrated };
+  } catch (error) {
+    return {
+      status: 'failed',
+      config,
+      error: error instanceof Error ? error : new Error(String(error)),
+    };
+  }
+}
+
+/**
+ * Reconciles a locally selected non-secret profile reference with the daemon.
+ * No automatic "first profile" selection is made: changing execution
+ * credentials must remain an explicit user choice.
+ */
+export function mergeByokCredentialProfiles(
+  config: AppConfig,
+  response: ByokCredentialProfilesResponse | null,
+): AppConfig {
+  if (!config.byokProfileId || !response) return config;
+  const profile = response.profiles.find((candidate) => candidate.id === config.byokProfileId);
+  if (!response.available || !profile?.configured) {
+    return {
+      ...config,
+      byokProfileId: undefined,
+      byokCredentialConfigured: false,
+      byokCredentialTail: undefined,
+    };
+  }
+  const protocol = profile.protocol as ApiProtocol;
+  const knownProvider = KNOWN_PROVIDERS.find(
+    (candidate) =>
+      candidate.protocol === protocol
+      && candidate.baseUrl === profile.baseUrl,
+  );
+  const previousProtocolConfig = config.apiProtocolConfigs?.[protocol];
+  return {
+    ...config,
+    apiKey: '',
+    apiProtocol: protocol,
+    apiProviderBaseUrl: knownProvider?.baseUrl ?? null,
+    apiProtocolConfigs: {
+      ...(config.apiProtocolConfigs ?? {}),
+      [protocol]: {
+        ...(previousProtocolConfig ?? {}),
+        apiKey: '',
+        apiProviderBaseUrl: knownProvider?.baseUrl ?? null,
+        apiVersion: profile.apiVersion ?? '',
+        baseUrl: profile.baseUrl,
+        model: profile.model,
+      },
+    },
+    apiVersion: profile.apiVersion ?? '',
+    baseUrl: profile.baseUrl,
+    byokCredentialConfigured: true,
+    byokCredentialTail: profile.keyTail,
+    model: profile.model,
+  };
 }
 
 interface PublicMediaProviderConfigEntry {
@@ -877,10 +1463,90 @@ function sanitizeAgentCliEnv(agentCliEnv: AppConfig['agentCliEnv']): AppConfig['
   return sanitized;
 }
 
+function preserveLegacyByokSecrets(
+  config: AppConfig,
+  stored: AppConfig,
+): AppConfig {
+  const apiProtocolConfigs = {
+    ...(config.apiProtocolConfigs ?? {}),
+  };
+  for (const [protocol, storedEntry] of Object.entries(stored.apiProtocolConfigs ?? {})) {
+    if (!storedEntry?.apiKey?.trim()) continue;
+    apiProtocolConfigs[protocol as ApiProtocol] = {
+      ...storedEntry,
+      ...(apiProtocolConfigs[protocol as ApiProtocol] ?? {}),
+      apiKey: storedEntry.apiKey,
+    };
+  }
+
+  const byokProviderConfigDrafts = {
+    ...(config.byokProviderConfigDrafts ?? {}),
+  };
+  for (const [key, storedDraft] of Object.entries(stored.byokProviderConfigDrafts ?? {})) {
+    if (!storedDraft.apiConfig.apiKey?.trim()) continue;
+    const currentDraft = byokProviderConfigDrafts[key];
+    byokProviderConfigDrafts[key] = {
+      ...storedDraft,
+      ...currentDraft,
+      apiConfig: {
+        ...storedDraft.apiConfig,
+        ...(currentDraft?.apiConfig ?? {}),
+        apiKey: storedDraft.apiConfig.apiKey,
+      },
+    };
+  }
+
+  return {
+    ...config,
+    ...(stored.apiKey?.trim() ? { apiKey: stored.apiKey } : {}),
+    apiProtocolConfigs,
+    byokProviderConfigDrafts,
+  };
+}
+
 export function saveConfig(config: AppConfig): void {
-  const sanitized: AppConfig = { ...config, agentCliEnv: sanitizeAgentCliEnv(config.agentCliEnv) };
+  let storedConfig: AppConfig | null = null;
+  try {
+    storedConfig = JSON.parse(
+      localStorage.getItem(STORAGE_KEY) ?? '{}',
+    ) as AppConfig;
+  } catch {
+    // A malformed old record cannot be preserved as a usable credential.
+  }
+  const apiProtocolConfigs = config.apiProtocolConfigs
+    ? Object.fromEntries(Object.entries(config.apiProtocolConfigs).map(([protocol, entry]) => [
+        protocol,
+        entry ? { ...entry, apiKey: '' } : entry,
+      ])) as AppConfig['apiProtocolConfigs']
+    : config.apiProtocolConfigs;
+  const byokProviderConfigDrafts = config.byokProviderConfigDrafts
+    ? Object.fromEntries(Object.entries(config.byokProviderConfigDrafts).map(([key, draft]) => [
+        key,
+        {
+          ...draft,
+          apiConfig: { ...draft.apiConfig, apiKey: '' },
+        },
+      ]))
+    : config.byokProviderConfigDrafts;
+  let sanitized: AppConfig = {
+    ...config,
+    apiKey: '',
+    apiProtocolConfigs,
+    byokProviderConfigDrafts,
+    agentCliEnv: sanitizeAgentCliEnv(config.agentCliEnv),
+  };
   for (const key of DAEMON_OWNED_KEYS) {
     delete (sanitized as unknown as Record<string, unknown>)[key];
+  }
+  if (
+    storedConfig
+    && hasLegacyByokSecret(storedConfig)
+    && !(config.byokProfileId && config.byokCredentialConfigured)
+  ) {
+    // A legacy plaintext key may be the user's only credential. Keep only
+    // those secret projections until secure migration succeeds, while still
+    // allowing unrelated settings (mode, model, theme, etc.) to persist.
+    sanitized = preserveLegacyByokSecrets(sanitized, storedConfig);
   }
   localStorage.setItem(STORAGE_KEY, JSON.stringify(sanitized));
 }

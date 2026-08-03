@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -7,10 +7,12 @@ import { gzip } from 'node:zlib';
 
 import {
   HIDE_CHROME_SELECTOR,
+  DECK_STAGE_SELECTOR,
   activeSlideCaptureOffsetTransform,
   captureDeckSlide,
   measureAuthoredSlideBox,
   paginateViewportBand,
+  prepareDeckStage,
   readDomToPptxBundleFile,
   requestedRenderSize,
   restoreActiveSlideCapture,
@@ -519,9 +521,11 @@ describe('measureAuthoredSlideBox', () => {
     offsetWidth?: number;
     offsetHeight?: number;
     stage?: HTMLElement | null;
+    stageSelector?: string;
   }): HTMLElement {
     return {
-      closest: (selector: string) => (selector === 'deck-stage' ? opts.stage ?? null : null),
+      closest: (selector: string) =>
+        selector === (opts.stageSelector ?? DECK_STAGE_SELECTOR) ? opts.stage ?? null : null,
       getAttribute: (name: string) => opts.attrs?.[name] ?? null,
       style: opts.style ?? {},
       offsetWidth: opts.offsetWidth ?? 0,
@@ -550,6 +554,17 @@ describe('measureAuthoredSlideBox', () => {
     expect(measureAuthoredSlideBox(fakeElement({ stage }))).toEqual({ w: 1024, h: 768 });
   });
 
+  test('uses framework deck-stage wrapper dimensions before transformed slide layout', () => {
+    const stage = fakeElement({ style: { width: '1920px', height: '1080px' } });
+    const slide = fakeElement({
+      stage,
+      stageSelector: 'deck-stage, #deck-stage, .deck-stage',
+      offsetWidth: 960,
+      offsetHeight: 540,
+    });
+    expect(measureAuthoredSlideBox(slide)).toEqual({ w: 1920, h: 1080 });
+  });
+
   test('uses declared slide dimensions before transformed layout fallback', () => {
     const slide = fakeElement({
       style: { width: '1600px', height: '900px' },
@@ -557,6 +572,43 @@ describe('measureAuthoredSlideBox', () => {
       offsetHeight: 450,
     });
     expect(measureAuthoredSlideBox(slide)).toEqual({ w: 1600, h: 900 });
+  });
+});
+
+describe('prepareDeckStage', () => {
+  test('normalizes framework deck stages to authored capture geometry', () => {
+    const hidden = { style: { setProperty: vi.fn() } };
+    const stage = {
+      setAttribute: vi.fn(),
+      style: { setProperty: vi.fn() },
+    };
+    const appended: Array<{ textContent?: string }> = [];
+    const previousDocument = globalThis.document;
+    Object.assign(globalThis, {
+      document: {
+        querySelectorAll: (selector: string) => {
+          if (selector === HIDE_CHROME_SELECTOR) return [hidden];
+          if (selector === DECK_STAGE_SELECTOR) return [stage];
+          return [];
+        },
+        createElement: () => ({ textContent: '' }),
+        head: { appendChild: (node: { textContent?: string }) => appended.push(node) },
+        documentElement: {},
+      },
+    });
+    try {
+      prepareDeckStage(HIDE_CHROME_SELECTOR, DECK_STAGE_SELECTOR);
+      expect(stage.setAttribute).toHaveBeenCalledWith('noscale', '');
+      expect(stage.style.setProperty).toHaveBeenCalledWith('transform', 'none', 'important');
+      expect(stage.style.setProperty).toHaveBeenCalledWith(
+        'transform-origin',
+        'top left',
+        'important',
+      );
+      expect(appended).toHaveLength(1);
+    } finally {
+      Object.assign(globalThis, { document: previousDocument });
+    }
   });
 });
 

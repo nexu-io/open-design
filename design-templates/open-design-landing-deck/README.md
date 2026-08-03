@@ -1,6 +1,6 @@
 # open-design-landing-deck
 
-Sister skill to [`open-design-landing`](../open-design-landing/).
+Sister design template to [`open-design-landing`](../open-design-landing/).
 Produces a single-file slide deck in the **Atelier Zero** design
 language — warm-paper background, italic-serif emphasis, coral
 terminating dots, surreal collage plates — paginated as a horizontal
@@ -21,7 +21,7 @@ open example.html
 ```
 
 The deck assumes 16 collage assets at `../open-design-landing/assets/`
-(the sister skill ships them). Use ←/→ · Space · PageUp/PageDown ·
+(the sister template ships them). Use ←/→ · Space · PageUp/PageDown ·
 Home/End to navigate, ESC for the overview grid.
 
 ## What you get
@@ -35,13 +35,13 @@ Home/End to navigate, ESC for the overview grid.
 - ESC overview grid with scaled thumbnails.
 - 7 slide kinds: `cover`, `section`, `content`, `stats`, `quote`,
   `cta`, `end`. Mix freely.
-- Same 16-slot image library as the landing-page sister skill —
+- Same 16-slot image library as the landing-page sister template —
   no extra prompting or rendering.
 
 ## Files
 
 ```text
-skills/open-design-landing-deck/
+design-templates/open-design-landing-deck/
 ├── SKILL.md                 # ← agent contract (read this first)
 ├── README.md                # ← you are here
 ├── schema.ts                # typed slide variants + brand block (re-exports from sister)
@@ -54,7 +54,7 @@ skills/open-design-landing-deck/
 ## Authoring a deck
 
 1. Copy `inputs.example.json` to your project as `inputs.json`.
-2. Edit `brand` (or copy from a sister-skill `inputs.json` you already have).
+2. Edit `brand` (or copy it from an `inputs.json` for the sister template).
 3. Set `deck_title` (the kicker shown in the chrome strip).
 4. Build the `slides` array. Each entry is one of seven kinds — see
    [`schema.ts`](./schema.ts) for the full type. A typical pitch:
@@ -79,7 +79,7 @@ skills/open-design-landing-deck/
 
 ## Image strategy
 
-The deck inherits the sister skill's 16-slot image library. Set
+The deck inherits the sister template's 16-slot image library. Set
 `inputs.imagery.assets_path` to wherever those PNGs live; the example
 uses `'../open-design-landing/assets/'`.
 
@@ -97,7 +97,7 @@ npx tsx ../open-design-landing/scripts/placeholder.ts ../open-design-landing/ass
 
 ## Migrating from `editorial-collage-deck`
 
-This skill replaces the older `editorial-collage-deck` skill. The renames
+This design template replaces the older `editorial-collage-deck` skill. The renames
 are mechanical:
 
 | Old | New |
@@ -106,13 +106,12 @@ are mechanical:
 | shared assets `../editorial-collage/assets/` | `../open-design-landing/assets/` |
 | TS type `EditorialCollageDeckInputs` | `OpenDesignLandingDeckInputs` |
 
-The `EditorialCollageDeckInputs` alias re-exported from
-[`schema.ts`](./schema.ts) is a temporary bridge: it is kept for the
-**v0.3.x** line and removed in the next minor release (**v0.4.0**).
-Update imports before then.
+The deprecated `EditorialCollageDeckInputs` alias is still re-exported from
+[`schema.ts`](./schema.ts) for backwards compatibility. New code should use
+`OpenDesignLandingDeckInputs`.
 
 ## See also
 
-- [`open-design-landing`](../open-design-landing/) — landing page sister skill.
-- [`guizang-ppt`](../guizang-ppt/) — the magazine-deck navigation pattern this skill borrows.
+- [`open-design-landing`](../open-design-landing/) — landing-page sister template.
+- [`guizang-ppt`](../guizang-ppt/) — the magazine-deck navigation pattern this template borrows.
 - [`design-systems/atelier-zero/DESIGN.md`](../../design-systems/atelier-zero/DESIGN.md) — design tokens.

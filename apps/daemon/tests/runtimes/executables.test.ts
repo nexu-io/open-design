@@ -37,6 +37,29 @@ test('deepseek entry declares codewhale as a fallback bin (issue #2983)', () => 
   );
 });
 
+test('resolveAgentExecutable finds Grok Build in OD_AGENT_HOME on Windows', () => {
+  const home = mkdtempSync(join(tmpdir(), 'od-grok-build-home-'));
+  try {
+    return withEnvSnapshot(['PATH', 'PATHEXT', 'OD_AGENT_HOME'], () =>
+      withPlatform('win32', () => {
+        const grok = join(home, '.grok', 'bin', 'grok.EXE');
+        mkdirSync(join(home, '.grok', 'bin'), { recursive: true });
+        writeFileSync(grok, '');
+        process.env.PATH = '';
+        process.env.PATHEXT = '.EXE';
+        process.env.OD_AGENT_HOME = home;
+
+        assert.equal(
+          resolveAgentExecutable(minimalAgentDef({ id: 'grok-build', bin: 'grok' })),
+          grok,
+        );
+      }),
+    );
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
 // resolveAgentExecutable touches the filesystem via existsSync; on
 // Windows resolveOnPath also walks PATHEXT extensions, which our fixture
 // files don't carry. Skip the filesystem-backed cases there — the

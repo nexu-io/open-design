@@ -19,11 +19,11 @@ describe('manualEditKindForElement', () => {
     expect(manualEditKindForElement(makeEl('<div><p>one</p><p>two</p></div>'))).toBe('container');
   });
 
-  it('treats an element with inline child markup as a container, not text', () => {
-    // The source patcher rejects a set-text commit when the target has element
-    // children ("This element contains nested markup"), so we must NOT offer a
-    // caret there — it would type then fail to persist. Style-only container.
-    expect(manualEditKindForElement(makeEl('<div>Hello <strong>world</strong></div>'))).toBe('container');
+  it('treats inline formatting children as text, interactive/block children as containers', () => {
+    // Inline formatting (strong/em/span/…) now round-trips through the
+    // set-inner-html commit, so a caret is safe there. Interactive children
+    // like <a> and block children still cannot round-trip — style-only.
+    expect(manualEditKindForElement(makeEl('<div>Hello <strong>world</strong></div>'))).toBe('text');
     expect(manualEditKindForElement(makeEl('<p>See <a href="#">link</a> now</p>'))).toBe('container');
   });
 

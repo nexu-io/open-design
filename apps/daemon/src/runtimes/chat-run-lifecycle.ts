@@ -236,3 +236,31 @@ export function bufferedAntigravityGeminiFirstTokenAt(
   }
   return null;
 }
+
+/**
+ * Writes the composed prompt as the final chunk on the child's stdin, closes
+ * it, and reports whether that write was backpressured.
+ *
+ * `end(chunk)` cannot report this: it returns the stream rather than a boolean,
+ * and `writableNeedDrain` is already back to false by the time it returns — even
+ * for a chunk that `write(chunk)` would have rejected. Every runtime except
+ * Claude (which streams JSON and keeps stdin open) takes this path, so reading
+ * backpressure off `end()` left `stdin_backpressure` permanently false on
+ * exactly the runs whose `stdin_write` stalls it exists to attribute. Issuing
+ * the write and the close separately is what makes the signal real.
+ *
+ * Returns true when the chunk had to be buffered because the OS pipe was full,
+ * i.e. the child was not draining stdin.
+ */
+export function writePromptAndEndStdin(
+  stdin: {
+    write: (chunk: string, encoding: BufferEncoding, cb: (err?: Error | null) => void) => boolean;
+    end: () => void;
+  },
+  composed: string,
+  onFlush: (err?: Error | null) => void,
+): boolean {
+  const accepted = stdin.write(composed, 'utf8', onFlush);
+  stdin.end();
+  return accepted === false;
+}

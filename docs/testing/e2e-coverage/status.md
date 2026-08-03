@@ -2,6 +2,9 @@
 
 这份文档记录 `e2e/` 当前的自动化测试分层、最近一轮补强工作的落点，以及我们有意保留的已知缺口。
 
+安装与更新器全生命周期的「节点 → 归属测试」覆盖图谱单独维护在
+[`../updater-lifecycle.md`](../updater-lifecycle.md)；改动 updater 相关代码时以那份图谱定位归属测试。
+
 ## 当前套件形态
 
 现在这套 E2E 已经比较明确地分成三层：
@@ -54,9 +57,9 @@ Playwright 资源场景现在支持显式 contract：
 
 相关文件：
 
-- [e2e/lib/playwright/resources.ts](/Users/mac/open-design/open-design/e2e/lib/playwright/resources.ts)
-- [e2e/resources/playwright.ts](/Users/mac/open-design/open-design/e2e/resources/playwright.ts)
-- [e2e/ui/app.test.ts](/Users/mac/open-design/open-design/e2e/ui/app.test.ts)
+- [e2e/lib/playwright/resources.ts](../../../e2e/lib/playwright/resources.ts)
+- [e2e/resources/playwright.ts](../../../e2e/resources/playwright.ts)
+- [e2e/ui/app.test.ts](../../../e2e/ui/app.test.ts)
 
 这意味着 `app.test.ts` 里的不少 flow 已经不再停留在“元素可见”，而是会一起验证持久化状态。
 
@@ -64,8 +67,8 @@ Playwright 资源场景现在支持显式 contract：
 
 更深的 real-run 校验落在：
 
-- [e2e/ui/real-daemon-run.test.ts](/Users/mac/open-design/open-design/e2e/ui/real-daemon-run.test.ts)
-- [e2e/tests/dialog/artifact-consistency.test.ts](/Users/mac/open-design/open-design/e2e/tests/dialog/artifact-consistency.test.ts)
+- [e2e/ui/real-daemon-run.test.ts](../../../e2e/ui/real-daemon-run.test.ts)
+- [e2e/tests/dialog/artifact-consistency.test.ts](../../../e2e/tests/dialog/artifact-consistency.test.ts)
 
 现在这里覆盖了：
 
@@ -77,7 +80,7 @@ Playwright 资源场景现在支持显式 contract：
 
 ### 3. Design Files 持久化
 
-[e2e/ui/app-design-files.test.ts](/Users/mac/open-design/open-design/e2e/ui/app-design-files.test.ts) 现在有了 API-backed 校验，覆盖：
+[e2e/ui/app-design-files.test.ts](../../../e2e/ui/app-design-files.test.ts) 现在有了 API-backed 校验，覆盖：
 
 - upload persistence
 - delete persistence
@@ -87,7 +90,7 @@ Playwright 资源场景现在支持显式 contract：
 
 ### 4. Restoration 与会话恢复
 
-[e2e/ui/app-restoration.test.ts](/Users/mac/open-design/open-design/e2e/ui/app-restoration.test.ts) 现在对下面这些点补了更强的 persisted-state 断言：
+[e2e/ui/app-restoration.test.ts](../../../e2e/ui/app-restoration.test.ts) 现在对下面这些点补了更强的 persisted-state 断言：
 
 - reload 后 latest conversation 选择
 - 删除 active conversation
@@ -102,7 +105,7 @@ Playwright 资源场景现在支持显式 contract：
 
 ### 5. Project management 持久化
 
-[e2e/ui/project-management-flows.test.ts](/Users/mac/open-design/open-design/e2e/ui/project-management-flows.test.ts) 现在对这些行为补了轻量 API 校验：
+[e2e/ui/project-management-flows.test.ts](../../../e2e/ui/project-management-flows.test.ts) 现在对这些行为补了轻量 API 校验：
 
 - rename persistence
 - search recovery
@@ -111,10 +114,10 @@ Playwright 资源场景现在支持显式 contract：
 
 ### 6. Entry configuration 与 keyboard workflows
 
-- [e2e/ui/entry-configuration-flows.test.ts](/Users/mac/open-design/open-design/e2e/ui/entry-configuration-flows.test.ts)
+- [e2e/ui/entry-configuration-flows.test.ts](../../../e2e/ui/entry-configuration-flows.test.ts)
   - 确认 Composio key 流程不会把明文 key 留在 saved config
   - 确认 replacement draft key 不会触发过早的全局持久化
-- [e2e/ui/workspace-keyboard-flows.test.ts](/Users/mac/open-design/open-design/e2e/ui/workspace-keyboard-flows.test.ts)
+- [e2e/ui/workspace-keyboard-flows.test.ts](../../../e2e/ui/workspace-keyboard-flows.test.ts)
   - 确认 quick-switcher 场景保留预期的 per-project file sets
   - 确认 mixed artifact / file workspace 在 reload 后仍然完整
 
@@ -133,34 +136,26 @@ Playwright 资源场景现在支持显式 contract：
 - connector configuration persistence
 - quick-switcher 跨 reload / 跨项目边界行为
 
-## 已知且故意保留的缺口
+## 当前缺口
 
-当前仍有一个明确的产品级缺口，以 `fixme` 的形式保留在：
+此前记录为产品缺口的 active-run reload 场景已经恢复为可执行的 P1 用例：
 
-- [e2e/ui/real-daemon-run.test.ts](/Users/mac/open-design/open-design/e2e/ui/real-daemon-run.test.ts)
+- [e2e/ui/real-daemon-run.test.ts](../../../e2e/ui/real-daemon-run.test.ts)
+  - `artifact persistence survives page reload during an active real daemon run`
+  - 断言原始 `runId`、assistant `runStatus`、`producedFiles`、项目文件和预览均在 reload 后收敛
 
-跳过的场景是：
-
-- 真实 daemon run 进行中刷新页面，然后期望 artifact persistence 正常完成
-
-当前产品实际行为：
-
-- reload 后 run 状态可以 reattach
-- assistant turn 看起来也可能正常结束
-- 但 artifact persistence 可能在 reattach 后丢失
-
-这条我们明确保留为已知产品缺口，而不是把测试弱化成假绿。
+当前没有对应的 `fixme`。如果该场景再次因产品回归失败，应保留失败信号并修复产品或测试前置条件，不要把它重新降级成跳过用例。
 
 ## 验证命令
 
-从 `/Users/mac/open-design/open-design` 运行：
+从仓库根目录运行：
 
 ```bash
 pnpm --filter @open-design/e2e typecheck
 ```
 
 ```bash
-pnpm --filter @open-design/e2e test -- e2e/tests/dialog/artifact-consistency.test.ts
+pnpm --filter @open-design/e2e test tests/dialog/artifact-consistency.test.ts
 ```
 
 ```bash
@@ -175,9 +170,7 @@ pnpm --filter @open-design/e2e exec playwright test -c playwright.config.ts ui/r
 pnpm --filter @open-design/e2e exec playwright test -c playwright.config.ts ui/app-design-files.test.ts ui/app-restoration.test.ts ui/project-management-flows.test.ts ui/entry-configuration-flows.test.ts ui/workspace-keyboard-flows.test.ts --project=chromium
 ```
 
-最近一次这五个强化过的 `extended` 文件 grouped run 结果是：
-
-- `59 passed`
+这些 grouped commands 是当前验证入口；不要把某次运行的固定通过数量当作长期基线，因为测试集合会继续演进。
 
 ## 建议的下一步
 
@@ -187,4 +180,4 @@ pnpm --filter @open-design/e2e exec playwright test -c playwright.config.ts ui/a
 
 - 在 `extended` 里继续给 UI-only 断言补低成本 persisted-state 校验
 - 每补完一批，就做一次 grouped validation
-- 已知产品 bug 继续保留为 `fixme`，不要为了变绿而弱化套件
+- 只有有明确产品语义、且当前架构仍支持的场景才保留在 UI E2E；过时的 DOM/交互模型应删除或迁移到更合适的测试层

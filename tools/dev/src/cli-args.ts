@@ -4,6 +4,7 @@ const OPTIONS_WITH_VALUE = new Set([
   "--env-file",
   "--expr",
   "--namespace",
+  "--parent-pid",
   "--path",
   "--selector",
   "--timeout",

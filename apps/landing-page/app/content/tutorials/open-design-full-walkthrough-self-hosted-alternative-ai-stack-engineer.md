@@ -16,7 +16,7 @@ This guide is for people who want to understand *what they're actually running*:
 
 ## What is Open Design?
 
-Open Design is a fully open-source replacement for a cloud design tool: **local-first, web-deployable, and BYOK at every layer.** "BYOK" means bring your own key. Instead of bundling its own model or agent, Open Design scans your machine for whatever coding CLI you already have — Claude Code, Codex, Cursor, Gemini, OpenCode, and more — and uses that as the engine. If none are on your path, there's an Anthropic API fallback. The license is Apache-2.0, so you can fork it, deploy it internally, and modify it freely.
+Open Design is a fully open-source replacement for a cloud design tool: **local-first, web-deployable, and BYOK at every layer.** "BYOK" means bring your own key. Instead of bundling its own model or agent, Open Design scans your machine for supported coding CLIs — Claude Code, Codex, Cursor, OpenCode, and more — and uses the selected runtime as the engine. Provider-key BYOK runs through the isolated OpenCode adapter; there is no direct Anthropic fallback adapter. The license is Apache-2.0, so you can fork it, deploy it internally, and modify it freely.
 
 The point AI Stack Engineer keeps returning to: a cloud design tool runs only on one vendor's model, in their cloud, behind a paid plan, with no self-host story. Open Design inverts all three — your machine, your agent, your key.
 

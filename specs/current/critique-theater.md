@@ -26,10 +26,10 @@ This spec is normative for the v1 implementation and protocol. It is the source 
 The non-goals above are intentional, not arbitrary. Future readers should know the tradeoff that led to each.
 
 - **No parallel processes.** A single CLI session keeps the agent's full context coherent: the Designer's draft and every later panelist's notes share one model context, so the Critic can see the actual hierarchy values the Designer chose, the Brand panelist can read the same DESIGN.md the Designer was passed, and the Copy panelist can pick at the verbs the Designer wrote. Splitting this across processes would require a cross-process artifact handoff and a way to replay prior-panelist notes into each one's context, which adds an estimated two to three weeks to the v1 timeline and turns a debugging session into a multi-process trace correlation problem.
-- **No new agent runtime.** The same on-PATH CLI Open Design already detects (Claude Code, Codex, Cursor Agent, Gemini CLI, etc.) is how this feature reaches users. Building a runtime would replicate work that the existing daemon already does well, would force users onto a model we picked rather than the one they signed up for, and would lose BYOK at every layer.
+- **No new agent runtime.** The same on-PATH CLI Open Design already detects (Claude Code, Codex, Cursor Agent, OpenCode, and the other registered definitions) is how this feature reaches users. Building a runtime would replicate work that the existing daemon already does well, would force users onto a model we picked rather than the one they signed up for, and would lose BYOK at every layer.
 - **No new SSE transport.** SSE is already plumbed through the daemon, the web app, the Electron shell, and the desktop sidecar IPC. A second transport would force every consumer to learn a second connection lifecycle, which is exactly the kind of accidental complexity that takes a feature out of v1.
 - **No configurable cast in v1.** A fixed five-panelist roster lets the composite formula and weight defaults stay constant across every artifact. A configurable cast adds UX surface (per-skill picker, override storage, settings sync) and requires the score formula to redistribute weight on the fly. We commit to v2 once we have data on which roles users actually drop or add.
-- **No new skill protocol.** Critique Theater layers on top of the skill loader; it does not change what a skill is. This means the 31 existing skills, the 129 design systems, and any future contributions inherit the panel without per-skill migration work.
+- **No new skill protocol.** Critique Theater layers on top of the skill loader; it does not change what a skill is. Existing skills, bundled design systems, and future contributions inherit the panel without per-skill migration work.
 
 ## High-level architecture
 
@@ -45,18 +45,22 @@ The non-goals above are intentional, not arbitrary. Future readers should know t
   reducer +                                emit panelEvent / roundEvent
   selectors                                / shipEvent / degradedEvent
                                            persist transcript ndjson +
-                                           critique columns in SQLite
+                                           critique run rows in SQLite
 ```
 
-There are exactly three new modules in the daemon:
+The core execution path is anchored by three daemon modules:
 
 | Module | Responsibility | Inputs | Outputs |
 | --- | --- | --- | --- |
 | `apps/daemon/src/critique/parser.ts` | Streaming tokenizer for `<PANELIST>`, `<ROUND_END>`, `<SHIP>` blocks. Handles partial chunks, malformed input, recovery. | `AsyncIterable<string>` (CLI stdout) | `AsyncIterable<PanelEvent>` |
-| `apps/daemon/src/critique/scoreboard.ts` | Pure state machine. Consumes `PanelEvent`s, buffers per-round, decides ship vs continue using injected config. No I/O. | `PanelEvent`, `CritiqueConfig` | `ScoreboardEvent` (delta-driven) |
-| `apps/daemon/src/critique/orchestrator.ts` | Wires parser and scoreboard to the SSE bus and SQLite. Owns interrupt cascade, persistence, and degraded fallback. | spawn handle, project id, artifact id | side effects: SSE + DB writes |
+| `apps/daemon/src/critique/scoreboard.ts` | Pure scoring helpers: weighted composite, convergence decision, and fallback-round selection. No I/O. | per-role scores, completed rounds, `CritiqueConfig` | composite, `RoundDecision`, selected fallback round |
+| `apps/daemon/src/critique/orchestrator.ts` | Collects parser events, owns per-round state, scoring, SSE fan-out, persistence, artifact writes, interrupt/timeout handling, and degraded fallback. | spawn handle, project id, artifact id | terminal run result plus SSE/DB/file side effects |
 
-Two new web component groups:
+Persistence, transcript/artifact I/O, interrupts, conformance, rollout, and run
+registration live in the other modules under `apps/daemon/src/critique/`; its
+[`AGENTS.md`](../../apps/daemon/src/critique/AGENTS.md) is the current module map.
+
+The presentation and prompt surfaces are:
 
 | Component group | Responsibility |
 | --- | --- |
@@ -67,11 +71,13 @@ One new contract package extension:
 
 | File | Purpose |
 | --- | --- |
-| `packages/contracts/src/critique.ts` | `CritiqueConfig` zod schema, `PANELIST_ROLES` constants, `PanelEvent` discriminated union, `CritiqueSseEvent` extension to the existing SSE event union. |
+| `packages/contracts/src/critique.ts` | `CritiqueConfig` schema/defaults, `PANELIST_ROLES`, the `PanelEvent` and `CritiqueSseEvent` discriminated unions, and the canonical critique SSE event-name list. |
 
 ## Configuration
 
-All thresholds, timeouts, and policies are config-driven. There are no magic numbers in business logic. Defaults live in a single `defaults.ts` next to the schema and are overridable via environment variables read by the existing daemon env layer.
+All thresholds, timeouts, and policies are config-driven. Contract defaults
+live in `packages/contracts/src/critique.ts`; daemon environment parsing lives
+in `apps/daemon/src/critique/config.ts`.
 
 ```ts
 // packages/contracts/src/critique.ts
@@ -100,7 +106,7 @@ export interface CritiqueConfig {
 | `OD_CRITIQUE_MAX_ROUNDS` | `3` | Hard upper bound on rounds. |
 | `OD_CRITIQUE_SCORE_THRESHOLD` | `8.0` | Ship gate. Composite below this continues. |
 | `OD_CRITIQUE_SCORE_SCALE` | `10` | Score range upper bound. Lower bound is always 0. |
-| `OD_CRITIQUE_ROUND_TIMEOUT_MS` | `90000` | Per-round wall clock cap. |
+| `OD_CRITIQUE_PER_ROUND_TIMEOUT_MS` | `90000` | Per-round wall clock cap. |
 | `OD_CRITIQUE_TOTAL_TIMEOUT_MS` | `240000` | Total run wall clock cap. |
 | `OD_CRITIQUE_PARSER_MAX_BLOCK_BYTES` | `262144` | Hard cap on bytes between matched tags. Prevents unbounded buffering. |
 | `OD_CRITIQUE_FALLBACK_POLICY` | `ship_best` | When threshold never met, which round to keep. |
@@ -211,7 +217,9 @@ Round `n+1` transcript bytes must be less than round `n` transcript bytes. Final
 
 ## SSE event protocol
 
-The existing `/api/projects/:id/events` SSE stream carries new event variants. All event names live in `packages/contracts/src/sse.ts` as a discriminated union extension, never as string literals in handlers.
+The existing `/api/projects/:id/events` SSE stream carries the critique event
+variants. Their discriminated union and canonical event-name list live in
+`packages/contracts/src/critique.ts`, never as handler-local string lists.
 
 | Event name | Payload fields | Meaning |
 | --- | --- | --- |
@@ -227,50 +235,64 @@ The existing `/api/projects/:id/events` SSE stream carries new event variants. A
 | `critique.failed` | `runId`, `cause` | Unrecoverable error. UI shows failed state with retry. |
 | `critique.parser_warning` | `runId`, `kind`, `position` | Non-fatal parser recovery. UI surfaces to log only, never to user, unless `kind == "weak_debate"`. |
 
-The `artifactRef` payload is a logical reference (`{ projectId, artifactId }`), not the artifact body. The UI fetches the body through the existing artifact endpoint and renders in the existing sandboxed iframe.
+The `artifactRef` payload is a logical reference (`{ projectId, artifactId }`),
+not the artifact body. The UI resolves persisted bytes through
+`GET /api/projects/:projectId/critique/:runId/artifact`; raw filesystem paths
+never cross the HTTP boundary.
 
 ## Persistence
 
-A new SQLite migration adds critique columns to the existing `artifacts` table. The migration is additive and reversible.
+A dedicated, idempotently-created `critique_runs` table owns critique lifecycle
+state. The implementation deliberately does not add columns to an `artifacts`
+table: artifacts are file-backed in this repository, while critique runs need
+queryable lifecycle rows with project/conversation foreign keys.
 
 ```sql
--- 00XX_critique_rounds.up.sql
-ALTER TABLE artifacts ADD COLUMN critique_score REAL;
-ALTER TABLE artifacts ADD COLUMN critique_rounds_json TEXT;
-ALTER TABLE artifacts ADD COLUMN critique_transcript_path TEXT;
-ALTER TABLE artifacts ADD COLUMN critique_status TEXT
-  CHECK (critique_status IN ('shipped','below_threshold','timed_out','interrupted','degraded','failed','legacy'));
-ALTER TABLE artifacts ADD COLUMN critique_protocol_version INTEGER;
-CREATE INDEX IF NOT EXISTS idx_artifacts_critique_status ON artifacts(critique_status);
-```
-
-```sql
--- 00XX_critique_rounds.down.sql
-DROP INDEX IF EXISTS idx_artifacts_critique_status;
-ALTER TABLE artifacts DROP COLUMN critique_protocol_version;
-ALTER TABLE artifacts DROP COLUMN critique_status;
-ALTER TABLE artifacts DROP COLUMN critique_transcript_path;
-ALTER TABLE artifacts DROP COLUMN critique_rounds_json;
-ALTER TABLE artifacts DROP COLUMN critique_score;
+CREATE TABLE IF NOT EXISTS critique_runs (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  conversation_id TEXT,
+  artifact_path TEXT,
+  status TEXT NOT NULL CHECK (status IN
+    ('shipped','below_threshold','timed_out','interrupted','degraded','failed','legacy','running')),
+  score REAL,
+  rounds_json TEXT NOT NULL DEFAULT '[]',
+  transcript_path TEXT,
+  protocol_version INTEGER NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE,
+  FOREIGN KEY(conversation_id) REFERENCES conversations(id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS idx_critique_runs_project
+  ON critique_runs(project_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_critique_runs_status
+  ON critique_runs(status);
 ```
 
 | Column | Format | Notes |
 | --- | --- | --- |
-| `critique_score` | `REAL` | Final composite. `NULL` for legacy artifacts. |
-| `critique_rounds_json` | `TEXT` | Compact summary per round: `[{n, composite, mustFix, decision}]`. Bounded; full transcript on disk. |
-| `critique_transcript_path` | `TEXT` | Relative path under daemon-managed artifact storage. The stored value is the relative path; absolute resolution is daemon-side only. This spec MUST NOT define daemon data paths; read root [`AGENTS.md`](../../AGENTS.md) → **Daemon data directory contract**. |
-| `critique_status` | `TEXT` | Constrained by `CHECK` clause. `legacy` marks artifacts produced before the feature shipped. |
-| `critique_protocol_version` | `INTEGER` | Pin which `parsers/v{n}.ts` to use for replay. |
+| `id` | `TEXT` | Critique run id and primary key. |
+| `project_id`, `conversation_id` | `TEXT` | Owning project plus optional conversation; delete behavior is enforced by foreign keys. |
+| `artifact_path` | `TEXT` | Daemon-resolved persisted SHIP artifact path; never returned directly to clients. |
+| `status` | `TEXT` | Constrained lifecycle value, including the in-flight `running` state and terminal statuses. |
+| `score` | `REAL` | Final composite when one is available. |
+| `rounds_json` | `TEXT` | Compact per-round summaries; the full event transcript remains file-backed. |
+| `transcript_path` | `TEXT` | Relative transcript filename resolved inside daemon-managed artifact storage. This spec MUST NOT define daemon data paths; read root [`AGENTS.md`](../../AGENTS.md) → **Daemon data directory contract**. |
+| `protocol_version` | `INTEGER` | Pins the parser version used for replay. |
+| `created_at`, `updated_at` | `INTEGER` | Millisecond lifecycle timestamps. |
 
 Transcripts are written through daemon-managed artifact storage (one `PanelEvent` per line). Files larger than 256 KiB are gzipped. The orchestrator chooses the format at write time; the replay path detects the format by extension. This spec MUST NOT define daemon data paths.
 
 ## UI surface
 
-All Theater components live under `apps/web/src/components/Theater/`. Each file is under 200 lines.
+Theater production code lives under `apps/web/src/components/Theater/`; its
+tests mirror that structure under `apps/web/tests/components/Theater/`.
 
 ```
 Theater/
   index.ts
+  CritiqueTheaterMount.tsx
   TheaterStage.tsx
   PanelistLane.tsx
   ScoreTicker.tsx
@@ -282,12 +304,15 @@ Theater/
   hooks/
     useCritiqueStream.ts
     useCritiqueReplay.ts
+    useCritiqueTheaterEnabled.ts
   state/
     reducer.ts
-    selectors.ts
-  __tests__/
-    reducer.test.ts
-    TheaterStage.test.tsx
+    sse.ts
+
+apps/web/tests/components/Theater/
+  TheaterStage.test.tsx
+  state/reducer.test.ts
+  state/sse.test.ts
 ```
 
 ### State machine
@@ -384,7 +409,7 @@ These exist purely to let reviewers walk every state in one page. The production
 | --- | --- | --- |
 | Stage component bundle | ≤ 18 KiB gzipped | `size-limit` in CI |
 | Reducer hot path | p99 ≤ 2 ms per event | vitest bench in CI |
-| First lane visible from first SSE event | ≤ 200 ms | Playwright trace in `e2e/critique-theater.spec.ts` |
+| First lane visible from first SSE event | ≤ 200 ms | Planned Playwright trace; the current functional suite is `e2e/ui/critique-theater.test.ts`. |
 | Transcript scrub at 1 MiB transcript | 60 fps, no dropped frames | Playwright `Page.metrics` |
 
 ### Interrupt semantics
@@ -506,13 +531,13 @@ A separate security review pass runs through the `code-reviewer` agent before me
 | Golden-file fixtures | vitest with `__fixtures__/critique/v1/*.txt` | Each adapter has at least one happy and two malformed transcripts on disk. |
 | Component | RTL + jsdom | Every reducer phase rendered at least once. |
 | Integration | vitest + sqlite memory + http mock | End-to-end happy path plus five failure modes. |
-| Adapter conformance | prerelease e2e against live adapters | Each of 12 CLIs plus BYOK proxy must pass canonical brief. |
-| Playwright e2e | `e2e/critique-theater.spec.ts` | Theater renders within 200 ms, Esc triggers Interrupt, replay scrub at 60 fps. |
+| Adapter conformance | nightly synthetic harness | The current workflow exercises the synthetic-good and synthetic-bad adapters; a production-adapter sweep remains follow-up work. |
+| Playwright e2e | `e2e/ui/critique-theater.test.ts` | Covers the live five-lane stage, shipped badge, Esc interrupt, and accessible role tree. The replay performance gate remains planned. |
 | Visual regression | Playwright `toHaveScreenshot()` | Each Theater state captured at 375 / 768 / 1280 viewports. |
 | A11y self-test | axe-playwright | Theater UI passes WCAG AA. |
 | Performance | size-limit + vitest bench | Bundle ≤ 18 KiB gz; reducer p99 ≤ 2 ms. |
 | Dead-code | `ts-prune` scoped to `critique/` and `Theater/` | Zero unreferenced exports. |
-| i18n | existing duplicate-key check plus new missing-key check | All 6 locales present for every Theater string. |
+| i18n | typed locale alignment tests | Every typed locale dictionary carries every Theater string. |
 | Coverage walker | new `pnpm check:critique-coverage` | Each `CritiqueConfig` field, `PanelEvent` variant, SSE event, SQLite column, protocol grammar element, and i18n key has at least one production reference and one test. |
 
 ## Rollout

@@ -18,7 +18,6 @@ import { createProjectArtifactFile } from '../../artifacts/create.js';
 import { ArtifactPublicationBlockedError } from '../../artifacts/publication-guard.js';
 import { ArtifactRegressionError } from '../../artifacts/stub-guard.js';
 import {
-  createProjectFileVersion,
   ensureCurrentProjectFileVersion,
   isProjectFileVersionPath,
   listProjectFileVersions,
@@ -111,12 +110,43 @@ const URL_PREVIEW_SCROLL_BRIDGE = `<script data-od-url-scroll-bridge>
   if (window.__odUrlScrollBridge) return;
   window.__odUrlScrollBridge = true;
   var pending = false;
+  var contentSizePending = false;
   function scrollElement(){
     return document.querySelector('.design-canvas') || document.scrollingElement || document.documentElement;
   }
   function num(value){
     var next = Number(value || 0);
     return Number.isFinite(next) ? next : 0;
+  }
+  function measureContentWidth(){
+    var root = document.documentElement;
+    var body = document.body || root;
+    if (!root) return null;
+    var values = [
+      root.scrollWidth,
+      body && body.scrollWidth,
+      root.offsetWidth,
+      body && body.offsetWidth,
+      root.clientWidth,
+      body && body.clientWidth
+    ];
+    var width = 0;
+    for (var i = 0; i < values.length; i += 1) {
+      var next = num(values[i]);
+      if (next > width) width = next;
+    }
+    return width > 0 ? Math.ceil(width) : null;
+  }
+  function postContentSize(){
+    window.parent.postMessage({ type: 'od:preview-content-size', width: measureContentWidth() }, '*');
+  }
+  function scheduleContentSize(){
+    if (contentSizePending) return;
+    contentSizePending = true;
+    window.requestAnimationFrame(function(){
+      contentSizePending = false;
+      postContentSize();
+    });
   }
   function post(){
     var el = scrollElement();
@@ -172,21 +202,43 @@ const URL_PREVIEW_SCROLL_BRIDGE = `<script data-od-url-scroll-bridge>
     if (data.type === 'od:preview-scroll-by') {
       scrollBy(scrollElement(), data.left, data.top);
       schedule();
+      scheduleContentSize();
+      return;
+    }
+    if (data.type === 'od:preview-content-size-request') {
+      scheduleContentSize();
     }
   });
   window.addEventListener('scroll', schedule, true);
   document.addEventListener('scroll', schedule, true);
-  window.addEventListener('resize', schedule);
+  window.addEventListener('resize', function(){
+    schedule();
+    scheduleContentSize();
+  });
+  if (typeof ResizeObserver !== 'undefined') {
+    try {
+      var observer = new ResizeObserver(scheduleContentSize);
+      observer.observe(document.documentElement);
+      if (document.body) observer.observe(document.body);
+    } catch (_) {}
+  }
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', function(){
       requestRestore();
       schedule();
+      scheduleContentSize();
     });
   } else {
     setTimeout(function(){
       requestRestore();
       schedule();
+      scheduleContentSize();
     }, 0);
+  }
+  setTimeout(scheduleContentSize, 80);
+  setTimeout(scheduleContentSize, 260);
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(scheduleContentSize).catch(function(){});
   }
 })();
 </script>`;
@@ -807,6 +859,39 @@ function injectUrlPreviewBridge(html: string, bridge: 'scroll' | 'selection' | '
     return injectBeforeBodyClose(html, 'data-od-url-selection-bridge', URL_PREVIEW_SELECTION_BRIDGE);
   }
   return injectBeforeBodyClose(html, 'data-od-url-snapshot-bridge', URL_PREVIEW_SNAPSHOT_BRIDGE);
+}
+
+function applyUrlPreviewBridgesToHtml(
+  transformed: string | Buffer,
+  mime: string,
+  requestedBridge: unknown,
+): string | Buffer {
+  if (
+    !(
+      wantsUrlPreviewScrollBridge(requestedBridge) ||
+      wantsUrlPreviewSelectionBridge(requestedBridge) ||
+      wantsUrlPreviewSnapshotBridge(requestedBridge)
+    ) ||
+    !/^text\/html(?:;|$)/i.test(mime)
+  ) {
+    return transformed;
+  }
+
+  let html = Buffer.isBuffer(transformed) ? transformed.toString('utf8') : transformed;
+  // Sanitize the <title> so Cmd+P -> "Save as PDF" produces a Teams-safe
+  // filename. URL-load iframes cannot rely on the host rewriting the document
+  // title after load, and powered previews are intentionally cross-origin.
+  html = daemonSanitizeTitleInDoc(html);
+  if (wantsUrlPreviewScrollBridge(requestedBridge)) {
+    html = injectUrlPreviewBridge(html, 'scroll');
+  }
+  if (wantsUrlPreviewSelectionBridge(requestedBridge)) {
+    html = injectUrlPreviewBridge(html, 'selection');
+  }
+  if (wantsUrlPreviewSnapshotBridge(requestedBridge)) {
+    html = injectUrlPreviewBridge(html, 'snapshot');
+  }
+  return html;
 }
 
 // ---------------------------------------------------------------------------
@@ -1553,8 +1638,8 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         }
         externalProjectDir = await createLocationProjectDir(location, id);
       }
-      // Website Clone projects that already carry the target URL skip the
-      // turn-1 discovery brief: for this scenario the URL *is* the brief —
+      // Website Clone projects that already carry the target URL explicitly
+      // skip the project-opening discovery brief: the URL *is* the brief —
       // the user asked for a reproduction, not a requirements interview, and
       // an unanswered question form just stalls the run (the agent then
       // "answers" it with conservative defaults). An explicit client-provided
@@ -2567,6 +2652,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     promptSource?: ProjectFileVersionPromptSource;
     source?: ProjectFileVersionSource;
     label?: string | null;
+    parentVersionId?: string;
   };
 
   function htmlVersionOptions(
@@ -2577,6 +2663,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     promptSource?: ProjectFileVersionPromptSource;
     source?: ProjectFileVersionSource;
     label?: string;
+    parentVersionId?: string;
   } {
     const fallbackPromptInfo = latestProjectPrompt(project);
     const prompt = override?.prompt !== undefined
@@ -2593,6 +2680,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       promptSource?: ProjectFileVersionPromptSource;
       source?: ProjectFileVersionSource;
       label?: string;
+      parentVersionId?: string;
     } = {
       prompt,
     };
@@ -2600,6 +2688,9 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     if (override?.source) versionOptions.source = override.source;
     if (typeof override?.label === 'string' && override.label.trim()) {
       versionOptions.label = override.label.trim();
+    }
+    if (typeof override?.parentVersionId === 'string' && override.parentVersionId.trim()) {
+      versionOptions.parentVersionId = override.parentVersionId.trim();
     }
     return versionOptions;
   }
@@ -2609,7 +2700,49 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       content: string,
       options?: ReturnType<typeof htmlVersionOptions>,
     ) => Promise<ProjectFileVersion | null>;
+    createVersion: (
+      content: string,
+      options?: ReturnType<typeof htmlVersionOptions>,
+    ) => Promise<ProjectFileVersion>;
+    matchVersionContent: (
+      content: string,
+      versionId?: string,
+    ) => Promise<{
+      status: 'matched' | 'missing_version' | 'digest_mismatch' | 'unknown';
+      version: ProjectFileVersion | null;
+    }>;
   };
+
+  async function matchedHtmlParentVersionId(
+    project: any,
+    fileName: string,
+    requestedParentVersionId: unknown,
+    versionLock: HtmlVersionLock,
+  ): Promise<string | undefined> {
+    if (typeof requestedParentVersionId !== 'string' || !requestedParentVersionId.trim()) {
+      return undefined;
+    }
+    const parentVersionId = requestedParentVersionId.trim();
+    try {
+      const existing = await readProjectFile(
+        PROJECTS_DIR,
+        project.id,
+        fileName,
+        project.metadata,
+      );
+      const match = await versionLock.matchVersionContent(
+        existing.buffer.toString('utf8'),
+        parentVersionId,
+      );
+      return match.status === 'matched' && match.version?.id === parentVersionId
+        ? parentVersionId
+        : undefined;
+    } catch {
+      // Missing/unreadable pre-edit bytes cannot prove lineage. The write may
+      // still proceed, but the new checkpoint must not inherit an origin.
+      return undefined;
+    }
+  }
 
   function htmlVersionCaptureWarning(err: unknown): ProjectFileVersionWarning {
     const message = err instanceof Error ? err.message : String(err);
@@ -3222,7 +3355,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         project?.metadata,
         undefined,
         skipHtmlPreviewBridge ? undefined : async (file) => {
-          let transformed = await maybeResolveVitePreviewHtml({
+          const transformed = await maybeResolveVitePreviewHtml({
             file,
             projectId,
             relPath,
@@ -3230,31 +3363,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
             projectsRoot: PROJECTS_DIR,
             readProjectFile,
           });
-          if (
-            (wantsUrlPreviewScrollBridge(req.query.odPreviewBridge) ||
-              wantsUrlPreviewSelectionBridge(req.query.odPreviewBridge) ||
-              wantsUrlPreviewSnapshotBridge(req.query.odPreviewBridge)) &&
-            /^text\/html(?:;|$)/i.test(file.mime)
-          ) {
-            let html = Buffer.isBuffer(transformed) ? transformed.toString('utf8') : transformed;
-            // Sanitize the <title> so Cmd+P → "Save as PDF" produces a
-            // Teams-safe filename. The URL-load iframe uses sandbox without
-            // allow-same-origin, so the host cannot rewrite contentDocument.title
-            // after load — we must do it here in the response. The srcDoc path
-            // has its own sanitization in buildSrcdoc (apps/web/src/runtime/srcdoc.ts).
-            html = daemonSanitizeTitleInDoc(html);
-            if (wantsUrlPreviewScrollBridge(req.query.odPreviewBridge)) {
-              html = injectUrlPreviewBridge(html, 'scroll');
-            }
-            if (wantsUrlPreviewSelectionBridge(req.query.odPreviewBridge)) {
-              html = injectUrlPreviewBridge(html, 'selection');
-            }
-            if (wantsUrlPreviewSnapshotBridge(req.query.odPreviewBridge)) {
-              html = injectUrlPreviewBridge(html, 'snapshot');
-            }
-            transformed = html;
-          }
-          return transformed;
+          return applyUrlPreviewBridgesToHtml(transformed, file.mime, req.query.odPreviewBridge);
         },
         true, // revalidate: emit ETag/Last-Modified so covers/preview/export reuse cached assets
       );
@@ -3304,15 +3413,17 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         relPath,
         project?.metadata,
         () => setPoweredPreviewHeaders(res),
-        skipPoweredTransform ? undefined : async (file) =>
-          maybeResolveVitePreviewHtml({
+        skipPoweredTransform ? undefined : async (file) => {
+          const transformed = await maybeResolveVitePreviewHtml({
             file,
             projectId,
-              relPath,
-              metadata: project?.metadata,
-              projectsRoot: PROJECTS_DIR,
-              readProjectFile,
-            }),
+            relPath,
+            metadata: project?.metadata,
+            projectsRoot: PROJECTS_DIR,
+            readProjectFile,
+          });
+          return applyUrlPreviewBridgesToHtml(transformed, file.mime, req.query.odPreviewBridge);
+        },
       );
     } catch (err: any) {
       const status = err && err.code === 'ENOENT' ? 404 : 400;
@@ -3445,8 +3556,8 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       if (!project) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
       }
-      const file = await readProjectFile(PROJECTS_DIR, project.id, fileName, project.metadata);
-      if (!/\.html?$/i.test(file.name)) {
+      const requestedFile = await readProjectFile(PROJECTS_DIR, project.id, fileName, project.metadata);
+      if (!/\.html?$/i.test(requestedFile.name)) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'versions are only available for HTML files');
       }
       const manualPrompt = typeof req.body?.prompt === 'string' && req.body.prompt.trim()
@@ -3459,6 +3570,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         promptSource?: ProjectFileVersionPromptSource;
         source: ProjectFileVersionSource;
         label?: string | null;
+        parentVersionId?: string;
       } = {
         prompt: manualPrompt ?? fallbackPromptInfo?.prompt ?? null,
         source: requestedSource,
@@ -3473,13 +3585,34 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       } else if (fallbackPromptInfo?.promptSource) {
         versionOptions.promptSource = fallbackPromptInfo.promptSource;
       }
-      const version = await createProjectFileVersion(
+      const version = await withProjectFileVersionLock(
         PROJECTS_DIR,
         project.id,
-        file.name,
-        file.buffer.toString('utf8'),
-        versionOptions,
+        requestedFile.name,
         project.metadata,
+        async (versionLock) => {
+          const currentFile = await readProjectFile(
+            PROJECTS_DIR,
+            project.id,
+            requestedFile.name,
+            project.metadata,
+          );
+          const parentVersionId = requestedSource === 'manual'
+            ? await matchedHtmlParentVersionId(
+              project,
+              currentFile.name,
+              req.body?.parentVersionId,
+              versionLock,
+            )
+            : undefined;
+          return versionLock.createVersion(
+            currentFile.buffer.toString('utf8'),
+            {
+              ...versionOptions,
+              ...(parentVersionId ? { parentVersionId } : {}),
+            },
+          );
+        },
       );
       if (!version) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'version could not be created');
@@ -3655,6 +3788,14 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
               ? requestProjectFileVersionUploadSource(req.body)
               : null;
             const writeAndCapture = async (versionLock?: HtmlVersionLock) => {
+              const parentVersionId = uploadProject && requestedSource === 'manual' && versionLock
+                ? await matchedHtmlParentVersionId(
+                  uploadProject,
+                  desiredName,
+                  req.body?.parentVersionId,
+                  versionLock,
+                )
+                : undefined;
               const meta = await writeProjectFile(
                 PROJECTS_DIR,
                 req.params.id,
@@ -3676,6 +3817,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
                       promptSource: 'manual',
                       source: requestedSource,
                       label: typeof req.body?.versionLabel === 'string' ? req.body.versionLabel : null,
+                      ...(parentVersionId ? { parentVersionId } : {}),
                     },
                   );
                 })()
@@ -3694,6 +3836,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
             /** @type {import('@open-design/contracts').ProjectFileResponse} */
             const body = {
               file: meta,
+              ...(versionCapture ? { version: versionCapture.version } : {}),
               ...(versionCapture?.versionWarning ? { versionWarning: versionCapture.versionWarning } : {}),
             };
             return res.json(body);
@@ -3710,6 +3853,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
           overwrite,
           versionLabel,
           versionPrompt,
+          parentVersionId: requestedParentVersionId,
         } = req.body || {};
         if (typeof name !== 'string' || typeof content !== 'string') {
           return sendApiError(
@@ -3744,6 +3888,14 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
             ? Buffer.from(content, 'base64')
             : Buffer.from(content, 'utf8');
         const writeAndCapture = async (versionLock?: HtmlVersionLock) => {
+          const parentVersionId = uploadProject && requestedSource === 'manual' && versionLock
+            ? await matchedHtmlParentVersionId(
+              uploadProject,
+              desiredName,
+              requestedParentVersionId,
+              versionLock,
+            )
+            : undefined;
           const meta = artifact === true
             ? await createProjectArtifactFile({
               projectsRoot: PROJECTS_DIR,
@@ -3769,6 +3921,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
               const versionOverride: HtmlVersionOverride = {
                 source: requestedSource,
                 label: typeof versionLabel === 'string' ? versionLabel : null,
+                ...(parentVersionId ? { parentVersionId } : {}),
               };
               if (typeof versionPrompt === 'string') {
                 versionOverride.prompt = versionPrompt;
@@ -3801,6 +3954,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         /** @type {import('@open-design/contracts').ProjectFileResponse} */
         const body = {
           file: meta,
+          ...(versionCapture ? { version: versionCapture.version } : {}),
           ...(versionCapture?.versionWarning ? { versionWarning: versionCapture.versionWarning } : {}),
         };
         res.json(body);

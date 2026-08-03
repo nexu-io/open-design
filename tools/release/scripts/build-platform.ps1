@@ -28,7 +28,8 @@ param(
   [Parameter(Mandatory = $true)]
   [string]$ReportRoot,
   [Parameter(Mandatory = $true)]
-  [string]$OutputsPath
+  [string]$OutputsPath,
+  [switch]$RequireVelaCli
 )
 
 $ErrorActionPreference = "Stop"
@@ -250,6 +251,9 @@ try {
   if ($SignMode -eq "on") {
     $buildArgs += "--signed"
   }
+  if ($RequireVelaCli) {
+    $buildArgs += "--require-vela-cli"
+  }
 
   Measure-Step "tools-pack win build" {
     $buildOutput = & $buildArgs[0] @($buildArgs | Select-Object -Skip 1)
@@ -290,17 +294,20 @@ try {
     if ($SignMode -eq "on") {
       $updateArgs += "--signed"
     }
+    if ($RequireVelaCli) {
+      $updateArgs += "--require-vela-cli"
+    }
     Measure-Step "tools-pack win build update fixture" {
       $updateOutput = & $updateArgs[0] @($updateArgs | Select-Object -Skip 1)
       if ($LASTEXITCODE -ne 0) {
         throw "tools-pack win update fixture build failed with exit code $LASTEXITCODE"
       }
       $updateOutput | Set-Content -LiteralPath $fixtureJsonPath -Encoding utf8
-      $updateBuild = Get-Content -LiteralPath $fixtureJsonPath -Raw | ConvertFrom-Json
-      $localUpdateArtifactPath = [string]$updateBuild.installerPath
-      if ([string]::IsNullOrWhiteSpace($localUpdateArtifactPath)) {
-        throw "tools-pack win build update fixture did not report installerPath"
-      }
+    }
+    $updateBuild = Get-Content -LiteralPath $fixtureJsonPath -Raw | ConvertFrom-Json
+    $localUpdateArtifactPath = [string]$updateBuild.installerPath
+    if ([string]::IsNullOrWhiteSpace($localUpdateArtifactPath)) {
+      throw "tools-pack win build update fixture did not report installerPath"
     }
     Measure-Step "validate launcher payload update fixture" {
       $updateBuild = Get-Content -LiteralPath $fixtureJsonPath -Raw | ConvertFrom-Json

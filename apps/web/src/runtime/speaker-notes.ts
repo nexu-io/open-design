@@ -50,6 +50,40 @@ export function removeSpeakerNotesFromHtml(source: string): string {
   return `${source.slice(0, block.start)}${source.slice(block.end)}`;
 }
 
+/**
+ * Removes the speaker-notes block together with the whitespace that sits
+ * directly around it. `upsertSpeakerNotesInHtml` pads its insertion with
+ * newlines, so plain block removal is not its inverse — it leaves the padding
+ * behind and a document that only gained notes no longer compares equal to the
+ * one before. Consuming the adjacent whitespace makes the two round-trip.
+ */
+function removeSpeakerNotesBlockAndPadding(source: string): string {
+  const block = findSpeakerNotesScriptBlock(source);
+  if (!block) return source;
+  let start = block.start;
+  let end = block.end;
+  while (start > 0 && /\s/.test(source[start - 1] ?? '')) start--;
+  while (end < source.length && /\s/.test(source[end] ?? '')) end++;
+  return `${source.slice(0, start)}${source.slice(end)}`;
+}
+
+/**
+ * True when two versions of a document differ ONLY inside the speaker-notes
+ * block. Notes live in a `<script type="application/json">` the browser never
+ * renders, so such a difference is invisible on the page: callers that would
+ * otherwise re-render or reload a preview can skip the work entirely.
+ *
+ * Both sides are reduced by the same block-and-padding removal and the
+ * remainder must be byte-identical, so a real visual change can never be
+ * mistaken for a notes-only one. The one theoretical blind spot is a
+ * whitespace-only difference immediately around the block inside a `<pre>`,
+ * where whitespace is significant — the notes script is never emitted there.
+ */
+export function sourcesDifferOnlyInSpeakerNotes(a: string, b: string): boolean {
+  if (a === b) return false;
+  return removeSpeakerNotesBlockAndPadding(a) === removeSpeakerNotesBlockAndPadding(b);
+}
+
 export function upsertSpeakerNotesInHtml(source: string, notes: readonly string[]): string {
   const normalized = normalizeSpeakerNotes(notes);
   const json = safeJsonForScript(normalized);
@@ -244,15 +278,15 @@ export function buildSpeakerNotesPresenterHtml(options: {
       <button type="button" id="reset"></button>
       <div class="counter" id="counter"></div>
     </div>
-    <div class="current"><iframe id="current" title="Current slide"></iframe></div>
+    <div class="current"><iframe id="current" title="Current slide" sandbox="allow-scripts"></iframe></div>
     <div class="filmstrip">
       <section id="previous-section">
         <div class="thumb-label" id="previous-label"></div>
-        <div class="thumb-frame"><iframe id="previous" title="Previous slide"></iframe></div>
+        <div class="thumb-frame"><iframe id="previous" title="Previous slide" sandbox="allow-scripts"></iframe></div>
       </section>
       <section id="next-section">
         <div class="thumb-label" id="next-label"></div>
-        <div class="thumb-frame"><iframe id="next" title="Next slide"></iframe></div>
+        <div class="thumb-frame"><iframe id="next" title="Next slide" sandbox="allow-scripts"></iframe></div>
       </section>
     </div>
   </main>

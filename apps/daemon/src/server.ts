@@ -24,11 +24,18 @@ import {
   detectDeckIntentSignal,
   detectMediaIntentSignal,
   detectPlatformIntentSignal,
+  extractUserAuthoredSignalText,
   renderConnectedExternalMcpDirective,
   resolveExclusiveSurface,
 } from './prompts/system.js';
+import {
+  computeStableSectionHashes,
+  serializeStableSections,
+  type StableSectionHashes,
+} from './prompts/stable-sections.js';
 import { emittedRenderableQuestionForm } from './question-form-detect.js';
 import { resolveProjectRoot } from './project-root.js';
+import { OPEN_DESIGN_PLUGIN_ID } from './mcp-observability.js';
 import {
   resolveDaemonCliPath,
   resolveDaemonPluginPreviewsDir,
@@ -93,6 +100,7 @@ import {
   validateCodexGeneratedImagesDir,
 } from './runtimes/chat-prompt-inputs.js';
 import {
+  writePromptAndEndStdin,
   applyClaudeStreamJsonRunBookkeeping,
   assertValidRuntimeDefInactivityTimeoutMs,
   bufferedAntigravityGeminiFirstTokenAt,
@@ -183,6 +191,8 @@ import {
   detectAgents,
   getAgentDef,
   isKnownModel,
+  isKnownServiceTier,
+  openDesignAmrRunAttempt,
   openDesignAmrTraceEnv,
   applyAgentLaunchEnv,
   resolveAgentLaunch,
@@ -195,13 +205,19 @@ import {
   rememberLiveModels,
   resolveDefaultModelFromOptions,
   resolveModelForAgent,
+  resolveModelForServiceTier,
 } from './runtimes/models.js';
 import { loadMmdRouteLaunchEnv } from './runtimes/mmd-routes.js';
+import { preflightCodexDefaultModel } from './runtimes/codex-model-preflight.js';
 import { preparePromptFileForAgent } from './runtimes/prompt-file.js';
 import { TerminalControlSequenceStripper } from './runtimes/terminal-control.js';
-import { buildOpenCodeByokProviderConfig } from './runtimes/byok-opencode.js';
 import {
-  persistPlainStreamArtifacts,
+  buildOpenCodeByokProviderConfig,
+  BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE,
+} from './runtimes/byok-opencode.js';
+import {
+  extractPlainStreamArtifacts,
+  persistPlainStreamArtifactList,
   plainStdoutFromRunEvents,
 } from './runtimes/plain-stream.js';
 import {
@@ -314,6 +330,7 @@ import {
   restoreProjectSnapshotLink,
   resolvePluginSnapshot,
   runPipelineForRun,
+  isSafePluginId,
   runStageWithRegistry,
   startSnapshotGc,
   uninstallPlugin,
@@ -328,6 +345,7 @@ import {
   listActiveRuleEntries,
   readMemoryConfig,
 } from './memory.js';
+import { runAutoExtractionCleanup } from './memory-cleanup.js';
 import { attachAcpSession } from './agent-protocol/index.js';
 import { attachPiRpcSession } from './agent-protocol/index.js';
 import { stageAmrImagePaths } from './media/amr-image-staging.js';
@@ -373,7 +391,11 @@ import {
 } from './run-lifecycle-tracer.js';
 import { deriveRunErrorCode, runResultFromStatus } from './run-result.js';
 import { classifyRunFailure, isResumableFailure } from './run-failure-classification.js';
-import { decideSafeRunRetry } from './run-retry-policy.js';
+import {
+  POST_TOOL_RESUME_CONTINUATION_PROMPT,
+  decidePostToolResumeRecovery,
+  decideSafeRunRetry,
+} from './run-retry-policy.js';
 import {
   amrUserIdForRunAnalytics,
   scanRunEventsForUsageAnalytics,
@@ -385,9 +407,11 @@ import {
 } from './run-artifact-fs.js';
 import {
   AiHtmlVersionSnapshotError,
+  artifactOriginForRun,
   snapshotAiHtmlVersionsForRun,
 } from './run-html-version-snapshots.js';
 import { reportRunCompletedFromDaemon } from './langfuse-bridge.js';
+import { reconcileDurableRunTerminals } from './runtimes/run-terminal-reconciliation.js';
 import { buildPromptStackTelemetry } from './prompt-telemetry.js';
 import { readAnalyticsContext } from './analytics.js';
 import {
@@ -523,6 +547,7 @@ import {
   insertRoutineRun,
   insertScheduledRoutineRun,
   insertTemplate,
+  latchConversationIntentSignals,
   findTemplateByNameAndProject,
   updateTemplate,
   listProjectsAwaitingInput,
@@ -607,6 +632,7 @@ import { EmptyTranscriptError, synthesizeHandoffPrompt } from './design/index.js
 import { TranscriptExportLockedError } from './transcript-export.js';
 import { registerChatRoutes } from './routes/chat.js';
 import { registerRunRoutes } from './routes/runs.js';
+import { registerByokCredentialRoutes } from './routes/byok-credentials.js';
 import { registerTerminalRoutes } from './routes/terminal.js';
 import { createTerminalService } from './terminals.js';
 import { registerSocialShareRoutes } from './routes/social-share.js';
@@ -672,6 +698,7 @@ import { apiTokenFromEnv, isApiAuthDisabled, isApiTokenMiddlewareEnabled } from 
 import { createOpenDesignPublicMetadataService } from './services/open-design-public-metadata.js';
 import { createWhatsNewService } from './services/whats-new.js';
 import { execCommandViaLoginShell } from './services/login-shell.js';
+import { ByokCredentialService } from './byok/credential-service.js';
 import {
   OFFICIAL_MARKETPLACE_ID,
   createMarketplaceSeedHelpers,
@@ -733,7 +760,32 @@ const PLUGIN_PREVIEWS_DIR = resolveDaemonPluginPreviewsDir({
   projectRoot: PROJECT_ROOT,
 });
 const OD_BIN = resolveDaemonCliPath();
-const OD_NODE_BIN = process.execPath;
+export function resolveOpenDesignNodeBin({
+  env = process.env,
+  execPath = process.execPath,
+  platform = process.platform,
+  resourceRoot = DAEMON_RESOURCE_ROOT,
+  exists = fs.existsSync,
+}: {
+  env?: NodeJS.ProcessEnv | Record<string, string | undefined>;
+  execPath?: string;
+  platform?: NodeJS.Platform;
+  resourceRoot?: string | null;
+  exists?: (path: string) => boolean;
+} = {}): string {
+  const configured = env.OD_NODE_BIN?.trim();
+  if (configured) return configured;
+
+  const bundledName = platform === 'win32' ? 'node.exe' : 'node';
+  const bundled = resourceRoot
+    ? (platform === 'win32' ? path.win32 : path).join(resourceRoot, 'bin', bundledName)
+    : null;
+  if (bundled && exists(bundled)) return bundled;
+
+  return execPath;
+}
+
+const OD_NODE_BIN = resolveOpenDesignNodeBin();
 const SKILLS_DIR = resolveDaemonResourceDir(
   DAEMON_RESOURCE_ROOT,
   'skills',
@@ -806,6 +858,9 @@ const {
 const SANDBOX_MODE_ENABLED = isSandboxModeEnabled(process.env);
 const RUNTIME_DATA_DIR = resolveDataDir(process.env.OD_DATA_DIR, PROJECT_ROOT, {
   requireExplicit: SANDBOX_MODE_ENABLED,
+});
+const defaultByokCredentialService = new ByokCredentialService({
+  dataDir: RUNTIME_DATA_DIR,
 });
 const SANDBOX_RUNTIME = resolveSandboxRuntimeConfig(SANDBOX_MODE_ENABLED, RUNTIME_DATA_DIR);
 ensureSandboxRuntimeDirs(SANDBOX_RUNTIME);
@@ -1085,7 +1140,7 @@ export function createAgentRuntimeEnv(
   baseEnv: NodeJS.ProcessEnv | Record<string, string | undefined>,
   daemonUrl: string,
   toolTokenGrant: { token?: string } | null = null,
-  nodeBin: string = process.execPath,
+  nodeBin: string = OD_NODE_BIN,
 ): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = applySandboxRuntimeEnv(
     {
@@ -1304,6 +1359,7 @@ export function __forTestFilesystemEmptyAnswerFallbackText(fileNames) {
   return filesystemEmptyAnswerFallbackText(fileNames);
 }
 
+
 export function shouldReportRunCompletedFromMessage(saved, body = {}) {
   return Boolean(
     saved &&
@@ -1318,39 +1374,44 @@ export function telemetryPromptFromRunRequest(message, currentPrompt) {
   return typeof currentPrompt === 'string' ? currentPrompt : message;
 }
 
-const FORM_ANSWERS_HEADER_RE = /^\s*\[form answers\s+(?:\u2014|-)\s*([^\]\r\n]+)\]/i;
+// Keep this header grammar aligned with parseFormAnswers in @open-design/contracts.
+const FORM_ANSWERS_HEADER_RE =
+  /^\s*\[form answers(?:\s*[\u2014\-:]\s*([^\]\r\n]+))?\]\s*(?:\r?\n|$)/i;
 
 // Aggressive OVERRIDE for weak / medium-strength plain agents (e.g.
 // GPT-OSS-120B Medium, Gemini 3.5 Flash) that otherwise echo RULE 1's
-// fenced form example back at the user on follow-up turns even when
-// they correctly understand the form is answered. Strong models
-// (Claude Sonnet 4.6, Gemini 3.1 Pro) already handle a shorter
-// OVERRIDE; enumerating the anti-patterns is a no-op for them and a
-// strong suppressor for the weaker ones. RULE 1 itself stays in the
-// system prompt so turn 1 can still emit a valid form.
+// fenced form example back after the user has answered it. Strong models
+// (Claude Sonnet 4.6, Gemini 3.1 Pro) already handle a shorter OVERRIDE;
+// enumerating the anti-patterns is a no-op for them and a strong suppressor
+// for the weaker ones. RULE 1 stays conditional: a genuinely new material
+// blocker may still require a new, targeted form on any turn.
 //
 // Exported so tests pin both the trigger condition and the literal
 // anti-patterns we ask the model to skip \u2014 silently weakening the
 // list (e.g. dropping the markdown-fence ban) would reintroduce the
 // form-echo regression on GPT-OSS / Gemini Flash.
-export const FORM_ANSWERED_SYSTEM_OVERRIDE = `## OVERRIDE \u2014 form already answered (this is turn 2 or later)
+export const FORM_ANSWERED_SYSTEM_OVERRIDE = `## OVERRIDE \u2014 submitted form answers are authoritative
 
 The user already submitted their form answers (see # User request below).
-RULE 1 documents the turn-1 ask flow; that flow is finished. Treat RULE 1
-as read-only documentation for this turn \u2014 do not execute any of it.
+Apply those answers. RULE 1 does not require another form merely because its
+example appears in the system prompt.
 
 Forbidden output for this turn:
-- A \`<question-form>\` tag of any id, including \`discovery\` or \`task-type\`.
-- A markdown \`\`\`json fenced block echoing the form schema or example.
-- Form-asking prose such as "Got it \u2014 tell me the following" or
+- Re-emitting the answered \`discovery\` or \`task-type\` form, or asking again
+  for information the submitted answers already provide.
+- A markdown \`\`\`json fenced block echoing an answered form's schema or example.
+- Form-asking prose that repeats the answered questions, such as
+  "Got it \u2014 tell me the following" or
   "\u8bf7\u544a\u8bc9\u6211\u4ee5\u4e0b\u4fe1\u606f".
 - Narrating fake system events such as "subagents stopped" or
   "server restart".
 
 Required output for this turn:
 - Open with a brief prose confirmation of what the brief is.
-- Then proceed to RULE 2 (branch on the submitted \`brand\` value) and
-  RULE 3 (emit the \`<artifact>\` block with the full HTML document).
+- Then apply RULE 2 as relevant and proceed to RULE 3 or the matching active
+  workflow.
+- Only if a new, materially blocking requirement remains unresolved may you
+  emit one new targeted \`<question-form>\`; never repeat answered fields.
 
 `;
 
@@ -1358,11 +1419,12 @@ Required output for this turn:
 // forms are not artifact-build transitions, so we only need to suppress
 // the form re-ask without directing the model toward RULE 2 / RULE 3.
 // Exported so tests can pin the literal content independently.
-export const FORM_ANSWERED_GENERIC_OVERRIDE = `## OVERRIDE \u2014 form already answered (this is turn 2 or later)
+export const FORM_ANSWERED_GENERIC_OVERRIDE = `## OVERRIDE \u2014 submitted form answers are authoritative
 
 The user already submitted their form answers (see # User request below).
 Do not ask the same form again. Treat the submitted answers as the active
-user instruction and respond accordingly.
+user instruction and respond accordingly. Ask again only if a new, materially
+blocking requirement remains unresolved.
 
 `;
 
@@ -1378,18 +1440,18 @@ function formAnswerTransitionForCurrentPrompt(currentPrompt) {
     '## Latest user turn - form answers submitted',
     trimmed,
     '',
-    // Keep the wording in lock-step with main — the stronger "do not
-    // emit any `<question-form>`" suppression now lives in the
-    // system-prompt `FORM_ANSWERED_SYSTEM_OVERRIDE` block, which
-    // every plain / stream-json adapter sees. Diverging the
+    // Keep the wording in lock-step with main — the stronger answered-form
+    // dedupe now lives in the system-prompt
+    // `FORM_ANSWERED_SYSTEM_OVERRIDE` block, which every plain /
+    // stream-json adapter sees. Diverging the
     // user-request transition string here breaks `chat-route.test
     // marks submitted discovery form answers ...` which asserts on
     // the exact main wording.
-    `The user has answered the ${formId} form. Do not emit another ${formId} form.`,
+    `The user has answered the ${formId} form. Do not re-emit the answered form or repeat fields it already answered.`,
   ];
   if (formId.toLowerCase() === 'discovery' || formId.toLowerCase() === 'task-type') {
     lines.push(
-      'Continue with RULE 2 / RULE 3 now. For Branch B answers, build now instead of asking another brief.',
+      'Apply the submitted answers and continue with RULE 2 / RULE 3 or the matching active workflow. Only if a new, materially blocking requirement remains unresolved may you emit one targeted form; never repeat answered fields.',
     );
   } else {
     lines.push(
@@ -1491,7 +1553,9 @@ export function createFinalizedMessageTelemetryReporter({
         ...(terminalResult ? { result: terminalResult } : {}),
         ...(run?.errorCode ? { error_code: run.errorCode } : {}),
         ...(run?.agentId ? { agent_provider_id: agentIdToTracking(run.agentId) } : {}),
-        ...(run?.model !== undefined ? { model_id: modelIdForTracking(run.model) } : {}),
+        ...(run?.model !== undefined || run?.resolvedModelId !== undefined
+          ? { model_id: modelIdForTracking(run.resolvedModelId ?? run.model) }
+          : {}),
       },
       insertId: `${runId}-langfuse-report-${reportTrigger}-${reportResult}${skipReason ? `-${skipReason}` : ''}`,
     });
@@ -1574,6 +1638,12 @@ export function createFinalizedMessageTelemetryReporter({
         skipReason: state.langfuse_expected === false ? 'not_expected' : undefined,
         status: saved.runStatus,
       });
+      if (
+        state.langfuse_expected === false
+        || state.langfuse_delivery_status === 'accepted'
+      ) {
+        design.runs.markLangfuseCompleted?.(run);
+      }
     })();
   };
 }
@@ -1976,6 +2046,7 @@ export interface DaemonRuntimeContext {
 }
 
 export interface StartServerOptions {
+  byokCredentialService?: ByokCredentialService;
   desktopArtifactExporter?: DesktopArtifactExporter | null;
   desktopPdfExporter?: DesktopPdfExporter | null;
   desktopSlideRenderer?: DesktopSlideRenderer | null;
@@ -1993,6 +2064,7 @@ export interface StartServerResult {
 }
 
 export async function startServer({
+  byokCredentialService = defaultByokCredentialService,
   port = 7456,
   host = normalizeDaemonBindHost(process.env.OD_BIND_HOST),
   returnServer = false,
@@ -2424,6 +2496,23 @@ export async function startServer({
   }
   void snapshotGc; // keep handle alive for the daemon's lifetime
 
+  // Memory hygiene: one-time removal of entries the retired chat
+  // auto-extraction pipelines wrote (regex-pack artifacts + chat-form
+  // residue in user_profile). Marker-gated inside, so this is a no-op on
+  // every boot after the first. Best-effort — memory cleanup must never
+  // block the daemon from serving.
+  try {
+    const memoryCleanup = await runAutoExtractionCleanup(RUNTIME_DATA_DIR);
+    if (memoryCleanup.ran && (memoryCleanup.deletedIds.length > 0 || memoryCleanup.profilePruned)) {
+      console.log(
+        `[memory] auto-extraction cleanup removed ${memoryCleanup.deletedIds.length} entr(y/ies)`
+        + `${memoryCleanup.profilePruned ? ' and pruned user_profile to canonical fields' : ''}`,
+      );
+    }
+  } catch (err) {
+    console.warn('[memory] auto-extraction cleanup failed:', err);
+  }
+
   // Warm agent-capability probes (e.g. whether the installed Claude Code
   // build advertises --include-partial-messages) so the first /api/chat
   // hits a populated cache even if /api/agents hasn't been called yet.
@@ -2469,6 +2558,7 @@ export async function startServer({
   const telemetry = registerTelemetryRoutes(app, {
     dataDir: RUNTIME_DATA_DIR,
     readAppConfig,
+    writeAppConfig,
   });
   const { analyticsService } = telemetry;
   const design = {
@@ -2489,6 +2579,25 @@ export async function startServer({
     getAppVersion: () => telemetry.getCachedAppVersion()?.version ?? '0.0.0',
     readAnalyticsContext,
   };
+
+  // Runs are process-local, but their terminal obligations are durable. On a
+  // fresh daemon boot, repair stale message rows and replay any PostHog or
+  // Langfuse terminal work whose checkpoint was not committed. Network work
+  // stays off the startup critical path.
+  void reconcileDurableRunTerminals({
+    analytics: analyticsService,
+    appVersion: telemetry.getCachedAppVersion()?.version ?? '0.0.0',
+    appVersionInfo: telemetry.getCachedAppVersion(),
+    db,
+    reportLangfuse: reportRunCompletedFromDaemon,
+    runsLogDir: path.join(RUNTIME_DATA_DIR, 'runs'),
+  }).then((reconciled) => {
+    if (reconciled.interrupted > 0 || reconciled.messagesReconciled > 0) {
+      console.warn('[runs] reconciled interrupted run terminals', reconciled);
+    }
+  }).catch((error) => {
+    console.warn('[runs] terminal reconciliation failed', error);
+  });
 
   // Interactive Terminal sessions (node-pty). In-memory, process-local, and
   // killed on daemon shutdown — see shutdownDaemonRuns below.
@@ -2864,6 +2973,7 @@ export async function startServer({
     testAgentConnection,
     getAgentDef,
     isKnownModel,
+    isKnownServiceTier,
     sanitizeCustomModel,
   };
   const critiqueDeps = {
@@ -2883,6 +2993,11 @@ export async function startServer({
   registerXaiRoutes(app, {
     http: httpDeps,
     paths: pathDeps,
+  });
+  registerByokCredentialRoutes(app, {
+    http: { requireLocalDaemonRequest, sendApiError },
+    byokCredentials: byokCredentialService,
+    connectionTest: testProviderConnection,
   });
   // Project workspace
   registerActiveContextRoutes(app, {
@@ -3394,6 +3509,7 @@ export async function startServer({
       listInstalledPlugins,
       getInstalledPlugin,
       installPlugin,
+      isSafePluginId,
       uninstallPlugin,
       installFromLocalFolder,
       applyPlugin,
@@ -3446,6 +3562,7 @@ export async function startServer({
       listInstalledPlugins,
       getInstalledPlugin,
       installPlugin,
+      isSafePluginId,
       uninstallPlugin,
       installFromLocalFolder,
       applyPlugin,
@@ -3532,6 +3649,7 @@ export async function startServer({
           pluginDesignSystemId,
           projectDesignSystemId: project?.designSystemId,
           appDefaultDesignSystemId: appConfigForPrompt?.designSystemId,
+          disabledDesignSystemIds: appConfigForPrompt?.disabledDesignSystems,
           // A project row with designSystemId=null can mean the user picked
           // "No design system"; do not reapply the global default behind their back.
           allowAppDefault: project === null,
@@ -4005,7 +4123,11 @@ export async function startServer({
       }
     }
 
-    const prompt = composeSystemPrompt({
+    // Hoisted verbatim out of the composeSystemPrompt() call so the exact same
+    // object both composes the prompt and feeds section-level drift
+    // attribution — a second, hand-maintained copy of these inputs would drift
+    // from the real ones and mislabel the telemetry it exists to explain.
+    const systemPromptInputs = {
       agentId,
       includeCodexImagegenOverride: false,
       skillBody,
@@ -4059,7 +4181,8 @@ export async function startServer({
       // restores the classic stack. main keeps classic as the default —
       // do NOT carry this flip into a PR against main.
       promptCoreVariant: process.env.OD_PROMPT_CORE === 'classic' ? undefined : 'slim',
-    });
+    };
+    const prompt = composeSystemPrompt(systemPromptInputs);
     // The chat handler also needs to know where the active skill lives
     // on disk so it can stage a per-project copy of its side files
     // before spawning the agent. Returning that here avoids a second
@@ -4084,6 +4207,10 @@ export async function startServer({
           .filter((part) => typeof part === 'string' && part.trim().length > 0)
           .join('\n\n---\n\n'),
       },
+      // Diagnostic only. The caller merges its own stable inputs
+      // (runtimeToolPrompt, the client system prompt) in before hashing, so the
+      // section map covers the whole fingerprint rather than just this half.
+      stableSectionInputs: systemPromptInputs,
     };
   };
 
@@ -4176,6 +4303,12 @@ export async function startServer({
   const startChatRun = async (chatBody, run) => {
     const lifecycle = createRunLifecycleTracer(run);
     lifecycle.mark('chat_run_started');
+    const pendingNativeSessionContinue =
+      run.nativeSessionContinuePending &&
+      typeof run.nativeSessionContinuePending.sessionId === 'string'
+        ? run.nativeSessionContinuePending
+        : null;
+    run.nativeSessionContinuePending = null;
     /** @type {Partial<ChatRequest> & { imagePaths?: string[] }} */
     chatBody = chatBody || {};
     const {
@@ -4196,11 +4329,12 @@ export async function startServer({
       commentAttachments = [],
       model,
       reasoning,
+      serviceTier,
       locale,
       research,
       context,
       titleGeneration,
-      byokProvider,
+      byokProfileId,
       byokMediaDefaults,
     } = chatBody;
     lifecycle.mark('prompt_build_start');
@@ -4217,9 +4351,15 @@ export async function startServer({
     // into chatBody across the createChatRunService boundary. Each field
     // is optional and only set when the chat body actually carried it.
     const telemetryPrompt = telemetryPromptFromRunRequest(message, currentPrompt);
-    if (typeof telemetryPrompt === 'string') run.userPrompt = telemetryPrompt;
+    if (
+      !pendingNativeSessionContinue &&
+      typeof telemetryPrompt === 'string'
+    ) {
+      run.userPrompt = telemetryPrompt;
+    }
     if (typeof model === 'string' && model) run.model = model;
     if (typeof reasoning === 'string' && reasoning) run.reasoning = reasoning;
+    if (typeof serviceTier === 'string' && serviceTier) run.serviceTier = serviceTier;
     if (typeof skillId === 'string' && skillId) run.skillId = skillId;
     if (typeof designSystemId === 'string' && designSystemId)
       run.designSystemId = designSystemId;
@@ -4240,19 +4380,34 @@ export async function startServer({
       );
     if (!def.bin)
       return design.runs.fail(run, 'AGENT_UNAVAILABLE', 'agent has no binary');
+    let resolvedByokCredential = null;
+    if (def.id === 'byok-opencode') {
+      try {
+        resolvedByokCredential =
+          typeof byokProfileId === 'string' && byokProfileId
+            ? await byokCredentialService.resolve(byokProfileId)
+            : null;
+      } catch {
+        resolvedByokCredential = null;
+      }
+    }
     const byokOpenCodeProvider = def.id === 'byok-opencode'
       ? buildOpenCodeByokProviderConfig(
-          byokProvider,
-          typeof model === 'string' ? model : null,
+          resolvedByokCredential?.provider,
+          resolvedByokCredential?.profile.model
+            ?? (typeof model === 'string' ? model : null),
         )
       : null;
     if (def.id === 'byok-opencode' && !byokOpenCodeProvider) {
       return design.runs.fail(
         run,
         'BYOK_PROVIDER_REQUIRED',
-        'BYOK OpenCode requires a provider, API key, and model for this run.',
+        BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE,
       );
     }
+    const requestedRuntimeModel = def.id === 'byok-opencode'
+      ? resolvedByokCredential?.profile.model ?? null
+      : model;
     // Validate the checked-in `inactivityTimeoutMs` hint immediately
     // after the runtime def is selected and before any side-effectful
     // setup (auto-memory extract, `.mcp.json` write/unlink,
@@ -4533,12 +4688,42 @@ export async function startServer({
       .filter((s) => typeof oauthTokensForSpawn[s.id] === 'string')
       .map((s) => ({ id: s.id, label: s.label }));
 
+    // Intent signals gate stable-region prompt blocks, so every flip changes
+    // stableInstructionFingerprint and re-sends the whole stable block on
+    // resume. Two rules keep flips down to genuine activations only:
+    //   1. Scan user-authored text only — for transcript-resending agents
+    //      `message` embeds prior ASSISTANT turns, whose copy (an earlier
+    //      discovery form's own options, delivery summaries) must never flip
+    //      a signal the user did not express.
+    //   2. Latch detections onto the conversation (monotonic ON), so a
+    //      history trim on agent switch or a non-transcript client cannot
+    //      flip a previously seen signal back OFF.
+    // OD_INTENT_SIGNAL_MODE=legacy restores the pre-hotfix whole-text,
+    // unlatched scan.
+    const legacyIntentSignalScan = process.env.OD_INTENT_SIGNAL_MODE === 'legacy';
+    const intentSignalTexts = legacyIntentSignalScan
+      ? [message, currentPrompt]
+      : [
+          extractUserAuthoredSignalText(message),
+          extractUserAuthoredSignalText(currentPrompt),
+        ];
+    const freshIntentSignals = {
+      deck: detectDeckIntentSignal(...intentSignalTexts),
+      media: detectMediaIntentSignal(...intentSignalTexts),
+      platform: detectPlatformIntentSignal(...intentSignalTexts),
+    };
+    const intentSignals =
+      !legacyIntentSignalScan && typeof run.conversationId === 'string' && run.conversationId
+        ? latchConversationIntentSignals(db, run.conversationId, freshIntentSignals)
+        : freshIntentSignals;
+
     const {
       prompt: daemonSystemPrompt,
       activeSkillDirs,
       critiqueShouldRun,
       designSystemSelection,
       promptTelemetryParts,
+      stableSectionInputs,
     } =
       await composeDaemonSystemPrompt({
         agentId,
@@ -4555,13 +4740,13 @@ export async function startServer({
         // prompt composer can splice in `## Active stage` blocks.
         // Default ON; set OD_BUNDLED_ATOM_PROMPTS=0 to opt out.
         appliedPluginSnapshotId: run?.appliedPluginSnapshotId ?? null,
-        // Scan the same text the agent will receive (transcript-resending
-        // agents carry prior turns inside `message`), so a deck mention
-        // anywhere in the visible conversation keeps the freeform
-        // maybe-deck framework injected.
-        freeformDeckSignal: detectDeckIntentSignal(message, currentPrompt),
-        mediaHintSignal: detectMediaIntentSignal(message, currentPrompt),
-        platformHintSignal: detectPlatformIntentSignal(message, currentPrompt),
+        // User-authored-only, conversation-latched detections (see the
+        // intentSignals block above): a deck mention in the user's own words
+        // anywhere in the conversation keeps the freeform maybe-deck
+        // framework injected for the conversation's whole life.
+        freeformDeckSignal: intentSignals.deck,
+        mediaHintSignal: intentSignals.media,
+        platformHintSignal: intentSignals.platform,
       });
 
     run.designSystemId = designSystemSelection?.id ?? null;
@@ -4696,18 +4881,50 @@ export async function startServer({
       return outcome;
     };
     const snapshotAiHtmlVersionsBeforeSuccess = async () => {
+      const origin = artifactOriginForRun({
+        runId: run.id,
+        externalPluginAnalytics: run.externalPluginAnalytics,
+      });
+      if (origin) {
+        // A successful Plugin run starts pessimistically. Only the exact
+        // versions returned by the snapshot writer may promote it to matched.
+        run.artifactOriginStatus = 'missing_version';
+        run.artifactVersionId = undefined;
+      }
       const outcome = resolveRunArtifactOutcomeBeforeFinish();
       if (!outcome?.diff || !outcome.projectRoot || !run.projectId) return;
       const promptInfo = latestRunPromptForHtmlVersionSnapshot();
-      await snapshotAiHtmlVersionsForRun({
+      const result = await snapshotAiHtmlVersionsForRun({
         projectsRoot: PROJECTS_DIR,
         projectId: run.projectId,
         projectRoot: outcome.projectRoot,
         diff: outcome.diff,
         prompt: promptInfo.prompt,
         ...(promptInfo.promptSource ? { promptSource: promptInfo.promptSource } : {}),
+        ...(origin ? { origin } : {}),
         metadata: projectRecord?.metadata,
       });
+      if (origin) {
+        const matching = result.snapshots.filter(({ version }) =>
+          version.origin?.entrySurface === origin.entrySurface
+          && version.origin.externalPluginId === origin.externalPluginId
+          && version.origin.pluginWorkflowId === origin.pluginWorkflowId
+          && version.origin.runId === origin.runId,
+        );
+        if (matching.length > 0) {
+          run.artifactOriginStatus = 'matched';
+          const configuredEntry =
+            typeof projectRecord?.metadata?.entryFile === 'string'
+              ? projectRecord.metadata.entryFile.replaceAll('\\', '/')
+              : null;
+          const selected =
+            (configuredEntry
+              ? matching.find(({ fileName }) => fileName === configuredEntry)
+              : undefined)
+            ?? (matching.length === 1 ? matching[0] : undefined);
+          run.artifactVersionId = selected?.version.id;
+        }
+      }
     };
     // Chain onto the run service's terminal chokepoint so startup rejection,
     // direct cancellation, shutdown, and every explicit finish path all consume
@@ -4774,8 +4991,10 @@ export async function startServer({
     // the upstream session's own configured default; omitted models may still
     // resolve to an available fallback below.
     let configuredAgentEnv = {};
+    let appConfigForRun = null;
     try {
       const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
+      appConfigForRun = appConfig;
       configuredAgentEnv = agentCliEnvForAgent(appConfig.agentCliEnv, def.id);
     } catch {
       configuredAgentEnv = {};
@@ -4787,13 +5006,17 @@ export async function startServer({
           ...configuredAgentEnv,
         })
       : null;
+    const configuredModel =
+      typeof appConfigForRun?.agentModels?.[def.id]?.model === 'string'
+        ? appConfigForRun.agentModels[def.id].model
+        : null;
     let safeModel = resolveModelForAgent(
       def,
-      typeof model === 'string'
-        ? isKnownModel(def, model, requestedLiveModelScope)
-          ? model
-          : sanitizeCustomModel(model)
-        : null,
+      typeof requestedRuntimeModel === 'string'
+        ? isKnownModel(def, requestedRuntimeModel, requestedLiveModelScope)
+          ? requestedRuntimeModel
+          : sanitizeCustomModel(requestedRuntimeModel)
+        : configuredModel,
       process.env,
       requestedLiveModelScope,
     );
@@ -4806,7 +5029,22 @@ export async function startServer({
       typeof reasoning === 'string' && Array.isArray(def.reasoningOptions)
         ? (def.reasoningOptions.find((r) => r.id === reasoning)?.id ?? null)
         : null;
-    const agentOptions = { model: safeModel, reasoning: safeReasoning };
+    safeModel = resolveModelForServiceTier(
+      def,
+      safeModel,
+      typeof serviceTier === 'string' ? serviceTier : null,
+      requestedLiveModelScope,
+    );
+    const safeServiceTier =
+      typeof serviceTier === 'string' &&
+      isKnownServiceTier(def, safeModel, serviceTier, requestedLiveModelScope)
+        ? serviceTier
+        : null;
+    const agentOptions = {
+      model: safeModel,
+      reasoning: safeReasoning,
+      serviceTier: safeServiceTier,
+    };
     const agentLaunch = resolveAgentLaunch(def, configuredAgentEnv);
     const resolvedBin = agentLaunch.selectedPath;
     if (def.id === 'amr' && resolvedBin && agentLaunch.launchPath) {
@@ -4846,7 +5084,7 @@ export async function startServer({
         // the probe failure and applies the identical fallback.
       }
     }
-    const agentResumeCtx =
+    const resolvedAgentResumeCtx =
       agentSupportsSessionResume && run.conversationId
         ? resolveAgentResumeContext(db, {
             conversationId: run.conversationId,
@@ -4855,7 +5093,29 @@ export async function startServer({
             currentCwd: effectiveCwd,
             currentAssistantMessageId: run.assistantMessageId ?? null,
           })
-        : { storedSessionId: null as string | null, resumeSessionId: null as string | null, newSessionId: undefined as string | undefined, isResuming: false, storedStablePromptHash: null as string | null, invalidationReason: null };
+        : { storedSessionId: null as string | null, resumeSessionId: null as string | null, newSessionId: undefined as string | undefined, isResuming: false, storedStablePromptHash: null as string | null, storedStableSections: null as StableSectionHashes | null, invalidationReason: null };
+    // A same-run post-tool recovery resumes the exact session id captured from
+    // the interrupted attempt. The ordinary cross-turn cursor guard cannot
+    // admit it yet because the current assistant placeholder is still in
+    // flight, so this daemon-only path supplies the already-validated handle
+    // directly. Public chat requests cannot reach this branch.
+    const forceInternalResume =
+      pendingNativeSessionContinue != null &&
+      def.resumesSessionViaCli === true &&
+      pendingNativeSessionContinue.sessionId.length > 0;
+    const agentResumeCtx = forceInternalResume
+      ? {
+          ...resolvedAgentResumeCtx,
+          storedSessionId: pendingNativeSessionContinue.sessionId,
+          resumeSessionId: pendingNativeSessionContinue.sessionId,
+          isResuming: true,
+          storedStablePromptHash:
+            pendingNativeSessionContinue.stablePromptHash ?? null,
+          storedStableSections:
+            pendingNativeSessionContinue.stablePromptSections ?? null,
+          invalidationReason: null,
+        }
+      : resolvedAgentResumeCtx;
     const publishNativeSessionRecoveryMetadata = () => {
       if (!run.nativeSessionRecovery) return;
       design.runs.emit(run, 'diagnostic', {
@@ -4893,6 +5153,14 @@ export async function startServer({
       .map((part) => (typeof part === 'string' ? part.trim() : ''))
       .join('\n\n---\n\n');
     const currentStableHash = hashStableInstructions(stableInstructionFingerprint);
+    // Per-section digests of the SAME inputs the fingerprint is built from, so a
+    // drift event can name which one moved. `currentStableHash` above stays the
+    // sole re-send decider — these only label a decision already made.
+    const currentStableSections = computeStableSectionHashes({
+      ...(stableSectionInputs ?? {}),
+      runtimeToolPrompt,
+      clientSystemPrompt: systemPrompt,
+    });
     // `runtimeToolPrompt` is part of the fingerprint and varies only when the
     // tool-token grant's presence flips between turns (rare cwd/projectId edge
     // cases); any such change correctly forces a full re-send that turn.
@@ -4905,7 +5173,10 @@ export async function startServer({
       isResuming: agentResumeCtx.isResuming,
       storedStablePromptHash: agentResumeCtx.storedStablePromptHash,
       currentStableHash,
+      storedStableSections: agentResumeCtx.storedStableSections,
+      currentStableSections,
     });
+    const currentStableSectionsJson = serializeStableSections(currentStableSections);
     const browserUsePromptGuard = renderBrowserUseUnavailablePrompt(run.browserUse ?? null);
     const titleGenerationRequested =
       titleGeneration &&
@@ -5060,6 +5331,10 @@ export async function startServer({
     // extractor only needs the head of the reply.
     const MEMORY_REPLY_CAP = 32 * 1024;
     let memoryReplyText = '';
+    // Upper bound for the truncation-proof plain-stream stdout accumulator used
+    // by the artifact finalizer (see the emit handler below). 8 MiB comfortably
+    // covers realistic artifact-bearing runs while bounding per-run memory.
+    const PLAIN_ARTIFACT_STDOUT_CAP = 8 * 1024 * 1024;
     const send = (event, data) => {
       const lifecycleMarkers = runLifecycleMarkersForStreamEvent(event, data);
       if (lifecycleMarkers.firstModelEventType) {
@@ -5105,6 +5380,24 @@ export async function startServer({
               : '';
         if (replyPiece) {
           memoryReplyText = (memoryReplyText + replyPiece).slice(0, MEMORY_REPLY_CAP);
+        }
+      }
+      // Keep enough of the plain-stream stdout on the run itself that the
+      // finalizer's artifact extraction does not depend on the <artifact> tag
+      // surviving the 2000-event run.events ring buffer. A long run that streams
+      // a complete <artifact> early and then floods >2000 later stdout events
+      // would evict the opening tag, making a scan of run.events miss it and
+      // silently drop the delivered file (#5351 fixed the same truncation class
+      // for the verdict consumers). We keep the HEAD (first CAP bytes, bounded)
+      // and separately track the TOTAL byte count; the finalizer stitches the
+      // head to the tail-biased run.events at their exact stream offset, so no
+      // artifact is lost and none is double-counted regardless of where in the
+      // stream it appears.
+      if (event === 'stdout' && data && typeof data.chunk === 'string') {
+        run.plainStdoutTotalBytes = (run.plainStdoutTotalBytes ?? 0) + data.chunk.length;
+        if ((run.plainArtifactStdout?.length ?? 0) < PLAIN_ARTIFACT_STDOUT_CAP) {
+          run.plainArtifactStdout =
+            ((run.plainArtifactStdout ?? '') + data.chunk).slice(0, PLAIN_ARTIFACT_STDOUT_CAP);
         }
       }
       persistRunEventToAssistantMessage(db, run, event, data);
@@ -5212,8 +5505,8 @@ export async function startServer({
         startRequestedAt: run.analyticsTelemetry?.startRequestedAt ?? run.createdAt,
       };
     };
-    const spawnRetryAttempt = () => {
-      void startChatRun(chatBody, run).catch((err) => {
+    const spawnRetryAttempt = (retryChatBody = chatBody) => {
+      void startChatRun(retryChatBody, run).catch((err) => {
         const message = err instanceof Error ? err.message : String(err);
         design.runs.emit(
           run,
@@ -5235,17 +5528,17 @@ export async function startServer({
     // or shutdown during the backoff window clears the timer (runtimes/runs.ts)
     // and finalizes the queued run, and the callback re-checks cancel/terminal
     // state in case it fires first.
-    const scheduleRetryRestart = (delayMs) => {
+    const scheduleRetryRestart = (delayMs, retryChatBody = chatBody) => {
       tearDownAttemptForRetry();
       const wait = Number.isFinite(delayMs) && delayMs > 0 ? delayMs : 0;
       if (wait <= 0) {
-        spawnRetryAttempt();
+        spawnRetryAttempt(retryChatBody);
         return;
       }
       run.retryRestartTimer = setTimeout(() => {
         run.retryRestartTimer = null;
         if (run.cancelRequested || design.runs.isTerminal(run.status)) return;
-        spawnRetryAttempt();
+        spawnRetryAttempt(retryChatBody);
       }, wait);
     };
     const finalizeRetryTelemetry = (status, decision, failure, errorCode) => {
@@ -5272,12 +5565,28 @@ export async function startServer({
           : undefined;
       const eventDecision =
         attemptCount > 0
-          ? { ...decision, retryAttemptIndex: attemptCount }
+          ? {
+              ...decision,
+              retryAttemptIndex: attemptCount,
+              retryMaxAttempts:
+                run.retryMaxAttempts ?? decision.retryMaxAttempts,
+              retryStrategy: run.retryStrategy ?? decision.retryStrategy,
+            }
           : decision;
+      // A successful retry has no current failure classification or error code.
+      // Fall back to the failure that caused attempt 0 to be retried so success
+      // recovery can still be attributed by root cause. Failed/suppressed retry
+      // events retain their existing current-attempt semantics.
+      const eventFailure = retryResult === 'success'
+        ? run.retryOriginFailure ?? failure
+        : failure;
+      const eventErrorCode = retryResult === 'success'
+        ? run.retryOriginErrorCode ?? errorCode
+        : errorCode;
       run.retryFinalResult = retryResult;
       run.retrySuppressedReason = retrySuppressedReason;
       design.runs.emit(run, 'run_retry_finished', {
-        ...retryAnalyticsBase(eventDecision, failure, errorCode),
+        ...retryAnalyticsBase(eventDecision, eventFailure, eventErrorCode),
         retry_result: retryResult,
         ...(retrySuppressedReason
           ? { retry_suppressed_reason: retrySuppressedReason }
@@ -5336,6 +5645,72 @@ export async function startServer({
         ...runSideEffectsForRun(run),
         cancelRequested: !!run.cancelRequested,
       };
+      const liveSessionId = agentResumeCtx.isResuming
+        ? agentResumeCtx.resumeSessionId
+        : agentCapturesSessionId
+          ? capturedSessionId
+          : agentResumeCtx.newSessionId;
+      const postToolResumeDecision = decidePostToolResumeRecovery({
+        result,
+        failure,
+        continuationAttemptCount:
+          run.nativeSessionContinueAttemptCount ?? 0,
+        totalRetryAttemptCount: run.retryAttemptCount ?? 0,
+        sideEffects,
+        supportsNativeSessionContinue: def.resumesSessionViaCli === true,
+        hasNativeSession: !!run.conversationId && !!liveSessionId,
+      });
+      if (
+        postToolResumeDecision?.shouldRetry &&
+        !design.runs.isTerminal(run.status) &&
+        run.conversationId &&
+        liveSessionId
+      ) {
+        run.retryOriginalFailure ??= failure ?? undefined;
+        run.retryOriginFailure = failure ? { ...failure } : null;
+        run.retryOriginErrorCode = errorCode ?? null;
+        run.retryAttemptCount = postToolResumeDecision.retryAttemptIndex;
+        run.nativeSessionContinueAttemptCount =
+          (run.nativeSessionContinueAttemptCount ?? 0) + 1;
+        run.retryMaxAttempts = postToolResumeDecision.retryMaxAttempts;
+        run.retryStrategy = postToolResumeDecision.retryStrategy;
+        run.retryFinalResult = undefined;
+        run.retrySuppressedReason = undefined;
+        upsertAgentSession(db, {
+          conversationId: run.conversationId,
+          agentId: def.id,
+          sessionId: liveSessionId,
+          stablePromptHash: currentStableHash,
+          stablePromptSections: currentStableSectionsJson,
+          model: safeModel ?? null,
+          cwd: effectiveCwd,
+          lastMessageId: run.assistantMessageId ?? null,
+        });
+        run.nativeSessionRecovery = markNativeSessionCaptured({
+          previous: run.nativeSessionRecovery,
+          agentId: def.id,
+          sessionId: liveSessionId,
+          resumed: agentResumeCtx.isResuming,
+        });
+        publishNativeSessionRecoveryMetadata();
+        design.runs.emit(run, 'run_retry_attempted', {
+          ...retryAnalyticsBase(postToolResumeDecision, failure, errorCode),
+          retry_reason: postToolResumeDecision.retryReason,
+          retry_delay_ms: postToolResumeDecision.retryDelayMs,
+        });
+        run.nativeSessionContinuePending = {
+          sessionId: liveSessionId,
+          stablePromptHash: currentStableHash,
+          stablePromptSections: currentStableSections,
+        };
+        scheduleRetryRestart(postToolResumeDecision.retryDelayMs, {
+          ...chatBody,
+          message: POST_TOOL_RESUME_CONTINUATION_PROMPT,
+          currentPrompt: POST_TOOL_RESUME_CONTINUATION_PROMPT,
+          titleGeneration: undefined,
+        });
+        return true;
+      }
       const decision = decideSafeRunRetry({
         result,
         failure,
@@ -5343,7 +5718,14 @@ export async function startServer({
         sideEffects,
       });
       if (decision.shouldRetry && !design.runs.isTerminal(run.status)) {
+        run.retryOriginalFailure ??= failure ?? undefined;
+        if ((run.retryAttemptCount ?? 0) === 0) {
+          run.retryOriginFailure = failure ? { ...failure } : null;
+          run.retryOriginErrorCode = errorCode ?? null;
+        }
         run.retryAttemptCount = decision.retryAttemptIndex;
+        run.retryMaxAttempts = decision.retryMaxAttempts;
+        run.retryStrategy = decision.retryStrategy;
         run.retryFinalResult = undefined;
         run.retrySuppressedReason = undefined;
         design.runs.emit(run, 'run_retry_attempted', {
@@ -5383,11 +5765,6 @@ export async function startServer({
         sideEffects.artifactWriteSeen ||
         sideEffects.liveArtifactSeen
       );
-      const liveSessionId = agentResumeCtx.isResuming
-        ? agentResumeCtx.resumeSessionId
-        : agentCapturesSessionId
-          ? capturedSessionId
-          : agentResumeCtx.newSessionId;
       const resumableFailure =
         result === 'failed' &&
         def.resumesSessionViaCli === true &&
@@ -5402,6 +5779,7 @@ export async function startServer({
       // failure type + fix. Only meaningful on a failed result.
       run.failureCategory = result === 'failed' ? failure?.failure_category ?? null : null;
       run.failureDetail = result === 'failed' ? failure?.failure_detail ?? null : null;
+      run.failureAction = result === 'failed' ? failure?.user_action ?? null : null;
       // Stamp the classification onto the persisted assistant message too, so a
       // reload (or any daemon-side persistence without the live web error
       // handler) keeps the specific failure guidance instead of the coarse
@@ -5413,6 +5791,7 @@ export async function startServer({
           agentId: def.id,
           sessionId: liveSessionId,
           stablePromptHash: currentStableHash,
+          stablePromptSections: currentStableSectionsJson,
           model: safeModel ?? null,
           cwd: effectiveCwd,
           lastMessageId: run.assistantMessageId ?? null,
@@ -5799,9 +6178,78 @@ export async function startServer({
       // in the normalizer while the child resolves it to the absolute path,
       // leaving the real config untouched. Mirrors the diagnostics-export.ts
       // `envFor('codex')` pattern. See issue #4276.
-      await normalizeCodexConfigFile(
-        spawnEnvForAgent('codex', process.env, configuredAgentEnv),
+      const codexConfigEnv = spawnEnvForAgent(
+        'codex',
+        process.env,
+        configuredAgentEnv,
+        undefined,
+        { resolvedBin: agentLaunch.selectedPath },
       );
+      await normalizeCodexConfigFile(codexConfigEnv);
+
+      // When Open Design leaves model selection at `default`, Codex resolves
+      // the concrete model from config.toml. A known-old CLI can accept the
+      // config, start `exec`, and only then reject a newer configured model.
+      // Gate only evidence-backed stable-version/model combinations before
+      // buildArgs/spawn. Every uncertain boundary (custom provider, API-key
+      // auth, config overlays, project config, unknown/prerelease version)
+      // fails open so Codex keeps its existing forward compatibility.
+      if (agentLaunch.launchPath) {
+        if (run.cancelRequested || design.runs.isTerminal(run.status)) {
+          lifecycle.mark('launch_preflight_end');
+          cleanupPromptFile();
+          return;
+        }
+        const preflight = await preflightCodexDefaultModel({
+          launchPath: agentLaunch.launchPath,
+          env: applyAgentLaunchEnv(codexConfigEnv, agentLaunch),
+          requestedModel: safeModel,
+          projectRoot: effectiveCwd,
+        });
+        if (run.cancelRequested || design.runs.isTerminal(run.status)) {
+          lifecycle.mark('launch_preflight_end');
+          cleanupPromptFile();
+          return;
+        }
+        if (preflight.status === 'compatible' || preflight.status === 'incompatible') {
+          run.resolvedModelId = preflight.model;
+          run.preflightAgentCliVersion = preflight.cliVersion;
+        }
+        if (preflight.status === 'incompatible') {
+          lifecycle.mark('launch_preflight_end');
+          const message =
+            `The '${preflight.model}' model requires a newer version of Codex. ` +
+            `The installed Codex CLI (${preflight.cliVersion}) is older than the known-compatible ` +
+            `minimum (${preflight.requiredCliVersion}). ` +
+            'Upgrade the Codex CLI or choose a model supported by this installation, then retry.';
+          design.runs.emit(run, 'diagnostic', {
+            type: 'model_capability_preflight',
+            status: 'incompatible',
+            model: preflight.model,
+            cli_version: preflight.cliVersion,
+            required_cli_version: preflight.requiredCliVersion,
+          });
+          send('error', createSseErrorPayload(
+            'AGENT_EXECUTION_FAILED',
+            message,
+            {
+              retryable: false,
+              details: {
+                failureCategory: 'model_unavailable',
+                failureDetail: 'cli_version_incompatible',
+                model: preflight.model,
+                requiredCliVersion: preflight.requiredCliVersion,
+              },
+            },
+          ));
+          cleanupPromptFile();
+          // No child was spawned, so there is no process exit code to report.
+          // Passing null preserves the preflight attribution instead of
+          // polluting exit_nonzero transport metrics with a synthetic exit 1.
+          finishWithRetryDecision('failed', null, null);
+          return;
+        }
+      }
     }
 
     // Serialize antigravity spawns whose buildArgs writes a concrete
@@ -5840,6 +6288,10 @@ export async function startServer({
           promptFilePath: promptFile?.path,
           resumeSessionId: agentResumeCtx.resumeSessionId,
           newSessionId: agentResumeCtx.newSessionId,
+          disablePlugins:
+            def.id === 'codex'
+            && run.externalPluginAnalytics?.externalPluginId
+              === OPEN_DESIGN_PLUGIN_ID,
         },
       );
     } catch (err) {
@@ -5909,6 +6361,12 @@ export async function startServer({
       persistDeliveredAgentSessionState = () => {
         if (persisted) return;
         persisted = true;
+        if (!getConversation(db, run.conversationId)) {
+          console.warn(
+            '[sessions] skipped delivered session persistence because the conversation is not persisted',
+          );
+          return;
+        }
         // The id to persist for a create turn: capture-style adapters store the
         // session id the CLI minted and reported on the stream; specify-style
         // adapters store the daemon-minted id they passed to the CLI. A
@@ -5924,6 +6382,7 @@ export async function startServer({
             agentId: def.id,
             sessionId: createTurnSessionId,
             stablePromptHash: currentStableHash,
+            stablePromptSections: currentStableSectionsJson,
             model: safeModel ?? null,
             cwd: effectiveCwd,
             lastMessageId: run.assistantMessageId ?? null,
@@ -5950,6 +6409,7 @@ export async function startServer({
             agentId: def.id,
             sessionId: agentResumeCtx.resumeSessionId,
             stablePromptHash: currentStableHash,
+            stablePromptSections: currentStableSectionsJson,
             model: safeModel ?? null,
             cwd: effectiveCwd,
             lastMessageId: run.assistantMessageId ?? null,
@@ -6143,6 +6603,9 @@ export async function startServer({
         artifactRegistered,
       });
     const noteAgentActivity = () => {
+      // E-lite: stamp the last-activity clock BEFORE the disabled-watchdog bail
+      // so `last_progress_age_ms` is recorded even when the watchdog is off.
+      run.lastAgentActivityAt = Date.now();
       const delay = activeInactivityTimeoutMs();
       if (delay <= 0) return;
       clearInactivityWatchdog();
@@ -6253,6 +6716,7 @@ export async function startServer({
       cwd,
       model: safeModel,
       reasoning: safeReasoning,
+      serviceTier: safeServiceTier,
       toolTokenExpiresAt: toolTokenGrant?.expiresAt ?? null,
     });
     noteAgentActivity();
@@ -6292,7 +6756,11 @@ export async function startServer({
           agentId: def.id,
           runId: run.id,
           conversationId: run.conversationId,
-          runAttempt: run.retryAttemptCount ?? 0,
+          runAttempt: openDesignAmrRunAttempt({
+            retryAttemptCount: run.retryAttemptCount,
+            manualResumeAttemptCount: run.manualResumeAttemptCount,
+          }),
+          externalPluginAnalytics: run.externalPluginAnalytics ?? null,
         }),
         // OpenCode external-MCP injection (issue #2142). Layered AFTER
         // spawnEnvForAgent / odMediaEnv / configuredAgentEnv so the
@@ -6444,10 +6912,35 @@ export async function startServer({
       // a Claude Code (anthropic) chat from triggering OpenAI/gpt-4o-
       // mini extraction in the background just because the user has
       // an OpenAI key parked in media-config.
+      //
+      // Normalize the spawn-resolved BYOK profile shape for the memory
+      // extractor. The raw secret never entered the persisted run body; it is
+      // held only by this run closure while the child is alive.
+      const memoryChatProvider: {
+        provider?: string;
+        apiKey?: string;
+        baseUrl?: string;
+        apiVersion?: string;
+        model?: string;
+        requiresApiKey?: boolean;
+      } | null = resolvedByokCredential
+        ? {
+            provider: resolvedByokCredential.profile.protocol,
+            apiKey: resolvedByokCredential.apiKey,
+            baseUrl: resolvedByokCredential.profile.baseUrl,
+            apiVersion: resolvedByokCredential.profile.apiVersion,
+            model: resolvedByokCredential.profile.model,
+            requiresApiKey: resolvedByokCredential.profile.requiresApiKey,
+          }
+        : null;
       const memoryOptions = {
         projectRoot: PROJECT_ROOT,
         chatAgentId: typeof agentId === 'string' ? agentId : null,
         chatModel: typeof safeModel === 'string' ? safeModel : null,
+        // Forward the per-call BYOK provider snapshot so pickProvider()
+        // can run "Same as chat" extraction against the user's actual
+        // provider/endpoint/model instead of falling back to defaults.
+        chatProvider: memoryChatProvider,
         // Scope the extractor's duplicate-turn de-dup to this conversation, so a
         // re-fired turn collapses but an identical (message, reply) in another
         // conversation is still examined.
@@ -6662,6 +7155,12 @@ export async function startServer({
     // plain streams (most other CLIs) we forward raw chunks unchanged so
     // the browser can append them to the assistant's text buffer.
     let agentStreamError = null;
+    // Preserve whether a latched error predates a later cancel request. The
+    // close handler runs after cancel() has already flipped cancelRequested,
+    // so consulting only the current flag loses the ordering of those events.
+    let agentStreamErrorObservedBeforeCancellation = false;
+    let acpFatalErrorObservedBeforeCancellation = false;
+    run.runtimeFailureObservedBeforeCancellation = false;
     // Holds buffered plain-text stdout chunks for agents (currently
     // antigravity) where we need to inspect the full output at close
     // time before deciding whether to forward it. The auth-prompt guard
@@ -6911,6 +7410,10 @@ export async function startServer({
 
     const sendAgentEvent = (ev) => {
       if (ev?.type === 'error') {
+        // Cancellation is the terminal user intent. Some CLIs flush a final
+        // error record while reacting to SIGTERM; treating that late frame as
+        // a run failure races the cancel route and can make it return failed.
+        if (run.cancelRequested) return;
         if (agentStreamError) return;
         flushVisibleAgentStderr();
         const failureText = [
@@ -6924,6 +7427,8 @@ export async function startServer({
           String(ev.message || 'Agent stream error'),
           failureText,
         );
+        agentStreamErrorObservedBeforeCancellation = true;
+        run.runtimeFailureObservedBeforeCancellation = true;
         clearInactivityWatchdog();
         const authFailure = classifyAgentAuthFailure(agentId, failureText);
         if (authFailure?.status === 'missing') {
@@ -7014,6 +7519,10 @@ export async function startServer({
         // init/system line arrives well before the model's first token.
         noteCliReadyAt();
         if (ev?.type === 'error') {
+          // Claude commonly reports its SIGTERM shutdown as an assistant or
+          // result error frame. Once cancellation has been requested, that
+          // frame is shutdown noise rather than a new user-visible failure.
+          if (run.cancelRequested) return;
           if (agentStreamError) return;
           // Hold back a resume-failure error so the close handler's transparent
           // reseed stays invisible. An is_error result frame on a dead --resume
@@ -7064,6 +7573,8 @@ export async function startServer({
           const serviceCode = classifyAgentServiceFailure(failureText);
           agentStreamError = diagnostic?.message
             ?? rewriteKnownAgentStreamError(agentId, message, failureText);
+          agentStreamErrorObservedBeforeCancellation = true;
+          run.runtimeFailureObservedBeforeCancellation = true;
           send('error', createSseErrorPayload(
             diagnostic?.code ?? serviceCode ?? 'AGENT_EXECUTION_FAILED',
             agentStreamError,
@@ -7159,9 +7670,13 @@ export async function startServer({
           if (channel === 'agent') {
             sendAgentEvent(payload);
           } else if (channel === 'error') {
+            if (run.cancelRequested) return;
             if (agentStreamError) return;
             flushVisibleAgentStderr();
             agentStreamError = String(payload?.message || 'Pi session error');
+            agentStreamErrorObservedBeforeCancellation = true;
+            acpFatalErrorObservedBeforeCancellation = true;
+            run.runtimeFailureObservedBeforeCancellation = true;
             const piErrorCode = typeof payload?.code === 'string' ? payload.code : null;
             if (piErrorCode) {
               run.errorCode = piErrorCode;
@@ -7194,6 +7709,7 @@ export async function startServer({
         mcpServers,
         envFormat: def.acpMcpEnvFormat ?? 'array',
         executionProfile,
+        completePromptOnTurnEnd: def.acpTurnEndCompletesPrompt === true,
         ...(def.id === 'amr' ? { modelUnavailableErrorCode: 'AMR_MODEL_UNAVAILABLE' } : {}),
         // Resume the prior upstream session (drives `session/load`) when the
         // resume-identity guard says it is safe; otherwise a fresh session/new.
@@ -7203,6 +7719,11 @@ export async function startServer({
         onCliReady: () => noteCliReadyAt(),
         onSessionInit: () => noteSessionInitDoneAt(),
         send: (event, data) => {
+          if (event === 'error') {
+            if (run.cancelRequested) return;
+            acpFatalErrorObservedBeforeCancellation = true;
+            run.runtimeFailureObservedBeforeCancellation = true;
+          }
           if (event === 'agent') {
             lastAgentEventPhase = summarizeAgentEventForInactivity(data);
           }
@@ -7328,12 +7849,25 @@ export async function startServer({
       emitVisibleAgentStderr(chunk);
     });
 
+    const finishCanceledIfRequested = (
+      code: number | null,
+      signal: NodeJS.Signals | null,
+    ): boolean => {
+      if (!run.cancelRequested) return false;
+      if (!design.runs.isTerminal(run.status)) {
+        markRpcCloseReason('cancel_requested');
+        finishWithRetryDecision('canceled', code, signal);
+      }
+      return true;
+    };
+
     child.on('error', (err) => {
       clearInactivityWatchdog();
       cleanupPromptFile();
       flushVisibleAgentStderr();
       revokeToolToken('child_exit');
       unregisterChatAgentEventSink();
+      if (finishCanceledIfRequested(1, null)) return;
       send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', err.message));
       finishWithRetryDecision('failed', 1, null);
     });
@@ -7412,13 +7946,13 @@ export async function startServer({
         ));
         return design.runs.finish(run, 'failed', code ?? 1, signal ?? null);
       }
-      if (acpSession?.hasFatalError()) {
+      if (acpFatalErrorObservedBeforeCancellation && acpSession?.hasFatalError()) {
         markRpcCloseReason('fatal_rpc_error');
         return finishWithRetryDecision('failed', code ?? 1, signal ?? null);
       }
       parseBufferedAntigravityGeminiJsonEventStream();
       flushAgentTitleMarkerBuffer();
-      if (agentStreamError) {
+      if (agentStreamErrorObservedBeforeCancellation && agentStreamError) {
         markRpcCloseReason('stream_error');
         return finishWithRetryDecision('failed', code === 0 ? 1 : (code ?? 1), signal ?? null);
       }
@@ -7729,14 +8263,51 @@ export async function startServer({
         (def.streamFormat ?? 'plain') === 'plain' &&
         run.projectId
       ) {
-        const plainStdout = plainStdoutFromRunEvents(run.events);
-        if (plainStdout.includes('<artifact')) {
+        // Reconstruct the agent's stdout for artifact extraction from two
+        // truncation-complementary windows over the SAME underlying stream:
+        //   - head: `run.plainArtifactStdout`, the FIRST CAP bytes (bounded), and
+        //   - tail: run.events, the LAST 2000 events.
+        // Using stream offsets (total byte count) we stitch them into a single
+        // continuous string at their exact seam, then extract ONCE. This is
+        // correct by construction:
+        //   - not truncated  -> head == whole stream (or tail == whole stream);
+        //   - overlapping    -> seam removes the double-covered span, so the
+        //                        same artifact is never counted twice AND two
+        //                        distinct artifacts that share a body are both
+        //                        kept (no value-level dedup);
+        //   - a true gap (a run with both >CAP early bytes AND >2000 later
+        //     events whose tail does not reach back to CAP) -> extract each
+        //     window separately and concatenate the artifact lists. The windows
+        //     do not overlap there, so there are no duplicate occurrences; only
+        //     an artifact buried entirely in the un-covered middle is lost, which
+        //     was already unrecoverable before this change (the old code only
+        //     ever had the tail).
+        const head = run.plainArtifactStdout ?? '';
+        const tail = plainStdoutFromRunEvents(run.events);
+        const totalBytes = run.plainStdoutTotalBytes ?? head.length;
+        const tailStart = Math.max(0, totalBytes - tail.length);
+        let plainArtifacts: ReturnType<typeof extractPlainStreamArtifacts>;
+        if (head.length === 0) {
+          plainArtifacts = extractPlainStreamArtifacts(tail);
+        } else if (tailStart <= head.length) {
+          // Overlap or contiguous: splice tail on at the seam and extract once.
+          const stitched = head + tail.slice(head.length - tailStart);
+          plainArtifacts = extractPlainStreamArtifacts(stitched);
+        } else {
+          // Gap: no overlap, so extracting each window and concatenating cannot
+          // produce a duplicate occurrence or a false cross-gap artifact.
+          plainArtifacts = [
+            ...extractPlainStreamArtifacts(head),
+            ...extractPlainStreamArtifacts(tail),
+          ];
+        }
+        if (plainArtifacts.length > 0) {
           try {
             const project = getProject(db, run.projectId);
-            const persistedPlainArtifacts = await persistPlainStreamArtifacts({
+            const persistedPlainArtifacts = await persistPlainStreamArtifactList({
               projectsRoot: PROJECTS_DIR,
               projectId: run.projectId,
-              stdout: plainStdout,
+              artifacts: plainArtifacts,
               metadata: project?.metadata,
               writeProjectFile,
             });
@@ -7789,6 +8360,7 @@ export async function startServer({
             agentId: def.id,
             sessionId: sessionPath,
             stablePromptHash: currentStableHash,
+            stablePromptSections: currentStableSectionsJson,
             model: safeModel ?? null,
             cwd: effectiveCwd,
             lastMessageId: run.assistantMessageId ?? null,
@@ -7818,6 +8390,7 @@ export async function startServer({
           agentId: def.id,
           sessionId: acpSession.getDurableSessionId(),
           stablePromptHash: currentStableHash,
+          stablePromptSections: currentStableSectionsJson,
           model: safeModel ?? null,
           cwd: effectiveCwd,
           lastMessageId: run.assistantMessageId ?? null,
@@ -7849,7 +8422,11 @@ export async function startServer({
           design.runs.finish(run, 'failed', 1, signal);
           return;
         }
-        persistDeliveredAgentSessionState();
+        try {
+          persistDeliveredAgentSessionState();
+        } catch (err) {
+          console.warn('[sessions] delivered session persistence failed', err);
+        }
       }
       finishWithRetryDecision(status, code, signal);
       } finally {
@@ -7887,7 +8464,11 @@ export async function startServer({
           },
         });
         try {
-          child.stdin.write(`${userMessage}\n`, 'utf8', markStdinWriteEnd);
+          // E-lite: `write` returns false when the chunk was buffered because the
+          // OS pipe is full (the child isn't draining stdin) — the corroborating
+          // signal for a `stdin_write`-phase inactivity stall.
+          const accepted = child.stdin.write(`${userMessage}\n`, 'utf8', markStdinWriteEnd);
+          run.stdinBackpressure = accepted === false;
         } catch (err) {
           // Swallow EPIPE here for the same reason as the listener above —
           // a fast-exiting child has already routed its failure through
@@ -7896,7 +8477,9 @@ export async function startServer({
         }
         run.stdinOpen = true;
       } else {
-        child.stdin.end(composed, 'utf8', markStdinWriteEnd);
+        // Split write + close so the boolean backpressure signal survives —
+        // see writePromptAndEndStdin for why `end(chunk)` cannot report it.
+        run.stdinBackpressure = writePromptAndEndStdin(child.stdin, composed, markStdinWriteEnd);
       }
     }
   };
@@ -8004,6 +8587,7 @@ export async function startServer({
       designSystemId: orbitDesignSystemId,
       model: modelPrefs.model ?? null,
       reasoning: modelPrefs.reasoning ?? null,
+      serviceTier: modelPrefs.serviceTier ?? null,
       message: prompt,
       systemPrompt: [
         renderOrbitTemplateSystemPrompt(template),
@@ -8064,6 +8648,7 @@ export async function startServer({
     paths: { PROJECTS_DIR, RUNTIME_DATA_DIR },
     agents: { detectAgents, getAgentDef },
     chat: { startChatRun },
+    byokCredentials: byokCredentialService,
     lifecycle: { isDaemonShuttingDown: () => daemonShuttingDown },
     plugins: {
       connectorService,
@@ -8320,6 +8905,7 @@ export async function startServer({
         context: routineContext,
         model: modelPrefs.model ?? null,
         reasoning: modelPrefs.reasoning ?? null,
+        serviceTier: modelPrefs.serviceTier ?? null,
         message: routine.prompt,
         systemPrompt: [
           `You are running an unattended scheduled routine named "${routine.name}".`,
@@ -8481,6 +9067,7 @@ export async function startServer({
     finalize: finalizeDeps,
     handoff: handoffDeps,
     chat: { startChatRun },
+    byokCredentials: byokCredentialService,
     messages: {
       pinAssistantMessageOnRunCreate,
       reconcileAssistantMessageOnRunEnd,
@@ -8513,6 +9100,7 @@ export async function startServer({
     chat: { startChatRun },
     agents: agentDeps,
     critique: critiqueDeps,
+    appConfig: { readAppConfig },
     validation: validationDeps,
     lifecycle: { isDaemonShuttingDown: () => daemonShuttingDown },
     telemetry: { reportFinalizedMessage, reportFeedback },

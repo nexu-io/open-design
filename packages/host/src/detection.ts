@@ -66,10 +66,13 @@ export function isOpenDesignHostBridge(value: unknown): value is OpenDesignHostB
     !isRecord(updater) ||
     !hasFunction(updater, "status") ||
     !hasFunction(updater, "check") ||
+    !hasFunction(updater, "clear-cache") ||
     !hasFunction(updater, "download") ||
     !hasFunction(updater, "install") ||
     !hasFunction(updater, "quit") ||
-    !hasFunction(updater, "subscribe")
+    !hasFunction(updater, "setMenuLabels") ||
+    !hasFunction(updater, "subscribe") ||
+    !hasFunction(updater, "subscribeOpenDialog")
   ) {
     return false;
   }

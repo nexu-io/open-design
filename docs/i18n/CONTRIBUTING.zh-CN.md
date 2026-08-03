@@ -12,9 +12,10 @@
 
 | 你想要…… | 你其实在加的是 | 它住在哪 | 体量 |
 |---|---|---|---|
-| 让 OD 渲染一种新的 artifact（一份发票、一个 iOS 设置页、一张 one-pager……） | 一个 **Skill** | [`skills/<your-skill>/`](../../skills/) | 一个文件夹，约 2 个文件 |
-| 让 OD 说一种新品牌的视觉语言 | 一套 **Design System** | [`design-systems/<brand>/DESIGN.md`](../../design-systems/) | 一个 Markdown 文件 |
-| 接入一个新的 coding-agent CLI | 一个 **Agent adapter** | [`apps/daemon/src/agents.ts`](../../apps/daemon/src/agents.ts) | 一个数组里 ~10 行 |
+| 让 OD 渲染一种新的 artifact（一份发票、一个 iOS 设置页、一张 one-pager……） | 一个**设计模板** | [`design-templates/<your-template>/`](../../design-templates/) | 一个包含 `SKILL.md` 与渲染资源的文件夹 |
+| 添加一项 agent 在任务中调用的功能能力 | 一个 **Skill** | [`skills/<your-skill>/`](../../skills/) | 一个包含 `SKILL.md` 与可选资源的文件夹 |
+| 让 OD 说一种新品牌的视觉语言 | 一套 **Design System** | [`design-systems/<brand>/`](../../design-systems/) | 一个包：`manifest.json`、`DESIGN.md` 和 `tokens.css` |
+| 接入一个新的 coding-agent CLI | 一个 **Agent adapter** | [`apps/daemon/src/runtimes/defs/`](../../apps/daemon/src/runtimes/defs/) | 一个定义和一条注册项 |
 | 加功能、修 bug、从 [`open-codesign`][ocod] 移植一个 UX 模式 | 代码 | `apps/web/src/`、`apps/daemon/` | 普通 PR |
 | 改文档、补法语 / 德语 / 中文翻译、修错别字 | 文档 | `README.md`、`README.fr.md`、`README.de.md`、`README.zh-CN.md`、`docs/`、`QUICKSTART.zh-CN.md` | 一个 PR |
 
@@ -42,14 +43,16 @@ pnpm --filter @open-design/web build  # 需要时构建 web package
 
 ---
 
-## 加一个 Skill
+## 加一个设计模板
 
-一个 skill 就是 [`skills/`](../../skills/) 下的一个文件夹，根目录放一个 `SKILL.md`，遵循 Claude Code 的 [`SKILL.md` 规范][skill]，再加上我们可选的 `od:` 扩展。**没有注册步骤。** 文件夹丢进来、重启 daemon、picker 里就出现了。
+一个设计模板就是 [`design-templates/`](../../design-templates/) 下的一个文件夹，根目录放一个 `SKILL.md`，遵循 Claude Code 的 [`SKILL.md` 规范][skill]，再加上我们可选的 `od:` 扩展。它把 Templates 图库中一种 artifact 的形态与渲染资源打包在一起。
 
-### Skill 文件夹结构
+### → 完整指南见 [`docs/skills-contributing.md`](../../docs/skills-contributing.md)
+
+### 设计模板文件夹结构
 
 ```text
-skills/your-skill/
+design-templates/your-template/
 ├── SKILL.md                    # 必须
 ├── assets/template.html        # 可选但强烈推荐 —— seed 模板
 ├── references/                 # 可选 —— agent 在规划阶段会读的知识文件
@@ -61,11 +64,11 @@ skills/your-skill/
 
 ### `SKILL.md` 的 frontmatter
 
-前三个字段是 Claude Code 的基础规范 —— `name`、`description`、`triggers`。`od:` 下面所有字段都是 OD 特有的、可选的，但 **`od.mode`** 决定 skill 出现在哪一组（Prototype / Deck / Template / Design system）。
+前三个字段是 Claude Code 的基础规范 —— `name`、`description`、`triggers`。`od:` 下面所有字段都是 OD 特有的、可选的，但 **`od.mode`** 决定模板出现在哪一组（Prototype / Deck / Template / Design system）。
 
 ```yaml
 ---
-name: your-skill
+name: your-template
 description: |
   一段电梯演讲。Agent 会原样读这段来判断用户的需求是否匹配。
   写具体一点：surface、受众、artifact 里有什么、没有什么。
@@ -80,109 +83,117 @@ od:
   featured: 1               # 任何正整数都会让它出现在「Showcase examples」
   preview:
     type: html              # html | jsx | pptx | markdown
-    entry: index.html
   design_system:
-    requires: true          # 这个 skill 是否会读激活的 DESIGN.md
-    sections: [color, typography, layout, components]
-  example_prompt: "一段可复制粘贴的提示词，最能体现这个 skill 的能力。"
+    requires: true          # 这个模板是否会读激活的 DESIGN.md
+  craft:
+    requires: [typography, color, anti-ai-slop]
+  example_prompt: "一段可复制粘贴的提示词，最能体现这个模板的能力。"
 ---
 
-# Your Skill
+# Your Template
 
 正文是自由 Markdown，描述 agent 应该走的工作流……
 ```
 
-完整 grammar —— 类型化输入、滑块参数、能力 gating —— 在 [`docs/skills-protocol.md`](../../docs/skills-protocol.md)。
+完整的活跃 grammar（`od.mode`、`od.surface`、`od.craft.requires`、`od.critique.policy`、gallery hints 等）在 [`docs/skills-protocol.md`](../../docs/skills-protocol.md)。旧的便携字段如 `od.inputs`、`od.parameters` 和 `od.capabilities_required` 可能仍会出现在外部 bundle 里，但 skill/template registry 不会消费它们。
 
-### 合并新 skill 的硬线
+### 合并新设计模板的硬线
 
-Skill 是用户直接看到的面，所以我们对它挑剔。一个新 skill 必须：
+设计模板是用户直接看到的面，所以我们对它挑剔。一个新模板必须：
 
-1. **附一份真实的 `example.html`。** 手搓的、本地直接打开就能看、像设计师真的会交付的东西。不要 lorem ipsum，不要 `<svg><rect/></svg>` 占位 hero。如果你自己都不能搓出 example，这个 skill 大概率还没准备好。
+1. **附一份真实的 `example.html`。** 手搓的、本地直接打开就能看、像设计师真的会交付的东西。不要 lorem ipsum，不要 `<svg><rect/></svg>` 占位 hero。如果你自己都不能搓出 example，这个模板大概率还没准备好。
 2. **过 anti-AI-slop checklist**（写在 body 里）。不准紫色渐变、不准通用 emoji 图标、不准左 border 圆角卡片、不准把 Inter 当 *display* 字体、不准自编数据。完整黑名单看 README 的「Anti-AI-slop machinery」一节。
 3. **诚实占位。** Agent 没真数字时写 `—` 或一个标注的灰块，绝不写「快 10 倍」。
-4. **附 `references/checklist.md`**，至少要有 P0 关卡（agent emit `<artifact>` 之前必须过的硬线）。格式照搬 [`skills/guizang-ppt/references/checklist.md`](../../skills/guizang-ppt/) 或 [`skills/dating-web/references/checklist.md`](../../skills/dating-web/)。
-5. **如果是 featured skill，加一张截图** 到 `docs/screenshots/skills/<skill>.png`。PNG 格式，约 1024×640 retina，从真实 `example.html` 上以缩小后的浏览器倍率截。
-6. **是一个自包含文件夹。** CDN 引入不能超过其他 skill 已经引入的；不准用没授权的字体；图片不要超过约 250 KB。
+4. **附 `references/checklist.md`**，至少要有 P0 关卡（agent emit `<artifact>` 之前必须过的硬线）。格式照搬 [`design-templates/guizang-ppt/references/checklist.md`](../../design-templates/guizang-ppt/) 或 [`design-templates/dating-web/references/checklist.md`](../../design-templates/dating-web/)。
+5. **如果是 featured 模板，加一张截图** 到 `docs/screenshots/skills/<skill>.png`。PNG 格式，约 1024×640 retina，从真实 `example.html` 上以缩小后的浏览器倍率截。
+6. **是一个自包含文件夹。** CDN 引入不能超过其他模板已经引入的；不准用没授权的字体；图片不要超过约 250 KB。
 
-如果你 fork 了一个现有 skill（比如从 `dating-web` 改成 `recruiting-web`），保留原 LICENSE 和原作者归属在 `references/` 里，并在 PR 描述里点出来。
+如果你 fork 了一个现有设计模板（比如从 `dating-web` 改成 `recruiting-web`），保留原 LICENSE 和原作者归属在 `references/` 里，并在 PR 描述里点出来。
 
-### 已有的 skill —— 挑一个像的来抄
+### 已有的设计模板 —— 挑一个像的来抄
 
-- 视觉 showcase、单屏原型：[`skills/dating-web/`](../../skills/dating-web/)、[`skills/digital-eguide/`](../../skills/digital-eguide/)
-- 多屏移动流程：[`skills/mobile-onboarding/`](../../skills/mobile-onboarding/)、[`skills/gamified-app/`](../../skills/gamified-app/)
-- 文档 / 模板（不需要 design system）：[`skills/pm-spec/`](../../skills/pm-spec/)、[`skills/weekly-update/`](../../skills/weekly-update/)
-- Deck 模式：[`skills/guizang-ppt/`](../../skills/guizang-ppt/)（来自 [op7418/guizang-ppt-skill][guizang]，原样捆绑）和 [`skills/simple-deck/`](../../skills/simple-deck/)
+- 视觉 showcase、单屏原型：[`design-templates/dating-web/`](../../design-templates/dating-web/)、[`design-templates/digital-eguide/`](../../design-templates/digital-eguide/)
+- 多屏移动流程：[`design-templates/mobile-onboarding/`](../../design-templates/mobile-onboarding/)、[`design-templates/gamified-app/`](../../design-templates/gamified-app/)
+- 文档 / 模板（不需要 design system）：[`design-templates/pm-spec/`](../../design-templates/pm-spec/)、[`design-templates/weekly-update/`](../../design-templates/weekly-update/)
+- Deck 模式：[`design-templates/guizang-ppt/`](../../design-templates/guizang-ppt/)（来自 [op7418/guizang-ppt-skill][guizang]，原样捆绑）和 [`design-templates/simple-deck/`](../../design-templates/simple-deck/)
+
+---
+
+## 加一个功能 Skill
+
+功能 Skill 是 agent 在任务中调用、用来处理用户输入的能力。先读 [`skills/README.md`](../../skills/README.md) 了解功能 Skill 与设计模板的职责边界，再读 [`skills/AGENTS.md`](../../skills/AGENTS.md) 了解文件夹契约；共用的 `SKILL.md` grammar 在 [`docs/skills-protocol.md`](../../docs/skills-protocol.md)。Daemon 的 lazy scanner 会在下一次 `/api/skills` 请求时重新扫描 Skill roots，所以本地新增 Skill 不需要重新构建，也不需要重启 daemon。
 
 ---
 
 ## 加一套 Design System
 
-一套 design system 就是 `design-systems/<slug>/` 下的一个 [`DESIGN.md`](../../design-systems/README.md) 文件。**一个文件，零代码。** 丢进来、重启 daemon、picker 按 category 分组显示出来。
+仓库里的新 design system 是 [`design-systems/<slug>/`](../../design-systems/) 下的一个 package，不再是单独的 Markdown 文件。当前内置的 151 套系统已经全部迁移到下面的 package contract。为了兼容旧内容或用户安装内容，daemon 仍能发现只有 `DESIGN.md` 的 legacy 文件夹，但新内置系统不应再采用这种形态。Catalog 会在每次 `/api/design-systems` 请求时重新扫描；编辑后刷新 Design System 界面即可，不需要重启 daemon。
 
-### Design system 文件夹结构
+### 最小 package 结构
 
 ```text
 design-systems/your-brand/
-└── DESIGN.md
+├── manifest.json
+├── DESIGN.md
+└── tokens.css
 ```
+
+`manifest.json` 保存稳定 id、展示名称、category、description、provenance 与已声明的 package 路径。`DESIGN.md` 向 agent 说明设计意图；`tokens.css` 是规范的已编译语义 token 样式表。完整契约见 [`docs/design-systems.md`](../../docs/design-systems.md) 与 [`design-systems/_schema/AGENTS.md`](../../design-systems/_schema/AGENTS.md)。
 
 ### `DESIGN.md` 形态
 
 ```markdown
-# Design System Inspired by YourBrand
+# YourBrand Design System
 
-> Category: Developer Tools
-> 一行总结，会显示在 picker 的预览里。
-
-## 1. Visual Theme & Atmosphere
+## Visual Theme
 …
 
-## 2. Color
-- Primary: `#hex` / `oklch(...)`
-- …
-
-## 3. Typography
+## Color Roles
 …
 
-## 4. Spacing & Grid
-## 5. Layout & Composition
-## 6. Components
-## 7. Motion & Interaction
-## 8. Voice & Brand
-## 9. Anti-patterns
+## Typography
+…
+
+## Layout and Spacing
+## Components and States
+## Motion and Interaction
+## Accessibility
+## Anti-patterns
 ```
 
-9 段式 schema 是固定的 —— skill body 会按这个结构 grep 内容。第一行 H1 会成为 picker 的标签（`Design System Inspired by` 前缀会被自动剥掉），`> Category: …` 那一行决定它落到哪个组。已有的 category 列表在 [`design-systems/README.md`](../../design-systems/README.md)；如果你的品牌真的塞不进任何一个，可以新增 category，但**优先尝试现有 category**。
+这里没有固定的 9 段式 schema。Package quality guard 要求至少 7 个有实质内容的 H2，但不限定名称、顺序或编号；请使用真正适合这套系统的标题。
 
 ### 合并新 design system 的硬线
 
-1. **9 个 section 都要在。** Section 内容空着可以（比如真的找不到 motion token），但标题必须保留，否则提示词的 grep 会断。
-2. **Hex 是真的。** 直接从品牌官网或产品里取色，不准从记忆里掏，不准让 AI 猜。README 里那套 5 步「品牌资产协议」对维护者一样适用。
-3. **强调色给 OKLch 是加分项。** 让色板在亮 / 暗模式之间能可预测地 lerp。
-4. **不要营销废话。** 品牌的 tagline 不是设计 token。删掉。
-5. **slug 用 ASCII** —— `linear.app` 写成 `linear-app`，`x.ai` 写成 `x-ai`。已经导入的 69 套都遵循这个约定，跟着写。
+1. **三个必需文件都要提交。** 文件夹 slug 必须与 `manifest.id` 一致，并使用规范化 ASCII（`linear.app` → `linear-app`、`x.ai` → `x-ai`）。
+2. **至少写 7 个有实质内容的 H2。** 不要只为凑数量添加空标题。
+3. **让正文与 token 保持一致。** `DESIGN.md` 中的颜色、字体、间距和动效决定必须与 `tokens.css` 一致，并通过共享 token guard。
+4. **使用真实证据和清晰 provenance。** 从源产品或官网直接取样，并在 manifest/package evidence 中记录来源。
+5. **写有用的 catalog 文案。** `manifest.name`、`category`、`description` 是 picker 的主要 metadata；不要塞营销废话。
 
-我们内置的 69 套产品系统是通过 [`scripts/sync-design-systems.ts`](../../scripts/sync-design-systems.ts) 从 [`VoltAgent/awesome-design-md`][acd2] 导入的。如果你的品牌应该归属在上游，**请先把 PR 发到那里** —— 我们下一次同步会自动收上来。`design-systems/` 文件夹用来放那些**不适合归到上游**的系统、加上我们手写的两套 starter。
+上游派生的产品系统通过 [`scripts/sync-design-systems.ts`](../../scripts/sync-design-systems.ts) 从 [`VoltAgent/awesome-design-md`][acd2] 导入。如果你的品牌应该归属在上游，**请先把 PR 发到那里** —— 我们下一次同步会自动收上来。`design-systems/` 还包含不适合归到上游、由本项目维护的补充系统。
 
 ---
 
 ## 接入一个新的 coding-agent CLI
 
-接入一个新 agent（比如某个新 shop 的 `foo-coder` CLI）就是在 [`apps/daemon/src/agents.ts`](../../apps/daemon/src/agents.ts) 里加一项：
+接入一个新 agent（比如某个新 shop 的 `foo-coder` CLI）需要在 [`apps/daemon/src/runtimes/defs/`](../../apps/daemon/src/runtimes/defs/) 中添加定义，并在 `runtimes/registry.ts` 注册：
 
-```javascript
-{
+```ts
+import type { RuntimeAgentDef } from '../types.js';
+
+export const fooAgentDef = {
   id: 'foo',
   name: 'Foo Coder',
   bin: 'foo',
   versionArgs: ['--version'],
+  fallbackModels: [{ id: 'default', label: 'Default', default: true }],
   buildArgs: (prompt) => ['exec', '-p', prompt],
   streamFormat: 'plain',           // 如果它说 claude-stream-json 就写那个
-}
+} satisfies RuntimeAgentDef;
 ```
 
-完事 —— daemon 会在 `PATH` 上检测到它、picker 显示出来、对话路径就通了。如果这个 CLI 吐 **类型化事件**（像 Claude Code 的 `--output-format stream-json`），在 [`apps/daemon/src/runtimes/claude-stream.ts`](../../apps/daemon/src/runtimes/claude-stream.ts) 里写一个 parser，并把 `streamFormat` 设成 `'claude-stream-json'`。
+把定义 import 到 [`runtimes/registry.ts`](../../apps/daemon/src/runtimes/registry.ts) 并加入 `BASE_AGENT_DEFS` 后，共用引擎会在 `PATH` 上检测它、在 picker 中展示，并构造调用参数。Wire shape 相同时复用已有的 `streamFormat`。真正新增一种 wire format 时，还要在 [`apps/daemon/src/runtimes/`](../../apps/daemon/src/runtimes/) 或 [`apps/daemon/src/agent-protocol/`](../../apps/daemon/src/agent-protocol/) 下添加 parser、parser tests，并在 [`server.ts`](../../apps/daemon/src/server.ts) 的 stream dispatch 中增加对应分支。
 
 合并硬线：
 
@@ -272,7 +283,7 @@ node --experimental-strip-types scripts/sync-litellm-models.ts
 - **Vendor 一个模型运行时。** OD 整个赌注就是「你已有的 CLI 就够了」。我们不带 `pi-ai`、不带 OpenAI key、不带模型加载器。
 - **未经讨论不要把前端重写到别的栈。** Next.js 16 App Router + React 18 + TS 是当前底线。不要随手改成 Astro / Solid / Svelte 或其他框架。
 - **把 daemon 换成 serverless function。** Daemon 的存在意义就是拥有真实的 `cwd` 和 spawn 真实的 CLI。SPA 部署 Vercel 没问题，daemon 仍然是 daemon。
-- **加 telemetry / 分析 / phone-home。** OD 是 local-first。唯一的对外请求是用户明确配置的 provider。
+- **在隐私契约之外增加 telemetry 或对外数据收集。** 产品分析与经过遮罩的 session replay 需要用户同意；在已配置的构建中，经过脱敏的安全性/可靠性 telemetry 始终启用。任何新事件、字段或目标都必须遵守 [`PRIVACY.md`](../../PRIVACY.md) 规定的同意、最小化与脱敏边界。
 - **打包二进制** 而没有附 license 文件和原作者归属。
 
 不确定自己的想法合不合适？开个 discussion 再写代码。
@@ -297,7 +308,7 @@ tl;dr：好好提 PR、认真 review、在 [Discussions][discussions] / [Discord
 
 ## License
 
-提交贡献即代表你同意你的贡献按本仓库的 [Apache-2.0 License](../../LICENSE) 授权。例外是 [`skills/guizang-ppt/`](../../skills/guizang-ppt/) 下的所有文件，保留它们原始的 MIT license 和原作者 [op7418](https://github.com/op7418) 的归属。
+提交贡献即代表你同意你的贡献按本仓库的 [Apache-2.0 License](../../LICENSE) 授权。例外是 [`design-templates/guizang-ppt/`](../../design-templates/guizang-ppt/) 下的所有文件，保留它们原始的 MIT license 和原作者 [op7418](https://github.com/op7418) 的归属。
 
 [skill]: https://docs.anthropic.com/en/docs/claude-code/skills
 [guizang]: https://github.com/op7418/guizang-ppt-skill

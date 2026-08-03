@@ -118,9 +118,8 @@ export interface AssistantFeedbackReasonPanelSurfaceViewProps {
   rating: 'positive' | 'negative';
 }
 
-// Exposure of the Questions tab discovery form — fires once per form
-// occurrence when a parseable form first becomes visible (the tab is
-// conditionally mounted, so emit sites dedupe by the occurrence key).
+// Exposure of an inline discovery form — fires once per form occurrence when
+// a parseable form first becomes visible in its originating assistant message.
 // Denominator for the questions_form click events above.
 export interface QuestionsFormSurfaceViewProps {
   page_name: 'chat_panel';
@@ -148,8 +147,8 @@ export interface UpdateIndicatorSurfaceViewProps {
 }
 
 export interface UpdatePromptSurfaceViewProps {
-  page_name: 'home';
-  area: 'update_prompt';
+  page_name: 'home' | 'app';
+  area: 'update_prompt' | 'update_dialog';
   app_version_before?: string;
   app_version_after?: string;
 }

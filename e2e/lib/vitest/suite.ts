@@ -182,6 +182,17 @@ export function resolvePackagedSmokeNamespace(
   if (env.OD_PACKAGED_E2E_NAMESPACE != null && env.OD_PACKAGED_E2E_NAMESPACE.trim() !== '') {
     return env.OD_PACKAGED_E2E_NAMESPACE;
   }
+  const channel = env.OD_PACKAGED_E2E_RELEASE_CHANNEL;
+  if (channel === 'prerelease' || channel === 'preview') {
+    switch (platform) {
+      case 'linux':
+        return `release-${channel}-linux`;
+      case 'mac':
+        return `release-${channel}`;
+      case 'win':
+        return `release-${channel}-win`;
+    }
+  }
   switch (platform) {
     case 'linux':
       return 'ci-pr-linux';

@@ -1,7 +1,7 @@
 ---
 title: 'Turn a Reference Image Into a Real Page With Open Design (Free via Gemini)'
 youtubeId: 9MiVWNaeMQc
-summary: A reference-image workflow for Open Design — grab a design you like (a Dribbble shot, any site screenshot), drop it in, and have Open Design build a real page in that visual language, running entirely free on Gemini CLI's free tier. Based on Compile Future's walkthrough.
+summary: A reference-image workflow for Open Design — grab a design you like, drop it in, and have Open Design build a real page in that visual language, running free on Gemini CLI's free tier in Compile Future's recording. That direct runtime is now retired; current releases use a supported local runtime or Google Gemini through BYOK.
 date: 2026-05-02
 category: Demo
 durationSeconds: 665
@@ -16,7 +16,7 @@ This guide is about a specific, underused Open Design workflow: **start from a r
 
 ## What is Open Design?
 
-Open Design is an open-source, local-first design platform — a Claude Design alternative that runs on your own machine. The headline difference: instead of being locked to one model, it drives **the coding agent you already use** — Claude Code, Codex, Cursor, Gemini, OpenCode, and more. It ships with a deep library of skills and brand design systems (Airbnb, Apple, Cursor, Ferrari, Figma, and many more), so generation starts from a real aesthetic rather than a generic prompt.
+Open Design is an open-source, local-first design platform — a Claude Design alternative that runs on your own machine. The headline difference: instead of being locked to one model, it drives **the coding agent you already use** — Claude Code, Codex, Cursor, OpenCode, Qwen, and more. It ships with a deep library of skills and brand design systems (Airbnb, Apple, Cursor, Ferrari, Figma, and many more), so generation starts from a real aesthetic rather than a generic prompt.
 
 - **Open source, Apache-2.0** — clone it, self-host it, or just download the app.
 - **Runs locally** — your projects live on your own machine.
@@ -24,9 +24,9 @@ Open Design is an open-source, local-first design platform — a Claude Design a
 
 ## Step 1 — Install and connect a free model
 
-Download the installer from [open-design.ai/download](https://open-design.ai/download) (macOS DMG or Windows .exe), or run from source. On first launch, choose your agent. Compile Future uses **Gemini CLI** because its free tier is generous (plenty of free requests per day) — so the whole workflow costs nothing:
+Download the installer from [open-design.ai/download](https://open-design.ai/download) (macOS DMG or Windows .exe), or run from source. On first launch, choose your runtime. Compile Future's recording used **Gemini CLI**, but current releases have retired that direct runtime. To follow the workflow today:
 
-- Pick **Gemini** in the setup. If it's not detected, install the Gemini CLI (one command from its site) and log in with a Google account.
+- Pick a supported local runtime such as **OpenCode**, or configure **Google Gemini** as a BYOK provider with an API key and model. BYOK runs through Open Design's isolated OpenCode adapter; it does not invoke the `gemini` executable.
 - Prefer something else? Any detected CLI works, or bring your own API key.
 
 This is why "no GPU": the model runs through your CLI in the cloud, so even a modest laptop is fine.
@@ -58,7 +58,7 @@ Refine in plain language — "remove the sign-in button," "adjust the card radiu
 
 ## Tips
 
-- **Run free on Gemini CLI's free tier** (or any free-tier CLI) — no subscription, no GPU.
+- **Use a supported free-tier runtime or Google Gemini BYOK allowance** — no separate Open Design subscription or GPU.
 - **Use a reference image** when you can picture the look but can't describe it — Dribbble or any site screenshot.
 - **Free-form mode + "match the image"** is the prompt pattern that nails the reference.
 - **Confirm the brand spec** it generates before it builds, so the direction is right.
@@ -70,7 +70,7 @@ Refine in plain language — "remove the sign-in button," "adjust the card radiu
 No. The model runs through your CLI (in the cloud), not on your machine — a normal laptop is fine.
 
 **Can I really run it for free?**
-Yes — point it at a free-tier CLI like Gemini and you can generate designs at no cost; you only pay if you choose a paid model/API.
+Yes — point it at a supported free-tier runtime, or use a provider allowance through BYOK; you only pay if you choose a paid model/API.
 
 **How do I design from an image I like?**
 Use free-form mode, attach the screenshot, and tell it to use the design language of the image; it extracts a brand spec and builds in that style.

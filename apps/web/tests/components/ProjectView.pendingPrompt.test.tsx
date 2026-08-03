@@ -216,9 +216,12 @@ const mockedSaveMessage = vi.mocked(saveMessage);
 
 const config: AppConfig = {
   mode: 'api',
+  apiProtocol: 'openai',
   apiKey: '',
-  baseUrl: '',
-  model: '',
+  byokProfileId: 'byok-test-profile',
+  byokCredentialConfigured: true,
+  baseUrl: 'https://api.openai.com/v1',
+  model: 'api-model',
   agentId: null,
   skillId: null,
   designSystemId: null,

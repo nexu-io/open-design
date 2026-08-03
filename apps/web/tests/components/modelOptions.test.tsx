@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   CUSTOM_MODEL_SENTINEL,
@@ -100,6 +100,75 @@ describe('orderModelOptionsByAvailability', () => {
 });
 
 describe('SearchableModelSelect', () => {
+  beforeEach(() => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      x: 120,
+      y: 200,
+      top: 200,
+      right: 360,
+      bottom: 236,
+      left: 120,
+      width: 240,
+      height: 36,
+      toJSON: () => ({}),
+    });
+  });
+
+  it('clamps an upward popover and keeps that placement while it still fits', async () => {
+    let triggerRect = {
+      x: 120,
+      y: 300,
+      top: 300,
+      right: 360,
+      bottom: 336,
+      left: 120,
+      width: 240,
+      height: 36,
+      toJSON: () => ({}),
+    };
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(
+      () => triggerRect,
+    );
+
+    render(
+      <SearchableModelSelect
+        models={Array.from({ length: 9 }, (_, index) => ({
+          id: `model-${index}`,
+          label: `Model ${index}`,
+        }))}
+        value="model-0"
+        onChange={vi.fn()}
+        searchPlaceholder="Search models"
+        popoverTestId="model-popover"
+        getPopoverBoundary={() => ({
+          top: 80,
+          right: 500,
+          bottom: 400,
+          left: 8,
+        })}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('combobox'));
+
+    const popover = await screen.findByTestId('model-popover');
+    expect(popover.style.bottom).toBe(`${window.innerHeight - 300 + 6}px`);
+    expect(popover.style.maxHeight).toBe('214px');
+
+    triggerRect = {
+      ...triggerRect,
+      y: 200,
+      top: 200,
+      bottom: 236,
+    };
+    fireEvent.scroll(window);
+
+    await waitFor(() => {
+      expect(popover.style.bottom).toBe(`${window.innerHeight - 200 + 6}px`);
+      expect(popover.style.maxHeight).toBe('114px');
+    });
+  });
+
   it('renders capability tag and cost metadata as option text', async () => {
     render(
       <SearchableModelSelect

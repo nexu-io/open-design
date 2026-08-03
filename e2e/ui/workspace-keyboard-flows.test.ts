@@ -2,7 +2,7 @@ import { expect, test } from '@/playwright/suite';
 import { ensureRailOpen, openNewProjectModal as openNewProjectModalFromProjects } from '@/playwright/rail';
 import { expectAllProjectFilesActive, expectAllProjectFilesInactive, openAllProjectFiles } from '@/playwright/workspace';
 import type { Locator, Page, Response } from '@playwright/test';
-import { applyStandardMocks } from '@/playwright/mock-factory';
+import { applyStandardMocks, routeSuccessfulRuns, successfulRunEventBody } from '@/playwright/mock-factory';
 
 const CHAT_PANEL_WIDTH_STORAGE_KEY = 'open-design.project.chatPanelWidth';
 
@@ -88,7 +88,9 @@ test('[P1] quick switcher arrow keys move selection before opening a file', asyn
   const quickSwitcherInput = page.locator('.qs-input');
   const selectedOption = page.getByRole('option', { selected: true });
   await expect(quickSwitcher).toBeVisible();
-  await expect(page.getByRole('option')).toHaveCount(3);
+  await quickSwitcherInput.fill('arrow-');
+  await expect(quickSwitcherOptionsByKind(page, 'FILE')).toHaveCount(3);
+  await expect(quickSwitcherOptionsByKind(page, 'IMAGE')).toHaveCount(3);
 
   const initialSelection = await selectedOption.textContent();
   await quickSwitcherInput.press('ArrowDown');
@@ -190,17 +192,9 @@ test('[P1] keyboard chat panel resize persists after reload', async ({ page }) =
 });
 
 test('[P0] @critical project chat Enter sends while Shift+Enter inserts a newline', async ({ page }) => {
-  let runCount = 0;
-  await page.route('**/api/runs', async (route) => {
-    runCount += 1;
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: JSON.stringify({ runId: `keyboard-run-${runCount}` }),
-    });
-  });
-  await page.route('**/api/runs/*/events', async (route) => {
-    const body = [
+  const runRequests = await routeSuccessfulRuns(page, {
+    runIdPrefix: 'keyboard-run',
+    eventBody: successfulRunEventBody([
       'event: start',
       'data: {"bin":"mock-agent"}',
       '',
@@ -210,19 +204,7 @@ test('[P0] @critical project chat Enter sends while Shift+Enter inserts a newlin
           '<artifact identifier="keyboard-artifact" type="text/html" title="Keyboard Artifact"><!doctype html><html><body><main><h1>Keyboard Artifact</h1></main></body></html></artifact>',
       })}`,
       '',
-      'event: end',
-      'data: {"code":0,"status":"succeeded"}',
-      '',
-      '',
-    ].join('\n');
-    await route.fulfill({
-      status: 200,
-      headers: {
-        'content-type': 'text/event-stream',
-        'cache-control': 'no-cache',
-      },
-      body,
-    });
+    ]),
   });
 
   await gotoEntryHome(page);
@@ -240,14 +222,14 @@ test('[P0] @critical project chat Enter sends while Shift+Enter inserts a newlin
   // verified by the `.msg.user` assertions below.
   await expect(input).toContainText('first line');
   await expect(input).toContainText('second line');
-  expect(runCount).toBe(0);
+  await runRequests.expectNone({ timeout: 100 });
 
   await Promise.all([
     page.waitForResponse(isCreateRunResponse, { timeout: 5_000 }),
     input.press('Enter'),
   ]);
 
-  expect(runCount).toBe(1);
+  await runRequests.expectCount(1);
   await expect(input).toHaveText('');
   await expect(page.locator('.msg.user', { hasText: 'first line' })).toHaveCount(1);
   await expect(page.locator('.msg.user', { hasText: 'second line' })).toHaveCount(1);
@@ -282,7 +264,8 @@ test('[P1] quick switcher still activates another file after the project reloads
   await expect(quickSwitcher).toBeVisible();
 
   await quickSwitcherInput.fill('reload-beta');
-  await expect(page.getByRole('option', { name: /reload-beta\.png/i })).toBeVisible();
+  await expect(quickSwitcherOption(page, 'reload-beta.png', 'IMAGE')).toBeVisible();
+  await expect(page.getByRole('option', { selected: true })).toContainText('reload-beta.png');
   await quickSwitcherInput.press('Enter');
 
   await expect(quickSwitcher).toBeHidden();
@@ -315,10 +298,10 @@ test('[P1] quick switcher only lists files from the active project after switchi
   await expect(quickSwitcher).toBeVisible();
 
   await quickSwitcherInput.fill('project');
-  await expect(page.getByRole('option', { name: /beta-project-file\.png/i })).toBeVisible();
-  await expect(page.getByRole('option', { name: /beta-project-secondary\.png/i })).toBeVisible();
-  await expect(page.getByRole('option', { name: /alpha-project-file\.png/i })).toHaveCount(0);
-  await expect(page.getByRole('option', { name: /alpha-project-secondary\.png/i })).toHaveCount(0);
+  await expect(quickSwitcherOption(page, 'beta-project-file.png', 'IMAGE')).toBeVisible();
+  await expect(quickSwitcherOption(page, 'beta-project-secondary.png', 'IMAGE')).toBeVisible();
+  await expect(quickSwitcherOption(page, 'alpha-project-file.png', 'IMAGE')).toHaveCount(0);
+  await expect(quickSwitcherOption(page, 'alpha-project-secondary.png', 'IMAGE')).toHaveCount(0);
   await expectProjectFilesToIncludeSuffixes(page, betaProjectId, ['beta-project-file.png', 'beta-project-secondary.png']);
   await expectProjectFilesToIncludeSuffixes(page, alphaProjectId, ['alpha-project-file.png', 'alpha-project-secondary.png']);
 
@@ -351,7 +334,7 @@ test('[P1] quick switcher leaves the Design Files panel and opens the selected f
   await expect(quickSwitcher).toBeVisible();
 
   await quickSwitcherInput.fill('design-files-alpha');
-  await expect(page.getByRole('option', { name: /design-files-alpha\.png/i })).toBeVisible();
+  await expect(quickSwitcherOption(page, 'design-files-alpha.png', 'FILE')).toBeVisible();
   await quickSwitcherInput.press('Enter');
 
   await expect(quickSwitcher).toBeHidden();
@@ -361,39 +344,20 @@ test('[P1] quick switcher leaves the Design Files panel and opens the selected f
 });
 
 test('[P1] quick switcher can switch from a design file tab back to a generated artifact tab', async ({ page }) => {
-  await page.route('**/api/runs', async (route) => {
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: '{"runId":"mock-run"}',
-    });
-  });
-  await page.route('**/api/runs/*/events', async (route) => {
-    const artifact =
-      '<artifact identifier="quick-switcher-artifact" type="text/html" title="Quick Switcher Artifact">' +
-      '<!doctype html><html><body><main><h1>Quick Switcher Artifact</h1></main></body></html>' +
-      '</artifact>';
-    const body = [
+  const artifact =
+    '<artifact identifier="quick-switcher-artifact" type="text/html" title="Quick Switcher Artifact">' +
+    '<!doctype html><html><body><main><h1>Quick Switcher Artifact</h1></main></body></html>' +
+    '</artifact>';
+  await routeSuccessfulRuns(page, {
+    runIdPrefix: 'mock-run',
+    eventBody: successfulRunEventBody([
       'event: start',
       'data: {"bin":"mock-agent"}',
       '',
       'event: stdout',
       `data: ${JSON.stringify({ chunk: artifact })}`,
       '',
-      'event: end',
-      'data: {"code":0,"status":"succeeded"}',
-      '',
-      '',
-    ].join('\n');
-
-    await route.fulfill({
-      status: 200,
-      headers: {
-        'content-type': 'text/event-stream',
-        'cache-control': 'no-cache',
-      },
-      body,
-    });
+    ]),
   });
 
   await gotoEntryHome(page);
@@ -416,7 +380,7 @@ test('[P1] quick switcher can switch from a design file tab back to a generated 
   await expect(quickSwitcher).toBeVisible();
 
   await quickSwitcherInput.fill('quick-switcher-artifact');
-  await expect(page.getByRole('option', { name: /quick-switcher-artifact\.html/i })).toBeVisible();
+  await expect(quickSwitcherOption(page, 'quick-switcher-artifact.html', 'FILE')).toBeVisible();
   await quickSwitcherInput.press('Enter');
 
   await expect(quickSwitcher).toBeHidden();
@@ -462,7 +426,7 @@ async function openNewProjectModal(page: Page) {
 }
 
 async function expectProjectsView(page: Page) {
-  if ((await page.locator('.tab-panel-toolbar').count()) === 0) {
+  if (!(await page.locator('.tab-panel-toolbar').isVisible().catch(() => false))) {
     await ensureRailOpen(page);
     await page.getByTestId('entry-nav-projects').click();
   }
@@ -573,6 +537,28 @@ function selectedBaseName(selectionText: string | null): string {
   const match = normalized.match(/arrow-(alpha|beta|gamma)\.png/i);
   expect(match?.[0]).toBeTruthy();
   return match![0];
+}
+
+function quickSwitcherOption(page: Page, name: string, kind: string): Locator {
+  return page.locator('.qs-row')
+    .filter({
+      has: page.locator('.qs-name').filter({
+        hasText: new RegExp(`^${escapeRegExp(name)}$`, 'i'),
+      }),
+    })
+    .filter({
+      has: page.locator('.qs-kind').filter({
+        hasText: new RegExp(`^${escapeRegExp(kind)}$`, 'i'),
+      }),
+    });
+}
+
+function quickSwitcherOptionsByKind(page: Page, kind: string): Locator {
+  return page.locator('.qs-row').filter({
+    has: page.locator('.qs-kind').filter({
+      hasText: new RegExp(`^${escapeRegExp(kind)}$`, 'i'),
+    }),
+  });
 }
 
 function escapeRegExp(value: string): string {

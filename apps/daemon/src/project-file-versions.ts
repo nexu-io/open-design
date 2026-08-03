@@ -1,4 +1,6 @@
 import type {
+  ArtifactOrigin,
+  ArtifactOriginStatus,
   ProjectFileKind,
   ProjectFileVersion,
   ProjectFileVersionPromptSource,
@@ -13,6 +15,9 @@ import { isSafeId, kindFor, mimeFor, resolveProjectDir, validateProjectPath } fr
 const VERSION_ROOT = '.file-versions';
 const VERSION_MANIFEST = 'manifest.json';
 const VERSION_ID_RE = /^[A-Za-z0-9_-]+$/u;
+const CONTENT_DIGEST_RE = /^[a-f0-9]{64}$/u;
+const ORIGIN_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u;
+const EXTERNAL_PLUGIN_IDS = new Set(['open-design']);
 const versionFileLocks = new Map<string, Promise<void>>();
 
 type VersionPromptSource = ProjectFileVersionPromptSource;
@@ -32,25 +37,37 @@ interface VersionEntry {
   mime: string;
   kind: ProjectFileKind;
   contentPath: string;
+  contentDigest?: string;
+  parentVersionId?: string;
+  origin?: ArtifactOrigin;
 }
 
 interface VersionManifestState {
   entries: VersionEntry[];
+  currentVersionId: string | null;
   deletedAt?: number;
 }
 
-interface CreateProjectFileVersionOptions {
+export interface CreateProjectFileVersionOptions {
   prompt?: string | null;
   promptSource?: VersionPromptSource;
   source?: VersionSource;
   label?: string | null;
   restoreFromVersionId?: string;
+  parentVersionId?: string;
+  origin?: ArtifactOrigin;
 }
 
 export interface ProjectFileVersionLockContext {
   safeName: string;
   createVersion: (content: string, options?: CreateProjectFileVersionOptions) => Promise<ProjectFileVersion>;
   ensureCurrentVersion: (content: string, options?: CreateProjectFileVersionOptions) => Promise<ProjectFileVersion | null>;
+  matchVersionContent: (content: string, versionId?: string) => Promise<ProjectFileVersionContentMatch>;
+}
+
+export interface ProjectFileVersionContentMatch {
+  status: Extract<ArtifactOriginStatus, 'matched' | 'missing_version' | 'digest_mismatch' | 'unknown'>;
+  version: ProjectFileVersion | null;
 }
 
 function codedError(message: string, code: string): Error & { code: string } {
@@ -150,6 +167,14 @@ export async function withProjectFileVersionLock<T>(
         createProjectFileVersionUnlocked(projectsRoot, projectId, safeName, content, options),
       ensureCurrentVersion: (content, options = {}) =>
         ensureCurrentProjectFileVersionUnlocked(projectsRoot, projectId, safeName, content, options),
+      matchVersionContent: (content, versionId) =>
+        resolveProjectFileVersionContentMatchUnlocked(
+          projectsRoot,
+          projectId,
+          safeName,
+          content,
+          versionId,
+        ),
     }),
   );
 }
@@ -170,6 +195,69 @@ function normalizeContentPath(value: unknown, id: string): string {
 function normalizeVersionNumber(value: unknown, fallback: number): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function normalizeVersionId(value: unknown): string | undefined {
+  return typeof value === 'string' && VERSION_ID_RE.test(value) ? value : undefined;
+}
+
+function normalizeContentDigest(value: unknown): string | undefined {
+  return typeof value === 'string' && CONTENT_DIGEST_RE.test(value) ? value : undefined;
+}
+
+function normalizeOriginId(value: unknown): string | undefined {
+  return typeof value === 'string' && ORIGIN_ID_RE.test(value) ? value : undefined;
+}
+
+function normalizeArtifactOrigin(value: unknown): ArtifactOrigin | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const raw = value as Record<string, unknown>;
+  const entrySurface = raw.entrySurface;
+  if (
+    entrySurface !== 'open_design_ui'
+    && entrySurface !== 'od_cli'
+    && entrySurface !== 'external_mcp'
+    && entrySurface !== 'unknown'
+  ) {
+    return undefined;
+  }
+  if (entrySurface === 'unknown') return { entrySurface };
+
+  const externalPluginId = raw.externalPluginId;
+  if (
+    externalPluginId !== undefined
+    && (typeof externalPluginId !== 'string' || !EXTERNAL_PLUGIN_IDS.has(externalPluginId))
+  ) {
+    return undefined;
+  }
+  const pluginWorkflowId = raw.pluginWorkflowId === undefined
+    ? undefined
+    : normalizeOriginId(raw.pluginWorkflowId);
+  const runId = raw.runId === undefined ? undefined : normalizeOriginId(raw.runId);
+  if (raw.pluginWorkflowId !== undefined && !pluginWorkflowId) return undefined;
+  if (raw.runId !== undefined && !runId) return undefined;
+
+  const origin: ArtifactOrigin = { entrySurface };
+  if (typeof externalPluginId === 'string') origin.externalPluginId = externalPluginId;
+  if (pluginWorkflowId) origin.pluginWorkflowId = pluginWorkflowId;
+  if (runId) origin.runId = runId;
+  return origin;
+}
+
+function artifactOriginsEqual(
+  left: ArtifactOrigin | undefined,
+  right: ArtifactOrigin | undefined,
+): boolean {
+  return (
+    left?.entrySurface === right?.entrySurface
+    && left?.externalPluginId === right?.externalPluginId
+    && left?.pluginWorkflowId === right?.pluginWorkflowId
+    && left?.runId === right?.runId
+  );
+}
+
+export function projectFileVersionContentDigest(content: string): string {
+  return createHash('sha256').update(Buffer.from(String(content ?? ''), 'utf8')).digest('hex');
 }
 
 function normalizePromptSource(value: unknown): VersionPromptSource | undefined {
@@ -199,10 +287,10 @@ function normalizeManifestEntry(raw: Record<string, unknown>, fileName: string, 
   if (typeof id !== 'string' || !VERSION_ID_RE.test(id)) return null;
   const version = normalizeVersionNumber(raw.version, index + 1);
   const promptSource = normalizePromptSource(raw.promptSource);
-  const restoreFromVersionId =
-    typeof raw.restoreFromVersionId === 'string' && VERSION_ID_RE.test(raw.restoreFromVersionId)
-      ? raw.restoreFromVersionId
-      : undefined;
+  const restoreFromVersionId = normalizeVersionId(raw.restoreFromVersionId);
+  const contentDigest = normalizeContentDigest(raw.contentDigest);
+  const parentVersionId = normalizeVersionId(raw.parentVersionId);
+  const origin = normalizeArtifactOrigin(raw.origin);
   const entry: VersionEntry = {
     id,
     fileName,
@@ -220,6 +308,9 @@ function normalizeManifestEntry(raw: Record<string, unknown>, fileName: string, 
   if (restoreFromVersionId) {
     entry.restoreFromVersionId = restoreFromVersionId;
   }
+  if (contentDigest) entry.contentDigest = contentDigest;
+  if (parentVersionId) entry.parentVersionId = parentVersionId;
+  if (origin) entry.origin = origin;
   return entry;
 }
 
@@ -236,7 +327,19 @@ function normalizeManifest(raw: unknown, fileName: string): VersionEntry[] {
 }
 
 function normalizeManifestState(raw: unknown, fileName: string): VersionManifestState {
-  const state: VersionManifestState = { entries: normalizeManifest(raw, fileName) };
+  const entries = normalizeManifest(raw, fileName);
+  const schemaVersion = raw && typeof raw === 'object'
+    ? Number((raw as { schemaVersion?: unknown }).schemaVersion)
+    : NaN;
+  const persistedCurrentVersionId = raw && typeof raw === 'object'
+    ? normalizeVersionId((raw as { currentVersionId?: unknown }).currentVersionId)
+    : undefined;
+  const currentVersionId = schemaVersion >= 2
+    ? (persistedCurrentVersionId && entries.some((entry) => entry.id === persistedCurrentVersionId)
+      ? persistedCurrentVersionId
+      : null)
+    : (entries.at(-1)?.id ?? null);
+  const state: VersionManifestState = { entries, currentVersionId };
   const deletedAt = raw && typeof raw === 'object'
     ? Number((raw as { deletedAt?: unknown }).deletedAt)
     : NaN;
@@ -259,13 +362,9 @@ async function readVersionManifestState(
     const raw = await readFile(path.join(versionRootFor(projectsRoot, projectId, fileName), VERSION_MANIFEST), 'utf8');
     return normalizeManifestState(JSON.parse(raw) as unknown, fileName);
   } catch (err) {
-    if (errorCode(err) === 'ENOENT') return { entries: [] };
+    if (errorCode(err) === 'ENOENT') return { entries: [], currentVersionId: null };
     throw err;
   }
-}
-
-async function readVersionManifest(projectsRoot: string, projectId: string, fileName: string): Promise<VersionEntry[]> {
-  return (await readVersionManifestState(projectsRoot, projectId, fileName)).entries;
 }
 
 async function writeVersionManifest(
@@ -273,13 +372,20 @@ async function writeVersionManifest(
   projectId: string,
   fileName: string,
   entries: VersionEntry[],
-  options: { deletedAt?: number } = {},
+  options: { currentVersionId: string | null; deletedAt?: number },
 ): Promise<void> {
   const root = versionRootFor(projectsRoot, projectId, fileName);
   await mkdir(root, { recursive: true });
-  const manifest: { schemaVersion: number; fileName: string; entries: VersionEntry[]; deletedAt?: number } = {
-    schemaVersion: 1,
+  const manifest: {
+    schemaVersion: number;
+    fileName: string;
+    currentVersionId: string | null;
+    entries: VersionEntry[];
+    deletedAt?: number;
+  } = {
+    schemaVersion: 2,
     fileName,
+    currentVersionId: options.currentVersionId,
     entries,
   };
   if (typeof options.deletedAt === 'number' && Number.isFinite(options.deletedAt)) {
@@ -304,11 +410,10 @@ function publicVersion(entry: VersionEntry, currentId: string | null): ProjectFi
   };
   if (entry.promptSource) version.promptSource = entry.promptSource;
   if (entry.restoreFromVersionId) version.restoreFromVersionId = entry.restoreFromVersionId;
+  if (entry.contentDigest) version.contentDigest = entry.contentDigest;
+  if (entry.parentVersionId) version.parentVersionId = entry.parentVersionId;
+  if (entry.origin) version.origin = entry.origin;
   return version;
-}
-
-function currentVersionId(entries: VersionEntry[]): string | null {
-  return entries.at(-1)?.id ?? null;
 }
 
 function nextLabel(version: number, restoredFrom?: VersionEntry | null): string {
@@ -339,9 +444,8 @@ export async function listProjectFileVersions(
 ): Promise<ProjectFileVersion[]> {
   const safeName = validateUserFileName(fileName);
   assertProjectAvailable(projectsRoot, projectId, metadata);
-  const entries = await readVersionManifest(projectsRoot, projectId, safeName);
-  const currentId = currentVersionId(entries);
-  return entries.map((entry) => publicVersion(entry, currentId));
+  const state = await readVersionManifestState(projectsRoot, projectId, safeName);
+  return state.entries.map((entry) => publicVersion(entry, state.currentVersionId));
 }
 
 export async function readProjectFileVersion(
@@ -357,15 +461,14 @@ export async function readProjectFileVersion(
     throw codedError('version id required', 'EINVAL');
   }
   assertProjectAvailable(projectsRoot, projectId, metadata);
-  const entries = await readVersionManifest(projectsRoot, projectId, safeName);
-  const currentId = currentVersionId(entries);
-  const entry = entries.find((item) => item.id === safeVersionId);
+  const state = await readVersionManifestState(projectsRoot, projectId, safeName);
+  const entry = state.entries.find((item) => item.id === safeVersionId);
   if (!entry) {
     throw codedError('version not found', 'ENOENT');
   }
   const content = await readFile(path.join(versionRootFor(projectsRoot, projectId, safeName), entry.contentPath), 'utf8');
   return {
-    version: publicVersion(entry, currentId),
+    version: publicVersion(entry, state.currentVersionId),
     content,
   };
 }
@@ -399,19 +502,26 @@ async function createProjectFileVersionUnlocked(
     typeof options.restoreFromVersionId === 'string' &&
     state.entries.some((entry) => entry.id === options.restoreFromVersionId);
   let entries = state.entries;
+  let priorCurrentVersionId = state.currentVersionId;
   if (state.deletedAt && !preserveDeletedHistory) {
     await rm(root, { recursive: true, force: true });
     await mkdir(root, { recursive: true });
     entries = [];
+    priorCurrentVersionId = null;
   }
   const restoredFrom = typeof options.restoreFromVersionId === 'string'
     ? entries.find((entry) => entry.id === options.restoreFromVersionId) ?? null
+    : null;
+  const requestedParentVersionId = normalizeVersionId(options.parentVersionId);
+  const explicitCurrentParent = requestedParentVersionId && requestedParentVersionId === priorCurrentVersionId
+    ? entries.find((entry) => entry.id === requestedParentVersionId) ?? null
     : null;
   const now = Date.now();
   const version = entries.reduce((max, entry) => Math.max(max, Number(entry.version) || 0), 0) + 1;
   const id = randomUUID();
   const contentPath = `${String(version).padStart(4, '0')}-${id}.html`;
   const text = String(content ?? '');
+  const source = inferVersionSource(options.source, options.promptSource, options.restoreFromVersionId);
   const entry: VersionEntry = {
     id,
     fileName: safeName,
@@ -420,20 +530,33 @@ async function createProjectFileVersionUnlocked(
       ? options.label.trim()
       : nextLabel(version, restoredFrom),
     createdAt: now,
-    source: inferVersionSource(options.source, options.promptSource, options.restoreFromVersionId),
+    source,
     prompt: normalizePrompt(options.prompt),
     size: Buffer.byteLength(text),
     mime: mimeFor(safeName),
     kind: kindFor(safeName) as ProjectFileKind,
     contentPath,
+    contentDigest: projectFileVersionContentDigest(text),
   };
   if (options.promptSource) entry.promptSource = options.promptSource;
   if (typeof options.restoreFromVersionId === 'string' && VERSION_ID_RE.test(options.restoreFromVersionId)) {
     entry.restoreFromVersionId = options.restoreFromVersionId;
   }
+  if (source === 'restore' && restoredFrom?.contentDigest) {
+    entry.parentVersionId = restoredFrom.id;
+    if (restoredFrom.origin) entry.origin = restoredFrom.origin;
+  } else if (source === 'manual' && explicitCurrentParent?.contentDigest) {
+    entry.parentVersionId = explicitCurrentParent.id;
+    if (explicitCurrentParent.origin) entry.origin = explicitCurrentParent.origin;
+  } else if (source === 'ai') {
+    const origin = normalizeArtifactOrigin(options.origin);
+    if (origin) entry.origin = origin;
+  }
   await writeFile(path.join(root, contentPath), text);
   const nextEntries = [...entries, entry];
-  await writeVersionManifest(projectsRoot, projectId, safeName, nextEntries);
+  await writeVersionManifest(projectsRoot, projectId, safeName, nextEntries, {
+    currentVersionId: id,
+  });
   return publicVersion(entry, id);
 }
 
@@ -450,6 +573,7 @@ export async function markProjectFileVersionStoreDeleted(
     const state = await readVersionManifestState(projectsRoot, projectId, safeName);
     if (state.entries.length === 0) return;
     await writeVersionManifest(projectsRoot, projectId, safeName, state.entries, {
+      currentVersionId: state.currentVersionId,
       deletedAt: Date.now(),
     });
   });
@@ -492,7 +616,9 @@ export async function renameProjectFileVersionStore(
 
     try {
       await rename(oldRoot, newRoot);
-      await writeVersionManifest(projectsRoot, projectId, safeTo, renamedEntries);
+      await writeVersionManifest(projectsRoot, projectId, safeTo, renamedEntries, {
+        currentVersionId: fromState.currentVersionId,
+      });
       return;
     } catch (err) {
       if (!isExistingTargetError(err)) throw err;
@@ -502,7 +628,9 @@ export async function renameProjectFileVersionStore(
     if (existingState.deletedAt) {
       await rm(newRoot, { recursive: true, force: true });
       await rename(oldRoot, newRoot);
-      await writeVersionManifest(projectsRoot, projectId, safeTo, renamedEntries);
+      await writeVersionManifest(projectsRoot, projectId, safeTo, renamedEntries, {
+        currentVersionId: fromState.currentVersionId,
+      });
       return;
     }
 
@@ -517,10 +645,18 @@ export async function renameProjectFileVersionStore(
         if (errorCode(err) !== 'ENOENT' && errorCode(err) !== 'EEXIST') throw err;
       }
     }
-    await writeVersionManifest(projectsRoot, projectId, safeTo, [
-      ...existingEntries,
-      ...renamedEntries.filter((entry) => !existingIds.has(entry.id)),
-    ]);
+    await writeVersionManifest(
+      projectsRoot,
+      projectId,
+      safeTo,
+      [
+        ...existingEntries,
+        ...renamedEntries.filter((entry) => !existingIds.has(entry.id)),
+      ],
+      {
+        currentVersionId: fromState.currentVersionId ?? existingState.currentVersionId,
+      },
+    );
     await rm(oldRoot, { recursive: true, force: true });
   });
 }
@@ -552,17 +688,82 @@ async function ensureCurrentProjectFileVersionUnlocked(
   const text = String(content ?? '');
   const state = await readVersionManifestState(projectsRoot, projectId, safeName);
   if (!state.deletedAt) {
-    const latest = state.entries.at(-1);
-    if (latest?.contentPath) {
+    const current = state.currentVersionId
+      ? state.entries.find((entry) => entry.id === state.currentVersionId)
+      : null;
+    if (current?.contentPath) {
       try {
-        const prior = await readFile(path.join(versionRootFor(projectsRoot, projectId, safeName), latest.contentPath), 'utf8');
-        if (prior === text) return publicVersion(latest, latest.id);
+        const prior = await readFile(path.join(versionRootFor(projectsRoot, projectId, safeName), current.contentPath), 'utf8');
+        if (prior === text) {
+          const source = inferVersionSource(
+            options.source,
+            options.promptSource,
+            options.restoreFromVersionId,
+          );
+          if (
+            source !== 'ai'
+            || artifactOriginsEqual(
+              current.origin,
+              normalizeArtifactOrigin(options.origin),
+            )
+          ) {
+            return publicVersion(current, state.currentVersionId);
+          }
+        }
       } catch (err) {
         if (errorCode(err) !== 'ENOENT') throw err;
       }
     }
   }
   return createProjectFileVersionUnlocked(projectsRoot, projectId, safeName, text, options);
+}
+
+export async function resolveProjectFileVersionContentMatch(
+  projectsRoot: string,
+  projectId: string,
+  fileName: string,
+  content: string,
+  versionId?: string,
+  metadata?: unknown,
+): Promise<ProjectFileVersionContentMatch> {
+  const safeName = validateUserFileName(fileName);
+  if (!/\.html?$/i.test(safeName)) {
+    return { status: 'missing_version', version: null };
+  }
+  assertProjectAvailable(projectsRoot, projectId, metadata);
+  return withVersionFileLock(projectsRoot, projectId, safeName, () =>
+    resolveProjectFileVersionContentMatchUnlocked(
+      projectsRoot,
+      projectId,
+      safeName,
+      content,
+      versionId,
+    ),
+  );
+}
+
+async function resolveProjectFileVersionContentMatchUnlocked(
+  projectsRoot: string,
+  projectId: string,
+  safeName: string,
+  content: string,
+  versionId?: string,
+): Promise<ProjectFileVersionContentMatch> {
+  const state = await readVersionManifestState(projectsRoot, projectId, safeName);
+  const requestedVersionId = versionId === undefined
+    ? state.currentVersionId
+    : normalizeVersionId(versionId);
+  if (!requestedVersionId) return { status: 'missing_version', version: null };
+  const entry = state.entries.find((candidate) => candidate.id === requestedVersionId);
+  if (!entry) return { status: 'missing_version', version: null };
+  const version = publicVersion(entry, state.currentVersionId);
+  if (!entry.contentDigest) return { status: 'unknown', version };
+  return {
+    status: projectFileVersionContentDigest(content) === entry.contentDigest
+      ? 'matched'
+      : 'digest_mismatch',
+    version,
+  };
 }
 
 export async function getProjectFileVersionRootStats(

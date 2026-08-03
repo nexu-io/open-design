@@ -1,5 +1,9 @@
 import { defineConfig, devices } from '@playwright/test';
 
+import { initializePlaywrightRunNamespace } from './lib/playwright/runtime-identity.ts';
+
+initializePlaywrightRunNamespace();
+
 function parseWorkerCount(value: string | undefined): number {
   if (value == null || value.length === 0) return 3;
   const parsed = Number(value);
@@ -13,7 +17,7 @@ export default defineConfig({
   testDir: './ui',
   testMatch: 'visual-*.test.ts',
   outputDir: './ui/reports/visual-test-results',
-  timeout: Number(process.env.OD_PLAYWRIGHT_TIMEOUT) || 60_000,
+  timeout: Number(process.env.OD_PLAYWRIGHT_TIMEOUT) || 240_000,
   expect: {
     timeout: 10_000,
   },

@@ -118,6 +118,16 @@ export type TrackingFidelity =
 
 export type TrackingExecutionMode = 'local_cli' | 'byok';
 
+export type TrackingByokPreflightBlockReason =
+  | 'api_key_required'
+  | 'api_key_invalid'
+  | 'base_url_required'
+  | 'base_url_invalid'
+  | 'model_required'
+  | 'model_default'
+  | 'multiple'
+  | 'config_invalid';
+
 // v2 BYOK provider catalogue (CSV row 65). Replaces v1's
 // `anthropic|openai|azure|ollama|google`. `senseaudio` was added on
 // `main` after the v2 doc was published; we forward it verbatim so
@@ -216,6 +226,11 @@ export type TrackingRunFailureDetail =
   | 'local_model_not_loaded'
   | 'cli_version_incompatible'
   | 'prompt_too_large'
+  | 'request_too_large'
+  | 'attachment_media_type_unsupported'
+  | 'tool_schema_invalid'
+  | 'prompt_tokenization_failed'
+  | 'provider_resource_not_found'
   | 'upstream_5xx'
   | 'upstream_client_error'
   | 'stream_disconnected'
@@ -242,6 +257,7 @@ export type TrackingRunFailureDetail =
   | 'qoder_stop_sequence'
   | 'signal_killed'
   | 'process_crashed'
+  | 'cpu_unsupported'
   | 'interrupted'
   | 'exit_code'
   | 'terminated_unknown'
@@ -259,6 +275,8 @@ export type TrackingRunFailureStage =
   | 'prompt_send'
   | 'first_token_wait'
   | 'tool_execution'
+  | 'tool_outstanding'
+  | 'post_tool_resume'
   | 'artifact_write'
   | 'child_close'
   | 'finalize';
@@ -306,7 +324,9 @@ export type TrackingRunFailureUserAction =
   | 'install_cli'
   | 'fix_config'
   | 'none';
-export type TrackingRunRetryStrategy = 'same_run_transient';
+export type TrackingRunRetryStrategy =
+  | 'same_run_transient'
+  | 'native_session_continue';
 export type TrackingRunRetryFinalResult =
   | 'not_attempted'
   | 'success'
@@ -347,6 +367,33 @@ export type TrackingRunCloseReason =
   | 'fatal_rpc_error'
   | 'empty_output'
   | 'unknown';
+export type TrackingAmrOpenCodeErrorPhase =
+  | 'timeout'
+  | 'event_stream_start'
+  | 'event_stream'
+  | 'prompt_async'
+  | 'other';
+export type TrackingAmrOpenCodeLastEventType =
+  | 'tool_call'
+  | 'tool_call_update'
+  | 'agent_message_chunk'
+  | 'agent_thought_chunk'
+  | 'done'
+  | 'other';
+export type TrackingAmrOpenCodeLastToolStatus =
+  | 'pending'
+  | 'in_progress'
+  | 'completed'
+  | 'failed'
+  | 'other';
+export type TrackingAmrOpenCodeLastToolKind =
+  | 'read'
+  | 'write'
+  | 'edit'
+  | 'search'
+  | 'execute'
+  | 'fetch'
+  | 'other';
 export type TrackingLangfuseDeliveryStatus =
   | 'not_expected'
   | 'queued'
@@ -362,6 +409,12 @@ export type TrackingLangfuseDropReason =
   | 'relay_5xx'
   | 'langfuse_4xx'
   | 'langfuse_5xx'
+  | 'vela_400'
+  | 'vela_401'
+  | 'vela_403'
+  | 'vela_413'
+  | 'vela_429'
+  | 'vela_5xx'
   | 'network_error';
 export type TrackingLangfuseReportResult =
   | 'accepted'

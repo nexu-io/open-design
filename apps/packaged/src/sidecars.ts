@@ -12,6 +12,7 @@ import {
   SIDECAR_MODES,
   type AppKey,
   type DaemonStatusSnapshot,
+  type RegisterWebUrlResult,
   type SidecarStamp,
   type WebStatusSnapshot,
 } from "@open-design/sidecar-proto";
@@ -33,9 +34,15 @@ import {
 
 import type { PackagedWebOutputMode } from "./config.js";
 import type { PackagedNamespacePaths } from "./paths.js";
+import {
+  prewarmPackagedFiles,
+  resolveDaemonPrewarmTargets,
+  resolveWebPrewarmTargets,
+} from "./prewarm.js";
 
 const require = createRequire(import.meta.url);
 const PACKAGED_CHILD_ENV_ALLOWLIST = [
+  "CODEX_HOME",
   "HOME",
   "HTTP_PROXY",
   "HTTPS_PROXY",
@@ -52,6 +59,30 @@ const PACKAGED_CHILD_ENV_ALLOWLIST = [
   "http_proxy",
   "https_proxy",
   "no_proxy",
+] as const;
+
+// The daemon owns the historical-outer compatibility handoff. Preserve the
+// updater controls it needs to launch the replacement payload desktop with the
+// same feed/test policy as the outer process, without broadening the packaged
+// child environment allowlist.
+const PACKAGED_DESKTOP_HANDOFF_ENV_KEYS = [
+  "OD_UPDATE_ARCH",
+  "OD_UPDATE_AUTO_CHECK",
+  "OD_UPDATE_AUTO_DOWNLOAD",
+  "OD_UPDATE_AUTO_OPEN",
+  "OD_UPDATE_CHANNEL",
+  "OD_UPDATE_CHECK_BACKOFF_INITIAL_MS",
+  "OD_UPDATE_CHECK_BACKOFF_MAX_MS",
+  "OD_UPDATE_CHECK_INITIAL_DELAY_MS",
+  "OD_UPDATE_CHECK_INTERVAL_MS",
+  "OD_UPDATE_CURRENT_VERSION",
+  "OD_UPDATE_DOWNLOAD_ROOT",
+  "OD_UPDATE_ENABLED",
+  "OD_UPDATE_INSTALLED_VERSION",
+  "OD_UPDATE_METADATA_URL",
+  "OD_UPDATE_MODE",
+  "OD_UPDATE_OPEN_DRY_RUN",
+  "OD_UPDATE_PLATFORM",
 ] as const;
 
 function shouldForwardPackagedChildEnv(key: string, includeProviderSecrets = false): boolean {
@@ -158,6 +189,15 @@ const DAEMON_STATUS_TIMEOUT_MS = 35_000;
 // lets that first launch succeed instead of failing to a recovery screen and
 // forcing a manual relaunch.
 const WIN32_STATUS_TIMEOUT_MS = 90_000;
+// Linux AppImage launches remount a fresh FUSE squashfs every time, so the
+// VFS page cache for the packaged payload is cold on EVERY launch — the
+// daemon demand-pages its 124 MB bundled node binary through FUSE while the
+// Electron main process faults through the same mount, and the 35s POSIX
+// baseline is unreachable on mid-range hardware (issue #5835). The prewarm
+// pass in startPackagedSidecars cuts the usual case to a few seconds; this
+// widened budget is the safety net for slow devices, mirroring the win32
+// rationale above (same "slow, not dead" failure class as #5515).
+const LINUX_STATUS_TIMEOUT_MS = 90_000;
 const DAEMON_MIGRATION_STATUS_TIMEOUT_MS = 30 * 60 * 1000;
 
 // Poll cadence for waitForStatus: start tight so a fast daemon is detected
@@ -168,15 +208,19 @@ const STATUS_POLL_INITIAL_MS = 150;
 const STATUS_POLL_MAX_MS = 1500;
 
 // Baseline status wait budget by platform, before the daemon-only legacy
-// migration override. win32 gets the wider AV-scan headroom; every other OS
-// keeps the 35s baseline.
+// migration override. win32 gets the wider AV-scan headroom, linux gets the
+// same headroom for AppImage FUSE cold starts; every other OS keeps the 35s
+// baseline.
 function baseStatusTimeoutMs(platform: NodeJS.Platform = process.platform): number {
-  return platform === "win32" ? WIN32_STATUS_TIMEOUT_MS : DAEMON_STATUS_TIMEOUT_MS;
+  if (platform === "win32") return WIN32_STATUS_TIMEOUT_MS;
+  if (platform === "linux") return LINUX_STATUS_TIMEOUT_MS;
+  return DAEMON_STATUS_TIMEOUT_MS;
 }
 
 /**
  * Daemon status wait budget. The platform baseline (35s, or 90s on win32 for
- * AV-scan headroom) is fine for normal cold boots, but the OD_LEGACY_DATA_DIR
+ * AV-scan headroom and on linux for AppImage FUSE cold starts) is fine for
+ * normal cold boots, but the OD_LEGACY_DATA_DIR
  * one-shot recovery flow can synch-copy a multi-GB legacy `.od/` payload before
  * SQLite even opens, and killing the child mid-migration can leave dataDir
  * half-promoted. When the env var is set, use a 30-minute budget so the parent
@@ -369,6 +413,10 @@ export type PackagedDaemonSpawnEnvOptions = {
   appVersion: string | null;
   amrProfile?: string | null;
   daemonCliEntry: string | null;
+  desktopHandoffEnv?: NodeJS.ProcessEnv;
+  mcpBootstrapArgs?: readonly string[];
+  mcpBootstrapCommand?: string | null;
+  nodeCommand?: string | null;
   /**
    * PR #974 round-5 (lefarcen P2): only pin the daemon's import-folder
    * gate ON when the desktop runtime is actually being started in the
@@ -411,10 +459,21 @@ export function buildPackagedDaemonSpawnEnv(
     // fallback, but packaged runtime must not rely on path inference from
     // Electron userData, bundle names, or ports.
     ...createPackagedDaemonManagedPathEnv(paths),
+    ...(options.nodeCommand == null || options.nodeCommand.length === 0
+      ? {}
+      : { OD_NODE_BIN: options.nodeCommand }),
     ...(options.amrProfile == null || options.amrProfile.length === 0
       ? {}
       : { OPEN_DESIGN_AMR_PROFILE: options.amrProfile }),
     ...(options.appVersion == null ? {} : { OD_APP_VERSION: options.appVersion }),
+    ...(options.mcpBootstrapCommand == null
+      || options.mcpBootstrapCommand.length === 0
+      ? {}
+      : { OD_MCP_BOOTSTRAP_COMMAND: options.mcpBootstrapCommand }),
+    ...(options.mcpBootstrapArgs == null
+      ? {}
+      : { OD_MCP_BOOTSTRAP_ARGS: JSON.stringify(options.mcpBootstrapArgs) }),
+    ...pickPackagedDesktopHandoffEnv(options.desktopHandoffEnv ?? {}),
     ...(options.telemetryRelayUrl == null || options.telemetryRelayUrl.length === 0
       ? {}
       : { OPEN_DESIGN_TELEMETRY_RELAY_URL: options.telemetryRelayUrl }),
@@ -439,6 +498,15 @@ export function buildPackagedDaemonSpawnEnv(
       ? {}
       : { POSTHOG_HOST: options.posthogHost }),
   };
+}
+
+function pickPackagedDesktopHandoffEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const selected: NodeJS.ProcessEnv = {};
+  for (const key of PACKAGED_DESKTOP_HANDOFF_ENV_KEYS) {
+    const value = env[key];
+    if (value != null && value.length > 0) selected[key] = value;
+  }
+  return selected;
 }
 
 async function spawnSidecarChild(options: {
@@ -489,12 +557,11 @@ async function spawnSidecarChild(options: {
   const child = spawn(
     command,
     [options.entryPath, ...createProcessStampArgs(stamp, OPEN_DESIGN_SIDECAR_CONTRACT)],
-    {
-      cwd: process.cwd(),
+    createPackagedSidecarSpawnOptions({
       env: childEnv,
-      stdio: ["ignore", logHandle.fd, logHandle.fd],
-      windowsHide: true,
-    },
+      logFd: logHandle.fd,
+      paths: options.paths,
+    }),
   );
 
   await new Promise<void>((resolveSpawn, rejectSpawn) => {
@@ -503,6 +570,24 @@ async function spawnSidecarChild(options: {
   });
 
   return { app: options.app, child, ipcPath, logHandle, logPath };
+}
+
+export function createPackagedSidecarSpawnOptions(input: {
+  env: NodeJS.ProcessEnv;
+  logFd: number;
+  paths: Pick<PackagedNamespacePaths, "runtimeRoot">;
+}): {
+  cwd: string;
+  env: NodeJS.ProcessEnv;
+  stdio: ["ignore", number, number];
+  windowsHide: true;
+} {
+  return {
+    cwd: input.paths.runtimeRoot,
+    env: input.env,
+    stdio: ["ignore", input.logFd, input.logFd],
+    windowsHide: true,
+  };
 }
 
 async function closeManagedChild(child: ManagedSidecarChild): Promise<void> {
@@ -523,6 +608,23 @@ async function closeManagedChild(child: ManagedSidecarChild): Promise<void> {
   await child.logHandle.close().catch(() => undefined);
 }
 
+export async function registerPackagedWebUrl(
+  daemonIpcPath: string,
+  webUrl: string,
+): Promise<void> {
+  const result = await requestJsonIpc<RegisterWebUrlResult>(
+    daemonIpcPath,
+    {
+      input: { url: webUrl },
+      type: SIDECAR_MESSAGES.REGISTER_WEB_URL,
+    },
+    { timeoutMs: 1_200 },
+  );
+  if (result.accepted !== true) {
+    throw new Error("daemon rejected packaged web URL registration");
+  }
+}
+
 export async function startPackagedSidecars(
   runtime: SidecarRuntimeContext<SidecarStamp>,
   paths: PackagedNamespacePaths,
@@ -533,6 +635,8 @@ export async function startPackagedSidecars(
     daemonSidecarEntry: string | null;
     electronNodeCommand: string | null;
     nodeCommand: string | null;
+    mcpBootstrapCommand: string | null;
+    mcpBootstrapArgs: readonly string[];
     telemetryRelayUrl: string | null;
     posthogKey: string | null;
     posthogHost: string | null;
@@ -572,16 +676,43 @@ export async function startPackagedSidecars(
 
   const children: ManagedSidecarChild[] = [];
 
+  const daemonSidecarEntry =
+    options.daemonSidecarEntry ?? resolveSidecarEntry("@open-design/daemon", "sidecar");
+  const webSidecarEntry =
+    options.webSidecarEntry ?? resolveSidecarEntry("@open-design/web", "sidecar");
+  const prewarmLog = (message: string): void => {
+    void appendSidecarLifecycleLog(join(paths.logsRoot, "launcher", "latest.log"), message);
+  };
+
   try {
+    // Issue #5835: on Linux AppImage the payload lives on a fresh FUSE mount
+    // with a cold page cache. Read the daemon's cold-start set (bundled node
+    // binary + daemon dist) into the page cache BEFORE spawning, so the
+    // timed status window covers real daemon work instead of demand-paging
+    // ~145 MB through FUSE page fault by page fault. Best-effort and gated
+    // to linux+FUSE inside prewarmPackagedFiles; plain-file installs skip.
+    await prewarmPackagedFiles(
+      resolveDaemonPrewarmTargets({
+        nodeCommand: options.nodeCommand,
+        daemonSidecarEntry,
+        resourceRoot: paths.resourceRoot,
+      }),
+      { log: prewarmLog },
+    );
+
     options.onPhase?.("daemon-spawning");
     const daemon = await spawnSidecarChild({
       app: APP_KEYS.DAEMON,
-      entryPath: options.daemonSidecarEntry ?? resolveSidecarEntry("@open-design/daemon", "sidecar"),
+      entryPath: daemonSidecarEntry,
       env: buildPackagedDaemonSpawnEnv(paths, {
         appVersion: options.appVersion,
         amrProfile: options.amrProfile,
         daemonCliEntry: options.daemonCliEntry,
+        desktopHandoffEnv: process.env,
         legacyDataDir: process.env.OD_LEGACY_DATA_DIR ?? null,
+        mcpBootstrapArgs: options.mcpBootstrapArgs,
+        mcpBootstrapCommand: options.mcpBootstrapCommand,
+        nodeCommand: options.nodeCommand,
         requireDesktopAuth: options.requireDesktopAuth,
         telemetryRelayUrl: options.telemetryRelayUrl,
         posthogKey: options.posthogKey,
@@ -593,6 +724,17 @@ export async function startPackagedSidecars(
       runtime,
     });
     children.push(daemon);
+    // The web prewarm overlaps the daemon's boot wait: its read set (web
+    // sidecar dist, .next/server chunks, Next framework code) is disjoint
+    // from the daemon's already-warm working set, so the FUSE server stays
+    // busy on sequential reads while the daemon does CPU/SQLite work.
+    const webPrewarm = prewarmPackagedFiles(
+      resolveWebPrewarmTargets({
+        webSidecarEntry,
+        webStandaloneRoot: options.webStandaloneRoot,
+      }),
+      { log: prewarmLog },
+    );
     const daemonStatus = await waitForStatus<DaemonStatusSnapshot>(
       daemon.ipcPath,
       (status) => status.url != null,
@@ -607,10 +749,14 @@ export async function startPackagedSidecars(
     if (daemonStatus.url == null) throw new Error("daemon did not report a URL");
     options.onPhase?.("daemon-ready");
 
+    // The web payload must be in the page cache before the web sidecar
+    // enters its own timed status window.
+    await webPrewarm;
+
     options.onPhase?.("web-spawning");
     const web = await spawnSidecarChild({
       app: APP_KEYS.WEB,
-      entryPath: options.webSidecarEntry ?? resolveSidecarEntry("@open-design/web", "sidecar"),
+      entryPath: webSidecarEntry,
       env: {
         [SIDECAR_ENV.DAEMON_PORT]: extractPort(daemonStatus.url),
         [SIDECAR_ENV.WEB_PORT]: "0",
@@ -634,6 +780,7 @@ export async function startPackagedSidecars(
       { child: web.child, logPath: logPathFor(paths, APP_KEYS.WEB) },
     );
     if (webStatus.url == null) throw new Error("web did not report a URL");
+    await registerPackagedWebUrl(daemon.ipcPath, webStatus.url);
     options.onPhase?.("web-ready");
 
     return {

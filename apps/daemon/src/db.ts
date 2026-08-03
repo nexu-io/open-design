@@ -80,6 +80,7 @@ function migrate(db: SqliteDb): void {
       project_id TEXT NOT NULL,
       title TEXT,
       session_mode TEXT NOT NULL DEFAULT 'design',
+      intent_signals_json TEXT,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL,
       FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
@@ -93,6 +94,12 @@ function migrate(db: SqliteDb): void {
       agent_id        TEXT NOT NULL,
       session_id      TEXT NOT NULL,
       stable_prompt_hash TEXT,
+      -- Per-section digests of the stable prefix inputs behind
+      -- stable_prompt_hash, as JSON (see prompts/stable-sections.ts). Purely
+      -- diagnostic: when the hash moves, diffing this against the current turn
+      -- names WHICH input drifted. Never gates a re-send -- stable_prompt_hash
+      -- stays the only source of truth for that.
+      stable_prompt_sections TEXT,
       -- Resume identity guard: the session is only safe to resume when the
       -- conversation has not changed shape under it. model/cwd are the runtime
       -- identity the upstream session was created with; a change forces a fresh
@@ -266,6 +273,9 @@ function migrate(db: SqliteDb): void {
   if (!conversationCols.some((c: DbRow) => c.name === 'session_mode')) {
     db.exec(`ALTER TABLE conversations ADD COLUMN session_mode TEXT NOT NULL DEFAULT 'design'`);
   }
+  if (!conversationCols.some((c: DbRow) => c.name === 'intent_signals_json')) {
+    db.exec(`ALTER TABLE conversations ADD COLUMN intent_signals_json TEXT`);
+  }
   const messageCols = db.prepare(`PRAGMA table_info(messages)`).all() as DbRow[];
   if (!messageCols.some((c: DbRow) => c.name === 'agent_id')) {
     db.exec(`ALTER TABLE messages ADD COLUMN agent_id TEXT`);
@@ -362,6 +372,12 @@ function migrate(db: SqliteDb): void {
   const agentSessionCols = db.prepare(`PRAGMA table_info(agent_sessions)`).all() as DbRow[];
   if (agentSessionCols.length > 0 && !agentSessionCols.some((c: DbRow) => c.name === 'stable_prompt_hash')) {
     db.exec(`ALTER TABLE agent_sessions ADD COLUMN stable_prompt_hash TEXT`);
+  }
+  // Drift attribution (see agent_sessions CREATE TABLE comment). Rows written
+  // before this column exists read back null and report `unattributed` for one
+  // turn, then self-heal on the next write.
+  if (agentSessionCols.length > 0 && !agentSessionCols.some((c: DbRow) => c.name === 'stable_prompt_sections')) {
+    db.exec(`ALTER TABLE agent_sessions ADD COLUMN stable_prompt_sections TEXT`);
   }
   // Resume identity guard columns (see agent_sessions CREATE TABLE comment).
   if (agentSessionCols.length > 0 && !agentSessionCols.some((c: DbRow) => c.name === 'model')) {
@@ -570,7 +586,7 @@ function normalizeDeployment(row: DbRow) {
     url: row.url,
     deploymentId: row.deploymentId ?? undefined,
     deploymentCount: Number(row.deploymentCount ?? 1),
-    target: 'preview',
+    target: row.target === 'production' ? 'production' : 'preview',
     status: row.status || 'ready',
     statusMessage: row.statusMessage ?? undefined,
     reachableAt: row.reachableAt == null ? undefined : Number(row.reachableAt),
@@ -1247,6 +1263,96 @@ export function deleteConversation(db: SqliteDb, id: string) {
   db.prepare(`DELETE FROM conversations WHERE id = ?`).run(id);
 }
 
+// ---------- conversation intent signals ----------
+
+// Latched per-conversation intent detections (deck / media / platform).
+// These gate stable-region prompt blocks; the latch keeps a signal from
+// flipping OFF when the visible transcript is trimmed (agent switch) or the
+// client never resends prior turns. Keyed by conversation only — intent
+// belongs to the conversation, not the agent.
+export interface ConversationIntentSignals {
+  deck: boolean;
+  media: boolean;
+  platform: boolean;
+}
+
+const NO_INTENT_SIGNALS: ConversationIntentSignals = {
+  deck: false,
+  media: false,
+  platform: false,
+};
+
+/**
+ * Read the conversation's latched intent signals. A missing row, NULL
+ * column, or unparsable value all read as all-false (pre-hotfix
+ * conversations and fresh rows).
+ */
+export function readConversationIntentSignals(
+  db: SqliteDb,
+  conversationId: string,
+): ConversationIntentSignals {
+  const row = db
+    .prepare(`SELECT intent_signals_json AS intentSignalsJson FROM conversations WHERE id = ?`)
+    .get(conversationId) as DbRow | undefined;
+  return normalizeIntentSignals(row?.intentSignalsJson);
+}
+
+function normalizeIntentSignals(value: unknown): ConversationIntentSignals {
+  if (typeof value !== 'string' || value.length === 0) return { ...NO_INTENT_SIGNALS };
+  try {
+    const parsed = JSON.parse(value) as Record<string, unknown> | null;
+    return {
+      deck: parsed?.deck === true,
+      media: parsed?.media === true,
+      platform: parsed?.platform === true,
+    };
+  } catch {
+    return { ...NO_INTENT_SIGNALS };
+  }
+}
+
+/**
+ * Latch this turn's fresh intent detections onto the conversation:
+ * `effective = stored OR fresh`, persisted only when it changes. Signals
+ * only ever turn ON for the life of a conversation (monotonic), so a
+ * genuine mid-conversation activation costs exactly one stable-prompt miss
+ * and a later signal-free turn cannot flip it back OFF. A conversationId
+ * without a persisted row degrades to fresh detection (nothing to latch on).
+ *
+ * The read+merge+write runs inside a BEGIN IMMEDIATE transaction: the write
+ * lock is taken before the read, so no other connection can commit between
+ * them and clobber a previously latched bit. Within one daemon process the
+ * sequence is already non-interleavable (better-sqlite3 is synchronous and
+ * there is no await point between read and write); the transaction pins the
+ * monotonic guarantee against future refactors and multi-connection writers.
+ */
+export function latchConversationIntentSignals(
+  db: SqliteDb,
+  conversationId: string,
+  fresh: ConversationIntentSignals,
+): ConversationIntentSignals {
+  const latch = db.transaction((): ConversationIntentSignals => {
+    const stored = readConversationIntentSignals(db, conversationId);
+    const effective: ConversationIntentSignals = {
+      deck: stored.deck || fresh.deck,
+      media: stored.media || fresh.media,
+      platform: stored.platform || fresh.platform,
+    };
+    if (
+      effective.deck !== stored.deck ||
+      effective.media !== stored.media ||
+      effective.platform !== stored.platform
+    ) {
+      db.prepare(`UPDATE conversations SET intent_signals_json = ? WHERE id = ?`).run(
+        JSON.stringify(effective),
+        conversationId,
+      );
+    }
+    return effective;
+  });
+  return latch.immediate();
+}
+
 // ---------- agent sessions ----------
 
 export function getAgentSession(
@@ -1270,6 +1376,7 @@ export function upsertAgentSession(
     agentId: string;
     sessionId: string;
     stablePromptHash?: string | null;
+    stablePromptSections?: string | null;
     model?: string | null;
     cwd?: string | null;
     lastMessageId?: string | null;
@@ -1277,11 +1384,13 @@ export function upsertAgentSession(
 ): void {
   db.prepare(
     `INSERT INTO agent_sessions
-       (conversation_id, agent_id, session_id, stable_prompt_hash, model, cwd, last_message_id, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       (conversation_id, agent_id, session_id, stable_prompt_hash, stable_prompt_sections,
+        model, cwd, last_message_id, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(conversation_id, agent_id)
        DO UPDATE SET session_id = excluded.session_id,
                      stable_prompt_hash = excluded.stable_prompt_hash,
+                     stable_prompt_sections = excluded.stable_prompt_sections,
                      model = excluded.model,
                      cwd = excluded.cwd,
                      last_message_id = excluded.last_message_id,
@@ -1291,6 +1400,7 @@ export function upsertAgentSession(
     input.agentId,
     input.sessionId,
     input.stablePromptHash ?? null,
+    input.stablePromptSections ?? null,
     input.model ?? null,
     input.cwd ?? null,
     input.lastMessageId ?? null,
@@ -1305,13 +1415,15 @@ export function getAgentSessionRecord(
 ): {
   sessionId: string;
   stablePromptHash: string | null;
+  stablePromptSections: string | null;
   model: string | null;
   cwd: string | null;
   lastMessageId: string | null;
 } | null {
   const row = db
     .prepare(
-      `SELECT session_id, stable_prompt_hash, model, cwd, last_message_id FROM agent_sessions
+      `SELECT session_id, stable_prompt_hash, stable_prompt_sections, model, cwd, last_message_id
+         FROM agent_sessions
         WHERE conversation_id = ? AND agent_id = ?`,
     )
     .get(conversationId, agentId) as DbRow | undefined;
@@ -1320,6 +1432,8 @@ export function getAgentSessionRecord(
     sessionId: row.session_id,
     stablePromptHash:
       typeof row.stable_prompt_hash === 'string' ? row.stable_prompt_hash : null,
+    stablePromptSections:
+      typeof row.stable_prompt_sections === 'string' ? row.stable_prompt_sections : null,
     model: typeof row.model === 'string' ? row.model : null,
     cwd: typeof row.cwd === 'string' ? row.cwd : null,
     lastMessageId: typeof row.last_message_id === 'string' ? row.last_message_id : null,
@@ -1414,6 +1528,35 @@ export function listMessages(db: SqliteDb, conversationId: string) {
     )
     .all(conversationId) as DbRow[])
     .map(normalizeMessage);
+}
+
+export function conversationTurnIndexForRun(
+  db: SqliteDb,
+  conversationId: string,
+  runId: string,
+): number | null {
+  const row = db
+    .prepare(
+      `SELECT (
+          SELECT COUNT(*)
+            FROM messages AS previous
+           WHERE previous.conversation_id = current.conversation_id
+             AND previous.role = 'assistant'
+             AND previous.run_id IS NOT NULL
+             AND previous.position < current.position
+        ) AS conversationTurnIndex
+         FROM messages AS current
+        WHERE current.conversation_id = ?
+          AND current.role = 'assistant'
+          AND current.run_id = ?
+        ORDER BY current.position ASC
+        LIMIT 1`,
+    )
+    .get(conversationId, runId) as DbRow | undefined;
+  const index = row?.conversationTurnIndex;
+  return typeof index === 'number' && Number.isInteger(index) && index >= 0
+    ? index
+    : null;
 }
 
 export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {

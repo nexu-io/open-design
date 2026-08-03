@@ -10,8 +10,8 @@ export const DEFAULT_MODEL_OPTION: RuntimeModelOption = {
 // recent live list (refreshed every detectAgents() call) and additionally
 // trust any value present in the static fallback. A model that's neither
 // gets rejected so a stale or hostile value can't smuggle arbitrary flags.
-const liveModelCache = new Map<string, Set<string>>();
 const liveModelOrder = new Map<string, RuntimeModelOption[]>();
+const liveModelCache = new Map<string, Map<string, RuntimeModelOption>>();
 
 function liveModelCacheKey(agentId: string, scope?: string | null): string {
   const trimmedScope = typeof scope === 'string' ? scope.trim() : '';
@@ -24,11 +24,10 @@ export function rememberLiveModels(agentId: string, models: RuntimeModelOption[]
     (model): model is RuntimeModelOption =>
       model != null && typeof model.id === 'string',
   );
-  const ids = remembered.map((model) => model.id);
   const key = liveModelCacheKey(agentId, scope);
   liveModelCache.set(
     key,
-    new Set(ids),
+    new Map(remembered.map((model) => [model.id, model])),
   );
   liveModelOrder.set(key, remembered);
 }
@@ -52,26 +51,127 @@ export function preferFreshLiveModels(
   return freshModels.length > 0 ? freshModels : rememberedModels;
 }
 
+function findFallbackModel(
+  def: RuntimeAgentDef,
+  modelId: string,
+): RuntimeModelOption | null {
+  if (!Array.isArray(def.fallbackModels)) return null;
+  return def.fallbackModels.find((m) => m.id === modelId) ?? null;
+}
+
+function cloneModelOptions(options: RuntimeModelOption[]): RuntimeModelOption[] {
+  return options.map((option) => ({ ...option }));
+}
+
+function cloneStringOptions(options: string[]): string[] {
+  return [...options];
+}
+
+function mergeMissingFallbackModelMetadata(
+  model: RuntimeModelOption,
+  fallback: RuntimeModelOption | null,
+): RuntimeModelOption {
+  if (!fallback) return model;
+  const fallbackSpeedTiers = fallback.additionalSpeedTiers;
+  const fallbackServiceTiers = fallback.serviceTierOptions;
+  const needsSpeedTiers =
+    (!model.additionalSpeedTiers || model.additionalSpeedTiers.length === 0) &&
+    Array.isArray(fallbackSpeedTiers) &&
+    fallbackSpeedTiers.length > 0;
+  const needsServiceTiers =
+    (!model.serviceTierOptions || model.serviceTierOptions.length === 0) &&
+    Array.isArray(fallbackServiceTiers) &&
+    fallbackServiceTiers.length > 0;
+  if (!needsSpeedTiers && !needsServiceTiers) return model;
+  return {
+    ...model,
+    ...(needsSpeedTiers
+      ? { additionalSpeedTiers: cloneStringOptions(fallbackSpeedTiers) }
+      : {}),
+    ...(needsServiceTiers
+      ? { serviceTierOptions: cloneModelOptions(fallbackServiceTiers) }
+      : {}),
+  };
+}
+
+export function mergeFallbackModelMetadata(
+  def: RuntimeAgentDef,
+  models: RuntimeModelOption[],
+): RuntimeModelOption[] {
+  if (!Array.isArray(def.fallbackModels) || def.fallbackModels.length === 0) {
+    return models;
+  }
+  return models.map((model) =>
+    mergeMissingFallbackModelMetadata(model, findFallbackModel(def, model.id)),
+  );
+}
+
+export function findKnownModel(
+  def: RuntimeAgentDef,
+  modelId: string | null | undefined,
+  scope?: string | null,
+): RuntimeModelOption | null {
+  if (!modelId) return null;
+  const live = liveModelCache.get(liveModelCacheKey(def.id, scope));
+  const liveModel = live?.get(modelId);
+  const fallbackModel = findFallbackModel(def, modelId);
+  if (liveModel) {
+    return mergeMissingFallbackModelMetadata(liveModel, fallbackModel);
+  }
+  return fallbackModel;
+}
+
 export function isKnownModel(
   def: RuntimeAgentDef,
   modelId: string | null | undefined,
   scope?: string | null,
 ) {
-  if (!modelId) return false;
-  const live = liveModelCache.get(liveModelCacheKey(def.id, scope));
-  if (live && live.has(modelId)) return true;
-  if (Array.isArray(def.fallbackModels)) {
-    return def.fallbackModels.some((m) => m.id === modelId);
-  }
-  return false;
+  return Boolean(findKnownModel(def, modelId, scope));
 }
 
-// Some adapters omit the synthetic `'default'` option from `fallbackModels`
-// because they only accept concrete ids for explicit model selection. When a
-// chat run has no model at all, prefer the first model from the live list last
-// surfaced to the UI, then fall back to the def's first concrete fallback id.
-// An explicit `'default'` choice is preserved so ACP runtimes can leave model
-// selection to the upstream session's own configured default.
+export function isKnownServiceTier(
+  def: RuntimeAgentDef,
+  modelId: string | null | undefined,
+  serviceTier: string | null | undefined,
+  scope?: string | null,
+) {
+  if (!serviceTier || serviceTier === 'default') return false;
+  const model = findKnownModel(def, modelId, scope);
+  return Boolean(
+    model?.serviceTierOptions?.some((tier) => tier.id === serviceTier),
+  );
+}
+
+export function resolveModelForServiceTier(
+  def: RuntimeAgentDef,
+  modelId: string | null | undefined,
+  serviceTier: string | null | undefined,
+  scope?: string | null,
+): string | null {
+  if (!serviceTier || serviceTier === 'default') return modelId ?? null;
+  if (isKnownServiceTier(def, modelId, serviceTier, scope)) return modelId ?? null;
+  if (modelId && modelId !== 'default') return modelId;
+  const candidates = [
+    ...getRememberedLiveModels(def.id, scope),
+    ...(Array.isArray(def.fallbackModels) ? def.fallbackModels : []),
+  ];
+  const seen = new Set<string>();
+  for (const candidate of candidates) {
+    if (!candidate?.id || candidate.id === 'default' || seen.has(candidate.id)) continue;
+    seen.add(candidate.id);
+    if (isKnownServiceTier(def, candidate.id, serviceTier, scope)) return candidate.id;
+  }
+  return modelId ?? null;
+}
+
+// Some adapters reject the synthetic `'default'` model id (e.g. AMR / vela,
+// which requires an explicit `session/set_model` before `session/prompt`).
+// Those defs declare it by omitting DEFAULT_MODEL_OPTION from
+// `fallbackModels` entirely. When the chat run produces a null or 'default'
+// model for one of those adapters, prefer the first model from the live list
+// last surfaced to the UI, then fall back to the def's first concrete fallback
+// id so the spawn layer always has a real model to forward.
+// Defs that DO list 'default' (the common case) are left untouched.
 export function resolveModelForAgent(
   def: RuntimeAgentDef,
   resolved: string | null,

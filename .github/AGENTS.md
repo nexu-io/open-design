@@ -12,8 +12,9 @@ Before changing GitHub automation, read the current versions of:
 - `.github/workflows/report.atom.yml`
 - `.github/scripts/handoff.py`
 - `scripts/scopes.ts`
+- `specs/current/ci.md` when changing scope rules, confidence tiers, or guards
 - `e2e/tests/packaged-smoke-workflow.test.ts`
-- `scripts/approve-fork-pr-workflows.ts` and `scripts/approve-fork-pr-workflows.test.ts` when touching fork PR approval behavior
+- `scripts/approve-fork-pr-workflows.ts` and `e2e/tests/scripts/approve-fork-pr-workflows.test.ts` when touching fork PR approval behavior
 
 If the change affects cross-workflow behavior, update the topology tests instead of relying only on workflow YAML review.
 
@@ -44,7 +45,7 @@ Default rule: do not add a new domain-specific follow-on workflow such as `foo.c
 - `.github/workflows/` contains GitHub Actions workflow entrypoints.
 - `.github/actions/` contains reusable composite actions for workflow setup steps.
 - `.github/scripts/` contains workflow-owned scripts and contracts that are not general repo developer commands.
-- `.github/workflow/scripts/` currently contains older release workflow implementation scripts. Treat it as existing release infrastructure, not as the default location for new CI handoff helpers.
+- `.github/scripts/release/` contains release workflow implementation helpers. Keep release-only helpers there and CI handoff helpers at `.github/scripts/`.
 - Root `scripts/` remains for repo-level developer checks, product scripts, and guard/test logic. Do not move workflow-only handoff glue there just to make it look more general.
 
 New workflow-owned helpers should usually live under `.github/scripts/`. Prefer TypeScript for project-owned scripts in general, but Python is acceptable for small GitHub runner glue when stdlib portability and low setup cost matter. Keep such exceptions narrow and covered by `pnpm guard` policy.
@@ -163,4 +164,4 @@ GitHub artifact behavior is easy to drift: artifact names must be unique per upl
 
 ### Where should tests live?
 
-Cross-workflow topology tests belong in `e2e/tests/` when they observe repository-level behavior. Script-specific behavior can stay next to the script's existing tests. Do not add one-off `*.test.ts` files just because a workflow helper exists; prefer existing topology coverage and helper self-checks when that is enough.
+Cross-workflow topology tests belong in `e2e/tests/` when they observe repository-level behavior. Root `scripts/` is test-free (enforced by `pnpm guard`); script behavior-contract coverage lives in `e2e/tests/scripts/`. Do not add one-off `*.test.ts` files just because a workflow helper exists; prefer existing topology coverage and helper self-checks when that is enough.

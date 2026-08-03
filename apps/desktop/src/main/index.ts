@@ -47,11 +47,23 @@ import {
   reportPriorDesktopUncleanExits,
 } from "./observability.js";
 import { attachDesktopProcessErrorFilter } from "./uncaught-exception.js";
-import { createDesktopUpdater, createDesktopUpdaterScheduler, type DesktopUpdaterScheduler } from "./updater.js";
+import {
+  DEFAULT_DESKTOP_UPDATE_MENU_LABELS,
+  deriveDesktopUpdateMenuItem,
+  desktopUpdateMenuItemKey,
+  type DesktopUpdateMenuLabels,
+} from "./update-menu.js";
+import {
+  createDesktopUpdater,
+  createDesktopUpdaterScheduler,
+  type DesktopUpdater,
+  type DesktopUpdaterScheduler,
+} from "./updater.js";
 import {
   exportDiagnosticsToFile,
   registerDesktopDiagnosticsIpc,
 } from "./diagnostics.js";
+import { notifyDesktopExternalShow } from "./external-show.js";
 
 // Re-export pure URL-policy helpers so the packaged workspace's
 // vitest can pin their behaviour without spinning up a full Electron
@@ -130,6 +142,7 @@ export function applyOsLocaleSwitch(electronApp: Electron.App): string {
 
 export type DesktopMainOptions = {
   beforeShutdown?: () => Promise<void>;
+  onExternalShow?: () => void | Promise<void>;
   discoverWebUrl?: () => Promise<string | null>;
   /**
    * Round-7 (lefarcen P2 @ runtime.ts:336): packaged builds report the
@@ -335,12 +348,22 @@ async function writeAppConfigToDaemon(
   return payload.config;
 }
 
+type DesktopMenuController = {
+  dispose(): void;
+  setUpdateLabels(labels: DesktopUpdateMenuLabels): void;
+};
+
 function installDesktopMenu(
   runtime: SidecarRuntimeContext<SidecarStamp>,
-  options: Pick<DesktopMainOptions, "discoverDaemonUrl" | "discoverWebUrl"> = {},
-): () => void {
+  options: Pick<DesktopMainOptions, "discoverDaemonUrl" | "discoverWebUrl"> & {
+    onOpenUpdateDialog?: () => void;
+    updater: DesktopUpdater;
+  },
+): DesktopMenuController {
   let developMenuVisible = false;
   let lastKnownAmrProfile: AmrEnvironmentProfile = "prod";
+  let updateMenuLabels = DEFAULT_DESKTOP_UPDATE_MENU_LABELS;
+  let updateStatus = options.updater.snapshot();
   const developMenuAccelerator = process.platform === "darwin" ? "Command+Option+Shift+D" : "Control+Alt+Shift+D";
 
   const showDevelopMenuError = (message: string, error: unknown): void => {
@@ -406,7 +429,14 @@ function installDesktopMenu(
       console.error("desktop diagnostics export from menu failed", error);
     });
   };
+  let lastUpdateMenuItemKey: string | null = null;
   const rebuild = () => {
+    const updateMenuItem = deriveDesktopUpdateMenuItem({
+      labels: updateMenuLabels,
+      platform: process.platform,
+      status: updateStatus,
+    });
+    lastUpdateMenuItemKey = desktopUpdateMenuItemKey(updateMenuItem);
     const template: MenuItemConstructorOptions[] = [
       ...(process.platform === "darwin"
         ? [
@@ -414,6 +444,14 @@ function installDesktopMenu(
               label: app.name,
               submenu: [
                 { role: "about" as const },
+                ...(updateMenuItem.visible
+                  ? [{
+                      click: options.onOpenUpdateDialog,
+                      enabled: updateMenuItem.enabled,
+                      id: "check-for-updates",
+                      label: updateMenuItem.label,
+                    }]
+                  : []),
                 { type: "separator" as const },
                 { role: "services" as const },
                 { type: "separator" as const },
@@ -521,14 +559,34 @@ function installDesktopMenu(
   };
 
   rebuild();
+  const unsubscribeUpdater = options.updater.subscribe(() => {
+    updateStatus = options.updater.snapshot();
+    // Updater status ticks frequently during downloads (progress updates),
+    // but Menu.setApplicationMenu drops open menus and burns main-process
+    // work. Rebuild only when the derived update item actually changes.
+    const nextKey = desktopUpdateMenuItemKey(deriveDesktopUpdateMenuItem({
+      labels: updateMenuLabels,
+      platform: process.platform,
+      status: updateStatus,
+    }));
+    if (nextKey === lastUpdateMenuItemKey) return;
+    rebuild();
+  });
   const registered = globalShortcut.register(developMenuAccelerator, toggleDevelopMenu);
   if (!registered) {
     console.warn("[open-design desktop] develop menu shortcut unavailable", { accelerator: developMenuAccelerator });
   }
-  return () => {
-    if (registered) {
-      globalShortcut.unregister(developMenuAccelerator);
-    }
+  return {
+    dispose() {
+      unsubscribeUpdater();
+      if (registered) {
+        globalShortcut.unregister(developMenuAccelerator);
+      }
+    },
+    setUpdateLabels(labels) {
+      updateMenuLabels = labels;
+      rebuild();
+    },
   };
 }
 
@@ -713,6 +771,7 @@ export async function runDesktopMain(
   let removeDiagnosticsIpc: () => void = () => undefined;
   let ipcServer: JsonIpcServerHandle | null = null;
   let shuttingDown = false;
+  let pendingUpdateDialogRequest = false;
 
   async function snapshotUpdateForStatus(): Promise<{
     update: DesktopUpdateStatusSnapshot;
@@ -809,6 +868,7 @@ export async function runDesktopMain(
             return activeDesktop.console();
           case SIDECAR_MESSAGES.SHOW:
             activeDesktop.show();
+            notifyDesktopExternalShow(options.onExternalShow);
             return { accepted: true };
           case SIDECAR_MESSAGES.CLICK:
             return await activeDesktop.click(request.input as DesktopClickInput);
@@ -838,6 +898,19 @@ export async function runDesktopMain(
   });
   console.info("[open-design desktop] desktop IPC server listening", { ipc: runtime.ipc });
 
+  const menuController = installDesktopMenu(runtime, {
+    ...options,
+    onOpenUpdateDialog: () => {
+      if (desktop == null) {
+        pendingUpdateDialogRequest = true;
+        return;
+      }
+      desktop.openUpdateDialog({ source: "mac-app-menu" });
+    },
+    updater,
+  });
+  disposeMenu = menuController.dispose;
+
   console.info("[open-design desktop] creating desktop runtime");
   desktop = await createDesktopRuntime({
     desktopAuthSecret,
@@ -858,14 +931,23 @@ export async function runDesktopMain(
     // fires, a crash is still a startup failure (covered by
     // packaged_runtime_failed), not a runtime abnormal exit.
     onRevealed: () => markDesktopSessionRunning({ stateFilePath: sessionStatePath }),
+    onUpdateMenuLabels: menuController.setUpdateLabels,
     requestQuit: shutdownAndExit,
     splashWindow: options.splashWindow,
     splashStartedAt: options.splashStartedAt,
     updater,
     windowTitle: options.windowTitle,
   });
+  if (pendingUpdateDialogRequest) {
+    pendingUpdateDialogRequest = false;
+    desktop.openUpdateDialog({ source: "mac-app-menu" });
+  }
   console.info("[open-design desktop] desktop runtime created");
-  options.onDesktopReady?.({ show: () => desktop?.show() });
+  options.onDesktopReady?.({
+    show: () => {
+      void Promise.resolve(options.onExternalShow?.()).finally(() => desktop?.show());
+    },
+  });
 
   const discoverDaemonBaseUrl = resolveDaemonBaseUrl(runtime, options);
   // Report each abnormal exit of a prior run now that the daemon is up to relay
@@ -890,7 +972,6 @@ export async function runDesktopMain(
     app,
     (event, properties) => reportDesktopObservabilityEvent(discoverDaemonBaseUrl, event, properties),
   );
-  disposeMenu = installDesktopMenu(runtime, options);
   removeDiagnosticsIpc = registerDesktopDiagnosticsIpc({
     discoverDaemonBaseUrl: resolveDaemonBaseUrl(runtime, options),
   });

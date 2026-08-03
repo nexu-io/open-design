@@ -4,6 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { OpenDesignHostUpdaterStatusSnapshot } from '@open-design/host';
 import { installMockOpenDesignHost } from '@open-design/host/testing';
+import type { UpsertByokCredentialProfileRequest } from '@open-design/contracts';
 import { en } from '../../src/i18n/locales/en';
 
 function optionNames(container: HTMLElement): string[] {
@@ -111,6 +112,7 @@ import { reconcileAmrProfileEnv } from '../../src/components/SettingsDialog';
 import { providerModelsCacheKey } from '../../src/components/providerModelsCache';
 import { I18nProvider } from '../../src/i18n';
 import { LOCALES } from '../../src/i18n/types';
+import { ByokCredentialProfileHttpError } from '../../src/state/config';
 import { MAX_MAX_TOKENS, MIN_MAX_TOKENS } from '../../src/state/maxTokens';
 import type {
   AgentInfo,
@@ -157,6 +159,8 @@ const amrAgent: AgentInfo = {
   models: [{ id: 'default', label: 'Default' }],
   supportsCustomModel: false,
 };
+
+const inFlightAuthAttemptId = '936da01f-9abd-4d9d-80c7-02af85c822a8';
 
 type OnRefreshAgents = (
   options?: AgentRefreshOptions,
@@ -282,6 +286,19 @@ function renderSettingsDialog(
 ) {
   const onPersist = vi.fn();
   const onPersistComposioKey = vi.fn();
+  const onPersistByokCredential = vi.fn(async (input: UpsertByokCredentialProfileRequest) => ({
+    id: input.id ?? 'byok-test-profile',
+    label: input.label,
+    protocol: input.protocol,
+    baseUrl: input.baseUrl,
+    model: input.model,
+    apiVersion: input.apiVersion,
+    requiresApiKey: input.requiresApiKey ?? true,
+    configured: true,
+    keyTail: input.apiKey?.slice(-4),
+    createdAt: 1,
+    updatedAt: 1,
+  }));
   const onSilentUpdatePreferenceChange: (allowSilentUpdates: boolean) => Promise<void> =
     options.onSilentUpdatePreferenceChange
     ?? (async () => undefined);
@@ -300,6 +317,7 @@ function renderSettingsDialog(
       onPersist={onPersist}
       onSilentUpdatePreferenceChange={onSilentUpdatePreferenceChange}
       onPersistComposioKey={onPersistComposioKey}
+      onPersistByokCredential={onPersistByokCredential}
       onClose={onClose}
       onRefreshAgents={onRefreshAgents}
     />,
@@ -309,6 +327,7 @@ function renderSettingsDialog(
     onPersist,
     onSilentUpdatePreferenceChange,
     onPersistComposioKey,
+    onPersistByokCredential,
     onClose,
     onRefreshAgents,
     ...view,
@@ -671,9 +690,17 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     await waitForPersist(
       first.onPersist,
       expect.objectContaining({
-        apiProviderBaseUrl: 'https://api.deepseek.com',
-        baseUrl: 'https://api.deepseek.com',
+        apiProviderBaseUrl: 'https://api.openai.com/v1',
+        baseUrl: 'https://api.openai.com/v1',
+        byokPendingProviderKey: 'openai:https://api.deepseek.com',
         byokProviderConfigDrafts: expect.objectContaining({
+          'openai:https://api.deepseek.com': expect.objectContaining({
+            apiConfig: expect.objectContaining({
+              apiKey: '',
+              baseUrl: 'https://api.deepseek.com',
+              model: 'deepseek-v4-flash',
+            }),
+          }),
           'openai:https://api.openai.com/v1': expect.objectContaining({
             apiConfig: expect.objectContaining({
               apiKey: 'sk-openai-provider',
@@ -733,7 +760,7 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
   });
 
   it('only persists Max tokens overrides within the supported BYOK range', async () => {
-    const { onPersist } = renderSettingsDialog({ apiKey: 'sk-test' });
+    const { onPersist } = renderSettingsDialog({ apiKey: 'sk-ant-test' });
 
     const maxTokensInput = screen.getByRole('spinbutton', { name: /Max tokens/ }) as HTMLInputElement;
     expect(maxTokensInput.min).toBe(String(MIN_MAX_TOKENS));
@@ -801,7 +828,9 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'OpenAI' }));
     selectGatewayPreset('DeepSeek — OpenAI');
 
-    expect(screen.getByRole('combobox', { name: 'Model' }).textContent).toContain('deepseek-chat');
+    expect(screen.getByRole('combobox', { name: 'Model' }).textContent).toContain(
+      'deepseek-v4-flash',
+    );
     expect((screen.getByLabelText('Base URL') as HTMLInputElement).value).toBe('https://api.deepseek.com');
   });
 
@@ -843,7 +872,9 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
 
     fireEvent.click(within(providerPopover).getByRole('option', { name: 'DeepSeek — Anthropic' }));
 
-    expect(screen.getByRole('combobox', { name: 'Model' }).textContent).toContain('deepseek-chat');
+    expect(screen.getByRole('combobox', { name: 'Model' }).textContent).toContain(
+      'deepseek-v4-flash',
+    );
     expect((screen.getByLabelText('Base URL') as HTMLInputElement).value).toBe(
       'https://api.deepseek.com/anthropic',
     );
@@ -935,10 +966,12 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     await waitFor(() => {
       expect(screen.getByText(/Connected\. Replied in 28 ms/)).toBeTruthy();
     });
-    const testConnectionCalls = fetchMock.mock.calls.filter(
-      ([input]) => input.toString() === '/api/test/connection',
-    );
-    expect(testConnectionCalls).toHaveLength(1);
+    await waitFor(() => {
+      const testConnectionCalls = fetchMock.mock.calls.filter(
+        ([input]) => input.toString() === '/api/test/connection',
+      );
+      expect(testConnectionCalls).toHaveLength(1);
+    });
   });
 
   it('keeps protocol drafts isolated without leaking API keys between tabs', () => {
@@ -996,11 +1029,143 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     );
   });
 
+  it('keeps a first-time incomplete BYOK setup as a draft until it is complete', async () => {
+    const first = renderSettingsDialog({
+      mode: 'daemon',
+      agentId: 'codex',
+      apiKey: '',
+      apiProtocol: 'anthropic',
+      baseUrl: 'https://api.anthropic.com',
+      model: 'claude-sonnet-4-5',
+      apiProviderBaseUrl: 'https://api.anthropic.com',
+    });
+
+    fireEvent.click(screen.getByRole('tab', { name: /BYOK.*API provider/i }));
+    fireEvent.change(screen.getByLabelText('API key'), {
+      target: { value: 'unfinished-key' },
+    });
+
+    expect(screen.getByTestId('settings-byok-draft-notice').textContent).toBe(
+      'This setup remains a draft until the required fields are complete. Your current execution setup stays active.',
+    );
+
+    await waitFor(() => expect(first.onPersist).toHaveBeenCalled());
+    expect(first.onPersist.mock.calls.at(-1)?.[0]).toMatchObject({
+      mode: 'daemon',
+      agentId: 'codex',
+      byokPendingProviderKey: 'anthropic:https://api.anthropic.com',
+      byokProviderConfigDrafts: {
+        'anthropic:https://api.anthropic.com': {
+          apiConfig: {
+            apiKey: 'unfinished-key',
+            baseUrl: 'https://api.anthropic.com',
+            model: 'claude-sonnet-4-5',
+          },
+        },
+      },
+    });
+    expect(analyticsTrackMock).toHaveBeenCalledWith(
+      'byok_preflight_blocked',
+      {
+        source: 'settings',
+        reason: 'api_key_invalid',
+        provider_id: 'anthropic',
+        active_execution_mode: 'local_cli',
+      },
+      undefined,
+    );
+
+    const persistedDraft = first.onPersist.mock.calls.at(-1)?.[0] as AppConfig;
+    first.unmount();
+
+    const reopened = renderSettingsDialog(persistedDraft);
+    fireEvent.click(screen.getByRole('tab', { name: /BYOK.*API provider/i }));
+    expect((screen.getByLabelText('API key') as HTMLInputElement).value).toBe(
+      'unfinished-key',
+    );
+
+    reopened.onPersist.mockClear();
+    fireEvent.change(screen.getByLabelText('API key'), {
+      target: { value: 'sk-ant-complete' },
+    });
+
+    await waitFor(() =>
+      expect(reopened.onPersist).toHaveBeenCalledWith(
+        expect.objectContaining({
+          mode: 'api',
+          apiKey: 'sk-ant-complete',
+          baseUrl: 'https://api.anthropic.com',
+          model: 'claude-sonnet-4-5',
+        }),
+        expect.any(Object),
+      ),
+    );
+  });
+
+  it('keeps the last valid BYOK config active while an edited replacement is incomplete', async () => {
+    const { onPersist } = renderSettingsDialog({
+      mode: 'api',
+      apiKey: 'sk-ant-active',
+      apiProtocol: 'anthropic',
+      baseUrl: 'https://api.anthropic.com',
+      model: 'claude-sonnet-4-5',
+      apiProviderBaseUrl: 'https://api.anthropic.com',
+    });
+
+    fireEvent.change(screen.getByLabelText('API key'), {
+      target: { value: '' },
+    });
+
+    await waitFor(() => expect(onPersist).toHaveBeenCalled());
+    expect(onPersist.mock.calls.at(-1)?.[0]).toMatchObject({
+      mode: 'api',
+      apiKey: 'sk-ant-active',
+      baseUrl: 'https://api.anthropic.com',
+      model: 'claude-sonnet-4-5',
+      byokProviderConfigDrafts: {
+        'anthropic:https://api.anthropic.com': {
+          apiConfig: {
+            apiKey: '',
+            baseUrl: 'https://api.anthropic.com',
+            model: 'claude-sonnet-4-5',
+          },
+        },
+      },
+    });
+  });
+
+  it('persists a cleared API key after the active provider field is committed', async () => {
+    const { onPersist } = renderSettingsDialog({
+      mode: 'api',
+      apiKey: 'sk-ant-active',
+      apiProtocol: 'anthropic',
+      baseUrl: 'https://api.anthropic.com',
+      model: 'claude-sonnet-4-5',
+      apiProviderBaseUrl: 'https://api.anthropic.com',
+    });
+    const apiKeyInput = screen.getByLabelText('API key');
+
+    fireEvent.change(apiKeyInput, { target: { value: '' } });
+    fireEvent.blur(apiKeyInput);
+
+    await waitFor(() =>
+      expect(onPersist).toHaveBeenCalledWith(
+        expect.objectContaining({
+          mode: 'api',
+          apiKey: '',
+          baseUrl: 'https://api.anthropic.com',
+          model: 'claude-sonnet-4-5',
+        }),
+        expect.any(Object),
+      ),
+    );
+  });
+
   it('surfaces autosave progress, success, and failure states in the modal chrome', async () => {
     const first = renderSettingsDialog();
 
     fireEvent.change(screen.getByLabelText('API key'), {
-      target: { value: 'sk-saved' },
+      target: { value: 'sk-ant-saved' },
     });
 
     await waitFor(() => {
@@ -1010,7 +1175,7 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
       expect(screen.getByText('All changes saved')).toBeTruthy();
     });
     expect(first.onPersist).toHaveBeenCalledWith(
-      expect.objectContaining({ apiKey: 'sk-saved' }),
+      expect.objectContaining({ apiKey: 'sk-ant-saved' }),
       expect.any(Object),
     );
 
@@ -1020,7 +1185,7 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     second.onPersist.mockRejectedValueOnce(new Error('daemon offline'));
 
     fireEvent.change(screen.getByLabelText('API key'), {
-      target: { value: 'sk-error' },
+      target: { value: 'sk-ant-error' },
     });
 
     await waitFor(() => {
@@ -1068,10 +1233,8 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     fireEvent.change(screen.getByLabelText('API key'), {
       target: { value: 'azure-key' },
     });
+    expect(screen.queryByLabelText('Custom deployment name')).toBeNull();
     fireEvent.change(screen.getByLabelText('Deployment name'), {
-      target: { value: '__custom__' },
-    });
-    fireEvent.change(screen.getByLabelText('Custom deployment name'), {
       target: { value: 'deployment-one' },
     });
     fireEvent.change(screen.getByLabelText('Base URL'), {
@@ -1094,10 +1257,26 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
         model: 'deployment-one',
         baseUrl: 'https://example.openai.azure.com',
         apiVersion: '2024-10-21',
-        apiProviderBaseUrl: null,
+        apiProviderBaseUrl: '',
       }),
       {},
     );
+
+    const persistedConfig = onPersist.mock.calls.at(-1)?.[0] as AppConfig;
+    cleanup();
+
+    renderSettingsDialog(persistedConfig);
+
+    expect((screen.getByLabelText('Deployment name') as HTMLInputElement).value).toBe(
+      'deployment-one',
+    );
+    expect((screen.getByLabelText('Base URL') as HTMLInputElement).value).toBe(
+      'https://example.openai.azure.com',
+    );
+    expect((screen.getByLabelText('API version') as HTMLInputElement).value).toBe(
+      '2024-10-21',
+    );
+    expect(screen.queryByLabelText('Custom deployment name')).toBeNull();
   });
 
   it('does not fetch provider models while the API key edit is still uncommitted', async () => {
@@ -1181,7 +1360,7 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     expect(screen.getByText('Model discovery is not available for this protocol.')).toBeTruthy();
 
     fetchProviderModelsMock.mockClear();
-    fireEvent.click(screen.getByRole('tab', { name: '小米 MiMo' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Xiaomi MiMo' }));
     await new Promise((resolve) => window.setTimeout(resolve, 350));
 
     expect(fetchProviderModelsMock).not.toHaveBeenCalled();
@@ -1253,6 +1432,112 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
       expect.objectContaining({
         apiProtocol: 'openai',
         model: 'account-ready-model',
+      }),
+      {},
+    );
+  });
+
+  it('replaces a retired preset with the first provider preference available to the account', async () => {
+    const testedModels: string[] = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === '/api/memory') {
+        return new Response(
+          JSON.stringify({ enabled: true, memories: [], extraction: null }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      expect(url).toBe('/api/test/connection');
+      const body = JSON.parse(String(init?.body)) as { model?: string };
+      testedModels.push(body.model ?? '');
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          kind: 'ok',
+          latencyMs: 7,
+          model: body.model,
+          sample: 'pong',
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    fetchProviderModelsMock.mockResolvedValueOnce({
+      ok: true,
+      kind: 'success',
+      latencyMs: 12,
+      models: [
+        { id: 'account-first', label: 'Account First' },
+        { id: 'kimi-k2.6', label: 'Kimi K2.6' },
+      ],
+    });
+    const { onPersist } = renderSettingsDialog({
+      apiProtocol: 'openai',
+      apiKey: 'sk-moonshot',
+      baseUrl: 'https://api.moonshot.cn/v1',
+      model: 'kimi-k2-0711-preview',
+      apiProviderBaseUrl: 'https://api.moonshot.cn/v1',
+    });
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Moonshot' }));
+
+    expect(await screen.findByText(/✓ Loaded \d+ models(?: from your account)?\./)).toBeTruthy();
+    expect(screen.getByRole('combobox', { name: 'Model' }).textContent).toContain(
+      'Kimi K2.6 (kimi-k2.6) · From your account',
+    );
+    expect(screen.getByRole('combobox', { name: 'Model' }).textContent).not.toContain(
+      'account-first',
+    );
+    await waitForPersist(
+      onPersist,
+      expect.objectContaining({
+        apiProtocol: 'openai',
+        model: 'kimi-k2.6',
+      }),
+      {},
+    );
+    await waitFor(() => {
+      expect(testedModels).toEqual(['kimi-k2.6']);
+    });
+  });
+
+  it('does not treat the first upstream model as the default when no preference matches', async () => {
+    fetchProviderModelsMock.mockResolvedValueOnce({
+      ok: true,
+      kind: 'success',
+      latencyMs: 12,
+      models: [
+        { id: 'account-first', label: 'Account First' },
+        { id: 'account-second', label: 'Account Second' },
+      ],
+    });
+    const { onPersist } = renderSettingsDialog({
+      apiProtocol: 'openai',
+      apiKey: 'sk-openai',
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4o',
+      apiProviderBaseUrl: 'https://api.openai.com/v1',
+    });
+
+    fireEvent.click(screen.getByRole('tab', { name: 'OpenAI' }));
+
+    expect(await screen.findByText(/✓ Loaded \d+ models(?: from your account)?\./)).toBeTruthy();
+    expect(screen.getByRole('combobox', { name: 'Model' }).textContent).not.toContain(
+      'account-first',
+    );
+    await waitForPersist(
+      onPersist,
+      expect.objectContaining({
+        apiProtocol: 'openai',
+        model: 'gpt-4o',
+        byokPendingProviderKey: 'openai:https://api.openai.com/v1',
+        byokProviderConfigDrafts: expect.objectContaining({
+          'openai:https://api.openai.com/v1': expect.objectContaining({
+            apiConfig: expect.objectContaining({
+              model: '',
+            }),
+          }),
+        }),
       }),
       {},
     );
@@ -1388,7 +1673,7 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
   });
 
   it('auto-tests a saved complete BYOK config when Settings opens', async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
       const url = input.toString();
       if (url === '/api/memory') {
         return new Response(
@@ -1521,7 +1806,7 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
       apiProviderBaseUrl: 'https://open.bigmodel.cn/api/paas/v4',
     });
 
-    fireEvent.click(screen.getByRole('tab', { name: '智谱' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Zhipu AI' }));
 
     expect(await screen.findByText('✓ Loaded 8 models from your account.')).toBeTruthy();
     fireEvent.click(screen.getByRole('combobox', { name: 'Model' }));
@@ -1996,10 +2281,12 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
       expect(apiKeyInput.value).toBe('sk-ant-test-provider');
     });
     expect(screen.getByText(en['settings.apiKeyCleaned'])).toBeTruthy();
-    const testConnectionCalls = fetchMock.mock.calls.filter(
-      ([input]) => input.toString() === '/api/test/connection',
-    );
-    expect(testConnectionCalls).toHaveLength(1);
+    await waitFor(() => {
+      const testConnectionCalls = fetchMock.mock.calls.filter(
+        ([input]) => input.toString() === '/api/test/connection',
+      );
+      expect(testConnectionCalls).toHaveLength(1);
+    });
   });
 
   it('lets users retry a failed BYOK connection test without editing the API key', async () => {
@@ -2106,6 +2393,60 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
       }),
       undefined,
     );
+  });
+
+  it('reports secure profile persistence failures with stable BYOK telemetry', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === '/api/memory') {
+        return new Response(
+          JSON.stringify({ enabled: true, memories: [], extraction: null }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      expect(url).toBe('/api/test/connection');
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          kind: 'ok',
+          latencyMs: 20,
+          model: 'claude-sonnet-4-5',
+          sample: 'pong',
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { onPersistByokCredential } = renderSettingsDialog({
+      apiKey: 'sk-ant-test-provider',
+    });
+    onPersistByokCredential.mockRejectedValueOnce(
+      new ByokCredentialProfileHttpError(
+        400,
+        'Invalid secure profile',
+        'VALIDATION_FAILED',
+      ),
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Test' }));
+
+    await waitFor(() => {
+      expect(analyticsTrackMock).toHaveBeenCalledWith(
+        'settings_byok_test_result',
+        expect.objectContaining({
+          page_name: 'settings',
+          area: 'execution_model',
+          provider_id: 'anthropic',
+          result: 'failed',
+          error_code: 'VALIDATION_FAILED',
+          error_kind: 'unknown',
+          field_missing: 'none',
+          success_after_action: false,
+        }),
+        undefined,
+      );
+    });
   });
 
   it('renders invalid Base URL test failures on the Base URL field', async () => {
@@ -2375,6 +2716,40 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     expect(optionNames(modelPopover)).toEqual(['gpt-4.1-mini', 'gpt-5.5', 'Custom (type below)…']);
   });
 
+  it('keeps the Local CLI custom model input clearable when default is the fallback model', () => {
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'codex' },
+      {
+        agents: [
+          {
+            ...availableAgents[0]!,
+            models: [{ id: 'default', label: 'Default' }],
+          },
+        ],
+      },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI/i }));
+    fireEvent.click(screen.getByRole('combobox', {
+      name: en['settings.modelPicker'],
+    }));
+    const modelPopover = screen.getByTestId('settings-agent-model-popover-codex');
+    fireEvent.click(within(modelPopover).getByRole('option', {
+      name: en['settings.modelCustom'],
+    }));
+
+    const customModelInput = screen.getByLabelText(
+      en['settings.modelCustomLabel'],
+    ) as HTMLInputElement;
+    expect(customModelInput.value).toBe('');
+
+    fireEvent.change(customModelInput, { target: { value: 'default' } });
+    expect(customModelInput.value).toBe('default');
+
+    fireEvent.change(customModelInput, { target: { value: '' } });
+    expect(customModelInput.value).toBe('');
+  });
+
   it('labels live CLI model metadata in the model picker', () => {
     renderSettingsDialog(
       { mode: 'daemon', agentId: 'codex' },
@@ -2417,6 +2792,129 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     expect(
       screen.getByText(/Showing built-in defaults/i),
     ).toBeTruthy();
+  });
+
+  it('persists Codex service tier selection and sends it to the agent test', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === '/api/test/connection') {
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            kind: 'success',
+            latencyMs: 12,
+            model: 'gpt-5.5',
+            sample: 'ok',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { onPersist } = renderSettingsDialog(
+      {
+        mode: 'daemon',
+        agentId: 'codex',
+        agentModels: {
+          codex: { model: 'gpt-5.5', reasoning: 'default' },
+        },
+      },
+      {
+        agents: [
+          {
+            ...availableAgents[0]!,
+            reasoningOptions: [
+              { id: 'default', label: 'Default' },
+              { id: 'high', label: 'High' },
+            ],
+            modelsSource: 'live',
+            models: [
+              { id: 'default', label: 'Default' },
+              {
+                id: 'gpt-5.5',
+                label: 'gpt-5.5',
+                serviceTierOptions: [{ id: 'priority', label: 'Fast' }],
+              },
+            ],
+          },
+        ],
+      },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI/i }));
+    const serviceTierPicker = screen.getByRole('combobox', {
+      name: en['settings.serviceTierPicker'],
+    }) as HTMLSelectElement;
+    expect(
+      Array.from(serviceTierPicker.options).map((option) => option.textContent),
+    ).toEqual(['Default', 'Fast']);
+
+    fireEvent.change(serviceTierPicker, { target: { value: 'priority' } });
+
+    await waitForPersist(
+      onPersist,
+      expect.objectContaining({
+        agentModels: {
+          codex: {
+            model: 'gpt-5.5',
+            reasoning: 'default',
+            serviceTier: 'priority',
+          },
+        },
+      }),
+      {},
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: en['settings.test'] }));
+
+    await waitFor(() => {
+      const calls = fetchMock.mock.calls as Array<[RequestInfo | URL, RequestInit?]>;
+      const testCall = calls.find(
+        ([input]) => input.toString() === '/api/test/connection',
+      );
+      expect(testCall).toBeDefined();
+      const init = testCall?.[1] as RequestInit | undefined;
+      const body = JSON.parse(String(init?.body));
+      expect(body).toEqual(expect.objectContaining({
+        mode: 'agent',
+        agentId: 'codex',
+        model: 'gpt-5.5',
+        reasoning: 'default',
+        serviceTier: 'priority',
+      }));
+    });
+
+    const reasoningPicker = screen.getByRole('combobox', {
+      name: en['settings.reasoningPicker'],
+    }) as HTMLSelectElement;
+    fireEvent.change(reasoningPicker, { target: { value: 'high' } });
+
+    await waitForPersist(
+      onPersist,
+      expect.objectContaining({
+        agentModels: {
+          codex: {
+            model: 'gpt-5.5',
+            reasoning: 'high',
+            serviceTier: 'priority',
+          },
+        },
+      }),
+      {},
+    );
+
+    fireEvent.change(serviceTierPicker, { target: { value: 'default' } });
+
+    await waitFor(() => {
+      const clearedPersist = onPersist.mock.calls.find(([config]) => {
+        const choice = (config as AppConfig).agentModels?.codex;
+        return choice?.model === 'gpt-5.5'
+          && choice.reasoning === 'high'
+          && !Object.prototype.hasOwnProperty.call(choice, 'serviceTier');
+      });
+      expect(clearedPersist).toBeDefined();
+    });
   });
 
   it('uses the existing Settings card picker for AMR without exposing custom stale models', () => {
@@ -2847,6 +3345,7 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
               ? {
                   loggedIn: false,
                   loginInFlight: true,
+                  authAttemptId: inFlightAuthAttemptId,
                   profile: 'local',
                   user: null,
                   configPath: '/Users/test/.amr/config.json',
@@ -2854,6 +3353,7 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
               : {
                   loggedIn: false,
                   loginInFlight: false,
+                  authAttemptId: inFlightAuthAttemptId,
                   profile: 'local',
                   user: null,
                   configPath: '/Users/test/.amr/config.json',
@@ -2863,6 +3363,9 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
         );
       }
       if (url === '/api/integrations/vela/login/cancel' && init?.method === 'POST') {
+        expect(JSON.parse(String(init.body))).toEqual({
+          authAttemptId: inFlightAuthAttemptId,
+        });
         statusStage = 'signed-out';
         return new Response(JSON.stringify({ canceled: true }), {
           status: 200,
@@ -2886,7 +3389,13 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
 
     expect(await screen.findByText('Canceled')).toBeTruthy();
-    expect(fetchMock).toHaveBeenCalledWith('/api/integrations/vela/login/cancel', { method: 'POST' });
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/integrations/vela/login/cancel',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ authAttemptId: inFlightAuthAttemptId }),
+      }),
+    );
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Authorize' })).toBeTruthy();
@@ -2920,6 +3429,7 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
           JSON.stringify({
             loggedIn: false,
             loginInFlight: true,
+            authAttemptId: inFlightAuthAttemptId,
             profile: 'local',
             user: null,
             configPath: '/Users/test/.amr/config.json',
@@ -2928,6 +3438,9 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
         );
       }
       if (url === '/api/integrations/vela/login/cancel' && init?.method === 'POST') {
+        expect(JSON.parse(String(init.body))).toEqual({
+          authAttemptId: inFlightAuthAttemptId,
+        });
         cancelReceived = true;
         return new Response(JSON.stringify({ canceled: true }), {
           status: 200,
@@ -2984,31 +3497,37 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
             ? {
                 loggedIn: false,
                 loginInFlight: true,
+                authAttemptId: inFlightAuthAttemptId,
                 profile: 'local',
                 user: null,
                 configPath: '/Users/test/.amr/config.json',
               }
             : statusStage === 'signed-in'
               ? {
-                  loggedIn: true,
-                  loginInFlight: false,
-                  profile: 'local',
-                  user: { id: 'user-1', email: 'late@example.com' },
-                  configPath: '/Users/test/.amr/config.json',
-                }
+                loggedIn: true,
+                loginInFlight: false,
+                authAttemptId: inFlightAuthAttemptId,
+                profile: 'local',
+                user: { id: 'user-1', email: 'late@example.com' },
+                configPath: '/Users/test/.amr/config.json',
+              }
               : {
-                  loggedIn: false,
-                  loginInFlight: false,
-                  profile: 'local',
-                  user: null,
-                  configPath: '/Users/test/.amr/config.json',
-                };
+                loggedIn: false,
+                loginInFlight: false,
+                authAttemptId: inFlightAuthAttemptId,
+                profile: 'local',
+                user: null,
+                configPath: '/Users/test/.amr/config.json',
+              };
         return new Response(JSON.stringify(body), {
           status: 200,
           headers: { 'content-type': 'application/json' },
         });
       }
       if (url === '/api/integrations/vela/login/cancel' && init?.method === 'POST') {
+        expect(JSON.parse(String(init.body))).toEqual({
+          authAttemptId: inFlightAuthAttemptId,
+        });
         statusStage = 'signed-out';
         return new Response(JSON.stringify({ canceled: true }), {
           status: 200,
@@ -4942,6 +5461,76 @@ describe('SettingsDialog about interactions', () => {
     expect(screen.getByText('Version 1.2.3-beta.4 is ready to install.')).toBeTruthy();
   });
 
+  it('clears the updater cache from the about page after inline confirmation', async () => {
+    const cleared = updateStatus({ state: 'idle' });
+    const clearCache = vi.fn(async () => cleared);
+    restoreOpenDesignHost = installMockOpenDesignHost({
+      host: {
+        updater: {
+          'clear-cache': clearCache,
+          status: vi.fn(async () => updateStatus()),
+        },
+      },
+    });
+
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'codex' },
+      {
+        initialSection: 'about',
+        appVersionInfo: {
+          version: '1.2.3-beta.3',
+          channel: 'beta',
+          packaged: true,
+          platform: 'darwin',
+          arch: 'arm64',
+        },
+      },
+    );
+
+    // Two-stage inline confirm: the first click only arms the action.
+    const trigger = await screen.findByTestId('settings-clear-updater-cache');
+    fireEvent.click(trigger);
+    expect(clearCache).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId('settings-clear-updater-cache-confirm'));
+
+    await waitFor(() => {
+      expect(clearCache).toHaveBeenCalled();
+    });
+    expect(await screen.findByText(en['settings.clearUpdaterCacheSuccess'])).toBeTruthy();
+  });
+
+  it('hides updater cache recovery when packaged updates are unsupported', async () => {
+    restoreOpenDesignHost = installMockOpenDesignHost({
+      host: {
+        updater: {
+          status: vi.fn(async () => updateStatus({
+            platform: 'linux',
+            state: 'unsupported',
+            supported: false,
+          })),
+        },
+      },
+    });
+
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'codex' },
+      {
+        initialSection: 'about',
+        appVersionInfo: {
+          version: '1.2.3-beta.3',
+          channel: 'beta',
+          packaged: true,
+          platform: 'linux',
+          arch: 'x64',
+        },
+      },
+    );
+
+    await screen.findByText(en['settings.updateStatusUnsupported']);
+    expect(screen.queryByTestId('settings-clear-updater-cache')).toBeNull();
+  });
+
   it('installs a downloaded payload update from the about page', async () => {
     const payloadReady = updateStatus({
       artifact: {
@@ -5002,7 +5591,7 @@ describe('SettingsDialog about interactions', () => {
     });
   });
 
-  it('keeps a quit retry action when update install succeeds but quit fails', async () => {
+  it('keeps a quit retry action when update install succeeds but quit throws or fails', async () => {
     const payloadReady = updateStatus({
       artifact: {
         name: 'open-design-1.2.3-beta.4-mac-arm64-payload.zip',
@@ -5029,10 +5618,12 @@ describe('SettingsDialog about interactions', () => {
       },
     });
     const install = vi.fn(async () => installed);
-    const quit = vi.fn(async () => ({
-      ok: false as const,
-      reason: 'desktop quit is not available',
-    }));
+    const quit = vi.fn()
+      .mockRejectedValueOnce(new Error('desktop quit failed'))
+      .mockResolvedValue({
+        ok: false as const,
+        reason: 'desktop quit is not available',
+      });
     restoreOpenDesignHost = installMockOpenDesignHost({
       host: {
         updater: {
@@ -5066,7 +5657,7 @@ describe('SettingsDialog about interactions', () => {
       expect(quit).toHaveBeenCalledTimes(1);
     });
     expect(screen.getByRole('button', { name: en['updater.quitButton'] })).toBeTruthy();
-    expect(screen.getAllByText(en['settings.updateQuitFailed']).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(en['updater.quitFailedTitle']).length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole('button', { name: en['updater.quitButton'] }));
 

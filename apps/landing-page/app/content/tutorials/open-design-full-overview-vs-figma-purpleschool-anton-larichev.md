@@ -16,7 +16,7 @@ This guide is a complete walkthrough of Open Design framed around one question: 
 
 ## What is Open Design?
 
-Open Design is an open-source, local-first design platform that runs **on top of the coding agent you already use**. Instead of being tied to one model, it detects the CLIs already on your machine — Claude Code, Codex, Cursor, Gemini, Copilot, OpenCode, and a couple of dozen more — and lets that agent drive generation. Anton's framing is exact: it looks a lot like Claude Design on the surface, but under the hood it is "just an extra UI that drives the same agents you already have installed." You are not paying a second subscription on top of your coding plan.
+Open Design is an open-source, local-first design platform that runs **on top of the coding agent you already use**. Instead of being tied to one model, it detects the supported CLIs already on your machine — Claude Code, Codex, Cursor, Copilot, OpenCode, Qwen, and a couple of dozen more — and lets that agent drive generation. Anton's framing is exact: it looks a lot like Claude Design on the surface, but under the hood it is "just an extra UI that drives the same agents you already have installed." You are not paying a second subscription on top of your coding plan.
 
 What makes it worth a serious look:
 
@@ -77,7 +77,7 @@ To call Open Design as a skill inside your agent, without ever opening the GUI:
 
 ```bash
 od mcp install <agent>
-# <agent> = claude | codex | cursor | copilot | gemini | opencode | …
+# <agent> = claude | codex | cursor | copilot | opencode | kiro | …
 ```
 
 Then, inside the agent: `Use open-design to generate a landing page with the Stripe design system`.
@@ -86,7 +86,7 @@ Then, inside the agent: `Use open-design to generate a landing page with the Str
 
 On first launch, Open Design scans your machine and shows every CLI it found, then walks you through a short setup:
 
-- **Pick the agent and model.** Anton uses Claude Code on Opus 4.7 ("one of the best for design"), but you can point at Codex, Gemini CLI, or any other detected agent. There's a **Test** button to confirm the connection.
+- **Pick the agent and model.** Anton uses Claude Code on Opus 4.7 ("one of the best for design"), but you can point at Codex, OpenCode, or any other detected agent. There's a **Test** button to confirm the connection.
 - **Or use an API key.** Prefer not to use a local CLI? Set a base URL, key, and model instead.
 - **Add media providers.** This is the differentiator — add keys for OpenAI GPT Image, MiniMax, ElevenLabs, and others to generate images, audio, and video on the spot.
 - **Toggle skills.** Enable the design skills you need (system design, prototype, brand guidelines, and more); leave the rest off.
@@ -140,7 +140,7 @@ No — they do different jobs. Figma is a precise, collaborative manual editor; 
 Indirectly. Direct Figma extraction is rough today. The reliable path is to convert the Figma design to code with your agent, then import that code (or import a Claude Design ZIP) into Open Design.
 
 **Do I have to use Claude?**
-No. Open Design drives any supported agent — Codex, Gemini CLI, Cursor, OpenCode, and more — and you can switch models mid-project, or bring your own API key.
+No. Open Design drives any supported agent — Codex, Cursor, OpenCode, Qwen, and more — and you can switch models mid-project, or configure a BYOK provider.
 
 **Is it free?**
 The app is open source under Apache-2.0 and free to run locally. You only pay for the model and media usage of whichever agent and providers you connect.

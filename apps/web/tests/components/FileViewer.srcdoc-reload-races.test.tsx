@@ -118,8 +118,10 @@ function heroTarget(): ManualEditTarget {
 }
 
 // Pins the inspector to a target by dispatching the od-edit-select message
-// that the edit-mode iframe bridge would normally send.  Returns the iframe
-// element so callers can inspect it or use it for further messages.
+// that the edit-mode iframe bridge would normally send, then opens the
+// opt-in inspector through the action bar's params button (the v2.1 two-step
+// flow).  Returns the iframe element so callers can inspect it or use it for
+// further messages.
 async function selectManualEditTarget(target = heroTarget()): Promise<HTMLIFrameElement> {
   const frame = await waitFor(() => {
     const node = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
@@ -133,6 +135,9 @@ async function selectManualEditTarget(target = heroTarget()): Promise<HTMLIFrame
         source: frame.contentWindow,
       }),
     );
+  });
+  await waitFor(() => {
+    fireEvent.click(screen.getByTestId('manual-edit-open-inspector'));
   });
   await waitFor(() => expect(panelState.props).not.toBeNull());
   return frame;

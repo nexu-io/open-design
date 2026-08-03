@@ -24,6 +24,7 @@ import type {
 } from '@open-design/contracts';
 import { Button } from '@open-design/components';
 import { Icon, type IconName } from './Icon';
+import { UserActionCard } from './UserActionCard';
 import { useT } from '../i18n';
 import styles from './OdCard.module.css';
 
@@ -269,15 +270,31 @@ const SCORE_ROW_CLASS: Record<OdCardRowStatus, string> = {
 // pass/fail/fixed icon, the rule text, and the note. Light and scannable.
 function VerifyScorecardCard({ card }: { card: OdCardVerifyScorecard }) {
   const t = useT();
+  // Passing validation is supporting evidence, so keep it to one quiet line.
+  // Partial/failed validation is actionable and starts open, but only failed
+  // rules are promoted; passing rows remain available when an all-pass card is
+  // explicitly expanded instead of competing with the answer by default.
+  const [open, setOpen] = useState(card.status !== 'pass');
   const statusLabel =
     card.status === 'pass'
       ? t('artifact.odCardScorecardStatusPass')
       : card.status === 'partial'
         ? t('artifact.odCardScorecardStatusPartial')
         : t('artifact.odCardScorecardStatusFail');
+  const failedRows = card.rows.filter((row) => row.status === 'fail');
+  const visibleRows = card.status === 'pass'
+    ? card.rows
+    : failedRows.length > 0
+      ? failedRows
+      : card.rows.filter((row) => row.status !== 'pass');
   return (
     <div className={`${styles.card} ${styles.scorecard}`} data-od-card="verify-scorecard">
-      <div className={styles.scorecardHead}>
+      <button
+        type="button"
+        className={styles.scorecardHead}
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
         <span className={`${styles.scorecardPill} ${SCORECARD_PILL_CLASS[card.status]}`}>
           {statusLabel}
         </span>
@@ -287,25 +304,33 @@ function VerifyScorecardCard({ card }: { card: OdCardVerifyScorecard }) {
         {card.summary ? (
           <span className={styles.scorecardSummary}>{card.summary}</span>
         ) : null}
+        <span className={styles.scorecardCount}>{card.rows.length}</span>
+        <span className={`${styles.scorecardChevron}${open ? ` ${styles.scorecardChevronOpen}` : ''}`} aria-hidden>
+          <Icon name="chevron-down" size={13} />
+        </span>
+      </button>
+      <div className={`accordion-collapsible${open ? ' open' : ''}`}>
+        <div className="accordion-collapsible-inner">
+          <ul className={styles.scoreRows}>
+            {visibleRows.map((row, i) => (
+              <li
+                key={`${row.rule}-${i}`}
+                className={`${styles.scoreRow} ${SCORE_ROW_CLASS[row.status]}`}
+              >
+                <span className={styles.scoreRowIcon} aria-hidden>
+                  <Icon name={ROW_STATUS_ICON[row.status]} size={13} />
+                </span>
+                <span className={styles.scoreRowBody}>
+                  <span className={styles.scoreRowRule}>{row.rule}</span>
+                  {row.note ? (
+                    <span className={styles.scoreRowNote}>{row.note}</span>
+                  ) : null}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
       </div>
-      <ul className={styles.scoreRows}>
-        {card.rows.map((row, i) => (
-          <li
-            key={`${row.rule}-${i}`}
-            className={`${styles.scoreRow} ${SCORE_ROW_CLASS[row.status]}`}
-          >
-            <span className={styles.scoreRowIcon} aria-hidden>
-              <Icon name={ROW_STATUS_ICON[row.status]} size={13} />
-            </span>
-            <span className={styles.scoreRowBody}>
-              <span className={styles.scoreRowRule}>{row.rule}</span>
-              {row.note ? (
-                <span className={styles.scoreRowNote}>{row.note}</span>
-              ) : null}
-            </span>
-          </li>
-        ))}
-      </ul>
     </div>
   );
 }
@@ -335,6 +360,7 @@ function RuleProposalCard({
   const [check, setCheck] = useState(card.check);
   const [rationale, setRationale] = useState(card.rationale ?? '');
   const [editing, setEditing] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [status, setStatus] = useState<'idle' | 'saving' | 'error'>('idle');
 
   useEffect(() => {
@@ -418,86 +444,22 @@ function RuleProposalCard({
   };
 
   return (
-    <div className={`${styles.card} ${styles.ruleCard}`} data-od-card="rule-proposal">
-      <div className={styles.ruleHead}>
-        <span className={styles.ruleHeadIcon} aria-hidden>
-          <Icon name="star" size={13} />
-        </span>
-        <span className={styles.ruleKicker}>
-          {t('artifact.odCardRuleKicker')}
-        </span>
-      </div>
-      {editing ? (
-        <div className={styles.ruleFields}>
-          <label className={styles.ruleFieldLabel}>
-            {t('artifact.odCardRuleNameLabel')}
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-          </label>
-          <label className={styles.ruleFieldLabel}>
-            {t('artifact.odCardRuleDescriptionLabel')}
-            <input
-              type="text"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-            />
-          </label>
-          <label className={styles.ruleFieldLabel}>
-            {t('artifact.odCardRuleAssertionLabel')}
-            <textarea
-              rows={2}
-              value={assertion}
-              onChange={(e) => setAssertion(e.target.value)}
-            />
-          </label>
-          <label className={styles.ruleFieldLabel}>
-            {t('artifact.odCardRuleCheckLabel')}
-            <textarea
-              rows={2}
-              value={check}
-              onChange={(e) => setCheck(e.target.value)}
-            />
-          </label>
-          <label className={styles.ruleFieldLabel}>
-            {t('artifact.odCardRuleRationaleLabel')}
-            <input
-              type="text"
-              value={rationale}
-              onChange={(e) => setRationale(e.target.value)}
-            />
-          </label>
-        </div>
-      ) : (
-        <div className={styles.ruleSummary}>
-          <h5 className={styles.ruleName}>{name}</h5>
-          {description ? <p className={styles.ruleDescription}>{description}</p> : null}
-          <dl className={styles.ruleFacts}>
-            <div>
-              <dt>{t('artifact.odCardRuleAssertionLabel')}</dt>
-              <dd>{assertion}</dd>
-            </div>
-            <div>
-              <dt>{t('artifact.odCardRuleCheckLabel')}</dt>
-              <dd>{check}</dd>
-            </div>
-            {rationale ? (
-              <div>
-                <dt>{t('artifact.odCardRuleRationaleLabel')}</dt>
-                <dd>{rationale}</dd>
-              </div>
-            ) : null}
-          </dl>
-        </div>
+    <UserActionCard
+      dataKind="rule-proposal"
+      dataOdCard="rule-proposal"
+      icon="star"
+      title={(
+        <>
+          {t('artifact.odCardRuleKicker')} · <span>{name}</span>
+        </>
       )}
-      {status === 'error' ? (
-        <p className={styles.ruleError} role="status">
-          {t('artifact.odCardRuleError')}
-        </p>
-      ) : null}
-      <div className={styles.ruleActions}>
+      open={detailsOpen || editing}
+      onOpenChange={(open) => {
+        if (!open && editing) setEditing(false);
+        setDetailsOpen(open);
+      }}
+      detailsLabel={t('brand.viewDetails')}
+      actions={
         <Button
           variant="primary"
           className={styles.ruleAction}
@@ -508,28 +470,107 @@ function RuleProposalCard({
             ? t('artifact.odCardRuleSaving')
             : t('artifact.odCardRuleKeep')}
         </Button>
-        <Button
-          variant="ghost"
-          className={styles.ruleAction}
-          disabled={status === 'saving'}
-          onClick={() => setEditing((e) => !e)}
-        >
-          {editing ? t('artifact.odCardRuleDone') : t('artifact.odCardRuleEdit')}
-        </Button>
-        <Button
-          variant="ghost"
-          className={styles.ruleAction}
-          disabled={status === 'saving'}
-          onClick={() => {
-            const discardedDecision = { status: 'discarded' } as const;
-            writeRuleProposalDecision(storageKey, discardedDecision);
-            setDecision(discardedDecision);
-          }}
-        >
-          {t('artifact.odCardRuleDiscard')}
-        </Button>
-      </div>
-    </div>
+      }
+      details={
+        <>
+          {editing ? (
+            <div className={styles.ruleFields}>
+              <label className={styles.ruleFieldLabel}>
+                {t('artifact.odCardRuleNameLabel')}
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                />
+              </label>
+              <label className={styles.ruleFieldLabel}>
+                {t('artifact.odCardRuleDescriptionLabel')}
+                <input
+                  type="text"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                />
+              </label>
+              <label className={styles.ruleFieldLabel}>
+                {t('artifact.odCardRuleAssertionLabel')}
+                <textarea
+                  rows={2}
+                  value={assertion}
+                  onChange={(e) => setAssertion(e.target.value)}
+                />
+              </label>
+              <label className={styles.ruleFieldLabel}>
+                {t('artifact.odCardRuleCheckLabel')}
+                <textarea
+                  rows={2}
+                  value={check}
+                  onChange={(e) => setCheck(e.target.value)}
+                />
+              </label>
+              <label className={styles.ruleFieldLabel}>
+                {t('artifact.odCardRuleRationaleLabel')}
+                <input
+                  type="text"
+                  value={rationale}
+                  onChange={(e) => setRationale(e.target.value)}
+                />
+              </label>
+            </div>
+          ) : (
+            <div className={styles.ruleSummary}>
+              {description ? <p className={styles.ruleDescription}>{description}</p> : null}
+              <dl className={styles.ruleFacts}>
+                <div>
+                  <dt>{t('artifact.odCardRuleAssertionLabel')}</dt>
+                  <dd>{assertion}</dd>
+                </div>
+                <div>
+                  <dt>{t('artifact.odCardRuleCheckLabel')}</dt>
+                  <dd>{check}</dd>
+                </div>
+                {rationale ? (
+                  <div>
+                    <dt>{t('artifact.odCardRuleRationaleLabel')}</dt>
+                    <dd>{rationale}</dd>
+                  </div>
+                ) : null}
+              </dl>
+            </div>
+          )}
+          {status === 'error' ? (
+            <p className={styles.ruleError} role="status">
+              {t('artifact.odCardRuleError')}
+            </p>
+          ) : null}
+          <div className={styles.ruleActions}>
+            <Button
+              variant="ghost"
+              className={styles.ruleAction}
+              disabled={status === 'saving'}
+              onClick={() => {
+                const nextEditing = !editing;
+                setEditing(nextEditing);
+                if (nextEditing) setDetailsOpen(true);
+              }}
+            >
+              {editing ? t('artifact.odCardRuleDone') : t('artifact.odCardRuleEdit')}
+            </Button>
+            <Button
+              variant="ghost"
+              className={styles.ruleAction}
+              disabled={status === 'saving'}
+              onClick={() => {
+                const discardedDecision = { status: 'discarded' } as const;
+                writeRuleProposalDecision(storageKey, discardedDecision);
+                setDecision(discardedDecision);
+              }}
+            >
+              {t('artifact.odCardRuleDiscard')}
+            </Button>
+          </div>
+        </>
+      }
+    />
   );
 }
 
@@ -601,33 +642,13 @@ function BrandBrowserAssistCard({
   };
 
   return (
-    <div className={`${styles.card} ${styles.ruleCard}`} data-od-card="brand-browser-assist">
-      <div className={styles.ruleHead}>
-        <span className={styles.ruleHeadIcon} aria-hidden>
-          <Icon name="globe" size={13} />
-        </span>
-        <span className={styles.ruleKicker}>
-          {t('artifact.odCardBrandAssistKicker', { reason: card.reason || 'Browser' })}
-        </span>
-      </div>
-      <div className={styles.ruleSummary}>
-        <p className={styles.ruleDescription}>{t('artifact.odCardBrandAssistBody')}</p>
-        {card.url ? <p className={styles.ruleName}>{card.url}</p> : null}
-        {done ? (
-          <div className={styles.ruleSaved} role="status">
-            <span className={styles.ruleSavedIcon} aria-hidden>
-              <Icon name="check" size={14} />
-            </span>
-            <span className={styles.ruleSavedLabel}>{t('artifact.odCardBrandAssistDone')}</span>
-          </div>
-        ) : null}
-      </div>
-      {status === 'error' ? (
-        <p className={styles.ruleError} role="status">
-          {errorMsg || t('artifact.odCardBrandAssistError')}
-        </p>
-      ) : null}
-      <div className={styles.ruleActions}>
+    <UserActionCard
+      dataKind="browser-assist"
+      dataOdCard="brand-browser-assist"
+      icon="globe"
+      title={t('artifact.odCardBrandAssistKicker', { reason: card.reason || 'Browser' })}
+      detailsLabel={t('brand.viewDetails')}
+      actions={
         <Button
           variant="primary"
           className={styles.ruleAction}
@@ -638,7 +659,22 @@ function BrandBrowserAssistCard({
             ? t('artifact.odCardBrandAssistWorking')
             : t('artifact.odCardBrandAssistConfirm')}
         </Button>
-      </div>
-    </div>
+      }
+      details={
+        <div className={styles.ruleSummary}>
+          <p className={styles.ruleDescription}>{t('artifact.odCardBrandAssistBody')}</p>
+          {card.url ? <p className={styles.ruleName}>{card.url}</p> : null}
+        </div>
+      }
+      status={done ? (
+        <span className={styles.ruleSavedLabel} role="status">
+          {t('artifact.odCardBrandAssistDone')}
+        </span>
+      ) : status === 'error' ? (
+        <span className={styles.ruleError} role="status">
+          {errorMsg || t('artifact.odCardBrandAssistError')}
+        </span>
+      ) : null}
+    />
   );
 }
