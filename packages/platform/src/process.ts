@@ -545,6 +545,30 @@ type OwnedProcessTreeTracker = {
   identities: Map<number, number>;
 };
 
+/**
+ * Detect a process that may be an owned descendant whose short-lived parent
+ * disappeared before the first tree observation. Windows preserves the parent
+ * PID after that exit, but a parent-chain walk cannot prove whether such an
+ * orphan belongs to the root. Treating the snapshot as a complete tree would
+ * allow a false "canceled" result, so verification deliberately fails closed.
+ */
+function hasAmbiguousInitialTreeOrphan(
+  processes: ProcessSnapshot[],
+  root: OwnedProcessIdentity,
+): boolean {
+  const rootCreatedAt = root.createdAt;
+  if (rootCreatedAt == null) return true;
+  const knownPids = new Set(processes.map((processInfo) => processInfo.pid));
+  return processes.some((processInfo) => (
+    processInfo.pid !== root.pid
+    && processInfo.ppid > 0
+    && !knownPids.has(processInfo.ppid)
+    && typeof processInfo.createdAt === "number"
+    && Number.isFinite(processInfo.createdAt)
+    && processInfo.createdAt >= rootCreatedAt
+  ));
+}
+
 function orderTrackedProcessPids(
   processes: ProcessSnapshot[],
   livePids: Set<number>,
@@ -571,6 +595,7 @@ function orderTrackedProcessPids(
 async function observeOwnedProcessTree(
   root: OwnedProcessIdentity,
   tracker: OwnedProcessTreeTracker,
+  initialObservation: boolean,
   readSnapshots: () => Promise<ProcessSnapshotObservation> = readProcessSnapshots,
 ): Promise<{
   identityVerified: boolean;
@@ -579,6 +604,9 @@ async function observeOwnedProcessTree(
   const observation = await readSnapshots();
   if (!observation.ok) return { identityVerified: false, pids: [] };
   const processes = observation.processes;
+  if (initialObservation && hasAmbiguousInitialTreeOrphan(processes, root)) {
+    return { identityVerified: false, pids: [] };
+  }
   const snapshotsByPid = new Map(processes.map((processInfo) => [processInfo.pid, processInfo]));
   for (const [pid, createdAt] of tracker.identities) {
     const current = snapshotsByPid.get(pid);
@@ -632,11 +660,11 @@ async function waitForOwnedProcessTreeExit(
 ): Promise<{ identityVerified: boolean; pids: number[] }> {
   const startedAt = Date.now();
   while (Date.now() - startedAt < timeoutMs) {
-    const observed = await observeOwnedProcessTree(root, tracker, readSnapshots);
+    const observed = await observeOwnedProcessTree(root, tracker, false, readSnapshots);
     if (!observed.identityVerified || observed.pids.length === 0) return observed;
     await sleep(100);
   }
-  return observeOwnedProcessTree(root, tracker, readSnapshots);
+  return observeOwnedProcessTree(root, tracker, false, readSnapshots);
 }
 
 /**
@@ -668,7 +696,7 @@ export async function terminateOwnedProcessTree(
   const tracker: OwnedProcessTreeTracker = {
     identities: new Map([[root.pid, root.createdAt]]),
   };
-  const first = await observeOwnedProcessTree(root, tracker, readSnapshots);
+  const first = await observeOwnedProcessTree(root, tracker, true, readSnapshots);
   if (!first.identityVerified) {
     return { attempted: false, childTreeQuiescent: false, forced: false, identityVerified: false, remainingPids: [] };
   }

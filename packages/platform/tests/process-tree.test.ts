@@ -176,6 +176,33 @@ describe("terminateOwnedProcessTree observation failures", () => {
       [300, "SIGKILL"],
     ]);
   });
+
+  it("does not verify a root-only initial tree when a newer orphan may have lost its parent", async () => {
+    const kill = vi.spyOn(process, "kill").mockReturnValue(true);
+    const snapshotReader = observations({
+      ok: true,
+      processes: [
+        { ...snapshot(100, 1), createdAt: 10 },
+        // PID 200 was a short-lived helper. PID 300 may be its child, but
+        // process enumeration cannot reconstruct that missing relationship.
+        { ...snapshot(300, 200), createdAt: 30 },
+      ],
+    });
+
+    const result = await terminateOwnedProcessTree(root, {
+      graceMs: 0,
+      forceWaitMs: 0,
+      readSnapshots: snapshotReader,
+    });
+
+    expect(result).toMatchObject({
+      attempted: false,
+      childTreeQuiescent: false,
+      identityVerified: false,
+      remainingPids: [],
+    });
+    expect(kill).not.toHaveBeenCalled();
+  });
 });
 
 describe("processCommandExactlyRunsExecutable", () => {
