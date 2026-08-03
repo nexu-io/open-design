@@ -298,6 +298,70 @@ describe('listSkills', () => {
     expect(skill.body).toContain('pkill -f -- "--user-data-dir=${CHROME_USER_DATA_DIR}"');
   });
 
+  it('exposes reply-advice mode on the pr-feedback-quality-gate skill (#6317)', async () => {
+    const skills = await listSkills(skillsRoot);
+    const skill = skills.find((entry: { id: string }) => entry.id === 'pr-feedback-quality-gate');
+
+    if (!skill) throw new Error('pr-feedback-quality-gate skill not found');
+
+    // English and Polish continuation/reply triggers surfaced via the runtime
+    // registry so the user-facing skill picker actually offers them.
+    expect(skill.triggers).toContain('continue PR');
+    expect(skill.triggers).toContain('reply to PR feedback');
+    expect(skill.triggers).toContain('answer PR feedback');
+    expect(skill.triggers).toContain('kontynuuj PR');
+    expect(skill.triggers).toContain('odpowiedz na uwagi do PR');
+
+    // An explicit English `od.example_prompt` is advertised as `examplePrompt`
+    // and demonstrates a read-only "inspect and draft, do not post" request.
+    expect(skill.examplePrompt).toBeTruthy();
+    expect(typeof skill.examplePrompt).toBe('string');
+    expect(skill.examplePrompt).toContain('Continue PR');
+    expect(skill.examplePrompt).toContain('draft');
+    expect(skill.examplePrompt).toContain('Do not post');
+
+    // The composed skill body exposes the reply-advice classification rules.
+    const body = skill.body ?? '';
+    expect(body).toContain('Reply-advice mode (read-only)');
+    expect(body).toContain('action required before replying');
+    expect(body).toContain('question requiring an answer');
+    expect(body).toContain('acknowledgement after a completed change');
+    expect(body).toContain('informational / approval / automated — no reply required');
+    expect(body).toContain('stale, outdated, or already resolved');
+
+    // Truthful drafting rules — never claim a change has been made when it
+    // has not; never claim new validation has run when it has not.
+    expect(body).toContain('Never claims a change has been made when it has not');
+    expect(body).toContain('Never claims new validation has run when it has not');
+    expect(body).toContain('current feedback');
+    expect(body).toContain('rather than');
+    expect(body).toMatch(/never\s+`new feedback`|not.*`new feedback`|call the result `current feedback`/i);
+
+    // Full review-surface inspection — every surface enumerated, and a surface
+    // with no items is itself an observation rather than something to skip.
+    expect(body).toContain('Issue (timeline) comments');
+    expect(body).toContain('Review summaries');
+    expect(body).toContain('Inline review threads');
+    expect(body).toContain('Status checks');
+    expect(body).toContain('Local worktree status');
+    expect(body).toContain('A surface with no items is itself an observation');
+
+    // Read-only authority boundary in reply-advice mode — no edits, comments,
+    // thread resolutions, commits, pushes, or check reruns without separate
+    // authorization.
+    expect(body).toContain('Reply-advice mode is the default path');
+    expect(body).toContain('NEVER edits PRs');
+    expect(body).toContain('resolves threads');
+    expect(body).toContain('commits, pushes');
+    expect(body).toContain('reruns checks');
+
+    // Existing minimal-fix, validation, and read-only cross-review rules
+    // remain present in the mutating workflow below reply-advice mode.
+    expect(body).toContain('mutating, opt-in only');
+    expect(body).toContain('read-only cross-review');
+    expect(body).toContain('pnpm guard');
+  });
+
   it('keeps html-ppt PNG export on one managed Chromium screenshot path', async () => {
     const skills = await listSkills(designTemplatesRoot);
     const skill = skills.find((entry: { id: string }) => entry.id === 'html-ppt');
