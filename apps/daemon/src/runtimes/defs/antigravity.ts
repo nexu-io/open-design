@@ -234,7 +234,7 @@ export const antigravityAgentDef = {
 
     const args: string[] = [];
     if (runtimeContext.agentLogFilePath) {
-      args.push(`--log-file=${runtimeContext.agentLogFilePath}`);
+      args.push('--log-file', runtimeContext.agentLogFilePath);
     }
     
     args.push(`--add-dir=${dirname(runtimeContext.promptFilePath)}`);

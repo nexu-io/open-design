@@ -555,7 +555,7 @@ test('antigravity delivers prompt via managed temp file instead of stdin', () =>
     agentLogFilePath: '/tmp/od-agy-test.log',
     promptFilePath: '/tmp/managed-prompt.md'
   });
-  assert.deepEqual(argsWithLog, ['--log-file=/tmp/od-agy-test.log', '--add-dir=/tmp', '-p', expectedFileText]);
+  assert.deepEqual(argsWithLog, ['--log-file', '/tmp/od-agy-test.log', '--add-dir=/tmp', '-p', expectedFileText]);
 
   // No `--model` flag exists upstream, so buildArgs argv must stay the
   // same regardless of which label the user picks.
@@ -571,7 +571,7 @@ test('antigravity delivers prompt via managed temp file instead of stdin', () =>
       promptFilePath: '/tmp/managed-prompt.md'
     });
     assert.equal(withModel.includes('--model'), false);
-    assert.deepEqual(withModel, ['--log-file=/tmp/od-agy-test.log', '--add-dir=/tmp', '-p', expectedFileText]);
+    assert.deepEqual(withModel, ['--log-file', '/tmp/od-agy-test.log', '--add-dir=/tmp', '-p', expectedFileText]);
   } finally {
     rmSync(settingsDir, { recursive: true, force: true });
   }
