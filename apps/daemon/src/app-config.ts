@@ -176,10 +176,23 @@ function validateByokProvider(raw: unknown): ByokProviderPrefs | undefined {
   const protocol = value.protocol.trim();
   const baseUrl = value.baseUrl.trim();
   const model = value.model.trim();
-  if (!protocol || !baseUrl || !model || !isByokProviderProtocol(protocol)) return undefined;
+  if (
+    !protocol ||
+    !baseUrl ||
+    !model ||
+    baseUrl.length > 2_048 ||
+    model.length > 256 ||
+    !isByokProviderProtocol(protocol)
+  ) return undefined;
   try {
     const url = new URL(baseUrl);
-    if (url.protocol !== 'https:' && url.protocol !== 'http:') return undefined;
+    if (
+      (url.protocol !== 'https:' && url.protocol !== 'http:') ||
+      url.username.length > 0 ||
+      url.password.length > 0 ||
+      url.search.length > 0 ||
+      url.hash.length > 0
+    ) return undefined;
   } catch {
     return undefined;
   }

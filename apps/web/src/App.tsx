@@ -1059,15 +1059,16 @@ function AppInner() {
           baseConfig.mediaProviders,
           daemonMediaProvidersLoaded,
         );
-        const next = mergeByokCredentialProfiles(
-          mergeDaemonMediaProviders(
-            clearStaleAmrModelChoiceOnProfileChange(
-              baseConfig,
-              mergeDaemonConfig(baseConfig, daemonConfig),
-            ),
-            daemonMediaProvidersLoaded,
-          ),
+        const secureByokConfig = mergeByokCredentialProfiles(
+          baseConfig,
           byokCredentialProfiles,
+        );
+        const next = mergeDaemonMediaProviders(
+          clearStaleAmrModelChoiceOnProfileChange(
+            secureByokConfig,
+            mergeDaemonConfig(secureByokConfig, daemonConfig),
+          ),
+          daemonMediaProvidersLoaded,
         );
         const hasLocalComposioKey = Boolean(next.composio?.apiKey?.trim());
         if (!hasLocalComposioKey && daemonComposioConfig) {
@@ -1088,7 +1089,7 @@ function AppInner() {
         // Migrate localStorage prefs to daemon on first boot with the new
         // endpoint. If daemon already had values the merge above used them;
         // writing back is idempotent and keeps both sides in sync.
-        void syncConfigToDaemon(next);
+        void syncConfigToDaemon(next, { byokProviderIntent: 'preserve' });
         void syncComposioConfigToDaemon(next.composio);
         latestPersistedConfigRef.current = next;
         setConfig(next);

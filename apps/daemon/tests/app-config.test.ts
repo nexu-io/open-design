@@ -45,6 +45,39 @@ describe('app-config', () => {
     });
   });
 
+  it.each([
+    ['username', 'https://token@example.test/v1'],
+    ['password', 'https://user:password@example.test/v1'],
+    ['query', 'https://example.test/v1?api_key=secret'],
+    ['fragment', 'https://example.test/v1#secret'],
+  ])('rejects a BYOK provider Base URL containing a %s component', async (_component, baseUrl) => {
+    await expect(writeAppConfig(dataDir, {
+      byokProvider: {
+        protocol: 'openai',
+        baseUrl,
+        model: 'custom-model',
+      },
+    })).rejects.toThrow('invalid BYOK provider selection');
+  });
+
+  it('rejects oversized BYOK provider metadata', async () => {
+    await expect(writeAppConfig(dataDir, {
+      byokProvider: {
+        protocol: 'openai',
+        baseUrl: `https://example.test/${'a'.repeat(2_048)}`,
+        model: 'custom-model',
+      },
+    })).rejects.toThrow('invalid BYOK provider selection');
+
+    await expect(writeAppConfig(dataDir, {
+      byokProvider: {
+        protocol: 'openai',
+        baseUrl: 'https://example.test/v1',
+        model: 'm'.repeat(257),
+      },
+    })).rejects.toThrow('invalid BYOK provider selection');
+  });
+
   let dataDir: string;
 
   beforeEach(async () => {

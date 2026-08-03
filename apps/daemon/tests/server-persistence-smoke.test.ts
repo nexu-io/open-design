@@ -101,6 +101,8 @@ it('[P0] starts on an existing data dir with legacy app config and persisted pro
   for (const byokProvider of [
     { ...agnes, protocol: 'unsupported' },
     { ...agnes, baseUrl: 'not-a-url' },
+    { ...agnes, baseUrl: 'https://token@example.test/v1' },
+    { ...agnes, baseUrl: 'https://example.test/v1?api_key=secret' },
     { ...agnes, model: '   ' },
   ]) {
     const response = await fetch(`${started.url}/api/app-config`, {

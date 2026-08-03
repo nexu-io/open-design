@@ -5,7 +5,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from '../../src/App';
 import type { AppConfig } from '../../src/types';
-import { loadConfig, mergeDaemonConfig, fetchDaemonConfig } from '../../src/state/config';
+import {
+  fetchByokCredentialProfilesFromDaemon,
+  fetchDaemonConfig,
+  loadConfig,
+  mergeDaemonConfig,
+  syncConfigToDaemon,
+} from '../../src/state/config';
 import {
   daemonIsLive,
   fetchAgentsStream,
@@ -31,6 +37,9 @@ vi.mock('../../src/components/EntryView', () => ({
       <div data-testid="onboarding-completed">
         {String(config.onboardingCompleted)}
       </div>
+      <div data-testid="byok-base-url">{config.baseUrl}</div>
+      <div data-testid="byok-model">{config.model}</div>
+      <div data-testid="byok-profile-id">{config.byokProfileId ?? 'none'}</div>
     </>
   ),
 }));
@@ -94,6 +103,7 @@ vi.mock('../../src/state/config', async () => {
   return {
     ...actual,
     fetchComposioConfigFromDaemon: vi.fn().mockResolvedValue(null),
+    fetchByokCredentialProfilesFromDaemon: vi.fn().mockResolvedValue(null),
     loadConfig: vi.fn(),
     // Use the real merge so onboardingCompleted / agentId flow exactly as in
     // production from the daemon config.
@@ -121,6 +131,8 @@ const mockedListProjects = vi.mocked(listProjects);
 const mockedListTemplates = vi.mocked(listTemplates);
 const mockedLoadConfig = vi.mocked(loadConfig);
 const mockedFetchDaemonConfig = vi.mocked(fetchDaemonConfig);
+const mockedFetchByokCredentialProfiles = vi.mocked(fetchByokCredentialProfilesFromDaemon);
+const mockedSyncConfigToDaemon = vi.mocked(syncConfigToDaemon);
 
 function firstRunConfig(): AppConfig {
   return {
@@ -174,6 +186,7 @@ describe('App first-run agent auto-select', () => {
       refreshing: false,
       models: [{ id: 'amr-model', label: 'AMR Model' }],
     });
+    mockedFetchByokCredentialProfiles.mockResolvedValue(null);
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) }),
@@ -248,6 +261,118 @@ describe('App first-run agent auto-select', () => {
     // it with the first available agent.
     await waitFor(() => {
       expect(screen.getByTestId('agent-id').textContent).toBe('claude');
+    });
+  });
+
+  it('keeps daemon provider metadata authoritative over a different saved secure profile', async () => {
+    mockedLoadConfig.mockReturnValue({
+      ...firstRunConfig(),
+      mode: 'api',
+      apiProtocol: 'openai',
+      baseUrl: 'https://openrouter.ai/api/v1',
+      model: 'old-profile-model',
+      byokProfileId: 'byok-openrouter',
+      onboardingCompleted: true,
+    });
+    mockedFetchDaemonConfig.mockResolvedValue({
+      byokProvider: {
+        protocol: 'openai',
+        baseUrl: 'https://apihub.agnes-ai.com/v1',
+        model: 'agnes-2.0-flash',
+      },
+      onboardingCompleted: true,
+    });
+    mockedFetchByokCredentialProfiles.mockResolvedValue({
+      available: true,
+      backend: 'keychain',
+      profiles: [{
+        id: 'byok-openrouter',
+        label: 'OpenRouter',
+        protocol: 'openai',
+        baseUrl: 'https://openrouter.ai/api/v1',
+        model: 'old-profile-model',
+        requiresApiKey: true,
+        configured: true,
+        keyTail: '1234',
+        createdAt: 1,
+        updatedAt: 1,
+      }],
+    });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('byok-base-url').textContent).toBe(
+        'https://apihub.agnes-ai.com/v1',
+      );
+    });
+    expect(screen.getByTestId('byok-model').textContent).toBe('agnes-2.0-flash');
+    expect(screen.getByTestId('byok-profile-id').textContent).toBe('none');
+  });
+
+  it('unlinks a secure profile when CLI metadata changes its model', async () => {
+    mockedLoadConfig.mockReturnValue({
+      ...firstRunConfig(),
+      mode: 'api',
+      apiProtocol: 'openai',
+      baseUrl: 'https://apihub.agnes-ai.com/v1',
+      model: 'old-profile-model',
+      byokProfileId: 'byok-agnes',
+      onboardingCompleted: true,
+    });
+    mockedFetchDaemonConfig.mockResolvedValue({
+      byokProvider: {
+        protocol: 'openai',
+        baseUrl: 'https://apihub.agnes-ai.com/v1',
+        model: 'agnes-2.0-flash',
+      },
+      onboardingCompleted: true,
+    });
+    mockedFetchByokCredentialProfiles.mockResolvedValue({
+      available: true,
+      backend: 'keychain',
+      profiles: [{
+        id: 'byok-agnes',
+        label: 'Agnes AI',
+        protocol: 'openai',
+        baseUrl: 'https://apihub.agnes-ai.com/v1',
+        model: 'old-profile-model',
+        requiresApiKey: true,
+        configured: true,
+        keyTail: '1234',
+        createdAt: 1,
+        updatedAt: 1,
+      }],
+    });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('byok-model').textContent).toBe('agnes-2.0-flash');
+    });
+    expect(screen.getByTestId('byok-profile-id').textContent).toBe('none');
+  });
+
+  it('preserves daemon provider metadata when bootstrap hydration fails', async () => {
+    mockedLoadConfig.mockReturnValue({
+      ...firstRunConfig(),
+      mode: 'api',
+      apiProtocol: 'openai',
+      baseUrl: 'https://stale-browser.example.test/v1',
+      model: 'stale-browser-model',
+    });
+    mockedFetchDaemonConfig.mockResolvedValue(null);
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(mockedSyncConfigToDaemon).toHaveBeenCalledWith(
+        expect.objectContaining({
+          baseUrl: 'https://stale-browser.example.test/v1',
+          model: 'stale-browser-model',
+        }),
+        expect.objectContaining({ byokProviderIntent: 'preserve' }),
+      );
     });
   });
 });

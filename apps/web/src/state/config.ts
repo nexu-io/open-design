@@ -1598,20 +1598,29 @@ export function mergeDaemonConfig(
       localConfig.mode === 'api' &&
       localConfig.apiProtocol === daemonByokProvider.protocol &&
       normalizeByokProviderIdentityBaseUrl(localConfig.baseUrl) === daemonByokProviderBaseUrl;
+    const sameSecureProfileSelection =
+      sameProviderIdentity &&
+      localConfig.model.trim() === daemonByokProvider.model.trim();
     const apiKey = sameProviderIdentity ? localConfig.apiKey : '';
+    const apiVersion = sameProviderIdentity ? localConfig.apiVersion : '';
     const apiConfig: ApiProtocolConfig = {
       apiKey,
       baseUrl: daemonByokProviderBaseUrl,
       model: daemonByokProvider.model.trim(),
-      apiVersion: '',
+      apiVersion,
       apiProviderBaseUrl: knownDaemonByokProvider?.baseUrl ?? null,
     };
+    if (!sameSecureProfileSelection) {
+      next.byokProfileId = undefined;
+      next.byokCredentialConfigured = false;
+      next.byokCredentialTail = undefined;
+    }
     next.mode = 'api';
     next.apiProtocol = daemonByokProvider.protocol;
     next.apiKey = apiKey;
     next.baseUrl = apiConfig.baseUrl;
     next.model = apiConfig.model;
-    next.apiVersion = '';
+    next.apiVersion = apiVersion;
     next.apiProviderBaseUrl = apiConfig.apiProviderBaseUrl;
     next.apiProtocolConfigs = {
       ...(next.apiProtocolConfigs ?? {}),
@@ -1802,7 +1811,7 @@ export async function fetchDaemonConfig(): Promise<AppConfigPrefs | null> {
 
 export async function syncConfigToDaemon(
   config: AppConfig,
-  options?: { throwOnError?: boolean; byokProviderIntent?: 'clear' },
+  options?: { throwOnError?: boolean; byokProviderIntent?: 'clear' | 'preserve' },
 ): Promise<void> {
   const prefs: AppConfigPrefs = {
     onboardingCompleted: config.onboardingCompleted,
@@ -1822,7 +1831,9 @@ export async function syncConfigToDaemon(
     customInstructions: config.customInstructions ?? null,
     projectLocations: config.projectLocations ?? [],
     defaultProjectLocationId: config.defaultProjectLocationId ?? 'default',
-    byokProvider: config.mode === 'api' && config.apiProtocol && config.baseUrl && config.model
+    byokProvider: options?.byokProviderIntent === 'preserve'
+      ? undefined
+      : config.mode === 'api' && config.apiProtocol && config.baseUrl && config.model
       ? {
         protocol: config.apiProtocol,
         baseUrl: config.baseUrl,

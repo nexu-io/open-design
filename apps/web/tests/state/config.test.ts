@@ -324,6 +324,40 @@ describe('syncConfigToDaemon', () => {
     expect(merged.baseUrl).toBe(daemonBaseUrl);
   });
 
+  it('preserves the Azure API version when daemon metadata keeps the same provider identity', () => {
+    const baseUrl = 'https://example-resource.openai.azure.com';
+    const merged = mergeDaemonConfig(
+      {
+        ...DEFAULT_CONFIG,
+        mode: 'api',
+        apiProtocol: 'azure',
+        apiKey: '',
+        apiVersion: '2025-04-01-preview',
+        baseUrl,
+        model: 'old-deployment',
+        apiProtocolConfigs: {
+          azure: {
+            apiKey: '',
+            apiVersion: '2025-04-01-preview',
+            baseUrl,
+            model: 'old-deployment',
+          },
+        },
+      },
+      {
+        byokProvider: {
+          protocol: 'azure',
+          baseUrl,
+          model: 'new-deployment',
+        },
+      },
+    );
+
+    expect(merged.apiVersion).toBe('2025-04-01-preview');
+    expect(merged.apiProtocolConfigs?.azure?.apiVersion).toBe('2025-04-01-preview');
+    expect(merged.model).toBe('new-deployment');
+  });
+
   it('hydrates a valid custom BYOK endpoint without treating it as a known provider', () => {
     const merged = mergeDaemonConfig(
       { ...DEFAULT_CONFIG, mode: 'daemon' },
@@ -351,6 +385,25 @@ describe('syncConfigToDaemon', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     await syncConfigToDaemon({ ...DEFAULT_CONFIG, mode: 'daemon' });
+
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).not.toHaveProperty('byokProvider');
+  });
+
+  it('omits provider metadata during bootstrap preservation sync', async () => {
+    const fetchMock = vi.fn(async () => new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await syncConfigToDaemon(
+      {
+        ...DEFAULT_CONFIG,
+        mode: 'api',
+        apiProtocol: 'openai',
+        baseUrl: 'https://stale-browser.example.test/v1',
+        model: 'stale-browser-model',
+      },
+      { byokProviderIntent: 'preserve' },
+    );
 
     const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(JSON.parse(String(init.body))).not.toHaveProperty('byokProvider');
