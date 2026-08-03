@@ -211,6 +211,14 @@ const DISCORD_URL = 'https://discord.gg/mHAjSMV6gz';
 const X_URL = 'https://x.com/OpenDesignHQ';
 const ONBOARDING_DROPDOWN_OPEN_EVENT = 'open-design:onboarding-dropdown-open';
 
+function onboardingByokProviderDraftKey(
+  protocol: ApiProtocol,
+  apiProviderBaseUrl: string | null | undefined,
+  baseUrl: string,
+): string {
+  return `${protocol}:${apiProviderBaseUrl ?? `custom:${baseUrl}`}`;
+}
+
 type OnboardingAgentTestState =
   | { status: 'idle' }
   | { status: 'running'; inputKey: string }
@@ -1935,6 +1943,61 @@ function OnboardingView({
     void onConfigPersist(nextConfig);
   }
 
+  function switchOnboardingByokProvider(baseUrl: string) {
+    const provider = KNOWN_PROVIDERS.find(
+      (item) => item.protocol === apiProtocol && item.baseUrl === baseUrl,
+    );
+    const currentApiConfig: ApiProtocolConfig = {
+      ...(config.apiProtocolConfigs?.[apiProtocol] ?? {}),
+      apiKey: config.apiKey,
+      baseUrl: config.baseUrl,
+      model: config.model,
+      apiVersion: config.apiVersion ?? '',
+      apiProviderBaseUrl: config.apiProviderBaseUrl ?? null,
+    };
+    const currentDraftKey = onboardingByokProviderDraftKey(
+      apiProtocol,
+      currentApiConfig.apiProviderBaseUrl,
+      currentApiConfig.baseUrl,
+    );
+    const nextBaseUrl = provider?.baseUrl ?? '';
+    const nextProviderBaseUrl = provider?.baseUrl ?? null;
+    const nextDraftKey = onboardingByokProviderDraftKey(
+      apiProtocol,
+      nextProviderBaseUrl,
+      nextBaseUrl,
+    );
+    const savedDraft = config.byokProviderConfigDrafts?.[nextDraftKey]?.apiConfig;
+    const nextApiConfig: ApiProtocolConfig = savedDraft ?? {
+      apiKey: '',
+      baseUrl: nextBaseUrl,
+      model: defaultKnownProviderModel(provider),
+      apiVersion: apiProtocol === 'azure' ? currentApiConfig.apiVersion : '',
+      apiProviderBaseUrl: nextProviderBaseUrl,
+    };
+    const nextConfig: AppConfig = {
+      ...config,
+      mode: 'api',
+      apiKey: nextApiConfig.apiKey,
+      baseUrl: nextApiConfig.baseUrl,
+      model: nextApiConfig.model,
+      apiVersion: apiProtocol === 'azure' ? (nextApiConfig.apiVersion ?? '') : '',
+      apiProviderBaseUrl: nextApiConfig.apiProviderBaseUrl ?? null,
+      apiProtocolConfigs: {
+        ...(config.apiProtocolConfigs ?? {}),
+        [apiProtocol]: nextApiConfig,
+      },
+      byokProviderConfigDrafts: {
+        ...(config.byokProviderConfigDrafts ?? {}),
+        [currentDraftKey]: {
+          apiConfig: currentApiConfig,
+          maxTokens: config.maxTokens,
+        },
+      },
+    };
+    void onConfigPersist(nextConfig);
+  }
+
   function selectPreferredProviderModelWhenEmpty(
     models: readonly ProviderModelOption[],
     expectedInputKey: string,
@@ -2898,14 +2961,7 @@ function OnboardingView({
                       onApiProtocolChange(protocol);
                     }}
                     onProviderChange={(baseUrl) => {
-                      const provider = KNOWN_PROVIDERS.find(
-                        (item) => item.protocol === apiProtocol && item.baseUrl === baseUrl,
-                      );
-                      updateApiConfig({
-                        baseUrl: provider?.baseUrl ?? '',
-                        model: defaultKnownProviderModel(provider),
-                        apiProviderBaseUrl: provider?.baseUrl ?? null,
-                      });
+                      switchOnboardingByokProvider(baseUrl);
                     }}
                     onApiKeyChange={(apiKey) => updateApiConfig({ apiKey })}
                     onModelChange={(model) => {

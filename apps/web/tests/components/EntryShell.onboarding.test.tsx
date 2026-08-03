@@ -1684,6 +1684,57 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     });
   });
 
+  it('does not send an OpenAI provider draft to Agnes during automatic onboarding checks', async () => {
+    const sentinelApiKey = 'onboarding-provider-sentinel';
+    vi.useFakeTimers();
+    const fetchMock = vi.fn(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/api/integrations/vela/status')) {
+        return jsonResponse({ loggedIn: false, profile: 'prod', user: null, configPath: '/x' });
+      }
+      if (url.endsWith('/api/provider/models') && init?.method === 'POST') {
+        return jsonResponse({ ok: true, kind: 'success', latencyMs: 10, models: [] });
+      }
+      if (url.endsWith('/api/test/connection') && init?.method === 'POST') {
+        return jsonResponse({
+          ok: true,
+          kind: 'success',
+          latencyMs: 10,
+          model: 'agnes-2.0-flash',
+          sample: 'Connected',
+        });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+    renderOnboarding({
+      config: baseConfig({
+        apiProtocol: 'openai',
+        apiKey: sentinelApiKey,
+        baseUrl: 'https://api.openai.com/v1',
+        model: 'gpt-4o',
+        apiProviderBaseUrl: 'https://api.openai.com/v1',
+      }),
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Bring your own key/i }));
+    chooseOnboardingOption('Quick fill provider', /Agnes AI/i);
+    fetchMock.mockClear();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+
+    const providerRequestBodies = fetchMock.mock.calls
+      .filter(([url]) => /\/api\/(provider\/models|test\/connection)$/.test(String(url)))
+      .map(([, init]) => JSON.parse(String(init?.body ?? '{}')));
+
+    expect({
+      apiKey: (screen.getByLabelText('API key') as HTMLInputElement).value,
+      providerRequestBodies,
+    }).toEqual({ apiKey: '', providerRequestBodies: [] });
+    expect(providerRequestBodies).not.toContain(sentinelApiKey);
+  });
+
   it('persists the BYOK config before finishing onboarding', async () => {
     globalThis.fetch = vi.fn(async (input, init) => {
       const url = String(input);
