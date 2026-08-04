@@ -50,6 +50,7 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
     getConversation,
     listConversations,
     updateConversation,
+    getMessage,
     listMessages,
     upsertMessage,
   } = ctx.conversations;
@@ -284,6 +285,28 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
     res.json({ messages: listMessages(db, req.params.cid) });
   });
 
+  // #6396: the daemon is the single writer of a daemon-backed assistant
+  // message's run events / content / last-run-event id / run status. A stale
+  // web-client snapshot (captured in memory before a reconnect or project
+  // switch, then PUT after the daemon appended more events) must never regress
+  // those fields — that's how the early `status:model` event got wiped. The
+  // client may still update UI metadata (feedback, comment attachments,
+  // telemetry) through the same PUT.
+  const mergeMessageWriteForDaemonBacked = (
+    messageId: string,
+    incoming: Record<string, unknown>,
+  ): Record<string, unknown> => {
+    const stored = getMessage(db, messageId);
+    if (!stored || stored.role !== 'assistant' || !stored.runId) return incoming;
+    return {
+      ...incoming,
+      events: stored.events ?? [],
+      content: stored.content ?? '',
+      lastRunEventId: stored.lastRunEventId,
+      runStatus: stored.runStatus,
+    };
+  };
+
   app.put('/api/projects/:id/conversations/:cid/messages/:mid', async (req, res) => {
     if (!await authorizeProjectRequest(
       req,
@@ -300,7 +323,7 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
       return res.status(400).json({ error: 'id mismatch' });
     }
     const saved = upsertMessage(db, req.params.cid, {
-      ...m,
+      ...mergeMessageWriteForDaemonBacked(req.params.mid, m),
       id: req.params.mid,
     });
     // Bump the parent project's updatedAt so the project list re-orders.
