@@ -1,0 +1,113 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-trading-terminal",
+  "title": "Trading Terminal",
+  "title_i18n": {
+    "zh-CN": "Trading Terminal",
+    "zh-TW": "Trading Terminal",
+    "ja": "Trading Terminal",
+    "ko": "Trading Terminal",
+    "de": "Trading Terminal",
+    "fr": "Trading Terminal",
+    "ru": "Trading Terminal",
+    "es": "Trading Terminal",
+    "pt-BR": "Trading Terminal",
+    "it": "Trading Terminal",
+    "vi": "Trading Terminal",
+    "pl": "Trading Terminal",
+    "id": "Trading Terminal",
+    "nl": "Trading Terminal",
+    "ar": "Trading Terminal",
+    "tr": "Trading Terminal",
+    "uk": "Trading Terminal",
+    "en": "Trading Terminal"
+  },
+  "version": "0.1.0",
+  "publishedAt": "2026-08-04T09:00:00Z",
+  "description": "Bloomberg-style trading terminal. Dark-only, data-dense, cyan/coral buy/sell signals.",
+  "description_i18n": {
+    "zh-CN": "彭博风格交易终端。纯深色、高信息密度、青/珊瑚买卖信号。",
+    "zh-TW": "彭博風格交易終端。純深色、高資訊密度、青/珊瑚買賣訊號。",
+    "ja": "Bloomberg風トレーディングターミナル。ダーク専用、高密度データ、シアン/コーラルの売買シグナル。",
+    "ko": "블룸버그 스타일 트레이딩 터미널. 다크 전용, 고밀도 데이터, 시안/코랄 매수·매도 시그널.",
+    "de": "Bloomberg-artiger Trading-Terminal. Nur dunkel, datendicht, Cyan/Koralle für Kauf/Verkauf.",
+    "fr": "Terminal de trading façon Bloomberg. Dark-only, dense en données, signaux d’achat/vente cyan/corail.",
+    "ru": "Торговый терминал в стиле Bloomberg. Только тёмный, плотные данные, cyan/coral сигналы buy/sell.",
+    "es": "Terminal de trading estilo Bloomberg. Solo oscuro, denso en datos, señales compra/venta cian/coral.",
+    "pt-BR": "Terminal de trading estilo Bloomberg. Apenas escuro, denso em dados, sinais de compra/venda ciano/coral.",
+    "it": "Terminale di trading in stile Bloomberg. Solo scuro, denso di dati, segnali buy/sell ciano/corallo.",
+    "vi": "Terminal giao dịch kiểu Bloomberg. Chỉ tối, dày dữ liệu, tín hiệu mua/bán cyan/coral.",
+    "pl": "Terminal tradingowy w stylu Bloomberg. Tylko ciemny, gęsty w dane, sygnały kupna/sprzedaży cyan/coral.",
+    "id": "Terminal trading bergaya Bloomberg. Hanya gelap, padat data, sinyal beli/jual cyan/coral.",
+    "nl": "Tradingterminal in Bloomberg-stijl. Alleen donker, datadicht, cyan/coral koop-/verkoopsignalen.",
+    "ar": "طرفية تداول بأسلوب Bloomberg. داكن فقط، كثيف البيانات، إشارات شراء/بيع سماوي/مرجاني.",
+    "tr": "Bloomberg tarzı işlem terminali. Yalnızca koyu, veri yoğun, cyan/coral alım/satım sinyalleri.",
+    "uk": "Торговий термінал у стилі Bloomberg. Лише темний, щільні дані, cyan/coral сигнали buy/sell.",
+    "en": "Bloomberg-style trading terminal. Dark-only, data-dense, cyan/coral buy/sell signals."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "themed-unique"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Trading Terminal design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Trading Terminal design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "trading-terminal",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}
