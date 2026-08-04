@@ -1025,13 +1025,9 @@ function AppInner() {
             ? t('settings.mediaProviderLoadError')
             : null,
         );
-        // Compute the next config outside the setConfig updater so we can
-        // both (a) call navigate() after setConfig returns — calling it
-        // inside the updater would trigger a Router setState during React's
-        // render phase — and (b) read next.onboardingCompleted synchronously,
-        // since React batches setConfig and the updater doesn't run until
-        // the next render. latestPersistedConfigRef is kept in sync with
-        // the rendered config and is safe to read here.
+        // Settings remain interactive while daemon hydration is in flight.
+        // Rebase the daemon response on the latest persisted state so a
+        // completed user write cannot be overwritten by the boot snapshot.
         const baseConfig = latestPersistedConfigRef.current;
         const migratedLocalMediaProviders = shouldSyncLocalMediaProvidersToDaemon(
           baseConfig.mediaProviders,
@@ -1050,9 +1046,9 @@ function AppInner() {
         }
         saveConfig(next);
         if (
-          daemonMediaProvidersResult.status === 'ok' &&
-          migratedLocalMediaProviders &&
-          hasAnyConfiguredProvider(next.mediaProviders)
+          daemonMediaProvidersResult.status === 'ok'
+          && migratedLocalMediaProviders
+          && hasAnyConfiguredProvider(next.mediaProviders)
         ) {
           void syncMediaProvidersToDaemon(next.mediaProviders, {
             daemonProviders: daemonMediaProvidersLoaded,
@@ -1346,14 +1342,15 @@ function AppInner() {
    */
   const handleConfigPersistComposioKey = useCallback(
     async (composio: AppConfig['composio']) => {
-      const next = await persistComposioConfigChange(config, composio);
-      setConfig((curr) => {
-        const merged: AppConfig = { ...curr, composio: next.composio };
-        saveConfig(merged);
-        return merged;
-      });
+      const next = await persistComposioConfigChange(
+        latestPersistedConfigRef.current,
+        composio,
+      );
+      latestPersistedConfigRef.current = next;
+      saveConfig(next);
+      setConfig(next);
     },
-    [config],
+    [],
   );
 
   const handleModeChange = useCallback(
@@ -1786,11 +1783,9 @@ function AppInner() {
     async (designSystemId: string, designSystemTitle: string) => {
       // "Create with this design system" must NOT assume a prototype. Route
       // the click through the hidden default design router (od-default) —
-      // exactly like a free-form Home prompt — so the agent first asks (via
-      // the task-type question-form) what to build with this system instead
-      // of silently binding the web-prototype scenario + high-fidelity
-      // metadata. The preset prompt seeds the conversation and is auto-sent
-      // so the router surfaces the confirmation form immediately; `kind`
+      // exactly like a free-form Home prompt. The preset prompt seeds the
+      // conversation and is auto-sent so the router can infer the task type
+      // from the brief, asking only when the route remains ambiguous. `kind`
       // stays the neutral 'other' so no surface-specific default leaks back
       // in on the daemon side.
       const presetPrompt = t('nextStep.brandCreateDesignPrompt', {

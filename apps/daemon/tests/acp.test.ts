@@ -2059,6 +2059,37 @@ test('attachAcpSession does not double-kill a child that exits cleanly on stdin.
   }
 });
 
+test('attachAcpSession accepts an opted-in ACP turn_end update as prompt completion', () => {
+  const child = new FakeAcpChild();
+  const events: Array<{ event: string; payload: unknown }> = [];
+
+  const session = attachAcpSession({
+    child: child as never,
+    prompt: 'hello',
+    cwd: '/tmp/od-project',
+    model: null,
+    mcpServers: [],
+    completePromptOnTurnEnd: true,
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  writeAcpResult(child, 1, {});
+  writeAcpResult(child, 2, { sessionId: 'session-1' });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'agent_message_chunk',
+    content: { type: 'text', text: 'done' },
+  });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'turn_end',
+    usage: { inputTokens: 1, outputTokens: 1 },
+  });
+  child.emit('close', 0, null);
+
+  assert.equal(session.completedSuccessfully(), true);
+  assert.equal(session.hasFatalError(), false);
+  assert.equal(events.some((entry) => entry.event === 'error'), false);
+});
+
 test('attachAcpSession.completedSuccessfully reflects abort and fatal-error states', () => {
   const child = new FakeAcpChild();
 

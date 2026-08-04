@@ -1830,7 +1830,8 @@ describe('ProjectView conversation run isolation', () => {
       ...config,
       mode: 'api',
       apiProtocol: 'openai',
-      apiKey: 'test-key',
+      apiKey: 'byok-test-key',
+      baseUrl: 'https://api.openai.com/v1',
       model: 'api-model',
     });
 
@@ -1842,7 +1843,12 @@ describe('ProjectView conversation run isolation', () => {
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
     expect(streamViaDaemon).toHaveBeenCalledWith(expect.objectContaining({
       agentId: 'byok-opencode',
-      byokProvider: expect.objectContaining({ protocol: 'openai', apiKey: 'test-key' }),
+      byokProvider: expect.objectContaining({
+        protocol: 'openai',
+        apiKey: 'byok-test-key',
+        baseUrl: 'https://api.openai.com/v1',
+        model: 'api-model',
+      }),
       model: 'api-model',
     }));
     await waitFor(() => expect(playSound).toHaveBeenCalledWith('success-sound'));
@@ -1940,14 +1946,12 @@ describe('ProjectView conversation run isolation', () => {
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
     expect(streamViaDaemon).toHaveBeenCalledWith(expect.objectContaining({
       agentId: 'byok-opencode',
-      byokProvider: {
+      byokProvider: expect.objectContaining({
         protocol: 'ollama',
-        apiKey: '',
         baseUrl: 'http://localhost:11434',
-        requiresApiKey: false,
-        apiVersion: '',
         model: 'llama3.2',
-      },
+        requiresApiKey: false,
+      }),
       model: 'llama3.2',
     }));
   });
@@ -1974,14 +1978,12 @@ describe('ProjectView conversation run isolation', () => {
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
     expect(streamViaDaemon).toHaveBeenCalledWith(expect.objectContaining({
       agentId: 'byok-opencode',
-      byokProvider: {
+      byokProvider: expect.objectContaining({
         protocol: 'openai',
-        apiKey: '',
         baseUrl: 'http://127.0.0.1:8000/v1',
-        requiresApiKey: false,
-        apiVersion: '',
         model: 'model',
-      },
+        requiresApiKey: false,
+      }),
       model: 'model',
     }));
   });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { type McpRunCreateRequest } from '../src/api/chat';
+import { type ChatRunCreateRequest, type McpRunCreateRequest } from '../src/api/chat';
 
 describe('McpRunCreateRequest contract', () => {
   it('accepts projectId-only shape (typed callers need no cast)', () => {
@@ -32,5 +32,51 @@ describe('McpRunCreateRequest contract', () => {
     };
     expect(withoutAgent.agentId).toBeUndefined();
     expect(withoutAgent.message).toBe('Make a landing page');
+  });
+
+  it('accepts conversationId without assistantMessageId (daemon mints pin)', () => {
+    const omitPin: McpRunCreateRequest = {
+      projectId: 'proj-4',
+      conversationId: 'conv-4',
+      message: 'Eval multi-turn without client pin',
+    };
+    expect(omitPin.conversationId).toBe('conv-4');
+    expect(omitPin.assistantMessageId).toBeUndefined();
+  });
+
+  it('accepts conversationId + client-supplied assistantMessageId', () => {
+    const withPin: McpRunCreateRequest = {
+      projectId: 'proj-5',
+      conversationId: 'conv-5',
+      assistantMessageId: 'asst-5',
+      message: 'Turn with client pin',
+    };
+    expect(withPin.assistantMessageId).toBe('asst-5');
+  });
+});
+
+describe('ChatRunCreateRequest contract', () => {
+  it('accepts conversationId without assistantMessageId (daemon mints pin)', () => {
+    const omitPin: ChatRunCreateRequest = {
+      agentId: 'claude',
+      message: 'Web or API omit-pin turn',
+      projectId: 'proj-chat-1',
+      conversationId: 'conv-chat-1',
+      clientRequestId: 'req-1',
+    };
+    expect(omitPin.conversationId).toBe('conv-chat-1');
+    expect(omitPin.assistantMessageId).toBeUndefined();
+  });
+
+  it('accepts client-supplied assistantMessageId when present', () => {
+    const withPin: ChatRunCreateRequest = {
+      agentId: 'claude',
+      message: 'Pinned turn',
+      projectId: 'proj-chat-2',
+      conversationId: 'conv-chat-2',
+      assistantMessageId: 'asst-chat-2',
+      clientRequestId: 'req-2',
+    };
+    expect(withPin.assistantMessageId).toBe('asst-chat-2');
   });
 });

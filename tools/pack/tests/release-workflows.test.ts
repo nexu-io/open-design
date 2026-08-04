@@ -21,7 +21,23 @@ function countOccurrences(content: string, needle: string): number {
 }
 
 describe("release workflows", () => {
-  it("requires Vela CLI only for beta mac arm64 packaging", async () => {
+  it("retains only the newest outer tools-pack cache for each release lane", async () => {
+    const workflows = await Promise.all([
+      readFile(new URL("../../../.github/workflows/release-beta.yml", import.meta.url), "utf8"),
+      readFile(new URL("../../../.github/workflows/release-preview.yml", import.meta.url), "utf8"),
+      readFile(new URL("../../../.github/workflows/release-prerelease.yml", import.meta.url), "utf8"),
+      readFile(new URL("../../../.github/workflows/release-stable.yml", import.meta.url), "utf8"),
+    ]);
+
+    expect(workflows.map((workflow) => countOccurrences(workflow, "keep=1"))).toEqual([2, 2, 2, 0]);
+    expect(workflows.map((workflow) => countOccurrences(workflow, "$keep = 1"))).toEqual([1, 1, 1, 1]);
+    for (const workflow of workflows) {
+      expect(workflow).not.toContain("keep=3");
+      expect(workflow).not.toContain("$keep = 3");
+    }
+  });
+
+  it("requires Vela CLI for every beta desktop packaging target", async () => {
     const [beta, betaSelfHosted, preview, prerelease, stable, stablePrepare, buildMac, buildWin, prepareMac, prepareWin, publishPlatform, winLifecycle, desktopUpdater, macBuild, macFs, installUnsafeDmg, winApp, macWorkspace, linuxPack] = await Promise.all([
       readFile(new URL("../../../.github/workflows/release-beta.yml", import.meta.url), "utf8"),
       readFile(new URL("../../../.github/workflows/release-beta-s.yml", import.meta.url), "utf8"),
@@ -67,8 +83,11 @@ describe("release workflows", () => {
     expect(mac).not.toContain("bash tools/release/scripts/build-platform.sh");
     expect(macX64).not.toContain("bash tools/release/scripts/build-platform.sh");
     expect(selfHostedMac).toContain("fnm exec --using=24 -- bash tools/release/scripts/build-platform.sh");
-    expect(mac).toContain("--require-vela-cli");
+    expect(countOccurrences(mac, "--require-vela-cli")).toBe(3);
+    expect(countOccurrences(macX64, "--require-vela-cli")).toBe(2);
+    expect(countOccurrences(win, "--require-vela-cli")).toBe(3);
     expect(selfHostedMac).toContain("REQUIRE_VELA_CLI: \"true\"");
+    expect(selfHostedWin).toContain("-RequireVelaCli");
     expect(mac.match(/RELEASE_ARTIFACT_MODE: dmg-and-payload/g)?.length ?? 0).toBe(2);
     expect(selfHostedMac.match(/RELEASE_ARTIFACT_MODE: dmg-and-payload/g)?.length ?? 0).toBe(2);
     expect(macX64.match(/RELEASE_ARTIFACT_MODE: \$\{\{ inputs\.mac_x64_target == 'all' && 'all' \|\| 'dmg-and-payload' \}\}/g)?.length ?? 0).toBe(2);
@@ -90,14 +109,12 @@ describe("release workflows", () => {
     expect(macX64).toContain("exec tools-pack mac build");
     expect(macX64).toContain("pnpm exec tsx scripts/release-smoke.ts mac specs/mac.spec.ts");
     expect(buildMac).toContain("build_args+=(--require-vela-cli)");
+    expect(buildMac).toContain("update_args+=(--require-vela-cli)");
     expect(buildMac).toContain('--cache-dir "$TOOLS_PACK_CACHE_DIR"');
     expect(buildMac).toContain('tools-pack mac build update fixture');
     expect(buildMac).toContain('OD_PACKAGED_E2E_MAC_UPDATE_BUILD_JSON_PATH="$update_build_json_path"');
     expect(buildMac).toContain('OD_PACKAGED_E2E_MAC_UPDATE_VERSION="${OD_PACKAGED_E2E_MAC_UPDATE_VERSION:-$update_version}"');
     expect(buildMac).not.toContain("::warning::Expected Electron framework symlink");
-    expect(macX64).not.toContain("REQUIRE_VELA_CLI: \"true\"");
-    expect(macX64).not.toContain("--require-vela-cli");
-    expect(win).not.toContain("--require-vela-cli");
     expect(linux).not.toContain("--require-vela-cli");
     expect(beta).not.toContain("REQUIRE_VELA_CLI: \"true\"");
     expect(beta).toContain("release-beta publish requires win_x64_target=nsis or all");
@@ -131,6 +148,8 @@ describe("release workflows", () => {
     expect(win).toContain("tools-pack-win-v1-beta-$env:RUNNER_OS-");
     expect(win).toContain('pnpm.cmd exec tools-pack win cleanup --dir "${{ runner.temp }}\\tools-pack" --namespace release-beta-win --json');
     expect(win).toContain('"tools-pack", "win", "build"');
+    expect(buildWin).toContain('$buildArgs += "--require-vela-cli"');
+    expect(buildWin).toContain('$updateArgs += "--require-vela-cli"');
     expect(win).toContain("tools-pack win validate-payload");
     expect(win).toContain("pnpm exec tsx scripts/release-smoke.ts win specs/win.spec.ts");
     expect(win).toContain(".\\.github\\scripts\\release\\cache\\win.ps1");

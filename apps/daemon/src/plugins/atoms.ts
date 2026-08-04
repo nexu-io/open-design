@@ -14,8 +14,8 @@ export interface AtomCatalogEntry {
 }
 
 export const FIRST_PARTY_ATOMS: ReadonlyArray<AtomCatalogEntry> = [
-  { id: 'discovery-question-form', label: 'Discovery question form', description: 'Turn-1 question form for ambiguous briefs.', status: 'implemented', taskKinds: ['new-generation', 'tune-collab'] },
-  { id: 'direction-picker',        label: 'Direction picker',        description: '3-5 direction picker before final.',         status: 'implemented', taskKinds: ['new-generation', 'tune-collab'] },
+  { id: 'discovery-question-form', label: 'Discovery question form', description: 'Structured clarification for unresolved material requirements.', status: 'implemented', taskKinds: ['new-generation', 'tune-collab'] },
+  { id: 'direction-picker',        label: 'Direction picker',        description: 'Optional 3-5 directions when explicitly requested.', status: 'implemented', taskKinds: ['new-generation', 'tune-collab'] },
   { id: 'todo-write',              label: 'Todo write',              description: 'TodoWrite-driven plan.',                    status: 'implemented', taskKinds: ['new-generation', 'code-migration', 'figma-migration', 'tune-collab'] },
   { id: 'file-read',               label: 'File read',               description: 'Read project files.',                       status: 'implemented', taskKinds: ['new-generation', 'code-migration', 'figma-migration', 'tune-collab'] },
   { id: 'file-write',              label: 'File write',              description: 'Write project files.',                      status: 'implemented', taskKinds: ['new-generation', 'code-migration', 'figma-migration', 'tune-collab'] },

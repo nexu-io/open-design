@@ -9,7 +9,7 @@ i18n:
     title: "Open Design 0.9.0:设计,给每一个人"
     summary: "Open Design 0.9.0 是「装完即创作」的版本。不用再到处找 API key,不用装三个 CLI——打开应用、登录一次、选一个模型,就能开始做东西。再加上更大的 agent 阵容、一个真正的插件库,以及在 Windows 和 Linux 上更顺的安装。"
     bodyHtml: |
-      <p>Tag <code>open-design-v0.9.0</code>,于 2026 年 6 月 2 日发布。<strong>7 天里 310 个 PR,98 位贡献者。</strong>代号「Design for everyone」——这是我们的<strong>「装完即创作」版本</strong>。前面三个版本,我们一直在请你「先干活,才能干活」:装一个 CLI、找一个 API key、粘贴密钥、测认证、从一份得现查的列表里挑对模型名。每一步,都是有人在真正做出第一个东西之前就放弃的地方。</p>
+      <p><code>open-design-v0.9.0</code>,于 2026 年 6 月 2 日发布。<strong>7 天里 310 个 PR,98 位贡献者。</strong>代号「Design for everyone」——这是我们的<strong>「装完即创作」版本</strong>。前面三个版本,我们一直在请你「先干活,才能干活」:装一个 CLI、找一个 API key、粘贴密钥、测认证、从一份得现查的列表里挑对模型名。每一步,都是有人在真正做出第一个东西之前就放弃的地方。</p>
       <p>0.9.0 把这些步骤删掉了。</p>
       <p>如果你想看长版本,<a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.9.0">GitHub 上的发布说明</a>有全部细节。这篇是短版本:底层改了什么、今天能拿它做什么、以及从哪开始。</p>
 
@@ -67,7 +67,7 @@ i18n:
     title: "Open Design 0.9.0：設計，給每一個人"
     summary: "Open Design 0.9.0 是「裝完即創作」的版本。不用再到處找 API key，不用裝三個 CLI——打開應用程式、登入一次、選一個模型，就能開始做東西。再加上更大的 agent 陣容、一個真正的外掛程式庫，以及在 Windows 和 Linux 上更順的安裝體驗。"
     bodyHtml: |
-      <p>Tag <code>open-design-v0.9.0</code>，於 2026 年 6 月 2 日發布。<strong>7 天裡 310 個 PR，98 位貢獻者。</strong>代號「Design for everyone」——這是我們的<strong>「裝完即創作」版本</strong>。前面三個版本，我們一直在請你「先幹活，才能幹活」：裝一個 CLI、找一個 API key、貼上密鑰、測認證、從一份得現查的清單裡挑對模型名稱。每一步，都是有人在真正做出第一個東西之前就放棄的地方。</p>
+      <p><code>open-design-v0.9.0</code>，於 2026 年 6 月 2 日發布。<strong>7 天裡 310 個 PR，98 位貢獻者。</strong>代號「Design for everyone」——這是我們的<strong>「裝完即創作」版本</strong>。前面三個版本，我們一直在請你「先幹活，才能幹活」：裝一個 CLI、找一個 API key、貼上密鑰、測認證、從一份得現查的清單裡挑對模型名稱。每一步，都是有人在真正做出第一個東西之前就放棄的地方。</p>
       <p>0.9.0 把這些步驟刪掉了。</p>
       <p>如果你想看長版本，<a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.9.0">GitHub 上的發布說明</a>有全部細節。這篇是短版本：底層改了什麼、今天能拿它做什麼、以及從哪開始。</p>
 
@@ -120,7 +120,7 @@ i18n:
     title: "Open Design 0.9.0:すべての人のためのデザイン"
     summary: "Open Design 0.9.0 は「インストールしたらすぐ作れる」リリースです。API キーを探し回る必要も、3 つの CLI をセットアップする必要もありません。アプリを開き、一度サインインし、モデルを選んで、作り始めるだけ。さらに、より充実した agent の布陣、本格的なプラグインライブラリ、そして Windows と Linux でのよりスムーズなインストールも。"
     bodyHtml: |
-      <p>タグ <code>open-design-v0.9.0</code>、2026 年 6 月 2 日にリリース。<strong>7 日間で 98 人のコントリビューターによる 310 件の PR。</strong>コードネームは「Design for everyone」——これは<strong>「インストールしたらすぐ作れる」リリース</strong>です。これまでの 3 つのリリースでは、作業をするためにまず作業をしてくださいとお願いしていました。CLI をインストールし、API キーを探し、シークレットを貼り付け、認証をテストし、いちいち調べないとわからないリストから正しいモデル名を選ぶ。そのどのステップも、誰かが何かを作る前に離脱してしまう場所でした。</p>
+      <p><code>open-design-v0.9.0</code>、2026 年 6 月 2 日にリリース。<strong>7 日間で 98 人のコントリビューターによる 310 件の PR。</strong>コードネームは「Design for everyone」——これは<strong>「インストールしたらすぐ作れる」リリース</strong>です。これまでの 3 つのリリースでは、作業をするためにまず作業をしてくださいとお願いしていました。CLI をインストールし、API キーを探し、シークレットを貼り付け、認証をテストし、いちいち調べないとわからないリストから正しいモデル名を選ぶ。そのどのステップも、誰かが何かを作る前に離脱してしまう場所でした。</p>
       <p>0.9.0 はそれらのステップを削除します。</p>
       <p>詳しいバージョンが知りたい場合は、<a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.9.0">GitHub のリリースノート</a>にすべて載っています。この記事は短いバージョンです。内部で何が変わったのか、今日それで何ができるのか、そしてどこから始めればいいのか。</p>
 
@@ -178,7 +178,7 @@ i18n:
     title: "Open Design 0.9.0: 모두를 위한 디자인"
     summary: "Open Design 0.9.0은 「설치하면 곧바로 창작」 릴리스입니다. API 키를 찾아 헤맬 필요도, CLI 세 개를 깔 필요도 없습니다. 앱을 열고, 한 번 로그인하고, 모델을 고르고, 바로 만들기 시작하세요. 여기에 더 커진 에이전트 라인업, 진짜 플러그인 라이브러리, 그리고 Windows와 Linux에서 한층 수월해진 설치까지 더했습니다."
     bodyHtml: |
-      <p>Tag <code>open-design-v0.9.0</code>, 2026년 6월 2일 출시. <strong>7일 동안 98명의 기여자가 보낸 310개의 PR.</strong> 코드네임 「Design for everyone」 — 이번은 <strong>「설치하면 곧바로 창작」 릴리스</strong>입니다. 지난 세 번의 릴리스 동안 우리는 여러분에게 일을 하기 전에 먼저 일을 하라고 요구해 왔습니다. CLI를 설치하고, API 키를 찾고, 비밀 키를 붙여넣고, 인증을 테스트하고, 일일이 찾아봐야 하는 목록에서 올바른 모델 이름을 고르는 일. 그 단계 하나하나가 누군가는 무언가를 만들어 보기도 전에 떠나 버리는 지점이었습니다.</p>
+      <p><code>open-design-v0.9.0</code>, 2026년 6월 2일 출시. <strong>7일 동안 98명의 기여자가 보낸 310개의 PR.</strong> 코드네임 「Design for everyone」 — 이번은 <strong>「설치하면 곧바로 창작」 릴리스</strong>입니다. 지난 세 번의 릴리스 동안 우리는 여러분에게 일을 하기 전에 먼저 일을 하라고 요구해 왔습니다. CLI를 설치하고, API 키를 찾고, 비밀 키를 붙여넣고, 인증을 테스트하고, 일일이 찾아봐야 하는 목록에서 올바른 모델 이름을 고르는 일. 그 단계 하나하나가 누군가는 무언가를 만들어 보기도 전에 떠나 버리는 지점이었습니다.</p>
       <p>0.9.0은 그 단계들을 삭제합니다.</p>
       <p>긴 버전을 원한다면 <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.9.0">GitHub의 릴리스 노트</a>에 전부 담겨 있습니다. 이 글은 짧은 버전입니다. 내부적으로 무엇이 바뀌었는지, 오늘 그것으로 무엇을 할 수 있는지, 그리고 어디서부터 시작하면 되는지.</p>
 
@@ -236,7 +236,7 @@ i18n:
     title: "Open Design 0.9.0: Design für alle"
     summary: "Open Design 0.9.0 ist das Installieren-und-loslegen-Release. Keine API-Key-Schnitzeljagd, kein Setup mit drei CLIs – App öffnen, einmal anmelden, ein Modell wählen und loslegen. Dazu eine größere Agent-Auswahl, eine echte Plugin-Bibliothek und einfachere Installation unter Windows und Linux."
     bodyHtml: |
-      <p>Tag <code>open-design-v0.9.0</code>, veröffentlicht am 2. Juni 2026. <strong>310 PRs von 98 Mitwirkenden in sieben Tagen.</strong> Codename „Design for everyone" – das ist das <strong>Installieren-und-loslegen-Release</strong>. Drei Releases lang haben wir dich gebeten, Arbeit zu erledigen, bevor du arbeiten konntest: ein CLI installieren, einen API-Key finden, Secrets einfügen, die Authentifizierung testen, den richtigen Modellnamen aus einer Liste auswählen, die du erst nachschlagen musstest. Jeder dieser Schritte war eine Stelle, an der jemand absprang, bevor er je etwas gemacht hatte.</p>
+      <p><code>open-design-v0.9.0</code>, veröffentlicht am 2. Juni 2026. <strong>310 PRs von 98 Mitwirkenden in sieben Tagen.</strong> Codename „Design for everyone" – das ist das <strong>Installieren-und-loslegen-Release</strong>. Drei Releases lang haben wir dich gebeten, Arbeit zu erledigen, bevor du arbeiten konntest: ein CLI installieren, einen API-Key finden, Secrets einfügen, die Authentifizierung testen, den richtigen Modellnamen aus einer Liste auswählen, die du erst nachschlagen musstest. Jeder dieser Schritte war eine Stelle, an der jemand absprang, bevor er je etwas gemacht hatte.</p>
       <p>0.9.0 streicht diese Schritte.</p>
       <p>Wenn du die lange Fassung willst: Die <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.9.0">Release Notes auf GitHub</a> haben sie. Dieser Beitrag ist die Kurzfassung: was sich unter der Haube geändert hat, was du heute damit machen kannst und wo du anfängst.</p>
 
@@ -294,7 +294,7 @@ i18n:
     title: "Open Design 0.9.0 : le design, pour tout le monde"
     summary: "Open Design 0.9.0, c'est la version « installer et créer ». Plus de chasse au trésor pour trouver une clé API, plus de configuration à trois CLI — vous ouvrez l'application, vous vous connectez une fois, vous choisissez un modèle, et vous commencez à construire. Avec, en plus, un banc d'agents plus large, une vraie bibliothèque de plugins, et des installations plus simples sur Windows et Linux."
     bodyHtml: |
-      <p>Tag <code>open-design-v0.9.0</code>, publié le 2 juin 2026. <strong>310 PR par 98 contributeurs en sept jours.</strong> Nom de code « Design for everyone » — c'est notre <strong>version « installer et créer »</strong>. Pendant trois versions, nous vous avons demandé de faire du travail avant de pouvoir faire du travail : installer un CLI, trouver une clé API, coller des secrets, tester l'authentification, choisir le bon nom de modèle dans une liste qu'il fallait aller chercher. Chacune de ces étapes était un endroit où quelqu'un abandonnait avant d'avoir jamais rien créé.</p>
+      <p><code>open-design-v0.9.0</code>, publié le 2 juin 2026. <strong>310 PR par 98 contributeurs en sept jours.</strong> Nom de code « Design for everyone » — c'est notre <strong>version « installer et créer »</strong>. Pendant trois versions, nous vous avons demandé de faire du travail avant de pouvoir faire du travail : installer un CLI, trouver une clé API, coller des secrets, tester l'authentification, choisir le bon nom de modèle dans une liste qu'il fallait aller chercher. Chacune de ces étapes était un endroit où quelqu'un abandonnait avant d'avoir jamais rien créé.</p>
       <p>0.9.0 supprime ces étapes.</p>
       <p>Si vous voulez la version longue, les <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.9.0">notes de version sur GitHub</a> la contiennent. Ce billet est la version courte : ce qui a changé sous le capot, ce que vous pouvez en faire aujourd'hui, et par où commencer.</p>
 
@@ -352,7 +352,7 @@ i18n:
     title: "Open Design 0.9.0: дизайн для каждого"
     summary: "Open Design 0.9.0 — это релиз «установил и создаёшь». Никакой охоты за API-ключами, никакой настройки трёх CLI — откройте приложение, войдите один раз, выберите модель и начинайте создавать. А ещё — расширенная скамейка агентов, настоящая библиотека плагинов и более простая установка на Windows и Linux."
     bodyHtml: |
-      <p>Тег <code>open-design-v0.9.0</code>, выпущен 2 июня 2026 года. <strong>310 PR от 98 контрибьюторов за семь дней.</strong> Кодовое имя «Design for everyone» — это наш <strong>релиз «установил и создаёшь»</strong>. На протяжении трёх релизов мы просили вас делать работу, прежде чем вы сможете делать работу: установить CLI, найти API-ключ, вставить секреты, проверить аутентификацию, выбрать правильное имя модели из списка, который ещё нужно было где-то посмотреть. Каждый из этих шагов был местом, где кто-то уходил, так и не создав ничего.</p>
+      <p><code>open-design-v0.9.0</code>, выпущен 2 июня 2026 года. <strong>310 PR от 98 контрибьюторов за семь дней.</strong> Кодовое имя «Design for everyone» — это наш <strong>релиз «установил и создаёшь»</strong>. На протяжении трёх релизов мы просили вас делать работу, прежде чем вы сможете делать работу: установить CLI, найти API-ключ, вставить секреты, проверить аутентификацию, выбрать правильное имя модели из списка, который ещё нужно было где-то посмотреть. Каждый из этих шагов был местом, где кто-то уходил, так и не создав ничего.</p>
       <p>0.9.0 убирает эти шаги.</p>
       <p>Если вам нужна длинная версия, в <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.9.0">примечаниях к релизу на GitHub</a> есть все детали. Этот пост — короткая версия: что изменилось под капотом, что вы можете сделать с этим сегодня и с чего начать.</p>
 
@@ -410,7 +410,7 @@ i18n:
     title: "Open Design 0.9.0: diseño para todos"
     summary: "Open Design 0.9.0 es la versión de instalar-y-crear. Sin búsqueda del tesoro de claves API, sin configurar tres CLI: abre la app, inicia sesión una vez, elige un modelo y empieza a construir. Además, un banco de agentes más grande, una verdadera biblioteca de plugins e instalaciones más fáciles en Windows y Linux."
     bodyHtml: |
-      <p>Tag <code>open-design-v0.9.0</code>, lanzado el 2 de junio de 2026. <strong>310 PRs de 98 colaboradores en siete días.</strong> Nombre en clave «Design for everyone»: esta es la <strong>versión de instalar-y-crear</strong>. Durante tres versiones te pedimos hacer trabajo antes de poder trabajar: instalar un CLI, encontrar una clave API, pegar secretos, probar la autenticación, elegir el nombre de modelo correcto de una lista que tenías que buscar. Cada uno de esos pasos era un lugar donde alguien se rendía antes de llegar a hacer nada.</p>
+      <p><code>open-design-v0.9.0</code>, lanzado el 2 de junio de 2026. <strong>310 PRs de 98 colaboradores en siete días.</strong> Nombre en clave «Design for everyone»: esta es la <strong>versión de instalar-y-crear</strong>. Durante tres versiones te pedimos hacer trabajo antes de poder trabajar: instalar un CLI, encontrar una clave API, pegar secretos, probar la autenticación, elegir el nombre de modelo correcto de una lista que tenías que buscar. Cada uno de esos pasos era un lugar donde alguien se rendía antes de llegar a hacer nada.</p>
       <p>0.9.0 elimina esos pasos.</p>
       <p>Si quieres la versión larga, las <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.9.0">notas de lanzamiento en GitHub</a> la tienen. Este artículo es la versión corta: qué cambió bajo el capó, qué puedes hacer con ello hoy y por dónde empezar.</p>
 
@@ -468,7 +468,7 @@ i18n:
     title: "Open Design 0.9.0: design para todo mundo"
     summary: "O Open Design 0.9.0 é a versão \"instale e crie\". Sem caça ao tesouro por chave de API, sem configurar três CLIs — abra o aplicativo, faça login uma vez, escolha um modelo e comece a construir. Além de um banco de agentes maior, uma biblioteca de plugins de verdade e instalações mais fáceis no Windows e no Linux."
     bodyHtml: |
-      <p>Tag <code>open-design-v0.9.0</code>, lançada em 2 de junho de 2026. <strong>310 PRs de 98 contribuidores em sete dias.</strong> Codinome "Design for everyone" — esta é a <strong>versão "instale e crie"</strong>. Por três versões, pedimos que você fizesse trabalho antes de poder trabalhar: instalar um CLI, encontrar uma chave de API, colar segredos, testar a autenticação, escolher o nome certo do modelo numa lista que você tinha de consultar. Cada um desses passos era um lugar onde alguém desistia antes mesmo de criar qualquer coisa.</p>
+      <p><code>open-design-v0.9.0</code>, lançada em 2 de junho de 2026. <strong>310 PRs de 98 contribuidores em sete dias.</strong> Codinome "Design for everyone" — esta é a <strong>versão "instale e crie"</strong>. Por três versões, pedimos que você fizesse trabalho antes de poder trabalhar: instalar um CLI, encontrar uma chave de API, colar segredos, testar a autenticação, escolher o nome certo do modelo numa lista que você tinha de consultar. Cada um desses passos era um lugar onde alguém desistia antes mesmo de criar qualquer coisa.</p>
       <p>O 0.9.0 elimina esses passos.</p>
       <p>Se você quer a versão longa, as <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.9.0">notas de lançamento no GitHub</a> têm tudo. Este post é a versão curta: o que mudou por baixo dos panos, o que você pode fazer com isso hoje e por onde começar.</p>
 
@@ -526,7 +526,7 @@ i18n:
     title: "Open Design 0.9.0: design per tutti"
     summary: "Open Design 0.9.0 è la release \"installa e crea\". Niente caccia al tesoro per le API key, niente configurazione di tre CLI: apri l'app, accedi una volta, scegli un modello e inizia a costruire. In più, una panchina di agent più ampia, una vera libreria di plugin e installazioni più facili su Windows e Linux."
     bodyHtml: |
-      <p>Tag <code>open-design-v0.9.0</code>, rilasciato il 2 giugno 2026. <strong>310 PR da 98 contributori in sette giorni.</strong> Nome in codice "Design for everyone": questa è la <strong>release "installa e crea"</strong>. Per tre release ti abbiamo chiesto di fare del lavoro prima di poter lavorare: installare una CLI, trovare una API key, incollare segreti, testare l'autenticazione, scegliere il nome di modello giusto da una lista che dovevi cercare. Ognuno di quei passaggi era un punto in cui qualcuno abbandonava prima ancora di creare qualcosa.</p>
+      <p><code>open-design-v0.9.0</code>, rilasciato il 2 giugno 2026. <strong>310 PR da 98 contributori in sette giorni.</strong> Nome in codice "Design for everyone": questa è la <strong>release "installa e crea"</strong>. Per tre release ti abbiamo chiesto di fare del lavoro prima di poter lavorare: installare una CLI, trovare una API key, incollare segreti, testare l'autenticazione, scegliere il nome di modello giusto da una lista che dovevi cercare. Ognuno di quei passaggi era un punto in cui qualcuno abbandonava prima ancora di creare qualcosa.</p>
       <p>0.9.0 elimina quei passaggi.</p>
       <p>Se vuoi la versione lunga, le <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.9.0">note di rilascio su GitHub</a> la contengono. Questo post è la versione breve: cosa è cambiato sotto il cofano, cosa puoi farci oggi e da dove iniziare.</p>
 
@@ -584,7 +584,7 @@ i18n:
     title: "Open Design 0.9.0: thiết kế cho tất cả mọi người"
     summary: "Open Design 0.9.0 là phiên bản \"cài xong là tạo được\". Không còn phải đi săn lùng API key, không còn phải cài ba CLI — mở ứng dụng, đăng nhập một lần, chọn một mô hình, và bắt đầu xây dựng. Cùng với đó là dàn agent lớn hơn, một thư viện plugin thực thụ, và việc cài đặt dễ dàng hơn trên Windows và Linux."
     bodyHtml: |
-      <p>Tag <code>open-design-v0.9.0</code>, phát hành ngày 2 tháng 6 năm 2026. <strong>310 PR từ 98 người đóng góp trong bảy ngày.</strong> Tên mã "Design for everyone" — đây là <strong>phiên bản "cài xong là tạo được"</strong>. Suốt ba phiên bản trước, chúng tôi đã bắt bạn phải làm việc trước khi có thể làm việc: cài một CLI, tìm một API key, dán bí mật vào, kiểm tra xác thực, chọn đúng tên mô hình từ một danh sách mà bạn phải tra cứu. Mỗi bước trong số đó đều là nơi có người bỏ cuộc trước khi kịp tạo ra bất cứ thứ gì.</p>
+      <p><code>open-design-v0.9.0</code>, phát hành ngày 2 tháng 6 năm 2026. <strong>310 PR từ 98 người đóng góp trong bảy ngày.</strong> Tên mã "Design for everyone" — đây là <strong>phiên bản "cài xong là tạo được"</strong>. Suốt ba phiên bản trước, chúng tôi đã bắt bạn phải làm việc trước khi có thể làm việc: cài một CLI, tìm một API key, dán bí mật vào, kiểm tra xác thực, chọn đúng tên mô hình từ một danh sách mà bạn phải tra cứu. Mỗi bước trong số đó đều là nơi có người bỏ cuộc trước khi kịp tạo ra bất cứ thứ gì.</p>
       <p>0.9.0 xóa bỏ những bước đó.</p>
       <p>Nếu bạn muốn bản dài, <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.9.0">ghi chú phát hành trên GitHub</a> có đầy đủ chi tiết. Bài này là bản ngắn: điều gì đã thay đổi ở bên dưới, hôm nay bạn có thể làm gì với nó, và bắt đầu từ đâu.</p>
 
@@ -637,7 +637,7 @@ i18n:
     title: "Open Design 0.9.0: projektowanie dla każdego"
     summary: "Open Design 0.9.0 to wydanie „zainstaluj i twórz\". Żadnego polowania na klucze API, żadnej konfiguracji trzech narzędzi CLI — otwórz aplikację, zaloguj się raz, wybierz model i zacznij budować. A do tego większa ławka agentów, prawdziwa biblioteka wtyczek oraz łatwiejsza instalacja na Windows i Linux."
     bodyHtml: |
-      <p>Tag <code>open-design-v0.9.0</code>, wydany 2 czerwca 2026 r. <strong>310 PR-ów od 98 współtwórców w siedem dni.</strong> Nazwa kodowa „Design for everyone" — to nasze <strong>wydanie „zainstaluj i twórz"</strong>. Przez trzy wydania prosiliśmy Cię, żebyś wykonał pracę, zanim mógłbyś wykonać pracę: zainstaluj CLI, znajdź klucz API, wklej sekrety, przetestuj uwierzytelnianie, wybierz właściwą nazwę modelu z listy, którą musiałeś sam wyszukać. Każdy z tych kroków był miejscem, w którym ktoś odpadał, zanim cokolwiek stworzył.</p>
+      <p><code>open-design-v0.9.0</code>, wydany 2 czerwca 2026 r. <strong>310 PR-ów od 98 współtwórców w siedem dni.</strong> Nazwa kodowa „Design for everyone" — to nasze <strong>wydanie „zainstaluj i twórz"</strong>. Przez trzy wydania prosiliśmy Cię, żebyś wykonał pracę, zanim mógłbyś wykonać pracę: zainstaluj CLI, znajdź klucz API, wklej sekrety, przetestuj uwierzytelnianie, wybierz właściwą nazwę modelu z listy, którą musiałeś sam wyszukać. Każdy z tych kroków był miejscem, w którym ktoś odpadał, zanim cokolwiek stworzył.</p>
       <p>0.9.0 usuwa te kroki.</p>
       <p>Jeśli chcesz dłuższą wersję, mają ją <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.9.0">informacje o wydaniu na GitHub</a>. Ten wpis to wersja krótka: co zmieniło się pod maską, co możesz z tym zrobić już dziś i od czego zacząć.</p>
 
@@ -690,7 +690,7 @@ i18n:
     title: "Open Design 0.9.0: desain untuk semua orang"
     summary: "Open Design 0.9.0 adalah rilis pasang-dan-langsung-berkarya. Tidak perlu lagi berburu API key, tidak perlu menyiapkan tiga CLI — buka aplikasi, masuk sekali, pilih model, dan mulai membangun. Ditambah jajaran agent yang lebih luas, pustaka plugin yang sesungguhnya, serta pemasangan yang lebih mudah di Windows dan Linux."
     bodyHtml: |
-      <p>Tag <code>open-design-v0.9.0</code>, dirilis pada 2 Juni 2026. <strong>310 PR dari 98 kontributor dalam tujuh hari.</strong> Nama sandi "Design for everyone" — ini adalah <strong>rilis pasang-dan-langsung-berkarya</strong>. Selama tiga rilis, kami meminta Anda mengerjakan pekerjaan sebelum bisa benar-benar bekerja: memasang CLI, mencari API key, menempelkan secret, menguji autentikasi, memilih nama model yang tepat dari daftar yang harus Anda cari sendiri. Setiap langkah itu adalah titik di mana seseorang berhenti sebelum sempat membuat apa pun.</p>
+      <p><code>open-design-v0.9.0</code>, dirilis pada 2 Juni 2026. <strong>310 PR dari 98 kontributor dalam tujuh hari.</strong> Nama sandi "Design for everyone" — ini adalah <strong>rilis pasang-dan-langsung-berkarya</strong>. Selama tiga rilis, kami meminta Anda mengerjakan pekerjaan sebelum bisa benar-benar bekerja: memasang CLI, mencari API key, menempelkan secret, menguji autentikasi, memilih nama model yang tepat dari daftar yang harus Anda cari sendiri. Setiap langkah itu adalah titik di mana seseorang berhenti sebelum sempat membuat apa pun.</p>
       <p>0.9.0 menghapus langkah-langkah itu.</p>
       <p>Jika Anda ingin versi panjangnya, <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.9.0">catatan rilis di GitHub</a> memuat semuanya. Tulisan ini adalah versi singkatnya: apa yang berubah di balik layar, apa yang bisa Anda lakukan dengannya hari ini, dan dari mana harus mulai.</p>
 
@@ -743,7 +743,7 @@ i18n:
     title: "Open Design 0.9.0: ontwerpen voor iedereen"
     summary: "Open Design 0.9.0 is de installeer-en-creëer-release. Geen speurtocht naar API-sleutels, geen setup met drie CLI's — open de app, log één keer in, kies een model en begin te bouwen. Plus een grotere agent-bank, een echte plugin-bibliotheek en eenvoudiger installaties op Windows en Linux."
     bodyHtml: |
-      <p>Tag <code>open-design-v0.9.0</code>, uitgebracht op 2 juni 2026. <strong>310 PR's van 98 bijdragers in zeven dagen.</strong> Codenaam "Design for everyone" — dit is de <strong>installeer-en-creëer-release</strong>. Drie releases lang vroegen we je om werk te doen voordat je werk kon doen: een CLI installeren, een API-sleutel zoeken, secrets plakken, authenticatie testen, de juiste modelnaam kiezen uit een lijst die je moest opzoeken. Elk van die stappen was een plek waar iemand afhaakte voordat hij ooit iets had gemaakt.</p>
+      <p><code>open-design-v0.9.0</code>, uitgebracht op 2 juni 2026. <strong>310 PR's van 98 bijdragers in zeven dagen.</strong> Codenaam "Design for everyone" — dit is de <strong>installeer-en-creëer-release</strong>. Drie releases lang vroegen we je om werk te doen voordat je werk kon doen: een CLI installeren, een API-sleutel zoeken, secrets plakken, authenticatie testen, de juiste modelnaam kiezen uit een lijst die je moest opzoeken. Elk van die stappen was een plek waar iemand afhaakte voordat hij ooit iets had gemaakt.</p>
       <p>0.9.0 schrapt die stappen.</p>
       <p>Wil je de lange versie, dan staat die in de <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.9.0">release notes op GitHub</a>. Dit bericht is de korte versie: wat er onder de motorkap is veranderd, wat je er vandaag mee kunt doen en waar je begint.</p>
 
@@ -907,7 +907,7 @@ i18n:
     title: "Open Design 0.9.0: дизайн для кожного"
     summary: "Open Design 0.9.0 — це реліз «встанови й твори». Жодних пошуків API-ключа, жодного налаштування трьох CLI — відкрий застосунок, увійди один раз, обери модель і починай створювати. Плюс більший набір агентів, справжня бібліотека плагінів і простіше встановлення на Windows та Linux."
     bodyHtml: |
-      <p>Тег <code>open-design-v0.9.0</code>, випущено 2 червня 2026 року. <strong>310 PR від 98 контрибуторів за сім днів.</strong> Кодова назва «Design for everyone» — це наш <strong>реліз «встанови й твори»</strong>. Протягом трьох релізів ми просили вас зробити роботу, перш ніж ви зможете робити роботу: встановити CLI, знайти API-ключ, вставити секрети, перевірити автентифікацію, обрати правильну назву моделі зі списку, який доводилося шукати. Кожен із цих кроків був місцем, де хтось відмовлявся, так і не створивши нічого.</p>
+      <p><code>open-design-v0.9.0</code>, випущено 2 червня 2026 року. <strong>310 PR від 98 контрибуторів за сім днів.</strong> Кодова назва «Design for everyone» — це наш <strong>реліз «встанови й твори»</strong>. Протягом трьох релізів ми просили вас зробити роботу, перш ніж ви зможете робити роботу: встановити CLI, знайти API-ключ, вставити секрети, перевірити автентифікацію, обрати правильну назву моделі зі списку, який доводилося шукати. Кожен із цих кроків був місцем, де хтось відмовлявся, так і не створивши нічого.</p>
       <p>0.9.0 видаляє ці кроки.</p>
       <p>Якщо ви хочете довгу версію, її містять <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.9.0">примітки до релізу на GitHub</a>. Цей допис — коротка версія: що змінилося під капотом, що ви можете робити з цим сьогодні та з чого почати.</p>
 
@@ -958,7 +958,7 @@ i18n:
       </ul>
 ---
 
-Tag `open-design-v0.9.0`, shipped 2 June 2026. **310 PRs from 98 contributors in seven days.** Codename "Design for everyone" — this is the **install-and-create release**. For three releases we asked you to do work before you could do work: install a CLI, find an API key, paste secrets, test authentication, pick the right model name from a list you had to look up. Every one of those steps was a place where someone bounced before they ever made anything.
+`open-design-v0.9.0`, shipped 2 June 2026. **310 PRs from 98 contributors in seven days.** Codename "Design for everyone" — this is the **install-and-create release**. For three releases we asked you to do work before you could do work: install a CLI, find an API key, paste secrets, test authentication, pick the right model name from a list you had to look up. Every one of those steps was a place where someone bounced before they ever made anything.
 
 0.9.0 deletes those steps.
 

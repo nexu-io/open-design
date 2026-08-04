@@ -1105,7 +1105,9 @@ describe('loadConfig', () => {
     expect(config.apiVersion).toBe('2024-01-01');
     expect(config.baseUrl).toBe('https://proxy.example.com/bedrock-runtime/v1');
     expect(config.model).toBe('gpt-4o');
-    expect(store.get('open-design:config')).toBe(JSON.stringify(persisted));
+    const migrated = JSON.parse(store.get('open-design:config') ?? '{}');
+    expect(migrated.apiKey).toBe('sk-proxy');
+    expect(store.get('open-design:config')).toContain('sk-proxy');
   });
 
   it('migrates legacy Anthropic API configs to an explicit apiProtocol', () => {
@@ -1372,6 +1374,49 @@ describe('loadConfig', () => {
 });
 
 describe('saveConfig', () => {
+  it('persists Local BYOK API keys while removing unpublished secure-profile metadata', () => {
+    store.set('open-design:config', JSON.stringify({
+      ...DEFAULT_CONFIG,
+      mode: 'api',
+      apiKey: 'top-level-secret',
+      byokProfileId: 'byok-openrouter-1',
+      byokCredentialConfigured: true,
+      apiProtocolConfigs: {
+        openai: {
+          apiKey: 'protocol-secret',
+          baseUrl: 'https://openrouter.ai/api/v1',
+          model: 'openrouter/free',
+        },
+      },
+      byokProviderConfigDrafts: {
+        openrouter: {
+          apiConfig: {
+            apiKey: 'draft-secret',
+            baseUrl: 'https://openrouter.ai/api/v1',
+            model: 'openrouter/free',
+          },
+        },
+      },
+    }));
+
+    const loaded = loadConfig();
+    expect(loaded.apiKey).toBe('top-level-secret');
+    expect(loaded.apiProtocolConfigs?.openai?.apiKey).toBe('protocol-secret');
+    expect(loaded.byokProviderConfigDrafts?.openrouter?.apiConfig.apiKey).toBe('draft-secret');
+    saveConfig(loaded);
+
+    const raw = store.get('open-design:config') ?? '';
+    const saved = JSON.parse(raw);
+    expect(raw).toContain('top-level-secret');
+    expect(raw).toContain('protocol-secret');
+    expect(raw).toContain('draft-secret');
+    expect(saved.apiKey).toBe('top-level-secret');
+    expect(saved.apiProtocolConfigs.openai.apiKey).toBe('protocol-secret');
+    expect(saved.byokProviderConfigDrafts.openrouter.apiConfig.apiKey).toBe('draft-secret');
+    expect(saved.byokProfileId).toBeUndefined();
+    expect(saved.byokCredentialConfigured).toBeUndefined();
+  });
+
   it('keeps daemon-owned privacy fields out of localStorage', () => {
     saveConfig({
       ...DEFAULT_CONFIG,

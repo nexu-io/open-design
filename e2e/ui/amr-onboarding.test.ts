@@ -7,12 +7,14 @@ import {
   STORAGE_KEY,
   waitForLoadingToClear,
 } from '@/playwright/amr';
-import { fulfillAgentsRoute } from '@/playwright/mock-factory';
+import { expectStableCount } from '@/playwright/assertions';
+import { fulfillAgentsRoute, routeSuccessfulRuns, successfulRunEventBody } from '@/playwright/mock-factory';
 import { T } from '@/timeouts';
 
 type OnboardingConfig = {
-  mode: 'daemon';
+  mode: 'daemon' | 'api';
   apiKey: string;
+  apiProtocol?: string;
   baseUrl: string;
   model: string;
   agentId: string | null;
@@ -283,13 +285,21 @@ test('[P0] onboarding cancel during a slow AMR status check does not start login
 
   const primary = cloudPrimaryButton(page);
   await expect(primary).toHaveText(/Sign in to Open Design|登录 Open Design/i);
-  await expect.poll(() => page.evaluate(() => window.__amrOnboardingCancelCalls ?? 0)).toBe(1);
+  // The status read was canceled before a daemon login attempt was created,
+  // so there is no attempt-scoped process for the client to cancel.
+  await expect.poll(() => page.evaluate(() => window.__amrOnboardingCancelCalls ?? 0)).toBe(0);
   await expect
     .poll(() => page.evaluate(() => window.__amrOnboardingSlowStatusResolved ?? false))
     .toBe(true);
-  await page.waitForTimeout(250);
   await expect(page.getByRole('button', { name: /Cancel sign-in/i })).toHaveCount(0);
-  await expect.poll(() => page.evaluate(() => window.__amrOnboardingLoginCalls ?? 0)).toBe(0);
+  await expectStableCount(
+    () => page.evaluate(() => window.__amrOnboardingLoginCalls ?? 0),
+    0,
+    {
+      timeout: 250,
+      message: 'cancelling onboarding should prevent the delayed status continuation from starting login',
+    },
+  );
 });
 
 // The AMR card + per-runtime model picker on the connect step were removed,
@@ -334,36 +344,15 @@ test('[P0] onboarding AMR runtime selection carries into the first Home run requ
   await advanceFromAboutYouToBrand(page);
   await expectOnboardingFinished(page);
 
-  let runBody: Record<string, unknown> | null = null;
-  await page.route('**/api/runs', async (route) => {
-    if (route.request().method() !== 'POST') {
-      await route.continue();
-      return;
-    }
-    runBody = route.request().postDataJSON() as Record<string, unknown>;
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: JSON.stringify({ runId: 'amr-onboarding-first-run' }),
-    });
-  });
-  await page.route('**/api/runs/amr-onboarding-first-run/events', async (route) => {
-    await route.fulfill({
-      status: 200,
-      headers: {
-        'content-type': 'text/event-stream',
-        'cache-control': 'no-cache',
-      },
-      body: [
-        'event: start',
-        'data: {"bin":"vela"}',
-        '',
-        'event: end',
-        'data: {"code":0,"status":"succeeded"}',
-        '',
-        '',
-      ].join('\n'),
-    });
+  const runBodies: Array<Record<string, unknown>> = [];
+  const runRequests = await routeSuccessfulRuns(page, {
+    bodies: runBodies,
+    runId: 'amr-onboarding-first-run',
+    eventBody: successfulRunEventBody([
+      'event: start',
+      'data: {"bin":"vela"}',
+      '',
+    ]),
   });
 
   const input = page.getByTestId('home-hero-input');
@@ -372,7 +361,8 @@ test('[P0] onboarding AMR runtime selection carries into the first Home run requ
   await expect(page.getByTestId('home-hero-submit')).toBeEnabled();
   await page.getByTestId('home-hero-submit').click();
 
-  await expect.poll(() => runBody, { timeout: 10_000 }).toMatchObject({
+  await runRequests.expectCount(1);
+  expect(runBodies[0]).toMatchObject({
     agentId: 'amr',
   });
 });
@@ -919,6 +909,7 @@ async function wireOnboardingMocks(
   let statusCalls = 0;
   let loginCalls = 0;
   let cancelCalls = 0;
+  let authAttemptId: string | null = null;
 
   await page.route('**/api/health', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' });
@@ -1036,6 +1027,11 @@ async function wireOnboardingMocks(
   }
 
   await page.route('**/api/integrations/vela/login', async (route) => {
+    const body = route.request().postDataJSON() as { authAttemptId?: string };
+    authAttemptId = body.authAttemptId ?? null;
+    expect(authAttemptId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
     loginCalls += 1;
     loginInFlight = true;
     if (!options.keepAmrLoginIncomplete) {
@@ -1047,11 +1043,17 @@ async function wireOnboardingMocks(
     }, loginCalls);
     await route.fulfill({
       status: 202,
-      json: { pid: 4242, startedAt: new Date().toISOString(), profile: 'local' },
+      json: {
+        pid: 4242,
+        startedAt: new Date().toISOString(),
+        profile: 'local',
+        authAttemptId,
+      },
     });
   });
 
   await page.route('**/api/integrations/vela/login/cancel', async (route) => {
+    expect(route.request().postDataJSON()).toEqual({ authAttemptId });
     cancelCalls += 1;
     loginInFlight = false;
     await page.evaluate((calls) => {

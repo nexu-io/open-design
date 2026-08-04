@@ -143,6 +143,39 @@ describe('OnboardingDropdown', () => {
     expect(screen.queryByText('No compatible text models were returned.')).toBeNull();
   });
 
+  it('only treats an empty option as selected when explicitly allowed', () => {
+    const options = [
+      { value: '', label: 'Azure OpenAI' },
+      { value: 'https://api.example.test', label: 'Example provider' },
+    ];
+
+    const { rerender } = render(
+      <OnboardingDropdown
+        label="Provider"
+        placeholder="Custom provider"
+        value=""
+        options={options}
+        onChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: /Custom provider/ })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Azure OpenAI/ })).toBeNull();
+
+    rerender(
+      <OnboardingDropdown
+        label="Provider"
+        placeholder="Custom provider"
+        value=""
+        options={options}
+        onChange={vi.fn()}
+        allowEmptyValue
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: /Azure OpenAI/ })).toBeTruthy();
+  });
+
   it('renders model tag and cost metadata as option text', () => {
     render(
       <OnboardingDropdown

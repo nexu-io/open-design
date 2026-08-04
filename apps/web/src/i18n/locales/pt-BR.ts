@@ -1527,6 +1527,8 @@ export const ptBR: Dict = {
   'newproj.createLiveArtifact': 'Criar artefato live',
   'newproj.createFromTemplate': 'Criar a partir do template',
   'newproj.createDisabledTitle': 'Salve primeiro um projeto como template (menu Compartilhar dentro de qualquer projeto).',
+  'newproj.openFolder': 'Abrir pasta',
+  'newproj.openingFolder': 'Abrindo…',
   'newproj.importClaudeZip': 'Importar ZIP do Claude Design',
   'newproj.importClaudeZipTitle': 'Importar uma exportação .zip do Claude Design',
   'newproj.importingClaudeZip': 'Importando…',

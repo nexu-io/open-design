@@ -52,8 +52,8 @@ import { useCoalescedCallback } from '../hooks/useCoalescedCallback';
 import { requestAmrArtifactUpgrade } from '../runtime/amr-artifact-upgrade';
 import {
   type AmrWalletSnapshot,
-  type ByokMediaDefaults,
   type ByokChatProviderConfig,
+  type ByokMediaDefaults,
   type ByokChatProtocol,
   type ResearchOptions,
 } from '@open-design/contracts';
@@ -102,7 +102,7 @@ import {
 } from '../utils/apiProtocol';
 import { playSound, showCompletionNotification } from '../utils/notifications';
 import { randomUUID } from '../utils/uuid';
-import { DEFAULT_NOTIFICATIONS } from '../state/config';
+import { DEFAULT_NOTIFICATIONS, KNOWN_PROVIDERS } from '../state/config';
 import type { TodoItem } from '../runtime/todos';
 import {
   appendErrorStatusEvent,
@@ -239,7 +239,6 @@ import {
 import { buildRepoImportPrompt, designSystemNeedsRepoConnect } from './design-system-github-evidence';
 import { isDesignSystemProject, resolveProjectDesignSystemId } from './design-system-project';
 import { collectReferencedJsxNames } from '../runtime/jsx-module-refs';
-import { KNOWN_PROVIDERS } from '../state/config';
 import { DESIGN_SYSTEM_TAB, FileWorkspace, type BrowserOpenRequest } from './FileWorkspace';
 import {
   type PluginFolderAgentAction,
@@ -1246,23 +1245,27 @@ function byokOpenCodeProviderFromConfig(
   const selectedProvider = selectedKnownProviderForConfig(config);
   const model = config.model.trim();
   if (
-    (byokProviderRequiresApiKey(config.apiProtocol, selectedProvider, config.baseUrl) && !config.apiKey.trim()) ||
-    !model ||
-    model.toLowerCase() === 'default' ||
-    (config.apiProtocol === 'azure' && !config.baseUrl.trim())
+    (byokProviderRequiresApiKey(config.apiProtocol, selectedProvider, config.baseUrl)
+      && !config.apiKey.trim())
+    || !model
+    || model.toLowerCase() === 'default'
+    || (config.apiProtocol === 'azure' && !config.baseUrl.trim())
   ) {
     return undefined;
   }
   return {
     protocol: config.apiProtocol,
     apiKey: config.apiKey.trim(),
-    baseUrl: config.baseUrl,
-    model: config.model,
-    ...(selectedProvider?.requiresApiKey === false ? { requiresApiKey: false } : {}),
-    apiVersion:
-      config.apiProtocol === 'azure'
-        ? config.apiVersion ?? ''
-        : '',
+    baseUrl: config.baseUrl.trim(),
+    model,
+    ...(config.apiProtocol === 'azure' && config.apiVersion?.trim()
+      ? { apiVersion: config.apiVersion.trim() }
+      : {}),
+    requiresApiKey: byokProviderRequiresApiKey(
+      config.apiProtocol,
+      selectedProvider,
+      config.baseUrl,
+    ),
   };
 }
 
@@ -1270,9 +1273,12 @@ function selectedKnownProviderForConfig(config: AppConfig) {
   if (!config.apiProtocol) return undefined;
   return KNOWN_PROVIDERS.find(
     (provider) =>
-      provider.protocol === config.apiProtocol &&
-      provider.baseUrl === config.baseUrl &&
-      (config.apiProviderBaseUrl == null || provider.baseUrl === config.apiProviderBaseUrl),
+      provider.protocol === config.apiProtocol
+      && provider.baseUrl === config.baseUrl
+      && (
+        config.apiProviderBaseUrl == null
+        || provider.baseUrl === config.apiProviderBaseUrl
+      ),
   );
 }
 
@@ -1404,7 +1410,15 @@ export function ProjectView({
   const detailedProject = projectDetail.project?.id === project.id ? projectDetail.project : null;
   const currentProject =
     detailedProject && detailedProject.updatedAt >= project.updatedAt ? detailedProject : project;
-  const projectDesignSystemId = resolveProjectDesignSystemId(currentProject);
+  const resolvedProjectDesignSystemId = resolveProjectDesignSystemId(currentProject);
+  // A project can outlive a Design System being disabled in Settings. Keep the
+  // persisted project value intact for recovery, but do not inject a disabled
+  // system into a new runtime turn.
+  const projectDesignSystemId = resolvedProjectDesignSystemId;
+  const runtimeDesignSystemId =
+    projectDesignSystemId && (config.disabledDesignSystems ?? []).includes(projectDesignSystemId)
+      ? null
+      : projectDesignSystemId;
   const projectIsDesignSystemProject = isDesignSystemProject(currentProject);
   // Website-clone turns reproduce a whole multi-page site; auto-open should
   // land on the site entry (index.html), not the last-written subpage. See
@@ -5911,7 +5925,7 @@ export function ProjectView({
           skillId: project.skillId ?? null,
           skillIds: Array.isArray(meta?.skillIds) ? meta.skillIds : [],
           context: runContext,
-          designSystemId: projectDesignSystemId ?? null,
+          designSystemId: runtimeDesignSystemId ?? null,
           attachments: runAttachments.map((a) => a.path),
           commentAttachments: runCommentAttachments,
           sessionMode: runSessionMode,
@@ -6004,15 +6018,9 @@ export function ProjectView({
         // BYOK users even though the UI saves model + index + entries
         // for that mode.
         const userText = (userMsg.content ?? '').trim();
-        // Snapshot the live BYOK chat config so the daemon can run
-        // "Same as chat" memory extraction against the same vendor /
-        // key / baseUrl / apiVersion the user is chatting with. The
-        // daemon never persists BYOK creds itself, so this per-call
-        // signal is the only way `pickProvider()` can avoid falling
-        // through to env / media-config (which is wrong for BYOK)
-        // when no explicit memory model override is set. The picker
-        // re-syncs an *explicit* override when chat config drifts;
-        // this snapshot covers the implicit "Same as chat" default.
+        // Forward the per-call BYOK provider snapshot so "Same as chat"
+        // memory extraction uses the same vendor, endpoint, key and model as
+        // the run. The daemon consumes it for this request only.
         const byokChatProvider = byokOpenCodeProvider
           ? {
               provider: byokOpenCodeProvider.protocol,
@@ -6031,7 +6039,7 @@ export function ProjectView({
                 userMessage: userText,
                 projectId: project.id,
                 conversationId: runConversationId,
-                chatProvider: byokChatProvider,
+                byokChatProvider,
               }),
             });
           } catch {
@@ -6072,7 +6080,7 @@ export function ProjectView({
           skillId: project.skillId ?? null,
           skillIds: Array.isArray(meta?.skillIds) ? meta.skillIds : [],
           context: runContext,
-          designSystemId: projectDesignSystemId ?? null,
+          designSystemId: runtimeDesignSystemId ?? null,
           attachments: runAttachments.map((a) => a.path),
           commentAttachments: runCommentAttachments,
           sessionMode: runSessionMode,
@@ -6156,6 +6164,7 @@ export function ProjectView({
       onTouchProject,
       project.id,
       projectDesignSystemId,
+      runtimeDesignSystemId,
       project.name,
       projectFiles,
       refreshProjectFiles,
@@ -6552,8 +6561,8 @@ export function ProjectView({
   const commentQueueOnSend = currentConversationBusy && !currentConversationQueueDisabled;
 
   const handleContinueRemainingTasks = useCallback(
-    (_assistantMessage: ChatMessage, todos: TodoItem[]) => {
-      if (currentConversationActionDisabled || todos.length === 0) return;
+    async (_assistantMessage: ChatMessage, todos: TodoItem[]) => {
+      if (currentConversationActionDisabled || todos.length === 0) return false;
       const remainingList = todos
         .map((todo, i) => {
           const label =
@@ -6567,7 +6576,7 @@ export function ProjectView({
         `${remainingList}\n\n` +
         'Before making changes, inspect the current project files as needed. ' +
         'Update TodoWrite as you complete each remaining task.';
-      void handleSend(prompt, [], []);
+      return handleSend(prompt, [], []);
     },
     [currentConversationActionDisabled, handleSend],
   );

@@ -492,10 +492,28 @@ function clearTelemetryEnv(): void {
 }
 
 async function putConfig(url: string, patch: Record<string, unknown>): Promise<void> {
+  const agentCliEnv =
+    patch.agentCliEnv && typeof patch.agentCliEnv === 'object'
+      ? patch.agentCliEnv as Record<string, unknown>
+      : {};
+  const amr =
+    agentCliEnv.amr && typeof agentCliEnv.amr === 'object'
+      ? agentCliEnv.amr as Record<string, unknown>
+      : {};
   const response = await fetch(`${url}/api/app-config`, {
     method: 'PUT',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(patch),
+    body: JSON.stringify({
+      ...patch,
+      agentCliEnv: {
+        ...agentCliEnv,
+        amr: {
+          ...amr,
+          VELA_RUNTIME_KEY: 'rt-amr-session-resume-test',
+          VELA_LINK_URL: 'https://amr-link.example.test/v1',
+        },
+      },
+    }),
   });
   expect(response.status).toBe(200);
 }

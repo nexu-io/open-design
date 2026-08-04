@@ -26,6 +26,10 @@ import {
   discoverPackagedDownloadAttribution,
 } from "./download-attribution.js";
 import { writePackagedDesktopIdentity } from "./identity.js";
+import {
+  parsePackagedHeadlessRequest,
+  resolvePackagedMcpBootstrapLaunch,
+} from "./headless-runtime.js";
 import { PackagedPathAccessError } from "./errors.js";
 import {
   exitPackagedLauncherForExistingDesktop,
@@ -107,6 +111,14 @@ function applyPackagedUpdaterEnv(updateMetadataUrl: string | null): void {
 }
 
 async function main(): Promise<void> {
+  const config = await readPackagedConfig();
+  const headlessRequest = parsePackagedHeadlessRequest(process.argv.slice(1));
+  if (headlessRequest.headless) {
+    const { runPackagedHeadless } = await import("./headless-runtime.js");
+    await runPackagedHeadless(config, headlessRequest);
+    return;
+  }
+
   // Must run BEFORE `app.whenReady()` below, because Chromium consumes
   // `--lang` at session bootstrap. Doing it here lets the packaged
   // renderer's `navigator.language` follow the OS instead of Chromium's
@@ -114,7 +126,6 @@ async function main(): Promise<void> {
   // again to recover the resolved locale string for the BrowserWindow.
   applyOsLocaleSwitch(app);
 
-  const config = await readPackagedConfig();
   const afterQuit = parseLauncherAfterQuitArgs(process.argv.slice(1));
   const handoffResume = parseLauncherHandoffResumeArgs(process.argv.slice(1));
   const delegated = parseLauncherDelegatedArgs(process.argv.slice(1));
@@ -145,6 +156,9 @@ async function main(): Promise<void> {
   }
   const activeConfig = launcherRuntime.config;
   const paths = launcherRuntime.paths;
+  const mcpBootstrap = resolvePackagedMcpBootstrapLaunch({
+    installedLaunchPath: launcherRuntime.installedLaunchPath,
+  });
 
   // Arm fatal-exit telemetry now that we know the channel key/version. The
   // startPackagedSidecars call below is THE failure this covers (daemon/web
@@ -226,14 +240,16 @@ async function main(): Promise<void> {
     daemonCliEntry: activeConfig.daemonCliEntry,
     daemonSidecarEntry: activeConfig.daemonSidecarEntry,
     electronNodeCommand: launcherRuntime.electronNodeCommand,
+    mcpBootstrapArgs: mcpBootstrap.args,
+    mcpBootstrapCommand: mcpBootstrap.command,
     nodeCommand: activeConfig.nodeCommand,
     telemetryRelayUrl: activeConfig.telemetryRelayUrl,
     posthogKey: activeConfig.posthogKey,
     posthogHost: activeConfig.posthogHost,
     // PR #974 round-5 (lefarcen P2): the Electron entry runs desktop
     // main alongside the daemon, so the import-folder gate must be
-    // pinned ON from request 0. See `apps/packaged/src/headless.ts` for
-    // the daemon+web-only counterpart that passes `false`.
+    // pinned ON from request 0. See `apps/packaged/src/headless-runtime.ts`
+    // for the windowless counterpart that passes `false`.
     requireDesktopAuth: true,
     webSidecarEntry: activeConfig.webSidecarEntry,
     webStandaloneRoot: activeConfig.webStandaloneRoot,
@@ -266,7 +282,7 @@ async function main(): Promise<void> {
   // mounting the web bundle (the runtime re-asserts this stage at its reveal
   // gate, which is a no-op when the label is already current).
   setSplashStage(splash.window, "workspace");
-  registerOdProtocol(sidecars.web.url ?? "http://127.0.0.1:0");
+  registerOdProtocol(() => sidecars.currentWebUrl() || "http://127.0.0.1:0");
 
   const { runDesktopMain } = await import("@open-design/desktop/main");
   await runDesktopMain(runtime, {

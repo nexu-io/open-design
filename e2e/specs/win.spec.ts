@@ -12,6 +12,10 @@ import { describe, expect, test } from 'vitest';
 
 import { createPackagedSmokeReport } from '@/vitest/packaged-report';
 import {
+  assertPackagedPtySmokeResult,
+  packagedPtySmokeExpression,
+} from '@/vitest/packaged-pty-smoke';
+import {
   applyPackagedUpdateEnv,
   resolvePackagedUpdateScenario,
 } from '@/vitest/packaged-update-scenario';
@@ -641,6 +645,21 @@ winDescribe('packaged windows runtime smoke', () => {
       expect(value.health.ok).toBe(true);
       if (releaseVersion != null && releaseVersion !== '') expect(value.health.version).toBe(releaseVersion);
       else expect(value.health.version).toEqual(expect.any(String));
+      const ptyInspect = await measureSmokeStep(timings, 'packaged PTY capability', async () =>
+        runToolsPackJson<WinInspectResult>('inspect', [
+          '--expr',
+          packagedPtySmokeExpression('win32'),
+        ]),
+      );
+      const pty = assertPackagedPtySmokeResult(ptyInspect.eval?.value);
+      expect(pty.projectCreateStatus).toBe(200);
+      expect(pty.projectSeedStatus).toBe(200);
+      expect(pty.terminalCreateStatus).toBe(200);
+      expect(pty.stdinStatus).toBe(200);
+      expect(pty.output).toContain(pty.marker);
+      expect(pty.exitCode, JSON.stringify(pty, null, 2)).toBe(0);
+      expect(pty.cleanup.terminalStatus).toBe(200);
+      expect(pty.cleanup.projectStatus).toBe(200);
       assertLauncherPointer(inspect.launcher.active, updateScenario.expectedCurrentVersion, 0, 'initial active');
       assertLauncherPointer(inspect.launcher.lastSuccessful, updateScenario.expectedCurrentVersion, 0, 'initial lastSuccessful');
 
@@ -843,6 +862,7 @@ winDescribe('packaged windows runtime smoke', () => {
         logs: 'skipped' in logs ? logs : summarizeLogs(logs),
         namespace,
         payloadUpdate,
+        pty,
         updaterRecovery,
         reinstall,
         screenshot: inspect.desktopIpcUnavailable ? null : report.screenshotRelpath,

@@ -88,6 +88,7 @@ export const SIDECAR_MESSAGES = Object.freeze({
   EXPORT_PDF: "export-pdf",
   MINT_IMPORT_TOKEN: "mint-import-token",
   REGISTER_DESKTOP_AUTH: "register-desktop-auth",
+  REGISTER_WEB_URL: "register-web-url",
   RENDER_SLIDES: "render-slides",
   SCREENSHOT: "screenshot",
   SHUTDOWN: "shutdown",
@@ -554,11 +555,30 @@ export type MintImportTokenResult =
   | { ok: false; code: "DESKTOP_AUTH_INACTIVE"; message: string; retryable: false }
   | { ok: false; code: "DESKTOP_AUTH_PENDING"; message: string; retryable: true };
 
+/**
+ * Registers the browser-facing URL after a packaged web sidecar has bound its
+ * dynamic port. The message travels over the namespace-scoped daemon IPC, so
+ * it cannot accidentally update another packaged runtime.
+ */
+export type RegisterWebUrlInput = {
+  url: string;
+};
+
+export type RegisterWebUrlMessage = {
+  input: RegisterWebUrlInput;
+  type: typeof SIDECAR_MESSAGES.REGISTER_WEB_URL;
+};
+
+export type RegisterWebUrlResult = {
+  accepted: true;
+};
+
 export type DaemonSidecarMessage =
   | SidecarStatusMessage
   | SidecarShutdownMessage
   | RegisterDesktopAuthMessage
-  | MintImportTokenMessage;
+  | MintImportTokenMessage
+  | RegisterWebUrlMessage;
 export type WebSidecarMessage = SidecarStatusMessage | SidecarShutdownMessage;
 export type DesktopSidecarMessage =
   | SidecarStatusMessage
@@ -759,6 +779,39 @@ function normalizeMintImportTokenInput(input: unknown): MintImportTokenInput {
   return { baseDir: normalizeNonEmptyString(value.baseDir, "mint-import-token baseDir") };
 }
 
+function normalizeRegisterWebUrlInput(input: unknown): RegisterWebUrlInput {
+  const value = assertObject(input, "register-web-url input");
+  assertKnownKeys(value, ["url"], "register-web-url input");
+  const raw = normalizeNonEmptyString(value.url, "register-web-url url");
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    throw new Error("register-web-url url must be an absolute URL");
+  }
+  if (parsed.protocol !== "http:") {
+    throw new Error("register-web-url url must use HTTP");
+  }
+  const hostname = parsed.hostname.toLowerCase();
+  if (hostname !== "127.0.0.1" && hostname !== "localhost" && hostname !== "[::1]") {
+    throw new Error("register-web-url url must use a loopback host");
+  }
+  const port = Number(parsed.port);
+  if (!Number.isInteger(port) || port <= 0 || port > 65535) {
+    throw new Error("register-web-url url must include a valid explicit port");
+  }
+  if (
+    parsed.username
+    || parsed.password
+    || parsed.pathname !== "/"
+    || parsed.search
+    || parsed.hash
+  ) {
+    throw new Error("register-web-url url must be a bare origin");
+  }
+  return { url: parsed.origin };
+}
+
 function normalizeBoolean(value: unknown, label: string): boolean {
   if (typeof value !== "boolean") throw new Error(`${label} must be a boolean`);
   return value;
@@ -887,6 +940,10 @@ export function normalizeDaemonSidecarMessage(input: unknown): DaemonSidecarMess
   if (type === SIDECAR_MESSAGES.MINT_IMPORT_TOKEN) {
     assertKnownKeys(value, ["input", "type"], "daemon sidecar message");
     return { input: normalizeMintImportTokenInput(value.input), type };
+  }
+  if (type === SIDECAR_MESSAGES.REGISTER_WEB_URL) {
+    assertKnownKeys(value, ["input", "type"], "daemon sidecar message");
+    return { input: normalizeRegisterWebUrlInput(value.input), type };
   }
   throw new SidecarContractError(SIDECAR_ERROR_CODES.UNKNOWN_MESSAGE, `unknown daemon sidecar message: ${type}`);
 }

@@ -1,6 +1,6 @@
 ---
 name: discovery-question-form
-description: Turn-1 discovery question form for ambiguous briefs.
+description: Structured clarification form for unresolved material requirements.
 od:
   scenario: general
   mode: discovery
@@ -8,19 +8,27 @@ od:
 
 # Discovery question form
 
-When the user's brief is ambiguous, the agent's first turn must surface
-the smallest possible set of clarifying questions that unblock the rest
-of the workflow. The questions are rendered as a `<question-form>` artifact
-inline in the originating assistant message. This is assistant text parsed by
-the host, not a plugin GenUI surface or a native tool call. Submitted answers
-return as the next user message, beginning with
-`[form answers — <form-id>]`.
+This atom defines the `<question-form>` protocol. It does not decide whether
+clarification is required. Follow the active skill and core prompt's
+requirements-clarification policy. When they identify unresolved information
+that would materially change the design direction, content structure, or
+delivery format, surface the smallest possible set of questions that unblocks
+the workflow.
 
-## When to fire
+The questions are rendered as a `<question-form>` artifact inline in the
+originating assistant message. This is assistant text parsed by the host, not a
+plugin GenUI surface or a native tool call. Submitted answers return as the
+next user message, beginning with `[form answers — <form-id>]`.
 
-- Brief is missing audience, target medium, or core intent.
-- Brief explicitly invites questions ("ask me anything if unclear").
-- The discovery skill or pipeline declares a `discovery` stage.
+## Activation boundary
+
+- A first turn or new project does not by itself require a form.
+- A `discovery` pipeline stage only makes this protocol available; declaring
+  or entering the stage does not trigger a form.
+- Missing metadata is not automatically a question. First use the request,
+  conversation, plugin inputs, memory, active skill, and design system.
+- If enough information is available to proceed safely, do not emit a form.
+- If a material blocker remains, ask only for that unresolved information.
 
 ## Emission shape
 

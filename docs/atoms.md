@@ -27,8 +27,8 @@ never own the atom implementations; they only reference them by id.
 
 | id | label | task kinds |
 | --- | --- | --- |
-| `discovery-question-form` | Discovery question form — turn-1 question form for ambiguous briefs. | `new-generation`, `tune-collab` |
-| `direction-picker` | Direction picker — 3–5 direction picker before the final commit. | `new-generation`, `tune-collab` |
+| `discovery-question-form` | Discovery question form — structured clarification protocol for unresolved material requirements on any turn. | `new-generation`, `tune-collab` |
+| `direction-picker` | Direction picker — optional 3–5 direction comparison when the user explicitly requests alternatives. | `new-generation`, `tune-collab` |
 | `todo-write` | Todo write — TodoWrite-driven plan. | all |
 | `file-read` / `file-write` / `file-edit` | File ops on the project cwd. | all |
 | `research-search` | Research search — Tavily-backed shallow research. | `new-generation` |

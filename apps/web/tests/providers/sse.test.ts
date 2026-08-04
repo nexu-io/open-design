@@ -70,6 +70,45 @@ describe('streamViaDaemon', () => {
     expect(body.currentPrompt).toBe('post-consent revision');
   });
 
+  it('sends the selected Local BYOK provider only to the local run endpoint', async () => {
+    const handlers = createDaemonHandlers();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-byok-profile' });
+      if (url === '/api/runs/run-byok-profile/events') {
+        return sseResponse('event: end\ndata: {"code":0,"status":"succeeded"}\n\n');
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamViaDaemon({
+      agentId: 'byok-opencode',
+      byokProvider: {
+        protocol: 'openai',
+        apiKey: 'local-test-key',
+        baseUrl: 'https://api.openai.com/v1',
+        model: 'gpt-5.4-mini',
+      },
+      handlers,
+      history: [{ id: '1', role: 'user', content: 'Create a site' }],
+      signal: new AbortController().signal,
+    });
+
+    const [, createRunInit] = fetchMock.mock.calls[0] as unknown as [
+      RequestInfo | URL,
+      RequestInit,
+    ];
+    const body = JSON.parse(String(createRunInit.body));
+    expect(body).not.toHaveProperty('byokProfileId');
+    expect(body.byokProvider).toEqual({
+      protocol: 'openai',
+      apiKey: 'local-test-key',
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-5.4-mini',
+    });
+  });
+
   it('publishes an authoritative successful run with an artifact to the app gate', async () => {
     const handlers = createDaemonHandlers();
     const eventTarget = new EventTarget();

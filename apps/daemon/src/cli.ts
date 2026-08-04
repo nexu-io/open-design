@@ -667,6 +667,10 @@ function printRootHelp() {
       Read and acknowledge message-center inbox items through the same
       daemon endpoints the bell UI uses.
 
+  od amr <login|status> [args]
+      Start Vela browser sign-in or inspect the current Vela account through
+      the local Open Design daemon.
+
   od memory tree <list|view|edit|move> [args]
       Inspect and edit the memory tree that is injected into agent prompts.
 
@@ -730,6 +734,7 @@ async function runAmr(args) {
   const sub = args[0];
   if (!sub || sub === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
+  od amr login [--json]
   od amr status [--refresh] [--json]
 
 Options:
@@ -742,6 +747,34 @@ Options:
   const flags = parseFlags(rest, { string: AMR_STRING_FLAGS, boolean: AMR_BOOLEAN_FLAGS });
   const base = await cliDaemonBaseUrl(flags);
   switch (sub) {
+    case 'login': {
+      const loginResp = await fetch(`${base}/api/integrations/vela/login`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{}',
+      });
+      if (!loginResp.ok) return structuredHttpFailure(loginResp);
+      const started = await loginResp.json();
+      const statusResp = await fetch(`${base}/api/integrations/vela/status`);
+      if (!statusResp.ok) return structuredHttpFailure(statusResp);
+      const status = await statusResp.json();
+      if (flags.json) {
+        return process.stdout.write(JSON.stringify({ started, status }, null, 2) + '\n');
+      }
+      console.log(`Vela login\tstarted`);
+      console.log(`Profile\t${status?.profile ?? started?.profile ?? '-'}`);
+      if (status?.loggedIn) {
+        console.log(`Status\tlogged in`);
+        return;
+      }
+      console.log(`Status\t${status?.loginInFlight ? 'waiting for browser authorization' : 'sign-in pending'}`);
+      if (status?.activationUrl) console.log(`Open\t${status.activationUrl}`);
+      if (status?.userCode) console.log(`Code\t${status.userCode}`);
+      if (status?.browserOpenFailed) {
+        console.log(`Note\tbrowser could not be opened automatically; use the link above`);
+      }
+      return;
+    }
     case 'status': {
       const query = flags.refresh ? '?refresh=1' : '';
       const statusResp = await fetch(`${base}/api/integrations/vela/status`);
@@ -1461,10 +1494,20 @@ async function runMcp(args) {
     return;
   }
 
-  const daemonUrl = await cliDaemonUrl(flags);
+  const { ensureMcpDaemonUrl } = await import('./mcp-bootstrap.js');
+  const daemonUrl = await ensureMcpDaemonUrl({
+    flagUrl: flags['daemon-url'],
+  });
 
   const { runMcpStdio } = await import('./mcp.js');
-  await runMcpStdio({ daemonUrl });
+  await runMcpStdio({
+    daemonUrl,
+    ...(flags['daemon-url']
+      ? {}
+      : {
+          resolveDaemonUrl: async () => await ensureMcpDaemonUrl({}),
+        }),
+  });
 }
 
 function printMcpHelp() {
@@ -1483,9 +1526,13 @@ Options:
                        discovers the live daemon URL at startup, so
                        MCP client configs stay valid across daemon
                        restarts even when the port is ephemeral. A
-                       running MCP server caches the URL; restart the
-                       MCP client after a daemon restart to pick up a
-                       new port.
+                       packaged install also starts the signed Open
+                       Design app in --headless mode when its daemon
+                       is stopped; no Electron window is opened. The
+                       MCP server re-discovers the registered runtime
+                       before calls and safely retries reads when the
+                       daemon changes ports, so an existing task can
+                       survive an Open Design restart.
 
 Tools exposed:
   list_projects                  list every Open Design project

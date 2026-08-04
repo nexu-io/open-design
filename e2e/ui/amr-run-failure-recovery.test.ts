@@ -7,7 +7,7 @@ import type { Page } from '@playwright/test';
 
 import { writeFakeVelaBin, seedVelaLoginConfig } from '@/amr';
 import { runErrorCard } from '@/playwright/chat';
-import { routeAgents } from '@/playwright/mock-factory';
+import { routeAgents, trackRunRequests } from '@/playwright/mock-factory';
 import { T } from '@/timeouts';
 import { createFakeAgentRuntimes } from '@/playwright/fake-agents';
 import {
@@ -358,16 +358,7 @@ test('[P0] @critical non-AMR model failures promote Open Design AMR and auto-ret
     selectedAgentId: 'codex',
   });
   const { conversationId, projectId } = amr;
-  const runRequestBodies: Array<Record<string, unknown>> = [];
-  await page.route('**/api/runs', async (route) => {
-    if (route.request().method() !== 'POST') {
-      await route.fallback();
-      return;
-    }
-    const raw = route.request().postData();
-    if (raw) runRequestBodies.push(JSON.parse(raw) as Record<string, unknown>);
-    await route.fallback();
-  });
+  const runRequests = trackRunRequests(page);
 
   const userMsgId = `u-switch-${projectId}`;
   const userMsgRes = await page.request.put(
@@ -427,7 +418,12 @@ test('[P0] @critical non-AMR model failures promote Open Design AMR and auto-ret
   await settings.getByRole('button', { name: /^(Authorize|Sign in)$/ }).first().click();
 
   await expect.poll(() => loginRequested, { timeout: T.medium }).toBe(true);
-  await expect.poll(() => runRequestBodies.some((body) => body.agentId === 'amr'), { timeout: T.long }).toBe(true);
+  await expect.poll(() => runRequests.bodies.filter((body) => body.agentId === 'amr').length, { timeout: T.long }).toBe(1);
+  expect(runRequests.bodies.filter((body) => body.agentId === 'amr')[0]).toMatchObject({
+    agentId: 'amr',
+    currentPrompt: 'please recover this failed non-AMR model run',
+  });
+  runRequests.dispose?.();
   await expect(page.getByText('AMR promotion retry recovered.').first()).toBeVisible({ timeout: T.long });
 });
 

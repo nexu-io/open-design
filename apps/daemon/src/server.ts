@@ -35,6 +35,7 @@ import {
 } from './prompts/stable-sections.js';
 import { emittedRenderableQuestionForm } from './question-form-detect.js';
 import { resolveProjectRoot } from './project-root.js';
+import { OPEN_DESIGN_PLUGIN_ID } from './mcp-observability.js';
 import {
   resolveDaemonCliPath,
   resolveDaemonPluginPreviewsDir,
@@ -191,6 +192,7 @@ import {
   getAgentDef,
   isKnownModel,
   isKnownServiceTier,
+  openDesignAmrRunAttempt,
   openDesignAmrTraceEnv,
   applyAgentLaunchEnv,
   resolveAgentLaunch,
@@ -389,7 +391,11 @@ import {
 } from './run-lifecycle-tracer.js';
 import { deriveRunErrorCode, runResultFromStatus } from './run-result.js';
 import { classifyRunFailure, isResumableFailure } from './run-failure-classification.js';
-import { decideSafeRunRetry } from './run-retry-policy.js';
+import {
+  POST_TOOL_RESUME_CONTINUATION_PROMPT,
+  decidePostToolResumeRecovery,
+  decideSafeRunRetry,
+} from './run-retry-policy.js';
 import {
   amrUserIdForRunAnalytics,
   scanRunEventsForUsageAnalytics,
@@ -401,6 +407,7 @@ import {
 } from './run-artifact-fs.js';
 import {
   AiHtmlVersionSnapshotError,
+  artifactOriginForRun,
   snapshotAiHtmlVersionsForRun,
 } from './run-html-version-snapshots.js';
 import { reportRunCompletedFromDaemon } from './langfuse-bridge.js';
@@ -1362,39 +1369,44 @@ export function telemetryPromptFromRunRequest(message, currentPrompt) {
   return typeof currentPrompt === 'string' ? currentPrompt : message;
 }
 
-const FORM_ANSWERS_HEADER_RE = /^\s*\[form answers\s+(?:\u2014|-)\s*([^\]\r\n]+)\]/i;
+// Keep this header grammar aligned with parseFormAnswers in @open-design/contracts.
+const FORM_ANSWERS_HEADER_RE =
+  /^\s*\[form answers(?:\s*[\u2014\-:]\s*([^\]\r\n]+))?\]\s*(?:\r?\n|$)/i;
 
 // Aggressive OVERRIDE for weak / medium-strength plain agents (e.g.
 // GPT-OSS-120B Medium, Gemini 3.5 Flash) that otherwise echo RULE 1's
-// fenced form example back at the user on follow-up turns even when
-// they correctly understand the form is answered. Strong models
-// (Claude Sonnet 4.6, Gemini 3.1 Pro) already handle a shorter
-// OVERRIDE; enumerating the anti-patterns is a no-op for them and a
-// strong suppressor for the weaker ones. RULE 1 itself stays in the
-// system prompt so turn 1 can still emit a valid form.
+// fenced form example back after the user has answered it. Strong models
+// (Claude Sonnet 4.6, Gemini 3.1 Pro) already handle a shorter OVERRIDE;
+// enumerating the anti-patterns is a no-op for them and a strong suppressor
+// for the weaker ones. RULE 1 stays conditional: a genuinely new material
+// blocker may still require a new, targeted form on any turn.
 //
 // Exported so tests pin both the trigger condition and the literal
 // anti-patterns we ask the model to skip \u2014 silently weakening the
 // list (e.g. dropping the markdown-fence ban) would reintroduce the
 // form-echo regression on GPT-OSS / Gemini Flash.
-export const FORM_ANSWERED_SYSTEM_OVERRIDE = `## OVERRIDE \u2014 form already answered (this is turn 2 or later)
+export const FORM_ANSWERED_SYSTEM_OVERRIDE = `## OVERRIDE \u2014 submitted form answers are authoritative
 
 The user already submitted their form answers (see # User request below).
-RULE 1 documents the turn-1 ask flow; that flow is finished. Treat RULE 1
-as read-only documentation for this turn \u2014 do not execute any of it.
+Apply those answers. RULE 1 does not require another form merely because its
+example appears in the system prompt.
 
 Forbidden output for this turn:
-- A \`<question-form>\` tag of any id, including \`discovery\` or \`task-type\`.
-- A markdown \`\`\`json fenced block echoing the form schema or example.
-- Form-asking prose such as "Got it \u2014 tell me the following" or
+- Re-emitting the answered \`discovery\` or \`task-type\` form, or asking again
+  for information the submitted answers already provide.
+- A markdown \`\`\`json fenced block echoing an answered form's schema or example.
+- Form-asking prose that repeats the answered questions, such as
+  "Got it \u2014 tell me the following" or
   "\u8bf7\u544a\u8bc9\u6211\u4ee5\u4e0b\u4fe1\u606f".
 - Narrating fake system events such as "subagents stopped" or
   "server restart".
 
 Required output for this turn:
 - Open with a brief prose confirmation of what the brief is.
-- Then proceed to RULE 2 (branch on the submitted \`brand\` value) and
-  RULE 3 (emit the \`<artifact>\` block with the full HTML document).
+- Then apply RULE 2 as relevant and proceed to RULE 3 or the matching active
+  workflow.
+- Only if a new, materially blocking requirement remains unresolved may you
+  emit one new targeted \`<question-form>\`; never repeat answered fields.
 
 `;
 
@@ -1402,11 +1414,12 @@ Required output for this turn:
 // forms are not artifact-build transitions, so we only need to suppress
 // the form re-ask without directing the model toward RULE 2 / RULE 3.
 // Exported so tests can pin the literal content independently.
-export const FORM_ANSWERED_GENERIC_OVERRIDE = `## OVERRIDE \u2014 form already answered (this is turn 2 or later)
+export const FORM_ANSWERED_GENERIC_OVERRIDE = `## OVERRIDE \u2014 submitted form answers are authoritative
 
 The user already submitted their form answers (see # User request below).
 Do not ask the same form again. Treat the submitted answers as the active
-user instruction and respond accordingly.
+user instruction and respond accordingly. Ask again only if a new, materially
+blocking requirement remains unresolved.
 
 `;
 
@@ -1422,18 +1435,18 @@ function formAnswerTransitionForCurrentPrompt(currentPrompt) {
     '## Latest user turn - form answers submitted',
     trimmed,
     '',
-    // Keep the wording in lock-step with main — the stronger "do not
-    // emit any `<question-form>`" suppression now lives in the
-    // system-prompt `FORM_ANSWERED_SYSTEM_OVERRIDE` block, which
-    // every plain / stream-json adapter sees. Diverging the
+    // Keep the wording in lock-step with main — the stronger answered-form
+    // dedupe now lives in the system-prompt
+    // `FORM_ANSWERED_SYSTEM_OVERRIDE` block, which every plain /
+    // stream-json adapter sees. Diverging the
     // user-request transition string here breaks `chat-route.test
     // marks submitted discovery form answers ...` which asserts on
     // the exact main wording.
-    `The user has answered the ${formId} form. Do not emit another ${formId} form.`,
+    `The user has answered the ${formId} form. Do not re-emit the answered form or repeat fields it already answered.`,
   ];
   if (formId.toLowerCase() === 'discovery' || formId.toLowerCase() === 'task-type') {
     lines.push(
-      'Continue with RULE 2 / RULE 3 now. For Branch B answers, build now instead of asking another brief.',
+      'Apply the submitted answers and continue with RULE 2 / RULE 3 or the matching active workflow. Only if a new, materially blocking requirement remains unresolved may you emit one targeted form; never repeat answered fields.',
     );
   } else {
     lines.push(
@@ -2538,6 +2551,7 @@ export async function startServer({
   const telemetry = registerTelemetryRoutes(app, {
     dataDir: RUNTIME_DATA_DIR,
     readAppConfig,
+    writeAppConfig,
   });
   const { analyticsService } = telemetry;
   const design = {
@@ -3623,6 +3637,7 @@ export async function startServer({
           pluginDesignSystemId,
           projectDesignSystemId: project?.designSystemId,
           appDefaultDesignSystemId: appConfigForPrompt?.designSystemId,
+          disabledDesignSystemIds: appConfigForPrompt?.disabledDesignSystems,
           // A project row with designSystemId=null can mean the user picked
           // "No design system"; do not reapply the global default behind their back.
           allowAppDefault: project === null,
@@ -4276,6 +4291,12 @@ export async function startServer({
   const startChatRun = async (chatBody, run) => {
     const lifecycle = createRunLifecycleTracer(run);
     lifecycle.mark('chat_run_started');
+    const pendingNativeSessionContinue =
+      run.nativeSessionContinuePending &&
+      typeof run.nativeSessionContinuePending.sessionId === 'string'
+        ? run.nativeSessionContinuePending
+        : null;
+    run.nativeSessionContinuePending = null;
     /** @type {Partial<ChatRequest> & { imagePaths?: string[] }} */
     chatBody = chatBody || {};
     const {
@@ -4318,7 +4339,12 @@ export async function startServer({
     // into chatBody across the createChatRunService boundary. Each field
     // is optional and only set when the chat body actually carried it.
     const telemetryPrompt = telemetryPromptFromRunRequest(message, currentPrompt);
-    if (typeof telemetryPrompt === 'string') run.userPrompt = telemetryPrompt;
+    if (
+      !pendingNativeSessionContinue &&
+      typeof telemetryPrompt === 'string'
+    ) {
+      run.userPrompt = telemetryPrompt;
+    }
     if (typeof model === 'string' && model) run.model = model;
     if (typeof reasoning === 'string' && reasoning) run.reasoning = reasoning;
     if (typeof serviceTier === 'string' && serviceTier) run.serviceTier = serviceTier;
@@ -4355,6 +4381,9 @@ export async function startServer({
         BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE,
       );
     }
+    const requestedRuntimeModel = def.id === 'byok-opencode'
+      ? byokOpenCodeProvider?.modelId ?? null
+      : model;
     // Validate the checked-in `inactivityTimeoutMs` hint immediately
     // after the runtime def is selected and before any side-effectful
     // setup (auto-memory extract, `.mcp.json` write/unlink,
@@ -4639,7 +4668,7 @@ export async function startServer({
     // stableInstructionFingerprint and re-sends the whole stable block on
     // resume. Two rules keep flips down to genuine activations only:
     //   1. Scan user-authored text only — for transcript-resending agents
-    //      `message` embeds prior ASSISTANT turns, whose copy (the turn-1
+    //      `message` embeds prior ASSISTANT turns, whose copy (an earlier
     //      discovery form's own options, delivery summaries) must never flip
     //      a signal the user did not express.
     //   2. Latch detections onto the conversation (monotonic ON), so a
@@ -4828,18 +4857,50 @@ export async function startServer({
       return outcome;
     };
     const snapshotAiHtmlVersionsBeforeSuccess = async () => {
+      const origin = artifactOriginForRun({
+        runId: run.id,
+        externalPluginAnalytics: run.externalPluginAnalytics,
+      });
+      if (origin) {
+        // A successful Plugin run starts pessimistically. Only the exact
+        // versions returned by the snapshot writer may promote it to matched.
+        run.artifactOriginStatus = 'missing_version';
+        run.artifactVersionId = undefined;
+      }
       const outcome = resolveRunArtifactOutcomeBeforeFinish();
       if (!outcome?.diff || !outcome.projectRoot || !run.projectId) return;
       const promptInfo = latestRunPromptForHtmlVersionSnapshot();
-      await snapshotAiHtmlVersionsForRun({
+      const result = await snapshotAiHtmlVersionsForRun({
         projectsRoot: PROJECTS_DIR,
         projectId: run.projectId,
         projectRoot: outcome.projectRoot,
         diff: outcome.diff,
         prompt: promptInfo.prompt,
         ...(promptInfo.promptSource ? { promptSource: promptInfo.promptSource } : {}),
+        ...(origin ? { origin } : {}),
         metadata: projectRecord?.metadata,
       });
+      if (origin) {
+        const matching = result.snapshots.filter(({ version }) =>
+          version.origin?.entrySurface === origin.entrySurface
+          && version.origin.externalPluginId === origin.externalPluginId
+          && version.origin.pluginWorkflowId === origin.pluginWorkflowId
+          && version.origin.runId === origin.runId,
+        );
+        if (matching.length > 0) {
+          run.artifactOriginStatus = 'matched';
+          const configuredEntry =
+            typeof projectRecord?.metadata?.entryFile === 'string'
+              ? projectRecord.metadata.entryFile.replaceAll('\\', '/')
+              : null;
+          const selected =
+            (configuredEntry
+              ? matching.find(({ fileName }) => fileName === configuredEntry)
+              : undefined)
+            ?? (matching.length === 1 ? matching[0] : undefined);
+          run.artifactVersionId = selected?.version.id;
+        }
+      }
     };
     // Chain onto the run service's terminal chokepoint so startup rejection,
     // direct cancellation, shutdown, and every explicit finish path all consume
@@ -4927,10 +4988,10 @@ export async function startServer({
         : null;
     let safeModel = resolveModelForAgent(
       def,
-      typeof model === 'string'
-        ? isKnownModel(def, model, requestedLiveModelScope)
-          ? model
-          : sanitizeCustomModel(model)
+      typeof requestedRuntimeModel === 'string'
+        ? isKnownModel(def, requestedRuntimeModel, requestedLiveModelScope)
+          ? requestedRuntimeModel
+          : sanitizeCustomModel(requestedRuntimeModel)
         : configuredModel,
       process.env,
       requestedLiveModelScope,
@@ -4999,7 +5060,7 @@ export async function startServer({
         // the probe failure and applies the identical fallback.
       }
     }
-    const agentResumeCtx =
+    const resolvedAgentResumeCtx =
       agentSupportsSessionResume && run.conversationId
         ? resolveAgentResumeContext(db, {
             conversationId: run.conversationId,
@@ -5009,6 +5070,28 @@ export async function startServer({
             currentAssistantMessageId: run.assistantMessageId ?? null,
           })
         : { storedSessionId: null as string | null, resumeSessionId: null as string | null, newSessionId: undefined as string | undefined, isResuming: false, storedStablePromptHash: null as string | null, storedStableSections: null as StableSectionHashes | null, invalidationReason: null };
+    // A same-run post-tool recovery resumes the exact session id captured from
+    // the interrupted attempt. The ordinary cross-turn cursor guard cannot
+    // admit it yet because the current assistant placeholder is still in
+    // flight, so this daemon-only path supplies the already-validated handle
+    // directly. Public chat requests cannot reach this branch.
+    const forceInternalResume =
+      pendingNativeSessionContinue != null &&
+      def.resumesSessionViaCli === true &&
+      pendingNativeSessionContinue.sessionId.length > 0;
+    const agentResumeCtx = forceInternalResume
+      ? {
+          ...resolvedAgentResumeCtx,
+          storedSessionId: pendingNativeSessionContinue.sessionId,
+          resumeSessionId: pendingNativeSessionContinue.sessionId,
+          isResuming: true,
+          storedStablePromptHash:
+            pendingNativeSessionContinue.stablePromptHash ?? null,
+          storedStableSections:
+            pendingNativeSessionContinue.stablePromptSections ?? null,
+          invalidationReason: null,
+        }
+      : resolvedAgentResumeCtx;
     const publishNativeSessionRecoveryMetadata = () => {
       if (!run.nativeSessionRecovery) return;
       design.runs.emit(run, 'diagnostic', {
@@ -5398,8 +5481,8 @@ export async function startServer({
         startRequestedAt: run.analyticsTelemetry?.startRequestedAt ?? run.createdAt,
       };
     };
-    const spawnRetryAttempt = () => {
-      void startChatRun(chatBody, run).catch((err) => {
+    const spawnRetryAttempt = (retryChatBody = chatBody) => {
+      void startChatRun(retryChatBody, run).catch((err) => {
         const message = err instanceof Error ? err.message : String(err);
         design.runs.emit(
           run,
@@ -5421,17 +5504,17 @@ export async function startServer({
     // or shutdown during the backoff window clears the timer (runtimes/runs.ts)
     // and finalizes the queued run, and the callback re-checks cancel/terminal
     // state in case it fires first.
-    const scheduleRetryRestart = (delayMs) => {
+    const scheduleRetryRestart = (delayMs, retryChatBody = chatBody) => {
       tearDownAttemptForRetry();
       const wait = Number.isFinite(delayMs) && delayMs > 0 ? delayMs : 0;
       if (wait <= 0) {
-        spawnRetryAttempt();
+        spawnRetryAttempt(retryChatBody);
         return;
       }
       run.retryRestartTimer = setTimeout(() => {
         run.retryRestartTimer = null;
         if (run.cancelRequested || design.runs.isTerminal(run.status)) return;
-        spawnRetryAttempt();
+        spawnRetryAttempt(retryChatBody);
       }, wait);
     };
     const finalizeRetryTelemetry = (status, decision, failure, errorCode) => {
@@ -5458,7 +5541,13 @@ export async function startServer({
           : undefined;
       const eventDecision =
         attemptCount > 0
-          ? { ...decision, retryAttemptIndex: attemptCount }
+          ? {
+              ...decision,
+              retryAttemptIndex: attemptCount,
+              retryMaxAttempts:
+                run.retryMaxAttempts ?? decision.retryMaxAttempts,
+              retryStrategy: run.retryStrategy ?? decision.retryStrategy,
+            }
           : decision;
       // A successful retry has no current failure classification or error code.
       // Fall back to the failure that caused attempt 0 to be retried so success
@@ -5532,6 +5621,72 @@ export async function startServer({
         ...runSideEffectsForRun(run),
         cancelRequested: !!run.cancelRequested,
       };
+      const liveSessionId = agentResumeCtx.isResuming
+        ? agentResumeCtx.resumeSessionId
+        : agentCapturesSessionId
+          ? capturedSessionId
+          : agentResumeCtx.newSessionId;
+      const postToolResumeDecision = decidePostToolResumeRecovery({
+        result,
+        failure,
+        continuationAttemptCount:
+          run.nativeSessionContinueAttemptCount ?? 0,
+        totalRetryAttemptCount: run.retryAttemptCount ?? 0,
+        sideEffects,
+        supportsNativeSessionContinue: def.resumesSessionViaCli === true,
+        hasNativeSession: !!run.conversationId && !!liveSessionId,
+      });
+      if (
+        postToolResumeDecision?.shouldRetry &&
+        !design.runs.isTerminal(run.status) &&
+        run.conversationId &&
+        liveSessionId
+      ) {
+        run.retryOriginalFailure ??= failure ?? undefined;
+        run.retryOriginFailure = failure ? { ...failure } : null;
+        run.retryOriginErrorCode = errorCode ?? null;
+        run.retryAttemptCount = postToolResumeDecision.retryAttemptIndex;
+        run.nativeSessionContinueAttemptCount =
+          (run.nativeSessionContinueAttemptCount ?? 0) + 1;
+        run.retryMaxAttempts = postToolResumeDecision.retryMaxAttempts;
+        run.retryStrategy = postToolResumeDecision.retryStrategy;
+        run.retryFinalResult = undefined;
+        run.retrySuppressedReason = undefined;
+        upsertAgentSession(db, {
+          conversationId: run.conversationId,
+          agentId: def.id,
+          sessionId: liveSessionId,
+          stablePromptHash: currentStableHash,
+          stablePromptSections: currentStableSectionsJson,
+          model: safeModel ?? null,
+          cwd: effectiveCwd,
+          lastMessageId: run.assistantMessageId ?? null,
+        });
+        run.nativeSessionRecovery = markNativeSessionCaptured({
+          previous: run.nativeSessionRecovery,
+          agentId: def.id,
+          sessionId: liveSessionId,
+          resumed: agentResumeCtx.isResuming,
+        });
+        publishNativeSessionRecoveryMetadata();
+        design.runs.emit(run, 'run_retry_attempted', {
+          ...retryAnalyticsBase(postToolResumeDecision, failure, errorCode),
+          retry_reason: postToolResumeDecision.retryReason,
+          retry_delay_ms: postToolResumeDecision.retryDelayMs,
+        });
+        run.nativeSessionContinuePending = {
+          sessionId: liveSessionId,
+          stablePromptHash: currentStableHash,
+          stablePromptSections: currentStableSections,
+        };
+        scheduleRetryRestart(postToolResumeDecision.retryDelayMs, {
+          ...chatBody,
+          message: POST_TOOL_RESUME_CONTINUATION_PROMPT,
+          currentPrompt: POST_TOOL_RESUME_CONTINUATION_PROMPT,
+          titleGeneration: undefined,
+        });
+        return true;
+      }
       const decision = decideSafeRunRetry({
         result,
         failure,
@@ -5545,6 +5700,8 @@ export async function startServer({
           run.retryOriginErrorCode = errorCode ?? null;
         }
         run.retryAttemptCount = decision.retryAttemptIndex;
+        run.retryMaxAttempts = decision.retryMaxAttempts;
+        run.retryStrategy = decision.retryStrategy;
         run.retryFinalResult = undefined;
         run.retrySuppressedReason = undefined;
         design.runs.emit(run, 'run_retry_attempted', {
@@ -5584,11 +5741,6 @@ export async function startServer({
         sideEffects.artifactWriteSeen ||
         sideEffects.liveArtifactSeen
       );
-      const liveSessionId = agentResumeCtx.isResuming
-        ? agentResumeCtx.resumeSessionId
-        : agentCapturesSessionId
-          ? capturedSessionId
-          : agentResumeCtx.newSessionId;
       const resumableFailure =
         result === 'failed' &&
         def.resumesSessionViaCli === true &&
@@ -5603,6 +5755,7 @@ export async function startServer({
       // failure type + fix. Only meaningful on a failed result.
       run.failureCategory = result === 'failed' ? failure?.failure_category ?? null : null;
       run.failureDetail = result === 'failed' ? failure?.failure_detail ?? null : null;
+      run.failureAction = result === 'failed' ? failure?.user_action ?? null : null;
       // Stamp the classification onto the persisted assistant message too, so a
       // reload (or any daemon-side persistence without the live web error
       // handler) keeps the specific failure guidance instead of the coarse
@@ -6111,6 +6264,10 @@ export async function startServer({
           promptFilePath: promptFile?.path,
           resumeSessionId: agentResumeCtx.resumeSessionId,
           newSessionId: agentResumeCtx.newSessionId,
+          disablePlugins:
+            def.id === 'codex'
+            && run.externalPluginAnalytics?.externalPluginId
+              === OPEN_DESIGN_PLUGIN_ID,
         },
       );
     } catch (err) {
@@ -6575,7 +6732,11 @@ export async function startServer({
           agentId: def.id,
           runId: run.id,
           conversationId: run.conversationId,
-          runAttempt: run.retryAttemptCount ?? 0,
+          runAttempt: openDesignAmrRunAttempt({
+            retryAttemptCount: run.retryAttemptCount,
+            manualResumeAttemptCount: run.manualResumeAttemptCount,
+          }),
+          externalPluginAnalytics: run.externalPluginAnalytics ?? null,
         }),
         // OpenCode external-MCP injection (issue #2142). Layered AFTER
         // spawnEnvForAgent / odMediaEnv / configuredAgentEnv so the
@@ -6728,12 +6889,9 @@ export async function startServer({
       // mini extraction in the background just because the user has
       // an OpenAI key parked in media-config.
       //
-      // Also normalize the BYOK provider shape: web side sends
-      // `{ protocol, ... }` via the chat body as `byokProvider`,
-      // but memory-llm.pickProvider expects `{ provider, ... }`
-      // with `provider` being a PROVIDER_DEFAULTS key. We apply the
-      // same mapping the web pre-turn path does (ProjectView.tsx
-      // constructs `{ provider: byokOpenCodeProvider.protocol, ... }`).
+      // Normalize the run-scoped BYOK provider shape for the memory extractor.
+      // The raw secret never enters the persisted run body; it is held only by
+      // this run closure while the child is alive.
       const memoryChatProvider: {
         provider?: string;
         apiKey?: string;
@@ -6747,7 +6905,7 @@ export async function startServer({
             apiKey: (byokProvider as { apiKey?: string }).apiKey,
             baseUrl: (byokProvider as { baseUrl?: string }).baseUrl,
             apiVersion: (byokProvider as { apiVersion?: string }).apiVersion,
-            model: (byokProvider as { model?: string }).model,
+            model: typeof safeModel === 'string' ? safeModel : undefined,
             requiresApiKey: (byokProvider as { requiresApiKey?: boolean }).requiresApiKey,
           }
         : null;
@@ -7527,6 +7685,7 @@ export async function startServer({
         mcpServers,
         envFormat: def.acpMcpEnvFormat ?? 'array',
         executionProfile,
+        completePromptOnTurnEnd: def.acpTurnEndCompletesPrompt === true,
         ...(def.id === 'amr' ? { modelUnavailableErrorCode: 'AMR_MODEL_UNAVAILABLE' } : {}),
         // Resume the prior upstream session (drives `session/load`) when the
         // resume-identity guard says it is safe; otherwise a fresh session/new.

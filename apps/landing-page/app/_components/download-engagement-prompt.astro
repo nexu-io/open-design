@@ -1,0 +1,486 @@
+---
+import { getDownloadPromptCopy } from '../download-prompt-i18n';
+import { getLatestRelease } from '../_lib/github';
+import {
+  localeFromPath,
+  localizedHref,
+  pageNameFromPath,
+  type LandingLocaleCode,
+} from '../i18n';
+
+interface Props {
+  locale?: LandingLocaleCode;
+}
+
+const locale = Astro.props.locale ?? localeFromPath(Astro.url.pathname);
+const copy = getDownloadPromptCopy(locale);
+const pageName = pageNameFromPath(Astro.url.pathname);
+const shouldRender = pageName !== 'download';
+const downloadHref = `${localizedHref('/download/', locale)}?source=engagement_prompt`;
+const latestRelease = shouldRender ? await getLatestRelease() : null;
+const directAssets = {
+  macArm64: latestRelease?.matrix.macArm64Dmg?.url ?? '',
+  macX64: latestRelease?.matrix.macX64Dmg?.url ?? '',
+  windows: latestRelease?.matrix.winSetup?.url ?? '',
+  linux: latestRelease?.matrix.linux?.url ?? '',
+};
+
+const ACTIVE_SECONDS_THRESHOLD = 35;
+const PAGE_COUNT_THRESHOLD = 3;
+const DISMISS_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
+const DOWNLOAD_COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000;
+---
+
+{shouldRender && (
+  <dialog
+    class="download-engagement-prompt"
+    data-download-engagement-prompt
+    data-od-id="engagement_download_prompt"
+    aria-labelledby="download-prompt-title"
+    aria-describedby="download-prompt-body"
+  >
+    <div class="download-prompt-card">
+      <button
+        class="download-prompt-close"
+        type="button"
+        data-download-prompt-dismiss="close_button"
+        aria-label={copy.closeLabel}
+      >
+        <span aria-hidden="true">×</span>
+      </button>
+
+      <div class="download-prompt-appmark" aria-hidden="true">
+        <img src="/android-chrome-192x192.png" alt="" width="58" height="58" />
+      </div>
+      <p class="download-prompt-eyebrow">{copy.eyebrow}</p>
+      <h2 id="download-prompt-title">{copy.title}<span aria-hidden="true">.</span></h2>
+      <p id="download-prompt-body" class="download-prompt-body">{copy.body}</p>
+
+      <ul class="download-prompt-benefits">
+        {copy.benefits.map((benefit) => (
+          <li><span aria-hidden="true">✓</span>{benefit}</li>
+        ))}
+      </ul>
+
+      <div class="download-prompt-actions">
+        <a
+          class="btn btn-primary download-prompt-primary hero-download-attention"
+          href={downloadHref}
+          data-download-cta
+          data-direct-download
+          data-download-placement="engagement_prompt"
+          data-download-prompt-cta
+        >
+          <span class="download-prompt-primary-icon" aria-hidden="true">↓</span>
+          <span>{copy.primary}</span>
+        </a>
+        <button
+          class="download-prompt-secondary"
+          type="button"
+          data-download-prompt-dismiss="keep_browsing"
+        >
+          {copy.secondary}
+        </button>
+      </div>
+      <p class="download-prompt-platforms">{copy.platformNote}</p>
+    </div>
+  </dialog>
+)}
+
+{shouldRender && (
+  <script
+    is:inline
+    define:vars={{
+      pageName,
+      locale,
+      ACTIVE_SECONDS_THRESHOLD,
+      PAGE_COUNT_THRESHOLD,
+      DISMISS_COOLDOWN_MS,
+      DOWNLOAD_COOLDOWN_MS,
+      directAssets,
+    }}
+  >
+    (() => {
+      const dialog = document.querySelector('[data-download-engagement-prompt]');
+      if (!dialog) return;
+      const cta = dialog.querySelector('[data-download-prompt-cta]');
+
+      const KEYS = {
+        pageViews: 'od_download_prompt_page_views_v2',
+        activeSeconds: 'od_download_prompt_active_seconds_v1',
+        shown: 'od_download_prompt_shown_v1',
+        dismissedAt: 'od_download_prompt_dismissed_at_v1',
+        downloadedAt: 'od_download_prompt_downloaded_at_v1',
+      };
+      let timer = 0;
+      let dismissReason = '';
+      let shownTrigger = '';
+
+      const read = (storage, key) => {
+        try { return storage.getItem(key); } catch (error) { return null; }
+      };
+      const write = (storage, key, value) => {
+        try { storage.setItem(key, value); } catch (error) {}
+      };
+      const recent = (key, cooldown) => {
+        const timestamp = Number(read(localStorage, key) || 0);
+        return Number.isFinite(timestamp) && timestamp > 0 && Date.now() - timestamp < cooldown;
+      };
+      const canShow = (forcePreview) => {
+        if (!window.matchMedia('(min-width: 768px)').matches) return false;
+        if (forcePreview) return true;
+        if (read(sessionStorage, KEYS.shown) === '1') return false;
+        if (recent(KEYS.dismissedAt, DISMISS_COOLDOWN_MS)) return false;
+        if (recent(KEYS.downloadedAt, DOWNLOAD_COOLDOWN_MS)) return false;
+        return true;
+      };
+      const track = (name, props) => {
+        if (typeof window.__odTrack !== 'function') return;
+        window.__odTrack(name, Object.assign({
+          page_name: pageName,
+          locale,
+          area: 'engagement_download_prompt',
+        }, props || {}));
+      };
+
+      // Resolve every high-intent CTA on the page (the modal and the homepage
+      // hero) straight to the newest installer for this machine. Build-time
+      // asset URLs make the link direct immediately; the background GitHub
+      // refresh keeps it current between site builds.
+      const detectPlatform = () => {
+        const ua = (navigator.userAgent || '').toLowerCase();
+        const p = (
+          navigator.userAgentData?.platform ||
+          navigator.platform ||
+          ''
+        ).toLowerCase();
+        // Desktop-mode Safari reports `MacIntel` on iPadOS. Keep every direct
+        // installer CTA on its neutral /download/ fallback for touch-capable
+        // iPads instead of handing them an unusable macOS .dmg.
+        const isIpadOS = navigator.maxTouchPoints > 1 && /mac/.test(p);
+        if (isIpadOS || /iphone|ipad|ipod/.test(ua)) return null;
+        if (/win/.test(p) || /windows/.test(ua)) {
+          return { key: 'windows', label: 'Windows', match: (name) => /win.*setup\.exe$/i.test(name) };
+        }
+        if (/mac/.test(p) || (/mac os x/.test(ua) && !/iphone|ipad|ipod/.test(ua))) {
+          let intel = false;
+          try {
+            const gl = document.createElement('canvas').getContext('webgl');
+            const dbg = gl && gl.getExtension('WEBGL_debug_renderer_info');
+            const renderer = dbg ? String(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL)) : '';
+            intel = /intel|radeon|amd/i.test(renderer) && !/apple/i.test(renderer);
+          } catch (error) {}
+          return intel
+            ? { key: 'macX64', label: 'macOS (Intel)', match: (name) => /mac-x64\.dmg$/i.test(name) }
+            : { key: 'macArm64', label: 'macOS (Apple Silicon)', match: (name) => /mac-arm64\.dmg$/i.test(name) };
+        }
+        if (/linux/.test(p) || (/linux/.test(ua) && !/android/.test(ua))) {
+          return { key: 'linux', label: 'Linux', match: (name) => /\.appimage$/i.test(name) };
+        }
+        return null;
+      };
+      const applyDirectAsset = (url, platformLabel) => {
+        if (typeof url !== 'string' || !url) return;
+        for (const link of document.querySelectorAll('[data-direct-download]')) {
+          link.href = url;
+          link.setAttribute('download', '');
+          link.setAttribute('data-download-platform-label', platformLabel);
+          link.removeAttribute('target');
+          link.removeAttribute('rel');
+        }
+      };
+      const platform = detectPlatform();
+      if (platform) {
+        applyDirectAsset(directAssets[platform.key], platform.label);
+        fetch('https://api.github.com/repos/nexu-io/open-design/releases/latest', {
+          headers: { Accept: 'application/vnd.github+json' },
+        })
+          .then((response) => (response.ok ? response.json() : null))
+          .then((release) => {
+            const assets = Array.isArray(release?.assets) ? release.assets : [];
+            const asset = assets.find((item) =>
+              item &&
+              typeof item.name === 'string' &&
+              typeof item.browser_download_url === 'string' &&
+              platform.match(item.name)
+            );
+            if (asset) applyDirectAsset(asset.browser_download_url, platform.label);
+          })
+          .catch(() => {});
+      }
+
+      const show = (trigger, forcePreview) => {
+        if (!canShow(Boolean(forcePreview)) || dialog.open) return false;
+        shownTrigger = trigger;
+        write(sessionStorage, KEYS.shown, '1');
+        if (timer) window.clearInterval(timer);
+
+        if (cta) {
+          cta.setAttribute('data-download-prompt-trigger', trigger);
+        }
+
+        if (typeof dialog.showModal === 'function') dialog.showModal();
+        else dialog.setAttribute('open', '');
+        document.documentElement.classList.add('download-prompt-open');
+        track('surface_view', {
+          element: 'engagement_modal',
+          trigger,
+          page_count: pageViews,
+          active_seconds: activeSeconds,
+        });
+        return true;
+      };
+      const dismiss = (reason) => {
+        dismissReason = reason;
+        if (typeof dialog.close === 'function') dialog.close('dismiss');
+        else dialog.removeAttribute('open');
+      };
+
+      // Count actual navigations within the session, including reloads and
+      // repeat visits to the same route. The conversion rule is "three page
+      // views", not "three distinct route names".
+      const storedPageViews = Number(read(sessionStorage, KEYS.pageViews) || 0);
+      const pageViews = (Number.isFinite(storedPageViews) && storedPageViews > 0
+        ? storedPageViews
+        : 0) + 1;
+      write(sessionStorage, KEYS.pageViews, String(pageViews));
+
+      let activeSeconds = Math.max(0, Number(read(sessionStorage, KEYS.activeSeconds) || 0) || 0);
+      if (pageViews >= PAGE_COUNT_THRESHOLD) {
+        window.setTimeout(() => show('page_count'), 1200);
+      }
+      timer = window.setInterval(() => {
+        if (document.visibilityState !== 'visible' || dialog.open) return;
+        activeSeconds += 1;
+        write(sessionStorage, KEYS.activeSeconds, String(activeSeconds));
+        if (activeSeconds >= ACTIVE_SECONDS_THRESHOLD) show('active_time');
+      }, 1000);
+
+      dialog.addEventListener('click', (event) => {
+        const target = event.target instanceof Element ? event.target : null;
+        const dismissButton = target?.closest('[data-download-prompt-dismiss]');
+        if (dismissButton) {
+          dismiss(dismissButton.getAttribute('data-download-prompt-dismiss') || 'dismiss');
+          return;
+        }
+        if (event.target === dialog) dismiss('backdrop');
+      });
+      dialog.addEventListener('cancel', () => { dismissReason = 'escape'; });
+      dialog.addEventListener('close', () => {
+        document.documentElement.classList.remove('download-prompt-open');
+        if (dialog.returnValue === 'download') return;
+        const reason = dismissReason || 'escape';
+        write(localStorage, KEYS.dismissedAt, String(Date.now()));
+        track('ui_click', { element: 'dismiss', action: reason, trigger: shownTrigger });
+      });
+
+      if (cta) {
+        cta.addEventListener('click', () => {
+          write(localStorage, KEYS.downloadedAt, String(Date.now()));
+          dialog.returnValue = 'download';
+        });
+      }
+
+      // QA escape hatch: `?download_prompt=preview` opens the real modal
+      // immediately without changing production trigger thresholds.
+      window.__odDownloadPrompt = {
+        show: (trigger = 'manual_preview') => show(trigger, true),
+      };
+      if (new URLSearchParams(window.location.search).get('download_prompt') === 'preview') {
+        window.setTimeout(() => show('preview', true), 350);
+      }
+    })();
+  </script>
+)}
+
+<style is:global>
+  html.download-prompt-open { overflow: hidden; }
+  .download-engagement-prompt {
+    width: min(660px, calc(100vw - 32px));
+    max-width: none;
+    max-height: calc(100dvh - 32px);
+    margin: auto;
+    padding: 0;
+    border: 0;
+    border-radius: 24px;
+    overflow: auto;
+    background: transparent;
+    color: var(--ink, #22221f);
+  }
+  .download-engagement-prompt::backdrop {
+    background: rgb(25 25 22 / 48%);
+    backdrop-filter: blur(8px);
+  }
+  .download-engagement-prompt[open] {
+    animation: download-prompt-enter 220ms cubic-bezier(.2, .8, .2, 1) both;
+  }
+  .download-prompt-card {
+    position: relative;
+    padding: 38px 42px 32px;
+    border: 1px solid rgb(34 34 31 / 12%);
+    border-radius: 24px;
+    background:
+      radial-gradient(circle at 92% 8%, rgb(79 255 28 / 12%), transparent 30%),
+      var(--paper, #f7f5ef);
+    box-shadow: 0 30px 90px rgb(0 0 0 / 24%);
+  }
+  .download-prompt-close {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    display: grid;
+    place-items: center;
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    border: 1px solid rgb(34 34 31 / 14%);
+    border-radius: 999px;
+    background: rgb(255 255 255 / 64%);
+    color: var(--ink-soft, #55544f);
+    font: inherit;
+    font-size: 25px;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .download-prompt-close:hover,
+  .download-prompt-close:focus-visible { border-color: var(--ink, #22221f); color: var(--ink, #22221f); }
+  .download-prompt-close:focus-visible,
+  .download-prompt-secondary:focus-visible {
+    outline: 2px solid var(--coral, #3eea17);
+    outline-offset: 2px;
+  }
+  .download-prompt-appmark {
+    width: 58px;
+    height: 58px;
+    margin-bottom: 20px;
+    border-radius: 15px;
+    overflow: hidden;
+    box-shadow: 0 12px 30px rgb(34 34 31 / 15%);
+  }
+  .download-prompt-appmark img { display: block; width: 100%; height: 100%; }
+  .download-prompt-eyebrow {
+    margin: 0 0 10px;
+    color: var(--coral, #3eea17);
+    font-size: 12px;
+    font-weight: 750;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+  }
+  .download-prompt-card h2 {
+    max-width: 17ch;
+    margin: 0;
+    font-family: var(--sans, sans-serif);
+    font-size: clamp(30px, 5vw, 42px);
+    line-height: 1.02;
+    letter-spacing: -.035em;
+    text-wrap: balance;
+  }
+  .download-prompt-card h2 span { color: var(--coral, #3eea17); }
+  .download-prompt-body {
+    max-width: 58ch;
+    margin: 20px 0 0;
+    color: var(--ink-soft, #55544f);
+    font-size: 16px;
+    line-height: 1.55;
+  }
+  .download-prompt-benefits {
+    display: grid;
+    gap: 10px;
+    margin: 24px 0 0;
+    padding: 20px;
+    border: 1px solid rgb(34 34 31 / 10%);
+    border-radius: 16px;
+    background: rgb(255 255 255 / 48%);
+    list-style: none;
+  }
+  .download-prompt-benefits li {
+    display: grid;
+    grid-template-columns: 20px minmax(0, 1fr);
+    gap: 9px;
+    align-items: start;
+    color: var(--ink, #22221f);
+    font-size: 14px;
+    line-height: 1.4;
+  }
+  .download-prompt-benefits li span { color: var(--coral, #3eea17); font-weight: 800; }
+  .download-prompt-actions {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-top: 26px;
+  }
+  .download-prompt-actions .btn { min-height: 48px; }
+  .download-prompt-actions .download-prompt-primary {
+    min-height: 56px;
+    padding: 11px 24px 11px 12px;
+    gap: 11px;
+    font-size: 15px;
+    box-shadow:
+      0 0 0 1px var(--ink, #22221f),
+      5px 5px 0 var(--coral, #63fe13),
+      0 18px 30px -19px rgba(34, 34, 31, 0.5);
+    transition: transform 180ms ease, background 180ms ease, box-shadow 180ms ease;
+  }
+  .download-prompt-actions .download-prompt-primary:hover {
+    transform: translate(-2px, -2px);
+    box-shadow:
+      0 0 0 1px var(--ink, #22221f),
+      7px 7px 0 var(--coral, #63fe13),
+      0 20px 32px -18px rgba(34, 34, 31, 0.52);
+  }
+  .download-prompt-actions .download-prompt-primary:active {
+    transform: translate(1px, 1px) scale(0.985);
+    box-shadow:
+      0 0 0 1px var(--ink, #22221f),
+      3px 3px 0 var(--coral, #63fe13),
+      0 14px 24px -18px rgba(34, 34, 31, 0.44);
+  }
+  .download-prompt-primary-icon {
+    width: 32px;
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    border-radius: 999px;
+    background: var(--coral, #63fe13);
+    color: var(--ink, #22221f);
+    font-size: 18px;
+    font-weight: 800;
+  }
+  .download-prompt-secondary {
+    padding: 10px 2px;
+    border: 0;
+    border-bottom: 1px solid transparent;
+    background: transparent;
+    color: var(--ink-soft, #55544f);
+    font: inherit;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .download-prompt-secondary:hover,
+  .download-prompt-secondary:focus-visible { border-bottom-color: currentColor; color: var(--ink, #22221f); }
+  .download-prompt-platforms {
+    margin: 16px 0 0;
+    color: var(--ink-faint, #77756d);
+    font-size: 12px;
+  }
+  @keyframes download-prompt-enter {
+    from { opacity: 0; transform: translateY(16px) scale(.98); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  @media (max-width: 767px) {
+    .download-engagement-prompt { display: none; }
+  }
+  @media (max-height: 720px) {
+    .download-prompt-card { padding-top: 28px; }
+    .download-prompt-appmark { width: 46px; height: 46px; margin-bottom: 14px; }
+    .download-prompt-card h2 { font-size: 30px; }
+    .download-prompt-body { margin-top: 14px; }
+    .download-prompt-benefits { margin-top: 16px; padding: 14px 16px; }
+    .download-prompt-actions { margin-top: 18px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .download-engagement-prompt[open] { animation: none; }
+  }
+</style>
