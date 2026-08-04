@@ -293,12 +293,16 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
   //
   // The guard is a "no regression" rule, not a blanket write-ownership rule:
   // run events are append-only, so a stale snapshot can only SHRINK the stored
-  // list. We preserve the stored events/content/last-run-event-id/run-status
-  // only when the incoming snapshot would drop already-persisted events. A web
-  // write that carries at least as many events still flows through — which
-  // keeps mock-agent flows working (the daemon never persisted events there,
-  // so the web is the legitimate writer) and lets UI metadata (feedback,
-  // comment attachments, telemetry) land on every PUT.
+  // list. We preserve the stored events/content/last-run-event-id/run-status —
+  // plus the daemon-ownership marker (role + runId), since a snapshot captured
+  // before `/api/runs` assigned a run id can omit `runId` and would otherwise
+  // null `run_id` and drop the message back out of the protected path on the
+  // next stale PUT — only when the incoming snapshot would drop
+  // already-persisted events. A web write that carries at least as many events
+  // still flows through — which keeps mock-agent flows working (the daemon
+  // never persisted events there, so the web is the legitimate writer) and
+  // lets UI metadata (feedback, comment attachments, telemetry) land on every
+  // PUT.
   const mergeMessageWriteForDaemonBacked = (
     messageId: string,
     incoming: Record<string, unknown>,
@@ -311,6 +315,8 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
     }
     return {
       ...incoming,
+      role: stored.role,
+      runId: stored.runId,
       events: stored.events,
       content: stored.content ?? '',
       lastRunEventId: stored.lastRunEventId,

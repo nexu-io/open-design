@@ -109,15 +109,17 @@ describe('stale web message snapshot does not wipe daemon-owned run events', () 
     ).toBe(true);
     expect(before?.content).toBe('Hello from the model.');
 
-    // Simulate the stale web snapshot: captured before the daemon appended any
-    // run events, then PUT after they were persisted. events/content/runStatus
-    // are all the pre-run values; feedback is a genuine client-owned metadata
-    // write that must still land.
-    const staleSnapshot = {
+    // Simulate TWO stale web snapshots, both captured before the daemon
+    // appended any run events AND before `/api/runs` assigned a run id — so the
+    // payload omits `runId` entirely (a genuinely pre-run snapshot). PUT both
+    // after the daemon persisted them. events/content/runStatus are all the
+    // pre-run values; feedback is a genuine client-owned metadata write that
+    // must still land.
+    const staleSnapshot = (runId: string | undefined) => ({
       id: assistantMessageId,
       role: 'assistant',
       content: '',
-      runId: before?.runId,
+      ...(runId ? { runId } : {}),
       runStatus: 'running',
       events: [],
       lastRunEventId: null,
@@ -126,28 +128,36 @@ describe('stale web message snapshot does not wipe daemon-owned run events', () 
         createdAt: Date.now(),
         updatedAt: Date.now(),
       },
-    };
-    const putResponse = await fetch(
-      `${started.url}/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(assistantMessageId)}`,
-      {
-        method: 'PUT',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(staleSnapshot),
-      },
-    );
-    expect(putResponse.status).toBe(200);
+    });
+    const putUrl = `${started.url}/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(assistantMessageId)}`;
+    const firstPut = await fetch(putUrl, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(staleSnapshot(undefined)),
+    });
+    expect(firstPut.status).toBe(200);
+    // A second stale PUT (no runId, empty events) must not be able to drop the
+    // message back out of the protected path now that `run_id` was preserved.
+    const secondPut = await fetch(putUrl, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(staleSnapshot(undefined)),
+    });
+    expect(secondPut.status).toBe(200);
 
-    // The daemon-owned run events/content must survive the stale PUT.
+    // The daemon-owned run events/content AND the daemon-ownership marker
+    // (runId) must survive both stale PUTs.
     const after = await fetchAssistantMessage(
       started.url,
       projectId,
       conversationId,
       assistantMessageId,
     );
+    expect(after?.runId).toBe(before?.runId);
     expect(after?.content).toBe('Hello from the model.');
     expect(
       after?.events?.some((event) => event.kind === 'status' && event.label === 'initializing'),
-      'early daemon-persisted event should survive a stale web snapshot PUT',
+      'early daemon-persisted event should survive stale web snapshot PUTs',
     ).toBe(true);
     expect(after?.runStatus).toBe('succeeded');
     // Client-owned metadata writes still land on daemon-backed messages.
