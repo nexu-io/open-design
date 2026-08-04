@@ -23,6 +23,7 @@ import {
   blogSlugToUrl,
   fileToSlug,
   git,
+  isNoindexPost,
   isPostFile,
 } from './lib.ts';
 
@@ -63,7 +64,12 @@ function main() {
     const [status, file, newFile] = line.split('\t');
     const targetFile = status?.startsWith('R') ? newFile : file;
     if (!status || !targetFile || !isPostFile(targetFile)) continue;
-    const url = blogSlugToUrl(fileToSlug(targetFile));
+    const slug = fileToSlug(targetFile);
+    // Posts frontmatter-flagged `noindex: true` are deliberately kept out of
+    // the index and the sitemap; emitting them here would make
+    // verify-readiness hard-fail and pin the `blog-indexed-prod` tag.
+    if (isNoindexPost(slug)) continue;
+    const url = blogSlugToUrl(slug);
     if (status === 'A' || status.startsWith('R')) added.push(url);
     else if (status === 'M') modified.push(url);
   }

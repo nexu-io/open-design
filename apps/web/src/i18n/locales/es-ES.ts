@@ -1527,6 +1527,8 @@ export const esES: Dict = {
   'newproj.createLiveArtifact': 'Crear artefacto en vivo',
   'newproj.createFromTemplate': 'Crear desde plantilla',
   'newproj.createDisabledTitle': 'Guarda primero un proyecto como plantilla (menú Compartir dentro de cualquier proyecto).',
+  'newproj.openFolder': 'Abrir carpeta',
+  'newproj.openingFolder': 'Abriendo…',
   'newproj.importClaudeZip': 'Importar ZIP de Claude Design',
   'newproj.importClaudeZipTitle': 'Importar una exportación .zip de Claude Design',
   'newproj.importingClaudeZip': 'Importando…',

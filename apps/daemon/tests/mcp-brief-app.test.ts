@@ -707,7 +707,7 @@ describe('local Open Design MCP brief app', () => {
 
     expect(userFacingCopy).toContain('Open Design Cloud');
     expect(userFacingCopy).toContain('Local Codex');
-    expect(userFacingCopy).toContain('Secure BYOK');
+    expect(userFacingCopy).not.toContain('Secure BYOK');
     expect(userFacingCopy).not.toMatch(/\b(?:Vela|AMR)\b/u);
     expect(userFacingCopy).not.toMatch(/agent\s*:\s*["']?[a-z]/iu);
   });

@@ -110,6 +110,7 @@ export interface HeaderProps {
     | 'html-anything'
     | 'html-video'
     | 'codex-slides'
+    | 'open-design-plugin'
     | 'solution'
     | 'agent'
     | 'plugins'
@@ -227,6 +228,7 @@ export function Header({
                   active === 'html-anything' ||
                   active === 'html-video' ||
                   active === 'codex-slides' ||
+                  active === 'open-design-plugin' ||
                   active === 'agent'
                     ? ' is-active'
                     : '')
@@ -274,6 +276,14 @@ export function Header({
                         className={active === 'codex-slides' ? 'is-active' : undefined}
                       >
                         <span className='dropdown-name'>Codex Slides</span>
+                      </a>
+                    </li>
+                    <li>
+                      <a
+                        href={href('/open-design-pugin/')}
+                        className={active === 'open-design-plugin' ? 'is-active' : undefined}
+                      >
+                        <span className='dropdown-name'>Open Design Plugin</span>
                       </a>
                     </li>
                   </ul>
