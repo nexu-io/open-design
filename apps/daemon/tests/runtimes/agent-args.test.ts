@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { test } from 'vitest';
 import {
   AGENT_DEFS, aider, antigravity, assert, claude, codex, copilot, cursorAgent, deepseek, devin, detectAgents, grokBuild, join, kilo, kimi, kiro, mkdtempSync, opencode, pi, qoder, qwen, rmSync, spawnEnvForAgent, tmpdir, vibe, writeFileSync, chmodSync,
@@ -534,18 +534,28 @@ test('qwen args check promptViaStdin, base args, model args and exclude `-` sent
 // the daemon would render the resulting empty reply as a "successful"
 // agent response — exactly the failure mode the auth/quota guard at
 // server.ts ~12090 is meant to catch but for the wrong reason.
-test('antigravity pipes prompt via stdin via -p flag (print mode)', () => {
+test('antigravity delivers prompt via managed temp file instead of stdin', () => {
   assert.equal(antigravity.bin, 'agy');
   assert.equal(antigravity.streamFormat, 'plain');
-  assert.equal(antigravity.promptViaStdin, true);
+  assert.equal(antigravity.promptViaStdin, false);
+  assert.equal(antigravity.promptViaFile, true);
 
-  const args = antigravity.buildArgs('write hello world', [], [], {}, {});
-  assert.deepEqual(args, ['-p', '-']);
+  assert.throws(() => {
+    antigravity.buildArgs('hello', [], [], {}, {});
+  }, /requires runtimeContext\.promptFilePath/);
+
+  const expectedFileText = 'Read the system instructions, conversation history, and user request from the file /tmp/managed-prompt.md. Follow the instructions strictly and provide the final response to the user\'s latest request.';
+
+  const args = antigravity.buildArgs('write hello world', [], [], {}, {
+    promptFilePath: '/tmp/managed-prompt.md'
+  });
+  assert.deepEqual(args, ['--add-dir=/tmp', '-p', expectedFileText]);
 
   const argsWithLog = antigravity.buildArgs('write hello world', [], [], {}, {
     agentLogFilePath: '/tmp/od-agy-test.log',
+    promptFilePath: '/tmp/managed-prompt.md'
   });
-  assert.deepEqual(argsWithLog, ['--log-file', '/tmp/od-agy-test.log', '-p', '-']);
+  assert.deepEqual(argsWithLog, ['--log-file', '/tmp/od-agy-test.log', '--add-dir=/tmp', '-p', expectedFileText]);
 
   // No `--model` flag exists upstream, so buildArgs argv must stay the
   // same regardless of which label the user picks.
@@ -558,9 +568,10 @@ test('antigravity pipes prompt via stdin via -p flag (print mode)', () => {
     }, {
       agentLogFilePath: '/tmp/od-agy-test.log',
       antigravitySettingsPath: join(settingsDir, 'settings.json'),
+      promptFilePath: '/tmp/managed-prompt.md'
     });
     assert.equal(withModel.includes('--model'), false);
-    assert.deepEqual(withModel, ['--log-file', '/tmp/od-agy-test.log', '-p', '-']);
+    assert.deepEqual(withModel, ['--log-file', '/tmp/od-agy-test.log', '--add-dir=/tmp', '-p', expectedFileText]);
   } finally {
     rmSync(settingsDir, { recursive: true, force: true });
   }
@@ -575,14 +586,16 @@ test('antigravity pipes prompt via stdin via -p flag (print mode)', () => {
   // same regression.
   const followUp = antigravity.buildArgs('next message', [], [], {}, {
     hasPriorAssistantTurn: true,
+    promptFilePath: '/tmp/managed-prompt.md'
   });
-  assert.deepEqual(followUp, ['-p', '-']);
+  assert.deepEqual(followUp, ['--add-dir=/tmp', '-p', expectedFileText]);
   assert.equal(followUp.includes('-c'), false);
 
   const firstTurn = antigravity.buildArgs('first', [], [], {}, {
     hasPriorAssistantTurn: false,
+    promptFilePath: '/tmp/managed-prompt.md'
   });
-  assert.deepEqual(firstTurn, ['-p', '-']);
+  assert.deepEqual(firstTurn, ['--add-dir=/tmp', '-p', expectedFileText]);
   assert.equal(antigravity.resumesSessionViaCli, undefined);
 
   assert.equal(antigravity.maxPromptArgBytes, undefined);
@@ -669,6 +682,17 @@ test('antigravity persists model selection to agy settings.json', () => {
     writeAntigravityModelSelection('Gemini 3.5 Flash (Low)', corruptPath);
     const recovered = JSON.parse(readFileSync(corruptPath, 'utf8'));
     assert.equal(recovered.model, 'Gemini 3.5 Flash (Low)');
+    // 5. Atomic replacement must preserve the destination's existing mode
+    //    so sensitive policies in settings.json do not become world-readable.
+    const modePath = join(dir, 'mode-settings.json');
+    writeFileSync(modePath, JSON.stringify({ model: 'old' }));
+    chmodSync(modePath, 0o600);
+    const expectedMode = statSync(modePath).mode & 0o777;
+    
+    writeAntigravityModelSelection('Gemini 3.5 Pro', modePath);
+    
+    const postStat = statSync(modePath);
+    assert.equal(postStat.mode & 0o777, expectedMode);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
