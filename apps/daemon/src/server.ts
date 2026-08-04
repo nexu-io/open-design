@@ -6703,6 +6703,8 @@ export async function startServer({
     noteAgentActivity();
 
     let child;
+    let earlyChildError: Error | null = null;
+    let earlyChildClose: { code: number | null; signal: NodeJS.Signals | null } | null = null;
     let acpSession = null;
     let writePromptToChildStdin = false;
     let spawnedAgentEnv = null;
@@ -6790,8 +6792,6 @@ export async function startServer({
       // before this run's canonical lifecycle handlers are assembled. Capture
       // any terminal event in that window so neither an error goes unhandled
       // nor a close is lost; the canonical handlers replay it once ready.
-      let earlyChildError: Error | null = null;
-      let earlyChildClose: { code: number | null; signal: NodeJS.Signals | null } | null = null;
       child.once('error', (err) => {
         earlyChildError = err;
       });
