@@ -112,6 +112,10 @@ describe('same-run retry runtime', () => {
       retry_of_run_id: run.id,
       retry_attempt_index: 1,
       retry_result: 'success',
+      failure_category: 'upstream_unavailable',
+      failure_detail: 'upstream_5xx',
+      failure_stage: 'first_token_wait',
+      error_code: 'UPSTREAM_UNAVAILABLE',
     });
   });
 
@@ -259,6 +263,161 @@ describe('same-run retry runtime', () => {
     expect(firstAttemptSessionId).toBeTruthy();
     expect(secondAttemptSessionId).toBeTruthy();
     expect(secondAttemptSessionId).not.toBe(firstAttemptSessionId);
+  });
+
+  it('continues a stalled post-tool Claude session without replaying the original request', async () => {
+    binDir = await mkdtemp(path.join(os.tmpdir(), 'od-run-retry-post-tool-bin-'));
+    const {
+      bin: fakeClaude,
+      argsLogPath,
+      promptLogPath,
+    } = await writePostToolStallingClaude(binDir, 'claude-post-tool-stall');
+
+    delete process.env.POSTHOG_KEY;
+    delete process.env.POSTHOG_HOST;
+    delete process.env.LANGFUSE_PUBLIC_KEY;
+    delete process.env.LANGFUSE_SECRET_KEY;
+    delete process.env.LANGFUSE_BASE_URL;
+    delete process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL;
+    process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = STALL_WATCHDOG_TIMEOUT_MS;
+
+    started = await startServer({ port: 0, returnServer: true }) as StartedServer;
+    await putConfig(started.url, {
+      agentId: 'claude',
+      agentCliEnv: { claude: { CLAUDE_BIN: fakeClaude } },
+      telemetry: { metrics: true, content: false, artifactManifest: false },
+      privacyDecisionAt: Date.now(),
+    });
+
+    const originalPrompt = 'perform the original request exactly once';
+    const run = await createAndWaitForRun(started.url, 'claude', originalPrompt);
+    expect(run.status).toBe('succeeded');
+
+    const events = await readRunEvents(run.eventsLogPath);
+    expect(events.filter((event) => event.event === 'start')).toHaveLength(2);
+    expect(events.filter((event) => event.event === 'end')).toHaveLength(1);
+    expect(events.filter((event) => event.event === 'agent' && event.data.type === 'tool_use'))
+      .toHaveLength(1);
+    expect(events.filter((event) => event.event === 'agent' && event.data.type === 'tool_result'))
+      .toHaveLength(1);
+
+    expect(events.find((event) => event.event === 'run_retry_attempted')?.data).toMatchObject({
+      retry_strategy: 'native_session_continue',
+      retry_reason: 'post_tool_resume',
+      failure_category: 'timeout',
+      failure_detail: 'inactivity_timeout',
+      failure_stage: 'post_tool_resume',
+    });
+    expect(events.find((event) => event.event === 'run_retry_finished')?.data).toMatchObject({
+      retry_strategy: 'native_session_continue',
+      retry_result: 'success',
+      failure_category: 'timeout',
+      failure_detail: 'inactivity_timeout',
+      failure_stage: 'post_tool_resume',
+    });
+
+    const attemptArgs = (await readClaudeAttemptArgs(argsLogPath)).filter(
+      (args) => args.includes('--session-id') || args.includes('--resume'),
+    );
+    expect(attemptArgs).toHaveLength(2);
+    const firstSessionId = sessionIdArg(attemptArgs[0] ?? []);
+    expect(firstSessionId).toBeTruthy();
+    expect(attemptArgs[1]).toContain('--resume');
+    expect(resumeSessionIdArg(attemptArgs[1] ?? [])).toBe(firstSessionId);
+    expect(attemptArgs[1]).not.toContain('--session-id');
+
+    const prompts = await readAttemptPrompts(promptLogPath);
+    expect(prompts.get(0)).toContain(originalPrompt);
+    expect(prompts.get(1)).toContain('Continue the interrupted turn');
+    expect(prompts.get(1)).not.toContain(originalPrompt);
+  });
+
+  it('continues a post-tool stall after a first-token retry used the safe retry budget', async () => {
+    binDir = await mkdtemp(path.join(os.tmpdir(), 'od-run-retry-mixed-stall-bin-'));
+    const {
+      bin: fakeClaude,
+      argsLogPath,
+      promptLogPath,
+    } = await writePostToolStallingClaude(
+      binDir,
+      'claude-first-token-then-post-tool-stall',
+      true,
+    );
+
+    delete process.env.POSTHOG_KEY;
+    delete process.env.POSTHOG_HOST;
+    delete process.env.LANGFUSE_PUBLIC_KEY;
+    delete process.env.LANGFUSE_SECRET_KEY;
+    delete process.env.LANGFUSE_BASE_URL;
+    delete process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL;
+    process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = STALL_WATCHDOG_TIMEOUT_MS;
+
+    started = await startServer({ port: 0, returnServer: true }) as StartedServer;
+    await putConfig(started.url, {
+      agentId: 'claude',
+      agentCliEnv: { claude: { CLAUDE_BIN: fakeClaude } },
+      telemetry: { metrics: true, content: false, artifactManifest: false },
+      privacyDecisionAt: Date.now(),
+    });
+
+    const originalPrompt = 'retry before tools, then continue the committed session';
+    const run = await createAndWaitForRun(started.url, 'claude', originalPrompt);
+    expect(run.status).toBe('succeeded');
+
+    const events = await readRunEvents(run.eventsLogPath);
+    expect(events.filter((event) => event.event === 'start')).toHaveLength(3);
+    expect(events.filter((event) => event.event === 'agent' && event.data.type === 'tool_use'))
+      .toHaveLength(1);
+    expect(events.filter((event) => event.event === 'agent' && event.data.type === 'tool_result'))
+      .toHaveLength(1);
+    expect(
+      events
+        .filter((event) => event.event === 'run_retry_attempted')
+        .map((event) => ({
+          index: event.data.retry_attempt_index,
+          strategy: event.data.retry_strategy,
+          reason: event.data.retry_reason,
+          stage: event.data.failure_stage,
+        })),
+    ).toEqual([
+      {
+        index: 1,
+        strategy: 'same_run_transient',
+        reason: 'transient_failure',
+        stage: 'first_token_wait',
+      },
+      {
+        index: 2,
+        strategy: 'native_session_continue',
+        reason: 'post_tool_resume',
+        stage: 'post_tool_resume',
+      },
+    ]);
+    expect(events.find((event) => event.event === 'run_retry_finished')?.data)
+      .toMatchObject({
+        retry_attempt_index: 2,
+        retry_max_attempts: 2,
+        retry_strategy: 'native_session_continue',
+        retry_result: 'success',
+        failure_stage: 'post_tool_resume',
+      });
+
+    const attemptArgs = (await readClaudeAttemptArgs(argsLogPath)).filter(
+      (args) => args.includes('--session-id') || args.includes('--resume'),
+    );
+    expect(attemptArgs).toHaveLength(3);
+    const firstSessionId = sessionIdArg(attemptArgs[0] ?? []);
+    const secondSessionId = sessionIdArg(attemptArgs[1] ?? []);
+    expect(firstSessionId).toBeTruthy();
+    expect(secondSessionId).toBeTruthy();
+    expect(secondSessionId).not.toBe(firstSessionId);
+    expect(resumeSessionIdArg(attemptArgs[2] ?? [])).toBe(secondSessionId);
+
+    const prompts = await readAttemptPrompts(promptLogPath);
+    expect(prompts.get(0)).toContain(originalPrompt);
+    expect(prompts.get(1)).toContain(originalPrompt);
+    expect(prompts.get(2)).toContain('Continue the interrupted turn');
+    expect(prompts.get(2)).not.toContain(originalPrompt);
   });
 
   it('does not let a stalled attempt’s forced-shutdown timers kill the healthy retry', async () => {
@@ -490,6 +649,9 @@ if (process.argv.includes('--help')) {
   console.log('Usage: claude -p [--include-partial-messages] [--add-dir DIR]');
   process.exit(0);
 }
+if (!process.argv.includes('--session-id') && !process.argv.includes('--resume')) {
+  process.exit(0);
+}
 let attempts = 0;
 try { attempts = Number(fs.readFileSync(counterPath, 'utf8')) || 0; } catch {}
 fs.writeFileSync(counterPath, String(attempts + 1));
@@ -517,6 +679,78 @@ if (attempts === 0) {
   return { bin, argsLogPath };
 }
 
+async function writePostToolStallingClaude(
+  dir: string,
+  name: string,
+  firstTokenStall = false,
+): Promise<{ bin: string; argsLogPath: string; promptLogPath: string }> {
+  const bin = path.join(dir, name);
+  const counterPath = path.join(dir, `${name}-attempts`);
+  const argsLogPath = path.join(dir, `${name}-args.jsonl`);
+  const promptLogPath = path.join(dir, `${name}-prompts.jsonl`);
+  await writeFile(bin, `#!/usr/bin/env node
+const fs = require('node:fs');
+const counterPath = ${JSON.stringify(counterPath)};
+const argsLogPath = ${JSON.stringify(argsLogPath)};
+const promptLogPath = ${JSON.stringify(promptLogPath)};
+const firstTokenStall = ${JSON.stringify(firstTokenStall)};
+if (process.argv.includes('--version')) {
+  console.log('claude-code 1.0.0-post-tool-stall');
+  process.exit(0);
+}
+if (process.argv.includes('--help')) {
+  console.log('Usage: claude -p [--include-partial-messages] [--add-dir DIR]');
+  process.exit(0);
+}
+if (!process.argv.includes('--session-id') && !process.argv.includes('--resume')) {
+  process.exit(0);
+}
+let attempts = 0;
+try { attempts = Number(fs.readFileSync(counterPath, 'utf8')) || 0; } catch {}
+fs.writeFileSync(counterPath, String(attempts + 1));
+fs.appendFileSync(argsLogPath, JSON.stringify(process.argv.slice(2)) + '\\n');
+process.stdin.on('data', (chunk) => {
+  fs.appendFileSync(promptLogPath, JSON.stringify({ attempt: attempts, chunk: String(chunk) }) + '\\n');
+});
+const postToolAttempt = firstTokenStall ? 1 : 0;
+if (firstTokenStall && attempts === 0) {
+  setTimeout(() => process.exit(0), 60000);
+} else if (attempts === postToolAttempt) {
+  console.log(JSON.stringify({ type: 'system', subtype: 'init', model: 'claude-post-tool-stall' }));
+  console.log(JSON.stringify({
+    type: 'assistant',
+    message: {
+      id: 'msg-post-tool',
+      content: [{ type: 'tool_use', id: 'tool-post-tool', name: 'Read', input: { file_path: 'README.md' } }],
+      stop_reason: 'tool_use'
+    }
+  }));
+  console.log(JSON.stringify({
+    type: 'user',
+    message: {
+      content: [{ type: 'tool_result', tool_use_id: 'tool-post-tool', content: 'completed once', is_error: false }]
+    }
+  }));
+  setTimeout(() => process.exit(0), 60000);
+} else {
+  setTimeout(() => {
+    console.log(JSON.stringify({ type: 'system', subtype: 'init', model: 'claude-post-tool-resumed' }));
+    console.log(JSON.stringify({
+      type: 'assistant',
+      message: {
+        id: 'msg-post-tool-success',
+        content: [{ type: 'text', text: 'Recovered from the existing session.' }],
+        stop_reason: 'end_turn'
+      }
+    }));
+    setTimeout(() => process.exit(0), 20);
+  }, 100);
+}
+`, 'utf8');
+  await chmod(bin, 0o755);
+  return { bin, argsLogPath, promptLogPath };
+}
+
 async function putConfig(url: string, patch: Record<string, unknown>): Promise<void> {
   const response = await fetch(`${url}/api/app-config`, {
     method: 'PUT',
@@ -526,7 +760,11 @@ async function putConfig(url: string, patch: Record<string, unknown>): Promise<v
   expect(response.status).toBe(200);
 }
 
-async function createAndWaitForRun(url: string, agentId = 'claude'): Promise<RunStatus> {
+async function createAndWaitForRun(
+  url: string,
+  agentId = 'claude',
+  prompt = 'please retry a transient runtime failure',
+): Promise<RunStatus> {
   const projectId = `retry_runtime_${randomUUID()}`;
   const projectResponse = await fetch(`${url}/api/projects`, {
     method: 'POST',
@@ -555,8 +793,8 @@ async function createAndWaitForRun(url: string, agentId = 'claude'): Promise<Run
       assistantMessageId,
       clientRequestId: `client_retry_${randomUUID()}`,
       agentId,
-      message: 'please retry a transient runtime failure',
-      currentPrompt: 'please retry a transient runtime failure',
+      message: prompt,
+      currentPrompt: prompt,
     }),
   });
   expect(runResponse.status).toBe(202);
@@ -599,6 +837,21 @@ async function readClaudeAttemptArgs(file: string): Promise<string[][]> {
 function sessionIdArg(args: string[]): string | null {
   const index = args.indexOf('--session-id');
   return index >= 0 ? args[index + 1] ?? null : null;
+}
+
+function resumeSessionIdArg(args: string[]): string | null {
+  const index = args.indexOf('--resume');
+  return index >= 0 ? args[index + 1] ?? null : null;
+}
+
+async function readAttemptPrompts(file: string): Promise<Map<number, string>> {
+  const prompts = new Map<number, string>();
+  const raw = await readFile(file, 'utf8');
+  for (const line of raw.trim().split('\n').filter(Boolean)) {
+    const entry = JSON.parse(line) as { attempt: number; chunk: string };
+    prompts.set(entry.attempt, `${prompts.get(entry.attempt) ?? ''}${entry.chunk}`);
+  }
+  return prompts;
 }
 
 function delay(ms: number): Promise<void> {

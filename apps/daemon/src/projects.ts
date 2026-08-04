@@ -77,6 +77,22 @@ function hasExternalProjectRoot(metadata?) {
   return path.isAbsolute(path.normalize(metadata.baseDir));
 }
 
+// For folder-imported projects (external baseDir) the file API resolves under
+// the user's OWN directory, so a hidden path segment (.ssh, .aws, .gnupg, …)
+// would let read/write/delete/rename/folder ops reach credential dotfiles that
+// live outside the app's managed data. Reject hidden segments for every such
+// operation — the single choke point every project file/folder mutation and
+// read funnels through — mirroring the rule buildBatchArchive already enforces
+// for exports. Managed projects (under PROJECTS_DIR, no external baseDir) are
+// unaffected. Callers pass the raw request name; we normalize before checking.
+export function assertVisibleForImportedProject(name, metadata?) {
+  if (!hasExternalProjectRoot(metadata)) return;
+  const segments = String(name ?? '').replace(/\\/g, '/').split('/').filter(Boolean);
+  if (segments.some((segment) => segment.startsWith('.'))) {
+    throw new Error('hidden path segments are not accessible in imported folders');
+  }
+}
+
 export function assertSandboxProjectRootAvailable(metadata?) {
   if (
     isSandboxModeEnabled(process.env) &&
@@ -171,6 +187,7 @@ async function collectFolders(dir, relDir, out, shouldSkipDir?: (name: string) =
 }
 
 export async function createProjectFolder(projectsRoot, projectId, name, metadata?) {
+  assertVisibleForImportedProject(name, metadata);
   const dir = await ensureProject(projectsRoot, projectId, metadata);
   const safeName = sanitizePath(name);
   const target = await resolveSafeReal(dir, safeName);
@@ -209,6 +226,7 @@ export async function ensureProjectSubdir(projectsRoot, projectId, subdir, metad
 // sandbox. Refuses to delete the project root itself. resolveSafeReal confines
 // the target to the project tree even across descendant symlinks.
 export async function deleteProjectFolder(projectsRoot, projectId, name, metadata?) {
+  assertVisibleForImportedProject(name, metadata);
   const dir = resolveProjectDir(projectsRoot, projectId, metadata);
   const safeName = sanitizePath(name);
   const target = await resolveSafeReal(dir, safeName);
@@ -721,6 +739,7 @@ ${list(assetFiles)}
 }
 
 export async function readProjectFile(projectsRoot, projectId, name, metadata?) {
+  assertVisibleForImportedProject(name, metadata);
   const dir = resolveProjectDir(projectsRoot, projectId, metadata);
   const file = await resolveSafeReal(dir, name);
   const buf = await readFile(file);
@@ -744,6 +763,7 @@ export async function readProjectFile(projectsRoot, projectId, name, metadata?) 
 // Like readProjectFile but skips loading the file content into memory.
 // Used by the media streaming endpoint so large video files are never buffered.
 export async function resolveProjectFilePath(projectsRoot, projectId, name, metadata?) {
+  assertVisibleForImportedProject(name, metadata);
   const dir = resolveProjectDir(projectsRoot, projectId, metadata);
   const file = await resolveSafeReal(dir, name);
   const st = await stat(file);
@@ -767,6 +787,7 @@ export async function writeProjectFile(
   { overwrite = true, artifactManifest = null } = {},
   metadata?,
 ) {
+  assertVisibleForImportedProject(name, metadata);
   const dir = await ensureProject(projectsRoot, projectId, metadata);
   const safeName = sanitizePath(name);
   const target = await resolveSafeReal(dir, safeName);
@@ -944,12 +965,15 @@ function parseManifest(raw) {
 }
 
 export async function deleteProjectFile(projectsRoot, projectId, name, metadata?) {
+  assertVisibleForImportedProject(name, metadata);
   const dir = resolveProjectDir(projectsRoot, projectId, metadata);
   const file = await resolveSafeReal(dir, name);
   await unlink(file);
 }
 
 export async function renameProjectFile(projectsRoot, projectId, fromName, toName, metadata?) {
+  assertVisibleForImportedProject(fromName, metadata);
+  assertVisibleForImportedProject(toName, metadata);
   const dir = resolveProjectDir(projectsRoot, projectId, metadata);
   const oldName = validateProjectPath(fromName);
   const newName = sanitizePath(toName);

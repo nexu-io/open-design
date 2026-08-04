@@ -8,9 +8,10 @@ This file is the single source of truth for agents entering this repository. Rea
 - Contribution and environment: `CONTRIBUTING.md`, `docs/i18n/CONTRIBUTING.zh-CN.md`.
 - Architecture and protocols: `docs/architecture.md`, `docs/skills-protocol.md`, `docs/agent-adapters.md`, `docs/modes.md`.
 - Historical product baseline: `docs/spec.md`, `docs/roadmap.md` (both explicitly archived; do not treat their dated decisions as current behavior).
-- References and current plans: `docs/references.md`, `docs/code-review-guidelines.md`, `specs/current/maintainability-roadmap.md`.
+- References and current plans: `docs/references.md`, `docs/code-review-guidelines.md`, `specs/current/maintainability-roadmap.md`, `specs/current/ci.md` (CI scope confidence methodology — required before changing confidence or guard fields in `scripts/scopes.ts`).
 - Directory-level agent guidance: `.github/AGENTS.md`, `apps/AGENTS.md`, `packages/AGENTS.md`, `tools/AGENTS.md`, `e2e/AGENTS.md`.
 - Packaged auto-update architecture and high-confidence local harness: read `tools/pack/AGENTS.md` section "Packaged auto-update architecture and harness" before touching packaged updater code, release-channel identity, installer behavior, or updater UI.
+- Packaged build cache contract: `tools/pack/CACHE.md` (determinant rules, materialization-time parameters, confidence grading — required before changing any build-cache node key).
 
 ## Workspace directories
 
@@ -268,6 +269,10 @@ root `pnpm tools-pr` script without a new explicit maintainer decision.
 
 ## Validation strategy
 
+- Before adding, repairing, or optimizing tests, follow
+  [`docs/testing/test-efficiency.zh-CN.md`](docs/testing/test-efficiency.zh-CN.md)
+  for completion signals, virtual-clock usage, isolation, and performance
+  validation.
 - After package, workspace, or command-entry changes, run `pnpm install` so workspace links and generated dist entries stay fresh.
 - For agent-stream / parser changes (`apps/daemon/src/runtimes/claude-stream.ts`, `json-event-stream.ts`, `qoder-stream.ts`, etc.), replay a recorded session through the mock CLIs in `mocks/` to verify event shapes round-trip without burning provider budget. PATH-overlay activation: `export PATH="$PWD/mocks/bin:$PATH" OD_MOCKS_TRACE=<8-char-id> OD_MOCKS_NO_DELAY=1`. See `mocks/README.md` for the trace catalog and selection knobs.
 - Treat every `pnpm-lock.yaml` change that affects Nix packaging as requiring a Nix pnpm deps hash refresh when you maintain the flake. `nix/pnpm-deps.nix` is a generated lock artifact; use `pnpm nix:update-hash` then re-run `nix flake check --print-build-logs --keep-going` locally. Standalone `.github/workflows/nix.yml` runs flake check when nix/lock inputs change; it is **not** part of core `ci.yml` / `Validate workspace` / merge queue. Docker image smoke/publish lives only in `.github/workflows/docker-image.yml` and is likewise outside the merge gate.

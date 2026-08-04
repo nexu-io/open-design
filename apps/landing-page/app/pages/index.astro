@@ -9,6 +9,7 @@ import SiteAnalytics from '../_components/site-analytics.astro';
 import ResourceHints from '../_components/resource-hints.astro';
 import LocaleSwitcherScript from '../_components/locale-switcher-script.astro';
 import PreciseLazyload from '../_components/precise-lazyload.astro';
+import DownloadEngagementPrompt from '../_components/download-engagement-prompt.astro';
 import {
   heroBgImage,
   heroBgSrcset,
@@ -214,6 +215,7 @@ const cobeEnhancerUrl = `/enhancers/cobe.js?v=${
   </head>
   <body>
     <Fragment set:html={pageHtml} />
+    <DownloadEngagementPrompt locale={locale} />
     {/*
      * Tighter than the catalog default (1500px): the homepage's heavy
      * below-the-fold art — full-bleed section backdrops, product shots — must
@@ -277,7 +279,7 @@ const cobeEnhancerUrl = `/enhancers/cobe.js?v=${
         const formatStars = (count) => {
           if (!Number.isFinite(count) || count <= 0) return '0';
           if (count < 1000) return String(count);
-          return `${(count / 1000).toFixed(1).replace(/\.0$/, '')}K`;
+          return `${(count / 1000).toFixed(1).replace(/\.0$/, '')}K+`;
         };
 
         // Pull a clean 'v0.3.0'-style label from a GitHub release record.
@@ -982,6 +984,16 @@ const cobeEnhancerUrl = `/enhancers/cobe.js?v=${
           );
           if (buttons.length === 0) return;
           const ua = navigator.userAgent || '';
+          const platform = (
+            navigator.userAgentData?.platform ||
+            navigator.platform ||
+            ''
+          ).toLowerCase();
+          // The engagement prompt runs before this legacy homepage enhancer.
+          // Desktop-mode iPadOS reports a Macintosh UA/platform, so stop here
+          // before a later pass can undo the prompt's neutral download fallback.
+          const isIpadOS = navigator.maxTouchPoints > 1 && /mac/.test(platform);
+          if (isIpadOS || /iPhone|iPad|iPod/i.test(ua)) return;
           const isWin = /Windows|Win32|Win64|WOW64/i.test(ua);
           const isMac = /Macintosh|Mac OS X/i.test(ua) && !/iPhone|iPad|iPod/i.test(ua);
 

@@ -2,8 +2,8 @@ import { expect, test } from '@/playwright/suite';
 import { ensureRailOpen, openNewProjectModal } from '@/playwright/rail';
 import { openAllProjectFiles } from '@/playwright/workspace';
 import { T } from '@/timeouts';
-import type { Locator, Page, Request, Route } from '@playwright/test';
-import { routeAgents } from '../lib/playwright/mock-factory.js';
+import type { Locator, Page, Request } from '@playwright/test';
+import { routeAgents, routeSuccessfulRuns } from '../lib/playwright/mock-factory.js';
 
 // The `/projects` view in `EntryShell` renders a `CenteredLoader` until
 // `projectsLoading || skillsLoading || designSystemsLoading` all clear
@@ -32,7 +32,12 @@ const AGENTS = [
     version: '0.134.0',
     models: [
       { id: 'default', label: 'Default (CLI config)' },
-      { id: 'gpt-5.5', label: 'GPT 5.5' },
+      {
+        id: 'gpt-5.5',
+        label: 'GPT 5.5',
+        additionalSpeedTiers: ['fast'],
+        serviceTierOptions: [{ id: 'priority', label: 'Fast' }],
+      },
     ],
   },
   {
@@ -97,6 +102,7 @@ async function stubEmptyProjectsNewProjectData(page: Page): Promise<void> {
 
 async function openNewProjectFromEmptyProjects(page: Page): Promise<void> {
   await page.goto('/projects', { waitUntil: 'domcontentloaded' });
+  await expect(page.getByText('Loading Open Design…')).toHaveCount(0, { timeout: 15_000 });
   await expect(page.locator('.designs-empty-state')).toBeVisible();
   await page.getByTestId('designs-empty-new-project').click();
 
@@ -109,7 +115,8 @@ async function openNewProjectFromLeftRail(page: Page): Promise<void> {
     window.localStorage.setItem('od.entry.railOpen', 'true');
   });
   await page.goto('/projects', { waitUntil: 'domcontentloaded' });
-  await expect(page.locator('.entry')).toHaveClass(/entry--rail-open/);
+  await expect(page.getByText('Loading Open Design…')).toHaveCount(0, { timeout: 15_000 });
+  await ensureRailOpen(page);
   await expect(page.getByTestId('entry-nav-new-project')).toBeVisible();
   await page.getByTestId('entry-nav-new-project').click();
 
@@ -211,7 +218,9 @@ function artifactPreviewFrame(page: Page) {
 }
 
 test.describe('new project modal from left rail', () => {
-  test.describe.configure({ mode: 'serial', timeout: 60_000 });
+  // Timeout-only configure: both tests open the modal themselves against
+  // stubbed data; serial would make the pair atomic within one CI shard.
+  test.describe.configure({ timeout: 60_000 });
 
   test('[P1] new project tabs switch visible form sections and preserve drafts', async ({ page }) => {
     await stubEmptyProjectsNewProjectData(page);
@@ -452,7 +461,7 @@ test('[P2] project detail header keeps the title and execution controls aligned 
   await page.setViewportSize({ width: 1365, height: 900 });
 
   const title = page.getByTestId('project-title');
-  const settingsButton = page.locator('.settings-icon-btn');
+  const settingsButton = page.getByTestId('entry-settings-menu-trigger');
   const handoffButton = page.getByRole('button', { name: /Choose hand-off target/i });
 
   await expect(title).toBeVisible();
@@ -508,28 +517,7 @@ test('[P1] project detail header design system picker switches the active projec
 
 test('[P0] @critical project detail header design system switch carries into the next run request', async ({ page }) => {
   const runRequestBodies: Array<Record<string, unknown>> = [];
-  await page.route('**/api/runs', async (route) => {
-    const raw = route.request().postData();
-    if (raw) {
-      try {
-        runRequestBodies.push(JSON.parse(raw) as Record<string, unknown>);
-      } catch {
-        // ignore non-JSON bodies; assertion below will surface missing payloads
-      }
-    }
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: '{"runId":"mock-run"}',
-    });
-  });
-  await page.route('**/api/runs/*/events', async (route) => {
-    await route.fulfill({
-      status: 200,
-      headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' },
-      body: ['event: end', 'data: {"code":0,"status":"succeeded"}', '', ''].join('\n'),
-    });
-  });
+  await routeSuccessfulRuns(page, { bodies: runRequestBodies, runId: 'mock-run' });
 
   await page.route('**/api/design-systems', async (route) => {
     await route.fulfill({ json: { designSystems: DESIGN_SYSTEMS } });
@@ -711,7 +699,7 @@ test('[P1] project detail Figma import uploads a .fig file and stages the sugges
   const suggestedPrompt = 'Build the current project from figma/DESIGN-context.md.';
 
   await routeComposerPlusFixtures(page);
-  await routeSuccessfulRuns(page, runRequestBodies, 'figma-import-build-run');
+  await routeSuccessfulRuns(page, { bodies: runRequestBodies, runIdPrefix: 'figma-import-build-run' });
   await page.route('**/api/projects/*/figma/import', async (route) => {
     importBodies.push(route.request().postData() ?? '');
     await route.fulfill({
@@ -825,7 +813,7 @@ test('[P1] project detail composer sends referenced workspace contexts into the 
   };
 
   await routeComposerPlusFixtures(page);
-  await routeSuccessfulRuns(page, runRequestBodies, 'workspace-context-payload-run');
+  await routeSuccessfulRuns(page, { bodies: runRequestBodies, runIdPrefix: 'workspace-context-payload-run' });
   await page.route('**/api/projects', async (route) => {
     if (route.request().method() === 'GET') {
       await route.fulfill({ json: { projects: [referenceProject] } });
@@ -912,7 +900,7 @@ test('[P1] project detail composer removing local-code context updates metadata 
   const runRequestBodies: Array<Record<string, unknown>> = [];
 
   await routeComposerPlusFixtures(page);
-  await routeSuccessfulRuns(page, runRequestBodies, 'workspace-context-remove-run');
+  await routeSuccessfulRuns(page, { bodies: runRequestBodies, runIdPrefix: 'workspace-context-remove-run' });
   await page.route('**/api/dialog/open-folder', async (route) => {
     await route.fulfill({ json: { path: '/tmp/open-design/local-code-remove' } });
   });
@@ -974,7 +962,7 @@ test('[P1] project detail keeps local-code context when linkedDirs PATCH removal
   const runRequestBodies: Array<Record<string, unknown>> = [];
 
   await routeComposerPlusFixtures(page);
-  await routeSuccessfulRuns(page, runRequestBodies, 'workspace-context-remove-failure-run');
+  await routeSuccessfulRuns(page, { bodies: runRequestBodies, runIdPrefix: 'workspace-context-remove-failure-run' });
   await page.route('**/api/dialog/open-folder', async (route) => {
     await route.fulfill({ json: { path: '/tmp/open-design/local-code-persist' } });
   });
@@ -1184,13 +1172,10 @@ test('[P1] Open Design Cloud hard balance gate blocks a project send before a da
       }),
     });
   });
-  await page.route('**/api/runs', async (route) => {
-    runRequestBodies.push(route.request().postDataJSON() as Record<string, unknown>);
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: '{"runId":"should-not-start"}',
-    });
+  const runRequests = await routeSuccessfulRuns(page, {
+    bodies: runRequestBodies,
+    runIdPrefix: 'should-not-start',
+    events: false,
   });
 
   await page.goto('/');
@@ -1205,8 +1190,9 @@ test('[P1] Open Design Cloud hard balance gate blocks a project send before a da
   await expect(dialog).toBeVisible();
   await expect(dialog).toContainText('$0.00');
   await expect(dialog.getByTestId('amr-balance-dialog-plans')).toBeVisible();
-  await page.waitForTimeout(500);
-  expect(runRequestBodies).toHaveLength(0);
+  await runRequests.expectNone({
+    message: 'AMR balance gate should block before POST /api/runs',
+  });
   await expect(page.getByTestId('chat-queued-send-strip')).toContainText(
     'Start a cloud run that should be blocked',
   );
@@ -1226,30 +1212,14 @@ test('[P0] @critical project detail composer agent menu lets the user switch Loc
   const modelSelect = menu.locator('.avatar-model-section [role=\"combobox\"]').first();
   await expect(modelSelect).toBeVisible();
   await expect(modelSelect).toContainText(/default/i);
-  await modelSelect.click();
-  await page.getByRole('option', { name: /^Sonnet \(alias\)$/i }).click();
+  await selectAvatarModelOption(page, modelSelect, /^Sonnet \(alias\)$/i);
   await expect(modelSelect).toContainText(/Sonnet/i);
 });
 
 test('[P0] project detail composer agent, model, and Plan mode switches carry into the next daemon run request', async ({ page }) => {
   test.setTimeout(60_000);
   const runRequestBodies: Array<Record<string, unknown>> = [];
-  await page.route('**/api/runs', async (route) => {
-    const raw = route.request().postData();
-    if (raw) runRequestBodies.push(JSON.parse(raw) as Record<string, unknown>);
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: '{"runId":"agent-model-run"}',
-    });
-  });
-  await page.route('**/api/runs/*/events', async (route) => {
-    await route.fulfill({
-      status: 200,
-      headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' },
-      body: ['event: end', 'data: {"code":0,"status":"succeeded"}', '', ''].join('\n'),
-    });
-  });
+  await routeSuccessfulRuns(page, { bodies: runRequestBodies, runId: 'agent-model-run' });
 
   await page.goto('/');
   await createProject(page, 'Composer agent switch run context');
@@ -1258,8 +1228,7 @@ test('[P0] project detail composer agent, model, and Plan mode switches carry in
   const { menu, claudeButton } = await openComposerAgentMenu(page);
   await claudeButton.click();
   const modelSelect = menu.locator('.avatar-model-section [role=\"combobox\"]').first();
-  await modelSelect.click();
-  await page.getByRole('option', { name: /^Sonnet \(alias\)$/i }).click();
+  await selectAvatarModelOption(page, modelSelect, /^Sonnet \(alias\)$/i);
   await expect(modelSelect).toContainText(/Sonnet/i);
   await page.keyboard.press('Escape');
   await expect(page.locator('.avatar-popover[role="dialog"]')).toHaveCount(0);
@@ -1279,25 +1248,48 @@ test('[P0] project detail composer agent, model, and Plan mode switches carry in
   expect(runRequestBodies[0]?.sessionMode).toBe('plan');
 });
 
+test('[P1] GPT 5.5 Fast service tier carries into the next Codex daemon run request', async ({ page }) => {
+  test.setTimeout(60_000);
+  const runRequestBodies: Array<Record<string, unknown>> = [];
+  await routeSuccessfulRuns(page, { bodies: runRequestBodies, runIdPrefix: 'codex-fast-tier-run' });
+
+  await page.goto('/');
+  await createProject(page, 'Codex Fast service tier contract');
+  await expectWorkspaceReady(page);
+
+  const { menu } = await openComposerAgentMenu(page);
+  const modelSelect = menu.locator('.avatar-model-section [role=\"combobox\"]').first();
+  await selectAvatarModelOption(page, modelSelect, /^GPT 5\.5$/i);
+  await expect(modelSelect).toContainText(/GPT 5\.5/i);
+
+  const serviceTierSelect = menu
+    .locator('label.avatar-select-row', { hasText: /Service tier/i })
+    .locator('select');
+  await expect(serviceTierSelect).toBeVisible();
+  await serviceTierSelect.selectOption('priority');
+  await expect(serviceTierSelect).toHaveValue('priority');
+
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.avatar-popover[role="dialog"]')).toHaveCount(0);
+
+  await page.getByTestId('chat-composer-input').fill('Use GPT 5.5 Fast for this Codex run.');
+  await Promise.all([
+    page.waitForRequest((request) => request.url().includes('/api/runs') && request.method() === 'POST'),
+    page.getByTestId('chat-send').click(),
+  ]);
+
+  await expect.poll(() => runRequestBodies.length).toBe(1);
+  expect(runRequestBodies[0]).toMatchObject({
+    agentId: 'codex',
+    model: 'gpt-5.5',
+    serviceTier: 'priority',
+  });
+});
+
 test('[P1] project detail composer can alternate Design, Ask, and Plan modes across turns', async ({ page }) => {
   test.setTimeout(60_000);
   const runRequestBodies: Array<Record<string, unknown>> = [];
-  await page.route('**/api/runs', async (route) => {
-    const raw = route.request().postData();
-    if (raw) runRequestBodies.push(JSON.parse(raw) as Record<string, unknown>);
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: JSON.stringify({ runId: `mode-run-${runRequestBodies.length}` }),
-    });
-  });
-  await page.route('**/api/runs/*/events', async (route) => {
-    await route.fulfill({
-      status: 200,
-      headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' },
-      body: ['event: end', 'data: {"code":0,"status":"succeeded"}', '', ''].join('\n'),
-    });
-  });
+  await routeSuccessfulRuns(page, { bodies: runRequestBodies, runIdPrefix: 'mode-run' });
 
   await page.goto('/');
   await createProject(page, 'Composer session mode alternation');
@@ -1332,22 +1324,7 @@ test('[P1] project detail composer can alternate Design, Ask, and Plan modes acr
 test('[P1] project detail composer keeps the selected mode across consecutive turns', async ({ page }) => {
   test.setTimeout(60_000);
   const runRequestBodies: Array<Record<string, unknown>> = [];
-  await page.route('**/api/runs', async (route) => {
-    const raw = route.request().postData();
-    if (raw) runRequestBodies.push(JSON.parse(raw) as Record<string, unknown>);
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: JSON.stringify({ runId: `same-mode-run-${runRequestBodies.length}` }),
-    });
-  });
-  await page.route('**/api/runs/*/events', async (route) => {
-    await route.fulfill({
-      status: 200,
-      headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' },
-      body: ['event: end', 'data: {"code":0,"status":"succeeded"}', '', ''].join('\n'),
-    });
-  });
+  await routeSuccessfulRuns(page, { bodies: runRequestBodies, runIdPrefix: 'same-mode-run' });
 
   await page.goto('/');
   await createProject(page, 'Composer same session mode reuse');
@@ -1379,7 +1356,7 @@ test('[P0] @critical project detail composer BYOK model switch persists from the
   test.setTimeout(60_000);
   const config = {
     mode: 'daemon',
-    apiKey: 'sk-openai-test',
+    apiKey: 'test-byok-key',
     apiProtocol: 'openai',
     apiVersion: '',
     baseUrl: 'https://api.openai.com/v1',
@@ -1449,7 +1426,7 @@ test('[P0] @critical project detail composer keeps Local CLI and BYOK model choi
   test.setTimeout(60_000);
   const config = {
     mode: 'daemon',
-    apiKey: 'sk-openai-test',
+    apiKey: 'test-byok-key',
     apiProtocol: 'openai',
     apiVersion: '',
     baseUrl: 'https://api.openai.com/v1',
@@ -1496,8 +1473,7 @@ test('[P0] @critical project detail composer keeps Local CLI and BYOK model choi
   const { menu, claudeButton } = await openComposerAgentMenu(page);
   await claudeButton.click();
   const localModelSelect = menu.locator('.avatar-model-section [role="combobox"]').first();
-  await localModelSelect.click();
-  await page.getByRole('option', { name: /^Sonnet \(alias\)$/i }).click();
+  await selectAvatarModelOption(page, localModelSelect, /^Sonnet \(alias\)$/i);
   await expect(localModelSelect).toContainText(/Sonnet/i);
 
   await menu.getByRole('button', { name: /API · BYOK|Use API/i }).click();
@@ -1538,22 +1514,7 @@ test('[P0] clearing the project design system removes designSystemId from the ne
     patchBodies.push(body);
     await route.continue();
   });
-  await page.route('**/api/runs', async (route) => {
-    const raw = route.request().postData();
-    if (raw) runRequestBodies.push(JSON.parse(raw) as Record<string, unknown>);
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: '{"runId":"design-system-clear-run"}',
-    });
-  });
-  await page.route('**/api/runs/*/events', async (route) => {
-    await route.fulfill({
-      status: 200,
-      headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' },
-      body: ['event: end', 'data: {"code":0,"status":"succeeded"}', '', ''].join('\n'),
-    });
-  });
+  await routeSuccessfulRuns(page, { bodies: runRequestBodies, runId: 'design-system-clear-run' });
 
   await page.goto('/');
   await createProject(page, 'Header design system clear run context');
@@ -1581,6 +1542,63 @@ test('[P0] clearing the project design system removes designSystemId from the ne
   ]);
 
   expect(runRequestBodies.length).toBeGreaterThan(0);
+  expect(runRequestBodies[0]?.designSystemId).toBeNull();
+});
+
+test('[P1] a disabled project design system is omitted from the next run request', async ({ page }) => {
+  const runRequestBodies: Array<Record<string, unknown>> = [];
+  await page.route('**/api/design-systems', async (route) => {
+    await route.fulfill({ json: { designSystems: DESIGN_SYSTEMS } });
+  });
+  await page.route('**/api/app-config', async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({
+        json: {
+          config: {
+            onboardingCompleted: true,
+            agentId: 'codex',
+            designSystemId: null,
+            disabledDesignSystems: ['editorial-noir'],
+            agentModels: { codex: { model: 'default' } },
+            privacyDecisionAt: 1,
+            telemetry: { metrics: false, content: false, artifactManifest: false },
+          },
+        },
+      });
+      return;
+    }
+    await route.fallback();
+  });
+  await routeSuccessfulRuns(page, { bodies: runRequestBodies, runId: 'disabled-design-system-run' });
+
+  await createProject(page, 'Disabled project design system');
+  await expectWorkspaceReady(page);
+  const projectId = getProjectContextFromUrl(page).projectId;
+  const projectResponse = await page.request.get(`/api/projects/${projectId}`);
+  expect(projectResponse.ok(), await projectResponse.text()).toBeTruthy();
+  const projectPayload = (await projectResponse.json()) as { project: Record<string, unknown> };
+  const disabledProject = {
+    ...projectPayload.project,
+    designSystemId: 'editorial-noir',
+  };
+  await page.route(`**/api/projects/${projectId}`, async (route) => {
+    if (route.request().method() === 'GET' || route.request().method() === 'PATCH') {
+      await route.fulfill({ json: { project: disabledProject } });
+      return;
+    }
+    await route.fallback();
+  });
+  await page.reload();
+  await expectWorkspaceReady(page);
+
+  const input = page.getByTestId('chat-composer-input');
+  await input.fill('Generate without the disabled design system.');
+  await Promise.all([
+    page.waitForRequest((request) => request.url().includes('/api/runs') && request.method() === 'POST'),
+    page.getByTestId('chat-send').click(),
+  ]);
+
+  expect(runRequestBodies).toHaveLength(1);
   expect(runRequestBodies[0]?.designSystemId).toBeNull();
 });
 
@@ -1650,12 +1668,16 @@ test('[P1] project handoff AMR website link carries attribution from the CLI tab
   const menu = await openHandoffCliTab(page);
   const amrLink = menu.locator('.handoff-amr-link');
   await expect(amrLink).toBeVisible();
+  await expect(amrLink).toHaveAttribute('target', '_blank');
+  await expect(amrLink).toHaveAttribute('rel', 'noreferrer');
 
-  const popupPromise = page.waitForEvent('popup');
+  await amrLink.evaluate((link) => {
+    link.addEventListener('click', (event) => event.preventDefault(), { once: true });
+  });
   await amrLink.click();
-  const popup = await popupPromise;
-  const url = new URL(popup.url());
-  await popup.close();
+  const href = await amrLink.getAttribute('href');
+  expect(href).toBeTruthy();
+  const url = new URL(href!);
 
   expect(url.searchParams.get('od_origin')).toBe('open_design');
   expect(url.searchParams.get('od_entry_source')).toBe('handoff_amr_website');
@@ -1742,7 +1764,7 @@ test('[P1] project detail workspace keeps design file tabs and preview controls 
   const fileTab = tabBySuffix(page, uploadedName);
   await expect(fileTab).toBeVisible();
   await expect(fileTab).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByRole('tab', { name: 'Design Files' })).toBeVisible();
+  await expect(page.getByTestId('workspace-pages-menu-trigger')).toBeVisible();
 
   await openUploadedHtmlArtifactPreview(page, uploadedName);
 
@@ -1757,7 +1779,7 @@ test('[P1] project detail workspace keeps design file tabs and preview controls 
 
 test('[P1] project detail session mode switch carries Ask and Plan semantics into daemon runs', async ({ page }) => {
   const runRequestBodies: Array<Record<string, unknown>> = [];
-  await routeSuccessfulRuns(page, runRequestBodies, 'session-mode-run');
+  await routeSuccessfulRuns(page, { bodies: runRequestBodies, runIdPrefix: 'session-mode-run' });
 
   await page.goto('/');
   await createProject(page, 'Project session mode contract');
@@ -1796,9 +1818,225 @@ test('[P1] project detail session mode switch carries Ask and Plan semantics int
   await expect(page.getByTestId('msg-session-mode-chip').last()).toContainText('Ask');
 });
 
+test('[P1] BYOK OpenCode project run sends provider config through the daemon contract', async ({ page }) => {
+  const byokConfig = {
+    mode: 'api',
+    apiKey: 'sk-openai-e2e',
+    apiProtocol: 'openai',
+    apiVersion: '',
+    baseUrl: 'https://api.openai.com/v1',
+    model: 'gpt-4o-mini',
+    apiProviderBaseUrl: 'https://api.openai.com/v1',
+    agentId: null,
+    skillId: null,
+    designSystemId: null,
+    onboardingCompleted: true,
+    privacyDecisionAt: 1,
+    telemetry: { metrics: false, content: false, artifactManifest: false },
+    agentModels: {},
+    agentCliEnv: {},
+  };
+  await page.addInitScript(
+    ({ key, value }) => {
+      window.localStorage.setItem(key, JSON.stringify(value));
+    },
+    { key: STORAGE_KEY, value: byokConfig },
+  );
+  await page.route('**/api/app-config', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.fallback();
+      return;
+    }
+    await route.fulfill({ json: { config: byokConfig } });
+  });
+  await routeAgents(page, [
+    ...AGENTS,
+    {
+      id: 'byok-opencode',
+      name: 'BYOK OpenCode',
+      bin: 'opencode',
+      available: true,
+      version: '0.12.0',
+      models: [{ id: 'default', label: 'Default' }],
+    },
+  ]);
+  await page.route('**/api/memory/extract', async (route) => {
+    await route.fulfill({ json: { ok: true, extracted: [] } });
+  });
+  const runRequestBodies: Array<Record<string, unknown>> = [];
+  await routeSuccessfulRuns(page, { bodies: runRequestBodies, runIdPrefix: 'byok-opencode-run' });
+
+  await page.goto('/');
+  await createProject(page, 'BYOK OpenCode daemon contract');
+  await expectWorkspaceReady(page);
+
+  const input = page.getByTestId('chat-composer-input');
+  await input.fill('Create a landing page with the configured BYOK provider.');
+  await Promise.all([
+    page.waitForRequest((request) => request.url().includes('/api/runs') && request.method() === 'POST'),
+    page.getByTestId('chat-send').click(),
+  ]);
+
+  await expect.poll(() => runRequestBodies.length).toBe(1);
+  expect(runRequestBodies[0]).toMatchObject({
+    agentId: 'byok-opencode',
+    model: 'gpt-4o-mini',
+    byokProvider: {
+      protocol: 'openai',
+      apiKey: 'sk-openai-e2e',
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4o-mini',
+      apiVersion: '',
+    },
+    analyticsHints: {
+      runtimeType: 'byok',
+    },
+  });
+});
+
+test('[P1] BYOK OpenCode keyless vLLM run keeps auth fields out of the daemon contract', async ({ page }) => {
+  const byokConfig = {
+    mode: 'api',
+    apiKey: '',
+    apiProtocol: 'openai',
+    apiVersion: '',
+    baseUrl: 'http://127.0.0.1:8000/v1',
+    model: 'model',
+    apiProviderBaseUrl: 'http://127.0.0.1:8000/v1',
+    agentId: null,
+    skillId: null,
+    designSystemId: null,
+    onboardingCompleted: true,
+    privacyDecisionAt: 1,
+    telemetry: { metrics: false, content: false, artifactManifest: false },
+    agentModels: {},
+    agentCliEnv: {},
+  };
+  await page.addInitScript(
+    ({ key, value }) => {
+      window.localStorage.setItem(key, JSON.stringify(value));
+    },
+    { key: STORAGE_KEY, value: byokConfig },
+  );
+  await page.route('**/api/app-config', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.fallback();
+      return;
+    }
+    await route.fulfill({ json: { config: byokConfig } });
+  });
+  await routeAgents(page, [
+    ...AGENTS,
+    {
+      id: 'byok-opencode',
+      name: 'BYOK OpenCode',
+      bin: 'opencode',
+      available: true,
+      version: '0.12.0',
+      models: [{ id: 'default', label: 'Default' }],
+    },
+  ]);
+  await page.route('**/api/memory/extract', async (route) => {
+    await route.fulfill({ json: { ok: true, extracted: [] } });
+  });
+  const runRequestBodies: Array<Record<string, unknown>> = [];
+  await routeSuccessfulRuns(page, { bodies: runRequestBodies, runIdPrefix: 'byok-opencode-keyless-run' });
+
+  await page.goto('/');
+  await createProject(page, 'BYOK OpenCode keyless vLLM contract');
+  await expectWorkspaceReady(page);
+
+  await page.getByTestId('chat-composer-input').fill('Use the local vLLM BYOK endpoint.');
+  await Promise.all([
+    page.waitForRequest((request) => request.url().includes('/api/runs') && request.method() === 'POST'),
+    page.getByTestId('chat-send').click(),
+  ]);
+
+  await expect.poll(() => runRequestBodies.length).toBe(1);
+  expect(runRequestBodies[0]).toMatchObject({
+    agentId: 'byok-opencode',
+    model: 'model',
+    byokProvider: {
+      protocol: 'openai',
+      apiKey: '',
+      baseUrl: 'http://127.0.0.1:8000/v1',
+      model: 'model',
+      apiVersion: '',
+      requiresApiKey: false,
+    },
+    analyticsHints: {
+      runtimeType: 'byok',
+    },
+  });
+});
+
+test('[P1] BYOK OpenCode unavailable blocks the project run before daemon routing', async ({ page }) => {
+  const byokConfig = {
+    mode: 'api',
+    apiKey: 'sk-openai-e2e',
+    apiProtocol: 'openai',
+    apiVersion: '',
+    baseUrl: 'https://api.openai.com/v1',
+    model: 'gpt-4o-mini',
+    apiProviderBaseUrl: 'https://api.openai.com/v1',
+    agentId: null,
+    skillId: null,
+    designSystemId: null,
+    onboardingCompleted: true,
+    privacyDecisionAt: 1,
+    telemetry: { metrics: false, content: false, artifactManifest: false },
+    agentModels: {},
+    agentCliEnv: {},
+  };
+  await page.addInitScript(
+    ({ key, value }) => {
+      window.localStorage.setItem(key, JSON.stringify(value));
+    },
+    { key: STORAGE_KEY, value: byokConfig },
+  );
+  await page.route('**/api/app-config', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.fallback();
+      return;
+    }
+    await route.fulfill({ json: { config: byokConfig } });
+  });
+  await routeAgents(page, [
+    ...AGENTS,
+    {
+      id: 'byok-opencode',
+      name: 'BYOK OpenCode',
+      bin: 'opencode',
+      available: false,
+      version: null,
+      models: [],
+    },
+  ]);
+
+  const runRequests = await routeSuccessfulRuns(page, {
+    runIdPrefix: 'byok-opencode-unavailable-should-not-start',
+    events: false,
+  });
+
+  await page.goto('/');
+  await createProject(page, 'BYOK OpenCode unavailable contract');
+  await expectWorkspaceReady(page);
+
+  const input = page.getByTestId('chat-composer-input');
+  await input.fill('Create a landing page with unavailable OpenCode.');
+  await page.getByTestId('chat-send').click();
+
+  await expect(page.locator('.run-error__description')).toContainText(
+    /BYOK API runs require OpenCode/i,
+  );
+  await runRequests.expectNone({
+    message: 'unavailable BYOK OpenCode should fail preflight before POST /api/runs',
+  });
+});
+
 test('[P1] project detail active file context is sent with the run and shown on the user message', async ({ page }) => {
   const runRequestBodies: Array<Record<string, unknown>> = [];
-  await routeSuccessfulRuns(page, runRequestBodies, 'workspace-context-run');
+  await routeSuccessfulRuns(page, { bodies: runRequestBodies, runIdPrefix: 'workspace-context-run' });
 
   await page.goto('/');
   await createProject(page, 'Workspace context chip contract');
@@ -1827,7 +2065,7 @@ test('[P1] project detail active file context is sent with the run and shown on 
 
 test('[P1] project detail session mode and active file context survive reload in message history', async ({ page }) => {
   const runRequestBodies: Array<Record<string, unknown>> = [];
-  await routeSuccessfulRuns(page, runRequestBodies, 'workspace-context-reload-run');
+  await routeSuccessfulRuns(page, { bodies: runRequestBodies, runIdPrefix: 'workspace-context-reload-run' });
 
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await createProject(page, 'Workspace context reload contract');
@@ -2688,7 +2926,15 @@ test('[P2] projects kanban view groups cards into status columns', async ({ page
   await expect(page.locator('.design-kanban-card.status-awaiting_input')).toHaveCount(1);
   await expect(page.locator('.design-kanban-card.status-succeeded')).toHaveCount(1);
   await expect(page.locator('.design-kanban-card.status-failed')).toHaveCount(1);
-  await expect(page.locator('.design-kanban-empty')).toHaveCount(1);
+  const kanbanColumns = page.locator('.design-kanban-col');
+  await expect(kanbanColumns).toHaveCount(7);
+  await expect(
+    kanbanColumns.filter({ hasText: 'Incomplete' }).locator('.design-kanban-empty'),
+  ).toHaveCount(1);
+  await expect(
+    kanbanColumns.filter({ hasText: 'Canceled' }).locator('.design-kanban-empty'),
+  ).toHaveCount(1);
+  await expect(page.locator('.design-kanban-empty')).toHaveCount(2);
 
   await expect(page.locator('.design-kanban-card.status-running')).toContainText('Running Card');
   await expect(page.locator('.design-kanban-card.status-awaiting_input')).toContainText(
@@ -2823,29 +3069,6 @@ async function createProject(
     conversationId: string;
   };
   await page.goto(`/projects/${body.project.id}/conversations/${body.conversationId}`);
-}
-
-async function routeSuccessfulRuns(
-  page: Page,
-  runRequestBodies: Array<Record<string, unknown>>,
-  runIdPrefix: string,
-) {
-  await page.route('**/api/runs', async (route) => {
-    const raw = route.request().postData();
-    if (raw) runRequestBodies.push(JSON.parse(raw) as Record<string, unknown>);
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: JSON.stringify({ runId: `${runIdPrefix}-${runRequestBodies.length}` }),
-    });
-  });
-  await page.route('**/api/runs/*/events', async (route) => {
-    await route.fulfill({
-      status: 200,
-      headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' },
-      body: ['event: end', 'data: {"code":0,"status":"succeeded"}', '', ''].join('\n'),
-    });
-  });
 }
 
 async function retryProjectCreate(
@@ -3163,6 +3386,22 @@ async function openComposerAgentMenu(page: Page): Promise<{
   }
   await expect(claudeButton).toBeVisible({ timeout: 20_000 });
   return { menu, claudeButton };
+}
+
+async function selectAvatarModelOption(
+  page: Page,
+  modelSelect: Locator,
+  optionName: RegExp,
+) {
+  await expect(modelSelect).toBeVisible();
+  const option = page.getByRole('option', { name: optionName });
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    await modelSelect.click();
+    if (await option.isVisible({ timeout: 2_000 }).catch(() => false)) break;
+    await page.keyboard.press('Escape').catch(() => {});
+  }
+  await expect(option).toBeVisible({ timeout: 10_000 });
+  await option.click();
 }
 
 async function selectComposerSessionMode(page: Page, modeTitle: 'Ask mode' | 'Plan mode' | 'Design mode') {

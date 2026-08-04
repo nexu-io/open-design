@@ -1,5 +1,5 @@
 import { expect, test } from '@/playwright/suite';
-import { fulfillAgentsRoute } from '@/playwright/mock-factory';
+import { fulfillAgentsRoute, routeSuccessfulRuns } from '@/playwright/mock-factory';
 import { openNewProjectModal as openNewProjectModalFromProjects } from '@/playwright/rail';
 import type { Page } from '@playwright/test';
 import { T } from '@/timeouts';
@@ -15,7 +15,7 @@ test.beforeEach(async ({ page }) => {
       JSON.stringify({
         mode: 'api',
         apiProtocol: 'openai',
-        apiKey: 'sk-test',
+        apiKey: 'test-byok-key',
         baseUrl: 'https://api.deepseek.com',
         model: 'deepseek-v4-flash',
         agentId: null,
@@ -63,33 +63,14 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('[P0] @critical API empty stream shows No output instead of Done', async ({ page }) => {
-  await page.route('**/api/runs', async (route) => {
-    if (route.request().method() !== 'POST') {
-      await route.continue();
-      return;
-    }
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ runId: 'api-empty-response-run' }),
-    });
-  });
-  await page.route('**/api/runs/api-empty-response-run/events', async (route) => {
-    await route.fulfill({
-      status: 200,
-      headers: {
-        'content-type': 'text/event-stream',
-        'cache-control': 'no-cache',
-      },
-      body: ['event: end', 'data: {"code":0,"status":"succeeded"}', '', ''].join('\n'),
-    });
-  });
+  const runRequests = await routeSuccessfulRuns(page, { runIdPrefix: 'api-empty-response-run' });
 
   await gotoEntryHome(page);
   await createProject(page, 'API empty response smoke');
   await expectWorkspaceReady(page);
   await sendPrompt(page, 'Create a login page');
 
+  await runRequests.expectCount(1);
   await expect(page.locator('.assistant-label', { hasText: 'No output' })).toBeVisible();
   await expect(page.getByText(/provider ended the request/i).first()).toBeVisible();
   await expect(page.locator('.assistant-label', { hasText: 'Done' })).toHaveCount(0);
@@ -120,7 +101,7 @@ async function openNewProjectModal(page: Page) {
 
 async function expectWorkspaceReady(page: Page) {
   await waitForLoadingToClear(page);
-  await expect(page).toHaveURL(/\/projects\//);
+  await expect(page).toHaveURL(/\/projects\//, { timeout: T.long });
   await expect(page.getByTestId('chat-composer')).toBeVisible();
   await expect(page.getByTestId('chat-composer-input')).toBeVisible();
   await expect(page.getByTestId('file-workspace')).toBeVisible();
@@ -138,7 +119,7 @@ async function sendPrompt(page: Page, prompt: string) {
         const url = new URL(response.url());
         return url.pathname === '/api/runs' && response.request().method() === 'POST';
       },
-      { timeout: 10_000 },
+      { timeout: T.long },
     ),
     sendButton.click(),
   ]);

@@ -251,6 +251,7 @@ export interface AgentTestRequest {
   agentId: string;
   model?: string;
   reasoning?: string;
+  serviceTier?: string;
   agentCliEnv?: AgentCliEnvPrefs;
 }
 

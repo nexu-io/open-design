@@ -829,7 +829,7 @@
 .home-hero__plugin-hover-kicker {
   display: block;
   margin-bottom: 2px;
-  color: var(--text-faint);
+  color: var(--text-muted);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0;
@@ -840,7 +840,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 4px 8px;
-  color: var(--text-faint);
+  color: var(--text-muted);
   font-size: 11px;
 }
 .home-hero__plugin-hover-meta span {
@@ -906,7 +906,7 @@
   box-shadow: var(--shadow-xs, 0 1px 2px rgba(0, 0, 0, 0.05));
 }
 .home-hero__mention-tab span:last-child {
-  color: var(--text-faint);
+  color: var(--text-muted);
   font-size: 10.5px;
 }
 .home-hero__plugin-picker-empty {
@@ -921,7 +921,7 @@
 }
 .home-hero__mention-section-label {
   padding: 5px 4px 2px;
-  color: var(--text-faint);
+  color: var(--text-muted);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0;
@@ -983,7 +983,7 @@
 }
 .home-hero__plugin-option-meta {
   flex: 0 0 auto;
-  color: var(--text-faint);
+  color: var(--text-muted);
   font-size: 11px;
 }
 .home-hero__input-foot {

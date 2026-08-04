@@ -12,6 +12,8 @@ import type {
   OpenDesignHostProjectImportResult,
   OpenDesignHostProjectReplaceWorkingDirResult,
   OpenDesignHostUpdaterActionOptions,
+  OpenDesignHostUpdaterMenuLabels,
+  OpenDesignHostUpdaterOpenDialogListener,
   OpenDesignHostUpdaterResult,
   OpenDesignHostUpdaterStatusAction,
   OpenDesignHostUpdaterStatusListener,
@@ -208,6 +210,14 @@ export async function downloadHostUpdater(
   return await runHostUpdaterAction(OPEN_DESIGN_HOST_UPDATER_ACTIONS.DOWNLOAD, options, scope);
 }
 
+/** Clear the host updater/launcher caches and reset one-shot update state. */
+export async function clearHostUpdaterCache(
+  options?: OpenDesignHostUpdaterActionOptions,
+  scope: OpenDesignHostGlobalScope = globalThis,
+): Promise<OpenDesignHostUpdaterResult> {
+  return await runHostUpdaterAction(OPEN_DESIGN_HOST_UPDATER_ACTIONS.CLEAR_CACHE, options, scope);
+}
+
 /** Trigger a host updater install. */
 export async function installHostUpdater(
   options?: OpenDesignHostUpdaterActionOptions,
@@ -241,5 +251,33 @@ export function subscribeHostUpdater(
     return host.updater.subscribe(listener);
   } catch {
     return () => undefined;
+  }
+}
+
+/** Subscribe to native host requests to open the updater dialog. */
+export function subscribeHostUpdaterOpenDialog(
+  listener: OpenDesignHostUpdaterOpenDialogListener,
+  scope: OpenDesignHostGlobalScope = globalThis,
+): () => void {
+  const host = getOpenDesignHost(scope);
+  if (host == null) return () => undefined;
+  try {
+    return host.updater.subscribeOpenDialog(listener);
+  } catch {
+    return () => undefined;
+  }
+}
+
+/** Synchronize renderer-localized updater menu labels to the native host. */
+export async function setHostUpdaterMenuLabels(
+  labels: OpenDesignHostUpdaterMenuLabels,
+  scope: OpenDesignHostGlobalScope = globalThis,
+): Promise<OpenDesignHostActionResult> {
+  const host = getOpenDesignHost(scope);
+  if (host == null) return unavailable("Open Design host is not available");
+  try {
+    return await host.updater.setMenuLabels(labels);
+  } catch (error) {
+    return unavailable(error instanceof Error ? error.message : String(error));
   }
 }

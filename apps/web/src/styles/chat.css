@@ -409,13 +409,103 @@
 .msg-run-context-row {
   display: flex;
   justify-content: flex-end;
-  align-items: center;
+  align-items: flex-start;
   flex-wrap: nowrap;
   gap: 3px;
   margin: 1px 0 4px;
   max-width: min(100%, 430px);
   margin-left: auto;
+  overflow: visible;
+}
+.msg-applied-context {
+  display: flex;
+  flex: 0 1 100%;
+  flex-direction: column;
+  min-width: 0;
+  max-width: 100%;
+  margin: 0 0 2px;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-faint);
+}
+.msg-applied-context__toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+  height: 20px;
+  padding: 1px 4px;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 10px;
+  text-align: left;
+  cursor: pointer;
+  transition: color 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.msg-applied-context__toggle:hover {
+  background: transparent;
+  color: var(--text-muted);
+}
+.msg-applied-context__toggle:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 38%, transparent);
+  outline-offset: 1px;
+}
+.msg-applied-context__icon,
+.msg-applied-context__chevron {
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: var(--text-faint);
+}
+.msg-applied-context__summary {
+  flex: 1 1 auto;
+  min-width: 0;
   overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.msg-applied-context__chevron {
+  transition: transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.msg-applied-context__chevron.is-open {
+  transform: rotate(180deg);
+}
+.msg-applied-context__details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  padding: 2px 4px 4px;
+  border-top: 1px solid color-mix(in srgb, var(--text-muted) 7%, transparent);
+}
+.msg-applied-context__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  padding: 1px 3px;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-faint);
+  font: inherit;
+  font-size: 9.5px;
+  white-space: nowrap;
+}
+.msg-applied-context__item.is-action {
+  cursor: pointer;
+}
+.msg-applied-context__item.is-action:hover {
+  color: var(--text);
+}
+.msg-applied-context__kind {
+  color: var(--text-faint);
+  font-size: 8.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
 }
 .msg-mode-chip {
   display: inline-flex;
@@ -739,167 +829,68 @@
   color: white;
   border-radius: var(--radius-xs);
 }
-/* =====================================================================
-   Unified run-failure card  ·  .run-error
-   One shell for every task failure. Neutral surface; the failure is
-   signalled by a semantic status dot + a strong title, NOT a flooded red
-   background (keeps a column of failed turns calm). Four-part structure:
-   ① type title  ② detail message  ③ 1–2 fix CTAs  ④ collapsible source.
-   data-tone re-tints only the status dot (error / warn / brand).
-   ===================================================================== */
-.run-error {
-  border: 1px solid var(--border);
-  background: var(--bg-elevated);
-  color: var(--text);
-  border-radius: var(--radius-md);
-  padding: 14px 16px;
+/* Run recovery uses the shared user-action card. Only the concrete problem and
+   primary recovery action stay visible; friendly copy plus raw diagnostics are
+   grouped in one expandable detail area. */
+.run-error__details {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  animation: run-error-in 200ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-@keyframes run-error-in {
-  from { opacity: 0; transform: translateY(4px) scale(0.99); }
-  to   { opacity: 1; transform: none; }
+  gap: 9px;
 }
 
-/* ① + ② — status dot, title, detail */
-.run-error__main { display: flex; gap: 11px; align-items: flex-start; }
-.run-error__icon {
-  flex: 0 0 auto;
-  width: 20px;
-  height: 20px;
-  margin-top: 1px;
-  display: grid;
-  place-items: center;
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--red) 12%, transparent);
-  color: var(--red);
-}
-.run-error__icon svg { width: 13px; height: 13px; }
-.run-error[data-tone='warn'] .run-error__icon {
-  background: color-mix(in srgb, var(--amber) 14%, transparent);
-  color: var(--amber);
-}
-.run-error[data-tone='brand'] .run-error__icon {
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  color: var(--accent);
-}
-.run-error__copy { min-width: 0; flex: 1 1 auto; }
-.run-error__title {
+.run-error__description {
   margin: 0;
-  font-size: 13.5px;
-  font-weight: 600;
-  line-height: 1.4;
-  color: var(--text-strong);
-}
-.run-error__desc {
-  margin: 3px 0 0;
-  font-size: 13px;
-  line-height: 1.55;
-  color: var(--text-muted);
   max-width: 64ch;
-  overflow-wrap: anywhere;
 }
 
-/* ④ — collapsible error source (code-line styled, one line when collapsed) */
-.run-error__source {
-  border: 1px solid var(--border-soft);
-  background: var(--bg-subtle);
-  border-radius: var(--radius-sm);
+.run-error__diagnostic {
   overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
 }
-/* Head row: the expand toggle (flex-grows) + a trailing copy button. They are
-   siblings, not nested — a button cannot contain another button. */
-.run-error__source-head {
-  display: flex;
-  align-items: stretch;
-}
-.run-error__source-bar {
+
+.run-error__diagnostic-head {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
-  flex: 1 1 auto;
-  min-width: 0;
-  appearance: none;
-  border: 0;
-  background: none;
-  cursor: pointer;
-  font: inherit;
-  text-align: left;
-  padding: 7px 10px;
+  padding: 5px 7px 3px 10px;
   color: var(--text-soft);
-}
-/* Copy diagnostics — sits at the right edge of the source head row. */
-.run-error__source-copy {
-  flex: 0 0 auto;
-  appearance: none;
-  border: 0;
-  background: none;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  color: var(--text-soft);
-  transition: background 140ms cubic-bezier(0.23, 1, 0.32, 1), color 140ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-.run-error__source-copy:hover {
-  background: var(--bg-fill-tertiary);
-  color: var(--text);
-}
-.run-error__source-chevron {
-  flex: 0 0 auto;
-  width: 12px;
-  height: 12px;
-  color: var(--text-faint);
-  transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-.run-error__source.is-open .run-error__source-chevron { transform: rotate(90deg); }
-.run-error__source-label {
-  flex: 0 0 auto;
   font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.02em;
 }
-.run-error__source-peek {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: var(--mono);
-  font-size: 11.5px;
-  color: var(--text-muted);
-}
-.run-error__source.is-open .run-error__source-peek { opacity: 0; }
-/* max-height accordion (robust where grid-rows:0fr leaks the first child line) */
-.run-error__source-full {
-  max-height: 0;
-  overflow: hidden;
-  transition: max-height 220ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-.run-error__source.is-open .run-error__source-full { max-height: 240px; }
-.run-error__source-full > pre {
-  margin: 0;
-  overflow: auto;
+
+.run-error__diagnostic > pre {
   max-height: 220px;
+  margin: 0;
   padding: 4px 10px 10px;
+  overflow: auto;
+  color: var(--text);
   font-family: var(--mono);
   font-size: 11.5px;
   line-height: 1.6;
-  color: var(--text);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
-/* ③ — fix actions, anchored to the bottom-right of the card */
-.run-error__actions {
-  display: flex;
-  flex-wrap: wrap;
+.run-error__source-copy {
+  appearance: none;
+  display: inline-flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
+  justify-content: center;
+  width: 28px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-soft);
+  cursor: pointer;
+}
+
+.run-error__source-copy:hover {
+  background: var(--bg-fill-tertiary);
+  color: var(--text);
 }
 /* Primary contextual CTA (Authorize & retry / Top up / terminal launch). */
 .chat-error-action {
@@ -917,11 +908,6 @@
   transition: background 140ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 .chat-error-action:hover { background: var(--accent-hover, var(--accent)); }
-/* Secondary recovery (Retry / Continue) — ghost. */
-.chat-error-retry {
-  flex: 0 0 auto;
-  padding: 6px 14px;
-}
 
 /* Inline AMR sign-in inside the unified card. The pill's base layout is scoped
    to Settings/onboarding, so it arrives unstyled here — give it its own full
@@ -981,47 +967,8 @@
   border-radius: var(--radius-sm);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .run-error { animation: none; }
-  .run-error__source-full,
-  .run-error__source-chevron { transition: none; }
-}
-
-/* AMR guidance card under the unified run-error card. Shares the same shell
-   (1px border + elevated surface + radius-md) so the two stack as one visual
-   system; the accent dot/chips carry the brand tint. */
-.amr-card {
-  margin-top: 8px;
-  padding: 14px 16px;
-  border: 1px solid var(--border);
-  background: var(--bg-elevated);
-  border-radius: var(--radius-md);
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.amr-card__head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.amr-card__icon {
-  flex: 0 0 auto;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
-  color: var(--accent);
-  font-weight: 700;
-  font-size: 13px;
-}
-.amr-card__title {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text);
-}
+/* Hosted-agent recovery is another user decision, so it reuses the shared
+   action-card shell. Only supporting copy and benefits remain local here. */
 .amr-card__body {
   margin: 0;
   font-size: 13px;
@@ -1041,12 +988,6 @@
   background: color-mix(in srgb, var(--accent) 10%, transparent);
   color: var(--accent);
   border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
-}
-.amr-card__actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 2px;
 }
 .amr-card__cta {
   appearance: none;

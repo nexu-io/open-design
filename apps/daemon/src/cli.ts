@@ -202,11 +202,19 @@ const CONFIG_STRING_FLAGS = new Set(['daemon-url', 'value', 'value-json']);
 const CONFIG_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 const AMR_STRING_FLAGS = new Set(['daemon-url']);
 const AMR_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'refresh']);
+const MESSAGE_CENTER_STRING_FLAGS = new Set([
+  'daemon-url',
+  'locale',
+  'filter',
+  'limit',
+  'cursor',
+]);
+const MESSAGE_CENTER_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 const PROJECT_STRING_FLAGS = new Set([
   'daemon-url', 'name', 'skill', 'design-system', 'plugin', 'metadata-json',
   'pending-prompt', 'project', 'conversation', 'message', 'prompt',
   'prompt-file', 'path', 'dir', 'as',
-  'agent', 'model', 'snapshot-id', 'inputs', 'grant-caps', 'editor',
+  'agent', 'model', 'service-tier', 'snapshot-id', 'inputs', 'grant-caps', 'editor',
   'title', 'label', 'against', 'seed-from', 'fork-after', 'mode',
   'source',
 ]);
@@ -326,6 +334,7 @@ const SUBCOMMAND_MAP = {
   media: runMedia,
   mcp: runMcp,
   amr: runAmr,
+  'message-center': runMessageCenter,
   research: runResearch,
   plugin: runPlugin,
   ui: runUi,
@@ -654,6 +663,14 @@ function printRootHelp() {
       schedule, trigger, or harvest results from a routine without
       opening the web UI.
 
+  od message-center <list|read|read-all> [args]
+      Read and acknowledge message-center inbox items through the same
+      daemon endpoints the bell UI uses.
+
+  od amr <login|status> [args]
+      Start Vela browser sign-in or inspect the current Vela account through
+      the local Open Design daemon.
+
   od memory tree <list|view|edit|move> [args]
       Inspect and edit the memory tree that is injected into agent prompts.
 
@@ -717,6 +734,7 @@ async function runAmr(args) {
   const sub = args[0];
   if (!sub || sub === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
+  od amr login [--json]
   od amr status [--refresh] [--json]
 
 Options:
@@ -729,6 +747,34 @@ Options:
   const flags = parseFlags(rest, { string: AMR_STRING_FLAGS, boolean: AMR_BOOLEAN_FLAGS });
   const base = await cliDaemonBaseUrl(flags);
   switch (sub) {
+    case 'login': {
+      const loginResp = await fetch(`${base}/api/integrations/vela/login`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{}',
+      });
+      if (!loginResp.ok) return structuredHttpFailure(loginResp);
+      const started = await loginResp.json();
+      const statusResp = await fetch(`${base}/api/integrations/vela/status`);
+      if (!statusResp.ok) return structuredHttpFailure(statusResp);
+      const status = await statusResp.json();
+      if (flags.json) {
+        return process.stdout.write(JSON.stringify({ started, status }, null, 2) + '\n');
+      }
+      console.log(`Vela login\tstarted`);
+      console.log(`Profile\t${status?.profile ?? started?.profile ?? '-'}`);
+      if (status?.loggedIn) {
+        console.log(`Status\tlogged in`);
+        return;
+      }
+      console.log(`Status\t${status?.loginInFlight ? 'waiting for browser authorization' : 'sign-in pending'}`);
+      if (status?.activationUrl) console.log(`Open\t${status.activationUrl}`);
+      if (status?.userCode) console.log(`Code\t${status.userCode}`);
+      if (status?.browserOpenFailed) {
+        console.log(`Note\tbrowser could not be opened automatically; use the link above`);
+      }
+      return;
+    }
     case 'status': {
       const query = flags.refresh ? '?refresh=1' : '';
       const statusResp = await fetch(`${base}/api/integrations/vela/status`);
@@ -773,6 +819,170 @@ Options:
     default:
       console.error(`unknown subcommand: od amr ${sub}`);
       process.exit(2);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Subcommand: od message-center …
+// ---------------------------------------------------------------------------
+
+async function runMessageCenter(args) {
+  const sub = args[0];
+  if (!sub || sub === 'help' || args.includes('--help') || args.includes('-h')) {
+    printMessageCenterHelp();
+    process.exit(sub === 'help' || args.includes('--help') || args.includes('-h') ? 0 : 2);
+  }
+  const rest = args.slice(1);
+  let flags;
+  try {
+    flags = parseFlags(rest, {
+      string: MESSAGE_CENTER_STRING_FLAGS,
+      boolean: MESSAGE_CENTER_BOOLEAN_FLAGS,
+    });
+  } catch (err) {
+    console.error(err.message);
+    printMessageCenterHelp();
+    process.exit(2);
+  }
+  const base = await cliDaemonBaseUrl(flags);
+  switch (sub) {
+    case 'list':
+      return runMessageCenterList(rest, flags, base);
+    case 'read':
+      return runMessageCenterRead(rest, flags, base);
+    case 'read-all':
+      return runMessageCenterReadAll(flags, base);
+    default:
+      console.error(`unknown subcommand: od message-center ${sub}`);
+      printMessageCenterHelp();
+      process.exit(2);
+  }
+}
+
+async function runMessageCenterList(rawArgs, flags, base) {
+  const limit = flags.limit == null ? 100 : Number(flags.limit);
+  if (!Number.isInteger(limit) || limit <= 0) {
+    console.error('--limit must be a positive integer');
+    process.exit(2);
+  }
+  const filter = flags.filter == null ? 'all' : String(flags.filter);
+  if (filter !== 'all' && filter !== 'unread' && filter !== 'read') {
+    console.error('--filter must be one of: all | unread | read');
+    process.exit(2);
+  }
+  const query = new URLSearchParams({
+    locale: messageCenterApiLocale(flags.locale == null ? 'en' : String(flags.locale)),
+    filter,
+    limit: String(limit),
+  });
+  if (typeof flags.cursor === 'string' && flags.cursor.length > 0) query.set('cursor', flags.cursor);
+  let resp;
+  try {
+    resp = await fetch(`${base}/api/integrations/vela/message-center/messages?${query}`);
+  } catch (err) {
+    surfaceFetchError(err, base);
+    process.exit(3);
+  }
+  if (!resp.ok) return structuredHttpFailure(resp);
+  const payload = await resp.json();
+  if (flags.json) {
+    process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
+    return;
+  }
+  const messages = Array.isArray(payload?.messages) ? payload.messages : [];
+  if (messages.length === 0) {
+    console.log('No message-center messages.');
+    return;
+  }
+  for (const message of messages) {
+    const status = message?.readAt ? 'read' : 'unread';
+    const id = typeof message?.id === 'string' ? message.id : '(missing-id)';
+    const typeName = typeof message?.typeName === 'string' ? message.typeName : '-';
+    const publishedAt = typeof message?.publishedAt === 'string' ? message.publishedAt : '-';
+    const title = typeof message?.title === 'string' ? message.title : '';
+    console.log(`${id}\t${status}\t${typeName}\t${publishedAt}\t${title}`);
+  }
+  if (payload?.nextCursor) console.log(`nextCursor\t${payload.nextCursor}`);
+  if (typeof payload?.unreadCount === 'number') console.log(`unreadCount\t${payload.unreadCount}`);
+}
+
+async function runMessageCenterRead(rawArgs, flags, base) {
+  const id = positionalArgs(rawArgs, MESSAGE_CENTER_STRING_FLAGS)[0];
+  if (!id) {
+    console.error('Usage: od message-center read <id> [--json] [--daemon-url <url>]');
+    process.exit(2);
+  }
+  let resp;
+  try {
+    resp = await fetch(`${base}/api/integrations/vela/message-center/messages/${encodeURIComponent(id)}/read`, {
+      method: 'POST',
+    });
+  } catch (err) {
+    surfaceFetchError(err, base);
+    process.exit(3);
+  }
+  if (!resp.ok) return structuredHttpFailure(resp);
+  const bodyText = await resp.text();
+  const payload = bodyText ? safeJsonParse(bodyText) : null;
+  if (flags.json) {
+    process.stdout.write(
+      JSON.stringify(payload ?? { ok: true, id }, null, 2) + '\n',
+    );
+    return;
+  }
+  console.log(`Marked message as read\t${id}`);
+}
+
+async function runMessageCenterReadAll(flags, base) {
+  let resp;
+  try {
+    resp = await fetch(`${base}/api/integrations/vela/message-center/read-all`, {
+      method: 'POST',
+    });
+  } catch (err) {
+    surfaceFetchError(err, base);
+    process.exit(3);
+  }
+  if (!resp.ok) return structuredHttpFailure(resp);
+  const bodyText = await resp.text();
+  const payload = bodyText ? safeJsonParse(bodyText) : null;
+  if (flags.json) {
+    process.stdout.write(
+      JSON.stringify(payload ?? { ok: true }, null, 2) + '\n',
+    );
+    return;
+  }
+  console.log('Marked all message-center messages as read');
+}
+
+function printMessageCenterHelp() {
+  console.log(`Usage:
+  od message-center list [--locale <locale>] [--filter <all|unread|read>] [--limit <n>] [--cursor <token>] [--json] [--daemon-url <url>]
+  od message-center read <id> [--json] [--daemon-url <url>]
+  od message-center read-all [--json] [--daemon-url <url>]
+
+Mirrors the message-center inbox surface exposed in the web UI through the
+same /api/integrations/vela/message-center daemon routes.
+
+Options:
+  --locale <locale>     Defaults to en. Mapped to the daemon API locale shape.
+  --filter <value>      all | unread | read (default: all).
+  --limit <n>           Positive integer page size (default: 100).
+  --cursor <token>      Forward a server pagination cursor for list.
+  --json                Emit raw JSON for scripts and external agents.
+  --daemon-url <url>    Open Design daemon HTTP base.`);
+}
+
+function messageCenterApiLocale(locale) {
+  const mapping = { en: 'en-US', 'es-ES': 'es', 'pt-BR': 'pt' };
+  return mapping[locale] ?? locale;
+}
+
+function safeJsonParse(text) {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
   }
 }
 
@@ -1284,10 +1494,20 @@ async function runMcp(args) {
     return;
   }
 
-  const daemonUrl = await cliDaemonUrl(flags);
+  const { ensureMcpDaemonUrl } = await import('./mcp-bootstrap.js');
+  const daemonUrl = await ensureMcpDaemonUrl({
+    flagUrl: flags['daemon-url'],
+  });
 
   const { runMcpStdio } = await import('./mcp.js');
-  await runMcpStdio({ daemonUrl });
+  await runMcpStdio({
+    daemonUrl,
+    ...(flags['daemon-url']
+      ? {}
+      : {
+          resolveDaemonUrl: async () => await ensureMcpDaemonUrl({}),
+        }),
+  });
 }
 
 function printMcpHelp() {
@@ -1306,9 +1526,13 @@ Options:
                        discovers the live daemon URL at startup, so
                        MCP client configs stay valid across daemon
                        restarts even when the port is ephemeral. A
-                       running MCP server caches the URL; restart the
-                       MCP client after a daemon restart to pick up a
-                       new port.
+                       packaged install also starts the signed Open
+                       Design app in --headless mode when its daemon
+                       is stopped; no Electron window is opened. The
+                       MCP server re-discovers the registered runtime
+                       before calls and safely retries reads when the
+                       daemon changes ports, so an existing task can
+                       survive an Open Design restart.
 
 Tools exposed:
   list_projects                  list every Open Design project
@@ -6100,9 +6324,9 @@ async function runRun(args) {
     console.log(`Usage:
   od run start --project <projectId> [--conversation <id>] [--message "<text>"]
                [--plugin <id>] [--inputs <json>] [--grant-caps a,b]
-               [--agent claude|codex|opencode] [--model <id>] [--follow] [--json]
+               [--agent claude|codex|opencode] [--model <id>] [--service-tier <id>] [--follow] [--json]
   od run redesign [--path <folder>] [--message "<text>" | --prompt-file <path|->]
-               [--agent claude] [--model <id>] [--follow] [--json]
+               [--agent claude] [--model <id>] [--service-tier <id>] [--follow] [--json]
   od run watch  <runId>                     ND-JSON event stream on stdout.
   od run cancel <runId>                     Request cancellation.
   od run continue <runId> [--follow]        Continue a resumable failed run.
@@ -6285,6 +6509,7 @@ Common options:
         designSystemId,
         ...(flags.agent ? { agentId: flags.agent } : {}),
         ...(flags.model ? { model: flags.model } : {}),
+        ...(flags['service-tier'] ? { serviceTier: flags['service-tier'] } : {}),
       };
       const data = await postJsonToDaemon(base, '/api/runs', body);
       if (flags.json && !flags.follow) {
@@ -6312,6 +6537,7 @@ Common options:
       if (flags['design-system']) body.designSystemId = flags['design-system'];
       if (flags.agent) body.agentId = flags.agent;
       if (flags.model) body.model = flags.model;
+      if (flags['service-tier']) body.serviceTier = flags['service-tier'];
       if (flags.inputs) {
         try { body.pluginInputs = JSON.parse(flags.inputs); } catch (err) {
           console.error(`--inputs must be valid JSON: ${err.message}`);

@@ -357,7 +357,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     tutorialsBlurb: '视频上手、演示与社区评测。',
     solution: '解决方案',
     useCases: '使用场景',
-    useCaseItems: ['原型', '看板', '幻灯片', '图片', '视频', '设计系统'],
+    useCaseItems: ['原型', '数据看板', '幻灯片', '图片', '视频', '设计系统'],
     roles: '角色',
     roleItems: ['独立开发者', '设计师', '工程', '产品经理', '市场'],
     tools: '工具',
@@ -2447,7 +2447,7 @@ const HOME_SEO_COPY: Record<LandingLocaleCode, HomeSeoCopy> = {
   zh: {
     title: 'Open Design —— 最佳 Claude Design 开源替代',
     description:
-      'Open Design 是开源的 vibe design workspace，也是 Claude Design 的开源替代——用你自己的 coding agent 做原型、落地页、仪表盘、Slides 和 HTML 视频。',
+      'Open Design 是开源的 vibe design workspace，也是 Claude Design 的开源替代——用你自己的 coding agent 做原型、落地页、数据看板、Slides 和 HTML 视频。',
   },
   'zh-tw': {
     title: 'Open Design —— 最佳 Claude Design 開源替代',
@@ -3767,7 +3767,7 @@ const HOME_PAGE_COPY_EN: HomePageCopy = {
       {
         badge: 'Loop',
         title: 'Prompt Choreography',
-        body: 'The interactive question form pops before a single pixel is improvised. 30s of radios beats 30min of redirects.',
+        body: 'When unresolved choices would materially change the result, a focused question form keeps the next iteration on track.',
       },
       {
         badge: 'Critique',
@@ -3802,7 +3802,7 @@ const HOME_PAGE_COPY_EN: HomePageCopy = {
       {
         title: 'Discover',
         body: () =>
-          'Turn 1 is a question form — surface, audience, tone, scale, brand context. Locked in 30 seconds.',
+          'Clarify only when it matters — focused questions for unresolved surface, audience, tone, scale, or brand context.',
       },
       {
         title: 'Direct',
@@ -4044,7 +4044,7 @@ const HOME_PAGE_COPY: Partial<Record<LandingLocaleCode, HomePageCopy>> = {
         {
           badge: '循环',
           title: '提示词编舞',
-          body: '在生成任何像素之前先弹出交互式问题表单。30 秒单选题，胜过 30 分钟来回改方向。',
+          body: '只有未决选择会实质影响结果时，才用精简问题表单确保下一轮方向准确。',
         },
         {
           badge: '批评',
@@ -4079,7 +4079,7 @@ const HOME_PAGE_COPY: Partial<Record<LandingLocaleCode, HomePageCopy>> = {
         {
           title: '发现',
           body: () =>
-            '第 1 轮先问问题：产物表面、受众、语气、规模、品牌上下文。30 秒锁定方向。',
+            '只在确有必要时澄清：聚焦尚未解决的产物表面、受众、语气、规模或品牌上下文。',
         },
         {
           title: '指挥',
@@ -4316,7 +4316,7 @@ HOME_PAGE_COPY['zh-tw'] = {
       {
         badge: '循環',
         title: '提示詞編舞',
-        body: '在生成任何像素之前先彈出互動式問題表單。30 秒單選題，勝過 30 分鐘來回改方向。',
+        body: '只有未決選擇會實質影響結果時，才用精簡問題表單確保下一輪方向準確。',
       },
       {
         badge: '批評',
@@ -4350,7 +4350,7 @@ HOME_PAGE_COPY['zh-tw'] = {
       {
         title: '發現',
         body: () =>
-          '第 1 輪先問問題：產物表面、受眾、語氣、規模、品牌上下文。30 秒鎖定方向。',
+          '只在確有必要時釐清：聚焦尚未解決的產物表面、受眾、語氣、規模或品牌上下文。',
       },
       {
         title: '指揮',
@@ -4868,7 +4868,7 @@ const LANDING_UI_COPY_OVERRIDES: Partial<
       skills: {
         title: (count) => `Skill — ${count} 个可组合设计能力 | Open Design`,
         description:
-          '浏览完整的 Open Design Skill 目录：100+ 个基于 SKILL.md 的文件夹，覆盖演示文稿、原型、仪表盘、移动流程、视频与实时 Artifact。每个 Skill 都是一个可放入 daemon 的文件夹。',
+          '浏览完整的 Open Design Skill 目录：100+ 个基于 SKILL.md 的文件夹，覆盖演示文稿、原型、数据看板、移动流程、视频与实时 Artifact。每个 Skill 都是一个可放入 daemon 的文件夹。',
         label: '目录 · Nº 01',
         heading: (count) => `Skill — ${count} 个可组合设计能力。`,
         lead:
@@ -4936,7 +4936,7 @@ const LANDING_UI_COPY_OVERRIDES: Partial<
       templates: {
         title: (count) => `模板 — ${count} 个可 fork 的 Artifact 模板 | Open Design`,
         description:
-          '可直接 fork 的 Artifact 模板：可刷新的 Live Artifact（类似 Notion 的团队仪表盘、运营简报）以及演示文稿和原型起点。每个模板都带有示例数据，适合复制改造。',
+          '可直接 fork 的 Artifact 模板：可刷新的 Live Artifact（类似 Notion 的团队数据看板、运营简报）以及演示文稿和原型起点。每个模板都带有示例数据，适合复制改造。',
         label: '目录 · Nº 04',
         heading: (count) => `模板 — ${count} 个可 fork 的 Artifact。`,
         lead:
@@ -6516,7 +6516,7 @@ const LOCALIZED_HOME_BODY_COPY: Partial<Record<LandingLocaleCode, DeepPartial<Ho
       items: [
         { badge: 'Deck', title: 'マガジン型 Deck', body: 'guizang-ppt による編集品質のスライド。マガジンレイアウトと WebGL hero を含みます。' },
         { badge: 'Media', title: '合成メディア', body: 'Gpt-image-2、Seedance、HyperFrames。画像、動画、音声を code と同じ chat surface で扱います。' },
-        { badge: 'Loop', title: 'Prompt の振付', body: '1 ピクセルを描く前に質問フォームで方向を固定します。30 秒の選択が長い手戻りを防ぎます。' },
+        { badge: 'Loop', title: 'Prompt の振付', body: '未確定の選択が結果を大きく変える場合だけ、焦点を絞った質問フォームで次の反復を導きます。' },
         { badge: 'Critique', title: '視覚推論', body: '理念、階層、実行、具体性、抑制の 5 次元 self-critique が artifact を守ります。' },
         { badge: 'Runtime', title: '柔らかいシステム', body: 'sandbox iframe、streaming todo、実 cwd のファイルシステム、人と機械の適応ループ。' },
       ],
@@ -6534,7 +6534,7 @@ const LOCALIZED_HOME_BODY_COPY: Partial<Record<LandingLocaleCode, DeepPartial<Ho
       lead: '各段階は反復的で、視覚的で、調査に基づきます。不透明な prompt ではなく、組み合わせ可能なファイルで進みます。',
       steps: [
         { title: '検出', body: (skills, systems) => `daemon が $PATH から 12 種の coding agent を探し、起動時に ${skills} 個の Skill と ${systems} 個の System を読み込みます。` },
-        { title: '発見', body: () => '最初の turn は質問フォームです。表面、対象者、トーン、規模、ブランド文脈を 30 秒で固定します。' },
+        { title: '発見', body: () => '必要なときだけ明確化し、未確定の表面、対象者、トーン、規模、ブランド文脈に絞って質問します。' },
         { title: '指示', body: () => '5 つの決定的な visual direction から選びます。OKLch palette、font stack、layout posture が揃います。' },
         { title: '納品', body: () => 'Agent が disk に書き、sandbox iframe で preview し、HTML / PDF / PPTX / ZIP / Markdown を export します。' },
       ],
@@ -6672,7 +6672,7 @@ LOCALIZED_HOME_BODY_COPY.ko = homeFallbackCopy({
     items: [
       { badge: 'Deck', title: '매거진형 Deck', body: 'guizang-ppt로 만드는 편집급 슬라이드. 매거진 레이아웃과 WebGL hero를 포함합니다.' },
       { badge: 'Media', title: '합성 미디어', body: 'Gpt-image-2, Seedance, HyperFrames. 이미지, 비디오, 오디오를 code와 같은 chat surface에서 다룹니다.' },
-      { badge: 'Loop', title: 'Prompt 안무', body: '픽셀을 그리기 전에 질문 폼으로 방향을 고정합니다. 30초 선택이 긴 재작업을 줄입니다.' },
+      { badge: 'Loop', title: 'Prompt 안무', body: '미해결 선택이 결과를 크게 바꿀 때만 집중된 질문 폼으로 다음 반복의 방향을 맞춥니다.' },
       { badge: 'Critique', title: '시각 추론', body: '철학, 위계, 실행, 구체성, 절제의 5차원 self-critique가 artifact를 지킵니다.' },
       { badge: 'Runtime', title: '유연한 시스템', body: 'sandbox iframe, streaming todo, 실제 cwd 파일 시스템, 인간과 기계의 적응 루프.' },
     ],
@@ -6690,7 +6690,7 @@ LOCALIZED_HOME_BODY_COPY.ko = homeFallbackCopy({
     lead: '각 단계는 반복적이고 시각적이며 리서치 기반입니다. 불투명한 prompt가 아니라 조합 가능한 파일로 진행합니다.',
     steps: [
       { title: '감지', body: (skills, systems) => `daemon이 $PATH에서 12종의 coding agent를 찾고 시작 시 ${skills}개의 Skill과 ${systems}개의 System을 로드합니다.` },
-      { title: '발견', body: () => '첫 turn은 질문 폼입니다. 표면, 대상, 톤, 규모, 브랜드 맥락을 30초 안에 고정합니다.' },
+      { title: '발견', body: () => '필요할 때만 명확히 하며, 미해결 표면, 대상, 톤, 규모 또는 브랜드 맥락에 집중해 질문합니다.' },
       { title: '지시', body: () => '5개의 결정적 visual direction 중 하나를 선택합니다. OKLch palette, font stack, layout posture가 함께 정해집니다.' },
       { title: '전달', body: () => 'Agent가 disk에 쓰고, sandbox iframe에서 preview한 뒤 HTML / PDF / PPTX / ZIP / Markdown으로 export합니다.' },
     ],
@@ -6827,7 +6827,7 @@ LOCALIZED_HOME_BODY_COPY.de = homeFallbackCopy({
     items: [
       { badge: 'Deck', title: 'Magazin-Decks', body: 'Redaktionelle Folien mit guizang-ppt. Magazinlayout und WebGL-Hero inklusive.' },
       { badge: 'Medien', title: 'Synthetische Medien', body: 'Gpt-image-2, Seedance und HyperFrames. Bild, Video und Audio auf derselben Chat-Oberfläche wie Code.' },
-      { badge: 'Loop', title: 'Prompt-Choreografie', body: 'Vor dem ersten Pixel fixiert ein Frageformular die Richtung. 30 Sekunden Auswahl sparen lange Korrekturschleifen.' },
+      { badge: 'Loop', title: 'Prompt-Choreografie', body: 'Nur wenn offene Entscheidungen das Ergebnis wesentlich verändern, hält ein fokussiertes Frageformular die nächste Iteration auf Kurs.' },
       { badge: 'Kritik', title: 'Visuelles Denken', body: 'Eine 5-dimensionale Selbstkritik schützt jedes Artifact: Haltung, Hierarchie, Ausführung, Spezifität und Zurückhaltung.' },
       { badge: 'Runtime', title: 'Weiche Systeme', body: 'Sandbox-iframe, streaming todos, echtes cwd-Dateisystem und adaptive Schleifen zwischen Mensch und Maschine.' },
     ],
@@ -6845,7 +6845,7 @@ LOCALIZED_HOME_BODY_COPY.de = homeFallbackCopy({
     lead: 'Jede Stufe ist iterativ, visuell und forschungsgetrieben: kombinierbare Dateien statt undurchsichtiger Prompts.',
     steps: [
       { title: 'Erkennen', body: (skills, systems) => `Der daemon scannt $PATH nach 12 Coding-Agents und lädt beim Start ${skills} Skills plus ${systems} Systeme.` },
-      { title: 'Entdecken', body: () => 'Turn 1 ist ein Frageformular: Oberfläche, Publikum, Ton, Maßstab und Markenkontext werden in 30 Sekunden fixiert.' },
+      { title: 'Entdecken', body: () => 'Nur bei Bedarf klären: fokussierte Fragen zu offenen Punkten bei Oberfläche, Publikum, Ton, Maßstab oder Markenkontext.' },
       { title: 'Lenken', body: () => 'Wähle eine von 5 deterministischen visuellen Richtungen mit OKLch-Palette, Font-Stack und Layout-Haltung.' },
       { title: 'Liefern', body: () => 'Der Agent schreibt auf die Platte, du prüfst im sandbox iframe und exportierst HTML / PDF / PPTX / ZIP / Markdown.' },
     ],

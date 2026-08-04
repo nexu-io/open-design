@@ -27,6 +27,7 @@ describe('openrouter video generation', () => {
   const realFetch = globalThis.fetch;
   const originalMediaConfigDir = process.env.OD_MEDIA_CONFIG_DIR;
   const originalDataDir = process.env.OD_DATA_DIR;
+  const originalPollInterval = process.env.OD_OPENROUTER_VIDEO_POLL_INTERVAL_MS;
 
   beforeEach(async () => {
     root = await mkdtemp(path.join(tmpdir(), 'od-openrouter-video-'));
@@ -35,6 +36,7 @@ describe('openrouter video generation', () => {
     await mkdir(projectsRoot, { recursive: true });
     delete process.env.OD_MEDIA_CONFIG_DIR;
     delete process.env.OD_DATA_DIR;
+    process.env.OD_OPENROUTER_VIDEO_POLL_INTERVAL_MS = '0';
     process.env.OD_OPENROUTER_API_KEY = 'sk-or-test-key-1234';
   });
 
@@ -50,6 +52,11 @@ describe('openrouter video generation', () => {
       delete process.env.OD_DATA_DIR;
     } else {
       process.env.OD_DATA_DIR = originalDataDir;
+    }
+    if (originalPollInterval == null) {
+      delete process.env.OD_OPENROUTER_VIDEO_POLL_INTERVAL_MS;
+    } else {
+      process.env.OD_OPENROUTER_VIDEO_POLL_INTERVAL_MS = originalPollInterval;
     }
     await rm(root, { recursive: true, force: true });
   });

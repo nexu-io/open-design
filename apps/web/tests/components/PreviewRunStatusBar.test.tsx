@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { render, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const { analyticsTrack } = vi.hoisted(() => ({ analyticsTrack: vi.fn() }));
@@ -29,6 +29,19 @@ function deliveredMessage(): ChatMessage {
   };
 }
 
+function runningMessage(): ChatMessage {
+  return {
+    id: 'running-message',
+    role: 'assistant',
+    content: '',
+    sessionMode: 'design',
+    runStatus: 'running',
+    createdAt: STARTED_AT,
+    startedAt: STARTED_AT,
+    events: [{ kind: 'tool_use', id: 'tool-1', name: 'write_file', input: {} }],
+  };
+}
+
 function renderStatus(messages: ChatMessage[]) {
   return render(
     <I18nProvider initial="en">
@@ -43,8 +56,21 @@ function renderStatus(messages: ChatMessage[]) {
 
 describe('PreviewRunStatusBar', () => {
   afterEach(() => {
+    cleanup();
     analyticsTrack.mockReset();
     vi.useRealTimers();
+  });
+
+  it('renders only the stage label while a Design run is active', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(STARTED_AT + 8 * 60_000 + 18_000);
+
+    renderStatus([runningMessage()]);
+
+    const status = screen.getByTestId('preview-run-status');
+    expect(status).toHaveTextContent('Building design solution');
+    expect(status).not.toHaveTextContent('Elapsed');
+    expect(status.querySelector('[aria-hidden="true"]')).toBeNull();
   });
 
   it('does not flash or track an already-expired delivered turn after an idle rerender', () => {

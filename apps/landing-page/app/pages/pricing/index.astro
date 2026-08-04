@@ -23,6 +23,7 @@ import {
   PREMIUM_MODELS,
   STANDARD_MODELS,
   CREDIT_BONUS_PCT,
+  TRIAL_CREDIT_PROMO_ENABLED,
   type PlanTierId,
 } from '../../_lib/pricing-content';
 import EnterpriseLeadForm from '../../_components/enterprise-lead-form.astro';
@@ -197,25 +198,32 @@ const jsonLd = [
         </a>
 
         <ul class="pr-feats">
-          <li class="pr-feat">{L.freeTrialCreditLabel}</li>
+          {/* The trial-credit row and both model lists only exist through the
+              signup credit grant; they vanish while that promotion is offline
+              (TRIAL_CREDIT_PROMO_ENABLED, mirrors the vela modal). */}
+          {TRIAL_CREDIT_PROMO_ENABLED && (
+            <li class="pr-feat">{L.freeTrialCreditLabel}</li>
+          )}
           <li class="pr-feat">{content.free.concurrency}</li>
           {content.free.features.map((f) => (
             <li class="pr-feat">{renderCatalogLabel(f)}</li>
           ))}
         </ul>
 
-        <div class="pr-models">
-          <p class="pr-models-head">{L.premiumModels}</p>
-          <ul class="pr-model-list">
-            {FREE_PREMIUM_MODELS.map((m) => (
-              <li class={m.trial ? undefined : 'is-unavailable'}>{m.name}</li>
-            ))}
-          </ul>
-          <p class="pr-models-head">{L.standardModels}</p>
-          <ul class="pr-model-list">
-            {STANDARD_MODELS.map((m) => <li>{m}</li>)}
-          </ul>
-        </div>
+        {TRIAL_CREDIT_PROMO_ENABLED && (
+          <div class="pr-models">
+            <p class="pr-models-head">{L.premiumModels}</p>
+            <ul class="pr-model-list">
+              {FREE_PREMIUM_MODELS.map((m) => (
+                <li class={m.trial ? undefined : 'is-unavailable'}>{m.name}</li>
+              ))}
+            </ul>
+            <p class="pr-models-head">{L.standardModels}</p>
+            <ul class="pr-model-list">
+              {STANDARD_MODELS.map((m) => <li>{m}</li>)}
+            </ul>
+          </div>
+        )}
       </article>
 
       {tiers.map((t) => {

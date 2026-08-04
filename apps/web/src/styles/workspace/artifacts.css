@@ -3426,6 +3426,58 @@
 .compact-toggle.on .compact-toggle-switch { background: var(--text); }
 .compact-toggle.on .compact-toggle-switch::after { transform: translateX(12px); }
 
+/* Dark-mode visibility for off-state toggles (#5298).
+   The default off-state track uses --border-strong, which in dark mode is
+   #46433c — only ~5% lighter than the --bg-subtle (#252321) panel behind it.
+   That makes the toggle track nearly invisible when the control is off,
+   leaving users unsure whether the setting is enabled. Bump the off-state
+   track to a clearly lighter neutral and outline the thumb so the white
+   knob stays visible against the (now lighter) track. On-state already
+   used --text (#e8e4dc) which is high-contrast, so it is left alone.
+
+   Two selector paths needed because Open Design supports both explicit
+   [data-theme='dark'] AND system dark via @media prefers-color-scheme
+   (the default "system" theme removes data-theme and falls back on the
+   media query in tokens.css). */
+
+/* --- Explicit dark theme --- */
+[data-theme='dark'] .toggle-row-switch,
+[data-theme='dark'] .compact-toggle-switch {
+  background: #6b6862;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.28);
+}
+[data-theme='dark'] .toggle-row-switch::after,
+[data-theme='dark'] .compact-toggle-switch::after {
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.4),
+    0 0 0 1px rgba(0, 0, 0, 0.18);
+}
+/* Hover: only lift the track when off, or the on-state bright track gets
+   overridden by a higher-specificity hover rule. */
+[data-theme='dark'] .compact-toggle:not(.on):hover .compact-toggle-switch,
+[data-theme='dark'] .toggle-row:not(.on):hover .toggle-row-switch {
+  background: #75726c;
+}
+
+/* --- System dark theme (the default — no data-theme attr set) --- */
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme]) .toggle-row-switch,
+  html:not([data-theme]) .compact-toggle-switch {
+    background: #6b6862;
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.28);
+  }
+  html:not([data-theme]) .toggle-row-switch::after,
+  html:not([data-theme]) .compact-toggle-switch::after {
+    box-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.4),
+      0 0 0 1px rgba(0, 0, 0, 0.18);
+  }
+  html:not([data-theme]) .compact-toggle:not(.on):hover .compact-toggle-switch,
+  html:not([data-theme]) .toggle-row:not(.on):hover .toggle-row-switch {
+    background: #75726c;
+  }
+}
+
 /* -------- Template picker (template tab) ---------------------------- */
 .template-list {
   display: flex;

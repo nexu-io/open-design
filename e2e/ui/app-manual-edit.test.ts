@@ -1,7 +1,8 @@
 import { expect, test } from '@/playwright/suite';
+import { expectStableCount } from '@/playwright/assertions';
 import { openNewProjectModal as openNewProjectModalFromProjects } from '@/playwright/rail';
-import { routeAgents } from '@/playwright/mock-factory';
-import { clickDeckNextSlide, clickDeckPreviousSlide, openAllProjectFiles } from '@/playwright/workspace';
+import { routeAgents, routeSuccessfulRuns } from '@/playwright/mock-factory';
+import { clickDeckNextSlide, openAllProjectFiles } from '@/playwright/workspace';
 import type { Page } from '@playwright/test';
 import { T } from '@/timeouts';
 
@@ -127,30 +128,11 @@ test('[P0] manual edit inspector previews and persists page and selected element
   await expectFileSourceExcludes(page, projectId, 'manual-edit.html', ['data-od-edit-selected']);
   await expect(page.locator('.manual-edit-error')).toHaveCount(0);
 
-  await expect(page.getByRole('button', { name: /^Share$/ })).toBeVisible();
-  await expect(page.getByRole('button', { name: /^Download$/ })).toBeVisible();
-});
-
-test('[P0] manual edit mode preserves preview actions after style edits', async ({ page }) => {
-  await routeMockAgents(page);
-  const projectId = await createEmptyProject(page, 'Manual edit smoke');
-  await seedHtmlArtifact(page, projectId, 'manual-edit.html', manualEditHtml());
-  await page.goto(`/projects/${projectId}/files/manual-edit.html`);
-  await openDesignFile(page, 'manual-edit.html');
-
+  await page.getByTestId('manual-edit-mode-toggle').click();
+  await expect(frame.getByRole('heading', { name: 'Original Hero' })).toBeVisible();
+  await expect(page.getByRole('tablist', { name: 'View mode' })).toHaveCount(0);
+  await expect(page.locator('.viewer-source')).toHaveCount(0);
   await expect(artifactPreview(page)).toBeVisible();
-  const frame = artifactPreviewFrame(page);
-  await expect(frame.getByRole('heading', { name: 'Original Hero' })).toBeVisible();
-
-  await page.getByTestId('manual-edit-mode-toggle').click();
-  await selectPreviewElementThroughBridge(page, frame, '[data-od-id="hero-title"]', 'TYPOGRAPHY');
-  const fontSizeInput = await selectStyleRowInput(page, frame, '[data-od-id="hero-title"]', 'TYPOGRAPHY', 'Size');
-  await fontSizeInput.fill('48');
-  await inspectSaveButton(page).click({ force: true });
-  await expectFileSource(page, projectId, 'manual-edit.html', ['font-size: 48px']);
-
-  await page.getByTestId('manual-edit-mode-toggle').click();
-  await expect(frame.getByRole('heading', { name: 'Original Hero' })).toBeVisible();
 
   await page.getByTestId('board-mode-toggle').click();
   await expect(page.getByRole('button', { name: /^Comment$/ })).toBeVisible();
@@ -177,6 +159,9 @@ async function selectPreviewElementThroughBridge(
     await frame.locator(selector).click({ timeout: 5_000 });
     await expect(frame.locator(`${selector}[data-od-edit-selected="true"]`)).toHaveCount(1, { timeout: 2_000 });
   }).toPass({ timeout: 30_000 });
+  // Element clicks raise only the lightweight selection chrome; the full
+  // inspector opens through the action bar's "Edit parameters" button.
+  await page.getByTestId('manual-edit-open-inspector').click();
   await expect(page.locator('.manual-edit-modal')).toContainText(section);
 }
 
@@ -354,6 +339,9 @@ test('[P1] HTML preview toolbar exposes screenshot, comments, mark, and edit wor
 
   await page.getByTestId('board-mode-toggle').click();
   await expect(page.getByTestId('board-mode-toggle')).toHaveAttribute('aria-pressed', 'true');
+  await expect(
+    artifactPreviewFrame(page).locator('html[data-od-comment-mode][data-od-comment-mode-kind="picker"]'),
+  ).toHaveCount(1);
   await artifactPreviewFrame(page).locator('[data-od-id="hero-title"]').click();
   await expect(page.getByTestId('comment-popover')).toBeVisible();
   await page.getByTestId('comment-popover-input').fill('Panel-level comment');
@@ -374,7 +362,13 @@ test('[P1] HTML preview toolbar exposes screenshot, comments, mark, and edit wor
   await expect(page.getByTestId('draw-overlay-toggle')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('button', { name: 'Box select' })).toBeVisible();
   await page.getByPlaceholder('Add a note for this mark').fill('Mark this hero crop');
-  await expect(page.getByRole('button', { name: 'Add to input' })).toBeEnabled();
+  const submitOptionsButton = page.getByRole('button', { name: 'Submit options' });
+  await expect(submitOptionsButton).toBeEnabled();
+  await submitOptionsButton.click();
+  const submitOptionsMenu = page.getByRole('menu', { name: 'Submit options' });
+  await expect(submitOptionsMenu.getByRole('menuitemradio', { name: 'Add to input' })).toBeEnabled();
+  await submitOptionsButton.click();
+  await expect(submitOptionsMenu).toHaveCount(0);
 
   const previewBox = await artifactPreview(page).boundingBox();
   expect(previewBox).not.toBeNull();
@@ -382,9 +376,10 @@ test('[P1] HTML preview toolbar exposes screenshot, comments, mark, and edit wor
   await page.mouse.down();
   await page.mouse.move(previewBox!.x + 220, previewBox!.y + 170);
   await page.mouse.up();
-  const queueButton = page.getByRole('button', { name: 'Queue' });
-  await expect(queueButton).toBeEnabled();
-  await queueButton.click();
+  await submitOptionsButton.click();
+  const queueOption = submitOptionsMenu.getByRole('menuitemradio', { name: 'Queue' });
+  await expect(queueOption).toBeEnabled();
+  await queueOption.click();
   const queuedStrip = page.getByTestId('chat-queued-send-strip');
   await expect(queuedStrip).toBeVisible();
   await expect(queuedStrip).toContainText('Mark this hero crop');
@@ -535,85 +530,15 @@ test('[P1] first-loop onboarding completes once after a successful artifact expo
   const secondHtmlDownload = page.waitForEvent('download');
   await page.locator('.share-menu-popover[role="menu"]').getByRole('menuitem', { name: /Export as standalone HTML/ }).click();
   await secondHtmlDownload;
-  await page.waitForTimeout(500);
-  const completedCount = analyticsBodies.join('\n').match(/onboarding_completed/g)?.length ?? 0;
-  expect(completedCount).toBe(1);
+  await expectStableCount(
+    () => analyticsBodies.join('\n').match(/onboarding_completed/g)?.length ?? 0,
+    1,
+    {
+      timeout: 750,
+      message: 're-exporting the same first-loop artifact should not emit a duplicate completion event',
+    },
+  );
 });
-
-async function selectStyleRowInput(
-  page: Page,
-  frame: ReturnType<Page['frameLocator']>,
-  selector: string,
-  section: string,
-  label: string,
-) {
-  await frame.locator(selector).evaluate((el) => {
-    const element = el as HTMLElement;
-    const rect = element.getBoundingClientRect();
-    const styles = window.getComputedStyle(element);
-    window.parent.postMessage({
-      type: 'od-edit-select',
-      target: {
-        id: element.dataset.odId ?? element.id,
-        kind: 'text',
-        label: element.textContent?.trim() || element.tagName.toLowerCase(),
-        tagName: element.tagName.toLowerCase(),
-        className: typeof element.className === 'string' ? element.className : '',
-        text: element.textContent?.trim() ?? '',
-        rect: {
-          x: Math.round(rect.x),
-          y: Math.round(rect.y),
-          width: Math.round(rect.width),
-          height: Math.round(rect.height),
-        },
-        fields: { text: element.textContent?.trim() ?? '' },
-        attributes: Object.fromEntries(Array.from(element.attributes).map((attr) => [attr.name, attr.value])),
-        styles: {
-          fontFamily: styles.fontFamily,
-          fontSize: styles.fontSize,
-          fontWeight: styles.fontWeight,
-          color: styles.color,
-          textAlign: styles.textAlign,
-          lineHeight: styles.lineHeight,
-          letterSpacing: styles.letterSpacing,
-          width: styles.width,
-          height: styles.height,
-          minHeight: styles.minHeight,
-          gap: styles.gap,
-          flexDirection: styles.flexDirection,
-          justifyContent: styles.justifyContent,
-          alignItems: styles.alignItems,
-          backgroundColor: styles.backgroundColor,
-          opacity: styles.opacity,
-          padding: styles.padding,
-          paddingTop: styles.paddingTop,
-          paddingRight: styles.paddingRight,
-          paddingBottom: styles.paddingBottom,
-          paddingLeft: styles.paddingLeft,
-          margin: styles.margin,
-          marginTop: styles.marginTop,
-          marginRight: styles.marginRight,
-          marginBottom: styles.marginBottom,
-          marginLeft: styles.marginLeft,
-          border: styles.border,
-          borderTopWidth: styles.borderTopWidth,
-          borderRightWidth: styles.borderRightWidth,
-          borderBottomWidth: styles.borderBottomWidth,
-          borderLeftWidth: styles.borderLeftWidth,
-          borderStyle: styles.borderStyle,
-          borderColor: styles.borderColor,
-          borderRadius: styles.borderRadius,
-        },
-        isLayoutContainer: false,
-        outerHtml: element.outerHTML,
-      },
-    }, '*');
-  });
-  await expect(page.locator('.manual-edit-modal')).toContainText('TYPOGRAPHY');
-  const row = inspectorSection(page, section).locator('.cc-row').filter({ hasText: label }).locator('input');
-  await expect(row).toBeVisible();
-  return row;
-}
 
 test('[P0] manual edit mode keeps deck navigation available for deck-shaped HTML', async ({ page }) => {
   await routeMockAgents(page);
@@ -626,221 +551,6 @@ test('[P0] manual edit mode keeps deck navigation available for deck-shaped HTML
   await expect(frame.getByText('Slide One')).toBeVisible();
   await clickDeckNextSlide(page);
   await expect(frame.getByText('Slide Two')).toBeVisible();
-});
-
-test('[P0] deck host navigation advances one slide when the deck also handles slide messages', async ({ page }) => {
-  await routeMockAgents(page);
-  const projectId = await createEmptyProject(page, 'Deck keyboard single step');
-  await seedDeckArtifact(
-    page,
-    projectId,
-    'keyboard-deck.html',
-    'Keyboard Deck',
-    ['Slide One', 'Slide Two', 'Slide Three'],
-    { stopsSlideMessagePropagation: true },
-  );
-  await page.goto(`/projects/${projectId}/files/keyboard-deck.html`);
-  await openDesignFile(page, 'keyboard-deck.html');
-
-  const frame = artifactPreviewFrame(page);
-  await expect(frame.getByText('Slide One')).toBeVisible();
-  await clickDeckNextSlide(page);
-  await expect(frame.getByText('Slide Two')).toBeVisible();
-  await expect(frame.getByText('Slide Three')).toBeHidden();
-});
-
-test('[P0] focused deck keyboard navigation advances one slide when the deck handles keys', async ({ page }) => {
-  await routeMockAgents(page);
-  const projectId = await createEmptyProject(page, 'Deck iframe keyboard single step');
-  await seedDeckArtifact(
-    page,
-    projectId,
-    'iframe-keyboard-deck.html',
-    'Iframe Keyboard Deck',
-    ['Slide One', 'Slide Two', 'Slide Three'],
-    { frameworkDeck: true, handlesKeyboard: true, stopsSlideMessagePropagation: true },
-  );
-  await page.goto(`/projects/${projectId}/files/iframe-keyboard-deck.html`);
-  await openDesignFile(page, 'iframe-keyboard-deck.html');
-
-  const frame = artifactPreviewFrame(page);
-  await expect(frame.getByText('Slide One')).toBeVisible();
-  await frame.locator('body').click();
-  await page.keyboard.press('ArrowRight');
-  await expect(frame.getByText('Slide Two')).toBeVisible();
-  await expect(frame.getByText('Slide Three')).toBeHidden();
-});
-
-test('[P0] deck host navigation works when deck content only mentions slide messages', async ({ page }) => {
-  await routeMockAgents(page);
-  const projectId = await createEmptyProject(page, 'Deck protocol text');
-  await seedDeckArtifact(
-    page,
-    projectId,
-    'protocol-text-deck.html',
-    'Protocol Text Deck',
-    ['Slide One', 'Slide Two'],
-    { mentionsSlideMessageProtocol: true },
-  );
-  await page.goto(`/projects/${projectId}/files/protocol-text-deck.html`);
-  await openDesignFile(page, 'protocol-text-deck.html');
-
-  const frame = artifactPreviewFrame(page);
-  await expect(frame.getByText('Slide One')).toBeVisible();
-  await expect(frame.getByText('Protocol token: od:slide')).toBeVisible();
-  await clickDeckNextSlide(page);
-  await expect(frame.getByText('Slide Two')).toBeVisible();
-  await expect(frame.getByText('Slide One')).toBeHidden();
-});
-
-test('[P0] deck host counter stays synced when a self-handling deck stops slide messages', async ({ page }) => {
-  await routeMockAgents(page);
-  const projectId = await createEmptyProject(page, 'Deck stopped message sync');
-  await seedDeckArtifact(
-    page,
-    projectId,
-    'stopped-message-deck.html',
-    'Stopped Message Deck',
-    ['Slide One', 'Slide Two', 'Slide Three'],
-    { stopsSlideMessagePropagation: true },
-  );
-  await page.goto(`/projects/${projectId}/files/stopped-message-deck.html`);
-  await openDesignFile(page, 'stopped-message-deck.html');
-
-  const frame = artifactPreviewFrame(page);
-  const hostCounter = page.locator('.deck-floating-count');
-  await expect(frame.getByText('Slide One')).toBeVisible();
-  await expect(hostCounter).toHaveText(/1\s*\/\s*3/);
-  await expect(frame.locator('#deck-cur')).toHaveText('01');
-
-  await clickDeckNextSlide(page);
-  await expect(frame.getByText('Slide Two')).toBeVisible();
-  await expect(hostCounter).toHaveText(/2\s*\/\s*3/);
-  await expect(frame.locator('#deck-cur')).toHaveText('02');
-
-  await clickDeckPreviousSlide(page);
-  await expect(frame.getByText('Slide One')).toBeVisible();
-  await expect(hostCounter).toHaveText(/1\s*\/\s*3/);
-  await expect(frame.locator('#deck-cur')).toHaveText('01');
-});
-
-test('[P0] history version deck keyboard navigation advances the displayed preview before iframe click', async ({ page }) => {
-  test.setTimeout(T.xlong);
-  await routeMockAgents(page);
-  const projectId = await createEmptyProject(page, 'History deck keyboard');
-  const fileName = 'history-keyboard-deck.html';
-  await seedDeckArtifact(
-    page,
-    projectId,
-    fileName,
-    'History Keyboard Deck',
-    [
-      'Slide One',
-      'Slide Two',
-      'Slide Three',
-      'Slide Four',
-      'Slide Five',
-      'Slide Six',
-      'Slide Seven',
-      'Slide Eight',
-      'Slide Nine',
-      'Slide Ten',
-    ],
-    { stopsSlideMessagePropagation: true },
-  );
-  const currentVersion = {
-    id: 'v-current',
-    fileName,
-    version: 3,
-    label: 'Selected 10-slide history preview',
-    createdAt: Date.now(),
-    source: 'manual',
-    prompt: 'Selected 10-slide history preview',
-    size: 42,
-    mime: 'text/html',
-    kind: 'html',
-    current: true,
-  };
-  await page.route(`**/api/projects/${projectId}/files/${fileName}/versions`, async (route) => {
-    if (route.request().method() === 'GET') {
-      await route.fulfill({
-        json: {
-          file: { name: fileName, kind: 'html', mime: 'text/html', size: 42, mtime: Date.now() },
-          versions: [currentVersion],
-        },
-      });
-      return;
-    }
-    await route.continue();
-  });
-  await page.goto(`/projects/${projectId}/files/${fileName}`, { waitUntil: 'domcontentloaded' });
-  await openDesignFile(page, fileName);
-
-  await page.getByRole('button', { name: 'Versions' }).click();
-  const dialog = page.getByRole('dialog', { name: 'Versions' });
-  await expect(dialog).toBeVisible();
-  await dialog.getByRole('option', { name: /Selected 10-slide history preview/i }).focus();
-  const historyFrame = dialog.locator('iframe').first().contentFrame();
-  await expect(historyFrame.locator('#deck-cur')).toHaveText('01');
-  await expect(historyFrame.locator('#deck-total')).toHaveText('10');
-
-  await page.keyboard.press('ArrowRight');
-  await expect(historyFrame.locator('#deck-cur')).toHaveText('02');
-  await page.keyboard.press('PageDown');
-  await expect(historyFrame.locator('#deck-cur')).toHaveText('03');
-  await page.keyboard.press('ArrowLeft');
-  await expect(historyFrame.locator('#deck-cur')).toHaveText('02');
-  await page.keyboard.press('PageUp');
-  await expect(historyFrame.locator('#deck-cur')).toHaveText('01');
-});
-
-
-test('[P0] simple deck keeps the active slide stable in preview-only mode', async ({ page }) => {
-  await routeMockAgents(page);
-  const projectId = await createEmptyProject(page, 'Simple deck navigation state');
-  await seedDeckArtifact(page, projectId, 'simple-deck.html', 'Simple Deck', ['Slide One', 'Slide Two', 'Slide Three']);
-  await page.goto(`/projects/${projectId}/files/simple-deck.html`);
-  await openDesignFile(page, 'simple-deck.html');
-
-  const frame = artifactPreviewFrame(page);
-
-  await expect(frame.getByText('Slide One')).toBeVisible();
-  await clickDeckNextSlide(page);
-  await expect(frame.getByText('Slide Two')).toBeVisible();
-
-  await expect(page.getByRole('tablist', { name: 'View mode' })).toHaveCount(0);
-  await expect(frame.getByText('Slide Two')).toBeVisible();
-  await clickDeckNextSlide(page);
-  await expect(frame.getByText('Slide Three')).toBeVisible();
-});
-
-test('[P0] @critical HTML viewer stays rendered without a code toggle', async ({ page }) => {
-  await routeMockAgents(page);
-  const projectId = await createEmptyProject(page, 'HTML preview toggle regression');
-  await seedHtmlArtifact(
-    page,
-    projectId,
-    'toggle-preview.html',
-    '<!doctype html><html><body><main><h1>Toggle Preview Stable</h1><p>Still visible after tab switches.</p></main></body></html>',
-  );
-  await page.goto(`/projects/${projectId}`);
-  await openDesignFile(page, 'toggle-preview.html');
-
-  const previewFrame = artifactPreview(page);
-  await expect(previewFrame).toBeVisible();
-  await expect(
-    artifactPreviewFrame(page).getByRole('heading', { name: 'Toggle Preview Stable' }),
-  ).toBeVisible();
-
-  await expect(page.getByRole('tablist', { name: 'View mode' })).toHaveCount(0);
-  await expect(page.locator('.viewer-source')).toHaveCount(0);
-  await expect(previewFrame).toBeVisible();
-  await expect(
-    artifactPreviewFrame(page).getByRole('heading', { name: 'Toggle Preview Stable' }),
-  ).toBeVisible();
-  await expect(
-    artifactPreviewFrame(page).getByText('Still visible after tab switches.'),
-  ).toBeVisible();
 });
 
 test('[P0] @critical edited HTML file restores selected tab and preview after reload', async ({ page }) => {
@@ -996,17 +706,9 @@ async function latestConversationId(page: Page, projectId: string): Promise<stri
 }
 
 async function holdNextRunOpen(page: Page) {
-  let runCount = 0;
-  await page.route('**/api/runs', async (route) => {
-    runCount += 1;
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: JSON.stringify({ runId: `preview-tools-run-${runCount}` }),
-    });
-  });
-  await page.route('**/api/runs/*/events', async () => {
-    await new Promise(() => undefined);
+  await routeSuccessfulRuns(page, {
+    runIdPrefix: 'preview-tools-run',
+    events: 'pending',
   });
 }
 

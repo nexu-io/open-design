@@ -72,6 +72,7 @@ import type {
   QuestionsFormClickProps,
   RunFailedToastClickProps,
   AmrAuthResultProps,
+  AmrAuthStageProps,
   AmrEntryClickProps,
   RunFailedToastSurfaceViewProps,
   HomeRecommendationClickProps,
@@ -136,6 +137,7 @@ import type {
   SettingsByokModelsFetchResultProps,
   SettingsByokTestResultProps,
   SettingsConnectorAuthResultProps,
+  ByokPreflightBlockedProps,
   OnboardingClickProps,
   OnboardingRuntimeScanResultProps,
   OnboardingCompleteResultProps,
@@ -149,6 +151,7 @@ import type {
   DesignSystemApplyResultProps,
   UpdateIndicatorSurfaceViewProps,
   UpdatePromptSurfaceViewProps,
+  UpdateCheckResultProps,
   UpdateInstallResultProps,
   WhatsNewPopupSurfaceViewProps,
   WhatsNewPopupClickProps,
@@ -322,8 +325,17 @@ export function trackAmrEntryClick(
 export function trackAmrAuthResult(
   track: Track,
   props: AmrAuthResultProps,
+  options?: TrackOptions,
 ): void {
-  send(track, 'amr_auth_result', props);
+  send(track, 'amr_auth_result', props, options);
+}
+
+export function trackAmrAuthStage(
+  track: Track,
+  props: AmrAuthStageProps,
+  options?: TrackOptions,
+): void {
+  send(track, 'amr_auth_stage', props, options);
 }
 
 // ---- ui_click (home) -----------------------------------------------------
@@ -1070,6 +1082,13 @@ export function trackSettingsByokModelsFetchResult(
   send(track, 'settings_byok_models_fetch_result', props);
 }
 
+export function trackByokPreflightBlocked(
+  track: Track,
+  props: ByokPreflightBlockedProps,
+): void {
+  send(track, 'byok_preflight_blocked', props);
+}
+
 export function trackSettingsConnectorAuthResult(
   track: Track,
   props: SettingsConnectorAuthResultProps,
@@ -1243,6 +1262,13 @@ export function trackUpdateInstallResult(
   props: UpdateInstallResultProps,
 ): void {
   send(track, 'update_install_result', props);
+}
+
+export function trackUpdateCheckResult(
+  track: Track,
+  props: UpdateCheckResultProps,
+): void {
+  send(track, 'update_check_result', props);
 }
 
 // ---- Post-update "what's new" card ---------------------------------------

@@ -1,7 +1,5 @@
 <h1 align="center">Open Design: 오픈소스 Claude Design 대안</h1>
 
-> 🔥 **Open Design 0.13.0 — _Stay in Flow_ 출시.** 긴 디자인 세션은 지금까지 중단될 때마다 끊겼습니다 — 실행은 진행 위치를 잃고, 모델 선택기는 추측하게 만들고, 내보내기는 한 번 더 우회해야 했습니다. 0.13.0은 세션을 계속 살아 있게 합니다: Codex / OpenCode / Pi / Open Design Cloud 실행을 여러 턴에 걸쳐 재개하고, 알맞은 모델을 더 빠르게 고르며, 스크린샷 기반 PPTX / PDF를 앱을 벗어나지 않고 전달하세요. [0.13.0 다운로드](https://github.com/nexu-io/open-design/releases) · [릴리스 노트](https://github.com/nexu-io/open-design/releases/tag/open-design-v0.13.0)
->
 > ⚡ **Open Design Cloud — 공식 모델 서비스.** 한 번의 충전으로 Open Design 안에서 GPT, Claude, Gemini, DeepSeek를 바로 사용하세요. 20+ 플래그십 모델, 무설정, 실제 토큰 사용량 기반 과금. [Open Design Cloud 사용해 보기](https://open-design.ai/cloud/)
 >
 > 🏅 **Open Design Fellow 프로그램이 지금 열렸습니다.** 디자인은 열려 있어야 한다고 믿으신다면 — Open Design Fellow가 되어 핵심 팀과 함께 제품을 빚어내고, 더 많은 사람이 디자인의 미래를 정의하는 일에 참여하도록 도와주세요. 자세히 → [`MAINTAINERS.md`](../../MAINTAINERS.md) 및 [Discord](https://discord.gg/mHAjSMV6gz).
@@ -116,10 +114,10 @@ Open Design가 무엇이고 무엇을 하는지 빠르게 살펴봅니다. **Hom
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | ✅ 지원됨 | `od mcp install claude` |
 | [Codex CLI](https://github.com/openai/codex) | ✅ 지원됨 | `od mcp install codex` |
 | [DeepSeek Reasonix](https://github.com/esengine/DeepSeek-Reasonix) | ✅ 지원됨 | `od mcp install reasonix` |
+| [Raven](https://github.com/EverMind-AI/Raven) | ✅ 지원됨 | `od mcp install raven` |
 | [Cursor](https://www.cursor.com/cli) | ✅ 지원됨 | `od mcp install cursor` |
 | [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ 지원됨 | `od mcp install copilot` |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ 지원됨 | `od mcp install copilot` |
-| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | ✅ 지원됨 | `od mcp install gemini` |
 | [OpenCode](https://opencode.ai/) | ✅ 지원됨 | `od mcp install opencode` |
 | [OpenClaw](https://github.com/openclaw/openclaw) | ✅ 지원됨 | `od mcp install openclaw` |
 | [Antigravity](https://antigravity.google) | ✅ 지원됨 | `od mcp install antigravity` |
@@ -304,8 +302,8 @@ GUI를 한 번도 열지 않고도 Open Design를 사용할 수 있습니다 —
 ```bash
 # One-line install into the agent you're using:
 od mcp install <agent>
-# <agent> = claude | codex | cursor | copilot | openclaw | antigravity | gemini
-#         | pi | vibe | hermes | cline | kimi | trae | opencode
+# <agent> = claude | codex | reasonix | raven | cursor | copilot | openclaw | antigravity
+#         | pi | vibe | hermes | cline | kimi | kiro | trae | opencode
 ```
 
 그런 다음 에이전트 안에서:
@@ -681,7 +679,7 @@ gh pr create --fill
 참여해 주신 모든 분께 감사드립니다 — 코드, 문서, 피드백, 날카로운 이슈, 새 스킬, 새 디자인 시스템.
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&max=500&columns=20&anon=1&cache_bust=2026-07-17" alt="Open Design contributors" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&max=500&columns=20&anon=1&cache_bust=2026-08-04" alt="Open Design contributors" />
 </a>
 
 ---
@@ -706,9 +704,9 @@ gh pr create --fill
 
 <a href="https://star-history.com/#nexu-io/open-design&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-07-17" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-07-17" />
-    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-07-17" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-08-04" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-08-04" />
+    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-08-04" />
   </picture>
 </a>
 

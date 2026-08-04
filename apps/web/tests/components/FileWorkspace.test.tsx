@@ -3076,11 +3076,12 @@ describe('FileWorkspace empty-project generation contract', () => {
 
       expect(screen.queryByTestId('generating-tab')).toBeNull();
       expect(screen.queryByTestId('generation-preview-stage')).toBeNull();
+      expect(screen.queryByTestId('preview-run-status')).toBeNull();
       expect(screen.getByTestId('design-files-empty')).toBeTruthy();
     },
   );
 
-  it('keeps delivery recovery in Chat and leaves a passive failure hint over existing preview files', () => {
+  it('keeps delivery recovery in Chat without mounting status over existing preview files', () => {
     render(
       <FileWorkspace
         projectId="project-1"
@@ -3104,13 +3105,9 @@ describe('FileWorkspace empty-project generation contract', () => {
       />,
     );
 
-    const previewStatus = screen.getByTestId('preview-run-status');
-    expect(previewStatus).toHaveTextContent('Delivery needs attention · Retry in Chat');
-    expect(previewStatus.closest('.ws-preview-run-status-slot')).not.toBeNull();
-    expect(previewStatus.closest('[data-testid="design-files-empty"]')).toBeNull();
+    expect(screen.queryByTestId('preview-run-status')).toBeNull();
     expect(screen.queryByTestId('preview-run-status-retry')).toBeNull();
     expect(screen.queryByTestId('preview-run-status-view-details')).toBeNull();
-    expect(previewStatus).not.toHaveTextContent('Elapsed');
   });
 
   it('does not mount main-preview delivery feedback over a browser tab', () => {
@@ -3145,7 +3142,7 @@ describe('FileWorkspace empty-project generation contract', () => {
     expect(screen.queryByTestId('preview-run-status')).toBeNull();
   });
 
-  it('keeps a delivered confirmation on the preview canvas after files arrive', () => {
+  it('does not mount a delivered confirmation over the preview canvas', () => {
     const now = 1_700_000_012_500;
     vi.spyOn(Date, 'now').mockReturnValue(now);
     render(
@@ -3172,12 +3169,6 @@ describe('FileWorkspace empty-project generation contract', () => {
       />,
     );
 
-    const previewStatus = screen.getByTestId('preview-run-status');
-    expect(previewStatus).toHaveTextContent('Design ready');
-    expect(previewStatus.closest('.ws-preview-run-status-slot')).not.toBeNull();
-    expect(previewStatus.closest('[data-testid="design-files-empty"]')).toBeNull();
-    expect(previewStatus).not.toHaveAttribute('aria-live');
-    expect(within(previewStatus).getByRole('status')).toHaveTextContent('Design ready');
-    expect(previewStatus.querySelector('[aria-hidden="true"]')).toHaveTextContent('Elapsed 0:03');
+    expect(screen.queryByTestId('preview-run-status')).toBeNull();
   });
 });

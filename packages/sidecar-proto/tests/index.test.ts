@@ -92,6 +92,27 @@ describe("open-design sidecar contract", () => {
     expect(normalizeDaemonSidecarMessage(message)).toEqual(message);
   });
 
+  it("accepts only loopback HTTP origins for packaged web registration", () => {
+    const message = {
+      input: { url: "http://127.0.0.1:64248" },
+      type: SIDECAR_MESSAGES.REGISTER_WEB_URL,
+    };
+    expect(normalizeDaemonSidecarMessage(message)).toEqual(message);
+
+    expect(() =>
+      normalizeDaemonSidecarMessage({
+        input: { url: "https://open-design.ai" },
+        type: SIDECAR_MESSAGES.REGISTER_WEB_URL,
+      }),
+    ).toThrow(/loopback|http/i);
+    expect(() =>
+      normalizeDaemonSidecarMessage({
+        input: { url: "http://127.0.0.1:64248/projects/project-1" },
+        type: SIDECAR_MESSAGES.REGISTER_WEB_URL,
+      }),
+    ).toThrow(/origin/i);
+  });
+
   it("rejects malformed mint-import-token payloads", () => {
     expect(() =>
       normalizeDaemonSidecarMessage({

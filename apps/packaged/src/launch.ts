@@ -106,6 +106,15 @@ export async function ensurePackagedNamespacePaths(
   ]);
 }
 
+export function stabilizePackagedWorkingDirectory(
+  paths: Pick<PackagedNamespacePaths, "runtimeRoot">,
+  chdir: (directory: string) => void = (directory) => process.chdir(directory),
+): void {
+  // Payload launches can inherit a cwd inside an older version directory. Move
+  // to the namespace-scoped root before release cleanup makes that cwd invalid.
+  chdir(paths.runtimeRoot);
+}
+
 export function applyPackagedElectronPathOverrides(
   paths: PackagedNamespacePaths,
 ): void {

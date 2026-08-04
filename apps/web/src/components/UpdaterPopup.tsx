@@ -4,13 +4,17 @@ import type { OpenDesignHostUpdaterStatusSnapshot } from '@open-design/host';
 
 import { Icon } from './Icon';
 import { popoverIn } from '../motion';
+import { openExternalUrl } from '../providers/registry';
 import {
   deriveUpdaterModel,
   openUpdaterInstaller,
   quitAfterUpdaterInstallerOpen,
   readUpdaterStatus,
+  restartSafetyFromActionResult,
+  restartSafetyFromUpdaterStatus,
   subscribeToUpdaterStatus,
   type UpdaterModel,
+  type UpdaterRestartSafety,
 } from '../lib/updater';
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
@@ -40,6 +44,9 @@ type UpdaterPopupProps = {
 
 function versionText(t: Translator, model: UpdaterModel): string {
   const version = model.availableVersion;
+  if (model.reinstall != null) {
+    return version == null ? t('updater.reinstallReadyGeneric') : t('updater.reinstallReadyVersion', { version });
+  }
   if (model.updateKind === 'payload') {
     return version == null ? t('updater.payloadReadyGeneric') : t('updater.payloadReadyVersion', { version });
   }
@@ -77,6 +84,17 @@ function updateVersionProps(model: UpdaterModel, appVersionBefore: string | null
 
 function updaterErrorCode(model: UpdaterModel): string | undefined {
   return model.status?.error?.code;
+}
+
+/**
+ * User-facing copy for a restart-safety preflight denial. The popup keeps
+ * these denials hard-blocked (no force path — that lives in the app-menu
+ * UpdateDialog), but the copy must say why instead of a generic failure.
+ */
+function restartSafetyText(t: Translator, safety: UpdaterRestartSafety): string {
+  return safety.state === 'blocked'
+    ? t('updater.activeRunsBody', { count: safety.activeRunCount })
+    : t('updater.activeRunsUnknownBody');
 }
 
 export function UpdaterPopup({
@@ -333,8 +351,9 @@ export function UpdaterPopup({
         return;
       }
       if (result.model.errorMessage != null) {
+        const safety = restartSafetyFromUpdaterStatus(result.status);
         actionInFlightRef.current = false;
-        setInstallError(installFailureText);
+        setInstallError(safety == null ? installFailureText : restartSafetyText(t, safety));
         setInstallState('idle');
         trackUpdateInstallResult(analytics.track, {
           page_name: 'home',
@@ -357,6 +376,8 @@ export function UpdaterPopup({
       });
       const quitResult = await quitAfterUpdaterInstallerOpen({ payload: { source: 'updater-prompt' } });
       if (!quitResult.ok) {
+        const quitSafety = restartSafetyFromActionResult(quitResult);
+        if (quitSafety != null) setInstallError(restartSafetyText(t, quitSafety));
         clearHandoffWatchdog();
         actionInFlightRef.current = false;
         setInstallState('recoverable');
@@ -458,6 +479,19 @@ export function UpdaterPopup({
   );
 }
 
+function ReinstallLearnMoreLink({ t, url }: { t: Translator; url: string }) {
+  return (
+    <button
+      className="updater-popup__link"
+      data-testid="updater-reinstall-learn-more"
+      type="button"
+      onClick={() => void openExternalUrl(url)}
+    >
+      {t('updater.reinstallLearnMore')} <Icon name="external-link" size={12} />
+    </button>
+  );
+}
+
 function UpdaterPopupPanel({
   allowSilentUpdatesChecked,
   channelLabel,
@@ -505,6 +539,9 @@ function UpdaterPopupPanel({
         {quitRecoverable && model.updateKind === 'payload'
           ? null
           : <p>{quitRecoverable ? t('updater.quitFailedBody') : versionText(t, model)}</p>}
+        {!quitRecoverable && model.reinstall?.url != null ? (
+          <ReinstallLearnMoreLink t={t} url={model.reinstall.url} />
+        ) : null}
         {channelLabel != null ? <span className="updater-popup__badge">{channelLabel}</span> : null}
         {installError != null ? (
           <p className="updater-popup__error" data-testid="updater-install-error" role="alert">

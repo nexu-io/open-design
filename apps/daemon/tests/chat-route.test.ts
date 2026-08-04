@@ -32,6 +32,7 @@ import {
 } from '../src/server.js';
 import { skillCwdAliasSegment } from '../src/cwd-aliases.js';
 import { getAgentDef } from '../src/agents.js';
+import { readAppConfig, writeAppConfig } from '../src/app-config.js';
 import { readMemoryConfig, writeMemoryConfig } from '../src/memory.js';
 import { upsertMessage } from '../src/db.js';
 import { renderCodexImagegenOverride } from '../src/prompts/system.js';
@@ -139,7 +140,10 @@ describe('/api/chat', () => {
         extraction: null,
       });
     }
-    const started = await startServer({ port: 0, returnServer: true }) as {
+    const started = await startServer({
+      port: 0,
+      returnServer: true,
+    }) as {
       url: string;
       server: http.Server;
     };
@@ -222,7 +226,6 @@ process.exit(0);
           }),
         });
         const body = await response.text();
-
         expect(response.ok).toBe(true);
         expect(body).toContain('<question-form');
         expect(body).toContain('"status":"succeeded"');
@@ -458,11 +461,12 @@ process.stdin.on('end', () => {
               protocol: 'senseaudio',
               apiKey: 'sk-test-byok',
               baseUrl: 'https://api.senseaudio.cn',
+              model: 'deepseek-v4-flash',
+              requiresApiKey: true,
             },
           }),
         });
         const body = await response.text();
-
         expect(response.ok).toBe(true);
         expect(body).toContain('byok-opencode-ok');
 
@@ -471,6 +475,8 @@ process.stdin.on('end', () => {
           'run',
           '--format',
           'json',
+          '--dir',
+          expect.stringContaining(projectId),
           '-m',
           'open-design-byok/deepseek-v4-flash',
         ]);
@@ -548,6 +554,7 @@ process.stdin.on('end', () => {
               protocol: 'openai',
               apiKey: '',
               baseUrl: 'http://127.0.0.1:8000/v1',
+              model: 'model',
               requiresApiKey: false,
             },
           }),
@@ -562,6 +569,8 @@ process.stdin.on('end', () => {
           'run',
           '--format',
           'json',
+          '--dir',
+          expect.stringContaining(projectId),
           '-m',
           'open-design-byok/model',
         ]);
@@ -575,7 +584,7 @@ process.stdin.on('end', () => {
         };
         const provider = parsed.provider?.['open-design-byok'];
         expect(provider).toMatchObject({
-          npm: '@ai-sdk/openai',
+          npm: '@ai-sdk/openai-compatible',
           options: {
             baseURL: 'http://127.0.0.1:8000/v1',
           },
@@ -586,7 +595,7 @@ process.stdin.on('end', () => {
     );
   });
 
-  it('does not pass forged BYOK provider config to other local runtimes', async () => {
+  it('does not pass BYOK provider config to other local runtimes', async () => {
     if (!process.env.OD_DATA_DIR) {
       throw new Error('OD_DATA_DIR is required for BYOK OpenCode config tests');
     }
@@ -639,8 +648,9 @@ process.stdin.on('end', () => {
         expect(response.ok).toBe(true);
         expect(body).toContain('opencode-ok');
         expect(await fsp.readFile(keyFile, 'utf8')).toBe('');
-        expect(await fsp.readFile(envFile, 'utf8')).not.toContain('open-design-byok');
-        expect(await fsp.readFile(envFile, 'utf8')).not.toContain('sk-test-byok');
+        const rawConfig = await fsp.readFile(envFile, 'utf8');
+        expect(rawConfig).not.toContain('open-design-byok');
+        expect(rawConfig).not.toContain('sk-test-byok');
       },
     );
   });
@@ -1010,6 +1020,115 @@ child.on('exit', (code, signal) => {
       else process.env.VELA_RUNTIME_KEY = previousRuntimeKey;
       if (previousLinkUrl == null) delete process.env.VELA_LINK_URL;
       else process.env.VELA_LINK_URL = previousLinkUrl;
+    }
+  });
+
+  it('keeps service tier overrides when /api/runs omits model but settings has one', async () => {
+    if (!process.env.OD_DATA_DIR) {
+      throw new Error('OD_DATA_DIR is required for service tier settings tests');
+    }
+    const argsPath = join(tmpdir(), `od-codex-args-${randomUUID()}.json`);
+    const previousConfig = await readAppConfig(process.env.OD_DATA_DIR);
+    try {
+      await writeAppConfig(process.env.OD_DATA_DIR, {
+        agentModels: { codex: { model: 'gpt-5.5' } },
+      });
+      await withFakeAgent(
+        'codex',
+        `
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+if (args[0] === 'debug' && args[1] === 'models') {
+  console.log(JSON.stringify([{ id: 'gpt-5.5', name: 'gpt-5.5', service_tiers: [{ id: 'priority', label: 'Fast' }] }]));
+  process.exit(0);
+}
+if (args[0] === 'login' && args[1] === 'status') {
+  console.log('Logged in');
+  process.exit(0);
+}
+fs.writeFileSync(${JSON.stringify(argsPath)}, JSON.stringify(args));
+console.log(JSON.stringify({ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'done' }] }));
+process.exit(0);
+`,
+        async () => {
+          const createResponse = await fetch(`${baseUrl}/api/runs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              agentId: 'codex',
+              message: 'hello',
+              serviceTier: 'priority',
+            }),
+          });
+          expect(createResponse.status).toBe(202);
+          const { runId } = await createResponse.json() as { runId: string };
+          await waitForRunStatus(baseUrl, runId);
+
+          const args = JSON.parse(readFileSync(argsPath, 'utf8')) as string[];
+          expect(args).toContain('--model');
+          expect(args).toContain('gpt-5.5');
+          expect(args).toContain('service_tier="priority"');
+        },
+      );
+    } finally {
+      rmSync(argsPath, { force: true });
+      await writeAppConfig(process.env.OD_DATA_DIR, {
+        agentModels: previousConfig.agentModels ?? null,
+      });
+    }
+  });
+
+  it('keeps service tier overrides when /api/runs omits model and settings has none', async () => {
+    if (!process.env.OD_DATA_DIR) {
+      throw new Error('OD_DATA_DIR is required for service tier settings tests');
+    }
+    const argsPath = join(tmpdir(), `od-codex-args-${randomUUID()}.json`);
+    const previousConfig = await readAppConfig(process.env.OD_DATA_DIR);
+    try {
+      await writeAppConfig(process.env.OD_DATA_DIR, { agentModels: null });
+      await withFakeAgent(
+        'codex',
+        `
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+if (args[0] === 'debug' && args[1] === 'models') {
+  console.log(JSON.stringify([{ id: 'gpt-5.5', name: 'gpt-5.5', service_tiers: [{ id: 'priority', label: 'Fast' }] }]));
+  process.exit(0);
+}
+if (args[0] === 'login' && args[1] === 'status') {
+  console.log('Logged in');
+  process.exit(0);
+}
+fs.writeFileSync(${JSON.stringify(argsPath)}, JSON.stringify(args));
+console.log(JSON.stringify({ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'done' }] }));
+process.exit(0);
+`,
+        async () => {
+          await fetch(`${baseUrl}/api/agents`);
+          const createResponse = await fetch(`${baseUrl}/api/runs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              agentId: 'codex',
+              message: 'hello',
+              serviceTier: 'priority',
+            }),
+          });
+          expect(createResponse.status).toBe(202);
+          const { runId } = await createResponse.json() as { runId: string };
+          await waitForRunStatus(baseUrl, runId);
+
+          const args = JSON.parse(readFileSync(argsPath, 'utf8')) as string[];
+          expect(args).toContain('--model');
+          expect(args).toContain('gpt-5.5');
+          expect(args).toContain('service_tier="priority"');
+        },
+      );
+    } finally {
+      rmSync(argsPath, { force: true });
+      await writeAppConfig(process.env.OD_DATA_DIR, {
+        agentModels: previousConfig.agentModels ?? null,
+      });
     }
   });
 
@@ -3010,8 +3129,15 @@ process.stdin.on('end', () => {
           const transcriptIdx = prompt.indexOf('## Full conversation transcript');
           expect(transitionIdx).toBeGreaterThan(-1);
           expect(transcriptIdx).toBeGreaterThan(transitionIdx);
-          expect(prompt).toContain('The user has answered the discovery form. Do not emit another discovery form.');
-          expect(prompt).toContain('Continue with RULE 2 / RULE 3 now.');
+          expect(prompt).toContain(
+            'The user has answered the discovery form. Do not re-emit the answered form or repeat fields it already answered.',
+          );
+          expect(prompt).toContain(
+            'Apply the submitted answers and continue with RULE 2 / RULE 3 or the matching active workflow.',
+          );
+          expect(prompt).toContain(
+            'Only if a new, materially blocking requirement remains unresolved',
+          );
           expect(prompt).toContain(formAnswers);
         },
       );
@@ -3550,6 +3676,13 @@ describe('chat prompt helpers', () => {
     })).toEqual({ id: 'project-ds', source: 'project' });
 
     expect(resolveEffectiveDesignSystemSelection({
+      requestDesignSystemId: null,
+      projectDesignSystemId: 'project-ds',
+      disabledDesignSystemIds: ['project-ds'],
+      allowAppDefault: false,
+    })).toEqual({ id: null, source: 'none' });
+
+    expect(resolveEffectiveDesignSystemSelection({
       appDefaultDesignSystemId: 'default-ds',
     })).toEqual({ id: 'default-ds', source: 'app-default' });
 
@@ -3590,6 +3723,7 @@ describe('chat prompt helpers', () => {
       stablePromptHash: 'hash-a',
       hit: false,
       missReason: 'new-session',
+      changedSections: null,
     });
 
     expect(describeStablePromptCache({
@@ -3600,6 +3734,7 @@ describe('chat prompt helpers', () => {
       stablePromptHash: 'hash-a',
       hit: true,
       missReason: null,
+      changedSections: null,
     });
 
     expect(describeStablePromptCache({
@@ -3610,6 +3745,55 @@ describe('chat prompt helpers', () => {
       stablePromptHash: 'hash-b',
       hit: false,
       missReason: 'stable-prompt-changed',
+      // No section map supplied: report no attribution rather than invent one.
+      changedSections: null,
+    });
+  });
+
+  it('names the drifted sections when a section map is supplied', () => {
+    expect(describeStablePromptCache({
+      isResuming: true,
+      storedStablePromptHash: 'hash-a',
+      currentStableHash: 'hash-b',
+      storedStableSections: { memory: 'm1', skill: 's1' },
+      currentStableSections: { memory: 'm2', skill: 's1' },
+    })).toEqual({
+      stablePromptHash: 'hash-b',
+      hit: false,
+      missReason: 'stable-prompt-changed',
+      changedSections: ['memory'],
+    });
+  });
+
+  it('reports unattributed drift when the prefix moved but no tracked section did', () => {
+    // The hash is the source of truth, so this is a real miss; an empty list
+    // would read as a drift with no cause instead of the coverage gap it is.
+    expect(describeStablePromptCache({
+      isResuming: true,
+      storedStablePromptHash: 'hash-a',
+      currentStableHash: 'hash-b',
+      storedStableSections: { memory: 'm1' },
+      currentStableSections: { memory: 'm1' },
+    })).toMatchObject({
+      missReason: 'stable-prompt-changed',
+      changedSections: ['unattributed'],
+    });
+  });
+
+  it('does not attribute sections for a missing stored hash', () => {
+    // A legacy/reseeded row has no baseline to diff, so every section would
+    // read as "changed" and drown the signal real drift carries.
+    expect(describeStablePromptCache({
+      isResuming: true,
+      storedStablePromptHash: null,
+      currentStableHash: 'hash-b',
+      storedStableSections: null,
+      currentStableSections: { memory: 'm1' },
+    })).toEqual({
+      stablePromptHash: 'hash-b',
+      hit: false,
+      missReason: 'missing-stored-hash',
+      changedSections: null,
     });
   });
 

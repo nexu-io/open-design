@@ -3,6 +3,11 @@ import { join } from 'node:path';
 
 import { expect, test as base } from '@playwright/test';
 
+import {
+  PLAYWRIGHT_TOOLS_DEV_FIXTURE_TIMEOUT_MS,
+  warmPlaywrightWebRuntime,
+} from './runtime-lifecycle.ts';
+import { resolvePlaywrightSlotNamespace } from './runtime-identity.ts';
 import { createToolsDevSuite, e2eWorkspaceRoot } from '../tools-dev/runtime.ts';
 import type { ToolsDevSuite } from '../tools-dev/types.ts';
 
@@ -21,7 +26,10 @@ type WorkerFixtures = {
 export const test = base.extend<TestFixtures, WorkerFixtures>({
   toolsDev: [
     async ({}, use, workerInfo) => {
-      const suite = await createPlaywrightToolsDevSuite(workerInfo.workerIndex);
+      const suite = await createPlaywrightToolsDevSuite(
+        workerInfo.parallelIndex,
+        workerInfo.workerIndex,
+      );
       let failed = false;
       const toolsDev: PlaywrightToolsDevSuite = Object.assign(suite, {
         markFailed() {
@@ -33,6 +41,7 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
       let stopError: unknown = null;
       try {
         await toolsDev.startWeb();
+        await warmPlaywrightWebRuntime(toolsDev.url.web('/'));
         await use(toolsDev);
       } catch (error) {
         useError = error;
@@ -53,7 +62,7 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
         }
       }
     },
-    { scope: 'worker', timeout: 120_000 },
+    { scope: 'worker', timeout: PLAYWRIGHT_TOOLS_DEV_FIXTURE_TIMEOUT_MS },
   ],
 
   baseURL: async ({ toolsDev }, use) => {
@@ -87,24 +96,23 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
 export { expect };
 export type { PlaywrightToolsDevSuite };
 
-async function createPlaywrightToolsDevSuite(workerIndex: number): Promise<ToolsDevSuite> {
-  const namespaceBase = process.env.OD_E2E_NAMESPACE ?? `playwright-${process.pid}`;
-  const namespace = `${sanitizeSegment(namespaceBase)}-w${workerIndex}`;
-  const root = join(e2eWorkspaceRoot(), '.tmp', 'e2e', namespace);
+async function createPlaywrightToolsDevSuite(
+  parallelIndex: number,
+  workerIndex: number,
+): Promise<ToolsDevSuite> {
+  const namespace = resolvePlaywrightSlotNamespace(parallelIndex);
+  const incarnation = `i${workerIndex}-p${process.pid}`;
+  const root = join(e2eWorkspaceRoot(), '.tmp', 'e2e', namespace, incarnation);
   const scratchDir = join(root, 'scratch');
   const suite = createToolsDevSuite({
     codexHomeDir: join(scratchDir, 'codex-home'),
     dataDir: join(scratchDir, 'data'),
     namespace,
+    ownerPid: process.pid,
     root,
     toolsDevRoot: join(scratchDir, 'tools-dev'),
   });
 
   await mkdir(scratchDir, { recursive: true });
   return suite;
-}
-
-function sanitizeSegment(value: string): string {
-  const safe = value.replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '');
-  return safe || 'playwright';
 }

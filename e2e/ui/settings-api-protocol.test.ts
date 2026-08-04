@@ -359,6 +359,7 @@ test('[P1] BYOK Ollama Cloud exposes refreshed model choices and persists select
   await expect(providerPresetCombobox(dialog)).toContainText(/Ollama Cloud \(managed\)/i);
   await expectModelComboboxText(dialog, /gpt-oss:120b/i);
   await expect(dialog.getByLabel('Base URL')).toHaveValue('https://ollama.com');
+  await dialog.getByLabel('API key').fill('ollama-key');
 
   await modelCombobox(dialog).click();
   const popover = page.getByTestId('settings-byok-model-popover');
@@ -450,7 +451,7 @@ test('[P1] BYOK connection test surfaces NVIDIA degraded provider detail', async
   );
 });
 
-test('[P0] BYOK save stays disabled until required fields are valid', async ({ page }) => {
+test('[P0] BYOK autosave waits until required fields are valid', async ({ page }) => {
   await openExecutionSettings(page, {
     mode: 'api',
     apiKey: '',
@@ -657,6 +658,9 @@ test('[P0] @critical BYOK clearing the API key restores the suggested OpenAI mod
   await apiKeyInput.fill('sk-openai-test');
   await apiKeyInput.blur();
   await expect.poll(() => providerModelRequests.length).toBe(1);
+  await expect.poll(async () => readSavedConfig(page)).toMatchObject({
+    apiKey: 'sk-openai-test',
+  });
 
   await modelSelect.click();
   await expect(page.locator(MODEL_POPOVER_SELECTOR).last().getByRole('option', {
@@ -1012,7 +1016,7 @@ test('[P0] @critical Settings keeps Local CLI and BYOK model choices isolated af
       apiProtocol: 'openai',
       apiVersion: '',
       baseUrl: 'https://api.openai.com/v1',
-      model: 'gpt-4o',
+      model: 'gpt-4o-mini',
       apiProviderBaseUrl: 'https://api.openai.com/v1',
       agentId: null,
       skillId: null,

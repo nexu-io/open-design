@@ -148,8 +148,8 @@ test('[P2] home topbar star and discord badges expose the current external-link 
 
   const discord = page.getByTestId('entry-discord-badge');
   await expect(discord).toHaveAttribute('href', 'https://discord.gg/mHAjSMV6gz');
-  await expect(discord).toHaveAttribute('title', /Join the Open Design Discord/i);
   await expect(discord).toHaveAttribute('aria-label', /Join the Open Design Discord/i);
+  await expect(discord).toHaveAttribute('data-tooltip', /Join the Open Design Discord/i);
 });
 
 test('[P2] home topbar Use everywhere navigates to Integrations with the tab selected', async ({ page }) => {
@@ -163,7 +163,7 @@ test('[P2] home topbar Use everywhere navigates to Integrations with the tab sel
   );
 });
 
-test('[P1] home topbar settings button opens settings and closes the execution popover', async ({ page }) => {
+test('[P1] home topbar settings menu opens settings and closes the execution popover', async ({ page }) => {
   await gotoEntryHome(page);
 
   const pill = page.getByTestId('inline-model-switcher-chip');
@@ -173,8 +173,14 @@ test('[P1] home topbar settings button opens settings and closes the execution p
   await expect(popover).toBeVisible();
 
   await page.getByRole('button', { name: OPEN_SETTINGS_LABEL }).click();
-  await expect(page.getByRole('dialog')).toBeVisible();
   await expect(popover).toHaveCount(0);
+  await expect(page.getByTestId('entry-settings-menu')).toBeVisible();
+
+  await page.getByTestId('entry-settings-open-details').click();
+  const settings = page.locator('.modal-settings');
+  await expect(settings).toBeVisible();
+  await expect(settings.getByRole('heading', { name: 'Execution mode' })).toBeVisible();
+  await expect(page.getByTestId('entry-settings-menu')).toHaveCount(0);
 });
 
 test('[P2] returning from another entry view via the home nav reaches the home hero', async ({ page }) => {

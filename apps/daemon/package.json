@@ -1,6 +1,6 @@
 {
   "name": "@open-design/daemon",
-  "version": "0.15.1",
+  "version": "0.16.1",
   "private": true,
   "type": "module",
   "main": "./dist/cli.js",
@@ -37,6 +37,7 @@
     "@open-design/agui-adapter": "workspace:*",
     "@open-design/contracts": "workspace:*",
     "@open-design/diagnostics": "workspace:*",
+    "@open-design/launcher-proto": "workspace:*",
     "@open-design/platform": "workspace:*",
     "@open-design/plugin-runtime": "workspace:*",
     "@open-design/registry-protocol": "workspace:*",
@@ -47,7 +48,7 @@
     "better-sqlite3": "12.10.0",
     "blake3-wasm": "2.1.5",
     "cheerio": "1.2.0",
-    "chokidar": "5.0.0",
+    "chokidar": "3.6.0",
     "express": "5.2.1",
     "jszip": "3.10.1",
     "kiwi-schema": "0.5.0",
@@ -65,6 +66,7 @@
     "@types/express": "5.0.6",
     "@types/multer": "2.1.0",
     "@types/node": "20.19.39",
+    "jsdom": "29.1.1",
     "typescript": "5.9.3",
     "vitest": "4.1.6"
   },

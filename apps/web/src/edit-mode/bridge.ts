@@ -1,5 +1,11 @@
+// Chrome-devtools-style picking: the click/hover resolver walks up from the
+// hit node to the nearest source-mapped element matching this selector, so
+// every tag listed here is a pickable depth level. Keep leaf/graphic tags
+// (canvas, svg, video, …) and inline formatting tags in sync with what real
+// generated pages contain — a missing tag means clicks "skip" that child and
+// select its container instead.
 export const MANUAL_EDIT_DISCOVERY_SELECTOR =
-  'main, nav, section, article, aside, header, footer, div, h1, h2, h3, h4, h5, h6, p, a, button, img, ul, ol, li, dl, dt, dd, table, thead, tbody, tfoot, tr, td, th, caption, blockquote, figure, figcaption, label, summary, pre, code, strong, em, b, i, small, mark, span';
+  'main, nav, section, article, aside, header, footer, div, h1, h2, h3, h4, h5, h6, p, a, button, img, ul, ol, li, dl, dt, dd, table, thead, tbody, tfoot, tr, td, th, caption, blockquote, figure, figcaption, label, summary, pre, code, strong, em, b, i, small, mark, span, u, s, strike, sub, sup, abbr, font, cite, q, kbd, samp, var, ins, del, dfn, time, address, hr, canvas, svg, video, audio, picture';
 export const MANUAL_EDIT_SOURCE_PATH_ATTR = 'data-od-source-path';
 export const MANUAL_EDIT_HOST_NODE_SELECTOR = [
   '[data-od-sandbox-shim]',
@@ -48,21 +54,40 @@ export function isSourceMappableManualEditElement(el: Element): boolean {
 }
 
 /**
- * A "text leaf" carries visible text and has NO element children, so a click
- * can drop a caret and the committed text round-trips through the source
- * patcher. This — not the tag name — is what makes a bare `<div>Title</div>`,
- * an `<li>`, a `<td>`, or an `<h4>` editable, exactly like a `<p>`.
- *
- * Elements with element children (even inline ones like `<strong>`/`<a>`) are
- * deliberately NOT text leaves: `applyManualEditPatch` rejects a `set-text`
- * patch whenever the target `hasElementChildren`, so offering a caret there
- * would let the user type and then fail to persist. Those stay containers
- * (style-only) until the patcher can persist nested markup.
+ * Inline formatting tags that keep an element "text-like": a caret can drop
+ * into it and the commit round-trips through the source patcher. Elements
+ * whose children are exclusively these tags commit via `set-inner-html`
+ * (preserving the inline markup); pure text leaves keep committing via
+ * `set-text`. Anything with block/interactive children stays a container.
  */
-export function manualEditElementIsTextLeaf(el: Element): boolean {
+export const MANUAL_EDIT_INLINE_TEXT_TAGS = [
+  'strong', 'em', 'b', 'i', 'u', 's', 'strike', 'span', 'mark', 'small', 'sub', 'sup', 'br', 'code', 'font', 'abbr',
+] as const;
+
+/**
+ * A "text-like" element carries visible text and contains, at most, inline
+ * formatting markup (see MANUAL_EDIT_INLINE_TEXT_TAGS) all the way down. This
+ * — not the tag name — is what makes a bare `<div>Title</div>`, an `<li>`, or
+ * an `<h4>` with a `<strong>` word editable, exactly like a `<p>`.
+ *
+ * Elements with block or interactive children (`<a>`, `<div>`, `<img>`, …)
+ * are deliberately NOT text-like: their nested structure cannot round-trip
+ * through a text/innerHTML commit safely, so they stay containers
+ * (style-only).
+ */
+export function manualEditElementIsTextLike(el: Element): boolean {
   const text = (el.textContent || '').trim();
   if (!text) return false;
-  return el.children.length === 0;
+  return manualEditInlineSubtree(el);
+}
+
+function manualEditInlineSubtree(el: Element): boolean {
+  for (const child of Array.from(el.children)) {
+    const tag = child.tagName ? child.tagName.toLowerCase() : '';
+    if (!(MANUAL_EDIT_INLINE_TEXT_TAGS as readonly string[]).includes(tag)) return false;
+    if (!manualEditInlineSubtree(child)) return false;
+  }
+  return true;
 }
 
 /**
@@ -77,7 +102,7 @@ export function manualEditKindForElement(el: Element): ManualEditKind {
   const tag = el.tagName ? el.tagName.toLowerCase() : '';
   if (tag === 'a') return 'link';
   if (tag === 'img') return 'image';
-  if (manualEditElementIsTextLeaf(el)) return 'text';
+  if (manualEditElementIsTextLike(el)) return 'text';
   return 'container';
 }
 
@@ -170,7 +195,8 @@ export function buildManualEditBridge(enabled: boolean): string {
   var discoverySelector = ${JSON.stringify(MANUAL_EDIT_DISCOVERY_SELECTOR)};
   var hostNodeSelector = ${JSON.stringify(MANUAL_EDIT_HOST_NODE_SELECTOR)};
   var sourcePathAttr = ${JSON.stringify(MANUAL_EDIT_SOURCE_PATH_ATTR)};
-  var styleProps = ['fontFamily','fontSize','fontWeight','color','textAlign','lineHeight','letterSpacing','width','height','minHeight','gap','flexDirection','justifyContent','alignItems','backgroundColor','opacity','padding','paddingTop','paddingRight','paddingBottom','paddingLeft','margin','marginTop','marginRight','marginBottom','marginLeft','border','borderTopWidth','borderRightWidth','borderBottomWidth','borderLeftWidth','borderStyle','borderColor','borderRadius'];
+  var styleProps = ['fontFamily','fontSize','fontWeight','fontStyle','textDecorationLine','color','textAlign','lineHeight','letterSpacing','whiteSpace','display','position','left','top','right','bottom','zIndex','width','height','minHeight','gap','flexDirection','justifyContent','alignItems','backgroundColor','opacity','transform','padding','paddingTop','paddingRight','paddingBottom','paddingLeft','margin','marginTop','marginRight','marginBottom','marginLeft','border','borderTopWidth','borderRightWidth','borderBottomWidth','borderLeftWidth','borderStyle','borderColor','borderRadius'];
+  var inlineTextTags = ${JSON.stringify(MANUAL_EDIT_INLINE_TEXT_TAGS)};
   function isHostNode(el){
     return !!(el && el.matches && el.matches(hostNodeSelector));
   }
@@ -196,6 +222,30 @@ export function buildManualEditBridge(enabled: boolean): string {
   function isSourceMappable(el){
     if (!el || !el.hasAttribute || isHostNode(el)) return false;
     return !!(el.hasAttribute('data-od-id') || el.hasAttribute(sourcePathAttr));
+  }
+  // Positional ids (data-od-source-path and auto-annotated path-N data-od-id)
+  // encode DOM positions computed at srcDoc build time. After any in-place
+  // structural mutation (insert/remove/duplicate via od-edit-apply-dom) those
+  // positions shift for following siblings, so every positional stamp must be
+  // recomputed or later patches would resolve against the WRONG source
+  // element. Authored semantic data-od-id values are never touched; elements
+  // whose saved-source markup was just inserted (no annotations at all) get
+  // stamped here so they are immediately source-mappable and selectable.
+  var positionalIdPattern = /^path-\\d+(-\\d+)*$/;
+  function restampPositionalIdentity(){
+    var nodes = document.body ? document.body.querySelectorAll(discoverySelector) : [];
+    for (var i = 0; i < nodes.length; i++) {
+      var el = nodes[i];
+      if (isHostNode(el)) continue;
+      var path = domPath(el);
+      if (!path) continue;
+      var sp = el.getAttribute(sourcePathAttr);
+      if ((sp === null || positionalIdPattern.test(sp)) && sp !== path) el.setAttribute(sourcePathAttr, path);
+      var odId = el.getAttribute('data-od-id');
+      if (odId && positionalIdPattern.test(odId) && odId !== path) el.setAttribute('data-od-id', path);
+      var runtime = el.getAttribute('data-od-runtime-id');
+      if (runtime && runtime !== path) el.removeAttribute('data-od-runtime-id');
+    }
   }
   function markBrandKitTarget(el, id, kind, label){
     if (!el || !el.setAttribute || isHostNode(el)) return;
@@ -266,10 +316,18 @@ export function buildManualEditBridge(enabled: boolean): string {
   function isDiscoveryTarget(el){
     return !!(el && el.matches && el.matches(discoverySelector));
   }
+  function inlineSubtreeOk(el){
+    for (var i = 0; i < el.children.length; i++) {
+      var tag = el.children[i].tagName ? el.children[i].tagName.toLowerCase() : '';
+      if (inlineTextTags.indexOf(tag) < 0) return false;
+      if (!inlineSubtreeOk(el.children[i])) return false;
+    }
+    return true;
+  }
   function isTextLeaf(el){
     var text = (el.textContent || '').trim();
     if (!text) return false;
-    return el.children.length === 0;
+    return inlineSubtreeOk(el);
   }
   function inferKind(el){
     var explicit = el.getAttribute('data-od-edit');
@@ -302,7 +360,91 @@ export function buildManualEditBridge(enabled: boolean): string {
     var computed = window.getComputedStyle(el);
     var styles = {};
     styleProps.forEach(function(prop){ styles[prop] = el.style[prop] || computed[prop] || ''; });
+    // Gesture math (move/resize) adds pointer deltas to these values, so they
+    // must be RESOLVED px — an authored 'left: 43%' would otherwise be read as
+    // 43px and teleport the element on the first drag. Computed left/top are
+    // used px for positioned elements; 'auto' falls back to the offset-parent
+    // geometry (the classic jQuery position() formula, margin corrected).
+    styles.position = computed.position || '';
+    var left = computed.left || '';
+    var top = computed.top || '';
+    if ((left === 'auto' || top === 'auto') && (computed.position === 'absolute' || computed.position === 'fixed')) {
+      var marginLeft = parseFloat(computed.marginLeft) || 0;
+      var marginTop = parseFloat(computed.marginTop) || 0;
+      if (computed.position === 'fixed') {
+        var fixedRect = el.getBoundingClientRect();
+        if (left === 'auto') left = (fixedRect.left - marginLeft) + 'px';
+        if (top === 'auto') top = (fixedRect.top - marginTop) + 'px';
+      } else {
+        if (left === 'auto') left = (el.offsetLeft - marginLeft) + 'px';
+        if (top === 'auto') top = (el.offsetTop - marginTop) + 'px';
+      }
+    }
+    styles.left = left;
+    styles.top = top;
     return styles;
+  }
+  function transformScaleOf(value){
+    if (!value || value === 'none') return null;
+    var open = value.indexOf('(');
+    if (open < 0) return null;
+    var nums = value.slice(open + 1, value.lastIndexOf(')')).split(',');
+    var is3d = value.indexOf('matrix3d') === 0;
+    var a = parseFloat(nums[0]);
+    var b = parseFloat(nums[1]);
+    var c = parseFloat(is3d ? nums[4] : nums[2]);
+    var d = parseFloat(is3d ? nums[5] : nums[3]);
+    if (!isFinite(a) || !isFinite(b) || !isFinite(c) || !isFinite(d)) return null;
+    return { x: Math.sqrt(a * a + b * b), y: Math.sqrt(c * c + d * d) };
+  }
+  function saneScale(value, fallback){
+    return (isFinite(value) && value > 0.01 && value < 100) ? value : fallback;
+  }
+  // Parent probes are shared by every child in one broadcast; allTargets()
+  // arms this so a 400-element page measures each parent once.
+  var parentProbeCache = null;
+  function parentProbeScale(parent){
+    if (!parent) return null;
+    if (parentProbeCache && parentProbeCache.has(parent)) return parentProbeCache.get(parent);
+    var pw = parent.offsetWidth;
+    var ph = parent.offsetHeight;
+    var probe = null;
+    if (pw > 0 || ph > 0) {
+      var pRect = parent.getBoundingClientRect();
+      probe = { x: pw > 0 ? pRect.width / pw : NaN, y: ph > 0 ? pRect.height / ph : NaN };
+    }
+    if (parentProbeCache) parentProbeCache.set(parent, probe);
+    return probe;
+  }
+  /**
+   * Scale between the element's own CSS pixel space — what its inline
+   * left/top/width mean — and the viewport pixels getBoundingClientRect
+   * reports. A deck stage fits its 1920x1080 slides by scaling a wrapper, so
+   * without this every gesture writes screen-sized deltas into a shrunken
+   * coordinate space: the element trails the cursor on a drag and a widened
+   * text box never actually gets wide enough to pull its text onto one line.
+   *
+   * Measured, never walked: the scaling wrapper can sit in a shadow root that
+   * parentElement cannot reach (the deck stage slots slides into a scaled
+   * canvas). The parent is the more precise probe — offsetWidth rounds to an
+   * integer, which matters far less on a big box — but it reads as unscaled
+   * across a slot boundary, so it only wins when it agrees with the element's
+   * own measurement.
+   */
+  function spaceScaleFor(el, rect, computed){
+    var own = transformScaleOf(computed.transform) || { x: 1, y: 1 };
+    var selfW = el.offsetWidth;
+    var selfH = el.offsetHeight;
+    var x = saneScale(selfW > 0 ? rect.width / saneScale(own.x, 1) / selfW : NaN, 1);
+    var y = saneScale(selfH > 0 ? rect.height / saneScale(own.y, 1) / selfH : NaN, x);
+    var probe = parentProbeScale(el.parentElement);
+    if (probe) {
+      var px = saneScale(probe.x, x);
+      var py = saneScale(probe.y, y);
+      if (Math.abs(px - x) <= x * 0.05) x = px;
+      if (Math.abs(py - y) <= y * 0.05) y = py;
+    }
+    return { x: x, y: y };
   }
   function isLayoutContainer(el){
     var display = window.getComputedStyle(el).display || '';
@@ -328,6 +470,7 @@ export function buildManualEditBridge(enabled: boolean): string {
   }
   function targetFrom(el, includeOuterHtml){
     var rect = el.getBoundingClientRect();
+    var scale = spaceScaleFor(el, rect, window.getComputedStyle(el));
     var kind = inferKind(el);
     var id = stableId(el);
     var hidden = isHiddenTarget(el, rect);
@@ -349,6 +492,7 @@ export function buildManualEditBridge(enabled: boolean): string {
       className: typeof el.className === 'string' ? el.className : '',
       text: (el.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 180),
       rect: { x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) },
+      scale: scale,
       fields: fields,
       attributes: attrsFor(el),
       styles: stylesFor(el),
@@ -361,11 +505,16 @@ export function buildManualEditBridge(enabled: boolean): string {
     annotateBrandKitRuntimeTargets();
     var nodes = document.body ? document.body.querySelectorAll(discoverySelector) : [];
     var targets = [];
-    for (var i = 0; i < nodes.length; i++) {
-      var rect = nodes[i].getBoundingClientRect();
-      if (!isSourceMappable(nodes[i])) continue;
-      if (!isHiddenTarget(nodes[i], rect) && (rect.width < 4 || rect.height < 4)) continue;
-      targets.push(targetFrom(nodes[i], false));
+    parentProbeCache = typeof Map === 'function' ? new Map() : null;
+    try {
+      for (var i = 0; i < nodes.length; i++) {
+        var rect = nodes[i].getBoundingClientRect();
+        if (!isSourceMappable(nodes[i])) continue;
+        if (!isHiddenTarget(nodes[i], rect) && (rect.width < 4 || rect.height < 4)) continue;
+        targets.push(targetFrom(nodes[i], false));
+      }
+    } finally {
+      parentProbeCache = null;
     }
     return targets;
   }
@@ -452,34 +601,139 @@ export function buildManualEditBridge(enabled: boolean): string {
     if (!activeTextEdit) return false;
     var session = activeTextEdit;
     activeTextEdit = null;
+    lastSelectionKey = '';
     var el = session.el;
+    // Drop the caret BEFORE revoking contenteditable: a selection left inside
+    // a node that just lost editability re-anchors to the document end, and
+    // the browser natively scrolls to reveal it — yanking the canvas to the
+    // page bottom on every Enter commit (bypasses scrollTo/scrollIntoView).
+    try {
+      var endSel = window.getSelection();
+      if (endSel && endSel.rangeCount > 0 && (el.contains(endSel.anchorNode) || el.contains(endSel.focusNode))) {
+        endSel.removeAllRanges();
+      }
+    } catch (e) {}
     el.removeAttribute('contenteditable');
     el.removeAttribute('data-od-editing');
     el.removeEventListener('keydown', session.onKey);
     if (guard) guard.editingEl = null;
     var value = (el.textContent || '').trim();
-    var changed = value !== session.originalText.trim();
+    var textChanged = value !== session.originalText.trim();
+    var htmlChanged = el.innerHTML !== session.originalHtml;
+    var changed = textChanged || htmlChanged;
     if (commit && changed) {
-      window.parent.postMessage({
-        type: 'od-edit-text-commit',
-        id: stableId(el),
-        value: value
-      }, '*');
+      if (el.children.length > 0) {
+        // Inline formatting (bold/italic/color spans) lives in child elements;
+        // a plain-text commit would flatten it, so escalate to innerHTML.
+        window.parent.postMessage({
+          type: 'od-edit-html-commit',
+          id: stableId(el),
+          value: el.innerHTML
+        }, '*');
+      } else {
+        window.parent.postMessage({
+          type: 'od-edit-text-commit',
+          id: stableId(el),
+          value: value
+        }, '*');
+      }
     } else if (!commit) {
-      el.textContent = session.originalText;
+      el.innerHTML = session.originalHtml;
     }
     postTextSession(el, false, { committed: !!commit, changed: changed });
     return true;
   }
+  var formatCommands = { bold: 1, italic: 1, underline: 1, strikeThrough: 1, foreColor: 1 };
+  // Layout changes inside the sandbox can trigger Chromium scroll anchoring:
+  // shrinking a title above the anchor silently changes window.scrollY even
+  // though the iframe never reloaded. Keep edit operations visually pinned by
+  // restoring both the page scroller and deck-style nested canvas scroller in
+  // the same task, after layout has been invalidated.
+  function captureEditScroll(){
+    var root = document.scrollingElement || document.documentElement || document.body;
+    var canvas = document.querySelector('.design-canvas');
+    return {
+      root: root,
+      rootLeft: root ? root.scrollLeft : 0,
+      rootTop: root ? root.scrollTop : 0,
+      canvas: canvas,
+      canvasLeft: canvas ? canvas.scrollLeft : 0,
+      canvasTop: canvas ? canvas.scrollTop : 0
+    };
+  }
+  function restoreEditScroll(snapshot){
+    if (!snapshot) return;
+    if (snapshot.root) {
+      snapshot.root.scrollLeft = snapshot.rootLeft;
+      snapshot.root.scrollTop = snapshot.rootTop;
+    }
+    if (snapshot.canvas) {
+      snapshot.canvas.scrollLeft = snapshot.canvasLeft;
+      snapshot.canvas.scrollTop = snapshot.canvasTop;
+    }
+  }
+  function applyTextFormat(command, value){
+    if (!activeTextEdit || !formatCommands[command]) return;
+    var el = activeTextEdit.el;
+    var scrollSnapshot = captureEditScroll();
+    // Range formatting needs real rich editing; plaintext-only refuses the
+    // formatting execCommands. The commit path already escalates to an
+    // innerHTML commit whenever child elements appear.
+    try {
+      if (el.getAttribute('contenteditable') !== 'true') el.setAttribute('contenteditable', 'true');
+      try { el.focus(); } catch (e) {}
+      try { document.execCommand('styleWithCSS', false, true); } catch (e) {}
+      try { document.execCommand(command, false, value == null ? null : value); } catch (e) {}
+    } finally {
+      restoreEditScroll(scrollSnapshot);
+    }
+    // Applying a format changes B/I/U/S state without moving the caret, so
+    // selectionchange never fires — re-announce so the toolbar highlights.
+    postTextSelection(el);
+  }
+  // Formatting state at the current selection, read straight from the browser's
+  // editing engine so the toolbar reflects what the text actually renders with
+  // (a range's bold span is invisible to the element-level style read).
+  function selectionFormatState(){
+    var state = { bold: false, italic: false, underline: false, strike: false };
+    try { state.bold = !!document.queryCommandState('bold'); } catch (e) {}
+    try { state.italic = !!document.queryCommandState('italic'); } catch (e) {}
+    try { state.underline = !!document.queryCommandState('underline'); } catch (e) {}
+    try { state.strike = !!document.queryCommandState('strikeThrough'); } catch (e) {}
+    return state;
+  }
+  var lastSelectionKey = '';
+  function postTextSelection(el){
+    if (!activeTextEdit || activeTextEdit.el !== el) return;
+    var sel = window.getSelection();
+    var inside = !!(sel && sel.rangeCount > 0 && el.contains(sel.anchorNode) && el.contains(sel.focusNode));
+    var hasRange = inside && !sel.isCollapsed;
+    var format = inside ? selectionFormatState() : null;
+    var key = (hasRange ? '1' : '0') + '|' + (format
+      ? (format.bold ? 'b' : '') + (format.italic ? 'i' : '') + (format.underline ? 'u' : '') + (format.strike ? 's' : '')
+      : 'none');
+    if (key === lastSelectionKey) return;
+    lastSelectionKey = key;
+    window.parent.postMessage({ type: 'od-edit-text-selection', id: stableId(el), hasRange: hasRange, format: format }, '*');
+  }
+  document.addEventListener('selectionchange', function(){
+    if (!activeTextEdit) return;
+    postTextSelection(activeTextEdit.el);
+  });
   function makeEditable(el, clickEvent){
     if (!el) return;
     if (activeTextEdit && activeTextEdit.el === el) {
-      placeCaretFromClick(clickEvent, el);
+      // Single click repositions the caret; double/triple click must KEEP the
+      // browser's native word/paragraph selection — collapsing it here made
+      // double-click-to-format impossible (drag selection only survives
+      // because pointer movement suppresses the click event).
+      if (!clickEvent || clickEvent.detail < 2) placeCaretFromClick(clickEvent, el);
       return;
     }
     if (activeTextEdit) finishActiveTextEdit(true);
     if (el.getAttribute('contenteditable') === 'true') return;
     var originalText = el.textContent || '';
+    var originalHtml = el.innerHTML;
     clearSelectedTarget();
     el.setAttribute('contenteditable', 'plaintext-only');
     el.setAttribute('data-od-editing', 'true');
@@ -495,8 +749,56 @@ export function buildManualEditBridge(enabled: boolean): string {
         ev.preventDefault();
         finishActiveTextEdit(false);
       }
+      if (ev.key === 'Home' || ev.key === 'End') {
+        // Chromium double-books Home/End inside a contenteditable: the caret
+        // moves AND the document smooth-scrolls to its top/bottom (the caret
+        // consumption does not suppress the page-scroll default). Consume the
+        // key and move the caret to the element's content start/end manually
+        // (Shift extends the selection) so an inline edit never yanks the
+        // canvas to the page bottom.
+        ev.preventDefault();
+        try {
+          var homeEndSel = window.getSelection();
+          if (homeEndSel) {
+            var homeEndRange = document.createRange();
+            homeEndRange.selectNodeContents(el);
+            homeEndRange.collapse(ev.key === 'Home');
+            if (ev.shiftKey && homeEndSel.rangeCount > 0) {
+              homeEndSel.extend(homeEndRange.startContainer, homeEndRange.startOffset);
+            } else {
+              homeEndSel.removeAllRanges();
+              homeEndSel.addRange(homeEndRange);
+            }
+          }
+        } catch (e) {}
+      }
+      if ((ev.metaKey || ev.ctrlKey) && !ev.altKey && ev.key && ev.key.toLowerCase() === 'z') {
+        // In-session Cmd+Z: the browser's native contenteditable undo consumes
+        // the typing steps first. Once the content is back to the session's
+        // original markup there is nothing left to undo locally, so escalate
+        // to the host's GLOBAL history — one shortcut walks the entire
+        // operation chain (text commits, style changes, moves) instead of
+        // dead-ending inside a single text element. Redo stays native while
+        // the session lives; escalation closes the session, so the next
+        // Cmd+Shift+Z reaches the host's global history through the normal
+        // non-session path.
+        if (!ev.shiftKey && el.innerHTML === originalHtml) {
+          ev.preventDefault();
+          ev.stopPropagation();
+          finishActiveTextEdit(true);
+          window.parent.postMessage({ type: 'od-edit-history', op: 'undo' }, '*');
+        }
+        return;
+      }
+      if ((ev.metaKey || ev.ctrlKey) && !ev.shiftKey && !ev.altKey) {
+        var key = ev.key ? ev.key.toLowerCase() : '';
+        if (key === 'b' || key === 'i' || key === 'u') {
+          ev.preventDefault();
+          applyTextFormat(key === 'b' ? 'bold' : key === 'i' ? 'italic' : 'underline', null);
+        }
+      }
     }
-    activeTextEdit = { el: el, originalText: originalText, onKey: onKey };
+    activeTextEdit = { el: el, originalText: originalText, originalHtml: originalHtml, onKey: onKey };
     el.addEventListener('keydown', onKey);
     postTextSession(el, true);
   }
@@ -523,13 +825,14 @@ export function buildManualEditBridge(enabled: boolean): string {
     }
     return null;
   }
-  function applyPreviewStyles(id, styles, version){
+  function applyPreviewStyles(id, styles, version, measureRect){
     var el = findById(id);
     if (!el) {
       window.parent.postMessage({ type: 'od-edit-preview-style-applied', id: id || '', version: Number(version) || 0, ok: false, error: 'Target not found' }, '*');
       return;
     }
     var keys = Object.keys(styles || {});
+    var scrollSnapshot = captureEditScroll();
     try {
       for (var i = 0; i < keys.length; i++) {
         var key = keys[i];
@@ -538,9 +841,20 @@ export function buildManualEditBridge(enabled: boolean): string {
         if (typeof value !== 'string' || value.trim() === '') el.style.removeProperty(cssName);
         else el.style.setProperty(cssName, value.trim());
       }
-      window.parent.postMessage({ type: 'od-edit-preview-style-applied', id: id, version: Number(version) || 0, ok: true }, '*');
+      restoreEditScroll(scrollSnapshot);
+      // Only layout-changing previews are measured: a resize needs the height
+      // the reflowed content actually took, while a move previews through
+      // transform alone and must not pay for a forced layout every frame.
+      var measured = null;
+      if (measureRect || keys.indexOf('width') >= 0 || keys.indexOf('height') >= 0) {
+        var box = el.getBoundingClientRect();
+        measured = { x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.width), height: Math.round(box.height) };
+      }
+      window.parent.postMessage({ type: 'od-edit-preview-style-applied', id: id, version: Number(version) || 0, ok: true, rect: measured }, '*');
     } catch (e) {
       window.parent.postMessage({ type: 'od-edit-preview-style-applied', id: id, version: Number(version) || 0, ok: false, error: e && e.message ? String(e.message) : 'Could not apply preview styles' }, '*');
+    } finally {
+      restoreEditScroll(scrollSnapshot);
     }
   }
   window.addEventListener('message', function(ev){
@@ -568,17 +882,221 @@ export function buildManualEditBridge(enabled: boolean): string {
       return;
     }
     if (ev.data.type === 'od-edit-preview-style') {
-      applyPreviewStyles(ev.data.id, ev.data.styles || {}, ev.data.version);
+      applyPreviewStyles(ev.data.id, ev.data.styles || {}, ev.data.version, !!ev.data.measureRect);
       return;
     }
     if (ev.data.type === 'od-edit-text-finish') {
       finishActiveTextEdit(ev.data.commit !== false);
       return;
     }
+    if (ev.data.type === 'od-edit-format') {
+      applyTextFormat(String(ev.data.command || ''), ev.data.value == null ? null : String(ev.data.value));
+      return;
+    }
+    if (ev.data.type === 'od-edit-refresh-targets') {
+      // Host applied a gesture commit (move/resize) without reloading the
+      // iframe; re-announce targets so overlay chrome tracks fresh rects.
+      postTargets();
+      return;
+    }
+    if (ev.data.type === 'od-edit-apply-dom') {
+      // In-place content apply: mutate the live DOM instead of reloading the
+      // whole iframe (no white flash, no scroll reset, no re-run of page
+      // scripts). Used by undo/redo AND by forward content commits.
+      // 'op' selects the mutation: 'replace' (default) swaps one element's
+      // markup for its saved-source version; 'insert-after' / 'append-child' /
+      // 'prepend-child' / 'insert-at-index' add a saved element in place;
+      // 'remove' deletes one.
+      // ok:false tells the host to fall back to a frozen-source reload.
+      var applyOk = false;
+      var applyOp = ev.data.op || 'replace';
+      var domScrollSnapshot = captureEditScroll();
+      // A caret/selection left inside a node we are about to replace or
+      // remove re-anchors unpredictably and makes the browser scroll to
+      // reveal it — the exact "random jump" this channel exists to avoid.
+      function dropSelectionInside(el){
+        try {
+          var sel = window.getSelection();
+          if (sel && sel.rangeCount > 0 && el && (el.contains(sel.anchorNode) || el.contains(sel.focusNode))) {
+            sel.removeAllRanges();
+          }
+        } catch (e) {}
+      }
+      try {
+        if (applyOp === 'remove') {
+          var removeEl = findById(ev.data.id);
+          if (removeEl && removeEl !== document.body && removeEl.parentElement) {
+            if (activeTextEdit && activeTextEdit.el === removeEl) finishActiveTextEdit(false);
+            dropSelectionInside(removeEl);
+            removeEl.remove();
+            applyOk = true;
+          }
+        } else if (applyOp === 'apply-content') {
+          // Runtime-annotated targets (brand-kit ids stamped by this bridge)
+          // have no markup of their own in the saved source — their edits
+          // persist into the brand payload / runtime overrides. Mirror the
+          // same content onto the live element so the canvas reflects the
+          // save without a reload (matching what the override applier will
+          // render on the NEXT load).
+          var contentEl = findById(ev.data.id);
+          var contentFields = ev.data.fields || {};
+          if (contentEl) {
+            if (activeTextEdit && activeTextEdit.el === contentEl) finishActiveTextEdit(false);
+            if (typeof contentFields.html === 'string') contentEl.innerHTML = contentFields.html;
+            else if (typeof contentFields.text === 'string') contentEl.textContent = contentFields.text;
+            if (typeof contentFields.href === 'string') contentEl.setAttribute('href', contentFields.href);
+            if (typeof contentFields.src === 'string') contentEl.setAttribute('src', contentFields.src);
+            if (typeof contentFields.alt === 'string') contentEl.setAttribute('alt', contentFields.alt);
+            if (contentFields.attributes && typeof contentFields.attributes === 'object') {
+              Object.keys(contentFields.attributes).forEach(function(name){
+                if (!/^[a-zA-Z_:][a-zA-Z0-9_:.-]*$/.test(name) || /^data-od-/.test(name) || /^on/i.test(name)) return;
+                var attrValue = contentFields.attributes[name];
+                if (typeof attrValue !== 'string' || attrValue.trim() === '') contentEl.removeAttribute(name);
+                else contentEl.setAttribute(name, attrValue);
+              });
+            }
+            applyOk = true;
+          }
+        } else if (typeof ev.data.html === 'string' && (applyOp === 'insert-after' || applyOp === 'append-child' || applyOp === 'prepend-child' || applyOp === 'insert-at-index')) {
+          var template = document.createElement('template');
+          template.innerHTML = ev.data.html;
+          var insertNode = template.content.firstElementChild;
+          if (insertNode) {
+            if (applyOp === 'append-child') {
+              (document.body || document.documentElement).appendChild(insertNode);
+              applyOk = true;
+            } else if (applyOp === 'insert-at-index') {
+              var bodyChildren = Array.prototype.slice.call(document.body.children).filter(function(child){ return !isHostNode(child); });
+              var bodyIndex = Number(ev.data.fields && ev.data.fields.index);
+              if (Number.isInteger(bodyIndex) && bodyIndex >= 0 && bodyIndex <= bodyChildren.length) {
+                document.body.insertBefore(insertNode, bodyChildren[bodyIndex] || null);
+                applyOk = true;
+              }
+            } else if (applyOp === 'prepend-child') {
+              var containerEl = ev.data.id === '__body__' ? document.body : findById(ev.data.id);
+              if (containerEl) {
+                containerEl.insertAdjacentElement('afterbegin', insertNode);
+                applyOk = true;
+              }
+            } else {
+              var anchorEl = findById(ev.data.id);
+              if (anchorEl && anchorEl !== document.body && anchorEl.parentElement) {
+                anchorEl.insertAdjacentElement('afterend', insertNode);
+                applyOk = true;
+              }
+            }
+          }
+        } else {
+          var applyEl = findById(ev.data.id);
+          if (applyEl && applyEl !== document.body && applyEl.parentElement && typeof ev.data.html === 'string') {
+            if (activeTextEdit && activeTextEdit.el === applyEl) finishActiveTextEdit(false);
+            dropSelectionInside(applyEl);
+            applyEl.outerHTML = ev.data.html;
+            applyOk = true;
+          }
+        }
+      } catch (applyError) { applyOk = false; }
+      // Structural/content mutations can invoke browser scroll anchoring or
+      // caret reveal even though the iframe stayed mounted. Put both scroll
+      // containers back before measuring/rebroadcasting the changed targets.
+      restoreEditScroll(domScrollSnapshot);
+      // Positional identity (path-N source-path / auto-annotated data-od-id)
+      // encodes DOM positions; any structural mutation shifts the following
+      // siblings, so restamp before anyone reads a stale id. Also stamps the
+      // newly inserted markup (saved-source html carries no annotations), so
+      // it becomes source-mappable and selectable without an iframe reload.
+      if (applyOk) restampPositionalIdentity();
+      window.parent.postMessage({ type: 'od-edit-apply-dom-result', version: Number(ev.data.version) || 0, ok: applyOk }, '*');
+      if (applyOk) setTimeout(postTargets, 0);
+      return;
+    }
   });
-  document.addEventListener('click', function(ev){
+  // One-shot timer armed by the Cmd/Ctrl+V shortcut; any real paste event
+  // disarms it (see the paste listener) so the two channels never double-fire.
+  var pendingShortcutPaste = 0;
+  document.addEventListener('keydown', function(ev){
+    if (!enabled || activeTextEdit) return;
+    var target = ev.target;
+    if (target && target.closest && target.closest('[contenteditable="true"],[contenteditable="plaintext-only"],input,textarea,select')) return;
+    var meta = ev.metaKey || ev.ctrlKey;
+    var key = ev.key ? ev.key.toLowerCase() : '';
+    if (meta && key === 'z') {
+      // Focus lives inside the iframe after any canvas click, so the host's
+      // own shortcut listener never hears these — forward them.
+      ev.preventDefault();
+      ev.stopPropagation();
+      window.parent.postMessage({ type: 'od-edit-history', op: ev.shiftKey ? 'redo' : 'undo' }, '*');
+      return;
+    }
+    var selected = document.querySelector('[data-od-edit-selected]');
+    if (!selected) return;
+    if (meta && key === 'd') {
+      ev.preventDefault();
+      ev.stopPropagation();
+      window.parent.postMessage({ type: 'od-edit-duplicate-request', id: stableId(selected) }, '*');
+      return;
+    }
+    if (meta && key === 'c' && !ev.shiftKey && !ev.altKey) {
+      // A real text selection keeps native copy; element copy only fires for
+      // a collapsed selection so Cmd+C on highlighted text is never hijacked.
+      var copySelection = window.getSelection();
+      if (copySelection && copySelection.rangeCount > 0 && !copySelection.isCollapsed) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      window.parent.postMessage({ type: 'od-edit-copy-request', id: stableId(selected) }, '*');
+      return;
+    }
+    if (meta && key === 'v' && !ev.shiftKey && !ev.altKey) {
+      // MUST NOT preventDefault here: cancelling the keydown suppresses the
+      // native 'paste' event, and that event is the ONLY place clipboard
+      // IMAGE bytes are readable — swallowing it broke image paste entirely.
+      // Instead, arm a one-shot fallback for environments where no paste
+      // event fires without an editable focus: if the native paste event
+      // arrives (Chromium fires it on the focused document even with no
+      // caret) it handles both the image and element cases and disarms the
+      // fallback; only when it never fires does the fallback forward the
+      // element-paste request, so a selected image/container still pastes.
+      if (pendingShortcutPaste) clearTimeout(pendingShortcutPaste);
+      var shortcutPasteId = stableId(selected);
+      pendingShortcutPaste = window.setTimeout(function(){
+        pendingShortcutPaste = 0;
+        window.parent.postMessage({ type: 'od-edit-paste-request', id: shortcutPasteId }, '*');
+      }, 150);
+      return;
+    }
+    if (ev.key === 'Delete' || ev.key === 'Backspace') {
+      ev.preventDefault();
+      ev.stopPropagation();
+      window.parent.postMessage({ type: 'od-edit-delete-request', id: stableId(selected) }, '*');
+    }
+  }, true);
+  var scrollPostTimer = 0;
+  window.addEventListener('scroll', function(){
     if (!enabled) return;
-    if (ev.target && ev.target.closest && ev.target.closest('[data-od-editing="true"]')) return;
+    if (scrollPostTimer) return;
+    scrollPostTimer = window.setTimeout(function(){
+      scrollPostTimer = 0;
+      postTargets();
+    }, 120);
+  }, true);
+  // Interaction listeners sit on WINDOW capture: the window node is visited
+  // before document, so stopping propagation here beats page handlers
+  // registered at document or element level in any phase. In edit mode the
+  // page must be inert — a click selects the element instead of running the
+  // page's own lightbox/menu handlers — while native defaults (caret
+  // placement, text selection, scrolling) keep working.
+  window.addEventListener('click', function(ev){
+    if (!enabled) return;
+    if (ev.target && ev.target.closest && ev.target.closest('[data-od-editing="true"]')) {
+      // Clicks inside the active inline-edit element keep the native caret
+      // behavior (that's mousedown's default, untouched), but must not reach
+      // the page's own delegated handlers or the sandbox shim's anchor
+      // interception — an editing element inside <a href="#"> otherwise
+      // opens the page's lightbox AND scrolls the canvas to the top.
+      ev.preventDefault();
+      ev.stopPropagation();
+      return;
+    }
     ev.preventDefault();
     ev.stopPropagation();
     var el = closestTarget(ev);
@@ -595,13 +1113,22 @@ export function buildManualEditBridge(enabled: boolean): string {
     // previous edit is never silently dropped.
     if (activeTextEdit && activeTextEdit.el !== el) finishActiveTextEdit(true);
     var kind = inferKind(el);
+    // The FIRST click only selects — it must not enter inline editing. Making a
+    // text box contenteditable reflows it (a deck's line-clamped / height-capped
+    // paragraph releases its truncation and visibly grows the instant it is
+    // selected), so selection would jump the element's size. Editing begins on
+    // an explicit second gesture: a click on the ALREADY-selected element or a
+    // double-click. This also makes text select the same way images/containers
+    // already do — first click selects, nothing reflows.
+    var alreadySelected = !!(el.hasAttribute && el.hasAttribute('data-od-edit-selected'));
+    var wantsEdit = alreadySelected || (ev && ev.detail >= 2);
     window.parent.postMessage({ type: 'od-edit-select', target: targetFrom(el, true) }, '*');
-    if (kind === 'text' || kind === 'link') {
+    if ((kind === 'text' || kind === 'link') && wantsEdit) {
       makeEditable(el, ev);
       return;
     }
   }, true);
-  document.addEventListener('pointerover', function(ev){
+  window.addEventListener('pointerover', function(ev){
     if (!enabled) return;
     // While editing, hovering must not retarget the inspector or surface a new
     // affordance — that's the other half of the #3646 instability.
@@ -611,7 +1138,125 @@ export function buildManualEditBridge(enabled: boolean): string {
     if (!el) return;
     postHoverTarget(el);
   }, true);
+  // Page-inertness guard. Blocking propagation at the window capture node
+  // keeps every page-owned pointer/hover handler from firing in edit mode
+  // (element-level, delegated, and document-capture alike) while native
+  // defaults — caret placement, drag selection, scrolling — stay intact.
+  // The bridge's own listeners also live on window, so they are unaffected;
+  // 'click' is excluded because the click handler above owns that decision.
+  ['pointerdown','pointerup','pointerover','pointerout','pointerenter','pointerleave','pointermove','mousedown','mouseup','mouseover','mouseout','mouseenter','mouseleave','mousemove','dblclick','auxclick','contextmenu','touchstart','touchend','touchmove'].forEach(function(type){
+    window.addEventListener(type, function(ev){
+      if (!enabled) return;
+      ev.stopPropagation();
+    }, true);
+  });
+  // Form submission would navigate the sandboxed document; in edit mode it is
+  // always a page-owned "operation" and never a bridge gesture.
+  window.addEventListener('submit', function(ev){
+    if (!enabled) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+  }, true);
+  function firstImageFile(transfer){
+    if (!transfer || !transfer.files) return null;
+    for (var i = 0; i < transfer.files.length; i++) {
+      var candidate = transfer.files[i];
+      if (candidate && candidate.type && candidate.type.indexOf('image/') === 0) return candidate;
+    }
+    return null;
+  }
+  // Read the image's BYTES inside the event turn and post those. Clipboard /
+  // drag File handles can be neutered once the paste/drop turn ends, and a
+  // postMessage-cloned handle then fails the host's upload with
+  // net::ERR_UPLOAD_FILE_CHANGED ("upload request failed"). Bytes in memory
+  // survive the frame hop and the fetch.
+  function postImagePayload(anchorId, file){
+    function send(buffer){
+      if (!buffer) return;
+      window.parent.postMessage({
+        type: 'od-edit-paste-image',
+        id: anchorId,
+        name: file.name || 'pasted-image.png',
+        mime: file.type || 'image/png',
+        buffer: buffer
+      }, '*');
+    }
+    function readViaReader(){
+      try {
+        var reader = new FileReader();
+        reader.onload = function(){ send(reader.result); };
+        reader.readAsArrayBuffer(file);
+      } catch (e) {}
+    }
+    try {
+      if (file.arrayBuffer) {
+        file.arrayBuffer().then(send, readViaReader);
+        return;
+      }
+    } catch (e) {}
+    readViaReader();
+  }
+  // Cmd/Ctrl+V routes through the native paste event (not keydown) so the
+  // clipboard payload is readable: an image file uploads and inserts as a new
+  // <img> element; anything else pastes the host's copied element block. An
+  // active inline text session keeps native paste for TEXT (it lands at the
+  // caret) — but an image file always inserts as an element, since a text
+  // session cannot consume it anyway.
+  document.addEventListener('paste', function(ev){
+    if (!enabled) return;
+    // The native paste event supersedes the Cmd/Ctrl+V shortcut fallback —
+    // it can see the clipboard (image vs element) where keydown cannot.
+    if (pendingShortcutPaste) {
+      clearTimeout(pendingShortcutPaste);
+      pendingShortcutPaste = 0;
+    }
+    var pastedImage = firstImageFile(ev.clipboardData);
+    if (!pastedImage) {
+      if (activeTextEdit) return;
+      if (ev.target && ev.target.closest && ev.target.closest('input,textarea,select,[contenteditable="true"],[contenteditable="plaintext-only"]')) return;
+    }
+    var pasteSelected = document.querySelector('[data-od-edit-selected]');
+    var pasteAnchor = pasteSelected
+      ? stableId(pasteSelected)
+      : activeTextEdit && activeTextEdit.el
+        ? stableId(activeTextEdit.el)
+        : '';
+    ev.preventDefault();
+    ev.stopPropagation();
+    if (pastedImage) {
+      postImagePayload(pasteAnchor, pastedImage);
+      return;
+    }
+    window.parent.postMessage({ type: 'od-edit-paste-request', id: pasteAnchor }, '*');
+  }, true);
+  // OS file drag-drop: dropping an image creates a new <img> element anchored
+  // at the deepest selectable element under the drop point.
+  document.addEventListener('dragover', function(ev){
+    if (!enabled || !ev.dataTransfer) return;
+    var types = ev.dataTransfer.types || [];
+    if (Array.prototype.indexOf.call(types, 'Files') < 0) return;
+    ev.preventDefault();
+    ev.dataTransfer.dropEffect = 'copy';
+  }, true);
+  document.addEventListener('drop', function(ev){
+    if (!enabled) return;
+    var droppedImage = firstImageFile(ev.dataTransfer);
+    if (!droppedImage) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    var dropAnchor = closestTarget(ev);
+    postImagePayload(dropAnchor ? stableId(dropAnchor) : '', droppedImage);
+  }, true);
   window.addEventListener('resize', postTargets);
+  // A freshly pasted/dropped image can be 0x0 during the immediate target
+  // pass after insertion and is intentionally filtered out by allTargets().
+  // Image load does not mutate the DOM, so MutationObserver cannot announce
+  // the now-measurable target; re-post explicitly when its dimensions settle.
+  document.addEventListener('load', function(ev){
+    var loaded = ev.target;
+    if (!enabled || !loaded || !loaded.tagName || loaded.tagName.toLowerCase() !== 'img') return;
+    postTargets();
+  }, true);
   function bootEditBridge(){
     annotateBrandKitRuntimeTargets();
     postTargets();
@@ -628,24 +1273,26 @@ export function buildManualEditBridge(enabled: boolean): string {
 }
 
 export function buildManualEditBridgeStyle(): string {
+  // Quiet chrome: hover previews as a DASHED outline, click commits to a
+  // solid one. The SELECTED frame is drawn host-side by
+  // ManualEditSelectionOverlay (action bar + drag/resize handles), so the
+  // in-iframe selected rule stays subtle instead of double-framing. Hover
+  // excludes the selected element so its solid frame never flickers dashed.
   return `<style data-od-edit-bridge-style>
+html[data-od-edit-mode], html[data-od-edit-mode] body { overflow-anchor: none !important; }
 html[data-od-edit-mode] body * { cursor: pointer !important; }
-html[data-od-edit-mode] [data-od-id],
-html[data-od-edit-mode] [data-od-runtime-id],
-html[data-od-edit-mode] [data-od-source-path] { outline: 1px dashed rgba(37, 99, 235, 0.35) !important; outline-offset: 3px !important; }
-html[data-od-edit-mode] [data-od-id]:hover,
-html[data-od-edit-mode] [data-od-runtime-id]:hover,
-html[data-od-edit-mode] [data-od-source-path]:hover { outline: 2px solid #2563eb !important; outline-offset: 3px !important; }
+html[data-od-edit-mode] [data-od-id]:hover:not([data-od-edit-selected]),
+html[data-od-edit-mode] [data-od-runtime-id]:hover:not([data-od-edit-selected]),
+html[data-od-edit-mode] [data-od-source-path]:hover:not([data-od-edit-selected]) { outline: 1.5px dashed rgba(37, 99, 235, 0.65) !important; outline-offset: 2px !important; }
 html[data-od-edit-mode] [data-od-edit-selected] {
-  outline: 2px solid #2563eb !important;
-  outline-offset: 4px;
-  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.16);
+  outline: 1px solid rgba(37, 99, 235, 0.4) !important;
+  outline-offset: 2px;
 }
 html[data-od-edit-mode] [data-od-editing="true"] {
-  outline: 2px solid #2563eb !important;
-  outline-offset: 4px;
-  background: rgba(37, 99, 235, 0.06);
+  outline: none !important;
+  background: rgba(37, 99, 235, 0.05);
   cursor: text !important;
+  caret-color: #2563eb;
 }
 </style>`;
 }

@@ -2,11 +2,19 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
 
-import { LAUNCHER_SCHEMA_VERSION, resolveLauncherVersionPaths } from "@open-design/launcher-proto";
+import {
+  LAUNCHER_SCHEMA_VERSION,
+  resolveLauncherVersionPaths,
+  type LauncherDesktopHandoffDescriptor,
+} from "@open-design/launcher-proto";
 import { describe, expect, it } from "vitest";
 
 import type { PackagedConfig } from "../src/config.js";
-import { confirmPackagedLauncherRuntime, resolvePackagedLauncherRuntime } from "../src/launcher-runtime.js";
+import {
+  confirmPackagedLauncherRuntime,
+  type PackagedLauncherRuntime,
+  resolvePackagedLauncherRuntime,
+} from "../src/launcher-runtime.js";
 import { resolvePackagedNamespacePaths } from "../src/paths.js";
 
 function fakeConfig(root: string, appVersion = "1.2.3-beta.4"): PackagedConfig {
@@ -75,10 +83,19 @@ describe("resolvePackagedLauncherRuntime", () => {
         version: "1.2.3-beta.5",
       });
       const resourcesPath = join(versionPaths.payloadRoot, "Open Design Beta.app", "Contents", "Resources");
+      const payloadExecutablePath = join(
+        versionPaths.payloadRoot,
+        "Open Design Beta.app",
+        "Contents",
+        "MacOS",
+        "Open Design Beta",
+      );
       await mkdir(join(resourcesPath, "open-design", "bin"), { recursive: true });
+      await mkdir(join(versionPaths.payloadRoot, "Open Design Beta.app", "Contents", "MacOS"), { recursive: true });
       await mkdir(join(resourcesPath, "prebundled", "daemon"), { recursive: true });
       await mkdir(join(resourcesPath, "prebundled", "web"), { recursive: true });
       await writeFile(join(resourcesPath, "open-design", "bin", "node"), "");
+      await writeFile(payloadExecutablePath, "");
       await writeFile(join(resourcesPath, "prebundled", "daemon", "daemon-sidecar.mjs"), "");
       await writeFile(join(resourcesPath, "prebundled", "web", "web-sidecar.mjs"), "");
       await writeFile(
@@ -130,6 +147,7 @@ describe("resolvePackagedLauncherRuntime", () => {
       const runtime = await resolvePackagedLauncherRuntime(config, paths);
 
       expect(runtime.source).toBe("payload");
+      expect(runtime.desktopExecutablePath).toBe(payloadExecutablePath);
       expect(runtime.electronNodeCommand).toBeNull();
       expect(runtime.installedLaunchPath).toBe("/Applications/Open Design Beta.app");
       expect(runtime.targetVersion).toBe("1.2.3-beta.5");
@@ -139,7 +157,13 @@ describe("resolvePackagedLauncherRuntime", () => {
       expect(runtime.config.webSidecarEntry).toBe(join(resourcesPath, "prebundled", "web", "web-sidecar.mjs"));
       expect(runtime.config.webStandaloneRoot).toBe(join(resourcesPath, "open-design-web-standalone"));
       expect(runtime.paths.resourceRoot).toBe(join(resourcesPath, "open-design"));
-      expect(JSON.parse(await readFile(runtime.launcherPaths.attemptsPath, "utf8"))).toMatchObject({
+      await expect(readFile(runtime.launcherPaths.attemptsPath, "utf8")).rejects.toThrow();
+
+      const payloadRuntime = await resolvePackagedLauncherRuntime(config, paths, {
+        currentExecutablePath: payloadExecutablePath,
+      });
+      expect(payloadRuntime.selection.reason).toBe("active");
+      expect(JSON.parse(await readFile(payloadRuntime.launcherPaths.attemptsPath, "utf8"))).toMatchObject({
         channel: "beta",
         generation: 1,
         namespace: config.namespace,
@@ -147,11 +171,135 @@ describe("resolvePackagedLauncherRuntime", () => {
         version: "1.2.3-beta.5",
       });
 
-      await confirmPackagedLauncherRuntime(runtime);
-      await expect(readFile(runtime.launcherPaths.attemptsPath, "utf8")).rejects.toThrow();
-      expect(JSON.parse(await readFile(runtime.launcherPaths.runtimePath, "utf8"))).toMatchObject({
+      const handoff: LauncherDesktopHandoffDescriptor = {
+        channel: "beta",
+        createdAt: "2026-07-15T01:00:00.000Z",
+        handoffId: "f5d4a712-8ba9-4c28-bcad-6dbed5db2d7c",
+        namespace: config.namespace,
+        outer: {
+          executablePath: process.execPath,
+          pid: process.pid,
+        },
+        payloadExecutablePath,
+        previous: { generation: 0, version: "1.2.3-beta.4" },
+        schemaVersion: LAUNCHER_SCHEMA_VERSION,
+        source: { generation: 1, version: "1.2.3-beta.5" },
+        state: "armed",
+        target: { generation: 1, version: "1.2.3-beta.5" },
+        updatedAt: "2026-07-15T01:00:00.000Z",
+      };
+      await writeFile(payloadRuntime.launcherPaths.handoffPath, `${JSON.stringify(handoff)}\n`);
+
+      const resumedRuntime = await resolvePackagedLauncherRuntime(config, paths, {
+        currentExecutablePath: payloadExecutablePath,
+        resume: { handoffId: handoff.handoffId },
+      });
+      expect(resumedRuntime.selection.reason).toBe("active-resume");
+
+      await confirmPackagedLauncherRuntime(resumedRuntime);
+      await expect(readFile(resumedRuntime.launcherPaths.attemptsPath, "utf8")).rejects.toThrow();
+      expect(JSON.parse(await readFile(resumedRuntime.launcherPaths.handoffPath, "utf8"))).toMatchObject({
+        previous: { generation: 0, version: "1.2.3-beta.4" },
+        source: { generation: 1, version: "1.2.3-beta.5" },
+        state: "confirmed",
+        target: { generation: 1, version: "1.2.3-beta.5" },
+      });
+      expect(JSON.parse(await readFile(resumedRuntime.launcherPaths.runtimePath, "utf8"))).toMatchObject({
         active: { generation: 1, version: "1.2.3-beta.5" },
         lastSuccessful: { generation: 1, version: "1.2.3-beta.5" },
+      });
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("refreshes a confirmed handoff with the current last-successful payload before advancing", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-packaged-launcher-handoff-refresh-"));
+    try {
+      const config = fakeConfig(root);
+      const paths = resolvePackagedNamespacePaths(config);
+      const currentPackageRuntime = await resolvePackagedLauncherRuntime(config, paths);
+      const firstPayload = { generation: 1, version: "1.2.3-beta.5" };
+      const secondPayload = { generation: 2, version: "1.2.3-beta.6" };
+      const secondPayloadExecutablePath = join(
+        root,
+        "launcher",
+        "channels",
+        "beta",
+        "namespaces",
+        config.namespace,
+        "versions",
+        secondPayload.version,
+        "payload",
+        "Open Design Beta.app",
+        "Contents",
+        "MacOS",
+        "Open Design Beta",
+      );
+      await mkdir(currentPackageRuntime.launcherPaths.stateRoot, { recursive: true });
+      await writeFile(
+        currentPackageRuntime.launcherPaths.handoffPath,
+        `${JSON.stringify({
+          channel: "beta",
+          createdAt: "2026-07-15T01:00:00.000Z",
+          handoffId: "f5d4a712-8ba9-4c28-bcad-6dbed5db2d7c",
+          namespace: config.namespace,
+          outer: {
+            executablePath: process.execPath,
+            pid: process.pid,
+          },
+          payloadExecutablePath: join(root, "payload-v1"),
+          previous: { generation: 0, version: "1.2.3-beta.4" },
+          schemaVersion: LAUNCHER_SCHEMA_VERSION,
+          source: firstPayload,
+          state: "confirmed",
+          target: firstPayload,
+          updatedAt: "2026-07-15T02:00:00.000Z",
+        } satisfies LauncherDesktopHandoffDescriptor)}\n`,
+      );
+      const secondPayloadRuntime = {
+        ...currentPackageRuntime,
+        desktopExecutablePath: secondPayloadExecutablePath,
+        descriptor: {
+          ...currentPackageRuntime.descriptor,
+          active: secondPayload,
+          lastSuccessful: firstPayload,
+        },
+        payloadDesktopProcess: true,
+        selection: {
+          pointer: secondPayload,
+          reason: "active",
+          selected: true,
+        },
+        source: "payload",
+        targetVersion: secondPayload.version,
+      } satisfies PackagedLauncherRuntime;
+
+      await confirmPackagedLauncherRuntime(secondPayloadRuntime);
+
+      expect(JSON.parse(
+        await readFile(secondPayloadRuntime.launcherPaths.handoffPath, "utf8"),
+      )).toMatchObject({
+        previous: firstPayload,
+        source: secondPayload,
+        state: "confirmed",
+        target: secondPayload,
+      });
+
+      await confirmPackagedLauncherRuntime({
+        ...secondPayloadRuntime,
+        descriptor: {
+          ...secondPayloadRuntime.descriptor,
+          lastSuccessful: secondPayload,
+        },
+      });
+      expect(JSON.parse(
+        await readFile(secondPayloadRuntime.launcherPaths.handoffPath, "utf8"),
+      )).toMatchObject({
+        previous: firstPayload,
+        source: secondPayload,
+        state: "confirmed",
+        target: secondPayload,
       });
     } finally {
       await rm(root, { force: true, recursive: true });

@@ -48,7 +48,8 @@ export interface PluginLoopSubmit {
   // video / audio → od-media-generation, others → od-new-generation).
   // Null means the caller did not stamp an explicit kind. HomeView's
   // free-form fallback uses `other` and binds the hidden od-default
-  // router plugin so the agent asks for the exact task type in-chat.
+  // router plugin so the agent infers the task type and asks only when
+  // the brief cannot be routed reliably.
   projectKind?: ProjectKind | null;
   projectMetadata?: ProjectMetadata | null;
   workingDir?: string | null;

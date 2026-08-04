@@ -1486,7 +1486,11 @@
   font-size: 12.5px;
   cursor: pointer;
   flex-shrink: 0;
-  max-width: 110px;
+  /* Tabs take their natural label width so short names ("Design System",
+     "Design Files") render in full; the cap only truncates genuinely long
+     file names. When many tabs open, the strip falls back to its existing
+     horizontal scroll instead of squeezing tabs. */
+  max-width: 220px;
   min-width: 0;
   color: var(--text-muted);
   transition: background 120ms var(--ease-out), color 120ms var(--ease-out);
@@ -2542,26 +2546,6 @@
   display: flex;
   flex-direction: column;
   position: relative;
-}
-
-/* Canvas-local Design delivery feedback. It stays with the workspace while
-   the empty placeholder hands over to an actual file preview, rather than
-   becoming a bottom-of-screen notification. */
-.ws-preview-run-status-slot {
-  position: absolute;
-  z-index: 2;
-  top: 50%;
-  left: 50%;
-  max-width: calc(100% - 48px);
-  pointer-events: none;
-  transform: translate(-50%, 116px);
-}
-
-@media (max-width: 640px) {
-  .ws-preview-run-status-slot {
-    max-width: calc(100% - 32px);
-    transform: translate(-50%, 104px);
-  }
 }
 
 .ws-browser-panel {

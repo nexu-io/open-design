@@ -3,6 +3,13 @@ import { describe, expect, it } from 'vitest';
 import { OFFICIAL_DESIGNER_PROMPT } from '../src/prompts/official-system.js';
 
 describe('official designer prompt', () => {
+  it('asks clarifying questions only when an unresolved answer blocks useful work', () => {
+    expect(OFFICIAL_DESIGNER_PROMPT).toContain(
+      'If the request and known context are sufficient, proceed without asking.',
+    );
+    expect(OFFICIAL_DESIGNER_PROMPT).not.toContain('Always confirm before building');
+  });
+
   it('documents unique data-od-id values for repeated inspectable HTML elements', () => {
     expect(OFFICIAL_DESIGNER_PROMPT).toContain('data-od-id');
     expect(OFFICIAL_DESIGNER_PROMPT).toContain('kebab-case');

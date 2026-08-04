@@ -310,6 +310,7 @@ export interface Dict {
   'settings.modeApi': string;
   'settings.modeApiMeta': string;
   'settings.byokNoFileToolsNotice': string;
+  'settings.byokDraftNotice': string;
   'settings.codeAgent': string;
   'settings.codeAgentHint': string;
   'settings.rescan': string;
@@ -466,6 +467,7 @@ export interface Dict {
   'settings.modelSourceLive': string;
   'settings.modelSourceFallback': string;
   'settings.reasoningPicker': string;
+  'settings.serviceTierPicker': string;
   'settings.modelPickerHint': string;
   'settings.modelPickerLiveHint': string;
   'settings.modelPickerLiveCatalogOnlyHint': string;
@@ -947,15 +949,25 @@ export interface Dict {
   // Desktop updater
   'updater.available': string;
   'updater.availableBody': string;
+  'updater.activeRunsTitle': string;
+  'updater.activeRunsBody': string;
+  'updater.activeRunsUnknownBody': string;
   'updater.checking': string;
   'updater.download': string;
   'updater.downloading': string;
   'updater.downloadingPercent': string;
+  'updater.dialogAvailableGeneric': string;
+  'updater.dialogAvailableVersion': string;
+  'updater.dialogCheckFailed': string;
+  'updater.dialogReadyGeneric': string;
+  'updater.dialogReadyVersion': string;
+  'updater.dialogUnsupported': string;
   'updater.done': string;
   'updater.failed': string;
   'updater.installerOpenBody': string;
   'updater.installerOpened': string;
   'updater.later': string;
+  'updater.manualDownload': string;
   'updater.allowSilentUpdates': string;
   'updater.openFailedFallback': string;
   'updater.installRestart': string;
@@ -971,7 +983,14 @@ export interface Dict {
   'updater.ready': string;
   'updater.readyGeneric': string;
   'updater.readyVersion': string;
+  // Forced installer reinstall (feed control.launcher.version.min gate).
+  // Copy priority: operator jump link (reinstall.url) > these defaults.
+  'updater.reinstallLearnMore': string;
+  'updater.reinstallReadyGeneric': string;
+  'updater.reinstallReadyVersion': string;
+  'updater.restartAnyway': string;
   'updater.upToDate': string;
+  'updater.viewVersionFeatures': string;
 
   // Post-update "what's new" card on the home surface. Release-configured
   // copy comes from the release feed; these keys cover the card chrome and
@@ -1020,6 +1039,22 @@ export interface Dict {
   'entry.navDesignSystems': string;
   'entry.navBrands': string;
   'entry.navIntegrations': string;
+  // Client message center
+  'messageCenter.openAria': string;
+  'messageCenter.unreadCount': string;
+  'messageCenter.title': string;
+  'messageCenter.subtitle': string;
+  'messageCenter.filterAll': string;
+  'messageCenter.filterUnread': string;
+  'messageCenter.filterRead': string;
+  'messageCenter.markAllRead': string;
+  'messageCenter.emptyAllTitle': string;
+  'messageCenter.emptyUnreadTitle': string;
+  'messageCenter.emptyReadTitle': string;
+  'messageCenter.emptyBody': string;
+  'messageCenter.close': string;
+  'messageCenter.desktopSettings': string;
+  'messageCenter.desktopSettingsHint': string;
   'workspaceTabs.project': string;
   'workspaceTabs.pluginDetails': string;
   'workspaceTabs.marketplace': string;
@@ -2005,6 +2040,8 @@ export interface Dict {
   'newproj.createLiveArtifact': string;
   'newproj.createFromTemplate': string;
   'newproj.createDisabledTitle': string;
+  'newproj.openFolder': string;
+  'newproj.openingFolder': string;
   'newproj.importClaudeZip': string;
   'newproj.importClaudeZipTitle': string;
   'newproj.importingClaudeZip': string;
@@ -2380,6 +2417,7 @@ export interface Dict {
   'avatar.modelSection': string;
   'avatar.modelLabel': string;
   'avatar.reasoningLabel': string;
+  'avatar.serviceTierLabel': string;
   'avatar.customSuffix': string;
   'socialShare.openDesignSection': string;
   'socialShare.openDesignTitle': string;
@@ -2508,7 +2546,9 @@ export interface Dict {
   'chat.runError.title.emptyOutput': string;
   'chat.runError.title.sessionExpired': string;
   'chat.runError.title.gitBashMissing': string;
+  'chat.runError.title.cpuUnsupported': string;
   'chat.runError.title.generic': string;
+  'chat.runError.title.artifactMissing': string;
   'chat.runError.signInMessage.amr': string;
   'chat.runError.signInMessage.other': string;
   'chat.runError.cliMissingMessage': string;
@@ -2526,6 +2566,7 @@ export interface Dict {
   'chat.runError.emptyOutputMessage': string;
   'chat.runError.sessionExpiredMessage': string;
   'chat.runError.gitBashMissingMessage': string;
+  'chat.runError.cpuUnsupportedMessage': string;
   'chat.runError.agentFallback': string;
   'chat.runError.sourceLabel': string;
   'chat.runError.sourceExpandAria': string;
@@ -3545,8 +3586,32 @@ export interface Dict {
   'manualEdit.minHeight': string;
   'manualEdit.deleteElement': string;
   'manualEdit.deleteElementConfirm': string;
+  'manualEdit.duplicateElement': string;
+  'manualEdit.pasteElement': string;
+  'manualEdit.pasteImage': string;
+  'manualEdit.moveElement': string;
+  'manualEdit.resizeElement': string;
+  'manualEdit.replaceImage': string;
+  'manualEdit.cropImage': string;
+  'manualEdit.applyCrop': string;
+  'manualEdit.cropFailed': string;
+  'manualEdit.bold': string;
+  'manualEdit.italic': string;
+  'manualEdit.underline': string;
+  'manualEdit.strikethrough': string;
+  'manualEdit.alignLeft': string;
+  'manualEdit.alignCenter': string;
+  'manualEdit.alignRight': string;
+  'manualEdit.spacing': string;
+  'manualEdit.letterSpacing': string;
+  'manualEdit.lineHeight': string;
+  'manualEdit.commonColors': string;
+  'manualEdit.hue': string;
+  'manualEdit.opacity': string;
   'manualEdit.uploadImage': string;
   'manualEdit.uploadingImage': string;
+  'manualEdit.processingImage': string;
+  'manualEdit.imageAdded': string;
   'manualEdit.uploadImageFailed': string;
   'manualEdit.focusSlides': string;
   'manualEdit.showPanels': string;
@@ -3573,11 +3638,16 @@ export interface Dict {
   'fileViewer.speakerNotesSaved': string;
   'fileViewer.speakerNotesSaveFailed': string;
   'fileViewer.speakerNotesPlaceholder': string;
+  'fileViewer.previewAssetBlockedTitle': string;
+  'fileViewer.previewAssetBlockedDetail': string;
   'fileViewer.presenterReset': string;
   'fileViewer.present': string;
   'fileViewer.presentInTab': string;
   'fileViewer.presentFullscreen': string;
   'fileViewer.presentNewTab': string;
+  'fileViewer.presentFromBeginning': string;
+  'fileViewer.presentFromCurrentSlide': string;
+  'fileViewer.presenterMode': string;
   'fileViewer.exitPresentation': string;
   'fileViewer.shareLabel': string;
   'fileViewer.shareMenuShareLink': string;
@@ -4240,6 +4310,13 @@ export interface Dict {
   'settings.resetOnboarding': string;
   'settings.resetOnboardingDesc': string;
   'settings.resetOnboardingButton': string;
+  // Manual updater/launcher cache clear (disaster recovery, About pane).
+  'settings.clearUpdaterCacheTitle': string;
+  'settings.clearUpdaterCacheHint': string;
+  'settings.clearUpdaterCacheButton': string;
+  'settings.clearUpdaterCacheConfirmButton': string;
+  'settings.clearUpdaterCacheSuccess': string;
+  'settings.clearUpdaterCacheFailed': string;
   'onboarding.brandTitle': string;
   'onboarding.brandSubtitle': string;
   'onboarding.brandSkip': string;

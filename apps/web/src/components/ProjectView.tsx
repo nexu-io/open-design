@@ -52,14 +52,16 @@ import { useCoalescedCallback } from '../hooks/useCoalescedCallback';
 import { requestAmrArtifactUpgrade } from '../runtime/amr-artifact-upgrade';
 import {
   type AmrWalletSnapshot,
-  type ByokMediaDefaults,
   type ByokChatProviderConfig,
+  type ByokMediaDefaults,
   type ByokChatProtocol,
   type ResearchOptions,
 } from '@open-design/contracts';
 import {
   anonymizeArtifactId,
   artifactKindToTracking,
+  byokProtocolToTracking,
+  executionModeToTracking,
   projectKindFromMetadataToTracking,
   projectKindToTracking,
 } from '@open-design/contracts/analytics';
@@ -72,6 +74,7 @@ import type {
 import { useAnalytics } from '../analytics/provider';
 import {
   trackArtifactHeaderClick,
+  trackByokPreflightBlocked,
   trackComposerBarClick,
   trackDesignSystemApplyResult,
   trackDesignSystemEnrichClick,
@@ -80,6 +83,7 @@ import {
   trackOnboardingFirstPromptSent,
   trackOnboardingFirstGenerationCompleted,
 } from '../analytics/events';
+import { byokPreflightBlockReason } from './byok/preflight';
 import {
   clearOnboardingSessionId,
   peekOnboardingSessionId,
@@ -98,7 +102,7 @@ import {
 } from '../utils/apiProtocol';
 import { playSound, showCompletionNotification } from '../utils/notifications';
 import { randomUUID } from '../utils/uuid';
-import { DEFAULT_NOTIFICATIONS } from '../state/config';
+import { DEFAULT_NOTIFICATIONS, KNOWN_PROVIDERS } from '../state/config';
 import type { TodoItem } from '../runtime/todos';
 import {
   appendErrorStatusEvent,
@@ -213,6 +217,7 @@ import { historyWithApiAttachmentContext } from '../api-attachment-context';
 import { filterImplicitProducedFiles } from '../produced-files';
 import { AvatarMenu } from './AvatarMenu';
 import { EntrySettingsMenu } from './EntrySettingsMenu';
+import { MessageCenter } from './MessageCenter';
 import { HandoffButton } from './HandoffButton';
 import { Icon } from './Icon';
 import { localizePluginTitle } from './plugins-home/localization';
@@ -234,7 +239,6 @@ import {
 import { buildRepoImportPrompt, designSystemNeedsRepoConnect } from './design-system-github-evidence';
 import { isDesignSystemProject, resolveProjectDesignSystemId } from './design-system-project';
 import { collectReferencedJsxNames } from '../runtime/jsx-module-refs';
-import { KNOWN_PROVIDERS } from '../state/config';
 import { DESIGN_SYSTEM_TAB, FileWorkspace, type BrowserOpenRequest } from './FileWorkspace';
 import {
   type PluginFolderAgentAction,
@@ -417,7 +421,7 @@ interface Props {
   onAgentChange: (id: string) => void;
   onAgentModelChange: (
     id: string,
-    choice: { model?: string; reasoning?: string },
+    choice: { model?: string; reasoning?: string; serviceTier?: string },
   ) => void;
   onApiModelChange?: (model: string) => void;
   onRefreshAgents: () => void;
@@ -483,6 +487,8 @@ const MIN_WORKSPACE_PANEL_WIDTH = 400;
 const SPLIT_RESIZE_HANDLE_WIDTH = 8;
 const BYOK_OPENCODE_UNAVAILABLE_MESSAGE =
   'BYOK API runs require OpenCode. Install OpenCode, then rescan local agents in Settings before retrying.';
+const BYOK_PROVIDER_REQUIRED_MESSAGE =
+  'BYOK OpenCode requires a provider, API key, and model. Complete BYOK settings before starting a run.';
 const BEDROCK_BYOK_UNSUPPORTED_MESSAGE =
   'AWS Bedrock BYOK chat requires AWS credential signing and is not supported by the current API-key proxy.';
 const CHAT_PANEL_KEYBOARD_STEP = 16;
@@ -1235,23 +1241,31 @@ function byokMediaDefaultsForRun(input: {
 function byokOpenCodeProviderFromConfig(
   config: AppConfig,
 ): ByokChatProviderConfig | undefined {
+  if (!isOpenCodeByokChatProtocol(config.apiProtocol)) return undefined;
   const selectedProvider = selectedKnownProviderForConfig(config);
+  const model = config.model.trim();
   if (
-    !isOpenCodeByokChatProtocol(config.apiProtocol) ||
-    (byokProviderRequiresApiKey(config.apiProtocol, selectedProvider, config.baseUrl) && !config.apiKey.trim())
+    (byokProviderRequiresApiKey(config.apiProtocol, selectedProvider, config.baseUrl)
+      && !config.apiKey.trim())
+    || !model
+    || model.toLowerCase() === 'default'
+    || (config.apiProtocol === 'azure' && !config.baseUrl.trim())
   ) {
     return undefined;
   }
   return {
     protocol: config.apiProtocol,
     apiKey: config.apiKey.trim(),
-    baseUrl: config.baseUrl,
-    model: config.model,
-    ...(selectedProvider?.requiresApiKey === false ? { requiresApiKey: false } : {}),
-    apiVersion:
-      config.apiProtocol === 'azure'
-        ? config.apiVersion ?? ''
-        : '',
+    baseUrl: config.baseUrl.trim(),
+    model,
+    ...(config.apiProtocol === 'azure' && config.apiVersion?.trim()
+      ? { apiVersion: config.apiVersion.trim() }
+      : {}),
+    requiresApiKey: byokProviderRequiresApiKey(
+      config.apiProtocol,
+      selectedProvider,
+      config.baseUrl,
+    ),
   };
 }
 
@@ -1259,9 +1273,12 @@ function selectedKnownProviderForConfig(config: AppConfig) {
   if (!config.apiProtocol) return undefined;
   return KNOWN_PROVIDERS.find(
     (provider) =>
-      provider.protocol === config.apiProtocol &&
-      provider.baseUrl === config.baseUrl &&
-      (config.apiProviderBaseUrl == null || provider.baseUrl === config.apiProviderBaseUrl),
+      provider.protocol === config.apiProtocol
+      && provider.baseUrl === config.baseUrl
+      && (
+        config.apiProviderBaseUrl == null
+        || provider.baseUrl === config.apiProviderBaseUrl
+      ),
   );
 }
 
@@ -1393,7 +1410,15 @@ export function ProjectView({
   const detailedProject = projectDetail.project?.id === project.id ? projectDetail.project : null;
   const currentProject =
     detailedProject && detailedProject.updatedAt >= project.updatedAt ? detailedProject : project;
-  const projectDesignSystemId = resolveProjectDesignSystemId(currentProject);
+  const resolvedProjectDesignSystemId = resolveProjectDesignSystemId(currentProject);
+  // A project can outlive a Design System being disabled in Settings. Keep the
+  // persisted project value intact for recovery, but do not inject a disabled
+  // system into a new runtime turn.
+  const projectDesignSystemId = resolvedProjectDesignSystemId;
+  const runtimeDesignSystemId =
+    projectDesignSystemId && (config.disabledDesignSystems ?? []).includes(projectDesignSystemId)
+      ? null
+      : projectDesignSystemId;
   const projectIsDesignSystemProject = isDesignSystemProject(currentProject);
   // Website-clone turns reproduce a whole multi-page site; auto-open should
   // land on the site entry (index.html), not the last-written subpage. See
@@ -4286,6 +4311,8 @@ export function ProjectView({
               // null the same as an active retryable state and keep the row
               // eligible for future refresh/reattach. Only authoritative
               // terminal statuses seal completedReattachRunsRef.
+              let shouldRefreshConversationAfterCleanup = true;
+              let shouldRetryAfterControllerCleanup = false;
               if (genericDisconnect) {
                 const attempts = (genericDisconnectRetriesRef.current.get(runId) ?? 0) + 1;
                 if (attempts >= MAX_TRANSIENT_RETRIES) {
@@ -4302,15 +4329,18 @@ export function ProjectView({
                     cancelController,
                   );
                   const backoffTimer = scheduleProjectTimeout(() => {
-                    const currentBackoffUntil =
-                      genericDisconnectBackoffUntilRef.current.get(runId) ?? 0;
-                    if (currentBackoffUntil <= Date.now()) {
-                      genericDisconnectBackoffUntilRef.current.delete(runId);
-                    }
+                    genericDisconnectBackoffUntilRef.current.delete(runId);
+                    shouldRetryAfterControllerCleanup = true;
                     setRecoveryTick((t) => t + 1);
                   }, 3000);
                   const latestRunStatus = await fetchChatRunStatus(runId).catch(() => null);
                   if (!latestRunStatus || isActiveRunStatus(latestRunStatus.status)) {
+                    // If the backoff elapsed while this probe was still in
+                    // flight, its recovery tick already ran while the run was
+                    // still registered as reattaching. Re-run recovery after
+                    // controller cleanup so the retry is not stranded until an
+                    // unrelated state change.
+                    shouldRefreshConversationAfterCleanup = false;
                   } else if (latestRunStatus.status === 'succeeded') {
                     if (
                       shouldPublishRunFinishedEvent
@@ -4407,8 +4437,13 @@ export function ProjectView({
               reattachCancelControllersRef.current.delete(runId);
               clearCurrentRunStreamingMarker(reattachConversationId, controller, cancelController);
               if (!skipFinalPersistNow) persistNow({ telemetryFinalized: true });
+              if (shouldRetryAfterControllerCleanup && !shouldRefreshConversationAfterCleanup) {
+                setRecoveryTick((t) => t + 1);
+              }
               if (retryFullReplayAfterCleanup) setRecoveryTick((t) => t + 1);
-              scheduleConversationMessageRefresh(reattachConversationId);
+              if (shouldRefreshConversationAfterCleanup) {
+                scheduleConversationMessageRefresh(reattachConversationId);
+              }
             },
           },
           onRunStatus: (runStatus) => {
@@ -4807,6 +4842,21 @@ export function ProjectView({
           chatAttachmentsFromPreviewCommentImages(attachment.imageAttachments),
         ),
       );
+      const byokOpenCodeProvider = byokOpenCodeProviderFromConfig(config);
+      const requiresByokPreflight =
+        (config.mode === 'api' && config.apiProtocol !== 'bedrock') ||
+        (config.mode === 'daemon' && config.agentId === 'byok-opencode');
+      if (requiresByokPreflight && !byokOpenCodeProvider) {
+        trackByokPreflightBlocked(analytics.track, {
+          source: 'run',
+          reason: byokPreflightBlockReason(config) ?? 'config_invalid',
+          provider_id: byokProtocolToTracking(config.apiProtocol) ?? 'unknown',
+          active_execution_mode: executionModeToTracking(config.mode),
+        });
+        setError(BYOK_PROVIDER_REQUIRED_MESSAGE);
+        onOpenSettings('execution');
+        return false;
+      }
       if (!retryTarget && meta?.queueOnly) {
         queueChatSendForCurrentConversation({
           conversationId: activeConversationId,
@@ -4996,7 +5046,6 @@ export function ProjectView({
               effectiveSelectedAgentChoice?.model,
             )
           : apiProtocolModelLabel(config.apiProtocol, config.model);
-      const byokOpenCodeProvider = byokOpenCodeProviderFromConfig(config);
       const preTurnFileNames = projectFiles.map((f) => f.name);
       const assistantId = randomUUID();
       const assistantMsg: ChatMessage = {
@@ -5674,11 +5723,7 @@ export function ProjectView({
                 genericDisconnectRetriesRef.current.set(runIdForGenericDisconnect, attempts);
                 genericDisconnectBackoffUntilRef.current.set(runIdForGenericDisconnect, backoffUntil);
                 const backoffTimer = scheduleProjectTimeout(() => {
-                  const currentBackoffUntil =
-                    genericDisconnectBackoffUntilRef.current.get(runIdForGenericDisconnect) ?? 0;
-                  if (currentBackoffUntil <= Date.now()) {
-                    genericDisconnectBackoffUntilRef.current.delete(runIdForGenericDisconnect);
-                  }
+                  genericDisconnectBackoffUntilRef.current.delete(runIdForGenericDisconnect);
                   setRecoveryTick((t) => t + 1);
                 }, 3000);
                 const latestRunStatus = await fetchChatRunStatus(runIdForGenericDisconnect).catch(() => null);
@@ -5880,7 +5925,7 @@ export function ProjectView({
           skillId: project.skillId ?? null,
           skillIds: Array.isArray(meta?.skillIds) ? meta.skillIds : [],
           context: runContext,
-          designSystemId: projectDesignSystemId ?? null,
+          designSystemId: runtimeDesignSystemId ?? null,
           attachments: runAttachments.map((a) => a.path),
           commentAttachments: runCommentAttachments,
           sessionMode: runSessionMode,
@@ -5890,6 +5935,7 @@ export function ProjectView({
           mediaExecution: mediaExecutionPolicyForProjectMetadata(project.metadata),
           model: daemonByokOpenCode ? config.model : choice?.model ?? null,
           reasoning: daemonByokOpenCode ? null : choice?.reasoning ?? null,
+          serviceTier: daemonByokOpenCode ? null : choice?.serviceTier ?? null,
           ...(daemonByokOpenCode && byokOpenCodeProvider
             ? { byokProvider: byokOpenCodeProvider }
             : {}),
@@ -5972,15 +6018,9 @@ export function ProjectView({
         // BYOK users even though the UI saves model + index + entries
         // for that mode.
         const userText = (userMsg.content ?? '').trim();
-        // Snapshot the live BYOK chat config so the daemon can run
-        // "Same as chat" memory extraction against the same vendor /
-        // key / baseUrl / apiVersion the user is chatting with. The
-        // daemon never persists BYOK creds itself, so this per-call
-        // signal is the only way `pickProvider()` can avoid falling
-        // through to env / media-config (which is wrong for BYOK)
-        // when no explicit memory model override is set. The picker
-        // re-syncs an *explicit* override when chat config drifts;
-        // this snapshot covers the implicit "Same as chat" default.
+        // Forward the per-call BYOK provider snapshot so "Same as chat"
+        // memory extraction uses the same vendor, endpoint, key and model as
+        // the run. The daemon consumes it for this request only.
         const byokChatProvider = byokOpenCodeProvider
           ? {
               provider: byokOpenCodeProvider.protocol,
@@ -5999,7 +6039,7 @@ export function ProjectView({
                 userMessage: userText,
                 projectId: project.id,
                 conversationId: runConversationId,
-                chatProvider: byokChatProvider,
+                byokChatProvider,
               }),
             });
           } catch {
@@ -6040,7 +6080,7 @@ export function ProjectView({
           skillId: project.skillId ?? null,
           skillIds: Array.isArray(meta?.skillIds) ? meta.skillIds : [],
           context: runContext,
-          designSystemId: projectDesignSystemId ?? null,
+          designSystemId: runtimeDesignSystemId ?? null,
           attachments: runAttachments.map((a) => a.path),
           commentAttachments: runCommentAttachments,
           sessionMode: runSessionMode,
@@ -6050,6 +6090,7 @@ export function ProjectView({
           mediaExecution: mediaExecutionPolicyForProjectMetadata(project.metadata),
           model: config.model,
           reasoning: null,
+          serviceTier: null,
           ...(byokOpenCodeProvider ? { byokProvider: byokOpenCodeProvider } : {}),
           byokMediaDefaults: byokMediaDefaultsForRun({
             imageModelOverride: byokImageModelOverride,
@@ -6123,6 +6164,7 @@ export function ProjectView({
       onTouchProject,
       project.id,
       projectDesignSystemId,
+      runtimeDesignSystemId,
       project.name,
       projectFiles,
       refreshProjectFiles,
@@ -6142,6 +6184,7 @@ export function ProjectView({
       scheduleProjectTimeout,
       onProjectsRefresh,
       onProjectChange,
+      onOpenSettings,
       byokImageModelOverride,
       byokVideoModelOverride,
       byokSpeechModelOverride,
@@ -6518,8 +6561,8 @@ export function ProjectView({
   const commentQueueOnSend = currentConversationBusy && !currentConversationQueueDisabled;
 
   const handleContinueRemainingTasks = useCallback(
-    (_assistantMessage: ChatMessage, todos: TodoItem[]) => {
-      if (currentConversationActionDisabled || todos.length === 0) return;
+    async (_assistantMessage: ChatMessage, todos: TodoItem[]) => {
+      if (currentConversationActionDisabled || todos.length === 0) return false;
       const remainingList = todos
         .map((todo, i) => {
           const label =
@@ -6533,7 +6576,7 @@ export function ProjectView({
         `${remainingList}\n\n` +
         'Before making changes, inspect the current project files as needed. ' +
         'Update TodoWrite as you complete each remaining task.';
-      void handleSend(prompt, [], []);
+      return handleSend(prompt, [], []);
     },
     [currentConversationActionDisabled, handleSend],
   );
@@ -8655,9 +8698,7 @@ export function ProjectView({
               byokSpeechVoice={byokSpeechVoiceOverride}
               onChangeByokSpeechVoice={setByokSpeechVoiceOverride}
               projectMetadata={currentProject.metadata}
-              onProjectMetadataChange={(metadata) => {
-                onProjectChange({ ...project, metadata });
-              }}
+              onProjectMetadataChange={onProjectChange}
               activeWorkspaceContext={activeWorkspaceContext}
               initialWorkspaceContexts={initialWorkspaceContexts}
               workspaceContexts={workspaceContexts}
@@ -8830,6 +8871,9 @@ export function ProjectView({
                 artifactKind={headerArtifact.artifact_kind}
                 metricsConsent={config.telemetry?.metrics === true}
                 installationId={config.installationId}
+              />
+              <MessageCenter
+                onOpenNotificationSettings={() => onOpenSettings('notifications')}
               />
               <EntrySettingsMenu
                 config={config}

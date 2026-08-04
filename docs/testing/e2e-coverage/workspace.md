@@ -40,6 +40,7 @@
 | WS-015 | deck 形态 HTML 在手动编辑模式下仍保留 deck 导航能力 | `app-manual-edit.test.ts` |
 | WS-016 | Python 文件可以在工作区打开为可读的内联源码预览 | `app-design-files.test.ts` via `python-source-preview` |
 | WS-017 | 上传的图片能通过 artifact 内的相对路径在生成 HTML 预览中正确加载 | `app-design-files.test.ts` via `uploaded-image-renders-in-preview` |
+| WS-018 | 主动停止运行会只发送一次 cancel 请求，持久化 assistant 的 canceled 状态，并且不留下 artifact 文件 | `app-restoration.test.ts` |
 
 ### 键盘优先工作区流
 

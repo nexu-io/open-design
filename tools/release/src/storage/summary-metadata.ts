@@ -25,17 +25,22 @@ const metadata = (metadataPath.length > 0
       }
       return response.json();
     })()) as {
+  control?: { launcher?: { version?: { min?: string; url?: string } } };
   readyTargets?: string[];
   releaseState?: string;
   r2?: { versionMetadataUrl?: string };
 };
 
+const launcherVersionMin = metadata.control?.launcher?.version?.min;
 writeText(summaryPath, [
   `## ${releaseChannel[0]?.toUpperCase() ?? ""}${releaseChannel.slice(1)} release metadata`,
   "",
   `- version: \`${versionFromMetadata(metadata as Record<string, unknown>)}\``,
   `- state: \`${metadata.releaseState ?? ""}\``,
   `- ready targets: \`${(metadata.readyTargets ?? []).join(", ")}\``,
+  ...(launcherVersionMin == null
+    ? []
+    : [`- launcher version floor: \`${launcherVersionMin}\` (forces installer reinstall below this outer version)`]),
   `- metadata: ${metadata.r2?.versionMetadataUrl ?? metadataUrl}`,
 ].join("\n"));
 

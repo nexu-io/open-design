@@ -240,10 +240,13 @@ try {
 const req = createRequire(resolve(repoRoot, "apps/daemon/package.json"));
 let needsRebuild = false;
 try {
-  req("better-sqlite3");
+  // Try to actually use the native addon; merely requiring the JS wrapper
+  // succeeds even when the binary is missing (e.g. after `pnpm install --ignore-scripts`).
+  const Database = req("better-sqlite3");
+  new Database(":memory:");
 } catch (e) {
   // MODULE_NOT_FOUND means daemon deps aren't installed yet — not our problem.
-  // Any other error (ERR_DLOPEN_FAILED, ABI mismatch, etc.) warrants a rebuild.
+  // Any other error (missing binary, ERR_DLOPEN_FAILED, ABI mismatch, etc.) warrants a rebuild.
   if (e?.code !== "MODULE_NOT_FOUND") {
     needsRebuild = true;
   }

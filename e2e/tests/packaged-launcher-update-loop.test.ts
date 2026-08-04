@@ -74,7 +74,14 @@ type PackagedLauncherRuntime = {
 
 type PackagedLauncherRuntimeModule = {
   confirmPackagedLauncherRuntime: (runtime: PackagedLauncherRuntime) => Promise<void>;
-  resolvePackagedLauncherRuntime: (config: PackagedConfigLike, paths: PackagedPaths) => Promise<PackagedLauncherRuntime>;
+  resolvePackagedLauncherRuntime: (
+    config: PackagedConfigLike,
+    paths: PackagedPaths,
+    options?: {
+      currentExecutablePath?: string;
+      delegated?: { generation: number; version: string };
+    },
+  ) => Promise<PackagedLauncherRuntime>;
 };
 
 type FixtureServer = {
@@ -84,15 +91,18 @@ type FixtureServer = {
 
 type PlatformCase = {
   arch: "arm64" | "x64";
+  channel: "beta" | "prerelease";
   currentVersion: string;
+  expectedPayloadExecutablePath: (root: string, namespace: string) => string;
   expectedResourceRoot: (root: string, namespace: string) => string;
   fixturePlatformKey: "mac" | "win";
-  namespace: "release-beta" | "release-beta-win";
+  productName: "Open Design" | "Open Design Beta" | "Open Design Prerelease";
+  namespace: "release-beta" | "release-beta-win" | "release-prerelease";
   payloadArchiveName: string;
   payloadPath: string;
   platform: "darwin" | "win32";
   promotedVersion: string;
-  writePayload: (destinationRoot: string, namespace: string) => Promise<void>;
+  writePayload: (destinationRoot: string, testCase: PlatformCase) => Promise<void>;
 };
 
 async function loadDesktopUpdaterModule(): Promise<DesktopUpdaterModule> {
@@ -107,13 +117,13 @@ async function loadPackagedLauncherRuntimeModule(): Promise<PackagedLauncherRunt
   return await import(new URL("../../apps/packaged/src/launcher-runtime.ts", import.meta.url).href) as PackagedLauncherRuntimeModule;
 }
 
-function fakePackagedConfig(root: string, namespace: PlatformCase["namespace"]): PackagedConfigLike {
+function fakePackagedConfig(root: string, testCase: PlatformCase): PackagedConfigLike {
   return {
     amrProfile: null,
-    appVersion: "1.2.3-beta.4",
+    appVersion: testCase.currentVersion,
     daemonCliEntry: null,
     daemonSidecarEntry: null,
-    namespace,
+    namespace: testCase.namespace,
     namespaceBaseRoot: join(root, "namespaces"),
     nodeCommand: null,
     posthogHost: null,
@@ -142,7 +152,9 @@ async function createPayloadMetadataFixture(options: PlatformCase): Promise<Fixt
       response.end(JSON.stringify({
         betaNumber: Number(options.promotedVersion.split(".").at(-1)),
         betaVersion: options.promotedVersion,
-        channel: "beta",
+        channel: options.channel,
+        releaseNumber: Number(options.promotedVersion.split(".").at(-1)),
+        releaseVersion: options.promotedVersion,
         platforms: {
           [options.fixturePlatformKey]: {
             arch: options.arch,
@@ -199,18 +211,19 @@ async function createPayloadMetadataFixture(options: PlatformCase): Promise<Fixt
   };
 }
 
-async function writeExtractedWindowsPayload(destinationRoot: string, namespace: string): Promise<void> {
+async function writeExtractedWindowsPayload(destinationRoot: string, testCase: PlatformCase): Promise<void> {
+  const executableName = `${testCase.productName}.exe`;
   await mkdir(join(destinationRoot, "payload", "resources", "open-design", "bin"), { recursive: true });
   await mkdir(join(destinationRoot, "payload", "resources", "prebundled", "daemon"), { recursive: true });
   await mkdir(join(destinationRoot, "payload", "resources", "prebundled", "web"), { recursive: true });
-  await writeFile(join(destinationRoot, "payload", "Open Design.exe"), "");
+  await writeFile(join(destinationRoot, "payload", executableName), "");
   await writeFile(join(destinationRoot, "payload", "resources", "open-design", "bin", "node.exe"), "");
   await writeFile(join(destinationRoot, "payload", "resources", "prebundled", "daemon", "daemon-sidecar.mjs"), "");
   await writeFile(join(destinationRoot, "payload", "resources", "prebundled", "web", "web-sidecar.mjs"), "");
   await writeFile(
     join(destinationRoot, "payload", "resources", "open-design-config.json"),
     `${JSON.stringify({
-      appVersion: "1.2.3-beta.5",
+      appVersion: testCase.promotedVersion,
       daemonSidecarEntryRelative: "prebundled/daemon/daemon-sidecar.mjs",
       nodeCommandRelative: "open-design/bin/node.exe",
       webOutputMode: "standalone",
@@ -220,31 +233,32 @@ async function writeExtractedWindowsPayload(destinationRoot: string, namespace: 
   await writeFile(
     join(destinationRoot, "manifest.json"),
     `${JSON.stringify({
-      channel: "beta",
-      entry: { cwd: "payload", executable: "payload/Open Design.exe" },
-      namespace,
+      channel: testCase.channel,
+      entry: { cwd: "payload", executable: `payload/${executableName}` },
+      namespace: testCase.namespace,
       payloadRoot: "payload",
       platform: "win32",
       schemaVersion: LAUNCHER_SCHEMA_VERSION,
-      version: "1.2.3-beta.5",
+      version: testCase.promotedVersion,
     })}\n`,
   );
 }
 
-async function writeExtractedMacPayload(destinationRoot: string, namespace: string): Promise<void> {
-  const resourcesRoot = join(destinationRoot, "payload", "Open Design Beta.app", "Contents", "Resources");
+async function writeExtractedMacPayload(destinationRoot: string, testCase: PlatformCase): Promise<void> {
+  const appBundleName = `${testCase.productName}.app`;
+  const resourcesRoot = join(destinationRoot, "payload", appBundleName, "Contents", "Resources");
   await mkdir(join(resourcesRoot, "open-design", "bin"), { recursive: true });
   await mkdir(join(resourcesRoot, "prebundled", "daemon"), { recursive: true });
   await mkdir(join(resourcesRoot, "prebundled", "web"), { recursive: true });
-  await mkdir(join(destinationRoot, "payload", "Open Design Beta.app", "Contents", "MacOS"), { recursive: true });
-  await writeFile(join(destinationRoot, "payload", "Open Design Beta.app", "Contents", "MacOS", "Open Design Beta"), "");
+  await mkdir(join(destinationRoot, "payload", appBundleName, "Contents", "MacOS"), { recursive: true });
+  await writeFile(join(destinationRoot, "payload", appBundleName, "Contents", "MacOS", testCase.productName), "");
   await writeFile(join(resourcesRoot, "open-design", "bin", "node"), "");
   await writeFile(join(resourcesRoot, "prebundled", "daemon", "daemon-sidecar.mjs"), "");
   await writeFile(join(resourcesRoot, "prebundled", "web", "web-sidecar.mjs"), "");
   await writeFile(
     join(resourcesRoot, "open-design-config.json"),
     `${JSON.stringify({
-      appVersion: "1.2.3-beta.5",
+      appVersion: testCase.promotedVersion,
       daemonSidecarEntryRelative: "prebundled/daemon/daemon-sidecar.mjs",
       nodeCommandRelative: "open-design/bin/node",
       webOutputMode: "standalone",
@@ -254,28 +268,36 @@ async function writeExtractedMacPayload(destinationRoot: string, namespace: stri
   await writeFile(
     join(destinationRoot, "manifest.json"),
     `${JSON.stringify({
-      channel: "beta",
+      channel: testCase.channel,
       entry: {
-        cwd: "payload/Open Design Beta.app",
-        executable: "payload/Open Design Beta.app/Contents/MacOS/Open Design Beta",
+        cwd: `payload/${appBundleName}`,
+        executable: `payload/${appBundleName}/Contents/MacOS/${testCase.productName}`,
       },
-      namespace,
+      namespace: testCase.namespace,
       payloadRoot: "payload",
       platform: "darwin",
       schemaVersion: LAUNCHER_SCHEMA_VERSION,
-      version: "1.2.3-beta.5",
+      version: testCase.promotedVersion,
     })}\n`,
   );
+}
+
+function nextFailedVersion(testCase: PlatformCase): string {
+  return testCase.channel === "prerelease" ? "1.2.3-prerelease.6" : "1.2.3-beta.6";
 }
 
 const platformCases: PlatformCase[] = [
   {
     arch: "x64",
+    channel: "beta",
     currentVersion: "1.2.3-beta.4",
+    expectedPayloadExecutablePath: (root, namespace) =>
+      join(root, "launcher", "channels", "beta", "namespaces", namespace, "versions", "1.2.3-beta.5", "payload", "Open Design.exe"),
     expectedResourceRoot: (root, namespace) =>
       join(root, "launcher", "channels", "beta", "namespaces", namespace, "versions", "1.2.3-beta.5", "payload", "resources", "open-design"),
     fixturePlatformKey: "win",
     namespace: "release-beta-win",
+    productName: "Open Design",
     payloadArchiveName: "open-design-1.2.3-beta.5-win-x64-payload.7z",
     payloadPath: "/payload.7z",
     platform: "win32",
@@ -284,22 +306,43 @@ const platformCases: PlatformCase[] = [
   },
   {
     arch: "arm64",
+    channel: "beta",
     currentVersion: "1.2.3-beta.4",
+    expectedPayloadExecutablePath: (root, namespace) =>
+      join(root, "launcher", "channels", "beta", "namespaces", namespace, "versions", "1.2.3-beta.5", "payload", "Open Design Beta.app", "Contents", "MacOS", "Open Design Beta"),
     expectedResourceRoot: (root, namespace) =>
       join(root, "launcher", "channels", "beta", "namespaces", namespace, "versions", "1.2.3-beta.5", "payload", "Open Design Beta.app", "Contents", "Resources", "open-design"),
     fixturePlatformKey: "mac",
     namespace: "release-beta",
+    productName: "Open Design Beta",
     payloadArchiveName: "open-design-1.2.3-beta.5-mac-arm64-payload.zip",
     payloadPath: "/payload.zip",
     platform: "darwin",
     promotedVersion: "1.2.3-beta.5",
     writePayload: writeExtractedMacPayload,
   },
+  {
+    arch: "arm64",
+    channel: "prerelease",
+    currentVersion: "1.2.3-prerelease.4",
+    expectedPayloadExecutablePath: (root, namespace) =>
+      join(root, "launcher", "channels", "prerelease", "namespaces", namespace, "versions", "1.2.3-prerelease.5", "payload", "Open Design Prerelease.app", "Contents", "MacOS", "Open Design Prerelease"),
+    expectedResourceRoot: (root, namespace) =>
+      join(root, "launcher", "channels", "prerelease", "namespaces", namespace, "versions", "1.2.3-prerelease.5", "payload", "Open Design Prerelease.app", "Contents", "Resources", "open-design"),
+    fixturePlatformKey: "mac",
+    namespace: "release-prerelease",
+    productName: "Open Design Prerelease",
+    payloadArchiveName: "open-design-1.2.3-prerelease.5-mac-arm64-payload.zip",
+    payloadPath: "/prerelease-payload.zip",
+    platform: "darwin",
+    promotedVersion: "1.2.3-prerelease.5",
+    writePayload: writeExtractedMacPayload,
+  },
 ];
 
 describe("packaged launcher payload update loop", () => {
   it.each(platformCases)(
-    "[P2] bridges a full-package beta install into $platform payload updates, bootstrap selection, confirmation, and fallback",
+    "[P2] bridges a full-package $channel install into $platform payload updates, bootstrap selection, confirmation, and fallback",
     async (testCase) => {
     const root = await mkdtemp(join(tmpdir(), "od-packaged-launcher-loop-"));
     const fixture = await createPayloadMetadataFixture(testCase);
@@ -308,7 +351,7 @@ describe("packaged launcher payload update loop", () => {
       const { createDesktopUpdater, DESKTOP_UPDATE_ENV } = await loadDesktopUpdaterModule();
       const { resolvePackagedNamespacePaths } = await loadPackagedPathsModule();
       const { confirmPackagedLauncherRuntime, resolvePackagedLauncherRuntime } = await loadPackagedLauncherRuntimeModule();
-      const config = fakePackagedConfig(root, testCase.namespace);
+      const config = fakePackagedConfig(root, testCase);
       const paths = resolvePackagedNamespacePaths(config);
       const initialRuntime = await resolvePackagedLauncherRuntime(config, paths);
       const launchRequests: Array<{ appPid: number; launchPath: string; root: string }> = [];
@@ -317,7 +360,7 @@ describe("packaged launcher payload update loop", () => {
       expect(initialRuntime.targetVersion).toBeNull();
       expect(initialRuntime.installedLaunchPath).toEqual(expect.any(String));
       expect(JSON.parse(await readFile(initialRuntime.launcherPaths.installPath, "utf8"))).toMatchObject({
-        channel: "beta",
+        channel: testCase.channel,
         launchPath: initialRuntime.installedLaunchPath,
         namespace: config.namespace,
         schemaVersion: LAUNCHER_SCHEMA_VERSION,
@@ -343,7 +386,7 @@ describe("packaged launcher payload update loop", () => {
         platform: testCase.platform,
         source: PACKAGED_SOURCE,
       }, {
-        extractLauncherPayloadArchive: async (input: { destinationRoot: string }) => testCase.writePayload(input.destinationRoot, config.namespace),
+        extractLauncherPayloadArchive: async (input: { destinationRoot: string }) => testCase.writePayload(input.destinationRoot, testCase),
         launchAppAfterQuit: async (input: { appPid: number; launchPath: string; root: string }) => {
           launchRequests.push({
             appPid: input.appPid,
@@ -366,7 +409,7 @@ describe("packaged launcher payload update loop", () => {
       expect(launchRequests).toEqual([
         {
           appPid: process.pid,
-          launchPath: initialRuntime.installedLaunchPath,
+          launchPath: testCase.expectedPayloadExecutablePath(paths.installationRoot, config.namespace),
           root: await realpath(paths.updateRoot),
         },
       ]);
@@ -378,7 +421,10 @@ describe("packaged launcher payload update loop", () => {
       expect(runtimeAfterApply.active).toEqual({ generation: 1, version: testCase.promotedVersion });
       expect(runtimeAfterApply.lastSuccessful).toEqual({ generation: 0, version: testCase.currentVersion });
 
-      const promoted = await resolvePackagedLauncherRuntime(config, paths);
+      const promoted = await resolvePackagedLauncherRuntime(config, paths, {
+        currentExecutablePath: testCase.expectedPayloadExecutablePath(paths.installationRoot, config.namespace),
+        delegated: { generation: 1, version: testCase.promotedVersion },
+      });
       expect(promoted.source).toBe("payload");
       expect(promoted.targetVersion).toBe(testCase.promotedVersion);
       expect(promoted.config.appVersion).toBe(testCase.promotedVersion);
@@ -398,8 +444,8 @@ describe("packaged launcher payload update loop", () => {
       await writeFile(
         promoted.launcherPaths.runtimePath,
         `${JSON.stringify({
-          active: { generation: 2, version: "1.2.3-beta.6" },
-          channel: "beta",
+          active: { generation: 2, version: nextFailedVersion(testCase) },
+          channel: testCase.channel,
           lastSuccessful: { generation: 1, version: testCase.promotedVersion },
           namespace: config.namespace,
           schemaVersion: LAUNCHER_SCHEMA_VERSION,
@@ -408,11 +454,11 @@ describe("packaged launcher payload update loop", () => {
       await writeFile(
         promoted.launcherPaths.attemptsPath,
         `${JSON.stringify({
-          channel: "beta",
+          channel: testCase.channel,
           generation: 2,
           namespace: config.namespace,
           schemaVersion: LAUNCHER_SCHEMA_VERSION,
-          version: "1.2.3-beta.6",
+          version: nextFailedVersion(testCase),
         })}\n`,
       );
 

@@ -913,8 +913,7 @@ export function DesignSystemCreationFlow({
       // drives the kickoff. POST /api/brands creates the backing project and
       // real transcript immediately, then the programmatic pass registers a
       // usable user:<id> design system in the background.
-      const extractUrl =
-        nonGithubSourceUrlsFromState(state)[0] ?? sourceUrlsFromState(state)[0] ?? '';
+      const extractUrl = nonGithubSourceUrlsFromState(state)[0] ?? '';
       const fallbackDesignMd = !extractUrl && !hasDesignMd
         ? buildFallbackDesignMdFromState(state)
         : '';
@@ -2304,6 +2303,7 @@ export function DesignSystemDetailView({
         commentAttachments,
         model: selectedModel?.model ?? null,
         reasoning: selectedModel?.reasoning ?? null,
+        serviceTier: selectedModel?.serviceTier ?? null,
         locale,
         analyticsHints: {
           entryFrom: wasOnboardingHandoff

@@ -16,7 +16,7 @@ Why does Open Design's output look better than a typical AI design tool's? Becau
 
 ## What is Open Design?
 
-Open Design is the open-source, local-first alternative to a closed cloud design tool. It doesn't ship its own AI agent — it **detects the coding agents you already have** (Claude Code, Codex, Cursor, Gemini, OpenCode, and more), or you bring your own API key (Anthropic, OpenAI, Azure, Google Gemini, even a local model via Ollama). The architecture is clean: a front-end talking to a local daemon, everything saved to a local SQLite database so your projects are always there when you come back.
+Open Design is the open-source, local-first alternative to a closed cloud design tool. It doesn't ship its own AI agent — it **detects the coding agents you already have** (Claude Code, Codex, Cursor, OpenCode, Qwen, and more), or you bring your own API key (Anthropic, OpenAI, Azure, Google Gemini, even a local model via Ollama). The architecture is clean: a front-end talking to a local daemon, everything saved to a local SQLite database so your projects are always there when you come back.
 
 ## The four libraries
 

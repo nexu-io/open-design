@@ -23,6 +23,11 @@ import { randomUUID } from '../utils/uuid';
 
 const STORAGE_KEY = 'open-design:config';
 const CONFIG_MIGRATION_VERSION = 2;
+const RETIRED_SECURE_BYOK_KEYS = [
+  'byokProfileId',
+  'byokCredentialConfigured',
+  'byokCredentialTail',
+] as const;
 
 // Hatched out of the box, but tucked away — the user has to go through
 // either the entry-view "adopt a pet" callout or Settings → Pets to
@@ -509,14 +514,14 @@ const BYOK_PROVIDER_PRESET_SPECS = [
   { id: 'xai', title: 'xAI', providerLabel: 'xAI' },
   { id: 'together', title: 'Together AI', providerLabel: 'Together AI' },
   { id: 'huggingface', title: 'Hugging Face', providerLabel: 'Hugging Face' },
-  { id: 'qwen', title: '千问', providerLabel: 'Qwen' },
-  { id: 'volcengine', title: '火山引擎', providerLabel: 'Volcengine Ark' },
-  { id: 'qianfan', title: '百度千帆', providerLabel: 'Baidu Qianfan' },
+  { id: 'qwen', title: 'Qwen', providerLabel: 'Qwen' },
+  { id: 'volcengine', title: 'Volcengine Ark', providerLabel: 'Volcengine Ark' },
+  { id: 'qianfan', title: 'Baidu Qianfan', providerLabel: 'Baidu Qianfan' },
   { id: 'vllm', title: 'vLLM', providerLabel: 'vLLM' },
-  { id: 'mimo', title: '小米 MiMo', providerLabel: 'MiMo (Xiaomi) — OpenAI' },
+  { id: 'mimo', title: 'Xiaomi MiMo', providerLabel: 'MiMo (Xiaomi) — OpenAI' },
   { id: 'minimax', title: 'MiniMax', providerLabel: 'MiniMax — Anthropic (CN)' },
   { id: 'moonshot', title: 'Moonshot', providerLabel: 'Moonshot' },
-  { id: 'zhipu', title: '智谱', providerLabel: 'Zhipu' },
+  { id: 'zhipu', title: 'Zhipu AI', providerLabel: 'Zhipu' },
 ] as const;
 
 export const BYOK_PROVIDER_PRESETS: ReadonlyArray<ByokProviderPresetConfig> =
@@ -660,6 +665,9 @@ export function loadConfig(): AppConfig {
     for (const key of DAEMON_OWNED_KEYS) {
       delete (parsed as Record<string, unknown>)[key];
     }
+    for (const key of RETIRED_SECURE_BYOK_KEYS) {
+      delete (parsed as Record<string, unknown>)[key];
+    }
     const parsedHasApiProtocol = Object.prototype.hasOwnProperty.call(
       parsed,
       'apiProtocol',
@@ -678,7 +686,6 @@ export function loadConfig(): AppConfig {
       notifications: normalizeNotifications(parsed.notifications),
       orbit: normalizeOrbit(parsed.orbit),
     };
-
     let migratedConfig = false;
     const parsedMigrationVersion =
       typeof parsed.configMigrationVersion === 'number'
@@ -755,7 +762,15 @@ export function loadConfig(): AppConfig {
     }
 
     if (migratedConfig || downgradedUnsupportedChatProtocol) {
-      saveConfig(merged);
+      // Best-effort re-persist of the migrated / downgraded config. A localStorage
+      // write failure here (quota exceeded, private-mode storage disabled) must not
+      // fall through to the outer catch and discard the valid config we just
+      // parsed — that would silently reset the user to defaults for the session.
+      try {
+        saveConfig(merged);
+      } catch {
+        // keep the parsed config even if it could not be written back
+      }
     }
 
     return merged;
@@ -986,8 +1001,14 @@ function sanitizeAgentCliEnv(agentCliEnv: AppConfig['agentCliEnv']): AppConfig['
 }
 
 export function saveConfig(config: AppConfig): void {
-  const sanitized: AppConfig = { ...config, agentCliEnv: sanitizeAgentCliEnv(config.agentCliEnv) };
+  const sanitized: AppConfig = {
+    ...config,
+    agentCliEnv: sanitizeAgentCliEnv(config.agentCliEnv),
+  };
   for (const key of DAEMON_OWNED_KEYS) {
+    delete (sanitized as unknown as Record<string, unknown>)[key];
+  }
+  for (const key of RETIRED_SECURE_BYOK_KEYS) {
     delete (sanitized as unknown as Record<string, unknown>)[key];
   }
   localStorage.setItem(STORAGE_KEY, JSON.stringify(sanitized));

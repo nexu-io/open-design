@@ -30,6 +30,7 @@ import {
   localizeBlogPostText,
 } from '../../content-i18n';
 import {
+  DEFAULT_LOCALE,
   getHeaderLocaleSwitcher,
   getLandingUiCopy,
   getLocaleDefinition,
@@ -224,6 +225,19 @@ const fmtDate = (d: Date) =>
 // Optional team-persona byline (avatar + name + role). Posts without an
 // `author` frontmatter id render no byline, unchanged.
 const author = getBlogAuthor((post.data as { author?: string }).author);
+
+// Posts about a language-neutral proper noun (a product name like `marp`)
+// rank every translated copy against the same English SERP. See the
+// `noindexLocaleVariants` docblock in content.config.ts for the full
+// rationale. English stays indexable; the localized variants drop out, and
+// the hreflang cluster is suppressed everywhere because hreflang must not
+// advertise URLs that carry `noindex`.
+const noindexLocaleVariants =
+  (post.data as { noindexLocaleVariants?: boolean }).noindexLocaleVariants === true;
+// Full-cluster escalation: `noindex: true` drops the English original too.
+// See the `noindex` docblock in content.config.ts.
+const noindexAllVariants = (post.data as { noindex?: boolean }).noindex === true;
+const isLocalizedVariant = locale !== DEFAULT_LOCALE;
 ---
 
 <!doctype html>
@@ -239,6 +253,8 @@ const author = getBlogAuthor((post.data as { author?: string }).author);
       image={coverImage}
       datePublished={post.data.date}
       category={post.data.category}
+      noindex={noindexAllVariants || (noindexLocaleVariants && isLocalizedVariant)}
+      noindexedLocaleVariants={noindexLocaleVariants || noindexAllVariants}
     />
     <script is:inline type='application/ld+json' set:html={JSON.stringify(breadcrumbJsonLd)} />
     <SiteAnalytics />

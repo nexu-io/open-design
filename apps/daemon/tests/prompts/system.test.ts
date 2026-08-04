@@ -124,51 +124,21 @@ describe('composeSystemPrompt', () => {
     expect(prompt).toContain('Do NOT launch your own browser to do this');
   });
 
-  it('preserves canonical default task-type options under locale overrides', () => {
+  it('does not inject a default task-type form under locale overrides', () => {
     const prompt = composeSystemPrompt({ locale: 'zh-CN' });
 
-    expect(prompt).toContain(
-      'keep the `taskType` option labels as the canonical routing choices',
-    );
-    for (const option of [
-      'Prototype',
-      'Live artifact',
-      'Slide deck',
-      'Image',
-      'Video',
-      'HyperFrames',
-      'Audio',
-      'Other',
-    ]) {
-      expect(prompt).toContain(`"${option}"`);
-    }
-    expect(prompt).not.toContain('option labels as `原型`');
-    expect(prompt).not.toContain('`实时作品`');
+    expect(prompt).not.toContain('<question-form id="task-type"');
+    expect(prompt).not.toContain('keep the `taskType` option labels');
   });
 
-  it('preserves canonical default task-type options for zh-TW locale overrides', () => {
+  it('keeps zh-TW locale guidance without injecting the router form', () => {
     const prompt = composeSystemPrompt({ locale: 'zh-TW' });
 
     expect(prompt).toContain('# UI locale override');
     expect(prompt).toContain('`zh-TW` (Traditional Chinese)');
-    expect(prompt).toContain(
-      'keep the `taskType` option labels as the canonical routing choices',
-    );
-    for (const option of [
-      'Prototype',
-      'Live artifact',
-      'Slide deck',
-      'Image',
-      'Video',
-      'HyperFrames',
-      'Audio',
-      'Other',
-    ]) {
-      expect(prompt).toContain(`"${option}"`);
-    }
+    expect(prompt).not.toContain('<question-form id="task-type"');
+    expect(prompt).not.toContain('keep the `taskType` option labels');
     expect(prompt).not.toContain('快速简报 — 30 秒');
-    expect(prompt).not.toContain('option labels as `原型`');
-    expect(prompt).not.toContain('`实时作品`');
   });
 
   it('treats an active design system as the visual direction', () => {
@@ -261,10 +231,9 @@ describe('composeSystemPrompt', () => {
         skillMode: surface,
         metadata: { kind: surface } as any,
       });
-      expect(prompt).not.toContain('<question-form id="discovery"');
-      expect(prompt).not.toContain('Quick brief — 30 seconds');
-      expect(prompt).not.toContain('Read once, in batches');
-      expect(prompt).not.toContain('Filesystem handoff is canonical');
+      expect(prompt).not.toContain('# Open Design Charter');
+      expect(prompt).not.toContain('## Requirements Clarification Phase');
+      expect(prompt).not.toContain('## Delivery');
       // Nor the Ask-mode charter (fourth-round finding): CHAT_MODE_OVERRIDE
       // forbids creating media, contradicting the media contract below.
       expect(prompt).not.toContain('# Ask mode');
@@ -272,7 +241,8 @@ describe('composeSystemPrompt', () => {
     }
     // Non-media slim runs keep the charter head.
     const design = composeSystemPrompt({ promptCoreVariant: 'slim' });
-    expect(design).toContain('<question-form id="discovery"');
+    expect(design).toContain('# Open Design Charter');
+    expect(design).toContain('## Requirements Clarification Phase');
   });
 
   it('injects the html-in-canvas preflight for the hyperframes skill', () => {
@@ -369,6 +339,14 @@ describe('composeSystemPrompt', () => {
     expect(prompt).toContain('no dark-on-dark labels');
   });
 
+  it('injects nested-diagram discipline only through deck surfaces', () => {
+    const heading = '## Nested / concentric diagram discipline';
+
+    expect(composeSystemPrompt({ skillMode: 'deck' })).toContain(heading);
+    expect(composeSystemPrompt({ metadata: { kind: 'deck' } as any })).toContain(heading);
+    expect(composeSystemPrompt({ metadata: { kind: 'prototype' } as any })).not.toContain(heading);
+  });
+
   it('resolves a non-media primary surface ahead of composed media mentions', () => {
     expect(resolveExclusiveSurface({
       skillMode: 'deck',
@@ -400,7 +378,7 @@ describe('composeSystemPrompt', () => {
 
     it('prioritizes question forms over native tool calls when clarifying', () => {
       const prompt = composeSystemPrompt({ agentId: 'amr' });
-      expect(prompt).toContain('## Clarifying questions mid-conversation');
+      expect(prompt).toContain('## Structured clarification on any turn');
       expect(prompt).toContain('`<question-form>` is assistant text for the Open Design UI, not a native tool call');
       expect(prompt).toContain(
         'emit the complete `<question-form>...</question-form>` block directly in the assistant message before any TodoWrite, file write/edit, Bash, or other native tool call',

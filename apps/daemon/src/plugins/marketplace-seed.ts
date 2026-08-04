@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { safeExternalFetch } from './plugin-asset-cache.js';
 import path from 'node:path';
 
 export const OFFICIAL_MARKETPLACE_ID = 'official';
@@ -88,7 +89,7 @@ export function createMarketplaceSeedHelpers(deps: MarketplaceSeedHelperDeps): M
           };
         }
       }
-      const response = await fetchImpl(url, { redirect: 'follow' });
+      const response = await safeExternalFetch(url, {}, fetchImpl);
       return {
         ok: response.ok,
         status: response.status,

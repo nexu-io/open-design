@@ -15,9 +15,17 @@
  * (timeouts, unreadable payloads, etc.). A structured `.code` on the error
  * (e.g. a future typed daemon error) always wins over message classification.
  */
+// The daemon's envelope codes are generic wrappers, not a classification, so
+// they must not win over message bucketing. Mirrors the deploy helper's guard.
+const GENERIC_EXPORT_ENVELOPE_CODES = new Set([
+  'BAD_REQUEST', 'FILE_NOT_FOUND', 'INTERNAL', 'INTERNAL_ERROR', 'UPSTREAM_UNAVAILABLE', 'UNKNOWN',
+]);
+
 export function exportErrorCode(err: unknown): string {
   const structured = (err as { code?: unknown } | null | undefined)?.code;
-  if (typeof structured === 'string' && structured.length > 0) return structured;
+  if (typeof structured === 'string' && structured.length > 0 && !GENERIC_EXPORT_ENVELOPE_CODES.has(structured)) {
+    return structured;
+  }
   if (!(err instanceof Error)) return 'UNKNOWN';
   const message = err.message ?? '';
   // The daemon rejected a desktop sidecar message it doesn't recognize — the
@@ -27,5 +35,25 @@ export function exportErrorCode(err: unknown): string {
   // so the raw text matches both patterns.
   if (/unknown \w+ sidecar message/i.test(message)) return 'DESKTOP_SIDECAR_UNKNOWN_MESSAGE';
   if (/renderer (?:is )?unavailable/i.test(message)) return 'DESKTOP_RENDERER_UNAVAILABLE';
+  // Capture-stage failures specific to export: the render produced nothing
+  // usable, so the request never even became an HTTP problem.
+  if (/\bnothing was captured\b|\bsnapshot is empty\b/i.test(message)) return 'EMPTY_CAPTURE';
+  if (/\bcanvas is not available\b/i.test(message)) return 'CANVAS_UNAVAILABLE';
+  if (/\bunreadable response\b/i.test(message)) return 'UNREADABLE_RESPONSE';
+  if (/\binvalid data url\b/i.test(message)) return 'INVALID_DATA_URL';
+  if (/\bdownload failed\b/i.test(message)) return 'DOWNLOAD_FAILED';
+  // Transport failures — a request that never got a response.
+  if (/\b(?:ENOTFOUND|ECONNREFUSED|ECONNRESET|EAI_AGAIN|ENETUNREACH|network error|failed to fetch|fetch failed)\b/i.test(message)) {
+    return 'NETWORK';
+  }
+  if (/\btimed?\s*out\b|\bETIMEDOUT\b/i.test(message)) return 'TIMEOUT';
+  if (/\brate.?limit/i.test(message) || /\b429\b/.test(message)) return 'RATE_LIMITED';
+  if (/\b(?:unauthori[sz]ed|forbidden|invalid (?:api )?(?:key|token|credential))\b/i.test(message)) {
+    return 'FORBIDDEN';
+  }
+  if (/\bnot found\b/i.test(message)) return 'NOT_FOUND';
+  // Same status regex (and the same false-positive guards) as the deploy helper.
+  const status = /\b([45]\d\d)\b/.exec(message)?.[1];
+  if (status) return `HTTP_${status}`;
   return err.name || 'UNKNOWN';
 }

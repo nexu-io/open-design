@@ -1,6 +1,6 @@
 ---
 name: direction-picker
-description: 3-5 direction picker that lets the user choose before final generation.
+description: Optional 3-5 direction picker for users who explicitly ask to compare visual directions.
 od:
   scenario: general
   mode: planning
@@ -9,17 +9,21 @@ od:
 # Direction picker
 
 Generative work benefits from explicit divergence before it converges.
-The direction-picker atom asks the agent to draft 3-5 distinct
-directions (visual / structural / tonal) and emit them in an inline
-`<question-form>` with a `direction-cards` question so the user picks the
-winning direction before the expensive generation pass. The submitted choice
-returns as the next user message.
+This atom defines how to present 3–5 distinct visual / structural / tonal
+directions when the user explicitly asks to see or compare direction options.
+Only in that case, emit one inline `<question-form>` with a `direction-cards`
+question. The submitted choice returns as the next user message.
+
+The presence of this atom or the `plan` stage does not trigger a picker. Do not
+emit direction cards proactively. When the user has not explicitly requested
+options, infer a fitting direction from the brief, active design system, and
+known context, then continue.
 
 ## Convergence
 
-The atom completes when the submitted form answer contains a direction id.
-The agent's next turn must lock onto that direction —
-backtracking forces a fresh devloop iteration of the picker stage.
+When a picker was explicitly requested, the atom completes when the submitted
+form answer contains a direction id. The agent's next turn must lock onto that
+direction — backtracking forces a fresh devloop iteration of the picker stage.
 
 ## Anti-patterns the prompt fragment forbids
 

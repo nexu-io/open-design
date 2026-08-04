@@ -71,6 +71,7 @@ export interface ChatSseStartPayload {
   projectId?: string | null;
   model?: string | null;
   reasoning?: string | null;
+  serviceTier?: string | null;
 }
 
 export interface ChatSseChunkPayload {
@@ -112,7 +113,14 @@ export type DaemonAgentPayload =
   | LiveArtifactSsePayload
   | LiveArtifactRefreshSsePayload
   | PlainStreamArtifactSsePayload
-  | { type: 'tool_use'; id: string; name: string; input: unknown }
+  | {
+      type: 'tool_use';
+      id: string;
+      name: string;
+      input: unknown;
+      /** Optional wall-clock ms when the tool first started (e.g. ACP first frame). */
+      startedAt?: number;
+    }
   /**
    * Live-only incremental tool-input fragment, emitted while the model is still
    * streaming a tool call's JSON arguments (Claude `input_json_delta`). `delta`

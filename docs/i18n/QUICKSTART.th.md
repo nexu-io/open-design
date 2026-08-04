@@ -346,7 +346,7 @@ open-design/
 
 ## Troubleshooting
 
-- **`better-sqlite3` fails to load / ABI mismatch after a Node.js version change** — `pnpm install` จะ re-run `postinstall` อัตโนมัติและ rebuild native addon สำหรับ Node.js ปัจจุบัน. ถ้าต้องการ rebuild เองหรือตรวจ fix: `pnpm --filter @open-design/daemon rebuild better-sqlite3` แล้ว `pnpm --filter @open-design/daemon exec node -e "require('better-sqlite3')"`. ต้องมี build tools: `python3`, `make`, `g++` (หรือ `clang++`). ถ้าคุณมี `ignore-scripts=true` ใน `.npmrc`, ให้รัน `node scripts/postinstall.mjs` หลัง `pnpm install`.
+- **`better-sqlite3` fails to load / ABI mismatch after a Node.js version change** — `pnpm install` จะ re-run `postinstall` อัตโนมัติและ rebuild native addon สำหรับ Node.js ปัจจุบัน. ถ้าต้องการ rebuild เองหรือตรวจ fix: `pnpm --filter @open-design/daemon rebuild better-sqlite3` แล้ว `pnpm --filter @open-design/daemon exec node -e "require('better-sqlite3')"`. ต้องมี build tools: `python3`, `make`, `g++` (หรือ `clang++`). ถ้าคุณใช้ `ignore-scripts=true` ใน `.npmrc` (พบบ่อยใน AUR packages), ให้รัน `pnpm bootstrap` หลัง `pnpm install`.
 - **"no agents found on PATH"** — ติดตั้ง local runtime ที่ register ไว้ใน [`apps/daemon/src/runtimes/registry.ts`](../../apps/daemon/src/runtimes/registry.ts), ตรวจว่า daemon มองเห็น executable แล้วใช้ **Rescan** ใน **Settings → Execution mode**. หรือ configure BYOK runtime ใน Settings.
 - **Claude Code exits with code 1** — Open Design start `claude` ได้แล้ว แต่ spawned non-interactive run fail ก่อน produce response. จาก shell หรือ app environment เดียวกับที่ start Open Design ให้เช็ค:
   ```bash

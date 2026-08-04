@@ -1,7 +1,7 @@
 import { expect, test } from '@/playwright/suite';
 import { ensureRailOpen } from '@/playwright/rail';
 import { routeAgents } from '@/playwright/mock-factory';
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 
 const STORAGE_KEY = 'open-design:config';
 const OPEN_SETTINGS_LABEL = /Open settings|打开设置|開啟設定/i;
@@ -75,6 +75,13 @@ async function seedAutomationsBase(page: Page, options: { locale?: string } = {}
 
 async function waitForLoadingToClear(page: Page) {
   await expect(page.getByText('Loading Open Design…')).toHaveCount(0, { timeout: 15_000 });
+}
+
+async function openSchedulePopover(modal: Locator, name: RegExp | string) {
+  await modal.getByRole('button', { name }).click();
+  const popover = modal.locator('.automation-popover--schedule');
+  await expect(popover).toBeVisible();
+  return popover;
 }
 
 async function gotoEntryHome(page: Page) {
@@ -292,8 +299,8 @@ test.describe('Automations page', () => {
 
     await view.getByRole('button', { name: 'New automation' }).click();
     const modal = page.getByTestId('automation-modal');
-    await modal.getByLabel('Automation title').fill('Weekly digest');
-    await expect(modal.getByLabel('Automation title')).toHaveValue('Weekly digest');
+    await modal.getByTestId('automation-modal-title').fill('Weekly digest');
+    await expect(modal.getByTestId('automation-modal-title')).toHaveValue('Weekly digest');
     await modal.getByTestId('automation-modal-prompt').fill('Summarize GitHub and design activity.');
     await expect(modal.getByTestId('automation-modal-prompt')).toHaveValue('Summarize GitHub and design activity.');
     await modal.getByRole('button', { name: 'Create' }).click();
@@ -424,7 +431,7 @@ test.describe('Automations page', () => {
 
     await view.getByRole('button', { name: 'New automation' }).click();
     const modal = page.getByTestId('automation-modal');
-    await modal.getByLabel('Automation title').fill('Newest digest');
+    await modal.getByTestId('automation-modal-title').fill('Newest digest');
     await modal.getByTestId('automation-modal-prompt').fill('Summarize the newest activity.');
     await modal.getByRole('button', { name: 'Create' }).click();
 
@@ -512,14 +519,14 @@ test.describe('Automations page', () => {
 
     await view.getByRole('button', { name: 'New automation' }).click();
     const modal = page.getByTestId('automation-modal');
-    await modal.getByLabel('Automation title').fill('Friday launch digest');
+    await modal.getByTestId('automation-modal-title').fill('Friday launch digest');
     await modal.getByTestId('automation-modal-prompt').fill('Summarize launch readiness every Friday.');
-    await modal.getByRole('button', { name: /Daily/i }).click();
-    await page.getByRole('tab', { name: 'Weekly' }).click();
-    await page.locator('.automation-popover__weekdays').getByRole('button', { name: 'Fri' }).click();
-    await page.locator('.automation-popover--schedule input[type="time"]').fill('16:45');
-    await page.locator('.automation-popover--schedule select').selectOption('UTC');
-    await page.getByRole('button', { name: 'Done' }).click();
+    const schedulePopover = await openSchedulePopover(modal, /Daily/i);
+    await schedulePopover.getByRole('tab', { name: 'Weekly' }).click();
+    await schedulePopover.locator('.automation-popover__weekdays').getByRole('button', { name: 'Fri' }).click();
+    await schedulePopover.locator('input[type="time"]').fill('16:45');
+    await schedulePopover.locator('select').selectOption('UTC');
+    await schedulePopover.getByRole('button', { name: 'Done' }).click();
     await expect(modal.getByRole('button', { name: /Friday.*4:45 PM.*UTC/i })).toBeVisible();
 
     await modal.getByRole('button', { name: 'Create' }).click();
@@ -709,24 +716,24 @@ test.describe('Automations page', () => {
     await row.getByRole('button', { name: 'Edit' }).click();
 
     const modal = page.getByTestId('automation-modal');
-    await expect(modal).toHaveAttribute('aria-label', 'Edit automation');
-    await expect(modal.getByLabel('Automation title')).toHaveValue('Daily digest');
+    await expect(modal).toHaveAttribute('aria-label', 'Edit');
+    await expect(modal.getByTestId('automation-modal-title')).toHaveValue('Daily digest');
     await expect(modal.getByTestId('automation-modal-prompt')).toHaveValue('Summarize GitHub and design activity.');
 
     await modal.getByRole('button', { name: /New project each run/i }).click();
     await modal.getByRole('button', { name: 'Launch Room' }).click();
     await expect(modal.getByRole('button', { name: /Launch Room/i })).toBeVisible();
 
-    await modal.getByRole('button', { name: /Daily/i }).click();
-    await page.getByRole('tab', { name: 'Weekdays' }).click();
-    await page.locator('.automation-popover--schedule input[type="time"]').fill('10:30');
-    await page.locator('.automation-popover--schedule select').selectOption('UTC');
-    await page.getByRole('button', { name: 'Done' }).click();
-    await expect(modal.getByRole('button', { name: /Weekdays.*10:30 AM.*UTC/i })).toBeVisible();
+    const schedulePopover = await openSchedulePopover(modal, /Daily/i);
+    await schedulePopover.getByRole('tab', { name: 'Weekdays' }).click();
+    await schedulePopover.locator('input[type="time"]').fill('10:30');
+    await schedulePopover.locator('select').selectOption('UTC');
+    await schedulePopover.getByRole('button', { name: 'Done' }).click();
+    await expect(modal.getByRole('button', { name: /Runs Mon.*Fri.*10:30 AM.*UTC/i })).toBeVisible();
 
-    await modal.getByLabel('Automation title').fill('Launch digest');
+    await modal.getByTestId('automation-modal-title').fill('Launch digest');
     await modal.getByTestId('automation-modal-prompt').fill('Summarize launch readiness and open blockers.');
-    await expect(modal.getByLabel('Automation title')).toHaveValue('Launch digest');
+    await expect(modal.getByTestId('automation-modal-title')).toHaveValue('Launch digest');
     await expect(modal.getByTestId('automation-modal-prompt')).toHaveValue('Summarize launch readiness and open blockers.');
 
     await modal.getByRole('button', { name: 'Save' }).click();
@@ -746,7 +753,7 @@ test.describe('Automations page', () => {
     });
 
     await expect(row).toContainText('Launch digest');
-    await expect(row).toContainText('Weekdays at 10:30 AM');
+    await expect(row).toContainText('Runs Mon–Fri at 10:30 AM');
     await expect(row).toContainText('Launch Room');
     await expect(row).toContainText('Summarize launch readiness and open blockers.');
   });
@@ -857,7 +864,7 @@ test.describe('Automations page', () => {
     const view = await gotoAutomations(page);
     await view.getByRole('button', { name: 'New automation' }).click();
     const modal = page.getByTestId('automation-modal');
-    await modal.getByLabel('Automation title').fill('Reuse launch project');
+    await modal.getByTestId('automation-modal-title').fill('Reuse launch project');
     await modal.getByTestId('automation-modal-prompt').fill('Append launch readiness notes.');
 
     await modal.getByRole('button', { name: /New project each run/i }).click();
@@ -1033,11 +1040,11 @@ test.describe('Automations page', () => {
 
     await view.getByRole('button', { name: 'New automation' }).click();
     const modal = page.getByTestId('automation-modal');
-    await modal.getByLabel('Automation title').fill('Weekly digest');
+    await modal.getByTestId('automation-modal-title').fill('Weekly digest');
     await modal.getByTestId('automation-modal-prompt').fill('Summarize GitHub and design activity.');
     await modal.getByRole('button', { name: 'Create' }).click();
 
-    await expect(modal.getByLabel('Automation title')).toHaveValue('Weekly digest');
+    await expect(modal.getByTestId('automation-modal-title')).toHaveValue('Weekly digest');
     await expect(modal.getByTestId('automation-modal-prompt')).toHaveValue('Summarize GitHub and design activity.');
     await expect(modal.getByText('provider unavailable')).toBeVisible();
     await expect(view.getByText('No automations yet')).toBeVisible();
@@ -1700,8 +1707,8 @@ test.describe('Automations page', () => {
 
     await row.getByRole('button', { name: 'Edit' }).click();
     const modal = page.getByTestId('automation-modal');
-    await expect(modal.getByLabel('Automation title')).toHaveValue('Daily digest');
-    await modal.getByLabel('Automation title').fill('Daily digest edited');
+    await expect(modal.getByTestId('automation-modal-title')).toHaveValue('Daily digest');
+    await modal.getByTestId('automation-modal-title').fill('Daily digest edited');
     await modal.getByRole('button', { name: /^Save/i }).click();
 
     await expect(view.getByText('Daily digest edited')).toBeVisible();
@@ -1796,13 +1803,13 @@ test.describe('Automations page', () => {
 
     await row.getByRole('button', { name: 'Edit' }).click();
     const modal = page.getByTestId('automation-modal');
-    await expect(modal.getByLabel('Automation title')).toHaveValue('Daily launch digest');
-    await modal.getByRole('button', { name: /Daily/i }).click();
-    await page.getByRole('tab', { name: 'Weekly' }).click();
-    await page.locator('.automation-popover__weekdays').getByRole('button', { name: 'Tue' }).click();
-    await page.locator('.automation-popover--schedule input[type="time"]').fill('08:15');
-    await page.locator('.automation-popover--schedule select').selectOption('UTC');
-    await page.getByRole('button', { name: 'Done' }).click();
+    await expect(modal.getByTestId('automation-modal-title')).toHaveValue('Daily launch digest');
+    const schedulePopover = await openSchedulePopover(modal, /Daily/i);
+    await schedulePopover.getByRole('tab', { name: 'Weekly' }).click();
+    await schedulePopover.locator('.automation-popover__weekdays').getByRole('button', { name: 'Tue' }).click();
+    await schedulePopover.locator('input[type="time"]').fill('08:15');
+    await schedulePopover.locator('select').selectOption('UTC');
+    await schedulePopover.getByRole('button', { name: 'Done' }).click();
     await modal.getByRole('button', { name: /^Save/i }).click();
 
     await expect.poll(() => patchBodies.length).toBe(1);
@@ -1976,7 +1983,7 @@ test.describe('Automations page', () => {
 
     await view.getByRole('button', { name: /Memory refresh template/i }).click();
     const modal = page.getByTestId('automation-modal');
-    await expect(modal.getByLabel('Automation title')).toHaveValue('Memory refresh template');
+    await expect(modal.getByTestId('automation-modal-title')).toHaveValue('Memory refresh template');
     await expect(modal.getByTestId('automation-modal-prompt')).toHaveValue(/Use Automation template "memory-refresh-template"/);
     await expect(modal.getByTestId('automation-modal-prompt')).toHaveValue(/Pipeline: Collect source packets -> Compact durable context -> Update memory/);
 
@@ -2094,15 +2101,15 @@ test.describe('Automations page', () => {
 
     await view.getByRole('button', { name: /Design system watch template/i }).click();
     const modal = page.getByTestId('automation-modal');
-    await expect(modal.getByLabel('Automation title')).toHaveValue('Design system watch template');
+    await expect(modal.getByTestId('automation-modal-title')).toHaveValue('Design system watch template');
     await modal.getByRole('button', { name: /New project each run/i }).click();
     await page.getByRole('button', { name: 'Template Target Project' }).click();
-    await modal.getByRole('button', { name: /Daily/i }).click();
-    await page.getByRole('tab', { name: 'Weekly' }).click();
-    await page.locator('.automation-popover__weekdays').getByRole('button', { name: 'Thu' }).click();
-    await page.locator('.automation-popover--schedule input[type="time"]').fill('13:30');
-    await page.locator('.automation-popover--schedule select').selectOption('UTC');
-    await page.getByRole('button', { name: 'Done' }).click();
+    const schedulePopover = await openSchedulePopover(modal, /Daily/i);
+    await schedulePopover.getByRole('tab', { name: 'Weekly' }).click();
+    await schedulePopover.locator('.automation-popover__weekdays').getByRole('button', { name: 'Thu' }).click();
+    await schedulePopover.locator('input[type="time"]').fill('13:30');
+    await schedulePopover.locator('select').selectOption('UTC');
+    await schedulePopover.getByRole('button', { name: 'Done' }).click();
 
     await modal.getByRole('button', { name: 'Create' }).click();
     await expect.poll(() => createBodies.length).toBe(1);

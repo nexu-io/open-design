@@ -43,6 +43,39 @@ describe("updater fixture server", () => {
     }
   });
 
+  it("publishes the control.launcher.version block from fixture knobs", async () => {
+    const server = await startUpdaterFixtureServer({
+      artifactBody: "fixture artifact",
+      channel: "beta",
+      controlLauncherVersionMin: "1.5.0-beta.1",
+      controlLauncherVersionUrl: "https://example.com/reinstall-help",
+      version: "2.0.0-beta.1",
+    });
+    try {
+      const metadata = await (await fetch(server.info.metadataUrl)).json() as {
+        control?: { launcher?: { version?: { min?: string; url?: string } } };
+      };
+      expect(metadata.control?.launcher?.version?.min).toBe("1.5.0-beta.1");
+      expect(metadata.control?.launcher?.version?.url).toBe("https://example.com/reinstall-help");
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("omits the control block when no control knobs are set", async () => {
+    const server = await startUpdaterFixtureServer({
+      artifactBody: "fixture artifact",
+      channel: "beta",
+      version: "2.0.0-beta.1",
+    });
+    try {
+      const metadata = await (await fetch(server.info.metadataUrl)).json() as { control?: unknown };
+      expect(metadata.control).toBeUndefined();
+    } finally {
+      await server.close();
+    }
+  });
+
   it("serves Windows installer metadata for the updater flow", async () => {
     const server = await startUpdaterFixtureServer({
       artifactBody: "fixture installer",

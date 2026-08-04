@@ -230,10 +230,16 @@ export interface StudioOnboardingHintClickProps {
 }
 
 export interface UpdateIndicatorClickProps {
-  page_name: 'home';
-  area: 'update_indicator' | 'update_prompt';
-  element: 'ready_indicator' | 'later' | 'install_update';
-  action: 'open_prompt' | 'dismiss' | 'install';
+  page_name: 'home' | 'app';
+  area: 'update_indicator' | 'update_prompt' | 'mac_app_menu' | 'update_dialog';
+  element:
+    | 'ready_indicator'
+    | 'later'
+    | 'install_update'
+    | 'check_for_updates'
+    | 'view_release_notes'
+    | 'restart_anyway';
+  action: 'open_prompt' | 'dismiss' | 'install' | 'check' | 'open_link' | 'force_restart';
   app_version_before?: string;
   app_version_after?: string;
 }
@@ -907,7 +913,7 @@ export interface QuestionsFormClickProps {
   form_id?: string;
   question_id?: string;
   style_id?: string;
-  style_context?: 'deck' | 'prototype';
+  style_context?: 'deck' | 'prototype' | 'document' | 'image' | 'video';
   interaction_source?: 'inline' | 'gallery';
   category_id?: 'all' | 'business' | 'editorial' | 'creative' | 'minimal';
   step_index?: number;
@@ -953,6 +959,12 @@ export interface AmrAuthResultProps {
   // attempt; absent when login was started without a recorded entry.
   entry_id?: string;
   source_detail?: TrackingAmrEntrySource;
+  auth_attempt_id?: string;
+  last_stage?: import('./amr-auth.js').AmrAuthStage;
+  last_stage_result?: import('./amr-auth.js').AmrAuthStageResult;
+  last_error_kind?: import('./amr-auth.js').AmrAuthErrorKind;
+  network_path?: import('./amr-auth.js').AmrAuthNetworkPath;
+  fallback_used?: boolean;
 }
 
 export interface ChatPanelResourcesPopoverClickProps {
@@ -1232,7 +1244,13 @@ export interface HandoffClickProps {
 export interface PresentPopoverClickProps {
   page_name: 'artifact';
   area: 'present_popover';
-  element: 'in_this_tab' | 'fullscreen' | 'new_tab';
+  element:
+    | 'in_this_tab'
+    | 'fullscreen'
+    | 'new_tab'
+    | 'start_from_beginning'
+    | 'start_from_current'
+    | 'presenter_mode';
   artifact_id?: string;
   artifact_kind?: TrackingArtifactKind;
 }
