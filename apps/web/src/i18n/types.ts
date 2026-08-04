@@ -2040,6 +2040,8 @@ export interface Dict {
   'newproj.createLiveArtifact': string;
   'newproj.createFromTemplate': string;
   'newproj.createDisabledTitle': string;
+  'newproj.openFolder': string;
+  'newproj.openingFolder': string;
   'newproj.importClaudeZip': string;
   'newproj.importClaudeZipTitle': string;
   'newproj.importingClaudeZip': string;

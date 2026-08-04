@@ -469,8 +469,6 @@ vi.mock('../../src/components/ChatPane', () => ({
 const config: AppConfig = {
   mode: 'daemon',
   apiKey: '',
-  byokProfileId: 'byok-test-profile',
-  byokCredentialConfigured: true,
   baseUrl: '',
   model: '',
   agentId: 'agent-1',
@@ -1832,9 +1830,7 @@ describe('ProjectView conversation run isolation', () => {
       ...config,
       mode: 'api',
       apiProtocol: 'openai',
-      apiKey: '',
-      byokProfileId: 'byok-test-profile',
-      byokCredentialConfigured: true,
+      apiKey: 'byok-test-key',
       baseUrl: 'https://api.openai.com/v1',
       model: 'api-model',
     });
@@ -1847,7 +1843,12 @@ describe('ProjectView conversation run isolation', () => {
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
     expect(streamViaDaemon).toHaveBeenCalledWith(expect.objectContaining({
       agentId: 'byok-opencode',
-      byokProfileId: 'byok-test-profile',
+      byokProvider: expect.objectContaining({
+        protocol: 'openai',
+        apiKey: 'byok-test-key',
+        baseUrl: 'https://api.openai.com/v1',
+        model: 'api-model',
+      }),
       model: 'api-model',
     }));
     await waitFor(() => expect(playSound).toHaveBeenCalledWith('success-sound'));
@@ -1891,8 +1892,6 @@ describe('ProjectView conversation run isolation', () => {
           agentId,
           apiProtocol: 'openai',
           apiKey,
-          byokProfileId: undefined,
-          byokCredentialConfigured: false,
           baseUrl: 'https://api.openai.com/v1',
           model,
         },
@@ -1947,7 +1946,12 @@ describe('ProjectView conversation run isolation', () => {
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
     expect(streamViaDaemon).toHaveBeenCalledWith(expect.objectContaining({
       agentId: 'byok-opencode',
-      byokProfileId: 'byok-test-profile',
+      byokProvider: expect.objectContaining({
+        protocol: 'ollama',
+        baseUrl: 'http://localhost:11434',
+        model: 'llama3.2',
+        requiresApiKey: false,
+      }),
       model: 'llama3.2',
     }));
   });
@@ -1974,7 +1978,12 @@ describe('ProjectView conversation run isolation', () => {
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
     expect(streamViaDaemon).toHaveBeenCalledWith(expect.objectContaining({
       agentId: 'byok-opencode',
-      byokProfileId: 'byok-test-profile',
+      byokProvider: expect.objectContaining({
+        protocol: 'openai',
+        baseUrl: 'http://127.0.0.1:8000/v1',
+        model: 'model',
+        requiresApiKey: false,
+      }),
       model: 'model',
     }));
   });

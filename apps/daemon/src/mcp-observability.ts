@@ -147,17 +147,28 @@ export function validateExternalPluginContext(
   };
 }
 
-export function validatePluginWorkflowId(value: unknown): string {
+function validateCanonicalPluginCorrelationId(
+  value: unknown,
+  fieldName: 'pluginWorkflowId' | 'requestId',
+): string {
   if (
     typeof value !== 'string'
     || value.length > 64
     || !WORKFLOW_ID_PATTERN.test(value)
   ) {
     throw pluginContractError(
-      'pluginWorkflowId must be a canonical UUID or ULID',
+      `${fieldName} must be a canonical UUID or ULID`,
     );
   }
   return value;
+}
+
+export function validatePluginWorkflowId(value: unknown): string {
+  return validateCanonicalPluginCorrelationId(value, 'pluginWorkflowId');
+}
+
+export function validatePluginRequestId(value: unknown): string {
+  return validateCanonicalPluginCorrelationId(value, 'requestId');
 }
 
 export function mapMcpHostProduct(
