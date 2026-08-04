@@ -5,6 +5,7 @@ import type {
   ProxyMessage,
   ProxyMessageContent,
   ProxyTextContentBlock,
+  ProviderRunMetadataRequestFields,
 } from '@open-design/contracts';
 import { projectFileUrl } from './registry';
 import type { StreamHandlers } from './anthropic';
@@ -23,11 +24,8 @@ import { isAnthropicSupportedImagePath } from '../utils/apiProtocol';
  * Other protocols ignore unknown body fields, so callers are free to
  * pass this for every protocol.
  */
-export interface ProxyContext {
+export interface ProxyContext extends ProviderRunMetadataRequestFields {
   projectId?: string;
-  providerRunId?: string;
-  providerOperationId?: string;
-  providerRunPurpose?: string;
   byokImageModel?: string;
   byokVideoModel?: string;
   byokSpeechModel?: string;

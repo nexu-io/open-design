@@ -1,4 +1,7 @@
-import type { ProviderCredentialSourceRequestFields } from './providerCredential';
+import type {
+  ProviderCredentialSourceRequestFields,
+  ProviderRunMetadataRequestFields,
+} from './providerCredential';
 import type { ReasoningExecutionRequestFields } from './reasoningExecution';
 
 export type ProxyMessageRole = 'system' | 'user' | 'assistant' | 'tool';
@@ -26,7 +29,9 @@ export interface ProxyMessage {
   content: ProxyMessageContent;
 }
 
-export type ProxyStreamRequest = ReasoningExecutionRequestFields & ProviderCredentialSourceRequestFields & {
+export type ProxyStreamRequest = ReasoningExecutionRequestFields &
+  ProviderCredentialSourceRequestFields &
+  ProviderRunMetadataRequestFields & {
   model: string;
   systemPrompt?: string;
   messages: ProxyMessage[];

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { DeploymentProviderProfile } from './deployment-provider.js';
-import { proxyDispatcherRequestInit } from './connectionTest.js';
+import { proxyDispatcherRequestInit } from '../connectionTest.js';
 
 const DEPLOYMENT_PROVIDER_RUN_SESSION_TIMEOUT_MS = 10_000;
 type DeploymentProviderRunErrorCode =

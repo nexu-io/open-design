@@ -77,10 +77,12 @@ describe('bound-API-token guard', () => {
 });
 
 describe('API-token open paths', () => {
-  it('opens only redacted deployment provider discovery beyond probes', () => {
-    expect(isApiTokenExemptRequest('GET', '/provider-orchestrator/config')).toBe(true);
-    expect(isApiTokenExemptRequest('GET', '/api/provider-orchestrator/config')).toBe(true);
-    expect(isApiTokenExemptRequest('POST', '/provider-orchestrator/config')).toBe(false);
+  it('opens only health, readiness, and version probes', () => {
+    expect(isApiTokenExemptRequest('GET', '/api/health')).toBe(true);
+    expect(isApiTokenExemptRequest('GET', '/api/ready')).toBe(true);
+    expect(isApiTokenExemptRequest('GET', '/api/version')).toBe(true);
+    expect(isApiTokenExemptRequest('GET', '/provider-orchestrator/config')).toBe(false);
+    expect(isApiTokenExemptRequest('GET', '/api/provider-orchestrator/config')).toBe(false);
     expect(isApiTokenExemptRequest('GET', '/app-config')).toBe(false);
   });
 });

@@ -49,11 +49,11 @@ import {
   resolveDeploymentProviderProfile,
   resolveProviderCredentialSource,
   type DeploymentProviderProfile,
-} from '../deployment-provider.js';
+} from '../integrations/deployment-provider.js';
 import {
   deploymentProviderRunMetadata,
   type DeploymentProviderRunMetadataResult,
-} from '../deployment-provider-run-session.js';
+} from '../integrations/deployment-provider-run-session.js';
 import { resolveModelForServiceTier } from '../runtimes/models.js';
 import { googleStreamGenerateContentUrl } from '../integrations/google-models.js';
 import { createRoleMarkerGuard } from '../role-marker-guard.js';

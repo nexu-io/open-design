@@ -215,8 +215,8 @@ import {
   buildOpenCodeByokProviderConfig,
   BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE,
 } from './runtimes/byok-opencode.js';
-import { resolveDeploymentProviderProfile } from './deployment-provider.js';
-import { deploymentProviderRunMetadata } from './deployment-provider-run-session.js';
+import { resolveDeploymentProviderProfile } from './integrations/deployment-provider.js';
+import { deploymentProviderRunMetadata } from './integrations/deployment-provider-run-session.js';
 import {
   extractPlainStreamArtifacts,
   persistPlainStreamArtifactList,
@@ -2126,10 +2126,8 @@ export async function startServer({
   // check (the desktop UI / local CLI never carry a bearer); every
   // other request must present `Authorization: Bearer <token>` with a
   // value matching `OD_API_TOKEN`. Health / readiness / version remain
-  // open so monitoring probes don't need the token. Redacted deployment
-  // provider discovery is also open so the browser can render an
-  // administrator-managed provider during first-run setup. Server-minted
-  // project preview asset scopes are also accepted for GETs so sandboxed
+  // open so monitoring probes don't need the token. Server-minted project
+  // preview asset scopes are also accepted for GETs so sandboxed
   // browser iframes can load HTML/CSS/JS without privileged headers.
   // Rich daemon status stays authenticated because it includes local
   // runtime paths.

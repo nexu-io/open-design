@@ -1,6 +1,9 @@
 import type { Express, Response } from 'express';
 import { PROJECT_EXPORT_MANIFEST_SCHEMA, isExportFormat } from '@open-design/contracts';
 import type { ConnectionTestProtocol } from '@open-design/contracts/api/connectionTest';
+import type { FinalizeProviderRequest } from '@open-design/contracts/api/finalize';
+import type { ProviderRunMetadataRequestFields } from '@open-design/contracts/api/providerCredential';
+import type { ReasoningExecutionRequestFields } from '@open-design/contracts/api/reasoningExecution';
 import { randomUUID } from 'node:crypto';
 import nodePath from 'node:path';
 import os from 'node:os';
@@ -27,8 +30,8 @@ import {
   resolveDeploymentProviderProfile,
   resolveProviderCredentialSource,
   type DeploymentProviderProfile,
-} from './deployment-provider.js';
-import { deploymentProviderRunMetadata } from './deployment-provider-run-session.js';
+} from './integrations/deployment-provider.js';
+import { deploymentProviderRunMetadata } from './integrations/deployment-provider-run-session.js';
 import { sandboxImportedProjectRootUnavailableReason } from './sandbox-mode.js';
 import { parseOrchestratorWorkspace } from './workspace-contract.js';
 
@@ -1503,6 +1506,9 @@ export function registerFinalizeRoutes(app: Express, ctx: RegisterFinalizeRoutes
     redactSecrets,
   } = ctx.finalize;
   app.post('/api/projects/:id/finalize/:provider', async (req, res) => {
+    const body = (req.body || {}) as Partial<FinalizeProviderRequest> &
+      ProviderRunMetadataRequestFields &
+      ReasoningExecutionRequestFields;
     const {
       apiKey,
       baseUrl,
@@ -1512,7 +1518,7 @@ export function registerFinalizeRoutes(app: Express, ctx: RegisterFinalizeRoutes
       protocol: bodyProtocol,
       reasoningExecution,
       credentialSource: rawCredentialSource,
-    } = req.body || {};
+    } = body;
     let secretsToRedact = [typeof apiKey === 'string' ? apiKey : ''];
     try {
       // Centralized path-traversal guard. `isSafeId` (apps/daemon/src/projects.ts)
@@ -1619,10 +1625,10 @@ export function registerFinalizeRoutes(app: Express, ctx: RegisterFinalizeRoutes
           const runMetadata = await deploymentProviderRunMetadata(
             deploymentProfile,
             {
-              ...(req.body as Record<string, unknown>),
+              ...(body as Record<string, unknown>),
               projectId: req.params.id,
-              providerRunId: req.body.providerRunId ?? fallbackRunId,
-              providerOperationId: req.body.providerOperationId ?? fallbackRunId,
+              providerRunId: body.providerRunId ?? fallbackRunId,
+              providerOperationId: body.providerOperationId ?? fallbackRunId,
               providerRunPurpose: 'finalize',
             },
             finalizeAbort.signal,

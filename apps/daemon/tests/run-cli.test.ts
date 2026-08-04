@@ -106,6 +106,44 @@ async function runCli(args: string[]): Promise<{ stdout: string; stderr: string;
 }
 
 describe('od run CLI', () => {
+  it('starts a BYOK OpenCode run with the deployment credential in JSON mode', async () => {
+    stub = await startRunStubServer(true);
+
+    const result = await runCli([
+      'run',
+      'start',
+      '--project',
+      'project-1',
+      '--message',
+      'Build the settings screen',
+      '--deployment-credential',
+      '--json',
+      '--daemon-url',
+      stub.baseUrl,
+    ]);
+
+    expect(result.code).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(JSON.parse(result.stdout)).toEqual({ runId: 'run-2' });
+    expect(stub.requests.map((request) => `${request.method} ${request.url}`)).toEqual([
+      'POST /api/runs',
+    ]);
+    expect(JSON.parse(stub.requests[0]!.body)).toEqual({
+      projectId: 'project-1',
+      message: 'Build the settings screen',
+      agentId: 'byok-opencode',
+      byokCredentialSource: 'deployment',
+    });
+  });
+
+  it('documents the deployment credential selector in run help', async () => {
+    const result = await runCli(['run', '--help']);
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain('--deployment-credential');
+    expect(result.stdout).toContain('BYOK OpenCode agent');
+  });
+
   it('continues a resumable run through the normal run creation API', async () => {
     stub = await startRunStubServer(true);
 

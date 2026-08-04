@@ -5,6 +5,7 @@ import { basename } from 'node:path';
 import { runDaemonCliStartup, startDaemonRuntime } from './daemon-startup.js';
 import { runLiveArtifactsMcpServer } from './mcp-live-artifacts-server.js';
 import { runArtifactsCli } from './artifacts-cli.js';
+import { runProviderCli } from './provider-cli.js';
 import { runProjectHandoff } from './handoff-cli.js';
 import { runConnectorsToolCli } from './tools-connectors-cli.js';
 import { runDesignSystemsToolCli } from './tools-design-systems-cli.js';
@@ -121,15 +122,6 @@ const RESEARCH_SEARCH_BOOLEAN_FLAGS = new Set([
   'help',
   'h',
 ]);
-const PROVIDER_STRING_FLAGS = new Set([
-  'daemon-url',
-]);
-const PROVIDER_BOOLEAN_FLAGS = new Set([
-  'help',
-  'h',
-  'json',
-]);
-
 const PLUGIN_STRING_FLAGS = new Set([
   'daemon-url',
   'source',
@@ -226,7 +218,7 @@ const PROJECT_STRING_FLAGS = new Set([
   'title', 'label', 'against', 'seed-from', 'fork-after', 'mode',
   'source',
 ]);
-const PROJECT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'follow']);
+const PROJECT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'follow', 'deployment-credential']);
 // `od templates …` mirrors NewProjectPanel / ExamplesTab. Same surface,
 // same /api/templates store. The CLI form is the embeddability contract:
 // external agents (hermes-agent, openclaw, ...) can snapshot, list, or
@@ -743,66 +735,12 @@ What the daemon does:
 // ---------------------------------------------------------------------------
 
 async function runProvider(args) {
-  const sub = args.find((a) => !a.startsWith('-')) || '';
-  if (!sub || sub === 'help' || args.includes('--help') || args.includes('-h')) {
-    printProviderHelp();
-    process.exit(sub === 'help' || args.includes('--help') || args.includes('-h') ? 0 : 2);
-  }
-  if (sub !== 'config') {
-    console.error(`unknown subcommand: od provider ${sub}`);
-    printProviderHelp();
-    process.exit(2);
-  }
-  const idx = args.indexOf(sub);
-  const rest = [...args.slice(0, idx), ...args.slice(idx + 1)];
-  let flags;
-  try {
-    flags = parseFlags(rest, {
-      string: PROVIDER_STRING_FLAGS,
-      boolean: PROVIDER_BOOLEAN_FLAGS,
-    });
-  } catch (err) {
-    console.error(err.message);
-    printProviderHelp();
-    process.exit(2);
-  }
-  const base = await cliDaemonBaseUrl(flags);
-  let resp;
-  try {
-    resp = await fetch(`${base}/api/provider-orchestrator/config`);
-  } catch (err) {
-    return exitWithStructuredError({
-      code: 'daemon-not-running',
-      message: `Cannot reach daemon at ${base}: ${err?.message ?? err}`,
-    });
-  }
-  if (!resp.ok) return structuredHttpFailure(resp);
-  const data = await resp.json();
-  if (flags.json) {
-    process.stdout.write(JSON.stringify(data, null, 2) + '\n');
-    return;
-  }
-  console.log(`[provider] ${data.available ? 'available' : 'unavailable'} (${data.kind ?? 'unknown'})`);
-  console.log(`  source:   ${data.credentialSource ?? 'deployment'}`);
-  console.log(`  protocol: ${data.protocol ?? 'openai'}`);
-  console.log(`  label:    ${data.label ?? 'Provider orchestrator'}`);
-  if (data.displayHost) console.log(`  host:     ${data.displayHost}`);
-  if (data.defaultModel) console.log(`  model:    ${data.defaultModel}`);
-  if (data.detail) console.log(`  detail:   ${data.detail}`);
-}
-
-function printProviderHelp() {
-  console.log(`Usage:
-  od provider config [--json] [--daemon-url <url>]
-
-Inspects daemon-managed provider configuration. This mirrors the deployment
-provider status endpoint: it reports whether a deployment provider is available,
-which protocol it fronts, its display label/host, and the default model.
-Provider credentials are never printed.
-
-Common options:
-  --daemon-url <url>   Open Design daemon HTTP base.
-  --json               Emit the raw redacted JSON response.`);
+  return runProviderCli(args, {
+    parseFlags,
+    daemonBaseUrl: cliDaemonBaseUrl,
+    exitWithStructuredError,
+    structuredHttpFailure,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -6403,7 +6341,8 @@ async function runRun(args) {
     console.log(`Usage:
   od run start --project <projectId> [--conversation <id>] [--message "<text>"]
                [--plugin <id>] [--inputs <json>] [--grant-caps a,b]
-               [--agent claude|codex|opencode] [--model <id>] [--service-tier <id>] [--follow] [--json]
+               [--agent claude|codex|opencode|byok-opencode] [--model <id>] [--service-tier <id>]
+               [--deployment-credential] [--follow] [--json]
   od run redesign [--path <folder>] [--message "<text>" | --prompt-file <path|->]
                [--agent claude] [--model <id>] [--service-tier <id>] [--follow] [--json]
   od run watch  <runId>                     ND-JSON event stream on stdout.
@@ -6416,6 +6355,9 @@ async function runRun(args) {
 
 Common options:
   --daemon-url <url>   Open Design daemon HTTP base.
+  --deployment-credential
+                       Use the daemon-managed deployment credential with the
+                       BYOK OpenCode agent; no browser credential is sent.
   --json               Emit raw JSON.`);
     process.exit(args.length === 0 ? 2 : 0);
   }
@@ -6617,6 +6559,14 @@ Common options:
       if (flags.agent) body.agentId = flags.agent;
       if (flags.model) body.model = flags.model;
       if (flags['service-tier']) body.serviceTier = flags['service-tier'];
+      if (flags['deployment-credential']) {
+        if (flags.agent && flags.agent !== 'byok-opencode') {
+          console.error('--deployment-credential requires --agent byok-opencode when --agent is set');
+          process.exit(2);
+        }
+        body.agentId = 'byok-opencode';
+        body.byokCredentialSource = 'deployment';
+      }
       if (flags.inputs) {
         try { body.pluginInputs = JSON.parse(flags.inputs); } catch (err) {
           console.error(`--inputs must be valid JSON: ${err.message}`);

@@ -213,6 +213,11 @@ describe('buildProxyMessages', () => {
         onDone: vi.fn(),
         onError: vi.fn(),
       },
+      {
+        providerRunId: 'run-1',
+        providerOperationId: 'chat:run-1',
+        providerRunPurpose: 'chat-completion',
+      },
     );
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -223,6 +228,9 @@ describe('buildProxyMessages', () => {
       model: 'gpt-routed',
       systemPrompt: 'System prompt',
       messages: [{ role: 'user', content: 'Hello' }],
+      providerRunId: 'run-1',
+      providerOperationId: 'chat:run-1',
+      providerRunPurpose: 'chat-completion',
     });
     expect(JSON.parse(String(proxyInit.body))).not.toMatchObject({
       apiKey: 'stale-browser-key',

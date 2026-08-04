@@ -1,4 +1,5 @@
 import type { ReasoningExecutionRequestFields } from './reasoningExecution';
+import type { ProviderRunMetadataRequestFields } from './providerCredential';
 
 // Shared DTOs for the `/api/projects/:id/finalize/<provider>` family of
 // synthesis endpoints. `/finalize/anthropic` was introduced first; the
@@ -35,7 +36,9 @@ export type FinalizeProviderProtocol =
  * the proxy, which requires it for some providers) — standard provider
  * defaults are applied by the daemon when possible.
  */
-interface FinalizeProviderCommonRequest extends ReasoningExecutionRequestFields {
+interface FinalizeProviderCommonRequest extends
+  ReasoningExecutionRequestFields,
+  ProviderRunMetadataRequestFields {
   /**
    * BYOK protocol selected in Settings. Omitted means `anthropic` for
    * backward compatibility with the original `/finalize/anthropic` caller.
