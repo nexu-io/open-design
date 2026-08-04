@@ -336,9 +336,15 @@ describe('public MCP discovery + generation tools', () => {
 
     expect(parsed.previewUrl).toBe(buildProjectRawFileUrl('http://127.0.0.1:17456', 'project-1', 'index.html'));
     expect(parsed.studioUrl).toBe('http://127.0.0.1:65321/projects/project-1/conversations/conv-9/files/index.html');
-    expect(parsed.hint).toContain('previewUrl is the primary stable rendered artifact link');
-    expect(parsed.hint).toContain('studioUrl, when present, is an optional Open Design workspace/editing link');
-    expect(parsed.hint).toContain('fall back to previewUrl');
+    expect(parsed.artifactRef).toEqual({
+      projectId: 'project-1',
+      entryFile: 'index.html',
+    });
+    expect(parsed.previewUrlLifetime).toBe('current_daemon_session');
+    expect(parsed.studioUrlLifetime).toBe('current_daemon_session');
+    expect(parsed.hint).toContain('artifactRef is the durable project/file identity');
+    expect(parsed.hint).toContain('call get_run again');
+    expect(parsed.hint).not.toContain('primary stable rendered artifact link');
     expect(parsed.hint).not.toContain('BEST link');
     expect(parsed.hint).not.toContain('ALWAYS render studioUrl');
   });
@@ -760,6 +766,13 @@ describe('public MCP discovery + generation tools', () => {
     const result = await handleMcpToolCall('http://127.0.0.1:17456', 'get_run', { runId: 'run-42' });
     const parsed = JSON.parse(firstText(result));
     expect(parsed.status).toBe('succeeded');
+    expect(parsed.artifactRef).toEqual({
+      projectId: 'project-xyz',
+      entryFile: 'index.html',
+    });
+    expect(parsed.previewUrlLifetime).toBe('current_daemon_session');
+    expect(parsed.hint).toContain('call get_run again');
+    expect(parsed.hint).not.toContain('primary stable rendered artifact link');
     // Hint must embed the run's projectId so callers pass it explicitly.
     expect(parsed.hint).toContain('project-xyz');
     // Must not tell callers to omit project and rely on active-context fallback.

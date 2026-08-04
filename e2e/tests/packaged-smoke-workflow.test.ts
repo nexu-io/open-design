@@ -1175,6 +1175,16 @@ process.stdin.on("end", () => {
     expect(workflow).not.toContain("needs.runners.outputs.blacksmith_default");
   });
 
+  it("[P1] routes external fork PRs through GitHub-hosted runner profiles", async () => {
+    const workflow = await readFile(ciWorkflowPath, "utf8");
+    const runners = sectionBetween(workflow, "  runners:", "  scopes:");
+
+    expect(runners).toContain("github.event_name == 'pull_request'");
+    expect(runners).toContain("github.event.pull_request.head.repo.full_name != github.repository");
+    expect(runners).toContain("&& 'economic'");
+    expect(runners).toContain("|| vars.OD_CI_RUNNER_MODE");
+  });
+
   it("[P1] pins ShellCheck for actionlint across runner profiles", async () => {
     const workflow = await readFile(ciWorkflowPath, "utf8");
     const staticGate = sectionBetween(workflow, "  static_gate:", "  preflight:");

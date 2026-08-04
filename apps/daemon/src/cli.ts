@@ -1500,7 +1500,14 @@ async function runMcp(args) {
   });
 
   const { runMcpStdio } = await import('./mcp.js');
-  await runMcpStdio({ daemonUrl });
+  await runMcpStdio({
+    daemonUrl,
+    ...(flags['daemon-url']
+      ? {}
+      : {
+          resolveDaemonUrl: async () => await ensureMcpDaemonUrl({}),
+        }),
+  });
 }
 
 function printMcpHelp() {
@@ -1521,11 +1528,11 @@ Options:
                        restarts even when the port is ephemeral. A
                        packaged install also starts the signed Open
                        Design app in --headless mode when its daemon
-                       is stopped; no Electron window is opened.
-                       Once running, the MCP server caches the URL;
-                       restart the
-                       MCP client after a daemon restart to pick up a
-                       new port.
+                       is stopped; no Electron window is opened. The
+                       MCP server re-discovers the registered runtime
+                       before calls and safely retries reads when the
+                       daemon changes ports, so an existing task can
+                       survive an Open Design restart.
 
 Tools exposed:
   list_projects                  list every Open Design project
