@@ -17,4 +17,6 @@ interface ImportMeta {
 interface Window {
   // Defined by posthog-analytics.astro; no-op shim until PostHog loads.
   __odTrack?: (name: string, props?: Record<string, unknown>) => void;
+  // QA-only handle exposed by the engagement download prompt.
+  __odDownloadPrompt?: { show: (trigger?: string) => boolean };
 }

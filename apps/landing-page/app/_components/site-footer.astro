@@ -10,6 +10,7 @@ import {
 } from '../i18n';
 import { getFooterLegalCopy } from '../footer-legal-i18n';
 import { getSolutionPageCopy, type SolutionPageKey } from '../solution-pages-i18n';
+import DownloadEngagementPrompt from './download-engagement-prompt.astro';
 
 interface Props {
   counts: HeaderProps['counts'];
@@ -261,3 +262,5 @@ const l = getFooterLegalCopy(locale);
     }
   </style>
 </footer>
+
+<DownloadEngagementPrompt locale={locale} />
