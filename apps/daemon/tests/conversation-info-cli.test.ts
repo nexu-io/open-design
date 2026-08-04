@@ -20,18 +20,29 @@ const execFileAsync = promisify(execFile);
 const cliEntry = fileURLToPath(new URL('../src/cli.ts', import.meta.url));
 
 /**
- * Run an execFile command that is expected to exit non-zero, returning the
- * typed `NodeJS.ErrnoException` so its `code`, `stderr`, and `stdout`
- * properties can be inspected. A success-branch result has none of these
- * properties (promisify's resolved value is only `{ stdout, stderr }`), so
- * this helper keeps the typecheck narrow rather than threading a union
- * through each test.
+ * Run an execFile command (command + args only — no options overload)
+ * that is expected to exit non-zero, returning the typed
+ * `NodeJS.ErrnoException` so its `code`, `stderr`, and `stdout`
+ * properties can be inspected. A success-branch result has none of
+ * these properties (promisify's resolved value is only
+ * `{ stdout, stderr }`), so this helper keeps the typecheck narrow
+ * rather than threading a union through each test.
+ *
+ * Per #6341 review (PerishCode round-4): `Parameters<typeof
+ * execFileAsync>` resolves to the promisified overload with three
+ * required parameters (command, args, options), but the call sites
+ * here pass only two, so the spread binding triggers TS2554. The
+ * helper now declares the two-argument shape explicitly and forwards
+ * into `execFileAsync(command, args)` internally; options stay
+ * optional on the promisified overload, which accepts a two-arg
+ * call without error.
  */
 async function expectExecFailureAsync(
-  ...args: Parameters<typeof execFileAsync>
+  command: string,
+  args: readonly string[],
 ): Promise<NodeJS.ErrnoException & { stdout?: string; stderr?: string }> {
   try {
-    const success = await execFileAsync(...args);
+    const success = await execFileAsync(command, args);
     throw new Error(
       `expectExecFailure: command resolved successfully\nstdout=${success.stdout}\nstderr=${success.stderr}`,
     );
