@@ -710,6 +710,100 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     expect(JSON.stringify({ modelRequestBodies, connectionRequestBodies })).not.toContain(sentinelApiKey);
   });
 
+  it('sends only the restored Agnes draft in automatic Gateway requests', async () => {
+    const sourceSentinel = 'FAKE_OPENAI_SOURCE_SENTINEL';
+    const agnesPlaceholder = 'FAKE_AGNES_DRAFT_PLACEHOLDER';
+    const agnesBaseUrl = 'https://apihub.agnes-ai.com/v1';
+    const agnesModel = 'agnes-2.0-flash';
+    const providerModels = await vi.importActual<
+      typeof import('../../src/providers/provider-models')
+    >('../../src/providers/provider-models');
+    fetchProviderModelsMock.mockImplementation(providerModels.fetchProviderModels);
+    vi.useFakeTimers();
+
+    const modelRequestBodies: Array<Record<string, unknown>> = [];
+    const connectionRequestBodies: Array<Record<string, unknown>> = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === '/api/memory') {
+        return new Response(JSON.stringify({ enabled: true, memories: [], extraction: null }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === '/api/provider/models') {
+        modelRequestBodies.push(JSON.parse(String(init?.body ?? '{}')));
+        return new Response(JSON.stringify({
+          ok: true,
+          kind: 'success',
+          latencyMs: 1,
+          models: [{ id: agnesModel, label: 'Agnes test model' }],
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === '/api/test/connection') {
+        connectionRequestBodies.push(JSON.parse(String(init?.body ?? '{}')));
+        return new Response(JSON.stringify({
+          ok: true,
+          kind: 'ok',
+          latencyMs: 2,
+          model: agnesModel,
+          sample: 'Connected in test',
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderSettingsDialog({
+      apiProtocol: 'openai',
+      apiKey: sourceSentinel,
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4o',
+      apiProviderBaseUrl: 'https://api.openai.com/v1',
+      byokProviderConfigDrafts: {
+        [`openai:${agnesBaseUrl}`]: {
+          apiConfig: {
+            apiKey: agnesPlaceholder,
+            baseUrl: agnesBaseUrl,
+            model: agnesModel,
+            apiProviderBaseUrl: agnesBaseUrl,
+          },
+        },
+      },
+    });
+
+    selectGatewayPreset('Agnes AI');
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_000);
+    });
+    for (let attempt = 0; attempt < 3 && connectionRequestBodies.length === 0; attempt += 1) {
+      await act(async () => {
+        await vi.runOnlyPendingTimersAsync();
+      });
+    }
+
+    expect(modelRequestBodies.length).toBeGreaterThanOrEqual(1);
+    expect(connectionRequestBodies.length).toBeGreaterThanOrEqual(1);
+    for (const body of [...modelRequestBodies, ...connectionRequestBodies]) {
+      expect(body).toMatchObject({
+        protocol: 'openai',
+        baseUrl: agnesBaseUrl,
+        apiKey: agnesPlaceholder,
+      });
+    }
+    expect(connectionRequestBodies).toEqual(expect.arrayContaining([
+      expect.objectContaining({ mode: 'provider', model: agnesModel }),
+    ]));
+    expect(JSON.stringify({ modelRequestBodies, connectionRequestBodies }))
+      .not.toContain(sourceSentinel);
+  });
+
   it('shows configured status from provider-scoped drafts for same-protocol presets', () => {
     renderSettingsDialog({
       apiProtocol: 'openai',
