@@ -710,6 +710,7 @@
   min-width: 0;
   min-height: 0;
   overflow-y: auto;
+  overflow-x: clip;
   background: var(--bg);
   padding: 0;
   /* Used by descendants (e.g. the plugins-home Scenario row) to
