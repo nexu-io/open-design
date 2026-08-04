@@ -217,8 +217,13 @@ export function createPluginInstallationHelpers(deps: PluginInstallationHelpersD
 
   async function stageUploadedPluginZip(buffer: Buffer, source: string) {
     const stagedFolder = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'od-plugin-zip-'));
-    await extractPluginZipToFolder(buffer, stagedFolder, deps.PLUGIN_UPLOAD_MAX_BYTES);
-    return finishUploadedPluginInstall(stagedFolder, source);
+    try {
+      await extractPluginZipToFolder(buffer, stagedFolder, deps.PLUGIN_UPLOAD_MAX_BYTES);
+      return await finishUploadedPluginInstall(stagedFolder, source);
+    } catch (err) {
+      await fs.promises.rm(stagedFolder, { recursive: true, force: true }).catch(() => undefined);
+      throw err;
+    }
   }
 
   async function stageUploadedPluginFolder(files: Array<{ buffer: Buffer; originalname: string }>, rawPaths: unknown) {
