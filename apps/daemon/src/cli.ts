@@ -1564,15 +1564,20 @@ async function runMcp(args) {
     flagUrl: flags['daemon-url'],
   });
 
-  if (transport === 'stdio') {
-    const { runMcpStdio } = await import('./mcp.js');
-    await runMcpStdio({ daemonUrl });
-    return;
-  }
   const explicitDaemonUrl =
     (typeof flags['daemon-url'] === 'string' && flags['daemon-url'].length > 0)
     || (typeof process.env.OD_DAEMON_URL === 'string'
       && process.env.OD_DAEMON_URL.length > 0);
+  if (transport === 'stdio') {
+    const { runMcpStdio } = await import('./mcp.js');
+    await runMcpStdio({
+      daemonUrl,
+      ...(!explicitDaemonUrl
+        ? { resolveDaemonUrl: () => ensureMcpDaemonUrl({}) }
+        : {}),
+    });
+    return;
+  }
   try {
     await httpModule.runMcpHttp({
       daemonUrl,
@@ -1612,10 +1617,10 @@ Options:
                        packaged install also starts the signed Open
                        Design app in --headless mode when its daemon
                        is stopped; no Electron window is opened.
-                       In HTTP mode, an implicitly discovered URL is
-                       rediscovered once after a connection refusal,
-                       so a daemon restart on a new port does not require
-                       restarting every MCP client. An explicit URL stays
+                       For an implicitly discovered URL, stdio refreshes the
+                       registered runtime before calls and HTTP rediscovers
+                       it after a connection failure. Safe reads are retried;
+                       ambiguous writes are not replayed. An explicit URL stays
                        fixed and is never replaced automatically.
 
 HTTP mode listens in the foreground at http://127.0.0.1:7457/mcp by

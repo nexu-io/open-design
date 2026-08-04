@@ -8,7 +8,7 @@ import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 
 import {
-  createMcpDaemonConnection,
+  createMcpDaemonTarget,
   createOpenDesignMcpServer,
 } from '../mcp.js';
 
@@ -154,9 +154,15 @@ export async function startMcpHttpServer({
   let cleanupTimer: ReturnType<typeof setInterval> | null = null;
   let closePromise: Promise<void> | null = null;
   let closing = false;
-  const daemonConnection = createMcpDaemonConnection({
+  const daemonTarget = createMcpDaemonTarget({
     daemonUrl,
-    ...(rediscoverDaemonUrl ? { rediscoverDaemonUrl } : {}),
+    ...(rediscoverDaemonUrl
+      ? {
+          refreshDaemonUrlBeforeCall: false,
+          resolveDaemonUrl: rediscoverDaemonUrl,
+          throwDaemonRecoveryErrors: true,
+        }
+      : {}),
   });
 
   const closeSession = (sessionId: string): Promise<void> => {
@@ -256,7 +262,7 @@ export async function startMcpHttpServer({
     let session: McpHttpSession | null = null;
     try {
       const server = createOpenDesignMcpServer({
-        daemonConnection,
+        daemonTarget,
         daemonUrl,
       });
       const transport = new StreamableHTTPServerTransport({
