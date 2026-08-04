@@ -208,6 +208,63 @@ describe('CLI startup boundaries', () => {
     ]);
   });
 
+  it('prints external agent inventory as JSON through the daemon API', async () => {
+    const payload = {
+      agentId: 'claude',
+      supported: true,
+      available: true,
+      mcpServers: [
+        { id: 'paper', name: 'paper', source: 'user', transport: 'http' },
+      ],
+      skills: [
+        { id: 'paper-mentor', name: 'paper-mentor', source: 'user' },
+      ],
+    };
+    const seen: string[] = [];
+    const server = http.createServer((req, res) => {
+      seen.push(req.url ?? '');
+      req.resume();
+      if (req.url === '/api/agent-inventory/claude') {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify(payload));
+        return;
+      }
+      res.writeHead(404, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: 'not found' }));
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+    const port = typeof address === 'object' && address ? address.port : 0;
+    const daemonUrl = `http://127.0.0.1:${port}`;
+
+    try {
+      const result = await execFileAsync(
+        process.execPath,
+        [
+          '--import',
+          'tsx',
+          cliEntry,
+          'agent-inventory',
+          'claude',
+          '--json',
+          '--daemon-url',
+          daemonUrl,
+        ],
+        {
+          cwd: daemonRoot,
+          env: { ...process.env },
+        },
+      );
+
+      expect(JSON.parse(result.stdout)).toEqual(payload);
+      expect(result.stderr).toBe('');
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+
+    expect(seen).toEqual(['/api/agent-inventory/claude']);
+  });
+
   it('prints AMR status JSON from the daemon status endpoint without wallet fallback', async () => {
     const seen: Array<{ method: string | undefined; url: string | undefined }> = [];
     const server = http.createServer((req, res) => {

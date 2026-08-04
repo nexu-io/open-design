@@ -609,6 +609,7 @@ import {
 } from './live-artifacts/http-helpers.js';
 import { registerConnectorRoutes } from './connectors/routes.js';
 import { registerActiveContextRoutes } from './routes/active-context.js';
+import { registerAgentInventoryRoutes } from './routes/agent-inventory.js';
 import { registerAutomationRoutes } from './routes/automation.js';
 import { registerAttributionRoutes } from './routes/attribution.js';
 import { registerDaemonRoutes } from './routes/daemon.js';
@@ -2982,6 +2983,10 @@ export async function startServer({
     http: httpDeps,
     paths: pathDeps,
     mcp: { pendingAuth: mcpPendingAuth, daemonUrlRef },
+  });
+  registerAgentInventoryRoutes(app, {
+    http: httpDeps,
+    paths: pathDeps,
   });
   registerXaiRoutes(app, {
     http: httpDeps,

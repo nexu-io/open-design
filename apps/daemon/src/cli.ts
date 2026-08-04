@@ -198,6 +198,8 @@ const LIBRARY_ASSET_STRING_FLAGS = new Set([
 const LIBRARY_ASSET_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 const DIAGNOSTICS_STRING_FLAGS = new Set(['daemon-url', 'output']);
 const DIAGNOSTICS_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
+const AGENT_INVENTORY_STRING_FLAGS = new Set(['daemon-url']);
+const AGENT_INVENTORY_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 const CONFIG_STRING_FLAGS = new Set(['daemon-url', 'value', 'value-json']);
 const CONFIG_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 const AMR_STRING_FLAGS = new Set(['daemon-url']);
@@ -353,6 +355,7 @@ const SUBCOMMAND_MAP = {
   chat: runChat,
   deploy: runDeploy,
   daemon: runDaemon,
+  'agent-inventory': runAgentInventory,
   atoms: runAtoms,
   skills: runSkills,
   'design-systems': runDesignSystems,
@@ -691,6 +694,10 @@ function printRootHelp() {
       into a zip for support tickets. Same output as Settings → About →
       Export diagnostics.
 
+  od agent-inventory <agent> [--json]
+      Inspect an external CLI's MCP servers and skills through
+      the same read-only inventory endpoint used by Settings → Execution mode.
+
   od export <file> --project <id> --format <pdf|image|pptx> [--out <path>]
       Programmatically export an HTML/deck artifact to PDF, image, or PPTX
       (no model/agent calls). Mirrors the web Download menu; rasterization uses
@@ -724,6 +731,92 @@ What the daemon does:
   * proxies messages (text + images) to the selected agent via child-process spawn
   * exposes /api/projects/:id/media/generate — the unified image/video/audio
      dispatcher that the agent calls via \`od media generate\`.`);
+}
+
+// ---------------------------------------------------------------------------
+// Subcommand: od agent-inventory …
+// ---------------------------------------------------------------------------
+
+async function runAgentInventory(args) {
+  let flags;
+  try {
+    flags = parseFlags(args, {
+      string: AGENT_INVENTORY_STRING_FLAGS,
+      boolean: AGENT_INVENTORY_BOOLEAN_FLAGS,
+    });
+  } catch (err) {
+    console.error(err.message);
+    printAgentInventoryHelp();
+    process.exit(2);
+  }
+  const helpRequested = flags.help || flags.h || args.includes('help');
+  if (helpRequested) {
+    printAgentInventoryHelp();
+    return;
+  }
+  const [agentId] = positionalArgs(args, AGENT_INVENTORY_STRING_FLAGS)
+    .filter((arg) => arg !== 'help');
+  if (!agentId) {
+    console.error('Usage: od agent-inventory <agent> [--json] [--daemon-url <url>]');
+    process.exit(2);
+  }
+
+  const base = await cliDaemonBaseUrl(flags);
+  const url = `${base}/api/agent-inventory/${encodeURIComponent(agentId)}`;
+  let resp;
+  try {
+    resp = await fetch(url);
+  } catch (err) {
+    surfaceFetchError(err, base);
+    process.exit(3);
+  }
+  const text = await resp.text();
+  let data;
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    data = { raw: text };
+  }
+  if (!resp.ok) {
+    console.error(`GET /api/agent-inventory/${agentId} failed: ${resp.status} ${text}`);
+    process.exit(4);
+  }
+
+  if (flags.json) {
+    process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+    return;
+  }
+
+  const label = typeof data?.agentId === 'string' ? data.agentId : agentId;
+  if (!data?.supported) {
+    console.log(`${label}: inventory detection is not supported.`);
+    return;
+  }
+  if (!data?.available) {
+    console.log(`${label}: inventory is not available${data?.reason ? ` (${data.reason})` : ''}.`);
+    return;
+  }
+  const mcpServers = Array.isArray(data?.mcpServers) ? data.mcpServers : [];
+  const skills = Array.isArray(data?.skills) ? data.skills : [];
+  console.log(`${label}: ${mcpServers.length} MCP server(s), ${skills.length} skill(s)`);
+  for (const item of mcpServers) {
+    const transport = typeof item?.transport === 'string' ? ` (${item.transport})` : '';
+    console.log(`  mcp: ${item?.name ?? item?.id ?? 'unknown'}${transport}`);
+  }
+  for (const item of skills) {
+    console.log(`  skill: ${item?.name ?? item?.id ?? 'unknown'}`);
+  }
+}
+
+function printAgentInventoryHelp() {
+  console.log(`Usage: od agent-inventory <agent> [--json] [--daemon-url <url>]
+
+Read the same external-agent inventory that Settings → Execution mode shows.
+The command is display-only; management actions stay in the external CLI.
+
+Examples:
+  od agent-inventory claude
+  od agent-inventory claude --json`);
 }
 
 // ---------------------------------------------------------------------------

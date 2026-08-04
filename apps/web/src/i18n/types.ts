@@ -919,6 +919,18 @@ export interface Dict {
   'settings.mcpCapabilityPull': string;
   'settings.mcpCapabilityDefault': string;
   'settings.mcpRunningNote': string;
+  'settings.agentInventoryTitle': string;
+  'settings.agentInventoryRefresh': string;
+  'settings.agentInventoryLoading': string;
+  'settings.agentInventoryError': string;
+  'settings.agentInventoryUnsupported': string;
+  'settings.agentInventoryUnavailable': string;
+  'settings.agentInventoryEmpty': string;
+  'settings.agentInventoryMcpServers': string;
+  'settings.agentInventorySkills': string;
+  'settings.agentInventoryNoMcpServers': string;
+  'settings.agentInventoryNoSkills': string;
+  'settings.agentInventorySourceUser': string;
 
   // Notifications (settings + system notifications)
   'settings.notifications': string;

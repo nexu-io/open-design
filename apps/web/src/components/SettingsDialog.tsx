@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, Dispatch, SetStateAction } from 'react';
+import { createPortal } from 'react-dom';
 import { Button, VisuallyHidden } from '@open-design/components';
-import type { AmrWalletSnapshot } from '@open-design/contracts';
+import type { AgentInventoryResponse, AmrWalletSnapshot } from '@open-design/contracts';
 import { validateBaseUrl } from '@open-design/contracts/api/connectionTest';
 import {
   agentIdToTracking,
@@ -4870,6 +4871,12 @@ export function SettingsDialog({
                                 />
                               ))}
                               {active ? renderAgentModelConfig(a) : null}
+                              {active ? (
+                                <AgentInventoryPanel
+                                  agentId={a.id}
+                                  agentLabel={agentName}
+                                />
+                              ) : null}
                             </div>
                           );
                           if (active && agentTestState.status !== 'idle') {
@@ -7997,6 +8004,287 @@ function CodexInstallToggle(): JSX.Element | null {
         </span>
       ) : null}
     </div>
+  );
+}
+
+function AgentInventoryPanel({
+  agentId,
+  agentLabel,
+}: {
+  agentId: string;
+  agentLabel: string;
+}): JSX.Element {
+  const { t } = useI18n();
+  const [inventory, setInventory] = useState<AgentInventoryResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshNonce, setRefreshNonce] = useState(0);
+  const [detailDialog, setDetailDialog] = useState<InventoryDialogData | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    setInventory(null);
+    setDetailDialog(null);
+    fetch(`/api/agent-inventory/${encodeURIComponent(agentId)}`)
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`daemon ${res.status}`);
+        return (await res.json()) as AgentInventoryResponse;
+      })
+      .then((data) => {
+        if (cancelled) return;
+        setInventory(data);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setInventory(null);
+        setError(String(err && err.message ? err.message : err));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [agentId, refreshNonce]);
+
+  const mcpServers = inventory?.mcpServers ?? [];
+  const skills = inventory?.skills ?? [];
+  const hasMcpServers = mcpServers.length > 0;
+  const hasSkills = skills.length > 0;
+  const mcpItems: InventoryDisplayItem[] = mcpServers.map((item) => ({
+    key: item.id,
+    name: item.name,
+    detail: [
+      t('settings.agentInventorySourceUser'),
+      item.transport,
+    ].filter(Boolean).join(' · '),
+    description: item.description,
+  })) ?? [];
+  const skillItems: InventoryDisplayItem[] = skills.map((item) => ({
+    key: item.id,
+    name: item.name,
+    detail: t('settings.agentInventorySourceUser'),
+    description: item.description,
+  })) ?? [];
+
+  return (
+    <section className="agent-inventory-section">
+      <div className="agent-inventory-header">
+        <div>
+          <p className="agent-inventory-title">
+            {t('settings.agentInventoryTitle', { client: agentLabel })}
+          </p>
+        </div>
+        <button
+          type="button"
+          className="ghost agent-inventory-refresh"
+          onClick={() => setRefreshNonce((n) => n + 1)}
+          disabled={loading}
+          aria-label={t('settings.agentInventoryRefresh')}
+        >
+          <Icon name="reload" size={14} />
+          <span>{t('settings.agentInventoryRefresh')}</span>
+        </button>
+      </div>
+
+      {error ? (
+        <div className="agent-inventory-empty">
+          {t('settings.agentInventoryError', { error })}
+        </div>
+      ) : loading && !inventory ? (
+        <div className="agent-inventory-empty">
+          {t('settings.agentInventoryLoading')}
+        </div>
+      ) : inventory && !inventory.supported ? (
+        <div className="agent-inventory-empty">
+          {t('settings.agentInventoryUnsupported', { client: agentLabel })}
+        </div>
+      ) : inventory && !inventory.available ? (
+        <div className="agent-inventory-empty">
+          {t('settings.agentInventoryUnavailable', { client: agentLabel })}
+        </div>
+      ) : inventory && !hasMcpServers && !hasSkills ? (
+        <div className="agent-inventory-empty">
+          {t('settings.agentInventoryEmpty', { client: agentLabel })}
+        </div>
+      ) : inventory ? (
+        <div className="agent-inventory-groups">
+          <InventoryGroupSummary
+            kind="mcp"
+            title={t('settings.agentInventoryMcpServers')}
+            items={mcpItems}
+            empty={t('settings.agentInventoryNoMcpServers')}
+            viewAllLabel={t('recentProjects.viewAll')}
+            onViewAll={setDetailDialog}
+          />
+          <InventoryGroupSummary
+            kind="skill"
+            title={t('settings.agentInventorySkills')}
+            items={skillItems}
+            empty={t('settings.agentInventoryNoSkills')}
+            viewAllLabel={t('recentProjects.viewAll')}
+            onViewAll={setDetailDialog}
+          />
+        </div>
+      ) : null}
+      {detailDialog ? (
+        <InventoryDetailDialog
+          dialog={detailDialog}
+          onClose={() => setDetailDialog(null)}
+        />
+      ) : null}
+    </section>
+  );
+}
+
+type InventoryKind = 'mcp' | 'skill';
+
+interface InventoryDisplayItem {
+  key: string;
+  name: string;
+  detail: string;
+  description?: string;
+}
+
+interface InventoryDialogData {
+  kind: InventoryKind;
+  title: string;
+  items: InventoryDisplayItem[];
+  empty: string;
+}
+
+function InventoryGroupSummary({
+  kind,
+  title,
+  items,
+  empty,
+  viewAllLabel,
+  onViewAll,
+}: {
+  kind: InventoryKind;
+  title: string;
+  items: InventoryDisplayItem[];
+  empty: string;
+  viewAllLabel: string;
+  onViewAll: (dialog: InventoryDialogData) => void;
+}): JSX.Element {
+  return (
+    <div className="agent-inventory-group">
+      <div className="agent-inventory-group-row">
+        <p className="agent-inventory-group-title">{title} ({items.length})</p>
+        {items.length > 0 ? (
+          <button
+            type="button"
+            className="ghost agent-inventory-view-all"
+            onClick={() => onViewAll({ kind, title, items, empty })}
+          >
+            <Icon name="external-link" size={13} />
+            <span>{viewAllLabel}</span>
+          </button>
+        ) : null}
+      </div>
+      {items.length === 0 ? (
+        <p className="agent-inventory-group-empty">{empty}</p>
+      ) : null}
+    </div>
+  );
+}
+
+function InventoryDetailDialog({
+  dialog,
+  onClose,
+}: {
+  dialog: InventoryDialogData;
+  onClose: () => void;
+}): JSX.Element | null {
+  const { t } = useI18n();
+  const [query, setQuery] = useState('');
+  const titleId = `agent-inventory-dialog-${dialog.kind}`;
+  const normalizedQuery = query.trim().toLowerCase();
+  const filteredItems = normalizedQuery
+    ? dialog.items.filter((item) =>
+        [item.name, item.detail, item.description ?? '']
+          .join(' ')
+          .toLowerCase()
+          .includes(normalizedQuery),
+      )
+    : dialog.items;
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [onClose]);
+
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
+    <div
+      className="agent-inventory-dialog-backdrop"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <div
+        className="agent-inventory-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+      >
+        <header className="agent-inventory-dialog-head">
+          <h3 id={titleId}>{dialog.title} ({dialog.items.length})</h3>
+          <button
+            type="button"
+            className="agent-inventory-dialog-close"
+            onClick={onClose}
+            aria-label={t('common.close')}
+            title={t('common.close')}
+          >
+            <Icon name="close" size={24} />
+          </button>
+        </header>
+        <label className="agent-inventory-search">
+          <Icon name="search" size={14} />
+          <VisuallyHidden>{t('common.search')}</VisuallyHidden>
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.currentTarget.value)}
+            placeholder={t('common.searchEllipsis')}
+          />
+        </label>
+        {filteredItems.length === 0 ? (
+          <p className="agent-inventory-dialog-empty">
+            {normalizedQuery ? t('settings.libraryNoResults') : dialog.empty}
+          </p>
+        ) : (
+          <ul className="agent-inventory-dialog-list">
+            {filteredItems.map((item) => (
+              <li key={item.key} className="agent-inventory-dialog-row">
+                <span className="agent-inventory-dialog-icon" aria-hidden>
+                  <Icon name={dialog.kind === 'mcp' ? 'terminal' : 'grid'} size={14} />
+                </span>
+                <span className="agent-inventory-dialog-item">
+                  <span className="agent-inventory-dialog-item-head">
+                    <span className="agent-inventory-dialog-item-name">{item.name}</span>
+                    <span className="agent-inventory-dialog-item-detail">{item.detail}</span>
+                  </span>
+                  {item.description ? (
+                    <span className="agent-inventory-dialog-item-description">
+                      {item.description}
+                    </span>
+                  ) : null}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>,
+    document.body,
   );
 }
 
