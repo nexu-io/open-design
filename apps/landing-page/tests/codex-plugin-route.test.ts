@@ -68,9 +68,9 @@ describe('Codex plugin landing route', () => {
     assert.match(page, /codex plugin marketplace list --json/);
     assert.match(
       page,
-      /codex plugin marketplace add nexu-io\/open-design-agent-plugins --ref main --json/,
+      /codex plugin marketplace add "\$open_design_required_source" --ref "\$open_design_required_ref" --json/,
     );
-    assert.match(page, /codex plugin add open-design@open-design --json/);
+    assert.match(page, /codex plugin add "\$open_design_required_selector" --json/);
     assert.match(page, /release-manifest\.json/);
     assert.match(page, /command -v od/);
     assert.match(page, /open-design-cli:mcp-install:v1/);
@@ -123,6 +123,311 @@ open_design_safe_mcp_inspect`);
     assert.doesNotMatch(result.stdout, /fake-(?:arg|inline|env)-secret/);
   });
 
+  it('rejects marketplace collisions and stale plugin versions', async () => {
+    const page = await readFile(PAGE, 'utf8');
+    const helper = evaluateTemplateConstant(page, 'PLUGIN_STATE_FUNCTION', {
+      RELEASE_MANIFEST: 'https://example.invalid/release-manifest.json',
+    });
+    const manifest = JSON.stringify(
+      {
+        marketplace: {
+          name: 'open-design',
+          gitSource: 'nexu-io/open-design-agent-plugins',
+          gitRef: 'main',
+        },
+        plugin: { name: 'open-design', version: '0.5.2' },
+      },
+      null,
+      2,
+    );
+    const canonicalMarketplace = JSON.stringify(
+      {
+        marketplaces: [
+          {
+            name: 'open-design',
+            marketplaceSource: {
+              sourceType: 'git',
+              source: 'https://github.com/nexu-io/open-design-agent-plugins.git',
+            },
+          },
+        ],
+      },
+      null,
+      2,
+    );
+    const conflictingMarketplace = canonicalMarketplace.replace(
+      'https://github.com/nexu-io/open-design-agent-plugins.git',
+      'https://github.com/example/not-open-design.git',
+    );
+    const stalePlugin = JSON.stringify(
+      {
+        installed: [
+          {
+            pluginId: 'open-design@open-design',
+            name: 'open-design',
+            marketplaceName: 'open-design',
+            version: '0.4.0',
+            installed: true,
+            enabled: true,
+            marketplaceSource: {
+              sourceType: 'git',
+              source: 'https://github.com/nexu-io/open-design-agent-plugins.git',
+            },
+          },
+        ],
+        available: [],
+      },
+      null,
+      2,
+    );
+    const foreignSelector = JSON.stringify(
+      {
+        installed: [
+          {
+            pluginId: 'open-design@another-marketplace',
+            name: 'open-design',
+            marketplaceName: 'another-marketplace',
+            version: '0.5.2',
+            installed: true,
+            enabled: true,
+            marketplaceSource: {
+              sourceType: 'git',
+              source: 'https://github.com/example/not-open-design.git',
+            },
+          },
+        ],
+        available: [],
+      },
+      null,
+      2,
+    );
+
+    const collision = runBash(`${helper}
+curl() { printf '%s\\n' '${manifest}'; }
+codex() {
+  case "$*" in
+    'plugin marketplace list --json') printf '%s\\n' '${conflictingMarketplace}' ;;
+    'plugin list --json') printf '%s\\n' '{"installed":[],"available":[]}' ;;
+  esac
+}
+open_design_plugin_inspect`);
+    assert.notEqual(collision.status, 0);
+    assert.match(collision.stdout, /open-design-plugin:error:marketplace-collision/);
+
+    const selectorCollision = runBash(`${helper}
+curl() { printf '%s\\n' '${manifest}'; }
+codex() {
+  case "$*" in
+    'plugin marketplace list --json') printf '%s\\n' '${canonicalMarketplace}' ;;
+    'plugin list --json') printf '%s\\n' '${foreignSelector}' ;;
+  esac
+}
+open_design_plugin_inspect`);
+    assert.notEqual(selectorCollision.status, 0);
+    assert.match(selectorCollision.stdout, /open-design-plugin:error:selector-collision/);
+
+    const stale = runBash(`${helper}
+curl() { printf '%s\\n' '${manifest}'; }
+codex() {
+  case "$*" in
+    'plugin marketplace list --json') printf '%s\\n' '${canonicalMarketplace}' ;;
+    'plugin list --json') printf '%s\\n' '${stalePlugin}' ;;
+  esac
+}
+open_design_plugin_inspect`);
+    assert.equal(stale.status, 2, stale.stderr);
+    assert.match(
+      stale.stdout,
+      /open-design-plugin:action:version-confirmation-required:0\.4\.0:0\.5\.2/,
+    );
+  });
+
+  it('gates plugin mutations on marketplace success and version confirmation', async () => {
+    const page = await readFile(PAGE, 'utf8');
+    const helper = evaluateTemplateConstant(page, 'PLUGIN_STATE_FUNCTION', {
+      RELEASE_MANIFEST: 'https://example.invalid/release-manifest.json',
+    });
+    const install = evaluateTemplateConstant(page, 'PLUGIN_INSTALL_COMMANDS', {
+      PLUGIN_STATE_FUNCTION: helper,
+    });
+    const manifest = JSON.stringify(
+      {
+        marketplace: {
+          name: 'open-design',
+          gitSource: 'nexu-io/open-design-agent-plugins',
+          gitRef: 'main',
+        },
+        plugin: { name: 'open-design', version: '0.5.2' },
+      },
+      null,
+      2,
+    );
+    const missing = JSON.stringify({ marketplaces: [] }, null, 2);
+    const pluginList = JSON.stringify(
+      {
+        installed: [],
+        available: [
+          {
+            pluginId: 'open-design@open-design',
+            name: 'open-design',
+            marketplaceName: 'open-design',
+            version: '0.5.2',
+            installed: false,
+            enabled: false,
+          },
+        ],
+      },
+      null,
+      2,
+    );
+    const result = runBash(`plugin_add_called=0
+curl() { printf '%s\\n' '${manifest}'; }
+codex() {
+  case "$*" in
+    'plugin marketplace list --json') printf '%s\\n' '${missing}' ;;
+    'plugin list --json') printf '%s\\n' '${pluginList}' ;;
+    'plugin marketplace add nexu-io/open-design-agent-plugins --ref main --json') return 1 ;;
+    'plugin add open-design@open-design --json') plugin_add_called=1 ;;
+  esac
+}
+${install}
+open_design_install_status=$?
+printf 'plugin-add-called:%s\\n' "$plugin_add_called"
+exit "$open_design_install_status"`);
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stdout, /open-design-plugin:error:marketplace-add-failed/);
+    assert.match(result.stdout, /plugin-add-called:0/);
+
+    const canonicalMarketplace = JSON.stringify(
+      {
+        marketplaces: [
+          {
+            name: 'open-design',
+            marketplaceSource: {
+              sourceType: 'git',
+              source: 'https://github.com/nexu-io/open-design-agent-plugins.git',
+            },
+          },
+        ],
+      },
+      null,
+      2,
+    );
+    const stalePlugin = JSON.stringify(
+      {
+        installed: [
+          {
+            pluginId: 'open-design@open-design',
+            name: 'open-design',
+            marketplaceName: 'open-design',
+            version: '0.4.0',
+            installed: true,
+            enabled: true,
+            marketplaceSource: {
+              sourceType: 'git',
+              source: 'https://github.com/nexu-io/open-design-agent-plugins.git',
+            },
+          },
+        ],
+        available: [],
+      },
+      null,
+      2,
+    );
+    const unconfirmed = runBash(`mutation_calls=0
+curl() { printf '%s\\n' '${manifest}'; }
+codex() {
+  case "$*" in
+    'plugin marketplace list --json') printf '%s\\n' '${canonicalMarketplace}' ;;
+    'plugin list --json') printf '%s\\n' '${stalePlugin}' ;;
+    *) mutation_calls=$((mutation_calls + 1)) ;;
+  esac
+}
+${install}
+open_design_install_status=$?
+printf 'mutation-calls:%s\\n' "$mutation_calls"
+exit "$open_design_install_status"`);
+
+    assert.equal(unconfirmed.status, 2, unconfirmed.stderr);
+    assert.match(
+      unconfirmed.stdout,
+      /open-design-plugin:action:version-confirmation-required:0\.4\.0:0\.5\.2/,
+    );
+    assert.match(unconfirmed.stdout, /mutation-calls:0/);
+  });
+
+  it('accepts only a verified local stdio MCP launch path', async () => {
+    const page = await readFile(PAGE, 'utf8');
+    const signedApp =
+      'open_design_signed_macos_app() { printf \'%s\\n\' \'/Applications/Open Design.app\'; }';
+    const validator = evaluateTemplateConstant(page, 'MCP_VALIDATION_FUNCTION', {
+      SIGNED_MACOS_APP_FUNCTION: signedApp,
+    });
+    const validate = (fixture: unknown) =>
+      runBash(`${validator}
+open_design_mcp_snapshot_is_verified_local '${JSON.stringify(fixture)}'`);
+
+    assert.notEqual(
+      validate({
+        name: 'open-design',
+        enabled: true,
+        transport: { type: 'streamable_http', command: null },
+      }).status,
+      0,
+    );
+    assert.notEqual(
+      validate({
+        name: 'open-design',
+        enabled: true,
+        transport: { type: 'stdio', command: 'open-design-helper' },
+      }).status,
+      0,
+    );
+    assert.notEqual(
+      validate({
+        name: 'open-design',
+        enabled: true,
+        transport: {
+          type: 'stdio',
+          command: '/Applications/Open Design.app/Contents/Resources/not-the-launcher',
+        },
+      }).status,
+      0,
+    );
+    assert.equal(
+      validate({
+        name: 'open-design',
+        enabled: true,
+        transport: {
+          type: 'stdio',
+          command:
+            '/Applications/Open Design.app/Contents/Frameworks/Open Design Helper.app/Contents/MacOS/Open Design Helper',
+        },
+      }).status,
+      0,
+    );
+
+    const cliValidator = evaluateTemplateConstant(page, 'MCP_VALIDATION_FUNCTION', {
+      SIGNED_MACOS_APP_FUNCTION: 'open_design_signed_macos_app() { return 1; }',
+    });
+    const cliFixture = JSON.stringify({
+      name: 'open-design',
+      enabled: true,
+      transport: { type: 'stdio', command: '/opt/open-design/open-design-runtime' },
+    });
+    const cliResult = runBash(`${cliValidator}
+od() {
+  case "$*" in
+    'mcp install --open-design-cli-probe') printf '%s\\n' 'open-design-cli:mcp-install:v1' ;;
+    'mcp install codex --print --json') printf '%s\\n' '{' '  "command": "/opt/open-design/open-design-runtime"' '}' ;;
+    *) return 1 ;;
+  esac
+}
+open_design_mcp_snapshot_is_verified_local '${cliFixture}'`);
+    assert.equal(cliResult.status, 0, cliResult.stderr);
+  });
+
   it('stops safely when od is missing or PATH-shadowed', async () => {
     const page = await readFile(PAGE, 'utf8');
     const preflight = evaluateTemplateConstant(page, 'PREFLIGHT_COMMANDS', {
@@ -167,7 +472,9 @@ ${preflight}`, '/open-design-test-empty-path');
     assert.match(english, /name, enabled, transport\.type and command/);
     assert.match(english, /args, env, env_vars, headers and token fields/);
     assert.match(english, /missing open-design result is expected and non-fatal/);
-    assert.match(english, /installed version exactly matches plugin\.version/);
+    assert.match(english, /installed version that exactly matches plugin\.version/);
+    assert.match(english, /OPEN_DESIGN_PLUGIN_UPDATE_CONFIRMED=1/);
+    assert.match(english, /enabled, uses stdio, and its absolute command matches/);
     assert.doesNotMatch(english, /Require Codex CLI 0\.144\.6/);
 
     for (const locale of locales) {
@@ -179,6 +486,8 @@ ${preflight}`, '/open-design-test-empty-path');
       assert.match(localized, /codex mcp list --json/);
       assert.match(localized, /CFBundleShortVersionString/);
       assert.match(localized, /Open Design Settings → MCP server/);
+      assert.match(localized, /OPEN_DESIGN_PLUGIN_UPDATE_CONFIRMED=1/);
+      assert.match(localized, /stdio/);
       assert.match(localized, /args/);
       assert.match(localized, /env/);
       assert.match(localized, /headers/);

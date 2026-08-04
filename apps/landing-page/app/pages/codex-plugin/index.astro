@@ -86,6 +86,226 @@ const SAFE_MCP_INSPECTION_FUNCTION = `open_design_safe_mcp_inspect() {
   [ "$open_design_mcp_status" -eq 0 ] || return "$open_design_mcp_status"
   printf '%s\\n' "$open_design_mcp_safe"
 }`;
+const MCP_VALIDATION_FUNCTION = `${SIGNED_MACOS_APP_FUNCTION}
+open_design_mcp_snapshot_is_verified_local() {
+  open_design_mcp_snapshot="$1"
+  case "$open_design_mcp_snapshot" in
+    '{"name":"open-design","enabled":true,"transport":{"type":"stdio","command":"'*'"}}') ;;
+    *) return 1 ;;
+  esac
+
+  open_design_mcp_command="$(printf '%s\\n' "$open_design_mcp_snapshot" | awk '{
+    value = $0
+    sub(/^.*"command":"/, "", value)
+    sub(/"}}$/, "", value)
+    print value
+  }')"
+  case "$open_design_mcp_command" in
+    /*) ;;
+    [A-Za-z]:\\\\*) ;;
+    \\\\*) ;;
+    *) return 1 ;;
+  esac
+
+  open_design_verified_app="$(open_design_signed_macos_app || true)"
+  if [ -n "$open_design_verified_app" ]; then
+    case "$open_design_mcp_command" in
+      "$open_design_verified_app/Contents/MacOS/Open Design" | \
+      "$open_design_verified_app/Contents/Frameworks/Open Design Helper.app/Contents/MacOS/Open Design Helper") return 0 ;;
+    esac
+  fi
+
+  open_design_verified_od="$(command -v od || true)"
+  [ -n "$open_design_verified_od" ] || return 1
+  [ "$("$open_design_verified_od" mcp install --open-design-cli-probe 2>/dev/null || true)" = "open-design-cli:mcp-install:v1" ] || return 1
+  open_design_expected_json="$("$open_design_verified_od" mcp install codex --print --json 2>/dev/null)" || return 1
+  open_design_expected_command="$(printf '%s\\n' "$open_design_expected_json" | awk '
+    /^[[:space:]]*"command":[[:space:]]*"/ {
+      value = $0
+      sub(/^[^:]*:[[:space:]]*"/, "", value)
+      sub(/",?[[:space:]]*$/, "", value)
+      print value
+      exit
+    }
+  ')"
+  unset open_design_expected_json
+  [ -n "$open_design_expected_command" ] && [ "$open_design_mcp_command" = "$open_design_expected_command" ]
+}`;
+const PLUGIN_STATE_FUNCTION = `open_design_manifest_plugin_requirements() {
+  open_design_manifest="$(curl -fsSL ${RELEASE_MANIFEST})" || {
+    printf '%s\\n' 'open-design-plugin:error:manifest-fetch-failed'
+    return 1
+  }
+  open_design_manifest_requirements="$(printf '%s\\n' "$open_design_manifest" | awk '
+    function string_value(line, value) {
+      value = $0
+      sub(/^[^:]*:[[:space:]]*"/, "", value)
+      sub(/",?[[:space:]]*$/, "", value)
+      return value
+    }
+    /^[[:space:]]*"marketplace":[[:space:]]*\{/ { in_marketplace = 1; next }
+    in_marketplace && /^[[:space:]]*"name":[[:space:]]*"/ { marketplace = string_value($0); next }
+    in_marketplace && /^[[:space:]]*"gitSource":[[:space:]]*"/ { source = string_value($0); next }
+    in_marketplace && /^[[:space:]]*"gitRef":[[:space:]]*"/ { git_ref = string_value($0); next }
+    in_marketplace && /^  \}[,]?$/ { in_marketplace = 0; next }
+    /^[[:space:]]*"plugin":[[:space:]]*\{/ { in_plugin = 1; next }
+    in_plugin && /^[[:space:]]*"name":[[:space:]]*"/ { plugin = string_value($0); next }
+    in_plugin && /^[[:space:]]*"version":[[:space:]]*"/ { version = string_value($0); next }
+    in_plugin && /^  \}[,]?$/ { in_plugin = 0; next }
+    END {
+      if (marketplace && source && git_ref && plugin && version) {
+        print marketplace "|" source "|" git_ref "|" plugin "|" version
+      }
+    }
+  ')"
+  unset open_design_manifest
+  [ -n "$open_design_manifest_requirements" ] || {
+    printf '%s\\n' 'open-design-plugin:error:manifest-requirements-missing'
+    return 1
+  }
+  printf '%s\\n' "$open_design_manifest_requirements"
+}
+open_design_canonical_marketplace_source() {
+  open_design_observed_source="$(printf '%s\\n' "$1" | sed -e 's#^https://github.com/##' -e 's#\\.git$##' -e 's#/$##')"
+  open_design_required_source="$(printf '%s\\n' "$2" | sed -e 's#^https://github.com/##' -e 's#\\.git$##' -e 's#/$##')"
+  [ -n "$open_design_observed_source" ] && [ "$open_design_observed_source" = "$open_design_required_source" ]
+}
+open_design_plugin_inspect() {
+  open_design_requirements="$(open_design_manifest_plugin_requirements)" || return 1
+  IFS='|' read -r open_design_required_marketplace open_design_required_source open_design_required_ref open_design_required_plugin open_design_required_version <<EOF
+$open_design_requirements
+EOF
+  open_design_required_selector="$open_design_required_plugin@$open_design_required_marketplace"
+  open_design_marketplaces_json="$(codex plugin marketplace list --json 2>/dev/null)" || {
+    printf '%s\\n' 'open-design-plugin:error:marketplace-list-failed'
+    return 1
+  }
+  open_design_marketplace_record="$(printf '%s\\n' "$open_design_marketplaces_json" | awk -v required_marketplace="$open_design_required_marketplace" '
+    function string_value(line, value) {
+      value = line
+      sub(/^[^:]*:[[:space:]]*"/, "", value)
+      sub(/",?[[:space:]]*$/, "", value)
+      return value
+    }
+    /^    \{$/ {
+      in_marketplace = 1
+      name = source_type = source = ""
+      next
+    }
+    in_marketplace && /^      "name":[[:space:]]*"/ { name = string_value($0); next }
+    in_marketplace && /^      "marketplaceSource":[[:space:]]*\{$/ { in_source = 1; next }
+    in_marketplace && in_source && /^        "sourceType":[[:space:]]*"/ { source_type = string_value($0); next }
+    in_marketplace && in_source && /^        "source":[[:space:]]*"/ { source = string_value($0); next }
+    in_marketplace && in_source && /^      \}[,]?$/ { in_source = 0; next }
+    in_marketplace && /^    \}[,]?$/ {
+      if (name == required_marketplace) print name "|" source_type "|" source
+      in_marketplace = 0
+    }
+  ')" || {
+    unset open_design_marketplaces_json
+    printf '%s\\n' 'open-design-plugin:error:marketplace-parse-failed'
+    return 1
+  }
+  unset open_design_marketplaces_json
+
+  if [ -n "$open_design_marketplace_record" ]; then
+    open_design_marketplace_count="$(printf '%s\\n' "$open_design_marketplace_record" | awk 'NF { count++ } END { print count + 0 }')"
+    [ "$open_design_marketplace_count" -eq 1 ] || {
+      printf '%s\\n' 'open-design-plugin:error:marketplace-collision'
+      return 1
+    }
+    IFS='|' read -r open_design_marketplace_name open_design_marketplace_type open_design_marketplace_source <<EOF
+$open_design_marketplace_record
+EOF
+    [ "$open_design_marketplace_type" = "git" ] && open_design_canonical_marketplace_source "$open_design_marketplace_source" "$open_design_required_source" || {
+      printf '%s\\n' 'open-design-plugin:error:marketplace-collision'
+      return 1
+    }
+    open_design_marketplace_state=present
+  else
+    open_design_marketplace_state=missing
+  fi
+
+  open_design_plugins_json="$(codex plugin list --json 2>/dev/null)" || {
+    printf '%s\\n' 'open-design-plugin:error:plugin-list-failed'
+    return 1
+  }
+  open_design_plugin_records="$(printf '%s\\n' "$open_design_plugins_json" | awk -v required_plugin="$open_design_required_plugin" '
+    function string_value(line, value) {
+      value = line
+      sub(/^[^:]*:[[:space:]]*"/, "", value)
+      sub(/",?[[:space:]]*$/, "", value)
+      return value
+    }
+    function scalar_value(line, value) {
+      value = line
+      sub(/^[^:]*:[[:space:]]*/, "", value)
+      sub(/,?[[:space:]]*$/, "", value)
+      return value
+    }
+    /^  "installed":[[:space:]]*\\[$/ { in_installed = 1; next }
+    in_installed && /^  \\][,]?$/ { in_installed = 0; next }
+    in_installed && /^    \{$/ {
+      in_plugin = 1
+      plugin_id = name = marketplace = version = installed = enabled = source_type = source = ""
+      next
+    }
+    in_plugin && /^      "pluginId":[[:space:]]*"/ { plugin_id = string_value($0); next }
+    in_plugin && /^      "name":[[:space:]]*"/ { name = string_value($0); next }
+    in_plugin && /^      "marketplaceName":[[:space:]]*"/ { marketplace = string_value($0); next }
+    in_plugin && /^      "version":[[:space:]]*"/ { version = string_value($0); next }
+    in_plugin && /^      "installed":[[:space:]]*/ { installed = scalar_value($0); next }
+    in_plugin && /^      "enabled":[[:space:]]*/ { enabled = scalar_value($0); next }
+    in_plugin && /^      "marketplaceSource":[[:space:]]*\{$/ { in_marketplace_source = 1; next }
+    in_plugin && in_marketplace_source && /^        "sourceType":[[:space:]]*"/ { source_type = string_value($0); next }
+    in_plugin && in_marketplace_source && /^        "source":[[:space:]]*"/ { source = string_value($0); next }
+    in_plugin && in_marketplace_source && /^      \}[,]?$/ { in_marketplace_source = 0; next }
+    in_installed && in_plugin && /^    \}[,]?$/ {
+      if (name == required_plugin || index(plugin_id, required_plugin "@") == 1) {
+        print plugin_id "|" marketplace "|" version "|" installed "|" enabled "|" source_type "|" source
+      }
+      in_plugin = 0
+    }
+  ')" || {
+    unset open_design_plugins_json
+    printf '%s\\n' 'open-design-plugin:error:plugin-parse-failed'
+    return 1
+  }
+  unset open_design_plugins_json
+
+  if [ -z "$open_design_plugin_records" ]; then
+    if [ "$open_design_marketplace_state" = "missing" ]; then
+      printf '%s\\n' 'open-design-plugin:state:marketplace-missing'
+    else
+      printf '%s\\n' 'open-design-plugin:state:plugin-missing'
+    fi
+    return 0
+  fi
+
+  open_design_plugin_count="$(printf '%s\\n' "$open_design_plugin_records" | awk 'NF { count++ } END { print count + 0 }')"
+  [ "$open_design_plugin_count" -eq 1 ] || {
+    printf '%s\\n' 'open-design-plugin:error:selector-collision'
+    return 1
+  }
+  IFS='|' read -r open_design_plugin_id open_design_plugin_marketplace open_design_plugin_version open_design_plugin_installed open_design_plugin_enabled open_design_plugin_source_type open_design_plugin_source <<EOF
+$open_design_plugin_records
+EOF
+  [ "$open_design_marketplace_state" = "present" ] && \
+    [ "$open_design_plugin_id" = "$open_design_required_selector" ] && \
+    [ "$open_design_plugin_marketplace" = "$open_design_required_marketplace" ] && \
+    [ "$open_design_plugin_installed" = "true" ] && \
+    [ "$open_design_plugin_enabled" = "true" ] && \
+    [ "$open_design_plugin_source_type" = "git" ] && \
+    open_design_canonical_marketplace_source "$open_design_plugin_source" "$open_design_required_source" || {
+      printf '%s\\n' 'open-design-plugin:error:selector-collision'
+      return 1
+    }
+  if [ "$open_design_plugin_version" != "$open_design_required_version" ]; then
+    printf '%s:%s:%s\\n' 'open-design-plugin:action:version-confirmation-required' "$open_design_plugin_version" "$open_design_required_version"
+    return 2
+  fi
+  printf '%s:%s\\n' 'open-design-plugin:state:exact' "$open_design_required_version"
+}`;
 const PREFLIGHT_COMMANDS = `open_design_version_at_least() {
   awk -v have="$1" -v need="$2" '
   function is_numeric(value) { return value ~ /^[0-9]+$/ }
@@ -208,22 +428,104 @@ open_design_preflight() {
   printf '%s:%s\\n' 'open-design-preflight:ok' "$open_design_runtime_source"
 }
 open_design_preflight`;
-const INSPECT_COMMANDS = `codex plugin marketplace list --json
-codex plugin list --json
+const INSPECT_COMMANDS = `${PLUGIN_STATE_FUNCTION}
 ${SAFE_MCP_INSPECTION_FUNCTION}
-open_design_safe_mcp_inspect`;
-const PLUGIN_INSTALL_COMMANDS = `codex plugin marketplace add nexu-io/open-design-agent-plugins --ref main --json
-codex plugin add open-design@open-design --json`;
-const MCP_INSTALL_COMMANDS = `${SIGNED_MACOS_APP_FUNCTION}
-${SAFE_MCP_INSPECTION_FUNCTION}
-open_design_install_mcp() {
-  open_design_mcp_state="$(open_design_safe_mcp_inspect)" || return 1
-  case "$open_design_mcp_state" in
-    *'"name":"open-design","enabled":true'*)
-      printf '%s\\n' 'open-design-mcp-install:ok:already-enabled'
+open_design_inspect_install() {
+  open_design_plugin_state="$(open_design_plugin_inspect)"
+  open_design_plugin_status=$?
+  printf '%s\\n' "$open_design_plugin_state"
+  [ "$open_design_plugin_status" -eq 0 ] || return "$open_design_plugin_status"
+  open_design_safe_mcp_inspect
+}
+open_design_inspect_install`;
+const PLUGIN_INSTALL_COMMANDS = `${PLUGIN_STATE_FUNCTION}
+open_design_install_plugin() {
+  open_design_requirements="$(open_design_manifest_plugin_requirements)" || return 1
+  IFS='|' read -r open_design_required_marketplace open_design_required_source open_design_required_ref open_design_required_plugin open_design_required_version <<EOF
+$open_design_requirements
+EOF
+  open_design_required_selector="$open_design_required_plugin@$open_design_required_marketplace"
+  open_design_plugin_state="$(open_design_plugin_inspect)"
+  open_design_plugin_status=$?
+  if [ "$open_design_plugin_status" -eq 2 ] && [ "$OPEN_DESIGN_PLUGIN_UPDATE_CONFIRMED" != "1" ]; then
+    printf '%s\\n' "$open_design_plugin_state"
+    return 2
+  fi
+  [ "$open_design_plugin_status" -eq 0 ] || [ "$open_design_plugin_status" -eq 2 ] || {
+    printf '%s\\n' "$open_design_plugin_state"
+    return "$open_design_plugin_status"
+  }
+
+  case "$open_design_plugin_state" in
+    open-design-plugin:state:exact:*)
+      printf '%s\\n' "$open_design_plugin_state"
+      return 0
+      ;;
+    open-design-plugin:state:marketplace-missing)
+      codex plugin marketplace add "$open_design_required_source" --ref "$open_design_required_ref" --json >/dev/null || {
+        printf '%s\\n' 'open-design-plugin:error:marketplace-add-failed'
+        return 1
+      }
+      open_design_plugin_state="$(open_design_plugin_inspect)"
+      open_design_plugin_status=$?
+      [ "$open_design_plugin_status" -eq 0 ] && [ "$open_design_plugin_state" = "open-design-plugin:state:plugin-missing" ] || {
+        printf '%s\\n' "$open_design_plugin_state"
+        return 1
+      }
+      ;;
+    open-design-plugin:action:version-confirmation-required:*)
+      codex plugin marketplace upgrade "$open_design_required_marketplace" --json >/dev/null || {
+        printf '%s\\n' 'open-design-plugin:error:marketplace-upgrade-failed'
+        return 1
+      }
+      open_design_plugin_state="$(open_design_plugin_inspect)"
+      open_design_plugin_status=$?
+      if [ "$open_design_plugin_status" -eq 0 ]; then
+        case "$open_design_plugin_state" in
+          open-design-plugin:state:exact:*)
+            printf '%s\\n' "$open_design_plugin_state"
+            return 0
+            ;;
+        esac
+      fi
+      [ "$open_design_plugin_status" -eq 2 ] || {
+        printf '%s\\n' "$open_design_plugin_state"
+        return 1
+      }
+      codex plugin remove "$open_design_required_selector" --json >/dev/null || {
+        printf '%s\\n' 'open-design-plugin:error:plugin-remove-failed'
+        return 1
+      }
+      ;;
+  esac
+
+  codex plugin add "$open_design_required_selector" --json >/dev/null || {
+    printf '%s\\n' 'open-design-plugin:error:plugin-add-failed'
+    return 1
+  }
+  open_design_plugin_state="$(open_design_plugin_inspect)" || {
+    open_design_plugin_status=$?
+    printf '%s\\n' "$open_design_plugin_state"
+    return "$open_design_plugin_status"
+  }
+  case "$open_design_plugin_state" in
+    open-design-plugin:state:exact:*)
+      printf '%s\\n' "$open_design_plugin_state"
       return 0
       ;;
   esac
+  printf '%s\\n' 'open-design-plugin:error:post-install-verification-failed'
+  return 1
+}
+open_design_install_plugin`;
+const MCP_INSTALL_COMMANDS = `${MCP_VALIDATION_FUNCTION}
+${SAFE_MCP_INSPECTION_FUNCTION}
+open_design_install_mcp() {
+  open_design_mcp_state="$(open_design_safe_mcp_inspect)" || return 1
+  if open_design_mcp_snapshot_is_verified_local "$open_design_mcp_state"; then
+    printf '%s\\n' 'open-design-mcp-install:ok:already-enabled'
+    return 0
+  fi
 
   open_design_od_path="$(command -v od || true)"
   open_design_od_probe=""
@@ -233,12 +535,10 @@ open_design_install_mcp() {
   if [ "$open_design_od_probe" = "open-design-cli:mcp-install:v1" ]; then
     if "$open_design_od_path" mcp install codex; then
       open_design_mcp_state="$(open_design_safe_mcp_inspect)" || return 1
-      case "$open_design_mcp_state" in
-        *'"name":"open-design","enabled":true'*)
-          printf '%s\\n' 'open-design-mcp-install:ok:verified-cli'
-          return 0
-          ;;
-      esac
+      if open_design_mcp_snapshot_is_verified_local "$open_design_mcp_state"; then
+        printf '%s\\n' 'open-design-mcp-install:ok:verified-cli'
+        return 0
+      fi
     fi
   fi
 
@@ -248,12 +548,10 @@ open_design_install_mcp() {
     open_design_attempt=0
     while [ "$open_design_attempt" -lt 20 ]; do
       open_design_mcp_state="$(open_design_safe_mcp_inspect)" || return 1
-      case "$open_design_mcp_state" in
-        *'"name":"open-design","enabled":true'*)
-          printf '%s\\n' 'open-design-mcp-install:ok:signed-macos-app'
-          return 0
-          ;;
-      esac
+      if open_design_mcp_snapshot_is_verified_local "$open_design_mcp_state"; then
+        printf '%s\\n' 'open-design-mcp-install:ok:signed-macos-app'
+        return 0
+      fi
       open_design_attempt=$((open_design_attempt + 1))
       sleep 2
     done
@@ -265,9 +563,31 @@ open_design_install_mcp() {
   return 1
 }
 open_design_install_mcp`;
-const VERIFY_COMMANDS = `codex plugin list --json
+const VERIFY_COMMANDS = `${PLUGIN_STATE_FUNCTION}
+open_design_verify_install() {
+  open_design_plugin_state="$(open_design_plugin_inspect)" || {
+    open_design_plugin_status=$?
+    printf '%s\\n' "$open_design_plugin_state"
+    return "$open_design_plugin_status"
+  }
+  case "$open_design_plugin_state" in
+    open-design-plugin:state:exact:*) ;;
+    *)
+      printf '%s\\n' 'open-design-plugin:error:verification-failed'
+      return 1
+      ;;
+  esac
 ${SAFE_MCP_INSPECTION_FUNCTION}
-open_design_safe_mcp_inspect`;
+${MCP_VALIDATION_FUNCTION}
+  open_design_mcp_state="$(open_design_safe_mcp_inspect)" || return 1
+  open_design_mcp_snapshot_is_verified_local "$open_design_mcp_state" || {
+    printf '%s\\n' 'open-design-mcp-install:error:verification-failed'
+    return 1
+  }
+  printf '%s\\n' "$open_design_plugin_state"
+  printf '%s\\n' "$open_design_mcp_state"
+}
+open_design_verify_install`;
 
 const codexRunFrames = [
   {
