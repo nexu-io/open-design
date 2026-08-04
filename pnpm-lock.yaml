@@ -132,7 +132,7 @@ importers:
         specifier: 7.25.0
         version: 7.25.0
       yauzl:
-        specifier: ^3.4.0
+        specifier: 3.4.0
         version: 3.4.0
     devDependencies:
       '@types/better-sqlite3':
@@ -148,7 +148,7 @@ importers:
         specifier: 20.19.39
         version: 20.19.39
       '@types/yauzl':
-        specifier: ^3.4.0
+        specifier: 3.4.0
         version: 3.4.0
       jsdom:
         specifier: 29.1.1
