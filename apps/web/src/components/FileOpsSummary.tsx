@@ -18,7 +18,7 @@ import { useState } from 'react';
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
 import {
-  countFileOps,
+  countArtifactFileOps,
   type FileOpEntry,
   type FileOpKind,
 } from '../runtime/file-ops';
@@ -66,7 +66,10 @@ export function FileOpsSummary({
     ? entries.slice(0, COLLAPSE_AFTER_ENTRY_COUNT)
     : entries;
 
-  const counts = countFileOps(entries);
+  // Count unique produced files (one row per file), not write operations — a
+  // file touched several times must count once in a "Files from this turn"
+  // header (#5909).
+  const counts = countArtifactFileOps(entries);
   const summaryParts: string[] = [];
   if (counts.write > 0) summaryParts.push(`${t('tool.write')} ${counts.write}`);
   if (counts.edit > 0) summaryParts.push(`${t('tool.edit')} ${counts.edit}`);

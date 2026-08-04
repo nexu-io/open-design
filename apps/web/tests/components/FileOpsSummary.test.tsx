@@ -55,7 +55,10 @@ describe('FileOpsSummary', () => {
     );
 
     expect(screen.getByText(/Write 2/)).toBeTruthy();
-    expect(screen.getByText(/Edit 4/)).toBeTruthy();
+    // #5909: the "Files from this turn" header counts unique produced files,
+    // not write operations. c.ts was edited three times but is one file, so
+    // the edit total is 2 (a.ts + c.ts), not the op-level count of 4.
+    expect(screen.getByText(/Edit 2/)).toBeTruthy();
     expect(screen.queryByText(/Delete/)).toBeNull();
     expect(screen.queryByText(/Read/)).toBeNull();
     expect(screen.getByTestId('file-ops-row-a.ts')).toBeTruthy();

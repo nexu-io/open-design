@@ -162,6 +162,28 @@ export function countFileOps(entries: FileOpEntry[]): FileOpCounts {
   return counts;
 }
 
+export interface ArtifactFileOpCounts {
+  write: number;
+  edit: number;
+}
+
+/**
+ * Count unique produced files for the "Files from this turn" disclosure
+ * header, categorized by each file's primary artifact op (edit > write).
+ * Unlike `countFileOps`, a file written (or edited) several times counts
+ * once — the header must match the number of delivered files, not the number
+ * of write operations (#5909).
+ */
+export function countArtifactFileOps(entries: FileOpEntry[]): ArtifactFileOpCounts {
+  let write = 0;
+  let edit = 0;
+  for (const entry of entries) {
+    if (entry.ops.includes('edit')) edit += 1;
+    else if (entry.ops.includes('write')) write += 1;
+  }
+  return { write, edit };
+}
+
 function extractSimpleBashDeletes(input: unknown): string[] {
   if (!input || typeof input !== 'object') return [];
   const command = (input as { command?: unknown }).command;
