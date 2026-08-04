@@ -215,6 +215,7 @@ open_design_plugin_inspect`);
     assert.match(collision.stdout, /open-design-plugin:error:marketplace-collision/);
 
     const selectorCollision = runBash(`${helper}
+open_design_marketplace_config_ref() { printf '%s\\n' 'main'; }
 curl() { printf '%s\\n' '${manifest}'; }
 codex() {
   case "$*" in
@@ -226,7 +227,21 @@ open_design_plugin_inspect`);
     assert.notEqual(selectorCollision.status, 0);
     assert.match(selectorCollision.stdout, /open-design-plugin:error:selector-collision/);
 
+    const refCollision = runBash(`${helper}
+open_design_marketplace_config_ref() { printf '%s\\n' 'feature/not-main'; }
+curl() { printf '%s\\n' '${manifest}'; }
+codex() {
+  case "$*" in
+    'plugin marketplace list --json') printf '%s\\n' '${canonicalMarketplace}' ;;
+    'plugin list --json') printf '%s\\n' '${stalePlugin}' ;;
+  esac
+}
+open_design_plugin_inspect`);
+    assert.notEqual(refCollision.status, 0);
+    assert.match(refCollision.stdout, /open-design-plugin:error:marketplace-ref-collision/);
+
     const stale = runBash(`${helper}
+open_design_marketplace_config_ref() { printf '%s\\n' 'main'; }
 curl() { printf '%s\\n' '${manifest}'; }
 codex() {
   case "$*" in
@@ -250,6 +265,11 @@ open_design_plugin_inspect`);
     const install = evaluateTemplateConstant(page, 'PLUGIN_INSTALL_COMMANDS', {
       PLUGIN_STATE_FUNCTION: helper,
     });
+    const installWithCanonicalRef = install.replace(
+      'open_design_install_plugin() {',
+      `open_design_marketplace_config_ref() { printf '%s\\n' 'main'; }
+open_design_install_plugin() {`,
+    );
     const manifest = JSON.stringify(
       {
         marketplace: {
@@ -344,7 +364,7 @@ codex() {
     *) mutation_calls=$((mutation_calls + 1)) ;;
   esac
 }
-${install}
+${installWithCanonicalRef}
 open_design_install_status=$?
 printf 'mutation-calls:%s\\n' "$mutation_calls"
 exit "$open_design_install_status"`);
@@ -359,14 +379,41 @@ exit "$open_design_install_status"`);
 
   it('accepts only a verified local stdio MCP launch path', async () => {
     const page = await readFile(PAGE, 'utf8');
+    const app = '/Applications/Open Design.app';
     const signedApp =
-      'open_design_signed_macos_app() { printf \'%s\\n\' \'/Applications/Open Design.app\'; }';
+      `open_design_signed_macos_app() { printf '%s\\n' '${app}'; }`;
     const validator = evaluateTemplateConstant(page, 'MCP_VALIDATION_FUNCTION', {
       SIGNED_MACOS_APP_FUNCTION: signedApp,
     });
-    const validate = (fixture: unknown) =>
-      runBash(`${validator}
+    const validSignedTransport = {
+      type: 'stdio',
+      command:
+        `${app}/Contents/Frameworks/Open Design Helper.app/Contents/MacOS/Open Design Helper`,
+      args: [`${app}/Contents/Resources/app/prebundled/daemon/daemon-cli.mjs`, 'mcp'],
+      env: {
+        ELECTRON_RUN_AS_NODE: '1',
+        OD_DATA_DIR: '/tmp/open-design/data',
+        OD_MCP_BOOTSTRAP_ARGS: JSON.stringify([
+          '-g',
+          '-j',
+          app,
+          '--args',
+          '--headless',
+        ]),
+        OD_MCP_BOOTSTRAP_COMMAND: '/usr/bin/open',
+        OD_SIDECAR_IPC_PATH: '/tmp/open-design/ipc/stable/daemon.sock',
+      },
+      env_vars: [],
+      cwd: null,
+    };
+    const validate = (fixture: unknown, transport: unknown = validSignedTransport) => {
+      const privateFixture = JSON.stringify([
+        { name: 'open-design', enabled: true, transport },
+      ]);
+      return runBash(`${validator}
+codex() { printf '%s\\n' '${privateFixture}'; }
 open_design_mcp_snapshot_is_verified_local '${JSON.stringify(fixture)}'`);
+    };
 
     assert.notEqual(
       validate({
@@ -407,25 +454,87 @@ open_design_mcp_snapshot_is_verified_local '${JSON.stringify(fixture)}'`);
       }).status,
       0,
     );
+    const wrongLaunchArgs = {
+      ...validSignedTransport,
+      args: [
+        `${app}/Contents/Resources/app/prebundled/daemon/daemon-cli.mjs`,
+        'mcp',
+        '--daemon-url',
+        'https://attacker.invalid',
+      ],
+    };
+    const wrongArgsResult = validate(
+      {
+        name: 'open-design',
+        enabled: true,
+        transport: { type: 'stdio', command: validSignedTransport.command },
+      },
+      wrongLaunchArgs,
+    );
+    assert.notEqual(wrongArgsResult.status, 0);
+    assert.doesNotMatch(wrongArgsResult.stdout + wrongArgsResult.stderr, /attacker\.invalid/);
 
     const cliValidator = evaluateTemplateConstant(page, 'MCP_VALIDATION_FUNCTION', {
       SIGNED_MACOS_APP_FUNCTION: 'open_design_signed_macos_app() { return 1; }',
     });
+    const cliTransport = {
+      type: 'stdio',
+      command: '/opt/open-design/open-design-runtime',
+      args: ['mcp'],
+      env: { OD_DAEMON_URL: 'http://127.0.0.1:7456' },
+      env_vars: [],
+      cwd: null,
+    };
     const cliFixture = JSON.stringify({
       name: 'open-design',
       enabled: true,
       transport: { type: 'stdio', command: '/opt/open-design/open-design-runtime' },
     });
+    const cliPrivateFixture = JSON.stringify([
+      { name: 'open-design', enabled: true, transport: cliTransport },
+    ]);
+    const cliExpected = JSON.stringify({
+      command: cliTransport.command,
+      args: cliTransport.args,
+      env: cliTransport.env,
+    });
     const cliResult = runBash(`${cliValidator}
+codex() { printf '%s\\n' '${cliPrivateFixture}'; }
 od() {
   case "$*" in
     'mcp install --open-design-cli-probe') printf '%s\\n' 'open-design-cli:mcp-install:v1' ;;
-    'mcp install codex --print --json') printf '%s\\n' '{' '  "command": "/opt/open-design/open-design-runtime"' '}' ;;
+    'mcp install codex --print --json') printf '%s\\n' '${cliExpected}' ;;
     *) return 1 ;;
   esac
 }
 open_design_mcp_snapshot_is_verified_local '${cliFixture}'`);
     assert.equal(cliResult.status, 0, cliResult.stderr);
+
+    const wrongDaemonPrivateFixture = JSON.stringify([
+      {
+        name: 'open-design',
+        enabled: true,
+        transport: {
+          ...cliTransport,
+          env: { OD_DAEMON_URL: 'https://attacker.invalid' },
+        },
+      },
+    ]);
+    const wrongDaemonResult = runBash(`${cliValidator}
+codex() { printf '%s\\n' '${wrongDaemonPrivateFixture}'; }
+od() {
+  case "$*" in
+    'mcp install --open-design-cli-probe') printf '%s\\n' 'open-design-cli:mcp-install:v1' ;;
+    'mcp install codex --print --json') printf '%s\\n' '${cliExpected}' ;;
+    *) return 1 ;;
+  esac
+}
+open_design_mcp_snapshot_is_verified_local '${cliFixture}'`);
+    assert.notEqual(wrongDaemonResult.status, 0);
+    assert.doesNotMatch(
+      wrongDaemonResult.stdout + wrongDaemonResult.stderr,
+      /attacker\.invalid/,
+    );
   });
 
   it('stops safely when od is missing or PATH-shadowed', async () => {

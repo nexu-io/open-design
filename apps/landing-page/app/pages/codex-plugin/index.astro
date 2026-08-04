@@ -87,6 +87,125 @@ const SAFE_MCP_INSPECTION_FUNCTION = `open_design_safe_mcp_inspect() {
   printf '%s\\n' "$open_design_mcp_safe"
 }`;
 const MCP_VALIDATION_FUNCTION = `${SIGNED_MACOS_APP_FUNCTION}
+open_design_private_mcp_matches() {
+  open_design_private_mode="$1"
+  open_design_private_app="$2"
+  open_design_private_od="$3"
+  open_design_private_safe_command="$4"
+  open_design_private_current="$(codex mcp list --json 2>/dev/null)" || return 1
+  open_design_private_expected=""
+  if [ "$open_design_private_mode" = "cli" ]; then
+    [ -n "$open_design_private_od" ] || return 1
+    open_design_private_expected="$("$open_design_private_od" mcp install codex --print --json 2>/dev/null)" || return 1
+  fi
+
+  open_design_private_node="$(command -v node || true)"
+  open_design_private_runtime=system-node
+  if [ -z "$open_design_private_node" ]; then
+    open_design_private_helper="$open_design_private_app/Contents/Frameworks/Open Design Helper.app/Contents/MacOS/Open Design Helper"
+    [ "$open_design_private_mode" = "signed-app" ] && [ -x "$open_design_private_helper" ] || return 1
+    open_design_private_node="$open_design_private_helper"
+    open_design_private_runtime=signed-helper
+  fi
+  open_design_private_checker='
+    const fs = require("node:fs");
+    const input = fs.readFileSync(0, "utf8");
+    const first = input.indexOf("\\n");
+    const second = input.indexOf("\\n", first + 1);
+    const third = input.indexOf("\\n", second + 1);
+    const marker = "\\n--OPEN-DESIGN-EXPECTED--\\n";
+    const mode = input.slice(0, first);
+    const app = input.slice(first + 1, second);
+    const safeCommand = input.slice(second + 1, third);
+    const rest = input.slice(third + 1);
+    const split = rest.indexOf(marker);
+    const currentText = split < 0 ? rest : rest.slice(0, split);
+    const expectedText = split < 0 ? "" : rest.slice(split + marker.length);
+    const sameArray = (left, right) =>
+      Array.isArray(left) && Array.isArray(right) &&
+      left.length === right.length && left.every((value, index) => value === right[index]);
+    const sameEnv = (left, right) => {
+      if (left == null || typeof left !== "object" || Array.isArray(left)) return false;
+      if (right == null || typeof right !== "object" || Array.isArray(right)) return false;
+      const leftKeys = Object.keys(left).sort();
+      const rightKeys = Object.keys(right).sort();
+      return sameArray(leftKeys, rightKeys) && leftKeys.every((key) => left[key] === right[key]);
+    };
+    let ok = false;
+    try {
+      const currentRoot = JSON.parse(currentText);
+      const rows = Array.isArray(currentRoot)
+        ? currentRoot
+        : Array.isArray(currentRoot.servers) ? currentRoot.servers : [];
+      const matches = rows.filter((row) => row && row.name === "open-design");
+      if (matches.length !== 1) process.exit(1);
+      const transport = matches[0].transport;
+      if (!transport || transport.type !== "stdio") process.exit(1);
+      if (transport.command !== safeCommand) process.exit(1);
+      if (transport.cwd != null) process.exit(1);
+      if (transport.env_vars != null && !sameArray(transport.env_vars, [])) process.exit(1);
+
+      if (mode === "signed-app") {
+        const helper = app + "/Contents/Frameworks/Open Design Helper.app/Contents/MacOS/Open Design Helper";
+        const daemonCli = app + "/Contents/Resources/app/prebundled/daemon/daemon-cli.mjs";
+        const env = transport.env;
+        const requiredEnvKeys = [
+          "ELECTRON_RUN_AS_NODE",
+          "OD_DATA_DIR",
+          "OD_MCP_BOOTSTRAP_ARGS",
+          "OD_MCP_BOOTSTRAP_COMMAND",
+          "OD_SIDECAR_IPC_PATH",
+        ].sort();
+        const envKeys = env && typeof env === "object" && !Array.isArray(env)
+          ? Object.keys(env).sort() : [];
+        let bootstrapArgs = null;
+        try { bootstrapArgs = JSON.parse(env && env.OD_MCP_BOOTSTRAP_ARGS); } catch {}
+        ok = transport.command === helper &&
+          sameArray(transport.args, [daemonCli, "mcp"]) &&
+          sameArray(envKeys, requiredEnvKeys) &&
+          env.ELECTRON_RUN_AS_NODE === "1" &&
+          env.OD_MCP_BOOTSTRAP_COMMAND === "/usr/bin/open" &&
+          sameArray(bootstrapArgs, ["-g", "-j", app, "--args", "--headless"]) &&
+          typeof env.OD_DATA_DIR === "string" && env.OD_DATA_DIR.startsWith("/") &&
+          typeof env.OD_SIDECAR_IPC_PATH === "string" &&
+          env.OD_SIDECAR_IPC_PATH.startsWith("/") &&
+          env.OD_SIDECAR_IPC_PATH.endsWith("/daemon.sock");
+      } else if (mode === "cli") {
+        const expectedRoot = JSON.parse(expectedText);
+        const expected = expectedRoot.launchSpec || expectedRoot.spec || expectedRoot;
+        const expectedEnv = expected.env == null ? {} : expected.env;
+        ok = typeof expected.command === "string" && expected.command.length > 0 &&
+          transport.command === expected.command &&
+          sameArray(transport.args, expected.args || []) &&
+          sameEnv(transport.env || {}, expectedEnv);
+      }
+    } catch {}
+    process.exit(ok ? 0 : 1);
+  '
+  if [ "$open_design_private_runtime" = "signed-helper" ]; then
+    printf '%s\\n%s\\n%s\\n%s\\n%s\\n%s' \
+      "$open_design_private_mode" \
+      "$open_design_private_app" \
+      "$open_design_private_safe_command" \
+      "$open_design_private_current" \
+      '--OPEN-DESIGN-EXPECTED--' \
+      "$open_design_private_expected" | \
+      ELECTRON_RUN_AS_NODE=1 "$open_design_private_node" -e "$open_design_private_checker" >/dev/null 2>&1
+    open_design_private_status=$?
+  else
+    printf '%s\\n%s\\n%s\\n%s\\n%s\\n%s' \
+      "$open_design_private_mode" \
+      "$open_design_private_app" \
+      "$open_design_private_safe_command" \
+      "$open_design_private_current" \
+      '--OPEN-DESIGN-EXPECTED--' \
+      "$open_design_private_expected" | \
+      "$open_design_private_node" -e "$open_design_private_checker" >/dev/null 2>&1
+    open_design_private_status=$?
+  fi
+  unset open_design_private_current open_design_private_expected open_design_private_checker
+  return "$open_design_private_status"
+}
 open_design_mcp_snapshot_is_verified_local() {
   open_design_mcp_snapshot="$1"
   case "$open_design_mcp_snapshot" in
@@ -108,28 +227,15 @@ open_design_mcp_snapshot_is_verified_local() {
   esac
 
   open_design_verified_app="$(open_design_signed_macos_app || true)"
-  if [ -n "$open_design_verified_app" ]; then
-    case "$open_design_mcp_command" in
-      "$open_design_verified_app/Contents/MacOS/Open Design" | \
-      "$open_design_verified_app/Contents/Frameworks/Open Design Helper.app/Contents/MacOS/Open Design Helper") return 0 ;;
-    esac
+  if [ -n "$open_design_verified_app" ] && \
+    open_design_private_mcp_matches signed-app "$open_design_verified_app" "" "$open_design_mcp_command"; then
+    return 0
   fi
 
   open_design_verified_od="$(command -v od || true)"
   [ -n "$open_design_verified_od" ] || return 1
   [ "$("$open_design_verified_od" mcp install --open-design-cli-probe 2>/dev/null || true)" = "open-design-cli:mcp-install:v1" ] || return 1
-  open_design_expected_json="$("$open_design_verified_od" mcp install codex --print --json 2>/dev/null)" || return 1
-  open_design_expected_command="$(printf '%s\\n' "$open_design_expected_json" | awk '
-    /^[[:space:]]*"command":[[:space:]]*"/ {
-      value = $0
-      sub(/^[^:]*:[[:space:]]*"/, "", value)
-      sub(/",?[[:space:]]*$/, "", value)
-      print value
-      exit
-    }
-  ')"
-  unset open_design_expected_json
-  [ -n "$open_design_expected_command" ] && [ "$open_design_mcp_command" = "$open_design_expected_command" ]
+  open_design_private_mcp_matches cli "" "$open_design_verified_od" "$open_design_mcp_command"
 }`;
 const PLUGIN_STATE_FUNCTION = `open_design_manifest_plugin_requirements() {
   open_design_manifest="$(curl -fsSL ${RELEASE_MANIFEST})" || {
@@ -169,6 +275,37 @@ open_design_canonical_marketplace_source() {
   open_design_observed_source="$(printf '%s\\n' "$1" | sed -e 's#^https://github.com/##' -e 's#\\.git$##' -e 's#/$##')"
   open_design_required_source="$(printf '%s\\n' "$2" | sed -e 's#^https://github.com/##' -e 's#\\.git$##' -e 's#/$##')"
   [ -n "$open_design_observed_source" ] && [ "$open_design_observed_source" = "$open_design_required_source" ]
+}
+open_design_marketplace_config_ref() {
+  open_design_config_marketplace="$1"
+  open_design_codex_home="$CODEX_HOME"
+  [ -n "$open_design_codex_home" ] || open_design_codex_home="$HOME/.codex"
+  open_design_codex_config="$open_design_codex_home/config.toml"
+  [ -r "$open_design_codex_config" ] || return 1
+  awk -v required="$open_design_config_marketplace" '
+    /^\[[^]]+\]$/ {
+      header = $0
+      sub(/^\[/, "", header)
+      sub(/\]$/, "", header)
+      in_required = header == "marketplaces." required || header == "marketplaces.\\\"" required "\\\""
+      next
+    }
+    in_required && /^[[:space:]]*ref[[:space:]]*=/ {
+      value = $0
+      sub(/^[^=]*=[[:space:]]*/, "", value)
+      sub(/[[:space:]]*$/, "", value)
+      if (substr(value, 1, 1) == "\\\"") {
+        sub(/^\\\"/, "", value)
+        sub(/\\\"$/, "", value)
+      }
+      if (value != "") {
+        print value
+        found = 1
+        exit
+      }
+    }
+    END { if (!found) exit 1 }
+  ' "$open_design_codex_config"
 }
 open_design_plugin_inspect() {
   open_design_requirements="$(open_design_manifest_plugin_requirements)" || return 1
@@ -219,6 +356,14 @@ $open_design_marketplace_record
 EOF
     [ "$open_design_marketplace_type" = "git" ] && open_design_canonical_marketplace_source "$open_design_marketplace_source" "$open_design_required_source" || {
       printf '%s\\n' 'open-design-plugin:error:marketplace-collision'
+      return 1
+    }
+    open_design_marketplace_ref="$(open_design_marketplace_config_ref "$open_design_required_marketplace")" || {
+      printf '%s\\n' 'open-design-plugin:error:marketplace-ref-missing'
+      return 1
+    }
+    [ "$open_design_marketplace_ref" = "$open_design_required_ref" ] || {
+      printf '%s\\n' 'open-design-plugin:error:marketplace-ref-collision'
       return 1
     }
     open_design_marketplace_state=present
