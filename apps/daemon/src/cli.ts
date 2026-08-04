@@ -2705,12 +2705,12 @@ function repeatableFlagValues(argv, name) {
   return values;
 }
 
-async function cliDaemonUrl(flags) {
-  return resolveDaemonUrl({ flagUrl: flags?.['daemon-url'] });
+async function cliDaemonUrl(flags, resolveOptions = {}) {
+  return resolveDaemonUrl({ flagUrl: flags?.['daemon-url'], ...resolveOptions });
 }
 
-async function cliDaemonBaseUrl(flags) {
-  return (await cliDaemonUrl(flags)).replace(/\/$/, '');
+async function cliDaemonBaseUrl(flags, resolveOptions = {}) {
+  return (await cliDaemonUrl(flags, resolveOptions)).replace(/\/$/, '');
 }
 
 function printMediaHelp() {
@@ -2950,8 +2950,14 @@ To register this server into a coding agent's own config automatically:
 // Codex one-click install use), so every install path configures byte-for-
 // byte the same command. Falls back to a minimal `od mcp --daemon-url`
 // spec when the daemon is unreachable.
+//
+// Opts into conventional per-channel IPC discovery (daemon-url.ts) — unlike
+// every other `od` subcommand, a bare terminal invocation of `mcp install
+// <agent>` against a packaged install has no other way to find the running
+// daemon, since OD_SIDECAR_IPC_PATH is only ever stamped into the packaged
+// app's own spawned children. See issue #6424.
 async function resolveMcpLaunchSpec(flags) {
-  const base = await cliDaemonBaseUrl(flags);
+  const base = await cliDaemonBaseUrl(flags, { allowConventionalIpcDiscovery: true });
   try {
     const resp = await fetch(`${base}/api/mcp/install-info`);
     if (resp.ok) {
@@ -2967,9 +2973,14 @@ async function resolveMcpLaunchSpec(flags) {
   } catch {
     // daemon not running / unreachable — fall through to the minimal spec
   }
+  // Bare `od` collides with the system octal-dump utility on macOS/Linux
+  // (issue #5120). Self-reinvoke via the absolute interpreter + entry-point
+  // paths this very process was launched with instead — the same pattern
+  // already used for plugin-validate above — so the degraded spec still
+  // resolves to a real executable even when discovery keeps failing.
   return {
-    command: 'od',
-    args: ['mcp', '--daemon-url', base],
+    command: process.execPath,
+    args: [process.argv[1], 'mcp', '--daemon-url', base],
     env: {},
   };
 }

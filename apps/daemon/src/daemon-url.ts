@@ -1,36 +1,56 @@
 import { spawn } from "node:child_process";
-import { readFile, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  RELEASE_CHANNELS,
+  releaseNamespace,
+  type ReleasePlatform,
+} from "@open-design/release";
+import {
   APP_KEYS,
+  OPEN_DESIGN_SIDECAR_CONTRACT,
+  SIDECAR_ENV,
+  SIDECAR_MESSAGES,
   type DaemonStatusSnapshot,
 } from "@open-design/sidecar-proto";
-import { SidecarFactory } from "@open-design/sidecar";
+import { requestJsonIpc, resolveAppIpcPath } from "@open-design/sidecar";
 
 export const DEFAULT_DAEMON_URL = "http://127.0.0.1:7456";
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
 export interface ResolveDaemonUrlOptions {
-  /** MCP must discover an endpoint; a guessed default could belong to another runtime. */
-  allowLegacyDefault?: boolean;
-  connectInherited?: typeof SidecarFactory.connectInherited;
   /** Value passed via `--daemon-url`. Empty string is treated as unset. */
   flagUrl?: string | null;
   /** Defaults to `process.env`; injected for tests. */
   env?: NodeJS.ProcessEnv;
   /** IPC discovery timeout. Short by default so an absent daemon does not stall CLI startup. */
   timeoutMs?: number;
+  /**
+   * Opt-in: when `OD_SIDECAR_IPC_PATH` is absent, also probe the
+   * conventional per-release-channel sidecar socket path(s) (see
+   * `conventionalIpcSocketPaths`) before falling through to `tools-dev`
+   * discovery and the legacy default. Defaults to `false` so every existing
+   * `resolveDaemonUrl` caller (media generate, project list, run start, …)
+   * keeps its current behavior unchanged — an unrelated already-running
+   * packaged daemon must not silently start answering for commands that
+   * never asked for daemon auto-discovery beyond an explicit IPC path.
+   * `resolveMcpLaunchSpec` (cli.ts, `od mcp install <agent>`) is the one
+   * caller that opts in: a plain terminal invocation of that command has no
+   * other way to find a packaged install's daemon. See issue #6424.
+   */
+  allowConventionalIpcDiscovery?: boolean;
 }
 
 /**
  * Resolve the daemon HTTP base URL for `od` client commands.
  *
  * Spawn order: explicit `--daemon-url` flag, `OD_DAEMON_URL` env, then
- * inherited sidecar client status, then the default
- * `tools-dev status --json` runtime in a verified source checkout only.
- * Discovery never invokes a package manager. Falls back to the legacy default
- * for direct `od` launches that do not run as a sidecar.
+ * a STATUS roundtrip to the concrete sidecar IPC endpoint supplied by
+ * the lifecycle owner in `OD_SIDECAR_IPC_PATH` (optionally falling back to
+ * the conventional per-channel socket path(s) when that env var is absent —
+ * see `allowConventionalIpcDiscovery` / `conventionalIpcSocketPaths`), then
+ * the default `tools-dev status --json` runtime. Falls back to the legacy
+ * default for direct `od` launches that do not run as a sidecar.
  */
 export async function resolveDaemonUrl(
   options: ResolveDaemonUrlOptions = {},
@@ -40,45 +60,146 @@ export async function resolveDaemonUrl(
   if (flagUrl != null && flagUrl.length > 0) return flagUrl;
   const envUrl = env.OD_DAEMON_URL;
   if (envUrl != null && envUrl.length > 0) return envUrl;
-  const discovered = await discoverDaemonUrlFromInheritedClient(
+  const discovered = await discoverDaemonUrlFromIpc(
     env,
     options.timeoutMs ?? 800,
-    options.connectInherited ?? SidecarFactory.connectInherited,
+    options.allowConventionalIpcDiscovery ?? false,
   );
   if (discovered != null) return discovered;
   const toolsDevUrl = await discoverDaemonUrlFromToolsDev(env, options.timeoutMs ?? 800);
   if (toolsDevUrl != null) return toolsDevUrl;
-  if (options.allowLegacyDefault === false) {
-    throw new Error("Open Design daemon could not be discovered. Open the app and refresh the MCP registration, or supply --daemon-url explicitly.");
-  }
   return DEFAULT_DAEMON_URL;
 }
 
-async function discoverDaemonUrlFromInheritedClient(
+async function discoverDaemonUrlFromIpc(
   env: NodeJS.ProcessEnv,
   timeoutMs: number,
-  connectInherited: typeof SidecarFactory.connectInherited,
+  allowConventionalIpcDiscovery: boolean,
 ): Promise<string | null> {
-  const client = connectInherited(env);
-  if (client == null) return null;
+  const explicitSocketPath = env[SIDECAR_ENV.IPC_PATH];
+  if (explicitSocketPath != null && explicitSocketPath.length > 0) {
+    return await probeIpcSocket(explicitSocketPath, timeoutMs);
+  }
+  if (!allowConventionalIpcDiscovery) return null;
+  // `OD_SIDECAR_IPC_PATH` is only ever stamped by the packaged app into its
+  // OWN spawned child processes (see apps/packaged/src/sidecars.ts) — an
+  // ordinary user terminal never has it set. Without this fallback, `od mcp
+  // install <agent>` run from a plain shell against a running packaged
+  // install can never find `/api/mcp/install-info` and always degrades to
+  // the broken bare-`od` launch spec in cli.ts's resolveMcpLaunchSpec, even
+  // though a live daemon is reachable at a well-known socket path. Gated
+  // behind `allowConventionalIpcDiscovery` so every other `od` subcommand
+  // keeps requiring an explicit IPC path / --daemon-url instead of silently
+  // latching onto an unrelated already-running packaged daemon. See #6424.
+  const candidates = conventionalIpcSocketPaths(env);
+  if (candidates.length === 0) return null;
+  const results = await Promise.allSettled(
+    candidates.map((socketPath) => probeIpcSocket(socketPath, timeoutMs)),
+  );
+  for (const result of results) {
+    if (result.status === "fulfilled" && result.value != null) return result.value;
+  }
+  return null;
+}
+
+async function probeIpcSocket(
+  socketPath: string,
+  timeoutMs: number,
+): Promise<string | null> {
   try {
-    const status = await client.status<DaemonStatusSnapshot>(APP_KEYS.DAEMON, { timeoutMs });
-    return status?.url ?? null;
+    const status = await requestJsonIpc<DaemonStatusSnapshot>(
+      socketPath,
+      { type: SIDECAR_MESSAGES.STATUS },
+      { timeoutMs },
+    );
+    const url = status?.url ?? null;
+    return url != null && isLoopbackHttpUrl(url) ? url : null;
   } catch {
     return null;
   }
+}
+
+/**
+ * Whether `url` is an http(s) URL whose host is loopback. The JSON-IPC
+ * protocol has no responder-identity check (no peer-credential/uid
+ * verification, no shared secret — see #6424 discussion), so a STATUS
+ * response is not proof the daemon is who it claims to be. This does not
+ * close that gap — the sidecar IPC endpoint itself would need to add
+ * authentication for that — but it does stop a responder on a predictable
+ * socket/pipe path from redirecting daemon discovery off-host, which is the
+ * one part of "what can this URL make us do" this module can cheaply rule
+ * out before the caller `fetch()`s `/api/mcp/install-info` from it and
+ * potentially persists whatever `command`/`args` come back into a coding
+ * agent's config.
+ */
+function isLoopbackHttpUrl(url: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
+  return parsed.hostname === "127.0.0.1" || parsed.hostname === "::1" || parsed.hostname === "localhost";
+}
+
+/**
+ * Conventional per-release-channel sidecar IPC socket paths, stable-channel
+ * first. Bounded to the product's own known channels (`@open-design/release`)
+ * so an absent daemon still fails fast — probes run concurrently via
+ * `Promise.allSettled` in the caller, so the wall-clock cost stays bounded by
+ * a single timeout regardless of candidate count, not their sum.
+ *
+ * Honors an explicit `OD_SIDECAR_NAMESPACE` when present (cheap extra check,
+ * mirrors the explicit-namespace precedence `resolveNamespace` already uses
+ * elsewhere); otherwise derives the current platform's namespace suffix from
+ * `process.platform`/`process.arch` and tries every known channel.
+ */
+function conventionalIpcSocketPaths(env: NodeJS.ProcessEnv): string[] {
+  const explicitNamespace = env[SIDECAR_ENV.NAMESPACE];
+  if (explicitNamespace != null && explicitNamespace.length > 0) {
+    return [
+      resolveAppIpcPath({
+        app: APP_KEYS.DAEMON,
+        contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+        env,
+        namespace: explicitNamespace,
+      }),
+    ];
+  }
+  const platform: ReleasePlatform =
+    process.platform === "darwin"
+      ? process.arch === "arm64"
+        ? "mac"
+        : "macIntel"
+      : process.platform === "win32"
+        ? "win"
+        : "linux";
+  const orderedChannels = [
+    RELEASE_CHANNELS.STABLE,
+    RELEASE_CHANNELS.BETA,
+    RELEASE_CHANNELS.BETAS,
+    RELEASE_CHANNELS.PRERELEASE,
+    RELEASE_CHANNELS.PREVIEW,
+  ] as const;
+  return orderedChannels.map((channel) =>
+    resolveAppIpcPath({
+      app: APP_KEYS.DAEMON,
+      contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+      env,
+      namespace: releaseNamespace(channel, platform),
+    }),
+  );
 }
 
 async function discoverDaemonUrlFromToolsDev(
   env: NodeJS.ProcessEnv,
   timeoutMs: number,
 ): Promise<string | null> {
-  const entry = await sourceToolsDevEntry();
-  if (entry == null) return null;
   return await new Promise<string | null>((resolve) => {
     let child;
     try {
-      child = spawn(process.execPath, [entry, "status", "--json"], {
+      child = spawn("pnpm", ["--silent", "exec", "tools-dev", "status", "--json"], {
         cwd: REPO_ROOT,
         env,
         stdio: ["ignore", "pipe", "ignore"],
@@ -111,38 +232,6 @@ async function discoverDaemonUrlFromToolsDev(
   });
 }
 
-/**
- * A dev probe may execute only the owned Node entry in a source checkout.
- * Missing MCP environment is normal for old registrations, so env flags cannot
- * establish this boundary. Anchor it to the module's physical location and
- * repository identities; installed bundles and launcher payloads fail closed.
- */
-async function sourceToolsDevEntry(): Promise<string | null> {
-  try {
-    const root = await realpath(REPO_ROOT);
-    const moduleDir = path.dirname(await realpath(fileURLToPath(import.meta.url)));
-    if (root.split(path.sep).some((segment) => segment.toLowerCase().endsWith(".app"))) return null;
-    if (!["src", "dist"].some((dir) => moduleDir === path.join(root, "apps/daemon", dir))) return null;
-    const entry = path.join(root, "tools/dev/bin/tools-dev.mjs");
-    const [git, workspace, entryStat, entryPath, rootJson, daemonJson, toolsJson] = await Promise.all([
-      stat(path.join(root, ".git")),
-      stat(path.join(root, "pnpm-workspace.yaml")),
-      stat(entry),
-      realpath(entry),
-      readFile(path.join(root, "package.json"), "utf8"),
-      readFile(path.join(root, "apps/daemon/package.json"), "utf8"),
-      readFile(path.join(root, "tools/dev/package.json"), "utf8"),
-    ]);
-    if ((!git.isDirectory() && !git.isFile()) || !workspace.isFile() || !entryStat.isFile() || entryPath !== entry) return null;
-    if (JSON.parse(rootJson)?.name !== "open-design" || JSON.parse(daemonJson)?.name !== "@open-design/daemon") return null;
-    const tools = JSON.parse(toolsJson);
-    if (tools?.name !== "@open-design/tools-dev" || tools?.bin?.["tools-dev"] !== "./bin/tools-dev.mjs") return null;
-    return entry;
-  } catch {
-    return null;
-  }
-}
-
 function extractDaemonUrlFromToolsDevStatus(stdout: string): string | null {
   for (let i = stdout.indexOf("{"); i !== -1; i = stdout.indexOf("{", i + 1)) {
     try {
@@ -153,7 +242,7 @@ function extractDaemonUrlFromToolsDevStatus(stdout: string): string | null {
       const url = parsed?.apps?.daemon?.url ?? parsed?.url ?? null;
       if (typeof url === "string" && url.length > 0) return url;
     } catch {
-      // The Node runtime can print notices before JSON; continue scanning.
+      // pnpm wrappers can print warnings before JSON; continue scanning.
     }
   }
   return null;
