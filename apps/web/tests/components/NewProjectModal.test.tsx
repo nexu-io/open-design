@@ -10,6 +10,7 @@ vi.mock('@open-design/host', () => ({
 
 import { pickAndImportHostProject } from '@open-design/host';
 import { NewProjectModal } from '../../src/components/NewProjectModal';
+import { I18nProvider } from '../../src/i18n';
 import type {
   DesignSystemSummary,
   ProjectTemplate,
@@ -131,7 +132,12 @@ describe('NewProjectModal layout', () => {
       ok: true,
       projectId: 'project-host',
     } as const;
-    vi.mocked(pickAndImportHostProject).mockResolvedValue(importResult);
+    let resolveImport!: (value: typeof importResult) => void;
+    vi.mocked(pickAndImportHostProject).mockImplementation(
+      () => new Promise<typeof importResult>((resolve) => {
+        resolveImport = resolve;
+      }),
+    );
     const onImportFolderResponse = vi.fn();
 
     render(
@@ -153,9 +159,37 @@ describe('NewProjectModal layout', () => {
     await waitFor(() => {
       expect(pickAndImportHostProject).toHaveBeenCalledWith({ skillId: 'prototype-skill' });
     });
+    expect(screen.getByRole('button', { name: 'Opening…' })).toBeTruthy();
+
+    resolveImport(importResult);
+
     await waitFor(() => {
       expect(onImportFolderResponse).toHaveBeenCalledWith(importResult);
     });
+  });
+
+  it('localizes the modal title and folder action in zh-CN', () => {
+    render(
+      <I18nProvider initial="zh-CN">
+        <NewProjectModal
+          open
+          skills={skills}
+          designSystems={designSystems}
+          defaultDesignSystemId={null}
+          templates={[]}
+          promptTemplates={[]}
+          onCreate={() => {}}
+          onImportFolderResponse={() => {}}
+          onClose={() => {}}
+        />
+      </I18nProvider>,
+    );
+
+    expect(screen.getByRole('dialog', { name: '新建项目' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: '新建项目' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '打开文件夹' })).toBeTruthy();
+    expect(screen.queryByText('New project')).toBeNull();
+    expect(screen.queryByText('Open folder')).toBeNull();
   });
 });
 
