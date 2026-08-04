@@ -43,7 +43,13 @@ jobs:
       - name: Resolve runner profiles
         id: runners
         env:
-          OD_CI_RUNNER_MODE: ${{ vars.OD_CI_RUNNER_MODE }}
+          # Fork PRs cannot rely on repository variables, so keep their required
+          # validation on GitHub-hosted runners even when private pools are down.
+          OD_CI_RUNNER_MODE: >-
+            ${{ github.event_name == 'pull_request'
+              && github.event.pull_request.head.repo.full_name != github.repository
+              && 'economic'
+              || vars.OD_CI_RUNNER_MODE }}
         run: python3 .github/scripts/runners.py
 
   scopes:

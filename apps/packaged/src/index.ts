@@ -282,7 +282,7 @@ async function main(): Promise<void> {
   // mounting the web bundle (the runtime re-asserts this stage at its reveal
   // gate, which is a no-op when the label is already current).
   setSplashStage(splash.window, "workspace");
-  registerOdProtocol(sidecars.web.url ?? "http://127.0.0.1:0");
+  registerOdProtocol(() => sidecars.currentWebUrl() || "http://127.0.0.1:0");
 
   const { runDesktopMain } = await import("@open-design/desktop/main");
   await runDesktopMain(runtime, {

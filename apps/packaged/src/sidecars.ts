@@ -96,6 +96,13 @@ function shouldForwardPackagedChildEnv(key: string, includeProviderSecrets = fal
 
 export type PackagedSidecarHandle = {
   close(): Promise<void>;
+  /**
+   * URL of the web sidecar that is live *right now*. `web` below is the
+   * first-boot snapshot and goes stale as soon as the sidecar is
+   * respawned on a fresh ephemeral port, so anything that dials the
+   * sidecar per request must read this instead.
+   */
+  currentWebUrl(): string;
   daemon: DaemonStatusSnapshot;
   web: WebStatusSnapshot;
 };
@@ -229,6 +236,181 @@ function baseStatusTimeoutMs(platform: NodeJS.Platform = process.platform): numb
  * @see apps/daemon/src/legacy-data-migrator.ts
  * @see https://github.com/nexu-io/open-design/issues/710
  */
+export type RestartPolicy = { allow(nowMs: number): boolean };
+
+/**
+ * Sliding-window cap on sidecar respawns.
+ *
+ * A sidecar that dies once should come back; a sidecar that crashes
+ * during boot must not respawn forever, because each attempt spends a
+ * full Next.js boot and would pin a core indefinitely.
+ *
+ * ponytail: a plain array of timestamps pruned by filter — the window
+ * holds single digits of entries, so a ring buffer would be more code
+ * for no measurable gain.
+ */
+export function createRestartPolicy(
+  options: { maxRestarts?: number; windowMs?: number } = {},
+): RestartPolicy {
+  const maxRestarts = options.maxRestarts ?? 5;
+  const windowMs = options.windowMs ?? 60_000;
+  let attempts: number[] = [];
+  return {
+    allow(nowMs: number): boolean {
+      attempts = attempts.filter((at) => nowMs - at < windowMs);
+      if (attempts.length >= maxRestarts) return false;
+      attempts.push(nowMs);
+      return true;
+    },
+  };
+}
+
+/**
+ * Owns the packaged web sidecar across initial boot, bounded crash recovery,
+ * and shutdown. Dependencies are injected so lifecycle races can be exercised
+ * deterministically without spawning real Electron children in unit tests.
+ */
+export function createWebSidecarSupervisor<
+  TChild,
+  TStatus extends { url: string | null },
+>(options: {
+  closeChild: (child: TChild) => Promise<void>;
+  hasExited: (child: TChild) => boolean;
+  now?: () => number;
+  onExit: (child: TChild, listener: () => void) => void;
+  policy?: RestartPolicy;
+  registerUrl: (url: string) => Promise<void>;
+  spawn: () => Promise<TChild>;
+  waitUntilReady: (child: TChild) => Promise<TStatus>;
+}): {
+  close(): Promise<void>;
+  currentUrl(): string;
+  start(): Promise<TStatus>;
+} {
+  const policy = options.policy ?? createRestartPolicy();
+  const now = options.now ?? Date.now;
+  const children = new Set<TChild>();
+  const closedChildren = new Set<TChild>();
+  let closing = false;
+  let closeTask: Promise<void> | null = null;
+  let currentUrl = "";
+  let pendingExitedChild: TChild | null = null;
+  let restartTask: Promise<void> | null = null;
+
+  const closeChildOnce = async (child: TChild): Promise<void> => {
+    if (closedChildren.has(child)) return;
+    closedChildren.add(child);
+    children.delete(child);
+    await options.closeChild(child);
+  };
+
+  const spawnAndPromote = async (): Promise<TStatus> => {
+    const child = await options.spawn();
+    children.add(child);
+    let promoted = false;
+    let exited = options.hasExited(child);
+
+    // Install supervision before readiness. A replacement that exits during
+    // boot is retried by restartUntilReady below; a promoted child schedules a
+    // fresh restart cycle when it later exits.
+    options.onExit(child, () => {
+      exited = true;
+      if (promoted && !closing) scheduleRestart(child);
+    });
+
+    try {
+      if (closing) throw new Error("packaged web sidecar supervisor is closing");
+      const status = await options.waitUntilReady(child);
+      if (status.url == null) throw new Error("web did not report a URL");
+      if (closing) throw new Error("packaged web sidecar supervisor is closing");
+      if (exited || options.hasExited(child)) {
+        throw new Error("web exited before its ready status could be promoted");
+      }
+
+      await options.registerUrl(status.url);
+      if (closing) throw new Error("packaged web sidecar supervisor is closing");
+      if (exited || options.hasExited(child)) {
+        throw new Error("web exited while its ready status was being registered");
+      }
+
+      // These assignments are synchronous: once promoted is true, any later
+      // exit event schedules another restart instead of being mistaken for a
+      // boot failure owned by the current restart loop.
+      promoted = true;
+      currentUrl = status.url;
+      return status;
+    } catch (error) {
+      await closeChildOnce(child).catch(() => undefined);
+      throw error;
+    }
+  };
+
+  const restartUntilReady = async (): Promise<void> => {
+    while (!closing) {
+      if (!policy.allow(now())) {
+        console.error("packaged web sidecar restart budget exhausted; not respawning");
+        return;
+      }
+      try {
+        await spawnAndPromote();
+        return;
+      } catch (error: unknown) {
+        if (closing) return;
+        console.error("failed to restart packaged web sidecar", error);
+      }
+    }
+  };
+
+  function scheduleRestart(exitedChild: TChild): void {
+    pendingExitedChild = exitedChild;
+    if (restartTask != null || closing) return;
+
+    const task = (async () => {
+      while (!closing && pendingExitedChild != null) {
+        const childToClose = pendingExitedChild;
+        pendingExitedChild = null;
+        await closeChildOnce(childToClose).catch((error: unknown) => {
+          console.error("failed to close exited packaged web sidecar", error);
+        });
+        await restartUntilReady();
+      }
+    })();
+    restartTask = task;
+    void task
+      .finally(() => {
+        if (restartTask === task) restartTask = null;
+        if (!closing && pendingExitedChild != null) scheduleRestart(pendingExitedChild);
+      })
+      .catch((error: unknown) => {
+        console.error("packaged web sidecar supervisor failed", error);
+      });
+  }
+
+  return {
+    async close(): Promise<void> {
+      if (closeTask != null) return await closeTask;
+      closing = true;
+      pendingExitedChild = null;
+      closeTask = (async () => {
+        // Close children already known to the supervisor first. Then await an
+        // in-flight deferred spawn: spawnAndPromote re-checks closing as soon as
+        // it resolves and closes that late child before returning. The final
+        // pass covers a child added between the first snapshot and the await.
+        for (const child of [...children].reverse()) {
+          await closeChildOnce(child).catch(() => undefined);
+        }
+        await restartTask?.catch(() => undefined);
+        for (const child of [...children].reverse()) {
+          await closeChildOnce(child).catch(() => undefined);
+        }
+      })();
+      return await closeTask;
+    },
+    currentUrl: () => currentUrl,
+    start: spawnAndPromote,
+  };
+}
+
 export function resolveDaemonStatusTimeoutMs(
   env: NodeJS.ProcessEnv = process.env,
   platform: NodeJS.Platform = process.platform,
@@ -675,6 +857,7 @@ export async function startPackagedSidecars(
   await mkdir(paths.electronSessionDataRoot, { recursive: true });
 
   const children: ManagedSidecarChild[] = [];
+  let webSupervisor: { close(): Promise<void> } | null = null;
 
   const daemonSidecarEntry =
     options.daemonSidecarEntry ?? resolveSidecarEntry("@open-design/daemon", "sidecar");
@@ -753,40 +936,56 @@ export async function startPackagedSidecars(
     // enters its own timed status window.
     await webPrewarm;
 
-    options.onPhase?.("web-spawning");
-    const web = await spawnSidecarChild({
-      app: APP_KEYS.WEB,
-      entryPath: webSidecarEntry,
-      env: {
-        [SIDECAR_ENV.DAEMON_PORT]: extractPort(daemonStatus.url),
-        [SIDECAR_ENV.WEB_PORT]: "0",
-        ...(options.webStandaloneRoot == null ? {} : { OD_WEB_STANDALONE_ROOT: options.webStandaloneRoot }),
-        OD_WEB_OUTPUT_MODE: options.webOutputMode,
-        PORT: "0",
-      },
-      electronNodeCommand: options.electronNodeCommand,
-      nodeCommand: options.nodeCommand,
-      paths,
-      runtime,
+    // Resolved out here rather than inside `spawnWeb`: the null check
+    // above narrows `daemonStatus.url` to string, but TypeScript drops
+    // property narrowing inside a closure that could run later.
+    const daemonPort = extractPort(daemonStatus.url);
+
+    const supervisor = createWebSidecarSupervisor<ManagedSidecarChild, WebStatusSnapshot>({
+      closeChild: closeManagedChild,
+      hasExited: (web) => web.child.exitCode !== null || web.child.signalCode !== null,
+      onExit: (web, listener) => web.child.once("exit", listener),
+      registerUrl: async (url) => await registerPackagedWebUrl(daemon.ipcPath, url),
+      spawn: async () => await spawnSidecarChild({
+        app: APP_KEYS.WEB,
+        entryPath: webSidecarEntry,
+        env: {
+          [SIDECAR_ENV.DAEMON_PORT]: daemonPort,
+          [SIDECAR_ENV.WEB_PORT]: "0",
+          ...(options.webStandaloneRoot == null ? {} : { OD_WEB_STANDALONE_ROOT: options.webStandaloneRoot }),
+          OD_WEB_OUTPUT_MODE: options.webOutputMode,
+          PORT: "0",
+        },
+        electronNodeCommand: options.electronNodeCommand,
+        nodeCommand: options.nodeCommand,
+        paths,
+        runtime,
+      }),
+      waitUntilReady: async (web) => await waitForStatus<WebStatusSnapshot>(
+        web.ipcPath,
+        (candidate) => candidate.url != null,
+        // Web has no legacy-migration path, so it uses the plain platform
+        // baseline (still widened on win32, where AV scanning can also slow the
+        // web sidecar's first bind) rather than resolveDaemonStatusTimeoutMs.
+        baseStatusTimeoutMs(),
+        { child: web.child, logPath: logPathFor(paths, APP_KEYS.WEB) },
+      ),
     });
-    children.push(web);
-    const webStatus = await waitForStatus<WebStatusSnapshot>(
-      web.ipcPath,
-      (status) => status.url != null,
-      // Web has no legacy-migration path, so it uses the plain platform
-      // baseline (still widened on win32, where AV scanning can also slow the
-      // web sidecar's first bind) rather than resolveDaemonStatusTimeoutMs.
-      baseStatusTimeoutMs(),
-      { child: web.child, logPath: logPathFor(paths, APP_KEYS.WEB) },
-    );
-    if (webStatus.url == null) throw new Error("web did not report a URL");
-    await registerPackagedWebUrl(daemon.ipcPath, webStatus.url);
+    webSupervisor = supervisor;
+
+    // Phase callbacks drive the splash screen, so they stay on the
+    // first-boot path only: a mid-session respawn must not rewind the
+    // user's splash back to "web-spawning".
+    options.onPhase?.("web-spawning");
+    const webStatus = await supervisor.start();
     options.onPhase?.("web-ready");
 
     return {
       daemon: daemonStatus,
       web: webStatus,
+      currentWebUrl: supervisor.currentUrl,
       async close() {
+        await supervisor.close();
         for (const child of [...children].reverse()) {
           await closeManagedChild(child).catch((error: unknown) => {
             console.error(`failed to close packaged ${child.app} sidecar`, error);
@@ -795,6 +994,7 @@ export async function startPackagedSidecars(
       },
     };
   } catch (error) {
+    await webSupervisor?.close().catch(() => undefined);
     for (const child of [...children].reverse()) {
       await closeManagedChild(child).catch(() => undefined);
     }
