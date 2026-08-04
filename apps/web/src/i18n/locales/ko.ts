@@ -1528,6 +1528,8 @@ export const ko: Dict = {
   'newproj.createLiveArtifact': '라이브 아티팩트 만들기',
   'newproj.createFromTemplate': '템플릿으로 생성',
   'newproj.createDisabledTitle': '먼저 프로젝트를 템플릿으로 저장하세요 (프로젝트 내 공유 메뉴 이용).',
+  'newproj.openFolder': '폴더 열기',
+  'newproj.openingFolder': '여는 중…',
   'newproj.importClaudeZip': 'Claude Design ZIP 가져오기',
   'newproj.importClaudeZipTitle': 'Claude Design .zip 내보내기 파일 가져오기',
   'newproj.importingClaudeZip': '가져오는 중…',

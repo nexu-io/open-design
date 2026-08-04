@@ -1528,6 +1528,8 @@ export const tr: Dict = {
   'newproj.createLiveArtifact': 'Canlı artifact oluştur',
   'newproj.createFromTemplate': 'Şablondan oluştur',
   'newproj.createDisabledTitle': 'Önce bir projeyi şablon olarak kaydedin (herhangi bir projenin içinde Paylaş menüsünden).',
+  'newproj.openFolder': 'Klasör aç',
+  'newproj.openingFolder': 'Açılıyor…',
   'newproj.importClaudeZip': 'Claude Design ZIP’i içe aktar',
   'newproj.importClaudeZipTitle': 'Bir Claude Design .zip’ini içe aktarın',
   'newproj.importingClaudeZip': 'İçe aktarılıyor…',

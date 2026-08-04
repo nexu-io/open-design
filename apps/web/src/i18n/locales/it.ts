@@ -1528,6 +1528,8 @@ export const it: Dict = {
   'newproj.createLiveArtifact': 'Crea artefatto live',
   'newproj.createFromTemplate': 'Crea dal modello',
   'newproj.createDisabledTitle': 'Salva prima un progetto come modello (menu Condividi in un progetto).',
+  'newproj.openFolder': 'Apri cartella',
+  'newproj.openingFolder': 'Apertura…',
   'newproj.importClaudeZip': 'Importa un ZIP Claude Design',
   'newproj.importClaudeZipTitle': 'Importa un\'esportazione .zip Claude Design',
   'newproj.importingClaudeZip': 'Importazione…',

@@ -1528,6 +1528,8 @@ export const hu: Dict = {
   'newproj.createLiveArtifact': 'Élő artifact létrehozása',
   'newproj.createFromTemplate': 'Létrehozás sablonból',
   'newproj.createDisabledTitle': 'Először ments el egy projektet sablonként (bármely projekt Megosztás menüjéből).',
+  'newproj.openFolder': 'Mappa megnyitása',
+  'newproj.openingFolder': 'Megnyitás…',
   'newproj.importClaudeZip': 'Claude Design ZIP importálása',
   'newproj.importClaudeZipTitle': 'Claude Design .zip export importálása',
   'newproj.importingClaudeZip': 'Importálás…',

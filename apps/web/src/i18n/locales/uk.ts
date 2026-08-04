@@ -1528,6 +1528,8 @@ export const uk: Dict = {
   'newproj.createLiveArtifact': 'Створити live-артефакт',
   'newproj.createFromTemplate': 'Створити з шаблону',
   'newproj.createDisabledTitle': 'Спочатку збережіть проект як шаблон (меню Поділитися всередині будь-якого проекту).',
+  'newproj.openFolder': 'Відкрити папку',
+  'newproj.openingFolder': 'Відкриття…',
   'newproj.importClaudeZip': 'Імпортувати Claude Design ZIP',
   'newproj.importClaudeZipTitle': 'Імпортувати експорт Claude Design .zip',
   'newproj.importingClaudeZip': 'Імпортування…',

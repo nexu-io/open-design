@@ -1528,6 +1528,8 @@ export const ar: Dict = {
   'newproj.createLiveArtifact': 'إنشاء عنصر مباشر',
   'newproj.createFromTemplate': 'إنشاء من قالب',
   'newproj.createDisabledTitle': 'احفظ مشروعاً كقالب أولاً (قائمة المشاركة داخل أي مشروع).',
+  'newproj.openFolder': 'فتح مجلد',
+  'newproj.openingFolder': 'جاري الفتح…',
   'newproj.importClaudeZip': 'استيراد ZIP من Claude Design',
   'newproj.importClaudeZipTitle': 'استيراد تصدير .zip من Claude Design',
   'newproj.importingClaudeZip': 'جاري الاستيراد...',

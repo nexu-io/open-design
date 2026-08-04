@@ -1528,6 +1528,8 @@ export const fr: Dict = {
   'newproj.createLiveArtifact': 'Créer un artefact dynamique',
   'newproj.createFromTemplate': 'Créer depuis le modèle',
   'newproj.createDisabledTitle': 'Enregistrez d\'abord un projet comme modèle (menu Partager dans un projet).',
+  'newproj.openFolder': 'Ouvrir un dossier',
+  'newproj.openingFolder': 'Ouverture…',
   'newproj.importClaudeZip': 'Importer un ZIP Claude Design',
   'newproj.importClaudeZipTitle': 'Importer une exportation .zip Claude Design',
   'newproj.importingClaudeZip': 'Importation…',

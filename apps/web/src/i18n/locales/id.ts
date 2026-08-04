@@ -1528,6 +1528,8 @@ export const id: Dict = {
   'newproj.createLiveArtifact': 'Buat live artifact',
   'newproj.createFromTemplate': 'Buat dari templat',
   'newproj.createDisabledTitle': 'Simpan proyek sebagai templat dulu.',
+  'newproj.openFolder': 'Buka folder',
+  'newproj.openingFolder': 'Membuka…',
   'newproj.importClaudeZip': 'Impor ZIP Claude Design',
   'newproj.importClaudeZipTitle': 'Impor file .zip hasil ekspor Claude Design',
   'newproj.importingClaudeZip': 'Mengimpor...',
