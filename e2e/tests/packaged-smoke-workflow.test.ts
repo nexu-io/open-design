@@ -911,7 +911,7 @@ process.stdin.on("end", () => {
     expect(scopes).toContain("ui_p0_validation_required: ${{ steps.detect.outputs.ui_p0_validation_required }}");
     expect(scopes).toContain("run_ui_p0: ${{ steps.detect.outputs.run_ui_p0 }}");
     expect(workflow).toContain("needs.scopes.outputs.run_ui_p0 == 'true'");
-    expect(validate).toContain('when($out.run_ui_p0 == "true"; ["ui_p0"])');
+    expect(validate).toContain('when($out.run_ui_p0 == "true"; ["ui_p0", "ui_critical_extras"])');
 
     await expect(runScopesPrint("workflow_dispatch", { inputs: { ci_mode: "hot" } }, ["apps/web/src/app/page.tsx"])).resolves.toMatchObject({
       ci_mode: "hot",
@@ -1122,7 +1122,8 @@ process.stdin.on("end", () => {
     const webWorkspaceTests = sectionBetween(workflow, "  web_workspace_tests:", "  e2e_vitest:");
     const e2eVitest = sectionBetween(workflow, "  e2e_vitest:", "  playwright_critical:");
     const preflight = sectionBetween(workflow, "  preflight:", "  workspace_unit_tests:");
-    const uiP0 = sectionBetween(workflow, "  ui_p0:", "  playwright_visual:");
+    const uiP0 = sectionBetween(workflow, "  ui_p0:", "  ui_critical_extras:");
+    const uiCriticalExtras = sectionBetween(workflow, "  ui_critical_extras:", "  playwright_visual:");
     const visual = sectionBetween(workflow, "  playwright_visual:", "  validate:");
 
     expect(runners).toContain("runs-on: ubuntu-24.04");
@@ -1148,20 +1149,32 @@ process.stdin.on("end", () => {
     expect(uiP0).toContain("include: ${{ fromJSON(needs.scopes.outputs.ui_p0_matrix) }}");
     expect(uiP0CiMatrix.map((entry) => entry.name)).toEqual([
       "entry-settings",
-      "project-workspace",
+      "project-workspace-core",
+      "project-workspace-collab",
+      "project-workspace-team-sync",
       "project-runtime",
       "workspace-restoration",
     ]);
-    expect(uiP0Groups["project-workspace"].files).toEqual([
+    expect(uiP0Groups["project-workspace-core"].files).toEqual([
       "ui/app.test.ts",
       "ui/app-design-files.test.ts",
       "ui/app-manual-edit.test.ts",
       "ui/project-management-flows.test.ts",
-      "ui/workspace-multi-client-collab.test.ts",
-      "ui/workspace-team-design-system-picker.test.ts",
       "ui/workspace-keyboard-flows.test.ts",
     ]);
-    expect(uiP0Groups["project-workspace"].workers).toBe(1);
+    expect(uiP0Groups["project-workspace-core"].workers).toBe(1);
+    expect(uiP0Groups["project-workspace-collab"]).toEqual({
+      grep: String.raw`\[P0\]`,
+      workers: 1,
+      files: ["ui/workspace-multi-client-collab.test.ts"],
+    });
+    expect(uiP0Groups["project-workspace-team-sync"]).toEqual({
+      grep: String.raw`\[P0\]`,
+      workers: 1,
+      files: ["ui/workspace-team-design-system-picker.test.ts"],
+    });
+    const uiP0FileAssignments = uiP0CiMatrix.flatMap((entry) => uiP0Groups[entry.shard].files);
+    expect(new Set(uiP0FileAssignments).size).toBe(uiP0FileAssignments.length);
     expect(uiP0Groups["critical-extras"]).toEqual({
       grep: "@merge-extra",
       workers: 1,
@@ -1173,8 +1186,11 @@ process.stdin.on("end", () => {
       files: ["ui/app-restoration.test.ts", "ui/critical-smoke.test.ts"],
     });
     expect(workflow).not.toContain("  ui_p0_smoke:");
-    expect(uiP0).toContain("run-ui-group critical-extras");
+    expect(uiP0).not.toContain("run-ui-group critical-extras");
     expect(uiP0).toContain("Preserve project-runtime domain artifact");
+    expect(uiCriticalExtras).toContain("needs.scopes.outputs.run_ui_p0 == 'true'");
+    expect(uiCriticalExtras).toContain("fromJSON(needs.runners.outputs.runs_on).ui_hot");
+    expect(uiCriticalExtras).toContain("run-ui-group critical-extras");
     expect(visual).toContain("fromJSON(needs.runners.outputs.runs_on).visual_hot");
     expect(visual).toContain("toJSON(fromJSON(needs.runners.outputs.runs_on).visual_hot)");
     expect(workflow).not.toContain("needs.runners.outputs.contabo_control");
@@ -1210,7 +1226,9 @@ process.stdin.on("end", () => {
     expect(benchmarkWorkflow).toContain("run-ui-group critical-extras");
     expect(benchmarkWorkflow).toContain("Preserve project-runtime domain artifact");
     expect(benchmarkWorkflow).toContain("--grep-invert '@merge-extra'");
-    expect(benchmarkWorkflow).toContain("name: project-workspace");
+    expect(benchmarkWorkflow).toContain("name: project-workspace-core");
+    expect(benchmarkWorkflow).toContain("name: project-workspace-collab");
+    expect(benchmarkWorkflow).toContain("name: project-workspace-team-sync");
     expect(fullUi).toContain("fromJSON(needs.p0_runners.outputs.runs_on).ui_hot");
     expect(fullUi).toContain("shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]");
     expect(fullUi).toContain('OD_PLAYWRIGHT_FULLY_PARALLEL: "1"');

@@ -180,7 +180,7 @@ configuration, bins, the packaged sidecar compatibility bridge, and runtime
 definition source/companion tests stay medium-tier.
 
 A pure matching merge group keeps preflight and workspace typecheck, workspace
-unit coverage, broad E2E Vitest, and the complete four-domain UI P0 matrix. It
+unit coverage, broad E2E Vitest, and the complete six-shard UI P0 matrix. It
 skips web workspace tests, visual Playwright, Windows launcher-payload tests,
 and tools-dev/tools-pack unit coverage. The retained plan therefore continues
 to exercise daemon buildability, user-level API/runtime behavior, and every
@@ -212,7 +212,7 @@ guarded plan; UI P0 remains the critical path.
 ## Daemon UI P0 capability shadow
 
 The UI P0 capability shadow is evidence-only. The applied `ui_p0_matrix`
-remains the full four-domain matrix in PR and merge-queue plans; no job reads
+remains the full six-shard matrix in PR and merge-queue plans; no job reads
 the shadow candidate as an execution input.
 
 The `daemon-runtime-definition` capability matches changes confined to:
@@ -223,12 +223,12 @@ The `daemon-runtime-definition` capability matches changes confined to:
 - the explicit companion-test list in
   `DAEMON_RUNTIME_DEFINITION_EXACT` (`scripts/scopes.ts`).
 
-Its candidate keeps `entry-settings`, `project-workspace`, and
-`project-runtime`, and omits only `workspace-restoration`. The project
-workspace remains included because its P0 coverage contains the local-agent
-and model selector. Any empty, unresolved, mixed, unknown, or out-of-surface
-change falls back to the full four-domain matrix and records the reason in
-`trace.uiP0Shadow`.
+Its candidate keeps `entry-settings`, all three `project-workspace-*` shards,
+and `project-runtime`, and omits only `workspace-restoration`. The project
+workspace shards remain included because their combined P0 coverage contains
+the local-agent and model selector. Any empty, unresolved, mixed, unknown, or
+out-of-surface change falls back to the full six-shard matrix and records the
+reason in `trace.uiP0Shadow`.
 
 Guard: `UI P0 shadow contract` (`scripts/lib/guard/scope.ts`). It pins the
 applied full matrix, the candidate group set, representative in-bound

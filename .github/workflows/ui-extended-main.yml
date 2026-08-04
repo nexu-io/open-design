@@ -50,8 +50,12 @@ jobs:
         include:
           - name: entry-settings
             shard: entry-settings
-          - name: project-workspace
-            shard: project-workspace
+          - name: project-workspace-core
+            shard: project-workspace-core
+          - name: project-workspace-collab
+            shard: project-workspace-collab
+          - name: project-workspace-team-sync
+            shard: project-workspace-team-sync
           - name: project-runtime
             shard: project-runtime
           - name: workspace-restoration
@@ -101,15 +105,62 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+      - name: Upload Playwright debug artifact
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: ui-extended-main-${{ github.run_id }}-p0-${{ matrix.name }}
+          path: |
+            e2e/ui/reports/playwright-html-report
+            e2e/ui/reports/test-results
+            e2e/ui/reports/results.json
+            e2e/ui/test-results
+          if-no-files-found: ignore
+          retention-days: 7
+
+  ui_critical_extras:
+    name: UI critical extras
+    needs: [p0_runners]
+    if: ${{ github.repository == 'nexu-io/open-design' && github.event_name == 'workflow_dispatch' && inputs.suite != 'full' }}
+    runs-on: ${{ fromJSON(needs.p0_runners.outputs.runs_on).ui_hot }}
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Configure CI parallelism
+        uses: ./.github/actions/configure-ci-parallelism
+
+      - name: Setup workspace
+        uses: ./.github/actions/setup-workspace
+        with:
+          runner-labels: ${{ toJSON(fromJSON(needs.p0_runners.outputs.runs_on).ui_hot) }}
+
+      - name: Setup Playwright
+        uses: ./.github/actions/setup-playwright
+        with:
+          package-json-path: e2e/package.json
+          install-command: pnpm -C e2e exec playwright install --with-deps chromium
+          runner-labels: ${{ toJSON(fromJSON(needs.p0_runners.outputs.runs_on).ui_hot) }}
+
+      - name: Prebuild workspace type declarations
+        run: |
+          pnpm --filter @open-design/daemon build
+          pnpm --filter @open-design/desktop build
+          pnpm --filter @open-design/web build:sidecar
+
+      - name: Clean Playwright state
+        run: pnpm -C e2e exec tsx scripts/playwright.ts clean
+
       - name: Run UI critical extras
-        if: ${{ matrix.shard == 'project-runtime' }}
         run: pnpm -C e2e exec tsx scripts/playwright.ts run-ui-group critical-extras
 
       - name: Upload Playwright debug artifact
         if: ${{ always() }}
         uses: actions/upload-artifact@v7
         with:
-          name: ui-extended-main-${{ github.run_id }}-p0-${{ matrix.name }}
+          name: ui-extended-main-${{ github.run_id }}-critical-extras
           path: |
             e2e/ui/reports/playwright-html-report
             e2e/ui/reports/test-results
