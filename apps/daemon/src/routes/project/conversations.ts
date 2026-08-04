@@ -5,6 +5,8 @@ import { backfillBrandExtractionTranscriptForProject } from '../../brands/index.
 import type { RouteDeps } from '../../server-context.js';
 import type { BoundWorkspaceResourceMutationGate } from '../../collab/workspace-resource-mutation.js';
 import type { AuthorizeProjectRequest } from '../../collab/project-request-authority.js';
+import { TERMINAL_RUN_STATUSES } from '../../runtimes/runs.js';
+
 import { registerProjectCommentRoutes } from './comments.js';
 import { cancelRunsOwnedBy } from './cancel-owned-runs.js';
 import {
@@ -291,18 +293,25 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
   // switch, then PUT after the daemon appended more events) must never regress
   // those fields — that's how the early `status:model` event got wiped.
   //
-  // The guard is a "no regression" rule, not a blanket write-ownership rule:
-  // run events are append-only, so a stale snapshot can only SHRINK the stored
-  // list. We preserve the stored events/content/last-run-event-id/run-status —
-  // plus the daemon-ownership marker (role + runId), since a snapshot captured
-  // before `/api/runs` assigned a run id can omit `runId` and would otherwise
-  // null `run_id` and drop the message back out of the protected path on the
-  // next stale PUT — only when the incoming snapshot would drop
-  // already-persisted events. A web write that carries at least as many events
-  // still flows through — which keeps mock-agent flows working (the daemon
-  // never persisted events there, so the web is the legitimate writer) and
-  // lets UI metadata (feedback, comment attachments, telemetry) land on every
-  // PUT.
+  // The guard is a "no regression" rule, not a blanket write-ownership rule,
+  // and it has two independent triggers:
+  //   1. Run events are append-only, so a stale snapshot can only SHRINK the
+  //      stored list — preserve stored events/content when the incoming
+  //      snapshot would drop already-persisted events.
+  //   2. Terminal run status is a daemon-owned latch: the daemon writes it
+  //      separately (no event appended), so a snapshot captured after the
+  //      final event but before that write has the SAME event count yet still
+  //      carries a non-terminal status. Never let it regress a terminal status.
+  // Both paths also preserve the daemon-ownership marker (role + runId), since
+  // a snapshot captured before `/api/runs` assigned a run id can omit `runId`
+  // and would otherwise null `run_id` and drop the message back out of the
+  // protected path on the next stale PUT.
+  //
+  // A web write that carries at least as many events and a non-regressing
+  // status still flows through — which keeps mock-agent flows working (the
+  // daemon never persisted events/status there, so the web is the legitimate
+  // writer) and lets UI metadata (feedback, comment attachments, telemetry)
+  // land on every PUT.
   const mergeMessageWriteForDaemonBacked = (
     messageId: string,
     incoming: Record<string, unknown>,
@@ -310,14 +319,22 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
     const stored = getMessage(db, messageId);
     if (!stored || stored.role !== 'assistant' || !stored.runId) return incoming;
     const incomingEvents = Array.isArray(incoming.events) ? incoming.events : [];
-    if (!stored.events || stored.events.length === 0 || incomingEvents.length >= stored.events.length) {
-      return incoming;
-    }
+    const shrinksEvents =
+      Boolean(stored.events) &&
+      stored.events!.length > 0 &&
+      incomingEvents.length < stored.events!.length;
+    const incomingStatus =
+      typeof incoming.runStatus === 'string' ? incoming.runStatus : null;
+    const regressesTerminalStatus =
+      stored.runStatus !== undefined &&
+      TERMINAL_RUN_STATUSES.has(stored.runStatus) &&
+      incomingStatus !== stored.runStatus;
+    if (!shrinksEvents && !regressesTerminalStatus) return incoming;
     return {
       ...incoming,
       role: stored.role,
       runId: stored.runId,
-      events: stored.events,
+      events: stored.events ?? [],
       content: stored.content ?? '',
       lastRunEventId: stored.lastRunEventId,
       runStatus: stored.runStatus,

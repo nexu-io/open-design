@@ -164,6 +164,76 @@ describe('stale web message snapshot does not wipe daemon-owned run events', () 
     expect(after?.feedback?.rating).toBe(1);
   });
 
+  it('does not regress a daemon-written terminal run status from an equal-length stale snapshot', async () => {
+    // The daemon writes the terminal run_status separately (no event appended),
+    // so a web snapshot captured after the final event but before that write has
+    // the SAME event count while still carrying a non-terminal status. It must
+    // not be able to regress the stored terminal status (#6396 / looper review).
+    binDir = await mkdtemp(path.join(os.tmpdir(), 'od-terminal-latch-bin-'));
+    const fakeClaude = await writeCleanClaude(binDir, 'claude-terminal-latch');
+
+    delete process.env.POSTHOG_KEY;
+    delete process.env.POSTHOG_HOST;
+    delete process.env.LANGFUSE_PUBLIC_KEY;
+    delete process.env.LANGFUSE_SECRET_KEY;
+    delete process.env.LANGFUSE_BASE_URL;
+    delete process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL;
+
+    started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
+    await putConfig(started.url, {
+      agentId: 'claude',
+      agentCliEnv: { claude: { CLAUDE_BIN: fakeClaude } },
+      telemetry: { metrics: true, content: false, artifactManifest: false },
+      privacyDecisionAt: Date.now(),
+    });
+
+    const { projectId, conversationId } = await createConversation(started.url);
+    const { assistantMessageId, status } = await sendRunAndWait(
+      started.url,
+      projectId,
+      conversationId,
+    );
+    expect(status.status).toBe('succeeded');
+
+    const before = await fetchAssistantMessage(
+      started.url,
+      projectId,
+      conversationId,
+      assistantMessageId,
+    );
+    expect(before?.runStatus).toBe('succeeded');
+    expect(before?.events?.length).toBeGreaterThan(0);
+
+    // Same event count, but the pre-finalize status — the exact shape that
+    // previously slipped through the length-based freshness check.
+    const equalLengthSnapshot = {
+      id: assistantMessageId,
+      role: 'assistant',
+      content: before?.content ?? '',
+      runId: before?.runId,
+      runStatus: 'running',
+      events: before?.events ?? [],
+    };
+    const putResponse = await fetch(
+      `${started.url}/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(assistantMessageId)}`,
+      {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(equalLengthSnapshot),
+      },
+    );
+    expect(putResponse.status).toBe(200);
+
+    const after = await fetchAssistantMessage(
+      started.url,
+      projectId,
+      conversationId,
+      assistantMessageId,
+    );
+    expect(after?.runStatus, 'terminal run status must not regress').toBe('succeeded');
+    expect(after?.runId).toBe(before?.runId);
+  });
+
   it('lets a mock-agent flow persist events/runStatus when the daemon never wrote any', async () => {
     // e2e Playwright suites mock the run SSE end-to-end, so the daemon never
     // persists events for the assistant message — the web client is the only
