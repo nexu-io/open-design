@@ -1,0 +1,113 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-hud",
+  "title": "HUD",
+  "title_i18n": {
+    "zh-CN": "HUD",
+    "zh-TW": "HUD",
+    "ja": "HUD",
+    "ko": "HUD",
+    "de": "HUD",
+    "fr": "HUD",
+    "ru": "HUD",
+    "es": "HUD",
+    "pt-BR": "HUD",
+    "it": "HUD",
+    "vi": "HUD",
+    "pl": "HUD",
+    "id": "HUD",
+    "nl": "HUD",
+    "ar": "HUD",
+    "tr": "HUD",
+    "uk": "HUD",
+    "en": "HUD"
+  },
+  "version": "0.1.0",
+  "publishedAt": "2026-08-04T09:00:00Z",
+  "description": "Fighter-jet head-up display. Phosphor green on near-black, all-caps data overlays, angular geometry.",
+  "description_i18n": {
+    "zh-CN": "战斗机抬头显示风格。近黑底上的磷光绿、全大写数据叠层、棱角几何。",
+    "zh-TW": "戰鬥機抬頭顯示風格。近黑底上的磷光綠、全大寫資料疊層、稜角幾何。",
+    "ja": "戦闘機のヘッドアップディスプレイ。ほぼ黒の上の燐光グリーン、全大文字のデータオーバーレイ、角ばった幾何学。",
+    "ko": "전투기 헤드업 디스플레이. 거의 검은 바탕의 인광 녹색, 대문자 데이터 오버레이, 각진 기하학.",
+    "de": "Kampfjet-Head-up-Display. Phosphorgrün auf Beinahe-Schwarz, Daten-Overlays in Versalien, kantige Geometrie.",
+    "fr": "Affichage tête haute de chasseur. Vert phosphore sur quasi-noir, overlays de données en capitales, géométrie angulaire.",
+    "ru": "ИЛС истребителя. Фосфорно-зелёный на почти чёрном, оверлеи данных капсом, угловатая геометрия.",
+    "es": "HUD de caza. Verde fósforo sobre casi negro, superposiciones de datos en mayúsculas, geometría angular.",
+    "pt-BR": "HUD de caça. Verde fósforo sobre quase preto, overlays de dados em caixa alta, geometria angular.",
+    "it": "HUD da caccia. Verde fosforo su quasi nero, overlay dati in maiuscolo, geometria angolare.",
+    "vi": "HUD kiểu máy bay tiêm kích. Xanh phosphor trên nền gần đen, lớp phủ dữ liệu chữ hoa, hình học góc cạnh.",
+    "pl": "HUD myśliwca. Fosforowa zieleń na niemal czerni, nakładki danych kapitalikami, kanciasta geometria.",
+    "id": "HUD jet tempur. Hijau fosfor di atas hampir hitam, overlay data huruf kapital, geometri bersudut.",
+    "nl": "HUD van een gevechtsvliegtuig. Fosforgroen op bijna-zwart, data-overlays in kapitalen, hoekige geometrie.",
+    "ar": "شاشة عرض علوية لطائرة مقاتلة. أخضر فسفوري على شبه أسود، طبقات بيانات بأحرف كبيرة، هندسة زاوية.",
+    "tr": "Savaş uçağı baş üstü göstergesi. Neredeyse siyah üzerinde fosfor yeşili, büyük harfli veri katmanları, açılı geometri.",
+    "uk": "ІЛС винищувача. Фосфорно-зелений на майже чорному, оверлеї даних капсом, кутаста геометрія.",
+    "en": "Fighter-jet head-up display. Phosphor green on near-black, all-caps data overlays, angular geometry."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "themed-unique"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the HUD design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the HUD design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "hud",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}
