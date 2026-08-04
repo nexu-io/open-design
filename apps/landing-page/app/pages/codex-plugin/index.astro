@@ -112,41 +112,29 @@ const localizedTemplateExamples = templateExamples.map((example, index) => ({
   ...copy.use.templates[index]!,
   prompt: promptExamples[index]!.prompt,
 }));
+const agentInstallCommands = [
+  PREFLIGHT_COMMANDS,
+  INSPECT_COMMANDS,
+  PLUGIN_INSTALL_COMMANDS,
+  MCP_INSTALL_COMMAND,
+  VERIFY_COMMANDS,
+] as const;
+const agentInstallSteps = copy.agentInstall.steps.map((step, index) => ({
+  ...step,
+  commands: agentInstallCommands[index]!,
+}));
 
 const jsonLd = [
   {
     '@context': 'https://schema.org',
     '@type': 'HowTo',
-    name: 'Install the Open Design plugin in Codex',
-    description:
-      'Agent-executable steps for installing the Open Design Codex plugin and its local MCP registration.',
-    step: [
-      {
-        '@type': 'HowToStep',
-        name: 'Preflight Codex and the marketplace source',
-        text: PREFLIGHT_COMMANDS,
-      },
-      {
-        '@type': 'HowToStep',
-        name: 'Inspect existing Codex plugin and MCP configuration',
-        text: INSPECT_COMMANDS,
-      },
-      {
-        '@type': 'HowToStep',
-        name: 'Install the marketplace and plugin',
-        text: PLUGIN_INSTALL_COMMANDS,
-      },
-      {
-        '@type': 'HowToStep',
-        name: 'Register the local Open Design MCP',
-        text: MCP_INSTALL_COMMAND,
-      },
-      {
-        '@type': 'HowToStep',
-        name: 'Verify and start a new Codex task',
-        text: VERIFY_COMMANDS,
-      },
-    ],
+    name: copy.agentInstall.howToName,
+    description: copy.agentInstall.howToDescription,
+    step: agentInstallSteps.map((step) => ({
+      '@type': 'HowToStep',
+      name: step.title,
+      text: `${step.body}\n${step.commands}`,
+    })),
   },
   {
     '@context': 'https://schema.org',
@@ -237,70 +225,24 @@ const jsonLd = [
   >
     <div class="odp-wrap">
       <div class="odp-agent-install__intro">
-        <p class="odp-agent-install__eyebrow">Agent-readable installation protocol</p>
-        <h2 id="odp-agent-install-title">Install the Codex plugin completely.</h2>
-        <p>
-          If the user asked you to install Open Design, execute this protocol in order. The
-          request authorizes changes only to the user’s Codex plugin and MCP configuration.
-          Preserve unrelated marketplaces, plugins, MCP servers and authentication state.
-        </p>
+        <p class="odp-agent-install__eyebrow">{copy.agentInstall.eyebrow}</p>
+        <h2 id="odp-agent-install-title">{copy.agentInstall.title}</h2>
+        <p>{copy.agentInstall.intro}</p>
       </div>
 
       <ol class="odp-agent-install__steps">
-        <li>
-          <h3>Preflight the supported environment</h3>
-          <p>
-            Require Codex CLI 0.144.6 or newer, Open Design 0.17.0 or newer and access to the
-            canonical marketplace repository. Do not silently download an installer or run an
-            unverified install script. If Open Design is missing or too old, stop and direct the
-            user to <a href="https://open-design.ai/download/">the official download page</a>.
-          </p>
-          <pre><code>{PREFLIGHT_COMMANDS}</code></pre>
-        </li>
-
-        <li>
-          <h3>Inspect before changing configuration</h3>
-          <p>
-            A missing <code>open-design</code> MCP is expected on a first install. If the
-            <code>open-design</code> marketplace name points to another source, stop and report the
-            collision. If the current plugin version is already installed, preserve it.
-          </p>
-          <pre><code>{INSPECT_COMMANDS}</code></pre>
-        </li>
-
-        <li>
-          <h3>Install the marketplace and plugin</h3>
-          <p>
-            Run both commands. An <code>alreadyAdded: true</code> result is success. Do not hand-edit
-            Codex configuration and do not copy plugin files into the Codex home directory.
-          </p>
-          <pre><code>{PLUGIN_INSTALL_COMMANDS}</code></pre>
-        </li>
-
-        <li>
-          <h3>Ensure the local Open Design MCP</h3>
-          <p>
-            Preserve an existing enabled <code>open-design</code> MCP. Otherwise run the MCP installer
-            supplied by the installed Open Design application. Use only a verified Open Design
-            <code>od</code> binary—not the unrelated macOS <code>/usr/bin/od</code>. If the CLI is not on
-            <code>PATH</code>, use Open Design Settings → MCP server or its signed packaged
-            <code>--headless --mcp-install codex</code> operation. Never guess a localhost port or run
-            <code>codex mcp login</code>; Vela login belongs to Open Design.
-          </p>
-          <pre><code>{MCP_INSTALL_COMMAND}</code></pre>
-        </li>
-
-        <li>
-          <h3>Verify, report and start a new task</h3>
-          <p>
-            Verify plugin id <code>open-design@open-design</code> and an enabled stdio MCP named
-            <code>open-design</code>. Its command must be an absolute Open Design launch path and must
-            not embed a bearer token, API key or Vela credential. Report what was installed and any
-            remaining Open Design or Vela-login prerequisite. Start a new Codex task so it loads the
-            installed plugin snapshot, then invoke <code>@open-design</code>.
-          </p>
-          <pre><code>{VERIFY_COMMANDS}</code></pre>
-        </li>
+        {agentInstallSteps.map((step, index) => (
+          <li>
+            <h3>{step.title}</h3>
+            <p>{step.body}</p>
+            {index === 0 && (
+              <p>
+                <a href={DOWNLOAD}>{copy.agentInstall.downloadLabel}</a>
+              </p>
+            )}
+            <pre><code>{step.commands}</code></pre>
+          </li>
+        ))}
       </ol>
     </div>
   </section>

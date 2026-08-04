@@ -16,6 +16,43 @@ const ko: OpenDesignPluginCopy = {
     copy: '복사',
     github: 'GitHub에서 소스 보기 ↗',
   },
+  agentInstall: {
+    howToName: 'Codex에 Open Design 플러그인 설치',
+    howToDescription:
+      'Open Design Codex 플러그인 설치와 로컬 MCP 등록을 에이전트가 실행할 수 있도록 안내하는 단계입니다.',
+    eyebrow: '에이전트가 읽을 수 있는 설치 프로토콜',
+    title: 'Codex 플러그인을 완전히 설치하세요.',
+    intro:
+      '사용자가 Open Design 설치를 요청했다면 이 프로토콜을 순서대로 실행하세요. 이 요청은 사용자의 Codex 플러그인 및 MCP 구성 변경만 허용합니다. 관련 없는 마켓플레이스, 플러그인, MCP 서버와 인증 상태는 그대로 유지하세요.',
+    downloadLabel: 'Open Design 공식 다운로드 페이지 ↗',
+    steps: [
+      {
+        title: '지원 환경을 사전 점검하세요',
+        body:
+          'Codex CLI 0.144.6 이상, Open Design 0.17.0 이상과 정식 마켓플레이스 저장소에 대한 접근 권한이 필요합니다. 확인 없이 설치 프로그램을 다운로드하거나 검증되지 않은 설치 스크립트를 실행하지 마세요. Open Design이 설치되어 있지 않거나 버전이 너무 낮으면 중단하고 사용자를 공식 다운로드 페이지로 안내하세요.',
+      },
+      {
+        title: '구성을 변경하기 전에 확인하세요',
+        body:
+          '처음 설치할 때 open-design MCP가 없는 것은 정상입니다. open-design 마켓플레이스 이름이 다른 소스를 가리키면 중단하고 충돌을 보고하세요. 현재 플러그인 버전이 이미 설치되어 있다면 그대로 유지하세요.',
+      },
+      {
+        title: '누락된 구성 요소만 설치하세요',
+        body:
+          '정식 마켓플레이스가 없을 때만 마켓플레이스 명령을 실행하세요. open-design@open-design이 설치되어 있지 않을 때만 플러그인 명령을 실행하고 기존 설치는 그대로 유지하세요. alreadyAdded: true 결과는 성공입니다. Codex 구성을 직접 편집하거나 플러그인 파일을 Codex 홈 디렉터리에 복사하지 마세요.',
+      },
+      {
+        title: '로컬 Open Design MCP를 준비하세요',
+        body:
+          '기존에 활성화된 open-design MCP가 있다면 그대로 유지하세요. 없다면 설치된 Open Design 애플리케이션이 제공하는 MCP 설치 프로그램을 실행하세요. 관련 없는 macOS /usr/bin/od가 아니라 검증된 Open Design od 바이너리만 사용하세요. CLI가 PATH에 없다면 Open Design Settings → MCP server 또는 서명된 패키지의 --headless --mcp-install codex 작업을 사용하세요. localhost 포트를 추측하거나 codex mcp login을 실행하지 마세요. Vela 로그인은 Open Design에서 해야 합니다.',
+      },
+      {
+        title: '확인하고 보고한 뒤 새 작업을 시작하세요',
+        body:
+          '플러그인 ID open-design@open-design과 open-design이라는 활성화된 stdio MCP를 확인하세요. 해당 명령은 Open Design의 절대 실행 경로여야 하며 bearer token, API key 또는 Vela 자격 증명을 포함해서는 안 됩니다. 설치된 항목과 아직 필요한 Open Design 또는 Vela 로그인 조건을 보고하세요. 새 Codex 작업을 시작해 설치된 플러그인 스냅샷을 불러온 다음 @open-design을 호출하세요.',
+      },
+    ],
+  },
   demo: {
     title: '한 번 설치하고, Codex/ChatGPT에서 바로 제작하세요.',
     lead:
@@ -29,7 +66,7 @@ const ko: OpenDesignPluginCopy = {
     installPhase: '설치',
     installTitle: 'Codex에 설치를 요청하세요',
     installBody:
-      '이 안내 문구를 Codex 작업에 붙여 넣으세요. Codex가 저장소의 설치 절차를 읽고, 공개 마켓플레이스 등록 없이도 플러그인과 로컬 MCP 설정을 완료합니다.',
+      '이 안내 문구를 Codex 작업에 붙여 넣으세요. Codex는 정식 Git 마켓플레이스 소스를 추가하고, 플러그인이 없을 때만 설치하며, 공개 카탈로그 등록 없이 로컬 MCP 설정을 완료합니다.',
     installNote: 'Codex에 한 번만 붙여 넣으면 나머지 설치 과정은 자동으로 처리됩니다.',
     steps: [
       {

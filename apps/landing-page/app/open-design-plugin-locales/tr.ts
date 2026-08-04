@@ -16,6 +16,43 @@ const tr: OpenDesignPluginCopy = {
     copy: 'Kopyala',
     github: 'Kaynak kodu GitHub’da görüntüle ↗',
   },
+  agentInstall: {
+    howToName: 'Open Design eklentisini Codex’e kurun',
+    howToDescription:
+      'Open Design Codex eklentisini kurmak ve yerel MCP kaydını yapmak için ajan tarafından uygulanabilir adımlar.',
+    eyebrow: 'Ajan tarafından okunabilir kurulum protokolü',
+    title: 'Codex eklentisini eksiksiz kurun.',
+    intro:
+      'Kullanıcı sizden Open Design’ı kurmanızı istediyse bu protokolü sırayla uygulayın. İstek, yalnızca kullanıcının Codex eklentisi ve MCP yapılandırmasında değişiklik yapılmasına izin verir. İlgisiz eklenti mağazalarını, eklentileri, MCP sunucularını ve kimlik doğrulama durumunu koruyun.',
+    downloadLabel: 'Resmî Open Design indirme sayfası ↗',
+    steps: [
+      {
+        title: 'Desteklenen ortam için ön kontrolleri yapın',
+        body:
+          'Codex CLI 0.144.6 veya üzerini, Open Design 0.17.0 veya üzerini ve kanonik eklenti mağazası deposuna erişimi zorunlu tutun. Bir yükleyiciyi sessizce indirmeyin veya doğrulanmamış bir kurulum betiğini çalıştırmayın. Open Design kurulu değilse ya da sürümü fazla eskiyse durun ve kullanıcıyı resmî indirme sayfasına yönlendirin.',
+      },
+      {
+        title: 'Yapılandırmayı değiştirmeden önce inceleyin',
+        body:
+          'İlk kurulumda open-design MCP’nin bulunmaması beklenir. open-design eklenti mağazası adı başka bir kaynağa işaret ediyorsa durun ve çakışmayı bildirin. Mevcut eklenti sürümü zaten kuruluysa onu koruyun.',
+      },
+      {
+        title: 'Yalnızca eksik bileşenleri kurun',
+        body:
+          'Eklenti mağazası komutunu yalnızca kanonik eklenti mağazası yoksa çalıştırın. Eklenti komutunu yalnızca open-design@open-design kurulu değilse çalıştırın; mevcut kurulumu koruyun. alreadyAdded: true sonucu başarıdır. Codex yapılandırmasını elle düzenlemeyin veya eklenti dosyalarını Codex ana dizinine kopyalamayın.',
+      },
+      {
+        title: 'Yerel Open Design MCP’nin hazır olduğundan emin olun',
+        body:
+          'Etkin durumdaki mevcut open-design MCP’yi koruyun. Aksi halde, kurulu Open Design uygulamasıyla sağlanan MCP yükleyicisini çalıştırın. İlgisiz macOS /usr/bin/od dosyasını değil, yalnızca doğrulanmış bir Open Design od ikilisini kullanın. CLI PATH üzerinde değilse Open Design Ayarları → MCP sunucusu seçeneğini veya imzalı paketin --headless --mcp-install codex işlemini kullanın. Asla bir localhost portu tahmin etmeyin veya codex mcp login çalıştırmayın; Vela ile oturum açma Open Design’da yapılır.',
+      },
+      {
+        title: 'Doğrulayın, raporlayın ve yeni bir görev başlatın',
+        body:
+          'open-design@open-design eklenti kimliğini ve open-design adlı, etkin bir stdio MCP’yi doğrulayın. MCP’nin komutu mutlak bir Open Design başlatma yolu olmalı; bearer token, API anahtarı veya Vela kimlik bilgisi içermemelidir. Nelerin kurulduğunu ve henüz karşılanmamış Open Design ya da Vela ile oturum açma ön koşullarını bildirin. Kurulu eklenti anlık görüntüsünü yükleyebilmesi için yeni bir Codex görevi başlatın, ardından @open-design çağrısını yapın.',
+      },
+    ],
+  },
   demo: {
     title: 'Bir kez kurun. Codex/ChatGPT içinden tasarlayın.',
     lead:
@@ -29,7 +66,7 @@ const tr: OpenDesignPluginCopy = {
     installPhase: 'Kurulum',
     installTitle: 'Kurulumu Codex’e yaptırın',
     installBody:
-      'Bu talimatı bir Codex görevine yapıştırın. Codex, herkese açık bir eklenti mağazası kaydına ihtiyaç duymadan depodaki kurulum yönergelerini okur; eklentiyi ve yerel MCP bağlantısını tamamlar.',
+      'Bu talimatı bir Codex görevine yapıştırın. Codex, kanonik Git eklenti mağazası kaynağını ekler, eklentiyi yalnızca eksikse kurar ve herkese açık bir katalog kaydı gerektirmeden yerel MCP kurulumunu tamamlar.',
     installNote: 'Codex’e bir kez yapıştırın; tüm kurulum ayrıntıları sizin için halledilir.',
     steps: [
       {

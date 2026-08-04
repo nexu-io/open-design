@@ -3,8 +3,8 @@
  *
  * English is the authoritative source. Every active non-English landing
  * locale provides a complete, structurally identical copy object in
- * `open-design-plugin-locales/`; product names, URLs, install instructions,
- * prompts, asset paths and numeric facts remain in the page component.
+ * `open-design-plugin-locales/`; product names, URLs, command lines, prompts,
+ * asset paths and numeric facts remain in the page component.
  */
 import type { LandingLocaleCode } from './i18n';
 import { OPEN_DESIGN_PLUGIN_TRANSLATIONS } from './open-design-plugin-locales';
@@ -30,6 +30,11 @@ type FaqCopy = {
   a: string;
 };
 
+type AgentInstallStepCopy = {
+  title: string;
+  body: string;
+};
+
 export type OpenDesignPluginCopy = {
   metadata: {
     title: string;
@@ -43,6 +48,21 @@ export type OpenDesignPluginCopy = {
     installAria: string;
     copy: string;
     github: string;
+  };
+  agentInstall: {
+    howToName: string;
+    howToDescription: string;
+    eyebrow: string;
+    title: string;
+    intro: string;
+    downloadLabel: string;
+    steps: [
+      AgentInstallStepCopy,
+      AgentInstallStepCopy,
+      AgentInstallStepCopy,
+      AgentInstallStepCopy,
+      AgentInstallStepCopy,
+    ];
   };
   demo: {
     title: string;
@@ -118,6 +138,43 @@ export const OPEN_DESIGN_PLUGIN_EN: OpenDesignPluginCopy = {
     copy: 'Copy',
     github: 'View source on GitHub ↗',
   },
+  agentInstall: {
+    howToName: 'Install the Open Design plugin in Codex',
+    howToDescription:
+      'Agent-executable steps for installing the Open Design Codex plugin and its local MCP registration.',
+    eyebrow: 'Agent-readable installation protocol',
+    title: 'Install the Codex plugin completely.',
+    intro:
+      'If the user asked you to install Open Design, execute this protocol in order. The request authorizes changes only to the user’s Codex plugin and MCP configuration. Preserve unrelated marketplaces, plugins, MCP servers and authentication state.',
+    downloadLabel: 'Official Open Design download page ↗',
+    steps: [
+      {
+        title: 'Preflight the supported environment',
+        body:
+          'Require Codex CLI 0.144.6 or newer, Open Design 0.17.0 or newer and access to the canonical marketplace repository. Do not silently download an installer or run an unverified install script. If Open Design is missing or too old, stop and direct the user to the official download page.',
+      },
+      {
+        title: 'Inspect before changing configuration',
+        body:
+          'A missing open-design MCP is expected on a first install. If the open-design marketplace name points to another source, stop and report the collision. If the current plugin version is already installed, preserve it.',
+      },
+      {
+        title: 'Install only missing components',
+        body:
+          'Run the marketplace command only if the canonical marketplace is absent. Run the plugin command only if open-design@open-design is not installed; preserve the existing installation. An alreadyAdded: true result is success. Do not hand-edit Codex configuration or copy plugin files into the Codex home directory.',
+      },
+      {
+        title: 'Ensure the local Open Design MCP',
+        body:
+          'Preserve an existing enabled open-design MCP. Otherwise run the MCP installer supplied by the installed Open Design application. Use only a verified Open Design od binary, not the unrelated macOS /usr/bin/od. If the CLI is not on PATH, use Open Design Settings → MCP server or its signed packaged --headless --mcp-install codex operation. Never guess a localhost port or run codex mcp login; Vela login belongs to Open Design.',
+      },
+      {
+        title: 'Verify, report and start a new task',
+        body:
+          'Verify plugin id open-design@open-design and an enabled stdio MCP named open-design. Its command must be an absolute Open Design launch path and must not embed a bearer token, API key or Vela credential. Report what was installed and any remaining Open Design or Vela-login prerequisite. Start a new Codex task so it loads the installed plugin snapshot, then invoke @open-design.',
+      },
+    ],
+  },
   demo: {
     title: 'Install once. Create from Codex/ChatGPT.',
     lead:
@@ -131,7 +188,7 @@ export const OPEN_DESIGN_PLUGIN_EN: OpenDesignPluginCopy = {
     installPhase: 'Install',
     installTitle: 'Ask Codex to install it',
     installBody:
-      'Paste this instruction into a Codex task. Codex reads the repository’s install lane and completes the plugin and local MCP setup without relying on a public marketplace listing.',
+      'Paste this instruction into a Codex task. Codex adds the canonical Git marketplace source, installs the plugin only if it is missing and completes the local MCP setup without requiring a public catalog listing.',
     installNote: 'Paste into Codex once—the installation details are handled for you.',
     steps: [
       {

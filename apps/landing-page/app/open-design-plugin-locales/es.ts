@@ -16,6 +16,43 @@ const es: OpenDesignPluginCopy = {
     copy: 'Copiar',
     github: 'Ver el código fuente en GitHub ↗',
   },
+  agentInstall: {
+    howToName: 'Instalar el plugin de Open Design en Codex',
+    howToDescription:
+      'Pasos ejecutables por un agente para instalar el plugin de Open Design para Codex y registrar su MCP local.',
+    eyebrow: 'Protocolo de instalación legible por agentes',
+    title: 'Instala por completo el plugin para Codex.',
+    intro:
+      'Si el usuario te ha pedido instalar Open Design, ejecuta este protocolo en orden. La solicitud solo autoriza cambios en la configuración de plugins y MCP de Codex del usuario. Conserva los demás marketplaces, plugins, servidores MCP y estados de autenticación.',
+    downloadLabel: 'Página oficial de descarga de Open Design ↗',
+    steps: [
+      {
+        title: 'Comprueba de antemano que el entorno sea compatible',
+        body:
+          'Requiere Codex CLI 0.144.6 o una versión posterior, Open Design 0.17.0 o una versión posterior y acceso al repositorio canónico del marketplace. No descargues silenciosamente un instalador ni ejecutes un script de instalación sin verificar. Si Open Design no está instalado o es demasiado antiguo, detente y dirige al usuario a la página oficial de descarga.',
+      },
+      {
+        title: 'Inspecciona la configuración antes de modificarla',
+        body:
+          'Es normal que el MCP open-design no exista en una primera instalación. Si el nombre del marketplace open-design apunta a otra fuente, detente e informa del conflicto. Si la versión actual del plugin ya está instalada, consérvala.',
+      },
+      {
+        title: 'Instala solo los componentes que falten',
+        body:
+          'Ejecuta el comando del marketplace solo si falta el marketplace canónico. Ejecuta el comando del plugin solo si open-design@open-design no está instalado; conserva la instalación existente. Un resultado alreadyAdded: true indica que la operación se realizó correctamente. No edites manualmente la configuración de Codex ni copies archivos del plugin en el directorio principal de Codex.',
+      },
+      {
+        title: 'Asegura el MCP local de Open Design',
+        body:
+          'Conserva cualquier MCP open-design existente que esté habilitado. De lo contrario, ejecuta el instalador de MCP incluido con la aplicación Open Design instalada. Usa únicamente un binario od verificado de Open Design, no el /usr/bin/od de macOS, que no está relacionado. Si la CLI no está en PATH, usa Open Design Settings → MCP server o la operación --headless --mcp-install codex de su paquete firmado. Nunca adivines un puerto localhost ni ejecutes codex mcp login; el inicio de sesión de Vela pertenece a Open Design.',
+      },
+      {
+        title: 'Verifica, informa e inicia una nueva tarea',
+        body:
+          'Verifica el id del plugin open-design@open-design y un MCP stdio habilitado llamado open-design. Su comando debe ser una ruta absoluta de inicio de Open Design y no debe incluir un token de portador, una clave de API ni una credencial de Vela. Informa de lo que se ha instalado y de cualquier requisito pendiente de Open Design o del inicio de sesión de Vela. Inicia una nueva tarea de Codex para que cargue la instantánea del plugin instalado y, después, invoca @open-design.',
+      },
+    ],
+  },
   demo: {
     title: 'Instálalo una vez. Crea desde Codex/ChatGPT.',
     lead:
@@ -29,7 +66,7 @@ const es: OpenDesignPluginCopy = {
     installPhase: 'Instalar',
     installTitle: 'Pide a Codex que lo instale',
     installBody:
-      'Pega esta instrucción en una tarea de Codex. Codex lee las instrucciones de instalación del repositorio y configura el plugin y el MCP local sin depender de que esté publicado en un marketplace.',
+      'Pega esta instrucción en una tarea de Codex. Codex añade la fuente canónica del marketplace de Git, instala el plugin solo si falta y completa la configuración del MCP local sin exigir que esté publicado en un catálogo público.',
     installNote:
       'Pégala una vez en Codex: los detalles de la instalación se gestionan por ti.',
     steps: [

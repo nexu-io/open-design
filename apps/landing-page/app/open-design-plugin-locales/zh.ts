@@ -16,6 +16,43 @@ const zh: OpenDesignPluginCopy = {
     copy: '复制',
     github: '在 GitHub 上查看源码 ↗',
   },
+  agentInstall: {
+    howToName: '在 Codex 中安装 Open Design 插件',
+    howToDescription:
+      '供 Agent 安装 Open Design Codex 插件并完成本地 MCP 注册的可执行步骤。',
+    eyebrow: 'Agent 可读安装协议',
+    title: '完整安装 Codex 插件。',
+    intro:
+      '如果用户要求你安装 Open Design，请按顺序执行此流程。该请求仅授权更改用户的 Codex 插件和 MCP 配置。请保持其他插件市场、插件、MCP 服务器及身份验证状态不变。',
+    downloadLabel: 'Open Design 官方下载页 ↗',
+    steps: [
+      {
+        title: '检查环境是否受支持',
+        body:
+          '确认 Codex CLI 为 0.144.6 或更高版本、Open Design 为 0.17.0 或更高版本，并且能够访问官方指定的 marketplace 仓库。不要在未告知用户的情况下下载安装程序，也不要运行未验证的安装脚本。如果尚未安装 Open Design 或版本过低，请停止操作并引导用户前往官方下载页。',
+      },
+      {
+        title: '更改配置前先行检查',
+        body:
+          '首次安装时没有 open-design MCP 属于正常情况。如果名为 open-design 的 marketplace 指向其他来源，请停止操作并报告命名冲突。如果当前插件版本已安装，请保留现有安装。',
+      },
+      {
+        title: '仅安装缺失的组件',
+        body:
+          '仅在官方指定的 marketplace 尚未添加时运行 marketplace 命令。仅在尚未安装 open-design@open-design 时运行插件命令；否则保留现有安装。返回 alreadyAdded: true 表示成功。不要手动编辑 Codex 配置，也不要将插件文件复制到 Codex 主目录。',
+      },
+      {
+        title: '确保本地 Open Design MCP 可用',
+        body:
+          '保留现有且已启用的 open-design MCP。如果不存在，请运行已安装 Open Design 应用提供的 MCP 安装程序。只能使用已验证的 Open Design od 二进制文件，不要使用与之无关的 macOS /usr/bin/od。如果 CLI 不在 PATH 中，请使用 Open Design Settings → MCP server，或使用其已签名应用包提供的 --headless --mcp-install codex 操作。绝不要猜测 localhost 端口，也不要运行 codex mcp login；Vela 登录应在 Open Design 中完成。',
+      },
+      {
+        title: '验证、报告并开始新任务',
+        body:
+          '验证插件 id 为 open-design@open-design，并存在名为 open-design 的已启用 stdio MCP。它的 command 必须是 Open Design 的绝对启动路径，且不得嵌入 bearer token、API key 或 Vela 凭据。报告已安装的内容，以及尚未满足的 Open Design 或 Vela 登录前置条件。新建 Codex 任务以加载已安装的插件快照，然后调用 @open-design。',
+      },
+    ],
+  },
   demo: {
     title: '安装一次，随时从 Codex/ChatGPT 开始创作。',
     lead:
@@ -29,7 +66,7 @@ const zh: OpenDesignPluginCopy = {
     installPhase: '安装',
     installTitle: '让 Codex 帮你完成安装',
     installBody:
-      '将这条指令粘贴到 Codex 任务中。Codex 会读取仓库里的安装流程，完成插件与本地 MCP 配置，无需依赖公开的插件市场页面。',
+      '将这条指令粘贴到 Codex 任务中。Codex 会添加官方指定的 Git marketplace 源，仅在插件尚未安装时进行安装，并完成本地 MCP 配置，无需插件已在公开目录中上架。',
     installNote: '只需在 Codex 中粘贴一次，具体安装步骤会自动完成。',
     steps: [
       {

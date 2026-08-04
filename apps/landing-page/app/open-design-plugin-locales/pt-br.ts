@@ -16,6 +16,43 @@ const copy: OpenDesignPluginCopy = {
     copy: 'Copiar',
     github: 'Ver código-fonte no GitHub ↗',
   },
+  agentInstall: {
+    howToName: 'Instalar o plugin Open Design no Codex',
+    howToDescription:
+      'Etapas que o agente pode executar para instalar o plugin Open Design no Codex e registrar o MCP local.',
+    eyebrow: 'Protocolo de instalação para agentes',
+    title: 'Instale o plugin do Codex por completo.',
+    intro:
+      'Se o usuário pediu que você instale o Open Design, execute este protocolo na ordem indicada. O pedido autoriza alterações somente nas configurações de plugin e MCP do Codex do usuário. Preserve marketplaces, plugins, servidores MCP e estados de autenticação não relacionados.',
+    downloadLabel: 'Página oficial de download do Open Design ↗',
+    steps: [
+      {
+        title: 'Verifique previamente o ambiente compatível',
+        body:
+          'Exija o Codex CLI 0.144.6 ou mais recente, o Open Design 0.17.0 ou mais recente e acesso ao repositório canônico do marketplace. Não baixe silenciosamente um instalador nem execute um script de instalação não verificado. Se o Open Design não estiver instalado ou for antigo demais, pare e encaminhe o usuário à página oficial de download.',
+      },
+      {
+        title: 'Inspecione antes de alterar a configuração',
+        body:
+          'A ausência do MCP open-design é esperada na primeira instalação. Se o nome open-design do marketplace apontar para outra origem, pare e informe o conflito. Se a versão atual do plugin já estiver instalada, preserve-a.',
+      },
+      {
+        title: 'Instale somente os componentes ausentes',
+        body:
+          'Execute o comando do marketplace somente se o marketplace canônico estiver ausente. Execute o comando do plugin somente se open-design@open-design não estiver instalado; preserve a instalação existente. Um resultado alreadyAdded: true indica sucesso. Não edite manualmente a configuração do Codex nem copie arquivos do plugin para o diretório inicial do Codex.',
+      },
+      {
+        title: 'Garanta o MCP local do Open Design',
+        body:
+          'Preserve um MCP open-design existente e habilitado. Caso contrário, execute o instalador do MCP fornecido pelo aplicativo Open Design instalado. Use somente um binário od verificado do Open Design, não o /usr/bin/od não relacionado do macOS. Se a CLI não estiver no PATH, use Open Design Settings → MCP server ou a operação assinada incluída no pacote --headless --mcp-install codex. Nunca tente adivinhar uma porta localhost nem execute codex mcp login; o login da Vela pertence ao Open Design.',
+      },
+      {
+        title: 'Verifique, informe e inicie uma nova tarefa',
+        body:
+          'Verifique o id de plugin open-design@open-design e um MCP stdio habilitado chamado open-design. Seu comando deve ser um caminho absoluto de inicialização do Open Design e não deve incorporar um bearer token, uma API key nem uma credencial da Vela. Informe o que foi instalado e qualquer pré-requisito restante do Open Design ou de login da Vela. Inicie uma nova tarefa do Codex para que ela carregue o snapshot do plugin instalado e, depois, invoque @open-design.',
+      },
+    ],
+  },
   demo: {
     title: 'Instale uma vez. Crie no Codex/ChatGPT.',
     lead:
@@ -29,7 +66,7 @@ const copy: OpenDesignPluginCopy = {
     installPhase: 'Instalar',
     installTitle: 'Peça ao Codex para instalar',
     installBody:
-      'Cole esta instrução em uma tarefa do Codex. O Codex lê o fluxo de instalação do repositório e conclui a configuração do plugin e do MCP local sem depender de uma publicação em marketplace.',
+      'Cole esta instrução em uma tarefa do Codex. O Codex adiciona a origem Git canônica do marketplace, instala o plugin somente se ele ainda não estiver presente e conclui a configuração do MCP local sem exigir uma listagem em catálogo público.',
     installNote:
       'Cole no Codex uma única vez — os detalhes da instalação ficam por conta dele.',
     steps: [

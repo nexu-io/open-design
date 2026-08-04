@@ -16,6 +16,43 @@ const copy: OpenDesignPluginCopy = {
     copy: 'Copier',
     github: 'Voir le code source sur GitHub ↗',
   },
+  agentInstall: {
+    howToName: 'Installer le plugin Open Design dans Codex',
+    howToDescription:
+      'Étapes exécutables par un agent pour installer le plugin Open Design pour Codex et enregistrer son MCP local.',
+    eyebrow: 'Protocole d’installation lisible par les agents',
+    title: 'Effectuez l’installation complète du plugin Codex.',
+    intro:
+      'Si l’utilisateur vous a demandé d’installer Open Design, exécutez ce protocole dans l’ordre. Cette demande autorise uniquement les modifications de la configuration des plugins Codex et du MCP de l’utilisateur. Préservez les autres marketplaces, plugins, serveurs MCP et l’état d’authentification.',
+    downloadLabel: 'Page officielle de téléchargement de Open Design ↗',
+    steps: [
+      {
+        title: 'Vérifier au préalable l’environnement pris en charge',
+        body:
+          'Exigez Codex CLI 0.144.6 ou une version ultérieure, Open Design 0.17.0 ou une version ultérieure et un accès au dépôt canonique de la marketplace. Ne téléchargez pas silencieusement un programme d’installation et n’exécutez pas de script d’installation non vérifié. Si Open Design est absent ou trop ancien, arrêtez-vous et dirigez l’utilisateur vers la page officielle de téléchargement.',
+      },
+      {
+        title: 'Inspecter avant de modifier la configuration',
+        body:
+          'L’absence du MCP open-design est normale lors d’une première installation. Si le nom de marketplace open-design pointe vers une autre source, arrêtez-vous et signalez le conflit. Si la version actuelle du plugin est déjà installée, conservez-la.',
+      },
+      {
+        title: 'Installer uniquement les composants manquants',
+        body:
+          'Exécutez la commande de la marketplace uniquement si la marketplace canonique est absente. Exécutez la commande du plugin uniquement si open-design@open-design n’est pas installé ; conservez l’installation existante. Un résultat alreadyAdded: true indique une réussite. Ne modifiez pas manuellement la configuration de Codex et ne copiez pas les fichiers du plugin dans le répertoire d’accueil de Codex.',
+      },
+      {
+        title: 'Garantir la disponibilité du MCP Open Design local',
+        body:
+          'Conservez tout MCP open-design existant et activé. Sinon, exécutez le programme d’installation du MCP fourni par l’application Open Design installée. Utilisez uniquement un binaire od vérifié de Open Design, et non le programme macOS sans rapport /usr/bin/od. Si la CLI n’est pas sur le PATH, utilisez Open Design Settings → MCP server ou son opération signée intégrée --headless --mcp-install codex. Ne devinez jamais un port localhost et n’exécutez jamais codex mcp login ; la connexion à Vela s’effectue dans Open Design.',
+      },
+      {
+        title: 'Vérifier, rendre compte et démarrer une nouvelle tâche',
+        body:
+          'Vérifiez l’identifiant de plugin open-design@open-design et un MCP stdio activé nommé open-design. Sa commande doit être un chemin de lancement absolu de Open Design et ne doit contenir aucun jeton bearer, aucune clé API ni aucun identifiant Vela. Indiquez ce qui a été installé ainsi que tout prérequis restant lié à Open Design ou à la connexion à Vela. Démarrez une nouvelle tâche Codex afin qu’elle charge l’instantané du plugin installé, puis invoquez @open-design.',
+      },
+    ],
+  },
   demo: {
     title: 'Installez-le une fois. Créez depuis Codex/ChatGPT.',
     lead:
@@ -29,7 +66,7 @@ const copy: OpenDesignPluginCopy = {
     installPhase: 'Installation',
     installTitle: 'Demandez à Codex de l’installer',
     installBody:
-      'Collez cette instruction dans une tâche Codex. Codex lit le parcours d’installation du dépôt, puis configure le plugin et le MCP local sans dépendre d’une publication sur une marketplace publique.',
+      'Collez cette instruction dans une tâche Codex. Codex ajoute la source Git canonique de la marketplace, installe le plugin uniquement s’il est absent et finalise la configuration du MCP local sans nécessiter de référencement dans un catalogue public.',
     installNote:
       'Collez-la une seule fois dans Codex : les détails de l’installation sont pris en charge pour vous.',
     steps: [

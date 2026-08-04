@@ -17,6 +17,43 @@ const ja: OpenDesignPluginCopy = {
     copy: 'コピー',
     github: 'GitHub でソースを見る ↗',
   },
+  agentInstall: {
+    howToName: 'Codex に Open Design プラグインをインストール',
+    howToDescription:
+      'Open Design の Codex プラグインをインストールし、ローカル MCP を登録するためにエージェントが実行できる手順です。',
+    eyebrow: 'エージェントが読み取れるインストールプロトコル',
+    title: 'Codex プラグインを完全にインストールする。',
+    intro:
+      'ユーザーから Open Design のインストールを依頼された場合は、このプロトコルを順番に実行してください。この依頼で許可されているのは、ユーザーの Codex プラグインと MCP 設定の変更に限られます。関係のないマーケットプレイス、プラグイン、MCP サーバー、認証状態はそのまま保持してください。',
+    downloadLabel: 'Open Design 公式ダウンロードページ ↗',
+    steps: [
+      {
+        title: '対応環境を事前確認する',
+        body:
+          'Codex CLI 0.144.6 以降、Open Design 0.17.0 以降、および正規のマーケットプレイスリポジトリへのアクセスが必要です。インストーラーを無断でダウンロードしたり、検証されていないインストールスクリプトを実行したりしないでください。Open Design がインストールされていないか、バージョンが古すぎる場合は停止し、ユーザーを公式ダウンロードページへ案内してください。',
+      },
+      {
+        title: '設定を変更する前に確認する',
+        body:
+          '初回インストール時に open-design MCP が存在しないことは想定内です。open-design というマーケットプレイス名が別のソースを指している場合は停止し、名前の衝突を報告してください。現在のプラグインバージョンがすでにインストールされている場合は、そのまま保持してください。',
+      },
+      {
+        title: '不足しているコンポーネントだけをインストールする',
+        body:
+          '正規のマーケットプレイスが存在しない場合にのみ、マーケットプレイスコマンドを実行してください。open-design@open-design がインストールされていない場合にのみプラグインコマンドを実行し、既存のインストールは保持してください。alreadyAdded: true という結果は成功です。Codex の設定を手作業で編集したり、Codex のホームディレクトリへプラグインファイルをコピーしたりしないでください。',
+      },
+      {
+        title: 'ローカルの Open Design MCP を確実に用意する',
+        body:
+          'すでに有効な open-design MCP がある場合は、そのまま保持してください。それ以外の場合は、インストール済みの Open Design アプリケーションに付属する MCP インストーラーを実行してください。無関係な macOS の /usr/bin/od ではなく、検証済みの Open Design od バイナリだけを使用してください。CLI が PATH にない場合は、Open Design Settings → MCP server、または署名済みパッケージに含まれる --headless --mcp-install codex 操作を使用してください。localhost のポートを推測したり、codex mcp login を実行したりしないでください。Vela へのログインは Open Design で行います。',
+      },
+      {
+        title: '確認、報告を行い、新しいタスクを開始する',
+        body:
+          'プラグイン ID open-design@open-design と、open-design という名前の有効な stdio MCP を確認してください。そのコマンドは Open Design を起動する絶対パスでなければならず、Bearer トークン、API キー、Vela の認証情報を埋め込んではいけません。インストールした内容と、未完了の Open Design または Vela ログインの前提条件があれば報告してください。新しい Codex タスクを開始してインストール済みのプラグインスナップショットを読み込ませ、@open-design を呼び出してください。',
+      },
+    ],
+  },
   demo: {
     title: '一度インストールすれば、Codex/ChatGPT からそのまま制作。',
     lead:
@@ -30,7 +67,7 @@ const ja: OpenDesignPluginCopy = {
     installPhase: 'インストール',
     installTitle: 'Codex にインストールを頼む',
     installBody:
-      'この指示を Codex のタスクに貼り付けます。Codex がリポジトリのインストール手順を読み、公開マーケットプレイスに依存せず、プラグインとローカル MCP の設定を完了します。',
+      'この指示を Codex のタスクに貼り付けます。Codex が正規の Git マーケットプレイスソースを追加し、プラグインが未インストールの場合にのみインストールして、公開カタログへの掲載を必要とせずにローカル MCP の設定を完了します。',
     installNote: 'Codex に一度貼り付けるだけで、インストールの詳細は自動で処理されます。',
     steps: [
       {

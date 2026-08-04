@@ -11,6 +11,8 @@ const OLD_PAGE = new URL('../app/pages/open-design-pugin/index.astro', import.me
 const REDIRECTS = new URL('../public/_redirects', import.meta.url);
 const HEADER = new URL('../app/_components/header.tsx', import.meta.url);
 const FOOTER = new URL('../app/_components/site-footer.astro', import.meta.url);
+const COPY = new URL('../app/open-design-plugin-i18n.ts', import.meta.url);
+const LOCALE_DIR = new URL('../app/open-design-plugin-locales/', import.meta.url);
 
 describe('Codex plugin landing route', () => {
   it('publishes the canonical route and all localized variants', async () => {
@@ -45,6 +47,21 @@ describe('Codex plugin landing route', () => {
     assert.match(page, /od mcp install codex/);
     assert.match(page, /codex plugin list --json/);
     assert.match(page, /codex mcp get open-design --json/);
-    assert.match(page, /Start a new Codex task/);
+  });
+
+  it('localizes the full protocol and keeps installation conditional', async () => {
+    const locales = ['zh', 'ja', 'ko', 'de', 'fr', 'ru', 'es', 'pt-br', 'it', 'tr'] as const;
+    const english = await readFile(COPY, 'utf8');
+
+    assert.match(english, /canonical Git marketplace source/);
+    assert.match(english, /Run the marketplace command only if/);
+    assert.match(english, /preserve the existing installation/);
+
+    for (const locale of locales) {
+      const localized = await readFile(new URL(`${locale}.ts`, LOCALE_DIR), 'utf8');
+      assert.match(localized, /agentInstall:\s*\{/);
+      assert.doesNotMatch(localized, /Agent-readable installation protocol/);
+      assert.doesNotMatch(localized, /Run the marketplace command only if/);
+    }
   });
 });
