@@ -22,7 +22,7 @@ export function registerTerminalRoutes(app: Express, ctx: RegisterTerminalRoutes
   const { sendApiError, createSseResponse } = ctx.http;
   const { PROJECTS_DIR } = ctx.paths;
   const { getProject } = ctx.projectStore;
-  const { resolveProjectDir } = ctx.projectFiles;
+  const { ensureProject } = ctx.projectFiles;
 
   // Resolve the session and assert it belongs to the path project. Returns
   // null and sends a 404 when missing/foreign so callers can early-return.
@@ -52,8 +52,13 @@ export function registerTerminalRoutes(app: Express, ctx: RegisterTerminalRoutes
       return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
     }
     const body = req.body || {};
-    const cwd = resolveProjectDir(PROJECTS_DIR, project.id, project.metadata);
     try {
+      // A newly-created managed project has a database row before it has any
+      // files, so its workspace directory may not exist yet. Windows ConPTY
+      // rejects that cwd with ERROR_DIRECTORY (267). Materialize managed
+      // project roots here; imported projects keep using their existing
+      // metadata.baseDir through ensureProject's storage contract.
+      const cwd = await ensureProject(PROJECTS_DIR, project.id, project.metadata);
       const session = await terminals.create({
         projectId: project.id,
         cwd,

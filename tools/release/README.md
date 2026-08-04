@@ -39,3 +39,28 @@ This matrix is a quick check before changing or validating the stable lane.
 - The stable workflow should stay isomorphic with the other `release-*` lanes.
   Stable-specific policy belongs behind scripts, CLI options, and file
   contracts, not as leaked tool internals in workflow YAML.
+
+## Native server bootstrap feed
+
+Hosted daemon + static Web installs (`install.sh` / `install.ps1`) resolve:
+
+- `https://releases.open-design.ai/server/latest/VERSION`
+- `https://releases.open-design.ai/server/v<version>/SHA256SUMS`
+- `https://releases.open-design.ai/server/v<version>/<archive>`
+
+`tools-pack server build` emits per-target archives plus `SHA256SUMS`. Assemble
+a multi-platform feed with `tools-pack server prepare-feed`, then publish:
+
+```bash
+RELEASE_SERVER_FEED_DIR=.tmp/tools-pack/out/server/feed \
+RELEASE_VERSION=0.16.1 \
+RELEASE_PUBLIC_ORIGIN=https://releases.open-design.ai \
+RELEASE_OUTPUTS_PATH=.tmp/tools-pack/out/server/publish.json \
+RELEASE_PUBLISH_SIDE_EFFECTS=true \
+  pnpm exec tools-release publish-server
+```
+
+The standalone `.github/workflows/release-server.yml` workflow builds every
+native target, prepares that feed, and optionally publishes it. Set
+`RELEASE_PUBLISH_SIDE_EFFECTS=false` for a dry-run plan that does not write to
+storage.

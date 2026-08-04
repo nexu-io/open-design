@@ -43,6 +43,26 @@ export function resolveShell(requested?: string | null): string {
   return process.env.SHELL || '/bin/bash';
 }
 
+/**
+ * Terminate a PTY using the signal semantics supported by the host.
+ *
+ * node-pty's Windows implementation rejects every explicit signal. Worse, a
+ * kill requested before ConPTY's first data event is deferred, so that
+ * rejection is thrown later outside the caller's try/catch and can terminate
+ * the daemon. Omitting the signal is node-pty's supported Windows kill path.
+ */
+export function killTerminalPty(
+  pty: Pick<NodePty.IPty, 'kill'>,
+  signal = 'SIGTERM',
+  platform: NodeJS.Platform = process.platform,
+): void {
+  if (platform === 'win32') {
+    pty.kill();
+    return;
+  }
+  pty.kill(signal);
+}
+
 export interface CreateTerminalMeta {
   projectId?: string | null;
   cwd: string;
@@ -296,7 +316,7 @@ export function createTerminalService({
   const kill = (session: any, signal: string = 'SIGTERM') => {
     if (TERMINAL_SESSION_TERMINAL_STATUSES.has(session.status)) return false;
     try {
-      session.pty.kill(signal);
+      killTerminalPty(session.pty, signal);
       return true;
     } catch {
       // If the kill throws, force the terminal state so clients unblock.
@@ -310,7 +330,7 @@ export function createTerminalService({
       (session) => !TERMINAL_SESSION_TERMINAL_STATUSES.has(session.status),
     );
     for (const session of active) {
-      try { session.pty.kill('SIGTERM'); } catch { /* best-effort */ }
+      try { killTerminalPty(session.pty, 'SIGTERM'); } catch { /* best-effort */ }
       finish(session, null, 'SIGTERM');
     }
     // Give children a grace window to actually exit before the daemon goes.

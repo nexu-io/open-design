@@ -41,6 +41,11 @@ import {
   uninstallPackedLinuxApp,
   uninstallPackedLinuxHeadless,
 } from "./linux.js";
+import { buildServerPackage } from "./server/build.js";
+import { writeServerBuildResultJson } from "./server/build-result.js";
+import { resolveServerPackConfig } from "./server/config.js";
+import { prepareServerReleaseFeed } from "./server/feed.js";
+import { smokeServerPackage } from "./server/smoke.js";
 
 type CliOptions = ToolPackCliOptions;
 
@@ -258,6 +263,86 @@ addBuildOptions(addSharedOptions(cli.command("linux <action>", "Linux packaging 
         return;
       default:
         throw new Error(`unsupported linux action: ${action}`);
+    }
+  });
+
+cli
+  .command(
+    "server <action>",
+    "Native daemon + static Web package commands: build|smoke|prepare-feed",
+  )
+  .option("--app-version <version>", "release application version")
+  .option("--arch <arch>", "native target architecture: arm64|x64")
+  .option("--archive <path>", "override the server archive path")
+  .option(
+    "--archives-dir <path>",
+    "directory of open-design-server archives for prepare-feed",
+  )
+  .option("--dir <path>", "tools-pack output root directory")
+  .option(
+    "--feed-dir <path>",
+    "output root for the hosted server bootstrap feed layout",
+  )
+  .option("--json", "print JSON")
+  .option(
+    "--json-output <path>",
+    "write the final server build result to a pure JSON file",
+  )
+  .option("--platform <platform>", "native target platform: darwin|linux|win32")
+  .option("--release-id <id>", "immutable release identifier")
+  .option("--skip-workspace-build", "reuse existing daemon and static Web build outputs")
+  .option("--skip-latest", "prepare-feed without rewriting latest/VERSION")
+  .action(async (action: string, options: CliOptions) => {
+    switch (action) {
+      case "build": {
+        const config = resolveServerPackConfig(options);
+        const result = await buildServerPackage(config, {
+          skipWorkspaceBuild: options.skipWorkspaceBuild === true,
+        });
+        if (options.jsonOutput != null) {
+          await writeServerBuildResultJson(options.jsonOutput, result);
+        }
+        printJson(result);
+        return;
+      }
+      case "smoke": {
+        const config = resolveServerPackConfig(options);
+        printJson(await smokeServerPackage(config));
+        return;
+      }
+      case "prepare-feed": {
+        const appVersion = options.appVersion;
+        if (appVersion == null || appVersion.length === 0) {
+          throw new Error("server prepare-feed requires --app-version");
+        }
+        const feedDir = options.feedDir;
+        if (feedDir == null || feedDir.length === 0) {
+          throw new Error("server prepare-feed requires --feed-dir");
+        }
+        const archives: string[] = [];
+        if (options.archive != null && options.archive.length > 0) {
+          archives.push(options.archive);
+        }
+        if (options.archivesDir != null && options.archivesDir.length > 0) {
+          archives.push(options.archivesDir);
+        }
+        if (archives.length === 0) {
+          throw new Error(
+            "server prepare-feed requires --archive and/or --archives-dir",
+          );
+        }
+        printJson(
+          await prepareServerReleaseFeed({
+            appVersion,
+            archives,
+            feedRoot: feedDir,
+            updateLatest: options.skipLatest !== true,
+          }),
+        );
+        return;
+      }
+      default:
+        throw new Error(`unsupported server action: ${action}`);
     }
   });
 

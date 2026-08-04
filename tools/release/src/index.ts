@@ -45,6 +45,15 @@ cli
   });
 
 cli
+  .command(
+    "publish-server",
+    "Publish the native server bootstrap feed (latest/VERSION + v<version>/SHA256SUMS + archives)",
+  )
+  .action(async () => {
+    await import("./storage/publish-server.ts");
+  });
+
+cli
   .command("prepare-release-note", "Discover and validate release note sources")
   .action(async () => {
     await import("./release-note/prepare.ts");

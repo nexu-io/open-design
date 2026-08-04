@@ -31,6 +31,18 @@ const autofixWorkflowPath = join(workspaceRoot, ".github", "workflows", "autofix
 const reportWorkflowPath = join(workspaceRoot, ".github", "workflows", "report.atom.yml");
 const bakePluginPreviewsWorkflowPath = join(workspaceRoot, ".github", "workflows", "bake-plugin-previews.yml");
 const bakePluginPreviewsPrWorkflowPath = join(workspaceRoot, ".github", "workflows", "bake-plugin-previews-pr.yml");
+const daemonPackageSmokeWorkflowPath = join(
+  workspaceRoot,
+  ".github",
+  "workflows",
+  "daemon-package-smoke.yml",
+);
+const releaseServerWorkflowPath = join(
+  workspaceRoot,
+  ".github",
+  "workflows",
+  "release-server.yml",
+);
 const dockerImageWorkflowPath = join(workspaceRoot, ".github", "workflows", "docker-image.yml");
 const flakePath = join(workspaceRoot, "flake.nix");
 const backportAutomergeWorkflowPath = join(workspaceRoot, ".github", "workflows", "backport-automerge.yml");
@@ -315,8 +327,348 @@ describe("packaged smoke workflow", () => {
     expect(workflow).not.toContain("Smoke PR mac packaged runtime");
     expect(workflow).not.toContain("Smoke PR windows packaged runtime");
     expect(workflow).not.toContain("Smoke PR linux headless packaged runtime");
+    expect(workflow).not.toContain("daemon_package_smoke");
+    expect(workflow).not.toContain("Daemon package smoke");
+    expect(workflow).not.toContain("tools-pack server smoke");
     expect(workflow).not.toContain("OD_PACKAGED_E2E_");
     expect(workflow).not.toContain("actions/cache/save");
+  });
+
+  it("[P2] keeps native daemon package smoke standalone across all supported targets", async () => {
+    const workflow = await readFile(daemonPackageSmokeWorkflowPath, "utf8");
+    const trigger = sectionBetween(workflow, "on:", "\npermissions:");
+
+    expect(trigger).toContain("pull_request:");
+    expect(trigger).toContain("push:");
+    expect(trigger).toContain("branches: [main]");
+    expect(trigger).toContain("workflow_dispatch:");
+    expect(trigger).not.toContain("merge_group:");
+    expect(trigger).not.toContain("workflow_run:");
+    expect(trigger).not.toContain("workflow_call:");
+    for (const path of [
+      ".github/actions/setup-workspace/**",
+      ".github/workflows/daemon-package-smoke.yml",
+      "apps/daemon/**",
+      "apps/web/**",
+      "assets/community-pets/**",
+      "assets/frames/**",
+      "craft/**",
+      "data/plugin-previews/**",
+      "design-systems/**",
+      "design-templates/**",
+      "package.json",
+      "packages/**",
+      "plugins/**",
+      "pnpm-lock.yaml",
+      "pnpm-workspace.yaml",
+      "prompt-templates/**",
+      "scripts/postinstall.mjs",
+      "skills/**",
+      "tools/pack/**",
+    ]) {
+      expect(trigger).toContain(`- "${path}"`);
+    }
+
+    expect(workflow).toContain("permissions:\n  contents: read");
+    expect(workflow).not.toContain("packages: write");
+    expect(workflow).not.toContain("id-token: write");
+    expect(workflow).not.toContain("secrets.");
+    expect(workflow).toContain(
+      "group: daemon-package-smoke-${{ github.event.pull_request.number || github.ref }}",
+    );
+    expect(workflow).toContain("cancel-in-progress: true");
+    expect(workflow).toContain("runs-on: ${{ matrix.runner }}");
+    expect(workflow).toContain("timeout-minutes: 45");
+    expect(workflow).toContain("fail-fast: false");
+
+    const matrixTargets = [...workflow.matchAll(/^\s+- target: (\S+)$/gm)].map((match) => match[1]);
+    expect(matrixTargets).toEqual([
+      "mac_arm64",
+      "mac_x64",
+      "linux_arm64",
+      "linux_x64",
+      "win_x64",
+      "win_arm64",
+    ]);
+    for (const matrixEntry of [
+      ["mac_arm64", "macos-14", "darwin", "arm64"],
+      ["mac_x64", "macos-15-intel", "darwin", "x64"],
+      ["linux_arm64", "ubuntu-22.04-arm", "linux", "arm64"],
+      ["linux_x64", "ubuntu-22.04", "linux", "x64"],
+      ["win_x64", "windows-latest", "win32", "x64"],
+      ["win_arm64", "windows-11-arm", "win32", "arm64"],
+    ] as const) {
+      const [target, runner, platform, arch] = matrixEntry;
+      expect(workflow).toContain(
+        `- target: ${target}\n            runner: ${runner}\n            platform: ${platform}\n            arch: ${arch}`,
+      );
+    }
+
+    expect(workflow).toContain("uses: ./.github/actions/setup-workspace");
+    expect(workflow).toContain('node-version: "24"');
+    expect(workflow).toContain("if: ${{ runner.os != 'Windows' }}");
+    expect(workflow).toContain("shell: bash");
+    expect(workflow).toContain("if: ${{ runner.os == 'Windows' }}");
+    expect(workflow).toContain("shell: pwsh");
+    expect(workflow).toContain(
+      "pnpm.cmd --dir tools/pack exec vitest run `",
+    );
+    expect(workflow).toContain("tests/server-bootstrap-resources.test.ts");
+    expect(workflow).toContain("tests/server-install.test.ts");
+    expect(workflow).toContain("pnpm tools-pack server build");
+    expect(workflow).toContain("pnpm tools-pack server smoke");
+    expect(workflow).toContain("pnpm.cmd tools-pack server build");
+    expect(workflow).toContain("pnpm.cmd tools-pack server smoke");
+    expect(workflow).toContain('--app-version 0.0.0-smoke');
+    expect(workflow).toContain('--release-id "smoke-${GITHUB_RUN_ID}"');
+    expect(workflow).toContain('--release-id "smoke-$env:GITHUB_RUN_ID"');
+    expect(workflow).toContain("if: ${{ always() }}");
+    expect(workflow).toContain("daemon-package-smoke-${{ github.run_id }}-${{ matrix.target }}");
+  });
+
+  it("[P2] exempts the standalone daemon package workflow from core validation scopes", async () => {
+    const plan = await runScopesPrint(
+      "workflow_dispatch",
+      { inputs: { ci_mode: "hot" } },
+      [".github/workflows/daemon-package-smoke.yml"],
+    );
+
+    expect(plan).toMatchObject({
+      workspace_validation_required: false,
+      ui_critical_validation_required: false,
+      run_playwright_critical: false,
+      run_ui_p0: false,
+    });
+    expect(plan).not.toHaveProperty("run_daemon_package_smoke");
+    expect(plan).not.toHaveProperty("daemon_package_smoke_required");
+  });
+
+  it("[P2] publishes the hosted server bootstrap feed outside the main CI gate", async () => {
+    const workflow = await readFile(releaseServerWorkflowPath, "utf8");
+    const ciWorkflow = await readFile(ciWorkflowPath, "utf8");
+
+    expect(ciWorkflow).not.toContain("release-server");
+    expect(ciWorkflow).not.toContain("tools-pack server prepare-feed");
+    expect(ciWorkflow).not.toContain("tools-release publish-server");
+
+    expect(workflow).toContain("name: release-server");
+    expect(workflow).toContain("workflow_dispatch:");
+    expect(workflow).toContain("release_version:");
+    expect(workflow).toContain("publish:");
+    expect(workflow).toContain("pnpm tools-pack server build");
+    expect(workflow).toContain("pnpm.cmd tools-pack server build");
+    expect(workflow).toContain("pnpm tools-pack server prepare-feed");
+    expect(workflow).toContain("pnpm exec tools-release publish-server");
+    expect(workflow).toContain('test -f "$feed_dir/latest/VERSION"');
+    expect(workflow).toContain('test -f "$feed_dir/v${version}/SHA256SUMS"');
+    expect(workflow).toContain("secrets.CLOUDFLARE_R2_RELEASES_AK");
+    expect(workflow).not.toContain("merge_group:");
+    expect(workflow).not.toContain("workflow_call:");
+
+    const plan = await runScopesPrint(
+      "workflow_dispatch",
+      { inputs: { ci_mode: "hot" } },
+      [".github/workflows/release-server.yml"],
+    );
+    expect(plan).toMatchObject({
+      workspace_validation_required: false,
+      ui_critical_validation_required: false,
+      run_playwright_critical: false,
+      run_ui_p0: false,
+    });
+  });
+
+  it("[P1] treats the server release version as shell data", async () => {
+    const workflow = await readFile(releaseServerWorkflowPath, "utf8");
+    const posixBuildStep = sectionBetween(
+      workflow,
+      "      - name: Build native server package",
+      "      - name: Build native Windows server package",
+    );
+    const windowsBuildStep = sectionBetween(
+      workflow,
+      "      - name: Build native Windows server package",
+      "      - name: Upload server archive",
+    );
+    const prepareFeedStep = sectionBetween(
+      workflow,
+      "      - name: Prepare hosted bootstrap feed",
+      "      - name: Upload prepared server feed",
+    );
+
+    for (const step of [
+      posixBuildStep,
+      windowsBuildStep,
+      prepareFeedStep,
+    ]) {
+      expect(step).toContain(
+        "RELEASE_VERSION: ${{ inputs.release_version }}",
+      );
+      expect(step.slice(step.indexOf("        run: |"))).not.toContain(
+        "${{ inputs.release_version }}",
+      );
+    }
+
+    expect(
+      extractWorkflowRunScript(workflow, "Build native server package"),
+    ).toContain('version="$RELEASE_VERSION"');
+    expect(
+      extractWorkflowRunScript(workflow, "Build native Windows server package"),
+    ).toContain("$version = $env:RELEASE_VERSION");
+    expect(
+      extractWorkflowRunScript(workflow, "Prepare hosted bootstrap feed"),
+    ).toContain('version="$RELEASE_VERSION"');
+  });
+
+  it("[P1] writes server build results separately from inherited build logs", async () => {
+    const workflow = await readFile(releaseServerWorkflowPath, "utf8");
+    const posixBuildStep = sectionBetween(
+      workflow,
+      "      - name: Build native server package",
+      "      - name: Build native Windows server package",
+    );
+    const windowsBuildStep = sectionBetween(
+      workflow,
+      "      - name: Build native Windows server package",
+      "      - name: Upload server archive",
+    );
+
+    expect(posixBuildStep).toContain(
+      '--json-output "$RUNNER_TEMP/server-package-build.json"',
+    );
+    expect(posixBuildStep).not.toContain(
+      '--json | tee "$RUNNER_TEMP/server-package-build.json"',
+    );
+    expect(windowsBuildStep).toContain(
+      '--json-output "$env:RUNNER_TEMP/server-package-build.json"',
+    );
+    expect(windowsBuildStep).not.toContain(
+      "Tee-Object -FilePath",
+    );
+  });
+
+  it("[P1] pins published server feeds to the dispatched main SHA", async () => {
+    const workflow = await readFile(releaseServerWorkflowPath, "utf8");
+    const preflightJob = sectionBetween(
+      workflow,
+      "  preflight:",
+      "  build:",
+    );
+    const preflightRunStart = preflightJob.indexOf("        run: |\n");
+    expect(preflightRunStart).toBeGreaterThanOrEqual(0);
+    const preflight = preflightJob
+      .slice(preflightRunStart + "        run: |\n".length)
+      .split("\n")
+      .map((line) => line.replace(/^          /, ""))
+      .join("\n")
+      .trimEnd();
+
+    expect(preflight).toContain('if [ "$INPUT_PUBLISH" = "true" ]; then');
+    expect(preflight).toContain(
+      'if [ "$EVENT_NAME" != "workflow_dispatch" ]; then',
+    );
+    expect(preflight).toContain(
+      'if [ "$REPOSITORY" != "nexu-io/open-design" ]; then',
+    );
+    expect(preflight).toContain(
+      'if [ "$DISPATCH_REF" != "refs/heads/main" ]; then',
+    );
+    expect(preflight).toContain(
+      'if [ "$REF_PROTECTED" != "true" ]; then',
+    );
+    expect(preflight).toContain('if [ -n "$REF_OVERRIDE" ]; then');
+
+    const runPreflight = (env: Record<string, string>) =>
+      execFileAsync("bash", ["-c", preflight], {
+        cwd: workspaceRoot,
+        env: {
+          ...process.env,
+          DISPATCH_REF: "refs/heads/main",
+          EVENT_NAME: "workflow_dispatch",
+          INPUT_PUBLISH: "false",
+          REF_OVERRIDE: "",
+          REF_PROTECTED: "true",
+          REPOSITORY: "nexu-io/open-design",
+          ...env,
+        },
+      });
+    await expect(
+      runPreflight({
+        INPUT_PUBLISH: "false",
+        REF_OVERRIDE: "refs/heads/feature/server-dry-run",
+      }),
+    ).resolves.toBeDefined();
+    await expect(
+      runPreflight({ INPUT_PUBLISH: "true" }),
+    ).resolves.toBeDefined();
+    await expect(
+      runPreflight({
+        DISPATCH_REF: "refs/heads/feature/untrusted",
+        INPUT_PUBLISH: "true",
+      }),
+    ).rejects.toThrow();
+    await expect(
+      runPreflight({
+        INPUT_PUBLISH: "true",
+        REPOSITORY: "attacker/open-design",
+      }),
+    ).rejects.toThrow();
+    await expect(
+      runPreflight({
+        INPUT_PUBLISH: "true",
+        REF_PROTECTED: "false",
+      }),
+    ).rejects.toThrow();
+    await expect(
+      runPreflight({
+        INPUT_PUBLISH: "true",
+        REF_OVERRIDE: "refs/heads/feature/untrusted",
+      }),
+    ).rejects.toThrow();
+
+    const buildJob = sectionBetween(workflow, "  build:", "  publish:");
+    const publishJob = workflow.slice(workflow.indexOf("  publish:"));
+    const trustedCheckout =
+      "ref: ${{ inputs.publish && github.sha || inputs.ref || github.sha }}";
+    const trustedJobGate =
+      "if: ${{ !inputs.publish || (github.repository == 'nexu-io/open-design' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.ref_protected && inputs.ref == '') }}";
+    expect(buildJob).toContain("needs: preflight");
+    expect(publishJob).toContain("needs: [preflight, build]");
+    expect(workflow.split(trustedJobGate)).toHaveLength(3);
+    expect(workflow.split(trustedCheckout)).toHaveLength(3);
+    expect(workflow).not.toContain(
+      "ref: ${{ inputs.ref || github.ref }}",
+    );
+
+    for (const job of [buildJob, publishJob]) {
+      const verifyIndex = job.indexOf(
+        "      - name: Verify trusted publish checkout",
+      );
+      const setupIndex = job.indexOf("      - name: Setup workspace");
+      expect(verifyIndex).toBeGreaterThanOrEqual(0);
+      expect(setupIndex).toBeGreaterThan(verifyIndex);
+      const trustedCheckoutStep = job.slice(verifyIndex, setupIndex);
+      expect(trustedCheckoutStep).toContain("if: ${{ inputs.publish }}");
+      expect(trustedCheckoutStep).toContain(
+        'checkout_sha="$(git rev-parse HEAD)"',
+      );
+      expect(trustedCheckoutStep).toContain(
+        'if [ "$checkout_sha" != "$GITHUB_SHA" ]; then',
+      );
+      expect(trustedCheckoutStep).not.toContain("git ls-remote");
+    }
+
+    const secretPublishStep = sectionBetween(
+      workflow,
+      "      - name: Publish server feed",
+      "      - name: Plan server feed publish (dry-run)",
+    );
+    expect(secretPublishStep).toContain(
+      "if: ${{ inputs.publish && github.repository == 'nexu-io/open-design' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.ref_protected && inputs.ref == '' }}",
+    );
+    expect(secretPublishStep).toContain(
+      "RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}",
+    );
   });
 
   it("[P2] runs Windows launcher payload archive validation when tools-pack is touched", async () => {
@@ -1069,16 +1421,19 @@ process.stdin.on("end", () => {
     });
   }, T.medium);
 
-  it("[P2] keeps packaging (nix/docker) off the core Validate workspace gate", async () => {
+  it("[P2] keeps packaging (nix/docker/daemon package) off the core Validate workspace gate", async () => {
     const workflow = await readFile(ciWorkflowPath, "utf8");
     const validate = sectionBetween(workflow, "  validate:", "  runtime_summary:");
 
     expect(workflow).not.toContain("nix_validation:");
     expect(workflow).not.toContain("docker_pr:");
+    expect(workflow).not.toContain("daemon_package_smoke:");
     expect(validate).not.toContain("nix_validation");
     expect(validate).not.toContain("docker_pr");
+    expect(validate).not.toContain("daemon_package_smoke");
     expect(validate).not.toContain("run_nix_validation");
     expect(validate).not.toContain("run_docker_build");
+    expect(validate).not.toContain("run_daemon_package_smoke");
     expect(validate).toContain("Check workspace validation jobs");
 
     const baseOutputs = {

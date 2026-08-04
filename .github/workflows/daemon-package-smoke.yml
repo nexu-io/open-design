@@ -1,0 +1,187 @@
+name: Daemon package smoke
+
+# Standalone native-daemon packaging check. This validates the distributable
+# server archive on each host platform and is intentionally outside ci.yml's
+# core Validate workspace merge gate.
+
+on:
+  pull_request:
+    paths:
+      - ".github/actions/setup-workspace/**"
+      - ".github/workflows/daemon-package-smoke.yml"
+      - "apps/daemon/**"
+      - "apps/web/**"
+      - "assets/community-pets/**"
+      - "assets/frames/**"
+      - "craft/**"
+      - "data/plugin-previews/**"
+      - "design-systems/**"
+      - "design-templates/**"
+      - "package.json"
+      - "packages/**"
+      - "plugins/**"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "prompt-templates/**"
+      - "scripts/postinstall.mjs"
+      - "skills/**"
+      - "tools/pack/**"
+  push:
+    branches: [main]
+    paths:
+      - ".github/actions/setup-workspace/**"
+      - ".github/workflows/daemon-package-smoke.yml"
+      - "apps/daemon/**"
+      - "apps/web/**"
+      - "assets/community-pets/**"
+      - "assets/frames/**"
+      - "craft/**"
+      - "data/plugin-previews/**"
+      - "design-systems/**"
+      - "design-templates/**"
+      - "package.json"
+      - "packages/**"
+      - "plugins/**"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "prompt-templates/**"
+      - "scripts/postinstall.mjs"
+      - "skills/**"
+      - "tools/pack/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: daemon-package-smoke-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: Daemon package smoke (${{ matrix.target }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: mac_arm64
+            runner: macos-14
+            platform: darwin
+            arch: arm64
+          - target: mac_x64
+            runner: macos-15-intel
+            platform: darwin
+            arch: x64
+          - target: linux_arm64
+            runner: ubuntu-22.04-arm
+            platform: linux
+            arch: arm64
+          - target: linux_x64
+            runner: ubuntu-22.04
+            platform: linux
+            arch: x64
+          - target: win_x64
+            runner: windows-latest
+            platform: win32
+            arch: x64
+          - target: win_arm64
+            runner: windows-11-arm
+            platform: win32
+            arch: arm64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Setup workspace
+        uses: ./.github/actions/setup-workspace
+        with:
+          node-version: "24"
+
+      - name: Test server installer contracts
+        if: ${{ runner.os != 'Windows' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm --dir tools/pack exec vitest run \
+            tests/server-bootstrap-resources.test.ts \
+            tests/server-install.test.ts
+
+      - name: Test Windows server installer contracts
+        if: ${{ runner.os == 'Windows' }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          pnpm.cmd --dir tools/pack exec vitest run `
+            tests/server-bootstrap-resources.test.ts `
+            tests/server-install.test.ts
+          if ($LASTEXITCODE -ne 0) {
+            throw "Windows server installer contract tests failed with exit code $LASTEXITCODE"
+          }
+
+      - name: Build native daemon package
+        if: ${{ runner.os != 'Windows' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm tools-pack server build \
+            --platform "${{ matrix.platform }}" \
+            --arch "${{ matrix.arch }}" \
+            --app-version 0.0.0-smoke \
+            --release-id "smoke-${GITHUB_RUN_ID}" \
+            --json | tee "$RUNNER_TEMP/daemon-package-build.json"
+
+      - name: Smoke native daemon package
+        if: ${{ runner.os != 'Windows' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm tools-pack server smoke \
+            --platform "${{ matrix.platform }}" \
+            --arch "${{ matrix.arch }}" \
+            --app-version 0.0.0-smoke \
+            --release-id "smoke-${GITHUB_RUN_ID}" \
+            --json | tee "$RUNNER_TEMP/daemon-package-smoke.json"
+
+      - name: Build native Windows daemon package
+        if: ${{ runner.os == 'Windows' }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          pnpm.cmd tools-pack server build `
+            --platform "${{ matrix.platform }}" `
+            --arch "${{ matrix.arch }}" `
+            --app-version 0.0.0-smoke `
+            --release-id "smoke-$env:GITHUB_RUN_ID" `
+            --json | Tee-Object -FilePath "$env:RUNNER_TEMP/daemon-package-build.json"
+          if ($LASTEXITCODE -ne 0) {
+            throw "tools-pack server build failed with exit code $LASTEXITCODE"
+          }
+
+      - name: Smoke native Windows daemon package
+        if: ${{ runner.os == 'Windows' }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          pnpm.cmd tools-pack server smoke `
+            --platform "${{ matrix.platform }}" `
+            --arch "${{ matrix.arch }}" `
+            --app-version 0.0.0-smoke `
+            --release-id "smoke-$env:GITHUB_RUN_ID" `
+            --json | Tee-Object -FilePath "$env:RUNNER_TEMP/daemon-package-smoke.json"
+          if ($LASTEXITCODE -ne 0) {
+            throw "tools-pack server smoke failed with exit code $LASTEXITCODE"
+          }
+
+      - name: Upload daemon package smoke diagnostics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: daemon-package-smoke-${{ github.run_id }}-${{ matrix.target }}
+          path: |
+            ${{ runner.temp }}/daemon-package-build.json
+            ${{ runner.temp }}/daemon-package-smoke.json
+          if-no-files-found: warn
+          retention-days: 7

@@ -51,8 +51,13 @@ export function writeText(path: string, value: string): void {
 }
 
 export function contentType(name: string): string {
+  const baseName = name.split(/[\\/]/).pop() ?? name;
+  if (baseName === "SHA256SUMS" || baseName === "VERSION") {
+    return "text/plain; charset=utf-8";
+  }
   if (name.endsWith(".dmg")) return "application/x-apple-diskimage";
   if (name.endsWith(".zip")) return "application/zip";
+  if (name.endsWith(".tar.gz") || name.endsWith(".tgz")) return "application/gzip";
   if (name.endsWith(".exe")) return "application/vnd.microsoft.portable-executable";
   if (name.endsWith(".AppImage")) return "application/octet-stream";
   if (name.endsWith(".sha256")) return "text/plain; charset=utf-8";

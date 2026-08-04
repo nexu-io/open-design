@@ -129,6 +129,8 @@ describe("startPackedMacApp", () => {
     }
   });
 
+  // The failure path collects codesign, xattr, and macOS system-policy
+  // diagnostics; allow that real host I/O to finish under parallel suite load.
   it("rejects a non-zero launcher exit before desktop handoff", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-mac-lifecycle-"));
     try {
@@ -153,7 +155,7 @@ describe("startPackedMacApp", () => {
     } finally {
       await rm(root, { force: true, recursive: true });
     }
-  });
+  }, 15_000);
 
   it("writes a launch override when the bundled config is missing", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-mac-lifecycle-"));

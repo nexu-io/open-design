@@ -1,9 +1,14 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { once } from 'node:events';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import express from 'express';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { resolveStaticSpaFallbackPath } from '../../src/server.js';
+import {
+  registerStaticSpaFallback,
+  resolveStaticSpaFallbackPath,
+} from '../../src/static-spa.js';
 
 describe('static SPA fallback', () => {
   let tempDir: string;
@@ -51,6 +56,35 @@ describe('static SPA fallback', () => {
       expect(resolveStaticSpaFallbackPath(request('/automations'), emptyDir)).toBeNull();
     } finally {
       rmSync(emptyDir, { force: true, recursive: true });
+    }
+  });
+
+  it('serves the SPA shell when the installation has a hidden parent directory', async () => {
+    const hiddenStaticDir = path.join(tempDir, '.open-design', 'apps', 'web', 'out');
+    mkdirSync(hiddenStaticDir, { recursive: true });
+    writeFileSync(path.join(hiddenStaticDir, 'index.html'), '<!doctype html><title>Open Design</title>');
+    const app = express();
+    registerStaticSpaFallback(app, hiddenStaticDir);
+    const server = app.listen(0, '127.0.0.1');
+    await once(server, 'listening');
+    const address = server.address();
+    if (address == null || typeof address === 'string') {
+      throw new Error('failed to bind SPA fallback test server');
+    }
+
+    try {
+      const response = await fetch(`http://127.0.0.1:${address.port}/projects/example`, {
+        headers: { accept: 'text/html' },
+      });
+      expect(response.status).toBe(200);
+      await expect(response.text()).resolves.toContain('<title>Open Design</title>');
+    } finally {
+      await new Promise<void>((resolveClose, rejectClose) => {
+        server.close((error) => {
+          if (error != null) rejectClose(error);
+          else resolveClose();
+        });
+      });
     }
   });
 });

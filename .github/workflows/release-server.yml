@@ -1,0 +1,309 @@
+name: release-server
+
+# Build native daemon + static Web archives across host platforms, assemble the
+# hosted bootstrap feed (latest/VERSION + v<version>/SHA256SUMS + archives), and
+# optionally publish it to releases storage under server/.
+#
+# Intentionally outside ci.yml / Validate workspace, same pattern as
+# daemon-package-smoke, nix, and docker packaging lanes.
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: "Server package version (path-safe, no leading v)."
+        required: true
+        type: string
+      publish:
+        description: "Publish the assembled server feed to release storage."
+        required: true
+        type: boolean
+        default: false
+      release_public_origin:
+        description: "Optional public release origin override."
+        required: false
+        type: string
+        default: ""
+      ref:
+        description: "Optional git ref for a dry-run build. Must be empty when publishing."
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-server-${{ github.event.inputs.release_version || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    name: Validate server release request
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - name: Validate publish trust boundary
+        shell: bash
+        env:
+          DISPATCH_REF: ${{ github.ref }}
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_PUBLISH: ${{ inputs.publish }}
+          REF_OVERRIDE: ${{ inputs.ref }}
+          REF_PROTECTED: ${{ github.ref_protected }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if [ "$INPUT_PUBLISH" = "true" ]; then
+            if [ "$EVENT_NAME" != "workflow_dispatch" ]; then
+              echo "::error::server publishing requires a workflow_dispatch event"
+              exit 1
+            fi
+            if [ "$REPOSITORY" != "nexu-io/open-design" ]; then
+              echo "::error::server publishing is restricted to nexu-io/open-design"
+              exit 1
+            fi
+            if [ "$DISPATCH_REF" != "refs/heads/main" ]; then
+              echo "::error::server publishing must be dispatched from refs/heads/main"
+              exit 1
+            fi
+            if [ "$REF_PROTECTED" != "true" ]; then
+              echo "::error::server publishing requires a protected dispatch ref"
+              exit 1
+            fi
+            if [ -n "$REF_OVERRIDE" ]; then
+              echo "::error::server publishing does not allow a ref override"
+              exit 1
+            fi
+          fi
+
+  build:
+    name: Build server package (${{ matrix.target }})
+    needs: preflight
+    if: ${{ !inputs.publish || (github.repository == 'nexu-io/open-design' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.ref_protected && inputs.ref == '') }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: mac_arm64
+            runner: macos-14
+            platform: darwin
+            arch: arm64
+          - target: mac_x64
+            runner: macos-15-intel
+            platform: darwin
+            arch: x64
+          - target: linux_arm64
+            runner: ubuntu-22.04-arm
+            platform: linux
+            arch: arm64
+          - target: linux_x64
+            runner: ubuntu-22.04
+            platform: linux
+            arch: x64
+          - target: win_x64
+            runner: windows-latest
+            platform: win32
+            arch: x64
+          - target: win_arm64
+            runner: windows-11-arm
+            platform: win32
+            arch: arm64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ inputs.publish && github.sha || inputs.ref || github.sha }}
+
+      - name: Verify trusted publish checkout
+        if: ${{ inputs.publish }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          checkout_sha="$(git rev-parse HEAD)"
+          if [ "$checkout_sha" != "$GITHUB_SHA" ]; then
+            echo "::error::server package checkout resolved $checkout_sha but workflow dispatch SHA is $GITHUB_SHA"
+            exit 1
+          fi
+
+      - name: Setup workspace
+        uses: ./.github/actions/setup-workspace
+        with:
+          node-version: "24"
+
+      - name: Build native server package
+        if: ${{ runner.os != 'Windows' }}
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ inputs.release_version }}
+        run: |
+          set -euo pipefail
+          version="$RELEASE_VERSION"
+          case "$version" in
+            ''|*[!A-Za-z0-9._+-]*|*..*)
+              echo "release_version must be a non-empty path-safe value" >&2
+              exit 1
+              ;;
+          esac
+          pnpm tools-pack server build \
+            --platform "${{ matrix.platform }}" \
+            --arch "${{ matrix.arch }}" \
+            --app-version "$version" \
+            --release-id "${version}+${GITHUB_SHA::12}" \
+            --json \
+            --json-output "$RUNNER_TEMP/server-package-build.json"
+          archive_path=$(
+            node -e 'const fs=require("node:fs"); const j=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); process.stdout.write(j.archivePath);' \
+              "$RUNNER_TEMP/server-package-build.json"
+          )
+          mkdir -p "$RUNNER_TEMP/server-archives"
+          cp "$archive_path" "$archive_path.sha256" "$RUNNER_TEMP/server-archives/"
+
+      - name: Build native Windows server package
+        if: ${{ runner.os == 'Windows' }}
+        shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ inputs.release_version }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $version = $env:RELEASE_VERSION
+          if ($version -notmatch '^[A-Za-z0-9][A-Za-z0-9._+-]*$' -or $version.Contains("..")) {
+            throw "release_version must be a non-empty path-safe value"
+          }
+          $sha = $env:GITHUB_SHA.Substring(0, 12)
+          pnpm.cmd tools-pack server build `
+            --platform "${{ matrix.platform }}" `
+            --arch "${{ matrix.arch }}" `
+            --app-version $version `
+            --release-id "$version+$sha" `
+            --json `
+            --json-output "$env:RUNNER_TEMP/server-package-build.json"
+          if ($LASTEXITCODE -ne 0) {
+            throw "tools-pack server build failed with exit code $LASTEXITCODE"
+          }
+          $build = Get-Content -Raw "$env:RUNNER_TEMP/server-package-build.json" | ConvertFrom-Json
+          $archivesDir = Join-Path $env:RUNNER_TEMP "server-archives"
+          New-Item -ItemType Directory -Force -Path $archivesDir | Out-Null
+          Copy-Item -LiteralPath $build.archivePath -Destination $archivesDir
+          Copy-Item -LiteralPath ($build.archivePath + ".sha256") -Destination $archivesDir
+
+      - name: Upload server archive
+        uses: actions/upload-artifact@v7
+        with:
+          name: server-archive-${{ matrix.target }}
+          path: ${{ runner.temp }}/server-archives/*
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    name: Assemble and publish server feed
+    needs: [preflight, build]
+    if: ${{ !inputs.publish || (github.repository == 'nexu-io/open-design' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.ref_protected && inputs.ref == '') }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    env:
+      RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ inputs.publish && github.sha || inputs.ref || github.sha }}
+
+      - name: Verify trusted publish checkout
+        if: ${{ inputs.publish }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          checkout_sha="$(git rev-parse HEAD)"
+          if [ "$checkout_sha" != "$GITHUB_SHA" ]; then
+            echo "::error::server feed checkout resolved $checkout_sha but workflow dispatch SHA is $GITHUB_SHA"
+            exit 1
+          fi
+
+      - name: Setup workspace
+        uses: ./.github/actions/setup-workspace
+        with:
+          node-version: "24"
+
+      - name: Download server archives
+        uses: actions/download-artifact@v8
+        with:
+          pattern: server-archive-*
+          path: ${{ runner.temp }}/server-archives
+          merge-multiple: true
+
+      - name: Prepare hosted bootstrap feed
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ inputs.release_version }}
+        run: |
+          set -euo pipefail
+          version="$RELEASE_VERSION"
+          archives_dir="$RUNNER_TEMP/server-archives"
+          feed_dir="$RUNNER_TEMP/server-feed"
+          pnpm tools-pack server prepare-feed \
+            --app-version "$version" \
+            --archives-dir "$archives_dir" \
+            --feed-dir "$feed_dir" \
+            --json | tee "$RUNNER_TEMP/server-feed.json"
+          test -f "$feed_dir/latest/VERSION"
+          test -f "$feed_dir/v${version}/SHA256SUMS"
+          ls -la "$feed_dir/v${version}"
+
+      - name: Upload prepared server feed
+        uses: actions/upload-artifact@v7
+        with:
+          name: server-feed-${{ inputs.release_version }}
+          path: |
+            ${{ runner.temp }}/server-feed/**
+            ${{ runner.temp }}/server-feed.json
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Publish server feed
+        if: ${{ inputs.publish && github.repository == 'nexu-io/open-design' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.ref_protected && inputs.ref == '' }}
+        shell: bash
+        env:
+          RELEASE_SERVER_FEED_DIR: ${{ runner.temp }}/server-feed
+          RELEASE_VERSION: ${{ inputs.release_version }}
+          RELEASE_OUTPUTS_PATH: ${{ runner.temp }}/server-publish.json
+          RELEASE_PUBLISH_SIDE_EFFECTS: "true"
+          RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
+          RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
+          RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
+          RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
+          RELEASE_STORAGE_REGION: auto
+          RELEASE_BRANCH: ${{ github.ref_name }}
+          RELEASE_COMMIT: ${{ github.sha }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+          RELEASE_RUN_ATTEMPT: ${{ github.run_attempt }}
+          RELEASE_RUN_ID: ${{ github.run_id }}
+          RELEASE_WORKFLOW: ${{ github.workflow }}
+        run: |
+          set -euo pipefail
+          if [ -z "${RELEASE_PUBLIC_ORIGIN:-}" ]; then
+            echo "RELEASE_PUBLIC_ORIGIN is required to publish the server feed" >&2
+            exit 1
+          fi
+          pnpm exec tools-release publish-server
+          cat "$RELEASE_OUTPUTS_PATH"
+
+      - name: Plan server feed publish (dry-run)
+        if: ${{ !inputs.publish }}
+        shell: bash
+        env:
+          RELEASE_SERVER_FEED_DIR: ${{ runner.temp }}/server-feed
+          RELEASE_VERSION: ${{ inputs.release_version }}
+          RELEASE_OUTPUTS_PATH: ${{ runner.temp }}/server-publish.json
+          RELEASE_PUBLISH_SIDE_EFFECTS: "false"
+          RELEASE_DRY_RUN_MODE: plan
+        run: |
+          set -euo pipefail
+          if [ -z "${RELEASE_PUBLIC_ORIGIN:-}" ]; then
+            export RELEASE_PUBLIC_ORIGIN="https://releases.open-design.ai"
+          fi
+          pnpm exec tools-release publish-server
+          cat "$RELEASE_OUTPUTS_PATH"

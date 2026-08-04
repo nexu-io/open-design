@@ -216,8 +216,10 @@ const MEDIUM_EXEMPT_EXACT = [
   ".github/workflows/autofix.atom.yml",
   ".github/workflows/comment.atom.yml",
   ".github/workflows/report.atom.yml",
+  ".github/workflows/daemon-package-smoke.yml",
   ".github/workflows/docker-image.yml",
   ".github/workflows/nix.yml",
+  ".github/workflows/release-server.yml",
 ] as const;
 
 const EXEMPT_REGEXES = [/\.(?:md|mdx|txt)$/] as const;

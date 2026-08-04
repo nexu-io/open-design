@@ -2,7 +2,74 @@
 
 Local packaging control plane for Open Design.
 
-`tools-pack` is the cross-platform packaging and smoke-lifecycle control plane. The macOS commands include:
+`tools-pack` is the cross-platform packaging and smoke-lifecycle control plane.
+
+## Native daemon + static Web
+
+The `server` target produces a platform-native archive containing the esbuild
+daemon bundle, the static Web export, product resources, and only the required
+Node runtime dependencies. It does not include Electron.
+
+Builds must run on the target OS and architecture so native addons are
+materialized for the actual release host:
+
+```bash
+pnpm tools-pack server build \
+  --platform darwin \
+  --arch arm64 \
+  --app-version 0.16.1 \
+  --release-id 0.16.1+abc123
+
+pnpm tools-pack server smoke \
+  --platform darwin \
+  --arch arm64 \
+  --app-version 0.16.1 \
+  --release-id 0.16.1+abc123
+```
+
+`server smoke` installs from the final archive twice: once with a compatible
+system Node 24 and once with an installation-owned private Node 24. It verifies
+the health endpoint, static Web shell and assets, SPA fallback, SQLite,
+`node-pty`, and the product's `blake3-wasm` deploy-asset hash path. It also
+mutates a copy of the final archive and confirms checksum rejection leaves the
+active release unchanged.
+
+The hosted bootstrap entrypoints are
+`resources/server/install.sh` for macOS/Linux and
+`resources/server/install.ps1` for Windows. Both verify the application
+archive before extraction, use system Node only when version 24 and the target
+platform/architecture match, and otherwise download a pinned,
+checksum-verified private Node runtime.
+
+Hosted installs default to `https://releases.open-design.ai/server` and expect:
+
+- `latest/VERSION` — single-line current version (no leading `v`)
+- `v<version>/SHA256SUMS` — GNU-style `sha256  archive-name` lines for every
+  published platform archive
+- `v<version>/open-design-server-<version>-<platform>-<arch>.(tar.gz|zip)`
+
+`server build` writes both `<archive>.sha256` and a single-target `SHA256SUMS`
+next to the archive. Assemble a multi-platform feed before publish:
+
+```bash
+pnpm tools-pack server prepare-feed \
+  --app-version 0.16.1 \
+  --archives-dir /path/to/archives \
+  --feed-dir .tmp/tools-pack/out/server/feed
+```
+
+Publish that feed with `pnpm exec tools-release publish-server` (see
+`tools/release`) or run the standalone `release-server` workflow, which builds
+every native target, prepares the feed, and optionally uploads it under the
+`server/` storage prefix.
+
+The server workflow builds Linux native addons on Ubuntu 22.04 for a
+glibc-based x64/arm64 compatibility baseline. The generic Linux archives do
+not target Alpine or other musl environments.
+
+## macOS
+
+The macOS commands include:
 
 - `tools-pack mac build --to all`
 - `tools-pack mac build --to app|dmg|zip`

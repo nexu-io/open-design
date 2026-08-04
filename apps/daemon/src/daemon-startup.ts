@@ -115,6 +115,28 @@ export async function closeHttpServer(
   });
 }
 
+export async function stopDaemonRuntime(started: StartedServer): Promise<void> {
+  // Reject new connections immediately, but keep one explicit handle alive
+  // until both HTTP close and bounded run/terminal cleanup finish. Some
+  // shutdown grace timers are intentionally unref'ed during normal daemon
+  // operation; without this guard they can leave the CLI's top-level await
+  // pending after the listener closes, which Node reports as exit code 13.
+  const shutdownGuard = setInterval(() => undefined, 1_000);
+  try {
+    const shutdownPromise = Promise.resolve()
+      .then(() => started.shutdown?.())
+      .catch((error) => {
+        console.error('daemon shutdown cleanup failed', error);
+      });
+    const closePromise = closeHttpServer(started.server).catch((error) => {
+      console.error('daemon HTTP shutdown failed', error);
+    });
+    await Promise.all([shutdownPromise, closePromise]);
+  } finally {
+    clearInterval(shutdownGuard);
+  }
+}
+
 export async function startDaemonRuntime(options: DaemonRuntimeOptions = {}): Promise<StartedDaemonRuntime> {
   const { openBrowser: shouldOpenBrowser = false, logListening = false, ...serverOptions } = options;
   const { startServer } = await import('./server.js');
@@ -126,13 +148,7 @@ export async function startDaemonRuntime(options: DaemonRuntimeOptions = {}): Pr
     throw new Error('daemon startServer did not return a server handle');
   }
 
-  const stop = async () => {
-    const closePromise = closeHttpServer(started.server);
-    const shutdownPromise = started.shutdown?.().catch((error: unknown) => {
-      console.error('daemon shutdown cleanup failed', error);
-    }) ?? Promise.resolve();
-    await Promise.allSettled([shutdownPromise, closePromise]);
-  };
+  const stop = () => stopDaemonRuntime(started);
 
   if (logListening) {
     console.log(`[od] listening on ${started.url}`);

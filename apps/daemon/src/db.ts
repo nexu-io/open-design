@@ -1075,6 +1075,21 @@ export function listConversations(db: SqliteDb, projectId: string) {
     .all(projectId)).map(normalizeConversation);
 }
 
+export function getInitialProjectConversation(db: SqliteDb, projectId: string) {
+  // Project creation and the next conversation can share one millisecond.
+  // Preserve insertion order for that tie instead of sorting random UUIDs.
+  const row = db
+    .prepare(
+      `SELECT id
+         FROM conversations
+        WHERE project_id = ?
+        ORDER BY created_at ASC, rowid ASC
+        LIMIT 1`,
+    )
+    .get(projectId) as DbRow | undefined;
+  return row ? getConversation(db, row.id) : null;
+}
+
 export function getConversation(db: SqliteDb, id: string) {
   const r = db
     .prepare(

@@ -1,0 +1,13 @@
+{
+  "name": "open-design-server-runtime",
+  "version": "0.0.0",
+  "private": true,
+  "dependencies": {
+    "better-sqlite3": "12.10.0",
+    "blake3-wasm": "2.1.5",
+    "node-pty": "1.1.0"
+  },
+  "optionalDependencies": {
+    "fsevents": "2.3.3"
+  }
+}
