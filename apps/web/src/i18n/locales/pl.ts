@@ -1527,6 +1527,8 @@ export const pl: Dict = {
   'newproj.createLiveArtifact': 'Utwórz aktywny artefakt',
   'newproj.createFromTemplate': 'Utwórz z szablonu',
   'newproj.createDisabledTitle': 'Najpierw zapisz projekt jako szablon (menu Udostępnij wewnątrz projektu).',
+  'newproj.openFolder': 'Otwórz folder',
+  'newproj.openingFolder': 'Otwieranie…',
   'newproj.importClaudeZip': 'Importuj Claude Design ZIP',
   'newproj.importClaudeZipTitle': 'Importuj eksport .zip z Claude Design',
   'newproj.importingClaudeZip': 'Importowanie…',
