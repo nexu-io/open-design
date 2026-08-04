@@ -63,6 +63,25 @@ function homeOfferForRoute(
   };
 }
 
+/**
+ * Home upsell may only surface for a session that still holds an unconsumed
+ * first-artifact milestone. The first successful artifact run arms the
+ * milestone; a later successful artifact run in the same session consumes it
+ * so a deferred Home return does not look like the first-work moment.
+ */
+function noteSuccessfulArtifactRun(
+  sessionKey: string,
+  eligibleSessions: Set<string>,
+  pendingHomeMilestones: Set<string>,
+): void {
+  if (eligibleSessions.has(sessionKey)) {
+    pendingHomeMilestones.delete(sessionKey);
+    return;
+  }
+  eligibleSessions.add(sessionKey);
+  pendingHomeMilestones.add(sessionKey);
+}
+
 export function AmrArtifactUpgradeGate({
   plan,
   planResolved,
@@ -82,6 +101,7 @@ export function AmrArtifactUpgradeGate({
   const openRef = useRef(false);
   const pendingSendRef = useRef<PendingSendDecision | null>(null);
   const eligibleSessionsRef = useRef<Set<string>>(new Set());
+  const pendingHomeMilestoneSessionsRef = useRef<Set<string>>(new Set());
   const promptedSessionsRef = useRef<Set<string>>(new Set());
   const homeOfferedSessionsRef = useRef<Set<string>>(new Set());
   const seenRunIdsRef = useRef<Set<string>>(new Set());
@@ -113,7 +133,11 @@ export function AmrArtifactUpgradeGate({
         return;
       }
       seenRunIdsRef.current.add(detail.runId);
-      eligibleSessionsRef.current.add(sessionKey);
+      noteSuccessfulArtifactRun(
+        sessionKey,
+        eligibleSessionsRef.current,
+        pendingHomeMilestoneSessionsRef.current,
+      );
     };
     window.addEventListener(DAEMON_RUN_FINISHED_EVENT, handleRunFinished);
     return () => window.removeEventListener(DAEMON_RUN_FINISHED_EVENT, handleRunFinished);
@@ -186,7 +210,7 @@ export function AmrArtifactUpgradeGate({
       homeVisible
       && !previous.homeVisible
       && previous.offer
-      && eligibleSessionsRef.current.has(previous.offer.sessionKey)
+      && pendingHomeMilestoneSessionsRef.current.has(previous.offer.sessionKey)
       && !homeOfferedSessionsRef.current.has(previous.offer.sessionKey)
     ) {
       setPendingHomeOffer(previous.offer);
@@ -204,6 +228,7 @@ export function AmrArtifactUpgradeGate({
   useEffect(() => {
     if (!pendingHomeOffer || !planResolved) return;
     if (isFreeAmrPlan(plan) && !hasOpenModal()) {
+      pendingHomeMilestoneSessionsRef.current.delete(pendingHomeOffer.sessionKey);
       homeOfferedSessionsRef.current.add(pendingHomeOffer.sessionKey);
       promptedSessionsRef.current.add(pendingHomeOffer.sessionKey);
       onHomeOfferChange?.(pendingHomeOffer);

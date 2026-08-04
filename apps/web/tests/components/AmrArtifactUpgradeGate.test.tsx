@@ -173,6 +173,41 @@ describe('AmrArtifactUpgradeGate', () => {
     expect(onHomeOfferChange).toHaveBeenCalledTimes(2);
   });
 
+  it('skips the Home offer when later generations consumed the first-work milestone', async () => {
+    const onHomeOfferChange = vi.fn();
+    const view = render(
+      <AmrArtifactUpgradeGate
+        {...BASE_PROPS}
+        plan="free"
+        planResolved
+        onHomeOfferChange={onHomeOfferChange}
+      />,
+    );
+
+    act(() => {
+      publishFinishedRun({ runId: 'run-1' });
+      publishFinishedRun({ runId: 'run-2' });
+    });
+    view.rerender(
+      <AmrArtifactUpgradeGate
+        {...BASE_PROPS}
+        activeProjectId={null}
+        activeConversationId={null}
+        activeFileName={null}
+        homeVisible
+        plan="free"
+        planResolved
+        onHomeOfferChange={onHomeOfferChange}
+      />,
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(onHomeOfferChange).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('amr-artifact-upgrade-dialog')).toBeNull();
+  });
+
   it('fails open while the plan is unavailable, then prompts after Free resolves', async () => {
     const view = render(
       <AmrArtifactUpgradeGate {...BASE_PROPS} plan={null} planResolved={false} />,
