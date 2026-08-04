@@ -1384,7 +1384,13 @@
   top: 0;
   z-index: 4;
 }
-.ws-tabs-shell:has(.entry-settings-menu__popover) {
+/* The tab shell's own z-index:4 makes it a stacking context, so any popover
+   opened from the right-side action cluster is capped at 4 — the same layer
+   Excalidraw uses for its toolbar (`--zIndex-layerUI: 4`), which paints later
+   in DOM order and therefore wins. Lift the whole shell while a popover is
+   open so these menus clear the sketch canvas chrome. */
+.ws-tabs-shell:has(.entry-settings-menu__popover),
+.ws-tabs-shell:has(.handoff-menu) {
   z-index: 1900;
 }
 .ws-tabs-bar {
