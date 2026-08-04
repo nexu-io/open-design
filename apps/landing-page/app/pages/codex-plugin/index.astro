@@ -25,12 +25,116 @@ const DOWNLOAD = href('/download/');
 
 const INSTALL_INSTRUCTION =
   'Read https://open-design.ai/codex-plugin/ and install the Open Design plugin in Codex, including its local MCP. Verify the installation, then tell me to start a new task.';
-const PREFLIGHT_COMMANDS = `codex --version
-git ls-remote https://github.com/nexu-io/open-design-agent-plugins.git main`;
-const INSPECT_COMMANDS = `curl -fsSL ${RELEASE_MANIFEST}
-codex plugin marketplace list --json
+const PREFLIGHT_COMMANDS = `open_design_version_at_least() {
+  awk -v have="$1" -v need="$2" '
+  function is_numeric(value) { return value ~ /^[0-9]+$/ }
+  BEGIN {
+    sub(/^[^0-9]*/, "", have)
+    sub(/^[^0-9]*/, "", need)
+    if (have !~ /^[0-9]+\\.[0-9]+\\.[0-9]+($|[-+])/ || need !~ /^[0-9]+\\.[0-9]+\\.[0-9]+($|[-+])/) exit 2
+    sub(/\\+.*/, "", have)
+    sub(/\\+.*/, "", need)
+    have_dash = index(have, "-")
+    need_dash = index(need, "-")
+    if (have_dash) {
+      have_prerelease = substr(have, have_dash + 1)
+      have = substr(have, 1, have_dash - 1)
+    }
+    if (need_dash) {
+      need_prerelease = substr(need, need_dash + 1)
+      need = substr(need, 1, need_dash - 1)
+    }
+    split(have, have_parts, ".")
+    split(need, need_parts, ".")
+    for (part = 1; part <= 3; part++) {
+      if ((have_parts[part] + 0) > (need_parts[part] + 0)) exit 0
+      if ((have_parts[part] + 0) < (need_parts[part] + 0)) exit 1
+    }
+    if (!have_prerelease && !need_prerelease) exit 0
+    if (!have_prerelease) exit 0
+    if (!need_prerelease) exit 1
+    have_count = split(have_prerelease, have_pre_parts, ".")
+    need_count = split(need_prerelease, need_pre_parts, ".")
+    max_count = have_count > need_count ? have_count : need_count
+    for (part = 1; part <= max_count; part++) {
+      if (part > have_count) exit 1
+      if (part > need_count) exit 0
+      have_numeric = is_numeric(have_pre_parts[part])
+      need_numeric = is_numeric(need_pre_parts[part])
+      if (have_numeric && need_numeric) {
+        if ((have_pre_parts[part] + 0) > (need_pre_parts[part] + 0)) exit 0
+        if ((have_pre_parts[part] + 0) < (need_pre_parts[part] + 0)) exit 1
+      } else if (have_numeric) {
+        exit 1
+      } else if (need_numeric) {
+        exit 0
+      } else {
+        if (have_pre_parts[part] > need_pre_parts[part]) exit 0
+        if (have_pre_parts[part] < need_pre_parts[part]) exit 1
+      }
+    }
+    exit 0
+  }'
+}
+open_design_json_string() {
+  awk -v key="\\\"$1\\\"" '{
+    rest = $0
+    while ((offset = index(rest, key)) > 0) {
+      rest = substr(rest, offset + length(key))
+      value = rest
+      sub(/^[[:space:]]*:[[:space:]]*/, "", value)
+      if (value ~ /^"/) {
+        sub(/^"/, "", value)
+        sub(/".*$/, "", value)
+        print value
+        exit
+      }
+    }
+  }'
+}
+open_design_preflight() {
+  open_design_manifest="$(curl -fsSL ${RELEASE_MANIFEST})" || return 1
+  open_design_required_codex="$(printf '%s\\n' "$open_design_manifest" | open_design_json_string minimumCodexCliVersion)"
+  open_design_required_runtime="$(printf '%s\\n' "$open_design_manifest" | open_design_json_string minimumOpenDesignVersion)"
+  [ -n "$open_design_required_codex" ] && [ -n "$open_design_required_runtime" ] || {
+    printf '%s\\n' 'open-design-preflight:error:manifest-minimums'
+    return 1
+  }
+
+  open_design_codex_raw="$(codex --version)" || return 1
+  open_design_codex_version="$(printf '%s\\n' "$open_design_codex_raw" | awk '{ for (field = 1; field <= NF; field++) if ($field ~ /^v?[0-9]+\\.[0-9]+\\.[0-9]+/) { sub(/^v/, "", $field); print $field; exit } }')"
+  open_design_version_at_least "$open_design_codex_version" "$open_design_required_codex" || {
+    printf '%s\\n' 'open-design-preflight:error:codex-version'
+    return 1
+  }
+
+  open_design_od_path="$(command -v od || true)"
+  open_design_od_probe=""
+  if [ -n "$open_design_od_path" ]; then
+    open_design_od_probe="$("$open_design_od_path" mcp install --open-design-cli-probe 2>/dev/null || true)"
+  fi
+  [ "$open_design_od_probe" = "open-design-cli:mcp-install:v1" ] || {
+    printf '%s\\n' 'open-design-preflight:error:cli-probe'
+    return 1
+  }
+
+  open_design_runtime_json="$("$open_design_od_path" version --json)" || {
+    printf '%s\\n' 'open-design-preflight:error:runtime-unavailable'
+    return 1
+  }
+  open_design_runtime_version="$(printf '%s\\n' "$open_design_runtime_json" | open_design_json_string version)"
+  open_design_version_at_least "$open_design_runtime_version" "$open_design_required_runtime" || {
+    printf '%s\\n' 'open-design-preflight:error:runtime-version'
+    return 1
+  }
+
+  git ls-remote https://github.com/nexu-io/open-design-agent-plugins.git main >/dev/null || return 1
+  printf '%s\\n' 'open-design-preflight:ok'
+}
+open_design_preflight`;
+const INSPECT_COMMANDS = `codex plugin marketplace list --json
 codex plugin list --json
-codex mcp get open-design --json`;
+codex mcp list`;
 const PLUGIN_INSTALL_COMMANDS = `codex plugin marketplace add nexu-io/open-design-agent-plugins --ref main --json
 codex plugin add open-design@open-design --json`;
 const MCP_INSTALL_COMMANDS = `open_design_od_path="$(command -v od || true)"
@@ -45,7 +149,7 @@ else
   false
 fi`;
 const VERIFY_COMMANDS = `codex plugin list --json
-codex mcp get open-design --json`;
+codex mcp list`;
 
 const codexRunFrames = [
   {

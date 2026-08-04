@@ -151,12 +151,12 @@ export const OPEN_DESIGN_PLUGIN_EN: OpenDesignPluginCopy = {
       {
         title: 'Preflight the supported environment',
         body:
-          'Require Codex CLI 0.144.6 or newer, Open Design 0.17.0 or newer and access to the canonical marketplace repository. Do not silently download an installer or run an unverified install script. If Open Design is missing or too old, stop and direct the user to the official download page.',
+          'Read plugin.minimumCodexCliVersion and plugin.minimumOpenDesignVersion from release-manifest.json. Before any configuration mutation, require both the installed Codex CLI and the verified Open Design runtime reported by the probed Open Design CLI to meet those manifest minimums. If the Open Design probe or runtime version is unavailable or too old, stop and direct the user to the official download page; do not silently download an installer or run an unverified script.',
       },
       {
         title: 'Inspect before changing configuration',
         body:
-          'Read the required selector and version from release-manifest.json, then compare them with the inspected Codex state. A missing open-design MCP is expected on a first install. If the open-design marketplace name points to another source, stop and report the collision. Preserve open-design@open-design only when its installed version matches the version declared in release-manifest.json.',
+          'Read the required selector and version from release-manifest.json, then compare them with the inspected Codex state. Inspect MCP state only through the redacted codex mcp list output: a missing open-design row is expected and non-fatal. Never capture codex mcp get open-design --json because transport environment values can contain credentials. If the open-design marketplace name points to another source, stop and report the collision. Preserve open-design@open-design only when its installed version matches the version declared in release-manifest.json.',
       },
       {
         title: 'Install only missing components',
@@ -171,7 +171,7 @@ export const OPEN_DESIGN_PLUGIN_EN: OpenDesignPluginCopy = {
       {
         title: 'Verify, report and start a new task',
         body:
-          'Verify plugin id open-design@open-design, confirm its installed version exactly matches plugin.version in release-manifest.json, and verify an enabled stdio MCP named open-design. Its command must be an absolute Open Design launch path and must not embed a bearer token, API key or Vela credential. Report what was installed and any remaining Open Design or Vela-login prerequisite. Start a new Codex task so it loads the installed plugin snapshot, then invoke @open-design.',
+          'Verify plugin id open-design@open-design, confirm its installed version exactly matches plugin.version in release-manifest.json, and use the redacted codex mcp list output to confirm an enabled stdio MCP named open-design. Its command must be an absolute Open Design launch path and must not embed a bearer token, API key or Vela credential. Report what was installed and any remaining Open Design or Vela-login prerequisite. Start a new Codex task so it loads the installed plugin snapshot, then invoke @open-design.',
       },
     ],
   },

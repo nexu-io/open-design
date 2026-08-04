@@ -29,12 +29,12 @@ const tr: OpenDesignPluginCopy = {
       {
         title: 'Desteklenen ortam için ön kontrolleri yapın',
         body:
-          'Codex CLI 0.144.6 veya üzerini, Open Design 0.17.0 veya üzerini ve kanonik eklenti mağazası deposuna erişimi zorunlu tutun. Bir yükleyiciyi sessizce indirmeyin veya doğrulanmamış bir kurulum betiğini çalıştırmayın. Open Design kurulu değilse ya da sürümü fazla eskiyse durun ve kullanıcıyı resmî indirme sayfasına yönlendirin.',
+          'plugin.minimumCodexCliVersion ve plugin.minimumOpenDesignVersion değerlerini release-manifest.json dosyasından okuyun. Herhangi bir yapılandırma değişikliğinden önce, hem kurulu Codex CLI’ın hem de sorgulanan Open Design CLI tarafından bildirilen doğrulanmış Open Design çalışma zamanının manifestte belirtilen minimum sürümleri karşılamasını zorunlu tutun. Open Design yoklaması veya çalışma zamanı sürümü kullanılamıyorsa ya da çok eskiyse durun ve kullanıcıyı resmî indirme sayfasına yönlendirin; bir yükleyiciyi sessizce indirmeyin veya doğrulanmamış bir betiği çalıştırmayın.',
       },
       {
         title: 'Yapılandırmayı değiştirmeden önce inceleyin',
         body:
-          'Gerekli seçiciyi ve sürümü release-manifest.json dosyasından okuyun, ardından bunları incelediğiniz Codex durumuyla karşılaştırın. İlk kurulumda open-design MCP’nin bulunmaması beklenir. open-design eklenti mağazası adı başka bir kaynağa işaret ediyorsa durun ve çakışmayı bildirin. open-design@open-design öğesini yalnızca kurulu sürümü release-manifest.json içinde bildirilen sürümle eşleşiyorsa koruyun.',
+          'Gerekli seçiciyi ve sürümü release-manifest.json dosyasından okuyun, ardından bunları incelediğiniz Codex durumuyla karşılaştırın. MCP durumunu yalnızca hassas bilgileri gizlenmiş codex mcp list çıktısı üzerinden inceleyin: open-design satırının bulunmaması beklenen bir durumdur ve engelleyici değildir. Taşıma katmanının ortam değişkeni değerleri kimlik bilgileri içerebileceğinden codex mcp get open-design --json çıktısını asla kaydetmeyin. open-design eklenti mağazası adı başka bir kaynağa işaret ediyorsa durun ve çakışmayı bildirin. open-design@open-design öğesini yalnızca kurulu sürümü release-manifest.json içinde bildirilen sürümle eşleşiyorsa koruyun.',
       },
       {
         title: 'Yalnızca eksik bileşenleri kurun',
@@ -49,7 +49,7 @@ const tr: OpenDesignPluginCopy = {
       {
         title: 'Doğrulayın, raporlayın ve yeni bir görev başlatın',
         body:
-          'open-design@open-design eklenti kimliğini doğrulayın, kurulu sürümünün release-manifest.json içindeki plugin.version ile tam olarak eşleştiğini onaylayın ve open-design adlı etkin bir stdio MCP’yi doğrulayın. Komutu mutlak bir Open Design başlatma yolu olmalı ve bearer token, API key ya da Vela kimlik bilgisi içermemelidir. Nelerin kurulduğunu ve henüz karşılanmamış Open Design ya da Vela ile oturum açma ön koşullarını bildirin. Kurulu eklenti anlık görüntüsünü yükleyebilmesi için yeni bir Codex görevi başlatın, ardından @open-design çağrısını yapın.',
+          'open-design@open-design eklenti kimliğini doğrulayın, kurulu sürümünün release-manifest.json içindeki plugin.version ile tam olarak eşleştiğini onaylayın ve open-design adlı etkin bir stdio MCP’yi doğrulamak için hassas bilgileri gizlenmiş codex mcp list çıktısını kullanın. Komutu mutlak bir Open Design başlatma yolu olmalı ve bearer token, API key ya da Vela kimlik bilgisi içermemelidir. Nelerin kurulduğunu ve henüz karşılanmamış Open Design ya da Vela ile oturum açma ön koşullarını bildirin. Kurulu eklenti anlık görüntüsünü yükleyebilmesi için yeni bir Codex görevi başlatın, ardından @open-design çağrısını yapın.',
       },
     ],
   },

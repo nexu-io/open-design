@@ -29,12 +29,12 @@ const de: OpenDesignPluginCopy = {
       {
         title: 'Die unterstützte Umgebung vorab prüfen',
         body:
-          'Codex CLI 0.144.6 oder neuer, Open Design 0.17.0 oder neuer sowie Zugriff auf das kanonische Marketplace-Repository sind erforderlich. Laden Sie nicht eigenmächtig ein Installationsprogramm herunter und führen Sie kein ungeprüftes Installationsskript aus. Fehlt Open Design oder ist die Version zu alt, brechen Sie ab und verweisen Sie den Benutzer auf die offizielle Download-Seite.',
+          'Lesen Sie plugin.minimumCodexCliVersion und plugin.minimumOpenDesignVersion aus release-manifest.json. Stellen Sie vor jeder Änderung an der Konfiguration sicher, dass sowohl die installierte Codex CLI als auch die verifizierte Open Design-Laufzeit, die von der geprüften Open Design CLI gemeldet wird, die im Manifest festgelegten Mindestversionen erfüllen. Wenn das Ergebnis der Open Design-Prüfung oder die Laufzeitversion nicht verfügbar oder zu alt ist, brechen Sie ab und verweisen Sie den Benutzer auf die offizielle Download-Seite; laden Sie nicht eigenmächtig ein Installationsprogramm herunter und führen Sie kein ungeprüftes Skript aus.',
       },
       {
         title: 'Die Konfiguration vor Änderungen prüfen',
         body:
-          'Lesen Sie den erforderlichen Selektor und die Version aus release-manifest.json und vergleichen Sie beides anschließend mit dem geprüften Codex-Status. Ein fehlendes MCP namens open-design ist bei einer Erstinstallation zu erwarten. Verweist der Marketplace-Name open-design auf eine andere Quelle, brechen Sie ab und melden Sie den Konflikt. Behalten Sie open-design@open-design nur bei, wenn die installierte Version mit der in release-manifest.json deklarierten Version übereinstimmt.',
+          'Lesen Sie den erforderlichen Selektor und die Version aus release-manifest.json und vergleichen Sie beides anschließend mit dem geprüften Codex-Status. Prüfen Sie den MCP-Status ausschließlich anhand der bereinigten Ausgabe von codex mcp list: Eine fehlende Zeile für open-design ist zu erwarten und kein Fehler. Erfassen Sie niemals die Ausgabe von codex mcp get open-design --json, da Werte der Transportumgebung Zugangsdaten enthalten können. Verweist der Marketplace-Name open-design auf eine andere Quelle, brechen Sie ab und melden Sie den Konflikt. Behalten Sie open-design@open-design nur bei, wenn die installierte Version mit der in release-manifest.json deklarierten Version übereinstimmt.',
       },
       {
         title: 'Nur fehlende Komponenten installieren',
@@ -49,7 +49,7 @@ const de: OpenDesignPluginCopy = {
       {
         title: 'Überprüfen, Bericht erstatten und eine neue Aufgabe starten',
         body:
-          'Überprüfen Sie die Plugin-ID open-design@open-design, bestätigen Sie, dass die installierte Version exakt plugin.version in release-manifest.json entspricht, und prüfen Sie ein aktiviertes stdio MCP namens open-design. Dessen Befehl muss einen absoluten Startpfad von Open Design verwenden und darf weder bearer token noch API key oder Vela-Zugangsdaten enthalten. Berichten Sie, was installiert wurde, und nennen Sie alle noch ausstehenden Voraussetzungen für Open Design oder die Vela-Anmeldung. Starten Sie eine neue Codex-Aufgabe, damit der installierte Plugin-Snapshot geladen wird, und rufen Sie anschließend @open-design auf.',
+          'Überprüfen Sie die Plugin-ID open-design@open-design, bestätigen Sie, dass die installierte Version exakt plugin.version in release-manifest.json entspricht, und bestätigen Sie anhand der bereinigten Ausgabe von codex mcp list, dass ein aktiviertes stdio MCP namens open-design vorhanden ist. Dessen Befehl muss einen absoluten Startpfad von Open Design verwenden und darf weder bearer token noch API key oder Vela-Zugangsdaten enthalten. Berichten Sie, was installiert wurde, und nennen Sie alle noch ausstehenden Voraussetzungen für Open Design oder die Vela-Anmeldung. Starten Sie eine neue Codex-Aufgabe, damit der installierte Plugin-Snapshot geladen wird, und rufen Sie anschließend @open-design auf.',
       },
     ],
   },

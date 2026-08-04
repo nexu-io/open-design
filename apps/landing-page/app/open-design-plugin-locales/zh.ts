@@ -29,12 +29,12 @@ const zh: OpenDesignPluginCopy = {
       {
         title: '检查环境是否受支持',
         body:
-          '确认 Codex CLI 为 0.144.6 或更高版本、Open Design 为 0.17.0 或更高版本，并且能够访问官方指定的 marketplace 仓库。不要在未告知用户的情况下下载安装程序，也不要运行未验证的安装脚本。如果尚未安装 Open Design 或版本过低，请停止操作并引导用户前往官方下载页。',
+          '从 release-manifest.json 读取 plugin.minimumCodexCliVersion 和 plugin.minimumOpenDesignVersion。在更改任何配置之前，确认已安装的 Codex CLI，以及通过 Open Design CLI 探测并验证的 Open Design 运行时，均满足清单中规定的最低版本要求。如果无法完成 Open Design 探测、无法获取运行时版本或版本过低，请停止操作并引导用户前往官方下载页；不要在未告知用户的情况下下载安装程序，也不要运行未验证的脚本。',
       },
       {
         title: '更改配置前先行检查',
         body:
-          '从 release-manifest.json 读取所需的选择器和版本，然后与检查到的 Codex 状态进行比较。首次安装时没有 open-design MCP 属于正常情况。如果名为 open-design 的 marketplace 指向其他来源，请停止操作并报告命名冲突。仅当已安装版本与 release-manifest.json 中声明的版本一致时，才保留 open-design@open-design。',
+          '从 release-manifest.json 读取所需的选择器和版本，然后与检查到的 Codex 状态进行比较。仅通过已脱敏的 codex mcp list 输出检查 MCP 状态：缺少 open-design 记录属于正常情况，不应导致流程失败。绝不要获取 codex mcp get open-design --json 的输出，因为其中的传输环境变量值可能包含凭据。如果名为 open-design 的 marketplace 指向其他来源，请停止操作并报告命名冲突。仅当已安装版本与 release-manifest.json 中声明的版本一致时，才保留 open-design@open-design。',
       },
       {
         title: '仅安装缺失的组件',
@@ -49,7 +49,7 @@ const zh: OpenDesignPluginCopy = {
       {
         title: '验证、报告并开始新任务',
         body:
-          '验证插件 id 为 open-design@open-design，确认其已安装版本与 release-manifest.json 中的 plugin.version 完全一致，并验证存在名为 open-design 的已启用 stdio MCP。它的 command 必须是 Open Design 的绝对启动路径，且不得嵌入 bearer token、API key 或 Vela 凭据。报告已安装的内容，以及尚未满足的 Open Design 或 Vela 登录前置条件。新建 Codex 任务以加载已安装的插件快照，然后调用 @open-design。',
+          '验证插件 id 为 open-design@open-design，确认其已安装版本与 release-manifest.json 中的 plugin.version 完全一致，并通过已脱敏的 codex mcp list 输出确认存在名为 open-design 的已启用 stdio MCP。它的 command 必须是 Open Design 的绝对启动路径，且不得嵌入 bearer token、API key 或 Vela 凭据。报告已安装的内容，以及尚未满足的 Open Design 或 Vela 登录前置条件。新建 Codex 任务以加载已安装的插件快照，然后调用 @open-design。',
       },
     ],
   },

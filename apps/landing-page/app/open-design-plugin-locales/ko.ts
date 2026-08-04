@@ -29,12 +29,12 @@ const ko: OpenDesignPluginCopy = {
       {
         title: '지원 환경을 사전 점검하세요',
         body:
-          'Codex CLI 0.144.6 이상, Open Design 0.17.0 이상과 정식 마켓플레이스 저장소에 대한 접근 권한이 필요합니다. 확인 없이 설치 프로그램을 다운로드하거나 검증되지 않은 설치 스크립트를 실행하지 마세요. Open Design이 설치되어 있지 않거나 버전이 너무 낮으면 중단하고 사용자를 공식 다운로드 페이지로 안내하세요.',
+          'release-manifest.json 파일에서 plugin.minimumCodexCliVersion 및 plugin.minimumOpenDesignVersion 값을 읽으세요. 구성을 변경하기 전에 설치된 Codex CLI와, 프로브를 마친 Open Design CLI가 보고하는 검증된 Open Design 런타임이 모두 매니페스트의 최소 버전을 충족하는지 확인하세요. Open Design 프로브 또는 런타임 버전을 확인할 수 없거나 버전이 너무 낮으면 중단하고 사용자를 공식 다운로드 페이지로 안내하세요. 설치 프로그램을 사용자 몰래 다운로드하거나 검증되지 않은 스크립트를 실행하지 마세요.',
       },
       {
         title: '구성을 변경하기 전에 확인하세요',
         body:
-          'release-manifest.json 파일에서 필요한 선택자와 버전을 읽은 다음, 점검한 Codex 상태와 비교하세요. 처음 설치할 때 open-design MCP가 없는 것은 정상입니다. open-design 마켓플레이스 이름이 다른 소스를 가리키면 중단하고 충돌을 보고하세요. 설치된 버전이 release-manifest.json 파일에 선언된 버전과 일치할 때만 open-design@open-design 플러그인을 그대로 유지하세요.',
+          'release-manifest.json 파일에서 필요한 선택자와 버전을 읽은 다음, 점검한 Codex 상태와 비교하세요. MCP 상태는 민감 정보가 제거된 codex mcp list 출력만으로 점검하세요. open-design 행이 없는 것은 예상된 상태이며 오류가 아닙니다. 전송 환경 값에 자격 증명이 포함될 수 있으므로 codex mcp get open-design --json 출력은 절대 캡처하지 마세요. open-design 마켓플레이스 이름이 다른 소스를 가리키면 중단하고 충돌을 보고하세요. 설치된 버전이 release-manifest.json 파일에 선언된 버전과 일치할 때만 open-design@open-design 플러그인을 그대로 유지하세요.',
       },
       {
         title: '누락된 구성 요소만 설치하세요',
@@ -49,7 +49,7 @@ const ko: OpenDesignPluginCopy = {
       {
         title: '확인하고 보고한 뒤 새 작업을 시작하세요',
         body:
-          '플러그인 ID가 open-design@open-design인지 확인하고, 설치된 버전이 release-manifest.json 파일의 plugin.version 값과 정확히 일치하는지 확인한 뒤, open-design 이름의 활성화된 stdio MCP를 확인하세요. 해당 명령은 Open Design의 절대 실행 경로여야 하며 bearer token, API key 또는 Vela 자격 증명을 포함해서는 안 됩니다. 설치된 항목과 아직 필요한 Open Design 또는 Vela 로그인 조건을 보고하세요. 새 Codex 작업을 시작해 설치된 플러그인 스냅샷을 불러온 다음 @open-design 멘션을 호출하세요.',
+          '플러그인 ID가 open-design@open-design인지 확인하고, 설치된 버전이 release-manifest.json 파일의 plugin.version 값과 정확히 일치하는지 확인한 뒤, 민감 정보가 제거된 codex mcp list 출력에서 open-design 이름의 활성화된 stdio MCP를 확인하세요. 해당 명령은 Open Design의 절대 실행 경로여야 하며 bearer token, API key 또는 Vela 자격 증명을 포함해서는 안 됩니다. 설치된 항목과 아직 필요한 Open Design 또는 Vela 로그인 조건을 보고하세요. 새 Codex 작업을 시작해 설치된 플러그인 스냅샷을 불러온 다음 @open-design 멘션을 호출하세요.',
       },
     ],
   },

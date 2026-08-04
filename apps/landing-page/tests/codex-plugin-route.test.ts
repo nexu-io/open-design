@@ -38,6 +38,10 @@ describe('Codex plugin landing route', () => {
     assert.match(page, /https:\/\/open-design\.ai\/codex-plugin\//);
     assert.match(page, /data-agent-install-protocol="open-design-codex-v1"/);
     assert.match(page, /codex --version/);
+    assert.match(page, /minimumCodexCliVersion/);
+    assert.match(page, /minimumOpenDesignVersion/);
+    assert.match(page, /open_design_version_at_least/);
+    assert.match(page, /"\$open_design_od_path" version --json/);
     assert.match(page, /codex plugin marketplace list --json/);
     assert.match(
       page,
@@ -50,7 +54,8 @@ describe('Codex plugin landing route', () => {
     assert.match(page, /open-design-mcp-install:fallback-required/);
     assert.doesNotMatch(page, /const MCP_INSTALL_COMMAND = 'od mcp install codex'/);
     assert.match(page, /codex plugin list --json/);
-    assert.match(page, /codex mcp get open-design --json/);
+    assert.match(page, /codex mcp list/);
+    assert.doesNotMatch(page, /codex mcp get open-design --json/);
   });
 
   it('localizes the full protocol and keeps installation conditional', async () => {
@@ -61,13 +66,19 @@ describe('Codex plugin landing route', () => {
     assert.match(english, /Run the marketplace command only if/);
     assert.match(english, /version declared in release-manifest\.json/);
     assert.match(english, /ask the user for confirmation before updating or reinstalling/);
+    assert.match(english, /plugin\.minimumOpenDesignVersion/);
+    assert.match(english, /redacted codex mcp list/);
+    assert.match(english, /missing open-design row is expected and non-fatal/);
     assert.match(english, /installed version exactly matches plugin\.version/);
+    assert.doesNotMatch(english, /Require Codex CLI 0\.144\.6/);
 
     for (const locale of locales) {
       const localized = await readFile(new URL(`${locale}.ts`, LOCALE_DIR), 'utf8');
       assert.match(localized, /agentInstall:\s*\{/);
       assert.match(localized, /release-manifest\.json/);
       assert.match(localized, /open-design-cli:mcp-install:v1/);
+      assert.match(localized, /plugin\.minimumOpenDesignVersion/);
+      assert.match(localized, /codex mcp list/);
       assert.doesNotMatch(localized, /Agent-readable installation protocol/);
       assert.doesNotMatch(localized, /Run the marketplace command only if/);
     }

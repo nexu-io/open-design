@@ -29,12 +29,12 @@ const copy: OpenDesignPluginCopy = {
       {
         title: 'Verifique previamente o ambiente compatível',
         body:
-          'Exija o Codex CLI 0.144.6 ou mais recente, o Open Design 0.17.0 ou mais recente e acesso ao repositório canônico do marketplace. Não baixe silenciosamente um instalador nem execute um script de instalação não verificado. Se o Open Design não estiver instalado ou for antigo demais, pare e encaminhe o usuário à página oficial de download.',
+          'Leia plugin.minimumCodexCliVersion e plugin.minimumOpenDesignVersion em release-manifest.json. Antes de alterar qualquer configuração, garanta que tanto o Codex CLI instalado quanto o runtime verificado do Open Design informado pela verificação do Open Design CLI atendam às versões mínimas do manifesto. Se o resultado da verificação do Open Design ou a versão do runtime não estiver disponível ou for antiga demais, pare e encaminhe o usuário à página oficial de download; não baixe silenciosamente um instalador nem execute um script não verificado.',
       },
       {
         title: 'Inspecione antes de alterar a configuração',
         body:
-          'Leia o seletor e a versão exigidos em release-manifest.json e compare-os com o estado inspecionado do Codex. A ausência do MCP open-design é esperada na primeira instalação. Se o nome open-design do marketplace apontar para outra origem, pare e informe o conflito. Preserve open-design@open-design somente quando a versão instalada corresponder à versão declarada em release-manifest.json.',
+          'Leia o seletor e a versão exigidos em release-manifest.json e compare-os com o estado inspecionado do Codex. Inspecione o estado do MCP somente pela saída de codex mcp list com os dados confidenciais removidos: a ausência da linha open-design é esperada e não é um erro. Nunca capture a saída de codex mcp get open-design --json, pois os valores do ambiente de transporte podem conter credenciais. Se o nome open-design do marketplace apontar para outra origem, pare e informe o conflito. Preserve open-design@open-design somente quando a versão instalada corresponder à versão declarada em release-manifest.json.',
       },
       {
         title: 'Instale somente os componentes ausentes',
@@ -49,7 +49,7 @@ const copy: OpenDesignPluginCopy = {
       {
         title: 'Verifique, informe e inicie uma nova tarefa',
         body:
-          'Verifique o id de plugin open-design@open-design, confirme que a versão instalada corresponde exatamente a plugin.version em release-manifest.json e verifique um stdio MCP habilitado chamado open-design. Seu comando deve ser um caminho absoluto de inicialização do Open Design e não deve incorporar um bearer token, uma API key nem uma credencial da Vela. Informe o que foi instalado e qualquer pré-requisito restante do Open Design ou de login da Vela. Inicie uma nova tarefa do Codex para que ela carregue o snapshot do plugin instalado e, depois, invoque @open-design.',
+          'Verifique o id de plugin open-design@open-design, confirme que a versão instalada corresponde exatamente a plugin.version em release-manifest.json e use a saída de codex mcp list com os dados confidenciais removidos para confirmar que há um stdio MCP habilitado chamado open-design. Seu comando deve ser um caminho absoluto de inicialização do Open Design e não deve incorporar um bearer token, uma API key nem uma credencial da Vela. Informe o que foi instalado e qualquer pré-requisito restante do Open Design ou de login da Vela. Inicie uma nova tarefa do Codex para que ela carregue o snapshot do plugin instalado e, depois, invoque @open-design.',
       },
     ],
   },
