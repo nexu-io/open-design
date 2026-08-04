@@ -88,6 +88,7 @@ export const it: Dict = {
   'chat.runError.sessionExpiredMessage': "La sessione ripresa era scaduta. È stata reimpostata, quindi riprova per avviare una nuova esecuzione.",
   'chat.runError.gitBashMissingMessage': "Per eseguire questo agente su Windows è necessario Git Bash, ma non è stato trovato. Installa Git per Windows e riprova.",
   'chat.runError.cpuUnsupportedMessage': "L'ambiente di esecuzione di questo agente richiede un set di istruzioni della CPU (AVX2) che questo dispositivo non possiede, quindi non può avviarsi. Aggiorna Open Design all'ultima versione, che include un ambiente di esecuzione compatibile.",
+  'chat.runError.retryTerminationCta': 'Prova a interrompere di nuovo',
   'common.cancel': 'Annulla',
   'chat.selectFromLibrary': 'Importa dalla libreria',
   'chat.importFigma': 'Importa da Figma',

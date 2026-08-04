@@ -181,7 +181,12 @@ export {
 } from './runtimes/run-lifecycle-analytics.js';
 
 export { resolveProjectRoot };
-import { createCommandInvocation } from '@open-design/platform';
+import {
+  captureOwnedProcessIdentity,
+  createCommandInvocation,
+  listProcessSnapshots,
+  spawnWindowsJobProcess,
+} from '@open-design/platform';
 import { SIDECAR_ENV } from '@open-design/sidecar-proto';
 import {
   buildLiveArtifactsMcpServersForAgent,
@@ -6698,6 +6703,8 @@ export async function startServer({
     noteAgentActivity();
 
     let child;
+    let earlyChildError: Error | null = null;
+    let earlyChildClose: { code: number | null; signal: NodeJS.Signals | null } | null = null;
     let acpSession = null;
     let writePromptToChildStdin = false;
     let spawnedAgentEnv = null;
@@ -6760,24 +6767,69 @@ export async function startServer({
       });
       lifecycle.mark('launch_preflight_end');
       lifecycle.mark('process_spawn_start');
-      child = spawn(invocation.command, invocation.args, {
-        env,
-        stdio: [stdinMode, 'pipe', 'pipe'],
-        cwd: effectiveCwd,
-        shell: false,
-        detached: process.platform !== 'win32',
-        // Required when invocation wraps a Windows .cmd/.bat shim through
-        // cmd.exe; without this, Node re-escapes the inner command line and
-        // breaks paths containing spaces (issue #315).
-        windowsVerbatimArguments: invocation.windowsVerbatimArguments,
-      });
+      child = process.platform === 'win32'
+        ? spawnWindowsJobProcess({
+            command: agentLaunch.launchPath,
+            args,
+            env,
+            cwd: effectiveCwd,
+            stdio: [stdinMode, 'pipe', 'pipe'],
+          })
+        : spawn(invocation.command, invocation.args, {
+            env,
+            stdio: [stdinMode, 'pipe', 'pipe'],
+            cwd: effectiveCwd,
+            shell: false,
+            detached: true,
+            // Required when invocation wraps a Windows .cmd/.bat shim through
+            // cmd.exe; without this, Node re-escapes the inner command line and
+            // breaks paths containing spaces (issue #315).
+            windowsVerbatimArguments: invocation.windowsVerbatimArguments,
+          });
       lifecycle.mark('process_spawned');
       run.child = child;
+      // The Windows process-table query below can yield to the event loop
+      // before this run's canonical lifecycle handlers are assembled. Capture
+      // any terminal event in that window so neither an error goes unhandled
+      // nor a close is lost; the canonical handlers replay it once ready.
+      child.once('error', (err) => {
+        earlyChildError = err;
+      });
+      child.once('close', (code, signal) => {
+        earlyChildClose = { code, signal };
+      });
       run.childPid = typeof child.pid === 'number' ? child.pid : null;
       run.processGroupId =
         process.platform !== 'win32' && typeof child.pid === 'number'
           ? child.pid
           : null;
+      // Windows has no captured POSIX process group. Record the root's process
+      // creation identity while it is alive so cancellation can safely walk its
+      // descendants later without ever trusting a recycled PID or process name.
+      run.processTreeRoot = null;
+      run.processTreeIdentityCapture = null;
+      run.requiresTreeVerification = process.platform === 'win32';
+      if (process.platform === 'win32' && typeof child.pid === 'number') {
+        // Do not await this full process-table query before attaching the
+        // canonical child lifecycle handlers below. A CLI can fail or close in
+        // that interval, which would otherwise leave the run unfinalized (and
+        // an error event unhandled). Cancellation awaits this promise before
+        // making its verification decision.
+        const spawnedChild = child;
+        const identityCapture = listProcessSnapshots()
+          .then((snapshots) => {
+            if (run.child !== spawnedChild) return;
+            run.processTreeRoot = captureOwnedProcessIdentity(snapshots, spawnedChild.pid, {
+              ownership: 'windows-job',
+            });
+          })
+          .catch(() => {
+            // A missing snapshot is deliberately handled as unverified by the
+            // cancellation gate; do not turn observation failure into a false
+            // claim that the process tree stopped.
+          });
+        run.processTreeIdentityCapture = identityCapture;
+      }
       // Schedule release of the antigravity model lock once agy's
       // --log-file confirms the chosen model was propagated to the
       // backend (the upstream signal that settings.json was read).
@@ -7830,6 +7882,10 @@ export async function startServer({
       signal: NodeJS.Signals | null,
     ): boolean => {
       if (!run.cancelRequested) return false;
+      // The cancellation gate owns the Windows terminal transition until it
+      // has verified that the captured runtime tree is gone. A direct child's
+      // close event is necessary evidence, but it is not sufficient evidence.
+      if (run.requiresTreeVerification === true && run.cancelPromise) return true;
       if (!design.runs.isTerminal(run.status)) {
         markRpcCloseReason('cancel_requested');
         finishWithRetryDecision('canceled', code, signal);
@@ -7837,7 +7893,7 @@ export async function startServer({
       return true;
     };
 
-    child.on('error', (err) => {
+    const handleChildError = (err: Error) => {
       clearInactivityWatchdog();
       cleanupPromptFile();
       flushVisibleAgentStderr();
@@ -7846,8 +7902,9 @@ export async function startServer({
       if (finishCanceledIfRequested(1, null)) return;
       send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', err.message));
       finishWithRetryDecision('failed', 1, null);
-    });
-    child.on('close', async (code, signal) => {
+    };
+    child.on('error', handleChildError);
+    const handleChildClose = async (code: number | null, signal: NodeJS.Signals | null) => {
       try {
       clearInactivityWatchdog();
       clearForcedChildShutdown();
@@ -8404,6 +8461,12 @@ export async function startServer({
           console.warn('[sessions] delivered session persistence failed', err);
         }
       }
+      // On Windows the cancel gate must make the terminal choice after it
+      // verifies the owned tree. Let a naturally completed run win normally;
+      // defer only the explicit-cancel close race.
+      if (status === 'canceled' && run.requiresTreeVerification === true && run.cancelPromise) {
+        return;
+      }
       finishWithRetryDecision(status, code, signal);
       } finally {
         // Best-effort cleanup of the per-run agy log file on every close
@@ -8416,7 +8479,10 @@ export async function startServer({
         }
         cleanupPromptFile();
       }
-    });
+    };
+    child.on('close', handleChildClose);
+    if (earlyChildError) handleChildError(earlyChildError);
+    if (earlyChildClose) void handleChildClose(earlyChildClose.code, earlyChildClose.signal);
     if (writePromptToChildStdin && child.stdin) {
       const promptInputFormat = def.promptInputFormat ?? 'text';
       lifecycle.mark('model_call_start');

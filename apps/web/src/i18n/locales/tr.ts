@@ -88,6 +88,7 @@ export const tr: Dict = {
   'chat.runError.sessionExpiredMessage': "Sürdürülen oturumun süresi dolmuştu. Sıfırlandı, bu yüzden yeni bir çalışma başlatmak için yeniden deneyin.",
   'chat.runError.gitBashMissingMessage': "Bu aracıyı Windows'ta çalıştırmak için Git Bash gerekir ancak bulunamadı. Git for Windows'u kurup yeniden deneyin.",
   'chat.runError.cpuUnsupportedMessage': "Bu aracının çalışma zamanı, bu cihazın CPU'sunda bulunmayan bir komut seti (AVX2) gerektirdiğinden başlatılamıyor. Uyumlu çalışma zamanı içeren en son Open Design sürümüne güncelleyin.",
+  'chat.runError.retryTerminationCta': 'Yeniden durdurmayı dene',
   'common.cancel': 'İptal et',
   'chat.selectFromLibrary': 'Kitaplıktan içe aktar',
   'chat.importFigma': 'Figma\'dan içe aktar',

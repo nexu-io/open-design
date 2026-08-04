@@ -88,6 +88,7 @@ export const hu: Dict = {
   'chat.runError.sessionExpiredMessage': "A folytatott munkamenet lejárt. Visszaállt, ezért próbáld újra egy új futás indításához.",
   'chat.runError.gitBashMissingMessage': "Az ügynök Windowson való futtatásához Git Bash szükséges, de nem található. Telepítsd a Git for Windowst, majd próbáld újra.",
   'chat.runError.cpuUnsupportedMessage': "Az ügynök futtatókörnyezete olyan CPU-utasításkészletet (AVX2) igényel, amellyel ez az eszköz nem rendelkezik, ezért nem tud elindulni. Frissítsd az Open Designt a legújabb verzióra, amely kompatibilis futtatókörnyezetet tartalmaz.",
+  'chat.runError.retryTerminationCta': 'Próbáld újra leállítani',
   'common.cancel': 'Mégse',
   'chat.selectFromLibrary': 'Importálás a könyvtárból',
   'chat.importFigma': 'Importálás Figmából',

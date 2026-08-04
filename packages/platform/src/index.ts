@@ -28,17 +28,24 @@ export {
 
 export type {
   ProcessSnapshot,
+  ProcessSnapshotObservation,
+  OwnedProcessIdentity,
+  ProcessTreeTerminationResult,
   ProcessStampContract,
   ProcessStampField,
   ProcessStampShape,
   SpawnProcessRequest,
+  WindowsJobSpawnRequest,
   StampedProcessMatchCriteria,
   StopProcessesResult,
 } from "./process.js";
 export {
+  captureOwnedProcessIdentity,
   collectProcessTreePids,
+  collectOwnedProcessTreePids,
   createProcessStampArgs,
   isProcessAlive,
+  readProcessSnapshots,
   listProcessSnapshots,
   matchesProcessStamp,
   matchesStampedProcess,
@@ -48,7 +55,9 @@ export {
   readProcessStampFromCommand,
   spawnBackgroundProcess,
   spawnLoggedProcess,
+  spawnWindowsJobProcess,
   stopProcesses,
+  terminateOwnedProcessTree,
   waitForProcessExit,
 } from "./process.js";
 

@@ -28,6 +28,7 @@ import {
   publishDaemonRunFinishedEvent,
   reattachDaemonRun,
   reportChatRunFeedback,
+  retryRunTermination,
   streamViaDaemon,
 } from '../providers/daemon';
 import { normalizeCustomReason } from '@open-design/contracts/analytics';
@@ -1788,6 +1789,11 @@ export function ProjectView({
   const reattachTextBuffersRef = useRef<Set<BufferedTextUpdates>>(new Set());
   const reattachControllersRef = useRef<Map<string, AbortController>>(new Map());
   const reattachCancelControllersRef = useRef<Map<string, AbortController>>(new Map());
+  const activeRunControllersByRunIdRef = useRef<Map<string, {
+    conversationId: string;
+    controller: AbortController;
+    cancelController: AbortController;
+  }>>(new Map());
   const completedReattachRunsRef = useRef<Set<string>>(new Set());
   // A locally finished run briefly has terminal status before its async
   // project-file refresh attaches delivery evidence. Do not let that same
@@ -3214,6 +3220,20 @@ export function ProjectView({
     return true;
   }, [clearActiveRunRefs, clearStreamingMarker]);
 
+  const clearRunStreamingMarkerByRunId = useCallback((runId: string) => {
+    const tracked = activeRunControllersByRunIdRef.current.get(runId);
+    if (!tracked) return false;
+    activeRunControllersByRunIdRef.current.delete(runId);
+    supersededRunsRef.current.delete(tracked.controller);
+    reattachControllersRef.current.delete(runId);
+    reattachCancelControllersRef.current.delete(runId);
+    return clearCurrentRunStreamingMarker(
+      tracked.conversationId,
+      tracked.controller,
+      tracked.cancelController,
+    );
+  }, [clearCurrentRunStreamingMarker]);
+
   const handleAssistantFeedback = useCallback(
     (assistantMessage: ChatMessage, change: ChatMessageFeedbackChange) => {
       const now = Date.now();
@@ -3845,6 +3865,7 @@ export function ProjectView({
             transientFailedRetriesRef.current.delete(runId);
             genericDisconnectRetriesRef.current.delete(runId);
             completedReattachRunsRef.current.add(runId);
+            activeRunControllersByRunIdRef.current.delete(runId);
             onProjectsRefresh();
             continue;
           }
@@ -3854,6 +3875,11 @@ export function ProjectView({
         const cancelController = new AbortController();
         reattachControllersRef.current.set(runId, controller);
         reattachCancelControllersRef.current.set(runId, cancelController);
+        activeRunControllersByRunIdRef.current.set(runId, {
+          conversationId: reattachConversationId,
+          controller,
+          cancelController,
+        });
         if (!isTerminalRunStatus(status.status)) {
           abortRef.current = controller;
           cancelRef.current = cancelController;
@@ -4023,6 +4049,7 @@ export function ProjectView({
               completedReattachRunsRef.current.add(runId);
               reattachControllersRef.current.delete(runId);
               reattachCancelControllersRef.current.delete(runId);
+              activeRunControllersByRunIdRef.current.delete(runId);
               clearCurrentRunStreamingMarker(reattachConversationId, controller, cancelController);
               // Clear any stale error banner set by the original onError path
               // (e.g. "daemon stream disconnected") so the chat does not show it
@@ -4435,6 +4462,7 @@ export function ProjectView({
               }
               reattachControllersRef.current.delete(runId);
               reattachCancelControllersRef.current.delete(runId);
+              activeRunControllersByRunIdRef.current.delete(runId);
               clearCurrentRunStreamingMarker(reattachConversationId, controller, cancelController);
               if (!skipFinalPersistNow) persistNow({ telemetryFinalized: true });
               if (shouldRetryAfterControllerCleanup && !shouldRefreshConversationAfterCleanup) {
@@ -4468,6 +4496,7 @@ export function ProjectView({
               completedReattachRunsRef.current.add(runId);
               reattachControllersRef.current.delete(runId);
               reattachCancelControllersRef.current.delete(runId);
+              activeRunControllersByRunIdRef.current.delete(runId);
               clearCurrentRunStreamingMarker(reattachConversationId, controller, cancelController);
             }
             if (isTerminalRunStatus(runStatus)) {
@@ -5503,6 +5532,7 @@ export function ProjectView({
           });
           const finalizingRunId = currentRunId;
           if (finalizingRunId) finalizingLocalRunIdsRef.current.add(finalizingRunId);
+          if (finalizingRunId) activeRunControllersByRunIdRef.current.delete(finalizingRunId);
           if (runCommentAttachments.length > 0) {
             void patchAttachedStatuses(runCommentAttachments, 'needs_review');
           }
@@ -5957,6 +5987,11 @@ export function ProjectView({
           locale,
           ...(runAnalyticsHints ? { analyticsHints: runAnalyticsHints } : {}),
           onRunCreated: (runId) => {
+            activeRunControllersByRunIdRef.current.set(runId, {
+              conversationId: runConversationId,
+              controller,
+              cancelController,
+            });
             const pinnedAssistant = {
               ...latestAssistantMsg,
               runId,
@@ -5983,9 +6018,16 @@ export function ProjectView({
               true,
               runStatus === 'canceled' ? { telemetryFinalized: true } : undefined,
             );
-            if (!runMayFinalize) return;
+            if (!runMayFinalize) {
+              if (runStatus === 'canceled' || runStatus === 'succeeded') {
+                if (currentRunId) activeRunControllersByRunIdRef.current.delete(currentRunId);
+                clearCurrentRunStreamingMarker(runConversationId, controller, cancelController);
+              }
+              return;
+            }
             updateConversationLatestRun(runStatus, endedAt);
             if (isTerminalRunStatus(runStatus)) {
+              if (currentRunId) activeRunControllersByRunIdRef.current.delete(currentRunId);
               clearCurrentRunStreamingMarker(runConversationId, controller, cancelController);
               scheduleConversationMessageRefresh(runConversationId);
               if (runStatus !== 'succeeded') clearTraceTouchedFilePaths();
@@ -6114,12 +6156,18 @@ export function ProjectView({
             runtimeType: 'byok',
           },
           onRunCreated: (runId) => {
+            activeRunControllersByRunIdRef.current.set(runId, {
+              conversationId: runConversationId,
+              controller,
+              cancelController,
+            });
             const pinnedAssistant = {
               ...latestAssistantMsg,
               runId,
               runStatus: 'queued' as const,
             };
             latestAssistantMsg = pinnedAssistant;
+            currentRunId = runId;
             void saveMessage(project.id, runConversationId, pinnedAssistant);
             updateMessageById(assistantId, (prev) => ({ ...prev, runId, runStatus: 'queued' }));
           },
@@ -6136,9 +6184,16 @@ export function ProjectView({
               true,
               runStatus === 'canceled' ? { telemetryFinalized: true } : undefined,
             );
-            if (!runMayFinalize) return;
+            if (!runMayFinalize) {
+              if (runStatus === 'canceled' || runStatus === 'succeeded') {
+                if (currentRunId) activeRunControllersByRunIdRef.current.delete(currentRunId);
+                clearCurrentRunStreamingMarker(runConversationId, controller, cancelController);
+              }
+              return;
+            }
             updateConversationLatestRun(runStatus, endedAt);
             if (isTerminalRunStatus(runStatus)) {
+              if (currentRunId) activeRunControllersByRunIdRef.current.delete(currentRunId);
               clearCurrentRunStreamingMarker(runConversationId, controller, cancelController);
               scheduleConversationMessageRefresh(runConversationId);
             }
@@ -6216,10 +6271,9 @@ export function ProjectView({
   );
 
   // Cancel every in-flight run for the current conversation (the user's own
-  // streaming turn plus any reattached runs), mark their assistant messages
-  // canceled, and drop the streaming state. Defined here — ahead of the
-  // queued-send handlers — because "send now" interrupts the active run to
-  // make room for the prioritized send.
+  // streaming turn plus any reattached runs). Keep the daemon event streams
+  // attached so the UI records the authoritative terminal status after
+  // termination verification completes.
   const handleStop = useCallback(() => {
     const stoppedAt = Date.now();
     const programmaticBrandId = isProgrammaticBrandExtractionProject(currentProject.metadata)
@@ -6251,23 +6305,17 @@ export function ProjectView({
     cancelSendTextBuffer(true);
     cancelReattachTextBuffers(true);
     cancelRef.current?.abort();
-    cancelRef.current = null;
     for (const controller of reattachCancelControllersRef.current.values()) {
       controller.abort();
     }
-    reattachCancelControllersRef.current.clear();
-    abortRef.current?.abort();
-    abortRef.current = null;
-    for (const controller of reattachControllersRef.current.values()) {
-      controller.abort();
-    }
-    reattachControllersRef.current.clear();
-    setStreaming(false);
-    streamingConversationIdRef.current = null;
-    setStreamingConversationId(null);
     setMessages((curr) => {
       const { messages: next, finalized } = finalizeActiveAssistantMessagesOnStop(curr, stoppedAt);
       for (const message of finalized) persistMessage(message, { telemetryFinalized: true });
+      if (finalized.length > 0) {
+        setStreaming(false);
+        streamingConversationIdRef.current = null;
+        setStreamingConversationId(null);
+      }
       return next;
     });
   }, [
@@ -6421,6 +6469,28 @@ export function ProjectView({
       void handleSend('', [], [], { retryOfAssistantId: assistantMessage.id });
     },
     [currentConversationActionDisabled, handleSend],
+  );
+
+  const handleRetryTermination = useCallback(
+    async (assistantMessage: ChatMessage) => {
+      if (!assistantMessage.runId) return;
+      try {
+        const status = await retryRunTermination(assistantMessage.runId);
+        if (status?.status === 'canceled') {
+          const releasedStreamingMarker = clearRunStreamingMarkerByRunId(assistantMessage.runId);
+          updateMessageById(
+            assistantMessage.id,
+            (previous) => ({ ...previous, runStatus: 'canceled', endedAt: Date.now() }),
+            true,
+          );
+          setError(null);
+          if (releasedStreamingMarker) setQueuedAutoStartTick((tick) => tick + 1);
+        }
+      } catch {
+        // Keep the persisted unverified-termination card available to retry.
+      }
+    },
+    [clearRunStreamingMarkerByRunId, updateMessageById],
   );
 
   // "Continue" on a resumable failed run: send a fresh turn in the same
@@ -8598,6 +8668,7 @@ export function ProjectView({
               onDeleteComment={(commentId) => void removePreviewComment(commentId)}
               onSend={handleComposerSend}
               onRetry={handleRetry}
+              onRetryTermination={handleRetryTermination}
               onResumeRun={handleResumeRun}
               onStop={handleStop}
               onRemoveQueuedSend={removeQueuedChatSend}
@@ -9938,7 +10009,7 @@ export function finalizeActiveAssistantMessagesOnStop(
 ): { messages: ChatMessage[]; finalized: ChatMessage[] } {
   const finalized: ChatMessage[] = [];
   const next = messages.map((message) => {
-    if (!isStoppableAssistantMessage(message)) {
+    if (!isStoppableAssistantMessage(message) || message.runId) {
       return message;
     }
     const updated = {

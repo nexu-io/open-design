@@ -19,6 +19,16 @@ describe('amrRechargeUrlForProfile', () => {
 });
 
 describe('resolveRunFailureUi', () => {
+  it('offers teardown retry, not a fresh run retry, for an unverified cancellation', () => {
+    expect(resolveRunFailureUi('RUN_TERMINATION_UNVERIFIED', 'termination_unverified', 'claude'))
+      .toMatchObject({
+        primaryAction: 'retry-termination',
+        messageKey: null,
+        secondaryRetry: false,
+        showSwitchCard: false,
+      });
+  });
+
   // RATE_LIMITED / UPSTREAM_UNAVAILABLE (non-antigravity): still promote AMR as
   // the steadier hosted alternative, but now also name the failure type and
   // carry actionable recovery copy (#895) instead of leaving the raw upstream

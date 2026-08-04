@@ -505,6 +505,8 @@ interface Props {
     meta?: ChatSendMeta,
   ) => ChatSendOutcome | Promise<ChatSendOutcome>;
   onRetry?: (assistantMessage: ChatMessage) => void;
+  /** Retry safe process-tree teardown without starting a new chat run. */
+  onRetryTermination?: (assistantMessage: ChatMessage) => void;
   onResumeRun?: (assistantMessage: ChatMessage) => void;
   onStop: () => void;
   // Skills available for @-mention assembly. ProjectView filters out the
@@ -816,6 +818,7 @@ export function ChatPane({
   onDeleteComment,
   onSend,
   onRetry,
+  onRetryTermination,
   onResumeRun,
   onStop,
   onRemoveQueuedSend,
@@ -1336,11 +1339,13 @@ export function ChatPane({
   // no-action card doesn't leave an empty flex row (and a dangling column gap).
   const runFailureHasAction = Boolean(
     retryAssistant &&
-      onRetry &&
       runFailureUi &&
-      (runFailureUi.primaryAction !== 'none' ||
-        runFailureUi.secondaryRetry ||
-        canResumeFailedRun),
+      ((runFailureUi.primaryAction === 'retry-termination' && onRetryTermination) ||
+        (onRetry &&
+          (runFailureUi.primaryAction !== 'none' &&
+            runFailureUi.primaryAction !== 'retry-termination' ||
+            runFailureUi.secondaryRetry ||
+            canResumeFailedRun))),
   );
   // The generic local-CLI escape hatch is only used when the failure card has
   // no direct recovery action. AMR guidance remains visible whenever the
@@ -2474,9 +2479,17 @@ export function ChatPane({
                           {t('avatar.useLocal')}
                         </button>
                       ) : null}
-                      {retryAssistant && onRetry && runFailureUi ? (
+                      {retryAssistant && runFailureUi ? (
                         <>
-                          {runFailureUi.primaryAction === 'authorize' ? (
+                          {runFailureUi.primaryAction === 'retry-termination' && onRetryTermination ? (
+                            <button
+                              type="button"
+                              className="chat-error-action chat-error-retry"
+                              onClick={() => onRetryTermination(retryAssistant)}
+                            >
+                              {t('chat.runError.retryTerminationCta')}
+                            </button>
+                          ) : onRetry && runFailureUi.primaryAction === 'authorize' ? (
                             // Sign in to AMR inline — the pill drives vela login,
                             // surfaces the activation URL/code when the browser
                             // doesn't auto-open, and on success we retry the run
@@ -2630,7 +2643,7 @@ export function ChatPane({
                             >
                               {t('chat.resumeRunCta')}
                             </button>
-                          ) : runFailureUi.primaryAction === 'retry' ||
+                          ) : onRetry && (runFailureUi.primaryAction === 'retry' ||
                             runFailureUi.secondaryRetry ? (
                             <button
                               type="button"
@@ -2639,7 +2652,7 @@ export function ChatPane({
                             >
                               {t('promptTemplates.retry')}
                             </button>
-                          ) : null}
+                          ) : null)}
                         </>
                       ) : null}
                     </>

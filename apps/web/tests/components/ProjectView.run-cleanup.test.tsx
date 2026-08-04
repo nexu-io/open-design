@@ -834,6 +834,76 @@ describe('ProjectView daemon cleanup', () => {
     });
   });
 
+  it('requests daemon cancellation on Stop without aborting the authoritative event stream', async () => {
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+
+    let capturedStreamSignal: AbortSignal | null = null;
+    let capturedCancelSignal: AbortSignal | null = null;
+    streamViaDaemon.mockImplementation(async (options: {
+      signal: AbortSignal;
+      cancelSignal?: AbortSignal;
+      onRunCreated?: (runId: string) => void;
+    }) => {
+      capturedStreamSignal = options.signal;
+      capturedCancelSignal = options.cancelSignal ?? null;
+      options.onRunCreated?.('run-stop-1');
+      return new Promise<void>(() => {});
+    });
+
+    render(
+      <ProjectView
+        project={{ id: 'project-stop', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    const chatProps = await waitForReadyChatPaneProps();
+    await chatProps.onSend!('keep running', [], []);
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+
+    const latestChatPaneProps = chatPaneSpy.mock.calls.at(-1)?.[0] as {
+      onStop?: () => void;
+    };
+    latestChatPaneProps.onStop?.();
+
+    await waitFor(() => expect((capturedCancelSignal as AbortSignal | null)?.aborted).toBe(true));
+    expect((capturedStreamSignal as AbortSignal | null)?.aborted).toBe(false);
+    expect(saveMessage).not.toHaveBeenCalledWith(
+      'project-stop',
+      'conv-1',
+      expect.objectContaining({
+        runId: 'run-stop-1',
+        runStatus: 'canceled',
+      }),
+      expect.objectContaining({ telemetryFinalized: true }),
+    );
+  });
+
   // Regression: when a project is created via PluginLoopHome with the
   // auto-send sessionStorage flag set, ProjectView used to seed
   // ChatComposer.initialDraft with project.pendingPrompt. The composer

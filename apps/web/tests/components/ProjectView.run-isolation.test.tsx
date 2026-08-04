@@ -29,6 +29,7 @@ const fetchChatRunStatus = vi.fn();
 const listActiveChatRuns = vi.fn();
 const listProjectRuns = vi.fn();
 const reattachDaemonRun = vi.fn();
+const retryRunTermination = vi.fn();
 const publishDaemonRunFinishedEvent = vi.fn();
 const fetchVelaLoginStatus = vi.fn();
 const fetchAmrWalletSnapshot = vi.fn();
@@ -75,6 +76,7 @@ vi.mock('../../src/providers/daemon', () => ({
   listProjectRuns: (...args: unknown[]) => listProjectRuns(...args),
   publishDaemonRunFinishedEvent: (...args: unknown[]) => publishDaemonRunFinishedEvent(...args),
   reattachDaemonRun: (...args: unknown[]) => reattachDaemonRun(...args),
+  retryRunTermination: (...args: unknown[]) => retryRunTermination(...args),
   streamViaDaemon: (...args: unknown[]) => streamViaDaemon(...args),
 }));
 
@@ -252,6 +254,7 @@ vi.mock('../../src/components/ChatPane', () => ({
     onNewConversation,
     error,
     onRetry,
+    onRetryTermination,
   }: {
     activeConversationId: string | null;
     conversations: Conversation[];
@@ -278,6 +281,7 @@ vi.mock('../../src/components/ChatPane', () => ({
     onSendQueuedNow?: (id: string) => void;
     onNewConversation: () => void;
     onRetry?: (message: ChatMessage) => void;
+    onRetryTermination?: (message: ChatMessage) => void;
   }) => {
     const attached = attachedComments ?? [];
     const retryTarget = [...(messages ?? [])]
@@ -333,6 +337,15 @@ vi.mock('../../src/components/ChatPane', () => ({
         {retryTarget && onRetry ? (
           <button type="button" data-testid="chat-retry" onClick={() => onRetry(retryTarget)}>
             retry
+          </button>
+        ) : null}
+        {retryTarget && onRetryTermination ? (
+          <button
+            type="button"
+            data-testid="chat-retry-termination"
+            onClick={() => onRetryTermination(retryTarget)}
+          >
+            retry termination
           </button>
         ) : null}
         {queuedItems?.map((item, index) => (
@@ -601,6 +614,7 @@ describe('ProjectView conversation run isolation', () => {
       signal: null,
     });
     reattachDaemonRun.mockImplementation(async () => new Promise<void>(() => {}));
+    retryRunTermination.mockResolvedValue(null);
     fetchVelaLoginStatus.mockResolvedValue({ loggedIn: false });
     // Positive wallet balance so the pre-run AMR balance gate lets sends
     // through; the gate's own behavior is covered in
@@ -1163,11 +1177,17 @@ describe('ProjectView conversation run isolation', () => {
     );
   });
 
-  it('interrupts the active run and flushes the prioritized queued send when send-now is clicked while busy', async () => {
+  it('flushes the prioritized queued send after the interrupted run is verified canceled', async () => {
     let finishReattach: (() => void) | null = null;
     let reattachHandlers: { onDone: () => void } | null = null;
+    let reattachRunStatus: ((status: NonNullable<ChatMessage['runStatus']>) => void) | null = null;
     reattachDaemonRun.mockImplementation(async (input: unknown) => {
-      reattachHandlers = (input as { handlers: { onDone: () => void } }).handlers;
+      const options = input as {
+        handlers: { onDone: () => void };
+        onRunStatus?: (status: NonNullable<ChatMessage['runStatus']>) => void;
+      };
+      reattachHandlers = options.handlers;
+      reattachRunStatus = options.onRunStatus ?? null;
       return new Promise<void>((resolve) => {
         finishReattach = resolve;
       });
@@ -1184,28 +1204,100 @@ describe('ProjectView conversation run isolation', () => {
     await waitFor(() => expect(screen.getByTestId('send-queued-1')).toBeTruthy());
     expect(streamViaDaemon).not.toHaveBeenCalled();
 
-    // Send-now on the second queued item while the conversation is still
-    // busy. The chosen UX is "interrupt the running turn and send this item
-    // now" — so this must stop the in-flight run and flush the prioritized
-    // send WITHOUT waiting for the active run to finish on its own. Stopping
-    // first keeps runs from overlapping. The reattach promise is never
-    // resolved here on purpose: a regression that only reorders the queue
-    // (without stopping) would leave the conversation busy forever and never
-    // call streamViaDaemon.
+    // Send-now on the second queued item while the conversation is still busy
+    // requests cancellation, then waits for the daemon's verified terminal
+    // status before releasing the queue. This preserves the cancellation MOAT:
+    // no optimistic local "canceled" state, and no overlapping replacement run.
     fireEvent.click(screen.getByTestId('send-queued-1'));
+    expect(streamViaDaemon).not.toHaveBeenCalled();
 
-    // The in-flight turn is canceled (interrupted), not left running.
+    await act(async () => {
+      reattachRunStatus?.('canceled');
+      await Promise.resolve();
+    });
+
+    // The in-flight turn is canceled only after the daemon says so.
     await waitFor(() =>
       expect(screen.getByTestId('assistant-summary').textContent).toContain('canceled'),
     );
 
-    // ...and the prioritized queued send flushes immediately afterward, with
-    // no manual completion of the reattach run.
+    // ...and the prioritized queued send flushes afterward, with no manual
+    // completion of the reattach run.
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
     const payload = streamViaDaemon.mock.calls[0]?.[0] as {
       history?: Array<{ role: string; content: string }>;
     };
     expect(payload.history?.at(-1)).toMatchObject({ role: 'user', content: 'hello from c' });
+  });
+
+  it('starts the prioritized queued send after an unverified interrupted run is verified by retry', async () => {
+    conversationAMessages = [];
+    const daemonRuns: Array<{
+      onRunCreated?: (runId: string) => void;
+      onRunStatus?: (status: NonNullable<ChatMessage['runStatus']>) => void;
+    }> = [];
+    streamViaDaemon.mockImplementation(async (input: unknown) => {
+      const options = input as {
+        onRunCreated?: (runId: string) => void;
+        onRunStatus?: (status: NonNullable<ChatMessage['runStatus']>) => void;
+      };
+      daemonRuns.push(options);
+      options.onRunCreated?.(`run-${daemonRuns.length}`);
+      options.onRunStatus?.('running');
+    });
+    retryRunTermination.mockResolvedValue({
+      id: 'run-1',
+      status: 'canceled',
+      createdAt: 1,
+      updatedAt: 3,
+      exitCode: null,
+      signal: 'SIGTERM',
+    });
+
+    renderProjectView(
+      config,
+      project,
+      [{ id: 'agent-1', name: 'OpenCode', bin: 'opencode', available: true, models: [] }],
+    );
+
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'));
+    await waitFor(() => expect(screen.getByTestId('send-message')).toHaveProperty('disabled', false));
+
+    fireEvent.click(screen.getByTestId('send-message'));
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByTestId('streaming-state').textContent).toBe('streaming'));
+
+    fireEvent.click(screen.getByTestId('send-message-alt'));
+    await waitFor(() => expect(screen.getByTestId('send-queued-0').textContent).toBe('hello from c'));
+
+    fireEvent.click(screen.getByTestId('send-queued-0'));
+    expect(streamViaDaemon).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      daemonRuns[0]?.onRunStatus?.('failed');
+      await Promise.resolve();
+    });
+
+    await waitFor(() =>
+      expect(screen.getByTestId('assistant-summary').textContent).toContain('failed'),
+    );
+    expect(streamViaDaemon).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByTestId('chat-retry-termination'));
+
+    await waitFor(() => expect(retryRunTermination).toHaveBeenCalledWith('run-1'));
+    await waitFor(() =>
+      expect(screen.getByTestId('assistant-summary').textContent).toContain('canceled'),
+    );
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(2));
+
+    const replacementPayload = streamViaDaemon.mock.calls[1]?.[0] as {
+      history?: Array<{ role: string; content: string }>;
+    };
+    expect(replacementPayload.history?.at(-1)).toMatchObject({
+      role: 'user',
+      content: 'hello from c',
+    });
   });
 
   it('ignores completion side effects when the interrupted run reports canceled and done late', async () => {
@@ -1260,6 +1352,10 @@ describe('ProjectView conversation run isolation', () => {
 
     fireEvent.click(screen.getByTestId('send-queued-0'));
 
+    await act(async () => {
+      daemonRuns[0]?.onRunStatus?.('canceled');
+      await Promise.resolve();
+    });
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(2));
     await waitFor(() =>
       expect(screen.getByTestId('conversation-latest-runs').textContent).toContain('conv-a:running'),
@@ -1276,7 +1372,6 @@ describe('ProjectView conversation run isolation', () => {
     fetchProjectFiles.mockClear();
 
     await act(async () => {
-      daemonRuns[0]?.onRunStatus?.('canceled');
       daemonRuns[0]?.handlers.onDone('interrupted done');
       await new Promise((resolve) => window.setTimeout(resolve, 0));
     });
@@ -1344,12 +1439,17 @@ describe('ProjectView conversation run isolation', () => {
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(screen.getByTestId('send-queued-0')).toBeTruthy());
 
-    // Interrupt: send-now stops the first run and flushes the queued send.
+    // Interrupt: send-now stops the first run. The queued send flushes only
+    // after the daemon verifies that cancellation.
     fireEvent.click(screen.getByTestId('send-queued-0'));
+    await act(async () => {
+      daemonRuns[0]?.onRunStatus?.('canceled');
+      await Promise.resolve();
+    });
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(screen.getByTestId('streaming-state').textContent).toBe('streaming'));
 
-    // The superseded run loses its terminal SSE and surfaces a late error. It
+    // The superseded run then surfaces a late error. It
     // must not paint a global failure banner over the live replacement run.
     await act(async () => {
       daemonRuns[0]?.handlers.onError(new Error('daemon stream disconnected before run completed'));
@@ -1364,8 +1464,14 @@ describe('ProjectView conversation run isolation', () => {
     // conv-a starts with a reattached run in flight (the screenshot scenario:
     // the agent was already streaming when the user queued a turn).
     let reattachHandlers: { onError: (err: Error) => void } | null = null;
+    let reattachRunStatus: ((status: NonNullable<ChatMessage['runStatus']>) => void) | null = null;
     reattachDaemonRun.mockImplementation(async (input: unknown) => {
-      reattachHandlers = (input as { handlers: { onError: (err: Error) => void } }).handlers;
+      const options = input as {
+        handlers: { onError: (err: Error) => void };
+        onRunStatus?: (status: NonNullable<ChatMessage['runStatus']>) => void;
+      };
+      reattachHandlers = options.handlers;
+      reattachRunStatus = options.onRunStatus ?? null;
       return new Promise<void>(() => {});
     });
     streamViaDaemon.mockImplementation(async (input: unknown) => {
@@ -1385,8 +1491,13 @@ describe('ProjectView conversation run isolation', () => {
     fireEvent.click(screen.getByTestId('send-message'));
     await waitFor(() => expect(screen.getByTestId('send-queued-0').textContent).toBe('hello from b'));
 
-    // Interrupt the reattached run; the queued send flushes as the replacement.
+    // Interrupt the reattached run; the queued send flushes as the replacement
+    // only after verified cancellation.
     fireEvent.click(screen.getByTestId('send-queued-0'));
+    await act(async () => {
+      reattachRunStatus?.('canceled');
+      await Promise.resolve();
+    });
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
     expect(screen.getByTestId('streaming-state').textContent).toBe('streaming');
 
@@ -1455,8 +1566,14 @@ describe('ProjectView conversation run isolation', () => {
     // flow (file refresh, artifact persist, produced-file attach) even though
     // it could land before the replacement send attaches.
     let reattachHandlers: { onDone: () => void } | null = null;
+    let reattachRunStatus: ((status: NonNullable<ChatMessage['runStatus']>) => void) | null = null;
     reattachDaemonRun.mockImplementation(async (input: unknown) => {
-      reattachHandlers = (input as { handlers: { onDone: () => void } }).handlers;
+      const options = input as {
+        handlers: { onDone: () => void };
+        onRunStatus?: (status: NonNullable<ChatMessage['runStatus']>) => void;
+      };
+      reattachHandlers = options.handlers;
+      reattachRunStatus = options.onRunStatus ?? null;
       return new Promise<void>(() => {});
     });
     streamViaDaemon.mockImplementation(async (input: unknown) => {
@@ -1477,6 +1594,10 @@ describe('ProjectView conversation run isolation', () => {
     await waitFor(() => expect(screen.getByTestId('send-queued-0').textContent).toBe('hello from b'));
 
     fireEvent.click(screen.getByTestId('send-queued-0'));
+    await act(async () => {
+      reattachRunStatus?.('canceled');
+      await Promise.resolve();
+    });
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
 
     fetchProjectFiles.mockClear();
@@ -1492,6 +1613,13 @@ describe('ProjectView conversation run isolation', () => {
 
   it('does not reset a queued send\'s own comment status when send-now flushes it', async () => {
     fetchPreviewComments.mockResolvedValue([previewComment]);
+    let reattachRunStatus: ((status: NonNullable<ChatMessage['runStatus']>) => void) | null = null;
+    reattachDaemonRun.mockImplementation(async (input: unknown) => {
+      reattachRunStatus = (input as {
+        onRunStatus?: (status: NonNullable<ChatMessage['runStatus']>) => void;
+      }).onRunStatus ?? null;
+      return new Promise<void>(() => {});
+    });
     streamViaDaemon.mockImplementation(async (input: unknown) => {
       const options = input as {
         onRunCreated?: (runId: string) => void;
@@ -1528,6 +1656,10 @@ describe('ProjectView conversation run isolation', () => {
     // interrupt's stale-comment cleanup must NOT reset it to 'open' — that would
     // race the replacement's 'applying' write and reopen a reserved comment.
     fireEvent.click(screen.getByTestId('send-queued-0'));
+    await act(async () => {
+      reattachRunStatus?.('canceled');
+      await Promise.resolve();
+    });
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalled());
 
     expect(patchPreviewCommentStatus).not.toHaveBeenCalledWith(

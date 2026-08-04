@@ -88,6 +88,7 @@ export const de: Dict = {
   'chat.runError.sessionExpiredMessage': "Die fortgesetzte Sitzung war abgelaufen. Sie wurde zurückgesetzt, wiederhole, um einen neuen Lauf zu starten.",
   'chat.runError.gitBashMissingMessage': "Für diesen Agenten unter Windows wird Git Bash benötigt, es wurde aber nicht gefunden. Installiere Git für Windows und versuche es erneut.",
   'chat.runError.cpuUnsupportedMessage': "Die Laufzeitumgebung dieses Agenten benötigt einen CPU-Befehlssatz (AVX2), den dieses Gerät nicht besitzt, und kann daher nicht starten. Aktualisiere Open Design auf die neueste Version, die eine kompatible Laufzeitumgebung mitliefert.",
+  'chat.runError.retryTerminationCta': 'Erneut versuchen zu beenden',
   'common.cancel': 'Abbrechen',
   'chat.selectFromLibrary': 'Aus Bibliothek importieren',
   'chat.importFigma': 'Aus Figma importieren',

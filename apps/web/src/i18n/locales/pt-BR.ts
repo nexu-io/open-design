@@ -88,6 +88,7 @@ export const ptBR: Dict = {
   'chat.runError.sessionExpiredMessage': "A sessão retomada havia expirado. Ela foi redefinida, então tente novamente para iniciar uma nova execução.",
   'chat.runError.gitBashMissingMessage': "O Git Bash é necessário para executar este agente no Windows, mas não foi encontrado. Instale o Git para Windows e tente novamente.",
   'chat.runError.cpuUnsupportedMessage': "O runtime deste agente precisa de um conjunto de instruções de CPU (AVX2) que este dispositivo não possui, por isso não consegue iniciar. Atualize o Open Design para a versão mais recente, que inclui um runtime compatível.",
+  'chat.runError.retryTerminationCta': 'Tentar interromper novamente',
   'common.cancel': 'Cancelar',
   'chat.selectFromLibrary': 'Importar da biblioteca',
   'chat.importFigma': 'Importar do Figma',

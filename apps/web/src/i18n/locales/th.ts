@@ -88,6 +88,7 @@ export const th: Dict = {
   'chat.runError.sessionExpiredMessage': "เซสชันที่กลับมาทำต่อหมดอายุแล้ว ระบบรีเซ็ตให้แล้ว โปรดลองใหม่เพื่อเริ่มการรันใหม่",
   'chat.runError.gitBashMissingMessage': "ต้องใช้ Git Bash เพื่อรันเอเจนต์นี้บน Windows แต่ไม่พบ โปรดติดตั้ง Git for Windows แล้วลองใหม่",
   'chat.runError.cpuUnsupportedMessage': "รันไทม์ของเอเจนต์นี้ต้องการชุดคำสั่ง CPU (AVX2) ที่อุปกรณ์นี้ไม่มี จึงไม่สามารถเริ่มทำงานได้ โปรดอัปเดต Open Design เป็นเวอร์ชันล่าสุดซึ่งมาพร้อมรันไทม์ที่เข้ากันได้",
+  'chat.runError.retryTerminationCta': 'ลองหยุดอีกครั้ง',
   'common.cancel': 'ยกเลิก',
   'chat.selectFromLibrary': 'นำเข้าจากไลบรารี',
   'chat.importFigma': 'นำเข้าจาก Figma',

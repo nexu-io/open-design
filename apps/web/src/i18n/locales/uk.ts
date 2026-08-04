@@ -88,6 +88,7 @@ export const uk: Dict = {
   'chat.runError.sessionExpiredMessage': "Відновлювана сесія завершилася. Її скинуто, тож спробуйте ще раз, щоб почати новий запуск.",
   'chat.runError.gitBashMissingMessage': "Для запуску цього агента в Windows потрібен Git Bash, але його не знайдено. Установіть Git для Windows і спробуйте ще раз.",
   'chat.runError.cpuUnsupportedMessage': "Середовищу виконання цього агента потрібен набір інструкцій процесора (AVX2), якого немає на цьому пристрої, тому воно не може запуститися. Оновіть Open Design до останньої версії, яка містить сумісне середовище виконання.",
+  'chat.runError.retryTerminationCta': 'Спробувати зупинити ще раз',
   'common.cancel': 'Скасувати',
   'chat.selectFromLibrary': 'Імпортувати з бібліотеки',
   'chat.importFigma': 'Імпортувати з Figma',

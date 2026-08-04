@@ -88,6 +88,7 @@ export const pl: Dict = {
   'chat.runError.sessionExpiredMessage': "Wznowiona sesja wygasła. Została zresetowana, więc spróbuj ponownie, aby rozpocząć nowe uruchomienie.",
   'chat.runError.gitBashMissingMessage': "Do uruchomienia tego agenta w systemie Windows wymagany jest Git Bash, ale go nie znaleziono. Zainstaluj Git dla Windows i spróbuj ponownie.",
   'chat.runError.cpuUnsupportedMessage': "Środowisko uruchomieniowe tego agenta wymaga zestawu instrukcji procesora (AVX2), którego to urządzenie nie posiada, więc nie może się uruchomić. Zaktualizuj Open Design do najnowszej wersji, która zawiera zgodne środowisko uruchomieniowe.",
+  'chat.runError.retryTerminationCta': 'Spróbuj zatrzymać ponownie',
   'common.cancel': 'Anuluj',
   'chat.selectFromLibrary': 'Importuj z biblioteki',
   'chat.importFigma': 'Importuj z Figmy',
