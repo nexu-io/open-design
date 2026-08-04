@@ -25,6 +25,67 @@ const DOWNLOAD = href('/download/');
 
 const INSTALL_INSTRUCTION =
   'Read https://open-design.ai/codex-plugin/ and install the Open Design plugin in Codex, including its local MCP. Verify the installation, then tell me to start a new task.';
+const SIGNED_MACOS_APP_FUNCTION = `open_design_signed_macos_app() {
+  [ "$(/usr/bin/uname -s 2>/dev/null || true)" = "Darwin" ] || return 1
+  for open_design_app in "/Applications/Open Design.app" "$HOME/Applications/Open Design.app"; do
+    [ -x "$open_design_app/Contents/MacOS/Open Design" ] || continue
+    [ -f "$open_design_app/Contents/Info.plist" ] || continue
+    /usr/bin/codesign --verify --deep --strict "$open_design_app" >/dev/null 2>&1 || continue
+    /usr/sbin/spctl --assess --type execute "$open_design_app" >/dev/null 2>&1 || continue
+    printf '%s\\n' "$open_design_app"
+    return 0
+  done
+  return 1
+}`;
+const SAFE_MCP_INSPECTION_FUNCTION = `open_design_safe_mcp_inspect() {
+  open_design_mcp_json="$(codex mcp list --json 2>/dev/null)" || {
+    printf '%s\\n' 'open-design-mcp-inspect:error:list-failed'
+    return 1
+  }
+  open_design_mcp_safe="$(printf '%s\\n' "$open_design_mcp_json" | awk '
+    function json_value(line, value) {
+      value = line
+      sub(/^[^:]*:[[:space:]]*/, "", value)
+      sub(/,[[:space:]]*$/, "", value)
+      return value
+    }
+    /^  \\{$/ {
+      in_server = 1
+      name = "null"
+      enabled = "null"
+      transport_type = "null"
+      command = "null"
+      next
+    }
+    in_server && /^    "name":[[:space:]]/ { name = json_value($0); next }
+    in_server && /^    "enabled":[[:space:]]/ { enabled = json_value($0); next }
+    in_server && /^    "transport":[[:space:]]*\\{$/ { in_transport = 1; next }
+    in_server && in_transport && /^      "type":[[:space:]]/ {
+      transport_type = json_value($0)
+      next
+    }
+    in_server && in_transport && /^      "command":[[:space:]]/ {
+      command = json_value($0)
+      next
+    }
+    in_server && in_transport && /^    \\}[,]?$/ { in_transport = 0; next }
+    in_server && /^  \\}[,]?$/ {
+      if (name == "\\\"open-design\\\"") {
+        printf "{\\\"name\\\":%s,\\\"enabled\\\":%s,\\\"transport\\\":{\\\"type\\\":%s,\\\"command\\\":%s}}\\n", name, enabled, transport_type, command
+        found = 1
+      }
+      in_server = 0
+      next
+    }
+    END {
+      if (!found) print "{\\\"name\\\":\\\"open-design\\\",\\\"enabled\\\":false,\\\"transport\\\":{\\\"type\\\":null,\\\"command\\\":null}}"
+    }
+  ')"
+  open_design_mcp_status=$?
+  unset open_design_mcp_json
+  [ "$open_design_mcp_status" -eq 0 ] || return "$open_design_mcp_status"
+  printf '%s\\n' "$open_design_mcp_safe"
+}`;
 const PREFLIGHT_COMMANDS = `open_design_version_at_least() {
   awk -v have="$1" -v need="$2" '
   function is_numeric(value) { return value ~ /^[0-9]+$/ }
@@ -92,6 +153,7 @@ open_design_json_string() {
     }
   }'
 }
+${SIGNED_MACOS_APP_FUNCTION}
 open_design_preflight() {
   open_design_manifest="$(curl -fsSL ${RELEASE_MANIFEST})" || return 1
   open_design_required_codex="$(printf '%s\\n' "$open_design_manifest" | open_design_json_string minimumCodexCliVersion)"
@@ -108,48 +170,104 @@ open_design_preflight() {
     return 1
   }
 
+  open_design_runtime_version=""
+  open_design_runtime_source=""
   open_design_od_path="$(command -v od || true)"
   open_design_od_probe=""
   if [ -n "$open_design_od_path" ]; then
     open_design_od_probe="$("$open_design_od_path" mcp install --open-design-cli-probe 2>/dev/null || true)"
   fi
-  [ "$open_design_od_probe" = "open-design-cli:mcp-install:v1" ] || {
-    printf '%s\\n' 'open-design-preflight:error:cli-probe'
-    return 1
-  }
+  if [ "$open_design_od_probe" = "open-design-cli:mcp-install:v1" ]; then
+    open_design_runtime_json="$("$open_design_od_path" version --json 2>/dev/null || true)"
+    open_design_runtime_version="$(printf '%s\\n' "$open_design_runtime_json" | open_design_json_string version)"
+    if [ -n "$open_design_runtime_version" ]; then
+      open_design_runtime_source="verified-cli"
+    fi
+  fi
 
-  open_design_runtime_json="$("$open_design_od_path" version --json)" || {
-    printf '%s\\n' 'open-design-preflight:error:runtime-unavailable'
+  if [ -z "$open_design_runtime_version" ]; then
+    open_design_app="$(open_design_signed_macos_app || true)"
+    if [ -n "$open_design_app" ]; then
+      open_design_runtime_version="$(/usr/bin/plutil -extract CFBundleShortVersionString raw -o - "$open_design_app/Contents/Info.plist" 2>/dev/null || true)"
+      if [ -n "$open_design_runtime_version" ]; then
+        open_design_runtime_source="signed-macos-app"
+      fi
+    fi
+  fi
+
+  [ -n "$open_design_runtime_version" ] || {
+    printf '%s\\n' 'open-design-preflight:action:settings-mcp-snippet-required'
     return 1
   }
-  open_design_runtime_version="$(printf '%s\\n' "$open_design_runtime_json" | open_design_json_string version)"
   open_design_version_at_least "$open_design_runtime_version" "$open_design_required_runtime" || {
     printf '%s\\n' 'open-design-preflight:error:runtime-version'
     return 1
   }
 
   git ls-remote https://github.com/nexu-io/open-design-agent-plugins.git main >/dev/null || return 1
-  printf '%s\\n' 'open-design-preflight:ok'
+  printf '%s:%s\\n' 'open-design-preflight:ok' "$open_design_runtime_source"
 }
 open_design_preflight`;
 const INSPECT_COMMANDS = `codex plugin marketplace list --json
 codex plugin list --json
-codex mcp list`;
+${SAFE_MCP_INSPECTION_FUNCTION}
+open_design_safe_mcp_inspect`;
 const PLUGIN_INSTALL_COMMANDS = `codex plugin marketplace add nexu-io/open-design-agent-plugins --ref main --json
 codex plugin add open-design@open-design --json`;
-const MCP_INSTALL_COMMANDS = `open_design_od_path="$(command -v od || true)"
-open_design_od_probe=""
-if [ -n "$open_design_od_path" ]; then
-  open_design_od_probe="$("$open_design_od_path" mcp install --open-design-cli-probe 2>/dev/null || true)"
-fi
-if [ "$open_design_od_probe" = "open-design-cli:mcp-install:v1" ]; then
-  "$open_design_od_path" mcp install codex
-else
-  printf '%s\n' 'open-design-mcp-install:fallback-required'
-  false
-fi`;
+const MCP_INSTALL_COMMANDS = `${SIGNED_MACOS_APP_FUNCTION}
+${SAFE_MCP_INSPECTION_FUNCTION}
+open_design_install_mcp() {
+  open_design_mcp_state="$(open_design_safe_mcp_inspect)" || return 1
+  case "$open_design_mcp_state" in
+    *'"name":"open-design","enabled":true'*)
+      printf '%s\\n' 'open-design-mcp-install:ok:already-enabled'
+      return 0
+      ;;
+  esac
+
+  open_design_od_path="$(command -v od || true)"
+  open_design_od_probe=""
+  if [ -n "$open_design_od_path" ]; then
+    open_design_od_probe="$("$open_design_od_path" mcp install --open-design-cli-probe 2>/dev/null || true)"
+  fi
+  if [ "$open_design_od_probe" = "open-design-cli:mcp-install:v1" ]; then
+    if "$open_design_od_path" mcp install codex; then
+      open_design_mcp_state="$(open_design_safe_mcp_inspect)" || return 1
+      case "$open_design_mcp_state" in
+        *'"name":"open-design","enabled":true'*)
+          printf '%s\\n' 'open-design-mcp-install:ok:verified-cli'
+          return 0
+          ;;
+      esac
+    fi
+  fi
+
+  open_design_app="$(open_design_signed_macos_app || true)"
+  if [ -n "$open_design_app" ]; then
+    /usr/bin/open -g -j "$open_design_app" --args --headless --mcp-install codex || return 1
+    open_design_attempt=0
+    while [ "$open_design_attempt" -lt 20 ]; do
+      open_design_mcp_state="$(open_design_safe_mcp_inspect)" || return 1
+      case "$open_design_mcp_state" in
+        *'"name":"open-design","enabled":true'*)
+          printf '%s\\n' 'open-design-mcp-install:ok:signed-macos-app'
+          return 0
+          ;;
+      esac
+      open_design_attempt=$((open_design_attempt + 1))
+      sleep 2
+    done
+    printf '%s\\n' 'open-design-mcp-install:error:packaged-timeout'
+    return 1
+  fi
+
+  printf '%s\\n' 'open-design-mcp-install:action:settings-mcp-snippet-required'
+  return 1
+}
+open_design_install_mcp`;
 const VERIFY_COMMANDS = `codex plugin list --json
-codex mcp list`;
+${SAFE_MCP_INSPECTION_FUNCTION}
+open_design_safe_mcp_inspect`;
 
 const codexRunFrames = [
   {

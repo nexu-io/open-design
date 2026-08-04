@@ -29,12 +29,12 @@ const zh: OpenDesignPluginCopy = {
       {
         title: '检查环境是否受支持',
         body:
-          '从 release-manifest.json 读取 plugin.minimumCodexCliVersion 和 plugin.minimumOpenDesignVersion。在更改任何配置之前，确认已安装的 Codex CLI，以及通过 Open Design CLI 探测并验证的 Open Design 运行时，均满足清单中规定的最低版本要求。如果无法完成 Open Design 探测、无法获取运行时版本或版本过低，请停止操作并引导用户前往官方下载页；不要在未告知用户的情况下下载安装程序，也不要运行未验证的脚本。',
+          '从 release-manifest.json 读取 plugin.minimumCodexCliVersion 和 plugin.minimumOpenDesignVersion。在更改任何配置之前，必须同时满足这两个最低版本要求。仅接受由经过探测的 Open Design CLI 报告的 Open Design 运行时版本，或通过代码签名和 Gatekeeper 检查的已签名 macOS 应用包中 CFBundleShortVersionString 的值。如果 od 缺失、在 PATH 中被其他程序遮蔽（包括 /usr/bin/od），或守护进程已停止，必须改用已签名应用包进行探测。如果两种已验证的探测方式均不可用，请在更改配置前停止操作，引导用户前往 Open Design Settings → MCP server 复制适用于该客户端的绝对路径配置片段，然后重试。只有在应用缺失或版本过低时，才引导用户前往官方下载页；绝不要静默下载安装程序或运行未验证的脚本。',
       },
       {
         title: '更改配置前先行检查',
         body:
-          '从 release-manifest.json 读取所需的选择器和版本，然后与检查到的 Codex 状态进行比较。仅通过已脱敏的 codex mcp list 输出检查 MCP 状态：缺少 open-design 记录属于正常情况，不应导致流程失败。绝不要获取 codex mcp get open-design --json 的输出，因为其中的传输环境变量值可能包含凭据。如果名为 open-design 的 marketplace 指向其他来源，请停止操作并报告命名冲突。仅当已安装版本与 release-manifest.json 中声明的版本一致时，才保留 open-design@open-design。',
+          '从 release-manifest.json 读取所需的选择器和版本，然后与检查到的 Codex 状态进行比较。仅通过从 codex mcp list --json 派生的已过滤 MCP 快照检查 MCP 状态。输出时只保留 name、enabled、transport.type 和 command；在输出前丢弃 args、env、env_vars、headers 和 token 字段。缺少 open-design 结果属于正常情况，不应导致流程失败。绝不要打印或报告原始列表或 codex mcp get open-design --json 输出，因为传输值可能包含凭据。如果名为 open-design 的 marketplace 指向其他来源，请停止操作并报告命名冲突。仅当已安装版本与 release-manifest.json 中声明的版本一致时，才保留 open-design@open-design。',
       },
       {
         title: '仅安装缺失的组件',
@@ -44,12 +44,12 @@ const zh: OpenDesignPluginCopy = {
       {
         title: '确保本地 Open Design MCP 可用',
         body:
-          '保留现有且已启用的 open-design MCP。如果不存在，请运行已安装 Open Design 应用提供的 MCP 安装程序。在 POSIX 系统中，仅当对解析出的 od 路径执行探测并返回 open-design-cli:mcp-install:v1 后，才运行该路径；如果返回任何其他结果（包括 /usr/bin/od），则必须改用 Open Design Settings → MCP server 或已签名应用包提供的 --headless --mcp-install codex 操作。绝不要猜测 localhost 端口，也不要运行 codex mcp login；Vela 登录应在 Open Design 中完成。',
+          '保留现有且已启用的 open-design MCP。如果不存在，请运行已安装 Open Design 应用提供的 MCP 安装程序。在 POSIX 系统中，仅当对解析出的 od 路径执行探测并返回 open-design-cli:mcp-install:v1 后，才运行该路径。如果该路径缺失、被 /usr/bin/od 遮蔽或无法完成操作，请使用 /usr/bin/open 启动经过验证的已签名 macOS 应用包并执行 --headless --mcp-install codex，然后仅轮询已过滤的 MCP 快照。如果没有可用的已验证启动器，请停止操作，引导用户前往 Open Design Settings → MCP server 复制适用于该客户端的绝对路径配置片段，然后重试此步骤。绝不要猜测 localhost 端口，也不要运行 codex mcp login；Vela 登录应在 Open Design 中完成。',
       },
       {
         title: '验证、报告并开始新任务',
         body:
-          '验证插件 id 为 open-design@open-design，确认其已安装版本与 release-manifest.json 中的 plugin.version 完全一致，并通过已脱敏的 codex mcp list 输出确认存在名为 open-design 的已启用 stdio MCP。它的 command 必须是 Open Design 的绝对启动路径，且不得嵌入 bearer token、API key 或 Vela 凭据。报告已安装的内容，以及尚未满足的 Open Design 或 Vela 登录前置条件。新建 Codex 任务以加载已安装的插件快照，然后调用 @open-design。',
+          '验证插件 id 为 open-design@open-design，确认其已安装版本与 release-manifest.json 中的 plugin.version 完全一致，并使用已过滤的 MCP 快照确认存在名为 open-design 的已启用 stdio MCP。仅检查 name、enabled、transport.type 和 command；原始 args、env、env_vars、headers、token、bearer token、API key 和 Vela 凭据值绝不能出现在输出或报告中。command 必须是 Open Design 的绝对启动路径。报告已安装的内容，以及尚未满足的 Open Design 或 Vela 登录前置条件。新建 Codex 任务以加载已安装的插件快照，然后调用 @open-design。',
       },
     ],
   },

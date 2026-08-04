@@ -30,12 +30,12 @@ const ja: OpenDesignPluginCopy = {
       {
         title: '対応環境を事前確認する',
         body:
-          'release-manifest.json から plugin.minimumCodexCliVersion と plugin.minimumOpenDesignVersion を読み取ってください。設定を変更する前に、インストール済みの Codex CLI と、プローブした Open Design CLI が報告する検証済みの Open Design ランタイムの両方が、マニフェストに記載された最小バージョンを満たしていることを確認してください。Open Design のプローブまたはランタイムバージョンを取得できない場合や、バージョンが古すぎる場合は停止し、ユーザーを公式ダウンロードページへ案内してください。インストーラーを無断でダウンロードしたり、未検証のスクリプトを実行したりしないでください。',
+          'release-manifest.json から plugin.minimumCodexCliVersion と plugin.minimumOpenDesignVersion を読み取ってください。設定を変更する前に、両方の最小要件を満たしていることを確認してください。Open Design のランタイムバージョンとして受け入れてよいのは、プローブした Open Design CLI が報告した値、またはコード署名と Gatekeeper のチェックに合格した署名済み macOS アプリバンドル内の CFBundleShortVersionString の値だけです。od が見つからない場合、PATH 上でシャドーイングされている場合（/usr/bin/od を含む）、またはデーモンが停止している場合は、署名済みバンドルのプローブに切り替えてください。いずれの検証済みプローブも利用できない場合は、設定を変更する前に停止し、Open Design Settings → MCP server でクライアント専用の絶対パススニペットをコピーするようユーザーに案内してから、再試行してください。公式ダウンロードページへ案内するのは、アプリが存在しないか古すぎる場合だけにしてください。インストーラーを無断でダウンロードしたり、未検証のスクリプトを実行したりしないでください。',
       },
       {
         title: '設定を変更する前に確認する',
         body:
-          'release-manifest.json から必須のセレクターとバージョンを読み取り、確認した Codex の状態と比較してください。機密情報がマスキングされた codex mcp list の出力だけを使って MCP の状態を確認してください。open-design の行がないことは想定内であり、致命的なエラーではありません。トランスポートの環境変数値に認証情報が含まれる可能性があるため、codex mcp get open-design --json の出力は絶対に取得しないでください。open-design というマーケットプレイス名が別のソースを指している場合は停止し、競合を報告してください。open-design@open-design は、インストール済みのバージョンが release-manifest.json で宣言されているバージョンと一致する場合にのみ保持してください。',
+          'release-manifest.json から必須のセレクターとバージョンを読み取り、確認した Codex の状態と比較してください。codex mcp list --json から生成したフィルタ済みの MCP スナップショットだけを使って、MCP の状態を確認してください。出力するのは name、enabled、transport.type、command だけとし、args、env、env_vars、headers、token の各フィールドは出力前に破棄してください。open-design の結果がないことは想定内であり、致命的なエラーではありません。トランスポートの値に認証情報が含まれる可能性があるため、未加工のリストや codex mcp get open-design --json の出力を表示したり報告したりしないでください。open-design というマーケットプレイス名が別のソースを指している場合は停止し、競合を報告してください。open-design@open-design は、インストール済みのバージョンが release-manifest.json で宣言されているバージョンと一致する場合にのみ保持してください。',
       },
       {
         title: '不足しているコンポーネントだけをインストールする',
@@ -45,12 +45,12 @@ const ja: OpenDesignPluginCopy = {
       {
         title: 'ローカルの Open Design MCP を確実に用意する',
         body:
-          'すでに有効な open-design MCP がある場合は、そのまま保持してください。それ以外の場合は、インストール済みの Open Design アプリケーションに付属する MCP インストーラーを実行してください。POSIX システムでは、解決済みの od パスに対するプローブが open-design-cli:mcp-install:v1 を返した場合にのみ、そのパスを実行してください。それ以外の結果の場合は、/usr/bin/od を含め、Open Design Settings → MCP server または署名済みパッケージに含まれる --headless --mcp-install codex 操作に切り替えてください。localhost のポートを推測したり、codex mcp login を実行したりしないでください。Vela へのログインは Open Design で行います。',
+          'すでに有効な open-design MCP がある場合は、そのまま保持してください。それ以外の場合は、インストール済みの Open Design アプリケーションに付属する MCP インストーラーを実行してください。POSIX システムでは、解決済みの od パスに対するプローブが open-design-cli:mcp-install:v1 を返した場合にのみ、そのパスを実行してください。そのパスが存在しない場合、/usr/bin/od によってシャドーイングされている場合、または実行を完了できない場合は、検証済みの署名済み macOS アプリバンドルに対して /usr/bin/open と --headless --mcp-install codex を使用し、その後はフィルタ済みの MCP スナップショットだけをポーリングしてください。検証済みの起動手段を利用できない場合は停止し、Open Design Settings → MCP server でクライアント専用の絶対パススニペットをコピーするようユーザーに案内してから、この手順を再試行してください。localhost のポートを推測したり、codex mcp login を実行したりしないでください。Vela へのログインは Open Design で行います。',
       },
       {
         title: '確認、報告を行い、新しいタスクを開始する',
         body:
-          'プラグイン ID open-design@open-design を検証し、そのインストール済みバージョンが release-manifest.json の plugin.version と完全に一致することを確認してください。また、機密情報がマスキングされた codex mcp list の出力を使って、open-design という名前の有効な stdio MCP を確認してください。そのコマンドは Open Design を起動する絶対パスでなければならず、bearer token、API key、Vela の認証情報を埋め込んではいけません。インストールした内容と、未完了の Open Design または Vela ログインの前提条件があれば報告してください。新しい Codex タスクを開始してインストール済みのプラグインスナップショットを読み込ませ、@open-design を呼び出してください。',
+          'プラグイン ID open-design@open-design を検証し、そのインストール済みバージョンが release-manifest.json の plugin.version と完全に一致することを確認してください。また、フィルタ済みの MCP スナップショットを使って、open-design という名前の有効な stdio MCP を確認してください。確認するのは name、enabled、transport.type、command だけにしてください。未加工の args、env、env_vars、headers、token、bearer token、API key、および Vela の認証情報の値は、出力やレポートに決して含めないでください。command は Open Design を起動する絶対パスでなければなりません。インストールした内容と、未完了の Open Design または Vela ログインの前提条件があれば報告してください。新しい Codex タスクを開始してインストール済みのプラグインスナップショットを読み込ませ、@open-design を呼び出してください。',
       },
     ],
   },

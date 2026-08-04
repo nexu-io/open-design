@@ -29,12 +29,12 @@ const ko: OpenDesignPluginCopy = {
       {
         title: '지원 환경을 사전 점검하세요',
         body:
-          'release-manifest.json 파일에서 plugin.minimumCodexCliVersion 및 plugin.minimumOpenDesignVersion 값을 읽으세요. 구성을 변경하기 전에 설치된 Codex CLI와, 프로브를 마친 Open Design CLI가 보고하는 검증된 Open Design 런타임이 모두 매니페스트의 최소 버전을 충족하는지 확인하세요. Open Design 프로브 또는 런타임 버전을 확인할 수 없거나 버전이 너무 낮으면 중단하고 사용자를 공식 다운로드 페이지로 안내하세요. 설치 프로그램을 사용자 몰래 다운로드하거나 검증되지 않은 스크립트를 실행하지 마세요.',
+          'release-manifest.json 파일에서 plugin.minimumCodexCliVersion 및 plugin.minimumOpenDesignVersion 값을 읽으세요. 구성을 변경하기 전에 두 최소 버전을 모두 충족해야 합니다. Open Design 런타임 버전은 프로브를 마친 Open Design CLI에서 보고된 값, 또는 코드 서명과 Gatekeeper 검사를 통과한 서명된 macOS 앱 번들의 CFBundleShortVersionString 값만 인정하세요. od가 없거나 PATH에서 다른 항목에 가려진 경우(/usr/bin/od 포함), 또는 데몬이 중지된 경우에는 서명된 번들 프로브로 넘어가야 합니다. 검증된 두 프로브를 모두 사용할 수 없다면 구성을 변경하기 전에 중단하고, 사용자에게 Open Design Settings → MCP server에서 해당 클라이언트용 절대 경로 스니펫을 복사하도록 안내한 뒤 다시 시도하세요. 앱이 없거나 버전이 너무 낮을 때만 사용자를 공식 다운로드 페이지로 안내하세요. 설치 프로그램을 사용자 몰래 다운로드하거나 검증되지 않은 스크립트를 실행해서는 안 됩니다.',
       },
       {
         title: '구성을 변경하기 전에 확인하세요',
         body:
-          'release-manifest.json 파일에서 필요한 선택자와 버전을 읽은 다음, 점검한 Codex 상태와 비교하세요. MCP 상태는 민감 정보가 제거된 codex mcp list 출력만으로 점검하세요. open-design 행이 없는 것은 예상된 상태이며 오류가 아닙니다. 전송 환경 값에 자격 증명이 포함될 수 있으므로 codex mcp get open-design --json 출력은 절대 캡처하지 마세요. open-design 마켓플레이스 이름이 다른 소스를 가리키면 중단하고 충돌을 보고하세요. 설치된 버전이 release-manifest.json 파일에 선언된 버전과 일치할 때만 open-design@open-design 플러그인을 그대로 유지하세요.',
+          'release-manifest.json 파일에서 필요한 선택자와 버전을 읽은 다음, 점검한 Codex 상태와 비교하세요. MCP 상태는 codex mcp list --json에서 얻은 필터링된 MCP 스냅샷으로만 점검하세요. 출력에는 name, enabled, transport.type, command만 포함하고, args, env, env_vars, headers, token 필드는 출력 전에 제거하세요. open-design 결과가 없는 것은 예상된 상태이며 오류가 아닙니다. 전송 값에 자격 증명이 포함될 수 있으므로 원시 목록이나 codex mcp get open-design --json 출력을 인쇄하거나 보고하지 마세요. open-design 마켓플레이스 이름이 다른 소스를 가리키면 중단하고 충돌을 보고하세요. 설치된 버전이 release-manifest.json 파일에 선언된 버전과 일치할 때만 open-design@open-design 플러그인을 그대로 유지하세요.',
       },
       {
         title: '누락된 구성 요소만 설치하세요',
@@ -44,12 +44,12 @@ const ko: OpenDesignPluginCopy = {
       {
         title: '로컬 Open Design MCP를 준비하세요',
         body:
-          '기존에 활성화된 open-design MCP가 있다면 그대로 유지하세요. 없다면 설치된 Open Design 애플리케이션이 제공하는 MCP 설치 프로그램을 실행하세요. POSIX 시스템에서는 확인된 od 경로의 프로브 결과로 open-design-cli:mcp-install:v1 문자열이 반환될 때만 해당 경로를 실행하세요. /usr/bin/od 경로를 포함해 그 밖의 결과가 나오면 Open Design Settings → MCP server 또는 서명된 패키지의 --headless --mcp-install codex 작업으로 전환해야 합니다. localhost 포트를 추측하거나 codex mcp login을 실행하지 마세요. Vela 로그인은 Open Design에서 해야 합니다.',
+          '기존에 활성화된 open-design MCP가 있다면 그대로 유지하세요. 없다면 설치된 Open Design 애플리케이션이 제공하는 MCP 설치 프로그램을 실행하세요. POSIX 시스템에서는 확인된 od 경로의 프로브 결과로 open-design-cli:mcp-install:v1 문자열이 반환될 때만 해당 경로를 실행하세요. 해당 경로가 없거나 /usr/bin/od 경로에 가려졌거나 작업을 완료할 수 없으면, 검증된 서명 macOS 앱 번들을 /usr/bin/open 명령과 --headless --mcp-install codex 옵션으로 실행한 다음 필터링된 MCP 스냅샷만 폴링하세요. 검증된 실행기를 사용할 수 없다면 중단하고, 사용자에게 Open Design Settings → MCP server에서 해당 클라이언트용 절대 경로 스니펫을 복사하도록 안내한 뒤 이 단계를 다시 시도하세요. localhost 포트를 추측하거나 codex mcp login을 실행하지 마세요. Vela 로그인은 Open Design에서 해야 합니다.',
       },
       {
         title: '확인하고 보고한 뒤 새 작업을 시작하세요',
         body:
-          '플러그인 ID가 open-design@open-design인지 확인하고, 설치된 버전이 release-manifest.json 파일의 plugin.version 값과 정확히 일치하는지 확인한 뒤, 민감 정보가 제거된 codex mcp list 출력에서 open-design 이름의 활성화된 stdio MCP를 확인하세요. 해당 명령은 Open Design의 절대 실행 경로여야 하며 bearer token, API key 또는 Vela 자격 증명을 포함해서는 안 됩니다. 설치된 항목과 아직 필요한 Open Design 또는 Vela 로그인 조건을 보고하세요. 새 Codex 작업을 시작해 설치된 플러그인 스냅샷을 불러온 다음 @open-design 멘션을 호출하세요.',
+          '플러그인 ID가 open-design@open-design인지 확인하고, 설치된 버전이 release-manifest.json 파일의 plugin.version 값과 정확히 일치하는지 확인한 뒤, 필터링된 MCP 스냅샷에서 open-design 이름의 활성화된 stdio MCP를 확인하세요. name, enabled, transport.type, command만 점검하세요. 원시 args, env, env_vars, headers, token, bearer token, API key 및 Vela 자격 증명 값은 출력이나 보고서에 절대 포함되면 안 됩니다. command 필드는 Open Design의 절대 실행 경로여야 합니다. 설치된 항목과 아직 필요한 Open Design 또는 Vela 로그인 조건을 보고하세요. 새 Codex 작업을 시작해 설치된 플러그인 스냅샷을 불러온 다음 @open-design 멘션을 호출하세요.',
       },
     ],
   },
