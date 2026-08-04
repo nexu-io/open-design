@@ -932,10 +932,14 @@
   font-weight: 500;
   color: var(--text);
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 4px;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .qf-required {
+  flex: 0 0 auto;
+  white-space: nowrap;
   color: var(--text-muted);
   border: 1px solid var(--border);
   border-radius: 999px;
