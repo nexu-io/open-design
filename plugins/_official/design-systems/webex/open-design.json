@@ -1,0 +1,113 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-webex",
+  "title": "Webex",
+  "title_i18n": {
+    "zh-CN": "Webex",
+    "zh-TW": "Webex",
+    "ja": "Webex",
+    "ko": "Webex",
+    "de": "Webex",
+    "fr": "Webex",
+    "ru": "Webex",
+    "es": "Webex",
+    "pt-BR": "Webex",
+    "it": "Webex",
+    "vi": "Webex",
+    "pl": "Webex",
+    "id": "Webex",
+    "nl": "Webex",
+    "ar": "Webex",
+    "tr": "Webex",
+    "uk": "Webex",
+    "en": "Webex"
+  },
+  "version": "0.1.0",
+  "publishedAt": "2026-08-04T09:00:00Z",
+  "description": "Collaboration platform. Momentum typography, blue action system, multi-user accent spectrum.",
+  "description_i18n": {
+    "zh-CN": "协作平台。Momentum 字体、蓝色操作系统、多用户强调色谱。",
+    "zh-TW": "協作平台。Momentum 字體、藍色操作系統、多使用者強調色譜。",
+    "ja": "コラボレーションプラットフォーム。Momentumタイポグラフィ、ブルーのアクションシステム、マルチユーザーのアクセントスペクトル。",
+    "ko": "협업 플랫폼. Momentum 타이포그래피, 블루 액션 시스템, 멀티유저 액센트 스펙트럼.",
+    "de": "Kollaborationsplattform. Momentum-Typografie, blaues Aktionssystem, Multi-User-Akzentspektrum.",
+    "fr": "Plateforme de collaboration. Typographie Momentum, système d’action bleu, spectre d’accents multi-utilisateurs.",
+    "ru": "Платформа для совместной работы. Типографика Momentum, синяя система действий, спектр акцентов для пользователей.",
+    "es": "Plataforma de colaboración. Tipografía Momentum, sistema de acción azul, espectro de acentos multiusuario.",
+    "pt-BR": "Plataforma de colaboração. Tipografia Momentum, sistema de ação azul, espectro de acentos multiusuário.",
+    "it": "Piattaforma di collaborazione. Tipografia Momentum, sistema d’azione blu, spettro di accenti multiutente.",
+    "vi": "Nền tảng cộng tác. Typography Momentum, hệ thống hành động xanh dương, phổ điểm nhấn đa người dùng.",
+    "pl": "Platforma współpracy. Typografia Momentum, niebieski system akcji, spektrum akcentów multi-user.",
+    "id": "Platform kolaborasi. Tipografi Momentum, sistem aksi biru, spektrum aksen multi-pengguna.",
+    "nl": "Samenwerkingsplatform. Momentum-typografie, blauw actiesysteem, multi-user accentspectrum.",
+    "ar": "منصة تعاون. خطوط Momentum، نظام إجراءات أزرق، طيف لمسات متعدد المستخدمين.",
+    "tr": "İş birliği platformu. Momentum tipografisi, mavi eylem sistemi, çok kullanıcılı vurgu spektrumu.",
+    "uk": "Платформа для спільної роботи. Типографіка Momentum, синя система дій, спектр акцентів для користувачів.",
+    "en": "Collaboration platform. Momentum typography, blue action system, multi-user accent spectrum."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "productivity-saas"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Webex design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Webex design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "webex",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}
