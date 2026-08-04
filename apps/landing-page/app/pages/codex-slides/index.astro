@@ -483,7 +483,7 @@ const studioTiles = copy.inside.map((tile, i) => ({ ...tile, src: STUDIO_SHOTS[i
   /* Studio UI screenshots carry dense product chrome, so they need a bigger
      cell than the simple deck cards — two-up instead of four-up. */
   .ha-showcase-wide {
-    grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
   }
 
   /* ---- Scenario cards ---- */
