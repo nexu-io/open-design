@@ -153,19 +153,26 @@ export function DesignSystemPicker({
       // Open upward when there isn't enough room below (the composer-top
       // picker is near the viewport bottom) but there is more room above.
       const openUp = spaceBelow < 320 && spaceAbove > spaceBelow;
+      // Prefer 220-420px, but never exceed the chosen side's actual space:
+      // the height is fixed (see PopoverAnchor.height), so a hard floor
+      // would push the popover past the viewport edge in a short window.
+      // The minimum applies only when it fits; below that the popover takes
+      // whatever space the side has and the panes scroll inside it.
+      const clampHeight = (space: number) =>
+        Math.min(Math.max(220, Math.min(420, space)), Math.max(space, 0));
       if (openUp) {
         setAnchor({
           bottom: window.innerHeight - rect.top + gap,
           left,
           width: popoverWidth,
-          height: Math.max(220, Math.min(420, spaceAbove)),
+          height: clampHeight(spaceAbove),
         });
       } else {
         setAnchor({
           top: rect.bottom + gap,
           left,
           width: popoverWidth,
-          height: Math.max(220, Math.min(420, spaceBelow)),
+          height: clampHeight(spaceBelow),
         });
       }
     }
