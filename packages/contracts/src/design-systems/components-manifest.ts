@@ -576,28 +576,26 @@ function extractStyleBlocks(html: string): string[] {
 
 function extractCssSelectors(css: string): string[] {
   const selectors = new Set<string>();
-  const commentlessCss = stripContainerAtRuleHeaders(stripCssComments(css));
+  // PerishCode round-8 blocker 2026-08-03 23:53 (OR-COR-...):
+  // stripContainerAtRuleHeaders is not quote-aware — its regex
+  // `@(media|supports|container|layer)\b[^{]*\{` breaks at a
+  // quoted brace like `@supports selector(.btn-a[data-icon="{"])`.
+  // After round-7 introduced iterateCssRules with full
+  // quote/escape-aware scanning and `isSupportedAtRuleHeader`
+  // recursion, the pre-pass is no longer needed. Drop it so
+  // `@supports selector(...)` with a dotted uppercase US base
+  // (e.g. `usBRK.B` in CSS `@supports` block) is processed
+  // correctly.
+  const commentlessCss = stripCssComments(css);
 
-  // The legacy `(?:^|[{}])\s*([^@{}][^{}]*?)\s*\{` regex anchored each
-  // rule at the *previous* rule's closing `}`, so half the flat rules in
-  // a sheet were silently dropped (#6224 part 1). It also mis-handled
-  // supported at-rule bodies: after `stripContainerAtRuleHeaders` turns
-  // `@media ... {` into `{`, the regex sees `{ \n .inside { ... }` and
-  // the bare `[^@{}]` exclusion rejects the inner selector — silent loss
-  // of every selector immediately inside an at-rule (#6250 reviewer #1).
-  //
-  // Reuse the brace-depth scanner that already powers
-  // `extractSelectorTokenReferences` — it walks the CSS character-by-character
-  // and recursively descends into supported at-rule bodies so inner
-  // selectors surface with their real selectors preserved.
   for (const { selectorList } of iterateCssRules(commentlessCss)) {
     if (selectorList.length === 0) continue;
     if (selectorList.includes(':root')) continue;
     if (/^(?:from|to|\d+(?:\.\d+)?%)$/i.test(selectorList)) continue;
-    // Skip supported at-rule headers — they survived the strip pass because
-    // the body wasn't processed by stripContainerAtRuleHeaders (e.g. nested
-    // recursion landed on `@media`). At-rules never contribute a *selector*.
-    if (selectorList.startsWith('@')) continue;
+    // Supported at-rule headers (e.g. @media, @supports) and their
+    // bodies are handled by iterateCssRules: the header is emitted
+    // as a rule and the body is recursed into for inner selectors.
+    if (selectorList.startsWith('@') && !isSupportedAtRuleHeader(selectorList)) continue;
 
     for (const selector of splitSelectorList(selectorList)) {
       const normalized = normalizeSelector(selector);
@@ -612,7 +610,12 @@ function extractCssSelectors(css: string): string[] {
 
 function extractSelectorTokenReferences(css: string): Map<string, string[]> {
   const referencesBySelector = new Map<string, Set<string>>();
-  const commentlessCss = stripContainerAtRuleHeaders(stripCssComments(css));
+  // PerishCode round-8 blocker 2026-08-03 23:53: drop the
+  // stripContainerAtRuleHeaders pre-pass — its non-quote-aware regex
+  // cuts `@supports selector(.btn-a[data-icon="{"])` at the quoted
+  // brace and loses the inner `.btn-a` rule's token references.
+  // iterateCssRules now recurses through supported at-rules on its own.
+  const commentlessCss = stripCssComments(css);
 
   // Walk the CSS character-by-character with a brace-depth scanner instead of
   // a single `[{}]\s*([^@{}][^{}]*?)\s*\{([^{}]*)\}` regex. The regex consumed
@@ -626,6 +629,12 @@ function extractSelectorTokenReferences(css: string): Map<string, string[]> {
   for (const { selectorList, body } of iterateCssRules(commentlessCss)) {
     if (selectorList.includes(':root')) continue;
     if (/^(?:from|to|\d+(?:\.\d+)?%)$/i.test(selectorList)) continue;
+    // Supported at-rule headers wrapped around inner rules are recursed
+    // into by iterateCssRules (round-8) so the inner rules' tokens reach
+    // the references map under their own selectors. The wrapper header
+    // itself contributes no token references. Unsupported at-rules
+    // (@keyframes / @font-face / @page) were dropped by iterateCssRules.
+    if (selectorList.startsWith('@')) continue;
 
     const tokenReferences = extractTokenReferences(body);
     if (tokenReferences.length === 0) continue;
@@ -656,9 +665,14 @@ function iterateCssRules(css: string): CssRule[] {
   const length = css.length;
 
   while (index < length) {
-    // Find the next '{' that opens a rule body. Skip '@container' at-rule
-    // bodies (their inner rules are emitted with the at-rule header stripped,
-    // matching stripContainerAtRuleHeaders behaviour).
+    // Find the next '{' that opens a rule body.
+    //
+    // Round-8 (PR #6250 PerishCode blocker 8-03 23:53): we no longer
+    // strip supported at-rule headers via a pre-pass. iterateCssRules
+    // recognises `@media` / `@supports` / `@container` / `@layer` headers
+    // itself via `isSupportedAtRuleHeader` and recurses through their
+    // body slices, so the header text reaches this scanner intact and
+    // the inner rules are emitted with their real selectors.
     //
     // Quote-aware scan (PR #6250 reviewer #4): a `{` that appears inside a
     // quoted selector context — e.g. `.btn-a[data-icon="{"]` — must NOT be
@@ -811,23 +825,31 @@ function iterateCssRules(css: string): CssRule[] {
     const body = flattenNestedBody(bodySlice);
 
     if (selectorList.length === 0) {
-      // Empty selector — the at-rule header (`@media`/`@supports`/
-      // `@container`/`@layer`) was stripped to '{' by
-      // stripContainerAtRuleHeaders before this scanner ran. The outermost
-      // `{` after stripping opens an empty selector; we must NOT push it as
-      // a rule (that would swallow the whole at-rule body as one giant
-      // "rule" and lose every inner selector). Instead recurse into the
-      // body slice so inner rules are emitted with their real selectors
-      // and real bodies (PR #6250 reviewer #1).
+      // Empty selector — recursion caller passed an already-flattened body
+      // slice that begins with a `{` (shouldn't happen post round-8 since
+      // stripContainerAtRuleHeaders no longer truncates headers, but kept
+      // as a defensive guard). Recurse to recover inner selectors instead
+      // of pushing a garbage "rule" that swallows the whole block.
       rules.push(...iterateCssRules(bodySlice));
-    } else if (!selectorList.startsWith('@') || isSupportedAtRuleHeader(selectorList)) {
-      // Ordinary selector, or a supported at-rule header that survived the
-      // strip pass (e.g. recursive call landed on `@media` whose header was
-      // not stripped because the parent body wasn't processed by
-      // stripContainerAtRuleHeaders). Push it as-is; the body still has
+    } else if (isSupportedAtRuleHeader(selectorList)) {
+      // Round-8 (PR #6250 PerishCode blocker 8-03 23:53): a supported
+      // at-rule header survived intact (no stripContainerAtRuleHeaders
+      // pre-pass truncates the header to `{`). Do NOT push the wrapper
+      // itself as a rule — its body is a *rule tree*, not a declaration
+      // list, so flattenNestedBody would fold every inner selector into
+      // the wrapper's "body" and the inner .btn-a / .btn-b selectors would
+      // never be emitted. Recurse through the body slice so inner rules
+      // surface with their real selectorLists and real bodies.
+      rules.push(...iterateCssRules(bodySlice));
+    } else if (!selectorList.startsWith('@')) {
+      // Ordinary selector. Push it as-is; the body still has
       // nested-block declarations flattened into it.
       rules.push({ selectorList, body });
     }
+    // Unsupported at-rule header (@keyframes, @font-face, @page, @import,
+    // @namespace, @charset): drop the rule entirely — its body is not an
+    // ordinary rule tree and recursing would emit garbage selectors from
+    // its declaration text.
     index = bodyEnd + 1;
     // Skip trailing whitespace + stray semicolons between rules — keeps the
     // next iteration's selectorList clean.
@@ -1014,9 +1036,12 @@ function stripCssComments(css: string): string {
   return css.replace(/\/\*[\s\S]*?\*\//g, '');
 }
 
-function stripContainerAtRuleHeaders(css: string): string {
-  return css.replace(/@(media|supports|container|layer)\b[^{]*\{/gi, '{');
-}
+// stripContainerAtRuleHeaders was removed in PR #6250 round-8 (PerishCode
+// blocker 8-03 23:53): its non-quote-aware regex
+// `@(media|supports|container|layer)\b[^{]*\{` truncated a header like
+// `@supports selector(.btn-a[data-icon="{"])` at the quoted brace,
+// losing the inner rules. iterateCssRules now recurses through supported
+// at-rules directly via `isSupportedAtRuleHeader`.
 
 function countLiterals(css: string): ComponentManifestLiteralInventory {
   return {
