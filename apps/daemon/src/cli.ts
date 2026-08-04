@@ -1856,8 +1856,12 @@ async function structuredHttpFailure(resp, fallbackCode = 'daemon-not-running') 
       data:    structuredErrorData(errorObj),
     });
   }
+  let finalFallbackCode = fallbackCode;
+  if (fallbackCode === 'daemon-not-running') {
+    finalFallbackCode = resp.status === 404 ? 'not-found' : 'http-error';
+  }
   exitWithStructuredError({
-    code:    fallbackCode,
+    code:    finalFallbackCode,
     message: errorObj?.message ?? `HTTP ${resp.status}${raw ? `: ${raw}` : ''}`,
     data:    structuredErrorData(errorObj),
   });
@@ -7315,7 +7319,8 @@ async function runConversation(args) {
                                            --fork-after stops the copy at one
                                            source message.
   od conversation list <projectId>           List conversations in a project.
-  od conversation info <conversationId>      Print one conversation.
+  od conversation info <conversationId> --project <projectId>
+                                             Print one conversation.
 
 Common options:
   --daemon-url <url>   Open Design daemon HTTP base.
@@ -7372,12 +7377,12 @@ Common options:
       return;
     }
     case 'info': {
-      const id = rest.find((a) => !a.startsWith('-'));
-      if (!id) {
-        console.error('Usage: od conversation info <conversationId>');
+      const [id] = positionalArgs(rest, PROJECT_STRING_FLAGS);
+      if (!id || !flags.project) {
+        console.error('Usage: od conversation info <conversationId> --project <projectId>');
         process.exit(2);
       }
-      const resp = await fetch(`${base}/api/conversations/${encodeURIComponent(id)}`);
+      const resp = await fetch(`${base}/api/projects/${encodeURIComponent(flags.project)}/conversations/${encodeURIComponent(id)}`);
       if (!resp.ok) return structuredHttpFailure(resp);
       const data = await resp.json();
       process.stdout.write(JSON.stringify(data, null, 2) + '\n');
