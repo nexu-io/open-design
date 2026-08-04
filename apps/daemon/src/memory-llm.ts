@@ -174,8 +174,10 @@ const PROVIDER_DEFAULTS = {
   // open-weight model so the auto-pick produces a deterministic answer
   // for users who haven't customised the picker; users who care can
   // pick anything off the picker's `Custom...` list.
+  // gpt-oss:20b is the smallest model currently served by Ollama Cloud
+  // (gemma3:4b was retired in July 2026).
   ollama: {
-    model: 'gemma3:4b',
+    model: 'gpt-oss:20b',
     baseUrl: 'https://ollama.com',
   },
   // SenseAudio's chat API is OpenAI-compatible (POST /v1/chat/completions,
