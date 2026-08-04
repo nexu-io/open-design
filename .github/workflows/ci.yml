@@ -31,7 +31,14 @@ concurrency:
 jobs:
   runners:
     name: Resolve runner profiles
-    runs-on: ubuntu-24.04
+    # Resolve on the Nexu ARC fleet for trusted branches, but preserve the
+    # hosted bootstrap path for external forks and explicit economic mode.
+    runs-on: >-
+      ${{ ((github.event_name == 'pull_request'
+        && github.event.pull_request.head.repo.full_name != github.repository)
+        || vars.OD_CI_RUNNER_MODE == 'economic')
+        && 'ubuntu-24.04'
+        || 'nexu-runners-small' }}
     outputs:
       runs_on: ${{ steps.runners.outputs.runs_on }}
       decision: ${{ steps.runners.outputs.decision }}

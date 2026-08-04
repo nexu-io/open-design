@@ -220,6 +220,14 @@ const baseConfig: AppConfig = {
   agentCliEnv: {},
 };
 
+async function clickCurrentPrivacyChoice(name: string) {
+  // App bootstrap can rerender the banner while the async findByRole call is
+  // resolving. Re-query synchronously before dispatching the event so the
+  // click lands on the currently mounted button.
+  await screen.findByRole('button', { name });
+  fireEvent.click(screen.getByRole('button', { name }));
+}
+
 describe('App connectors settings flows', () => {
   beforeEach(() => {
     mockedDaemonIsLive.mockResolvedValue(true);
@@ -300,7 +308,7 @@ describe('App connectors settings flows', () => {
       expect(mockedSyncConfigToDaemon).toHaveBeenCalled();
     });
     mockedSyncConfigToDaemon.mockClear();
-    fireEvent.click(await screen.findByRole('button', { name: 'Share' }));
+    await clickCurrentPrivacyChoice('Share');
 
     await waitFor(() => {
       expect(mockedSyncConfigToDaemon).toHaveBeenCalledWith(
@@ -328,7 +336,7 @@ describe('App connectors settings flows', () => {
       expect(mockedSyncConfigToDaemon).toHaveBeenCalled();
     });
     mockedSyncConfigToDaemon.mockClear();
-    fireEvent.click(await screen.findByRole('button', { name: 'Share' }));
+    await clickCurrentPrivacyChoice('Share');
 
     await waitFor(() => {
       expect(mockedSyncConfigToDaemon).toHaveBeenCalledWith(
@@ -356,7 +364,7 @@ describe('App connectors settings flows', () => {
       expect(mockedSyncConfigToDaemon).toHaveBeenCalled();
     });
     mockedSyncConfigToDaemon.mockClear();
-    fireEvent.click(await screen.findByRole('button', { name: 'Share' }));
+    await clickCurrentPrivacyChoice('Share');
 
     await waitFor(() => {
       expect(mockedSyncConfigToDaemon).toHaveBeenCalledWith(
@@ -377,7 +385,7 @@ describe('App connectors settings flows', () => {
       expect(mockedSyncConfigToDaemon).toHaveBeenCalled();
     });
     mockedSyncConfigToDaemon.mockClear();
-    fireEvent.click(await screen.findByRole('button', { name: "Don't share" }));
+    await clickCurrentPrivacyChoice("Don't share");
 
     await waitFor(() => {
       expect(mockedSyncConfigToDaemon).toHaveBeenCalledWith(
@@ -404,7 +412,7 @@ describe('App connectors settings flows', () => {
       expect(mockedSyncConfigToDaemon).toHaveBeenCalled();
     });
     mockedSyncConfigToDaemon.mockClear();
-    fireEvent.click(await screen.findByRole('button', { name: "Don't share" }));
+    await clickCurrentPrivacyChoice("Don't share");
 
     await waitFor(() => {
       expect(mockedSyncConfigToDaemon).toHaveBeenCalledWith(
