@@ -172,7 +172,8 @@ open_design_private_mcp_matches() {
           env.OD_SIDECAR_IPC_PATH.endsWith("/daemon.sock");
       } else if (mode === "cli") {
         const expectedRoot = JSON.parse(expectedText);
-        const expected = expectedRoot.launchSpec || expectedRoot.spec || expectedRoot;
+        const expected = expectedRoot.launchSpec;
+        if (!expected || typeof expected !== "object" || Array.isArray(expected)) process.exit(1);
         const expectedEnv = expected.env == null ? {} : expected.env;
         ok = typeof expected.command === "string" && expected.command.length > 0 &&
           transport.command === expected.command &&

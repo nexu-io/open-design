@@ -494,9 +494,16 @@ open_design_mcp_snapshot_is_verified_local '${JSON.stringify(fixture)}'`);
       { name: 'open-design', enabled: true, transport: cliTransport },
     ]);
     const cliExpected = JSON.stringify({
-      command: cliTransport.command,
-      args: cliTransport.args,
-      env: cliTransport.env,
+      ok: true,
+      agent: 'codex',
+      kind: 'cli',
+      launchSpec: {
+        command: cliTransport.command,
+        args: cliTransport.args,
+        env: cliTransport.env,
+      },
+      command: 'codex mcp add open-design -- /opt/open-design/open-design-runtime mcp',
+      message: 'would run: codex mcp add open-design -- /opt/open-design/open-design-runtime mcp',
     });
     const cliResult = runBash(`${cliValidator}
 codex() { printf '%s\\n' '${cliPrivateFixture}'; }
@@ -509,6 +516,25 @@ od() {
 }
 open_design_mcp_snapshot_is_verified_local '${cliFixture}'`);
     assert.equal(cliResult.status, 0, cliResult.stderr);
+
+    const legacyEnvelope = JSON.stringify({
+      ok: true,
+      agent: 'codex',
+      kind: 'cli',
+      command: 'codex mcp add open-design -- /opt/open-design/open-design-runtime mcp',
+      message: 'would run: codex mcp add open-design -- /opt/open-design/open-design-runtime mcp',
+    });
+    const missingLaunchSpecResult = runBash(`${cliValidator}
+codex() { printf '%s\\n' '${cliPrivateFixture}'; }
+od() {
+  case "$*" in
+    'mcp install --open-design-cli-probe') printf '%s\\n' 'open-design-cli:mcp-install:v1' ;;
+    'mcp install codex --print --json') printf '%s\\n' '${legacyEnvelope}' ;;
+    *) return 1 ;;
+  esac
+}
+open_design_mcp_snapshot_is_verified_local '${cliFixture}'`);
+    assert.notEqual(missingLaunchSpecResult.status, 0);
 
     const wrongDaemonPrivateFixture = JSON.stringify([
       {

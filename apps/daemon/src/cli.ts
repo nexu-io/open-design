@@ -1655,6 +1655,7 @@ async function runMcpInstall(args) {
       ok: false,
       agent: slug,
       kind: 'manual',
+      ...(dryRun ? { launchSpec: spec } : {}),
       configPath: plan.configPath,
       format: plan.format,
       snippet: plan.snippet,
@@ -1678,6 +1679,7 @@ async function runMcpInstall(args) {
         ok: true,
         agent: slug,
         kind: 'cli',
+        launchSpec: spec,
         command: `${plan.bin} ${argv.join(' ')}`,
         message: `would run: ${plan.bin} ${argv.join(' ')}`,
       });
@@ -1762,6 +1764,7 @@ async function runMcpInstall(args) {
       ok: true,
       agent: slug,
       kind: 'json',
+      launchSpec: spec,
       configPath: plan.configPath,
       preview: next,
       message: `would write ${plan.configPath}`,
@@ -1790,7 +1793,7 @@ Agents:
 Options:
   --uninstall, --remove   Remove the Open Design MCP server instead.
   --print, --dry-run      Show what would change; write nothing.
-  --json                  Machine-readable result.
+  --json                  Machine-readable result (dry runs include launchSpec).
   --name <name>           MCP server name in the agent config (default: open-design).
   --daemon-url <url>      Daemon URL used to resolve the launch command.
 
