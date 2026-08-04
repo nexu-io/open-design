@@ -156,22 +156,22 @@ export const OPEN_DESIGN_PLUGIN_EN: OpenDesignPluginCopy = {
       {
         title: 'Inspect before changing configuration',
         body:
-          'A missing open-design MCP is expected on a first install. If the open-design marketplace name points to another source, stop and report the collision. If the current plugin version is already installed, preserve it.',
+          'Read the required selector and version from release-manifest.json, then compare them with the inspected Codex state. A missing open-design MCP is expected on a first install. If the open-design marketplace name points to another source, stop and report the collision. Preserve open-design@open-design only when its installed version matches the version declared in release-manifest.json.',
       },
       {
         title: 'Install only missing components',
         body:
-          'Run the marketplace command only if the canonical marketplace is absent. Run the plugin command only if open-design@open-design is not installed; preserve the existing installation. An alreadyAdded: true result is success. Do not hand-edit Codex configuration or copy plugin files into the Codex home directory.',
+          'Run the marketplace command only if the canonical marketplace is absent. Run the plugin command when open-design@open-design is missing. If it is installed at a different version, ask the user for confirmation before updating or reinstalling it; skip installation only when the exact required version is present. An alreadyAdded: true result is success. Do not hand-edit Codex configuration or copy plugin files into the Codex home directory.',
       },
       {
         title: 'Ensure the local Open Design MCP',
         body:
-          'Preserve an existing enabled open-design MCP. Otherwise run the MCP installer supplied by the installed Open Design application. Use only a verified Open Design od binary, not the unrelated macOS /usr/bin/od. If the CLI is not on PATH, use Open Design Settings → MCP server or its signed packaged --headless --mcp-install codex operation. Never guess a localhost port or run codex mcp login; Vela login belongs to Open Design.',
+          'Preserve an existing enabled open-design MCP. Otherwise run the MCP installer supplied by the installed Open Design application. On POSIX systems, execute the resolved od path only after its probe returns open-design-cli:mcp-install:v1; any other result, including /usr/bin/od, must route to Open Design Settings → MCP server or the signed packaged --headless --mcp-install codex operation. Never guess a localhost port or run codex mcp login; Vela login belongs to Open Design.',
       },
       {
         title: 'Verify, report and start a new task',
         body:
-          'Verify plugin id open-design@open-design and an enabled stdio MCP named open-design. Its command must be an absolute Open Design launch path and must not embed a bearer token, API key or Vela credential. Report what was installed and any remaining Open Design or Vela-login prerequisite. Start a new Codex task so it loads the installed plugin snapshot, then invoke @open-design.',
+          'Verify plugin id open-design@open-design, confirm its installed version exactly matches plugin.version in release-manifest.json, and verify an enabled stdio MCP named open-design. Its command must be an absolute Open Design launch path and must not embed a bearer token, API key or Vela credential. Report what was installed and any remaining Open Design or Vela-login prerequisite. Start a new Codex task so it loads the installed plugin snapshot, then invoke @open-design.',
       },
     ],
   },

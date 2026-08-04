@@ -34,22 +34,22 @@ const copy: OpenDesignPluginCopy = {
       {
         title: 'Inspecione antes de alterar a configuração',
         body:
-          'A ausência do MCP open-design é esperada na primeira instalação. Se o nome open-design do marketplace apontar para outra origem, pare e informe o conflito. Se a versão atual do plugin já estiver instalada, preserve-a.',
+          'Leia o seletor e a versão exigidos em release-manifest.json e compare-os com o estado inspecionado do Codex. A ausência do MCP open-design é esperada na primeira instalação. Se o nome open-design do marketplace apontar para outra origem, pare e informe o conflito. Preserve open-design@open-design somente quando a versão instalada corresponder à versão declarada em release-manifest.json.',
       },
       {
         title: 'Instale somente os componentes ausentes',
         body:
-          'Execute o comando do marketplace somente se o marketplace canônico estiver ausente. Execute o comando do plugin somente se open-design@open-design não estiver instalado; preserve a instalação existente. Um resultado alreadyAdded: true indica sucesso. Não edite manualmente a configuração do Codex nem copie arquivos do plugin para o diretório inicial do Codex.',
+          'Execute o comando do marketplace somente se o marketplace canônico estiver ausente. Execute o comando do plugin quando open-design@open-design estiver ausente. Se houver uma versão diferente instalada, peça a confirmação do usuário antes de atualizá-la ou reinstalá-la; pule a instalação somente quando estiver presente exatamente a versão exigida. Um resultado alreadyAdded: true indica sucesso. Não edite manualmente a configuração do Codex nem copie arquivos do plugin para o diretório inicial do Codex.',
       },
       {
         title: 'Garanta o MCP local do Open Design',
         body:
-          'Preserve um MCP open-design existente e habilitado. Caso contrário, execute o instalador do MCP fornecido pelo aplicativo Open Design instalado. Use somente um binário od verificado do Open Design, não o /usr/bin/od não relacionado do macOS. Se a CLI não estiver no PATH, use Open Design Settings → MCP server ou a operação assinada incluída no pacote --headless --mcp-install codex. Nunca tente adivinhar uma porta localhost nem execute codex mcp login; o login da Vela pertence ao Open Design.',
+          'Preserve um MCP open-design existente e habilitado. Caso contrário, execute o instalador do MCP fornecido pelo aplicativo Open Design instalado. Em sistemas POSIX, execute o caminho resolvido de od somente depois que a verificação retornar open-design-cli:mcp-install:v1; diante de qualquer outro resultado, inclusive /usr/bin/od, use Open Design Settings → MCP server ou a operação assinada incluída no pacote --headless --mcp-install codex. Nunca tente adivinhar uma porta localhost nem execute codex mcp login; o login da Vela pertence ao Open Design.',
       },
       {
         title: 'Verifique, informe e inicie uma nova tarefa',
         body:
-          'Verifique o id de plugin open-design@open-design e um MCP stdio habilitado chamado open-design. Seu comando deve ser um caminho absoluto de inicialização do Open Design e não deve incorporar um bearer token, uma API key nem uma credencial da Vela. Informe o que foi instalado e qualquer pré-requisito restante do Open Design ou de login da Vela. Inicie uma nova tarefa do Codex para que ela carregue o snapshot do plugin instalado e, depois, invoque @open-design.',
+          'Verifique o id de plugin open-design@open-design, confirme que a versão instalada corresponde exatamente a plugin.version em release-manifest.json e verifique um stdio MCP habilitado chamado open-design. Seu comando deve ser um caminho absoluto de inicialização do Open Design e não deve incorporar um bearer token, uma API key nem uma credencial da Vela. Informe o que foi instalado e qualquer pré-requisito restante do Open Design ou de login da Vela. Inicie uma nova tarefa do Codex para que ela carregue o snapshot do plugin instalado e, depois, invoque @open-design.',
       },
     ],
   },

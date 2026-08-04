@@ -44,7 +44,11 @@ describe('Codex plugin landing route', () => {
       /codex plugin marketplace add nexu-io\/open-design-agent-plugins --ref main --json/,
     );
     assert.match(page, /codex plugin add open-design@open-design --json/);
-    assert.match(page, /od mcp install codex/);
+    assert.match(page, /release-manifest\.json/);
+    assert.match(page, /command -v od/);
+    assert.match(page, /open-design-cli:mcp-install:v1/);
+    assert.match(page, /open-design-mcp-install:fallback-required/);
+    assert.doesNotMatch(page, /const MCP_INSTALL_COMMAND = 'od mcp install codex'/);
     assert.match(page, /codex plugin list --json/);
     assert.match(page, /codex mcp get open-design --json/);
   });
@@ -55,11 +59,15 @@ describe('Codex plugin landing route', () => {
 
     assert.match(english, /canonical Git marketplace source/);
     assert.match(english, /Run the marketplace command only if/);
-    assert.match(english, /preserve the existing installation/);
+    assert.match(english, /version declared in release-manifest\.json/);
+    assert.match(english, /ask the user for confirmation before updating or reinstalling/);
+    assert.match(english, /installed version exactly matches plugin\.version/);
 
     for (const locale of locales) {
       const localized = await readFile(new URL(`${locale}.ts`, LOCALE_DIR), 'utf8');
       assert.match(localized, /agentInstall:\s*\{/);
+      assert.match(localized, /release-manifest\.json/);
+      assert.match(localized, /open-design-cli:mcp-install:v1/);
       assert.doesNotMatch(localized, /Agent-readable installation protocol/);
       assert.doesNotMatch(localized, /Run the marketplace command only if/);
     }

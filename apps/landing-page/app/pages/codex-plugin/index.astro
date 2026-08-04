@@ -19,18 +19,31 @@ const href = (path: string) => localizedHref(path, locale);
 const copy = getOpenDesignPluginCopy(locale);
 const PAGE_URL = new URL(Astro.url.pathname, SITE).toString();
 const REPO = 'https://github.com/nexu-io/open-design-agent-plugins';
+const RELEASE_MANIFEST =
+  'https://raw.githubusercontent.com/nexu-io/open-design-agent-plugins/main/release-manifest.json';
 const DOWNLOAD = href('/download/');
 
 const INSTALL_INSTRUCTION =
   'Read https://open-design.ai/codex-plugin/ and install the Open Design plugin in Codex, including its local MCP. Verify the installation, then tell me to start a new task.';
 const PREFLIGHT_COMMANDS = `codex --version
 git ls-remote https://github.com/nexu-io/open-design-agent-plugins.git main`;
-const INSPECT_COMMANDS = `codex plugin marketplace list --json
+const INSPECT_COMMANDS = `curl -fsSL ${RELEASE_MANIFEST}
+codex plugin marketplace list --json
 codex plugin list --json
 codex mcp get open-design --json`;
 const PLUGIN_INSTALL_COMMANDS = `codex plugin marketplace add nexu-io/open-design-agent-plugins --ref main --json
 codex plugin add open-design@open-design --json`;
-const MCP_INSTALL_COMMAND = 'od mcp install codex';
+const MCP_INSTALL_COMMANDS = `open_design_od_path="$(command -v od || true)"
+open_design_od_probe=""
+if [ -n "$open_design_od_path" ]; then
+  open_design_od_probe="$("$open_design_od_path" mcp install --open-design-cli-probe 2>/dev/null || true)"
+fi
+if [ "$open_design_od_probe" = "open-design-cli:mcp-install:v1" ]; then
+  "$open_design_od_path" mcp install codex
+else
+  printf '%s\n' 'open-design-mcp-install:fallback-required'
+  false
+fi`;
 const VERIFY_COMMANDS = `codex plugin list --json
 codex mcp get open-design --json`;
 
@@ -116,7 +129,7 @@ const agentInstallCommands = [
   PREFLIGHT_COMMANDS,
   INSPECT_COMMANDS,
   PLUGIN_INSTALL_COMMANDS,
-  MCP_INSTALL_COMMAND,
+  MCP_INSTALL_COMMANDS,
   VERIFY_COMMANDS,
 ] as const;
 const agentInstallSteps = copy.agentInstall.steps.map((step, index) => ({

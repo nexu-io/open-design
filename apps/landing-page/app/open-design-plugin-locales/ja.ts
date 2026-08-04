@@ -35,22 +35,22 @@ const ja: OpenDesignPluginCopy = {
       {
         title: '設定を変更する前に確認する',
         body:
-          '初回インストール時に open-design MCP が存在しないことは想定内です。open-design というマーケットプレイス名が別のソースを指している場合は停止し、名前の衝突を報告してください。現在のプラグインバージョンがすでにインストールされている場合は、そのまま保持してください。',
+          'release-manifest.json から必須のセレクターとバージョンを読み取り、確認した Codex の状態と比較してください。初回インストール時に open-design MCP が存在しないことは想定内です。open-design というマーケットプレイス名が別のソースを指している場合は停止し、競合を報告してください。open-design@open-design は、インストール済みのバージョンが release-manifest.json で宣言されているバージョンと一致する場合にのみ保持してください。',
       },
       {
         title: '不足しているコンポーネントだけをインストールする',
         body:
-          '正規のマーケットプレイスが存在しない場合にのみ、マーケットプレイスコマンドを実行してください。open-design@open-design がインストールされていない場合にのみプラグインコマンドを実行し、既存のインストールは保持してください。alreadyAdded: true という結果は成功です。Codex の設定を手作業で編集したり、Codex のホームディレクトリへプラグインファイルをコピーしたりしないでください。',
+          '正規のマーケットプレイスが存在しない場合にのみ、マーケットプレイスコマンドを実行してください。open-design@open-design が存在しない場合は、プラグインコマンドを実行してください。異なるバージョンがインストールされている場合は、更新または再インストールの前にユーザーへ確認を求めてください。必要なバージョンと完全に一致する場合にのみインストールをスキップしてください。alreadyAdded: true という結果は成功です。Codex の設定を手作業で編集したり、Codex のホームディレクトリへプラグインファイルをコピーしたりしないでください。',
       },
       {
         title: 'ローカルの Open Design MCP を確実に用意する',
         body:
-          'すでに有効な open-design MCP がある場合は、そのまま保持してください。それ以外の場合は、インストール済みの Open Design アプリケーションに付属する MCP インストーラーを実行してください。無関係な macOS の /usr/bin/od ではなく、検証済みの Open Design od バイナリだけを使用してください。CLI が PATH にない場合は、Open Design Settings → MCP server、または署名済みパッケージに含まれる --headless --mcp-install codex 操作を使用してください。localhost のポートを推測したり、codex mcp login を実行したりしないでください。Vela へのログインは Open Design で行います。',
+          'すでに有効な open-design MCP がある場合は、そのまま保持してください。それ以外の場合は、インストール済みの Open Design アプリケーションに付属する MCP インストーラーを実行してください。POSIX システムでは、解決済みの od パスに対するプローブが open-design-cli:mcp-install:v1 を返した場合にのみ、そのパスを実行してください。それ以外の結果の場合は、/usr/bin/od を含め、Open Design Settings → MCP server または署名済みパッケージに含まれる --headless --mcp-install codex 操作に切り替えてください。localhost のポートを推測したり、codex mcp login を実行したりしないでください。Vela へのログインは Open Design で行います。',
       },
       {
         title: '確認、報告を行い、新しいタスクを開始する',
         body:
-          'プラグイン ID open-design@open-design と、open-design という名前の有効な stdio MCP を確認してください。そのコマンドは Open Design を起動する絶対パスでなければならず、Bearer トークン、API キー、Vela の認証情報を埋め込んではいけません。インストールした内容と、未完了の Open Design または Vela ログインの前提条件があれば報告してください。新しい Codex タスクを開始してインストール済みのプラグインスナップショットを読み込ませ、@open-design を呼び出してください。',
+          'プラグイン ID open-design@open-design を検証し、そのインストール済みバージョンが release-manifest.json の plugin.version と完全に一致することを確認して、open-design という名前の有効な stdio MCP を検証してください。そのコマンドは Open Design を起動する絶対パスでなければならず、bearer token、API key、Vela の認証情報を埋め込んではいけません。インストールした内容と、未完了の Open Design または Vela ログインの前提条件があれば報告してください。新しい Codex タスクを開始してインストール済みのプラグインスナップショットを読み込ませ、@open-design を呼び出してください。',
       },
     ],
   },

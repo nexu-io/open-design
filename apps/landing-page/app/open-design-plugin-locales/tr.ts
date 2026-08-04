@@ -34,22 +34,22 @@ const tr: OpenDesignPluginCopy = {
       {
         title: 'Yapılandırmayı değiştirmeden önce inceleyin',
         body:
-          'İlk kurulumda open-design MCP’nin bulunmaması beklenir. open-design eklenti mağazası adı başka bir kaynağa işaret ediyorsa durun ve çakışmayı bildirin. Mevcut eklenti sürümü zaten kuruluysa onu koruyun.',
+          'Gerekli seçiciyi ve sürümü release-manifest.json dosyasından okuyun, ardından bunları incelediğiniz Codex durumuyla karşılaştırın. İlk kurulumda open-design MCP’nin bulunmaması beklenir. open-design eklenti mağazası adı başka bir kaynağa işaret ediyorsa durun ve çakışmayı bildirin. open-design@open-design öğesini yalnızca kurulu sürümü release-manifest.json içinde bildirilen sürümle eşleşiyorsa koruyun.',
       },
       {
         title: 'Yalnızca eksik bileşenleri kurun',
         body:
-          'Eklenti mağazası komutunu yalnızca kanonik eklenti mağazası yoksa çalıştırın. Eklenti komutunu yalnızca open-design@open-design kurulu değilse çalıştırın; mevcut kurulumu koruyun. alreadyAdded: true sonucu başarıdır. Codex yapılandırmasını elle düzenlemeyin veya eklenti dosyalarını Codex ana dizinine kopyalamayın.',
+          'Eklenti mağazası komutunu yalnızca kanonik eklenti mağazası yoksa çalıştırın. open-design@open-design eksikse eklenti komutunu çalıştırın. Farklı bir sürüm kuruluysa güncellemeden veya yeniden kurmadan önce kullanıcıdan onay isteyin; yalnızca gerekli sürüm tam olarak mevcutsa kurulumu atlayın. alreadyAdded: true sonucu başarıdır. Codex yapılandırmasını elle düzenlemeyin veya eklenti dosyalarını Codex ana dizinine kopyalamayın.',
       },
       {
         title: 'Yerel Open Design MCP’nin hazır olduğundan emin olun',
         body:
-          'Etkin durumdaki mevcut open-design MCP’yi koruyun. Aksi halde, kurulu Open Design uygulamasıyla sağlanan MCP yükleyicisini çalıştırın. İlgisiz macOS /usr/bin/od dosyasını değil, yalnızca doğrulanmış bir Open Design od ikilisini kullanın. CLI PATH üzerinde değilse Open Design Ayarları → MCP sunucusu seçeneğini veya imzalı paketin --headless --mcp-install codex işlemini kullanın. Asla bir localhost portu tahmin etmeyin veya codex mcp login çalıştırmayın; Vela ile oturum açma Open Design’da yapılır.',
+          'Etkin durumdaki mevcut open-design MCP’yi koruyun. Aksi halde, kurulu Open Design uygulamasıyla sağlanan MCP yükleyicisini çalıştırın. POSIX sistemlerinde, çözümlenmiş od yolunu yalnızca yoklaması open-design-cli:mcp-install:v1 sonucunu verdikten sonra çalıştırın; /usr/bin/od dahil diğer tüm sonuçlarda Open Design Settings → MCP server seçeneğine veya imzalı paketin --headless --mcp-install codex işlemine yönelin. Asla bir localhost portu tahmin etmeyin veya codex mcp login çalıştırmayın; Vela ile oturum açma Open Design’da yapılır.',
       },
       {
         title: 'Doğrulayın, raporlayın ve yeni bir görev başlatın',
         body:
-          'open-design@open-design eklenti kimliğini ve open-design adlı, etkin bir stdio MCP’yi doğrulayın. MCP’nin komutu mutlak bir Open Design başlatma yolu olmalı; bearer token, API anahtarı veya Vela kimlik bilgisi içermemelidir. Nelerin kurulduğunu ve henüz karşılanmamış Open Design ya da Vela ile oturum açma ön koşullarını bildirin. Kurulu eklenti anlık görüntüsünü yükleyebilmesi için yeni bir Codex görevi başlatın, ardından @open-design çağrısını yapın.',
+          'open-design@open-design eklenti kimliğini doğrulayın, kurulu sürümünün release-manifest.json içindeki plugin.version ile tam olarak eşleştiğini onaylayın ve open-design adlı etkin bir stdio MCP’yi doğrulayın. Komutu mutlak bir Open Design başlatma yolu olmalı ve bearer token, API key ya da Vela kimlik bilgisi içermemelidir. Nelerin kurulduğunu ve henüz karşılanmamış Open Design ya da Vela ile oturum açma ön koşullarını bildirin. Kurulu eklenti anlık görüntüsünü yükleyebilmesi için yeni bir Codex görevi başlatın, ardından @open-design çağrısını yapın.',
       },
     ],
   },

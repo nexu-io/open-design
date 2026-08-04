@@ -34,22 +34,22 @@ const zh: OpenDesignPluginCopy = {
       {
         title: '更改配置前先行检查',
         body:
-          '首次安装时没有 open-design MCP 属于正常情况。如果名为 open-design 的 marketplace 指向其他来源，请停止操作并报告命名冲突。如果当前插件版本已安装，请保留现有安装。',
+          '从 release-manifest.json 读取所需的选择器和版本，然后与检查到的 Codex 状态进行比较。首次安装时没有 open-design MCP 属于正常情况。如果名为 open-design 的 marketplace 指向其他来源，请停止操作并报告命名冲突。仅当已安装版本与 release-manifest.json 中声明的版本一致时，才保留 open-design@open-design。',
       },
       {
         title: '仅安装缺失的组件',
         body:
-          '仅在官方指定的 marketplace 尚未添加时运行 marketplace 命令。仅在尚未安装 open-design@open-design 时运行插件命令；否则保留现有安装。返回 alreadyAdded: true 表示成功。不要手动编辑 Codex 配置，也不要将插件文件复制到 Codex 主目录。',
+          '仅在官方指定的 marketplace 尚未添加时运行 marketplace 命令。缺少 open-design@open-design 时，运行插件命令。如果已安装的是其他版本，请先征得用户确认，再进行更新或重新安装；只有在已安装版本与要求的版本完全一致时，才跳过安装。返回 alreadyAdded: true 表示成功。不要手动编辑 Codex 配置，也不要将插件文件复制到 Codex 主目录。',
       },
       {
         title: '确保本地 Open Design MCP 可用',
         body:
-          '保留现有且已启用的 open-design MCP。如果不存在，请运行已安装 Open Design 应用提供的 MCP 安装程序。只能使用已验证的 Open Design od 二进制文件，不要使用与之无关的 macOS /usr/bin/od。如果 CLI 不在 PATH 中，请使用 Open Design Settings → MCP server，或使用其已签名应用包提供的 --headless --mcp-install codex 操作。绝不要猜测 localhost 端口，也不要运行 codex mcp login；Vela 登录应在 Open Design 中完成。',
+          '保留现有且已启用的 open-design MCP。如果不存在，请运行已安装 Open Design 应用提供的 MCP 安装程序。在 POSIX 系统中，仅当对解析出的 od 路径执行探测并返回 open-design-cli:mcp-install:v1 后，才运行该路径；如果返回任何其他结果（包括 /usr/bin/od），则必须改用 Open Design Settings → MCP server 或已签名应用包提供的 --headless --mcp-install codex 操作。绝不要猜测 localhost 端口，也不要运行 codex mcp login；Vela 登录应在 Open Design 中完成。',
       },
       {
         title: '验证、报告并开始新任务',
         body:
-          '验证插件 id 为 open-design@open-design，并存在名为 open-design 的已启用 stdio MCP。它的 command 必须是 Open Design 的绝对启动路径，且不得嵌入 bearer token、API key 或 Vela 凭据。报告已安装的内容，以及尚未满足的 Open Design 或 Vela 登录前置条件。新建 Codex 任务以加载已安装的插件快照，然后调用 @open-design。',
+          '验证插件 id 为 open-design@open-design，确认其已安装版本与 release-manifest.json 中的 plugin.version 完全一致，并验证存在名为 open-design 的已启用 stdio MCP。它的 command 必须是 Open Design 的绝对启动路径，且不得嵌入 bearer token、API key 或 Vela 凭据。报告已安装的内容，以及尚未满足的 Open Design 或 Vela 登录前置条件。新建 Codex 任务以加载已安装的插件快照，然后调用 @open-design。',
       },
     ],
   },

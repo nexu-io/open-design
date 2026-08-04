@@ -34,22 +34,22 @@ const es: OpenDesignPluginCopy = {
       {
         title: 'Inspecciona la configuración antes de modificarla',
         body:
-          'Es normal que el MCP open-design no exista en una primera instalación. Si el nombre del marketplace open-design apunta a otra fuente, detente e informa del conflicto. Si la versión actual del plugin ya está instalada, consérvala.',
+          'Lee el selector y la versión requeridos de release-manifest.json y compáralos con el estado de Codex que has inspeccionado. Es normal que el MCP open-design no exista en una primera instalación. Si el nombre del marketplace open-design apunta a otra fuente, detente e informa del conflicto. Conserva open-design@open-design únicamente si su versión instalada coincide con la versión declarada en release-manifest.json.',
       },
       {
         title: 'Instala solo los componentes que falten',
         body:
-          'Ejecuta el comando del marketplace solo si falta el marketplace canónico. Ejecuta el comando del plugin solo si open-design@open-design no está instalado; conserva la instalación existente. Un resultado alreadyAdded: true indica que la operación se realizó correctamente. No edites manualmente la configuración de Codex ni copies archivos del plugin en el directorio principal de Codex.',
+          'Ejecuta el comando del marketplace solo si falta el marketplace canónico. Ejecuta el comando del plugin cuando falte open-design@open-design. Si está instalado con una versión distinta, pide confirmación al usuario antes de actualizarlo o reinstalarlo; omite la instalación solo cuando esté presente la versión exacta requerida. Un resultado alreadyAdded: true indica que la operación se realizó correctamente. No edites manualmente la configuración de Codex ni copies archivos del plugin en el directorio principal de Codex.',
       },
       {
         title: 'Asegura el MCP local de Open Design',
         body:
-          'Conserva cualquier MCP open-design existente que esté habilitado. De lo contrario, ejecuta el instalador de MCP incluido con la aplicación Open Design instalada. Usa únicamente un binario od verificado de Open Design, no el /usr/bin/od de macOS, que no está relacionado. Si la CLI no está en PATH, usa Open Design Settings → MCP server o la operación --headless --mcp-install codex de su paquete firmado. Nunca adivines un puerto localhost ni ejecutes codex mcp login; el inicio de sesión de Vela pertenece a Open Design.',
+          'Conserva cualquier MCP open-design existente que esté habilitado. De lo contrario, ejecuta el instalador de MCP incluido con la aplicación Open Design instalada. En sistemas POSIX, ejecuta la ruta de od resuelta solo después de que su comprobación devuelva open-design-cli:mcp-install:v1; ante cualquier otro resultado, incluido /usr/bin/od, recurre a Open Design Settings → MCP server o a la operación --headless --mcp-install codex del paquete firmado. Nunca adivines un puerto localhost ni ejecutes codex mcp login; el inicio de sesión en Vela se realiza en Open Design.',
       },
       {
         title: 'Verifica, informa e inicia una nueva tarea',
         body:
-          'Verifica el id del plugin open-design@open-design y un MCP stdio habilitado llamado open-design. Su comando debe ser una ruta absoluta de inicio de Open Design y no debe incluir un token de portador, una clave de API ni una credencial de Vela. Informa de lo que se ha instalado y de cualquier requisito pendiente de Open Design o del inicio de sesión de Vela. Inicia una nueva tarea de Codex para que cargue la instantánea del plugin instalado y, después, invoca @open-design.',
+          'Verifica el id del plugin open-design@open-design, confirma que su versión instalada coincide exactamente con plugin.version en release-manifest.json y verifica que haya un stdio MCP habilitado llamado open-design. Su comando debe ser una ruta absoluta de inicio de Open Design y no debe incluir ningún bearer token, ninguna API key ni ninguna credencial de Vela. Informa de lo que se ha instalado y de cualquier requisito pendiente de Open Design o del inicio de sesión en Vela. Inicia una nueva tarea de Codex para que cargue la instantánea del plugin instalado y, después, invoca @open-design.',
       },
     ],
   },
