@@ -1527,6 +1527,8 @@ export const th: Dict = {
   'newproj.createLiveArtifact': 'สร้าง live artifact',
   'newproj.createFromTemplate': 'สร้างจากเทมเพลต',
   'newproj.createDisabledTitle': 'คุณต้องบันทึกโปรเจกต์เป็นเทมเพลตก่อน',
+  'newproj.openFolder': 'เปิดโฟลเดอร์',
+  'newproj.openingFolder': 'กำลังเปิด…',
   'newproj.importClaudeZip': 'นำเข้า Claude Design ZIP',
   'newproj.importClaudeZipTitle': 'นำเข้า .zip จาก Claude Design',
   'newproj.importingClaudeZip': 'กำลังนำเข้า…',

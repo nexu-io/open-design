@@ -6,7 +6,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   testAgent,
   testApiProvider,
-  testSavedByokProfile,
 } from '../../src/providers/connection-test';
 import type { ConnectionTestResponse } from '../../src/types';
 
@@ -141,26 +140,5 @@ describe('testAgent', () => {
         codex: { CODEX_HOME: '~/.codex-alt' },
       },
     });
-  });
-});
-
-describe('testSavedByokProfile', () => {
-  it('tests the encoded profile reference without sending a raw key', async () => {
-    const fetchMock = vi.fn().mockResolvedValueOnce(jsonResponse({
-      ok: true,
-      kind: 'success',
-      latencyMs: 12,
-      model: 'openrouter/free',
-    }));
-    globalThis.fetch = fetchMock as typeof fetch;
-
-    const result = await testSavedByokProfile('byok-openrouter/profile');
-
-    expect(result.ok).toBe(true);
-    expect(fetchMock).toHaveBeenCalledWith(
-      '/api/byok/profiles/byok-openrouter%2Fprofile/test',
-      { method: 'POST', signal: undefined },
-    );
-    expect(JSON.stringify(fetchMock.mock.calls)).not.toContain('apiKey');
   });
 });

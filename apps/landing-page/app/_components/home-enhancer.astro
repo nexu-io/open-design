@@ -205,6 +205,13 @@
       const btn = document.querySelector('[data-download-cta]:not([data-download-page])');
       if (!btn) return;
       const ua = navigator.userAgent || '';
+      const platform = (
+        navigator.userAgentData?.platform ||
+        navigator.platform ||
+        ''
+      ).toLowerCase();
+      const isIpadOS = navigator.maxTouchPoints > 1 && /mac/.test(platform);
+      if (isIpadOS || /iPhone|iPad|iPod/i.test(ua)) return;
       const isWin = /Windows|Win32|Win64|WOW64/i.test(ua);
       const isMac = /Macintosh|Mac OS X/i.test(ua) && !/iPhone|iPad|iPod/i.test(ua);
 

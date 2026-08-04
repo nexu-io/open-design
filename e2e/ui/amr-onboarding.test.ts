@@ -17,9 +17,6 @@ type OnboardingConfig = {
   apiProtocol?: string;
   baseUrl: string;
   model: string;
-  byokProfileId?: string;
-  byokCredentialConfigured?: boolean;
-  byokCredentialTail?: string;
   agentId: string | null;
   skillId: null;
   designSystemId: null;
@@ -624,12 +621,9 @@ test('[P0] @critical onboarding BYOK path can fetch models, test the provider, a
   await expectOnboardingFinished(page);
   await pollStoredConfig(page).toMatchObject({
     mode: 'api',
-    apiKey: '',
+    apiKey: 'test-api-key',
     baseUrl: 'https://api.anthropic.com',
     model: 'claude-opus-4-8',
-    byokProfileId: 'byok-onboarding-1',
-    byokCredentialConfigured: true,
-    byokCredentialTail: '-key',
     onboardingCompleted: true,
   });
 });
@@ -753,12 +747,9 @@ test('[P0] onboarding BYOK path supports Anthropic model selection and API key v
   await pollStoredConfig(page).toMatchObject({
     mode: 'api',
     apiProtocol: 'anthropic',
-    apiKey: '',
+    apiKey: 'anthropic-test-key',
     baseUrl: 'https://api.anthropic.com',
     model: 'claude-sonnet-4-5',
-    byokProfileId: 'byok-onboarding-1',
-    byokCredentialConfigured: true,
-    byokCredentialTail: '-key',
     onboardingCompleted: true,
   });
 });
@@ -919,7 +910,6 @@ async function wireOnboardingMocks(
   let loginCalls = 0;
   let cancelCalls = 0;
   let authAttemptId: string | null = null;
-  let byokProfile: Record<string, unknown> | null = null;
 
   await page.route('**/api/health', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' });
@@ -941,38 +931,6 @@ async function wireOnboardingMocks(
     if (route.request().method() === 'PUT') {
       Object.assign(config, route.request().postDataJSON() as Partial<OnboardingConfig>);
       await route.fulfill({ json: { ok: true } });
-      return;
-    }
-    await route.continue();
-  });
-
-  await page.route('**/api/byok/profiles', async (route) => {
-    if (route.request().method() === 'GET') {
-      await route.fulfill({
-        json: {
-          available: true,
-          backend: 'test',
-          profiles: byokProfile ? [byokProfile] : [],
-        },
-      });
-      return;
-    }
-    if (route.request().method() === 'POST') {
-      const request = route.request().postDataJSON() as Record<string, unknown>;
-      const apiKey = String(request.apiKey ?? '');
-      byokProfile = {
-        id: String(request.id ?? 'byok-onboarding-1'),
-        label: String(request.label ?? 'Anthropic'),
-        protocol: String(request.protocol ?? 'anthropic'),
-        baseUrl: String(request.baseUrl ?? ''),
-        model: String(request.model ?? ''),
-        requiresApiKey: request.requiresApiKey !== false,
-        configured: true,
-        keyTail: apiKey.slice(-4),
-        createdAt: 1,
-        updatedAt: 1,
-      };
-      await route.fulfill({ json: { profile: byokProfile } });
       return;
     }
     await route.continue();

@@ -12,7 +12,6 @@ import { DESIGN_SYSTEMS_USAGE, isDesignSystemsHelpArg } from './cli-help/index.j
 import { BRAND_USAGE, isBrandHelpArg } from './cli-help/index.js';
 import { parseDesignSystemRenameArgs } from './design-systems/rename-args.js';
 import { runLiveArtifactsToolCli } from './tools-live-artifacts-cli.js';
-import { runByokToolCli } from './tools-byok-cli.js';
 import { splitResearchSubcommand } from './research/cli-args.js';
 import { resolveDaemonUrl } from './daemon-url.js';
 import { requestJsonIpc } from '@open-design/sidecar';
@@ -334,7 +333,6 @@ const SUBCOMMAND_MAP = {
   artifacts: runArtifacts,
   media: runMedia,
   mcp: runMcp,
-  byok: runByok,
   amr: runAmr,
   'message-center': runMessageCenter,
   research: runResearch,
@@ -1470,15 +1468,6 @@ parse JSON with python3, not jq):
 Skills should call this and then reference the returned filename in their
 artifact / message body. The daemon writes the bytes into the project's
 files folder so the FileViewer can preview them immediately.`);
-}
-
-// ---------------------------------------------------------------------------
-// Subcommand: od byok
-// ---------------------------------------------------------------------------
-
-async function runByok(args) {
-  const result = await runByokToolCli(args);
-  if (result.exitCode !== 0) process.exit(result.exitCode);
 }
 
 // ---------------------------------------------------------------------------
