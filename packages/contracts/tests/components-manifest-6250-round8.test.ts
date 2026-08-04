@@ -79,4 +79,35 @@ describe('@supports with quoted braces in selector (#6250 round-8 blocker)', () 
       expect.arrayContaining(['--a', '--b', '--c']),
     );
   });
+
+  it('does not lose the first ordinary rule after a top-level @import', () => {
+    // PerishCode round-9 blocker (lefarcen 2026-08-04 02:51):
+    // top-level @import at-rules cause the scanner to fold the
+    // first following rule's selector into the @import prelude,
+    // so the first ordinary selector disappears while the later
+    // one survives. Round-9 fix: skip @import rules entirely.
+    const manifest = extractComponentsManifest({
+      brandId: 'import-selector-loss',
+      tokensCss: ':root { --a: red; --b: blue; }',
+      fixtureHtml: `
+        <style>
+          @import url('https://fonts.googleapis.com/css2?family=Roboto');
+          .btn-a { color: var(--a); }
+          .btn-b { color: var(--b); }
+        </style>
+        <button class="btn-a btn-b">x</button>
+      `,
+    });
+
+    expect(manifest.selectors).toEqual(
+      expect.arrayContaining(['.btn-a', '.btn-b']),
+    );
+    const buttonsGroup = manifest.groups.find((g) => g.id === 'buttons');
+    expect(buttonsGroup?.selectors).toEqual(
+      expect.arrayContaining(['.btn-a', '.btn-b']),
+    );
+    expect(buttonsGroup?.tokenReferences).toEqual(
+      expect.arrayContaining(['--a', '--b']),
+    );
+  });
 });

@@ -665,6 +665,17 @@ function iterateCssRules(css: string): CssRule[] {
   const length = css.length;
 
   while (index < length) {
+    // Fast-path: skip @import rules entirely. They carry no component
+    // selectors and their body is just a semicolon-terminated URL,
+    // so the brace scanner would treat them as "unbalanced CSS" and
+    // break out of the loop, losing all subsequent rules.
+    const remaining = css.slice(index);
+    if (remaining.match(/^\s*@import\b/)) {
+      const semiIdx = remaining.indexOf(';');
+      index += semiIdx === -1 ? remaining.length : semiIdx + 1;
+      continue;
+    }
+
     // Find the next '{' that opens a rule body.
     //
     // Round-8 (PR #6250 PerishCode blocker 8-03 23:53): we no longer
