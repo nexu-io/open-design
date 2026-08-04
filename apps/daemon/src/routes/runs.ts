@@ -1,7 +1,8 @@
 import type { Express, Request, Response } from 'express';
 import type Database from 'better-sqlite3';
 import fs from 'node:fs';
-import { randomUUID } from 'node:crypto';
+import path from 'node:path';
+import { createHash, randomUUID } from 'node:crypto';
 import {
   defaultScenarioPluginIdForProjectMetadata,
   RUN_RESULT_PACKAGE_SCHEMA,
@@ -49,6 +50,12 @@ import {
 import { parseMediaExecutionPolicyInput } from '../media/policy.js';
 import { isManagedProjectCwd } from '../mcp-config.js';
 import {
+  normalizeExternalPluginRunAnalyticsHints,
+  OPEN_DESIGN_PLUGIN_ID,
+  resolvePluginGenerationSloWindowMs,
+  validatePluginWorkflowId,
+} from '../mcp-observability.js';
+import {
   buildConnectorProbe,
   getInstalledPlugin,
   resolvePluginSnapshot,
@@ -76,6 +83,10 @@ import {
   snapshotProjectArtifacts,
   type RunArtifactBaseline,
 } from '../run-artifact-fs.js';
+import {
+  validateRunDeliverable,
+  type RunDeliverableValidationResult,
+} from '../run-deliverable-validation.js';
 import type { RunEventForDiagnostics } from '../run-diagnostics.js';
 import { summarizeRunDiagnosticsForAnalytics } from '../run-diagnostics.js';
 import type { RunEventForFailureClassification } from '../run-failure-classification.js';
@@ -92,6 +103,7 @@ import {
   BYOK_OPENCODE_AGENT_ID,
   BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE,
 } from '../runtimes/byok-opencode.js';
+import { resolveChatRunInactivityTimeoutMs } from '../runtimes/chat-run-lifecycle.js';
 import {
   deriveActivationMilestones,
   runAskedUserQuestion,
@@ -101,6 +113,21 @@ import {
   runDesignSystemCreatedForRun,
   runPreviewModuleCountForRun,
 } from '../runtimes/run-lifecycle-analytics.js';
+import { normalizeCommentAttachments } from '../runtimes/chat-prompt-inputs.js';
+
+// Keep in sync with the web uploader's `looksLikeImage` (apps/web registry):
+// omit-pin seeds must classify the same extensions as `image` so reload chips
+// match the original staged attachment kind.
+const SEEDED_USER_IMAGE_EXTS = new Set([
+  '.png',
+  '.jpg',
+  '.jpeg',
+  '.gif',
+  '.webp',
+  '.avif',
+  '.svg',
+  '.bmp',
+]);
 
 type SqliteDb = Database.Database;
 type JsonRecord = Record<string, unknown>;
@@ -109,6 +136,107 @@ type ApiResponse = Response<unknown>;
 type ProjectMetadata = (Partial<ContractProjectMetadata> & JsonRecord) | null | undefined;
 type AgentCliEnv = Parameters<typeof agentCliEnvForAgent>[0];
 type RunDeliveryTarget = 'managed-project' | 'external-project' | 'none';
+type SeededCommentAttachment = ReturnType<typeof normalizeCommentAttachments>[number] & {
+  slideIndex?: number;
+};
+
+/**
+ * Deck annotations carry a zero-based `slideIndex` so reload/retry can flip the
+ * preview via `queuedSlideNavTarget`. The prompt normalizer intentionally omits
+ * it; re-attach from the raw request when seeding persisted messages.
+ */
+function seededSlideIndexFromRaw(raw: unknown): number | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const slideIndex = (raw as { slideIndex?: unknown }).slideIndex;
+  if (typeof slideIndex !== 'number' || !Number.isFinite(slideIndex) || slideIndex < 0) {
+    return undefined;
+  }
+  return Math.floor(slideIndex);
+}
+
+function withSeededSlideIndex(
+  normalized: ReturnType<typeof normalizeCommentAttachments>,
+  rawCommentAttachments: unknown[],
+): SeededCommentAttachment[] {
+  return normalized.map((item, index) => {
+    const rawById = rawCommentAttachments.find(
+      (entry) =>
+        entry &&
+        typeof entry === 'object' &&
+        !Array.isArray(entry) &&
+        typeof (entry as { id?: unknown }).id === 'string' &&
+        (entry as { id: string }).id === item.id,
+    );
+    const slideIndex = seededSlideIndexFromRaw(rawById ?? rawCommentAttachments[index]);
+    return slideIndex === undefined ? item : { ...item, slideIndex };
+  });
+}
+
+/**
+ * Map ChatRunCreateRequest attachment fields onto the ChatMessage shape used by
+ * upsertMessage / listMessages. Request `attachments` are project-relative
+ * path strings; persisted messages store `{ path, name, kind, order }` so the
+ * UI can reload chips and annotation context after a headless omit-pin seed.
+ */
+function seededUserMessageAttachmentFields(meta: JsonRecord): {
+  attachments?: Array<{ path: string; name: string; kind: 'image' | 'file'; order: number }>;
+  commentAttachments?: SeededCommentAttachment[];
+} {
+  const attachments = Array.isArray(meta.attachments)
+    ? meta.attachments
+        .filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
+        .map((attachmentPath, index) => {
+          const name = path.basename(attachmentPath) || attachmentPath;
+          const ext = path.extname(name).toLowerCase();
+          return {
+            path: attachmentPath,
+            name,
+            kind: SEEDED_USER_IMAGE_EXTS.has(ext) ? ('image' as const) : ('file' as const),
+            order: index,
+          };
+        })
+    : [];
+  const rawCommentAttachments = Array.isArray(meta.commentAttachments)
+    ? meta.commentAttachments
+    : [];
+  const commentAttachments = withSeededSlideIndex(
+    normalizeCommentAttachments(
+      rawCommentAttachments as Parameters<typeof normalizeCommentAttachments>[0],
+    ),
+    rawCommentAttachments,
+  );
+  return {
+    ...(attachments.length > 0 ? { attachments } : {}),
+    ...(commentAttachments.length > 0 ? { commentAttachments } : {}),
+  };
+}
+
+/**
+ * Map request/run turn metadata onto the ChatMessage fields the web client
+ * writes via PUT /messages. ChatPane and ProjectView retry both re-read
+ * sessionMode / runContext / appliedPluginSnapshot from the user message after
+ * reload, so omit-pin seeds must persist the same columns.
+ */
+function seededUserMessageTurnMetadataFields(
+  meta: JsonRecord,
+  appliedPluginSnapshot?: AppliedPluginSnapshot | null,
+): {
+  sessionMode?: string;
+  runContext?: Record<string, unknown>;
+  appliedPluginSnapshot?: AppliedPluginSnapshot;
+} {
+  const runContext =
+    meta.context && typeof meta.context === 'object' && !Array.isArray(meta.context)
+      ? (meta.context as Record<string, unknown>)
+      : undefined;
+  return {
+    ...(typeof meta.sessionMode === 'string' && meta.sessionMode
+      ? { sessionMode: meta.sessionMode }
+      : {}),
+    ...(runContext ? { runContext } : {}),
+    ...(appliedPluginSnapshot ? { appliedPluginSnapshot } : {}),
+  };
+}
 
 interface ProjectRecord {
   id: string;
@@ -144,6 +272,8 @@ interface ChatRun {
   projectId: string | null;
   conversationId: string | null;
   assistantMessageId: string | null;
+  clientRequestId?: string | null;
+  requestFingerprint?: string | null;
   agentId: string | null;
   model?: string | null;
   status: ChatRunStatus;
@@ -154,15 +284,31 @@ interface ChatRun {
   signal?: string | null;
   error?: string | null;
   errorCode?: string | null;
+  failureAction?: string | null;
   projectMetadata?: ProjectMetadata;
   appliedPluginSnapshotId?: string | null;
   pluginId?: string | null;
-  clientType?: 'desktop' | 'web';
+  clientType?: 'desktop' | 'web' | 'external_mcp';
   sessionMode?: string | null;
   context?: Record<string, unknown> | null;
   events: RunEventRecord[];
   clients: Set<SseClient>;
   analyticsContext?: AnalyticsContext;
+  analyticsRecovery?: { context?: AnalyticsContext } | null;
+  externalPluginAnalytics?: Record<string, unknown> | null;
+  manualResumeAttemptCount?: number;
+  rechargeWaitDurationMs?: number;
+  artifactOriginStatus?:
+    | 'matched'
+    | 'missing_version'
+    | 'digest_mismatch'
+    | 'invalid_origin'
+    | 'unknown';
+  artifactVersionId?: string;
+  deliverableValid?: boolean;
+  deliverableValidation?: ChatRunStatusResponse['deliverableValidation'];
+  deliverableEntryFile?: string;
+  deliverableArtifactKind?: ChatRunStatusResponse['deliverableArtifactKind'];
   analyticsTelemetry?: RunTelemetryTimestamps;
   resolvedModelId?: string | null;
   preflightAgentCliVersion?: string | null;
@@ -204,6 +350,8 @@ interface RunCreateMeta extends JsonRecord {
   projectId?: string;
   conversationId?: string;
   assistantMessageId?: string;
+  clientRequestId?: string;
+  requestFingerprint?: string;
   agentId?: string;
   pluginId?: string;
   appliedPluginSnapshotId?: string;
@@ -220,7 +368,13 @@ interface RunListFilters {
 
 interface ChatRunService {
   create(meta: RunCreateMeta): ChatRun;
+  createOrReuse(meta: RunCreateMeta):
+    | { kind: 'created'; run: ChatRun }
+    | { kind: 'reused'; run: ChatRun }
+    | { kind: 'conflict'; run: ChatRun };
+  prepareRestart(run: ChatRun): ChatRun | null;
   get(id: string): ChatRun | null;
+  findByPluginWorkflowId(pluginWorkflowId: string): ChatRun | null;
   list(filters: RunListFilters): ChatRun[];
   statusBody(run: ChatRun): ChatRunStatusResponse;
   stream(run: ChatRun, req: Request, res: Response): void;
@@ -235,6 +389,10 @@ interface ChatRunService {
     insertId: string;
   }): void;
   markAnalyticsCompleted?(run: ChatRun): void;
+  setDeliverableValidation?(
+    run: ChatRun,
+    result: RunDeliverableValidationResult,
+  ): void;
 }
 
 interface AnalyticsService {
@@ -381,6 +539,41 @@ function toProjectRecord(value: unknown): ProjectRecord | null {
     : null;
 }
 
+async function validateChatRunDeliverable(input: {
+  db: SqliteDb;
+  projectsRoot: string;
+  run: ChatRun;
+  runStatus: ChatRunStatus;
+  artifactCount: number;
+  touchedPaths?: string[];
+}): Promise<RunDeliverableValidationResult> {
+  const project = input.run.projectId
+    ? toProjectRecord(getProject(input.db, input.run.projectId))
+    : null;
+  return validateRunDeliverable({
+    projectsRoot: input.projectsRoot,
+    projectId: input.run.projectId,
+    projectMetadata:
+      project?.metadata ?? input.run.projectMetadata ?? null,
+    runStatus: input.runStatus,
+    artifactCount: input.artifactCount,
+    ...(input.touchedPaths ? { touchedPaths: input.touchedPaths } : {}),
+  });
+}
+
+function runTouchedArtifactPaths(run: ChatRun): string[] | undefined {
+  const diff = (
+    run.artifactOutcome as
+      | { diff?: { touchedPaths?: unknown } }
+      | undefined
+  )?.diff;
+  return Array.isArray(diff?.touchedPaths)
+    ? diff.touchedPaths.filter(
+        (value): value is string => typeof value === 'string' && value.length > 0,
+      )
+    : undefined;
+}
+
 function isProjectEnrichableDesignSystem(project: ProjectRecord): boolean {
   if (typeof project.designSystemId === 'string' && project.designSystemId.length > 0) {
     return true;
@@ -440,12 +633,14 @@ function resolveEffectiveDesignSystemSelection({
   pluginDesignSystemId,
   projectDesignSystemId,
   appDefaultDesignSystemId,
+  disabledDesignSystemIds,
   allowAppDefault = true,
 }: {
   requestDesignSystemId?: unknown;
   pluginDesignSystemId?: unknown;
   projectDesignSystemId?: unknown;
   appDefaultDesignSystemId?: unknown;
+  disabledDesignSystemIds?: unknown;
   allowAppDefault?: boolean;
 }): { id: string | null; source: DesignSystemSelectionSource } {
   const requestId = normalizedDesignSystemId(requestDesignSystemId);
@@ -454,8 +649,15 @@ function resolveEffectiveDesignSystemSelection({
   const pluginId = normalizedDesignSystemId(pluginDesignSystemId);
   if (pluginId) return { id: pluginId, source: 'plugin' };
 
+  const disabledIds = Array.isArray(disabledDesignSystemIds)
+    ? disabledDesignSystemIds.map(normalizedDesignSystemId).filter(
+        (value): value is string => value !== null,
+      )
+    : [];
   const projectId = normalizedDesignSystemId(projectDesignSystemId);
-  if (projectId) return { id: projectId, source: 'project' };
+  if (projectId && !disabledIds.includes(projectId)) {
+    return { id: projectId, source: 'project' };
+  }
 
   if (allowAppDefault) {
     const appDefaultId = normalizedDesignSystemId(appDefaultDesignSystemId);
@@ -483,6 +685,97 @@ function routeParamId(req: ApiRequest): string | null {
   return typeof req.params.id === 'string' && req.params.id.length > 0
     ? req.params.id
     : null;
+}
+
+function withoutSensitiveRunInput(body: JsonRecord): JsonRecord {
+  const sanitized = { ...body };
+  delete sanitized.byokProvider;
+  delete sanitized.byokProfileId;
+  delete sanitized.apiKey;
+  delete sanitized.rechargeResumeCapability;
+  return sanitized;
+}
+
+function canonicalJsonValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalJsonValue);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as JsonRecord)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, nested]) => [key, canonicalJsonValue(nested)]),
+    );
+  }
+  return value;
+}
+
+function semanticPluginSnapshot(
+  snapshot: AppliedPluginSnapshot | null | undefined,
+): Record<string, unknown> | null {
+  if (!snapshot) return null;
+  const {
+    snapshotId: _snapshotId,
+    appliedAt: _appliedAt,
+    status: _status,
+    ...semantic
+  } = snapshot;
+  return semantic;
+}
+
+function runRequestFingerprint(
+  meta: RunCreateMeta,
+  appliedPluginSnapshot?: AppliedPluginSnapshot | null,
+): string {
+  // Fingerprint the complete execution-shaping request, not a hand-picked
+  // subset that silently aliases system prompts, attachments, context,
+  // research or media defaults. Exclude only transport/recovery metadata,
+  // analytics-only source hints and derived mutable rows. A freshly-created
+  // snapshot id is deliberately excluded; its immutable semantic content is
+  // included instead so a lost-response retry neither conflicts spuriously
+  // nor ignores a real plugin upgrade.
+  const logicalRequest = { ...meta } as JsonRecord;
+  delete logicalRequest.clientRequestId;
+  delete logicalRequest.requestFingerprint;
+  delete logicalRequest.resume;
+  delete logicalRequest.analyticsHints;
+  delete logicalRequest.assistantMessageId;
+  delete logicalRequest.projectMetadata;
+  delete logicalRequest.appliedPluginSnapshotId;
+  logicalRequest.appliedPluginSnapshot =
+    semanticPluginSnapshot(appliedPluginSnapshot);
+  return createHash('sha256')
+    .update(JSON.stringify(canonicalJsonValue(logicalRequest)))
+    .digest('hex');
+}
+
+const EXTERNAL_PLUGIN_ANALYTICS_KEYS = [
+  'entrySurface',
+  'hostProduct',
+  'externalPluginId',
+  'externalPluginVersion',
+  'distributionMechanism',
+  'publisherClass',
+  'attributionQuality',
+  'pluginWorkflowId',
+  'logicalRequestDigest',
+  'logicalRequestDigestVersion',
+] as const;
+
+function externalPluginAttributionMismatch(
+  existing: Record<string, unknown> | null | undefined,
+  incoming: unknown,
+): boolean {
+  const next =
+    incoming && typeof incoming === 'object' && !Array.isArray(incoming)
+      ? (incoming as Record<string, unknown>)
+      : null;
+  const existingIsPlugin =
+    existing?.externalPluginId === OPEN_DESIGN_PLUGIN_ID;
+  const nextIsPlugin = next?.externalPluginId === OPEN_DESIGN_PLUGIN_ID;
+  if (!existingIsPlugin && !nextIsPlugin) return false;
+  if (!existingIsPlugin || !nextIsPlugin) return true;
+  return EXTERNAL_PLUGIN_ANALYTICS_KEYS.some(
+    (key) => existing[key] !== next[key],
+  );
 }
 
 function hasCompleteByokOpenCodeConfig(meta: JsonRecord): boolean {
@@ -544,6 +837,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       return sendApiError(res, 503, 'UPSTREAM_UNAVAILABLE', 'daemon is shutting down');
     }
     const requestBody = toJsonRecord(req.body);
+    const requestAnalyticsContext = readAnalyticsContext(req);
     const mediaExecution = parseMediaExecutionPolicyInput(requestBody.mediaExecution);
     if (!mediaExecution.ok) {
       return sendApiError(res, 400, 'BAD_REQUEST', mediaExecution.message);
@@ -559,6 +853,22 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         'VALIDATION_FAILED',
         BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE,
       );
+    }
+    // Reject a client-supplied conversationId that is missing a projectId or
+    // not owned by that projectId before plugin snapshot resolve (which links
+    // the snapshot to the conversation and would FK-fail / 500) and before
+    // omit-pin mint/seed (which would return 202 with an unpersisted
+    // assistantMessageId, or write messages without owning-project context).
+    if (typeof requestBody.conversationId === 'string' && requestBody.conversationId) {
+      const requestConversation = getConversation(db, requestBody.conversationId);
+      if (
+        !requestConversation ||
+        typeof requestBody.projectId !== 'string' ||
+        !requestBody.projectId ||
+        requestConversation.projectId !== requestBody.projectId
+      ) {
+        return sendApiError(res, 404, 'CONVERSATION_NOT_FOUND', 'conversation not found for project');
+      }
     }
     let resolvedSnapshot = null;
     if (typeof requestBody.projectId === 'string' && requestBody.projectId) {
@@ -608,7 +918,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       }
     }
     const meta: RunCreateMeta = {
-      ...requestBody,
+      ...withoutSensitiveRunInput(requestBody),
       mediaExecution: mediaExecution.policy,
       toolBundle: toolBundle.bundle,
     };
@@ -657,7 +967,12 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         console.warn('[runs] agent id fallback failed', err);
       }
     }
-    if (!hasCompleteByokOpenCodeConfig(meta)) {
+    if (!hasCompleteByokOpenCodeConfig({
+      ...meta,
+      ...(requestBody.byokProvider !== undefined
+        ? { byokProvider: requestBody.byokProvider }
+        : {}),
+    })) {
       return sendApiError(
         res,
         400,
@@ -681,6 +996,69 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     if (runProject?.metadata) {
       meta.projectMetadata = runProject.metadata;
     }
+    const requestAnalyticsHints =
+      meta.analyticsHints
+      && typeof meta.analyticsHints === 'object'
+      && !Array.isArray(meta.analyticsHints)
+        ? (meta.analyticsHints as Record<string, unknown>)
+        : null;
+    const hasExternalPluginHints = Boolean(
+      requestAnalyticsHints
+      && (
+        requestAnalyticsHints.externalPluginId !== undefined
+        || requestAnalyticsHints.externalPluginVersion !== undefined
+        || requestAnalyticsHints.pluginWorkflowId !== undefined
+        || requestAnalyticsHints.logicalRequestDigest !== undefined
+        || requestAnalyticsHints.logicalRequestDigestVersion !== undefined
+      ),
+    );
+    if (hasExternalPluginHints) {
+      let normalizedExternalPluginHints;
+      try {
+        normalizedExternalPluginHints =
+          normalizeExternalPluginRunAnalyticsHints(requestAnalyticsHints, {
+            clientRequestId: meta.clientRequestId,
+            analyticsContext: requestAnalyticsContext,
+          });
+      } catch (error) {
+        return sendApiError(
+          res,
+          400,
+          'PLUGIN_CONTRACT_REJECTED',
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+      const runtimeDef =
+        typeof meta.agentId === 'string' ? getAgentDef(meta.agentId) : null;
+      const inactivityTimeoutMs = resolveChatRunInactivityTimeoutMs(
+        runtimeDef?.inactivityTimeoutMs,
+      );
+      meta.analyticsHints = {
+        ...requestAnalyticsHints,
+        ...normalizedExternalPluginHints,
+        generationSloWindowMs: resolvePluginGenerationSloWindowMs({
+          inactivityTimeoutMs,
+          configuredValue: process.env.OD_PLUGIN_GENERATION_SLO_WINDOW_MS,
+        }),
+      };
+      const existingWorkflowRun = design.runs.findByPluginWorkflowId(
+        normalizedExternalPluginHints.pluginWorkflowId,
+      );
+      if (
+        existingWorkflowRun
+        && existingWorkflowRun.clientRequestId !== meta.clientRequestId
+      ) {
+        return sendApiError(
+          res,
+          409,
+          'PLUGIN_WORKFLOW_CONFLICT',
+          'pluginWorkflowId is already bound to a different logical run request',
+        );
+      }
+    }
+    // Headless / MCP clients often omit conversationId; bind the project's
+    // earliest conversation so the run has a chat home.
+    let conversationFallbackBound = false;
     if (
       typeof meta.projectId === 'string' &&
       meta.projectId &&
@@ -700,22 +1078,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           : null;
         if (defaultConv && typeof defaultConv.id === 'string' && defaultConv.id) {
           meta.conversationId = defaultConv.id;
-          if (typeof meta.assistantMessageId !== 'string' || !meta.assistantMessageId) {
-            meta.assistantMessageId = randomUUID();
-          }
-          const promptForUserMessage =
-            typeof meta.message === 'string' && meta.message.trim().length > 0
-              ? meta.message
-              : null;
-          if (promptForUserMessage) {
-            upsertMessage(db, defaultConv.id, {
-              id: randomUUID(),
-              role: 'user',
-              content: promptForUserMessage,
-              startedAt: Date.now(),
-              endedAt: Date.now(),
-            });
-          }
+          conversationFallbackBound = true;
         }
       } catch (err) {
         console.warn('[runs] mcp conversation fallback failed', err);
@@ -725,31 +1088,185 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       typeof meta.conversationId === 'string' && meta.conversationId
         ? getConversation(db, meta.conversationId)
         : null;
-    // A run may only attach to a conversation owned by its own project. Without
-    // this guard a request pairing projectId=A with a conversationId owned by
-    // project B runs in A's cwd but pins its messages and native session under
-    // B — corrupting B's chat history and resume identity. Mirror the ownership
-    // check the sibling routes already enforce (handoff.ts, terminal.ts).
-    if (
-      conversationSession &&
-      typeof meta.projectId === 'string' &&
-      meta.projectId &&
-      conversationSession.projectId !== meta.projectId
-    ) {
-      return sendApiError(res, 404, 'CONVERSATION_NOT_FOUND', 'conversation not found for project');
+    // Re-check after optional headless conversation bind: a run may only attach
+    // to a conversation that exists and is owned by its project. Covers both
+    // client-supplied ids (already validated above) and fallback-bound ids.
+    // Require a string projectId so omit-pin never seeds without owning-project
+    // context. Must run before omit-pin mint/seed so a missing conversation
+    // never yields a 202 with an assistantMessageId that was never persisted.
+    if (typeof meta.conversationId === 'string' && meta.conversationId) {
+      if (
+        !conversationSession ||
+        typeof meta.projectId !== 'string' ||
+        !meta.projectId ||
+        conversationSession.projectId !== meta.projectId
+      ) {
+        return sendApiError(res, 404, 'CONVERSATION_NOT_FOUND', 'conversation not found for project');
+      }
     }
+    // Resolve session mode before omit-pin seed so the user turn stores the
+    // same mode the run will use (matches web PUT /messages persistence).
     meta.sessionMode =
       meta.sessionMode === 'chat' || meta.sessionMode === 'design' || meta.sessionMode === 'plan'
         ? normalizeConversationSessionMode(meta.sessionMode)
         : normalizeConversationSessionMode(conversationSession?.sessionMode);
-    const run = design.runs.create(meta);
+    // Web always mints assistantMessageId client-side. API clients that already
+    // know conversationId (eval runners, scripts, MCP after the bind above) may
+    // omit it. Without a server-side pin, pinAssistantMessageOnRunCreate no-ops,
+    // lastMessageId stays null, and multi-turn native session resume is skipped
+    // (missing_cursor / resume_skipped). Ownership is validated above first.
+    // Also seed the user turn when the server bound conversationId via the
+    // headless fallback even if the client already supplied a pin — the pre-
+    // refactor path always seeded in that case, and MCP allows pin + omitted
+    // conversationId independently.
+    //
+    // Prepare seed payload before createOrReuse, but only persist when the run
+    // is newly created so lost-response retries with clientRequestId do not
+    // duplicate user turns.
+    const missingClientPin =
+      typeof meta.assistantMessageId !== 'string' || !meta.assistantMessageId;
+    let omitPinUserSeed: {
+      conversationId: string;
+      content: string;
+      attachments: ReturnType<typeof seededUserMessageAttachmentFields>;
+      turnMetadata: ReturnType<typeof seededUserMessageTurnMetadataFields>;
+    } | null = null;
+    if (
+      typeof meta.conversationId === 'string' &&
+      meta.conversationId &&
+      (missingClientPin || conversationFallbackBound)
+    ) {
+      if (missingClientPin) {
+        meta.assistantMessageId = randomUUID();
+      }
+      // Prefer original request currentPrompt (latest turn) whenever it is a
+      // string — including empty for attachments-only sends. Plugin resolution
+      // may replace meta.message with a rendered scenario brief for the run
+      // (see above); seed visible chat content from requestBody so that
+      // internal brief never appears as user-authored content. message may be
+      // a full flattened ChatRequest transcript. Minimal MCP requests set both
+      // equal. Only fall back to message when currentPrompt is absent. Empty
+      // message is still seedable when attachment metadata is present so
+      // chips/annotations survive reload for omit-pin clients that leave
+      // currentPrompt unset.
+      const seededAttachments = seededUserMessageAttachmentFields(meta);
+      const hasSeedableAttachmentMetadata =
+        (seededAttachments.attachments?.length ?? 0) > 0 ||
+        (seededAttachments.commentAttachments?.length ?? 0) > 0;
+      const originalCurrentPrompt = requestBody.currentPrompt;
+      const originalMessage = requestBody.message;
+      const promptForUserMessage =
+        typeof originalCurrentPrompt === 'string'
+          ? originalCurrentPrompt
+          : typeof originalMessage === 'string' &&
+              (originalMessage.trim().length > 0 || hasSeedableAttachmentMetadata)
+            ? originalMessage
+            : null;
+      if (promptForUserMessage !== null) {
+        omitPinUserSeed = {
+          conversationId: meta.conversationId,
+          content: promptForUserMessage,
+          attachments: seededAttachments,
+          turnMetadata: seededUserMessageTurnMetadataFields(
+            meta,
+            resolvedSnapshot?.ok ? resolvedSnapshot.snapshot : null,
+          ),
+        };
+      }
+    }
+    meta.requestFingerprint = runRequestFingerprint(
+      meta,
+      resolvedSnapshot?.ok ? resolvedSnapshot.snapshot : null,
+    );
+    const creation = design.runs.createOrReuse(meta);
+    if (creation.kind === 'conflict') {
+      return sendApiError(
+        res,
+        409,
+        'IDEMPOTENCY_CONFLICT',
+        'clientRequestId is already associated with a different logical run request',
+      );
+    }
+    const run = creation.run;
+    const analyticsAttributionMismatch =
+      creation.kind === 'reused'
+      && externalPluginAttributionMismatch(
+        run.externalPluginAnalytics,
+        meta.analyticsHints,
+      );
+    let resumed = false;
+    if (creation.kind === 'reused') {
+      const resumeRequested = requestBody.resume === true;
+      const rechargeFailure =
+        run.status === 'failed'
+        && run.agentId === 'amr'
+        && (
+          run.failureAction === 'recharge'
+          || run.errorCode === 'AMR_INSUFFICIENT_BALANCE'
+        );
+      if (!resumeRequested) {
+        return res.status(202).json({
+          runId: run.id,
+          conversationId: run.conversationId ?? null,
+          assistantMessageId: run.assistantMessageId ?? null,
+          clientRequestId: run.clientRequestId ?? null,
+          reused: true,
+          resumed: false,
+          ...(analyticsAttributionMismatch
+            ? { analyticsAttributionMismatch: true }
+            : {}),
+          ...(run.appliedPluginSnapshotId
+            ? { appliedPluginSnapshotId: run.appliedPluginSnapshotId }
+            : {}),
+          ...(run.pluginId ? { pluginId: run.pluginId } : {}),
+        });
+      }
+      if (!rechargeFailure || !design.runs.prepareRestart(run)) {
+        return sendApiError(
+          res,
+          409,
+          'RUN_NOT_RECHARGE_RESUMABLE',
+          'Only a failed Open Design Cloud run waiting for recharge can be resumed with the same request',
+        );
+      }
+      resumed = true;
+    }
+    if (creation.kind === 'created' && omitPinUserSeed) {
+      try {
+        const now = Date.now();
+        upsertMessage(db, omitPinUserSeed.conversationId, {
+          id: randomUUID(),
+          role: 'user',
+          content: omitPinUserSeed.content,
+          startedAt: now,
+          endedAt: now,
+          // Same turn metadata the web client writes via PUT /messages so
+          // reload/retry keep sessionMode, runContext, and applied plugin.
+          ...omitPinUserSeed.turnMetadata,
+          // Preserve request attachments/commentAttachments on the seeded user
+          // turn so reload/listMessages still show chips and annotation context
+          // for omit-pin / headless clients (same columns as PUT /messages).
+          ...omitPinUserSeed.attachments,
+        });
+        // Bump parent project updatedAt so listProjects reorders (same as
+        // PUT /messages). Headless/API turns that never hit that route would
+        // otherwise leave the project buried under more recent activity.
+        if (typeof meta.projectId === 'string' && meta.projectId) {
+          updateProject(db, meta.projectId, {});
+        }
+      } catch (err) {
+        console.warn('[runs] api client user message pin failed', err);
+      }
+    }
     try {
       pinAssistantMessageOnRunCreate(db, run);
     } catch (err) {
       console.warn('[runs] message create pin failed', err);
     }
     const declaredClient = String(req.get('x-od-client') ?? '').toLowerCase();
-    if (declaredClient === 'desktop' || declaredClient === 'web') {
+    if (requestAnalyticsContext?.clientType === 'external_mcp') {
+      run.clientType = 'external_mcp';
+    } else if (declaredClient === 'desktop' || declaredClient === 'web') {
       run.clientType = declaredClient;
     } else {
       const ua = String(req.get('user-agent') ?? '');
@@ -767,6 +1284,12 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       runId: run.id,
       conversationId: run.conversationId ?? null,
       assistantMessageId: run.assistantMessageId ?? null,
+      clientRequestId: run.clientRequestId ?? null,
+      reused: creation.kind === 'reused',
+      resumed,
+      ...(analyticsAttributionMismatch
+        ? { analyticsAttributionMismatch: true }
+        : {}),
       ...(resolvedSnapshot?.ok
         ? {
             appliedPluginSnapshotId: resolvedSnapshot.snapshotId,
@@ -775,7 +1298,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         : {}),
     };
     res.status(202).json(body);
-    if (resolvedSnapshot?.ok && resolvedSnapshot.snapshot.pipeline) {
+    if (!resumed && resolvedSnapshot?.ok && resolvedSnapshot.snapshot.pipeline) {
       firePipelineForRun({
         run,
         snapshot: resolvedSnapshot.snapshot,
@@ -793,7 +1316,13 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         console.warn('[plugins] skill candidate hook setup failed', err);
       }
     }
-    design.runs.start(run, () => startChatRun(meta, run));
+    const executionMeta: RunCreateMeta = {
+      ...meta,
+      ...(requestBody.byokProvider !== undefined
+        ? { byokProvider: requestBody.byokProvider }
+        : {}),
+    };
+    design.runs.start(run, () => startChatRun(executionMeta, run));
 
     const reqBody = requestBody;
     const analyticsHints =
@@ -825,8 +1354,21 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       }).catch(() => {});
     }
 
-    const analyticsContext = readAnalyticsContext(req);
-    if (analyticsContext) {
+    const recoveredAnalyticsContext =
+      run.analyticsRecovery
+      && typeof run.analyticsRecovery === 'object'
+      && (run.analyticsRecovery as { context?: unknown }).context
+      && typeof (run.analyticsRecovery as { context?: unknown }).context === 'object'
+        ? ((run.analyticsRecovery as { context: AnalyticsContext }).context)
+        : null;
+    // Source/identity is first-write immutable for a logical run. A retry or
+    // recharge resume cannot relabel a prior ordinary request as Plugin (or
+    // vice versa) by changing analytics-only headers.
+    const analyticsContext =
+      run.analyticsContext
+      ?? recoveredAnalyticsContext
+      ?? requestAnalyticsContext;
+    if (!run.analyticsContext && analyticsContext) {
       run.analyticsContext = analyticsContext;
     }
     design.runs.wait(run).then((status: { status: string }) => {
@@ -914,6 +1456,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           : null,
         projectDesignSystemId: runProjectForAnalytics?.designSystemId,
         appDefaultDesignSystemId: (appCfgForAnalytics as { designSystemId?: unknown }).designSystemId,
+        disabledDesignSystemIds: (appCfgForAnalytics as { disabledDesignSystems?: unknown }).disabledDesignSystems,
         allowAppDefault: runProjectForAnalytics === null,
       });
       const runProjectKind = resolveRunProjectKindForAnalytics({
@@ -1063,6 +1606,42 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         mcp_id: runMcpServerIds[0] ?? null,
         skill_ids: runSkillIds,
         token_count_source: userQueryTokens > 0 ? 'estimated' : 'unknown',
+        ...(run.externalPluginAnalytics
+          ? {
+              entry_surface:
+                run.externalPluginAnalytics.entrySurface,
+              host_product:
+                run.externalPluginAnalytics.hostProduct,
+              external_plugin_id:
+                run.externalPluginAnalytics.externalPluginId,
+              external_plugin_version:
+                run.externalPluginAnalytics.externalPluginVersion,
+              distribution_mechanism:
+                run.externalPluginAnalytics.distributionMechanism,
+              publisher_class:
+                run.externalPluginAnalytics.publisherClass,
+              attribution_quality:
+                run.externalPluginAnalytics.attributionQuality,
+              plugin_workflow_id:
+                run.externalPluginAnalytics.pluginWorkflowId,
+              logical_request_digest:
+                run.externalPluginAnalytics.logicalRequestDigest,
+              logical_request_digest_version:
+                run.externalPluginAnalytics.logicalRequestDigestVersion,
+              brief_state:
+                run.externalPluginAnalytics.briefState,
+              generation_slo_window_ms:
+                run.externalPluginAnalytics.generationSloWindowMs,
+              deduplicated: creation.kind === 'reused',
+              resume: resumed,
+              attempt_count: (run.manualResumeAttemptCount ?? 0) + 1,
+              recharge_wait_duration_ms:
+                run.rechargeWaitDurationMs ?? 0,
+              ...(analyticsAttributionMismatch
+                ? { source_metadata_mismatch: true }
+                : {}),
+            }
+          : {}),
       };
       design.runs.setAnalyticsRecovery?.(run, {
         context: analyticsContext,
@@ -1237,6 +1816,22 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
             previewModuleCount = toolStreamPreviewModuleCount();
           }
         }
+        const touchedArtifactPaths = runTouchedArtifactPaths(run);
+        const deliverable = run.externalPluginAnalytics
+          ? await validateChatRunDeliverable({
+              db,
+              projectsRoot: PROJECTS_DIR,
+              run,
+              runStatus: run.status,
+              artifactCount,
+              ...(touchedArtifactPaths
+                ? { touchedPaths: touchedArtifactPaths }
+                : {}),
+            })
+          : null;
+        if (deliverable) {
+          design.runs.setDeliverableValidation?.(run, deliverable);
+        }
         const activationMilestones = deriveActivationMilestones({
           result,
           artifactCount,
@@ -1287,6 +1882,22 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
             ...(activationMilestones ? { $set_once: activationMilestones } : {}),
             model_id: finishedModelId,
             artifact_count: artifactCount,
+            ...(run.externalPluginAnalytics
+              ? {
+                  deliverable_valid: deliverable?.valid === true,
+                  deliverable_validation:
+                    deliverable?.valid === true ? 'valid' : 'invalid',
+                  artifact_origin_status:
+                    run.artifactOriginStatus ?? 'missing_version',
+                  ...(run.artifactVersionId
+                    ? { artifact_version_id: run.artifactVersionId }
+                    : {}),
+                  resume: (run.manualResumeAttemptCount ?? 0) > 0,
+                  attempt_count: (run.manualResumeAttemptCount ?? 0) + 1,
+                  recharge_wait_duration_ms:
+                    run.rechargeWaitDurationMs ?? 0,
+                }
+              : {}),
             ...(artifactsCreated !== undefined ? { artifacts_created: artifactsCreated } : {}),
             ...(artifactsModified !== undefined ? { artifacts_modified: artifactsModified } : {}),
             asked_user_question: runAskedUserQuestion(run.events),
@@ -1417,6 +2028,48 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     res.json(body);
   });
 
+  app.get('/api/runs/by-plugin-workflow/:workflowId', (req: ApiRequest, res: ApiResponse) => {
+    let pluginWorkflowId: string;
+    try {
+      pluginWorkflowId = validatePluginWorkflowId(req.params.workflowId);
+    } catch {
+      return sendApiError(
+        res,
+        400,
+        'PLUGIN_CONTRACT_REJECTED',
+        'pluginWorkflowId must be a canonical UUID or ULID',
+      );
+    }
+    const run = design.runs.findByPluginWorkflowId(pluginWorkflowId);
+    const analytics =
+      run?.externalPluginAnalytics
+      && run.externalPluginAnalytics.externalPluginId
+        === OPEN_DESIGN_PLUGIN_ID
+        ? run.externalPluginAnalytics
+        : null;
+    if (!run || !analytics) {
+      return sendApiError(
+        res,
+        404,
+        'NOT_FOUND',
+        'plugin workflow run not found',
+      );
+    }
+    res.json({
+      runId: run.id,
+      projectId: run.projectId,
+      pluginWorkflowId,
+      logicalRequestDigest: analytics.logicalRequestDigest,
+      logicalRequestDigestVersion: analytics.logicalRequestDigestVersion,
+      externalPluginContext: {
+        id: analytics.externalPluginId,
+        version: analytics.externalPluginVersion,
+        distributionMechanism: analytics.distributionMechanism,
+        publisherClass: analytics.publisherClass,
+      },
+    });
+  });
+
   app.get('/api/runs/:id/result-package', async (req: ApiRequest, res: ApiResponse) => {
     const runId = routeParamId(req);
     if (!runId) return sendApiError(res, 400, 'BAD_REQUEST', 'run id missing');
@@ -1503,12 +2156,47 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     res.json(body);
   });
 
-  app.get('/api/runs/:id', (req: ApiRequest, res: ApiResponse) => {
+  app.get('/api/runs/:id', async (req: ApiRequest, res: ApiResponse) => {
     const runId = routeParamId(req);
     if (!runId) return sendApiError(res, 400, 'BAD_REQUEST', 'run id missing');
     const run = design.runs.get(runId);
     if (!run) return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
-    res.json(design.runs.statusBody(run));
+    const status = design.runs.statusBody(run);
+    if (!design.runs.isTerminal(run.status)) {
+      res.json(status);
+      return;
+    }
+    if (
+      typeof status.deliverableValid === 'boolean'
+      && typeof status.deliverableValidation === 'string'
+    ) {
+      res.json(status);
+      return;
+    }
+    const touchedArtifactPaths = runTouchedArtifactPaths(run);
+    const deliverable = await validateChatRunDeliverable({
+      db,
+      projectsRoot: PROJECTS_DIR,
+      run,
+      runStatus: run.status,
+      artifactCount:
+        typeof status.artifactCount === 'number' ? status.artifactCount : 0,
+      ...(touchedArtifactPaths
+        ? { touchedPaths: touchedArtifactPaths }
+        : {}),
+    });
+    design.runs.setDeliverableValidation?.(run, deliverable);
+    res.json({
+      ...status,
+      deliverableValid: deliverable.valid,
+      deliverableValidation: deliverable.validation,
+      ...(deliverable.entryFile
+        ? { deliverableEntryFile: deliverable.entryFile }
+        : {}),
+      ...(deliverable.artifactKind
+        ? { deliverableArtifactKind: deliverable.artifactKind }
+        : {}),
+    });
   });
 
   app.get('/api/runs/:id/events', (req: ApiRequest, res: ApiResponse) => {
@@ -1578,7 +2266,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     res.json(body);
   });
 
-  app.post('/api/chat', (req: ApiRequest, res: ApiResponse) => {
+  app.post('/api/chat', async (req: ApiRequest, res: ApiResponse) => {
     if (ctx.lifecycle.isDaemonShuttingDown()) {
       return sendApiError(res, 503, 'UPSTREAM_UNAVAILABLE', 'daemon is shutting down');
     }
@@ -1628,13 +2316,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         return sendApiError(res, 404, 'CONVERSATION_NOT_FOUND', 'conversation not found for project');
       }
     }
-    const meta = {
-      ...requestBody,
-      mediaExecution: mediaExecution.policy,
-      toolBundle: toolBundle.bundle,
-      ...(chatProject?.metadata ? { projectMetadata: chatProject.metadata } : {}),
-    };
-    if (!hasCompleteByokOpenCodeConfig(meta)) {
+    if (!hasCompleteByokOpenCodeConfig(requestBody)) {
       return sendApiError(
         res,
         400,
@@ -1642,7 +2324,27 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE,
       );
     }
-    const run = design.runs.create(meta);
+    const meta: RunCreateMeta = {
+      ...withoutSensitiveRunInput(requestBody),
+      mediaExecution: mediaExecution.policy,
+      toolBundle: toolBundle.bundle,
+      ...(chatProject?.metadata ? { projectMetadata: chatProject.metadata } : {}),
+    };
+    meta.requestFingerprint = runRequestFingerprint(meta);
+    const creation = design.runs.createOrReuse(meta);
+    if (creation.kind === 'conflict') {
+      return sendApiError(
+        res,
+        409,
+        'IDEMPOTENCY_CONFLICT',
+        'clientRequestId is already associated with a different logical run request',
+      );
+    }
+    const run = creation.run;
+    if (creation.kind === 'reused') {
+      design.runs.stream(run, req, res);
+      return;
+    }
     try {
       pinAssistantMessageOnRunCreate(db, run);
     } catch (err) {
@@ -1650,6 +2352,15 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     }
     design.runs.stream(run, req, res);
     reconcileAssistantMessageOnRunEnd(db, design.runs, run);
-    design.runs.start(run, () => startChatRun(meta, run));
+    const executionMeta: RunCreateMeta = {
+      ...meta,
+      ...(requestBody.byokProvider !== undefined
+        ? { byokProvider: requestBody.byokProvider }
+        : {}),
+    };
+    design.runs.start(run, () => startChatRun(executionMeta, run));
   });
 }
+
+export const __forTestHasCompleteByokOpenCodeConfig = hasCompleteByokOpenCodeConfig;
+export const __forTestWithoutSensitiveRunInput = withoutSensitiveRunInput;

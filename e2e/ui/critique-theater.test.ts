@@ -1,13 +1,10 @@
 /**
  * Critique Theater end-to-end coverage (Phase 11).
  *
- * Activation history. The earlier revision of this file was parked behind
- * `test.describe.fixme` because the route at `/` did not mount the
- * Theater (`<CritiqueTheaterMount>` only renders inside `<ProjectView>`,
- * i.e. on `/projects/:id`) and because the single-shot SSE fixture
- * streamed `run_started` through `ship` in one body, which collapses the
- * UI to the shipped surface before any assertion can observe the live
- * stage (Codex P2 on PR #1320).
+ * The suite runs inside a real project route because
+ * `<CritiqueTheaterMount>` renders inside `<ProjectView>`, not at `/`.
+ * Its SSE fixture deliberately separates live and terminal frames so the
+ * mutually exclusive UI states can be asserted deterministically.
  *
  * This revision activates the suite in three moves:
  *
@@ -24,11 +21,9 @@
  *      not also claim the live stage was visible (the two phases are
  *      mutually exclusive surfaces).
  *
- *   3. The visual-regression cases stay parked at the per-test level via
- *      `test.fixme`, because their PNG baselines are not yet committed.
- *      The follow-up that lands the baselines flips those four lines to
- *      `test` and runs Playwright with `--update-snapshots` on first run.
- *      Suite-level activation does not block on that follow-up.
+ *   3. Visual regression belongs to the dedicated visual suite. This file
+ *      keeps functional state and accessibility coverage only; un-baselined
+ *      snapshot placeholders are not useful functional test cases.
  *
  * Determinism boundary: the daemon owns project state (creation, metadata,
  * conversation persistence). The e2e harness owns the SSE event delivery
@@ -257,25 +252,4 @@ test.describe('Critique Theater e2e (Phase 11)', () => {
     await expect(stage.getByRole('button', { name: 'Interrupt' })).toBeVisible();
   });
 
-  // Visual regression at three viewports. Parked per-test until the
-  // baseline-seeding follow-up commits the first PNGs via
-  // `playwright test --update-snapshots`. The four cases stay visible
-  // to `--list` so the suite count does not flap when they activate.
-  for (const vp of [
-    { width: 375, height: 720, label: 'mobile' },
-    { width: 768, height: 1024, label: 'tablet' },
-    { width: 1280, height: 800, label: 'desktop' },
-  ]) {
-    test.fixme(`[P2] visual regression - shipped state @ ${vp.label}`, async ({ page }) => {
-      await page.setViewportSize({ width: vp.width, height: vp.height });
-      await stubProjectEvents(page, FULL_TRANSCRIPT);
-      const projectId = await seedProject(page, `visual-${vp.label}`);
-      await page.goto(`/projects/${projectId}`);
-      await expect(page.getByText('Shipped')).toBeVisible({ timeout: 5_000 });
-      await expect(page.locator('.theater-collapsed')).toHaveScreenshot(
-        `theater-shipped-${vp.label}.png`,
-        { animations: 'disabled' },
-      );
-    });
-  }
 });

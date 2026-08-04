@@ -7,6 +7,7 @@ import {
   createFakeAgentRuntimes,
   FAKE_AGENT_RUNTIME_IDS,
 } from '@/playwright/fake-agents';
+import { trackRunRequests } from '@/playwright/mock-factory';
 import type { FakeAgentId } from '@/playwright/fake-agents';
 import { T } from '@/timeouts';
 
@@ -586,10 +587,7 @@ test('[P1] BYOK OpenCode run is blocked before spawn when provider config is mis
   // Settings section for the user to complete the config. So "fails clearly
   // before spawn" now means no create-run request is issued and the preflight
   // surfaces the fix, not a daemon-side failed run.
-  let createRunRequestSent = false;
-  page.on('request', (request) => {
-    if (isCreateRunRequest(request)) createRunRequestSent = true;
-  });
+  const runRequests = trackRunRequests(page);
 
   const { projectId } = await currentProjectContext(page);
   const input = page.getByTestId('chat-composer-input');
@@ -604,8 +602,11 @@ test('[P1] BYOK OpenCode run is blocked before spawn when provider config is mis
   ).toBeVisible({ timeout: 15_000 });
 
   // No run was created and no artifact was produced — the block is pre-spawn.
-  await page.waitForTimeout(1_000);
-  expect(createRunRequestSent).toBe(false);
+  await runRequests.expectNone({
+    timeout: 1_000,
+    message: 'missing BYOK provider should block before POST /api/runs',
+  });
+  runRequests.dispose?.();
   expect(await listProjectFiles(page, projectId)).toEqual([]);
 
   await page.reload({ waitUntil: 'domcontentloaded' });

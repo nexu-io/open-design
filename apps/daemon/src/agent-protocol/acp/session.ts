@@ -78,6 +78,10 @@ export interface AttachAcpSessionOptions {
   stageTimeoutMs?: number;
   executionProfile?: ExecutionProfile;
   modelUnavailableErrorCode?: 'AMR_MODEL_UNAVAILABLE';
+  // Some ACP adapters expose an explicit `turn_end` session update as their
+  // terminal turn signal instead of returning the pending session/prompt RPC.
+  // Keep this opt-in so standard ACP adapters still require the response.
+  completePromptOnTurnEnd?: boolean;
   // When set, resume an existing upstream session instead of creating a new
   // one: the handshake sends `session/load { sessionId }` (the durable handle
   // captured from a prior run via `getDurableSessionId()`) rather than
@@ -131,6 +135,7 @@ export function attachAcpSession({
   stageTimeoutMs = DEFAULT_STAGE_TIMEOUT_MS,
   executionProfile = 'filesystem',
   modelUnavailableErrorCode,
+  completePromptOnTurnEnd = false,
   resumeSessionId,
   onCliReady,
   onSessionInit,
@@ -629,6 +634,14 @@ export function attachAcpSession({
           elapsedMs: Date.now() - runStartedAt,
         });
         emitAcpRawShapeDiagnostic(update);
+      }
+      if (
+        completePromptOnTurnEnd &&
+        promptRequestId !== null &&
+        update.sessionUpdate === 'turn_end'
+      ) {
+        finishCleanPrompt(update.usage);
+        return;
       }
       if (update.sessionUpdate === 'agent_thought_chunk') {
         emitAcpRawShapeDiagnostic(update);

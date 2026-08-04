@@ -3509,6 +3509,15 @@ dialog.tpl-share-popover .detail-share-dialog-text {
   line-height: 125%;
   margin-bottom: var(--spacing-24);
 }
+:lang(ja) .info-page.solution-page .catalog-head .display,
+:lang(ja) .info-page.solution-index-page .catalog-head .display,
+:lang(ja) .info-page.solution-page .catalog-head .lead,
+:lang(ja) .info-page.solution-index-page .catalog-head .lead {
+  line-break: strict;
+  word-break: normal;
+  overflow-wrap: normal;
+  text-wrap: balance;
+}
 .info-page.solution-page .catalog-head .display em,
 .info-page.solution-index-page .catalog-head .display em,
 .info-page.solution-page h2 em,
@@ -3548,6 +3557,42 @@ dialog.tpl-share-popover .detail-share-dialog-text {
 .solution-hero-band .solution-hero img {
   max-height: 420px;
 }
+.solution-proof-media a {
+  position: relative;
+  display: block;
+  color: inherit;
+}
+.solution-proof-media img {
+  aspect-ratio: 1.592 / 1;
+  object-fit: cover;
+  object-position: top center;
+  transition: transform 180ms ease, border-color 180ms ease;
+}
+.solution-proof-media a:hover img,
+.solution-proof-media a:focus-visible img {
+  border-color: var(--od-brand-deep);
+  transform: translateY(-2px);
+}
+.solution-proof-media a:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--od-brand) 45%, transparent);
+  outline-offset: 4px;
+  border-radius: var(--spacing-8);
+}
+.solution-proof-open {
+  position: absolute;
+  right: var(--spacing-12);
+  bottom: var(--spacing-12);
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--od-border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--od-white) 92%, transparent);
+  color: var(--od-strong);
+  font-size: var(--font-size-18, 18px);
+  box-shadow: 0 8px 24px rgb(30 28 23 / 12%);
+}
 .solution-hero-cta,
 .info-cta-actions {
   gap: var(--spacing-12);
@@ -3569,9 +3614,33 @@ dialog.tpl-share-popover .detail-share-dialog-text {
   color: var(--od-white);
   border-color: var(--od-strong);
 }
+.solution-page .solution-download-cta {
+  position: relative;
+  min-height: 48px;
+  padding: var(--spacing-12) var(--spacing-20);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  box-shadow: 0 14px 28px rgb(30 28 23 / 22%);
+  transition:
+    transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    background 180ms ease,
+    box-shadow 180ms ease;
+}
 .solution-page .btn-primary:hover,
 .solution-index-page .btn-primary:hover {
   background: var(--od-text);
+}
+.solution-page .solution-download-cta:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 18px 34px rgb(30 28 23 / 28%);
+}
+.solution-page .solution-download-cta:active {
+  transform: translateY(0) scale(0.98);
+  box-shadow: 0 8px 18px rgb(30 28 23 / 20%);
+}
+.solution-page .solution-download-cta:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--coral) 72%, white);
+  outline-offset: 3px;
 }
 .solution-page .btn-ghost,
 .solution-index-page .btn-ghost {

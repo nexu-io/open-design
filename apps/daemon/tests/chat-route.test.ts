@@ -140,7 +140,10 @@ describe('/api/chat', () => {
         extraction: null,
       });
     }
-    const started = await startServer({ port: 0, returnServer: true }) as {
+    const started = await startServer({
+      port: 0,
+      returnServer: true,
+    }) as {
       url: string;
       server: http.Server;
     };
@@ -223,7 +226,6 @@ process.exit(0);
           }),
         });
         const body = await response.text();
-
         expect(response.ok).toBe(true);
         expect(body).toContain('<question-form');
         expect(body).toContain('"status":"succeeded"');
@@ -459,11 +461,12 @@ process.stdin.on('end', () => {
               protocol: 'senseaudio',
               apiKey: 'sk-test-byok',
               baseUrl: 'https://api.senseaudio.cn',
+              model: 'deepseek-v4-flash',
+              requiresApiKey: true,
             },
           }),
         });
         const body = await response.text();
-
         expect(response.ok).toBe(true);
         expect(body).toContain('byok-opencode-ok');
 
@@ -472,6 +475,8 @@ process.stdin.on('end', () => {
           'run',
           '--format',
           'json',
+          '--dir',
+          expect.stringContaining(projectId),
           '-m',
           'open-design-byok/deepseek-v4-flash',
         ]);
@@ -549,6 +554,7 @@ process.stdin.on('end', () => {
               protocol: 'openai',
               apiKey: '',
               baseUrl: 'http://127.0.0.1:8000/v1',
+              model: 'model',
               requiresApiKey: false,
             },
           }),
@@ -563,6 +569,8 @@ process.stdin.on('end', () => {
           'run',
           '--format',
           'json',
+          '--dir',
+          expect.stringContaining(projectId),
           '-m',
           'open-design-byok/model',
         ]);
@@ -587,7 +595,7 @@ process.stdin.on('end', () => {
     );
   });
 
-  it('does not pass forged BYOK provider config to other local runtimes', async () => {
+  it('does not pass BYOK provider config to other local runtimes', async () => {
     if (!process.env.OD_DATA_DIR) {
       throw new Error('OD_DATA_DIR is required for BYOK OpenCode config tests');
     }
@@ -640,8 +648,9 @@ process.stdin.on('end', () => {
         expect(response.ok).toBe(true);
         expect(body).toContain('opencode-ok');
         expect(await fsp.readFile(keyFile, 'utf8')).toBe('');
-        expect(await fsp.readFile(envFile, 'utf8')).not.toContain('open-design-byok');
-        expect(await fsp.readFile(envFile, 'utf8')).not.toContain('sk-test-byok');
+        const rawConfig = await fsp.readFile(envFile, 'utf8');
+        expect(rawConfig).not.toContain('open-design-byok');
+        expect(rawConfig).not.toContain('sk-test-byok');
       },
     );
   });
@@ -3120,8 +3129,15 @@ process.stdin.on('end', () => {
           const transcriptIdx = prompt.indexOf('## Full conversation transcript');
           expect(transitionIdx).toBeGreaterThan(-1);
           expect(transcriptIdx).toBeGreaterThan(transitionIdx);
-          expect(prompt).toContain('The user has answered the discovery form. Do not emit another discovery form.');
-          expect(prompt).toContain('Continue with RULE 2 / RULE 3 now.');
+          expect(prompt).toContain(
+            'The user has answered the discovery form. Do not re-emit the answered form or repeat fields it already answered.',
+          );
+          expect(prompt).toContain(
+            'Apply the submitted answers and continue with RULE 2 / RULE 3 or the matching active workflow.',
+          );
+          expect(prompt).toContain(
+            'Only if a new, materially blocking requirement remains unresolved',
+          );
           expect(prompt).toContain(formAnswers);
         },
       );
@@ -3658,6 +3674,13 @@ describe('chat prompt helpers', () => {
       projectDesignSystemId: 'project-ds',
       appDefaultDesignSystemId: 'default-ds',
     })).toEqual({ id: 'project-ds', source: 'project' });
+
+    expect(resolveEffectiveDesignSystemSelection({
+      requestDesignSystemId: null,
+      projectDesignSystemId: 'project-ds',
+      disabledDesignSystemIds: ['project-ds'],
+      allowAppDefault: false,
+    })).toEqual({ id: null, source: 'none' });
 
     expect(resolveEffectiveDesignSystemSelection({
       appDefaultDesignSystemId: 'default-ds',

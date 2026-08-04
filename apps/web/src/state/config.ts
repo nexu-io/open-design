@@ -23,6 +23,11 @@ import { randomUUID } from '../utils/uuid';
 
 const STORAGE_KEY = 'open-design:config';
 const CONFIG_MIGRATION_VERSION = 2;
+const RETIRED_SECURE_BYOK_KEYS = [
+  'byokProfileId',
+  'byokCredentialConfigured',
+  'byokCredentialTail',
+] as const;
 
 // Hatched out of the box, but tucked away — the user has to go through
 // either the entry-view "adopt a pet" callout or Settings → Pets to
@@ -677,6 +682,9 @@ export function loadConfig(): AppConfig {
     for (const key of DAEMON_OWNED_KEYS) {
       delete (parsed as Record<string, unknown>)[key];
     }
+    for (const key of RETIRED_SECURE_BYOK_KEYS) {
+      delete (parsed as Record<string, unknown>)[key];
+    }
     const parsedHasApiProtocol = Object.prototype.hasOwnProperty.call(
       parsed,
       'apiProtocol',
@@ -695,7 +703,6 @@ export function loadConfig(): AppConfig {
       notifications: normalizeNotifications(parsed.notifications),
       orbit: normalizeOrbit(parsed.orbit),
     };
-
     let migratedConfig = false;
     const parsedMigrationVersion =
       typeof parsed.configMigrationVersion === 'number'
@@ -1011,8 +1018,14 @@ function sanitizeAgentCliEnv(agentCliEnv: AppConfig['agentCliEnv']): AppConfig['
 }
 
 export function saveConfig(config: AppConfig): void {
-  const sanitized: AppConfig = { ...config, agentCliEnv: sanitizeAgentCliEnv(config.agentCliEnv) };
+  const sanitized: AppConfig = {
+    ...config,
+    agentCliEnv: sanitizeAgentCliEnv(config.agentCliEnv),
+  };
   for (const key of DAEMON_OWNED_KEYS) {
+    delete (sanitized as unknown as Record<string, unknown>)[key];
+  }
+  for (const key of RETIRED_SECURE_BYOK_KEYS) {
     delete (sanitized as unknown as Record<string, unknown>)[key];
   }
   localStorage.setItem(STORAGE_KEY, JSON.stringify(sanitized));

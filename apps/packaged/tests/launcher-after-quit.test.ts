@@ -224,6 +224,54 @@ describe("inspectExistingDesktopForLauncher", () => {
     }
   });
 
+  it("replaces a healthy headless owner before opening the desktop window", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-launcher-inspect-headless-"));
+    const requests: unknown[] = [];
+    try {
+      const paths = fakePaths(root);
+
+      const result = await inspectExistingDesktopForLauncher("release-beta", {
+        incomingVersion: "0.16.0-beta.1",
+        paths,
+        requestIpc: (async (ipcPath: string, message: unknown) => {
+          requests.push(message);
+          if ((message as { type?: string }).type === SIDECAR_MESSAGES.STATUS) {
+            if (ipcPath.includes("daemon") || ipcPath.includes("web")) {
+              return {
+                pid: 2345,
+                state: "running",
+                updatedAt: new Date().toISOString(),
+                url: "http://127.0.0.1:1234",
+              };
+            }
+            return {
+              pid: 1234,
+              state: "running",
+              update: { currentVersion: "0.16.0-beta.1" },
+              updatedAt: new Date().toISOString(),
+              windowVisible: false,
+            };
+          }
+          return { accepted: true };
+        }) as typeof import("@open-design/sidecar").requestJsonIpc,
+        waitForExit: (async (pid: number) => pid === 1234) as typeof import("@open-design/platform").waitForProcessExit,
+      });
+
+      expect(result).toEqual({ action: "continue", reason: "headless-owner" });
+      expect(requests).toEqual([
+        { type: SIDECAR_MESSAGES.STATUS },
+        { type: SIDECAR_MESSAGES.STATUS },
+        { type: SIDECAR_MESSAGES.STATUS },
+        { type: SIDECAR_MESSAGES.SHUTDOWN },
+      ]);
+      const log = await readFile(join(root, "logs", "launcher", "after-quit.log"), "utf8");
+      expect(log).toContain("action=restart reason=headless-owner pid=1234");
+      expect(log).toContain("shutdown=exited reason=headless-owner pid=1234");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
   it("continues when inspect cannot reach desktop", async () => {
     const root = await mkdtemp(join(tmpdir(), "od-launcher-inspect-failed-"));
     try {

@@ -323,7 +323,9 @@ export type TrackingRunFailureUserAction =
   | 'install_cli'
   | 'fix_config'
   | 'none';
-export type TrackingRunRetryStrategy = 'same_run_transient';
+export type TrackingRunRetryStrategy =
+  | 'same_run_transient'
+  | 'native_session_continue';
 export type TrackingRunRetryFinalResult =
   | 'not_attempted'
   | 'success'

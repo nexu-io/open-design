@@ -540,7 +540,10 @@ interface Props {
   composerPlaceholder?: string;
   onSubmitQuestionForm?: QuestionFormSubmitHandler;
   questionFormSubmitDisabled?: boolean;
-  onContinueRemainingTasks?: (assistantMessage: ChatMessage, todos: TodoItem[]) => void;
+  onContinueRemainingTasks?: (
+    assistantMessage: ChatMessage,
+    todos: TodoItem[],
+  ) => boolean | void | Promise<boolean | void>;
   onAssistantFeedback?: (assistantMessage: ChatMessage, change: ChatMessageFeedbackChange) => void;
   // Client-side action for a brand-browser-assist od-card: open/focus the
   // Browser tab. Routed through the stable callbacks ref.
@@ -2685,6 +2688,7 @@ export function ChatPane({
           <PinnedTodoSlot
             messages={displayMessages}
             streaming={streaming}
+            conversationId={activeConversationId}
             onContinueRemainingTasks={onContinueRemainingTasks}
             containerRef={pinnedTodoRef}
           />
@@ -3395,14 +3399,32 @@ function includeVirtualRowByKey<T extends { key: string }>(
 function PinnedTodoSlot({
   messages,
   streaming,
+  conversationId,
   onContinueRemainingTasks,
   containerRef,
 }: {
   messages: ChatMessage[];
   streaming: boolean;
-  onContinueRemainingTasks?: (assistantMessage: ChatMessage, todos: TodoItem[]) => void;
+  conversationId: string | null;
+  onContinueRemainingTasks?: (
+    assistantMessage: ChatMessage,
+    todos: TodoItem[],
+  ) => boolean | void | Promise<boolean | void>;
   containerRef?: MutableRefObject<HTMLDivElement | null>;
 }) {
+  const storageKey = `od:chat:continued-todo:${conversationId ?? 'none'}`;
+  const [dismissal, setDismissal] = useState(() => ({
+    storageKey,
+    snapshotKey: readContinuedTodoSnapshotKey(storageKey),
+  }));
+  useEffect(() => {
+    setDismissal({
+      storageKey,
+      snapshotKey: readContinuedTodoSnapshotKey(storageKey),
+    });
+  }, [storageKey]);
+  const dismissedSnapshotKey =
+    dismissal.storageKey === storageKey ? dismissal.snapshotKey : null;
   const input = latestTodoWriteInputForPinnedCard(messages);
   if (input == null) return null;
 
@@ -3413,6 +3435,19 @@ function PinnedTodoSlot({
         (event) => event.kind === 'tool_use' && isTodoWriteToolName(event.name),
       ),
   );
+  const ownerTodoEvent = owner?.events
+    ? [...owner.events].reverse().find(
+        (event) => event.kind === 'tool_use' && isTodoWriteToolName(event.name),
+      )
+    : undefined;
+  const snapshotKey =
+    owner &&
+    ownerTodoEvent &&
+    'id' in ownerTodoEvent &&
+    typeof ownerTodoEvent.id === 'string'
+      ? `${owner.id}:${ownerTodoEvent.id}`
+      : null;
+  if (snapshotKey != null && snapshotKey === dismissedSnapshotKey) return null;
   const unfinishedTodos = owner ? unfinishedTodosFromEvents(owner.events) : [];
 
   return (
@@ -3425,13 +3460,39 @@ function PinnedTodoSlot({
         runStreaming={streaming}
         runSucceeded={!streaming}
         onContinue={
-          owner && unfinishedTodos.length > 0 && onContinueRemainingTasks
-            ? () => onContinueRemainingTasks(owner, unfinishedTodos)
+          owner && snapshotKey && unfinishedTodos.length > 0 && onContinueRemainingTasks
+            ? () => {
+                void Promise.resolve(onContinueRemainingTasks(owner, unfinishedTodos))
+                  .then((accepted) => {
+                    if (accepted === false) return;
+                    setDismissal({ storageKey, snapshotKey });
+                    writeContinuedTodoSnapshotKey(storageKey, snapshotKey);
+                  })
+                  .catch(() => {});
+              }
             : undefined
         }
       />
     </div>
   );
+}
+
+function readContinuedTodoSnapshotKey(storageKey: string): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    return window.sessionStorage.getItem(storageKey);
+  } catch {
+    return null;
+  }
+}
+
+function writeContinuedTodoSnapshotKey(storageKey: string, snapshotKey: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.sessionStorage.setItem(storageKey, snapshotKey);
+  } catch {
+    // sessionStorage may be unavailable in sandboxed or privacy-restricted contexts.
+  }
 }
 
 function QueuedSendStrip({

@@ -3,7 +3,10 @@
 // degrades when the daemon answers with a 5xx envelope.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { testAgent, testApiProvider } from '../../src/providers/connection-test';
+import {
+  testAgent,
+  testApiProvider,
+} from '../../src/providers/connection-test';
 import type { ConnectionTestResponse } from '../../src/types';
 
 const realFetch = globalThis.fetch;

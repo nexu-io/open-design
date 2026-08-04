@@ -3582,7 +3582,7 @@
       "capabilitiesSummary": [
         "prompt:inject"
       ],
-      "description": "3-5 direction picker that lets the user choose before final generation.",
+      "description": "Optional 3-5 direction picker for users who explicitly ask to compare visual directions.",
       "tags": [
         "atom",
         "first-party",
@@ -3604,7 +3604,7 @@
       "capabilitiesSummary": [
         "prompt:inject"
       ],
-      "description": "Turn-1 discovery question form for ambiguous briefs.",
+      "description": "Structured clarification form for unresolved material requirements.",
       "tags": [
         "atom",
         "first-party",
@@ -9693,13 +9693,12 @@
       "capabilitiesSummary": [
         "prompt:inject",
         "pipeline:*",
-        "genui:choice",
         "media:image",
         "media:video",
         "media:audio",
         "fs:write"
       ],
-      "description": "Hidden fallback scenario for free-form Home prompts. It asks the user which task type to build, then continues through the matching design flow.",
+      "description": "Hidden fallback scenario for free-form Home prompts. It infers the task type and asks only when the brief cannot be routed reliably.",
       "tags": [
         "scenario",
         "first-party",

@@ -152,6 +152,32 @@ test('codex args disable plugins when OD_CODEX_DISABLE_PLUGINS is 1', () => {
   });
 });
 
+test('codex args disable plugins for an externally attributed Local Codex run', () => {
+  withEnvSnapshot(['OD_CODEX_DISABLE_PLUGINS', 'OD_CODEX_SANDBOX'], () => {
+    delete process.env.OD_CODEX_DISABLE_PLUGINS;
+    delete process.env.OD_CODEX_SANDBOX;
+
+    withPlatform('darwin', () => {
+      const args = codex.buildArgs('', [], [], {}, {
+        cwd: '/tmp/od-project',
+        disablePlugins: true,
+      });
+
+      assert.deepEqual(args.slice(0, 9), [
+        'exec',
+        '--json',
+        '--skip-git-repo-check',
+        '--sandbox',
+        'workspace-write',
+        '-c',
+        'sandbox_workspace_write.network_access=true',
+        '--disable',
+        'plugins',
+      ]);
+    });
+  });
+});
+
 test('codex args use workspace-write sandbox on macOS and Linux', () => {
   withEnvSnapshot(['OD_CODEX_DISABLE_PLUGINS', 'OD_CODEX_SANDBOX', 'WSL_DISTRO_NAME'], () => {
     delete process.env.OD_CODEX_DISABLE_PLUGINS;

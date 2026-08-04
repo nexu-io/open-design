@@ -2576,6 +2576,7 @@ describe('reportRunFeedback', () => {
   });
 
   it('posts feedback scores to Vela when completed-run telemetry uses Vela', async () => {
+    vi.stubEnv('OPEN_DESIGN_VELA_TELEMETRY', 'on');
     vi.stubEnv('VELA_CONTROL_KEY', 'ck_secret');
     vi.stubEnv('VELA_API_URL', 'https://vela.example.test');
     vi.stubEnv(
@@ -2624,6 +2625,7 @@ describe('reportRunFeedback', () => {
   });
 
   it('does not fall back anonymously when Vela rejects feedback auth', async () => {
+    vi.stubEnv('OPEN_DESIGN_VELA_TELEMETRY', 'on');
     vi.stubEnv('VELA_CONTROL_KEY', 'ck_expired');
     vi.stubEnv('VELA_API_URL', 'https://vela.example.test');
     vi.stubEnv(

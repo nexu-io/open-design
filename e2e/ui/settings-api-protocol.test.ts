@@ -451,7 +451,7 @@ test('[P1] BYOK connection test surfaces NVIDIA degraded provider detail', async
   );
 });
 
-test('[P0] BYOK save stays disabled until required fields are valid', async ({ page }) => {
+test('[P0] BYOK autosave waits until required fields are valid', async ({ page }) => {
   await openExecutionSettings(page, {
     mode: 'api',
     apiKey: '',
@@ -1016,7 +1016,7 @@ test('[P0] @critical Settings keeps Local CLI and BYOK model choices isolated af
       apiProtocol: 'openai',
       apiVersion: '',
       baseUrl: 'https://api.openai.com/v1',
-      model: 'gpt-4o',
+      model: 'gpt-4o-mini',
       apiProviderBaseUrl: 'https://api.openai.com/v1',
       agentId: null,
       skillId: null,
