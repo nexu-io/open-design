@@ -4,7 +4,14 @@
   "name": "hyperframes-composition-project-msf5yasd",
   "title": "HyperFrames Composition Project",
   "version": "0.1.0",
-  "description": "**Always invoke the relevant skill before writing or modifying compositions.** Skills encode framework-specific patterns (e.g., `window.__timelines` registration, `data-*` attribute semantics, shader-compatible CSS rules",
+  "description": "Guides agents through creating and validating HyperFrames HTML compositions with the framework's required project conventions and workflows.",
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
   "od": {
     "kind": "skill",
     "taskKind": "new-generation",
@@ -16,7 +23,9 @@
       ]
     },
     "capabilities": [
-      "prompt:inject"
+      "prompt:inject",
+      "bash",
+      "network"
     ]
   }
 }

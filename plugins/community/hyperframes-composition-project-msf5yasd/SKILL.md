@@ -1,3 +1,8 @@
+---
+name: hyperframes-composition-project-msf5yasd
+description: Use this plugin when creating, modifying, validating, rendering, or publishing a HyperFrames HTML composition project.
+---
+
 # HyperFrames Composition Project
 
 ## Skills — USE THESE FIRST
