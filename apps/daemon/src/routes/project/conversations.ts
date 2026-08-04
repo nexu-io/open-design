@@ -330,6 +330,8 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
       TERMINAL_RUN_STATUSES.has(stored.runStatus) &&
       incomingStatus !== stored.runStatus;
     if (!shrinksEvents && !regressesTerminalStatus) return incoming;
+    const hasStartedAt = Object.prototype.hasOwnProperty.call(incoming, 'startedAt');
+    const hasEndedAt = Object.prototype.hasOwnProperty.call(incoming, 'endedAt');
     return {
       ...incoming,
       role: stored.role,
@@ -338,11 +340,13 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
       content: stored.content ?? '',
       lastRunEventId: stored.lastRunEventId,
       runStatus: stored.runStatus,
-      // Daemon-written lifecycle timestamps; a stale snapshot that omits them
-      // would otherwise null out started_at / ended_at (and endedAt feeds
-      // persisted-run telemetry).
-      startedAt: stored.startedAt,
-      endedAt: stored.endedAt,
+      // Daemon-written lifecycle timestamps. A stale snapshot that omits them
+      // would otherwise null out started_at / ended_at (endedAt feeds
+      // persisted-run telemetry). But a metadata update that GENUINELY carries
+      // a new timestamp (e.g. the retry flow persisting a fresh endedAt) must
+      // still land — so only preserve when the snapshot omits the field.
+      startedAt: hasStartedAt ? incoming.startedAt : stored.startedAt,
+      endedAt: hasEndedAt ? incoming.endedAt : stored.endedAt,
     };
   };
 

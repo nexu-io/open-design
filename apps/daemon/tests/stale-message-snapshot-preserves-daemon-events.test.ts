@@ -239,6 +239,80 @@ describe('stale web message snapshot does not wipe daemon-owned run events', () 
     expect(after?.runId).toBe(before?.runId);
   });
 
+  it('lets a metadata update write a fresh endedAt while preserving daemon events', async () => {
+    // The retry flow persists the completion timestamp as a metadata update
+    // whose events array is empty (the web never carries the daemon's detailed
+    // events). It must not be treated as a stale full snapshot: the fresh
+    // endedAt should land while the daemon-owned events/status survive.
+    binDir = await mkdtemp(path.join(os.tmpdir(), 'od-meta-update-bin-'));
+    const fakeClaude = await writeCleanClaude(binDir, 'claude-meta-update');
+
+    delete process.env.POSTHOG_KEY;
+    delete process.env.POSTHOG_HOST;
+    delete process.env.LANGFUSE_PUBLIC_KEY;
+    delete process.env.LANGFUSE_SECRET_KEY;
+    delete process.env.LANGFUSE_BASE_URL;
+    delete process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL;
+
+    started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
+    await putConfig(started.url, {
+      agentId: 'claude',
+      agentCliEnv: { claude: { CLAUDE_BIN: fakeClaude } },
+      telemetry: { metrics: true, content: false, artifactManifest: false },
+      privacyDecisionAt: Date.now(),
+    });
+
+    const { projectId, conversationId } = await createConversation(started.url);
+    const { assistantMessageId, status } = await sendRunAndWait(
+      started.url,
+      projectId,
+      conversationId,
+    );
+    expect(status.status).toBe('succeeded');
+
+    const before = await fetchAssistantMessage(
+      started.url,
+      projectId,
+      conversationId,
+      assistantMessageId,
+    );
+    expect(before?.events?.length).toBeGreaterThan(0);
+    expect(before?.endedAt).toBeTypeOf('number');
+
+    // Metadata-only update: empty events, matching terminal status, a NEW
+    // endedAt the web observed on completion.
+    const freshEndedAt = Date.now() + 10_000;
+    const metadataUpdate = {
+      id: assistantMessageId,
+      role: 'assistant',
+      content: '',
+      runStatus: 'succeeded',
+      events: [],
+      endedAt: freshEndedAt,
+    };
+    const putResponse = await fetch(
+      `${started.url}/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(assistantMessageId)}`,
+      {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(metadataUpdate),
+      },
+    );
+    expect(putResponse.status).toBe(200);
+
+    const after = await fetchAssistantMessage(
+      started.url,
+      projectId,
+      conversationId,
+      assistantMessageId,
+    );
+    // The web's fresh endedAt lands (metadata write), while daemon-owned
+    // events and terminal status survive.
+    expect(after?.endedAt).toBe(freshEndedAt);
+    expect(after?.events?.length).toBeGreaterThan(0);
+    expect(after?.runStatus).toBe('succeeded');
+  });
+
   it('lets a mock-agent flow persist events/runStatus when the daemon never wrote any', async () => {
     // e2e Playwright suites mock the run SSE end-to-end, so the daemon never
     // persists events for the assistant message — the web client is the only
