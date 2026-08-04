@@ -1316,9 +1316,14 @@ od conversation info --project <projectId> <conversationId> [--json]
 `new`: those consume `<projectId>` as the first positional argument, while
 `info` takes it as `--project <projectId>` followed by the `<conversationId>`
 positional. The discrepancy mirrors the embedded `od conversation help` block
-(`apps/daemon/src/cli.ts`) and is asserted by the
-`docs/plugins-spec.md and the embedded help block advertise the new --project flag for info`
-regression in `apps/daemon/tests/conversation-info-cli.test.ts`.
+(`apps/daemon/src/cli.ts`).
+
+NOTE: There is no repository-owned cross-document regression check that
+enforces future drift between this spec section and the `od conversation help`
+block; the prior assertion was lifted out of the daemon test lane (see commit
+9f68de7f7, "fix(#6341): typecheck-safe execFile helper; remove docs-consistency
+test from daemon lane"). Maintain the two surfaces by hand when changing
+`info`'s argument shape.
 
 #### Run / task lifecycle (new)
 

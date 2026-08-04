@@ -1307,7 +1307,9 @@ od conversation new  <projectId> [--title "<title>"] [--json]
 od conversation info --project <projectId> <conversationId> [--json]
 ```
 
-`od conversation info` 的参数形态与 `list` 和 `new` 不同：后两者把 `<projectId>` 作为第一个位置参数，而 `info` 把它放在 `--project <projectId>` 上，再带 `<conversationId>` 位置参数。该差异与 `apps/daemon/src/cli.ts` 中内嵌的 `od conversation help` 文本一致，并由 `apps/daemon/tests/conversation-info-cli.test.ts` 中的 `docs/plugins-spec.md and the embedded help block advertise the new --project flag for info` 回归测试断言，以防文档再次与 CLI drift。
+`od conversation info` 的参数形态与 `list` 和 `new` 不同：后两者把 `<projectId>` 作为第一个位置参数，而 `info` 把它放在 `--project <projectId>` 上，再带 `<conversationId>` 位置参数。该差异与 `apps/daemon/src/cli.ts` 中内嵌的 `od conversation help` 文本一致。
+
+注意：当前仓库没有跨文档的回归校验来强制此 spec 与 `od conversation help` 文本保持同步；此前的断言已从 daemon 测试 lane 中移出（见 commit 9f68de7f7 "fix(#6341): typecheck-safe execFile helper; remove docs-consistency test from daemon lane"）。修改 `info` 参数形态时需手工保持两份文档一致。
 
 #### Run / task lifecycle（新增）
 
