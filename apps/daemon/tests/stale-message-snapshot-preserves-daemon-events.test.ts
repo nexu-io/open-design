@@ -154,6 +154,79 @@ describe('stale web message snapshot does not wipe daemon-owned run events', () 
     expect(after?.feedback?.rating).toBe(1);
   });
 
+  it('lets a mock-agent flow persist events/runStatus when the daemon never wrote any', async () => {
+    // e2e Playwright suites mock the run SSE end-to-end, so the daemon never
+    // persists events for the assistant message — the web client is the only
+    // writer. The no-regression guard must NOT block that: a web write that
+    // grows the stored event list (from empty to non-empty) must flow through,
+    // including the terminal runStatus. Regression for the UI P0
+    // app-restoration suite after the #6396 guard.
+    delete process.env.POSTHOG_KEY;
+    delete process.env.POSTHOG_HOST;
+    delete process.env.LANGFUSE_PUBLIC_KEY;
+    delete process.env.LANGFUSE_SECRET_KEY;
+    delete process.env.LANGFUSE_BASE_URL;
+    delete process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL;
+
+    started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
+    await putConfig(started.url, {
+      agentId: 'claude',
+      telemetry: { metrics: true, content: false, artifactManifest: false },
+      privacyDecisionAt: Date.now(),
+    });
+
+    const { projectId, conversationId } = await createConversation(started.url);
+    const messageId = `mock_flow_${randomUUID()}`;
+    const url = `${started.url}/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}`;
+
+    // Web creates the daemon-backed-looking row (runId from the mocked run
+    // response) with no events yet.
+    const created = await fetch(url, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: messageId,
+        role: 'assistant',
+        content: '',
+        runId: 'mock-run',
+        runStatus: 'running',
+        events: [],
+      }),
+    });
+    expect(created.status).toBe(200);
+
+    // Web streams the artifact via mocked SSE and persists the final snapshot.
+    const persisted = await fetch(url, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: messageId,
+        role: 'assistant',
+        content: 'artifact payload',
+        runId: 'mock-run',
+        runStatus: 'succeeded',
+        events: [
+          { kind: 'status', label: 'starting', detail: 'mock-agent' },
+          { kind: 'text', text: 'artifact payload' },
+        ],
+      }),
+    });
+    expect(persisted.status).toBe(200);
+
+    const stored = await fetchAssistantMessage(
+      started.url,
+      projectId,
+      conversationId,
+      messageId,
+    );
+    expect(stored?.runStatus).toBe('succeeded');
+    expect(stored?.content).toBe('artifact payload');
+    expect(stored?.events).toEqual([
+      { kind: 'status', label: 'starting', detail: 'mock-agent' },
+      { kind: 'text', text: 'artifact payload' },
+    ]);
+  });
+
   it('still lets the client write non-daemon-backed messages', async () => {
     delete process.env.POSTHOG_KEY;
     delete process.env.POSTHOG_HOST;

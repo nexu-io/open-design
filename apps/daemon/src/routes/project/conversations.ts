@@ -289,18 +289,29 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
   // message's run events / content / last-run-event id / run status. A stale
   // web-client snapshot (captured in memory before a reconnect or project
   // switch, then PUT after the daemon appended more events) must never regress
-  // those fields — that's how the early `status:model` event got wiped. The
-  // client may still update UI metadata (feedback, comment attachments,
-  // telemetry) through the same PUT.
+  // those fields — that's how the early `status:model` event got wiped.
+  //
+  // The guard is a "no regression" rule, not a blanket write-ownership rule:
+  // run events are append-only, so a stale snapshot can only SHRINK the stored
+  // list. We preserve the stored events/content/last-run-event-id/run-status
+  // only when the incoming snapshot would drop already-persisted events. A web
+  // write that carries at least as many events still flows through — which
+  // keeps mock-agent flows working (the daemon never persisted events there,
+  // so the web is the legitimate writer) and lets UI metadata (feedback,
+  // comment attachments, telemetry) land on every PUT.
   const mergeMessageWriteForDaemonBacked = (
     messageId: string,
     incoming: Record<string, unknown>,
   ): Record<string, unknown> => {
     const stored = getMessage(db, messageId);
     if (!stored || stored.role !== 'assistant' || !stored.runId) return incoming;
+    const incomingEvents = Array.isArray(incoming.events) ? incoming.events : [];
+    if (!stored.events || stored.events.length === 0 || incomingEvents.length >= stored.events.length) {
+      return incoming;
+    }
     return {
       ...incoming,
-      events: stored.events ?? [],
+      events: stored.events,
       content: stored.content ?? '',
       lastRunEventId: stored.lastRunEventId,
       runStatus: stored.runStatus,
