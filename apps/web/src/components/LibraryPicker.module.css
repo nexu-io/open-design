@@ -123,7 +123,7 @@
   border: none;
   background: transparent;
   cursor: pointer;
-  text-align: left;
+  text-align: start;
   /* Skip off-screen card layout/paint so a large library opens snappily; the
      reserved size keeps the modal scrollbar stable. `auto` remembers the real
      height once a card has rendered. */

@@ -128,7 +128,7 @@
     font-size: 17px;
   }
   .toc li .n { font-family: var(--mono); font-size: 11px; letter-spacing: 0.18em; color: var(--muted); }
-  .toc li .pg { font-family: var(--mono); font-size: 11px; letter-spacing: 0.18em; color: var(--muted); text-align: right; }
+  .toc li .pg { font-family: var(--mono); font-size: 11px; letter-spacing: 0.18em; color: var(--muted); text-align: end; }
   .toc li .t { font-family: var(--display); font-size: 22px; letter-spacing: -0.012em; line-height: 1.2; }
   .toc li .t em { font-style: italic; color: var(--ink-soft); }
 
@@ -155,7 +155,7 @@
   .manifesto .item p { margin: 0; font-size: 14.5px; color: var(--ink-soft); max-width: 56ch; }
   .manifesto .item .tag {
     font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.18em; text-transform: uppercase;
-    color: var(--muted); text-align: right;
+    color: var(--muted); text-align: end;
   }
 
   /* Bento data slide */
@@ -183,7 +183,7 @@
   .delta.down { background: var(--accent-2-bg); color: var(--accent-2); }
 
   /* Quote slide */
-  .quote-slide { justify-content: center; text-align: left; }
+  .quote-slide { justify-content: center; text-align: start; }
   .quote-slide blockquote {
     margin: 0; padding: 38px 0;
     border-top: 1px solid var(--hairline);
@@ -259,7 +259,7 @@
     width: var(--w, 0%); background: var(--ink-soft);
   }
   .chart-slide .chart .bar.accent::after { background: var(--accent); }
-  .chart-slide .chart .v { font-family: var(--mono); font-size: 13px; text-align: right; letter-spacing: 0.02em; }
+  .chart-slide .chart .v { font-family: var(--mono); font-size: 13px; text-align: end; letter-spacing: 0.02em; }
 
   /* Colophon */
   .colophon-slide .grid { margin-top: 56px; display: grid; grid-template-columns: 1fr 1fr; gap: 64px; }
@@ -274,7 +274,7 @@
   .colophon-slide dl + dl { border-top: 1px solid var(--hairline); padding-top: 22px; }
 
   /* Closing */
-  .closing-slide { justify-content: center; text-align: left; }
+  .closing-slide { justify-content: center; text-align: start; }
   .closing-slide h2 {
     font-family: var(--display); font-style: italic; font-weight: 400;
     font-size: clamp(64px, 8vw, 120px); line-height: 1;

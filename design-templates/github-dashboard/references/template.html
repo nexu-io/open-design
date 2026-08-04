@@ -77,7 +77,7 @@
     table { width: 100%; border-collapse: collapse; font-size: 13px; }
     .table-scroll { overflow-x: auto; }
     .table-scroll table { min-width: 760px; }
-    th { text-align: left; padding: 10px 12px; color: var(--text-tertiary); font-size: 11px; font-weight: 500; letter-spacing: .01em; background: var(--surface-muted); text-transform: uppercase; }
+    th { text-align: start; padding: 10px 12px; color: var(--text-tertiary); font-size: 11px; font-weight: 500; letter-spacing: .01em; background: var(--surface-muted); text-transform: uppercase; }
     td { padding: 14px 12px; border-top: 1px solid var(--border); color: var(--text-secondary); }
     td strong { color: var(--text-primary); font-weight: 500; }
     .mono { font-family: "Geist Mono", "JetBrains Mono", ui-monospace, monospace; font-size: 12px; }
@@ -441,23 +441,23 @@
               <tbody>
                 <tr>
                   <td><strong>Primary Language</strong></td>
-                  <td style="text-align: right;">{{data.repository.language}}</td>
+                  <td style="text-align: end;">{{data.repository.language}}</td>
                 </tr>
                 <tr>
                   <td><strong>License</strong></td>
-                  <td style="text-align: right;">{{data.repository.license}}</td>
+                  <td style="text-align: end;">{{data.repository.license}}</td>
                 </tr>
                 <tr>
                   <td><strong>Created</strong></td>
-                  <td style="text-align: right;">{{data.repository.created}}</td>
+                  <td style="text-align: end;">{{data.repository.created}}</td>
                 </tr>
                 <tr>
                   <td><strong>Last Updated</strong></td>
-                  <td style="text-align: right;">{{data.repository.lastUpdated}}</td>
+                  <td style="text-align: end;">{{data.repository.lastUpdated}}</td>
                 </tr>
                 <tr>
                   <td><strong>Repository Size</strong></td>
-                  <td style="text-align: right;">{{data.repository.size}}</td>
+                  <td style="text-align: end;">{{data.repository.size}}</td>
                 </tr>
               </tbody>
             </table>

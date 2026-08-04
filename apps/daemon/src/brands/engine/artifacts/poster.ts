@@ -278,7 +278,7 @@ function renderStatement(brand: Brand): string {
           <span class="p-sign-dot"></span>
           <span class="p-sign-name">${esc(brand.name)}</span>
         </span>
-        <span class="p-meta" style="text-align:right;max-width:40cqi;">${esc(
+        <span class="p-meta" style="text-align:end;max-width:40cqi;">${esc(
           brand.voice.adjectives.slice(0, 2).map(cap).join(" · ") || host,
         )}</span>
       </footer>
@@ -335,7 +335,7 @@ function renderEvent(brand: Brand): string {
           <span class="p-sign-dot"></span>
           <span class="p-sign-name">${esc(brand.name)}</span>
         </span>
-        <span class="p-meta" style="text-align:right;max-width:40cqi;">${esc(
+        <span class="p-meta" style="text-align:end;max-width:40cqi;">${esc(
           brand.voice.adjectives.slice(0, 2).map(cap).join(" · ") || host,
         )}</span>
       </footer>

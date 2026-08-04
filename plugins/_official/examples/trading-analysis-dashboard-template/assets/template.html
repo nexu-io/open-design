@@ -18,7 +18,7 @@
     .app{display:grid;grid-template-columns:230px 1fr;height:100%}
     .side{border-right:1px solid var(--line);padding:16px;background:linear-gradient(180deg,color-mix(in srgb,var(--panel) 90%,transparent),color-mix(in srgb,var(--panel2) 80%,transparent))}
     .brand{font-weight:800;letter-spacing:.14em;font-size:13px;margin:8px 8px 14px}
-    .nav{display:grid;gap:6px}.nav button{border:0;text-align:left;padding:10px;border-radius:10px;background:transparent;color:var(--muted);font-weight:600;cursor:pointer}
+    .nav{display:grid;gap:6px}.nav button{border:0;text-align:start;padding:10px;border-radius:10px;background:transparent;color:var(--muted);font-weight:600;cursor:pointer}
     .nav button.active,.nav button:hover{background:var(--chip);color:var(--text)}
     .main{padding:14px;overflow:auto}
     .top{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
@@ -36,7 +36,7 @@
     .v{margin-top:4px;font-size:24px;font-weight:800;font-family:"JetBrains Mono",ui-monospace,monospace}
     .layout{display:grid;grid-template-columns:1.4fr 1fr;gap:10px;margin-top:10px}
     .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-    table{width:100%;border-collapse:collapse;font-size:12px} th,td{padding:8px;border-bottom:1px solid var(--line);text-align:left}
+    table{width:100%;border-collapse:collapse;font-size:12px} th,td{padding:8px;border-bottom:1px solid var(--line);text-align:start}
     th{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
     .badge{font-size:10px;padding:2px 6px;border-radius:999px;border:1px solid var(--line)}
     .good{color:var(--good)} .bad{color:var(--bad)}
@@ -65,7 +65,7 @@
     .palette.open{display:flex}
     .palette-card{width:min(680px,92vw);border:1px solid var(--line);border-radius:12px;background:var(--panel);overflow:hidden}
     .palette input{width:100%;border:0;border-bottom:1px solid var(--line);padding:12px;background:var(--chip);color:var(--text);font:12px "JetBrains Mono",monospace}
-    .palette button{width:100%;border:0;border-bottom:1px solid var(--line);padding:10px 12px;background:transparent;color:var(--text);text-align:left;cursor:pointer}
+    .palette button{width:100%;border:0;border-bottom:1px solid var(--line);padding:10px 12px;background:transparent;color:var(--text);text-align:start;cursor:pointer}
     .focus{position:fixed;inset:0;background:rgba(4,8,16,.6);backdrop-filter:blur(4px);display:none;z-index:30}
     .focus.show{display:block}
     .chart-shell.floating{position:fixed!important;z-index:31!important;box-shadow:0 30px 90px rgba(0,0,0,.45)!important}

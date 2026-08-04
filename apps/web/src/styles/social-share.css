@@ -19,7 +19,7 @@
   gap: 8px;
   padding: 0 9px;
   font-size: 12.5px;
-  text-align: left;
+  text-align: start;
   text-decoration: none;
   cursor: pointer;
   transition: background-color 120ms cubic-bezier(0.23, 1, 0.32, 1),

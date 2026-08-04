@@ -103,7 +103,7 @@
   background: transparent;
   color: var(--text);
   cursor: pointer;
-  text-align: left;
+  text-align: start;
   transition: background-color var(--dur-quick) var(--ease-out),
     border-color var(--dur-quick) var(--ease-out);
 }

@@ -237,7 +237,7 @@
   font-weight: 400;
   color: var(--text-secondary);
   max-width: 38ch;
-  text-align: right;
+  text-align: end;
   padding-bottom: var(--spacing-12);
 }
 .od-community .section-head .kicker { margin-bottom: var(--spacing-18); display: block; }
@@ -331,7 +331,7 @@
   color: var(--text-faint);
 }
 .od-community .leaderboard-head span:nth-child(3),
-.od-community .leaderboard-head span:nth-child(4) { text-align: right; }
+.od-community .leaderboard-head span:nth-child(4) { text-align: end; }
 .od-community .row {
   display: grid;
   grid-template-columns: 40px 1fr 80px 80px 60px;
@@ -347,9 +347,9 @@
 .od-community .row .who img { width: 36px; height: 36px; border-radius: 50%; background: var(--bg-divide); }
 .od-community .row .who .n { font-size: var(--font-size-14); line-height: 125%; font-weight: 500; color: var(--text-strong); }
 .od-community .row .who .h { font-size: var(--font-size-12); line-height: 125%; font-weight: 400; color: var(--text-faint); margin-top: var(--spacing-2); display: block; }
-.od-community .row .v { text-align: right; font-size: var(--font-size-16); line-height: 125%; font-weight: 500; font-variant-numeric: tabular-nums; color: var(--text-strong); }
+.od-community .row .v { text-align: end; font-size: var(--font-size-16); line-height: 125%; font-weight: 500; font-variant-numeric: tabular-nums; color: var(--text-strong); }
 .od-community .row .v.coral { color: var(--brand-text); }
-.od-community .row .arr { text-align: right; color: var(--text-faint); transition: color 0.15s, transform 0.15s; }
+.od-community .row .arr { text-align: end; color: var(--text-faint); transition: color 0.15s, transform 0.15s; }
 .od-community .row:hover .arr { color: var(--brand-text); transform: translateX(2px); }
 .od-community .issue-list { display: flex; flex-direction: column; border-top: 1px solid var(--border); }
 .od-community .issue {
@@ -385,7 +385,7 @@
 .od-community .label.bug { background: #ffecec; color: var(--error); border-color: #ffd2d2; }
 .od-community .label.design { background: var(--bg-soft); color: var(--text-secondary); border-color: var(--border); }
 .od-community .label.lang { background: transparent; border-color: var(--border); color: var(--text-secondary); }
-.od-community .issue .lang { font-size: var(--font-size-12); line-height: 125%; font-weight: 500; color: var(--text-faint); text-align: right; min-width: 80px; }
+.od-community .issue .lang { font-size: var(--font-size-12); line-height: 125%; font-weight: 500; color: var(--text-faint); text-align: end; min-width: 80px; }
 .od-community .issue .arr { color: var(--text-faint); transition: color 0.15s, transform 0.15s; }
 .od-community .issue:hover .arr { color: var(--brand-text); transform: translateX(3px); }
 .od-community .issues-foot {
@@ -505,7 +505,7 @@
 .od-community .amb-foot { margin-top: var(--spacing-48); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: var(--spacing-20); }
 .od-community .amb-foot .note { font-size: var(--font-size-12); line-height: 125%; font-weight: 500; color: var(--text-faint); max-width: 46ch; }
 .od-community .amb-foot .cta { display: flex; gap: var(--spacing-12); flex-wrap: wrap; }
-.od-community .amb-side { display: flex; flex-direction: column; align-items: flex-end; gap: var(--spacing-20); text-align: right; }
+.od-community .amb-side { display: flex; flex-direction: column; align-items: flex-end; gap: var(--spacing-20); text-align: end; }
 .od-community .amb-side .amb-apply { font-size: var(--font-size-14); font-weight: 600; padding: var(--spacing-16) var(--spacing-28); }
 .od-community .amb-side .amb-apply:hover { transform: translateY(-2px); }
 .od-community .amb-side p { font-size: var(--font-size-14); line-height: 125%; font-weight: 400; color: var(--text-secondary); max-width: 38ch; margin: 0; }
@@ -723,7 +723,7 @@
   .od-community .amb-grid { grid-template-columns: 1fr; }
   .od-community .amb-col { border-right: 0; border-bottom: 1px solid var(--bg-divide); }
   .od-community .amb-col:last-child { border-bottom: 0; }
-  .od-community .amb-side { align-items: flex-start; text-align: left; }
+  .od-community .amb-side { align-items: flex-start; text-align: start; }
   .od-community .ambassador-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .od-community .showcase-grid { grid-template-columns: 1fr; gap: var(--spacing-48); }
 }
@@ -793,7 +793,7 @@
   display: block;
   width: auto;
   max-width: none;
-  text-align: left;
+  text-align: start;
   align-items: normal;
 }
 .od-community .hero-grid {

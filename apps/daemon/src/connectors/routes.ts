@@ -432,7 +432,7 @@ function renderConnectorConnectedHtml(connectorId: string): string {
         border: 1px solid var(--border);
         border-radius: var(--radius);
         background: var(--bg-subtle);
-        text-align: left;
+        text-align: start;
       }
       .summary-label { display: grid; gap: 2px; min-width: 0; }
       .summary-label strong { color: var(--text); font-size: 13px; }

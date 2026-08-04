@@ -394,7 +394,7 @@
   font: inherit;
   font-size: 13px;
   line-height: 1.2;
-  text-align: left;
+  text-align: start;
   cursor: pointer;
   transition: background-color var(--dur-quick) var(--ease-out),
     color var(--dur-quick) var(--ease-out);
@@ -529,7 +529,7 @@
   font-size: 12px;
   font-weight: 600;
   line-height: 1.35;
-  text-align: right;
+  text-align: end;
 }
 
 .moduleAction {
@@ -1224,7 +1224,7 @@
   background: var(--bg-panel);
   color: inherit;
   font: inherit;
-  text-align: left;
+  text-align: start;
   text-decoration: none;
   cursor: pointer;
   transition: border-color var(--dur-quick) var(--ease-out),

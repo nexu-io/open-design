@@ -741,7 +741,7 @@
 .cc-value > select {
   flex: 1 1 auto; min-width: 0; border: none; outline: none;
   background: transparent; font: inherit; color: var(--manual-edit-field-text);
-  padding: 0; text-align: right;
+  padding: 0; text-align: end;
 }
 .cc-value > input::placeholder {
   color: var(--manual-edit-field-muted);
@@ -761,7 +761,7 @@
   padding: 0; cursor: pointer; background-clip: padding-box;
   flex: 0 0 auto;
 }
-.cc-color > input { text-align: right; }
+.cc-color > input { text-align: end; }
 .cc-color-popover {
   position: absolute; top: calc(100% + 6px); left: 0; z-index: 100;
   background: var(--bg-panel); border: 1px solid var(--manual-edit-field-border);
@@ -808,7 +808,7 @@
 .cc-quad-cell input {
   flex: 1 1 auto; min-width: 0; border: none; outline: none;
   background: transparent; font: inherit; padding: 0;
-  color: var(--manual-edit-field-text); text-align: right;
+  color: var(--manual-edit-field-text); text-align: end;
 }
 .cc-quad-unit { color: var(--manual-edit-field-muted); font-style: normal; font-size: 10px; }
 
@@ -886,7 +886,7 @@
   width: 100%;
   height: auto;
   padding: 9px 10px;
-  text-align: left;
+  text-align: start;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--bg-panel);

@@ -16,7 +16,7 @@
   margin: 0;
   font-size: 13px;
   color: var(--text-muted);
-  text-align: right;
+  text-align: end;
 }
 
 /* Download link — an accent-tinted pill matching the toolbar control sizing. */
@@ -489,7 +489,7 @@
   border: none;
   background: none;
   cursor: pointer;
-  text-align: left;
+  text-align: start;
   font-size: 13px;
   font-weight: 600;
   color: var(--text);
@@ -645,7 +645,7 @@
   flex-direction: column;
   gap: 1px;
   width: 100%;
-  text-align: left;
+  text-align: start;
   padding: 8px 10px;
   border: none;
   border-radius: 8px;

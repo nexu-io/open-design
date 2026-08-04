@@ -93,9 +93,9 @@ Mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas
   padding: var(--space-1) 0;
   border-bottom: 1px solid var(--color-border);
 }
-.order-book-size { color: var(--color-text-secondary); text-align: right; }
-.order-book-bid  { color: var(--color-gain); text-align: right; }
-.order-book-ask  { color: var(--color-loss); text-align: right; }
+.order-book-size { color: var(--color-text-secondary); text-align: end; }
+.order-book-bid  { color: var(--color-gain); text-align: end; }
+.order-book-ask  { color: var(--color-loss); text-align: end; }
 ```
 
 ### Price Card

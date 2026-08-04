@@ -553,7 +553,7 @@
   margin: 0;
   font-size: 12px;
   overflow-wrap: anywhere;
-  text-align: right;
+  text-align: end;
 }
 .diagnostics-export-status.success { color: var(--text); }
 .diagnostics-export-status.error { color: var(--danger, #d4543b); }
@@ -796,7 +796,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   color: var(--text);
-  text-align: left;
+  text-align: start;
   box-shadow: none;
   min-width: 0;
 }
@@ -1141,7 +1141,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   cursor: pointer;
-  text-align: left;
+  text-align: start;
   position: relative;
   transition: border-color 120ms var(--ease-out), box-shadow 120ms var(--ease-out), background 120ms var(--ease-out);
 }
@@ -1254,7 +1254,7 @@
   border: 0;
   background: transparent;
   color: inherit;
-  text-align: left;
+  text-align: start;
   cursor: pointer;
 }
 .agent-card-installed:has(.agent-card-amr-auth) .agent-card-select {
@@ -1766,7 +1766,7 @@
   font-weight: 600;
   line-height: 1.25;
   overflow-wrap: anywhere;
-  text-align: left;
+  text-align: start;
 }
 /* Device-authorization fallback shown while signing in to AMR. Surfaced from
    vela login's stdout so the user can finish even when the browser did not
@@ -1793,7 +1793,7 @@
   border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border));
   border-radius: 10px;
   background: color-mix(in srgb, var(--accent) 6%, transparent);
-  text-align: left;
+  text-align: start;
 }
 .amr-login-activation__hint {
   font-size: 11px;
@@ -2019,7 +2019,7 @@
 .settings-byok-connection-test-status {
   flex: 1 1 auto;
   min-width: 0;
-  text-align: right;
+  text-align: end;
 }
 .settings-byok-ready {
   color: var(--text-muted);
@@ -2167,7 +2167,7 @@
   appearance: none;
   border: 0;
   background: transparent;
-  text-align: left;
+  text-align: start;
   padding: 8px 30px 8px 10px;
   border-radius: var(--radius);
   display: flex;
@@ -2356,7 +2356,7 @@
 .settings-model-select {
   display: block;
   width: 100%;
-  text-align: left;
+  text-align: start;
   line-height: 1.35;
 }
 .inline-switcher__select .model-select-searchable__value {
@@ -3047,7 +3047,7 @@
   color: var(--text-strong);
   box-shadow: var(--shadow-xs);
   cursor: pointer;
-  text-align: left;
+  text-align: start;
   transition: border-color 140ms var(--ease-out), background 140ms var(--ease-out), box-shadow 140ms var(--ease-out);
 }
 .newproj-card:hover {
@@ -3309,7 +3309,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   cursor: pointer;
-  text-align: left;
+  text-align: start;
   transition: border-color 120ms var(--ease-out), background 120ms var(--ease-out);
 }
 .toggle-row:hover { border-color: var(--border-strong); }
@@ -3381,7 +3381,7 @@
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   cursor: pointer;
-  text-align: left;
+  text-align: start;
   transition: background 120ms var(--ease-out);
 }
 .compact-toggle:hover { background: var(--bg-subtle); }
@@ -3490,7 +3490,7 @@
   background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  text-align: left;
+  text-align: start;
   transition: border-color 120ms var(--ease-out), background 120ms var(--ease-out);
 }
 .template-option:hover { border-color: var(--border-strong); }
@@ -3508,7 +3508,7 @@
   background: none;
   border: none;
   cursor: pointer;
-  text-align: left;
+  text-align: start;
 }
 .template-option-delete {
   flex: none;
@@ -3667,7 +3667,7 @@
   border: 1px dashed var(--border-strong);
   border-radius: var(--radius-sm);
   cursor: pointer;
-  text-align: left;
+  text-align: start;
   transition: border-color 140ms var(--ease-out), background 140ms var(--ease-out), transform 140ms var(--ease-out);
 }
 .newproj-connectors-empty:hover {

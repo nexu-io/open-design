@@ -572,7 +572,7 @@ body::before {
   font-family: var(--sans);
   font-size: 12.5px;
   line-height: 1.2;
-  text-align: left;
+  text-align: start;
   text-decoration: none;
   cursor: pointer;
   transition: background 140ms ease, color 140ms ease;
@@ -2077,7 +2077,7 @@ section.tight { padding: 90px 0; }
   font-weight: 800;
   line-height: 1.15;
   letter-spacing: 0;
-  text-align: left;
+  text-align: start;
 }
 /* === Text Scroll Reveal — the ABOUT statement (Magic UI / Inspira port).
    A tall track with a sticky, vertically-centered paragraph; the inline
@@ -2103,7 +2103,7 @@ section.tight { padding: 90px 0; }
   font-size: 26px;
   line-height: 1.35;
   letter-spacing: 0;
-  text-align: left;
+  text-align: start;
   color: var(--ink);
 }
 .reveal-word {
@@ -2127,7 +2127,7 @@ section.tight { padding: 90px 0; }
   font-size: 26px;
   line-height: 1.18;
   /* Left-aligned, overriding the centered `.about-copy`. */
-  text-align: left;
+  text-align: start;
 }
 .about-statement span {
   display: block;
@@ -2199,7 +2199,7 @@ section.tight { padding: 90px 0; }
 }
 .about-tabs {
   margin: 0 auto 42px;
-  text-align: left;
+  text-align: start;
 }
 .about-tab-radio {
   position: absolute;
@@ -2459,7 +2459,7 @@ section.tight { padding: 90px 0; }
   font-family: var(--sans);
   font-size: 9.5px;
   color: var(--ink-faint);
-  text-align: right;
+  text-align: end;
   letter-spacing: 0.06em;
   line-height: 1.45;
 }
@@ -5618,7 +5618,7 @@ footer .container {
   .nav-links .nav-trigger {
     display: block;
     width: 100%;
-    text-align: left;
+    text-align: start;
     padding: 14px 0;
     font-size: 16px;
   }

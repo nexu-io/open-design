@@ -556,7 +556,7 @@
   padding: 6px 8px;
   border: none;
   background: transparent;
-  text-align: left;
+  text-align: start;
   border-radius: var(--radius-sm);
   cursor: pointer;
 }
@@ -606,7 +606,7 @@
   padding: 6px 10px;
   background: transparent;
   border: none;
-  text-align: left;
+  text-align: start;
   font-size: 12px;
   color: var(--text-muted);
 }
@@ -782,7 +782,7 @@
   background: transparent;
   border: 0;
   cursor: pointer;
-  text-align: left;
+  text-align: start;
   font: inherit;
   color: inherit;
 }
@@ -1375,7 +1375,7 @@ button.qf-chip-other:disabled { cursor: default; opacity: 0.6; }
 }
 .qf-visual-dialog-title {
   min-width: 0;
-  text-align: left;
+  text-align: start;
   text-wrap: balance;
 }
 .qf-visual-dialog-close {
@@ -3107,7 +3107,7 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   color: var(--text-muted);
   cursor: not-allowed;
   font-size: 12.5px;
-  text-align: left;
+  text-align: start;
   width: 100%;
 }
 .composer-import-item:hover {
@@ -3339,7 +3339,7 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   color: var(--text);
   font-size: 12px;
   line-height: 18px;
-  text-align: left;
+  text-align: start;
   cursor: pointer;
   width: 100%;
   transition:

@@ -394,7 +394,7 @@
   overflow: auto;
   padding: 36px 40px;
   color: var(--text-strong);
-  text-align: left;
+  text-align: start;
 }
 .lightboxFontHero {
   font-size: clamp(56px, 12vw, 120px);

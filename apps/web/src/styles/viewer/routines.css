@@ -1584,7 +1584,7 @@
   align-items: flex-start;
   max-width: none;
   gap: 5px;
-  text-align: left;
+  text-align: start;
 }
 .app .chat-empty-title {
   font-size: 13.5px;
@@ -2118,7 +2118,7 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled {
   cursor: pointer;
   font: inherit;
   font-size: 12px;
-  text-align: left;
+  text-align: start;
 }
 .app .working-dir-pill-menu-item.small,
 .chat-composer-fixed-layer .working-dir-pill-menu-item.small {
@@ -2735,7 +2735,7 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled {
   color: var(--text);
   border-radius: var(--radius-sm);
   cursor: pointer;
-  text-align: left;
+  text-align: start;
   width: 100%;
 }
 .app .handoff-menu-item:hover {
@@ -3113,7 +3113,7 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled {
   border: 0;
   background: transparent;
   border-radius: var(--radius);
-  text-align: left;
+  text-align: start;
   cursor: pointer;
 }
 .project-ds-picker-option:hover {

@@ -44,7 +44,7 @@
     .pin { display: inline-flex; align-items: center; gap: 8px; font: 600 11px/1 var(--mono); padding: 7px 11px; border: 1.5px dashed var(--accent); color: var(--accent); transform: rotate(-1.6deg); letter-spacing: 0.16em; background: #fff; white-space: nowrap; }
     .pin .x { width: 6px; height: 6px; background: var(--accent); transform: rotate(45deg); }
     .head .sub { font: 500 15px/1.4 var(--sans); color: var(--muted); margin-top: 8px; max-width: 64ch; }
-    .head .meta { font: 500 11px/1.5 var(--mono); color: var(--muted); letter-spacing: 0.1em; text-align: right; text-transform: uppercase; white-space: nowrap; }
+    .head .meta { font: 500 11px/1.5 var(--mono); color: var(--muted); letter-spacing: 0.1em; text-align: end; text-transform: uppercase; white-space: nowrap; }
     .head .meta b { color: var(--ink); }
 
     /* ---- flow row ---- */
@@ -158,7 +158,7 @@
     @media (max-width: 1100px) {
       .board { padding: 24px 20px 48px; }
       .head { grid-template-columns: 1fr; }
-      .head .meta { text-align: left; }
+      .head .meta { text-align: start; }
       .flow { padding: 28px 0 16px; }
       .note.a, .note.b { display: none; }
     }

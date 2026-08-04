@@ -110,7 +110,7 @@
   font-size: 12.5px;
   color: var(--text);
   cursor: pointer;
-  text-align: left;
+  text-align: start;
   text-decoration: none;
 }
 .plugin-share-item:hover,
@@ -356,7 +356,7 @@
   color: inherit;
   font: inherit;
   cursor: default;
-  text-align: left;
+  text-align: start;
   border-radius: var(--radius-pill);
   min-width: 0;
 }

@@ -426,7 +426,7 @@ function renderOAuthResultPage(opts: any) {
   .card {
     max-width: 420px; width: 100%; padding: 28px 28px 22px; border-radius: 12px;
     background: white; border: 1px solid #d0d7de; box-shadow: 0 8px 24px rgba(0,0,0,.06);
-    text-align: left;
+    text-align: start;
   }
   h1 { margin: 0 0 8px; font-size: 18px; color: ${accent}; }
   p  { margin: 0 0 16px; font-size: 14px; line-height: 1.55; }

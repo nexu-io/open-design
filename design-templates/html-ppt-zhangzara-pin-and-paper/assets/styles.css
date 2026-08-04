@@ -146,7 +146,7 @@ section.slide.ink .footer { color: var(--paper); opacity: .75; }
   color: var(--ink);
   transform: rotate(-3deg);
   transform-origin: right bottom;
-  text-align: right;
+  text-align: end;
   z-index: 3;
 }
 .s-cover .handwritten .underline {
@@ -166,7 +166,7 @@ section.slide.ink .footer { color: var(--paper); opacity: .75; }
 .s-cover .row .date {
   font-family: "DM Mono", monospace; font-weight: 500;
   font-size: 16px; letter-spacing: .18em; text-transform: uppercase;
-  text-align: right;
+  text-align: end;
 }
 
 /* ============ 02 AGENDA ============ */
@@ -207,7 +207,7 @@ section.slide.ink .footer { color: var(--paper); opacity: .75; }
 .s-agenda .row .meta {
   font-family: "DM Mono", monospace; font-weight: 500;
   font-size: 15px; letter-spacing: .14em; text-transform: uppercase;
-  opacity: .7; text-align: right;
+  opacity: .7; text-align: end;
 }
 
 /* ============ 03 NOTECARDS ============ */
@@ -273,7 +273,7 @@ section.slide.ink .footer { color: var(--paper); opacity: .75; }
   position: absolute; right: 64px; top: 110px;
   font-family: "DM Mono", monospace; font-weight: 500;
   font-size: 16px; letter-spacing: .22em; text-transform: uppercase;
-  color: var(--paper); opacity: .8; text-align: right;
+  color: var(--paper); opacity: .8; text-align: end;
 }
 .s-sec h2 {
   position: absolute;

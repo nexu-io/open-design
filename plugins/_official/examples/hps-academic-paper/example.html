@@ -110,8 +110,8 @@ a{color:var(--accent);text-decoration:underline;text-underline-offset:3px}
 .figcaption b{font-style:normal;font-weight:700;color:var(--text-1)}
 /* Booktabs table — heavy top/bottom rules, hairline midrule, no vertical rules. */
 .booktabs{border-collapse:collapse;width:100%;font-size:clamp(14px,1.45vw,18px)}
-.booktabs th,.booktabs td{padding:10px 16px;text-align:left;border:0}
-.booktabs td.num,.booktabs th.num{text-align:right;font-variant-numeric:tabular-nums}
+.booktabs th,.booktabs td{padding:10px 16px;text-align:start;border:0}
+.booktabs td.num,.booktabs th.num{text-align:end;font-variant-numeric:tabular-nums}
 .booktabs thead th{border-top:2px solid var(--text-1);border-bottom:1px solid var(--text-1);font-weight:700}
 .booktabs tbody tr:last-child td{border-bottom:2px solid var(--text-1)}
 .booktabs .best{font-weight:700;color:var(--accent)}
@@ -251,7 +251,7 @@ a{color:var(--accent);text-decoration:underline;text-underline-offset:3px}
     <p class="kicker">Headline number</p>
     <p class="stat-big anim-rise-in" style="color:var(--accent)">34pp</p>
     <p class="lede mt-m" style="max-width:44ch">Median accuracy drop from in-distribution to held-out novel compositions, pooled across the 63 surveyed studies.</p>
-    <p class="footnote mt-l" style="text-align:left">† 63 studies · 11 model families (350M–70B params) · 6 benchmark families · gap shrinks with scale but never reaches zero (min. observed: 9pp, largest model, best prompting).</p>
+    <p class="footnote mt-l" style="text-align:start">† 63 studies · 11 model families (350M–70B params) · 6 benchmark families · gap shrinks with scale but never reaches zero (min. observed: 9pp, largest model, best prompting).</p>
     <div class="notes">One number carries the slide, set in link-blue ink. The dagger footnote with its hairline rule is the academic signature: the headline figure arrives with its supporting counts.</div>
   </section>
 

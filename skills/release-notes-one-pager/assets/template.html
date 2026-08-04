@@ -103,7 +103,7 @@
       .topnav-inner { flex-wrap: wrap; }
       .topnav nav { display: none; }
       .log-row { grid-template-columns: 1fr; }
-      .log-row .pull { text-align: left; }
+      .log-row .pull { text-align: start; }
     }
 
     /* ─── type ──────────────────────────────────────────────────────── */
@@ -252,10 +252,10 @@
 
     /* ─── table (data-style, no chrome) ─────────────────────────────── */
     .ds-table { width: 100%; border-collapse: collapse; font-size: 14px; }
-    .ds-table th, .ds-table td { padding: 12px 14px; text-align: left; border-bottom: 1px solid var(--border); }
+    .ds-table th, .ds-table td { padding: 12px 14px; text-align: start; border-bottom: 1px solid var(--border); }
     .ds-table th { color: var(--muted); font-weight: 500; font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; }
     .ds-table tbody tr:hover { background: var(--fg-soft); }
-    .ds-table .num-col { font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; }
+    .ds-table .num-col { font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: end; }
 
     /* ─── image placeholder (DS-tinted block, never broken <img>) ──── */
     .ph-img {
@@ -293,7 +293,7 @@
     .log-row { display: grid; grid-template-columns: 120px 1fr 100px; gap: var(--gap-lg); padding: 22px 0; border-top: 1px solid var(--border); align-items: baseline; }
     .log-row .meta { color: var(--muted); }
     .log-row h3 { font-size: 19px; }
-    .log-row .pull { text-align: right; }
+    .log-row .pull { text-align: end; }
 
     /* ─── list (unordered/ordered list with consistent spacing) ─────── */
     .list { margin: 16px 0 0; padding: 0 0 0 18px; }

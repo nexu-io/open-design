@@ -26,7 +26,7 @@
   .brand-mark { width: 44px; height: 44px; border-radius: 50%; background: var(--ink); color: var(--paper); display: inline-flex; align-items: center; justify-content: center; font-family: var(--display); font-size: 22px; font-weight: 700; }
   .brand-name { font-family: var(--display); font-size: 22px; font-weight: 700; letter-spacing: -0.005em; }
   .brand-meta { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
-  .invoice-block { text-align: right; }
+  .invoice-block { text-align: end; }
   .invoice-label { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); }
   .invoice-num { font-family: var(--display); font-size: 32px; letter-spacing: -0.01em; font-weight: 700; margin: 6px 0 4px; }
   .invoice-dates { font-size: 13px; color: var(--muted); }
@@ -43,12 +43,12 @@
   .ref-strip .value { font-size: 14px; }
 
   table { width: 100%; border-collapse: collapse; }
-  thead th { text-align: left; padding: 10px 12px; border-bottom: 2px solid var(--ink); font-family: var(--mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 500; }
+  thead th { text-align: start; padding: 10px 12px; border-bottom: 2px solid var(--ink); font-family: var(--mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 500; }
   tbody td { padding: 14px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
   td.desc strong { display: block; font-weight: 600; margin-bottom: 4px; }
   td.desc small { display: block; color: var(--muted); font-size: 12.5px; }
-  td.num { text-align: right; font-variant-numeric: tabular-nums; font-family: var(--mono); font-size: 13.5px; }
-  th.num { text-align: right; }
+  td.num { text-align: end; font-variant-numeric: tabular-nums; font-family: var(--mono); font-size: 13.5px; }
+  th.num { text-align: end; }
 
   .totals { display: grid; grid-template-columns: 1.4fr 1fr; gap: 24px; margin-top: 28px; align-items: flex-start; }
   .terms { font-size: 12.5px; color: var(--muted); padding: 18px 20px; background: var(--bg); border-radius: 6px; }
@@ -67,7 +67,7 @@
 
   .signoff { margin-top: 40px; display: grid; grid-template-columns: 1fr auto; gap: 24px; align-items: end; }
   .signoff p { margin: 0; font-family: var(--display); font-size: 16px; font-style: italic; color: var(--muted); }
-  .signature { text-align: right; }
+  .signature { text-align: end; }
   .signature .scribble { font-family: 'Brush Script MT', 'Snell Roundhand', cursive; font-size: 28px; color: var(--accent); }
   .signature .name { font-size: 12.5px; color: var(--muted); padding-top: 6px; border-top: 1px solid var(--line); margin-top: 4px; }
 
@@ -81,7 +81,7 @@
     .totals { grid-template-columns: 1fr; }
     .ref-strip { grid-template-columns: 1fr; }
     header.brandbar { grid-template-columns: 1fr; }
-    .invoice-block { text-align: left; }
+    .invoice-block { text-align: start; }
   }
 </style>
 </head>

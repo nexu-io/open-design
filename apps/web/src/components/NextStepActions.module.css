@@ -90,7 +90,7 @@
   border-bottom: 1px solid var(--border-soft);
   border-radius: 0;
   cursor: pointer;
-  text-align: left;
+  text-align: start;
   transition:
     background 140ms cubic-bezier(0.23, 1, 0.32, 1),
     color 140ms cubic-bezier(0.23, 1, 0.32, 1);
@@ -330,7 +330,7 @@
   border: 1px solid transparent;
   border-radius: 8px;
   cursor: pointer;
-  text-align: left;
+  text-align: start;
   transition:
     background 140ms cubic-bezier(0.23, 1, 0.32, 1),
     border-color 140ms cubic-bezier(0.23, 1, 0.32, 1);

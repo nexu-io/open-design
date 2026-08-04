@@ -225,7 +225,7 @@ export function renderDesignSystemPreview(id: string, raw: string): string {
     .prose img { max-width: 100%; height: auto; border-radius: 6px; }
     .prose .table-wrap { overflow-x: auto; margin: 18px 0; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
     .prose table { width: 100%; border-collapse: collapse; font-size: 13.5px; line-height: 1.5; }
-    .prose th, .prose td { padding: 9px 14px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--border); }
+    .prose th, .prose td { padding: 9px 14px; text-align: start; vertical-align: top; border-bottom: 1px solid var(--border); }
     .prose th { background: var(--bg); font-weight: 600; font-size: 12px; letter-spacing: 0.02em; text-transform: uppercase; color: var(--muted); }
     .prose tr:last-child td { border-bottom: none; }
     .prose td code, .prose th code { white-space: nowrap; }
