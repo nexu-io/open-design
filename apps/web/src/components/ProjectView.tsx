@@ -5984,7 +5984,12 @@ export function ProjectView({
               true,
               runStatus === 'canceled' ? { telemetryFinalized: true } : undefined,
             );
-            if (!runMayFinalize) return;
+            if (!runMayFinalize) {
+              if (runStatus === 'canceled' || runStatus === 'succeeded') {
+                clearCurrentRunStreamingMarker(runConversationId, controller, cancelController);
+              }
+              return;
+            }
             updateConversationLatestRun(runStatus, endedAt);
             if (isTerminalRunStatus(runStatus)) {
               clearCurrentRunStreamingMarker(runConversationId, controller, cancelController);
@@ -6137,7 +6142,12 @@ export function ProjectView({
               true,
               runStatus === 'canceled' ? { telemetryFinalized: true } : undefined,
             );
-            if (!runMayFinalize) return;
+            if (!runMayFinalize) {
+              if (runStatus === 'canceled' || runStatus === 'succeeded') {
+                clearCurrentRunStreamingMarker(runConversationId, controller, cancelController);
+              }
+              return;
+            }
             updateConversationLatestRun(runStatus, endedAt);
             if (isTerminalRunStatus(runStatus)) {
               clearCurrentRunStreamingMarker(runConversationId, controller, cancelController);

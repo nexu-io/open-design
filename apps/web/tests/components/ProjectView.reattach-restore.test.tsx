@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, waitFor } from '@testing-library/react';
+import { act, cleanup, render, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   ProjectView,
@@ -973,6 +973,7 @@ describe('ProjectView daemon reattach restore', () => {
     let firstHandlers: {
       onAgentEvent: (ev: unknown) => void;
     } | null = null;
+    let firstRunStatus: ((status: NonNullable<ChatMessage['runStatus']>) => void) | null = null;
     let secondHandlers: {
       onAgentEvent: (ev: unknown) => void;
       onDelta: (text: string) => void;
@@ -982,6 +983,7 @@ describe('ProjectView daemon reattach restore', () => {
     streamViaDaemon
       .mockImplementationOnce(async (options: any) => {
         options.onRunCreated('run-first');
+        firstRunStatus = options.onRunStatus ?? null;
         firstHandlers = options.handlers;
         options.handlers.onAgentEvent({
           kind: 'tool_use',
@@ -1011,6 +1013,15 @@ describe('ProjectView daemon reattach restore', () => {
     await waitFor(() => expect(firstHandlers).toBeTruthy());
 
     chatPaneHarness.onStop!();
+    expect(saveMessage.mock.calls.some((call) => {
+      const message = call[2] as ChatMessage;
+      return message?.runId === 'run-first' && message.runStatus === 'canceled';
+    })).toBe(false);
+
+    await act(async () => {
+      firstRunStatus?.('canceled');
+      await Promise.resolve();
+    });
     await waitFor(() => {
       const stopped = saveMessage.mock.calls
         .map((call) => call[2] as ChatMessage)
