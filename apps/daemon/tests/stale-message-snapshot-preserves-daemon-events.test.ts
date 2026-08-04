@@ -43,6 +43,8 @@ type StoredMessage = {
   lastRunEventId?: string | null;
   events?: PersistedEvent[];
   feedback?: { rating?: number };
+  startedAt?: number;
+  endedAt?: number;
 };
 
 type RunHandles = {
@@ -160,6 +162,9 @@ describe('stale web message snapshot does not wipe daemon-owned run events', () 
       'early daemon-persisted event should survive stale web snapshot PUTs',
     ).toBe(true);
     expect(after?.runStatus).toBe('succeeded');
+    // Daemon-written lifecycle timestamps survive the stale PUTs too.
+    expect(after?.startedAt).toBe(before?.startedAt);
+    expect(after?.endedAt).toBe(before?.endedAt);
     // Client-owned metadata writes still land on daemon-backed messages.
     expect(after?.feedback?.rating).toBe(1);
   });

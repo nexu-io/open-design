@@ -338,6 +338,11 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
       content: stored.content ?? '',
       lastRunEventId: stored.lastRunEventId,
       runStatus: stored.runStatus,
+      // Daemon-written lifecycle timestamps; a stale snapshot that omits them
+      // would otherwise null out started_at / ended_at (and endedAt feeds
+      // persisted-run telemetry).
+      startedAt: stored.startedAt,
+      endedAt: stored.endedAt,
     };
   };
 
