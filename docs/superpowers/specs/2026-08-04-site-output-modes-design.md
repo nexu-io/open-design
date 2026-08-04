@@ -266,6 +266,35 @@ providers generally do not transmit empty directories, so its guaranteed
 existence applies to the local generated project, not to a provider's remote
 file listing.
 
+### Canonical file priority
+
+`index.html`, `styles.css`, and `script.js` are not placeholder filenames that
+reserve their names while real content is moved into numbered siblings. They
+are the canonical files and must carry the primary page content whenever that
+kind of content exists.
+
+The postprocessor selects one primary CSS source and one primary JavaScript
+source. For each kind, selection order is:
+
+1. a non-empty canonical source (`styles.css` or `script.js`);
+2. the first non-empty local source referenced by the selected entry HTML;
+3. the first non-empty source in deterministic path order;
+4. an existing empty canonical source;
+5. another existing source;
+6. no source, in which case an empty canonical file is created.
+
+The selected primary source maps directly to the canonical filename. Extracted
+inline CSS is appended to `styles.css`; extracted inline JavaScript is appended
+to `script.js`. If a previously existing canonical file is empty while another
+source contains content, the content-bearing source takes the canonical name
+and the empty placeholder is omitted.
+
+Additional CSS and JavaScript files remain separate only when there are
+multiple content-bearing sources or their module/reference boundaries require
+separate files. Their names must not force the primary source into an automatic
+`-1` suffix. Duplicate HTML references introduced by canonicalization are
+collapsed while preserving the first reference position.
+
 ### Transformation
 
 The postprocessor:
@@ -282,6 +311,9 @@ The postprocessor:
   overwritten;
 - creates empty canonical CSS and JavaScript files when the page genuinely
   requires neither;
+- keeps primary content in `styles.css` and `script.js` instead of creating
+  empty canonical files beside content-bearing `styles-1.css` or
+  `script-1.js` files;
 - removes or relocates visible files outside the allowed structure only after
   staged validation succeeds.
 
@@ -439,6 +471,14 @@ its existing five fields.
 - a single inline HTML page becomes the canonical minimum tree;
 - additional HTML pages are preserved;
 - CSS and JavaScript files are always present;
+- an existing non-empty `styles.css` and `script.js` remain canonical rather
+  than being renamed with `-1` suffixes;
+- when only non-canonical CSS or JavaScript exists, the primary referenced
+  source becomes `styles.css` or `script.js`;
+- when an empty canonical placeholder and a non-empty sibling both exist, the
+  non-empty source is promoted and the placeholder is omitted;
+- inline CSS and JavaScript are appended to their canonical files, and
+  duplicate canonical references are removed;
 - Base64 resources are extracted to `assets/`;
 - local resources move to `assets/` and references are rewritten;
 - name collisions use content hashes;
