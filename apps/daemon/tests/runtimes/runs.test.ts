@@ -291,7 +291,7 @@ describe('chat run service shutdown', () => {
     terminateProcessTree.mockResolvedValueOnce({ attempted: true, childTreeQuiescent: true, forced: true, identityVerified: true, remainingPids: [] });
     await runs.cancel(run);
     expect(run.status).toBe('canceled');
-    expect(run.termination).toMatchObject({ attempts: 2, outcome: 'verified' });
+    expect((run as any).termination).toMatchObject({ attempts: 2, outcome: 'verified' });
   });
 
   describe('cancel kill fallback', () => {

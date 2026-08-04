@@ -29,6 +29,7 @@ const fetchChatRunStatus = vi.fn();
 const listActiveChatRuns = vi.fn();
 const listProjectRuns = vi.fn();
 const reattachDaemonRun = vi.fn();
+const retryRunTermination = vi.fn();
 const publishDaemonRunFinishedEvent = vi.fn();
 const fetchVelaLoginStatus = vi.fn();
 const fetchAmrWalletSnapshot = vi.fn();
@@ -75,6 +76,7 @@ vi.mock('../../src/providers/daemon', () => ({
   listProjectRuns: (...args: unknown[]) => listProjectRuns(...args),
   publishDaemonRunFinishedEvent: (...args: unknown[]) => publishDaemonRunFinishedEvent(...args),
   reattachDaemonRun: (...args: unknown[]) => reattachDaemonRun(...args),
+  retryRunTermination: (...args: unknown[]) => retryRunTermination(...args),
   streamViaDaemon: (...args: unknown[]) => streamViaDaemon(...args),
 }));
 
@@ -252,6 +254,7 @@ vi.mock('../../src/components/ChatPane', () => ({
     onNewConversation,
     error,
     onRetry,
+    onRetryTermination,
   }: {
     activeConversationId: string | null;
     conversations: Conversation[];
@@ -278,6 +281,7 @@ vi.mock('../../src/components/ChatPane', () => ({
     onSendQueuedNow?: (id: string) => void;
     onNewConversation: () => void;
     onRetry?: (message: ChatMessage) => void;
+    onRetryTermination?: (message: ChatMessage) => void;
   }) => {
     const attached = attachedComments ?? [];
     const retryTarget = [...(messages ?? [])]
@@ -333,6 +337,15 @@ vi.mock('../../src/components/ChatPane', () => ({
         {retryTarget && onRetry ? (
           <button type="button" data-testid="chat-retry" onClick={() => onRetry(retryTarget)}>
             retry
+          </button>
+        ) : null}
+        {retryTarget && onRetryTermination ? (
+          <button
+            type="button"
+            data-testid="chat-retry-termination"
+            onClick={() => onRetryTermination(retryTarget)}
+          >
+            retry termination
           </button>
         ) : null}
         {queuedItems?.map((item, index) => (
@@ -601,6 +614,7 @@ describe('ProjectView conversation run isolation', () => {
       signal: null,
     });
     reattachDaemonRun.mockImplementation(async () => new Promise<void>(() => {}));
+    retryRunTermination.mockResolvedValue(null);
     fetchVelaLoginStatus.mockResolvedValue({ loggedIn: false });
     // Positive wallet balance so the pre-run AMR balance gate lets sends
     // through; the gate's own behavior is covered in
@@ -1214,6 +1228,76 @@ describe('ProjectView conversation run isolation', () => {
       history?: Array<{ role: string; content: string }>;
     };
     expect(payload.history?.at(-1)).toMatchObject({ role: 'user', content: 'hello from c' });
+  });
+
+  it('starts the prioritized queued send after an unverified interrupted run is verified by retry', async () => {
+    conversationAMessages = [];
+    const daemonRuns: Array<{
+      onRunCreated?: (runId: string) => void;
+      onRunStatus?: (status: NonNullable<ChatMessage['runStatus']>) => void;
+    }> = [];
+    streamViaDaemon.mockImplementation(async (input: unknown) => {
+      const options = input as {
+        onRunCreated?: (runId: string) => void;
+        onRunStatus?: (status: NonNullable<ChatMessage['runStatus']>) => void;
+      };
+      daemonRuns.push(options);
+      options.onRunCreated?.(`run-${daemonRuns.length}`);
+      options.onRunStatus?.('running');
+    });
+    retryRunTermination.mockResolvedValue({
+      id: 'run-1',
+      status: 'canceled',
+      createdAt: 1,
+      updatedAt: 3,
+      exitCode: null,
+      signal: 'SIGTERM',
+    });
+
+    renderProjectView(
+      config,
+      project,
+      [{ id: 'agent-1', name: 'OpenCode', bin: 'opencode', available: true, models: [] }],
+    );
+
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'));
+    await waitFor(() => expect(screen.getByTestId('send-message')).toHaveProperty('disabled', false));
+
+    fireEvent.click(screen.getByTestId('send-message'));
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByTestId('streaming-state').textContent).toBe('streaming'));
+
+    fireEvent.click(screen.getByTestId('send-message-alt'));
+    await waitFor(() => expect(screen.getByTestId('send-queued-0').textContent).toBe('hello from c'));
+
+    fireEvent.click(screen.getByTestId('send-queued-0'));
+    expect(streamViaDaemon).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      daemonRuns[0]?.onRunStatus?.('failed');
+      await Promise.resolve();
+    });
+
+    await waitFor(() =>
+      expect(screen.getByTestId('assistant-summary').textContent).toContain('failed'),
+    );
+    expect(streamViaDaemon).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByTestId('chat-retry-termination'));
+
+    await waitFor(() => expect(retryRunTermination).toHaveBeenCalledWith('run-1'));
+    await waitFor(() =>
+      expect(screen.getByTestId('assistant-summary').textContent).toContain('canceled'),
+    );
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(2));
+
+    const replacementPayload = streamViaDaemon.mock.calls[1]?.[0] as {
+      history?: Array<{ role: string; content: string }>;
+    };
+    expect(replacementPayload.history?.at(-1)).toMatchObject({
+      role: 'user',
+      content: 'hello from c',
+    });
   });
 
   it('ignores completion side effects when the interrupted run reports canceled and done late', async () => {
