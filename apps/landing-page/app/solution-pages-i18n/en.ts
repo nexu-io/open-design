@@ -433,7 +433,7 @@ export const EN: SolutionLocaleCopy = {
     heading: 'Generate a landing page you can ship',
     lead: 'Describe the offer and let your agent generate a real, responsive landing page — hero, features, pricing, waitlist, on brand. Then keep going: the same artifact becomes shipped code you deploy, in the agent you already run.',
     heroImageAlt:
-      'Editorial illustration of a prompt turning into a responsive landing page and then production code, framed by a green selection box',
+      'Real responsive landing page generated with Open Design, showing the Qelora project homepage',
     tldrTitle: 'In one line',
     tldrBody:
       'Most AI landing page builders lock your page inside their editor and meter it per seat. Open Design generates the landing page inside your coding agent and carries it from prompt to shipped code — real sections, your brand, no export step, no per-seat meter.',
@@ -1125,7 +1125,7 @@ export const EN: SolutionLocaleCopy = {
     heading: 'Prototype at the speed of a prompt',
     lead: 'Describe the flow you have in mind and let your agent assemble a real, clickable prototype — multiple screens, shared styles, and live interactions — rendered straight to HTML you can open, share, and hand to engineering.',
     heroImageAlt:
-      'Editorial illustration of a hand sketching a wireframe that turns into a clickable multi-screen app prototype',
+      'Real web prototype generated with Open Design, showing the responsive Qelora project homepage',
     tldrTitle: 'In one line',
     tldrBody:
       'Open Design is the design layer for the coding agent you already use. For prototyping, that means going from a one-paragraph idea to a navigable, styled prototype in a single session — no design tool, no export step, no handoff gap.',
@@ -1383,7 +1383,7 @@ export const EN: SolutionLocaleCopy = {
     heading: 'Decks that look designed, written by a prompt',
     lead: 'Hand your agent an outline and a tone. Open Design applies a deck template and visual system so every slide is laid out, typeset, and on-brand — not a bullet list on a blank background.',
     heroImageAlt:
-      'Editorial illustration of an outline on the left turning into a sequence of designed presentation slides on the right',
+      'Open Design generating a real twelve-slide presentation with speaker notes and an editable HTML source file',
     tldrTitle: 'In one line',
     tldrBody:
       'Open Design turns an outline into a designed HTML deck your agent renders in one session — present it in the browser, export to PDF or PPTX, and keep the source in your repo.',
@@ -2069,7 +2069,7 @@ export const EN: SolutionLocaleCopy = {
     heading: 'Make the idea clickable before the kickoff',
     lead: 'Describe the flow and your agent renders a real, clickable prototype you can put in front of stakeholders today — so reviews discuss the actual thing, not a paragraph in a doc.',
     heroImageAlt:
-      'Editorial illustration of a PM turning a written idea into a clickable prototype shown to stakeholders',
+      'Real interactive team dashboard artifact generated with Open Design for stakeholder review',
     tldrTitle: 'In one line',
     tldrBody:
       'Open Design gives a PM a design-free way to make ideas tangible: prompt-to-prototype for alignment and briefs, without spending the team’s design budget.',

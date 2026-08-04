@@ -1634,6 +1634,8 @@ export const zhCN: Dict = {
   "newproj.createFromTemplate": "基于模板创建",
   "newproj.createDisabledTitle":
     "请先在任意项目内通过「分享」菜单将其保存为模板。",
+  "newproj.openFolder": "打开文件夹",
+  "newproj.openingFolder": "正在打开…",
   "newproj.importClaudeZip": "导入 Claude Design ZIP",
   "newproj.importClaudeZipTitle": "导入 Claude Design 导出的 .zip 文件",
   "newproj.importingClaudeZip": "正在导入…",

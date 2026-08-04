@@ -26,8 +26,8 @@ export function isNodePtyUnavailableError(error: unknown): error is NodePtyUnava
 
 /**
  * Resolve node-pty's POSIX spawn-helper candidates without importing its
- * native addon. The shared lookup keeps Terminal and Keychain PTY users on the
- * same package-relative runtime boundary.
+ * native addon. The lookup keeps Terminal users on the package-relative
+ * runtime boundary used by the packaged app.
  */
 export function spawnHelperCandidatePaths(): string[] {
   if (process.platform === 'win32') return [];

@@ -52,6 +52,7 @@ import { useCoalescedCallback } from '../hooks/useCoalescedCallback';
 import { requestAmrArtifactUpgrade } from '../runtime/amr-artifact-upgrade';
 import {
   type AmrWalletSnapshot,
+  type ByokChatProviderConfig,
   type ByokMediaDefaults,
   type ByokChatProtocol,
   type ResearchOptions,
@@ -101,7 +102,7 @@ import {
 } from '../utils/apiProtocol';
 import { playSound, showCompletionNotification } from '../utils/notifications';
 import { randomUUID } from '../utils/uuid';
-import { DEFAULT_NOTIFICATIONS } from '../state/config';
+import { DEFAULT_NOTIFICATIONS, KNOWN_PROVIDERS } from '../state/config';
 import type { TodoItem } from '../runtime/todos';
 import {
   appendErrorStatusEvent,
@@ -270,6 +271,7 @@ import { effectiveMaxTokens } from '../state/maxTokens';
 import { effectiveAgentModelChoice } from './agentModelSelection';
 import { mediaExecutionPolicyForProjectMetadata } from '../media/execution-policy';
 import { mediaModelProviderId } from '../media/models';
+import { byokProviderRequiresApiKey } from '../utils/byokProvider';
 import {
   useByokImageModelOptions,
   useByokVideoModelOptions,
@@ -1236,13 +1238,48 @@ function byokMediaDefaultsForRun(input: {
   };
 }
 
-function byokOpenCodeProfileIdFromConfig(
+function byokOpenCodeProviderFromConfig(
   config: AppConfig,
-): string | undefined {
+): ByokChatProviderConfig | undefined {
   if (!isOpenCodeByokChatProtocol(config.apiProtocol)) return undefined;
-  if (byokPreflightBlockReason(config) !== null) return undefined;
-  if (!config.byokCredentialConfigured) return undefined;
-  return config.byokProfileId?.trim() || undefined;
+  const selectedProvider = selectedKnownProviderForConfig(config);
+  const model = config.model.trim();
+  if (
+    (byokProviderRequiresApiKey(config.apiProtocol, selectedProvider, config.baseUrl)
+      && !config.apiKey.trim())
+    || !model
+    || model.toLowerCase() === 'default'
+    || (config.apiProtocol === 'azure' && !config.baseUrl.trim())
+  ) {
+    return undefined;
+  }
+  return {
+    protocol: config.apiProtocol,
+    apiKey: config.apiKey.trim(),
+    baseUrl: config.baseUrl.trim(),
+    model,
+    ...(config.apiProtocol === 'azure' && config.apiVersion?.trim()
+      ? { apiVersion: config.apiVersion.trim() }
+      : {}),
+    requiresApiKey: byokProviderRequiresApiKey(
+      config.apiProtocol,
+      selectedProvider,
+      config.baseUrl,
+    ),
+  };
+}
+
+function selectedKnownProviderForConfig(config: AppConfig) {
+  if (!config.apiProtocol) return undefined;
+  return KNOWN_PROVIDERS.find(
+    (provider) =>
+      provider.protocol === config.apiProtocol
+      && provider.baseUrl === config.baseUrl
+      && (
+        config.apiProviderBaseUrl == null
+        || provider.baseUrl === config.apiProviderBaseUrl
+      ),
+  );
 }
 
 function isOpenCodeByokChatProtocol(
@@ -4805,11 +4842,11 @@ export function ProjectView({
           chatAttachmentsFromPreviewCommentImages(attachment.imageAttachments),
         ),
       );
-      const byokProfileId = byokOpenCodeProfileIdFromConfig(config);
+      const byokOpenCodeProvider = byokOpenCodeProviderFromConfig(config);
       const requiresByokPreflight =
         (config.mode === 'api' && config.apiProtocol !== 'bedrock') ||
         (config.mode === 'daemon' && config.agentId === 'byok-opencode');
-      if (requiresByokPreflight && !byokProfileId) {
+      if (requiresByokPreflight && !byokOpenCodeProvider) {
         trackByokPreflightBlocked(analytics.track, {
           source: 'run',
           reason: byokPreflightBlockReason(config) ?? 'config_invalid',
@@ -5899,8 +5936,8 @@ export function ProjectView({
           model: daemonByokOpenCode ? config.model : choice?.model ?? null,
           reasoning: daemonByokOpenCode ? null : choice?.reasoning ?? null,
           serviceTier: daemonByokOpenCode ? null : choice?.serviceTier ?? null,
-          ...(daemonByokOpenCode && byokProfileId
-            ? { byokProfileId }
+          ...(daemonByokOpenCode && byokOpenCodeProvider
+            ? { byokProvider: byokOpenCodeProvider }
             : {}),
           ...(daemonByokOpenCode
             ? {
@@ -5981,9 +6018,18 @@ export function ProjectView({
         // BYOK users even though the UI saves model + index + entries
         // for that mode.
         const userText = (userMsg.content ?? '').trim();
-        // Pass only the non-secret profile reference so "Same as chat"
-        // memory extraction resolves the same daemon-owned credential as the
-        // run. Raw provider keys never cross this browser call boundary.
+        // Forward the per-call BYOK provider snapshot so "Same as chat"
+        // memory extraction uses the same vendor, endpoint, key and model as
+        // the run. The daemon consumes it for this request only.
+        const byokChatProvider = byokOpenCodeProvider
+          ? {
+              provider: byokOpenCodeProvider.protocol,
+              apiKey: byokOpenCodeProvider.apiKey,
+              baseUrl: byokOpenCodeProvider.baseUrl,
+              apiVersion: byokOpenCodeProvider.apiVersion,
+              model: byokOpenCodeProvider.model,
+            }
+          : undefined;
         if (userText.length > 0) {
           try {
             await fetch('/api/memory/extract', {
@@ -5993,7 +6039,7 @@ export function ProjectView({
                 userMessage: userText,
                 projectId: project.id,
                 conversationId: runConversationId,
-                byokProfileId,
+                byokChatProvider,
               }),
             });
           } catch {
@@ -6045,7 +6091,7 @@ export function ProjectView({
           model: config.model,
           reasoning: null,
           serviceTier: null,
-          ...(byokProfileId ? { byokProfileId } : {}),
+          ...(byokOpenCodeProvider ? { byokProvider: byokOpenCodeProvider } : {}),
           byokMediaDefaults: byokMediaDefaultsForRun({
             imageModelOverride: byokImageModelOverride,
             videoModelOverride: byokVideoModelOverride,
@@ -6515,8 +6561,8 @@ export function ProjectView({
   const commentQueueOnSend = currentConversationBusy && !currentConversationQueueDisabled;
 
   const handleContinueRemainingTasks = useCallback(
-    (_assistantMessage: ChatMessage, todos: TodoItem[]) => {
-      if (currentConversationActionDisabled || todos.length === 0) return;
+    async (_assistantMessage: ChatMessage, todos: TodoItem[]) => {
+      if (currentConversationActionDisabled || todos.length === 0) return false;
       const remainingList = todos
         .map((todo, i) => {
           const label =
@@ -6530,7 +6576,7 @@ export function ProjectView({
         `${remainingList}\n\n` +
         'Before making changes, inspect the current project files as needed. ' +
         'Update TodoWrite as you complete each remaining task.';
-      void handleSend(prompt, [], []);
+      return handleSend(prompt, [], []);
     },
     [currentConversationActionDisabled, handleSend],
   );

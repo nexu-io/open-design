@@ -1,66 +1,39 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import {
-  __forTestByokRunInputError,
+  __forTestHasCompleteByokOpenCodeConfig,
   __forTestWithoutSensitiveRunInput,
 } from '../../src/routes/runs.js';
 
 describe('BYOK run input boundary', () => {
-  it('rejects raw credentials before consulting profile metadata', async () => {
-    const has = vi.fn(async () => true);
-    const error = await __forTestByokRunInputError({
+  it('accepts a complete run-scoped Local BYOK provider', () => {
+    expect(__forTestHasCompleteByokOpenCodeConfig({
       agentId: 'byok-opencode',
-      byokProfileId: 'byok-openrouter',
+      model: 'gpt-5.4-mini',
       byokProvider: {
         protocol: 'openai',
-        apiKey: 'raw-secret',
+        apiKey: 'local-only-secret',
+        baseUrl: 'https://api.openai.com/v1',
       },
-    }, { has });
-
-    expect(error).toMatch(/raw BYOK credentials are not accepted/iu);
-    expect(has).not.toHaveBeenCalled();
+    })).toBe(true);
   });
 
-  it('accepts only an existing non-secret profile reference', async () => {
-    const has = vi.fn(async (profileId: string) => profileId === 'byok-openrouter');
-
-    await expect(__forTestByokRunInputError({
+  it('rejects a BYOK run without a run-scoped provider', () => {
+    expect(__forTestHasCompleteByokOpenCodeConfig({
       agentId: 'byok-opencode',
-      byokProfileId: 'byok-openrouter',
-    }, { has })).resolves.toBeNull();
-    await expect(__forTestByokRunInputError({
-      agentId: 'byok-opencode',
-      byokProfileId: 'byok-missing',
-    }, { has })).resolves.toMatch(/secure credential profile/iu);
+    })).toBe(false);
   });
 
-  it('rejects credential-shaped fields nested in BYOK plugin inputs', async () => {
-    const has = vi.fn(async () => true);
-    const error = await __forTestByokRunInputError({
+  it('accepts a keyless run-scoped provider when the protocol permits it', () => {
+    expect(__forTestHasCompleteByokOpenCodeConfig({
       agentId: 'byok-opencode',
-      byokProfileId: 'byok-openrouter',
-      pluginInputs: {
-        nested: [{ apiKey: 'raw-secret' }],
+      model: 'local-model',
+      byokProvider: {
+        protocol: 'openai',
+        baseUrl: 'http://127.0.0.1:1234/v1',
+        requiresApiKey: false,
       },
-    }, { has });
-
-    expect(error).toMatch(/raw BYOK credentials are not accepted/iu);
-    expect(has).not.toHaveBeenCalled();
-  });
-
-  it('fails closed when BYOK structured input exceeds the scan depth', async () => {
-    const has = vi.fn(async () => true);
-    let nested: Record<string, unknown> = { apiKey: 'raw-secret' };
-    for (let depth = 0; depth < 24; depth += 1) nested = { nested };
-
-    const error = await __forTestByokRunInputError({
-      agentId: 'byok-opencode',
-      byokProfileId: 'byok-openrouter',
-      pluginInputs: nested,
-    }, { has });
-
-    expect(error).toMatch(/raw BYOK credentials are not accepted/iu);
-    expect(has).not.toHaveBeenCalled();
+    })).toBe(true);
   });
 
   it('removes every credential-bearing compatibility field before persistence', () => {
@@ -75,7 +48,6 @@ describe('BYOK run input boundary', () => {
 
     expect(sanitized).toEqual({
       agentId: 'byok-opencode',
-      byokProfileId: 'byok-openrouter',
       message: 'Create a site',
     });
     expect(JSON.stringify(sanitized)).not.toContain('secret');

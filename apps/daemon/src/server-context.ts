@@ -134,7 +134,6 @@ export interface ServerContext {
   finalize: any;
   handoff: any;
   chat: any;
-  byokCredentials: any;
   messages: any;
   agents: any;
   critique: any;

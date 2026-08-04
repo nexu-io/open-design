@@ -22,8 +22,10 @@ import {
   SITE,
   SITEMAP_CHILD_URL,
   fetchWithRetry,
+  isNoindexPost,
   readJsonFile,
   sleep,
+  urlToBlogSlug,
 } from './lib.ts';
 
 interface Args {
@@ -137,7 +139,18 @@ async function main() {
   const input = readJsonFile<{ addedUrls: string[]; modifiedUrls?: string[] }>(
     args.urls,
   );
-  const urls = [...new Set([...(input.addedUrls ?? []), ...(input.modifiedUrls ?? [])])];
+  const allUrls = [...new Set([...(input.addedUrls ?? []), ...(input.modifiedUrls ?? [])])];
+  // Defense-in-depth mirror of the detect-changed-urls skip: a post whose
+  // source frontmatter sets `noindex: true` is deliberately noindexed and
+  // absent from the sitemap. Checking it here would both burn the sitemap
+  // poll timeout (the URL never appears) and hard-fail readiness, pinning
+  // the `blog-indexed-prod` tag for unrelated posts.
+  const urls = allUrls.filter((url) => {
+    const slug = urlToBlogSlug(url);
+    const skip = slug !== undefined && isNoindexPost(slug);
+    if (skip) console.error(`Skipping intentionally noindexed URL: ${url}`);
+    return !skip;
+  });
   if (urls.length === 0) {
     const empty: ReadinessResult[] = [];
     if (args.out) writeFileSync(args.out, JSON.stringify(empty, null, 2) + '\n');

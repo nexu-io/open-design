@@ -30,10 +30,13 @@ vi.mock('electron', () => ({
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { handleOdRequest } from '../src/protocol.js';
+import { protocol } from 'electron';
+
+import { handleOdRequest, registerOdProtocol } from '../src/protocol.js';
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe('od:// protocol proxy', () => {
@@ -128,6 +131,47 @@ describe('od:// protocol proxy', () => {
     expect(response.status).toBe(502);
     const body = (await response.json()) as { message: string };
     expect(body.message).toBe('sync timeout');
+  });
+
+  // The web sidecar can die and be respawned on a fresh random port
+  // mid-session (an update handoff reaped it on 2026-07-25). When
+  // `registerOdProtocol` snapshotted the URL, the proxy stayed pinned
+  // to the dead port for the rest of the process lifetime and every
+  // renderer fetch 502'd until the user quit and relaunched the app.
+  // The handler must therefore re-resolve the target on each request.
+  it('resolves the web runtime URL on every request instead of snapshotting it', async () => {
+    const handleMock = vi.mocked(protocol.handle);
+    handleMock.mockClear();
+
+    // `registerOdProtocol` wires the handler to the global fetch, so
+    // stub that rather than probing real ports: a port-based test
+    // would silently pass or fail depending on whatever happens to be
+    // listening on the developer's machine.
+    const targets: string[] = [];
+    vi.stubGlobal('fetch', async (input: Request) => {
+      targets.push(input.url);
+      return new Response('ok', { status: 200 });
+    });
+
+    let current = 'http://127.0.0.1:50401';
+    registerOdProtocol(() => current);
+
+    const handler = handleMock.mock.calls[0]?.[1] as (
+      request: Request,
+    ) => Promise<Response>;
+    expect(handler).toBeTypeOf('function');
+
+    await handler(new Request('od://app/api/runs'));
+
+    // The sidecar dies and comes back on a different ephemeral port.
+    current = 'http://127.0.0.1:59530';
+
+    await handler(new Request('od://app/api/runs'));
+
+    expect(targets).toEqual([
+      'http://127.0.0.1:50401/api/runs',
+      'http://127.0.0.1:59530/api/runs',
+    ]);
   });
 });
 

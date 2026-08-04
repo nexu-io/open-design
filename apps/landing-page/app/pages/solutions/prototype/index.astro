@@ -11,14 +11,13 @@
  * Simplified Chinese; other locales fall back to English).
  */
 import Layout from '../../../_components/sub-page-layout.astro';
-import LazyImg from '../../../_components/lazy-img.astro';
+import SolutionProofMedia from '../../../_components/solution-proof-media.astro';
 import TemplateCard from '../../../_components/template-card.astro';
 import { getInfoPageCopy } from '../../../info-page-i18n';
 import { getSolutionPageCopy } from '../../../solution-pages-i18n';
 import { getBundledPlugins } from '../../../_lib/bundled-plugins';
 import { bundledRecordOf, categorizePlugin } from '../../../_lib/plugin-facets';
 import { pickSolutionPlugins } from '../../../_lib/solution-featured';
-import { imageAsset, imageAssetSrcset } from '../../../image-assets';
 import { localeFromPath, localizedHref, localePath, stripLocaleFromPath } from '../../../i18n';
 
 const SITE = Astro.site?.toString() ?? 'https://open-design.ai/';
@@ -31,9 +30,6 @@ const page = getSolutionPageCopy(locale, 'prototype');
 
 const title = page.title;
 const description = page.description;
-
-const heroImg = imageAsset('solutions/prototype/hero.png', { width: 1280, quality: 82 });
-const heroSrcset = imageAssetSrcset('solutions/prototype/hero.png', [768, 1280]);
 
 // Real prototype-category plugins for the feature grid (same <TemplateCard>
 // path image/video/slides use, so previews resolve to pipeline-generated
@@ -103,21 +99,18 @@ const jsonLd = [
         <h1 class="display">{page.heading}</h1>
         <p class="lead">{page.lead}</p>
         <div class="solution-hero-cta">
-          <a class="btn btn-primary" href={REPO} target="_blank" rel="noreferrer noopener">{common.starOnGithub}</a>
-          <a class="btn btn-ghost" href={href('/download/')}>{common.downloadDesktop}</a>
+          <a class="btn btn-primary solution-download-cta hero-download-attention" href={href('/download/')} data-download-cta data-direct-download data-download-placement="solution_hero">{common.downloadDesktop}</a>
+          <a class="btn btn-ghost" href={REPO} target="_blank" rel="noreferrer noopener">{common.starOnGithub}</a>
         </div>
       </header>
-      <figure class="solution-hero">
-        <LazyImg
-          src={heroImg}
-          srcset={heroSrcset}
-          sizes="(max-width: 880px) 100vw, 540px"
-          alt={page.heroImageAlt}
-          loading="priority"
-          width={1280}
-          height={853}
-        />
-      </figure>
+      <SolutionProofMedia
+        src="/lab-cards/prototype.webp"
+        alt={page.heroImageAlt}
+        href={href(page.exampleHref)}
+        linkLabel={page.exampleLinkLabel}
+        width={1592}
+        height={1000}
+      />
     </div>
 
     <div class="tldr-card">
@@ -204,8 +197,8 @@ const jsonLd = [
         <p>{page.ctaBody}</p>
       </div>
       <div class="info-cta-actions">
-        <a class="btn btn-primary" href={REPO} target="_blank" rel="noreferrer noopener">{common.starOnGithub}</a>
-        <a class="btn btn-ghost" href={REPO_RELEASES} target="_blank" rel="noreferrer noopener">{common.downloadDesktop}</a>
+        <a class="btn btn-primary solution-download-cta hero-download-attention" href={REPO_RELEASES} data-download-cta data-direct-download data-download-placement="solution_footer" target="_blank" rel="noreferrer noopener">{common.downloadDesktop}</a>
+        <a class="btn btn-ghost" href={REPO} target="_blank" rel="noreferrer noopener">{common.starOnGithub}</a>
       </div>
       <div class="info-cta-meta">
         <span class="stamp">● {common.apache}</span>
