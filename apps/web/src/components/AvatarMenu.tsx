@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
 import { createPortal } from 'react-dom';
 import type { AmrWalletSnapshot } from '@open-design/contracts';
 import { getResolvedDeviceId } from '../analytics/client';
@@ -25,8 +25,16 @@ import {
   fetchAmrWalletSnapshot,
   fetchVelaLoginStatus,
   formatVelaBalanceUsd,
+  startVelaLogin,
   type VelaLoginStatus,
 } from '../providers/daemon';
+import {
+  AMR_LOGIN_POLL_INTERVAL_MS,
+  AMR_LOGIN_STATUS_EVENT,
+  amrLoginPollOutcome,
+  amrLoginStatusEventReason,
+  notifyAmrLoginStatusChanged,
+} from './amrLoginPolling';
 import {
   amrPlansUrlForProfile,
 } from '../runtime/amr-guidance';
@@ -249,6 +257,77 @@ export function AvatarMenu({
     event.currentTarget.href = attributedAmrUrl(amrPlansUrl, attribution, deviceId);
     setOpen(false);
   };
+
+  // #5244: the project-page agent menu must expose the same unauthenticated
+  // Open Design login entry the Home-page menu (InlineModelSwitcher) does. When
+  // the account is signed out, the Open Design row shows a sign-in action that
+  // starts the Vela login flow and polls until the account is ready, the
+  // browser window is closed, or the login times out.
+  const [amrLoginPending, setAmrLoginPending] = useState(false);
+  const amrLoginStartedAtRef = useRef<number | null>(null);
+  const amrLoginPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const stopAmrLoginPolling = useCallback(() => {
+    if (amrLoginPollRef.current) {
+      clearInterval(amrLoginPollRef.current);
+      amrLoginPollRef.current = null;
+    }
+    amrLoginStartedAtRef.current = null;
+    setAmrLoginPending(false);
+  }, []);
+
+  const handleAmrSignIn = useCallback(async () => {
+    if (amrLoginPending) return;
+    const startedAt = Date.now();
+    amrLoginStartedAtRef.current = startedAt;
+    setAmrLoginPending(true);
+    const odDeviceId = amrHandoffDeviceId({
+      metricsConsent: config.telemetry?.metrics === true,
+      resolvedDeviceId: getResolvedDeviceId(),
+      installationId: config.installationId,
+    });
+    const result = await startVelaLogin(null, odDeviceId);
+    if (result.ok || result.alreadyRunning) {
+      notifyAmrLoginStatusChanged('login-started');
+      amrLoginPollRef.current = setInterval(() => {
+        void fetchVelaLoginStatus()
+          .then((status) => {
+            if (status) setAmrAccount(status);
+            const outcome = amrLoginPollOutcome(status, startedAt);
+            if (outcome === 'signed-in') {
+              stopAmrLoginPolling();
+              notifyAmrLoginStatusChanged('status-changed');
+            } else if (outcome === 'stopped' || outcome === 'timed-out') {
+              stopAmrLoginPolling();
+            }
+          })
+          .catch(() => {
+            stopAmrLoginPolling();
+          });
+      }, AMR_LOGIN_POLL_INTERVAL_MS);
+    } else {
+      setAmrLoginPending(false);
+      amrLoginStartedAtRef.current = null;
+    }
+  }, [amrLoginPending, config.installationId, config.telemetry?.metrics, stopAmrLoginPolling]);
+
+  // A login cancelled from another surface (e.g. the Home page) should stop the
+  // poll here too.
+  useEffect(() => {
+    if (!amrLoginPending) return;
+    const onLoginStatus = (event: Event) => {
+      if (amrLoginStatusEventReason(event) === 'login-canceled') {
+        stopAmrLoginPolling();
+      }
+    };
+    window.addEventListener(AMR_LOGIN_STATUS_EVENT, onLoginStatus);
+    return () => window.removeEventListener(AMR_LOGIN_STATUS_EVENT, onLoginStatus);
+  }, [amrLoginPending, stopAmrLoginPolling]);
+
+  // Clear any in-flight poll on unmount.
+  useEffect(() => () => {
+    if (amrLoginPollRef.current) clearInterval(amrLoginPollRef.current);
+  }, []);
 
   // Resolve the user's model + reasoning pick for the active agent. Falls
   // back to the agent's first declared option (`'default'`) when the user
@@ -489,6 +568,21 @@ export function AvatarMenu({
                         >
                           {t('settings.amrUpgrade')}
                         </a>
+                      ) : null}
+                      {amrAccount && !amrAccount.loggedIn ? (
+                        <button
+                          type="button"
+                          className="avatar-amr-row__signin"
+                          data-testid="avatar-amr-row-signin"
+                          disabled={amrLoginPending}
+                          onClick={() => {
+                            void handleAmrSignIn();
+                          }}
+                        >
+                          {amrLoginPending
+                            ? t('settings.amrSigningIn')
+                            : t('settings.amrSignIn')}
+                        </button>
                       ) : null}
                     </div>
                   );

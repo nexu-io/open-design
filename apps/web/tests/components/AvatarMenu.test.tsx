@@ -234,6 +234,88 @@ describe('AvatarMenu', () => {
     ]);
   });
 
+  it('shows a sign-in action in the Open Design row when signed out', async () => {
+    // #5244: the project-page agent menu (AvatarMenu) must expose the same
+    // unauthenticated Open Design login entry the Home-page menu does.
+    const amrAgent: AgentInfo = {
+      id: 'amr',
+      name: 'Open Design AMR',
+      bin: 'vela',
+      available: true,
+      models: [{ id: 'default', label: 'Default (CLI config)' }],
+    };
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === '/api/integrations/vela/status') {
+        return new Response(
+          JSON.stringify({
+            loggedIn: false,
+            loginInFlight: false,
+            profile: 'test',
+            user: null,
+            configPath: '/Users/test/.amr/config.json',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      return new Response('{}', { status: 200 });
+    }));
+
+    renderMenu({ agents: [codexAgent, claudeAgent, amrAgent] });
+    openMenu();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('avatar-agent-option-amr')).toBeTruthy();
+    });
+    expect(screen.getByTestId('avatar-amr-row-signin')).toBeTruthy();
+  });
+
+  it('starts the Open Design login flow when the signed-out sign-in action is clicked', async () => {
+    const amrAgent: AgentInfo = {
+      id: 'amr',
+      name: 'Open Design AMR',
+      bin: 'vela',
+      available: true,
+      models: [{ id: 'default', label: 'Default (CLI config)' }],
+    };
+    const loginCalls: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === '/api/integrations/vela/status') {
+        return new Response(
+          JSON.stringify({
+            loggedIn: false,
+            loginInFlight: false,
+            profile: 'test',
+            user: null,
+            configPath: '/Users/test/.amr/config.json',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url === '/api/integrations/vela/login') {
+        loginCalls.push(url);
+        return new Response(
+          JSON.stringify({ ok: true, authAttemptId: 'auth-1' }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      return new Response('{}', { status: 200 });
+    }));
+
+    renderMenu({ agents: [codexAgent, claudeAgent, amrAgent] });
+    openMenu();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('avatar-amr-row-signin')).toBeTruthy();
+    });
+    fireEvent.click(screen.getByTestId('avatar-amr-row-signin'));
+
+    await waitFor(() => {
+      expect(loginCalls).toContain('/api/integrations/vela/login');
+    });
+  });
+
   it('rescans agents and re-renders newly available CLI entries', async () => {
     function Harness() {
       const [agents, setAgents] = useState<AgentInfo[]>([

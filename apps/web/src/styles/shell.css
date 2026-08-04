@@ -1263,6 +1263,44 @@
     transform: none;
   }
 }
+.avatar-amr-row__signin,
+.avatar-amr-row__signin:visited {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--text-strong) 28%, transparent);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-strong);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    transform 150ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+@media (hover: hover) and (pointer: fine) {
+  .avatar-amr-row__signin:not(:disabled):hover {
+    background: color-mix(in srgb, var(--text-strong) 8%, transparent);
+    border-color: color-mix(in srgb, var(--text-strong) 45%, transparent);
+  }
+}
+.avatar-amr-row__signin:active {
+  transform: scale(0.96);
+}
+.avatar-amr-row__signin:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--text-strong) 45%, transparent);
+  outline-offset: 2px;
+}
+.avatar-amr-row__signin:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
 .avatar-item {
   display: flex;
   align-items: center;
