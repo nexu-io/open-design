@@ -176,10 +176,132 @@
   opacity: 0.76;
 }
 
+.odp-agent-install,
 .odp-demo,
 .odp-use,
 .odp-faq {
   padding: clamp(88px, 10vw, 144px) 0;
+}
+
+.odp-agent-install {
+  border-top: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.46);
+}
+
+.odp-agent-install__intro {
+  max-width: 820px;
+}
+
+.odp-agent-install__eyebrow {
+  margin: 0 0 18px;
+  color: var(--olive);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.odp-agent-install__intro h2 {
+  margin: 0;
+  font-size: clamp(38px, 5.2vw, 64px);
+  font-weight: 640;
+  line-height: 1.01;
+  letter-spacing: -0.032em;
+  text-wrap: balance;
+}
+
+.odp-agent-install__intro > p:last-child {
+  max-width: 760px;
+  margin: 19px 0 0;
+  color: var(--ink-mute);
+  font-size: 17px;
+  line-height: 1.65;
+}
+
+.odp-agent-install__steps {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  list-style: none;
+  margin: 54px 0 0;
+  padding: 0;
+  counter-reset: odp-agent-step;
+}
+
+.odp-agent-install__steps li {
+  min-width: 0;
+  padding: 26px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bone);
+  counter-increment: odp-agent-step;
+}
+
+.odp-agent-install__steps li:last-child {
+  grid-column: 1 / -1;
+}
+
+.odp-agent-install__steps h3 {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+  font-size: 21px;
+  font-weight: 650;
+  letter-spacing: -0.025em;
+}
+
+.odp-agent-install__steps h3::before {
+  content: counter(odp-agent-step, decimal-leading-zero);
+  display: inline-grid;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  color: var(--olive);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0;
+}
+
+.odp-agent-install__steps p {
+  margin: 16px 0 0;
+  color: var(--ink-mute);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.odp-agent-install__steps a {
+  color: var(--ink);
+  text-underline-offset: 3px;
+}
+
+.odp-agent-install__steps p code {
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 0.9em;
+  font-weight: 700;
+}
+
+.odp-agent-install__steps pre {
+  margin: 20px 0 0;
+  padding: 18px 20px;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+}
+
+.odp-agent-install__steps pre code {
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .odp-demo {
@@ -673,6 +795,14 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .odp-agent-install__steps {
+    grid-template-columns: 1fr;
+  }
+
+  .odp-agent-install__steps li:last-child {
+    grid-column: auto;
+  }
+
   .odp-final-actions {
     width: min(100%, 360px);
   }
@@ -714,10 +844,19 @@
     margin: 0 16px 16px;
   }
 
+  .odp-agent-install,
   .odp-demo,
   .odp-use,
   .odp-faq {
     padding: 78px 0;
+  }
+
+  .odp-agent-install__steps {
+    margin-top: 38px;
+  }
+
+  .odp-agent-install__steps li {
+    padding: 22px 20px;
   }
 
   .odp-demo {

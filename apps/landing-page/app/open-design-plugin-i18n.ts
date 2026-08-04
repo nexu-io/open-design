@@ -1,5 +1,5 @@
 /*
- * `/open-design-pugin/` — localized product-page copy.
+ * `/codex-plugin/` — localized product-page copy.
  *
  * English is the authoritative source. Every active non-English landing
  * locale provides a complete, structurally identical copy object in

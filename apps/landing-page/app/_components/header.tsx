@@ -280,7 +280,7 @@ export function Header({
                     </li>
                     <li>
                       <a
-                        href={href('/open-design-pugin/')}
+                        href={href('/codex-plugin/')}
                         className={active === 'open-design-plugin' ? 'is-active' : undefined}
                       >
                         <span className='dropdown-name'>Open Design Plugin</span>
