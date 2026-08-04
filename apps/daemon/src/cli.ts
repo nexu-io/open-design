@@ -6357,7 +6357,8 @@ Common options:
   --daemon-url <url>   Open Design daemon HTTP base.
   --deployment-credential
                        Use the daemon-managed deployment credential with the
-                       BYOK OpenCode agent; no browser credential is sent.
+                       BYOK OpenCode agent; requires --model <id> and sends no
+                       browser credential.
   --json               Emit raw JSON.`);
     process.exit(args.length === 0 ? 2 : 0);
   }
@@ -6562,6 +6563,10 @@ Common options:
       if (flags['deployment-credential']) {
         if (flags.agent && flags.agent !== 'byok-opencode') {
           console.error('--deployment-credential requires --agent byok-opencode when --agent is set');
+          process.exit(2);
+        }
+        if (!flags.model) {
+          console.error('--deployment-credential requires --model <id>');
           process.exit(2);
         }
         body.agentId = 'byok-opencode';

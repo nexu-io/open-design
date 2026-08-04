@@ -117,6 +117,8 @@ describe('od run CLI', () => {
       '--message',
       'Build the settings screen',
       '--deployment-credential',
+      '--model',
+      'gpt-5.4-mini',
       '--json',
       '--daemon-url',
       stub.baseUrl,
@@ -132,8 +134,28 @@ describe('od run CLI', () => {
       projectId: 'project-1',
       message: 'Build the settings screen',
       agentId: 'byok-opencode',
+      model: 'gpt-5.4-mini',
       byokCredentialSource: 'deployment',
     });
+  });
+
+  it('rejects a deployment credential run without an explicit model', async () => {
+    stub = await startRunStubServer(true);
+
+    const result = await runCli([
+      'run',
+      'start',
+      '--project',
+      'project-1',
+      '--deployment-credential',
+      '--json',
+      '--daemon-url',
+      stub.baseUrl,
+    ]);
+
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain('--deployment-credential requires --model <id>');
+    expect(stub.requests).toEqual([]);
   });
 
   it('documents the deployment credential selector in run help', async () => {
@@ -142,6 +164,7 @@ describe('od run CLI', () => {
     expect(result.code).toBe(0);
     expect(result.stdout).toContain('--deployment-credential');
     expect(result.stdout).toContain('BYOK OpenCode agent');
+    expect(result.stdout).toContain('requires --model <id>');
   });
 
   it('continues a resumable run through the normal run creation API', async () => {

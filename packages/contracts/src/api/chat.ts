@@ -113,7 +113,7 @@ export interface ChatRequest {
    * adapter. The daemon must not persist this object; it is translated into
    * child env + OPENCODE_CONFIG_CONTENT for the current run only.
    */
-  byokProvider?: ByokChatProviderConfig;
+  byokProvider?: UserByokChatProviderConfig;
   /**
    * Selects the administrator-managed deployment provider for a BYOK OpenCode
    * run. This is deliberately a discriminator only: no credential or endpoint
