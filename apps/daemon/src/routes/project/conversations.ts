@@ -329,14 +329,13 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
       TERMINAL_RUN_STATUSES.has(stored.runStatus) &&
       incomingStatus !== stored.runStatus;
     if (!shrinksEvents && !regressesTerminalStatus) return incoming;
-    // Daemon-written lifecycle timestamps are watermarks: startedAt keeps the
-    // earliest (the daemon's first start), endedAt only advances. A stale
-    // snapshot that carries an older endedAt — or omits one entirely — must
-    // not regress the daemon's value, while a metadata update that genuinely
-    // advances endedAt (e.g. the retry flow) still lands.
-    const incomingStartedAt = typeof incoming.startedAt === 'number' ? incoming.startedAt : null;
+    // Daemon-written lifecycle timestamps. startedAt is the daemon's first
+    // start (COALESCE keeps it), so a stale snapshot must never regress it —
+    // keep the stored value unconditionally. endedAt is a watermark that only
+    // advances: a stale snapshot carrying an older endedAt — or omitting it —
+    // must not regress the daemon's value, while a metadata update that
+    // genuinely advances endedAt (e.g. the retry flow) still lands.
     const incomingEndedAt = typeof incoming.endedAt === 'number' ? incoming.endedAt : null;
-    const storedStartedAt = typeof stored.startedAt === 'number' ? stored.startedAt : null;
     const storedEndedAt = typeof stored.endedAt === 'number' ? stored.endedAt : null;
     return {
       ...incoming,
@@ -346,11 +345,7 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
       content: stored.content ?? '',
       lastRunEventId: stored.lastRunEventId,
       runStatus: stored.runStatus,
-      startedAt:
-        incomingStartedAt !== null &&
-        (storedStartedAt === null || incomingStartedAt <= storedStartedAt)
-          ? incomingStartedAt
-          : stored.startedAt,
+      startedAt: stored.startedAt,
       endedAt:
         incomingEndedAt !== null &&
         (storedEndedAt === null || incomingEndedAt >= storedEndedAt)

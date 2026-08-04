@@ -125,6 +125,9 @@ describe('stale web message snapshot does not wipe daemon-owned run events', () 
       runStatus: 'running',
       events: [],
       lastRunEventId: null,
+      // An explicitly OLDER startedAt: the daemon-written first-start time
+      // must not regress to this earlier value (looper review on #6418).
+      startedAt: (before?.startedAt ?? 0) - 1000,
       feedback: {
         rating: 1,
         createdAt: Date.now(),
