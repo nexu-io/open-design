@@ -313,6 +313,82 @@ describe('stale web message snapshot does not wipe daemon-owned run events', () 
     expect(after?.runStatus).toBe('succeeded');
   });
 
+  it('rejects a message id that belongs to another conversation', async () => {
+    // The route must not read or rewrite a daemon-backed message through a
+    // different conversation's endpoint (looper review on #6418).
+    delete process.env.POSTHOG_KEY;
+    delete process.env.POSTHOG_HOST;
+    delete process.env.LANGFUSE_PUBLIC_KEY;
+    delete process.env.LANGFUSE_SECRET_KEY;
+    delete process.env.LANGFUSE_BASE_URL;
+    delete process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL;
+
+    started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
+    await putConfig(started.url, {
+      agentId: 'claude',
+      telemetry: { metrics: true, content: false, artifactManifest: false },
+      privacyDecisionAt: Date.now(),
+    });
+
+    const { projectId, conversationId } = await createConversation(started.url);
+
+    // A second conversation in the same project.
+    const secondConvResponse = await fetch(
+      `${started.url}/api/projects/${encodeURIComponent(projectId)}/conversations`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ title: 'other conversation' }),
+      },
+    );
+    expect(secondConvResponse.status).toBe(200);
+    const secondConv = (await secondConvResponse.json()) as { conversation: { id: string } };
+
+    // Seed a daemon-backed message in conversation 1.
+    const messageId = `cross_conv_${randomUUID()}`;
+    const seedUrl = `${started.url}/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}`;
+    const seeded = await fetch(seedUrl, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: messageId,
+        role: 'assistant',
+        content: 'original',
+        runId: 'run-cross-conv',
+        runStatus: 'succeeded',
+        events: [{ kind: 'status', label: 'model', detail: 'm' }],
+        startedAt: 1000,
+        endedAt: 2000,
+      }),
+    });
+    expect(seeded.status).toBe(200);
+
+    // PUT the same id through conversation 2's endpoint: must be rejected.
+    const wrongConvUrl = `${started.url}/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(secondConv.conversation.id)}/messages/${encodeURIComponent(messageId)}`;
+    const rejected = await fetch(wrongConvUrl, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: messageId,
+        role: 'assistant',
+        content: 'overwritten',
+        runStatus: 'running',
+        events: [],
+      }),
+    });
+    expect(rejected.status).toBe(404);
+
+    // Conversation 1's message is untouched.
+    const stored = await fetchAssistantMessage(
+      started.url,
+      projectId,
+      conversationId,
+      messageId,
+    );
+    expect(stored?.content).toBe('original');
+    expect(stored?.runStatus).toBe('succeeded');
+  });
+
   it('lets a mock-agent flow persist events/runStatus when the daemon never wrote any', async () => {
     // e2e Playwright suites mock the run SSE end-to-end, so the daemon never
     // persists events for the assistant message — the web client is the only

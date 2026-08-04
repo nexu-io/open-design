@@ -2528,7 +2528,7 @@ export function listMessages(db: SqliteDb, conversationId: string) {
     .map(normalizeMessage);
 }
 
-export function getMessage(db: SqliteDb, id: string) {
+export function getMessage(db: SqliteDb, id: string, conversationId?: string) {
   const row = db
     .prepare(
       `SELECT id, role, content, agent_id AS agentId, agent_name AS agentName,
@@ -2548,9 +2548,9 @@ export function getMessage(db: SqliteDb, id: string) {
               created_at AS createdAt, started_at AS startedAt, ended_at AS endedAt,
               position
          FROM messages
-        WHERE id = ?`,
+        WHERE id = ?${conversationId ? ' AND conversation_id = ?' : ''}`,
     )
-    .get(id) as DbRow | undefined;
+    .get(conversationId ? [id, conversationId] : id) as DbRow | undefined;
   return row ? normalizeMessage(row) : null;
 }
 

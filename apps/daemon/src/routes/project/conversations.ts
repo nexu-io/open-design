@@ -313,10 +313,9 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
   // writer) and lets UI metadata (feedback, comment attachments, telemetry)
   // land on every PUT.
   const mergeMessageWriteForDaemonBacked = (
-    messageId: string,
+    stored: ReturnType<typeof getMessage>,
     incoming: Record<string, unknown>,
   ): Record<string, unknown> => {
-    const stored = getMessage(db, messageId);
     if (!stored || stored.role !== 'assistant' || !stored.runId) return incoming;
     const incomingEvents = Array.isArray(incoming.events) ? incoming.events : [];
     const shrinksEvents =
@@ -330,8 +329,15 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
       TERMINAL_RUN_STATUSES.has(stored.runStatus) &&
       incomingStatus !== stored.runStatus;
     if (!shrinksEvents && !regressesTerminalStatus) return incoming;
-    const hasStartedAt = Object.prototype.hasOwnProperty.call(incoming, 'startedAt');
-    const hasEndedAt = Object.prototype.hasOwnProperty.call(incoming, 'endedAt');
+    // Daemon-written lifecycle timestamps are watermarks: startedAt keeps the
+    // earliest (the daemon's first start), endedAt only advances. A stale
+    // snapshot that carries an older endedAt — or omits one entirely — must
+    // not regress the daemon's value, while a metadata update that genuinely
+    // advances endedAt (e.g. the retry flow) still lands.
+    const incomingStartedAt = typeof incoming.startedAt === 'number' ? incoming.startedAt : null;
+    const incomingEndedAt = typeof incoming.endedAt === 'number' ? incoming.endedAt : null;
+    const storedStartedAt = typeof stored.startedAt === 'number' ? stored.startedAt : null;
+    const storedEndedAt = typeof stored.endedAt === 'number' ? stored.endedAt : null;
     return {
       ...incoming,
       role: stored.role,
@@ -340,13 +346,16 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
       content: stored.content ?? '',
       lastRunEventId: stored.lastRunEventId,
       runStatus: stored.runStatus,
-      // Daemon-written lifecycle timestamps. A stale snapshot that omits them
-      // would otherwise null out started_at / ended_at (endedAt feeds
-      // persisted-run telemetry). But a metadata update that GENUINELY carries
-      // a new timestamp (e.g. the retry flow persisting a fresh endedAt) must
-      // still land — so only preserve when the snapshot omits the field.
-      startedAt: hasStartedAt ? incoming.startedAt : stored.startedAt,
-      endedAt: hasEndedAt ? incoming.endedAt : stored.endedAt,
+      startedAt:
+        incomingStartedAt !== null &&
+        (storedStartedAt === null || incomingStartedAt <= storedStartedAt)
+          ? incomingStartedAt
+          : stored.startedAt,
+      endedAt:
+        incomingEndedAt !== null &&
+        (storedEndedAt === null || incomingEndedAt >= storedEndedAt)
+          ? incomingEndedAt
+          : stored.endedAt,
     };
   };
 
@@ -365,8 +374,15 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
     if (m.id && m.id !== req.params.mid) {
       return res.status(400).json({ error: 'id mismatch' });
     }
+    // Scope the stored lookup to the conversation authorized by the route. If a
+    // message with this id exists in ANOTHER conversation, reject rather than
+    // rewrite the wrong row through this endpoint (looper review on #6418).
+    const existing = getMessage(db, req.params.mid, req.params.cid);
+    if (existing === null && getMessage(db, req.params.mid) !== null) {
+      return res.status(404).json({ error: 'message not found' });
+    }
     const saved = upsertMessage(db, req.params.cid, {
-      ...mergeMessageWriteForDaemonBacked(req.params.mid, m),
+      ...mergeMessageWriteForDaemonBacked(existing, m),
       id: req.params.mid,
     });
     // Bump the parent project's updatedAt so the project list re-orders.
