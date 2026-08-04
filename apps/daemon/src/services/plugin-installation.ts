@@ -1,7 +1,11 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import JSZip from 'jszip';
+import stream from 'node:stream';
+import util from 'node:util';
+import yauzl from 'yauzl';
+
+const pipeline = util.promisify(stream.pipeline);
 
 export interface PluginInstallResult {
   ok: boolean;
@@ -109,22 +113,72 @@ export function safeUploadRelativePath(input: unknown) {
 
 export async function extractPluginZipToFolder(buffer: Buffer, stagedFolder: string, maxBytes: number) {
   if (buffer.length > maxBytes) throw new Error('zip file too large');
-  const zip = await JSZip.loadAsync(buffer);
-  let totalBytes = 0;
-  const entries = Object.values(zip.files);
-  if (entries.length === 0) throw new Error('zip contains no files');
-  for (const entry of entries) {
-    if (entry.dir) continue;
-    const rel = safeUploadRelativePath(entry.name);
-    const unixMode = typeof entry.unixPermissions === 'number' ? entry.unixPermissions : 0;
-    if ((unixMode & 0o170000) === 0o120000) throw new Error(`zip entry is a symbolic link: ${entry.name}`);
-    const content = await entry.async('nodebuffer');
-    totalBytes += content.length;
-    if (totalBytes > maxBytes) throw new Error('zip extracted size exceeds 50 MiB');
-    const dest = path.join(stagedFolder, rel);
-    await fs.promises.mkdir(path.dirname(dest), { recursive: true });
-    await fs.promises.writeFile(dest, content);
-  }
+
+  const zip = await new Promise<yauzl.ZipFile>((resolve, reject) => {
+    yauzl.fromBuffer(buffer, { lazyEntries: true }, (err, zipfile) => {
+      if (err || !zipfile) reject(err ?? new Error('failed to load zip'));
+      else resolve(zipfile);
+    });
+  });
+
+  return new Promise<void>((resolve, reject) => {
+    let totalBytes = 0;
+    let entryCount = 0;
+    
+    zip.on('error', reject);
+    zip.on('end', () => {
+      if (entryCount === 0) reject(new Error('zip contains no files'));
+      else resolve();
+    });
+
+    zip.on('entry', (entry: yauzl.Entry) => {
+      if (entry.fileName.endsWith('/')) {
+        zip.readEntry();
+        return;
+      }
+      entryCount++;
+
+      const unixMode = typeof entry.externalFileAttributes === 'number' ? (entry.externalFileAttributes >>> 16) : 0;
+      if ((unixMode & 0o170000) === 0o120000) {
+        reject(new Error(`zip entry is a symbolic link: ${entry.fileName}`));
+        return;
+      }
+
+      let rel: string;
+      try {
+        rel = safeUploadRelativePath(entry.fileName);
+      } catch (err) {
+        reject(err);
+        return;
+      }
+
+      zip.openReadStream(entry, async (err, readStream) => {
+        if (err || !readStream) {
+          reject(err ?? new Error(`failed to read entry: ${entry.fileName}`));
+          return;
+        }
+
+        const dest = path.join(stagedFolder, rel);
+        try {
+          await fs.promises.mkdir(path.dirname(dest), { recursive: true });
+          
+          readStream.on('data', (chunk: Buffer) => {
+            totalBytes += chunk.length;
+            if (totalBytes > maxBytes) {
+              readStream.destroy(new Error('zip extracted size exceeds 50 MiB'));
+            }
+          });
+
+          await pipeline(readStream, fs.createWriteStream(dest));
+          zip.readEntry();
+        } catch (pipeErr) {
+          reject(pipeErr);
+        }
+      });
+    });
+
+    zip.readEntry();
+  });
 }
 
 export function createPluginInstallationHelpers(deps: PluginInstallationHelpersDeps) {
