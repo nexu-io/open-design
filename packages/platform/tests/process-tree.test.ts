@@ -6,11 +6,14 @@ import { once } from "node:events";
 import { setTimeout as sleep } from "node:timers/promises";
 
 import {
+  captureOwnedProcessIdentity,
   collectOwnedProcessTreePids,
   collectProcessTreePids,
   processCommandExactlyRunsExecutable,
+  readProcessSnapshots,
   spawnWindowsJobProcess,
   terminateOwnedProcessTree,
+  waitForProcessExit,
   type OwnedProcessIdentity,
   type ProcessSnapshot,
   type ProcessSnapshotObservation,
@@ -265,6 +268,59 @@ describe("terminateOwnedProcessTree observation failures", () => {
       child.kill("SIGTERM");
       await once(child, "close");
       await sleep(1_000);
+      await expect(fs.stat(sentinelPath)).rejects.toMatchObject({ code: "ENOENT" });
+    } finally {
+      if (!child.killed) child.kill("SIGKILL");
+      await fs.rm(fixtureDir, { force: true, recursive: true });
+    }
+  });
+
+  it.skipIf(process.platform !== "win32")("terminates and verifies a real Windows job process tree", async () => {
+    const fixtureDir = await fs.mkdtemp(path.join(os.tmpdir(), "open-design-job-verify-"));
+    const sentinelPath = path.join(fixtureDir, "descendant-survived");
+    const descendantProgram = [
+      "const fs = require('node:fs');",
+      "setTimeout(() => fs.writeFileSync(process.argv[1], 'survived'), 1500);",
+      "setInterval(() => {}, 1000);",
+    ].join(" ");
+    const runtimeProgram = [
+      "const { spawn } = require('node:child_process');",
+      "const child = spawn(process.execPath, ['-e', process.argv[2], process.argv[1]], { stdio: 'ignore' });",
+      "child.unref();",
+      "process.stdout.write(`ready:${child.pid}\\n`);",
+      "setInterval(() => {}, 1000);",
+    ].join(" ");
+    const child = spawnWindowsJobProcess({
+      command: process.execPath,
+      args: ["-e", runtimeProgram, sentinelPath, descendantProgram],
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    child.stdout?.on("data", (chunk) => {
+      stdout += String(chunk);
+    });
+    try {
+      await Promise.race([
+        once(child.stdout!, "data"),
+        sleep(5_000).then(() => {
+          throw new Error("Windows job runner did not become ready: " + stdout);
+        }),
+      ]);
+      const snapshots = await readProcessSnapshots();
+      expect(snapshots.ok).toBe(true);
+      const root = captureOwnedProcessIdentity(snapshots.processes, child.pid, { ownership: "windows-job" });
+      expect(root?.createdAt).toEqual(expect.any(Number));
+
+      const result = await terminateOwnedProcessTree(root, { forceWaitMs: 1_000, graceMs: 1_000 });
+
+      expect(result).toMatchObject({
+        attempted: true,
+        childTreeQuiescent: true,
+        identityVerified: true,
+        remainingPids: [],
+      });
+      await expect(waitForProcessExit(child.pid, 5_000)).resolves.toBe(true);
+      await sleep(1_750);
       await expect(fs.stat(sentinelPath)).rejects.toMatchObject({ code: "ENOENT" });
     } finally {
       if (!child.killed) child.kill("SIGKILL");

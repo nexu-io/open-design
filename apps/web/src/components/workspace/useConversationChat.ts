@@ -343,19 +343,16 @@ export function useConversationChat(
 
   const onStop = useCallback(() => {
     const stoppedAt = Date.now();
-    // Abort the cancel signal first so the daemon stops the run (POST cancel),
-    // then drop the browser-side SSE subscription.
+    // Abort only the cancel signal so the daemon stops the run while the
+    // browser-side SSE subscription can still deliver the terminal status.
     cancelRef.current?.abort();
-    cancelRef.current = null;
-    abortRef.current?.abort();
-    abortRef.current = null;
     textBufferRef.current?.flush();
     textBufferRef.current?.cancel();
     textBufferRef.current = null;
-    setStreaming(false);
     setMessages((curr) => {
       const { messages: next, finalized } = finalizeActiveAssistantMessagesOnStop(curr, stoppedAt);
       for (const message of finalized) persist(message);
+      if (finalized.length > 0) setStreaming(false);
       return next;
     });
   }, [persist]);

@@ -122,9 +122,15 @@ type WindowsProcessRecord = {
 
 function parseProcessCreationDate(value: string | null | undefined): number | null {
   if (typeof value !== "string" || !value.trim()) return null;
+  const trimmed = value.trim();
+  const jsonDate = trimmed.match(/^\/Date\((-?\d+)(?:[+-]\d{4})?\)\/$/);
+  if (jsonDate) {
+    const parsed = Number(jsonDate[1]);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
   // Win32_Process.CreationDate is DMTF datetime (`YYYYMMDDHHmmss.ffffff+ZZZ`),
   // which Date.parse intentionally does not understand.
-  const dmtf = value.match(/^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})\.(\d{6})([+-])(\d{3})$/);
+  const dmtf = trimmed.match(/^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})\.(\d{6})([+-])(\d{3})$/);
   if (dmtf) {
     const [, year, month, day, hour, minute, second, microseconds, sign, offset] = dmtf;
     const localUtcMs = Date.UTC(
@@ -134,7 +140,7 @@ function parseProcessCreationDate(value: string | null | undefined): number | nu
     const offsetMs = Number(offset) * 60_000 * (sign === "+" ? 1 : -1);
     return Number.isFinite(localUtcMs) ? localUtcMs - offsetMs : null;
   }
-  const parsed = Date.parse(value);
+  const parsed = Date.parse(trimmed);
   return Number.isFinite(parsed) ? parsed : null;
 }
 
@@ -469,7 +475,7 @@ async function listPosixProcessSnapshots(): Promise<ProcessSnapshot[]> {
 async function listWindowsProcessSnapshots(): Promise<ProcessSnapshot[]> {
   const command = [
     "$ErrorActionPreference = 'Stop'",
-    "Get-CimInstance Win32_Process | Select-Object ProcessId, ParentProcessId, CreationDate, CommandLine | ConvertTo-Json -Compress",
+    "Get-CimInstance Win32_Process | ForEach-Object { $creationDate = $_.CreationDate; [pscustomobject]@{ ProcessId = $_.ProcessId; ParentProcessId = $_.ParentProcessId; CreationDate = if ($creationDate -is [datetime]) { $creationDate.ToUniversalTime().ToString('o') } elseif ($null -ne $creationDate) { [string]$creationDate } else { $null }; CommandLine = $_.CommandLine } } | ConvertTo-Json -Compress",
   ].join("; ");
   const stdout = await new Promise<string>((resolveList, rejectList) => {
     execFile("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", command], { encoding: "utf8", maxBuffer: 8 * 1024 * 1024 }, (error, out) => {

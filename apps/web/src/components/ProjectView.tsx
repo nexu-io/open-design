@@ -6217,10 +6217,9 @@ export function ProjectView({
   );
 
   // Cancel every in-flight run for the current conversation (the user's own
-  // streaming turn plus any reattached runs), mark their assistant messages
-  // canceled, and drop the streaming state. Defined here — ahead of the
-  // queued-send handlers — because "send now" interrupts the active run to
-  // make room for the prioritized send.
+  // streaming turn plus any reattached runs). Keep the daemon event streams
+  // attached so the UI records the authoritative terminal status after
+  // termination verification completes.
   const handleStop = useCallback(() => {
     const stoppedAt = Date.now();
     const programmaticBrandId = isProgrammaticBrandExtractionProject(currentProject.metadata)
@@ -6252,23 +6251,17 @@ export function ProjectView({
     cancelSendTextBuffer(true);
     cancelReattachTextBuffers(true);
     cancelRef.current?.abort();
-    cancelRef.current = null;
     for (const controller of reattachCancelControllersRef.current.values()) {
       controller.abort();
     }
-    reattachCancelControllersRef.current.clear();
-    abortRef.current?.abort();
-    abortRef.current = null;
-    for (const controller of reattachControllersRef.current.values()) {
-      controller.abort();
-    }
-    reattachControllersRef.current.clear();
-    setStreaming(false);
-    streamingConversationIdRef.current = null;
-    setStreamingConversationId(null);
     setMessages((curr) => {
       const { messages: next, finalized } = finalizeActiveAssistantMessagesOnStop(curr, stoppedAt);
       for (const message of finalized) persistMessage(message, { telemetryFinalized: true });
+      if (finalized.length > 0) {
+        setStreaming(false);
+        streamingConversationIdRef.current = null;
+        setStreamingConversationId(null);
+      }
       return next;
     });
   }, [
@@ -9960,7 +9953,7 @@ export function finalizeActiveAssistantMessagesOnStop(
 ): { messages: ChatMessage[]; finalized: ChatMessage[] } {
   const finalized: ChatMessage[] = [];
   const next = messages.map((message) => {
-    if (!isStoppableAssistantMessage(message)) {
+    if (!isStoppableAssistantMessage(message) || message.runId) {
       return message;
     }
     const updated = {
