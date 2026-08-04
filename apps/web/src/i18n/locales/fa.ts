@@ -1527,6 +1527,8 @@ export const fa: Dict = {
   'newproj.createLiveArtifact': 'ایجاد مصنوع زنده',
   'newproj.createFromTemplate': 'ایجاد از قالب',
   'newproj.createDisabledTitle': 'ابتدا یک پروژه را به عنوان قالب ذخیره کنید (منوی اشتراک‌گذاری در داخل هر پروژه).',
+  'newproj.openFolder': 'باز کردن پوشه',
+  'newproj.openingFolder': 'در حال باز کردن…',
   'newproj.importClaudeZip': 'وارد کردن ZIP طراحی Claude',
   'newproj.importClaudeZipTitle': 'وارد کردن یک فایل .zip صادر شده از Claude Design',
   'newproj.importingClaudeZip': 'در حال وارد کردن…',
