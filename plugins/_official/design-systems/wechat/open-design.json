@@ -1,0 +1,113 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-wechat",
+  "title": "WeChat",
+  "title_i18n": {
+    "zh-CN": "微信",
+    "zh-TW": "微信",
+    "ja": "WeChat",
+    "ko": "WeChat",
+    "de": "WeChat",
+    "fr": "WeChat",
+    "ru": "WeChat",
+    "es": "WeChat",
+    "pt-BR": "WeChat",
+    "it": "WeChat",
+    "vi": "WeChat",
+    "pl": "WeChat",
+    "id": "WeChat",
+    "nl": "WeChat",
+    "ar": "WeChat",
+    "tr": "WeChat",
+    "uk": "WeChat",
+    "en": "WeChat"
+  },
+  "version": "0.1.0",
+  "publishedAt": "2026-08-04T09:00:00Z",
+  "description": "Brand language for WeChat Mini Programs and open ecosystem extensions. Simple, clean, trust-green.",
+  "description_i18n": {
+    "zh-CN": "微信小程序与开放生态扩展的品牌视觉语言。简洁干净，信任绿。",
+    "zh-TW": "微信小程式與開放生態擴充的品牌視覺語言。簡潔乾淨，信任綠。",
+    "ja": "WeChatミニプログラムとオープンエコシステム拡張向けのブランド言語。シンプルでクリーン、信頼のグリーン。",
+    "ko": "WeChat 미니프로그램과 오픈 생태계 확장용 브랜드 언어. 단순하고 깔끔하며 신뢰의 그린.",
+    "de": "Markensprache für WeChat-Mini-Programme und Open-Ecosystem-Erweiterungen. Schlicht, klar, Vertrauensgrün.",
+    "fr": "Langage de marque pour les Mini Programs WeChat et les extensions d’écosystème ouvert. Simple, propre, vert de confiance.",
+    "ru": "Брендовый язык для мини-программ WeChat и расширений открытой экосистемы. Простой, чистый, зелёный доверия.",
+    "es": "Lenguaje de marca para Mini Programs de WeChat y extensiones del ecosistema abierto. Simple, limpio, verde de confianza.",
+    "pt-BR": "Linguagem de marca para Mini Programs do WeChat e extensões do ecossistema aberto. Simples, limpa, verde de confiança.",
+    "it": "Linguaggio di brand per Mini Programs WeChat ed estensioni dell’ecosistema aperto. Semplice, pulito, verde di fiducia.",
+    "vi": "Ngôn ngữ thương hiệu cho Mini Program WeChat và phần mở rộng hệ sinh thái mở. Đơn giản, sạch, xanh tin cậy.",
+    "pl": "Język marki dla Mini Programów WeChat i rozszerzeń otwartego ekosystemu. Prosty, czysty, zaufana zieleń.",
+    "id": "Bahasa merek untuk Mini Program WeChat dan ekstensi ekosistem terbuka. Sederhana, bersih, hijau kepercayaan.",
+    "nl": "Merktaal voor WeChat Mini Programs en open-ecosysteemextensies. Eenvoudig, schoon, vertrouwensgroen.",
+    "ar": "لغة علامة تجارية لبرامج WeChat المصغّرة وامتدادات النظام المفتوح. بسيطة ونظيفة وخضراء تبعث على الثقة.",
+    "tr": "WeChat Mini Programları ve açık ekosistem uzantıları için marka dili. Sade, temiz, güven yeşili.",
+    "uk": "Брендова мова для мініпрограм WeChat і розширень відкритої екосистеми. Проста, чиста, зелень довіри.",
+    "en": "Brand language for WeChat Mini Programs and open ecosystem extensions. Simple, clean, trust-green."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "social-messaging"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the WeChat design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the WeChat design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "wechat",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}
