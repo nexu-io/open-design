@@ -21,6 +21,7 @@ import { copyPluginFolderForProjectContext } from './runtimes/plugin-context.js'
 import { readProjectPluginManifest as readProjectPluginManifestWithContract } from './plugins/project-manifest.js';
 import { createProjectEventRegistry } from './runtimes/project-events.js';
 import { createLiveArtifactEventEmitter } from './runtimes/live-artifact-events.js';
+import { sanitizeArtifactSlug as sanitizeSlug } from './artifacts/slug.js';
 import { upsertSkillPluginCandidateAssistantMessage as upsertSkillPluginCandidateAssistantMessageWithContract } from './runtimes/skill-candidate-message.js';
 import { resolveProjectRoot } from './project-root.js';
 import {
@@ -7146,13 +7147,4 @@ export async function startServer({
 
 function randomId() {
   return randomUUID();
-}
-
-function sanitizeSlug(text) {
-  return String(text)
-    .toLowerCase()
-    .replace(/[^\w\s-]/g, '')
-    .replace(/[\s_]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 64);
 }
