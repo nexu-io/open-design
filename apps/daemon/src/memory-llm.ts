@@ -1,4 +1,3 @@
-// @ts-nocheck
 // LLM-driven memory extractor.
 //
 // The heuristic regex pack in `memory.ts` only catches explicit markers
@@ -43,7 +42,12 @@
 // — produces a record in `memory-extractions.ts` so the settings panel
 // can show running / skipped / success / failed states in real time.
 
-import { MEMORY_TYPES } from '@open-design/contracts';
+import {
+  MEMORY_TYPES,
+  type MemoryEntrySummary,
+  type MemoryExtractionProvider,
+  type MemoryType,
+} from '@open-design/contracts';
 import {
   composeMemoryBody,
   listMemoryEntries,
@@ -73,6 +77,93 @@ import {
 } from './agents.js';
 import { agentCliEnvForAgent, readAppConfig } from './app-config.js';
 import { createJsonEventStreamHandler } from './runtimes/json-event-stream.js';
+
+type ProviderDefaults = {
+  model: string;
+  baseUrl: string;
+  apiVersion?: string;
+};
+
+type ResolvedProvider = {
+  kind: MemoryExtractionProvider;
+  apiKey: string;
+  model: string;
+  baseUrl: string;
+  apiVersion: string;
+  credentialSource: string | null;
+  transport?: 'chat-cli';
+  agentId?: string;
+};
+
+type ChatProviderSnapshot = {
+  provider?: string;
+  apiKey?: string | undefined;
+  model?: string | undefined;
+  baseUrl?: string | undefined;
+  apiVersion?: string | undefined;
+};
+
+type MemoryCandidate = {
+  type: MemoryType;
+  name: string;
+  description: string;
+  body: string;
+};
+
+type MemoryInput = {
+  userMessage?: string;
+  assistantMessage?: string | undefined;
+  annotations?: MemoryAnnotation[] | undefined;
+};
+
+type MemoryAnnotation = {
+  comment?: string;
+  label?: string;
+  currentText?: string;
+  selectionKind?: string;
+  intent?: string;
+  markKind?: string;
+};
+
+type MemoryLlmOptions = {
+  dataDir?: string | null;
+  projectRoot?: string | null | undefined;
+  chatAgentId?: string | null;
+  chatModel?: string | null;
+  chatProvider?: ChatProviderSnapshot | null;
+  kind?: string;
+  source?: 'llm' | 'connector' | 'heuristic' | 'manual' | 'brand' | 'annotation';
+  systemPrompt?: string;
+  localCliRunner?: ((input: {
+    agentId: string;
+    model: string;
+    system: string;
+    user: string;
+    projectRoot: string | null;
+    dataDir: string | null;
+  }) => Promise<string> | string) | undefined;
+  candidateFilter?: (candidate: MemoryCandidate) => boolean;
+};
+
+type CollectResult =
+  | { status: 'skipped'; attemptId: null; proposed: []; existingEntries: MemoryEntrySummary[] }
+  | { status: 'failed'; attemptId: string; proposed: []; existingEntries: MemoryEntrySummary[] }
+  | { status: 'ok'; attemptId: string; proposed: MemoryCandidate[]; existingEntries: MemoryEntrySummary[] };
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+type AnthropicResponse = {
+  content?: Array<{ type?: string; text?: string }>;
+};
+type OpenAiResponse = {
+  choices?: Array<{ message?: { content?: string | null } }>;
+};
+type GoogleResponse = {
+  candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+};
+type StreamEvent = { type?: string; message?: string; delta?: string };
 
 const SYSTEM_PROMPT = `You are a memory extractor for a personal AI design assistant.
 
@@ -147,7 +238,7 @@ Type rules:
 // own `https://<resource>.openai.azure.com` host, so the user must
 // supply theirs. We still emit an empty default here so a missing
 // override doesn't crash with `undefined` when accessed.
-const PROVIDER_DEFAULTS = {
+const PROVIDER_DEFAULTS: Record<MemoryExtractionProvider, ProviderDefaults> = {
   anthropic: {
     model: 'claude-haiku-4-5',
     baseUrl: 'https://api.anthropic.com',
@@ -198,7 +289,7 @@ const PROVIDER_DEFAULTS = {
 // chain stays the same as before for anthropic/openai; azure uses the
 // AZURE_OPENAI_API_KEY convention; google uses GOOGLE_API_KEY (matching
 // the gemini SDK's expectation, with GEMINI_API_KEY as a secondary).
-function envKeyFor(provider) {
+function envKeyFor(provider: MemoryExtractionProvider): string {
   if (provider === 'anthropic') return process.env.ANTHROPIC_API_KEY?.trim() || '';
   if (provider === 'openai') return process.env.OPENAI_API_KEY?.trim() || '';
   if (provider === 'azure') {
@@ -244,7 +335,9 @@ function envKeyFor(provider) {
 // user sees while they think they're "using Claude". Anything we don't
 // recognise stays unconstrained (returns null) so the legacy
 // cross-provider fallback can still kick in for setups we don't model.
-function chatProtocolFromAgentId(agentId) {
+function chatProtocolFromAgentId(
+  agentId: unknown,
+): MemoryExtractionProvider | null {
   if (!agentId || typeof agentId !== 'string') return null;
   const id = agentId.trim().toLowerCase();
   if (id === 'claude') return 'anthropic';
@@ -273,7 +366,10 @@ function chatProtocolFromAgentId(agentId) {
   return null;
 }
 
-function canUseLocalCliForMemory(agentId, provider) {
+function canUseLocalCliForMemory(
+  agentId: string,
+  provider: MemoryExtractionProvider,
+): boolean {
   // Keep this allowlist explicit: each entry below has a headless one-shot
   // mode that accepts stdin and a parser we can reduce back to assistant text.
   if (agentId === 'claude' && provider === 'anthropic') return true;
@@ -282,10 +378,15 @@ function canUseLocalCliForMemory(agentId, provider) {
   return false;
 }
 
-function localCliProviderFor(agentId, provider, model) {
+function localCliProviderFor(
+  agentId: string,
+  provider: MemoryExtractionProvider,
+  model: string | null | undefined,
+): ResolvedProvider | null {
   if (!canUseLocalCliForMemory(agentId, provider)) return null;
   return {
     kind: provider,
+    apiKey: '',
     model: (typeof model === 'string' && model.trim()) || 'default',
     baseUrl: 'local-cli',
     apiVersion: '',
@@ -336,7 +437,13 @@ function localCliProviderFor(agentId, provider, model) {
 // through from the web app on a per-call basis (the daemon never
 // persists BYOK creds, so this is the only signal we have for that
 // mode).
-async function pickProvider(projectRoot, dataDir, chatAgentId, chatProvider, chatModel) {
+async function pickProvider(
+  projectRoot: string | null | undefined,
+  dataDir: string | null | undefined,
+  chatAgentId: string | null | undefined,
+  chatProvider: ChatProviderSnapshot | null | undefined,
+  chatModel: string | null | undefined,
+): Promise<ResolvedProvider | null> {
   const chatProtocol = chatProtocolFromAgentId(chatAgentId);
   const normalizedChatAgentId =
     typeof chatAgentId === 'string' ? chatAgentId.trim().toLowerCase() : '';
@@ -348,7 +455,7 @@ async function pickProvider(projectRoot, dataDir, chatAgentId, chatProvider, cha
     } catch (err) {
       console.warn(
         '[memory-llm] failed to read memory config override',
-        err?.message ?? err,
+        errorMessage(err),
       );
     }
   }
@@ -410,6 +517,7 @@ async function pickProvider(projectRoot, dataDir, chatAgentId, chatProvider, cha
         override.provider === 'azure'
           ? (typeof override.apiVersion === 'string' && override.apiVersion.trim())
             || PROVIDER_DEFAULTS.azure.apiVersion
+            || ''
           : '',
       credentialSource,
     };
@@ -442,7 +550,7 @@ async function pickProvider(projectRoot, dataDir, chatAgentId, chatProvider, cha
           (chatProtocol === 'anthropic' && process.env.ANTHROPIC_BASE_URL)
           || (chatProtocol === 'openai' && process.env.OPENAI_BASE_URL)
           || defaults.baseUrl,
-        apiVersion: chatProtocol === 'azure' ? defaults.apiVersion : '',
+        apiVersion: chatProtocol === 'azure' ? defaults.apiVersion ?? '' : '',
         credentialSource: 'env',
       };
     }
@@ -467,10 +575,7 @@ async function pickProvider(projectRoot, dataDir, chatAgentId, chatProvider, cha
           };
         }
       } catch (err) {
-        console.warn(
-          '[memory-llm] media-config lookup failed (chat-constrained)',
-          err?.message ?? err,
-        );
+        console.warn('[memory-llm] media-config lookup failed (chat-constrained)', errorMessage(err));
       }
     }
     // The chat protocol is known but no key for it is available. Bail
@@ -488,35 +593,38 @@ async function pickProvider(projectRoot, dataDir, chatAgentId, chatProvider, cha
   // big chat model (gpt-4o, claude-sonnet-4-5) silently turns into a
   // cheap haiku/mini call. The caller can opt into using the chat
   // model verbatim by setting `chatProvider.model`.
+  const chatProviderKind = chatProvider?.provider;
   if (
     chatProvider
-    && chatProvider.provider
-    && PROVIDER_DEFAULTS[chatProvider.provider]
+    && typeof chatProviderKind === 'string'
+    && Object.prototype.hasOwnProperty.call(PROVIDER_DEFAULTS, chatProviderKind)
   ) {
+    const providerKind = chatProviderKind as MemoryExtractionProvider;
     const apiKey =
       typeof chatProvider.apiKey === 'string' ? chatProvider.apiKey.trim() : '';
     if (apiKey) {
-      const defaults = PROVIDER_DEFAULTS[chatProvider.provider];
+      const defaults = PROVIDER_DEFAULTS[providerKind];
       const baseUrl =
         (typeof chatProvider.baseUrl === 'string' && chatProvider.baseUrl.trim())
         || defaults.baseUrl;
       // Azure with no resource URL is unrecoverable — same guard as
       // the override path above.
-      if (chatProvider.provider !== 'azure' || baseUrl) {
+      if (providerKind !== 'azure' || baseUrl) {
         const explicitModel =
           typeof chatProvider.model === 'string' && chatProvider.model.trim()
             ? chatProvider.model.trim()
             : '';
         return {
-          kind: chatProvider.provider,
+          kind: providerKind,
           apiKey,
           model: envOverrideModel || explicitModel || defaults.model,
           baseUrl,
           apiVersion:
-            chatProvider.provider === 'azure'
+            providerKind === 'azure'
               ? (typeof chatProvider.apiVersion === 'string'
                   && chatProvider.apiVersion.trim())
                 || PROVIDER_DEFAULTS.azure.apiVersion
+                || ''
               : '',
           credentialSource: 'chat-byok',
         };
@@ -531,6 +639,7 @@ async function pickProvider(projectRoot, dataDir, chatAgentId, chatProvider, cha
       model: envOverrideModel || PROVIDER_DEFAULTS.anthropic.model,
       baseUrl:
         process.env.ANTHROPIC_BASE_URL || PROVIDER_DEFAULTS.anthropic.baseUrl,
+      apiVersion: '',
       credentialSource: 'env',
     };
   }
@@ -540,6 +649,7 @@ async function pickProvider(projectRoot, dataDir, chatAgentId, chatProvider, cha
       apiKey: process.env.OPENAI_API_KEY,
       model: envOverrideModel || PROVIDER_DEFAULTS.openai.model,
       baseUrl: process.env.OPENAI_BASE_URL || PROVIDER_DEFAULTS.openai.baseUrl,
+      apiVersion: '',
       credentialSource: 'env',
     };
   }
@@ -560,21 +670,30 @@ async function pickProvider(projectRoot, dataDir, chatAgentId, chatProvider, cha
             envOverrideModel || cred.model || PROVIDER_DEFAULTS.openai.model,
           baseUrl: (cred.baseUrl && String(cred.baseUrl).trim())
             || PROVIDER_DEFAULTS.openai.baseUrl,
+          apiVersion: '',
           credentialSource: 'media-config',
         };
       }
     } catch (err) {
       console.warn(
         '[memory-llm] failed to read media-config for fallback',
-        err?.message ?? err,
+        errorMessage(err),
       );
     }
   }
   return null;
 }
 
-function renderUserPayload({ userMessage, assistantMessage, currentMemory }) {
-  const parts = [];
+function renderUserPayload({
+  userMessage,
+  assistantMessage,
+  currentMemory,
+}: {
+  userMessage: string;
+  assistantMessage?: string | undefined;
+  currentMemory: string;
+}): string {
+  const parts: string[] = [];
   parts.push('## Existing memory');
   parts.push(currentMemory && currentMemory.trim().length > 0
     ? currentMemory
@@ -610,7 +729,7 @@ const FETCH_TIMEOUT_MS = 30_000;
 // works. Anthropic's `/v1/messages` and OpenAI's `/v1/chat/completions`
 // both flow through this; Azure and Gemini build their URLs
 // differently and don't need it.
-function appendVersionedApiPath(baseUrl, suffix) {
+function appendVersionedApiPath(baseUrl: string, suffix: string): string {
   const url = new URL(baseUrl);
   const pathname = url.pathname.replace(/\/+$/, '');
   url.pathname = /\/v\d+(\/|$)/.test(pathname)
@@ -622,7 +741,7 @@ function appendVersionedApiPath(baseUrl, suffix) {
 // Build a standard AbortSignal that fires after FETCH_TIMEOUT_MS so a
 // stalled provider call surfaces as a 'failed' record instead of
 // hanging the attempt indefinitely.
-function withTimeout(ms) {
+function withTimeout(ms: number): AbortSignal {
   if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
     return AbortSignal.timeout(ms);
   }
@@ -642,9 +761,10 @@ function withTimeout(ms) {
 // both: `cause.message` typically already embeds the code (e.g.
 // "read ECONNRESET"), and showing "ECONNRESET · read ECONNRESET"
 // would just double the noise.
-function describeFetchError(err) {
-  const head = err?.message || String(err);
-  const cause = err?.cause;
+function describeFetchError(err: unknown): string {
+  const error = err instanceof Error ? err : new Error(String(err));
+  const head = error.message;
+  const cause = error.cause as { code?: unknown; message?: unknown; errors?: unknown[] } | undefined;
   if (!cause) return head;
   const codeRaw = cause.code ? String(cause.code) : '';
   const msgRaw =
@@ -665,8 +785,11 @@ function describeFetchError(err) {
   // Most of these are six identical DNS errors, so dedupe aggressively.
   if (!detail && Array.isArray(cause.errors)) {
     for (const inner of cause.errors) {
-      const innerCode = inner?.code ? String(inner.code) : '';
-      const innerMsg = inner?.message ? String(inner.message) : '';
+      const innerRecord = inner && typeof inner === 'object'
+        ? inner as { code?: unknown; message?: unknown }
+        : {};
+      const innerCode = innerRecord.code ? String(innerRecord.code) : '';
+      const innerMsg = innerRecord.message ? String(innerRecord.message) : '';
       const candidate = innerCode || innerMsg;
       if (candidate) {
         detail = candidate;
@@ -677,7 +800,11 @@ function describeFetchError(err) {
   return detail ? `${head} (${detail})` : head;
 }
 
-async function callAnthropic(provider, system, user) {
+async function callAnthropic(
+  provider: ResolvedProvider,
+  system: string,
+  user: string,
+): Promise<string> {
   let resp;
   try {
     resp = await fetch(appendVersionedApiPath(provider.baseUrl, '/messages'), {
@@ -701,12 +828,16 @@ async function callAnthropic(provider, system, user) {
   if (!resp.ok) {
     throw new Error(`anthropic ${resp.status}: ${await resp.text().catch(() => '')}`);
   }
-  const json = await resp.json();
+  const json = await resp.json() as AnthropicResponse;
   const block = (json?.content || []).find((b) => b?.type === 'text');
   return block?.text ?? '';
 }
 
-async function callOpenAI(provider, system, user) {
+async function callOpenAI(
+  provider: ResolvedProvider,
+  system: string,
+  user: string,
+): Promise<string> {
   let resp;
   try {
     resp = await fetch(
@@ -739,7 +870,7 @@ async function callOpenAI(provider, system, user) {
   if (!resp.ok) {
     throw new Error(`openai ${resp.status}: ${await resp.text().catch(() => '')}`);
   }
-  const json = await resp.json();
+  const json = await resp.json() as OpenAiResponse;
   return json?.choices?.[0]?.message?.content ?? '';
 }
 
@@ -748,11 +879,15 @@ async function callOpenAI(provider, system, user) {
 // `provider.model` here is the Azure deployment name (the user typed it
 // into the model field — that's what the chat picker calls "Deployment
 // (Model)" too), not the underlying model family.
-async function callAzure(provider, system, user) {
+async function callAzure(
+  provider: ResolvedProvider,
+  system: string,
+  user: string,
+): Promise<string> {
   const base = String(provider.baseUrl || '').replace(/\/+$/, '');
   const deployment = encodeURIComponent(provider.model);
   const apiVersion = encodeURIComponent(
-    provider.apiVersion || PROVIDER_DEFAULTS.azure.apiVersion,
+    provider.apiVersion || PROVIDER_DEFAULTS.azure.apiVersion || '',
   );
   const url = `${base}/openai/deployments/${deployment}/chat/completions?api-version=${apiVersion}`;
   let resp;
@@ -778,7 +913,7 @@ async function callAzure(provider, system, user) {
   if (!resp.ok) {
     throw new Error(`azure ${resp.status}: ${await resp.text().catch(() => '')}`);
   }
-  const json = await resp.json();
+  const json = await resp.json() as OpenAiResponse;
   return json?.choices?.[0]?.message?.content ?? '';
 }
 
@@ -787,7 +922,11 @@ async function callAzure(provider, system, user) {
 // `contents[]` with `role` + `parts`, and the API key is a query
 // parameter rather than a header. `responseMimeType: application/json`
 // gets us the strict JSON output the parser expects.
-async function callGoogle(provider, system, user) {
+async function callGoogle(
+  provider: ResolvedProvider,
+  system: string,
+  user: string,
+): Promise<string> {
   const base = String(provider.baseUrl || '').replace(/\/+$/, '');
   const model = encodeURIComponent(provider.model);
   const url = `${base}/v1beta/models/${model}:generateContent?key=${encodeURIComponent(provider.apiKey)}`;
@@ -809,7 +948,7 @@ async function callGoogle(provider, system, user) {
   if (!resp.ok) {
     throw new Error(`google ${resp.status}: ${await resp.text().catch(() => '')}`);
   }
-  const json = await resp.json();
+  const json = await resp.json() as GoogleResponse;
   const parts = json?.candidates?.[0]?.content?.parts;
   if (Array.isArray(parts)) {
     return parts.map((p) => (p && typeof p.text === 'string' ? p.text : '')).join('');
@@ -819,8 +958,12 @@ async function callGoogle(provider, system, user) {
 
 const LOCAL_CLI_TIMEOUT_MS = 60_000;
 
-function extractJsonEventText(kind, raw, agentName) {
-  const events = [];
+function extractJsonEventText(
+  kind: string,
+  raw: string,
+  agentName: string,
+): string {
+  const events: StreamEvent[] = [];
   const handler = createJsonEventStreamHandler(kind, (event) => events.push(event));
   handler.feed(raw);
   handler.flush();
@@ -841,7 +984,13 @@ function extractJsonEventText(kind, raw, agentName) {
     .trim();
 }
 
-async function callLocalCli(provider, system, user, options) {
+async function callLocalCli(
+  provider: ResolvedProvider,
+  system: string,
+  user: string,
+  options: MemoryLlmOptions,
+): Promise<string> {
+  if (!provider.agentId) throw new Error('Local CLI provider is missing agent id');
   if (typeof options?.localCliRunner === 'function') {
     return options.localCliRunner({
       agentId: provider.agentId,
@@ -890,7 +1039,7 @@ async function callLocalCli(provider, system, user, options) {
 
   let args;
   let stdinText = prompt;
-  let parseStdout = (raw) => raw.trim();
+  let parseStdout = (raw: string): string => raw.trim();
   if (provider.agentId === 'claude') {
     args = ['-p', '--input-format', 'text', '--output-format', 'text'];
     if (provider.model && provider.model !== 'default') {
@@ -940,7 +1089,7 @@ async function callLocalCli(provider, system, user, options) {
     env,
   });
 
-  return await new Promise((resolve, reject) => {
+  return await new Promise<string>((resolve, reject) => {
     let stdout = '';
     let stderr = '';
     let settled = false;
@@ -953,12 +1102,12 @@ async function callLocalCli(provider, system, user, options) {
       windowsVerbatimArguments: invocation.windowsVerbatimArguments,
     });
 
-    const finish = (err, text) => {
+    const finish = (err: Error | null, text?: string): void => {
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
       if (err) reject(err);
-      else resolve(text);
+      else resolve(text ?? '');
     };
 
     const timeout = setTimeout(() => {
@@ -986,7 +1135,7 @@ async function callLocalCli(provider, system, user, options) {
         try {
           text = parseStdout(stdout);
         } catch (err) {
-          finish(err);
+          finish(err instanceof Error ? err : new Error(String(err)));
           return;
         }
         if (text) {
@@ -999,7 +1148,7 @@ async function callLocalCli(provider, system, user, options) {
       finish(new Error(`${def.name} CLI ${status}: ${detail}`));
     });
     child.stdin.on('error', (err) => {
-      if (err.code !== 'EPIPE') finish(err);
+      if ((err as NodeJS.ErrnoException).code !== 'EPIPE') finish(err);
     });
     child.stdin.end(stdinText);
   });
@@ -1007,13 +1156,26 @@ async function callLocalCli(provider, system, user, options) {
 
 // Tolerant JSON parse — the model occasionally wraps output in ```json
 // fences even when told not to. Strip those defensively.
-function parseEntries(rawText) {
-  if (typeof rawText !== 'string') return [];
+function isMemoryCandidate(value: unknown): value is MemoryCandidate {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.type === 'string'
+    && (MEMORY_TYPES as readonly string[]).includes(candidate.type)
+    && typeof candidate.name === 'string'
+    && candidate.name.trim().length > 0
+    && typeof candidate.body === 'string'
+    && candidate.body.trim().length > 0
+    && typeof candidate.description === 'string'
+  );
+}
+
+function parseEntries(rawText: string): MemoryCandidate[] {
   let text = rawText.trim();
   if (text.startsWith('```')) {
     text = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
   }
-  let parsed;
+  let parsed: { entries?: unknown };
   try {
     parsed = JSON.parse(text);
   } catch {
@@ -1030,22 +1192,15 @@ function parseEntries(rawText) {
   // Accept every type the shared contract knows about — including the new
   // `profile` / `rule` buckets — so an LLM that proposes a verified rule or a
   // profile fact isn't silently discarded here.
-  const validTypes = new Set(MEMORY_TYPES);
   return list
-    .filter(
-      (e) =>
-        e &&
-        typeof e === 'object' &&
-        validTypes.has(e.type) &&
-        typeof e.name === 'string' &&
-        e.name.trim().length > 0 &&
-        typeof e.body === 'string' &&
-        e.body.trim().length > 0,
-    )
+    .filter(isMemoryCandidate)
     .slice(0, 6); // hard cap so a confused model can't flood the store
 }
 
-function alreadyKnown(existing, candidate) {
+function alreadyKnown(
+  existing: MemoryEntrySummary[],
+  candidate: MemoryCandidate,
+): boolean {
   const candKey = `${candidate.type}::${candidate.name.toLowerCase().trim()}`;
   for (const e of existing) {
     if (`${e.type}::${e.name.toLowerCase().trim()}` === candKey) return true;
@@ -1053,7 +1208,12 @@ function alreadyKnown(existing, candidate) {
   return false;
 }
 
-function toMemoryDraft(candidate) {
+function toMemoryDraft(candidate: MemoryCandidate): {
+  type: MemoryType;
+  name: string;
+  description: string;
+  body: string;
+} {
   return {
     type: candidate.type,
     name: String(candidate.name).trim().slice(0, 80),
@@ -1062,7 +1222,11 @@ function toMemoryDraft(candidate) {
   };
 }
 
-async function collectProposedEntries(dataDir, input, options) {
+async function collectProposedEntries(
+  dataDir: string,
+  input: MemoryInput,
+  options: MemoryLlmOptions = {},
+): Promise<CollectResult> {
   const projectRoot = options?.projectRoot ?? null;
   const chatAgentId = options?.chatAgentId ?? null;
   const chatModel = options?.chatModel ?? null;
@@ -1111,11 +1275,11 @@ async function collectProposedEntries(dataDir, input, options) {
   markProvider(attemptId, {
     kind: provider.kind,
     model: provider.model,
-    credentialSource: provider.credentialSource,
+    credentialSource: provider.credentialSource ?? 'unknown',
   });
 
   let currentMemory = '';
-  let existingEntries = [];
+  let existingEntries: MemoryEntrySummary[] = [];
   try {
     [currentMemory, existingEntries] = await Promise.all([
       composeMemoryBody(dataDir),
@@ -1155,32 +1319,37 @@ async function collectProposedEntries(dataDir, input, options) {
     // err.message is already pre-formatted by describeFetchError() when
     // the call layer caught a network error. For HTTP-level failures
     // (`anthropic 401: …`) the message is already user-facing too.
-    console.warn(`[memory-llm] ${provider.kind} call failed`, err?.message ?? err);
-    markFailed(attemptId, err);
+    console.warn(`[memory-llm] ${provider.kind} call failed`, errorMessage(err));
+    markFailed(attemptId, err instanceof Error ? err : new Error(String(err)));
     return { status: 'failed', attemptId, proposed: [], existingEntries };
   }
 
-  let proposed;
+  let proposed: MemoryCandidate[];
   try {
     proposed = parseEntries(raw);
     if (typeof options?.candidateFilter === 'function') {
+      const candidateFilter = options.candidateFilter;
       proposed = proposed.filter((candidate) => {
         try {
-          return options.candidateFilter(candidate);
+          return candidateFilter(candidate);
         } catch {
           return false;
         }
       });
     }
   } catch (err) {
-    markFailed(attemptId, err);
+    markFailed(attemptId, err instanceof Error ? err : new Error(String(err)));
     return { status: 'failed', attemptId, proposed: [], existingEntries };
   }
   markProposed(attemptId, proposed.length);
   return { status: 'ok', attemptId, proposed, existingEntries };
 }
 
-export async function suggestWithLLM(dataDir, input, options) {
+export async function suggestWithLLM(
+  dataDir: string,
+  input: MemoryInput,
+  options: MemoryLlmOptions = {},
+): Promise<MemoryCandidate[]> {
   const result = await collectProposedEntries(dataDir, input, options);
   if (result.status !== 'ok') return [];
 
@@ -1201,8 +1370,11 @@ export async function suggestWithLLM(dataDir, input, options) {
 // copy, the mark intent) for the model to judge whether the critique is a
 // one-off or a standing preference. The typed message that rode along with
 // the annotations is appended as extra context.
-function renderAnnotationPayload(annotations, userMessage) {
-  const parts = [
+function renderAnnotationPayload(
+  annotations: MemoryAnnotation[],
+  userMessage?: string,
+): string {
+  const parts: string[] = [
     'The user reviewed a generated design artifact and left these inline annotations:',
   ];
   annotations.forEach((a, index) => {
@@ -1242,8 +1414,14 @@ function renderAnnotationPayload(annotations, userMessage) {
 // `input.annotations` is the turn's comment-attachment list; only annotations
 // carrying a non-empty user comment are mined (a bare highlight with no words
 // has no durable signal to distill). Returns the written entries.
-export async function distillAnnotationsToMemory(dataDir, input, options) {
-  const annotations = Array.isArray(input?.annotations) ? input.annotations : [];
+export async function distillAnnotationsToMemory(
+  dataDir: string,
+  input: MemoryInput,
+  options: MemoryLlmOptions = {},
+): Promise<MemoryEntrySummary[]> {
+  const annotations: MemoryAnnotation[] = Array.isArray(input.annotations)
+    ? input.annotations
+    : [];
   const withComment = annotations.filter(
     (a) => a && typeof a.comment === 'string' && a.comment.trim().length > 0,
   );
@@ -1265,7 +1443,11 @@ export async function distillAnnotationsToMemory(dataDir, input, options) {
   );
 }
 
-export async function extractWithLLM(dataDir, input, options) {
+export async function extractWithLLM(
+  dataDir: string,
+  input: MemoryInput,
+  options: MemoryLlmOptions = {},
+): Promise<MemoryEntrySummary[]> {
   const changeSource = options?.source ?? 'llm';
   const result = await collectProposedEntries(dataDir, input, options);
   if (result.status !== 'ok') return [];
@@ -1276,7 +1458,7 @@ export async function extractWithLLM(dataDir, input, options) {
     return [];
   }
 
-  const written = [];
+  const written: MemoryEntrySummary[] = [];
   for (const cand of proposed) {
     if (alreadyKnown(existingEntries, cand)) continue;
     try {
@@ -1295,7 +1477,7 @@ export async function extractWithLLM(dataDir, input, options) {
         updatedAt: entry.updatedAt,
       });
     } catch (err) {
-      console.warn('[memory-llm] write failed', err?.message ?? err);
+      console.warn('[memory-llm] write failed', errorMessage(err));
     }
   }
 

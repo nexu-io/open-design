@@ -68,7 +68,7 @@ export interface MemoryChangeEvent {
   // pass. Lets the toast say "Memory updated (3 new)" instead of three
   // separate toasts.
   count?: number;
-  source?: 'heuristic' | 'llm' | 'manual' | 'connector' | 'brand';
+  source?: 'heuristic' | 'llm' | 'manual' | 'connector' | 'brand' | 'annotation';
   enabled?: boolean;
   at: number;
 }
