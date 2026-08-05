@@ -943,6 +943,11 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
     // reply shape in sync with the srcDoc bridge in
     // apps/web/src/runtime/srcdoc.ts (od:mark-anchor-targets).
     if (data.type === 'od:mark-anchor-request') {
+      // An enumeration failure must NOT look like a healthy empty document:
+      // the host treats any reply as "bridge answered" and clears its retry
+      // budget, so a masked exception would silently pin marks frame-relative.
+      // Stay silent on failure — the host's timeout classifies it as
+      // unanswered and its cooldown/retry semantics engage.
       var markTargets = [];
       try {
         var found = allTargets();
@@ -953,7 +958,9 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
             position: found[mi].position
           });
         }
-      } catch (_) {}
+      } catch (_) {
+        return;
+      }
       try {
         window.parent.postMessage({ type: 'od:mark-anchor-targets', id: data.id, targets: markTargets }, '*');
       } catch (_) {}

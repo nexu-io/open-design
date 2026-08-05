@@ -2346,6 +2346,11 @@ function meaningfulDomFallbackTarget(el) {
     // fields anchoring uses are sent back, so a large document does not ship a
     // full style snapshot per element across the bridge.
     if (data.type === 'od:mark-anchor-request') {
+      // Enumeration failure stays silent (no reply) so the host's timeout
+      // classifies it as unanswered and keeps its retry budget — a masked
+      // exception would read as a healthy empty document and pin marks
+      // frame-relative. Keep in sync with the URL bridge in
+      // apps/daemon/src/routes/project/index.ts.
       var markTargets = [];
       try {
         var found = allTargets();
@@ -2356,7 +2361,9 @@ function meaningfulDomFallbackTarget(el) {
             position: found[mi].position
           });
         }
-      } catch (_) {}
+      } catch (_) {
+        return;
+      }
       try {
         window.parent.postMessage({ type: 'od:mark-anchor-targets', id: data.id, targets: markTargets }, '*');
       } catch (_) {}

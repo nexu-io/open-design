@@ -492,6 +492,16 @@ export function PreviewDrawOverlay({
     anchorLastProbeAtRef.current = Date.now();
     const response = await requestPreviewAnchorTargets(iframe);
     anchorSilentProbesRef.current = response.answered ? 0 : anchorSilentProbesRef.current + 1;
+    // The await spans up to the bridge timeout, during which the world can
+    // change under us: the active iframe can swap (srcDoc → URL once the
+    // bridge-ready message advertises markAnchors) and the frame can resize.
+    // The reply describes the OLD document/geometry; committing it to the
+    // shared mark refs would move marks to the wrong region right before a
+    // capture. Discard the stale reply — the pass that accompanies the change
+    // (resize observer, bridge-ready re-render, or the pre-capture sync)
+    // re-probes against the current frame.
+    if (anchorHostIframe() !== iframe) return;
+    if (wrap.offsetWidth !== frame.w || wrap.offsetHeight !== frame.h) return;
     const targets = response.targets;
     if (targets.length === 0) return;
 

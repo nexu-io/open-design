@@ -392,6 +392,98 @@ describe('PreviewDrawOverlay content anchoring (issue #6361)', () => {
     }
   });
 
+  it('discards an anchor reply that resolves after the active iframe swapped', async () => {
+    // The probe await spans up to 1.5s. Draw can start on the srcDoc twin and
+    // switch to the URL/powered iframe when bridge-ready advertises
+    // markAnchors; a reply from the OLD frame (whose scroll position and boxes
+    // differ) must not be committed against the shared mark refs.
+    frame.w = 692;
+    frame.h = 666;
+    const restoreRect = installFrameGeometry();
+    const observer = installResizeObserver();
+    const anchors = vi.mocked(requestPreviewAnchorTargets);
+    anchors.mockClear();
+    // The old frame's document scrolled 100px between the two probes, so its
+    // stale reply reports every band 100px higher than the anchor remembers.
+    const SCROLLED = ZOOMED.map((t) => ({
+      ...t,
+      position: { ...t.position, y: t.position.y - 100 },
+    }));
+    let releaseStale: (() => void) | null = null;
+    anchors
+      // commit-time probe: answers fast, anchor acquired against ZOOMED.
+      .mockImplementationOnce(async () => ({ answered: true, targets: ZOOMED }) as never)
+      // next probe hangs until we release it with the stale scrolled boxes.
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            releaseStale = () => resolve({ answered: true, targets: SCROLLED } as never);
+          }) as never,
+      );
+    // Everything after: a live bridge with no targets, so nothing re-corrects
+    // the marks between the stale commit and the send.
+    anchors.mockImplementation(async () => ({ answered: true, targets: [] }) as never);
+
+    const annotation = vi.fn((event: Event) => {
+      const detail = (event as CustomEvent<{ ack?: (r: { ok: boolean }) => void }>).detail;
+      detail.ack?.({ ok: true });
+    });
+    window.addEventListener('opendesign:annotation', annotation);
+
+    try {
+      const { container, getByRole } = render(
+        <PreviewDrawOverlay active>
+          <iframe title="first" data-od-render-mode="srcdoc" data-od-active="true" />
+          <iframe title="second" data-od-render-mode="url-load" data-od-active="false" />
+        </PreviewDrawOverlay>,
+      );
+      const wrap = container.querySelector<HTMLElement>('.preview-draw-overlay')!;
+      const canvas = container.querySelector<HTMLCanvasElement>('canvas')!;
+      Object.defineProperty(wrap, 'offsetWidth', { configurable: true, get: () => frame.w });
+      Object.defineProperty(wrap, 'offsetHeight', { configurable: true, get: () => frame.h });
+      observer.trigger();
+
+      // Mark BAND 05 (342..382); commit-time probe anchors it.
+      fireEvent.pointerDown(canvas, { clientX: 40, clientY: 342, pointerId: 1 });
+      fireEvent.pointerMove(canvas, { clientX: 600, clientY: 382, pointerId: 1 });
+      fireEvent.pointerUp(canvas, { clientX: 600, clientY: 382, pointerId: 1 });
+      await waitFor(() => expect(anchors).toHaveBeenCalledTimes(1));
+      await new Promise((r) => setTimeout(r, 350));
+
+      // A resize kicks off probe #2, which hangs.
+      observer.trigger();
+      await waitFor(() => expect(anchors).toHaveBeenCalledTimes(2));
+
+      // The active iframe swaps while probe #2 is in flight; THEN the stale
+      // reply (old frame's scrolled boxes) lands.
+      const first = container.querySelector<HTMLIFrameElement>('iframe[title="first"]')!;
+      const second = container.querySelector<HTMLIFrameElement>('iframe[title="second"]')!;
+      first.setAttribute('data-od-active', 'false');
+      second.setAttribute('data-od-active', 'true');
+      releaseStale!();
+      await new Promise((r) => setTimeout(r, 50));
+
+      const input = container.querySelector<HTMLInputElement>('.preview-draw-note-input')!;
+      fireEvent.change(input, { target: { value: 'Stale replies must be dropped.' } });
+      fireEvent.click(getByRole('button', { name: 'Send' }));
+
+      await waitFor(() => expect(annotation).toHaveBeenCalledTimes(1));
+      const detail = (annotation.mock.calls[0]?.[0] as CustomEvent<{
+        bounds?: { x: number; y: number; width: number; height: number };
+      }>).detail;
+
+      // The mark must stay where the user drew it (342). Committing the stale
+      // scrolled reply would re-project it 100px up (242) — the old frame's
+      // geometry applied to the new frame's marks.
+      expect(detail.bounds!.y).toBeCloseTo(342, 0);
+      expect(detail.bounds!.height).toBeCloseTo(40, 0);
+    } finally {
+      window.removeEventListener('opendesign:annotation', annotation);
+      observer.restore();
+      restoreRect();
+    }
+  });
+
   it('resets the probe budget when the file changes under the open overlay', async () => {
     frame.w = 692;
     frame.h = 666;
