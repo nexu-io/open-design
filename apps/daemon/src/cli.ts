@@ -51,6 +51,7 @@ import { runVersion as runVersionCommand } from './version/cli.js';
 import { runMcp as runMcpCommand } from './mcp/cli.js';
 import { runExport as runExportCommand } from './export/cli.js';
 import { runMediaWait as runMediaWaitCommand } from './media/wait-cli.js';
+import { runMediaGenerate as runMediaGenerateCommand } from './media/generate-cli.js';
 import { resolveDaemonUrl } from './daemon-url.js';
 import { requestJsonIpc } from '@open-design/sidecar';
 import { SIDECAR_ENV, SIDECAR_MESSAGES } from '@open-design/sidecar-proto';
@@ -75,39 +76,6 @@ const argv = process.argv.slice(2);
 // We dispatch on the first positional argument so flags like --port keep
 // working unchanged. Subcommand routing is keyword-based; flags are
 // parsed inside each handler.
-
-// Flags accepted by `od media generate`. Whitelisted so a hallucinated
-// `--length 5` from the LLM fails fast instead of silently no-op'ing
-// while we route a bogus body to the daemon.
-//
-// Hoisted to the top of the module *before* the subcommand dispatch
-// below: top-level `await SUBCOMMAND_MAP[first](rest)` runs runMedia
-// synchronously during module evaluation, and runMedia references these
-// `const` Sets — leaving them at the bottom of the file would hit the
-// TDZ ("Cannot access 'MEDIA_GENERATE_STRING_FLAGS' before
-// initialization") and crash every `od media …` invocation.
-const MEDIA_GENERATE_STRING_FLAGS = new Set([
-  'project',
-  'surface',
-  'model',
-  'prompt',
-  'output',
-  'aspect',
-  'length',
-  'duration',
-  'prompt-influence',
-  'voice',
-  'audio-kind',
-  'composition-dir',
-  'image',
-  'daemon-url',
-  'language',
-]);
-const MEDIA_GENERATE_BOOLEAN_FLAGS = new Set([
-  'help',
-  'h',
-  'loop',
-]);
 
 // Hoisted next to MCP_*_FLAGS for the same TDZ reason as the MEDIA flags
 // above: `od mcp install <agent>` dispatches through SUBCOMMAND_MAP during
@@ -368,6 +336,19 @@ async function runMediaWaitCommandWithDeps(args: readonly string[]): Promise<voi
   });
 }
 
+async function runMediaGenerateCommandWithDeps(args: readonly string[]): Promise<void> {
+  return runMediaGenerateCommand(args, {
+    resolveDaemonUrl: cliDaemonUrl,
+    env: process.env,
+    fetch,
+    surfaceFetchError,
+    pollUntilDoneOrBudget,
+    writeStderr: (text) => { process.stderr.write(text); },
+    printHelp: printMediaHelp,
+    exit: process.exit,
+  });
+}
+
 type CliSubcommandHandler = (args: readonly string[]) => Promise<void> | void;
 
 const SUBCOMMAND_MAP: Record<string, CliSubcommandHandler> = {
@@ -604,91 +585,7 @@ async function runMedia(args) {
   const idx = args.indexOf(sub);
   const subArgs = [...args.slice(0, idx), ...args.slice(idx + 1)];
   if (sub === 'wait') return runMediaWaitCommandWithDeps(subArgs);
-  return runMediaGenerate(subArgs);
-}
-
-async function runMediaGenerate(rawArgs) {
-  let flags;
-  try {
-    flags = parseFlags(rawArgs, {
-      string: MEDIA_GENERATE_STRING_FLAGS,
-      boolean: MEDIA_GENERATE_BOOLEAN_FLAGS,
-    });
-  } catch (err) {
-    console.error(err.message);
-    printMediaHelp();
-    process.exit(2);
-  }
-
-  const daemonUrl = await cliDaemonUrl(flags);
-  const projectId = flags.project || process.env.OD_PROJECT_ID;
-  const token = process.env.OD_TOOL_TOKEN;
-  if (!projectId && !token) {
-    console.error(
-      'project id required. Pass --project <id> or set OD_PROJECT_ID. The daemon injects this when it spawns the code agent.',
-    );
-    process.exit(2);
-  }
-
-  const surface = flags.surface;
-  if (!surface || !['image', 'video', 'audio'].includes(surface)) {
-    console.error('--surface must be one of: image | video | audio');
-    process.exit(2);
-  }
-  if (!flags.model) {
-    console.error('--model required (see http://<daemon>/api/media/models)');
-    process.exit(2);
-  }
-
-  const body = {
-    surface,
-    model: flags.model,
-    prompt: flags.prompt,
-    output: flags.output,
-    aspect: flags.aspect,
-    voice: flags.voice,
-    audioKind: flags['audio-kind'],
-    compositionDir: flags['composition-dir'],
-    image: flags.image,
-    language: flags.language,
-  };
-  if (flags.length != null) body.length = Number(flags.length);
-  if (flags.duration != null) body.duration = Number(flags.duration);
-  if (flags['prompt-influence'] != null) body.promptInfluence = Number(flags['prompt-influence']);
-  if (flags.loop === true) body.loop = true;
-
-  const url = token
-    ? `${daemonUrl.replace(/\/$/, '')}/api/tools/media/generate`
-    : `${daemonUrl.replace(/\/$/, '')}/api/projects/${encodeURIComponent(projectId)}/media/generate`;
-  let resp;
-  try {
-    resp = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        ...(token ? { authorization: `Bearer ${token}` } : {}),
-      },
-      body: JSON.stringify(body),
-    });
-  } catch (err) {
-    surfaceFetchError(err, daemonUrl);
-    process.exit(3);
-  }
-  if (!resp.ok) {
-    const text = await resp.text();
-    console.error(`daemon ${resp.status}: ${text}`);
-    process.exit(4);
-  }
-  const accepted = await resp.json();
-  const { taskId } = accepted;
-  if (!taskId) {
-    console.error('daemon did not return a taskId');
-    process.exit(4);
-  }
-  console.error(`task ${taskId} queued (${accepted.status || 'queued'})`);
-  await pollUntilDoneOrBudget(daemonUrl, taskId, 0, {
-    stillRunningExitCode: 0,
-  });
+  return runMediaGenerateCommandWithDeps(subArgs);
 }
 
 async function pollUntilDoneOrBudget(daemonUrl, taskId, sinceStart, options = {}) {
