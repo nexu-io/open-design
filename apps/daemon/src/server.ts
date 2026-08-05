@@ -164,6 +164,7 @@ import {
 import { quotePosixShellArg } from './runtimes/shell-command.js';
 import { createShellCommandRunner } from './runtimes/shell-exec.js';
 import { hasGeneratedPluginArtifacts } from './runtimes/plugin-artifacts.js';
+import { isPluginAuthoringRun as isPluginAuthoringRunWithSnapshot } from './runtimes/plugin-authoring.js';
 import { sanitizeArchiveFilename } from './runtimes/archive-filename.js';
 import {
   githubRepoNameFromPluginName,
@@ -1189,18 +1190,6 @@ function reconcileAssistantMessageOnRunEnd(db, runs, run) {
     });
 }
 
-
-function isPluginAuthoringRun(db, run) {
-  if (run?.pluginId === 'od-plugin-authoring') return true;
-  if (
-    typeof run?.appliedPluginSnapshotId === 'string'
-    && run.appliedPluginSnapshotId.length > 0
-  ) {
-    const snapshot = getSnapshot(db, run.appliedPluginSnapshotId);
-    return snapshot?.pluginId === 'od-plugin-authoring';
-  }
-  return false;
-}
 
 // Renderable `<question-form>`/`<ask-question>` detection now lives in
 // `./question-form-detect.ts` so the missing-artifacts guard, awaiting-input
@@ -6539,7 +6528,7 @@ export async function startServer({
       if (
         code === 0 &&
         !run.cancelRequested &&
-        isPluginAuthoringRun(db, run) &&
+        isPluginAuthoringRunWithSnapshot(run, (snapshotId) => getSnapshot(db, snapshotId)) &&
         !(await hasGeneratedPluginArtifacts(cwd)) &&
         !emittedRenderableQuestionForm(clarifyingQuestionText)
       ) {
