@@ -224,8 +224,9 @@ describe('countArtifactFileOps', () => {
       ok('t3'),
       use('Read', { file_path: '/a.ts' }, 't4'),
       ok('t4'),
-      // b.ts read then edited → one edit (edit beats write).
-      use('Read', { file_path: '/b.ts' }, 't5'),
+      // b.ts written THEN edited (the #5909 repro path: create + edit the same
+      // file) → one edit (edit beats write).
+      use('Write', { file_path: '/b.ts' }, 't5'),
       ok('t5'),
       use('Edit', { file_path: '/b.ts' }, 't6'),
       ok('t6'),
@@ -242,8 +243,8 @@ describe('countArtifactFileOps', () => {
     ];
     const rows = deriveFileOps(events);
     expect(countArtifactFileOps(rows)).toEqual({ write: 1, edit: 2 });
-    // The op-level counter is unchanged: it still sees all three writes.
-    expect(countFileOps(rows).write).toBe(3);
+    // The op-level counter is unchanged: a.ts (3) + b.ts (1) writes.
+    expect(countFileOps(rows).write).toBe(4);
     expect(countFileOps(rows).edit).toBe(4);
   });
 });
