@@ -38,6 +38,10 @@ import {
   describeAutomationScheduleForCli,
   parseAutomationScheduleFlag,
 } from './runtimes/automation-schedule.js';
+import {
+  requestDaemonShutdown,
+  requestDaemonStatus,
+} from './runtimes/daemon-control.js';
 import { splitResearchSubcommand } from './research/cli-args.js';
 import { resolveDaemonUrl } from './daemon-url.js';
 import { requestJsonIpc } from '@open-design/sidecar';
@@ -6674,7 +6678,7 @@ async function runDaemonStatus(flags) {
   const base = await cliDaemonBaseUrl(flags);
   let resp;
   try {
-    resp = await fetch(`${base}/api/daemon/status`);
+    resp = await requestDaemonStatus(base);
   } catch (err) {
     return exitWithStructuredError({
       code:    'daemon-not-running',
@@ -6691,7 +6695,7 @@ async function runDaemonStop(flags) {
   const base = await cliDaemonBaseUrl(flags);
   let resp;
   try {
-    resp = await fetch(`${base}/api/daemon/shutdown`, { method: 'POST' });
+    resp = await requestDaemonShutdown(base);
   } catch (err) {
     return exitWithStructuredError({
       code:    'daemon-not-running',
