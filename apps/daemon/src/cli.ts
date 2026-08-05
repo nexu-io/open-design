@@ -304,7 +304,9 @@ const PLUGIN_LIST_BOOLEAN_FLAGS = new Set([
   'bundled', 'no-bundled',
 ]);
 
-const SUBCOMMAND_MAP = {
+type CliSubcommandHandler = (args: readonly string[]) => Promise<void> | void;
+
+const SUBCOMMAND_MAP: Record<string, CliSubcommandHandler> = {
   artifacts: runArtifacts,
   media: runMedia,
   mcp: runMcp,
