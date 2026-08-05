@@ -166,6 +166,10 @@ import { createShellCommandRunner } from './runtimes/shell-exec.js';
 import { hasGeneratedPluginArtifacts } from './runtimes/plugin-artifacts.js';
 import { isPluginAuthoringRun as isPluginAuthoringRunWithSnapshot } from './runtimes/plugin-authoring.js';
 import { assistantMessageEmittedQuestionForm as assistantMessageEmittedQuestionFormWithReader } from './runtimes/question-message.js';
+import {
+  TERMINAL_RUN_STATUSES,
+  shouldReportRunCompletedFromMessage as shouldReportRunCompletedFromMessageWithContract,
+} from './runtimes/telemetry-message.js';
 import { sanitizeArchiveFilename } from './runtimes/archive-filename.js';
 import {
   githubRepoNameFromPluginName,
@@ -1172,7 +1176,6 @@ function shouldSkipPluginContextEntry(name) {
 }
 
 
-const TERMINAL_RUN_STATUSES = new Set(['succeeded', 'failed', 'canceled']);
 const LANGFUSE_TERMINAL_FALLBACK_DELAY_MS = 15_000;
 
 function reconcileAssistantMessageOnRunEnd(db, runs, run) {
@@ -1339,15 +1342,7 @@ function pinAssistantMessageOnRunCreate(db, run) {
   });
 }
 
-export function shouldReportRunCompletedFromMessage(saved, body = {}) {
-  return Boolean(
-    saved &&
-      saved.runId &&
-      typeof saved.runStatus === 'string' &&
-      TERMINAL_RUN_STATUSES.has(saved.runStatus) &&
-      body?.telemetryFinalized === true,
-  );
-}
+export const shouldReportRunCompletedFromMessage = shouldReportRunCompletedFromMessageWithContract;
 
 // Aggressive OVERRIDE for weak / medium-strength plain agents (e.g.
 // GPT-OSS-120B Medium, Gemini 3.5 Flash) that otherwise echo RULE 1's
