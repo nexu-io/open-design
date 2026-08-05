@@ -467,19 +467,29 @@ export function PreviewDrawOverlay({
     ) {
       return;
     }
-    // A frame that never answers should not make every send wait out the
-    // bridge timeout — but "answered with zero targets" is a live bridge (a
-    // dynamic app may annotate elements later, a fresh file may still be
-    // loading), and one early empty reply must not disable anchoring for the
-    // session. Give up only after consecutive unanswered probes, and forget
-    // the verdict whenever the probe targets a different iframe element.
-    const iframe = snapshotHostIframe();
+    // Anchors must come from the frame the user draws on and the compositor
+    // captures — the ACTIVE iframe. The hidden srcDoc twin can diverge from an
+    // active URL/powered frame (independent scroll, or a powered artifact that
+    // does not execute in the opaque sandbox at all), so resolving anchors
+    // there re-introduces the drift this feature exists to fix. Snapshot
+    // capture keeps its own srcDoc-preferring fallback (snapshotHostIframe).
+    const iframe = anchorHostIframe();
     if (!iframe) return;
     if (anchorProbeFrameRef.current !== iframe) {
       anchorProbeFrameRef.current = iframe;
       anchorSilentProbesRef.current = 0;
     }
-    if (anchorSilentProbesRef.current >= ANCHOR_PROBE_GIVE_UP) return;
+    // A frame that never answers should not make every send wait out the
+    // bridge timeout — but "answered with zero targets" is a live bridge (a
+    // dynamic app may annotate elements later), and a bridge can also become
+    // ready AFTER two early probes time out (slow-loading document). So the
+    // give-up is a cooldown, not a verdict: after the threshold, probing
+    // pauses, then a single retry is allowed each cooldown window.
+    if (anchorSilentProbesRef.current >= ANCHOR_PROBE_GIVE_UP) {
+      const now = Date.now();
+      if (now - anchorLastProbeAtRef.current < ANCHOR_PROBE_COOLDOWN_MS) return;
+    }
+    anchorLastProbeAtRef.current = Date.now();
     const response = await requestPreviewAnchorTargets(iframe);
     anchorSilentProbesRef.current = response.answered ? 0 : anchorSilentProbesRef.current + 1;
     const targets = response.targets;
@@ -541,11 +551,25 @@ export function PreviewDrawOverlay({
   /**
    * Anchor-probe backoff state. A frame with no anchor bridge never answers,
    * and each unanswered probe costs the full bridge timeout — but the verdict
-   * must stay per-frame and reversible (see syncContentAnchors).
+   * must stay per-frame, reversible, and time-bounded (see syncContentAnchors):
+   * after ANCHOR_PROBE_GIVE_UP consecutive silent probes, probing cools down
+   * rather than stopping, so a bridge that becomes ready late (slow document
+   * load) is still discovered. Activation resets everything so a re-opened
+   * overlay or a new file starts with a fresh probe budget.
    */
   const ANCHOR_PROBE_GIVE_UP = 2;
+  const ANCHOR_PROBE_COOLDOWN_MS = 5000;
   const anchorSilentProbesRef = useRef(0);
+  const anchorLastProbeAtRef = useRef(0);
   const anchorProbeFrameRef = useRef<HTMLIFrameElement | null>(null);
+  // The overlay can stay mounted (and even active) across a file switch; the
+  // iframe element is often reused, so the per-frame reset above won't fire.
+  // A new document is a new bridge — start its probe budget from zero.
+  useEffect(() => {
+    anchorSilentProbesRef.current = 0;
+    anchorLastProbeAtRef.current = 0;
+    anchorProbeFrameRef.current = null;
+  }, [filePath]);
   const contentAnchorTimerRef = useRef<number | null>(null);
   const contentAnchorRanAtRef = useRef(0);
 
@@ -612,6 +636,17 @@ export function PreviewDrawOverlay({
       wrapRef.current?.querySelector<HTMLIFrameElement>('iframe[data-od-render-mode="srcdoc"]') ??
       activePreviewIframe()
     );
+  }
+
+  // Anchors are different: they must describe the document the user is looking
+  // at and drawing over. When the URL/powered iframe is active, its hidden
+  // srcDoc twin can scroll independently (URL scroll restoration targets the
+  // active frame only) or not execute at all (powered artifacts need the
+  // isolated real origin), so element boxes read from the twin are wrong.
+  // Always ask the ACTIVE frame; render-mode gating (urlAnchorBridge) already
+  // guarantees it can answer whenever draw mode kept URL-load.
+  function anchorHostIframe(): HTMLIFrameElement | null {
+    return activePreviewIframe();
   }
 
   function canTryDirectFrameScroll(iframe: HTMLIFrameElement): boolean {
@@ -965,6 +1000,12 @@ export function PreviewDrawOverlay({
     drawingRef.current = null;
     selectionBoxesRef.current = [];
     boxDraftRef.current = null;
+    // Fresh probe budget for the next activation: the file, transport, or
+    // bridge readiness may all have changed while the overlay was closed, and
+    // a stale silent-probe counter would leave the next session frame-relative.
+    anchorSilentProbesRef.current = 0;
+    anchorLastProbeAtRef.current = 0;
+    anchorProbeFrameRef.current = null;
     resetTextEditingState();
     commitTextMarks([]);
     setExtraFiles([]);

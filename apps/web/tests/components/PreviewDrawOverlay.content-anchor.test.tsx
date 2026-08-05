@@ -291,4 +291,153 @@ describe('PreviewDrawOverlay content anchoring (issue #6361)', () => {
       restoreRect();
     }
   });
+
+  it('probes the ACTIVE iframe, not the hidden srcDoc twin', async () => {
+    // With urlAnchorBridge the URL/powered iframe stays active in draw mode.
+    // The hidden srcDoc twin can diverge (independent scroll, or a powered
+    // artifact that does not execute in the opaque sandbox), so anchor
+    // requests against it produce wrong boxes. The probe must go to the frame
+    // marked data-od-active="true".
+    frame.w = 692;
+    frame.h = 666;
+    const restoreRect = installFrameGeometry();
+    const observer = installResizeObserver();
+    const anchors = vi.mocked(requestPreviewAnchorTargets);
+    anchors.mockClear();
+    const probed: Array<string | null> = [];
+    anchors.mockImplementation(async (iframe: HTMLIFrameElement) => {
+      probed.push(iframe.getAttribute('title'));
+      return { answered: true, targets: ZOOMED } as never;
+    });
+
+    try {
+      const { container } = render(
+        <PreviewDrawOverlay active>
+          <iframe title="url-active" data-od-render-mode="url-load" data-od-active="true" />
+          <iframe title="srcdoc-twin" data-od-render-mode="srcdoc" data-od-active="false" />
+        </PreviewDrawOverlay>,
+      );
+      const wrap = container.querySelector<HTMLElement>('.preview-draw-overlay')!;
+      const canvas = container.querySelector<HTMLCanvasElement>('canvas')!;
+      Object.defineProperty(wrap, 'offsetWidth', { configurable: true, get: () => frame.w });
+      Object.defineProperty(wrap, 'offsetHeight', { configurable: true, get: () => frame.h });
+      observer.trigger();
+
+      fireEvent.pointerDown(canvas, { clientX: 40, clientY: 342, pointerId: 1 });
+      fireEvent.pointerMove(canvas, { clientX: 600, clientY: 382, pointerId: 1 });
+      fireEvent.pointerUp(canvas, { clientX: 600, clientY: 382, pointerId: 1 });
+      await waitFor(() => expect(anchors).toHaveBeenCalled());
+
+      expect(probed.length).toBeGreaterThan(0);
+      expect([...new Set(probed)]).toEqual(['url-active']);
+    } finally {
+      observer.restore();
+      restoreRect();
+    }
+  });
+
+  it('recovers a bridge that becomes ready after the silent-probe budget is spent', async () => {
+    // Two early probes can time out while a slow document is still loading.
+    // That must be a cooldown, not a permanent verdict: once the bridge is
+    // ready, a later probe (after the cooldown window) re-engages anchoring.
+    vi.useFakeTimers();
+    frame.w = 692;
+    frame.h = 666;
+    const restoreRect = installFrameGeometry();
+    const observer = installResizeObserver();
+    const anchors = vi.mocked(requestPreviewAnchorTargets);
+    anchors.mockClear();
+    // Bridge not loaded yet: unanswered.
+    anchors.mockImplementation(async () => ({ answered: false, targets: [] }) as never);
+
+    try {
+      const { container } = render(
+        <PreviewDrawOverlay active>
+          <iframe title="srcdoc" data-od-render-mode="srcdoc" data-od-active="true" />
+        </PreviewDrawOverlay>,
+      );
+      const wrap = container.querySelector<HTMLElement>('.preview-draw-overlay')!;
+      const canvas = container.querySelector<HTMLCanvasElement>('canvas')!;
+      Object.defineProperty(wrap, 'offsetWidth', { configurable: true, get: () => frame.w });
+      Object.defineProperty(wrap, 'offsetHeight', { configurable: true, get: () => frame.h });
+      observer.trigger();
+
+      async function drawAndSettle(y1: number, y2: number) {
+        fireEvent.pointerDown(canvas, { clientX: 40, clientY: y1, pointerId: 1 });
+        fireEvent.pointerMove(canvas, { clientX: 600, clientY: y2, pointerId: 1 });
+        fireEvent.pointerUp(canvas, { clientX: 600, clientY: y2, pointerId: 1 });
+        // run the settle-paced content re-anchor + async probe
+        await vi.advanceTimersByTimeAsync(500);
+      }
+
+      // Spend the silent-probe budget (2 unanswered probes).
+      await drawAndSettle(342, 382);
+      await drawAndSettle(292, 332);
+      const spent = anchors.mock.calls.length;
+      expect(spent).toBeGreaterThanOrEqual(2);
+
+      // Within the cooldown: no new probe fires.
+      await drawAndSettle(242, 282);
+      expect(anchors.mock.calls.length).toBe(spent);
+
+      // Bridge finishes loading; after the cooldown a retry probes again.
+      anchors.mockImplementation(async () => ({ answered: true, targets: ZOOMED }) as never);
+      await vi.advanceTimersByTimeAsync(5200);
+      await drawAndSettle(342, 382);
+      expect(anchors.mock.calls.length).toBeGreaterThan(spent);
+    } finally {
+      vi.useRealTimers();
+      observer.restore();
+      restoreRect();
+    }
+  });
+
+  it('resets the probe budget when the file changes under the open overlay', async () => {
+    frame.w = 692;
+    frame.h = 666;
+    const restoreRect = installFrameGeometry();
+    const observer = installResizeObserver();
+    const anchors = vi.mocked(requestPreviewAnchorTargets);
+    anchors.mockClear();
+    anchors.mockImplementation(async () => ({ answered: false, targets: [] }) as never);
+
+    try {
+      const view = render(
+        <PreviewDrawOverlay active filePath="a.html">
+          <iframe title="srcdoc" data-od-render-mode="srcdoc" data-od-active="true" />
+        </PreviewDrawOverlay>,
+      );
+      const wrap = view.container.querySelector<HTMLElement>('.preview-draw-overlay')!;
+      const canvas = view.container.querySelector<HTMLCanvasElement>('canvas')!;
+      Object.defineProperty(wrap, 'offsetWidth', { configurable: true, get: () => frame.w });
+      Object.defineProperty(wrap, 'offsetHeight', { configurable: true, get: () => frame.h });
+      observer.trigger();
+
+      // Exhaust the budget on file A (same reused iframe element).
+      for (const y of [342, 292]) {
+        fireEvent.pointerDown(canvas, { clientX: 40, clientY: y, pointerId: 1 });
+        fireEvent.pointerMove(canvas, { clientX: 600, clientY: y + 40, pointerId: 1 });
+        fireEvent.pointerUp(canvas, { clientX: 600, clientY: y + 40, pointerId: 1 });
+        await waitFor(() => expect(anchors.mock.calls.length).toBeGreaterThan(0));
+        await new Promise((r) => setTimeout(r, 350));
+      }
+      const spent = anchors.mock.calls.length;
+
+      // Switch files without unmounting; file B's bridge answers.
+      anchors.mockImplementation(async () => ({ answered: true, targets: ZOOMED }) as never);
+      view.rerender(
+        <PreviewDrawOverlay active filePath="b.html">
+          <iframe title="srcdoc" data-od-render-mode="srcdoc" data-od-active="true" />
+        </PreviewDrawOverlay>,
+      );
+
+      fireEvent.pointerDown(canvas, { clientX: 40, clientY: 342, pointerId: 1 });
+      fireEvent.pointerMove(canvas, { clientX: 600, clientY: 382, pointerId: 1 });
+      fireEvent.pointerUp(canvas, { clientX: 600, clientY: 382, pointerId: 1 });
+      await waitFor(() => expect(anchors.mock.calls.length).toBeGreaterThan(spent));
+    } finally {
+      observer.restore();
+      restoreRect();
+    }
+  });
 });
