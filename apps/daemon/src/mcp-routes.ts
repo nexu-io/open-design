@@ -7,6 +7,7 @@ import { MCP_TEMPLATES, buildAcpMcpServers, buildClaudeMcpJson, isManagedProject
 import { beginAuth, exchangeCodeForToken, refreshAccessToken } from './mcp-oauth.js';
 import { clearToken, getToken, isTokenExpired, readAllTokens, setToken } from './mcp-tokens.js';
 import { escapeHtml } from './runtimes/html-escaping.js';
+import { resolvePublicBaseUrl } from './runtimes/public-base-url.js';
 import type { RouteDeps } from './server-context.js';
 
 export interface RegisterMcpRoutesDeps extends RouteDeps<'http' | 'paths' | 'mcp'> {}
@@ -358,14 +359,10 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
 }
 
 function getPublicBaseUrl(req: any) {
-  const env = process.env.OD_PUBLIC_BASE_URL;
-  if (env && /^https?:\/\//i.test(env)) {
-    return env.replace(/\/+$/u, '');
-  }
-  const proto = req.protocol || 'http';
-  const host = req.get('host');
-  if (!host) return `http://localhost:${process.env.OD_PORT ?? '7456'}`;
-  return `${proto}://${host}`;
+  return resolvePublicBaseUrl(req, {
+    configuredBaseUrl: process.env.OD_PUBLIC_BASE_URL,
+    fallbackPort: process.env.OD_PORT,
+  });
 }
 
 function mcpOAuthCallbackUrl(req: any) {

@@ -382,6 +382,7 @@ export {
   telemetryPromptFromRunRequest,
 } from './runtimes/chat-user-request.js';
 import { readAnalyticsContext } from './analytics.js';
+import { resolvePublicBaseUrl } from './runtimes/public-base-url.js';
 import {
   agentIdToTracking,
   modelIdForTracking,
@@ -910,14 +911,10 @@ const mcpPendingAuth = new PendingAuthCache();
  * will reject `redirect_uri` mismatches.
  */
 function getPublicBaseUrl(req) {
-  const env = process.env.OD_PUBLIC_BASE_URL;
-  if (env && /^https?:\/\//i.test(env)) {
-    return env.replace(/\/+$/u, '');
-  }
-  const proto = req.protocol || 'http';
-  const host = req.get('host');
-  if (!host) return `http://localhost:${process.env.OD_PORT ?? '7456'}`;
-  return `${proto}://${host}`;
+  return resolvePublicBaseUrl(req, {
+    configuredBaseUrl: process.env.OD_PUBLIC_BASE_URL,
+    fallbackPort: process.env.OD_PORT,
+  });
 }
 
 function mcpOAuthCallbackUrl(req) {
