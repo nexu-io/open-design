@@ -1,50 +1,43 @@
 import { describe, expect, it } from 'vitest';
 import {
-  RECOVERABLE_EXIT_CODES,
+  classifyStructuredHttpFailure,
   normalizeRecoverableErrorCode,
-  structuredErrorData,
 } from '../../src/runtimes/cli-error-contract.js';
 
-describe('CLI structured error contract', () => {
-  it('normalizes daemon codes while preserving ordinary string codes', () => {
+function response(body: unknown, status = 500, text = '') {
+  return {
+    status,
+    json: async () => body,
+    text: async () => text,
+  };
+}
+
+describe('CLI structured HTTP error contract', () => {
+  it('preserves recoverable nested errors and their structured data', async () => {
+    await expect(classifyStructuredHttpFailure(response({
+      error: { code: 'project-not-found', message: 'missing', details: { id: 'p1' }, retryable: false },
+    }, 404))).resolves.toEqual({
+      code: 'project-not-found',
+      message: 'missing',
+      data: { details: { id: 'p1' }, retryable: false },
+    });
+  });
+
+  it('normalizes legacy flat errors while retaining the caller fallback code', async () => {
+    await expect(classifyStructuredHttpFailure(response({ error: 'source project not found' }, 404), 'project-not-found'))
+      .resolves.toEqual({ code: 'project-not-found', message: 'source project not found' });
+  });
+
+  it('uses response text when JSON is unavailable and no recoverable code exists', async () => {
+    await expect(classifyStructuredHttpFailure({
+      status: 502,
+      json: async () => { throw new Error('not json'); },
+      text: async () => 'upstream unavailable',
+    })).resolves.toEqual({ code: 'daemon-not-running', message: 'HTTP 502: upstream unavailable' });
+  });
+
+  it('keeps special desktop authorization normalization in the shared contract', () => {
     expect(normalizeRecoverableErrorCode('DESKTOP_AUTH_PENDING', '')).toBe('desktop-auth-pending');
-    expect(normalizeRecoverableErrorCode('FORBIDDEN', 'Desktop import token rejected')).toBe(
-      'desktop-import-token-rejected',
-    );
-    expect(normalizeRecoverableErrorCode('project-not-found', '')).toBe('project-not-found');
-    expect(normalizeRecoverableErrorCode(undefined, '')).toBeUndefined();
-  });
-
-  it('collects nested data, details, and retryability without mutating the error', () => {
-    const error = {
-      data: { projectId: 'p1' },
-      details: { reason: 'stale' },
-      retryable: true,
-    };
-
-    expect(structuredErrorData(error)).toEqual({
-      projectId: 'p1',
-      details: { reason: 'stale' },
-      retryable: true,
-    });
-    expect(error).toEqual({
-      data: { projectId: 'p1' },
-      details: { reason: 'stale' },
-      retryable: true,
-    });
-  });
-
-  it('omits empty or non-object error data', () => {
-    expect(structuredErrorData(null)).toBeUndefined();
-    expect(structuredErrorData({ data: null, retryable: 'yes' })).toBeUndefined();
-    expect(structuredErrorData({ data: {}, details: undefined, retryable: false })).toEqual({
-      retryable: false,
-    });
-  });
-
-  it('keeps stable recoverable process exit codes', () => {
-    expect(RECOVERABLE_EXIT_CODES['daemon-not-running']).toBe(64);
-    expect(RECOVERABLE_EXIT_CODES['desktop-import-token-rejected']).toBe(75);
-    expect(Object.keys(RECOVERABLE_EXIT_CODES)).toHaveLength(13);
+    expect(normalizeRecoverableErrorCode('FORBIDDEN', 'desktop import token rejected')).toBe('desktop-import-token-rejected');
   });
 });

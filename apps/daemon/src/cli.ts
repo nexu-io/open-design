@@ -28,8 +28,7 @@ import {
 } from './runtimes/github-repository.js';
 import {
   RECOVERABLE_EXIT_CODES,
-  normalizeRecoverableErrorCode,
-  structuredErrorData,
+  classifyStructuredHttpFailure,
 } from './runtimes/cli-error-contract.js';
 import {
   execFileBuffered as runBufferedCommand,
@@ -1317,25 +1316,8 @@ function exitWithStructuredError({ code, message, data }) {
 // would drop the only diagnostic the daemon actually returned to a
 // headless caller.
 async function structuredHttpFailure(resp, fallbackCode = 'daemon-not-running') {
-  let parsed;
-  try { parsed = await resp.json(); } catch { parsed = {}; }
-  const errorObj =
-    typeof parsed?.error === 'string'
-      ? { message: parsed.error }
-      : parsed?.error;
-  const errCode = normalizeRecoverableErrorCode(errorObj?.code, errorObj?.message);
-  if (errCode && errCode in RECOVERABLE_EXIT_CODES) {
-    exitWithStructuredError({
-      code:    errCode,
-      message: errorObj?.message ?? `HTTP ${resp.status}`,
-      data:    structuredErrorData(errorObj),
-    });
-  }
-  exitWithStructuredError({
-    code:    fallbackCode,
-    message: errorObj?.message ?? `HTTP ${resp.status}: ${await resp.text().catch(() => '')}`,
-    data:    structuredErrorData(errorObj),
-  });
+  const failure = await classifyStructuredHttpFailure(resp, fallbackCode);
+  exitWithStructuredError(failure);
 }
 
 async function runPlugin(args) {

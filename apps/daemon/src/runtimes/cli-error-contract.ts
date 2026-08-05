@@ -16,6 +16,18 @@ export const RECOVERABLE_EXIT_CODES = {
 
 export type RecoverableErrorCode = keyof typeof RECOVERABLE_EXIT_CODES;
 
+export interface StructuredHttpFailureResponse {
+  status: number;
+  json(): Promise<unknown>;
+  text(): Promise<string>;
+}
+
+export interface StructuredCliError {
+  code: string;
+  message: string;
+  data?: Record<string, unknown>;
+}
+
 export function normalizeRecoverableErrorCode(
   code: unknown,
   message: unknown,
@@ -41,4 +53,44 @@ export function structuredErrorData(
   if (errorRecord.details !== undefined) data.details = errorRecord.details;
   if (typeof errorRecord.retryable === 'boolean') data.retryable = errorRecord.retryable;
   return Object.keys(data).length > 0 ? data : undefined;
+}
+
+/**
+ * Normalize the daemon's nested and legacy flat HTTP error envelopes into the
+ * stable CLI error shape. Process exit and stderr writing stay at the CLI
+ * boundary; this function owns only response interpretation.
+ */
+export async function classifyStructuredHttpFailure(
+  resp: StructuredHttpFailureResponse,
+  fallbackCode: string = 'daemon-not-running',
+): Promise<StructuredCliError> {
+  let parsed: unknown;
+  try {
+    parsed = await resp.json();
+  } catch {
+    parsed = {};
+  }
+
+  const parsedRecord = parsed && typeof parsed === 'object'
+    ? parsed as Record<string, unknown>
+    : {};
+  const rawError = parsedRecord.error;
+  const errorObj: Record<string, unknown> = typeof rawError === 'string'
+    ? { message: rawError }
+    : rawError && typeof rawError === 'object'
+      ? rawError as Record<string, unknown>
+      : {};
+  const message = typeof errorObj.message === 'string' ? errorObj.message : undefined;
+  const errCode = normalizeRecoverableErrorCode(errorObj.code, message);
+  const code = errCode && errCode in RECOVERABLE_EXIT_CODES ? errCode : fallbackCode;
+  const fallbackMessage = errCode && errCode in RECOVERABLE_EXIT_CODES
+    ? `HTTP ${resp.status}`
+    : `HTTP ${resp.status}: ${await resp.text().catch(() => '')}`;
+  const data = structuredErrorData(errorObj);
+
+  return {
+    code,
+    message: message ?? fallbackMessage,
+    ...(data ? { data } : {}),
+  };
 }
