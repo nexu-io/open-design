@@ -92,6 +92,59 @@ function installResizeObserver() {
   };
 }
 
+/**
+ * Composite-recording mocks: capture the rects the compositor paints into the
+ * annotation PNG so tests can assert painted-pixels ↔ structured-bounds
+ * alignment (the #6361 three-way invariant) without decoding an image.
+ */
+function installRecordingCompositeMocks() {
+  const painted: Array<{ x: number; y: number; w: number; h: number }> = [];
+  const originalImage = globalThis.Image;
+  class MockImage {
+    onload: (() => void) | null = null;
+    onerror: (() => void) | null = null;
+    set src(_value: string) {
+      window.setTimeout(() => this.onload?.(), 0);
+    }
+  }
+  Object.defineProperty(globalThis, 'Image', { configurable: true, value: MockImage, writable: true });
+  const getContext = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation((() => ({
+    beginPath: vi.fn(),
+    clearRect: vi.fn(),
+    drawImage: vi.fn(),
+    fillRect: vi.fn((x: number, y: number, w: number, h: number) => {
+      painted.push({ x, y, w, h });
+    }),
+    fillText: vi.fn(),
+    lineCap: 'round',
+    lineJoin: 'round',
+    lineTo: vi.fn(),
+    lineWidth: 1,
+    measureText: vi.fn(() => ({ width: 10 })),
+    moveTo: vi.fn(),
+    restore: vi.fn(),
+    save: vi.fn(),
+    scale: vi.fn(),
+    setLineDash: vi.fn(),
+    stroke: vi.fn(),
+    strokeRect: vi.fn(),
+    strokeStyle: '',
+    fillStyle: '',
+    font: '',
+  })) as unknown as typeof HTMLCanvasElement.prototype.getContext);
+  const toBlob = vi
+    .spyOn(HTMLCanvasElement.prototype, 'toBlob')
+    .mockImplementation((callback: BlobCallback) => callback(new Blob(['png'], { type: 'image/png' })));
+  return {
+    painted,
+    restore() {
+      Object.defineProperty(globalThis, 'Image', { configurable: true, value: originalImage, writable: true });
+      getContext.mockRestore();
+      toBlob.mockRestore();
+    },
+  };
+}
+
 describe('PreviewDrawOverlay content anchoring (issue #6361)', () => {
   it('follows the marked element when the artifact reflows', async () => {
     frame.w = 692;
@@ -974,6 +1027,94 @@ describe('PreviewDrawOverlay content anchoring (issue #6361)', () => {
       expect(detail.bounds!.height).toBeCloseTo(40, 0);
     } finally {
       window.removeEventListener('opendesign:annotation', annotation);
+      observer.restore();
+      restoreRect();
+    }
+  });
+
+  it('a resize during capture cannot rewrite marks before bounds are read', async () => {
+    // The ResizeObserver's geometric re-anchor is a mark-ref writer too. If a
+    // resize (zoom/sidebar/device frame) lands while the compositor holds the
+    // pixels, rewriting the refs would make annotationBounds disagree with
+    // the PNG. The freeze must defer the frame re-anchor until after send.
+    frame.w = 692;
+    frame.h = 666;
+    const restoreRect = installFrameGeometry();
+    const observer = installResizeObserver();
+    const anchors = vi.mocked(requestPreviewAnchorTargets);
+    anchors.mockReset();
+    // Bridge answers empty: marks stay purely frame-relative, isolating the
+    // geometric (resize) writer from the content-anchor writer.
+    anchors.mockImplementation(async () => ({ answered: true, targets: [] }) as never);
+
+    const annotation = vi.fn((event: Event) => {
+      const detail = (event as CustomEvent<{ ack?: (r: { ok: boolean }) => void }>).detail;
+      detail.ack?.({ ok: true });
+    });
+    window.addEventListener('opendesign:annotation', annotation);
+
+    // Host capture that resizes the frame mid-flight.
+    let midCapture: (() => Promise<void>) | null = null;
+    const captureSnapshot = vi.fn(async () => {
+      if (midCapture) await midCapture();
+      return { dataUrl: 'data:image/png;base64,cG5n', w: 692, h: 666 };
+    });
+    const composite = installRecordingCompositeMocks();
+
+    try {
+      const { container, getByRole } = render(
+        <PreviewDrawOverlay active captureSnapshot={captureSnapshot}>
+          <iframe title="srcdoc" data-od-render-mode="srcdoc" data-od-active="true" />
+        </PreviewDrawOverlay>,
+      );
+      const wrap = container.querySelector<HTMLElement>('.preview-draw-overlay')!;
+      const canvas = container.querySelector<HTMLCanvasElement>('canvas')!;
+      Object.defineProperty(wrap, 'offsetWidth', { configurable: true, get: () => frame.w });
+      Object.defineProperty(wrap, 'offsetHeight', { configurable: true, get: () => frame.h });
+      observer.trigger();
+
+      // Box over BAND 05's zoomed position (342..382).
+      fireEvent.pointerDown(canvas, { clientX: 40, clientY: 342, pointerId: 1 });
+      fireEvent.pointerMove(canvas, { clientX: 600, clientY: 382, pointerId: 1 });
+      fireEvent.pointerUp(canvas, { clientX: 600, clientY: 382, pointerId: 1 });
+      await new Promise((r) => setTimeout(r, 350));
+
+      // Mid-capture: the frame grows (e.g. Cmd-0 zoom restore) and the
+      // observer fires. The geometric re-anchor must be DEFERRED.
+      midCapture = async () => {
+        frame.w = 804;
+        frame.h = 744;
+        observer.trigger();
+        await new Promise((r) => setTimeout(r, 60));
+      };
+
+      const input = container.querySelector<HTMLInputElement>('.preview-draw-note-input')!;
+      fireEvent.change(input, { target: { value: 'Resize must not split PNG from bounds.' } });
+      fireEvent.click(getByRole('button', { name: 'Send' }));
+
+      await waitFor(() => expect(annotation).toHaveBeenCalledTimes(1));
+      const detail = (annotation.mock.calls[0]?.[0] as CustomEvent<{
+        bounds?: { x: number; y: number; width: number; height: number };
+      }>).detail;
+
+      // The pixels were captured in the 692x666 frame, so the bounds must be
+      // the 692x666-frame values (y=342). A mid-capture geometric re-anchor
+      // would have scaled them toward the 744-tall frame (y≈382).
+      expect(detail.bounds!.y).toBeCloseTo(342, 0);
+      expect(detail.bounds!.height).toBeCloseTo(40, 0);
+
+      // Three-way invariant: the box the compositor painted into the PNG
+      // (fillRect in snapshot space, 692x666 here) must coincide with the
+      // structured bounds. Pre-fix, the mid-capture re-anchor rewrote the
+      // normalized marks and the painted rect slid ~18px up while the bounds
+      // stayed put — PNG and position disagreed.
+      const markRect = composite.painted.find((r) => r.w > 500 && r.h > 20 && r.h < 100)!;
+      expect(markRect).toBeTruthy();
+      expect(markRect.y).toBeCloseTo(detail.bounds!.y, 0);
+      expect(markRect.h).toBeCloseTo(detail.bounds!.height, 0);
+    } finally {
+      window.removeEventListener('opendesign:annotation', annotation);
+      composite.restore();
       observer.restore();
       restoreRect();
     }

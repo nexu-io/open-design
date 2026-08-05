@@ -374,6 +374,16 @@ export function PreviewDrawOverlay({
   // redraw, exported PNG, the structured bounds handed to the agent) keeps
   // agreeing with what the user marked.
   function reanchorMarksToFrame(next: FrameSize) {
+    // Capture freeze covers this writer too: a resize (window, UI zoom,
+    // sidebar, device frame) landing while the compositor holds the pixels
+    // must not rewrite the mark refs, or annotationBounds reads a different
+    // frame state than the PNG. Remember only the LATEST pending frame; the
+    // freeze release in send()'s finally replays it against the pre-freeze
+    // baseline.
+    if (anchorWritesFrozenRef.current) {
+      pendingFrameReanchorRef.current = next;
+      return;
+    }
     const previous = frameSizeRef.current;
     frameSizeRef.current = next;
     if (!shouldReanchorMarks(previous, next)) return;
@@ -645,6 +655,13 @@ export function PreviewDrawOverlay({
   // bounds), syncContentAnchors defers instead of writing the mark refs, so
   // the composited PNG and the structured bounds read one consistent state.
   const anchorWritesFrozenRef = useRef(false);
+  // Latest frame size a resize reported while writes were frozen; replayed on
+  // release so marks catch up to the final geometry exactly once.
+  const pendingFrameReanchorRef = useRef<FrameSize | null>(null);
+  // Layout size captured when the freeze engages. Marks are normalized, so
+  // the bounds reader must multiply by the SAME size the PNG was composited
+  // against — the live canvas can grow mid-capture even when the refs do not.
+  const frozenLayoutSizeRef = useRef<{ width: number; height: number } | null>(null);
   // The overlay can stay mounted (and even active) across a file switch; the
   // iframe element is often reused, so the per-frame reset above won't fire.
   // A new document is a new bridge — start its probe budget from zero.
@@ -1100,6 +1117,8 @@ export function PreviewDrawOverlay({
     anchorProbeGenerationRef.current += 1;
     anchorWritesFrozenRef.current = false;
     anchorSyncTrailingRef.current = false;
+    pendingFrameReanchorRef.current = null;
+    frozenLayoutSizeRef.current = null;
     resetTextEditingState();
     commitTextMarks([]);
     setExtraFiles([]);
@@ -1115,6 +1134,9 @@ export function PreviewDrawOverlay({
   // the on-screen (transform-scaled) size, which shrank the structured bounds
   // by the fit scale while the painted PNG stayed artifact-local (#6361).
   function canvasLayoutSize(): { width: number; height: number } | null {
+    if (anchorWritesFrozenRef.current && frozenLayoutSizeRef.current) {
+      return frozenLayoutSizeRef.current;
+    }
     const cvs = canvasRef.current;
     if (!cvs) return null;
     // offsetWidth/Height are the untransformed layout size. Fall back to the
@@ -1285,6 +1307,7 @@ export function PreviewDrawOverlay({
       contentAnchorTimerRef.current = null;
     }
     await syncContentAnchors();
+    frozenLayoutSizeRef.current = canvasLayoutSize();
     anchorWritesFrozenRef.current = true;
     if (captureSnapshot) {
       // The host's captureSnapshot is a compositor screenshot of the on-screen
@@ -1482,7 +1505,14 @@ export function PreviewDrawOverlay({
       // (scroll/resize probe replies), run it now.
       if (anchorWritesFrozenRef.current) {
         anchorWritesFrozenRef.current = false;
-        if (anchorSyncTrailingRef.current) {
+        frozenLayoutSizeRef.current = null;
+        const pendingFrame = pendingFrameReanchorRef.current;
+        pendingFrameReanchorRef.current = null;
+        if (pendingFrame) {
+          reanchorMarksToFrame(pendingFrame);
+          redraw();
+        }
+        if (anchorSyncTrailingRef.current || pendingFrame) {
           anchorSyncTrailingRef.current = false;
           scheduleContentReanchor();
         }
