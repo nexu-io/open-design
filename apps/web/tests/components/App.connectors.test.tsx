@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { useSyncExternalStore } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from '../../src/App';
@@ -24,11 +25,27 @@ import {
 } from '../../src/providers/registry';
 import { listProjects, listTemplates } from '../../src/state/projects';
 
-const useRouteMock = vi.fn(() => ({ kind: 'home' as const, view: 'home' as const }));
+// Settings is now a full-page route (`/settings`): App.openSettings navigates
+// instead of toggling a modal flag, so the router mock must feed navigate()
+// calls back into useRoute() (like the production useSyncExternalStore router)
+// for the settings surface to render at all.
+const homeRouteMock = { kind: 'home' as const, view: 'home' as const };
+const routeListeners = new Set<() => void>();
+const useRouteMock = vi.fn(() => homeRouteMock);
 
 vi.mock('../../src/router', () => ({
-  navigate: vi.fn(),
-  useRoute: () => useRouteMock(),
+  navigate: vi.fn((route: unknown) => {
+    useRouteMock.mockReturnValue(route as never);
+    routeListeners.forEach((notify) => notify());
+  }),
+  useRoute: () =>
+    useSyncExternalStore(
+      (onChange) => {
+        routeListeners.add(onChange);
+        return () => routeListeners.delete(onChange);
+      },
+      useRouteMock,
+    ),
 }));
 
 vi.mock('../../src/components/EntryView', () => ({
@@ -230,6 +247,7 @@ async function clickCurrentPrivacyChoice(name: string) {
 
 describe('App connectors settings flows', () => {
   beforeEach(() => {
+    useRouteMock.mockReturnValue(homeRouteMock);
     mockedDaemonIsLive.mockResolvedValue(true);
     mockedFetchAgentsStream.mockResolvedValue([]);
     mockedFetchSkills.mockResolvedValue([]);
@@ -268,6 +286,88 @@ describe('App connectors settings flows', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Composio tail: uQEg')).toBeTruthy();
+    });
+  });
+
+  it('does not send a destructive empty Composio write during bootstrap', async () => {
+    mockedLoadConfig.mockReturnValue({
+      ...baseConfig,
+      composio: {
+        apiKey: '',
+        apiKeyConfigured: false,
+        apiKeyTail: '',
+      },
+    });
+    mockedFetchComposioConfigFromDaemon.mockResolvedValue({
+      apiKey: '',
+      apiKeyConfigured: false,
+      apiKeyTail: '',
+    });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(mockedFetchComposioConfigFromDaemon).toHaveBeenCalledTimes(1);
+      expect(mockedSyncConfigToDaemon).toHaveBeenCalled();
+    });
+
+    // PUT { apiKey: '' } means "clear" at the daemon boundary. A bootstrap
+    // write can complete after the user's first explicit Save and erase the
+    // freshly stored key, so startup must stay read-only when there is no
+    // legacy plaintext key to migrate.
+    expect(mockedSyncComposioConfigToDaemon).not.toHaveBeenCalled();
+  });
+
+  it('removes a legacy plaintext Composio key only after migration succeeds', async () => {
+    mockedLoadConfig.mockReturnValue({
+      ...baseConfig,
+      composio: {
+        apiKey: 'cmp_legacy_secret',
+        apiKeyConfigured: false,
+        apiKeyTail: '',
+      },
+    });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(mockedSyncComposioConfigToDaemon).toHaveBeenCalledWith(
+        expect.objectContaining({ apiKey: 'cmp_legacy_secret' }),
+      );
+      expect(mockedSaveConfig.mock.calls.at(-1)?.[0]).toMatchObject({
+        composio: {
+          apiKey: '',
+          apiKeyConfigured: true,
+          apiKeyTail: 'cret',
+        },
+      });
+    });
+  });
+
+  it('retains a legacy plaintext Composio key when migration fails', async () => {
+    mockedLoadConfig.mockReturnValue({
+      ...baseConfig,
+      composio: {
+        apiKey: 'cmp_retry_secret',
+        apiKeyConfigured: false,
+        apiKeyTail: '',
+      },
+    });
+    mockedSyncComposioConfigToDaemon.mockResolvedValueOnce(false);
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(mockedSyncComposioConfigToDaemon).toHaveBeenCalledWith(
+        expect.objectContaining({ apiKey: 'cmp_retry_secret' }),
+      );
+      expect(mockedSaveConfig.mock.calls.at(-1)?.[0]).toMatchObject({
+        composio: {
+          apiKey: 'cmp_retry_secret',
+          apiKeyConfigured: false,
+          apiKeyTail: '',
+        },
+      });
     });
   });
 

@@ -2642,6 +2642,13 @@ describe('API proxy routes', () => {
     const pngBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x42, 0x59]);
     let capturedUrl: string | undefined;
 
+    const createResponse = await realFetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: 'test-project', name: 'Proxy route fixture' }),
+    });
+    expect(createResponse.status).toBe(200);
+
     const fetchMock = vi.fn(async (input: FetchInput, init?: FetchInit) => {
       const url = String(input);
       if (url.startsWith(baseUrl)) return realFetch(input, init);

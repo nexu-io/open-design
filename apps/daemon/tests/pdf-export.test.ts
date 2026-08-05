@@ -71,7 +71,14 @@ describe('POST /api/projects/:id/export/pdf', () => {
     }) as { server: { close(cb: () => void): void }; url: string };
 
     try {
-      await fetch(`${started.url}/api/projects/${encodeURIComponent(projectId)}/files`, {
+      const createResponse = await fetch(`${started.url}/api/projects`, {
+        body: JSON.stringify({ id: projectId, name: 'PDF route fixture' }),
+        headers: { 'content-type': 'application/json' },
+        method: 'POST',
+      });
+      expect(createResponse.status).toBe(200);
+
+      const writeResponse = await fetch(`${started.url}/api/projects/${encodeURIComponent(projectId)}/files`, {
         body: JSON.stringify({
           content: '<!doctype html><section class="slide">One</section>',
           name: 'deck/index.html',
@@ -79,6 +86,7 @@ describe('POST /api/projects/:id/export/pdf', () => {
         headers: { 'content-type': 'application/json' },
         method: 'POST',
       });
+      expect(writeResponse.status).toBe(200);
 
       const response = await fetch(`${started.url}/api/projects/${encodeURIComponent(projectId)}/export/pdf`, {
         body: JSON.stringify({ deck: true, fileName: 'deck/index.html', title: 'Seed Deck' }),

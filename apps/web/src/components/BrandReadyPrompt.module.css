@@ -94,6 +94,11 @@
   justify-content: center;
   width: 34px;
   height: 34px;
+  /* Reset the global `button` rule (primitives.css: padding: 0 16px). The chip
+     sizes itself from width/height, so the inherited 16px inline padding left a
+     0px-wide content box and collapsed the × glyph to nothing — the chip then
+     rendered as a bare white circle. */
+  padding: 0;
   margin-top: -4px;
   margin-right: -4px;
   margin-left: 6px;
@@ -140,7 +145,7 @@
 }
 
 .refineHint {
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 1.35;
   color: var(--text-muted, #6e7781);
 }

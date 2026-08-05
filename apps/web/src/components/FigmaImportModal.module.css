@@ -7,7 +7,8 @@
   justify-content: center;
   padding: 32px;
   background: rgba(17, 24, 39, 0.55);
-  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: var(--scrim-backdrop);
+  backdrop-filter: var(--scrim-backdrop);
 }
 
 .modal {
@@ -37,7 +38,7 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
   color: var(--text);
 }
@@ -49,7 +50,7 @@
   width: 34px;
   height: 34px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-large, 8px);
   background: var(--bg-elevated);
   color: var(--text);
   cursor: pointer;
@@ -77,7 +78,7 @@
   flex: 1 1 0;
   padding: 7px 12px;
   border: none;
-  border-radius: 9px;
+  border-radius: var(--radius-large, 8px);
   background: transparent;
   color: var(--text-muted);
   font-size: 13px;
@@ -151,7 +152,7 @@
   width: 100%;
   padding: 10px 12px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-large, 8px);
   background: var(--bg-subtle);
   color: var(--text);
   font-size: 14px;
@@ -166,7 +167,7 @@
   margin: 0 16px;
   padding: 10px 12px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-large, 8px);
   background: var(--bg-subtle);
   color: var(--text);
   font-size: 13px;
@@ -241,7 +242,7 @@
 .swatch {
   width: 22px;
   height: 22px;
-  border-radius: 6px;
+  border-radius: var(--radius-medium, 4px);
   border: 1px solid var(--border);
 }
 .summaryFoot {

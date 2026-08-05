@@ -1,4 +1,4 @@
-export const OPEN_DESIGN_BRIEF_APP_VERSION = 'v6' as const;
+export const OPEN_DESIGN_BRIEF_APP_VERSION = 'v8' as const;
 
 /**
  * Self-contained MCP Apps resource. It intentionally has no remote assets,
@@ -67,6 +67,7 @@ export const OPEN_DESIGN_BRIEF_APP_HTML = String.raw`<!doctype html>
         let phase = "loading";
         let confirmedPayload = null;
         let standardBridgeReady = false;
+        let standardBridgeInitialization = null;
         let hostCapabilities = null;
         let sizeFrame = 0;
         let lastWidth = -1;
@@ -83,6 +84,7 @@ export const OPEN_DESIGN_BRIEF_APP_HTML = String.raw`<!doctype html>
             confirmed: "Brief confirmed.",
             continuing: "Sending confirmed brief…",
             delivered: "Brief confirmed and sent.",
+            deliveredContextCleanupFailed: "Brief confirmed and sent, but its composer context could not be cleared. Remove it before sending another message.",
             confirmedPublishFailed: "Brief already confirmed, but could not continue. Try sending it again.",
             continueSending: "Continue",
             invalidConfirmation: "The host returned an invalid confirmation.",
@@ -98,6 +100,7 @@ export const OPEN_DESIGN_BRIEF_APP_HTML = String.raw`<!doctype html>
             confirmed: "需求已确认。",
             continuing: "正在发送已确认的需求…",
             delivered: "需求已确认并已发送。",
+            deliveredContextCleanupFailed: "需求已确认并已发送，但未能清除输入框上下文。发送下一条消息前请手动移除。",
             confirmedPublishFailed: "需求已经确认，但未能继续发送。请重试发送。",
             continueSending: "继续发送",
             invalidConfirmation: "宿主返回了无效的确认结果。",
@@ -113,6 +116,7 @@ export const OPEN_DESIGN_BRIEF_APP_HTML = String.raw`<!doctype html>
             confirmed: "需求已確認。",
             continuing: "正在傳送已確認的需求…",
             delivered: "需求已確認並已傳送。",
+            deliveredContextCleanupFailed: "需求已確認並已傳送，但未能清除輸入框內容。傳送下一則訊息前請手動移除。",
             confirmedPublishFailed: "需求已經確認，但未能繼續傳送。請重試傳送。",
             continueSending: "繼續傳送",
             invalidConfirmation: "宿主回傳了無效的確認結果。",
@@ -128,6 +132,7 @@ export const OPEN_DESIGN_BRIEF_APP_HTML = String.raw`<!doctype html>
             confirmed: "ブリーフを確認しました。",
             continuing: "確認済みブリーフを送信しています…",
             delivered: "ブリーフを確認して送信しました。",
+            deliveredContextCleanupFailed: "ブリーフは送信されましたが、入力欄のコンテキストを消去できませんでした。次のメッセージを送る前に手動で削除してください。",
             confirmedPublishFailed: "ブリーフは確認済みですが、送信を続行できませんでした。もう一度送信してください。",
             continueSending: "送信を続ける",
             invalidConfirmation: "ホストから無効な確認結果が返されました。",
@@ -393,7 +398,7 @@ export const OPEN_DESIGN_BRIEF_APP_HTML = String.raw`<!doctype html>
           // text instead of a context-only turn rendered as "(No content)".
           if (window.openai && typeof window.openai.sendFollowUpMessage === "function") {
             await window.openai.sendFollowUpMessage({ prompt, scrollToBottom: true });
-            return;
+            return clearModelContext();
           }
           if (standardBridgeReady && hostSupports("message")) {
             if (hostSupports("updateModelContext")) {
@@ -406,9 +411,27 @@ export const OPEN_DESIGN_BRIEF_APP_HTML = String.raw`<!doctype html>
               role: "user",
               content: [{ type: "text", text: prompt }],
             });
-            return;
+            return clearModelContext();
           }
           throw new Error(copy().publishUnavailable);
+        }
+
+        async function clearModelContext() {
+          if (!standardBridgeReady) {
+            const initialized = standardBridgeInitialization
+              ? await standardBridgeInitialization
+              : false;
+            if (!initialized) return false;
+          }
+          if (!hostSupports("updateModelContext")) {
+            return true;
+          }
+          try {
+            await request("ui/update-model-context", {});
+            return true;
+          } catch {
+            return false;
+          }
         }
 
         form.addEventListener("change", () => {
@@ -452,8 +475,11 @@ export const OPEN_DESIGN_BRIEF_APP_HTML = String.raw`<!doctype html>
           confirmedPayload = payload;
           applyPhase("confirmed_publishing");
           try {
-            await publishConfirmation(confirmedPayload);
-            applyPhase("delivered");
+            const contextCleared = await publishConfirmation(confirmedPayload);
+            applyPhase(
+              "delivered",
+              contextCleared ? undefined : copy().deliveredContextCleanupFailed,
+            );
           } catch {
             applyPhase("confirmed_publish_failed");
           }
@@ -464,8 +490,11 @@ export const OPEN_DESIGN_BRIEF_APP_HTML = String.raw`<!doctype html>
           continueButton.disabled = true;
           applyPhase("confirmed_publishing");
           try {
-            await publishConfirmation(confirmedPayload);
-            applyPhase("delivered");
+            const contextCleared = await publishConfirmation(confirmedPayload);
+            applyPhase(
+              "delivered",
+              contextCleared ? undefined : copy().deliveredContextCleanupFailed,
+            );
           } catch {
             applyPhase("confirmed_publish_failed");
           }
@@ -495,9 +524,9 @@ export const OPEN_DESIGN_BRIEF_APP_HTML = String.raw`<!doctype html>
           render(window.openai.toolOutput);
         }
         showLoading();
-        request("ui/initialize", {
+        standardBridgeInitialization = request("ui/initialize", {
           protocolVersion: "2026-01-26",
-          appInfo: { name: "open-design-brief", version: "v6" },
+          appInfo: { name: "open-design-brief", version: "v8" },
           appCapabilities: {},
         }).then((result) => {
           standardBridgeReady = true;
@@ -509,14 +538,16 @@ export const OPEN_DESIGN_BRIEF_APP_HTML = String.raw`<!doctype html>
           notify("ui/notifications/initialized", {});
           render(toolPayload(result));
           scheduleSizeChanged();
+          return true;
         }).catch(() => {
           if (window.openai && window.openai.toolOutput) {
             render(window.openai.toolOutput);
-            return;
+            return false;
           }
           main.hidden = false;
           status.textContent = copy().bridgeUnavailable;
           scheduleSizeChanged();
+          return false;
         });
         window.addEventListener("resize", scheduleSizeChanged);
       })();

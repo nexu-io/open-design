@@ -213,44 +213,57 @@ beforeEach(() => {
   process.env.VELA_PROFILE = 'prod';
 });
 
-afterEach(() => {
-  if (originalHome === undefined) delete process.env.HOME;
-  else process.env.HOME = originalHome;
-  delete process.env.OPEN_DESIGN_AMR_PROFILE;
-  delete process.env.VELA_PROFILE;
-  delete process.env.FAKE_VELA_LOGIN_DELAY_MS;
-  delete process.env.FAKE_VELA_LOGIN_FAIL;
-  delete process.env.FAKE_VELA_LOGIN_FAIL_WITHOUT_API_URL;
-  delete process.env.FAKE_VELA_LOGIN_FAIL_WITHOUT_API_URL_DELAY_MS;
-  delete process.env.FAKE_VELA_LOGIN_EXIT_ZERO_WITHOUT_API_URL_DELAY_MS;
-  delete process.env.OD_AMR_LOGIN_ACTIVATION_GRACE_MS;
-  delete process.env.FAKE_VELA_LOGIN_USER_EMAIL;
-  delete process.env.FAKE_VELA_LOGIN_USER_PLAN;
-  delete process.env.FAKE_VELA_BILLING_TIER;
-  delete process.env.FAKE_VELA_BILLING_BALANCE_USD;
-  delete process.env.FAKE_VELA_BILLING_LOG;
-  delete process.env.FAKE_VELA_BILLING_DELAY_MS;
-  delete process.env.FAKE_VELA_BILLING_UNKNOWN_COMMAND;
-  delete process.env.FAKE_VELA_MODEL_LIST_JSON;
-  delete process.env.FAKE_VELA_MODEL_PRESET_JSON;
-  delete process.env.FAKE_VELA_ENV_DUMP_PATH;
-  delete process.env.FAKE_VELA_LOGIN_INVOCATION_LOG;
-  delete process.env.FAKE_VELA_LOGIN_ACTIVATION_AFTER_PARENT_EXIT_MS;
-  delete process.env.FAKE_VELA_LOGIN_PARENT_EXIT_DELAY_MS;
-  delete process.env.FAKE_VELA_LOGIN_ACTIVATION_THEN_EXIT_DELAY_MS;
-  delete process.env.FAKE_VELA_LOGIN_ACTIVATION_THEN_EXIT_CODE;
-  delete process.env.OD_PUBLIC_BASE_URL;
-  delete process.env.VELA_RUNTIME_KEY;
-  delete process.env.VELA_LINK_URL;
-  delete process.env.OPEN_DESIGN_AMR_ANALYTICS_URL;
-  delete process.env.OPEN_DESIGN_AMR_ANALYTICS_ENV;
-  delete process.env.OD_AMR_WALLET_FETCH_TIMEOUT_MS;
-  rmSync(tmpHome, {
-    recursive: true,
-    force: true,
-    maxRetries: 5,
-    retryDelay: 50,
-  });
+afterEach(async () => {
+  try {
+    // `/login` acknowledges after the child reaches its activation boundary,
+    // not necessarily after the child exits. Do not let that process retain
+    // this test's HOME/env or trip the next test's in-flight guard.
+    const status = await getJson<{ loginInFlight: boolean }>(
+      `${baseUrl}/api/integrations/vela/status`,
+    );
+    if (status.body.loginInFlight) {
+      await postJson(`${baseUrl}/api/integrations/vela/login/cancel`);
+      await waitForVelaLoginIdle();
+    }
+  } finally {
+    if (originalHome === undefined) delete process.env.HOME;
+    else process.env.HOME = originalHome;
+    delete process.env.OPEN_DESIGN_AMR_PROFILE;
+    delete process.env.VELA_PROFILE;
+    delete process.env.FAKE_VELA_LOGIN_DELAY_MS;
+    delete process.env.FAKE_VELA_LOGIN_FAIL;
+    delete process.env.FAKE_VELA_LOGIN_FAIL_WITHOUT_API_URL;
+    delete process.env.FAKE_VELA_LOGIN_FAIL_WITHOUT_API_URL_DELAY_MS;
+    delete process.env.FAKE_VELA_LOGIN_EXIT_ZERO_WITHOUT_API_URL_DELAY_MS;
+    delete process.env.OD_AMR_LOGIN_ACTIVATION_GRACE_MS;
+    delete process.env.FAKE_VELA_LOGIN_USER_EMAIL;
+    delete process.env.FAKE_VELA_LOGIN_USER_PLAN;
+    delete process.env.FAKE_VELA_BILLING_TIER;
+    delete process.env.FAKE_VELA_BILLING_BALANCE_USD;
+    delete process.env.FAKE_VELA_BILLING_LOG;
+    delete process.env.FAKE_VELA_BILLING_DELAY_MS;
+    delete process.env.FAKE_VELA_BILLING_UNKNOWN_COMMAND;
+    delete process.env.FAKE_VELA_MODEL_LIST_JSON;
+    delete process.env.FAKE_VELA_MODEL_PRESET_JSON;
+    delete process.env.FAKE_VELA_ENV_DUMP_PATH;
+    delete process.env.FAKE_VELA_LOGIN_INVOCATION_LOG;
+    delete process.env.FAKE_VELA_LOGIN_ACTIVATION_AFTER_PARENT_EXIT_MS;
+    delete process.env.FAKE_VELA_LOGIN_PARENT_EXIT_DELAY_MS;
+    delete process.env.FAKE_VELA_LOGIN_ACTIVATION_THEN_EXIT_DELAY_MS;
+    delete process.env.FAKE_VELA_LOGIN_ACTIVATION_THEN_EXIT_CODE;
+    delete process.env.OD_PUBLIC_BASE_URL;
+    delete process.env.VELA_RUNTIME_KEY;
+    delete process.env.VELA_LINK_URL;
+    delete process.env.OPEN_DESIGN_AMR_ANALYTICS_URL;
+    delete process.env.OPEN_DESIGN_AMR_ANALYTICS_ENV;
+    delete process.env.OD_AMR_WALLET_FETCH_TIMEOUT_MS;
+    rmSync(tmpHome, {
+      recursive: true,
+      force: true,
+      maxRetries: 5,
+      retryDelay: 50,
+    });
+  }
 });
 
 describe('GET /api/integrations/vela/wallet', () => {
@@ -794,10 +807,14 @@ describe('GET /api/integrations/vela/status', () => {
     expect(body.user?.name).toBe('杨瑾龙');
   });
 
-  it('blocks the first signed-in /status on a cold cache and surfaces the fetched plan + balance', async () => {
-    // Regression: the new account surfaces read /status once and do not
-    // re-poll, so a cold cache must resolve live billing BEFORE the first
-    // response — otherwise plan/balance stay hidden until the user refocuses.
+  it('resolves live billing on a cold cache within the wait budget and surfaces the fetched plan + balance', async () => {
+    // Regression: several account surfaces read /status once per mount/open
+    // and do not re-poll on a fixed interval, so a cold cache should still
+    // resolve live billing before the first response WHEN billing answers
+    // promptly (the common case — fake-vela here has no delay configured).
+    // A billing read slower than the wait budget is covered separately by
+    // "does not block /status on a cold cache when billing is slow, …" below,
+    // which asserts the response is never held hostage to a slow probe.
     clearAllVelaLiveAccounts();
     process.env.FAKE_VELA_BILLING_TIER = 'plus';
     process.env.FAKE_VELA_BILLING_BALANCE_USD = '247.51';
@@ -814,6 +831,48 @@ describe('GET /api/integrations/vela/status', () => {
     // Env-/config-identity stays on `user`; live billing rides on `account`.
     expect(body.account?.plan).toBe('plus');
     expect(body.account?.balanceUsd).toBe('247.51');
+  });
+
+  it('does not block /status on a cold cache when billing is slow, and applies the account on a later poll once it resolves', async () => {
+    // Regression for the "sign out then sign back in" cold-cache path: every
+    // logout clears the live-account cache (clearAllVelaLiveAccounts), so a
+    // slow (or hung) `vela billing summary` must not delay the login-status
+    // check itself — that check is what the avatar/menu/settings surfaces
+    // need FIRST. The fetch is left running in the background and the next
+    // /status read (every consumer already re-reads on mount, window
+    // focus/visibilitychange, or the sign-in event) picks up the resolved
+    // plan/balance instead.
+    clearAllVelaLiveAccounts();
+    process.env.FAKE_VELA_BILLING_TIER = 'plus';
+    process.env.FAKE_VELA_BILLING_BALANCE_USD = '19.99';
+    process.env.FAKE_VELA_BILLING_DELAY_MS = '2000';
+    seedLogin('local', {
+      user: { id: 'slow-billing-1', email: 'slow-billing@example.com', plan: undefined },
+    });
+
+    const startedAt = Date.now();
+    const first = await getJson<{
+      loggedIn: boolean;
+      account?: { plan?: string; balanceUsd?: string | null };
+    }>(`${baseUrl}/api/integrations/vela/status`);
+    const elapsedMs = Date.now() - startedAt;
+
+    expect(first.body.loggedIn).toBe(true);
+    // Well under the 2s billing delay — proves /status did not block on it.
+    expect(elapsedMs).toBeLessThan(1800);
+    expect(first.body.account).toBeUndefined();
+
+    // Give the still-running background billing fetch time to resolve and
+    // populate the live-account cache.
+    await new Promise((resolve) => setTimeout(resolve, 2300));
+
+    const second = await getJson<{
+      loggedIn: boolean;
+      account?: { plan?: string; balanceUsd?: string | null };
+    }>(`${baseUrl}/api/integrations/vela/status`);
+    expect(second.body.loggedIn).toBe(true);
+    expect(second.body.account?.plan).toBe('plus');
+    expect(second.body.account?.balanceUsd).toBe('19.99');
   });
 
   it('normalizes a successful billing summary without a tier to free (upgradeable)', async () => {
@@ -1925,6 +1984,298 @@ describe('ALL /api/integrations/vela/api-proxy/*', () => {
       expect(upstreamRequests[0]?.headers['content-length']).toBe(String(Buffer.byteLength(body)));
       expect(upstreamRequests[0]?.body).toBe(body);
     } finally {
+      requestSpy.mockRestore();
+    }
+  });
+
+  it('preserves a valid Workspace scope while stripping request hop-by-hop headers', async () => {
+    let forwardedHeaders: Record<string, string | string[]> | undefined;
+    const requestSpy = vi.spyOn(https, 'request').mockImplementation(((_target, options, callback) => {
+      const upstream = new PassThrough() as any;
+      upstream.on('finish', () => {
+        forwardedHeaders = options?.headers as Record<string, string | string[]>;
+        const upstreamRes = new PassThrough() as any;
+        upstreamRes.statusCode = 200;
+        upstreamRes.headers = { 'content-type': 'application/json' };
+        callback?.(upstreamRes);
+        upstreamRes.end(JSON.stringify({ ok: true }));
+      });
+      upstream.setTimeout = () => upstream;
+      return upstream;
+    }) as typeof https.request);
+    const daemonUrl = new URL(baseUrl);
+
+    try {
+      const status = await new Promise<number>((resolve, reject) => {
+        const request = http.request(
+          {
+            hostname: daemonUrl.hostname,
+            port: daemonUrl.port,
+            method: 'GET',
+            path: '/api/integrations/vela/api-proxy/api/v1/workspaces/workspace_team-1/billing',
+            headers: {
+              'x-vela-workspace-id': 'workspace_team-1',
+              connection: 'x-test-hop',
+              'keep-alive': 'timeout=5',
+              'proxy-authorization': 'Basic test-only',
+              te: 'trailers',
+              trailer: 'x-test-checksum',
+              'transfer-encoding': 'chunked',
+              'x-test-hop': 'drop-me',
+            },
+          },
+          (response) => {
+            response.resume();
+            response.once('end', () => resolve(response.statusCode ?? 0));
+          },
+        );
+        request.on('error', reject);
+        request.end();
+      });
+
+      expect(status).toBe(200);
+      expect(forwardedHeaders?.['x-vela-workspace-id']).toBe('workspace_team-1');
+      expect(forwardedHeaders).not.toHaveProperty('connection');
+      expect(forwardedHeaders).not.toHaveProperty('keep-alive');
+      expect(forwardedHeaders).not.toHaveProperty('proxy-authorization');
+      expect(forwardedHeaders).not.toHaveProperty('te');
+      expect(forwardedHeaders).not.toHaveProperty('trailer');
+      expect(forwardedHeaders).not.toHaveProperty('transfer-encoding');
+      expect(forwardedHeaders).not.toHaveProperty('upgrade');
+      expect(forwardedHeaders).not.toHaveProperty('x-test-hop');
+    } finally {
+      requestSpy.mockRestore();
+    }
+  });
+
+  it('rejects normalized path escapes and malformed Workspace scope before proxying', async () => {
+    let upstreamRequestCount = 0;
+    const requestSpy = vi.spyOn(https, 'request').mockImplementation(((_target, _options, callback) => {
+      upstreamRequestCount += 1;
+      const upstream = new PassThrough() as any;
+      upstream.on('finish', () => {
+        const upstreamRes = new PassThrough() as any;
+        upstreamRes.statusCode = 200;
+        upstreamRes.headers = { 'content-type': 'application/json' };
+        callback?.(upstreamRes);
+        upstreamRes.end(JSON.stringify({ unexpectedlyProxied: true }));
+      });
+      upstream.setTimeout = () => upstream;
+      return upstream;
+    }) as typeof https.request);
+    const daemonUrl = new URL(baseUrl);
+    const rawGet = (pathName: string, headers?: http.OutgoingHttpHeaders) =>
+      new Promise<{ status: number; body: unknown }>((resolve, reject) => {
+        const request = http.request(
+          {
+            hostname: daemonUrl.hostname,
+            port: daemonUrl.port,
+            method: 'GET',
+            path: pathName,
+            headers,
+          },
+          (response) => {
+            const chunks: Buffer[] = [];
+            response.on('data', (chunk: Buffer | string) => {
+              chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+            });
+            response.on('end', () => {
+              resolve({
+                status: response.statusCode ?? 0,
+                body: JSON.parse(Buffer.concat(chunks).toString('utf8')),
+              });
+            });
+          },
+        );
+        request.on('error', reject);
+        request.end();
+      });
+
+    try {
+      const escaped = await rawGet(
+        '/api/integrations/vela/api-proxy/api/v1/%2e%2e/private',
+      );
+      const invalid = await rawGet(
+        '/api/integrations/vela/api-proxy/api/v1/wallet/balance',
+        { 'x-vela-workspace-id': ['workspace/escape'] },
+      );
+      const duplicate = await rawGet(
+        '/api/integrations/vela/api-proxy/api/v1/wallet/balance',
+        { 'x-vela-workspace-id': ['workspace-a', 'workspace-b'] },
+      );
+      const connectionNominated = await rawGet(
+        '/api/integrations/vela/api-proxy/api/v1/wallet/balance',
+        {
+          connection: 'x-vela-workspace-id',
+          'x-vela-workspace-id': 'workspace-team',
+        },
+      );
+
+      expect(escaped).toEqual({ status: 404, body: { error: 'unknown_amr_api_proxy_path' } });
+      expect(invalid).toEqual({ status: 400, body: { error: 'invalid_workspace_id' } });
+      expect(duplicate).toEqual({ status: 400, body: { error: 'invalid_workspace_id' } });
+      expect(connectionNominated).toEqual({
+        status: 400,
+        body: { error: 'invalid_workspace_id' },
+      });
+      expect(upstreamRequestCount).toBe(0);
+    } finally {
+      requestSpy.mockRestore();
+    }
+  });
+
+  it('strips upstream hop-by-hop response headers while preserving billing metadata', async () => {
+    const requestSpy = vi.spyOn(https, 'request').mockImplementation(((_target, _options, callback) => {
+      const upstream = new PassThrough() as any;
+      upstream.on('finish', () => {
+        const upstreamRes = new PassThrough() as any;
+        upstreamRes.statusCode = 200;
+        upstreamRes.headers = {
+          connection: 'x-upstream-hop',
+          'x-upstream-hop': 'drop-me',
+          'keep-alive': 'timeout=5',
+          'proxy-authenticate': 'Basic',
+          'proxy-authorization': 'Basic test-only',
+          te: 'trailers',
+          trailer: 'x-test-checksum',
+          'transfer-encoding': 'chunked',
+          upgrade: 'websocket',
+          'x-request-id': 'billing-request-1',
+          'content-type': 'application/json',
+        };
+        callback?.(upstreamRes);
+        upstreamRes.end(JSON.stringify({ balanceUsd: '120.00' }));
+      });
+      upstream.setTimeout = () => upstream;
+      return upstream;
+    }) as typeof https.request);
+
+    try {
+      const response = await fetch(
+        `${baseUrl}/api/integrations/vela/api-proxy/api/v1/wallet/balance`,
+        { headers: { 'x-vela-workspace-id': 'workspace-team' } },
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get('x-request-id')).toBe('billing-request-1');
+      expect(response.headers.get('connection')).not.toBe('x-upstream-hop');
+      expect(response.headers.get('x-upstream-hop')).toBeNull();
+      expect(response.headers.get('keep-alive')).not.toBe('timeout=5');
+      for (const name of [
+        'proxy-authenticate',
+        'proxy-authorization',
+        'te',
+        'trailer',
+        'upgrade',
+      ]) {
+        expect(response.headers.get(name), name).toBeNull();
+      }
+    } finally {
+      requestSpy.mockRestore();
+    }
+  });
+
+  it('destroys the upstream request when a streaming Workspace upload is aborted', async () => {
+    let upstreamRequest: PassThrough | undefined;
+    let markUpstreamCreated: (() => void) | undefined;
+    let markUpstreamDestroyed: (() => void) | undefined;
+    const upstreamCreated = new Promise<void>((resolve) => {
+      markUpstreamCreated = resolve;
+    });
+    const upstreamDestroyed = new Promise<void>((resolve) => {
+      markUpstreamDestroyed = resolve;
+    });
+    const requestSpy = vi.spyOn(https, 'request').mockImplementation((() => {
+      upstreamRequest = new PassThrough();
+      upstreamRequest.once('close', () => markUpstreamDestroyed?.());
+      (upstreamRequest as any).setTimeout = () => upstreamRequest;
+      markUpstreamCreated?.();
+      return upstreamRequest as any;
+    }) as typeof https.request);
+    const daemonUrl = new URL(baseUrl);
+
+    try {
+      const upload = http.request({
+        hostname: daemonUrl.hostname,
+        port: daemonUrl.port,
+        method: 'POST',
+        path: '/api/integrations/vela/api-proxy/api/v1/workspaces/import',
+        headers: {
+          'content-type': 'application/octet-stream',
+          'content-length': '1024',
+          'x-vela-workspace-id': 'workspace-upload',
+        },
+      });
+      upload.on('error', () => {});
+      const uploadClosed = new Promise<void>((resolve) => upload.once('close', resolve));
+      upload.write(Buffer.alloc(64, 1));
+      await upstreamCreated;
+      upload.destroy();
+      await uploadClosed;
+      await upstreamDestroyed;
+
+      expect(upstreamRequest?.destroyed).toBe(true);
+    } finally {
+      upstreamRequest?.destroy();
+      requestSpy.mockRestore();
+    }
+  });
+
+  it('destroys the upstream request when the downstream response closes', async () => {
+    let upstreamRequest: PassThrough | undefined;
+    let upstreamResponse: PassThrough | undefined;
+    let downstreamRequest: http.ClientRequest | undefined;
+    let markUpstreamDestroyed: (() => void) | undefined;
+    const upstreamDestroyed = new Promise<void>((resolve) => {
+      markUpstreamDestroyed = resolve;
+    });
+    let markResponseStarted: (() => void) | undefined;
+    const responseStarted = new Promise<void>((resolve) => {
+      markResponseStarted = resolve;
+    });
+    const requestSpy = vi.spyOn(https, 'request').mockImplementation(((_target, _options, callback) => {
+      upstreamRequest = new PassThrough();
+      upstreamRequest.once('close', () => markUpstreamDestroyed?.());
+      upstreamRequest.on('finish', () => {
+        upstreamResponse = new PassThrough();
+        (upstreamResponse as any).statusCode = 200;
+        (upstreamResponse as any).headers = { 'content-type': 'application/json' };
+        callback?.(upstreamResponse as any);
+        upstreamResponse.write('{"balanceUsd":');
+        markResponseStarted?.();
+      });
+      (upstreamRequest as any).setTimeout = () => upstreamRequest;
+      return upstreamRequest as any;
+    }) as typeof https.request);
+    const daemonUrl = new URL(baseUrl);
+
+    try {
+      const downstreamClosed = new Promise<void>((resolve, reject) => {
+        downstreamRequest = http.request(
+          {
+            hostname: daemonUrl.hostname,
+            port: daemonUrl.port,
+            method: 'GET',
+            path: '/api/integrations/vela/api-proxy/api/v1/wallet/balance',
+            headers: { 'x-vela-workspace-id': 'workspace-close' },
+          },
+          (response) => {
+            response.once('data', () => response.destroy());
+            response.once('close', resolve);
+          },
+        );
+        downstreamRequest.on('error', reject);
+        downstreamRequest.end();
+      });
+      await responseStarted;
+      await downstreamClosed;
+      await upstreamDestroyed;
+
+      expect(upstreamRequest?.destroyed).toBe(true);
+    } finally {
+      downstreamRequest?.destroy();
+      upstreamRequest?.destroy();
+      upstreamResponse?.destroy();
       requestSpy.mockRestore();
     }
   });

@@ -753,6 +753,8 @@ jobs:
               handoff_dir="$(python3 .github/scripts/handoff.py dir comment "$handoff_id" --root "$handoff_root")"
               mkdir -p "$handoff_dir"
               marker="<!-- merge-queue-needs-validation -->"
+              # Markdown code spans are intentionally literal in these single-quoted strings.
+              # shellcheck disable=SC2016
               {
                 printf '%s\n' "$marker"
                 # Markdown code spans are intentional literal text.

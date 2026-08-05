@@ -259,7 +259,7 @@ describe('public MCP discovery + generation tools', () => {
     expect(parsed).toMatchObject({
       status: 'failed',
       failureAction: 'recharge',
-      rechargeUrl: 'https://open-design.ai/amr/wallet?source=open_design',
+      rechargeUrl: 'https://open-design.ai/amr/dashboard?source=open_design',
     });
     expect(parsed.hint).toContain('same requestId');
     expect(parsed.hint).toContain('resume:true');

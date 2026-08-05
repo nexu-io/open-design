@@ -9,8 +9,9 @@
 // coarse status the New Brand modal / onboarding step render.
 
 import { useCallback, useRef, useState } from 'react';
-import type { BrandExtractStartResponse, BrandStatus } from '@open-design/contracts';
+import type { BrandExtractStartResponse, BrandStatus, WorkspaceCollabContext } from '@open-design/contracts';
 import { useI18n } from '../i18n';
+import { workspaceProjectHeaders } from '../state/projects';
 
 /** Coarse kickoff phase. */
 export type BrandExtractPhase = 'idle' | 'starting' | 'done' | 'error';
@@ -52,7 +53,21 @@ export interface UseBrandExtract {
    *  (in which case `state.error` is set). */
   run: (
     url: string,
-    options?: { description?: string; designMd?: string; throwOnError?: boolean },
+    options?: {
+      description?: string;
+      designMd?: string;
+      throwOnError?: boolean;
+      /**
+       * The caller's active workspace, so the daemon can bind the freshly
+       * created backing project into it (see `bindBrandProjectIntoRequestWorkspace`
+       * in `apps/daemon/src/brand-routes.ts`). Omitted is explicitly unscoped.
+       * Without this, a team member's brand/design-system extraction project
+       * has no `workspace_projects` row at all, and POST /api/runs + POST
+       * /api/chat's workspace-identity gate then 403s the very first agent
+       * turn against it (spec 04 §9.3, recvqb1t4FrckM).
+       */
+      workspaceContext?: WorkspaceCollabContext | null;
+    },
   ) => Promise<BrandExtractStartResponse | null>;
   reset: () => void;
 }
@@ -69,7 +84,12 @@ export function useBrandExtract(): UseBrandExtract {
 
   const run = useCallback(async (
     url: string,
-    options: { description?: string; designMd?: string; throwOnError?: boolean } = {},
+    options: {
+      description?: string;
+      designMd?: string;
+      throwOnError?: boolean;
+      workspaceContext?: WorkspaceCollabContext | null;
+    } = {},
   ): Promise<BrandExtractStartResponse | null> => {
     if (inFlightRef.current) return null;
     inFlightRef.current = true;
@@ -87,7 +107,11 @@ export function useBrandExtract(): UseBrandExtract {
       resp = await fetch('/api/brands', {
         method: 'POST',
         cache: 'no-store',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          ...(options.workspaceContext ? workspaceProjectHeaders(options.workspaceContext) : {}),
+        },
         body: JSON.stringify({
           ...(url.trim() ? { url } : {}),
           ...(options.description?.trim() ? { description: options.description.trim() } : {}),

@@ -590,18 +590,12 @@ async function seedHtmlArtifact(
 
 async function openDesignFile(page: Page, fileName: string) {
   await openAllProjectFiles(page);
-  const fileRow = page.locator('[data-testid^="design-file-row-"]', {
-    hasText: fileName,
-  });
+  const fileRow = page.locator(`[data-testid^="design-file-row-"][data-testid$="${fileName}"]`).first();
   await expect(fileRow).toBeVisible();
-  const mainButton = fileRow.getByRole('button').first();
-  await mainButton.click();
-  const openButton = page.getByTestId('design-file-preview').getByRole('button', { name: 'Open' });
-  if (await openButton.isVisible().catch(() => false)) {
-    await openButton.click();
-    return;
-  }
-  await mainButton.dblclick();
+  // #5517 removed the preview pane and its "Open" button: the row's primary
+  // target opens the file in a workspace tab on a single click.
+  await fileRow.getByRole('button').first().click();
+  await expect(tabBySuffix(page, fileName)).toHaveAttribute('aria-selected', 'true');
 }
 
 async function expectFileSource(

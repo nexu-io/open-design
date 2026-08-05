@@ -9,8 +9,8 @@
  * AmrLoginPill.test.tsx; here we only assert ChatPane's wiring.
  */
 
-import { cleanup, render, screen } from '@testing-library/react';
-import { forwardRef, useEffect } from 'react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { forwardRef, useEffect, type ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ChatPane } from '../../src/components/ChatPane';
@@ -46,6 +46,7 @@ let lastPillProps: {
   metricsConsent?: boolean;
   installationId?: string | null;
   showActivationDetails?: boolean;
+  onSignInStarted?: () => void;
   onStatusChange?: (s: VelaLoginStatus | null) => void;
 } | null = null;
 vi.mock('../../src/components/AmrLoginPill', () => ({
@@ -56,6 +57,7 @@ vi.mock('../../src/components/AmrLoginPill', () => ({
     metricsConsent?: boolean;
     installationId?: string | null;
     showActivationDetails?: boolean;
+    onSignInStarted?: () => void;
     onStatusChange?: (s: VelaLoginStatus | null) => void;
   }) => {
     lastPillProps = props;
@@ -101,7 +103,27 @@ function amrAuthFailedMessage(): ChatMessage {
   };
 }
 
-function renderChat(onRetry: (m: ChatMessage) => void) {
+function localAgentAuthFailedMessage(): ChatMessage {
+  return {
+    ...amrAuthFailedMessage(),
+    id: 'msg-local-auth',
+    runId: 'run-local-auth',
+    agentId: 'codex',
+    events: [
+      {
+        kind: 'status',
+        label: 'error',
+        detail: 'Codex authorization expired.',
+        code: 'AGENT_AUTH_REQUIRED',
+      },
+    ],
+  };
+}
+
+function renderChat(
+  onRetry: (m: ChatMessage) => void,
+  props: Partial<ComponentProps<typeof ChatPane>> = {},
+) {
   return render(
     <ChatPane
       messages={[amrAuthFailedMessage()]}
@@ -125,6 +147,7 @@ function renderChat(onRetry: (m: ChatMessage) => void) {
         installationId: 'install-123',
         telemetry: { metrics: true },
       } as unknown as AppConfig}
+      {...props}
     />,
   );
 }
@@ -132,7 +155,7 @@ function renderChat(onRetry: (m: ChatMessage) => void) {
 const signedIn: VelaLoginStatus = {
   loggedIn: true,
   profile: 'prod',
-  user: null,
+  user: { id: 'account-a', email: 'account-a@example.com', plan: 'free' },
   configPath: '',
 };
 
@@ -149,25 +172,206 @@ describe('ChatPane inline AMR auth', () => {
     expect(screen.queryByText('promptTemplates.retry')).toBeNull();
   });
 
-  it('retries the failed run exactly once on a signed-out -> signed-in transition', () => {
+  it('arms on the origin mount and retries once only after an exact fresh mount', () => {
     const onRetry = vi.fn();
-    renderChat(onRetry);
+    let pending: Parameters<NonNullable<ComponentProps<typeof ChatPane>['onArmAmrAuthRetryContinuation']>>[0] | null = null;
+    const onArm = vi.fn((next) => {
+      pending = next;
+    });
+    renderChat(onRetry, {
+      amrAuthRetryMountId: 'mount-origin',
+      amrAuthRetryWorkspaceIdentityKey:
+        'workspace-a:personal:member-a:owner:active:active:true:true',
+      onArmAmrAuthRetryContinuation: onArm,
+    });
 
-    const signedOut: VelaLoginStatus = {
-      loggedIn: false,
-      loginInFlight: true,
-      profile: 'prod',
-      user: null,
-      configPath: '',
-    };
-    // Establish the signed-out baseline, then the sign-in transition retries
-    // once; a repeated signed-in poll must NOT retry again (loop guard).
-    lastPillProps?.onStatusChange?.(signedOut);
+    lastPillProps?.onSignInStarted?.();
+    expect(onArm).toHaveBeenCalledTimes(1);
+    expect(pending).toMatchObject({
+      projectId: 'project-1',
+      conversationId: 'conv-1',
+      assistantId: 'msg-amr-auth',
+      originMountId: 'mount-origin',
+    });
+    // Even a fast signed-in event cannot let the origin authorization lifetime
+    // retry with its now-stale context.
+    lastPillProps?.onStatusChange?.(signedIn);
+    expect(onRetry).not.toHaveBeenCalled();
+
+    cleanup();
+    let available = true;
+    const onConsume = vi.fn(() => {
+      if (!available) return false;
+      available = false;
+      return true;
+    });
+    renderChat(onRetry, {
+      amrAuthRetryContinuation: {
+        ...pending!,
+        accountIdAtArm: null,
+        createdAtMs: Date.now(),
+      },
+      amrAuthRetryMountId: 'mount-fresh',
+      amrAuthRetryWorkspaceIdentityKey:
+        'workspace-a:personal:member-a:owner:active:active:true:true',
+      onConsumeAmrAuthRetryContinuation: onConsume,
+    });
+
     lastPillProps?.onStatusChange?.(signedIn);
     lastPillProps?.onStatusChange?.(signedIn);
 
     expect(onRetry).toHaveBeenCalledTimes(1);
     expect(onRetry.mock.calls[0]![0]).toMatchObject({ id: 'msg-amr-auth' });
+    expect(onConsume).toHaveBeenCalledTimes(2);
+  });
+
+  it('waits for the current signed-in status to carry an account id', () => {
+    const onRetry = vi.fn();
+    const onConsume = vi.fn(() => true);
+    renderChat(onRetry, {
+      amrAuthRetryContinuation: {
+        projectId: 'project-1',
+        conversationId: 'conv-1',
+        assistantId: 'msg-amr-auth',
+        workspaceIdentityKey:
+          'workspace-a:personal:member-a:owner:active:active:true:true',
+        originMountId: 'mount-origin',
+        accountIdAtArm: 'account-a',
+        createdAtMs: Date.now(),
+      },
+      amrAuthRetryMountId: 'mount-fresh',
+      amrAuthRetryWorkspaceIdentityKey:
+        'workspace-a:personal:member-a:owner:active:active:true:true',
+      onConsumeAmrAuthRetryContinuation: onConsume,
+    });
+
+    lastPillProps?.onStatusChange?.({
+      ...signedIn,
+      user: null,
+    });
+
+    expect(onConsume).not.toHaveBeenCalled();
+    expect(onRetry).not.toHaveBeenCalled();
+
+    lastPillProps?.onStatusChange?.(signedIn);
+
+    expect(onConsume).toHaveBeenCalledTimes(1);
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it('consumes a Settings handoff on a fresh exact mount even without an inline AMR failure', async () => {
+    fetchVelaLoginStatusMock.mockResolvedValue(signedIn);
+    const onRetry = vi.fn();
+    let available = true;
+    const onConsume = vi.fn(() => {
+      if (!available) return false;
+      available = false;
+      return true;
+    });
+    renderChat(onRetry, {
+      messages: [localAgentAuthFailedMessage()],
+      amrAuthRetryContinuation: {
+        projectId: 'project-1',
+        conversationId: 'conv-1',
+        assistantId: 'msg-local-auth',
+        workspaceIdentityKey:
+          'workspace-a:personal:member-a:owner:active:active:true:true',
+        originMountId: 'mount-before-settings',
+        accountIdAtArm: null,
+        createdAtMs: Date.now(),
+      },
+      amrAuthRetryMountId: 'mount-after-settings',
+      amrAuthRetryWorkspaceIdentityKey:
+        'workspace-a:personal:member-a:owner:active:active:true:true',
+      onConsumeAmrAuthRetryContinuation: onConsume,
+    });
+
+    await waitFor(() => expect(onRetry).toHaveBeenCalledTimes(1));
+    expect(onRetry.mock.calls[0]![0]).toMatchObject({ id: 'msg-local-auth' });
+    expect(onConsume).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries an unbound local project on the same mount only after signed-out -> signed-in', () => {
+    const onRetry = vi.fn();
+    let armed: Parameters<NonNullable<ComponentProps<typeof ChatPane>['onArmAmrAuthRetryContinuation']>>[0] | null = null;
+    const onArm = vi.fn((next) => {
+      armed = next;
+    });
+    let available = true;
+    const onConsume = vi.fn(() => {
+      if (!available) return false;
+      available = false;
+      return true;
+    });
+    const baseProps: Partial<ComponentProps<typeof ChatPane>> = {
+      amrAuthRetryMountId: 'mount-local',
+      amrAuthRetryWorkspaceIdentityKey: 'none',
+      onArmAmrAuthRetryContinuation: onArm,
+      onConsumeAmrAuthRetryContinuation: onConsume,
+    };
+    const view = renderChat(onRetry, baseProps);
+
+    lastPillProps?.onSignInStarted?.();
+    expect(armed).not.toBeNull();
+    view.rerender(
+      <ChatPane
+        messages={[amrAuthFailedMessage()]}
+        streaming={false}
+        error={null}
+        projectId="project-1"
+        projectFiles={[]}
+        onEnsureProject={async () => 'project-1'}
+        onSend={vi.fn()}
+        onStop={vi.fn()}
+        onRetry={onRetry}
+        conversations={[
+          { projectId: 'project-1', id: 'conv-1', title: 'Current', createdAt: 1, updatedAt: 1 },
+        ]}
+        activeConversationId="conv-1"
+        onSelectConversation={vi.fn()}
+        onDeleteConversation={vi.fn()}
+        config={{
+          agentId: 'amr',
+          agentCliEnv: {},
+          installationId: 'install-123',
+          telemetry: { metrics: true },
+        } as unknown as AppConfig}
+        {...baseProps}
+        amrAuthRetryWorkspaceIdentityKey=
+          "personal-a:personal:member-personal-a:owner:active:active:true:true"
+        amrAuthRetryPersonalAdoptionWitness={{
+          workspaceIdentityKey:
+            'personal-a:personal:member-personal-a:owner:active:active:true:true',
+          workspaceId: 'personal-a',
+          workspaceMemberId: 'member-personal-a',
+          workspaceType: 'personal',
+          memberStatus: 'active',
+        }}
+        amrAuthRetryContinuation={{
+          ...armed!,
+          accountIdAtArm: null,
+          createdAtMs: Date.now(),
+        }}
+      />,
+    );
+
+    // A signed-in poll by itself is not proof that this authorization attempt
+    // changed identity, so it must not retry.
+    lastPillProps?.onStatusChange?.(signedIn);
+    expect(onRetry).not.toHaveBeenCalled();
+
+    lastPillProps?.onStatusChange?.({
+      loggedIn: false,
+      loginInFlight: true,
+      profile: 'prod',
+      user: null,
+      configPath: '',
+    });
+    lastPillProps?.onStatusChange?.(signedIn);
+    lastPillProps?.onStatusChange?.(signedIn);
+
+    expect(onConsume).toHaveBeenCalledTimes(1);
+    expect(onRetry).toHaveBeenCalledTimes(1);
   });
 
   it('does not retry while still signed out', () => {

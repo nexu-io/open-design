@@ -210,10 +210,11 @@ describe('intent signals × stable prompt cache', () => {
     expect(await runPromptCache(url, conversationId, turn2.id)).toMatchObject({
       hit: false,
       missReason: 'stable-prompt-changed',
-      // The deck signal is the only thing that moved, so attribution must name
-      // `intent` alone. A wider list would mean the section map cannot isolate
-      // a cause; `unattributed` would mean it missed this input entirely.
-      changedSections: ['intent'],
+      // The deck signal moved, and on this branch the craft section follows
+      // the intent signal (deck-specific craft rules swap in with the deck
+      // intent), so attribution names both real movers. `unattributed` would
+      // mean the section map missed this input entirely.
+      changedSections: ['intent', 'craft'],
     });
 
     // t3 has no deck vocabulary of its own; the conversation latch must hold

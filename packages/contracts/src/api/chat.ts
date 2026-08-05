@@ -93,6 +93,10 @@ export interface ChatRequest {
   projectId?: string | null;
   conversationId?: string | null;
   sessionMode?: ChatSessionMode;
+  /** Client-minted id for the latest user turn. The daemon pins this row before
+   * the assistant row so concurrent best-effort message persistence cannot
+   * invert the visible turn order. */
+  userMessageId?: string | null;
   assistantMessageId?: string | null;
   clientRequestId?: string | null;
   skillId?: string | null;

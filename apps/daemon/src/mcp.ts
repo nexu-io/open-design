@@ -65,7 +65,7 @@ const SERVER_NAME = 'open-design';
 const SERVER_VERSION = '0.2.0';
 const MCP_STDIO_IDLE_EXIT_MS = 30 * 60 * 1000;
 const OPEN_DESIGN_BRIEF_APP_RESOURCE =
-  'ui://open-design/artifact-card-v6.html';
+  'ui://open-design/artifact-card-v8.html';
 
 export const MCP_SERVER_INSTRUCTIONS = [
   'Use only these product names in user-facing replies: Open Design Cloud and Local Codex.',

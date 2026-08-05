@@ -13,6 +13,7 @@ describe("AMR Environment Profile desktop menu helpers", () => {
     expect(normalizeAmrEnvironmentProfile("")).toBe("prod");
     expect(normalizeAmrEnvironmentProfile("staging")).toBe("prod");
     expect(normalizeAmrEnvironmentProfile("local")).toBe("local");
+    expect(normalizeAmrEnvironmentProfile("feature-test")).toBe("feature-test");
     expect(normalizeAmrEnvironmentProfile("test")).toBe("test");
     expect(normalizeAmrEnvironmentProfile("prod")).toBe("prod");
   });
@@ -67,10 +68,10 @@ describe("AMR Environment Profile desktop menu helpers", () => {
   });
 
   it("creates the AMR env section when the existing config has no agentCliEnv", () => {
-    expect(mergeAmrEnvironmentProfileConfig({}, "test")).toEqual({
+    expect(mergeAmrEnvironmentProfileConfig({}, "feature-test")).toEqual({
       agentCliEnv: {
         amr: {
-          OPEN_DESIGN_AMR_PROFILE: "test",
+          OPEN_DESIGN_AMR_PROFILE: "feature-test",
         },
       },
     });
@@ -144,7 +145,7 @@ describe("AMR Environment Profile desktop menu helpers", () => {
     });
   });
 
-  it("builds radio menu items for prod, test, and local", () => {
+  it("builds radio menu items for prod, test, feature-test, and local", () => {
     const selected: string[] = [];
     const [profileMenu] = createAmrEnvironmentProfileMenuItems("test", (profile) => {
       selected.push(profile);
@@ -154,6 +155,7 @@ describe("AMR Environment Profile desktop menu helpers", () => {
     expect(profileMenu.submenu).toEqual([
       expect.objectContaining({ label: "prod", type: "radio", checked: false }),
       expect.objectContaining({ label: "test", type: "radio", checked: true }),
+      expect.objectContaining({ label: "feature-test", type: "radio", checked: false }),
       expect.objectContaining({ label: "local", type: "radio", checked: false }),
     ]);
 

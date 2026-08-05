@@ -1,0 +1,1151 @@
+---
+/*
+ * /codex-plugin/ - standalone landing page for the public
+ * nexu-io/open-design-agent-plugins repository.
+ *
+ * English is the authoritative source. Complete translated copy for every
+ * active landing locale lives in `open-design-plugin-locales/`.
+ */
+import Layout from '../../_components/sub-page-layout.astro';
+import LazyImg from '../../_components/lazy-img.astro';
+import { getLocaleDefinition, localeFromPath, localizedHref } from '../../i18n';
+import { getOpenDesignPluginCopy } from '../../open-design-plugin-i18n';
+import '../../open-design-pugin.css';
+
+const SITE = Astro.site?.toString() ?? 'https://open-design.ai/';
+const locale = localeFromPath(Astro.url.pathname);
+const localeDefinition = getLocaleDefinition(locale);
+const href = (path: string) => localizedHref(path, locale);
+const copy = getOpenDesignPluginCopy(locale);
+const PAGE_URL = new URL(Astro.url.pathname, SITE).toString();
+const REPO = 'https://github.com/nexu-io/open-design-agent-plugins';
+const RELEASE_MANIFEST =
+  'https://raw.githubusercontent.com/nexu-io/open-design-agent-plugins/main/release-manifest.json';
+const DOWNLOAD = href('/download/');
+
+const INSTALL_INSTRUCTION =
+  'Read https://open-design.ai/codex-plugin/ and install the Open Design plugin in Codex, including its local MCP. Verify the installation, then tell me to start a new task.';
+const SIGNED_MACOS_APP_FUNCTION = `open_design_signed_macos_app() {
+  [ "$(/usr/bin/uname -s 2>/dev/null || true)" = "Darwin" ] || return 1
+  for open_design_app in "/Applications/Open Design.app" "$HOME/Applications/Open Design.app"; do
+    [ -x "$open_design_app/Contents/MacOS/Open Design" ] || continue
+    [ -f "$open_design_app/Contents/Info.plist" ] || continue
+    /usr/bin/codesign --verify --deep --strict "$open_design_app" >/dev/null 2>&1 || continue
+    /usr/sbin/spctl --assess --type execute "$open_design_app" >/dev/null 2>&1 || continue
+    printf '%s\\n' "$open_design_app"
+    return 0
+  done
+  return 1
+}`;
+const SAFE_MCP_INSPECTION_FUNCTION = `open_design_safe_mcp_inspect() {
+  open_design_mcp_json="$(codex mcp list --json 2>/dev/null)" || {
+    printf '%s\\n' 'open-design-mcp-inspect:error:list-failed'
+    return 1
+  }
+  open_design_mcp_safe="$(printf '%s\\n' "$open_design_mcp_json" | awk '
+    function json_value(line, value) {
+      value = line
+      sub(/^[^:]*:[[:space:]]*/, "", value)
+      sub(/,[[:space:]]*$/, "", value)
+      return value
+    }
+    /^  \\{$/ {
+      in_server = 1
+      name = "null"
+      enabled = "null"
+      transport_type = "null"
+      command = "null"
+      next
+    }
+    in_server && /^    "name":[[:space:]]/ { name = json_value($0); next }
+    in_server && /^    "enabled":[[:space:]]/ { enabled = json_value($0); next }
+    in_server && /^    "transport":[[:space:]]*\\{$/ { in_transport = 1; next }
+    in_server && in_transport && /^      "type":[[:space:]]/ {
+      transport_type = json_value($0)
+      next
+    }
+    in_server && in_transport && /^      "command":[[:space:]]/ {
+      command = json_value($0)
+      next
+    }
+    in_server && in_transport && /^    \\}[,]?$/ { in_transport = 0; next }
+    in_server && /^  \\}[,]?$/ {
+      if (name == "\\\"open-design\\\"") {
+        printf "{\\\"name\\\":%s,\\\"enabled\\\":%s,\\\"transport\\\":{\\\"type\\\":%s,\\\"command\\\":%s}}\\n", name, enabled, transport_type, command
+        found = 1
+      }
+      in_server = 0
+      next
+    }
+    END {
+      if (!found) print "{\\\"name\\\":\\\"open-design\\\",\\\"enabled\\\":false,\\\"transport\\\":{\\\"type\\\":null,\\\"command\\\":null}}"
+    }
+  ')"
+  open_design_mcp_status=$?
+  unset open_design_mcp_json
+  [ "$open_design_mcp_status" -eq 0 ] || return "$open_design_mcp_status"
+  printf '%s\\n' "$open_design_mcp_safe"
+}`;
+const MCP_VALIDATION_FUNCTION = `${SIGNED_MACOS_APP_FUNCTION}
+open_design_private_mcp_matches() {
+  open_design_private_mode="$1"
+  open_design_private_app="$2"
+  open_design_private_od="$3"
+  open_design_private_safe_command="$4"
+  open_design_private_current="$(codex mcp list --json 2>/dev/null)" || return 1
+  open_design_private_expected=""
+  if [ "$open_design_private_mode" = "cli" ]; then
+    [ -n "$open_design_private_od" ] || return 1
+    open_design_private_expected="$("$open_design_private_od" mcp install codex --print --json 2>/dev/null)" || return 1
+  fi
+
+  open_design_private_node="$(command -v node || true)"
+  open_design_private_runtime=system-node
+  if [ -z "$open_design_private_node" ]; then
+    open_design_private_helper="$open_design_private_app/Contents/Frameworks/Open Design Helper.app/Contents/MacOS/Open Design Helper"
+    [ "$open_design_private_mode" = "signed-app" ] && [ -x "$open_design_private_helper" ] || return 1
+    open_design_private_node="$open_design_private_helper"
+    open_design_private_runtime=signed-helper
+  fi
+  open_design_private_checker='
+    const fs = require("node:fs");
+    const input = fs.readFileSync(0, "utf8");
+    const first = input.indexOf("\\n");
+    const second = input.indexOf("\\n", first + 1);
+    const third = input.indexOf("\\n", second + 1);
+    const marker = "\\n--OPEN-DESIGN-EXPECTED--\\n";
+    const mode = input.slice(0, first);
+    const app = input.slice(first + 1, second);
+    const safeCommand = input.slice(second + 1, third);
+    const rest = input.slice(third + 1);
+    const split = rest.indexOf(marker);
+    const currentText = split < 0 ? rest : rest.slice(0, split);
+    const expectedText = split < 0 ? "" : rest.slice(split + marker.length);
+    const sameArray = (left, right) =>
+      Array.isArray(left) && Array.isArray(right) &&
+      left.length === right.length && left.every((value, index) => value === right[index]);
+    const sameEnv = (left, right) => {
+      if (left == null || typeof left !== "object" || Array.isArray(left)) return false;
+      if (right == null || typeof right !== "object" || Array.isArray(right)) return false;
+      const leftKeys = Object.keys(left).sort();
+      const rightKeys = Object.keys(right).sort();
+      return sameArray(leftKeys, rightKeys) && leftKeys.every((key) => left[key] === right[key]);
+    };
+    let ok = false;
+    try {
+      const currentRoot = JSON.parse(currentText);
+      const rows = Array.isArray(currentRoot)
+        ? currentRoot
+        : Array.isArray(currentRoot.servers) ? currentRoot.servers : [];
+      const matches = rows.filter((row) => row && row.name === "open-design");
+      if (matches.length !== 1) process.exit(1);
+      const transport = matches[0].transport;
+      if (!transport || transport.type !== "stdio") process.exit(1);
+      if (transport.command !== safeCommand) process.exit(1);
+      if (transport.cwd != null) process.exit(1);
+      if (transport.env_vars != null && !sameArray(transport.env_vars, [])) process.exit(1);
+
+      if (mode === "signed-app") {
+        const helper = app + "/Contents/Frameworks/Open Design Helper.app/Contents/MacOS/Open Design Helper";
+        const daemonCli = app + "/Contents/Resources/app/prebundled/daemon/daemon-cli.mjs";
+        const env = transport.env;
+        const requiredEnvKeys = [
+          "ELECTRON_RUN_AS_NODE",
+          "OD_DATA_DIR",
+          "OD_MCP_BOOTSTRAP_ARGS",
+          "OD_MCP_BOOTSTRAP_COMMAND",
+          "OD_SIDECAR_IPC_PATH",
+        ].sort();
+        const envKeys = env && typeof env === "object" && !Array.isArray(env)
+          ? Object.keys(env).sort() : [];
+        let bootstrapArgs = null;
+        try { bootstrapArgs = JSON.parse(env && env.OD_MCP_BOOTSTRAP_ARGS); } catch {}
+        ok = transport.command === helper &&
+          sameArray(transport.args, [daemonCli, "mcp"]) &&
+          sameArray(envKeys, requiredEnvKeys) &&
+          env.ELECTRON_RUN_AS_NODE === "1" &&
+          env.OD_MCP_BOOTSTRAP_COMMAND === "/usr/bin/open" &&
+          sameArray(bootstrapArgs, ["-g", "-j", app, "--args", "--headless"]) &&
+          typeof env.OD_DATA_DIR === "string" && env.OD_DATA_DIR.startsWith("/") &&
+          typeof env.OD_SIDECAR_IPC_PATH === "string" &&
+          env.OD_SIDECAR_IPC_PATH.startsWith("/") &&
+          env.OD_SIDECAR_IPC_PATH.endsWith("/daemon.sock");
+      } else if (mode === "cli") {
+        const expectedRoot = JSON.parse(expectedText);
+        const expected = expectedRoot.launchSpec;
+        if (!expected || typeof expected !== "object" || Array.isArray(expected)) process.exit(1);
+        const expectedEnv = expected.env == null ? {} : expected.env;
+        ok = typeof expected.command === "string" && expected.command.length > 0 &&
+          transport.command === expected.command &&
+          sameArray(transport.args, expected.args || []) &&
+          sameEnv(transport.env || {}, expectedEnv);
+      }
+    } catch {}
+    process.exit(ok ? 0 : 1);
+  '
+  if [ "$open_design_private_runtime" = "signed-helper" ]; then
+    printf '%s\\n%s\\n%s\\n%s\\n%s\\n%s' \
+      "$open_design_private_mode" \
+      "$open_design_private_app" \
+      "$open_design_private_safe_command" \
+      "$open_design_private_current" \
+      '--OPEN-DESIGN-EXPECTED--' \
+      "$open_design_private_expected" | \
+      ELECTRON_RUN_AS_NODE=1 "$open_design_private_node" -e "$open_design_private_checker" >/dev/null 2>&1
+    open_design_private_status=$?
+  else
+    printf '%s\\n%s\\n%s\\n%s\\n%s\\n%s' \
+      "$open_design_private_mode" \
+      "$open_design_private_app" \
+      "$open_design_private_safe_command" \
+      "$open_design_private_current" \
+      '--OPEN-DESIGN-EXPECTED--' \
+      "$open_design_private_expected" | \
+      "$open_design_private_node" -e "$open_design_private_checker" >/dev/null 2>&1
+    open_design_private_status=$?
+  fi
+  unset open_design_private_current open_design_private_expected open_design_private_checker
+  return "$open_design_private_status"
+}
+open_design_mcp_snapshot_is_verified_local() {
+  open_design_mcp_snapshot="$1"
+  case "$open_design_mcp_snapshot" in
+    '{"name":"open-design","enabled":true,"transport":{"type":"stdio","command":"'*'"}}') ;;
+    *) return 1 ;;
+  esac
+
+  open_design_mcp_command="$(printf '%s\\n' "$open_design_mcp_snapshot" | awk '{
+    value = $0
+    sub(/^.*"command":"/, "", value)
+    sub(/"}}$/, "", value)
+    print value
+  }')"
+  case "$open_design_mcp_command" in
+    /*) ;;
+    [A-Za-z]:\\\\*) ;;
+    \\\\*) ;;
+    *) return 1 ;;
+  esac
+
+  open_design_verified_app="$(open_design_signed_macos_app || true)"
+  if [ -n "$open_design_verified_app" ] && \
+    open_design_private_mcp_matches signed-app "$open_design_verified_app" "" "$open_design_mcp_command"; then
+    return 0
+  fi
+
+  open_design_verified_od="$(command -v od || true)"
+  [ -n "$open_design_verified_od" ] || return 1
+  [ "$("$open_design_verified_od" mcp install --open-design-cli-probe 2>/dev/null || true)" = "open-design-cli:mcp-install:v1" ] || return 1
+  open_design_private_mcp_matches cli "" "$open_design_verified_od" "$open_design_mcp_command"
+}`;
+const PLUGIN_STATE_FUNCTION = `open_design_manifest_plugin_requirements() {
+  open_design_manifest="$(curl -fsSL ${RELEASE_MANIFEST})" || {
+    printf '%s\\n' 'open-design-plugin:error:manifest-fetch-failed'
+    return 1
+  }
+  open_design_manifest_requirements="$(printf '%s\\n' "$open_design_manifest" | awk '
+    function string_value(line, value) {
+      value = $0
+      sub(/^[^:]*:[[:space:]]*"/, "", value)
+      sub(/",?[[:space:]]*$/, "", value)
+      return value
+    }
+    /^[[:space:]]*"marketplace":[[:space:]]*\{/ { in_marketplace = 1; next }
+    in_marketplace && /^[[:space:]]*"name":[[:space:]]*"/ { marketplace = string_value($0); next }
+    in_marketplace && /^[[:space:]]*"gitSource":[[:space:]]*"/ { source = string_value($0); next }
+    in_marketplace && /^[[:space:]]*"gitRef":[[:space:]]*"/ { git_ref = string_value($0); next }
+    in_marketplace && /^  \}[,]?$/ { in_marketplace = 0; next }
+    /^[[:space:]]*"plugin":[[:space:]]*\{/ { in_plugin = 1; next }
+    in_plugin && /^[[:space:]]*"name":[[:space:]]*"/ { plugin = string_value($0); next }
+    in_plugin && /^[[:space:]]*"version":[[:space:]]*"/ { version = string_value($0); next }
+    in_plugin && /^  \}[,]?$/ { in_plugin = 0; next }
+    END {
+      if (marketplace && source && git_ref && plugin && version) {
+        print marketplace "|" source "|" git_ref "|" plugin "|" version
+      }
+    }
+  ')"
+  unset open_design_manifest
+  [ -n "$open_design_manifest_requirements" ] || {
+    printf '%s\\n' 'open-design-plugin:error:manifest-requirements-missing'
+    return 1
+  }
+  printf '%s\\n' "$open_design_manifest_requirements"
+}
+open_design_canonical_marketplace_source() {
+  open_design_observed_source="$(printf '%s\\n' "$1" | sed -e 's#^https://github.com/##' -e 's#\\.git$##' -e 's#/$##')"
+  open_design_required_source="$(printf '%s\\n' "$2" | sed -e 's#^https://github.com/##' -e 's#\\.git$##' -e 's#/$##')"
+  [ -n "$open_design_observed_source" ] && [ "$open_design_observed_source" = "$open_design_required_source" ]
+}
+open_design_marketplace_config_ref() {
+  open_design_config_marketplace="$1"
+  open_design_codex_home="$CODEX_HOME"
+  [ -n "$open_design_codex_home" ] || open_design_codex_home="$HOME/.codex"
+  open_design_codex_config="$open_design_codex_home/config.toml"
+  [ -r "$open_design_codex_config" ] || return 1
+  awk -v required="$open_design_config_marketplace" '
+    /^\[[^]]+\]$/ {
+      header = $0
+      sub(/^\[/, "", header)
+      sub(/\]$/, "", header)
+      in_required = header == "marketplaces." required || header == "marketplaces.\\\"" required "\\\""
+      next
+    }
+    in_required && /^[[:space:]]*ref[[:space:]]*=/ {
+      value = $0
+      sub(/^[^=]*=[[:space:]]*/, "", value)
+      sub(/[[:space:]]*$/, "", value)
+      if (substr(value, 1, 1) == "\\\"") {
+        sub(/^\\\"/, "", value)
+        sub(/\\\"$/, "", value)
+      }
+      if (value != "") {
+        print value
+        found = 1
+        exit
+      }
+    }
+    END { if (!found) exit 1 }
+  ' "$open_design_codex_config"
+}
+open_design_plugin_inspect() {
+  open_design_requirements="$(open_design_manifest_plugin_requirements)" || return 1
+  IFS='|' read -r open_design_required_marketplace open_design_required_source open_design_required_ref open_design_required_plugin open_design_required_version <<EOF
+$open_design_requirements
+EOF
+  open_design_required_selector="$open_design_required_plugin@$open_design_required_marketplace"
+  open_design_marketplaces_json="$(codex plugin marketplace list --json 2>/dev/null)" || {
+    printf '%s\\n' 'open-design-plugin:error:marketplace-list-failed'
+    return 1
+  }
+  open_design_marketplace_record="$(printf '%s\\n' "$open_design_marketplaces_json" | awk -v required_marketplace="$open_design_required_marketplace" '
+    function string_value(line, value) {
+      value = line
+      sub(/^[^:]*:[[:space:]]*"/, "", value)
+      sub(/",?[[:space:]]*$/, "", value)
+      return value
+    }
+    /^    \{$/ {
+      in_marketplace = 1
+      name = source_type = source = ""
+      next
+    }
+    in_marketplace && /^      "name":[[:space:]]*"/ { name = string_value($0); next }
+    in_marketplace && /^      "marketplaceSource":[[:space:]]*\{$/ { in_source = 1; next }
+    in_marketplace && in_source && /^        "sourceType":[[:space:]]*"/ { source_type = string_value($0); next }
+    in_marketplace && in_source && /^        "source":[[:space:]]*"/ { source = string_value($0); next }
+    in_marketplace && in_source && /^      \}[,]?$/ { in_source = 0; next }
+    in_marketplace && /^    \}[,]?$/ {
+      if (name == required_marketplace) print name "|" source_type "|" source
+      in_marketplace = 0
+    }
+  ')" || {
+    unset open_design_marketplaces_json
+    printf '%s\\n' 'open-design-plugin:error:marketplace-parse-failed'
+    return 1
+  }
+  unset open_design_marketplaces_json
+
+  if [ -n "$open_design_marketplace_record" ]; then
+    open_design_marketplace_count="$(printf '%s\\n' "$open_design_marketplace_record" | awk 'NF { count++ } END { print count + 0 }')"
+    [ "$open_design_marketplace_count" -eq 1 ] || {
+      printf '%s\\n' 'open-design-plugin:error:marketplace-collision'
+      return 1
+    }
+    IFS='|' read -r open_design_marketplace_name open_design_marketplace_type open_design_marketplace_source <<EOF
+$open_design_marketplace_record
+EOF
+    [ "$open_design_marketplace_type" = "git" ] && open_design_canonical_marketplace_source "$open_design_marketplace_source" "$open_design_required_source" || {
+      printf '%s\\n' 'open-design-plugin:error:marketplace-collision'
+      return 1
+    }
+    open_design_marketplace_ref="$(open_design_marketplace_config_ref "$open_design_required_marketplace")" || {
+      printf '%s\\n' 'open-design-plugin:error:marketplace-ref-missing'
+      return 1
+    }
+    [ "$open_design_marketplace_ref" = "$open_design_required_ref" ] || {
+      printf '%s\\n' 'open-design-plugin:error:marketplace-ref-collision'
+      return 1
+    }
+    open_design_marketplace_state=present
+  else
+    open_design_marketplace_state=missing
+  fi
+
+  open_design_plugins_json="$(codex plugin list --json 2>/dev/null)" || {
+    printf '%s\\n' 'open-design-plugin:error:plugin-list-failed'
+    return 1
+  }
+  open_design_plugin_records="$(printf '%s\\n' "$open_design_plugins_json" | awk -v required_plugin="$open_design_required_plugin" '
+    function string_value(line, value) {
+      value = line
+      sub(/^[^:]*:[[:space:]]*"/, "", value)
+      sub(/",?[[:space:]]*$/, "", value)
+      return value
+    }
+    function scalar_value(line, value) {
+      value = line
+      sub(/^[^:]*:[[:space:]]*/, "", value)
+      sub(/,?[[:space:]]*$/, "", value)
+      return value
+    }
+    /^  "installed":[[:space:]]*\\[$/ { in_installed = 1; next }
+    in_installed && /^  \\][,]?$/ { in_installed = 0; next }
+    in_installed && /^    \{$/ {
+      in_plugin = 1
+      plugin_id = name = marketplace = version = installed = enabled = source_type = source = ""
+      next
+    }
+    in_plugin && /^      "pluginId":[[:space:]]*"/ { plugin_id = string_value($0); next }
+    in_plugin && /^      "name":[[:space:]]*"/ { name = string_value($0); next }
+    in_plugin && /^      "marketplaceName":[[:space:]]*"/ { marketplace = string_value($0); next }
+    in_plugin && /^      "version":[[:space:]]*"/ { version = string_value($0); next }
+    in_plugin && /^      "installed":[[:space:]]*/ { installed = scalar_value($0); next }
+    in_plugin && /^      "enabled":[[:space:]]*/ { enabled = scalar_value($0); next }
+    in_plugin && /^      "marketplaceSource":[[:space:]]*\{$/ { in_marketplace_source = 1; next }
+    in_plugin && in_marketplace_source && /^        "sourceType":[[:space:]]*"/ { source_type = string_value($0); next }
+    in_plugin && in_marketplace_source && /^        "source":[[:space:]]*"/ { source = string_value($0); next }
+    in_plugin && in_marketplace_source && /^      \}[,]?$/ { in_marketplace_source = 0; next }
+    in_installed && in_plugin && /^    \}[,]?$/ {
+      if (name == required_plugin || index(plugin_id, required_plugin "@") == 1) {
+        print plugin_id "|" marketplace "|" version "|" installed "|" enabled "|" source_type "|" source
+      }
+      in_plugin = 0
+    }
+  ')" || {
+    unset open_design_plugins_json
+    printf '%s\\n' 'open-design-plugin:error:plugin-parse-failed'
+    return 1
+  }
+  unset open_design_plugins_json
+
+  if [ -z "$open_design_plugin_records" ]; then
+    if [ "$open_design_marketplace_state" = "missing" ]; then
+      printf '%s\\n' 'open-design-plugin:state:marketplace-missing'
+    else
+      printf '%s\\n' 'open-design-plugin:state:plugin-missing'
+    fi
+    return 0
+  fi
+
+  open_design_plugin_count="$(printf '%s\\n' "$open_design_plugin_records" | awk 'NF { count++ } END { print count + 0 }')"
+  [ "$open_design_plugin_count" -eq 1 ] || {
+    printf '%s\\n' 'open-design-plugin:error:selector-collision'
+    return 1
+  }
+  IFS='|' read -r open_design_plugin_id open_design_plugin_marketplace open_design_plugin_version open_design_plugin_installed open_design_plugin_enabled open_design_plugin_source_type open_design_plugin_source <<EOF
+$open_design_plugin_records
+EOF
+  [ "$open_design_marketplace_state" = "present" ] && \
+    [ "$open_design_plugin_id" = "$open_design_required_selector" ] && \
+    [ "$open_design_plugin_marketplace" = "$open_design_required_marketplace" ] && \
+    [ "$open_design_plugin_installed" = "true" ] && \
+    [ "$open_design_plugin_enabled" = "true" ] && \
+    [ "$open_design_plugin_source_type" = "git" ] && \
+    open_design_canonical_marketplace_source "$open_design_plugin_source" "$open_design_required_source" || {
+      printf '%s\\n' 'open-design-plugin:error:selector-collision'
+      return 1
+    }
+  if [ "$open_design_plugin_version" != "$open_design_required_version" ]; then
+    printf '%s:%s:%s\\n' 'open-design-plugin:action:version-confirmation-required' "$open_design_plugin_version" "$open_design_required_version"
+    return 2
+  fi
+  printf '%s:%s\\n' 'open-design-plugin:state:exact' "$open_design_required_version"
+}`;
+const PREFLIGHT_COMMANDS = `open_design_version_at_least() {
+  awk -v have="$1" -v need="$2" '
+  function is_numeric(value) { return value ~ /^[0-9]+$/ }
+  BEGIN {
+    sub(/^[^0-9]*/, "", have)
+    sub(/^[^0-9]*/, "", need)
+    if (have !~ /^[0-9]+\\.[0-9]+\\.[0-9]+($|[-+])/ || need !~ /^[0-9]+\\.[0-9]+\\.[0-9]+($|[-+])/) exit 2
+    sub(/\\+.*/, "", have)
+    sub(/\\+.*/, "", need)
+    have_dash = index(have, "-")
+    need_dash = index(need, "-")
+    if (have_dash) {
+      have_prerelease = substr(have, have_dash + 1)
+      have = substr(have, 1, have_dash - 1)
+    }
+    if (need_dash) {
+      need_prerelease = substr(need, need_dash + 1)
+      need = substr(need, 1, need_dash - 1)
+    }
+    split(have, have_parts, ".")
+    split(need, need_parts, ".")
+    for (part = 1; part <= 3; part++) {
+      if ((have_parts[part] + 0) > (need_parts[part] + 0)) exit 0
+      if ((have_parts[part] + 0) < (need_parts[part] + 0)) exit 1
+    }
+    if (!have_prerelease && !need_prerelease) exit 0
+    if (!have_prerelease) exit 0
+    if (!need_prerelease) exit 1
+    have_count = split(have_prerelease, have_pre_parts, ".")
+    need_count = split(need_prerelease, need_pre_parts, ".")
+    max_count = have_count > need_count ? have_count : need_count
+    for (part = 1; part <= max_count; part++) {
+      if (part > have_count) exit 1
+      if (part > need_count) exit 0
+      have_numeric = is_numeric(have_pre_parts[part])
+      need_numeric = is_numeric(need_pre_parts[part])
+      if (have_numeric && need_numeric) {
+        if ((have_pre_parts[part] + 0) > (need_pre_parts[part] + 0)) exit 0
+        if ((have_pre_parts[part] + 0) < (need_pre_parts[part] + 0)) exit 1
+      } else if (have_numeric) {
+        exit 1
+      } else if (need_numeric) {
+        exit 0
+      } else {
+        if (have_pre_parts[part] > need_pre_parts[part]) exit 0
+        if (have_pre_parts[part] < need_pre_parts[part]) exit 1
+      }
+    }
+    exit 0
+  }'
+}
+open_design_json_string() {
+  awk -v key="\\\"$1\\\"" '{
+    rest = $0
+    while ((offset = index(rest, key)) > 0) {
+      rest = substr(rest, offset + length(key))
+      value = rest
+      sub(/^[[:space:]]*:[[:space:]]*/, "", value)
+      if (value ~ /^"/) {
+        sub(/^"/, "", value)
+        sub(/".*$/, "", value)
+        print value
+        exit
+      }
+    }
+  }'
+}
+${SIGNED_MACOS_APP_FUNCTION}
+open_design_preflight() {
+  open_design_manifest="$(curl -fsSL ${RELEASE_MANIFEST})" || return 1
+  open_design_required_codex="$(printf '%s\\n' "$open_design_manifest" | open_design_json_string minimumCodexCliVersion)"
+  open_design_required_runtime="$(printf '%s\\n' "$open_design_manifest" | open_design_json_string minimumOpenDesignVersion)"
+  [ -n "$open_design_required_codex" ] && [ -n "$open_design_required_runtime" ] || {
+    printf '%s\\n' 'open-design-preflight:error:manifest-minimums'
+    return 1
+  }
+
+  open_design_codex_raw="$(codex --version)" || return 1
+  open_design_codex_version="$(printf '%s\\n' "$open_design_codex_raw" | awk '{ for (field = 1; field <= NF; field++) if ($field ~ /^v?[0-9]+\\.[0-9]+\\.[0-9]+/) { sub(/^v/, "", $field); print $field; exit } }')"
+  open_design_version_at_least "$open_design_codex_version" "$open_design_required_codex" || {
+    printf '%s\\n' 'open-design-preflight:error:codex-version'
+    return 1
+  }
+
+  open_design_runtime_version=""
+  open_design_runtime_source=""
+  open_design_od_path="$(command -v od || true)"
+  open_design_od_probe=""
+  if [ -n "$open_design_od_path" ]; then
+    open_design_od_probe="$("$open_design_od_path" mcp install --open-design-cli-probe 2>/dev/null || true)"
+  fi
+  if [ "$open_design_od_probe" = "open-design-cli:mcp-install:v1" ]; then
+    open_design_runtime_json="$("$open_design_od_path" version --json 2>/dev/null || true)"
+    open_design_runtime_version="$(printf '%s\\n' "$open_design_runtime_json" | open_design_json_string version)"
+    if [ -n "$open_design_runtime_version" ]; then
+      open_design_runtime_source="verified-cli"
+    fi
+  fi
+
+  if [ -z "$open_design_runtime_version" ]; then
+    open_design_app="$(open_design_signed_macos_app || true)"
+    if [ -n "$open_design_app" ]; then
+      open_design_runtime_version="$(/usr/bin/plutil -extract CFBundleShortVersionString raw -o - "$open_design_app/Contents/Info.plist" 2>/dev/null || true)"
+      if [ -n "$open_design_runtime_version" ]; then
+        open_design_runtime_source="signed-macos-app"
+      fi
+    fi
+  fi
+
+  [ -n "$open_design_runtime_version" ] || {
+    printf '%s\\n' 'open-design-preflight:action:settings-mcp-snippet-required'
+    return 1
+  }
+  open_design_version_at_least "$open_design_runtime_version" "$open_design_required_runtime" || {
+    printf '%s\\n' 'open-design-preflight:error:runtime-version'
+    return 1
+  }
+
+  git ls-remote https://github.com/nexu-io/open-design-agent-plugins.git main >/dev/null || return 1
+  printf '%s:%s\\n' 'open-design-preflight:ok' "$open_design_runtime_source"
+}
+open_design_preflight`;
+const INSPECT_COMMANDS = `${PLUGIN_STATE_FUNCTION}
+${SAFE_MCP_INSPECTION_FUNCTION}
+open_design_inspect_install() {
+  open_design_plugin_state="$(open_design_plugin_inspect)"
+  open_design_plugin_status=$?
+  printf '%s\\n' "$open_design_plugin_state"
+  [ "$open_design_plugin_status" -eq 0 ] || return "$open_design_plugin_status"
+  open_design_safe_mcp_inspect
+}
+open_design_inspect_install`;
+const PLUGIN_INSTALL_COMMANDS = `${PLUGIN_STATE_FUNCTION}
+open_design_install_plugin() {
+  open_design_requirements="$(open_design_manifest_plugin_requirements)" || return 1
+  IFS='|' read -r open_design_required_marketplace open_design_required_source open_design_required_ref open_design_required_plugin open_design_required_version <<EOF
+$open_design_requirements
+EOF
+  open_design_required_selector="$open_design_required_plugin@$open_design_required_marketplace"
+  open_design_plugin_state="$(open_design_plugin_inspect)"
+  open_design_plugin_status=$?
+  if [ "$open_design_plugin_status" -eq 2 ] && [ "$OPEN_DESIGN_PLUGIN_UPDATE_CONFIRMED" != "1" ]; then
+    printf '%s\\n' "$open_design_plugin_state"
+    return 2
+  fi
+  [ "$open_design_plugin_status" -eq 0 ] || [ "$open_design_plugin_status" -eq 2 ] || {
+    printf '%s\\n' "$open_design_plugin_state"
+    return "$open_design_plugin_status"
+  }
+
+  case "$open_design_plugin_state" in
+    open-design-plugin:state:exact:*)
+      printf '%s\\n' "$open_design_plugin_state"
+      return 0
+      ;;
+    open-design-plugin:state:marketplace-missing)
+      codex plugin marketplace add "$open_design_required_source" --ref "$open_design_required_ref" --json >/dev/null || {
+        printf '%s\\n' 'open-design-plugin:error:marketplace-add-failed'
+        return 1
+      }
+      open_design_plugin_state="$(open_design_plugin_inspect)"
+      open_design_plugin_status=$?
+      [ "$open_design_plugin_status" -eq 0 ] && [ "$open_design_plugin_state" = "open-design-plugin:state:plugin-missing" ] || {
+        printf '%s\\n' "$open_design_plugin_state"
+        return 1
+      }
+      ;;
+    open-design-plugin:action:version-confirmation-required:*)
+      codex plugin marketplace upgrade "$open_design_required_marketplace" --json >/dev/null || {
+        printf '%s\\n' 'open-design-plugin:error:marketplace-upgrade-failed'
+        return 1
+      }
+      open_design_plugin_state="$(open_design_plugin_inspect)"
+      open_design_plugin_status=$?
+      if [ "$open_design_plugin_status" -eq 0 ]; then
+        case "$open_design_plugin_state" in
+          open-design-plugin:state:exact:*)
+            printf '%s\\n' "$open_design_plugin_state"
+            return 0
+            ;;
+        esac
+      fi
+      [ "$open_design_plugin_status" -eq 2 ] || {
+        printf '%s\\n' "$open_design_plugin_state"
+        return 1
+      }
+      codex plugin remove "$open_design_required_selector" --json >/dev/null || {
+        printf '%s\\n' 'open-design-plugin:error:plugin-remove-failed'
+        return 1
+      }
+      ;;
+  esac
+
+  codex plugin add "$open_design_required_selector" --json >/dev/null || {
+    printf '%s\\n' 'open-design-plugin:error:plugin-add-failed'
+    return 1
+  }
+  open_design_plugin_state="$(open_design_plugin_inspect)" || {
+    open_design_plugin_status=$?
+    printf '%s\\n' "$open_design_plugin_state"
+    return "$open_design_plugin_status"
+  }
+  case "$open_design_plugin_state" in
+    open-design-plugin:state:exact:*)
+      printf '%s\\n' "$open_design_plugin_state"
+      return 0
+      ;;
+  esac
+  printf '%s\\n' 'open-design-plugin:error:post-install-verification-failed'
+  return 1
+}
+open_design_install_plugin`;
+const MCP_INSTALL_COMMANDS = `${MCP_VALIDATION_FUNCTION}
+${SAFE_MCP_INSPECTION_FUNCTION}
+open_design_install_mcp() {
+  open_design_mcp_state="$(open_design_safe_mcp_inspect)" || return 1
+  if open_design_mcp_snapshot_is_verified_local "$open_design_mcp_state"; then
+    printf '%s\\n' 'open-design-mcp-install:ok:already-enabled'
+    return 0
+  fi
+
+  open_design_od_path="$(command -v od || true)"
+  open_design_od_probe=""
+  if [ -n "$open_design_od_path" ]; then
+    open_design_od_probe="$("$open_design_od_path" mcp install --open-design-cli-probe 2>/dev/null || true)"
+  fi
+  if [ "$open_design_od_probe" = "open-design-cli:mcp-install:v1" ]; then
+    if "$open_design_od_path" mcp install codex; then
+      open_design_mcp_state="$(open_design_safe_mcp_inspect)" || return 1
+      if open_design_mcp_snapshot_is_verified_local "$open_design_mcp_state"; then
+        printf '%s\\n' 'open-design-mcp-install:ok:verified-cli'
+        return 0
+      fi
+    fi
+  fi
+
+  open_design_app="$(open_design_signed_macos_app || true)"
+  if [ -n "$open_design_app" ]; then
+    /usr/bin/open -g -j "$open_design_app" --args --headless --mcp-install codex || return 1
+    open_design_attempt=0
+    while [ "$open_design_attempt" -lt 20 ]; do
+      open_design_mcp_state="$(open_design_safe_mcp_inspect)" || return 1
+      if open_design_mcp_snapshot_is_verified_local "$open_design_mcp_state"; then
+        printf '%s\\n' 'open-design-mcp-install:ok:signed-macos-app'
+        return 0
+      fi
+      open_design_attempt=$((open_design_attempt + 1))
+      sleep 2
+    done
+    printf '%s\\n' 'open-design-mcp-install:error:packaged-timeout'
+    return 1
+  fi
+
+  printf '%s\\n' 'open-design-mcp-install:action:settings-mcp-snippet-required'
+  return 1
+}
+open_design_install_mcp`;
+const VERIFY_COMMANDS = `${PLUGIN_STATE_FUNCTION}
+open_design_verify_install() {
+  open_design_plugin_state="$(open_design_plugin_inspect)" || {
+    open_design_plugin_status=$?
+    printf '%s\\n' "$open_design_plugin_state"
+    return "$open_design_plugin_status"
+  }
+  case "$open_design_plugin_state" in
+    open-design-plugin:state:exact:*) ;;
+    *)
+      printf '%s\\n' 'open-design-plugin:error:verification-failed'
+      return 1
+      ;;
+  esac
+${SAFE_MCP_INSPECTION_FUNCTION}
+${MCP_VALIDATION_FUNCTION}
+  open_design_mcp_state="$(open_design_safe_mcp_inspect)" || return 1
+  open_design_mcp_snapshot_is_verified_local "$open_design_mcp_state" || {
+    printf '%s\\n' 'open-design-mcp-install:error:verification-failed'
+    return 1
+  }
+  printf '%s\\n' "$open_design_plugin_state"
+  printf '%s\\n' "$open_design_mcp_state"
+}
+open_design_verify_install`;
+
+const codexRunFrames = [
+  {
+    src: '/open-design-pugin/codex-real-plugin-detail.png',
+    width: 895,
+    height: 580,
+    displayWidth: 820,
+  },
+  {
+    src: '/open-design-pugin/codex-real-cafe-prompt.png',
+    width: 384,
+    height: 271,
+    displayWidth: 360,
+  },
+  {
+    src: '/open-design-pugin/codex-real-cafe-running.png',
+    width: 1676,
+    height: 1075,
+    displayWidth: 1080,
+  },
+  {
+    src: '/open-design-pugin/codex-real-cafe-result.png',
+    width: 1682,
+    height: 1070,
+    displayWidth: 1080,
+  },
+] as const;
+
+const promptExamples = [
+  {
+    prompt:
+      '@open-design Create a tactile product launch page for Oryzo, a sustainable rice-husk material. Use a cutting-mat grid, cork-toned product photography, oversized typography, technical labels, and a warm editorial layout.',
+  },
+  {
+    prompt:
+      '@open-design Create an event landing page for Open Design Osaka. Lead with a typographic map of Japan, restrained ivory and olive colors, the date and location, speaker details, and a clear registration action.',
+  },
+  {
+    prompt:
+      '@open-design Create a dark editorial website for Fable 5. Use a near-black canvas, small navigation, a bold serif headline, restrained white typography, and subtle interactive controls.',
+  },
+  {
+    prompt:
+      '@open-design Create an interactive release story for Open Design 0.9.0. Visualize a model timeline on a bright canvas with floating cards, connecting lines, color-coded labels, and responsive horizontal exploration.',
+  },
+] as const;
+
+const templateExamples = [
+  {
+    src: '/showcase/oryzo-replica.jpg',
+    width: 1200,
+    height: 750,
+  },
+  {
+    src: '/showcase/event-osaka.jpg',
+    width: 1200,
+    height: 676,
+  },
+  {
+    src: '/showcase/fable5-site.jpg',
+    width: 1200,
+    height: 750,
+  },
+  {
+    src: '/showcase/launch-0-9-0.jpg',
+    width: 1200,
+    height: 676,
+  },
+] as const;
+
+const runFrames = codexRunFrames.map((frame, index) => ({
+  ...frame,
+  ...copy.demo.steps[index]!,
+}));
+const localizedTemplateExamples = templateExamples.map((example, index) => ({
+  ...example,
+  ...copy.use.templates[index]!,
+  prompt: promptExamples[index]!.prompt,
+}));
+const agentInstallCommands = [
+  PREFLIGHT_COMMANDS,
+  INSPECT_COMMANDS,
+  PLUGIN_INSTALL_COMMANDS,
+  MCP_INSTALL_COMMANDS,
+  VERIFY_COMMANDS,
+] as const;
+const agentInstallSteps = copy.agentInstall.steps.map((step, index) => ({
+  ...step,
+  commands: agentInstallCommands[index]!,
+}));
+
+const jsonLd = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'HowTo',
+    name: copy.agentInstall.howToName,
+    description: copy.agentInstall.howToDescription,
+    step: agentInstallSteps.map((step) => ({
+      '@type': 'HowToStep',
+      name: step.title,
+      text: `${step.body}\n${step.commands}`,
+    })),
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'WebPage',
+    name: copy.schema.pageName,
+    description: copy.metadata.description,
+    url: PAGE_URL,
+    inLanguage: localeDefinition.htmlLang,
+    isPartOf: { '@type': 'WebSite', name: 'Open Design', url: new URL(href('/'), SITE).toString() },
+    about: {
+      '@type': 'SoftwareApplication',
+      name: copy.schema.applicationName,
+      applicationCategory: 'DesignApplication',
+      operatingSystem: 'macOS, Windows, Linux',
+      inLanguage: localeDefinition.htmlLang,
+      url: PAGE_URL,
+      sameAs: REPO,
+      license: 'https://www.apache.org/licenses/LICENSE-2.0',
+      offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+    },
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    inLanguage: localeDefinition.htmlLang,
+    mainEntity: copy.faq.items.map(({ q, a }) => ({
+      '@type': 'Question',
+      name: q,
+      acceptedAnswer: { '@type': 'Answer', text: a },
+    })),
+  },
+];
+---
+
+<Layout
+  title={copy.metadata.title}
+  description={copy.metadata.description}
+  active="open-design-plugin"
+  jsonLd={jsonLd}
+  keywords={copy.metadata.keywords}
+  mainClassName="sub-main odp-page"
+>
+  <section class="odp-hero" aria-labelledby="odp-title">
+    <div class="odp-wrap odp-hero-layout">
+      <div class="odp-hero-copy">
+        <h1 id="odp-title">{copy.hero.title}</h1>
+        <p class="odp-hero-lead">
+          {copy.hero.leadBefore}
+          <span class="odp-chatgpt-label">
+            <img src="/agents/openai.svg" alt="" width="22" height="22" />
+            {copy.hero.chatgptLabel}
+          </span>
+        </p>
+      </div>
+
+      <div class="odp-install-cluster">
+        <div class="odp-command-card" aria-label={copy.hero.installAria}>
+          <pre><code id="odp-install-instruction">{INSTALL_INSTRUCTION}</code></pre>
+        </div>
+
+        <div class="odp-install-actions">
+          <button
+            class="btn btn-primary odp-install-copy"
+            type="button"
+            data-copy-target="#odp-install-instruction"
+            data-idle-label={copy.hero.copy}
+            data-copying-label={copy.clipboard.copying}
+            data-copied-label={copy.clipboard.copied}
+            data-failed-label={copy.clipboard.failed}
+            aria-live="polite"
+          >
+            {copy.hero.copy}
+          </button>
+
+          <a class="odp-github-link" href={REPO} target="_blank" rel="noreferrer noopener">
+            {copy.hero.github}
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section
+    class="odp-agent-install"
+    id="agent-installation"
+    aria-labelledby="odp-agent-install-title"
+    data-agent-install-protocol="open-design-codex-v1"
+  >
+    <div class="odp-wrap">
+      <div class="odp-agent-install__intro">
+        <p class="odp-agent-install__eyebrow">{copy.agentInstall.eyebrow}</p>
+        <h2 id="odp-agent-install-title">{copy.agentInstall.title}</h2>
+        <p>{copy.agentInstall.intro}</p>
+      </div>
+
+      <ol class="odp-agent-install__steps">
+        {agentInstallSteps.map((step, index) => (
+          <li>
+            <h3>{step.title}</h3>
+            <p>{step.body}</p>
+            {index === 0 && (
+              <p>
+                <a href={DOWNLOAD}>{copy.agentInstall.downloadLabel}</a>
+              </p>
+            )}
+            <pre><code>{step.commands}</code></pre>
+          </li>
+        ))}
+      </ol>
+    </div>
+  </section>
+
+  <section class="odp-demo" aria-labelledby="odp-demo-title">
+    <div class="odp-wrap">
+      <div class="odp-section-intro">
+        <h2 id="odp-demo-title">{copy.demo.title}</h2>
+        <p>{copy.demo.lead}</p>
+      </div>
+
+      <figure class="odp-flow-overview">
+        <img
+          src="/open-design-pugin/codex-real-workspace-overview.webp"
+          alt={copy.demo.overviewAlt}
+          width="1936"
+          height="1082"
+          loading="eager"
+        />
+        <figcaption>
+          <span>{copy.demo.overviewLabel}</span>
+          {copy.demo.overviewCaption}
+        </figcaption>
+      </figure>
+
+      <div class="odp-run-detail">
+        <ol class="odp-run-list" aria-label={copy.demo.stepListAria}>
+          <li style="--odp-step-media-width: 820px">
+            <div class="odp-run-copy">
+              <p class="odp-run-kicker">
+                <span>01</span>
+                {copy.demo.installPhase}
+              </p>
+              <h3>{copy.demo.installTitle}</h3>
+              <p>{copy.demo.installBody}</p>
+            </div>
+            <div class="odp-step-command" aria-label={copy.demo.installTitle}>
+              <pre><code>{INSTALL_INSTRUCTION}</code></pre>
+              <div class="odp-step-command-footer">
+                <p>{copy.demo.installNote}</p>
+                <button
+                  type="button"
+                  data-copy-text={INSTALL_INSTRUCTION}
+                  data-idle-label={copy.hero.copy}
+                  data-copying-label={copy.clipboard.copying}
+                  data-copied-label={copy.clipboard.copied}
+                  data-failed-label={copy.clipboard.failed}
+                  aria-live="polite"
+                >
+                  {copy.hero.copy}
+                </button>
+              </div>
+            </div>
+          </li>
+          {runFrames.map((frame, index) => (
+            <li style={`--odp-step-media-width: ${frame.displayWidth}px`}>
+              <div class="odp-run-copy">
+                <p class="odp-run-kicker">
+                  <span>{String(index + 2).padStart(2, '0')}</span>
+                  {frame.phase}
+                </p>
+                <h3>{frame.title}</h3>
+                <p>{frame.body}</p>
+              </div>
+              <figure class="odp-run-media">
+                <img
+                  src={frame.src}
+                  alt={frame.alt}
+                  width={frame.width}
+                  height={frame.height}
+                  loading="lazy"
+                />
+              </figure>
+            </li>
+          ))}
+        </ol>
+
+      </div>
+    </div>
+  </section>
+
+  <section class="odp-use" aria-labelledby="odp-use-title">
+    <div class="odp-wrap">
+      <div class="odp-section-intro">
+        <h2 id="odp-use-title">{copy.use.title}</h2>
+        <p>{copy.use.lead}</p>
+      </div>
+
+      <div class="odp-example-grid" aria-label={copy.use.galleryAria}>
+        {localizedTemplateExamples.map((example) => (
+          <article class="odp-example-card">
+            <figure>
+              <LazyImg
+                src={example.src}
+                alt={example.alt}
+                width={example.width}
+                height={example.height}
+              />
+            </figure>
+            <div class="odp-example-copy">
+              <h3>{example.label}</h3>
+              <code>{example.prompt}</code>
+            </div>
+            <button
+              type="button"
+              data-copy-text={example.prompt}
+              data-idle-label={copy.use.copyPrompt}
+              data-copying-label={copy.clipboard.copying}
+              data-copied-label={copy.clipboard.copied}
+              data-failed-label={copy.clipboard.failed}
+              aria-live="polite"
+            >
+              {copy.use.copyPrompt}
+            </button>
+          </article>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <section class="odp-faq" aria-labelledby="odp-faq-title">
+    <div class="odp-wrap odp-faq-grid">
+      <div>
+        <h2 id="odp-faq-title">{copy.faq.title}</h2>
+        <p>{copy.faq.lead}</p>
+      </div>
+      <ol class="odp-faq-list">
+        {copy.faq.items.map(({ q, a }) => (
+          <li>
+            <details>
+              <summary>
+                <span>{q}</span>
+                <span class="odp-faq-toggle" aria-hidden="true">+</span>
+              </summary>
+              <p>{a}</p>
+            </details>
+          </li>
+        ))}
+      </ol>
+    </div>
+  </section>
+
+  <section class="odp-final" aria-label={copy.final.aria}>
+    <div class="odp-wrap">
+      <div class="odp-final-panel">
+        <div>
+          <h2>{copy.final.title}</h2>
+          <p>{copy.final.bodyBeforeMention} <code>@open-design</code>{copy.final.bodyAfterMention}</p>
+        </div>
+        <div class="odp-final-actions">
+          <button
+            type="button"
+            data-copy-text={INSTALL_INSTRUCTION}
+            data-idle-label={copy.final.copy}
+            data-copying-label={copy.clipboard.copying}
+            data-copied-label={copy.clipboard.copied}
+            data-failed-label={copy.clipboard.failed}
+            aria-live="polite"
+          >
+            {copy.final.copy}
+          </button>
+          <a href={DOWNLOAD}>{copy.final.download}</a>
+          <a href={REPO} target="_blank" rel="noreferrer noopener">{copy.final.source}</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <script is:inline>
+    const setCopyState = async (button, text) => {
+      if (!(button instanceof HTMLButtonElement)) return;
+      const idleLabel = button.dataset.idleLabel || button.textContent || 'Copy';
+      const copyingLabel = button.dataset.copyingLabel || 'Copying…';
+      const copiedLabel = button.dataset.copiedLabel || 'Copied';
+      const failedLabel = button.dataset.failedLabel || 'Select and copy';
+      button.disabled = true;
+      button.textContent = copyingLabel;
+
+      try {
+        await navigator.clipboard.writeText(text.trim());
+        button.textContent = copiedLabel;
+      } catch {
+        button.textContent = failedLabel;
+      }
+
+      window.setTimeout(() => {
+        button.disabled = false;
+        button.textContent = idleLabel;
+      }, 1800);
+    };
+
+    document.querySelectorAll('[data-copy-target]').forEach((candidate) => {
+      if (!(candidate instanceof HTMLButtonElement)) return;
+      const selector = candidate.dataset.copyTarget;
+      const target = selector ? document.querySelector(selector) : null;
+      if (!target) return;
+      candidate.addEventListener('click', () => setCopyState(candidate, target.textContent || ''));
+    });
+
+    document.querySelectorAll('[data-copy-text]').forEach((candidate) => {
+      if (!(candidate instanceof HTMLButtonElement)) return;
+      candidate.addEventListener('click', () => setCopyState(candidate, candidate.dataset.copyText || ''));
+    });
+  </script>
+</Layout>

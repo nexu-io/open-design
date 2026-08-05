@@ -35,8 +35,11 @@ import type {
   ResearchOptions,
   RunContextSelection,
   SseErrorPayload,
+  WorkspaceCollabContext,
 } from '@open-design/contracts';
 import type { StreamHandlers } from './anthropic';
+import { workspaceProjectHeaders } from '../state/projects';
+import { setRuntimeAmrConsoleOrigin } from '../runtime/amr-guidance';
 
 /**
  * Returns the front-end carrier that's about to send this request:
@@ -292,6 +295,7 @@ export interface DaemonStreamOptions {
   projectId?: string | null;
   conversationId?: string | null;
   sessionMode?: ChatSessionMode;
+  userMessageId?: string | null;
   assistantMessageId?: string | null;
   clientRequestId?: string | null;
   skillId?: string | null;
@@ -321,6 +325,16 @@ export interface DaemonStreamOptions {
   mediaExecution?: MediaExecutionPolicy;
   titleGeneration?: { enabled?: boolean };
   locale?: string;
+  // The caller's current workspace identity, attached as `x-od-workspace-*`
+  // headers on POST /api/runs so the daemon's workspace-resource mutation
+  // gate (see `enforceWorkspaceProjectMutation` in
+  // `apps/daemon/src/routes/runs.ts`) can tell a team member apart from a
+  // headerless caller. Mirrors `workspaceProjectHeaders` usage on every
+  // other project write (rename/delete/duplicate/comments/file writes) —
+  // omitting it here would make POST /api/runs the one write path that
+  // forgets to identify the caller. Null/omitted for signed-out / personal
+  // (non-workspace) usage, matching those other call sites.
+  workspaceContext?: WorkspaceCollabContext | null;
   initialLastEventId?: string | null;
   onRunCreated?: (runId: string) => void;
   onRunStatus?: (status: ChatRunStatus) => void;
@@ -336,6 +350,7 @@ export interface DaemonReattachOptions {
   runId: string;
   projectId?: string | null;
   conversationId?: string | null;
+  workspaceContext?: WorkspaceCollabContext | null;
   signal: AbortSignal;
   cancelSignal?: AbortSignal;
   handlers: DaemonStreamHandlers;
@@ -643,6 +658,7 @@ export async function streamViaDaemon({
   projectId,
   conversationId,
   sessionMode,
+  userMessageId,
   assistantMessageId,
   clientRequestId,
   skillId,
@@ -662,6 +678,7 @@ export async function streamViaDaemon({
   mediaExecution,
   titleGeneration,
   locale,
+  workspaceContext,
   initialLastEventId,
   onRunCreated,
   onRunStatus,
@@ -683,6 +700,7 @@ export async function streamViaDaemon({
     projectId: projectId ?? null,
     conversationId: conversationId ?? null,
     sessionMode,
+    userMessageId: userMessageId ?? null,
     assistantMessageId: assistantMessageId ?? null,
     clientRequestId: clientRequestId ?? null,
     skillId: skillId ?? null,
@@ -716,6 +734,13 @@ export async function streamViaDaemon({
         // The daemon falls back to a User-Agent sniff when this header is
         // absent (e.g. third-party clients), so omitting it in tests is OK.
         'X-OD-Client': detectClientType(),
+        // Identifies the caller's workspace to the daemon's workspace-resource
+        // mutation gate (see `enforceWorkspaceProjectMutation` in
+        // apps/daemon/src/routes/runs.ts) — without it, a team member's own
+        // run on a team-bound project 401s exactly like an unauthenticated
+        // caller's would. Omitted (headers stay absent) for signed-out /
+        // personal usage, matching every other workspace-gated write.
+        ...(workspaceContext ? workspaceProjectHeaders(workspaceContext) : {}),
       },
       body,
     });
@@ -752,6 +777,7 @@ export async function streamViaDaemon({
       onRunEventId,
       projectId,
       conversationId,
+      workspaceContext,
       publishRunFinishedEvent: true,
     });
   } catch (err) {
@@ -771,9 +797,16 @@ export async function reattachDaemonRun(options: DaemonReattachOptions): Promise
   });
 }
 
-export async function fetchChatRunStatus(runId: string): Promise<ChatRunStatusResponse | null> {
+export async function fetchChatRunStatus(
+  runId: string,
+  workspaceContext?: WorkspaceCollabContext | null,
+): Promise<ChatRunStatusResponse | null> {
   try {
-    const resp = await fetch(`/api/runs/${encodeURIComponent(runId)}`);
+    const resp = await fetch(`/api/runs/${encodeURIComponent(runId)}`, {
+      ...(workspaceContext
+        ? { headers: workspaceProjectHeaders(workspaceContext) }
+        : {}),
+    });
     if (!resp.ok) return null;
     return (await resp.json()) as ChatRunStatusResponse;
   } catch {
@@ -886,6 +919,12 @@ export interface VelaLoginStatus {
   activationUrl?: string;
   userCode?: string;
   browserOpenFailed?: boolean;
+  // Origin of the vela web console this runtime talks to, when the daemon was
+  // given one (OD_VELA_WEB_URL, baked into packaged builds from a CI secret).
+  // The client builds wallet / plans / upgrade links from it; internal AMR
+  // environments therefore need no hostname literal in this public bundle.
+  // Absent for prod and fork builds.
+  consoleOrigin?: string;
   authAttemptId?: string;
   authStages?: VelaLoginAuthStage[];
   authRoute?: AmrAuthNetworkPath;
@@ -913,7 +952,14 @@ export async function fetchVelaLoginStatus(options: { refresh?: boolean } = {}):
     const query = options.refresh ? '?refresh=1' : '';
     const resp = await fetch(`/api/integrations/vela/status${query}`, { cache: 'no-store' });
     if (!resp.ok) return null;
-    return (await resp.json()) as VelaLoginStatus;
+    const status = (await resp.json()) as VelaLoginStatus;
+    // Every AMR status read refreshes the runtime console origin, so the console
+    // links stay correct no matter which surface (login pill, model switcher,
+    // avatar menu, low-balance dialog) triggered the fetch. Doing it here rather
+    // than in each caller is what keeps the origin out of web source: no caller
+    // needs to know the hostname of the environment it is pointed at.
+    setRuntimeAmrConsoleOrigin(status.consoleOrigin);
+    return status;
   } catch {
     return null;
   }
@@ -1052,19 +1098,20 @@ export async function velaLogout(): Promise<{ ok: boolean }> {
 // the PUT /messages/:id round-trip).
 export async function reportChatRunFeedback(req: {
   runId: string;
-  projectId: string;
-  conversationId: string;
-  assistantMessageId: string;
   rating: 'positive' | 'negative';
   reasonCodes: string[];
   hasCustomReason: boolean;
   customReason: string;
-}): Promise<void> {
+}, workspaceContext?: WorkspaceCollabContext | null): Promise<void> {
   try {
-    await fetch(`/api/runs/${encodeURIComponent(req.runId)}/feedback`, {
+    const { runId, ...feedback } = req;
+    await fetch(`/api/runs/${encodeURIComponent(runId)}/feedback`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(req),
+      headers: {
+        'Content-Type': 'application/json',
+        ...(workspaceContext ? workspaceProjectHeaders(workspaceContext) : {}),
+      },
+      body: JSON.stringify(feedback),
     });
   } catch {
     // Best-effort.
@@ -1074,10 +1121,15 @@ export async function reportChatRunFeedback(req: {
 export async function listActiveChatRuns(
   projectId: string,
   conversationId: string,
+  workspaceContext?: WorkspaceCollabContext | null,
 ): Promise<ChatRunStatusResponse[]> {
   try {
     const qs = new URLSearchParams({ projectId, conversationId, status: 'active' });
-    const resp = await fetch(`/api/runs?${qs.toString()}`);
+    const resp = await fetch(`/api/runs?${qs.toString()}`, {
+      ...(workspaceContext
+        ? { headers: workspaceProjectHeaders(workspaceContext) }
+        : {}),
+    });
     if (!resp.ok) return [];
     const body = (await resp.json()) as ChatRunListResponse;
     return body.runs ?? [];
@@ -1086,9 +1138,15 @@ export async function listActiveChatRuns(
   }
 }
 
-export async function listProjectRuns(): Promise<ChatRunStatusResponse[]> {
+export async function listProjectRuns(
+  workspaceContext?: WorkspaceCollabContext | null,
+): Promise<ChatRunStatusResponse[]> {
   try {
-    const resp = await fetch('/api/runs');
+    const resp = await fetch('/api/runs', {
+      ...(workspaceContext
+        ? { headers: workspaceProjectHeaders(workspaceContext) }
+        : {}),
+    });
     if (!resp.ok) return [];
     const body = (await resp.json()) as ChatRunListResponse;
     return body.runs ?? [];
@@ -1108,6 +1166,7 @@ async function consumeDaemonRun({
   onRunEventId,
   projectId,
   conversationId,
+  workspaceContext,
   publishRunFinishedEvent,
 }: DaemonReattachOptions & { agentId?: string }): Promise<void> {
   let acc = '';
@@ -1146,7 +1205,12 @@ async function consumeDaemonRun({
   const cancelRun = () => {
     if (canceled) return;
     canceled = true;
-    void fetch(`/api/runs/${encodeURIComponent(runId)}/cancel`, { method: 'POST' }).catch(() => {});
+    void fetch(`/api/runs/${encodeURIComponent(runId)}/cancel`, {
+      method: 'POST',
+      ...(workspaceContext
+        ? { headers: workspaceProjectHeaders(workspaceContext) }
+        : {}),
+    }).catch(() => {});
   };
 
   cancelSignal?.addEventListener('abort', cancelRun, { once: true });
@@ -1163,6 +1227,9 @@ async function consumeDaemonRun({
         resp = await fetch(`/api/runs/${encodeURIComponent(runId)}/events${qs}`, {
           method: 'GET',
           signal,
+          ...(workspaceContext
+            ? { headers: workspaceProjectHeaders(workspaceContext) }
+            : {}),
         });
       } catch (err) {
         if ((err as Error).name === 'AbortError') throw err;
@@ -1296,7 +1363,7 @@ async function consumeDaemonRun({
       }
       let shouldResetReconnects = sawStreamProgress;
       if (pendingStructuredError && endStatus === null) {
-        const status = await fetchChatRunStatus(runId).catch(() => null);
+        const status = await fetchChatRunStatus(runId, workspaceContext).catch(() => null);
         if (status && isChatRunStatus(status.status) && status.status !== 'queued' && status.status !== 'running') {
           endStatus = status.status;
           exitCode = status.exitCode ?? null;
@@ -1329,7 +1396,7 @@ async function consumeDaemonRun({
     }
 
     if (endStatus === null) {
-      const status = await fetchChatRunStatus(runId);
+      const status = await fetchChatRunStatus(runId, workspaceContext);
       if (status && isChatRunStatus(status.status) && status.status !== 'queued' && status.status !== 'running') {
         endStatus = status.status;
         exitCode = status.exitCode ?? null;

@@ -16,6 +16,43 @@ const tr: OpenDesignPluginCopy = {
     copy: 'Kopyala',
     github: 'Kaynak kodu GitHub’da görüntüle ↗',
   },
+  agentInstall: {
+    howToName: 'Open Design eklentisini Codex’e kurun',
+    howToDescription:
+      'Open Design Codex eklentisini kurmak ve yerel MCP kaydını yapmak için ajan tarafından uygulanabilir adımlar.',
+    eyebrow: 'Ajan tarafından okunabilir kurulum protokolü',
+    title: 'Codex eklentisini eksiksiz kurun.',
+    intro:
+      'Kullanıcı sizden Open Design’ı kurmanızı istediyse bu protokolü sırayla uygulayın. İstek, yalnızca kullanıcının Codex eklentisi ve MCP yapılandırmasında değişiklik yapılmasına izin verir. İlgisiz eklenti mağazalarını, eklentileri, MCP sunucularını ve kimlik doğrulama durumunu koruyun.',
+    downloadLabel: 'Resmî Open Design indirme sayfası ↗',
+    steps: [
+      {
+        title: 'Desteklenen ortam için ön kontrolleri yapın',
+        body:
+          'plugin.minimumCodexCliVersion ve plugin.minimumOpenDesignVersion değerlerini release-manifest.json dosyasından okuyun. Herhangi bir yapılandırma değişikliğinden önce her iki minimum gereksinimin de karşılanmasını zorunlu tutun. Open Design çalışma zamanı sürümünü yalnızca yoklanan Open Design CLI’dan veya kod imzası ve Gatekeeper kontrollerini geçen imzalı bir macOS uygulama paketindeki CFBundleShortVersionString değerinden kabul edin. od eksikse veya PATH üzerinde gölgelenmişse (/usr/bin/od dahil) ya da daemon durmuşsa imzalı paket yoklamasına geçin. Doğrulanmış iki yoklama yönteminden hiçbiri kullanılamıyorsa değişiklik yapmadan önce durun; kullanıcıyı, istemciye özel mutlak yol kod parçacığını kopyalaması için Open Design Settings → MCP server bölümüne yönlendirin ve ardından yeniden deneyin. Kullanıcıyı yalnızca uygulama yoksa veya sürümü çok eskiyse resmî indirme sayfasına yönlendirin; bir yükleyiciyi sessizce indirmeyin veya doğrulanmamış bir betiği çalıştırmayın.',
+      },
+      {
+        title: 'Yapılandırmayı değiştirmeden önce inceleyin',
+        body:
+          'Gerekli seçiciyi ve sürümü release-manifest.json dosyasından okuyun, ardından bunları incelediğiniz Codex durumuyla karşılaştırın. MCP durumunu yalnızca codex mcp list --json çıktısından türetilen filtrelenmiş MCP anlık görüntüsü üzerinden inceleyin. Çıktıya yalnızca name, enabled, transport.type ve command alanlarını dahil edin; args, env, env_vars, headers ve token alanlarını çıktı vermeden önce atın. open-design sonucunun bulunmaması beklenen bir durumdur ve engelleyici değildir. Taşıma değerleri kimlik bilgileri içerebileceğinden ham listeyi veya codex mcp get open-design --json çıktısını asla yazdırmayın ya da raporlamayın. open-design eklenti mağazası adı başka bir kaynağa işaret ediyorsa durun ve çakışmayı bildirin. open-design@open-design öğesini yalnızca kurulu sürümü release-manifest.json içinde bildirilen sürümle eşleşiyorsa koruyun.',
+      },
+      {
+        title: 'Yalnızca eksik bileşenleri kurun',
+        body:
+          'Eklenti mağazası komutunu yalnızca kanonik eklenti mağazası yoksa çalıştırın; eklenti mağazasını ekleme işlemi başarısız olursa eklenti komutunu çalıştırmadan durun. open-design@open-design eksikse eklenti komutunu çalıştırın. Farklı bir sürüm kuruluysa güncellemeden veya yeniden kurmadan önce kullanıcıdan onay isteyin; bu adımı yalnızca açık onay aldıktan sonra OPEN_DESIGN_PLUGIN_UPDATE_CONFIRMED=1 ile yeniden çalıştırın. Yalnızca gerekli sürüm tam olarak mevcutsa kurulumu atlayın. alreadyAdded: true sonucu başarıdır. Codex yapılandırmasını elle düzenlemeyin veya eklenti dosyalarını Codex ana dizinine kopyalamayın.',
+      },
+      {
+        title: 'Yerel Open Design MCP’nin hazır olduğundan emin olun',
+        body:
+          'Mevcut bir open-design MCP’yi yalnızca etkinse, stdio kullanıyorsa ve mutlak command değeri doğrulanmış bir Open Design başlatıcısıyla eşleşiyorsa koruyun. Aksi halde, kurulu Open Design uygulamasıyla sağlanan MCP yükleyicisini çalıştırın. POSIX sistemlerinde, çözümlenmiş od yolunu yalnızca yoklaması open-design-cli:mcp-install:v1 sonucunu verdikten sonra çalıştırın. Bu yol yoksa, /usr/bin/od tarafından gölgeleniyorsa veya yol üzerinden işlem tamamlanamıyorsa doğrulanmış, imzalı macOS uygulama paketini /usr/bin/open ve --headless --mcp-install codex ile çalıştırın; ardından aynı yapısal kontrolleri uygulayarak yalnızca filtrelenmiş MCP anlık görüntüsünü düzenli olarak sorgulayın. Doğrulanmış bir başlatıcı yoksa durun, kullanıcıyı istemciye özel mutlak yol kod parçacığını kopyalaması için Open Design Settings → MCP server bölümüne yönlendirin ve bu adımı yeniden deneyin. Asla bir localhost portu tahmin etmeyin veya codex mcp login çalıştırmayın; Vela ile oturum açma Open Design’da yapılır.',
+      },
+      {
+        title: 'Doğrulayın, raporlayın ve yeni bir görev başlatın',
+        body:
+          'open-design@open-design eklenti kimliğini, kanonik eklenti mağazası kaynağını ve kurulu sürümünün release-manifest.json içindeki plugin.version ile tam olarak eşleştiğini doğrulayın. Kurulum sırasında kullanılan aynı doğrulanmış Open Design başlatıcısıyla mutlak command değeri eşleşen, open-design adlı etkin bir stdio MCP bulunduğunu doğrulamak için filtrelenmiş MCP anlık görüntüsünü kullanın. Yalnızca name, enabled, transport.type ve command alanlarını inceleyin; ham args, env, env_vars, headers, token, bearer token, API key ve Vela kimlik bilgisi değerleri çıktı veya raporlarda asla görünmemelidir. Nelerin kurulduğunu ve henüz karşılanmamış Open Design ya da Vela ile oturum açma ön koşullarını bildirin. Kurulu eklenti anlık görüntüsünü yükleyebilmesi için yeni bir Codex görevi başlatın, ardından @open-design çağrısını yapın.',
+      },
+    ],
+  },
   demo: {
     title: 'Bir kez kurun. Codex/ChatGPT içinden tasarlayın.',
     lead:
@@ -29,7 +66,7 @@ const tr: OpenDesignPluginCopy = {
     installPhase: 'Kurulum',
     installTitle: 'Kurulumu Codex’e yaptırın',
     installBody:
-      'Bu talimatı bir Codex görevine yapıştırın. Codex, herkese açık bir eklenti mağazası kaydına ihtiyaç duymadan depodaki kurulum yönergelerini okur; eklentiyi ve yerel MCP bağlantısını tamamlar.',
+      'Bu talimatı bir Codex görevine yapıştırın. Codex, kanonik Git eklenti mağazası kaynağını ekler, eklentiyi yalnızca eksikse kurar ve herkese açık bir katalog kaydı gerektirmeden yerel MCP kurulumunu tamamlar.',
     installNote: 'Codex’e bir kez yapıştırın; tüm kurulum ayrıntıları sizin için halledilir.',
     steps: [
       {

@@ -43,6 +43,33 @@ describe("GitHub Actions cache workflows", () => {
       action.indexOf("uses: actions/cache/save@v5"),
     );
 
+    // Non-persistent branch: pin a stable home store before `pnpm store path`
+    // so actions/cache version hashes match across hosted and Nexu ARC fleets.
+    const detectStep = sectionBetween(
+      action,
+      "- name: Detect persistent pnpm store",
+      "- name: Setup pnpm",
+    );
+    // Isolate the else arm by its home-store pin (not "else"/"fi", which match
+    // substrings like npm_config).
+    const homeStoreIndex = detectStep.indexOf('store_dir="$HOME/.pnpm-store"');
+    expect(homeStoreIndex).toBeGreaterThanOrEqual(0);
+    const nonPersistentBranch = detectStep.slice(homeStoreIndex);
+    expect(nonPersistentBranch).toContain('echo "NPM_CONFIG_STORE_DIR=$store_dir"');
+    expect(nonPersistentBranch).toContain('echo "npm_config_store_dir=$store_dir"');
+    expect(nonPersistentBranch).toContain('echo "enabled=false"');
+    expect(action.indexOf('store_dir="$HOME/.pnpm-store"')).toBeLessThan(
+      action.indexOf('run: echo "path=$(pnpm store path --silent)"'),
+    );
+
+    const restoreStep = sectionBetween(
+      action,
+      "- name: Restore pnpm store",
+      "- name: Install dependencies",
+    );
+    expect(restoreStep).toContain("restore-keys: |");
+    expect(restoreStep).toContain("pnpm-store-${{ runner.os }}-");
+
     const saveStep = action.slice(action.indexOf("- name: Save pnpm store"));
     expect(saveStep).toContain("inputs.save-pnpm-cache == 'true'");
     expect(saveStep).toContain("steps.persistent-pnpm-store.outputs.enabled != 'true'");
@@ -53,9 +80,10 @@ describe("GitHub Actions cache workflows", () => {
     expect(saveStep).toContain("github.event_name == 'schedule'");
   });
 
-  it("[P1] seeds Windows from main and deletes only closed-PR BuildKit cache families", async () => {
+  it("[P1] seeds Windows and Linux from main and deletes only closed-PR BuildKit cache families", async () => {
     const workflow = await readFile(cacheMaintenanceWorkflow, "utf8");
-    const seedJob = sectionBetween(workflow, "  seed-pnpm-windows:", "  clean-closed-pr-buildkit:");
+    const windowsSeedJob = sectionBetween(workflow, "  seed-pnpm-windows:", "  seed-pnpm-linux:");
+    const linuxSeedJob = sectionBetween(workflow, "  seed-pnpm-linux:", "  clean-closed-pr-buildkit:");
     const cleanupJob = workflow.slice(workflow.indexOf("  clean-closed-pr-buildkit:"));
 
     expect(workflow).toContain("pull_request_target:");
@@ -66,13 +94,19 @@ describe("GitHub Actions cache workflows", () => {
     expect(workflow).toContain("actions: write");
     expect(workflow).toContain("contents: read");
 
-    expect(seedJob).toContain("github.event_name == 'push'");
-    expect(seedJob).toContain("github.event_name == 'workflow_dispatch'");
-    expect(seedJob).toContain("github.ref == 'refs/heads/main'");
-    expect(seedJob).toContain("runs-on: windows-latest");
-    expect(seedJob).toContain("uses: actions/checkout@v6.0.2");
-    expect(seedJob).toContain("uses: ./.github/actions/setup-workspace");
-    expect(seedJob).toContain("save-pnpm-cache: 'true'");
+    for (const seedJob of [windowsSeedJob, linuxSeedJob]) {
+      expect(seedJob).toContain("github.event_name == 'push'");
+      expect(seedJob).toContain("github.event_name == 'workflow_dispatch'");
+      expect(seedJob).toContain("github.ref == 'refs/heads/main'");
+      expect(seedJob).toContain("uses: actions/checkout@v6.0.2");
+      expect(seedJob).toContain("uses: ./.github/actions/setup-workspace");
+      expect(seedJob).toContain("save-pnpm-cache: 'true'");
+    }
+
+    expect(windowsSeedJob).toContain("runs-on: windows-latest");
+    // One hosted Linux seed is enough: actions/cache is repo-scoped and shared
+    // by every Nexu size (small/medium/large) once the store path is pinned.
+    expect(linuxSeedJob).toContain("runs-on: ubuntu-24.04");
 
     expect(cleanupJob).toContain("github.event_name == 'pull_request_target'");
     expect(cleanupJob).toContain("refs/pull/${{ github.event.pull_request.number }}/merge");
@@ -85,7 +119,8 @@ describe("GitHub Actions cache workflows", () => {
     expect(cleanupJob).not.toContain("github.event.pull_request.head");
   });
 
-  it("[P1] uses the existing main visual baseline as the Linux pnpm seed", async () => {
+
+  it("[P1] keeps visual-baseline as a secondary Linux pnpm seed on main", async () => {
     const workflow = await readFile(visualBaselineWorkflow, "utf8");
     const setupStep = sectionBetween(workflow, "      - name: Setup workspace", "      - name: Setup Playwright");
 
@@ -94,6 +129,7 @@ describe("GitHub Actions cache workflows", () => {
     expect(setupStep).toContain("uses: ./.github/actions/setup-workspace");
     expect(setupStep).toContain("save-pnpm-cache: 'true'");
   });
+
 
   it("[P1] keeps landing preview caches restore-only before merge and seeds them from main", async () => {
     const workflow = await readFile(landingPageCiWorkflow, "utf8");

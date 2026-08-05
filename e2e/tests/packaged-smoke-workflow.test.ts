@@ -215,8 +215,13 @@ async function runScopesPrint(eventName: string, eventPayload: unknown, changedF
   const ghCmdPath = join(tempDir, "gh.cmd");
   await writeFile(eventPath, JSON.stringify(eventPayload));
   const script = `#!/usr/bin/env node
-process.stdout.write(${JSON.stringify(changedFiles.join("\n"))});
-if (${JSON.stringify(changedFiles.length > 0)}) process.stdout.write("\\n");
+const changedFiles = ${JSON.stringify(changedFiles)};
+if (process.argv.includes("--jq")) {
+  process.stdout.write(changedFiles.join("\\n"));
+  if (changedFiles.length > 0) process.stdout.write("\\n");
+} else {
+  process.stdout.write(JSON.stringify({ files: changedFiles.map((filename) => ({ filename })) }));
+}
 `;
   await writeFile(ghPath, script);
   await chmod(ghPath, 0o755);
@@ -1154,6 +1159,7 @@ process.stdin.on("end", () => {
     expect(uiP0CiMatrix.map((entry) => entry.name)).toEqual([
       "entry-settings",
       "project-workspace",
+      "project-collab",
       "project-runtime",
       "workspace-restoration",
     ]);
@@ -1162,9 +1168,14 @@ process.stdin.on("end", () => {
       "ui/app-design-files.test.ts",
       "ui/app-manual-edit.test.ts",
       "ui/project-management-flows.test.ts",
-      "ui/workspace-keyboard-flows.test.ts",
+      "ui/workspace-team-design-system-picker.test.ts",
     ]);
     expect(uiP0Groups["project-workspace"].workers).toBe(1);
+    expect(uiP0Groups["project-collab"].files).toEqual([
+      "ui/workspace-multi-client-collab.test.ts",
+      "ui/workspace-keyboard-flows.test.ts",
+    ]);
+    expect(uiP0Groups["project-collab"].workers).toBe(1);
     expect(uiP0Groups["critical-extras"]).toEqual({
       grep: "@merge-extra",
       workers: 1,
@@ -1537,6 +1548,52 @@ process.stdin.on("end", () => {
 
     expect(prereleaseWorkflow).toContain("OPEN_DESIGN_STABLE_VERSION: ${{ inputs.release_version }}");
     expect(prereleaseWorkflow).toContain("Required when ref is not release/vX.Y.Z");
+  });
+
+  it("[P2] makes a publish=false beta dispatch retrievable on both platforms without touching a channel", async () => {
+    // A publish=false dispatch is the standing shape for dogfood/QA builds: they
+    // must never enter the public beta feed. mac already handed back a DMG, but
+    // the Windows job produced nothing retrievable at all, so a Windows dogfood
+    // build was impossible without also publishing. Both platforms now emit a
+    // GitHub artifact plus an R2 upload under the dogfood prefix.
+    const workflow = await readFile(releaseBetaWorkflowPath, "utf8");
+    const macJob = sectionBetween(workflow, "  build_mac_arm64:", "  build_mac_x64:");
+    const winJob = sectionBetween(workflow, "  build_win_x64:", "  build_linux_x64:");
+
+    for (const [label, job] of [["mac_arm64", macJob], ["win_x64", winJob]] as const) {
+      expect(job, label).toContain("run: pnpm exec tools-release publish-dogfood");
+      expect(job, label).toContain("DOGFOOD_VERSION: ${{ needs.metadata.outputs.beta_version }}");
+      expect(job, label).toContain("DOGFOOD_BUILD_ID: ${{ github.run_id }}-${{ github.run_attempt }}");
+      // Artifact paths come from the build's own --json output, so whichever
+      // targets the parameterised --to actually produced are what get uploaded.
+      expect(job, label).toContain("DOGFOOD_BUILD_JSON_PATH:");
+      expect(job, label).toContain("DOGFOOD_BUILD_JSON_KEYS:");
+    }
+
+    // The Windows installer is retrievable as a GitHub artifact too, covering
+    // every win_x64_target (nsis -> setup exe, zip -> portable zip, all -> both).
+    expect(winJob).toContain("name: open-design-beta-win-x64-installer");
+    expect(winJob).toContain("builder\\*-setup.exe");
+    expect(winJob).toContain("builder\\*-portable.zip");
+
+    // Every publish=false distribution step is gated on !inputs.publish, so the
+    // publish=true release pipeline runs exactly as it did before.
+    const dogfoodSteps = workflow.split("\n      - name: ").filter((step) =>
+      /publish-dogfood|for manual distribution/.test(step)
+    );
+    expect(dogfoodSteps).toHaveLength(4);
+    for (const step of dogfoodSteps) {
+      expect(step, step.split("\n")[0]).toContain("if: ${{ !cancelled() && !inputs.publish }}");
+    }
+
+    // A dogfood step must never name a channel prefix, a latest pointer, or the
+    // publishing commands; those stay exclusive to the inputs.publish lane.
+    for (const step of dogfoodSteps) {
+      const head = step.split("\n")[0] ?? "";
+      for (const forbidden of ["publish-platform", "publish-metadata", "beta/latest", "prerelease/", "preview/", "stable/"]) {
+        expect(step, `${head} / ${forbidden}`).not.toContain(forbidden);
+      }
+    }
   });
 
   it("[P2] publishes release notes through one channel-neutral tools-release pipeline", async () => {

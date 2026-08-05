@@ -16,6 +16,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { PackagedLauncherRuntime } from "../src/launcher-runtime.js";
 import {
+  findPackagedDeeplinkArg,
   launchPackagedPayloadDesktop,
   planPackagedPayloadDesktopDelegation,
 } from "../src/payload-desktop-launch.js";
@@ -76,6 +77,20 @@ describe("payload desktop delegation", () => {
       generation: 1,
       version: "1.2.3-beta.5",
     });
+  });
+
+  it("forwards only the OS invite URL across an outer-to-payload cold start", () => {
+    const deeplink = "opendesign://workspace/invite/continue?nonce=payload-cold-start";
+    expect(findPackagedDeeplinkArg(["Open Design.exe", "--unrelated", deeplink])).toBe(deeplink);
+    expect(findPackagedDeeplinkArg(["Open Design.exe", "--unrelated"])).toBeNull();
+    const plan = planPackagedPayloadDesktopDelegation(fakeRuntime(false), stamp, {
+      currentPid: 4321,
+      forwardedArgs: ["Open Design.exe", "--unrelated", deeplink],
+      timeoutMs: 60_000,
+    });
+
+    expect(plan?.args).toContain(deeplink);
+    expect(plan?.args).not.toContain("--unrelated");
   });
 
   it("omits the delegated pointer for a rollback delegation", () => {

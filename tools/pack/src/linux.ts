@@ -238,6 +238,12 @@ export function buildDockerArgs(
   if (config.amrProfile != null) {
     dockerArgs.push("-e", `OPEN_DESIGN_AMR_PROFILE=${config.amrProfile}`);
   }
+  // The vela web origin is resolved on the host (from the build-time secret)
+  // but the packaged config is written inside the container, so the containerized
+  // build needs it forwarded or the workspace-team gate stays closed.
+  if (config.velaWebUrl != null) {
+    dockerArgs.push("-e", `OD_VELA_WEB_URL=${config.velaWebUrl}`);
+  }
   dockerArgs.push(
     "-w",
     "/project",
@@ -586,6 +592,7 @@ async function writeAssembledApp(
         ...(config.telemetryRelayUrl == null ? {} : { telemetryRelayUrl: config.telemetryRelayUrl }),
         ...(config.posthogKey == null ? {} : { posthogKey: config.posthogKey }),
         ...(config.posthogHost == null ? {} : { posthogHost: config.posthogHost }),
+        ...(config.velaWebUrl == null ? {} : { velaWebUrl: config.velaWebUrl }),
         ...(config.portable ? {} : { namespaceBaseRoot: config.roots.runtime.namespaceBaseRoot }),
       },
       null,

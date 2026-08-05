@@ -163,6 +163,7 @@ export async function waitForLauncherAfterQuit(
 export async function inspectExistingDesktopForLauncher(
   namespace: string,
   options: {
+    deeplinkUrl?: string | null;
     incomingVersion?: string | null;
     logger?: LauncherAfterQuitLogger;
     paths: PackagedNamespacePaths;
@@ -281,7 +282,14 @@ export async function inspectExistingDesktopForLauncher(
   }
 
   try {
-    await requestIpc(ipcPath, { type: SIDECAR_MESSAGES.SHOW }, { timeoutMs: 800 });
+    await requestIpc(
+      ipcPath,
+      {
+        ...(options.deeplinkUrl == null ? {} : { input: { deeplinkUrl: options.deeplinkUrl } }),
+        type: SIDECAR_MESSAGES.SHOW,
+      },
+      { timeoutMs: 800 },
+    );
     await writeLauncherAfterQuitLog(options.paths, `inspect-found-existing namespace=${namespace} focus=accepted`);
     return { action: "exit", reason: "existing-focused" };
   } catch (error) {

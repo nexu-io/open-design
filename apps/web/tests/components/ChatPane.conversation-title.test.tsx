@@ -143,7 +143,7 @@ describe('ChatPane session switcher', () => {
     });
   });
 
-  it('opens the profile-scoped wallet from the AMR recharge action', () => {
+  it('opens the profile-scoped console from the AMR recharge action', () => {
     const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
     render(
       <ChatPane
@@ -171,16 +171,27 @@ describe('ChatPane session switcher', () => {
       />,
     );
 
-    fireEvent.click(screen.getByText('chat.amrError.rechargeCta'));
+    const rechargeAction = screen.getByText('chat.amrError.rechargeCta');
+    const retryAction = screen.getByText('promptTemplates.retry');
+    expect(rechargeAction.parentElement).toBe(retryAction.parentElement);
+    expect(
+      rechargeAction.parentElement?.closest('[data-user-action-footer="true"]'),
+    ).toBeTruthy();
 
-    const [walletUrl, target, features] = openSpy.mock.calls[0] ?? [];
+    fireEvent.click(rechargeAction);
+
+    const [consoleUrl, target, features] = openSpy.mock.calls[0] ?? [];
     expect(target).toBe('_blank');
     expect(features).toBe('noopener,noreferrer');
-    const parsedWalletUrl = new URL(String(walletUrl));
-    expect(`${parsedWalletUrl.origin}${parsedWalletUrl.pathname}`).toBe(
-      'https://vela.powerformer.net/wallet',
+    const parsedConsoleUrl = new URL(String(consoleUrl));
+    // Top-up reports on the console dashboard now, not a wallet page.
+    expect(`${parsedConsoleUrl.origin}${parsedConsoleUrl.pathname}`).toBe(
+      'https://vela.powerformer.net/dashboard',
     );
-    expect(parsedWalletUrl.searchParams.get('od_entry_source')).toBe('chat_error_recharge');
+    // The plain top-up entry must NOT carry the upgrade intent — it opens the
+    // console to add credit, not the plan catalog.
+    expect(parsedConsoleUrl.searchParams.get('billing')).toBeNull();
+    expect(parsedConsoleUrl.searchParams.get('od_entry_source')).toBe('chat_error_recharge');
   });
 
   it('opens the profile-scoped plans view from the AMR tier upgrade action', () => {
@@ -218,9 +229,12 @@ describe('ChatPane session switcher', () => {
     expect(features).toBe('noopener,noreferrer');
     const parsedPlansUrl = new URL(String(plansUrl));
     expect(`${parsedPlansUrl.origin}${parsedPlansUrl.pathname}`).toBe(
-      'https://vela.powerformer.net/wallet',
+      'https://vela.powerformer.net/dashboard',
     );
-    expect(parsedPlansUrl.searchParams.get('view')).toBe('plans');
+    // `billing=plan` is B's state-aware upgrade intent: its dashboard opens the
+    // plan surface that matches the signed-in account instead of the fixed
+    // wallet pricing modal this used to request.
+    expect(parsedPlansUrl.searchParams.get('billing')).toBe('plan');
     expect(parsedPlansUrl.searchParams.get('od_entry_source')).toBe('chat_error_upgrade');
   });
 });

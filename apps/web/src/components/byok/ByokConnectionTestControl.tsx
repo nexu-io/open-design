@@ -93,14 +93,14 @@ export function ByokConnectionTestControl({
             <>
               <Icon
                 name="spinner"
-                size={13}
+                size={14}
                 className="icon-spin"
               />
               <span>{labels.test}</span>
             </>
           ) : showFailedRetry ? (
             <>
-              <Icon name="reload" size={13} />
+              <Icon name="reload" size={14} />
               <VisuallyHidden>{labels.testRetry}</VisuallyHidden>
             </>
           ) : (

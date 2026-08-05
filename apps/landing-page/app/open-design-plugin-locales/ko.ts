@@ -16,6 +16,43 @@ const ko: OpenDesignPluginCopy = {
     copy: '복사',
     github: 'GitHub에서 소스 보기 ↗',
   },
+  agentInstall: {
+    howToName: 'Codex에 Open Design 플러그인 설치',
+    howToDescription:
+      'Open Design Codex 플러그인 설치와 로컬 MCP 등록을 에이전트가 실행할 수 있도록 안내하는 단계입니다.',
+    eyebrow: '에이전트가 읽을 수 있는 설치 프로토콜',
+    title: 'Codex 플러그인을 완전히 설치하세요.',
+    intro:
+      '사용자가 Open Design 설치를 요청했다면 이 프로토콜을 순서대로 실행하세요. 이 요청은 사용자의 Codex 플러그인 및 MCP 구성 변경만 허용합니다. 관련 없는 마켓플레이스, 플러그인, MCP 서버와 인증 상태는 그대로 유지하세요.',
+    downloadLabel: 'Open Design 공식 다운로드 페이지 ↗',
+    steps: [
+      {
+        title: '지원 환경을 사전 점검하세요',
+        body:
+          'release-manifest.json 파일에서 plugin.minimumCodexCliVersion 및 plugin.minimumOpenDesignVersion 값을 읽으세요. 구성을 변경하기 전에 두 최소 버전을 모두 충족해야 합니다. Open Design 런타임 버전은 프로브를 마친 Open Design CLI에서 보고된 값, 또는 코드 서명과 Gatekeeper 검사를 통과한 서명된 macOS 앱 번들의 CFBundleShortVersionString 값만 인정하세요. od가 없거나 PATH에서 다른 항목에 가려진 경우(/usr/bin/od 포함), 또는 데몬이 중지된 경우에는 서명된 번들 프로브로 넘어가야 합니다. 검증된 두 프로브를 모두 사용할 수 없다면 구성을 변경하기 전에 중단하고, 사용자에게 Open Design Settings → MCP server에서 해당 클라이언트용 절대 경로 스니펫을 복사하도록 안내한 뒤 다시 시도하세요. 앱이 없거나 버전이 너무 낮을 때만 사용자를 공식 다운로드 페이지로 안내하세요. 설치 프로그램을 사용자 몰래 다운로드하거나 검증되지 않은 스크립트를 실행해서는 안 됩니다.',
+      },
+      {
+        title: '구성을 변경하기 전에 확인하세요',
+        body:
+          'release-manifest.json 파일에서 필요한 선택자와 버전을 읽은 다음, 점검한 Codex 상태와 비교하세요. MCP 상태는 codex mcp list --json에서 얻은 필터링된 MCP 스냅샷으로만 점검하세요. 출력에는 name, enabled, transport.type, command만 포함하고, args, env, env_vars, headers, token 필드는 출력 전에 제거하세요. open-design 결과가 없는 것은 예상된 상태이며 오류가 아닙니다. 전송 값에 자격 증명이 포함될 수 있으므로 원시 목록이나 codex mcp get open-design --json 출력을 인쇄하거나 보고하지 마세요. open-design 마켓플레이스 이름이 다른 소스를 가리키면 중단하고 충돌을 보고하세요. 설치된 버전이 release-manifest.json 파일에 선언된 버전과 일치할 때만 open-design@open-design 플러그인을 그대로 유지하세요.',
+      },
+      {
+        title: '누락된 구성 요소만 설치하세요',
+        body:
+          '정식 마켓플레이스가 없을 때만 마켓플레이스 명령을 실행하고, 마켓플레이스 추가에 실패하면 플러그인 명령을 실행하지 말고 중단하세요. open-design@open-design 플러그인이 없으면 플러그인 명령을 실행하세요. 다른 버전이 설치되어 있다면 업데이트하거나 다시 설치하기 전에 사용자에게 확인하세요. 명시적인 확인을 받은 뒤에만 OPEN_DESIGN_PLUGIN_UPDATE_CONFIRMED=1 값을 설정해 이 단계를 다시 실행하세요. 정확히 필요한 버전이 이미 있을 때만 설치를 건너뛰세요. alreadyAdded: true 결과는 성공입니다. Codex 구성을 직접 편집하거나 플러그인 파일을 Codex 홈 디렉터리에 복사하지 마세요.',
+      },
+      {
+        title: '로컬 Open Design MCP를 준비하세요',
+        body:
+          '기존 open-design MCP는 활성화되어 있고, stdio를 사용하며, command에 지정된 절대 경로가 검증된 Open Design 실행기와 일치할 때만 그대로 유지하세요. 그렇지 않으면 설치된 Open Design 애플리케이션이 제공하는 MCP 설치 프로그램을 실행하세요. POSIX 시스템에서는 확인된 od 경로의 프로브 결과로 open-design-cli:mcp-install:v1 문자열이 반환될 때만 해당 경로를 실행하세요. 해당 경로가 없거나 /usr/bin/od 경로에 가려졌거나 작업을 완료할 수 없으면, 검증된 서명 macOS 앱 번들을 /usr/bin/open 명령과 --headless --mcp-install codex 옵션으로 실행한 다음 동일한 구조 검사를 적용해 필터링된 MCP 스냅샷만 폴링하세요. 검증된 실행기를 사용할 수 없다면 중단하고, 사용자에게 Open Design Settings → MCP server에서 해당 클라이언트용 절대 경로 스니펫을 복사하도록 안내한 뒤 이 단계를 다시 시도하세요. localhost 포트를 추측하거나 codex mcp login을 실행하지 마세요. Vela 로그인은 Open Design에서 해야 합니다.',
+      },
+      {
+        title: '확인하고 보고한 뒤 새 작업을 시작하세요',
+        body:
+          '플러그인 ID open-design@open-design, 해당 플러그인의 정식 마켓플레이스 소스, 그리고 release-manifest.json의 plugin.version과 정확히 일치하는 설치 버전을 확인하세요. 필터링된 MCP 스냅샷을 사용해 이름이 open-design인 활성화된 stdio MCP가 있고, 그 MCP의 command에 지정된 절대 경로가 설치 중 사용한 동일한 검증된 Open Design 실행기와 일치하는지 확인하세요. name, enabled, transport.type, command만 점검하세요. 원시 args, env, env_vars, headers, token, bearer token, API key 및 Vela 자격 증명 값은 출력이나 보고서에 절대 포함되면 안 됩니다. 설치된 항목과 아직 필요한 Open Design 또는 Vela 로그인 조건을 보고하세요. 새 Codex 작업을 시작해 설치된 플러그인 스냅샷을 불러온 다음 @open-design 멘션을 호출하세요.',
+      },
+    ],
+  },
   demo: {
     title: '한 번 설치하고, Codex/ChatGPT에서 바로 제작하세요.',
     lead:
@@ -29,7 +66,7 @@ const ko: OpenDesignPluginCopy = {
     installPhase: '설치',
     installTitle: 'Codex에 설치를 요청하세요',
     installBody:
-      '이 안내 문구를 Codex 작업에 붙여 넣으세요. Codex가 저장소의 설치 절차를 읽고, 공개 마켓플레이스 등록 없이도 플러그인과 로컬 MCP 설정을 완료합니다.',
+      '이 안내 문구를 Codex 작업에 붙여 넣으세요. Codex는 정식 Git 마켓플레이스 소스를 추가하고, 플러그인이 없을 때만 설치하며, 공개 카탈로그 등록 없이 로컬 MCP 설정을 완료합니다.',
     installNote: 'Codex에 한 번만 붙여 넣으면 나머지 설치 과정은 자동으로 처리됩니다.',
     steps: [
       {

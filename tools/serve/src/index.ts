@@ -1,6 +1,10 @@
 import { cac } from "cac";
 import type { ReleaseChannel } from "@open-design/release";
 
+import {
+  DEFAULT_COLLAB_CLOUD_PORT,
+  startCollabCloudFixtureServer,
+} from "./collab-cloud-fixture.js";
 import { startReleaseStorageFixtureServer } from "./release-storage-fixture.js";
 import { startUpdaterFixtureServer } from "./updater-fixture.js";
 
@@ -16,6 +20,7 @@ type CliOptions = {
   includePayload?: boolean;
   payloadPath?: string;
   version?: string;
+  token?: string;
 };
 
 function parsePort(value: string | undefined): number {
@@ -47,6 +52,32 @@ async function start(service: string, options: CliOptions): Promise<void> {
       printJson(server.info);
     } else {
       process.stdout.write(`tools-serve release-storage: ${server.info.endpointUrl} bucket=${server.info.bucket}\n`);
+    }
+
+    const shutdown = () => {
+      void server.close().finally(() => process.exit(0));
+    };
+    process.on("SIGINT", shutdown);
+    process.on("SIGTERM", shutdown);
+    return;
+  }
+
+  if (service === "collab-cloud") {
+    // Default to the well-known collab-cloud port when the caller does not pin
+    // one, so two daemons can share a URL without discovering a dynamic port.
+    const rawPort = options.port;
+    const port = rawPort != null && rawPort !== "0" ? parsePort(rawPort) : DEFAULT_COLLAB_CLOUD_PORT;
+    const server = await startCollabCloudFixtureServer({
+      host: options.host,
+      port,
+      token: options.token,
+    });
+    if (options.json === true) {
+      printJson(server.info);
+    } else {
+      process.stdout.write(
+        `tools-serve collab-cloud: ${server.info.endpointUrl} (token=${server.info.token})\n`,
+      );
     }
 
     const shutdown = () => {
@@ -105,6 +136,7 @@ cli
   .option("--include-payload", "Include launcher payload metadata")
   .option("--payload-path <path>", "Serve launcher payload bytes from a real archive")
   .option("--platform <platform>", "Updater platform: mac|win", { default: "mac" })
+  .option("--token <token>", "collab-cloud: shared bearer token clients must present")
   .option("--port <port>", "Port to bind, 0 for dynamic", { default: "0" })
   .option("--version <version>", "Fixture update version", { default: "99.0.0" })
   .action((service: string, options: CliOptions) => {

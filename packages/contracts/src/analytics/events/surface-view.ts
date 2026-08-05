@@ -5,6 +5,7 @@
 import type { TrackingOnboardingFirstLoopStep, TrackingOnboardingProductType, TrackingOnboardingRole, TrackingOnboardingUseCase } from './onboarding.js';
 import type { TrackingArtifactKind, TrackingNewProjectTab, TrackingProjectKind } from './shared-enums.js';
 import type { DesignSystemsPresetBrandPickerSurfaceViewProps } from './ui-click.js';
+import type { WorkspaceSurfaceViewProps } from './workspace.js';
 // ---- surface_view --------------------------------------------------------
 
 export interface HelpPopoverSurfaceViewProps {
@@ -14,7 +15,7 @@ export interface HelpPopoverSurfaceViewProps {
 
 // Impression of the header gear settings popover. Mirrors
 // HelpPopoverSurfaceViewProps: fires once each time the popover opens so the
-// share / language / appearance funnels have a denominator.
+// share / language funnels have a denominator.
 export interface SettingsPopoverSurfaceViewProps {
   page_name: 'home' | 'artifact';
   area: 'settings_popover';
@@ -87,22 +88,6 @@ export interface RunFailedToastSurfaceViewProps {
   conversation_id: string | null;
   assistant_message_id: string;
   run_id: string | null;
-}
-
-// Preview-workspace status feedback for Design-mode runs. This exposure is
-// intentionally separate from `run_finished`: that event records the daemon
-// outcome, while this one measures whether the user actually saw the delivery
-// confirmation or recovery path.
-export interface PreviewRunStatusSurfaceViewProps {
-  page_name: 'file_manager';
-  area: 'preview_run_status';
-  element: 'run_status_bar';
-  status: 'generating' | 'verifying' | 'succeeded' | 'failed';
-  delivery_state?: 'delivered' | 'no_result' | 'delivery_failed';
-  project_id: string;
-  conversation_id: string | null;
-  assistant_message_id: string;
-  run_id?: string;
 }
 
 export interface AssistantFeedbackReasonPanelSurfaceViewProps {
@@ -211,8 +196,8 @@ export interface StudioOnboardingHintSurfaceViewProps {
 }
 
 export type SurfaceViewProps =
+  | WorkspaceSurfaceViewProps
   | RunFailedToastSurfaceViewProps
-  | PreviewRunStatusSurfaceViewProps
   | HomeRecommendationSurfaceViewProps
   | StudioOnboardingHintSurfaceViewProps
   | HelpPopoverSurfaceViewProps
