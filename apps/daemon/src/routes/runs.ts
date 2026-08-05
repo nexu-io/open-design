@@ -81,6 +81,7 @@ import {
 } from '../run-tool-bundle.js';
 import type { DetectedAgent, RuntimeAgentDef } from '../runtimes/types.js';
 import type { ChatRun, ChatRunService, RunCreateMeta } from '../runtimes/runs.js';
+import type { SkillCandidateRun, SkillCandidateRunWaiter } from '../runtimes/skill-candidate-message.js';
 export type { ChatRunService } from '../runtimes/runs.js';
 import {
   countDesignSystemPreviewModules,
@@ -201,8 +202,8 @@ export interface RegisterRunRoutesDeps {
     connectorService: ConnectorService;
     detectSkillPluginCandidateOnRunSuccess: (
       db: SqliteDb,
-      runs: ChatRunService,
-      run: ChatRun,
+      runs: SkillCandidateRunWaiter,
+      run: SkillCandidateRun,
       input: JsonRecord,
       projectRoot: string,
     ) => void;

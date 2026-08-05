@@ -1,7 +1,7 @@
 import type { DesktopExportArtifactInput, DesktopExportArtifactResult, DesktopExportPdfInput, DesktopExportPdfResult } from '@open-design/sidecar-proto';
 import type Database from 'better-sqlite3';
 import type { SkillCandidateRunContext } from './runtimes/deferred-plugin-candidate.js';
-import type { RunForSkillCandidateMessage } from './runtimes/skill-candidate-message.js';
+import type { RunForSkillCandidateMessage, SkillCandidateRun, SkillCandidateRunWaiter } from './runtimes/skill-candidate-message.js';
 import type { RunWithAssistantMessageId } from './runtimes/run-event-persistence.js';
 import type { RunToPinAssistantMessage } from './runtimes/run-message-pinning.js';
 import type { ChatRun } from './runtimes/runs.js';
@@ -1127,12 +1127,12 @@ const deferredSkillPluginCandidateForRun = (db: Database.Database, run: SkillCan
     list: (projectId) => listSkillPluginCandidates(db, projectId),
   }, run);
 
-export function detectSkillPluginCandidateOnRunSuccess(db: Database.Database, runs: ChatRunService, run: ChatRun, input: Record<string, unknown>, projectRoot: string) {
+export function detectSkillPluginCandidateOnRunSuccess(db: Database.Database, runs: SkillCandidateRunWaiter, run: SkillCandidateRun, input: Record<string, unknown>, projectRoot: string) {
   const projectId = run.projectId;
   const conversationId = run.conversationId;
   if (!projectId || !conversationId) return;
   void runs
-    .wait(run as never)
+    .wait(run)
     .then(async (finalStatus) => {
       if (finalStatus.status !== 'succeeded') return;
       const pausedForQuestion = assistantMessageEmittedQuestionFormWithReader({

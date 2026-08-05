@@ -14,6 +14,18 @@ export interface RunForSkillCandidateMessage {
   agentId?: string | null;
 }
 
+export interface SkillCandidateRun {
+  id: string;
+  projectId?: string | null;
+  conversationId?: string | null;
+  assistantMessageId?: string | null;
+  agentId?: string | null;
+}
+
+export interface SkillCandidateRunWaiter {
+  wait(run: unknown): Promise<{ status: string }>;
+}
+
 interface SkillCandidateAssistantMessage {
   id: string;
   role: 'assistant';
