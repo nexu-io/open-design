@@ -65,6 +65,7 @@ import {
   planAgentInstall,
   applyJsonInstall,
   removeJsonInstall,
+  type McpLaunchSpec,
 } from './mcp-agent-install.js';
 
 const argv = process.argv.slice(2);
@@ -737,19 +738,22 @@ To register this server into a coding agent's own config automatically:
 // Codex one-click install use), so every install path configures byte-for-
 // byte the same command. Falls back to a minimal `od mcp --daemon-url`
 // spec when the daemon is unreachable.
-async function resolveMcpLaunchSpec(flags) {
+function isMcpLaunchSpec(value: unknown): value is McpLaunchSpec {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Record<string, unknown>;
+  if (typeof candidate.command !== 'string' || !Array.isArray(candidate.args)) return false;
+  if (!candidate.args.every((arg) => typeof arg === 'string')) return false;
+  if (!candidate.env || typeof candidate.env !== 'object' || Array.isArray(candidate.env)) return false;
+  return Object.values(candidate.env).every((entry) => typeof entry === 'string');
+}
+
+async function resolveMcpLaunchSpec(flags?: CliFlags): Promise<McpLaunchSpec> {
   const base = await cliDaemonBaseUrl(flags);
   try {
     const resp = await fetch(`${base}/api/mcp/install-info`);
     if (resp.ok) {
-      const info = await resp.json();
-      if (info && typeof info.command === 'string' && Array.isArray(info.args)) {
-        return {
-          command: info.command,
-          args: info.args,
-          env: info.env && typeof info.env === 'object' ? info.env : {},
-        };
-      }
+      const info = await resp.json() as unknown;
+      if (isMcpLaunchSpec(info)) return info;
     }
   } catch {
     // daemon not running / unreachable — fall through to the minimal spec
@@ -761,7 +765,10 @@ async function resolveMcpLaunchSpec(flags) {
   };
 }
 
-function emitInstallResult(useJson, result) {
+function emitInstallResult(
+  useJson: boolean,
+  result: { ok: boolean; message: string; [key: string]: unknown },
+): void {
   if (useJson) {
     console.log(JSON.stringify(result));
     return;
@@ -773,15 +780,15 @@ function emitInstallResult(useJson, result) {
   }
 }
 
-async function runMcpInstall(args) {
-  let flags;
+async function runMcpInstall(args: readonly string[]): Promise<void> {
+  let flags: CliFlags;
   try {
     flags = parseFlags(args, {
       string: MCP_INSTALL_STRING_FLAGS,
       boolean: MCP_INSTALL_BOOLEAN_FLAGS,
     });
   } catch (err) {
-    console.error(err.message);
+    console.error(err instanceof Error ? err.message : String(err));
     printMcpInstallHelp();
     process.exit(2);
   }
@@ -805,7 +812,7 @@ async function runMcpInstall(args) {
 
   const uninstall = Boolean(flags.uninstall || flags.remove);
   const dryRun = Boolean(flags.print || flags['dry-run']);
-  const serverName = flags.name || 'open-design';
+  const serverName = typeof flags.name === 'string' ? flags.name : 'open-design';
 
   const os = await import('node:os');
   const spec = await resolveMcpLaunchSpec(flags);
