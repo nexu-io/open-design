@@ -161,13 +161,8 @@ import {
   isLoopbackPeerAddress,
   parseProjectPreviewAssetPath,
 } from './runtimes/local-request.js';
-import {
-  buildCommandShellCommand,
-  buildGhShellCommand,
-  buildLoginShellCommand,
-  quotePosixShellArg,
-} from './runtimes/shell-command.js';
-import { execFileBuffered as runBufferedCommand } from './runtimes/child-process.js';
+import { quotePosixShellArg } from './runtimes/shell-command.js';
+import { createShellCommandRunner } from './runtimes/shell-exec.js';
 import { sanitizeArchiveFilename } from './runtimes/archive-filename.js';
 import {
   githubRepoNameFromPluginName,
@@ -1079,31 +1074,7 @@ export function createAgentRuntimeEnv(
 
 export { createAgentRuntimeToolPrompt };
 
-function execFileBuffered(command, args, opts = {}) {
-  return runBufferedCommand(command, args, {
-    timeout: 120_000,
-    maxBuffer: 1024 * 1024,
-    ...opts,
-  });
-}
-
-function execGhBuffered(args, opts = {}) {
-  if (process.platform === 'win32') return execFileBuffered('gh', args, opts);
-  const shell = process.env.SHELL && process.env.SHELL.trim() ? process.env.SHELL.trim() : '/bin/zsh';
-  return execFileBuffered(shell, ['-c', buildLoginShellCommand(buildGhShellCommand(args))], {
-    env: process.env,
-    ...opts,
-  });
-}
-
-function execCommandViaLoginShell(command, args, opts = {}) {
-  if (process.platform === 'win32') return execFileBuffered(command, args, opts);
-  const shell = process.env.SHELL && process.env.SHELL.trim() ? process.env.SHELL.trim() : '/bin/zsh';
-  return execFileBuffered(shell, ['-c', buildLoginShellCommand(buildCommandShellCommand(command, args))], {
-    env: process.env,
-    ...opts,
-  });
-}
+const { execFileBuffered, execGhBuffered, execCommandViaLoginShell } = createShellCommandRunner();
 
 async function readProjectPluginManifest(folder) {
   const raw = await fs.promises.readFile(path.join(folder, 'open-design.json'), 'utf8');
