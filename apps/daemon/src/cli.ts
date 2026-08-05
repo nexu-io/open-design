@@ -2437,7 +2437,7 @@ async function runPluginInfo(rest: readonly string[]) {
   const url = `${base}/api/plugins/${encodeURIComponent(id)}`;
   const resp = await fetch(url);
   if (resp.ok && !flags.version) {
-    const data = await resp.json();
+    const data = (await resp.json()) as Record<string, unknown>;
     process.stdout.write(JSON.stringify(data, null, 2) + '\n');
     return;
   }
@@ -2457,7 +2457,7 @@ async function runPluginInfo(rest: readonly string[]) {
     console.error(`GET /api/plugins/${id} failed: ${resp.status} ${await resp.text()}`);
     process.exit(1);
   }
-  const data = await resp.json();
+  const data = (await resp.json()) as Record<string, unknown>;
   process.stdout.write(JSON.stringify(data, null, 2) + '\n');
 }
 
@@ -3193,7 +3193,7 @@ fixtures into a plugin's own tests/.`);
     process.exit(4);
   }
   if (flags.json) {
-    const data = await resp.json();
+    const data = (await resp.json()) as Record<string, unknown>;
     process.stdout.write(JSON.stringify(data, null, 2) + '\n');
     return;
   }
@@ -4470,7 +4470,7 @@ async function runUiShow(rest: readonly string[]) {
 
 async function runUiRespond(rest: readonly string[]) {
   const flags = parseFlags(rest, { string: UI_STRING_FLAGS, boolean: UI_BOOLEAN_FLAGS });
-  const positional = rest.filter((a) => !a.startsWith('-')
+  const positional = rest.filter((a: any) => !a.startsWith('-')
     && a !== flags['daemon-url']
     && a !== flags.run
     && a !== flags.project
@@ -4518,9 +4518,9 @@ async function runUiRespond(rest: readonly string[]) {
   }
 }
 
-async function runUiRevoke(rest) {
+async function runUiRevoke(rest: readonly string[]) {
   const flags = parseFlags(rest, { string: UI_STRING_FLAGS, boolean: UI_BOOLEAN_FLAGS });
-  const positional = rest.filter((a) => !a.startsWith('-')
+  const positional = rest.filter((a: any) => !a.startsWith('-')
     && a !== flags['daemon-url']
     && a !== flags.run
     && a !== flags.project
@@ -4550,9 +4550,9 @@ async function runUiRevoke(rest) {
   }
 }
 
-async function runUiPrefill(rest) {
+async function runUiPrefill(rest: readonly string[]) {
   const flags = parseFlags(rest, { string: UI_STRING_FLAGS, boolean: UI_BOOLEAN_FLAGS });
-  const positional = rest.filter((a) => !a.startsWith('-')
+  const positional = rest.filter((a: any) => !a.startsWith('-')
     && a !== flags['daemon-url']
     && a !== flags.run
     && a !== flags.project
@@ -4682,7 +4682,7 @@ and bare marketplace names resolved through configured registry sources.`);
 // reachable via the CLI; we wrap rather than duplicate.
 // ---------------------------------------------------------------------------
 
-async function projectDaemonUrl(flags) {
+async function projectDaemonUrl(flags: any) {
   return cliDaemonUrl(flags);
 }
 
@@ -4700,7 +4700,7 @@ Common options:
   --json               Emit raw JSON.`);
 }
 
-async function runShare(args) {
+async function runShare(args: readonly string[]) {
   return runShareCommand(args, {
     resolveDaemonBaseUrl: cliDaemonBaseUrl,
     fetch,
@@ -4735,8 +4735,8 @@ Flags:
   --json               Emit raw JSON.`);
 }
 
-async function runFigma(args) {
-  const sub = args.find((a) => !a.startsWith('-'));
+async function runFigma(args: readonly string[]) {
+  const sub = args.find((a: any) => !a.startsWith('-'));
   if (!sub || sub === 'help' || args.includes('--help') || args.includes('-h')) {
     printFigmaUsage();
     process.exit(sub ? 0 : 2);
@@ -4854,7 +4854,7 @@ async function runFigma(args) {
 // ---------------------------------------------------------------------------
 
 // Derive a short domain for list output from a brand's source URL.
-function brandDomainForCli(sourceUrl) {
+function brandDomainForCli(sourceUrl: any) {
   if (typeof sourceUrl !== 'string' || sourceUrl.trim().length === 0) return '-';
   try {
     const u = new URL(/^[a-z]+:\/\//i.test(sourceUrl) ? sourceUrl : `https://${sourceUrl}`);
@@ -4864,7 +4864,7 @@ function brandDomainForCli(sourceUrl) {
   }
 }
 
-function formatBrandRow(summary) {
+function formatBrandRow(summary: any) {
   const meta = summary?.meta ?? {};
   const name = summary?.brand?.name || meta.id || '-';
   return [
@@ -5058,7 +5058,7 @@ async function readFileFlagOrStdin(value: any): Promise<string | null> {
 // Re-runs extraction against pre-captured rendered HTML (e.g. a page an external
 // agent already loaded past an anti-bot wall), mirroring the UI's browser-assist
 // confirm path so the capability is reachable from the CLI too.
-async function runBrandExtractFromHtml(rest) {
+async function runBrandExtractFromHtml(rest: readonly string[]) {
   let flags;
   try {
     flags = parseFlags(rest, { string: BRAND_STRING_FLAGS, boolean: BRAND_BOOLEAN_FLAGS });
@@ -5127,7 +5127,7 @@ async function runBrandExtractFromHtml(rest) {
   }
 }
 
-async function runBrandPreview(rest) {
+async function runBrandPreview(rest: readonly string[]) {
   let flags;
   try {
     flags = parseFlags(rest, { string: BRAND_STRING_FLAGS, boolean: BRAND_BOOLEAN_FLAGS });
@@ -5169,7 +5169,7 @@ async function runBrandPreview(rest) {
   console.log(`${data?.id ?? id}\t${data?.file ?? 'brand.html'}`);
 }
 
-async function runBrandGet(rest) {
+async function runBrandGet(rest: readonly string[]) {
   let flags;
   try {
     flags = parseFlags(rest, { string: BRAND_STRING_FLAGS, boolean: BRAND_BOOLEAN_FLAGS });
@@ -5213,12 +5213,12 @@ async function runBrandGet(rest) {
   }
   if (brand?.tagline) console.log(`tagline\t${brand.tagline}`);
   if (Array.isArray(brand?.colors) && brand.colors.length > 0) {
-    console.log(`colors\t${brand.colors.map((c) => c.hex).join(' ')}`);
+    console.log(`colors\t${brand.colors.map((c: any) => c.hex).join(' ')}`);
   }
   if (meta.error) console.log(`error\t${meta.error}`);
 }
 
-async function runBrandDelete(rest) {
+async function runBrandDelete(rest: readonly string[]) {
   let flags;
   try {
     flags = parseFlags(rest, { string: BRAND_STRING_FLAGS, boolean: BRAND_BOOLEAN_FLAGS });
@@ -5248,7 +5248,7 @@ async function runBrandDelete(rest) {
   console.log(`[brand] deleted ${id}`);
 }
 
-function normalizeChatSessionModeFlag(value) {
+function normalizeChatSessionModeFlag(value: any) {
   if (value == null) return undefined;
   const mode = String(value).trim().toLowerCase();
   if (mode === 'design' || mode === 'chat') return mode;
@@ -5256,7 +5256,7 @@ function normalizeChatSessionModeFlag(value) {
   process.exit(2);
 }
 
-function safeReadJsonFile(p) {
+function safeReadJsonFile(p: any) {
   try {
     if (p === '-') return JSON.parse(readFileSync(0, 'utf8'));
     return JSON.parse(readFileSync(p, 'utf8'));
@@ -5265,7 +5265,7 @@ function safeReadJsonFile(p) {
   }
 }
 
-async function resolveFolderPathForCli(rawPath) {
+async function resolveFolderPathForCli(rawPath: any) {
   const path = await import('node:path');
   const os = await import('node:os');
   const raw = typeof rawPath === 'string' && rawPath.trim().length > 0
@@ -5279,12 +5279,12 @@ async function resolveFolderPathForCli(rawPath) {
   return path.resolve(expanded);
 }
 
-async function basenameForCli(folderPath) {
+async function basenameForCli(folderPath: any) {
   const path = await import('node:path');
   return path.basename(folderPath) || 'Imported project';
 }
 
-async function readRunMessageFromFlags(flags, fallback = null) {
+async function readRunMessageFromFlags(flags: any, fallback = null) {
   if (typeof flags.message === 'string' && flags.message.length > 0) {
     return flags.message;
   }
@@ -5293,7 +5293,7 @@ async function readRunMessageFromFlags(flags, fallback = null) {
   return fallback;
 }
 
-async function postJsonToDaemon(base, route, body, headers = {}) {
+async function postJsonToDaemon(base: any, route: any, body: any, headers: Record<string, string> = {}) {
   let resp;
   try {
     resp = await fetch(`${base}${route}`, {
@@ -5305,14 +5305,15 @@ async function postJsonToDaemon(base, route, body, headers = {}) {
     surfaceFetchError(err, base);
     process.exit(3);
   }
-  const data = await resp.json().catch(() => ({}));
+  const data = (await resp.json().catch(() => ({}))) as Record<string, unknown>;
   if (!resp.ok) {
-    const errCode = data?.error?.code;
+    const errBody = data.error as { code?: string; message?: string; data?: unknown } | undefined;
+    const errCode = errBody?.code;
     if (errCode && errCode in RECOVERABLE_EXIT_CODES) {
       return exitWithStructuredError({
         code:    errCode,
-        message: data.error.message ?? `HTTP ${resp.status}`,
-        data:    data.error.data,
+        message: errBody?.message ?? `HTTP ${resp.status}`,
+        data:    errBody?.data,
       });
     }
     console.error(`POST ${route} failed: ${resp.status} ${JSON.stringify(data)}`);
@@ -5321,8 +5322,8 @@ async function postJsonToDaemon(base, route, body, headers = {}) {
   return data;
 }
 
-async function postImportFolderToDaemon(base, body, baseDir) {
-  const headers = {};
+async function postImportFolderToDaemon(base: any, body: any, baseDir: any) {
+  const headers: Record<string, string> = {};
   const importToken = await mintCliImportToken(baseDir);
   if (importToken != null) {
     headers['x-od-desktop-import-token'] = importToken;
@@ -5330,7 +5331,7 @@ async function postImportFolderToDaemon(base, body, baseDir) {
   return postJsonToDaemon(base, '/api/import/folder', body, headers);
 }
 
-async function runProject(args) {
+async function runProject(args: readonly string[]) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
   od project create [--name "<title>"] [--skill <id>] [--design-system <id>]
@@ -5374,12 +5375,12 @@ Common options:
     case 'list': {
       const resp = await fetch(`${base}/api/projects`);
       if (!resp.ok) return structuredHttpFailure(resp);
-      const data = await resp.json();
+      const data = (await resp.json()) as Record<string, unknown>;
       if (flags.json) {
         process.stdout.write(JSON.stringify(data, null, 2) + '\n');
         return;
       }
-      const projects = data?.projects ?? [];
+      const projects = (data?.projects ?? []) as Array<Record<string, unknown>>;
       if (projects.length === 0) {
         console.log('No projects. Create one with `od project create --name "..."`.');
         return;
@@ -5388,14 +5389,14 @@ Common options:
       return;
     }
     case 'info': {
-      const id = rest.find((a) => !a.startsWith('-'));
+      const id = rest.find((a: any) => !a.startsWith('-'));
       if (!id) {
         console.error('Usage: od project info <id>');
         process.exit(2);
       }
       const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}`);
       if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
-      const data = await resp.json();
+      const data = (await resp.json()) as Record<string, unknown>;
       process.stdout.write(JSON.stringify(data, null, 2) + '\n');
       return;
     }
@@ -5406,7 +5407,7 @@ Common options:
       const name = typeof flags.name === 'string' && flags.name.length > 0
         ? flags.name
         : 'Untitled project';
-      const body = {
+      const body: Record<string, unknown> = {
         id,
         name,
         skillId:        flags.skill ?? null,
@@ -5434,13 +5435,14 @@ Common options:
         headers: { 'content-type': 'application/json' },
         body:    JSON.stringify(body),
       });
-      const data = await resp.json().catch(() => ({}));
+      const data = (await resp.json().catch(() => ({}))) as Record<string, unknown>;
+      const errBody = data.error as { code?: string; message?: string; data?: unknown } | undefined;
       if (!resp.ok) {
-        if (resp.status === 409 && data?.error?.code === 'capabilities-required') {
+        if (resp.status === 409 && errBody?.code === 'capabilities-required') {
           return exitWithStructuredError({
             code:    'capabilities-required',
-            message: data.error.message,
-            data:    data.error.data,
+            message: errBody.message ?? '',
+            data:    errBody.data,
           });
         }
         console.error(`POST /api/projects failed: ${resp.status} ${JSON.stringify(data)}`);
@@ -5450,7 +5452,8 @@ Common options:
         process.stdout.write(JSON.stringify(data, null, 2) + '\n');
         return;
       }
-      console.log(`[project] created ${data.project?.id ?? id} (conversation ${data.conversationId})`);
+      const project = data.project as { id?: string } | undefined;
+      console.log(`[project] created ${project?.id ?? id} (conversation ${String(data.conversationId)})`);
       return;
     }
     case 'import': {
@@ -5460,13 +5463,13 @@ Common options:
         console.error('Usage: od project import <baseDir> [--name "<title>"]');
         process.exit(2);
       }
-      const body = { baseDir: importBaseDir };
+      const body: Record<string, unknown> = { baseDir: importBaseDir };
       if (typeof flags.name === 'string' && flags.name.length > 0) body.name = flags.name;
       if (typeof flags.skill === 'string' && flags.skill.length > 0) body.skillId = flags.skill;
       if (typeof flags['design-system'] === 'string' && flags['design-system'].length > 0) {
         body.designSystemId = flags['design-system'];
       }
-      const headers = { 'content-type': 'application/json' };
+      const headers: Record<string, string> = { 'content-type': 'application/json' };
       const importToken = await mintCliImportToken(importBaseDir);
       if (importToken != null) {
         headers['x-od-desktop-import-token'] = importToken;
@@ -5477,12 +5480,13 @@ Common options:
         body:    JSON.stringify(body),
       });
       if (!resp.ok) return structuredHttpFailure(resp);
-      const data = await resp.json();
+      const data = (await resp.json()) as Record<string, unknown>;
       if (flags.json) {
         process.stdout.write(JSON.stringify(data, null, 2) + '\n');
         return;
       }
-      console.log(`[project] imported ${data.project?.id ?? '-'} (conversation ${data.conversationId ?? '-'})`);
+      const proj = data.project as { id?: string } | undefined;
+      console.log(`[project] imported ${proj?.id ?? '-'} (conversation ${String(data.conversationId ?? '-')})`);
       return;
     }
     case 'import-folder': {
@@ -5506,11 +5510,12 @@ Common options:
         process.stdout.write(JSON.stringify(data, null, 2) + '\n');
         return;
       }
-      console.log(`[project] imported ${data.project?.id ?? '-'} from ${folderPath} (conversation ${data.conversationId ?? '-'})`);
+      const proj2 = data.project as { id?: string } | undefined;
+      console.log(`[project] imported ${proj2?.id ?? '-'} from ${folderPath} (conversation ${String(data.conversationId ?? '-')})`);
       return;
     }
     case 'delete': {
-      const id = rest.find((a) => !a.startsWith('-'));
+      const id = rest.find((a: any) => !a.startsWith('-'));
       if (!id) {
         console.error('Usage: od project delete <id>');
         process.exit(2);
@@ -5523,7 +5528,7 @@ Common options:
     case 'editors': {
       const resp = await fetch(`${base}/api/editors`);
       if (!resp.ok) return structuredHttpFailure(resp);
-      const data = await resp.json();
+      const data = (await resp.json()) as Record<string, unknown>;
       if (flags.json) {
         process.stdout.write(JSON.stringify(data, null, 2) + '\n');
         return;
@@ -5536,7 +5541,7 @@ Common options:
       return;
     }
     case 'open-in': {
-      const id = rest.find((a) => !a.startsWith('-'));
+      const id = rest.find((a: any) => !a.startsWith('-'));
       if (!id) {
         console.error('Usage: od project open-in <id> --editor <slug>');
         process.exit(2);
@@ -5551,7 +5556,7 @@ Common options:
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ editorId: editor }),
       });
-      const data = await resp.json().catch(() => ({}));
+      const data = (await resp.json().catch(() => ({}))) as Record<string, unknown>;
       if (!resp.ok) {
         if (flags.json) process.stdout.write(JSON.stringify(data, null, 2) + '\n');
         else console.error(`POST /api/projects/${id}/open-in failed: ${resp.status} ${JSON.stringify(data)}`);
@@ -5570,7 +5575,7 @@ Common options:
   }
 }
 
-async function runRun(args) {
+async function runRun(args: readonly string[]) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
   od run start --project <projectId> [--conversation <id>] [--message "<text>"]
@@ -5601,7 +5606,7 @@ Common options:
         : `${base}/api/runs`;
       const resp = await fetch(url);
       if (!resp.ok) return structuredHttpFailure(resp);
-      const data = await resp.json();
+      const data = (await resp.json()) as Record<string, unknown>;
       if (flags.json) {
         process.stdout.write(JSON.stringify(data, null, 2) + '\n');
         return;
@@ -5613,46 +5618,47 @@ Common options:
       return;
     }
     case 'info': {
-      const id = rest.find((a) => !a.startsWith('-'));
+      const id = rest.find((a: any) => !a.startsWith('-'));
       if (!id) {
         console.error('Usage: od run info <runId>');
         process.exit(2);
       }
       const resp = await fetch(`${base}/api/runs/${encodeURIComponent(id)}`);
       if (!resp.ok) return structuredHttpFailure(resp, 'run-not-found');
-      const data = await resp.json();
+      const data = (await resp.json()) as Record<string, unknown>;
       process.stdout.write(JSON.stringify(data, null, 2) + '\n');
       return;
     }
     case 'result-package': {
-      const id = rest.find((a) => !a.startsWith('-'));
+      const id = rest.find((a: any) => !a.startsWith('-'));
       if (!id) {
         console.error('Usage: od run result-package <runId> [--json]');
         process.exit(2);
       }
       const resp = await fetch(`${base}/api/runs/${encodeURIComponent(id)}/result-package`);
       if (!resp.ok) return structuredHttpFailure(resp, 'run-not-found');
-      const data = await resp.json();
+      const data = (await resp.json()) as Record<string, unknown>;
       if (flags.json) {
         process.stdout.write(JSON.stringify(data, null, 2) + '\n');
         return;
       }
-      const run = data?.run ?? {};
-      const workspace = data?.workspace ?? {};
-      const storage = workspace.storage ?? {};
-      const provenance = workspace.provenance ?? null;
-      console.log(`run\t${run.id ?? id}\t${run.status ?? '-'}`);
-      console.log(`workspace\t${storage.kind ?? '-'}\t${storage.baseDir ?? '-'}`);
-      console.log(`provenance\t${provenance?.kind ?? '-'}\twriteback=${provenance?.writeback ?? '-'}`);
-      console.log(`project\t${data?.project?.id ?? '-'}\tfiles=${data?.project?.fileCount ?? 0}`);
-      const artifacts = Array.isArray(data?.artifacts) ? data.artifacts : [];
+      const run = (data?.run ?? {}) as Record<string, unknown>;
+      const workspace = (data?.workspace ?? {}) as Record<string, unknown>;
+      const storage = (workspace.storage ?? {}) as Record<string, unknown>;
+      const provenance = (workspace.provenance ?? null) as Record<string, unknown> | null;
+      console.log(`run\t${String(run.id ?? id)}\t${String(run.status ?? '-')}`);
+      console.log(`workspace\t${String(storage.kind ?? '-')}\t${String(storage.baseDir ?? '-')}`);
+      console.log(`provenance\t${String(provenance?.kind ?? '-')}\twriteback=${String(provenance?.writeback ?? '-')}`);
+      const project = data?.project as Record<string, unknown> | undefined;
+      console.log(`project\t${String(project?.id ?? '-')}\tfiles=${String(project?.fileCount ?? 0)}`);
+      const artifacts = Array.isArray(data?.artifacts) ? (data.artifacts as Array<Record<string, unknown>>) : [];
       for (const artifact of artifacts) {
-        console.log(`artifact\t${artifact.file ?? '-'}\t${artifact.kind ?? '-'}\t${artifact.title ?? '-'}`);
+        console.log(`artifact\t${String(artifact.file ?? '-')}\t${String(artifact.kind ?? '-')}\t${String(artifact.title ?? '-')}`);
       }
       return;
     }
     case 'cancel': {
-      const id = rest.find((a) => !a.startsWith('-'));
+      const id = rest.find((a: any) => !a.startsWith('-'));
       if (!id) {
         console.error('Usage: od run cancel <runId>');
         process.exit(2);
@@ -5663,7 +5669,7 @@ Common options:
       return;
     }
     case 'watch': {
-      const id = rest.find((a) => !a.startsWith('-'));
+      const id = rest.find((a: any) => !a.startsWith('-'));
       if (!id) {
         console.error('Usage: od run watch <runId>');
         process.exit(2);
@@ -5696,8 +5702,8 @@ Common options:
           skillId,
           designSystemId,
         }, folderPath);
-        projectId = imported.project?.id;
-        conversationId = conversationId ?? imported.conversationId;
+        projectId = (imported?.project as { id?: string } | undefined)?.id;
+        conversationId = conversationId ?? (imported?.conversationId as string | undefined);
         if (!projectId) {
           console.error('POST /api/import/folder did not return project.id');
           process.exit(1);
@@ -5734,7 +5740,7 @@ Common options:
         console.error('--project <projectId> is required');
         process.exit(2);
       }
-      const body = { projectId: flags.project };
+      const body: Record<string, unknown> = { projectId: flags.project };
       if (flags.conversation) body.conversationId = flags.conversation;
       const message = await readRunMessageFromFlags(flags);
       if (message) body.message = message;
@@ -5758,20 +5764,21 @@ Common options:
         headers: { 'content-type': 'application/json' },
         body:    JSON.stringify(body),
       });
-      const data = await resp.json().catch(() => ({}));
+      const data = (await resp.json().catch(() => ({}))) as Record<string, unknown>;
+      const errBody = data.error as { code?: string; message?: string; data?: unknown } | undefined;
       if (!resp.ok) {
-        if (resp.status === 409 && data?.error?.code === 'capabilities-required') {
+        if (resp.status === 409 && errBody?.code === 'capabilities-required') {
           return exitWithStructuredError({
             code:    'capabilities-required',
-            message: data.error.message,
-            data:    data.error.data,
+            message: errBody.message ?? '',
+            data:    errBody.data,
           });
         }
-        if (resp.status === 422 && data?.error?.code === 'missing-input') {
+        if (resp.status === 422 && errBody?.code === 'missing-input') {
           return exitWithStructuredError({
             code:    'missing-input',
-            message: data.error.message,
-            data:    data.error.data,
+            message: errBody.message ?? '',
+            data:    errBody.data,
           });
         }
         console.error(`POST /api/runs failed: ${resp.status} ${JSON.stringify(data)}`);
@@ -5794,7 +5801,7 @@ Common options:
 // Stream the SSE events at /api/runs/:id/events as ND-JSON on stdout.
 // Each line is one event: { event, data } so a code agent can parse it
 // without needing an SSE library.
-async function streamRunEvents(base, runId) {
+async function streamRunEvents(base: any, runId: any) {
   const resp = await fetch(`${base}/api/runs/${encodeURIComponent(runId)}/events`, {
     headers: { accept: 'text/event-stream' },
   });
@@ -5833,7 +5840,7 @@ async function streamRunEvents(base, runId) {
 // streams down over SSE; local keystrokes are POSTed back up to /stdin. When
 // stdin is a TTY we flip it into raw mode so the remote shell sees per-key
 // bytes (ctrl-c, arrows, tab) instead of line-buffered input.
-async function runShell(args) {
+async function runShell(args: readonly string[]) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
   od shell --project <projectId> [--shell <path>] [--json]
@@ -5881,13 +5888,13 @@ Common options:
 // Bridge a local TTY to a remote PTY session: SSE `data` events → stdout,
 // local stdin bytes → POST /stdin, terminal resize → POST /resize. Resolves
 // when the remote shell emits its `exit` event.
-async function attachTerminal(base, projectId, terminalId) {
+async function attachTerminal(base: any, projectId: any, terminalId: any) {
   const termPath = `${base}/api/projects/${encodeURIComponent(projectId)}/terminals/${encodeURIComponent(terminalId)}`;
   const isRawTty = Boolean(process.stdin.isTTY && process.stdin.setRawMode);
   if (isRawTty) process.stdin.setRawMode(true);
   process.stdin.resume();
 
-  const onInput = (chunk) => {
+  const onInput = (chunk: any) => {
     fetch(`${termPath}/stdin`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -5950,7 +5957,7 @@ async function attachTerminal(base, projectId, terminalId) {
   }
 }
 
-async function runFiles(args) {
+async function runFiles(args: readonly string[]) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
   od files list   <projectId>                  List files in a project.
@@ -5974,14 +5981,14 @@ Common options:
   const base = (await projectDaemonUrl(flags)).replace(/\/$/, '');
   switch (sub) {
     case 'list': {
-      const id = rest.find((a) => !a.startsWith('-'));
+      const id = rest.find((a: any) => !a.startsWith('-'));
       if (!id) {
         console.error('Usage: od files list <projectId>');
         process.exit(2);
       }
       const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}/files`);
       if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
-      const data = await resp.json();
+      const data = (await resp.json()) as Record<string, unknown>;
       if (flags.json) {
         process.stdout.write(JSON.stringify(data, null, 2) + '\n');
         return;
@@ -5991,7 +5998,7 @@ Common options:
       return;
     }
     case 'read': {
-      const positional = rest.filter((a) => !a.startsWith('-'));
+      const positional = rest.filter((a: any) => !a.startsWith('-'));
       const [id, rel] = positional;
       if (!id || !rel) {
         console.error('Usage: od files read <projectId> <relpath>');
@@ -6004,7 +6011,7 @@ Common options:
       return;
     }
     case 'upload': {
-      const positional = rest.filter((a) => !a.startsWith('-')
+      const positional = rest.filter((a: any) => !a.startsWith('-')
         && a !== flags.as);
       const [id, localPath] = positional;
       if (!id || !localPath) {
@@ -6025,7 +6032,7 @@ Common options:
         }),
       });
       if (!resp.ok) return structuredHttpFailure(resp);
-      const data = await resp.json();
+      const data = (await resp.json()) as Record<string, unknown>;
       if (flags.json) {
         process.stdout.write(JSON.stringify(data, null, 2) + '\n');
         return;
@@ -6034,7 +6041,7 @@ Common options:
       return;
     }
     case 'write': {
-      const positional = rest.filter((a) => !a.startsWith('-'));
+      const positional = rest.filter((a: any) => !a.startsWith('-'));
       const [id, rel] = positional;
       if (!id || !rel) {
         console.error('Usage: od files write <projectId> <relpath> [< stdin]');
@@ -6060,7 +6067,7 @@ Common options:
         }),
       });
       if (!resp.ok) return structuredHttpFailure(resp);
-      const data = await resp.json();
+      const data = (await resp.json()) as Record<string, unknown>;
       if (flags.json) {
         process.stdout.write(JSON.stringify(data, null, 2) + '\n');
         return;
@@ -6069,7 +6076,7 @@ Common options:
       return;
     }
     case 'delete': {
-      const positional = rest.filter((a) => !a.startsWith('-'));
+      const positional = rest.filter((a: any) => !a.startsWith('-'));
       const [id, name] = positional;
       if (!id || !name) {
         console.error('Usage: od files delete <projectId> <name>');
@@ -6107,11 +6114,11 @@ Common options:
   }
 }
 
-function encodeProjectRelpath(rel) {
+function encodeProjectRelpath(rel: any) {
   return String(rel).split('/').map(encodeURIComponent).join('/');
 }
 
-async function fetchProjectFileText(base, id, rel) {
+async function fetchProjectFileText(base: any, id: any, rel: any) {
   const resp = await fetch(
     `${base}/api/projects/${encodeURIComponent(id)}/files/${encodeProjectRelpath(rel)}`,
   );
@@ -6125,7 +6132,7 @@ async function readStdinUtf8() {
   return fs.readFileSync(0, 'utf8');
 }
 
-async function mintCliImportToken(baseDir) {
+async function mintCliImportToken(baseDir: any) {
   const socketPath = process.env[SIDECAR_ENV.IPC_PATH];
   if (typeof socketPath !== 'string' || socketPath.length === 0) return null;
   let result;
@@ -6151,7 +6158,7 @@ async function mintCliImportToken(baseDir) {
   return null;
 }
 
-function createUnifiedDiff(leftLabel, rightLabel, leftText, rightText) {
+function createUnifiedDiff(leftLabel: any, rightLabel: any, leftText: any, rightText: any) {
   if (leftText === rightText) return '';
   const leftLines = splitDiffLines(leftText);
   const rightLines = splitDiffLines(rightText);
@@ -6189,21 +6196,21 @@ function createUnifiedDiff(leftLabel, rightLabel, leftText, rightText) {
   ].join('\n') + '\n';
 }
 
-function splitDiffLines(text) {
+function splitDiffLines(text: any) {
   const value = String(text);
   if (value.length === 0) return [];
   return value.match(/.*?(?:\r\n|\n|\r|$)/gs).filter((line) => line.length > 0);
 }
 
-function formatDiffRange(start, length) {
+function formatDiffRange(start: any, length: any) {
   return length === 1 ? String(start) : `${start},${length}`;
 }
 
-function diffLineBody(oldLines, newLines) {
-  if (oldLines.length === 0) return newLines.map((line) => diffLine('+', line));
-  if (newLines.length === 0) return oldLines.map((line) => diffLine('-', line));
+function diffLineBody(oldLines: any, newLines: any) {
+  if (oldLines.length === 0) return newLines.map((line: any) => diffLine('+', line));
+  if (newLines.length === 0) return oldLines.map((line: any) => diffLine('-', line));
   if (oldLines.length * newLines.length > 1_000_000) {
-    return [...oldLines.map((line) => diffLine('-', line)), ...newLines.map((line) => diffLine('+', line))];
+    return [...oldLines.map((line: any) => diffLine('-', line)), ...newLines.map((line: any) => diffLine('+', line))];
   }
   const width = newLines.length + 1;
   const lcs = Array.from(
@@ -6238,7 +6245,7 @@ function diffLineBody(oldLines, newLines) {
   return out;
 }
 
-function diffLine(prefix, line) {
+function diffLine(prefix: any, line: any) {
   const value = String(line);
   if (value.endsWith('\r\n')) return `${prefix}${renderDiffLineContent(value.slice(0, -1))}`;
   if (value.endsWith('\n')) return `${prefix}${renderDiffLineContent(value.slice(0, -1))}`;
@@ -6246,7 +6253,7 @@ function diffLine(prefix, line) {
   return `${prefix}${renderDiffLineContent(value)}\n\\ No newline at end of file`;
 }
 
-function renderDiffLineContent(value) {
+function renderDiffLineContent(value: any) {
   return String(value).replace(/\r/g, '\\r');
 }
 
@@ -6256,7 +6263,7 @@ function renderDiffLineContent(value) {
 // project as a reusable starting point, list everything the user has
 // saved, or drop one that is no longer needed. The web UI and the CLI
 // share the daemon HTTP layer so neither can drift out of step.
-async function runTemplates(args) {
+async function runTemplates(args: readonly string[]) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
   od templates list                                  List user-saved templates.
@@ -6287,7 +6294,7 @@ Common options:
   // proj-1 --name Cards`) would hit the missing-id usage path before
   // ever reaching the daemon. Mirrors the `positionalArgs` helper in
   // `runAutomation`.
-  const positionalArgs = (values) => {
+  const positionalArgs = (values: any) => {
     const out = [];
     for (let i = 0; i < values.length; i++) {
       const value = values[i];
@@ -6319,7 +6326,7 @@ Common options:
         process.exit(3);
       }
       if (!resp.ok) return structuredHttpFailure(resp);
-      const data = await resp.json();
+      const data = (await resp.json()) as Record<string, unknown>;
       if (flags.json) {
         process.stdout.write(JSON.stringify(data, null, 2) + '\n');
         return;
@@ -6374,7 +6381,7 @@ Common options:
         if (resp.status === 400) return structuredHttpFailure(resp, 'missing-input');
         return structuredHttpFailure(resp);
       }
-      const data = await resp.json();
+      const data = (await resp.json()) as Record<string, unknown>;
       if (flags.json) {
         process.stdout.write(JSON.stringify(data, null, 2) + '\n');
         return;
@@ -6418,7 +6425,7 @@ Common options:
   }
 }
 
-async function runConversation(args) {
+async function runConversation(args: readonly string[]) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
   od conversation new  <projectId> [--title "<title>"] [--seed-from <cid>] [--fork-after <mid>] [--mode design|chat]
@@ -6466,7 +6473,7 @@ Common options:
         body:    JSON.stringify(body),
       });
       if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
-      const data = await resp.json();
+      const data = (await resp.json()) as Record<string, unknown>;
       if (flags.json) {
         process.stdout.write(JSON.stringify(data, null, 2) + '\n');
         return;
@@ -6476,26 +6483,26 @@ Common options:
       return;
     }
     case 'list': {
-      const id = rest.find((a) => !a.startsWith('-'));
+      const id = rest.find((a: any) => !a.startsWith('-'));
       if (!id) {
         console.error('Usage: od conversation list <projectId>');
         process.exit(2);
       }
       const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}/conversations`);
       if (!resp.ok) return structuredHttpFailure(resp);
-      const data = await resp.json();
+      const data = (await resp.json()) as Record<string, unknown>;
       process.stdout.write(JSON.stringify(data, null, 2) + '\n');
       return;
     }
     case 'info': {
-      const id = rest.find((a) => !a.startsWith('-'));
+      const id = rest.find((a: any) => !a.startsWith('-'));
       if (!id) {
         console.error('Usage: od conversation info <conversationId>');
         process.exit(2);
       }
       const resp = await fetch(`${base}/api/conversations/${encodeURIComponent(id)}`);
       if (!resp.ok) return structuredHttpFailure(resp);
-      const data = await resp.json();
+      const data = (await resp.json()) as Record<string, unknown>;
       process.stdout.write(JSON.stringify(data, null, 2) + '\n');
       return;
     }
@@ -6516,7 +6523,7 @@ Common options:
 //   of the dual-track surface for context-seeded conversations.
 // ---------------------------------------------------------------------------
 
-async function runChat(args) {
+async function runChat(args: readonly string[]) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
   od chat new --project <id> [--seed-from <cid>] [--fork-after <mid>] [--title "<title>"] [--mode design|chat] [--json]
@@ -6566,7 +6573,7 @@ Common options:
         body:    JSON.stringify(body),
       });
       if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
-      const data = await resp.json();
+      const data = (await resp.json()) as Record<string, unknown>;
       if (flags.json) {
         process.stdout.write(JSON.stringify(data, null, 2) + '\n');
         return;
@@ -6603,7 +6610,7 @@ Common options:
 // `od daemon stop   [--daemon-url <url>]`         calls POST /api/daemon/shutdown.
 // ---------------------------------------------------------------------------
 
-async function runDaemon(args) {
+async function runDaemon(args: readonly string[]) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
   od daemon start [--headless] [--serve-web] [--port <n>] [--host <addr>] [--no-open]
@@ -6638,7 +6645,7 @@ Common options:
 
 // Plan §3.GG1 — `od daemon db status`. Prints a SQLite inventory
 // (file path, size on disk, schema version, per-table row counts).
-async function runDaemonDb(rest, flags) {
+async function runDaemonDb(rest: readonly string[], flags: any) {
   const sub = rest[0];
   if (!sub || sub === 'help' || rest.includes('--help') || rest.includes('-h')) {
     console.log(`Usage:
@@ -6671,7 +6678,7 @@ vacuum:
       console.error(`POST /api/daemon/db/vacuum failed: ${resp.status} ${await resp.text()}`);
       process.exit(1);
     }
-    const data = await resp.json();
+    const data = (await resp.json()) as Record<string, unknown>;
     if (flags.json) {
       process.stdout.write(JSON.stringify(data, null, 2) + '\n');
       return;
@@ -6692,15 +6699,16 @@ vacuum:
       console.error(`POST ${url} failed: ${resp.status} ${await resp.text()}`);
       process.exit(1);
     }
-    const data = await resp.json();
+    const data = (await resp.json()) as Record<string, unknown>;
     if (flags.json) {
       process.stdout.write(JSON.stringify(data, null, 2) + '\n');
     } else {
-      const issueCount = Array.isArray(data.issues) ? data.issues.length : 0;
-      console.log(`[db verify] mode=${data.mode}  ok=${data.ok}  issues=${issueCount}  ${data.elapsedMs ?? 0}ms`);
+      const issues = data.issues as Array<Record<string, unknown>> | undefined;
+      const issueCount = Array.isArray(issues) ? issues.length : 0;
+      console.log(`[db verify] mode=${data.mode as string}  ok=${String(data.ok)}  issues=${issueCount}  ${String(data.elapsedMs ?? 0)}ms`);
       if (issueCount > 0) {
-        for (const issue of data.issues) {
-          console.error(`  [${issue.kind}] ${issue.message}`);
+        for (const issue of issues ?? []) {
+          console.error(`  [${String(issue.kind)}] ${String(issue.message)}`);
         }
       }
     }
@@ -6715,7 +6723,7 @@ vacuum:
     console.error(`GET /api/daemon/db failed: ${resp.status} ${await resp.text()}`);
     process.exit(1);
   }
-  const data = await resp.json();
+  const data = (await resp.json()) as Record<string, unknown>;
   if (flags.json) {
     process.stdout.write(JSON.stringify(data, null, 2) + '\n');
     return;
@@ -6730,21 +6738,21 @@ vacuum:
   if (tables.length === 0) {
     console.log('    (none)');
   } else {
-    const longest = Math.max(...tables.map((t) => t.name.length));
+    const longest = Math.max(...tables.map((t: any) => t.name.length));
     for (const t of tables) {
       console.log(`    ${t.name.padEnd(longest)}  ${t.rowCount}`);
     }
   }
 }
 
-function formatBytes(n) {
+function formatBytes(n: any) {
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KiB`;
   if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(2)} MiB`;
   return `${(n / 1024 / 1024 / 1024).toFixed(2)} GiB`;
 }
 
-async function runDaemonStart(flags) {
+async function runDaemonStart(flags: any) {
   const port = Number(flags.port ?? process.env.OD_PORT ?? 7456);
   const host = String(flags.host ?? process.env.OD_BIND_HOST ?? '127.0.0.1').trim() || '127.0.0.1';
   const headless = Boolean(flags.headless || flags['no-open'] || flags['serve-web']);
@@ -6775,7 +6783,7 @@ async function runDaemonStart(flags) {
   });
 }
 
-async function runDaemonStatus(flags) {
+async function runDaemonStatus(flags: any) {
   const base = await cliDaemonBaseUrl(flags);
   let resp;
   try {
@@ -6787,7 +6795,7 @@ async function runDaemonStatus(flags) {
     });
   }
   if (!resp.ok) return structuredHttpFailure(resp);
-  const data = await resp.json();
+  const data = (await resp.json()) as Record<string, unknown>;
   if (flags.json) {
     process.stdout.write(JSON.stringify(data, null, 2) + '\n');
     return;
@@ -6795,7 +6803,7 @@ async function runDaemonStatus(flags) {
   console.log(`[daemon] ${data.bindHost}:${data.port} v${data.version} pid=${data.pid} plugins=${data.installedPlugins}`);
 }
 
-async function runDaemonStop(flags) {
+async function runDaemonStop(flags: any) {
   const base = await cliDaemonBaseUrl(flags);
   let resp;
   try {
@@ -6818,11 +6826,11 @@ async function runDaemonStop(flags) {
 // (the §11.7 "headless = canonical" invariant).
 // ---------------------------------------------------------------------------
 
-async function libraryDaemonUrl(flags) {
+async function libraryDaemonUrl(flags: any) {
   return cliDaemonUrl(flags);
 }
 
-async function runAtoms(args) {
+async function runAtoms(args: readonly string[]) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
   od atoms list             List first-party atoms (implemented + planned).
@@ -6842,7 +6850,7 @@ Common options:
     case 'list': {
       const resp = await fetch(`${base}/api/atoms`);
       if (!resp.ok) return structuredHttpFailure(resp);
-      const data = await resp.json();
+      const data = (await resp.json()) as Record<string, unknown>;
       if (flags.json) {
         process.stdout.write(JSON.stringify(data, null, 2) + '\n');
         return;
@@ -6854,15 +6862,15 @@ Common options:
       return;
     }
     case 'show': {
-      const id = rest.find((a) => !a.startsWith('-'));
+      const id = rest.find((a: any) => !a.startsWith('-'));
       if (!id) {
         console.error('Usage: od atoms show <id>');
         process.exit(2);
       }
       const resp = await fetch(`${base}/api/atoms`);
       if (!resp.ok) return structuredHttpFailure(resp);
-      const data = await resp.json();
-      const atom = (data?.atoms ?? []).find((a) => a.id === id);
+      const data = (await resp.json()) as Record<string, unknown>;
+      const atom = (data?.atoms ?? []).find((a: any) => a.id === id);
       if (!atom) {
         console.error(`atom ${id} not found`);
         process.exit(65);
@@ -6871,7 +6879,7 @@ Common options:
       return;
     }
     case 'info': {
-      const id = rest.find((a) => !a.startsWith('-'));
+      const id = rest.find((a: any) => !a.startsWith('-'));
       if (!id) {
         console.error('Usage: od atoms info <id>');
         process.exit(2);
@@ -6882,7 +6890,7 @@ Common options:
         process.exit(65);
       }
       if (!resp.ok) return structuredHttpFailure(resp);
-      const atom = await resp.json();
+      const atom = (await resp.json()) as Record<string, unknown>;
       if (flags.json) {
         process.stdout.write(JSON.stringify(atom, null, 2) + '\n');
         return;
@@ -6937,8 +6945,8 @@ Options:
   --out <file>              Write the figma export to a file (default: stdout).`);
 }
 
-async function runLibrary(args) {
-  const sub = args.find((a) => !a.startsWith('-')) || '';
+async function runLibrary(args: readonly string[]) {
+  const sub = args.find((a: any) => !a.startsWith('-')) || '';
   if (!sub || sub === 'help' || sub === '-h' || sub === '--help') {
     printLibraryHelp();
     process.exit(sub ? 0 : 2);
@@ -6957,7 +6965,7 @@ async function runLibrary(args) {
   }
   const base = await cliDaemonBaseUrl(flags);
   const pos = positionalArgs(rest, LIBRARY_ASSET_STRING_FLAGS);
-  const writeJson = (data) => process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+  const writeJson = (data: any) => process.stdout.write(JSON.stringify(data, null, 2) + '\n');
 
   try {
     switch (sub) {
@@ -6974,7 +6982,7 @@ async function runLibrary(args) {
         const qs = params.toString();
         const resp = await fetch(`${base}/api/library/assets${qs ? `?${qs}` : ''}`);
         if (!resp.ok) return structuredHttpFailure(resp);
-        const data = await resp.json();
+        const data = (await resp.json()) as Record<string, unknown>;
         if (flags.json) {
           writeJson(data);
           return;
@@ -7059,10 +7067,11 @@ async function runLibrary(args) {
             if (!flags.json) console.error(`${src}\trejected\t${message}`);
             continue;
           }
-          const data = await resp.json();
+          const data = (await resp.json()) as Record<string, unknown>;
           results.push({ source: src, ok: true, ...data });
           if (!flags.json) {
-            console.log(`${data.asset.id}\t${data.deduped ? 'deduped' : 'imported'}\t${data.asset.kind}`);
+            const asset = data.asset as { id?: string; kind?: string } | undefined;
+            console.log(`${asset?.id ?? '?'}\t${data.deduped ? 'deduped' : 'imported'}\t${asset?.kind ?? '?'}`);
           }
         }
         if (flags.json) writeJson(sources.length === 1 ? results[0] : results);
@@ -7087,7 +7096,7 @@ async function runLibrary(args) {
           body: JSON.stringify(body),
         });
         if (!resp.ok) return structuredHttpFailure(resp);
-        const data = await resp.json();
+        const data = (await resp.json()) as Record<string, unknown>;
         if (flags.json) {
           writeJson(data);
           return;
@@ -7107,7 +7116,7 @@ async function runLibrary(args) {
           body: '{}',
         });
         if (!resp.ok) return structuredHttpFailure(resp);
-        const data = await resp.json();
+        const data = (await resp.json()) as Record<string, unknown>;
         if (flags.json) {
           writeJson(data);
           return;
@@ -7144,7 +7153,7 @@ async function runLibrary(args) {
           body: '{}',
         });
         if (!resp.ok) return structuredHttpFailure(resp);
-        const data = await resp.json();
+        const data = (await resp.json()) as Record<string, unknown>;
         if (flags.json) {
           writeJson(data);
           return;
@@ -7157,7 +7166,7 @@ async function runLibrary(args) {
       case 'pair': {
         const resp = await fetch(`${base}/api/library/pair`, { method: 'POST' });
         if (!resp.ok) return structuredHttpFailure(resp);
-        const data = await resp.json();
+        const data = (await resp.json()) as Record<string, unknown>;
         if (flags.json) {
           writeJson(data);
           return;
@@ -7177,7 +7186,7 @@ async function runLibrary(args) {
   }
 }
 
-async function runLibraryList(name, args) {
+async function runLibraryList(name: any, args: readonly string[]) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
   od ${name} list           List ${name}.
@@ -7193,7 +7202,7 @@ async function runLibraryList(name, args) {
     case 'list': {
       const resp = await fetch(`${base}${apiPath}`);
       if (!resp.ok) return structuredHttpFailure(resp);
-      const data = await resp.json();
+      const data = (await resp.json()) as Record<string, unknown>;
       if (flags.json) {
         process.stdout.write(JSON.stringify(data, null, 2) + '\n');
         return;
@@ -7206,14 +7215,14 @@ async function runLibraryList(name, args) {
       return;
     }
     case 'show': {
-      const id = rest.find((a) => !a.startsWith('-'));
+      const id = rest.find((a: any) => !a.startsWith('-'));
       if (!id) {
         console.error(`Usage: od ${name} show <id>`);
         process.exit(2);
       }
       const resp = await fetch(`${base}${apiPath}/${encodeURIComponent(id)}`);
       if (!resp.ok) return structuredHttpFailure(resp);
-      const data = await resp.json();
+      const data = (await resp.json()) as Record<string, unknown>;
       process.stdout.write(JSON.stringify(data, null, 2) + '\n');
       return;
     }
@@ -7223,10 +7232,10 @@ async function runLibraryList(name, args) {
   }
 }
 
-async function runSkills(args)        { return runLibraryList('skills', args); }
-async function runCraft(args)         { return runLibraryList('craft', args); }
+async function runSkills(args: readonly string[])        { return runLibraryList('skills', args); }
+async function runCraft(args: readonly string[])         { return runLibraryList('craft', args); }
 
-async function runDesignSystems(args) {
+async function runDesignSystems(args: readonly string[]) {
   if (args[0] === 'rename') return runDesignSystemRename(args.slice(1));
   if (args[0] === 'download') return runDesignSystemDownload(args.slice(1));
   if (args[0] === 'import-local') return runDesignSystemImportLocal(args.slice(1));
@@ -7246,7 +7255,7 @@ async function runDesignSystems(args) {
 // .zip (every system file plus a generated SKILLS.md usage guide) the web
 // "Download brand" button produces — and writes it to disk. Only user design
 // systems are downloadable; presets return 404.
-async function runDesignSystemDownload(args) {
+async function runDesignSystemDownload(args: readonly string[]) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
   od design-systems download <id> [--out <path>] [--json] [--daemon-url <url>]
@@ -7308,7 +7317,7 @@ generated SKILLS.md usage guide).
 // Imports a local app/design-system project through the same daemon endpoint as
 // the Settings UI. The CLI resolves relative paths before sending the request
 // because the daemon intentionally accepts only absolute host paths.
-async function runDesignSystemImportLocal(args) {
+async function runDesignSystemImportLocal(args: readonly string[]) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
   od design-systems import-local <path> [--name <name>] [--import-mode <mode>] [--craft <slugs>] [--json] [--daemon-url <url>]
@@ -7339,7 +7348,7 @@ Imports a local project directory as an editable Open Design design system.
 
 // od design-systems import-github <url> [--branch <branch>] [--name <name>]
 //   [--import-mode <mode>] [--craft <slug,slug>] [--json] [--daemon-url <url>]
-async function runDesignSystemImportGithub(args) {
+async function runDesignSystemImportGithub(args: readonly string[]) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
   od design-systems import-github <url> [--branch <branch>] [--name <name>] [--import-mode <mode>] [--craft <slugs>] [--json] [--daemon-url <url>]
@@ -7369,10 +7378,10 @@ Imports a public GitHub repository as an editable Open Design design system.
   return postDesignSystemImport(flags, '/api/design-systems/import/github', body);
 }
 
-function designSystemImportRequestBody(flags, baseBody) {
+function designSystemImportRequestBody(flags: any, baseBody: any) {
   const craftApplies =
     typeof flags.craft === 'string'
-      ? flags.craft.split(',').map((slug) => slug.trim().toLowerCase()).filter(Boolean)
+      ? flags.craft.split(',').map((slug: any) => slug.trim().toLowerCase()).filter(Boolean)
       : undefined;
   return {
     ...baseBody,
@@ -7382,7 +7391,7 @@ function designSystemImportRequestBody(flags, baseBody) {
   };
 }
 
-async function postDesignSystemImport(flags, endpoint, body) {
+async function postDesignSystemImport(flags: any, endpoint: any, body: any) {
   const base = (await libraryDaemonUrl(flags)).replace(/\/$/, '');
   const resp = await fetch(`${base}${endpoint}`, {
     method: 'POST',
@@ -7390,7 +7399,7 @@ async function postDesignSystemImport(flags, endpoint, body) {
     body: JSON.stringify(body),
   });
   if (!resp.ok) return structuredHttpFailure(resp);
-  const data = await resp.json();
+  const data = (await resp.json()) as Record<string, unknown>;
   if (flags.json) {
     process.stdout.write(JSON.stringify(data, null, 2) + '\n');
     return;
@@ -7409,7 +7418,7 @@ async function postDesignSystemImport(flags, endpoint, body) {
 // Starts the same review-gated token contract rebuild job exposed in the web
 // design-system detail view. Without --force the daemon only queues a job when
 // source/token-contract.report.json recommends it.
-async function runDesignSystemTokenContractRebuild(args) {
+async function runDesignSystemTokenContractRebuild(args: readonly string[]) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
   od design-systems rebuild-token-contract <id> [--force] [--json] [--daemon-url <url>]
@@ -7436,7 +7445,7 @@ Starts a review-gated TOKEN_SCHEMA token contract rebuild for an editable import
     body: JSON.stringify({ force: flags.force === true }),
   });
   if (!resp.ok) return structuredHttpFailure(resp);
-  const data = await resp.json();
+  const data = (await resp.json()) as Record<string, unknown>;
   if (flags.json) {
     process.stdout.write(JSON.stringify(data, null, 2) + '\n');
     return;
@@ -7457,7 +7466,7 @@ Starts a review-gated TOKEN_SCHEMA token contract rebuild for an editable import
 // Design systems "shadcn" import source. <reference> is the shadcn CLI
 // shorthand "<owner>/<repo>/<item>" (e.g. shadcn/ui/theme-zinc) or a direct
 // https URL to a registry-item JSON document.
-async function runDesignSystemImportShadcn(args) {
+async function runDesignSystemImportShadcn(args: readonly string[]) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
   od design-systems import-shadcn <reference> [--name <name>] [--import-mode <mode>] [--craft <slugs>] [--json] [--daemon-url <url>]
@@ -7487,7 +7496,7 @@ Imports a shadcn registry item as an Open Design design system.
 // /api/design-systems/:id. Built-in systems are read-only and the daemon
 // returns 404, surfaced here as a structured failure. Arg parsing lives in
 // rename-args.ts so it can be unit-tested.
-async function runDesignSystemRename(args) {
+async function runDesignSystemRename(args: readonly string[]) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
   od design-systems rename <id> --title <new-title> [--json] [--daemon-url <url>]
@@ -7512,7 +7521,7 @@ Renames an editable (user-created) design system. Built-in systems are read-only
     body: JSON.stringify({ title: parsed.title }),
   });
   if (!resp.ok) return structuredHttpFailure(resp);
-  const data = await resp.json();
+  const data = (await resp.json()) as Record<string, unknown>;
   if (flags.json) {
     process.stdout.write(JSON.stringify(data, null, 2) + '\n');
     return;
@@ -7521,7 +7530,7 @@ Renames an editable (user-created) design system. Built-in systems are read-only
   console.log(`Renamed ${parsed.id} -> ${renamed.title ?? parsed.title}`);
 }
 
-async function runStatus(args) {
+async function runStatus(args: readonly string[]) {
   // Alias of `od daemon status`.
   return runDaemon(['status', ...args]);
 }
@@ -7553,7 +7562,7 @@ async function runStatus(args) {
 // scalar strings/numbers/booleans are coerced.
 // ---------------------------------------------------------------------------
 
-async function runDoctor(args) {
+async function runDoctor(args: readonly string[]) {
   const flags = parseFlags(args, { string: CONFIG_STRING_FLAGS, boolean: CONFIG_BOOLEAN_FLAGS });
   if (flags.help || flags.h) {
     console.log(`Usage:
@@ -7629,7 +7638,7 @@ or the daemon cannot be reached.`);
             report.issues.push({
               severity: 'error',
               code:     'plugin-doctor-failed',
-              message:  `${p.id}@${p.version}: ${(data?.issues ?? []).map((i) => i.code).join(', ')}`,
+              message:  `${p.id}@${p.version}: ${(data?.issues ?? []).map((i: any) => i.code).join(', ')}`,
             });
           }
         } catch (err) {
@@ -7662,7 +7671,7 @@ or the daemon cannot be reached.`);
   process.exit(hasError ? 1 : 0);
 }
 
-async function runConfig(args) {
+async function runConfig(args: readonly string[]) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
   od config list                      Print the full app config as JSON.
@@ -7685,10 +7694,10 @@ Common options:
   const fetchConfig = async () => {
     const resp = await fetch(`${base}/api/app-config`);
     if (!resp.ok) return structuredHttpFailure(resp);
-    const data = await resp.json();
+    const data = (await resp.json()) as Record<string, unknown>;
     return data?.config ?? {};
   };
-  const writeConfig = async (next) => {
+  const writeConfig = async (next: any) => {
     const resp = await fetch(`${base}/api/app-config`, {
       method:  'PUT',
       headers: { 'content-type': 'application/json' },
@@ -7843,7 +7852,7 @@ Common options:
   --daemon-url <url>   Open Design daemon HTTP base.`);
 }
 
-function memoryPositionals(values) {
+function memoryPositionals(values: any) {
   const out = [];
   for (let i = 0; i < values.length; i++) {
     const value = values[i];
@@ -7859,7 +7868,7 @@ function memoryPositionals(values) {
   return out;
 }
 
-async function readMemoryBodyFromFlags(flags) {
+async function readMemoryBodyFromFlags(flags: any) {
   if (typeof flags.body === 'string') return flags.body;
   if (typeof flags['body-file'] !== 'string') return undefined;
   const path = flags['body-file'];
@@ -7872,7 +7881,7 @@ async function readMemoryBodyFromFlags(flags) {
   return await readFile(path, 'utf8');
 }
 
-function formatMemoryTreeRow(node) {
+function formatMemoryTreeRow(node: any) {
   return [
     node.id,
     node.parentId ?? '-',
@@ -7884,7 +7893,7 @@ function formatMemoryTreeRow(node) {
   ].join('\t');
 }
 
-function printMemoryEntry(entry) {
+function printMemoryEntry(entry: any) {
   console.log(`# ${entry.name}`);
   console.log(`id: ${entry.id}`);
   console.log(`type: ${entry.type}`);
@@ -7893,7 +7902,7 @@ function printMemoryEntry(entry) {
   process.stdout.write(`${entry.body ?? ''}\n`);
 }
 
-async function fetchMemoryTree(base) {
+async function fetchMemoryTree(base: any): Promise<Record<string, unknown>> {
   let resp;
   try {
     resp = await fetch(`${base}/api/memory/tree`);
@@ -7902,10 +7911,10 @@ async function fetchMemoryTree(base) {
     process.exit(3);
   }
   if (!resp.ok) return structuredHttpFailure(resp);
-  return await resp.json();
+  return (await resp.json()) as Record<string, unknown>;
 }
 
-async function patchMemoryTreeNode(base, id, body) {
+async function patchMemoryTreeNode(base: any, id: any, body: any): Promise<Record<string, unknown>> {
   let resp;
   try {
     resp = await fetch(`${base}/api/memory/tree/${encodeURIComponent(id)}`, {
@@ -7918,13 +7927,13 @@ async function patchMemoryTreeNode(base, id, body) {
     process.exit(3);
   }
   if (!resp.ok) return structuredHttpFailure(resp);
-  return await resp.json();
+  return (await resp.json()) as Record<string, unknown>;
 }
 
 // GET /api/memory/:id, returning the MemoryEntry or null on a 404. Used by the
 // profile/rule subcommands so they can read-before-write (merge) without
 // crashing when the entry doesn't exist yet.
-async function fetchMemoryEntry(base, id) {
+async function fetchMemoryEntry(base: any, id: any) {
   let resp;
   try {
     resp = await fetch(`${base}/api/memory/${encodeURIComponent(id)}`);
@@ -7934,14 +7943,14 @@ async function fetchMemoryEntry(base, id) {
   }
   if (resp.status === 404) return null;
   if (!resp.ok) return structuredHttpFailure(resp);
-  const data = await resp.json();
+  const data = (await resp.json()) as Record<string, unknown>;
   return data.entry ?? data;
 }
 
 // Read the verbatim prose body for `od memory profile set` / `rule add`.
 // Accepts `--prompt-file <path>` or `--prompt-file -` (stdin). Returns
 // undefined when neither is supplied so the caller can fall back to flags.
-async function readMemoryPromptFile(flags) {
+async function readMemoryPromptFile(flags: any) {
   if (typeof flags['prompt-file'] !== 'string' || flags['prompt-file'].length === 0) {
     return undefined;
   }
@@ -7962,7 +7971,7 @@ async function readMemoryPromptFile(flags) {
 // Collect repeated `--field "Label=Value"` flags from the raw argv slice.
 // parseFlags collapses duplicate keys, so we scan manually like `--input`
 // in `od plugin apply`. Returns an ordered list of {label, value} pairs.
-function collectMemoryFieldFlags(rest) {
+function collectMemoryFieldFlags(rest: any) {
   const out = [];
   for (let i = 0; i < rest.length; i++) {
     if (rest[i] !== '--field') continue;
@@ -7986,7 +7995,7 @@ function collectMemoryFieldFlags(rest) {
 // A legacy "- **Label:** value" line is tolerated on read. Lines that don't
 // match (free prose, blank lines, headings) are preserved verbatim ahead of
 // the list.
-function parseProfileBody(body) {
+function parseProfileBody(body: any) {
   const labels = [];
   const byLabel = new Map();
   const preamble = [];
@@ -8004,7 +8013,7 @@ function parseProfileBody(body) {
   return { labels, byLabel, preamble };
 }
 
-function renderProfileBody(parsed) {
+function renderProfileBody(parsed: any) {
   const lines = [];
   if (parsed.preamble.length > 0) {
     lines.push(...parsed.preamble, '');
@@ -8015,7 +8024,7 @@ function renderProfileBody(parsed) {
   return lines.join('\n');
 }
 
-function printMemoryProfile(entry) {
+function printMemoryProfile(entry: any) {
   if (!entry) {
     console.log('no profile yet');
     return;
@@ -8027,13 +8036,13 @@ function printMemoryProfile(entry) {
 // `enabled`, the extraction hook `chatExtractionEnabled`, and the three new
 // loop hooks). The new flags may be absent from older daemons / before the
 // route patch lands, so we coalesce missing booleans to a printable dash.
-function formatMemoryConfigSwitch(value) {
+function formatMemoryConfigSwitch(value: any) {
   if (value === true) return 'on';
   if (value === false) return 'off';
   return '-';
 }
 
-async function runMemory(args) {
+async function runMemory(args: readonly string[]) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     printMemoryHelp();
     process.exit(args.length === 0 ? 2 : 0);
@@ -8064,7 +8073,7 @@ async function runMemory(args) {
     process.exit(2);
   }
   const base = await cliDaemonBaseUrl(flags);
-  const writeJson = (data) =>
+  const writeJson = (data: any) =>
     process.stdout.write(JSON.stringify(data, null, 2) + '\n');
 
   if (topic === 'profile') {
@@ -8106,7 +8115,7 @@ async function runMemory(args) {
       process.exit(2);
     }
     const treeData = await fetchMemoryTree(base);
-    const node = (treeData.tree ?? []).find((item) => item.id === id);
+    const node = (treeData.tree ?? []).find((item: any) => item.id === id);
     if (!node) {
       console.error(`memory tree node not found: ${id}`);
       process.exit(4);
@@ -8127,7 +8136,7 @@ async function runMemory(args) {
       process.exit(3);
     }
     if (!resp.ok) return structuredHttpFailure(resp);
-    const data = await resp.json();
+    const data = (await resp.json()) as Record<string, unknown>;
     if (flags.json) {
       writeJson(data);
       return;
@@ -8185,7 +8194,7 @@ async function runMemory(args) {
 // `od memory profile <show|set>` — the singleton structured user profile the
 // PRE loop (intent gateway) reads to expand a short query into a full brief.
 // Same store as every other memory entry; the well-known id is `user_profile`.
-async function runMemoryProfile(base, rest, flags, writeJson) {
+async function runMemoryProfile(base: any, rest: any, flags: any, writeJson: any) {
   const parts = memoryPositionals(rest);
   const action = parts[0] ?? 'show';
   const PROFILE_ID = 'user_profile';
@@ -8238,7 +8247,7 @@ async function runMemoryProfile(base, rest, flags, writeJson) {
       process.exit(3);
     }
     if (!resp.ok) return structuredHttpFailure(resp);
-    const data = await resp.json();
+    const data = (await resp.json()) as Record<string, unknown>;
     if (flags.json) {
       writeJson(data.entry ?? data);
       return;
@@ -8255,7 +8264,7 @@ async function runMemoryProfile(base, rest, flags, writeJson) {
 
 // `od memory rule <list|add>` — verified rules (assertion + check) the POST
 // self-verify loop enforces as scorecard rubric items.
-async function runMemoryRule(base, rest, flags, writeJson) {
+async function runMemoryRule(base: any, rest: any, flags: any, writeJson: any) {
   const parts = memoryPositionals(rest);
   const action = parts[0] ?? 'list';
 
@@ -8268,8 +8277,8 @@ async function runMemoryRule(base, rest, flags, writeJson) {
       process.exit(3);
     }
     if (!resp.ok) return structuredHttpFailure(resp);
-    const data = await resp.json();
-    const rules = (data.entries ?? []).filter((e) => e.type === 'rule');
+    const data = (await resp.json()) as Record<string, unknown>;
+    const rules = (data.entries ?? []).filter((e: any) => e.type === 'rule');
     if (flags.json) {
       writeJson({ rules });
       return;
@@ -8327,7 +8336,7 @@ async function runMemoryRule(base, rest, flags, writeJson) {
       process.exit(3);
     }
     if (!resp.ok) return structuredHttpFailure(resp);
-    const data = await resp.json();
+    const data = (await resp.json()) as Record<string, unknown>;
     if (flags.json) {
       writeJson(data.entry ?? data);
       return;
@@ -8360,7 +8369,7 @@ async function runMemoryRule(base, rest, flags, writeJson) {
       process.exit(3);
     }
     if (!resp.ok) return structuredHttpFailure(resp);
-    const data = await resp.json();
+    const data = (await resp.json()) as Record<string, unknown>;
     if (flags.json) {
       writeJson(data);
       return;
@@ -8392,7 +8401,7 @@ async function runMemoryRule(base, rest, flags, writeJson) {
 // hold a JSON array of annotation objects, or plain text with one note per
 // line — both keep the --prompt-file embeddability contract clean for jobs
 // that pipe through xargs/jq/heredoc.
-async function collectDistillAnnotations(flags) {
+async function collectDistillAnnotations(flags: any) {
   const annotations = [];
   if (typeof flags.note === 'string' && flags.note.trim()) {
     annotations.push({
@@ -8444,7 +8453,7 @@ async function collectDistillAnnotations(flags) {
 // enforcement history (THREAD 2). `list` prints recent enforcement outcomes
 // (`pass` / `fail` / `missing`) the daemon recorded for artifact turns with
 // active rules; `clear` drops the in-memory buffer.
-async function runMemoryVerify(base, rest, flags, writeJson) {
+async function runMemoryVerify(base: any, rest: any, flags: any, writeJson: any) {
   const parts = memoryPositionals(rest);
   const action = parts[0] ?? 'list';
 
@@ -8457,7 +8466,7 @@ async function runMemoryVerify(base, rest, flags, writeJson) {
       process.exit(3);
     }
     if (!resp.ok) return structuredHttpFailure(resp);
-    const data = await resp.json();
+    const data = (await resp.json()) as Record<string, unknown>;
     if (flags.json) {
       writeJson(data);
       return;
@@ -8489,7 +8498,7 @@ async function runMemoryVerify(base, rest, flags, writeJson) {
       process.exit(3);
     }
     if (!resp.ok) return structuredHttpFailure(resp);
-    const data = await resp.json();
+    const data = (await resp.json()) as Record<string, unknown>;
     if (flags.json) {
       writeJson(data);
       return;
@@ -8506,7 +8515,7 @@ async function runMemoryVerify(base, rest, flags, writeJson) {
 // `od memory config` — inspect or toggle the master switch + the four hooks.
 // No flags ⇒ print every switch (read off GET /api/memory). Toggle flags ⇒
 // PATCH /api/memory/config and print the result. Flags accept true|false.
-async function runMemoryConfig(base, rest, flags, writeJson) {
+async function runMemoryConfig(base: any, rest: any, flags: any, writeJson: any) {
   // Map CLI flag → config field. --extraction is the chat-extraction hook;
   // --profile/--rewrite/--verify are the new PRE/POST loop hooks.
   const TOGGLE_MAP = {
@@ -8516,7 +8525,7 @@ async function runMemoryConfig(base, rest, flags, writeJson) {
     rewrite: 'rewriteEnabled',
     verify: 'verifyEnabled',
   };
-  const parseBool = (raw, flagName) => {
+  const parseBool = (raw: any, flagName: any) => {
     if (raw === 'true' || raw === true) return true;
     if (raw === 'false') return false;
     console.error(`--${flagName} expects true or false`);
@@ -8540,7 +8549,7 @@ async function runMemoryConfig(base, rest, flags, writeJson) {
       process.exit(3);
     }
     if (!resp.ok) return structuredHttpFailure(resp);
-    const data = await resp.json();
+    const data = (await resp.json()) as Record<string, unknown>;
     const view = {
       enabled: data.enabled,
       chatExtractionEnabled: data.chatExtractionEnabled,
@@ -8572,7 +8581,7 @@ async function runMemoryConfig(base, rest, flags, writeJson) {
     process.exit(3);
   }
   if (!resp.ok) return structuredHttpFailure(resp);
-  const data = await resp.json();
+  const data = (await resp.json()) as Record<string, unknown>;
   if (flags.json) {
     writeJson(data);
     return;
@@ -8597,7 +8606,7 @@ async function runMemoryConfig(base, rest, flags, writeJson) {
 // facing surface.
 // ---------------------------------------------------------------------------
 
-function parseAutomationTarget(flags) {
+function parseAutomationTarget(flags: any) {
   const raw = flags.target;
   if (raw == null) {
     if (flags.project) return { mode: 'reuse', projectId: String(flags.project) };
@@ -8629,13 +8638,13 @@ function parseAutomationTarget(flags) {
   );
 }
 
-function describeAutomationTargetForCli(target) {
+function describeAutomationTargetForCli(target: any) {
   if (!target) return '-';
   if (target.mode === 'reuse') return `reuse=${target.projectId}`;
   return 'new-project';
 }
 
-function splitAutomationIds(value) {
+function splitAutomationIds(value: any) {
   if (typeof value !== 'string' || value.trim().length === 0) return [];
   const seen = new Set();
   const out = [];
@@ -8648,7 +8657,7 @@ function splitAutomationIds(value) {
   return out;
 }
 
-function automationContextFromFlags(flags) {
+function automationContextFromFlags(flags: any) {
   const skillIds = splitAutomationIds(flags.skill);
   const pluginIds = splitAutomationIds(flags.plugin);
   const mcpServerIds = splitAutomationIds(flags.mcp);
@@ -8662,7 +8671,7 @@ function automationContextFromFlags(flags) {
   return Object.keys(context).length > 0 ? context : null;
 }
 
-function formatAutomationRow(r) {
+function formatAutomationRow(r: any) {
   const next = r.nextRunAt
     ? new Date(r.nextRunAt).toISOString()
     : (r.enabled ? '-' : 'paused');
@@ -8676,7 +8685,7 @@ function formatAutomationRow(r) {
   ].join('\t');
 }
 
-async function readPromptFromFlags(flags) {
+async function readPromptFromFlags(flags: any) {
   if (typeof flags.prompt === 'string' && flags.prompt.length > 0) {
     return flags.prompt;
   }
@@ -8750,7 +8759,7 @@ Common options:
   --daemon-url <url>   Open Design daemon HTTP base.`);
 }
 
-async function runAutomation(args) {
+async function runAutomation(args: readonly string[]) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     printAutomationHelp();
     process.exit(args.length === 0 ? 2 : 0);
@@ -8769,10 +8778,10 @@ async function runAutomation(args) {
   }
   const base = await cliDaemonBaseUrl(flags);
 
-  const writeJson = (data) =>
+  const writeJson = (data: any) =>
     process.stdout.write(JSON.stringify(data, null, 2) + '\n');
 
-  const positionalArgs = (values) => {
+  const positionalArgs = (values: any) => {
     const out = [];
     for (let i = 0; i < values.length; i++) {
       const value = values[i];
@@ -8788,7 +8797,7 @@ async function runAutomation(args) {
     return out;
   };
 
-  const requireId = (label) => {
+  const requireId = (label: any) => {
     const id = positionalArgs(rest)[0];
     if (!id) {
       console.error(`Usage: od automation ${label} <id>`);
@@ -8817,7 +8826,7 @@ async function runAutomation(args) {
           process.exit(3);
         }
         if (!resp.ok) return structuredHttpFailure(resp);
-        const data = await resp.json();
+        const data = (await resp.json()) as Record<string, unknown>;
         if (flags.json) {
           writeJson(data);
           return;
@@ -8855,7 +8864,7 @@ async function runAutomation(args) {
           process.exit(3);
         }
         if (!resp.ok) return structuredHttpFailure(resp);
-        const data = await resp.json();
+        const data = (await resp.json()) as Record<string, unknown>;
         writeJson(flags.json ? data : (data.template ?? data));
         return;
       }
@@ -8907,7 +8916,7 @@ async function runAutomation(args) {
           process.exit(3);
         }
         if (!resp.ok) return structuredHttpFailure(resp);
-        const data = await resp.json();
+        const data = (await resp.json()) as Record<string, unknown>;
         if (flags.json) {
           writeJson(data);
           return;
@@ -8939,7 +8948,7 @@ async function runAutomation(args) {
           process.exit(3);
         }
         if (!resp.ok) return structuredHttpFailure(resp);
-        const data = await resp.json();
+        const data = (await resp.json()) as Record<string, unknown>;
         if (flags.json) {
           writeJson(data);
           return;
@@ -8996,7 +9005,7 @@ async function runAutomation(args) {
           process.exit(3);
         }
         if (!resp.ok) return structuredHttpFailure(resp);
-        const data = await resp.json();
+        const data = (await resp.json()) as Record<string, unknown>;
         if (flags.json) {
           writeJson(data);
           return;
@@ -9059,7 +9068,7 @@ async function runAutomation(args) {
           process.exit(3);
         }
         if (!resp.ok) return structuredHttpFailure(resp);
-        const data = await resp.json();
+        const data = (await resp.json()) as Record<string, unknown>;
         if (flags.json) {
           writeJson(data);
           return;
@@ -9080,7 +9089,7 @@ async function runAutomation(args) {
         process.exit(3);
       }
       if (!resp.ok) return structuredHttpFailure(resp);
-      const data = await resp.json();
+      const data = (await resp.json()) as Record<string, unknown>;
       if (flags.json) {
         writeJson(data);
         return;
@@ -9104,7 +9113,7 @@ async function runAutomation(args) {
         process.exit(3);
       }
       if (!resp.ok) return structuredHttpFailure(resp);
-      const data = await resp.json();
+      const data = (await resp.json()) as Record<string, unknown>;
       if (flags.json) {
         writeJson(data);
         return;
@@ -9125,7 +9134,7 @@ async function runAutomation(args) {
         process.exit(3);
       }
       if (!resp.ok) return structuredHttpFailure(resp);
-      const data = await resp.json();
+      const data = (await resp.json()) as Record<string, unknown>;
       if (flags.json) {
         writeJson(data);
         return;
@@ -9167,7 +9176,7 @@ async function runAutomation(args) {
         process.exit(3);
       }
       if (!resp.ok) return structuredHttpFailure(resp);
-      const data = await resp.json();
+      const data = (await resp.json()) as Record<string, unknown>;
       if (flags.json) {
         writeJson(data);
         return;
@@ -9233,7 +9242,7 @@ async function runAutomation(args) {
         surfaceFetchError(err, base);
         process.exit(3);
       }
-      const data = await resp.json().catch(() => ({}));
+      const data = (await resp.json().catch(() => ({}))) as Record<string, unknown>;
       if (!resp.ok) {
         console.error(`POST /api/routines failed: ${resp.status} ${JSON.stringify(data)}`);
         process.exit(1);
@@ -9291,7 +9300,7 @@ async function runAutomation(args) {
         surfaceFetchError(err, base);
         process.exit(3);
       }
-      const data = await resp.json().catch(() => ({}));
+      const data = (await resp.json().catch(() => ({}))) as Record<string, unknown>;
       if (!resp.ok) {
         console.error(`PATCH /api/routines/${id} failed: ${resp.status} ${JSON.stringify(data)}`);
         process.exit(1);
@@ -9319,7 +9328,7 @@ async function runAutomation(args) {
         surfaceFetchError(err, base);
         process.exit(3);
       }
-      const data = await resp.json().catch(() => ({}));
+      const data = (await resp.json().catch(() => ({}))) as Record<string, unknown>;
       if (!resp.ok) {
         console.error(`PATCH /api/routines/${id} failed: ${resp.status} ${JSON.stringify(data)}`);
         process.exit(1);
@@ -9342,7 +9351,7 @@ async function runAutomation(args) {
         surfaceFetchError(err, base);
         process.exit(3);
       }
-      const data = await resp.json().catch(() => ({}));
+      const data = (await resp.json().catch(() => ({}))) as Record<string, unknown>;
       if (!resp.ok && resp.status !== 202) {
         console.error(`POST /api/routines/${id}/run failed: ${resp.status} ${JSON.stringify(data)}`);
         process.exit(1);

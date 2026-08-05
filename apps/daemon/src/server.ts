@@ -1,4 +1,18 @@
 import type { DesktopExportArtifactInput, DesktopExportArtifactResult, DesktopExportPdfInput, DesktopExportPdfResult } from '@open-design/sidecar-proto';
+import type Database from 'better-sqlite3';
+import type { SkillCandidateRunContext } from './runtimes/deferred-plugin-candidate.js';
+import type { RunForSkillCandidateMessage } from './runtimes/skill-candidate-message.js';
+import type { RunWithAssistantMessageId } from './runtimes/run-event-persistence.js';
+import type { RunToPinAssistantMessage } from './runtimes/run-message-pinning.js';
+import type { ChatRun } from './runtimes/runs.js';
+import type { HttpDeps, PathDeps } from './server-context.js';
+import type { SidecarRuntimeContext, SidecarStampShape } from '@open-design/sidecar';
+import type { ChatRunStatusResponse, MediaExecutionPolicy } from '@open-design/contracts';
+import type { ChatRunService } from './routes/runs.js';
+import type { InstalledPluginRecord, SkillPluginCandidate } from '@open-design/contracts';
+import type { PluginShareAction } from './services/plugin-share-tasks.js';
+import type { SkillCandidateMessageDb } from './runtimes/skill-candidate-message.js';
+import type { RunMessagePinningDb } from './runtimes/run-message-pinning.js';
 import express from 'express';
 import multer from 'multer';
 import JSZip from 'jszip';
@@ -15,6 +29,7 @@ import {
 } from './prompts/system.js';
 import { emittedRenderableQuestionForm } from './question-form-detect.js';
 import { createFinalizedMessageTelemetryReporter as createFinalizedMessageTelemetryReporterWithContract } from './runtimes/telemetry-finalization.js';
+import type { FinalizedMessageRecord, FinalizedMessageReportInput } from './runtimes/telemetry-finalization.js';
 import { createMarketplaceFetcher as createMarketplaceFetcherWithContract } from './runtimes/marketplace-fetcher.js';
 import { copyPluginFolderForProjectContext } from './runtimes/plugin-context.js';
 import { readProjectPluginManifest as readProjectPluginManifestWithContract } from './plugins/project-manifest.js';
@@ -238,6 +253,7 @@ import {
   listSkills,
   resolveSkillId,
   splitDerivedSkillId,
+  type SkillInfo,
 } from './skills.js';
 import { validateLinkedDirs } from './linked-dirs.js';
 import { installFromTarget, uninstallById, sanitizeRepoName } from './library-install.js';
@@ -271,6 +287,8 @@ import {
   resolveDesignSystemAssets,
   updateUserDesignSystem,
   updateUserDesignSystemRevisionStatus,
+  type DesignSystemListOptions,
+  type DesignSystemSummary,
 } from './design-systems/index.js';
 import { createDesignSystemGenerationJobStore } from './design-systems/generation-jobs.js';
 import { createDesignSystemServerServices } from './design-systems/server-services.js';
@@ -313,6 +331,8 @@ import {
   marketplaceManifestUrlForRegistry,
   marketplaceRegistryIdFromUrl,
 } from './plugins/marketplaces.js';
+import type { SnapshotStatsRow } from './plugins/stats.js';
+import type { InstallOptions } from './plugins/installer.js';
 import {
   composeMemoryBody,
   extractFromMessage,
@@ -389,6 +409,7 @@ import {
   snapshotProjectArtifacts,
 } from './run-artifact-fs.js';
 import { reportRunCompletedFromDaemon } from './langfuse-bridge.js';
+import type { ReportRunCompletedFromDaemonOpts } from './langfuse-bridge.js';
 import { buildPromptStackTelemetry } from './prompt-telemetry.js';
 import {
   FORM_ANSWERS_HEADER_RE,
@@ -400,7 +421,7 @@ export {
   telemetryPromptFromRunRequest,
 } from './runtimes/chat-user-request.js';
 import { readAnalyticsContext } from './analytics.js';
-import { resolvePublicBaseUrl } from './runtimes/public-base-url.js';
+import { resolvePublicBaseUrl, type PublicBaseUrlResolver } from './runtimes/public-base-url.js';
 import {
   createAgentRuntimeEnv as createAgentRuntimeEnvRuntime,
   createAgentRuntimeToolPrompt,
@@ -431,7 +452,7 @@ import { loadCraftSections } from './craft.js';
 import { skillCwdAliasSegment, stageActiveSkill } from './cwd-aliases.js';
 import { buildDesktopArtifactExportInput, buildDesktopPdfExportInput } from './pdf-export.js';
 import { generateMedia } from './media/index.js';
-import { listElevenLabsVoiceOptions } from './integrations/elevenlabs-voices.js';
+import { listElevenLabsVoiceOptions, type ElevenLabsVoiceOption } from './integrations/elevenlabs-voices.js';
 import { searchResearch, ResearchError } from './research/index.js';
 import { openBrowser } from './browser-open.js';
 import {
@@ -449,7 +470,7 @@ import {
   listRecentMediaTasks,
   reconcileMediaTasksOnBoot,
 } from './media/tasks.js';
-import { createMediaTaskStore, type MediaTaskStore } from './media/task-store.js';
+import { createMediaTaskStore, type LiveMediaTask, type MediaTaskCreateInfo, type MediaTaskStore } from './media/task-store.js';
 import {
   MCP_TEMPLATES,
   buildAcpMcpServers,
@@ -458,6 +479,7 @@ import {
   isManagedProjectCwd,
   readMcpConfig,
   writeMcpConfig,
+  type McpConfig,
 } from './mcp-config.js';
 import {
   resolveExternalMcpServersForRun,
@@ -588,12 +610,12 @@ import {
   updateLiveArtifact,
 } from './live-artifacts/store.js';
 import { refreshLiveArtifact } from './live-artifacts/refresh-service.js';
-import { registerConnectorRoutes } from './connectors/routes.js';
+import { registerConnectorRoutes, type ConnectorApiErrorSender } from './connectors/routes.js';
 import { registerActiveContextRoutes } from './routes/active-context.js';
 import { registerAutomationRoutes } from './routes/automation.js';
 import { registerDaemonRoutes } from './routes/daemon.js';
 import { registerGenuiRoutes } from './routes/genui.js';
-import { registerDesignSystemRoutes } from './routes/design-systems.js';
+import { registerDesignSystemRoutes, type RegisterDesignSystemRoutesDeps } from './routes/design-systems.js';
 import { registerHostToolsRoutes } from './routes/host-tools.js';
 import { registerPluginAssetRoutes } from './routes/plugins/assets.js';
 import { registerPluginMarketplaceRoutes } from './routes/plugins/marketplaces.js';
@@ -627,8 +649,9 @@ import {
 } from './routes/static-resource.js';
 export { rewriteSkillAssetUrls } from './routes/static-resource.js';
 import { registerRoutineRoutes, routineDbRowToContract } from './routes/routine.js';
+import type { Routine } from './routines.js';
 import { resolveAmrModelProbe } from './runtimes/amr-model-probe.js';
-import { createPluginInstallationHelpers, normalizeProjectPluginFolderPath, resolveProjectChildDirectory } from './services/plugin-installation.js';
+import { createPluginInstallationHelpers, normalizeProjectPluginFolderPath, resolveProjectChildDirectory, type PluginInstallationHelpersDeps } from './services/plugin-installation.js';
 import { createPluginShareTaskStore } from './services/plugin-share-tasks.js';
 import { getRouteRegistrationInventory, installRouteRegistrationGuard } from './route-registration-guard.js';
 import { assertServerContextSatisfiesRoutes } from './route-context-contract.js';
@@ -692,6 +715,7 @@ import {
   checkCloudflarePagesDeploymentLinks as checkCloudflarePagesDeploymentLinksWithContract,
   cloudflarePagesProjectNameForDeploy as cloudflarePagesProjectNameForDeployWithContract,
 } from './runtimes/deployment-links.js';
+import type { DeploymentRecord } from './runtimes/deployment-links.js';
 import {
   allowedBrowserPorts,
   configuredAllowedOrigins,
@@ -1015,7 +1039,7 @@ function emitLiveArtifactRefreshEvent(
 // project's `/api/projects/:id/events` stream. The payload's `type` field
 // becomes the SSE event name (see routes/project/index.ts). Used for live-artifact
 // events and `conversation-created` events emitted by routine runs (#1361).
-function emitProjectEvent(projectId, payload) {
+function emitProjectEvent(projectId: string | undefined, payload: ProjectEventPayload) {
   return projectEventRegistry.emit(projectId, payload);
 }
 
@@ -1023,7 +1047,7 @@ function emitProjectEvent(projectId, payload) {
 const CMD_BAT_RE = /\.(cmd|bat)$/i;
 const PROMPT_TEMP_FILE = () =>
   '.od-prompt-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '.md';
-const promptFileBootstrap = (fp) =>
+const promptFileBootstrap = (fp: string) =>
   `Your full instructions are stored in the file: ${fp.replace(/\\/g, '/')}. ` +
   'Open that file first and follow every instruction in it exactly — ' +
   'it contains the system prompt, design system, skill workflow, and user request. ' +
@@ -1090,24 +1114,26 @@ const reconcileAssistantMessageOnRunEnd = reconcileAssistantMessageOnRunEndWithC
 // status, and run analytics all share ONE renderable-form check. See
 // `emittedRenderableQuestionForm` imported above.
 
-const deferredSkillPluginCandidateForRun = (db, run) =>
+const deferredSkillPluginCandidateForRun = (db: Database.Database, run: SkillCandidateRunContext) =>
   deferredSkillPluginCandidateForRunWithReader({
     list: (projectId) => listSkillPluginCandidates(db, projectId),
   }, run);
 
-export function detectSkillPluginCandidateOnRunSuccess(db, runs, run, input, projectRoot) {
-  if (!run.projectId || !run.conversationId) return;
+export function detectSkillPluginCandidateOnRunSuccess(db: Database.Database, runs: ChatRunService, run: ChatRun, input: Record<string, unknown>, projectRoot: string) {
+  const projectId = run.projectId;
+  const conversationId = run.conversationId;
+  if (!projectId || !conversationId) return;
   void runs
-    .wait(run)
+    .wait(run as never)
     .then(async (finalStatus) => {
       if (finalStatus.status !== 'succeeded') return;
       const pausedForQuestion = assistantMessageEmittedQuestionFormWithReader({
-        get: (id) => db.prepare(`SELECT content FROM messages WHERE id = ?`).get(id),
+        get: (id) => db.prepare(`SELECT content FROM messages WHERE id = ?`).get(id) as { content?: unknown } | null | undefined,
       }, run.assistantMessageId);
       const detected = await detectSkillPluginCandidate({
-        projectId: run.projectId,
+        projectId,
         runId: run.id,
-        conversationId: run.conversationId,
+        conversationId,
         assistantMessageId: null,
         message: input?.message ?? input?.currentPrompt,
         attachments: input?.attachments,
@@ -1117,33 +1143,33 @@ export function detectSkillPluginCandidateOnRunSuccess(db, runs, run, input, pro
       if (pausedForQuestion) return;
       const candidateToShow = candidate ?? deferredSkillPluginCandidateForRun(db, run);
       if (!candidateToShow || candidateToShow.status === 'dismissed') return;
-      upsertSkillPluginCandidateAssistantMessage(db, run, candidateToShow);
+      upsertSkillPluginCandidateAssistantMessage(db, run as RunForSkillCandidateMessage, candidateToShow);
     })
     .catch((err) => {
       console.warn('[plugins] skill candidate detection failed', err);
     });
 }
 
-export const upsertSkillPluginCandidateAssistantMessage = (db, run, candidate) =>
+export const upsertSkillPluginCandidateAssistantMessage = (db: SkillCandidateMessageDb, run: RunForSkillCandidateMessage, candidate: SkillPluginCandidate) =>
   upsertSkillPluginCandidateAssistantMessageWithContract(db, run, candidate, {
-    upsertMessage: (messageDb, conversationId, message) => upsertMessage(messageDb, conversationId, message),
+    upsertMessage: (messageDb, conversationId, message) => upsertMessage(messageDb as Database.Database, conversationId, message),
     createMessageId: randomUUID,
     now: Date.now,
   });
 
-const persistRunEventToAssistantMessage = (db, run, event, data) =>
+const persistRunEventToAssistantMessage = (db: SkillCandidateMessageDb, run: RunWithAssistantMessageId, event: unknown, data: unknown) =>
   persistRunEventToAssistantMessageWithContract(
-    (messageId, eventRecord) => appendMessageAgentEvent(db, messageId, eventRecord),
+    (messageId, eventRecord) => appendMessageAgentEvent(db as Database.Database, messageId, eventRecord),
     run,
     event,
     data,
   );
 
-const pinAssistantMessageOnRunCreate = (db, run) =>
+const pinAssistantMessageOnRunCreate = (db: RunMessagePinningDb, run: RunToPinAssistantMessage) =>
   pinAssistantMessageOnRunCreateWithContract(
     db,
     run,
-    (messageDb, conversationId, message) => upsertMessage(messageDb, conversationId, message),
+    (messageDb, conversationId, message) => upsertMessage(messageDb as Database.Database, conversationId, message),
   );
 
 export const shouldReportRunCompletedFromMessage = shouldReportRunCompletedFromMessageWithContract;
@@ -1212,7 +1238,7 @@ export const createFinalizedMessageTelemetryReporter = ({
   runs: design.runs,
   analytics: design.analytics,
   getAppVersion: () => getAppVersion() ?? (typeof design?.getAppVersion === 'function' ? design.getAppVersion() : null),
-  report,
+  report: (input: FinalizedMessageReportInput) => report(input as ReportRunCompletedFromDaemonOpts),
 }, reportedRuns, db, dataDir);
 
 export function shouldReportRunCompletionTelemetryFallbackStatus(status: unknown): boolean {
@@ -1230,12 +1256,12 @@ const deploymentLinksDependencies = {
   aggregateStatus: aggregateCloudflarePagesStatus,
 };
 
-function cloudflarePagesProjectNameForDeploy(db, projectId, projectName, prior) {
-  return cloudflarePagesProjectNameForDeployWithContract(db, projectId, projectName, prior, deploymentLinksDependencies);
+function cloudflarePagesProjectNameForDeploy(db: unknown, projectId: string, projectName: string | undefined, prior: unknown) {
+  return cloudflarePagesProjectNameForDeployWithContract(db, projectId, projectName, prior, deploymentLinksDependencies as Parameters<typeof cloudflarePagesProjectNameForDeployWithContract>[4]);
 }
 
-function checkCloudflarePagesDeploymentLinks(existing) {
-  return checkCloudflarePagesDeploymentLinksWithContract(existing, deploymentLinksDependencies);
+function checkCloudflarePagesDeploymentLinks(existing: DeploymentRecord) {
+  return checkCloudflarePagesDeploymentLinksWithContract(existing, deploymentLinksDependencies as Parameters<typeof checkCloudflarePagesDeploymentLinksWithContract>[1]);
 }
 
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -1309,7 +1335,8 @@ const projectUpload = multer({
         // it sees. projectMetadataLookup is populated at startServer() boot
         // and keyed by project id; null fallback gives the standard
         // .od/projects/<id>/ behavior for non-imported projects.
-        const meta = projectMetadataLookup?.(req.params.id) ?? null;
+        const projectId = req.params.id as string;
+        const meta = projectMetadataLookup?.(projectId) ?? null;
         // Optional `dir` form field (sent BEFORE the file parts by the web
         // client) routes uploads into a subfolder, so files dropped/picked
         // while viewing a folder land there instead of the project root. The
@@ -1318,14 +1345,14 @@ const projectUpload = multer({
         const subdir = typeof req.body?.dir === 'string' ? req.body.dir : '';
         const { absDir, relDir } = await ensureProjectSubdir(
           PROJECTS_DIR,
-          req.params.id,
+          projectId,
           subdir,
           meta,
         );
         (req as any)._uploadRelDir = relDir;
         cb(null, absDir);
       } catch (err) {
-        cb(err, '');
+        cb(err as Error, '');
       }
     },
     filename: (_req, file, cb) => {
@@ -1482,16 +1509,19 @@ export async function startServer({
   const designSystemServices = createDesignSystemServerServices({
     roots: { SKILL_ROOTS, DESIGN_TEMPLATE_ROOTS, ALL_SKILL_LIKE_ROOTS },
     paths: { PROJECTS_DIR, DESIGN_SYSTEMS_DIR, USER_DESIGN_SYSTEMS_DIR },
-    skills: { listSkills, findSkillById },
+    skills: {
+      listSkills: (roots: string[]) => listSkills(roots) as unknown as Promise<Array<Record<string, unknown> & { id: string }>>,
+      findSkillById: (skills: Array<Record<string, unknown> & { id: string }>, id: string) => findSkillById(skills, id) as unknown as (Record<string, unknown> & { id: string }) | undefined,
+    },
     designSystems: {
-      listDesignSystems,
+      listDesignSystems: listDesignSystems as never,
       readDesignSystem,
       readDesignSystemPackageInfo,
       readDesignSystemStaticFile,
       listUserDesignSystemFiles,
       readUserDesignSystemFile,
       linkUserDesignSystemProject,
-      LEGACY_DESIGN_SYSTEM_ARTIFACTS,
+      LEGACY_DESIGN_SYSTEM_ARTIFACTS: [...LEGACY_DESIGN_SYSTEM_ARTIFACTS] as unknown as Array<{ replacementPaths: string[]; legacyPath: string; removeDirectory?: boolean }>,
     },
     projects: {
       getProject,
@@ -1522,7 +1552,7 @@ export async function startServer({
   // Chrome may strip the port from the Origin header on same-origin GET
   // requests. Only use this as a fallback for safe, idempotent GET requests;
   // mutating routes always require an exact origin/host match.
-  function isPortlessLoopbackOrigin(origin) {
+  function isPortlessLoopbackOrigin(origin: string) {
     return /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])$/.test(origin);
   }
 
@@ -1598,11 +1628,11 @@ export async function startServer({
   }
   const pluginInstallation = createPluginInstallationHelpers({
     db,
-    installFromLocalFolder,
-    PLUGIN_REGISTRY_ROOTS,
+    installFromLocalFolder: installFromLocalFolder as unknown as (db: unknown, args: unknown) => AsyncIterable<unknown>,
+    PLUGIN_REGISTRY_ROOTS: PLUGIN_REGISTRY_ROOTS as unknown as string[],
     PLUGIN_LOCKFILE_PATH,
     PLUGIN_UPLOAD_MAX_BYTES,
-  });
+  } as PluginInstallationHelpersDeps);
   // Wire the upload-destination bridge to this db so multer can route
   // file uploads into baseDir-rooted projects' actual folders.
   projectMetadataLookup = (id) => {
@@ -1617,7 +1647,7 @@ export async function startServer({
   // Routines are stored as DB rows; the service holds in-memory timers and
   // delegates "list me everything" / "record a run" back to SQLite.
   routineService = new RoutineService({
-    list: () => listRoutines(db).map((row) => routineDbRowToContract(row, null)),
+    list: () => listRoutines(db).map((row) => routineDbRowToContract(row, null)) as Routine[],
     insertRun: (run, options) => {
       const row = {
         id: run.id,
@@ -1673,7 +1703,7 @@ export async function startServer({
     console.log('[od] Codex plugins disabled via OD_CODEX_DISABLE_PLUGINS=1');
   }
 
-  let bundledMarketplaceEntries = [];
+  let bundledMarketplaceEntries: MarketplaceEntry[] = [];
   // Plan §3.I3 / spec §23.3.5 — register every plugin under
   // <resourceRoot>/plugins/_official/** in packaged runs, or
   // <projectRoot>/plugins/_official/** in workspace runs, as bundled plugins. The walker
@@ -1713,12 +1743,12 @@ export async function startServer({
       for (const w of result.warnings) console.warn(`[plugins] bundled warn: ${w}`);
     }
   } catch (err) {
-    console.warn(`[plugins] bundled registration failed: ${(err)?.message ?? err}`);
+    console.warn(`[plugins] bundled registration failed: ${(err as Error)?.message ?? err}`);
   }
 
   try {
-    const seedDirs = await fs.promises.readdir(PLUGIN_REGISTRY_DIR, { withFileTypes: true }).catch((err) => {
-      if (err?.code === 'ENOENT') return [];
+    const seedDirs = await fs.promises.readdir(PLUGIN_REGISTRY_DIR, { withFileTypes: true }).catch((err: unknown) => {
+      if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') return [];
       throw err;
     });
     const { ensureMarketplaceManifest } = await import('./plugins/marketplaces.js');
@@ -1741,7 +1771,7 @@ export async function startServer({
       }
     }
   } catch (err) {
-    console.warn(`[plugins] registry seed failed: ${(err)?.message ?? err}`);
+    console.warn(`[plugins] registry seed failed: ${(err as Error)?.message ?? err}`);
   }
 
   // Plan §3.A5 / spec §16 Phase 5 / PB2: periodic snapshot GC. Disabled
@@ -1757,7 +1787,7 @@ export async function startServer({
       console.log(`[plugins] snapshot GC startup sweep removed ${initialSweep.removed} row(s)`);
     }
   } catch (err) {
-    console.warn(`[plugins] snapshot GC startup sweep failed: ${(err)?.message ?? err}`);
+    console.warn(`[plugins] snapshot GC startup sweep failed: ${(err as Error)?.message ?? err}`);
   }
   void snapshotGc; // keep handle alive for the daemon's lifetime
 
@@ -1783,8 +1813,8 @@ export async function startServer({
 
 
   registerMemoryRoutes(app, {
-    http: { createSseResponse, requireLocalDaemonRequest },
-    paths: { RUNTIME_DATA_DIR, PROJECT_ROOT, PROJECTS_DIR },
+    http: { createSseResponse, requireLocalDaemonRequest } as HttpDeps,
+    paths: { RUNTIME_DATA_DIR, PROJECT_ROOT, PROJECTS_DIR } as PathDeps,
     appConfig: { readAppConfig },
   });
 
@@ -1811,7 +1841,7 @@ export async function startServer({
   const design = {
     runs: createChatRunService({
       createSseResponse,
-      createSseErrorPayload,
+      createSseErrorPayload: createSseErrorPayload as (code: string, message: string, init?: Record<string, unknown>) => unknown,
       runsLogDir: path.join(RUNTIME_DATA_DIR, 'runs'),
     }),
     analytics: analyticsService,
@@ -1827,7 +1857,7 @@ export async function startServer({
   // to Langfuse so repeated message updates only emit one final trace per run.
   // Terminal fallback reports intentionally do not claim this set; a delayed
   // telemetry-finalized message can still replace the synthetic fallback.
-  const reportedRuns = new Set();
+  const reportedRuns = new Set<string>();
 
   const reportFinalizedMessage = createFinalizedMessageTelemetryReporter({
     design,
@@ -1860,7 +1890,7 @@ export async function startServer({
           role: 'assistant',
           runId: run.id,
           runStatus: status,
-        },
+        } as FinalizedMessageRecord,
         { telemetryFinalized: true },
         {
           analyticsContext,
@@ -1880,7 +1910,7 @@ export async function startServer({
   // (`internal.example.com → 10.0.0.5`) still passes. We delegate to
   // `validateBaseUrlResolved` here so every proxy and finalize handler runs
   // the same resolved-IP check before issuing the upstream request.
-  const validateExternalApiBaseUrl = (baseUrl) => validateBaseUrlResolved(baseUrl);
+  const validateExternalApiBaseUrl = (baseUrl: string) => validateBaseUrlResolved(baseUrl);
 
   const resolvedPortRef = {
     get current() {
@@ -1944,7 +1974,7 @@ export async function startServer({
   });
 
   registerConnectorRoutes(app, {
-    sendApiError,
+    sendApiError: sendApiError as ConnectorApiErrorSender,
     authorizeToolRequest,
     projectsRoot: PROJECTS_DIR,
     requireLocalDaemonRequest,
@@ -1953,7 +1983,7 @@ export async function startServer({
 
   registerDiagnosticsRoutes(app, {
     requireLocalDaemonRequest,
-    runtime,
+    runtime: runtime as never,
     projectRoot: PROJECT_ROOT,
     runsDir: path.join(RUNTIME_DATA_DIR, 'runs'),
     dataDir: RUNTIME_DATA_DIR,
@@ -2065,11 +2095,11 @@ export async function startServer({
     writeConfig,
     generateMedia,
     mediaTasks: mediaTaskStore.tasks,
-    createMediaTask: (taskId, projectId, info) => mediaTaskStore.create(taskId, projectId, info),
-    persistMediaTask: (task) => mediaTaskStore.persist(task),
-    appendTaskProgress: (task, line) => mediaTaskStore.appendProgress(task, line),
-    notifyTaskWaiters: (task) => mediaTaskStore.notifyWaiters(task),
-    getLiveMediaTask: (taskId) => mediaTaskStore.get(taskId),
+    createMediaTask: (taskId: string, projectId: string, info?: MediaTaskCreateInfo) => mediaTaskStore.create(taskId, projectId, info),
+    persistMediaTask: (task: LiveMediaTask) => mediaTaskStore.persist(task),
+    appendTaskProgress: (task: LiveMediaTask, line: string) => mediaTaskStore.appendProgress(task, line),
+    notifyTaskWaiters: (task: LiveMediaTask) => mediaTaskStore.notifyWaiters(task),
+    getLiveMediaTask: (taskId: string) => mediaTaskStore.get(taskId),
     mediaTaskSnapshot,
     listMediaTasksByProject,
     listElevenLabsVoiceOptions,
@@ -2174,9 +2204,9 @@ export async function startServer({
   });
   registerFigmaRoutes(app, {
     db,
-    http: { sendApiError, sendMulterError },
+    http: { sendApiError: sendApiError as never, sendMulterError },
     projectsRoot: PROJECTS_DIR,
-    projects: { getProject, resolveProjectDir },
+    projects: { getProject: getProject as (db: unknown, id: string) => { id: string; metadata?: unknown } | null, resolveProjectDir },
     imports: { decodeMultipartFilename, importFigmaFromBytes },
   });
   registerSocialShareRoutes(app, { http: httpDeps });
@@ -2192,7 +2222,13 @@ export async function startServer({
     status: projectStatusDeps,
     events: projectEventDeps,
     ids: idDeps,
-    telemetry: { reportFinalizedMessage },
+    telemetry: {
+      reportFinalizedMessage,
+      reportRunCompletionTelemetryFallback,
+      resolveRunProjectKindForAnalytics,
+      runArtifactBaselines,
+      runRetryEventsForAnalytics,
+    },
     appConfig: appConfigDeps,
     agents: agentDeps,
     validation: validationDeps,
@@ -2225,10 +2261,10 @@ export async function startServer({
     http: httpDeps,
     paths: pathDeps,
     resources: {
-      listAllSkills,
-      listAllDesignTemplates,
-      listAllSkillLikeEntries,
-      listAllDesignSystems,
+      listAllSkills: listAllSkills as unknown as () => Promise<Array<SkillInfo & { source?: string }>>,
+      listAllDesignTemplates: listAllDesignTemplates as unknown as () => Promise<Array<SkillInfo & { source?: string }>>,
+      listAllSkillLikeEntries: listAllSkillLikeEntries as unknown as () => Promise<Array<SkillInfo & { source?: string }>>,
+      listAllDesignSystems: listAllDesignSystems as unknown as () => Promise<Array<DesignSystemSummary & { source?: string }>>,
       mimeFor,
     },
     tokenContractRebuild: {
@@ -2270,7 +2306,7 @@ export async function startServer({
       renderDesignSystemShowcase,
       updateUserDesignSystem,
       updateUserDesignSystemRevisionStatus,
-    },
+    } as unknown as RegisterDesignSystemRoutesDeps['designSystems'],
     generationJobs: designSystemGenerationJobs,
   });
   registerBrandRoutes(app, {
@@ -2318,7 +2354,7 @@ export async function startServer({
   });
   registerDesignSystemToolRoutes(app, {
     auth: authDeps,
-    http: httpDeps,
+    http: httpDeps as never,
     paths: pathDeps,
     projects: { getProject: (id: string) => getProject(db, id) },
   });
@@ -2396,7 +2432,7 @@ export async function startServer({
   registerVelaRoutes(app, {
     paths: { RUNTIME_DATA_DIR },
     appConfig: { readAppConfig },
-    http: { getPublicBaseUrl },
+    http: { getPublicBaseUrl: getPublicBaseUrl as unknown as PublicBaseUrlResolver },
     env: process.env,
   });
 
@@ -2416,9 +2452,9 @@ export async function startServer({
     isLocalSameOrigin,
     resolvedPortRef,
     pluginShareTaskStore,
-    installOrUpgradePlugin: async (req, res, mode) => {
+    installOrUpgradePlugin: async (req: express.Request, res: express.Response, mode: string) => {
       const body = req.body && typeof req.body === 'object' ? req.body : {};
-      const id = req.params.id;
+      const id = req.params.id as string;
       let source = '';
       let marketplaceResolution = null;
       if (mode === 'upgrade') {
@@ -2455,7 +2491,7 @@ export async function startServer({
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Connection', 'keep-alive');
       res.flushHeaders?.();
-      const writeEvent = (event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+      const writeEvent = (event: string, data: unknown) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
       if (mode === 'upgrade') writeEvent('progress', { kind: 'progress', phase: 'resolving', message: `Upgrading ${id} from ${source} (policy=${body.policy === 'pinned' ? 'pinned' : 'latest'})` });
       try {
         const basePlugin = mode === 'upgrade' ? getInstalledPlugin(db, id) : null;
@@ -2472,7 +2508,7 @@ export async function startServer({
           manifestDigest: marketplaceResolution?.manifestDigest ?? basePlugin?.manifestDigest,
           archiveIntegrity: marketplaceResolution?.archiveIntegrity ?? basePlugin?.archiveIntegrity,
           lockfilePath: PLUGIN_LOCKFILE_PATH,
-        })) {
+        } as unknown as InstallOptions)) {
           writeEvent(ev.kind, ev);
           if (ev.kind === 'success' || ev.kind === 'error') break;
         }
@@ -2482,9 +2518,9 @@ export async function startServer({
         res.end();
       }
     },
-    handleShareProject: async (req, res) => {
+    handleShareProject: async (req: express.Request, res: express.Response) => {
       try {
-        const sourcePlugin = getInstalledPlugin(db, req.params.id);
+        const sourcePlugin = getInstalledPlugin(db, req.params.id as string);
         if (!sourcePlugin) return sendApiError(res, 404, 'NOT_FOUND', 'plugin not found');
         if (!USER_PLUGIN_SOURCE_KINDS.has(sourcePlugin.sourceKind)) return res.status(409).json({ ok: false, code: 'plugin-not-shareable', message: 'Only user-installed plugins can start a share project.' });
         const body = req.body && typeof req.body === 'object' ? req.body : {};
@@ -2500,45 +2536,45 @@ export async function startServer({
         if (resolved && !resolved.ok) return res.status(resolved.status).json(resolved.body);
         const project = getProject(db, id); if (!project) return sendApiError(res, 500, 'INTERNAL_ERROR', 'created project could not be loaded');
         res.json({ ok: true, project, conversationId: cid, ...(resolved?.ok ? { appliedPluginSnapshotId: resolved.snapshotId } : {}), actionPluginId, sourcePluginId: sourcePlugin.id, stagedPath, prompt, message: `Created a ${PLUGIN_SHARE_ACTION_LABELS[action]} task for ${sourcePlugin.title || sourcePlugin.id}.` });
-      } catch (err) { res.status(400).json({ ok: false, message: String(err?.message || err) }); }
+      } catch (err) { res.status(400).json({ ok: false, message: String((err as Error)?.message || err) }); }
     },
-    handlePluginTrust: async (req, res) => {
+    handlePluginTrust: async (req: express.Request, res: express.Response) => {
       try {
-        const plugin = getInstalledPlugin(db, req.params.id); if (!plugin) return res.status(404).json({ error: 'plugin not found' });
+        const plugin = getInstalledPlugin(db, req.params.id as string); if (!plugin) return res.status(404).json({ error: 'plugin not found' });
         const body = req.body && typeof req.body === 'object' ? req.body : {}; const action = body.action === 'revoke' ? 'revoke' : 'grant';
         const { validateCapabilityList, grantCapabilities, revokeCapabilities } = await import('./plugins/trust.js');
         const { accepted, rejected } = validateCapabilityList(body.capabilities);
         if (rejected.length > 0) return res.status(400).json({ error: { code: 'invalid-capability', message: `Capability validation failed: ${rejected.map((r) => r.capability).join(', ')}`, data: { rejected } } });
         if (accepted.length === 0) return res.status(400).json({ error: { code: 'no-capabilities', message: 'capabilities[] is required and must contain at least one entry' } });
-        const next = action === 'revoke' ? revokeCapabilities({ db, pluginId: req.params.id, capabilities: accepted }) : grantCapabilities({ db, pluginId: req.params.id, capabilities: accepted });
-        const updated = getInstalledPlugin(db, req.params.id);
-        try { const { recordPluginEvent } = await import('./plugins/events.js'); recordPluginEvent({ kind: 'plugin.trust-changed', pluginId: req.params.id, details: { action, capabilities: accepted, total: next.length } }); } catch {}
-        res.status(action === 'grant' ? 201 : 200).json({ ok: true, id: req.params.id, action, capabilitiesGranted: next, plugin: updated });
+        const next = action === 'revoke' ? revokeCapabilities({ db, pluginId: req.params.id as string, capabilities: accepted }) : grantCapabilities({ db, pluginId: req.params.id as string, capabilities: accepted });
+        const updated = getInstalledPlugin(db, req.params.id as string);
+        try { const { recordPluginEvent } = await import('./plugins/events.js'); recordPluginEvent({ kind: 'plugin.trust-changed', pluginId: req.params.id as string, details: { action, capabilities: accepted, total: next.length } }); } catch {}
+        res.status(action === 'grant' ? 201 : 200).json({ ok: true, id: req.params.id as string, action, capabilitiesGranted: next, plugin: updated });
       } catch (err) { res.status(500).json({ error: String(err) }); }
     },
-    handlePluginStats: async (res) => {
-      try { const { pluginInventoryStats, snapshotInventoryStats } = await import('./plugins/stats.js'); const installed = listInstalledPlugins(db); const inventoryRows = db.prepare(`SELECT status, project_id, run_id, applied_at FROM applied_plugin_snapshots`).all(); res.json({ plugins: pluginInventoryStats(installed), snapshots: snapshotInventoryStats(inventoryRows), generatedAt: Date.now() }); } catch (err) { res.status(500).json({ error: String(err) }); }
+    handlePluginStats: async (res: express.Response) => {
+      try { const { pluginInventoryStats, snapshotInventoryStats } = await import('./plugins/stats.js'); const installed = listInstalledPlugins(db); const inventoryRows = db.prepare(`SELECT status, project_id, run_id, applied_at FROM applied_plugin_snapshots`).all() as SnapshotStatsRow[]; res.json({ plugins: pluginInventoryStats(installed), snapshots: snapshotInventoryStats(inventoryRows), generatedAt: Date.now() }); } catch (err) { res.status(500).json({ error: String(err) }); }
     },
-    handleAppliedPluginExport: async (req, res) => {
+    handleAppliedPluginExport: async (req: express.Request, res: express.Response) => {
       try { const body = req.body && typeof req.body === 'object' ? req.body : {}; const target = body.target === 'od' || body.target === 'claude-plugin' || body.target === 'agent-skill' ? body.target : null; if (!target) return res.status(400).json({ error: 'target must be one of: od, claude-plugin, agent-skill' }); const outDir = typeof body.outDir === 'string' && body.outDir.length > 0 ? body.outDir : null; if (!outDir) return res.status(400).json({ error: 'outDir is required' }); const { exportPlugin, ExportError } = await import('./plugins/export.js'); try { const result = await exportPlugin({ db, target, outDir, ...(typeof body.snapshotId === 'string' ? { snapshotId: body.snapshotId } : {}), ...(typeof body.projectId === 'string' ? { projectId: body.projectId } : {}) }); res.json({ ok: true, ...result }); } catch (err) { if (err instanceof ExportError) return res.status(404).json({ error: err.message }); throw err; } } catch (err) { res.status(500).json({ error: String(err) }); }
     },
-    handleProjectInstallFolder: async (req, res) => {
-      try { const project = getProject(db, req.params.id); if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found'); const body = req.body && typeof req.body === 'object' ? req.body : {}; const relativePath = normalizeProjectPluginFolderPath(body.path); const projectRoot = resolveProjectDir(PROJECTS_DIR, req.params.id, project.metadata); const folder = await resolveProjectChildDirectory(projectRoot, relativePath); const warnings = []; const log = []; let plugin = null; let message = 'Install finished.'; for await (const ev of installPlugin(db, { source: folder, roots: PLUGIN_REGISTRY_ROOTS })) { if (ev.message) log.push(ev.message); if (Array.isArray(ev.warnings)) warnings.splice(0, warnings.length, ...ev.warnings); if (ev.kind === 'success') { plugin = ev.plugin; message = `Installed ${ev.plugin.title}.`; break; } if (ev.kind === 'error') { message = ev.message; break; } } res.status(plugin ? 200 : 400).json({ ok: Boolean(plugin), plugin, warnings, message, log }); } catch (err) { const code = err && err.code; const status = code === 'ENOENT' || code === 'ENOTDIR' ? 404 : 400; sendApiError(res, status, status === 404 ? 'PLUGIN_FOLDER_NOT_FOUND' : 'BAD_REQUEST', String(err?.message || err)); }
+    handleProjectInstallFolder: async (req: express.Request, res: express.Response) => {
+      try { const project = getProject(db, req.params.id as string); if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found'); const body = req.body && typeof req.body === 'object' ? req.body : {}; const relativePath = normalizeProjectPluginFolderPath(body.path); const projectRoot = resolveProjectDir(PROJECTS_DIR, req.params.id as string, project.metadata); const folder = await resolveProjectChildDirectory(projectRoot, relativePath); const warnings: string[] = []; const log: string[] = []; let plugin: InstalledPluginRecord | null = null; let message = 'Install finished.'; for await (const ev of installPlugin(db, { source: folder, roots: PLUGIN_REGISTRY_ROOTS })) { if ('message' in ev && ev.message) log.push(ev.message); if ('warnings' in ev && Array.isArray(ev.warnings)) warnings.splice(0, warnings.length, ...ev.warnings); if (ev.kind === 'success') { plugin = ev.plugin; message = `Installed ${ev.plugin.title}.`; break; } if (ev.kind === 'error') { message = ev.message; break; } } res.status(plugin ? 200 : 400).json({ ok: Boolean(plugin), plugin, warnings, message, log }); } catch (err) { const code = (err as { code?: string })?.code; const status = code === 'ENOENT' || code === 'ENOTDIR' ? 404 : 400; sendApiError(res, status, (status === 404 ? 'PLUGIN_FOLDER_NOT_FOUND' : 'BAD_REQUEST') as never, String((err as Error)?.message || err)); }
     },
-    handleProjectPluginCli: async (req, res, action) => {
-      try { const project = getProject(db, req.params.id); if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found'); const body = req.body && typeof req.body === 'object' ? req.body : {}; const relativePath = normalizeProjectPluginFolderPath(body.path); const projectRoot = resolveProjectDir(PROJECTS_DIR, req.params.id, project.metadata); const folder = await resolveProjectChildDirectory(projectRoot, relativePath); const subcommand = action === 'publish-github' ? 'publish-repo' : 'open-design-pr'; const timeout = action === 'publish-github' ? 240_000 : 300_000; const result = await execCommandViaLoginShell(OD_NODE_BIN, [OD_BIN, 'plugin', subcommand, folder, '--json'], { timeout }); const payload = result.stdout ? JSON.parse(result.stdout) : null; if (!result.ok || !payload?.ok) return res.status(500).json({ ok: false, code: payload?.error?.label || (action === 'publish-github' ? 'publish-repo-failed' : 'open-design-pr-failed'), message: payload?.error?.stderr || payload?.error?.stdout || (action === 'publish-github' ? 'GitHub repo publish failed.' : 'Open Design PR creation failed.'), log: payload?.steps?.map((step) => step.stderr || step.stdout || step.command).filter(Boolean) ?? [result.stderr || result.stdout || `${subcommand} failed`] }); res.json({ ok: true, message: action === 'publish-github' ? (payload.repoUrl ? `Published plugin to ${payload.repoUrl}.` : 'Published plugin to GitHub.') : (payload.prUrl ? `Opened Open Design PR flow at ${payload.prUrl}.` : 'Opened Open Design PR flow.'), ...(payload.repoUrl ? { url: payload.repoUrl } : {}), ...(payload.prUrl ? { url: payload.prUrl } : {}), log: payload.steps?.map((step) => step.stderr || step.stdout || step.command).filter(Boolean) ?? [] }); } catch (err) { res.status(400).json({ ok: false, message: String(err?.message || err), log: [] }); }
+    handleProjectPluginCli: async (req: express.Request, res: express.Response, action: string) => {
+      try { const project = getProject(db, req.params.id as string); if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found'); const body = req.body && typeof req.body === 'object' ? req.body : {}; const relativePath = normalizeProjectPluginFolderPath(body.path); const projectRoot = resolveProjectDir(PROJECTS_DIR, req.params.id as string, project.metadata); const folder = await resolveProjectChildDirectory(projectRoot, relativePath); const subcommand = action === 'publish-github' ? 'publish-repo' : 'open-design-pr'; const timeout = action === 'publish-github' ? 240_000 : 300_000; const result = await execCommandViaLoginShell(OD_NODE_BIN, [OD_BIN, 'plugin', subcommand, folder, '--json'], { timeout }); const payload = result.stdout ? JSON.parse(result.stdout) : null; if (!result.ok || !payload?.ok) return res.status(500).json({ ok: false, code: payload?.error?.label || (action === 'publish-github' ? 'publish-repo-failed' : 'open-design-pr-failed'), message: payload?.error?.stderr || payload?.error?.stdout || (action === 'publish-github' ? 'GitHub repo publish failed.' : 'Open Design PR creation failed.'), log: payload?.steps?.map((step: { stderr?: string; stdout?: string; command?: string }) => step.stderr || step.stdout || step.command).filter(Boolean) ?? [result.stderr || result.stdout || `${subcommand} failed`] }); res.json({ ok: true, message: action === 'publish-github' ? (payload.repoUrl ? `Published plugin to ${payload.repoUrl}.` : 'Published plugin to GitHub.') : (payload.prUrl ? `Opened Open Design PR flow at ${payload.prUrl}.` : 'Opened Open Design PR flow.'), ...(payload.repoUrl ? { url: payload.repoUrl } : {}), ...(payload.prUrl ? { url: payload.prUrl } : {}), log: payload.steps?.map((step: { stderr?: string; stdout?: string; command?: string }) => step.stderr || step.stdout || step.command).filter(Boolean) ?? [] }); } catch (err) { res.status(400).json({ ok: false, message: String((err as Error)?.message || err), log: [] }); }
     },
-    handleCandidateDraft: async (req, res) => {
+    handleCandidateDraft: async (req: express.Request, res: express.Response) => {
       if (!isLocalSameOrigin(req, resolvedPort)) return res.status(403).json({ error: 'cross-origin request rejected' });
-      try { const project = getProject(db, req.params.id); if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found'); const projectRoot = resolveProjectDir(PROJECTS_DIR, req.params.id, project.metadata); const result = await generateSkillPluginDraft(db, projectRoot, req.params.id, req.params.candidateId); if (!result) return sendApiError(res, 404, 'NOT_FOUND', 'plugin candidate not found'); res.status(result.ok ? 200 : 422).json(result); } catch (err) { res.status(400).json({ ok: false, message: String(err?.message || err) }); }
+      try { const project = getProject(db, req.params.id as string); if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found'); const projectRoot = resolveProjectDir(PROJECTS_DIR, req.params.id as string, project.metadata); const result = await generateSkillPluginDraft(db, projectRoot, req.params.id as string, req.params.candidateId as string); if (!result) return sendApiError(res, 404, 'NOT_FOUND', 'plugin candidate not found'); res.status(result.ok ? 200 : 422).json(result); } catch (err) { res.status(400).json({ ok: false, message: String((err as Error)?.message || err) }); }
     },
-    handleCandidateShareTask: async (req, res) => {
+    handleCandidateShareTask: async (req: express.Request, res: express.Response) => {
       if (!isLocalSameOrigin(req, resolvedPort)) return res.status(403).json({ error: 'cross-origin request rejected' });
-      try { const project = getProject(db, req.params.id); if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found'); const body = req.body && typeof req.body === 'object' ? req.body : {}; const action = body.action === 'publish-github' || body.action === 'contribute-open-design' ? body.action : null; if (!action) return sendApiError(res, 400, 'BAD_REQUEST', 'plugin share action is required'); const projectRoot = resolveProjectDir(PROJECTS_DIR, req.params.id, project.metadata); const draft = await generateSkillPluginDraft(db, projectRoot, req.params.id, req.params.candidateId); if (!draft) return sendApiError(res, 404, 'NOT_FOUND', 'plugin candidate not found'); if (!draft.validation.ok) return res.status(422).json({ ok: false, code: 'plugin-draft-invalid', message: 'Generated plugin draft is invalid.', draft }); const task = pluginShareTaskStore.createAndStart(req.params.id, { action, path: draft.draftPath }, draft.folder); res.status(202).json({ taskId: task.id, action, path: draft.draftPath, status: task.status, startedAt: task.startedAt, draft }); } catch (err) { res.status(400).json({ ok: false, message: String(err?.message || err) }); }
+      try { const project = getProject(db, req.params.id as string); if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found'); const body = req.body && typeof req.body === 'object' ? req.body : {}; const action = body.action === 'publish-github' || body.action === 'contribute-open-design' ? body.action : null; if (!action) return sendApiError(res, 400, 'BAD_REQUEST', 'plugin share action is required'); const projectRoot = resolveProjectDir(PROJECTS_DIR, req.params.id as string, project.metadata); const draft = await generateSkillPluginDraft(db, projectRoot, req.params.id as string, req.params.candidateId as string); if (!draft) return sendApiError(res, 404, 'NOT_FOUND', 'plugin candidate not found'); if (!draft.validation.ok) return res.status(422).json({ ok: false, code: 'plugin-draft-invalid', message: 'Generated plugin draft is invalid.', draft }); const task = pluginShareTaskStore.createAndStart(req.params.id as string, { action, path: draft.draftPath }, draft.folder); res.status(202).json({ taskId: task.id, action, path: draft.draftPath, status: task.status, startedAt: task.startedAt, draft }); } catch (err) { res.status(400).json({ ok: false, message: String((err as Error)?.message || err) }); }
     },
-    handleProjectShareTask: async (req, res) => {
+    handleProjectShareTask: async (req: express.Request, res: express.Response) => {
       if (!isLocalSameOrigin(req, resolvedPort)) return res.status(403).json({ error: 'cross-origin request rejected' });
-      try { const project = getProject(db, req.params.id); if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found'); const body = req.body && typeof req.body === 'object' ? req.body : {}; const action: PluginShareAction | null = body.action === 'publish-github' || body.action === 'contribute-open-design' ? body.action : null; if (!action) return sendApiError(res, 400, 'BAD_REQUEST', 'plugin share action is required'); const relativePath = normalizeProjectPluginFolderPath(body.path); const projectRoot = resolveProjectDir(PROJECTS_DIR, req.params.id, project.metadata); const folder = await resolveProjectChildDirectory(projectRoot, relativePath); const task = pluginShareTaskStore.createAndStart(req.params.id, { action, path: relativePath }, folder); res.status(202).json({ taskId: task.id, action, path: relativePath, status: task.status, startedAt: task.startedAt }); } catch (err) { const code = err && err.code; const status = code === 'ENOENT' || code === 'ENOTDIR' ? 404 : 400; sendApiError(res, status, status === 404 ? 'PLUGIN_FOLDER_NOT_FOUND' : 'BAD_REQUEST', String(err?.message || err)); }
+      try { const project = getProject(db, req.params.id as string); if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found'); const body = req.body && typeof req.body === 'object' ? req.body : {}; const action: PluginShareAction | null = body.action === 'publish-github' || body.action === 'contribute-open-design' ? body.action : null; if (!action) return sendApiError(res, 400, 'BAD_REQUEST', 'plugin share action is required'); const relativePath = normalizeProjectPluginFolderPath(body.path); const projectRoot = resolveProjectDir(PROJECTS_DIR, req.params.id as string, project.metadata); const folder = await resolveProjectChildDirectory(projectRoot, relativePath); const task = pluginShareTaskStore.createAndStart(req.params.id as string, { action, path: relativePath }, folder); res.status(202).json({ taskId: task.id, action, path: relativePath, status: task.status, startedAt: task.startedAt }); } catch (err) { const code = (err as { code?: string })?.code; const status = code === 'ENOENT' || code === 'ENOTDIR' ? 404 : 400; sendApiError(res, status, (status === 404 ? 'PLUGIN_FOLDER_NOT_FOUND' : 'BAD_REQUEST') as never, String((err as Error)?.message || err)); }
     },
   };
 
@@ -2562,7 +2598,7 @@ export async function startServer({
       craft: [],
       atoms: FIRST_PARTY_ATOMS.map((a) => ({ id: a.id, label: a.label })),
       scenarios,
-    };
+    } as never;
   }
 
   // Pure read off `installed_plugins`: rows whose source_kind='bundled'
@@ -2636,17 +2672,17 @@ export async function startServer({
       FIRST_PARTY_ATOMS,
     },
     helpers: pluginRouteHelpers,
-  });
+  } as never);
   registerAtomRoutes(app, {
     db,
     resources: { FIRST_PARTY_ATOMS },
-  });
+  } as never);
   registerPluginMarketplaceRoutes(app, {
     db,
     bundledMarketplaceEntries,
     createMarketplaceFetcher,
     marketplaceRegistryIdFromUrl,
-  });
+  } as never);
   registerPluginAssetRoutes(app, {
     db,
     pluginAssetCache,
@@ -2654,13 +2690,13 @@ export async function startServer({
     assetCacheRewriteUrl,
     isCacheableExternalUrl,
     assembleExample,
-  });
+  } as never);
 
   registerGenuiRoutes(app, {
     db,
     design,
     paths: { PROJECTS_DIR },
-  });
+  } as never);
 
   registerProjectPluginRoutes(app, {
     db,
@@ -2685,8 +2721,8 @@ export async function startServer({
       FIRST_PARTY_ATOMS,
     },
     helpers: pluginRouteHelpers,
-  });
-  registerProjectUploadRoutes(app, { http: httpDeps, uploads: uploadDeps, node: nodeDeps });
+  } as never);
+  registerProjectUploadRoutes(app, { http: httpDeps, uploads: uploadDeps, node: nodeDeps } as never);
 
   const composeDaemonSystemPrompt = async ({
     agentId,
@@ -2700,7 +2736,26 @@ export async function startServer({
     connectedExternalMcp,
     appliedPluginSnapshotId,
     mediaExecution,
-  }) => {
+  }: {
+    agentId?: string;
+    projectId?: string;
+    skillId?: string;
+    skillIds?: string[];
+    designSystemId?: string;
+    streamFormat?: string;
+    locale?: string;
+    sessionMode?: string;
+    connectedExternalMcp?: unknown;
+    appliedPluginSnapshotId?: string;
+    mediaExecution?: unknown;
+  }): Promise<{
+    prompt: string;
+    activeSkillDir: string | null;
+    activeSkillDirs: string[];
+    critiqueShouldRun: boolean;
+    designSystemSelection: { id: string | null; requestedId: string | undefined; source: string; digest: string | null };
+    promptTelemetryParts: { skillPrompt: string; designSystemPrompt: string; pluginStagePrompt: string };
+  }> => {
     const project =
       typeof projectId === 'string' && projectId
         ? getProject(db, projectId)
@@ -2718,11 +2773,11 @@ export async function startServer({
     ) {
       try {
         pluginDesignSystemId = designSystemIdFromPluginSnapshot(
-          getSnapshot(db, appliedPluginSnapshotId),
+          getSnapshot(db, appliedPluginSnapshotId) as never,
         );
       } catch (err) {
         console.warn(
-          `[plugins] designSystem selection failed: ${err?.message ?? err}`,
+          `[plugins] designSystem selection failed: ${(err as Error)?.message ?? err}`,
         );
       }
     }
@@ -2763,8 +2818,8 @@ export async function startServer({
     let skillName;
     let skillMode;
     const skillModes = new Set<NonNullable<Parameters<typeof composeSystemPrompt>[0]['skillMode']>>();
-    let skillCraftRequires = [];
-    let activeSkillDir = null;
+    let skillCraftRequires: string[] = [];
+    let activeSkillDir: string | null = null;
     const activeSkillDirs: string[] = [];
     // Per-skill Critique Theater override sourced from
     // `od.critique.policy` in the resolved skill's SKILL.md frontmatter.
@@ -2896,7 +2951,7 @@ export async function startServer({
         }
       } catch (err) {
         console.warn(
-          `[plugins] pluginSkillBody load failed: ${err?.message ?? err}`,
+          `[plugins] pluginSkillBody load failed: ${(err as Error)?.message ?? err}`,
         );
       }
     }
@@ -2960,8 +3015,8 @@ export async function startServer({
     let designSystemFixtureHtml;
     let designSystemPullIndex;
     let designSystemImportMode;
-    let designSystemCraftApplies = [];
-    let designSystemCraftExemptions = [];
+    let designSystemCraftApplies: string[] = [];
+    let designSystemCraftExemptions: string[] = [];
     let activeDesignSystemId = null;
     let designSystemDigest = null;
     if (effectiveDesignSystemId) {
@@ -3009,7 +3064,7 @@ export async function startServer({
             fixtureHtml: designSystemFixtureHtml,
             pullIndex: designSystemPullIndex,
             importMode: designSystemImportMode,
-          });
+          } as never);
         }
       }
     }
@@ -3030,8 +3085,8 @@ export async function startServer({
       metadata?.kind === 'template' && typeof metadata.templateId === 'string'
         ? (getTemplate(db, metadata.templateId) ?? undefined)
         : undefined;
-    let audioVoiceOptions = [];
-    let audioVoiceOptionsError;
+    let audioVoiceOptions: ElevenLabsVoiceOption[] = [];
+    let audioVoiceOptionsError: string | undefined;
     if (
       metadata?.kind === 'audio' &&
       metadata?.audioKind === 'speech' &&
@@ -3041,7 +3096,7 @@ export async function startServer({
       try {
         audioVoiceOptions = await listElevenLabsVoiceOptions(PROJECT_ROOT, { limit: 100 });
       } catch (err) {
-        audioVoiceOptionsError = err && err.message ? err.message : String(err);
+        audioVoiceOptionsError = (err as Error)?.message ?? String(err);
         console.warn('[elevenlabs] voice option lookup failed:', audioVoiceOptionsError);
       }
     }
@@ -3133,7 +3188,7 @@ export async function startServer({
         if (snap) pluginBlock = pluginPromptBlock(snap);
       } catch (err) {
         console.warn(
-          `[plugins] pluginBlock build failed: ${err?.message ?? err}`,
+          `[plugins] pluginBlock build failed: ${(err as Error)?.message ?? err}`,
         );
       }
     }
@@ -3167,7 +3222,7 @@ export async function startServer({
           if (blocks.length > 0) activeStageBlocks = blocks;
         }
       } catch (err) {
-        console.warn(`[plugins] activeStageBlocks build failed: ${(err)?.message ?? err}`);
+        console.warn(`[plugins] activeStageBlocks build failed: ${(err as Error)?.message ?? err}`);
       }
     }
 
@@ -3175,7 +3230,7 @@ export async function startServer({
       agentId,
       includeCodexImagegenOverride: false,
       skillBody,
-      skillName,
+      skillName: skillName ?? undefined,
       skillMode,
       skillModes: skillModes.size > 0 ? Array.from(skillModes) : undefined,
       designSystemBody,
@@ -3208,7 +3263,7 @@ export async function startServer({
       critiqueSkill: critiqueShouldRun ? critiqueSkill : undefined,
       locale: typeof locale === 'string' ? locale : undefined,
       sessionMode: normalizeConversationSessionMode(sessionMode),
-      mediaExecution,
+      mediaExecution: mediaExecution as MediaExecutionPolicy | undefined,
       streamFormat,
       connectedExternalMcp: Array.isArray(connectedExternalMcp)
         ? connectedExternalMcp
@@ -3252,15 +3307,15 @@ export async function startServer({
   // back to the canned v1 stub for diagnostic bisection or replay
   // of pre-Stage-D runs. Errors are swallowed (logged) so a bad
   // pipeline never blocks the agent run.
-  const firePipelineForRun = (args) => {
+  const firePipelineForRun = (args: { run: ChatRun; snapshot: any; runs: ChatRunService; db: Database.Database }) => {
     const { run, snapshot, runs, db: dbHandle } = args;
     if (!snapshot?.pipeline?.stages?.length) return;
     const env = { maxIterations: readPluginEnvKnobs().maxDevloopIterations };
-    const emitPipeline = (evt) => {
-      try { runs.emit(run, evt.kind, evt); } catch {/* ignore */}
+    const emitPipeline = (evt: { kind: string; [key: string]: unknown }) => {
+      try { runs.emit!(run as never, evt.kind, evt); } catch {/* ignore */}
     };
-    const emitGenui = (evt) => {
-      try { runs.emit(run, evt.kind, evt); } catch {/* ignore */}
+    const emitGenui = (evt: { kind: string; [key: string]: unknown }) => {
+      try { runs.emit!(run as never, evt.kind, evt); } catch {/* ignore */}
     };
     const projectIdForRun = run.projectId
       ?? snapshot.resolvedContext?.items?.[0]?.id
@@ -3268,9 +3323,9 @@ export async function startServer({
     const runnerMode = process.env.OD_PIPELINE_RUNNER === 'stub'
       ? 'stub'
       : 'registry';
-    let runStage;
+    let runStage: any;
     if (runnerMode === 'stub') {
-      runStage = ({ iteration }) => ({
+      runStage = ({ iteration }: { iteration: number }) => ({
         signals: {
           'critique.score':  iteration >= 0 ? 4 : 0,
           'preview.ok':      true,
@@ -3279,7 +3334,7 @@ export async function startServer({
       });
     } else {
       registerBuiltInAtomWorkers();
-      runStage = async ({ stage, iteration, snapshot: stageSnapshot }) => {
+      runStage = async ({ stage, iteration, snapshot: stageSnapshot }: { stage: any; iteration: number; snapshot: any }) => {
         const outcome = await runStageWithRegistry({
           db:             dbHandle,
           runId:          run.id,
@@ -3306,9 +3361,9 @@ export async function startServer({
       runStage,
       emitPipeline,
       emitGenui,
-    }).catch((err) => {
+    }).catch((err: unknown) => {
       try {
-        runs.emit(run, 'pipeline_stage_failed', {
+        runs.emit!(run as never, 'pipeline_stage_failed', {
           runId:      run.id,
           snapshotId: snapshot.snapshotId,
           message:    String(err?.message ?? err),
@@ -3317,7 +3372,7 @@ export async function startServer({
     });
   };
 
-  const startChatRun = async (chatBody, run) => {
+  const startChatRun = async (chatBody: Record<string, unknown>, run: ChatRun) => {
     run.analyticsTelemetry = {
       ...(run.analyticsTelemetry ?? {}),
       startChatRunStartedAt: Date.now(),
@@ -3459,8 +3514,8 @@ export async function startServer({
     // Project directory resolution lives in projects.ts so sandbox mode can
     // consistently reject imported-folder metadata that has no managed copy.
     let cwd = null;
-    let existingProjectFiles = [];
-    let existingProjectFolders = [];
+    let existingProjectFiles: Record<string, unknown>[] = [];
+    let existingProjectFolders: Record<string, unknown>[] = [];
     if (typeof projectId === 'string' && projectId) {
       try {
         const chatProject = getProject(db, projectId);
@@ -3567,7 +3622,7 @@ export async function startServer({
         })
       : null;
     let toolTokenRevoked = false;
-    const revokeToolToken = (reason) => {
+    const revokeToolToken = (reason: 'child_exit' | 'sse_end' | 'ttl_expired' | 'manual') => {
       if (toolTokenRevoked || !toolTokenGrant) return;
       toolTokenRevoked = true;
       toolTokenRegistry.revokeToken(toolTokenGrant.token, reason);
@@ -3581,14 +3636,14 @@ export async function startServer({
     // server the daemon already holds a valid Bearer for. We re-use both
     // values further down at .mcp.json write time — see the spawn block
     // below — instead of re-reading.
-    let externalMcpConfig = { servers: [] };
+    let externalMcpConfig: McpConfig = { servers: [] };
     if (!SANDBOX_RUNTIME.enabled) {
       try {
         externalMcpConfig = await readMcpConfig(RUNTIME_DATA_DIR);
       } catch (err) {
         console.warn(
           '[mcp-config] read failed:',
-          err && err.message ? err.message : err,
+          (err as Error)?.message ?? err,
         );
       }
     }
@@ -3620,14 +3675,14 @@ export async function startServer({
               const refreshed = await refreshAndPersistToken(
                 RUNTIME_DATA_DIR,
                 serverId,
-                tok,
+                tok as never,
               );
               if (refreshed) access = refreshed.accessToken;
             } catch (err) {
               console.warn(
                 '[mcp-oauth] refresh failed for',
                 serverId,
-                err && err.message ? err.message : err,
+                (err as Error)?.message ?? err,
               );
             }
           }
@@ -3644,7 +3699,7 @@ export async function startServer({
       } catch (err) {
         console.warn(
           '[mcp-tokens] read failed:',
-          err && err.message ? err.message : err,
+          (err as Error)?.message ?? err,
         );
       }
     }
@@ -4347,7 +4402,7 @@ export async function startServer({
           } catch (err) {
             console.warn(
               '[mcp-config] failed to write project .mcp.json:',
-              err && err.message ? err.message : err,
+              (err as Error)?.message ?? err,
             );
           }
         } else {
@@ -4357,7 +4412,7 @@ export async function startServer({
             if ((err && err.code) !== 'ENOENT') {
               console.warn(
                 '[mcp-config] failed to remove stale .mcp.json:',
-                err && err.message ? err.message : err,
+                (err as Error)?.message ?? err,
               );
             }
           }
@@ -4393,7 +4448,7 @@ export async function startServer({
       } catch (err) {
         console.warn(
           '[mcp-config] failed to build OPENCODE_CONFIG_CONTENT:',
-          err && err.message ? err.message : err,
+          (err as Error)?.message ?? err,
         );
       }
     }

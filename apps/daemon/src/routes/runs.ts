@@ -176,7 +176,7 @@ interface RunListFilters {
   status?: unknown;
 }
 
-interface ChatRunService {
+export interface ChatRunService {
   create(meta: RunCreateMeta): ChatRun;
   get(id: string): ChatRun | null;
   list(filters: RunListFilters): ChatRun[];

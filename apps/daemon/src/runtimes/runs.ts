@@ -75,15 +75,15 @@ export interface ChatRun {
   eventsLogPath: string | null;
   eventsLogStream: fs.WriteStream | null;
   eventsLogClosed: boolean;
-  analyticsContext?: AnalyticsContext;
-  analyticsTelemetry?: RunTelemetryTimestamps;
-  clientType?: 'desktop' | 'web';
-  designSystemId?: string | null;
-  designSystemRequestedId?: string | null;
-  designSystemSelectionSource?: 'request' | 'plugin' | 'project' | 'app-default' | 'none' | null;
-  designSystemDigest?: string | null;
-  promptCache?: ChatRunStatusResponse['promptCache'];
-  resumable?: boolean;
+  analyticsContext?: AnalyticsContext | undefined;
+  analyticsTelemetry?: RunTelemetryTimestamps | undefined;
+  clientType?: 'desktop' | 'web' | undefined;
+  designSystemId?: string | null | undefined;
+  designSystemRequestedId?: string | null | undefined;
+  designSystemSelectionSource?: 'request' | 'plugin' | 'project' | 'app-default' | 'none' | null | undefined;
+  designSystemDigest?: string | null | undefined;
+  promptCache?: ChatRunStatusResponse['promptCache'] | undefined;
+  resumable?: boolean | undefined;
   [key: string]: unknown;
 }
 
