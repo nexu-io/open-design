@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * build.ts — the integration seam that turns one input (a Brand kit or a raw
  * URL) into a complete, writable BrandSystem.
@@ -55,10 +54,10 @@ function normalizeBrandForAssembly(brand: Brand): Brand {
   return {
     ...brand,
     logo: {
-      primary: null,
-      alternates: [],
-      notes: "",
       ...(brand.logo ?? {}),
+      primary: brand.logo?.primary ?? null,
+      alternates: brand.logo?.alternates ?? [],
+      notes: brand.logo?.notes ?? "",
     },
     colors: Array.isArray(brand.colors) ? brand.colors : [],
     typography: brand.typography ?? {},
@@ -288,7 +287,7 @@ function buildIndexPage(
   const esc = (v: string) =>
     v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-  const links = [
+  const links = ([
     ["kit.html", "Component kit (light)"],
     ["kit.dark.html", "Component kit (dark)"],
     ["artifacts/landing.html", "Landing page"],
@@ -301,7 +300,7 @@ function buildIndexPage(
     ["theme.json", "theme.json (antd)"],
     ["seed.json", "seed.json"],
     ["BRAND-SYSTEM.md", "BRAND-SYSTEM.md"],
-  ]
+  ] as Array<[string, string]>)
     .map(
       ([href, label]) =>
         `<li><a href="${esc(href)}" style="color:var(--brand-color-link);text-decoration:none;">${esc(
@@ -343,7 +342,12 @@ export function buildBrandSystem(
   const normalizedBrand = normalizeBrandForAssembly(brand);
   const slug = opts?.slug ? slugify(opts.slug) : slugify(normalizedBrand.name);
   const seed = seedFromBrand(normalizedBrand);
-  return assemble({ slug, brand: normalizedBrand, seed, fontFiles: opts?.fontFiles });
+  return assemble({
+    slug,
+    brand: normalizedBrand,
+    seed,
+    ...(opts?.fontFiles !== undefined ? { fontFiles: opts.fontFiles } : {}),
+  });
 }
 
 // ─────────────────────────── public: from a URL ─────────────────────────────
