@@ -555,6 +555,42 @@ interface CliFileListResponse {
   [key: string]: unknown;
 }
 
+interface CliTemplateSummary {
+  id?: string;
+  name?: string;
+  description?: string;
+  [key: string]: unknown;
+}
+
+interface CliTemplateListResponse {
+  templates?: CliTemplateSummary[];
+  [key: string]: unknown;
+}
+
+interface CliTemplateResponse {
+  template?: CliTemplateSummary;
+  [key: string]: unknown;
+}
+
+interface CliConversationSummary {
+  id?: string;
+  title?: string;
+  sessionMode?: string;
+  seedFromConversationId?: string;
+  forkAfterMessageId?: string;
+  [key: string]: unknown;
+}
+
+interface CliConversationResponse {
+  conversation?: CliConversationSummary;
+  [key: string]: unknown;
+}
+
+interface CliConversationListResponse {
+  conversations?: CliConversationSummary[];
+  [key: string]: unknown;
+}
+
 interface BrandResponse {
   id?: string;
   projectId?: string;
@@ -6400,12 +6436,12 @@ Common options:
         process.exit(3);
       }
       if (!resp.ok) return structuredHttpFailure(resp);
-      const data = (await resp.json()) as Record<string, unknown>;
+      const data = (await resp.json()) as CliTemplateListResponse;
       if (flags.json) {
         process.stdout.write(JSON.stringify(data, null, 2) + '\n');
         return;
       }
-      const templates = Array.isArray(data?.templates) ? data.templates : [];
+      const templates = data.templates ?? [];
       if (templates.length === 0) {
         console.log('No templates. Save one with `od templates save <projectId> --name "..."`.');
         return;
@@ -6427,7 +6463,10 @@ Common options:
         console.error('--name required');
         process.exit(2);
       }
-      const body = { name, sourceProjectId: projectId };
+      const body: { name: string; sourceProjectId: string; description?: string } = {
+        name,
+        sourceProjectId: projectId,
+      };
       if (typeof flags.description === 'string' && flags.description.length > 0) {
         body.description = flags.description;
       }
@@ -6455,7 +6494,7 @@ Common options:
         if (resp.status === 400) return structuredHttpFailure(resp, 'missing-input');
         return structuredHttpFailure(resp);
       }
-      const data = (await resp.json()) as Record<string, unknown>;
+      const data = (await resp.json()) as CliTemplateResponse;
       if (flags.json) {
         process.stdout.write(JSON.stringify(data, null, 2) + '\n');
         return;
@@ -6527,7 +6566,12 @@ Common options:
         console.error('Usage: od conversation new <projectId> [--title "<title>"] [--seed-from <cid>] [--fork-after <mid>]');
         process.exit(2);
       }
-      const body = {};
+      const body: {
+        title?: string;
+        sessionMode?: string;
+        seedFromConversationId?: string;
+        forkAfterMessageId?: string;
+      } = {};
       if (typeof flags.title === 'string') body.title = flags.title;
       const sessionMode = normalizeChatSessionModeFlag(flags.mode);
       if (sessionMode) body.sessionMode = sessionMode;
@@ -6547,7 +6591,7 @@ Common options:
         body:    JSON.stringify(body),
       });
       if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
-      const data = (await resp.json()) as Record<string, unknown>;
+      const data = (await resp.json()) as CliConversationResponse;
       if (flags.json) {
         process.stdout.write(JSON.stringify(data, null, 2) + '\n');
         return;
@@ -6564,7 +6608,7 @@ Common options:
       }
       const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}/conversations`);
       if (!resp.ok) return structuredHttpFailure(resp);
-      const data = (await resp.json()) as Record<string, unknown>;
+      const data = (await resp.json()) as CliConversationListResponse;
       process.stdout.write(JSON.stringify(data, null, 2) + '\n');
       return;
     }
@@ -6576,7 +6620,7 @@ Common options:
       }
       const resp = await fetch(`${base}/api/conversations/${encodeURIComponent(id)}`);
       if (!resp.ok) return structuredHttpFailure(resp);
-      const data = (await resp.json()) as Record<string, unknown>;
+      const data = (await resp.json()) as CliConversationResponse;
       process.stdout.write(JSON.stringify(data, null, 2) + '\n');
       return;
     }
@@ -6627,7 +6671,12 @@ Common options:
         console.error('Usage: od chat new --project <id> [--seed-from <cid>] [--fork-after <mid>] [--title "<title>"]');
         process.exit(2);
       }
-      const body = {};
+      const body: {
+        title?: string;
+        sessionMode?: string;
+        seedFromConversationId?: string;
+        forkAfterMessageId?: string;
+      } = {};
       if (typeof flags.title === 'string') body.title = flags.title;
       const sessionMode = normalizeChatSessionModeFlag(flags.mode);
       if (sessionMode) body.sessionMode = sessionMode;
@@ -6647,7 +6696,7 @@ Common options:
         body:    JSON.stringify(body),
       });
       if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
-      const data = (await resp.json()) as Record<string, unknown>;
+      const data = (await resp.json()) as CliConversationResponse;
       if (flags.json) {
         process.stdout.write(JSON.stringify(data, null, 2) + '\n');
         return;
