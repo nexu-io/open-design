@@ -42,6 +42,7 @@ import { createMarketplaceFetcher as createMarketplaceFetcherWithContract } from
 import { copyPluginFolderForProjectContext } from './runtimes/plugin-context.js';
 import { readProjectPluginManifest as readProjectPluginManifestWithContract } from './plugins/project-manifest.js';
 import { createProjectEventRegistry, type ProjectEventPayload } from './runtimes/project-events.js';
+import type { ResolveSnapshotResult } from './plugins/resolve-snapshot.js';
 import {
   createLiveArtifactEventEmitter,
   type LiveArtifactAction,
@@ -657,7 +658,7 @@ import {
 } from './routes/static-resource.js';
 export { rewriteSkillAssetUrls } from './routes/static-resource.js';
 import { registerRoutineRoutes, routineDbRowToContract } from './routes/routine.js';
-import type { Routine } from './routines.js';
+import type { Routine, RoutineRun } from './routines.js';
 import { resolveAmrModelProbe } from './runtimes/amr-model-probe.js';
 import { createPluginInstallationHelpers, normalizeProjectPluginFolderPath, resolveProjectChildDirectory, type PluginInstallationHelpersDeps } from './services/plugin-installation.js';
 import { createPluginShareTaskStore } from './services/plugin-share-tasks.js';
@@ -747,7 +748,6 @@ import { createOpenDesignPublicMetadataService } from './services/open-design-pu
 /** @typedef {import('@open-design/contracts').ChatSseEvent} ChatSseEvent */
 /** @typedef {import('@open-design/contracts').ProxyStreamRequest} ProxyStreamRequest */
 /** @typedef {import('@open-design/contracts').ProxySseEvent} ProxySseEvent */
-/** @typedef {import('@open-design/contracts').ProjectConversationCreatedSsePayload} ProjectConversationCreatedSsePayload */
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -6815,8 +6815,8 @@ export async function startServer({
         : {}),
     };
     const stamp = formatLocalProjectTimestamp(new Date(now).toISOString());
-    let projectId;
-    let projectName;
+    let projectId: string | null = null;
+    let projectName: string | null = null;
     const scheduledPlaceholderProjectId = `routine-pending-project-${runId}`;
     const scheduledPlaceholderConversationId = `routine-pending-conv-${runId}`;
     let createdProjectId: string | null = null;
@@ -6855,10 +6855,10 @@ export async function startServer({
     }
 
     let conversationId = `routine-conv-${randomUUID()}`;
-    let conversationCreatedEvent: ProjectConversationCreatedSsePayload | null = null;
+    let conversationCreatedEvent: ProjectEventPayload | null = null;
     const routineConversationTitle = () => routine.target.mode === 'reuse'
       ? `${routine.name} · ${stamp}`
-      : projectName;
+      : projectName ?? routine.name;
     const createRoutineConversation = () => {
       if (createdConversationId) return;
       if (!projectId) createRoutineProject();
@@ -6882,7 +6882,7 @@ export async function startServer({
     };
 
     const assistantMessageId = `routine-assistant-${randomUUID()}`;
-    let resolvedRoutineSnapshot = null;
+    let resolvedRoutineSnapshot: ResolveSnapshotResult = null;
     // Tracks any snapshot id that `resolvePluginSnapshot()` already pinned
     // to the reused project before the resolver threw on a later linking
     // step. `finalizeOk()` performs `linkSnapshotToProject()` BEFORE
@@ -6907,7 +6907,7 @@ export async function startServer({
             pluginId: primaryPluginId,
             pluginInputs: { prompt: routine.prompt },
           },
-          projectId,
+          projectId: projectId ?? scheduledPlaceholderProjectId,
           conversationId,
           registry,
           activeProjectDesignSystem:
@@ -6944,14 +6944,9 @@ export async function startServer({
       clientRequestId: `routine-${trigger}-${randomUUID()}`,
       agentId,
       mediaExecution: defaultMediaExecutionPolicy(),
-      ...(resolvedRoutineSnapshot?.ok
-        ? {
-            appliedPluginSnapshotId: resolvedRoutineSnapshot.snapshotId,
-            pluginId: resolvedRoutineSnapshot.snapshot.pluginId,
-          }
-        : {}),
     });
-    const persistPreparedRun = async (routineRun = null) => {
+    const getResolvedRoutineSnapshot = (): ResolveSnapshotResult => resolvedRoutineSnapshot;
+    const persistPreparedRun = async (routineRun: RoutineRun | null = null) => {
       if (!projectId) {
         createRoutineProject();
       }
@@ -6968,11 +6963,12 @@ export async function startServer({
         routineRun.agentRunId = run.id;
       }
       await resolveRoutinePluginSnapshot();
-      if (resolvedRoutineSnapshot?.ok) {
-        run.appliedPluginSnapshotId = resolvedRoutineSnapshot.snapshotId;
-        run.pluginId = resolvedRoutineSnapshot.snapshot.pluginId;
+      const resolvedSnapshot = getResolvedRoutineSnapshot();
+      if (resolvedSnapshot?.ok) {
+        run.appliedPluginSnapshotId = resolvedSnapshot.snapshotId;
+        run.pluginId = resolvedSnapshot.snapshot.pluginId;
         const { linkSnapshotToRun } = await import('./plugins/snapshots.js');
-        linkSnapshotToRun(db, resolvedRoutineSnapshot.snapshotId, run.id);
+        linkSnapshotToRun(db, resolvedSnapshot.snapshotId, run.id);
       }
       upsertMessage(db, conversationId, {
         id: `routine-user-${run.id}`,
@@ -6996,7 +6992,7 @@ export async function startServer({
       // Notify any open `ProjectView` only after the routine run row has
       // been accepted and preparation has completed, so failed setup does not
       // surface phantom conversations (#1361).
-      if (conversationCreatedEvent) emitProjectEvent(projectId, conversationCreatedEvent);
+      if (conversationCreatedEvent) emitProjectEvent(projectId ?? undefined, conversationCreatedEvent);
       design.runs.start(run, () => startChatRun({
         agentId,
         projectId,
@@ -7039,14 +7035,15 @@ export async function startServer({
         // `resolvePluginSnapshot()` left pinned on the project if it threw
         // partway through linking — see the comment on
         // `partiallyAppliedSnapshotId` above.
+        const resolvedSnapshot = getResolvedRoutineSnapshot();
         const snapshotIdToDiscard =
-          resolvedRoutineSnapshot?.ok
-            ? resolvedRoutineSnapshot.snapshotId
+          resolvedSnapshot?.ok
+            ? resolvedSnapshot.snapshotId
             : partiallyAppliedSnapshotId;
         if (snapshotIdToDiscard) {
           restoreProjectSnapshotLink(
             db,
-            projectId,
+            projectId ?? scheduledPlaceholderProjectId,
             snapshotIdToDiscard,
             previousProjectSnapshotId,
             run.id,
@@ -7085,7 +7082,7 @@ export async function startServer({
             runId,
             trigger,
             status: finalStatus.status,
-            projectId,
+            projectId: projectId ?? scheduledPlaceholderProjectId,
             conversationId,
             agentRunId: run.id,
             summary: `Routine "${routine.name}" ${finalStatus.status}.`,
@@ -7104,14 +7101,14 @@ export async function startServer({
         summary: failureError
           ? `Routine "${routine.name}" failed: ${failureError}`
           : `Routine "${routine.name}" ${finalStatus.status}.${evolutionSummary}`,
-        error: failureError ?? undefined,
-        errorCode: failureErrorCode ?? undefined,
+        ...(failureError ? { error: failureError } : {}),
+        ...(failureErrorCode ? { errorCode: failureErrorCode } : {}),
       };
     })();
 
     return {
-      projectId: run.projectId,
-      conversationId: run.conversationId,
+      projectId: run.projectId ?? scheduledPlaceholderProjectId,
+      conversationId: run.conversationId ?? scheduledPlaceholderConversationId,
       agentRunId: run.id,
       completion,
       prepare: persistPreparedRun,
