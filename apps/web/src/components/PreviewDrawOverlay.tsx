@@ -455,24 +455,31 @@ export function PreviewDrawOverlay({
   // marks with an anchor are re-projected. Anchoring is best-effort — a preview
   // that reports no elements leaves marks on their frame-relative position
   // rather than blocking the annotation.
-  async function syncContentAnchors(): Promise<void> {
-    // One probe in flight at a time. A burst of scroll/resize events during a
-    // slow bridge must not stack timeout-bound listeners — remember that work
-    // arrived, and run ONE trailing pass when the current probe settles.
-    if (anchorSyncInFlightRef.current) {
+  function syncContentAnchors(): Promise<void> {
+    // One probe in flight at a time: a burst of scroll/resize events during a
+    // slow bridge must not stack timeout-bound listeners. But callers AWAIT
+    // this — the pre-capture sync in requestSnapshot relies on the returned
+    // promise covering the work — so a coalesced call must not resolve early:
+    // it joins the in-flight chain, which also runs the trailing pass inline
+    // before settling. Send therefore always observes the final anchors, and
+    // the screenshot and structured bounds read the same state (#6361).
+    if (anchorSyncPromiseRef.current) {
       anchorSyncTrailingRef.current = true;
-      return;
+      return anchorSyncPromiseRef.current;
     }
-    anchorSyncInFlightRef.current = true;
-    try {
-      await syncContentAnchorsInner();
-    } finally {
-      anchorSyncInFlightRef.current = false;
-      if (anchorSyncTrailingRef.current) {
-        anchorSyncTrailingRef.current = false;
-        scheduleContentReanchor('live');
+    const chain = (async () => {
+      try {
+        await syncContentAnchorsInner();
+        while (anchorSyncTrailingRef.current) {
+          anchorSyncTrailingRef.current = false;
+          await syncContentAnchorsInner();
+        }
+      } finally {
+        anchorSyncPromiseRef.current = null;
       }
-    }
+    })();
+    anchorSyncPromiseRef.current = chain;
+    return chain;
   }
 
   async function syncContentAnchorsInner(): Promise<void> {
@@ -624,8 +631,9 @@ export function PreviewDrawOverlay({
   // probed iframe), so a late reply can never commit.
   const anchorProbeGenerationRef = useRef(0);
   // In-flight coalescing for syncContentAnchors: at most one probe awaits the
-  // bridge at a time; bursts collapse into a single trailing pass.
-  const anchorSyncInFlightRef = useRef(false);
+  // bridge at a time; bursts collapse into a single trailing pass that runs
+  // inside the shared promise so awaiting callers see the final state.
+  const anchorSyncPromiseRef = useRef<Promise<void> | null>(null);
   const anchorSyncTrailingRef = useRef(false);
   // The overlay can stay mounted (and even active) across a file switch; the
   // iframe element is often reused, so the per-frame reset above won't fire.

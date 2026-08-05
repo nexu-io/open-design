@@ -736,6 +736,92 @@ describe('PreviewDrawOverlay content anchoring (issue #6361)', () => {
     }
   });
 
+  it('makes Send await an in-flight probe so bounds reflect the final anchors', async () => {
+    // Send can arrive while a content-anchor probe is mid-await. The
+    // pre-capture sync must JOIN that probe (and its trailing pass), not
+    // resolve early — otherwise the capture composites and the structured
+    // bounds are read from pre-probe refs.
+    frame.w = 692;
+    frame.h = 666;
+    const restoreRect = installFrameGeometry();
+    const observer = installResizeObserver();
+    const anchors = vi.mocked(requestPreviewAnchorTargets);
+    anchors.mockReset();
+    let releaseSlow: (() => void) | null = null;
+    anchors
+      // commit-time probe: fast, anchors the mark against ZOOMED.
+      .mockImplementationOnce(async () => ({ answered: true, targets: ZOOMED }) as never)
+      // scroll-triggered probe: hangs until released with RESTORED boxes
+      // (the artifact reflowed 19.5px while the probe was in flight).
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            releaseSlow = () => resolve({ answered: true, targets: RESTORED } as never);
+          }) as never,
+      )
+      .mockImplementation(async () => ({ answered: true, targets: RESTORED }) as never);
+
+    const annotation = vi.fn((event: Event) => {
+      const detail = (event as CustomEvent<{ ack?: (r: { ok: boolean }) => void }>).detail;
+      detail.ack?.({ ok: true });
+    });
+    window.addEventListener('opendesign:annotation', annotation);
+
+    try {
+      const { container, getByRole } = render(
+        <PreviewDrawOverlay active>
+          <iframe title="srcdoc" data-od-render-mode="srcdoc" data-od-active="true" />
+        </PreviewDrawOverlay>,
+      );
+      const wrap = container.querySelector<HTMLElement>('.preview-draw-overlay')!;
+      const canvas = container.querySelector<HTMLCanvasElement>('canvas')!;
+      const iframe = container.querySelector<HTMLIFrameElement>('iframe')!;
+      Object.defineProperty(wrap, 'offsetWidth', { configurable: true, get: () => frame.w });
+      Object.defineProperty(wrap, 'offsetHeight', { configurable: true, get: () => frame.h });
+      observer.trigger();
+
+      // Mark BAND 05 while zoomed; the commit probe anchors it (342).
+      fireEvent.pointerDown(canvas, { clientX: 40, clientY: 342, pointerId: 1 });
+      fireEvent.pointerMove(canvas, { clientX: 600, clientY: 382, pointerId: 1 });
+      fireEvent.pointerUp(canvas, { clientX: 600, clientY: 382, pointerId: 1 });
+      await waitFor(() => expect(anchors).toHaveBeenCalledTimes(1));
+      await new Promise((r) => setTimeout(r, 350));
+
+      // A scroll starts the slow probe...
+      fireEvent(
+        window,
+        new MessageEvent('message', {
+          data: { type: 'od:preview-scroll', canvasTop: 1 },
+          source: iframe.contentWindow,
+        }),
+      );
+      await waitFor(() => expect(anchors).toHaveBeenCalledTimes(2));
+
+      // ...and Send fires BEFORE it resolves.
+      const input = container.querySelector<HTMLInputElement>('.preview-draw-note-input')!;
+      fireEvent.change(input, { target: { value: 'Send must wait for the probe.' } });
+      fireEvent.click(getByRole('button', { name: 'Send' }));
+      await new Promise((r) => setTimeout(r, 100));
+      expect(annotation).not.toHaveBeenCalled();
+
+      // The probe resolves with the post-reflow boxes; the awaited pre-capture
+      // sync (joined onto the same chain) must land the mark on 322.5.
+      releaseSlow!();
+
+      await waitFor(() => expect(annotation).toHaveBeenCalledTimes(1));
+      const detail = (annotation.mock.calls[0]?.[0] as CustomEvent<{
+        bounds?: { x: number; y: number; width: number; height: number };
+      }>).detail;
+
+      expect(detail.bounds!.y).toBeCloseTo(322.5, 0);
+      expect(detail.bounds!.height).toBeCloseTo(40, 0);
+    } finally {
+      window.removeEventListener('opendesign:annotation', annotation);
+      observer.restore();
+      restoreRect();
+    }
+  });
+
   it('resets the probe budget when the file changes under the open overlay', async () => {
     frame.w = 692;
     frame.h = 666;
