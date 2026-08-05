@@ -222,7 +222,7 @@ import {
 } from './skills.js';
 import { validateLinkedDirs } from './linked-dirs.js';
 import { installFromTarget, uninstallById, sanitizeRepoName } from './library-install.js';
-import { buildWindowsFolderDialogCommand, parseFolderDialogStdout } from './native-folder-dialog.js';
+import { openNativeFolderDialog as runNativeFolderDialog } from './native-folder-dialog.js';
 import {
   AssetCacheError,
   assetCacheRewriteUrl,
@@ -2038,48 +2038,6 @@ function optionalToolGrantFromRequest(req, options = {}) {
   return validation.ok ? validation.grant : null;
 }
 
-function openNativeFolderDialog() {
-  return new Promise((resolve) => {
-    const platform = process.platform;
-    if (platform === 'darwin') {
-      // `choose folder` is handled specially by the system: it presents a fully
-      // interactive standard navigation panel that reliably takes key focus
-      // (unlike a JXA-driven NSOpenPanel from background-only osascript, which
-      // renders but can't be clicked). That standard panel already includes a
-      // "New Folder" button in the bottom-left, so users can create a folder
-      // inline without any extra wiring.
-      execFile(
-        'osascript',
-        ['-e', 'POSIX path of (choose folder with prompt "Select a code folder to link")'],
-        { timeout: 120_000 },
-        (err, stdout) => {
-          if (err) return resolve(null);
-          const p = stdout.trim().replace(/\/$/, '');
-          resolve(p || null);
-        },
-      );
-    } else if (platform === 'linux') {
-      execFile(
-        'zenity',
-        ['--file-selection', '--directory', '--title=Select a code folder to link'],
-        { timeout: 120_000 },
-        (err, stdout) => {
-          if (err) return resolve(null);
-          const p = stdout.trim();
-          resolve(p || null);
-        },
-      );
-    } else if (platform === 'win32') {
-      const command = buildWindowsFolderDialogCommand();
-      execFile(command.command, command.args, { timeout: 120_000 }, (err, stdout) => {
-        resolve(parseFolderDialogStdout(err, stdout));
-      });
-    } else {
-      resolve(null);
-    }
-  });
-}
-
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 fs.mkdirSync(ARTIFACTS_DIR, { recursive: true });
 
@@ -3133,7 +3091,10 @@ export async function startServer({
   };
   const appConfigDeps = { readAppConfig, writeAppConfig };
   const orbitDeps = { orbitService };
-  const nativeDialogDeps = { openBrowser, openNativeFolderDialog };
+  const nativeDialogDeps = {
+    openBrowser,
+    openNativeFolderDialog: () => runNativeFolderDialog(execFile),
+  };
   const researchDeps = { searchResearch, ResearchError };
   const liveArtifactDeps = {
     createLiveArtifact,
