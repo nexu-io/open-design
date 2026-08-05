@@ -2457,7 +2457,16 @@ function OnboardingView({
         runtime_type: 'local_cli',
       });
       setRuntime('local');
-      void scanCliAgents({ preferExisting: true });
+      // Re-entering the Local runtime must not restart the CLI scan:
+      // if a scan already completed (with or without detected agents),
+      // reuse it. Only the explicit "Rescan" button should re-run
+      // detection. See issue #2646.
+      const scanAlreadyCompleted =
+        cliScanStatus === 'done' ||
+        (cliScanStatus !== 'scanning' && visibleAgentIds.length > 0);
+      if (!scanAlreadyCompleted) {
+        void scanCliAgents({ preferExisting: true });
+      }
       setStep(2);
       return;
     }
