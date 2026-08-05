@@ -29,6 +29,7 @@ import {
 import {
   RECOVERABLE_EXIT_CODES,
   classifyStructuredHttpFailure,
+  type StructuredCliError,
 } from './runtimes/cli-error-contract.js';
 import {
   execFileBuffered as runBufferedCommand,
@@ -49,7 +50,7 @@ import { runResearch } from './research/cli.js';
 import { runDiagnostics as runDiagnosticsCommand } from './diagnostics/cli.js';
 import { runVersion as runVersionCommand } from './version/cli.js';
 import { runMcp as runMcpCommand } from './mcp/cli.js';
-import { runExport as runExportCommand } from './export/cli.js';
+import { EXPORT_FORMATS, runExport as runExportCommand } from './export/cli.js';
 import { runMediaWait as runMediaWaitCommand } from './media/wait-cli.js';
 import { runMediaGenerate as runMediaGenerateCommand } from './media/generate-cli.js';
 import { runPollUntilDoneOrBudget } from './media/poll-cli.js';
@@ -962,8 +963,10 @@ otherwise a minimal \`od mcp --daemon-url <url>\` command is used.`);
 // code + a JSON envelope on stderr. Code agents read these to decide
 // whether the failure is recoverable (re-grant capabilities, prompt
 // the user, retry with --grant-caps, etc.).
-function exitWithStructuredError({ code, message, data }) {
-  const exit = RECOVERABLE_EXIT_CODES[code] ?? 1;
+function exitWithStructuredError({ code, message, data }: StructuredCliError): never {
+  const exit = code in RECOVERABLE_EXIT_CODES
+    ? RECOVERABLE_EXIT_CODES[code as keyof typeof RECOVERABLE_EXIT_CODES]
+    : 1;
   const envelope = { error: { code, message, data: data ?? {} } };
   process.stderr.write(JSON.stringify(envelope) + '\n');
   process.exit(exit);
@@ -981,7 +984,10 @@ function exitWithStructuredError({ code, message, data }) {
 // structured envelope instead of collapsing to `HTTP <status>: `, which
 // would drop the only diagnostic the daemon actually returned to a
 // headless caller.
-async function structuredHttpFailure(resp, fallbackCode = 'daemon-not-running') {
+async function structuredHttpFailure(
+  resp: Parameters<typeof classifyStructuredHttpFailure>[0],
+  fallbackCode = 'daemon-not-running',
+): Promise<never> {
   const failure = await classifyStructuredHttpFailure(resp, fallbackCode);
   exitWithStructuredError(failure);
 }

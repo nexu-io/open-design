@@ -4,7 +4,7 @@ const EXPORT_STRING_FLAGS = new Set([
   'daemon-url', 'project', 'format', 'out', 'image-format', 'title', 'file',
 ]);
 const EXPORT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'deck']);
-const EXPORT_FORMATS = ['pdf', 'image'] as const;
+export const EXPORT_FORMATS = ['pdf', 'image'] as const;
 const EXPORT_IMAGE_FORMATS = ['png', 'jpeg'] as const;
 
 export interface ExportCliDeps {
