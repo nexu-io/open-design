@@ -14,44 +14,7 @@ const copy: OpenDesignPluginCopy = {
     chatgptLabel: 'application de bureau ChatGPT',
     installAria: 'Installer Open Design Cloud dans Codex/ChatGPT',
     copy: 'Copier',
-    github: 'Voir le code source sur GitHub ↗',
-  },
-  agentInstall: {
-    howToName: 'Installer le plugin Open Design dans Codex',
-    howToDescription:
-      'Étapes exécutables par un agent pour installer le plugin Open Design pour Codex et enregistrer son MCP local.',
-    eyebrow: 'Protocole d’installation lisible par les agents',
-    title: 'Effectuez l’installation complète du plugin Codex.',
-    intro:
-      'Si l’utilisateur vous a demandé d’installer Open Design, exécutez ce protocole dans l’ordre. Cette demande autorise uniquement les modifications de la configuration des plugins Codex et du MCP de l’utilisateur. Préservez les autres marketplaces, plugins, serveurs MCP et l’état d’authentification.',
-    downloadLabel: 'Page officielle de téléchargement de Open Design ↗',
-    steps: [
-      {
-        title: 'Vérifier au préalable l’environnement pris en charge',
-        body:
-          'Lisez plugin.minimumCodexCliVersion et plugin.minimumOpenDesignVersion dans release-manifest.json. Avant toute modification de la configuration, exigez le respect de ces deux minimums. Acceptez la version du runtime Open Design uniquement si elle provient de la CLI Open Design interrogée ou de CFBundleShortVersionString dans un bundle d’application macOS signé qui réussit les vérifications de signature de code et de Gatekeeper. Si od est introuvable ou masqué par un autre exécutable dans le PATH, notamment /usr/bin/od, ou si le daemon est arrêté, passez à la vérification du bundle signé. Si aucune des deux vérifications fiables n’est disponible, arrêtez-vous avant toute modification, dirigez l’utilisateur vers Open Design Settings → MCP server pour copier l’extrait propre au client contenant le chemin absolu, puis réessayez. Ne dirigez l’utilisateur vers la page officielle de téléchargement que si l’application est absente ou trop ancienne ; ne téléchargez jamais silencieusement un programme d’installation et n’exécutez jamais de script non vérifié.',
-      },
-      {
-        title: 'Inspecter avant de modifier la configuration',
-        body:
-          'Lisez dans release-manifest.json le sélecteur et la version requis, puis comparez-les à l’état de Codex que vous avez inspecté. Inspectez l’état du MCP uniquement au moyen de l’instantané MCP filtré produit à partir de codex mcp list --json. N’émettez que name, enabled, transport.type et command ; supprimez les champs args, env, env_vars, headers et token avant toute sortie. L’absence d’un résultat open-design est attendue et non bloquante. N’affichez et ne communiquez jamais la liste brute ni la sortie de codex mcp get open-design --json, car les valeurs de transport peuvent contenir des informations d’authentification. Si le nom de marketplace open-design pointe vers une autre source, arrêtez-vous et signalez le conflit. Ne conservez open-design@open-design que si sa version installée correspond à la version déclarée dans release-manifest.json.',
-      },
-      {
-        title: 'Installer uniquement les composants manquants',
-        body:
-          'N’exécutez la commande de la marketplace que si la marketplace canonique est absente et, si son ajout échoue, arrêtez-vous sans lancer la commande du plugin. Exécutez la commande du plugin si open-design@open-design est manquant. Si une version différente est installée, demandez confirmation à l’utilisateur avant toute mise à jour ou réinstallation ; uniquement après avoir reçu une confirmation explicite, relancez cette étape avec OPEN_DESIGN_PLUGIN_UPDATE_CONFIRMED=1. Ne sautez l’étape d’installation que si la version exacte requise est présente. Un résultat alreadyAdded: true indique une réussite. Ne modifiez pas manuellement la configuration de Codex et ne copiez pas les fichiers du plugin dans le répertoire d’accueil de Codex.',
-      },
-      {
-        title: 'Garantir la disponibilité du MCP Open Design local',
-        body:
-          'Ne conservez un MCP open-design existant que s’il est activé, s’il utilise stdio et si son champ command est un chemin absolu correspondant à un lanceur Open Design vérifié. Sinon, exécutez le programme d’installation du MCP fourni par l’application Open Design installée. Sur les systèmes POSIX, n’exécutez le chemin od résolu qu’après que sa vérification a renvoyé open-design-cli:mcp-install:v1. Si ce chemin est introuvable, masqué par /usr/bin/od ou si son exécution n’aboutit pas, utilisez /usr/bin/open avec le bundle d’application macOS signé et vérifié ainsi que --headless --mcp-install codex, puis interrogez uniquement l’instantané MCP filtré en appliquant les mêmes contrôles structurels. Si aucun lanceur vérifié n’est disponible, arrêtez-vous, dirigez l’utilisateur vers Open Design Settings → MCP server pour copier l’extrait propre au client contenant le chemin absolu, puis réessayez cette étape. Ne devinez jamais un port localhost et n’exécutez jamais codex mcp login ; la connexion à Vela doit s’effectuer dans Open Design.',
-      },
-      {
-        title: 'Vérifier, rendre compte et démarrer une nouvelle tâche',
-        body:
-          'Vérifiez l’identifiant de plugin open-design@open-design, sa source de marketplace canonique et une version installée qui correspond exactement à plugin.version dans release-manifest.json. Utilisez l’instantané MCP filtré pour confirmer la présence d’un stdio MCP activé nommé open-design, dont le champ command est un chemin absolu correspondant au même lanceur Open Design vérifié que celui utilisé lors de l’installation. N’inspectez que name, enabled, transport.type et command ; les valeurs brutes de args, env, env_vars, headers, token, bearer token, API key et des informations d’authentification Vela ne doivent jamais apparaître dans les sorties ni dans les rapports. Indiquez ce qui a été installé ainsi que tout prérequis restant lié à Open Design ou à la connexion à Vela. Démarrez une nouvelle tâche Codex afin qu’elle charge l’instantané du plugin installé, puis invoquez @open-design.',
-      },
-    ],
+    github: 'Voir le guide d’installation sur GitHub ↗',
   },
   demo: {
     title: 'Installez-le une fois. Créez depuis Codex/ChatGPT.',

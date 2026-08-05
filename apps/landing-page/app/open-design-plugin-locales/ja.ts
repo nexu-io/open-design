@@ -15,44 +15,7 @@ const ja: OpenDesignPluginCopy = {
     chatgptLabel: 'ChatGPT デスクトップアプリの任意のタスクに入力してください',
     installAria: 'Open Design Cloud を Codex/ChatGPT にインストール',
     copy: 'コピー',
-    github: 'GitHub でソースを見る ↗',
-  },
-  agentInstall: {
-    howToName: 'Codex に Open Design プラグインをインストール',
-    howToDescription:
-      'Open Design の Codex プラグインをインストールし、ローカル MCP を登録するためにエージェントが実行できる手順です。',
-    eyebrow: 'エージェントが読み取れるインストールプロトコル',
-    title: 'Codex プラグインを完全にインストールする。',
-    intro:
-      'ユーザーから Open Design のインストールを依頼された場合は、このプロトコルを順番に実行してください。この依頼で許可されているのは、ユーザーの Codex プラグインと MCP 設定の変更に限られます。関係のないマーケットプレイス、プラグイン、MCP サーバー、認証状態はそのまま保持してください。',
-    downloadLabel: 'Open Design 公式ダウンロードページ ↗',
-    steps: [
-      {
-        title: '対応環境を事前確認する',
-        body:
-          'release-manifest.json から plugin.minimumCodexCliVersion と plugin.minimumOpenDesignVersion を読み取ってください。設定を変更する前に、両方の最小要件を満たしていることを確認してください。Open Design のランタイムバージョンとして受け入れてよいのは、プローブした Open Design CLI が報告した値、またはコード署名と Gatekeeper のチェックに合格した署名済み macOS アプリバンドル内の CFBundleShortVersionString の値だけです。od が見つからない場合、PATH 上でシャドーイングされている場合（/usr/bin/od を含む）、またはデーモンが停止している場合は、署名済みバンドルのプローブに切り替えてください。いずれの検証済みプローブも利用できない場合は、設定を変更する前に停止し、Open Design Settings → MCP server でクライアント専用の絶対パススニペットをコピーするようユーザーに案内してから、再試行してください。公式ダウンロードページへ案内するのは、アプリが存在しないか古すぎる場合だけにしてください。インストーラーを無断でダウンロードしたり、未検証のスクリプトを実行したりしないでください。',
-      },
-      {
-        title: '設定を変更する前に確認する',
-        body:
-          'release-manifest.json から必須のセレクターとバージョンを読み取り、確認した Codex の状態と比較してください。codex mcp list --json から生成したフィルタ済みの MCP スナップショットだけを使って、MCP の状態を確認してください。出力するのは name、enabled、transport.type、command だけとし、args、env、env_vars、headers、token の各フィールドは出力前に破棄してください。open-design の結果がないことは想定内であり、致命的なエラーではありません。トランスポートの値に認証情報が含まれる可能性があるため、未加工のリストや codex mcp get open-design --json の出力を表示したり報告したりしないでください。open-design というマーケットプレイス名が別のソースを指している場合は停止し、競合を報告してください。open-design@open-design は、インストール済みのバージョンが release-manifest.json で宣言されているバージョンと一致する場合にのみ保持してください。',
-      },
-      {
-        title: '不足しているコンポーネントだけをインストールする',
-        body:
-          '正規のマーケットプレイスが存在しない場合にのみマーケットプレイスコマンドを実行し、マーケットプレイスの追加に失敗した場合はプラグインコマンドを実行せずに停止してください。open-design@open-design が存在しない場合は、プラグインコマンドを実行してください。異なるバージョンがインストールされている場合は、更新または再インストールの前にユーザーへ確認を求めてください。明示的な確認を得た後に限り、OPEN_DESIGN_PLUGIN_UPDATE_CONFIRMED=1 を指定してこの手順を再実行してください。必要なバージョンと完全に一致する場合にのみインストールをスキップしてください。alreadyAdded: true という結果は成功です。Codex の設定を手作業で編集したり、Codex のホームディレクトリへプラグインファイルをコピーしたりしないでください。',
-      },
-      {
-        title: 'ローカルの Open Design MCP を確実に用意する',
-        body:
-          '既存の open-design MCP は、有効で、stdio を使用し、その command が絶対パスであり、検証済みの Open Design ランチャーと一致する場合にのみ保持してください。それ以外の場合は、インストール済みの Open Design アプリケーションに付属する MCP インストーラーを実行してください。POSIX システムでは、解決済みの od パスに対するプローブが open-design-cli:mcp-install:v1 を返した場合にのみ、そのパスを実行してください。そのパスが存在しない場合、/usr/bin/od によってシャドーイングされている場合、または実行を完了できない場合は、検証済みの署名済み macOS アプリバンドルに対して /usr/bin/open と --headless --mcp-install codex を使用し、その後は同じ構造チェックを適用しながら、フィルタ済みの MCP スナップショットだけをポーリングしてください。検証済みのランチャーを利用できない場合は停止し、Open Design Settings → MCP server でクライアント専用の絶対パススニペットをコピーするようユーザーに案内してから、この手順を再試行してください。localhost のポートを推測したり、codex mcp login を実行したりしないでください。Vela へのログインは Open Design で行います。',
-      },
-      {
-        title: '確認、報告を行い、新しいタスクを開始する',
-        body:
-          'プラグイン ID open-design@open-design とその正規のマーケットプレイスソースを検証し、インストール済みバージョンが release-manifest.json の plugin.version と完全に一致することを確認してください。フィルタ済みの MCP スナップショットを使って、open-design という名前の有効な stdio MCP があり、その command が絶対パスで、インストール時に使用したものと同じ検証済みの Open Design ランチャーと一致することを確認してください。確認するのは name、enabled、transport.type、command だけにしてください。未加工の args、env、env_vars、headers、token、bearer token、API key、および Vela の認証情報の値は、出力やレポートに決して含めないでください。インストールした内容と、未完了の Open Design または Vela ログインの前提条件があれば報告してください。新しい Codex タスクを開始してインストール済みのプラグインスナップショットを読み込ませ、@open-design を呼び出してください。',
-      },
-    ],
+    github: 'GitHub でインストールガイドを見る ↗',
   },
   demo: {
     title: '一度インストールすれば、Codex/ChatGPT からそのまま制作。',
