@@ -35,6 +35,10 @@ import {
   execFileBuffered as runBufferedCommand,
   spawnPassthrough as runPassthroughCommand,
 } from './runtimes/child-process.js';
+import {
+  describeAutomationScheduleForCli,
+  parseAutomationScheduleFlag,
+} from './runtimes/automation-schedule.js';
 import { splitResearchSubcommand } from './research/cli-args.js';
 import { resolveDaemonUrl } from './daemon-url.js';
 import { requestJsonIpc } from '@open-design/sidecar';
@@ -285,15 +289,6 @@ const BRAND_STRING_FLAGS = new Set([
 const BRAND_BOOLEAN_FLAGS = new Set([
   'help', 'h', 'json',
 ]);
-// Hoisted because `runAutomation` is reachable through the top-of-file
-// SUBCOMMAND_MAP dispatch, which runs during module evaluation —
-// any `const` declared further down would still be in TDZ when
-// `parseScheduleFlag` reads this map. Same reason the other dispatch-
-// touched constants live near the top.
-const AUTOMATION_WEEKDAY_TOKENS = {
-  sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6,
-  sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6,
-};
 const PLUGIN_LIST_FILTER_FLAGS = new Set([
   ...PLUGIN_STRING_FLAGS,
   'task-kind', 'mode', 'tag', 'trust',
@@ -8513,57 +8508,6 @@ async function runMemoryConfig(base, rest, flags, writeJson) {
 // facing surface.
 // ---------------------------------------------------------------------------
 
-function parseScheduleFlag(raw) {
-  if (!raw || typeof raw !== 'string') {
-    throw new Error(
-      '--schedule is required. Forms: hourly:<minute> | daily:HH:MM[:TZ] | weekdays:HH:MM[:TZ] | weekly:DAY:HH:MM[:TZ]',
-    );
-  }
-  const parts = raw.split(':');
-  const kind = parts[0];
-  if (kind === 'hourly') {
-    const minute = Number(parts[1]);
-    if (!Number.isInteger(minute) || minute < 0 || minute > 59) {
-      throw new Error('--schedule hourly requires :<minute>, 0-59');
-    }
-    return { kind: 'hourly', minute };
-  }
-  if (kind === 'daily' || kind === 'weekdays') {
-    if (parts.length < 3) {
-      throw new Error(`--schedule ${kind} requires :HH:MM[:TZ]`);
-    }
-    const hh = parts[1];
-    const mm = parts[2];
-    const time = `${hh.padStart(2, '0')}:${mm.padStart(2, '0')}`;
-    if (!/^[0-2]\d:[0-5]\d$/.test(time)) {
-      throw new Error(`--schedule ${kind} time must be HH:MM (24h)`);
-    }
-    const timezone = parts.slice(3).join(':') || 'UTC';
-    return { kind, time, timezone };
-  }
-  if (kind === 'weekly') {
-    if (parts.length < 4) {
-      throw new Error('--schedule weekly requires :DAY:HH:MM[:TZ] (DAY is 0-6 or sun/mon/...)');
-    }
-    const dayToken = String(parts[1]).toLowerCase();
-    let weekday;
-    if (/^[0-6]$/.test(dayToken)) {
-      weekday = Number(dayToken);
-    } else if (AUTOMATION_WEEKDAY_TOKENS[dayToken] !== undefined) {
-      weekday = AUTOMATION_WEEKDAY_TOKENS[dayToken];
-    } else {
-      throw new Error(`--schedule weekly day must be 0-6 or sun..sat (got "${parts[1]}")`);
-    }
-    const time = `${parts[2].padStart(2, '0')}:${parts[3].padStart(2, '0')}`;
-    if (!/^[0-2]\d:[0-5]\d$/.test(time)) {
-      throw new Error('--schedule weekly time must be HH:MM (24h)');
-    }
-    const timezone = parts.slice(4).join(':') || 'UTC';
-    return { kind: 'weekly', weekday, time, timezone };
-  }
-  throw new Error(`--schedule kind must be hourly|daily|weekdays|weekly (got "${kind}")`);
-}
-
 function parseAutomationTarget(flags) {
   const raw = flags.target;
   if (raw == null) {
@@ -8594,18 +8538,6 @@ function parseAutomationTarget(flags) {
   throw new Error(
     `--target must be "new-project" or "reuse=<projectId>" (got "${value}")`,
   );
-}
-
-function describeAutomationScheduleForCli(schedule) {
-  if (!schedule) return '-';
-  if (schedule.kind === 'hourly') {
-    return `hourly:${String(schedule.minute).padStart(2, '0')}`;
-  }
-  if (schedule.kind === 'weekly') {
-    const days = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
-    return `weekly:${days[schedule.weekday] ?? schedule.weekday}:${schedule.time}:${schedule.timezone}`;
-  }
-  return `${schedule.kind}:${schedule.time}:${schedule.timezone}`;
 }
 
 function describeAutomationTargetForCli(target) {
@@ -9153,7 +9085,7 @@ async function runAutomation(args) {
       let schedule;
       let target;
       try {
-        schedule = parseScheduleFlag(flags.schedule);
+        schedule = parseAutomationScheduleFlag(flags.schedule);
         target = parseAutomationTarget(flags);
       } catch (err) {
         console.error(err.message);
@@ -9200,7 +9132,7 @@ async function runAutomation(args) {
       if (promptPatch != null) patch.prompt = promptPatch.trim();
       if (flags.schedule) {
         try {
-          patch.schedule = parseScheduleFlag(flags.schedule);
+          patch.schedule = parseAutomationScheduleFlag(flags.schedule);
         } catch (err) {
           console.error(err.message);
           process.exit(2);
