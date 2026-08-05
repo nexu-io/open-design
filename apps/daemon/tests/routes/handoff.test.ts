@@ -1,4 +1,3 @@
-// @ts-nocheck
 // HTTP-layer tests for `POST /api/projects/:id/handoff` — mirrors the
 // pattern used by `finalize-design.test.ts`'s HTTP-layer block: spin
 // up the real daemon via `startServer({ port: 0 })`, exercise the
@@ -13,6 +12,19 @@ import path from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 const PROJECT_ID = 'handoff-route-fixture';
+
+type HandoffResponse = {
+  error: { code: string; message: string };
+  prompt?: string;
+  model?: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  transcriptMessageCount?: number;
+};
+
+async function readHandoffResponse(response: Response): Promise<HandoffResponse> {
+  return (await response.json()) as HandoffResponse;
+}
 
 describe('POST /api/projects/:id/handoff — HTTP layer', () => {
   let server: http.Server;
@@ -92,7 +104,7 @@ describe('POST /api/projects/:id/handoff — HTTP layer', () => {
   it('400 BAD_REQUEST when apiKey is missing', async () => {
     const res = await postHandoff(PROJECT_ID, { model: 'claude-opus-4-7' });
     expect(res.status).toBe(400);
-    const body = await res.json();
+    const body = await readHandoffResponse(res);
     expect(body.error.code).toBe('BAD_REQUEST');
     expect(body.error.message.toLowerCase()).toContain('apikey');
   });
@@ -100,7 +112,7 @@ describe('POST /api/projects/:id/handoff — HTTP layer', () => {
   it('400 BAD_REQUEST when model is missing', async () => {
     const res = await postHandoff(PROJECT_ID, { apiKey: 'sk-test' });
     expect(res.status).toBe(400);
-    const body = await res.json();
+    const body = await readHandoffResponse(res);
     expect(body.error.code).toBe('BAD_REQUEST');
     expect(body.error.message.toLowerCase()).toContain('model');
   });
@@ -112,7 +124,7 @@ describe('POST /api/projects/:id/handoff — HTTP layer', () => {
       model: 'claude-opus-4-7',
     });
     expect(res.status).toBe(400);
-    const body = await res.json();
+    const body = await readHandoffResponse(res);
     expect(body.error.code).toBe('BAD_REQUEST');
   });
 
@@ -123,7 +135,7 @@ describe('POST /api/projects/:id/handoff — HTTP layer', () => {
       model: 'claude-opus-4-7',
     });
     expect(res.status).toBe(403);
-    const body = await res.json();
+    const body = await readHandoffResponse(res);
     expect(body.error.code).toBe('FORBIDDEN');
   });
 
@@ -134,7 +146,7 @@ describe('POST /api/projects/:id/handoff — HTTP layer', () => {
       model: 'claude-opus-4-7',
     });
     expect(res.status).toBe(400);
-    const body = await res.json();
+    const body = await readHandoffResponse(res);
     expect(body.error.code).toBe('BAD_REQUEST');
     expect(body.error.message.toLowerCase()).toContain('project id');
   });
@@ -146,7 +158,7 @@ describe('POST /api/projects/:id/handoff — HTTP layer', () => {
       model: 'claude-opus-4-7',
     });
     expect(res.status).toBe(404);
-    const body = await res.json();
+    const body = await readHandoffResponse(res);
     expect(body.error.code).toBe('PROJECT_NOT_FOUND');
   });
 
@@ -156,7 +168,7 @@ describe('POST /api/projects/:id/handoff — HTTP layer', () => {
       model: 'claude-opus-4-7',
     });
     expect(res.status).toBe(400);
-    const body = await res.json();
+    const body = await readHandoffResponse(res);
     expect(body.error.code).toBe('BAD_REQUEST');
     expect(body.error.message.toLowerCase()).toContain('conversationid');
   });
@@ -168,7 +180,7 @@ describe('POST /api/projects/:id/handoff — HTTP layer', () => {
       model: 'claude-opus-4-7',
     });
     expect(res.status).toBe(404);
-    const body = await res.json();
+    const body = await readHandoffResponse(res);
     expect(body.error.code).toBe('CONVERSATION_NOT_FOUND');
   });
 
@@ -195,7 +207,7 @@ describe('POST /api/projects/:id/handoff — HTTP layer', () => {
       model: 'claude-opus-4-7',
     });
     expect(res.status).toBe(400);
-    const body = await res.json();
+    const body = await readHandoffResponse(res);
     expect(body.error.code).toBe('EMPTY_TRANSCRIPT');
   });
 
@@ -214,7 +226,7 @@ describe('POST /api/projects/:id/handoff — HTTP layer', () => {
       model: 'claude-opus-4-7',
     });
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = await readHandoffResponse(res);
     expect(body.prompt).toBe('## Context\nresume this work\n');
     expect(body.model).toBe('claude-opus-4-7');
     expect(body.inputTokens).toBe(1234);
@@ -234,7 +246,7 @@ describe('POST /api/projects/:id/handoff — HTTP layer', () => {
       model: 'claude-opus-4-7',
     });
     expect(res.status).toBe(401);
-    const body = await res.json();
+    const body = await readHandoffResponse(res);
     expect(body.error.code).toBe('UNAUTHORIZED');
   });
 
@@ -250,7 +262,7 @@ describe('POST /api/projects/:id/handoff — HTTP layer', () => {
       model: 'claude-opus-4-7',
     });
     expect(res.status).toBe(429);
-    const body = await res.json();
+    const body = await readHandoffResponse(res);
     expect(body.error.code).toBe('RATE_LIMITED');
   });
 
@@ -266,7 +278,7 @@ describe('POST /api/projects/:id/handoff — HTTP layer', () => {
       model: 'claude-opus-4-7',
     });
     expect(res.status).toBe(502);
-    const body = await res.json();
+    const body = await readHandoffResponse(res);
     expect(body.error.code).toBe('UPSTREAM_UNAVAILABLE');
   });
 
@@ -292,7 +304,7 @@ describe('POST /api/projects/:id/handoff — HTTP layer', () => {
       model: 'claude-not-a-real-model',
     });
     expect(res.status).toBe(400);
-    const body = await res.json();
+    const body = await readHandoffResponse(res);
     expect(body.error.code).toBe('BAD_REQUEST');
     const serialized = JSON.stringify(body);
     expect(serialized).not.toContain(echoedKey); // inbound key redacted
@@ -308,7 +320,7 @@ describe('POST /api/projects/:id/handoff — HTTP layer', () => {
       model: 'claude-opus-4-7',
     });
     expect(res.status).toBe(502);
-    const body = await res.json();
+    const body = await readHandoffResponse(res);
     expect(body.error.code).toBe('UPSTREAM_UNAVAILABLE');
   });
 
@@ -335,7 +347,7 @@ describe('POST /api/projects/:id/handoff — HTTP layer', () => {
         model: 'claude-opus-4-7',
       });
       expect(res.status).toBe(409);
-      const body = await res.json();
+      const body = await readHandoffResponse(res);
       expect(body.error.code).toBe('CONFLICT');
     } finally {
       if (lockFd !== null) {
@@ -358,7 +370,7 @@ describe('POST /api/projects/:id/handoff — HTTP layer', () => {
       model: 'claude-opus-4-7',
     });
     expect(res.status).toBe(401);
-    const body = await res.json();
+    const body = await readHandoffResponse(res);
     const serialized = JSON.stringify(body);
     expect(serialized).not.toContain(echoedKey);
   });
