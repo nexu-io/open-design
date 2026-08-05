@@ -19,6 +19,7 @@ import { createFinalizedMessageTelemetryReporter as createFinalizedMessageTeleme
 import { createMarketplaceFetcher as createMarketplaceFetcherWithContract } from './runtimes/marketplace-fetcher.js';
 import { copyPluginFolderForProjectContext } from './runtimes/plugin-context.js';
 import { readProjectPluginManifest as readProjectPluginManifestWithContract } from './plugins/project-manifest.js';
+import { createProjectEventRegistry } from './runtimes/project-events.js';
 import { upsertSkillPluginCandidateAssistantMessage as upsertSkillPluginCandidateAssistantMessageWithContract } from './runtimes/skill-candidate-message.js';
 import { resolveProjectRoot } from './project-root.js';
 import {
@@ -946,7 +947,8 @@ function getPublicBaseUrl(req) {
  * refreshed; the caller treats `null` as "needs reconnect".
  */
 const activeChatAgentEventSinks = new Map();
-const activeProjectEventSinks = new Map();
+const projectEventRegistry = createProjectEventRegistry();
+const activeProjectEventSinks = projectEventRegistry.sinks;
 // Per-chat-run handles, keyed by runId. Lets non-stream side effects
 // (live-artifact create, project events) reach back into the chat
 // run's local state — currently used by the artifact quiet-period
@@ -1019,17 +1021,7 @@ function emitLiveArtifactRefreshEvent(grant, payload) {
 // becomes the SSE event name (see routes/project/index.ts). Used for live-artifact
 // events and `conversation-created` events emitted by routine runs (#1361).
 function emitProjectEvent(projectId, payload) {
-  const sinks = activeProjectEventSinks.get(projectId);
-  if (!sinks || sinks.size === 0) return false;
-  for (const sink of Array.from(sinks)) {
-    try {
-      sink(payload);
-    } catch {
-      sinks.delete(sink);
-    }
-  }
-  if (sinks.size === 0) activeProjectEventSinks.delete(projectId);
-  return true;
+  return projectEventRegistry.emit(projectId, payload);
 }
 
 // Windows ENAMETOOLONG mitigation constants
