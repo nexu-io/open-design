@@ -159,6 +159,17 @@ function renderNav(i: EditorialCollageInputs): string {
 </header>`;
 }
 
+function imageUrl(
+  assets: string,
+  name: string,
+  strategy: EditorialCollageInputs['imagery']['strategy'],
+): string {
+  // #5903: placeholder imagery is emitted as .svg — a PNG-named file whose
+  // bytes are SVG XML breaks in browsers that sniff by extension. Real
+  // generated/user PNGs keep the .png extension.
+  return `${assets}${name}.${strategy === 'placeholder' ? 'svg' : 'png'}`;
+}
+
 function renderSecRule(r: SectionRule): string {
   return `
   <div class='sec-rule'>
@@ -234,7 +245,7 @@ function renderHero(i: EditorialCollageInputs): string {
       <span class='annot annot-tr'>${i.hero.annotations.tr}</span>
       <span class='annot annot-bl coord'>${i.hero.annotations.bl}</span>
       <span class='annot annot-br'>${i.hero.annotations.br}</span>
-      <img src='${assets}hero.png' alt='' />
+      <img src='${imageUrl(assets, 'hero', i.imagery.strategy)}' alt='' />
       <div class='index'>
       ${index}
       </div>
@@ -269,7 +280,7 @@ function renderAbout(i: EditorialCollageInputs): string {
         </div>
       </div>
       <div class='about-art' data-reveal='right'>
-        <img src='${assets}about.png' alt='' />
+        <img src='${imageUrl(assets, 'about', i.imagery.strategy)}' alt='' />
         <div class='about-side-note'>
           <b></b>
           ${i.about.side_note}
@@ -284,7 +295,7 @@ function renderAbout(i: EditorialCollageInputs): string {
 </section>`;
 }
 
-function renderCapabilityCard(c: CapabilityCard): string {
+function renderCapabilityCard(c: CapabilityCard, strategy: EditorialCollageInputs['imagery']['strategy']): string {
   return `<div class='card' data-reveal>
     <div class='num'>${c.num}<span class='tag'>${c.tag}</span></div>
     <svg class='icon' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.5'>
@@ -299,7 +310,9 @@ function renderCapabilityCard(c: CapabilityCard): string {
 }
 
 function renderCapabilities(i: EditorialCollageInputs): string {
-  const cards = i.capabilities.cards.map(renderCapabilityCard).join('\n            ');
+  const cards = i.capabilities.cards
+    .map((c) => renderCapabilityCard(c, i.imagery.strategy))
+    .join('\n            ');
   const assets = i.imagery.assets_path.replace(/\/?$/, '/');
   return `
 <section class='capabilities' id='agents' data-od-id='capabilities'>
@@ -309,7 +322,7 @@ function renderCapabilities(i: EditorialCollageInputs): string {
       <div class='capabilities-art' data-reveal='left'>
         <span class='corner tl'></span>
         <span class='corner br'></span>
-        <img src='${assets}capabilities.png' alt='' />
+        <img src='${imageUrl(assets, 'capabilities', i.imagery.strategy)}' alt='' />
         <div class='ribbon'>${i.capabilities.ribbon}</div>
       </div>
       <div class='capabilities-copy' data-reveal>
@@ -329,9 +342,9 @@ function renderLabPill(p: LabPill): string {
   return `<button class='pill${p.active ? ' active' : ''}'>${p.label}<span class='count'>${p.count}</span></button>`;
 }
 
-function renderLabCard(c: LabCard, n: number, assets: string): string {
+function renderLabCard(c: LabCard, n: number, assets: string, strategy: EditorialCollageInputs['imagery']['strategy']): string {
   return `<div class='lab' data-reveal>
-    <div class='lab-img'><span class='badge'>${c.badge}</span><img src='${assets}lab-${n}.png' alt='' /></div>
+    <div class='lab-img'><span class='badge'>${c.badge}</span><img src='${imageUrl(assets, `lab-${n}`, strategy)}' alt='' /></div>
     <div class='num-row'><span>${c.num}</span><span>${c.year}</span></div>
     <h4>${c.title}</h4>
     <p>${c.body}</p>
@@ -343,7 +356,7 @@ function renderLabs(i: EditorialCollageInputs): string {
   const pills = i.labs.pills.map(renderLabPill).join('\n          ');
   const assets = i.imagery.assets_path.replace(/\/?$/, '/');
   const cards = i.labs.cards
-    .map((c, idx) => renderLabCard(c, idx + 1, assets))
+    .map((c, idx) => renderLabCard(c, idx + 1, assets, i.imagery.strategy))
     .join('\n        ');
   const progress = Array.from({ length: i.labs.progress.total }, (_, k) =>
     k < i.labs.progress.filled ? `<span class='on'></span>` : `<span></span>`,
@@ -381,19 +394,19 @@ function renderLabs(i: EditorialCollageInputs): string {
 </section>`;
 }
 
-function renderMethodStep(s: MethodStep, last: boolean, n: number, assets: string): string {
+function renderMethodStep(s: MethodStep, last: boolean, n: number, assets: string, strategy: EditorialCollageInputs['imagery']['strategy']): string {
   return `<div class='method-step' data-reveal>
     <div class='num'>${s.num}</div>
     <h4>${s.title}${last ? '' : ` <span class='arrow-r'>→</span>`}</h4>
     <p>${s.body}</p>
-    <div class='img'><img src='${assets}method-${n}.png' alt='' /></div>
+    <div class='img'><img src='${imageUrl(assets, `method-${n}`, strategy)}' alt='' /></div>
   </div>`;
 }
 
 function renderMethod(i: EditorialCollageInputs): string {
   const assets = i.imagery.assets_path.replace(/\/?$/, '/');
   const steps = i.method.steps
-    .map((s, idx, arr) => renderMethodStep(s, idx === arr.length - 1, idx + 1, assets))
+    .map((s, idx, arr) => renderMethodStep(s, idx === arr.length - 1, idx + 1, assets, i.imagery.strategy))
     .join('\n        ');
   return `
 <section class='method' data-od-id='method'>
@@ -423,7 +436,7 @@ function renderMethod(i: EditorialCollageInputs): string {
 </section>`;
 }
 
-function renderWorkCard(c: WorkCard, idx: number, assets: string, href: string): string {
+function renderWorkCard(c: WorkCard, idx: number, assets: string, href: string, strategy: EditorialCollageInputs['imagery']['strategy']): string {
   return `<a class='work-card${idx === 1 ? ' alt' : ''}' data-reveal href='${href}'${ext(href)}>
     <div class='label-row'>
       <span class='small-label'>${c.small_label}</span>
@@ -431,7 +444,7 @@ function renderWorkCard(c: WorkCard, idx: number, assets: string, href: string):
     </div>
     <h3>${c.title}</h3>
     <p>${c.body}</p>
-    <div class='img'><img src='${assets}work-${idx + 1}.png' alt='' /></div>
+    <div class='img'><img src='${imageUrl(assets, `work-${idx + 1}`, strategy)}' alt='' /></div>
     <div class='meta-row'>
       <span class='year'>${c.year}</span>
       <span>${c.tag}</span>
@@ -445,7 +458,7 @@ function renderWork(i: EditorialCollageInputs): string {
   // Use the first nav link as the work-card href fallback (we don't model per-card hrefs in WorkCard).
   const fallbackHref = i.nav.find((l) => /skills/i.test(l.label))?.href ?? '#';
   const cards = i.work.cards
-    .map((c, idx) => renderWorkCard(c, idx, assets, fallbackHref))
+    .map((c, idx) => renderWorkCard(c, idx, assets, fallbackHref, i.imagery.strategy))
     .join('\n      ');
   return `
 <section class='tight' data-od-id='work'>
@@ -516,7 +529,7 @@ function renderTestimonial(i: EditorialCollageInputs): string {
         <a class='read-more' href='${i.testimonial.read_more_href}'${ext(i.testimonial.read_more_href)}>${i.testimonial.read_more_label}</a>
       </div>
       <div class='testimonial-art' data-reveal='right'>
-        <img src='${assets}testimonial.png' alt='' />
+        <img src='${imageUrl(assets, 'testimonial', i.imagery.strategy)}' alt='' />
       </div>
     </div>
   </div>
@@ -551,7 +564,7 @@ function renderCTA(i: EditorialCollageInputs): string {
         </div>
       </div>
       <div class='cta-art' data-reveal='right'>
-        <img src='${assets}cta.png' alt='' />
+        <img src='${imageUrl(assets, 'cta', i.imagery.strategy)}' alt='' />
         <div class='index'>Nº 08</div>
         <div class='ribbon'>${i.cta.ribbon}</div>
       </div>

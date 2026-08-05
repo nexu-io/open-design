@@ -3,14 +3,14 @@
  * open-design-landing — SVG framework placeholder generator.
  *
  * When `imagery.strategy === 'placeholder'`, this script writes one
- * paper-textured SVG file per slot in `assets/image-manifest.json`.
- * The generated files live alongside the schema-named PNGs that the
- * composer references (`hero.png`, `about.png`, `lab-1.png`, …) so
- * the layout renders fully without any image budget.
+ * paper-textured SVG file per slot in `assets/image-manifest.json`,
+ * named `<id>.svg`. The composer references slot imagery by a
+ * strategy-aware extension (`.svg` here, `.png` for real generated or
+ * user imagery), so the layout renders fully without any image budget.
  *
  * Each placeholder shows: slot id · ratio · pixel dimensions · the
  * `prompt_section` hint copied from the manifest. Drop the real PNG
- * with the same filename to swap in production imagery; no markup
+ * with the same base name to swap in production imagery; no markup
  * change required.
  *
  * Usage:
@@ -124,19 +124,12 @@ async function loadManifest(): Promise<Manifest> {
 }
 
 /**
- * Write `<out>/<slot.file>` for every slot. The composer references
- * slots by .png filename; we honor that by writing `<basename>.svg`
- * AND a `<basename>.png.svg` symlink-style fallback. Most static
- * hosts serve SVG to <img> just fine, so the practical convention
- * is: if you want placeholders, point your `imagery.assets_path` at
- * a directory of `.svg` files OR rename the SVGs to `.png` (some
- * browsers honor extensionless content-sniffing).
- *
- * For the most reliable result, write BOTH:
- *   - `<id>.svg`   — clean, editable
- *   - `<file>`     — same SVG content under the .png filename so the
- *                    composer's `<img src='./assets/<id>.png'>` works
- *                    without changing markup.
+ * Write `<out>/<id>.svg` for every slot. The composer references slot imagery
+ * by a strategy-aware extension: `.svg` for the `placeholder` strategy (this
+ * script) and `.png` for real generated/user imagery. Writing the SVG payload
+ * under a `.png` filename — the old "png alias for compatibility" behavior —
+ * produced broken images, because browsers sniff `.png` by extension and refuse
+ * the SVG bytes (#5903).
  */
 export async function writePlaceholders(outDir: string): Promise<string[]> {
   const manifest = await loadManifest();
@@ -145,10 +138,8 @@ export async function writePlaceholders(outDir: string): Promise<string[]> {
   for (const slot of manifest.slots) {
     const svg = placeholderSvg(slot);
     const svgPath = resolve(outDir, `${slot.id}.svg`);
-    const pngPath = resolve(outDir, slot.file);
     await writeFile(svgPath, svg, 'utf8');
-    await writeFile(pngPath, svg, 'utf8');
-    written.push(svgPath, pngPath);
+    written.push(svgPath);
   }
   return written;
 }
@@ -159,9 +150,7 @@ async function main(): Promise<void> {
     ? outArg!
     : resolve(process.cwd(), outArg ?? './assets/');
   const written = await writePlaceholders(out);
-  const pngs = written.filter((p) => p.endsWith('.png')).length;
-  const svgs = written.filter((p) => p.endsWith('.svg')).length;
-  console.log(`✓ wrote ${pngs} png-named placeholders + ${svgs} svg files into ${out}`);
+  console.log(`✓ wrote ${written.length} svg placeholders into ${out}`);
   console.log(`  (${written.map((p) => basename(p)).join(', ')})`);
 }
 
