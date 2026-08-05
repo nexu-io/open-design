@@ -165,6 +165,12 @@ import {
   parseProjectPreviewAssetPath,
 } from './runtimes/local-request.js';
 import {
+  buildCommandShellCommand,
+  buildGhShellCommand,
+  buildLoginShellCommand,
+  quotePosixShellArg,
+} from './runtimes/shell-command.js';
+import {
   normalizeRunContextSelection,
   renderRunContextPrompt,
 } from './runtimes/run-context.js';
@@ -1223,25 +1229,6 @@ function execFileBuffered(command, args, opts = {}) {
       });
     });
   });
-}
-
-function quotePosixShellArg(value) {
-  const text = String(value ?? '');
-  return `'${text.replace(/'/g, `'\\''`)}'`;
-}
-
-function buildGhShellCommand(args) {
-  return ['gh', ...args].map(quotePosixShellArg).join(' ');
-}
-
-function buildCommandShellCommand(command, args) {
-  return [command, ...args].map(quotePosixShellArg).join(' ');
-}
-
-function buildLoginShellCommand(innerCommand) {
-  // Use a non-login shell and re-export PATH so test fakes and agent wrappers
-  // remain visible; login shells often reset PATH from profile scripts.
-  return `export PATH=${quotePosixShellArg(process.env.PATH ?? '')}; ${innerCommand}`;
 }
 
 function execGhBuffered(args, opts = {}) {
