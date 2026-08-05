@@ -856,10 +856,11 @@ async function runMcpInstall(args: readonly string[]): Promise<void> {
       return;
     }
     const { spawn } = await import('node:child_process');
-    const code = await new Promise((resolve) => {
+    const code = await new Promise<number>((resolve) => {
       const child = spawn(plan.bin, argv, { stdio: 'inherit' });
       child.on('error', (err) => {
-        console.error(`✗ failed to run ${plan.bin}: ${err.message}`);
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(`✗ failed to run ${plan.bin}: ${message}`);
         resolve(127);
       });
       child.on('exit', (c) => resolve(c ?? 0));
@@ -887,11 +888,11 @@ async function runMcpInstall(args: readonly string[]): Promise<void> {
   // plan.kind === 'json'
   const fs = await import('node:fs/promises');
   const path = await import('node:path');
-  let existing = null;
+  let existing: string | null = null;
   try {
     existing = await fs.readFile(plan.configPath, 'utf8');
   } catch (err) {
-    if (err && err.code !== 'ENOENT') throw err;
+    if (!(err instanceof Error) || (err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
   }
 
   if (uninstall) {
