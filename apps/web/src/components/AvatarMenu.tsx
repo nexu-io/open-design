@@ -5,6 +5,7 @@ import { amrHandoffDeviceId, attributedAmrUrl, recordAmrEntry } from '../analyti
 import { useAnalytics } from '../analytics/provider';
 import { useT } from '../i18n';
 import { AgentIcon } from './AgentIcon';
+import { useAmrSignIn } from './useAmrSignIn';
 import { modelProviderIconSrc } from './modelProviderIcon';
 import { RemixIcon } from './RemixIcon';
 import {
@@ -220,6 +221,13 @@ export function AvatarMenu({
   // rows route to the signed-in profile's workspace-scoped plans page (see
   // openAmrUpgrade).
   const [amrAccount, setAmrAccount] = useState<VelaLoginStatus | null>(null);
+  // #5244: signed-out login entry — reuse the shared Vela login flow so the
+  // popover exposes the same affordance as the Home nav-rail account menu.
+  const { amrLoginPending, handleAmrSignIn } = useAmrSignIn({
+    metricsConsent: config.telemetry?.metrics === true,
+    installationId: config.installationId,
+    onStatus: (status) => setAmrAccount(status),
+  });
   useEffect(() => {
     if (!open || !amrAvailable) {
       setAmrAccount(null);
@@ -576,6 +584,26 @@ export function AvatarMenu({
               is unreachable from here. Pinned to the bottom of the scroll port
               like the home switcher's, so a long model list cannot scroll it
               away. */}
+          {amrAccount && !amrAccount.loggedIn ? (
+            <button
+              type="button"
+              className="avatar-item avatar-item--pinned avatar-amr-signin"
+              data-testid="avatar-amr-row-signin"
+              disabled={amrLoginPending}
+              onClick={() => {
+                void handleAmrSignIn();
+              }}
+            >
+              <span className="avatar-item-icon" aria-hidden>
+                <RemixIcon name="login-circle-line" size={15} />
+              </span>
+              <span>
+                {amrLoginPending
+                  ? t('settings.amrSigningIn')
+                  : t('settings.amrSignIn')}
+              </span>
+            </button>
+          ) : null}
           <button
             type="button"
             className="avatar-item avatar-item--pinned"
