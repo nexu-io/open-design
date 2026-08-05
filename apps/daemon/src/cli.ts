@@ -6,6 +6,7 @@ import {
   collectCliPositionals,
   parseFlags,
   positionalArgs,
+  type CliFlags,
 } from './cli-args.js';
 import { runDaemonCliStartup, startDaemonRuntime } from './daemon-startup.js';
 import { runLiveArtifactsMcpServer } from './mcp-live-artifacts-server.js';
@@ -53,7 +54,7 @@ import { runMcp as runMcpCommand } from './mcp/cli.js';
 import { EXPORT_FORMATS, runExport as runExportCommand } from './export/cli.js';
 import { runMediaWait as runMediaWaitCommand } from './media/wait-cli.js';
 import { runMediaGenerate as runMediaGenerateCommand } from './media/generate-cli.js';
-import { runPollUntilDoneOrBudget } from './media/poll-cli.js';
+import { runPollUntilDoneOrBudget, type MediaPollOptions } from './media/poll-cli.js';
 import { runShare as runShareCommand } from './share/cli.js';
 import { resolveDaemonUrl } from './daemon-url.js';
 import { requestJsonIpc } from '@open-design/sidecar';
@@ -558,7 +559,7 @@ What the daemon does:
 // Subcommand: od research …
 // ---------------------------------------------------------------------------
 
-async function runArtifacts(args) {
+async function runArtifacts(args: readonly string[]): Promise<void> {
   const { exitCode } = await runArtifactsCli(args);
   process.exit(exitCode);
 }
@@ -567,7 +568,7 @@ async function runArtifacts(args) {
 // Subcommand: od media …
 // ---------------------------------------------------------------------------
 
-async function runMedia(args) {
+async function runMedia(args: readonly string[]): Promise<void> {
   const sub = args.find((a) => !a.startsWith('-')) || '';
   if (sub === 'help' || sub === '-h' || sub === '--help' || sub === '') {
     printMediaHelp();
@@ -585,7 +586,12 @@ async function runMedia(args) {
   return runMediaGenerateCommandWithDeps(subArgs);
 }
 
-async function pollUntilDoneOrBudget(daemonUrl, taskId, sinceStart, options = {}) {
+async function pollUntilDoneOrBudget(
+  daemonUrl: string,
+  taskId: string,
+  sinceStart: number,
+  options: MediaPollOptions = {},
+): Promise<void> {
   return runPollUntilDoneOrBudget(daemonUrl, taskId, sinceStart, options, {
     fetch,
     surfaceFetchError,
@@ -595,7 +601,7 @@ async function pollUntilDoneOrBudget(daemonUrl, taskId, sinceStart, options = {}
   });
 }
 
-function surfaceFetchError(err, daemonUrl) {
+function surfaceFetchError(err: unknown, daemonUrl: string): void {
   const cause = err && typeof err === 'object' ? err.cause : null;
   const code =
     cause && typeof cause === 'object' && typeof cause.code === 'string'
@@ -605,7 +611,7 @@ function surfaceFetchError(err, daemonUrl) {
     cause && typeof cause === 'object' && typeof cause.message === 'string'
       ? cause.message
       : '';
-  let detail = err && err.message ? err.message : String(err);
+  let detail = err instanceof Error ? err.message : String(err);
   if (code) detail = `${code}${causeMsg ? ` — ${causeMsg}` : ''}`;
   else if (causeMsg) detail = causeMsg;
   console.error(`failed to reach daemon at ${daemonUrl}: ${detail}`);
@@ -619,11 +625,12 @@ function surfaceFetchError(err, daemonUrl) {
   }
 }
 
-async function cliDaemonUrl(flags) {
-  return resolveDaemonUrl({ flagUrl: flags?.['daemon-url'] });
+async function cliDaemonUrl(flags?: CliFlags): Promise<string> {
+  const flagUrl = flags?.['daemon-url'];
+  return resolveDaemonUrl({ flagUrl: typeof flagUrl === 'string' ? flagUrl : undefined });
 }
 
-async function cliDaemonBaseUrl(flags) {
+async function cliDaemonBaseUrl(flags?: CliFlags): Promise<string> {
   return (await cliDaemonUrl(flags)).replace(/\/$/, '');
 }
 
