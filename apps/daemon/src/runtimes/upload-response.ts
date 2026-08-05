@@ -11,8 +11,10 @@ type SendApiError = (
   init?: Omit<ApiError, 'code' | 'message'>,
 ) => Response;
 
+export type MulterErrorResponder = (res: Response, err: unknown) => Response;
+
 /** Keep multipart implementation details at the HTTP error boundary. */
-export function createMulterErrorResponder(sendApiError: SendApiError) {
+export function createMulterErrorResponder(sendApiError: SendApiError): MulterErrorResponder {
   return (res: Response, err: unknown): Response => {
     if (err instanceof multer.MulterError) {
       const classification = classifyUploadError(err.code);

@@ -627,6 +627,7 @@ import {
 } from './runtimes/request-authorization.js';
 import { mediaTaskSnapshot } from './runtimes/media-task.js';
 import { createMulterErrorResponder } from './runtimes/upload-response.js';
+import { createProjectUploadMiddleware } from './runtimes/project-upload.js';
 import { sendLiveArtifactRouteError } from './runtimes/live-artifact-errors.js';
 import {
   setLiveArtifactCodeHeaders,
@@ -1972,16 +1973,8 @@ const projectUpload = multer({
   limits: { fileSize: 200 * 1024 * 1024 },  // 200MB — covers the largest design assets we expect (PPTX/PDF/raw images)
 });
 
-function handleProjectUpload(req, res, next) {
-  projectUpload.array('files', 12)(req, res, (err) => {
-    if (err) {
-      return sendMulterError(res, err);
-    }
-    next();
-  });
-}
-
 const sendMulterError = createMulterErrorResponder(sendApiError);
+const handleProjectUpload = createProjectUploadMiddleware(projectUpload, sendMulterError);
 
 const mediaTasks = new Map();
 const TASK_TTL_AFTER_DONE_MS = 10 * 60 * 1000;
