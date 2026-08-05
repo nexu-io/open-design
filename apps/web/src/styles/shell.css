@@ -73,16 +73,21 @@
   z-index: 120;
 }
 .workspace-tabs-chrome .workspace-tabs-traffic {
-  margin-right: var(--app-chrome-traffic-margin);
+  /* Logical property: in LTR `margin-inline-end` is the right edge (traffic
+     sits on the left, the margin opens the gap toward the tab strip); in RTL
+     it flips to the left edge, so traffic mirrors to the right side of the
+     chrome row. See #5549. */
+  margin-inline-end: var(--app-chrome-traffic-margin);
 }
 .workspace-tabs-new-btn {
   width: 30px;
   height: 30px;
-  /* Always pinned to the strip's right edge: auto margin absorbs the free
-     space when tabs don't fill the row; the sticky rule below takes over
-     once the strip overflows and scrolls. */
-  margin-left: auto;
-  margin-right: 0;
+  /* Always pinned to the strip's inline-end edge: auto margin absorbs the
+     free space when tabs don't fill the row; the sticky rule below takes
+     over once the strip overflows and scrolls. Using logical properties so
+     the button mirrors to the visual left under `dir=rtl`. See #5549. */
+  margin-inline-start: auto;
+  margin-inline-end: 0;
   padding: 0;
   border: 0;
   border-radius: var(--radius-sm);
@@ -97,7 +102,7 @@
 }
 .workspace-tabs-strip.is-overflowing .workspace-tabs-new-btn {
   position: sticky;
-  right: 0;
+  inset-inline-end: 0;
   z-index: 2;
   background: var(--bg-panel);
   box-shadow: -8px 0 10px -9px color-mix(in srgb, var(--text) 30%, transparent);
@@ -247,7 +252,10 @@ html.od-radial-open .workspace-shell {
   display: flex;
   align-items: end;
   gap: 2px;
-  padding-left: var(--workspace-tabs-edge-inset);
+  /* Logical property: in LTR this is the left edge (tabs start from the
+     left); in RTL it flips to the right edge so the tab strip's leading
+     inset mirrors with the chrome row. See #5549. */
+  padding-inline-start: var(--workspace-tabs-edge-inset);
   position: relative;
   z-index: 1;
   /* Horizontal scroll inside the strip — tabs keep their natural width
