@@ -956,9 +956,26 @@ export function PreviewDrawOverlay({
     bumpLayoutRevision();
   }, [active, redraw]);
 
+  // Bounds read for the annotation payload must be in the frame's *layout*
+  // space (offsetWidth/Height), matching the snapshot the marks are composited
+  // onto. In a scaled tablet/phone device frame getBoundingClientRect() returns
+  // the on-screen (transform-scaled) size, which shrank the structured bounds
+  // by the fit scale while the painted PNG stayed artifact-local (#6361).
+  function canvasLayoutSize(): { width: number; height: number } | null {
+    const cvs = canvasRef.current;
+    if (!cvs) return null;
+    // offsetWidth/Height are the untransformed layout size. Fall back to the
+    // client rect when layout metrics are unavailable (detached node, JSDOM) —
+    // in an unscaled frame the two agree.
+    const width = cvs.offsetWidth > 0 ? cvs.offsetWidth : cvs.getBoundingClientRect().width;
+    const height = cvs.offsetHeight > 0 ? cvs.offsetHeight : cvs.getBoundingClientRect().height;
+    if (width <= 0 || height <= 0) return null;
+    return { width, height };
+  }
+
   function normalizedRectToCanvasRect(box: NormalizedRect): Rect | null {
-    const rect = canvasRef.current?.getBoundingClientRect();
-    if (!rect || rect.width <= 0 || rect.height <= 0) return null;
+    const rect = canvasLayoutSize();
+    if (!rect) return null;
     return {
       x: box.x * rect.width,
       y: box.y * rect.height,
@@ -990,9 +1007,9 @@ export function PreviewDrawOverlay({
   }
 
   function strokeRect(stroke: Stroke | null | undefined): Rect | null {
-    const rect = canvasRef.current?.getBoundingClientRect();
+    const rect = canvasLayoutSize();
     const points = stroke?.points ?? [];
-    if (!rect || rect.width <= 0 || rect.height <= 0 || points.length === 0) return null;
+    if (!rect || points.length === 0) return null;
     const xs = points.map((point) => point.x * rect.width);
     const ys = points.map((point) => point.y * rect.height);
     const minX = Math.min(...xs);
@@ -1009,8 +1026,14 @@ export function PreviewDrawOverlay({
   }
 
   function textBounds(): { x: number; y: number; width: number; height: number } | null {
-    const rect = canvasRef.current?.getBoundingClientRect();
-    if (!rect || rect.width <= 0 || rect.height <= 0) return null;
+    const layout = canvasLayoutSize();
+    const client = canvasRef.current?.getBoundingClientRect();
+    if (!layout || !client || client.width <= 0 || client.height <= 0) return null;
+    // Client-space offsets shrink under a device-frame `transform: scale()`;
+    // divide by the live scale so label boxes land in layout space like every
+    // other bounds source (#6361).
+    const scaleX = client.width / layout.width;
+    const scaleY = client.height / layout.height;
     const rects: { left: number; top: number; right: number; bottom: number }[] = [];
     for (const mark of textMarksRef.current) {
       if (mark.text.trim().length === 0) continue;
@@ -1018,16 +1041,16 @@ export function PreviewDrawOverlay({
       if (el) {
         const box = el.getBoundingClientRect();
         rects.push({
-          left: box.left - rect.left,
-          top: box.top - rect.top,
-          right: box.right - rect.left,
-          bottom: box.bottom - rect.top,
+          left: (box.left - client.left) / scaleX,
+          top: (box.top - client.top) / scaleY,
+          right: (box.right - client.left) / scaleX,
+          bottom: (box.bottom - client.top) / scaleY,
         });
       } else {
         // No live element (e.g. capture path measured after unmount): fall back
         // to the drop point so the label still contributes to the crop bounds.
-        const left = mark.x * rect.width;
-        const top = mark.y * rect.height;
+        const left = mark.x * layout.width;
+        const top = mark.y * layout.height;
         rects.push({ left, top, right: left + 1, bottom: top + 1 });
       }
     }
