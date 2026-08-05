@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   RELEASE_CHANNELS,
-  releaseNamespace,
+  releaseNamespaceCandidates,
   type ReleasePlatform,
 } from "@open-design/release";
 import {
@@ -51,6 +51,16 @@ export interface ResolveDaemonUrlOptions {
    * candidates on `win32`.
    */
   allowConventionalIpcDiscovery?: boolean;
+  /**
+   * Test-only override for the `ReleasePlatform` that
+   * `conventionalIpcSocketPaths` derives from `process.platform`/
+   * `process.arch` via `currentReleasePlatform()`. Production callers should
+   * never set this. It exists so tests can exercise the macIntel/win
+   * candidate-list branches directly instead of mutating global process
+   * state (the previous approach, which the #6425 review flagged as making
+   * this code hard to test safely under concurrent test execution).
+   */
+  platform?: ReleasePlatform;
 }
 
 /**
@@ -76,6 +86,7 @@ export async function resolveDaemonUrl(
     env,
     options.timeoutMs ?? 800,
     options.allowConventionalIpcDiscovery ?? false,
+    options.platform,
   );
   if (discovered != null) return discovered;
   const toolsDevUrl = await discoverDaemonUrlFromToolsDev(env, options.timeoutMs ?? 800);
@@ -87,6 +98,7 @@ async function discoverDaemonUrlFromIpc(
   env: NodeJS.ProcessEnv,
   timeoutMs: number,
   allowConventionalIpcDiscovery: boolean,
+  platform?: ReleasePlatform,
 ): Promise<string | null> {
   const explicitSocketPath = env[SIDECAR_ENV.IPC_PATH];
   if (explicitSocketPath != null && explicitSocketPath.length > 0) {
@@ -108,17 +120,34 @@ async function discoverDaemonUrlFromIpc(
   // behind `allowConventionalIpcDiscovery` so every other `od` subcommand
   // keeps requiring an explicit IPC path / --daemon-url instead of silently
   // latching onto an unrelated already-running packaged daemon. See #6424.
-  const candidates = conventionalIpcSocketPaths(env);
+  const candidates = conventionalIpcSocketPaths(env, platform);
   if (candidates.length === 0) return null;
   const results = await Promise.allSettled(
     candidates.map((socketPath) =>
       probeIpcSocket(socketPath, timeoutMs, { requireLoopback: true, requireOwnerMatch: true }),
     ),
   );
-  for (const result of results) {
-    if (result.status === "fulfilled" && result.value != null) return result.value;
-  }
-  return null;
+  // Distinct successful responses only. An explicit OD_SIDECAR_NAMESPACE
+  // always yields exactly one candidate above, so ambiguity can only arise
+  // from the channel sweep in conventionalIpcSocketPaths(). If MORE THAN ONE
+  // distinct daemon answers (e.g. a stable install and a beta install both
+  // happen to be running), this function has no way to know which one the
+  // invoking `od` binary or user actually meant — a prior version of this
+  // code deterministically preferred "stable", but determinism is not
+  // correctness: resolveMcpLaunchSpec() would persist that guess's absolute
+  // paths into the agent's config, silently wiring it to the WRONG packaged
+  // channel. Refuse to choose and return null instead, so the caller falls
+  // through to tools-dev discovery and then the legacy default — a safe,
+  // inert self-reinvocation spec rather than a confidently wrong one. See
+  // the #6425 review discussion. Deduplicated by URL VALUE, not candidate
+  // count: releaseNamespaceCandidates() can list more than one namespace
+  // alias for the same channel (see conventionalIpcSocketPaths()), and two
+  // aliases resolving to the same live daemon is not actually ambiguous.
+  const found = results
+    .filter((result): result is PromiseFulfilledResult<string> => result.status === "fulfilled" && result.value != null)
+    .map((result) => result.value);
+  const distinct = Array.from(new Set(found));
+  return distinct.length === 1 ? distinct[0]! : null;
 }
 
 async function probeIpcSocket(
@@ -143,13 +172,17 @@ async function probeIpcSocket(
 }
 
 /**
- * Whether `url` is an http(s) URL whose host is loopback. Only applied to
- * conventional-path candidates (see `probeIpcSocket`'s `requireLoopback`) —
- * it must NOT gate the pre-existing explicit `OD_SIDECAR_IPC_PATH` case,
- * which can legitimately point at a non-default `--host` (Tailscale, a
- * specific interface, …). This rules out a predictable-socket responder
- * redirecting discovery off-host; it does not by itself prove the responder
- * IS the real daemon — see `isOwnedByCurrentProcess`.
+ * Whether `url` is a bare http(s) loopback origin: scheme, loopback host,
+ * and an explicit port — nothing else. Only applied to conventional-path
+ * candidates (see `probeIpcSocket`'s `requireLoopback`) — it must NOT gate
+ * the pre-existing explicit `OD_SIDECAR_IPC_PATH` case, which can
+ * legitimately point at a non-default `--host` (Tailscale, a specific
+ * interface, …). This rules out a predictable-socket responder redirecting
+ * discovery off-host, or onto a non-base URL (embedded credentials, a
+ * sub-path, a query string, a fragment) that `resolveMcpLaunchSpec` would
+ * otherwise blindly append `/api/mcp/install-info` onto; it does not by
+ * itself prove the responder IS the real daemon — see
+ * `isOwnedByCurrentProcess`.
  *
  * Delegates hostname classification to `isLoopbackHostname` (the same
  * predicate the daemon's own inbound request validation uses in
@@ -162,8 +195,16 @@ async function probeIpcSocket(
  * which address in the block is used. `isLoopbackHostname` also strips the
  * `[...]` brackets WHATWG URL puts around IPv6 literals, so this stays
  * correct for `[::1]`-style hosts without a separate bracket check.
+ *
+ * `isLoopbackHostname` classifies the URL's HOSTNAME STRING; it does not
+ * verify the later HTTP fetch in `resolveMcpLaunchSpec` actually lands on a
+ * loopback network interface. In particular, accepting the literal string
+ * "localhost" relies on the OS/hosts-file resolving it to a loopback address
+ * — a local trust boundary this module does not independently re-verify.
+ * Treat this function as "rules out a hostname that does not even claim to
+ * be loopback", not as an end-to-end network guarantee.
  */
-function isLoopbackHttpUrl(url: string): boolean {
+export function isLoopbackHttpUrl(url: string): boolean {
   let parsed: URL;
   try {
     parsed = new URL(url);
@@ -171,27 +212,58 @@ function isLoopbackHttpUrl(url: string): boolean {
     return false;
   }
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
-  return isLoopbackHostname(parsed.hostname);
+  if (!isLoopbackHostname(parsed.hostname)) return false;
+  // A real daemon STATUS response is always a bare origin at an explicit
+  // ephemeral port. Rejecting anything else means a predictable-socket
+  // responder can't smuggle credentials, a redirect-ish sub-path, or a query
+  // string through discovery — resolveMcpLaunchSpec (cli.ts) appends
+  // `/api/mcp/install-info` to this value as a plain string, so a non-base
+  // URL here would produce a surprising fetch target even when the host
+  // itself is legitimately loopback.
+  if (parsed.username.length > 0 || parsed.password.length > 0) return false;
+  if (parsed.port.length === 0) return false;
+  if (parsed.pathname !== "/" && parsed.pathname !== "") return false;
+  if (parsed.search.length > 0 || parsed.hash.length > 0) return false;
+  return true;
 }
 
 /**
- * Whether the unix socket at `socketPath` is owned by the current process's
- * effective user. Loopback alone only rules out off-host redirection — on a
- * predictable, unauthenticated path (see `conventionalIpcSocketPaths`),
- * another local process could still occupy the path (e.g. while the real
- * daemon is stopped/restarting) and answer with a loopback URL of its own,
- * which `resolveMcpLaunchSpec` would then treat as authoritative and fetch
- * `/api/mcp/install-info` from. Comparing the socket file's owning uid
- * against `process.getuid()` blocks a different OS user from impersonating
- * the daemon this way (same-user impersonation, e.g. by other malware
- * already running as this user, is a materially different threat this
- * check does not — and cannot cheaply — address; that needs protocol-level
- * authentication in `packages/sidecar`).
+ * Whether the unix socket FILE at `socketPath` is owned by the current
+ * process's effective user, checked via `statSync` immediately before
+ * `probeIpcSocket` calls `requestJsonIpc` to connect to it. This is a
+ * mitigation, not a proof of identity, in two distinct ways that are worth
+ * stating plainly rather than implying a stronger guarantee than either
+ * actually provides:
+ *
+ * 1. TOCTOU: the filesystem object at `socketPath` could in principle be
+ *    replaced (unlinked and re-bound by a different process) between this
+ *    `statSync` and the `connect()` `requestJsonIpc` performs immediately
+ *    after. Node's `net` module has no atomic "connect, then check who you
+ *    connected to" primitive for unix sockets, so this check and the
+ *    connect it gates are two separate syscalls with a real, if narrow,
+ *    window between them.
+ * 2. File ownership is not peer identity: even without the TOCTOU race,
+ *    "the socket file is owned by my uid" proves that SOME process running
+ *    as this uid created or was granted ownership of that path — not that
+ *    the process CURRENTLY answering on it is the one this call intended to
+ *    reach. A real trust boundary needs OS peer credentials (`SO_PEERCRED`
+ *    on Linux, `LOCAL_PEERCRED` on macOS/BSD), which Node's `net` module
+ *    does not expose without native code; that is out of scope for this
+ *    fix.
+ *
+ * What this DOES reliably block: a DIFFERENT OS user (no shared uid)
+ * squatting the predictable path and answering as though it were the
+ * daemon — e.g. while the real daemon is stopped/restarting, which
+ * `resolveMcpLaunchSpec` would otherwise treat as authoritative and fetch
+ * `/api/mcp/install-info` from. It does NOT defend against other processes
+ * already running as THIS SAME user (other local malware, say), which is a
+ * materially different and harder threat model requiring the
+ * protocol-level authentication noted above, in `packages/sidecar`.
  *
  * POSIX-only: `process.getuid` does not exist on Windows, and Windows named
  * pipes use a different ACL model this module does not verify yet, so
- * `conventionalIpcSocketPaths` returns no candidates on `win32` and this
- * function is never reached there in practice.
+ * `conventionalIpcSocketPaths` returns no candidates on `win32`/`"win"` and
+ * this function is never reached there in practice.
  */
 function isOwnedByCurrentProcess(socketPath: string): boolean {
   if (typeof process.getuid !== "function") return false;
@@ -204,6 +276,24 @@ function isOwnedByCurrentProcess(socketPath: string): boolean {
 }
 
 /**
+ * The `ReleasePlatform` this process is currently running as, derived from
+ * `platform`/`arch` (defaulting to the real `process` object). Accepts an
+ * injectable subset of `NodeJS.Process` purely so tests can exercise the
+ * mac/macIntel/win/linux branches of `conventionalIpcSocketPaths` directly
+ * — via that function's own `platform` parameter — instead of mutating
+ * `process.platform`/`process.arch` globals, which the #6425 review flagged
+ * as fragile under concurrent test execution. Production code should always
+ * call this with no argument.
+ */
+export function currentReleasePlatform(
+  proc: Pick<NodeJS.Process, "platform" | "arch"> = process,
+): ReleasePlatform {
+  if (proc.platform === "darwin") return proc.arch === "arm64" ? "mac" : "macIntel";
+  if (proc.platform === "win32") return "win";
+  return "linux";
+}
+
+/**
  * Conventional per-release-channel sidecar IPC socket paths, stable-channel
  * first. Bounded to the product's own known channels (`@open-design/release`)
  * plus the generic library default so an absent daemon still fails fast —
@@ -213,25 +303,39 @@ function isOwnedByCurrentProcess(socketPath: string): boolean {
  *
  * Honors an explicit `OD_SIDECAR_NAMESPACE` when present (cheap extra check,
  * mirrors the explicit-namespace precedence `resolveNamespace` already uses
- * elsewhere); otherwise derives the current platform's namespace suffix from
- * `process.platform`/`process.arch` and tries every known release channel,
- * THEN the bare `SIDECAR_DEFAULTS.namespace` ("default"). The packaged
- * desktop app always stamps an explicit `release-<channel>` namespace, but
- * `tools-pack` installs whose version string doesn't resolve to a known
- * channel (`defaultNamespaceForAppVersion` in `tools/pack/src/config.ts`)
- * fall through to the bare sidecar-proto default instead — release channels
- * are tried first since they're the more common (packaged app) case, with
- * "default" as the deterministic last resort.
+ * elsewhere); otherwise resolves `platform` (defaulting to
+ * `currentReleasePlatform()`; callers never need to pass this explicitly in
+ * production — see that function's doc comment) and tries every known
+ * release channel via `releaseNamespaceCandidates` — which also surfaces any
+ * legacy namespace aliases a channel/platform pair is still shipping under
+ * (see `@open-design/release`'s own doc comment for the one known outlier,
+ * beta on Intel mac) — THEN the bare `SIDECAR_DEFAULTS.namespace`
+ * ("default"). The packaged desktop app always stamps an explicit
+ * `release-<channel>` namespace, but `tools-pack` installs whose version
+ * string doesn't resolve to a known channel (`defaultNamespaceForAppVersion`
+ * in `tools/pack/src/config.ts`) fall through to the bare sidecar-proto
+ * default instead — release channels are tried first since they're the more
+ * common (packaged app) case, with "default" as the deterministic last
+ * resort. Namespace/alias identity is intentionally NOT this module's
+ * concern beyond converting a namespace string into an IPC path: it is owned
+ * by `@open-design/release`, which is the layer four straight rounds of
+ * review found new namespace-derivation gaps in before this split (see
+ * #6425 review discussion) — keeping that knowledge in one place is what
+ * prevents a fifth.
  *
- * Returns no candidates on `win32`: the ownership check this discovery mode
- * requires (`isOwnedByCurrentProcess`) has no Windows implementation yet, and
- * probing a predictable named pipe without any ownership/identity check is
- * exactly the gap this module is trying to close, not widen. This is a known,
- * intentional scope limit of this fix — see issue #6424's follow-up for
- * Windows-specific coverage — not an oversight.
+ * Returns no candidates when `platform` is `"win"`: the ownership check this
+ * discovery mode requires (`isOwnedByCurrentProcess`) has no Windows
+ * implementation yet, and probing a predictable named pipe without any
+ * ownership/identity check is exactly the gap this module is trying to
+ * close, not widen. This is a known, intentional scope limit of this fix —
+ * see issue #6424's follow-up for Windows-specific coverage — not an
+ * oversight.
  */
-function conventionalIpcSocketPaths(env: NodeJS.ProcessEnv): string[] {
-  if (process.platform === "win32") return [];
+export function conventionalIpcSocketPaths(
+  env: NodeJS.ProcessEnv,
+  platform: ReleasePlatform = currentReleasePlatform(),
+): string[] {
+  if (platform === "win") return [];
   const explicitNamespace = env[SIDECAR_ENV.NAMESPACE];
   if (explicitNamespace != null && explicitNamespace.length > 0) {
     return [
@@ -243,8 +347,6 @@ function conventionalIpcSocketPaths(env: NodeJS.ProcessEnv): string[] {
       }),
     ];
   }
-  const platform: ReleasePlatform =
-    process.platform === "darwin" ? (process.arch === "arm64" ? "mac" : "macIntel") : "linux";
   const orderedChannels = [
     RELEASE_CHANNELS.STABLE,
     RELEASE_CHANNELS.BETA,
@@ -253,20 +355,7 @@ function conventionalIpcSocketPaths(env: NodeJS.ProcessEnv): string[] {
     RELEASE_CHANNELS.PREVIEW,
   ] as const;
   const orderedNamespaces: string[] = [
-    ...orderedChannels.map((channel) => releaseNamespace(channel, platform)),
-    // Known CI naming inconsistency (see #6425 review): every other
-    // channel's Intel-mac build follows the standard `-intel` suffix
-    // (release-prerelease-intel, release-preview-intel, matching
-    // `releaseNamespace(channel, "macIntel")`), but
-    // `.github/workflows/release-beta.yml`'s mac_x64 job instead bakes
-    // "release-beta-x64" via `tools-pack mac build --namespace
-    // release-beta-x64`. That literal is what a live beta Intel install's
-    // daemon actually listens under, so it has to be probed even though it
-    // doesn't fit the derivable pattern. Renaming the shipping workflow's
-    // namespace to match the pattern is a separate, higher-risk change
-    // (would orphan already-installed beta Intel users' existing IPC path)
-    // outside the scope of this fix — see PR #6425 review discussion.
-    ...(platform === "macIntel" ? ["release-beta-x64"] : []),
+    ...orderedChannels.flatMap((channel) => releaseNamespaceCandidates(channel, platform)),
     SIDECAR_DEFAULTS.namespace,
   ];
   return orderedNamespaces.map((namespace) =>

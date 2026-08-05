@@ -11,12 +11,108 @@ import {
   SIDECAR_ENV,
   SIDECAR_MESSAGES,
 } from "@open-design/sidecar-proto";
-import { resolveDaemonUrl, DEFAULT_DAEMON_URL } from "../src/daemon-url.js";
+import {
+  resolveDaemonUrl,
+  DEFAULT_DAEMON_URL,
+  currentReleasePlatform,
+  conventionalIpcSocketPaths,
+  isLoopbackHttpUrl,
+} from "../src/daemon-url.js";
 
-const CURRENT_RELEASE_PLATFORM: ReleasePlatform =
-  process.platform === "darwin"
-    ? process.arch === "arm64" ? "mac" : "macIntel"
-    : process.platform === "win32" ? "win" : "linux";
+const CURRENT_RELEASE_PLATFORM: ReleasePlatform = currentReleasePlatform();
+
+function expectedConventionalPaths(env: NodeJS.ProcessEnv, namespaces: readonly string[]): string[] {
+  return namespaces.map((namespace) =>
+    resolveAppIpcPath({ app: APP_KEYS.DAEMON, contract: OPEN_DESIGN_SIDECAR_CONTRACT, env, namespace }),
+  );
+}
+
+// Pure, host-OS-independent coverage of the candidate-namespace list itself.
+// Split out from the IPC-integration suite below per the #6425 architecture
+// review: shape/precedence of the candidate list doesn't need a live socket
+// to verify, and testing it directly (with an explicit `platform` argument)
+// means this suite can exercise the macIntel/win branches on ANY host
+// without mutating `process.platform`/`process.arch` globals.
+describe("conventionalIpcSocketPaths (pure)", () => {
+  it("returns no candidates when platform is win, regardless of env", () => {
+    expect(conventionalIpcSocketPaths({}, "win")).toEqual([]);
+    expect(conventionalIpcSocketPaths({ [SIDECAR_ENV.NAMESPACE]: "custom-namespace" }, "win")).toEqual([]);
+  });
+
+  it("an explicit OD_SIDECAR_NAMESPACE bypasses the channel sweep on every non-win platform", () => {
+    for (const platform of ["mac", "macIntel", "linux"] as const) {
+      const env = { [SIDECAR_ENV.NAMESPACE]: "custom-namespace" };
+      expect(conventionalIpcSocketPaths(env, platform)).toEqual(expectedConventionalPaths(env, ["custom-namespace"]));
+    }
+  });
+
+  // Locks in the full stable-first channel sweep, including the one known
+  // legacy-namespace outlier: beta on Intel mac lists TWO candidates
+  // (canonical "-intel" suffix first, then the "release-beta-x64" alias
+  // release-beta.yml's mac_x64 job actually ships under) because
+  // `@open-design/release`'s `releaseNamespaceCandidates` owns that mapping
+  // now — see its own doc comment for why the alias exists. Every other
+  // channel/platform pair here has exactly one candidate.
+  it("sweeps every known release channel plus the generic default, stable first", () => {
+    const cases: Array<[ReleasePlatform, string[]]> = [
+      ["mac", ["release-stable", "release-beta", "release-betas", "release-prerelease", "release-preview", SIDECAR_DEFAULTS.namespace]],
+      [
+        "macIntel",
+        [
+          "release-stable-intel",
+          "release-beta-intel",
+          "release-beta-x64",
+          "release-betas-intel",
+          "release-prerelease-intel",
+          "release-preview-intel",
+          SIDECAR_DEFAULTS.namespace,
+        ],
+      ],
+      [
+        "linux",
+        [
+          "release-stable-linux",
+          "release-beta-linux",
+          "release-betas-linux",
+          "release-prerelease-linux",
+          "release-preview-linux",
+          SIDECAR_DEFAULTS.namespace,
+        ],
+      ],
+    ];
+    for (const [platform, namespaces] of cases) {
+      const env = {};
+      expect(conventionalIpcSocketPaths(env, platform)).toEqual(expectedConventionalPaths(env, namespaces));
+    }
+  });
+});
+
+// Pure coverage of the loopback/bare-origin URL policy applied to
+// conventional-path candidates. Split out for the same reason as the
+// candidate-list suite above: no live socket needed to verify this.
+describe("isLoopbackHttpUrl (pure)", () => {
+  it.each([
+    "http://127.0.0.1:59999",
+    "http://127.0.0.2:23456",
+    "http://[::1]:34567",
+    "https://localhost:41111",
+  ])("accepts a bare loopback origin: %s", (url) => {
+    expect(isLoopbackHttpUrl(url)).toBe(true);
+  });
+
+  it.each([
+    ["http://user:pass@127.0.0.1:22222", "embedded credentials"],
+    ["http://127.0.0.1:22222/some/path", "non-root path"],
+    ["http://127.0.0.1:22222/?x=1", "query string"],
+    ["http://127.0.0.1:22222/#fragment", "fragment"],
+    ["http://127.0.0.1", "missing explicit port"],
+    ["http://evil.example:1234", "non-loopback host"],
+    ["not a url", "unparseable"],
+    ["ftp://127.0.0.1:1234", "non-http(s) scheme"],
+  ])("rejects %s (%s)", (url) => {
+    expect(isLoopbackHttpUrl(url)).toBe(false);
+  });
+});
 
 // Verifies the resolution chain: --daemon-url > OD_DAEMON_URL > sidecar
 // IPC status discovery > legacy default. Each layer must short-circuit the next
@@ -179,7 +275,8 @@ describe("resolveDaemonUrl", () => {
   // in daemon-url.ts): the ownership check this discovery mode requires has
   // no Windows implementation yet, so `conventionalIpcSocketPaths` yields no
   // candidates on win32 and this whole describe block does not apply there —
-  // see the dedicated win32 test below instead.
+  // the pure `conventionalIpcSocketPaths (pure)` suite above covers the win
+  // no-candidate behavior unconditionally instead.
   describe.skipIf(process.platform === "win32")("conventional per-channel IPC discovery (#6424)", () => {
     let conventionalIpcBaseDir: string;
 
@@ -316,13 +413,20 @@ describe("resolveDaemonUrl", () => {
       }
     });
 
-    // Locks in the channel-precedence contract: when more than one release
-    // channel's daemon happens to be live at once, the stable channel's
-    // response wins deterministically, never whichever socket happens to
-    // answer first. `Promise.allSettled` + ordered result scan (not
-    // `Promise.any`/a bare race) is load-bearing for this — a naive race
-    // would make the outcome depend on scheduling.
-    it("prefers the stable channel when multiple channel sockets are simultaneously live", async () => {
+    // Regression coverage for the Codex architecture review on #6425: this
+    // test previously asserted that stable's response deterministically
+    // "won" a race against beta (with a real 50ms delay to lock in the
+    // ordering). Determinism is not correctness — if two packaged channels
+    // are simultaneously live, discovery has no way to know which one the
+    // invoking `od mcp install` actually meant, and silently preferring
+    // stable would let resolveMcpLaunchSpec (cli.ts) persist the WRONG
+    // channel's absolute paths into the agent's config. discoverDaemonUrlFromIpc
+    // now refuses to guess: more than one DISTINCT successful response means
+    // ambiguous, and it returns null so the caller falls through to the
+    // legacy default — a safe, inert result instead of a confidently wrong
+    // one. No artificial delay needed to prove this, which also removes the
+    // suite's only real-timer nondeterminism.
+    it("does not guess between channels when more than one is simultaneously live (ambiguous)", async () => {
       const stableSocketPath = resolveAppIpcPath({
         app: APP_KEYS.DAEMON,
         contract: OPEN_DESIGN_SIDECAR_CONTRACT,
@@ -340,29 +444,24 @@ describe("resolveDaemonUrl", () => {
       let stableIpc: JsonIpcServerHandle | null = null;
       let betaIpc: JsonIpcServerHandle | null = null;
       try {
-        // Beta answers immediately; stable answers slightly slower — if the
-        // implementation ever regresses to a bare race, this ordering would
-        // flip the result to beta and fail the assertion below.
         betaIpc = await createJsonIpcServer({
           socketPath: betaSocketPath,
           handler: () => ({ pid: 2, state: "running", updatedAt: new Date().toISOString(), url: "http://127.0.0.1:57777" }),
         });
         stableIpc = await createJsonIpcServer({
           socketPath: stableSocketPath,
-          handler: async () => {
-            await new Promise((resolve) => setTimeout(resolve, 50));
-            return { pid: 1, state: "running", updatedAt: new Date().toISOString(), url: "http://127.0.0.1:56666" };
-          },
+          handler: () => ({ pid: 1, state: "running", updatedAt: new Date().toISOString(), url: "http://127.0.0.1:56666" }),
         });
 
         const url = await resolveDaemonUrl({
           env: {
+            PATH: emptyBinDir,
             [SIDECAR_ENV.IPC_BASE]: conventionalIpcBaseDir,
           },
           timeoutMs: 1000,
           allowConventionalIpcDiscovery: true,
         });
-        expect(url).toBe("http://127.0.0.1:56666");
+        expect(url).toBe(DEFAULT_DAEMON_URL);
       } finally {
         await stableIpc?.close();
         await betaIpc?.close();
@@ -472,55 +571,40 @@ describe("resolveDaemonUrl", () => {
       }
     });
 
-    // Regression coverage for the #6425 review: every OTHER channel's
-    // Intel-mac build follows the standard `-intel` suffix that
-    // `releaseNamespace(channel, "macIntel")` derives (release-prerelease-
-    // intel, release-preview-intel, …), but `.github/workflows/
-    // release-beta.yml`'s mac_x64 job instead bakes the literal
-    // "release-beta-x64" via `tools-pack mac build --namespace
-    // release-beta-x64`. Deliberately does NOT derive the expected socket's
-    // namespace from `releaseNamespace()` (that would just re-encode the
-    // same wrong assumption the implementation had) — hardcodes the exact
-    // literal the live workflow produces instead. Forces `process.platform`/
-    // `process.arch` to darwin/x64 (this suite normally runs on whatever
-    // architecture the CI/dev machine actually has, which cannot otherwise
-    // exercise the macIntel branch on an arm64 host) using the same
-    // `Object.defineProperty` + restore pattern already used elsewhere in
-    // this package (see `host-tools-launch-shell.test.ts`).
+    // Regression coverage for the #6425 review: `conventionalIpcSocketPaths`
+    // now surfaces "release-beta-x64" for beta on Intel mac via
+    // `@open-design/release`'s `releaseNamespaceCandidates` (see the pure
+    // suite above for the candidate-list-shape assertion). This proves the
+    // IPC round trip actually resolves through that alias end-to-end. Uses
+    // `resolveDaemonUrl`'s injectable `platform` option instead of mutating
+    // `process.platform`/`process.arch` — this test now runs identically
+    // regardless of the host machine's real architecture.
     it("discovers the live daemon via the release-beta-x64 literal namespace on Intel mac (CI naming inconsistency)", async () => {
-      const origPlatform = process.platform;
-      const origArch = process.arch;
-      Object.defineProperty(process, "platform", { value: "darwin", configurable: true });
-      Object.defineProperty(process, "arch", { value: "x64", configurable: true });
+      const socketPath = resolveAppIpcPath({
+        app: APP_KEYS.DAEMON,
+        contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+        env: { [SIDECAR_ENV.IPC_BASE]: conventionalIpcBaseDir },
+        namespace: "release-beta-x64",
+      });
+      fs.mkdirSync(path.dirname(socketPath), { recursive: true });
+      let ipc: JsonIpcServerHandle | null = null;
       try {
-        const socketPath = resolveAppIpcPath({
-          app: APP_KEYS.DAEMON,
-          contract: OPEN_DESIGN_SIDECAR_CONTRACT,
-          env: { [SIDECAR_ENV.IPC_BASE]: conventionalIpcBaseDir },
-          namespace: "release-beta-x64",
+        ipc = await createJsonIpcServer({
+          socketPath,
+          handler: () => ({ pid: 1, state: "running", updatedAt: new Date().toISOString(), url: "http://127.0.0.1:39999" }),
         });
-        fs.mkdirSync(path.dirname(socketPath), { recursive: true });
-        let ipc: JsonIpcServerHandle | null = null;
-        try {
-          ipc = await createJsonIpcServer({
-            socketPath,
-            handler: () => ({ pid: 1, state: "running", updatedAt: new Date().toISOString(), url: "http://127.0.0.1:39999" }),
-          });
 
-          const url = await resolveDaemonUrl({
-            env: {
-              [SIDECAR_ENV.IPC_BASE]: conventionalIpcBaseDir,
-            },
-            timeoutMs: 1000,
-            allowConventionalIpcDiscovery: true,
-          });
-          expect(url).toBe("http://127.0.0.1:39999");
-        } finally {
-          await ipc?.close();
-        }
+        const url = await resolveDaemonUrl({
+          env: {
+            [SIDECAR_ENV.IPC_BASE]: conventionalIpcBaseDir,
+          },
+          timeoutMs: 1000,
+          allowConventionalIpcDiscovery: true,
+          platform: "macIntel",
+        });
+        expect(url).toBe("http://127.0.0.1:39999");
       } finally {
-        Object.defineProperty(process, "platform", { value: origPlatform, configurable: true });
-        Object.defineProperty(process, "arch", { value: origArch, configurable: true });
+        await ipc?.close();
       }
     });
 
@@ -566,27 +650,19 @@ describe("resolveDaemonUrl", () => {
     });
   });
 
-  // Companion to the POSIX-only describe block above: conventional discovery
-  // must be a no-op on win32 (no candidates, no probing, no crash) rather
-  // than attempting to guess a named-pipe path with no ownership check.
-  //
-  // Regression note (#6425 review): this test must NOT set
-  // SIDECAR_ENV.IPC_PATH — doing so takes the explicit-socket branch in
-  // `discoverDaemonUrlFromIpc` before `conventionalIpcSocketPaths()` ever
-  // runs, so the assertion would pass for the wrong reason (explicit-path
-  // probe failing against a missing socket) without ever exercising the
-  // win32 no-candidate behavior it claims to cover.
-  it.skipIf(process.platform !== "win32")(
-    "does not attempt conventional discovery on win32 even when allowConventionalIpcDiscovery is true",
-    async () => {
-      const url = await resolveDaemonUrl({
-        env: {
-          PATH: emptyBinDir,
-        },
-        timeoutMs: 300,
-        allowConventionalIpcDiscovery: true,
-      });
-      expect(url).toBe(DEFAULT_DAEMON_URL);
-    },
-  );
+  // Regression coverage for the #6425 review: proves the same win no-op
+  // behavior at the `resolveDaemonUrl` integration level, using the
+  // injectable `platform` option instead of gating on the real host OS —
+  // this runs on every host, not just an actual win32 CI runner.
+  it("does not attempt conventional discovery when platform is win, even with allowConventionalIpcDiscovery true", async () => {
+    const url = await resolveDaemonUrl({
+      env: {
+        PATH: emptyBinDir,
+      },
+      timeoutMs: 300,
+      allowConventionalIpcDiscovery: true,
+      platform: "win",
+    });
+    expect(url).toBe(DEFAULT_DAEMON_URL);
+  });
 });

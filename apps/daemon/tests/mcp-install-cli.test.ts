@@ -1,9 +1,15 @@
 import { execFile } from 'node:child_process';
-import { createServer } from 'node:http';
+import fs from 'node:fs';
+import http from 'node:http';
+import os from 'node:os';
 import { dirname, resolve as pathResolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { createJsonIpcServer, resolveAppIpcPath, type JsonIpcServerHandle } from '@open-design/sidecar';
+import { releaseNamespace } from '@open-design/release';
+import { APP_KEYS, OPEN_DESIGN_SIDECAR_CONTRACT, SIDECAR_ENV, SIDECAR_MESSAGES } from '@open-design/sidecar-proto';
+import { currentReleasePlatform } from '../src/daemon-url.js';
 
 const execFileP = promisify(execFile);
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -12,9 +18,17 @@ const REPO_ROOT = pathResolve(__dirname, '../../..');
 const CLI_SRC = pathResolve(__dirname, '../src/cli.ts');
 const TSX_CLI = pathResolve(REPO_ROOT, 'node_modules/tsx/dist/cli.mjs');
 
-async function runCli(args: string[]): Promise<{ stdout: string; stderr: string; code: number | null }> {
-  const env: NodeJS.ProcessEnv = { ...process.env };
+async function runCli(
+  args: string[],
+  extraEnv: NodeJS.ProcessEnv = {},
+): Promise<{ stdout: string; stderr: string; code: number | null }> {
+  const env: NodeJS.ProcessEnv = { ...process.env, ...extraEnv };
   delete env.NODE_OPTIONS;
+  // Never let this test's actual invoking environment leak a real daemon
+  // endpoint into the child — every scenario here needs to reach
+  // resolveMcpLaunchSpec's discovery chain on its own terms.
+  delete env.OD_DAEMON_URL;
+  delete env.OD_SIDECAR_IPC_PATH;
   try {
     const { stdout, stderr } = await execFileP(process.execPath, [TSX_CLI, CLI_SRC, ...args], {
       cwd: DAEMON_ROOT,
@@ -48,7 +62,7 @@ describe('od mcp install CLI identity probe', () => {
       args: ['/opt/open-design/daemon-cli.mjs', 'mcp'],
       env: { OD_DATA_DIR: '/tmp/open-design-data' },
     };
-    const server = createServer((_req, res) => {
+    const server = http.createServer((_req, res) => {
       res.setHeader('content-type', 'application/json');
       res.end(JSON.stringify(launchSpec));
     });
@@ -79,5 +93,88 @@ describe('od mcp install CLI identity probe', () => {
         server.close((error) => (error ? reject(error) : resolve()));
       });
     }
+  });
+});
+
+// End-to-end regression for #6424/#6425: a plain terminal invocation of
+// `od mcp install <agent>` (no OD_SIDECAR_IPC_PATH, no OD_DAEMON_URL — the
+// exact conditions of the original bug report) must persist the PACKAGED
+// daemon's real /api/mcp/install-info launch spec, discovered via the
+// conventional per-channel IPC socket, rather than degrading to the
+// self-reinvocation fallback in resolveMcpLaunchSpec (cli.ts). Codex's
+// architecture review of this PR noted that every other test here proves
+// resolveDaemonUrl()'s discovery in isolation, but nothing proved the full
+// `od mcp install` CLI closure actually wires a discovered daemon's install
+// info through to the printed install plan.
+describe('od mcp install <agent> end-to-end via conventional IPC discovery (#6424/#6425)', () => {
+  let conventionalIpcBaseDir: string;
+  let httpServer: http.Server;
+  let httpPort: number;
+  let ipc: JsonIpcServerHandle | null = null;
+
+  const FAKE_COMMAND = 'open-design-fake-daemon-command';
+  const FAKE_ARGS = ['--fake-flag', 'fake-value'];
+
+  beforeAll(async () => {
+    conventionalIpcBaseDir = fs.mkdtempSync(pathResolve(os.tmpdir(), 'od-mcp-install-e2e-'));
+
+    // Stands in for the real daemon's /api/mcp/install-info HTTP endpoint —
+    // the launch spec resolveMcpLaunchSpec should end up persisting is
+    // whatever THIS returns, never the self-reinvocation fallback.
+    httpServer = http.createServer((req, res) => {
+      if (req.url === '/api/mcp/install-info') {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ command: FAKE_COMMAND, args: FAKE_ARGS, env: {} }));
+        return;
+      }
+      res.writeHead(404);
+      res.end();
+    });
+    await new Promise<void>((resolve) => httpServer.listen(0, '127.0.0.1', resolve));
+    const address = httpServer.address();
+    if (address == null || typeof address === 'string') throw new Error('expected an AddressInfo');
+    httpPort = address.port;
+
+    const socketPath = resolveAppIpcPath({
+      app: APP_KEYS.DAEMON,
+      contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+      env: { [SIDECAR_ENV.IPC_BASE]: conventionalIpcBaseDir },
+      namespace: releaseNamespace('stable', currentReleasePlatform()),
+    });
+    fs.mkdirSync(pathResolve(socketPath, '..'), { recursive: true });
+    ipc = await createJsonIpcServer({
+      socketPath,
+      handler: (message) => {
+        if (message != null && typeof message === 'object' && (message as { type?: unknown }).type === SIDECAR_MESSAGES.STATUS) {
+          return { pid: 1, state: 'running', updatedAt: new Date().toISOString(), url: `http://127.0.0.1:${httpPort}` };
+        }
+        throw new Error('unexpected message');
+      },
+    });
+  });
+
+  afterAll(async () => {
+    await ipc?.close();
+    await new Promise<void>((resolve) => httpServer.close(() => resolve()));
+    fs.rmSync(conventionalIpcBaseDir, { recursive: true, force: true });
+  });
+
+  it('persists the discovered packaged launch spec instead of the self-reinvocation fallback', async () => {
+    const result = await runCli(['mcp', 'install', 'claude', '--print', '--json'], {
+      [SIDECAR_ENV.IPC_BASE]: conventionalIpcBaseDir,
+    });
+
+    expect(result.code).toBe(0);
+    expect(result.stderr).toBe('');
+    const parsed = JSON.parse(result.stdout) as { ok: boolean; agent: string; kind: string; command: string };
+    expect(parsed.ok).toBe(true);
+    expect(parsed.agent).toBe('claude');
+    expect(parsed.kind).toBe('cli');
+    // The fallback spec's command is always `process.execPath` (an absolute
+    // node interpreter path) — it can never contain FAKE_COMMAND. Seeing
+    // FAKE_COMMAND here proves the CLI actually reached the fake HTTP
+    // server through conventional discovery, not the degraded fallback.
+    expect(parsed.command).toContain(FAKE_COMMAND);
+    expect(parsed.command).toContain(FAKE_ARGS.join(' '));
   });
 });
