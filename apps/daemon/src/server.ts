@@ -163,6 +163,7 @@ import {
 } from './runtimes/local-request.js';
 import { quotePosixShellArg } from './runtimes/shell-command.js';
 import { createShellCommandRunner } from './runtimes/shell-exec.js';
+import { hasGeneratedPluginArtifacts } from './runtimes/plugin-artifacts.js';
 import { sanitizeArchiveFilename } from './runtimes/archive-filename.js';
 import {
   githubRepoNameFromPluginName,
@@ -1168,29 +1169,6 @@ function shouldSkipPluginContextEntry(name) {
   return PLUGIN_CONTEXT_SKIP_DIRS.has(name) || PLUGIN_CONTEXT_SKIP_FILES.has(name);
 }
 
-async function ensureGhReady() {
-  const version = await execGhBuffered(['--version'], { timeout: 10_000 });
-  if (!version.ok) {
-    return {
-      ok: false,
-      code: 'gh-not-installed',
-      message: 'GitHub CLI is not installed. Install it, then click this action again.',
-      url: 'https://cli.github.com/',
-      log: [version.stderr || version.stdout || 'gh --version failed'],
-    };
-  }
-  const auth = await execGhBuffered(['auth', 'status', '--hostname', 'github.com'], { timeout: 10_000 });
-  if (!auth.ok) {
-    return {
-      ok: false,
-      code: 'gh-not-authenticated',
-      message: 'GitHub CLI is installed but not authenticated. Run `gh auth login --web`, finish browser authorization, then click this action again.',
-      url: 'https://github.com/login/device',
-      log: [auth.stderr || auth.stdout || 'gh auth status failed'],
-    };
-  }
-  return { ok: true, log: [version.stdout, auth.stderr || auth.stdout].filter(Boolean) };
-}
 
 const TERMINAL_RUN_STATUSES = new Set(['succeeded', 'failed', 'canceled']);
 const LANGFUSE_TERMINAL_FALLBACK_DELAY_MS = 15_000;
@@ -1222,20 +1200,6 @@ function isPluginAuthoringRun(db, run) {
     return snapshot?.pluginId === 'od-plugin-authoring';
   }
   return false;
-}
-
-async function hasGeneratedPluginArtifacts(projectRoot) {
-  if (!projectRoot || typeof projectRoot !== 'string') return false;
-  const required = [
-    path.join(projectRoot, 'generated-plugin', 'open-design.json'),
-    path.join(projectRoot, 'generated-plugin', 'SKILL.md'),
-  ];
-  try {
-    await Promise.all(required.map((file) => fs.promises.access(file, fs.constants.F_OK)));
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 // Renderable `<question-form>`/`<ask-question>` detection now lives in
