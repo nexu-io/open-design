@@ -266,6 +266,10 @@ export function AvatarMenu({
   const [amrLoginPending, setAmrLoginPending] = useState(false);
   const amrLoginStartedAtRef = useRef<number | null>(null);
   const amrLoginPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Set false on unmount so an async login that resolves AFTER the menu is torn
+  // down cannot dispatch events or spawn an unowned polling interval (looper
+  // review on #6421).
+  const amrMountedRef = useRef(true);
 
   const stopAmrLoginPolling = useCallback(() => {
     if (amrLoginPollRef.current) {
@@ -287,11 +291,13 @@ export function AvatarMenu({
       installationId: config.installationId,
     });
     const result = await startVelaLogin(null, odDeviceId);
+    if (!amrMountedRef.current) return;
     if (result.ok || result.alreadyRunning) {
       notifyAmrLoginStatusChanged('login-started');
       amrLoginPollRef.current = setInterval(() => {
         void fetchVelaLoginStatus()
           .then((status) => {
+            if (!amrMountedRef.current) return;
             if (status) setAmrAccount(status);
             const outcome = amrLoginPollOutcome(status, startedAt);
             if (outcome === 'signed-in') {
@@ -302,6 +308,7 @@ export function AvatarMenu({
             }
           })
           .catch(() => {
+            if (!amrMountedRef.current) return;
             stopAmrLoginPolling();
           });
       }, AMR_LOGIN_POLL_INTERVAL_MS);
@@ -324,8 +331,10 @@ export function AvatarMenu({
     return () => window.removeEventListener(AMR_LOGIN_STATUS_EVENT, onLoginStatus);
   }, [amrLoginPending, stopAmrLoginPolling]);
 
-  // Clear any in-flight poll on unmount.
+  // Clear any in-flight poll on unmount and mark the component as unmounted so
+  // a pending startVelaLogin cannot spawn a new unowned interval.
   useEffect(() => () => {
+    amrMountedRef.current = false;
     if (amrLoginPollRef.current) clearInterval(amrLoginPollRef.current);
   }, []);
 

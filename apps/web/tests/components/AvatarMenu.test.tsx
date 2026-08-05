@@ -316,6 +316,74 @@ describe('AvatarMenu', () => {
     });
   });
 
+  it('does not start a polling interval if the menu unmounts before login resolves', async () => {
+    // looper review on #6421: an async login resolving after unmount must not
+    // spawn an unowned interval whose callbacks update stale component state.
+    const amrAgent: AgentInfo = {
+      id: 'amr',
+      name: 'Open Design AMR',
+      bin: 'vela',
+      available: true,
+      models: [{ id: 'default', label: 'Default (CLI config)' }],
+    };
+    let resolveLogin: (value: Response) => void = () => {};
+    const loginPromise = new Promise<Response>((resolve) => {
+      resolveLogin = resolve;
+    });
+    const setIntervalSpy = vi.spyOn(globalThis, 'setInterval');
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === '/api/integrations/vela/status') {
+        return new Response(
+          JSON.stringify({
+            loggedIn: false,
+            loginInFlight: false,
+            profile: 'test',
+            user: null,
+            configPath: '/Users/test/.amr/config.json',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url === '/api/integrations/vela/login') return loginPromise;
+      return new Response('{}', { status: 200 });
+    }));
+
+    const view = render(
+      <AvatarMenu
+        config={baseConfig}
+        agents={[codexAgent, claudeAgent, amrAgent]}
+        daemonLive
+        onModeChange={vi.fn()}
+        onAgentChange={vi.fn()}
+        onAgentModelChange={vi.fn()}
+        onOpenSettings={vi.fn()}
+        onRefreshAgents={vi.fn()}
+      />,
+    );
+    openMenu();
+    await waitFor(() => {
+      expect(screen.getByTestId('avatar-amr-row-signin')).toBeTruthy();
+    });
+    fireEvent.click(screen.getByTestId('avatar-amr-row-signin'));
+
+    // Unmount while the login request is still in flight, then resolve it.
+    view.unmount();
+    resolveLogin(
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    // No AMR polling interval (AMR_LOGIN_POLL_INTERVAL_MS = 2000) may have
+    // been created after unmount. testing-library's internal waitFor timer uses
+    // a different delay, so filter on our interval's cadence.
+    const amrPollCalls = setIntervalSpy.mock.calls.filter(([, delay]) => delay === 2000);
+    expect(amrPollCalls).toHaveLength(0);
+  });
+
   it('rescans agents and re-renders newly available CLI entries', async () => {
     function Harness() {
       const [agents, setAgents] = useState<AgentInfo[]>([
