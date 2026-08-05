@@ -590,7 +590,7 @@ export function AvatarMenu({
                 type="button"
                 className="avatar-item avatar-item--pinned avatar-amr-signin"
                 data-testid="avatar-amr-row-signin"
-                disabled={amrLoginPending || !!amrLoginError}
+                disabled={amrLoginPending}
                 onClick={() => {
                   void handleAmrSignIn();
                 }}

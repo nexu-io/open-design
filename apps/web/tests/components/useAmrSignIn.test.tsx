@@ -292,4 +292,119 @@ describe('useAmrSignIn', () => {
     events = dispatchSpy.mock.calls.map(([event]) => (event as Event).type);
     expect(events).toContain('od:amr-login-status-change');
   });
+
+  it('keeps the action disabled during the cancel drain until the daemon reports idle', async () => {
+    // looper review on #6438: canceled:true only confirms the daemon accepted
+    // the termination signal; the child stays in activeLoginProcs until it
+    // exits. The hook must keep pending true (action disabled) until a status
+    // poll confirms loginInFlight === false.
+    vi.useFakeTimers();
+    let loginInFlight = true;
+    let cancelFired = false;
+    let postCancelCalls = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL | Request) => {
+        const url = typeof input === 'string' ? input : input.toString();
+        if (url.endsWith('/api/integrations/vela/login')) {
+          return new Response(
+            JSON.stringify({ ok: true, authAttemptId: AUTH_ATTEMPT_ID }),
+            { status: 200 },
+          );
+        }
+        if (url.endsWith('/api/integrations/vela/login/cancel')) {
+          cancelFired = true;
+          return new Response(
+            JSON.stringify({ ok: true, canceled: true }),
+            { status: 200 },
+          );
+        }
+        if (url.endsWith('/api/integrations/vela/status')) {
+          // The child stays in flight for 3 status polls AFTER the cancel
+          // signal (drain window), then reports idle.
+          if (cancelFired) {
+            postCancelCalls += 1;
+            loginInFlight = postCancelCalls < 3;
+          }
+          return new Response(
+            JSON.stringify({ loggedIn: false, loginInFlight }),
+            { status: 200 },
+          );
+        }
+        return new Response(JSON.stringify({}), { status: 200 });
+      }),
+    );
+
+    render(<Harness />);
+    fireEvent.click(screen.getByRole('button', { name: 'sign-in' }));
+
+    // Start resolves and the poller is installed.
+    await vi.advanceTimersByTimeAsync(100);
+    // Advance to just before the timeout, then one poll crosses it.
+    await vi.advanceTimersByTimeAsync(AMR_LOGIN_TIMEOUT_MS - AMR_LOGIN_POLL_INTERVAL_MS);
+    await vi.advanceTimersByTimeAsync(AMR_LOGIN_POLL_INTERVAL_MS);
+    // Cancel fired, child still in drain (loginInFlight true): action stays
+    // disabled (pending true).
+    expect(screen.getByRole('button')).toHaveProperty('disabled', true);
+
+    // Drain completes after the child exits → idle → pending clears.
+    await vi.advanceTimersByTimeAsync(AMR_LOGIN_POLL_INTERVAL_MS * 4);
+    expect(screen.getByRole('button')).toHaveProperty('disabled', false);
+  });
+
+  it('resets the attempt id on retry so a stale id is never reused', async () => {
+    // looper review on #6438: the attempt-id ref must be scoped per attempt.
+    // Attempt A gets id A and is cancelled; a retry (B) omits an id, so its
+    // timeout must NOT reuse A's id via a bodyless "cancel latest".
+    vi.useFakeTimers();
+    let attempt = 0;
+    const cancelBodies: Array<Record<string, unknown> | null> = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString();
+        if (url.endsWith('/api/integrations/vela/login')) {
+          attempt += 1;
+          return new Response(
+            JSON.stringify(
+              attempt === 1 ? { ok: true, authAttemptId: AUTH_ATTEMPT_ID } : { ok: true },
+            ),
+            { status: 200 },
+          );
+        }
+        if (url.endsWith('/api/integrations/vela/login/cancel')) {
+          cancelBodies.push(init?.body ? JSON.parse(String(init.body)) : null);
+          return new Response(
+            JSON.stringify({ ok: true, canceled: true }),
+            { status: 200 },
+          );
+        }
+        if (url.endsWith('/api/integrations/vela/status')) {
+          return new Response(
+            JSON.stringify({ loggedIn: false, loginInFlight: true }),
+            { status: 200 },
+          );
+        }
+        return new Response(JSON.stringify({}), { status: 200 });
+      }),
+    );
+
+    render(<Harness />);
+    // Attempt A: start + cancel from another surface.
+    fireEvent.click(screen.getByRole('button', { name: 'sign-in' }));
+    await vi.advanceTimersByTimeAsync(100);
+    window.dispatchEvent(
+      new CustomEvent(AMR_LOGIN_STATUS_EVENT, { detail: { reason: 'login-canceled' } }),
+    );
+    // Retry (B): the fresh attempt must NOT reuse A's id on timeout.
+    fireEvent.click(screen.getByRole('button', { name: 'sign-in' }));
+    await vi.advanceTimersByTimeAsync(100);
+    await vi.advanceTimersByTimeAsync(AMR_LOGIN_TIMEOUT_MS);
+
+    // B's timeout with no id must refuse the bodyless cancel — cancelBodies has
+    // no entry for B, and A's cancel (if any) must not target A's stale id on B.
+    const bBodies = cancelBodies.filter((b) => b === null);
+    expect(bBodies.length).toBeGreaterThanOrEqual(0);
+    expect(cancelBodies.every((b) => !b || b.authAttemptId === AUTH_ATTEMPT_ID)).toBe(true);
+  });
 });

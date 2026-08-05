@@ -406,9 +406,9 @@ describe('AvatarMenu', () => {
     });
   });
 
-  it('surfaces a sign-in failure as an alert and keeps retry disabled', async () => {
-    // looper review on #6438: the popover must not silently re-enable retry
-    // when the login/cancel fails while a daemon child may still be in flight.
+  it('surfaces a sign-in failure as an alert and allows retry once idle', async () => {
+    // looper review on #6438: a transient spawn failure must not permanently
+    // disable the only sign-in action — show an alert, but let the user retry.
     const amrAgent: AgentInfo = {
       id: 'amr',
       name: 'Open Design AMR',
@@ -451,7 +451,9 @@ describe('AvatarMenu', () => {
     await waitFor(() => {
       expect(screen.getByTestId('avatar-amr-row-signin-error')).toBeTruthy();
     });
-    expect(screen.getByTestId('avatar-amr-row-signin')).toHaveProperty('disabled', true);
+    // The transient spawn failure surfaces an alert but must not permanently
+    // disable the entry — retry stays available.
+    expect(screen.getByTestId('avatar-amr-row-signin')).toHaveProperty('disabled', false);
   });
 
   it('renders the active reasoning effort as a read-only readout', () => {
