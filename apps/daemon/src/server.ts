@@ -18,6 +18,7 @@ import { emittedRenderableQuestionForm } from './question-form-detect.js';
 import { createFinalizedMessageTelemetryReporter as createFinalizedMessageTelemetryReporterWithContract } from './runtimes/telemetry-finalization.js';
 import { createMarketplaceFetcher as createMarketplaceFetcherWithContract } from './runtimes/marketplace-fetcher.js';
 import { copyPluginFolderForProjectContext } from './runtimes/plugin-context.js';
+import { readProjectPluginManifest as readProjectPluginManifestWithContract } from './plugins/project-manifest.js';
 import { upsertSkillPluginCandidateAssistantMessage as upsertSkillPluginCandidateAssistantMessageWithContract } from './runtimes/skill-candidate-message.js';
 import { resolveProjectRoot } from './project-root.js';
 import {
@@ -1081,26 +1082,7 @@ export { createAgentRuntimeToolPrompt };
 
 const { execFileBuffered, execGhBuffered, execCommandViaLoginShell } = createShellCommandRunner();
 
-async function readProjectPluginManifest(folder) {
-  const raw = await fs.promises.readFile(path.join(folder, 'open-design.json'), 'utf8');
-  const manifest = JSON.parse(raw);
-  const name = typeof manifest.name === 'string' && manifest.name.trim()
-    ? manifest.name.trim()
-    : path.basename(folder);
-  if (/[/\\]/.test(name) || /^\.+$/.test(name)) {
-    throw new Error(
-      `open-design.json in ${folder}: name "${name}" must not contain path separators or consist only of dots`,
-    );
-  }
-  return {
-    name,
-    title: typeof manifest.title === 'string' ? manifest.title : name,
-    version: typeof manifest.version === 'string' ? manifest.version : '0.1.0',
-    manifest,
-  };
-}
-
-export const __forTestReadProjectPluginManifest = readProjectPluginManifest;
+export const __forTestReadProjectPluginManifest = readProjectPluginManifestWithContract;
 
 const USER_PLUGIN_SOURCE_KINDS = new Set([
   'user',
