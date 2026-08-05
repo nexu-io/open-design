@@ -606,6 +606,33 @@ interface CliAtomListResponse {
   [key: string]: unknown;
 }
 
+interface CliLibraryAsset {
+  id?: string;
+  kind?: string;
+  width?: number;
+  height?: number;
+  sourceTitle?: string;
+  sourceUrl?: string;
+  caption?: string;
+  [key: string]: unknown;
+}
+
+interface CliLibraryAssetsResponse {
+  assets?: CliLibraryAsset[];
+  [key: string]: unknown;
+}
+
+interface CliLibraryIngestResponse {
+  asset?: CliLibraryAsset;
+  deduped?: boolean;
+  [key: string]: unknown;
+}
+
+interface CliLibraryApplyResponse {
+  relPath?: string;
+  [key: string]: unknown;
+}
+
 interface BrandResponse {
   id?: string;
   projectId?: string;
@@ -7110,17 +7137,19 @@ async function runLibrary(args: readonly string[]) {
       case 'list':
       case 'search': {
         const params = new URLSearchParams();
-        const query = sub === 'search' ? flags.query || pos[0] : flags.query;
+        const query = typeof flags.query === 'string'
+          ? flags.query
+          : sub === 'search' ? pos[0] : undefined;
         if (query) params.set('q', query);
-        if (flags.kind) params.set('kind', flags.kind);
-        if (flags.tag) params.set('tag', flags.tag);
-        if (flags.source) params.set('source', flags.source);
-        if (flags.date) params.set('date', flags.date);
-        if (flags.project) params.set('projectId', flags.project);
+        if (typeof flags.kind === 'string') params.set('kind', flags.kind);
+        if (typeof flags.tag === 'string') params.set('tag', flags.tag);
+        if (typeof flags.source === 'string') params.set('source', flags.source);
+        if (typeof flags.date === 'string') params.set('date', flags.date);
+        if (typeof flags.project === 'string') params.set('projectId', flags.project);
         const qs = params.toString();
         const resp = await fetch(`${base}/api/library/assets${qs ? `?${qs}` : ''}`);
         if (!resp.ok) return structuredHttpFailure(resp);
-        const data = (await resp.json()) as Record<string, unknown>;
+        const data = (await resp.json()) as CliLibraryAssetsResponse;
         if (flags.json) {
           writeJson(data);
           return;
@@ -7168,10 +7197,17 @@ async function runLibrary(args: readonly string[]) {
         }
         const { readFile } = await import('node:fs/promises');
         const nodePath = await import('node:path');
-        const results = [];
+        const results: Array<Record<string, unknown>> = [];
         let failed = false;
         for (const src of sources) {
-          const body = {};
+          const body: {
+            url?: string;
+            sourceUrl?: string;
+            dataUrl?: string;
+            filename?: string;
+            kind?: string;
+            tags?: string[];
+          } = {};
           try {
             if (/^https?:\/\//i.test(src)) {
               body.url = src;
@@ -7184,12 +7220,13 @@ async function runLibrary(args: readonly string[]) {
             }
           } catch (err) {
             failed = true;
-            results.push({ source: src, ok: false, error: err?.message ?? String(err) });
-            if (!flags.json) console.error(`${src}\terror\t${err?.message ?? err}`);
+            const message = err instanceof Error ? err.message : String(err);
+            results.push({ source: src, ok: false, error: message });
+            if (!flags.json) console.error(`${src}\terror\t${message}`);
             continue;
           }
-          if (flags.kind) body.kind = flags.kind;
-          if (flags.tag) body.tags = [flags.tag];
+          if (typeof flags.kind === 'string') body.kind = flags.kind;
+          if (typeof flags.tag === 'string') body.tags = [flags.tag];
           const resp = await fetch(`${base}/api/library/ingest`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
@@ -7199,13 +7236,15 @@ async function runLibrary(args: readonly string[]) {
             failed = true;
             // The daemon rejects unsupported formats (415) and oversized files
             // (413); surface the reason per source instead of aborting the run.
-            const detail = await resp.json().catch(() => null);
+            const detail = await resp.json().catch(() => null) as {
+              error?: { message?: string };
+            } | null;
             const message = detail?.error?.message ?? `HTTP ${resp.status}`;
             results.push({ source: src, ok: false, status: resp.status, error: message });
             if (!flags.json) console.error(`${src}\trejected\t${message}`);
             continue;
           }
-          const data = (await resp.json()) as Record<string, unknown>;
+          const data = (await resp.json()) as CliLibraryIngestResponse;
           results.push({ source: src, ok: true, ...data });
           if (!flags.json) {
             const asset = data.asset as { id?: string; kind?: string } | undefined;
@@ -7226,15 +7265,20 @@ async function runLibrary(args: readonly string[]) {
           console.error('Usage: od library apply <id> --project <projectId> [--dir <subdir>]');
           process.exit(2);
         }
-        const body = { projectId: flags.project };
-        if (flags.dir) body.dir = flags.dir;
+        const projectId = flags.project;
+        if (typeof projectId !== 'string') {
+          console.error('Usage: od library apply <id> --project <projectId> [--dir <subdir>]');
+          process.exit(2);
+        }
+        const body: { projectId: string; dir?: string } = { projectId };
+        if (typeof flags.dir === 'string') body.dir = flags.dir;
         const resp = await fetch(`${base}/api/library/assets/${encodeURIComponent(id)}/apply`, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify(body),
         });
         if (!resp.ok) return structuredHttpFailure(resp);
-        const data = (await resp.json()) as Record<string, unknown>;
+        const data = (await resp.json()) as CliLibraryApplyResponse;
         if (flags.json) {
           writeJson(data);
           return;
@@ -7273,6 +7317,7 @@ async function runLibrary(args: readonly string[]) {
         const ir = await resp.text();
         if (flags.out) {
           const { writeFile } = await import('node:fs/promises');
+          if (typeof flags.out !== 'string') process.exit(2);
           await writeFile(flags.out, ir, 'utf8');
           if (flags.json) {
             writeJson({ ok: true, id, out: flags.out, bytes: Buffer.byteLength(ir) });
