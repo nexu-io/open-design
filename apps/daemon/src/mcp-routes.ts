@@ -6,6 +6,7 @@ import { installCodexMcp, probeCodexInstall, uninstallCodexMcp } from './codex-c
 import { MCP_TEMPLATES, buildAcpMcpServers, buildClaudeMcpJson, isManagedProjectCwd, readMcpConfig, writeMcpConfig } from './mcp-config.js';
 import { beginAuth, exchangeCodeForToken, refreshAccessToken } from './mcp-oauth.js';
 import { clearToken, getToken, isTokenExpired, readAllTokens, setToken } from './mcp-tokens.js';
+import { escapeHtml } from './runtimes/html-escaping.js';
 import type { RouteDeps } from './server-context.js';
 
 export interface RegisterMcpRoutesDeps extends RouteDeps<'http' | 'paths' | 'mcp'> {}
@@ -441,13 +442,4 @@ function renderOAuthResultPage(opts: any) {
   </script>
 </body>
 </html>`;
-}
-
-function escapeHtml(s: any) {
-  return String(s ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
 }

@@ -625,6 +625,7 @@ import {
   requestRunOverride,
   toolTokenValidationStatus,
 } from './runtimes/tool-authorization.js';
+import { escapeHtml } from './runtimes/html-escaping.js';
 import {
   aggregateCloudflarePagesStatus,
   buildDeployFileSet,
@@ -2072,15 +2073,6 @@ function renderOAuthResultPage(opts) {
   </script>
 </body>
 </html>`;
-}
-
-function escapeHtml(s) {
-  return String(s ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
 }
 
 function setLiveArtifactPreviewHeaders(res) {
