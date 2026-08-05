@@ -701,6 +701,42 @@ interface CliMemoryEntryResponse {
   [key: string]: unknown;
 }
 
+interface CliMemoryEntriesResponse {
+  entries?: CliMemoryEntry[];
+  [key: string]: unknown;
+}
+
+interface CliRuleProposal {
+  name: string;
+  description?: string;
+  assertion: string;
+  check: string;
+  rationale?: string;
+}
+
+interface CliRuleSuggestResponse {
+  proposals?: CliRuleProposal[];
+  source?: string;
+  attemptedLLM?: boolean;
+  [key: string]: unknown;
+}
+
+interface CliMemoryVerification {
+  at: string;
+  status: string;
+  rulesActive: number;
+  rulesCovered: number;
+  rowsFailed: number;
+  runId?: string;
+  uncoveredRules?: string[];
+}
+
+interface CliMemoryVerificationsResponse {
+  verifications?: CliMemoryVerification[];
+  removed?: number;
+  [key: string]: unknown;
+}
+
 interface BrandResponse {
   id?: string;
   projectId?: string;
@@ -3398,7 +3434,7 @@ fixtures into a plugin's own tests/.`);
     process.exit(4);
   }
   if (flags.json) {
-    const data = (await resp.json()) as Record<string, unknown>;
+    const data = (await resp.json()) as CliMemoryEntriesResponse;
     process.stdout.write(JSON.stringify(data, null, 2) + '\n');
     return;
   }
@@ -6911,7 +6947,7 @@ vacuum:
       console.error(`POST /api/daemon/db/vacuum failed: ${resp.status} ${await resp.text()}`);
       process.exit(1);
     }
-    const data = (await resp.json()) as Record<string, unknown>;
+    const data = (await resp.json()) as CliMemoryEntryResponse;
     if (flags.json) {
       process.stdout.write(JSON.stringify(data, null, 2) + '\n');
       return;
@@ -6932,7 +6968,7 @@ vacuum:
       console.error(`POST ${url} failed: ${resp.status} ${await resp.text()}`);
       process.exit(1);
     }
-    const data = (await resp.json()) as Record<string, unknown>;
+    const data = (await resp.json()) as CliRuleSuggestResponse;
     if (flags.json) {
       process.stdout.write(JSON.stringify(data, null, 2) + '\n');
     } else {
@@ -8540,7 +8576,7 @@ async function runMemoryRule(base: any, rest: any, flags: any, writeJson: any) {
       process.exit(3);
     }
     if (!resp.ok) return structuredHttpFailure(resp);
-    const data = (await resp.json()) as Record<string, unknown>;
+    const data = (await resp.json()) as CliMemoryEntriesResponse;
     const rules = (data.entries ?? []).filter((e: any) => e.type === 'rule');
     if (flags.json) {
       writeJson({ rules });
@@ -8599,7 +8635,7 @@ async function runMemoryRule(base: any, rest: any, flags: any, writeJson: any) {
       process.exit(3);
     }
     if (!resp.ok) return structuredHttpFailure(resp);
-    const data = (await resp.json()) as Record<string, unknown>;
+    const data = (await resp.json()) as CliMemoryEntryResponse;
     if (flags.json) {
       writeJson(data.entry ?? data);
       return;
@@ -8632,7 +8668,7 @@ async function runMemoryRule(base: any, rest: any, flags: any, writeJson: any) {
       process.exit(3);
     }
     if (!resp.ok) return structuredHttpFailure(resp);
-    const data = (await resp.json()) as Record<string, unknown>;
+    const data = (await resp.json()) as CliRuleSuggestResponse;
     if (flags.json) {
       writeJson(data);
       return;
@@ -8729,7 +8765,7 @@ async function runMemoryVerify(base: any, rest: any, flags: any, writeJson: any)
       process.exit(3);
     }
     if (!resp.ok) return structuredHttpFailure(resp);
-    const data = (await resp.json()) as Record<string, unknown>;
+    const data = (await resp.json()) as CliMemoryVerificationsResponse;
     if (flags.json) {
       writeJson(data);
       return;
@@ -8795,7 +8831,7 @@ async function runMemoryConfig(base: any, rest: any, flags: any, writeJson: any)
     process.exit(2);
   };
 
-  const patch = {};
+  const patch: Record<string, boolean> = {};
   for (const [flagName, field] of Object.entries(TOGGLE_MAP)) {
     if (flagName in flags) {
       patch[field] = parseBool(flags[flagName], flagName);
