@@ -512,7 +512,10 @@ export type SidecarShutdownMessage = { type: typeof SIDECAR_MESSAGES.SHUTDOWN };
 export type DesktopEvalMessage = { input: DesktopEvalInput; type: typeof SIDECAR_MESSAGES.EVAL };
 export type DesktopScreenshotMessage = { input: DesktopScreenshotInput; type: typeof SIDECAR_MESSAGES.SCREENSHOT };
 export type DesktopConsoleMessage = { type: typeof SIDECAR_MESSAGES.CONSOLE };
-export type DesktopShowMessage = { type: typeof SIDECAR_MESSAGES.SHOW };
+export type DesktopShowInput = {
+  deeplinkUrl?: string;
+};
+export type DesktopShowMessage = { input?: DesktopShowInput; type: typeof SIDECAR_MESSAGES.SHOW };
 export type DesktopClickMessage = { input: DesktopClickInput; type: typeof SIDECAR_MESSAGES.CLICK };
 export type DesktopExportPdfMessage = { input: DesktopExportPdfInput; type: typeof SIDECAR_MESSAGES.EXPORT_PDF };
 export type DesktopRenderSlidesMessage = { input: DesktopRenderSlidesInput; type: typeof SIDECAR_MESSAGES.RENDER_SLIDES };
@@ -919,6 +922,17 @@ function normalizeDesktopUpdateInput(input: unknown): DesktopUpdateInput {
   return { action: value.action };
 }
 
+function normalizeDesktopShowInput(input: unknown): DesktopShowInput {
+  const value = assertObject(input, "desktop show input");
+  assertKnownKeys(value, ["deeplinkUrl"], "desktop show input");
+  if (value.deeplinkUrl == null) return {};
+  const deeplinkUrl = normalizeNonEmptyString(value.deeplinkUrl, "desktop show deeplinkUrl");
+  if (!deeplinkUrl.startsWith("opendesign://")) {
+    throw new Error("desktop show deeplinkUrl must use the opendesign scheme");
+  }
+  return { deeplinkUrl };
+}
+
 function normalizeMessageType(value: unknown, label: string): string {
   if (typeof value !== "string" || value.length === 0) {
     throw new SidecarContractError(SIDECAR_ERROR_CODES.INVALID_MESSAGE, `${label} type must be a non-empty string`);
@@ -965,9 +979,13 @@ export function normalizeDesktopSidecarMessage(input: unknown): DesktopSidecarMe
     case SIDECAR_MESSAGES.STATUS:
     case SIDECAR_MESSAGES.SHUTDOWN:
     case SIDECAR_MESSAGES.CONSOLE:
-    case SIDECAR_MESSAGES.SHOW:
       assertKnownKeys(value, ["type"], "desktop sidecar message");
       return { type };
+    case SIDECAR_MESSAGES.SHOW:
+      assertKnownKeys(value, ["input", "type"], "desktop sidecar message");
+      return value.input == null
+        ? { type }
+        : { input: normalizeDesktopShowInput(value.input), type };
     case SIDECAR_MESSAGES.EVAL:
       assertKnownKeys(value, ["input", "type"], "desktop sidecar message");
       return { input: normalizeDesktopEvalInput(value.input), type };

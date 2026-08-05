@@ -9,6 +9,11 @@
 
 import { act, cleanup, render } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
+import {
+  buildWorkspacePermissions,
+  buildWorkspaceSeatSummary,
+  type WorkspaceCollabContext,
+} from '@open-design/contracts';
 
 import { useCritiqueStream } from '../../../../src/components/Theater/hooks/useCritiqueStream';
 import type {
@@ -27,6 +32,7 @@ afterEach(() => {
 interface FactoryHandle {
   send: (action: CritiqueAction) => void;
   closed: boolean;
+  workspaceContext: WorkspaceCollabContext | null;
 }
 
 function makeFactory(): {
@@ -46,6 +52,7 @@ function makeFactory(): {
     const handle: FactoryHandle = {
       send: (action) => onEvent(action),
       closed: false,
+      workspaceContext: _opts.workspaceContext ?? null,
     };
     handles.push(handle);
     return {
@@ -61,15 +68,42 @@ interface Harness {
   state: CritiqueState;
 }
 
-function Probe({ projectId, enabled, factory, sink }: {
+function Probe({ projectId, enabled, factory, sink, workspaceContext }: {
   projectId: string | null;
   enabled: boolean;
   factory: ReturnType<typeof makeFactory>['factory'];
   sink: Harness;
+  workspaceContext?: WorkspaceCollabContext | null;
 }) {
-  const { state } = useCritiqueStream(projectId, enabled, { connectionFactory: factory });
+  const { state } = useCritiqueStream(projectId, enabled, {
+    connectionFactory: factory,
+    workspaceContext,
+  });
   sink.state = state;
   return null;
+}
+
+function teamContext(
+  workspaceId: string,
+  workspaceMemberId: string,
+): WorkspaceCollabContext {
+  return {
+    workspaceId,
+    workspaceType: 'team',
+    workspaceMemberId,
+    role: 'member',
+    memberStatus: 'active',
+    lifecycleState: 'active',
+    billingState: 'active',
+    planId: 'team_plus',
+    providerMode: 'platform_credits',
+    teamId: `team-${workspaceId}`,
+    seatSummary: buildWorkspaceSeatSummary({ seatLimit: 3, usedSeats: 2 }),
+    permissions: buildWorkspacePermissions({
+      role: 'member',
+      lifecycleState: 'active',
+    }),
+  };
 }
 
 describe('useCritiqueStream (Phase 7.2)', () => {
@@ -152,6 +186,36 @@ describe('useCritiqueStream (Phase 7.2)', () => {
     expect(handles).toHaveLength(2);
     expect(handles[0]!.closed).toBe(true);
     expect(handles[1]!.closed).toBe(false);
+  });
+
+  it('keys the live connection by full Workspace identity for the same project id', () => {
+    const workspaceA = teamContext('workspace-a', 'member-a');
+    const workspaceB = teamContext('workspace-b', 'member-b');
+    const { factory, handles } = makeFactory();
+    const sink: Harness = { state: { phase: 'idle' } };
+    const { rerender } = render(
+      <Probe
+        projectId="same-project"
+        enabled
+        factory={factory}
+        sink={sink}
+        workspaceContext={workspaceA}
+      />,
+    );
+    expect(handles[0]!.workspaceContext?.workspaceId).toBe('workspace-a');
+
+    rerender(
+      <Probe
+        projectId="same-project"
+        enabled
+        factory={factory}
+        sink={sink}
+        workspaceContext={workspaceB}
+      />,
+    );
+    expect(handles).toHaveLength(2);
+    expect(handles[0]!.closed).toBe(true);
+    expect(handles[1]!.workspaceContext?.workspaceId).toBe('workspace-b');
   });
 
   it('resets reducer state to idle when projectId changes (PR #1314 review)', () => {

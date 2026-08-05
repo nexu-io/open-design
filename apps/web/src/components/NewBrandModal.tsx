@@ -6,6 +6,7 @@ import { useBrandExtract } from '../runtime/useBrandExtract';
 import type { BrandReference } from '../runtime/brand-references';
 import { BrandReferencePicker } from './BrandReferencePicker';
 import styles from './NewBrandModal.module.css';
+import { useWorkspaceContext } from '../collab/useWorkspaceContext';
 
 interface Props {
   open: boolean;
@@ -17,6 +18,7 @@ interface Props {
 
 export function NewBrandModal({ open, onClose, onCreated }: Props) {
   const t = useT();
+  const { context: workspaceContext } = useWorkspaceContext();
   const { state, run, reset } = useBrandExtract();
   const [url, setUrl] = useState('');
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -53,9 +55,9 @@ export function NewBrandModal({ open, onClose, onCreated }: Props) {
       e.preventDefault();
       const trimmed = url.trim();
       if (!trimmed || starting) return;
-      void run(trimmed);
+      void run(trimmed, { workspaceContext });
     },
-    [url, starting, run],
+    [url, starting, run, workspaceContext],
   );
 
   // Picking a reference brand fills the URL field for visible feedback and
@@ -64,9 +66,9 @@ export function NewBrandModal({ open, onClose, onCreated }: Props) {
     (brand: BrandReference) => {
       if (starting) return;
       setUrl(brand.domain);
-      void run(brand.domain);
+      void run(brand.domain, { workspaceContext });
     },
-    [starting, run],
+    [starting, run, workspaceContext],
   );
 
   useEffect(() => {

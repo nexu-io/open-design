@@ -23,7 +23,7 @@ import {
   trackSettingsPopoverSurfaceView,
 } from '../analytics/events';
 import { createSocialSharePayload } from '../providers/registry';
-import type { AppConfig, AppTheme } from '../types';
+import type { AppConfig } from '../types';
 import { formatDiscordPresenceCount, useDiscordPresence } from './useDiscordPresence';
 import { Icon } from './Icon';
 import { SocialShareGrid } from './SocialShareGrid';
@@ -46,6 +46,9 @@ export type EntrySettingsSection =
   | 'integrations'
   | 'mcpClient'
   | 'language'
+  // Legacy deep-link token: the theme setting is gone (the app ships
+  // light-only) and SettingsDialog folds this into General, but the token stays
+  // accepted so an old link does not become a type error at the call site.
   | 'appearance'
   | 'notifications'
   | 'pet'
@@ -55,19 +58,8 @@ export type EntrySettingsSection =
   | 'memory'
   | 'designSystems';
 
-const ENTRY_THEME_OPTIONS: Array<{
-  value: AppTheme;
-  icon: 'sun-moon' | 'sun' | 'moon';
-  labelKey: 'settings.themeSystem' | 'settings.themeLight' | 'settings.themeDark';
-}> = [
-  { value: 'system', icon: 'sun-moon', labelKey: 'settings.themeSystem' },
-  { value: 'light', icon: 'sun', labelKey: 'settings.themeLight' },
-  { value: 'dark', icon: 'moon', labelKey: 'settings.themeDark' },
-];
-
 interface Props {
   config: AppConfig;
-  onThemeChange: (theme: AppTheme) => void;
   onOpenSettings: (section?: EntrySettingsSection) => void;
   // Fired when the gear trigger is clicked. Used by the in-project header to
   // emit the `artifact_header` / `settings` ui_click; the home/entry shell
@@ -80,7 +72,6 @@ interface Props {
 
 export function EntrySettingsMenu({
   config,
-  onThemeChange,
   onOpenSettings,
   onTrackTriggerClick,
   trackingPageName,
@@ -96,7 +87,6 @@ export function EntrySettingsMenu({
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const langListRef = useRef<HTMLDivElement | null>(null);
-  const activeTheme = config.theme ?? 'system';
   const discordOnlineLabel = discordPresence
     ? t('entry.discordOnlineLabel', {
         count: formatDiscordPresenceCount(discordPresence.onlineCount),
@@ -155,7 +145,7 @@ export function EntrySettingsMenu({
   }, [open]);
 
   // surface_view — fire once each time the settings popover opens so the
-  // share / language / appearance funnels have a denominator.
+  // share / language funnels have a denominator.
   useEffect(() => {
     if (!open) return;
     trackSettingsPopoverSurfaceView(analytics.track, {
@@ -209,7 +199,7 @@ export function EntrySettingsMenu({
         >
           <section className="entry-settings-menu__section">
             <div className="entry-settings-menu__section-title">
-              <Icon name="languages" size={13} />
+              <Icon name="languages" size={14} />
               <span>{t('settings.language')}</span>
             </div>
             <div className="entry-settings-menu__select">
@@ -272,7 +262,7 @@ export function EntrySettingsMenu({
                           {active ? (
                             <Icon
                               name="check"
-                              size={12}
+                              size={14}
                               className="entry-settings-menu__option-check"
                             />
                           ) : null}
@@ -287,43 +277,7 @@ export function EntrySettingsMenu({
 
           <section className="entry-settings-menu__section">
             <div className="entry-settings-menu__section-title">
-              <Icon name="palette" size={13} />
-              <span>{t('settings.appearance')}</span>
-            </div>
-            <div className="entry-settings-menu__theme-row">
-              {ENTRY_THEME_OPTIONS.map((option) => {
-                const active = activeTheme === option.value;
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    role="menuitemradio"
-                    aria-checked={active}
-                    className={`entry-settings-menu__theme${
-                      active ? ' is-active' : ''
-                    }`}
-                    onClick={() => {
-                      trackSettingsPopoverClick(analytics.track, {
-                        page_name: pageName,
-                        area: 'settings_popover',
-                        element: 'appearance',
-                        value: option.value,
-                      });
-                      onThemeChange(option.value);
-                      setOpen(false);
-                    }}
-                  >
-                    <Icon name={option.icon} size={13} />
-                    <span>{t(option.labelKey)}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-
-          <section className="entry-settings-menu__section">
-            <div className="entry-settings-menu__section-title">
-              <Icon name="external-link" size={13} />
+              <Icon name="external-link" size={14} />
               <span>{t('socialShare.openDesignSection')}</span>
             </div>
             <SocialShareGrid
@@ -388,7 +342,7 @@ export function EntrySettingsMenu({
                 {discordOnlineLabel}
               </span>
             ) : null}
-            <Icon name="external-link" size={12} className="entry-settings-menu__item-end" />
+            <Icon name="external-link" size={14} className="entry-settings-menu__item-end" />
           </a>
           <a
             className="entry-settings-menu__item"
@@ -412,7 +366,7 @@ export function EntrySettingsMenu({
               X
             </span>
             <span>{t('entry.followXLabel')}</span>
-            <Icon name="external-link" size={12} className="entry-settings-menu__item-end" />
+            <Icon name="external-link" size={14} className="entry-settings-menu__item-end" />
           </a>
           <a
             className="entry-settings-menu__item"
@@ -436,7 +390,7 @@ export function EntrySettingsMenu({
               @
             </span>
             <span>{t('entry.followThreadsLabel')}</span>
-            <Icon name="external-link" size={12} className="entry-settings-menu__item-end" />
+            <Icon name="external-link" size={14} className="entry-settings-menu__item-end" />
           </a>
           <a
             className="entry-settings-menu__item"
@@ -460,7 +414,7 @@ export function EntrySettingsMenu({
               YT
             </span>
             <span>{t('entry.youtubeLabel')}</span>
-            <Icon name="external-link" size={12} className="entry-settings-menu__item-end" />
+            <Icon name="external-link" size={14} className="entry-settings-menu__item-end" />
           </a>
           <a
             className="entry-settings-menu__item"

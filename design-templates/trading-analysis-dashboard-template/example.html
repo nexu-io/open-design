@@ -4,19 +4,18 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Trading Analysis Dashboard Template Example</title>
-  <style>
-    html,body{margin:0;height:100%;background:#0a1220;color:#eaf3ff;font-family:Inter,system-ui,sans-serif}
-    .top{height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 12px;border-bottom:1px solid #233756;background:#0e1a2e}
-    .top b{font-size:12px;letter-spacing:.08em}
-    .top span{font-size:11px;color:#9eb1ce}
-    iframe{border:0;width:100%;height:calc(100% - 45px);display:block;background:#0a1220}
-  </style>
+  <style>html,body{margin:0;height:100%;background:#0a1220}iframe{width:100%;height:100%;border:0;display:block}</style>
 </head>
 <body>
-  <div class="top">
-    <b>TRADING ANALYSIS DASHBOARD · TEMPLATE EXAMPLE</b>
-    <span>Default display sample rendered from assets/template.html</span>
-  </div>
-  <iframe src="./assets/template.html" title="Trading analysis dashboard template example"></iframe>
+  <!-- Iframe-only shell (recvqholN2wcep): the daemon's sandboxed preview
+       route unwraps a body that is EXACTLY one iframe and serves the inner
+       template directly (see iframeOnlyHtmlShellTarget in
+       apps/daemon/src/routes/plugins/assets.ts). The previous wrapper added a
+       header strip above the iframe, which defeated the unwrap — the nested
+       iframe was then blocked by the preview CSP (default-src 'none', no
+       frame-src), so both the live preview and the baked gallery poster
+       rendered a gray broken frame. Keep this file a bare iframe shell, like
+       flowai-live-dashboard-template. -->
+  <iframe src="./assets/template.html" title="Trading Analysis Dashboard Template Example"></iframe>
 </body>
 </html>

@@ -27,6 +27,7 @@ import {
   setAnalyticsUserId,
   setConfigureGlobals,
 } from './client';
+import { APP_VERSION_PLACEHOLDER } from './app-version';
 import { patchExceptionTrackingAppVersion } from './error-tracking';
 import type { AnalyticsConfigureGlobals } from '@open-design/contracts/analytics';
 import {
@@ -92,7 +93,6 @@ function isSameOriginApiCall(url: unknown): boolean {
   }
 }
 
-const APP_VERSION_PLACEHOLDER = '0.0.0';
 let runtimeAppVersion: string | null = null;
 let runtimeAppVersionPromise: Promise<string | null> | null = null;
 

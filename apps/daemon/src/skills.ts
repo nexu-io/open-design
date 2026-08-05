@@ -9,9 +9,13 @@
 import type { Dirent } from "node:fs";
 import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
+import type Database from "better-sqlite3";
 import { parseFrontmatter } from "./design-systems/frontmatter.js";
 import type { SkillCritiquePolicy } from "./critique/rollout.js";
 import { skillCwdAliasSegment, SKILLS_CWD_ALIAS } from "./cwd-aliases.js";
+import { getWorkspaceResourceByResourceId } from "./db.js";
+
+type SqliteDb = Database.Database;
 
 // Persisted skill ids on existing projects can outlive a folder rename.
 // listSkills() derives the id from the SKILL.md frontmatter `name`, so once
@@ -100,6 +104,19 @@ export interface SkillInfo {
   critiquePolicy: SkillCritiquePolicy;
   body: string;
   dir: string;
+  /**
+   * True for a skill materialized locally from a TEAMMATE's team share — the
+   * puller's copy, never the sharer's own (mirrors design-systems'
+   * `metadata.json` `teamSynced` flag; see `isTeamSyncedUserDesignSystem` in
+   * design-systems/index.ts). Sourced from the generic `workspace_resources`
+   * binding's `visibility` column (`'team'` — written by `syncSharedTeamSkill`'s
+   * `markTeamSynced` in server.ts), so it only appears when the caller asked to
+   * be workspace-scoped (`db` + `workspaceId` both passed to `listSkills`).
+   * Without this, a skill pulled from the team was indistinguishable from one
+   * the caller authored, and unsharing it team-side let it silently reappear
+   * in "Personal" instead of just leaving the Team scope.
+   */
+  teamSynced?: boolean;
 }
 
 interface DerivedExample {
@@ -136,6 +153,76 @@ export function findSkillById(skills: unknown, id: unknown): SkillInfo | undefin
   return (skills as SkillInfo[]).find((s) => s.id === canonical);
 }
 
+export interface ListSkillsOptions {
+  /**
+   * Narrow the listing to skills visible from this workspace (see
+   * `workspace_resources` in `db.ts`). Requires `db` — both are optional so
+   * legacy callers can deliberately keep an unscoped local catalog. HTTP
+   * resource routes and project/run prompt resolution pass the exact
+   * Workspace plus creator member.
+   */
+  db?: SqliteDb;
+  workspaceId?: string | null;
+  workspaceMemberId?: string | null;
+}
+
+/**
+ * Is this skill visible from `scope` (the requesting workspace)?
+ *
+ * Built-in skills are app capabilities and remain global. User skills in an
+ * explicit Workspace require an exact binding: Team skills are visible to
+ * Team members, while Personal skills require the creator member. Unbound
+ * user skills are quarantined from explicit Workspaces.
+ *
+ * `scope === undefined` is a separate signal from `null`/`''`: undefined
+ * means the caller is on the preserved local/CLI compatibility lane.
+ * `null`/`''` is a headerless HTTP catalog and may see built-ins and unbound
+ * local skills, but never a Workspace-claimed skill.
+ */
+function skillVisibleFromWorkspace(
+  db: SqliteDb,
+  skillId: string,
+  scope: string | null | undefined,
+  workspaceMemberId: string | null | undefined,
+  source: SkillSource,
+): boolean {
+  return skillVisibleFromBinding(
+    getWorkspaceResourceByResourceId(db, "skill", skillId),
+    scope,
+    workspaceMemberId,
+    source,
+  );
+}
+
+/**
+ * Pure counterpart of {@link skillVisibleFromWorkspace} that takes an
+ * already-fetched binding row instead of looking it up again — lets
+ * `listSkills`'s final scoping pass reuse the one binding read for both the
+ * visibility check and the `teamSynced` annotation below, instead of hitting
+ * `workspace_resources` twice per entry.
+ */
+function skillVisibleFromBinding(
+  binding: ReturnType<typeof getWorkspaceResourceByResourceId>,
+  scope: string | null | undefined,
+  workspaceMemberId: string | null | undefined,
+  source: SkillSource,
+): boolean {
+  const ownerId = typeof binding?.workspaceId === "string" ? binding.workspaceId.trim() : "";
+  if (scope === undefined) return true;
+  // A retracted teammate mirror stays bound as `visibility: 'team'` so its
+  // origin remains recoverable, but its tombstone removes it from every
+  // scoped catalog. The on-disk copy is intentionally left untouched.
+  if (binding?.visibility === "team" && binding.resourceState === "deleted") return false;
+  if (source === "built-in") return true;
+  const scopeId = scope?.trim();
+  if (!scopeId) return !ownerId;
+  if (!ownerId || ownerId !== scopeId) return false;
+  if (binding?.visibility === "team") return true;
+  const creatorId = binding?.createdByWorkspaceMemberId?.trim();
+  const callerId = workspaceMemberId?.trim();
+  return Boolean(creatorId && callerId && creatorId === callerId);
+}
+
 // Accept either a single root path or an array. When given multiple roots,
 // the first one wins on id collisions so user-imported skills under
 // USER_SKILLS_DIR can shadow a built-in skill of the same name without
@@ -144,6 +231,7 @@ export function findSkillById(skills: unknown, id: unknown): SkillInfo | undefin
 // UI can render an origin pill and gate the delete control.
 export async function listSkills(
   skillsRoots: string | readonly string[],
+  options: ListSkillsOptions = {},
 ): Promise<SkillInfo[]> {
   const roots = Array.isArray(skillsRoots) ? skillsRoots : [skillsRoots];
   const out: SkillInfo[] = [];
@@ -173,6 +261,23 @@ export async function listSkills(
         const data = asSkillFrontmatter(parsedData);
         const parentId =
           typeof data.name === "string" && data.name ? data.name : entry.name;
+        // A hidden user shadow must not consume the id before the built-in
+        // root is scanned. Otherwise another member's Personal skill could
+        // make the globally shipped skill of the same id disappear.
+        if (
+          source === "user"
+          && options.db
+          && options.workspaceId !== undefined
+          && !skillVisibleFromWorkspace(
+            options.db,
+            parentId,
+            options.workspaceId,
+            options.workspaceMemberId,
+            source,
+          )
+        ) {
+          continue;
+        }
         // Skip when an earlier root already surfaced this id — the first
         // root wins so user shadows built-in. Done before we read the
         // rest of the frontmatter to keep the shadowed-skill path cheap.
@@ -310,7 +415,40 @@ export async function listSkills(
       }
     }
   }
-  return out;
+  // `options.workspaceId === undefined` (key omitted entirely) is the
+  // "never asked to be scoped" case every non-`GET /api/skills` caller uses.
+  // A caller that DID pass the key — even as `null`, which `GET /api/skills`
+  // does whenever the request carries no `x-od-workspace-id` header — must
+  // still go through `skillVisibleFromWorkspace` below so a claimed skill is
+  // hidden from a headerless reader instead of silently passing through here.
+  if (!options.db || options.workspaceId === undefined) return out;
+  const scopeDb = options.db;
+  const scopeId = options.workspaceId;
+  // A derived `<parent>:<child>` example card has no `workspace_resources`
+  // row of its own — only the parent skill is ever bound (see
+  // `importUserSkill`'s caller) — so resolve derived ids back to their
+  // parent before checking visibility.
+  return out
+    .map((entry) => {
+      const derived = splitDerivedSkillId(entry.id);
+      const bindingId = derived ? derived.parentId : entry.id;
+      return { entry, binding: getWorkspaceResourceByResourceId(scopeDb, "skill", bindingId) };
+    })
+    .filter(({ entry, binding }) =>
+      skillVisibleFromBinding(
+        binding,
+        scopeId,
+        options.workspaceMemberId,
+        entry.source,
+      ),
+    )
+    // A live binding whose visibility is `'team'` is the puller's copy of a
+    // teammate's share (see `syncSharedTeamSkill`'s `markTeamSynced` in
+    // server.ts) — never the sharer's own skill, which is never bound this
+    // way. Tombstoned Team bindings were removed by the visibility filter.
+    .map(({ entry, binding }) =>
+      binding?.visibility === "team" ? { ...entry, teamSynced: true } : entry,
+    );
 }
 
 // Discover example artifacts that live alongside SKILL.md under

@@ -32,8 +32,8 @@
   border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--accent, #79a8ff) 12%, transparent);
   color: color-mix(in srgb, var(--accent, #79a8ff) 78%, var(--text));
-  font-size: 10.5px;
-  font-weight: 750;
+  font-size: 12px;
+  font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -87,7 +87,7 @@
 .automations-metric__value {
   color: var(--text-strong);
   font-size: 13px;
-  font-weight: 720;
+  font-weight: 700;
   line-height: 1;
   letter-spacing: -0.01em;
   font-variant-numeric: tabular-nums;
@@ -95,7 +95,7 @@
 
 .automations-metric__label {
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   line-height: 1;
   letter-spacing: 0.05em;
@@ -113,8 +113,8 @@
   border-radius: var(--radius);
   background: color-mix(in srgb, var(--accent, #79a8ff) 16%, var(--bg-panel));
   color: var(--text-strong);
-  font-size: 12.5px;
-  font-weight: 680;
+  font-size: 13px;
+  font-weight: 600;
   letter-spacing: -0.005em;
   cursor: pointer;
   box-shadow:
@@ -163,7 +163,7 @@
 
 .automations-section__label {
   margin: 0;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 700;
   letter-spacing: -0.005em;
   color: var(--text-strong);
@@ -171,14 +171,14 @@
 
 .automations-section__sub {
   margin: 4px 0 0;
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.5;
   color: var(--text-muted);
 }
 
 .automations-section__meta {
   color: var(--text-muted);
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.02em;
   font-variant-numeric: tabular-nums;
@@ -249,13 +249,13 @@
 
 .automation-empty__body strong {
   color: var(--text-strong);
-  font-size: 13.5px;
-  font-weight: 680;
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .automation-empty__body span {
   color: var(--text-muted);
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.45;
 }
 
@@ -326,8 +326,8 @@
 }
 
 .automation-row__title {
-  font-size: 13.5px;
-  font-weight: 680;
+  font-size: 13px;
+  font-weight: 600;
   color: var(--text-strong);
 }
 
@@ -341,7 +341,7 @@
 
 .automation-row__prompt {
   max-width: 100%;
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.5;
   color: var(--text-muted);
   display: -webkit-box;
@@ -368,8 +368,8 @@
   border-radius: var(--radius-pill);
   background: var(--bg-subtle);
   color: var(--text-muted);
-  font-size: 10.5px;
-  font-weight: 750;
+  font-size: 12px;
+  font-weight: 700;
   letter-spacing: 0;
   text-transform: uppercase;
 }
@@ -427,7 +427,7 @@
   background: var(--bg-subtle);
   color: var(--text);
   font-size: 12px;
-  font-weight: 650;
+  font-weight: 600;
   cursor: pointer;
   transition:
     background-color 120ms cubic-bezier(0.23, 1, 0.32, 1),
@@ -476,8 +476,8 @@
   gap: 12px;
   margin-bottom: 8px;
   color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 750;
+  font-size: 12px;
+  font-weight: 700;
   letter-spacing: 0;
   text-transform: uppercase;
 }
@@ -512,7 +512,7 @@
 
 .automation-history__status {
   color: var(--text-muted);
-  font-size: 11.5px;
+  font-size: 12px;
   text-transform: capitalize;
 }
 
@@ -646,7 +646,7 @@
   border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--bg-subtle) 90%, transparent);
   color: var(--text-muted);
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 700;
   line-height: 1;
   font-variant-numeric: tabular-nums;
@@ -683,7 +683,7 @@
   display: block;
   color: var(--text-strong);
   font-size: 13px;
-  font-weight: 680;
+  font-weight: 600;
 }
 
 .automations-templates__empty p {
@@ -773,14 +773,14 @@
   gap: 5px;
   width: fit-content;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
 }
 
 .automation-template-card__title {
   color: var(--text-strong);
-  font-size: 13.5px;
-  font-weight: 680;
+  font-size: 13px;
+  font-weight: 600;
   line-height: 1.35;
 }
 
@@ -817,7 +817,8 @@
   justify-content: center;
   padding: 24px;
   background: color-mix(in srgb, var(--scrim, rgba(0, 0, 0, 0.45)) 92%, transparent);
-  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: var(--scrim-backdrop);
+  backdrop-filter: var(--scrim-backdrop);
   animation: automation-modal-fade-in 160ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
@@ -868,14 +869,14 @@
   border: 0;
   background: transparent;
   font-size: 16px;
-  font-weight: 680;
+  font-weight: 600;
   color: var(--text-strong);
   padding: 6px 0;
 }
 
 .automation-modal__title-input::placeholder {
   color: var(--text-faint);
-  font-weight: 560;
+  font-weight: 500;
 }
 
 .automation-modal__title-input:focus {
@@ -909,7 +910,7 @@
   height: 32px;
   padding: 0 11px;
   border-radius: var(--radius);
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 700;
 }
 
@@ -968,7 +969,6 @@
 .automation-modal__prompt:focus {
   outline: none;
   border-color: color-mix(in srgb, var(--accent, #79a8ff) 44%, var(--border));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent, #79a8ff) 14%, transparent);
 }
 
 .automation-modal__prompt-wrap.is-mentioning .automation-modal__prompt {
@@ -1020,7 +1020,7 @@
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-muted);
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 700;
   cursor: pointer;
 }
@@ -1049,8 +1049,8 @@
 .automation-mention-section__label,
 .automation-popover__section-label {
   color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 750;
+  font-size: 12px;
+  font-weight: 700;
   letter-spacing: 0;
   text-transform: uppercase;
 }
@@ -1121,8 +1121,8 @@
 .automation-template-option__title {
   overflow: hidden;
   color: var(--text-strong);
-  font-size: 12.5px;
-  font-weight: 680;
+  font-size: 13px;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1131,7 +1131,7 @@
 .automation-template-option__meta {
   overflow: hidden;
   color: var(--text-muted);
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 1.3;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1157,7 +1157,7 @@
   background: var(--bg-panel);
   color: var(--text);
   font-size: 12px;
-  font-weight: 650;
+  font-weight: 600;
   cursor: pointer;
 }
 
@@ -1206,7 +1206,7 @@
   background: var(--bg-elevated, var(--bg-panel));
   color: var(--text);
   font-size: 12px;
-  font-weight: 680;
+  font-weight: 600;
   cursor: pointer;
   transition:
     background-color 120ms cubic-bezier(0.23, 1, 0.32, 1),
@@ -1281,7 +1281,7 @@
   height: 32px;
   padding: 0 14px;
   border-radius: var(--radius);
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 700;
   cursor: pointer;
   transition:
@@ -1329,9 +1329,11 @@
   max-height: 360px;
   overflow: auto;
   padding: 6px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--material-separator);
   border-radius: var(--radius);
-  background: var(--bg-elevated, var(--bg-panel));
+  background: var(--glass-regular);
+  -webkit-backdrop-filter: var(--glass-backdrop);
+  backdrop-filter: var(--glass-backdrop);
   box-shadow: 0 14px 34px color-mix(in srgb, #000 28%, transparent);
   display: flex;
   flex-direction: column;
@@ -1441,8 +1443,8 @@
 }
 
 .automation-popover__label {
-  font-size: 12.5px;
-  font-weight: 680;
+  font-size: 13px;
+  font-weight: 600;
   color: var(--text-strong);
   /*
    * Single-line truncate with ellipsis (#3274). Long project names in the
@@ -1461,7 +1463,7 @@
 }
 
 .automation-popover__hint {
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--text-muted);
   line-height: 1.4;
 }
@@ -1488,7 +1490,7 @@
   padding: 0 10px;
   border-radius: var(--radius-sm);
   font-size: 12px;
-  font-weight: 680;
+  font-weight: 600;
   cursor: pointer;
 }
 
@@ -1518,8 +1520,8 @@
   border: 1px solid var(--border);
   background: var(--bg-panel);
   color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 680;
+  font-size: 12px;
+  font-weight: 600;
   border-radius: var(--radius);
   cursor: pointer;
 }
@@ -1543,7 +1545,7 @@
 }
 
 .automation-popover__field > span {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   color: var(--text-muted);
   text-transform: uppercase;
@@ -1562,7 +1564,7 @@
   border-radius: var(--radius);
   background: var(--bg-panel);
   color: var(--text);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 /* Hide the browser-native clock icon so it doesn't crowd the time field */

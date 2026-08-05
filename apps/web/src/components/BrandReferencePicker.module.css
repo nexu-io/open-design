@@ -12,10 +12,99 @@
   min-height: 0;
 }
 
-.fill .head,
-.fill .quickPicksSection,
-.fill .controls {
+.fill .quickPicksSection {
   flex: 0 0 auto;
+}
+
+/* ── Compact side-nav split: search + categories left, gallery right ── */
+.split {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+  min-height: 0;
+}
+
+.fill .split {
+  flex: 1 1 auto;
+  min-height: 0;
+  /* Bounded height: children stretch so the gallery column can scroll. */
+  align-items: stretch;
+}
+
+.sideNav {
+  flex: 0 0 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+/* Host-scrolled hosts (BrandPickerModal): the whole picker scrolls, so pin
+   the side nav to the scrollport while the gallery column runs past it. */
+.compact:not(.fill) .sideNav {
+  position: sticky;
+  top: 0;
+}
+
+.mainCol {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* In the side nav the category chips read as a vertical nav list rather than
+   a pill cloud. */
+.sideNav .categories {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: 2px;
+}
+
+.sideNav .categoryChip {
+  display: flex;
+  justify-content: flex-start;
+  text-align: left;
+  padding: 7px 10px;
+  border-color: transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font-size: 13px;
+}
+
+.sideNav .categoryChip:hover {
+  border-color: transparent;
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+
+.sideNav .categoryChipActive,
+.sideNav .categoryChipActive:hover {
+  border-color: transparent;
+  background: var(--accent-tint);
+  color: var(--accent);
+}
+
+/* Narrow hosts: fall back to the stacked flow (nav above the gallery). */
+@media (max-width: 760px) {
+  .split {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .sideNav {
+    flex: 0 0 auto;
+  }
+  .compact:not(.fill) .sideNav {
+    position: static;
+  }
+  .sideNav .categories {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+  }
 }
 
 .head {
@@ -28,15 +117,15 @@
 .heading {
   margin: 0;
   font-family: var(--serif);
-  font-size: 22px;
-  font-weight: 640;
+  font-size: 20px;
+  font-weight: 600;
   letter-spacing: -0.01em;
   color: var(--text-strong);
 }
 
 .subtext {
   margin: 0;
-  font-size: 13.5px;
+  font-size: 13px;
   line-height: 1.5;
   color: var(--text-muted);
 }
@@ -54,8 +143,8 @@
 }
 
 .quickPicksLabel {
-  font-size: 11.5px;
-  font-weight: 650;
+  font-size: 12px;
+  font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--text-muted);
@@ -82,7 +171,7 @@
   background: var(--bg-elevated);
   color: var(--text);
   font-size: 13px;
-  font-weight: 550;
+  font-weight: 500;
   cursor: pointer;
   transition: border-color var(--dur-quick) var(--ease-out),
     background-color var(--dur-quick) var(--ease-out),
@@ -158,7 +247,7 @@
   border-radius: var(--radius-pill);
   background: var(--bg-subtle);
   color: var(--text);
-  font-size: 13.5px;
+  font-size: 13px;
   transition: border-color var(--dur-quick) var(--ease-out),
     box-shadow var(--dur-quick) var(--ease-out);
 }
@@ -170,7 +259,6 @@
 .search:focus-visible {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .categories {
@@ -191,7 +279,7 @@
   background: var(--bg-subtle);
   color: var(--text-muted);
   font-size: 12px;
-  font-weight: 550;
+  font-weight: 500;
   cursor: pointer;
   transition: border-color var(--dur-quick) var(--ease-out),
     background-color var(--dur-quick) var(--ease-out),
@@ -227,8 +315,12 @@
   min-height: 0;
   overflow-y: auto;
   scrollbar-width: thin;
-  /* breathing room so cards and their hover lift never kiss the scrollbar */
-  padding: 2px 4px 4px 2px;
+  /* Symmetric bleed room: side padding ≥ the cards' 9px hover bleed so the
+     bleed renders inside the scrollport instead of forcing a horizontal
+     scrollbar, and the matching negative margin cancels it so card content
+     stays on the column's left line. */
+  margin: 0 -9px;
+  padding: 2px 9px 4px 9px;
 }
 
 .grid {
@@ -237,8 +329,39 @@
   gap: 10px;
 }
 
+/* Side-nav split: the gallery column reads as a roomy 2-up wall — wide, tall
+   cards give the longest catalogue names ("Charlotte Tilbury", "Lucid
+   Motors") full text width instead of an ellipsis. The column gap absorbs the
+   cards' ±9px hover bleed (see .compact .card) with clearance to spare. */
 .compact .grid {
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 24px;
+}
+
+/* Borderless rows whose CONTENT sits flush on the column's left line (same
+   line as the quick-picks label above): the 8px padding + 1px border are
+   cancelled by a -9px margin, so the row's hover fill and accent outline
+   bleed past the content instead of indenting it. */
+.compact .card {
+  padding: 20px 8px;
+  gap: 13px;
+  margin: 0 -9px;
+  border-color: transparent;
+}
+
+/* Seamless logo: no tile edge — the mark sits directly on the row. The
+   monogram fallback keeps its own filled square so bare initials still read
+   as a logo slot. */
+.compact .cardThumb {
+  width: 46px;
+  height: 46px;
+  border: 0;
+  background: transparent;
+}
+
+/* Taller hover affordance so the action reads as a real button. */
+.compact .extractPill {
+  padding: 8px 14px;
 }
 
 .card {
@@ -315,8 +438,8 @@
   border-radius: var(--radius-xs);
   background: var(--bg-muted);
   color: var(--text-soft);
-  font-size: 15px;
-  font-weight: 650;
+  font-size: 16px;
+  font-weight: 600;
 }
 
 .quickChip .favicon,
@@ -338,7 +461,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text-strong);
 }
@@ -347,7 +470,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--text-muted);
 }
 
@@ -362,7 +485,7 @@
   border-radius: var(--radius-pill);
   background: var(--accent);
   color: #fff;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   opacity: 0;
   transform: translateY(6px);
@@ -414,7 +537,7 @@
   padding: 9px 12px;
   border-radius: var(--radius-sm);
   font-size: 13px;
-  font-weight: 550;
+  font-weight: 500;
 }
 
 .statusBusy {
@@ -461,7 +584,7 @@
   background: var(--bg-elevated);
   color: var(--text);
   font-size: 13px;
-  font-weight: 550;
+  font-weight: 500;
   cursor: pointer;
   transition: border-color var(--dur-quick) var(--ease-out),
     background-color var(--dur-quick) var(--ease-out);

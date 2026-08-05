@@ -1,7 +1,7 @@
 .backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(28, 27, 26, 0.42);
+  background: color-mix(in srgb, #202020 42%, transparent);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
   -webkit-app-region: no-drag;
@@ -9,21 +9,21 @@
   align-items: center;
   justify-content: center;
   z-index: 100;
-  animation: dialog-backdrop-fade-in 160ms ease-out;
+  animation: dialog-backdrop-fade-in var(--duration-fast, 150ms) var(--curve-decelerate-mid, ease-out);
 }
 
 :where(.dialog) {
   background: var(--bg-elevated);
   -webkit-app-region: no-drag;
   border-radius: var(--radius-lg);
-  padding: 22px;
+  padding: var(--spacing-22, 22px);
   width: 520px;
-  max-width: calc(100vw - 32px);
+  max-width: calc(100vw - var(--spacing-32, 32px));
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--spacing-12, 12px);
   box-shadow: var(--shadow-lg);
-  animation: dialog-panel-pop-in 220ms cubic-bezier(0.21, 1.02, 0.73, 1);
+  animation: dialog-panel-pop-in var(--duration-gentle, 250ms) var(--curve-decelerate-mid, ease-out);
 }
 
 .dialogSectioned {
@@ -34,47 +34,47 @@
 .header {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--spacing-4, 4px);
 }
 
 .body {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--spacing-12, 12px);
 }
 
 .footer {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
+  gap: var(--spacing-8, 8px);
 }
 
 .dialogSectioned .header {
-  padding: 22px 22px 0;
+  padding: var(--spacing-22, 22px) var(--spacing-22, 22px) 0;
 }
 
 .dialogSectioned .body {
-  padding: 16px 22px 0;
+  padding: var(--spacing-16, 16px) var(--spacing-22, 22px) 0;
 }
 
 .dialogSectioned .footer {
-  padding: 16px 22px 16px;
-  border-top: 1px solid var(--border);
-  margin-top: 16px;
+  padding: var(--spacing-16, 16px) var(--spacing-22, 22px);
+  border-top: var(--stroke-thin, 1px) solid var(--border);
+  margin-top: var(--spacing-16, 16px);
 }
 
 .title {
   margin: 0;
-  font-size: 22px;
+  font-size: var(--font-size-20, 20px);
   font-weight: 600;
-  letter-spacing: -0.015em;
+  letter-spacing: 0;
   color: var(--text);
 }
 
 .description {
   margin: 0;
-  font-size: 13px;
-  line-height: 1.55;
+  font-size: var(--font-size-13, 13px);
+  line-height: 125%;
   color: var(--text-muted);
 }
 

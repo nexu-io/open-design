@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
 const setupWorkspaceAction = new URL("../../.github/actions/setup-workspace/action.yml", import.meta.url);
+const setupPlaywrightAction = new URL("../../.github/actions/setup-playwright/action.yml", import.meta.url);
 const cacheMaintenanceWorkflow = new URL("../../.github/workflows/cache-maintenance.yml", import.meta.url);
 const landingPageCiWorkflow = new URL("../../.github/workflows/landing-page-ci.yml", import.meta.url);
 const visualBaselineWorkflow = new URL("../../.github/workflows/visual-baseline.yml", import.meta.url);
@@ -16,6 +17,17 @@ function sectionBetween(content: string, start: string, end: string): string {
 }
 
 describe("GitHub Actions cache workflows", () => {
+  it("[P1] uses preseeded Playwright only for a ready Nexu runner image", async () => {
+    const action = await readFile(setupPlaywrightAction, "utf8");
+
+    expect(action).toContain("*'\"nexu-runners-'*");
+    expect(action).toContain("PLAYWRIGHT_BROWSERS_PATH");
+    expect(action).toContain("steps.preinstalled-playwright.outputs.enabled == 'true'");
+    expect(action).toContain("steps.preinstalled-playwright.outputs.enabled != 'true'");
+    expect(action).toContain('pnpm -C "$package_dir" exec playwright install chromium');
+    expect(action).toContain("run: ${{ inputs.install-command }}");
+  });
+
   it("[P1] keeps pnpm cache writes on explicit trusted main seed jobs", async () => {
     const action = await readFile(setupWorkspaceAction, "utf8");
 

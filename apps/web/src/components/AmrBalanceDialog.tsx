@@ -9,7 +9,8 @@ import {
   attributedAmrUrl,
   recordAmrEntry,
 } from '../analytics/amr-attribution';
-import { amrConsoleUrlForProfile } from '../runtime/amr-guidance';
+import { useWorkspaceBilling, useWorkspaceContext } from '../collab/useWorkspaceContext';
+import { workspaceUpgradeUrl } from './EntryNavRail';
 import {
   AMR_HARD_BLOCK_BALANCE_USD,
   amrWalletBalanceUsd,
@@ -50,10 +51,11 @@ interface Props {
 // user just wrote a task and pressed send — so it must read as "one step from
 // starting", never as an error. Two variants with distinct copy AND CTAs:
 //
-//   insufficient — signed in, wallet definitively empty. CTA opens the
-//     console WALLET page (not the plans modal directly: free users landing
-//     on the wallet already get the subscription modal auto-opened, while
-//     paying users see top-up options in place). Balance badge shown.
+//   insufficient — signed in, wallet definitively empty. The CTA reads
+//     「升级套餐」, so it must LAND on the plan picker rather than drop the user
+//     on a page to hunt for it: it opens the team dashboard with B's
+//     `billing=checkout` deep link, which auto-opens the checkout dialog on
+//     arrival. Balance badge shown.
 //
 //   signed_out — Open Design Cloud selected but no account session. The CTA
 //     is the in-app sign-in (AmrLoginPill: spawns vela login, surfaces the
@@ -93,6 +95,28 @@ export function AmrBalanceDialog({
   // resume the parked task via onResolved. Bounded so an abandoned recharge
   // doesn't poll forever; guarded against double-fires.
   const [watchingWallet, setWatchingWallet] = useState(false);
+  // Where 「升级套餐」 goes. `workspaceUpgradeUrl` is the one decision point for
+  // every upgrade affordance: personal workspace → B's personal plan modal
+  // (`billing=plan`); team → `billing=checkout` vs `billing=plan` by whether
+  // the team ever completed a first checkout. Getting the personal branch wrong
+  // opened an error-state dialog: routing a personal workspace onto the team
+  // `billing=checkout` deep link opened the Upgrade-to-Team dialog with "Team
+  // plan unavailable" / a 3-seat minimum (recvpYEiH019cD, failed acceptance
+  // round). B now resolves `billing=plan` against the workspace's own state, so
+  // the team branch's guess is a hint rather than a requirement. The profile
+  // fallback keeps the CTA alive after a signed-out/no-context read (but not
+  // while that read is pending) — same `billing=plan` deep link every other
+  // Upgrade affordance uses (ChatPane, AvatarMenu, InlineModelSwitcher).
+  const {
+    context: workspaceContext,
+    loading: workspaceContextLoading,
+  } = useWorkspaceContext();
+  const workspaceBilling = useWorkspaceBilling();
+  const upgradeUrl = workspaceContextLoading
+    ? null
+    : workspaceUpgradeUrl(workspaceContext, workspaceBilling, {
+        fallbackProfile: profile,
+      });
   const resolvedRef = useRef(false);
   const resolveOnce = () => {
     if (resolvedRef.current) return;
@@ -124,7 +148,8 @@ export function AmrBalanceDialog({
     // resolveOnce is stable via ref; onResolved changes don't re-arm the watch.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [watchingWallet]);
-  const openWallet = () => {
+  const openUpgrade = () => {
+    if (!upgradeUrl) return;
     setWatchingWallet(true);
     // Same attribution handshake as the other Open Design Cloud handoffs
     // (ChatPane recharge, AvatarMenu upgrade): record the amr_entry, forward
@@ -138,7 +163,7 @@ export function AmrBalanceDialog({
       installationId,
     });
     window.open(
-      attributedAmrUrl(amrConsoleUrlForProfile(profile), attribution, deviceId),
+      attributedAmrUrl(upgradeUrl, attribution, deviceId),
       '_blank',
       'noopener,noreferrer',
     );
@@ -166,8 +191,16 @@ export function AmrBalanceDialog({
       >
         <Icon name="close" size={14} />
       </button>
-      <div className={styles.iconBadge} aria-hidden>
-        <Icon name="sparkles" size={22} />
+      <div className={styles.banner}>
+        <img
+          className={styles.bannerImage}
+          src="/upgrade/cloud-signin-aurora.jpg"
+          alt=""
+          width={1680}
+          height={720}
+          decoding="async"
+          draggable={false}
+        />
       </div>
       <h2 className={styles.title}>
         {signedOut ? t('chat.amrBalanceGate.signedOutTitle') : t('chat.amrBalanceGate.title')}
@@ -211,16 +244,16 @@ export function AmrBalanceDialog({
               if (loginStatus?.loggedIn === true) resolveOnce();
             }}
           />
-        ) : (
+        ) : upgradeUrl ? (
           <Button
             variant="primary"
             className={styles.cta}
-            onClick={openWallet}
+            onClick={openUpgrade}
             data-testid="amr-balance-dialog-plans"
           >
             {t('chat.amrBalanceGate.plansCta')}
           </Button>
-        )}
+        ) : null}
         <Button variant="ghost" className={styles.later} onClick={onClose}>
           {t('chat.amrBalanceGate.laterCta')}
         </Button>

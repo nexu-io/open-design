@@ -1,5 +1,5 @@
 name: Configure CI parallelism
-description: Export CI worker counts derived from nproc/2
+description: Export build worker counts derived from nproc/2 with a memory-safe Playwright cap
 
 runs:
   using: composite
@@ -14,14 +14,18 @@ runs:
         if [ "$workers" -lt 1 ]; then
           workers=1
         fi
+        playwright_workers="$workers"
+        if [ "$playwright_workers" -gt 2 ]; then
+          playwright_workers=2
+        fi
 
         {
           echo "OPEN_DESIGN_POSTINSTALL_CONCURRENCY=$workers"
           echo "OPEN_DESIGN_WORKSPACE_CONCURRENCY=$workers"
           echo "OD_CI_DAEMON_MAX_WORKERS=$workers"
           echo "OD_E2E_VITEST_MAX_WORKERS=$workers"
-          echo "OD_PLAYWRIGHT_WORKERS=$workers"
+          echo "OD_PLAYWRIGHT_WORKERS=$playwright_workers"
         } >> "$GITHUB_ENV"
 
         echo "workers=$workers" >> "$GITHUB_OUTPUT"
-        echo "nproc=$cpu_count workers=$workers"
+        echo "nproc=$cpu_count workers=$workers playwright_workers=$playwright_workers"

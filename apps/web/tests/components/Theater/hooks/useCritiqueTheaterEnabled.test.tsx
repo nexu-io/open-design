@@ -11,6 +11,11 @@ import { act, cleanup, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  buildWorkspacePermissions,
+  buildWorkspaceSeatSummary,
+  type WorkspaceCollabContext,
+} from '@open-design/contracts';
+import {
   setCritiqueTheaterEnabled,
   useCritiqueTheaterEnabled,
 } from '../../../../src/components/Theater/hooks/useCritiqueTheaterEnabled';
@@ -27,6 +32,26 @@ beforeEach(() => {
 function Probe({ sink }: { sink: { enabled?: boolean } }) {
   sink.enabled = useCritiqueTheaterEnabled();
   return null;
+}
+
+function teamContext(): WorkspaceCollabContext {
+  return {
+    workspaceId: 'workspace-a',
+    workspaceType: 'team',
+    workspaceMemberId: 'member-a',
+    role: 'member',
+    memberStatus: 'active',
+    lifecycleState: 'active',
+    billingState: 'active',
+    planId: 'team_plus',
+    providerMode: 'platform_credits',
+    teamId: 'team-a',
+    seatSummary: buildWorkspaceSeatSummary({ seatLimit: 3, usedSeats: 2 }),
+    permissions: buildWorkspacePermissions({
+      role: 'member',
+      lifecycleState: 'active',
+    }),
+  };
 }
 
 describe('useCritiqueTheaterEnabled (Phase 15.3)', () => {
@@ -336,6 +361,34 @@ describe('useCritiqueTheaterEnabled (Phase 15.3)', () => {
     expect(fetchCalls).toHaveLength(2);
     const body = JSON.parse(fetchCalls[1]!.body ?? '{}');
     expect(body).toEqual({ metadata: { critiqueTheaterEnabled: true } });
+  });
+
+  it('sends the persisted project exact scope on both settings requests', async () => {
+    const fetchCalls: RequestInit[] = [];
+    const fetchProjectSettings = (_url: string, init: RequestInit) => {
+      fetchCalls.push(init);
+      return Promise.resolve(
+        (init.method ?? 'GET') === 'GET'
+          ? Response.json({ project: { id: 'proj-team', metadata: {} } })
+          : new Response(null, { status: 200 }),
+      );
+    };
+
+    await act(async () => {
+      setCritiqueTheaterEnabled(true, {
+        projectId: 'proj-team',
+        workspaceContext: teamContext(),
+        fetchProjectSettings,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(fetchCalls).toHaveLength(2);
+    for (const init of fetchCalls) {
+      const headers = new Headers(init.headers);
+      expect(headers.get('x-od-workspace-id')).toBe('workspace-a');
+      expect(headers.get('x-od-workspace-member-id')).toBe('member-a');
+    }
   });
 
   it('skips the daemon PATCH when no projectId is supplied (bare integrator surface)', () => {

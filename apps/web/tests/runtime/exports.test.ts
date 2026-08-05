@@ -25,6 +25,7 @@ import {
   requestPreviewSnapshot,
   sourceLooksLikeExportableDeck,
 } from '../../src/runtime/exports';
+import { workspaceContextFixture } from '../helpers/workspace-context';
 
 describe('planDeckImageCapture (#4604 current-slide capture for runtime decks)', () => {
   it('whole-deck capture renders off-screen with no index (stitch all)', () => {
@@ -724,6 +725,81 @@ describe('binary project/design-system downloads', () => {
     });
     expect(capturedFilename).toBe('pitch.pptx');
     expect(await capturedBlob!.text()).toBe('PK-fake-pptx');
+  });
+
+  it('carries the project-pinned Workspace identity across every project export transport', async () => {
+    const workspaceContext = workspaceContextFixture({
+      workspaceId: 'workspace-a',
+      workspaceMemberId: 'member-a',
+    });
+    const fetchMock = vi.fn<typeof fetch>(async (input) => {
+      const url = String(input);
+      if (url.endsWith('/export/pdf')) {
+        return Response.json({ ok: true });
+      }
+      if (url.endsWith('/export/image')) {
+        return Response.json(
+          { error: { message: 'desktop only' } },
+          { status: 501 },
+        );
+      }
+      if (url.includes('/export/') && url.includes('?inline=1')) {
+        return new Response('<!doctype html><p>exported</p>', { status: 200 });
+      }
+      return new Response('archive-or-rendered-bytes', {
+        status: 200,
+        headers: {
+          'content-type': 'application/octet-stream',
+          'content-disposition': 'attachment; filename="export.bin"',
+        },
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await exportProjectAsHtml({
+      projectId: 'project-a',
+      filePath: 'index.html',
+      fallbackHtml: '<p>fallback</p>',
+      fallbackTitle: 'HTML',
+      workspaceContext,
+    });
+    await exportProjectAsPdf({
+      deck: false,
+      fallbackPdf: vi.fn(),
+      filePath: 'index.html',
+      projectId: 'project-a',
+      title: 'PDF',
+      workspaceContext,
+    });
+    await exportProjectAsPptx({
+      projectId: 'project-a',
+      fileName: 'index.html',
+      workspaceContext,
+    });
+    await exportProjectImageDataUrl({
+      projectId: 'project-a',
+      fileName: 'index.html',
+      workspaceContext,
+    });
+    await exportProjectAsZip({
+      projectId: 'project-a',
+      filePath: 'index.html',
+      fallbackHtml: '<p>fallback</p>',
+      fallbackTitle: 'ZIP',
+      workspaceContext,
+    });
+    await downloadProjectArchive({
+      projectId: 'project-a',
+      fallbackTitle: 'Archive',
+      workspaceContext,
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(6);
+    for (const [, init] of fetchMock.mock.calls) {
+      const headers = new Headers(init?.headers);
+      expect(headers.get('x-od-workspace-id')).toBe('workspace-a');
+      expect(headers.get('x-od-workspace-member-id')).toBe('member-a');
+    }
   });
 
   it('requests editable PPTX when the caller selects native shapes and text', async () => {

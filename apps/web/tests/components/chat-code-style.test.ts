@@ -10,9 +10,12 @@ describe('chat code styles', () => {
   it('keeps assistant chat code text free of filled backgrounds', () => {
     const css = readExpandedIndexCss();
 
+    // The code TEXT containers stay unfilled so assistant code reads cleanly…
     expect(cssRule(css, '.prose-block .md-inline-code')).toContain('background: transparent');
     expect(cssRule(css, '.prose-block .md-code-block')).toContain('background: transparent');
     expect(cssRule(css, '.live-code-pre')).toContain('background: transparent');
-    expect(cssRule(css, '.app .live-code-box')).toContain('background: transparent');
+    // …while #5517 gives the live-code widget WRAPPER a subtle secondary fill
+    // so it reads as a self-contained card (the text inside stays transparent).
+    expect(cssRule(css, '.app .live-code-box')).toContain('background: var(--bg-fill-secondary)');
   });
 });

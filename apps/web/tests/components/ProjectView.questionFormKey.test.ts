@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildQuestionFormKey,
   mergeServerMessagesIntoConversation,
+  normalizeConversationMessageOrder,
 } from '../../src/components/ProjectView';
 import type { ChatMessage, ProjectFile } from '../../src/types';
 
@@ -89,5 +90,57 @@ describe('mergeServerMessagesIntoConversation', () => {
 
     expect(merged.map((message) => message.id)).toEqual(['user-1', 'assistant-1', 'cta-1']);
     expect(merged[1]?.producedFiles).toEqual([producedFile]);
+  });
+});
+
+describe('normalizeConversationMessageOrder', () => {
+  it('restores a user turn that was persisted after its pinned assistant', () => {
+    const messages: ChatMessage[] = [
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: 'Working',
+        createdAt: 1_100,
+        startedAt: 1_000,
+        runId: 'run-1',
+        runStatus: 'running',
+      },
+      {
+        id: 'user-1',
+        role: 'user',
+        content: 'Build the dashboard',
+        createdAt: 1_000,
+      },
+    ];
+
+    expect(normalizeConversationMessageOrder(messages).map((message) => message.id)).toEqual([
+      'user-1',
+      'assistant-1',
+    ]);
+  });
+
+  it('does not reorder an unrelated assistant followed by a later user turn', () => {
+    const messages: ChatMessage[] = [
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: 'Done',
+        createdAt: 1_000,
+        startedAt: 900,
+        runId: 'run-1',
+        runStatus: 'succeeded',
+      },
+      {
+        id: 'user-2',
+        role: 'user',
+        content: 'Now make it responsive',
+        createdAt: 2_000,
+      },
+    ];
+
+    expect(normalizeConversationMessageOrder(messages).map((message) => message.id)).toEqual([
+      'assistant-1',
+      'user-2',
+    ]);
   });
 });

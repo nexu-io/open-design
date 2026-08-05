@@ -9,7 +9,10 @@
 import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import type { MemoryChangeEvent } from '@open-design/contracts';
+import type {
+  MemoryChangeEvent,
+  MemoryExtractionEvent,
+} from '@open-design/contracts';
 import { useT } from '../i18n';
 import { toastSlideUp } from '../motion';
 
@@ -23,18 +26,85 @@ interface Props {
   // Optional click handler. When provided, the pill becomes a button
   // and clicking it should jump the user into Settings → Memory.
   onOpenMemory?: () => void;
+  /**
+   * `off` preserves the browser's HTTP/1.1 connection budget while a project
+   * is hydrating. `activity` is used only while a project run can produce a
+   * memory extraction; when that run ends we keep the stream just long enough
+   * to observe the extraction's own terminal event. Other shell surfaces keep
+   * the existing always-on notification behavior.
+   */
+  subscriptionMode?: MemoryToastSubscriptionMode;
 }
 
 const VISIBLE_MS = 4500;
+const EXTRACTION_START_GRACE_MS = 10_000;
 
-export function MemoryToast({ onOpenMemory }: Props) {
+export type MemoryToastSubscriptionMode = 'always' | 'activity' | 'off';
+
+export function memoryToastSubscriptionMode(input: {
+  routeKind: string;
+  projectRunActive: boolean;
+  memorySurfaceOpen: boolean;
+}): MemoryToastSubscriptionMode {
+  // MemorySection owns the same endpoint while its surface is open, so a
+  // second toast-only connection would be redundant.
+  if (input.memorySurfaceOpen) return 'off';
+  if (input.routeKind !== 'project') return 'always';
+  return input.projectRunActive ? 'activity' : 'off';
+}
+
+export function MemoryToast({
+  onOpenMemory,
+  subscriptionMode = 'always',
+}: Props) {
   const t = useT();
   const [toast, setToast] = useState<ActiveToast | null>(null);
+  const [subscribed, setSubscribed] = useState(subscriptionMode !== 'off');
   // We keep the dismiss timer in a ref so a second event mid-flight
   // resets the countdown instead of double-dismissing.
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const subscriptionModeRef = useRef(subscriptionMode);
+  const subscriptionCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const activeExtractionIdsRef = useRef(new Set<string>());
 
   useEffect(() => {
+    const previousMode = subscriptionModeRef.current;
+    subscriptionModeRef.current = subscriptionMode;
+    if (subscriptionCloseTimerRef.current) {
+      clearTimeout(subscriptionCloseTimerRef.current);
+      subscriptionCloseTimerRef.current = null;
+    }
+    if (subscriptionMode !== 'off') {
+      setSubscribed(true);
+      return;
+    }
+    // Entering a project from Home must release the memory slot immediately.
+    // Only a stream that was opened for an active run gets a short hand-off
+    // window so the post-child-close extractor can announce its `running` id.
+    if (previousMode !== 'activity') {
+      activeExtractionIdsRef.current.clear();
+      setSubscribed(false);
+      return;
+    }
+    subscriptionCloseTimerRef.current = setTimeout(() => {
+      subscriptionCloseTimerRef.current = null;
+      if (
+        subscriptionModeRef.current === 'off'
+        && activeExtractionIdsRef.current.size === 0
+      ) {
+        setSubscribed(false);
+      }
+    }, EXTRACTION_START_GRACE_MS);
+  }, [subscriptionMode]);
+
+  useEffect(() => () => {
+    if (subscriptionCloseTimerRef.current) {
+      clearTimeout(subscriptionCloseTimerRef.current);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!subscribed) return;
     // Guard for environments without EventSource (jsdom in tests, SSR).
     // The toast is purely a UX nicety; no SSE just means no auto-pop-up.
     if (typeof EventSource === 'undefined') return;
@@ -64,10 +134,36 @@ export function MemoryToast({ onOpenMemory }: Props) {
       // a notification still lets the user see updates next time they
       // open Settings → Memory.
     });
+    es.addEventListener('extraction', (raw) => {
+      try {
+        const event = JSON.parse((raw as MessageEvent).data) as MemoryExtractionEvent;
+        if (!event?.id) return;
+        if (event.phase === 'running') {
+          activeExtractionIdsRef.current.add(event.id);
+          if (subscriptionCloseTimerRef.current) {
+            clearTimeout(subscriptionCloseTimerRef.current);
+            subscriptionCloseTimerRef.current = null;
+          }
+          return;
+        }
+        activeExtractionIdsRef.current.delete(event.id);
+        if (
+          subscriptionModeRef.current === 'off'
+          && activeExtractionIdsRef.current.size === 0
+        ) {
+          subscriptionCloseTimerRef.current = setTimeout(() => {
+            subscriptionCloseTimerRef.current = null;
+            if (subscriptionModeRef.current === 'off') setSubscribed(false);
+          }, 0);
+        }
+      } catch {
+        // Malformed payload — ignore.
+      }
+    });
     return () => {
       es.close();
     };
-  }, []);
+  }, [subscribed]);
 
   useEffect(() => {
     if (!toast) return;

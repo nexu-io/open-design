@@ -5,7 +5,13 @@ import { createRoot, type Root } from 'react-dom/client';
 import { Simulate } from 'react-dom/test-utils';
 import { JSDOM } from 'jsdom';
 import { ManualEditPanel, emptyManualEditDraft, manualEditPatchSummary, normalizeManualEditStyles, type ManualEditDraft } from '../../src/components/ManualEditPanel';
+import type { ProjectDesignTokenSuggestion, ProjectDesignTokenSuggestionProp } from '../../src/providers/registry';
 import { emptyManualEditStyles, type ManualEditPatch, type ManualEditStyles, type ManualEditTarget } from '../../src/edit-mode/types';
+
+// The rewritten panel renders ONE localized "Parameters" list instead of the
+// old hardcoded CONTENT / TYPOGRAPHY / SIZE / LAYOUT / BOX group headers, so
+// tests address controls by their translated row label rather than by group.
+const PARAMETERS = 'Parameters';
 
 const target: ManualEditTarget = {
   id: 'hero-title',
@@ -59,7 +65,15 @@ describe('ManualEditPanel', () => {
   it('renders the style inspector without the advanced editor entry', () => {
     renderPanel();
 
-    expect(host.textContent).toContain('TYPOGRAPHY');
+    // One localized parameters list carries what the old hardcoded English
+    // TYPOGRAPHY / SIZE / LAYOUT / BOX headers used to split apart.
+    const parameters = sectionByTitle(PARAMETERS);
+    for (const label of ['Text color', 'Background', 'Font', 'Font size', 'Weight', 'Line height', 'Letter spacing', 'Radius', 'Width', 'Height', 'Padding', 'Margin']) {
+      expect(parameters.textContent).toContain(label);
+    }
+    for (const legacyHead of ['TYPOGRAPHY', 'SIZE', 'LAYOUT', 'BOX']) {
+      expect(sectionHeads()).not.toContain(legacyHead);
+    }
     expect(host.textContent).not.toContain('Advanced');
   });
 
@@ -103,7 +117,7 @@ describe('ManualEditPanel', () => {
     const footer = host.querySelector('.manual-edit-footer');
     const deleteButton = host.querySelector('button[aria-label="Delete element"]');
 
-    expect(scrollRegion?.textContent).toContain('TYPOGRAPHY');
+    expect(scrollRegion?.textContent).toContain(PARAMETERS);
     expect(scrollRegion?.contains(deleteButton)).toBe(false);
     expect(footer?.contains(deleteButton)).toBe(true);
     expect(deleteButton?.textContent).toBe('');
@@ -213,10 +227,7 @@ describe('ManualEditPanel', () => {
       },
     });
 
-    const sizeRow = Array.from(host.querySelectorAll('.cc-row'))
-      .find((row) => row.textContent?.includes('Size'));
-    const sizeInput = sizeRow?.querySelector('input') as HTMLInputElement | null;
-    if (!sizeInput) throw new Error('Size input not found');
+    const sizeInput = rowInput('Font size');
 
     expect(sizeInput.value).toBe('32');
   });
@@ -233,10 +244,9 @@ describe('ManualEditPanel', () => {
       },
     });
 
-    const sizeIncrease = host.querySelector('button[aria-label="Size increase"]') as HTMLButtonElement | null;
-    const lineIncrease = host.querySelector('button[aria-label="Line increase"]') as HTMLButtonElement | null;
-    const trackingDecrease = host.querySelector('button[aria-label="Tracking decrease"]') as HTMLButtonElement | null;
-    if (!sizeIncrease || !lineIncrease || !trackingDecrease) throw new Error('Stepper button not found');
+    const sizeIncrease = stepper('Font size', 'increase');
+    const lineIncrease = stepper('Line height', 'increase');
+    const trackingDecrease = stepper('Letter spacing', 'decrease');
 
     act(() => {
       sizeIncrease.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
@@ -247,8 +257,12 @@ describe('ManualEditPanel', () => {
     expect(onStyleChange).toHaveBeenCalledWith('hero-title', { fontSize: '33px' }, 'Style: Hero Title');
     expect(onStyleChange).toHaveBeenCalledWith('hero-title', { lineHeight: '1.5' }, 'Style: Hero Title');
     expect(onStyleChange).toHaveBeenCalledWith('hero-title', { letterSpacing: '0px' }, 'Style: Hero Title');
-    expect(host.textContent).not.toContain('Opacity');
-    expect(host.textContent).not.toContain('Padding');
+    // Box/spacing controls used to live in their own English-headed groups.
+    // They now ride in the same localized list, so the port's contract is
+    // "exactly one parameters group", not "typography-only".
+    expect(sectionHeads().filter((head) => head === PARAMETERS)).toHaveLength(1);
+    expect(sectionByTitle(PARAMETERS).textContent).toContain('Opacity');
+    expect(sectionByTitle(PARAMETERS).textContent).toContain('Padding');
   });
 
   it('does not persist an unchanged target style when the inspector opens', () => {
@@ -318,10 +332,7 @@ describe('ManualEditPanel', () => {
       },
     });
 
-    const lineInput = Array.from(host.querySelectorAll('.cc-row'))
-      .find((row) => row.textContent?.includes('Line'))
-      ?.querySelector('input') as HTMLInputElement | null;
-    if (!lineInput) throw new Error('Line input not found');
+    const lineInput = rowInput('Line height');
 
     act(() => {
       lineInput.dispatchEvent(new dom.window.FocusEvent('blur', { bubbles: true }));
@@ -343,10 +354,7 @@ describe('ManualEditPanel', () => {
       },
     });
 
-    const lineInput = Array.from(host.querySelectorAll('.cc-row'))
-      .find((row) => row.textContent?.includes('Line'))
-      ?.querySelector('input') as HTMLInputElement | null;
-    if (!lineInput) throw new Error('Line input not found');
+    const lineInput = rowInput('Line height');
 
     act(() => {
       lineInput.value = '49px';
@@ -458,7 +466,7 @@ describe('ManualEditPanel', () => {
     );
   });
 
-  it('hides layout controls for non-layout single targets', () => {
+  it('disables layout controls for non-layout single targets', () => {
     const onStyleChange = vi.fn();
     renderPanel({
       onStyleChange,
@@ -469,10 +477,23 @@ describe('ManualEditPanel', () => {
       },
     });
 
-    const layoutSection = Array.from(host.querySelectorAll('.cc-section')).find((section) => (
-      section.textContent?.includes('LAYOUT')
-    ));
-    expect(layoutSection).toBeUndefined();
+    // Layout rows now live in the shared parameters list rather than their own
+    // group, so "not editable" has to be asserted as disabled controls plus the
+    // explanatory hint — not as a missing section.
+    const parameters = sectionByTitle(PARAMETERS);
+    expect(rowSelect('Direction').disabled).toBe(true);
+    expect(rowSelect('Distribution').disabled).toBe(true);
+    expect(rowInput('Gap').disabled).toBe(true);
+    expect(parameters.textContent).toContain('Layout controls are available for flex or grid containers.');
+    // The alignment slot degrades to text-align so it is never a dead control.
+    const align = rowSelect('Align');
+    expect(align.disabled).toBe(false);
+    act(() => {
+      align.value = 'center';
+      align.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+    });
+    expect(onStyleChange).toHaveBeenCalledWith('hero-title', { textAlign: 'center' }, 'Style: Hero Title');
+
     expect(normalizeManualEditStyles({ gap: '12', flexDirection: 'column' }, { layoutEnabled: false })).toEqual({
       ok: true,
       styles: {},
@@ -491,16 +512,17 @@ describe('ManualEditPanel', () => {
       },
     });
 
-    const layoutSection = sectionByTitle('LAYOUT');
-    expect(layoutSection.classList.contains('cc-section-inactive')).toBe(false);
-    expect(layoutSection.textContent).not.toContain('Select a container or group to edit layout.');
-    const gapInput = layoutSection.querySelector('input') as HTMLInputElement | null;
-    const directionSelect = layoutSection.querySelector('select') as HTMLSelectElement | null;
-    const gapIncrease = layoutSection.querySelector('button[aria-label="Gap increase"]') as HTMLButtonElement | null;
-    if (!gapInput || !directionSelect) throw new Error('Layout controls not found');
+    const parameters = sectionByTitle(PARAMETERS);
+    expect(parameters.classList.contains('cc-section-inactive')).toBe(false);
+    expect(parameters.textContent).not.toContain('Layout controls are available for flex or grid containers.');
+    const gapInput = rowInput('Gap');
+    const directionSelect = rowSelect('Direction');
+    const gapIncrease = stepper('Gap', 'increase');
     expect(gapInput.disabled).toBe(false);
     expect(directionSelect.disabled).toBe(false);
-    if (!gapIncrease) throw new Error('Gap increase control not found');
+    // A flex/grid container gets the real cross-axis alignment control.
+    expect(rowSelect('Align').disabled).toBe(false);
+    expect(Array.from(rowSelect('Align').options).map((option) => option.value)).toContain('baseline');
 
     act(() => {
       gapIncrease.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
@@ -512,6 +534,223 @@ describe('ManualEditPanel', () => {
     expect(onStyleChange).toHaveBeenCalledWith('hero-title', { flexDirection: 'column' }, 'Style: Hero Title');
   });
 
+  it('edits each padding side independently through the quad row', () => {
+    const onStyleChange = vi.fn<OnStyleChange>();
+    renderPanel({
+      onStyleChange,
+      styles: {
+        ...emptyManualEditStyles(),
+        paddingTop: '8px',
+        paddingRight: '8px',
+        paddingBottom: '8px',
+        paddingLeft: '8px',
+      },
+    });
+
+    // px is implied: the cell shows the bare number and writes back a px value.
+    expect(quadCellInput('Padding', 'Top').value).toBe('8');
+
+    const topInput = quadCellInput('Padding', 'Top');
+    act(() => {
+      topInput.value = '24';
+      Simulate.change(topInput);
+    });
+    expect(onStyleChange).toHaveBeenCalledWith('hero-title', { paddingTop: '24px' }, 'Style: Hero Title');
+
+    // Each side is its own longhand — nudging Right must not touch the others.
+    act(() => {
+      stepper('Right', 'increase').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    });
+    expect(onStyleChange).toHaveBeenCalledWith('hero-title', { paddingRight: '9px' }, 'Style: Hero Title');
+    expect(onStyleChange).not.toHaveBeenCalledWith(
+      'hero-title',
+      expect.objectContaining({ paddingLeft: expect.any(String) }),
+      'Style: Hero Title',
+    );
+  });
+
+  it('edits each margin side independently and collapses to a shared value', () => {
+    const onStyleChange = vi.fn<OnStyleChange>();
+    renderPanel({
+      onStyleChange,
+      styles: {
+        ...emptyManualEditStyles(),
+        marginTop: '12px',
+        marginRight: '12px',
+        marginBottom: '12px',
+        marginLeft: '12px',
+      },
+    });
+
+    const bottomInput = quadCellInput('Margin', 'Bottom');
+    act(() => {
+      bottomInput.value = '4';
+      Simulate.change(bottomInput);
+    });
+    expect(onStyleChange).toHaveBeenCalledWith('hero-title', { marginBottom: '4px' }, 'Style: Hero Title');
+
+    // Collapsed, an all-equal quad summarizes as the single shared number so
+    // the row stays readable without expanding it.
+    const head = quadRow('Margin').querySelector('.cc-quad-head') as HTMLButtonElement;
+    act(() => {
+      head.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    });
+    expect(quadRow('Margin').querySelector('.cc-quad-grid')).toBeNull();
+    expect(quadRow('Margin').querySelector('em')?.textContent).toBe('12');
+  });
+
+  it('fans a single border width out to all four sides', () => {
+    const onStyleChange = vi.fn<OnStyleChange>();
+    renderPanel({ onStyleChange, styles: { ...emptyManualEditStyles(), borderTopWidth: '1px' } });
+
+    const borderWidth = rowInput('Border width');
+    act(() => {
+      borderWidth.value = '3';
+      Simulate.change(borderWidth);
+    });
+
+    expect(onStyleChange).toHaveBeenCalledWith(
+      'hero-title',
+      { borderTopWidth: '3px', borderRightWidth: '3px', borderBottomWidth: '3px', borderLeftWidth: '3px' },
+      'Style: Hero Title',
+    );
+  });
+
+  it('asks the host for reference values matching the focused field', () => {
+    const onInspectValueSelect = vi.fn<(prop: ProjectDesignTokenSuggestionProp, value: string) => void>();
+    renderPanel({
+      onInspectValueSelect,
+      styles: { ...emptyManualEditStyles(), color: '#111111' },
+    });
+
+    act(() => {
+      Simulate.focus(rowInput('Text color'));
+    });
+
+    expect(onInspectValueSelect).toHaveBeenCalledWith('color', '#111111');
+    // Focusing surfaces the strip, scoped to the field the user is editing.
+    expect(host.querySelector('.cc-suggest')).not.toBeNull();
+    expect(host.querySelector('.cc-suggest-head')?.textContent).toContain('Reference values');
+    expect(host.querySelector('.cc-suggest-head em')?.textContent).toBe('Text color');
+  });
+
+  it('falls back to the computed value when asking for reference values', () => {
+    const onInspectValueSelect = vi.fn<(prop: ProjectDesignTokenSuggestionProp, value: string) => void>();
+    renderPanel({
+      onInspectValueSelect,
+      selectedTarget: {
+        ...target,
+        computedSummary: {
+          display: 'block', position: 'static',
+          fontFamily: 'Inter', fontSize: '18px', fontWeight: '400',
+          lineHeight: '1.4', letterSpacing: 'normal',
+          color: 'rgb(20, 20, 20)', backgroundColor: 'transparent', borderColor: 'transparent',
+          borderRadius: '0px', padding: '0px', margin: '0px',
+        },
+      },
+    });
+
+    act(() => {
+      Simulate.focus(rowInput('Font size'));
+    });
+
+    expect(onInspectValueSelect).toHaveBeenCalledWith('fontSize', '18px');
+  });
+
+  it('shows only the reference values for the focused property and applies the picked one', () => {
+    const onApplyTokenSuggestion = vi.fn<(prop: keyof ManualEditStyles, value: string) => void>();
+    renderPanel({
+      onApplyTokenSuggestion,
+      tokenSuggestions: [
+        tokenSuggestion({ prop: 'color', token: '--brand-ink', value: '#101828' }),
+        tokenSuggestion({ prop: 'color', token: '--brand-muted', value: '#667085' }),
+        tokenSuggestion({ prop: 'fontSize', token: '--text-lg', value: '20px' }),
+      ],
+    });
+
+    act(() => {
+      Simulate.focus(rowInput('Text color'));
+    });
+
+    const chips = Array.from(host.querySelectorAll('.cc-suggest-chip'));
+    expect(chips.map((chip) => chip.querySelector('.cc-suggest-token')?.textContent))
+      .toEqual(['--brand-ink', '--brand-muted']);
+    // Colour references carry a swatch so the value is judgeable at a glance.
+    expect(chips[0]?.querySelector('.cc-suggest-swatch')).not.toBeNull();
+
+    act(() => {
+      chips[1]!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onApplyTokenSuggestion).toHaveBeenCalledWith('color', '#667085');
+  });
+
+  it('maps a border-width reference back onto the border side props', () => {
+    const onApplyTokenSuggestion = vi.fn<(prop: keyof ManualEditStyles, value: string) => void>();
+    renderPanel({
+      onApplyTokenSuggestion,
+      tokenSuggestions: [tokenSuggestion({ prop: 'borderWidth', token: '--hairline', value: '1px' })],
+    });
+
+    act(() => {
+      Simulate.focus(rowInput('Border width'));
+    });
+    const chip = host.querySelector('.cc-suggest-chip') as HTMLButtonElement | null;
+    if (!chip) throw new Error('Border width reference chip not found');
+    act(() => {
+      chip.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onApplyTokenSuggestion).toHaveBeenCalledWith('borderTopWidth', '1px');
+  });
+
+  it('distinguishes loading reference values from having none', () => {
+    renderPanel({ tokenSuggestionsLoading: true });
+    act(() => {
+      Simulate.focus(rowInput('Text color'));
+    });
+    expect(host.querySelector('.cc-suggest-empty')?.textContent).toBe('Loading…');
+    expect(host.querySelector('.cc-suggest-chip')).toBeNull();
+
+    renderPanel({ tokenSuggestions: [] });
+    act(() => {
+      Simulate.focus(rowInput('Text color'));
+    });
+    expect(host.querySelector('.cc-suggest-empty')?.textContent).toBe('No matching reference values');
+  });
+
+  it('drops the reference strip when the selection moves to another element', () => {
+    renderPanel({
+      tokenSuggestions: [tokenSuggestion({ prop: 'color', token: '--brand-ink', value: '#101828' })],
+    });
+    act(() => {
+      Simulate.focus(rowInput('Text color'));
+    });
+    expect(host.querySelector('.cc-suggest')).not.toBeNull();
+
+    renderPanel({
+      tokenSuggestions: [tokenSuggestion({ prop: 'color', token: '--brand-ink', value: '#101828' })],
+      selectedTarget: { ...target, id: 'other-title', label: 'Other Title' },
+    });
+
+    expect(host.querySelector('.cc-suggest')).toBeNull();
+  });
+
+  it('shows no reference strip for properties with no token vocabulary', () => {
+    const onInspectValueSelect = vi.fn<(prop: ProjectDesignTokenSuggestionProp, value: string) => void>();
+    renderPanel({
+      onInspectValueSelect,
+      styles: { ...emptyManualEditStyles(), opacity: '0.5' },
+    });
+
+    act(() => {
+      Simulate.focus(rowInput('Opacity'));
+    });
+
+    expect(host.querySelector('.cc-suggest')).toBeNull();
+    expect(onInspectValueSelect).not.toHaveBeenCalled();
+  });
+
   it('summarizes full-source history entries without rendering the full file', () => {
     const source = '<html><body>' + 'x'.repeat(10_000) + '</body></html>';
 
@@ -521,11 +760,72 @@ describe('ManualEditPanel', () => {
     expect(manualEditPatchSummary({ kind: 'set-full-source', source })).not.toContain('x'.repeat(100));
   });
 
+  function tokenSuggestion(
+    overrides: Partial<ProjectDesignTokenSuggestion> & Pick<ProjectDesignTokenSuggestion, 'prop' | 'token' | 'value'>,
+  ): ProjectDesignTokenSuggestion {
+    return {
+      sourceFile: 'design-system/tokens.css',
+      line: 12,
+      matchReason: 'exact',
+      score: 1,
+      ...overrides,
+    };
+  }
+
   function sectionByTitle(title: string): HTMLElement {
     const section = Array.from(host.querySelectorAll('.cc-section'))
       .find((candidate) => candidate.querySelector('.cc-section-head')?.textContent === title) as HTMLElement | undefined;
     if (!section) throw new Error(`${title} section not found`);
     return section;
+  }
+
+  function sectionHeads(): string[] {
+    return Array.from(host.querySelectorAll('.cc-section-head')).map((head) => head.textContent ?? '');
+  }
+
+  /** A parameter row is identified by its localized `.cc-label`, so a renamed
+   *  or re-grouped control fails loudly instead of silently matching a
+   *  neighbour whose text happens to contain the same substring. */
+  function rowByLabel(label: string): HTMLElement {
+    const row = Array.from(host.querySelectorAll('.cc-row'))
+      .find((candidate) => candidate.querySelector('.cc-label')?.textContent === label) as HTMLElement | undefined;
+    if (!row) throw new Error(`${label} row not found`);
+    return row;
+  }
+
+  function rowInput(label: string): HTMLInputElement {
+    const input = rowByLabel(label).querySelector('input') as HTMLInputElement | null;
+    if (!input) throw new Error(`${label} input not found`);
+    return input;
+  }
+
+  function rowSelect(label: string): HTMLSelectElement {
+    const select = rowByLabel(label).querySelector('select') as HTMLSelectElement | null;
+    if (!select) throw new Error(`${label} select not found`);
+    return select;
+  }
+
+  function stepper(label: string, direction: 'increase' | 'decrease'): HTMLButtonElement {
+    const button = host.querySelector(`button[aria-label="${label} ${direction}"]`) as HTMLButtonElement | null;
+    if (!button) throw new Error(`${label} ${direction} control not found`);
+    return button;
+  }
+
+  /** The four-way padding/margin editor, addressed by its collapsible head. */
+  function quadRow(label: string): HTMLElement {
+    const quad = Array.from(host.querySelectorAll('.cc-quad'))
+      .find((candidate) => candidate.querySelector('.cc-quad-head span')?.textContent === label) as HTMLElement | undefined;
+    if (!quad) throw new Error(`${label} quad row not found`);
+    return quad;
+  }
+
+  function quadCellInput(label: string, axis: string): HTMLInputElement {
+    const cell = Array.from(quadRow(label).querySelectorAll('.cc-quad-cell'))
+      .find((candidate) => candidate.querySelector('.cc-quad-axis')?.textContent === axis) as HTMLElement | undefined;
+    if (!cell) throw new Error(`${label} ${axis} cell not found`);
+    const input = cell.querySelector('input') as HTMLInputElement | null;
+    if (!input) throw new Error(`${label} ${axis} input not found`);
+    return input;
   }
 
   function renderPanel({
@@ -545,6 +845,10 @@ describe('ManualEditPanel', () => {
     pageStylesEnabled = true,
     floatingStyle,
     onFloatingPositionChange,
+    tokenSuggestions,
+    tokenSuggestionsLoading,
+    onApplyTokenSuggestion,
+    onInspectValueSelect,
   }: {
     onDraftChange?: OnDraftChange;
     onApplyPatch?: OnApplyPatch;
@@ -562,6 +866,10 @@ describe('ManualEditPanel', () => {
     pageStylesEnabled?: boolean;
     floatingStyle?: CSSProperties;
     onFloatingPositionChange?: (position: { left: number; top: number }) => void;
+    tokenSuggestions?: ProjectDesignTokenSuggestion[];
+    tokenSuggestionsLoading?: boolean;
+    onApplyTokenSuggestion?: (prop: keyof ManualEditStyles, value: string) => void;
+    onInspectValueSelect?: (prop: ProjectDesignTokenSuggestionProp, value: string) => void;
   } = {}) {
     const draft = {
       ...emptyManualEditDraft('<html></html>'),
@@ -596,6 +904,10 @@ describe('ManualEditPanel', () => {
           onRedo={vi.fn<() => void>()}
           floatingStyle={floatingStyle}
           onFloatingPositionChange={onFloatingPositionChange}
+          tokenSuggestions={tokenSuggestions}
+          tokenSuggestionsLoading={tokenSuggestionsLoading}
+          onApplyTokenSuggestion={onApplyTokenSuggestion}
+          onInspectValueSelect={onInspectValueSelect}
         />,
       );
     });

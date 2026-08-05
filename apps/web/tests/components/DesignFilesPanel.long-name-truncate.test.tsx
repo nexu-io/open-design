@@ -13,8 +13,7 @@ import type { ProjectFile } from '../../src/types';
 // table truncates the name with the existing `text-overflow: ellipsis`
 // instead of growing the cell. The JSX fix adds `title={f.name}` so the
 // browser surfaces the full filename on hover even when the visible
-// text is truncated. (`<DfPreview>` already renders the full name with
-// `word-break: break-word` for users who open the preview pane.)
+// text is truncated — the panel has no detail pane to fall back on.
 //
 // jsdom does not measure layout, so the truncation itself can't be
 // asserted directly. These specs encode the contract: the rendered DOM
@@ -72,26 +71,42 @@ afterEach(() => {
 
 const LONG_NAME =
   'mpqdcf5m-A-1-year-old-boy-_standing_-with-short-black-hair_-big-eyes-with-black-pupils_-wearing-a-watermelon-shaped-helmet.jpeg';
+// Images now render as bare masonry cards (no name line), so the list-row
+// truncation contract is asserted on a text file, which keeps the row shell.
+const LONG_ROW_NAME = LONG_NAME.replace(/\.jpeg$/, '.txt');
 
 describe('DesignFilesPanel long filename truncation (#3260)', () => {
-  it('renders the file row for a long filename without crashing', () => {
+  it('renders the image card for a long filename without crashing', () => {
     const { container } = renderPanel([file({ name: LONG_NAME })]);
-    const row = container.querySelector(`[data-testid="design-file-row-${LONG_NAME}"]`);
-    expect(row).toBeTruthy();
+    const card = container.querySelector(`[data-testid="design-file-row-${LONG_NAME}"]`);
+    expect(card).toBeTruthy();
   });
 
-  it('exposes the full filename via a `title` attribute on the name span (hover tooltip)', () => {
+  it('exposes the full filename via a `title` attribute on the image card thumb (hover tooltip)', () => {
     const { container } = renderPanel([file({ name: LONG_NAME })]);
+    const thumb = container.querySelector('.df-card-thumb') as HTMLElement | null;
+    expect(thumb).toBeTruthy();
+    // The tooltip contract: an image card has no visible name line, so the
+    // full filename must surface on the thumb's hover tooltip.
+    expect(thumb?.getAttribute('title')).toContain(LONG_NAME);
+  });
+
+  it('exposes the full filename via a `title` attribute on the row name span (hover tooltip)', () => {
+    const { container } = renderPanel([
+      file({ name: LONG_ROW_NAME, kind: 'text', mime: 'text/plain' }),
+    ]);
     const nameSpan = container.querySelector('.df-row-name') as HTMLElement | null;
     expect(nameSpan).toBeTruthy();
     // The tooltip contract: hovering a truncated row reveals the full
-    // filename. Without this users see "...g-helmet.jpeg" with no way
+    // filename. Without this users see "...g-helmet.txt" with no way
     // to read the leading characters until they open the preview pane.
-    expect(nameSpan?.getAttribute('title')).toBe(LONG_NAME);
+    expect(nameSpan?.getAttribute('title')).toBe(LONG_ROW_NAME);
   });
 
   it('keeps the truncate-friendly DOM structure (.df-row-name-wrap > .df-row-name-btn > .df-row-name-wrap > .df-row-name)', () => {
-    const { container } = renderPanel([file({ name: LONG_NAME })]);
+    const { container } = renderPanel([
+      file({ name: LONG_ROW_NAME, kind: 'text', mime: 'text/plain' }),
+    ]);
     // The CSS fix relies on this nesting: the outer `.df-row-name-wrap`
     // cell constrains its width, the inner wrap is min-width:0 /
     // max-width:100%, and `.df-row-name` carries `text-overflow: ellipsis`.

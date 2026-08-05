@@ -1,13 +1,16 @@
 // Reusable "pick a brand to extract from" surface.
 //
-// A curated quick-pick row of the best-looking brands sits above a
-// categorized, searchable gallery of every reference brand. The component is
-// purely presentational: it takes an `onPick` callback and leaves the actual
-// extraction kickoff to each entry point (New Brand modal, Brand Kit tab,
-// onboarding). Visuals come from public favicons only — no private storage.
+// The full-page variant stacks a curated quick-pick row above a categorized,
+// searchable gallery; the compact (modal) variant is a side-nav split —
+// search + category nav in a left column, the gallery top-aligned on the
+// right. The component is purely presentational: it takes an `onPick`
+// callback and leaves the actual extraction kickoff to each entry point (New
+// Brand modal, Brand Kit tab, onboarding). Visuals come from public favicons
+// only — no private storage.
 
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { useT } from '../i18n';
+import type { Dict } from '../i18n/types';
 import {
   BRAND_CATEGORIES,
   BRAND_REFERENCES,
@@ -52,6 +55,30 @@ export interface BrandReferencePickerProps {
 const ALL = 'all';
 const PAGE_FULL = 40;
 const PAGE_COMPACT = 24;
+
+// The industry buckets in brand-references.json are DATA VALUES ('software',
+// 'activewear', …), not display copy — rendering them raw is what put English
+// category chips and English per-card captions inside an otherwise localized
+// modal. Map each known bucket to a translation key (same shape as
+// CommunityView's TEMPLATE_TYPE_LABEL_KEY) and keep the capitalize helper only
+// as the fallback for a bucket the catalogue adds before this map catches up.
+// Brand *names* stay untranslated — they are proper nouns.
+const BRAND_CATEGORY_LABEL_KEY: Record<string, keyof Dict> = {
+  software: 'brandPicker.categorySoftware',
+  finance: 'brandPicker.categoryFinance',
+  fashion: 'brandPicker.categoryFashion',
+  activewear: 'brandPicker.categoryActivewear',
+  beauty: 'brandPicker.categoryBeauty',
+  wellness: 'brandPicker.categoryWellness',
+  food: 'brandPicker.categoryFood',
+  beverage: 'brandPicker.categoryBeverage',
+  media: 'brandPicker.categoryMedia',
+  education: 'brandPicker.categoryEducation',
+  electronics: 'brandPicker.categoryElectronics',
+  automotive: 'brandPicker.categoryAutomotive',
+  healthcare: 'brandPicker.categoryHealthcare',
+  travel: 'brandPicker.categoryTravel',
+};
 
 function categoryLabel(category: string): string {
   return category.charAt(0).toUpperCase() + category.slice(1);
@@ -129,6 +156,13 @@ export function BrandReferencePicker({
   const compact = variant === 'compact';
   const resolvedActionLabel = actionLabel ?? t('brandPicker.extractAction');
   const resolvedQuickPicksLabel = quickPicksLabel ?? t('brandPicker.quickPicksLabel');
+  const labelForCategory = useCallback(
+    (value: string) => {
+      const key = BRAND_CATEGORY_LABEL_KEY[value];
+      return key ? t(key) : categoryLabel(value);
+    },
+    [t],
+  );
   const pageSize = compact ? PAGE_COMPACT : PAGE_FULL;
   const [category, setCategory] = useState(ALL);
   const [query, setQuery] = useState('');
@@ -147,10 +181,13 @@ export function BrandReferencePicker({
       return (
         b.name.toLowerCase().includes(q) ||
         b.domain.toLowerCase().includes(q) ||
-        b.category.toLowerCase().includes(q)
+        // Match the raw bucket AND its localized label, so a reader who sees
+        // "汽车" on the chips can actually type "汽车" and get Porsche.
+        b.category.toLowerCase().includes(q) ||
+        labelForCategory(b.category).toLowerCase().includes(q)
       );
     });
-  }, [category, query]);
+  }, [category, query, labelForCategory]);
 
   // Narrowing the wall (new filter / search) starts over from the top.
   useEffect(() => {
@@ -207,135 +244,166 @@ export function BrandReferencePicker({
     .filter(Boolean)
     .join(' ');
 
+  const quickPicksEl = showQuickPicks ? (
+    <div
+      className={styles.quickPicksSection}
+      role="group"
+      aria-label={resolvedQuickPicksLabel}
+    >
+      <span className={styles.quickPicksLabel}>{resolvedQuickPicksLabel}</span>
+      <div className={styles.quickPicks}>
+        {QUICK_PICK_BRANDS.map((brand) => {
+          const loadingThis = busy && brand.domain === pickedDomain;
+          return (
+            <button
+              key={`quick-${brand.domain}`}
+              type="button"
+              className={`${styles.quickChip} ${loadingThis ? styles.chipLoading : ''}`}
+              disabled={locked}
+              aria-busy={loadingThis || undefined}
+              onClick={() => handlePick(brand)}
+              data-testid={`brand-quick-${brand.domain}`}
+            >
+              {loadingThis ? (
+                <Spinner />
+              ) : (
+                <BrandFavicon domain={brand.domain} name={brand.name} />
+              )}
+              <span className={styles.quickName}>{brand.name}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  ) : null;
+
+  const searchEl = (
+    <div className={styles.searchWrap}>
+      <SearchGlyph />
+      <input
+        type="search"
+        className={styles.search}
+        placeholder={t('brandPicker.searchPlaceholder')}
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        data-testid="brand-picker-search"
+      />
+    </div>
+  );
+
+  const categoriesEl = (
+    <div className={styles.categories}>
+      {[ALL, ...BRAND_CATEGORIES].map((c) => (
+        <button
+          key={c}
+          type="button"
+          className={`${styles.categoryChip} ${category === c ? styles.categoryChipActive : ''}`}
+          aria-pressed={category === c}
+          onClick={() => setCategory(c)}
+        >
+          {c === ALL ? t('brandPicker.allCategories') : labelForCategory(c)}
+        </button>
+      ))}
+    </div>
+  );
+
+  const statusEl = error ? (
+    <p className={styles.statusError} role="alert" data-testid="brand-picker-error">
+      {error}
+    </p>
+  ) : busy && picked ? (
+    <p className={styles.statusBusy} role="status" data-testid="brand-picker-status">
+      <Spinner />
+      {t('brandPicker.opening', { brand: picked.name })}
+    </p>
+  ) : null;
+
+  const galleryEl = (
+    <div className={styles.scrollArea} ref={scrollAreaRef}>
+      <div className={styles.grid} data-testid="brand-picker-grid">
+        {visible.map((brand) => {
+          const loadingThis = busy && brand.domain === pickedDomain;
+          return (
+            <button
+              key={brand.domain}
+              type="button"
+              className={`${styles.card} ${loadingThis ? styles.cardLoading : ''}`}
+              disabled={locked}
+              aria-busy={loadingThis || undefined}
+              onClick={() => handlePick(brand)}
+              data-testid={`brand-card-${brand.domain}`}
+            >
+              <span className={styles.cardThumb}>
+                {loadingThis ? (
+                  <Spinner />
+                ) : (
+                  <BrandFavicon domain={brand.domain} name={brand.name} />
+                )}
+              </span>
+              <span className={styles.cardBody}>
+                <span className={styles.cardName} title={brand.name}>
+                  {brand.name}
+                </span>
+                <span className={styles.cardCategory}>{labelForCategory(brand.category)}</span>
+              </span>
+              <span className={styles.extractPill} aria-hidden>
+                {resolvedActionLabel}
+                <ArrowGlyph />
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {limit < filtered.length ? (
+        <>
+          <div ref={sentinelRef} className={styles.sentinel} aria-hidden />
+          <div className={styles.showMoreWrap}>
+            <button
+              type="button"
+              className={styles.showMore}
+              onClick={() => setLimit((l) => Math.min(l + pageSize, filtered.length))}
+            >
+              {t('brandPicker.showMore')}
+            </button>
+          </div>
+        </>
+      ) : null}
+    </div>
+  );
+
+  // Compact (modal) hosts use a side-nav split: search + category nav in a
+  // left column, the gallery top-aligned on the right. The full-page variant
+  // keeps the stacked heading / quick-picks / centered-controls flow.
   return (
     <section className={rootClass} data-testid="brand-reference-picker">
-      {compact ? null : (
-        <header className={styles.head}>
-          <h2 className={styles.heading}>{t('brandPicker.heading')}</h2>
-          <p className={styles.subtext}>{t('brandPicker.subtext')}</p>
-        </header>
-      )}
-
-      {showQuickPicks ? (
-        <div
-          className={styles.quickPicksSection}
-          role="group"
-          aria-label={resolvedQuickPicksLabel}
-        >
-          <span className={styles.quickPicksLabel}>{resolvedQuickPicksLabel}</span>
-          <div className={styles.quickPicks}>
-            {QUICK_PICK_BRANDS.map((brand) => {
-              const loadingThis = busy && brand.domain === pickedDomain;
-              return (
-                <button
-                  key={`quick-${brand.domain}`}
-                  type="button"
-                  className={`${styles.quickChip} ${loadingThis ? styles.chipLoading : ''}`}
-                  disabled={locked}
-                  aria-busy={loadingThis || undefined}
-                  onClick={() => handlePick(brand)}
-                  data-testid={`brand-quick-${brand.domain}`}
-                >
-                  {loadingThis ? (
-                    <Spinner />
-                  ) : (
-                    <BrandFavicon domain={brand.domain} name={brand.name} />
-                  )}
-                  <span className={styles.quickName}>{brand.name}</span>
-                </button>
-              );
-            })}
+      {compact ? (
+        <div className={styles.split}>
+          <aside className={styles.sideNav}>
+            {searchEl}
+            {categoriesEl}
+          </aside>
+          <div className={styles.mainCol}>
+            {quickPicksEl}
+            {statusEl}
+            {galleryEl}
           </div>
         </div>
-      ) : null}
-
-      <div className={styles.controls}>
-        <div className={styles.searchWrap}>
-          <SearchGlyph />
-          <input
-            type="search"
-            className={styles.search}
-            placeholder={t('brandPicker.searchPlaceholder')}
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            data-testid="brand-picker-search"
-          />
-        </div>
-        <div className={styles.categories}>
-          {[ALL, ...BRAND_CATEGORIES].map((c) => (
-            <button
-              key={c}
-              type="button"
-              className={`${styles.categoryChip} ${category === c ? styles.categoryChipActive : ''}`}
-              aria-pressed={category === c}
-              onClick={() => setCategory(c)}
-            >
-              {c === ALL ? t('brandPicker.allCategories') : categoryLabel(c)}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {error ? (
-        <p className={styles.statusError} role="alert" data-testid="brand-picker-error">
-          {error}
-        </p>
-      ) : busy && picked ? (
-        <p className={styles.statusBusy} role="status" data-testid="brand-picker-status">
-          <Spinner />
-          {t('brandPicker.opening', { brand: picked.name })}
-        </p>
-      ) : null}
-
-      <div className={styles.scrollArea} ref={scrollAreaRef}>
-        <div className={styles.grid} data-testid="brand-picker-grid">
-          {visible.map((brand) => {
-            const loadingThis = busy && brand.domain === pickedDomain;
-            return (
-              <button
-                key={brand.domain}
-                type="button"
-                className={`${styles.card} ${loadingThis ? styles.cardLoading : ''}`}
-                disabled={locked}
-                aria-busy={loadingThis || undefined}
-                onClick={() => handlePick(brand)}
-                data-testid={`brand-card-${brand.domain}`}
-              >
-                <span className={styles.cardThumb}>
-                  {loadingThis ? (
-                    <Spinner />
-                  ) : (
-                    <BrandFavicon domain={brand.domain} name={brand.name} />
-                  )}
-                </span>
-                <span className={styles.cardBody}>
-                  <span className={styles.cardName}>{brand.name}</span>
-                  <span className={styles.cardCategory}>{categoryLabel(brand.category)}</span>
-                </span>
-                <span className={styles.extractPill} aria-hidden>
-                  {resolvedActionLabel}
-                  <ArrowGlyph />
-                </span>
-              </button>
-            );
-          })}
-        </div>
-
-        {limit < filtered.length ? (
-          <>
-            <div ref={sentinelRef} className={styles.sentinel} aria-hidden />
-            <div className={styles.showMoreWrap}>
-              <button
-                type="button"
-                className={styles.showMore}
-                onClick={() => setLimit((l) => Math.min(l + pageSize, filtered.length))}
-              >
-                {t('brandPicker.showMore')}
-              </button>
-            </div>
-          </>
-        ) : null}
-      </div>
+      ) : (
+        <>
+          <header className={styles.head}>
+            <h2 className={styles.heading}>{t('brandPicker.heading')}</h2>
+            <p className={styles.subtext}>{t('brandPicker.subtext')}</p>
+          </header>
+          {quickPicksEl}
+          <div className={styles.controls}>
+            {searchEl}
+            {categoriesEl}
+          </div>
+          {statusEl}
+          {galleryEl}
+        </>
+      )}
     </section>
   );
 }

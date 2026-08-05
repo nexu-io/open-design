@@ -30,12 +30,12 @@ interface Props {
   onDecision: (decision: AmrLowBalanceDecision) => void;
 }
 
-// SOFT pre-run reminder for Open Design Cloud tasks: the wallet can still
+// SOFT pre-run reminder for Open Design Cloud tasks: the balance can still
 // fund a start but sits at or below the low-balance line, so the run may die
 // mid-flight. Unlike the hard AmrBalanceDialog this never stands between the
 // user and their task — "start anyway" resolves the SAME pending send the
 // gate paused (a continuation, not a re-submit), "top up" opens the console
-// wallet page and parks the send, and the "don't remind me" opt-out persists
+// dashboard and parks the send, and the "don't remind me" opt-out persists
 // for every future soft warning. Hard blocks ignore the opt-out by design.
 export function AmrLowBalanceDialog({
   balanceUsd,
@@ -56,7 +56,7 @@ export function AmrLowBalanceDialog({
     commitOptOut();
     onDecision(decision);
   };
-  const openWalletAndPark = () => {
+  const openConsoleAndPark = () => {
     const attribution = recordAmrEntry(analytics.track, entrySource, new Date(), {
       metricsConsent,
     });
@@ -112,7 +112,7 @@ export function AmrLowBalanceDialog({
           <Button
             variant="primary"
             className={styles.cta}
-            onClick={openWalletAndPark}
+            onClick={openConsoleAndPark}
             data-testid="amr-low-balance-dialog-recharge"
           >
             {t('chat.amrLowBalance.rechargeCta')}
