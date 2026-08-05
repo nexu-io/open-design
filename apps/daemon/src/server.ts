@@ -18,8 +18,14 @@ import { createFinalizedMessageTelemetryReporter as createFinalizedMessageTeleme
 import { createMarketplaceFetcher as createMarketplaceFetcherWithContract } from './runtimes/marketplace-fetcher.js';
 import { copyPluginFolderForProjectContext } from './runtimes/plugin-context.js';
 import { readProjectPluginManifest as readProjectPluginManifestWithContract } from './plugins/project-manifest.js';
-import { createProjectEventRegistry } from './runtimes/project-events.js';
-import { createLiveArtifactEventEmitter } from './runtimes/live-artifact-events.js';
+import { createProjectEventRegistry, type ProjectEventPayload } from './runtimes/project-events.js';
+import {
+  createLiveArtifactEventEmitter,
+  type LiveArtifactAction,
+  type LiveArtifactGrant,
+  type LiveArtifactRefreshPayload,
+  type LiveArtifactSummary,
+} from './runtimes/live-artifact-events.js';
 import { sanitizeArtifactSlug as sanitizeSlug } from './artifacts/slug.js';
 import { upsertSkillPluginCandidateAssistantMessage as upsertSkillPluginCandidateAssistantMessageWithContract } from './runtimes/skill-candidate-message.js';
 import { resolveProjectRoot } from './project-root.js';
@@ -326,6 +332,7 @@ import {
   defaultMarketplaceSeedConfig as buildMarketplaceSeedConfig,
   mergeMarketplaceEntries,
   renderPluginBriefTemplate,
+  type MarketplaceEntry,
 } from './runtimes/marketplace-boundary.js';
 import { diagnoseClaudeCliFailure } from './claude-diagnostics.js';
 import { loadCritiqueConfigFromEnv } from './critique/config.js';
@@ -800,11 +807,11 @@ const PLUGIN_REGISTRY_DIR = resolveDaemonResourceDir(
 const OFFICIAL_MARKETPLACE_ID = 'official';
 const OFFICIAL_PLUGIN_SOURCE_REPO = 'github:nexu-io/open-design@main';
 
-function defaultMarketplaceSeedConfig(id) {
+function defaultMarketplaceSeedConfig(id: string) {
   return buildMarketplaceSeedConfig(id, OFFICIAL_MARKETPLACE_ID, marketplaceManifestUrlForRegistry);
 }
 
-function bundledPluginRegistrySource(sourcePath) {
+function bundledPluginRegistrySource(sourcePath: string) {
   return buildBundledPluginRegistrySource(sourcePath, {
     bundledPluginsDir: BUNDLED_PLUGINS_DIR,
     projectRoot: PROJECT_ROOT,
@@ -812,7 +819,10 @@ function bundledPluginRegistrySource(sourcePath) {
   });
 }
 
-async function marketplaceSeedManifestText(id, bundledMarketplaceEntries) {
+async function marketplaceSeedManifestText(
+  id: string,
+  bundledMarketplaceEntries: readonly MarketplaceEntry[],
+): Promise<string | null> {
   const manifestPath = path.join(PLUGIN_REGISTRY_DIR, id, 'open-design-marketplace.json');
   if (!fs.existsSync(manifestPath)) return null;
   let manifestText = await fs.promises.readFile(manifestPath, 'utf8');
@@ -822,7 +832,10 @@ async function marketplaceSeedManifestText(id, bundledMarketplaceEntries) {
   return manifestText;
 }
 
-function createMarketplaceFetcher(seedId, bundledMarketplaceEntries) {
+function createMarketplaceFetcher(
+  seedId: string | null,
+  bundledMarketplaceEntries: readonly MarketplaceEntry[],
+) {
   return createMarketplaceFetcherWithContract(seedId, {
     registryIdFromUrl: marketplaceRegistryIdFromUrl,
     readSeedManifest: (registryId) => marketplaceSeedManifestText(registryId, bundledMarketplaceEntries),
@@ -906,7 +919,7 @@ const orbitService = new OrbitService(RUNTIME_DATA_DIR);
 const designSystemGenerationJobs = createDesignSystemGenerationJobStore({
   root: USER_DESIGN_SYSTEMS_DIR,
 });
-let routineService = null;
+let routineService: RoutineService | null = null;
 
 // In-memory OAuth state cache. Lives for the daemon process's lifetime.
 // Maps the OAuth `state` parameter we generated in /api/mcp/oauth/start
@@ -929,7 +942,7 @@ const mcpPendingAuth = new PendingAuthCache();
  * ERR_CONNECTION_REFUSED. Misconfiguration is loud: the OAuth provider
  * will reject `redirect_uri` mismatches.
  */
-function getPublicBaseUrl(req) {
+function getPublicBaseUrl(req: express.Request) {
   return resolvePublicBaseUrl(req, {
     configuredBaseUrl: process.env.OD_PUBLIC_BASE_URL,
     fallbackPort: process.env.OD_PORT,
@@ -946,7 +959,7 @@ function getPublicBaseUrl(req) {
  * for. Tokens persisted before that context was recorded can't be safely
  * refreshed; the caller treats `null` as "needs reconnect".
  */
-const activeChatAgentEventSinks = new Map();
+const activeChatAgentEventSinks = new Map<string, (payload: ProjectEventPayload) => boolean>();
 const projectEventRegistry = createProjectEventRegistry();
 const activeProjectEventSinks = projectEventRegistry.sinks;
 // Per-chat-run handles, keyed by runId. Lets non-stream side effects
@@ -963,7 +976,7 @@ const liveArtifactEventEmitter = createLiveArtifactEventEmitter({
   chatRunHandles: activeChatRunHandles,
 });
 
-function emitChatAgentEvent(runId, payload) {
+function emitChatAgentEvent(runId: string, payload: ProjectEventPayload) {
   const sink = activeChatAgentEventSinks.get(runId);
   if (!sink) return false;
   return sink(payload);
@@ -976,18 +989,25 @@ function emitChatAgentEvent(runId, payload) {
 export const __forTestChatRunHandles = activeChatRunHandles;
 
 export function __forTestEmitLiveArtifactEvent(
-  grant: { runId?: string; projectId?: string },
-  action: 'created' | 'updated' | 'deleted',
-  artifact: { id: string; projectId?: string; title?: string; refreshStatus?: string },
+  grant: LiveArtifactGrant,
+  action: LiveArtifactAction,
+  artifact: LiveArtifactSummary,
 ) {
   return emitLiveArtifactEvent(grant, action, artifact);
 }
 
-function emitLiveArtifactEvent(grant, action, artifact) {
+function emitLiveArtifactEvent(
+  grant: LiveArtifactGrant,
+  action: LiveArtifactAction,
+  artifact: LiveArtifactSummary,
+) {
   return liveArtifactEventEmitter.emitLiveArtifactEvent(grant, action, artifact);
 }
 
-function emitLiveArtifactRefreshEvent(grant, payload) {
+function emitLiveArtifactRefreshEvent(
+  grant: LiveArtifactGrant,
+  payload: LiveArtifactRefreshPayload,
+) {
   return liveArtifactEventEmitter.emitLiveArtifactRefreshEvent(grant, payload);
 }
 
@@ -4925,6 +4945,7 @@ export async function startServer({
         lastAgentEventPhase = summarizeAgentEventForInactivity(payload);
         noteAgentActivity();
         send('agent', payload);
+        return true;
       });
       activeChatRunHandles.set(toolTokenGrant.runId, { noteArtifactRegistered });
     }
