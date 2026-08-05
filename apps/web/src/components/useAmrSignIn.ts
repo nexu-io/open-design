@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { amrHandoffDeviceId } from '../analytics/amr-attribution';
+import {
+  amrHandoffDeviceId,
+  type AmrEntryAttribution,
+} from '../analytics/amr-attribution';
 import { getResolvedDeviceId } from '../analytics/client';
 import {
   cancelVelaLogin,
@@ -23,6 +26,10 @@ import {
 interface UseAmrSignInOptions {
   metricsConsent: boolean;
   installationId: string | null | undefined;
+  /** Attribution for the AMR/Open Design handoff join. startVelaLogin only
+   *  carries the od_device_id when an attribution is present, so omit this to
+   *  send no handoff (or pass a recorded entry to opt in). */
+  attribution?: AmrEntryAttribution | null;
   /** Fired on every polling status observation so a consumer can refresh its
    *  cached account state (e.g. the popover account). */
   onStatus?: (status: VelaLoginStatus) => void;
@@ -53,6 +60,7 @@ interface UseAmrSignInOptions {
 export function useAmrSignIn({
   metricsConsent,
   installationId,
+  attribution,
   onStatus,
 }: UseAmrSignInOptions) {
   const [amrLoginPending, setAmrLoginPending] = useState(false);
@@ -105,7 +113,7 @@ export function useAmrSignIn({
       resolvedDeviceId: getResolvedDeviceId(),
       installationId,
     });
-    const result = await startVelaLogin(null, odDeviceId);
+    const result = await startVelaLogin(attribution ?? null, odDeviceId);
     if (!amrMountedRef.current || amrAttemptRef.current !== attempt) return;
     if (result.ok || result.alreadyRunning) {
       amrLoginAttemptIdRef.current = result.authAttemptId ?? amrLoginAttemptIdRef.current;
@@ -119,6 +127,10 @@ export function useAmrSignIn({
             const outcome = amrLoginPollOutcome(status, startedAt);
             if (outcome === 'signed-in') {
               stopAmrLoginPolling();
+              // A prior timeout/cancel failure must not survive a later
+              // successful (possibly external) login — clear it or the stale
+              // alert returns after the next logout on a still-mounted surface.
+              setAmrLoginError(null);
               notifyAmrLoginStatusChanged('status-changed');
               notifyWorkspaceContextRefresh();
               notifyWorkspaceBillingRefresh();
@@ -180,7 +192,7 @@ export function useAmrSignIn({
       setAmrLoginPending(false);
       amrLoginStartedAtRef.current = null;
     }
-  }, [amrLoginPending, metricsConsent, installationId, stopAmrLoginPolling]);
+  }, [amrLoginPending, metricsConsent, installationId, attribution, stopAmrLoginPolling]);
 
   // A login cancelled from another surface (e.g. Home) should stop the poll
   // here too.
@@ -192,10 +204,12 @@ export function useAmrSignIn({
         && !amrSelfCancelRef.current
       ) {
         // A foreign cancel (another surface) means the daemon child is being
-        // torn down but may still be draining through the kill grace period.
-        // Enter reconcile: keep pending true until a status poll confirms
-        // loginInFlight === false, so a fast retry does not 409 into the drain.
-        amrReconcileRef.current = true;
+        // torn down but may still be draining. Keep polling (pending stays
+        // true) but do NOT set the timeout-reconcile flag: the raw
+        // `loginInFlight === false` reconcile check would bypass the startup-
+        // settle window and could re-enable the action while the child is
+        // still starting. Foreign cancellation instead waits for the ordinary
+        // `stopped` outcome (idle AFTER settle) before clearing.
       }
     };
     window.addEventListener(AMR_LOGIN_STATUS_EVENT, onLoginStatus);

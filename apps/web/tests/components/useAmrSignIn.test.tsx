@@ -418,4 +418,57 @@ describe('useAmrSignIn', () => {
     expect(bBodies.length).toBeGreaterThanOrEqual(0);
     expect(cancelBodies.every((b) => !b || b.authAttemptId === AUTH_ATTEMPT_ID)).toBe(true);
   });
+
+  it('does not re-enable on a transient idle read right after a foreign cancel-during-start', async () => {
+    // looper review on #6438: a foreign cancel during start followed by the
+    // first status read reporting idle BEFORE the startup-settle window must
+    // NOT clear pending — amrLoginPollOutcome treats that early read as pending,
+    // so a fast retry cannot 409 into a child that is still starting.
+    vi.useFakeTimers();
+    let resolveLogin: (value: Response) => void = () => {};
+    const loginPromise = new Promise<Response>((resolve) => {
+      resolveLogin = resolve;
+    });
+    let statusCall = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL | Request) => {
+        const url = typeof input === 'string' ? input : input.toString();
+        if (url.endsWith('/api/integrations/vela/login')) return loginPromise;
+        if (url.endsWith('/api/integrations/vela/status')) {
+          statusCall += 1;
+          // First read: transient idle BEFORE settle; then in-flight while the
+          // child starts; after settle, idle again (drain done).
+          const loginInFlight =
+            statusCall === 1 ? false : statusCall <= 4 ? true : false;
+          return new Response(
+            JSON.stringify({ loggedIn: false, loginInFlight }),
+            { status: 200 },
+          );
+        }
+        return new Response(JSON.stringify({}), { status: 200 });
+      }),
+    );
+
+    render(<Harness />);
+    fireEvent.click(screen.getByRole('button', { name: 'sign-in' }));
+    window.dispatchEvent(
+      new CustomEvent(AMR_LOGIN_STATUS_EVENT, { detail: { reason: 'login-canceled' } }),
+    );
+    resolveLogin(
+      new Response(JSON.stringify({ ok: true, authAttemptId: AUTH_ATTEMPT_ID }), {
+        status: 200,
+      }),
+    );
+
+    // Start resolves, poller installed.
+    await vi.advanceTimersByTimeAsync(100);
+    // First poll: transient idle read (statusCall 1, before settle).
+    await vi.advanceTimersByTimeAsync(AMR_LOGIN_POLL_INTERVAL_MS);
+    expect(screen.getByRole('button')).toHaveProperty('disabled', true);
+
+    // After settle, the child reports in-flight then idle → stopped → re-enable.
+    await vi.advanceTimersByTimeAsync(AMR_LOGIN_POLL_INTERVAL_MS * 5);
+    expect(screen.getByRole('button')).toHaveProperty('disabled', false);
+  });
 });

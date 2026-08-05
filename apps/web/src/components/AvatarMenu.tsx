@@ -226,6 +226,14 @@ export function AvatarMenu({
   const { amrLoginPending, amrLoginError, handleAmrSignIn } = useAmrSignIn({
     metricsConsent: config.telemetry?.metrics === true,
     installationId: config.installationId,
+    // Opted-in AMR handoff join: carry the same source attribution the Open
+    // Design agent row uses, so the od_device_id reaches the login.
+    attribution: recordAmrEntry(
+      analytics.track,
+      'avatar_amr_agent_card',
+      new Date(),
+      { metricsConsent: config.telemetry?.metrics === true },
+    ),
     onStatus: (status) => setAmrAccount(status),
   });
   useEffect(() => {
