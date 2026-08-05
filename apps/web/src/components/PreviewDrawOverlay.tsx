@@ -463,6 +463,12 @@ export function PreviewDrawOverlay({
     // it joins the in-flight chain, which also runs the trailing pass inline
     // before settling. Send therefore always observes the final anchors, and
     // the screenshot and structured bounds read the same state (#6361).
+    if (anchorWritesFrozenRef.current) {
+      // Capture in progress: remember the work; send()'s finally releases the
+      // freeze and runs the deferred pass.
+      anchorSyncTrailingRef.current = true;
+      return Promise.resolve();
+    }
     if (anchorSyncPromiseRef.current) {
       anchorSyncTrailingRef.current = true;
       return anchorSyncPromiseRef.current;
@@ -635,6 +641,10 @@ export function PreviewDrawOverlay({
   // inside the shared promise so awaiting callers see the final state.
   const anchorSyncPromiseRef = useRef<Promise<void> | null>(null);
   const anchorSyncTrailingRef = useRef(false);
+  // While true (from the pre-capture sync until send() finishes reading the
+  // bounds), syncContentAnchors defers instead of writing the mark refs, so
+  // the composited PNG and the structured bounds read one consistent state.
+  const anchorWritesFrozenRef = useRef(false);
   // The overlay can stay mounted (and even active) across a file switch; the
   // iframe element is often reused, so the per-frame reset above won't fire.
   // A new document is a new bridge — start its probe budget from zero.
@@ -1088,6 +1098,8 @@ export function PreviewDrawOverlay({
     anchorLastProbeAtRef.current = 0;
     anchorProbeFrameRef.current = null;
     anchorProbeGenerationRef.current += 1;
+    anchorWritesFrozenRef.current = false;
+    anchorSyncTrailingRef.current = false;
     resetTextEditingState();
     commitTextMarks([]);
     setExtraFiles([]);
@@ -1261,7 +1273,19 @@ export function PreviewDrawOverlay({
     // the structured bounds are read (#6361). The debounced pass after a resize
     // usually got here first; awaiting it once more makes the sent annotation
     // correct even when the user zooms and submits in the same instant.
+    //
+    // Ordering hardening: a settle timer armed BEFORE this call could fire
+    // mid-capture and mutate the mark refs between the pixels and the bounds.
+    // Drain it into this awaited sync, then freeze anchor writes until send()
+    // finishes reading both (anchorWritesFrozenRef, released in send's
+    // finally). Mid-capture probe replies re-queue via the trailing flag and
+    // apply after the send completes.
+    if (contentAnchorTimerRef.current !== null) {
+      window.clearTimeout(contentAnchorTimerRef.current);
+      contentAnchorTimerRef.current = null;
+    }
     await syncContentAnchors();
+    anchorWritesFrozenRef.current = true;
     if (captureSnapshot) {
       // The host's captureSnapshot is a compositor screenshot of the on-screen
       // region, which would otherwise include this overlay's own strokes +
@@ -1454,6 +1478,15 @@ export function PreviewDrawOverlay({
       setPreviewIndex(null);
     } finally {
       setPendingAction(null);
+      // Release the pre-capture freeze; if anchor work arrived mid-capture
+      // (scroll/resize probe replies), run it now.
+      if (anchorWritesFrozenRef.current) {
+        anchorWritesFrozenRef.current = false;
+        if (anchorSyncTrailingRef.current) {
+          anchorSyncTrailingRef.current = false;
+          scheduleContentReanchor();
+        }
+      }
     }
   }
 

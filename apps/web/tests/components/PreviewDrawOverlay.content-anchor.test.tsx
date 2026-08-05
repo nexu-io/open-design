@@ -887,6 +887,98 @@ describe('PreviewDrawOverlay content anchoring (issue #6361)', () => {
     }
   });
 
+  it('freezes anchor writes during capture so bounds match the captured pixels', async () => {
+    // requestSnapshot drains pending settle timers into one awaited sync, then
+    // freezes anchor writes until send() has read the bounds. A probe reply
+    // landing DURING the (slow) capture must not re-project the marks: the
+    // pixels were already taken, so a post-capture write would make the
+    // structured bounds disagree with the PNG — the #6361 invariant.
+    frame.w = 692;
+    frame.h = 666;
+    const restoreRect = installFrameGeometry();
+    const observer = installResizeObserver();
+    const anchors = vi.mocked(requestPreviewAnchorTargets);
+    anchors.mockReset();
+    // Boxes shifted 100px: what a mid-capture scroll probe would report.
+    const SHIFTED = ZOOMED.map((t) => ({
+      ...t,
+      position: { ...t.position, y: t.position.y - 100 },
+    }));
+    anchors
+      // commit probe + the drained pre-capture sync: stable ZOOMED boxes.
+      .mockImplementationOnce(async () => ({ answered: true, targets: ZOOMED }) as never)
+      .mockImplementationOnce(async () => ({ answered: true, targets: ZOOMED }) as never)
+      // anything after (a mid-capture pass, if the freeze fails): shifted.
+      .mockImplementation(async () => ({ answered: true, targets: SHIFTED }) as never);
+
+    const annotation = vi.fn((event: Event) => {
+      const detail = (event as CustomEvent<{ ack?: (r: { ok: boolean }) => void }>).detail;
+      detail.ack?.({ ok: true });
+    });
+    window.addEventListener('opendesign:annotation', annotation);
+
+    // Slow host capture: the freeze window is wide open while it runs.
+    let midCapture: (() => Promise<void>) | null = null;
+    const captureSnapshot = vi.fn(async () => {
+      if (midCapture) await midCapture();
+      return { dataUrl: 'data:image/png;base64,cG5n', w: 692, h: 666 };
+    });
+
+    try {
+      const { container, getByRole } = render(
+        <PreviewDrawOverlay active captureSnapshot={captureSnapshot}>
+          <iframe title="srcdoc" data-od-render-mode="srcdoc" data-od-active="true" />
+        </PreviewDrawOverlay>,
+      );
+      const wrap = container.querySelector<HTMLElement>('.preview-draw-overlay')!;
+      const canvas = container.querySelector<HTMLCanvasElement>('canvas')!;
+      const iframe = container.querySelector<HTMLIFrameElement>('iframe')!;
+      Object.defineProperty(wrap, 'offsetWidth', { configurable: true, get: () => frame.w });
+      Object.defineProperty(wrap, 'offsetHeight', { configurable: true, get: () => frame.h });
+      observer.trigger();
+
+      // Mark BAND 05; commit probe anchors it at 342.
+      fireEvent.pointerDown(canvas, { clientX: 40, clientY: 342, pointerId: 1 });
+      fireEvent.pointerMove(canvas, { clientX: 600, clientY: 382, pointerId: 1 });
+      fireEvent.pointerUp(canvas, { clientX: 600, clientY: 382, pointerId: 1 });
+      await waitFor(() => expect(anchors).toHaveBeenCalledTimes(1));
+      await new Promise((r) => setTimeout(r, 350));
+
+      // While the capture runs: scroll events try to trigger a re-anchor pass
+      // that would apply the SHIFTED boxes.
+      midCapture = async () => {
+        for (let i = 0; i < 3; i++) {
+          fireEvent(
+            window,
+            new MessageEvent('message', {
+              data: { type: 'od:preview-scroll', canvasTop: i },
+              source: iframe.contentWindow,
+            }),
+          );
+          await new Promise((r) => setTimeout(r, 60));
+        }
+      };
+
+      const input = container.querySelector<HTMLInputElement>('.preview-draw-note-input')!;
+      fireEvent.change(input, { target: { value: 'Freeze the refs during capture.' } });
+      fireEvent.click(getByRole('button', { name: 'Send' }));
+
+      await waitFor(() => expect(annotation).toHaveBeenCalledTimes(1));
+      const detail = (annotation.mock.calls[0]?.[0] as CustomEvent<{
+        bounds?: { x: number; y: number; width: number; height: number };
+      }>).detail;
+
+      // Bounds must reflect the state the pixels were captured from (342) —
+      // NOT the shifted boxes a mid-capture pass would have applied (242).
+      expect(detail.bounds!.y).toBeCloseTo(342, 0);
+      expect(detail.bounds!.height).toBeCloseTo(40, 0);
+    } finally {
+      window.removeEventListener('opendesign:annotation', annotation);
+      observer.restore();
+      restoreRect();
+    }
+  });
+
   it('resets the probe budget when the file changes under the open overlay', async () => {
     frame.w = 692;
     frame.h = 666;

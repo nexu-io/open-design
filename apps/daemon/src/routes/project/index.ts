@@ -5012,7 +5012,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     return etag;
   }
 
-  function rawRequestIsFresh(req: any, etag: string, mtimeMs: number): boolean {
+  function rawRequestIsFresh(req: any, etag: string, mtimeMs: number, suffixActive = false): boolean {
     // If-None-Match is authoritative when present (RFC 9110 §13.1.3): freshness
     // is decided solely by whether the ETag matches — do NOT fall through to
     // If-Modified-Since. Otherwise a same-second rewrite (ETag changes
@@ -5023,6 +5023,11 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     if (typeof ifNoneMatch === 'string') {
       return ifNoneMatch.split(',').some((tag) => tag.trim() === etag);
     }
+    // With an appended bridge suffix, Last-Modified (source mtime) does not
+    // identify the representation: a pre-suffix cache holds the same date but
+    // different bytes. An IMS-only revalidation must therefore MISS so the
+    // client refetches the bridged body; ETag clients are unaffected.
+    if (suffixActive) return false;
     const ifModifiedSince = req.headers['if-modified-since'];
     if (typeof ifModifiedSince === 'string') {
       const since = Date.parse(ifModifiedSince);
@@ -5147,7 +5152,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     let currentEtag: string | null = null;
     if (revalidate && !willSubstitute) {
       currentEtag = setRawRevalidationHeaders(res, meta, validatorSuffix);
-      if (rawRequestIsFresh(req, currentEtag, meta.mtime)) {
+      if (rawRequestIsFresh(req, currentEtag, meta.mtime, validatorSuffix.length > 0)) {
         return res.status(304).end();
       }
     }

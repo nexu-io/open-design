@@ -397,6 +397,28 @@ describe('GET /api/projects/:id/raw/* range request route', () => {
     expect(plain.headers.get('etag')).toBe(preFixEtag);
   });
 
+  it('busts pre-suffix caches on If-Modified-Since-only revalidation too', async () => {
+    // An IMS-only client (no stored ETag) that cached the pre-suffix body
+    // sends the unchanged source mtime. Last-Modified does not identify the
+    // suffixed representation, so freshness must MISS and return the bridged
+    // bytes rather than 304ing a bridgeless document.
+    const url = `${rawUrl('large.html')}?odPreviewBridge=selection`;
+    const first = await fetch(url);
+    expect(first.status).toBe(200);
+    const lastModified = first.headers.get('last-modified')!;
+    expect(lastModified).toBeTruthy();
+
+    const ims = await fetch(url, { headers: { 'If-Modified-Since': lastModified } });
+    expect(ims.status).toBe(200);
+    expect(await ims.text()).toContain('data-od-url-selection-bridge');
+
+    // Without a suffix the IMS fast path still works (no false busting).
+    const plainFirst = await fetch(rawUrl('large.html'));
+    const plainLm = plainFirst.headers.get('last-modified')!;
+    const plainIms = await fetch(rawUrl('large.html'), { headers: { 'If-Modified-Since': plainLm } });
+    expect(plainIms.status).toBe(304);
+  });
+
   it('appends the preview bridges after streamed large HTML on the powered route too', async () => {
     const res = await fetch(`${poweredUrl('large.html')}?odPreviewBridge=selection&odPreviewBridge=snapshot`);
     expect(res.status).toBe(200);
