@@ -34,6 +34,10 @@ import {
 import {
   execFileBuffered as runBufferedCommand,
   spawnPassthrough as runPassthroughCommand,
+  type BufferedCommandOptions,
+  type BufferedCommandResult,
+  type PassthroughCommandOptions,
+  type PassthroughCommandResult,
 } from './runtimes/child-process.js';
 import {
   describeAutomationScheduleForCli,
@@ -56,6 +60,8 @@ import { runMediaGenerate as runMediaGenerateCommand } from './media/generate-cl
 import { runPollUntilDoneOrBudget, type MediaPollOptions } from './media/poll-cli.js';
 import { runShare as runShareCommand } from './share/cli.js';
 import type { ScaffoldInput } from './plugins/scaffold.js';
+import type { PublishCatalog, PublishMetadata } from './plugins/publish.js';
+import type { InstalledPluginRecord } from '@open-design/contracts';
 import { resolveDaemonUrl } from './daemon-url.js';
 import { requestJsonIpc } from '@open-design/sidecar';
 import { SIDECAR_ENV, SIDECAR_MESSAGES } from '@open-design/sidecar-proto';
@@ -256,6 +262,60 @@ const PLUGIN_LIST_BOOLEAN_FLAGS = new Set([
   ...PLUGIN_BOOLEAN_FLAGS,
   'bundled', 'no-bundled',
 ]);
+
+interface CliWorkflowStep {
+  label: string;
+  command: string;
+  ok?: boolean;
+  stdout?: string;
+  stderr?: string;
+}
+
+interface CliWorkflowRunOptions extends BufferedCommandOptions {
+  tolerate?: (result: BufferedCommandResult) => boolean;
+}
+
+interface PluginPublishManifest {
+  name?: string;
+  version?: string;
+  title?: string;
+  description?: string;
+  homepage?: string;
+  plugin?: { repo?: unknown } & Record<string, unknown>;
+  author?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+interface PluginPublishRow extends PluginPublishManifest {
+  id?: string;
+  manifest?: PluginPublishManifest;
+  version?: string;
+}
+
+interface PluginCandidateSummary {
+  id: string;
+  status: string;
+  title: string;
+  draftPath?: string;
+}
+
+interface PluginCandidateResponse {
+  candidates?: PluginCandidateSummary[];
+  draftPath?: string;
+  validation?: { ok?: boolean };
+  message?: string;
+}
+
+interface PluginApplyResponse {
+  appliedPlugin?: {
+    pluginId: string;
+    pluginVersion: string;
+    manifestSourceDigest: string;
+  };
+  contextItems?: Array<{ kind: string; id?: string; name?: string; path?: string }>;
+  warnings?: string[];
+  fields?: string[];
+}
 
 async function runResearchCommand(args: readonly string[]): Promise<void> {
   return runResearch(args, {
@@ -1310,7 +1370,7 @@ Exit codes:
       console.log(`\nNext: od plugin install --source ${result.outPath}`);
     }
   } catch (err) {
-    console.error(`[pack] failed: ${err?.message ?? err}`);
+    console.error(`[pack] failed: ${err instanceof Error ? err.message : String(err)}`);
     process.exit(2);
   }
 }
@@ -1389,11 +1449,18 @@ Shows the GitHub account gh will use for Open Design registry publishing.`);
   }
 }
 
-async function execFileBuffered(command, args, opts = {}) {
+async function execFileBuffered(
+  command: string,
+  args: readonly string[],
+  opts: BufferedCommandOptions = {},
+): Promise<BufferedCommandResult> {
   return runBufferedCommand(command, args, opts);
 }
 
-async function execGhBuffered(args, opts = {}) {
+async function execGhBuffered(
+  args: readonly string[],
+  opts: BufferedCommandOptions = {},
+): Promise<BufferedCommandResult> {
   if (process.platform === 'win32') return execFileBuffered('gh', args, opts);
   const shell = process.env.SHELL && process.env.SHELL.trim() ? process.env.SHELL.trim() : '/bin/zsh';
   return execFileBuffered(shell, ['-c', buildLoginShellCommand(buildGhShellCommand(args))], {
@@ -1402,11 +1469,15 @@ async function execGhBuffered(args, opts = {}) {
   });
 }
 
-async function spawnPassthrough(command, args, opts = {}) {
+async function spawnPassthrough(
+  command: string,
+  args: readonly string[],
+  opts: PassthroughCommandOptions = {},
+): Promise<PassthroughCommandResult> {
   return runPassthroughCommand(command, args, opts);
 }
 
-async function spawnGhPassthrough(args) {
+async function spawnGhPassthrough(args: readonly string[]): Promise<PassthroughCommandResult> {
   if (process.platform === 'win32') return spawnPassthrough('gh', args);
   const shell = process.env.SHELL && process.env.SHELL.trim() ? process.env.SHELL.trim() : '/bin/zsh';
   return spawnPassthrough(shell, ['-c', buildLoginShellCommand(buildGhShellCommand(args))], {
@@ -2801,7 +2872,7 @@ Closed signal vocabulary:
 // on-disk fixture (typically committed under tests/fixtures/) and
 // exits 4 on byte-mismatch. Lets a plugin author lock byte-
 // equality without writing a new test harness.
-async function runPluginCanon(rest) {
+async function runPluginCanon(rest: readonly string[]): Promise<void> {
   const flags = parseFlags(rest, {
     string:  new Set([...PLUGIN_STRING_FLAGS, 'check']),
     boolean: PLUGIN_BOOLEAN_FLAGS,
@@ -2844,7 +2915,7 @@ fixtures into a plugin's own tests/.`);
     try {
       expected = await fs.readFile(checkPath, 'utf8');
     } catch (err) {
-      console.error(`[canon --check] cannot read ${checkPath}: ${err?.message ?? err}`);
+      console.error(`[canon --check] cannot read ${checkPath}: ${err instanceof Error ? err.message : String(err)}`);
       process.exit(2);
     }
     const actual = await resp.text();
@@ -2882,7 +2953,7 @@ fixtures into a plugin's own tests/.`);
 // Plan §3.AA1 — `od plugin diff <a> <b>`. Compares two installed
 // plugins (by id) and prints a structured report. Useful for
 // debugging replay invariance + reviewing version bumps.
-async function runPluginDiff(rest) {
+async function runPluginDiff(rest: readonly string[]): Promise<void> {
   const flags = parseFlags(rest, { string: PLUGIN_STRING_FLAGS, boolean: PLUGIN_BOOLEAN_FLAGS });
   const positional = rest.filter((a) => !a.startsWith('-'));
   if (flags.help || flags.h || positional.length < 2) {
@@ -2908,8 +2979,8 @@ into 'added' / 'removed' / 'changed' with one line per field.`);
     console.error(`GET /api/plugins/${idB} failed: ${respB.status}`);
     process.exit(1);
   }
-  const a = await respA.json();
-  const b = await respB.json();
+  const a = await respA.json() as InstalledPluginRecord;
+  const b = await respB.json() as InstalledPluginRecord;
   const { diffPlugins } = await import('./plugins/diff.js');
   const report = diffPlugins({ a, b });
   if (flags.json) {
@@ -2937,7 +3008,7 @@ into 'added' / 'removed' / 'changed' with one line per field.`);
   }
 }
 
-async function runPluginUpgrade(rest) {
+async function runPluginUpgrade(rest: readonly string[]): Promise<void> {
   const flags = parseFlags(rest, { string: PLUGIN_STRING_FLAGS, boolean: PLUGIN_BOOLEAN_FLAGS });
   const id = rest.find((a) => !a.startsWith('-') && a !== flags['daemon-url'] && a !== flags.source);
   if (!id) {
@@ -3003,7 +3074,7 @@ async function runPluginUpgrade(rest) {
   process.exit(exitCode);
 }
 
-async function runPluginUninstall(rest) {
+async function runPluginUninstall(rest: readonly string[]): Promise<void> {
   const flags = parseFlags(rest, { string: PLUGIN_STRING_FLAGS, boolean: PLUGIN_BOOLEAN_FLAGS });
   const id = rest.find((a) => !a.startsWith('-') && a !== flags['daemon-url'] && a !== flags.source);
   if (!id) {
@@ -3016,11 +3087,11 @@ async function runPluginUninstall(rest) {
     console.error(`POST /api/plugins/${id}/uninstall failed: ${resp.status} ${await resp.text()}`);
     process.exit(1);
   }
-  const data = await resp.json();
+  const data = await resp.json() as { removedFolder?: string; warning?: string };
   console.log(`[uninstall] ${data?.removedFolder ? 'ok' : 'no-op'}${data?.warning ? ` (warning: ${data.warning})` : ''}`);
 }
 
-async function runPluginApply(rest) {
+async function runPluginApply(rest: readonly string[]): Promise<void> {
   const flags = parseFlags(rest, { string: PLUGIN_STRING_FLAGS, boolean: PLUGIN_BOOLEAN_FLAGS });
   const id = rest.find((a) => !a.startsWith('-')
     && a !== flags['daemon-url']
@@ -3035,16 +3106,21 @@ async function runPluginApply(rest) {
   // Plan §3.B2: support both --inputs <json> and repeated --input k=v
   // forms so a code agent can build the inputs map without a JSON
   // shell-escape dance.
-  let inputs = {};
+  let inputs: Record<string, string | number | boolean> = {};
   if (typeof flags.inputs === 'string' && flags.inputs.trim().length > 0) {
-    try { inputs = JSON.parse(flags.inputs); } catch (err) {
+    try {
+      const parsed = JSON.parse(flags.inputs);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        inputs = parsed as Record<string, string | number | boolean>;
+      }
+    } catch (err) {
       console.error(`--inputs must be valid JSON: ${err instanceof Error ? err.message : String(err)}`);
       process.exit(2);
     }
   }
   for (let i = 0; i < rest.length; i++) {
-    if (rest[i] === '--input' && typeof rest[i + 1] === 'string') {
-      const kv = rest[i + 1];
+    const kv = rest[i + 1];
+    if (rest[i] === '--input' && typeof kv === 'string') {
       const eq = kv.indexOf('=');
       if (eq > 0) {
         const k = kv.slice(0, eq);
@@ -3068,10 +3144,10 @@ async function runPluginApply(rest) {
   } catch (err) {
     return exitWithStructuredError({
       code: 'daemon-not-running',
-      message: `Cannot reach daemon at ${await pluginDaemonUrl(flags)}: ${err?.message ?? err}`,
+      message: `Cannot reach daemon at ${await pluginDaemonUrl(flags)}: ${err instanceof Error ? err.message : String(err)}`,
     });
   }
-  const data = await resp.json().catch(() => ({}));
+  const data = await resp.json().catch(() => ({})) as PluginApplyResponse;
   if (!resp.ok) {
     if (resp.status === 422 && Array.isArray(data?.fields)) {
       return exitWithStructuredError({
@@ -3098,14 +3174,14 @@ async function runPluginApply(rest) {
   }
 }
 
-function coerceCliValue(raw) {
+function coerceCliValue(raw: string): string | number | boolean {
   if (raw === 'true') return true;
   if (raw === 'false') return false;
   if (/^-?\d+(\.\d+)?$/.test(raw)) return Number(raw);
   return raw;
 }
 
-async function runPluginCandidates(rest) {
+async function runPluginCandidates(rest: readonly string[]): Promise<void> {
   const sub = rest[0];
   const args = rest.slice(1);
   const flags = parseFlags(args, {
@@ -3130,7 +3206,7 @@ Lists and formalizes persisted skill-to-plugin candidates.`);
   if (sub === 'list') {
     const qs = flags['include-dismissed'] ? '?includeDismissed=true' : '';
     const resp = await fetch(`${base}/api/projects/${encodeURIComponent(projectId)}/plugin-candidates${qs}`);
-    const data = await resp.json().catch(() => null);
+    const data = await resp.json().catch(() => ({})) as PluginCandidateResponse;
     if (!resp.ok) {
       console.error(`GET plugin candidates failed: ${resp.status} ${JSON.stringify(data)}`);
       process.exit(1);
@@ -3160,7 +3236,7 @@ Lists and formalizes persisted skill-to-plugin candidates.`);
       headers: { 'Content-Type': 'application/json' },
       body: '{}',
     });
-    const data = await resp.json().catch(() => null);
+    const data = await resp.json().catch(() => ({})) as PluginCandidateResponse;
     if (flags.json) {
       process.stdout.write(JSON.stringify(data, null, 2) + '\n');
     } else if (resp.ok) {
@@ -3177,7 +3253,7 @@ Lists and formalizes persisted skill-to-plugin candidates.`);
       headers: { 'Content-Type': 'application/json' },
       body: '{}',
     });
-    const data = await resp.json().catch(() => null);
+    const data = await resp.json().catch(() => null) as PluginCandidateResponse | null;
     if (flags.json) process.stdout.write(JSON.stringify(data, null, 2) + '\n');
     else if (resp.ok) console.log(`[candidate] dismissed ${candidateId}`);
     else console.error(`[candidate] dismiss failed: ${data?.message ?? JSON.stringify(data)}`);
@@ -3195,7 +3271,7 @@ Lists and formalizes persisted skill-to-plugin candidates.`);
 // against the URL so the author lands on the catalog's submission form
 // in one step. We never POST anywhere — the upstream review flow is
 // always under the author's control.
-async function runPluginPublish(rest) {
+async function runPluginPublish(rest: readonly string[]): Promise<void> {
   const flags = parseFlags(rest, {
     string: new Set(['daemon-url', 'to', 'snapshot-id', 'repo', 'catalog']),
     boolean: new Set(['help', 'h', 'json', 'open']),
@@ -3228,11 +3304,11 @@ publish from a frozen run snapshot rather than the live installed copy.`);
   // Pull the plugin metadata from the daemon. We do this through the
   // existing /api/plugins/:id endpoint so the CLI never needs a direct
   // SQLite handle; everything stays loopback-mediated.
-  let meta = { pluginId: id, pluginVersion: '0.0.0' };
+  let meta: PublishMetadata = { pluginId: id, pluginVersion: '0.0.0' };
   try {
     const resp = await fetch(`${base}/api/plugins/${encodeURIComponent(id)}`);
     if (resp.ok) {
-      const row = await resp.json();
+      const row = await resp.json() as PluginPublishRow;
       // The daemon's plugin row carries a stored `version` plus the full
       // manifest. For project-local plugins (`generated-plugin/`, snapshots,
       // freshly imported folders) the stored `version` is `'0.0.0'` until
@@ -3288,7 +3364,7 @@ publish from a frozen run snapshot rather than the live installed copy.`);
   const { buildPublishLink, PublishError } = await import('./plugins/publish.js');
   let link;
   try {
-    link = buildPublishLink({ catalog: target, meta });
+    link = buildPublishLink({ catalog: target as PublishCatalog, meta });
   } catch (err) {
     if (err instanceof PublishError) {
       console.error(`[publish] ${err.message}`);
@@ -3313,7 +3389,7 @@ publish from a frozen run snapshot rather than the live installed copy.`);
   }
 }
 
-async function runPluginPublishRepo(rest) {
+async function runPluginPublishRepo(rest: readonly string[]): Promise<void> {
   const flags = parseFlags(rest, {
     string: new Set(['host', 'owner']),
     boolean: new Set(['help', 'h', 'json', 'dry-run']),
@@ -3344,7 +3420,12 @@ GitHub API as a last resort. It never publishes to placeholder owners.`);
   const manifestPath = resolve(absFolder, 'open-design.json');
   const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
   const host = typeof flags.host === 'string' ? flags.host : 'github.com';
-  const target = await resolvePluginGithubTarget({ host, owner: flags.owner, manifest, purpose: 'publish-repo' });
+  const target = await resolvePluginGithubTarget({
+    host,
+    ...(flags.owner !== undefined ? { owner: flags.owner } : {}),
+    manifest,
+    purpose: 'publish-repo',
+  });
   const normalized = normalizeManifestRepoForOwner(manifest, target.owner);
   if (normalized.changed && !flags['dry-run']) {
     await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
@@ -3356,16 +3437,24 @@ GitHub API as a last resort. It never publishes to placeholder owners.`);
     console.error(`[publish-repo] invalid plugin.repo after normalization: ${normalized.repoUrl}`);
     process.exit(2);
   }
-  const steps = [];
-  const run = async (label, command, args, opts = {}) => {
+  const steps: CliWorkflowStep[] = [];
+  const run = async (
+    label: string,
+    command: string,
+    args: readonly string[],
+    opts: CliWorkflowRunOptions = {},
+  ): Promise<BufferedCommandResult> => {
     steps.push({ label, command: [command, ...args].join(' ') });
     if (flags['dry-run']) return { ok: true, stdout: '', stderr: '' };
     const result = await (command === 'gh'
       ? execGhBuffered(args, { cwd: opts.cwd ?? absFolder, timeout: opts.timeout ?? 120_000 })
       : execFileBuffered(command, args, { cwd: opts.cwd ?? absFolder, timeout: opts.timeout ?? 120_000 }));
-    steps[steps.length - 1].ok = result.ok;
-    steps[steps.length - 1].stdout = result.stdout;
-    steps[steps.length - 1].stderr = result.stderr;
+    const step = steps.at(-1);
+    if (step) {
+      step.ok = result.ok;
+      step.stdout = result.stdout;
+      step.stderr = result.stderr;
+    }
     if (!result.ok) {
       emitPluginWorkflowResult(flags, {
         ok: false,
@@ -3385,8 +3474,8 @@ GitHub API as a last resort. It never publishes to placeholder owners.`);
   };
 
   let exists = false;
-  const view = flags['dry-run']
-    ? { ok: false, stderr: 'dry-run' }
+  const view: BufferedCommandResult = flags['dry-run']
+    ? { ok: false, stdout: '', stderr: 'dry-run' }
     : await execGhBuffered(['repo', 'view', repo.fullName], { cwd: absFolder, timeout: 30_000 });
   steps.push({ label: 'check repo', command: `gh repo view ${repo.fullName}`, ok: view.ok, stdout: view.stdout, stderr: view.stderr });
   if (view.ok) {
@@ -3429,8 +3518,8 @@ GitHub API as a last resort. It never publishes to placeholder owners.`);
   }
 
   await run('git add', 'git', ['add', '-A'], { cwd: workdir });
-  const status = flags['dry-run']
-    ? { stdout: 'dry-run' }
+  const status: BufferedCommandResult = flags['dry-run']
+    ? { ok: true, stdout: 'dry-run', stderr: '' }
     : await execFileBuffered('git', ['status', '--porcelain'], { cwd: workdir });
   if (status.stdout.trim().length > 0 || !exists) {
     const commitMessage = exists
@@ -3453,8 +3542,8 @@ GitHub API as a last resort. It never publishes to placeholder owners.`);
     ], { cwd: workdir });
   }
   await run('git push tags', 'git', ['push', '--tags'], { cwd: workdir });
-  const verify = flags['dry-run']
-    ? { ok: true, stdout: JSON.stringify({ nameWithOwner: repo.fullName, url: normalized.repoUrl }) }
+  const verify: BufferedCommandResult = flags['dry-run']
+    ? { ok: true, stdout: JSON.stringify({ nameWithOwner: repo.fullName, url: normalized.repoUrl }), stderr: '' }
     : await run('verify repo', 'gh', ['repo', 'view', repo.fullName, '--json', 'url,nameWithOwner'], { cwd: workdir });
   const parsedVerify = safeJson(verify.stdout);
   if (cleanupDir && !flags['dry-run']) {
@@ -3475,7 +3564,7 @@ GitHub API as a last resort. It never publishes to placeholder owners.`);
   });
 }
 
-async function runPluginOpenDesignPr(rest) {
+async function runPluginOpenDesignPr(rest: readonly string[]): Promise<void> {
   const flags = parseFlags(rest, {
     string: new Set(['host', 'owner']),
     boolean: new Set(['help', 'h', 'json', 'dry-run']),
@@ -3502,7 +3591,12 @@ fork of nexu-io/open-design, pushes a branch, and opens the PR form with --web.`
   const manifestPath = resolve(absFolder, 'open-design.json');
   const manifest = JSON.parse(await fsp.readFile(manifestPath, 'utf8'));
   const host = typeof flags.host === 'string' ? flags.host : 'github.com';
-  const target = await resolvePluginGithubTarget({ host, owner: flags.owner, manifest, purpose: 'open-design-pr' });
+  const target = await resolvePluginGithubTarget({
+    host,
+    ...(flags.owner !== undefined ? { owner: flags.owner } : {}),
+    manifest,
+    purpose: 'open-design-pr',
+  });
   const name = String(manifest.name ?? '').trim();
   if (!name) {
     console.error('[open-design-pr] manifest.name is required');
@@ -3512,16 +3606,24 @@ fork of nexu-io/open-design, pushes a branch, and opens the PR form with --web.`
   const branch = `plugin/${name}-${Math.floor(Date.now() / 1000)}`;
   const tmpRoot = await fsp.mkdtemp(join(os.tmpdir(), 'od-open-design-pr-'));
   const checkout = join(tmpRoot, 'open-design');
-  const steps = [];
-  const run = async (label, command, args, opts = {}) => {
+  const steps: CliWorkflowStep[] = [];
+  const run = async (
+    label: string,
+    command: string,
+    args: readonly string[],
+    opts: CliWorkflowRunOptions = {},
+  ): Promise<BufferedCommandResult> => {
     steps.push({ label, command: [command, ...args].join(' ') });
     if (flags['dry-run']) return { ok: true, stdout: '', stderr: '' };
     const result = await (command === 'gh'
       ? execGhBuffered(args, { cwd: opts.cwd ?? process.cwd(), timeout: opts.timeout ?? 180_000 })
       : execFileBuffered(command, args, { cwd: opts.cwd ?? process.cwd(), timeout: opts.timeout ?? 180_000 }));
-    steps[steps.length - 1].ok = result.ok;
-    steps[steps.length - 1].stdout = result.stdout;
-    steps[steps.length - 1].stderr = result.stderr;
+    const step = steps.at(-1);
+    if (step) {
+      step.ok = result.ok;
+      step.stdout = result.stdout;
+      step.stderr = result.stderr;
+    }
     if (!result.ok && !opts.tolerate?.(result)) {
       emitPluginWorkflowResult(flags, {
         ok: false,
@@ -3595,7 +3697,13 @@ fork of nexu-io/open-design, pushes a branch, and opens the PR form with --web.`
   });
 }
 
-async function publishToMarketplaceJson({ catalogPath, meta }) {
+async function publishToMarketplaceJson({
+  catalogPath,
+  meta,
+}: {
+  catalogPath: string;
+  meta: PublishMetadata;
+}) {
   const [{ dirname, resolve }, { mkdir, readFile, writeFile }, { PublishError, upsertMarketplaceJsonEntry }] = await Promise.all([
     import('node:path'),
     import('node:fs/promises'),
@@ -3606,7 +3714,7 @@ async function publishToMarketplaceJson({ catalogPath, meta }) {
   try {
     existing = JSON.parse(await readFile(resolvedPath, 'utf8'));
   } catch (err) {
-    if (err?.code !== 'ENOENT') {
+    if (!(err instanceof Error && (err as NodeJS.ErrnoException).code === 'ENOENT')) {
       throw err;
     }
   }
@@ -3634,7 +3742,17 @@ async function publishToMarketplaceJson({ catalogPath, meta }) {
   };
 }
 
-async function resolvePluginGithubTarget({ host = 'github.com', owner, manifest, purpose }) {
+async function resolvePluginGithubTarget({
+  host = 'github.com',
+  owner,
+  manifest,
+  purpose,
+}: {
+  host?: string;
+  owner?: string | boolean;
+  manifest: PluginPublishManifest;
+  purpose: 'publish-repo' | 'open-design-pr';
+}) {
   const version = await execGhBuffered(['--version'], { timeout: 10_000 });
   if (!version.ok) {
     console.error('[plugin github] GitHub CLI is required. Install gh from https://cli.github.com/ and retry.');
@@ -3707,7 +3825,10 @@ async function resolvePluginGithubTarget({ host = 'github.com', owner, manifest,
   };
 }
 
-function normalizeManifestRepoForOwner(manifest, owner) {
+function normalizeManifestRepoForOwner(
+  manifest: PluginPublishManifest,
+  owner: string,
+) {
   const name = String(manifest?.name ?? '').trim();
   if (!name) {
     console.error('[plugin repo] manifest.name is required');
