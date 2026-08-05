@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Install/uninstall logic for user-managed skills and design systems.
 // Installed items live under ~/.open-design/skills/ and
 // ~/.open-design/design-systems/ respectively.
@@ -7,15 +6,25 @@ import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { isBlocked } from './linked-dirs.js';
-import { listSkills, findSkillById } from './skills.js';
+import { listSkills } from './skills.js';
 import { listDesignSystems } from './design-systems/index.js';
 
-/** @typedef {{ source: 'github', url: string } | { source: 'local', path: string }} InstallTarget */
+type InstallKind = 'skill' | 'design-system';
+type InstallTarget =
+  | { source: 'github'; url: string }
+  | { source: 'local'; path: string };
+type InstallResult =
+  | { ok: true; dir: string }
+  | { ok: false; error: string };
+type UninstallResult =
+  | { ok: true }
+  | { ok: false; error: string; status?: number };
+type ListedItem = { id: string; dir?: string };
 
 const GITHUB_URL_RE = /^https:\/\/github\.com\/[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+\/?$/;
 const SAFE_NAME_RE = /^[a-zA-Z0-9_.-]+$/;
 
-export function sanitizeRepoName(url) {
+export function sanitizeRepoName(url: string): string {
   const trimmed = url.replace(/\/+$/, '');
   const segments = trimmed.split('/');
   const raw = segments[segments.length - 1] || 'unnamed';
@@ -26,13 +35,11 @@ export function sanitizeRepoName(url) {
   return name.slice(0, 64);
 }
 
-/**
- * @param {InstallTarget} target
- * @param {string} userDir - user-installed directory (e.g. ~/.open-design/skills)
- * @param {'skill' | 'design-system'} kind
- * @returns {Promise<{ok: true, dir: string} | {ok: false, error: string}>}
- */
-export async function installFromTarget(target, userDir, kind) {
+export async function installFromTarget(
+  target: InstallTarget,
+  userDir: string,
+  kind: InstallKind,
+): Promise<InstallResult> {
   const manifest = kind === 'skill' ? 'SKILL.md' : 'DESIGN.md';
 
   if (target.source === 'github') {
@@ -44,7 +51,11 @@ export async function installFromTarget(target, userDir, kind) {
   return { ok: false, error: 'Invalid install source' };
 }
 
-async function installFromGithub(url, userDir, manifest) {
+async function installFromGithub(
+  url: string,
+  userDir: string,
+  manifest: 'SKILL.md' | 'DESIGN.md',
+): Promise<InstallResult> {
   if (!GITHUB_URL_RE.test(url)) {
     return { ok: false, error: 'Invalid GitHub URL. Expected https://github.com/<owner>/<repo>' };
   }
@@ -64,7 +75,7 @@ async function installFromGithub(url, userDir, manifest) {
 
   // Shallow clone
   try {
-    await new Promise((resolve, reject) => {
+    await new Promise<void>((resolve, reject) => {
       const cp = execFile('git', ['clone', '--depth', '1', url, dest], {
         timeout: 60_000,
       }, (err, _stdout, stderr) => {
@@ -93,7 +104,11 @@ async function installFromGithub(url, userDir, manifest) {
   return { ok: true, dir: dest };
 }
 
-async function installFromLocal(localPath, userDir, manifest) {
+async function installFromLocal(
+  localPath: string,
+  userDir: string,
+  manifest: 'SKILL.md' | 'DESIGN.md',
+): Promise<InstallResult> {
   if (!path.isAbsolute(localPath)) {
     return { ok: false, error: 'Path must be absolute' };
   }
@@ -136,22 +151,21 @@ async function installFromLocal(localPath, userDir, manifest) {
   // Create symlink
   try {
     fs.symlinkSync(realPath, linkPath, 'junction');
-  } catch (err) {
-    return { ok: false, error: `Failed to create symlink: ${err.message}` };
+  } catch (err: unknown) {
+    return { ok: false, error: `Failed to create symlink: ${err instanceof Error ? err.message : String(err)}` };
   }
 
   return { ok: true, dir: linkPath };
 }
 
-/**
- * @param {string} id - skill or DS id to uninstall
- * @param {string} userDir - user-installed directory
- * @param {string} builtInDir - built-in directory
- * @param {'skill' | 'design-system'} kind
- * @returns {Promise<{ok: true} | {ok: false, error: string, status?: number}>}
- */
-export async function uninstallById(id, userDir, builtInDir, kind) {
-  const listFn = kind === 'skill' ? listSkills : listDesignSystems;
+export async function uninstallById(
+  id: string,
+  userDir: string,
+  builtInDir: string,
+  kind: InstallKind,
+): Promise<UninstallResult> {
+  const listFn: (root: string) => Promise<ListedItem[]> =
+    kind === 'skill' ? listSkills : listDesignSystems;
 
   // Check if it's a built-in item
   const builtIn = await listFn(builtInDir);
@@ -166,8 +180,9 @@ export async function uninstallById(id, userDir, builtInDir, kind) {
     return { ok: false, error: 'Not found in user-installed items', status: 404 };
   }
 
-  // item.dir points to the filesystem directory
-  const target = item.dir;
+  // Skill entries expose their directory; design-system summaries do not, so
+  // derive that path from the user root when necessary.
+  const target = item.dir ?? path.join(userDir, id.replace(/^user:/, ''));
   try {
     const stat = fs.lstatSync(target);
     if (stat.isSymbolicLink()) {
@@ -175,8 +190,8 @@ export async function uninstallById(id, userDir, builtInDir, kind) {
     } else if (stat.isDirectory()) {
       fs.rmSync(target, { recursive: true, force: true });
     }
-  } catch (err) {
-    return { ok: false, error: `Failed to remove: ${err.message}` };
+  } catch (err: unknown) {
+    return { ok: false, error: `Failed to remove: ${err instanceof Error ? err.message : String(err)}` };
   }
 
   return { ok: true };
