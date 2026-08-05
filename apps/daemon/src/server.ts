@@ -17,6 +17,7 @@ import {
 import { emittedRenderableQuestionForm } from './question-form-detect.js';
 import { createFinalizedMessageTelemetryReporter as createFinalizedMessageTelemetryReporterWithContract } from './runtimes/telemetry-finalization.js';
 import { createMarketplaceFetcher as createMarketplaceFetcherWithContract } from './runtimes/marketplace-fetcher.js';
+import { copyPluginFolderForProjectContext } from './runtimes/plugin-context.js';
 import { upsertSkillPluginCandidateAssistantMessage as upsertSkillPluginCandidateAssistantMessageWithContract } from './runtimes/skill-candidate-message.js';
 import { resolveProjectRoot } from './project-root.js';
 import {
@@ -180,6 +181,7 @@ import { deferredSkillPluginCandidateForRun as deferredSkillPluginCandidateForRu
 import { sanitizeArchiveFilename } from './runtimes/archive-filename.js';
 import {
   githubRepoNameFromPluginName,
+  PLUGIN_SHARE_ACTION_LABELS,
   normalizePluginShareAction,
   renderPluginSharePrompt,
 } from './runtimes/plugin-share.js';
@@ -1108,69 +1110,6 @@ const USER_PLUGIN_SOURCE_KINDS = new Set([
   'url',
   'local',
 ]);
-
-const PLUGIN_CONTEXT_SKIP_DIRS = new Set([
-  '.git',
-  '.next',
-  '.nuxt',
-  '.od',
-  '.output',
-  '.tmp',
-  '.turbo',
-  '.venv',
-  '__pycache__',
-  'build',
-  'coverage',
-  'dist',
-  'node_modules',
-  'out',
-  'target',
-  'vendor',
-]);
-
-const PLUGIN_CONTEXT_SKIP_FILES = new Set([
-  '.DS_Store',
-  'Thumbs.db',
-]);
-
-async function copyPluginFolderForProjectContext(sourceRoot, destRoot) {
-  const rootReal = await fs.promises.realpath(sourceRoot);
-  const stat = await fs.promises.stat(rootReal);
-  if (!stat.isDirectory()) {
-    const err = new Error('plugin source path is not a directory');
-    err.code = 'ENOTDIR';
-    throw err;
-  }
-  await copyPluginContextDir(rootReal, destRoot, rootReal);
-}
-
-async function copyPluginContextDir(src, dest, rootReal) {
-  await fs.promises.mkdir(dest, { recursive: true });
-  const entries = await fs.promises.readdir(src, { withFileTypes: true });
-  for (const entry of entries) {
-    if (shouldSkipPluginContextEntry(entry.name)) continue;
-    if (entry.isSymbolicLink()) continue;
-
-    const from = path.join(src, entry.name);
-    const to = path.join(dest, entry.name);
-    if (entry.isDirectory()) {
-      const childReal = await fs.promises.realpath(from).catch(() => null);
-      if (!childReal || (childReal !== rootReal && !childReal.startsWith(rootReal + path.sep))) {
-        continue;
-      }
-      await copyPluginContextDir(childReal, to, rootReal);
-      continue;
-    }
-    if (!entry.isFile()) continue;
-    await fs.promises.mkdir(path.dirname(to), { recursive: true });
-    await fs.promises.copyFile(from, to);
-  }
-}
-
-function shouldSkipPluginContextEntry(name) {
-  return PLUGIN_CONTEXT_SKIP_DIRS.has(name) || PLUGIN_CONTEXT_SKIP_FILES.has(name);
-}
-
 
 const LANGFUSE_TERMINAL_FALLBACK_DELAY_MS = 15_000;
 

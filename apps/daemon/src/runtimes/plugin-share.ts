@@ -2,6 +2,11 @@ import { PLUGIN_SHARE_ACTION_PLUGIN_IDS } from '@open-design/contracts';
 
 export type PluginShareAction = keyof typeof PLUGIN_SHARE_ACTION_PLUGIN_IDS;
 
+export const PLUGIN_SHARE_ACTION_LABELS: Record<PluginShareAction, string> = {
+  'publish-github': 'Publish to GitHub',
+  'contribute-open-design': 'Contribute to Open Design',
+};
+
 export interface PluginShareSource {
   id: string;
   title?: string | null;

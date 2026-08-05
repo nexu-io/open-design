@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   githubRepoNameFromPluginName,
+  PLUGIN_SHARE_ACTION_LABELS,
   normalizePluginShareAction,
   renderPluginSharePrompt,
 } from '../../src/runtimes/plugin-share.js';
@@ -16,6 +17,11 @@ describe('plugin share helpers', () => {
     expect(normalizePluginShareAction('contribute-open-design')).toBe('contribute-open-design');
     expect(normalizePluginShareAction('delete-repository')).toBeNull();
     expect(normalizePluginShareAction(null)).toBeNull();
+  });
+
+  it('provides stable labels for share-project summaries', () => {
+    expect(PLUGIN_SHARE_ACTION_LABELS['publish-github']).toBe('Publish to GitHub');
+    expect(PLUGIN_SHARE_ACTION_LABELS['contribute-open-design']).toBe('Contribute to Open Design');
   });
 
   it('renders action-specific prompts with the staged path and endpoint', () => {
