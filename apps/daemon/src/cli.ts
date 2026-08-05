@@ -49,6 +49,7 @@ import { runResearch } from './research/cli.js';
 import { runDiagnostics as runDiagnosticsCommand } from './diagnostics/cli.js';
 import { runVersion as runVersionCommand } from './version/cli.js';
 import { runMcp as runMcpCommand } from './mcp/cli.js';
+import { runExport as runExportCommand } from './export/cli.js';
 import { resolveDaemonUrl } from './daemon-url.js';
 import { requestJsonIpc } from '@open-design/sidecar';
 import { SIDECAR_ENV, SIDECAR_MESSAGES } from '@open-design/sidecar-proto';
@@ -339,6 +340,23 @@ async function runMcpCommandWithDeps(args: readonly string[]): Promise<void> {
   });
 }
 
+async function runExportCommandWithDeps(args: readonly string[]): Promise<void> {
+  return runExportCommand(args, {
+    resolveDaemonBaseUrl: cliDaemonBaseUrl,
+    fetch,
+    structuredHttpFailure,
+    writeFile: async (path, data) => {
+      const { writeFile } = await import('node:fs/promises');
+      await writeFile(path, data);
+    },
+    writeStdout: (text) => { process.stdout.write(text); },
+    writeStderr: (text) => { process.stderr.write(text); },
+    log: console.log,
+    printHelp: printExportHelp,
+    exit: process.exit,
+  });
+}
+
 type CliSubcommandHandler = (args: readonly string[]) => Promise<void> | void;
 
 const SUBCOMMAND_MAP: Record<string, CliSubcommandHandler> = {
@@ -373,18 +391,8 @@ const SUBCOMMAND_MAP: Record<string, CliSubcommandHandler> = {
   config: runConfig,
   library: runLibrary,
   figma: runFigma,
-  export: runExport,
+  export: runExportCommandWithDeps,
 };
-
-const EXPORT_STRING_FLAGS = new Set([
-  'daemon-url', 'project', 'format', 'out', 'image-format', 'title', 'file',
-]);
-const EXPORT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'deck']);
-const EXPORT_FORMATS = ['pdf', 'image'];
-// Mirrors EXPORT_IMAGE_FORMATS in packages/contracts. The desktop renderer
-// (Electron nativeImage) can only encode PNG/JPEG, so WebP is rejected here
-// with a clear error instead of silently downgrading to PNG.
-const EXPORT_IMAGE_FORMATS = ['png', 'jpeg'];
 
 function printExportHelp() {
   console.log(`Usage:
@@ -412,72 +420,6 @@ Examples:
   od export slide.html --project p1 --format image --image-format png --out slide.png`);
 }
 
-async function runExport(args) {
-  if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
-    printExportHelp();
-    process.exit(args.length === 0 ? 2 : 0);
-  }
-  let flags;
-  try {
-    flags = parseFlags(args, { string: EXPORT_STRING_FLAGS, boolean: EXPORT_BOOLEAN_FLAGS });
-  } catch (err) {
-    console.error(err.message);
-    process.exit(2);
-  }
-  const pos = positionalArgs(args, EXPORT_STRING_FLAGS);
-  const file = flags.file || pos[0];
-  const projectId = flags.project;
-  const format = flags.format;
-  if (!file || !projectId || !format) {
-    printExportHelp();
-    process.exit(2);
-  }
-  if (!EXPORT_FORMATS.includes(format)) {
-    console.error(`invalid --format: ${format} (expected ${EXPORT_FORMATS.join(' | ')})`);
-    process.exit(2);
-  }
-  if (flags['image-format'] && !EXPORT_IMAGE_FORMATS.includes(flags['image-format'])) {
-    console.error(`invalid --image-format: ${flags['image-format']} (expected ${EXPORT_IMAGE_FORMATS.join(' | ')})`);
-    process.exit(2);
-  }
-  const base = await cliDaemonBaseUrl(flags);
-  const resp = await fetch(`${base}/api/projects/${encodeURIComponent(projectId)}/export`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      fileName: file,
-      format,
-      deck: flags.deck === true,
-      ...(flags['image-format'] ? { imageFormat: flags['image-format'] } : {}),
-      ...(flags.title ? { title: flags.title } : {}),
-    }),
-  });
-  if (!resp.ok) return structuredHttpFailure(resp);
-  const buffer = Buffer.from(await resp.arrayBuffer());
-  let out = flags.out;
-  if (!out) {
-    const cd = resp.headers.get('content-disposition') || '';
-    const star = /filename\*=UTF-8''([^;]+)/i.exec(cd);
-    const plain = /filename="([^"]+)"/i.exec(cd);
-    if (star && star[1]) {
-      try { out = decodeURIComponent(star[1]); } catch { out = plain && plain[1] ? plain[1] : null; }
-    } else if (plain && plain[1]) {
-      out = plain[1];
-    }
-    if (!out) {
-      const ext = format === 'image'
-        ? (flags['image-format'] === 'jpeg' ? 'jpg' : 'png')
-        : 'pdf';
-      out = `artifact.${ext}`;
-    }
-  }
-  const { writeFile } = await import('node:fs/promises');
-  await writeFile(out, buffer);
-  if (flags.json) {
-    return process.stdout.write(JSON.stringify({ ok: true, out, bytes: buffer.length, format }, null, 2) + '\n');
-  }
-  console.log(`wrote ${out} (${buffer.length} bytes)`);
-}
 
 if (argv[0] === 'mcp' && argv[1] === 'live-artifacts') {
   try {
