@@ -633,6 +633,44 @@ interface CliLibraryApplyResponse {
   [key: string]: unknown;
 }
 
+interface CliDesignSystemImportResponse {
+  designSystem?: { id?: string; title?: string; [key: string]: unknown };
+  tokenContractRebuild?: {
+    job?: { id?: string; [key: string]: unknown };
+    decision?: { reason?: string; [key: string]: unknown };
+  };
+  job?: { id?: string; [key: string]: unknown };
+  decision?: { reason?: string; [key: string]: unknown };
+  [key: string]: unknown;
+}
+
+interface CliDoctorIssue {
+  severity: string;
+  code: string;
+  message: string;
+}
+
+interface CliDoctorPlugin {
+  id: string;
+  version?: string;
+  ok: boolean;
+  issues: unknown[];
+}
+
+interface CliDoctorResponse {
+  daemon: { bindHost?: string; port?: number; pid?: number } | null;
+  plugins: CliDoctorPlugin[];
+  skills: unknown[];
+  designSystems: unknown[];
+  atoms: unknown[];
+  issues: CliDoctorIssue[];
+}
+
+interface CliConfigResponse {
+  config?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
 interface BrandResponse {
   id?: string;
   projectId?: string;
@@ -7390,7 +7428,10 @@ async function runLibraryList(name: any, args: readonly string[]) {
         process.stdout.write(JSON.stringify(data, null, 2) + '\n');
         return;
       }
-      const rows = data?.[name === 'design-systems' ? 'designSystems' : name] ?? [];
+      const rowKey = name === 'design-systems' ? 'designSystems' : name;
+      const rows = Array.isArray(data[rowKey])
+        ? data[rowKey] as Array<Record<string, unknown>>
+        : [];
       for (const row of rows) {
         const label = row.title ?? row.name ?? row.id ?? row.label;
         console.log(`${row.id}\t${label}`);
@@ -7582,12 +7623,12 @@ async function postDesignSystemImport(flags: any, endpoint: any, body: any) {
     body: JSON.stringify(body),
   });
   if (!resp.ok) return structuredHttpFailure(resp);
-  const data = (await resp.json()) as Record<string, unknown>;
+  const data = (await resp.json()) as CliDesignSystemImportResponse;
   if (flags.json) {
     process.stdout.write(JSON.stringify(data, null, 2) + '\n');
     return;
   }
-  const imported = data.designSystem ?? data;
+  const imported = data.designSystem ?? {};
   console.log(`Imported ${imported.id ?? '(unknown id)'}${imported.title ? ` -> ${imported.title}` : ''}`);
   if (data.tokenContractRebuild?.job) {
     console.log(`Token contract rebuild queued: ${data.tokenContractRebuild.job.id}`);
@@ -7628,7 +7669,7 @@ Starts a review-gated TOKEN_SCHEMA token contract rebuild for an editable import
     body: JSON.stringify({ force: flags.force === true }),
   });
   if (!resp.ok) return structuredHttpFailure(resp);
-  const data = (await resp.json()) as Record<string, unknown>;
+  const data = (await resp.json()) as CliDesignSystemImportResponse;
   if (flags.json) {
     process.stdout.write(JSON.stringify(data, null, 2) + '\n');
     return;
@@ -7688,7 +7729,7 @@ async function runDesignSystemRename(args: readonly string[]) {
 Renames an editable (user-created) design system. Built-in systems are read-only.`);
     process.exit(args.length === 0 ? 2 : 0);
   }
-  const parsed = parseDesignSystemRenameArgs(args);
+  const parsed = parseDesignSystemRenameArgs([...args]);
   if (!parsed) {
     console.error('Usage: od design-systems rename <id> --title <new-title>');
     process.exit(2);
@@ -7709,8 +7750,8 @@ Renames an editable (user-created) design system. Built-in systems are read-only
     process.stdout.write(JSON.stringify(data, null, 2) + '\n');
     return;
   }
-  const renamed = data.designSystem ?? data;
-  console.log(`Renamed ${parsed.id} -> ${renamed.title ?? parsed.title}`);
+  const renamed = data.designSystem as Record<string, unknown> | undefined;
+  console.log(`Renamed ${parsed.id} -> ${renamed?.title ?? parsed.title}`);
 }
 
 async function runStatus(args: readonly string[]) {
@@ -7756,7 +7797,7 @@ or the daemon cannot be reached.`);
     process.exit(0);
   }
   const base = (await libraryDaemonUrl(flags)).replace(/\/$/, '');
-  const report = {
+  const report: CliDoctorResponse = {
     daemon:        null,
     plugins:       [],
     skills:        [],
@@ -7771,14 +7812,15 @@ or the daemon cannot be reached.`);
     if (!resp.ok) {
       report.issues.push({ severity: 'error', code: 'daemon-status', message: `HTTP ${resp.status}` });
     } else {
-      report.daemon = await resp.json();
+      report.daemon = (await resp.json()) as CliDoctorResponse['daemon'];
     }
   } catch (err) {
-    report.issues.push({ severity: 'error', code: 'daemon-not-running', message: String(err?.message ?? err) });
+    const message = err instanceof Error ? err.message : String(err);
+    report.issues.push({ severity: 'error', code: 'daemon-not-running', message });
     if (flags.json) {
       process.stdout.write(JSON.stringify(report, null, 2) + '\n');
     } else {
-      console.error('[doctor] daemon unreachable:', String(err?.message ?? err));
+      console.error('[doctor] daemon unreachable:', message);
     }
     process.exit(64);
   }
@@ -7791,50 +7833,55 @@ or the daemon cannot be reached.`);
       fetch(`${base}/api/atoms`),
     ]);
     if (skillsResp.ok) {
-      const data = await skillsResp.json();
+      const data = (await skillsResp.json()) as { skills?: unknown[] };
       report.skills = data?.skills ?? [];
     }
     if (dsResp.ok) {
-      const data = await dsResp.json();
+      const data = (await dsResp.json()) as { designSystems?: unknown[] };
       report.designSystems = data?.designSystems ?? [];
     }
     if (atomsResp.ok) {
-      const data = await atomsResp.json();
+      const data = (await atomsResp.json()) as { atoms?: unknown[] };
       report.atoms = data?.atoms ?? [];
     }
   } catch (err) {
-    report.issues.push({ severity: 'warn', code: 'library-list-failed', message: String(err?.message ?? err) });
+    report.issues.push({ severity: 'warn', code: 'library-list-failed', message: err instanceof Error ? err.message : String(err) });
   }
 
   // Plugin doctor — runs the daemon's per-plugin check on every install.
   try {
     const listResp = await fetch(`${base}/api/plugins`);
     if (listResp.ok) {
-      const list = await listResp.json();
-      const plugins = list?.plugins ?? [];
+      const list = (await listResp.json()) as { plugins?: Array<{ id: string; version?: string }> };
+      const plugins = list.plugins ?? [];
       for (const p of plugins) {
         try {
           const doctorResp = await fetch(`${base}/api/plugins/${encodeURIComponent(p.id)}/doctor`, { method: 'POST' });
-          const data = await doctorResp.json().catch(() => ({}));
-          report.plugins.push({ id: p.id, version: p.version, ok: !!data?.ok, issues: data?.issues ?? [] });
+          const data = (await doctorResp.json().catch(() => ({}))) as { ok?: boolean; issues?: Array<{ code?: string }> };
+          report.plugins.push({
+            id: p.id,
+            ...(p.version === undefined ? {} : { version: p.version }),
+            ok: !!data.ok,
+            issues: data.issues ?? [],
+          });
           if (!data?.ok) {
             report.issues.push({
               severity: 'error',
               code:     'plugin-doctor-failed',
-              message:  `${p.id}@${p.version}: ${(data?.issues ?? []).map((i: any) => i.code).join(', ')}`,
+              message: `${p.id}@${p.version ?? '?'}: ${(data.issues ?? []).map((i) => i.code ?? '?').join(', ')}`,
             });
           }
         } catch (err) {
           report.issues.push({
             severity: 'warn',
             code:     'plugin-doctor-error',
-            message:  `${p.id}: ${err?.message ?? err}`,
+            message:  `${p.id}: ${err instanceof Error ? err.message : String(err)}`,
           });
         }
       }
     }
   } catch (err) {
-    report.issues.push({ severity: 'warn', code: 'plugin-list-failed', message: String(err?.message ?? err) });
+    report.issues.push({ severity: 'warn', code: 'plugin-list-failed', message: err instanceof Error ? err.message : String(err) });
   }
 
   if (flags.json) {
@@ -7874,20 +7921,20 @@ Common options:
   const flags = parseFlags(rest, { string: CONFIG_STRING_FLAGS, boolean: CONFIG_BOOLEAN_FLAGS });
   const base = (await libraryDaemonUrl(flags)).replace(/\/$/, '');
 
-  const fetchConfig = async () => {
+  const fetchConfig = async (): Promise<Record<string, unknown>> => {
     const resp = await fetch(`${base}/api/app-config`);
     if (!resp.ok) return structuredHttpFailure(resp);
-    const data = (await resp.json()) as Record<string, unknown>;
-    return data?.config ?? {};
+    const data = (await resp.json()) as CliConfigResponse;
+    return data.config ?? {};
   };
-  const writeConfig = async (next: any) => {
+  const writeConfig = async (next: Record<string, unknown>): Promise<Record<string, unknown>> => {
     const resp = await fetch(`${base}/api/app-config`, {
       method:  'PUT',
       headers: { 'content-type': 'application/json' },
       body:    JSON.stringify(next),
     });
     if (!resp.ok) return structuredHttpFailure(resp);
-    return (await resp.json())?.config ?? next;
+    return ((await resp.json()) as CliConfigResponse).config ?? next;
   };
 
   switch (sub) {
