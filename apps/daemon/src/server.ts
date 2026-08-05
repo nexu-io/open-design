@@ -153,6 +153,11 @@ import {
   publicDeployments,
 } from './runtimes/deployment-context.js';
 import {
+  createAmrModelUnavailablePayload,
+  createSseErrorPayload,
+  rewriteKnownAgentStreamError,
+} from './runtimes/sse-errors.js';
+import {
   normalizeRunContextSelection,
   renderRunContextPrompt,
 } from './runtimes/run-context.js';
@@ -2425,50 +2430,6 @@ function openNativeFolderDialog() {
       resolve(null);
     }
   });
-}
-
-/**
- * @param {ApiErrorCode} code
- * @param {string} message
- * @param {Omit<ApiError, 'code' | 'message'>} [init]
- */
-function createSseErrorPayload(code, message, init = {}) {
-  return { message, error: createCompatApiError(code, message, init) };
-}
-
-function rewriteKnownAgentStreamError(agentId, message, failureText = '') {
-  const rawMessage =
-    typeof message === 'string' && message.trim()
-      ? message.trim()
-      : 'Agent stream error';
-  const combined = `${rawMessage}\n${failureText}`;
-  if (
-    /bufio\.scanner:\s*token too long/i.test(combined) &&
-    /opencode/i.test(combined) &&
-    (agentId === 'opencode' || agentId === 'amr' || /json-rpc id \d+/i.test(combined))
-  ) {
-    return 'The run failed due to an unknown upstream streaming error. Please retry.';
-  }
-  return rawMessage;
-}
-
-function createAmrModelUnavailablePayload(model, init = {}) {
-  const modelText = typeof model === 'string' && model.trim()
-    ? `"${model.trim()}"`
-    : 'the selected model';
-  return createSseErrorPayload(
-    'AMR_MODEL_UNAVAILABLE',
-    `AMR model ${modelText} is not available from Vela. Refresh the AMR model list, choose a supported model, and retry this run.`,
-    {
-      retryable: false,
-      details: {
-        kind: 'amr_model',
-        action: 'choose_model',
-        ...(typeof model === 'string' && model.trim() ? { model: model.trim() } : {}),
-        ...init,
-      },
-    },
-  );
 }
 
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
