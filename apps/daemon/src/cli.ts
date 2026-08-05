@@ -48,6 +48,7 @@ import {
 import { runResearch } from './research/cli.js';
 import { runDiagnostics as runDiagnosticsCommand } from './diagnostics/cli.js';
 import { runVersion as runVersionCommand } from './version/cli.js';
+import { runMcp as runMcpCommand } from './mcp/cli.js';
 import { resolveDaemonUrl } from './daemon-url.js';
 import { requestJsonIpc } from '@open-design/sidecar';
 import { SIDECAR_ENV, SIDECAR_MESSAGES } from '@open-design/sidecar-proto';
@@ -104,14 +105,6 @@ const MEDIA_GENERATE_BOOLEAN_FLAGS = new Set([
   'help',
   'h',
   'loop',
-]);
-
-const MCP_STRING_FLAGS = new Set([
-  'daemon-url',
-]);
-const MCP_BOOLEAN_FLAGS = new Set([
-  'help',
-  'h',
 ]);
 
 // Hoisted next to MCP_*_FLAGS for the same TDZ reason as the MEDIA flags
@@ -330,12 +323,28 @@ async function runVersionCommandWithDeps(args: readonly string[]): Promise<void>
   });
 }
 
+async function runMcpCommandWithDeps(args: readonly string[]): Promise<void> {
+  if (args[0] === 'install') {
+    return runMcpInstall(args.slice(1));
+  }
+  return runMcpCommand(args, {
+    resolveDaemonUrl: cliDaemonUrl,
+    runMcpStdio: async ({ daemonUrl }) => {
+      const { runMcpStdio } = await import('./mcp.js');
+      await runMcpStdio({ daemonUrl });
+    },
+    writeStderr: (text) => { process.stderr.write(text); },
+    printHelp: printMcpHelp,
+    exit: process.exit,
+  });
+}
+
 type CliSubcommandHandler = (args: readonly string[]) => Promise<void> | void;
 
 const SUBCOMMAND_MAP: Record<string, CliSubcommandHandler> = {
   artifacts: runArtifacts,
   media: runMedia,
-  mcp: runMcp,
+  mcp: runMcpCommandWithDeps,
   research: runResearchCommand,
   plugin: runPlugin,
   ui: runUi,
@@ -930,36 +939,6 @@ Output: a single line of JSON: {"file": { name, size, kind, mime, ... }}
 Skills should call this and then reference the returned filename in their
 artifact / message body. The daemon writes the bytes into the project's
 files folder so the FileViewer can preview them immediately.`);
-}
-
-// ---------------------------------------------------------------------------
-// Subcommand: od mcp
-// ---------------------------------------------------------------------------
-
-async function runMcp(args) {
-  if (args[0] === 'install') {
-    return runMcpInstall(args.slice(1));
-  }
-  let flags;
-  try {
-    flags = parseFlags(args, {
-      string: MCP_STRING_FLAGS,
-      boolean: MCP_BOOLEAN_FLAGS,
-    });
-  } catch (err) {
-    console.error(err.message);
-    printMcpHelp();
-    process.exit(2);
-  }
-  if (flags.help || flags.h) {
-    printMcpHelp();
-    return;
-  }
-
-  const daemonUrl = await cliDaemonUrl(flags);
-
-  const { runMcpStdio } = await import('./mcp.js');
-  await runMcpStdio({ daemonUrl });
 }
 
 function printMcpHelp() {
