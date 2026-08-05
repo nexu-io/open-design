@@ -173,6 +173,7 @@ import {
 import { reconcileAssistantMessageOnRunEnd as reconcileAssistantMessageOnRunEndWithContract } from './runtimes/run-message-reconciliation.js';
 import { persistRunEventToAssistantMessage as persistRunEventToAssistantMessageWithContract } from './runtimes/run-event-persistence.js';
 import { pinAssistantMessageOnRunCreate as pinAssistantMessageOnRunCreateWithContract } from './runtimes/run-message-pinning.js';
+import { deferredSkillPluginCandidateForRun as deferredSkillPluginCandidateForRunWithReader } from './runtimes/deferred-plugin-candidate.js';
 import { sanitizeArchiveFilename } from './runtimes/archive-filename.js';
 import {
   githubRepoNameFromPluginName,
@@ -1189,15 +1190,10 @@ const reconcileAssistantMessageOnRunEnd = reconcileAssistantMessageOnRunEndWithC
 // status, and run analytics all share ONE renderable-form check. See
 // `emittedRenderableQuestionForm` imported above.
 
-function deferredSkillPluginCandidateForRun(db, run) {
-  if (!run.projectId || !run.conversationId) return null;
-  return listSkillPluginCandidates(db, run.projectId)
-    .find((candidate) =>
-      candidate.status !== 'dismissed' &&
-      !candidate.assistantMessageId &&
-      candidate.conversationId === run.conversationId,
-    ) ?? null;
-}
+const deferredSkillPluginCandidateForRun = (db, run) =>
+  deferredSkillPluginCandidateForRunWithReader({
+    list: (projectId) => listSkillPluginCandidates(db, projectId),
+  }, run);
 
 export function detectSkillPluginCandidateOnRunSuccess(db, runs, run, input, projectRoot) {
   if (!run.projectId || !run.conversationId) return;
