@@ -165,6 +165,7 @@ import { quotePosixShellArg } from './runtimes/shell-command.js';
 import { createShellCommandRunner } from './runtimes/shell-exec.js';
 import { hasGeneratedPluginArtifacts } from './runtimes/plugin-artifacts.js';
 import { isPluginAuthoringRun as isPluginAuthoringRunWithSnapshot } from './runtimes/plugin-authoring.js';
+import { assistantMessageEmittedQuestionForm as assistantMessageEmittedQuestionFormWithReader } from './runtimes/question-message.js';
 import { sanitizeArchiveFilename } from './runtimes/archive-filename.js';
 import {
   githubRepoNameFromPluginName,
@@ -1196,12 +1197,6 @@ function reconcileAssistantMessageOnRunEnd(db, runs, run) {
 // status, and run analytics all share ONE renderable-form check. See
 // `emittedRenderableQuestionForm` imported above.
 
-function assistantMessageEmittedQuestionForm(db, assistantMessageId) {
-  if (!assistantMessageId) return false;
-  const row = db.prepare(`SELECT content FROM messages WHERE id = ?`).get(assistantMessageId);
-  return emittedRenderableQuestionForm(row?.content);
-}
-
 function deferredSkillPluginCandidateForRun(db, run) {
   if (!run.projectId || !run.conversationId) return null;
   return listSkillPluginCandidates(db, run.projectId)
@@ -1218,7 +1213,9 @@ export function detectSkillPluginCandidateOnRunSuccess(db, runs, run, input, pro
     .wait(run)
     .then(async (finalStatus) => {
       if (finalStatus.status !== 'succeeded') return;
-      const pausedForQuestion = assistantMessageEmittedQuestionForm(db, run.assistantMessageId);
+      const pausedForQuestion = assistantMessageEmittedQuestionFormWithReader({
+        get: (id) => db.prepare(`SELECT content FROM messages WHERE id = ?`).get(id),
+      }, run.assistantMessageId);
       const detected = await detectSkillPluginCandidate({
         projectId: run.projectId,
         runId: run.id,
