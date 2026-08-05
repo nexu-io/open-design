@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Tests for `apps/daemon/src/handoff-design.ts` — the synthesis pipeline
 // behind `POST /api/projects/:id/handoff`. Mirrors the finalize-design
 // test layout: a prompt-builder block, then a full-pipeline block with
@@ -176,8 +175,8 @@ describe('synthesizeHandoffPrompt (pipeline)', () => {
     seedConversation(db);
 
     let observedUrl = '';
-    const fetchImpl = vi.fn(async (url: string) => {
-      observedUrl = url;
+    const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+      observedUrl = String(input);
       return fakeAnthropicSuccess('p');
     });
 
@@ -234,9 +233,9 @@ describe('synthesizeHandoffPrompt (pipeline)', () => {
     seedConversation(db);
 
     const controller = new AbortController();
-    const fetchImpl = vi.fn((url: string, init: RequestInit) => {
-      return new Promise((_resolve, reject) => {
-        init.signal?.addEventListener('abort', () => {
+    const fetchImpl = vi.fn((input: string | URL | Request, init?: RequestInit) => {
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => {
           const err = new Error('aborted');
           err.name = 'AbortError';
           reject(err);
@@ -258,9 +257,9 @@ describe('synthesizeHandoffPrompt (pipeline)', () => {
     const { db, projectsRoot } = setupProjectFixture();
     seedConversation(db);
 
-    const fetchImpl = vi.fn((_url: string, init: RequestInit) => {
-      return new Promise((_resolve, reject) => {
-        init.signal?.addEventListener('abort', () => {
+    const fetchImpl = vi.fn((_input: string | URL | Request, init?: RequestInit) => {
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => {
           const err = new Error('timed out');
           err.name = 'AbortError';
           reject(err);
@@ -284,10 +283,10 @@ describe('synthesizeHandoffPrompt (pipeline)', () => {
     // fetch() resolves as soon as the upstream sends headers; this body
     // never enqueues and never closes. The stream honors init.signal the
     // way a real fetch body does, so a mid-read abort errors the stream.
-    const fetchImpl = vi.fn((_url: string, init: RequestInit) => {
+    const fetchImpl = vi.fn((_input: string | URL | Request, init?: RequestInit) => {
       const body = new ReadableStream({
         start(controller) {
-          init.signal?.addEventListener('abort', () => {
+          init?.signal?.addEventListener('abort', () => {
             const err = new Error('aborted');
             err.name = 'AbortError';
             controller.error(err);
@@ -333,8 +332,8 @@ describe('synthesizeHandoffPrompt (pipeline)', () => {
     seedConversation(db, { messageCount: 5_000 });
 
     let capturedBody = '';
-    const fetchImpl = vi.fn(async (_url: string, init: RequestInit) => {
-      capturedBody = String(init.body ?? '');
+    const fetchImpl = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
+      capturedBody = String(init?.body ?? '');
       return fakeAnthropicSuccess('p');
     });
 
@@ -359,8 +358,8 @@ describe('synthesizeHandoffPrompt (pipeline)', () => {
     seedConversation(db, { conversationId: 'conv-bravo', messageCount: 2, text: 'BRAVO-TOPIC' });
 
     let capturedBody = '';
-    const fetchImpl = vi.fn(async (_url: string, init: RequestInit) => {
-      capturedBody = String(init.body ?? '');
+    const fetchImpl = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
+      capturedBody = String(init?.body ?? '');
       return fakeAnthropicSuccess('p');
     });
 
