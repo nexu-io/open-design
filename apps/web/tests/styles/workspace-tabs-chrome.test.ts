@@ -37,7 +37,9 @@ describe('workspace tabs chrome styles', () => {
     const projectStrip = cssDeclarations(routinesCss, '.workspace-shell .workspace-tabs-strip');
 
     expect(ruleValue(chrome, 'padding')).toBe('0 10px 0 8px');
-    expect(ruleValue(traffic, 'margin-right')).toBe('var(--app-chrome-traffic-margin)');
+    // Logical property (margin-inline-end) so the traffic/window-controls
+    // region mirrors under dir=rtl. See #5549.
+    expect(ruleValue(traffic, 'margin-inline-end')).toBe('var(--app-chrome-traffic-margin)');
     expect(ruleValue(projectChrome, 'padding')).toBe('0 8px 0 0');
     expect(ruleValue(projectStrip, 'align-items')).toBe('center');
   });
