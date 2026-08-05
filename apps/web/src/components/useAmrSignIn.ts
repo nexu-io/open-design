@@ -24,21 +24,25 @@ interface UseAmrSignInOptions {
   metricsConsent: boolean;
   installationId: string | null | undefined;
   /** Fired on every polling status observation so a consumer can refresh its
-   *  cached account state (e.g. the nav-rail email or the popover account). */
+   *  cached account state (e.g. the popover account). */
   onStatus?: (status: VelaLoginStatus) => void;
 }
 
 /**
  * Start the Open Design (Vela) login flow and poll until the account is ready,
- * the browser window closes, or the login times out. Shared by the Home nav-rail
- * account menu and the project-page AvatarMenu popover so both surfaces expose
- * the same signed-out login affordance (#5244).
+ * the browser window closes, or the login times out. Used by the project-page
+ * AvatarMenu popover's signed-out entry (#5244).
  *
- * Lifecycle guards (looper review on #6421):
+ * Lifecycle guards (looper review on #6421 / #6438):
  *  - a mounted flag re-armed in the effect setup body, so React Strict Mode's
  *    dev probe (setup → cleanup → setup) does not leave it permanently false;
- *  - after `startVelaLogin` resolves, and in every polling callback, bail out
- *    if the consumer unmounted so no unowned interval is spawned.
+ *  - an attempt generation token, invalidated on every stop and checked after
+ *    the `startVelaLogin` await and before every polling callback, so a
+ *    superseded/cancelled attempt can neither install a poller nor let a
+ *    delayed callback mutate a later attempt's state;
+ *  - the timeout path cancels THIS attempt by authAttemptId (never a body-less
+ *    "cancel whatever is latest", which could kill a newer attempt started by
+ *    another surface) and surfaces a failure state if the cancel fails.
  */
 export function useAmrSignIn({
   metricsConsent,
@@ -46,13 +50,18 @@ export function useAmrSignIn({
   onStatus,
 }: UseAmrSignInOptions) {
   const [amrLoginPending, setAmrLoginPending] = useState(false);
+  const [amrLoginError, setAmrLoginError] = useState<string | null>(null);
   const amrLoginStartedAtRef = useRef<number | null>(null);
   const amrLoginPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const amrMountedRef = useRef(true);
+  // Attempt generation: bumped on every stop/unmount so an in-flight start or a
+  // delayed poll callback from a previous attempt cannot drive a newer one.
+  const amrAttemptRef = useRef(0);
   const onStatusRef = useRef(onStatus);
   onStatusRef.current = onStatus;
 
   const stopAmrLoginPolling = useCallback(() => {
+    amrAttemptRef.current += 1;
     if (amrLoginPollRef.current) {
       clearInterval(amrLoginPollRef.current);
       amrLoginPollRef.current = null;
@@ -63,22 +72,30 @@ export function useAmrSignIn({
 
   const handleAmrSignIn = useCallback(async () => {
     if (amrLoginPending) return;
+    // Capture this attempt's token so a cancel/stop that races the await cannot
+    // let a superseded attempt install a poller. Setting the ref makes THIS
+    // attempt current; stopAmrLoginPolling increments past it to invalidate.
+    const attempt = amrAttemptRef.current + 1;
+    amrAttemptRef.current = attempt;
     const startedAt = Date.now();
     amrLoginStartedAtRef.current = startedAt;
     setAmrLoginPending(true);
+    setAmrLoginError(null);
     const odDeviceId = amrHandoffDeviceId({
       metricsConsent,
       resolvedDeviceId: getResolvedDeviceId(),
       installationId,
     });
     const result = await startVelaLogin(null, odDeviceId);
-    if (!amrMountedRef.current) return;
+    if (!amrMountedRef.current || amrAttemptRef.current !== attempt) return;
     if (result.ok || result.alreadyRunning) {
+      const authAttemptId = result.authAttemptId;
       notifyAmrLoginStatusChanged('login-started');
       amrLoginPollRef.current = setInterval(() => {
+        if (amrAttemptRef.current !== attempt) return;
         void fetchVelaLoginStatus()
-          .then((status) => {
-            if (!amrMountedRef.current) return;
+          .then(async (status) => {
+            if (!amrMountedRef.current || amrAttemptRef.current !== attempt) return;
             if (status) onStatusRef.current?.(status);
             const outcome = amrLoginPollOutcome(status, startedAt);
             if (outcome === 'signed-in') {
@@ -92,20 +109,29 @@ export function useAmrSignIn({
               notifyWorkspaceBillingRefresh();
               notifyTeamProjectsChanged();
             } else if (outcome === 'stopped' || outcome === 'timed-out') {
-              // A timed-out attempt's `vela login` child is often still alive
-              // (the daemon never self-reported loginInFlight: false). Release
-              // it, or a retry click 409s as alreadyRunning instead of spawning
-              // a fresh browser flow (mirrors CloudSignInTip).
-              if (outcome === 'timed-out') void cancelVelaLogin();
+              if (outcome === 'timed-out') {
+                // A timed-out attempt's `vela login` child is often still alive
+                // (the daemon never self-reported loginInFlight: false). Cancel
+                // THIS attempt by id so a retry does not 409 as alreadyRunning,
+                // and surface the failure if the cancel itself fails.
+                const cancel = await cancelVelaLogin(authAttemptId);
+                if (!amrMountedRef.current || amrAttemptRef.current !== attempt) return;
+                if (!cancel.ok) {
+                  setAmrLoginError('settings.amrLoginErrorCompact');
+                }
+              }
               stopAmrLoginPolling();
             }
           })
           .catch(() => {
-            if (!amrMountedRef.current) return;
+            if (!amrMountedRef.current || amrAttemptRef.current !== attempt) return;
             stopAmrLoginPolling();
           });
       }, AMR_LOGIN_POLL_INTERVAL_MS);
     } else {
+      if (amrAttemptRef.current === attempt) {
+        setAmrLoginError(result.error || 'settings.amrLoginErrorCompact');
+      }
       setAmrLoginPending(false);
       amrLoginStartedAtRef.current = null;
     }
@@ -131,9 +157,10 @@ export function useAmrSignIn({
     amrMountedRef.current = true;
     return () => {
       amrMountedRef.current = false;
+      amrAttemptRef.current += 1;
       if (amrLoginPollRef.current) clearInterval(amrLoginPollRef.current);
     };
   }, []);
 
-  return { amrLoginPending, handleAmrSignIn, stopAmrLoginPolling };
+  return { amrLoginPending, amrLoginError, handleAmrSignIn, stopAmrLoginPolling };
 }
