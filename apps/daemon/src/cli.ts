@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-// @ts-nocheck
 import { readFileSync } from 'node:fs';
 import { basename } from 'node:path';
 import {
@@ -349,7 +348,7 @@ async function runMediaGenerateCommandWithDeps(args: readonly string[]): Promise
   });
 }
 
-type CliSubcommandHandler = (args: readonly string[]) => Promise<void | boolean> | void;
+type CliSubcommandHandler = (args: readonly string[]) => Promise<void> | void;
 
 const SUBCOMMAND_MAP: Record<string, CliSubcommandHandler> = {
   artifacts: runArtifacts,
@@ -1110,7 +1109,10 @@ Writes <out|cwd>/<id>/{SKILL.md,open-design.json,README.md}.`);
       withClaudePlugin: Boolean(flags['with-claude-plugin']),
     };
     const result = await scaffoldPlugin(input);
-    if (flags.json) return process.stdout.write(JSON.stringify(result, null, 2) + '\n');
+    if (flags.json) {
+      process.stdout.write(JSON.stringify(result, null, 2) + '\n');
+      return;
+    }
     console.log(`[scaffold] ${result.folder}`);
     for (const file of result.files) console.log(`  ${file}`);
     console.log(`\nNext: od plugin install ${result.folder}`);
@@ -1473,7 +1475,10 @@ view is the single source of truth.`);
     console.error(`POST /api/applied-plugins/export failed: ${resp.status} ${JSON.stringify(data)}`);
     process.exit(1);
   }
-  if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+  if (flags.json) {
+    process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+    return;
+  }
   console.log(`[export] ${data.folder} (snapshot ${data.snapshotId})`);
   for (const f of data.files ?? []) console.log(`  ${f}`);
 }
@@ -1481,7 +1486,7 @@ view is the single source of truth.`);
 // Plan §3.B4 / spec §6: `od marketplace …` minimum verbs. Add / list /
 // refresh / remove / trust. The Phase 3 follow-up wires
 // `od plugin install <name>` resolution through these catalogs.
-async function runMarketplace(args) {
+async function runMarketplace(args: readonly string[]) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
   od marketplace add     <url> [--trust trusted|restricted]   Register a federated catalog.
@@ -1912,14 +1917,14 @@ async function runPluginRun(rest: readonly string[]) {
   }
 }
 
-async function pluginDaemonUrl(flags) {
+async function pluginDaemonUrl(flags?: CliFlags): Promise<string> {
   return cliDaemonUrl(flags);
 }
 
 // Plan §3.Y1 — filter knobs on `od plugin list` (and feeds
 // `od plugin search` below). Recognising these as string flags
 // keeps the parseFlags() argv consumer happy.
-async function runPluginList(rest) {
+async function runPluginList(rest: readonly string[]) {
   const flags = parseFlags(rest, {
     string:  PLUGIN_LIST_FILTER_FLAGS,
     boolean: PLUGIN_LIST_BOOLEAN_FLAGS,
@@ -1948,7 +1953,7 @@ Lists installed plugins. Filters AND together: --task-kind=code-migration
 }
 
 // Plan §3.Y1 — `od plugin search <query>`.
-async function runPluginSearch(rest) {
+async function runPluginSearch(rest: readonly string[]) {
   const flags = parseFlags(rest, {
     string:  PLUGIN_LIST_FILTER_FLAGS,
     boolean: PLUGIN_LIST_BOOLEAN_FLAGS,
@@ -1980,7 +1985,7 @@ flags as 'od plugin list'.`);
 // pluginInventoryStats + snapshotInventoryStats aggregation. The
 // daemon-side route owns the SQLite reads; the CLI is a thin
 // formatter.
-async function runPluginStats(rest) {
+async function runPluginStats(rest: readonly string[]) {
   const flags = parseFlags(rest, {
     string:  PLUGIN_STRING_FLAGS,
     boolean: PLUGIN_BOOLEAN_FLAGS,
@@ -2105,7 +2110,7 @@ function emitPluginList({ entries, json, emptyMessage, showRank }) {
   }
 }
 
-async function runPluginInfo(rest) {
+async function runPluginInfo(rest: readonly string[]) {
   const flags = parseFlags(rest, { string: PLUGIN_STRING_FLAGS, boolean: PLUGIN_BOOLEAN_FLAGS });
   const id = rest.find((a) => !a.startsWith('--')
     && a !== flags['daemon-url']
@@ -2172,7 +2177,7 @@ function resolveMarketplacePluginFromList(marketplaces, specifier) {
 // compare the daemon's view to their on-disk open-design.json
 // without scrolling past the registry record fields (sourceKind /
 // fsPath / installedAt etc).
-async function runPluginManifest(rest) {
+async function runPluginManifest(rest: readonly string[]) {
   const flags = parseFlags(rest, { string: PLUGIN_STRING_FLAGS, boolean: PLUGIN_BOOLEAN_FLAGS });
   const id = rest.find((a) => !a.startsWith('--') && a !== flags['daemon-url'] && a !== flags.source);
   if (!id) {
@@ -2202,7 +2207,7 @@ async function runPluginManifest(rest) {
 // count descending then source ascending. Useful for ops audits
 // ('which github repos do my plugins come from') + for plugin
 // authors comparing their fork to its upstream installs.
-async function runPluginSources(rest) {
+async function runPluginSources(rest: readonly string[]) {
   const flags = parseFlags(rest, { string: PLUGIN_STRING_FLAGS, boolean: PLUGIN_BOOLEAN_FLAGS });
   const url = `${(await pluginDaemonUrl(flags)).replace(/\/$/, '')}/api/plugins`;
   const resp = await fetch(url);
@@ -2242,7 +2247,7 @@ async function runPluginSources(rest) {
   }
 }
 
-async function runPluginInstall(rest) {
+async function runPluginInstall(rest: readonly string[]) {
   const flags = parseFlags(rest, { string: PLUGIN_STRING_FLAGS, boolean: PLUGIN_BOOLEAN_FLAGS });
   const source = typeof flags.source === 'string' ? flags.source : rest.find((a) => !a.startsWith('-'));
   if (!source) {
@@ -3033,7 +3038,7 @@ async function runPluginApply(rest) {
   let inputs = {};
   if (typeof flags.inputs === 'string' && flags.inputs.trim().length > 0) {
     try { inputs = JSON.parse(flags.inputs); } catch (err) {
-      console.error(`--inputs must be valid JSON: ${err.message}`);
+      console.error(`--inputs must be valid JSON: ${err instanceof Error ? err.message : String(err)}`);
       process.exit(2);
     }
   }
@@ -3130,7 +3135,10 @@ Lists and formalizes persisted skill-to-plugin candidates.`);
       console.error(`GET plugin candidates failed: ${resp.status} ${JSON.stringify(data)}`);
       process.exit(1);
     }
-    if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+    if (flags.json) {
+      process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      return;
+    }
     const candidates = Array.isArray(data?.candidates) ? data.candidates : [];
     if (candidates.length === 0) {
       console.log('No plugin candidates.');
@@ -4108,7 +4116,7 @@ async function runUiRespond(rest) {
     value = null;
   } else if (typeof flags['value-json'] === 'string') {
     try { value = JSON.parse(flags['value-json']); } catch (err) {
-      console.error(`--value-json must be valid JSON: ${err.message}`);
+      console.error(`--value-json must be valid JSON: ${err instanceof Error ? err.message : String(err)}`);
       process.exit(2);
     }
   } else if (typeof flags.value === 'string') {
@@ -4186,7 +4194,7 @@ async function runUiPrefill(rest) {
   let value = null;
   if (typeof flags['value-json'] === 'string') {
     try { value = JSON.parse(flags['value-json']); } catch (err) {
-      console.error(`--value-json must be valid JSON: ${err.message}`);
+      console.error(`--value-json must be valid JSON: ${err instanceof Error ? err.message : String(err)}`);
       process.exit(2);
     }
   } else if (typeof flags.value === 'string') {
@@ -4394,7 +4402,10 @@ async function runFigma(args) {
       console.error(`POST /api/runs failed: ${runResp.status} ${JSON.stringify(runData)}`);
       process.exit(1);
     }
-    if (flags.json) return process.stdout.write(JSON.stringify(runData, null, 2) + '\n');
+    if (flags.json) {
+      process.stdout.write(JSON.stringify(runData, null, 2) + '\n');
+      return;
+    }
     console.log(`[figma] migration run started ${runData.runId}`);
     return;
   }
@@ -4404,7 +4415,7 @@ async function runFigma(args) {
   try {
     bytes = readFileSync(file);
   } catch (err) {
-    console.error(`cannot read ${file}: ${err.message}`);
+    console.error(`cannot read ${file}: ${err instanceof Error ? err.message : String(err)}`);
     process.exit(2);
   }
   const form = new FormData();
@@ -4418,7 +4429,8 @@ async function runFigma(args) {
   const data = await resp.json();
 
   if (flags.json && !flags.build) {
-    return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+    process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+    return;
   }
   const inv = data.inventory ?? {};
   if (!flags.json) {
@@ -4441,7 +4453,10 @@ async function runFigma(args) {
       console.error(`build run failed: ${runResp.status} ${JSON.stringify(runData)}`);
       process.exit(1);
     }
-    if (flags.json) return process.stdout.write(JSON.stringify({ ...data, build: runData }, null, 2) + '\n');
+    if (flags.json) {
+      process.stdout.write(JSON.stringify({ ...data, build: runData }, null, 2) + '\n');
+      return;
+    }
     console.log(`[figma] build run started ${runData.runId}`);
   }
 }
@@ -4511,7 +4526,7 @@ async function runBrandList(rest) {
   try {
     flags = parseFlags(rest, { string: BRAND_STRING_FLAGS, boolean: BRAND_BOOLEAN_FLAGS });
   } catch (err) {
-    console.error(err.message);
+    console.error(err instanceof Error ? err.message : String(err));
     process.exit(2);
   }
   const base = await cliDaemonBaseUrl(flags);
@@ -4542,7 +4557,7 @@ async function runBrandCreate(rest) {
   try {
     flags = parseFlags(rest, { string: BRAND_STRING_FLAGS, boolean: BRAND_BOOLEAN_FLAGS });
   } catch (err) {
-    console.error(err.message);
+    console.error(err instanceof Error ? err.message : String(err));
     process.exit(2);
   }
   const positional = positionalArgs(rest, BRAND_STRING_FLAGS);
@@ -4602,7 +4617,7 @@ async function runBrandFinalize(rest) {
   try {
     flags = parseFlags(rest, { string: BRAND_STRING_FLAGS, boolean: BRAND_BOOLEAN_FLAGS });
   } catch (err) {
-    console.error(err.message);
+    console.error(err instanceof Error ? err.message : String(err));
     process.exit(2);
   }
   const id = positionalArgs(rest, BRAND_STRING_FLAGS)[0];
@@ -4668,7 +4683,7 @@ async function runBrandExtractFromHtml(rest) {
   try {
     flags = parseFlags(rest, { string: BRAND_STRING_FLAGS, boolean: BRAND_BOOLEAN_FLAGS });
   } catch (err) {
-    console.error(err.message);
+    console.error(err instanceof Error ? err.message : String(err));
     process.exit(2);
   }
   const id = positionalArgs(rest, BRAND_STRING_FLAGS)[0];
@@ -4980,7 +4995,10 @@ Common options:
       const resp = await fetch(`${base}/api/projects`);
       if (!resp.ok) return structuredHttpFailure(resp);
       const data = await resp.json();
-      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      if (flags.json) {
+        process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+        return;
+      }
       const projects = data?.projects ?? [];
       if (projects.length === 0) {
         console.log('No projects. Create one with `od project create --name "..."`.');
@@ -5048,7 +5066,10 @@ Common options:
         console.error(`POST /api/projects failed: ${resp.status} ${JSON.stringify(data)}`);
         process.exit(1);
       }
-      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      if (flags.json) {
+        process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+        return;
+      }
       console.log(`[project] created ${data.project?.id ?? id} (conversation ${data.conversationId})`);
       return;
     }
@@ -5077,7 +5098,10 @@ Common options:
       });
       if (!resp.ok) return structuredHttpFailure(resp);
       const data = await resp.json();
-      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      if (flags.json) {
+        process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+        return;
+      }
       console.log(`[project] imported ${data.project?.id ?? '-'} (conversation ${data.conversationId ?? '-'})`);
       return;
     }
@@ -5098,7 +5122,10 @@ Common options:
         designSystemId: flags['design-system'] ?? null,
       };
       const data = await postImportFolderToDaemon(base, body, folderPath);
-      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      if (flags.json) {
+        process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+        return;
+      }
       console.log(`[project] imported ${data.project?.id ?? '-'} from ${folderPath} (conversation ${data.conversationId ?? '-'})`);
       return;
     }
@@ -5117,7 +5144,10 @@ Common options:
       const resp = await fetch(`${base}/api/editors`);
       if (!resp.ok) return structuredHttpFailure(resp);
       const data = await resp.json();
-      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      if (flags.json) {
+        process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+        return;
+      }
       const editors = data?.editors ?? [];
       for (const ed of editors) {
         const status = ed.available ? 'available' : 'missing';
@@ -5147,7 +5177,10 @@ Common options:
         else console.error(`POST /api/projects/${id}/open-in failed: ${resp.status} ${JSON.stringify(data)}`);
         process.exit(1);
       }
-      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      if (flags.json) {
+        process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+        return;
+      }
       console.log(`[project] opened ${id} in ${editor} (${data.path ?? ''})`);
       return;
     }
@@ -5189,7 +5222,10 @@ Common options:
       const resp = await fetch(url);
       if (!resp.ok) return structuredHttpFailure(resp);
       const data = await resp.json();
-      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      if (flags.json) {
+        process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+        return;
+      }
       const runs = data?.runs ?? [];
       for (const r of runs) {
         console.log(`${r.id}\t${r.status}\tproject=${r.projectId ?? '-'}\tplugin=${r.pluginId ?? '-'}`);
@@ -5217,7 +5253,10 @@ Common options:
       const resp = await fetch(`${base}/api/runs/${encodeURIComponent(id)}/result-package`);
       if (!resp.ok) return structuredHttpFailure(resp, 'run-not-found');
       const data = await resp.json();
-      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      if (flags.json) {
+        process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+        return;
+      }
       const run = data?.run ?? {};
       const workspace = data?.workspace ?? {};
       const storage = workspace.storage ?? {};
@@ -5299,11 +5338,12 @@ Common options:
       };
       const data = await postJsonToDaemon(base, '/api/runs', body);
       if (flags.json && !flags.follow) {
-        return process.stdout.write(JSON.stringify({
+        process.stdout.write(JSON.stringify({
           ...data,
           project: imported?.project ?? null,
           conversationId: conversationId ?? null,
         }, null, 2) + '\n');
+        return;
       }
       console.log(`[run] started ${data.runId}`);
       if (flags.follow) await streamRunEvents(base, data.runId);
@@ -5358,7 +5398,8 @@ Common options:
         process.exit(1);
       }
       if (flags.json && !flags.follow) {
-        return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+        process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+        return;
       }
       console.log(`[run] started ${data.runId}`);
       if (flags.follow) await streamRunEvents(base, data.runId);
@@ -5446,7 +5487,8 @@ Common options:
   if (!createResp.ok) return structuredHttpFailure(createResp, 'project-not-found');
   const created = await createResp.json();
   if (flags.json) {
-    return process.stdout.write(JSON.stringify(created, null, 2) + '\n');
+    process.stdout.write(JSON.stringify(created, null, 2) + '\n');
+    return;
   }
   const terminalId = created?.terminal?.id;
   if (!terminalId) {
@@ -5560,7 +5602,10 @@ Common options:
       const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}/files`);
       if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
       const data = await resp.json();
-      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      if (flags.json) {
+        process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+        return;
+      }
       const files = Array.isArray(data?.files) ? data.files : [];
       for (const f of files) console.log(`${f.size}\t${f.name ?? f.path}`);
       return;
@@ -5601,7 +5646,10 @@ Common options:
       });
       if (!resp.ok) return structuredHttpFailure(resp);
       const data = await resp.json();
-      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      if (flags.json) {
+        process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+        return;
+      }
       console.log(`[files] uploaded ${data?.file?.name ?? desiredName}`);
       return;
     }
@@ -5633,7 +5681,10 @@ Common options:
       });
       if (!resp.ok) return structuredHttpFailure(resp);
       const data = await resp.json();
-      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      if (flags.json) {
+        process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+        return;
+      }
       console.log(`[files] wrote ${data?.file?.name ?? rel}`);
       return;
     }
@@ -5663,7 +5714,10 @@ Common options:
         ? await readStdinUtf8()
         : await fetchProjectFileText(base, id, rightLabel);
       const diff = createUnifiedDiff(`a/${relA}`, `b/${rightLabel}`, left, right);
-      if (flags.json) return process.stdout.write(JSON.stringify({ diff }, null, 2) + '\n');
+      if (flags.json) {
+        process.stdout.write(JSON.stringify({ diff }, null, 2) + '\n');
+        return;
+      }
       process.stdout.write(diff);
       return;
     }
@@ -5886,7 +5940,10 @@ Common options:
       }
       if (!resp.ok) return structuredHttpFailure(resp);
       const data = await resp.json();
-      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      if (flags.json) {
+        process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+        return;
+      }
       const templates = Array.isArray(data?.templates) ? data.templates : [];
       if (templates.length === 0) {
         console.log('No templates. Save one with `od templates save <projectId> --name "..."`.');
@@ -5938,7 +5995,10 @@ Common options:
         return structuredHttpFailure(resp);
       }
       const data = await resp.json();
-      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      if (flags.json) {
+        process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+        return;
+      }
       const id = data?.template?.id ?? '';
       const savedName = data?.template?.name ?? name;
       console.log(`[templates] saved ${savedName}${id ? ` (${id})` : ''}`);
@@ -5966,7 +6026,8 @@ Common options:
       if (!resp.ok) return structuredHttpFailure(resp);
       if (flags.json) {
         const data = await resp.json().catch(() => ({ ok: true }));
-        return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+        process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+        return;
       }
       console.log(`[templates] deleted ${id}`);
       return;
@@ -6026,7 +6087,10 @@ Common options:
       });
       if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
       const data = await resp.json();
-      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      if (flags.json) {
+        process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+        return;
+      }
       const conv = data.conversation;
       console.log(`[conversation] created ${conv?.id ?? '-'} (mode ${conv?.sessionMode ?? sessionMode ?? 'design'})`);
       return;
@@ -6123,7 +6187,10 @@ Common options:
       });
       if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
       const data = await resp.json();
-      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      if (flags.json) {
+        process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+        return;
+      }
       const conv = data.conversation;
       const seeded = body.seedFromConversationId
         ? ` (seeded from ${body.seedFromConversationId})`
@@ -6341,7 +6408,10 @@ async function runDaemonStatus(flags) {
   }
   if (!resp.ok) return structuredHttpFailure(resp);
   const data = await resp.json();
-  if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+  if (flags.json) {
+    process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+    return;
+  }
   console.log(`[daemon] ${data.bindHost}:${data.port} v${data.version} pid=${data.pid} plugins=${data.installedPlugins}`);
 }
 
@@ -6393,7 +6463,10 @@ Common options:
       const resp = await fetch(`${base}/api/atoms`);
       if (!resp.ok) return structuredHttpFailure(resp);
       const data = await resp.json();
-      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      if (flags.json) {
+        process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+        return;
+      }
       const atoms = data?.atoms ?? [];
       for (const a of atoms) {
         console.log(`${a.id}\t${a.status}\t[${(a.taskKinds ?? []).join(', ')}]\t${a.label}`);
@@ -6430,7 +6503,10 @@ Common options:
       }
       if (!resp.ok) return structuredHttpFailure(resp);
       const atom = await resp.json();
-      if (flags.json) return process.stdout.write(JSON.stringify(atom, null, 2) + '\n');
+      if (flags.json) {
+        process.stdout.write(JSON.stringify(atom, null, 2) + '\n');
+        return;
+      }
       console.log(`# ${atom.label} (${atom.id})`);
       console.log(`status:    ${atom.status}`);
       console.log(`taskKinds: ${(atom.taskKinds ?? []).join(', ')}`);
@@ -6519,7 +6595,10 @@ async function runLibrary(args) {
         const resp = await fetch(`${base}/api/library/assets${qs ? `?${qs}` : ''}`);
         if (!resp.ok) return structuredHttpFailure(resp);
         const data = await resp.json();
-        if (flags.json) return writeJson(data);
+        if (flags.json) {
+          writeJson(data);
+          return;
+        }
         for (const asset of data.assets ?? []) {
           const dims = asset.width && asset.height ? `${asset.width}x${asset.height}` : '';
           const label = asset.sourceTitle || asset.sourceUrl || asset.caption || '';
@@ -6535,7 +6614,8 @@ async function runLibrary(args) {
         }
         const resp = await fetch(`${base}/api/library/assets/${encodeURIComponent(id)}`);
         if (!resp.ok) return structuredHttpFailure(resp);
-        return writeJson(await resp.json());
+        writeJson(await resp.json());
+        return;
       }
       case 'rm': {
         const id = pos[0];
@@ -6547,7 +6627,10 @@ async function runLibrary(args) {
           method: 'DELETE',
         });
         if (!resp.ok) return structuredHttpFailure(resp);
-        if (flags.json) return writeJson(await resp.json());
+        if (flags.json) {
+          writeJson(await resp.json());
+          return;
+        }
         console.log(`deleted ${id}`);
         return;
       }
@@ -6625,7 +6708,10 @@ async function runLibrary(args) {
         });
         if (!resp.ok) return structuredHttpFailure(resp);
         const data = await resp.json();
-        if (flags.json) return writeJson(data);
+        if (flags.json) {
+          writeJson(data);
+          return;
+        }
         console.log(`applied ${id} → ${data.relPath}`);
         return;
       }
@@ -6642,7 +6728,10 @@ async function runLibrary(args) {
         });
         if (!resp.ok) return structuredHttpFailure(resp);
         const data = await resp.json();
-        if (flags.json) return writeJson(data);
+        if (flags.json) {
+          writeJson(data);
+          return;
+        }
         console.log(`created project ${data.projectId} → ${data.relPath}`);
         return;
       }
@@ -6658,7 +6747,10 @@ async function runLibrary(args) {
         if (flags.out) {
           const { writeFile } = await import('node:fs/promises');
           await writeFile(flags.out, ir, 'utf8');
-          if (flags.json) return writeJson({ ok: true, id, out: flags.out, bytes: Buffer.byteLength(ir) });
+          if (flags.json) {
+            writeJson({ ok: true, id, out: flags.out, bytes: Buffer.byteLength(ir) });
+            return;
+          }
           console.log(`wrote ${flags.out}`);
           return;
         }
@@ -6673,7 +6765,10 @@ async function runLibrary(args) {
         });
         if (!resp.ok) return structuredHttpFailure(resp);
         const data = await resp.json();
-        if (flags.json) return writeJson(data);
+        if (flags.json) {
+          writeJson(data);
+          return;
+        }
         console.log(
           `Synced ${data.total} new (${data.designSystems} design systems, ${data.projectAssets} project assets; ${data.deduped} already indexed).`,
         );
@@ -6683,7 +6778,10 @@ async function runLibrary(args) {
         const resp = await fetch(`${base}/api/library/pair`, { method: 'POST' });
         if (!resp.ok) return structuredHttpFailure(resp);
         const data = await resp.json();
-        if (flags.json) return writeJson(data);
+        if (flags.json) {
+          writeJson(data);
+          return;
+        }
         console.log(`Pairing code: ${data.code}`);
         console.log('Enter this code in the OD Clipper extension popup within 5 minutes.');
         return;
@@ -6716,7 +6814,10 @@ async function runLibraryList(name, args) {
       const resp = await fetch(`${base}${apiPath}`);
       if (!resp.ok) return structuredHttpFailure(resp);
       const data = await resp.json();
-      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      if (flags.json) {
+        process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+        return;
+      }
       const rows = data?.[name === 'design-systems' ? 'designSystems' : name] ?? [];
       for (const row of rows) {
         const label = row.title ?? row.name ?? row.id ?? row.label;
@@ -6813,9 +6914,10 @@ generated SKILLS.md usage guide).
   const { writeFile } = await import('node:fs/promises');
   await writeFile(out, buffer);
   if (flags.json) {
-    return process.stdout.write(
+    process.stdout.write(
       JSON.stringify({ ok: true, id, out, bytes: buffer.length }, null, 2) + '\n',
     );
+    return;
   }
   console.log(`Downloaded ${id} -> ${out} (${buffer.length} bytes)`);
 }
@@ -6909,7 +7011,10 @@ async function postDesignSystemImport(flags, endpoint, body) {
   });
   if (!resp.ok) return structuredHttpFailure(resp);
   const data = await resp.json();
-  if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+  if (flags.json) {
+    process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+    return;
+  }
   const imported = data.designSystem ?? data;
   console.log(`Imported ${imported.id ?? '(unknown id)'}${imported.title ? ` -> ${imported.title}` : ''}`);
   if (data.tokenContractRebuild?.job) {
@@ -6952,7 +7057,10 @@ Starts a review-gated TOKEN_SCHEMA token contract rebuild for an editable import
   });
   if (!resp.ok) return structuredHttpFailure(resp);
   const data = await resp.json();
-  if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+  if (flags.json) {
+    process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+    return;
+  }
   if (data.job) {
     console.log(`Token contract rebuild queued for ${id}: ${data.job.id}`);
     return;
@@ -7025,7 +7133,10 @@ Renames an editable (user-created) design system. Built-in systems are read-only
   });
   if (!resp.ok) return structuredHttpFailure(resp);
   const data = await resp.json();
-  if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+  if (flags.json) {
+    process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+    return;
+  }
   const renamed = data.designSystem ?? data;
   console.log(`Renamed ${parsed.id} -> ${renamed.title ?? parsed.title}`);
 }
@@ -7594,7 +7705,10 @@ async function runMemory(args) {
 
   if (action === 'list') {
     const data = await fetchMemoryTree(base);
-    if (flags.json) return writeJson(data);
+    if (flags.json) {
+      writeJson(data);
+      return;
+    }
     const tree = data.tree ?? [];
     if (tree.length === 0) {
       console.log('No memory tree nodes.');
@@ -7618,7 +7732,10 @@ async function runMemory(args) {
       process.exit(4);
     }
     if (node.kind === 'folder') {
-      if (flags.json) return writeJson({ node });
+      if (flags.json) {
+        writeJson({ node });
+        return;
+      }
       console.log(`${node.path}\t${node.name}\t${node.childrenCount ?? 0} children`);
       return;
     }
@@ -7631,7 +7748,10 @@ async function runMemory(args) {
     }
     if (!resp.ok) return structuredHttpFailure(resp);
     const data = await resp.json();
-    if (flags.json) return writeJson(data);
+    if (flags.json) {
+      writeJson(data);
+      return;
+    }
     printMemoryEntry(data.entry ?? data);
     return;
   }
@@ -7653,7 +7773,10 @@ async function runMemory(args) {
       process.exit(2);
     }
     const data = await patchMemoryTreeNode(base, id, body);
-    if (flags.json) return writeJson(data);
+    if (flags.json) {
+      writeJson(data);
+      return;
+    }
     console.log(`[memory] updated ${data.entry?.id ?? id}`);
     return;
   }
@@ -7666,7 +7789,10 @@ async function runMemory(args) {
       process.exit(2);
     }
     const data = await patchMemoryTreeNode(base, id, { type });
-    if (flags.json) return writeJson(data);
+    if (flags.json) {
+      writeJson(data);
+      return;
+    }
     console.log(`[memory] moved ${data.entry?.id ?? id} to ${data.entry?.type ?? type}`);
     return;
   }
@@ -7686,7 +7812,10 @@ async function runMemoryProfile(base, rest, flags, writeJson) {
 
   if (action === 'show') {
     const entry = await fetchMemoryEntry(base, PROFILE_ID);
-    if (flags.json) return writeJson(entry ?? null);
+    if (flags.json) {
+      writeJson(entry ?? null);
+      return;
+    }
     printMemoryProfile(entry);
     return;
   }
@@ -7730,7 +7859,10 @@ async function runMemoryProfile(base, rest, flags, writeJson) {
     }
     if (!resp.ok) return structuredHttpFailure(resp);
     const data = await resp.json();
-    if (flags.json) return writeJson(data.entry ?? data);
+    if (flags.json) {
+      writeJson(data.entry ?? data);
+      return;
+    }
     console.log(`[memory] saved profile ${data.entry?.id ?? PROFILE_ID}`);
     printMemoryProfile(data.entry ?? data);
     return;
@@ -7758,7 +7890,10 @@ async function runMemoryRule(base, rest, flags, writeJson) {
     if (!resp.ok) return structuredHttpFailure(resp);
     const data = await resp.json();
     const rules = (data.entries ?? []).filter((e) => e.type === 'rule');
-    if (flags.json) return writeJson({ rules });
+    if (flags.json) {
+      writeJson({ rules });
+      return;
+    }
     if (rules.length === 0) {
       console.log('No rule memories.');
       return;
@@ -7813,7 +7948,10 @@ async function runMemoryRule(base, rest, flags, writeJson) {
     }
     if (!resp.ok) return structuredHttpFailure(resp);
     const data = await resp.json();
-    if (flags.json) return writeJson(data.entry ?? data);
+    if (flags.json) {
+      writeJson(data.entry ?? data);
+      return;
+    }
     console.log(`[memory] added rule ${data.entry?.id ?? name}`);
     return;
   }
@@ -7843,7 +7981,10 @@ async function runMemoryRule(base, rest, flags, writeJson) {
     }
     if (!resp.ok) return structuredHttpFailure(resp);
     const data = await resp.json();
-    if (flags.json) return writeJson(data);
+    if (flags.json) {
+      writeJson(data);
+      return;
+    }
     const proposals = data.proposals ?? [];
     if (proposals.length === 0) {
       console.log('No rule proposals distilled from these annotations.');
@@ -7937,7 +8078,10 @@ async function runMemoryVerify(base, rest, flags, writeJson) {
     }
     if (!resp.ok) return structuredHttpFailure(resp);
     const data = await resp.json();
-    if (flags.json) return writeJson(data);
+    if (flags.json) {
+      writeJson(data);
+      return;
+    }
     const verifications = data.verifications ?? [];
     if (verifications.length === 0) {
       console.log('No verification records yet.');
@@ -7966,7 +8110,10 @@ async function runMemoryVerify(base, rest, flags, writeJson) {
     }
     if (!resp.ok) return structuredHttpFailure(resp);
     const data = await resp.json();
-    if (flags.json) return writeJson(data);
+    if (flags.json) {
+      writeJson(data);
+      return;
+    }
     console.log(`[memory] cleared ${data.removed ?? 0} verification record(s)`);
     return;
   }
@@ -8021,7 +8168,10 @@ async function runMemoryConfig(base, rest, flags, writeJson) {
       rewriteEnabled: data.rewriteEnabled,
       verifyEnabled: data.verifyEnabled,
     };
-    if (flags.json) return writeJson(view);
+    if (flags.json) {
+      writeJson(view);
+      return;
+    }
     console.log(`enabled               ${formatMemoryConfigSwitch(view.enabled)}`);
     console.log(`chatExtractionEnabled ${formatMemoryConfigSwitch(view.chatExtractionEnabled)}`);
     console.log(`profileEnabled        ${formatMemoryConfigSwitch(view.profileEnabled)}`);
@@ -8043,7 +8193,10 @@ async function runMemoryConfig(base, rest, flags, writeJson) {
   }
   if (!resp.ok) return structuredHttpFailure(resp);
   const data = await resp.json();
-  if (flags.json) return writeJson(data);
+  if (flags.json) {
+    writeJson(data);
+    return;
+  }
   console.log(`enabled               ${formatMemoryConfigSwitch(data.enabled)}`);
   console.log(`chatExtractionEnabled ${formatMemoryConfigSwitch(data.chatExtractionEnabled)}`);
   console.log(`profileEnabled        ${formatMemoryConfigSwitch(data.profileEnabled)}`);
@@ -8285,7 +8438,10 @@ async function runAutomation(args) {
         }
         if (!resp.ok) return structuredHttpFailure(resp);
         const data = await resp.json();
-        if (flags.json) return writeJson(data);
+        if (flags.json) {
+          writeJson(data);
+          return;
+        }
         const templates = data.templates ?? [];
         if (templates.length === 0) {
           console.log('No automation templates available.');
@@ -8320,7 +8476,8 @@ async function runAutomation(args) {
         }
         if (!resp.ok) return structuredHttpFailure(resp);
         const data = await resp.json();
-        return writeJson(flags.json ? data : (data.template ?? data));
+        writeJson(flags.json ? data : (data.template ?? data));
+        return;
       }
       console.error(`unknown subcommand: od automation template ${action}`);
       printAutomationHelp();
@@ -8371,7 +8528,10 @@ async function runAutomation(args) {
         }
         if (!resp.ok) return structuredHttpFailure(resp);
         const data = await resp.json();
-        if (flags.json) return writeJson(data);
+        if (flags.json) {
+          writeJson(data);
+          return;
+        }
         console.log(`[automation source] ingested ${data.packet?.id}`);
         console.log(`compression: ${data.compressionReport?.status ?? 'unknown'} (${data.compressionReport?.beforeTokens ?? 0} -> ${data.compressionReport?.afterTokens ?? 0} tokens)`);
         const proposals = data.proposals ?? [];
@@ -8400,7 +8560,10 @@ async function runAutomation(args) {
         }
         if (!resp.ok) return structuredHttpFailure(resp);
         const data = await resp.json();
-        if (flags.json) return writeJson(data);
+        if (flags.json) {
+          writeJson(data);
+          return;
+        }
         const packets = data.packets ?? [];
         if (packets.length === 0) {
           console.log('No automation source packets.');
@@ -8432,7 +8595,8 @@ async function runAutomation(args) {
           process.exit(3);
         }
         if (!resp.ok) return structuredHttpFailure(resp);
-        return writeJson(await resp.json());
+        writeJson(await resp.json());
+        return;
       }
       console.error(`unknown subcommand: od automation source ${action}`);
       printAutomationHelp();
@@ -8453,7 +8617,10 @@ async function runAutomation(args) {
         }
         if (!resp.ok) return structuredHttpFailure(resp);
         const data = await resp.json();
-        if (flags.json) return writeJson(data);
+        if (flags.json) {
+          writeJson(data);
+          return;
+        }
         const proposals = data.proposals ?? [];
         if (proposals.length === 0) {
           console.log('No automation proposals.');
@@ -8486,7 +8653,8 @@ async function runAutomation(args) {
           process.exit(3);
         }
         if (!resp.ok) return structuredHttpFailure(resp);
-        return writeJson(await resp.json());
+        writeJson(await resp.json());
+        return;
       }
       if (action === 'apply' || action === 'reject') {
         const id = parts[1];
@@ -8512,7 +8680,10 @@ async function runAutomation(args) {
         }
         if (!resp.ok) return structuredHttpFailure(resp);
         const data = await resp.json();
-        if (flags.json) return writeJson(data);
+        if (flags.json) {
+          writeJson(data);
+          return;
+        }
         console.log(`[automation proposal] ${action === 'apply' ? 'applied' : 'rejected'} ${data.proposal?.id ?? id}`);
         return;
       }
@@ -8530,7 +8701,10 @@ async function runAutomation(args) {
       }
       if (!resp.ok) return structuredHttpFailure(resp);
       const data = await resp.json();
-      if (flags.json) return writeJson(data);
+      if (flags.json) {
+        writeJson(data);
+        return;
+      }
       const routines = data.routines ?? [];
       if (routines.length === 0) {
         console.log('No automations. Create one with `od automation create --name "..." --prompt "..." --schedule daily:09:00`.');
@@ -8551,7 +8725,10 @@ async function runAutomation(args) {
       }
       if (!resp.ok) return structuredHttpFailure(resp);
       const data = await resp.json();
-      if (flags.json) return writeJson(data);
+      if (flags.json) {
+        writeJson(data);
+        return;
+      }
       writeJson(data.routine ?? data);
       return;
     }
@@ -8569,7 +8746,10 @@ async function runAutomation(args) {
       }
       if (!resp.ok) return structuredHttpFailure(resp);
       const data = await resp.json();
-      if (flags.json) return writeJson(data);
+      if (flags.json) {
+        writeJson(data);
+        return;
+      }
       const runs = data.runs ?? [];
       if (runs.length === 0) {
         console.log(`No runs yet for ${id}.`);
@@ -8608,7 +8788,10 @@ async function runAutomation(args) {
       }
       if (!resp.ok) return structuredHttpFailure(resp);
       const data = await resp.json();
-      if (flags.json) return writeJson(data);
+      if (flags.json) {
+        writeJson(data);
+        return;
+      }
       console.log(`[automation] crystallized ${runId}`);
       console.log(`sourcePacket\t${data.packet?.id ?? ''}`);
       console.log(`compression\t${data.compressionReport?.status ?? 'unknown'}\t${data.compressionReport?.beforeTokens ?? 0}->${data.compressionReport?.afterTokens ?? 0}`);
@@ -8675,7 +8858,10 @@ async function runAutomation(args) {
         console.error(`POST /api/routines failed: ${resp.status} ${JSON.stringify(data)}`);
         process.exit(1);
       }
-      if (flags.json) return writeJson(data);
+      if (flags.json) {
+        writeJson(data);
+        return;
+      }
       console.log(`[automation] created ${data.routine?.id}`);
       console.log(formatAutomationRow(data.routine));
       return;
@@ -8730,7 +8916,10 @@ async function runAutomation(args) {
         console.error(`PATCH /api/routines/${id} failed: ${resp.status} ${JSON.stringify(data)}`);
         process.exit(1);
       }
-      if (flags.json) return writeJson(data);
+      if (flags.json) {
+        writeJson(data);
+        return;
+      }
       console.log(`[automation] updated ${id}`);
       console.log(formatAutomationRow(data.routine));
       return;
@@ -8755,7 +8944,10 @@ async function runAutomation(args) {
         console.error(`PATCH /api/routines/${id} failed: ${resp.status} ${JSON.stringify(data)}`);
         process.exit(1);
       }
-      if (flags.json) return writeJson(data);
+      if (flags.json) {
+        writeJson(data);
+        return;
+      }
       console.log(`[automation] ${sub}d ${id}`);
       return;
     }
@@ -8775,7 +8967,10 @@ async function runAutomation(args) {
         console.error(`POST /api/routines/${id}/run failed: ${resp.status} ${JSON.stringify(data)}`);
         process.exit(1);
       }
-      if (flags.json) return writeJson(data);
+      if (flags.json) {
+        writeJson(data);
+        return;
+      }
       console.log(`[automation] triggered ${id}`);
       if (data.projectId) console.log(`projectId\t${data.projectId}`);
       if (data.conversationId) console.log(`conversationId\t${data.conversationId}`);
@@ -8794,7 +8989,10 @@ async function runAutomation(args) {
         process.exit(3);
       }
       if (!resp.ok) return structuredHttpFailure(resp);
-      if (flags.json) return writeJson({ ok: true, id });
+      if (flags.json) {
+        writeJson({ ok: true, id });
+        return;
+      }
       console.log(`[automation] deleted ${id}`);
       return;
     }

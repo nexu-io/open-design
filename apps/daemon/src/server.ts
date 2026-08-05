@@ -1,4 +1,3 @@
-// @ts-nocheck
 import type { DesktopExportArtifactInput, DesktopExportArtifactResult, DesktopExportPdfInput, DesktopExportPdfResult } from '@open-design/sidecar-proto';
 import express from 'express';
 import multer from 'multer';
@@ -502,7 +501,6 @@ import {
   readProjectFile,
   renameProjectFile,
   removeProjectDir,
-  resolveProjectDir,
   SandboxImportedProjectError,
   sanitizeName,
   sanitizePath,
