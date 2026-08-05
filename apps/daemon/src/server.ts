@@ -642,7 +642,14 @@ export {
   composeProjectDisplayStatus,
   normalizeProjectDisplayStatus,
 } from './runtimes/project-status.js';
-import { normalizePersistedToolInput } from './runtimes/persisted-tool-input.js';
+export {
+  daemonAgentPayloadToPersistedAgentEvent,
+  runSseEventToPersistedAgentEvent,
+} from './runtimes/persisted-agent-events.js';
+import {
+  daemonAgentPayloadToPersistedAgentEvent,
+  runSseEventToPersistedAgentEvent,
+} from './runtimes/persisted-agent-events.js';
 import {
   aggregateCloudflarePagesStatus,
   buildDeployFileSet,
@@ -1379,131 +1386,6 @@ function persistRunEventToAssistantMessage(db, run, event, data) {
   } catch (err) {
     console.warn('[runs] message event persistence failed', err);
   }
-}
-
-function runSseEventToPersistedAgentEvent(event, data) {
-  if (event === 'start') {
-    return {
-      kind: 'status',
-      label: 'starting',
-      ...(typeof data?.bin === 'string' ? { detail: data.bin } : {}),
-    };
-  }
-  if (event === 'stdout') {
-    const chunk = typeof data?.chunk === 'string' ? data.chunk : '';
-    return chunk ? { kind: 'text', text: chunk } : null;
-  }
-  if (event === 'error') {
-    const message = typeof data?.error?.message === 'string'
-      ? data.error.message
-      : typeof data?.message === 'string'
-        ? data.message
-        : '';
-    return {
-      kind: 'status',
-      label: 'error',
-      ...(message ? { detail: message } : {}),
-    };
-  }
-  if (event !== 'agent') return null;
-  return daemonAgentPayloadToPersistedAgentEvent(data);
-}
-
-export function daemonAgentPayloadToPersistedAgentEvent(data) {
-  const type = data?.type;
-  if (type === 'status' && typeof data.label === 'string') {
-    const detail =
-      typeof data.detail === 'string'
-        ? data.detail
-        : typeof data.model === 'string'
-          ? data.model
-          : typeof data.ttftMs === 'number'
-            ? `first token in ${Math.round(data.ttftMs / 100) / 10}s`
-            : undefined;
-    return { kind: 'status', label: data.label, ...(detail ? { detail } : {}) };
-  }
-  if (type === 'text_delta' && typeof data.delta === 'string') {
-    return { kind: 'text', text: data.delta };
-  }
-  if (type === 'conversation_title' && typeof data.title === 'string') {
-    return { kind: 'conversation_title', title: data.title };
-  }
-  if (type === 'thinking_delta' && typeof data.delta === 'string') {
-    return { kind: 'thinking', text: data.delta };
-  }
-  if (type === 'thinking_start') return { kind: 'status', label: 'thinking' };
-  if (type === 'live_artifact') {
-    return {
-      kind: 'live_artifact',
-      action: data.action,
-      projectId: data.projectId,
-      artifactId: data.artifactId,
-      title: data.title,
-      ...(data.refreshStatus ? { refreshStatus: data.refreshStatus } : {}),
-    };
-  }
-  if (type === 'live_artifact_refresh') {
-    return {
-      kind: 'live_artifact_refresh',
-      phase: data.phase,
-      projectId: data.projectId,
-      artifactId: data.artifactId,
-      ...(data.refreshId ? { refreshId: data.refreshId } : {}),
-      ...(data.title ? { title: data.title } : {}),
-      ...(typeof data.refreshedSourceCount === 'number'
-        ? { refreshedSourceCount: data.refreshedSourceCount }
-        : {}),
-      ...(data.error ? { error: data.error } : {}),
-    };
-  }
-  if (type === 'tool_use' && typeof data.id === 'string' && typeof data.name === 'string') {
-    return { kind: 'tool_use', id: data.id, name: data.name, input: normalizePersistedToolInput(data.input) };
-  }
-  // Live-only incremental tool-input fragments are for real-time display only.
-  // Returning null skips persistence so history replay isn't polluted with
-  // mid-token JSON shards; the full `tool_use` above is the persisted record.
-  if (type === 'tool_input_delta') return null;
-  if (type === 'tool_result' && typeof data.toolUseId === 'string') {
-    return {
-      kind: 'tool_result',
-      toolUseId: data.toolUseId,
-      content: String(data.content ?? ''),
-      isError: Boolean(data.isError),
-    };
-  }
-  if (type === 'usage') {
-    const usage = data.usage && typeof data.usage === 'object' ? data.usage : {};
-    return {
-      kind: 'usage',
-      inputTokens: usage.input_tokens,
-      outputTokens: usage.output_tokens,
-      ...(typeof data.costUsd === 'number' ? { costUsd: data.costUsd } : {}),
-      ...(typeof data.durationMs === 'number' ? { durationMs: data.durationMs } : {}),
-    };
-  }
-  if (type === 'fabricated_role_marker' && typeof data.marker === 'string') {
-    return {
-      kind: 'status',
-      label: 'warning',
-      detail: `Model emitted fabricated role marker ("${data.marker}"). Response was truncated at this point to prevent unauthorized instruction injection. See issue #3247.`,
-    };
-  }
-  // Persist tool-loop warnings/halts so the signal survives a reload or history
-  // replay. Without this the event is transient-only, and in
-  // OD_TOOL_LOOP_GUARD=warn (no terminal TOOL_LOOP_DETECTED error) the user
-  // would lose the only record that a loop was detected. Mirrors the live
-  // mapping in apps/web/src/providers/daemon.ts so replayed and live views match.
-  if (type === 'tool_loop' && typeof data.toolName === 'string') {
-    const toolName = data.toolName;
-    const count = typeof data.count === 'number' ? data.count : 0;
-    const detail =
-      data.action === 'halt'
-        ? `Run stopped: the agent repeated a failing ${toolName} call ${count}× without progress. Re-check the actual target before retrying.`
-        : `Heads up — the agent has repeated a failing ${toolName} call ${count}× and may be stuck.`;
-    return { kind: 'status', label: 'warning', detail };
-  }
-  if (type === 'raw' && typeof data.line === 'string') return { kind: 'raw', line: data.line };
-  return null;
 }
 
 function pinAssistantMessageOnRunCreate(db, run) {
