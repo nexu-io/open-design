@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "kind": "html",
+  "title": "public-links.html",
+  "entry": "public-links.html",
+  "renderer": "html",
+  "status": "complete",
+  "exports": [
+    "html",
+    "pdf",
+    "zip"
+  ],
+  "createdAt": "2026-08-05T19:44:28.376Z",
+  "updatedAt": "2026-08-05T19:44:28.376Z",
+  "metadata": {
+    "inferred": true,
+    "reconciled": true
+  }
+}

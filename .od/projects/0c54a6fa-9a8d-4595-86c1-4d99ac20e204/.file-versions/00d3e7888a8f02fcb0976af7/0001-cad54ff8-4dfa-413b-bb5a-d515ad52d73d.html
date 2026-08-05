@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="es" data-od-id="screen-results">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Resultados · NicaRunner</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app-shell" data-od-id="results-shell">
+  <aside class="app-sidebar">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" style="color:var(--accent);margin-bottom:var(--s-md);"><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <a href="dashboard.html" class="nav-item"><svg viewBox="0 0 20 20" fill="none"><rect x="2" y="2" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/><rect x="11" y="2" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/><rect x="2" y="11" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/><rect x="11" y="11" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/></svg></a>
+    <a href="races.html" class="nav-item"><svg viewBox="0 0 20 20" fill="none"><path d="M7 3h6l2 5-5 2-5-2 2-5z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M4 17v-7m12 7v-7M10 13v4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></a>
+    <a href="results.html" class="nav-item active"><svg viewBox="0 0 20 20" fill="none"><path d="M3 3h14v14H3V3z" stroke="currentColor" stroke-width="1.5"/><path d="M7 14V8m3 6v-4m3 4v-6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></a>
+    <a href="controversias.html" class="nav-item"><svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.5"/><path d="M10 6v4m0 0h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></a>
+    <a href="notifications.html" class="nav-item"><svg viewBox="0 0 20 20" fill="none"><path d="M8 3h4l2 7-2 7H8L6 10l2-7z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg></a>
+    <a href="public-links.html" class="nav-item"><svg viewBox="0 0 20 20" fill="none"><path d="M8 10h4M8 10a3.5 3.5 0 010-5h4a3.5 3.5 0 010 5M8 10a3.5 3.5 0 000 5h4a3.5 3.5 0 000-5" stroke="currentColor" stroke-width="1.5"/></svg></a>
+    <div class="nav-separator"></div>
+    <a href="users.html" class="nav-item"><svg viewBox="0 0 20 20" fill="none"><circle cx="7" cy="6" r="3" stroke="currentColor" stroke-width="1.5"/><circle cx="13" cy="6" r="3" stroke="currentColor" stroke-width="1.5"/><path d="M1 18c0-3.3 2.7-6 6-6s6 2.7 6 6M19 18c0-3.3-2.7-6-6-6" stroke="currentColor" stroke-width="1.5"/></svg></a>
+    <a href="categories.html" class="nav-item"><svg viewBox="0 0 20 20" fill="none"><rect x="2" y="2" width="7" height="6" rx="1" stroke="currentColor" stroke-width="1.5"/><rect x="11" y="2" width="7" height="10" rx="1" stroke="currentColor" stroke-width="1.5"/><rect x="2" y="10" width="7" height="8" rx="1" stroke="currentColor" stroke-width="1.5"/></svg></a>
+  </aside>
+  <div class="app-main-area">
+    <header class="app-topbar"><span class="topbar-title">Resultados</span><div class="topbar-right"><div class="race-select"><span class="live-dot"></span>Ultra Trail Volcán Mombacho 2025</div></div></header>
+    <main class="app-content" data-od-id="results-content">
+      <div class="section-header" data-od-id="results-header">
+        <div><h2>Resultados oficiales</h2><p class="text-muted text-sm">712 tiempos registrados</p></div>
+        <div class="flex gap-sm">
+          <button class="btn btn-info" data-od-id="notify-all-btn">Notificar a todos</button>
+          <button class="btn btn-secondary">Exportar</button>
+        </div>
+      </div>
+      <div class="toolbar">
+        <div class="input-group" style="max-width:300px;"><input class="input" placeholder="Buscar por dorsal o nombre..."></div>
+        <div class="select-wrap"><select class="input" style="width:auto;"><option>Todas las categorías</option><option>Élite Masculino</option><option>Élite Femenino</option></select></div>
+      </div>
+      <div class="table-wrap" data-od-id="results-table">
+        <table>
+          <thead><tr><th>Pos</th><th>Dorsal</th><th>Nombre</th><th>Categoría</th><th>Tiempo oficial</th><th>Chip</th><th>Última edición</th><th style="width:130px;">Acciones</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">1</td><td class="mono">042</td><td>Carlos Mendoza</td><td>Élite M</td><td class="mono">3:24:15</td><td class="mono">3:24:12</td><td class="text-sm text-muted">Hoy, 10:32</td><td><div class="flex gap-sm"><button class="btn btn-sm btn-ghost">Editar</button><button class="btn btn-sm btn-ghost" style="color:var(--accent);">Notificar</button></div></td></tr>
+            <tr><td class="mono">2</td><td class="mono">118</td><td>María José López</td><td>Élite F</td><td class="mono">3:31:42</td><td class="mono">3:31:39</td><td class="text-sm text-muted">Hoy, 10:45</td><td><div class="flex gap-sm"><button class="btn btn-sm btn-ghost">Editar</button><button class="btn btn-sm btn-ghost" style="color:var(--accent);">Notificar</button></div></td></tr>
+            <tr><td class="mono">3</td><td class="mono">203</td><td>Luis Ortega</td><td>Máster M</td><td class="mono">3:45:08</td><td class="mono">3:45:05</td><td class="text-sm text-muted">Hoy, 10:58</td><td><div class="flex gap-sm"><button class="btn btn-sm btn-ghost">Editar</button><button class="btn btn-sm btn-ghost" style="color:var(--accent);">Notificar</button></div></td></tr>
+            <tr><td class="mono">4</td><td class="mono">067</td><td>Ana Ramírez</td><td>Élite F</td><td class="mono">3:52:33</td><td class="mono">3:52:28</td><td class="text-sm text-muted">Hoy, 09:15</td><td><div class="flex gap-sm"><button class="btn btn-sm btn-ghost">Editar</button><button class="btn btn-sm btn-ghost" style="color:var(--accent);">Notificar</button></div></td></tr>
+            <tr><td class="mono">5</td><td class="mono">315</td><td>Pedro Gaitán</td><td>Máster M</td><td class="mono">4:01:19</td><td class="mono">4:01:14</td><td class="text-sm text-muted">Ayer, 16:42</td><td><div class="flex gap-sm"><button class="btn btn-sm btn-ghost">Editar</button><button class="btn btn-sm btn-ghost" style="color:var(--accent);">Notificar</button></div></td></tr>
+          </tbody>
+        </table>
+        <div class="pagination">
+          <span class="pagination-info">Mostrando 1–5 de 712</span>
+          <div class="pagination-btns">
+            <button class="btn btn-sm btn-secondary" disabled>Anterior</button>
+            <button class="btn btn-sm btn-primary">1</button>
+            <button class="btn btn-sm btn-secondary">2</button>
+            <button class="btn btn-sm btn-secondary">3</button>
+            <button class="btn btn-sm btn-secondary">Siguiente</button>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+</body>
+</html>

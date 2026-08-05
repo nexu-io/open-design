@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "fileName": "runner-share.html",
+  "entries": [
+    {
+      "id": "830a797b-867c-4497-b9d1-4dd3c0f914ec",
+      "fileName": "runner-share.html",
+      "version": 1,
+      "label": "Version 1",
+      "createdAt": 1785959217721,
+      "source": "ai",
+      "prompt": "No, lo que quiero es visualizar en Open Design todas las pantallas del repo para ir haciendo ajustes puntuales",
+      "size": 2670,
+      "mime": "text/html; charset=utf-8",
+      "kind": "html",
+      "contentPath": "0001-830a797b-867c-4497-b9d1-4dd3c0f914ec.html",
+      "promptSource": "message"
+    }
+  ]
+}

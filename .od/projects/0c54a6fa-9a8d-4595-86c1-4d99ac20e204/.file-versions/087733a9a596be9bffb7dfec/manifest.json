@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "fileName": "reset-password.html",
+  "entries": [
+    {
+      "id": "3b3184d5-14c4-4e9f-bdaf-80bb41be7a4f",
+      "fileName": "reset-password.html",
+      "version": 1,
+      "label": "Version 1",
+      "createdAt": 1785959217722,
+      "source": "ai",
+      "prompt": "No, lo que quiero es visualizar en Open Design todas las pantallas del repo para ir haciendo ajustes puntuales",
+      "size": 1534,
+      "mime": "text/html; charset=utf-8",
+      "kind": "html",
+      "contentPath": "0001-3b3184d5-14c4-4e9f-bdaf-80bb41be7a4f.html",
+      "promptSource": "message"
+    }
+  ]
+}

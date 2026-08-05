@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "kind": "html",
+  "title": "runner-share.html",
+  "entry": "runner-share.html",
+  "renderer": "html",
+  "status": "complete",
+  "exports": [
+    "html",
+    "pdf",
+    "zip"
+  ],
+  "createdAt": "2026-08-05T19:45:55.474Z",
+  "updatedAt": "2026-08-05T19:45:55.474Z",
+  "metadata": {
+    "inferred": true,
+    "reconciled": true
+  }
+}

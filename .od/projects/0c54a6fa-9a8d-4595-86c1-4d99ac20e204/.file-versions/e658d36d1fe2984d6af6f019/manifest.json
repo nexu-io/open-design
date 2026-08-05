@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 1,
+  "fileName": "public-results.html",
+  "entries": [
+    {
+      "id": "60661f11-e2f6-43af-bead-75bf75219214",
+      "fileName": "public-results.html",
+      "version": 1,
+      "label": "Version 1",
+      "createdAt": 1785959217721,
+      "source": "ai",
+      "prompt": "No, lo que quiero es visualizar en Open Design todas las pantallas del repo para ir haciendo ajustes puntuales",
+      "size": 3921,
+      "mime": "text/html; charset=utf-8",
+      "kind": "html",
+      "contentPath": "0001-60661f11-e2f6-43af-bead-75bf75219214.html",
+      "promptSource": "message"
+    },
+    {
+      "id": "e81dec6f-ab12-43ba-bb8c-e7ca376824a0",
+      "fileName": "public-results.html",
+      "version": 2,
+      "label": "Version 2",
+      "createdAt": 1785959773569,
+      "source": "ai",
+      "prompt": "la pantalla de @public-results.html  las tablas pudieran llegar a tener muchos registros, se deberia poder hacer scroll horizontal y tener un campo de filtro para buscar rapidamente entre los datos",
+      "size": 10794,
+      "mime": "text/html; charset=utf-8",
+      "kind": "html",
+      "contentPath": "0002-e81dec6f-ab12-43ba-bb8c-e7ca376824a0.html",
+      "promptSource": "message"
+    },
+    {
+      "id": "292c241a-189a-4b71-8914-611eefa06c04",
+      "fileName": "public-results.html",
+      "version": 3,
+      "label": "Version 3",
+      "createdAt": 1785960577184,
+      "source": "ai",
+      "prompt": "quita las columnas extras Procedencia y Chip,  añade scroll vertical a las tablas, ademas cuando el usuario haga scroll a la pagina deja el filtro y todo lo demas que esta arriba siempre visible",
+      "size": 11905,
+      "mime": "text/html; charset=utf-8",
+      "kind": "html",
+      "contentPath": "0003-292c241a-189a-4b71-8914-611eefa06c04.html",
+      "promptSource": "message"
+    },
+    {
+      "id": "fe9a9112-e467-4cf3-a5c7-6441933e1fd1",
+      "fileName": "public-results.html",
+      "version": 4,
+      "label": "Version 4",
+      "createdAt": 1785963489283,
+      "source": "ai",
+      "prompt": "En todas las pantallas y tablas donde se carguen resultados de carreras con estado \"cerradas/Terminadas\" poner medallas de oro, plata y bronce para los corredores del 1er, 2do y 3er lugar",
+      "size": 12075,
+      "mime": "text/html; charset=utf-8",
+      "kind": "html",
+      "contentPath": "0004-fe9a9112-e467-4cf3-a5c7-6441933e1fd1.html",
+      "promptSource": "message"
+    },
+    {
+      "id": "666d0842-0673-46ed-b2eb-52ecdc087059",
+      "fileName": "public-results.html",
+      "version": 5,
+      "label": "Version 5",
+      "createdAt": 1785963778156,
+      "source": "ai",
+      "prompt": "En lugar de circulos pon iconos de medallas a la par del numero de su posición para que sea mas llamativo y profesional",
+      "size": 13603,
+      "mime": "text/html; charset=utf-8",
+      "kind": "html",
+      "contentPath": "0005-666d0842-0673-46ed-b2eb-52ecdc087059.html",
+      "promptSource": "message"
+    }
+  ]
+}

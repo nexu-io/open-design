@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 1,
+  "fileName": "index.html",
+  "entries": [
+    {
+      "id": "7ea1abe6-e930-4ac6-bf65-eab1d6b05725",
+      "fileName": "index.html",
+      "version": 1,
+      "label": "Version 1",
+      "createdAt": 1785959217719,
+      "source": "ai",
+      "prompt": "No, lo que quiero es visualizar en Open Design todas las pantallas del repo para ir haciendo ajustes puntuales",
+      "size": 10727,
+      "mime": "text/html; charset=utf-8",
+      "kind": "html",
+      "contentPath": "0001-7ea1abe6-e930-4ac6-bf65-eab1d6b05725.html",
+      "promptSource": "message"
+    },
+    {
+      "id": "217a287f-f74c-4c6f-994e-6ee6e2e8ba42",
+      "fileName": "index.html",
+      "version": 2,
+      "label": "Version 2",
+      "createdAt": 1785962612679,
+      "source": "ai",
+      "prompt": "el menu lateral izquierdo quisiera que fuera tipo hamburguesa desplegable, en resoluciones grandes que se muestre la descripcion del item y en resoluciones pequeñas (tablet/celularse) que queden solo los iconos con opcion a desplegar descripcion",
+      "size": 11294,
+      "mime": "text/html; charset=utf-8",
+      "kind": "html",
+      "contentPath": "0002-217a287f-f74c-4c6f-994e-6ee6e2e8ba42.html",
+      "promptSource": "message"
+    },
+    {
+      "id": "63235c47-c43d-4d4f-82f5-5f672f735316",
+      "fileName": "index.html",
+      "version": 3,
+      "label": "Version 3",
+      "createdAt": 1785963061715,
+      "source": "ai",
+      "prompt": "quedo 1 item en el sidebar igual al boton de colapsar, posiblemente duplicado del trabajo anterior, corrigelo",
+      "size": 11404,
+      "mime": "text/html; charset=utf-8",
+      "kind": "html",
+      "contentPath": "0003-63235c47-c43d-4d4f-82f5-5f672f735316.html",
+      "promptSource": "message"
+    },
+    {
+      "id": "2d364c3b-ca93-4241-b3a1-d19a79d6bc14",
+      "fileName": "index.html",
+      "version": 4,
+      "label": "Version 4",
+      "createdAt": 1785964709928,
+      "source": "ai",
+      "prompt": "ok, procede",
+      "size": 11957,
+      "mime": "text/html; charset=utf-8",
+      "kind": "html",
+      "contentPath": "0004-2d364c3b-ca93-4241-b3a1-d19a79d6bc14.html",
+      "promptSource": "message"
+    },
+    {
+      "id": "dfd22131-810b-46e1-a3a8-09a6d110a303",
+      "fileName": "index.html",
+      "version": 5,
+      "label": "Version 5",
+      "createdAt": 1785965686919,
+      "source": "ai",
+      "prompt": "go",
+      "size": 12484,
+      "mime": "text/html; charset=utf-8",
+      "kind": "html",
+      "contentPath": "0005-dfd22131-810b-46e1-a3a8-09a6d110a303.html",
+      "promptSource": "message"
+    }
+  ]
+}

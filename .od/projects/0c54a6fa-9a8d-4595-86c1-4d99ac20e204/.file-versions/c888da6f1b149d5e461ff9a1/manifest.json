@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 1,
+  "fileName": "races.html",
+  "entries": [
+    {
+      "id": "d647b59e-c6a8-49d6-982b-ef54be09988e",
+      "fileName": "races.html",
+      "version": 1,
+      "label": "Version 1",
+      "createdAt": 1785959217725,
+      "source": "ai",
+      "prompt": "No, lo que quiero es visualizar en Open Design todas las pantallas del repo para ir haciendo ajustes puntuales",
+      "size": 7376,
+      "mime": "text/html; charset=utf-8",
+      "kind": "html",
+      "contentPath": "0001-d647b59e-c6a8-49d6-982b-ef54be09988e.html",
+      "promptSource": "message"
+    },
+    {
+      "id": "bdfb3ff6-9031-485f-a434-10bfe921cbdf",
+      "fileName": "races.html",
+      "version": 2,
+      "label": "Version 2",
+      "createdAt": 1785962612680,
+      "source": "ai",
+      "prompt": "el menu lateral izquierdo quisiera que fuera tipo hamburguesa desplegable, en resoluciones grandes que se muestre la descripcion del item y en resoluciones pequeñas (tablet/celularse) que queden solo los iconos con opcion a desplegar descripcion",
+      "size": 7943,
+      "mime": "text/html; charset=utf-8",
+      "kind": "html",
+      "contentPath": "0002-bdfb3ff6-9031-485f-a434-10bfe921cbdf.html",
+      "promptSource": "message"
+    },
+    {
+      "id": "a5df3a87-5183-492d-9973-7745c605f916",
+      "fileName": "races.html",
+      "version": 3,
+      "label": "Version 3",
+      "createdAt": 1785963061716,
+      "source": "ai",
+      "prompt": "quedo 1 item en el sidebar igual al boton de colapsar, posiblemente duplicado del trabajo anterior, corrigelo",
+      "size": 8053,
+      "mime": "text/html; charset=utf-8",
+      "kind": "html",
+      "contentPath": "0003-a5df3a87-5183-492d-9973-7745c605f916.html",
+      "promptSource": "message"
+    },
+    {
+      "id": "899293b4-9782-40df-833c-5939a44ed2ca",
+      "fileName": "races.html",
+      "version": 4,
+      "label": "Version 4",
+      "createdAt": 1785964709934,
+      "source": "ai",
+      "prompt": "ok, procede",
+      "size": 8606,
+      "mime": "text/html; charset=utf-8",
+      "kind": "html",
+      "contentPath": "0004-899293b4-9782-40df-833c-5939a44ed2ca.html",
+      "promptSource": "message"
+    },
+    {
+      "id": "80ffa929-50a2-4b81-ac48-2d1d4359280c",
+      "fileName": "races.html",
+      "version": 5,
+      "label": "Version 5",
+      "createdAt": 1785965686904,
+      "source": "ai",
+      "prompt": "go",
+      "size": 9140,
+      "mime": "text/html; charset=utf-8",
+      "kind": "html",
+      "contentPath": "0005-80ffa929-50a2-4b81-ac48-2d1d4359280c.html",
+      "promptSource": "message"
+    }
+  ]
+}

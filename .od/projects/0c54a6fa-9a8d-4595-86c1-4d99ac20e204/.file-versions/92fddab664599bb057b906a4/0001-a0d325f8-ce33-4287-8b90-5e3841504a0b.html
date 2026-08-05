@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="es" data-od-id="screen-change-password">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cambiar contraseña · NicaRunner</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app-shell">
+  <aside class="app-sidebar"><div style="margin-top:var(--s-md);color:var(--accent);">NR</div></aside>
+  <div class="app-main-area">
+    <header class="app-topbar"><span class="topbar-title">Cambiar contraseña</span><div class="topbar-right"></div></header>
+    <main class="app-content" style="display:flex;align-items:center;justify-content:center;">
+      <div class="card" style="width:100%;max-width:440px;" data-od-id="change-password-card">
+        <div style="display:flex;align-items:center;gap:var(--s-md);margin-bottom:var(--s-xl);padding:var(--s-md);background:var(--info-50);border:1px solid var(--info-200);border-radius:var(--r-btn);">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style="color:var(--info-600);flex-shrink:0;"><circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="1.5"/><path d="M10 6v4M10 14h.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          <span style="font-size:0.8125rem;color:var(--info-600);">Primer inicio de sesión: debés cambiar tu contraseña temporal antes de continuar.</span>
+        </div>
+        <h2 style="margin-bottom:var(--s-xl);">Nueva contraseña</h2>
+        <div class="form-field">
+          <label for="current-pass">Contraseña actual</label>
+          <input id="current-pass" class="input" type="password" placeholder="Contraseña temporal" value="········">
+        </div>
+        <div class="form-field">
+          <label for="new-pass">Nueva contraseña</label>
+          <input id="new-pass" class="input" type="password" placeholder="Mínimo 8 caracteres" value="········">
+        </div>
+        <div class="form-field">
+          <label for="confirm-pass">Confirmar nueva contraseña</label>
+          <input id="confirm-pass" class="input" type="password" placeholder="Repetí la contraseña" value="········">
+        </div>
+        <button class="btn btn-primary" style="width:100%;" data-od-id="change-pass-submit">Cambiar contraseña</button>
+      </div>
+    </main>
+  </div>
+</div>
+</body>
+</html>

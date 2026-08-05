@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "fileName": "change-password.html",
+  "entries": [
+    {
+      "id": "a0d325f8-ce33-4287-8b90-5e3841504a0b",
+      "fileName": "change-password.html",
+      "version": 1,
+      "label": "Version 1",
+      "createdAt": 1785959217720,
+      "source": "ai",
+      "prompt": "No, lo que quiero es visualizar en Open Design todas las pantallas del repo para ir haciendo ajustes puntuales",
+      "size": 2514,
+      "mime": "text/html; charset=utf-8",
+      "kind": "html",
+      "contentPath": "0001-a0d325f8-ce33-4287-8b90-5e3841504a0b.html",
+      "promptSource": "message"
+    },
+    {
+      "id": "d953abea-a456-4457-a402-af636eb0ac3b",
+      "fileName": "change-password.html",
+      "version": 2,
+      "label": "Version 2",
+      "createdAt": 1785962612679,
+      "source": "ai",
+      "prompt": "el menu lateral izquierdo quisiera que fuera tipo hamburguesa desplegable, en resoluciones grandes que se muestre la descripcion del item y en resoluciones pequeñas (tablet/celularse) que queden solo los iconos con opcion a desplegar descripcion",
+      "size": 2750,
+      "mime": "text/html; charset=utf-8",
+      "kind": "html",
+      "contentPath": "0002-d953abea-a456-4457-a402-af636eb0ac3b.html",
+      "promptSource": "message"
+    },
+    {
+      "id": "80308daf-0db7-46d1-abc1-7beaf6a1fdbd",
+      "fileName": "change-password.html",
+      "version": 3,
+      "label": "Version 3",
+      "createdAt": 1785964709921,
+      "source": "ai",
+      "prompt": "ok, procede",
+      "size": 3306,
+      "mime": "text/html; charset=utf-8",
+      "kind": "html",
+      "contentPath": "0003-80308daf-0db7-46d1-abc1-7beaf6a1fdbd.html",
+      "promptSource": "message"
+    },
+    {
+      "id": "35fbeaee-eded-4267-8abc-0a0a5ce82868",
+      "fileName": "change-password.html",
+      "version": 4,
+      "label": "Version 4",
+      "createdAt": 1785965686890,
+      "source": "ai",
+      "prompt": "go",
+      "size": 3840,
+      "mime": "text/html; charset=utf-8",
+      "kind": "html",
+      "contentPath": "0004-35fbeaee-eded-4267-8abc-0a0a5ce82868.html",
+      "promptSource": "message"
+    }
+  ]
+}

@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="es" data-od-id="screen-notifications">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Notificaciones · NicaRunner</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app-shell" data-od-id="notifications-shell">
+  <aside class="app-sidebar">
+  <button class="sidebar-toggle" aria-label="Menú"><svg viewBox="0 0 20 20" fill="none"><path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" style="color:var(--accent);margin-bottom:var(--s-md);"><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <a href="dashboard.html" class="nav-item"><svg viewBox="0 0 20 20" fill="none"><rect x="2" y="2" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/><rect x="11" y="2" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/><rect x="2" y="11" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/><rect x="11" y="11" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/></svg><span class="nav-label">Dashboard</span></a>
+    <a href="races.html" class="nav-item"><svg viewBox="0 0 20 20" fill="none"><path d="M7 3h6l2 5-5 2-5-2 2-5z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M4 17v-7m12 7v-7M10 13v4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><span class="nav-label">Carreras</span></a>
+    <a href="results.html" class="nav-item"><svg viewBox="0 0 20 20" fill="none"><path d="M3 3h14v14H3V3z" stroke="currentColor" stroke-width="1.5"/><path d="M7 14V8m3 6v-4m3 4v-6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><span class="nav-label">Resultados</span></a>
+    <a href="controversias.html" class="nav-item"><svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.5"/><path d="M10 6v4m0 0h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><span class="nav-label">Controversias</span></a>
+    <a href="notifications.html" class="nav-item active"><svg viewBox="0 0 20 20" fill="none"><path d="M8 3h4l2 7-2 7H8L6 10l2-7z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg><span class="nav-label">Notificaciones</span></a>
+    <a href="public-links.html" class="nav-item"><svg viewBox="0 0 20 20" fill="none"><path d="M8 10h4M8 10a3.5 3.5 0 010-5h4a3.5 3.5 0 010 5M8 10a3.5 3.5 0 000 5h4a3.5 3.5 0 000-5" stroke="currentColor" stroke-width="1.5"/></svg><span class="nav-label">Enlaces</span></a>
+    <div class="nav-separator"></div>
+    <a href="users.html" class="nav-item"><svg viewBox="0 0 20 20" fill="none"><circle cx="7" cy="6" r="3" stroke="currentColor" stroke-width="1.5"/><circle cx="13" cy="6" r="3" stroke="currentColor" stroke-width="1.5"/><path d="M1 18c0-3.3 2.7-6 6-6s6 2.7 6 6M19 18c0-3.3-2.7-6-6-6" stroke="currentColor" stroke-width="1.5"/></svg><span class="nav-label">Usuarios</span></a>
+    <a href="categories.html" class="nav-item"><svg viewBox="0 0 20 20" fill="none"><rect x="2" y="2" width="7" height="6" rx="1" stroke="currentColor" stroke-width="1.5"/><rect x="11" y="2" width="7" height="10" rx="1" stroke="currentColor" stroke-width="1.5"/><rect x="2" y="10" width="7" height="8" rx="1" stroke="currentColor" stroke-width="1.5"/></svg><span class="nav-label">Categorías</span></a>
+  </aside>
+  <div class="app-main-area">
+    <header class="app-topbar"><span class="topbar-title">Notificar a todos</span><div class="topbar-right"><div class="race-select"><span class="live-dot"></span>Ultra Trail Volcán Mombacho 2025</div></div></header>
+    <main class="app-content" data-od-id="notifications-content">
+      <div class="page-header" data-od-id="notifications-header">
+        <h1>Envío masivo de resultados</h1>
+        <p>Envía los tiempos oficiales por email y WhatsApp a todos los corredores con tiempo registrado.</p>
+      </div>
+
+      <!-- Summary Card -->
+      <div class="card" style="margin-bottom:var(--s-xl);" data-od-id="notifications-summary">
+        <div style="display:flex;align-items:center;gap:var(--s-md);margin-bottom:var(--s-lg);padding:var(--s-md);background:var(--info-50);border:1px solid var(--info-200);border-radius:var(--r-btn);">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style="color:var(--info-600);flex-shrink:0;"><circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="1.5"/><path d="M10 6v4M10 14h.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          <span style="font-size:0.875rem;color:var(--info-600);">Se enviarán notificaciones a todos los corredores con tiempo oficial registrado. Los corredores sin tiempo no recibirán notificación.</span>
+        </div>
+
+        <div class="content-2col" style="margin-bottom:var(--s-lg);">
+          <div class="kpi-card">
+            <div class="kpi-label">Corredores con tiempo</div>
+            <div class="kpi-value">712</div>
+            <div class="kpi-sub">Recibirán notificación</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Sin tiempo registrado</div>
+            <div class="kpi-value" style="color:var(--tx-md);">135</div>
+            <div class="kpi-sub">No recibirán notificación</div>
+          </div>
+        </div>
+
+        <button class="btn btn-primary" style="width:100%;" data-od-id="notifications-send">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 2l12 6-12 6 3-6-3-6z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+          Enviar notificaciones a 712 corredores
+        </button>
+        <p style="text-align:center;color:var(--tx-md);font-size:0.75rem;margin-top:var(--s-md);">Email + WhatsApp · Solo administradores pueden ejecutar esta acción</p>
+      </div>
+
+      <!-- Post-dispatch metrics -->
+      <div class="card" data-od-id="notifications-metrics">
+        <div class="card-header"><span class="card-title">Último envío — 15 Mar 2025, 11:42</span></div>
+        <div class="kpi-grid">
+          <div><div class="kpi-label">Creadas</div><div class="kpi-value" style="font-size:1.5rem;">712</div></div>
+          <div><div class="kpi-label">Enviadas</div><div class="kpi-value" style="font-size:1.5rem;color:var(--official-600);">698</div></div>
+          <div><div class="kpi-label">Fallidas</div><div class="kpi-value" style="font-size:1.5rem;color:var(--critical-600);">14</div></div>
+          <div><div class="kpi-label">Pendientes</div><div class="kpi-value" style="font-size:1.5rem;color:var(--dispute-600);">0</div></div>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+<script src="sidebar.js"></script>
+</body>
+</html>

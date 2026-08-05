@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="es" data-od-id="screen-races">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Carreras · NicaRunner</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app-shell" data-od-id="races-shell">
+  <aside class="app-sidebar">
+  <button class="sidebar-toggle" aria-label="Menú"><svg viewBox="0 0 20 20" fill="none"><path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
+    <svg width="24" height="24" viewBox="0 0 48 48" fill="none" style="color:var(--accent);margin-bottom:var(--s-md);"><rect x="4" y="4" width="40" height="40" rx="10" stroke="currentColor" stroke-width="2"/><path d="M14 26l6-6 4 4 8-8" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <a href="dashboard.html" class="nav-item"><svg viewBox="0 0 20 20" fill="none"><rect x="2" y="2" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/><rect x="11" y="2" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/><rect x="2" y="11" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/><rect x="11" y="11" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/></svg><span class="nav-label">Dashboard</span></a>
+    <a href="races.html" class="nav-item active"><svg viewBox="0 0 20 20" fill="none"><path d="M7 3h6l2 5-5 2-5-2 2-5z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M4 17v-7m12 7v-7M10 13v4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><span class="nav-label">Carreras</span></a>
+    <a href="results.html" class="nav-item"><svg viewBox="0 0 20 20" fill="none"><path d="M3 3h14v14H3V3z" stroke="currentColor" stroke-width="1.5"/><path d="M7 14V8m3 6v-4m3 4v-6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><span class="nav-label">Resultados</span></a>
+    <a href="controversias.html" class="nav-item"><svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.5"/><path d="M10 6v4m0 0h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><span class="nav-label">Controversias</span><span class="nav-badge">3</span></a>
+    <a href="notifications.html" class="nav-item"><svg viewBox="0 0 20 20" fill="none"><path d="M8 3h4l2 7-2 7H8L6 10l2-7z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg><span class="nav-label">Notificaciones</span></a>
+    <a href="public-links.html" class="nav-item"><svg viewBox="0 0 20 20" fill="none"><path d="M8 10h4M8 10a3.5 3.5 0 010-5h4a3.5 3.5 0 010 5M8 10a3.5 3.5 0 000 5h4a3.5 3.5 0 000-5" stroke="currentColor" stroke-width="1.5"/></svg><span class="nav-label">Enlaces</span></a>
+    <div class="nav-separator"></div>
+    <a href="users.html" class="nav-item"><svg viewBox="0 0 20 20" fill="none"><circle cx="7" cy="6" r="3" stroke="currentColor" stroke-width="1.5"/><circle cx="13" cy="6" r="3" stroke="currentColor" stroke-width="1.5"/><path d="M1 18c0-3.3 2.7-6 6-6s6 2.7 6 6M19 18c0-3.3-2.7-6-6-6" stroke="currentColor" stroke-width="1.5"/></svg><span class="nav-label">Usuarios</span></a>
+    <a href="categories.html" class="nav-item"><svg viewBox="0 0 20 20" fill="none"><rect x="2" y="2" width="7" height="6" rx="1" stroke="currentColor" stroke-width="1.5"/><rect x="11" y="2" width="7" height="10" rx="1" stroke="currentColor" stroke-width="1.5"/><rect x="2" y="10" width="7" height="8" rx="1" stroke="currentColor" stroke-width="1.5"/></svg><span class="nav-label">Categorías</span></a>
+  </aside>
+  <div class="app-main-area">
+    <header class="app-topbar"><span class="topbar-title">Carreras</span><div class="topbar-right"><div class="race-select"><span class="live-dot"></span>Ultra Trail Volcán Mombacho 2025</div></div></header>
+    <main class="app-content" data-od-id="races-content">
+      <div class="section-header" data-od-id="races-header">
+        <div><h2>Todas las carreras</h2><p class="text-muted text-sm">42 carreras registradas</p></div>
+        <button class="btn btn-primary" data-od-id="races-new">+ Nueva carrera</button>
+      </div>
+
+      <div class="toolbar">
+        <div class="input-group" style="max-width:300px;"><input class="input" placeholder="Buscar carrera..."></div>
+        <div class="select-wrap"><select class="input" style="width:auto;"><option>Todas las fechas</option><option>2025</option><option>2024</option></select></div>
+      </div>
+
+      <div class="table-wrap" data-od-id="races-table">
+        <table>
+          <thead><tr><th>Nombre</th><th>Fecha</th><th>Distancia</th><th>Inscritos</th><th>Estado</th><th style="width:120px;">Acciones</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><a href="race-detail.html" style="color:var(--accent);font-weight:500;text-decoration:none;">Ultra Trail Volcán Mombacho</a></td>
+              <td class="mono">15 Mar 2025</td><td>50K</td><td class="mono">218</td>
+              <td><span class="badge badge-success"><span class="live-dot"></span>En curso</span></td>
+              <td><div class="flex gap-sm"><button class="btn btn-sm btn-secondary">Editar</button><button class="btn btn-sm btn-destructive">Eliminar</button></div></td>
+            </tr>
+            <tr>
+              <td><a href="race-detail.html" style="color:var(--accent);font-weight:500;text-decoration:none;">Trail Laguna de Apoyo</a></td>
+              <td class="mono">22 Feb 2025</td><td>21K</td><td class="mono">156</td>
+              <td><span class="badge badge-success">Finalizada</span></td>
+              <td><div class="flex gap-sm"><button class="btn btn-sm btn-secondary">Editar</button><button class="btn btn-sm btn-destructive">Eliminar</button></div></td>
+            </tr>
+            <tr>
+              <td><a href="race-detail.html" style="color:var(--accent);font-weight:500;text-decoration:none;">Cross Cerro Negro</a></td>
+              <td class="mono">10 Ene 2025</td><td>10K</td><td class="mono">89</td>
+              <td><span class="badge badge-neutral">Archivada</span></td>
+              <td><div class="flex gap-sm"><button class="btn btn-sm btn-secondary">Editar</button></div></td>
+            </tr>
+            <tr>
+              <td><a href="race-detail.html" style="color:var(--accent);font-weight:500;text-decoration:none;">Maratón Granada</a></td>
+              <td class="mono">08 Dic 2024</td><td>42K</td><td class="mono">312</td>
+              <td><span class="badge badge-success">Finalizada</span></td>
+              <td><div class="flex gap-sm"><button class="btn btn-sm btn-secondary">Editar</button></div></td>
+            </tr>
+            <tr>
+              <td><a href="race-detail.html" style="color:var(--accent);font-weight:500;text-decoration:none;">Carrera del Café Matagalpa</a></td>
+              <td class="mono">20 Nov 2024</td><td>15K</td><td class="mono">143</td>
+              <td><span class="badge badge-success">Finalizada</span></td>
+              <td><div class="flex gap-sm"><button class="btn btn-sm btn-secondary">Editar</button><button class="btn btn-sm btn-destructive">Eliminar</button></div></td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="pagination">
+          <span class="pagination-info">Mostrando 1–5 de 42</span>
+          <div class="pagination-btns">
+            <button class="btn btn-sm btn-secondary" disabled>Anterior</button>
+            <button class="btn btn-sm btn-primary">1</button>
+            <button class="btn btn-sm btn-secondary">2</button>
+            <button class="btn btn-sm btn-secondary">3</button>
+            <button class="btn btn-sm btn-secondary">Siguiente</button>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+<script src="sidebar.js"></script>
+</body>
+</html>

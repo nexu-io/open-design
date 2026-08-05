@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "kind": "html",
+  "title": "notifications.html",
+  "entry": "notifications.html",
+  "renderer": "html",
+  "status": "complete",
+  "exports": [
+    "html",
+    "pdf",
+    "zip"
+  ],
+  "createdAt": "2026-08-05T19:44:06.463Z",
+  "updatedAt": "2026-08-05T19:44:06.463Z",
+  "metadata": {
+    "inferred": true,
+    "reconciled": true
+  }
+}

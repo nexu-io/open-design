@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "kind": "html",
+  "title": "users.html",
+  "entry": "users.html",
+  "renderer": "html",
+  "status": "complete",
+  "exports": [
+    "html",
+    "pdf",
+    "zip"
+  ],
+  "createdAt": "2026-08-05T19:45:07.682Z",
+  "updatedAt": "2026-08-05T19:45:07.682Z",
+  "metadata": {
+    "inferred": true,
+    "reconciled": true
+  }
+}

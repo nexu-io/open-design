@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="es" data-od-id="screen-dashboard">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard · NicaRunner</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<style>.progress-bar{height:6px;background:var(--hover-wash);border-radius:3px;overflow:hidden;flex:1;min-width:80px}.progress-fill{height:100%;border-radius:3px;transition:width .3s}.progress-fill.green{background:var(--official-600)}.progress-fill.amber{background:var(--dispute-600)}.chart-bar{display:flex;align-items:end;gap:2px;height:120px}.chart-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px}.chart-fill{border-radius:3px 3px 0 0;width:100%;min-width:20px;transition:height .4s}.chart-fill.green{background:var(--official-600)}.chart-fill.amber{background:var(--dispute-600)}.chart-fill.blue{background:var(--accent)}.chart-label{font-size:.625rem;color:var(--tx-md);text-align:center;white-space:nowrap}</style>
+</head>
+<body>
+<div class="app-shell" data-od-id="dashboard-shell">
+  <aside class="app-sidebar">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" style="color:var(--accent);margin-bottom:var(--s-md);"><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <a href="dashboard.html" class="nav-item active"><svg viewBox="0 0 20 20" fill="none"><rect x="2" y="2" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/><rect x="11" y="2" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/><rect x="2" y="11" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/><rect x="11" y="11" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/></svg></a>
+    <a href="races.html" class="nav-item"><svg viewBox="0 0 20 20" fill="none"><path d="M7 3h6l2 5-5 2-5-2 2-5z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M4 17v-7m12 7v-7M10 13v4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></a>
+    <a href="results.html" class="nav-item"><svg viewBox="0 0 20 20" fill="none"><path d="M3 3h14v14H3V3z" stroke="currentColor" stroke-width="1.5"/><path d="M7 14V8m3 6v-4m3 4v-6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></a>
+    <a href="controversias.html" class="nav-item"><svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.5"/><path d="M10 6v4m0 0h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><span class="nav-badge">3</span></a>
+    <a href="notifications.html" class="nav-item"><svg viewBox="0 0 20 20" fill="none"><path d="M8 3h4l2 7-2 7H8L6 10l2-7z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg></a>
+    <a href="public-links.html" class="nav-item"><svg viewBox="0 0 20 20" fill="none"><path d="M8 10h4M8 10a3.5 3.5 0 010-5h4a3.5 3.5 0 010 5M8 10a3.5 3.5 0 000 5h4a3.5 3.5 0 000-5" stroke="currentColor" stroke-width="1.5"/></svg></a>
+    <div class="nav-separator"></div>
+    <a href="users.html" class="nav-item"><svg viewBox="0 0 20 20" fill="none"><circle cx="7" cy="6" r="3" stroke="currentColor" stroke-width="1.5"/><circle cx="13" cy="6" r="3" stroke="currentColor" stroke-width="1.5"/><path d="M1 18c0-3.3 2.7-6 6-6s6 2.7 6 6M19 18c0-3.3-2.7-6-6-6" stroke="currentColor" stroke-width="1.5"/></svg></a>
+    <a href="categories.html" class="nav-item"><svg viewBox="0 0 20 20" fill="none"><rect x="2" y="2" width="7" height="6" rx="1" stroke="currentColor" stroke-width="1.5"/><rect x="11" y="2" width="7" height="10" rx="1" stroke="currentColor" stroke-width="1.5"/><rect x="2" y="10" width="7" height="8" rx="1" stroke="currentColor" stroke-width="1.5"/></svg></a>
+  </aside>
+
+  <div class="app-main-area">
+    <header class="app-topbar" data-od-id="dashboard-topbar">
+      <span class="topbar-title">Dashboard</span>
+      <div class="topbar-right">
+        <div class="race-select"><span class="live-dot"></span>Ultra Trail Volcán Mombacho 2025</div>
+      </div>
+    </header>
+
+    <main class="app-content" data-od-id="dashboard-content">
+      <!-- KPIs -->
+      <div class="kpi-grid" data-od-id="dashboard-kpis" style="margin-bottom:var(--s-xl);">
+        <div class="kpi-card" data-od-id="kpi-inscritos">
+          <div class="kpi-label">Total inscritos</div>
+          <div class="kpi-value">847</div>
+          <div class="kpi-sub">42 carreras activas</div>
+        </div>
+        <div class="kpi-card" data-od-id="kpi-con-tiempo">
+          <div class="kpi-label">Con tiempo registrado</div>
+          <div class="kpi-value">712</div>
+          <div class="kpi-sub" style="color:var(--official-600);">84% del total</div>
+        </div>
+        <div class="kpi-card" data-od-id="kpi-pendientes">
+          <div class="kpi-label">Pendientes de captura</div>
+          <div class="kpi-value">135</div>
+          <div class="kpi-sub" style="color:var(--dispute-600);">16% restante</div>
+        </div>
+        <div class="kpi-card" data-od-id="kpi-controversias">
+          <div class="kpi-label">Controversias abiertas</div>
+          <div class="kpi-value" style="color:var(--critical-600);">3</div>
+          <div class="kpi-sub">Requieren resolución</div>
+        </div>
+      </div>
+
+      <div class="content-2col" style="margin-bottom:var(--s-xl);">
+        <!-- Últimos resultados capturados -->
+        <div class="card" data-od-id="ultimos-resultados">
+          <div class="card-header">
+            <span class="card-title">Últimos resultados capturados</span>
+            <a href="results.html" class="btn-link text-sm">Ver todos</a>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Pos</th><th>Dorsal</th><th>Nombre</th><th>Tiempo</th><th>Categoría</th></tr></thead>
+              <tbody>
+                <tr><td class="mono">1</td><td class="mono">042</td><td>Carlos Mendoza</td><td class="mono">3:24:15</td><td><span class="badge badge-success">Élite M</span></td></tr>
+                <tr><td class="mono">2</td><td class="mono">118</td><td>María José López</td><td class="mono">3:31:42</td><td><span class="badge badge-success">Élite F</span></td></tr>
+                <tr><td class="mono">3</td><td class="mono">203</td><td>Luis Ortega</td><td class="mono">3:45:08</td><td><span class="badge badge-info">Máster M</span></td></tr>
+                <tr><td class="mono">4</td><td class="mono">067</td><td>Ana Ramírez</td><td class="mono">3:52:33</td><td><span class="badge badge-success">Élite F</span></td></tr>
+                <tr><td class="mono">5</td><td class="mono">315</td><td>Pedro Gaitán</td><td class="mono">4:01:19</td><td><span class="badge badge-info">Máster M</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Progreso por categoría -->
+        <div class="card" data-od-id="progreso-categorias">
+          <div class="card-header"><span class="card-title">Progreso por categoría</span></div>
+          <table style="width:100%;">
+            <thead><tr><th>Categoría</th><th style="width:160px;">Progreso</th><th style="text-align:right;">%</th></tr></thead>
+            <tbody>
+              <tr><td style="font-weight:500;">Élite Masculino</td><td><div class="progress-bar"><div class="progress-fill green" style="width:92%;"></div></div></td><td class="mono" style="text-align:right;color:var(--official-600);">92%</td></tr>
+              <tr><td style="font-weight:500;">Élite Femenino</td><td><div class="progress-bar"><div class="progress-fill green" style="width:88%;"></div></div></td><td class="mono" style="text-align:right;color:var(--official-600);">88%</td></tr>
+              <tr><td style="font-weight:500;">Máster Masculino</td><td><div class="progress-bar"><div class="progress-fill green" style="width:79%;"></div></div></td><td class="mono" style="text-align:right;color:var(--official-600);">79%</td></tr>
+              <tr><td style="font-weight:500;">Máster Femenino</td><td><div class="progress-bar"><div class="progress-fill amber" style="width:65%;"></div></div></td><td class="mono" style="text-align:right;color:var(--dispute-600);">65%</td></tr>
+              <tr><td style="font-weight:500;">Juvenil</td><td><div class="progress-bar"><div class="progress-fill amber" style="width:54%;"></div></div></td><td class="mono" style="text-align:right;color:var(--dispute-600);">54%</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Posiciones por categoría -->
+      <div class="card" data-od-id="posiciones-categoria">
+        <div class="card-header">
+          <span class="card-title">Posiciones · Élite Masculino</span>
+          <div class="flex items-center gap-md">
+            <div class="select-wrap"><select class="input" style="width:auto;min-width:160px;"><option>Élite Masculino</option><option>Élite Femenino</option><option>Máster Masculino</option></select></div>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Pos</th><th>Dorsal</th><th>Nombre</th><th>Tiempo oficial</th><th>Chip</th><th>Dif.</th><th>Estado</th></tr></thead>
+            <tbody>
+              <tr><td class="mono">1</td><td class="mono">042</td><td>Carlos Mendoza</td><td class="mono">3:24:15</td><td class="mono">3:24:12</td><td class="mono">+0:03</td><td><span class="badge badge-success">Confirmado</span></td></tr>
+              <tr><td class="mono">2</td><td class="mono">203</td><td>Luis Ortega</td><td class="mono">3:45:08</td><td class="mono">3:45:05</td><td class="mono">+0:03</td><td><span class="badge badge-success">Confirmado</span></td></tr>
+              <tr><td class="mono">3</td><td class="mono">315</td><td>Pedro Gaitán</td><td class="mono">4:01:19</td><td class="mono">4:01:14</td><td class="mono">+0:05</td><td><span class="badge badge-success">Confirmado</span></td></tr>
+              <tr><td class="mono">4</td><td class="mono">178</td><td>Javier Solís</td><td class="mono">4:12:44</td><td class="mono">—</td><td class="mono">—</td><td><span class="badge badge-warning">Pendiente</span></td></tr>
+              <tr><td class="mono">5</td><td class="mono">089</td><td>Ricardo Vega</td><td class="mono">4:18:02</td><td class="mono">4:17:58</td><td class="mono">+0:04</td><td><span class="badge badge-error">Disputa</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+</body>
+</html>

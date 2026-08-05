@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "kind": "html",
+  "title": "controversias.html",
+  "entry": "controversias.html",
+  "renderer": "html",
+  "status": "complete",
+  "exports": [
+    "html",
+    "pdf",
+    "zip"
+  ],
+  "createdAt": "2026-08-05T19:43:33.722Z",
+  "updatedAt": "2026-08-05T19:43:33.722Z",
+  "metadata": {
+    "inferred": true,
+    "reconciled": true
+  }
+}

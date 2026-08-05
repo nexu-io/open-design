@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "fileName": "forgot-password.html",
+  "entries": [
+    {
+      "id": "b4cf702c-2e58-4c24-b62d-c8203ccebffb",
+      "fileName": "forgot-password.html",
+      "version": 1,
+      "label": "Version 1",
+      "createdAt": 1785959217720,
+      "source": "ai",
+      "prompt": "No, lo que quiero es visualizar en Open Design todas las pantallas del repo para ir haciendo ajustes puntuales",
+      "size": 1698,
+      "mime": "text/html; charset=utf-8",
+      "kind": "html",
+      "contentPath": "0001-b4cf702c-2e58-4c24-b62d-c8203ccebffb.html",
+      "promptSource": "message"
+    }
+  ]
+}

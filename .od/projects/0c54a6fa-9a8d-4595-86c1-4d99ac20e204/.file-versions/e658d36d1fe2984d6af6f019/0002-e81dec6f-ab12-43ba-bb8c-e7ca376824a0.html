@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="es" data-od-id="screen-public-results">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Resultados públicos · NicaRunner</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<style>
+  body{background:var(--bg-app)}
+  .public-header{background:var(--bg-sb);padding:40px var(--s-xl);text-align:center}
+  .public-header h1{font-size:1.75rem;font-weight:700;color:var(--sb-fg)}
+  .public-header p{color:var(--sb-muted);margin-top:var(--s-xs);font-size:0.875rem}
+  .public-content{max-width:960px;margin:var(--s-xl) auto;padding:0 var(--s-xl)}
+
+  /* Search */
+  .search-bar{position:relative;margin-bottom:var(--s-xl)}
+  .search-bar .input{padding-left:36px;height:36px}
+  .search-bar svg{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--sb-muted);pointer-events:none}
+
+  /* Scrollable table */
+  .table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .table-scroll table{min-width:100%}
+  .table-scroll::-webkit-scrollbar{height:6px}
+  .table-scroll::-webkit-scrollbar-track{background:var(--hover-wash);border-radius:3px}
+  .table-scroll::-webkit-scrollbar-thumb{background:var(--bd);border-radius:3px}
+
+  /* Hidden row when filtered */
+  tr.filtered-out{display:none}
+
+  /* No results */
+  .no-results{display:none;text-align:center;padding:var(--s-xl);color:var(--tx-md)}
+  .no-results.visible{display:block}
+  .no-results p{font-size:0.875rem}
+  .no-results .clear-filter{color:var(--accent);cursor:pointer;font-weight:500;text-decoration:underline;font-size:0.8125rem;margin-top:var(--s-xs);display:inline-block}
+
+  /* Match count */
+  .match-count{font-size:0.75rem;color:var(--tx-md);margin-left:var(--s-sm);font-weight:400}
+</style>
+</head>
+<body data-od-id="public-results-page">
+<div class="public-header" data-od-id="public-results-header">
+  <svg width="36" height="36" viewBox="0 0 48 48" fill="none" style="color:var(--accent);margin-bottom:var(--s-md);"><rect x="4" y="4" width="40" height="40" rx="10" stroke="currentColor" stroke-width="2"/><path d="M14 26l6-6 4 4 8-8" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <h1>Ultra Trail Volcán Mombacho 2025</h1>
+  <p>50K · 15 de marzo de 2025 · Resultados oficiales</p>
+</div>
+
+<div class="public-content" data-od-id="public-results-content">
+  <!-- Filter -->
+  <div class="search-bar" data-od-id="public-results-search">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.5"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+    <input class="input" id="searchInput" type="text" placeholder="Filtrar por dorsal, nombre o tiempo..." data-od-id="search-input" autocomplete="off">
+  </div>
+
+  <!-- Élite Masculino -->
+  <div class="card" style="margin-bottom:var(--s-xl);" data-od-id="card-elite-m">
+    <div class="card-header"><span class="card-title" data-od-id="cat-title-elite-m">Élite Masculino</span><span class="badge badge-neutral" data-od-id="cat-count-elite-m">64 corredores</span></div>
+    <div class="table-wrap table-scroll" data-od-id="table-elite-m">
+      <table>
+        <thead><tr><th>Pos</th><th>Dorsal</th><th>Nombre</th><th>Procedencia</th><th>Chip</th><th>Tiempo</th><th>Ritmo</th></tr></thead>
+        <tbody data-category="elite-m">
+          <tr><td class="mono">1</td><td class="mono">042</td><td><a href="runner-share.html" style="color:var(--accent);text-decoration:none;font-weight:500;">Carlos Mendoza</a></td><td>Managua</td><td class="mono">3:24:12</td><td class="mono">3:24:15</td><td class="mono">4:05/km</td></tr>
+          <tr><td class="mono">2</td><td class="mono">203</td><td><a href="runner-share.html" style="color:var(--accent);text-decoration:none;font-weight:500;">Luis Ortega</a></td><td>Granada</td><td class="mono">3:45:05</td><td class="mono">3:45:08</td><td class="mono">4:30/km</td></tr>
+          <tr><td class="mono">3</td><td class="mono">315</td><td><a href="runner-share.html" style="color:var(--accent);text-decoration:none;font-weight:500;">Pedro Gaitán</a></td><td>León</td><td class="mono">4:01:14</td><td class="mono">4:01:19</td><td class="mono">4:49/km</td></tr>
+          <tr><td class="mono">4</td><td class="mono">178</td><td>Javier Solís</td><td>Matagalpa</td><td class="mono">4:12:40</td><td class="mono">4:12:44</td><td class="mono">5:03/km</td></tr>
+          <tr><td class="mono">5</td><td class="mono">089</td><td>Ricardo Vega</td><td>Estelí</td><td class="mono">4:17:58</td><td class="mono">4:18:02</td><td class="mono">5:09/km</td></tr>
+          <tr><td class="mono">6</td><td class="mono">451</td><td>Andrés Delgado</td><td>Jinotepe</td><td class="mono">4:22:33</td><td class="mono">4:22:37</td><td class="mono">5:15/km</td></tr>
+          <tr><td class="mono">7</td><td class="mono">267</td><td>Mario Castellón</td><td>Masaya</td><td class="mono">4:28:51</td><td class="mono">4:28:55</td><td class="mono">5:22/km</td></tr>
+          <tr><td class="mono">8</td><td class="mono">133</td><td>Óscar Ramírez</td><td>Rivas</td><td class="mono">4:35:09</td><td class="mono">4:35:14</td><td class="mono">5:30/km</td></tr>
+          <tr><td class="mono">9</td><td class="mono">398</td><td>Felipe Montoya</td><td>Chinandega</td><td class="mono">4:41:22</td><td class="mono">4:41:27</td><td class="mono">5:37/km</td></tr>
+          <tr><td class="mono">10</td><td class="mono">210</td><td>Daniel Huete</td><td>Managua</td><td class="mono">4:48:03</td><td class="mono">4:48:08</td><td class="mono">5:45/km</td></tr>
+        </tbody>
+      </table>
+      <div class="no-results" data-od-id="no-results-elite-m">
+        <p>Sin resultados para este filtro en Élite Masculino.</p>
+        <span class="clear-filter" onclick="document.getElementById('searchInput').value='';filterTables();document.getElementById('searchInput').focus();">Limpiar filtro</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Élite Femenino -->
+  <div class="card" style="margin-bottom:var(--s-xl);" data-od-id="card-elite-f">
+    <div class="card-header"><span class="card-title" data-od-id="cat-title-elite-f">Élite Femenino</span><span class="badge badge-neutral" data-od-id="cat-count-elite-f">38 corredoras</span></div>
+    <div class="table-wrap table-scroll" data-od-id="table-elite-f">
+      <table>
+        <thead><tr><th>Pos</th><th>Dorsal</th><th>Nombre</th><th>Procedencia</th><th>Chip</th><th>Tiempo</th><th>Ritmo</th></tr></thead>
+        <tbody data-category="elite-f">
+          <tr><td class="mono">1</td><td class="mono">118</td><td><a href="runner-share.html" style="color:var(--accent);text-decoration:none;font-weight:500;">María José López</a></td><td>Managua</td><td class="mono">3:31:39</td><td class="mono">3:31:42</td><td class="mono">4:14/km</td></tr>
+          <tr><td class="mono">2</td><td class="mono">067</td><td><a href="runner-share.html" style="color:var(--accent);text-decoration:none;font-weight:500;">Ana Ramírez</a></td><td>Granada</td><td class="mono">3:52:28</td><td class="mono">3:52:33</td><td class="mono">4:39/km</td></tr>
+          <tr><td class="mono">3</td><td class="mono">156</td><td>Elena Castillo</td><td>León</td><td class="mono">4:02:11</td><td class="mono">4:02:15</td><td class="mono">4:50/km</td></tr>
+          <tr><td class="mono">4</td><td class="mono">234</td><td>Sofía Herrera</td><td>Matagalpa</td><td class="mono">4:15:35</td><td class="mono">4:15:40</td><td class="mono">5:06/km</td></tr>
+          <tr><td class="mono">5</td><td class="mono">198</td><td>Gabriela Pineda</td><td>Estelí</td><td class="mono">4:28:50</td><td class="mono">4:28:55</td><td class="mono">5:22/km</td></tr>
+          <tr><td class="mono">6</td><td class="mono">312</td><td>Carmen Urbina</td><td>Jinotepe</td><td class="mono">4:35:18</td><td class="mono">4:35:22</td><td class="mono">5:30/km</td></tr>
+          <tr><td class="mono">7</td><td class="mono">145</td><td>Lucía Mayorga</td><td>Masaya</td><td class="mono">4:42:07</td><td class="mono">4:42:12</td><td class="mono">5:38/km</td></tr>
+          <tr><td class="mono">8</td><td class="mono">276</td><td>Valeria Ríos</td><td>Rivas</td><td class="mono">4:49:33</td><td class="mono">4:49:38</td><td class="mono">5:47/km</td></tr>
+          <tr><td class="mono">9</td><td class="mono">089</td><td>Jimena Córdoba</td><td>Chinandega</td><td class="mono">4:55:51</td><td class="mono">4:55:56</td><td class="mono">5:55/km</td></tr>
+          <tr><td class="mono">10</td><td class="mono">350</td><td>Adriana Salazar</td><td>Managua</td><td class="mono">5:02:14</td><td class="mono">5:02:19</td><td class="mono">6:02/km</td></tr>
+        </tbody>
+      </table>
+      <div class="no-results" data-od-id="no-results-elite-f">
+        <p>Sin resultados para este filtro en Élite Femenino.</p>
+        <span class="clear-filter" onclick="document.getElementById('searchInput').value='';filterTables();document.getElementById('searchInput').focus();">Limpiar filtro</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const searchInput = document.getElementById('searchInput');
+  const cards = document.querySelectorAll('.card');
+
+  function filterTables() {
+    const query = searchInput.value.trim().toLowerCase();
+    let globalVisible = 0;
+
+    cards.forEach(card => {
+      const tbody = card.querySelector('tbody');
+      const noResults = card.querySelector('.no-results');
+      const countBadge = card.querySelector('.badge-neutral');
+      const titleEl = card.querySelector('.card-title');
+      if (!tbody) return;
+
+      const rows = tbody.querySelectorAll('tr');
+      let visible = 0;
+
+      rows.forEach(row => {
+        const text = row.textContent.toLowerCase();
+        if (!query || text.includes(query)) {
+          row.classList.remove('filtered-out');
+          visible++;
+        } else {
+          row.classList.add('filtered-out');
+        }
+      });
+
+      globalVisible += visible;
+
+      // Toggle empty state
+      if (query && visible === 0 && rows.length > 0) {
+        noResults.classList.add('visible');
+      } else {
+        noResults.classList.remove('visible');
+      }
+
+      // Update badge count
+      if (query && countBadge) {
+        countBadge.textContent = visible + ' de ' + rows.length;
+      } else if (countBadge && titleEl) {
+        const cat = titleEl.textContent.trim();
+        countBadge.textContent = rows.length + (cat.includes('Femenino') ? ' corredoras' : ' corredores');
+      }
+    });
+  }
+
+  searchInput.addEventListener('input', filterTables);
+</script>
+</body>
+</html>

@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 1,
+  "fileName": "controversias.html",
+  "entries": [
+    {
+      "id": "ca462e68-f991-457a-9d30-2dc6d2acf0ca",
+      "fileName": "controversias.html",
+      "version": 1,
+      "label": "Version 1",
+      "createdAt": 1785959217726,
+      "source": "ai",
+      "prompt": "No, lo que quiero es visualizar en Open Design todas las pantallas del repo para ir haciendo ajustes puntuales",
+      "size": 7026,
+      "mime": "text/html; charset=utf-8",
+      "kind": "html",
+      "contentPath": "0001-ca462e68-f991-457a-9d30-2dc6d2acf0ca.html",
+      "promptSource": "message"
+    },
+    {
+      "id": "b2ac0bac-2881-4ef0-9800-6ffe1ac827a3",
+      "fileName": "controversias.html",
+      "version": 2,
+      "label": "Version 2",
+      "createdAt": 1785962612679,
+      "source": "ai",
+      "prompt": "el menu lateral izquierdo quisiera que fuera tipo hamburguesa desplegable, en resoluciones grandes que se muestre la descripcion del item y en resoluciones pequeñas (tablet/celularse) que queden solo los iconos con opcion a desplegar descripcion",
+      "size": 7593,
+      "mime": "text/html; charset=utf-8",
+      "kind": "html",
+      "contentPath": "0002-b2ac0bac-2881-4ef0-9800-6ffe1ac827a3.html",
+      "promptSource": "message"
+    },
+    {
+      "id": "b2d8aaaa-daac-48ba-9f52-c371061c56c7",
+      "fileName": "controversias.html",
+      "version": 3,
+      "label": "Version 3",
+      "createdAt": 1785963061714,
+      "source": "ai",
+      "prompt": "quedo 1 item en el sidebar igual al boton de colapsar, posiblemente duplicado del trabajo anterior, corrigelo",
+      "size": 7703,
+      "mime": "text/html; charset=utf-8",
+      "kind": "html",
+      "contentPath": "0003-b2d8aaaa-daac-48ba-9f52-c371061c56c7.html",
+      "promptSource": "message"
+    },
+    {
+      "id": "64fa3c41-0b0c-4264-87da-1ebd6157d751",
+      "fileName": "controversias.html",
+      "version": 4,
+      "label": "Version 4",
+      "createdAt": 1785964709923,
+      "source": "ai",
+      "prompt": "ok, procede",
+      "size": 8256,
+      "mime": "text/html; charset=utf-8",
+      "kind": "html",
+      "contentPath": "0004-64fa3c41-0b0c-4264-87da-1ebd6157d751.html",
+      "promptSource": "message"
+    },
+    {
+      "id": "481c7632-4874-4f94-9845-9dc79d3a2c7f",
+      "fileName": "controversias.html",
+      "version": 5,
+      "label": "Version 5",
+      "createdAt": 1785965686891,
+      "source": "ai",
+      "prompt": "go",
+      "size": 8790,
+      "mime": "text/html; charset=utf-8",
+      "kind": "html",
+      "contentPath": "0005-481c7632-4874-4f94-9845-9dc79d3a2c7f.html",
+      "promptSource": "message"
+    }
+  ]
+}

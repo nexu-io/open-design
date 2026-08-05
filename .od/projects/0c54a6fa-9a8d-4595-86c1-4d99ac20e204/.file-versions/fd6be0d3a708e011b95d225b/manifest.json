@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 1,
+  "fileName": "notifications.html",
+  "entries": [
+    {
+      "id": "3fd82281-20a8-4546-ae5f-cfe85dd7a77d",
+      "fileName": "notifications.html",
+      "version": 1,
+      "label": "Version 1",
+      "createdAt": 1785959217721,
+      "source": "ai",
+      "prompt": "No, lo que quiero es visualizar en Open Design todas las pantallas del repo para ir haciendo ajustes puntuales",
+      "size": 6499,
+      "mime": "text/html; charset=utf-8",
+      "kind": "html",
+      "contentPath": "0001-3fd82281-20a8-4546-ae5f-cfe85dd7a77d.html",
+      "promptSource": "message"
+    },
+    {
+      "id": "8f568831-87bb-4fb9-b5b7-0b82dfce8edb",
+      "fileName": "notifications.html",
+      "version": 2,
+      "label": "Version 2",
+      "createdAt": 1785962612680,
+      "source": "ai",
+      "prompt": "el menu lateral izquierdo quisiera que fuera tipo hamburguesa desplegable, en resoluciones grandes que se muestre la descripcion del item y en resoluciones pequeñas (tablet/celularse) que queden solo los iconos con opcion a desplegar descripcion",
+      "size": 7066,
+      "mime": "text/html; charset=utf-8",
+      "kind": "html",
+      "contentPath": "0002-8f568831-87bb-4fb9-b5b7-0b82dfce8edb.html",
+      "promptSource": "message"
+    },
+    {
+      "id": "869fd3d6-39d5-4333-8b4e-276db569a34b",
+      "fileName": "notifications.html",
+      "version": 3,
+      "label": "Version 3",
+      "createdAt": 1785963061715,
+      "source": "ai",
+      "prompt": "quedo 1 item en el sidebar igual al boton de colapsar, posiblemente duplicado del trabajo anterior, corrigelo",
+      "size": 7176,
+      "mime": "text/html; charset=utf-8",
+      "kind": "html",
+      "contentPath": "0003-869fd3d6-39d5-4333-8b4e-276db569a34b.html",
+      "promptSource": "message"
+    },
+    {
+      "id": "b01c0cf6-d971-4ba2-bd4b-185d8cdeddc6",
+      "fileName": "notifications.html",
+      "version": 4,
+      "label": "Version 4",
+      "createdAt": 1785964709929,
+      "source": "ai",
+      "prompt": "ok, procede",
+      "size": 7729,
+      "mime": "text/html; charset=utf-8",
+      "kind": "html",
+      "contentPath": "0004-b01c0cf6-d971-4ba2-bd4b-185d8cdeddc6.html",
+      "promptSource": "message"
+    },
+    {
+      "id": "22948abd-639a-4017-a89b-7ea3f3669afb",
+      "fileName": "notifications.html",
+      "version": 5,
+      "label": "Version 5",
+      "createdAt": 1785965686891,
+      "source": "ai",
+      "prompt": "go",
+      "size": 8263,
+      "mime": "text/html; charset=utf-8",
+      "kind": "html",
+      "contentPath": "0005-22948abd-639a-4017-a89b-7ea3f3669afb.html",
+      "promptSource": "message"
+    }
+  ]
+}

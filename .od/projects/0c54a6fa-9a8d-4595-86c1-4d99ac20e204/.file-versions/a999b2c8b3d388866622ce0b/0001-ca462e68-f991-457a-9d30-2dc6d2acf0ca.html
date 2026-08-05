@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="es" data-od-id="screen-controversias">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Controversias · NicaRunner</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<style>.row-dispute{background:#FFFBF0}.row-dispute:hover{background:#FFF7E0!important}</style>
+</head>
+<body>
+<div class="app-shell" data-od-id="controversias-shell">
+  <aside class="app-sidebar">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" style="color:var(--accent);margin-bottom:var(--s-md);"><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <a href="dashboard.html" class="nav-item"><svg viewBox="0 0 20 20" fill="none"><rect x="2" y="2" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/><rect x="11" y="2" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/><rect x="2" y="11" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/><rect x="11" y="11" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/></svg></a>
+    <a href="races.html" class="nav-item"><svg viewBox="0 0 20 20" fill="none"><path d="M7 3h6l2 5-5 2-5-2 2-5z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M4 17v-7m12 7v-7M10 13v4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></a>
+    <a href="results.html" class="nav-item"><svg viewBox="0 0 20 20" fill="none"><path d="M3 3h14v14H3V3z" stroke="currentColor" stroke-width="1.5"/><path d="M7 14V8m3 6v-4m3 4v-6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></a>
+    <a href="controversias.html" class="nav-item active"><svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.5"/><path d="M10 6v4m0 0h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><span class="nav-badge">3</span></a>
+    <a href="notifications.html" class="nav-item"><svg viewBox="0 0 20 20" fill="none"><path d="M8 3h4l2 7-2 7H8L6 10l2-7z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg></a>
+    <a href="public-links.html" class="nav-item"><svg viewBox="0 0 20 20" fill="none"><path d="M8 10h4M8 10a3.5 3.5 0 010-5h4a3.5 3.5 0 010 5M8 10a3.5 3.5 0 000 5h4a3.5 3.5 0 000-5" stroke="currentColor" stroke-width="1.5"/></svg></a>
+    <div class="nav-separator"></div>
+    <a href="users.html" class="nav-item"><svg viewBox="0 0 20 20" fill="none"><circle cx="7" cy="6" r="3" stroke="currentColor" stroke-width="1.5"/><circle cx="13" cy="6" r="3" stroke="currentColor" stroke-width="1.5"/><path d="M1 18c0-3.3 2.7-6 6-6s6 2.7 6 6M19 18c0-3.3-2.7-6-6-6" stroke="currentColor" stroke-width="1.5"/></svg></a>
+    <a href="categories.html" class="nav-item"><svg viewBox="0 0 20 20" fill="none"><rect x="2" y="2" width="7" height="6" rx="1" stroke="currentColor" stroke-width="1.5"/><rect x="11" y="2" width="7" height="10" rx="1" stroke="currentColor" stroke-width="1.5"/><rect x="2" y="10" width="7" height="8" rx="1" stroke="currentColor" stroke-width="1.5"/></svg></a>
+  </aside>
+  <div class="app-main-area">
+    <header class="app-topbar"><span class="topbar-title">Controversias</span><div class="topbar-right"><div class="race-select"><span class="live-dot"></span>Ultra Trail Volcán Mombacho 2025</div></div></header>
+    <main class="app-content" data-od-id="controversias-content">
+      <div class="section-header" data-od-id="controversias-header">
+        <div><h2>Disputas de tiempo</h2><p class="text-muted text-sm">3 controversias abiertas · 12 resueltas</p></div>
+        <button class="btn btn-primary" data-od-id="controversias-resolve-all">Resolver todas</button>
+      </div>
+
+      <div class="toolbar">
+        <div class="input-group" style="max-width:300px;"><input class="input" placeholder="Buscar dorsal o nombre..."></div>
+        <div class="select-wrap"><select class="input" style="width:auto;"><option>Todos los estados</option><option>Abierta</option><option>Resuelta</option></select></div>
+        <div class="select-wrap"><select class="input" style="width:auto;"><option>Todas las categorías</option><option>Élite Masculino</option></select></div>
+      </div>
+
+      <div class="table-wrap" data-od-id="controversias-table">
+        <table>
+          <thead><tr><th>Dorsal</th><th>Nombre</th><th>Categoría</th><th>Tiempo chip</th><th>Tiempo captura</th><th>Tiempo cámara</th><th>Dif.</th><th>Estado</th><th style="width:100px;"></th></tr></thead>
+          <tbody>
+            <tr class="row-dispute">
+              <td class="mono">089</td><td>Ricardo Vega</td><td>Élite M</td><td class="mono">4:17:58</td><td class="mono">4:18:02</td><td class="mono">4:17:59</td><td class="mono" style="color:var(--dispute-600);">+0:04</td>
+              <td><span class="badge badge-warning">Abierta</span></td>
+              <td><button class="btn btn-sm btn-info" data-od-id="controversias-resolve-089">Resolver</button></td>
+            </tr>
+            <tr class="row-dispute">
+              <td class="mono">156</td><td>Elena Castillo</td><td>Élite F</td><td class="mono">4:02:11</td><td class="mono">4:02:15</td><td class="mono">—</td><td class="mono" style="color:var(--dispute-600);">+0:04</td>
+              <td><span class="badge badge-warning">Abierta</span></td>
+              <td><button class="btn btn-sm btn-info" data-od-id="controversias-resolve-156">Resolver</button></td>
+            </tr>
+            <tr class="row-dispute">
+              <td class="mono">291</td><td>Diego Montenegro</td><td>Máster M</td><td class="mono">5:10:44</td><td class="mono">5:11:01</td><td class="mono">5:10:45</td><td class="mono" style="color:var(--critical-600);">+0:17</td>
+              <td><span class="badge badge-warning">Abierta</span></td>
+              <td><button class="btn btn-sm btn-info" data-od-id="controversias-resolve-291">Resolver</button></td>
+            </tr>
+            <tr>
+              <td class="mono">042</td><td>Carlos Mendoza</td><td>Élite M</td><td class="mono">3:24:12</td><td class="mono">3:24:15</td><td class="mono">3:24:13</td><td class="mono" style="color:var(--official-600);">+0:03</td>
+              <td><span class="badge badge-success">Resuelta</span></td><td></td>
+            </tr>
+            <tr>
+              <td class="mono">118</td><td>María José López</td><td>Élite F</td><td class="mono">3:31:39</td><td class="mono">3:31:42</td><td class="mono">—</td><td class="mono" style="color:var(--official-600);">+0:03</td>
+              <td><span class="badge badge-success">Resuelta</span></td><td></td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="pagination"><span class="pagination-info">Mostrando 5 controversias</span></div>
+      </div>
+    </main>
+  </div>
+</div>
+</body>
+</html>

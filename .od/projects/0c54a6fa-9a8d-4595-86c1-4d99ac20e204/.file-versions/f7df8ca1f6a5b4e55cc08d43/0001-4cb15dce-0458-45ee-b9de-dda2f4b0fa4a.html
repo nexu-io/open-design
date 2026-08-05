@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="es" data-od-id="screen-login">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inicio de sesión · NicaRunner</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="login-split" data-od-id="login-split">
+  <!-- Brand Panel -->
+  <div class="login-brand" data-od-id="login-brand">
+    <svg width="48" height="48" viewBox="0 0 48 48" fill="none"><rect x="4" y="4" width="40" height="40" rx="10" stroke="var(--accent)" stroke-width="2"/><path d="M14 26l6-6 4 4 8-8" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <h1>NicaRunner</h1>
+    <p>Sala de control de carrera. Gestioná dorsales, tiempos, resultados y controversias desde un solo lugar.</p>
+  </div>
+
+  <!-- Form Panel -->
+  <div class="login-form-side" data-od-id="login-form-side">
+    <div class="login-card" data-od-id="login-card">
+      <h2>Iniciar sesión</h2>
+      <div class="form-field">
+        <label for="email">Email o alias</label>
+        <input id="email" class="input" type="text" placeholder="correo@ejemplo.com" value="admin@nicarunner.com">
+      </div>
+      <div class="form-field">
+        <label for="password">Contraseña</label>
+        <input id="password" class="input" type="password" placeholder="••••••••" value="········">
+      </div>
+      <button class="btn btn-primary" style="width:100%;margin-top:var(--s-sm);" data-od-id="login-submit">Ingresar</button>
+      <div class="form-footer">
+        <a href="forgot-password.html" class="form-link">¿Olvidaste tu contraseña?</a>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

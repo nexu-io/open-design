@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="es" data-od-id="screen-reset-password">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Restablecer contraseña · NicaRunner</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:var(--bg-app);">
+<div class="card" style="width:100%;max-width:420px;" data-od-id="reset-password-card">
+  <h2 style="text-align:center;margin-bottom:var(--s-sm);">Restablecer contraseña</h2>
+  <p style="text-align:center;color:var(--tx-md);margin-bottom:var(--s-xl);font-size:0.875rem;">Elegí una nueva contraseña para tu cuenta.</p>
+  <div class="form-field">
+    <label for="new-pass">Nueva contraseña</label>
+    <input id="new-pass" class="input" type="password" placeholder="Mínimo 8 caracteres" value="········">
+  </div>
+  <div class="form-field">
+    <label for="confirm-pass">Confirmar contraseña</label>
+    <input id="confirm-pass" class="input" type="password" placeholder="Repetí la contraseña" value="········">
+  </div>
+  <button class="btn btn-primary" style="width:100%;" data-od-id="reset-submit">Restablecer</button>
+  <div style="text-align:center;margin-top:var(--s-lg);">
+    <a href="login.html" class="form-link">Volver al inicio de sesión</a>
+  </div>
+</div>
+</body>
+</html>

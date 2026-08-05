@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "fileName": "login.html",
+  "entries": [
+    {
+      "id": "4cb15dce-0458-45ee-b9de-dda2f4b0fa4a",
+      "fileName": "login.html",
+      "version": 1,
+      "label": "Version 1",
+      "createdAt": 1785959217720,
+      "source": "ai",
+      "prompt": "No, lo que quiero es visualizar en Open Design todas las pantallas del repo para ir haciendo ajustes puntuales",
+      "size": 1856,
+      "mime": "text/html; charset=utf-8",
+      "kind": "html",
+      "contentPath": "0001-4cb15dce-0458-45ee-b9de-dda2f4b0fa4a.html",
+      "promptSource": "message"
+    }
+  ]
+}

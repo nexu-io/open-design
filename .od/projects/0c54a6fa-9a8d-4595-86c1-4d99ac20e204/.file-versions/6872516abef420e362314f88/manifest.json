@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 1,
+  "fileName": "race-detail.html",
+  "entries": [
+    {
+      "id": "28e26532-6f62-4112-9b99-92930e8fde5b",
+      "fileName": "race-detail.html",
+      "version": 1,
+      "label": "Version 1",
+      "createdAt": 1785959217721,
+      "source": "ai",
+      "prompt": "No, lo que quiero es visualizar en Open Design todas las pantallas del repo para ir haciendo ajustes puntuales",
+      "size": 5668,
+      "mime": "text/html; charset=utf-8",
+      "kind": "html",
+      "contentPath": "0001-28e26532-6f62-4112-9b99-92930e8fde5b.html",
+      "promptSource": "message"
+    },
+    {
+      "id": "f19d1292-5635-43ad-b84a-9142226cb660",
+      "fileName": "race-detail.html",
+      "version": 2,
+      "label": "Version 2",
+      "createdAt": 1785962612680,
+      "source": "ai",
+      "prompt": "el menu lateral izquierdo quisiera que fuera tipo hamburguesa desplegable, en resoluciones grandes que se muestre la descripcion del item y en resoluciones pequeñas (tablet/celularse) que queden solo los iconos con opcion a desplegar descripcion",
+      "size": 6235,
+      "mime": "text/html; charset=utf-8",
+      "kind": "html",
+      "contentPath": "0002-f19d1292-5635-43ad-b84a-9142226cb660.html",
+      "promptSource": "message"
+    },
+    {
+      "id": "1341dd17-0a8f-4125-8039-aeba9756198f",
+      "fileName": "race-detail.html",
+      "version": 3,
+      "label": "Version 3",
+      "createdAt": 1785963061715,
+      "source": "ai",
+      "prompt": "quedo 1 item en el sidebar igual al boton de colapsar, posiblemente duplicado del trabajo anterior, corrigelo",
+      "size": 6345,
+      "mime": "text/html; charset=utf-8",
+      "kind": "html",
+      "contentPath": "0003-1341dd17-0a8f-4125-8039-aeba9756198f.html",
+      "promptSource": "message"
+    },
+    {
+      "id": "3c52e550-cb08-498e-9c7d-b42ccff13a4f",
+      "fileName": "race-detail.html",
+      "version": 4,
+      "label": "Version 4",
+      "createdAt": 1785964709929,
+      "source": "ai",
+      "prompt": "ok, procede",
+      "size": 6898,
+      "mime": "text/html; charset=utf-8",
+      "kind": "html",
+      "contentPath": "0004-3c52e550-cb08-498e-9c7d-b42ccff13a4f.html",
+      "promptSource": "message"
+    },
+    {
+      "id": "1a7700c0-0348-4bf0-bf9b-6b98bd6dbae4",
+      "fileName": "race-detail.html",
+      "version": 5,
+      "label": "Version 5",
+      "createdAt": 1785965686919,
+      "source": "ai",
+      "prompt": "go",
+      "size": 7432,
+      "mime": "text/html; charset=utf-8",
+      "kind": "html",
+      "contentPath": "0005-1a7700c0-0348-4bf0-bf9b-6b98bd6dbae4.html",
+      "promptSource": "message"
+    }
+  ]
+}
