@@ -468,8 +468,7 @@ import {
   validateTarget as validateRoutineTarget,
 } from './routines.js';
 import { buildMcpInstallPayload } from './mcp-install-info.js';
-import { createDiagnosticsExportHandler } from './diagnostics-export.js';
-import { DIAGNOSTICS_EXPORT_PATH } from '@open-design/diagnostics';
+import { registerDiagnosticsRoutes } from './routes/diagnostics.js';
 import {
   buildProjectArchive,
   buildBatchArchive,
@@ -2642,21 +2641,13 @@ export async function startServer({
     composio: composioConnectorProvider,
   });
 
-  // Gate the diagnostics export behind requireLocalDaemonRequest so it stays
-  // unreachable when daemon binds to a non-loopback address (Tailscale,
-  // 0.0.0.0, etc.). The bundle contains daemon/web/desktop logs, host
-  // metadata, and crash reports — same threat tier as connector / live-
-  // artifact endpoints, which all use the same guard.
-  app.get(
-    DIAGNOSTICS_EXPORT_PATH,
+  registerDiagnosticsRoutes(app, {
     requireLocalDaemonRequest,
-    createDiagnosticsExportHandler({
-      runtime,
-      projectRoot: PROJECT_ROOT,
-      runsDir: path.join(RUNTIME_DATA_DIR, 'runs'),
-      dataDir: RUNTIME_DATA_DIR,
-    }),
-  );
+    runtime,
+    projectRoot: PROJECT_ROOT,
+    runsDir: path.join(RUNTIME_DATA_DIR, 'runs'),
+    dataDir: RUNTIME_DATA_DIR,
+  });
 
   const nodeDeps = { fs, path };
   const idDeps = { randomId, randomUUID };
