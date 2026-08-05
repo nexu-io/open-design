@@ -1,0 +1,22 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "grundraster-f-r-proben-msfib2p9",
+  "title": "Grundraster für Proben",
+  "version": "0.1.0",
+  "description": "--- name: RASTER.md zweck: Grundraster für Live-Artefakte — was eine Probe ist, wie sie gebaut wird, wie sie geprüft wird stand: 2026-08-02 herkunft: E-023 (Beispiele vor der Entscheidung), Regel 10, E-015. Erfahrungsgru",
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  }
+}

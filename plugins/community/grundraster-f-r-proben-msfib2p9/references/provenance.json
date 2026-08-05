@@ -1,0 +1,26 @@
+{
+  "candidateId": "f3f44dd2-1e0f-4587-ae1f-8d4f8a75e6e3",
+  "projectId": "01eaa930-f26b-4d12-bda2-2b6c48919dfa",
+  "runId": "b164857e-ac4a-4023-8963-3997589e76ac",
+  "conversationId": "efd570a2-3b8d-4352-a9c3-d0c2e9402e42",
+  "provenance": {
+    "summary": "Detected from RASTER.md, plan.md after a successful run.",
+    "detectedAt": 1785895968897
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "RASTER.md",
+      "label": "RASTER.md",
+      "size": 11329,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "plan.md",
+      "label": "plan.md",
+      "size": 8465,
+      "copied": true
+    }
+  ]
+}
