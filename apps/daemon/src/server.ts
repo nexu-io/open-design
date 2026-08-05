@@ -172,6 +172,7 @@ import {
 } from './runtimes/telemetry-message.js';
 import { reconcileAssistantMessageOnRunEnd as reconcileAssistantMessageOnRunEndWithContract } from './runtimes/run-message-reconciliation.js';
 import { persistRunEventToAssistantMessage as persistRunEventToAssistantMessageWithContract } from './runtimes/run-event-persistence.js';
+import { pinAssistantMessageOnRunCreate as pinAssistantMessageOnRunCreateWithContract } from './runtimes/run-message-pinning.js';
 import { sanitizeArchiveFilename } from './runtimes/archive-filename.js';
 import {
   githubRepoNameFromPluginName,
@@ -1297,35 +1298,12 @@ const persistRunEventToAssistantMessage = (db, run, event, data) =>
     data,
   );
 
-function pinAssistantMessageOnRunCreate(db, run) {
-  if (!run.conversationId || !run.assistantMessageId) return;
-  const existing = db
-    .prepare(`SELECT id FROM messages WHERE id = ?`)
-    .get(run.assistantMessageId);
-  if (existing) {
-    db.prepare(
-      `UPDATE messages
-          SET run_id = ?,
-              run_status = CASE
-                WHEN run_status IN ('succeeded', 'failed', 'canceled') THEN run_status
-                ELSE ?
-              END,
-              started_at = COALESCE(started_at, ?)
-        WHERE id = ?`,
-    ).run(run.id, run.status, run.createdAt, run.assistantMessageId);
-    return;
-  }
-  upsertMessage(db, run.conversationId, {
-    id: run.assistantMessageId,
-    role: 'assistant',
-    content: '',
-    agentId: run.agentId ?? undefined,
-    events: [],
-    runId: run.id,
-    runStatus: run.status,
-    startedAt: run.createdAt,
-  });
-}
+const pinAssistantMessageOnRunCreate = (db, run) =>
+  pinAssistantMessageOnRunCreateWithContract(
+    db,
+    run,
+    (messageDb, conversationId, message) => upsertMessage(messageDb, conversationId, message),
+  );
 
 export const shouldReportRunCompletedFromMessage = shouldReportRunCompletedFromMessageWithContract;
 
