@@ -626,7 +626,7 @@ import {
   createToolAuthorizationHandlers,
 } from './runtimes/request-authorization.js';
 import { mediaTaskSnapshot } from './runtimes/media-task.js';
-import { classifyUploadError } from './runtimes/upload-errors.js';
+import { createMulterErrorResponder } from './runtimes/upload-response.js';
 import { sendLiveArtifactRouteError } from './runtimes/live-artifact-errors.js';
 import {
   setLiveArtifactCodeHeaders,
@@ -1981,24 +1981,7 @@ function handleProjectUpload(req, res, next) {
   });
 }
 
-function sendMulterError(res, err) {
-  if (err instanceof multer.MulterError) {
-    const classification = classifyUploadError(err.code);
-    return sendApiError(
-      res,
-      classification.status,
-      classification.code,
-      classification.message,
-      { details: { legacyCode: classification.legacyCode } },
-    );
-  }
-
-  if (err) {
-    return sendApiError(res, 500, 'INTERNAL_ERROR', 'upload failed');
-  }
-
-  return sendApiError(res, 500, 'INTERNAL_ERROR', 'upload failed');
-}
+const sendMulterError = createMulterErrorResponder(sendApiError);
 
 const mediaTasks = new Map();
 const TASK_TTL_AFTER_DONE_MS = 10 * 60 * 1000;
