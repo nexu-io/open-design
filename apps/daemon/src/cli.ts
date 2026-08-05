@@ -31,6 +31,10 @@ import {
   normalizeRecoverableErrorCode,
   structuredErrorData,
 } from './runtimes/cli-error-contract.js';
+import {
+  execFileBuffered as runBufferedCommand,
+  spawnPassthrough as runPassthroughCommand,
+} from './runtimes/child-process.js';
 import { splitResearchSubcommand } from './research/cli-args.js';
 import { resolveDaemonUrl } from './daemon-url.js';
 import { requestJsonIpc } from '@open-design/sidecar';
@@ -1687,22 +1691,7 @@ Shows the GitHub account gh will use for Open Design registry publishing.`);
 }
 
 async function execFileBuffered(command, args, opts = {}) {
-  const { execFile } = await import('node:child_process');
-  return new Promise((resolve) => {
-    execFile(command, args, {
-      timeout: 30_000,
-      maxBuffer: 1024 * 1024,
-      ...opts,
-    }, (error, stdout, stderr) => {
-      resolve({
-        ok: !error,
-        code: error?.code,
-        stdout: String(stdout ?? '').trim(),
-        stderr: String(stderr ?? '').trim(),
-        error,
-      });
-    });
-  });
+  return runBufferedCommand(command, args, opts);
 }
 
 async function execGhBuffered(args, opts = {}) {
@@ -1715,12 +1704,7 @@ async function execGhBuffered(args, opts = {}) {
 }
 
 async function spawnPassthrough(command, args, opts = {}) {
-  const { spawn } = await import('node:child_process');
-  return await new Promise((resolve) => {
-    const child = spawn(command, args, { stdio: 'inherit', ...opts });
-    child.on('error', (error) => resolve({ code: 1, error }));
-    child.on('close', (code) => resolve({ code }));
-  });
+  return runPassthroughCommand(command, args, opts);
 }
 
 async function spawnGhPassthrough(args) {
