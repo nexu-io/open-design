@@ -46,6 +46,7 @@ import {
   requestDaemonStatus,
 } from './runtimes/daemon-control.js';
 import { runResearch } from './research/cli.js';
+import { runDiagnostics as runDiagnosticsCommand } from './diagnostics/cli.js';
 import { resolveDaemonUrl } from './daemon-url.js';
 import { requestJsonIpc } from '@open-design/sidecar';
 import { SIDECAR_ENV, SIDECAR_MESSAGES } from '@open-design/sidecar-proto';
@@ -205,8 +206,6 @@ const LIBRARY_ASSET_STRING_FLAGS = new Set([
   'daemon-url', 'kind', 'tag', 'source', 'date', 'query', 'project', 'label', 'out', 'dir',
 ]);
 const LIBRARY_ASSET_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
-const DIAGNOSTICS_STRING_FLAGS = new Set(['daemon-url', 'output']);
-const DIAGNOSTICS_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 const CONFIG_STRING_FLAGS = new Set(['daemon-url', 'value', 'value-json']);
 const CONFIG_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 const PROJECT_STRING_FLAGS = new Set([
@@ -306,6 +305,19 @@ async function runResearchCommand(args: readonly string[]): Promise<void> {
   });
 }
 
+async function runDiagnosticsCommandWithDeps(args: readonly string[]): Promise<void> {
+  return runDiagnosticsCommand(args, {
+    resolveDaemonUrl: cliDaemonUrl,
+    fetch,
+    exitWithStructuredError,
+    structuredHttpFailure,
+    writeStdout: (text) => { process.stdout.write(text); },
+    writeStderr: (text) => { process.stderr.write(text); },
+    log: console.log,
+    exit: process.exit,
+  });
+}
+
 type CliSubcommandHandler = (args: readonly string[]) => Promise<void> | void;
 
 const SUBCOMMAND_MAP: Record<string, CliSubcommandHandler> = {
@@ -333,7 +345,7 @@ const SUBCOMMAND_MAP: Record<string, CliSubcommandHandler> = {
   skills: runSkills,
   'design-systems': runDesignSystems,
   craft: runCraft,
-  diagnostics: runDiagnostics,
+  diagnostics: runDiagnosticsCommandWithDeps,
   status: runStatus,
   version: runVersion,
   doctor: runDoctor,
@@ -7326,69 +7338,6 @@ async function runStatus(args) {
 // `od doctor` follow-ups, shell scripts) can collect a support bundle
 // without driving the web UI.
 // ---------------------------------------------------------------------------
-
-async function runDiagnostics(args) {
-  const sub = args[0];
-  if (!sub || sub === 'help' || args.includes('--help') || args.includes('-h')) {
-    console.log(`Usage:
-  od diagnostics export [<path>] [--output <path>] [--json] [--daemon-url <url>]
-
-Bundles daemon/web/desktop logs, machine info, and recent crash reports
-into a zip. The bundle is the same one Settings → About → Export
-diagnostics produces.
-
-  <path>                 Where to write the zip. Defaults to
-                         ./open-design-diagnostics-<timestamp>.zip in the
-                         current working directory. Alias: --output <path>.
-  --json                 Print {path, sizeBytes} on stdout instead of a
-                         human-readable summary. The file is still written
-                         to <path>.
-  --daemon-url <url>     Override the daemon HTTP base URL.`);
-    process.exit(0);
-  }
-  if (sub !== 'export') {
-    console.error(`unknown subcommand: od diagnostics ${sub}`);
-    process.exit(2);
-  }
-
-  const flags = parseFlags(args.slice(1), {
-    string: DIAGNOSTICS_STRING_FLAGS,
-    boolean: DIAGNOSTICS_BOOLEAN_FLAGS,
-  });
-  const positional = args.slice(1).filter((a) => !a.startsWith('-'));
-  const base = (await libraryDaemonUrl(flags)).replace(/\/$/, '');
-
-  const { DIAGNOSTICS_EXPORT_PATH, DIAGNOSTICS_FILENAME_PREFIX, diagnosticsFileName } =
-    await import('@open-design/diagnostics');
-  const fs = await import('node:fs/promises');
-  const path = await import('node:path');
-
-  const explicitOutput = typeof flags.output === 'string' && flags.output.length > 0
-    ? flags.output
-    : positional[0];
-  const targetPath = path.resolve(explicitOutput ?? diagnosticsFileName(DIAGNOSTICS_FILENAME_PREFIX));
-
-  let resp;
-  try {
-    resp = await fetch(`${base}${DIAGNOSTICS_EXPORT_PATH}`);
-  } catch (err) {
-    return exitWithStructuredError({
-      code:    'daemon-not-running',
-      message: `Cannot reach daemon at ${base}: ${err?.message ?? err}`,
-    });
-  }
-  if (!resp.ok) return structuredHttpFailure(resp);
-
-  const buf = Buffer.from(await resp.arrayBuffer());
-  await fs.mkdir(path.dirname(targetPath), { recursive: true });
-  await fs.writeFile(targetPath, buf);
-
-  if (flags.json) {
-    process.stdout.write(JSON.stringify({ path: targetPath, sizeBytes: buf.length }) + '\n');
-    return;
-  }
-  console.log(`Wrote diagnostics bundle to ${targetPath} (${buf.length} bytes).`);
-}
 
 async function runVersion(args) {
   const flags = parseFlags(args, { string: LIBRARY_STRING_FLAGS, boolean: LIBRARY_BOOLEAN_FLAGS });
