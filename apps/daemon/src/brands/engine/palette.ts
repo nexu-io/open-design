@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Palette engine — a faithful, dependency-free port of @ant-design/colors'
  * `generate()` HSV algorithm (the L1 "color algorithm" of the brand framework,
@@ -114,9 +113,9 @@ function hsvToRgb({ h, s, v }: HSV): RGB {
   const q = v * (1 - f * s);
   const t = v * (1 - (1 - f) * s);
   const mod = i % 6;
-  const r = [v, q, p, p, t, v][mod];
-  const g = [t, v, v, q, p, p][mod];
-  const b = [p, p, t, v, v, q][mod];
+  const r = [v, q, p, p, t, v][mod]!;
+  const g = [t, v, v, q, p, p][mod]!;
+  const b = [p, p, t, v, v, q][mod]!;
   return { r: r * 255, g: g * 255, b: b * 255 };
 }
 
@@ -227,7 +226,7 @@ export function generate(
   if (opts.theme === "dark") {
     const bg = parseHex(opts.backgroundColor || "#141414");
     return darkColorMap.map(({ index, opacity }) =>
-      rgbToHex(mix(bg, parseHex(patterns[index - 1]), opacity)),
+      rgbToHex(mix(bg, parseHex(patterns[index - 1]!), opacity)),
     );
   }
 
