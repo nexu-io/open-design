@@ -603,7 +603,7 @@ async function pollUntilDoneOrBudget(
 
 function surfaceFetchError(err: unknown, daemonUrl: string): void {
   const cause = err && typeof err === 'object'
-    ? (err as { cause?: unknown }).cause
+    ? (err as { cause?: { code?: unknown; message?: unknown } }).cause
     : null;
   const code =
     cause && typeof cause === 'object' && typeof cause.code === 'string'
