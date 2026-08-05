@@ -29,8 +29,8 @@ export default defineConfig({
     : [['list'], ['json', { outputFile: './ui/reports/visual-results.json' }]],
   use: {
     ...devices['Desktop Chrome'],
-    trace: 'off',
-    screenshot: 'off',
+    trace: 'retain-on-failure',
+    screenshot: 'only-on-failure',
     viewport: { width: 1440, height: 900 },
     deviceScaleFactor: 1,
   },

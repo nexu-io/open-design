@@ -16,6 +16,7 @@ interface CapturedRequest {
   method: string;
   url: string;
   body: string;
+  headers: http.IncomingHttpHeaders;
 }
 
 interface StubServer {
@@ -43,6 +44,7 @@ async function startRunStubServer(resumable: boolean): Promise<StubServer> {
         method: req.method ?? '',
         url: req.url ?? '',
         body: raw,
+        headers: req.headers,
       };
       requests.push(captured);
       res.setHeader('content-type', 'application/json');
@@ -60,9 +62,57 @@ async function startRunStubServer(resumable: boolean): Promise<StubServer> {
         return;
       }
 
+      if (
+        captured.method === 'GET'
+        && (captured.url === '/api/runs' || captured.url === '/api/runs?projectId=project-1')
+      ) {
+        res.statusCode = 200;
+        res.end(JSON.stringify({ runs: [] }));
+        return;
+      }
+
+      if (
+        captured.method === 'GET'
+        && captured.url === '/api/runs/run-1/result-package'
+      ) {
+        res.statusCode = 200;
+        res.end(JSON.stringify({ run: { id: 'run-1', status: 'completed' } }));
+        return;
+      }
+
+      if (
+        captured.method === 'POST'
+        && captured.url === '/api/runs/run-1/cancel'
+      ) {
+        res.statusCode = 200;
+        res.end(JSON.stringify({ ok: true }));
+        return;
+      }
+
       if (captured.method === 'POST' && captured.url === '/api/runs') {
         res.statusCode = 200;
         res.end(JSON.stringify({ runId: 'run-2' }));
+        return;
+      }
+
+      if (captured.method === 'POST' && captured.url === '/api/import/folder') {
+        res.statusCode = 200;
+        res.end(JSON.stringify({
+          project: { id: 'imported-project' },
+          conversationId: 'imported-conversation',
+        }));
+        return;
+      }
+
+      if (
+        captured.method === 'GET'
+        && (captured.url === '/api/runs/run-1/events' || captured.url === '/api/runs/run-2/events')
+      ) {
+        res.writeHead(200, {
+          'content-type': 'text/event-stream',
+          'cache-control': 'no-cache',
+        });
+        res.end('event: end\ndata: {"status":"completed"}\n\n');
         return;
       }
 
@@ -133,6 +183,10 @@ describe('od run CLI', () => {
     expect(JSON.parse(stub.requests[1]!.body).message).toContain(
       'The previous turn was interrupted by a transient failure.',
     );
+    for (const request of stub.requests) {
+      expect(request.headers['x-od-workspace-id']).toBeUndefined();
+      expect(request.headers['x-od-workspace-member-id']).toBeUndefined();
+    }
   });
 
   it('refuses to continue a run without a safe recoverable native session', async () => {
@@ -152,5 +206,120 @@ describe('od run CLI', () => {
     expect(stub.requests.map((request) => `${request.method} ${request.url}`)).toEqual([
       'GET /api/runs/run-1',
     ]);
+  });
+
+  it('forwards explicit Workspace scope through continue status and creation requests', async () => {
+    stub = await startRunStubServer(true);
+
+    const result = await runCli([
+      'run',
+      'continue',
+      'run-1',
+      '--workspace',
+      'team-workspace',
+      '--workspace-member',
+      'creator-member',
+      '--daemon-url',
+      stub.baseUrl,
+    ]);
+
+    expect(result.code).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(stub.requests).toHaveLength(2);
+    for (const request of stub.requests) {
+      expect(request.headers['x-od-workspace-id']).toBe('team-workspace');
+      expect(request.headers['x-od-workspace-member-id']).toBe('creator-member');
+    }
+  });
+
+  it.each([
+    {
+      label: 'list',
+      args: ['run', 'list', '--json'],
+      requests: ['GET /api/runs'],
+    },
+    {
+      label: 'project list',
+      args: ['run', 'list', '--project', 'project-1', '--json'],
+      requests: ['GET /api/runs?projectId=project-1'],
+    },
+    {
+      label: 'info',
+      args: ['run', 'info', 'run-1'],
+      requests: ['GET /api/runs/run-1'],
+    },
+    {
+      label: 'result package',
+      args: ['run', 'result-package', 'run-1', '--json'],
+      requests: ['GET /api/runs/run-1/result-package'],
+    },
+    {
+      label: 'cancel',
+      args: ['run', 'cancel', 'run-1'],
+      requests: ['POST /api/runs/run-1/cancel'],
+    },
+    {
+      label: 'redesign',
+      args: ['run', 'redesign', '--project', 'project-1', '--json'],
+      requests: ['POST /api/runs'],
+    },
+    {
+      label: 'redesign import and start',
+      args: ['run', 'redesign', '--path', DAEMON_ROOT, '--json'],
+      requests: ['POST /api/import/folder', 'POST /api/runs'],
+    },
+    {
+      label: 'start and follow',
+      args: ['run', 'start', '--project', 'project-1', '--follow'],
+      requests: ['POST /api/runs', 'GET /api/runs/run-2/events'],
+    },
+    {
+      label: 'watch',
+      args: ['run', 'watch', 'run-1'],
+      requests: ['GET /api/runs/run-1/events'],
+    },
+  ])('forwards explicit Workspace scope for $label requests', async ({ args, requests }) => {
+    stub = await startRunStubServer(true);
+
+    const result = await runCli([
+      ...args,
+      '--workspace',
+      'team-workspace',
+      '--workspace-member',
+      'creator-member',
+      '--daemon-url',
+      stub.baseUrl,
+    ]);
+
+    expect(result.code, result.stderr).toBe(0);
+    expect(stub.requests.map((request) => `${request.method} ${request.url}`)).toEqual(requests);
+    for (const request of stub.requests) {
+      expect(request.headers['x-od-workspace-id']).toBe('team-workspace');
+      expect(request.headers['x-od-workspace-member-id']).toBe('creator-member');
+    }
+  });
+
+  it('keeps no-scope run creation and streaming requests headerless', async () => {
+    stub = await startRunStubServer(true);
+
+    const result = await runCli([
+      'run',
+      'start',
+      '--project',
+      'project-1',
+      '--follow',
+      '--daemon-url',
+      stub.baseUrl,
+    ]);
+
+    expect(result.code, result.stderr).toBe(0);
+    expect(stub.requests.map((request) => `${request.method} ${request.url}`)).toEqual([
+      'POST /api/runs',
+      'GET /api/runs/run-2/events',
+    ]);
+    for (const request of stub.requests) {
+      expect(request.headers['x-od-workspace-id']).toBeUndefined();
+      expect(request.headers['x-od-workspace-member-id']).toBeUndefined();
+    }
   });
 });

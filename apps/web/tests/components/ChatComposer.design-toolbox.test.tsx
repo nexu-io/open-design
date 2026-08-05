@@ -111,9 +111,9 @@ const GMAIL_CONNECTOR = {
 
 let fetchMock: ReturnType<typeof vi.fn>;
 
-// The design toolbox left the "+" menu; it now opens as a standalone popover
-// driven by the composer's imperative handle (the assistant "next step" card
-// calls this in the real app). Tests open it the same way.
+// The standalone toolbox remains available through the composer's imperative
+// handle for focused panel tests, even though production discovery now lives
+// in the composer's "+" menu.
 function renderComposer(
   overrides: Partial<ComponentProps<typeof ChatComposer>> = {},
 ) {
@@ -220,6 +220,39 @@ afterEach(() => {
 });
 
 describe('ChatComposer design toolbox', () => {
+  it('returns focus to the active opener when an imperative caller omits it', async () => {
+    const { ref } = renderComposer();
+    await flushMounts();
+    const opener = document.createElement('button');
+    document.body.appendChild(opener);
+
+    try {
+      opener.focus();
+      act(() => {
+        ref.current?.openPluginsPanel();
+      });
+
+      const search = await waitFor(() => {
+        const input = document.querySelector<HTMLInputElement>(
+          '.composer-plugins-standalone-popup input',
+        );
+        expect(input).toBeTruthy();
+        return input!;
+      });
+      search.focus();
+      expect(document.activeElement).toBe(search);
+
+      act(() => {
+        fireEvent.keyDown(document, { key: 'Escape' });
+      });
+
+      expect(document.querySelector('.composer-plugins-standalone-popup')).toBeNull();
+      expect(document.activeElement).toBe(opener);
+    } finally {
+      opener.remove();
+    }
+  });
+
   it('stages a one-turn follow-up skill without patching the project skill', async () => {
     const onSend = vi.fn();
     const { ref } = renderComposer({ onSend });

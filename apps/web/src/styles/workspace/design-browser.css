@@ -32,8 +32,15 @@
 /* ---- Chrome bar ---------------------------------------------------------- */
 .db-chrome {
   position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, auto) minmax(180px, 740px) max-content;
+  /* Flex with auto side margins on the address form: the nav / actions
+     clusters keep their content width (the Desktop switcher never gets
+     clipped), the form grows up to its cap, and any leftover space splits
+     equally on BOTH sides of the form — so the address bar always sits
+     centered with identical gaps to the left and right icon clusters.
+     (A grid with a greedy minmax(180px,740px) middle track first starves
+     the 1fr sides on narrow panels and shoves the form against the
+     truncated left cluster.) */
+  display: flex;
   align-items: center;
   gap: 10px;
   min-width: 0;
@@ -48,6 +55,7 @@
   display: inline-flex;
   align-items: center;
   gap: 2px;
+  flex: 0 0 auto;
   min-width: 0;
   max-width: 100%;
 }
@@ -129,64 +137,26 @@
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
-.db-viewport-switcher {
-  position: relative;
-  display: inline-flex;
+.db-icon-btn.is-spinning svg {
+  animation: db-spin 900ms linear infinite;
 }
-.db-viewport-switcher .db-icon-btn {
-  width: auto;
-  min-width: 76px;
-  gap: 4px;
-  padding: 0 8px;
-}
-.db-viewport-label {
-  max-width: 58px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 11.5px;
-  font-weight: 600;
-}
-.db-viewport-menu {
-  position: absolute;
-  top: calc(100% + 8px);
-  left: 0;
-  z-index: 720;
-  width: 156px;
-  padding: 6px;
-  border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
-  border-radius: var(--radius-lg);
-  background: var(--bg-panel);
-  box-shadow: var(--shadow-lg);
-  animation: db-pop 160ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-.db-viewport-menu button {
-  width: 100%;
-  min-height: 34px;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 16px;
-  align-items: center;
-  gap: 8px;
-  border: 0;
-  border-radius: var(--radius);
-  background: transparent;
-  color: var(--text);
-  padding: 6px 8px;
-  text-align: left;
-  font-size: 12px;
-  cursor: pointer;
-}
-.db-viewport-menu button:hover,
-.db-viewport-menu button.active {
-  background: var(--bg-subtle);
+@keyframes db-spin {
+  to { transform: rotate(360deg); }
 }
 /* ---- Address omnibox ----------------------------------------------------- */
 .db-address-form {
   position: relative;
   height: 38px;
-  min-width: 0;
+  /* Flex child of .db-chrome: grow to the cap, then let the auto margins
+     split the leftover equally so the form stays centered between the two
+     icon clusters with identical spacing on both sides. */
+  flex: 1 1 auto;
+  min-width: 180px;
+  max-width: 740px;
+  margin-inline: auto;
   border: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
-  border-radius: var(--radius-md);
+  /* Capsule address bar. */
+  border-radius: var(--radius-pill);
   background: var(--bg-panel);
   color: var(--text-muted);
   display: flex;
@@ -660,17 +630,6 @@
   background: var(--bg);
   overflow: hidden;
 }
-.db-content-viewport-tablet,
-.db-content-viewport-mobile {
-  background:
-    linear-gradient(45deg, color-mix(in srgb, var(--border) 26%, transparent) 25%, transparent 25%),
-    linear-gradient(-45deg, color-mix(in srgb, var(--border) 26%, transparent) 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, color-mix(in srgb, var(--border) 26%, transparent) 75%),
-    linear-gradient(-45deg, transparent 75%, color-mix(in srgb, var(--border) 26%, transparent) 75%);
-  background-color: color-mix(in srgb, var(--bg) 92%, var(--text) 8%);
-  background-size: 18px 18px;
-  background-position: 0 0, 0 9px, 9px -9px, -9px 0;
-}
 .db-viewport-frame {
   position: absolute;
   inset: 0;
@@ -679,19 +638,6 @@
   min-height: 0;
   overflow: hidden;
   background: #fff;
-}
-.db-viewport-tablet,
-.db-viewport-mobile {
-  inset: 16px auto auto 50%;
-  width: min(var(--db-viewport-width), calc(100% - 32px));
-  height: min(var(--db-viewport-height), calc(100% - 32px));
-  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
-  border-radius: 18px;
-  box-shadow: 0 16px 44px rgba(28, 27, 26, 0.16);
-  transform: translateX(-50%);
-}
-.db-viewport-mobile {
-  border-radius: 24px;
 }
 .db-webview,
 .db-fallback,
@@ -794,9 +740,12 @@
 
 @container design-browser (max-width: 920px) {
   .db-chrome {
-    grid-template-columns: minmax(0, auto) minmax(150px, 560px) max-content;
     gap: 8px;
     padding-inline: 10px;
+  }
+  .db-address-form {
+    min-width: 150px;
+    max-width: 560px;
   }
   .db-action-save {
     display: none;
@@ -808,16 +757,12 @@
 
 @container design-browser (max-width: 760px) {
   .db-chrome {
-    grid-template-columns: minmax(0, auto) minmax(120px, 420px) max-content;
     gap: 6px;
     padding-inline: 8px;
   }
-  .db-viewport-switcher .db-icon-btn {
-    min-width: 46px;
-    padding-inline: 6px;
-  }
-  .db-viewport-label {
-    display: none;
+  .db-address-form {
+    min-width: 120px;
+    max-width: 420px;
   }
   .db-action-mark,
   .db-action-edit {
@@ -827,8 +772,11 @@
 
 @container design-browser (max-width: 620px) {
   .db-chrome {
-    grid-template-columns: minmax(0, auto) minmax(88px, 1fr) auto;
     gap: 4px;
+  }
+  .db-address-form {
+    min-width: 88px;
+    max-width: none;
   }
   .db-nav {
     gap: 0;
@@ -1260,7 +1208,13 @@
 
 @media (max-width: 720px) {
   .db-chrome {
-    grid-template-columns: minmax(0, 1fr);
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .db-address-form {
+    min-width: 0;
+    max-width: none;
+    margin-inline: 0;
   }
   .db-nav,
   .db-actions {

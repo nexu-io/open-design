@@ -39,6 +39,7 @@ import {
   resolveDaemonPrewarmTargets,
   resolveWebPrewarmTargets,
 } from "./prewarm.js";
+import { workspaceTeamTransportEnv } from "./workspace-team.js";
 
 const require = createRequire(import.meta.url);
 const PACKAGED_CHILD_ENV_ALLOWLIST = [
@@ -613,6 +614,11 @@ export type PackagedDaemonSpawnEnvOptions = {
   telemetryRelayUrl?: string | null;
   posthogKey?: string | null;
   posthogHost?: string | null;
+  /**
+   * Vela web console origin baked into the bundle at packaging time. Half of
+   * the workspace-team gate — see {@link workspaceTeamTransportEnv}.
+   */
+  velaWebUrl?: string | null;
 };
 
 /**
@@ -647,6 +653,7 @@ export function buildPackagedDaemonSpawnEnv(
     ...(options.amrProfile == null || options.amrProfile.length === 0
       ? {}
       : { OPEN_DESIGN_AMR_PROFILE: options.amrProfile }),
+    ...workspaceTeamTransportEnv(options.amrProfile, options.velaWebUrl),
     ...(options.appVersion == null ? {} : { OD_APP_VERSION: options.appVersion }),
     ...(options.mcpBootstrapCommand == null
       || options.mcpBootstrapCommand.length === 0
@@ -822,6 +829,7 @@ export async function startPackagedSidecars(
     telemetryRelayUrl: string | null;
     posthogKey: string | null;
     posthogHost: string | null;
+    velaWebUrl: string | null;
     /**
      * PR #974 round-5 (lefarcen P2): caller asserts whether a desktop
      * runtime is being started in this packaged process group. The
@@ -900,6 +908,7 @@ export async function startPackagedSidecars(
         telemetryRelayUrl: options.telemetryRelayUrl,
         posthogKey: options.posthogKey,
         posthogHost: options.posthogHost,
+        velaWebUrl: options.velaWebUrl,
       }),
       electronNodeCommand: options.electronNodeCommand,
       nodeCommand: options.nodeCommand,

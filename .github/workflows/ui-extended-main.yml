@@ -42,7 +42,7 @@ jobs:
     name: UI P0 (${{ matrix.name }})
     needs: [p0_runners]
     if: ${{ github.repository == 'nexu-io/open-design' && github.event_name == 'workflow_dispatch' && inputs.suite != 'full' }}
-    runs-on: ${{ fromJSON(needs.p0_runners.outputs.runs_on).ui_hot }}
+    runs-on: ${{ fromJSON(needs.p0_runners.outputs.runs_on).ui_p0 }}
     timeout-minutes: 45
     strategy:
       fail-fast: false
@@ -67,14 +67,14 @@ jobs:
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace
         with:
-          runner-labels: ${{ toJSON(fromJSON(needs.p0_runners.outputs.runs_on).ui_hot) }}
+          runner-labels: ${{ toJSON(fromJSON(needs.p0_runners.outputs.runs_on).ui_p0) }}
 
       - name: Setup Playwright
         uses: ./.github/actions/setup-playwright
         with:
           package-json-path: e2e/package.json
           install-command: pnpm -C e2e exec playwright install --with-deps chromium
-          runner-labels: ${{ toJSON(fromJSON(needs.p0_runners.outputs.runs_on).ui_hot) }}
+          runner-labels: ${{ toJSON(fromJSON(needs.p0_runners.outputs.runs_on).ui_p0) }}
 
       - name: Prebuild workspace type declarations
         run: |

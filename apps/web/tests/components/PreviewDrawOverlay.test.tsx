@@ -218,14 +218,15 @@ describe('PreviewDrawOverlay', () => {
     expect(toolbar?.style.flexWrap).toBe('nowrap');
     expect(toolbar?.style.overflow).toBe('visible');
     expect(toolCluster?.style.flex).toBe('0 0 auto');
-    expect(subTools).toHaveLength(1);
-    expect(subTools[0]?.style.flex).toBe('0 0 54px');
-    expect(subTools[0]?.style.minWidth).toBe('54px');
-    expect(subTools[0]?.style.background).not.toBe('var(--accent)');
-    expect(subTools[0]?.style.color).toBe('rgb(255, 255, 255)');
-    expect(subTools[0]?.parentElement?.style.background).toBe('transparent');
+    // One 34px segment per mark tool, sharing a single translucent track.
+    expect(subTools).toHaveLength(3);
+    for (const segment of subTools) {
+      expect(segment.style.width).toBe('34px');
+      expect(segment.style.color).toBe('rgb(255, 255, 255)');
+      expect(segment.style.borderStyle).toBe('none');
+    }
+    expect(subTools[0]?.parentElement?.style.background).toBe('rgba(255, 255, 255, 0.08)');
     expect(subTools[0]?.parentElement?.style.borderStyle).toBe('none');
-    expect(subTools[0]?.querySelector('.ri-arrow-down-s-line')).toBeTruthy();
     expect(noteActions?.style.flex).toBe('1 1 360px');
     expect(noteActions?.style.minWidth).toBe('0px');
     expect(noteActions?.style.maxWidth).toBe('420px');
@@ -239,7 +240,7 @@ describe('PreviewDrawOverlay', () => {
     expect(input?.style.maxWidth).toBe('100%');
   });
 
-  it('uses a single current-tool button with a box select and pen menu', () => {
+  it('shows every mark tool as its own segment and arms the one clicked', () => {
     const onToolbarClick = vi.fn();
     const { container, getByRole, queryByRole } = render(
       <PreviewDrawOverlay active onToolbarClick={onToolbarClick}>
@@ -247,38 +248,39 @@ describe('PreviewDrawOverlay', () => {
       </PreviewDrawOverlay>,
     );
 
-    expect(container.querySelectorAll('.preview-draw-subtool-action')).toHaveLength(1);
-    fireEvent.click(getByRole('button', { name: 'Box select' }));
-    expect(getByRole('menu', { name: 'Mark tool' })).toBeTruthy();
-    expect(getByRole('menuitemradio', { name: 'Box select' })).toBeTruthy();
-    expect(getByRole('menuitemradio', { name: 'Pen' })).toBeTruthy();
-    fireEvent.click(getByRole('menuitemradio', { name: 'Pen' }));
-    expect(onToolbarClick).toHaveBeenLastCalledWith('pen');
+    // Flat segmented group: no dropdown, and switching never hides a tool.
+    expect(container.querySelectorAll('.preview-draw-subtool-action')).toHaveLength(3);
     expect(queryByRole('menu', { name: 'Mark tool' })).toBeNull();
-    expect(queryByRole('button', { name: 'Box select' })).toBeNull();
-    expect(getByRole('button', { name: 'Pen' })).toBeTruthy();
+    expect(getByRole('group', { name: 'Mark tool' })).toBeTruthy();
+
+    // Box select is armed on open.
+    expect(getByRole('button', { name: 'Box select' }).getAttribute('aria-pressed')).toBe('true');
 
     fireEvent.click(getByRole('button', { name: 'Pen' }));
-    fireEvent.click(getByRole('menuitemradio', { name: 'Box select' }));
+    expect(onToolbarClick).toHaveBeenLastCalledWith('pen');
+    expect(getByRole('button', { name: 'Pen' }).getAttribute('aria-pressed')).toBe('true');
+    expect(getByRole('button', { name: 'Box select' }).getAttribute('aria-pressed')).toBe('false');
+
+    fireEvent.click(getByRole('button', { name: 'Box select' }));
     expect(onToolbarClick).toHaveBeenLastCalledWith('rect');
-    expect(getByRole('button', { name: 'Box select' })).toBeTruthy();
-    expect(queryByRole('button', { name: 'Pen' })).toBeNull();
+    expect(getByRole('button', { name: 'Box select' }).getAttribute('aria-pressed')).toBe('true');
+    expect(getByRole('button', { name: 'Pen' }).getAttribute('aria-pressed')).toBe('false');
   });
 
-  it('offers a text tool in the mark menu and switches to it', () => {
+  it('offers a text tool alongside the others and switches to it', () => {
     const onToolbarClick = vi.fn();
-    const { getByRole, queryByRole } = render(
+    const { getByRole } = render(
       <PreviewDrawOverlay active onToolbarClick={onToolbarClick}>
         <div style={{ width: 320, height: 200 }} />
       </PreviewDrawOverlay>,
     );
 
-    fireEvent.click(getByRole('button', { name: 'Box select' }));
-    expect(getByRole('menuitemradio', { name: 'Text' })).toBeTruthy();
-    fireEvent.click(getByRole('menuitemradio', { name: 'Text' }));
+    fireEvent.click(getByRole('button', { name: 'Text' }));
     expect(onToolbarClick).toHaveBeenLastCalledWith('text');
-    expect(getByRole('button', { name: 'Text' })).toBeTruthy();
-    expect(queryByRole('button', { name: 'Box select' })).toBeNull();
+    expect(getByRole('button', { name: 'Text' }).getAttribute('aria-pressed')).toBe('true');
+    // The other tools stay on the bar rather than collapsing behind the active one.
+    expect(getByRole('button', { name: 'Box select' })).toBeTruthy();
+    expect(getByRole('button', { name: 'Pen' })).toBeTruthy();
   });
 
   it('drops focusable, independent text labels where the canvas is pressed', () => {
@@ -292,8 +294,7 @@ describe('PreviewDrawOverlay', () => {
     canvas.getBoundingClientRect = () =>
       ({ x: 0, y: 0, left: 0, top: 0, right: 200, bottom: 200, width: 200, height: 200, toJSON: () => ({}) }) as DOMRect;
 
-    fireEvent.click(getByRole('button', { name: 'Box select' }));
-    fireEvent.click(getByRole('menuitemradio', { name: 'Text' }));
+    fireEvent.click(getByRole('button', { name: 'Text' }));
 
     // First press drops a label and focuses it.
     fireEvent.pointerDown(canvas, { clientX: 40, clientY: 40, pointerId: 1 });
@@ -321,8 +322,7 @@ describe('PreviewDrawOverlay', () => {
     canvas.getBoundingClientRect = () =>
       ({ x: 0, y: 0, left: 0, top: 0, right: 200, bottom: 200, width: 200, height: 200, toJSON: () => ({}) }) as DOMRect;
 
-    fireEvent.click(getByRole('button', { name: 'Box select' }));
-    fireEvent.click(getByRole('menuitemradio', { name: 'Text' }));
+    fireEvent.click(getByRole('button', { name: 'Text' }));
     fireEvent.pointerDown(canvas, { clientX: 40, clientY: 40, pointerId: 1 });
 
     const textarea = container.querySelector<HTMLTextAreaElement>('.preview-draw-text-layer textarea')!;
@@ -342,8 +342,7 @@ describe('PreviewDrawOverlay', () => {
     canvas.getBoundingClientRect = () =>
       ({ x: 0, y: 0, left: 0, top: 0, right: 200, bottom: 200, width: 200, height: 200, toJSON: () => ({}) }) as DOMRect;
 
-    fireEvent.click(getByRole('button', { name: 'Box select' }));
-    fireEvent.click(getByRole('menuitemradio', { name: 'Text' }));
+    fireEvent.click(getByRole('button', { name: 'Text' }));
     fireEvent.pointerDown(canvas, { clientX: 40, clientY: 40, pointerId: 1 });
 
     const textarea = container.querySelector<HTMLTextAreaElement>('.preview-draw-text-layer textarea')!;
@@ -367,8 +366,7 @@ describe('PreviewDrawOverlay', () => {
     canvas.getBoundingClientRect = () =>
       ({ x: 0, y: 0, left: 0, top: 0, right: 200, bottom: 200, width: 200, height: 200, toJSON: () => ({}) }) as DOMRect;
 
-    fireEvent.click(getByRole('button', { name: 'Box select' }));
-    fireEvent.click(getByRole('menuitemradio', { name: 'Text' }));
+    fireEvent.click(getByRole('button', { name: 'Text' }));
     // Drop at 20%,20% and give it text so it survives blur as a placed label.
     fireEvent.pointerDown(canvas, { clientX: 40, clientY: 40, pointerId: 1 });
     const textarea = container.querySelector<HTMLTextAreaElement>('.preview-draw-text-layer textarea')!;
@@ -398,8 +396,7 @@ describe('PreviewDrawOverlay', () => {
     canvas.getBoundingClientRect = () =>
       ({ x: 0, y: 0, left: 0, top: 0, right: 200, bottom: 200, width: 200, height: 200, toJSON: () => ({}) }) as DOMRect;
 
-    fireEvent.click(getByRole('button', { name: 'Box select' }));
-    fireEvent.click(getByRole('menuitemradio', { name: 'Text' }));
+    fireEvent.click(getByRole('button', { name: 'Text' }));
     fireEvent.pointerDown(canvas, { clientX: 40, clientY: 40, pointerId: 1 });
     const textarea = container.querySelector<HTMLTextAreaElement>('.preview-draw-text-layer textarea')!;
     fireEvent.change(textarea, { target: { value: 'edit me' } });
@@ -436,8 +433,7 @@ describe('PreviewDrawOverlay', () => {
       canvas.getBoundingClientRect = () =>
         ({ x: 0, y: 0, left: 0, top: 0, right: 200, bottom: 200, width: 200, height: 200, toJSON: () => ({}) }) as DOMRect;
 
-      fireEvent.click(getByRole('button', { name: 'Box select' }));
-      fireEvent.click(getByRole('menuitemradio', { name: 'Text' }));
+      fireEvent.click(getByRole('button', { name: 'Text' }));
       fireEvent.pointerDown(canvas, { clientX: 40, clientY: 40, pointerId: 1 });
       const textarea = container.querySelector<HTMLTextAreaElement>('.preview-draw-text-layer textarea')!;
       fireEvent.change(textarea, { target: { value: 'Annotate me' } });
@@ -541,9 +537,8 @@ describe('PreviewDrawOverlay', () => {
       // Send is the split button's default action; Queue and Add-to-input now
       // live in its dropdown, opened via the chevron.
       const sendButton = getByRole('button', { name: 'Send' }) as HTMLButtonElement;
-      fireEvent.click(getByRole('button', { name: 'Submit options' }));
-      const queueButton = getByRole('menuitemradio', { name: 'Queue' }) as HTMLButtonElement;
-      const addToInputButton = getByRole('menuitemradio', { name: 'Add to input' }) as HTMLButtonElement;
+      const queueButton = getByRole('button', { name: 'Queue' }) as HTMLButtonElement;
+      const addToInputButton = getByRole('button', { name: 'Add to input' }) as HTMLButtonElement;
       expect(sendButton.disabled).toBe(true);
       expect(sendButton.title).toBe('Task running');
       expect(queueButton.disabled).toBe(false);
@@ -561,7 +556,7 @@ describe('PreviewDrawOverlay', () => {
       // The dropdown stays open through this flow, so click the Queue item
       // directly (re-clicking the chevron would just toggle it shut).
       fireEvent.change(input!, { target: { value: 'Queue another note.' } });
-      fireEvent.click(getByRole('menuitemradio', { name: 'Queue' }));
+      fireEvent.click(getByRole('button', { name: 'Queue' }));
       await waitFor(() => expect(annotation).toHaveBeenCalledTimes(2));
     } finally {
       window.removeEventListener('opendesign:annotation', annotation);
@@ -587,8 +582,7 @@ describe('PreviewDrawOverlay', () => {
       fireEvent.change(input!, { target: { value: 'Keep this in the input.' } });
 
       // Add-to-input is now a choice in the submit dropdown.
-      fireEvent.click(getByRole('button', { name: 'Submit options' }));
-      fireEvent.click(getByRole('menuitemradio', { name: 'Add to input' }));
+      fireEvent.click(getByRole('button', { name: 'Add to input' }));
 
       await waitFor(() => expect(annotation).toHaveBeenCalledTimes(1));
       expect(annotation.mock.calls[0]?.[0]).toMatchObject({
@@ -728,8 +722,7 @@ describe('PreviewDrawOverlay', () => {
     mockElementRect(wrap, { left: 0, top: 0, width: 700, height: 320 });
     mockElementRect(dock, { left: 0, top: 0, width: 180, height: 96 });
 
-    fireEvent.click(getByRole('button', { name: 'Box select' }));
-    fireEvent.click(getByRole('menuitemradio', { name: 'Pen' }));
+    fireEvent.click(getByRole('button', { name: 'Pen' }));
     drawPenStroke(canvas, [{ x: 40, y: 40 }, { x: 100, y: 90 }]);
     await waitFor(() => expect(dock.dataset.drawLayout).toBe('floating'));
     const firstPosition = dock.style.left;
@@ -783,7 +776,6 @@ describe('PreviewDrawOverlay', () => {
 
     const input = container.querySelector<HTMLInputElement>('.preview-draw-note-input')!;
     fireEvent.change(input, { target: { value: 'keep me here' } });
-    fireEvent.click(getByRole('button', { name: 'Submit options' }));
 
     drawSelectionBox(canvas, { x: 80, y: 80 }, { x: 180, y: 160 });
     await waitFor(() => expect(dock.dataset.drawLayout).toBe('floating'));
@@ -791,10 +783,13 @@ describe('PreviewDrawOverlay', () => {
     const inputAfter = container.querySelector<HTMLInputElement>('.preview-draw-note-input')!;
     expect(inputAfter).toBe(input);
     expect(inputAfter.value).toBe('keep me here');
-    expect(getByRole('menu')).toBeTruthy();
+    // Every submit action stays reachable across the re-dock.
+    expect(getByRole('button', { name: 'Add to input' })).toBeTruthy();
+    expect(getByRole('button', { name: 'Queue' })).toBeTruthy();
+    expect(getByRole('button', { name: 'Send' })).toBeTruthy();
   });
 
-  it('remembers the submit action chosen from the dropdown', async () => {
+  it('runs each submit action from its own always-visible button', async () => {
     const annotation = vi.fn((event: Event) => {
       const detail = (event as CustomEvent<{ ack?: (result: { ok: boolean }) => void }>).detail;
       detail.ack?.({ ok: true });
@@ -811,19 +806,21 @@ describe('PreviewDrawOverlay', () => {
       const input = container.querySelector<HTMLInputElement>('.preview-draw-note-input');
       fireEvent.change(input!, { target: { value: 'ship it' } });
 
-      // Default main action is Send.
+      // All three destinations are on the bar at once — no chevron, no
+      // remembered default that changes what the primary click does.
+      expect(getByRole('button', { name: 'Add to input' })).toBeTruthy();
+      expect(getByRole('button', { name: 'Queue' })).toBeTruthy();
       expect(getByRole('button', { name: 'Send' })).toBeTruthy();
 
-      // Pick Queue from the dropdown: it runs the action and becomes the new default.
-      fireEvent.click(getByRole('button', { name: 'Submit options' }));
-      fireEvent.click(getByRole('menuitemradio', { name: 'Queue' }));
+      fireEvent.click(getByRole('button', { name: 'Queue' }));
       await waitFor(() => expect(annotation).toHaveBeenCalledTimes(1));
       expect(annotation.mock.calls[0]?.[0]).toMatchObject({
         detail: expect.objectContaining({ action: 'queue' }),
       });
 
-      // The split button's default action is now Queue.
-      await waitFor(() => expect(getByRole('button', { name: 'Queue' })).toBeTruthy());
+      // Send is still Send afterwards — the bar does not re-label itself.
+      await waitFor(() => expect(getByRole('button', { name: 'Send' })).toBeTruthy());
+      expect(getByRole('button', { name: 'Queue' })).toBeTruthy();
     } finally {
       window.removeEventListener('opendesign:annotation', annotation);
     }

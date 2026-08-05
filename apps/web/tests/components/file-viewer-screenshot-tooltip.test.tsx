@@ -71,7 +71,7 @@ describe('FileViewer screenshot tooltip guard', () => {
     };
 
     // TooltipLayer is an app-level component that portals the active tooltip
-    // into <body>; mount it so the screenshot button's hover tooltip is real.
+    // into <body>; mount it so the capture button's hover tooltip is real.
     render(
       <>
         <TooltipLayer />
@@ -84,7 +84,7 @@ describe('FileViewer screenshot tooltip guard', () => {
       </>,
     );
 
-    const button = screen.getByTestId('screenshot-copy-button');
+    const button = screen.getByTestId('edit-screenshot-to-chat-button');
     fireEvent.pointerOver(button);
     expect(document.body.querySelector('.od-tooltip-layer')).not.toBeNull();
 

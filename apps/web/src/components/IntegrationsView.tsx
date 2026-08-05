@@ -69,9 +69,31 @@ export function IntegrationsView({
   }, [initialTab]);
 
   useEffect(() => {
-    localConfigRef.current = config;
-    setLocalConfig(config);
+    setLocalConfig((current) => {
+      const pendingComposioKey = current.composio?.apiKey ?? '';
+      const reconciled = pendingComposioKey.trim()
+        ? {
+            ...config,
+            composio: {
+              ...(config.composio ?? {}),
+              apiKey: pendingComposioKey,
+            },
+          }
+        : config;
+      localConfigRef.current = reconciled;
+      return reconciled;
+    });
   }, [config]);
+
+  const updateLocalDraft = useCallback<Dispatch<SetStateAction<AppConfig>>>((nextConfig) => {
+    const base = localConfigRef.current;
+    const resolved =
+      typeof nextConfig === 'function'
+        ? (nextConfig as (current: AppConfig) => AppConfig)(base)
+        : nextConfig;
+    localConfigRef.current = resolved;
+    setLocalConfig(resolved);
+  }, []);
 
   const updateLocalConfig = useCallback<Dispatch<SetStateAction<AppConfig>>>(
     (nextConfig) => {
@@ -145,7 +167,7 @@ export function IntegrationsView({
         {activeTab === 'connectors' ? (
           <ConnectorSection
             cfg={localConfig}
-            setCfg={setLocalConfig}
+            setCfg={updateLocalDraft}
             composioConfigLoading={composioConfigLoading}
             onPersistComposioKey={onPersistComposioKey}
             onConnectorsTabClick={(element) =>

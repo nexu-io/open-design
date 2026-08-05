@@ -1,9 +1,30 @@
-import { type DragEvent, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  type DragEvent,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { createPortal } from 'react-dom';
 import { useT } from '../i18n';
-import { navigate, type EntryHomeView, type Route } from '../router';
+import { buildPath, navigate, type EntryHomeView, type Route } from '../router';
 import type { Project } from '../types';
 import { Icon, type IconName } from './Icon';
+import {
+  HOME_APPLY_TEMPLATE_EVENT,
+  orderedCreateChips,
+  type HomeHeroChip,
+} from './home-hero/chips';
+import {
+  ENTRY_RAIL_STATE_EVENT,
+  ENTRY_RAIL_TOGGLE_EVENT,
+  readStoredRailOpen,
+} from './entryRailBridge';
+import { homeHeroChipLabel } from './home-hero/chip-labels';
+import { useGlideIndicator } from '../hooks/useGlideIndicator';
+import { useLiquidGlass } from '../hooks/useLiquidGlass';
 
 type WorkspaceChromeTab =
   | {
@@ -35,6 +56,17 @@ interface WorkspaceTabsState {
   activeTabId: string;
 }
 
+interface PersistedWorkspaceTabsSnapshot {
+  state: WorkspaceTabsState;
+  updatedAt: number;
+}
+
+interface PersistedWorkspaceTabsStore {
+  current: WorkspaceTabsState | null;
+  scopeKey: string | undefined;
+  scopes: Record<string, PersistedWorkspaceTabsSnapshot>;
+}
+
 interface DisplayTab {
   id: string;
   title: string;
@@ -53,16 +85,36 @@ interface TabDragTarget {
 interface Props {
   route: Route;
   projects: Project[];
+  /**
+   * Persisted Workspace binding for the project currently named by `route`.
+   * `null` is an authoritative unbound/local project; `undefined` means the
+   * current route is not a resolved project and must not relax scope resets.
+   */
+  activeProjectWorkspaceId?: string | null;
   // Once onboarding is finished, the permanent entry
   // tab must never linger on the 'onboarding' (Welcome) view — some completion
   // paths navigate straight to a new project/design-system and leave the entry
   // tab showing Welcome in the background. This flips it back to Home.
   onboardingCompleted?: boolean;
+  /**
+   * Stable "AMR account + active workspace" identity key the currently open
+   * tabs belong to (derived in App.tsx from `amrLoginStatus` +
+   * `workspaceContext` — see the comment there for the exact composition).
+   * `null` means "not resolved yet" (before the first AMR status read
+   * completes): the bar leaves whatever it already restored from
+   * localStorage untouched rather than guessing.
+   *
+   * Once resolved, each value owns an isolated tab snapshot. Switching to a
+   * different workspace restores only that scope's tabs (or a fresh Home tab
+   * on first visit), so returning to a workspace keeps its order and active
+   * tab without exposing those tabs in another scope.
+   */
+  identityScopeKey?: string | null;
 }
 
 const STORAGE_KEY = 'open-design:workspace-tabs:v1';
 const OPEN_WORKSPACE_TAB_EVENT = 'open-design:workspace-tabs:open';
-const MAX_SEARCH_RESULTS = 80;
+const MAX_PERSISTED_TAB_SCOPES = 12;
 const TAB_DRAG_HAPTIC_MS = 8;
 const TAB_DROP_HAPTIC_MS = 12;
 
@@ -300,9 +352,30 @@ function tabDragTargetKey(target: TabDragTarget): string {
   return `${target.tabId}:${target.edge}`;
 }
 
-function tabDropEdgeFromElement(event: DragEvent<HTMLElement>, element: HTMLElement): TabDropEdge {
-  const rect = element.getBoundingClientRect();
-  return event.clientX > rect.left + rect.width / 2 ? 'after' : 'before';
+/**
+ * A tab's horizontal span in viewport X, measured from layout geometry
+ * (offsetLeft/offsetWidth) instead of getBoundingClientRect. Layout geometry
+ * excludes transforms, so the FLIP slide animation and drag styling never
+ * shift the rects the drop hit-testing reads — a transformed hovered tab used
+ * to move its own midpoint, flip the before/after edge, transform back, and
+ * oscillate (visible jitter while dragging).
+ */
+function tabLayoutSpan(
+  strip: HTMLElement,
+  element: HTMLElement,
+): { left: number; right: number; mid: number } {
+  const stripLeft = strip.getBoundingClientRect().left - strip.scrollLeft;
+  const left = stripLeft + element.offsetLeft;
+  const width = element.offsetWidth;
+  return { left, right: left + width, mid: left + width / 2 };
+}
+
+function tabDropEdgeFromElement(
+  event: DragEvent<HTMLElement>,
+  strip: HTMLElement,
+  element: HTMLElement,
+): TabDropEdge {
+  return event.clientX > tabLayoutSpan(strip, element).mid ? 'after' : 'before';
 }
 
 function pulseTabDragHaptic(durationMs = TAB_DRAG_HAPTIC_MS) {
@@ -314,30 +387,131 @@ function pulseTabDragHaptic(durationMs = TAB_DRAG_HAPTIC_MS) {
   }
 }
 
-function initialTabsState(route: Route): WorkspaceTabsState {
-  const fallback = tabFromRoute(route);
-  if (typeof window === 'undefined') {
-    return syncStateToRoute({ tabs: [fallback], activeTabId: fallback.id }, route);
-  }
+function reviveTabsState(value: unknown): WorkspaceTabsState | null {
+  if (value === null || typeof value !== 'object') return null;
+  const record = value as Record<string, unknown>;
+  const tabs = Array.isArray(record.tabs)
+    ? record.tabs.map(reviveTab).filter((tab): tab is WorkspaceChromeTab => tab !== null)
+    : [];
+  if (tabs.length === 0) return null;
+  const activeTabId = typeof record.activeTabId === 'string' ? record.activeTabId : '';
+  return normalizeTabsState({ tabs, activeTabId: activeTabId || tabs[0]!.id });
+}
+
+function readPersistedTabsStore(): PersistedWorkspaceTabsStore {
+  const empty: PersistedWorkspaceTabsStore = {
+    current: null,
+    scopeKey: undefined,
+    scopes: {},
+  };
+  if (typeof window === 'undefined') return empty;
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return syncStateToRoute({ tabs: [fallback], activeTabId: fallback.id }, route);
+    if (!raw) return empty;
     const parsed = JSON.parse(raw) as unknown;
-    if (parsed === null || typeof parsed !== 'object') {
-      return syncStateToRoute({ tabs: [fallback], activeTabId: fallback.id }, route);
-    }
+    if (parsed === null || typeof parsed !== 'object') return empty;
     const record = parsed as Record<string, unknown>;
-    const tabs = Array.isArray(record.tabs)
-      ? record.tabs.map(reviveTab).filter((tab): tab is WorkspaceChromeTab => tab !== null)
-      : [];
-    const activeTabId = typeof record.activeTabId === 'string' ? record.activeTabId : '';
-    if (tabs.length === 0) {
-      return syncStateToRoute({ tabs: [fallback], activeTabId: fallback.id }, route);
+    const current = reviveTabsState(record);
+    const scopeKey = typeof record.scopeKey === 'string' ? record.scopeKey : undefined;
+    const scopes: Record<string, PersistedWorkspaceTabsSnapshot> = {};
+    if (record.scopes !== null && typeof record.scopes === 'object') {
+      for (const [key, value] of Object.entries(record.scopes as Record<string, unknown>)) {
+        if (!key || value === null || typeof value !== 'object') continue;
+        const snapshotRecord = value as Record<string, unknown>;
+        const state = reviveTabsState(snapshotRecord.state);
+        if (!state) continue;
+        scopes[key] = {
+          state,
+          updatedAt: typeof snapshotRecord.updatedAt === 'number'
+            ? snapshotRecord.updatedAt
+            : 0,
+        };
+      }
     }
-    return syncStateToRoute({ tabs, activeTabId: activeTabId || tabs[0]!.id }, route);
+    // Migrate the previous single-scope format in memory. It remains readable
+    // at the top level while the next write adds the scoped registry.
+    if (scopeKey && current && !scopes[scopeKey]) {
+      scopes[scopeKey] = { state: current, updatedAt: 0 };
+    }
+    return { current, scopeKey, scopes };
   } catch {
-    return syncStateToRoute({ tabs: [fallback], activeTabId: fallback.id }, route);
+    return empty;
   }
+}
+
+function persistTabsStore(
+  store: PersistedWorkspaceTabsStore,
+  currentScopeKey: string | undefined,
+  current: WorkspaceTabsState,
+): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const scopes = currentScopeKey
+      ? {
+          ...store.scopes,
+          [currentScopeKey]: {
+            state: normalizeTabsState(current),
+            updatedAt: Date.now(),
+          },
+        }
+      : store.scopes;
+    const retainedScopes = Object.fromEntries(
+      Object.entries(scopes)
+        .sort(([, left], [, right]) => right.updatedAt - left.updatedAt)
+        .slice(0, MAX_PERSISTED_TAB_SCOPES),
+    );
+    const payloadScopeKey = currentScopeKey ?? store.scopeKey;
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        ...normalizeTabsState(current),
+        ...(payloadScopeKey ? { scopeKey: payloadScopeKey, scopes: retainedScopes } : {}),
+      }),
+    );
+    store.current = current;
+    store.scopeKey = payloadScopeKey;
+    store.scopes = retainedScopes;
+  } catch {
+    // Best-effort browser chrome state. Navigation itself remains URL-driven.
+  }
+}
+
+function freshHomeTabsState(): WorkspaceTabsState {
+  const homeTab = createEntryTab('home');
+  return { tabs: [homeTab], activeTabId: homeTab.id };
+}
+
+function initialTabsState(
+  route: Route,
+  persisted: PersistedWorkspaceTabsStore,
+  identityScopeKey: string | null | undefined,
+): WorkspaceTabsState {
+  const fallback = tabFromRoute(route);
+  const fallbackState = { tabs: [fallback], activeTabId: fallback.id };
+  if (identityScopeKey === undefined) {
+    return syncStateToRoute(persisted.current ?? fallbackState, route);
+  }
+  if (identityScopeKey === null) {
+    // An unowned snapshot (no `scopeKey` stamp — written by a build that
+    // predates tab scoping) cannot be attributed to whichever identity is
+    // about to resolve, so it must not even be displayed provisionally
+    // (recvqziATl6LlJ / recvqxKdOz0S6g). Owned snapshots keep the warm-reload
+    // restore; the scope effect reconciles them once the identity resolves.
+    if (persisted.scopeKey === undefined) {
+      return syncStateToRoute(fallbackState, route);
+    }
+    return persisted.current ?? syncStateToRoute(fallbackState, route);
+  }
+  const scoped = persisted.scopes[identityScopeKey]?.state;
+  if (persisted.scopeKey === identityScopeKey) {
+    return syncStateToRoute(scoped ?? persisted.current ?? fallbackState, route);
+  }
+  if (persisted.scopeKey === undefined) {
+    // Same attribution rule with the scope already resolved at mount time:
+    // unowned storage never seeds a resolved scope. Route truth alone does.
+    return syncStateToRoute(fallbackState, route);
+  }
+  return scoped ?? freshHomeTabsState();
 }
 
 function syncStateToRoute(state: WorkspaceTabsState, route: Route): WorkspaceTabsState {
@@ -423,32 +597,88 @@ function syncStateToRoute(state: WorkspaceTabsState, route: Route): WorkspaceTab
   return normalizeTabsState({ tabs: nextTabs, activeTabId: replacement.id });
 }
 
-function normalizeSearch(value: string): string {
-  return value.trim().toLocaleLowerCase();
+function accountBucketForScope(scopeKey: string): string {
+  return scopeKey.split('::', 1)[0] ?? scopeKey;
 }
 
-interface HoverPreviewState {
-  tabId: string;
-  anchorLeft: number;
-  anchorRight: number;
-  anchorBottom: number;
-  anchorWidth: number;
+function workspaceBucketForScope(scopeKey: string): string | null {
+  const separator = scopeKey.indexOf('::');
+  return separator < 0 ? null : scopeKey.slice(separator + 2);
 }
 
-const HOVER_PREVIEW_DELAY_MS = 380;
+function shouldRehomeAuthorizedProjectAfterSignIn({
+  previousScopeKey,
+  nextScopeKey,
+  route,
+  activeProjectWorkspaceId,
+}: {
+  previousScopeKey: string;
+  nextScopeKey: string;
+  route: Route;
+  activeProjectWorkspaceId: string | null | undefined;
+}): boolean {
+  const activeProjectMatchesIncomingScope =
+    activeProjectWorkspaceId === null
+    || (
+      typeof activeProjectWorkspaceId === 'string'
+      && activeProjectWorkspaceId === workspaceBucketForScope(nextScopeKey)
+    );
+  return (
+    accountBucketForScope(previousScopeKey) === 'anon'
+    && accountBucketForScope(nextScopeKey) !== 'anon'
+    && route.kind === 'project'
+    && activeProjectWorkspaceId !== undefined
+    && activeProjectMatchesIncomingScope
+  );
+}
 
-export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false }: Props) {
+export function WorkspaceTabsBar({
+  route,
+  projects,
+  activeProjectWorkspaceId,
+  onboardingCompleted = false,
+  identityScopeKey,
+}: Props) {
   const t = useT();
-  const [state, setState] = useState<WorkspaceTabsState>(() => initialTabsState(route));
-  const [tabsMenuOpen, setTabsMenuOpen] = useState(false);
-  const [query, setQuery] = useState('');
-  const [hoverPreview, setHoverPreview] = useState<HoverPreviewState | null>(null);
+  const [persistedTabsStore] = useState(readPersistedTabsStore);
+  const [state, setState] = useState<WorkspaceTabsState>(
+    () => initialTabsState(route, persistedTabsStore, identityScopeKey),
+  );
+  const lastSeenScopeKeyRef = useRef<string | undefined>(persistedTabsStore.scopeKey);
+  const resolvedScopeOnceRef = useRef(false);
+  const pendingScopeStateRef = useRef<{
+    scopeKey: string;
+    state: WorkspaceTabsState;
+  } | null>(null);
+  const pendingScopeRouteRef = useRef<{
+    scopeKey: string;
+    path: string;
+  } | null>(null);
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  // #5517 corner fan: the "+" button opens a corner-anchored radial menu of
+  // template wedges instead of immediately spawning a home tab.
+  const [radialMenu, setRadialMenu] = useState<{ x: number; y: number } | null>(null);
+  const [radialHoverId, setRadialHoverId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!radialMenu) setRadialHoverId(null);
+  }, [radialMenu]);
+  useEffect(() => {
+    if (!radialMenu) return;
+    // Uniform page blur: filter on the shell blurs every descendant equally
+    // (backdrop-filter on the scrim sampled composited layers unevenly).
+    document.documentElement.classList.add('od-radial-open');
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setRadialMenu(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.documentElement.classList.remove('od-radial-open');
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [radialMenu]);
   const [tabsOverflowing, setTabsOverflowing] = useState(false);
   const stripRef = useRef<HTMLDivElement | null>(null);
-  const menuRef = useRef<HTMLDivElement | null>(null);
-  const popoverRef = useRef<HTMLDivElement | null>(null);
-  const searchInputRef = useRef<HTMLInputElement | null>(null);
-  const hoverTimerRef = useRef<number | null>(null);
   const previousOnboardingCompletedRef = useRef(onboardingCompleted);
   const resetEntryToHomeAfterOnboardingRef = useRef(false);
   const dragSuppressClickRef = useRef(false);
@@ -456,6 +686,96 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
   const dragHapticTargetRef = useRef<string | null>(null);
   const [draggingTabId, setDraggingTabId] = useState<string | null>(null);
   const [dragOverTarget, setDragOverTarget] = useState<TabDragTarget | null>(null);
+  // recvq5eKj2kdF0: `projects` is the Home view's own fetch (recent/drafts,
+  // capped) — navigating Home refetches and REPLACES it (App.tsx's
+  // reconcileFetchedProjects), which drops any project that is open in a
+  // background tab but falls outside that scope. `displayTabFor` then found
+  // no entry for the tab's projectId and fell back to the untitled label,
+  // even though the project genuinely has a name — the tab just "forgot" it
+  // the moment Home reloaded. This ref remembers the last real name seen for
+  // each project id so a tab never regresses to untitled once it has shown a
+  // real one; it is intentionally a ref (not state) because it must not
+  // itself trigger a render — the incoming `projects`/`state.tabs` change
+  // that recomputes `displayTabs` already will.
+  const knownProjectNamesRef = useRef<Map<string, string>>(new Map());
+
+  // Liquid-glass glide indicator: one persistent pill that slides to the
+  // active tab (see useGlideIndicator + .workspace-tabs-glide in routines.css).
+  const glideRef = useRef<HTMLDivElement | null>(null);
+  const glidePillRef = useRef<HTMLDivElement | null>(null);
+  const glideGlassRef = useLiquidGlass<HTMLDivElement>({ strength: 0.2 });
+  const setGlidePillRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      glidePillRef.current = node;
+      glideGlassRef(node);
+    },
+    [glideGlassRef],
+  );
+
+  // FLIP slide for live drag-reordering: when the tab order changes mid-drag,
+  // each displaced tab starts at its previous slot (inverted transform) and
+  // transitions to its new one instead of teleporting. Positions come from
+  // offsetLeft (layout space, transform-free), so the in-flight slides never
+  // feed back into the drop hit-testing in findTabDropTarget.
+  const tabFlipLeftsRef = useRef(new Map<string, number>());
+  useLayoutEffect(() => {
+    const strip = stripRef.current;
+    if (!strip) return;
+    const previousLefts = tabFlipLeftsRef.current;
+    const nextLefts = new Map<string, number>();
+    for (const element of strip.querySelectorAll<HTMLElement>('[data-workspace-tab-id]')) {
+      const id = element.dataset.workspaceTabId;
+      if (!id) continue;
+      nextLefts.set(id, element.offsetLeft);
+      const before = previousLefts.get(id);
+      if (before === undefined) continue;
+      const delta = before - element.offsetLeft;
+      if (!delta) continue;
+      // The dragged tab itself snaps — its native drag ghost is what tracks
+      // the pointer; animating the in-row placeholder would lag behind it.
+      if (id === draggingTabIdRef.current) continue;
+      element.style.transition = 'none';
+      element.style.transform = `translateX(${delta}px)`;
+      // Commit the inverted start position before re-enabling transitions.
+      void element.offsetWidth;
+      element.style.transition = '';
+      element.style.transform = '';
+    }
+    tabFlipLeftsRef.current = nextLefts;
+  });
+
+  // Layout epoch for the glide indicator: any change in tab identity/order or
+  // the overflow state can shift the active tab without changing which tab is
+  // active — those reposition instantly (no fake slide).
+  const tabsLayoutKey = useMemo(
+    () => `${state.tabs.map((tab) => tab.id).join('|')}:${tabsOverflowing ? 1 : 0}`,
+    [state.tabs, tabsOverflowing],
+  );
+  const activeChromeTab = state.tabs.find((tab) => tab.id === state.activeTabId);
+  // The pinned entry tab renders only a flat rail-toggle whenever it's active —
+  // the sidebar toggle on Home, the Home button in every other entry section
+  // (settings / all-projects / community / design-systems). In ALL of these the
+  // glide pill must not park its filled "active tab" surface over it, so key off
+  // `kind === 'entry'` rather than the Home view alone (which left the pill
+  // filling the button in the other sections).
+  const activeIsEntryRailToggle = activeChromeTab?.kind === 'entry';
+  useGlideIndicator({
+    containerRef: stripRef,
+    indicatorRef: glideRef,
+    pillRef: glidePillRef,
+    // On an entry section, target a never-matching selector so the glide pill
+    // fades out over the toggle instead of filling it. (jsdom-safe — no `:has()`
+    // in querySelector.)
+    activeSelector: activeIsEntryRailToggle
+      ? '.workspace-tab.is-active.__no-glide__'
+      : '.workspace-tab.is-active',
+    activeKey: state.activeTabId,
+    layoutKey: tabsLayoutKey,
+    frozen: draggingTabId !== null,
+    // The pinned entry tab is position: sticky — its visual position diverges
+    // from layout coords while the strip is scrolled, so chase it on scroll.
+    trackScroll: activeChromeTab?.kind === 'entry',
+  });
 
   // While the app is on the onboarding (Welcome) route, opening a new tab
   // would navigate away from onboarding and bypass the Connect gate. Key off
@@ -466,64 +786,66 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
   // both the "+" button and the Cmd/Ctrl+T shortcut from one place.
   const onboardingActive = route.kind === 'home' && route.view === 'onboarding';
 
-  function clearHoverTimer() {
-    if (hoverTimerRef.current !== null) {
-      window.clearTimeout(hoverTimerRef.current);
-      hoverTimerRef.current = null;
-    }
-  }
-
-  function scheduleHoverPreview(tabId: string, element: HTMLElement) {
-    clearHoverTimer();
-    hoverTimerRef.current = window.setTimeout(() => {
-      const rect = element.getBoundingClientRect();
-      setHoverPreview({
-        tabId,
-        anchorLeft: rect.left,
-        anchorRight: rect.right,
-        anchorBottom: rect.bottom,
-        anchorWidth: rect.width,
-      });
-    }, HOVER_PREVIEW_DELAY_MS);
-  }
-
-  function dismissHoverPreview() {
-    clearHoverTimer();
-    setHoverPreview(null);
-  }
-
-  useEffect(() => () => clearHoverTimer(), []);
+  // Mirror of EntryShell's entry nav-rail open state, only used to reflect it
+  // on the pinned Home tab's sidebar toggle (aria-expanded). EntryShell owns
+  // the state and broadcasts changes as a window event because it renders in a
+  // sibling React tree; the localStorage seed covers the frames before the
+  // first broadcast arrives.
+  const [entryRailOpen, setEntryRailOpen] = useState<boolean>(readStoredRailOpen);
+  useEffect(() => {
+    const onRailState = (event: Event) => {
+      const open = (event as CustomEvent<{ open?: unknown }>).detail?.open;
+      if (typeof open === 'boolean') setEntryRailOpen(open);
+    };
+    window.addEventListener(ENTRY_RAIL_STATE_EVENT, onRailState);
+    return () => window.removeEventListener(ENTRY_RAIL_STATE_EVENT, onRailState);
+  }, []);
 
   const projectById = useMemo(
     () => new Map(projects.map((project) => [project.id, project])),
     [projects],
   );
 
+  // Refresh the fallback cache from whatever this fetch actually returned,
+  // before `displayTabFor` below reads it — same render pass, so a tab
+  // reading a name for the first time never has to wait a tick for it.
+  for (const project of projects) {
+    const name = project.name?.trim();
+    if (name) knownProjectNamesRef.current.set(project.id, name);
+  }
+
   const displayTabs = useMemo(
-    () => state.tabs.map((tab) => displayTabFor(tab, projectById, t)),
+    () => state.tabs.map((tab) => displayTabFor(tab, projectById, t, knownProjectNamesRef.current)),
     [state.tabs, projectById, t],
   );
   const displayTabById = useMemo(
     () => new Map(displayTabs.map((tab) => [tab.id, tab])),
     [displayTabs],
   );
-  const filteredTabs = useMemo(() => {
-    const needle = normalizeSearch(query);
-    const source = needle
-      ? displayTabs.filter((tab) => {
-          const haystack = `${tab.title} ${tab.meta}`.toLocaleLowerCase();
-          return haystack.includes(needle);
-        })
-      : displayTabs;
-    return source
-      .slice()
-      .sort((a, b) => b.tab.lastActiveAt - a.tab.lastActiveAt)
-      .slice(0, MAX_SEARCH_RESULTS);
-  }, [displayTabs, query]);
-
   useEffect(() => {
+    if (identityScopeKey === null) return;
+    const pendingScopeRoute = pendingScopeRouteRef.current;
+    if (
+      pendingScopeRoute
+      && pendingScopeRoute.scopeKey === identityScopeKey
+    ) {
+      // React StrictMode replays mount effects without remounting refs. Keep
+      // rejecting the outgoing workspace URL until the router commits the
+      // route selected for the incoming scope.
+      if (pendingScopeRoute.path !== buildPath(route)) return;
+      pendingScopeRouteRef.current = null;
+    }
+    if (
+      typeof identityScopeKey === 'string'
+      && lastSeenScopeKeyRef.current !== identityScopeKey
+    ) {
+      // A workspace transition owns route reconciliation: the current URL can
+      // still describe the outgoing workspace for this render and must never
+      // be folded into the incoming workspace's snapshot.
+      return;
+    }
     setState((current) => syncStateToRoute(current, route));
-  }, [route]);
+  }, [route, identityScopeKey]);
 
   useEffect(() => {
     if (!previousOnboardingCompletedRef.current && onboardingCompleted) {
@@ -567,15 +889,166 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
     });
   }, [onboardingCompleted, onboardingActive, route.kind]);
 
-  // Close the Search-tabs popover whenever onboarding becomes active. The
-  // trigger button is hidden during onboarding, so a popover left open across
-  // a route flip to /onboarding (e.g. browser back/forward, which bypasses
-  // activateTab/createNewTab) would otherwise float over the first-run flow
-  // with no visible control to dismiss it. The portal is also gated on
-  // !onboardingActive below so it never renders for the frame before this runs.
+  // Tab-scope enforcement: every AMR account + workspace key owns one isolated
+  // snapshot. Save the outgoing state before loading the incoming state, and
+  // navigate to that snapshot's active tab. The persistent registry is capped
+  // (MAX_PERSISTED_TAB_SCOPES), so workspace bouncing remains recoverable
+  // without turning localStorage into an unbounded recently-closed cache.
+  //
+  // Suppressed while onboarding is active: `createNewTab`/`openRadialMenu`
+  // are both gated on `onboardingActive`, so the ONLY tab that can exist
+  // during onboarding is the single pinned entry tab — there is nothing to
+  // protect against yet, and forcing a close+navigate-home mid-flow would
+  // eject the user from the Connect step before they finish it (a real
+  // scenario: finishing AMR sign-in mid-onboarding is exactly a scope change
+  // per this design). The new key is still recorded via the ref so the
+  // reconciliation does not re-fire the moment onboarding completes with a
+  // scope that has not changed again since.
   useEffect(() => {
-    if (onboardingActive) setTabsMenuOpen(false);
-  }, [onboardingActive]);
+    if (typeof identityScopeKey !== 'string') return;
+    const previous = lastSeenScopeKeyRef.current;
+    lastSeenScopeKeyRef.current = identityScopeKey;
+    const firstResolvedScope = !resolvedScopeOnceRef.current;
+    resolvedScopeOnceRef.current = true;
+    if (previous === identityScopeKey) return;
+
+    if (previous === undefined) {
+      // Upgrade compatibility, held to the attribution rule (recvqziATl6LlJ /
+      // recvqxKdOz0S6g): a legacy single snapshot has no owner stamp, so it
+      // must never be adopted into whichever scope happens to resolve first —
+      // the account that opened those tabs may have switched since (pre-scoping
+      // builds never closed tabs on an account swap), and adopting would
+      // surface another account's project tabs inside the current account's
+      // workspace. Tabs are bookmarks: when attribution is unknowable, drop
+      // the snapshot and rebuild from route truth (fresh Home plus whatever
+      // tab the current URL already points at). A session with no unowned
+      // snapshot in storage (fresh install / already-scoped storage) keeps
+      // adopting its own live, session-created state unchanged.
+      const unownedSnapshotInStorage =
+        persistedTabsStore.scopeKey === undefined && persistedTabsStore.current !== null;
+      const adopted = syncStateToRoute(
+        unownedSnapshotInStorage ? freshHomeTabsState() : stateRef.current,
+        route,
+      );
+      persistedTabsStore.scopes[identityScopeKey] = {
+        state: adopted,
+        updatedAt: Date.now(),
+      };
+      pendingScopeStateRef.current = { scopeKey: identityScopeKey, state: adopted };
+      setState(adopted);
+      return;
+    }
+
+    if (!firstResolvedScope) {
+      persistedTabsStore.scopes[previous] = {
+        state: stateRef.current,
+        updatedAt: Date.now(),
+      };
+    }
+
+    if (onboardingActive) {
+      // Onboarding must not be interrupted by sign-in resolving a workspace:
+      // never navigate away from the flow. But re-homing the live state to
+      // the new scope is attribution, and the live state is not always the
+      // single pinned entry tab the flow itself creates — a snapshot restored
+      // at mount can ride along (browser localStorage outlives a daemon
+      // data-dir reset that replays onboarding). Within one account that is
+      // the owner's own state; across accounts (a direct mid-onboarding
+      // account swap) it must fail closed to a fresh Home state instead
+      // (recvqziATl6LlJ leak family) — visually identical for the legitimate
+      // sign-in-mid-onboarding case (a single entry tab either way, synced to
+      // the onboarding route), and never a cross-account tab transfer.
+      const rehomed =
+        accountBucketForScope(previous) === accountBucketForScope(identityScopeKey)
+          ? stateRef.current
+          : syncStateToRoute(freshHomeTabsState(), route);
+      persistedTabsStore.scopes[identityScopeKey] = {
+        state: rehomed,
+        updatedAt: Date.now(),
+      };
+      if (rehomed !== stateRef.current) {
+        pendingScopeStateRef.current = { scopeKey: identityScopeKey, state: rehomed };
+        setState(rehomed);
+      }
+      return;
+    }
+
+    // Settings is app-local rather than Workspace-owned. Keep that explicit
+    // destination when leaving a project-pinned Workspace scope for the same
+    // account's ambient scope, and through the failed-run CTA's anonymous ->
+    // signed-in authorization handoff. Rebuild from a fresh entry tab so no
+    // project tab crosses the scope boundary. Account A -> B still falls
+    // through to the fail-closed reset below.
+    const previousAccountBucket = accountBucketForScope(previous);
+    const nextAccountBucket = accountBucketForScope(identityScopeKey);
+    if (
+      route.kind === 'home'
+      && route.view === 'settings'
+      && (
+        previousAccountBucket === nextAccountBucket
+        || (previousAccountBucket === 'anon' && nextAccountBucket !== 'anon')
+      )
+    ) {
+      const rehomed = syncStateToRoute(freshHomeTabsState(), route);
+      persistedTabsStore.scopes[identityScopeKey] = {
+        state: rehomed,
+        updatedAt: Date.now(),
+      };
+      pendingScopeStateRef.current = { scopeKey: identityScopeKey, state: rehomed };
+      pendingScopeRouteRef.current = null;
+      setState(rehomed);
+      return;
+    }
+
+    // Inline "Authorize & retry" must finish the same run in place. Re-home
+    // only the live route tab (plus a fresh Home tab) when anonymous login
+    // resolves either an unbound local project or an exact witness for the
+    // project's persisted Workspace. Unresolved projects, Workspace
+    // mismatches, sign-out, authenticated account A→B, and Team/Personal
+    // workspace switches all retain the fail-closed reset below.
+    if (shouldRehomeAuthorizedProjectAfterSignIn({
+      previousScopeKey: previous,
+      nextScopeKey: identityScopeKey,
+      route,
+      activeProjectWorkspaceId,
+    })) {
+      const rehomed = syncStateToRoute(freshHomeTabsState(), route);
+      persistedTabsStore.scopes[identityScopeKey] = {
+        state: rehomed,
+        updatedAt: Date.now(),
+      };
+      pendingScopeStateRef.current = { scopeKey: identityScopeKey, state: rehomed };
+      pendingScopeRouteRef.current = null;
+      setState(rehomed);
+      return;
+    }
+
+    // Preserve the prior fail-closed authentication boundary: workspace
+    // bouncing within one account is recoverable, but sign-out or an account
+    // change always lands on a fresh Home state instead of reviving browser
+    // chrome from a previous authenticated session.
+    const mayRestore =
+      accountBucketForScope(previous) === accountBucketForScope(identityScopeKey);
+    const nextState = mayRestore
+      ? persistedTabsStore.scopes[identityScopeKey]?.state ?? freshHomeTabsState()
+      : freshHomeTabsState();
+    pendingScopeStateRef.current = { scopeKey: identityScopeKey, state: nextState };
+    setState(nextState);
+    const activeTab =
+      nextState.tabs.find((tab) => tab.id === nextState.activeTabId) ?? nextState.tabs[0]!;
+    const nextRoute = routeForTab(activeTab);
+    const nextPath = buildPath(nextRoute);
+    pendingScopeRouteRef.current = buildPath(route) === nextPath
+      ? null
+      : { scopeKey: identityScopeKey, path: nextPath };
+    navigate(nextRoute);
+  }, [
+    activeProjectWorkspaceId,
+    identityScopeKey,
+    onboardingActive,
+    persistedTabsStore,
+    route,
+  ]);
 
   // Scroll the active tab into view when it changes. The strip itself
   // is native-scrollable horizontally (see CSS), so we just nudge the
@@ -619,7 +1092,6 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
           activeTabId: nextTab.id,
         });
       });
-      setTabsMenuOpen(false);
     }
 
     window.addEventListener(OPEN_WORKSPACE_TAB_EVENT, onOpenWorkspaceTab);
@@ -643,7 +1115,11 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
       typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(requestMeasure);
     if (resizeObserver) {
       resizeObserver.observe(stripElement);
-      Array.from(stripElement.children).forEach((child) => resizeObserver.observe(child));
+      // Skip the glide indicator: its width transitions with every tab
+      // switch and would feed a resize event into overflow measurement.
+      Array.from(stripElement.children)
+        .filter((child) => !child.classList.contains('workspace-tabs-glide'))
+        .forEach((child) => resizeObserver.observe(child));
     }
     window.addEventListener('resize', requestMeasure);
     return () => {
@@ -664,49 +1140,21 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
   }, [state.activeTabId, state.tabs.length]);
 
   useEffect(() => {
-    try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    } catch {
-      // Best-effort browser chrome state. Navigation itself remains URL-driven.
+    const pending = pendingScopeStateRef.current;
+    if (pending) {
+      // Effects from the render that observed a NEW scope still close over the
+      // OLD scope's state. Wait for React to commit the selected snapshot
+      // before associating any state with the incoming key.
+      if (pending.scopeKey !== identityScopeKey || pending.state !== state) return;
+      pendingScopeStateRef.current = null;
     }
-  }, [state]);
-
-  useEffect(() => {
-    if (!tabsMenuOpen) return;
-    const frame = window.requestAnimationFrame(() => {
-      searchInputRef.current?.focus();
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [tabsMenuOpen]);
-
-  useEffect(() => {
-    if (!tabsMenuOpen) return;
-    function onPointerDown(event: MouseEvent) {
-      const target = event.target as Node;
-      const insideTrigger = menuRef.current?.contains(target) ?? false;
-      // The popover is rendered through a portal into document.body to
-      // escape the `contain: layout` containment block on
-      // `.workspace-tabs-strip` (which would otherwise resolve our
-      // fixed positioning against the strip instead of the viewport).
-      // The portaled node is outside menuRef's subtree, so we also have
-      // to count clicks inside it as "inside the menu".
-      const insidePopover = popoverRef.current?.contains(target) ?? false;
-      if (!insideTrigger && !insidePopover) {
-        setTabsMenuOpen(false);
-      }
-    }
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') {
-        setTabsMenuOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', onPointerDown, true);
-    document.addEventListener('keydown', onKeyDown);
-    return () => {
-      document.removeEventListener('mousedown', onPointerDown, true);
-      document.removeEventListener('keydown', onKeyDown);
-    };
-  }, [tabsMenuOpen]);
+    if (identityScopeKey === null) return;
+    persistTabsStore(
+      persistedTabsStore,
+      typeof identityScopeKey === 'string' ? identityScopeKey : undefined,
+      state,
+    );
+  }, [state, identityScopeKey, persistedTabsStore]);
 
   useEffect(() => {
     function onWorkspaceTabShortcut(event: KeyboardEvent) {
@@ -778,8 +1226,6 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
       ),
       activeTabId: tab.id,
     }));
-    setTabsMenuOpen(false);
-    dismissHoverPreview();
     navigate(routeForTab(tab));
   }
 
@@ -811,7 +1257,95 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
       dragSuppressClickRef.current = false;
       return;
     }
+    // Clicking the pinned Home tab always lands on the home page, whatever
+    // entry section (projects / design-systems / …) the tab last showed.
+    // Keyboard tab-cycling goes through activateTab directly and keeps the
+    // remembered section.
+    if (tab.kind === 'entry' && tab.view !== 'home') {
+      activateTab({ ...tab, view: 'home' });
+      return;
+    }
     activateTab(tab);
+  }
+
+  // Corner-anchored radial fan menu on the "+" button: three concentric bands
+  // sweep down-left from the button (the pivot at the top-right corner),
+  // carrying the composer Template picker's icons. Each band is a ring split
+  // into angular wedges — 3 / 4 from the inner bands outward, with the outer
+  // band absorbing every remaining template (see `radialSlots`).
+  // Picking a wedge opens the home tab with that template applied to the hero.
+  const RADIAL_SIZE = 300;
+  const RADIAL_PAD = 24;
+  const RADIAL_R_IN = 56;
+  const RADIAL_R_OUT = 264;
+  const RADIAL_BANDS = [3, 4, 3];
+  const RADIAL_START = 96; // fan start angle (screen degrees) …
+  const RADIAL_SWEEP = 78; // … total arc, fanning toward the left
+  const RADIAL_GAP = 0; // wedges abut; hairline strokes are the dividers
+  const RADIAL_CX = RADIAL_SIZE - RADIAL_PAD;
+  const RADIAL_CY = RADIAL_PAD;
+
+  function radialBandRadius(band: number): number {
+    return RADIAL_R_IN + ((RADIAL_R_OUT - RADIAL_R_IN) * band) / RADIAL_BANDS.length;
+  }
+
+  // Per-template placement across the bands, aligned to template order.
+  const radialSlots = useMemo(() => {
+    const chips = orderedCreateChips().filter((chip) => chip.action.kind === 'apply-scenario');
+    const slots: Array<{ chip: HomeHeroChip; band: number; seg: number; segCount: number }> = [];
+    let cursor = 0;
+    RADIAL_BANDS.forEach((count, band) => {
+      const isLast = band === RADIAL_BANDS.length - 1;
+      const remaining = Math.max(chips.length - cursor, 0);
+      const take = isLast ? remaining : Math.min(count, remaining);
+      for (let seg = 0; seg < take; seg += 1) {
+        const chip = chips[cursor + seg];
+        if (chip) slots.push({ chip, band, seg, segCount: take });
+      }
+      cursor += take;
+    });
+    return slots;
+  }, []);
+
+  function radialWedgeAngles(seg: number, segCount: number): [number, number] {
+    const step = RADIAL_SWEEP / segCount;
+    return [RADIAL_START + seg * step + RADIAL_GAP / 2, RADIAL_START + (seg + 1) * step - RADIAL_GAP / 2];
+  }
+
+  function radialSectorPath(cx: number, cy: number, a1: number, a2: number, r0: number, r1: number): string {
+    const rad = (a: number) => (a * Math.PI) / 180;
+    const px = (r: number, a: number) => `${(cx + r * Math.cos(rad(a))).toFixed(2)} ${(cy + r * Math.sin(rad(a))).toFixed(2)}`;
+    return `M ${px(r1, a1)} A ${r1} ${r1} 0 0 1 ${px(r1, a2)} L ${px(r0, a2)} A ${r0} ${r0} 0 0 0 ${px(r0, a1)} Z`;
+  }
+
+  function openEntryView(view: EntryHomeView) {
+    const normalized = normalizeTabsState(state);
+    const existingEntryTab = normalized.tabs.find((tab) => tab.kind === 'entry');
+    if (existingEntryTab) {
+      setState({ ...normalized, activeTabId: existingEntryTab.id });
+    } else {
+      const tab = createEntryTab(view);
+      setState({ tabs: [...normalized.tabs, tab], activeTabId: tab.id });
+    }
+    navigate({ kind: 'home', view });
+    setRadialMenu(null);
+  }
+
+  function openTemplateFromRadial(chip: HomeHeroChip) {
+    openEntryView('home');
+    // Hand the pick to the hero once the home tab has mounted/activated —
+    // HomeHero applies the chip exactly as if its own picker was clicked.
+    window.setTimeout(() => {
+      window.dispatchEvent(
+        new CustomEvent(HOME_APPLY_TEMPLATE_EVENT, { detail: { chipId: chip.id } }),
+      );
+    }, 50);
+  }
+
+  function openRadialMenu(event: React.MouseEvent<HTMLButtonElement>) {
+    if (onboardingActive) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    setRadialMenu((cur) => (cur ? null : { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }));
   }
 
   function createNewTab() {
@@ -834,11 +1368,9 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
       });
       navigate({ kind: 'home', view: 'home' });
     }
-    setTabsMenuOpen(false);
   }
 
   function closeTab(tabId: string) {
-    dismissHoverPreview();
     const normalized = normalizeTabsState(state);
     const closingIndex = normalized.tabs.findIndex((tab) => tab.id === tabId);
     if (closingIndex < 0) return;
@@ -865,8 +1397,6 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
   }
 
   function reorderTab(sourceId: string, targetId: string, edge: TabDropEdge) {
-    dismissHoverPreview();
-    setTabsMenuOpen(false);
     setState((current) => {
       const normalized = normalizeTabsState(current);
       const tabs = reorderTabsById(normalized.tabs, sourceId, targetId, edge);
@@ -897,7 +1427,7 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
       if (tabElement && strip.contains(tabElement)) {
         const tabId = tabElement.dataset.workspaceTabId;
         if (tabId && tabId !== sourceId) {
-          return resolveTarget({ tabId, edge: tabDropEdgeFromElement(event, tabElement) });
+          return resolveTarget({ tabId, edge: tabDropEdgeFromElement(event, strip, tabElement) });
         }
       }
     }
@@ -906,9 +1436,9 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
     for (const tabElement of strip.querySelectorAll<HTMLElement>('[data-workspace-tab-id]')) {
       const tabId = tabElement.dataset.workspaceTabId;
       if (!tabId || tabId === sourceId) continue;
-      const rect = tabElement.getBoundingClientRect();
-      if (event.clientX <= rect.left + rect.width / 2) return resolveTarget({ tabId, edge: 'before' });
-      if (event.clientX <= rect.right) return resolveTarget({ tabId, edge: 'after' });
+      const span = tabLayoutSpan(strip, tabElement);
+      if (event.clientX <= span.mid) return resolveTarget({ tabId, edge: 'before' });
+      if (event.clientX <= span.right) return resolveTarget({ tabId, edge: 'after' });
       lastTarget = { tabId, edge: 'after' };
     }
     return lastTarget;
@@ -920,7 +1450,6 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
       event.preventDefault();
       return;
     }
-    dismissHoverPreview();
     dragSuppressClickRef.current = true;
     draggingTabIdRef.current = tabId;
     dragHapticTargetRef.current = `${tabId}:self`;
@@ -1003,8 +1532,20 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
             chrome horizontally. The search-tabs popover still acts as
             a keyboard surface for finding a tab that's scrolled out of
             view. */}
+        {/* Liquid-glass active-tab pill: positioned by useGlideIndicator in
+            the strip's content coordinates, painted by the __pill (frosted
+            everywhere, SDF refraction on Chromium via useLiquidGlass). First
+            child so `.workspace-tab + .workspace-tab` sibling selectors and
+            [data-workspace-tab-id] queries stay untouched. */}
+        <div className="workspace-tabs-glide" ref={glideRef} aria-hidden="true">
+          <div
+            className="workspace-tabs-glide__pill od-glass-refract"
+            ref={setGlidePillRef}
+          />
+        </div>
         {state.tabs.map((tab) => {
-          const display = displayTabById.get(tab.id) ?? displayTabFor(tab, projectById, t);
+          const display =
+            displayTabById.get(tab.id) ?? displayTabFor(tab, projectById, t, knownProjectNamesRef.current);
           const active = tab.id === state.activeTabId;
           // The single entry tab is permanent and pinned leftmost: it cannot be
           // closed or dragged out of the first slot, whatever section it shows.
@@ -1020,215 +1561,173 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
               data-workspace-tab-id={tab.id}
               role="tab"
               aria-selected={active}
-              aria-describedby={hoverPreview?.tabId === tab.id ? 'workspace-tab-preview' : undefined}
               draggable={!isPinned && state.tabs.length > 1}
               onDragStart={(event) => handleTabDragStart(tab.id, event)}
               onDragEnd={handleTabDragEnd}
-              onMouseEnter={(event) => scheduleHoverPreview(tab.id, event.currentTarget)}
-              onMouseLeave={dismissHoverPreview}
             >
-              <button
-                type="button"
-                className="workspace-tab__main"
-                onClick={() => openTab(tab)}
-                onFocus={(event) => scheduleHoverPreview(tab.id, event.currentTarget.parentElement ?? event.currentTarget)}
-                onBlur={dismissHoverPreview}
-              >
-                <span className="workspace-tab__icon" aria-hidden>
-                  <Icon name={display.icon} size={14} />
-                </span>
-                <span className="workspace-tab__label">{display.title}</span>
-              </button>
-              {isPinned ? null : (
+              {isPinned && active && tab.view === 'home' ? (
+                /* Home view only: the pinned tab is the sidebar toggle — a Home
+                   button would be redundant since you are already home. */
                 <button
                   type="button"
-                  className="workspace-tab__close od-tooltip"
-                  aria-label={t('common.close')}
-                  title={t('common.close')}
-                  data-tooltip={t('common.close')}
+                  className="workspace-tab__rail-toggle od-tooltip"
+                  aria-label={entryRailOpen ? t('entry.navCollapse') : t('entry.navExpand')}
+                  aria-expanded={entryRailOpen}
+                  title={entryRailOpen ? t('entry.navCollapse') : t('entry.navExpand')}
+                  data-tooltip={entryRailOpen ? t('entry.navCollapse') : t('entry.navExpand')}
                   data-tooltip-placement="bottom"
-                  onClick={() => closeTab(tab.id)}
+                  data-testid="workspace-home-rail-toggle"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    window.dispatchEvent(new CustomEvent(ENTRY_RAIL_TOGGLE_EVENT));
+                  }}
                 >
-                  <Icon name="close" size={10} />
+                  <Icon name="panel-left" size={14} />
                 </button>
+              ) : isPinned && active ? (
+                /* Any other entry section (settings / all-projects / community /
+                   design-systems …): show the Home icon; clicking returns home. */
+                <button
+                  type="button"
+                  className="workspace-tab__rail-toggle od-tooltip"
+                  aria-label={t('entry.navHome')}
+                  title={t('entry.navHome')}
+                  data-tooltip={t('entry.navHome')}
+                  data-tooltip-placement="bottom"
+                  data-testid="workspace-home-nav"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    openTab(tab);
+                  }}
+                >
+                  <Icon name="home" size={14} />
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    className="workspace-tab__main"
+                    onClick={() => openTab(tab)}
+                  >
+                    <span className="workspace-tab__icon" aria-hidden>
+                      {/* The pinned entry tab remembers its last section
+                          (settings / community / …), but clicking it always
+                          lands on home (openTab), so it must read as the Home
+                          button — not the remembered section's icon. */}
+                      <Icon name={isPinned ? 'home' : display.icon} size={14} />
+                    </span>
+                    <span className="workspace-tab__label">{display.title}</span>
+                  </button>
+                  {isPinned ? null : (
+                    <button
+                      type="button"
+                      className="workspace-tab__close od-tooltip"
+                      aria-label={t('common.close')}
+                      title={t('common.close')}
+                      data-tooltip={t('common.close')}
+                      data-tooltip-placement="bottom"
+                      onClick={() => closeTab(tab.id)}
+                    >
+                      <Icon name="close" size={14} />
+                    </button>
+                  )}
+                </>
               )}
             </div>
           );
         })}
-        <button
-          type="button"
-          className="workspace-tabs-new-btn od-tooltip"
-          onClick={createNewTab}
-          title="New tab"
-          data-tooltip="New tab"
-          data-tooltip-placement="bottom"
-          aria-label="New tab"
-          data-testid="workspace-tabs-new-tab"
-          disabled={onboardingActive}
-        >
-          <Icon name="plus" size={14} />
-        </button>
+        {/* #5517 drops the top-right "+"; new tab stays reachable through
+            ⌘/Ctrl+T. That "+" was the ONLY caller of openRadialMenu, so the
+            radial template menu below is now unreachable — its state and
+            markup stay, as the reference keeps them.
+
+            The tab-search button (and its popover) was removed per request
+            (2026-07-24); a tab scrolled out of view is reached by scrolling
+            the strip or cycling with Ctrl+Tab / ⌘1-9. */}
       </div>
-      <div className="workspace-tabs-actions" ref={menuRef}>
-        {onboardingActive ? null : (
-        <button
-          type="button"
-          className={`workspace-tabs-icon-btn od-tooltip${tabsMenuOpen ? ' is-active' : ''}`}
-          onClick={() => setTabsMenuOpen((open) => !open)}
-          title="Search tabs"
-          data-tooltip="Search tabs"
-          data-tooltip-placement="bottom"
-          aria-label="Search tabs"
-          aria-haspopup="dialog"
-          aria-expanded={tabsMenuOpen}
-        >
-          <Icon name="search" size={15} />
-        </button>
-        )}
-        {tabsMenuOpen && !onboardingActive && typeof document !== 'undefined'
-          ? createPortal(
-              <div
-                className="workspace-tabs-popover"
-                role="dialog"
-                aria-label="Search tabs"
-                ref={popoverRef}
-              >
-                <div className="workspace-tabs-search">
-                  <Icon name="search" size={14} />
-                  <input
-                    ref={searchInputRef}
-                    value={query}
-                    onChange={(event) => setQuery(event.target.value)}
-                    placeholder="Search tabs"
-                    aria-label="Search tabs"
+      {radialMenu ? createPortal(
+        <div className="workspace-radial-layer" onMouseDown={() => setRadialMenu(null)}>
+          <div
+            className="workspace-radial-menu"
+            style={{ left: radialMenu.x - (RADIAL_SIZE - RADIAL_PAD), top: radialMenu.y - RADIAL_PAD, width: RADIAL_SIZE, height: RADIAL_SIZE }}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <svg width={RADIAL_SIZE} height={RADIAL_SIZE} viewBox={`0 0 ${RADIAL_SIZE} ${RADIAL_SIZE}`}>
+              {radialSlots.map((slot) => {
+                const [a1, a2] = radialWedgeAngles(slot.seg, slot.segCount);
+                const r0 = radialBandRadius(slot.band);
+                const r1 = radialBandRadius(slot.band + 1);
+                const isHover = slot.chip.id === radialHoverId;
+                return (
+                  <path
+                    key={slot.chip.id}
+                    className={`workspace-radial-sector-path${isHover ? ' is-hover' : ''}`}
+                    d={radialSectorPath(RADIAL_CX, RADIAL_CY, a1, a2, r0, r1)}
+                    role="menuitem"
+                    aria-label={homeHeroChipLabel(slot.chip.id, t)}
+                    data-testid={`workspace-radial-template-${slot.chip.id}`}
+                    onMouseEnter={() => setRadialHoverId(slot.chip.id)}
+                    onMouseLeave={() => setRadialHoverId((v) => (v === slot.chip.id ? null : v))}
+                    onClick={() => openTemplateFromRadial(slot.chip)}
                   />
-                </div>
-                <div className="workspace-tabs-popover__section">
-                  <span>Open tabs</span>
-                  <span>{state.tabs.length}</span>
-                </div>
-                <div className="workspace-tabs-list" role="listbox" aria-label="Open tabs">
-                  {filteredTabs.length > 0 ? (
-                    filteredTabs.map((display) => {
-                      const active = display.id === state.activeTabId;
-                      return (
-                        <div
-                          key={display.id}
-                          className={`workspace-tabs-list__item${active ? ' is-active' : ''}`}
-                          role="option"
-                          aria-selected={active}
-                        >
-                          <button
-                            type="button"
-                            className="workspace-tabs-list__main od-tooltip"
-                            onClick={() => openTab(display.tab)}
-                            title={display.title}
-                            data-tooltip={display.title}
-                            data-tooltip-placement="right"
-                          >
-                            <span className="workspace-tabs-list__icon" aria-hidden>
-                              <Icon name={display.icon} size={15} />
-                            </span>
-                            <span className="workspace-tabs-list__text">
-                              <span className="workspace-tabs-list__title">{display.title}</span>
-                              <span className="workspace-tabs-list__meta">{display.meta}</span>
-                            </span>
-                          </button>
-                          {display.tab.kind === 'entry' ? null : (
-                            <button
-                              type="button"
-                              className="workspace-tabs-list__close od-tooltip"
-                              onClick={() => closeTab(display.id)}
-                              title={t('common.close')}
-                              data-tooltip={t('common.close')}
-                              data-tooltip-placement="left"
-                              aria-label={t('common.close')}
-                            >
-                              <Icon name="close" size={11} />
-                            </button>
-                          )}
-                        </div>
-                      );
-                    })
-                  ) : (
-                    <div className="workspace-tabs-empty">No tabs found</div>
-                  )}
-                </div>
-              </div>,
-              document.body,
-            )
-          : null}
-      </div>
-      {hoverPreview && typeof document !== 'undefined' && !tabsMenuOpen
-        ? createPortal(
-            (() => {
-              const previewTab = state.tabs.find((tab) => tab.id === hoverPreview.tabId);
-              if (!previewTab) return null;
-              const previewDisplay = displayTabById.get(previewTab.id)
-                ?? displayTabFor(previewTab, projectById, t);
-              const previewDetail = describePreviewDetail(previewTab, projectById);
-              const previewWidth = Math.max(220, Math.round(hoverPreview.anchorWidth));
-              const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1024;
-              const left = Math.max(
-                0,
-                Math.min(viewportWidth - previewWidth, hoverPreview.anchorLeft),
-              );
+                );
+              })}
+            </svg>
+            {radialSlots.map((slot) => {
+              const [a1, a2] = radialWedgeAngles(slot.seg, slot.segCount);
+              const mid = (a1 + a2) / 2;
+              const rmid = (radialBandRadius(slot.band) + radialBandRadius(slot.band + 1)) / 2;
+              const ix = RADIAL_CX + rmid * Math.cos((mid * Math.PI) / 180);
+              const iy = RADIAL_CY + rmid * Math.sin((mid * Math.PI) / 180);
+              const isHover = slot.chip.id === radialHoverId;
               return (
-                <div
-                  id="workspace-tab-preview"
-                  className="workspace-tab-preview"
-                  role="tooltip"
-                  style={{ left, top: hoverPreview.anchorBottom + 6, width: previewWidth }}
+                <span
+                  key={slot.chip.id}
+                  className={`workspace-radial-icon-btn${isHover ? ' is-hover' : ''}`}
+                  aria-hidden
+                  style={{ left: ix, top: iy }}
+                  title={homeHeroChipLabel(slot.chip.id, t)}
                 >
-                  <div className="workspace-tab-preview__icon" aria-hidden>
-                    <Icon name={previewDisplay.icon} size={16} />
-                  </div>
-                  <div className="workspace-tab-preview__text">
-                    <div className="workspace-tab-preview__title">{previewDisplay.title}</div>
-                    <div className="workspace-tab-preview__meta">{previewDisplay.meta}</div>
-                    {previewDetail ? (
-                      <div className="workspace-tab-preview__detail">{previewDetail}</div>
-                    ) : null}
-                  </div>
-                </div>
+                  <Icon name={slot.chip.icon} size={17} />
+                </span>
               );
-            })(),
-            document.body,
-          )
-        : null}
+            })}
+          </div>
+          <button
+            type="button"
+            className="workspace-radial-close"
+            style={{ left: radialMenu.x, top: radialMenu.y }}
+            aria-label={t('common.close')}
+            title={t('common.close')}
+            onMouseDown={(event) => event.stopPropagation()}
+            onClick={() => setRadialMenu(null)}
+          >
+            <Icon name="plus" size={16} />
+          </button>
+        </div>,
+        document.body,
+      ) : null}
     </header>
   );
-}
-
-function describePreviewDetail(
-  tab: WorkspaceChromeTab,
-  projectById: Map<string, Project>,
-): string | null {
-  if (tab.kind === 'project') {
-    if (tab.fileName) return tab.fileName;
-    const project = projectById.get(tab.projectId);
-    const brief = project?.pendingPrompt?.trim() || project?.customInstructions?.trim();
-    if (brief) {
-      return brief.length > 120 ? `${brief.slice(0, 117)}…` : brief;
-    }
-    return null;
-  }
-  if (tab.kind === 'marketplace') {
-    return tab.pluginId ? tab.pluginId : null;
-  }
-  return null;
 }
 
 function displayTabFor(
   tab: WorkspaceChromeTab,
   projectById: Map<string, Project>,
   t: ReturnType<typeof useT>,
+  knownProjectNames?: Map<string, string>,
 ): DisplayTab {
   if (tab.kind === 'project') {
     const project = projectById.get(tab.projectId);
+    // recvq5eKj2kdF0: `projectById` only covers this render's fetched list
+    // (Home's fetch is capped/scoped and does not include every open tab's
+    // project) — fall back to the last real name this tab showed before
+    // falling back further to the untitled label, so a tab with a real name
+    // never regresses to "untitled" just because Home reloaded.
+    const title = project?.name?.trim() || knownProjectNames?.get(tab.projectId) || t('common.untitled');
     return {
       id: tab.id,
-      title: project?.name?.trim() || t('common.untitled'),
+      title,
       meta: t('workspaceTabs.project'),
       icon: 'folder',
       tab,
@@ -1253,6 +1752,13 @@ function displayTabFor(
     library: 'Library',
     brands: t('entry.navBrands'),
     integrations: t('entry.navIntegrations'),
+    community: t('pluginsHome.title'),
+    drafts: t('entry.navDrafts'),
+    'all-projects': t('entry.navAllProjects'),
+    members: t('entry.navMembers'),
+    board: t('entry.navBoard'),
+    'workspace-settings': t('entry.navWorkspaceSettings'),
+    settings: t('settings.title'),
   };
   const entryIcon: Record<EntryHomeView, IconName> = {
     home: 'home',
@@ -1264,6 +1770,13 @@ function displayTabFor(
     library: 'image',
     brands: 'blocks',
     integrations: 'link',
+    community: 'globe',
+    drafts: 'file',
+    'all-projects': 'folder',
+    members: 'users',
+    board: 'kanban',
+    'workspace-settings': 'settings',
+    settings: 'settings',
   };
   return {
     id: tab.id,

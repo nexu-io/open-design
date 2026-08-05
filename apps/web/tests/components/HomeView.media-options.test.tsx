@@ -7,6 +7,18 @@ vi.mock('../../src/components/home-hero/PlaceholderCarousel', () => ({
   PlaceholderCarousel: () => null,
 }));
 
+vi.mock('../../src/collab/useWorkspaceContext', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/collab/useWorkspaceContext')>();
+  return {
+    ...actual,
+    useWorkspaceContext: () => ({
+      context: null,
+      loading: false,
+      failure: 'unsupported' as const,
+    }),
+  };
+});
+
 import { HomeView } from '../../src/components/HomeView';
 import type { DesignSystemSummary, PromptTemplateSummary } from '../../src/types';
 // HomeHero's prompt input migrated from a <textarea> + highlight overlay to the
@@ -60,14 +72,19 @@ afterEach(() => {
 });
 
 describe('HomeView media composer options', () => {
-  it('shows the Home composer session-mode switcher and still defaults to Design mode', async () => {
+  it('shows the Home composer mode picker and still defaults to Design mode', async () => {
     stubFetch();
     const onSubmit = vi.fn();
     renderHome({ onSubmit });
 
     await screen.findByTestId('home-hero-input');
 
-    expect(screen.getByTestId('session-mode-trigger').getAttribute('aria-label')).toBe('Design mode');
+    // 设计 is the app default AND the default SELECTION: the composer opens with
+    // the Design pill showing, so the mode the request will run in is stated on
+    // screen rather than hidden behind a neutral glyph. The submitted payload
+    // carries design either way.
+    expect(screen.getByTestId('composer-mode-trigger').getAttribute('aria-label')).toBe('Mode: Design');
+    expect(screen.getByTestId('composer-mode-clear')).toBeTruthy();
 
     await setHomePrompt('Create a clean loading animation');
     await submitHome();
@@ -511,23 +528,18 @@ async function openOption(name: string) {
 }
 
 async function clickHomeRailChip(id: string) {
-  // Wait until the target control is enabled (plugins load asynchronously, so a
-  // freshly-rendered rail/grid card is briefly disabled) before clicking.
-  const enabledClick = async (testId: string) => {
-    await waitFor(() =>
-      expect((screen.getByTestId(testId) as HTMLButtonElement).disabled).toBe(false),
-    );
-    fireEvent.click(screen.getByTestId(testId));
-  };
-  // No template selected → the rail card is visible; click it directly.
-  if (screen.queryByTestId(`home-hero-rail-${id}`)) {
-    await enabledClick(`home-hero-rail-${id}`);
-    return;
-  }
-  // A template is selected → the rail is hidden; open the Template dropdown and
-  // pick from its grid (picking closes the dropdown, so the next open is clean).
-  fireEvent.click(await screen.findByTestId('home-hero-template-trigger'));
-  await enabledClick(`home-hero-template-card-${id}`);
+  // #5517 removed the inline template rail from Home: every scenario template
+  // is picked from the composer footer's radial Template picker. Wait until the
+  // trigger and the wedge are enabled first — plugins load asynchronously, so
+  // both are briefly disabled after mount.
+  const trigger = await screen.findByTestId('home-hero-template-trigger');
+  await waitFor(() => expect((trigger as HTMLButtonElement).disabled).toBe(false));
+  fireEvent.click(trigger);
+  const wedgeId = `home-hero-template-wedge-${id}`;
+  await waitFor(() =>
+    expect(screen.getByTestId(wedgeId).getAttribute('aria-disabled')).not.toBe('true'),
+  );
+  fireEvent.click(screen.getByTestId(wedgeId));
 }
 
 // Drive the Lexical editor and let the OnChange -> onPromptChange -> setPrompt

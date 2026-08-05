@@ -2,13 +2,16 @@ import { mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import type { Locator } from '@playwright/test';
+
 import { expect, test } from '@/playwright/suite';
 
 import { writeFakeVelaBin } from '@/amr';
-import { routeAgents } from '@/playwright/mock-factory';
+import { routeAgents, suppressWhatsNew } from '@/playwright/mock-factory';
 import { T } from '@/timeouts';
 import {
   createProjectViaApi,
+  gotoEntryHome,
   gotoProject,
   mockAmrWalletSnapshot,
   openSettingsDialog,
@@ -18,6 +21,10 @@ import {
 } from '@/playwright/amr';
 
 test.describe.configure({ timeout: T.xlong });
+
+test.beforeEach(async ({ page }) => {
+  await suppressWhatsNew(page);
+});
 
 async function stubCatalogsEmpty(page: import('@playwright/test').Page) {
   await page.route('**/api/skills', async (route) => {
@@ -39,6 +46,11 @@ async function stubCatalogsEmpty(page: import('@playwright/test').Page) {
       models: [{ id: 'glm-5', label: 'glm-5' }],
     },
   ]);
+}
+
+/** The AMR agent card's own select button, which carries `aria-pressed`. */
+function amrAgentToggle(settings: Locator): Locator {
+  return settings.getByTestId('settings-agent-card-amr').getByRole('button').first();
 }
 
 test('[P0] after local Sign out, AMR runs require re-login and Settings keeps AMR selected', async ({ page }) => {
@@ -108,7 +120,11 @@ test('[P0] after local Sign out, AMR runs require re-login and Settings keeps AM
   await gotoProject(page, projectId);
 
   const settings = await openSettingsDialog(page);
-  await expect(settings.getByRole('button', { name: /Open Design/i }).first()).toHaveAttribute('aria-pressed', 'true');
+  // Scope to the AMR agent card: the settings sidebar also carries an
+  // "Open Design MCP" nav item, so a surface-wide /Open Design/i now resolves
+  // to that `settings-nav-item` (which has no aria-pressed) instead of the
+  // agent card's select button.
+  await expect(amrAgentToggle(settings)).toHaveAttribute('aria-pressed', 'true');
   await expect(settings.getByRole('button', { name: /^Sign out$/i })).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(settings).toHaveCount(0);
@@ -116,8 +132,13 @@ test('[P0] after local Sign out, AMR runs require re-login and Settings keeps AM
     const response = await fetch('/api/integrations/vela/logout', { method: 'POST' });
     if (!response.ok) throw new Error(`logout failed: ${response.status}`);
   });
+  // Logout tears down the authenticated project shell asynchronously. Reboot
+  // on the signed-out entry before opening Settings so this assertion does not
+  // race the project-to-entry transition and accidentally target a trigger
+  // that disappeared between discovery and click.
+  await gotoEntryHome(page);
   const reopenedSettings = await openSettingsDialog(page);
-  await expect(reopenedSettings.getByRole('button', { name: /Open Design/i }).first()).toHaveAttribute('aria-pressed', 'true');
+  await expect(amrAgentToggle(reopenedSettings)).toHaveAttribute('aria-pressed', 'true');
   await expect(reopenedSettings.getByRole('button', { name: /^Authorize$|^Sign in$/i })).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(reopenedSettings).toHaveCount(0);

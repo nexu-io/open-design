@@ -7,7 +7,8 @@
   justify-content: center;
   padding: 32px;
   background: rgba(17, 24, 39, 0.55);
-  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: var(--scrim-backdrop);
+  backdrop-filter: var(--scrim-backdrop);
 }
 
 .modal {
@@ -34,7 +35,7 @@
 .headTitle {
   flex: 1 1 auto;
   min-width: 0;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
   color: var(--text);
 }
@@ -46,7 +47,7 @@
   width: 34px;
   height: 34px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-large, 8px);
   background: var(--bg-elevated);
   color: var(--text);
   cursor: pointer;

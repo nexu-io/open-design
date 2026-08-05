@@ -12,9 +12,6 @@
 // are also multi-selectable — checkbox, Cmd/Ctrl+click, Shift+click range, a
 // rubber-band box drag, Cmd/Ctrl+A — and the selection can be bulk-deleted from
 // the action bar or with Delete / Backspace.
-//
-// Copy is intentionally inline (not yet i18n-keyed) — localization of the
-// Library surface is a tracked follow-up.
 
 import { memo, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { ChatAttachment, DesignSystemSummary, LibraryAsset } from '@open-design/contracts';
@@ -54,6 +51,12 @@ import {
 import { LibraryPreviewModal } from './LibraryPreviewModal';
 import { LibraryUploadModal } from './LibraryUploadModal';
 import styles from './LibrarySection.module.css';
+import { useT } from '../i18n';
+import { useWorkspaceContext } from '../collab/useWorkspaceContext';
+import { workspaceIdentityCacheKey } from '../collab/workspace-identity';
+import { resolveProjectWorkspaceContext } from '../collab/useProjectWorkspaceScope';
+
+type Translate = ReturnType<typeof useT>;
 
 interface Props {
   active: boolean;
@@ -63,27 +66,31 @@ interface Props {
 
 // `value` is matched against an asset's `badgeKind` (not its raw storage kind),
 // so `element` isolates clipper element-pick captures and `image` excludes them.
-const KIND_FILTERS: Array<{ value: string; label: string }> = [
-  { value: '', label: 'All kinds' },
-  { value: 'image', label: 'Images' },
-  { value: 'element', label: 'Elements' },
-  { value: 'design-system', label: 'Design systems' },
-  { value: 'video', label: 'Video' },
-  { value: 'html', label: 'HTML' },
-  { value: 'font', label: 'Fonts' },
-  { value: 'color', label: 'Colors' },
-  { value: 'text', label: 'Text' },
-  { value: 'url', label: 'Links' },
-];
+function kindFilters(t: Translate): Array<{ value: string; label: string }> {
+  return [
+    { value: '', label: t('library.kindAll') },
+    { value: 'image', label: t('library.kindImages') },
+    { value: 'element', label: t('library.kindElements') },
+    { value: 'design-system', label: t('library.kindDesignSystems') },
+    { value: 'video', label: t('library.kindVideo') },
+    { value: 'html', label: 'HTML' },
+    { value: 'font', label: t('library.kindFonts') },
+    { value: 'color', label: t('library.kindColors') },
+    { value: 'text', label: t('library.kindText') },
+    { value: 'url', label: t('library.kindLinks') },
+  ];
+}
 
-const SOURCE_FILTERS: Array<{ value: string; label: string }> = [
-  { value: '', label: 'All sources' },
-  { value: 'clipper', label: 'Clipper' },
-  { value: 'manual-upload', label: 'Upload' },
-  { value: 'agent-task', label: 'Agent' },
-  { value: 'design-system', label: 'Design system' },
-  { value: 'generated', label: 'Generated' },
-];
+function sourceFilters(t: Translate): Array<{ value: string; label: string }> {
+  return [
+    { value: '', label: t('library.sourceAll') },
+    { value: 'clipper', label: t('library.sourceClipper') },
+    { value: 'manual-upload', label: t('library.upload') },
+    { value: 'agent-task', label: t('library.sourceAgent') },
+    { value: 'design-system', label: t('library.sourceDesignSystem') },
+    { value: 'generated', label: t('library.sourceGenerated') },
+  ];
+}
 
 /** Local `YYYY-MM-DD` for a Date — matches the daemon's `archivedDate` bucket. */
 function ymdLocal(date: Date): string {
@@ -99,11 +106,11 @@ function dayKeyOf(asset: LibraryAsset): string {
 }
 
 /** Human heading for a `YYYY-MM-DD` day bucket — Today / Yesterday / a date. */
-function dayHeading(key: string): string {
+function dayHeading(key: string, t: Translate): string {
   const today = ymdLocal(new Date());
   const yesterday = ymdLocal(new Date(Date.now() - 86_400_000));
-  if (key === today) return 'Today';
-  if (key === yesterday) return 'Yesterday';
+  if (key === today) return t('library.today');
+  if (key === yesterday) return t('library.yesterday');
   const [y, m, d] = key.split('-').map(Number);
   if (!y || !m || !d) return key;
   return new Date(y, m - 1, d).toLocaleDateString(undefined, {
@@ -362,6 +369,7 @@ const LibraryCard = memo(function LibraryCard({
   onEditAsPage,
   onOpenProject,
 }: LibraryCardProps) {
+  const t = useT();
   const src = primarySource(asset);
   const projectId = originProjectId(asset);
   const designSystemId = originDesignSystemId(asset);
@@ -389,7 +397,7 @@ const LibraryCard = memo(function LibraryCard({
             }
             onPreview(asset.id);
           }}
-          aria-label={`Preview ${title}`}
+          aria-label={t('library.previewAsset', { title })}
         >
           <span className={styles.previewOverlay} aria-hidden>
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -403,7 +411,7 @@ const LibraryCard = memo(function LibraryCard({
           className={styles.selectCheck}
           data-checked={selected ? 'true' : 'false'}
           aria-pressed={selected}
-          aria-label={selected ? 'Deselect asset' : 'Select asset'}
+          aria-label={selected ? t('library.deselectAsset') : t('library.selectAsset')}
           onClick={(e) => {
             e.stopPropagation();
             if (e.shiftKey) onRange(index);
@@ -454,7 +462,7 @@ const LibraryCard = memo(function LibraryCard({
             className={styles.linkBtn}
             onClick={() => navigate({ kind: 'design-system-detail', designSystemId })}
           >
-            Open design system
+            {t('library.openDesignSystem')}
           </button>
         ) : projectId ? (
           <button
@@ -462,7 +470,7 @@ const LibraryCard = memo(function LibraryCard({
             className={styles.linkBtn}
             onClick={() => onOpenProject(projectId, asset.relPath)}
           >
-            Open project
+            {t('library.openProject')}
           </button>
         ) : asset.kind === 'html' ? (
           <button
@@ -471,17 +479,17 @@ const LibraryCard = memo(function LibraryCard({
             onClick={() => onEditAsPage(asset.id)}
             disabled={editing}
           >
-            {editing ? 'Opening…' : 'Edit as page'}
+            {editing ? t('library.opening') : t('library.editAsPage')}
           </button>
         ) : asset.sourceUrl ? (
           <a className={styles.linkBtn} href={asset.sourceUrl} target="_blank" rel="noreferrer">
-            Source
+            {t('library.viewSource')}
           </a>
         ) : (
           <span />
         )}
         <button type="button" className={styles.deleteBtn} onClick={() => onDelete(asset.id)}>
-          Remove
+          {t('library.remove')}
         </button>
       </div>
     </figure>
@@ -489,6 +497,9 @@ const LibraryCard = memo(function LibraryCard({
 });
 
 export function LibrarySection({ active, onOpenProject }: Props) {
+  const t = useT();
+  const { context: workspaceContext } = useWorkspaceContext();
+  const workspaceIdentity = workspaceIdentityCacheKey(workspaceContext);
   const [assets, setAssets] = useState<LibraryAsset[]>([]);
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -728,13 +739,23 @@ export function LibrarySection({ active, onOpenProject }: Props) {
 
   // --- multi-select → design system ---------------------------------------
 
+  useEffect(() => {
+    dsLoadedRef.current = false;
+    setDsList([]);
+  }, [workspaceIdentity]);
+
   // Lazily load the user's own (editable) design systems the first time the
   // "Use in design system" menu opens — these are the ones that can be refined.
   useEffect(() => {
     if (!dsMenuOpen || dsLoadedRef.current) return;
     dsLoadedRef.current = true;
-    void fetchDesignSystems().then((list) => setDsList(list.filter((d) => d.source === 'user')));
-  }, [dsMenuOpen]);
+    let cancelled = false;
+    void fetchDesignSystems(workspaceContext).then((list) =>
+      !cancelled && setDsList(list.filter((d) => d.source === 'user')));
+    return () => {
+      cancelled = true;
+    };
+  }, [dsMenuOpen, workspaceIdentity]);
 
   // Dismiss the menu on outside click / Escape. Deliberately NOT a full-screen
   // backdrop element: a stray bare overlay can paint opaque (e.g. UA button
@@ -806,18 +827,30 @@ export function LibrarySection({ active, onOpenProject }: Props) {
       if (!chosen.length) return;
       setDsBusy(true);
       try {
+        const mutationWorkspaceContext = workspaceContext;
         let projectId = ds.projectId;
         if (!projectId) {
-          const detail = await fetchDesignSystem(ds.id);
+          const detail = await fetchDesignSystem(ds.id, mutationWorkspaceContext);
           projectId = detail?.projectId;
         }
         if (!projectId) {
           setDsMenuOpen(false);
           return;
         }
+        const projectWorkspaceContext = await resolveProjectWorkspaceContext(
+          projectId,
+          mutationWorkspaceContext,
+          mutationWorkspaceContext?.workspaceId ?? null,
+        );
         const attachments: ChatAttachment[] = [];
         for (const a of chosen) {
-          const res = await applyLibraryAsset(a.id, projectId, undefined, { includeElement: true });
+          const res = await applyLibraryAsset(
+            a.id,
+            projectId,
+            undefined,
+            { includeElement: true },
+            projectWorkspaceContext,
+          );
           if (res?.relPath) {
             attachments.push({
               path: res.relPath,
@@ -848,7 +881,7 @@ export function LibrarySection({ active, onOpenProject }: Props) {
         setDsBusy(false);
       }
     },
-    [assets, selectedIds, onOpenProject],
+    [assets, onOpenProject, selectedIds, workspaceIdentity],
   );
 
   const toggleOne = useCallback((id: string, index: number) => {
@@ -1073,6 +1106,9 @@ export function LibrarySection({ active, onOpenProject }: Props) {
       .map(([key, items]) => ({ key, items }));
   }, [assets]);
 
+  const kindFilterOptions = useMemo(() => kindFilters(t), [t]);
+  const sourceFilterOptions = useMemo(() => sourceFilters(t), [t]);
+
   // Render one memoized card. The wrapper just wires this render's per-card
   // props; `LibraryCard` itself is what skips re-rendering when only another
   // card's selection changed.
@@ -1102,12 +1138,9 @@ export function LibrarySection({ active, onOpenProject }: Props) {
     >
       {fontFaceCss ? <style>{fontFaceCss}</style> : null}
       <header className="entry-section__head">
-        <h1 className="entry-section__title">Library</h1>
+        <h1 className="entry-section__title">{t('library.title')}</h1>
         <div className={styles.clipperHint}>
-          <p className={styles.headerHint}>
-            Clip any page, design system, screenshot, image, or Figma import JSON into your Library —
-            local-first, one click, no login.
-          </p>
+          <p className={styles.headerHint}>{t('library.headerHint')}</p>
           <a
             className={styles.clipperDownload}
             href="https://open-design.ai/clipper"
@@ -1115,7 +1148,7 @@ export function LibrarySection({ active, onOpenProject }: Props) {
             rel="noreferrer"
           >
             <Icon name="download" size={15} />
-            Get the Open Design Web Clipper
+            {t('library.getClipper')}
           </a>
         </div>
       </header>
@@ -1126,36 +1159,36 @@ export function LibrarySection({ active, onOpenProject }: Props) {
           <input
             className={styles.search}
             type="search"
-            placeholder="Search captions, tags, titles…"
+            placeholder={t('library.searchPlaceholder')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <select aria-label="Filter by kind" className={styles.select} value={kind} onChange={(e) => setKind(e.target.value)}>
-          {KIND_FILTERS.map((f) => (
+        <select aria-label={t('library.filterByKind')} className={styles.select} value={kind} onChange={(e) => setKind(e.target.value)}>
+          {kindFilterOptions.map((f) => (
             <option key={f.value} value={f.value}>
               {f.label}
             </option>
           ))}
         </select>
-        <select aria-label="Filter by source" className={styles.select} value={source} onChange={(e) => setSource(e.target.value)}>
-          {SOURCE_FILTERS.map((f) => (
+        <select aria-label={t('library.filterBySource')} className={styles.select} value={source} onChange={(e) => setSource(e.target.value)}>
+          {sourceFilterOptions.map((f) => (
             <option key={f.value} value={f.value}>
               {f.label}
             </option>
           ))}
         </select>
-        <div className={styles.viewToggle} role="group" aria-label="View mode">
+        <div className={styles.viewToggle} role="group" aria-label={t('library.viewMode')}>
           <button
             type="button"
             className={`${styles.viewToggleBtn} od-tooltip`}
             data-active={viewMode === 'grid' ? 'true' : 'false'}
             aria-pressed={viewMode === 'grid'}
             onClick={() => setViewMode('grid')}
-            data-tooltip="Show assets as a grid"
+            data-tooltip={t('library.viewGridTooltip')}
             data-tooltip-placement="bottom"
           >
-            Grid
+            {t('library.viewGrid')}
           </button>
           <button
             type="button"
@@ -1163,10 +1196,10 @@ export function LibrarySection({ active, onOpenProject }: Props) {
             data-active={viewMode === 'timeline' ? 'true' : 'false'}
             aria-pressed={viewMode === 'timeline'}
             onClick={() => setViewMode('timeline')}
-            data-tooltip="Group assets by day, newest first"
+            data-tooltip={t('library.viewTimelineTooltip')}
             data-tooltip-placement="bottom"
           >
-            Timeline
+            {t('library.viewTimeline')}
           </button>
         </div>
         <Button
@@ -1174,11 +1207,11 @@ export function LibrarySection({ active, onOpenProject }: Props) {
           className={`${styles.refreshBtn} od-tooltip`}
           onClick={() => void load()}
           aria-busy={loading}
-          data-tooltip="Reload the list with the current filters"
+          data-tooltip={t('library.refreshTooltip')}
           data-tooltip-placement="bottom"
         >
           <Icon name="refresh" size={15} className={loading ? styles.spin : undefined} />
-          Refresh
+          {t('library.refresh')}
         </Button>
         <Button
           variant="ghost"
@@ -1186,31 +1219,33 @@ export function LibrarySection({ active, onOpenProject }: Props) {
           onClick={() => void runSync()}
           aria-busy={syncing}
           disabled={syncing}
-          data-tooltip="Pull your design systems and agent-generated artifacts into the Library"
+          data-tooltip={t('library.syncTooltip')}
           data-tooltip-placement="bottom"
         >
           <Icon name="refresh" size={15} className={syncing ? styles.spin : undefined} />
-          {syncing ? 'Syncing…' : 'Sync'}
+          {syncing ? t('library.syncing') : t('library.sync')}
         </Button>
         <Button
           className={`${styles.uploadBtn} od-tooltip`}
           onClick={() => openUpload()}
-          data-tooltip="Upload images, fonts, or files into the Library"
+          data-tooltip={t('library.uploadTooltip')}
           data-tooltip-placement="bottom"
         >
           <Icon name="upload" size={15} />
-          Upload
+          {t('library.upload')}
         </Button>
       </div>
 
       {selectedCount > 0 && !dragging ? (
         <div className={styles.selectionBar}>
-          <span className={styles.selectionCount}>{selectedCount} selected</span>
+          <span className={styles.selectionCount}>
+            {t('library.selectedCount', { count: selectedCount })}
+          </span>
           <button type="button" className={styles.selectionLink} onClick={selectAll}>
-            Select all
+            {t('library.selectAll')}
           </button>
           <button type="button" className={styles.selectionLink} onClick={clearSelection}>
-            Clear
+            {t('library.clear')}
           </button>
           <span className={styles.selectionSpacer} />
           <button
@@ -1218,12 +1253,12 @@ export function LibrarySection({ active, onOpenProject }: Props) {
             className={styles.chatBtn}
             onClick={() => void chatToDesignFromSelection()}
             disabled={dsBusy}
-            title={`Start a chat to turn ${selectedCount} into a design`}
+            title={t('library.chatToDesignTitle', { count: selectedCount })}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
               <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
             </svg>
-            Chat to design
+            {t('library.chatToDesign')}
           </button>
           <div className={styles.dsMenuWrap} ref={dsMenuWrapRef}>
             <button
@@ -1234,7 +1269,7 @@ export function LibrarySection({ active, onOpenProject }: Props) {
               aria-expanded={dsMenuOpen}
               disabled={dsBusy}
             >
-              {dsBusy ? 'Working…' : 'Use in design system'}
+              {dsBusy ? t('library.working') : t('library.useInDesignSystem')}
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                 <path d="m6 9 6 6 6-6" />
               </svg>
@@ -1247,15 +1282,15 @@ export function LibrarySection({ active, onOpenProject }: Props) {
                   role="menuitem"
                   onClick={() => void createDesignSystemFromSelection()}
                 >
-                  <span className={styles.dsMenuItemTitle}>Create new design system</span>
+                  <span className={styles.dsMenuItemTitle}>{t('library.createDesignSystem')}</span>
                   <span className={styles.dsMenuItemSub}>
-                    Open the create flow with these {selectedCount} attached
+                    {t('library.createDesignSystemSub', { count: selectedCount })}
                   </span>
                 </button>
                 <div className={styles.dsMenuDivider} />
-                <div className={styles.dsMenuHeader}>Refine existing</div>
+                <div className={styles.dsMenuHeader}>{t('library.refineExisting')}</div>
                 {dsList.length === 0 ? (
-                  <div className={styles.dsMenuEmpty}>No editable design systems yet.</div>
+                  <div className={styles.dsMenuEmpty}>{t('library.noEditableDesignSystems')}</div>
                 ) : (
                   dsList.map((ds) => (
                     <button
@@ -1266,7 +1301,7 @@ export function LibrarySection({ active, onOpenProject }: Props) {
                       onClick={() => void optimizeExistingDesignSystem(ds)}
                     >
                       <span className={styles.dsMenuItemTitle}>{ds.title}</span>
-                      <span className={styles.dsMenuItemSub}>Add assets & open to refine</span>
+                      <span className={styles.dsMenuItemSub}>{t('library.addAssetsAndRefine')}</span>
                     </button>
                   ))
                 )}
@@ -1274,20 +1309,20 @@ export function LibrarySection({ active, onOpenProject }: Props) {
             ) : null}
           </div>
           <button type="button" className={styles.selectionDelete} onClick={requestDeleteSelected}>
-            Delete {selectedCount}
+            {t('library.deleteCount', { count: selectedCount })}
           </button>
         </div>
       ) : null}
 
       {loading && assets.length === 0 ? (
-        <p className={styles.empty}>Loading…</p>
+        <p className={styles.empty}>{t('library.loading')}</p>
       ) : assets.length === 0 ? (
         <div className={styles.empty}>
-          <p>No assets yet.</p>
+          <p>{t('library.emptyTitle')}</p>
           <p className={styles.emptyHint}>
-            Clip from any page with the Open Design Web Clipper, run{' '}
-            <code>od library import &lt;file&gt;</code>, or upload inside a project — everything
-            lands here.
+            {t('library.emptyHintBefore')}{' '}
+            <code>od library import &lt;file&gt;</code>
+            {t('library.emptyHintAfter')}
           </p>
         </div>
       ) : viewMode === 'timeline' ? (
@@ -1301,7 +1336,7 @@ export function LibrarySection({ active, onOpenProject }: Props) {
             <section key={group.key} className={styles.timelineDay}>
               <div className={styles.timelineHead}>
                 <span className={styles.timelineDot} aria-hidden />
-                <h2 className={styles.timelineDate}>{dayHeading(group.key)}</h2>
+                <h2 className={styles.timelineDate}>{dayHeading(group.key, t)}</h2>
                 <span className={styles.timelineCount}>{group.items.length}</span>
               </div>
               <div className={styles.timelineGrid}>
@@ -1332,7 +1367,7 @@ export function LibrarySection({ active, onOpenProject }: Props) {
         <div className={styles.dropOverlay} aria-hidden>
           <div className={styles.dropOverlayInner}>
             <Icon name="upload" size={30} />
-            <span className={styles.dropOverlayText}>Drop to upload to your Library</span>
+            <span className={styles.dropOverlayText}>{t('library.dropToUpload')}</span>
           </div>
         </div>
       ) : null}
@@ -1357,18 +1392,21 @@ export function LibrarySection({ active, onOpenProject }: Props) {
           ariaLabelledBy={confirmDeleteTitleId}
         >
           <DialogTitle id={confirmDeleteTitleId}>
-            Delete {selectedCount} {selectedCount === 1 ? 'asset' : 'assets'}?
+            {selectedCount === 1
+              ? t('library.confirmDeleteTitleOne', { count: selectedCount })
+              : t('library.confirmDeleteTitleMany', { count: selectedCount })}
           </DialogTitle>
           <DialogDescription className="modal-confirm-message">
-            This permanently removes {selectedCount === 1 ? 'it' : 'them'} from your Library. This
-            can’t be undone.
+            {selectedCount === 1
+              ? t('library.confirmDeleteBodyOne')
+              : t('library.confirmDeleteBodyMany')}
           </DialogDescription>
           <DialogFooter className="row">
             <button type="button" onClick={() => setConfirmDeleteOpen(false)}>
-              Cancel
+              {t('library.cancel')}
             </button>
             <button type="button" className="primary danger" autoFocus onClick={confirmDeleteSelected}>
-              Delete {selectedCount}
+              {t('library.deleteCount', { count: selectedCount })}
             </button>
           </DialogFooter>
         </Dialog>

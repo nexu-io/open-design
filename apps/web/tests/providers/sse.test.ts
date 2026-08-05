@@ -53,6 +53,7 @@ describe('streamViaDaemon', () => {
 
     await streamViaDaemon({
       agentId: 'mock',
+      userMessageId: '3',
       history: [
         { id: '1', role: 'user', content: 'pre-consent brief' },
         { id: '2', role: 'assistant', content: 'draft response' },
@@ -68,6 +69,7 @@ describe('streamViaDaemon', () => {
     expect(body.message).toContain('pre-consent brief');
     expect(body.message).toContain('post-consent revision');
     expect(body.currentPrompt).toBe('post-consent revision');
+    expect(body.userMessageId).toBe('3');
   });
 
   it('sends the selected Local BYOK provider only to the local run endpoint', async () => {
@@ -1058,7 +1060,7 @@ describe('streamViaDaemon', () => {
           sseResponse(
             [
               'event: error',
-              'data: {"message":"AMR balance unavailable","error":{"code":"AMR_INSUFFICIENT_BALANCE","message":"AMR balance unavailable","details":{"kind":"amr_account","action":"recharge","actionUrl":"https://open-design.ai/amr/wallet"}}}',
+              'data: {"message":"AMR balance unavailable","error":{"code":"AMR_INSUFFICIENT_BALANCE","message":"AMR balance unavailable","details":{"kind":"amr_account","action":"recharge","actionUrl":"https://open-design.ai/amr/dashboard"}}}',
               '',
               '',
             ].join('\n'),
@@ -1081,7 +1083,7 @@ describe('streamViaDaemon', () => {
         details: {
           kind: 'amr_account',
           action: 'recharge',
-          actionUrl: 'https://open-design.ai/amr/wallet',
+          actionUrl: 'https://open-design.ai/amr/dashboard',
         },
       }),
     );

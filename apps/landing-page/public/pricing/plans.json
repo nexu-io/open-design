@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "currency": "USD",
   "overageDeployPriceUsd": 2,
   "tiers": [
@@ -26,12 +26,12 @@
       "monthly": {
         "priceUsd": 100,
         "introPriceUsd": 70,
-        "grantUsd": 100
+        "grantUsd": 120
       },
       "yearly": {
         "priceUsd": 720,
         "discountPct": 40,
-        "grantUsd": 1200
+        "grantUsd": 1440
       },
       "deployLimit": 20
     },
@@ -42,14 +42,80 @@
       "monthly": {
         "priceUsd": 200,
         "introPriceUsd": 120,
-        "grantUsd": 200
+        "grantUsd": 300
       },
       "yearly": {
         "priceUsd": 1176,
         "discountPct": 51,
-        "grantUsd": 2400
+        "grantUsd": 3600
       },
       "deployLimit": 50
+    }
+  ],
+  "teamTiers": [
+    {
+      "tier": "team_basic",
+      "rank": 0,
+      "recommended": false,
+      "minSeats": 3,
+      "monthlyCreditsPerSeatUsd": 0,
+      "monthly": {
+        "priceUsd": 20,
+        "introPriceUsd": 16
+      },
+      "yearly": {
+        "priceUsd": 240,
+        "introPriceUsd": 168,
+        "discountPct": 30
+      }
+    },
+    {
+      "tier": "team_plus",
+      "rank": 1,
+      "recommended": false,
+      "minSeats": 3,
+      "monthlyCreditsPerSeatUsd": 20,
+      "monthly": {
+        "priceUsd": 40,
+        "introPriceUsd": 32
+      },
+      "yearly": {
+        "priceUsd": 480,
+        "introPriceUsd": 336,
+        "discountPct": 30
+      }
+    },
+    {
+      "tier": "team_pro",
+      "rank": 2,
+      "recommended": true,
+      "minSeats": 3,
+      "monthlyCreditsPerSeatUsd": 100,
+      "monthly": {
+        "priceUsd": 120,
+        "introPriceUsd": 84
+      },
+      "yearly": {
+        "priceUsd": 1440,
+        "introPriceUsd": 864,
+        "discountPct": 40
+      }
+    },
+    {
+      "tier": "team_max",
+      "rank": 3,
+      "recommended": false,
+      "minSeats": 3,
+      "monthlyCreditsPerSeatUsd": 200,
+      "monthly": {
+        "priceUsd": 220,
+        "introPriceUsd": 132
+      },
+      "yearly": {
+        "priceUsd": 2640,
+        "introPriceUsd": 1296,
+        "discountPct": 51
+      }
     }
   ]
 }

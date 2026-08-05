@@ -2,12 +2,14 @@ import type http from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { ensureWorkspaceProject, openDatabase } from '../src/db.js';
 import { startServer } from '../src/server.js';
 
 describe('project preview containment routes', () => {
   let server: http.Server;
   let baseUrl: string;
   const projectsToClean: string[] = [];
+  const cleanupWorkspaceHeaders = new Map<string, Record<string, string>>();
 
   beforeAll(async () => {
     const started = (await startServer({ port: 0, returnServer: true })) as {
@@ -20,7 +22,11 @@ describe('project preview containment routes', () => {
 
   afterAll(async () => {
     for (const id of projectsToClean.splice(0)) {
-      await fetch(`${baseUrl}/api/projects/${id}`, { method: 'DELETE' }).catch(() => {});
+      const headers = cleanupWorkspaceHeaders.get(id);
+      await fetch(`${baseUrl}/api/projects/${id}`, {
+        method: 'DELETE',
+        ...(headers ? { headers } : {}),
+      }).catch(() => {});
     }
     await new Promise<void>((resolve) => server.close(() => resolve()));
   });
@@ -48,6 +54,41 @@ describe('project preview containment routes', () => {
       body: JSON.stringify({ name, content }),
     });
     expect(response.ok).toBe(true);
+  }
+
+  function workspaceHeaders(workspaceId: string, workspaceMemberId: string): Record<string, string> {
+    return {
+      'x-od-workspace-id': workspaceId,
+      'x-od-workspace-member-id': workspaceMemberId,
+      'x-od-workspace-type': 'personal',
+      'x-od-workspace-role': 'member',
+      'x-od-workspace-member-status': 'active',
+      'x-od-workspace-lifecycle-state': 'active',
+      'x-od-workspace-can-share-projects': 'true',
+      'x-od-workspace-can-write-synced-files': 'true',
+    };
+  }
+
+  function bindPersonalProject(
+    projectId: string,
+    workspaceId: string,
+    workspaceMemberId: string,
+  ): void {
+    const dataDir = process.env.OD_DATA_DIR;
+    if (!dataDir) throw new Error('OD_DATA_DIR is required by the daemon test harness');
+    const db = openDatabase(process.cwd(), { dataDir });
+    ensureWorkspaceProject(db, {
+      projectId,
+      workspaceId,
+      visibility: 'personal',
+      resourceState: 'active',
+      createdByWorkspaceMemberId: workspaceMemberId,
+      updatedByWorkspaceMemberId: workspaceMemberId,
+      resourceHubResourceId: null,
+      cloudTombstonedAt: null,
+      syncState: 'local_only',
+    });
+    cleanupWorkspaceHeaders.set(projectId, workspaceHeaders(workspaceId, workspaceMemberId));
   }
 
   it('returns a scoped preview URL with sandbox guidance and serves it with an opaque-origin CSP', async () => {
@@ -143,6 +184,83 @@ describe('project preview containment routes', () => {
     const missingBody = await missingAsset.json() as { error?: { message?: string } };
     expect(missingBody.error?.message).toContain('ENOENT');
     expect(missingBody.error?.message).toContain('assets/missing.png');
+  });
+
+  it('binds runtime-created relative assets to the verified Workspace preview authority', async () => {
+    const workspaceId = `workspace-${randomUUID()}`;
+    const workspaceMemberId = `member-${randomUUID()}`;
+    const projectId = await createProject({ entryFile: 'brand.html' });
+    await writeProjectFile(
+      projectId,
+      'brand.html',
+      [
+        '<!doctype html><html><head><title>Brand</title></head><body>',
+        '<script type="application/json" id="brand">{"logo":"logos/mark.png"}</script>',
+        '<script>const img = document.createElement("img"); img.src = JSON.parse(document.querySelector("#brand").textContent).logo; document.body.append(img);</script>',
+        '</body></html>',
+      ].join(''),
+    );
+    await writeProjectFile(projectId, 'logos/mark.png', 'brand-logo-bytes');
+    bindPersonalProject(projectId, workspaceId, workspaceMemberId);
+
+    const scopeQuery = new URLSearchParams({ workspaceId, workspaceMemberId });
+    const scopedPlainRawResponse = await fetch(
+      `${baseUrl}/api/projects/${projectId}/raw/brand.html?${scopeQuery}`,
+    );
+    expect(scopedPlainRawResponse.status).toBe(200);
+    expect(await scopedPlainRawResponse.text()).not.toContain('<base href=');
+
+    const unscopedLogoResponse = await fetch(
+      `${baseUrl}/api/projects/${projectId}/raw/logos/mark.png`,
+    );
+    expect(unscopedLogoResponse.status).toBe(400);
+    expect(await unscopedLogoResponse.json()).toMatchObject({
+      error: { code: 'WORKSPACE_CONTEXT_REQUIRED' },
+    });
+
+    scopeQuery.append('odPreviewBridge', 'scroll');
+    const rawResponse = await fetch(
+      `${baseUrl}/api/projects/${projectId}/raw/brand.html?${scopeQuery}`,
+    );
+    expect(rawResponse.status).toBe(200);
+    const html = await rawResponse.text();
+    const baseHref = html.match(/<base\s+href="([^"]+)"/i)?.[1];
+    expect(baseHref).toMatch(
+      new RegExp(`^/api/projects/${projectId}/preview/[A-Za-z0-9_-]{8,128}/$`, 'u'),
+    );
+
+    // The browser resolves runtime-created `img.src = "logos/mark.png"`
+    // against <base>. A query-scoped raw document cannot do this because URL
+    // resolution never inherits the document query string.
+    const runtimeLogoUrl = new URL('logos/mark.png', new URL(baseHref!, baseUrl));
+    expect(runtimeLogoUrl.search).toBe('');
+    expect(runtimeLogoUrl.pathname).toContain(`/api/projects/${projectId}/preview/`);
+    const logoResponse = await fetch(runtimeLogoUrl);
+    expect(logoResponse.status).toBe(200);
+    expect(await logoResponse.text()).toBe('brand-logo-bytes');
+
+    const wrongWorkspaceQuery = new URLSearchParams({
+      workspaceId: `wrong-${randomUUID()}`,
+      workspaceMemberId,
+      odPreviewBridge: 'scroll',
+    });
+    const wrongWorkspaceResponse = await fetch(
+      `${baseUrl}/api/projects/${projectId}/raw/brand.html?${wrongWorkspaceQuery}`,
+    );
+    expect(wrongWorkspaceResponse.status).toBe(403);
+    expect(await wrongWorkspaceResponse.text()).not.toContain('/preview/');
+
+    const foreignProjectId = await createProject({ entryFile: 'brand.html' });
+    await writeProjectFile(foreignProjectId, 'logos/mark.png', 'foreign-logo-bytes');
+    bindPersonalProject(
+      foreignProjectId,
+      `foreign-workspace-${randomUUID()}`,
+      `foreign-member-${randomUUID()}`,
+    );
+    const borrowedTokenUrl = new URL(runtimeLogoUrl);
+    borrowedTokenUrl.pathname = borrowedTokenUrl.pathname.replace(projectId, foreignProjectId);
+    const borrowedTokenResponse = await fetch(borrowedTokenUrl);
+    expect(borrowedTokenResponse.status).toBe(404);
   });
 
   it('serves minted preview HTML and assets without bearer headers when API token auth is enabled', async () => {

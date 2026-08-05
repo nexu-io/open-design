@@ -1,4 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  buildWorkspacePermissions,
+  buildWorkspaceSeatSummary,
+  type WorkspaceCollabContext,
+} from '@open-design/contracts';
 
 import { historyWithApiAttachmentContext } from '../src/api-attachment-context';
 import {
@@ -20,6 +25,23 @@ vi.mock('../src/providers/registry', async () => {
 
 const mockedFetchProjectFilePreview = vi.mocked(fetchProjectFilePreview);
 const mockedFetchProjectFileText = vi.mocked(fetchProjectFileText);
+
+function teamContext(): WorkspaceCollabContext {
+  return {
+    workspaceId: 'workspace-a',
+    workspaceType: 'team',
+    workspaceMemberId: 'member-a',
+    role: 'member',
+    memberStatus: 'active',
+    lifecycleState: 'active',
+    billingState: 'active',
+    planId: 'team_plus',
+    providerMode: 'platform_credits',
+    teamId: 'team-a',
+    seatSummary: buildWorkspaceSeatSummary({ seatLimit: 3, usedSeats: 2 }),
+    permissions: buildWorkspacePermissions({ role: 'member', lifecycleState: 'active' }),
+  };
+}
 
 describe('historyWithApiAttachmentContext', () => {
   afterEach(() => {
@@ -103,6 +125,53 @@ describe('historyWithApiAttachmentContext', () => {
     );
     expect(history[0]?.content).toContain('```ts');
     expect(history[0]?.content).toContain('const answer = 42;');
+  });
+
+  it('reads Team BYOK attachment content under the pinned project identity', async () => {
+    const workspaceContext = teamContext();
+    mockedFetchProjectFileText.mockResolvedValue('team-only content');
+
+    const history = await historyWithApiAttachmentContext(
+      [userMessage('msg-1', 'Use this code', [{ path: 'src/team.ts', name: 'team.ts', kind: 'file' }])],
+      'msg-1',
+      'project-1',
+      [projectFile('src/team.ts', 'code')],
+      { workspaceContext },
+    );
+
+    expect(mockedFetchProjectFileText).toHaveBeenCalledWith(
+      'project-1',
+      'src/team.ts',
+      {
+        cache: 'no-store',
+        cacheBustKey: 123,
+        workspaceContext,
+      },
+    );
+    expect(history[0]?.content).toContain('team-only content');
+  });
+
+  it('reads Team BYOK document previews under the pinned project identity', async () => {
+    const workspaceContext = teamContext();
+    mockedFetchProjectFilePreview.mockResolvedValue({
+      kind: 'document',
+      title: 'brief.docx',
+      sections: [{ title: 'Document', lines: ['team-only preview'] }],
+    });
+
+    await historyWithApiAttachmentContext(
+      [userMessage('msg-1', 'Read this', [{ path: 'brief.docx', name: 'brief.docx', kind: 'file' }])],
+      'msg-1',
+      'project-1',
+      [projectFile('brief.docx', 'document')],
+      { workspaceContext },
+    );
+
+    expect(mockedFetchProjectFilePreview).toHaveBeenCalledWith(
+      'project-1',
+      'brief.docx',
+      workspaceContext,
+    );
   });
 
   it('does not fetch raw text for sketch image attachments', async () => {

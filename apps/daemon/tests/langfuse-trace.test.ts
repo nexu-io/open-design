@@ -2576,6 +2576,9 @@ describe('reportRunFeedback', () => {
   });
 
   it('posts feedback scores to Vela when completed-run telemetry uses Vela', async () => {
+    // tests/setup.ts defaults OPEN_DESIGN_VELA_TELEMETRY to 'off' so unit
+    // tests never route through a developer's real Vela profile; this test
+    // exercises exactly that sink, so opt back in explicitly.
     vi.stubEnv('OPEN_DESIGN_VELA_TELEMETRY', 'on');
     vi.stubEnv('VELA_CONTROL_KEY', 'ck_secret');
     vi.stubEnv('VELA_API_URL', 'https://vela.example.test');
@@ -2625,6 +2628,7 @@ describe('reportRunFeedback', () => {
   });
 
   it('does not fall back anonymously when Vela rejects feedback auth', async () => {
+    // Same opt-in as above: the setup default keeps the Vela sink off.
     vi.stubEnv('OPEN_DESIGN_VELA_TELEMETRY', 'on');
     vi.stubEnv('VELA_CONTROL_KEY', 'ck_expired');
     vi.stubEnv('VELA_API_URL', 'https://vela.example.test');

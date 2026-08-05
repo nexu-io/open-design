@@ -74,7 +74,7 @@ export function FileOpsSummary({
   const header = (
     <>
       <span className="file-ops-icon" aria-hidden>
-        <Icon name="file" size={13} />
+        <Icon name="file" size={14} />
       </span>
       <span className="file-ops-label">{t('assistant.producedFiles')}</span>
       <span className="file-ops-summary-line">{summaryParts.join(' · ')}</span>
@@ -86,7 +86,7 @@ export function FileOpsSummary({
               : t('assistant.unfinishedMore', { n: hiddenEntryCount })}
           </span>
           <span className={`file-ops-chev${expanded ? ' is-expanded' : ''}`} aria-hidden>
-            <Icon name="chevron-down" size={11} />
+            <Icon name="chevron-down" size={14} />
           </span>
         </>
       ) : null}

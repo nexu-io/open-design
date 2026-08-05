@@ -60,6 +60,10 @@ export type TrackingAmrEntrySource =
   | 'inline_model_switcher_amr_row'
   | 'settings_amr_agent_card'
   | 'settings_amr_authorize'
+  // The 'use Open Design Cloud' callout on the execution tab. Same device-auth
+  // flow as settings_amr_authorize, kept distinct so the two entry points stay
+  // separable in funnel analysis.
+  | 'settings_cloud_callout'
   | 'settings_amr_console'
   | 'settings_amr_install'
   | 'avatar_amr_console'

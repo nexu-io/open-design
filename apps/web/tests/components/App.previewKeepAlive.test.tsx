@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from '../../src/App';
+import { navigate, type Route } from '../../src/router';
 import type { AppConfig, Project } from '../../src/types';
 import {
   fetchComposioConfigFromDaemon,
@@ -29,12 +30,14 @@ import { useIframeKeepAlivePool } from '../../src/components/IframeKeepAlivePool
 
 const evictProjectMock = vi.fn();
 const evictMatchingMock = vi.fn();
-const useRouteMock = vi.fn(() => ({
+const PROJECT_ROUTE: Route = {
   kind: 'project' as const,
   projectId: 'project-1',
   conversationId: null,
   fileName: null,
-}));
+};
+const SETTINGS_ROUTE: Route = { kind: 'home', view: 'settings' };
+const useRouteMock = vi.fn<() => Route>(() => PROJECT_ROUTE);
 
 vi.mock('../../src/router', () => ({
   navigate: vi.fn(),
@@ -60,12 +63,17 @@ vi.mock('../../src/components/ProjectView', () => ({
     project,
     onProjectChange,
     onOpenSettings,
+    onBack,
   }: {
     project: Project;
     onProjectChange: (project: Project) => void;
     onOpenSettings: (section?: string) => void;
+    onBack: () => void;
   }) => (
     <div>
+      <button type="button" onClick={onBack}>
+        Back to projects
+      </button>
       <button
         type="button"
         onClick={() =>
@@ -149,9 +157,15 @@ vi.mock('../../src/components/WorkspaceTabsBar', () => ({
   WorkspaceTabsBar: () => null,
 }));
 
-vi.mock('../../src/components/MemoryToast', () => ({
-  MemoryToast: () => null,
-}));
+vi.mock('../../src/components/MemoryToast', async () => {
+  const actual = await vi.importActual<typeof import('../../src/components/MemoryToast')>(
+    '../../src/components/MemoryToast',
+  );
+  return {
+    ...actual,
+    MemoryToast: () => null,
+  };
+});
 
 vi.mock('../../src/components/PrivacyConsentModal', () => ({
   PrivacyConsentModal: () => null,
@@ -216,6 +230,7 @@ const mockedFetchMediaProvidersFromDaemon = vi.mocked(fetchMediaProvidersFromDae
 const mockedLoadConfig = vi.mocked(loadConfig);
 const mockedMergeDaemonConfig = vi.mocked(mergeDaemonConfig);
 const mockedUseIframeKeepAlivePool = vi.mocked(useIframeKeepAlivePool);
+const mockedNavigate = vi.mocked(navigate);
 
 const baseConfig: AppConfig = {
   mode: 'api',
@@ -248,12 +263,15 @@ const project: Project = {
 
 describe('App preview keep-alive invalidation', () => {
   beforeEach(() => {
+    useRouteMock.mockReturnValue(PROJECT_ROUTE);
     mockedUseIframeKeepAlivePool.mockReturnValue({
       attach: vi.fn(),
       release: vi.fn(),
       evict: vi.fn(),
       evictProject: evictProjectMock,
       evictMatching: evictMatchingMock,
+      subscribe: vi.fn(() => () => {}),
+      revision: vi.fn(() => 0),
     });
     mockedDaemonIsLive.mockResolvedValue(true);
     mockedFetchAgents.mockResolvedValue([]);
@@ -299,6 +317,34 @@ describe('App preview keep-alive invalidation', () => {
     });
   });
 
+  it('does not evict the active preview while guarded Back is pending or after it is denied', async () => {
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Back to projects' }));
+
+    expect(mockedNavigate).toHaveBeenCalledWith(
+      { kind: 'home', view: 'home' },
+      { onCommit: expect.any(Function) },
+    );
+    // Cross the browser task boundary used by the old unconditional eviction.
+    // A denied guard has no commit signal, so the active iframe must survive.
+    await act(async () => {
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+    });
+    expect(evictProjectMock).not.toHaveBeenCalled();
+  });
+
+  it('evicts the active preview after guarded Back commits', async () => {
+    mockedNavigate.mockImplementationOnce((_route, options) => {
+      options?.onCommit?.();
+    });
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Back to projects' }));
+
+    expect(evictProjectMock).toHaveBeenCalledWith('project-1', { includeActive: true });
+  });
+
   // Regression for the mrcfps follow-up on PR #2190: ProjectView's
   // signature only hashes SkillSummary / DesignSystemSummary fields, so a
   // body-only registry edit leaves every signature unchanged and the
@@ -307,9 +353,11 @@ describe('App preview keep-alive invalidation', () => {
   // mutation so the pool drops any project that depends on the affected
   // id — active or parked — regardless of which summary fields moved.
   it('evicts pool entries for projects that use a changed skill, even on body-only edits', async () => {
-    render(<App />);
+    const view = render(<App />);
 
     fireEvent.click(await screen.findByRole('button', { name: 'Open settings' }));
+    useRouteMock.mockReturnValue(SETTINGS_ROUTE);
+    view.rerender(<App />);
     fireEvent.click(await screen.findByRole('button', { name: 'Trigger skill body change' }));
 
     await waitFor(() => {
@@ -328,9 +376,11 @@ describe('App preview keep-alive invalidation', () => {
   });
 
   it('does not evict pool entries for projects that use a different skill', async () => {
-    render(<App />);
+    const view = render(<App />);
 
     fireEvent.click(await screen.findByRole('button', { name: 'Open settings' }));
+    useRouteMock.mockReturnValue(SETTINGS_ROUTE);
+    view.rerender(<App />);
     fireEvent.click(
       await screen.findByRole('button', { name: 'Trigger unrelated skill change' }),
     );
@@ -349,9 +399,11 @@ describe('App preview keep-alive invalidation', () => {
   });
 
   it('evicts pool entries for projects that use a changed design system', async () => {
-    render(<App />);
+    const view = render(<App />);
 
     fireEvent.click(await screen.findByRole('button', { name: 'Open settings' }));
+    useRouteMock.mockReturnValue(SETTINGS_ROUTE);
+    view.rerender(<App />);
     fireEvent.click(
       await screen.findByRole('button', { name: 'Trigger design system change' }),
     );

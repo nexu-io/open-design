@@ -42,6 +42,19 @@ export function MediaSurface({ preview, pluginTitle, inView, visible = inView }:
   useEffect(() => {
     setPosterLoadFailed(false);
   }, [preview.poster]);
+  // Some Chromium builds paint a solid black frame for an instant right as a
+  // freshly-mounted `<video>` starts decoding, before its first real frame is
+  // ready — with the video layered above the poster (z-index above the img),
+  // that flash briefly blacks out the whole card (reported against the
+  // community template gallery). Keep the video transparent until it reports
+  // real decoded data so the poster underneath stays visible through that
+  // gap instead of a black flash. Resets only on a genuine source change —
+  // the element stays mounted while on-screen, so hover/idle toggling must
+  // not re-hide an already-decoded frame.
+  const [videoReady, setVideoReady] = useState(false);
+  useEffect(() => {
+    setVideoReady(false);
+  }, [preview.videoUrl]);
 
   const isVideo = preview.mediaType === 'video' && Boolean(preview.videoUrl);
   const holdMs = preview.loopHoldMs ?? null;
@@ -199,7 +212,8 @@ export function MediaSurface({ preview, pluginTitle, inView, visible = inView }:
           disablePictureInPicture
           tabIndex={-1}
           aria-hidden
-          style={{ pointerEvents: 'none' }}
+          onLoadedData={() => setVideoReady(true)}
+          style={{ pointerEvents: 'none', opacity: videoReady ? 1 : 0 }}
         />
       ) : null}
     </div>

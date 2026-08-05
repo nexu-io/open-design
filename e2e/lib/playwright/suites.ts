@@ -36,6 +36,7 @@ export const uiP0Groups = {
       "ui/settings-api-protocol.test.ts",
       "ui/settings-connectors-auth-happy-path.test.ts",
       "ui/settings-connectors-auth-recovery.test.ts",
+      "ui/workspace-team-interactions.test.ts",
     ],
   },
   "project-workspace": {
@@ -46,8 +47,19 @@ export const uiP0Groups = {
       "ui/app-design-files.test.ts",
       "ui/app-manual-edit.test.ts",
       "ui/project-management-flows.test.ts",
-      "ui/workspace-keyboard-flows.test.ts",
+      "ui/workspace-team-design-system-picker.test.ts",
     ],
+  },
+  // Split out of "project-workspace" (2026-08-04): the two multi-client collab
+  // specs alone accounted for ~10 of that group's ~26min single-worker wall
+  // time (workspace-multi-client-collab.test.ts spins up two isolated
+  // client/daemon runtimes per case). Carving them into their own single-worker
+  // shard lets both halves run concurrently as separate CI jobs instead of
+  // serially on one worker, without changing per-shard worker isolation.
+  "project-collab": {
+    grep: String.raw`\[P0\]`,
+    workers: 1,
+    files: ["ui/workspace-multi-client-collab.test.ts", "ui/workspace-keyboard-flows.test.ts"],
   },
   "project-runtime": {
     grep: String.raw`\[P0\]`,
@@ -66,6 +78,7 @@ export type UiP0GroupName = keyof typeof uiP0Groups;
 export const uiP0CiMatrix = [
   { name: "entry-settings", shard: "entry-settings" },
   { name: "project-workspace", shard: "project-workspace" },
+  { name: "project-collab", shard: "project-collab" },
   { name: "project-runtime", shard: "project-runtime" },
   { name: "workspace-restoration", shard: "workspace-restoration" },
 ] as const satisfies readonly UiP0CiMatrixEntry[];
@@ -93,6 +106,9 @@ const uiP0CoverageFiles = [
   "ui/settings-connectors-auth-happy-path.test.ts",
   "ui/settings-connectors-auth-recovery.test.ts",
   "ui/settings-local-cli-codex-fallback.test.ts",
+  "ui/workspace-team-interactions.test.ts",
+  "ui/workspace-multi-client-collab.test.ts",
+  "ui/workspace-team-design-system-picker.test.ts",
   "ui/workspace-keyboard-flows.test.ts",
 ] as const;
 

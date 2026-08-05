@@ -129,7 +129,147 @@ export interface UpdateCheckResultProps {
 // (current daemon-side authoritative emission). Daemon supplies token /
 // duration data; entry surfaces propagate the optional context (entry_from,
 // fidelity, etc.) via the create-run payload.
-export interface RunCreatedProps {
+export type TrackingRunEntrySource =
+  | 'new_project'
+  | 'chat_composer'
+  | 'comment'
+  | 'mark'
+  | 'next_step'
+  | 'question_answer'
+  | 'resume_continue'
+  | TrackingDesignSystemRunEntryFrom;
+
+export type TrackingRunRecoveryActionType =
+  | 'manual_retry'
+  | 'resume_run'
+  | 'authorize_and_retry'
+  | 'switch_model_retry'
+  | 'switch_runtime_retry'
+  | 'question_answer';
+
+export interface RunTaskLineageProps {
+  /** Stable id for one user intent across every recovery-created Run. */
+  task_execution_id: string;
+  /** First Run in the task. Equals run_id on task_run_index zero. */
+  initial_run_id: string;
+  /** Previous Run that directly triggered this recovery Run. */
+  source_run_id?: string;
+  /** Zero-based Run index inside the task; same-Run automatic retries do not increment it. */
+  task_run_index: number;
+  recovery_action_type?: TrackingRunRecoveryActionType;
+  recovery_action_instance_id?: string;
+}
+
+export interface RunContextProps {
+  session_run_index?: number;
+  project_run_index?: number;
+  has_existing_artifacts?: boolean;
+  is_followup_run?: boolean;
+}
+
+export interface RunCapabilitiesProps {
+  plugin_id?: string;
+  skill_ids?: string[];
+  mcp_server_ids?: string[];
+}
+
+export type TrackingInputAccountingMode = 'inclusive' | 'additive' | 'unknown';
+
+export interface RunModelCallTokenProps {
+  provider_input_tokens?: number;
+  effective_input_tokens?: number;
+  output_tokens?: number;
+  cache_read_tokens?: number;
+  cache_write_tokens?: number;
+}
+
+export interface RunTokenProps extends RunModelCallTokenProps {
+  usage_count_source: TrackingTokenCountSource;
+  cache_token_source?: 'anthropic' | 'openai' | 'unavailable';
+  input_accounting_mode?: TrackingInputAccountingMode;
+  user_query_tokens?: number;
+  total_tokens?: number;
+  first_model_call?: RunModelCallTokenProps;
+}
+
+export interface RunDesignSystemProps {
+  selection_source?: string;
+  edit_surface?: TrackingDesignSystemEditSurface;
+  origin?: TrackingDesignSystemOrigin;
+  input_source_count?: number;
+  has_brand_description?: boolean;
+  brand_description_length_bucket?: TrackingDesignSystemLengthBucket;
+  github_repo_count?: number;
+  local_folder_count?: number;
+  fig_file_count?: number;
+  asset_file_count?: number;
+  change_type?: 'none' | 'created' | 'modified';
+  preview_module_count?: number;
+  missing_font_count?: number;
+}
+
+export interface RunTimingProps {
+  total_duration_ms: number;
+  queue_duration_ms?: number;
+  process_spawn_duration_ms?: number;
+  time_to_first_model_event_ms?: number;
+  first_model_event_type?: TrackingFirstModelEventType;
+  time_to_first_token_ms?: number;
+  time_to_first_visible_output_ms?: number;
+  time_to_first_artifact_ms?: number;
+  generation_duration_ms?: number;
+  finalize_duration_ms?: number;
+  collection_status?: TrackingRunPhaseTimingStatus;
+}
+
+export interface RunAutomaticRetryProps {
+  retry_count: number;
+  outcome: TrackingRunRetryFinalResult;
+  suppressed_reason?: TrackingRunRetrySuppressedReason;
+  last_attempt?: {
+    index?: number;
+    duration_ms?: number;
+    time_to_first_token_ms?: number;
+  };
+}
+
+export interface RunActivityProps {
+  tools?: {
+    call_count?: number;
+    duration_ms?: number;
+  };
+  artifacts?: {
+    changed_file_count?: number;
+    created_file_count?: number;
+    modified_file_count?: number;
+    supporting_asset_files_changed_count?: number;
+    write_duration_ms?: number;
+    write_status?: TrackingArtifactWriteStatus;
+    write_source?: TrackingArtifactWriteSource;
+  };
+}
+
+export interface RunDiagnosticsProps {
+  failure_signal_source?: TrackingRunDiagnosticSource;
+  run_close_reason?: TrackingRunCloseReason;
+  last_observed_phase?: TrackingRunLifecyclePhase;
+  stderr_line_count_bucket?: TrackingStderrLineCountBucket;
+  stdout_line_count_bucket?: TrackingStderrLineCountBucket;
+  first_token_seen?: boolean;
+  user_visible_output_seen?: boolean;
+  tool_call_seen?: boolean;
+  artifact_write_seen?: boolean;
+  live_artifact_seen?: boolean;
+  session_resume_fallback_used?: boolean;
+  runtime_timing?: Record<string, number>;
+}
+
+export interface RunLangfuseDeliveryProps {
+  delivery_status: TrackingLangfuseDeliveryStatus;
+  drop_reason?: TrackingLangfuseDropReason;
+}
+
+export interface RunCreatedProps extends RunTaskLineageProps {
   // `chat_panel` is the regular artifact-run surface; `design_system_project`
   // is the DS-as-project variant (DS creation + regeneration runs).
   page_name: 'chat_panel' | 'design_system_project';
@@ -137,19 +277,9 @@ export interface RunCreatedProps {
   // Where the run was initiated from. The DS variant uses the
   // `TrackingDesignSystemRunEntryFrom` set; both unions stay
   // distinct so the dashboard can split funnels cleanly.
-  entry_from?:
-    | 'new_project'
-    | 'chat_composer'
-    // Preview-annotation entries: `comment` (comment/board pin flow) and
-    // `mark` (Mark draw-overlay flow). Both run against an existing artifact.
-    | 'comment'
-    | 'mark'
-    // `next_step`: composer seeded by a guided Next-step action (best-effort,
-    // tagged on the following send). `question_answer`: submitting answers to
-    // an inline `<question-form>` clarification.
-    | 'next_step'
-    | 'question_answer'
-    | TrackingDesignSystemRunEntryFrom;
+  entry_from?: TrackingRunEntrySource;
+  /** v4 name; entry_from remains during the compatibility window. */
+  entry_source?: TrackingRunEntrySource;
   // Session-dimension run context (0-based `turn_index` within the browser
   // analytics session, `is_first_run` === turn_index 0). Lets the dashboard
   // sequence a session's runs and read "did this session reach an artifact,
@@ -210,6 +340,8 @@ export interface RunCreatedProps {
   reference_template?: string;
   aspect?: string;
   has_attachment: boolean;
+  /** v4 name; has_attachment remains during the compatibility window. */
+  has_attachments: boolean;
   user_query_tokens: number;
   // `'default'` when the user did not pick a specific model and the agent's
   // own default was selected; use `modelIdForTracking` to bucket null/empty
@@ -231,6 +363,8 @@ export interface RunCreatedProps {
   // (wire value `chat`); `design` is the full design-agent run. Optional so
   // DS-generation runs (which have no user-facing mode) can omit it.
   session_mode?: TrackingSessionMode;
+  /** v4 name; session_mode remains during the compatibility window. */
+  interaction_mode?: TrackingSessionMode;
   // The plugin actively bound to this run (the applied plugin snapshot), or
   // null when the user ran with no active plugin.
   plugin_id?: string | null;
@@ -240,6 +374,11 @@ export interface RunCreatedProps {
   mcp_ids?: string[];
   skill_ids?: string[];
   token_count_source: TrackingTokenCountSource;
+  /** v4 grouped domains. Old flat aliases remain during migration. */
+  run_context?: RunContextProps;
+  capabilities?: RunCapabilitiesProps;
+  tokens: RunTokenProps;
+  design_system?: RunDesignSystemProps;
   // External MCP/Plugin attribution. These fields are optional so existing UI
   // and CLI Run producers keep their current contract; the Open Design Cloud
   // Plugin path validates and supplies the complete subset.
@@ -268,8 +407,12 @@ export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
   error_code?: string;
   failure_category?: TrackingRunFailureCategory;
   failure_detail?: TrackingRunFailureDetail;
+  /** v4 name; failure_detail remains during the compatibility window. */
+  failure_reason?: TrackingRunFailureDetail;
   failure_stage?: TrackingRunFailureStage;
   retryable?: boolean;
+  /** v4 name; retryable remains during the compatibility window. */
+  is_automatic_retry_eligible?: boolean;
   user_action?: TrackingRunFailureUserAction;
   // A daemon boot repaired a terminal state that was interrupted before the
   // normal PostHog/Langfuse finalization path completed.
@@ -313,6 +456,10 @@ export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
   // them from the "run finished -> has artifact" funnel instead of counting
   // them as artifact-generation failures.
   asked_user_question: boolean;
+  /** v4 name; asked_user_question remains during the compatibility window. */
+  clarification_requested: boolean;
+  /** Main user-visible artifact outcome; omitted for Ask, clarification and DS Runs. */
+  primary_artifact_change?: 'none' | 'created' | 'modified';
   input_tokens?: number;
   input_tokens_provider?: number;
   input_tokens_effective?: number;
@@ -365,6 +512,11 @@ export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
   artifact_write_source?: TrackingArtifactWriteSource;
   finalize_duration_ms?: number;
   total_duration_ms: number;
+  timing: RunTimingProps;
+  automatic_retry?: RunAutomaticRetryProps;
+  run_activity?: RunActivityProps;
+  diagnostics?: RunDiagnosticsProps;
+  langfuse_delivery?: RunLangfuseDeliveryProps;
   bottleneck_phase?: TrackingRunLifecyclePhase;
   last_observed_phase?: TrackingRunLifecyclePhase;
   phase_timing_status?: TrackingRunPhaseTimingStatus;

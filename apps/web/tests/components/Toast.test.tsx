@@ -74,7 +74,9 @@ describe('Toast', () => {
   it('distinguishes the error status glyph from the dismiss icon', () => {
     const { container } = render(<Toast message="Could not read the page" tone="error" onDismiss={() => {}} />);
     expect(
-      container.querySelector('.od-toast.tone-error .od-toast-icon path[d^="m21.73 18"]'),
+      // The error glyph is the Remix `error-warning-line` circle (inline SVG
+      // icon language from #5517) — distinct from the close-line dismiss glyph.
+      container.querySelector('.od-toast.tone-error .od-toast-icon path[d^="M12 22C6.47715"]'),
     ).not.toBeNull();
   });
 

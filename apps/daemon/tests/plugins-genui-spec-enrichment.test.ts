@@ -12,9 +12,18 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import type { WorkspaceCollabContext } from '@open-design/contracts';
 import Database from 'better-sqlite3';
+import express from 'express';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { createAuthorizeProjectRequest } from '../src/collab/project-request-authority.js';
+import {
+  ensureWorkspaceProject,
+  getWorkspaceProject,
+  getWorkspaceProjectByProjectId,
+} from '../src/db.js';
+import { registerGenuiRoutes } from '../src/routes/genui.js';
 import { startServer } from '../src/server.js';
 
 type StartedServer = { server: http.Server; url: string };
@@ -31,6 +40,59 @@ let pluginRoot: string;
 const cleanupRows: string[] = [];
 
 const PLUGIN_ID = `phase2a5-form-${Date.now()}`;
+const WORKSPACE_ID = 'workspace-genui-spec';
+const WORKSPACE_MEMBER_ID = 'member-genui-spec';
+
+function workspaceContext(): WorkspaceCollabContext {
+  return {
+    workspaceId: WORKSPACE_ID,
+    workspaceName: 'GenUI spec fixture',
+    workspaceType: 'team',
+    workspaceMemberId: WORKSPACE_MEMBER_ID,
+    role: 'owner',
+    memberStatus: 'active',
+    lifecycleState: 'active',
+    billingState: 'active',
+    planId: 'team_plus',
+    providerMode: 'platform_credits',
+    seatSummary: {
+      seatLimit: 3,
+      usedSeats: 1,
+      availableSeats: 2,
+      isSeatFull: false,
+    },
+    permissions: {
+      canManageMembers: true,
+      canManageBilling: true,
+      canInviteMembers: true,
+      canManageAutoRecharge: true,
+      canShareProjects: true,
+      canWriteSyncedFiles: true,
+      canViewWorkspaceSettings: true,
+      canManageSharedResources: true,
+    },
+  } as WorkspaceCollabContext;
+}
+
+async function listen(app: express.Express): Promise<StartedServer> {
+  const routeServer = http.createServer(app);
+  await new Promise<void>((resolve, reject) => {
+    routeServer.once('error', reject);
+    routeServer.listen(0, '127.0.0.1', () => {
+      routeServer.off('error', reject);
+      resolve();
+    });
+  });
+  const address = routeServer.address();
+  if (!address || typeof address === 'string') {
+    routeServer.close();
+    throw new Error('expected GenUI route fixture to listen on a TCP port');
+  }
+  return {
+    server: routeServer,
+    url: `http://127.0.0.1:${address.port}`,
+  };
+}
 
 beforeEach(async () => {
   pluginRoot = await mkdtemp(path.join(os.tmpdir(), 'od-genui-spec-'));
@@ -156,12 +218,20 @@ describe('GET /api/runs/:runId/genui/:surfaceId enriches with snapshot spec', ()
     const snapshotId = projBody.appliedPluginSnapshotId;
     expect(typeof snapshotId).toBe('string');
 
-    // Insert a genui_surfaces row directly (no agent runs in the test
-    // env). The runId is synthetic; the GET endpoint keys off it.
+    // Insert a genui_surfaces row directly (no agent process runs in the
+    // fixture), then expose that synthetic run through the same in-memory
+    // registry contract the production route authorizes before reading rows.
     const dbPath = path.join(serverRuntimeDataRoot, 'app.sqlite');
     const db = new Database(dbPath);
     const runId = `run-phase2a5-${Date.now()}`;
     const surfaceRowId = `srf-phase2a5-${Date.now()}`;
+    ensureWorkspaceProject(db, {
+      projectId,
+      workspaceId: WORKSPACE_ID,
+      visibility: 'team',
+      resourceState: 'active',
+      createdByWorkspaceMemberId: WORKSPACE_MEMBER_ID,
+    });
     db.prepare(
       `INSERT INTO genui_surfaces (
          id, project_id, conversation_id, run_id, plugin_snapshot_id,
@@ -177,32 +247,89 @@ describe('GET /api/runs/:runId/genui/:surfaceId enriches with snapshot spec', ()
       'discovery',
       Date.now(),
     );
-    db.close();
 
-    const resp = await fetch(`${baseUrl}/api/runs/${encodeURIComponent(runId)}/genui/discovery`);
-    expect(resp.status).toBe(200);
-    const body = await resp.json() as {
-      surfaceId: string;
-      kind: string;
-      spec: {
-        id: string;
+    const routeApp = express();
+    routeApp.use(express.json());
+    const authorizeProjectRequest = createAuthorizeProjectRequest({
+      db,
+      getWorkspaceProject: (_db, workspaceId, candidateProjectId) =>
+        getWorkspaceProject(db, workspaceId, candidateProjectId),
+      getWorkspaceProjectByProjectId: (_db, candidateProjectId) =>
+        getWorkspaceProjectByProjectId(db, candidateProjectId),
+      verifyWorkspaceRequestAuthority: async (req: any) => {
+        const workspaceId = req.get('x-od-workspace-id')?.trim();
+        const workspaceMemberId = req.get('x-od-workspace-member-id')?.trim();
+        if (
+          workspaceId !== WORKSPACE_ID
+          || workspaceMemberId !== WORKSPACE_MEMBER_ID
+        ) {
+          return {
+            ok: false,
+            status: 403,
+            code: 'WORKSPACE_ACCESS_DENIED',
+            message: 'workspace identity does not match the GenUI fixture',
+          };
+        }
+        return { ok: true, context: workspaceContext() };
+      },
+      sendApiError: (res, status, code, message, details) =>
+        res.status(status).json({ error: { code, message, ...details } }),
+    });
+    registerGenuiRoutes(routeApp, {
+      db,
+      design: {
+        runs: {
+          get: (candidateRunId) =>
+            candidateRunId === runId ? { projectId } : undefined,
+        },
+      },
+      paths: { PROJECTS_DIR: path.join(serverRuntimeDataRoot, 'projects') },
+      authorizeProjectRequest,
+    });
+
+    let routeServer: http.Server | undefined;
+    try {
+      const startedRouteServer = await listen(routeApp);
+      routeServer = startedRouteServer.server;
+      const resp = await fetch(
+        `${startedRouteServer.url}/api/runs/${encodeURIComponent(runId)}/genui/discovery`,
+        {
+          headers: {
+            'x-od-workspace-id': WORKSPACE_ID,
+            'x-od-workspace-member-id': WORKSPACE_MEMBER_ID,
+          },
+        },
+      );
+      expect(resp.status).toBe(200);
+      const body = await resp.json() as {
+        surfaceId: string;
         kind: string;
-        schema?: {
-          type?: string;
-          required?: string[];
-          properties?: Record<string, { type?: string; enum?: string[] }>;
+        spec: {
+          id: string;
+          kind: string;
+          schema?: {
+            type?: string;
+            required?: string[];
+            properties?: Record<string, { type?: string; enum?: string[] }>;
+          };
         };
       };
-    };
-    expect(body.surfaceId).toBe('discovery');
-    expect(body.kind).toBe('form');
-    // The new `spec` field carries the snapshot's surface spec.
-    expect(body.spec).toBeDefined();
-    expect(body.spec.id).toBe('discovery');
-    expect(body.spec.kind).toBe('form');
-    expect(body.spec.schema?.type).toBe('object');
-    expect(body.spec.schema?.required).toEqual(['topic']);
-    expect(body.spec.schema?.properties?.topic).toBeDefined();
-    expect(body.spec.schema?.properties?.audience?.enum).toEqual(['VC pitch', 'general']);
+      expect(body.surfaceId).toBe('discovery');
+      expect(body.kind).toBe('form');
+      // The new `spec` field carries the snapshot's surface spec.
+      expect(body.spec).toBeDefined();
+      expect(body.spec.id).toBe('discovery');
+      expect(body.spec.kind).toBe('form');
+      expect(body.spec.schema?.type).toBe('object');
+      expect(body.spec.schema?.required).toEqual(['topic']);
+      expect(body.spec.schema?.properties?.topic).toBeDefined();
+      expect(body.spec.schema?.properties?.audience?.enum).toEqual(['VC pitch', 'general']);
+    } finally {
+      await new Promise<void>((resolve) => {
+        if (!routeServer) return resolve();
+        routeServer.close(() => resolve());
+      });
+      db.close();
+    }
   });
 });

@@ -18,7 +18,7 @@ export type ToolPackPlatform = "mac" | "win" | "linux";
 export type ToolPackBuildOutput = "all" | "app" | "appimage" | "dir" | "dmg" | "nsis" | "zip";
 export type ToolPackMacCompression = "store" | "normal" | "maximum";
 export type ToolPackWebOutputMode = "server" | "standalone";
-export type ToolPackAmrProfile = "prod" | "test" | "local";
+export type ToolPackAmrProfile = "prod" | "test" | "feature-test" | "local";
 
 export type ToolPackCliOptions = {
   appVersion?: string;
@@ -100,6 +100,20 @@ export type ToolPackConfig = {
   posthogKey?: string;
   posthogHost?: string;
   /**
+   * Origin of the vela web console this build's AMR backend serves, sourced
+   * from `OD_VELA_WEB_URL` at packaging time. Baked into
+   * open-design-config.json so the packaged runtime can forward it to the
+   * daemon as `OD_VELA_WEB_URL`, which is what turns the workspace-team
+   * transports on and what the workspace settings / members / dashboard
+   * console links are derived from.
+   *
+   * Deliberately injected rather than checked in: the non-prod AMR
+   * environments are internal deployments, and this repository is public.
+   * Official builds get it from a per-profile CI secret; fork and local builds
+   * simply omit it, which leaves workspace-team dormant.
+   */
+  velaWebUrl?: string;
+  /**
    * Personal API key (`phx_...`) used by the @posthog/cli sourcemap helper to
    * upload browser sourcemaps to PostHog after `next build` and before the
    * web bundle is copied into the Electron package. Sourced from
@@ -173,8 +187,10 @@ function resolveToolPackAmrProfile(value: string | undefined): ToolPackAmrProfil
   if (value == null) return undefined;
   const normalized = value.trim();
   if (normalized.length === 0) return undefined;
-  if (normalized === "prod" || normalized === "test" || normalized === "local") return normalized;
-  throw new Error(`OPEN_DESIGN_AMR_PROFILE must be prod, test, or local: ${value}`);
+  if (normalized === "prod" || normalized === "test" || normalized === "feature-test" || normalized === "local") {
+    return normalized;
+  }
+  throw new Error(`OPEN_DESIGN_AMR_PROFILE must be prod, test, feature-test, or local: ${value}`);
 }
 
 function resolveToolPackPosthogKey(value: string | undefined): string | undefined {
@@ -203,6 +219,28 @@ function resolveToolPackPosthogHost(value: string | undefined): string | undefin
   }
   if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
     throw new Error(`POSTHOG_HOST must be http(s): ${value}`);
+  }
+  return normalized.replace(/\/+$/, "");
+}
+
+/**
+ * The vela web console origin to bake into the bundle, or undefined when this
+ * build was given none. Rejects anything that is not an absolute http(s) URL so
+ * a misconfigured CI secret fails the build instead of shipping a bundle whose
+ * console links are silently broken.
+ */
+function resolveToolPackVelaWebUrl(value: string | undefined): string | undefined {
+  if (value == null) return undefined;
+  const normalized = value.trim();
+  if (normalized.length === 0) return undefined;
+  let parsed: URL;
+  try {
+    parsed = new URL(normalized);
+  } catch {
+    throw new Error(`OD_VELA_WEB_URL must be an absolute URL: ${value}`);
+  }
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+    throw new Error(`OD_VELA_WEB_URL must be http(s): ${value}`);
   }
   return normalized.replace(/\/+$/, "");
 }
@@ -358,6 +396,7 @@ export function resolveToolPackConfig(
     updateMetadataUrl: resolveToolPackUpdateMetadataUrl(process.env.OD_UPDATE_METADATA_URL),
     posthogKey: resolveToolPackPosthogKey(process.env.POSTHOG_KEY),
     posthogHost: resolveToolPackPosthogHost(process.env.POSTHOG_HOST),
+    velaWebUrl: resolveToolPackVelaWebUrl(process.env.OD_VELA_WEB_URL),
     posthogCliApiKey: resolveToolPackPosthogCliApiKey(
       process.env.POSTHOG_CLI_API_KEY ?? process.env.POSTHOG_PERSONAL_API_KEY,
     ),

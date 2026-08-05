@@ -467,6 +467,91 @@ describe('selection bridge — empty annotation surface (#890)', () => {
     expect(win.getComputedStyle(iframe).pointerEvents).toBe('auto');
   });
 
+  it('restores the active page state captured from the URL-loaded preview', async () => {
+    const { win } = setupBridgeDom(
+      '<main id="home" data-page="home"><h1>Home</h1></main>' +
+        '<main id="profile" data-page="profile" hidden><h1>Profile</h1></main>',
+      'inspect',
+    );
+
+    win.dispatchEvent(
+      new win.MessageEvent('message', {
+        data: {
+          type: 'od:preview-runtime-state-restore',
+          state: {
+            version: 1,
+            hash: '',
+            htmlAttrs: {},
+            bodyAttrs: {},
+            entries: [
+              {
+                path: [0],
+                tag: 'main',
+                id: 'home',
+                attrs: { 'data-page': 'home', hidden: '' },
+              },
+              {
+                path: [1],
+                tag: 'main',
+                id: 'profile',
+                attrs: { 'data-page': 'profile', class: 'active' },
+              },
+            ],
+          },
+        },
+      }),
+    );
+
+    expect(win.document.getElementById('home')?.hasAttribute('hidden')).toBe(true);
+    expect(win.document.getElementById('profile')?.hasAttribute('hidden')).toBe(false);
+    expect(win.document.getElementById('profile')?.className).toBe('active');
+
+    const home = win.document.getElementById('home')!;
+    const profile = win.document.getElementById('profile')!;
+    home.dispatchEvent(new win.Event('pointerdown', { bubbles: true }));
+    home.removeAttribute('hidden');
+    home.setAttribute('data-edit-revision', 'fresh');
+    profile.setAttribute('hidden', '');
+
+    await new Promise<void>((resolve) => win.setTimeout(resolve, 120));
+    expect(home.hasAttribute('hidden')).toBe(false);
+    expect(home.getAttribute('data-edit-revision')).toBe('fresh');
+    expect(profile.hasAttribute('hidden')).toBe(true);
+  });
+
+  it('restores the current page content before manual edit activates', async () => {
+    const { win } = setupBridgeDom(
+      '<main id="app" data-page="today"><h1 data-od-source-path="path-0-0">Today page</h1></main>',
+      'inspect',
+    );
+
+    win.dispatchEvent(
+      new win.MessageEvent('message', {
+        data: {
+          type: 'od:preview-runtime-state-restore',
+          state: {
+            version: 1,
+            hash: '',
+            roots: [{
+              path: [0],
+              tag: 'main',
+              id: 'app',
+              html: '<section data-od-id="profile-screen"><h1>Profile page</h1><p>Current page content</p></section>',
+            }],
+            htmlAttrs: {},
+            bodyAttrs: {},
+            entries: [],
+          },
+        },
+      }),
+    );
+
+    expect(win.document.getElementById('app')?.getAttribute('data-page')).toBe('today');
+    expect(win.document.querySelector('[data-od-id="profile-screen"] h1')?.textContent).toBe('Profile page');
+    expect(win.document.body.textContent).toContain('Current page content');
+    expect(win.document.body.textContent).not.toContain('Today page');
+  });
+
   it('posts od:comment-target for the annotated card when the device-frame iframe is clicked', async () => {
     const { win, parentPostMessage } = setupBridgeDom(
       '<article data-od-id="tablet-card" class="frame-card"><div class="meta">Tablet edition</div><iframe id="f" class="tablet-frame" title="Tablet edition" src="about:blank"></iframe></article>',

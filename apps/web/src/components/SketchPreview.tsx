@@ -1,6 +1,8 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import type { AppState, BinaryFiles } from '@excalidraw/excalidraw/types';
 import type { ExcalidrawElement, NonDeleted } from '@excalidraw/excalidraw/element/types';
+import type { WorkspaceCollabContext } from '@open-design/contracts';
+import { workspaceIdentityCacheKey } from '../collab/workspace-identity';
 import { fetchProjectFileText } from '../providers/registry';
 import type { ProjectFile } from '../types';
 import {
@@ -54,13 +56,16 @@ export function SketchPreview({
   projectId,
   file,
   className,
+  workspaceContext,
 }: {
   projectId: string;
   file: Pick<ProjectFile, 'kind' | 'name' | 'mtime'>;
   className?: string;
+  workspaceContext?: WorkspaceCollabContext | null;
 }) {
+  const workspaceIdentity = workspaceIdentityCacheKey(workspaceContext);
   const cacheKey = isRenderableSketchJson(file)
-    ? sketchPreviewCacheKey(projectId, file.name, file.mtime)
+    ? sketchPreviewCacheKey(projectId, file.name, file.mtime, workspaceIdentity)
     : null;
   const [preview, setPreview] = useState<SketchPreviewState | null>(() => (
     cacheKey ? previewCache.get(cacheKey) ?? null : null
@@ -69,14 +74,22 @@ export function SketchPreview({
   useEffect(() => {
     let cancelled = false;
     if (!isRenderableSketchJson(file)) return;
-    const nextCacheKey = sketchPreviewCacheKey(projectId, file.name, file.mtime);
+    const nextCacheKey = sketchPreviewCacheKey(
+      projectId,
+      file.name,
+      file.mtime,
+      workspaceIdentity,
+    );
     const cached = previewCache.get(nextCacheKey);
     if (cached) {
       setPreview(cached);
       return;
     }
     setPreview(null);
-    void fetchProjectFileText(projectId, file.name, { cache: 'no-store' }).then(async (text) => {
+    void fetchProjectFileText(projectId, file.name, {
+      cache: 'no-store',
+      ...(workspaceContext ? { workspaceContext } : {}),
+    }).then(async (text) => {
       if (cancelled) return;
       const nextPreview = await buildSketchPreviewState(text);
       if (cancelled) return;
@@ -86,7 +99,7 @@ export function SketchPreview({
     return () => {
       cancelled = true;
     };
-  }, [file.kind, file.name, file.mtime, projectId]);
+  }, [file.kind, file.name, file.mtime, projectId, workspaceContext, workspaceIdentity]);
 
   const geometry = useMemo(() => {
     const resolvedItems = preview?.items ?? [];
@@ -300,8 +313,13 @@ function totalExcalidrawFileBytes(files: Record<string, unknown>): number {
   return total;
 }
 
-function sketchPreviewCacheKey(projectId: string, name: string, mtime: number): string {
-  return `${projectId}\n${name}\n${mtime}`;
+function sketchPreviewCacheKey(
+  projectId: string,
+  name: string,
+  mtime: number,
+  workspaceIdentity: string,
+): string {
+  return `${workspaceIdentity}\n${projectId}\n${name}\n${mtime}`;
 }
 
 function rememberSketchPreview(key: string, preview: SketchPreviewState): void {
@@ -397,7 +415,7 @@ function renderSketchSvgItem(item: SketchItem, index: number) {
       y={clampSketchNumber(item.y)}
       fill={item.color}
       fontSize={Math.max(12, clampSketchSize(item.size))}
-      fontFamily="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+      fontFamily="Albert Sans, PingFang SC, Microsoft YaHei, sans-serif"
     >
       {normalizeSketchText(item.text)}
     </text>
