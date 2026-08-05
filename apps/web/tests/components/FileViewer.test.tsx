@@ -7176,7 +7176,7 @@ describe('FileViewer tweaks toolbar', () => {
     ))).toBe(false);
   });
 
-  it('keeps the URL-loaded iframe active when opening Draw after the URL preview bridge is ready', async () => {
+  it('swaps to the srcDoc frame when opening Draw, because the URL bridge predates mark anchoring', async () => {
     const { container } = render(
       <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
         liveHtml='<html><body><button>Stateful tab</button><main data-od-id="hero">Hero</main></body></html>'
@@ -7198,12 +7198,18 @@ describe('FileViewer tweaks toolbar', () => {
 
     clickAgentTool('draw-overlay-toggle');
 
+    // Issue #6361: marks anchor to the element they were drawn on, so the frame
+    // the user marks and the compositor screenshots must also be the frame that
+    // reports element boxes and scroll. `odPreviewBridge=snapshot` is only half
+    // that contract — the raw preview route injects a selection bridge that
+    // predates `od:mark-anchor-request` — so Draw falls back to srcDoc. Once the
+    // raw route serves the anchor bridge too, url-load becomes eligible again
+    // (see file-viewer-render-mode.test.ts).
     await waitFor(() => {
       const activeFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
-      expect(activeFrame).toBe(urlFrame);
-      expect(activeFrame.getAttribute('data-od-render-mode')).toBe('url-load');
+      expect(activeFrame.getAttribute('data-od-render-mode')).toBe('srcdoc');
       expect(activeFrame.getAttribute('data-od-active')).toBe('true');
-      expect(srcDocFrame.getAttribute('data-od-active')).toBe('false');
+      expect(urlFrame.getAttribute('data-od-active')).toBe('false');
       expect(container.querySelector('canvas')).toBeTruthy();
     });
   });
