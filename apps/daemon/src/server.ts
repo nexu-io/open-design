@@ -332,6 +332,15 @@ import {
 } from './run-artifact-fs.js';
 import { reportRunCompletedFromDaemon } from './langfuse-bridge.js';
 import { buildPromptStackTelemetry } from './prompt-telemetry.js';
+import {
+  FORM_ANSWERS_HEADER_RE,
+  composeChatUserRequestForAgent,
+  telemetryPromptFromRunRequest,
+} from './runtimes/chat-user-request.js';
+export {
+  composeChatUserRequestForAgent,
+  telemetryPromptFromRunRequest,
+} from './runtimes/chat-user-request.js';
 import { readAnalyticsContext } from './analytics.js';
 import {
   agentIdToTracking,
@@ -1966,12 +1975,6 @@ export function shouldReportRunCompletedFromMessage(saved, body = {}) {
   );
 }
 
-export function telemetryPromptFromRunRequest(message, currentPrompt) {
-  return typeof currentPrompt === 'string' ? currentPrompt : message;
-}
-
-const FORM_ANSWERS_HEADER_RE = /^\s*\[form answers\s+(?:\u2014|-)\s*([^\]\r\n]+)\]/i;
-
 // Aggressive OVERRIDE for weak / medium-strength plain agents (e.g.
 // GPT-OSS-120B Medium, Gemini 3.5 Flash) that otherwise echo RULE 1's
 // fenced form example back at the user on follow-up turns even when
@@ -2017,70 +2020,6 @@ Do not ask the same form again. Treat the submitted answers as the active
 user instruction and respond accordingly.
 
 `;
-
-function formAnswerTransitionForCurrentPrompt(currentPrompt) {
-  if (typeof currentPrompt !== 'string') return null;
-  const trimmed = currentPrompt.trim();
-  if (!trimmed) return null;
-  const match = FORM_ANSWERS_HEADER_RE.exec(trimmed);
-  if (!match) return null;
-  const rawFormId = (match[1] || 'form').trim() || 'form';
-  const formId = rawFormId.replace(/[^\w.-]/g, '') || 'form';
-  const lines = [
-    '## Latest user turn - form answers submitted',
-    trimmed,
-    '',
-    // Keep the wording in lock-step with main — the stronger "do not
-    // emit any `<question-form>`" suppression now lives in the
-    // system-prompt `FORM_ANSWERED_SYSTEM_OVERRIDE` block, which
-    // every plain / stream-json adapter sees. Diverging the
-    // user-request transition string here breaks `chat-route.test
-    // marks submitted discovery form answers ...` which asserts on
-    // the exact main wording.
-    `The user has answered the ${formId} form. Do not emit another ${formId} form.`,
-  ];
-  if (formId.toLowerCase() === 'discovery' || formId.toLowerCase() === 'task-type') {
-    lines.push(
-      'Continue with RULE 2 / RULE 3 now. For Branch B answers, build now instead of asking another brief.',
-    );
-  } else {
-    lines.push(
-      'Treat these form answers as the active user turn instead of replaying the transcript as a fresh request.',
-    );
-  }
-  return lines.join('\n');
-}
-
-export function composeChatUserRequestForAgent(
-  message,
-  currentPrompt,
-  options: { skipTranscript?: boolean } = {},
-) {
-  // When the adapter resumes its own session (today: `agy -c`), the
-  // daemon-rendered `## user` / `## assistant` transcript is a duplicate
-  // of what the upstream CLI already has in memory — and the embedded
-  // copy carries the literal `<question-form>` markup the agent emitted
-  // on turn 1, which the model then re-emits on turn 2. Send only the
-  // latest user turn (`currentPrompt`) in that case; the upstream
-  // session memory provides the rest. See
-  // `RuntimeAgentDef.resumesSessionViaCli`.
-  const skip = options.skipTranscript === true;
-  const bodySource = skip ? currentPrompt : message;
-  const body =
-    typeof bodySource === 'string' && bodySource.trim()
-      ? bodySource
-      : '(No extra typed instruction.)';
-  const transition = formAnswerTransitionForCurrentPrompt(currentPrompt);
-  if (!transition) return body;
-  if (skip) {
-    return [transition, body].join('\n\n');
-  }
-  return [
-    transition,
-    '## Full conversation transcript',
-    body,
-  ].join('\n\n');
-}
 
 export function createFinalizedMessageTelemetryReporter({
   design,
