@@ -39,6 +39,9 @@ import {
   parseAutomationScheduleFlag,
 } from './runtimes/automation-schedule.js';
 import {
+  requestDaemonDbStatus,
+  requestDaemonDbVacuum,
+  requestDaemonDbVerify,
   requestDaemonShutdown,
   requestDaemonStatus,
 } from './runtimes/daemon-control.js';
@@ -6565,7 +6568,7 @@ vacuum:
   }
   const base = (await libraryDaemonUrl(flags)).replace(/\/$/, '');
   if (sub === 'vacuum') {
-    const resp = await fetch(`${base}/api/daemon/db/vacuum`, { method: 'POST' });
+    const resp = await requestDaemonDbVacuum(base);
     if (!resp.ok) {
       console.error(`POST /api/daemon/db/vacuum failed: ${resp.status} ${await resp.text()}`);
       process.exit(1);
@@ -6586,7 +6589,7 @@ vacuum:
       boolean: new Set(['help', 'h', 'json', 'quick']),
     });
     const url = `${base}/api/daemon/db/verify${verifyFlags.quick ? '?quick=1' : ''}`;
-    const resp = await fetch(url, { method: 'POST' });
+    const resp = await requestDaemonDbVerify(base, Boolean(verifyFlags.quick));
     if (!resp.ok) {
       console.error(`POST ${url} failed: ${resp.status} ${await resp.text()}`);
       process.exit(1);
@@ -6609,7 +6612,7 @@ vacuum:
     console.error(`unknown subcommand: od daemon db ${sub}`);
     process.exit(2);
   }
-  const resp = await fetch(`${base}/api/daemon/db`);
+  const resp = await requestDaemonDbStatus(base);
   if (!resp.ok) {
     console.error(`GET /api/daemon/db failed: ${resp.status} ${await resp.text()}`);
     process.exit(1);
