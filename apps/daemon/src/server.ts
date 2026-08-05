@@ -20,6 +20,7 @@ import { createMarketplaceFetcher as createMarketplaceFetcherWithContract } from
 import { copyPluginFolderForProjectContext } from './runtimes/plugin-context.js';
 import { readProjectPluginManifest as readProjectPluginManifestWithContract } from './plugins/project-manifest.js';
 import { createProjectEventRegistry } from './runtimes/project-events.js';
+import { createLiveArtifactEventEmitter } from './runtimes/live-artifact-events.js';
 import { upsertSkillPluginCandidateAssistantMessage as upsertSkillPluginCandidateAssistantMessageWithContract } from './runtimes/skill-candidate-message.js';
 import { resolveProjectRoot } from './project-root.js';
 import {
@@ -957,6 +958,12 @@ const activeProjectEventSinks = projectEventRegistry.sinks;
 // store.
 const activeChatRunHandles = new Map();
 
+const liveArtifactEventEmitter = createLiveArtifactEventEmitter({
+  emitProjectEvent,
+  emitChatAgentEvent,
+  chatRunHandles: activeChatRunHandles,
+});
+
 function emitChatAgentEvent(runId, payload) {
   const sink = activeChatAgentEventSinks.get(runId);
   if (!sink) return false;
@@ -978,42 +985,11 @@ export function __forTestEmitLiveArtifactEvent(
 }
 
 function emitLiveArtifactEvent(grant, action, artifact) {
-  if (!artifact?.id) return false;
-  const payload = {
-    type: 'live_artifact',
-    action,
-    projectId: artifact.projectId ?? grant.projectId,
-    artifactId: artifact.id,
-    title: artifact.title ?? artifact.id,
-    refreshStatus: artifact.refreshStatus,
-  };
-  let emitted = emitProjectEvent(payload.projectId, payload);
-  if (grant?.runId) emitted = emitChatAgentEvent(grant.runId, payload) || emitted;
-  // After the deliverable exists, switch the chat run into a shorter
-  // "quiet period" watchdog: agents sometimes keep their child process
-  // alive after a successful artifact write (post-write reasoning, log
-  // flushes, claude-code stream-json's idle stdin) and the 10-minute
-  // default leaves the UI parked on Working until the watchdog fires
-  // an unrelated "stalled" error. See #1451.
-  if (action === 'created' && grant?.runId) {
-    const handle = activeChatRunHandles.get(grant.runId);
-    if (handle?.noteArtifactRegistered) {
-      try { handle.noteArtifactRegistered(); } catch {}
-    }
-  }
-  return emitted;
+  return liveArtifactEventEmitter.emitLiveArtifactEvent(grant, action, artifact);
 }
 
 function emitLiveArtifactRefreshEvent(grant, payload) {
-  if (!payload?.artifactId) return false;
-  const event = {
-    type: 'live_artifact_refresh',
-    projectId: grant.projectId,
-    ...payload,
-  };
-  let emitted = emitProjectEvent(grant.projectId, event);
-  if (grant?.runId) emitted = emitChatAgentEvent(grant.runId, event) || emitted;
-  return emitted;
+  return liveArtifactEventEmitter.emitLiveArtifactRefreshEvent(grant, payload);
 }
 
 // Broadcast an event to every SSE subscriber currently watching the given

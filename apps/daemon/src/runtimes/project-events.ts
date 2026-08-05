@@ -1,5 +1,6 @@
 export interface ProjectEventPayload {
   type?: string;
+  projectId?: string | undefined;
   [key: string]: unknown;
 }
 
