@@ -19,6 +19,13 @@ import { parseDesignSystemRenameArgs } from './design-systems/rename-args.js';
 import { runLiveArtifactsToolCli } from './tools-live-artifacts-cli.js';
 import { buildGhShellCommand, buildLoginShellCommand } from './runtimes/shell-command.js';
 import { parsePluginSpecifier, resolvePluginVersion } from './runtimes/plugin-specifier.js';
+import {
+  isGhApiRateLimit,
+  isPlaceholderRepoOwner,
+  isRepoNotFound,
+  parseGhAuthStatusLogin,
+  parseGithubRepoUrl,
+} from './runtimes/github-repository.js';
 import { splitResearchSubcommand } from './research/cli-args.js';
 import { resolveDaemonUrl } from './daemon-url.js';
 import { requestJsonIpc } from '@open-design/sidecar';
@@ -4038,20 +4045,6 @@ async function resolvePluginGithubTarget({ host = 'github.com', owner, manifest,
   };
 }
 
-function parseGhAuthStatusLogin(output) {
-  const text = String(output ?? '');
-  const activeAccount = /Logged in to [^\s]+ account ([^\s()]+)/i.exec(text);
-  if (activeAccount?.[1]) return activeAccount[1].trim();
-  const tokenAccount = /Token account:\s*([^\s()]+)/i.exec(text);
-  if (tokenAccount?.[1]) return tokenAccount[1].trim();
-  return '';
-}
-
-function isGhApiRateLimit(result) {
-  const text = `${result?.stdout ?? ''}\n${result?.stderr ?? ''}`;
-  return /rate limit exceeded|authenticated requests get a higher rate limit/i.test(text);
-}
-
 function normalizeManifestRepoForOwner(manifest, owner) {
   const name = String(manifest?.name ?? '').trim();
   if (!name) {
@@ -4075,41 +4068,6 @@ function normalizeManifestRepoForOwner(manifest, owner) {
     repoUrl,
     previousRepoUrl: rawRepo || null,
   };
-}
-
-function parseGithubRepoUrl(raw) {
-  if (!raw || typeof raw !== 'string') return null;
-  const trimmed = raw.trim().replace(/\.git$/i, '');
-  let owner = '';
-  let name = '';
-  try {
-    const url = new URL(trimmed);
-    if (!/^github\.com$/i.test(url.hostname)) return null;
-    const parts = url.pathname.split('/').filter(Boolean);
-    owner = parts[0] ?? '';
-    name = parts[1] ?? '';
-  } catch {
-    const match = /^([^/\s]+)\/([^/\s]+)$/.exec(trimmed);
-    if (!match) return null;
-    owner = match[1];
-    name = match[2];
-  }
-  if (!owner || !name) return null;
-  return {
-    owner,
-    name,
-    fullName: `${owner}/${name}`,
-    url: `https://github.com/${owner}/${name}`,
-  };
-}
-
-function isPlaceholderRepoOwner(owner) {
-  return /^(open-design-user|<vendor>|vendor|example-user|your-org|your-username|owner|user|username)$/i.test(String(owner ?? '').trim());
-}
-
-function isRepoNotFound(result) {
-  const text = `${result?.stdout ?? ''}\n${result?.stderr ?? ''}`;
-  return /could not resolve to a repository|not found|repository not found/i.test(text);
 }
 
 async function pluginCliValidateFolder(folder) {
