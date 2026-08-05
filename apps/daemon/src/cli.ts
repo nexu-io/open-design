@@ -56,6 +56,7 @@ import { runMediaWait as runMediaWaitCommand } from './media/wait-cli.js';
 import { runMediaGenerate as runMediaGenerateCommand } from './media/generate-cli.js';
 import { runPollUntilDoneOrBudget, type MediaPollOptions } from './media/poll-cli.js';
 import { runShare as runShareCommand } from './share/cli.js';
+import type { ScaffoldInput } from './plugins/scaffold.js';
 import { resolveDaemonUrl } from './daemon-url.js';
 import { requestJsonIpc } from '@open-design/sidecar';
 import { SIDECAR_ENV, SIDECAR_MESSAGES } from '@open-design/sidecar-proto';
@@ -1091,16 +1092,21 @@ Writes <out|cwd>/<id>/{SKILL.md,open-design.json,README.md}.`);
     : process.cwd();
   const { scaffoldPlugin, ScaffoldError } = await import('./plugins/scaffold.js');
   try {
+    const stringFlag = (key: string): string | undefined =>
+      typeof flags[key] === 'string' ? flags[key] as string : undefined;
+    const title = stringFlag('title');
+    const description = stringFlag('description');
+    const taskKind = stringFlag('task-kind') as ScaffoldInput['taskKind'];
+    const mode = stringFlag('mode');
+    const scenario = stringFlag('scenario');
     const input = {
       targetDir,
       id,
-      ...(flags.title       ? { title: flags.title }             : {}),
-      ...(flags.description ? { description: flags.description } : {}),
-      ...(flags['task-kind']
-        ? { taskKind: flags['task-kind'] }
-        : {}),
-      ...(flags.mode        ? { mode: flags.mode }               : {}),
-      ...(flags.scenario    ? { scenario: flags.scenario }       : {}),
+      ...(title ? { title } : {}),
+      ...(description ? { description } : {}),
+      ...(taskKind ? { taskKind } : {}),
+      ...(mode ? { mode } : {}),
+      ...(scenario ? { scenario } : {}),
       withClaudePlugin: Boolean(flags['with-claude-plugin']),
     };
     const result = await scaffoldPlugin(input);
