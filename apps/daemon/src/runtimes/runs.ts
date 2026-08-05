@@ -36,6 +36,9 @@ interface RunEventRecord {
 
 interface AcpSession {
   abort(): void;
+  hasFatalError?: () => boolean;
+  completedSuccessfully?: () => boolean;
+  getLastSessionPath?: () => string | null;
 }
 
 export interface ChatRun {

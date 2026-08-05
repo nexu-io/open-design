@@ -121,8 +121,8 @@ type MemoryAnnotation = {
   label?: string;
   currentText?: string;
   selectionKind?: string;
-  intent?: string;
-  markKind?: string;
+  intent?: string | undefined;
+  markKind?: string | undefined;
 };
 
 type MemoryLlmOptions = {

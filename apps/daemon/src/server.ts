@@ -10,6 +10,7 @@ import type { HttpDeps, PathDeps } from './server-context.js';
 import type { SidecarRuntimeContext, SidecarStampShape } from '@open-design/sidecar';
 import type {
   ChatRequest,
+  CritiqueSseEvent,
   ChatRunStatus,
   ChatRunStatusResponse,
   MediaExecutionPolicy,
@@ -5456,7 +5457,7 @@ export async function startServer({
         const critiqueProjectIdForBus =
           typeof projectId === 'string' && projectId ? projectId : null;
         const critiqueBus = {
-          emit: (e) => {
+          emit: (e: CritiqueSseEvent): void => {
             // Two transports for every critique event: the run-scoped
             // SSE send back to the originating chat run, plus the
             // project-scoped fan-out so the Theater mount (subscribed
@@ -5525,9 +5526,9 @@ export async function startServer({
             // the request skillId with a project-row fallback; pass it
             // through verbatim, and leave the orchestrator's own default
             // of 'unknown' for runs that genuinely have no skill assigned.
-            skill: typeof chatSkillId === 'string' && chatSkillId
-              ? chatSkillId
-              : undefined,
+            ...(typeof chatSkillId === 'string' && chatSkillId
+              ? { skill: chatSkillId }
+              : {}),
             cfg: critiqueCfg,
             db,
             bus: critiqueBus,
@@ -5565,7 +5566,7 @@ export async function startServer({
     // parser that turns stream_event objects into UI-friendly events. For
     // plain streams (most other CLIs) we forward raw chunks unchanged so
     // the browser can append them to the assistant's text buffer.
-    let agentStreamError = null;
+    let agentStreamError: string | null = null;
     // Holds buffered plain-text stdout chunks for agents (currently
     // antigravity) where we need to inspect the full output at close
     // time before deciding whether to forward it. The auth-prompt guard
@@ -5641,8 +5642,8 @@ export async function startServer({
         sessionInitDoneAt: timestamp,
       };
     };
-    const noteFirstTokenFromAgentEvent = (ev) => {
-      if (ev?.type && FIRST_TOKEN_AGENT_EVENT_TYPES.has(ev.type)) {
+    const noteFirstTokenFromAgentEvent = (ev: Record<string, unknown>): void => {
+      if (typeof ev?.type === 'string' && FIRST_TOKEN_AGENT_EVENT_TYPES.has(ev.type)) {
         noteFirstTokenAt();
       }
     };
@@ -5661,7 +5662,7 @@ export async function startServer({
       if (visible) emitGuardedTextDelta(visible);
     }
 
-    function guardTextDelta(delta) {
+    function guardTextDelta(delta: string): string {
       return runGuard.feedText(delta);
     }
 
@@ -5808,12 +5809,12 @@ export async function startServer({
     // coverage. observe runs AFTER the send so a `tool_loop` warning/halt
     // follows the result that triggered it in the stream. (PR #3375 review:
     // Copilot and ACP bypassed the guard by calling send('agent', …) directly.)
-    function emitAgentEvent(ev: any) {
+    function emitAgentEvent(ev: Record<string, unknown>): void {
       send('agent', ev);
       observeToolEventForLoop(ev);
     }
 
-    const sendAgentEvent = (ev) => {
+    const sendAgentEvent = (ev: Record<string, unknown>): void => {
       if (ev?.type === 'error') {
         if (agentStreamError) return;
         flushVisibleAgentStderr();
@@ -5824,12 +5825,12 @@ export async function startServer({
           agentStderrTail,
         ].join('\n');
         agentStreamError = rewriteKnownAgentStreamError(
-          agentId,
+          chatAgentId ?? '',
           String(ev.message || 'Agent stream error'),
           failureText,
         );
         clearInactivityWatchdog();
-        const authFailure = classifyAgentAuthFailure(agentId, failureText);
+        const authFailure = classifyAgentAuthFailure(chatAgentId ?? '', failureText);
         if (authFailure?.status === 'missing') {
           send('error', createSseErrorPayload(
             'AGENT_AUTH_REQUIRED',
@@ -5845,13 +5846,13 @@ export async function startServer({
         const serviceCode = classifyAgentServiceFailure(failureText);
         if (serviceCode) {
           send('error', createSseErrorPayload(serviceCode, agentStreamError, {
-            details: ev.raw ? { raw: ev.raw } : undefined,
+            ...(typeof ev.raw === 'string' ? { details: { raw: ev.raw } } : {}),
             retryable: true,
           }));
           return;
         }
         send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', agentStreamError, {
-          details: ev.raw ? { raw: ev.raw } : undefined,
+          ...(typeof ev.raw === 'string' ? { details: { raw: ev.raw } } : {}),
           retryable: false,
         }));
         return;
@@ -5870,7 +5871,7 @@ export async function startServer({
         return;
       }
       noteFirstTokenFromAgentEvent(ev);
-      if (ev?.type && SUBSTANTIVE_AGENT_EVENT_TYPES.has(ev.type)) {
+      if (typeof ev?.type === 'string' && SUBSTANTIVE_AGENT_EVENT_TYPES.has(ev.type)) {
         agentProducedOutput = true;
       }
       emitAgentEvent(ev);
@@ -5927,9 +5928,10 @@ export async function startServer({
           });
           const serviceCode = classifyAgentServiceFailure(failureText);
           agentStreamError = diagnostic?.message
-            ?? rewriteKnownAgentStreamError(agentId, message, failureText);
+            ?? rewriteKnownAgentStreamError(chatAgentId ?? '', message, failureText);
+          const diagnosticCode = diagnostic?.code ?? serviceCode ?? 'AGENT_EXECUTION_FAILED';
           send('error', createSseErrorPayload(
-            diagnostic?.code ?? serviceCode ?? 'AGENT_EXECUTION_FAILED',
+            diagnosticCode as Parameters<typeof createSseErrorPayload>[0],
             agentStreamError,
             {
               retryable: diagnostic?.retryable
@@ -6016,9 +6018,9 @@ export async function startServer({
         prompt: composed,
         cwd: effectiveCwd,
         model: safeModel,
-        parentSession: agentResumeCtx.isResuming && agentResumeCtx.resumeSessionId
-          ? agentResumeCtx.resumeSessionId
-          : undefined,
+        ...(agentResumeCtx.isResuming && agentResumeCtx.resumeSessionId
+          ? { parentSession: agentResumeCtx.resumeSessionId }
+          : {}),
         send: (channel, payload) => {
           if (channel === 'agent') {
             sendAgentEvent(payload);
@@ -6060,18 +6062,25 @@ export async function startServer({
         ...(def.id === 'amr' ? { modelUnavailableErrorCode: 'AMR_MODEL_UNAVAILABLE' } : {}),
         onCliReady: () => noteCliReadyAt(),
         onSessionInit: () => noteSessionInitDoneAt(),
-        send: (event, data) => {
+        send: (event: string, data: unknown): void => {
+          const payload = data && typeof data === 'object'
+            ? data as Record<string, unknown>
+            : null;
           if (event === 'agent') {
-            lastAgentEventPhase = summarizeAgentEventForInactivity(data);
+            lastAgentEventPhase = summarizeAgentEventForInactivity(payload ?? {});
           }
           noteAgentActivity();
           if (event === 'error') flushVisibleAgentStderr();
           if (def.id === 'amr' && event === 'error') {
             const failure = classifyAmrAccountFailure(
               [
-                typeof data?.message === 'string' ? data.message : '',
-                typeof data?.error?.message === 'string' ? data.error.message : '',
-                typeof data?.error?.code === 'string' ? data.error.code : '',
+                typeof payload?.message === 'string' ? payload.message : '',
+                typeof (payload?.error as Record<string, unknown> | undefined)?.message === 'string'
+                  ? (payload?.error as Record<string, unknown>).message as string
+                  : '',
+                typeof (payload?.error as Record<string, unknown> | undefined)?.code === 'string'
+                  ? (payload?.error as Record<string, unknown>).code as string
+                  : '',
                 agentStdoutTail,
                 agentStderrTail,
               ].join('\n'),
@@ -6081,15 +6090,17 @@ export async function startServer({
               return;
             }
           }
-          if (event === 'agent' && data?.type === 'text_delta' && typeof data.delta === 'string') {
-            if (emitTitleFilteredGuardedTextDelta(data.delta)) {
+          if (event === 'agent' && payload?.type === 'text_delta' && typeof payload.delta === 'string') {
+            if (emitTitleFilteredGuardedTextDelta(payload.delta)) {
               noteFirstTokenAt();
             }
             return;
           }
           if (event === 'agent') {
-            noteFirstTokenFromAgentEvent(data);
-            emitAgentEvent(data);
+            if (payload) {
+              noteFirstTokenFromAgentEvent(payload);
+              emitAgentEvent(payload);
+            }
           } else {
             send(event, data);
           }
@@ -6184,7 +6195,7 @@ export async function startServer({
       }
       revokeToolToken('child_exit');
       unregisterChatAgentEventSink();
-      if (acpSession?.hasFatalError()) {
+      if (acpSession?.hasFatalError?.()) {
         markRpcCloseReason('fatal_rpc_error');
         return finishWithRetryDecision('failed', code ?? 1, signal ?? null);
       }
@@ -6208,7 +6219,7 @@ export async function startServer({
           }
         }
         const authFailure = classifyAgentAuthFailure(
-          agentId,
+          chatAgentId ?? '',
           `${agentStderrTail}\n${agentStdoutTail}`,
         );
         if (authFailure?.status === 'missing') {
@@ -6288,7 +6299,7 @@ export async function startServer({
         childStdoutSeen
       ) {
         const authFailure = classifyAgentAuthFailure(
-          agentId,
+          agentId ?? '',
           `${agentStderrTail}\n${agentStdoutTail}`,
         );
         if (authFailure?.status === 'missing') {
@@ -6329,7 +6340,7 @@ export async function startServer({
             // empty-output message.
           }
         }
-        const authFailure = classifyAgentAuthFailure(agentId, combinedDetail);
+        const authFailure = classifyAgentAuthFailure(agentId ?? '', combinedDetail);
         const serviceFailure = !authFailure
           ? classifyAgentServiceFailure(combinedDetail)
           : null;
@@ -6418,7 +6429,7 @@ export async function startServer({
             // A diagnostic that named its own failure class (e.g.
             // AGENT_CONNECTION_DROPPED) wins over the generic service-failure
             // sniff so the UI can localize by code and triage can count it.
-            diagnostic.code ?? serviceCode ?? 'AGENT_EXECUTION_FAILED',
+            (diagnostic.code ?? serviceCode ?? 'AGENT_EXECUTION_FAILED') as Parameters<typeof createSseErrorPayload>[0],
             diagnostic.message,
             { retryable: diagnostic.retryable, details: { detail: diagnostic.detail } },
           ));
@@ -6471,13 +6482,14 @@ export async function startServer({
       // receive spurious manifests. Best-effort; must not block finalisation.
       // See issue #2893.
       if (run.projectId) {
+        const projectId = run.projectId;
         (async () => {
           try {
-            const project = getProject(db, run.projectId);
-            const files = await listFiles(PROJECTS_DIR, run.projectId, {
+            const project = getProject(db, projectId);
+            const files = await listFiles(PROJECTS_DIR, projectId, {
               metadata: project?.metadata,
             });
-            const dir = resolveProjectDir(PROJECTS_DIR, run.projectId, project?.metadata);
+            const dir = resolveProjectDir(PROJECTS_DIR, projectId, project?.metadata);
             for (const f of files) {
               const ext = f.name.slice(f.name.lastIndexOf('.')).toLowerCase();
               if (ext !== '.html' && ext !== '.htm') continue;
@@ -6487,7 +6499,7 @@ export async function startServer({
                 if (!isRunTouchedProjectFile(st.mtimeMs, runStartTimeMs)) continue;
                 await reconcileHtmlArtifactManifest(
                   PROJECTS_DIR,
-                  run.projectId,
+                  projectId,
                   f.name,
                   project?.metadata,
                 );
@@ -6569,7 +6581,7 @@ export async function startServer({
           // Swallow EPIPE here for the same reason as the listener above —
           // a fast-exiting child has already routed its failure through
           // stderr / exit handlers.
-          if (err && err.code !== 'EPIPE') throw err;
+          if (err && (err as NodeJS.ErrnoException).code !== 'EPIPE') throw err;
         }
         run.stdinOpen = true;
       } else {
