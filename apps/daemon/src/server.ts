@@ -16,6 +16,7 @@ import {
 } from './prompts/system.js';
 import { emittedRenderableQuestionForm } from './question-form-detect.js';
 import { createFinalizedMessageTelemetryReporter as createFinalizedMessageTelemetryReporterWithContract } from './runtimes/telemetry-finalization.js';
+import { createMarketplaceFetcher as createMarketplaceFetcherWithContract } from './runtimes/marketplace-fetcher.js';
 import { upsertSkillPluginCandidateAssistantMessage as upsertSkillPluginCandidateAssistantMessageWithContract } from './runtimes/skill-candidate-message.js';
 import { resolveProjectRoot } from './project-root.js';
 import {
@@ -814,25 +815,10 @@ async function marketplaceSeedManifestText(id, bundledMarketplaceEntries) {
 }
 
 function createMarketplaceFetcher(seedId, bundledMarketplaceEntries) {
-  return async (url) => {
-    const registryId = marketplaceRegistryIdFromUrl(url);
-    if (registryId && (!seedId || registryId === seedId)) {
-      const manifestText = await marketplaceSeedManifestText(registryId, bundledMarketplaceEntries);
-      if (manifestText != null) {
-        return {
-          ok:     true,
-          status: 200,
-          text:   async () => manifestText,
-        };
-      }
-    }
-    const response = await fetch(url, { redirect: 'follow' });
-    return {
-      ok:     response.ok,
-      status: response.status,
-      text:   () => response.text(),
-    };
-  };
+  return createMarketplaceFetcherWithContract(seedId, {
+    registryIdFromUrl: marketplaceRegistryIdFromUrl,
+    readSeedManifest: (registryId) => marketplaceSeedManifestText(registryId, bundledMarketplaceEntries),
+  });
 }
 
 const SANDBOX_MODE_ENABLED = isSandboxModeEnabled(process.env);
