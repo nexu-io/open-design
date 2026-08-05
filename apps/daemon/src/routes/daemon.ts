@@ -29,6 +29,26 @@ export function registerDaemonRoutes(app: Express, deps: RegisterDaemonRoutesDep
   const { db, env, host, http, paths, sandboxRuntime } = deps;
   const { requireLocalDaemonRequest, sendApiError } = http;
 
+  app.get('/api/health', async (_req, res) => {
+    const versionInfo = await readCurrentAppVersionInfo();
+    res.json({ ok: true, version: versionInfo.version });
+  });
+
+  app.get('/api/ready', async (_req, res) => {
+    const versionInfo = await readCurrentAppVersionInfo();
+    const ready = !deps.getDaemonShuttingDown();
+    res.status(ready ? 200 : 503).json({
+      ok: ready,
+      ready,
+      version: versionInfo.version,
+    });
+  });
+
+  app.get('/api/version', async (_req, res) => {
+    const version = await readCurrentAppVersionInfo();
+    res.json({ version });
+  });
+
   app.get('/api/daemon/status', async (_req, res) => {
     const versionInfo = await readCurrentAppVersionInfo();
     res.json({
