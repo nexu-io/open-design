@@ -171,6 +171,7 @@ import {
   shouldReportRunCompletedFromMessage as shouldReportRunCompletedFromMessageWithContract,
 } from './runtimes/telemetry-message.js';
 import { reconcileAssistantMessageOnRunEnd as reconcileAssistantMessageOnRunEndWithContract } from './runtimes/run-message-reconciliation.js';
+import { persistRunEventToAssistantMessage as persistRunEventToAssistantMessageWithContract } from './runtimes/run-event-persistence.js';
 import { sanitizeArchiveFilename } from './runtimes/archive-filename.js';
 import {
   githubRepoNameFromPluginName,
@@ -1288,16 +1289,13 @@ export function upsertSkillPluginCandidateAssistantMessage(db, run, candidate) {
   return messageId;
 }
 
-function persistRunEventToAssistantMessage(db, run, event, data) {
-  if (!run.assistantMessageId) return;
-  const persisted = runSseEventToPersistedAgentEvent(event, data);
-  if (!persisted) return;
-  try {
-    appendMessageAgentEvent(db, run.assistantMessageId, persisted);
-  } catch (err) {
-    console.warn('[runs] message event persistence failed', err);
-  }
-}
+const persistRunEventToAssistantMessage = (db, run, event, data) =>
+  persistRunEventToAssistantMessageWithContract(
+    (messageId, eventRecord) => appendMessageAgentEvent(db, messageId, eventRecord),
+    run,
+    event,
+    data,
+  );
 
 function pinAssistantMessageOnRunCreate(db, run) {
   if (!run.conversationId || !run.assistantMessageId) return;
