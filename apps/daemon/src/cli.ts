@@ -533,6 +533,28 @@ interface RunStartResponse extends CliRunStartResponse {
   conversationId?: string;
 }
 
+interface CliTerminalCreateResponse {
+  terminal?: { id?: string; [key: string]: unknown };
+  [key: string]: unknown;
+}
+
+interface CliFileSummary {
+  name?: string;
+  path?: string;
+  size?: number;
+  [key: string]: unknown;
+}
+
+interface CliFileResponse {
+  file?: CliFileSummary;
+  [key: string]: unknown;
+}
+
+interface CliFileListResponse {
+  files?: CliFileSummary[];
+  [key: string]: unknown;
+}
+
 interface BrandResponse {
   id?: string;
   projectId?: string;
@@ -5911,8 +5933,8 @@ Common options:
     process.exit(2);
   }
   const base = (await projectDaemonUrl(flags)).replace(/\/$/, '');
-  const body = {};
-  if (flags.shell) body.shell = flags.shell;
+  const body: { shell?: string; cols?: number; rows?: number } = {};
+  if (typeof flags.shell === 'string') body.shell = flags.shell;
   if (process.stdout.columns) body.cols = process.stdout.columns;
   if (process.stdout.rows) body.rows = process.stdout.rows;
   const createResp = await fetch(
@@ -5924,7 +5946,7 @@ Common options:
     },
   );
   if (!createResp.ok) return structuredHttpFailure(createResp, 'project-not-found');
-  const created = await createResp.json();
+  const created = (await createResp.json()) as CliTerminalCreateResponse;
   if (flags.json) {
     process.stdout.write(JSON.stringify(created, null, 2) + '\n');
     return;
@@ -6040,12 +6062,12 @@ Common options:
       }
       const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}/files`);
       if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
-      const data = (await resp.json()) as Record<string, unknown>;
+      const data = (await resp.json()) as CliFileListResponse;
       if (flags.json) {
         process.stdout.write(JSON.stringify(data, null, 2) + '\n');
         return;
       }
-      const files = Array.isArray(data?.files) ? data.files : [];
+      const files = data.files ?? [];
       for (const f of files) console.log(`${f.size}\t${f.name ?? f.path}`);
       return;
     }
@@ -6084,7 +6106,7 @@ Common options:
         }),
       });
       if (!resp.ok) return structuredHttpFailure(resp);
-      const data = (await resp.json()) as Record<string, unknown>;
+      const data = (await resp.json()) as CliFileResponse;
       if (flags.json) {
         process.stdout.write(JSON.stringify(data, null, 2) + '\n');
         return;
@@ -6100,7 +6122,7 @@ Common options:
         process.exit(2);
       }
       // Read stdin synchronously into a buffer.
-      let chunks = [];
+      let chunks: Buffer[] = [];
       try {
         const stdin = readFileSync(0);
         chunks = [stdin];
@@ -6119,7 +6141,7 @@ Common options:
         }),
       });
       if (!resp.ok) return structuredHttpFailure(resp);
-      const data = (await resp.json()) as Record<string, unknown>;
+      const data = (await resp.json()) as CliFileResponse;
       if (flags.json) {
         process.stdout.write(JSON.stringify(data, null, 2) + '\n');
         return;
@@ -6248,17 +6270,17 @@ function createUnifiedDiff(leftLabel: any, rightLabel: any, leftText: any, right
   ].join('\n') + '\n';
 }
 
-function splitDiffLines(text: any) {
+function splitDiffLines(text: any): string[] {
   const value = String(text);
   if (value.length === 0) return [];
-  return value.match(/.*?(?:\r\n|\n|\r|$)/gs).filter((line) => line.length > 0);
+  return (value.match(/.*?(?:\r\n|\n|\r|$)/gs) ?? []).filter((line) => line.length > 0);
 }
 
 function formatDiffRange(start: any, length: any) {
   return length === 1 ? String(start) : `${start},${length}`;
 }
 
-function diffLineBody(oldLines: any, newLines: any) {
+function diffLineBody(oldLines: string[], newLines: string[]): string[] {
   if (oldLines.length === 0) return newLines.map((line: any) => diffLine('+', line));
   if (newLines.length === 0) return oldLines.map((line: any) => diffLine('-', line));
   if (oldLines.length * newLines.length > 1_000_000) {
@@ -6271,12 +6293,12 @@ function diffLineBody(oldLines: any, newLines: any) {
   );
   for (let i = oldLines.length - 1; i >= 0; i--) {
     for (let j = newLines.length - 1; j >= 0; j--) {
-      lcs[i][j] = oldLines[i] === newLines[j]
-        ? lcs[i + 1][j + 1] + 1
-        : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+      lcs[i]![j] = oldLines[i] === newLines[j]
+        ? lcs[i + 1]![j + 1]! + 1
+        : Math.max(lcs[i + 1]![j]!, lcs[i]![j + 1]!);
     }
   }
-  const out = [];
+  const out: string[] = [];
   let i = 0;
   let j = 0;
   while (i < oldLines.length && j < newLines.length) {
@@ -6284,7 +6306,7 @@ function diffLineBody(oldLines: any, newLines: any) {
       out.push(diffLine(' ', oldLines[i]));
       i++;
       j++;
-    } else if (lcs[i + 1][j] >= lcs[i][j + 1]) {
+    } else if (lcs[i + 1]![j]! >= lcs[i]![j + 1]!) {
       out.push(diffLine('-', oldLines[i]));
       i++;
     } else {
