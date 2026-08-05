@@ -170,6 +170,7 @@ import {
   buildLoginShellCommand,
   quotePosixShellArg,
 } from './runtimes/shell-command.js';
+import { execFileBuffered as runBufferedCommand } from './runtimes/child-process.js';
 import {
   githubRepoNameFromPluginName,
   normalizePluginShareAction,
@@ -1173,23 +1174,11 @@ export function composeProjectDisplayStatus(
   };
 }
 
-/**
- * @param {ApiErrorCode} code
- * @param {string} message
- * @param {Omit<ApiError, 'code' | 'message'>} [init]
- * @returns {ApiError}
- */
 function execFileBuffered(command, args, opts = {}) {
-  return new Promise((resolve) => {
-    execFile(command, args, { timeout: 120_000, maxBuffer: 1024 * 1024, ...opts }, (error, stdout, stderr) => {
-      resolve({
-        ok: !error,
-        code: error?.code,
-        stdout: String(stdout ?? '').trim(),
-        stderr: String(stderr ?? '').trim(),
-        error,
-      });
-    });
+  return runBufferedCommand(command, args, {
+    timeout: 120_000,
+    maxBuffer: 1024 * 1024,
+    ...opts,
   });
 }
 
