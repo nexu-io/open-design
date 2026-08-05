@@ -17,6 +17,7 @@ export type RunResult = 'success' | 'failed' | 'cancelled';
 
 export interface RunStatusForAnalytics {
   status: string;
+  error?: string | null;
   errorCode?: string | null;
   exitCode?: number | null;
   signal?: string | null;

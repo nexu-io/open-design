@@ -71,6 +71,9 @@ export interface ChatRun {
   errorCode: string | null;
   cancelRequested: boolean;
   retryRestartTimer: ReturnType<typeof setTimeout> | null;
+  retryAttemptCount?: number;
+  retryFinalResult?: string | undefined;
+  retrySuppressedReason?: string | undefined;
   stdinOpen: boolean;
   eventsLogPath: string | null;
   eventsLogStream: fs.WriteStream | null;

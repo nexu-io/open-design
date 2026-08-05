@@ -5,9 +5,15 @@ import type { RunForSkillCandidateMessage } from './runtimes/skill-candidate-mes
 import type { RunWithAssistantMessageId } from './runtimes/run-event-persistence.js';
 import type { RunToPinAssistantMessage } from './runtimes/run-message-pinning.js';
 import type { ChatRun } from './runtimes/runs.js';
+import type { RuntimeModelOption } from './runtimes/types.js';
 import type { HttpDeps, PathDeps } from './server-context.js';
 import type { SidecarRuntimeContext, SidecarStampShape } from '@open-design/sidecar';
-import type { ChatRunStatusResponse, MediaExecutionPolicy } from '@open-design/contracts';
+import type {
+  ChatRequest,
+  ChatRunStatus,
+  ChatRunStatusResponse,
+  MediaExecutionPolicy,
+} from '@open-design/contracts';
 import type { ChatRunService } from './routes/runs.js';
 import type { InstalledPluginRecord, SkillPluginCandidate } from '@open-design/contracts';
 import type { PluginShareAction } from './services/plugin-share-tasks.js';
@@ -17,6 +23,7 @@ import express from 'express';
 import multer from 'multer';
 import JSZip from 'jszip';
 import { execFile, spawn } from 'node:child_process';
+import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -3372,12 +3379,12 @@ export async function startServer({
     });
   };
 
-  const startChatRun = async (chatBody: Record<string, unknown>, run: ChatRun) => {
+  type ChatRunBody = Partial<ChatRequest> & { imagePaths?: string[] };
+  const startChatRun = async (chatBody: ChatRunBody, run: ChatRun) => {
     run.analyticsTelemetry = {
       ...(run.analyticsTelemetry ?? {}),
       startChatRunStartedAt: Date.now(),
     };
-    /** @type {Partial<ChatRequest> & { imagePaths?: string[] }} */
     chatBody = chatBody || {};
     const {
       agentId,
@@ -4074,15 +4081,17 @@ export async function startServer({
     // `emittedRenderableQuestionForm`).
     const CLARIFYING_QUESTION_BUFFER_CAP = 256 * 1024;
     let clarifyingQuestionText = '';
-    const send = (event, data) => {
+    const send = (event: string, data: unknown): void => {
+      const payload = data && typeof data === 'object'
+        ? data as Record<string, unknown>
+        : null;
       if (
         event === 'agent' &&
-        data &&
-        data.type === 'text_delta' &&
-        typeof data.delta === 'string' &&
+        payload?.type === 'text_delta' &&
+        typeof payload.delta === 'string' &&
         clarifyingQuestionText.length < CLARIFYING_QUESTION_BUFFER_CAP
       ) {
-        clarifyingQuestionText = (clarifyingQuestionText + data.delta).slice(
+        clarifyingQuestionText = (clarifyingQuestionText + payload.delta).slice(
           0,
           CLARIFYING_QUESTION_BUFFER_CAP,
         );
@@ -4090,7 +4099,13 @@ export async function startServer({
       persistRunEventToAssistantMessage(db, run, event, data);
       design.runs.emit(run, event, data);
     };
-    const retryAnalyticsBase = (decision, failure, errorCode) => {
+    type RetryDecision = ReturnType<typeof decideSafeRunRetry>;
+    type RetryFailure = ReturnType<typeof classifyRunFailure>;
+    const retryAnalyticsBase = (
+      decision: RetryDecision,
+      failure: RetryFailure,
+      errorCode: string | null | undefined,
+    ) => {
       const runProjectKind = resolveRunProjectKindForAnalytics({
         hintProjectKind: null,
         projectMetadata: projectRecord?.metadata,
@@ -4117,7 +4132,7 @@ export async function startServer({
         ...(errorCode ? { error_code: errorCode } : {}),
       };
     };
-    const destroyChildStdio = (child) => {
+    const destroyChildStdio = (child: ChatRun['child']): void => {
       // Best-effort cleanup of stdio streams on a child process we're about
       // to drop. The daemon-sidecar (apps/daemon) keeps listeners attached
       // to child.stdout / child.stderr / child.stdin across the run
@@ -4130,7 +4145,12 @@ export async function startServer({
       //
       // See: https://github.com/nexu-io/open-design/issues/4100
       if (!child) return;
-      const destroyStream = (stream) => {
+      type DestroyableStream = {
+        destroyed?: boolean;
+        removeAllListeners: (...args: never[]) => unknown;
+        destroy: () => unknown;
+      };
+      const destroyStream = (stream: DestroyableStream | null): void => {
         if (!stream || stream.destroyed) return;
         try { stream.removeAllListeners(); } catch {}
         try { stream.destroy(); } catch {}
@@ -4193,7 +4213,7 @@ export async function startServer({
     // or shutdown during the backoff window clears the timer (runtimes/runs.ts)
     // and finalizes the queued run, and the callback re-checks cancel/terminal
     // state in case it fires first.
-    const scheduleRetryRestart = (delayMs) => {
+    const scheduleRetryRestart = (delayMs: number): void => {
       tearDownAttemptForRetry();
       const wait = Number.isFinite(delayMs) && delayMs > 0 ? delayMs : 0;
       if (wait <= 0) {
@@ -4206,7 +4226,12 @@ export async function startServer({
         spawnRetryAttempt();
       }, wait);
     };
-    const finalizeRetryTelemetry = (status, decision, failure, errorCode) => {
+    const finalizeRetryTelemetry = (
+      status: ChatRunStatus,
+      decision: RetryDecision,
+      failure: RetryFailure,
+      errorCode: string | null | undefined,
+    ): void => {
       const attemptCount = run.retryAttemptCount ?? 0;
       const result = runResultFromStatus(status);
       if (attemptCount <= 0 && result !== 'failed') {
@@ -4226,7 +4251,9 @@ export async function startServer({
         retryResult === 'suppressed'
           ? run.cancelRequested
             ? 'cancel_requested'
-            : decision?.retrySuppressedReason
+            : 'retrySuppressedReason' in decision
+              ? decision.retrySuppressedReason
+              : undefined
           : undefined;
       const eventDecision =
         attemptCount > 0
@@ -4242,18 +4269,26 @@ export async function startServer({
           : {}),
       });
     };
-    let pendingRpcCloseReason = null;
-    const markRpcCloseReason = (reason) => {
+    let pendingRpcCloseReason: string | null = null;
+    const markRpcCloseReason = (reason: string): void => {
       pendingRpcCloseReason = reason;
     };
-    const deriveRpcCloseReason = (status, code, signal) => {
+    const deriveRpcCloseReason = (
+      status: ChatRunStatus,
+      code: number | null,
+      signal: string | null,
+    ): string => {
       if (pendingRpcCloseReason) return pendingRpcCloseReason;
       if (run.cancelRequested || status === 'canceled') return 'cancel_requested';
       if (signal) return 'signal';
       if (typeof code === 'number') return code === 0 ? 'exit_0' : 'exit_nonzero';
       return 'unknown';
     };
-    const finishWithRetryDecision = (status, code = null, signal = null) => {
+    const finishWithRetryDecision = (
+      status: ChatRunStatus,
+      code: number | null = null,
+      signal: string | null = null,
+    ): boolean => {
       run.analyticsTelemetry = {
         ...(run.analyticsTelemetry ?? {}),
         finalizeStartAt: run.analyticsTelemetry?.finalizeStartAt ?? Date.now(),
@@ -4285,7 +4320,7 @@ export async function startServer({
       };
       const decision = decideSafeRunRetry({
         result,
-        failure,
+        ...(failure ? { failure } : {}),
         attemptCount: run.retryAttemptCount ?? 0,
         sideEffects,
       });
@@ -4333,17 +4368,18 @@ export async function startServer({
       const liveSessionId = agentResumeCtx.isResuming
         ? agentResumeCtx.resumeSessionId
         : agentResumeCtx.newSessionId;
+      const conversationIdForResume = run.conversationId;
       const resumableFailure =
         result === 'failed' &&
         def.resumesSessionViaCli === true &&
-        !!run.conversationId &&
+        !!conversationIdForResume &&
         !!liveSessionId &&
         committedWorkSeen &&
         isResumableFailure(failure);
       run.resumable = resumableFailure;
       if (resumableFailure) {
         upsertAgentSession(db, {
-          conversationId: run.conversationId,
+          conversationId: conversationIdForResume,
           agentId: def.id,
           sessionId: liveSessionId,
           stablePromptHash: currentStableHash,
@@ -4407,6 +4443,7 @@ export async function startServer({
     // explicit "external MCP is not forwarded to <agent>" banner for them
     // so the previous silent-failure UX is gone.
     if (
+      cwd &&
       def.externalMcpInjection === 'claude-mcp-json' &&
       isManagedProjectCwd(cwd, PROJECTS_DIR)
     ) {
@@ -4436,7 +4473,7 @@ export async function startServer({
           try {
             await fs.promises.unlink(target);
           } catch (err) {
-            if ((err && err.code) !== 'ENOENT') {
+            if ((err as NodeJS.ErrnoException)?.code !== 'ENOENT') {
               console.warn(
                 '[mcp-config] failed to remove stale .mcp.json:',
                 (err as Error)?.message ?? err,
@@ -4520,7 +4557,8 @@ export async function startServer({
     // below calls `sendAmrAccountFailure(...)` to surface AMR_AUTH_REQUIRED
     // for signed-out users, and a `const` declared later in the same outer
     // function scope would hit a TDZ ReferenceError before initialization.
-    const sendAmrAccountFailure = (failure) => {
+    type AmrAccountFailure = Parameters<typeof amrAccountFailureDetails>[0];
+    const sendAmrAccountFailure = (failure: AmrAccountFailure): void => {
       send('error', createSseErrorPayload(
         failure.code,
         failure.message,
@@ -4565,7 +4603,7 @@ export async function startServer({
       // AMR became unusable in packaged nightlies. Reusing the cache keeps that
       // blocking probe off the per-run hot path and degrades to preset instead
       // of fail-closing; vela's own `session/set_model` remains the final gate.
-      let liveModels = [];
+      let liveModels: RuntimeModelOption[] = [];
       try {
         const probe = await resolveAmrModelProbe({ dataDir: RUNTIME_DATA_DIR, env: process.env, readAppConfig });
         const catalog = await amrModelLoadingCache.get(probe.cacheKey, {
@@ -4743,10 +4781,14 @@ export async function startServer({
         {
           cwd: effectiveCwd,
           hasPriorAssistantTurn,
-          agentLogFilePath,
-          promptFilePath: promptFile?.path,
-          resumeSessionId: agentResumeCtx.resumeSessionId,
-          newSessionId: agentResumeCtx.newSessionId,
+          ...(agentLogFilePath ? { agentLogFilePath } : {}),
+          ...(promptFile?.path ? { promptFilePath: promptFile.path } : {}),
+          ...(agentResumeCtx.resumeSessionId
+            ? { resumeSessionId: agentResumeCtx.resumeSessionId }
+            : {}),
+          ...(agentResumeCtx.newSessionId
+            ? { newSessionId: agentResumeCtx.newSessionId }
+            : {}),
         },
       );
     } catch (err) {
@@ -4812,13 +4854,14 @@ export async function startServer({
 
     let persistDeliveredAgentSessionState = () => {};
     if (def.resumesSessionViaCli === true && run.conversationId) {
+      const sessionConversationId = run.conversationId;
       let persisted = false;
       persistDeliveredAgentSessionState = () => {
         if (persisted) return;
         persisted = true;
         if (!agentResumeCtx.isResuming && agentResumeCtx.newSessionId) {
           upsertAgentSession(db, {
-            conversationId: run.conversationId,
+            conversationId: sessionConversationId,
             agentId: def.id,
             sessionId: agentResumeCtx.newSessionId,
             stablePromptHash: currentStableHash,
@@ -4826,7 +4869,7 @@ export async function startServer({
           return;
         }
         if (agentResumeCtx.isResuming && includeStableInstructions) {
-          updateAgentSessionStableHash(db, run.conversationId, def.id, currentStableHash);
+          updateAgentSessionStableHash(db, sessionConversationId, def.id, currentStableHash);
         }
       };
     }
@@ -4840,7 +4883,7 @@ export async function startServer({
     const inactivityTimeoutMs = resolveChatRunInactivityTimeoutMs(def.inactivityTimeoutMs);
     const artifactQuietPeriodMs = resolveChatRunArtifactQuietPeriodMs();
     const inactivityKillGraceMs = 3_000;
-    let inactivityTimer = null;
+    let inactivityTimer: ReturnType<typeof setTimeout> | null = null;
     let childStdoutSeen = false;
     let lastAgentEventPhase = 'spawn pending';
     let lastToolResultChars = 0;
@@ -4866,7 +4909,7 @@ export async function startServer({
     // handler bails early when this is true, revoking only this attempt's own
     // tool token.
     let watchdogRetryRestarted = false;
-    const summarizeAgentEventForInactivity = (payload) => {
+    const summarizeAgentEventForInactivity = (payload: Record<string, unknown>): string => {
       const type = payload?.type ? String(payload.type) : 'unknown';
       if (type === 'tool_result') {
         const content = typeof payload.content === 'string' ? payload.content : '';
@@ -4897,7 +4940,7 @@ export async function startServer({
         inactivityTimer = null;
       }
     };
-    let forcedChildShutdownTimers = [];
+    let forcedChildShutdownTimers: Array<ReturnType<typeof setTimeout>> = [];
     const clearForcedChildShutdown = () => {
       for (const timer of forcedChildShutdownTimers) clearTimeout(timer);
       forcedChildShutdownTimers = [];
@@ -5113,10 +5156,10 @@ export async function startServer({
     });
     noteAgentActivity();
 
-    let child;
-    let acpSession = null;
+    let child: ChildProcessWithoutNullStreams | null = null;
+    let acpSession: ChatRun['acpSession'] = null;
     let writePromptToChildStdin = false;
-    let spawnedAgentEnv = null;
+    let spawnedAgentEnv: NodeJS.ProcessEnv = {};
     let agentStdoutTail = '';
     let agentStderrTail = '';
     const agentStderrFilter = createAgentStderrVisibilityFilter(agentId);
@@ -5183,7 +5226,7 @@ export async function startServer({
         // cmd.exe; without this, Node re-escapes the inner command line and
         // breaks paths containing spaces (issue #315).
         windowsVerbatimArguments: invocation.windowsVerbatimArguments,
-      });
+      }) as ChildProcessWithoutNullStreams;
       run.analyticsTelemetry = {
         ...(run.analyticsTelemetry ?? {}),
         processSpawnedAt: Date.now(),
@@ -5255,7 +5298,8 @@ export async function startServer({
           // the same condition via UV_EOF. Both mean the child exited before
           // reading stdin — the process exit/close handlers already route
           // the underlying failure to SSE via stderr, so swallow these here.
-          if (err.code !== 'EPIPE' && err.code !== 'EOF' && err.message !== 'write EOF') {
+          const code = (err as NodeJS.ErrnoException).code;
+          if (code !== 'EPIPE' && code !== 'EOF' && err.message !== 'write EOF') {
             send(
               'error',
               createSseErrorPayload(
@@ -5271,7 +5315,10 @@ export async function startServer({
       cleanupPromptFile();
       revokeToolToken('child_exit');
       unregisterChatAgentEventSink();
-      send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', `spawn failed: ${err.message}`));
+      send('error', createSseErrorPayload(
+        'AGENT_EXECUTION_FAILED',
+        `spawn failed: ${err instanceof Error ? err.message : String(err)}`,
+      ));
       design.runs.finish(run, 'failed', 1, null);
       return;
     }
@@ -5478,8 +5525,8 @@ export async function startServer({
             // the request skillId with a project-row fallback; pass it
             // through verbatim, and leave the orchestrator's own default
             // of 'unknown' for runs that genuinely have no skill assigned.
-            skill: typeof effectiveSkillId === 'string' && effectiveSkillId
-              ? effectiveSkillId
+            skill: typeof chatSkillId === 'string' && chatSkillId
+              ? chatSkillId
               : undefined,
             cfg: critiqueCfg,
             db,
@@ -5524,7 +5571,7 @@ export async function startServer({
     // time before deciding whether to forward it. The auth-prompt guard
     // in the close handler suppresses the buffer when the output is an
     // OAuth prompt; otherwise the flush below sends the chunks in order.
-    const plaintextStdoutBuffer: BufferedStdoutChunk[] = [];
+    const plaintextStdoutBuffer: Array<{ text: string; receivedAt: number }> = [];
     // Arrival time of the first buffered plain-text stdout chunk
     // (antigravity). First-token timing is stamped from this value only
     // when the buffer is actually flushed to the client at close time. If
