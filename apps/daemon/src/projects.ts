@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Project files registry. Each project is a folder under
 // <projectRoot>/.od/projects/<projectId>/. The frontend's project list
 // (localStorage) carries metadata; this module is the single owner of the
@@ -20,6 +19,7 @@ import {
   STUB_GUARDED_MANIFEST_KINDS,
   evaluateArtifactStubGuard,
   readArtifactStubGuardConfigFromEnv,
+  type ArtifactStubGuardWarning,
 } from './artifacts/stub-guard.js';
 import {
   assertArtifactPublicationAllowed,
@@ -50,7 +50,117 @@ export type ProjectFileWriteOptions = {
 
 export type ProjectFileBody = string | Uint8Array;
 
-export function isRunTouchedProjectFile(fileMtimeMs, runStartTimeMs) {
+type ProjectMetadata = unknown;
+
+export type ProjectResolutionOptions = {
+  allowUnavailableSandboxImportedProject?: boolean | undefined;
+};
+
+export type ProjectFileRecord = {
+  name: string;
+  path: string;
+  type: 'file' | 'dir';
+  size: number;
+  mtime: number;
+  kind: string;
+  mime: string;
+  artifactKind?: unknown;
+  artifactManifest: Record<string, unknown> | null;
+  stubGuardWarning?: ArtifactStubGuardWarning;
+};
+
+export type ProjectFileReadResult = ProjectFileRecord & {
+  buffer: Buffer;
+};
+
+export type ProjectFilePathResult = {
+  filePath: string;
+  name: string;
+  size: number;
+  mtime: number;
+  mime: string;
+  kind: string;
+};
+
+export type ProjectFolderRecord = {
+  name: string;
+  path: string;
+  type: 'dir';
+  size: 0;
+  mtime: number;
+};
+
+type ArchiveEntry = {
+  relPath: string;
+  fullPath: string;
+  mtime: number;
+};
+
+type ArchiveRejection = {
+  name: string;
+  reason: string;
+};
+
+type ProjectFileMap = {
+  files: string[];
+  htmlFiles: string[];
+  screenHtmlFiles: string[];
+  cssFiles: string[];
+  jsFiles: string[];
+  assetFiles: string[];
+  entryFile: string;
+};
+
+type ArtifactManifestFile = {
+  relPath: string;
+  fullPath: string;
+};
+
+type ManifestRename = {
+  oldManifestPath: string;
+  newManifestPath: string;
+  raw: string;
+  oldName: string;
+};
+
+type ProjectFileRenameResult = {
+  file: ProjectFileRecord;
+  oldName: string;
+  newName: string;
+};
+
+type ManifestRefRewrite = {
+  changed: boolean;
+  value: unknown;
+};
+
+type ArchiveError = Error & {
+  code?: string;
+  rejected?: ArchiveRejection[];
+};
+
+function errorCode(error: unknown): string | undefined {
+  if (!error || typeof error !== 'object') return undefined;
+  const code = (error as { code?: unknown }).code;
+  return typeof code === 'string' ? code : undefined;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function codedError(message: string, code: string): NodeJS.ErrnoException {
+  const error = new Error(message) as NodeJS.ErrnoException;
+  error.code = code;
+  return error;
+}
+
+export type ProjectArchiveResult = {
+  buffer: Buffer;
+  baseName: string;
+};
+
+export function isRunTouchedProjectFile(fileMtimeMs: number, runStartTimeMs: number): boolean {
   if (!Number.isFinite(fileMtimeMs) || !Number.isFinite(runStartTimeMs)) return false;
   return fileMtimeMs + RUN_ARTIFACT_RECONCILE_MTIME_GRACE_MS >= runStartTimeMs;
 }
@@ -62,7 +172,7 @@ function containsIgnoredProjectDirSegment(name: string): boolean {
     .some((segment) => isIgnoredProjectDirName(segment));
 }
 
-export function projectDir(projectsRoot, projectId) {
+export function projectDir(projectsRoot: string, projectId: string): string {
   if (!isSafeId(projectId)) throw new Error('invalid project id');
   return path.join(projectsRoot, projectId);
 }
@@ -76,44 +186,64 @@ export class SandboxImportedProjectError extends Error {
   }
 }
 
-function hasExternalProjectRoot(metadata?) {
-  if (typeof metadata?.baseDir !== 'string') return false;
-  return path.isAbsolute(path.normalize(metadata.baseDir));
+function externalProjectBaseDir(metadata?: ProjectMetadata | null): string | null {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return null;
+  const baseDir = (metadata as { baseDir?: unknown }).baseDir;
+  return typeof baseDir === 'string' && baseDir.trim() ? baseDir : null;
 }
 
-export function assertSandboxProjectRootAvailable(metadata?) {
+function hasExternalProjectRoot(metadata?: ProjectMetadata | null): boolean {
+  const baseDir = externalProjectBaseDir(metadata);
+  if (!baseDir) return false;
+  return path.isAbsolute(path.normalize(baseDir));
+}
+
+export function assertSandboxProjectRootAvailable(metadata?: ProjectMetadata | null): void {
+  const baseDir = externalProjectBaseDir(metadata);
   if (
     isSandboxModeEnabled(process.env) &&
     hasExternalProjectRoot(metadata) &&
     !isOrchestratorScratchWorkspace(metadata) &&
-    !isSandboxImportedProjectRootAllowed(metadata.baseDir)
+    baseDir &&
+    !isSandboxImportedProjectRootAllowed(baseDir)
   ) {
     throw new SandboxImportedProjectError();
   }
 }
 
-function usesExternalProjectRoot(metadata?) {
+function usesExternalProjectRoot(metadata?: ProjectMetadata | null): boolean {
+  const baseDir = externalProjectBaseDir(metadata);
   if (!hasExternalProjectRoot(metadata)) return false;
   if (isOrchestratorScratchWorkspace(metadata)) return true;
   if (!isSandboxModeEnabled(process.env)) return true;
-  return isSandboxImportedProjectRootAllowed(metadata.baseDir);
+  return !!baseDir && isSandboxImportedProjectRootAllowed(baseDir);
 }
 
 // Returns the folder a project's files live in. For git-linked projects
 // (metadata.baseDir set), this is the user's own folder. Otherwise falls
 // back to the standard computed path under projectsRoot.
-export function resolveProjectDir(projectsRoot, projectId, metadata?, opts = {}) {
+export function resolveProjectDir(
+  projectsRoot: string,
+  projectId: string,
+  metadata?: ProjectMetadata | null,
+  opts: ProjectResolutionOptions = {},
+): string {
+  const baseDir = externalProjectBaseDir(metadata);
   if (!opts.allowUnavailableSandboxImportedProject) {
     assertSandboxProjectRootAvailable(metadata);
   }
-  if (usesExternalProjectRoot(metadata)) {
-    return path.normalize(metadata.baseDir);
+  if (usesExternalProjectRoot(metadata) && baseDir) {
+    return path.normalize(baseDir);
   }
   if (!isSafeId(projectId)) throw new Error('invalid project id');
   return path.join(projectsRoot, projectId);
 }
 
-export async function ensureProject(projectsRoot, projectId, metadata?) {
+export async function ensureProject(
+  projectsRoot: string,
+  projectId: string,
+  metadata?: ProjectMetadata | null,
+): Promise<string> {
   const dir = resolveProjectDir(projectsRoot, projectId, metadata);
   // Git-linked folders already exist; skip mkdir to avoid side-effects.
   if (!usesExternalProjectRoot(metadata)) {
@@ -122,10 +252,17 @@ export async function ensureProject(projectsRoot, projectId, metadata?) {
   return dir;
 }
 
-export async function listFiles(projectsRoot, projectId, opts = {}) {
+export async function listFiles(
+  projectsRoot: string,
+  projectId: string,
+  opts: ProjectResolutionOptions & {
+    metadata?: ProjectMetadata | null | undefined;
+    since?: number | undefined;
+  } = {},
+): Promise<ProjectFileRecord[]> {
   const metadata = opts?.metadata;
   const dir = resolveProjectDir(projectsRoot, projectId, metadata);
-  const out = [];
+  const out: ProjectFileRecord[] = [];
   // Skip generated dependency/build trees for all project roots. Standard OD
   // projects can contain framework installs too; surfacing package HTML like
   // node_modules/tslib/*.html as artifacts produces blank previews.
@@ -139,21 +276,32 @@ export async function listFiles(projectsRoot, projectId, opts = {}) {
   return out;
 }
 
-export async function listProjectFolders(projectsRoot, projectId, opts = {}) {
+export async function listProjectFolders(
+  projectsRoot: string,
+  projectId: string,
+  opts: ProjectResolutionOptions & {
+    metadata?: ProjectMetadata | null | undefined;
+  } = {},
+): Promise<ProjectFolderRecord[]> {
   const metadata = opts?.metadata;
   const dir = resolveProjectDir(projectsRoot, projectId, metadata);
-  const out = [];
+  const out: ProjectFolderRecord[] = [];
   await collectFolders(dir, '', out, isIgnoredProjectDirName);
   out.sort((a, b) => a.name.localeCompare(b.name));
   return out;
 }
 
-async function collectFolders(dir, relDir, out, shouldSkipDir?: (name: string) => boolean) {
-  let entries = [];
+async function collectFolders(
+  dir: string,
+  relDir: string,
+  out: ProjectFolderRecord[],
+  shouldSkipDir?: (name: string) => boolean,
+): Promise<void> {
+  let entries: import('node:fs').Dirent[] = [];
   try {
     entries = await readdir(dir, { withFileTypes: true });
   } catch (err) {
-    if (err && err.code === 'ENOENT') return;
+    if (errorCode(err) === 'ENOENT') return;
     throw err;
   }
   for (const e of entries) {
@@ -174,16 +322,19 @@ async function collectFolders(dir, relDir, out, shouldSkipDir?: (name: string) =
   }
 }
 
-export async function createProjectFolder(projectsRoot, projectId, name, metadata?) {
+export async function createProjectFolder(
+  projectsRoot: string,
+  projectId: string,
+  name: string,
+  metadata?: ProjectMetadata | null,
+): Promise<ProjectFolderRecord> {
   const dir = await ensureProject(projectsRoot, projectId, metadata);
   const safeName = sanitizePath(name);
   const target = await resolveSafeReal(dir, safeName);
   await mkdir(target, { recursive: true });
   const st = await stat(target);
   if (!st.isDirectory()) {
-    const err = new Error('target path is not a folder');
-    err.code = 'ENOTDIR';
-    throw err;
+    throw codedError('target path is not a folder', 'ENOTDIR');
   }
   return {
     name: safeName,
@@ -199,7 +350,12 @@ export async function createProjectFolder(projectsRoot, projectId, name, metadat
 // forward-slash relative path ('' when no subdir was requested). Used by the
 // upload route so attachments dropped/picked while viewing a folder land in
 // that folder instead of the project root.
-export async function ensureProjectSubdir(projectsRoot, projectId, subdir, metadata?) {
+export async function ensureProjectSubdir(
+  projectsRoot: string,
+  projectId: string,
+  subdir: string | null | undefined,
+  metadata?: ProjectMetadata | null,
+): Promise<{ absDir: string; relDir: string }> {
   const dir = await ensureProject(projectsRoot, projectId, metadata);
   const raw = typeof subdir === 'string' ? subdir.trim() : '';
   if (!raw) return { absDir: dir, relDir: '' };
@@ -212,21 +368,22 @@ export async function ensureProjectSubdir(projectsRoot, projectId, subdir, metad
 // Recursively delete a folder (and everything under it) within the project
 // sandbox. Refuses to delete the project root itself. resolveSafeReal confines
 // the target to the project tree even across descendant symlinks.
-export async function deleteProjectFolder(projectsRoot, projectId, name, metadata?) {
+export async function deleteProjectFolder(
+  projectsRoot: string,
+  projectId: string,
+  name: string,
+  metadata?: ProjectMetadata | null,
+): Promise<void> {
   const dir = resolveProjectDir(projectsRoot, projectId, metadata);
   const safeName = sanitizePath(name);
   const target = await resolveSafeReal(dir, safeName);
   const dirReal = await realpath(dir).catch(() => dir);
   if (target === dirReal) {
-    const err = new Error('cannot delete project root');
-    err.code = 'EINVAL';
-    throw err;
+    throw codedError('cannot delete project root', 'EINVAL');
   }
   const st = await stat(target);
   if (!st.isDirectory()) {
-    const err = new Error('target is not a folder');
-    err.code = 'ENOTDIR';
-    throw err;
+    throw codedError('target is not a folder', 'ENOTDIR');
   }
   await rm(target, { recursive: true, force: true });
 }
@@ -248,12 +405,18 @@ export async function detectEntryFile(dir: string): Promise<string | null> {
   return null;
 }
 
-async function collectFiles(dir, relDir, out, shouldSkipDir?: (name: string) => boolean, projectRoot = dir) {
-  let entries = [];
+async function collectFiles(
+  dir: string,
+  relDir: string,
+  out: ProjectFileRecord[],
+  shouldSkipDir?: (name: string) => boolean,
+  projectRoot: string = dir,
+): Promise<void> {
+  let entries: import('node:fs').Dirent[] = [];
   try {
     entries = await readdir(dir, { withFileTypes: true });
   } catch (err) {
-    if (err && err.code === 'ENOENT') return;
+    if (errorCode(err) === 'ENOENT') return;
     throw err;
   }
   for (const e of entries) {
@@ -289,7 +452,12 @@ async function collectFiles(dir, relDir, out, shouldSkipDir?: (name: string) => 
 // the user sees in the file panel. Used by the "Download as .zip" share
 // menu item, which exports the user's actual project tree (e.g. the
 // uploaded `ui-design/` folder), not just the rendered HTML.
-export async function buildProjectArchive(projectsRoot, projectId, root, metadata?) {
+export async function buildProjectArchive(
+  projectsRoot: string,
+  projectId: string,
+  root: string | null | undefined,
+  metadata?: ProjectMetadata | null,
+): Promise<ProjectArchiveResult> {
   const projectRoot = resolveProjectDir(projectsRoot, projectId, metadata);
   let archiveRoot = projectRoot;
   let archiveBaseName = '';
@@ -312,25 +480,19 @@ export async function buildProjectArchive(projectsRoot, projectId, root, metadat
   try {
     rootStat = await stat(archiveRoot);
   } catch (err) {
-    if (err && err.code === 'ENOENT') {
-      const e = new Error('archive root does not exist');
-      e.code = 'ENOENT';
-      throw e;
+    if (errorCode(err) === 'ENOENT') {
+      throw codedError('archive root does not exist', 'ENOENT');
     }
     throw err;
   }
   if (!rootStat.isDirectory()) {
-    const err = new Error('archive root is not a directory');
-    err.code = 'ENOTDIR';
-    throw err;
+    throw codedError('archive root is not a directory', 'ENOTDIR');
   }
 
-  const entries = [];
+  const entries: ArchiveEntry[] = [];
   await collectArchiveEntries(archiveRoot, '', entries);
   if (entries.length === 0) {
-    const err = new Error('archive root is empty');
-    err.code = 'ENOENT';
-    throw err;
+    throw codedError('archive root is empty', 'ENOENT');
   }
 
   const zip = new JSZip();
@@ -355,18 +517,23 @@ export async function buildProjectArchive(projectsRoot, projectId, root, metadat
   return { buffer, baseName: archiveBaseName };
 }
 
-export async function buildBatchArchive(projectsRoot, projectId, fileNames, metadata?) {
+export async function buildBatchArchive(
+  projectsRoot: string,
+  projectId: string,
+  fileNames: string[],
+  metadata?: ProjectMetadata | null,
+): Promise<ProjectArchiveResult> {
   const projectRoot = resolveProjectDir(projectsRoot, projectId, metadata);
   const zip = new JSZip();
   let packed = 0;
-  const rejected = [];
+  const rejected: ArchiveRejection[] = [];
 
   for (const name of fileNames) {
     let filePath;
     try {
       filePath = resolveSafe(projectRoot, name);
     } catch (err) {
-      rejected.push({ name, reason: `invalid path: ${err?.message || err}` });
+      rejected.push({ name, reason: `invalid path: ${errorMessage(err)}` });
       continue;
     }
 
@@ -400,7 +567,7 @@ export async function buildBatchArchive(projectsRoot, projectId, fileNames, meta
       try {
         segStat = await lstat(walk);
       } catch (err) {
-        if (err && err.code === 'ENOENT') {
+        if (errorCode(err) === 'ENOENT') {
           rejected.push({ name, reason: `segment not found: ${seg}` });
           break;
         }
@@ -415,7 +582,7 @@ export async function buildBatchArchive(projectsRoot, projectId, fileNames, meta
       rejected.push({ name, reason: 'symlinks are not eligible for archive' });
       continue;
     }
-    if (rejected.length > 0 && rejected[rejected.length - 1].name === name) continue;
+    if (rejected.at(-1)?.name === name) continue;
 
     // Final stat on the resolved path (guards against TOCTOU between segment
     // walk and read, and catches non-regular files).
@@ -423,7 +590,7 @@ export async function buildBatchArchive(projectsRoot, projectId, fileNames, meta
     try {
       st = await lstat(filePath);
     } catch (err) {
-      if (err && err.code === 'ENOENT') {
+      if (errorCode(err) === 'ENOENT') {
         rejected.push({ name, reason: 'file not found' });
         continue;
       }
@@ -452,14 +619,14 @@ export async function buildBatchArchive(projectsRoot, projectId, fileNames, meta
   if (rejected.length > 0) {
     const err = new Error(
       `${rejected.length} file(s) ineligible for archive: ${rejected.map((r) => r.name).join(', ')}`,
-    );
+    ) as ArchiveError;
     err.code = 'BAD_REQUEST';
     err.rejected = rejected;
     throw err;
   }
 
   if (packed === 0) {
-    const err = new Error('no files could be packed');
+    const err = new Error('no files could be packed') as ArchiveError;
     err.code = 'ENOENT';
     throw err;
   }
@@ -472,12 +639,16 @@ export async function buildBatchArchive(projectsRoot, projectId, fileNames, meta
   return { buffer, baseName: '' };
 }
 
-async function collectArchiveEntries(dir, relDir, out) {
-  let entries = [];
+async function collectArchiveEntries(
+  dir: string,
+  relDir: string,
+  out: ArchiveEntry[],
+): Promise<void> {
+  let entries: import('node:fs').Dirent[] = [];
   try {
     entries = await readdir(dir, { withFileTypes: true });
   } catch (err) {
-    if (err && err.code === 'ENOENT') return;
+    if (errorCode(err) === 'ENOENT') return;
     throw err;
   }
   for (const e of entries) {
@@ -496,7 +667,7 @@ async function collectArchiveEntries(dir, relDir, out) {
   }
 }
 
-function addDesignHandoff(zip, entries, projectLabel) {
+function addDesignHandoff(zip: JSZip, entries: ArchiveEntry[], projectLabel: string): void {
   if (entries.some((entry) => entry.relPath === DESIGN_HANDOFF_FILENAME)) return;
   zip.file(DESIGN_HANDOFF_FILENAME, buildDesignHandoff(entries, projectLabel), {
     date: new Date(0),
@@ -504,7 +675,7 @@ function addDesignHandoff(zip, entries, projectLabel) {
   });
 }
 
-function addDesignManifest(zip, entries, projectLabel) {
+function addDesignManifest(zip: JSZip, entries: ArchiveEntry[], projectLabel: string): void {
   if (entries.some((entry) => entry.relPath === DESIGN_MANIFEST_FILENAME)) return;
   zip.file(DESIGN_MANIFEST_FILENAME, buildDesignManifest(entries, projectLabel), {
     date: new Date(0),
@@ -523,7 +694,7 @@ function isFrameWrapperHtmlFile(file: string): boolean {
   return FRAME_WRAPPER_FILE_RE.test(file);
 }
 
-function projectFileMap(entries) {
+function projectFileMap(entries: ArchiveEntry[]): ProjectFileMap {
   const files = entries.map((entry) => entry.relPath).sort((a, b) => a.localeCompare(b));
   const htmlFiles = files.filter((name) => /\.html?$/i.test(name));
   const screenHtmlFiles = htmlFiles.filter((name) => !isFrameWrapperHtmlFile(name));
@@ -539,7 +710,7 @@ function projectFileMap(entries) {
   return { files, htmlFiles, screenHtmlFiles, cssFiles, jsFiles, assetFiles, entryFile };
 }
 
-function buildDesignManifest(entries, projectLabel) {
+function buildDesignManifest(entries: ArchiveEntry[], projectLabel: string): string {
   const { files, htmlFiles, screenHtmlFiles, cssFiles, jsFiles, assetFiles, entryFile } = projectFileMap(entries);
   const screenFiles = screenHtmlFiles.length > 0 ? screenHtmlFiles : [entryFile];
   return JSON.stringify({
@@ -622,7 +793,7 @@ function buildDesignManifest(entries, projectLabel) {
   }, null, 2);
 }
 
-function buildDesignHandoff(entries, projectLabel) {
+function buildDesignHandoff(entries: ArchiveEntry[], projectLabel: string): string {
   const { files, htmlFiles, cssFiles, jsFiles, assetFiles, entryFile } = projectFileMap(entries);
   const accentLikelyBrandLed =
     files.some((name) => /(design|brand|tokens?|theme|style|tailwind|variables)\.(css|scss|sass|less|json|ts|tsx|js|jsx|md)$/i.test(name)) ||
@@ -631,7 +802,8 @@ function buildDesignHandoff(entries, projectLabel) {
     htmlFiles.length > 0 ||
     cssFiles.length > 0 ||
     files.some((name) => /(screens?|pages?|components?|app|src)\//i.test(name));
-  const list = (items) => items.length > 0 ? items.map((name) => `- \`${name}\``).join('\n') : '- None detected';
+  const list = (items: string[]): string =>
+    items.length > 0 ? items.map((name) => `- \`${name}\``).join('\n') : '- None detected';
 
   return `# ${projectLabel || 'Open Design project'} implementation handoff
 
@@ -723,7 +895,12 @@ ${list(assetFiles)}
 `;
 }
 
-export async function readProjectFile(projectsRoot, projectId, name, metadata?) {
+export async function readProjectFile(
+  projectsRoot: string,
+  projectId: string,
+  name: string,
+  metadata?: ProjectMetadata | null,
+): Promise<ProjectFileReadResult> {
   const dir = resolveProjectDir(projectsRoot, projectId, metadata);
   const file = await resolveSafeReal(dir, name);
   const buf = await readFile(file);
@@ -735,6 +912,7 @@ export async function readProjectFile(projectsRoot, projectId, name, metadata?) 
     buffer: buf,
     name: rel,
     path: rel,
+    type: 'file',
     size: st.size,
     mtime: st.mtimeMs,
     mime: mimeFor(rel),
@@ -746,7 +924,12 @@ export async function readProjectFile(projectsRoot, projectId, name, metadata?) 
 
 // Like readProjectFile but skips loading the file content into memory.
 // Used by the media streaming endpoint so large video files are never buffered.
-export async function resolveProjectFilePath(projectsRoot, projectId, name, metadata?) {
+export async function resolveProjectFilePath(
+  projectsRoot: string,
+  projectId: string,
+  name: string,
+  metadata?: ProjectMetadata | null,
+): Promise<ProjectFilePathResult> {
   const dir = resolveProjectDir(projectsRoot, projectId, metadata);
   const file = await resolveSafeReal(dir, name);
   const st = await stat(file);
@@ -768,8 +951,8 @@ export async function writeProjectFile(
   name: string,
   body: ProjectFileBody,
   { overwrite = true, artifactManifest = null }: ProjectFileWriteOptions = {},
-  metadata?: unknown,
-) {
+  metadata?: ProjectMetadata | null,
+): Promise<ProjectFileRecord> {
   const dir = await ensureProject(projectsRoot, projectId, metadata);
   const safeName = sanitizePath(name);
   const target = await resolveSafeReal(dir, safeName);
@@ -777,11 +960,9 @@ export async function writeProjectFile(
   if (!overwrite) {
     try {
       await stat(target);
-      const err = new Error('file already exists');
-      err.code = 'EEXIST';
-      throw err;
+      throw codedError('file already exists', 'EEXIST');
     } catch (err) {
-      if (!err || err.code !== 'ENOENT') throw err;
+      if (errorCode(err) !== 'ENOENT') throw err;
     }
   }
   await mkdir(path.dirname(target), { recursive: true });
@@ -797,16 +978,23 @@ export async function writeProjectFile(
       // every artifact that flows through writeProjectFile, regardless of
       // which agent/atom produced the body. Throws
       // ArtifactPublicationBlockedError which the route layer maps to 422.
-      if (isPublicationGuardedArtifactKind(validatedManifest.kind)) {
+      const manifestKind = validatedManifest.kind;
+      if (isPublicationGuardedArtifactKind(manifestKind)) {
         assertArtifactPublicationAllowed(body);
       }
-      const identifier = typeof validatedManifest.metadata?.identifier === 'string'
-        ? validatedManifest.metadata.identifier
+      const manifestMetadata = validatedManifest.metadata;
+      const identifier = manifestMetadata && typeof manifestMetadata === 'object'
+        && typeof (manifestMetadata as { identifier?: unknown }).identifier === 'string'
+        ? (manifestMetadata as { identifier: string }).identifier
         : '';
       // Stub-guard applies to HTML-rendered manifest kinds (html, deck).
       // Other kinds (markdown, svg, code-snippet) can legitimately be small
       // and are skipped.
-      if (identifier.length > 0 && STUB_GUARDED_MANIFEST_KINDS.has(validatedManifest.kind)) {
+      if (
+        identifier.length > 0
+        && typeof manifestKind === 'string'
+        && STUB_GUARDED_MANIFEST_KINDS.has(manifestKind)
+      ) {
         // Scan the directory the new file actually lands in, not the project
         // root — writeProjectFile accepts nested paths like reports/X.html
         // and a root-only scan would miss prior siblings in subdirectories.
@@ -847,9 +1035,10 @@ export async function writeProjectFile(
   }
   const st = await stat(target);
   const persistedManifest = await readManifestForPath(dir, safeName);
-  const result = {
+  const result: ProjectFileRecord = {
     name: safeName,
     path: safeName,
+    type: 'file',
     size: st.size,
     mtime: st.mtimeMs,
     kind: kindFor(safeName),
@@ -861,11 +1050,16 @@ export async function writeProjectFile(
   return result;
 }
 
-function artifactManifestNameFor(name) {
+function artifactManifestNameFor(name: string): string {
   return `${name}.artifact.json`;
 }
 
-export async function reconcileHtmlArtifactManifest(projectsRoot, projectId, name, metadata?) {
+export async function reconcileHtmlArtifactManifest(
+  projectsRoot: string,
+  projectId: string,
+  name: string,
+  metadata?: ProjectMetadata | null,
+): Promise<Record<string, unknown> | null> {
   const dir = resolveProjectDir(projectsRoot, projectId, metadata);
   const safeName = validateProjectPath(name);
   if (containsIgnoredProjectDirSegment(safeName)) return null;
@@ -876,7 +1070,7 @@ export async function reconcileHtmlArtifactManifest(projectsRoot, projectId, nam
   try {
     target = await resolveSafeReal(dir, safeName);
   } catch (err) {
-    if (err && err.code === 'ENOENT') return null;
+    if (errorCode(err) === 'ENOENT') return null;
     throw err;
   }
 
@@ -884,7 +1078,7 @@ export async function reconcileHtmlArtifactManifest(projectsRoot, projectId, nam
   try {
     targetStat = await stat(target);
   } catch (err) {
-    if (err && err.code === 'ENOENT') return null;
+    if (errorCode(err) === 'ENOENT') return null;
     throw err;
   }
   if (!targetStat.isFile()) return null;
@@ -896,7 +1090,7 @@ export async function reconcileHtmlArtifactManifest(projectsRoot, projectId, nam
     const raw = await readFile(manifestTarget, 'utf8');
     return parseManifest(raw);
   } catch (err) {
-    if (!err || err.code !== 'ENOENT') throw err;
+    if (errorCode(err) !== 'ENOENT') throw err;
   }
 
   const inferred = inferLegacyManifest(safeName);
@@ -924,7 +1118,10 @@ export async function reconcileHtmlArtifactManifest(projectsRoot, projectId, nam
   return validated.value;
 }
 
-async function readManifestForPath(projectDirPath, relPath) {
+async function readManifestForPath(
+  projectDirPath: string,
+  relPath: string,
+): Promise<Record<string, unknown> | null> {
   if (containsIgnoredProjectDirSegment(relPath)) return null;
   const fullPath = path.join(projectDirPath, relPath);
   if (await isViteDevHtmlEntry(projectDirPath, relPath, fullPath)) return null;
@@ -934,43 +1131,50 @@ async function readManifestForPath(projectDirPath, relPath) {
     const parsed = parseManifest(raw);
     if (parsed) return parsed;
   } catch (err) {
-    if (!err || err.code !== 'ENOENT') {
+    if (errorCode(err) !== 'ENOENT') {
       // ignore malformed/invalid manifests and fallback to inference
     }
   }
   return inferLegacyManifest(relPath);
 }
 
-function parseManifest(raw) {
+function parseManifest(raw: string): Record<string, unknown> | null {
   return parsePersistedManifest(raw, '');
 }
 
-export async function deleteProjectFile(projectsRoot, projectId, name, metadata?) {
+export async function deleteProjectFile(
+  projectsRoot: string,
+  projectId: string,
+  name: string,
+  metadata?: ProjectMetadata | null,
+): Promise<void> {
   const dir = resolveProjectDir(projectsRoot, projectId, metadata);
   const file = await resolveSafeReal(dir, name);
   await unlink(file);
 }
 
-export async function renameProjectFile(projectsRoot, projectId, fromName, toName, metadata?) {
+export async function renameProjectFile(
+  projectsRoot: string,
+  projectId: string,
+  fromName: string,
+  toName: string,
+  metadata?: ProjectMetadata | null,
+): Promise<ProjectFileRenameResult> {
   const dir = resolveProjectDir(projectsRoot, projectId, metadata);
   const oldName = validateProjectPath(fromName);
   const newName = sanitizePath(toName);
   try {
     await stat(dir);
   } catch (err) {
-    if (err && err.code === 'ENOENT') {
-      const missing = new Error('source file not found');
-      missing.code = 'ENOENT';
-      throw missing;
+    if (errorCode(err) === 'ENOENT') {
+      throw codedError('source file not found', 'ENOENT');
     }
     throw err;
   }
   const source = await resolveSafeReal(dir, oldName);
   const sourceStat = await stat(source);
   if (!sourceStat.isFile()) {
-    const err = new Error('source is not a regular file');
-    err.code = 'EISDIR';
-    throw err;
+    throw codedError('source is not a regular file', 'EISDIR');
   }
 
   if (oldName === newName) {
@@ -979,6 +1183,7 @@ export async function renameProjectFile(projectsRoot, projectId, fromName, toNam
       file: {
         name: oldName,
         path: oldName,
+        type: 'file',
         size: sourceStat.size,
         mtime: sourceStat.mtimeMs,
         kind: kindFor(oldName),
@@ -997,11 +1202,9 @@ export async function renameProjectFile(projectsRoot, projectId, fromName, toNam
   if (source !== target) {
     try {
       await stat(target);
-      const err = new Error('target file already exists');
-      err.code = 'EEXIST';
-      throw err;
+      throw codedError('target file already exists', 'EEXIST');
     } catch (err) {
-      if (!err || err.code !== 'ENOENT') throw err;
+      if (errorCode(err) !== 'ENOENT') throw err;
     }
   }
 
@@ -1019,6 +1222,7 @@ export async function renameProjectFile(projectsRoot, projectId, fromName, toNam
     file: {
       name: newName,
       path: newName,
+      type: 'file',
       size: st.size,
       mtime: st.mtimeMs,
       kind: kindFor(newName),
@@ -1031,7 +1235,11 @@ export async function renameProjectFile(projectsRoot, projectId, fromName, toNam
   };
 }
 
-async function renameFilePath(source, target, opts = {}) {
+async function renameFilePath(
+  source: string,
+  target: string,
+  opts: { noOverwrite?: boolean | undefined } = {},
+): Promise<void> {
   const { noOverwrite = false } = opts;
   if (source === target) return;
   const temp = await uniqueRenameTempPath(source);
@@ -1057,7 +1265,7 @@ async function renameFilePath(source, target, opts = {}) {
   }
 }
 
-async function uniqueRenameTempPath(source) {
+async function uniqueRenameTempPath(source: string): Promise<string> {
   const dir = path.dirname(source);
   const base = path.basename(source);
   for (let i = 0; i < 10; i++) {
@@ -1065,19 +1273,21 @@ async function uniqueRenameTempPath(source) {
     try {
       await stat(temp);
     } catch (err) {
-      if (err && err.code === 'ENOENT') return temp;
+      if (errorCode(err) === 'ENOENT') return temp;
       throw err;
     }
   }
-  const err = new Error('could not allocate temporary rename path');
-  err.code = 'EEXIST';
-  throw err;
+  throw codedError('could not allocate temporary rename path', 'EEXIST');
 }
 
-async function prepareArtifactManifestRename(dir, oldName, newName) {
+async function prepareArtifactManifestRename(
+  dir: string,
+  oldName: string,
+  newName: string,
+): Promise<ManifestRename | null> {
   const oldManifestName = artifactManifestNameFor(oldName);
   const oldManifestPath = await resolveSafeReal(dir, oldManifestName).catch((err) => {
-    if (err && err.code === 'ENOENT') return null;
+    if (errorCode(err) === 'ENOENT') return null;
     throw err;
   });
   if (!oldManifestPath) return null;
@@ -1086,7 +1296,7 @@ async function prepareArtifactManifestRename(dir, oldName, newName) {
   try {
     raw = await readFile(oldManifestPath, 'utf8');
   } catch (err) {
-    if (err && err.code === 'ENOENT') return null;
+    if (errorCode(err) === 'ENOENT') return null;
     throw err;
   }
 
@@ -1098,18 +1308,19 @@ async function prepareArtifactManifestRename(dir, oldName, newName) {
   if (oldManifestPath !== newManifestPath) {
     try {
       await stat(newManifestPath);
-      const err = new Error('target artifact manifest already exists');
-      err.code = 'EEXIST';
-      throw err;
+      throw codedError('target artifact manifest already exists', 'EEXIST');
     } catch (err) {
-      if (!err || err.code !== 'ENOENT') throw err;
+      if (errorCode(err) !== 'ENOENT') throw err;
     }
   }
 
   return { oldManifestPath, newManifestPath: targetManifestPath, raw, oldName };
 }
 
-async function commitArtifactManifestRename(manifestRename, newName) {
+async function commitArtifactManifestRename(
+  manifestRename: ManifestRename | null,
+  newName: string,
+): Promise<void> {
   if (!manifestRename) return;
   const { oldManifestPath, newManifestPath, raw, oldName } = manifestRename;
   await mkdir(path.dirname(newManifestPath), { recursive: true });
@@ -1131,8 +1342,12 @@ async function commitArtifactManifestRename(manifestRename, newName) {
   await renameFilePath(oldManifestPath, newManifestPath, { noOverwrite: true });
 }
 
-async function updateArtifactManifestRefsForRename(dir, oldName, newName) {
-  const manifests = [];
+async function updateArtifactManifestRefsForRename(
+  dir: string,
+  oldName: string,
+  newName: string,
+): Promise<void> {
+  const manifests: ArtifactManifestFile[] = [];
   await collectArtifactManifestFiles(dir, '', manifests);
   for (const manifestFile of manifests) {
     const ownerName = ownerNameForArtifactManifest(manifestFile.relPath);
@@ -1141,7 +1356,7 @@ async function updateArtifactManifestRefsForRename(dir, oldName, newName) {
     try {
       raw = await readFile(manifestFile.fullPath, 'utf8');
     } catch (err) {
-      if (err && err.code === 'ENOENT') continue;
+      if (errorCode(err) === 'ENOENT') continue;
       throw err;
     }
     const parsed = parseManifest(raw);
@@ -1160,12 +1375,16 @@ async function updateArtifactManifestRefsForRename(dir, oldName, newName) {
   }
 }
 
-async function collectArtifactManifestFiles(dir, relDir, out) {
-  let entries = [];
+async function collectArtifactManifestFiles(
+  dir: string,
+  relDir: string,
+  out: ArtifactManifestFile[],
+): Promise<void> {
+  let entries: import('node:fs').Dirent[] = [];
   try {
     entries = await readdir(dir, { withFileTypes: true });
   } catch (err) {
-    if (err && err.code === 'ENOENT') return;
+    if (errorCode(err) === 'ENOENT') return;
     throw err;
   }
   for (const entry of entries) {
@@ -1182,7 +1401,11 @@ async function collectArtifactManifestFiles(dir, relDir, out) {
   }
 }
 
-async function isViteDevHtmlEntry(projectDirPath, safeName, targetPath) {
+async function isViteDevHtmlEntry(
+  projectDirPath: string,
+  safeName: string,
+  targetPath: string,
+): Promise<boolean> {
   if (!/(^|\/)index\.html?$/i.test(safeName)) return false;
   let body = '';
   try {
@@ -1206,7 +1429,7 @@ async function isViteDevHtmlEntry(projectDirPath, safeName, targetPath) {
       const st = await stat(path.join(projectDirPath, candidate));
       if (st.isFile()) return true;
     } catch (err) {
-      if (!err || err.code !== 'ENOENT') return false;
+      if (errorCode(err) !== 'ENOENT') return false;
     }
   }
   try {
@@ -1218,13 +1441,20 @@ async function isViteDevHtmlEntry(projectDirPath, safeName, targetPath) {
   }
 }
 
-function ownerNameForArtifactManifest(manifestName) {
+function ownerNameForArtifactManifest(manifestName: string): string | null {
   const suffix = '.artifact.json';
   if (!manifestName.endsWith(suffix)) return null;
   return manifestName.slice(0, -suffix.length);
 }
 
-function rewriteArtifactManifestRenameRefs(manifest, { ownerName, oldName, newName }) {
+function rewriteArtifactManifestRenameRefs(
+  manifest: Record<string, unknown>,
+  {
+    ownerName,
+    oldName,
+    newName,
+  }: { ownerName: string; oldName: string; newName: string },
+): { changed: boolean; manifest: Record<string, unknown> } {
   let changed = false;
   const next = { ...manifest };
 
@@ -1247,7 +1477,7 @@ function rewriteArtifactManifestRenameRefs(manifest, { ownerName, oldName, newNa
   }
 
   if (Array.isArray(next.supportingFiles)) {
-    const supportingFiles = next.supportingFiles.map((ref) => {
+    const supportingFiles = next.supportingFiles.map((ref: unknown) => {
       const updated = rewriteManifestRefForRename(ref, ownerName, oldName, newName);
       if (updated.changed) changed = true;
       return updated.value;
@@ -1259,12 +1489,12 @@ function rewriteArtifactManifestRenameRefs(manifest, { ownerName, oldName, newNa
 }
 
 function rewriteManifestRefForRename(
-  ref,
-  ownerName,
-  oldName,
-  newName,
-  options = {},
-) {
+  ref: unknown,
+  ownerName: string,
+  oldName: string,
+  newName: string,
+  options: { preferProjectRoot?: boolean | undefined } = {},
+): ManifestRefRewrite {
   if (typeof ref !== 'string') return { changed: false, value: ref };
   const normalized = ref.replace(/\\/g, '/').trim();
   if (!normalized) return { changed: false, value: ref };
@@ -1287,7 +1517,7 @@ function rewriteManifestRefForRename(
   return { changed: false, value: ref };
 }
 
-function relativeManifestRefForOwner(ownerName, targetName) {
+function relativeManifestRefForOwner(ownerName: string, targetName: string): string {
   const ownerDir = path.posix.dirname(ownerName);
   if (ownerDir === '.') return targetName;
   const relative = path.posix.relative(ownerDir, targetName);
@@ -1297,11 +1527,11 @@ function relativeManifestRefForOwner(ownerName, targetName) {
   return relative;
 }
 
-function normalizeManifestProjectRootRef(ref) {
+function normalizeManifestProjectRootRef(ref: unknown): string | null {
   return normalizeManifestProjectRef(ref, '');
 }
 
-function normalizeManifestProjectRef(ref, ownerName) {
+function normalizeManifestProjectRef(ref: unknown, ownerName: string): string | null {
   if (typeof ref !== 'string' || !ref.trim()) return null;
   const value = ref.trim().replace(/\\/g, '/');
   if (value.includes('\0') || value.startsWith('/')) return null;
@@ -1314,12 +1544,12 @@ function normalizeManifestProjectRef(ref, ownerName) {
   return normalized;
 }
 
-export async function removeProjectDir(projectsRoot, projectId) {
+export async function removeProjectDir(projectsRoot: string, projectId: string): Promise<void> {
   const dir = projectDir(projectsRoot, projectId);
   await rm(dir, { recursive: true, force: true });
 }
 
-function resolveSafe(dir, name) {
+function resolveSafe(dir: string, name: string): string {
   const safePath = validateProjectPath(name);
   const target = path.resolve(dir, safePath);
   if (!target.startsWith(dir + path.sep) && target !== dir) {
@@ -1336,27 +1566,25 @@ function resolveSafe(dir, name) {
 // candidate (or its existing prefix, for writes that haven't created
 // the file yet) and re-validates against the realpath of dir, so
 // descendant symlinks can't reach outside the project.
-async function resolveSafeReal(dir, name) {
+async function resolveSafeReal(dir: string, name: string): Promise<string> {
   const candidate = resolveSafe(dir, name);
   const rootReal = await realpath(dir).catch(() => dir);
   let real;
   try {
     real = await realpath(candidate);
   } catch (err) {
-    if (!err || err.code !== 'ENOENT') throw err;
+    if (errorCode(err) !== 'ENOENT') throw err;
     // Write case: path doesn't exist yet. Realpath the longest existing
     // prefix and re-append the missing tail.
     real = await resolveExistingPrefix(candidate);
   }
   if (!real.startsWith(rootReal + path.sep) && real !== rootReal) {
-    const e = new Error('path escapes project dir via symlink');
-    e.code = 'EPATHESCAPE';
-    throw e;
+    throw codedError('path escapes project dir via symlink', 'EPATHESCAPE');
   }
   return real;
 }
 
-async function resolveExistingPrefix(p) {
+async function resolveExistingPrefix(p: string): Promise<string> {
   const parts = p.split(path.sep);
   for (let i = parts.length; i > 0; i--) {
     const prefix = parts.slice(0, i).join(path.sep) || path.sep;
@@ -1365,18 +1593,18 @@ async function resolveExistingPrefix(p) {
       const rest = parts.slice(i).join(path.sep);
       return rest ? path.join(real, rest) : real;
     } catch (err) {
-      if (!err || err.code !== 'ENOENT') throw err;
+      if (errorCode(err) !== 'ENOENT') throw err;
     }
   }
   return p;
 }
 
-export function sanitizePath(raw) {
+export function sanitizePath(raw: unknown): string {
   const normalized = validateProjectPath(raw);
   return normalized.split('/').map(sanitizeName).join('/');
 }
 
-export function validateProjectPath(raw) {
+export function validateProjectPath(raw: unknown): string {
   if (typeof raw !== 'string' || !raw.trim()) {
     throw new Error('invalid file name');
   }
@@ -1394,7 +1622,7 @@ export function validateProjectPath(raw) {
   return parts.join('/');
 }
 
-export function isReservedProjectFilePath(raw) {
+export function isReservedProjectFilePath(raw: unknown): boolean {
   try {
     const normalized = String(raw ?? '').replace(/\\/g, '/');
     return normalized.split('/').filter(Boolean).some((part) => RESERVED_PROJECT_FILE_SEGMENTS.has(part));
@@ -1409,7 +1637,7 @@ export function isReservedProjectFilePath(raw) {
 // The previous ASCII-only filter collapsed every non-ASCII character to
 // '_', so a Chinese filename like '测试文档.docx' became '____.docx'
 // (issue #144).
-export function sanitizeName(raw) {
+export function sanitizeName(raw: unknown): string {
   const cleaned = String(raw ?? '')
     .replace(/[\\/]/g, '_')
     .replace(/\s+/g, '-')
@@ -1423,8 +1651,8 @@ export function sanitizeName(raw) {
 // UTF-8 bytes (Chinese, Japanese, Cyrillic, ...) the user uploads. Re-
 // decode as UTF-8 when the result round-trips back to the original
 // bytes; otherwise the source was genuine latin1 and we leave it alone.
-export function decodeMultipartFilename(name) {
-  if (!name || typeof name !== 'string') return name ?? '';
+export function decodeMultipartFilename(name: unknown): string {
+  if (typeof name !== 'string') return '';
   // If any code point exceeds 0xFF the source is already a properly
   // decoded Unicode string — for example, multer received an RFC 5987
   // `filename*` parameter and decoded it as UTF-8. Re-running latin1
@@ -1437,7 +1665,7 @@ export function decodeMultipartFilename(name) {
   return Buffer.from(utf8, 'utf8').equals(buf) ? utf8 : name;
 }
 
-function toProjectPath(raw) {
+function toProjectPath(raw: string): string {
   return raw.split(path.sep).join('/');
 }
 
@@ -1450,14 +1678,14 @@ function toProjectPath(raw) {
 // reach this code via a percent-encoded URL like `/api/projects/%2e%2e/...`
 // which Express decodes before the route handler sees it) and steer
 // finalize / write operations outside `.od/projects/`.
-export function isSafeId(id) {
+export function isSafeId(id: unknown): id is string {
   if (typeof id !== 'string') return false;
   if (id.length === 0 || id.length > 128) return false;
   if (/^\.+$/.test(id)) return false; // reject `.`, `..`, `...`, etc.
   return /^[A-Za-z0-9._-]+$/.test(id);
 }
 
-const EXT_MIME = {
+const EXT_MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
   '.htm': 'text/html; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
@@ -1495,7 +1723,7 @@ const EXT_MIME = {
   '.m4a': 'audio/mp4',
 };
 
-export function mimeFor(name) {
+export function mimeFor(name: string): string {
   const ext = path.extname(name).toLowerCase();
   return EXT_MIME[ext] || 'application/octet-stream';
 }
@@ -1504,7 +1732,10 @@ export function mimeFor(name) {
 // Returns { start, end } for a satisfiable range, 'unsatisfiable' for a
 // 416-class range, or null if the header is absent/malformed/multi-range
 // (callers fall back to a full 200 response in the null case).
-export function parseByteRange(header, fileSize) {
+export function parseByteRange(
+  header: string | null | undefined,
+  fileSize: number,
+): { start: number; end: number } | 'unsatisfiable' | null {
   if (!header || !header.startsWith('bytes=')) return null;
   const spec = header.slice(6).trim();
   // Multi-range is valid RFC 7233 but uncommon for media; fall back to full.
@@ -1538,7 +1769,16 @@ export function parseByteRange(header, fileSize) {
   return { start, end };
 }
 
-export async function searchProjectFiles(projectsRoot, projectId, query, opts = {}) {
+export async function searchProjectFiles(
+  projectsRoot: string,
+  projectId: string,
+  query: string,
+  opts: {
+    max?: number | undefined;
+    pattern?: string | null | undefined;
+    metadata?: ProjectMetadata | null | undefined;
+  } = {},
+): Promise<Array<{ file: string; line: number; snippet: string }>> {
   const max = Math.min(Number(opts.max) || 200, 1000);
   const pattern = opts.pattern || null;
   const metadata = opts.metadata;
@@ -1546,7 +1786,7 @@ export async function searchProjectFiles(projectsRoot, projectId, query, opts = 
   const dir = resolveProjectDir(projectsRoot, projectId, metadata);
   const escaped = String(query).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const re = new RegExp(escaped, 'i');
-  const matches = [];
+  const matches: Array<{ file: string; line: number; snippet: string }> = [];
   for (const f of items) {
     if (!isTextualMime(f.mime)) continue;
     if (pattern && !globMatch(f.name, pattern)) continue;
@@ -1558,8 +1798,9 @@ export async function searchProjectFiles(projectsRoot, projectId, query, opts = 
     }
     const lines = content.split('\n');
     for (let i = 0; i < lines.length; i++) {
-      if (re.test(lines[i])) {
-        const snippet = lines[i].length > 220 ? lines[i].slice(0, 220) + '…' : lines[i];
+      const line = lines[i];
+      if (line !== undefined && re.test(line)) {
+        const snippet = line.length > 220 ? line.slice(0, 220) + '…' : line;
         matches.push({ file: f.name, line: i + 1, snippet });
         if (matches.length >= max) return matches;
       }
@@ -1568,7 +1809,7 @@ export async function searchProjectFiles(projectsRoot, projectId, query, opts = 
   return matches;
 }
 
-function isTextualMime(mime) {
+function isTextualMime(mime: string): boolean {
   if (!mime) return false;
   return (
     /^text\//i.test(mime) ||
@@ -1578,12 +1819,12 @@ function isTextualMime(mime) {
   );
 }
 
-function globMatch(name, glob) {
+function globMatch(name: string, glob: string): boolean {
   const re = new RegExp(
     '^' +
       glob
         .split('*')
-        .map((s) => s.replace(/[.+?^${}()|[\]\\]/g, '\\$&'))
+        .map((s: string) => s.replace(/[.+?^${}()|[\]\\]/g, '\\$&'))
         .join('.*') +
       '$',
   );
@@ -1591,7 +1832,7 @@ function globMatch(name, glob) {
 }
 
 // Coarse kind buckets the frontend uses to pick a viewer.
-export function kindFor(name) {
+export function kindFor(name: string): string {
   // Editable sketches use a compound extension so they slot into the
   // "sketch" bucket while still being valid JSON on disk.
   if (name.endsWith('.sketch.json')) return 'sketch';
