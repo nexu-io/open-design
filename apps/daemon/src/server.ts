@@ -170,6 +170,7 @@ import {
   quotePosixShellArg,
 } from './runtimes/shell-command.js';
 import { execFileBuffered as runBufferedCommand } from './runtimes/child-process.js';
+import { sanitizeArchiveFilename } from './runtimes/archive-filename.js';
 import {
   githubRepoNameFromPluginName,
   normalizePluginShareAction,
@@ -1937,20 +1938,6 @@ async function checkCloudflarePagesDeploymentLinks(existing) {
       cloudflarePages,
     },
   };
-}
-
-// Filename slug for the Content-Disposition header on archive downloads.
-// Browsers reject quotes and control bytes; we keep Unicode letters/digits
-// so a project name with non-ASCII characters (e.g. "café-design")
-// survives instead of becoming a row of underscores.
-function sanitizeArchiveFilename(raw) {
-  const cleaned = String(raw ?? '')
-    .replace(/[\\/:*?"<>|]/g, '_')
-    .replace(/[\u0000-\u001f\u007f]/g, '')
-    .replace(/\s+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 80);
-  return cleaned;
 }
 
 function sendLiveArtifactRouteError(res, err) {

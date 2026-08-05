@@ -17,6 +17,7 @@ import type {
 } from '../design-systems/generation-jobs.js';
 import type { openDatabase } from '../db.js';
 import type { Project, ProjectFile } from '@open-design/contracts';
+import { sanitizeArchiveFilename } from '../runtimes/archive-filename.js';
 
 type DbHandle = ReturnType<typeof openDatabase>;
 
@@ -63,17 +64,6 @@ export interface RegisterDesignSystemRoutesDeps extends RouteDeps<'db' | 'paths'
     start: (input: UserDesignSystemInput) => DesignSystemGenerationJob;
   };
 };
-
-// Strip a brand title down to a safe download filename stem (no path
-// separators, control chars, or trailing dashes; capped so the OS accepts it).
-function sanitizeArchiveFilename(raw: string): string {
-  return String(raw ?? '')
-    .replace(/[\\/:*?"<>|]/g, '_')
-    .replace(/[\u0000-\u001f\u007f]/g, '')
-    .replace(/\s+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 80);
-}
 
 export function registerDesignSystemRoutes(app: Express, ctx: RegisterDesignSystemRoutesDeps) {
   const { db } = ctx;
