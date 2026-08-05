@@ -6707,21 +6707,25 @@ export async function startServer({
 
     const completion = (async () => {
       const finalStatus = await design.runs.wait(run);
+      const terminalStatus = finalStatus.status;
+      if (terminalStatus === 'queued' || terminalStatus === 'running') {
+        throw new Error(`Orbit run ${run.id} ended without a terminal status: ${terminalStatus}`);
+      }
       db.prepare(
         `UPDATE messages SET run_status = ?, ended_at = ? WHERE id = ?`,
-      ).run(finalStatus.status, Date.now(), assistantMessageId);
+      ).run(terminalStatus, Date.now(), assistantMessageId);
       const artifacts = await listLiveArtifacts({ projectsRoot: PROJECTS_DIR, projectId });
       const artifact = artifacts.find((candidate) => candidate.createdByRunId === run.id);
-      const status = finalStatus.status === 'succeeded' && !artifact ? 'failed' : finalStatus.status;
+      const status = terminalStatus === 'succeeded' && !artifact ? 'failed' : terminalStatus;
       return {
         agentRunId: run.id,
         status,
         ...(artifact?.id ? { artifactId: artifact.id, artifactProjectId: projectId } : {}),
         summary: artifact?.id
-          ? `Agent ${finalStatus.status} and registered live artifact ${artifact.title}.`
-          : finalStatus.status === 'succeeded'
+          ? `Agent ${terminalStatus} and registered live artifact ${artifact.title}.`
+          : terminalStatus === 'succeeded'
             ? buildOrbitNoLiveArtifactSummary(run.events)
-            : `Agent ${finalStatus.status} but did not register a live artifact for this Orbit run.`,
+            : `Agent ${terminalStatus} but did not register a live artifact for this Orbit run.`,
       };
     })();
 

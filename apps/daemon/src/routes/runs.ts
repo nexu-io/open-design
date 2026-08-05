@@ -6,7 +6,9 @@ import {
   defaultScenarioPluginIdForProjectMetadata,
   RUN_RESULT_PACKAGE_SCHEMA,
   type AppliedPluginSnapshot,
+  type ApiErrorCode,
   type ArtifactManifest,
+  type ChatRequest,
   type ChatRunStatus,
   type ChatRunStatusResponse,
   type ProjectMetadata as ContractProjectMetadata,
@@ -57,6 +59,8 @@ import {
   runtimeTypeForRunAnalytics,
   scanRunEventsForUsageAnalytics,
   summarizeRunTimingAnalytics,
+  type RunProjectKindAnalyticsInput,
+  type RunRetryAnalyticsEvent,
   type RunEventForAnalyticsObservability,
   type RunTelemetryTimestamps,
 } from '../run-analytics-observability.js';
@@ -76,6 +80,8 @@ import {
   validateRunToolBundleForAgent,
 } from '../run-tool-bundle.js';
 import type { DetectedAgent, RuntimeAgentDef } from '../runtimes/types.js';
+import type { ChatRun, ChatRunService, RunCreateMeta } from '../runtimes/runs.js';
+export type { ChatRunService } from '../runtimes/runs.js';
 import {
   countDesignSystemPreviewModules,
   countNewArtifacts,
@@ -121,72 +127,10 @@ interface SseClient {
   cleanup?(): void;
 }
 
-interface ChatRun {
-  id: string;
-  projectId: string | null;
-  conversationId: string | null;
-  assistantMessageId: string | null;
-  agentId: string | null;
-  model?: string | null;
-  status: ChatRunStatus;
-  createdAt: number;
-  updatedAt: number;
-  cancelRequested?: boolean;
-  exitCode?: number | null;
-  signal?: string | null;
-  error?: string | null;
-  errorCode?: string | null;
-  projectMetadata?: ProjectMetadata;
-  appliedPluginSnapshotId?: string | null;
-  pluginId?: string | null;
-  clientType?: 'desktop' | 'web';
-  events: RunEventRecord[];
-  clients: Set<SseClient>;
-  analyticsContext?: AnalyticsContext;
-  analyticsTelemetry?: RunTelemetryTimestamps;
-  retryAttemptCount?: number;
-  retryFinalResult?: string;
-  retrySuppressedReason?: string;
-  designSystemId?: string | null;
-  designSystemRequestedId?: string | null;
-  designSystemSelectionSource?: string | null;
-  designSystemDigest?: string | null;
-  promptCache?: {
-    stablePromptHash?: string;
-    hit?: boolean;
-    missReason?: string | null;
-  };
-}
-
-interface RunCreateMeta extends JsonRecord {
-  projectId?: string;
-  conversationId?: string;
-  assistantMessageId?: string;
-  agentId?: string;
-  pluginId?: string;
-  appliedPluginSnapshotId?: string;
-  message?: string;
-  currentPrompt?: string;
-  projectMetadata?: ProjectMetadata;
-}
-
 interface RunListFilters {
   projectId?: unknown;
   conversationId?: unknown;
   status?: unknown;
-}
-
-export interface ChatRunService {
-  create(meta: RunCreateMeta): ChatRun;
-  get(id: string): ChatRun | null;
-  list(filters: RunListFilters): ChatRun[];
-  statusBody(run: ChatRun): ChatRunStatusResponse;
-  stream(run: ChatRun, req: Request, res: Response): void;
-  start(run: ChatRun, starter: () => Promise<unknown>): ChatRun;
-  wait(run: ChatRun): Promise<ChatRunStatusResponse>;
-  cancel(run: ChatRun): Promise<ChatRunStatusResponse>;
-  isTerminal(status: ChatRunStatus): boolean;
-  emit?(run: ChatRun, event: string, data: unknown): RunEventRecord;
 }
 
 interface AnalyticsService {
@@ -211,11 +155,6 @@ interface ProjectFileEntry {
   artifactManifest?: ArtifactManifest | JsonRecord | null;
 }
 
-interface RunRetryAnalyticsEvent {
-  event: string;
-  data: Record<string, unknown>;
-}
-
 interface RunArtifactBaselines {
   take(runId: string): RunArtifactBaseline | undefined;
 }
@@ -232,11 +171,6 @@ interface RunCreatedFallbackInput {
   status: string;
 }
 
-interface RunProjectKindInput {
-  hintProjectKind: string | null;
-  projectMetadata?: ProjectMetadata;
-}
-
 export interface RegisterRunRoutesDeps {
   db: SqliteDb;
   design: RunRoutesDesignService;
@@ -245,20 +179,20 @@ export interface RegisterRunRoutesDeps {
     sendApiError: (
       res: Response,
       status: number,
-      code: string,
+      code: ApiErrorCode,
       message: string,
-    ) => Response<unknown> | void;
+    ) => Response | void;
   };
   paths: {
     PROJECTS_DIR: string;
     RUNTIME_DATA_DIR: string;
   };
   agents: {
-    detectAgents: (agentCliEnv?: Record<string, unknown>) => Promise<DetectedAgent[]>;
+    detectAgents: (agentCliEnv?: Parameters<typeof agentCliEnvForAgent>[0]) => Promise<DetectedAgent[]>;
     getAgentDef: (agentId: string) => RuntimeAgentDef | null | undefined;
   };
   chat: {
-    startChatRun: (meta: RunCreateMeta, run: ChatRun) => Promise<unknown>;
+    startChatRun: (meta: Partial<ChatRequest> & { imagePaths?: string[] }, run: ChatRun) => Promise<unknown>;
   };
   lifecycle: {
     isDaemonShuttingDown: () => boolean;
@@ -283,9 +217,9 @@ export interface RegisterRunRoutesDeps {
   };
   telemetry: {
     reportRunCompletionTelemetryFallback: (input: RunCreatedFallbackInput) => void;
-    resolveRunProjectKindForAnalytics: (input: RunProjectKindInput) => string;
+    resolveRunProjectKindForAnalytics: (input: RunProjectKindAnalyticsInput) => string | null;
     runArtifactBaselines: RunArtifactBaselines;
-    runRetryEventsForAnalytics: (events: RunEventRecord[]) => RunRetryAnalyticsEvent[];
+    runRetryEventsForAnalytics: (events: readonly RunEventForAnalyticsObservability[]) => RunRetryAnalyticsEvent[];
   };
   messages: {
     pinAssistantMessageOnRunCreate: (db: SqliteDb, run: ChatRun) => void;
@@ -564,7 +498,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           ? appCfg.agentId
           : null;
         const agents = await detectAgents(
-          toJsonRecord(appCfg.agentCliEnv),
+          toJsonRecord(appCfg.agentCliEnv) as AgentCliEnv,
         ).catch((): DetectedAgent[] => []);
         const cfgAgentAvailable = cfgAgent
           ? agents.some((agent) => agent.id === cfgAgent && agent.available)
@@ -686,7 +620,10 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         console.warn('[plugins] skill candidate hook setup failed', err);
       }
     }
-    design.runs.start(run, () => startChatRun(meta, run));
+    design.runs.start(run, () => startChatRun(
+      meta as Partial<ChatRequest> & { imagePaths?: string[] },
+      run,
+    ));
 
     const reqBody = requestBody;
     const analyticsHints =
@@ -735,7 +672,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         () => ({} as Record<string, unknown>),
       );
       const detectedAgentsForAnalytics = await detectAgents(
-        toJsonRecord((appCfgForAnalytics as { agentCliEnv?: unknown }).agentCliEnv),
+        toJsonRecord((appCfgForAnalytics as { agentCliEnv?: unknown }).agentCliEnv) as AgentCliEnv,
       ).catch((): Array<{ id: string; available: boolean }> => []);
       const velaStatusForAnalytics = (() => {
         try {
@@ -799,7 +736,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       });
       const runProjectKind = resolveRunProjectKindForAnalytics({
         hintProjectKind,
-        projectMetadata: runProjectForAnalytics?.metadata,
+        projectMetadata: (runProjectForAnalytics?.metadata ?? null) as Exclude<RunProjectKindAnalyticsInput['projectMetadata'], undefined>,
       });
       const dsRunContext =
         analyticsHints.designSystemRunContext
@@ -1125,7 +1062,9 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
             eventName: retryEvent.event,
             context: analyticsContext,
             appVersion: design.getAppVersion(),
-            properties: retryEvent.data,
+            properties: retryEvent.data && typeof retryEvent.data === 'object'
+              ? retryEvent.data as Record<string, unknown>
+              : {},
             insertId: `${runInsertId}-${retryEvent.event}-${index}`,
           });
         }
@@ -1243,7 +1182,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         return sendApiError(
           res,
           500,
-          'WORKSPACE_ENUMERATION_FAILED',
+          'WORKSPACE_ENUMERATION_FAILED' as ApiErrorCode,
           err instanceof Error ? err.message : String(err),
         );
       }

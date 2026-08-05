@@ -5,6 +5,7 @@ import path from 'node:path';
 import type { Request, Response } from 'express';
 import type {
   BrowserUseRunState,
+  ChatRequest,
   ChatRunStatus,
   ChatRunStatusResponse,
   MediaExecutionPolicy,
@@ -27,7 +28,7 @@ interface SseClient {
   cleanup?(): void;
 }
 
-interface RunEventRecord {
+export interface RunEventRecord {
   id: number;
   event: string;
   data: unknown;
@@ -93,7 +94,7 @@ export interface ChatRun {
   [key: string]: unknown;
 }
 
-interface RunCreateMeta {
+export interface RunCreateMeta {
   projectId?: string;
   conversationId?: string;
   assistantMessageId?: string;
@@ -102,9 +103,9 @@ interface RunCreateMeta {
   pluginId?: string;
   appliedPluginSnapshotId?: string;
   projectMetadata?: Partial<ProjectMetadata> & Record<string, unknown>;
-  mediaExecution?: unknown;
-  toolBundle?: unknown;
-  browserUse?: unknown;
+  mediaExecution?: ChatRequest['mediaExecution'];
+  toolBundle?: ChatRequest['toolBundle'];
+  browserUse?: BrowserUseRunState;
   model?: string;
   [key: string]: unknown;
 }
@@ -116,6 +117,24 @@ interface ChatRunServiceOptions {
   ttlMs?: number;
   shutdownGraceMs?: number;
   runsLogDir?: string | null;
+}
+
+export interface ChatRunService {
+  create(meta?: RunCreateMeta): ChatRun;
+  get(id: string): ChatRun | null;
+  list(filters: Record<string, unknown>): ChatRun[];
+  statusBody(run: ChatRun): ChatRunStatusResponse;
+  stream(run: ChatRun, req: Request, res: Response): void;
+  start(run: ChatRun, starter: () => Promise<unknown>): ChatRun;
+  wait(run: ChatRun): Promise<ChatRunStatusResponse>;
+  cancel(run: ChatRun): Promise<ChatRunStatusResponse>;
+  isTerminal(status: ChatRunStatus): boolean;
+  emit(run: ChatRun, event: string, data: unknown): RunEventRecord;
+  finish(run: ChatRun, status: ChatRunStatus, code?: number | null, signal?: string | null): void;
+  fail(run: ChatRun, message: string, code?: string): void;
+  drop(run: ChatRun | null): void;
+  shutdownActive(): Promise<void>;
+  signalChild(run: ChatRun, signal?: NodeJS.Signals): void;
 }
 
 export const TERMINAL_RUN_STATUSES = new Set<ChatRunStatus>(['succeeded', 'failed', 'canceled']);
