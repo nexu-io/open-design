@@ -9498,12 +9498,19 @@ function HtmlViewer({
     return s != null && htmlNeedsPoweredPreview(s);
   }, [routingHtmlSource, serverPoweredPreviewRequired]);
   const [urlSelectionBridgeReady, setUrlSelectionBridgeReady] = useState(false);
+  // The daemon's URL selection bridge advertises `markAnchors: true` once it
+  // serves the od:mark-anchor-request protocol Draw anchoring needs (#6361).
+  // Older daemon responses (or the raw preview route's legacy bridge) omit the
+  // flag, so Draw falls back to srcDoc there instead of resolving anchors
+  // against a frame that cannot answer.
+  const [urlAnchorBridgeReady, setUrlAnchorBridgeReady] = useState(false);
   const urlLoadDecision: UrlLoadDecision = {
     mode,
     isDeck: effectiveDeck,
     commentMode: boardMode,
     urlCommentBridge: urlSelectionBridgeReady,
     urlSnapshotBridge: urlSelectionBridgeReady,
+    urlAnchorBridge: urlAnchorBridgeReady,
     editMode: manualEditMode,
     urlModeBridge,
     inspectMode,
@@ -9651,6 +9658,7 @@ function HtmlViewer({
     if (activeFilesRefreshPending || previewSrcCarriesCurrentRefresh) return;
     setPreviewSrcUrl(effectiveBasePreviewSrcUrl);
     setUrlSelectionBridgeReady(false);
+    setUrlAnchorBridgeReady(false);
   }, [activeFilesRefreshPending, effectiveBasePreviewSrcUrl, previewSrcCarriesCurrentRefresh]);
   useEffect(() => {
     const activeFrame = useUrlLoadPreview
@@ -10066,9 +10074,10 @@ function HtmlViewer({
       const frame = urlPreviewIframeRef.current;
       if (ev.source !== frame?.contentWindow) return;
       if (frame.getAttribute('src') === 'about:blank') return;
-      const data = ev.data as { type?: string } | null;
+      const data = ev.data as { type?: string; markAnchors?: boolean } | null;
       if (data?.type !== 'od:url-selection-bridge-ready') return;
       setUrlSelectionBridgeReady(true);
+      setUrlAnchorBridgeReady(data.markAnchors === true);
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
@@ -15335,6 +15344,7 @@ function HtmlViewer({
                               setUrlPreviewFirstLoadPending(false);
                             }
                             setUrlSelectionBridgeReady(false);
+                            setUrlAnchorBridgeReady(false);
                             dcViewportRestoreAtRef.current = Date.now();
                             frame?.contentWindow?.postMessage({
                               type: '__dc_set_viewport',
@@ -15378,6 +15388,7 @@ function HtmlViewer({
                               setUrlPreviewFirstLoadPending(false);
                             }
                             setUrlSelectionBridgeReady(false);
+                            setUrlAnchorBridgeReady(false);
                             dcViewportRestoreAtRef.current = Date.now();
                             frame?.contentWindow?.postMessage({
                               type: '__dc_set_viewport',

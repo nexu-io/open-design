@@ -31,7 +31,7 @@ vi.mock('../../src/runtime/exports', async (importOriginal) => {
     requestPreviewSnapshot: vi.fn(async () => null),
     // No content anchors available: this file covers the frame-geometry
     // fallback that has to hold when the preview cannot report element boxes.
-    requestPreviewAnchorTargets: vi.fn(async () => []),
+    requestPreviewAnchorTargets: vi.fn(async () => ({ answered: false, targets: [] })),
   };
 });
 

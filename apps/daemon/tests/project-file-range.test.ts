@@ -388,6 +388,20 @@ describe('GET /api/projects/:id/raw/* range request route', () => {
     expect(html).not.toContain('data-od-url-scroll-bridge');
   });
 
+  it('serves the Draw mark-anchor protocol from the URL selection bridge (issue #6361)', async () => {
+    // Draw-mode content anchoring must resolve element boxes from the frame
+    // the user sees. For powered previews that is the URL-loaded frame, so
+    // the daemon bridge answers od:mark-anchor-request and advertises the
+    // capability in its ready message; the host keys the URL-load decision
+    // (urlAnchorBridge) off that flag.
+    const bridged = await fetch(`${rawUrl('page.html')}?odPreviewBridge=selection`);
+    expect(bridged.status).toBe(200);
+    const html = await bridged.text();
+    expect(html).toContain("'od:mark-anchor-request'");
+    expect(html).toContain("type: 'od:mark-anchor-targets'");
+    expect(html).toContain("type: 'od:url-selection-bridge-ready', markAnchors: true");
+  });
+
   it('injects the URL preview snapshot bridge only when requested', async () => {
     const plain = await fetch(rawUrl('page.html'));
     expect(await plain.text()).toBe('<html/>');

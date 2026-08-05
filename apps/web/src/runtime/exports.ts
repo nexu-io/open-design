@@ -407,40 +407,54 @@ export type PreviewAnchorTarget = {
 };
 
 /**
+ * The preview frame's answer to an anchor-targets request. `answered`
+ * distinguishes a live bridge that currently has zero annotated elements
+ * (retry later — a dynamic app may add them) from a frame that never replied
+ * (no bridge, not loaded, or postMessage failed).
+ */
+export type PreviewAnchorResponse = {
+  answered: boolean;
+  targets: PreviewAnchorTarget[];
+};
+
+/**
  * Ask the preview frame for the boxes of every annotated element, so an
  * annotation mark can be anchored to the content it was drawn on and survive a
- * reflow (#6361). Resolves to an empty list rather than rejecting: anchoring is
- * an enhancement over the frame-relative position, never a prerequisite for
- * sending an annotation.
+ * reflow (#6361). Resolves rather than rejecting: anchoring is an enhancement
+ * over the frame-relative position, never a prerequisite for sending an
+ * annotation.
  */
 export function requestPreviewAnchorTargets(
   iframe: HTMLIFrameElement,
   timeout = 1500,
-): Promise<PreviewAnchorTarget[]> {
+): Promise<PreviewAnchorResponse> {
   const win = iframe.contentWindow;
-  if (!win) return Promise.resolve([]);
+  if (!win) return Promise.resolve({ answered: false, targets: [] });
   const id = `anchor-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   return new Promise((resolve) => {
     let done = false;
-    function finish(targets: PreviewAnchorTarget[]) {
+    function finish(response: PreviewAnchorResponse) {
       if (done) return;
       done = true;
       window.removeEventListener('message', onMsg);
-      resolve(targets);
+      resolve(response);
     }
     function onMsg(ev: MessageEvent) {
       if (ev.source !== win) return;
       const d = ev.data as { type?: string; id?: string; targets?: unknown } | null;
       if (!d || d.type !== 'od:mark-anchor-targets' || d.id !== id) return;
-      finish(Array.isArray(d.targets) ? (d.targets as PreviewAnchorTarget[]) : []);
+      finish({
+        answered: true,
+        targets: Array.isArray(d.targets) ? (d.targets as PreviewAnchorTarget[]) : [],
+      });
     }
     window.addEventListener('message', onMsg);
     try {
       win.postMessage({ type: 'od:mark-anchor-request', id }, '*');
     } catch {
-      finish([]);
+      finish({ answered: false, targets: [] });
     }
-    setTimeout(() => finish([]), timeout);
+    setTimeout(() => finish({ answered: false, targets: [] }), timeout);
   });
 }
 

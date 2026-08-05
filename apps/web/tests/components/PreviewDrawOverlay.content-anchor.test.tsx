@@ -20,7 +20,7 @@ vi.mock('../../src/runtime/exports', async (importOriginal) => {
   return {
     ...actual,
     requestPreviewSnapshot: vi.fn(async () => null),
-    requestPreviewAnchorTargets: vi.fn(async () => []),
+    requestPreviewAnchorTargets: vi.fn(async () => ({ answered: false, targets: [] })),
   };
 });
 
@@ -99,7 +99,7 @@ describe('PreviewDrawOverlay content anchoring (issue #6361)', () => {
     const restoreRect = installFrameGeometry();
     const observer = installResizeObserver();
     const anchors = vi.mocked(requestPreviewAnchorTargets);
-    anchors.mockImplementation(async () => ZOOMED as never);
+    anchors.mockImplementation(async () => ({ answered: true, targets: ZOOMED }) as never);
 
     const annotation = vi.fn((event: Event) => {
       const detail = (event as CustomEvent<{ ack?: (r: { ok: boolean }) => void }>).detail;
@@ -129,7 +129,7 @@ describe('PreviewDrawOverlay content anchoring (issue #6361)', () => {
       // moves UP by 19.5px — the opposite direction from the frame growth.
       frame.w = 804;
       frame.h = 744;
-      anchors.mockImplementation(async () => RESTORED as never);
+      anchors.mockImplementation(async () => ({ answered: true, targets: RESTORED }) as never);
       observer.trigger();
 
       const input = container.querySelector<HTMLInputElement>('.preview-draw-note-input')!;
@@ -143,6 +143,146 @@ describe('PreviewDrawOverlay content anchoring (issue #6361)', () => {
 
       // BAND 05's new home, not the 342 a frame-relative rule would preserve
       // and not the 382 the original bug produced.
+      expect(detail.bounds!.y).toBeCloseTo(322.5, 0);
+      expect(detail.bounds!.height).toBeCloseTo(40, 0);
+    } finally {
+      window.removeEventListener('opendesign:annotation', annotation);
+      observer.restore();
+      restoreRect();
+    }
+  });
+
+  it('re-projects undone strokes too, so undo → reflow → redo restores the artifact region', async () => {
+    frame.w = 692;
+    frame.h = 666;
+    const restoreRect = installFrameGeometry();
+    const observer = installResizeObserver();
+    const anchors = vi.mocked(requestPreviewAnchorTargets);
+    anchors.mockImplementation(async () => ({ answered: true, targets: ZOOMED }) as never);
+
+    const annotation = vi.fn((event: Event) => {
+      const detail = (event as CustomEvent<{ ack?: (r: { ok: boolean }) => void }>).detail;
+      detail.ack?.({ ok: true });
+    });
+    window.addEventListener('opendesign:annotation', annotation);
+
+    try {
+      const { container, getByRole } = render(
+        <PreviewDrawOverlay active>
+          <iframe title="srcdoc" data-od-render-mode="srcdoc" />
+        </PreviewDrawOverlay>,
+      );
+      const wrap = container.querySelector<HTMLElement>('.preview-draw-overlay')!;
+      const canvas = container.querySelector<HTMLCanvasElement>('canvas')!;
+      Object.defineProperty(wrap, 'offsetWidth', { configurable: true, get: () => frame.w });
+      Object.defineProperty(wrap, 'offsetHeight', { configurable: true, get: () => frame.h });
+      observer.trigger();
+
+      // Pen-stroke BAND 05 where it sits while zoomed (342..382), then undo it.
+      fireEvent.click(getByRole('button', { name: 'Pen' }));
+      fireEvent.pointerDown(canvas, { clientX: 40, clientY: 352, pointerId: 1 });
+      fireEvent.pointerMove(canvas, { clientX: 300, clientY: 362, pointerId: 1 });
+      fireEvent.pointerMove(canvas, { clientX: 600, clientY: 372, pointerId: 1 });
+      fireEvent.pointerUp(canvas, { clientX: 600, clientY: 372, pointerId: 1 });
+      await waitFor(() => expect(anchors).toHaveBeenCalled());
+      // The commit-time anchor pass is async; let it write the anchor back
+      // before the stroke moves onto the undo stack.
+      await new Promise((r) => setTimeout(r, 350));
+      fireEvent.click(getByRole('button', { name: 'Undo' }));
+
+      // Reflow while the stroke sits on the undo stack.
+      frame.w = 804;
+      frame.h = 744;
+      anchors.mockImplementation(async () => ({ answered: true, targets: RESTORED }) as never);
+      observer.trigger();
+      // Let the settle-paced content re-anchor run before redoing.
+      await waitFor(() => expect(anchors.mock.calls.length).toBeGreaterThan(1));
+      await new Promise((r) => setTimeout(r, 350));
+
+      fireEvent.click(getByRole('button', { name: 'Redo' }));
+
+      const input = container.querySelector<HTMLInputElement>('.preview-draw-note-input')!;
+      fireEvent.change(input, { target: { value: 'Redo must land on the same band.' } });
+      fireEvent.click(getByRole('button', { name: 'Send' }));
+
+      await waitFor(() => expect(annotation).toHaveBeenCalledTimes(1));
+      const detail = (annotation.mock.calls[0]?.[0] as CustomEvent<{
+        bounds?: { x: number; y: number; width: number; height: number };
+      }>).detail;
+
+      // BAND 05 now spans 322.5..362.5. The stroke rode rows 352..372 inside
+      // the zoomed band (342..382); the same relative rows re-projected are
+      // 332.5..352.5, so with strokeRect's 8px pad the bounds start ~324.5.
+      // The pre-fix behavior leaves the stroke at 352..372 (bounds y=344) —
+      // a full half-band low, on the neighbouring band.
+      expect(detail.bounds!.y).toBeLessThan(335);
+      expect(detail.bounds!.y).toBeGreaterThan(315);
+    } finally {
+      window.removeEventListener('opendesign:annotation', annotation);
+      observer.restore();
+      restoreRect();
+    }
+  });
+
+  it('keeps probing after an answered-empty response, so late targets still anchor', async () => {
+    frame.w = 692;
+    frame.h = 666;
+    const restoreRect = installFrameGeometry();
+    const observer = installResizeObserver();
+    const anchors = vi.mocked(requestPreviewAnchorTargets);
+    // A live bridge with no annotated elements yet — e.g. a dynamic app that
+    // renders its data-od-id nodes a moment later.
+    anchors.mockImplementation(async () => ({ answered: true, targets: [] }) as never);
+
+    const annotation = vi.fn((event: Event) => {
+      const detail = (event as CustomEvent<{ ack?: (r: { ok: boolean }) => void }>).detail;
+      detail.ack?.({ ok: true });
+    });
+    window.addEventListener('opendesign:annotation', annotation);
+
+    try {
+      const { container, getByRole } = render(
+        <PreviewDrawOverlay active>
+          <iframe title="srcdoc" data-od-render-mode="srcdoc" />
+        </PreviewDrawOverlay>,
+      );
+      const wrap = container.querySelector<HTMLElement>('.preview-draw-overlay')!;
+      const canvas = container.querySelector<HTMLCanvasElement>('canvas')!;
+      Object.defineProperty(wrap, 'offsetWidth', { configurable: true, get: () => frame.w });
+      Object.defineProperty(wrap, 'offsetHeight', { configurable: true, get: () => frame.h });
+      observer.trigger();
+
+      // First mark: bridge answers with zero targets (no anchor acquired).
+      fireEvent.pointerDown(canvas, { clientX: 40, clientY: 342, pointerId: 1 });
+      fireEvent.pointerMove(canvas, { clientX: 600, clientY: 382, pointerId: 1 });
+      fireEvent.pointerUp(canvas, { clientX: 600, clientY: 382, pointerId: 1 });
+      await waitFor(() => expect(anchors).toHaveBeenCalled());
+      const probesAfterEmpty = anchors.mock.calls.length;
+
+      // Targets appear; a reflow follows. The pre-fix latch recorded the empty
+      // response as "no bridge" and never asked again, leaving the mark at its
+      // stale frame fraction.
+      anchors.mockImplementation(async () => ({ answered: true, targets: ZOOMED }) as never);
+      observer.trigger();
+      await waitFor(() => expect(anchors.mock.calls.length).toBeGreaterThan(probesAfterEmpty));
+      await new Promise((r) => setTimeout(r, 350));
+
+      frame.w = 804;
+      frame.h = 744;
+      anchors.mockImplementation(async () => ({ answered: true, targets: RESTORED }) as never);
+      observer.trigger();
+
+      const input = container.querySelector<HTMLInputElement>('.preview-draw-note-input')!;
+      fireEvent.change(input, { target: { value: 'Anchors must attach late.' } });
+      fireEvent.click(getByRole('button', { name: 'Send' }));
+
+      await waitFor(() => expect(annotation).toHaveBeenCalledTimes(1));
+      const detail = (annotation.mock.calls[0]?.[0] as CustomEvent<{
+        bounds?: { x: number; y: number; width: number; height: number };
+      }>).detail;
+
+      // BAND 05's post-reflow home — anchoring engaged despite the empty
+      // first response.
       expect(detail.bounds!.y).toBeCloseTo(322.5, 0);
       expect(detail.bounds!.height).toBeCloseTo(40, 0);
     } finally {

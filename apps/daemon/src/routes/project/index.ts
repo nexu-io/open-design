@@ -932,7 +932,31 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
     var data = ev && ev.data;
     if (!data || !data.type) return;
     if (data.type === 'od:url-selection-bridge-probe') {
-      window.parent.postMessage({ type: 'od:url-selection-bridge-ready' }, '*');
+      window.parent.postMessage({ type: 'od:url-selection-bridge-ready', markAnchors: true }, '*');
+      return;
+    }
+    // Annotation marks anchor to the element they were drawn on so they
+    // survive a reflow (#6361). Draw mode needs element boxes on demand
+    // WITHOUT comment mode's hover/click interception, and the boxes must
+    // come from the frame the user actually sees — for powered previews
+    // that is this URL-loaded frame, not the hidden srcDoc twin. Keep the
+    // reply shape in sync with the srcDoc bridge in
+    // apps/web/src/runtime/srcdoc.ts (od:mark-anchor-targets).
+    if (data.type === 'od:mark-anchor-request') {
+      var markTargets = [];
+      try {
+        var found = allTargets();
+        for (var mi = 0; mi < found.length; mi++) {
+          markTargets.push({
+            elementId: found[mi].elementId,
+            selector: found[mi].selector,
+            position: found[mi].position
+          });
+        }
+      } catch (_) {}
+      try {
+        window.parent.postMessage({ type: 'od:mark-anchor-targets', id: data.id, targets: markTargets }, '*');
+      } catch (_) {}
       return;
     }
     if (data.type === 'od:preview-runtime-state-capture' && data.id) {
@@ -1066,7 +1090,7 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
   var mo = new MutationObserver(schedulePostTargets);
   mo.observe(document.documentElement, { subtree: true, childList: true });
   ensureStyle();
-  window.parent.postMessage({ type: 'od:url-selection-bridge-ready' }, '*');
+  window.parent.postMessage({ type: 'od:url-selection-bridge-ready', markAnchors: true }, '*');
 })();
 </script>`;
 

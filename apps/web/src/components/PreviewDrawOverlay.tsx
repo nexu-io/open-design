@@ -467,15 +467,22 @@ export function PreviewDrawOverlay({
     ) {
       return;
     }
-    // A preview with no bridge (or no annotated elements) never answers. Learn
-    // that once from the pass that runs when the mark is committed, so the
-    // pre-capture sync stays instant instead of making every send wait out the
-    // bridge timeout.
-    if (anchorBridgeRef.current === false) return;
+    // A frame that never answers should not make every send wait out the
+    // bridge timeout — but "answered with zero targets" is a live bridge (a
+    // dynamic app may annotate elements later, a fresh file may still be
+    // loading), and one early empty reply must not disable anchoring for the
+    // session. Give up only after consecutive unanswered probes, and forget
+    // the verdict whenever the probe targets a different iframe element.
     const iframe = snapshotHostIframe();
     if (!iframe) return;
-    const targets = await requestPreviewAnchorTargets(iframe);
-    anchorBridgeRef.current = targets.length > 0;
+    if (anchorProbeFrameRef.current !== iframe) {
+      anchorProbeFrameRef.current = iframe;
+      anchorSilentProbesRef.current = 0;
+    }
+    if (anchorSilentProbesRef.current >= ANCHOR_PROBE_GIVE_UP) return;
+    const response = await requestPreviewAnchorTargets(iframe);
+    anchorSilentProbesRef.current = response.answered ? 0 : anchorSilentProbesRef.current + 1;
+    const targets = response.targets;
     if (targets.length === 0) return;
 
     selectionBoxesRef.current = selectionBoxesRef.current.map((box) => {
@@ -488,6 +495,11 @@ export function PreviewDrawOverlay({
     });
 
     strokesRef.current = strokesRef.current.map((stroke) => syncStrokeAnchor(stroke, frame, targets));
+    // Undone strokes are still live content — redoStroke() pushes one straight
+    // back into strokesRef — so they must track the artifact through a reflow
+    // exactly like visible strokes, or undo → reflow → redo restores the stroke
+    // on the neighbouring element.
+    undoneStrokesRef.current = undoneStrokesRef.current.map((stroke) => syncStrokeAnchor(stroke, frame, targets));
 
     const nextText = textMarksRef.current.map((mark) => {
       const rect = { x: mark.x, y: mark.y, width: 0, height: 0 };
@@ -526,8 +538,14 @@ export function PreviewDrawOverlay({
     return () => window.removeEventListener('message', onMessage);
   }, []);
 
-  /** null = not yet probed, true = bridge answers, false = give up quietly. */
-  const anchorBridgeRef = useRef<boolean | null>(null);
+  /**
+   * Anchor-probe backoff state. A frame with no anchor bridge never answers,
+   * and each unanswered probe costs the full bridge timeout — but the verdict
+   * must stay per-frame and reversible (see syncContentAnchors).
+   */
+  const ANCHOR_PROBE_GIVE_UP = 2;
+  const anchorSilentProbesRef = useRef(0);
+  const anchorProbeFrameRef = useRef<HTMLIFrameElement | null>(null);
   const contentAnchorTimerRef = useRef<number | null>(null);
   const contentAnchorRanAtRef = useRef(0);
 
