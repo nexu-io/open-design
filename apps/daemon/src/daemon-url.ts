@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -37,6 +38,15 @@ export interface ResolveDaemonUrlOptions {
    * `resolveMcpLaunchSpec` (cli.ts, `od mcp install <agent>`) is the one
    * caller that opts in: a plain terminal invocation of that command has no
    * other way to find a packaged install's daemon. See issue #6424.
+   *
+   * A candidate response is only trusted when it is both a loopback URL
+   * (rules out off-host redirection) and the socket file is owned by this
+   * process's effective user (rules out a different local user squatting
+   * the predictable path — see `isOwnedByCurrentProcess`). Neither check
+   * applies to the explicit `OD_SIDECAR_IPC_PATH` path above, which is a
+   * concrete endpoint the lifecycle owner supplied rather than a guessed
+   * one. POSIX-only for now: `conventionalIpcSocketPaths` yields no
+   * candidates on `win32`.
    */
   allowConventionalIpcDiscovery?: boolean;
 }
@@ -78,6 +88,11 @@ async function discoverDaemonUrlFromIpc(
 ): Promise<string | null> {
   const explicitSocketPath = env[SIDECAR_ENV.IPC_PATH];
   if (explicitSocketPath != null && explicitSocketPath.length > 0) {
+    // Unrestricted: this path is a concrete endpoint the lifecycle owner
+    // supplied for THIS session, not a guessed/predictable one, so neither
+    // the loopback nor the ownership gate applies here. A daemon started
+    // with a non-default --host (Tailscale, a specific interface, …) must
+    // keep working when the caller was explicitly told its socket path.
     return await probeIpcSocket(explicitSocketPath, timeoutMs);
   }
   if (!allowConventionalIpcDiscovery) return null;
@@ -94,7 +109,9 @@ async function discoverDaemonUrlFromIpc(
   const candidates = conventionalIpcSocketPaths(env);
   if (candidates.length === 0) return null;
   const results = await Promise.allSettled(
-    candidates.map((socketPath) => probeIpcSocket(socketPath, timeoutMs)),
+    candidates.map((socketPath) =>
+      probeIpcSocket(socketPath, timeoutMs, { requireLoopback: true, requireOwnerMatch: true }),
+    ),
   );
   for (const result of results) {
     if (result.status === "fulfilled" && result.value != null) return result.value;
@@ -105,7 +122,9 @@ async function discoverDaemonUrlFromIpc(
 async function probeIpcSocket(
   socketPath: string,
   timeoutMs: number,
+  options: { requireLoopback?: boolean; requireOwnerMatch?: boolean } = {},
 ): Promise<string | null> {
+  if (options.requireOwnerMatch && !isOwnedByCurrentProcess(socketPath)) return null;
   try {
     const status = await requestJsonIpc<DaemonStatusSnapshot>(
       socketPath,
@@ -113,24 +132,22 @@ async function probeIpcSocket(
       { timeoutMs },
     );
     const url = status?.url ?? null;
-    return url != null && isLoopbackHttpUrl(url) ? url : null;
+    if (url == null) return null;
+    if (options.requireLoopback && !isLoopbackHttpUrl(url)) return null;
+    return url;
   } catch {
     return null;
   }
 }
 
 /**
- * Whether `url` is an http(s) URL whose host is loopback. The JSON-IPC
- * protocol has no responder-identity check (no peer-credential/uid
- * verification, no shared secret — see #6424 discussion), so a STATUS
- * response is not proof the daemon is who it claims to be. This does not
- * close that gap — the sidecar IPC endpoint itself would need to add
- * authentication for that — but it does stop a responder on a predictable
- * socket/pipe path from redirecting daemon discovery off-host, which is the
- * one part of "what can this URL make us do" this module can cheaply rule
- * out before the caller `fetch()`s `/api/mcp/install-info` from it and
- * potentially persists whatever `command`/`args` come back into a coding
- * agent's config.
+ * Whether `url` is an http(s) URL whose host is loopback. Only applied to
+ * conventional-path candidates (see `probeIpcSocket`'s `requireLoopback`) —
+ * it must NOT gate the pre-existing explicit `OD_SIDECAR_IPC_PATH` case,
+ * which can legitimately point at a non-default `--host` (Tailscale, a
+ * specific interface, …). This rules out a predictable-socket responder
+ * redirecting discovery off-host; it does not by itself prove the responder
+ * IS the real daemon — see `isOwnedByCurrentProcess`.
  */
 function isLoopbackHttpUrl(url: string): boolean {
   let parsed: URL;
@@ -144,6 +161,35 @@ function isLoopbackHttpUrl(url: string): boolean {
 }
 
 /**
+ * Whether the unix socket at `socketPath` is owned by the current process's
+ * effective user. Loopback alone only rules out off-host redirection — on a
+ * predictable, unauthenticated path (see `conventionalIpcSocketPaths`),
+ * another local process could still occupy the path (e.g. while the real
+ * daemon is stopped/restarting) and answer with a loopback URL of its own,
+ * which `resolveMcpLaunchSpec` would then treat as authoritative and fetch
+ * `/api/mcp/install-info` from. Comparing the socket file's owning uid
+ * against `process.getuid()` blocks a different OS user from impersonating
+ * the daemon this way (same-user impersonation, e.g. by other malware
+ * already running as this user, is a materially different threat this
+ * check does not — and cannot cheaply — address; that needs protocol-level
+ * authentication in `packages/sidecar`).
+ *
+ * POSIX-only: `process.getuid` does not exist on Windows, and Windows named
+ * pipes use a different ACL model this module does not verify yet, so
+ * `conventionalIpcSocketPaths` returns no candidates on `win32` and this
+ * function is never reached there in practice.
+ */
+function isOwnedByCurrentProcess(socketPath: string): boolean {
+  if (typeof process.getuid !== "function") return false;
+  try {
+    const stat = statSync(socketPath);
+    return stat.isSocket() && stat.uid === process.getuid();
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Conventional per-release-channel sidecar IPC socket paths, stable-channel
  * first. Bounded to the product's own known channels (`@open-design/release`)
  * so an absent daemon still fails fast — probes run concurrently via
@@ -154,8 +200,14 @@ function isLoopbackHttpUrl(url: string): boolean {
  * mirrors the explicit-namespace precedence `resolveNamespace` already uses
  * elsewhere); otherwise derives the current platform's namespace suffix from
  * `process.platform`/`process.arch` and tries every known channel.
+ *
+ * Returns no candidates on `win32`: the ownership check this discovery mode
+ * requires (`isOwnedByCurrentProcess`) has no Windows implementation yet, and
+ * probing a predictable named pipe without any ownership/identity check is
+ * exactly the gap this module is trying to close, not widen.
  */
 function conventionalIpcSocketPaths(env: NodeJS.ProcessEnv): string[] {
+  if (process.platform === "win32") return [];
   const explicitNamespace = env[SIDECAR_ENV.NAMESPACE];
   if (explicitNamespace != null && explicitNamespace.length > 0) {
     return [
@@ -168,13 +220,7 @@ function conventionalIpcSocketPaths(env: NodeJS.ProcessEnv): string[] {
     ];
   }
   const platform: ReleasePlatform =
-    process.platform === "darwin"
-      ? process.arch === "arm64"
-        ? "mac"
-        : "macIntel"
-      : process.platform === "win32"
-        ? "win"
-        : "linux";
+    process.platform === "darwin" ? (process.arch === "arm64" ? "mac" : "macIntel") : "linux";
   const orderedChannels = [
     RELEASE_CHANNELS.STABLE,
     RELEASE_CHANNELS.BETA,

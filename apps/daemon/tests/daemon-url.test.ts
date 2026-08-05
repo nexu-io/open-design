@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createJsonIpcServer, resolveAppIpcPath, type JsonIpcServerHandle } from "@open-design/sidecar";
 import { releaseNamespace, type ReleasePlatform } from "@open-design/release";
 import {
@@ -132,6 +132,40 @@ describe("resolveDaemonUrl", () => {
     }
   });
 
+  // Regression coverage for the #6425 review: the loopback gate added for
+  // conventional-path discovery must NOT apply to this pre-existing explicit
+  // path. A daemon started with a non-default --host (Tailscale, a specific
+  // interface, …) is a legitimate, already-supported configuration — the
+  // lifecycle owner told the caller exactly which socket to dial, so there is
+  // nothing to authenticate here that the explicit path doesn't already pin.
+  it("honors an explicit sidecar status whose url is not loopback", async () => {
+    const socketPath = process.platform === "win32"
+      ? `\\\\.\\pipe\\open-design-daemon-url-nonloopback-${process.pid}-${Date.now()}`
+      : path.join(ipcBaseDir, "daemon-nonloopback.sock");
+    let ipc: JsonIpcServerHandle | null = null;
+    try {
+      ipc = await createJsonIpcServer({
+        socketPath,
+        handler: () => ({
+          pid: 4243,
+          state: "running",
+          updatedAt: new Date().toISOString(),
+          url: "http://192.168.1.50:7456",
+        }),
+      });
+
+      const url = await resolveDaemonUrl({
+        env: {
+          [SIDECAR_ENV.IPC_PATH]: socketPath,
+        },
+        timeoutMs: 1000,
+      });
+      expect(url).toBe("http://192.168.1.50:7456");
+    } finally {
+      await ipc?.close();
+    }
+  });
+
   // Regression coverage for #6424: a plain terminal invocation of `od mcp
   // install <agent>` never has OD_SIDECAR_IPC_PATH set (only the packaged
   // app's own spawned children get it), so it previously had no way to find
@@ -139,7 +173,13 @@ describe("resolveDaemonUrl", () => {
   // launch spec. `allowConventionalIpcDiscovery` is opt-in specifically so
   // this new discovery path cannot change behavior for every OTHER `od`
   // subcommand that already worked correctly without it.
-  describe("conventional per-channel IPC discovery (#6424)", () => {
+  //
+  // POSIX-only (see `conventionalIpcSocketPaths` / `isOwnedByCurrentProcess`
+  // in daemon-url.ts): the ownership check this discovery mode requires has
+  // no Windows implementation yet, so `conventionalIpcSocketPaths` yields no
+  // candidates on win32 and this whole describe block does not apply there —
+  // see the dedicated win32 test below instead.
+  describe.skipIf(process.platform === "win32")("conventional per-channel IPC discovery (#6424)", () => {
     let conventionalIpcBaseDir: string;
 
     beforeAll(() => {
@@ -327,5 +367,64 @@ describe("resolveDaemonUrl", () => {
         await betaIpc?.close();
       }
     });
+
+    // Regression coverage for the #6425 review: loopback alone only rules
+    // out off-host redirection, not a different local user squatting the
+    // predictable socket path and answering with a loopback URL of its own
+    // (e.g. while the real daemon is stopped/restarting). Simulates that by
+    // making the current process disagree with the socket file's actual
+    // owning uid — the response must be rejected even though it is a
+    // perfectly well-formed, loopback, "successful" STATUS reply.
+    it("rejects a conventional-path response when the socket is not owned by the current process", async () => {
+      const socketPath = resolveAppIpcPath({
+        app: APP_KEYS.DAEMON,
+        contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+        env: { [SIDECAR_ENV.IPC_BASE]: conventionalIpcBaseDir },
+        namespace: releaseNamespace("stable", CURRENT_RELEASE_PLATFORM),
+      });
+      fs.mkdirSync(path.dirname(socketPath), { recursive: true });
+      let ipc: JsonIpcServerHandle | null = null;
+      const realUid = process.getuid?.() ?? 0;
+      const getuidSpy = vi.spyOn(process, "getuid").mockReturnValue(realUid + 1);
+      try {
+        ipc = await createJsonIpcServer({
+          socketPath,
+          // A "malicious" responder: well-formed, loopback, otherwise
+          // indistinguishable from the real daemon's own STATUS reply.
+          handler: () => ({ pid: 666, state: "running", updatedAt: new Date().toISOString(), url: "http://127.0.0.1:45678" }),
+        });
+
+        const url = await resolveDaemonUrl({
+          env: {
+            PATH: emptyBinDir,
+            [SIDECAR_ENV.IPC_BASE]: conventionalIpcBaseDir,
+          },
+          timeoutMs: 300,
+          allowConventionalIpcDiscovery: true,
+        });
+        expect(url).toBe(DEFAULT_DAEMON_URL);
+      } finally {
+        getuidSpy.mockRestore();
+        await ipc?.close();
+      }
+    });
   });
+
+  // Companion to the POSIX-only describe block above: conventional discovery
+  // must be a no-op on win32 (no candidates, no probing, no crash) rather
+  // than attempting to guess a named-pipe path with no ownership check.
+  it.skipIf(process.platform !== "win32")(
+    "does not attempt conventional discovery on win32 even when allowConventionalIpcDiscovery is true",
+    async () => {
+      const url = await resolveDaemonUrl({
+        env: {
+          PATH: emptyBinDir,
+          [SIDECAR_ENV.IPC_PATH]: path.join(ipcBaseDir, "missing.sock"),
+        },
+        timeoutMs: 300,
+        allowConventionalIpcDiscovery: true,
+      });
+      expect(url).toBe(DEFAULT_DAEMON_URL);
+    },
+  );
 });
