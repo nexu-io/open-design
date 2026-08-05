@@ -671,6 +671,22 @@ interface CliConfigResponse {
   [key: string]: unknown;
 }
 
+interface CliMemoryTreeNode {
+  id: string;
+  parentId?: string;
+  path: string;
+  kind: string;
+  type?: string;
+  scope: string;
+  name: string;
+  childrenCount?: number;
+}
+
+interface CliMemoryTreeResponse {
+  tree?: CliMemoryTreeNode[];
+  [key: string]: unknown;
+}
+
 interface BrandResponse {
   id?: string;
   projectId?: string;
@@ -8111,7 +8127,7 @@ async function readMemoryBodyFromFlags(flags: any) {
   return await readFile(path, 'utf8');
 }
 
-function formatMemoryTreeRow(node: any) {
+function formatMemoryTreeRow(node: CliMemoryTreeNode) {
   return [
     node.id,
     node.parentId ?? '-',
@@ -8132,7 +8148,7 @@ function printMemoryEntry(entry: any) {
   process.stdout.write(`${entry.body ?? ''}\n`);
 }
 
-async function fetchMemoryTree(base: any): Promise<Record<string, unknown>> {
+async function fetchMemoryTree(base: any): Promise<CliMemoryTreeResponse> {
   let resp;
   try {
     resp = await fetch(`${base}/api/memory/tree`);
@@ -8141,7 +8157,7 @@ async function fetchMemoryTree(base: any): Promise<Record<string, unknown>> {
     process.exit(3);
   }
   if (!resp.ok) return structuredHttpFailure(resp);
-  return (await resp.json()) as Record<string, unknown>;
+  return (await resp.json()) as CliMemoryTreeResponse;
 }
 
 async function patchMemoryTreeNode(base: any, id: any, body: any): Promise<Record<string, unknown>> {
