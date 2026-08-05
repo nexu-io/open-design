@@ -2,12 +2,7 @@
 
 > ⚡ **Open Design Cloud — the official model service.** One recharge to use GPT, Claude, Gemini, and DeepSeek inside Open Design: 20+ flagship models, zero config, billed by real token usage. [Try Open Design Cloud](https://open-design.ai/cloud/?utm_source=github&utm_medium=referral&utm_content=readme_try_cloud)
 >
-> 🏅 **The Open Design Fellow program is now open.** If you also believe design s
-
-## Hosted demo
-
-Try [Open Design in 即时演示](https://demo.autoclaude.cn) for a one-hour, no-setup evaluation of the project in a hosted environment. This is an independent community demo and is not an official Open Design service.
-hould be open — become an Open Design Fellow, shape the product alongside the core team, and help more people take part in defining the future of design. Details → [`MAINTAINERS.md`](MAINTAINERS.md) and [Discord](https://discord.gg/mHAjSMV6gz).
+> 🏅 **The Open Design Fellow program is now open.** If you also believe design should be open — become an Open Design Fellow, shape the product alongside the core team, and help more people take part in defining the future of design. Details → [`MAINTAINERS.md`](MAINTAINERS.md) and [Discord](https://discord.gg/mHAjSMV6gz).
 
 <p align="center">
   <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="Open Design hero banner — the headline &quot;The open-source Claude Design alternative&quot; over a classical scene of columns and robed figures on a digital-code backdrop, with stat cards for design systems, plugins, coding agents, and media providers" width="100%" />
@@ -775,3 +770,7 @@ Detailed provenance → [`docs/references.md`](docs/references.md).
 ## License
 
 Apache-2.0. Bundled skills and templates with their own `LICENSE` files retain those licenses, including `design-templates/guizang-ppt/` (MIT, [@op7418](https://github.com/op7418)), `design-templates/html-ppt/` (MIT, [@lewislulu](https://github.com/lewislulu)), and `skills/web-clone/` (MIT, [@Jane-xiaoer](https://github.com/Jane-xiaoer)).
+
+## Hosted demo
+
+Try [Open Design in 即时演示](https://demo.autoclaude.cn) for a one-hour, no-setup evaluation of the project in a hosted environment. This is an independent community demo and is not an official Open Design service.
