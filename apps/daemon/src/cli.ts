@@ -496,6 +496,43 @@ interface CliRunStartResponse {
   [key: string]: unknown;
 }
 
+interface CliProjectSummary {
+  id?: string;
+  name?: string;
+  skillId?: string | null;
+  designSystemId?: string | null;
+  [key: string]: unknown;
+}
+
+interface ProjectImportResponse {
+  project?: CliProjectSummary;
+  conversationId?: string;
+  [key: string]: unknown;
+}
+
+interface ProjectEditorsResponse {
+  editors?: Array<{ id?: string; label?: string; available?: boolean; [key: string]: unknown }>;
+  [key: string]: unknown;
+}
+
+interface CliRunSummary {
+  id?: string;
+  status?: string;
+  projectId?: string;
+  pluginId?: string;
+  [key: string]: unknown;
+}
+
+interface RunListResponse {
+  runs?: CliRunSummary[];
+  [key: string]: unknown;
+}
+
+interface RunStartResponse extends CliRunStartResponse {
+  project?: CliProjectSummary;
+  conversationId?: string;
+}
+
 interface BrandResponse {
   id?: string;
   projectId?: string;
@@ -5284,7 +5321,7 @@ async function basenameForCli(folderPath: any) {
   return path.basename(folderPath) || 'Imported project';
 }
 
-async function readRunMessageFromFlags(flags: any, fallback = null) {
+async function readRunMessageFromFlags(flags: any, fallback: string | null = null): Promise<string | null> {
   if (typeof flags.message === 'string' && flags.message.length > 0) {
     return flags.message;
   }
@@ -5293,7 +5330,12 @@ async function readRunMessageFromFlags(flags: any, fallback = null) {
   return fallback;
 }
 
-async function postJsonToDaemon(base: any, route: any, body: any, headers: Record<string, string> = {}) {
+async function postJsonToDaemon<T extends Record<string, unknown> = Record<string, unknown>>(
+  base: any,
+  route: any,
+  body: any,
+  headers: Record<string, string> = {},
+): Promise<T> {
   let resp;
   try {
     resp = await fetch(`${base}${route}`, {
@@ -5313,22 +5355,26 @@ async function postJsonToDaemon(base: any, route: any, body: any, headers: Recor
       return exitWithStructuredError({
         code:    errCode,
         message: errBody?.message ?? `HTTP ${resp.status}`,
-        data:    errBody?.data,
+        data:    errBody?.data as Record<string, unknown> | undefined,
       });
     }
     console.error(`POST ${route} failed: ${resp.status} ${JSON.stringify(data)}`);
     process.exit(1);
   }
-  return data;
+  return data as T;
 }
 
-async function postImportFolderToDaemon(base: any, body: any, baseDir: any) {
+async function postImportFolderToDaemon(
+  base: any,
+  body: any,
+  baseDir: any,
+): Promise<ProjectImportResponse> {
   const headers: Record<string, string> = {};
   const importToken = await mintCliImportToken(baseDir);
   if (importToken != null) {
     headers['x-od-desktop-import-token'] = importToken;
   }
-  return postJsonToDaemon(base, '/api/import/folder', body, headers);
+  return postJsonToDaemon<ProjectImportResponse>(base, '/api/import/folder', body, headers);
 }
 
 async function runProject(args: readonly string[]) {
@@ -5435,8 +5481,10 @@ Common options:
         headers: { 'content-type': 'application/json' },
         body:    JSON.stringify(body),
       });
-      const data = (await resp.json().catch(() => ({}))) as Record<string, unknown>;
-      const errBody = data.error as { code?: string; message?: string; data?: unknown } | undefined;
+      const data = (await resp.json().catch(() => ({}))) as ProjectImportResponse & {
+        error?: { code?: string; message?: string; data?: Record<string, unknown> };
+      };
+      const errBody = data.error;
       if (!resp.ok) {
         if (resp.status === 409 && errBody?.code === 'capabilities-required') {
           return exitWithStructuredError({
@@ -5452,7 +5500,7 @@ Common options:
         process.stdout.write(JSON.stringify(data, null, 2) + '\n');
         return;
       }
-      const project = data.project as { id?: string } | undefined;
+      const project = data.project;
       console.log(`[project] created ${project?.id ?? id} (conversation ${String(data.conversationId)})`);
       return;
     }
@@ -5510,7 +5558,7 @@ Common options:
         process.stdout.write(JSON.stringify(data, null, 2) + '\n');
         return;
       }
-      const proj2 = data.project as { id?: string } | undefined;
+      const proj2 = data.project;
       console.log(`[project] imported ${proj2?.id ?? '-'} from ${folderPath} (conversation ${String(data.conversationId ?? '-')})`);
       return;
     }
@@ -5528,7 +5576,7 @@ Common options:
     case 'editors': {
       const resp = await fetch(`${base}/api/editors`);
       if (!resp.ok) return structuredHttpFailure(resp);
-      const data = (await resp.json()) as Record<string, unknown>;
+      const data = (await resp.json()) as ProjectEditorsResponse;
       if (flags.json) {
         process.stdout.write(JSON.stringify(data, null, 2) + '\n');
         return;
@@ -5611,7 +5659,7 @@ Common options:
         process.stdout.write(JSON.stringify(data, null, 2) + '\n');
         return;
       }
-      const runs = data?.runs ?? [];
+      const runs = ((data as RunListResponse).runs ?? []);
       for (const r of runs) {
         console.log(`${r.id}\t${r.status}\tproject=${r.projectId ?? '-'}\tplugin=${r.pluginId ?? '-'}`);
       }
@@ -5722,7 +5770,7 @@ Common options:
         ...(flags.agent ? { agentId: flags.agent } : {}),
         ...(flags.model ? { model: flags.model } : {}),
       };
-      const data = await postJsonToDaemon(base, '/api/runs', body);
+      const data = await postJsonToDaemon<RunStartResponse>(base, '/api/runs', body);
       if (flags.json && !flags.follow) {
         process.stdout.write(JSON.stringify({
           ...data,
@@ -5764,8 +5812,10 @@ Common options:
         headers: { 'content-type': 'application/json' },
         body:    JSON.stringify(body),
       });
-      const data = (await resp.json().catch(() => ({}))) as Record<string, unknown>;
-      const errBody = data.error as { code?: string; message?: string; data?: unknown } | undefined;
+      const data = (await resp.json().catch(() => ({}))) as RunStartResponse & {
+        error?: { code?: string; message?: string; data?: Record<string, unknown> };
+      };
+      const errBody = data.error;
       if (!resp.ok) {
         if (resp.status === 409 && errBody?.code === 'capabilities-required') {
           return exitWithStructuredError({
