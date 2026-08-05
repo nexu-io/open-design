@@ -687,6 +687,20 @@ interface CliMemoryTreeResponse {
   [key: string]: unknown;
 }
 
+interface CliMemoryEntry {
+  id?: string;
+  name?: string;
+  type?: string;
+  description?: string;
+  body?: string;
+  [key: string]: unknown;
+}
+
+interface CliMemoryEntryResponse {
+  entry?: CliMemoryEntry;
+  [key: string]: unknown;
+}
+
 interface BrandResponse {
   id?: string;
   projectId?: string;
@@ -2628,7 +2642,7 @@ async function runPluginInfo(rest: readonly string[]) {
   const url = `${base}/api/plugins/${encodeURIComponent(id)}`;
   const resp = await fetch(url);
   if (resp.ok && !flags.version) {
-    const data = (await resp.json()) as Record<string, unknown>;
+    const data = (await resp.json()) as CliMemoryEntryResponse;
     process.stdout.write(JSON.stringify(data, null, 2) + '\n');
     return;
   }
@@ -8139,7 +8153,7 @@ function formatMemoryTreeRow(node: CliMemoryTreeNode) {
   ].join('\t');
 }
 
-function printMemoryEntry(entry: any) {
+function printMemoryEntry(entry: CliMemoryEntry) {
   console.log(`# ${entry.name}`);
   console.log(`id: ${entry.id}`);
   console.log(`type: ${entry.type}`);
@@ -8160,7 +8174,7 @@ async function fetchMemoryTree(base: any): Promise<CliMemoryTreeResponse> {
   return (await resp.json()) as CliMemoryTreeResponse;
 }
 
-async function patchMemoryTreeNode(base: any, id: any, body: any): Promise<Record<string, unknown>> {
+async function patchMemoryTreeNode(base: any, id: any, body: any): Promise<CliMemoryEntryResponse> {
   let resp;
   try {
     resp = await fetch(`${base}/api/memory/tree/${encodeURIComponent(id)}`, {
@@ -8173,13 +8187,13 @@ async function patchMemoryTreeNode(base: any, id: any, body: any): Promise<Recor
     process.exit(3);
   }
   if (!resp.ok) return structuredHttpFailure(resp);
-  return (await resp.json()) as Record<string, unknown>;
+  return (await resp.json()) as CliMemoryEntryResponse;
 }
 
 // GET /api/memory/:id, returning the MemoryEntry or null on a 404. Used by the
 // profile/rule subcommands so they can read-before-write (merge) without
 // crashing when the entry doesn't exist yet.
-async function fetchMemoryEntry(base: any, id: any) {
+async function fetchMemoryEntry(base: any, id: any): Promise<CliMemoryEntry | null> {
   let resp;
   try {
     resp = await fetch(`${base}/api/memory/${encodeURIComponent(id)}`);
@@ -8189,7 +8203,7 @@ async function fetchMemoryEntry(base: any, id: any) {
   }
   if (resp.status === 404) return null;
   if (!resp.ok) return structuredHttpFailure(resp);
-  const data = (await resp.json()) as Record<string, unknown>;
+  const data = (await resp.json()) as CliMemoryEntryResponse;
   return data.entry ?? data;
 }
 
@@ -8385,12 +8399,12 @@ async function runMemory(args: readonly string[]) {
       process.exit(3);
     }
     if (!resp.ok) return structuredHttpFailure(resp);
-    const data = (await resp.json()) as Record<string, unknown>;
+    const data = (await resp.json()) as CliMemoryEntryResponse;
     if (flags.json) {
       writeJson(data);
       return;
     }
-    printMemoryEntry(data.entry ?? data);
+    printMemoryEntry(data.entry ?? (data as unknown as CliMemoryEntry));
     return;
   }
 
@@ -8400,7 +8414,7 @@ async function runMemory(args: readonly string[]) {
       console.error('Usage: od memory tree edit <id> [--name ...] [--description ...] [--type ...] [--body ...|--body-file ...]');
       process.exit(2);
     }
-    const body = {};
+    const body: Record<string, unknown> = {};
     if (typeof flags.name === 'string') body.name = flags.name;
     if (typeof flags.description === 'string') body.description = flags.description;
     if (typeof flags.type === 'string') body.type = flags.type;
@@ -8496,7 +8510,7 @@ async function runMemoryProfile(base: any, rest: any, flags: any, writeJson: any
       process.exit(3);
     }
     if (!resp.ok) return structuredHttpFailure(resp);
-    const data = (await resp.json()) as Record<string, unknown>;
+    const data = (await resp.json()) as CliMemoryEntryResponse;
     if (flags.json) {
       writeJson(data.entry ?? data);
       return;
