@@ -3661,7 +3661,7 @@ export async function startServer({
       runScopedServers: runScopedMcpServers,
       sandboxMode: SANDBOX_RUNTIME.enabled,
     });
-    const oauthTokensForSpawn = {};
+    const oauthTokensForSpawn: Record<string, string> = {};
     if (persistedTokenServerIds.size > 0) {
       try {
         const stored = await readAllTokens(RUNTIME_DATA_DIR);
@@ -3710,6 +3710,15 @@ export async function startServer({
       .filter((s) => typeof oauthTokensForSpawn[s.id] === 'string')
       .map((s) => ({ id: s.id, label: s.label }));
 
+    const chatAgentId = typeof agentId === 'string' ? agentId : undefined;
+    const chatProjectId = typeof projectId === 'string' ? projectId : undefined;
+    const chatSkillId = typeof skillId === 'string' ? skillId : undefined;
+    const chatSkillIds = Array.isArray(skillIds) && skillIds.every((id) => typeof id === 'string')
+      ? skillIds
+      : undefined;
+    const chatDesignSystemId = typeof designSystemId === 'string' ? designSystemId : undefined;
+    const chatLocale = typeof locale === 'string' ? locale : undefined;
+    const chatMessage = typeof message === 'string' ? message : '';
     const {
       prompt: daemonSystemPrompt,
       activeSkillDirs,
@@ -3718,25 +3727,34 @@ export async function startServer({
       promptTelemetryParts,
     } =
       await composeDaemonSystemPrompt({
-        agentId,
-        projectId,
-        skillId,
-        skillIds,
-        designSystemId,
+        ...(chatAgentId ? { agentId: chatAgentId } : {}),
+        ...(chatProjectId ? { projectId: chatProjectId } : {}),
+        ...(chatSkillId ? { skillId: chatSkillId } : {}),
+        ...(chatSkillIds ? { skillIds: chatSkillIds } : {}),
+        ...(chatDesignSystemId ? { designSystemId: chatDesignSystemId } : {}),
         streamFormat: def?.streamFormat ?? 'plain',
-        locale,
+        ...(chatLocale ? { locale: chatLocale } : {}),
         sessionMode: runSessionMode,
         connectedExternalMcp,
         mediaExecution: run?.mediaExecution,
         // Plan §3.M2 / §3.V1 — forward the run's snapshot id so the
         // prompt composer can splice in `## Active stage` blocks.
         // Default ON; set OD_BUNDLED_ATOM_PROMPTS=0 to opt out.
-        appliedPluginSnapshotId: run?.appliedPluginSnapshotId ?? null,
+        ...(run?.appliedPluginSnapshotId
+          ? { appliedPluginSnapshotId: run.appliedPluginSnapshotId }
+          : {}),
       });
 
-    run.designSystemId = designSystemSelection?.id ?? null;
+    run.designSystemId = designSystemSelection?.id ?? undefined;
     run.designSystemRequestedId = designSystemSelection?.requestedId ?? null;
-    run.designSystemSelectionSource = designSystemSelection?.source ?? 'none';
+    run.designSystemSelectionSource = (designSystemSelection?.source as
+      | 'none'
+      | 'project'
+      | 'plugin'
+      | 'request'
+      | 'app-default'
+      | null
+      | undefined) ?? 'none';
     run.designSystemDigest = designSystemSelection?.digest ?? null;
 
     // Make skill side files reachable through three layers, in order of
@@ -3802,7 +3820,7 @@ export async function startServer({
       }
     }
     let codexGeneratedImagesDir = resolveCodexGeneratedImagesDir(
-      agentId,
+      chatAgentId,
       projectRecord?.metadata,
       process.env,
       os.homedir(),
@@ -3817,22 +3835,26 @@ export async function startServer({
       );
     }
     const extraAllowedDirs = resolveChatExtraAllowedDirs({
-      agentId,
+      agentId: chatAgentId ?? null,
       skillsDir: SKILLS_DIR,
       designSystemsDir: DESIGN_SYSTEMS_DIR,
       linkedDirs,
       codexGeneratedImagesDir,
     });
     const codexImagegenOverride = resolveGrantedCodexImagegenOverride({
-      agentId,
+      agentId: chatAgentId ?? null,
       metadata: projectRecord?.metadata,
       codexGeneratedImagesDir,
       extraAllowedDirs,
       mediaExecution: run?.mediaExecution,
     });
     const researchCommandContract = resolveResearchCommandContract(
-      research,
-      message,
+      research && typeof research === 'object' ? research as {
+        enabled?: boolean;
+        query?: string;
+        maxSources?: number;
+      } : null,
+      chatMessage,
     );
     // Resume-capable adapters continue their own upstream session so they
     // keep working memory across turns. Decide once per run; reuse for the
@@ -3848,7 +3870,7 @@ export async function startServer({
           })
         : { resumeSessionId: null as string | null, newSessionId: undefined as string | undefined, isResuming: false, storedStablePromptHash: null as string | null };
     const userRequestPrompt = composeChatUserRequestForAgent(
-      message,
+      chatMessage,
       currentPrompt,
       // Only trim to the latest turn when we are actually resuming an
       // existing session. A create turn still sends the full transcript so
@@ -3882,10 +3904,12 @@ export async function startServer({
       currentStableHash,
     });
     const browserUsePromptGuard = renderBrowserUseUnavailablePrompt(run.browserUse ?? null);
+    const titleGenerationConfig =
+      titleGeneration && typeof titleGeneration === 'object'
+        ? titleGeneration as { enabled?: boolean }
+        : null;
     const titleGenerationRequested =
-      titleGeneration &&
-      typeof titleGeneration === 'object' &&
-      titleGeneration.enabled === true &&
+      titleGenerationConfig?.enabled === true &&
       !agentResumeCtx.isResuming;
     const titleGenerationPrompt = titleGenerationRequested
       ? [
