@@ -17,6 +17,7 @@ import { DESIGN_SYSTEMS_USAGE, isDesignSystemsHelpArg } from './design-systems-c
 import { BRAND_USAGE, isBrandHelpArg } from './brands-cli-help.js';
 import { parseDesignSystemRenameArgs } from './design-systems/rename-args.js';
 import { runLiveArtifactsToolCli } from './tools-live-artifacts-cli.js';
+import { buildGhShellCommand, buildLoginShellCommand } from './runtimes/shell-command.js';
 import { splitResearchSubcommand } from './research/cli-args.js';
 import { resolveDaemonUrl } from './daemon-url.js';
 import { requestJsonIpc } from '@open-design/sidecar';
@@ -1721,19 +1722,6 @@ async function execFileBuffered(command, args, opts = {}) {
       });
     });
   });
-}
-
-function quotePosixShellArg(value) {
-  const text = String(value ?? '');
-  return `'${text.replace(/'/g, `'\\''`)}'`;
-}
-
-function buildGhShellCommand(args) {
-  return ['gh', ...args].map(quotePosixShellArg).join(' ');
-}
-
-function buildLoginShellCommand(innerCommand) {
-  return `export PATH=${quotePosixShellArg(process.env.PATH ?? '')}; ${innerCommand}`;
 }
 
 async function execGhBuffered(args, opts = {}) {
