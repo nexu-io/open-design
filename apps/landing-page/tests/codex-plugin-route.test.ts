@@ -110,6 +110,26 @@ describe('Codex plugin landing route', () => {
     assert.match(await response.text(), /## Install into Codex/);
   });
 
+  it('returns actionable plain-text guidance when the upstream fetch rejects', async () => {
+    const request = new Request('https://open-design.ai/codex-plugin/', {
+      headers: { 'User-Agent': 'ChatGPT-User/1.0' },
+    });
+    const response = await handleCodexPluginRequest(
+      {
+        request,
+        next: async () => new Response('<html>landing</html>'),
+      },
+      async () => {
+        throw new Error('simulated network failure');
+      },
+    );
+
+    assert.equal(response.status, 502);
+    assert.equal(response.headers.get('Content-Type'), 'text/plain; charset=utf-8');
+    assert.equal(response.headers.get('Cache-Control'), 'no-store');
+    assert.match(await response.text(), new RegExp(AGENT_INSTALL_GUIDE_URL));
+  });
+
   it('does not duplicate the agent protocol in page content or structured data', async () => {
     const [page, copy] = await Promise.all([
       readFile(PAGE, 'utf8'),
