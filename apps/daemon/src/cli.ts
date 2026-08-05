@@ -441,6 +441,44 @@ interface PluginRecordResponse {
   manifest?: InstalledPluginRecord['manifest'];
 }
 
+interface PluginDoctorResponse {
+  ok?: boolean;
+  pluginId?: string;
+  freshDigest?: string;
+  issues?: Array<{ severity?: string; code?: string; message?: string }>;
+  [key: string]: unknown;
+}
+
+interface PluginReplayResponse {
+  rerun?: {
+    pluginId?: string;
+    pluginVersion?: string;
+    manifestSourceDigest?: string;
+    inputs?: Record<string, unknown>;
+  };
+  [key: string]: unknown;
+}
+
+interface PluginTrustResponse {
+  capabilitiesGranted?: string[];
+  error?: {
+    code?: string;
+    data?: { rejected?: Array<{ capability?: string; reason?: string }> };
+  };
+  [key: string]: unknown;
+}
+
+interface GenUiListResponse {
+  surfaces?: Array<{
+    surfaceId?: string;
+    kind?: string;
+    persist?: string | boolean;
+    status?: string;
+    id?: string;
+  }>;
+  [key: string]: unknown;
+}
+
 async function runResearchCommand(args: readonly string[]): Promise<void> {
   return runResearch(args, {
     resolveDaemonUrl: cliDaemonUrl,
@@ -4167,7 +4205,7 @@ async function runPluginDoctor(rest: readonly string[]) {
     console.error(`POST /api/plugins/${id}/doctor failed: ${resp.status} ${await resp.text()}`);
     process.exit(1);
   }
-  const data = await resp.json();
+  const data = await resp.json() as PluginDoctorResponse;
   const issues = Array.isArray(data?.issues) ? data.issues : [];
   const warnings = issues.filter((i: any) => i?.severity === 'warning');
   const strict = flags.strict === true;
@@ -4178,7 +4216,7 @@ async function runPluginDoctor(rest: readonly string[]) {
     process.stdout.write(JSON.stringify({ ...data, strict, passed }, null, 2) + '\n');
   } else {
     if (passed && issues.length === 0) {
-      console.log(`[doctor] ${data.pluginId} ok (digest ${data.freshDigest.slice(0, 12)}…)`);
+      console.log(`[doctor] ${data.pluginId} ok (digest ${(data.freshDigest ?? '').slice(0, 12)}…)`);
     } else {
       const tier = !data.ok ? 'errors' : (strict && warnings.length > 0) ? 'warnings (--strict)' : 'warnings';
       console.log(`[doctor] ${data.pluginId} ${tier}:`);
@@ -4225,7 +4263,7 @@ async function runPluginReplay(rest: readonly string[]) {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ snapshotId }),
   });
-  const data = await resp.json().catch(() => ({}));
+  const data = await resp.json().catch(() => ({})) as PluginReplayResponse;
   if (!resp.ok) {
     console.error(`POST /api/runs/${runId}/replay failed: ${resp.status} ${JSON.stringify(data)}`);
     process.exit(1);
@@ -4270,7 +4308,7 @@ async function runPluginTrust(rest: readonly string[]) {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ capabilities: caps, action }),
   });
-  const data = await resp.json().catch(() => ({}));
+  const data = await resp.json().catch(() => ({})) as PluginTrustResponse;
   if (!resp.ok) {
     if (resp.status === 400 && data?.error?.code === 'invalid-capability') {
       const rej = (data.error.data?.rejected ?? [])
