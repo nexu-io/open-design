@@ -18,7 +18,11 @@ import { BRAND_USAGE, isBrandHelpArg } from './brands-cli-help.js';
 import { parseDesignSystemRenameArgs } from './design-systems/rename-args.js';
 import { runLiveArtifactsToolCli } from './tools-live-artifacts-cli.js';
 import { buildGhShellCommand, buildLoginShellCommand } from './runtimes/shell-command.js';
-import { parsePluginSpecifier, resolvePluginVersion } from './runtimes/plugin-specifier.js';
+import {
+  parsePluginSpecifier,
+  resolvePluginVersion,
+  type PluginSpecifierEntry,
+} from './runtimes/plugin-specifier.js';
 import {
   isGhApiRateLimit,
   isPlaceholderRepoOwner,
@@ -61,7 +65,14 @@ import { runPollUntilDoneOrBudget, type MediaPollOptions } from './media/poll-cl
 import { runShare as runShareCommand } from './share/cli.js';
 import type { ScaffoldInput } from './plugins/scaffold.js';
 import type { PublishCatalog, PublishMetadata } from './plugins/publish.js';
-import type { InstalledPluginRecord } from '@open-design/contracts';
+import type {
+  AppliedPluginSnapshot,
+  InstalledPluginRecord,
+  MarketplaceManifest,
+  MarketplacePluginEntry,
+  TrustTier,
+} from '@open-design/contracts';
+import type { SearchInstalledPluginsResultEntry } from './plugins/search.js';
 import { resolveDaemonUrl } from './daemon-url.js';
 import { requestJsonIpc } from '@open-design/sidecar';
 import { SIDECAR_ENV, SIDECAR_MESSAGES } from '@open-design/sidecar-proto';
@@ -311,10 +322,72 @@ interface PluginApplyResponse {
     pluginId: string;
     pluginVersion: string;
     manifestSourceDigest: string;
+    snapshotId?: string;
   };
   contextItems?: Array<{ kind: string; id?: string; name?: string; path?: string }>;
   warnings?: string[];
   fields?: string[];
+  error?: {
+    code?: string;
+    data?: { missing?: string[] };
+  };
+}
+
+interface PluginRunResponse {
+  runId: string;
+  appliedPluginSnapshotId?: string;
+  error?: PluginApplyResponse['error'];
+}
+
+interface MarketplaceRecord {
+  id: string;
+  url: string;
+  version?: string;
+  specVersion?: string;
+  trust: 'official' | 'trusted' | 'restricted';
+  manifest?: MarketplaceManifest;
+}
+
+interface MarketplaceListResponse {
+  marketplaces: MarketplaceRecord[];
+}
+
+interface MarketplacePluginsResponse {
+  plugins: MarketplacePluginEntry[];
+}
+
+interface PluginStatsResponse {
+  plugins?: PluginStatsBucket;
+  snapshots?: PluginStatsBucket;
+}
+
+interface PluginStatsBucket {
+  [key: string]: unknown;
+  total?: number;
+  bundled?: number;
+  thirdParty?: number;
+  withElevatedCapabilities?: number;
+  lastInstalledAt?: number;
+  lastUpdatedAt?: number;
+  bySourceKind?: Record<string, number>;
+  byTrust?: Record<string, number>;
+  byTaskKind?: Record<string, number>;
+  byStatus?: Record<string, number>;
+  withProject?: number;
+  withRun?: number;
+  oldestAppliedAt?: number;
+  newestAppliedAt?: number;
+}
+
+interface PluginListResponse {
+  plugins: InstalledPluginRecord[];
+}
+
+interface PluginSourceBucket {
+  sourceKind: string;
+  source: string;
+  count: number;
+  plugins: Array<{ id: string; version: string }>;
 }
 
 async function runResearchCommand(args: readonly string[]): Promise<void> {
@@ -1485,7 +1558,7 @@ async function spawnGhPassthrough(args: readonly string[]): Promise<PassthroughC
   });
 }
 
-function inferGithubHost(target) {
+function inferGithubHost(target: string) {
   if (!target || target === 'github.com') return 'github.com';
   try {
     const parsed = new URL(target);
@@ -1541,7 +1614,11 @@ view is the single source of truth.`);
       outDir: out,
     }),
   });
-  const data = await resp.json().catch(() => ({}));
+  const data = await resp.json().catch(() => ({})) as {
+    folder?: string;
+    snapshotId?: string;
+    files?: string[];
+  };
   if (!resp.ok) {
     console.error(`POST /api/applied-plugins/export failed: ${resp.status} ${JSON.stringify(data)}`);
     process.exit(1);
@@ -1557,7 +1634,7 @@ view is the single source of truth.`);
 // Plan §3.B4 / spec §6: `od marketplace …` minimum verbs. Add / list /
 // refresh / remove / trust. The Phase 3 follow-up wires
 // `od plugin install <name>` resolution through these catalogs.
-async function runMarketplace(args: readonly string[]) {
+async function runMarketplace(args: readonly string[]): Promise<void> {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
   od marketplace add     <url> [--trust trusted|restricted]   Register a federated catalog.
@@ -1584,7 +1661,7 @@ Common options:
   switch (sub) {
     case 'list': {
       const resp = await fetch(`${base}/api/marketplaces`);
-      const data = await resp.json().catch(() => ({}));
+      const data = await resp.json().catch(() => ({})) as MarketplaceListResponse;
       if (!resp.ok) return structuredHttpFailure(resp);
       if (flags.json) {
         process.stdout.write(JSON.stringify(data, null, 2) + '\n');
@@ -1612,7 +1689,7 @@ Common options:
       const tag = typeof flags.tag === 'string' ? flags.tag.toLowerCase() : null;
       const resp = await fetch(`${base}/api/marketplaces`);
       if (!resp.ok) return structuredHttpFailure(resp);
-      const data = await resp.json();
+      const data = await resp.json() as MarketplaceListResponse;
       const matches = [];
       for (const mp of data?.marketplaces ?? []) {
         const plugins = mp.manifest?.plugins ?? [];
@@ -1623,7 +1700,7 @@ Common options:
             ...(Array.isArray(p.tags) ? p.tags : []),
           ].join(' ').toLowerCase();
           if (!haystack.includes(query)) continue;
-          if (tag && !(Array.isArray(p.tags) && p.tags.map((t) => t.toLowerCase()).includes(tag))) continue;
+          if (tag && !(Array.isArray(p.tags) && p.tags.map((t) => String(t).toLowerCase()).includes(tag))) continue;
           matches.push({
             marketplaceId:  mp.id,
             marketplaceUrl: mp.url,
@@ -1656,7 +1733,7 @@ Common options:
         process.exit(2);
       }
       const resp = await fetch(`${base}/api/marketplaces/${encodeURIComponent(id)}/plugins`);
-      const data = await resp.json().catch(() => ({}));
+      const data = await resp.json().catch(() => ({})) as MarketplacePluginsResponse;
       if (!resp.ok) {
         console.error(`plugins failed: ${resp.status} ${JSON.stringify(data)}`);
         process.exit(1);
@@ -1681,7 +1758,7 @@ Common options:
       const resp = id
         ? await fetch(`${base}/api/marketplaces/${encodeURIComponent(id)}`)
         : await fetch(`${base}/api/marketplaces`);
-      const data = await resp.json().catch(() => ({}));
+      const data = await resp.json().catch(() => ({})) as Partial<MarketplaceRecord> & MarketplaceListResponse;
       if (!resp.ok) {
         console.error(`doctor failed: ${resp.status} ${JSON.stringify(data)}`);
         process.exit(1);
@@ -1690,6 +1767,10 @@ Common options:
       const { doctorMarketplace } = await import('./plugins/marketplace-doctor.js');
       const reports = [];
       for (const row of rows) {
+        if (!row.id || !row.trust || !row.manifest) {
+          console.error(`[marketplace doctor] ${row.id}: cached manifest is missing`);
+          continue;
+        }
         reports.push(await doctorMarketplace({
           id: row.id,
           trust: row.trust,
@@ -1730,13 +1811,15 @@ Common options:
         console.error('Usage: od marketplace add <url> [--trust trusted|restricted]');
         process.exit(2);
       }
-      const trust = flags.trust ?? 'restricted';
+      const trust = flags.trust === 'trusted' || flags.trust === 'official' || flags.trust === 'restricted'
+        ? flags.trust
+        : 'restricted';
       const resp = await fetch(`${base}/api/marketplaces`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ url, trust }),
       });
-      const data = await resp.json().catch(() => ({}));
+      const data = await resp.json().catch(() => ({})) as MarketplaceRecord;
       if (!resp.ok) {
         console.error(`add failed: ${resp.status} ${JSON.stringify(data)}`);
         process.exit(1);
@@ -1754,23 +1837,26 @@ Common options:
         console.error(`Usage: od marketplace ${sub} <id>`);
         process.exit(2);
       }
-      let url;
-      let method = 'GET';
-      let body;
+      let url: string | undefined;
+      let method: 'GET' | 'POST' | 'DELETE' = 'GET';
+      let body: string | undefined;
       if (sub === 'info')         url = `${base}/api/marketplaces/${encodeURIComponent(id)}`;
       else if (sub === 'refresh') { url = `${base}/api/marketplaces/${encodeURIComponent(id)}/refresh`; method = 'POST'; }
       else if (sub === 'remove')  { url = `${base}/api/marketplaces/${encodeURIComponent(id)}`; method = 'DELETE'; }
       else if (sub === 'trust') {
-        const trust = flags.trust ?? 'trusted';
+        const trust: TrustTier = flags.trust === 'restricted' || flags.trust === 'bundled'
+          ? flags.trust
+          : 'trusted';
         url = `${base}/api/marketplaces/${encodeURIComponent(id)}/trust`;
         method = 'POST';
         body = JSON.stringify({ trust });
       }
+      if (!url) throw new Error(`Unsupported marketplace command: ${sub}`);
       const resp = await fetch(url, {
         method,
         ...(body ? { headers: { 'content-type': 'application/json' }, body } : {}),
       });
-      const data = await resp.json().catch(() => ({}));
+      const data = await resp.json().catch(() => ({})) as MarketplaceRecord;
       if (!resp.ok) {
         console.error(`${sub} failed: ${resp.status} ${JSON.stringify(data)}`);
         process.exit(1);
@@ -1818,7 +1904,7 @@ async function runPluginSnapshots(args: readonly string[]) {
       console.error(`GET ${url} failed: ${resp.status} ${await resp.text()}`);
       process.exit(1);
     }
-    const data = await resp.json();
+    const data = await resp.json() as { removed?: number; [key: string]: unknown };
     process.stdout.write(JSON.stringify(data, null, 2) + '\n');
     return;
   }
@@ -1828,7 +1914,12 @@ async function runPluginSnapshots(args: readonly string[]) {
       console.error('Usage: od plugin snapshots diff <id-a> <id-b>');
       process.exit(2);
     }
-    const [idA, idB] = positional;
+    const idA = positional[0];
+    const idB = positional[1];
+    if (!idA || !idB) {
+      console.error('Usage: od plugin snapshots diff <id-a> <id-b>');
+      process.exit(2);
+    }
     const [respA, respB] = await Promise.all([
       fetch(`${base}/api/applied-plugins/${encodeURIComponent(idA)}`),
       fetch(`${base}/api/applied-plugins/${encodeURIComponent(idB)}`),
@@ -1839,8 +1930,8 @@ async function runPluginSnapshots(args: readonly string[]) {
       console.error(`fetch failed: ${respA.status} / ${respB.status}`);
       process.exit(1);
     }
-    const a = await respA.json();
-    const b = await respB.json();
+    const a = await respA.json() as AppliedPluginSnapshot;
+    const b = await respB.json() as AppliedPluginSnapshot;
     const { diffSnapshots } = await import('./plugins/snapshot-diff.js');
     const report = diffSnapshots({ a, b });
     if (flags.json) {
@@ -1880,7 +1971,7 @@ async function runPluginSnapshots(args: readonly string[]) {
       console.error(`GET ${url} failed: ${resp.status} ${await resp.text()}`);
       process.exit(1);
     }
-    const data = await resp.json();
+    const data = await resp.json() as { removed?: number; [key: string]: unknown };
     process.stdout.write(JSON.stringify(data, null, 2) + '\n');
     return;
   }
@@ -1896,7 +1987,7 @@ async function runPluginSnapshots(args: readonly string[]) {
       console.error(`POST ${url} failed: ${resp.status} ${await resp.text()}`);
       process.exit(1);
     }
-    const data = await resp.json();
+    const data = await resp.json() as { removed?: number; [key: string]: unknown };
     if (flags.json) {
       process.stdout.write(JSON.stringify(data, null, 2) + '\n');
       return;
@@ -1944,7 +2035,7 @@ async function runPluginRun(rest: readonly string[]) {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ inputs, grantCaps, projectId: flags.project }),
   });
-  const applyData = await applyResp.json().catch(() => ({}));
+  const applyData = await applyResp.json().catch(() => ({})) as PluginApplyResponse;
   if (!applyResp.ok) {
     console.error(`apply failed: ${applyResp.status} ${JSON.stringify(applyData)}`);
     process.exit(applyResp.status === 422 ? 67 : 1);
@@ -1966,7 +2057,7 @@ async function runPluginRun(rest: readonly string[]) {
       ...(flags['snapshot-id'] ? { appliedPluginSnapshotId: flags['snapshot-id'] } : {}),
     }),
   });
-  const runData = await runResp.json().catch(() => ({}));
+  const runData = await runResp.json().catch(() => ({})) as PluginRunResponse;
   if (!runResp.ok) {
     if (runResp.status === 409 && runData?.error?.code === 'capabilities-required') {
       const missing = (runData.error.data?.missing ?? []).join(',');
@@ -2081,7 +2172,7 @@ Prints an at-a-glance plugin + snapshot inventory:
     console.error(`GET ${url} failed: ${resp.status} ${await resp.text()}`);
     process.exit(1);
   }
-  const data = await resp.json();
+  const data = await resp.json() as PluginStatsResponse;
   if (flags.json) {
     process.stdout.write(JSON.stringify(data, null, 2) + '\n');
     return;
@@ -2112,33 +2203,39 @@ Prints an at-a-glance plugin + snapshot inventory:
   console.log(`  newest applied:   ${newestApplied}`);
 }
 
-function formatCounts(counts) {
+function formatCounts(counts: unknown): string {
   if (!counts || typeof counts !== 'object') return '(none)';
   const entries = Object.entries(counts).sort(([a], [b]) => a.localeCompare(b));
   if (entries.length === 0) return '(none)';
   return entries.map(([k, v]) => `${k}=${v}`).join(', ');
 }
 
-function formatTimestamp(ts) {
+function formatTimestamp(ts: unknown): string {
   if (typeof ts !== 'number' || !Number.isFinite(ts)) return '(none)';
   try { return new Date(ts).toISOString(); } catch { return String(ts); }
 }
 
-async function fetchPluginList(flags) {
+async function fetchPluginList(flags: CliFlags): Promise<PluginListResponse> {
   const url = `${(await pluginDaemonUrl(flags)).replace(/\/$/, '')}/api/plugins`;
   const resp = await fetch(url);
   if (!resp.ok) {
     console.error(`GET /api/plugins failed: ${resp.status} ${await resp.text()}`);
     process.exit(1);
   }
-  const data = await resp.json();
+  const data = await resp.json() as PluginListResponse;
   return data;
 }
 
-async function applyPluginFilters(plugins, flags, query) {
+async function applyPluginFilters(
+  plugins: readonly InstalledPluginRecord[],
+  flags: CliFlags,
+  query?: string,
+): Promise<SearchInstalledPluginsResultEntry[]> {
   if (!Array.isArray(plugins) || plugins.length === 0) return [];
   const { searchInstalledPlugins } = await import('./plugins/search.js');
-  const trustFlag = typeof flags.trust === 'string' ? flags.trust : undefined;
+  const trustFlag: TrustTier | undefined = flags.trust === 'trusted' || flags.trust === 'restricted' || flags.trust === 'bundled'
+    ? flags.trust
+    : undefined;
   const taskKind  = typeof flags['task-kind'] === 'string' ? flags['task-kind'] : undefined;
   const mode      = typeof flags.mode === 'string' ? flags.mode : undefined;
   const tag       = typeof flags.tag === 'string'  ? flags.tag  : undefined;
@@ -2157,11 +2254,21 @@ async function applyPluginFilters(plugins, flags, query) {
   return result.entries;
 }
 
-function emitPluginList({ entries, json, emptyMessage, showRank }) {
+function emitPluginList({
+  entries,
+  json,
+  emptyMessage,
+  showRank = false,
+}: {
+  entries: SearchInstalledPluginsResultEntry[];
+  json: boolean;
+  emptyMessage?: string;
+  showRank?: boolean;
+}): void {
   if (json) {
     process.stdout.write(JSON.stringify({
       total: entries.length,
-      plugins: entries.map((e) => ({
+      plugins: entries.map((e: any) => ({
         ...e.plugin,
         ...(showRank ? { matched: e.matched, rank: e.rank } : {}),
       })),
@@ -2201,7 +2308,7 @@ async function runPluginInfo(rest: readonly string[]) {
   }
   const mpResp = await fetch(`${base}/api/marketplaces`);
   if (mpResp.ok) {
-    const mpData = await mpResp.json().catch(() => ({}));
+    const mpData = await mpResp.json().catch(() => ({})) as MarketplaceListResponse;
     const resolved = resolveMarketplacePluginFromList(
       mpData?.marketplaces ?? [],
       flags.version ? `${id}@${flags.version}` : id,
@@ -2219,13 +2326,16 @@ async function runPluginInfo(rest: readonly string[]) {
   process.stdout.write(JSON.stringify(data, null, 2) + '\n');
 }
 
-function resolveMarketplacePluginFromList(marketplaces, specifier) {
+function resolveMarketplacePluginFromList(
+  marketplaces: readonly MarketplaceRecord[],
+  specifier: string,
+) {
   const parsed = parsePluginSpecifier(specifier);
   const target = parsed.name.toLowerCase();
   for (const marketplace of marketplaces) {
     for (const entry of marketplace?.manifest?.plugins ?? []) {
       if (String(entry.name ?? '').toLowerCase() !== target) continue;
-      const version = resolvePluginVersion(entry, parsed.range);
+      const version = resolvePluginVersion(entry as PluginSpecifierEntry, parsed.range);
       if (!version) return null;
       return {
         marketplaceId: marketplace.id,
@@ -2265,7 +2375,7 @@ async function runPluginManifest(rest: readonly string[]) {
     console.error(`GET /api/plugins/${id} failed: ${resp.status} ${await resp.text()}`);
     process.exit(1);
   }
-  const data = await resp.json();
+  const data = await resp.json() as { manifest?: unknown };
   if (!data?.manifest) {
     console.error(`plugin ${id} has no recorded manifest (registry row is incomplete)`);
     process.exit(1);
@@ -2286,12 +2396,17 @@ async function runPluginSources(rest: readonly string[]) {
     console.error(`GET /api/plugins failed: ${resp.status} ${await resp.text()}`);
     process.exit(1);
   }
-  const data = await resp.json();
+  const data = await resp.json() as PluginListResponse;
   const plugins = Array.isArray(data?.plugins) ? data.plugins : [];
-  const buckets = new Map();
+  const buckets = new Map<string, PluginSourceBucket>();
   for (const p of plugins) {
     const key = `${p.sourceKind ?? 'unknown'}\t${p.source ?? '(none)'}`;
-    const entry = buckets.get(key) ?? { sourceKind: p.sourceKind ?? 'unknown', source: p.source ?? '(none)', count: 0, plugins: [] };
+    const entry = buckets.get(key) ?? {
+      sourceKind: p.sourceKind ?? 'unknown',
+      source: p.source ?? '(none)',
+      count: 0,
+      plugins: [],
+    };
     entry.count += 1;
     entry.plugins.push({ id: p.id, version: p.version });
     buckets.set(key, entry);
@@ -2390,7 +2505,7 @@ async function runPluginInstall(rest: readonly string[]) {
 // in-memory plugin event ring buffer via SSE. -f keeps the
 // connection open and prints live events; otherwise prints the
 // backlog and exits when the daemon closes the stream.
-async function runPluginEvents(rest) {
+async function runPluginEvents(rest: readonly string[]) {
   const sub = rest[0];
   if (!sub || sub === 'help' || rest.includes('--help') || rest.includes('-h')) {
     console.log(`Usage:
@@ -2425,7 +2540,7 @@ Lifecycle vocabulary:
   const pluginIdFilter = typeof flags['plugin-id'] === 'string' && flags['plugin-id'].length > 0
     ? flags['plugin-id']
     : null;
-  const matches = (ev) => {
+  const matches = (ev: any) => {
     if (!ev) return false;
     if (kindFilter && ev.kind !== kindFilter) return false;
     if (pluginIdFilter && ev.pluginId !== pluginIdFilter) return false;
@@ -2519,7 +2634,7 @@ Lifecycle vocabulary:
   const reader = resp.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
-  const renderEvent = (channel, data) => {
+  const renderEvent = (channel: any, data: any) => {
     if (!matches(data)) return;
     if (flags.json) {
       process.stdout.write(JSON.stringify({ channel, ...data }) + '\n');
@@ -2599,12 +2714,12 @@ Lifecycle vocabulary:
 //
 // Aggregates into a unified pass/fail report. Exit 4 on any failed
 // check; useful as a one-liner CI check for a plugin's repo.
-async function runPluginVerify(rest) {
+async function runPluginVerify(rest: readonly string[]) {
   const flags = parseFlags(rest, {
     string:  new Set([...PLUGIN_STRING_FLAGS, 'config']),
     boolean: PLUGIN_BOOLEAN_FLAGS,
   });
-  const positional = rest.filter((a) => !a.startsWith('-'));
+  const positional = rest.filter((a: any) => !a.startsWith('-'));
   const id = positional[0];
   if (flags.help || flags.h || !id) {
     console.log(`Usage:
@@ -2769,12 +2884,12 @@ Exit codes:
 // closed UntilSignals vocabulary applies (critique.score /
 // iterations / user.confirmed / preview.ok / build.passing /
 // tests.passing); unknown keys surface as warnings.
-async function runPluginSimulate(rest) {
+async function runPluginSimulate(rest: readonly string[]) {
   const flags = parseFlags(rest, {
     string:  new Set([...PLUGIN_STRING_FLAGS, 's', 'cap']),
     boolean: PLUGIN_BOOLEAN_FLAGS,
   });
-  const positional = rest.filter((a) => !a.startsWith('-'));
+  const positional = rest.filter((a: any) => !a.startsWith('-'));
   const id = positional[0];
   if (flags.help || flags.h || !id) {
     console.log(`Usage:
@@ -3853,7 +3968,7 @@ function normalizeManifestRepoForOwner(
   };
 }
 
-async function pluginCliValidateFolder(folder) {
+async function pluginCliValidateFolder(folder: any) {
   const result = await execFileBuffered(process.execPath, [process.argv[1], 'plugin', 'validate', folder], {
     timeout: 120_000,
   });
@@ -3866,7 +3981,7 @@ async function pluginCliValidateFolder(folder) {
   return result;
 }
 
-function emitPluginWorkflowResult(flags, payload) {
+function emitPluginWorkflowResult(flags: any, payload: any) {
   if (flags.json) {
     process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
     return;
@@ -3893,16 +4008,16 @@ function emitPluginWorkflowResult(flags, payload) {
   console.log(JSON.stringify(payload, null, 2));
 }
 
-function safeJson(raw) {
+function safeJson(raw: any) {
   try { return JSON.parse(raw); } catch { return null; }
 }
 
-function extractFirstUrl(text) {
+function extractFirstUrl(text: any) {
   const match = /https?:\/\/\S+/i.exec(String(text ?? ''));
   return match ? match[0].replace(/[)\].,]+$/, '') : null;
 }
 
-async function runPluginYank(rest) {
+async function runPluginYank(rest: readonly string[]) {
   const flags = parseFlags(rest, {
     string: new Set(['daemon-url', 'reason', 'to']),
     boolean: new Set(['help', 'h', 'json', 'open']),
@@ -3915,7 +4030,7 @@ Yanking never deletes metadata or bytes. It opens the registry review flow that
 marks a version unresolvable for new installs while preserving lockfile replay.`);
     process.exit(rest.length === 0 ? 2 : 0);
   }
-  const spec = rest.find((a) => !a.startsWith('-') && a !== flags.reason && a !== flags.to);
+  const spec = rest.find((a: any) => !a.startsWith('-') && a !== flags.reason && a !== flags.to);
   const reason = typeof flags.reason === 'string' ? flags.reason.trim() : '';
   const parsed = parsePluginSpecifier(spec);
   if (!parsed.name || !parsed.range) {
@@ -3975,7 +4090,7 @@ marks a version unresolvable for new installs while preserving lockfile replay.`
   }
 }
 
-async function runPluginDoctor(rest) {
+async function runPluginDoctor(rest: readonly string[]) {
   // Plan §3.HH1 — --strict promotes warnings to errors so CI can
   // opt into 'no warnings allowed' mode without parsing the issue
   // list manually.
@@ -3996,7 +4111,7 @@ async function runPluginDoctor(rest) {
   }
   const data = await resp.json();
   const issues = Array.isArray(data?.issues) ? data.issues : [];
-  const warnings = issues.filter((i) => i?.severity === 'warning');
+  const warnings = issues.filter((i: any) => i?.severity === 'warning');
   const strict = flags.strict === true;
   // Strict mode: a clean issue list is still required, but the
   // pass/fail bit also fails on any warning.
@@ -4017,7 +4132,7 @@ async function runPluginDoctor(rest) {
   process.exit(passed ? 0 : (data.ok ? 4 : 1));
 }
 
-function safeParseJson(s) {
+function safeParseJson(s: any) {
   try { return JSON.parse(s); } catch { return null; }
 }
 
@@ -4028,9 +4143,9 @@ function safeParseJson(s) {
 // the agent restarts the run via `od plugin apply` followed by a normal
 // `od run start`. Future Phase 2C `od plugin run` will collapse this
 // into a one-shot wrapper.
-async function runPluginReplay(rest) {
+async function runPluginReplay(rest: readonly string[]) {
   const flags = parseFlags(rest, { string: PLUGIN_STRING_FLAGS, boolean: PLUGIN_BOOLEAN_FLAGS });
-  const runId = rest.find((a) => !a.startsWith('-')
+  const runId = rest.find((a: any) => !a.startsWith('-')
     && a !== flags['daemon-url']
     && a !== flags.source
     && a !== flags.inputs
@@ -4071,9 +4186,9 @@ async function runPluginReplay(rest) {
 // canonical write surface (invariant I4). The daemon validates the
 // capability vocabulary; unknown / malformed entries surface as
 // exit-2 usage failures.
-async function runPluginTrust(rest) {
+async function runPluginTrust(rest: readonly string[]) {
   const flags = parseFlags(rest, { string: PLUGIN_STRING_FLAGS, boolean: PLUGIN_BOOLEAN_FLAGS });
-  const id = rest.find((a) => !a.startsWith('-')
+  const id = rest.find((a: any) => !a.startsWith('-')
     && a !== flags['daemon-url']
     && a !== flags.source
     && a !== flags.inputs
@@ -4101,7 +4216,7 @@ async function runPluginTrust(rest) {
   if (!resp.ok) {
     if (resp.status === 400 && data?.error?.code === 'invalid-capability') {
       const rej = (data.error.data?.rejected ?? [])
-        .map((r) => `${r.capability} (${r.reason})`)
+        .map((r: any) => `${r.capability} (${r.reason})`)
         .join(', ');
       console.error(`[trust] invalid capabilities: ${rej}`);
       process.exit(2);
@@ -4121,7 +4236,7 @@ async function runPluginTrust(rest) {
 // Subcommand: od ui …  (spec §10.3.4 headless GenUI surface inbox)
 // ---------------------------------------------------------------------------
 
-async function runUi(args) {
+async function runUi(args: readonly string[]) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     printUiHelp();
     process.exit(args.length === 0 ? 2 : 0);
@@ -4141,11 +4256,11 @@ async function runUi(args) {
   }
 }
 
-async function uiDaemonUrl(flags) {
+async function uiDaemonUrl(flags: any) {
   return cliDaemonUrl(flags);
 }
 
-async function runUiList(rest) {
+async function runUiList(rest: readonly string[]) {
   const flags = parseFlags(rest, { string: UI_STRING_FLAGS, boolean: UI_BOOLEAN_FLAGS });
   const base = (await uiDaemonUrl(flags)).replace(/\/$/, '');
   let url;
@@ -4175,9 +4290,9 @@ async function runUiList(rest) {
   }
 }
 
-async function runUiShow(rest) {
+async function runUiShow(rest: readonly string[]) {
   const flags = parseFlags(rest, { string: UI_STRING_FLAGS, boolean: UI_BOOLEAN_FLAGS });
-  const positional = rest.filter((a) => !a.startsWith('-')
+  const positional = rest.filter((a: any) => !a.startsWith('-')
     && a !== flags['daemon-url']
     && a !== flags.run
     && a !== flags.project
@@ -4211,7 +4326,7 @@ async function runUiShow(rest) {
   process.stdout.write(JSON.stringify(data, null, 2) + '\n');
 }
 
-async function runUiRespond(rest) {
+async function runUiRespond(rest: readonly string[]) {
   const flags = parseFlags(rest, { string: UI_STRING_FLAGS, boolean: UI_BOOLEAN_FLAGS });
   const positional = rest.filter((a) => !a.startsWith('-')
     && a !== flags['daemon-url']
