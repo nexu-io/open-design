@@ -4696,7 +4696,7 @@ async function runBrandExtractFromHtml(rest) {
   try {
     html = await readFileFlagOrStdin(flags['html-file']);
   } catch (err) {
-    console.error(`could not read --html-file: ${err.message}`);
+    console.error(`could not read --html-file: ${err instanceof Error ? err.message : String(err)}`);
     process.exit(2);
   }
   if (!html || !html.trim()) {
@@ -4708,7 +4708,7 @@ async function runBrandExtractFromHtml(rest) {
     try {
       css = (await readFileFlagOrStdin(flags['css-file'])) ?? '';
     } catch (err) {
-      console.error(`could not read --css-file: ${err.message}`);
+      console.error(`could not read --css-file: ${err instanceof Error ? err.message : String(err)}`);
       process.exit(2);
     }
   }
@@ -4752,7 +4752,7 @@ async function runBrandPreview(rest) {
   try {
     flags = parseFlags(rest, { string: BRAND_STRING_FLAGS, boolean: BRAND_BOOLEAN_FLAGS });
   } catch (err) {
-    console.error(err.message);
+    console.error(err instanceof Error ? err.message : String(err));
     process.exit(2);
   }
   const id = positionalArgs(rest, BRAND_STRING_FLAGS)[0];
@@ -4794,7 +4794,7 @@ async function runBrandGet(rest) {
   try {
     flags = parseFlags(rest, { string: BRAND_STRING_FLAGS, boolean: BRAND_BOOLEAN_FLAGS });
   } catch (err) {
-    console.error(err.message);
+    console.error(err instanceof Error ? err.message : String(err));
     process.exit(2);
   }
   const id = positionalArgs(rest, BRAND_STRING_FLAGS)[0];
@@ -4843,7 +4843,7 @@ async function runBrandDelete(rest) {
   try {
     flags = parseFlags(rest, { string: BRAND_STRING_FLAGS, boolean: BRAND_BOOLEAN_FLAGS });
   } catch (err) {
-    console.error(err.message);
+    console.error(err instanceof Error ? err.message : String(err));
     process.exit(2);
   }
   const id = positionalArgs(rest, BRAND_STRING_FLAGS)[0];
@@ -5042,7 +5042,7 @@ Common options:
       if (flags.plugin) body.pluginId = flags.plugin;
       if (flags.inputs) {
         try { body.pluginInputs = JSON.parse(flags.inputs); } catch (err) {
-          console.error(`--inputs must be valid JSON: ${err.message}`);
+          console.error(`--inputs must be valid JSON: ${err instanceof Error ? err.message : String(err)}`);
           process.exit(2);
         }
       }
@@ -5365,7 +5365,7 @@ Common options:
       if (flags.model) body.model = flags.model;
       if (flags.inputs) {
         try { body.pluginInputs = JSON.parse(flags.inputs); } catch (err) {
-          console.error(`--inputs must be valid JSON: ${err.message}`);
+          console.error(`--inputs must be valid JSON: ${err instanceof Error ? err.message : String(err)}`);
           process.exit(2);
         }
       }
@@ -5666,7 +5666,7 @@ Common options:
         const stdin = readFileSync(0);
         chunks = [stdin];
       } catch (err) {
-        console.error(`stdin read failed: ${err.message ?? err}`);
+        console.error(`stdin read failed: ${err instanceof Error ? err.message : String(err)}`);
         process.exit(1);
       }
       const body = Buffer.concat(chunks);
@@ -5896,7 +5896,7 @@ Common options:
   try {
     flags = parseFlags(rest, { string: TEMPLATES_STRING_FLAGS, boolean: TEMPLATES_BOOLEAN_FLAGS });
   } catch (err) {
-    console.error(err.message);
+    console.error(err instanceof Error ? err.message : String(err));
     process.exit(2);
   }
   const base = (await cliDaemonBaseUrl(flags));
@@ -6572,7 +6572,7 @@ async function runLibrary(args) {
       boolean: LIBRARY_ASSET_BOOLEAN_FLAGS,
     });
   } catch (err) {
-    console.error(err.message);
+    console.error(err instanceof Error ? err.message : String(err));
     process.exit(2);
   }
   const base = await cliDaemonBaseUrl(flags);
@@ -7351,7 +7351,7 @@ Common options:
       let parsed;
       if (typeof flags['value-json'] === 'string') {
         try { parsed = JSON.parse(flags['value-json']); } catch (err) {
-          console.error(`--value-json must be valid JSON: ${err.message}`);
+          console.error(`--value-json must be valid JSON: ${err instanceof Error ? err.message : String(err)}`);
           process.exit(2);
         }
       } else if (typeof flags.value === 'string') {
@@ -7680,7 +7680,7 @@ async function runMemory(args) {
       boolean: MEMORY_BOOLEAN_FLAGS,
     });
   } catch (err) {
-    console.error(err.message);
+    console.error(err instanceof Error ? err.message : String(err));
     process.exit(2);
   }
   const base = await cliDaemonBaseUrl(flags);
@@ -8384,7 +8384,7 @@ async function runAutomation(args) {
       boolean: AUTOMATION_BOOLEAN_FLAGS,
     });
   } catch (err) {
-    console.error(err.message);
+    console.error(err instanceof Error ? err.message : String(err));
     process.exit(2);
   }
   const base = await cliDaemonBaseUrl(flags);
@@ -8827,7 +8827,7 @@ async function runAutomation(args) {
         schedule = parseAutomationScheduleFlag(flags.schedule);
         target = parseAutomationTarget(flags);
       } catch (err) {
-        console.error(err.message);
+        console.error(err instanceof Error ? err.message : String(err));
         process.exit(2);
       }
       const body = {
@@ -8876,7 +8876,7 @@ async function runAutomation(args) {
         try {
           patch.schedule = parseAutomationScheduleFlag(flags.schedule);
         } catch (err) {
-          console.error(err.message);
+          console.error(err instanceof Error ? err.message : String(err));
           process.exit(2);
         }
       }
@@ -8884,7 +8884,7 @@ async function runAutomation(args) {
         try {
           patch.target = parseAutomationTarget(flags);
         } catch (err) {
-          console.error(err.message);
+          console.error(err instanceof Error ? err.message : String(err));
           process.exit(2);
         }
       }
