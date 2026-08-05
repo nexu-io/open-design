@@ -7154,14 +7154,22 @@ export async function startServer({
       renderPluginBriefTemplate,
     },
     resources: {
-      listAllSkills,
-      listAllDesignTemplates,
-      listAllSkillLikeEntries,
-      listAllDesignSystems,
+      listAllSkills: listAllSkills as unknown as () => Promise<Array<SkillInfo & { source?: string }>>,
+      listAllDesignTemplates: listAllDesignTemplates as unknown as () => Promise<Array<SkillInfo & { source?: string }>>,
+      listAllSkillLikeEntries: listAllSkillLikeEntries as unknown as () => Promise<Array<SkillInfo & { source?: string }>>,
+      listAllDesignSystems: listAllDesignSystems as unknown as () => Promise<Array<DesignSystemSummary & { source?: string }>>,
       mimeFor,
     },
     routines: { routineService },
     projectPreviewScopes,
+    telemetry: {
+      reportFinalizedMessage,
+      reportFeedback,
+      reportRunCompletionTelemetryFallback,
+      resolveRunProjectKindForAnalytics,
+      runArtifactBaselines,
+      runRetryEventsForAnalytics,
+    },
     validation: validationDeps,
     finalize: finalizeDeps,
     handoff: handoffDeps,
@@ -7227,7 +7235,7 @@ export async function startServer({
       await terminalService.shutdownActive();
       await design.analytics.shutdown();
     };
-    let server;
+    let server: import('node:http').Server;
     try {
       server = app.listen(port, host);
       server.once('listening', () => {
