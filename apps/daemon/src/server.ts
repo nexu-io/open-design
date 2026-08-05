@@ -457,6 +457,8 @@ import {
   readAllTokens,
   setToken,
 } from './mcp-tokens.js';
+import { createMcpTokenRefresher } from './runtimes/mcp-token-refresh.js';
+const refreshAndPersistToken = createMcpTokenRefresher({ refreshAccessToken, setToken });
 import { agentCliEnvForAgent, readAppConfig, readPluginEnvKnobs, writeAppConfig } from './app-config.js';
 import { OrbitService, formatLocalProjectTimestamp, renderOrbitTemplateSystemPrompt } from './orbit.js';
 import { buildOrbitNoLiveArtifactSummary } from './orbit-agent-summary.js';
@@ -938,38 +940,6 @@ function getPublicBaseUrl(req) {
  * for. Tokens persisted before that context was recorded can't be safely
  * refreshed; the caller treats `null` as "needs reconnect".
  */
-async function refreshAndPersistToken(dataDir, serverId, current) {
-  if (!current.refreshToken) return null;
-  if (!current.tokenEndpoint || !current.clientId) return null;
-  const tokenResp = await refreshAccessToken({
-    tokenEndpoint: current.tokenEndpoint,
-    clientId: current.clientId,
-    clientSecret: current.clientSecret,
-    refreshToken: current.refreshToken,
-    scope: current.scope,
-    resource: current.resourceUrl,
-  });
-  const next = {
-    accessToken: tokenResp.access_token,
-    refreshToken: tokenResp.refresh_token ?? current.refreshToken,
-    tokenType: tokenResp.token_type ?? 'Bearer',
-    scope: tokenResp.scope ?? current.scope,
-    expiresAt:
-      typeof tokenResp.expires_in === 'number'
-        ? Date.now() + tokenResp.expires_in * 1000
-        : undefined,
-    savedAt: Date.now(),
-    tokenEndpoint: current.tokenEndpoint,
-    clientId: current.clientId,
-    clientSecret: current.clientSecret,
-    authServerIssuer: current.authServerIssuer,
-    redirectUri: current.redirectUri,
-    resourceUrl: current.resourceUrl,
-  };
-  await setToken(dataDir, serverId, next);
-  return next;
-}
-
 const activeChatAgentEventSinks = new Map();
 const activeProjectEventSinks = new Map();
 // Per-chat-run handles, keyed by runId. Lets non-stream side effects
