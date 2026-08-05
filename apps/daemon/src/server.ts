@@ -312,13 +312,20 @@ import { classifyRunFailure, isResumableFailure } from './run-failure-classifica
 import { decideSafeRunRetry } from './run-retry-policy.js';
 import {
   amrUserIdForRunAnalytics,
+  resolveRunProjectKindForAnalytics,
+  retryFinalResultForRunStatus,
+  runRetryEventsForAnalytics,
+  scanRunEventsForFinishedProps,
+  scanRunEventsForRetrySideEffects,
   scanRunEventsForUsageAnalytics,
 } from './run-analytics-observability.js';
-import {
-  countDesignSystemPreviewModules,
-  countNewArtifacts,
-  didRunCreateDesignSystemFile,
-} from './runtimes/run-artifacts.js';
+export {
+  resolveRunProjectKindForAnalytics as __forTestResolveRunProjectKindForAnalytics,
+  retryFinalResultForRunStatus as __forTestRetryFinalResultForRunStatus,
+  runRetryEventsForAnalytics as __forTestRunRetryEventsForAnalytics,
+  scanRunEventsForFinishedProps as __forTestScanRunEventsForFinishedProps,
+  scanRunEventsForRetrySideEffects as __forTestScanRunEventsForRetrySideEffects,
+} from './run-analytics-observability.js';
 import {
   createRunArtifactBaselines,
   snapshotProjectArtifacts,
@@ -329,7 +336,6 @@ import { readAnalyticsContext } from './analytics.js';
 import {
   agentIdToTracking,
   modelIdForTracking,
-  projectKindFromMetadataToTracking,
 } from '@open-design/contracts/analytics';
 import {
   mergeNoProxyWithLoopbackDefaults,
@@ -1466,113 +1472,6 @@ async function readProjectPluginManifest(folder) {
 }
 
 export const __forTestReadProjectPluginManifest = readProjectPluginManifest;
-
-function resolveRunProjectKindForAnalytics({
-  hintProjectKind,
-  projectMetadata,
-}) {
-  if (typeof hintProjectKind === 'string') return hintProjectKind;
-  if (projectMetadata?.importedFrom === 'design-system') return 'design_system';
-  // Brand-extraction backing projects (kind:'brand', importedFrom:
-  // 'brand-extraction') ARE design systems — a brand is one source for a DS,
-  // not a separate object. Report them as design_system so DS-project runs
-  // (creation + later edits) drill down cleanly. See design-system tracking spec §1.
-  if (projectMetadata?.importedFrom === 'brand-extraction') return 'design_system';
-  // Derive straight from the persisted metadata: videoModel splits HyperFrames
-  // (kind=video) out of generic video, and the prototype/other subtype fields
-  // (fidelity / intent / platform) split wireframe/mobile/live_artifact/document
-  // out so the run's project_kind matches the Home card the user picked. The
-  // web-supplied `hintProjectKind` already encodes all of this when set.
-  return projectKindFromMetadataToTracking(projectMetadata);
-}
-
-export function __forTestResolveRunProjectKindForAnalytics(args) {
-  return resolveRunProjectKindForAnalytics(args);
-}
-
-// Scans run.events newest→oldest to extract usage token counts and the
-// agent-reported model name. The scan must not short-circuit on usage
-// before reaching the model signal: usage is a terminal event while
-// status:initializing/model is emitted at the very start of the run, so
-// in reverse iteration usage is seen first. The loop continues until both
-// usage tokens are found AND (the caller already has a model from reqBody
-// OR the agent-reported model has been found).
-function scanRunEventsForFinishedProps(events, reqBodyModel) {
-  const usage = scanRunEventsForUsageAnalytics(events, reqBodyModel, 0);
-  return {
-    inputTokens: usage.input_tokens,
-    outputTokens: usage.output_tokens,
-    agentReportedModel: usage.agent_reported_model,
-  };
-}
-
-export function __forTestScanRunEventsForFinishedProps(events, reqBodyModel) {
-  return scanRunEventsForFinishedProps(events, reqBodyModel);
-}
-
-function scanRunEventsForRetrySideEffects(events) {
-  const sideEffects = {
-    userVisibleOutputSeen: false,
-    toolCallSeen: false,
-    artifactWriteSeen: false,
-    liveArtifactSeen: false,
-  };
-  for (const rec of Array.isArray(events) ? events : []) {
-    if (rec?.event === 'stdout') {
-      const chunk = rec.data?.chunk;
-      if (typeof chunk === 'string' ? chunk.length > 0 : chunk !== undefined) {
-        sideEffects.userVisibleOutputSeen = true;
-      }
-    }
-    const data = rec?.data;
-    if (!data || typeof data !== 'object') continue;
-    if (data.type === 'text_delta' || data.type === 'thinking_delta') {
-      const delta = typeof data.delta === 'string' ? data.delta : '';
-      if (delta.length > 0) sideEffects.userVisibleOutputSeen = true;
-    }
-    if (data.type === 'tool_use') sideEffects.toolCallSeen = true;
-    if (data.type === 'artifact') sideEffects.artifactWriteSeen = true;
-    if (data.type === 'live_artifact' || rec.event === 'live_artifact') {
-      sideEffects.liveArtifactSeen = true;
-    }
-  }
-  if (
-    countNewArtifacts(events) > 0 ||
-    didRunCreateDesignSystemFile(events) ||
-    countDesignSystemPreviewModules(events) > 0
-  ) {
-    sideEffects.artifactWriteSeen = true;
-  }
-  return sideEffects;
-}
-
-export function __forTestScanRunEventsForRetrySideEffects(events) {
-  return scanRunEventsForRetrySideEffects(events);
-}
-
-function retryFinalResultForRunStatus(status, retryAttemptCount) {
-  const result = runResultFromStatus(status);
-  if ((retryAttemptCount ?? 0) <= 0) {
-    return result === 'failed' ? 'suppressed' : 'not_attempted';
-  }
-  if (result === 'success') return 'success';
-  if (result === 'failed') return 'failed';
-  return 'suppressed';
-}
-
-export function __forTestRetryFinalResultForRunStatus(status, retryAttemptCount) {
-  return retryFinalResultForRunStatus(status, retryAttemptCount);
-}
-
-function runRetryEventsForAnalytics(events) {
-  return (Array.isArray(events) ? events : []).filter((rec) =>
-    rec?.event === 'run_retry_attempted' || rec?.event === 'run_retry_finished'
-  );
-}
-
-export function __forTestRunRetryEventsForAnalytics(events) {
-  return runRetryEventsForAnalytics(events);
-}
 
 function githubRepoNameFromPluginName(name) {
   const slug = String(name)

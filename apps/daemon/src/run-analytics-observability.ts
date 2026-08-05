@@ -1,5 +1,13 @@
 import type { TrackingRuntimeType } from '@open-design/contracts/analytics';
 import type { VelaLoginStatus } from './integrations/vela.js';
+import { projectKindFromMetadataToTracking } from '@open-design/contracts/analytics';
+import {
+  countDesignSystemPreviewModules,
+  countNewArtifacts,
+  didRunCreateDesignSystemFile,
+  type RunEventLike,
+} from './runtimes/run-artifacts.js';
+import { runResultFromStatus } from './run-result.js';
 
 const RUNTIME_TYPES: readonly TrackingRuntimeType[] = [
   'amr_cloud',
@@ -48,6 +56,125 @@ export interface RunEventForAnalyticsObservability {
   event: string;
   data: unknown;
   timestamp?: number;
+}
+
+export interface RunProjectKindAnalyticsInput {
+  hintProjectKind?: unknown;
+  projectMetadata?: {
+    kind?: string | null;
+    videoModel?: string | null;
+    fidelity?: string | null;
+    intent?: string | null;
+    platform?: string | null;
+    platformTargets?: readonly string[] | null;
+    importedFrom?: string | null;
+  } | null;
+}
+
+export interface RunRetrySideEffects {
+  userVisibleOutputSeen: boolean;
+  toolCallSeen: boolean;
+  artifactWriteSeen: boolean;
+  liveArtifactSeen: boolean;
+}
+
+export interface RunFinishedAnalyticsProps {
+  inputTokens?: number | undefined;
+  outputTokens?: number | undefined;
+  agentReportedModel: string | null;
+}
+
+export interface RunRetryAnalyticsEvent {
+  event: string;
+  data: unknown;
+}
+
+export function resolveRunProjectKindForAnalytics(
+  input: RunProjectKindAnalyticsInput,
+): string | null {
+  const { hintProjectKind, projectMetadata } = input;
+  if (typeof hintProjectKind === 'string') return hintProjectKind;
+  if (projectMetadata?.importedFrom === 'design-system') return 'design_system';
+  if (projectMetadata?.importedFrom === 'brand-extraction') return 'design_system';
+  return projectKindFromMetadataToTracking(projectMetadata);
+}
+
+export function scanRunEventsForFinishedProps(
+  events: RunEventForAnalyticsObservability[],
+  reqBodyModel: unknown,
+): RunFinishedAnalyticsProps {
+  const usage = scanRunEventsForUsageAnalytics(events, reqBodyModel, 0);
+  return {
+    inputTokens: usage.input_tokens,
+    outputTokens: usage.output_tokens,
+    agentReportedModel: usage.agent_reported_model,
+  };
+}
+
+export function scanRunEventsForRetrySideEffects(
+  events: readonly RunEventLike[],
+): RunRetrySideEffects {
+  const sideEffects: RunRetrySideEffects = {
+    userVisibleOutputSeen: false,
+    toolCallSeen: false,
+    artifactWriteSeen: false,
+    liveArtifactSeen: false,
+  };
+  for (const rec of events) {
+    if (rec?.event === 'stdout') {
+      const chunk =
+        rec.data && typeof rec.data === 'object'
+          ? (rec.data as { chunk?: unknown }).chunk
+          : undefined;
+      if (typeof chunk === 'string' ? chunk.length > 0 : chunk !== undefined) {
+        sideEffects.userVisibleOutputSeen = true;
+      }
+    }
+    const data = rec?.data;
+    if (!data || typeof data !== 'object') continue;
+    const typedData = data as { type?: unknown; delta?: unknown };
+    if (typedData.type === 'text_delta' || typedData.type === 'thinking_delta') {
+      const delta = typeof typedData.delta === 'string' ? typedData.delta : '';
+      if (delta.length > 0) sideEffects.userVisibleOutputSeen = true;
+    }
+    if (typedData.type === 'tool_use') sideEffects.toolCallSeen = true;
+    if (typedData.type === 'artifact') sideEffects.artifactWriteSeen = true;
+    if (typedData.type === 'live_artifact' || rec.event === 'live_artifact') {
+      sideEffects.liveArtifactSeen = true;
+    }
+  }
+  if (
+    countNewArtifacts(events) > 0 ||
+    didRunCreateDesignSystemFile(events) ||
+    countDesignSystemPreviewModules(events) > 0
+  ) {
+    sideEffects.artifactWriteSeen = true;
+  }
+  return sideEffects;
+}
+
+export function retryFinalResultForRunStatus(
+  status: string | undefined,
+  retryAttemptCount: number | null | undefined,
+): 'success' | 'failed' | 'suppressed' | 'not_attempted' {
+  const result = runResultFromStatus(status);
+  if ((retryAttemptCount ?? 0) <= 0) {
+    return result === 'failed' ? 'suppressed' : 'not_attempted';
+  }
+  if (result === 'success') return 'success';
+  if (result === 'failed') return 'failed';
+  return 'suppressed';
+}
+
+export function runRetryEventsForAnalytics(
+  events: readonly RunEventLike[],
+): RunRetryAnalyticsEvent[] {
+  return events
+    .filter(
+      (rec): rec is RunEventLike & { event: string } =>
+        rec.event === 'run_retry_attempted' || rec.event === 'run_retry_finished',
+    )
+    .map((rec) => ({ event: rec.event, data: rec.data }));
 }
 
 export interface RunTelemetryTimestamps {
