@@ -479,6 +479,17 @@ interface GenUiListResponse {
   [key: string]: unknown;
 }
 
+interface GenUiSurfaceResponse {
+  surface?: { id?: string; [key: string]: unknown };
+  spec?: { schema?: unknown; [key: string]: unknown };
+  [key: string]: unknown;
+}
+
+interface GenUiRevokeResponse {
+  invalidated?: number;
+  [key: string]: unknown;
+}
+
 async function runResearchCommand(args: readonly string[]): Promise<void> {
   return runResearch(args, {
     resolveDaemonUrl: cliDaemonUrl,
@@ -4371,7 +4382,7 @@ async function runUiList(rest: readonly string[]) {
     console.error(`GET ${url} failed: ${resp.status} ${await resp.text()}`);
     process.exit(1);
   }
-  const data = await resp.json();
+  const data = await resp.json() as GenUiListResponse;
   if (flags.json) {
     process.stdout.write(JSON.stringify(data, null, 2) + '\n');
     return;
@@ -4410,7 +4421,7 @@ async function runUiShow(rest: readonly string[]) {
     console.error(`GET ${url} failed: ${resp.status} ${await resp.text()}`);
     process.exit(1);
   }
-  const data = await resp.json();
+  const data = await resp.json() as GenUiSurfaceResponse;
   // Plan §6 Phase 2A.5 — `--schema` prints the spec's JSON Schema
   // only (null if the surface declares none). Designed to feed
   // `od ui respond --value-json "$(...)"` in headless / agent flows.
@@ -4460,7 +4471,7 @@ async function runUiRespond(rest: readonly string[]) {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ value, respondedBy: 'user' }),
   });
-  const data = await resp.json().catch(() => ({}));
+  const data = await resp.json().catch(() => ({})) as GenUiSurfaceResponse;
   if (!resp.ok) {
     console.error(`POST ${url} failed: ${resp.status} ${JSON.stringify(data)}`);
     process.exit(1);
@@ -4492,7 +4503,7 @@ async function runUiRevoke(rest) {
   }
   const url = `${(await uiDaemonUrl(flags)).replace(/\/$/, '')}/api/projects/${encodeURIComponent(projectId)}/genui/${encodeURIComponent(surfaceId)}/revoke`;
   const resp = await fetch(url, { method: 'POST' });
-  const data = await resp.json().catch(() => ({}));
+  const data = await resp.json().catch(() => ({})) as GenUiRevokeResponse;
   if (!resp.ok) {
     console.error(`POST ${url} failed: ${resp.status} ${JSON.stringify(data)}`);
     process.exit(1);
@@ -4544,7 +4555,7 @@ async function runUiPrefill(rest) {
       value,
     }),
   });
-  const data = await resp.json().catch(() => ({}));
+  const data = await resp.json().catch(() => ({})) as GenUiSurfaceResponse;
   if (!resp.ok) {
     console.error(`POST ${url} failed: ${resp.status} ${JSON.stringify(data)}`);
     process.exit(1);
