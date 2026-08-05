@@ -361,6 +361,67 @@ describe('MCP Streamable HTTP transport', () => {
     await request;
   });
 
+  it('aborts an in-flight create_artifact request during shutdown', async () => {
+    const projectId = '00000000-0000-4000-8000-000000000001';
+    let releaseArtifact!: () => void;
+    let noteArtifactRequested!: () => void;
+    let noteArtifactAborted!: () => void;
+    const artifactGate = new Promise<void>((resolve) => {
+      releaseArtifact = resolve;
+    });
+    const artifactRequested = new Promise<void>((resolve) => {
+      noteArtifactRequested = resolve;
+    });
+    const artifactAborted = new Promise<void>((resolve) => {
+      noteArtifactAborted = resolve;
+    });
+    const daemon = await listenDaemon(async (req, res) => {
+      if (
+        req.method === 'POST'
+        && req.url === `/api/projects/${projectId}/files`
+      ) {
+        req.once('aborted', noteArtifactAborted);
+        noteArtifactRequested();
+        await artifactGate;
+      }
+      res.statusCode = 200;
+      res.setHeader('content-type', 'application/json');
+      res.end('{}');
+    });
+    const handle = await startHttpMcp({ daemonUrl: daemon.url });
+    const connected = await connectClient(handle.url, 'artifact-shutdown-client');
+    const request = connected.client.callTool({
+      arguments: {
+        content: '<main>Artifact</main>',
+        name: 'index.html',
+        project: projectId,
+      },
+      name: 'create_artifact',
+    }).catch(() => undefined);
+
+    try {
+      await artifactRequested;
+      const closeOutcome = await Promise.race([
+        handle.close().then(() => 'closed'),
+        new Promise<'timed-out'>((resolve) => {
+          setTimeout(() => resolve('timed-out'), 1_000);
+        }),
+      ]);
+      expect(closeOutcome).toBe('closed');
+      const abortOutcome = await Promise.race([
+        artifactAborted.then(() => 'aborted'),
+        new Promise<'timed-out'>((resolve) => {
+          setTimeout(() => resolve('timed-out'), 1_000);
+        }),
+      ]);
+      expect(abortOutcome).toBe('aborted');
+    } finally {
+      releaseArtifact();
+    }
+    await connected.client.close().catch(() => undefined);
+    await request;
+  });
+
   it('rediscovers an implicit daemon URL once and retries the failed call', async () => {
     const daemon = await listenDaemon((req, res) => {
       res.statusCode = 200;

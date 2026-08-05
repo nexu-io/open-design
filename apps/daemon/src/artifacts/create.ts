@@ -88,6 +88,7 @@ export async function postCreateArtifactRequest(args: {
   baseUrl: string;
   projectId: string;
   input: CreateProjectArtifactInput;
+  signal?: AbortSignal;
 }): Promise<unknown> {
   const response = await fetch(
     `${args.baseUrl.replace(/\/$/, '')}/api/projects/${encodeURIComponent(args.projectId)}/files`,
@@ -98,6 +99,7 @@ export async function postCreateArtifactRequest(args: {
         'content-type': 'application/json',
       },
       body: JSON.stringify(buildCreateArtifactRequestBody(args.input)),
+      ...(args.signal ? { signal: args.signal } : {}),
     },
   );
   const text = await response.text();

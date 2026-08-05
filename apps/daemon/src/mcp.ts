@@ -2813,6 +2813,7 @@ async function createArtifact(baseUrl: string, args: McpArgs) {
     args.artifactManifest
       ? args.artifactManifest
       : undefined;
+  const requestSignal = mcpRequestSignal.getStore();
   const payload = await postCreateArtifactRequest({
     baseUrl,
     projectId: id,
@@ -2822,6 +2823,7 @@ async function createArtifact(baseUrl: string, args: McpArgs) {
       encoding: args.encoding === 'base64' ? 'base64' : 'utf8',
       ...(artifactManifest === undefined ? {} : { artifactManifest }),
     },
+    ...(requestSignal ? { signal: requestSignal } : {}),
   });
   const result = payload && typeof payload === 'object' && !Array.isArray(payload)
     ? (payload as JsonObject)
