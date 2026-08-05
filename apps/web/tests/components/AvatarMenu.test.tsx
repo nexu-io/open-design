@@ -9,8 +9,9 @@ import { AvatarMenu } from '../../src/components/AvatarMenu';
 import type { ProjectWorkspaceScopeState } from '../../src/collab/useProjectWorkspaceScope';
 import type { AgentInfo, AppConfig, ExecMode } from '../../src/types';
 
-const { openExternalUrlMock } = vi.hoisted(() => ({
+const { openExternalUrlMock, recordAmrEntryMock } = vi.hoisted(() => ({
   openExternalUrlMock: vi.fn<(url: string) => Promise<boolean>>(),
+  recordAmrEntryMock: vi.fn(),
 }));
 
 vi.mock('../../src/i18n', () => ({
@@ -19,6 +20,12 @@ vi.mock('../../src/i18n', () => ({
 
 vi.mock('../../src/providers/registry', () => ({
   openExternalUrl: openExternalUrlMock,
+}));
+
+vi.mock('../../src/analytics/amr-attribution', () => ({
+  recordAmrEntry: recordAmrEntryMock,
+  amrHandoffDeviceId: () => 'dev-1',
+  attributedAmrUrl: (url: string) => url,
 }));
 
 
@@ -454,6 +461,62 @@ describe('AvatarMenu', () => {
     // The transient spawn failure surfaces an alert but must not permanently
     // disable the entry — retry stays available.
     expect(screen.getByTestId('avatar-amr-row-signin')).toHaveProperty('disabled', false);
+  });
+
+  it('only records the AMR attribution on the sign-in click, not on mount/render', async () => {
+    // looper review on #6438: attribution is lazily created inside the sign-in
+    // handler — never on mount or poll renders, which would emit phantom
+    // click_amr_entry events and persist a source attribution on every render.
+    const amrAgent: AgentInfo = {
+      id: 'amr',
+      name: 'Open Design AMR',
+      bin: 'vela',
+      available: true,
+      models: [{ id: 'default', label: 'Default (CLI config)' }],
+    };
+    recordAmrEntryMock.mockReturnValue({
+      entryId: 'od-amr-test',
+      sourceProduct: 'open_design',
+      sourceDetail: 'avatar_amr_agent_card',
+      occurredAt: '2026-08-05T00:00:00.000Z',
+    });
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === '/api/integrations/vela/status') {
+        return new Response(
+          JSON.stringify({
+            loggedIn: false,
+            loginInFlight: false,
+            profile: 'test',
+            user: null,
+            configPath: '/Users/test/.amr/config.json',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url === '/api/integrations/vela/login') {
+        return new Response(
+          JSON.stringify({ ok: true, authAttemptId: 'auth-1' }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      return new Response('{}', { status: 200 });
+    }));
+
+    renderMenu({ agents: [codexAgent, claudeAgent, amrAgent] });
+    openMenu();
+
+    // Mount + open + status fetch must NOT record an attribution yet.
+    await waitFor(() => {
+      expect(screen.getByTestId('avatar-amr-row-signin')).toBeTruthy();
+    });
+    expect(recordAmrEntryMock).not.toHaveBeenCalled();
+
+    // The sign-in click is the only place attribution is recorded.
+    fireEvent.click(screen.getByTestId('avatar-amr-row-signin'));
+    await waitFor(() => {
+      expect(recordAmrEntryMock).toHaveBeenCalled();
+    });
   });
 
   it('renders the active reasoning effort as a read-only readout', () => {

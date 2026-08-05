@@ -26,10 +26,12 @@ import {
 interface UseAmrSignInOptions {
   metricsConsent: boolean;
   installationId: string | null | undefined;
-  /** Attribution for the AMR/Open Design handoff join. startVelaLogin only
-   *  carries the od_device_id when an attribution is present, so omit this to
-   *  send no handoff (or pass a recorded entry to opt in). */
-  attribution?: AmrEntryAttribution | null;
+  /** Attribution factory for the AMR/Open Design handoff join. startVelaLogin
+   *  only carries the od_device_id when an attribution is present. The factory
+   *  is invoked ONLY inside handleAmrSignIn (on the actual click), so a
+   *  recording/analytics-emitting helper is never evaluated on mount or poll
+   *  renders (looper review on #6438). */
+  attribution?: () => AmrEntryAttribution | null;
   /** Fired on every polling status observation so a consumer can refresh its
    *  cached account state (e.g. the popover account). */
   onStatus?: (status: VelaLoginStatus) => void;
@@ -113,7 +115,7 @@ export function useAmrSignIn({
       resolvedDeviceId: getResolvedDeviceId(),
       installationId,
     });
-    const result = await startVelaLogin(attribution ?? null, odDeviceId);
+    const result = await startVelaLogin(attribution?.() ?? null, odDeviceId);
     if (!amrMountedRef.current || amrAttemptRef.current !== attempt) return;
     if (result.ok || result.alreadyRunning) {
       amrLoginAttemptIdRef.current = result.authAttemptId ?? amrLoginAttemptIdRef.current;
