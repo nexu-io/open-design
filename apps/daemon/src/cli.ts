@@ -737,6 +737,74 @@ interface CliMemoryVerificationsResponse {
   [key: string]: unknown;
 }
 
+interface CliAutomationTemplate {
+  id: string;
+  title: string;
+  triggerKinds?: string[];
+  sourceKinds?: string[];
+  outputSinks?: string[];
+  tokenCompression?: string;
+  reviewPolicy?: string;
+}
+
+interface CliAutomationProposal {
+  id: string;
+  targetKind?: string;
+  action?: string;
+  status?: string;
+  title?: string;
+  updatedAt?: string;
+}
+
+interface CliAutomationPacket {
+  id: string;
+  sourceKind?: string;
+  capturedAt?: string;
+  tokenStats?: { originalTokens?: number };
+  title?: string;
+}
+
+interface CliAutomationCompressionReport {
+  status?: string;
+  beforeTokens?: number;
+  afterTokens?: number;
+}
+
+interface CliAutomationRun {
+  id: string;
+  status?: string;
+  trigger?: string;
+  startedAt: string;
+  projectId?: string;
+  conversationId?: string;
+}
+
+interface CliAutomationRoutine {
+  id?: string;
+  name?: string;
+  prompt?: string;
+  skillId?: string;
+  context?: string;
+  agentId?: string;
+  schedule?: unknown;
+  target?: unknown;
+  enabled?: boolean;
+}
+
+interface CliAutomationResponse {
+  templates?: CliAutomationTemplate[];
+  template?: CliAutomationTemplate;
+  packet?: CliAutomationPacket;
+  packets?: CliAutomationPacket[];
+  compressionReport?: CliAutomationCompressionReport;
+  proposals?: CliAutomationProposal[];
+  proposal?: CliAutomationProposal;
+  routines?: CliAutomationRoutine[];
+  routine?: CliAutomationRoutine;
+  runs?: CliAutomationRun[];
+  [key: string]: unknown;
+}
+
 interface BrandResponse {
   id?: string;
   projectId?: string;
@@ -7402,7 +7470,7 @@ async function runLibrary(args: readonly string[]) {
           body: '{}',
         });
         if (!resp.ok) return structuredHttpFailure(resp);
-        const data = (await resp.json()) as Record<string, unknown>;
+          const data = (await resp.json()) as Record<string, unknown>;
         if (flags.json) {
           writeJson(data);
           return;
@@ -7440,7 +7508,7 @@ async function runLibrary(args: readonly string[]) {
           body: '{}',
         });
         if (!resp.ok) return structuredHttpFailure(resp);
-        const data = (await resp.json()) as Record<string, unknown>;
+          const data = (await resp.json()) as Record<string, unknown>;
         if (flags.json) {
           writeJson(data);
           return;
@@ -9125,7 +9193,7 @@ async function runAutomation(args: readonly string[]) {
           process.exit(3);
         }
         if (!resp.ok) return structuredHttpFailure(resp);
-        const data = (await resp.json()) as Record<string, unknown>;
+        const data = (await resp.json()) as CliAutomationResponse;
         if (flags.json) {
           writeJson(data);
           return;
@@ -9163,7 +9231,7 @@ async function runAutomation(args: readonly string[]) {
           process.exit(3);
         }
         if (!resp.ok) return structuredHttpFailure(resp);
-        const data = (await resp.json()) as Record<string, unknown>;
+        const data = (await resp.json()) as CliAutomationResponse;
         writeJson(flags.json ? data : (data.template ?? data));
         return;
       }
@@ -9215,7 +9283,7 @@ async function runAutomation(args: readonly string[]) {
           process.exit(3);
         }
         if (!resp.ok) return structuredHttpFailure(resp);
-        const data = (await resp.json()) as Record<string, unknown>;
+        const data = (await resp.json()) as CliAutomationResponse;
         if (flags.json) {
           writeJson(data);
           return;
@@ -9247,7 +9315,7 @@ async function runAutomation(args: readonly string[]) {
           process.exit(3);
         }
         if (!resp.ok) return structuredHttpFailure(resp);
-        const data = (await resp.json()) as Record<string, unknown>;
+        const data = (await resp.json()) as CliAutomationResponse;
         if (flags.json) {
           writeJson(data);
           return;
@@ -9304,7 +9372,7 @@ async function runAutomation(args: readonly string[]) {
           process.exit(3);
         }
         if (!resp.ok) return structuredHttpFailure(resp);
-        const data = (await resp.json()) as Record<string, unknown>;
+        const data = (await resp.json()) as CliAutomationResponse;
         if (flags.json) {
           writeJson(data);
           return;
@@ -9367,7 +9435,7 @@ async function runAutomation(args: readonly string[]) {
           process.exit(3);
         }
         if (!resp.ok) return structuredHttpFailure(resp);
-        const data = (await resp.json()) as Record<string, unknown>;
+        const data = (await resp.json()) as CliAutomationResponse;
         if (flags.json) {
           writeJson(data);
           return;
@@ -9388,7 +9456,7 @@ async function runAutomation(args: readonly string[]) {
         process.exit(3);
       }
       if (!resp.ok) return structuredHttpFailure(resp);
-      const data = (await resp.json()) as Record<string, unknown>;
+      const data = (await resp.json()) as CliAutomationResponse;
       if (flags.json) {
         writeJson(data);
         return;
@@ -9412,7 +9480,7 @@ async function runAutomation(args: readonly string[]) {
         process.exit(3);
       }
       if (!resp.ok) return structuredHttpFailure(resp);
-      const data = (await resp.json()) as Record<string, unknown>;
+      const data = (await resp.json()) as CliAutomationResponse;
       if (flags.json) {
         writeJson(data);
         return;
@@ -9433,7 +9501,7 @@ async function runAutomation(args: readonly string[]) {
         process.exit(3);
       }
       if (!resp.ok) return structuredHttpFailure(resp);
-      const data = (await resp.json()) as Record<string, unknown>;
+      const data = (await resp.json()) as CliAutomationResponse;
       if (flags.json) {
         writeJson(data);
         return;
@@ -9475,7 +9543,7 @@ async function runAutomation(args: readonly string[]) {
         process.exit(3);
       }
       if (!resp.ok) return structuredHttpFailure(resp);
-      const data = (await resp.json()) as Record<string, unknown>;
+      const data = (await resp.json()) as CliAutomationResponse;
       if (flags.json) {
         writeJson(data);
         return;
@@ -9518,7 +9586,7 @@ async function runAutomation(args: readonly string[]) {
         console.error(err instanceof Error ? err.message : String(err));
         process.exit(2);
       }
-      const body = {
+      const body: Record<string, unknown> = {
         name,
         prompt: prompt.trim(),
         schedule,
@@ -9541,7 +9609,7 @@ async function runAutomation(args: readonly string[]) {
         surfaceFetchError(err, base);
         process.exit(3);
       }
-      const data = (await resp.json().catch(() => ({}))) as Record<string, unknown>;
+      const data = (await resp.json().catch(() => ({}))) as CliAutomationResponse;
       if (!resp.ok) {
         console.error(`POST /api/routines failed: ${resp.status} ${JSON.stringify(data)}`);
         process.exit(1);
@@ -9556,7 +9624,7 @@ async function runAutomation(args: readonly string[]) {
     }
     case 'update': {
       const id = requireId('update');
-      const patch = {};
+      const patch: Record<string, unknown> = {};
       if (typeof flags.name === 'string') patch.name = flags.name.trim();
       const promptPatch = await readPromptFromFlags(flags);
       if (promptPatch != null) patch.prompt = promptPatch.trim();
