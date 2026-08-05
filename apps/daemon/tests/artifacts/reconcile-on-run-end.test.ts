@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Verifies the run-end artifact manifest reconciliation added for #2893:
 // when a chat run writes HTML via write_file (no artifactManifest) and then
 // terminates, the close-handler reconciliation should create the missing
@@ -12,14 +11,14 @@ import { closeDatabase, insertProject, openDatabase } from '../../src/db.js';
 import { isRunTouchedProjectFile, listFiles, reconcileHtmlArtifactManifest, writeProjectFile } from '../../src/projects.js';
 
 const PROJECT_ID = 'reconcile-test';
-let tempDir = null;
-let projectsRoot = null;
+let tempDir: string | null = null;
+let projectsRoot = '';
 
 afterEach(() => {
   closeDatabase();
   if (tempDir) fs.rmSync(tempDir, { recursive: true, force: true });
   tempDir = null;
-  projectsRoot = null;
+  projectsRoot = '';
 });
 
 function setup() {

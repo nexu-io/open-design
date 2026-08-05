@@ -43,6 +43,13 @@ export const projectFileRenameTestHooks = {
   beforeCommit: null as null | ((paths: { source: string; target: string }) => Promise<void> | void),
 };
 
+export type ProjectFileWriteOptions = {
+  overwrite?: boolean;
+  artifactManifest?: unknown;
+};
+
+export type ProjectFileBody = string | Uint8Array;
+
 export function isRunTouchedProjectFile(fileMtimeMs, runStartTimeMs) {
   if (!Number.isFinite(fileMtimeMs) || !Number.isFinite(runStartTimeMs)) return false;
   return fileMtimeMs + RUN_ARTIFACT_RECONCILE_MTIME_GRACE_MS >= runStartTimeMs;
@@ -756,17 +763,17 @@ export async function resolveProjectFilePath(projectsRoot, projectId, name, meta
 }
 
 export async function writeProjectFile(
-  projectsRoot,
-  projectId,
-  name,
-  body,
-  { overwrite = true, artifactManifest = null } = {},
-  metadata?,
+  projectsRoot: string,
+  projectId: string,
+  name: string,
+  body: ProjectFileBody,
+  { overwrite = true, artifactManifest = null }: ProjectFileWriteOptions = {},
+  metadata?: unknown,
 ) {
   const dir = await ensureProject(projectsRoot, projectId, metadata);
   const safeName = sanitizePath(name);
   const target = await resolveSafeReal(dir, safeName);
-  body = normalizeArtifactRuntimeImports(safeName, body);
+  body = normalizeArtifactRuntimeImports(safeName, body) as ProjectFileBody;
   if (!overwrite) {
     try {
       await stat(target);
