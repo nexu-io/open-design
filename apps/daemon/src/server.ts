@@ -626,6 +626,7 @@ import {
   toolTokenValidationStatus,
 } from './runtimes/tool-authorization.js';
 import { escapeHtml } from './runtimes/html-escaping.js';
+import { mediaTaskSnapshot } from './runtimes/media-task.js';
 import {
   aggregateCloudflarePagesStatus,
   buildDeployFileSet,
@@ -2431,22 +2432,6 @@ function notifyTaskWaiters(db, task) {
       }
     }, TASK_TTL_AFTER_DONE_MS).unref?.();
   }
-}
-
-function mediaTaskSnapshot(task, since = 0) {
-  const snapshot = {
-    taskId: task.id,
-    status: task.status,
-    startedAt: task.startedAt,
-    endedAt: task.endedAt,
-    progress: task.progress.slice(since),
-    nextSince: task.progress.length,
-  };
-  if (task.status === 'done') snapshot.file = task.file;
-  if (task.status === 'failed' || task.status === 'interrupted') {
-    snapshot.error = task.error;
-  }
-  return snapshot;
 }
 
 export function createSseResponse(
