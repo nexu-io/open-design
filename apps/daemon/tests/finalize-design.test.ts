@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Tests for `apps/daemon/src/finalize-design.ts` — fills in across phases
 // D-I. Phase D adds the truncation helper tests; phases E-I extend.
 //
@@ -418,7 +417,7 @@ describe('callAnthropicWithRetry', () => {
   it('retries once on 429 and resolves when the second response succeeds', async () => {
     const ok = jsonResponse(200, { content: [{ type: 'text', text: 'DESIGN.md body' }], usage: { input_tokens: 1, output_tokens: 1 } });
     const fetchImpl = vi
-      .fn<any, any>()
+      .fn<typeof globalThis.fetch>()
       .mockResolvedValueOnce(textResponse(429, '{"error":"rate limited"}'))
       .mockResolvedValueOnce(ok);
 
@@ -429,7 +428,7 @@ describe('callAnthropicWithRetry', () => {
 
   it('throws FinalizeUpstreamError(503) when both attempts return 5xx', async () => {
     const fetchImpl = vi
-      .fn<any, any>()
+      .fn<typeof globalThis.fetch>()
       .mockResolvedValueOnce(textResponse(503, 'service unavailable'))
       .mockResolvedValueOnce(textResponse(503, 'service unavailable'));
 
@@ -442,7 +441,7 @@ describe('callAnthropicWithRetry', () => {
 
   it('propagates AbortError from fetch when the signal is aborted', async () => {
     const controller = new AbortController();
-    const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
+    const fetchImpl = vi.fn(async (_url: string | URL | Request, init?: RequestInit): Promise<Response> => {
       // Mirror native fetch's behavior: throw AbortError when init.signal is aborted.
       if (init?.signal?.aborted) {
         const err = new Error('aborted');
@@ -1003,7 +1002,7 @@ describe('POST /api/projects/:id/finalize/anthropic — HTTP-layer validation', 
       model: 'claude-opus-4-7',
     });
     expect(res.status).toBe(400);
-    const body = await res.json();
+    const body = (await res.json()) as { error: { code: string; message: string } };
     expect(body.error.code).toBe('BAD_REQUEST');
   });
 
@@ -1017,7 +1016,7 @@ describe('POST /api/projects/:id/finalize/anthropic — HTTP-layer validation', 
       model: 'claude-opus-4-7',
     });
     expect(res.status).toBe(403);
-    const body = await res.json();
+    const body = (await res.json()) as { error: { code: string; message: string } };
     expect(body.error.code).toBe('FORBIDDEN');
   });
 
@@ -1028,7 +1027,7 @@ describe('POST /api/projects/:id/finalize/anthropic — HTTP-layer validation', 
       model: 'claude-opus-4-7',
     });
     expect(res.status).toBe(400);
-    const body = await res.json();
+    const body = (await res.json()) as { error: { code: string; message: string } };
     expect(body.error.code).toBe('BAD_REQUEST');
     expect(body.error.message.toLowerCase()).toContain('apikey');
   });
@@ -1042,7 +1041,7 @@ describe('POST /api/projects/:id/finalize/anthropic — HTTP-layer validation', 
       model: 'claude-opus-4-7',
     });
     expect(res.status).toBe(400);
-    const body = await res.json();
+    const body = (await res.json()) as { error: { code: string; message: string } };
     expect(body.error.code).toBe('BAD_REQUEST');
     expect(body.error.message.toLowerCase()).toContain('project id');
   });
