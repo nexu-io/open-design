@@ -29,7 +29,7 @@ Onboarding 与 Settings 选择该预设后，沿用现有通用行为：切换�
 
 ## 数据流
 
-UI：`Agnes AI preset` → 浏览器本地 `ApiProtocolConfig(openai)` 与 provider draft → `syncConfigToDaemon` 以非敏感 `byokProvider` 写入 `/api/app-config` → 现有 OpenAI-compatible 请求路径。API Key 不离开浏览器本地 credential flow。
+UI：`Agnes AI preset` → 浏览器本地 `ApiProtocolConfig(openai)` 与 provider draft → `syncConfigToDaemon` 以非敏感 `byokProvider` 写入 `/api/app-config` → 现有 OpenAI-compatible 请求路径。bootstrap 时 `mergeDaemonConfig` 以 daemon 的 `byokProvider` 为权威映射回 `mode`/`apiProtocol`/`baseUrl`/`model`（CLI 写入的选择在 web 重载后成为活动 provider），`null` 权威回退 daemon 模式；API Key 不离开浏览器本地 credential flow。
 
 CLI：`od config byok get|set|clear` 读写同一个 `/api/app-config` 端点（daemon `writeAppConfig` 合并写入，`byokProvider: null` 清除选择），供外部代理与 headless 流程读取或配置同一份非敏感 provider metadata。
 

@@ -1021,6 +1021,19 @@ export function saveConfig(config: AppConfig): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(sanitized));
 }
 
+// Protocols the daemon may persist through `od config byok`; anything else
+// in daemon metadata is treated as stale/malformed and ignored during merge.
+const DAEMON_BYOK_PROTOCOLS: readonly ApiProtocol[] = [
+  'anthropic',
+  'openai',
+  'azure',
+  'google',
+  'ollama',
+  'senseaudio',
+  'aihubmix',
+  'bedrock',
+];
+
 export function mergeDaemonConfig(
   localConfig: AppConfig,
   daemonConfig: AppConfigPrefs | null,
@@ -1112,6 +1125,23 @@ export function mergeDaemonConfig(
   }
   if (daemonConfig.defaultProjectLocationId !== undefined) {
     next.defaultProjectLocationId = daemonConfig.defaultProjectLocationId ?? 'default';
+  }
+  // Daemon BYOK metadata is authoritative during bootstrap so an
+  // `od config byok set` selection survives a web reload. The metadata is
+  // deliberately non-secret: applying it must never import an API key; the
+  // browser keeps its endpoint-scoped key draft untouched. An explicit
+  // daemon `null` (from `od config byok clear` or a daemon-mode save) is
+  // authoritative too and falls back to daemon mode.
+  if (daemonConfig.byokProvider !== undefined) {
+    const provider = daemonConfig.byokProvider;
+    if (provider && DAEMON_BYOK_PROTOCOLS.includes(provider.protocol as ApiProtocol)) {
+      next.mode = 'api';
+      next.apiProtocol = provider.protocol as ApiProtocol;
+      next.baseUrl = provider.baseUrl;
+      next.model = provider.model;
+    } else if (provider === null) {
+      next.mode = 'daemon';
+    }
   }
   return next;
 }

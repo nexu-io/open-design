@@ -543,7 +543,9 @@ function applyConfigValue(
     } else {
       const validated = validateByokProvider(value);
       if (validated !== undefined) target[key] = validated;
-      else delete target[key];
+      // An invalid object is not an explicit clear: keep the last valid
+      // selection so a malformed external-agent payload cannot silently
+      // wipe a persisted provider. Only `null` clears.
     }
     return;
   }

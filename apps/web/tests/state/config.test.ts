@@ -441,6 +441,68 @@ describe('mergeDaemonConfig', () => {
       mergeDaemonConfig({ ...DEFAULT_CONFIG, allowSilentUpdates: true }, {}).allowSilentUpdates,
     ).toBeUndefined();
   });
+
+  it('adopts a CLI-written Agnes provider as the active UI provider without importing an API key', () => {
+    const merged = mergeDaemonConfig(
+      {
+        ...DEFAULT_CONFIG,
+        mode: 'daemon',
+        apiKey: 'browser-only-key',
+        baseUrl: 'https://stale.example/v1',
+        model: 'stale-model',
+      },
+      {
+        byokProvider: {
+          protocol: 'openai',
+          baseUrl: 'https://apihub.agnes-ai.com/v1',
+          model: 'agnes-2.0-flash',
+        },
+      },
+    );
+
+    expect(merged.mode).toBe('api');
+    expect(merged.apiProtocol).toBe('openai');
+    expect(merged.baseUrl).toBe('https://apihub.agnes-ai.com/v1');
+    expect(merged.model).toBe('agnes-2.0-flash');
+    // Endpoint-scoped browser credentials stay local; daemon metadata never
+    // carries or overwrites an API key.
+    expect(merged.apiKey).toBe('browser-only-key');
+  });
+
+  it('treats an explicit daemon clear as authoritative and falls back to daemon mode', () => {
+    const merged = mergeDaemonConfig(
+      {
+        ...DEFAULT_CONFIG,
+        mode: 'api',
+        apiProtocol: 'openai',
+        baseUrl: 'https://apihub.agnes-ai.com/v1',
+        model: 'agnes-2.0-flash',
+      },
+      { byokProvider: null },
+    );
+
+    expect(merged.mode).toBe('daemon');
+  });
+
+  it('ignores daemon BYOK metadata with an unknown protocol instead of corrupting state', () => {
+    const local: AppConfig = {
+      ...DEFAULT_CONFIG,
+      mode: 'daemon',
+      apiProtocol: 'openai',
+      baseUrl: 'https://local.example/v1',
+      model: 'local-model',
+    };
+    const merged = mergeDaemonConfig(local, {
+      byokProvider: {
+        protocol: 'not-a-protocol',
+        baseUrl: 'https://apihub.agnes-ai.com/v1',
+        model: 'agnes-2.0-flash',
+      },
+    });
+
+    expect(merged.mode).toBe('daemon');
+    expect(merged.baseUrl).toBe('https://local.example/v1');
+  });
 });
 
 describe('mergeDaemonMediaProviders', () => {
