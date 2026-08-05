@@ -47,6 +47,7 @@ import {
 } from './runtimes/daemon-control.js';
 import { runResearch } from './research/cli.js';
 import { runDiagnostics as runDiagnosticsCommand } from './diagnostics/cli.js';
+import { runVersion as runVersionCommand } from './version/cli.js';
 import { resolveDaemonUrl } from './daemon-url.js';
 import { requestJsonIpc } from '@open-design/sidecar';
 import { SIDECAR_ENV, SIDECAR_MESSAGES } from '@open-design/sidecar-proto';
@@ -318,6 +319,17 @@ async function runDiagnosticsCommandWithDeps(args: readonly string[]): Promise<v
   });
 }
 
+async function runVersionCommandWithDeps(args: readonly string[]): Promise<void> {
+  return runVersionCommand(args, {
+    resolveDaemonUrl: cliDaemonUrl,
+    fetch,
+    exitWithStructuredError,
+    structuredHttpFailure,
+    writeStdout: (text) => { process.stdout.write(text); },
+    log: console.log,
+  });
+}
+
 type CliSubcommandHandler = (args: readonly string[]) => Promise<void> | void;
 
 const SUBCOMMAND_MAP: Record<string, CliSubcommandHandler> = {
@@ -347,7 +359,7 @@ const SUBCOMMAND_MAP: Record<string, CliSubcommandHandler> = {
   craft: runCraft,
   diagnostics: runDiagnosticsCommandWithDeps,
   status: runStatus,
-  version: runVersion,
+  version: runVersionCommandWithDeps,
   doctor: runDoctor,
   config: runConfig,
   library: runLibrary,
@@ -7338,27 +7350,6 @@ async function runStatus(args) {
 // `od doctor` follow-ups, shell scripts) can collect a support bundle
 // without driving the web UI.
 // ---------------------------------------------------------------------------
-
-async function runVersion(args) {
-  const flags = parseFlags(args, { string: LIBRARY_STRING_FLAGS, boolean: LIBRARY_BOOLEAN_FLAGS });
-  const base = (await libraryDaemonUrl(flags)).replace(/\/$/, '');
-  let resp;
-  try {
-    resp = await fetch(`${base}/api/version`);
-  } catch (err) {
-    return exitWithStructuredError({
-      code:    'daemon-not-running',
-      message: `Cannot reach daemon at ${base}: ${err?.message ?? err}`,
-    });
-  }
-  if (!resp.ok) return structuredHttpFailure(resp);
-  const data = await resp.json();
-  if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
-  const version = typeof data?.version === 'string'
-    ? data.version
-    : (data?.version?.version ?? JSON.stringify(data));
-  console.log(version);
-}
 
 // ---------------------------------------------------------------------------
 // Subcommand: od doctor / od config (Phase 4 CLI parity tail).
