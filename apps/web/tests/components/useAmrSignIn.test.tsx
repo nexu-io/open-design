@@ -370,25 +370,29 @@ describe('useAmrSignIn', () => {
 
   it('resets the attempt id on retry so a stale id is never reused', async () => {
     // looper review on #6438: the attempt-id ref must be scoped per attempt.
-    // Attempt A gets id A and is cancelled; a retry (B) omits an id, so its
-    // timeout must NOT reuse A's id via a bodyless "cancel latest".
+    // Attempt A times out and is cancelled BY its id; the drain completes so the
+    // action re-enables; a retry (B) omits an id, so its timeout must NOT emit a
+    // bodyless "cancel latest" or reuse A's stale id.
     vi.useFakeTimers();
-    let attempt = 0;
+    let loginCount = 0;
+    let cancelFired = false;
+    let postCancelPolls = 0;
     const cancelBodies: Array<Record<string, unknown> | null> = [];
     vi.stubGlobal(
       'fetch',
       vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
         const url = typeof input === 'string' ? input : input.toString();
         if (url.endsWith('/api/integrations/vela/login')) {
-          attempt += 1;
+          loginCount += 1;
           return new Response(
             JSON.stringify(
-              attempt === 1 ? { ok: true, authAttemptId: AUTH_ATTEMPT_ID } : { ok: true },
+              loginCount === 1 ? { ok: true, authAttemptId: AUTH_ATTEMPT_ID } : { ok: true },
             ),
             { status: 200 },
           );
         }
         if (url.endsWith('/api/integrations/vela/login/cancel')) {
+          cancelFired = true;
           cancelBodies.push(init?.body ? JSON.parse(String(init.body)) : null);
           return new Response(
             JSON.stringify({ ok: true, canceled: true }),
@@ -396,6 +400,15 @@ describe('useAmrSignIn', () => {
           );
         }
         if (url.endsWith('/api/integrations/vela/status')) {
+          // Attempt A: stays in flight until its cancel fires, then drains to
+          // idle after 2 polls. Attempt B (no id) stays in flight forever.
+          if (loginCount === 1 && cancelFired) {
+            postCancelPolls += 1;
+            return new Response(
+              JSON.stringify({ loggedIn: false, loginInFlight: postCancelPolls < 2 }),
+              { status: 200 },
+            );
+          }
           return new Response(
             JSON.stringify({ loggedIn: false, loginInFlight: true }),
             { status: 200 },
@@ -406,22 +419,25 @@ describe('useAmrSignIn', () => {
     );
 
     render(<Harness />);
-    // Attempt A: start + cancel from another surface.
+    // Attempt A: start with id A.
     fireEvent.click(screen.getByRole('button', { name: 'sign-in' }));
     await vi.advanceTimersByTimeAsync(100);
-    window.dispatchEvent(
-      new CustomEvent(AMR_LOGIN_STATUS_EVENT, { detail: { reason: 'login-canceled' } }),
-    );
-    // Retry (B): the fresh attempt must NOT reuse A's id on timeout.
-    fireEvent.click(screen.getByRole('button', { name: 'sign-in' }));
-    await vi.advanceTimersByTimeAsync(100);
-    await vi.advanceTimersByTimeAsync(AMR_LOGIN_TIMEOUT_MS);
+    // A times out → cancel fires with A's id; child still draining.
+    await vi.advanceTimersByTimeAsync(AMR_LOGIN_TIMEOUT_MS - AMR_LOGIN_POLL_INTERVAL_MS);
+    await vi.advanceTimersByTimeAsync(AMR_LOGIN_POLL_INTERVAL_MS);
+    expect(cancelBodies).toEqual([{ authAttemptId: AUTH_ATTEMPT_ID }]);
+    // A drains to idle → action re-enables.
+    await vi.advanceTimersByTimeAsync(AMR_LOGIN_POLL_INTERVAL_MS * 4);
+    expect(screen.getByRole('button')).toHaveProperty('disabled', false);
 
-    // B's timeout with no id must refuse the bodyless cancel — cancelBodies has
-    // no entry for B, and A's cancel (if any) must not target A's stale id on B.
-    const bBodies = cancelBodies.filter((b) => b === null);
-    expect(bBodies.length).toBeGreaterThanOrEqual(0);
-    expect(cancelBodies.every((b) => !b || b.authAttemptId === AUTH_ATTEMPT_ID)).toBe(true);
+    // Retry (B): fresh attempt without an id.
+    fireEvent.click(screen.getByRole('button', { name: 'sign-in' }));
+    await vi.advanceTimersByTimeAsync(100);
+    // B times out with no trustworthy id → the hook must refuse cancellation:
+    // no bodyless entry, and no reuse of A's stale id.
+    await vi.advanceTimersByTimeAsync(AMR_LOGIN_TIMEOUT_MS - AMR_LOGIN_POLL_INTERVAL_MS);
+    await vi.advanceTimersByTimeAsync(AMR_LOGIN_POLL_INTERVAL_MS);
+    expect(cancelBodies).toEqual([{ authAttemptId: AUTH_ATTEMPT_ID }]);
   });
 
   it('does not re-enable on a transient idle read right after a foreign cancel-during-start', async () => {
