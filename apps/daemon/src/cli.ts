@@ -67,6 +67,7 @@ import type { ScaffoldInput } from './plugins/scaffold.js';
 import type { PublishCatalog, PublishMetadata } from './plugins/publish.js';
 import type {
   AppliedPluginSnapshot,
+  FigmaImportResult,
   InstalledPluginRecord,
   MarketplaceManifest,
   MarketplacePluginEntry,
@@ -487,6 +488,11 @@ interface GenUiSurfaceResponse {
 
 interface GenUiRevokeResponse {
   invalidated?: number;
+  [key: string]: unknown;
+}
+
+interface CliRunStartResponse {
+  runId?: string;
   [key: string]: unknown;
 }
 
@@ -4838,7 +4844,7 @@ function formatBrandRow(summary) {
   ].join('\t');
 }
 
-async function runBrand(args) {
+async function runBrand(args: readonly string[]) {
   if (args.length === 0 || isBrandHelpArg(args[0])
       || args.includes('--help') || args.includes('-h')) {
     console.log(BRAND_USAGE);
@@ -4864,7 +4870,7 @@ async function runBrand(args) {
   }
 }
 
-async function runBrandList(rest) {
+async function runBrandList(rest: readonly string[]) {
   let flags;
   try {
     flags = parseFlags(rest, { string: BRAND_STRING_FLAGS, boolean: BRAND_BOOLEAN_FLAGS });
@@ -4895,7 +4901,7 @@ async function runBrandList(rest) {
   for (const summary of brands) console.log(formatBrandRow(summary));
 }
 
-async function runBrandCreate(rest) {
+async function runBrandCreate(rest: readonly string[]) {
   let flags;
   try {
     flags = parseFlags(rest, { string: BRAND_STRING_FLAGS, boolean: BRAND_BOOLEAN_FLAGS });
@@ -4955,7 +4961,7 @@ async function runBrandCreate(rest) {
   console.log(`${data?.id ?? ''}\t${data?.projectId ?? ''}`);
 }
 
-async function runBrandFinalize(rest) {
+async function runBrandFinalize(rest: readonly string[]) {
   let flags;
   try {
     flags = parseFlags(rest, { string: BRAND_STRING_FLAGS, boolean: BRAND_BOOLEAN_FLAGS });
