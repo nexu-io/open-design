@@ -1529,8 +1529,6 @@ export function EntryShell({
           onOpenSettings={onOpenSettings}
           onInvite={() => changeView('members')}
           onSignInCloud={() => navigate({ kind: 'home', view: 'onboarding' })}
-          metricsConsent={config.telemetry?.metrics === true}
-          installationId={config.installationId}
           updaterSlot={updaterSlot}
           // A loading or unavailable workspace read is not proof of sign-out.
           // Keep the account slot neutral until Cloud answers successfully;

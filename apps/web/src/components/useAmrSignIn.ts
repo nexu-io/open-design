@@ -2,10 +2,16 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { amrHandoffDeviceId } from '../analytics/amr-attribution';
 import { getResolvedDeviceId } from '../analytics/client';
 import {
+  cancelVelaLogin,
   fetchVelaLoginStatus,
   startVelaLogin,
   type VelaLoginStatus,
 } from '../providers/daemon';
+import {
+  notifyTeamProjectsChanged,
+  notifyWorkspaceBillingRefresh,
+  notifyWorkspaceContextRefresh,
+} from '../collab/useWorkspaceContext';
 import {
   AMR_LOGIN_POLL_INTERVAL_MS,
   AMR_LOGIN_STATUS_EVENT,
@@ -77,8 +83,20 @@ export function useAmrSignIn({
             const outcome = amrLoginPollOutcome(status, startedAt);
             if (outcome === 'signed-in') {
               stopAmrLoginPolling();
+              // Mirror CloudSignInTip / AmrLoginPill / onboarding: surfaces that
+              // subscribe to workspace state wait on these refresh events, not on
+              // the AMR login-status event, so a login started here must nudge
+              // the workspace catalog / billing to re-read (looper review).
               notifyAmrLoginStatusChanged('status-changed');
+              notifyWorkspaceContextRefresh();
+              notifyWorkspaceBillingRefresh();
+              notifyTeamProjectsChanged();
             } else if (outcome === 'stopped' || outcome === 'timed-out') {
+              // A timed-out attempt's `vela login` child is often still alive
+              // (the daemon never self-reported loginInFlight: false). Release
+              // it, or a retry click 409s as alreadyRunning instead of spawning
+              // a fresh browser flow (mirrors CloudSignInTip).
+              if (outcome === 'timed-out') void cancelVelaLogin();
               stopAmrLoginPolling();
             }
           })

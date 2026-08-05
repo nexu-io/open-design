@@ -48,7 +48,6 @@ import {
 import { resetCloudSignInTipDismissal } from './CloudSignInTip';
 import { SignOutConfirmDialog } from './SignOutConfirmDialog';
 import { notifyAmrLoginStatusChanged } from './amrLoginPolling';
-import { useAmrSignIn } from './useAmrSignIn';
 import { Icon } from './Icon';
 import { GITHUB_STARS_FALLBACK_LABEL, formatStars, useGithubStars } from './useGithubStars';
 import { PlanWordmark, planBadgeTierForWorkspace } from './PlanWordmark';
@@ -209,10 +208,6 @@ interface Props {
   onInvite?: () => void;
   /** Start the cloud sign-in / team flow from the local-state callout. */
   onSignInCloud?: () => void;
-  /** Telemetry consent + install id, passed through to the inline Vela sign-in
-   *  flow the account menu uses for its signed-out entry (#5244). */
-  metricsConsent?: boolean;
-  installationId?: string | null;
   /**
    * The update-ready host (`UpdaterPopup`), which renders nothing until the
    * updater reports a downloaded, unopened installer.
@@ -571,8 +566,6 @@ export function EntryNavRail({
   onOpenSettings,
   updaterSlot,
   footerNotice,
-  metricsConsent,
-  installationId,
 }: Props) {
   const { t } = useI18n();
   const analytics = useAnalytics();
@@ -676,14 +669,6 @@ export function EntryNavRail({
   // vela login-status projection the first time the menu opens — never on
   // mount, so shells without an open menu spend zero requests on it.
   const [accountEmail, setAccountEmail] = useState<string | null>(null);
-  // #5244: signed-out login entry in the account menu, using the shared Vela
-  // login flow so the rail matches the project-page popover and the footer's
-  // CloudSignInTip. Refreshes the account email once the login completes.
-  const { amrLoginPending, handleAmrSignIn } = useAmrSignIn({
-    metricsConsent: metricsConsent ?? false,
-    installationId,
-    onStatus: (status) => setAccountEmail(status?.user?.email?.trim() ?? null),
-  });
   useEffect(() => {
     if (!accountOpen) return;
     // Refetch on EVERY open (the previous value stays visible while the read
@@ -1092,25 +1077,6 @@ export function EntryNavRail({
                       <span className="entry-nav-rail__account-head-email">{accountEmail}</span>
                     ) : null}
                   </div>
-                  {!accountEmail ? (
-                    <button
-                      type="button"
-                      className="entry-nav-rail__menu-item"
-                      role="menuitem"
-                      data-testid="entry-nav-account-signin"
-                      disabled={amrLoginPending}
-                      onClick={() => {
-                        void handleAmrSignIn();
-                      }}
-                    >
-                      <RemixIcon name="login-circle-line" size={14} />
-                      <span>
-                        {amrLoginPending
-                          ? t('settings.amrSigningIn')
-                          : t('settings.amrSignIn')}
-                      </span>
-                    </button>
-                  ) : null}
                   {/* #5517 billing card: plan (+badge) + 升级 CTA + USD balance.
                       The balance row links out to B's console. It receives
                       only an explicitly scoped money value; raw credits are
