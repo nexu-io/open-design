@@ -424,14 +424,11 @@ import {
 } from './media/models.js';
 import { readMaskedConfig, writeConfig } from './media/config.js';
 import {
-  deleteMediaTask,
-  getMediaTask,
-  insertMediaTask,
   listMediaTasksByProject,
   listRecentMediaTasks,
   reconcileMediaTasksOnBoot,
-  updateMediaTask,
 } from './media/tasks.js';
+import { createMediaTaskStore, type MediaTaskStore } from './media/task-store.js';
 import {
   MCP_TEMPLATES,
   buildAcpMcpServers,
@@ -1940,106 +1937,7 @@ const projectUpload = multer({
 const sendMulterError = createMulterErrorResponder(sendApiError);
 const handleProjectUpload = createProjectUploadMiddleware(projectUpload, sendMulterError);
 
-const mediaTasks = new Map();
 const TASK_TTL_AFTER_DONE_MS = 10 * 60 * 1000;
-const MEDIA_TERMINAL_STATUSES = new Set(['done', 'failed', 'interrupted']);
-
-function hydrateMediaTask(row) {
-  const task = {
-    id: row.id,
-    projectId: row.projectId,
-    status: row.status,
-    surface: row.surface,
-    model: row.model,
-    progress: Array.isArray(row.progress) ? row.progress.slice() : [],
-    file: row.file ?? null,
-    error: row.error ?? null,
-    startedAt: row.startedAt,
-    endedAt: row.endedAt,
-    waiters: new Set(),
-  };
-  mediaTasks.set(task.id, task);
-  return task;
-}
-
-function getLiveMediaTask(db, taskId) {
-  const cached = mediaTasks.get(taskId);
-  if (cached) return cached;
-  const row = getMediaTask(db, taskId);
-  return row ? hydrateMediaTask(row) : null;
-}
-
-function createMediaTask(db, taskId, projectId, info = {}) {
-  const task = {
-    id: taskId,
-    projectId,
-    status: 'queued',
-    surface: info.surface,
-    model: info.model,
-    progress: [],
-    file: null,
-    error: null,
-    startedAt: Date.now(),
-    endedAt: null,
-    waiters: new Set(),
-  };
-  mediaTasks.set(taskId, task);
-  insertMediaTask(db, {
-    id: taskId,
-    projectId,
-    status: task.status,
-    surface: task.surface,
-    model: task.model,
-    progress: task.progress,
-    file: task.file,
-    error: task.error,
-    startedAt: task.startedAt,
-    endedAt: task.endedAt,
-  });
-  return task;
-}
-
-function persistMediaTask(db, task) {
-  updateMediaTask(db, task.id, {
-    status: task.status,
-    surface: task.surface,
-    model: task.model,
-    progress: task.progress,
-    file: task.file,
-    error: task.error,
-    startedAt: task.startedAt,
-    endedAt: task.endedAt,
-  });
-}
-
-function appendTaskProgress(db, task, line) {
-  task.progress.push(line);
-  persistMediaTask(db, task);
-  notifyTaskWaiters(db, task);
-}
-
-function notifyTaskWaiters(db, task) {
-  const wakers = Array.from(task.waiters);
-  for (const w of wakers) {
-    try {
-      w();
-    } catch {
-      // Never let one bad waiter block the rest.
-    }
-  }
-  if (
-    MEDIA_TERMINAL_STATUSES.has(task.status) &&
-    !task._gcScheduled
-  ) {
-    task._gcScheduled = true;
-    setTimeout(() => {
-      if (task.waiters.size === 0) {
-        mediaTasks.delete(task.id);
-        deleteMediaTask(db, task.id);
-      }
-    }, TASK_TTL_AFTER_DONE_MS).unref?.();
-  }
-}
 
 export type DesktopPdfExporter = (input: DesktopExportPdfInput) => Promise<DesktopExportPdfResult>;
 export type DesktopArtifactExporter = (input: DesktopExportArtifactInput) => Promise<DesktopExportArtifactResult>;
@@ -2278,6 +2176,10 @@ export async function startServer({
     next();
   });
   const db = openDatabase(PROJECT_ROOT, { dataDir: RUNTIME_DATA_DIR });
+  const mediaTaskStore: MediaTaskStore = createMediaTaskStore({
+    db,
+    ttlAfterDoneMs: TASK_TTL_AFTER_DONE_MS,
+  });
   // Restore paired browser-extension origins into the in-memory allowlist the
   // /api origin middleware above consults, so a paired clipper survives daemon
   // restarts without re-pairing.
@@ -2354,9 +2256,9 @@ export async function startServer({
         `deleted ${mediaReconcile.deleted} expired terminal task(s)`,
     );
   }
-  mediaTasks.clear();
+  mediaTaskStore.clear();
   for (const row of listRecentMediaTasks(db, { terminalTtlMs: TASK_TTL_AFTER_DONE_MS })) {
-    hydrateMediaTask(row);
+    mediaTaskStore.hydrate(row);
   }
 
   if (process.env.OD_CODEX_DISABLE_PLUGINS === '1') {
@@ -2754,12 +2656,12 @@ export async function startServer({
     readMaskedConfig,
     writeConfig,
     generateMedia,
-    mediaTasks,
-    createMediaTask: (taskId, projectId, info) => createMediaTask(db, taskId, projectId, info),
-    persistMediaTask: (task) => persistMediaTask(db, task),
-    appendTaskProgress: (task, line) => appendTaskProgress(db, task, line),
-    notifyTaskWaiters: (task) => notifyTaskWaiters(db, task),
-    getLiveMediaTask: (taskId) => getLiveMediaTask(db, taskId),
+    mediaTasks: mediaTaskStore.tasks,
+    createMediaTask: (taskId, projectId, info) => mediaTaskStore.create(taskId, projectId, info),
+    persistMediaTask: (task) => mediaTaskStore.persist(task),
+    appendTaskProgress: (task, line) => mediaTaskStore.appendProgress(task, line),
+    notifyTaskWaiters: (task) => mediaTaskStore.notifyWaiters(task),
+    getLiveMediaTask: (taskId) => mediaTaskStore.get(taskId),
     mediaTaskSnapshot,
     listMediaTasksByProject,
     listElevenLabsVoiceOptions,
