@@ -401,6 +401,43 @@ describe("resolveDaemonUrl", () => {
       }
     });
 
+    // Regression coverage for the #6425 review: `isLoopbackHttpUrl` used to
+    // accept only the exact strings "127.0.0.1" / "[::1]" / "localhost", but
+    // the daemon's own inbound bind validation (`isLoopbackHostname` in
+    // `http/local-daemon-request.ts`) already treats the entire 127.0.0.0/8
+    // range as loopback. A packaged daemon started with e.g.
+    // `OD_BIND_HOST=127.0.0.2` is a pre-existing, already-supported local
+    // configuration — conventional discovery rejecting it (and silently
+    // falling back to 7456, where nothing is listening) would be a
+    // regression for that case, not a security improvement.
+    it("accepts a conventional-path response whose url is another 127.0.0.0/8 loopback address", async () => {
+      const socketPath = resolveAppIpcPath({
+        app: APP_KEYS.DAEMON,
+        contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+        env: { [SIDECAR_ENV.IPC_BASE]: conventionalIpcBaseDir },
+        namespace: releaseNamespace("stable", CURRENT_RELEASE_PLATFORM),
+      });
+      fs.mkdirSync(path.dirname(socketPath), { recursive: true });
+      let ipc: JsonIpcServerHandle | null = null;
+      try {
+        ipc = await createJsonIpcServer({
+          socketPath,
+          handler: () => ({ pid: 1, state: "running", updatedAt: new Date().toISOString(), url: "http://127.0.0.2:23456" }),
+        });
+
+        const url = await resolveDaemonUrl({
+          env: {
+            [SIDECAR_ENV.IPC_BASE]: conventionalIpcBaseDir,
+          },
+          timeoutMs: 1000,
+          allowConventionalIpcDiscovery: true,
+        });
+        expect(url).toBe("http://127.0.0.2:23456");
+      } finally {
+        await ipc?.close();
+      }
+    });
+
     // Regression coverage for the #6425 review: the packaged desktop app
     // always stamps an explicit `release-<channel>` namespace, but a
     // `tools-pack` install whose version string doesn't resolve to a known
@@ -480,13 +517,19 @@ describe("resolveDaemonUrl", () => {
   // Companion to the POSIX-only describe block above: conventional discovery
   // must be a no-op on win32 (no candidates, no probing, no crash) rather
   // than attempting to guess a named-pipe path with no ownership check.
+  //
+  // Regression note (#6425 review): this test must NOT set
+  // SIDECAR_ENV.IPC_PATH — doing so takes the explicit-socket branch in
+  // `discoverDaemonUrlFromIpc` before `conventionalIpcSocketPaths()` ever
+  // runs, so the assertion would pass for the wrong reason (explicit-path
+  // probe failing against a missing socket) without ever exercising the
+  // win32 no-candidate behavior it claims to cover.
   it.skipIf(process.platform !== "win32")(
     "does not attempt conventional discovery on win32 even when allowConventionalIpcDiscovery is true",
     async () => {
       const url = await resolveDaemonUrl({
         env: {
           PATH: emptyBinDir,
-          [SIDECAR_ENV.IPC_PATH]: path.join(ipcBaseDir, "missing.sock"),
         },
         timeoutMs: 300,
         allowConventionalIpcDiscovery: true,

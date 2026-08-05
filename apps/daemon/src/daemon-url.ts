@@ -16,6 +16,7 @@ import {
   type DaemonStatusSnapshot,
 } from "@open-design/sidecar-proto";
 import { requestJsonIpc, resolveAppIpcPath } from "@open-design/sidecar";
+import { isLoopbackHostname } from "./http/local-daemon-request.js";
 
 export const DEFAULT_DAEMON_URL = "http://127.0.0.1:7456";
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -149,6 +150,18 @@ async function probeIpcSocket(
  * specific interface, …). This rules out a predictable-socket responder
  * redirecting discovery off-host; it does not by itself prove the responder
  * IS the real daemon — see `isOwnedByCurrentProcess`.
+ *
+ * Delegates hostname classification to `isLoopbackHostname` (the same
+ * predicate the daemon's own inbound request validation uses in
+ * `http/local-daemon-request.ts`) instead of an exact-match list, so this
+ * accepts the full 127.0.0.0/8 range. A packaged daemon started with e.g.
+ * `OD_BIND_HOST=127.0.0.2` is an already-supported local configuration
+ * whose own bind validation accepts it; conventional discovery rejecting it
+ * (falling back to 7456, where nothing listens) would be a regression for
+ * that case, not a security improvement — 127/8 is loopback regardless of
+ * which address in the block is used. `isLoopbackHostname` also strips the
+ * `[...]` brackets WHATWG URL puts around IPv6 literals, so this stays
+ * correct for `[::1]`-style hosts without a separate bracket check.
  */
 function isLoopbackHttpUrl(url: string): boolean {
   let parsed: URL;
@@ -158,11 +171,7 @@ function isLoopbackHttpUrl(url: string): boolean {
     return false;
   }
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
-  // WHATWG URL always brackets an IPv6 literal in `.hostname` (verified:
-  // `new URL("http://[::1]:1234").hostname === "[::1]"`, never the bare
-  // `"::1"`). The bare form was dead code that could never match, silently
-  // rejecting a legitimate IPv6-loopback daemon status.
-  return parsed.hostname === "127.0.0.1" || parsed.hostname === "[::1]" || parsed.hostname === "localhost";
+  return isLoopbackHostname(parsed.hostname);
 }
 
 /**
