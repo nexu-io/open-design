@@ -15,6 +15,7 @@ import {
   resolveExclusiveSurface,
 } from './prompts/system.js';
 import { emittedRenderableQuestionForm } from './question-form-detect.js';
+import { upsertSkillPluginCandidateAssistantMessage as upsertSkillPluginCandidateAssistantMessageWithContract } from './runtimes/skill-candidate-message.js';
 import { resolveProjectRoot } from './project-root.js';
 import {
   resolveDaemonCliPath,
@@ -1224,67 +1225,12 @@ export function detectSkillPluginCandidateOnRunSuccess(db, runs, run, input, pro
     });
 }
 
-export function upsertSkillPluginCandidateAssistantMessage(db, run, candidate) {
-  const currentMessagePosition = run.assistantMessageId
-    ? (db.prepare(`SELECT position FROM messages WHERE id = ?`).get(run.assistantMessageId)?.position ?? null)
-    : null;
-  const existingMessagePosition = candidate.assistantMessageId
-    ? (db.prepare(`SELECT position FROM messages WHERE id = ?`).get(candidate.assistantMessageId)?.position ?? null)
-    : null;
-  if (
-    typeof currentMessagePosition === 'number' &&
-    typeof existingMessagePosition === 'number' &&
-    existingMessagePosition > currentMessagePosition
-  ) {
-    return null;
-  }
-  const canReuseExistingMessage =
-    candidate.assistantMessageId &&
-    candidate.assistantMessageId !== run.assistantMessageId &&
-    typeof existingMessagePosition === 'number';
-  const messageId = canReuseExistingMessage ? candidate.assistantMessageId : randomUUID();
-  const shouldMoveReusedMessage =
-    canReuseExistingMessage &&
-    typeof currentMessagePosition === 'number' &&
-    typeof existingMessagePosition === 'number' &&
-    existingMessagePosition <= currentMessagePosition;
-  if (
-    candidate.assistantMessageId &&
-    candidate.assistantMessageId !== messageId &&
-    candidate.assistantMessageId !== run.assistantMessageId
-  ) {
-    db.prepare(`DELETE FROM messages WHERE id = ?`).run(candidate.assistantMessageId);
-  }
-  const now = Date.now();
-  upsertMessage(db, run.conversationId, {
-    id: messageId,
-    role: 'assistant',
-    content: `Open Design found reusable skill material that can become a plugin: ${candidate.title}`,
-    agentId: run.agentId ?? undefined,
-    events: [{
-      kind: 'plugin_candidate',
-      candidateId: candidate.id,
-      title: candidate.title,
-      description: candidate.description,
-      confidence: candidate.confidence,
-      draftPath: candidate.draftPath ?? null,
-    }],
-    createdAt: now,
-    endedAt: now,
+export const upsertSkillPluginCandidateAssistantMessage = (db, run, candidate) =>
+  upsertSkillPluginCandidateAssistantMessageWithContract(db, run, candidate, {
+    upsertMessage: (messageDb, conversationId, message) => upsertMessage(messageDb, conversationId, message),
+    createMessageId: randomUUID,
+    now: Date.now,
   });
-  if (shouldMoveReusedMessage) {
-    const max = db
-      .prepare(`SELECT COALESCE(MAX(position), -1) AS m FROM messages WHERE conversation_id = ?`)
-      .get(run.conversationId)?.m ?? -1;
-    db.prepare(`UPDATE messages SET position = ? WHERE id = ?`).run(Number(max) + 1, messageId);
-  }
-  db.prepare(
-    `UPDATE skill_plugin_candidates
-        SET assistant_message_id = ?, updated_at = ?
-      WHERE id = ?`,
-  ).run(messageId, now, candidate.id);
-  return messageId;
-}
 
 const persistRunEventToAssistantMessage = (db, run, event, data) =>
   persistRunEventToAssistantMessageWithContract(
