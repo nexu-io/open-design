@@ -1231,6 +1231,13 @@ export async function syncConfigToDaemon(
     customInstructions: config.customInstructions ?? null,
     projectLocations: config.projectLocations ?? [],
     defaultProjectLocationId: config.defaultProjectLocationId ?? 'default',
+    byokProvider: config.mode === 'api' && config.apiProtocol && config.baseUrl && config.model
+      ? {
+        protocol: config.apiProtocol,
+        baseUrl: config.baseUrl,
+        model: config.model,
+      }
+      : null,
   };
   try {
     const response = await fetch('/api/app-config', {

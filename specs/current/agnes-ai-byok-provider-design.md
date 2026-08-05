@@ -2,9 +2,7 @@
 
 ## 决策
 
-本设计以 `upstream/main` 的提交 `4d0376e fix(byok): restore local runtime configuration` 为准。该提交取代此前的 daemon/CLI 双轨方案：BYOK 设置与 API Key 均只保存在浏览器本地既有配置和 provider draft 中。
-
-Agnes AI 作为一个浏览器本地 BYOK 快捷预设接入，不改变 daemon、共享合同、CLI、MCP 或请求协议。
+本设计遵循 AGENTS.md 的 UI/CLI 双轨要求（issue #6359 同时要求 `od config byok get/set/clear`）：Agnes AI 作为 BYOK 快捷预设接入，非敏感的 provider 选择（protocol / baseUrl / model）通过共享的 `/api/app-config` 端点持久化，`od config byok` 与 web UI 读写同一份 metadata；API Key 仍只保存在浏览器本地既有配置和 provider draft 中，绝不进入 app-config 或经 CLI 传输。
 
 ## 固定参数
 
@@ -25,19 +23,20 @@ Onboarding 与 Settings 选择该预设后，沿用现有通用行为：切换�
 ## 非目标
 
 - 不新增 `agnes` protocol、provider 专用请求分支、流式解析器或模型发现逻辑。
-- 不改动 `packages/contracts`、`apps/daemon`、MCP、`od` CLI 或 app-config BYOK metadata。
+- 不通过 `od config byok` 或 app-config 读写 API Key；不新增 MCP 改动。
 - 不接入图像或视频能力，不新增依赖或 i18n key。
 - 不在源码、测试、文档、日志、报告或截图中写入真实 API Key。
 
 ## 数据流
 
-`Agnes AI preset` → 浏览器本地 `ApiProtocolConfig(openai)` 与 provider draft → 现有 OpenAI-compatible 请求路径。
+UI：`Agnes AI preset` → 浏览器本地 `ApiProtocolConfig(openai)` 与 provider draft → `syncConfigToDaemon` 以非敏感 `byokProvider` 写入 `/api/app-config` → 现有 OpenAI-compatible 请求路径。API Key 不离开浏览器本地 credential flow。
 
-没有 daemon hydration、共享 `byokProvider` metadata 或 `od config byok` 参与该路径。
+CLI：`od config byok get|set|clear` 读写同一个 `/api/app-config` 端点（daemon `writeAppConfig` 合并写入，`byokProvider: null` 清除选择），供外部代理与 headless 流程读取或配置同一份非敏感 provider metadata。
 
 ## 验证与验收
 
 - state 测试验证派生出的唯一 `agnes-ai` preset 含固定 protocol、Base URL 与模型。
 - Onboarding 测试验证通过现有 quick-fill 选择后预填 URL 和模型。
 - Settings 测试验证选择 Agnes 时不会复用另一 provider 的浏览器本地 Key。
-- 最终差异相对 `upstream/main` 只允许两份本设计文档、`apps/web/src/state/config.ts`、`apps/web/src/components/EntryShell.tsx`、`apps/web/src/components/SettingsDialog.tsx` 与聚焦 web 测试；不得包含 daemon、CLI、contracts 或 MCP 的 Agnes 改动。
+- daemon 测试验证 `byokProvider` 持久化、拒绝 `apiKey` 字段、`null` 清除；CLI 测试验证 `get`/`set`/`clear` 经 stub server 打到 `/api/app-config`；web 测试验证同步 payload 不含浏览器 API Key。
+- 最终差异相对 `upstream/main` 包含本设计文档、`packages/contracts` 的 `ByokProviderPrefs`、daemon app-config 校验与持久化、`od config byok` 子命令、web `syncConfigToDaemon` 同步及聚焦测试；不包含 MCP 改动。

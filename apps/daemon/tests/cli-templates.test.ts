@@ -501,3 +501,89 @@ describe('od templates CLI', () => {
     expect(envelope.error.message).toBe('name required');
   });
 });
+
+describe('od config byok CLI', () => {
+  let stub: StubServer;
+
+  beforeAll(async () => {
+    stub = await startStubServer();
+  });
+
+  afterAll(async () => {
+    await stub.close();
+  });
+
+  beforeEach(() => {
+    stub.requests.length = 0;
+    stub.setResponder((req) => {
+      if (req.method === 'PUT') {
+        return { status: 200, body: { config: JSON.parse(req.body) } };
+      }
+      return {
+        status: 200,
+        body: {
+          config: {
+            byokProvider: {
+              protocol: 'openai',
+              baseUrl: 'https://apihub.agnes-ai.com/v1',
+              model: 'agnes-2.0-flash',
+            },
+          },
+        },
+      };
+    });
+  });
+
+  it('persists Agnes provider metadata through the shared app-config endpoint without an API key', async () => {
+    const result = await runCli([
+      'config', 'byok', 'set', 'openai', 'https://apihub.agnes-ai.com/v1', 'agnes-2.0-flash',
+      '--daemon-url', stub.baseUrl,
+    ]);
+
+    expect(result.code).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual({
+      protocol: 'openai',
+      baseUrl: 'https://apihub.agnes-ai.com/v1',
+      model: 'agnes-2.0-flash',
+    });
+    expect(stub.requests).toHaveLength(1);
+    expect(stub.requests[0]).toMatchObject({ method: 'PUT', url: '/api/app-config' });
+    expect(JSON.parse(stub.requests[0]?.body ?? '{}')).toEqual({
+      byokProvider: {
+        protocol: 'openai',
+        baseUrl: 'https://apihub.agnes-ai.com/v1',
+        model: 'agnes-2.0-flash',
+      },
+    });
+  });
+
+  it('prints the stored provider metadata with od config byok get', async () => {
+    const result = await runCli([
+      'config', 'byok', 'get',
+      '--daemon-url', stub.baseUrl,
+    ]);
+
+    expect(result.code).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual({
+      protocol: 'openai',
+      baseUrl: 'https://apihub.agnes-ai.com/v1',
+      model: 'agnes-2.0-flash',
+    });
+    expect(stub.requests[0]).toMatchObject({ method: 'GET', url: '/api/app-config' });
+  });
+
+  it('clears the stored provider selection with od config byok clear', async () => {
+    const result = await runCli([
+      'config', 'byok', 'clear',
+      '--daemon-url', stub.baseUrl,
+    ]);
+
+    expect(result.code).toBe(0);
+    expect(JSON.parse(result.stdout)).toBeNull();
+    expect(stub.requests).toHaveLength(1);
+    expect(stub.requests[0]).toMatchObject({ method: 'PUT', url: '/api/app-config' });
+    expect(JSON.parse(stub.requests[0]?.body ?? '{}')).toEqual({
+      byokProvider: null,
+    });
+  });
+});

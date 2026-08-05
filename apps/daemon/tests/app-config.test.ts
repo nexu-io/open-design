@@ -220,6 +220,39 @@ describe('app-config', () => {
   });
 
   describe('writeAppConfig', () => {
+    it('persists non-secret BYOK provider metadata and rejects API keys', async () => {
+      await writeAppConfig(dataDir, {
+        byokProvider: {
+          protocol: 'openai',
+          baseUrl: 'https://apihub.agnes-ai.com/v1',
+          model: 'agnes-2.0-flash',
+          apiKey: 'must-not-persist',
+        },
+      });
+
+      expect((await readAppConfig(dataDir)).byokProvider).toEqual({
+        protocol: 'openai',
+        baseUrl: 'https://apihub.agnes-ai.com/v1',
+        model: 'agnes-2.0-flash',
+      });
+    });
+
+    it('clears a BYOK provider selection when null is sent', async () => {
+      await writeAppConfig(dataDir, {
+        byokProvider: {
+          protocol: 'openai',
+          baseUrl: 'https://apihub.agnes-ai.com/v1',
+          model: 'agnes-2.0-flash',
+        },
+      });
+      expect((await readAppConfig(dataDir)).byokProvider).toBeDefined();
+
+      await writeAppConfig(dataDir, { byokProvider: null });
+
+      const cfg = await readAppConfig(dataDir);
+      expect(cfg.byokProvider).toBeNull();
+    });
+
     it('creates data directory if missing', async () => {
       const nested = path.join(dataDir, 'sub', 'dir');
       await writeAppConfig(nested, { onboardingCompleted: true });

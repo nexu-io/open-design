@@ -250,6 +250,51 @@ describe('syncConfigToDaemon', () => {
       allowSilentUpdates: true,
     });
   });
+
+  it('syncs the non-secret BYOK provider selection without leaking the browser API key', async () => {
+    const fetchMock = vi.fn(async () => new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await syncConfigToDaemon({
+      ...DEFAULT_CONFIG,
+      mode: 'api',
+      apiProtocol: 'openai',
+      apiKey: 'browser-only-key',
+      baseUrl: 'https://apihub.agnes-ai.com/v1',
+      model: 'agnes-2.0-flash',
+    });
+
+    const [, init] = fetchMock.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    const body = JSON.parse(String(init.body));
+    expect(body.byokProvider).toEqual({
+      protocol: 'openai',
+      baseUrl: 'https://apihub.agnes-ai.com/v1',
+      model: 'agnes-2.0-flash',
+    });
+    expect(JSON.stringify(body)).not.toContain('browser-only-key');
+  });
+
+  it('clears the stored BYOK provider when the config is not in API mode', async () => {
+    const fetchMock = vi.fn(async () => new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await syncConfigToDaemon({
+      ...DEFAULT_CONFIG,
+      mode: 'daemon',
+      apiProtocol: 'openai',
+      baseUrl: 'https://apihub.agnes-ai.com/v1',
+      model: 'agnes-2.0-flash',
+    });
+
+    const [, init] = fetchMock.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    expect(JSON.parse(String(init.body)).byokProvider).toBeNull();
+  });
 });
 
 describe('syncMediaProvidersToDaemon', () => {
