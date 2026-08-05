@@ -3003,11 +3003,11 @@ Closed signal vocabulary:
   const { simulatePipeline, parseSignalKv } = await import('./plugins/simulate.js');
   const parsedSignals = parseSignalKv(sValues);
   for (const w of parsedSignals.warnings) console.warn(`[simulate] warn: ${w}`);
-  const cap = typeof flags.cap === 'string' ? Number(flags.cap) : undefined;
+  const cap = typeof flags.cap === 'string' ? Number(flags.cap) : null;
   const result = simulatePipeline({
     pipeline,
     signals: parsedSignals.signals,
-    ...(Number.isFinite(cap) && cap > 0 ? { iterationCap: cap } : {}),
+    ...(cap !== null && Number.isFinite(cap) && cap > 0 ? { iterationCap: cap } : {}),
   });
   if (flags.json) {
     process.stdout.write(JSON.stringify(result, null, 2) + '\n');
@@ -3133,7 +3133,12 @@ different versions) and prints every changed field. Output groups
 into 'added' / 'removed' / 'changed' with one line per field.`);
     process.exit(positional.length < 2 ? 2 : 0);
   }
-  const [idA, idB] = positional;
+  const idA = positional[0];
+  const idB = positional[1];
+  if (!idA || !idB) {
+    console.error('Usage: od plugin diff <id-a> <id-b> [--json]');
+    process.exit(2);
+  }
   const base = (await pluginDaemonUrl(flags)).replace(/\/$/, '');
   const [respA, respB] = await Promise.all([
     fetch(`${base}/api/plugins/${encodeURIComponent(idA)}`),
