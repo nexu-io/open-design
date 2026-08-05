@@ -10,6 +10,7 @@ import {
 import {
   APP_KEYS,
   OPEN_DESIGN_SIDECAR_CONTRACT,
+  SIDECAR_DEFAULTS,
   SIDECAR_ENV,
   SIDECAR_MESSAGES,
   type DaemonStatusSnapshot,
@@ -157,7 +158,11 @@ function isLoopbackHttpUrl(url: string): boolean {
     return false;
   }
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
-  return parsed.hostname === "127.0.0.1" || parsed.hostname === "::1" || parsed.hostname === "localhost";
+  // WHATWG URL always brackets an IPv6 literal in `.hostname` (verified:
+  // `new URL("http://[::1]:1234").hostname === "[::1]"`, never the bare
+  // `"::1"`). The bare form was dead code that could never match, silently
+  // rejecting a legitimate IPv6-loopback daemon status.
+  return parsed.hostname === "127.0.0.1" || parsed.hostname === "[::1]" || parsed.hostname === "localhost";
 }
 
 /**
@@ -192,19 +197,29 @@ function isOwnedByCurrentProcess(socketPath: string): boolean {
 /**
  * Conventional per-release-channel sidecar IPC socket paths, stable-channel
  * first. Bounded to the product's own known channels (`@open-design/release`)
- * so an absent daemon still fails fast — probes run concurrently via
- * `Promise.allSettled` in the caller, so the wall-clock cost stays bounded by
- * a single timeout regardless of candidate count, not their sum.
+ * plus the generic library default so an absent daemon still fails fast —
+ * probes run concurrently via `Promise.allSettled` in the caller, so the
+ * wall-clock cost stays bounded by a single timeout regardless of candidate
+ * count, not their sum.
  *
  * Honors an explicit `OD_SIDECAR_NAMESPACE` when present (cheap extra check,
  * mirrors the explicit-namespace precedence `resolveNamespace` already uses
  * elsewhere); otherwise derives the current platform's namespace suffix from
- * `process.platform`/`process.arch` and tries every known channel.
+ * `process.platform`/`process.arch` and tries every known release channel,
+ * THEN the bare `SIDECAR_DEFAULTS.namespace` ("default"). The packaged
+ * desktop app always stamps an explicit `release-<channel>` namespace, but
+ * `tools-pack` installs whose version string doesn't resolve to a known
+ * channel (`defaultNamespaceForAppVersion` in `tools/pack/src/config.ts`)
+ * fall through to the bare sidecar-proto default instead — release channels
+ * are tried first since they're the more common (packaged app) case, with
+ * "default" as the deterministic last resort.
  *
  * Returns no candidates on `win32`: the ownership check this discovery mode
  * requires (`isOwnedByCurrentProcess`) has no Windows implementation yet, and
  * probing a predictable named pipe without any ownership/identity check is
- * exactly the gap this module is trying to close, not widen.
+ * exactly the gap this module is trying to close, not widen. This is a known,
+ * intentional scope limit of this fix — see issue #6424's follow-up for
+ * Windows-specific coverage — not an oversight.
  */
 function conventionalIpcSocketPaths(env: NodeJS.ProcessEnv): string[] {
   if (process.platform === "win32") return [];
@@ -228,12 +243,16 @@ function conventionalIpcSocketPaths(env: NodeJS.ProcessEnv): string[] {
     RELEASE_CHANNELS.PRERELEASE,
     RELEASE_CHANNELS.PREVIEW,
   ] as const;
-  return orderedChannels.map((channel) =>
+  const orderedNamespaces: string[] = [
+    ...orderedChannels.map((channel) => releaseNamespace(channel, platform)),
+    SIDECAR_DEFAULTS.namespace,
+  ];
+  return orderedNamespaces.map((namespace) =>
     resolveAppIpcPath({
       app: APP_KEYS.DAEMON,
       contract: OPEN_DESIGN_SIDECAR_CONTRACT,
       env,
-      namespace: releaseNamespace(channel, platform),
+      namespace,
     }),
   );
 }

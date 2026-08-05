@@ -7,6 +7,7 @@ import { releaseNamespace, type ReleasePlatform } from "@open-design/release";
 import {
   APP_KEYS,
   OPEN_DESIGN_SIDECAR_CONTRACT,
+  SIDECAR_DEFAULTS,
   SIDECAR_ENV,
   SIDECAR_MESSAGES,
 } from "@open-design/sidecar-proto";
@@ -365,6 +366,72 @@ describe("resolveDaemonUrl", () => {
       } finally {
         await stableIpc?.close();
         await betaIpc?.close();
+      }
+    });
+
+    // Regression coverage for the #6425 review: WHATWG's URL always brackets
+    // an IPv6 literal in `.hostname` (`new URL("http://[::1]:1234").hostname
+    // === "[::1]"`, never the bare "::1"), so a bare-string comparison here
+    // rejects every legitimate IPv6-loopback daemon status.
+    it("accepts a conventional-path response whose url is IPv6 loopback", async () => {
+      const socketPath = resolveAppIpcPath({
+        app: APP_KEYS.DAEMON,
+        contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+        env: { [SIDECAR_ENV.IPC_BASE]: conventionalIpcBaseDir },
+        namespace: releaseNamespace("stable", CURRENT_RELEASE_PLATFORM),
+      });
+      fs.mkdirSync(path.dirname(socketPath), { recursive: true });
+      let ipc: JsonIpcServerHandle | null = null;
+      try {
+        ipc = await createJsonIpcServer({
+          socketPath,
+          handler: () => ({ pid: 1, state: "running", updatedAt: new Date().toISOString(), url: "http://[::1]:34567" }),
+        });
+
+        const url = await resolveDaemonUrl({
+          env: {
+            [SIDECAR_ENV.IPC_BASE]: conventionalIpcBaseDir,
+          },
+          timeoutMs: 1000,
+          allowConventionalIpcDiscovery: true,
+        });
+        expect(url).toBe("http://[::1]:34567");
+      } finally {
+        await ipc?.close();
+      }
+    });
+
+    // Regression coverage for the #6425 review: the packaged desktop app
+    // always stamps an explicit `release-<channel>` namespace, but a
+    // `tools-pack` install whose version string doesn't resolve to a known
+    // channel (`defaultNamespaceForAppVersion` in `tools/pack/src/config.ts`)
+    // falls through to the bare `SIDECAR_DEFAULTS.namespace` ("default")
+    // instead. The channel sweep alone would never find that daemon.
+    it("falls back to the generic default namespace when no release-channel socket is live", async () => {
+      const socketPath = resolveAppIpcPath({
+        app: APP_KEYS.DAEMON,
+        contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+        env: { [SIDECAR_ENV.IPC_BASE]: conventionalIpcBaseDir },
+        namespace: SIDECAR_DEFAULTS.namespace,
+      });
+      fs.mkdirSync(path.dirname(socketPath), { recursive: true });
+      let ipc: JsonIpcServerHandle | null = null;
+      try {
+        ipc = await createJsonIpcServer({
+          socketPath,
+          handler: () => ({ pid: 1, state: "running", updatedAt: new Date().toISOString(), url: "http://127.0.0.1:41111" }),
+        });
+
+        const url = await resolveDaemonUrl({
+          env: {
+            [SIDECAR_ENV.IPC_BASE]: conventionalIpcBaseDir,
+          },
+          timeoutMs: 1000,
+          allowConventionalIpcDiscovery: true,
+        });
+        expect(url).toBe("http://127.0.0.1:41111");
+      } finally {
+        await ipc?.close();
       }
     });
 
