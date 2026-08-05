@@ -992,12 +992,8 @@ test('claude helpArgs probes the -p subcommand where --add-dir lives (issue #430
 // server.ts:4615 branches on `def.promptInputFormat` to decide how to write
 // the composed prompt to a stdin-fed child: 'stream-json' writes one JSONL
 // `user` message and keeps stdin open, anything else writes the raw prompt
-// and ends stdin. Because server.ts opens with `// @ts-nocheck`, a typo on
-// that property (e.g. an undefined `runtimeAdapter.promptInputFormat()`)
-// passes typecheck but throws `ReferenceError` at runtime for every chat
-// run that goes through the stdin-write path — i.e. every agent below.
-// Pin the field shape so a future regression of that contract fails here
-// instead of in production.
+// and ends stdin. The server reads this field as a property, so pin its
+// shape here and catch regressions before they reach production.
 test('promptInputFormat is a string property (or undefined) on every promptViaStdin agent', () => {
   const stdinAgents = [
     { name: 'claude', def: claude, expected: 'stream-json' },

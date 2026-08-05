@@ -20,9 +20,8 @@ import type {
   AnnotationDistillInput,
   RuleProposalDraft,
 } from '@open-design/contracts';
-// suggestWithLLM lives in the @ts-nocheck memory-llm module; its inferred type
-// is loose, which is fine — we only consume the {type,name,description,body}
-// MemoryDraft shape it documents.
+// The extractor's public function is intentionally consumed through its
+// documented MemoryDraft shape: {type,name,description,body}.
 import { suggestWithLLM } from './memory-llm.js';
 
 const MAX_ANNOTATIONS = 24;

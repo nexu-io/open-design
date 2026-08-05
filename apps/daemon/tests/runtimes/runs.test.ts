@@ -602,11 +602,7 @@ describe('run event log persistence', () => {
       createSseErrorPayload: (code: string, message: string) => ({ error: { code, message } }),
       shutdownGraceMs: 10,
       ttlMs: 60_000,
-      // runs.ts is `// @ts-nocheck`, so the inferred type for the
-      // `runsLogDir = null` default narrows to literal `null` from the
-      // outside; cast to bypass and pass the real string. Production
-      // callers (server.ts) use a string path directly.
-      runsLogDir: runsLogDir as unknown as null,
+      runsLogDir,
     });
   }
 
