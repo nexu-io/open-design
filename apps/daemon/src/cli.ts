@@ -591,6 +591,21 @@ interface CliConversationListResponse {
   [key: string]: unknown;
 }
 
+interface CliAtom {
+  id?: string;
+  status?: string;
+  taskKinds?: string[];
+  label?: string;
+  description?: string;
+  skillBody?: string;
+  [key: string]: unknown;
+}
+
+interface CliAtomListResponse {
+  atoms?: CliAtom[];
+  [key: string]: unknown;
+}
+
 interface BrandResponse {
   id?: string;
   projectId?: string;
@@ -6887,7 +6902,7 @@ async function runDaemonStart(flags: any) {
   });
   console.log(`[od] listening on ${runtime.url} (${headless ? 'headless' : 'desktop'})`);
 
-  await new Promise((resolve) => {
+  await new Promise<void>((resolve) => {
     let shuttingDown = false;
     const stop = () => {
       if (shuttingDown) process.exit(0);
@@ -6914,7 +6929,7 @@ async function runDaemonStatus(flags: any) {
   } catch (err) {
     return exitWithStructuredError({
       code:    'daemon-not-running',
-      message: `Cannot reach daemon at ${base}: ${err?.message ?? err}`,
+      message: `Cannot reach daemon at ${base}: ${err instanceof Error ? err.message : String(err)}`,
     });
   }
   if (!resp.ok) return structuredHttpFailure(resp);
@@ -6934,7 +6949,7 @@ async function runDaemonStop(flags: any) {
   } catch (err) {
     return exitWithStructuredError({
       code:    'daemon-not-running',
-      message: `Cannot reach daemon at ${base}: ${err?.message ?? err}`,
+      message: `Cannot reach daemon at ${base}: ${err instanceof Error ? err.message : String(err)}`,
     });
   }
   if (!resp.ok) return structuredHttpFailure(resp);
@@ -6973,7 +6988,7 @@ Common options:
     case 'list': {
       const resp = await fetch(`${base}/api/atoms`);
       if (!resp.ok) return structuredHttpFailure(resp);
-      const data = (await resp.json()) as Record<string, unknown>;
+      const data = (await resp.json()) as CliAtomListResponse;
       if (flags.json) {
         process.stdout.write(JSON.stringify(data, null, 2) + '\n');
         return;
@@ -6992,8 +7007,8 @@ Common options:
       }
       const resp = await fetch(`${base}/api/atoms`);
       if (!resp.ok) return structuredHttpFailure(resp);
-      const data = (await resp.json()) as Record<string, unknown>;
-      const atom = (data?.atoms ?? []).find((a: any) => a.id === id);
+      const data = (await resp.json()) as CliAtomListResponse;
+      const atom = (data.atoms ?? []).find((a) => a.id === id);
       if (!atom) {
         console.error(`atom ${id} not found`);
         process.exit(65);
@@ -7013,7 +7028,7 @@ Common options:
         process.exit(65);
       }
       if (!resp.ok) return structuredHttpFailure(resp);
-      const atom = (await resp.json()) as Record<string, unknown>;
+      const atom = (await resp.json()) as CliAtom;
       if (flags.json) {
         process.stdout.write(JSON.stringify(atom, null, 2) + '\n');
         return;
