@@ -153,6 +153,64 @@ describe('public MCP discovery + generation tools', () => {
     expect(JSON.parse(firstText(result))).toMatchObject({ runId: 'run-55' });
   });
 
+  it('start_run POSTs skills[] as skillIds to /api/runs when skills is provided', async () => {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.endsWith('/api/projects')) {
+        return new Response(JSON.stringify({ projects: [{ id: 'project-1', name: 'Demo' }] }), { status: 200 });
+      }
+      if (url.endsWith('/api/mcp/install-info')) {
+        return new Response(JSON.stringify({ webBaseUrl: null }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ runId: 'run-56', skillId: 'threejs', skillIds: ['shader-dev', 'frame-liquid-bg-hero'] }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await handleMcpToolCall('http://127.0.0.1:17456', 'start_run', {
+      project: 'Demo',
+      prompt: 'Build a 3D hero with shader effects',
+      skill: 'threejs',
+      skills: ['shader-dev', 'frame-liquid-bg-hero'],
+    });
+
+    const runsCall = fetchMock.mock.calls.find(
+      ([url, init]) => String(url).endsWith('/api/runs') && (init as RequestInit)?.method === 'POST',
+    );
+    const postBody = JSON.parse(String(runsCall?.[1]?.body));
+    expect(postBody).toMatchObject({
+      projectId: 'project-1',
+      message: 'Build a 3D hero with shader effects',
+      skillId: 'threejs',
+      skillIds: ['shader-dev', 'frame-liquid-bg-hero'],
+    });
+    expect(JSON.parse(firstText(result))).toMatchObject({ runId: 'run-56' });
+  });
+
+  it('start_run omits skillIds from POST body when skills is not provided', async () => {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.endsWith('/api/active')) {
+        return new Response(JSON.stringify({ active: true, projectId: 'proj-a', projectName: 'A', fileName: null }), { status: 200 });
+      }
+      if (url.endsWith('/api/mcp/install-info')) {
+        return new Response(JSON.stringify({ webBaseUrl: null }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ runId: 'run-no-skills' }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await handleMcpToolCall('http://127.0.0.1:17456', 'start_run', {
+      prompt: 'iterate',
+      skill: 'brand-identity',
+    });
+
+    const runsCall = fetchMock.mock.calls.find(
+      ([url, init]) => String(url).endsWith('/api/runs') && (init as RequestInit)?.method === 'POST',
+    );
+    const postBody = JSON.parse(String(runsCall?.[1]?.body));
+    expect(postBody).toMatchObject({ projectId: 'proj-a', skillId: 'brand-identity' });
+    expect(postBody).not.toHaveProperty('skillIds');
+    expect(JSON.parse(firstText(result))).toMatchObject({ runId: 'run-no-skills' });
+  });
+
   it('start_run omits agentId from POST body when agent arg is not provided', async () => {
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
       if (url.endsWith('/api/active')) {
