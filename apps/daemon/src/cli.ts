@@ -1148,7 +1148,7 @@ Exit codes:
   2  CLI usage error / folder unreadable`);
     process.exit(rest.length === 0 ? 2 : 0);
   }
-  const folder = rest[0];
+  const folder = rest[0] ?? '';
 
   // Try to load the daemon's registry view; the validator works
   // offline too — emits warnings instead of errors for refs we
@@ -1162,14 +1162,37 @@ Exit codes:
         fetch(`${base}/api/design-systems`).catch(() => null),
         fetch(`${base}/api/atoms`).catch(() => null),
       ]);
-      const skills = (skillsResp?.ok ? (await skillsResp.json())?.skills : []) ?? [];
-      const designSystems = (dsResp?.ok ? (await dsResp.json())?.designSystems : []) ?? [];
-      const atoms = (atomsResp?.ok ? (await atomsResp.json())?.atoms : []) ?? [];
+      const recordsFor = async (response: Response | null, key: string): Promise<Record<string, unknown>[]> => {
+        if (!response?.ok) return [];
+        const payload = await response.json() as unknown;
+        if (!payload || typeof payload !== 'object') return [];
+        const value = (payload as Record<string, unknown>)[key];
+        return Array.isArray(value)
+          ? value.filter((entry): entry is Record<string, unknown> =>
+            Boolean(entry) && typeof entry === 'object' && !Array.isArray(entry))
+          : [];
+      };
+      const [skills, designSystems, atoms] = await Promise.all([
+        recordsFor(skillsResp, 'skills'),
+        recordsFor(dsResp, 'designSystems'),
+        recordsFor(atomsResp, 'atoms'),
+      ]);
       registry = {
-        skills:        skills.map((s) => ({ id: s.id, title: s.name ?? s.title, description: s.description })),
-        designSystems: designSystems.map((d) => ({ id: d.id, title: d.title })),
+        skills:        skills.flatMap((s) => typeof s.id === 'string'
+          ? [{
+            id: s.id,
+            ...(typeof s.name === 'string' ? { title: s.name } : {}),
+            ...(typeof s.title === 'string' ? { title: s.title } : {}),
+            ...(typeof s.description === 'string' ? { description: s.description } : {}),
+          }]
+          : []),
+        designSystems: designSystems.flatMap((d) => typeof d.id === 'string'
+          ? [{ id: d.id, ...(typeof d.title === 'string' ? { title: d.title } : {}) }]
+          : []),
         craft:         [],
-        atoms:         atoms.map((a) => ({ id: a.id, label: a.label })),
+        atoms:         atoms.flatMap((a) => typeof a.id === 'string'
+          ? [{ id: a.id, ...(typeof a.label === 'string' ? { label: a.label } : {}) }]
+          : []),
       };
     } catch {
       registry = undefined;
@@ -1207,7 +1230,7 @@ Exit codes:
       console.log(`[validate] ok=${result.ok}`);
     }
   } catch (err) {
-    console.error(`[validate] failed: ${err?.message ?? err}`);
+    console.error(`[validate] failed: ${err instanceof Error ? err.message : String(err)}`);
     process.exit(2);
   }
   process.exit(result.ok ? 0 : 4);
@@ -1245,7 +1268,7 @@ Exit codes:
   4  pack-time error (missing open-design.json, invalid JSON, etc)`);
     process.exit(rest.length === 0 ? 2 : 0);
   }
-  const folder = rest[0];
+  const folder = rest[0] ?? '';
   try {
     const { packPlugin, PackPluginError } = await import('./plugins/pack.js');
     let result;
