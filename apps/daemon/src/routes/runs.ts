@@ -15,12 +15,16 @@ import {
   type RunResultPackageResponse,
 } from '@open-design/contracts';
 import {
+  buildRunCreatedV4Aliases,
+  buildRunFinishedV4Aliases,
   deriveConfigureGlobals,
   modelIdForTracking,
   sessionModeToTracking,
   type TrackingDesignSystemSource,
   type TrackingDesignSystemKind,
   type TrackingDesignSystemEditSurface,
+  type RunTaskLineageProps,
+  type TrackingRunRecoveryActionType,
 } from '@open-design/contracts/analytics';
 import type { OdNativeEvent } from '@open-design/agui-adapter';
 import { newInsertId, readAnalyticsContext } from '../analytics.js';
@@ -87,7 +91,10 @@ import {
 } from '../run-analytics-observability.js';
 import {
   diffRunArtifacts,
+  primaryArtifactChangeForRun,
   snapshotProjectArtifacts,
+  supportingAssetFilesChangedForRun,
+  type RunArtifactDiff,
   type RunArtifactBaseline,
 } from '../run-artifact-fs.js';
 import {
@@ -342,6 +349,7 @@ interface ChatRun {
     artifactsModified?: number;
     designSystemCreated: boolean;
     previewModuleCount: number;
+    diff?: RunArtifactDiff;
   };
   designSystemId?: string | null;
   designSystemRequestedId?: string | null;
@@ -1875,6 +1883,46 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       const hintProjectTurnIndex = typeof analyticsHints.projectTurnIndex === 'number'
         ? analyticsHints.projectTurnIndex
         : undefined;
+      const taskExecutionId = typeof analyticsHints.taskExecutionId === 'string'
+        && analyticsHints.taskExecutionId.length > 0
+        ? analyticsHints.taskExecutionId
+        : run.clientRequestId ?? run.id;
+      const initialRunId = typeof analyticsHints.initialRunId === 'string'
+        && analyticsHints.initialRunId.length > 0
+        ? analyticsHints.initialRunId
+        : run.id;
+      const taskRunIndex = typeof analyticsHints.taskRunIndex === 'number'
+        && Number.isInteger(analyticsHints.taskRunIndex)
+        && analyticsHints.taskRunIndex >= 0
+        ? analyticsHints.taskRunIndex
+        : 0;
+      const recoveryActionTypes: ReadonlySet<TrackingRunRecoveryActionType> = new Set([
+        'manual_retry',
+        'resume_run',
+        'authorize_and_retry',
+        'switch_model_retry',
+        'switch_runtime_retry',
+        'question_answer',
+      ]);
+      const recoveryActionType = typeof analyticsHints.recoveryActionType === 'string'
+        && recoveryActionTypes.has(
+          analyticsHints.recoveryActionType as TrackingRunRecoveryActionType,
+        )
+        ? analyticsHints.recoveryActionType as TrackingRunRecoveryActionType
+        : undefined;
+      const taskLineage: RunTaskLineageProps = {
+        task_execution_id: taskExecutionId,
+        initial_run_id: initialRunId,
+        task_run_index: taskRunIndex,
+        ...(typeof analyticsHints.sourceRunId === 'string' && analyticsHints.sourceRunId.length > 0
+          ? { source_run_id: analyticsHints.sourceRunId }
+          : {}),
+        ...(recoveryActionType ? { recovery_action_type: recoveryActionType } : {}),
+        ...(typeof analyticsHints.recoveryActionInstanceId === 'string'
+          && analyticsHints.recoveryActionInstanceId.length > 0
+          ? { recovery_action_instance_id: analyticsHints.recoveryActionInstanceId }
+          : {}),
+      };
       const conversationTurnIndex = run.conversationId
         ? conversationTurnIndexForRun(db, run.conversationId, run.id)
         : null;
@@ -2088,6 +2136,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
             }
           : {}),
       };
+      Object.assign(baseProps, buildRunCreatedV4Aliases(baseProps, taskLineage));
       design.runs.setAnalyticsRecovery?.(run, {
         context: analyticsContext,
         properties: baseProps,
@@ -2170,7 +2219,9 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         // in the rollout `last_token_usage`, read here best-effort.
         const firstCallUsage = await (async (): Promise<{
           first_call_input_tokens?: number;
+          first_call_input_tokens_effective?: number;
           first_call_cache_read_input_tokens?: number;
+          first_call_cache_creation_input_tokens?: number;
           first_call_cache_hit_ratio?: number;
         } | null> => {
           if (run.agentId === 'codex') {
@@ -2187,7 +2238,14 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
                   'codex',
                 ),
               ).CODEX_HOME;
-              return await readCodexRolloutFirstCall({ codexHome, sessionId });
+              const codexUsage = await readCodexRolloutFirstCall({ codexHome, sessionId });
+              return codexUsage
+                ? {
+                    ...codexUsage,
+                    first_call_input_tokens_effective:
+                      codexUsage.first_call_input_tokens,
+                  }
+                : null;
             } catch {
               return null;
             }
@@ -2195,10 +2253,22 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           if (usageAnalytics.first_call_input_tokens === undefined) return null;
           return {
             first_call_input_tokens: usageAnalytics.first_call_input_tokens,
+            ...(usageAnalytics.first_call_input_tokens_effective !== undefined
+              ? {
+                  first_call_input_tokens_effective:
+                    usageAnalytics.first_call_input_tokens_effective,
+                }
+              : {}),
             ...(usageAnalytics.first_call_cache_read_input_tokens !== undefined
               ? {
                   first_call_cache_read_input_tokens:
                     usageAnalytics.first_call_cache_read_input_tokens,
+                }
+              : {}),
+            ...(usageAnalytics.first_call_cache_creation_input_tokens !== undefined
+              ? {
+                  first_call_cache_creation_input_tokens:
+                    usageAnalytics.first_call_cache_creation_input_tokens,
                 }
               : {}),
             ...(usageAnalytics.first_call_cache_hit_ratio !== undefined
@@ -2225,6 +2295,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         let artifactsModified: number | undefined;
         let designSystemCreated: boolean;
         let previewModuleCount: number;
+        let artifactDiff: RunArtifactDiff | undefined;
         const artifactOutcome = run.artifactOutcome;
         if (artifactOutcome) {
           artifactCount = artifactOutcome.artifactCount;
@@ -2232,6 +2303,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           artifactsModified = artifactOutcome.artifactsModified;
           designSystemCreated = artifactOutcome.designSystemCreated;
           previewModuleCount = artifactOutcome.previewModuleCount;
+          artifactDiff = artifactOutcome.diff;
         } else {
           const artifactBaseline = runArtifactBaselines.take(run.id);
           if (artifactBaseline && !artifactBaseline.contended) {
@@ -2245,6 +2317,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
               diff = null;
             }
             if (diff) {
+              artifactDiff = diff;
               artifactCount = diff.touched;
               artifactsCreated = diff.created;
               artifactsModified = diff.modified;
@@ -2309,7 +2382,23 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
             insertId: `${runInsertId}-${retryEvent.event}-${index}`,
           });
         }
-        const finishedProperties = {
+        const clarificationRequested = runAskedUserQuestion(run.events);
+        const interactionMode = typeof reqBody.sessionMode === 'string'
+          ? sessionModeToTracking(reqBody.sessionMode)
+          : undefined;
+        const primaryArtifactChange = artifactDiff
+          ? primaryArtifactChangeForRun({
+              diff: artifactDiff,
+              projectKind: runProjectKind,
+              hadExistingArtifacts: hintHasExistingArtifact === true,
+              ...(interactionMode ? { interactionMode } : {}),
+              clarificationRequested,
+            })
+          : undefined;
+        const supportingAssetFilesChanged = artifactDiff
+          ? supportingAssetFilesChangedForRun(artifactDiff, runProjectKind)
+          : undefined;
+        const finishedProperties: Record<string, unknown> = {
             ...baseProps,
             design_system_id: run.designSystemId ?? undefined,
             design_system_digest: run.designSystemDigest ?? undefined,
@@ -2345,7 +2434,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
               : {}),
             ...(artifactsCreated !== undefined ? { artifacts_created: artifactsCreated } : {}),
             ...(artifactsModified !== undefined ? { artifacts_modified: artifactsModified } : {}),
-            asked_user_question: runAskedUserQuestion(run.events),
+            asked_user_question: clarificationRequested,
             retry_attempt_count: run.retryAttemptCount ?? 0,
             retry_final_result: run.retryFinalResult ?? 'not_attempted',
             ...(agentCliVersion
@@ -2444,6 +2533,55 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
             tool_name_count: toolAnalytics.tool_name_count,
             tool_names: toolAnalytics.tool_names_csv,
           };
+        Object.assign(
+          finishedProperties,
+          buildRunFinishedV4Aliases(finishedProperties, taskLineage, {
+            inputAccountingMode: usageAnalytics.input_accounting_mode,
+            ...(firstCallUsage
+              ? {
+                  firstModelCall: {
+                    ...(firstCallUsage.first_call_input_tokens !== undefined
+                      ? { provider_input_tokens: firstCallUsage.first_call_input_tokens }
+                      : {}),
+                    ...(firstCallUsage.first_call_input_tokens_effective !== undefined
+                      ? { effective_input_tokens: firstCallUsage.first_call_input_tokens_effective }
+                      : {}),
+                    ...(firstCallUsage.first_call_cache_read_input_tokens !== undefined
+                      ? { cache_read_tokens: firstCallUsage.first_call_cache_read_input_tokens }
+                      : {}),
+                    ...(firstCallUsage.first_call_cache_creation_input_tokens !== undefined
+                      ? { cache_write_tokens: firstCallUsage.first_call_cache_creation_input_tokens }
+                      : {}),
+                  },
+                }
+              : {}),
+            ...(primaryArtifactChange
+              ? { primaryArtifactChange }
+              : {}),
+            ...(artifactDiff
+              ? {
+                  artifactFiles: {
+                    changed_file_count: artifactDiff.contentTouched,
+                    created_file_count: artifactDiff.contentCreated,
+                    modified_file_count: artifactDiff.contentModified,
+                    ...(supportingAssetFilesChanged !== undefined
+                      ? {
+                          supporting_asset_files_changed_count:
+                            supportingAssetFilesChanged,
+                        }
+                      : {}),
+                  },
+                }
+              : {}),
+            ...(isDesignSystemRun
+              ? {
+                  designSystemChangeType: designSystemCreated
+                    ? hintHasExistingArtifact === true ? 'modified' : 'created'
+                    : 'none',
+                }
+              : {}),
+          }),
+        );
         // Refresh local recovery snapshot so crash recovery matches PostHog
         // `run_finished` (usage/timing/tools), not only run_created baseProps.
         // Keep the base insertId here: reconcileDurableRunTerminals appends

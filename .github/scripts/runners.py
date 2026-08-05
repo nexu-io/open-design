@@ -10,6 +10,7 @@ WINDOWS_HOSTED = ["windows-latest"]
 NEXU_SMALL = ["nexu-runners-small"]
 NEXU_MEDIUM = ["nexu-runners-medium"]
 NEXU_LARGE = ["nexu-runners-large"]
+NEXU_XLARGE = ["nexu-runners-xlarge"]
 
 
 def compact_json(value):
@@ -27,6 +28,9 @@ def resolve_contract(mode):
     control = GITHUB_HOSTED if mode == "economic" else NEXU_SMALL
     workload = GITHUB_HOSTED if mode == "economic" else NEXU_MEDIUM
     browser_workload = GITHUB_HOSTED if mode == "economic" else NEXU_LARGE
+    # UI P0 is the memory-heavy Playwright domain suite; prefer the dedicated
+    # xlarge class once available so large remains headroom for lighter UI jobs.
+    ui_p0_workload = GITHUB_HOSTED if mode == "economic" else NEXU_XLARGE
 
     return {
         "runs_on": {
@@ -36,6 +40,7 @@ def resolve_contract(mode):
             "windows_tools": WINDOWS_HOSTED,
             "js_hot": workload,
             "ui_hot": browser_workload,
+            "ui_p0": ui_p0_workload,
             "visual_hot": browser_workload,
         },
         "decision": {

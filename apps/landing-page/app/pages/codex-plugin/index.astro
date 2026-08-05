@@ -1,9 +1,8 @@
 ---
 /*
- * /open-design-pugin/ - standalone landing page for the public
+ * /codex-plugin/ - standalone landing page for the public
  * nexu-io/open-design-agent-plugins repository.
  *
- * The route intentionally preserves the user-specified `pugin` spelling.
  * English is the authoritative source. Complete translated copy for every
  * active landing locale lives in `open-design-plugin-locales/`.
  */
@@ -20,11 +19,10 @@ const href = (path: string) => localizedHref(path, locale);
 const copy = getOpenDesignPluginCopy(locale);
 const PAGE_URL = new URL(Astro.url.pathname, SITE).toString();
 const REPO = 'https://github.com/nexu-io/open-design-agent-plugins';
+const AGENT_INSTALL_GUIDE = `${REPO}/blob/main/AGENTS.md`;
 const DOWNLOAD = href('/download/');
-
 const INSTALL_INSTRUCTION =
-  'Read open-design.ai/codex-plugin to install the Open Design plugin and set up a new task for me.';
-
+  '/goal Read https://open-design.ai/codex-plugin/ to install Open Design for Codex and set up a new task for me.';
 const codexRunFrames = [
   {
     src: '/open-design-pugin/codex-real-plugin-detail.png',
@@ -178,7 +176,12 @@ const jsonLd = [
             {copy.hero.copy}
           </button>
 
-          <a class="odp-github-link" href={REPO} target="_blank" rel="noreferrer noopener">
+          <a
+            class="odp-github-link"
+            href={AGENT_INSTALL_GUIDE}
+            target="_blank"
+            rel="noreferrer noopener"
+          >
             {copy.hero.github}
           </a>
         </div>

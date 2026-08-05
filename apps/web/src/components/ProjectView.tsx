@@ -50,6 +50,11 @@ import {
 } from '../providers/registry';
 import { useProjectFileEvents, type ProjectEvent } from '../providers/project-events';
 import { claimProjectTurnIndex, claimRunTurnIndex } from '../analytics/identity';
+import {
+  buildInitialTaskAnalytics,
+  buildRecoveryTaskAnalytics,
+  runAgentProviderId,
+} from '../analytics/run-task';
 import { useCoalescedCallback } from '../hooks/useCoalescedCallback';
 import { requestAmrArtifactUpgrade } from '../runtime/amr-artifact-upgrade';
 import {
@@ -57,6 +62,7 @@ import {
   type ByokChatProviderConfig,
   type ByokMediaDefaults,
   type ByokChatProtocol,
+  type ChatTaskExecutionAnalytics,
   type ProjectWorkspaceScope,
   type ResearchOptions,
 } from '@open-design/contracts';
@@ -73,6 +79,7 @@ import type {
   TrackingDesignSystemApplyTargetKind,
   TrackingDesignSystemOrigin,
   TrackingDesignSystemStatusValue,
+  TrackingRunRecoveryActionType,
 } from '@open-design/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
 import {
@@ -84,6 +91,8 @@ import {
   trackOnboardingPromptPrefilled,
   trackOnboardingFirstPromptSent,
   trackOnboardingFirstGenerationCompleted,
+  trackRunRecoveryActionClick,
+  trackRunStartBlockedSurfaceView,
 } from '../analytics/events';
 import { byokPreflightBlockReason } from './byok/preflight';
 import {
@@ -366,6 +375,8 @@ type ProjectChatSendMeta = ChatSendMeta & {
    *  of replaying a second copy when the queue later drains. This flag is
    *  transport-only and is stripped before queue persistence. */
   acceptQueuedHomeHandoff?: boolean;
+  /** Stable task lineage for retries, resumes and clarification answers. */
+  taskAnalytics?: ChatTaskExecutionAnalytics;
 };
 
 export function mergeSavedPreviewComment(current: PreviewComment[], saved: PreviewComment): PreviewComment[] {
@@ -638,7 +649,7 @@ interface QueuedChatSendUpdate {
   prompt: string;
   attachments: ChatAttachment[];
   commentAttachments: ChatCommentAttachment[];
-  meta?: ChatSendMeta;
+  meta?: ProjectChatSendMeta;
 }
 
 let liveArtifactEventSequence = 0;
@@ -2419,6 +2430,15 @@ export function ProjectView({
   const streamingConversationIdRef = useRef<string | null>(null);
   const [queuedChatSends, setQueuedChatSends] = useState<QueuedChatSend[]>([]);
   const queuedChatSendsRef = useRef<QueuedChatSend[]>([]);
+  // A BYOK preflight can reject a send before any Run exists. Keep that
+  // submission's task identity in memory so fixing Settings and resubmitting
+  // the same draft completes the original task funnel instead of fabricating a
+  // second task. AMR hard gates persist the full send in the queue separately.
+  const blockedRunTaskRef = useRef<{
+    conversationId: string;
+    requestKey: string;
+    taskAnalytics: ChatTaskExecutionAnalytics;
+  } | null>(null);
   const sendTextBufferRef = useRef<BufferedTextUpdates | null>(null);
   const reattachTextBuffersRef = useRef<Set<BufferedTextUpdates>>(new Set());
   const reattachControllersRef = useRef<Map<string, AbortController>>(new Map());
@@ -6179,7 +6199,7 @@ export function ProjectView({
   const updateQueuedChatSend = useCallback((id: string, update: QueuedChatSendUpdate) => {
     const next = queuedChatSendsRef.current.map((item) => {
       if (item.id !== id) return item;
-      const meta = stripQueueOnlyFromMeta(update.meta);
+      const meta = stripQueueOnlyFromMeta({ ...(item.meta ?? {}), ...(update.meta ?? {}) });
       const updated: QueuedChatSend = {
         ...item,
         prompt: update.prompt,
@@ -6289,6 +6309,32 @@ export function ProjectView({
         ? resolveRetryTarget(messages, meta.retryOfAssistantId)
         : null;
       if (meta?.retryOfAssistantId && !retryTarget) return false;
+      const blockedRequestKey = JSON.stringify([
+        prompt,
+        attachments.map((attachment) => [attachment.path, attachment.name]),
+        commentAttachments.map((attachment) => attachment.id),
+      ]);
+      const pendingBlockedTask = blockedRunTaskRef.current;
+      const resumesBlockedTask = !meta?.taskAnalytics
+        && !retryTarget
+        && pendingBlockedTask?.conversationId === activeConversationId
+        && pendingBlockedTask.requestKey === blockedRequestKey;
+      if (
+        pendingBlockedTask?.conversationId === activeConversationId
+        && pendingBlockedTask.requestKey !== blockedRequestKey
+      ) {
+        blockedRunTaskRef.current = null;
+      }
+      let taskAnalytics = meta?.taskAnalytics
+        ?? (retryTarget
+          ? buildRecoveryTaskAnalytics(
+              messages,
+              retryTarget.failedAssistant,
+              'manual_retry',
+            )
+          : resumesBlockedTask
+            ? pendingBlockedTask.taskAnalytics
+          : buildInitialTaskAnalytics(randomUUID()));
       const runContext = meta?.context ?? retryTarget?.userMsg.runContext;
       const historyBase = retryTarget ? retryTarget.priorMessages : baseMessages ?? messages;
       if (
@@ -6313,11 +6359,39 @@ export function ProjectView({
         (config.mode === 'api' && config.apiProtocol !== 'bedrock') ||
         (config.mode === 'daemon' && config.agentId === 'byok-opencode');
       if (requiresByokPreflight && !byokOpenCodeProvider) {
+        const blockReason = byokPreflightBlockReason(config) ?? 'config_invalid';
+        const recoveryActionInstanceId = `blocked:${taskAnalytics.taskExecutionId}`;
+        const recoveryActionType: TrackingRunRecoveryActionType =
+          blockReason === 'model_required' || blockReason === 'model_default'
+            ? 'switch_model_retry'
+            : blockReason === 'api_key_required' || blockReason === 'api_key_invalid'
+              ? 'authorize_and_retry'
+              : 'manual_retry';
+        taskAnalytics = {
+          ...taskAnalytics,
+          recoveryActionType,
+          recoveryActionInstanceId,
+        };
+        blockedRunTaskRef.current = {
+          conversationId: activeConversationId,
+          requestKey: blockedRequestKey,
+          taskAnalytics,
+        };
         trackByokPreflightBlocked(analytics.track, {
           source: 'run',
-          reason: byokPreflightBlockReason(config) ?? 'config_invalid',
+          reason: blockReason,
           provider_id: byokProtocolToTracking(config.apiProtocol) ?? 'unknown',
           active_execution_mode: executionModeToTracking(config.mode),
+        });
+        trackRunStartBlockedSurfaceView(analytics.track, {
+          page_name: 'chat_panel',
+          area: 'chat_composer',
+          element: 'run_start_blocked',
+          task_execution_id: taskAnalytics.taskExecutionId,
+          recovery_action_instance_id: recoveryActionInstanceId,
+          block_reason: blockReason,
+          agent_provider_id: byokProtocolToTracking(config.apiProtocol) ?? 'unknown',
+          model_id: config.model?.trim() || 'default',
         });
         setError(BYOK_PROVIDER_REQUIRED_MESSAGE);
         onOpenSettings('execution');
@@ -6329,7 +6403,7 @@ export function ProjectView({
           prompt,
           attachments: effectiveAttachments,
           commentAttachments,
-          meta: { ...(meta ?? {}), sessionMode: runSessionMode },
+          meta: { ...(meta ?? {}), sessionMode: runSessionMode, taskAnalytics },
         });
         // `true` means the send has been durably accepted by this view's
         // queue. Callers that own persisted annotations may only remove them
@@ -6342,7 +6416,7 @@ export function ProjectView({
           prompt,
           attachments: effectiveAttachments,
           commentAttachments,
-          meta: { ...(meta ?? {}), sessionMode: runSessionMode },
+          meta: { ...(meta ?? {}), sessionMode: runSessionMode, taskAnalytics },
         });
         return meta?.acceptQueuedHomeHandoff === true;
       }
@@ -6363,7 +6437,7 @@ export function ProjectView({
             prompt,
             attachments: effectiveAttachments,
             commentAttachments,
-            meta: { ...(meta ?? {}), sessionMode: runSessionMode },
+            meta: { ...(meta ?? {}), sessionMode: runSessionMode, taskAnalytics },
           });
           return meta?.acceptQueuedHomeHandoff === true;
         }
@@ -6418,7 +6492,7 @@ export function ProjectView({
                 prompt,
                 attachments: effectiveAttachments,
                 commentAttachments,
-                meta: { ...(meta ?? {}), sessionMode: runSessionMode },
+                meta: { ...(meta ?? {}), sessionMode: runSessionMode, taskAnalytics },
               });
               return true;
             }
@@ -6441,6 +6515,22 @@ export function ProjectView({
             return acceptedQueuedHomeHandoff(queueGateSend());
           }
           if (gate.kind === 'hard') {
+            const recoveryActionInstanceId = `blocked:${taskAnalytics.taskExecutionId}`;
+            trackRunStartBlockedSurfaceView(analytics.track, {
+              page_name: 'chat_panel',
+              area: 'chat_composer',
+              element: 'run_start_blocked',
+              task_execution_id: taskAnalytics.taskExecutionId,
+              recovery_action_instance_id: recoveryActionInstanceId,
+              block_reason: gate.reason,
+              agent_provider_id: 'amr',
+              model_id: config.agentModels?.amr?.model?.trim() || 'default',
+            });
+            taskAnalytics = {
+              ...taskAnalytics,
+              recoveryActionType: 'manual_retry',
+              recoveryActionInstanceId,
+            };
             setAmrBalanceGateBlock({
               reason: gate.reason,
               snapshot: gate.snapshot,
@@ -6476,6 +6566,7 @@ export function ProjectView({
           amrGateInFlightConversationsRef.current.delete(gateConversationId);
         }
       }
+      if (resumesBlockedTask) blockedRunTaskRef.current = null;
       // First genuine send in a recommendation-started project — the
       // send-through half of the onboarding funnel. Fires once per project (the
       // guard is project-scoped so it survives ProjectView remounts), on the
@@ -6514,6 +6605,7 @@ export function ProjectView({
         content: prompt,
         createdAt: startedAt,
         sessionMode: runSessionMode,
+        taskAnalytics,
         ...(meta?.appliedPluginSnapshot
           ? { appliedPluginSnapshot: meta.appliedPluginSnapshot }
           : {}),
@@ -6565,6 +6657,7 @@ export function ProjectView({
         runStatus: config.mode === 'daemon' ? 'running' : undefined,
         startedAt,
         sessionMode: runSessionMode,
+        taskAnalytics,
         preTurnFileNames,
       };
       let latestAssistantMsg: ChatMessage = assistantMsg;
@@ -7437,6 +7530,12 @@ export function ProjectView({
             : config.agentId === 'amr'
               ? ('amr_cloud' as const)
               : ('local_cli' as const),
+          taskExecutionId: taskAnalytics.taskExecutionId,
+          initialRunId: taskAnalytics.initialRunId,
+          sourceRunId: taskAnalytics.sourceRunId,
+          taskRunIndex: taskAnalytics.taskRunIndex,
+          recoveryActionType: taskAnalytics.recoveryActionType,
+          recoveryActionInstanceId: taskAnalytics.recoveryActionInstanceId,
         };
         void streamViaDaemon({
           agentId: config.agentId,
@@ -7485,10 +7584,15 @@ export function ProjectView({
           locale,
           ...(runAnalyticsHints ? { analyticsHints: runAnalyticsHints } : {}),
           onRunCreated: (runId) => {
+            const resolvedTaskAnalytics = {
+              ...taskAnalytics,
+              initialRunId: taskAnalytics.initialRunId ?? runId,
+            };
             const pinnedAssistant = {
               ...latestAssistantMsg,
               runId,
               runStatus: 'queued' as const,
+              taskAnalytics: resolvedTaskAnalytics,
             };
             latestAssistantMsg = pinnedAssistant;
             currentRunId = runId;
@@ -7497,7 +7601,12 @@ export function ProjectView({
             void saveMessage(project.id, runConversationId, pinnedAssistant, {
               workspaceContext: projectRunWorkspaceContext,
             });
-            updateMessageById(assistantId, (prev) => ({ ...prev, runId, runStatus: 'queued' }));
+            updateMessageById(assistantId, (prev) => ({
+              ...prev,
+              runId,
+              runStatus: 'queued',
+              taskAnalytics: resolvedTaskAnalytics,
+            }));
           },
           onRunStatus: (runStatus) => {
             const endedAt = isTerminalRunStatus(runStatus) ? Date.now() : undefined;
@@ -7647,18 +7756,34 @@ export function ProjectView({
             ...(byokProjectTurn ? { projectTurnIndex: byokProjectTurn.projectTurnIndex } : {}),
             hasExistingArtifact: byokHasExistingArtifact,
             runtimeType: 'byok',
+            taskExecutionId: taskAnalytics.taskExecutionId,
+            initialRunId: taskAnalytics.initialRunId,
+            sourceRunId: taskAnalytics.sourceRunId,
+            taskRunIndex: taskAnalytics.taskRunIndex,
+            recoveryActionType: taskAnalytics.recoveryActionType,
+            recoveryActionInstanceId: taskAnalytics.recoveryActionInstanceId,
           },
           onRunCreated: (runId) => {
+            const resolvedTaskAnalytics = {
+              ...taskAnalytics,
+              initialRunId: taskAnalytics.initialRunId ?? runId,
+            };
             const pinnedAssistant = {
               ...latestAssistantMsg,
               runId,
               runStatus: 'queued' as const,
+              taskAnalytics: resolvedTaskAnalytics,
             };
             latestAssistantMsg = pinnedAssistant;
             void saveMessage(project.id, runConversationId, pinnedAssistant, {
               workspaceContext: projectRunWorkspaceContext,
             });
-            updateMessageById(assistantId, (prev) => ({ ...prev, runId, runStatus: 'queued' }));
+            updateMessageById(assistantId, (prev) => ({
+              ...prev,
+              runId,
+              runStatus: 'queued',
+              taskAnalytics: resolvedTaskAnalytics,
+            }));
           },
           onRunStatus: (runStatus) => {
             const endedAt = isTerminalRunStatus(runStatus) ? Date.now() : undefined;
@@ -7964,11 +8089,21 @@ export function ProjectView({
   ]);
 
   const handleRetry = useCallback(
-    (assistantMessage: ChatMessage) => {
+    (
+      assistantMessage: ChatMessage,
+      recoveryActionType: TrackingRunRecoveryActionType = 'manual_retry',
+    ) => {
       if (currentConversationActionDisabled) return;
-      void handleSend('', [], [], { retryOfAssistantId: assistantMessage.id });
+      void handleSend('', [], [], {
+        retryOfAssistantId: assistantMessage.id,
+        taskAnalytics: buildRecoveryTaskAnalytics(
+          messages,
+          assistantMessage,
+          recoveryActionType,
+        ),
+      });
     },
-    [currentConversationActionDisabled, handleSend],
+    [currentConversationActionDisabled, handleSend, messages],
   );
 
   // "Continue" on a resumable failed run: send a fresh turn in the same
@@ -7980,11 +8115,18 @@ export function ProjectView({
   // run_created / run_finished can quantify how often resume fires and whether
   // it recovers (the whole point is to show the mechanism lowers failure rate).
   const handleResumeRun = useCallback(
-    (_assistantMessage: ChatMessage) => {
+    (assistantMessage: ChatMessage) => {
       if (currentConversationActionDisabled) return;
-      void handleSend(RESUME_CONTINUE_PROMPT, [], [], { entryFrom: 'resume_continue' });
+      void handleSend(RESUME_CONTINUE_PROMPT, [], [], {
+        entryFrom: 'resume_continue',
+        taskAnalytics: buildRecoveryTaskAnalytics(
+          messages,
+          assistantMessage,
+          'resume_run',
+        ),
+      });
     },
-    [currentConversationActionDisabled, handleSend],
+    [currentConversationActionDisabled, handleSend, messages],
   );
 
   // "Switch to AMR & retry" crosses the Settings route, which intentionally
@@ -10485,11 +10627,41 @@ export function ProjectView({
               initialDraft={chatInitialDraft}
               onboardingStarterPath={onboardingEntryRef.current?.productType ?? null}
               questionFormSubmitDisabled={currentConversationActionDisabled}
-              onSubmitQuestionForm={(text, attachments = [], context) => {
+              onSubmitQuestionForm={(text, attachments = [], context, sourceAssistantMessageId) => {
                 if (currentConversationActionDisabled) return false;
+                const sourceAssistant = sourceAssistantMessageId
+                  ? messages.find((message) => message.id === sourceAssistantMessageId)
+                  : undefined;
+                const questionTaskAnalytics = sourceAssistant
+                  ? buildRecoveryTaskAnalytics(
+                      messages,
+                      sourceAssistant,
+                      'question_answer',
+                    )
+                  : undefined;
+                if (sourceAssistant && questionTaskAnalytics) {
+                  trackRunRecoveryActionClick(analytics.track, {
+                    page_name: 'chat_panel',
+                    area: 'chat_panel',
+                    element: 'run_recovery_action',
+                    task_execution_id: questionTaskAnalytics.taskExecutionId,
+                    recovery_action_instance_id:
+                      questionTaskAnalytics.recoveryActionInstanceId!,
+                    recovery_action_type: 'question_answer',
+                    ...(questionTaskAnalytics.sourceRunId
+                      ? { source_run_id: questionTaskAnalytics.sourceRunId }
+                      : {}),
+                    ...(sourceAssistant.agentId
+                      ? { source_agent_provider_id: runAgentProviderId(sourceAssistant.agentId) }
+                      : {}),
+                  });
+                }
                 return handleSend(text, attachments, [], {
                   entryFrom: 'question_answer',
                   ...(context ? { context } : {}),
+                  ...(questionTaskAnalytics
+                    ? { taskAnalytics: questionTaskAnalytics }
+                    : {}),
                 });
               }}
               onContinueRemainingTasks={handleContinueRemainingTasks}

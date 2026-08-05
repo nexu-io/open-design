@@ -22,6 +22,11 @@ const BASE: ByokRunBaseInput = {
   apiProtocol: 'anthropic',
   skillId: null,
   sessionMode: 'design',
+  taskAnalytics: {
+    taskExecutionId: 'task_1',
+    initialRunId: 'run_1',
+    taskRunIndex: 0,
+  },
 };
 
 describe('byokAgentProviderId', () => {
@@ -55,6 +60,15 @@ describe('buildByokRunCreatedProps', () => {
       mcp_id: null,
       token_count_source: 'unknown',
       session_mode: 'design',
+      task_execution_id: 'task_1',
+      initial_run_id: 'run_1',
+      task_run_index: 0,
+      interaction_mode: 'design',
+      has_attachments: false,
+      tokens: {
+        usage_count_source: 'unknown',
+        user_query_tokens: 12,
+      },
     });
     // runtime_type is stamped on the event itself (not left to the mutable
     // super-property) so a mid-stream mode switch can't split the run.
@@ -94,6 +108,14 @@ describe('buildByokRunFinishedProps', () => {
       total_duration_ms: 8421,
       agent_provider_id: 'anthropic',
       runtime_type: 'byok',
+      clarification_requested: false,
+      primary_artifact_change: 'created',
+      timing: { total_duration_ms: 8421 },
+      run_activity: {
+        artifacts: {
+          changed_file_count: 1,
+        },
+      },
     });
   });
 

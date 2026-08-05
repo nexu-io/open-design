@@ -82,15 +82,15 @@ describe("pricing contract", () => {
   it("uses Vela's stable billing-plan deep link instead of wallet-era aliases", () => {
     assert.equal(
       CLOUD_CONSOLE_URL,
-      "https://vela.powerformer.net/dashboard?billing=plan",
+      "https://open-design.ai/cloud/dashboard?billing=plan",
     );
     assert.equal(
       cloudSubscribeUrl("pro", "yearly"),
-      "https://vela.powerformer.net/dashboard?billing=plan",
+      "https://open-design.ai/cloud/dashboard?billing=plan",
     );
     assert.equal(
       scopedBillingPlanUrl("workspace-a"),
-      "https://vela.powerformer.net/dashboard?billing=plan&workspaceId=workspace-a",
+      "https://open-design.ai/cloud/dashboard?billing=plan&workspaceId=workspace-a",
     );
     assert.equal(scopedBillingPlanUrl("  "), CLOUD_CONSOLE_URL);
   });

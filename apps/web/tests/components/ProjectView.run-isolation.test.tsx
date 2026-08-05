@@ -2847,6 +2847,20 @@ describe('ProjectView conversation run isolation', () => {
         },
         undefined,
       );
+      expect(analyticsTrackMock).toHaveBeenCalledWith(
+        'surface_view',
+        expect.objectContaining({
+          page_name: 'chat_panel',
+          area: 'chat_composer',
+          element: 'run_start_blocked',
+          task_execution_id: expect.any(String),
+          recovery_action_instance_id: expect.stringMatching(/^blocked:/),
+          block_reason: reason,
+          agent_provider_id: 'openai',
+          model_id: model.trim() || 'default',
+        }),
+        undefined,
+      );
       expect(streamViaDaemon).not.toHaveBeenCalled();
       expect(saveMessage).not.toHaveBeenCalled();
     },

@@ -123,13 +123,21 @@ env:
   # Workspace Team gate for packaged prerelease builds. tools-pack reads
   # OPEN_DESIGN_AMR_PROFILE and bakes OD_VELA_WEB_URL into open-design-config.json;
   # both are required for the packaged daemon to enable the workspace-team
-  # transport (see apps/packaged/src/workspace-team.ts). Empty amr_profile leaves
-  # the default (prod), which the packaged gate rejects, so the normal push-driven
-  # prerelease pipeline stays unchanged. A test / feature-test dispatch points at
-  # the matching per-profile Vela console origin held in a repository secret.
-  # Secrets read here: VELA_WEB_URL_FEATURE_TEST, VELA_WEB_URL_TEST.
+  # transport (see apps/packaged/src/workspace-team.ts).
+  #
+  # Every profile now resolves an origin, production included: prod's Vela
+  # backend serves the feature (WORKSPACE_TEAM_ENABLED plus a configured
+  # resource-hub blob store), so a prod build ships the transports enabled.
+  # An empty amr_profile still yields no origin, which the packaged gate treats
+  # as dormant — a build that forgets the profile degrades to local-only rather
+  # than pointing at an unknown backend.
+  #
+  # Origins stay in repository secrets rather than literals: the non-prod AMR
+  # environments are internal deployments and this repository is public.
+  # Secrets read here: VELA_WEB_URL_FEATURE_TEST, VELA_WEB_URL_TEST,
+  # VELA_WEB_URL_PROD.
   OPEN_DESIGN_AMR_PROFILE: ${{ inputs.amr_profile }}
-  OD_VELA_WEB_URL: ${{ inputs.amr_profile == 'feature-test' && secrets.VELA_WEB_URL_FEATURE_TEST || inputs.amr_profile == 'test' && secrets.VELA_WEB_URL_TEST || '' }}
+  OD_VELA_WEB_URL: ${{ inputs.amr_profile == 'feature-test' && secrets.VELA_WEB_URL_FEATURE_TEST || inputs.amr_profile == 'test' && secrets.VELA_WEB_URL_TEST || inputs.amr_profile == 'prod' && secrets.VELA_WEB_URL_PROD || '' }}
 jobs:
   metadata:
     name: Prepare prerelease metadata

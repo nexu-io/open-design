@@ -3,6 +3,7 @@
  * surface_view event prop types and their union.
  */
 import type { TrackingOnboardingFirstLoopStep, TrackingOnboardingProductType, TrackingOnboardingRole, TrackingOnboardingUseCase } from './onboarding.js';
+import type { TrackingRunRecoveryActionType } from './result-events.js';
 import type { TrackingArtifactKind, TrackingNewProjectTab, TrackingProjectKind } from './shared-enums.js';
 import type { DesignSystemsPresetBrandPickerSurfaceViewProps } from './ui-click.js';
 import type { WorkspaceSurfaceViewProps } from './workspace.js';
@@ -88,6 +89,47 @@ export interface RunFailedToastSurfaceViewProps {
   conversation_id: string | null;
   assistant_message_id: string;
   run_id: string | null;
+}
+
+export interface RunRecoveryActionSurfaceViewProps {
+  page_name: 'chat_panel';
+  area: 'chat_panel';
+  element: 'run_recovery_action';
+  task_execution_id: string;
+  recovery_action_instance_id: string;
+  recovery_action_type: TrackingRunRecoveryActionType;
+  source_run_id?: string;
+  source_agent_provider_id?: string;
+  source_model_id?: string;
+  failure_category?: string;
+  failure_reason?: string;
+}
+
+export interface RunStartBlockedSurfaceViewProps {
+  page_name: 'chat_panel';
+  area: 'chat_composer';
+  element: 'run_start_blocked';
+  task_execution_id: string;
+  recovery_action_instance_id: string;
+  block_reason: string;
+  agent_provider_id: string;
+  model_id: string;
+}
+
+// Preview-workspace status feedback for Design-mode runs. This exposure is
+// intentionally separate from `run_finished`: that event records the daemon
+// outcome, while this one measures whether the user actually saw the delivery
+// confirmation or recovery path.
+export interface PreviewRunStatusSurfaceViewProps {
+  page_name: 'file_manager';
+  area: 'preview_run_status';
+  element: 'run_status_bar';
+  status: 'generating' | 'verifying' | 'succeeded' | 'failed';
+  delivery_state?: 'delivered' | 'no_result' | 'delivery_failed';
+  project_id: string;
+  conversation_id: string | null;
+  assistant_message_id: string;
+  run_id?: string;
 }
 
 export interface AssistantFeedbackReasonPanelSurfaceViewProps {
@@ -198,6 +240,9 @@ export interface StudioOnboardingHintSurfaceViewProps {
 export type SurfaceViewProps =
   | WorkspaceSurfaceViewProps
   | RunFailedToastSurfaceViewProps
+  | RunRecoveryActionSurfaceViewProps
+  | RunStartBlockedSurfaceViewProps
+  | PreviewRunStatusSurfaceViewProps
   | HomeRecommendationSurfaceViewProps
   | StudioOnboardingHintSurfaceViewProps
   | HelpPopoverSurfaceViewProps

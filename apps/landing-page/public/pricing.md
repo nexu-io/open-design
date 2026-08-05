@@ -80,6 +80,6 @@ not required to use Open Design.
 - Overage cloud deploys beyond a tier's monthly limit: $2 each.
 - Intro/promotional pricing and current annual discounts may differ — see the
   live pricing page for the current numbers: https://open-design.ai/pricing/
-- Subscription checkout is handled by the authenticated Vela dashboard:
-  https://vela.powerformer.net/dashboard?billing=plan
+- Subscription checkout is handled by the authenticated Cloud dashboard:
+  https://open-design.ai/cloud/dashboard?billing=plan
 - License: https://www.apache.org/licenses/LICENSE-2.0

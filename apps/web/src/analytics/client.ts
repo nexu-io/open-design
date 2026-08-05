@@ -51,7 +51,7 @@ let configureGlobals: AnalyticsConfigureGlobals = {
 // `event_schema_version`, `device_id`, `session_id`, `locale`, or the
 // configure-state globals. We restash this on init and re-register it
 // after every reset()/identify() so every subsequent event keeps the
-// v2 schema contract.
+// current schema contract.
 let lastRegisterPayload: Record<string, unknown> | null = null;
 
 // Returns the installationId the daemon stamped on /api/analytics/config

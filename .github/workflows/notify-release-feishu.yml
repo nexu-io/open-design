@@ -75,14 +75,16 @@ jobs:
       # version). Only set when building from a non-release ref like main, where
       # release-prerelease cannot derive the base version from the branch name.
       release_version: ${{ inputs.release_version }}
-      # Workspace Team gate: the packaged prerelease only enables the vela-cli
-      # transports when a test/feature-test AMR profile is baked in (see
-      # apps/packaged/src/workspace-team.ts + release-prerelease.yml). A manual
-      # dispatch can pass amr_profile explicitly; otherwise release/v0.18.0 — the
-      # workspace-team release cycle — defaults to `test` so its auto push-built
-      # prereleases ship the transport enabled, while every other release branch
-      # stays on prod. Drop the branch default once workspace-team ships to prod.
-      amr_profile: ${{ inputs.amr_profile || (github.ref_name == 'release/v0.18.0' && 'test') || '' }}
+      # Workspace Team profile baked into the packaged build (see
+      # apps/packaged/src/workspace-team.ts + release-prerelease.yml). Release
+      # builds ship `prod`: production's Vela backend now serves the feature, so
+      # a release prerelease points users at the production console rather than
+      # an internal test environment. A manual dispatch can still override to
+      # test / feature-test to cut a build against those backends.
+      #
+      # (This replaces a temporary `test` default on release/v0.18.0 that
+      # existed only while prod's resource-hub storage was unconfigured.)
+      amr_profile: ${{ inputs.amr_profile || 'prod' }}
       # Windows packaged smoke is a hard publish gate (publish needs build_win
       # success) but currently flakes on release/v0.18.0 ("did not reach main app
       # shell"), skip-blocking EVERY platform's publish + the Feishu card. TEMPORARY:

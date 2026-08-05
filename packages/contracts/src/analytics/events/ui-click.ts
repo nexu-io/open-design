@@ -5,6 +5,7 @@
 import type { DesignSystemEnrichClickProps, TrackingDesignSystemEditSurface } from './design-systems.js';
 import type { TrackingPageName, TrackingSettingsPage } from './event-names.js';
 import type { OnboardingClickProps, TrackingOnboardingFirstLoopStep, TrackingOnboardingProductType, TrackingOnboardingRole, TrackingOnboardingUseCase } from './onboarding.js';
+import type { TrackingRunRecoveryActionType } from './result-events.js';
 import type { TrackingAmrEntrySource, TrackingArtifactKind, TrackingByokProviderId, TrackingCliProviderId, TrackingExecutionMode, TrackingExportFormat, TrackingFeedbackProviderId, TrackingNewProjectTab, TrackingProjectKind, TrackingProjectSource } from './shared-enums.js';
 import type { AccountMenuClickProps, CommunityTemplateClickProps, EntryNavigationClickProps, ExtensionMarketplaceClickProps, ProjectCollectionClickProps, TrackingWorkspaceScope, WorkspaceInviteClickProps, WorkspaceSwitcherClickProps } from './workspace.js';
 // ---- ui_click ------------------------------------------------------------
@@ -931,6 +932,22 @@ export interface RunFailedToastClickProps {
   element: 'go_amr';
 }
 
+export interface RunRecoveryActionClickProps {
+  page_name: 'chat_panel';
+  area: 'chat_panel';
+  element: 'run_recovery_action';
+  task_execution_id: string;
+  recovery_action_instance_id: string;
+  recovery_action_type: TrackingRunRecoveryActionType;
+  source_run_id?: string;
+  source_agent_provider_id?: string;
+  source_model_id?: string;
+  failure_category?: string;
+  failure_reason?: string;
+  target_agent_provider_id?: string;
+  target_model_id?: string;
+}
+
 export interface AmrEntryClickProps {
   page_name: TrackingPageName;
   area: 'amr_entry';
@@ -1616,6 +1633,7 @@ export type UiClickProps =
   | NextStepActionClickProps
   | QuestionsFormClickProps
   | RunFailedToastClickProps
+  | RunRecoveryActionClickProps
   | AmrEntryClickProps
   | ChatPanelResourcesPopoverClickProps
   | ChatPanelMessageQueueClickProps

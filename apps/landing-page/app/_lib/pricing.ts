@@ -80,7 +80,7 @@ export interface PricingContract {
 }
 
 /** Production dashboard that owns the authenticated billing-plan dialog. */
-export const CLOUD_BASE_URL = 'https://vela.powerformer.net/dashboard';
+export const CLOUD_BASE_URL = 'https://open-design.ai/cloud/dashboard';
 
 /** Public pricing contract served by the landing page. */
 export const PLANS_JSON_URL = '/pricing/plans.json';
