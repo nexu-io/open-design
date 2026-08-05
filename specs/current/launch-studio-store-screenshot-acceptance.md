@@ -161,6 +161,7 @@ pnpm tools-dev stop --namespace task12-acceptance --json
 
 - 真实 AI 路径 B 仍未验收：生成、锁定、改写、恢复、导出无法在无模型额度下完成。
 - 复跑证据保留在 Git 忽略目录：
-  `.worktrees/store-screenshot-phase1/e2e/.tmp/path-b-0805/artifacts/summary.json` 与同目录脚本。
+  `.worktrees/store-screenshot-phase1/.tmp/e2e/path-b-0805/artifacts/summary.json` 与同目录脚本
+  （`run-path-b.mjs`）。
 - 恢复方式：账户额度恢复（预计 2026-08-08 后）或提供其他已授权 Provider 后，
   以相同 namespace 环境重跑脚本；无需改动实现代码。
