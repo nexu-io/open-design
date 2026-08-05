@@ -160,9 +160,8 @@ import {
   createProjectPreviewScopeRegistry,
   isLoopbackHostname,
   isLoopbackPeerAddress,
-  localOriginFromHeader,
-  normalizeLocalAuthority,
   parseProjectPreviewAssetPath,
+  validateLocalDaemonRequest,
 } from './runtimes/local-request.js';
 import {
   buildCommandShellCommand,
@@ -1982,38 +1981,12 @@ function sendLiveArtifactRouteError(res, err) {
   return sendApiError(res, 500, 'LIVE_ARTIFACT_STORAGE_FAILED', String(err));
 }
 
-function validateLocalDaemonRequest(req) {
-  if (!isLoopbackPeerAddress(req.socket?.remoteAddress)) {
-    return {
-      ok: false,
-      message: 'request peer must be a loopback address',
-      details: { peer: 'remoteAddress' },
-    };
-  }
-
-  const host = normalizeLocalAuthority(req.get('host'));
-  if (!host || !isLoopbackHostname(host.hostname)) {
-    return {
-      ok: false,
-      message: 'request host must be a loopback daemon address',
-      details: { header: 'host' },
-    };
-  }
-
-  const originHeader = req.get('origin');
-  if (originHeader !== undefined && !localOriginFromHeader(originHeader)) {
-    return {
-      ok: false,
-      message: 'request origin must be a loopback daemon origin',
-      details: { header: 'origin' },
-    };
-  }
-
-  return { ok: true, origin: localOriginFromHeader(originHeader) };
-}
-
 function requireLocalDaemonRequest(req, res, next) {
-  const validation = validateLocalDaemonRequest(req);
+  const validation = validateLocalDaemonRequest({
+    remoteAddress: req.socket?.remoteAddress,
+    host: req.get('host'),
+    origin: req.get('origin'),
+  });
   if (!validation.ok) {
     return sendApiError(res, 403, 'FORBIDDEN', validation.message, validation.details ? { details: validation.details } : {});
   }

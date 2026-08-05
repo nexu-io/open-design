@@ -6,6 +6,7 @@ import {
   localOriginFromHeader,
   normalizeLocalAuthority,
   parseProjectPreviewAssetPath,
+  validateLocalDaemonRequest,
 } from '../../src/runtimes/local-request.js';
 
 describe('local request helpers', () => {
@@ -32,6 +33,41 @@ describe('local request helpers', () => {
     expect(localOriginFromHeader('https://localhost:8787/path')).toBeNull();
     expect(localOriginFromHeader('https://example.com')).toBeNull();
     expect(localOriginFromHeader('http://localhost:8787, https://example.com')).toBeNull();
+  });
+
+  it('authorizes local daemon requests only when peer, host, and origin are loopback-safe', () => {
+    expect(validateLocalDaemonRequest({
+      remoteAddress: '::ffff:127.0.0.1',
+      host: 'localhost:7456',
+      origin: 'http://localhost:3000',
+    })).toEqual({ ok: true, origin: 'http://localhost:3000' });
+    expect(validateLocalDaemonRequest({
+      remoteAddress: '192.168.1.10',
+      host: 'localhost:7456',
+      origin: undefined,
+    })).toMatchObject({
+      ok: false,
+      message: 'request peer must be a loopback address',
+      details: { peer: 'remoteAddress' },
+    });
+    expect(validateLocalDaemonRequest({
+      remoteAddress: '127.0.0.1',
+      host: 'evil.example:7456',
+      origin: undefined,
+    })).toMatchObject({
+      ok: false,
+      message: 'request host must be a loopback daemon address',
+      details: { header: 'host' },
+    });
+    expect(validateLocalDaemonRequest({
+      remoteAddress: '127.0.0.1',
+      host: 'localhost:7456',
+      origin: 'https://evil.example',
+    })).toMatchObject({
+      ok: false,
+      message: 'request origin must be a loopback daemon origin',
+      details: { header: 'origin' },
+    });
   });
 
   it('parses preview asset identity without accepting malformed escapes', () => {

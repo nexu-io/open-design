@@ -11,6 +11,16 @@ export interface ProjectPreviewScopeRegistry {
   validate(projectId: string, scope: string): boolean;
 }
 
+export interface LocalDaemonRequestInput {
+  remoteAddress: unknown;
+  host: unknown;
+  origin: unknown;
+}
+
+export type LocalDaemonRequestValidation =
+  | { ok: true; origin: string | null }
+  | { ok: false; message: string; details: { peer: string } | { header: string } };
+
 const PROJECT_PREVIEW_SCOPE_TTL_MS = 60 * 60 * 1000;
 const PROJECT_PREVIEW_ASSET_PATH_RE = /^\/projects\/([^/]+)\/preview\/([^/]+)\/.+$/u;
 
@@ -45,6 +55,37 @@ export function isLoopbackPeerAddress(address: unknown): boolean {
   if (normalized === '::1' || normalized === '0:0:0:0:0:0:0:1') return true;
   if (net.isIP(normalized) === 4) return normalized === '127.0.0.1' || normalized.startsWith('127.');
   return false;
+}
+
+export function validateLocalDaemonRequest(
+  input: LocalDaemonRequestInput,
+): LocalDaemonRequestValidation {
+  if (!isLoopbackPeerAddress(input.remoteAddress)) {
+    return {
+      ok: false,
+      message: 'request peer must be a loopback address',
+      details: { peer: 'remoteAddress' },
+    };
+  }
+
+  const host = normalizeLocalAuthority(input.host);
+  if (!host || !isLoopbackHostname(host.hostname)) {
+    return {
+      ok: false,
+      message: 'request host must be a loopback daemon address',
+      details: { header: 'host' },
+    };
+  }
+
+  if (input.origin !== undefined && !localOriginFromHeader(input.origin)) {
+    return {
+      ok: false,
+      message: 'request origin must be a loopback daemon origin',
+      details: { header: 'origin' },
+    };
+  }
+
+  return { ok: true, origin: localOriginFromHeader(input.origin) };
 }
 
 export function createProjectPreviewScopeRegistry(): ProjectPreviewScopeRegistry {
