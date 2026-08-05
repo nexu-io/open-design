@@ -948,10 +948,26 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
       // budget, so a masked exception would silently pin marks frame-relative.
       // Stay silent on failure — the host's timeout classifies it as
       // unanswered and its cooldown/retry semantics engage.
+      //
+      // Only VISIBLE elements may anchor a mark. The host picks the smallest
+      // containing box, so an invisible nested node (visibility:hidden,
+      // opacity:0, or a collapsed responsive panel) would otherwise win over
+      // the visible element the user actually marked and drag the annotation
+      // onto hidden content on reflow. Mirrors the srcDoc bridge's
+      // elementVisibleForComment gate.
       var markTargets = [];
       try {
         var found = allTargets();
         for (var mi = 0; mi < found.length; mi++) {
+          var anchorEl = null;
+          try { anchorEl = document.querySelector(found[mi].selector); } catch (_) { anchorEl = null; }
+          if (!anchorEl) continue;
+          var anchorPos = found[mi].position;
+          if (!anchorPos || anchorPos.width <= 0 || anchorPos.height <= 0) continue;
+          try {
+            var anchorCs = window.getComputedStyle(anchorEl);
+            if (anchorCs.display === 'none' || anchorCs.visibility === 'hidden' || Number(anchorCs.opacity) === 0) continue;
+          } catch (_) {}
           markTargets.push({
             elementId: found[mi].elementId,
             selector: found[mi].selector,

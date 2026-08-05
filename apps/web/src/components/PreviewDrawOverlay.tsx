@@ -456,6 +456,26 @@ export function PreviewDrawOverlay({
   // that reports no elements leaves marks on their frame-relative position
   // rather than blocking the annotation.
   async function syncContentAnchors(): Promise<void> {
+    // One probe in flight at a time. A burst of scroll/resize events during a
+    // slow bridge must not stack timeout-bound listeners — remember that work
+    // arrived, and run ONE trailing pass when the current probe settles.
+    if (anchorSyncInFlightRef.current) {
+      anchorSyncTrailingRef.current = true;
+      return;
+    }
+    anchorSyncInFlightRef.current = true;
+    try {
+      await syncContentAnchorsInner();
+    } finally {
+      anchorSyncInFlightRef.current = false;
+      if (anchorSyncTrailingRef.current) {
+        anchorSyncTrailingRef.current = false;
+        scheduleContentReanchor('live');
+      }
+    }
+  }
+
+  async function syncContentAnchorsInner(): Promise<void> {
     const wrap = wrapRef.current;
     if (!wrap) return;
     const frame: FrameSize = { w: wrap.offsetWidth, h: wrap.offsetHeight };
@@ -564,6 +584,26 @@ export function PreviewDrawOverlay({
     return () => window.removeEventListener('message', onMessage);
   }, []);
 
+  // Document epoch: the host can navigate/reload the SAME iframe element for
+  // the SAME file (reloadKey bumps, URL swaps) while Draw stays open. A probe
+  // reply from the pre-reload document would pass the node/size guards, so a
+  // (re)load in any child iframe invalidates pending probe generations. `load`
+  // does not bubble, but capture-phase listeners on ancestors do fire.
+  useEffect(() => {
+    const wrap = wrapRef.current;
+    if (!wrap) return;
+    function onFrameLoad(ev: Event) {
+      if (!(ev.target instanceof HTMLIFrameElement)) return;
+      anchorProbeGenerationRef.current += 1;
+      anchorSilentProbesRef.current = 0;
+      anchorLastProbeAtRef.current = 0;
+      // Fresh document, fresh boxes — re-project marks against it.
+      scheduleContentReanchor();
+    }
+    wrap.addEventListener('load', onFrameLoad, true);
+    return () => wrap.removeEventListener('load', onFrameLoad, true);
+  }, []);
+
   /**
    * Anchor-probe backoff state. A frame with no anchor bridge never answers,
    * and each unanswered probe costs the full bridge timeout — but the verdict
@@ -580,8 +620,13 @@ export function PreviewDrawOverlay({
   const anchorProbeFrameRef = useRef<HTMLIFrameElement | null>(null);
   // Monotonic probe generation — see syncContentAnchors. Bumped whenever a new
   // probe starts and whenever the world a pending probe measured is
-  // invalidated (deactivation, file switch), so a late reply can never commit.
+  // invalidated (deactivation, file switch, or a document (re)load in the
+  // probed iframe), so a late reply can never commit.
   const anchorProbeGenerationRef = useRef(0);
+  // In-flight coalescing for syncContentAnchors: at most one probe awaits the
+  // bridge at a time; bursts collapse into a single trailing pass.
+  const anchorSyncInFlightRef = useRef(false);
+  const anchorSyncTrailingRef = useRef(false);
   // The overlay can stay mounted (and even active) across a file switch; the
   // iframe element is often reused, so the per-frame reset above won't fire.
   // A new document is a new bridge — start its probe budget from zero.

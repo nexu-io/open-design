@@ -429,6 +429,15 @@ describe('GET /api/projects/:id/raw/* range request route', () => {
     expect(html).toContain("'od:mark-anchor-request'");
     expect(html).toContain("type: 'od:mark-anchor-targets'");
     expect(html).toContain("type: 'od:url-selection-bridge-ready', markAnchors: true");
+    // Invisible elements must not anchor marks: the host picks the smallest
+    // containing box, so a hidden nested panel would beat the visible element
+    // the user marked. The bridge filters on computed style before replying
+    // (mirroring the srcDoc bridge's elementVisibleForComment gate).
+    const anchorHandler = html.slice(html.indexOf("'od:mark-anchor-request'"), html.indexOf("'od:mark-anchor-targets'"));
+    expect(anchorHandler).toContain("visibility === 'hidden'");
+    expect(anchorHandler).toContain("display === 'none'");
+    expect(anchorHandler).toContain('Number(anchorCs.opacity) === 0');
+    expect(anchorHandler).toContain('anchorPos.width <= 0');
   });
 
   it('injects the URL preview snapshot bridge only when requested', async () => {

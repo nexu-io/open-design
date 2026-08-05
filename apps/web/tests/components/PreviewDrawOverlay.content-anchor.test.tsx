@@ -303,7 +303,7 @@ describe('PreviewDrawOverlay content anchoring (issue #6361)', () => {
     const restoreRect = installFrameGeometry();
     const observer = installResizeObserver();
     const anchors = vi.mocked(requestPreviewAnchorTargets);
-    anchors.mockClear();
+    anchors.mockReset();
     const probed: Array<string | null> = [];
     anchors.mockImplementation(async (iframe: HTMLIFrameElement) => {
       probed.push(iframe.getAttribute('title'));
@@ -346,7 +346,7 @@ describe('PreviewDrawOverlay content anchoring (issue #6361)', () => {
     const restoreRect = installFrameGeometry();
     const observer = installResizeObserver();
     const anchors = vi.mocked(requestPreviewAnchorTargets);
-    anchors.mockClear();
+    anchors.mockReset();
     // Bridge not loaded yet: unanswered.
     anchors.mockImplementation(async () => ({ answered: false, targets: [] }) as never);
 
@@ -402,7 +402,7 @@ describe('PreviewDrawOverlay content anchoring (issue #6361)', () => {
     const restoreRect = installFrameGeometry();
     const observer = installResizeObserver();
     const anchors = vi.mocked(requestPreviewAnchorTargets);
-    anchors.mockClear();
+    anchors.mockReset();
     // The old frame's document scrolled 100px between the two probes, so its
     // stale reply reports every band 100px higher than the anchor remembers.
     const SCROLLED = ZOOMED.map((t) => ({
@@ -495,7 +495,7 @@ describe('PreviewDrawOverlay content anchoring (issue #6361)', () => {
     const restoreRect = installFrameGeometry();
     const observer = installResizeObserver();
     const anchors = vi.mocked(requestPreviewAnchorTargets);
-    anchors.mockClear();
+    anchors.mockReset();
     const SCROLLED = ZOOMED.map((t) => ({
       ...t,
       position: { ...t.position, y: t.position.y - 100 },
@@ -560,17 +560,19 @@ describe('PreviewDrawOverlay content anchoring (issue #6361)', () => {
       observer.trigger();
       canvas = view.container.querySelector<HTMLCanvasElement>('canvas')!;
 
-      // Fresh mark; its commit pass (probe 3) anchors it against ZOOMED.
+      // Fresh mark. Its commit-time sync coalesces behind the still-hanging
+      // pre-reopen probe, so no new bridge call yet.
       fireEvent.pointerDown(canvas, { clientX: 40, clientY: 342, pointerId: 1 });
       fireEvent.pointerMove(canvas, { clientX: 600, clientY: 382, pointerId: 1 });
       fireEvent.pointerUp(canvas, { clientX: 600, clientY: 382, pointerId: 1 });
-      await waitFor(() => expect(anchors.mock.calls.length).toBeGreaterThanOrEqual(3));
-      await new Promise((r) => setTimeout(r, 350));
+      await new Promise((r) => setTimeout(r, 200));
 
       // NOW the pre-reopen probe resolves with scrolled boxes. Committing it
-      // re-projects the anchored fresh mark 100px up.
+      // would corrupt the fresh mark (anchor it against 100px-off boxes).
+      // Discarding it lets the trailing pass anchor against current boxes.
       releaseStale!();
-      await new Promise((r) => setTimeout(r, 50));
+      await waitFor(() => expect(anchors.mock.calls.length).toBeGreaterThanOrEqual(3));
+      await new Promise((r) => setTimeout(r, 350));
 
       const input = view.container.querySelector<HTMLInputElement>('.preview-draw-note-input')!;
       fireEvent.change(input, { target: { value: 'Reopen must not resurrect stale replies.' } });
@@ -589,13 +591,158 @@ describe('PreviewDrawOverlay content anchoring (issue #6361)', () => {
     }
   });
 
+  it('discards a probe reply that resolves after the same iframe reloaded', async () => {
+    // Same node, same size, same file: only the document changed (reloadKey /
+    // URL navigation). The iframe load event must invalidate the pending
+    // generation so the pre-reload reply cannot re-project the marks.
+    frame.w = 692;
+    frame.h = 666;
+    const restoreRect = installFrameGeometry();
+    const observer = installResizeObserver();
+    const anchors = vi.mocked(requestPreviewAnchorTargets);
+    anchors.mockReset();
+    const SCROLLED = ZOOMED.map((t) => ({
+      ...t,
+      position: { ...t.position, y: t.position.y - 100 },
+    }));
+    let releaseStale: (() => void) | null = null;
+    anchors
+      // commit-time probe answers fast; the mark anchors against ZOOMED.
+      .mockImplementationOnce(async () => ({ answered: true, targets: ZOOMED }) as never)
+      // resize-triggered probe hangs; resolves with pre-reload boxes later.
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            releaseStale = () => resolve({ answered: true, targets: SCROLLED } as never);
+          }) as never,
+      )
+      // post-reload probes: live bridge, no targets — nothing re-corrects a
+      // mark corrupted by a stale commit.
+      .mockImplementation(async () => ({ answered: true, targets: [] }) as never);
+
+    const annotation = vi.fn((event: Event) => {
+      const detail = (event as CustomEvent<{ ack?: (r: { ok: boolean }) => void }>).detail;
+      detail.ack?.({ ok: true });
+    });
+    window.addEventListener('opendesign:annotation', annotation);
+
+    try {
+      const { container, getByRole } = render(
+        <PreviewDrawOverlay active>
+          <iframe title="srcdoc" data-od-render-mode="srcdoc" data-od-active="true" />
+        </PreviewDrawOverlay>,
+      );
+      const wrap = container.querySelector<HTMLElement>('.preview-draw-overlay')!;
+      const canvas = container.querySelector<HTMLCanvasElement>('canvas')!;
+      const iframe = container.querySelector<HTMLIFrameElement>('iframe')!;
+      Object.defineProperty(wrap, 'offsetWidth', { configurable: true, get: () => frame.w });
+      Object.defineProperty(wrap, 'offsetHeight', { configurable: true, get: () => frame.h });
+      observer.trigger();
+
+      // Mark; commit probe anchors it. A resize starts the hanging probe.
+      fireEvent.pointerDown(canvas, { clientX: 40, clientY: 342, pointerId: 1 });
+      fireEvent.pointerMove(canvas, { clientX: 600, clientY: 382, pointerId: 1 });
+      fireEvent.pointerUp(canvas, { clientX: 600, clientY: 382, pointerId: 1 });
+      await waitFor(() => expect(anchors).toHaveBeenCalledTimes(1));
+      await new Promise((r) => setTimeout(r, 350));
+      observer.trigger();
+      await waitFor(() => expect(anchors).toHaveBeenCalledTimes(2));
+
+      // The document reloads in the SAME iframe node at the SAME size; then
+      // the stale pre-reload reply lands.
+      fireEvent.load(iframe);
+      releaseStale!();
+      await new Promise((r) => setTimeout(r, 400));
+
+      const input = container.querySelector<HTMLInputElement>('.preview-draw-note-input')!;
+      fireEvent.change(input, { target: { value: 'Reload must invalidate pending probes.' } });
+      fireEvent.click(getByRole('button', { name: 'Send' }));
+
+      await waitFor(() => expect(annotation).toHaveBeenCalledTimes(1));
+      const detail = (annotation.mock.calls[0]?.[0] as CustomEvent<{
+        bounds?: { x: number; y: number; width: number; height: number };
+      }>).detail;
+
+      // The mark stays where the user drew it; the stale reply would have
+      // re-projected it 100px up.
+      expect(detail.bounds!.y).toBeCloseTo(342, 0);
+    } finally {
+      window.removeEventListener('opendesign:annotation', annotation);
+      observer.restore();
+      restoreRect();
+    }
+  });
+
+  it('coalesces probes during a scroll burst on a slow bridge', async () => {
+    // Scroll events arrive ~every frame. With a bridge that answers slowly,
+    // each live tick must NOT stack another in-flight probe — one runs, one
+    // trailing pass is remembered, the rest collapse.
+    frame.w = 692;
+    frame.h = 666;
+    const restoreRect = installFrameGeometry();
+    const observer = installResizeObserver();
+    const anchors = vi.mocked(requestPreviewAnchorTargets);
+    anchors.mockReset();
+    const pending: Array<() => void> = [];
+    anchors.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          pending.push(() => resolve({ answered: true, targets: [] } as never));
+        }) as never,
+    );
+
+    try {
+      const { container } = render(
+        <PreviewDrawOverlay active>
+          <iframe title="srcdoc" data-od-render-mode="srcdoc" data-od-active="true" />
+        </PreviewDrawOverlay>,
+      );
+      const wrap = container.querySelector<HTMLElement>('.preview-draw-overlay')!;
+      const canvas = container.querySelector<HTMLCanvasElement>('canvas')!;
+      const iframe = container.querySelector<HTMLIFrameElement>('iframe')!;
+      Object.defineProperty(wrap, 'offsetWidth', { configurable: true, get: () => frame.w });
+      Object.defineProperty(wrap, 'offsetHeight', { configurable: true, get: () => frame.h });
+      observer.trigger();
+
+      // A mark so the sync has something to do.
+      fireEvent.pointerDown(canvas, { clientX: 40, clientY: 342, pointerId: 1 });
+      fireEvent.pointerMove(canvas, { clientX: 600, clientY: 382, pointerId: 1 });
+      fireEvent.pointerUp(canvas, { clientX: 600, clientY: 382, pointerId: 1 });
+      await waitFor(() => expect(anchors).toHaveBeenCalledTimes(1));
+
+      // 30 scroll messages while the first probe is still pending.
+      for (let i = 0; i < 30; i++) {
+        fireEvent(
+          window,
+          new MessageEvent('message', {
+            data: { type: 'od:preview-scroll', canvasTop: i },
+            source: iframe.contentWindow,
+          }),
+        );
+        await new Promise((r) => setTimeout(r, 5));
+      }
+      // Still just the one probe in flight — the burst coalesced.
+      expect(anchors.mock.calls.length).toBe(1);
+      expect(pending.length).toBe(1);
+
+      // Resolving it releases exactly one trailing pass.
+      pending.shift()!();
+      await waitFor(() => expect(anchors.mock.calls.length).toBe(2));
+      await new Promise((r) => setTimeout(r, 200));
+      expect(anchors.mock.calls.length).toBe(2);
+    } finally {
+      observer.restore();
+      restoreRect();
+    }
+  });
+
   it('resets the probe budget when the file changes under the open overlay', async () => {
     frame.w = 692;
     frame.h = 666;
     const restoreRect = installFrameGeometry();
     const observer = installResizeObserver();
     const anchors = vi.mocked(requestPreviewAnchorTargets);
-    anchors.mockClear();
+    anchors.mockReset();
     anchors.mockImplementation(async () => ({ answered: false, targets: [] }) as never);
 
     try {
