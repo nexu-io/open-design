@@ -161,6 +161,90 @@ describe('app-config', () => {
       expect(cfg.orbit).not.toHaveProperty('templateSkillId');
     });
 
+    it('preserves only the minimal persisted Orbit Workspace identity', async () => {
+      await writeFile(
+        path.join(dataDir, 'app-config.json'),
+        JSON.stringify({
+          orbit: {
+            enabled: true,
+            time: '09:30',
+            workspaceScope: {
+              workspaceId: ' workspace-a ',
+              workspaceMemberId: ' member-a ',
+              role: 'owner',
+            },
+          },
+        }),
+      );
+
+      const cfg = await readAppConfig(dataDir);
+
+      expect(cfg.orbit?.workspaceScope).toEqual({
+        workspaceId: 'workspace-a',
+        workspaceMemberId: 'member-a',
+      });
+    });
+
+    it('keeps scoped Orbit identity when an older client updates Orbit without that field', async () => {
+      await writeAppConfig(dataDir, {
+        orbit: {
+          enabled: true,
+          time: '09:30',
+          workspaceScope: {
+            workspaceId: 'workspace-a',
+            workspaceMemberId: 'member-a',
+          },
+        },
+      });
+
+      await writeAppConfig(dataDir, {
+        orbit: {
+          enabled: false,
+          time: '10:15',
+        },
+      });
+
+      await expect(readAppConfig(dataDir)).resolves.toMatchObject({
+        orbit: {
+          enabled: false,
+          time: '10:15',
+          workspaceScope: {
+            workspaceId: 'workspace-a',
+            workspaceMemberId: 'member-a',
+          },
+        },
+      });
+    });
+
+    it('allows an explicit null to clear a persisted Orbit Workspace identity', async () => {
+      await writeAppConfig(dataDir, {
+        orbit: {
+          enabled: true,
+          time: '09:30',
+          workspaceScope: {
+            workspaceId: 'workspace-a',
+            workspaceMemberId: 'member-a',
+          },
+        },
+      });
+
+      await writeAppConfig(dataDir, {
+        orbit: {
+          enabled: false,
+          time: '10:15',
+          workspaceScope: null,
+        },
+      });
+
+      await expect(readAppConfig(dataDir)).resolves.toMatchObject({
+        orbit: {
+          enabled: false,
+          time: '10:15',
+          workspaceScope: null,
+        },
+      });
+    });
+
     it('falls back to default orbit time for out-of-range stored values', async () => {
       await writeFile(
         path.join(dataDir, 'app-config.json'),

@@ -29,6 +29,23 @@ jobs:
         with:
           save-pnpm-cache: 'true'
 
+
+  # GHA actions/cache is repo-scoped and shared across hosted + every Nexu
+  # size (small/medium/large). One Linux seed under the pinned home store path
+  # is enough for the whole fleet; no per-size matrix required.
+  seed-pnpm-linux:
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v6.0.2
+
+      - name: Seed Linux pnpm cache
+        uses: ./.github/actions/setup-workspace
+        with:
+          save-pnpm-cache: 'true'
+
   clean-closed-pr-buildkit:
     if: github.event_name == 'pull_request_target' && github.repository == 'nexu-io/open-design'
     runs-on: ubuntu-24.04

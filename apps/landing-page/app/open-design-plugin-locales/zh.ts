@@ -16,6 +16,43 @@ const zh: OpenDesignPluginCopy = {
     copy: '复制',
     github: '在 GitHub 上查看源码 ↗',
   },
+  agentInstall: {
+    howToName: '在 Codex 中安装 Open Design 插件',
+    howToDescription:
+      '供 Agent 安装 Open Design Codex 插件并完成本地 MCP 注册的可执行步骤。',
+    eyebrow: 'Agent 可读安装协议',
+    title: '完整安装 Codex 插件。',
+    intro:
+      '如果用户要求你安装 Open Design，请按顺序执行此流程。该请求仅授权更改用户的 Codex 插件和 MCP 配置。请保持其他插件市场、插件、MCP 服务器及身份验证状态不变。',
+    downloadLabel: 'Open Design 官方下载页 ↗',
+    steps: [
+      {
+        title: '检查环境是否受支持',
+        body:
+          '从 release-manifest.json 读取 plugin.minimumCodexCliVersion 和 plugin.minimumOpenDesignVersion。在更改任何配置之前，必须同时满足这两个最低版本要求。仅接受由经过探测的 Open Design CLI 报告的 Open Design 运行时版本，或通过代码签名和 Gatekeeper 检查的已签名 macOS 应用包中 CFBundleShortVersionString 的值。如果 od 缺失、在 PATH 中被其他程序遮蔽（包括 /usr/bin/od），或守护进程已停止，必须改用已签名应用包进行探测。如果两种已验证的探测方式均不可用，请在更改配置前停止操作，引导用户前往 Open Design Settings → MCP server 复制适用于该客户端的绝对路径配置片段，然后重试。只有在应用缺失或版本过低时，才引导用户前往官方下载页；绝不要静默下载安装程序或运行未验证的脚本。',
+      },
+      {
+        title: '更改配置前先行检查',
+        body:
+          '从 release-manifest.json 读取所需的选择器和版本，然后与检查到的 Codex 状态进行比较。仅通过从 codex mcp list --json 派生的已过滤 MCP 快照检查 MCP 状态。输出时只保留 name、enabled、transport.type 和 command；在输出前丢弃 args、env、env_vars、headers 和 token 字段。缺少 open-design 结果属于正常情况，不应导致流程失败。绝不要打印或报告原始列表或 codex mcp get open-design --json 输出，因为传输值可能包含凭据。如果名为 open-design 的 marketplace 指向其他来源，请停止操作并报告命名冲突。仅当已安装版本与 release-manifest.json 中声明的版本一致时，才保留 open-design@open-design。',
+      },
+      {
+        title: '仅安装缺失的组件',
+        body:
+          '仅当官方指定的 marketplace 尚未添加时，才运行 marketplace 命令；如果添加 marketplace 失败，请停止操作，不要运行插件命令。缺少 open-design@open-design 时，运行插件命令。如果已安装的是其他版本，请先征得用户确认，再进行更新或重新安装；只有在获得明确确认后，才使用 OPEN_DESIGN_PLUGIN_UPDATE_CONFIRMED=1 重新执行此步骤。只有在已安装版本与要求的版本完全一致时，才跳过安装。返回 alreadyAdded: true 表示成功。不要手动编辑 Codex 配置，也不要将插件文件复制到 Codex 主目录。',
+      },
+      {
+        title: '确保本地 Open Design MCP 可用',
+        body:
+          '仅当现有 open-design MCP 已启用、使用 stdio，并且其绝对 command 与经过验证的 Open Design 启动器一致时，才保留该 MCP。否则，请运行已安装 Open Design 应用提供的 MCP 安装程序。在 POSIX 系统中，仅当对解析出的 od 路径执行探测并返回 open-design-cli:mcp-install:v1 后，才运行该路径。如果该路径缺失、被 /usr/bin/od 遮蔽或无法完成操作，请使用 /usr/bin/open 启动经过验证的已签名 macOS 应用包并执行 --headless --mcp-install codex，然后仅按相同的结构检查轮询已过滤的 MCP 快照。如果没有可用的已验证启动器，请停止操作，引导用户前往 Open Design Settings → MCP server 复制适用于该客户端的绝对路径配置片段，然后重试此步骤。绝不要猜测 localhost 端口，也不要运行 codex mcp login；Vela 登录应在 Open Design 中完成。',
+      },
+      {
+        title: '验证、报告并开始新任务',
+        body:
+          '验证插件 id 为 open-design@open-design、marketplace 来源为官方指定的来源，并确认已安装版本与 release-manifest.json 中的 plugin.version 完全一致。使用已过滤的 MCP 快照确认存在名为 open-design 的已启用 stdio MCP，且其绝对 command 与安装期间使用的同一个经过验证的 Open Design 启动器一致。仅检查 name、enabled、transport.type 和 command；原始 args、env、env_vars、headers、token、bearer token、API key 和 Vela 凭据值绝不能出现在输出或报告中。报告已安装的内容，以及尚未满足的 Open Design 或 Vela 登录前置条件。新建 Codex 任务以加载已安装的插件快照，然后调用 @open-design。',
+      },
+    ],
+  },
   demo: {
     title: '安装一次，随时从 Codex/ChatGPT 开始创作。',
     lead:
@@ -29,7 +66,7 @@ const zh: OpenDesignPluginCopy = {
     installPhase: '安装',
     installTitle: '让 Codex 帮你完成安装',
     installBody:
-      '将这条指令粘贴到 Codex 任务中。Codex 会读取仓库里的安装流程，完成插件与本地 MCP 配置，无需依赖公开的插件市场页面。',
+      '将这条指令粘贴到 Codex 任务中。Codex 会添加官方指定的 Git marketplace 源，仅在插件尚未安装时进行安装，并完成本地 MCP 配置，无需插件已在公开目录中上架。',
     installNote: '只需在 Codex 中粘贴一次，具体安装步骤会自动完成。',
     steps: [
       {

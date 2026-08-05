@@ -8,6 +8,35 @@ vi.mock('@open-design/host', () => ({
   pickAndImportHostProject: vi.fn(),
 }));
 
+vi.mock('../../src/collab/useWorkspaceContext', () => ({
+  useWorkspaceContext: () => ({
+    context: {
+      lifecycleState: 'active',
+      memberStatus: 'active',
+      permissions: {
+        canManageMembers: true,
+        canManageSharedResources: true,
+        canManageWorkspace: true,
+        canShareProjects: true,
+        canViewWorkspaceSettings: true,
+        canWriteSyncedFiles: true,
+      },
+      role: 'owner',
+      seat: {
+        isSeatFull: false,
+        occupiedSeats: 1,
+        totalSeats: 5,
+      },
+      workspaceId: 'workspace-modal',
+      workspaceMemberId: 'member-modal',
+      workspaceName: 'Modal Workspace',
+      workspaceType: 'team',
+    },
+    failure: null,
+    loading: false,
+  }),
+}));
+
 import { pickAndImportHostProject } from '@open-design/host';
 import { NewProjectModal } from '../../src/components/NewProjectModal';
 import { I18nProvider } from '../../src/i18n';
@@ -157,7 +186,13 @@ describe('NewProjectModal layout', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Open folder' }));
 
     await waitFor(() => {
-      expect(pickAndImportHostProject).toHaveBeenCalledWith({ skillId: 'prototype-skill' });
+      expect(pickAndImportHostProject).toHaveBeenCalledWith({
+        skillId: 'prototype-skill',
+        workspaceContext: expect.objectContaining({
+          workspaceId: 'workspace-modal',
+          workspaceMemberId: 'member-modal',
+        }),
+      });
     });
     expect(screen.getByRole('button', { name: 'Opening…' })).toBeTruthy();
 

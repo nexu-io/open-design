@@ -98,6 +98,8 @@ const TOKEN_CONTRACT_REBUILD_STEP_DEFS = [
 ] as const;
 
 export type DesignSystemRevisionInput = {
+  /** Exact authorized storage root; defaults to the store root for Personal jobs. */
+  root?: string;
   designSystemId: string;
   feedback: string;
   sectionTitle?: string;
@@ -105,6 +107,8 @@ export type DesignSystemRevisionInput = {
 };
 
 export type DesignSystemTokenContractRebuildInput = {
+  /** Exact authorized storage root; defaults to the store root for Personal jobs. */
+  root?: string;
   designSystemId: string;
   decision: DesignSystemTokenContractRebuildDecision;
   feedback: string;
@@ -124,7 +128,10 @@ export function createDesignSystemGenerationJobStore(options: StoreOptions) {
   const delayMs = options.delayMs ?? 280;
   const idFactory = options.idFactory ?? randomUUID;
 
-  function start(input: UserDesignSystemInput): DesignSystemGenerationJob {
+  function start(
+    input: UserDesignSystemInput,
+    createDesignSystemForJob: StoreOptions['createDesignSystem'] = createDesignSystem,
+  ): DesignSystemGenerationJob {
     const now = new Date().toISOString();
     const job: MutableJob = {
       id: idFactory(),
@@ -137,7 +144,7 @@ export function createDesignSystemGenerationJobStore(options: StoreOptions) {
       message: 'Queued',
     };
     jobs.set(job.id, job);
-    void run(job, input);
+    void run(job, input, createDesignSystemForJob);
     return snapshot(job);
   }
 
@@ -182,7 +189,11 @@ export function createDesignSystemGenerationJobStore(options: StoreOptions) {
     return job ? snapshot(job) : null;
   }
 
-  async function run(job: MutableJob, input: UserDesignSystemInput): Promise<void> {
+  async function run(
+    job: MutableJob,
+    input: UserDesignSystemInput,
+    createDesignSystemForJob: NonNullable<StoreOptions['createDesignSystem']>,
+  ): Promise<void> {
     try {
       markJob(job, 'running', 'Starting generation');
       let created: DesignSystemSummary | null = null;
@@ -194,7 +205,7 @@ export function createDesignSystemGenerationJobStore(options: StoreOptions) {
         setStepMessage(job, 'explore-resources', sourceSummary(input, sourceContext));
       });
       await runStep(job, 'create-draft', async () => {
-        created = await createDesignSystem(options.root, enrichedInput);
+        created = await createDesignSystemForJob(options.root, enrichedInput);
         job.designSystemId = created.id;
         setStepMessage(job, 'create-draft', `Created ${created.title}`);
       });
@@ -219,6 +230,7 @@ export function createDesignSystemGenerationJobStore(options: StoreOptions) {
 
   async function runRevision(job: MutableJob, input: DesignSystemRevisionInput): Promise<void> {
     try {
+      const jobRoot = input.root ?? options.root;
       markJob(job, 'running', 'Starting revision');
       const feedback = cleanFeedback(input.feedback);
       if (!feedback) throw new Error('Revision feedback is required');
@@ -226,7 +238,7 @@ export function createDesignSystemGenerationJobStore(options: StoreOptions) {
       let proposedBody = '';
       await runStep(job, 'read-draft', async () => {
         if (!body) {
-          body = await readExistingDesignSystem(options.root, input.designSystemId, {
+          body = await readExistingDesignSystem(jobRoot, input.designSystemId, {
             idPrefix: 'user:',
           }) ?? undefined;
         }
@@ -243,7 +255,7 @@ export function createDesignSystemGenerationJobStore(options: StoreOptions) {
       });
       await runStep(job, 'create-revision', async () => {
         if (!body) throw new Error('Editable design system not found');
-        const revision = await createRevision(options.root, input.designSystemId, {
+        const revision = await createRevision(jobRoot, input.designSystemId, {
           feedback,
           baseBody: body,
           proposedBody,
@@ -269,6 +281,7 @@ export function createDesignSystemGenerationJobStore(options: StoreOptions) {
     input: DesignSystemTokenContractRebuildInput,
   ): Promise<void> {
     try {
+      const jobRoot = input.root ?? options.root;
       markJob(job, 'running', 'Starting token contract rebuild');
       await runStep(job, 'read-token-report', async () => {
         await sleep(delayMs);
@@ -293,7 +306,7 @@ export function createDesignSystemGenerationJobStore(options: StoreOptions) {
         setStepMessage(job, 'draft-contract-review', `Prepared TOKEN_SCHEMA rebuild request (${weakCount} weak token(s))`);
       });
       await runStep(job, 'create-revision', async () => {
-        const revision = await createRevision(options.root, input.designSystemId, {
+        const revision = await createRevision(jobRoot, input.designSystemId, {
           feedback: input.feedback,
           baseBody: input.baseBody,
           proposedBody: input.proposedBody,

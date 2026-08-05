@@ -573,6 +573,124 @@ describe('buildPackagedDaemonSpawnEnv', () => {
     expect(env.OPEN_DESIGN_AMR_PROFILE).toBe('test');
   });
 
+  it.each(['feature-test', 'test'] as const)(
+    'enables the vela-cli workspace-team transport for a %s build with an injected vela web origin',
+    (amrProfile) => {
+      const env = buildPackagedDaemonSpawnEnv(fakePaths(), {
+        appVersion: null,
+        amrProfile,
+        daemonCliEntry: null,
+        legacyDataDir: null,
+        requireDesktopAuth: true,
+        velaWebUrl: 'https://vela.example.invalid',
+      });
+      expect(env.OPEN_DESIGN_AMR_PROFILE).toBe(amrProfile);
+      expect(env.OD_WORKSPACE_CONTEXT_SOURCE).toBe('vela');
+      expect(env.OD_TEAM_PROJECTS_TRANSPORT).toBe('vela-cli');
+      expect(env.OD_COLLAB_TRANSPORT).toBe('vela-cli');
+      expect(env.OD_RESOURCE_TRANSPORT).toBe('vela-cli');
+      expect(env.OD_VELA_WEB_URL).toBe('https://vela.example.invalid');
+    },
+  );
+
+  // The gate is profile AND origin. A build whose CI secret was never
+  // configured must degrade to "workspace-team dormant" rather than turn the
+  // transports on against an unknown backend.
+  it.each(['feature-test', 'test'] as const)(
+    'leaves the workspace-team transport off for a %s build with no injected vela web origin',
+    (amrProfile) => {
+      for (const velaWebUrl of [undefined, null, '', '   ']) {
+        const env = buildPackagedDaemonSpawnEnv(fakePaths(), {
+          appVersion: null,
+          amrProfile,
+          daemonCliEntry: null,
+          legacyDataDir: null,
+          requireDesktopAuth: true,
+          velaWebUrl,
+        });
+        expect('OD_WORKSPACE_CONTEXT_SOURCE' in env).toBe(false);
+        expect('OD_TEAM_PROJECTS_TRANSPORT' in env).toBe(false);
+        expect('OD_COLLAB_TRANSPORT' in env).toBe(false);
+        expect('OD_RESOURCE_TRANSPORT' in env).toBe(false);
+        expect('OD_VELA_WEB_URL' in env).toBe(false);
+      }
+    },
+  );
+
+  it('leaves the workspace-team transport off for builds without a workspace-team backend', () => {
+    for (const amrProfile of ['prod', 'local', null] as const) {
+      const env = buildPackagedDaemonSpawnEnv(fakePaths(), {
+        appVersion: null,
+        amrProfile,
+        daemonCliEntry: null,
+        legacyDataDir: null,
+        requireDesktopAuth: true,
+      });
+      expect('OD_WORKSPACE_CONTEXT_SOURCE' in env).toBe(false);
+      expect('OD_TEAM_PROJECTS_TRANSPORT' in env).toBe(false);
+      expect('OD_COLLAB_TRANSPORT' in env).toBe(false);
+      expect('OD_RESOURCE_TRANSPORT' in env).toBe(false);
+      expect('OD_VELA_WEB_URL' in env).toBe(false);
+    }
+  });
+
+  // Workspace Team is released, so a prod bundle handed an origin now turns the
+  // transports on — that is the shipping path for stable users.
+  it('enables the workspace-team transport for a prod build with an injected vela web origin', () => {
+    const env = buildPackagedDaemonSpawnEnv(fakePaths(), {
+      appVersion: null,
+      amrProfile: 'prod',
+      daemonCliEntry: null,
+      legacyDataDir: null,
+      requireDesktopAuth: true,
+      velaWebUrl: 'https://open-design.ai/cloud',
+    });
+    expect(env.OD_WORKSPACE_CONTEXT_SOURCE).toBe('vela');
+    expect(env.OD_TEAM_PROJECTS_TRANSPORT).toBe('vela-cli');
+    expect(env.OD_COLLAB_TRANSPORT).toBe('vela-cli');
+    expect(env.OD_RESOURCE_TRANSPORT).toBe('vela-cli');
+    expect(env.OD_VELA_WEB_URL).toBe('https://open-design.ai/cloud');
+  });
+
+  // The profile allowlist remains the load-bearing half of the gate for every
+  // profile that is NOT a released Vela backend: a `local` or profile-less
+  // bundle handed an origin must still stay dormant rather than point the
+  // transports at a backend that does not serve them.
+  it('never enables the workspace-team transport for a local or profile-less build', () => {
+    for (const amrProfile of ['local', null] as const) {
+      const env = buildPackagedDaemonSpawnEnv(fakePaths(), {
+        appVersion: null,
+        amrProfile,
+        daemonCliEntry: null,
+        legacyDataDir: null,
+        requireDesktopAuth: true,
+        velaWebUrl: 'https://vela.example.invalid',
+      });
+      expect('OD_WORKSPACE_CONTEXT_SOURCE' in env).toBe(false);
+      expect('OD_TEAM_PROJECTS_TRANSPORT' in env).toBe(false);
+      expect('OD_COLLAB_TRANSPORT' in env).toBe(false);
+      expect('OD_RESOURCE_TRANSPORT' in env).toBe(false);
+      expect('OD_VELA_WEB_URL' in env).toBe(false);
+    }
+  });
+
+  // The origin half of the gate is what protects a misconfigured prod build:
+  // no injected origin means dormant, never a guessed backend.
+  it('keeps a prod build dormant when no vela web origin was injected', () => {
+    const env = buildPackagedDaemonSpawnEnv(fakePaths(), {
+      appVersion: null,
+      amrProfile: 'prod',
+      daemonCliEntry: null,
+      legacyDataDir: null,
+      requireDesktopAuth: true,
+    });
+    expect('OD_WORKSPACE_CONTEXT_SOURCE' in env).toBe(false);
+    expect('OD_TEAM_PROJECTS_TRANSPORT' in env).toBe(false);
+    expect('OD_COLLAB_TRANSPORT' in env).toBe(false);
+    expect('OD_RESOURCE_TRANSPORT' in env).toBe(false);
+    expect('OD_VELA_WEB_URL' in env).toBe(false);
+  });
+
   it('forwards POSTHOG_KEY/POSTHOG_HOST to the daemon spawn env when baked into the bundle', () => {
     const env = buildPackagedDaemonSpawnEnv(fakePaths(), {
       appVersion: null,

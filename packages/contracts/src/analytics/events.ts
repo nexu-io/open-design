@@ -14,6 +14,7 @@ export * from './events/shared-enums.js';
 export * from './events/onboarding.js';
 export * from './events/amr-auth.js';
 export * from './events/design-systems.js';
+export * from './events/workspace.js';
 export * from './events/mcp.js';
 export * from './events/page-view.js';
 export * from './events/ui-click.js';

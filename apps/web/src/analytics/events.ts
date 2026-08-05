@@ -18,7 +18,6 @@ import type {
   DesignSystemsTemplatesModalSurfaceViewProps,
   AssistantFeedbackReasonPanelSurfaceViewProps,
   QuestionsFormSurfaceViewProps,
-  PreviewRunStatusSurfaceViewProps,
   // ui_click
   HomeNavClickProps,
   HelpPopoverClickProps,
@@ -112,7 +111,6 @@ import type {
   SettingsMediaProvidersClickProps,
   SettingsConnectorsClickProps,
   SettingsLanguageClickProps,
-  SettingsAppearanceClickProps,
   SettingsNotificationsClickProps,
   SettingsPetsClickProps,
   SettingsPrivacyClickProps,
@@ -155,6 +153,20 @@ import type {
   UpdateInstallResultProps,
   WhatsNewPopupSurfaceViewProps,
   WhatsNewPopupClickProps,
+  EntryNavigationClickProps,
+  AccountMenuClickProps,
+  WorkspaceSwitcherClickProps,
+  WorkspaceInviteClickProps,
+  ProjectCollectionClickProps,
+  CommunityTemplateClickProps,
+  ExtensionMarketplaceClickProps,
+  WorkspaceSurfaceViewProps,
+  WorkspaceSwitchResultProps,
+  WorkspaceInviteResultProps,
+  WorkspaceProjectActionResultProps,
+  WorkspaceSharedProjectOpenResultProps,
+  WorkspaceResourceActionResultProps,
+  ProjectCommentCreateResultProps,
 } from '@open-design/contracts/analytics';
 
 type TrackOptions = { requestId?: string; insertId?: string };
@@ -179,6 +191,64 @@ function send<T extends object>(
 
 export function trackPageView(track: Track, props: PageViewProps): void {
   send(track, 'page_view', props);
+}
+
+// ---- Workspace redesign -------------------------------------------------
+
+export function trackEntryNavigationClick(track: Track, props: EntryNavigationClickProps): void {
+  send(track, 'ui_click', props);
+}
+
+export function trackAccountMenuClick(track: Track, props: AccountMenuClickProps): void {
+  send(track, 'ui_click', props);
+}
+
+export function trackWorkspaceSwitcherClick(track: Track, props: WorkspaceSwitcherClickProps): void {
+  send(track, 'ui_click', props);
+}
+
+export function trackWorkspaceInviteClick(track: Track, props: WorkspaceInviteClickProps, options?: TrackOptions): void {
+  send(track, 'ui_click', props, options);
+}
+
+export function trackProjectCollectionClick(track: Track, props: ProjectCollectionClickProps, options?: TrackOptions): void {
+  send(track, 'ui_click', props, options);
+}
+
+export function trackCommunityTemplateClick(track: Track, props: CommunityTemplateClickProps): void {
+  send(track, 'ui_click', props);
+}
+
+export function trackExtensionMarketplaceClick(track: Track, props: ExtensionMarketplaceClickProps): void {
+  send(track, 'ui_click', props);
+}
+
+export function trackWorkspaceSurfaceView(track: Track, props: WorkspaceSurfaceViewProps): void {
+  send(track, 'surface_view', props);
+}
+
+export function trackWorkspaceSwitchResult(track: Track, props: WorkspaceSwitchResultProps, options?: TrackOptions): void {
+  send(track, 'workspace_switch_result', props, options);
+}
+
+export function trackWorkspaceInviteResult(track: Track, props: WorkspaceInviteResultProps, options?: TrackOptions): void {
+  send(track, 'workspace_invite_result', props, options);
+}
+
+export function trackWorkspaceProjectActionResult(track: Track, props: WorkspaceProjectActionResultProps, options?: TrackOptions): void {
+  send(track, 'workspace_project_action_result', props, options);
+}
+
+export function trackWorkspaceSharedProjectOpenResult(track: Track, props: WorkspaceSharedProjectOpenResultProps, options?: TrackOptions): void {
+  send(track, 'workspace_shared_project_open_result', props, options);
+}
+
+export function trackWorkspaceResourceActionResult(track: Track, props: WorkspaceResourceActionResultProps, options?: TrackOptions): void {
+  send(track, 'workspace_resource_action_result', props, options);
+}
+
+export function trackProjectCommentCreateResult(track: Track, props: ProjectCommentCreateResultProps): void {
+  send(track, 'project_comment_create_result', props);
 }
 
 // ---- surface_view --------------------------------------------------------
@@ -256,13 +326,6 @@ export function trackAssistantFeedbackReasonPanelSurfaceView(
 export function trackRunFailedToastSurfaceView(
   track: Track,
   props: RunFailedToastSurfaceViewProps,
-): void {
-  send(track, 'surface_view', props);
-}
-
-export function trackPreviewRunStatusSurfaceView(
-  track: Track,
-  props: PreviewRunStatusSurfaceViewProps,
 ): void {
   send(track, 'surface_view', props);
 }
@@ -918,13 +981,6 @@ export function trackSettingsConnectorsClick(
 export function trackSettingsLanguageClick(
   track: Track,
   props: SettingsLanguageClickProps,
-): void {
-  send(track, 'ui_click', props);
-}
-
-export function trackSettingsAppearanceClick(
-  track: Track,
-  props: SettingsAppearanceClickProps,
 ): void {
   send(track, 'ui_click', props);
 }

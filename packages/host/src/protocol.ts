@@ -39,10 +39,42 @@ export type OpenDesignHostActionResult =
   | { ok: true }
   | OpenDesignHostFailure;
 
+/**
+ * The workspace attribution the renderer gives the host so a folder import
+ * lands in the caller's current workspace instead of the host's ambient one.
+ *
+ * This is a deliberate structural subset of the daemon/web
+ * `WorkspaceCollabContext`, redeclared here rather than imported: this package
+ * is the renderer host-bridge wire contract and must stay independent of the
+ * daemon/web contracts package (enforced by the "stays independent from
+ * daemon/web contracts" test). A full `WorkspaceCollabContext` is structurally
+ * assignable to this type, so callers pass theirs unchanged.
+ *
+ * Only the fields the host actually forwards are modelled, and the enum-like
+ * fields stay `string` because the host treats them as opaque pass-through
+ * values — the daemon remains the authority that parses and validates them.
+ * Deliberately no index signature: an interface never satisfies one, so adding
+ * it would reject the very `WorkspaceCollabContext` callers pass. Callers hand
+ * over a variable, not a fresh literal, so the extra fields ride along fine.
+ */
+export type OpenDesignHostWorkspaceContext = {
+  lifecycleState: string;
+  memberStatus: string;
+  permissions: {
+    canShareProjects: boolean;
+    canWriteSyncedFiles: boolean;
+  };
+  role: string;
+  workspaceId: string;
+  workspaceMemberId: string;
+  workspaceType: string;
+};
+
 export type OpenDesignHostProjectImportInit = {
   designSystemId?: string | null;
   name?: string;
   skillId?: string | null;
+  workspaceContext?: OpenDesignHostWorkspaceContext | null;
 };
 
 export type OpenDesignHostProjectImportSuccess = {
@@ -105,6 +137,22 @@ export type OpenDesignHostBrowserClearDataOptions = {
   cookies?: boolean;
   storage?: boolean;
 };
+
+/**
+ * App theme values the renderer may pin the host window appearance to.
+ * `light`/`dark` force the native window material (macOS under-window
+ * vibrancy glass follows the OS appearance by default, which reads as a
+ * muddy gray when the OS is dark but the app theme is explicitly light);
+ * `system` restores following the OS.
+ */
+export const OPEN_DESIGN_HOST_APPEARANCE_THEMES = Object.freeze({
+  DARK: "dark",
+  LIGHT: "light",
+  SYSTEM: "system",
+} as const);
+
+export type OpenDesignHostAppearanceTheme =
+  (typeof OPEN_DESIGN_HOST_APPEARANCE_THEMES)[keyof typeof OPEN_DESIGN_HOST_APPEARANCE_THEMES];
 
 export const OPEN_DESIGN_HOST_UPDATER_ACTIONS = Object.freeze({
   CHECK: "check",
@@ -313,6 +361,11 @@ export type OpenDesignHostUpdaterOpenDialogRequest = {
 export type OpenDesignHostUpdaterOpenDialogListener = (request: OpenDesignHostUpdaterOpenDialogRequest) => void;
 
 export type OpenDesignHostBridge = {
+  // Optional so older host builds still satisfy the bridge shape; callers
+  // must feature-detect before invoking.
+  appearance?: {
+    setTheme(theme: OpenDesignHostAppearanceTheme): void;
+  };
   browser: {
     clearData(options?: OpenDesignHostBrowserClearDataOptions): Promise<OpenDesignHostActionResult>;
   };

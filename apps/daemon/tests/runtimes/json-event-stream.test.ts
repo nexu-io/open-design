@@ -1180,6 +1180,63 @@ test('codex json stream emits thinking status and reasoning token usage', () => 
   ]);
 });
 
+test('codex json stream emits thinking deltas from reasoning items (regression: codex thinking had no content to expand)', () => {
+  const { events, handler } = collectEvents('codex');
+
+  handler.feed(
+    JSON.stringify({ type: 'turn.started' }) + '\n' +
+    JSON.stringify({
+      type: 'item.completed',
+      item: { id: 'item_0', type: 'reasoning', text: '**Scoping the deck**\nPick 10 slides.' },
+    }) + '\n' +
+    JSON.stringify({
+      type: 'item.completed',
+      item: { id: 'item_2', type: 'reasoning', text: '**Choosing a palette**' },
+    }) + '\n',
+  );
+
+  assert.deepEqual(events, [
+    { type: 'status', label: 'thinking' },
+    { type: 'thinking_delta', delta: '**Scoping the deck**\nPick 10 slides.' },
+    // A new reasoning item starts a new summary paragraph; the web folds all
+    // thinking deltas into one block, so the parser owns the separation.
+    { type: 'thinking_delta', delta: '\n\n**Choosing a palette**' },
+  ]);
+});
+
+test('codex json stream emits only the unseen suffix when a reasoning item repeats across lifecycle events', () => {
+  const { events, handler } = collectEvents('codex');
+
+  handler.feed(
+    JSON.stringify({ type: 'item.started', item: { id: 'item_0', type: 'reasoning', text: '' } }) + '\n' +
+    JSON.stringify({ type: 'item.updated', item: { id: 'item_0', type: 'reasoning', text: 'Reading the brief' } }) + '\n' +
+    JSON.stringify({ type: 'item.completed', item: { id: 'item_0', type: 'reasoning', text: 'Reading the brief, then drafting.' } }) + '\n',
+  );
+
+  assert.deepEqual(events, [
+    { type: 'thinking_delta', delta: 'Reading the brief' },
+    { type: 'thinking_delta', delta: ', then drafting.' },
+  ]);
+});
+
+test('codex json stream surfaces non-fatal error items as a warning status, not raw noise (skills budget notice)', () => {
+  const { events, handler } = collectEvents('codex');
+
+  const message =
+    'Skill descriptions were shortened to fit the 2% skills context budget. ' +
+    'Codex can still see every skill, but some descriptions are shorter.';
+  handler.feed(
+    JSON.stringify({ type: 'item.completed', item: { id: 'item_0', type: 'error', message } }) + '\n',
+  );
+
+  // Must stay a visible non-fatal warning: two sibling runs in the incident
+  // bundle carried this exact item and completed successfully, so a fatal
+  // `error` event here would wrongly kill healthy runs.
+  assert.deepEqual(events, [
+    { type: 'status', label: 'warning', detail: message },
+  ]);
+});
+
 test('codex json stream preserves line boundaries between assistant message items', () => {
   const { events, handler } = collectEvents('codex');
 

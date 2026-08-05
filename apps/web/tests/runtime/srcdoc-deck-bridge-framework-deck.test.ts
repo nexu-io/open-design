@@ -15,8 +15,15 @@ import { buildSrcdoc } from '../../src/runtime/srcdoc';
 // pushed the scaled stage off-screen.
 //
 // The fix: detect the framework deck via its `id="deck-stage"` marker and
-// skip the `data-od-deck-fix` styleFix for it. Legacy / non-framework
-// decks that authored their own `.stage` grid still get the override.
+// skip the place-content override for it. Legacy / non-framework decks that
+// authored their own `.stage` grid still get it.
+//
+// Framework decks get the INVERSE fix instead (acceptance #47). Their skeleton
+// documents `.deck-shell` as plain block flow so the stage's natural top-left
+// is (0, 0); generated decks routinely re-declare it as a centering flex
+// container, which makes the stage a flex item whose default `flex-shrink: 1`
+// collapses `width: 1920px` to the pane width — a 16:9 canvas silently renders
+// portrait. Restoring block flow + no shrink is a no-op on a compliant deck.
 
 function frameworkDeckHtml(): string {
   return [
@@ -61,12 +68,18 @@ function legacyDeckHtml(): string {
 describe('injectDeckBridge — framework-deck detection (#deck-stage)', () => {
   it('skips the place-content fix when the deck carries the framework #deck-stage marker', () => {
     const out = buildSrcdoc(frameworkDeckHtml(), { deck: true });
-    expect(out).not.toMatch(/<style[^>]*data-od-deck-fix/);
     expect(out).not.toContain('place-content: center !important');
     // The bridge script itself must still ship — the framework's own
     // fit() handles centering, but the host-side counter / keyboard
     // bridge still needs the slide-state postMessage channel.
     expect(out).toMatch(/<script[^>]*data-od-deck-bridge/);
+  });
+
+  it('keeps a framework deck stage at its authored size when the shell is a flex container', () => {
+    const out = buildSrcdoc(frameworkDeckHtml(), { deck: true });
+    expect(out).toMatch(/<style[^>]*data-od-deck-fix/);
+    expect(out).toContain('.deck-shell { display: block !important; }');
+    expect(out).toContain('.deck-stage { flex-shrink: 0 !important; }');
   });
 
   it('keeps injecting the place-content fix for legacy / non-framework decks', () => {
@@ -114,7 +127,9 @@ describe('injectDeckBridge — framework-deck detection (#deck-stage)', () => {
     ];
     for (const variant of variants) {
       const out = buildSrcdoc(`<!doctype html><html><body>${variant}</body></html>`, { deck: true });
-      expect(out, `variant ${JSON.stringify(variant)}`).not.toContain('data-od-deck-fix');
+      expect(out, `variant ${JSON.stringify(variant)}`).not.toContain('place-content: center !important');
+      // …and gets the framework branch's shrink fix instead.
+      expect(out, `variant ${JSON.stringify(variant)}`).toContain('flex-shrink: 0 !important');
     }
   });
 });

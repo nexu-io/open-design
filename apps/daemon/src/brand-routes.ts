@@ -16,6 +16,7 @@ import path from 'node:path';
 import type { Application, Request, Response } from 'express';
 
 import {
+  ensureWorkspaceProject,
   getProject,
   listFirstConversationRunStatuses,
   listConversationsAwaitingInput,
@@ -25,6 +26,10 @@ import {
   listProjectsAwaitingInput,
   type insertProject,
 } from './db.js';
+import type { CreatedProjectWorkspaceResolver } from './collab/created-project-workspace.js';
+import type { AuthorizeProjectRequest } from './collab/project-request-authority.js';
+import type { WorkspaceResourceContext } from './collab/workspace-resource-mutation.js';
+import type { DesignSystemSummary, UserDesignSystemInput } from './design-systems/index.js';
 import { resolveProjectDir } from './projects.js';
 import {
   continueBrandExtraction,
@@ -49,8 +54,48 @@ export interface BrandRoutesDeps {
    *  `user:<id>` design system, so selecting a brand in the composer reuses
    *  the existing design-system apply flow. */
   userDesignSystemsRoot: string;
+  /** The workspace an extracted brand's design system should be claimed by
+   *  (#145), resolved from the exact request's explicit identity. */
+  resolveDesignSystemWorkspaceId?: (req: Request) => Promise<string | null>;
+  /** Exact-scope creator owned by server.ts; keeps metadata and the generic
+   * workspace_resources envelope in one operation. */
+  createWorkspaceOwnedDesignSystem?: (
+    root: string,
+    input: UserDesignSystemInput,
+    context: WorkspaceResourceContext | null,
+  ) => Promise<DesignSystemSummary>;
+  /** Roll back both the filesystem record and its generic envelope. */
+  deleteWorkspaceOwnedDesignSystem?: (
+    root: string,
+    designSystemId: string,
+  ) => Promise<boolean>;
+  /** Exact read gate shared with the design-system data plane. */
+  authorizeDesignSystemRead?: (
+    req: Request,
+    res: Response,
+    designSystemId: string,
+    allowNavigationQuery?: boolean,
+  ) => Promise<boolean>;
+  /** Whether this logical design-system id has a persisted Workspace owner. */
+  isDesignSystemWorkspaceBound?: (designSystemId: string) => boolean;
+  /** Canonical design-system deletion gate shared with its own DELETE route. */
+  deleteDesignSystemForRequest?: (
+    req: Request,
+    res: Response,
+    designSystemId: string,
+    options?: { beforeDelete?: () => Promise<boolean> },
+  ) => Promise<boolean>;
+  /** Exact read gate for logo bytes served from the backing project. */
+  authorizeProjectRequest?: AuthorizeProjectRequest;
   /** `<dataDir>/projects` — backing brand-extraction projects. */
   projectsRoot: string;
+  /**
+   * Where a brand-extraction project belongs. Verifies an asserted workspace
+   * identity, then degrades to the daemon's own signed-in workspace rather than
+   * refusing — see `createdProjectWorkspaceHome` in
+   * `collab/created-project-workspace.ts`.
+   */
+  resolveCreatedProjectHome?: CreatedProjectWorkspaceResolver;
   /** Skills root — the agent-driven kit page is rendered from the bundled
    *  `brand-extract` template under here. */
   skillsRoot: string;
@@ -97,6 +142,72 @@ type ProgrammaticExtractionAbortResult = 'none' | 'settled' | 'timeout';
 export function registerBrandRoutes(app: Application, deps: BrandRoutesDeps): void {
   const { brandsRoot, userDesignSystemsRoot, projectsRoot, skillsRoot, dataDir, db, randomId } = deps;
   const activeProgrammaticBrandExtractions = new Map<string, ActiveProgrammaticBrandExtraction>();
+  const sendWorkspaceScopeError = (res: Response, error: unknown): boolean => {
+    if (
+      !error
+      || typeof error !== 'object'
+      || !('status' in error)
+      || (error.status !== 400 && error.status !== 403 && error.status !== 503)
+      || !('code' in error)
+      || typeof error.code !== 'string'
+    ) {
+      return false;
+    }
+    res.status(error.status).json({
+      error: error.code,
+      message: error instanceof Error ? error.message : String(error.code),
+      ...('retryable' in error && error.retryable === true ? { retryable: true } : {}),
+    });
+    return true;
+  };
+
+  /**
+   * Bind a freshly started brand-extraction project into the SAME workspace
+   * the request that created it is acting in — mirroring `POST /api/projects`
+   * (`routes/project/index.ts`'s `workspaceIdForCreate` handling) and
+   * `bindDuplicateIntoRequestWorkspace` (the same file's duplicate/design-
+   * system-copy routes).
+   *
+   * `startBrandExtraction` (`brands/index.ts`) inserts its backing project row
+   * directly and has never called `ensureWorkspaceProject`: the function takes
+   * a plain options object, not an Express `Request`, so it has no workspace
+   * headers to bind against, and nothing downstream filled the gap. A project
+   * with no `workspace_projects` row is not a harmless default — as of the
+   * POST /api/runs and POST /api/chat workspace-identity gate
+   * (`enforceWorkspaceResourceMutation`, resourceType 'project'), an unbound
+   * project is UNCONDITIONALLY denied a run whenever the caller's client
+   * carries any workspace headers at all (`row === null` short-circuits to
+   * `canMutate: false` regardless of who created it), not merely "ungated
+   * either way" as pre-existing call sites assumed. A team member who just
+   * asked the composer to extract a brand/design system could never get the
+   * agent to write anything into it — including the very `assets/` write
+   * spec 04 §9.3's asset sync depends on — because their own first chat turn
+   * 403s before the agent ever runs.
+   *
+   * Scoped to an ACTIVE member only, matching `POST /api/projects`. A
+   * headerless legacy request remains unbound. An asserted but invalid or
+   * unavailable identity fails before extraction creates any local state.
+   */
+  function bindBrandProjectIntoRequestWorkspace(
+    ctx: Awaited<ReturnType<CreatedProjectWorkspaceResolver>>,
+    projectId: string,
+    now: number,
+  ): void {
+    if (!ctx || ctx.memberStatus !== 'active') return;
+    ensureWorkspaceProject(db, {
+      projectId,
+      workspaceId: ctx.workspaceId,
+      visibility: 'personal',
+      resourceState: 'active',
+      createdByWorkspaceMemberId: ctx.workspaceMemberId,
+      updatedByWorkspaceMemberId: ctx.workspaceMemberId,
+      syncState: 'local_only',
+      resourceHubResourceId: null,
+      cloudTombstonedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
 
   function trackProgrammaticBrandExtraction(
     brandId: string,
@@ -125,7 +236,6 @@ export function registerBrandRoutes(app: Application, deps: BrandRoutesDeps): vo
     const active = activeProgrammaticBrandExtractions.get(brandId);
     if (!active) return 'none';
     active.controller.abort();
-    activeProgrammaticBrandExtractions.delete(brandId);
     return waitForProgrammaticExtractionSettlement(active, options.settleTimeoutMs);
   }
 
@@ -227,6 +337,11 @@ export function registerBrandRoutes(app: Application, deps: BrandRoutesDeps): vo
       return;
     }
     try {
+      // Resolve before startBrandExtraction reserves a brand/project. An
+      // explicitly scoped request must never degrade to an unbound artifact.
+      const createHome = deps.resolveCreatedProjectHome
+        ? await deps.resolveCreatedProjectHome(req)
+        : null;
       const programmaticAbortController = new AbortController();
       const backgroundExtractionRef: { current: Promise<unknown> | null } = { current: null };
       const startOptions: Parameters<typeof startBrandExtraction>[0] = {
@@ -239,12 +354,22 @@ export function registerBrandRoutes(app: Application, deps: BrandRoutesDeps): vo
         // returning, then harvests + synthesizes + finalizes the design system
         // in the background.
         userDesignSystemsRoot,
+        designSystemWorkspaceId: (await deps.resolveDesignSystemWorkspaceId?.(req)) ?? null,
         dataDir,
         programmaticAbortSignal: programmaticAbortController.signal,
         onBackgroundExtraction: (settled) => {
           backgroundExtractionRef.current = settled;
         },
       };
+      if (deps.createWorkspaceOwnedDesignSystem) {
+        startOptions.createUserDesignSystem = (root, input) =>
+          deps.createWorkspaceOwnedDesignSystem!(root, input, createHome);
+      }
+      if (deps.deleteWorkspaceOwnedDesignSystem) {
+        startOptions.deleteUserDesignSystem = deps.deleteWorkspaceOwnedDesignSystem;
+      }
+      startOptions.bindCreatedProject = (projectId) =>
+        bindBrandProjectIntoRequestWorkspace(createHome, projectId, Date.now());
       if (url.trim()) startOptions.url = url;
       if (description.trim()) startOptions.description = description;
       if (designMd.trim()) startOptions.designMd = designMd;
@@ -260,6 +385,7 @@ export function registerBrandRoutes(app: Application, deps: BrandRoutesDeps): vo
       trackProgrammaticBrandExtraction(result.id, programmaticAbortController, backgroundExtraction);
       res.json(result);
     } catch (err) {
+      if (sendWorkspaceScopeError(res, err)) return;
       const message = err instanceof Error ? err.message : String(err);
       // A bad URL is the only expected throw; everything else is a 500.
       const status = /valid http/i.test(message) ? 400 : 500;
@@ -412,6 +538,7 @@ export function registerBrandRoutes(app: Application, deps: BrandRoutesDeps): vo
         id,
         brandsRoot,
         userDesignSystemsRoot,
+        designSystemWorkspaceId: (await deps.resolveDesignSystemWorkspaceId?.(req)) ?? null,
         projectsRoot,
         skillsRoot,
         dataDir,
@@ -423,6 +550,7 @@ export function registerBrandRoutes(app: Application, deps: BrandRoutesDeps): vo
       const result = await finalizeBrand(finalizeOptions);
       res.json(result);
     } catch (err) {
+      if (sendWorkspaceScopeError(res, err)) return;
       const message = err instanceof Error ? err.message : String(err);
       const status = /not found/i.test(message) ? 404 : 422;
       res.status(status).json({ error: message });
@@ -500,7 +628,37 @@ export function registerBrandRoutes(app: Application, deps: BrandRoutesDeps): vo
   // DELETE /api/brands/:id — remove the brand and its registered design system.
   app.delete('/api/brands/:id', async (req: Request, res: Response) => {
     try {
-      await removeBrand(brandsRoot, userDesignSystemsRoot, String(req.params.id));
+      const id = String(req.params.id);
+      const detail = readBrandDetail(brandsRoot, id);
+      if (detail?.meta.designSystemId && deps.deleteDesignSystemForRequest) {
+        if (!(await deps.deleteDesignSystemForRequest(
+          req,
+          res,
+          detail.meta.designSystemId,
+          {
+            beforeDelete: async () => {
+              const abortResult = await abortActiveProgrammaticBrandExtraction(id, {
+                settleTimeoutMs: PROGRAMMATIC_ABORT_SETTLE_GRACE_MS,
+              });
+              if (abortResult !== 'timeout') return true;
+              res.status(409).json({
+                error: 'BRAND_EXTRACTION_STILL_STOPPING',
+                message: 'brand extraction is still stopping; retry deletion',
+                retryable: true,
+              });
+              return false;
+            },
+          },
+        ))) return;
+      }
+      await removeBrand(
+        brandsRoot,
+        userDesignSystemsRoot,
+        id,
+        detail?.meta.designSystemId && deps.deleteDesignSystemForRequest
+          ? async () => true
+          : deps.deleteWorkspaceOwnedDesignSystem,
+      );
       res.json({ ok: true });
     } catch (err) {
       res.status(500).json({ error: String(err) });
@@ -508,12 +666,38 @@ export function registerBrandRoutes(app: Application, deps: BrandRoutesDeps): vo
   });
 
   // GET /api/brands/:id/logo — serve the primary logo image. 404 if none.
-  app.get('/api/brands/:id/logo', (req: Request, res: Response) => {
+  app.get('/api/brands/:id/logo', async (req: Request, res: Response) => {
     try {
       const id = String(req.params.id);
-      const logoPath =
-        resolveBrandLogoPath(brandsRoot, id)
-        ?? resolveBackingProjectLogoPath({ brandsRoot, projectsRoot, db }, id);
+      const detail = readBrandDetail(brandsRoot, id);
+      const brandLogoPath = resolveBrandLogoPath(brandsRoot, id);
+      let logoPath = brandLogoPath;
+      const designSystemId = detail?.meta.designSystemId;
+      const designSystemBound = designSystemId
+        ? (deps.isDesignSystemWorkspaceBound?.(designSystemId) ?? true)
+        : false;
+      if (brandLogoPath && designSystemId && designSystemBound && deps.authorizeDesignSystemRead) {
+        if (!(await deps.authorizeDesignSystemRead(
+          req,
+          res,
+          designSystemId,
+          true,
+        ))) return;
+      } else if (brandLogoPath && detail?.meta.projectId && deps.authorizeProjectRequest) {
+        if (!(await deps.authorizeProjectRequest(req, res, detail.meta.projectId, {
+          mode: 'read',
+          allowNavigationQuery: true,
+        }))) return;
+      }
+      if (!logoPath) {
+        logoPath = resolveBackingProjectLogoPath({ brandsRoot, projectsRoot, db }, id);
+        if (logoPath && detail?.meta.projectId && deps.authorizeProjectRequest) {
+          if (!(await deps.authorizeProjectRequest(req, res, detail.meta.projectId, {
+            mode: 'read',
+            allowNavigationQuery: true,
+          }))) return;
+        }
+      }
       if (!logoPath) {
         res.status(404).json({ error: 'logo not found' });
         return;

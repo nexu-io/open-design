@@ -39,6 +39,8 @@ const updateMetadataUrl = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_MAC_U
 const updateVersion = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_MAC_UPDATE_VERSION);
 const updateBuildJsonPath = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_MAC_UPDATE_BUILD_JSON_PATH);
 const updateFixture = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_MAC_UPDATE_FIXTURE);
+const packagedInviteDeeplink =
+  'opendesign://workspace/invite/continue?workspace_id=packaged-smoke-workspace&member_id=packaged-smoke-member&invite_id=packaged-smoke-invite&nonce=packaged-smoke-nonce';
 
 const outputNamespaceRoot = join(toolsPackDir, 'out', 'mac', 'namespaces', namespace);
 const runtimeNamespaceRoot = join(toolsPackDir, 'runtime', 'mac', 'namespaces', namespace);
@@ -397,6 +399,7 @@ macDescribe('packaged mac runtime smoke', () => {
       expect(install.detached).toBe(true);
       expectPathInside(install.dmgPath, join(outputNamespaceRoot, 'dmg'));
       expectPathInside(install.installedAppPath, join(outputNamespaceRoot, 'install', 'Applications'));
+      await assertMacInviteProtocolRegistration(install.installedAppPath);
 
       await seedPackagedOnboardingComplete();
 
@@ -466,6 +469,24 @@ macDescribe('packaged mac runtime smoke', () => {
       expect(pty.cleanup.projectStatus).toBe(200);
       assertLauncherPointer(inspect.launcher.active, updateScenario.expectedCurrentVersion, 0, 'initial active');
       assertLauncherPointer(inspect.launcher.lastSuccessful, updateScenario.expectedCurrentVersion, 0, 'initial lastSuccessful');
+
+      const protocolHotPid = inspect.status?.pid ?? start.pid;
+      await invokeMacInviteDeeplink(install.installedAppPath);
+      const protocolHotInspect = await waitForHealthyDesktop();
+      expect(protocolHotInspect.status?.pid).toBe(protocolHotPid);
+
+      if (verifyCoreOnly) {
+        const protocolStop = await runToolsPackJson<MacStopResult>('stop');
+        started = false;
+        expect(protocolStop.status).not.toBe('partial');
+        expect(protocolStop.remainingPids).toEqual([]);
+
+        await invokeMacInviteDeeplink(install.installedAppPath);
+        started = true;
+        const protocolColdInspect = await waitForHealthyDesktop();
+        expect(protocolColdInspect.status?.state).toBe('running');
+        expect(protocolColdInspect.status?.pid).not.toBe(protocolHotPid);
+      }
 
       if (!verifyCoreOnly) {
         const updaterVersion = expectedPayloadUpdateVersion;
@@ -1208,6 +1229,14 @@ desktopMacDescribe('mac desktop settings smoke', () => {
     });
   }, 45_000);
 
+  // #5517 removed the theme segmented control from Settings, so the packaged
+  // "preview then save" appearance loop is now driven by the accent swatches —
+  // the only appearance control the section still owns. The invariants under
+  // test are the same ones the theme leg used to prove: the edit previews
+  // immediately on the live document, and it survives the dialog closing via
+  // Save. The seeded `theme` is a LEGACY dark value: the theme setting is gone
+  // and the app ships light-only, so the packaged runtime must coerce it to
+  // light on read rather than carry it into the document.
   test('previews and saves the desktop appearance preference', async () => {
     await seedDesktopConfig(desktop, {
       mode: 'api',
@@ -1222,19 +1251,22 @@ desktopMacDescribe('mac desktop settings smoke', () => {
       onboardingCompleted: true,
       mediaProviders: {},
       agentModels: {},
-      theme: 'system',
+      theme: 'dark',
     }, 'theme');
 
     await desktop.openSettings();
     await openDesktopSettingsSection(desktop, 'Appearance');
-    await clickDesktopSegmentButton(desktop, 'Dark');
+    await clickDesktopAccentSwatch(desktop, '#87ea5c');
 
     await waitFor(async () => {
       const snapshot = await readDesktopAppearanceSnapshot(desktop);
       expect(snapshot.dialogOpen).toBe(true);
-      expect(snapshot.activeTheme).toBe('Dark');
-      expect(snapshot.documentTheme).toBe('dark');
-      expect(snapshot.savedTheme).toBe('system');
+      // Live preview lands on the document before anything is saved.
+      expect(snapshot.documentAccent).toBe('#87ea5c');
+      // The seeded legacy `dark` never reaches the document, and the coerced
+      // value is written back so the dark preference stops existing on disk.
+      expect(snapshot.documentTheme).toBe('light');
+      expect(snapshot.savedTheme).toBe('light');
     });
 
     await clickDesktopSettingsFooterButton(desktop, 'primary');
@@ -1242,8 +1274,9 @@ desktopMacDescribe('mac desktop settings smoke', () => {
     await waitFor(async () => {
       const snapshot = await readDesktopAppearanceSnapshot(desktop);
       expect(snapshot.dialogOpen).toBe(false);
-      expect(snapshot.documentTheme).toBe('dark');
-      expect(snapshot.savedTheme).toBe('dark');
+      expect(snapshot.documentAccent).toBe('#87ea5c');
+      expect(snapshot.savedAccent).toBe('#87ea5c');
+      expect(snapshot.savedTheme).toBe('light');
     });
   }, 45_000);
 
@@ -1895,7 +1928,13 @@ desktopMacDescribe('mac desktop settings smoke', () => {
     });
   }, 45_000);
 
-  test('opens the Appearance section from the desktop shell and shows theme controls', async () => {
+  // #5517 (product confirmed 2026-07-20) removed the 系统/浅色/深色 segmented
+  // control from Appearance; the theme now moves only through the account
+  // menu's 切换主题 row. The point of this test is unchanged — the packaged
+  // desktop shell can reach the Appearance section and render its controls —
+  // so it now asserts on the accent swatches, the section's surviving control,
+  // and guards that the theme segmented control has not come back.
+  test('opens the Appearance section from the desktop shell and shows the accent controls', async () => {
     await seedDesktopConfig(desktop, {
       mode: 'api',
       apiKey: 'sk-test',
@@ -1920,9 +1959,9 @@ desktopMacDescribe('mac desktop settings smoke', () => {
       expect(snapshot.dialogOpen).toBe(true);
       expect(snapshot.heading).toBe('Appearance');
       expect(snapshot.sectionTitle).toBe('Appearance');
-      expect(snapshot.systemVisible).toBe(true);
-      expect(snapshot.lightVisible).toBe(true);
-      expect(snapshot.darkVisible).toBe(true);
+      expect(snapshot.accentSwatchesVisible).toBe(true);
+      expect(snapshot.defaultAccentVisible).toBe(true);
+      expect(snapshot.themeSegControlVisible).toBe(false);
     });
   }, 45_000);
 });
@@ -2067,9 +2106,10 @@ type DesktopLocalCliSnapshot = {
 };
 
 type DesktopAppearanceSnapshot = {
-  activeTheme: string | null;
   dialogOpen: boolean;
+  documentAccent: string | null;
   documentTheme: string | null;
+  savedAccent: string | null;
   savedTheme: string | null;
 };
 
@@ -2113,12 +2153,13 @@ type DesktopAboutSnapshot = {
 };
 
 type DesktopAppearanceSectionSnapshot = {
-  darkVisible: boolean;
+  accentSwatchesVisible: boolean;
+  defaultAccentVisible: boolean;
   dialogOpen: boolean;
   heading: string | null;
-  lightVisible: boolean;
   sectionTitle: string | null;
-  systemVisible: boolean;
+  /** #5517 removed it; kept as a negative assertion so it cannot creep back. */
+  themeSegControlVisible: boolean;
 };
 
 type DesktopArtifactOpenSnapshot = {
@@ -2195,16 +2236,26 @@ async function clickDesktopExecutionModeTab(
   expect(clicked).toBe(true);
 }
 
-async function clickDesktopSegmentButton(
+/**
+ * Click an accent swatch in the Settings › Appearance section.
+ *
+ * Replaces the old `clickDesktopSegmentButton` theme helper: the
+ * 系统/浅色/深色 segmented control is gone (#5517 hid it, and the theme setting
+ * was removed outright because the app ships light-only), leaving the accent
+ * swatches as the only appearance control Settings still owns. Swatches carry
+ * the hex as their aria-label (the default swatch is "Default accent color").
+ */
+async function clickDesktopAccentSwatch(
   desktop: DesktopHarness,
   label: string,
 ): Promise<void> {
   const clicked = await desktop.eval<boolean>(`
     (() => {
-      const button = Array.from(document.querySelectorAll('[role="dialog"] button'))
-        .find((node) => node.textContent?.trim() === ${JSON.stringify(label)});
-      if (!(button instanceof HTMLElement)) return false;
-      button.click();
+      const swatch = document.querySelector(
+        '[role="dialog"] .pet-swatches [role="radio"][aria-label=' + ${JSON.stringify(JSON.stringify(label))} + ']',
+      );
+      if (!(swatch instanceof HTMLElement)) return false;
+      swatch.click();
       return true;
     })()
   `);
@@ -2271,13 +2322,11 @@ async function readDesktopAppearanceSnapshot(
     (() => {
       const raw = window.localStorage.getItem(${JSON.stringify(STORAGE_KEY)});
       const config = raw ? JSON.parse(raw) : {};
-      const activeButton = Array.from(document.querySelectorAll('[role="dialog"] button[aria-pressed="true"]'))
-        .find((node) => ['Light', 'Dark', 'System'].includes(node.textContent?.trim() ?? ''));
-
       return {
-        activeTheme: activeButton?.textContent?.trim() ?? null,
         dialogOpen: Boolean(document.querySelector('[role="dialog"]')),
+        documentAccent: document.documentElement.style.getPropertyValue('--accent').trim() || null,
         documentTheme: document.documentElement.getAttribute('data-theme'),
+        savedAccent: typeof config.accentColor === 'string' ? config.accentColor : null,
         savedTheme: typeof config.theme === 'string' ? config.theme : null,
       };
     })()
@@ -2380,15 +2429,23 @@ async function readDesktopAppearanceSectionSnapshot(
     (() => {
       const sectionTitle = document.querySelector('.settings-section .section-head h3')
         ?.textContent?.trim() ?? null;
-      const labels = Array.from(document.querySelectorAll('.seg-control .seg-title'))
-        .map((node) => node.textContent?.trim() ?? '');
+      const accentGroup = document.querySelector('.settings-section .pet-swatches[role="radiogroup"]');
+      const accentSwatches = accentGroup
+        ? Array.from(accentGroup.querySelectorAll('[role="radio"]'))
+        : [];
       return {
-        darkVisible: labels.includes('Dark'),
+        accentSwatchesVisible: accentSwatches.length > 0,
+        defaultAccentVisible: accentSwatches.some(
+          (node) => node.getAttribute('aria-label') === 'Default accent color',
+        ),
         dialogOpen: Boolean(document.querySelector('[role="dialog"]')),
         heading: document.querySelector('[role="dialog"] h2')?.textContent?.trim() ?? null,
-        lightVisible: labels.includes('Light'),
         sectionTitle,
-        systemVisible: labels.includes('System'),
+        // Scoped by aria-label: the Notifications controls in the same dialog
+        // are seg-controls too, and they are not what #5517 removed.
+        themeSegControlVisible: Boolean(
+          document.querySelector('.seg-control[aria-label="Appearance"]'),
+        ),
       };
     })()
   `);
@@ -2959,6 +3016,30 @@ function expectPathInside(filePath: string, expectedRoot: string): void {
     normalizedPath === normalizedRoot || normalizedPath.startsWith(`${normalizedRoot}${sep}`),
     `${normalizedPath} should be inside ${normalizedRoot}`,
   ).toBe(true);
+}
+
+async function assertMacInviteProtocolRegistration(installedAppPath: string): Promise<void> {
+  const plistPath = join(installedAppPath, 'Contents', 'Info.plist');
+  const { stdout } = await execFileAsync('/usr/bin/plutil', [
+    '-convert',
+    'json',
+    '-o',
+    '-',
+    plistPath,
+  ]);
+  const plist = JSON.parse(stdout) as {
+    CFBundleURLTypes?: Array<{ CFBundleURLSchemes?: string[] }>;
+  };
+  const schemes = (plist.CFBundleURLTypes ?? []).flatMap(
+    (entry) => entry.CFBundleURLSchemes ?? [],
+  );
+  expect(schemes).toContain('opendesign');
+}
+
+async function invokeMacInviteDeeplink(installedAppPath: string): Promise<void> {
+  // `-a` pins delivery to this namespace's installed test bundle instead of a
+  // developer's stable Open Design app that may own the same global scheme.
+  await execFileAsync('/usr/bin/open', ['-a', installedAppPath, packagedInviteDeeplink]);
 }
 
 async function pathExists(filePath: string): Promise<boolean> {

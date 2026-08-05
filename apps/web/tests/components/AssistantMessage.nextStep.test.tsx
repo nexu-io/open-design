@@ -153,8 +153,10 @@ describe('AssistantMessage next-step affordance', () => {
         {...h}
       />,
     );
-    expect(screen.getByTestId('file-ops-summary')).toBeTruthy();
-    expect(screen.getByTestId('file-ops-row-notes.md')).toBeTruthy();
+    // #5517 shape: a turn with produced files but no tool ops renders the flat
+    // produced-files block, not the collapsible tool-op summary.
+    expect(document.querySelector('.produced-files')?.textContent).toContain('notes.md');
+    expect(screen.queryByTestId('file-ops-summary')).toBeNull();
     expect(screen.getByTestId('next-step-actions')).toBeTruthy();
     expect(screen.getByText(en['nextStep.projectGenerateArtifactTitle'])).toBeTruthy();
     fireEvent.click(screen.getByTestId('next-step-project-action-project-generate-artifact'));
