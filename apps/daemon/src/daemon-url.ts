@@ -254,6 +254,19 @@ function conventionalIpcSocketPaths(env: NodeJS.ProcessEnv): string[] {
   ] as const;
   const orderedNamespaces: string[] = [
     ...orderedChannels.map((channel) => releaseNamespace(channel, platform)),
+    // Known CI naming inconsistency (see #6425 review): every other
+    // channel's Intel-mac build follows the standard `-intel` suffix
+    // (release-prerelease-intel, release-preview-intel, matching
+    // `releaseNamespace(channel, "macIntel")`), but
+    // `.github/workflows/release-beta.yml`'s mac_x64 job instead bakes
+    // "release-beta-x64" via `tools-pack mac build --namespace
+    // release-beta-x64`. That literal is what a live beta Intel install's
+    // daemon actually listens under, so it has to be probed even though it
+    // doesn't fit the derivable pattern. Renaming the shipping workflow's
+    // namespace to match the pattern is a separate, higher-risk change
+    // (would orphan already-installed beta Intel users' existing IPC path)
+    // outside the scope of this fix — see PR #6425 review discussion.
+    ...(platform === "macIntel" ? ["release-beta-x64"] : []),
     SIDECAR_DEFAULTS.namespace,
   ];
   return orderedNamespaces.map((namespace) =>

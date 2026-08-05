@@ -472,6 +472,58 @@ describe("resolveDaemonUrl", () => {
       }
     });
 
+    // Regression coverage for the #6425 review: every OTHER channel's
+    // Intel-mac build follows the standard `-intel` suffix that
+    // `releaseNamespace(channel, "macIntel")` derives (release-prerelease-
+    // intel, release-preview-intel, …), but `.github/workflows/
+    // release-beta.yml`'s mac_x64 job instead bakes the literal
+    // "release-beta-x64" via `tools-pack mac build --namespace
+    // release-beta-x64`. Deliberately does NOT derive the expected socket's
+    // namespace from `releaseNamespace()` (that would just re-encode the
+    // same wrong assumption the implementation had) — hardcodes the exact
+    // literal the live workflow produces instead. Forces `process.platform`/
+    // `process.arch` to darwin/x64 (this suite normally runs on whatever
+    // architecture the CI/dev machine actually has, which cannot otherwise
+    // exercise the macIntel branch on an arm64 host) using the same
+    // `Object.defineProperty` + restore pattern already used elsewhere in
+    // this package (see `host-tools-launch-shell.test.ts`).
+    it("discovers the live daemon via the release-beta-x64 literal namespace on Intel mac (CI naming inconsistency)", async () => {
+      const origPlatform = process.platform;
+      const origArch = process.arch;
+      Object.defineProperty(process, "platform", { value: "darwin", configurable: true });
+      Object.defineProperty(process, "arch", { value: "x64", configurable: true });
+      try {
+        const socketPath = resolveAppIpcPath({
+          app: APP_KEYS.DAEMON,
+          contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+          env: { [SIDECAR_ENV.IPC_BASE]: conventionalIpcBaseDir },
+          namespace: "release-beta-x64",
+        });
+        fs.mkdirSync(path.dirname(socketPath), { recursive: true });
+        let ipc: JsonIpcServerHandle | null = null;
+        try {
+          ipc = await createJsonIpcServer({
+            socketPath,
+            handler: () => ({ pid: 1, state: "running", updatedAt: new Date().toISOString(), url: "http://127.0.0.1:39999" }),
+          });
+
+          const url = await resolveDaemonUrl({
+            env: {
+              [SIDECAR_ENV.IPC_BASE]: conventionalIpcBaseDir,
+            },
+            timeoutMs: 1000,
+            allowConventionalIpcDiscovery: true,
+          });
+          expect(url).toBe("http://127.0.0.1:39999");
+        } finally {
+          await ipc?.close();
+        }
+      } finally {
+        Object.defineProperty(process, "platform", { value: origPlatform, configurable: true });
+        Object.defineProperty(process, "arch", { value: origArch, configurable: true });
+      }
+    });
+
     // Regression coverage for the #6425 review: loopback alone only rules
     // out off-host redirection, not a different local user squatting the
     // predictable socket path and answering with a loopback URL of its own
