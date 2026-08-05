@@ -5355,7 +5355,9 @@ async function postJsonToDaemon<T extends Record<string, unknown> = Record<strin
       return exitWithStructuredError({
         code:    errCode,
         message: errBody?.message ?? `HTTP ${resp.status}`,
-        data:    errBody?.data as Record<string, unknown> | undefined,
+        ...(errBody?.data && typeof errBody.data === 'object'
+          ? { data: errBody.data as Record<string, unknown> }
+          : {}),
       });
     }
     console.error(`POST ${route} failed: ${resp.status} ${JSON.stringify(data)}`);
@@ -5467,7 +5469,7 @@ Common options:
         if (mj && typeof mj === 'object') body.metadata = mj;
       }
       if (flags.plugin) body.pluginId = flags.plugin;
-      if (flags.inputs) {
+      if (typeof flags.inputs === 'string') {
         try { body.pluginInputs = JSON.parse(flags.inputs); } catch (err) {
           console.error(`--inputs must be valid JSON: ${err instanceof Error ? err.message : String(err)}`);
           process.exit(2);
@@ -5490,7 +5492,7 @@ Common options:
           return exitWithStructuredError({
             code:    'capabilities-required',
             message: errBody.message ?? '',
-            data:    errBody.data,
+            ...(errBody.data ? { data: errBody.data } : {}),
           });
         }
         console.error(`POST /api/projects failed: ${resp.status} ${JSON.stringify(data)}`);
@@ -5797,7 +5799,7 @@ Common options:
       if (flags['design-system']) body.designSystemId = flags['design-system'];
       if (flags.agent) body.agentId = flags.agent;
       if (flags.model) body.model = flags.model;
-      if (flags.inputs) {
+      if (typeof flags.inputs === 'string') {
         try { body.pluginInputs = JSON.parse(flags.inputs); } catch (err) {
           console.error(`--inputs must be valid JSON: ${err instanceof Error ? err.message : String(err)}`);
           process.exit(2);
@@ -5821,14 +5823,14 @@ Common options:
           return exitWithStructuredError({
             code:    'capabilities-required',
             message: errBody.message ?? '',
-            data:    errBody.data,
+            ...(errBody.data ? { data: errBody.data } : {}),
           });
         }
         if (resp.status === 422 && errBody?.code === 'missing-input') {
           return exitWithStructuredError({
             code:    'missing-input',
             message: errBody.message ?? '',
-            data:    errBody.data,
+            ...(errBody.data ? { data: errBody.data } : {}),
           });
         }
         console.error(`POST /api/runs failed: ${resp.status} ${JSON.stringify(data)}`);
