@@ -52,6 +52,7 @@ import { runMcp as runMcpCommand } from './mcp/cli.js';
 import { runExport as runExportCommand } from './export/cli.js';
 import { runMediaWait as runMediaWaitCommand } from './media/wait-cli.js';
 import { runMediaGenerate as runMediaGenerateCommand } from './media/generate-cli.js';
+import { runPollUntilDoneOrBudget } from './media/poll-cli.js';
 import { runShare as runShareCommand } from './share/cli.js';
 import { resolveDaemonUrl } from './daemon-url.js';
 import { requestJsonIpc } from '@open-design/sidecar';
@@ -584,111 +585,13 @@ async function runMedia(args) {
 }
 
 async function pollUntilDoneOrBudget(daemonUrl, taskId, sinceStart, options = {}) {
-  const totalBudgetMs = typeof options.totalBudgetMs === 'number' ? options.totalBudgetMs : 25_000;
-  const perCallTimeoutMs = 4_000;
-  const stillRunningExitCode =
-    typeof options.stillRunningExitCode === 'number'
-      ? options.stillRunningExitCode
-      : 2;
-  const startedAt = Date.now();
-  const url = `${daemonUrl.replace(/\/$/, '')}/api/media/tasks/${encodeURIComponent(taskId)}/wait`;
-
-  let since = Number.isFinite(sinceStart) ? sinceStart : 0;
-  let lastSnapshot = null;
-
-  while (Date.now() - startedAt < totalBudgetMs) {
-    const remaining = totalBudgetMs - (Date.now() - startedAt);
-    const callTimeout = Math.max(500, Math.min(perCallTimeoutMs, remaining));
-    let resp;
-    try {
-      resp = await fetch(url, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ since, timeoutMs: callTimeout }),
-      });
-    } catch (err) {
-      surfaceFetchError(err, daemonUrl);
-      process.exit(3);
-    }
-    if (resp.status === 404) {
-      console.error(`task ${taskId} not found (expired or never queued)`);
-      process.exit(4);
-    }
-    if (!resp.ok) {
-      const text = await resp.text();
-      console.error(`daemon ${resp.status}: ${text}`);
-      process.exit(4);
-    }
-    let snap;
-    try {
-      snap = await resp.json();
-    } catch {
-      console.error('daemon returned non-JSON for /wait');
-      process.exit(4);
-    }
-    lastSnapshot = snap;
-    if (Array.isArray(snap.progress)) {
-      for (const line of snap.progress) {
-        process.stderr.write(line + '\n');
-        process.stdout.write(`# ${line}\n`);
-      }
-    }
-    if (typeof snap.nextSince === 'number') since = snap.nextSince;
-
-    if (snap.status === 'done') {
-      const file = snap.file || {};
-      const warnings = Array.isArray(file.warnings) ? file.warnings : [];
-      for (const w of warnings) {
-        if (typeof w === 'string' && w) console.error(`WARN: ${w}`);
-      }
-      if (file.providerError) {
-        const provider = file.providerId || 'provider';
-        console.error(
-          `WARN: ${provider} call failed — wrote stub fallback (${file.size} bytes) to ${file.name}`,
-        );
-        console.error(`WARN: reason: ${file.providerError}`);
-        console.error(
-          'WARN: surface this verbatim to the user. Do NOT claim the stub is the final result.',
-        );
-      }
-      process.stdout.write(JSON.stringify({ file }) + '\n');
-      process.exit(file.providerError ? 5 : 0);
-    }
-    if (snap.status === 'failed') {
-      const msg = snap.error?.message || 'task failed';
-      console.error(`task failed: ${msg}`);
-      process.stdout.write(
-        JSON.stringify({ taskId, status: 'failed', error: snap.error || {} }) + '\n',
-      );
-      process.exit(snap.error?.status || 5);
-    }
-    if (snap.status === 'interrupted') {
-      const msg = snap.error?.message || 'task interrupted';
-      console.error(`task interrupted: ${msg}`);
-      process.stdout.write(
-        JSON.stringify({ taskId, status: 'interrupted', error: snap.error || {} }) + '\n',
-      );
-      process.exit(snap.error?.status || 5);
-    }
-  }
-
-  const handoff = {
-    taskId,
-    status: lastSnapshot?.status || 'running',
-    nextSince: since,
-    elapsed: Math.round((Date.now() - startedAt) / 1000),
-  };
-  process.stdout.write(JSON.stringify(handoff) + '\n');
-  const stillRunningHint =
-    stillRunningExitCode === 0
-      ? 'This is a successful queued/running handoff, not a failure.'
-      : `exit code ${stillRunningExitCode} = still running.`;
-  process.stderr.write(
-    `task ${taskId} still running after ${handoff.elapsed}s. ` +
-      `Run \`"$OD_NODE_BIN" "$OD_BIN" media wait ${taskId} --since ${since}\` to continue in an agent runtime ` +
-      `(${stillRunningHint}).\n`,
-  );
-  process.exit(stillRunningExitCode);
+  return runPollUntilDoneOrBudget(daemonUrl, taskId, sinceStart, options, {
+    fetch,
+    surfaceFetchError,
+    writeStdout: (text) => process.stdout.write(text),
+    writeStderr: (text) => process.stderr.write(text),
+    exit: process.exit,
+  });
 }
 
 function surfaceFetchError(err, daemonUrl) {
