@@ -73,6 +73,9 @@ import type {
   TrustTier,
 } from '@open-design/contracts';
 import type { SearchInstalledPluginsResultEntry } from './plugins/search.js';
+import type { DoctorReport } from './plugins/doctor.js';
+import type { SimulatePipelineResult } from './plugins/simulate.js';
+import type { VerifyCheckId } from './plugins/verify.js';
 import { resolveDaemonUrl } from './daemon-url.js';
 import { requestJsonIpc } from '@open-design/sidecar';
 import { SIDECAR_ENV, SIDECAR_MESSAGES } from '@open-design/sidecar-proto';
@@ -388,6 +391,54 @@ interface PluginSourceBucket {
   source: string;
   count: number;
   plugins: Array<{ id: string; version: string }>;
+}
+
+interface PluginEvent {
+  id: number;
+  at?: string | number;
+  kind: string;
+  pluginId?: string;
+  details?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+interface PluginEventSnapshotResponse {
+  events?: PluginEvent[];
+  generatedAt?: string;
+}
+
+interface PluginEventPurgeResponse {
+  purged?: number;
+  firstId?: number;
+  lastId?: number;
+  preNextId?: number;
+}
+
+interface PluginEventStatsResponse {
+  stats?: {
+    total?: number;
+    byKind?: Record<string, number>;
+    byPluginId?: Record<string, number>;
+    oldestAt?: number;
+    newestAt?: number;
+    firstId?: number;
+    lastId?: number;
+  };
+}
+
+interface PluginVerifyConfig {
+  enabled: string[];
+  strict?: boolean;
+  simulate?: {
+    signals?: Record<string, string | number | boolean>;
+    iterationCap?: number;
+  };
+  canon?: { snapshotId?: string; fixturePath?: string };
+}
+
+interface PluginRecordResponse {
+  fsPath?: string;
+  manifest?: InstalledPluginRecord['manifest'];
 }
 
 async function runResearchCommand(args: readonly string[]): Promise<void> {
@@ -2540,7 +2591,7 @@ Lifecycle vocabulary:
   const pluginIdFilter = typeof flags['plugin-id'] === 'string' && flags['plugin-id'].length > 0
     ? flags['plugin-id']
     : null;
-  const matches = (ev: any) => {
+  const matches = (ev: PluginEvent): boolean => {
     if (!ev) return false;
     if (kindFilter && ev.kind !== kindFilter) return false;
     if (pluginIdFilter && ev.pluginId !== pluginIdFilter) return false;
@@ -2554,7 +2605,7 @@ Lifecycle vocabulary:
       console.error(`GET ${url} failed: ${resp.status} ${await resp.text()}`);
       process.exit(1);
     }
-    const data = await resp.json();
+    const data = await resp.json() as PluginEventSnapshotResponse;
     const events = (Array.isArray(data?.events) ? data.events : []).filter(matches);
     if (flags.json) {
       process.stdout.write(JSON.stringify({ events, count: events.length, generatedAt: data?.generatedAt }, null, 2) + '\n');
@@ -2589,7 +2640,7 @@ Lifecycle vocabulary:
       console.error(`POST /api/plugins/events/purge failed: ${resp.status} ${await resp.text()}`);
       process.exit(1);
     }
-    const data = await resp.json();
+    const data = await resp.json() as PluginEventPurgeResponse;
     if (purgeFlags.json) {
       process.stdout.write(JSON.stringify(data, null, 2) + '\n');
     } else {
@@ -2604,7 +2655,7 @@ Lifecycle vocabulary:
       console.error(`GET /api/plugins/events/stats failed: ${resp.status} ${await resp.text()}`);
       process.exit(1);
     }
-    const data = await resp.json();
+    const data = await resp.json() as PluginEventStatsResponse;
     if (flags.json) {
       process.stdout.write(JSON.stringify(data, null, 2) + '\n');
       return;
@@ -2634,7 +2685,7 @@ Lifecycle vocabulary:
   const reader = resp.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
-  const renderEvent = (channel: any, data: any) => {
+  const renderEvent = (channel: string, data: PluginEvent): void => {
     if (!matches(data)) return;
     if (flags.json) {
       process.stdout.write(JSON.stringify({ channel, ...data }) + '\n');
@@ -2767,7 +2818,7 @@ Exit codes:
     console.error(`GET /api/plugins/${id} failed: ${pluginResp.status} ${await pluginResp.text()}`);
     process.exit(1);
   }
-  const plugin = await pluginResp.json();
+  const plugin = await pluginResp.json() as PluginRecordResponse;
 
   // 2. Load .od-verify.json from --config or <fsPath>/.od-verify.json.
   const fs = await import('node:fs/promises');
@@ -2775,13 +2826,13 @@ Exit codes:
   const configPath = typeof flags.config === 'string'
     ? path.resolve(flags.config)
     : (typeof plugin?.fsPath === 'string' ? path.join(plugin.fsPath, '.od-verify.json') : null);
-  let config = { enabled: ['doctor', 'simulate', 'canon'] };
+  let config: PluginVerifyConfig = { enabled: ['doctor', 'simulate', 'canon'] };
   if (configPath) {
     try {
       const raw = await fs.readFile(configPath, 'utf8');
       config = JSON.parse(raw);
     } catch (err) {
-      const e = err;
+      const e = err as { code?: string; message?: string };
       if (e?.code !== 'ENOENT') {
         console.error(`[verify] cannot read config ${configPath}: ${e?.message ?? e}`);
         process.exit(2);
@@ -2798,7 +2849,7 @@ Exit codes:
   if (enabledSet.has('doctor')) {
     const doctorResp = await fetch(`${base}/api/plugins/${encodeURIComponent(id)}/doctor`);
     if (doctorResp.ok) {
-      doctorReport = await doctorResp.json();
+      doctorReport = await doctorResp.json() as DoctorReport;
     }
   }
 
@@ -2846,9 +2897,10 @@ Exit codes:
 
   // 6. Aggregate.
   const { verifyPlugin } = await import('./plugins/verify.js');
+  const enabled = [...enabledSet] as VerifyCheckId[];
   const report = verifyPlugin({
     config: {
-      enabled: [...enabledSet],
+      enabled,
       ...(config.strict   === true     ? { strict:   true }      : {}),
       ...(config.simulate              ? { simulate: config.simulate } : {}),
       ...(config.canon                 ? { canon:    config.canon    } : {}),
@@ -2919,10 +2971,11 @@ Closed signal vocabulary:
     process.exit(id ? 0 : 2);
   }
   // Collect every -s value (parseFlags returns the last only).
-  const sValues = [];
+  const sValues: string[] = [];
   for (let i = 0; i < rest.length; i++) {
-    if ((rest[i] === '-s' || rest[i] === '--signal') && typeof rest[i + 1] === 'string') {
-      sValues.push(rest[i + 1]);
+    const value = rest[i + 1];
+    if ((rest[i] === '-s' || rest[i] === '--signal') && value !== undefined) {
+      sValues.push(value);
     }
   }
   // Fetch the plugin from the daemon so we get the resolved
@@ -2937,7 +2990,7 @@ Closed signal vocabulary:
     console.error(`GET /api/plugins/${id} failed: ${resp.status} ${await resp.text()}`);
     process.exit(1);
   }
-  const plugin = await resp.json();
+  const plugin = await resp.json() as PluginRecordResponse;
   const pipeline = plugin?.manifest?.od?.pipeline;
   if (!pipeline || !Array.isArray(pipeline.stages) || pipeline.stages.length === 0) {
     if (flags.json) {
