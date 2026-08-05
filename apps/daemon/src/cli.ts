@@ -4726,11 +4726,12 @@ async function runFigma(args) {
     console.error('--project <id> is required');
     process.exit(2);
   }
-  const file = flags.file;
-  const figmaUrl = flags['figma-url'];
+  const file = typeof flags.file === 'string' ? flags.file : undefined;
+  const figmaUrl = typeof flags['figma-url'] === 'string' ? flags['figma-url'] : undefined;
   if (!file && !figmaUrl) {
     console.error('one of --file <path.fig> or --figma-url <url> is required');
     process.exit(2);
+    return;
   }
 
   // Figma URL → the existing migration scenario (OAuth lives in the run
@@ -4746,7 +4747,7 @@ async function runFigma(args) {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(runBody),
     });
-    const runData = await runResp.json().catch(() => ({}));
+    const runData = await runResp.json().catch(() => ({})) as CliRunStartResponse;
     if (!runResp.ok) {
       console.error(`POST /api/runs failed: ${runResp.status} ${JSON.stringify(runData)}`);
       process.exit(1);
@@ -4760,6 +4761,7 @@ async function runFigma(args) {
   }
 
   // Offline .fig path → multipart upload to the import endpoint.
+  if (!file) return;
   let bytes;
   try {
     bytes = readFileSync(file);
@@ -4775,7 +4777,7 @@ async function runFigma(args) {
     body: form,
   });
   if (!resp.ok) return structuredHttpFailure(resp);
-  const data = await resp.json();
+  const data = await resp.json() as FigmaImportResult;
 
   if (flags.json && !flags.build) {
     process.stdout.write(JSON.stringify(data, null, 2) + '\n');
@@ -4797,7 +4799,7 @@ async function runFigma(args) {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ projectId: flags.project, message }),
     });
-    const runData = await runResp.json().catch(() => ({}));
+    const runData = await runResp.json().catch(() => ({})) as CliRunStartResponse;
     if (!runResp.ok) {
       console.error(`build run failed: ${runResp.status} ${JSON.stringify(runData)}`);
       process.exit(1);
