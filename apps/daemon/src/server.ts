@@ -170,6 +170,7 @@ import {
   TERMINAL_RUN_STATUSES,
   shouldReportRunCompletedFromMessage as shouldReportRunCompletedFromMessageWithContract,
 } from './runtimes/telemetry-message.js';
+import { reconcileAssistantMessageOnRunEnd as reconcileAssistantMessageOnRunEndWithContract } from './runtimes/run-message-reconciliation.js';
 import { sanitizeArchiveFilename } from './runtimes/archive-filename.js';
 import {
   githubRepoNameFromPluginName,
@@ -1178,21 +1179,7 @@ function shouldSkipPluginContextEntry(name) {
 
 const LANGFUSE_TERMINAL_FALLBACK_DELAY_MS = 15_000;
 
-function reconcileAssistantMessageOnRunEnd(db, runs, run) {
-  if (!run.assistantMessageId) return;
-  void runs
-    .wait(run)
-    .then((finalStatus) => {
-      db.prepare(
-        `UPDATE messages
-            SET run_status = ?, ended_at = COALESCE(ended_at, ?)
-          WHERE id = ? AND run_status IN ('queued', 'running')`,
-      ).run(finalStatus.status, Date.now(), run.assistantMessageId);
-    })
-    .catch((err) => {
-      console.warn('[runs] message reconciliation failed', err);
-    });
-}
+const reconcileAssistantMessageOnRunEnd = reconcileAssistantMessageOnRunEndWithContract;
 
 
 // Renderable `<question-form>`/`<ask-question>` detection now lives in
