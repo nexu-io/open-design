@@ -1011,7 +1011,7 @@ async function structuredHttpFailure(
   exitWithStructuredError(failure);
 }
 
-async function runPlugin(args) {
+async function runPlugin(args: readonly string[]) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     printPluginHelp();
     process.exit(args.length === 0 ? 2 : 0);
@@ -1062,7 +1062,7 @@ async function runPlugin(args) {
 // Side-effect: writes a SKILL.md + open-design.json starter under
 // `<targetDir>/<id>/`. Default targetDir is process.cwd() so a code
 // agent can drop the scaffold into the current repo root.
-async function runPluginScaffold(rest) {
+async function runPluginScaffold(rest: readonly string[]) {
   const flags = parseFlags(rest, {
     string: new Set([
       'id', 'title', 'description', 'task-kind', 'mode', 'scenario', 'out',
@@ -1123,7 +1123,7 @@ Writes <out|cwd>/<id>/{SKILL.md,open-design.json,README.md}.`);
 // fetches the daemon's registry view so skill / DS / atom refs in
 // the manifest can be checked too; falls back to an empty registry
 // when --no-daemon is set or the daemon is unreachable.
-async function runPluginValidate(rest) {
+async function runPluginValidate(rest: readonly string[]) {
   const flags = parseFlags(rest, {
     string:  new Set(['daemon-url']),
     boolean: new Set(['help', 'h', 'json', 'no-daemon']),
@@ -1212,7 +1212,7 @@ Exit codes:
 // Produces a gzip-compressed tar archive ready to install via the
 // installer's HTTPS-tarball path. The output path is folder-base +
 // version when the manifest exposes a version, otherwise folder-base.
-async function runPluginPack(rest) {
+async function runPluginPack(rest: readonly string[]) {
   const flags = parseFlags(rest, {
     string:  new Set(['out']),
     boolean: new Set(['help', 'h', 'json']),
@@ -1284,7 +1284,7 @@ Exit codes:
   }
 }
 
-async function runPluginLogin(rest) {
+async function runPluginLogin(rest: readonly string[]) {
   const flags = parseFlags(rest, {
     string: new Set(['host']),
     boolean: new Set(['help', 'h']),
@@ -1306,7 +1306,7 @@ Wraps GitHub CLI auth for Open Design registry publishing. The token stays in gh
   process.exit(result.code ?? 0);
 }
 
-async function runPluginWhoami(rest) {
+async function runPluginWhoami(rest: readonly string[]) {
   const flags = parseFlags(rest, {
     string: new Set(['host']),
     boolean: new Set(['help', 'h', 'json']),
@@ -1399,7 +1399,7 @@ function inferGithubHost(target) {
 // Produces a publish-ready folder from the AppliedPluginSnapshot
 // behind a given project (or directly from a snapshot id). Three
 // targets: 'od', 'claude-plugin', 'agent-skill'.
-async function runPluginExport(rest) {
+async function runPluginExport(rest: readonly string[]) {
   const flags = parseFlags(rest, {
     string: new Set(['daemon-url', 'as', 'out', 'snapshot-id', 'project']),
     boolean: new Set(['help', 'h', 'json']),
@@ -1684,7 +1684,7 @@ Common options:
 //   - `od plugin snapshots list [--project <id>]` — list snapshots
 //   - `od plugin snapshots prune [--before <ts>]` — force-delete expired
 //     (and optionally older-than-cutoff unreferenced) rows.
-async function runPluginSnapshots(args) {
+async function runPluginSnapshots(args: readonly string[]) {
   const sub = args[0];
   if (!sub || sub === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
@@ -1806,7 +1806,7 @@ async function runPluginSnapshots(args) {
 // Plan §3.B3: `od plugin run <id>` shorthand. Today this is a thin
 // wrapper around `od plugin apply` + `POST /api/runs` so a code agent
 // can drive the apply→start→follow loop without two hops.
-async function runPluginRun(rest) {
+async function runPluginRun(rest: readonly string[]) {
   const flags = parseFlags(rest, { string: PLUGIN_STRING_FLAGS, boolean: PLUGIN_BOOLEAN_FLAGS });
   const id = rest.find((a) => !a.startsWith('-')
     && a !== flags['daemon-url']
