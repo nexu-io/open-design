@@ -26,6 +26,11 @@ import {
   parseGhAuthStatusLogin,
   parseGithubRepoUrl,
 } from './runtimes/github-repository.js';
+import {
+  RECOVERABLE_EXIT_CODES,
+  normalizeRecoverableErrorCode,
+  structuredErrorData,
+} from './runtimes/cli-error-contract.js';
 import { splitResearchSubcommand } from './research/cli-args.js';
 import { resolveDaemonUrl } from './daemon-url.js';
 import { requestJsonIpc } from '@open-design/sidecar';
@@ -284,21 +289,6 @@ const BRAND_BOOLEAN_FLAGS = new Set([
 const AUTOMATION_WEEKDAY_TOKENS = {
   sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6,
   sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6,
-};
-const RECOVERABLE_EXIT_CODES = {
-  'daemon-not-running':       64,
-  'plugin-not-found':         65,
-  'snapshot-not-found':       65,
-  'capabilities-required':    66,
-  'missing-input':            67,
-  'project-not-found':        68,
-  'run-not-found':            69,
-  'provider-not-configured':  70,
-  'plugin-requires-daemon':   71,
-  'snapshot-stale':           72,
-  'genui-surface-awaiting':   73,
-  'desktop-auth-pending':     74,
-  'desktop-import-token-rejected': 75,
 };
 const PLUGIN_LIST_FILTER_FLAGS = new Set([
   ...PLUGIN_STRING_FLAGS,
@@ -1347,23 +1337,6 @@ async function structuredHttpFailure(resp, fallbackCode = 'daemon-not-running') 
     message: errorObj?.message ?? `HTTP ${resp.status}: ${await resp.text().catch(() => '')}`,
     data:    structuredErrorData(errorObj),
   });
-}
-
-function normalizeRecoverableErrorCode(code, message) {
-  if (code === 'DESKTOP_AUTH_PENDING') return 'desktop-auth-pending';
-  if (code === 'FORBIDDEN' && /desktop import token rejected/i.test(String(message ?? ''))) {
-    return 'desktop-import-token-rejected';
-  }
-  return code;
-}
-
-function structuredErrorData(error) {
-  if (!error || typeof error !== 'object') return undefined;
-  const data = {};
-  if ('data' in error && error.data !== undefined) Object.assign(data, error.data);
-  if ('details' in error && error.details !== undefined) data.details = error.details;
-  if (typeof error.retryable === 'boolean') data.retryable = error.retryable;
-  return Object.keys(data).length > 0 ? data : undefined;
 }
 
 async function runPlugin(args) {
