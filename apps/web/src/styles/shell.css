@@ -1830,6 +1830,19 @@ body:has(.artifact-version-panel) .ws-tabs-file-actions-before {
   border-top: 1px solid var(--border-soft);
   background: var(--bg-elevated);
 }
+/* Shared sticky footer for the signed-out Sign in row + the pinned Settings
+   row. One sticky container prevents the two rows from clamping to the same
+   bottom edge and overlapping in long model lists (looper review on #6438). */
+.avatar-pinned-footer {
+  position: sticky;
+  bottom: -6px;
+  z-index: 1;
+  margin-top: 2px;
+  border-top: 1px solid var(--border-soft);
+  background: var(--bg-elevated);
+  display: flex;
+  flex-direction: column;
+}
 
 .avatar-popover {
   position: absolute;

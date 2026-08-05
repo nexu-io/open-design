@@ -358,9 +358,14 @@ describe('useAmrSignIn', () => {
     // disabled (pending true).
     expect(screen.getByRole('button')).toHaveProperty('disabled', true);
 
-    // Drain completes after the child exits → idle → pending clears.
+    // Drain completes after the child exits → idle → pending clears, and a
+    // terminal status event is published so app-wide loginInFlight caches
+    // refresh (looper review on #6438).
+    const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
     await vi.advanceTimersByTimeAsync(AMR_LOGIN_POLL_INTERVAL_MS * 4);
     expect(screen.getByRole('button')).toHaveProperty('disabled', false);
+    const events = dispatchSpy.mock.calls.map(([event]) => (event as Event).type);
+    expect(events).toContain('od:amr-login-status-change');
   });
 
   it('resets the attempt id on retry so a stale id is never reused', async () => {

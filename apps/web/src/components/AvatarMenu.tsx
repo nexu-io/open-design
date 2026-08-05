@@ -595,53 +595,55 @@ export function AvatarMenu({
               is unreachable from here. Pinned to the bottom of the scroll port
               like the home switcher's, so a long model list cannot scroll it
               away. */}
-          {amrAccount && !amrAccount.loggedIn ? (
-            <div className="avatar-amr-signin-wrap">
-              <button
-                type="button"
-                className="avatar-item avatar-item--pinned avatar-amr-signin"
-                data-testid="avatar-amr-row-signin"
-                disabled={amrLoginPending}
-                onClick={() => {
-                  void handleAmrSignIn();
-                }}
-              >
-                <span className="avatar-item-icon" aria-hidden>
-                  <RemixIcon name="login-circle-line" size={15} />
-                </span>
-                <span>
-                  {amrLoginPending
-                    ? t('settings.amrSigningIn')
-                    : t('settings.amrSignIn')}
-                </span>
-              </button>
-              {amrLoginError ? (
-                <span
-                  className="avatar-amr-signin-error"
-                  role="alert"
-                  data-testid="avatar-amr-row-signin-error"
+          <div className="avatar-pinned-footer">
+            {amrAccount && !amrAccount.loggedIn ? (
+              <div className="avatar-amr-signin-wrap">
+                <button
+                  type="button"
+                  className="avatar-item avatar-amr-signin"
+                  data-testid="avatar-amr-row-signin"
+                  disabled={amrLoginPending}
+                  onClick={() => {
+                    void handleAmrSignIn();
+                  }}
                 >
-                  {amrLoginError === 'settings.amrLoginErrorCompact'
-                    ? t('settings.amrLoginErrorCompact')
-                    : amrLoginError}
-                </span>
-              ) : null}
-            </div>
-          ) : null}
-          <button
-            type="button"
-            className="avatar-item avatar-item--pinned"
-            data-testid="avatar-open-execution-settings"
-            onClick={() => {
-              setOpen(false);
-              onOpenSettings('execution');
-            }}
-          >
-            <span className="avatar-item-icon" aria-hidden>
-              <RemixIcon name="settings-3-line" size={15} />
-            </span>
-            <span>{t('inlineSwitcher.openFullSettings')}</span>
-          </button>
+                  <span className="avatar-item-icon" aria-hidden>
+                    <RemixIcon name="login-circle-line" size={15} />
+                  </span>
+                  <span>
+                    {amrLoginPending
+                      ? t('settings.amrSigningIn')
+                      : t('settings.amrSignIn')}
+                  </span>
+                </button>
+                {amrLoginError ? (
+                  <span
+                    className="avatar-amr-signin-error"
+                    role="alert"
+                    data-testid="avatar-amr-row-signin-error"
+                  >
+                    {amrLoginError === 'settings.amrLoginErrorCompact'
+                      ? t('settings.amrLoginErrorCompact')
+                      : amrLoginError}
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
+            <button
+              type="button"
+              className="avatar-item"
+              data-testid="avatar-open-execution-settings"
+              onClick={() => {
+                setOpen(false);
+                onOpenSettings('execution');
+              }}
+            >
+              <span className="avatar-item-icon" aria-hidden>
+                <RemixIcon name="settings-3-line" size={15} />
+              </span>
+              <span>{t('inlineSwitcher.openFullSettings')}</span>
+            </button>
+          </div>
 
           {onBack ? (
             <>

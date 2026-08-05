@@ -176,9 +176,12 @@ export function useAmrSignIn({
             // Reconcile drain: after a timeout cancel OR a foreign cancel, keep
             // pending until loginInFlight is false. On this path startedAt is
             // already past the startup-settle window, so the raw idle read is a
-            // trustworthy "child drained" signal.
+            // trustworthy "child drained" signal. Publish a terminal status
+            // event so app-wide caches (which read on the AMR status event,
+            // not this hook) refresh their stale loginInFlight (looper review).
             if (amrReconcileRef.current && status?.loginInFlight === false) {
               setAmrLoginError(null);
+              notifyAmrLoginStatusChanged('status-changed');
               stopAmrLoginPolling();
             }
           })
