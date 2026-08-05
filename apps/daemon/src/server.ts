@@ -628,6 +628,14 @@ import {
 import { escapeHtml } from './runtimes/html-escaping.js';
 import { mediaTaskSnapshot } from './runtimes/media-task.js';
 import { classifyUploadError } from './runtimes/upload-errors.js';
+import {
+  composeProjectDisplayStatus,
+  normalizeProjectDisplayStatus,
+} from './runtimes/project-status.js';
+export {
+  composeProjectDisplayStatus,
+  normalizeProjectDisplayStatus,
+} from './runtimes/project-status.js';
 import { normalizePersistedToolInput } from './runtimes/persisted-tool-input.js';
 import {
   aggregateCloudflarePagesStatus,
@@ -1161,27 +1169,6 @@ export function createAgentRuntimeToolPrompt(
     tokenLine,
     '- Prefer project wrapper commands through `OD_NODE_BIN` + `OD_BIN` over raw HTTP. The wrappers read these environment values automatically.',
   ].join('\n');
-}
-
-export function normalizeProjectDisplayStatus(status) {
-  return status === 'starting' || status === 'queued' ? 'running' : status;
-}
-
-export function composeProjectDisplayStatus(
-  baseStatus,
-  awaitingInputProjects,
-  projectId,
-) {
-  if (
-    baseStatus.value === 'succeeded' &&
-    awaitingInputProjects.has(projectId)
-  ) {
-    return { ...baseStatus, value: 'awaiting_input' };
-  }
-  return {
-    ...baseStatus,
-    value: normalizeProjectDisplayStatus(baseStatus.value),
-  };
 }
 
 function execFileBuffered(command, args, opts = {}) {
