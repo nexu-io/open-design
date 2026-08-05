@@ -1,5 +1,6 @@
 import { expect, test } from '@/playwright/suite';
 import { applyStandardMocks } from '@/playwright/mock-factory';
+import { ensureRailOpen } from '@/playwright/rail';
 import { T } from '@/timeouts';
 
 // Recent-project fixtures give the home page enough height to scroll the
@@ -72,10 +73,13 @@ test.beforeEach(async ({ page }) => {
       updater: {
         status: async () => downloadedStatus,
         check: async () => downloadedStatus,
+        'clear-cache': async () => downloadedStatus,
         download: async () => downloadedStatus,
         install: async () => downloadedStatus,
         quit: async () => ({ ok: true }),
+        setMenuLabels: async () => ({ ok: true }),
         subscribe: () => () => {},
+        subscribeOpenDialog: () => () => {},
       },
     };
   });
@@ -113,6 +117,9 @@ test('[P1] update ready prompt paints above the composer and its agent picker', 
     )
     .toBeLessThan(80);
 
+  // The updater host moved into the nav rail footer with the entry topbar's
+  // removal (#5517); the collapsed rail is inert, so expand it first.
+  await ensureRailOpen(page);
   await page.getByTestId('entry-nav-updater').click();
   const popup = page.getByTestId('updater-popup');
   await expect(popup).toBeVisible();
@@ -124,6 +131,32 @@ test('[P1] update ready prompt paints above the composer and its agent picker', 
   const chip = page.getByTestId('inline-model-switcher-chip');
   await chip.focus();
   await page.keyboard.press('Enter');
+  await expect(page.getByTestId('inline-model-switcher-popover')).toBeVisible();
+  await expect(popup).toBeVisible();
+
+  // Focusing the composer chip can scroll it back into view after the prompt
+  // opens. Re-establish a real overlap now that both surfaces are present so
+  // the stacking assertion cannot pass on separated geometry.
+  await expect
+    .poll(async () =>
+      page.evaluate(() => {
+        const scroller = document.querySelector('.entry-main--scroll');
+        const popupEl = document.querySelector('[data-testid="updater-popup"]');
+        const card = document.querySelector('.home-hero__input-card');
+        if (scroller == null || popupEl == null || card == null) return Number.NaN;
+        const popupRect = popupEl.getBoundingClientRect();
+        const cardRect = card.getBoundingClientRect();
+        const overlap = Math.min(popupRect.bottom, cardRect.bottom) - Math.max(popupRect.top, cardRect.top);
+        if (overlap < 24) {
+          scroller.scrollBy(0, cardRect.top - (popupRect.bottom - 32));
+          scroller.dispatchEvent(new Event('scroll'));
+        }
+        const nextPopupRect = popupEl.getBoundingClientRect();
+        const nextCardRect = card.getBoundingClientRect();
+        return Math.min(nextPopupRect.bottom, nextCardRect.bottom) - Math.max(nextPopupRect.top, nextCardRect.top);
+      }),
+    )
+    .toBeGreaterThan(24);
   await expect(page.getByTestId('inline-model-switcher-popover')).toBeVisible();
   await expect(popup).toBeVisible();
 

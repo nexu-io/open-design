@@ -347,12 +347,14 @@ export function resolveEffectiveDesignSystemSelection({
   pluginDesignSystemId,
   projectDesignSystemId,
   appDefaultDesignSystemId,
+  disabledDesignSystemIds,
   allowAppDefault = true,
 }: {
   requestDesignSystemId?: InputValue;
   pluginDesignSystemId?: InputValue;
   projectDesignSystemId?: InputValue;
   appDefaultDesignSystemId?: InputValue;
+  disabledDesignSystemIds?: InputValue;
   allowAppDefault?: boolean;
 }): { id: string | null; source: DesignSystemSelectionSource } {
   const requestId = normalizedDesignSystemId(requestDesignSystemId);
@@ -361,8 +363,15 @@ export function resolveEffectiveDesignSystemSelection({
   const pluginId = normalizedDesignSystemId(pluginDesignSystemId);
   if (pluginId) return { id: pluginId, source: 'plugin' };
 
+  const disabledIds = Array.isArray(disabledDesignSystemIds)
+    ? disabledDesignSystemIds
+        .map((value) => normalizedDesignSystemId(value))
+        .filter((value): value is string => value !== null)
+    : [];
   const projectId = normalizedDesignSystemId(projectDesignSystemId);
-  if (projectId) return { id: projectId, source: 'project' };
+  if (projectId && !disabledIds.includes(projectId)) {
+    return { id: projectId, source: 'project' };
+  }
 
   if (allowAppDefault) {
     const appDefaultId = normalizedDesignSystemId(appDefaultDesignSystemId);

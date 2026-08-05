@@ -30,6 +30,13 @@ describe('GET /api/projects/:id/raw/* cache revalidation', () => {
     baseUrl = started.url;
     server = started.server;
 
+    const createResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: projectId, name: 'Raw cache fixture' }),
+    });
+    expect(createResponse.status).toBe(200);
+
     projectsRoot = path.join(process.env.OD_DATA_DIR!, 'projects');
     const dir = path.join(projectsRoot, projectId);
     await mkdir(dir, { recursive: true });

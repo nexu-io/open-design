@@ -17,6 +17,18 @@ vi.mock('../../src/components/home-hero/PlaceholderCarousel', () => ({
   PlaceholderCarousel: () => null,
 }));
 
+vi.mock('../../src/collab/useWorkspaceContext', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/collab/useWorkspaceContext')>();
+  return {
+    ...actual,
+    useWorkspaceContext: () => ({
+      context: null,
+      loading: false,
+      failure: 'unsupported' as const,
+    }),
+  };
+});
+
 import { HomeView } from '../../src/components/HomeView';
 import { I18nProvider } from '../../src/i18n';
 import { writeHomeGuideStage } from '../../src/components/home-hero/firstRunGuide';
@@ -94,7 +106,10 @@ describe('home composer sending state', () => {
     await waitFor(() => {
       expect(submit.disabled).toBe(true);
     });
-    expect(submit.textContent).toContain('Sending…');
+    // #5517 made the submit button icon-only (spinner while sending); the
+    // Sending… state now lives on the accessible name instead of a label span.
+    expect(submit.getAttribute('aria-label')).toBe('Sending…');
+    expect(submit.getAttribute('aria-busy')).toBe('true');
     expect(submit.className).toContain('is-sending');
 
     // A second click during the in-flight window must not start a second run.
@@ -128,7 +143,9 @@ describe('home composer sending state', () => {
     await waitFor(() => {
       expect(submit.disabled).toBe(false);
     });
-    expect(submit.textContent).toContain('Send');
+    // Icon-only button (#5517): the idle accessible name replaces the old
+    // visible Send label.
+    expect(submit.getAttribute('aria-label')).toBe('Run');
     expect(submit.className).not.toContain('is-sending');
     expect((await screen.findByRole('alert')).textContent).toMatch(/try again/i);
 
@@ -176,9 +193,12 @@ describe('home composer sending state', () => {
       </I18nProvider>,
     );
 
+    // #5517 removed the inline template rail; templates are picked from the
+    // composer footer's radial Template picker.
+    fireEvent.click(await screen.findByTestId('home-hero-template-trigger'));
     // Seeding through a fallback prompt-example card is what arms the
     // examplePromptContext marker.
-    fireEvent.click(await screen.findByTestId('home-hero-rail-prototype'));
+    fireEvent.click(await screen.findByTestId('home-hero-template-wedge-prototype'));
     const exampleCards = await screen.findAllByTestId('home-hero-prompt-example');
     fireEvent.click(exampleCards[0]!);
 

@@ -3,6 +3,10 @@ import { dirname, join } from "node:path";
 
 import type { ToolPackConfig } from "../config.js";
 import { domToPptxBundleResource } from "../dom-to-pptx-resource.js";
+import {
+  assertNodePtyRuntime,
+  resolveNodePtyRuntimeArch,
+} from "../node-pty-runtime.js";
 import { macResources } from "../resources.js";
 import { electronBuilderVersionForAppVersion } from "../versions.js";
 import { execFileAsync } from "./commands.js";
@@ -133,6 +137,18 @@ export async function runElectronBuilder(
       notarize: config.macNotarize ? undefined : false,
       target: targets,
     },
+    // Register the workspace-invite deeplink scheme so macOS routes
+    // `opendesign://workspace/invite/continue?...` to this app (electron-builder
+    // writes it into Info.plist CFBundleURLTypes; a runtime
+    // setAsDefaultProtocolClient alone is unreliable on macOS). The scheme string
+    // must match INVITE_DEEPLINK_SCHEME in
+    // apps/desktop/src/main/invite-deeplink-core.ts.
+    protocols: [
+      {
+        name: `${PRODUCT_NAME} Invite`,
+        schemes: ["opendesign"],
+      },
+    ],
     nodeGypRebuild: false,
     npmRebuild: false,
     productName: identity.productName,
@@ -164,5 +180,10 @@ export async function runElectronBuilder(
       ...(config.signed ? {} : { CSC_IDENTITY_AUTO_DISCOVERY: "false" }),
       ...(webStandaloneHookConfigPath == null ? {} : { [WEB_STANDALONE_HOOK_CONFIG_ENV]: webStandaloneHookConfigPath }),
     },
+  });
+  await assertNodePtyRuntime({
+    appRoot: join(paths.appPath, "Contents", "Resources", "app"),
+    arch: resolveNodePtyRuntimeArch(process.arch),
+    platform: "darwin",
   });
 }

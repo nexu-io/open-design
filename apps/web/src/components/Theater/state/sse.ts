@@ -5,8 +5,10 @@ import {
   type CritiqueSseEventName,
   type PanelEvent,
 } from '@open-design/contracts/critique';
+import type { WorkspaceCollabContext } from '@open-design/contracts';
 
 import type { CritiqueAction } from './reducer';
+import { workspaceResourceUrl } from '../../../collab/workspace-identity';
 
 export interface CritiqueEventsConnection {
   close(): void;
@@ -22,13 +24,34 @@ export interface CritiqueEventsConnectionOptions {
   /** Test seam: setTimeout substitutes for fake timers. */
   setTimeoutFn?: typeof setTimeout;
   clearTimeoutFn?: typeof clearTimeout;
+  /** Persisted project authority encoded into the EventSource URL. */
+  workspaceContext?: WorkspaceCollabContext | null;
 }
 
 const DEFAULT_INITIAL_BACKOFF = 1000;
 const DEFAULT_MAX_BACKOFF = 30_000;
 
-export function critiqueEventsUrl(projectId: string): string {
-  return `/api/projects/${encodeURIComponent(projectId)}/events`;
+export function critiqueEventsUrl(
+  projectId: string,
+  workspaceContext?: WorkspaceCollabContext | null,
+): string {
+  return workspaceResourceUrl(
+    `/api/projects/${encodeURIComponent(projectId)}/events`,
+    workspaceContext,
+  );
+}
+
+/** Browser-owned artifact navigation cannot attach project authority headers. */
+export function critiqueArtifactUrl(
+  projectId: string,
+  runId: string,
+  workspaceContext?: WorkspaceCollabContext | null,
+): string {
+  return workspaceResourceUrl(
+    `/api/projects/${encodeURIComponent(projectId)}`
+      + `/critique/${encodeURIComponent(runId)}/artifact`,
+    workspaceContext,
+  );
 }
 
 /**
@@ -119,7 +142,7 @@ export function createCritiqueEventsConnection(
 
   const connect = (): void => {
     if (cancelled) return;
-    const es = new Ctor(critiqueEventsUrl(projectId));
+    const es = new Ctor(critiqueEventsUrl(projectId, options.workspaceContext));
     source = es;
     es.addEventListener('ready', () => {
       backoff = initialBackoff;

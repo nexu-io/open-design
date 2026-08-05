@@ -128,7 +128,7 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
   {
     id: 'nanobanana',
     label: 'Nano Banana',
-    hint: 'Google official by default; custom gateway configurable',
+    hint: 'Uses Google’s official API by default. You can also configure a custom gateway.',
     integrated: true,
     defaultBaseUrl: 'https://generativelanguage.googleapis.com',
     docsUrl: 'https://ai.google.dev/gemini-api/docs/api-key',

@@ -1,6 +1,18 @@
 import { expect, test } from '@/playwright/suite';
 import type { Page } from '@playwright/test';
-import { routeAgents, suppressWhatsNew } from '@/playwright/mock-factory';
+import {
+  clearHomeTemplate,
+  openHomeTemplateMenu,
+  pickHomeTemplate,
+} from '@/playwright/home-hero';
+import {
+  routeAgents,
+  routeSuccessfulRuns,
+  successfulRunEventBody,
+  suppressWhatsNew,
+  trackRunRequests,
+} from '@/playwright/mock-factory';
+import { ensureRailOpen } from '@/playwright/rail';
 import { T } from '@/timeouts';
 
 test.describe.configure({ timeout: T.xlong });
@@ -8,7 +20,6 @@ test.describe.configure({ timeout: T.xlong });
 const STORAGE_KEY = 'open-design:config';
 const LOCALE_KEY = 'open-design:locale';
 const LOCALE_SOURCE_KEY = 'open-design:locale-source';
-const OPEN_SETTINGS_LABEL = /Open settings|打开设置|開啟設定/i;
 
 const HOME_CONFIG = {
   mode: 'daemon',
@@ -183,6 +194,39 @@ const HOME_PLUGINS = [
     },
   },
   {
+    id: 'example-live-dashboard',
+    title: 'Live Dashboard',
+    version: '0.1.0',
+    trust: 'bundled',
+    sourceKind: 'bundled',
+    source: '/tmp/live-dashboard',
+    fsPath: '/tmp/live-dashboard',
+    capabilitiesGranted: ['prompt:inject'],
+    installedAt: 0,
+    updatedAt: 0,
+    manifest: {
+      name: 'example-live-dashboard',
+      title: 'Live Dashboard',
+      version: '0.1.0',
+      description: 'Notion-style team dashboard rendered as a Live Artifact.',
+      tags: ['live-dashboard', 'team-workspace-dashboard'],
+      od: {
+        kind: 'scenario',
+        taskKind: 'new-generation',
+        mode: 'prototype',
+        scenario: 'operation',
+        surface: 'web',
+        useCase: {
+          query: 'Build a Notion-style team dashboard with live KPIs.',
+        },
+        inputs: [
+          { name: 'workspace_name', type: 'string', required: true },
+          { name: 'page_title', type: 'string', default: 'Team Dashboard' },
+        ],
+      },
+    },
+  },
+  {
     id: 'od-media-generation',
     title: 'Media generation',
     version: '0.1.0',
@@ -264,6 +308,37 @@ const HOME_PLUGINS = [
 ];
 
 const APPLY_RESPONSES: Record<string, unknown> = {
+  'example-live-dashboard': {
+    query: 'Build a Notion-style team dashboard with live KPIs.',
+    contextItems: [],
+    inputs: [],
+    assets: [],
+    mcpServers: [],
+    trust: 'bundled',
+    capabilitiesGranted: ['prompt:inject'],
+    capabilitiesRequired: ['prompt:inject'],
+    appliedPlugin: {
+      snapshotId: 'snap-live-dashboard',
+      pluginId: 'example-live-dashboard',
+      pluginVersion: '0.1.0',
+      manifestSourceDigest: 'a'.repeat(64),
+      inputs: {
+        workspace_name: 'QA Team',
+        page_title: 'Team Dashboard',
+      },
+      resolvedContext: { items: [] },
+      capabilitiesGranted: ['prompt:inject'],
+      capabilitiesRequired: ['prompt:inject'],
+      assetsStaged: [],
+      taskKind: 'new-generation',
+      appliedAt: 0,
+      connectorsRequired: [],
+      connectorsResolved: [],
+      mcpServers: [],
+      status: 'fresh',
+    },
+    projectMetadata: {},
+  },
   'example-simple-deck': {
     query: 'Draft a quarterly review deck.',
     contextItems: [],
@@ -357,7 +432,9 @@ async function gotoEntryHome(page: Page) {
   if (await privacyDialog.isVisible().catch(() => false)) {
     await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
   }
-  await expect(page.getByRole('button', { name: OPEN_SETTINGS_LABEL })).toBeVisible();
+  // #5517 moved the settings entry into the collapsed-by-default nav rail, so it
+  // is not in the accessibility tree on load; the hero is the ready signal now.
+  await expect(page.getByTestId('home-hero')).toBeVisible();
 }
 
 test.beforeEach(async ({ page }) => {
@@ -406,6 +483,13 @@ test.beforeEach(async ({ page }) => {
         config: HOME_CONFIG,
       },
     });
+  });
+
+  // These Home composer scenarios exercise the signed-out/local path. Settle
+  // workspace bootstrap explicitly so strict workspace write guards do not
+  // confuse an unresolved test fixture with an authenticated cloud identity.
+  await page.route('**/api/workspace/directory', async (route) => {
+    await route.fulfill({ json: { items: [] } });
   });
 
   await page.route('**/api/projects', async (route) => {
@@ -464,7 +548,7 @@ test('[P1] home left rail expands and collapses from the shell controls', async 
 
   const shell = page.locator('.entry');
   const rail = page.locator('.entry-nav-rail');
-  const expand = page.getByTestId('entry-rail-toggle');
+  const expand = page.getByTestId('workspace-home-rail-toggle');
 
   await expect(shell).not.toHaveClass(/entry--rail-open/);
   await expect(rail).toHaveAttribute('aria-hidden', 'true');
@@ -474,11 +558,14 @@ test('[P1] home left rail expands and collapses from the shell controls', async 
   await expect(shell).toHaveClass(/entry--rail-open/);
   await expect(rail).not.toHaveAttribute('aria-hidden', 'true');
   await expect(page.getByTestId('entry-nav-home')).toBeVisible();
-  await expect(page.getByTestId('entry-nav-projects')).toBeVisible();
+  // #5517's rail dropped the single "Projects" destination; Design systems is
+  // the stable second destination in both the signed-out and team rails.
+  await expect(page.getByTestId('entry-nav-design-systems')).toBeVisible();
 
-  const collapse = page.getByTestId('entry-nav-collapse');
-  await expect(collapse).toBeVisible();
-  await collapse.click();
+  // The rail has no in-rail collapse control (the header is chrome-free);
+  // the pinned Home tab's toggle folds it back.
+  await expect(expand).toHaveAttribute('aria-expanded', 'true');
+  await expand.click();
   await expect(shell).not.toHaveClass(/entry--rail-open/);
   await expect(rail).toHaveAttribute('aria-hidden', 'true');
   await expect(expand).toHaveAttribute('aria-expanded', 'false');
@@ -551,16 +638,16 @@ test('[P1] home composer plus menu opens project, local code, Figma help, and de
   const input = page.getByTestId('home-hero-input');
 
   await page.getByTestId('home-hero-plus-trigger').click();
-  const plusMenu = page.getByRole('menu');
-  for (const label of ['Files', 'Code', 'Designs']) {
-    await expect(plusMenu.getByText(label, { exact: true })).toBeVisible();
-  }
+  // The plus menu is a flat list of actions — it carries no Files/Code/Designs
+  // group headings, and design systems are chosen from the composer footer
+  // picker rather than from this menu.
   await expect(page.getByTestId('composer-plus-attach')).toBeVisible();
   await expect(page.getByTestId('composer-plus-reference-project')).toBeVisible();
   await expect(page.getByTestId('composer-plus-local-code')).toBeVisible();
   await expect(page.getByTestId('composer-plus-figma')).toBeVisible();
-  await expect(page.getByTestId('composer-plus-figma-help')).toBeVisible();
-  await expect(page.getByTestId('composer-plus-design-system')).toBeVisible();
+  // …and it does NOT carry the "查看方法" (.fig download guide) row: the menu
+  // lists things to ATTACH to the message, and a help article is not one.
+  await expect(page.getByTestId('composer-plus-figma-help')).toHaveCount(0);
   await page.getByTestId('composer-plus-reference-project').click();
   const referenceDialog = page.getByRole('dialog', { name: 'Reference another project' });
   await expect(referenceDialog).toBeVisible();
@@ -584,16 +671,7 @@ test('[P1] home composer plus menu opens project, local code, Figma help, and de
   await figmaImport.getByRole('button', { name: 'Close' }).click();
   await expect(figmaImport).toHaveCount(0);
 
-  await page.getByTestId('home-hero-plus-trigger').click();
-  await page.getByTestId('composer-plus-figma-help').click();
-  const figmaHelp = page.getByRole('dialog', { name: 'How to download a .fig file' });
-  await expect(figmaHelp).toBeVisible();
-  await expect(figmaHelp).toContainText('Save local copy');
-  await figmaHelp.getByRole('button', { name: 'Close' }).click();
-  await expect(figmaHelp).toHaveCount(0);
-
-  await page.getByTestId('home-hero-plus-trigger').click();
-  await page.getByTestId('composer-plus-design-system').click();
+  await page.getByTestId('home-hero-design-system-trigger').click();
   await expect(page.getByTestId('project-ds-picker-popover')).toBeVisible();
 });
 
@@ -990,25 +1068,9 @@ test('[P1] home staged workspace context auto-sends into the first project run',
   await page.route('**/api/live-artifacts**', async (route) => {
     await route.fulfill({ json: { liveArtifacts: [] } });
   });
-  await page.route('**/api/runs', async (route) => {
-    if (route.request().method() !== 'POST') {
-      await route.fallback();
-      return;
-    }
-    const raw = route.request().postData();
-    if (raw) runBodies.push(JSON.parse(raw) as Record<string, unknown>);
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: JSON.stringify({ runId: 'home-autosend-context-run' }),
-    });
-  });
-  await page.route('**/api/runs/*/events**', async (route) => {
-    await route.fulfill({
-      status: 200,
-      headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' },
-      body: ['event: end', 'data: {"code":0,"status":"succeeded"}', '', ''].join('\n'),
-    });
+  const runRequests = await routeSuccessfulRuns(page, {
+    bodies: runBodies,
+    runId: 'home-autosend-context-run',
   });
   await page.route('**/api/dialog/open-folder', async (route) => {
     await route.fulfill({ json: { path: '/tmp/open-design/local-code-home-autosend' } });
@@ -1038,7 +1100,7 @@ test('[P1] home staged workspace context auto-sends into the first project run',
   ]);
 
   await expect(page).toHaveURL(new RegExp(`/projects/${projectId}`));
-  await expect.poll(() => runBodies.length, { timeout: 15_000 }).toBe(1);
+  await runRequests.expectCount(1, { timeout: 15_000 });
   expect(runBodies[0]?.message).toContain(prompt);
   expect(runBodies[0]?.projectId).toBe(projectId);
   expect(runBodies[0]?.conversationId).toBe(conversationId);
@@ -1062,26 +1124,23 @@ test('[P1] home staged workspace context auto-sends into the first project run',
     .toBeNull();
 });
 
-test('[P2] home hero exposes the template picker, starter cards, blank project, and More shortcuts', async ({ page }) => {
+test('[P2] home hero exposes the composer footer pickers and the full template set', async ({ page }) => {
   await gotoEntryHome(page);
 
-  await expect(page.getByTestId('entry-star-badge')).toContainText('51.6K');
   await expect(page.getByTestId('home-hero-template-picker')).toBeVisible();
   await expect(page.getByTestId('home-hero-design-system-picker')).toBeVisible();
   await expect(page.getByTestId('working-dir-picker')).toBeVisible();
-  await expect(page.getByTestId('home-hero-template-section')).toBeVisible();
-  await expect(page.getByTestId('home-hero-blank-project')).toBeVisible();
-  await expect(page.getByTestId('home-hero-type-tabs')).toBeVisible();
-  for (const id of ['prototype', 'live-artifact', 'deck', 'image', 'video', 'hyperframes', 'audio']) {
-    await expect(page.getByTestId(`home-hero-rail-${id}`)).toBeVisible();
-  }
-  await expect(page.getByTestId('home-hero-shortcuts-trigger')).toBeVisible();
 
-  await page.getByTestId('home-hero-shortcuts-trigger').click();
-  const menu = page.getByTestId('home-hero-shortcuts-menu');
-  await expect(menu).toBeVisible();
-  for (const id of ['create-plugin', 'figma', 'template']) {
-    await expect(menu.getByTestId(`home-hero-rail-${id}`)).toBeVisible();
+  // #5517 removed Home's inline scenario rail ("Start from a template… / …or
+  // create a blank project") together with its More-shortcuts menu. Every
+  // project-type template now lives on the composer footer picker's radial
+  // menu, so that ring is the entry point this smoke has to see.
+  await expect(page.getByTestId('home-hero-type-tabs')).toHaveCount(0);
+  await expect(page.getByTestId('home-hero-shortcuts-trigger')).toHaveCount(0);
+
+  const menu = await openHomeTemplateMenu(page);
+  for (const id of ['prototype', 'live-artifact', 'deck', 'image', 'video', 'hyperframes', 'audio']) {
+    await expect(menu.getByTestId(`home-hero-template-wedge-${id}`)).toBeVisible();
   }
 });
 
@@ -1113,14 +1172,14 @@ test('[P1] home session mode toggle switches Ask planning prompts away from desi
   await routeRunsAccepted(page);
   await gotoEntryHome(page);
 
-  const modeTrigger = page.getByTestId('session-mode-trigger');
-  await expect(modeTrigger).toContainText('Design');
+  const modeTrigger = page.getByTestId('composer-mode-trigger');
+  // Design is the app default, so the picker starts on its neutral trigger.
+  await expect(modeTrigger).toHaveAttribute('aria-label', 'Choose a mode');
   await modeTrigger.click();
-  await expect(page.getByRole('menuitemradio', { name: 'Design mode' })).toHaveAttribute('aria-checked', 'true');
-  await page.getByRole('menuitemradio', { name: 'Ask mode' }).hover();
+  // Every mode description is always visible in the open menu (no hover card).
   await expect(page.getByText(/planning, and discussion/i)).toBeVisible();
 
-  await page.getByRole('menuitemradio', { name: 'Ask mode' }).click();
+  await page.getByTestId('composer-mode-menu-chat').click();
   await expect(modeTrigger).toContainText('Ask');
   await page.getByTestId('home-hero-input').fill('Help me plan the IA before designing screens.');
 
@@ -1137,7 +1196,7 @@ test('[P1] home session mode toggle switches Ask planning prompts away from desi
   expect(askBody.pluginId ?? null).toBeNull();
 
   await gotoEntryHome(page);
-  await expect(page.getByTestId('session-mode-trigger')).toContainText('Design');
+  await expect(page.getByTestId('composer-mode-trigger')).toHaveAttribute('aria-label', 'Choose a mode');
   await page.getByTestId('home-hero-input').fill('Design the screens from this brief.');
 
   const designRequestPromise = page.waitForRequest((request) =>
@@ -1160,8 +1219,7 @@ test('[P0] home design-system picker carries explicit and cleared selections int
   await gotoEntryHome(page);
 
   await selectHomeDesignSystem(page, 'agentic');
-  await page.getByTestId('home-hero-template-trigger').click();
-  await page.getByTestId('home-hero-template-card-deck').click();
+  await pickHomeTemplate(page, 'deck');
   await page.getByTestId('home-hero-input').fill('Create a design-system aware deck.');
 
   const selectedRequestPromise = page.waitForRequest((request) =>
@@ -1184,7 +1242,7 @@ test('[P0] home design-system picker carries explicit and cleared selections int
   expect(clearedBody.designSystemId ?? null).toBeNull();
 });
 
-test('[P1] home Brand Kit chip opens design-system creation and starts brand extraction', async ({ page }) => {
+test('[P1] home design-system picker Create opens design-system creation and starts brand extraction', async ({ page }) => {
   const brandRequests: Array<{ url?: string; locale?: string }> = [];
   await routeHomeDesignSystems(page);
   await routeProjectCreates(page);
@@ -1192,7 +1250,12 @@ test('[P1] home Brand Kit chip opens design-system creation and starts brand ext
   await routeBrandExtraction(page, brandRequests);
 
   await gotoEntryHome(page);
-  await page.getByTestId('home-hero-rail-create-brand-kit').click();
+  // The Brand Kit rail chip went away with the scenario rail (#5517) and it is
+  // not one of the template picker's wedges — those are `apply-scenario` chips
+  // only. Brand extraction is now reached through the composer design-system
+  // picker's Create action, which is the surviving entry to /design-systems/create.
+  await page.getByTestId('home-hero-design-system-trigger').click();
+  await page.getByTestId('project-ds-picker-create').click();
 
   await expect(page).toHaveURL(/\/design-systems\/create$/);
   await expect(page.getByRole('heading', { name: /Design a system, in minutes/i })).toBeVisible();
@@ -1241,82 +1304,54 @@ test('[P1] brand-backed design system previews as a Brand Kit and carries into p
   expect(body.designSystemId).toBe(BRAND_DESIGN_SYSTEM.id);
 });
 
-test('[P1] home template carousel scrolls horizontally without page overflow', async ({ page }) => {
-  await page.setViewportSize({ width: 920, height: 820 });
+// The horizontally-scrolling scenario-card rail this used to drive
+// (`.home-hero__scenario-cards` + `.home-hero__rail-edge`) was deleted with the
+// rest of the inline template rail in #5517; the radial picker is a fixed-size
+// ring with no scroll axis, so there is no overflow behaviour left to pin.
+//
+// The first-run "scroll up to reveal community templates" affordance
+// (`home-templates-hint` / `.home-templates-reveal__body` / the Home
+// `plugins-home-section`) went with it — `HomeTemplatesReveal` is no longer
+// rendered anywhere — so its two specs are gone too.
+
+test('[P2] home template picker clears from the ring centre and dismisses on Escape or outside click', async ({ page }) => {
   await gotoEntryHome(page);
 
-  const rail = page.locator('.home-hero__scenario-cards').first();
-  await expect(rail).toBeVisible();
-  const initial = await rail.evaluate((el) => ({
-    scrollLeft: el.scrollLeft,
-    scrollWidth: el.scrollWidth,
-    clientWidth: el.clientWidth,
-    pageOverflow: Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth),
-  }));
-  expect(initial.scrollWidth).toBeGreaterThan(initial.clientWidth);
-  expect(initial.pageOverflow).toBeLessThanOrEqual(2);
+  await pickHomeTemplate(page, 'deck');
 
-  await page.locator('.home-hero__rail-edge--right').first().click({ force: true });
-  await expect
-    .poll(() => rail.evaluate((el) => el.scrollLeft), { timeout: 3_000 })
-    .toBeGreaterThan(initial.scrollLeft);
-});
+  // The radial has no search box (and therefore no empty-result state); the
+  // centre disc of the ring is the clear control.
+  await openHomeTemplateMenu(page);
+  await page.getByTestId('home-hero-template-radial-clear').click();
+  await expect(page.getByTestId('home-hero-template-menu')).toHaveCount(0);
+  await expect(page.getByTestId('home-hero-template-reset')).toHaveCount(0);
+  await expect(page.getByTestId('home-hero-active-plugin')).toHaveCount(0);
 
-test('[P1] first-run home template reveal opens from wheel gesture', async ({ page }) => {
-  await gotoEntryHome(page);
-
-  const revealBody = page.locator('.home-templates-reveal__body');
-  await expect(page.getByTestId('home-templates-hint')).toBeVisible();
-  await expect(revealBody).toHaveAttribute('aria-hidden', 'true');
-
-  await page.mouse.wheel(0, 500);
-
-  await expect(revealBody).toHaveAttribute('aria-hidden', 'false');
-  await expect(page.getByTestId('entry-view-home').getByTestId('plugins-home-section')).toBeVisible();
-});
-
-test('[P1] blank project entry remains retryable after create failures', async ({ page }) => {
-  await routeProjectCreates(page, { failFirstCreate: true });
-  await gotoEntryHome(page);
-
-  const failedResponsePromise = page.waitForResponse((response) =>
-    response.request().method() === 'POST'
-    && new URL(response.url()).pathname === '/api/projects'
-    && response.status() === 500,
-  );
-  await page.getByTestId('home-hero-blank-project').click();
-  await failedResponsePromise;
-  await expect(page).toHaveURL(/\/$/);
-  await expect(page.getByTestId('home-hero-blank-project')).toBeEnabled();
-
-  const retryRequestPromise = page.waitForRequest((request) =>
-    request.method() === 'POST' && new URL(request.url()).pathname === '/api/projects',
-  );
-  await page.getByTestId('home-hero-blank-project').click();
-  await retryRequestPromise;
-  await expect(page).toHaveURL(/\/projects\/[^/]+$/);
-});
-
-test('[P2] home template picker supports no-results, clear, Escape, and outside dismissal', async ({ page }) => {
-  await gotoEntryHome(page);
-
-  await page.getByTestId('home-hero-template-trigger').click();
-  await page.getByTestId('home-hero-template-card-deck').click();
-  await expect(page.getByTestId('home-hero-template-reset')).toBeVisible();
-
-  await page.getByTestId('home-hero-template-trigger').click();
-  await page.getByTestId('home-hero-template-search').fill('zzzz-no-template');
-  await expect(page.getByTestId('home-hero-template-menu')).toContainText(/No matches|没有匹配|沒有相符/i);
-  await page.getByTestId('home-hero-template-clear').click();
-  await expect(activeHeroChip(page)).toHaveCount(0);
-
+  await openHomeTemplateMenu(page);
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('home-hero-template-menu')).toHaveCount(0);
 
-  await page.getByTestId('home-hero-template-trigger').click();
-  await expect(page.getByTestId('home-hero-template-menu')).toBeVisible();
+  await openHomeTemplateMenu(page);
   await page.getByTestId('home-hero-input').click();
   await expect(page.getByTestId('home-hero-template-menu')).toHaveCount(0);
+});
+
+test('[P1] home suggestion entry remains retryable after create failures', async ({ page }) => {
+  const projectCreateCount = await routeProjectCreates(page, { failFirstCreate: true });
+  await routeRunsAccepted(page);
+  const runRequests = trackRunRequests(page);
+  await gotoEntryHome(page);
+
+  await page.getByTestId('home-hero-submit').click();
+  await expect.poll(projectCreateCount).toBe(1);
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByTestId('home-hero-submit')).toBeEnabled();
+  await expect(page.getByRole('alert').filter({ hasText: /Failed to start the run/i })).toBeVisible();
+  await runRequests.expectNone({ message: 'failed blank project create should not start a run' });
+
+  await page.getByTestId('home-hero-submit').click();
+  await expect.poll(projectCreateCount).toBe(2);
+  await expect(page).toHaveURL(/\/projects\/[^/]+$/);
 });
 
 test('[P2] zh-CN home smoke exposes the localized template, design system, working directory, and send entries', async ({ page }) => {
@@ -1339,26 +1374,34 @@ test('[P2] zh-CN home smoke exposes the localized template, design system, worki
 test('[P1] home template picker selects a starter template and can clear it', async ({ page }) => {
   await gotoEntryHome(page);
 
-  await page.getByTestId('home-hero-template-trigger').click();
-  const menu = page.getByTestId('home-hero-template-menu');
-  await expect(menu).toBeVisible();
-  await expect(page.getByTestId('home-hero-template-card-prototype')).toBeVisible();
-  await expect(page.getByTestId('home-hero-template-card-deck')).toBeVisible();
+  const menu = await openHomeTemplateMenu(page);
+  await expect(menu.getByTestId('home-hero-template-wedge-prototype')).toBeVisible();
+  await expect(menu.getByTestId('home-hero-template-wedge-deck')).toBeVisible();
 
-  await page.getByTestId('home-hero-template-search').fill('deck');
-  await expect(page.getByTestId('home-hero-template-card-deck')).toBeVisible();
-  await page.getByTestId('home-hero-template-card-deck').click();
-
+  await menu.getByTestId('home-hero-template-wedge-deck').click();
   await expect(page.getByTestId('home-hero-template-trigger')).toContainText(/Slide deck|幻灯片|投影片/i);
 
   await page.getByTestId('home-hero-template-reset').click();
   await expect(page.getByTestId('home-hero-footer-option-speakerNotes')).toHaveCount(0);
-  await expect(page.getByTestId('home-hero-template-trigger')).toContainText(/None|无|無/i);
+  // At rest the pill drops the value slot entirely and reads as the bare
+  // "Template" kicker — there is no "None" placeholder any more.
+  await expect(page.getByTestId('home-hero-template-trigger')).toContainText(/Template|模板|範本/i);
 });
 
-test('[P1] first-run home keeps community templates collapsed until the hint is used', async ({ page }) => {
+// "Blank project" no longer has a Home entry: the "…or create a blank project"
+// link went with the scenario rail, and `HomeHero`'s `onStartBlankProject` prop
+// is now threaded through but never rendered. The only surviving direct-create
+// entry is the Drafts / All projects empty state (`EntryBlankState`), which
+// requires a team workspace context this suite does not sign into — so the two
+// blank-project specs that drove `home-hero-blank-project` are gone. Creating a
+// project from Home without a template is still covered by the empty-composer
+// submit spec above and by the new-project modal specs in
+// `project-management-flows.test.ts`.
+
+test('[P1] home template picker switches non-media modes without surfacing media-only footer options', async ({ page }) => {
   await gotoEntryHome(page);
 
+  await expect(page.getByTestId('home-hero-template-picker')).toBeVisible();
   const home = page.getByTestId('entry-view-home');
   const revealBody = page.locator('.home-templates-reveal__body');
   await expect(page.getByTestId('recent-projects-strip')).toHaveCount(0);
@@ -1431,49 +1474,101 @@ test('[P1] home hero rail switches non-media modes without surfacing media-only 
   await expect(page.getByTestId('home-hero-footer-option-duration')).toHaveCount(0);
   await expect(page.getByTestId('home-hero-footer-option-audioType')).toHaveCount(0);
 
-  await expectChipSelection(page, 'prototype', 'Prototype');
+  await pickHomeTemplate(page, 'prototype');
   await expect(page.getByTestId('home-hero-design-system-trigger')).toBeVisible();
   await expect(page.getByTestId('home-hero-footer-option-duration')).toHaveCount(0);
   await expect(page.getByTestId('home-hero-footer-option-audioType')).toHaveCount(0);
-  await clearActiveChip(page);
+  await clearHomeTemplate(page);
 
-  await expectChipSelection(page, 'live-artifact', 'Live artifact');
+  await pickHomeTemplate(page, 'live-artifact');
   await expect(page.getByTestId('home-hero-footer-option-duration')).toHaveCount(0);
   await expect(page.getByTestId('home-hero-footer-option-audioType')).toHaveCount(0);
-  await clearActiveChip(page);
+  await clearHomeTemplate(page);
 
-  await expectChipSelection(page, 'deck', 'Slide deck');
+  await pickHomeTemplate(page, 'deck');
   await expect(page.getByTestId('home-hero-design-system-trigger')).toBeVisible();
   await expect(page.getByTestId('home-hero-footer-option-duration')).toHaveCount(0);
   await expect(page.getByTestId('home-hero-footer-option-audioType')).toHaveCount(0);
-  await clearActiveChip(page);
+  await clearHomeTemplate(page);
 });
 
-test('[P1] home hero rail defers media settings for image, video, hyperframes, and audio', async ({ page }) => {
+test('[P1] home template picker defers media settings for image, video, hyperframes, and audio', async ({ page }) => {
   await gotoEntryHome(page);
 
-  await expectChipSelection(page, 'image', 'Image');
+  await pickHomeTemplate(page, 'image');
   await expect(page.getByTestId('home-hero-design-system-trigger')).toBeVisible();
   await expect(page.getByTestId('home-hero-footer-option-ratio')).toHaveCount(0);
   await expect(page.getByTestId('home-hero-footer-option-resolution')).toHaveCount(0);
   await expect(page.getByTestId('home-hero-footer-option-duration')).toHaveCount(0);
-  await clearActiveChip(page);
+  await clearHomeTemplate(page);
 
-  await expectChipSelection(page, 'video', 'Video');
+  await pickHomeTemplate(page, 'video');
   await expect(page.getByTestId('home-hero-design-system-trigger')).toBeVisible();
   await expect(page.getByTestId('home-hero-footer-option-ratio')).toHaveCount(0);
   await expect(page.getByTestId('home-hero-footer-option-resolution')).toHaveCount(0);
   await expect(page.getByTestId('home-hero-footer-option-duration')).toHaveCount(0);
-  await clearActiveChip(page);
+  await clearHomeTemplate(page);
 
-  await expectChipSelection(page, 'hyperframes', 'HyperFrames');
+  await pickHomeTemplate(page, 'hyperframes');
   await expect(page.getByTestId('home-hero-footer-option-ratio')).toHaveCount(0);
   await expect(page.getByTestId('home-hero-footer-option-duration')).toHaveCount(0);
-  await clearActiveChip(page);
+  await clearHomeTemplate(page);
 
-  await expectChipSelection(page, 'audio', 'Audio');
+  await pickHomeTemplate(page, 'audio');
   await expect(page.getByTestId('home-hero-footer-option-audioType')).toHaveCount(0);
   await expect(page.getByTestId('home-hero-footer-option-duration')).toHaveCount(0);
+});
+
+test('[P1] expired plugin refresh keeps known Home creation types actionable after a real remount', async ({
+  page,
+}) => {
+  await gotoEntryHome(page);
+  const initialMenu = await openHomeTemplateMenu(page);
+  await expect(initialMenu.getByTestId('home-hero-template-wedge-prototype')).not.toHaveAttribute(
+    'aria-disabled',
+    'true',
+  );
+  await page.keyboard.press('Escape');
+
+  // Age the module-level catalog past its 10-second TTL, then leave Home
+  // through an in-app route so HomeView really unmounts while the JS module and
+  // its last successful snapshot remain alive.
+  await page.evaluate(() => {
+    const expiredNow = Date.now() + 11_000;
+    Date.now = () => expiredNow;
+  });
+  let releaseRefresh!: () => void;
+  const refreshGate = new Promise<void>((resolve) => {
+    releaseRefresh = resolve;
+  });
+  let refreshRequests = 0;
+  await page.route('**/api/plugins', async (route) => {
+    refreshRequests += 1;
+    await refreshGate;
+    await route.fulfill({ json: { plugins: HOME_PLUGINS } });
+  });
+
+  try {
+    await ensureRailOpen(page);
+    await page.getByTestId('entry-settings-button').click();
+    await expect(page).toHaveURL(/\/settings$/);
+    await page.goBack();
+    await expect(page.getByTestId('home-hero')).toBeVisible();
+    await expect.poll(() => refreshRequests).toBeGreaterThan(0);
+
+    // The revalidation is deliberately unresolved. The latest successful
+    // catalog must seed the remount synchronously instead of greying every
+    // creation type until this request finishes.
+    const remountedMenu = await openHomeTemplateMenu(page);
+    await expect(
+      remountedMenu.getByTestId('home-hero-template-wedge-prototype'),
+    ).not.toHaveAttribute('aria-disabled', 'true');
+    await expect(
+      remountedMenu.getByTestId('home-hero-template-wedge-deck'),
+    ).not.toHaveAttribute('aria-disabled', 'true');
+  } finally {
+    releaseRefresh();
+  }
 });
 
 test('[P1] home hero example presets update the composer input for prototype and live artifact', async ({ page }) => {
@@ -1482,207 +1577,175 @@ test('[P1] home hero example presets update the composer input for prototype and
   const input = page.getByTestId('home-hero-input');
   await expect(input).toHaveText('');
 
-  await page.getByTestId('home-hero-rail-prototype').click();
+  await pickHomeTemplate(page, 'prototype');
   await expect(page.getByTestId('home-hero-plugin-presets')).toBeVisible();
+  await usePreset(page, 'example-web-prototype');
   await useExamplePreset(page, 'example-web-prototype');
   await expect(input).toHaveText(
     'Build a high-fidelity web prototype for product evaluators using the active project design system from the bundled web prototype seed.',
   );
 
-  await clearActiveChip(page);
-  await page.getByTestId('home-hero-rail-live-artifact').click();
+  await clearHomeTemplate(page);
+  await pickHomeTemplate(page, 'live-artifact');
   await expect(page.getByTestId('home-hero-plugin-presets')).toBeVisible();
+  await usePreset(page, 'image-template-notion-team-dashboard-live-artifact');
   await useExamplePreset(page, 'image-template-notion-team-dashboard-live-artifact');
   await expect(input).toHaveText('Create a live Notion dashboard artifact.');
 });
 
-test('[P1] home hero example preset Use button applies the template without relying on card click', async ({ page }) => {
+test('[P1] live dashboard preset sends the active workspace name to plugin apply', async ({ page }) => {
+  const personalWorkspace = {
+    workspaceId: 'ws-personal',
+    workspaceName: 'Personal Workspace',
+    workspaceType: 'personal',
+    workspaceMemberId: 'wm-personal',
+    role: 'owner',
+    memberStatus: 'active',
+    lifecycleState: 'active',
+  } as const;
+  const teamWorkspace = {
+    workspaceId: 'ws-qa',
+    workspaceName: 'QA Team',
+    workspaceType: 'team',
+    workspaceMemberId: 'wm-qa',
+    role: 'member',
+    memberStatus: 'active',
+    lifecycleState: 'active',
+  } as const;
+  const workspaceContext = (
+    selected: typeof personalWorkspace | typeof teamWorkspace,
+    includeWorkspaceName = false,
+  ) => ({
+    workspaceId: selected.workspaceId,
+    workspaceType: selected.workspaceType,
+    workspaceMemberId: selected.workspaceMemberId,
+    role: selected.role,
+    memberStatus: 'active' as const,
+    lifecycleState: 'active' as const,
+    billingState: 'active' as const,
+    planId: selected.workspaceType === 'team' ? 'team' : null,
+    providerMode: 'platform_credits' as const,
+    seatSummary: {
+      seatLimit: 10,
+      usedSeats: 1,
+      availableSeats: 9,
+      isSeatFull: false,
+    },
+    permissions: {
+      canInviteMembers: false,
+      canManageMembers: false,
+      canManageBilling: false,
+      canManageAutoRecharge: false,
+      canShareProjects: true,
+      canWriteSyncedFiles: true,
+      canViewWorkspaceSettings: true,
+      canManageSharedResources: false,
+    },
+    ...(includeWorkspaceName ? { workspaceName: selected.workspaceName } : {}),
+  });
+  await page.route('**/api/workspace/directory', async (route) => {
+    await route.fulfill({
+      json: {
+        items: [personalWorkspace, teamWorkspace],
+        activeWorkspaceId: null,
+      },
+    });
+  });
+  await page.route('**/api/workspace/context', async (route) => {
+    const workspaceId = route.request().headers()['x-od-workspace-id'];
+    const selected = workspaceId === teamWorkspace.workspaceId
+      ? teamWorkspace
+      : personalWorkspace;
+    await route.fulfill({
+      json: {
+        context: workspaceContext(selected),
+      },
+    });
+  });
+  await page.route('**/api/workspace/active', async (route) => {
+    if (route.request().method() !== 'PUT') {
+      await route.fallback();
+      return;
+    }
+    const body = route.request().postDataJSON() as {
+      workspaceId?: unknown;
+      workspaceMemberId?: unknown;
+    };
+    const selected = [personalWorkspace, teamWorkspace].find(
+      (item) =>
+        item.workspaceId === body.workspaceId
+        && item.workspaceMemberId === body.workspaceMemberId,
+    );
+    if (!selected) {
+      await route.fulfill({ status: 400, json: { error: 'exact_workspace_scope_required' } });
+      return;
+    }
+    await route.fulfill({
+      json: {
+        activeWorkspaceId: selected.workspaceId,
+        context: workspaceContext(selected, true),
+      },
+    });
+  });
+
+  await gotoEntryHome(page);
+  await page.getByTestId('workspace-home-rail-toggle').click();
+  await expect(page.getByTestId('workspace-switcher')).toContainText('Personal Workspace');
+
+  await pickHomeTemplate(page, 'live-artifact');
+  await usePreset(page, 'example-live-dashboard');
+  await expect(page.getByTestId('home-hero-submit')).toBeEnabled();
+
+  // The preset is already bound to Personal. Switching the request-local tab
+  // context must replace that context-owned input and invalidate the old apply
+  // snapshot before Send — no account-level active Workspace participates.
+  await page.getByTestId('workspace-switcher').click();
+  await page.getByRole('menuitem', { name: 'QA Team' }).click();
+  await expect(page.getByTestId('workspace-switcher')).toContainText('QA Team');
+
+  const applyRequestPromise = page.waitForRequest((request) =>
+    request.method() === 'POST'
+      && request.url().includes('/api/plugins/example-live-dashboard/apply'),
+  );
+  await page.getByTestId('home-hero-submit').click();
+
+  const applyRequest = await applyRequestPromise;
+  const body = applyRequest.postDataJSON() as {
+    inputs?: Record<string, unknown>;
+  };
+  expect(body.inputs).toMatchObject({
+    workspace_name: 'QA Team',
+    page_title: 'Team Dashboard',
+  });
+});
+
+test('[P1] home hero example preset card has no hover overlay and applies the template directly', async ({ page }) => {
   await gotoEntryHome(page);
 
   const input = page.getByTestId('home-hero-input');
   await expect(input).toHaveText('');
 
-  await page.getByTestId('home-hero-rail-prototype').click();
+  await pickHomeTemplate(page, 'prototype');
   await expect(page.getByTestId('home-hero-plugin-presets')).toBeVisible();
-  await useExamplePreset(page, 'example-web-prototype');
+
+  const card = page.locator(
+    '[data-testid="home-hero-plugin-preset"][data-plugin-id="example-web-prototype"]',
+  );
+  await card.hover();
+  // 2026-07 product decision: drop the hover-revealed Use/Remix overlay
+  // (#4861) and restore the #5517 baseline where the whole card is the
+  // single click-to-use affordance — no separate button, no preview modal.
+  await expect(
+    page.getByTestId('home-hero-plugin-preset-use-example-web-prototype'),
+  ).toHaveCount(0);
+  await expect(page.locator('.home-hero__plugin-preset-actions')).toHaveCount(0);
+
+  await card.click();
 
   await expect(page.getByTestId('home-hero-active-plugin')).toBeVisible();
   await expect(input).toHaveText(
     'Build a high-fidelity web prototype for product evaluators using the active project design system from the bundled web prototype seed.',
   );
-});
-
-test('[P1] home hero example preset Copy creates a project from the template preview', async ({ page }) => {
-  const projectId = 'home-preset-copy-project';
-  const conversationId = 'conv-home-preset-copy';
-  const duplicateRequests: Array<{ name?: string }> = [];
-  const copyPlugin = homePresetCopyPlugin('example-web-prototype', 'Web Prototype');
-
-  await page.unroute('**/api/plugins');
-  await page.route('**/api/plugins', async (route) => {
-    await route.fulfill({ json: { plugins: [copyPlugin] } });
-  });
-  await page.route('**/api/plugins/example-web-prototype/preview', async (route) => {
-    await route.fulfill({
-      status: 200,
-      headers: { 'content-type': 'text/html' },
-      body: '<!doctype html><html><body><main><h1>Home Preset Copy Preview</h1></main></body></html>',
-    });
-  });
-  await page.route('**/api/plugins/example-web-prototype/duplicate-project', async (route) => {
-    duplicateRequests.push(route.request().postDataJSON() as { name?: string });
-    await route.fulfill({
-      json: {
-        ok: true,
-        sourcePluginId: 'example-web-prototype',
-        projectId,
-        conversationId,
-        relPath: 'example.html',
-        warnings: [],
-      },
-    });
-  });
-  await routeMinimalProjectWorkspace(page, projectId, conversationId, {
-    name: 'Web Prototype',
-    metadata: {
-      kind: 'prototype',
-      templateId: 'plugin:example-web-prototype',
-      duplicatedFromPluginId: 'example-web-prototype',
-    },
-  });
-  await page.route(`**/api/projects/${projectId}/files/example.html`, async (route) => {
-    await route.fulfill({
-      json: {
-        file: {
-          name: 'example.html',
-          path: 'example.html',
-          kind: 'html',
-          size: 96,
-          updatedAt: Date.now(),
-          content: '<!doctype html><html><body><h1>Copied preset</h1></body></html>',
-        },
-      },
-    });
-  });
-
-  await gotoEntryHome(page);
-  await page.getByTestId('home-hero-rail-prototype').click();
-  await expect(page.locator('[data-testid="home-hero-plugin-preset"][data-plugin-id="example-web-prototype"]')).toBeVisible();
-  const preset = page.locator('[data-testid="home-hero-plugin-preset"][data-plugin-id="example-web-prototype"]');
-  await preset.hover();
-  const duplicateButton = page.getByTestId('home-hero-plugin-preset-duplicate-example-web-prototype');
-  await expect(duplicateButton).toBeVisible();
-  await duplicateButton.click();
-
-  await expect
-    .poll(() => duplicateRequests.at(-1)?.name)
-    .toBe('Web Prototype');
-  await expect(page).toHaveURL(new RegExp(`/projects/${projectId}`));
-});
-
-test('[P1] home hero example preset Copy failure keeps Home retryable', async ({ page }) => {
-  const duplicateRequests: Array<{ name?: string }> = [];
-  const copyPlugin = homePresetCopyPlugin('example-web-prototype', 'Web Prototype');
-
-  await page.unroute('**/api/plugins');
-  await page.route('**/api/plugins', async (route) => {
-    await route.fulfill({ json: { plugins: [copyPlugin] } });
-  });
-  await page.route('**/api/plugins/example-web-prototype/preview', async (route) => {
-    await route.fulfill({
-      status: 200,
-      headers: { 'content-type': 'text/html' },
-      body: '<!doctype html><html><body><main><h1>Copy Failure Preview</h1></main></body></html>',
-    });
-  });
-  await page.route('**/api/plugins/example-web-prototype/duplicate-project', async (route) => {
-    duplicateRequests.push(route.request().postDataJSON() as { name?: string });
-    await route.fulfill({
-      status: 500,
-      json: { error: { code: 'duplicate-failed', message: 'fixture duplicate failure' } },
-    });
-  });
-
-  await gotoEntryHome(page);
-  await page.getByTestId('home-hero-rail-prototype').click();
-  const duplicateButton = page.getByTestId('home-hero-plugin-preset-duplicate-example-web-prototype');
-  await page.locator('[data-testid="home-hero-plugin-preset"][data-plugin-id="example-web-prototype"]').hover();
-  await expect(duplicateButton).toBeVisible();
-  await duplicateButton.click();
-
-  await expect
-    .poll(() => duplicateRequests.at(-1)?.name)
-    .toBe('Web Prototype');
-  await expect(page).toHaveURL(/\/$/);
-  await expect(page.locator('.home-hero__error')).toContainText('Could not remix this template.');
-  await expect(duplicateButton).not.toHaveAttribute('aria-busy', 'true');
-  await expect(duplicateButton).toBeEnabled();
-});
-
-test('[P1] home hero preset inline Use and Duplicate actions work from the template card', async ({ page }) => {
-  const duplicateRequests: Array<{ name?: string }> = [];
-  await page.route('**/api/plugins/example-web-prototype/duplicate-project', async (route) => {
-    duplicateRequests.push(route.request().postDataJSON() as { name?: string });
-    await route.fulfill({
-      json: {
-        ok: true,
-        sourcePluginId: 'example-web-prototype',
-        projectId: 'web-prototype-template-project',
-        conversationId: 'web-prototype-template-conversation',
-        relPath: 'index.html',
-      },
-    });
-  });
-  await page.route('**/api/projects/web-prototype-template-project', async (route) => {
-    await route.fulfill({
-      json: {
-        project: {
-          id: 'web-prototype-template-project',
-          name: 'Web Prototype',
-          path: '/tmp/open-design/web-prototype-template-project',
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-          metadata: { kind: 'prototype', duplicatedFromPluginId: 'example-web-prototype' },
-        },
-      },
-    });
-  });
-  await page.route('**/api/projects/web-prototype-template-project/conversations', async (route) => {
-    await route.fulfill({
-      json: {
-        conversations: [
-          {
-            id: 'web-prototype-template-conversation',
-            title: 'Web Prototype',
-            projectId: 'web-prototype-template-project',
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-            sessionMode: 'design',
-          },
-        ],
-      },
-    });
-  });
-  await page.route('**/api/projects/web-prototype-template-project/conversations/*/messages**', async (route) => {
-    await route.fulfill({ json: { messages: [] } });
-  });
-
-  await gotoEntryHome(page);
-  await page.getByTestId('home-hero-rail-prototype').click();
-  const card = page.locator('[data-testid="home-hero-plugin-preset"][data-plugin-id="example-web-prototype"]');
-  await card.hover();
-
-  await useExamplePreset(page, 'example-web-prototype');
-  await expect(page.getByTestId('home-hero-input')).toHaveText(
-    'Build a high-fidelity web prototype for product evaluators using the active project design system from the bundled web prototype seed.',
-  );
-
-  await card.hover();
-  await page.getByTestId('home-hero-plugin-preset-duplicate-example-web-prototype').click();
-  await expect
-    .poll(() => duplicateRequests.at(-1)?.name)
-    .toBe('Web Prototype');
-  await expect(page).toHaveURL(/\/projects\/web-prototype-template-project/);
 });
 
 test('[P1] home hero deck example preset updates the composer input', async ({ page }) => {
@@ -1691,8 +1754,9 @@ test('[P1] home hero deck example preset updates the composer input', async ({ p
   const input = page.getByTestId('home-hero-input');
   await expect(input).toHaveText('');
 
-  await page.getByTestId('home-hero-rail-deck').click();
+  await pickHomeTemplate(page, 'deck');
   await expect(page.getByTestId('home-hero-plugin-presets')).toBeVisible();
+  await usePreset(page, 'example-simple-deck');
   await useExamplePreset(page, 'example-simple-deck');
   await expect(input).toHaveText(
     'Create a pitch deck for decision makers about quarterly review with 10-15 pages. Speaker notes: include speaker notes. Use the active project design system.',
@@ -1703,7 +1767,7 @@ test('[P1] home hero prompt example cards fill the composer for fallback modes',
   await gotoEntryHome(page);
 
   const input = page.getByTestId('home-hero-input');
-  await page.getByTestId('home-hero-rail-audio').click();
+  await pickHomeTemplate(page, 'audio');
   await expect(page.getByTestId('home-hero-prompt-examples')).toBeVisible();
   await expect(page.getByTestId('home-hero-plugin-presets')).toHaveCount(0);
 
@@ -1715,22 +1779,24 @@ test('[P1] home hero prompt example cards fill the composer for fallback modes',
   await expect(input).toHaveText(exampleText ?? '');
 });
 
-test('[P2] clearing the selected hero template restores the rail and clears preset chrome', async ({ page }) => {
+test('[P2] clearing the selected hero template clears preset chrome and reopens the full ring', async ({ page }) => {
   await gotoEntryHome(page);
 
-  await page.getByTestId('home-hero-rail-prototype').click();
+  await pickHomeTemplate(page, 'prototype');
   await expect(page.getByTestId('home-hero-plugin-presets')).toBeVisible();
   await expect(page.getByTestId('home-hero-template-reset')).toBeVisible();
   await expect(page.getByTestId('home-hero-design-system-trigger')).toBeVisible();
 
-  await clearActiveChip(page);
+  await clearHomeTemplate(page);
 
   await expect(page.getByTestId('home-hero-plugin-presets')).toHaveCount(0);
   await expect(page.getByTestId('home-hero-footer-option-designSystem')).toHaveCount(0);
   await expect(page.getByTestId('home-hero-footer-option-ratio')).toHaveCount(0);
   await expect(page.getByTestId('home-hero-footer-option-duration')).toHaveCount(0);
-  await expect(page.getByTestId('home-hero-type-tabs')).toBeVisible();
-  await expect(page.getByTestId('home-hero-rail-live-artifact')).toBeVisible();
+  // Every template is offered again once the pill is back to its empty state.
+  const menu = await openHomeTemplateMenu(page);
+  await expect(menu.getByTestId('home-hero-template-wedge-live-artifact')).toBeVisible();
+  await expect(menu.getByTestId('home-hero-template-wedge-prototype')).toBeVisible();
 });
 
 test('[P1] after clearing one mode, selecting another example updates the composer without leaking prior mode state', async ({ page }) => {
@@ -1738,18 +1804,20 @@ test('[P1] after clearing one mode, selecting another example updates the compos
 
   const input = page.getByTestId('home-hero-input');
 
-  await page.getByTestId('home-hero-rail-prototype').click();
+  await pickHomeTemplate(page, 'prototype');
   await expect(page.getByTestId('home-hero-plugin-presets')).toBeVisible();
+  await usePreset(page, 'example-web-prototype');
   await useExamplePreset(page, 'example-web-prototype');
   await expect(input).toHaveText(
     'Build a high-fidelity web prototype for product evaluators using the active project design system from the bundled web prototype seed.',
   );
 
-  await clearActiveChip(page);
+  await clearHomeTemplate(page);
 
-  await page.getByTestId('home-hero-rail-live-artifact').click();
+  await pickHomeTemplate(page, 'live-artifact');
   await expect(page.getByTestId('home-hero-plugin-presets')).toBeVisible();
   await expect(page.getByTestId('home-hero-footer-option-designSystem')).toHaveCount(0);
+  await usePreset(page, 'image-template-notion-team-dashboard-live-artifact');
   await useExamplePreset(page, 'image-template-notion-team-dashboard-live-artifact');
   await expect(input).toHaveText('Create a live Notion dashboard artifact.');
 });
@@ -1759,8 +1827,12 @@ test('[P1] selecting another example updates the composer input', async ({ page 
 
   const input = page.getByTestId('home-hero-input');
 
-  await page.getByTestId('home-hero-rail-live-artifact').click();
+  await pickHomeTemplate(page, 'live-artifact');
   await expect(page.getByTestId('home-hero-plugin-presets')).toBeVisible();
+  await usePreset(page, 'image-template-notion-team-dashboard-live-artifact');
+  await expect(input).toHaveText('Create a live Notion dashboard artifact.');
+
+  await usePreset(page, 'example-live-artifact');
   await useExamplePreset(page, 'image-template-notion-team-dashboard-live-artifact');
   await expect(input).toHaveText('Create a live Notion dashboard artifact.');
 
@@ -1768,21 +1840,33 @@ test('[P1] selecting another example updates the composer input', async ({ page 
   await expect(input).toHaveText('Create refreshable, auditable Open Design artifacts.');
 });
 
-async function expectChipSelection(page: Page, chipId: string, _label: string) {
-  const chip = page.getByTestId(`home-hero-rail-${chipId}`);
-  await expect(chip).toBeEnabled();
-  await chip.click();
-  await expect(page.getByTestId('home-hero-template-reset')).toBeVisible();
+/**
+ * Apply an example preset to the composer. The preset card itself is the
+ * single click-to-use affordance (2026-07 removed the separate
+ * hover-revealed "Use"/"Remix" overlay buttons and restored the #5517
+ * baseline), so this is just a plain click on the card.
+ */
+async function usePreset(page: Page, pluginId: string) {
+  const card = page.locator(
+    `[data-testid="home-hero-plugin-preset"][data-plugin-id="${pluginId}"]`,
+  );
+  await expect(card).toBeVisible();
+  await card.click();
 }
 
+// Template selection / clearing now lives in `@/playwright/home-hero`
+// (`pickHomeTemplate` / `clearHomeTemplate`): both used to be local helpers
+// built on the deleted `home-hero-rail-*` cards and `home-hero-active-type-chip`.
+//
+// Historical alias from when picking a preset was a two-step hover + Use
+// button flow (`usePreset` hovered/asserted, `useExamplePreset` clicked);
+// kept so existing call-site pairs still resolve without churning every
+// caller now that both steps collapse into one click.
 async function useExamplePreset(page: Page, pluginId: string) {
   const card = page.locator(
     `[data-testid="home-hero-plugin-preset"][data-plugin-id="${pluginId}"]`,
   );
-  await card.hover();
-  const useButton = page.getByTestId(`home-hero-plugin-preset-use-${pluginId}`);
-  await expect(useButton).toBeVisible();
-  await useButton.click();
+  await card.click();
 }
 
 function activeHeroChip(page: Page) {
@@ -1871,60 +1955,10 @@ async function routeMinimalProjectWorkspace(
   });
 }
 
-function homePresetCopyPlugin(id: string, title: string) {
-  return {
-    id,
-    title,
-    version: '1.0.0',
-    trust: 'trusted',
-    sourceKind: 'bundled',
-    source: `/tmp/${id}`,
-    fsPath: `/tmp/${id}`,
-    capabilitiesGranted: ['prompt:inject'],
-    installedAt: 0,
-    updatedAt: 0,
-    manifest: {
-      name: id,
-      title,
-      version: '1.0.0',
-      description: `${title} fixture.`,
-      tags: ['prototype', 'template'],
-      od: {
-        kind: 'scenario',
-        taskKind: 'new-generation',
-        mode: 'prototype',
-        preview: {
-          type: 'html',
-          entry: './example.html',
-        },
-        useCase: {
-          query: {
-            en: 'Build a copied template.',
-          },
-        },
-      },
-    },
-  };
-}
-
 async function routeRunsAccepted(page: Page) {
-  await page.route('**/api/runs', async (route) => {
-    if (route.request().method() !== 'POST') {
-      await route.continue();
-      return;
-    }
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: '{"runId":"home-run-smoke"}',
-    });
-  });
-  await page.route('**/api/runs/*/events', async (route) => {
-    await route.fulfill({
-      status: 200,
-      headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' },
-      body: ['event: end', 'data: {"code":0,"status":"succeeded"}', '', ''].join('\n'),
-    });
+  await routeSuccessfulRuns(page, {
+    runId: 'home-run-smoke',
+    eventBody: successfulRunEventBody(),
   });
 }
 
@@ -1960,6 +1994,7 @@ async function routeProjectCreates(page: Page, options: { failFirstCreate?: bool
     }
     await route.continue();
   });
+  return () => createCount;
 }
 
 async function routeHomeDesignSystems(page: Page, options: { includeBrandKit?: boolean } = {}) {

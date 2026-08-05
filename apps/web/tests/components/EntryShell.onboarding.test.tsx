@@ -5,8 +5,13 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { EntryShell } from '../../src/components/EntryShell';
-import { AMR_LOGIN_TIMEOUT_MS } from '../../src/components/amrLoginPolling';
+import {
+  AMR_LOGIN_POLL_INTERVAL_MS,
+  AMR_LOGIN_STATUS_EVENT,
+  AMR_LOGIN_TIMEOUT_MS,
+} from '../../src/components/amrLoginPolling';
 import { I18nProvider } from '../../src/i18n';
+import { fetchProjectFiles } from '../../src/providers/registry';
 import type { AgentInfo, AppConfig } from '../../src/types';
 import { setHomeHeroPrompt } from '../helpers/home-hero-lexical';
 
@@ -106,7 +111,6 @@ function renderOnboarding(
     onApiModelChange: vi.fn(),
     onConfigPersist: vi.fn(),
     onRefreshAgents: vi.fn(() => [amrAgent(), cliAgent()]),
-    onThemeChange: vi.fn(),
     onCreateProject: vi.fn(),
     onCreatePluginShareProject: vi.fn(),
     onImportClaudeDesign: vi.fn(),
@@ -162,7 +166,6 @@ function renderHome(
     config: baseConfig({
       agentId: 'claude-code',
       agentModels: { 'claude-code': { model: 'sonnet' } },
-      theme: 'system',
     }),
     agents: [cliAgent()],
     daemonLive: true,
@@ -173,7 +176,6 @@ function renderHome(
     onApiModelChange: vi.fn(),
     onConfigPersist: vi.fn(),
     onRefreshAgents: vi.fn(() => [cliAgent()]),
-    onThemeChange: vi.fn(),
     onCreateProject: vi.fn(),
     onCreatePluginShareProject: vi.fn(),
     onImportClaudeDesign: vi.fn(),
@@ -292,7 +294,7 @@ beforeEach(() => {
 });
 
 describe('EntryShell settings menu', () => {
-  it('opens quick actions before opening the full settings dialog', async () => {
+  it('opens settings from the signed-out rail without duplicating the footer action', async () => {
     globalThis.fetch = vi.fn(async (input) => {
       const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
       if (url.endsWith('/api/community/discord')) {
@@ -317,40 +319,28 @@ describe('EntryShell settings menu', () => {
     }) as typeof fetch;
     const props = renderHome();
 
-    await waitFor(() => {
-      expect(screen.getByText('1.2k online')).toBeTruthy();
-    });
-
-    fireEvent.click(screen.getByTestId('entry-settings-menu-trigger'));
-
-    expect(props.onOpenSettings).not.toHaveBeenCalled();
-    expect(screen.getByTestId('entry-settings-menu')).toBeTruthy();
-    expect(screen.getByText('Language')).toBeTruthy();
-    expect(screen.getByText('Appearance')).toBeTruthy();
-    expect(screen.getByRole('menuitem', { name: /Join Discord/i })).toBeTruthy();
-    expect(screen.getByRole('menuitem', { name: /1.2k online/i })).toBeTruthy();
-    expect(
-      screen.getByRole('menuitem', { name: /Follow @OpenDesignHQ on X/i }).getAttribute('href'),
-    ).toBe('https://x.com/OpenDesignHQ');
-    expect(
-      screen.getByRole('menuitem', { name: /Follow Open Design on Threads/i }).getAttribute('href'),
-    ).toBe('https://www.threads.com/@opendesign.ai');
-    expect(
-      screen.getByRole('menuitem', { name: /Open Design on YouTube/i }).getAttribute('href'),
-    ).toBe('https://www.youtube.com/@Open-Design-ai');
-
-    fireEvent.click(screen.getByTestId('entry-settings-open-details'));
+    // The signed-out rail's own settings item (below 扩展) is the single
+    // settings entry — the #5517 footer carries none.
+    fireEvent.click(await screen.findByTestId('entry-settings-button'));
 
     expect(props.onOpenSettings).toHaveBeenCalledWith();
+    expect(screen.getAllByTestId('entry-settings-button')).toHaveLength(1);
   });
 });
 
 describe('EntryShell design systems view', () => {
-  it('refreshes the design-system catalog when the view is active', async () => {
+  it('leaves workspace-scoped design-system activation to the mounted tab', async () => {
     const onDesignSystemsRefresh = vi.fn();
     renderHome({ onDesignSystemsRefresh }, '/design-systems');
 
-    await waitFor(() => expect(onDesignSystemsRefresh).toHaveBeenCalledTimes(1));
+    expect(await screen.findByTestId('entry-view-design-systems')).toHaveAttribute(
+      'data-active',
+      'true',
+    );
+    // DesignSystemsTab owns its Team SSE activation and fallback snapshot.
+    // Calling the App-level catalog refresh here as well creates a duplicate,
+    // differently-scoped request every time the route becomes active.
+    expect(onDesignSystemsRefresh).not.toHaveBeenCalled();
   });
 });
 
@@ -368,16 +358,23 @@ describe('EntryShell route scroll isolation', () => {
     return scrollContainer;
   }
 
-  it('resets the shared scroll offset when navigating from Home to Projects', async () => {
+  // #5517 reshaped the rail: the flat `entry-nav-projects` button is gone, and
+  // its Drafts / All-projects replacements only mount under a workspace
+  // context this render has none of. Design systems is the nearest rail
+  // destination that survives in every state, and the reset it exercises is the
+  // same shared `.entry-main--scroll` element, so the spec's subject is intact.
+  it('resets the shared scroll offset when navigating away from Home', async () => {
     window.localStorage.setItem('od.entry.railOpen', 'true');
     renderHome();
 
     const scrollContainer = entryScrollContainer();
     scrollContainer.scrollTop = 280;
-    fireEvent.click(screen.getByTestId('entry-nav-projects'));
+    fireEvent.click(screen.getByTestId('entry-nav-design-systems'));
 
     await waitFor(() => {
-      expect(screen.getByTestId('entry-view-projects').getAttribute('data-active')).toBe('true');
+      expect(
+        screen.getByTestId('entry-view-design-systems').getAttribute('data-active'),
+      ).toBe('true');
     });
     expect(scrollContainer.scrollTop).toBe(0);
   });
@@ -397,22 +394,46 @@ describe('EntryShell route scroll isolation', () => {
   });
 });
 
-describe('EntryShell new project rail', () => {
-  it('creates a blank project directly from the rail plus', async () => {
-    window.localStorage.setItem('od.entry.railOpen', 'false');
+describe('EntryShell project reopen request priority', () => {
+  it('aborts Home cover work, keeps hidden Projects idle, and lets the foreground files read finish', async () => {
+    const files = [{
+      name: 'index.html',
+      path: 'index.html',
+      kind: 'html' as const,
+      mtime: 1,
+      size: 1,
+      mime: 'text/html',
+    }];
+    const fileRequests: Array<RequestInit | undefined> = [];
     const fetchMock = vi.fn(
       async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
-        const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
-        if (url.endsWith('/api/projects') && init?.method === 'POST') {
-          return jsonResponse({
-            project: {
-              id: 'blank-project-1',
-              name: 'Untitled',
-              createdAt: Date.now(),
-              updatedAt: Date.now(),
-            },
-            conversationId: 'conversation-1',
-          });
+        const url = typeof input === 'string'
+          ? input
+          : input instanceof Request
+            ? input.url
+            : String(input);
+        if (url === '/api/projects/project-reopen/files') {
+          // Single-flight (`lib/shared-cancellable-get`) gives every `/files`
+          // reader — cancellable or not — one shared request carrying the
+          // shared AbortSignal, so "is this the background scan?" is the
+          // request ordinal, not the presence of a signal. Request #1 is
+          // Home's cover scan and must hang until it is aborted; the
+          // foreground read that follows it must be answered.
+          const isBackgroundCoverScan = fileRequests.length === 0;
+          fileRequests.push(init);
+          if (isBackgroundCoverScan) {
+            return new Promise<Response>((_resolve, reject) => {
+              init?.signal?.addEventListener(
+                'abort',
+                () => reject(new DOMException('Aborted', 'AbortError')),
+                { once: true },
+              );
+            });
+          }
+          return jsonResponse({ files });
+        }
+        if (url.includes('/api/live-artifacts?projectId=project-reopen')) {
+          return jsonResponse({ liveArtifacts: [] });
         }
         if (url.endsWith('/api/community/discord')) {
           return jsonResponse({
@@ -433,36 +454,65 @@ describe('EntryShell new project rail', () => {
           });
         }
         return jsonResponse({});
-      });
+      },
+    );
     globalThis.fetch = fetchMock as typeof fetch;
-    const props = renderHome();
-
-    fireEvent.click(screen.getByTestId('entry-rail-toggle'));
-    fireEvent.click(screen.getByTestId('entry-nav-new-project'));
-
-    await waitFor(() => {
-      expect(screen.getByTestId('new-project-modal')).toBeTruthy();
+    const onOpenProject = vi.fn((projectId: string) => {
+      expect(projectId).toBe('project-reopen');
+      // App leaves EntryShell when it opens ProjectView. Model that boundary
+      // directly so the mounted Home strip must cancel its background probe.
+      cleanup();
     });
-    expect(screen.getByTestId('new-project-panel')).toBeTruthy();
-    expect(props.onOpenProject).not.toHaveBeenCalled();
-    expect(props.onCreateProject).not.toHaveBeenCalled();
-    const createCall = fetchMock.mock.calls.find(
-      ([input, init]) => input === '/api/projects' && init?.method === 'POST',
-    );
-    expect(createCall).toBeUndefined();
-    expect(analyticsMocks.track).toHaveBeenCalledWith(
-      'ui_click',
-      expect.objectContaining({
-        page_name: 'home',
-        area: 'nav',
-        element: 'new_project_plus',
-      }),
-      undefined,
-    );
-  });
 
-  it('opens the new project modal from the Projects tab button', async () => {
-    window.localStorage.setItem('od.entry.railOpen', 'false');
+    renderHome({
+      projects: [{
+        id: 'project-reopen',
+        name: 'Reopen project',
+        skillId: null,
+        designSystemId: null,
+        createdAt: 1,
+        updatedAt: 2,
+        status: { value: 'not_started' },
+      }],
+      onOpenProject,
+    });
+
+    await waitFor(() => expect(fileRequests).toHaveLength(1));
+    const homeSignal = fileRequests[0]?.signal;
+    expect(homeSignal).toBeDefined();
+    // DesignsTab is mounted under EntryShell's hidden Projects pane, but its
+    // own background files/live-artifact scans must remain dormant.
+    expect(
+      fetchMock.mock.calls.filter(([input]) =>
+        String(input).includes('/api/live-artifacts?projectId=project-reopen'),
+      ),
+    ).toHaveLength(0);
+
+    fireEvent.click(screen.getByRole('button', { name: /Reopen project/ }));
+
+    expect(onOpenProject).toHaveBeenCalledTimes(1);
+    expect(homeSignal?.aborted).toBe(true);
+    await expect(fetchProjectFiles('project-reopen')).resolves.toEqual(files);
+    expect(fileRequests).toHaveLength(2);
+    // The foreground read must own a live request of its own: it neither joins
+    // the abandoned scan's dead entry nor inherits its aborted signal.
+    const foregroundSignal = fileRequests[1]?.signal;
+    expect(foregroundSignal).toBeDefined();
+    expect(foregroundSignal).not.toBe(homeSignal);
+    expect(foregroundSignal?.aborted).toBe(false);
+  });
+});
+
+describe('EntryShell new project rail', () => {
+  // The rail's "+ New project" button (`entry-nav-new-project`) is gone in
+  // #5517's rail: `EntryShell` still passes `onNewProject` — with its
+  // `new_project_plus` ui_click — to `EntryNavRail`, but the rail never renders
+  // a control that calls it, so the button and that analytics event are both
+  // unreachable. The spec that drove it is therefore removed; opening the
+  // new-project modal is still covered by the Projects-view CTA below, which is
+  // the surviving entry point.
+
+  it('opens the new project modal from the Projects view new-project button', async () => {
     const fetchMock = vi.fn(
       async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
         const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
@@ -504,6 +554,10 @@ describe('EntryShell new project rail', () => {
         return jsonResponse({});
       });
     globalThis.fetch = fetchMock as typeof fetch;
+    // Start directly on the Projects view (/projects). The nav rail no longer
+    // has a single "Projects" button — the projects list is its own route,
+    // reachable via /projects or Home's "view all" — so drive the DesignsTab's
+    // own new-project CTA rather than a removed rail button.
     const props = renderHome({
       projects: [
         {
@@ -516,10 +570,8 @@ describe('EntryShell new project rail', () => {
           status: { value: 'not_started' },
         },
       ],
-    });
+    }, '/projects');
 
-    fireEvent.click(screen.getByTestId('entry-rail-toggle'));
-    fireEvent.click(screen.getByTestId('entry-nav-projects'));
     fireEvent.click(screen.getByTestId('designs-new-project'));
 
     await waitFor(() => {
@@ -567,7 +619,9 @@ describe('EntryShell Home submit handoff', () => {
 
     await waitFor(() => expect(onCreateProject).toHaveBeenCalledTimes(1));
     expect(submit.disabled).toBe(true);
-    expect(submit.textContent).toContain('Sending…');
+    // #5517: the submit is icon-only (spinner while sending) — assert the
+    // busy state through aria instead of the removed label text.
+    expect(submit.getAttribute('aria-busy')).toBe('true');
 
     resolveCreate(true);
     await waitFor(() => expect(submit.disabled).toBe(false));
@@ -831,8 +885,104 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     expect(loginCalls).toHaveLength(2);
   });
 
+  it('preserves a pre-start cancel when the status refresh rejects', async () => {
+    const canonicalAuthAttemptId = '22222222-2222-4222-8222-222222222222';
+    const newerAuthAttemptId = '33333333-3333-4333-8333-333333333333';
+    let releaseLogin!: (response: Response) => void;
+    const heldLoginResponse = new Promise<Response>((resolve) => {
+      releaseLogin = resolve;
+    });
+    let statusCalls = 0;
+    const cancelAttemptIds: string[] = [];
+    const statusEvents: string[] = [];
+    const onStatusEvent = ((event: CustomEvent) => {
+      statusEvents.push(event.detail?.reason);
+    }) as EventListener;
+    window.addEventListener(AMR_LOGIN_STATUS_EVENT, onStatusEvent);
+    const fetchMock = vi.fn(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/api/integrations/vela/status')) {
+        statusCalls += 1;
+        if (cancelAttemptIds.length === 1) {
+          throw new Error('status unavailable');
+        }
+        const newerAttemptVisible = cancelAttemptIds.length >= 2;
+        return jsonResponse({
+          loggedIn: false,
+          loginInFlight: newerAttemptVisible,
+          authAttemptId: newerAttemptVisible ? newerAuthAttemptId : undefined,
+          profile: 'prod',
+          user: null,
+          configPath: '/x',
+        });
+      }
+      if (url.endsWith('/api/integrations/vela/login') && init?.method === 'POST') {
+        return heldLoginResponse;
+      }
+      if (url.endsWith('/api/integrations/vela/login/cancel') && init?.method === 'POST') {
+        const body = JSON.parse(String(init.body)) as { authAttemptId: string };
+        cancelAttemptIds.push(body.authAttemptId);
+        return jsonResponse({ canceled: false, pids: [] });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+    renderOnboarding();
+
+    const signIn = await findCloudSignInButton();
+    vi.useFakeTimers();
+    fireEvent.click(signIn);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/integrations/vela/login',
+      expect.objectContaining({ method: 'POST' }),
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Cancel sign-in/i }));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(cancelAttemptIds).toHaveLength(1);
+    const statusCallsAfterEarlyCancel = statusCalls;
+
+    releaseLogin(jsonResponse({
+      pid: 123,
+      authAttemptId: canonicalAuthAttemptId,
+    }, 202));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await vi.advanceTimersByTimeAsync(AMR_LOGIN_POLL_INTERVAL_MS);
+    window.removeEventListener(AMR_LOGIN_STATUS_EVENT, onStatusEvent);
+
+    expect(cancelAttemptIds).toEqual([
+      expect.stringMatching(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+      ),
+      canonicalAuthAttemptId,
+    ]);
+    expect(statusCalls).toBeGreaterThan(statusCallsAfterEarlyCancel + 1);
+    expect(screen.getByText('Signing in…')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Cancel sign-in/i })).toBeTruthy();
+    expect(statusEvents).not.toContain('login-canceled');
+    expect(analyticsMocks.track).not.toHaveBeenCalledWith(
+      'amr_auth_result',
+      expect.objectContaining({ result: 'cancelled' }),
+      expect.anything(),
+    );
+  });
+
   it('cancels AMR login and re-enables onboarding after the login timeout', async () => {
     let loginStarted = false;
+    let authAttemptId: string | null = null;
     const fetchMock = vi.fn(async (input, init) => {
       const url = String(input);
       if (url.endsWith('/api/integrations/vela/status')) {
@@ -845,10 +995,16 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
         });
       }
       if (url.endsWith('/api/integrations/vela/login') && init?.method === 'POST') {
+        const body = JSON.parse(String(init.body)) as { authAttemptId?: string };
+        authAttemptId = body.authAttemptId ?? null;
+        expect(authAttemptId).toMatch(
+          /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+        );
         loginStarted = true;
-        return jsonResponse({ pid: 123 }, 202);
+        return jsonResponse({ pid: 123, authAttemptId }, 202);
       }
       if (url.endsWith('/api/integrations/vela/login/cancel') && init?.method === 'POST') {
+        expect(JSON.parse(String(init.body))).toEqual({ authAttemptId });
         loginStarted = false;
         return jsonResponse({ canceled: true, pids: [123] });
       }
@@ -879,7 +1035,13 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(AMR_LOGIN_TIMEOUT_MS);
     });
-    expect(fetchMock).toHaveBeenCalledWith('/api/integrations/vela/login/cancel', { method: 'POST' });
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/integrations/vela/login/cancel',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ authAttemptId }),
+      }),
+    );
     expect(screen.getByText('Sign-in failed.')).toBeTruthy();
     expect(screen.queryByText('Signing in…')).toBeNull();
     expect(
@@ -925,6 +1087,69 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     await vi.waitFor(() => {
       expect(screen.getByRole('heading', { name: 'About you' })).toBeTruthy();
     });
+  });
+
+  it('refreshes workspace context, billing, and team projects as soon as onboarding sign-in completes', async () => {
+    // Onboarding's embedded AMR sign-in step (pollAmrLoginCompletion) used to
+    // fire only notifyAmrLoginStatusChanged() on success — unlike
+    // CloudSignInTip's finishSignedIn() and refreshWorkspaceSurfacesAfterOnboarding()
+    // (the two other places a sign-in completes), which fire all three
+    // workspace-refresh notifications. That gap left workspaceContext stale
+    // until finishOnboarding fired it later, so Home's rail briefly rendered
+    // in its signed-out shape (still showing "Sign in to use Open Design
+    // Cloud") right after a successful onboarding sign-in.
+    const { WORKSPACE_CONTEXT_REFRESH_EVENT, WORKSPACE_BILLING_REFRESH_EVENT, TEAM_PROJECTS_CHANGED_EVENT } =
+      await import('../../src/collab/useWorkspaceContext');
+    const contextRefresh = vi.fn();
+    const billingRefresh = vi.fn();
+    const teamProjectsChanged = vi.fn();
+    window.addEventListener(WORKSPACE_CONTEXT_REFRESH_EVENT, contextRefresh);
+    window.addEventListener(WORKSPACE_BILLING_REFRESH_EVENT, billingRefresh);
+    window.addEventListener(TEAM_PROJECTS_CHANGED_EVENT, teamProjectsChanged);
+    try {
+      let statusCalls = 0;
+      const fetchMock = vi.fn(async (input, init) => {
+        const url = String(input);
+        if (url.endsWith('/api/integrations/vela/status')) {
+          statusCalls += 1;
+          return jsonResponse(
+            statusCalls >= 3
+              ? {
+                  loggedIn: true,
+                  profile: 'prod',
+                  user: { id: 'u', email: 'user@example.com' },
+                  configPath: '/x',
+                }
+              : { loggedIn: false, profile: 'prod', user: null, configPath: '/x' },
+          );
+        }
+        if (url.endsWith('/api/integrations/vela/login') && init?.method === 'POST') {
+          return jsonResponse({ pid: 123 }, 202);
+        }
+        throw new Error(`unexpected fetch: ${url}`);
+      });
+      globalThis.fetch = fetchMock as typeof fetch;
+      renderOnboarding();
+
+      const signIn = await findCloudSignInButton();
+      vi.useFakeTimers();
+      fireEvent.click(signIn);
+      await act(async () => {});
+      expect(contextRefresh).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(2000);
+      await vi.waitFor(() => {
+        expect(screen.getByRole('heading', { name: 'About you' })).toBeTruthy();
+      });
+
+      expect(contextRefresh).toHaveBeenCalled();
+      expect(billingRefresh).toHaveBeenCalled();
+      expect(teamProjectsChanged).toHaveBeenCalled();
+    } finally {
+      window.removeEventListener(WORKSPACE_CONTEXT_REFRESH_EVENT, contextRefresh);
+      window.removeEventListener(WORKSPACE_BILLING_REFRESH_EVENT, billingRefresh);
+      window.removeEventListener(TEAM_PROJECTS_CHANGED_EVENT, teamProjectsChanged);
+    }
   });
 
   it('recovers from a transient status failure during login polling and still continues after authorization completes', async () => {
@@ -1621,6 +1846,71 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
       baseUrl: 'https://api.anthropic.com',
       model: 'claude-opus-4-8',
       apiProviderBaseUrl: null,
+    });
+  });
+
+  it('lets Azure BYOK onboarding enter a custom deployment directly', async () => {
+    globalThis.fetch = vi.fn(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/api/integrations/vela/status')) {
+        return jsonResponse({ loggedIn: false, profile: 'prod', user: null, configPath: '/x' });
+      }
+      if (url.endsWith('/api/test/connection') && init?.method === 'POST') {
+        const body = JSON.parse(String(init.body ?? '{}'));
+        expect(body).toMatchObject({
+          protocol: 'azure',
+          apiKey: 'azure-key',
+          baseUrl: 'https://example.openai.azure.com',
+          model: 'deployment-one',
+        });
+        return jsonResponse({
+          ok: true,
+          kind: 'success',
+          latencyMs: 11,
+          model: 'deployment-one',
+          sample: 'Connected',
+        });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    }) as typeof fetch;
+    const props = renderOnboarding({
+      config: baseConfig({
+        mode: 'api',
+        apiProtocol: 'azure',
+        apiProviderBaseUrl: '',
+      }),
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Bring your own key/i }));
+
+    expect(screen.getByRole('tab', { name: 'Azure OpenAI' }).getAttribute('aria-selected')).toBe(
+      'true',
+    );
+    expect((screen.getByRole('button', { name: /Fetch models/i }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+    expect(screen.getAllByRole('button', { name: 'Azure OpenAI' }).length).toBeGreaterThan(0);
+
+    fireEvent.change(screen.getByLabelText('API key'), { target: { value: 'azure-key' } });
+    fireEvent.change(screen.getByLabelText('Base URL'), {
+      target: { value: 'https://example.openai.azure.com' },
+    });
+    fireEvent.change(screen.getByLabelText('Deployment name'), {
+      target: { value: 'deployment-one' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^Test$/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Connected\. Replied in 11 ms/i)).toBeTruthy();
+    });
+    expect(props.onApiModelChange).toHaveBeenCalledWith('deployment-one');
+    expect((props.onConfigPersist as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0]).toMatchObject({
+      mode: 'api',
+      apiProtocol: 'azure',
+      apiKey: 'azure-key',
+      apiProviderBaseUrl: '',
+      baseUrl: 'https://example.openai.azure.com',
+      model: 'deployment-one',
     });
   });
 

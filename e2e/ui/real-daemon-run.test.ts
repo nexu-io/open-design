@@ -7,6 +7,7 @@ import {
   createFakeAgentRuntimes,
   FAKE_AGENT_RUNTIME_IDS,
 } from '@/playwright/fake-agents';
+import { trackRunRequests } from '@/playwright/mock-factory';
 import type { FakeAgentId } from '@/playwright/fake-agents';
 import { T } from '@/timeouts';
 
@@ -536,7 +537,7 @@ test('[P0] separate projects keep daemon artifacts isolated across recent-projec
   const alpha = await currentProjectContext(page);
   await expectProjectFilesToContain(page, alpha.projectId, [GENERATED_FILE]);
 
-  await page.getByRole('button', { name: /back to projects/i }).click();
+  await leaveProjectForEntry(page);
 
   await createProject(page, 'Real daemon isolation beta');
   await expectWorkspaceReady(page);
@@ -545,14 +546,14 @@ test('[P0] separate projects keep daemon artifacts isolated across recent-projec
   await expectProjectFilesToContain(page, beta.projectId, [FOLLOW_UP_FILE]);
   expect(beta.projectId).not.toBe(alpha.projectId);
 
-  await page.getByRole('button', { name: /back to projects/i }).click();
+  await leaveProjectForEntry(page);
   await openProjectFromProjectsView(page, alpha.projectId);
   await expectWorkspaceReady(page);
   await expect(page.getByTestId('file-workspace').getByText(GENERATED_FILE, { exact: true })).toBeVisible();
   await expect(page.getByText(FOLLOW_UP_FILE, { exact: true })).toHaveCount(0);
   expect((await listProjectFiles(page, alpha.projectId)).map((file) => file.name)).toEqual([GENERATED_FILE]);
 
-  await page.getByRole('button', { name: /back to projects/i }).click();
+  await leaveProjectForEntry(page);
   await openProjectFromProjectsView(page, beta.projectId);
   await expectWorkspaceReady(page);
   await expect(page.getByTestId('file-workspace').getByText(FOLLOW_UP_FILE, { exact: true })).toBeVisible();
@@ -586,10 +587,7 @@ test('[P1] BYOK OpenCode run is blocked before spawn when provider config is mis
   // Settings section for the user to complete the config. So "fails clearly
   // before spawn" now means no create-run request is issued and the preflight
   // surfaces the fix, not a daemon-side failed run.
-  let createRunRequestSent = false;
-  page.on('request', (request) => {
-    if (isCreateRunRequest(request)) createRunRequestSent = true;
-  });
+  const runRequests = trackRunRequests(page);
 
   const { projectId } = await currentProjectContext(page);
   const input = page.getByTestId('chat-composer-input');
@@ -604,8 +602,11 @@ test('[P1] BYOK OpenCode run is blocked before spawn when provider config is mis
   ).toBeVisible({ timeout: 15_000 });
 
   // No run was created and no artifact was produced — the block is pre-spawn.
-  await page.waitForTimeout(1_000);
-  expect(createRunRequestSent).toBe(false);
+  await runRequests.expectNone({
+    timeout: 1_000,
+    message: 'missing BYOK provider should block before POST /api/runs',
+  });
+  runRequests.dispose?.();
   expect(await listProjectFiles(page, projectId)).toEqual([]);
 
   await page.reload({ waitUntil: 'domcontentloaded' });
@@ -613,7 +614,18 @@ test('[P1] BYOK OpenCode run is blocked before spawn when provider config is mis
   expect(await listProjectFiles(page, projectId)).toEqual([]);
 });
 
-test('[P1] plugin authoring produces a generated-plugin scaffold with action cards', async ({ page }) => {
+// BLOCKED — no UI entry point left for agent-driven plugin authoring.
+//
+// This spec used to start from the Home rail's More-shortcuts menu ("Create a
+// plugin", `home-hero-rail-create-plugin`), which #5517 deleted along with the
+// rest of the rail. The daemon-side capability is intact and
+// `EntryShell.startPluginAuthoring` / `createPluginAuthoringHandoff` are still
+// wired, but nothing calls them any more: `EntryShell` hands
+// `onCreatePlugin={startPluginAuthoring}` to `ExtensionsMarketplace`, which
+// only uses the prop as a boolean gate for a Create button that opens the
+// import/upload dialog instead. Restore an entry point (or re-point this spec
+// at it) before un-fixme-ing — do not weaken the assertions to make it pass.
+test.fixme('[P1] plugin authoring produces a generated-plugin scaffold with action cards', async ({ page }) => {
   await configureFakeAgent(page, 'codex');
   await installBrowserAgentConfig(page, 'codex');
   await gotoEntryHome(page);
@@ -701,12 +713,20 @@ test('[P0] real daemon run supports fake non-Codex runtime protocols', async ({ 
 });
 
 async function createProject(page: Page, name: string, agentId: FakeAgentId = 'codex') {
+  const projectId = `real-daemon-${name}-${Date.now()}`.replace(/[^A-Za-z0-9._-]/g, '-');
   await configureFakeAgent(page, agentId);
   await installBrowserAgentConfig(page, agentId);
-  const projectId = `real-daemon-${agentId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  await createProjectViaApi(page, projectId, name);
+  // Keep the branch's conversation-scoped landing (createProjectViaApi returns
+  // the seeded conversation here), and take #6161's two improvements: the
+  // post-navigation `configureFakeAgent` + `setBrowserAgentConfig` pair is the
+  // redundant setup it removed — `installBrowserAgentConfig` above already
+  // seeded it — and the goto is guarded against the aborted-navigation races a
+  // domcontentloaded wait can lose to.
+  const { conversationId } = await createProjectViaApi(page, projectId, name);
   try {
-    await page.goto(`/projects/${projectId}`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`/projects/${projectId}/conversations/${conversationId}`, {
+      waitUntil: 'domcontentloaded',
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (!/ERR_ABORTED|frame was detached/i.test(message)) throw error;
@@ -749,10 +769,34 @@ async function createProjectViaApi(page: Page, projectId: string, name: string) 
 }
 
 async function openProjectFromProjectsView(page: Page, projectId: string) {
-  await gotoEntryHome(page);
-  const recentProjects = page.getByTestId('recent-projects-strip');
-  await expect(recentProjects).toBeVisible();
-  await recentProjects.locator(`[data-project-id="${projectId}"]`).click();
+  await page.goto(`/projects/${projectId}`, { waitUntil: 'domcontentloaded' });
+  await waitForLoadingToClear(page);
+}
+
+/**
+ * Leave the open project through the UI and land back on the entry surface.
+ *
+ * This used to be `getByRole('button', { name: /back to projects/i })`, which
+ * no longer resolves to anything on a project surface. #5517 (884ed1085) gave
+ * ChatPane's top-left slot to the pane-collapse control — `onCollapse` wins
+ * over `onBack` there, and ProjectView passes both — and the standalone
+ * `AppChromeHeader` that owned the `app-chrome-back` "Back to projects" button
+ * is no longer mounted anywhere (only its portal-id constants are still
+ * imported). The single remaining "Back to projects" label lives inside the
+ * avatar menu's popover, which is closed by default, so the old locator just
+ * hung until the test timed out.
+ *
+ * The surviving way out of a project is the pinned entry tab in the workspace
+ * tabs bar: `WorkspaceTabsBar.openTab` always sends that tab home, whatever
+ * entry section it last showed. Coverage is unchanged — this still exercises
+ * "leave the project through real chrome", which is what the isolation
+ * journey below depends on.
+ */
+async function leaveProjectForEntry(page: Page) {
+  const pinnedEntryTab = page.locator('.workspace-tab.is-pinned');
+  await expect(pinnedEntryTab).toBeVisible();
+  await pinnedEntryTab.locator('.workspace-tab__main').click();
+  await expect(page.getByTestId('file-workspace')).toHaveCount(0);
 }
 
 async function gotoEntryHome(page: Page) {
@@ -788,17 +832,20 @@ async function expectWorkspaceReady(page: Page) {
 }
 
 async function selectComposerSessionMode(page: Page, modeTitle: 'Ask mode' | 'Plan mode' | 'Design mode') {
-  const trigger = page.getByTestId('chat-composer').getByTestId('session-mode-trigger');
+  // #5517 composer mode picker: Ask maps to the real `chat` session mode.
+  const modeId = modeTitle === 'Ask mode' ? 'chat' : modeTitle === 'Plan mode' ? 'plan' : 'design';
+  const modeName = modeTitle.replace(' mode', '');
+  const trigger = page.getByTestId('chat-composer').getByTestId('composer-mode-trigger');
   await expect(trigger).toBeVisible();
   await trigger.click();
 
-  const menu = page.locator('.session-mode-toggle__menu[role="menu"]');
+  const menu = page.getByTestId('composer-mode-menu');
   await expect(menu).toBeVisible();
-  await expect(menu.getByRole('menuitemradio', { name: 'Ask mode' })).toBeVisible();
-  await expect(menu.getByRole('menuitemradio', { name: 'Plan mode' })).toBeVisible();
-  await expect(menu.getByRole('menuitemradio', { name: 'Design mode' })).toBeVisible();
-  await menu.getByRole('menuitemradio', { name: modeTitle }).click();
-  await expect(trigger).toHaveAttribute('aria-label', modeTitle);
+  await expect(menu.getByTestId('composer-mode-menu-chat')).toBeVisible();
+  await expect(menu.getByTestId('composer-mode-menu-plan')).toBeVisible();
+  await expect(menu.getByTestId('composer-mode-menu-design')).toBeVisible();
+  await menu.getByTestId(`composer-mode-menu-${modeId}`).click();
+  await expect(trigger).toHaveAttribute('aria-label', `Mode: ${modeName}`);
 }
 
 async function sendPrompt(page: Page, prompt: string) {

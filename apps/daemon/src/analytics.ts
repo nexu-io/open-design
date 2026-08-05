@@ -15,12 +15,25 @@ import type { Request } from 'express';
 import {
   ANALYTICS_HEADER_DEVICE_ID,
   ANALYTICS_HEADER_CLIENT_TYPE,
+  ANALYTICS_HEADER_ATTRIBUTION_QUALITY,
+  ANALYTICS_HEADER_DISTRIBUTION_MECHANISM,
+  ANALYTICS_HEADER_ENTRY_SURFACE,
+  ANALYTICS_HEADER_EXTERNAL_PLUGIN_ID,
+  ANALYTICS_HEADER_EXTERNAL_PLUGIN_VERSION,
+  ANALYTICS_HEADER_HOST_PRODUCT,
   ANALYTICS_HEADER_LOCALE,
+  ANALYTICS_HEADER_MCP_SESSION_ID,
+  ANALYTICS_HEADER_PUBLISHER_CLASS,
   ANALYTICS_HEADER_REQUEST_ID,
   ANALYTICS_HEADER_SESSION_ID,
   anonymizeArtifactId as anonymizeArtifactIdShared,
   type AnalyticsClientType,
+  type AnalyticsAttributionQuality,
   type AnalyticsConfigResponse,
+  type AnalyticsDistributionMechanism,
+  type AnalyticsEntrySurface,
+  type AnalyticsHostProduct,
+  type AnalyticsPublisherClass,
   EVENT_SCHEMA_VERSION,
 } from '@open-design/contracts/analytics';
 import { readAppConfig } from './app-config.js';
@@ -52,6 +65,14 @@ export interface AnalyticsContext {
   clientType: AnalyticsClientType;
   locale: string;
   requestId: string | null;
+  entrySurface?: AnalyticsEntrySurface;
+  hostProduct?: AnalyticsHostProduct;
+  externalPluginId?: string;
+  externalPluginVersion?: string;
+  distributionMechanism?: AnalyticsDistributionMechanism;
+  publisherClass?: AnalyticsPublisherClass;
+  attributionQuality?: AnalyticsAttributionQuality;
+  mcpSessionId?: string;
 }
 
 // Read context from an incoming request. Returns null when the web client did
@@ -64,10 +85,65 @@ export function readAnalyticsContext(req: Request): AnalyticsContext | null {
   const sessionId = headerString(req, ANALYTICS_HEADER_SESSION_ID) ?? deviceId;
   const clientHeader = headerString(req, ANALYTICS_HEADER_CLIENT_TYPE);
   const clientType: AnalyticsClientType =
-    clientHeader === 'desktop' ? 'desktop' : 'web';
+    clientHeader === 'desktop'
+      ? 'desktop'
+      : clientHeader === 'external_mcp'
+        ? 'external_mcp'
+        : 'web';
   const locale = headerString(req, ANALYTICS_HEADER_LOCALE) ?? 'en';
   const requestId = headerString(req, ANALYTICS_HEADER_REQUEST_ID);
-  return { deviceId, sessionId, clientType, locale, requestId };
+  const entrySurface = boundedHeader(
+    req,
+    ANALYTICS_HEADER_ENTRY_SURFACE,
+    ['open_design_ui', 'od_cli', 'external_mcp'] as const,
+  );
+  const hostProduct = boundedHeader(
+    req,
+    ANALYTICS_HEADER_HOST_PRODUCT,
+    ['codex_desktop', 'codex_cli', 'codex_unknown', 'claude_code', 'unknown'] as const,
+  );
+  const distributionMechanism = boundedHeader(
+    req,
+    ANALYTICS_HEADER_DISTRIBUTION_MECHANISM,
+    ['git_marketplace', 'local_repo', 'manual', 'unknown'] as const,
+  );
+  const publisherClass = boundedHeader(
+    req,
+    ANALYTICS_HEADER_PUBLISHER_CLASS,
+    ['open_design_first_party', 'third_party', 'unknown'] as const,
+  );
+  const attributionQuality = boundedHeader(
+    req,
+    ANALYTICS_HEADER_ATTRIBUTION_QUALITY,
+    ['self_reported', 'session_correlated'] as const,
+  );
+  const externalPluginId = boundedFreeTextHeader(
+    req,
+    ANALYTICS_HEADER_EXTERNAL_PLUGIN_ID,
+  );
+  const externalPluginVersion = boundedFreeTextHeader(
+    req,
+    ANALYTICS_HEADER_EXTERNAL_PLUGIN_VERSION,
+  );
+  const mcpSessionId = boundedFreeTextHeader(
+    req,
+    ANALYTICS_HEADER_MCP_SESSION_ID,
+  );
+  return {
+    deviceId,
+    sessionId,
+    clientType,
+    locale,
+    requestId,
+    ...(entrySurface ? { entrySurface } : {}),
+    ...(hostProduct ? { hostProduct } : {}),
+    ...(externalPluginId ? { externalPluginId } : {}),
+    ...(externalPluginVersion ? { externalPluginVersion } : {}),
+    ...(distributionMechanism ? { distributionMechanism } : {}),
+    ...(publisherClass ? { publisherClass } : {}),
+    ...(attributionQuality ? { attributionQuality } : {}),
+    ...(mcpSessionId ? { mcpSessionId } : {}),
+  };
 }
 
 function headerString(req: Request, name: string): string | null {
@@ -75,6 +151,23 @@ function headerString(req: Request, name: string): string | null {
   if (Array.isArray(raw)) return raw[0]?.trim() || null;
   if (typeof raw === 'string') return raw.trim() || null;
   return null;
+}
+
+function boundedHeader<const Values extends readonly string[]>(
+  req: Request,
+  name: string,
+  values: Values,
+): Values[number] | undefined {
+  const value = headerString(req, name);
+  return value && values.includes(value) ? value : undefined;
+}
+
+function boundedFreeTextHeader(req: Request, name: string): string | undefined {
+  const value = headerString(req, name);
+  if (!value || value.length > 128 || !/^[A-Za-z0-9._:@/-]+$/u.test(value)) {
+    return undefined;
+  }
+  return value;
 }
 
 export interface PosthogConfig {
@@ -141,6 +234,12 @@ export interface AnalyticsService {
     properties?: Record<string, unknown>;
     insertId?: string;
   }): Promise<void>;
+  identifyGroup(args: {
+    context: AnalyticsContext;
+    groupType: 'workspace';
+    groupKey: string;
+    properties: Record<string, unknown>;
+  }): Promise<void>;
   shutdown(): Promise<void>;
 }
 
@@ -148,6 +247,7 @@ const NOOP_SERVICE: AnalyticsService = {
   capture: async () => undefined,
   captureSafety: async () => undefined,
   mergeAnonymousPerson: async () => undefined,
+  identifyGroup: async () => undefined,
   shutdown: async () => undefined,
 };
 
@@ -218,6 +318,30 @@ export function createAnalyticsService(args: {
             // v2 rename: was `anonymous_id`. Value unchanged.
             device_id: context.deviceId,
             client_type: context.clientType,
+            ...(context.entrySurface
+              ? { entry_surface: context.entrySurface }
+              : {}),
+            ...(context.hostProduct
+              ? { host_product: context.hostProduct }
+              : {}),
+            ...(context.externalPluginId
+              ? { external_plugin_id: context.externalPluginId }
+              : {}),
+            ...(context.externalPluginVersion
+              ? { external_plugin_version: context.externalPluginVersion }
+              : {}),
+            ...(context.distributionMechanism
+              ? { distribution_mechanism: context.distributionMechanism }
+              : {}),
+            ...(context.publisherClass
+              ? { publisher_class: context.publisherClass }
+              : {}),
+            ...(context.attributionQuality
+              ? { attribution_quality: context.attributionQuality }
+              : {}),
+            ...(context.mcpSessionId
+              ? { mcp_session_id: context.mcpSessionId }
+              : {}),
             locale: context.locale,
             // Canonical PostHog OS props so backend events join the same
             // OS breakdown as posthog-js (which the daemon can't auto-fill).
@@ -295,6 +419,22 @@ export function createAnalyticsService(args: {
         });
       } catch {
         // Attribution merge failures must not block app startup or consent.
+      }
+    },
+    identifyGroup: async ({ context, groupType, groupKey, properties }) => {
+      try {
+        const appCfg = await readAppConfig(args.dataDir);
+        if (appCfg.telemetry?.metrics !== true) return;
+        const cleanProperties = cleanPosthogPersonProperties(properties);
+        if (!groupKey || Object.keys(cleanProperties).length === 0) return;
+        client.groupIdentify({
+          groupType,
+          groupKey,
+          distinctId: context.deviceId,
+          properties: cleanProperties,
+        });
+      } catch {
+        // Group updates are best-effort and must never affect product reads.
       }
     },
     shutdown: async () => {

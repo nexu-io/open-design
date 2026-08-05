@@ -1,5 +1,9 @@
 import { defineConfig, devices } from '@playwright/test';
 
+import { initializePlaywrightRunNamespace } from './lib/playwright/runtime-identity.ts';
+
+initializePlaywrightRunNamespace();
+
 function parseWorkerCount(value: string | undefined): number {
   if (value == null || value.length === 0) return 2;
   const parsed = Number(value);

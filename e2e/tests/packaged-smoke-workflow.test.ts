@@ -9,12 +9,21 @@ import { promisify } from "node:util";
 
 import { describe, expect, it } from "vitest";
 
+import { T } from "@/timeouts";
+
 import { uiP0CiMatrix, uiP0Groups } from "../lib/playwright/suites.ts";
 
 const execFileAsync = promisify(execFile);
 const e2eRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const workspaceRoot = dirname(e2eRoot);
 const ciWorkflowPath = join(workspaceRoot, ".github", "workflows", "ci.yml");
+const configureCiParallelismActionPath = join(
+  workspaceRoot,
+  ".github",
+  "actions",
+  "configure-ci-parallelism",
+  "action.yml",
+);
 const uiExtendedMainWorkflowPath = join(workspaceRoot, ".github", "workflows", "ui-extended-main.yml");
 const playwrightConfigPath = join(e2eRoot, "playwright.config.ts");
 const commentWorkflowPath = join(workspaceRoot, ".github", "workflows", "comment.atom.yml");
@@ -206,8 +215,13 @@ async function runScopesPrint(eventName: string, eventPayload: unknown, changedF
   const ghCmdPath = join(tempDir, "gh.cmd");
   await writeFile(eventPath, JSON.stringify(eventPayload));
   const script = `#!/usr/bin/env node
-process.stdout.write(${JSON.stringify(changedFiles.join("\n"))});
-if (${JSON.stringify(changedFiles.length > 0)}) process.stdout.write("\\n");
+const changedFiles = ${JSON.stringify(changedFiles)};
+if (process.argv.includes("--jq")) {
+  process.stdout.write(changedFiles.join("\\n"));
+  if (changedFiles.length > 0) process.stdout.write("\\n");
+} else {
+  process.stdout.write(JSON.stringify({ files: changedFiles.map((filename) => ({ filename })) }));
+}
 `;
   await writeFile(ghPath, script);
   await chmod(ghPath, 0o755);
@@ -1058,7 +1072,7 @@ process.stdin.on("end", () => {
       run_playwright_critical: false,
       run_ui_p0: true,
     });
-  });
+  }, T.medium);
 
   it("[P2] keeps packaging (nix/docker) off the core Validate workspace gate", async () => {
     const workflow = await readFile(ciWorkflowPath, "utf8");
@@ -1108,7 +1122,7 @@ process.stdin.on("end", () => {
     );
   });
 
-  it("[P2] routes default CI through cost-sensitive runner tiers", async () => {
+  it("[P2] routes trusted Linux CI through the Nexu runner fleet", async () => {
     const workflow = await readFile(ciWorkflowPath, "utf8");
     const runners = sectionBetween(workflow, "  runners:", "  scopes:");
     const scopes = sectionBetween(workflow, "  scopes:", "  static_gate:");
@@ -1120,7 +1134,8 @@ process.stdin.on("end", () => {
     const uiP0 = sectionBetween(workflow, "  ui_p0:", "  playwright_visual:");
     const visual = sectionBetween(workflow, "  playwright_visual:", "  validate:");
 
-    expect(runners).toContain("runs-on: ubuntu-24.04");
+    expect(runners).toContain("|| 'nexu-runners-small'");
+    expect(runners).toContain("&& 'ubuntu-24.04'");
     expect(runners).toContain("runs_on: ${{ steps.runners.outputs.runs_on }}");
     expect(runners).toContain("decision: ${{ steps.runners.outputs.decision }}");
     expect(runners).toContain("python3 .github/scripts/runners.py");
@@ -1144,6 +1159,7 @@ process.stdin.on("end", () => {
     expect(uiP0CiMatrix.map((entry) => entry.name)).toEqual([
       "entry-settings",
       "project-workspace",
+      "project-collab",
       "project-runtime",
       "workspace-restoration",
     ]);
@@ -1152,15 +1168,21 @@ process.stdin.on("end", () => {
       "ui/app-design-files.test.ts",
       "ui/app-manual-edit.test.ts",
       "ui/project-management-flows.test.ts",
-      "ui/workspace-keyboard-flows.test.ts",
+      "ui/workspace-team-design-system-picker.test.ts",
     ]);
     expect(uiP0Groups["project-workspace"].workers).toBe(1);
+    expect(uiP0Groups["project-collab"].files).toEqual([
+      "ui/workspace-multi-client-collab.test.ts",
+      "ui/workspace-keyboard-flows.test.ts",
+    ]);
+    expect(uiP0Groups["project-collab"].workers).toBe(1);
     expect(uiP0Groups["critical-extras"]).toEqual({
       grep: "@merge-extra",
       workers: 1,
       files: ["ui/app.test.ts"],
     });
     expect(uiP0Groups["workspace-restoration"]).toEqual({
+      fullyParallel: true,
       grep: String.raw`\[P0\]`,
       files: ["ui/app-restoration.test.ts", "ui/critical-smoke.test.ts"],
     });
@@ -1172,6 +1194,28 @@ process.stdin.on("end", () => {
     expect(workflow).not.toContain("needs.runners.outputs.contabo_control");
     expect(workflow).not.toContain("needs.runners.outputs.hosted_or_blacksmith");
     expect(workflow).not.toContain("needs.runners.outputs.blacksmith_default");
+  });
+
+  it("[P2] caps Playwright concurrency independently from build concurrency", async () => {
+    const action = await readFile(configureCiParallelismActionPath, "utf8");
+
+    expect(action).toContain('playwright_workers="$workers"');
+    expect(action).toContain('if [ "$playwright_workers" -gt 2 ]; then');
+    expect(action).toContain("playwright_workers=2");
+    expect(action).toContain('echo "OD_PLAYWRIGHT_WORKERS=$playwright_workers"');
+    expect(action).toContain('echo "OPEN_DESIGN_WORKSPACE_CONCURRENCY=$workers"');
+  });
+
+  it("[P1] routes external fork PRs through GitHub-hosted runner profiles", async () => {
+    const workflow = await readFile(ciWorkflowPath, "utf8");
+    const runners = sectionBetween(workflow, "  runners:", "  scopes:");
+
+    expect(runners).toContain("github.event_name == 'pull_request'");
+    expect(runners).toContain("github.event.pull_request.head.repo.full_name != github.repository");
+    expect(runners).toContain("|| vars.OD_CI_RUNNER_MODE == 'economic'");
+    expect(runners).toContain("&& 'ubuntu-24.04'");
+    expect(runners).toContain("&& 'economic'");
+    expect(runners).toContain("|| vars.OD_CI_RUNNER_MODE");
   });
 
   it("[P1] pins ShellCheck for actionlint across runner profiles", async () => {
@@ -1228,19 +1272,13 @@ process.stdin.on("end", () => {
       "windows_tools",
       "workspace_unit",
     ]);
-    expect(defaultRunsOn.control).toEqual([
-      "self-hosted",
-      "Linux",
-      "X64",
-      "od-persistent-ci",
-      "od-ci-hot-poc",
-    ]);
-    expect(defaultRunsOn.general_medium).toEqual(["ubuntu-24.04"]);
-    expect(defaultRunsOn.workspace_unit).toEqual(["ubuntu-24.04"]);
+    expect(defaultRunsOn.control).toEqual(["nexu-runners-small"]);
+    expect(defaultRunsOn.general_medium).toEqual(["nexu-runners-medium"]);
+    expect(defaultRunsOn.workspace_unit).toEqual(["nexu-runners-medium"]);
     expect(defaultRunsOn.windows_tools).toEqual(["windows-latest"]);
-    expect(defaultRunsOn.js_hot).toEqual(["blacksmith-4vcpu-ubuntu-2404"]);
-    expect(defaultRunsOn.ui_hot).toEqual(["blacksmith-4vcpu-ubuntu-2404"]);
-    expect(defaultRunsOn.visual_hot).toEqual(["blacksmith-4vcpu-ubuntu-2404"]);
+    expect(defaultRunsOn.js_hot).toEqual(["nexu-runners-medium"]);
+    expect(defaultRunsOn.ui_hot).toEqual(["nexu-runners-large"]);
+    expect(defaultRunsOn.visual_hot).toEqual(["nexu-runners-large"]);
     expect(defaultProfiles).not.toHaveProperty("contabo_control");
     expect(defaultProfiles).not.toHaveProperty("hosted_or_blacksmith");
     expect(defaultProfiles).not.toHaveProperty("blacksmith_default");
@@ -1248,13 +1286,13 @@ process.stdin.on("end", () => {
     const performanceProfiles = await runRunners("performance");
     const performanceRunsOn = runnerRunsOn(performanceProfiles);
     expect(runnerDecision(performanceProfiles)).toEqual({ schema_version: 1, mode: "performance" });
-    expect(performanceRunsOn.control).toEqual(["ubuntu-24.04"]);
-    expect(performanceRunsOn.general_medium).toEqual(["blacksmith-4vcpu-ubuntu-2404"]);
-    expect(performanceRunsOn.workspace_unit).toEqual(["ubuntu-24.04"]);
+    expect(performanceRunsOn.control).toEqual(["nexu-runners-small"]);
+    expect(performanceRunsOn.general_medium).toEqual(["nexu-runners-medium"]);
+    expect(performanceRunsOn.workspace_unit).toEqual(["nexu-runners-medium"]);
     expect(performanceRunsOn.windows_tools).toEqual(["windows-latest"]);
-    expect(performanceRunsOn.js_hot).toEqual(["blacksmith-4vcpu-ubuntu-2404"]);
-    expect(performanceRunsOn.ui_hot).toEqual(["blacksmith-4vcpu-ubuntu-2404"]);
-    expect(performanceRunsOn.visual_hot).toEqual(["blacksmith-4vcpu-ubuntu-2404"]);
+    expect(performanceRunsOn.js_hot).toEqual(["nexu-runners-medium"]);
+    expect(performanceRunsOn.ui_hot).toEqual(["nexu-runners-large"]);
+    expect(performanceRunsOn.visual_hot).toEqual(["nexu-runners-large"]);
 
     const economicProfiles = await runRunners("economic");
     const economicRunsOn = runnerRunsOn(economicProfiles);
@@ -1266,6 +1304,12 @@ process.stdin.on("end", () => {
     expect(economicRunsOn.js_hot).toEqual(["ubuntu-24.04"]);
     expect(economicRunsOn.ui_hot).toEqual(["ubuntu-24.04"]);
     expect(economicRunsOn.visual_hot).toEqual(["ubuntu-24.04"]);
+
+    for (const invalidMode of ["Economic", " economic "]) {
+      const fallbackProfiles = await runRunners(invalidMode);
+      expect(runnerDecision(fallbackProfiles)).toEqual({ schema_version: 1, mode: "default" });
+      expect(runnerRunsOn(fallbackProfiles).control).toEqual(["nexu-runners-small"]);
+    }
   });
 
   it("[P2] routes CI follow-ons through generic handoff workflows", async () => {
@@ -1504,6 +1548,52 @@ process.stdin.on("end", () => {
 
     expect(prereleaseWorkflow).toContain("OPEN_DESIGN_STABLE_VERSION: ${{ inputs.release_version }}");
     expect(prereleaseWorkflow).toContain("Required when ref is not release/vX.Y.Z");
+  });
+
+  it("[P2] makes a publish=false beta dispatch retrievable on both platforms without touching a channel", async () => {
+    // A publish=false dispatch is the standing shape for dogfood/QA builds: they
+    // must never enter the public beta feed. mac already handed back a DMG, but
+    // the Windows job produced nothing retrievable at all, so a Windows dogfood
+    // build was impossible without also publishing. Both platforms now emit a
+    // GitHub artifact plus an R2 upload under the dogfood prefix.
+    const workflow = await readFile(releaseBetaWorkflowPath, "utf8");
+    const macJob = sectionBetween(workflow, "  build_mac_arm64:", "  build_mac_x64:");
+    const winJob = sectionBetween(workflow, "  build_win_x64:", "  build_linux_x64:");
+
+    for (const [label, job] of [["mac_arm64", macJob], ["win_x64", winJob]] as const) {
+      expect(job, label).toContain("run: pnpm exec tools-release publish-dogfood");
+      expect(job, label).toContain("DOGFOOD_VERSION: ${{ needs.metadata.outputs.beta_version }}");
+      expect(job, label).toContain("DOGFOOD_BUILD_ID: ${{ github.run_id }}-${{ github.run_attempt }}");
+      // Artifact paths come from the build's own --json output, so whichever
+      // targets the parameterised --to actually produced are what get uploaded.
+      expect(job, label).toContain("DOGFOOD_BUILD_JSON_PATH:");
+      expect(job, label).toContain("DOGFOOD_BUILD_JSON_KEYS:");
+    }
+
+    // The Windows installer is retrievable as a GitHub artifact too, covering
+    // every win_x64_target (nsis -> setup exe, zip -> portable zip, all -> both).
+    expect(winJob).toContain("name: open-design-beta-win-x64-installer");
+    expect(winJob).toContain("builder\\*-setup.exe");
+    expect(winJob).toContain("builder\\*-portable.zip");
+
+    // Every publish=false distribution step is gated on !inputs.publish, so the
+    // publish=true release pipeline runs exactly as it did before.
+    const dogfoodSteps = workflow.split("\n      - name: ").filter((step) =>
+      /publish-dogfood|for manual distribution/.test(step)
+    );
+    expect(dogfoodSteps).toHaveLength(4);
+    for (const step of dogfoodSteps) {
+      expect(step, step.split("\n")[0]).toContain("if: ${{ !cancelled() && !inputs.publish }}");
+    }
+
+    // A dogfood step must never name a channel prefix, a latest pointer, or the
+    // publishing commands; those stay exclusive to the inputs.publish lane.
+    for (const step of dogfoodSteps) {
+      const head = step.split("\n")[0] ?? "";
+      for (const forbidden of ["publish-platform", "publish-metadata", "beta/latest", "prerelease/", "preview/", "stable/"]) {
+        expect(step, `${head} / ${forbidden}`).not.toContain(forbidden);
+      }
+    }
   });
 
   it("[P2] publishes release notes through one channel-neutral tools-release pipeline", async () => {

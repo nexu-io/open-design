@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildProjectRawFileUrl } from '@open-design/contracts';
 
-import { _resetWebBaseUrlCache, handleMcpToolCall } from '../src/mcp.js';
+import { handleMcpToolCall, localMcpToolDefinitions } from '../src/mcp.js';
 
 const originalFetch = globalThis.fetch;
 
@@ -19,7 +19,6 @@ describe('public MCP discovery + generation tools', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     globalThis.fetch = originalFetch;
-    _resetWebBaseUrlCache();
   });
 
   it('list_skills proxies GET /api/skills', async () => {
@@ -31,6 +30,34 @@ describe('public MCP discovery + generation tools', () => {
 
     const result = await handleMcpToolCall('http://127.0.0.1:17456', 'list_skills', {});
     expect(JSON.parse(firstText(result))).toEqual({ skills: [{ id: 'deck', name: 'Deck' }] });
+  });
+
+  it('does not expose secure BYOK profiles or a BYOK start_run parameter', () => {
+    const definitions = localMcpToolDefinitions();
+    expect(definitions.some((tool) => tool.name === 'list_byok_profiles')).toBe(false);
+    const startRun = definitions.find((tool) => tool.name === 'start_run');
+    expect(startRun?.inputSchema.properties).not.toHaveProperty('byokProfile');
+  });
+
+  it('start_run rejects raw credential fields at any nesting depth', async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ runId: 'must-not-run' }), { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await handleMcpToolCall(
+      'http://127.0.0.1:17456',
+      'start_run',
+      {
+        prompt: 'Create a launch page',
+        inputs: { provider: { api_key: 'must-never-cross-mcp' } },
+      },
+    );
+
+    expect(result).toMatchObject({ isError: true });
+    expect(firstText(result)).toContain('raw API keys are not accepted');
+    expect(JSON.stringify(result)).not.toContain('must-never-cross-mcp');
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('start_run resolves a project name and POSTs /api/runs with the prompt + plugin + inputs', async () => {
@@ -52,11 +79,13 @@ describe('public MCP discovery + generation tools', () => {
       agent: 'claude',
       model: 'claude-opus-4-7',
       serviceTier: 'priority',
+      requestId: 'brief-42-cloud',
     });
 
     const postBody = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body));
     expect(postBody).toEqual({
       projectId: 'project-1',
+      clientRequestId: 'brief-42-cloud',
       message: 'A 5-slide seed pitch deck',
       currentPrompt: 'A 5-slide seed pitch deck',
       pluginId: 'pitch-deck',
@@ -65,7 +94,10 @@ describe('public MCP discovery + generation tools', () => {
       model: 'claude-opus-4-7',
       serviceTier: 'priority',
     });
-    expect(JSON.parse(firstText(result))).toMatchObject({ runId: 'run-42' });
+    expect(JSON.parse(firstText(result))).toMatchObject({
+      runId: 'run-42',
+      requestId: 'brief-42-cloud',
+    });
   });
 
   it('start_run uses the active project when project is omitted', async () => {
@@ -201,6 +233,38 @@ describe('public MCP discovery + generation tools', () => {
     expect(parsed.previewUrl).toBeUndefined();
   });
 
+  it('get_run returns a recharge link and same-request resume instructions', async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.endsWith('/api/mcp/install-info')) {
+        return new Response(JSON.stringify({ webBaseUrl: null }), { status: 200 });
+      }
+      return new Response(JSON.stringify({
+        id: 'run-wallet',
+        status: 'failed',
+        projectId: 'project-1',
+        clientRequestId: 'brief-42-cloud',
+        agentId: 'amr',
+        errorCode: 'AMR_INSUFFICIENT_BALANCE',
+        failureAction: 'recharge',
+      }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await handleMcpToolCall(
+      'http://127.0.0.1:17456',
+      'get_run',
+      { runId: 'run-wallet' },
+    );
+    const parsed = JSON.parse(firstText(result));
+    expect(parsed).toMatchObject({
+      status: 'failed',
+      failureAction: 'recharge',
+      rechargeUrl: 'https://open-design.ai/amr/dashboard?source=open_design',
+    });
+    expect(parsed.hint).toContain('same requestId');
+    expect(parsed.hint).toContain('resume:true');
+  });
+
   // When a run is mid-flight, the outer agent has no in-band signal
   // that OD is making progress — which led real Codex clients to cancel
   // after a few polls and substitute their own output. Surfacing
@@ -241,6 +305,93 @@ describe('public MCP discovery + generation tools', () => {
     const parsed = JSON.parse(firstText(result));
     expect(parsed.studioUrl).toBe(
       'http://127.0.0.1:65321/projects/project-1/conversations/conv-9/files/index.html',
+    );
+  });
+
+  it('get_run success hint makes previewUrl the primary deliverable and studioUrl optional', async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.endsWith('/api/mcp/install-info')) {
+        return new Response(JSON.stringify({ webBaseUrl: 'http://127.0.0.1:65321' }), { status: 200 });
+      }
+      if (url.endsWith('/api/runs/run-42')) {
+        return new Response(JSON.stringify({
+          id: 'run-42',
+          status: 'succeeded',
+          projectId: 'project-1',
+          conversationId: 'conv-9',
+        }), { status: 200 });
+      }
+      if (url.endsWith('/api/projects/project-1')) {
+        return new Response(JSON.stringify({ project: { id: 'project-1', metadata: { entryFile: 'index.html' } } }), { status: 200 });
+      }
+      if (url.endsWith('/api/runs/run-42/events')) {
+        return new Response('', { status: 200 });
+      }
+      throw new Error('unexpected url ' + url);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await handleMcpToolCall('http://127.0.0.1:17456', 'get_run', { runId: 'run-42' });
+    const parsed = JSON.parse(firstText(result));
+
+    expect(parsed.previewUrl).toBe(buildProjectRawFileUrl('http://127.0.0.1:17456', 'project-1', 'index.html'));
+    expect(parsed.studioUrl).toBe('http://127.0.0.1:65321/projects/project-1/conversations/conv-9/files/index.html');
+    expect(parsed.artifactRef).toEqual({
+      projectId: 'project-1',
+      entryFile: 'index.html',
+    });
+    expect(parsed.previewUrlLifetime).toBe('current_daemon_session');
+    expect(parsed.studioUrlLifetime).toBe('current_daemon_session');
+    expect(parsed.hint).toContain('artifactRef is the durable project/file identity');
+    expect(parsed.hint).toContain('call get_run again');
+    expect(parsed.hint).not.toContain('primary stable rendered artifact link');
+    expect(parsed.hint).not.toContain('BEST link');
+    expect(parsed.hint).not.toContain('ALWAYS render studioUrl');
+  });
+  it('get_run uses the newly registered web port on the next delivery lookup', async () => {
+    let webBaseUrl = 'http://127.0.0.1:65321';
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.endsWith('/api/mcp/install-info')) {
+        return new Response(JSON.stringify({ webBaseUrl }), { status: 200 });
+      }
+      if (url.endsWith('/api/runs/run-42')) {
+        return new Response(JSON.stringify({
+          id: 'run-42',
+          status: 'succeeded',
+          projectId: 'project-1',
+          conversationId: 'conv-9',
+        }), { status: 200 });
+      }
+      if (url.endsWith('/api/projects/project-1')) {
+        return new Response(JSON.stringify({
+          project: {
+            id: 'project-1',
+            metadata: { entryFile: 'index.html' },
+          },
+        }), { status: 200 });
+      }
+      if (url.endsWith('/api/runs/run-42/events')) {
+        return new Response('', { status: 200 });
+      }
+      throw new Error(`unexpected url ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const first = await handleMcpToolCall(
+      'http://127.0.0.1:17456',
+      'get_run',
+      { runId: 'run-42' },
+    );
+    expect(JSON.parse(firstText(first)).studioUrl).toContain('127.0.0.1:65321');
+
+    webBaseUrl = 'http://127.0.0.1:53421';
+    const afterRebind = await handleMcpToolCall(
+      'http://127.0.0.1:17456',
+      'get_run',
+      { runId: 'run-42' },
+    );
+    expect(JSON.parse(firstText(afterRebind)).studioUrl).toContain(
+      '127.0.0.1:53421',
     );
   });
 
@@ -615,6 +766,13 @@ describe('public MCP discovery + generation tools', () => {
     const result = await handleMcpToolCall('http://127.0.0.1:17456', 'get_run', { runId: 'run-42' });
     const parsed = JSON.parse(firstText(result));
     expect(parsed.status).toBe('succeeded');
+    expect(parsed.artifactRef).toEqual({
+      projectId: 'project-xyz',
+      entryFile: 'index.html',
+    });
+    expect(parsed.previewUrlLifetime).toBe('current_daemon_session');
+    expect(parsed.hint).toContain('call get_run again');
+    expect(parsed.hint).not.toContain('primary stable rendered artifact link');
     // Hint must embed the run's projectId so callers pass it explicitly.
     expect(parsed.hint).toContain('project-xyz');
     // Must not tell callers to omit project and rely on active-context fallback.

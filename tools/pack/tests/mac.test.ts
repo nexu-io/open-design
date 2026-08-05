@@ -75,6 +75,12 @@ afterEach(() => {
 });
 
 describe("resolveSeededAppConfigPaths", () => {
+  it("declares the Workspace invite URL scheme in the packaged app metadata", async () => {
+    const source = await readFile(new URL("../src/mac/builder.ts", import.meta.url), "utf8");
+    expect(source).toContain("protocols: [");
+    expect(source).toContain('schemes: ["opendesign"]');
+  });
+
   it("uses workspace .od by default", () => {
     const config = makeConfig("/work");
     expect(resolveSeededAppConfigPaths(config)).toEqual({
@@ -270,12 +276,54 @@ describe("renderMacPackagedConfig", () => {
       await rm(root, { force: true, recursive: true });
     }
   });
+
+  // The vela web origin is the workspace-team console link the daemon derives
+  // its settings / members / dashboard URLs from. It arrives from a CI secret
+  // rather than the source tree, so packaging has to carry it into the bundle
+  // (same chain as posthogKey) or the feature stays dark in the packaged app.
+  it("bakes the injected vela web origin for a workspace-team build", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-mac-"));
+    try {
+      const config = makeConfig(root, {
+        amrProfile: "feature-test",
+        velaWebUrl: "https://vela.example.invalid",
+      });
+
+      const packagedConfig = JSON.parse(
+        renderMacPackagedConfig({
+          appVersion: "1.2.3-beta.0",
+          config,
+          usePrebundledStandaloneWeb: true,
+        }),
+      ) as Record<string, unknown>;
+
+      expect(packagedConfig.velaWebUrl).toBe("https://vela.example.invalid");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("omits the vela web origin when the build was given none", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-mac-"));
+    try {
+      const packagedConfig = JSON.parse(
+        renderMacPackagedConfig({
+          appVersion: "1.2.3",
+          config: makeConfig(root),
+          usePrebundledStandaloneWeb: true,
+        }),
+      ) as Record<string, unknown>;
+
+      expect(packagedConfig).not.toHaveProperty("velaWebUrl");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
 });
 
 describe("runElectronBuilder", () => {
   async function prepareElectronBuilderConfig(root: string, overrides: Partial<ToolPackConfig>) {
     const cliPath = join(root, "fake-electron-builder.mjs");
-    await writeFile(cliPath, "process.exit(0);\n", "utf8");
 
     const config = makeConfig(root, {
       appVersion: "1.2.3-prerelease.4",
@@ -285,6 +333,29 @@ describe("runElectronBuilder", () => {
       ...overrides,
     });
     const paths = resolveMacPaths(config);
+    const nodePtyPrebuildRoot = join(
+      paths.appPath,
+      "Contents",
+      "Resources",
+      "app",
+      "node_modules",
+      "node-pty",
+      "prebuilds",
+      `darwin-${process.arch}`,
+    );
+    await writeFile(
+      cliPath,
+      [
+        'import { chmod, mkdir, writeFile } from "node:fs/promises";',
+        `const prebuildRoot = ${JSON.stringify(nodePtyPrebuildRoot)};`,
+        "await mkdir(prebuildRoot, { recursive: true });",
+        'await writeFile(new URL("pty.node", `file://${prebuildRoot}/`), Buffer.alloc(32 * 1024, 1));',
+        'await writeFile(new URL("spawn-helper", `file://${prebuildRoot}/`), "#!/bin/sh\\nexit 0\\n", "utf8");',
+        'await chmod(new URL("spawn-helper", `file://${prebuildRoot}/`), 0o755);',
+        "",
+      ].join("\n"),
+      "utf8",
+    );
 
     await runElectronBuilder(config, paths, ["dir"]);
 

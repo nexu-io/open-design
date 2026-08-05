@@ -7,9 +7,15 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  buildWorkspacePermissions,
+  buildWorkspaceSeatSummary,
+  type WorkspaceCollabContext,
+} from '@open-design/contracts';
 
 import {
   createCritiqueEventsConnection,
+  critiqueArtifactUrl,
   critiqueEventsUrl,
   sseToPanelEvent,
 } from '../../../../src/components/Theater/state/sse';
@@ -74,6 +80,29 @@ class StubEventSource implements EventTarget {
 
 const RUN_ID = 'run_sse';
 
+function teamContext(
+  workspaceId: string,
+  workspaceMemberId: string,
+): WorkspaceCollabContext {
+  return {
+    workspaceId,
+    workspaceType: 'team',
+    workspaceMemberId,
+    role: 'member',
+    memberStatus: 'active',
+    lifecycleState: 'active',
+    billingState: 'active',
+    planId: 'team_plus',
+    providerMode: 'platform_credits',
+    teamId: `team-${workspaceId}`,
+    seatSummary: buildWorkspaceSeatSummary({ seatLimit: 3, usedSeats: 2 }),
+    permissions: buildWorkspacePermissions({
+      role: 'member',
+      lifecycleState: 'active',
+    }),
+  };
+}
+
 beforeEach(() => {
   StubEventSource.instances = [];
 });
@@ -90,6 +119,36 @@ describe('critique SSE connection manager (Phase 7.2)', () => {
     expect(StubEventSource.instances).toHaveLength(1);
     expect(StubEventSource.instances[0]!.url).toBe(critiqueEventsUrl('proj-1'));
     conn.close();
+  });
+
+  it('puts the exact Workspace identity in the EventSource URL and preserves unbound compatibility', () => {
+    const workspaceA = teamContext('workspace-a', 'member-a');
+    const scoped = critiqueEventsUrl('same-project', workspaceA);
+    const parsed = new URL(scoped, 'https://od.local');
+    expect(parsed.searchParams.get('workspaceId')).toBe('workspace-a');
+    expect(parsed.searchParams.get('workspaceMemberId')).toBe('member-a');
+    expect(critiqueEventsUrl('same-project', null)).toBe(
+      '/api/projects/same-project/events',
+    );
+
+    createCritiqueEventsConnection('same-project', () => undefined, {
+      EventSourceCtor: StubEventSource as unknown as typeof EventSource,
+      workspaceContext: workspaceA,
+    });
+    expect(StubEventSource.instances[0]!.url).toBe(scoped);
+  });
+
+  it('puts the exact Workspace identity in artifact navigation URLs', () => {
+    const workspaceA = teamContext('workspace-a', 'member-a');
+    const parsed = new URL(
+      critiqueArtifactUrl('project-a', 'run-a', workspaceA),
+      'https://od.local',
+    );
+    expect(parsed.pathname).toBe(
+      '/api/projects/project-a/critique/run-a/artifact',
+    );
+    expect(parsed.searchParams.get('workspaceId')).toBe('workspace-a');
+    expect(parsed.searchParams.get('workspaceMemberId')).toBe('member-a');
   });
 
   it('subscribes to every CRITIQUE_SSE_EVENT_NAMES channel', () => {

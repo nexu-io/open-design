@@ -3828,11 +3828,8 @@ process.stdin.on('end', () => {
   });
 
   it('surfaces OpenCode provider connectivity errors captured before timeout (#4999)', async () => {
-    const oldTimeout = process.env.OD_CONNECTION_TEST_AGENT_TIMEOUT_MS;
-    process.env.OD_CONNECTION_TEST_AGENT_TIMEOUT_MS = '1500';
-    try {
-      await withFakeOpenCode(
-        `
+    await withFakeOpenCode(
+      `
 const args = process.argv.slice(2);
 if (args[0] === 'models') {
   console.log('ollama/qwen3.5-9b');
@@ -3842,28 +3839,21 @@ console.error('Cannot connect to API: Unable to connect. Is the computer able to
 console.log('UNRELATED_STDOUT_TAIL_MARKER');
 setInterval(() => {}, 1000);
 `,
-        async () => {
-          const result = await testAgentConnection({
-            agentId: 'opencode',
-            model: 'ollama/qwen3.5-9b',
-          });
+      async () => {
+        const result = await testAgentConnection({
+          agentId: 'opencode',
+          model: 'ollama/qwen3.5-9b',
+        });
 
-          expect(result.ok).toBe(false);
-          expect(result.kind).toBe('upstream_unavailable');
-          expect(result.detail).toContain('OpenCode reported a provider connectivity failure');
-          expect(result.detail).toContain('Cannot connect to API');
-          expect(result.detail).not.toContain('UNRELATED_STDOUT_TAIL_MARKER');
-          expect(result.diagnostics?.phase).toBe('connection_smoke_test');
-          expect(result.diagnostics?.stderrTail).toContain('Cannot connect to API');
-        },
-      );
-    } finally {
-      if (oldTimeout === undefined) {
-        delete process.env.OD_CONNECTION_TEST_AGENT_TIMEOUT_MS;
-      } else {
-        process.env.OD_CONNECTION_TEST_AGENT_TIMEOUT_MS = oldTimeout;
-      }
-    }
+        expect(result.ok).toBe(false);
+        expect(result.kind).toBe('upstream_unavailable');
+        expect(result.detail).toContain('OpenCode reported a provider connectivity failure');
+        expect(result.detail).toContain('Cannot connect to API');
+        expect(result.detail).not.toContain('UNRELATED_STDOUT_TAIL_MARKER');
+        expect(result.diagnostics?.phase).toBe('connection_smoke_test');
+        expect(result.diagnostics?.stderrTail).toContain('Cannot connect to API');
+      },
+    );
   });
 
   it.each([
@@ -3880,11 +3870,8 @@ setInterval(() => {}, 1000);
   ])(
     'surfaces OpenCode provider connectivity errors from %s before timeout (#4999)',
     async (_name, stderrLine, expectedDetail) => {
-      const oldTimeout = process.env.OD_CONNECTION_TEST_AGENT_TIMEOUT_MS;
-      process.env.OD_CONNECTION_TEST_AGENT_TIMEOUT_MS = '1500';
-      try {
-        await withFakeOpenCode(
-          `
+      await withFakeOpenCode(
+        `
 const args = process.argv.slice(2);
 if (args[0] === 'models') {
   console.log('ollama/qwen3.5-9b');
@@ -3893,25 +3880,18 @@ if (args[0] === 'models') {
 console.error(${JSON.stringify(stderrLine)});
 setInterval(() => {}, 1000);
 `,
-          async () => {
-            const result = await testAgentConnection({
-              agentId: 'opencode',
-              model: 'ollama/qwen3.5-9b',
-            });
+        async () => {
+          const result = await testAgentConnection({
+            agentId: 'opencode',
+            model: 'ollama/qwen3.5-9b',
+          });
 
-            expect(result.ok).toBe(false);
-            expect(result.kind).toBe('upstream_unavailable');
-            expect(result.detail).toContain(expectedDetail);
-            expect(result.diagnostics?.phase).toBe('connection_smoke_test');
-          },
-        );
-      } finally {
-        if (oldTimeout === undefined) {
-          delete process.env.OD_CONNECTION_TEST_AGENT_TIMEOUT_MS;
-        } else {
-          process.env.OD_CONNECTION_TEST_AGENT_TIMEOUT_MS = oldTimeout;
-        }
-      }
+          expect(result.ok).toBe(false);
+          expect(result.kind).toBe('upstream_unavailable');
+          expect(result.detail).toContain(expectedDetail);
+          expect(result.diagnostics?.phase).toBe('connection_smoke_test');
+        },
+      );
     },
   );
 

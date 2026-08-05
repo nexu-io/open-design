@@ -49,7 +49,7 @@ export const ZH: SolutionLocaleCopy = {
     ],
     featuresTitle: '你能线框化什么',
     features: [
-      { title: 'Web 应用屏幕', body: 'Dashboard、设置、多屏流程——作为一组连贯线框，再带到代码。', thumb: 'example-web-prototype' },
+      { title: 'Web 应用屏幕', body: '数据看板、设置、多屏流程——作为一组连贯线框，再带到代码。', thumb: 'example-web-prototype' },
       { title: '移动端流程', body: '逐屏的移动端旅程，结构与状态一致。', thumb: 'example-mobile-app' },
       { title: 'SaaS 落地页', body: '营销与 SaaS 落地布局，可线框、可上样式、可上线。', thumb: 'example-saas-landing' },
       { title: '引导与表单', body: '多步引导、注册、表单流程，层级清晰。', thumb: 'example-hr-onboarding' },
@@ -145,7 +145,7 @@ export const ZH: SolutionLocaleCopy = {
     ],
     featuresTitle: '你能生成什么',
     features: [
-      { title: 'Web 应用界面', body: 'Dashboard、设置、数据表——作为一组连贯组件生成，再带到代码。', thumb: 'example-web-prototype' },
+      { title: 'Web 应用界面', body: '数据看板、设置、数据表——作为一组连贯组件生成，再带到代码。', thumb: 'example-web-prototype' },
       { title: '移动端 UI', body: '逐屏的移动端界面，组件与状态一致。', thumb: 'example-mobile-app' },
       { title: 'SaaS 与营销页', body: '落地、定价、营销 UI，可生成、可换主题、可上线。', thumb: 'example-saas-landing' },
       { title: '表单与流程', body: '多步表单、引导、登录流程，层级清晰、状态完整。', thumb: 'example-hr-onboarding' },
@@ -290,32 +290,32 @@ export const ZH: SolutionLocaleCopy = {
     ],
   },
   aiLandingPageGenerator: {
-    title: 'AI 落地页生成器 —— 用 Open Design 从提示词到可上线落地页',
+    title: 'AI 落地页生成器 —— 用 Open Design 从一句话到可上线落地页',
     description:
-      '一个免费开源的 AI 落地页生成器：把一句提示词变成真实、响应式的落地页，并一路带到可上线代码。Open Design 跑在你已经在用的编程 agent 里，所以生成的页面和部署上线的页面就是同一份你拥有的产物。',
+      '一个免费开源的 AI 落地页生成器：把一句话需求变成真实、响应式的落地页，并一路带到可上线代码。Open Design 在你已经使用的编程助手中运行，生成页面与上线页面是同一份归你所有的产物。',
     breadcrumb: 'AI 落地页生成器',
     label: '工具 · AI 落地页生成器',
     heading: '生成一个能上线的落地页',
-    lead: '描述你的卖点，让你的 agent 生成真实、响应式的落地页——hero、功能、定价、waitlist，贴合品牌。然后继续往前：同一份产物会变成你部署的可上线代码，全在你已经在用的 agent 里完成。',
-    heroImageAlt: '编辑插画：一句提示词变成响应式落地页、再变成生产代码，被一个绿色选框框住',
+    lead: '描述你的卖点，让智能助手生成真实、响应式的落地页——首屏、功能、定价和候补表单都贴合品牌。继续修改同一份文件，就能得到可以直接部署的代码。',
+    heroImageAlt: 'Open Design 生成的真实响应式落地页，展示 Qelora 项目首页',
     tldrTitle: '一句话',
     tldrBody:
-      '多数 AI 落地页搭建工具把你的页面锁在它的编辑器里、按席位计费。Open Design 在你的编程 agent 里生成落地页，并把它从提示词一路带到可上线代码——真实区块、你的品牌、没有导出步骤、没有按席位计费。',
+      '多数 AI 落地页工具把页面锁在自己的编辑器里并按席位计费。Open Design 在你的编程助手里生成真实区块和可上线代码，页面归你所有，不需要额外导出。',
     stepsTitle: 'AI 落地页生成器怎么用',
     steps: [
       {
         title: '描述页面',
-        body: '用大白话告诉 agent 要做什么——"一个笔记应用的发布页：hero、三个功能、定价、一个 waitlist 表单"。Open Design 加载落地页 skill，让 agent 排布真实区块、层级清晰。',
+        body: '用大白话说明需求——“一个笔记应用的发布页：首屏、三个功能、定价和候补表单”。Open Design 会调用落地页能力，排出层级清晰的真实区块。',
         imageAlt: '插画：把大白话的落地页需求敲进终端',
       },
       {
         title: '生成响应式页面',
-        body: 'agent 用可复用区块和设计 token 拼出页面，让间距、字体、配色一致，在每个屏幕上都好看。你得到连贯、贴品牌的落地页——而不是一个你费劲去改的模板。',
-        imageAlt: '插画：落地页由 hero、功能、定价区块在栅格上拼装而成',
+        body: '智能助手用可复用区块和设计规范拼出页面，让间距、字体、配色在不同屏幕上都保持一致。你得到的是连贯、贴合品牌的页面，而不是难以修改的固定模板。',
+        imageAlt: '插画：落地页由首屏、功能、定价区块在栅格上拼装而成',
       },
       {
         title: '打磨并加转化',
-        body: '在对话里调文案、区块和 CTA——"把 hero 收紧""加个社会证明""把 waitlist 表单接上"。产物原地更新，而不是从头重新生成。',
+        body: '在对话里调整文案、区块和行动按钮——“收紧首屏”“增加用户评价”“接上候补表单”。页面会原地更新，不必从头生成。',
         imageAlt: '插画：通过对话打磨落地页，加上一条证言和一个表单',
       },
       {
@@ -329,28 +329,28 @@ export const ZH: SolutionLocaleCopy = {
     tableColWithOd: '用 Open Design',
     tableColWithout: '一般 AI 落地页搭建工具',
     tableRows: [
-      { capability: '从提示词生成', withOd: '在你已开着的 agent 里一句提示', without: '另注册一个建站工具、在它云端生成' },
+      { capability: '从一句话生成', withOd: '在你已打开的编程助手里直接描述', without: '另注册一个建站工具、在它云端生成' },
       { capability: '真实响应式区块', withOd: '由可复用设计系统构建，跨断点一致', without: '一个你在它编辑器里改的锁定模板' },
       { capability: '设计转代码', withOd: '同一产物变成可上线代码——托管在任何地方', without: '页面住在它平台上，导出受限或要付费' },
-      { capability: '拥有产出', withOd: '你 repo 里的纯文件与代码，完全归你', without: '托管在它那儿，你租页面、不拥有' },
+      { capability: '拥有产出', withOd: '代码仓库里的文件与代码，完全归你', without: '托管在它那儿，你租页面、不拥有' },
       { capability: '成本与锁定', withOd: '开源、自带密钥、本地运行', without: '按席位/按页面订阅、厂商托管' },
     ],
     featuresTitle: '你能生成什么',
     features: [
-      { title: '产品发布页', body: 'hero、功能、定价、waitlist——作为一个连贯页面生成，再带到代码。', thumb: 'example-kami-landing' },
+      { title: '产品发布页', body: '首屏、功能、定价、候补表单——一次生成连贯页面，再继续改成上线代码。', thumb: 'example-kami-landing' },
       { title: 'SaaS 营销页', body: '功能与定价布局，可生成、可换主题、可上线到你自己的域名。', thumb: 'example-saas-landing' },
-      { title: 'Waitlist 与预告页', body: '单一目的的收集页，带可用表单和清晰 CTA。', thumb: 'example-hr-onboarding' },
-      { title: '活动与campaign页', body: '限时 campaign 布局，第一版就接线且贴品牌。', thumb: 'example-web-prototype' },
+      { title: '候补与预告页', body: '目标明确的收集页，带可用表单和清晰行动按钮。', thumb: 'example-hr-onboarding' },
+      { title: '活动专题页', body: '适合限时活动的页面布局，第一版就能使用且贴合品牌。', thumb: 'example-web-prototype' },
       { title: '应用下载页', body: '移动优先的页面，展示产品、驱动安装。', thumb: 'example-mobile-app' },
       { title: '任意视觉风格', body: '编辑感、柔和或张扬——把一种连贯风格贯穿到底。', thumb: 'example-gamified-app' },
     ],
     galleryTitle: '用 Open Design 做出来的落地页',
     galleryLead:
-      '每一个都始于一句提示、渲染成真实、响应式的产物。挑一个接近你想法的模板，描述你的变体，agent 帮你改——从落地页到可上线代码。',
+      '每一个都始于一句话需求，并渲染成真实、响应式的页面。挑一个接近你想法的模板，描述要改的地方，智能助手会一路改到可上线代码。',
     gallery: [
       { thumb: 'example-kami-landing', caption: '产品发布页' },
       { thumb: 'example-saas-landing', caption: 'SaaS 营销页' },
-      { thumb: 'example-hr-onboarding', caption: 'Waitlist 收集流程' },
+      { thumb: 'example-hr-onboarding', caption: '候补名单收集流程' },
       { thumb: 'example-web-prototype-taste-soft', caption: '柔和风格落地布局' },
     ],
     exampleHref: '/plugins/templates/',
@@ -359,7 +359,7 @@ export const ZH: SolutionLocaleCopy = {
     faq: [
       {
         q: 'AI 落地页生成器免费吗？',
-        a: '免费。Open Design 开源，跑在你已经在用的编程 agent 里、用你自己的模型密钥——落地页生成本身没有按席位或按页面计费。',
+        a: '免费。Open Design 开源，在你已经使用的编程助手里运行；落地页生成本身没有按席位或按页面计费。',
       },
       {
         q: '页面能托管在任何地方吗？',
@@ -367,16 +367,16 @@ export const ZH: SolutionLocaleCopy = {
       },
       {
         q: '页面是响应式且贴品牌的吗？',
-        a: '是。agent 由可复用设计系统构建，所以页面跨断点一致、贴合你的品牌——而且你对着它说话就能改，不用跟模板较劲。',
+        a: '是。智能助手会使用可复用的设计系统，让页面在不同屏幕宽度下保持一致并贴合品牌；直接用语言描述就能继续修改。',
       },
       {
-        q: '支持哪些 agent？',
-        a: 'Open Design 支持 Claude Code、Codex、Cursor Agent、Gemini CLI 等十多个一方适配器。你自带模型密钥，没有任何东西托管在我们这边。',
+        q: '支持哪些编程助手？',
+        a: 'Open Design 支持 Claude Code、Codex、Cursor 和 Gemini CLI 等二十多种编程助手。',
       },
     ],
     ctaTitle: '今晚就生成第一个落地页',
     ctaBody:
-      'Star 仓库、装上 Open Design，把你下一个发布想法变成真实、响应式的落地页——再变成可上线代码——全在你已经在用的 agent 里。',
+      '下载 Open Design，把下一个发布想法变成真实、响应式的落地页，再继续改成可上线代码。',
     relatedTitle: '相关工具与指南',
     related: [
       { href: '/solutions/ai-ui-generator/', label: 'AI UI 生成器' },
@@ -626,7 +626,7 @@ export const ZH: SolutionLocaleCopy = {
     featuresTitle: '你能做什么原型',
     features: [
       { title: 'App 流程', body: '引导、设置、多屏旅程，作为可点击的一组生成。', thumb: 'example-mobile-app' },
-      { title: 'Web 应用原型', body: 'Dashboard 和工具带真实导航与状态，再带到代码。', thumb: 'example-web-prototype' },
+      { title: 'Web 应用原型', body: '数据看板和工具带真实导航与状态，再带到代码。', thumb: 'example-web-prototype' },
       { title: 'SaaS 与落地流程', body: '营销到注册的流程，可原型、可上样式、可上线。', thumb: 'example-saas-landing' },
       { title: '引导与表单', body: '多步引导和表单流程，层级清晰、状态完整。', thumb: 'example-hr-onboarding' },
       { title: '可交互概念', body: '快速拿出一个可点击概念，再把同一份产物带到生产。', thumb: 'example-gamified-app' },
@@ -676,25 +676,25 @@ export const ZH: SolutionLocaleCopy = {
   prototype: {
     title: '用 Open Design + Claude Code 做可交互原型',
     description:
-      '一句话描述，就能在终端里生成可点击、多屏的原型。Open Design 把设计技能、模板和设计系统交给你的编码 agent，直接产出能在浏览器里打开的真实原型。',
+      '一句话描述，就能生成可点击、多屏的原型。Open Design 把设计能力、模板和设计系统交给你常用的编程助手，直接产出能在浏览器里打开的真实原型。',
     breadcrumb: '原型',
     label: '使用场景 · 原型',
     heading: '以一句话的速度做原型',
-    lead: '把脑子里的流程描述出来，让 agent 拼出真实可点击的原型——多个屏幕、统一样式、可交互——直接渲染成 HTML，能打开、能分享、能交给工程。',
-    heroImageAlt: '编辑风插画：一只手画出线框，线框变成可点击的多屏应用原型',
+    lead: '把脑子里的流程描述出来，让智能助手拼出真实可点击的原型——多个屏幕、统一样式、可交互——直接渲染成 HTML，能打开、能分享、能交给工程。',
+    heroImageAlt: 'Open Design 生成的真实 Web 原型，展示响应式 Qelora 项目首页',
     tldrTitle: '一句话',
     tldrBody:
-      'Open Design 是你正在用的编码 agent 的设计层。对原型来说，就是在一次对话里从一段想法走到可导航、有样式的原型——不用设计工具、不用导出、没有交接断层。',
+      'Open Design 是你常用编程助手的设计层。一次对话，就能从一段想法走到可导航、有样式的原型——不用另学设计工具，也不用反复导出和交接。',
     stepsTitle: '用 Open Design 做原型的流程',
     steps: [
       {
         title: '描述流程',
-        body: '用大白话告诉 agent 你要做什么——"一个引导流程，含欢迎页、套餐选择页和确认页"。Open Design 会加载原型 skill，让 agent 知道要产出多个屏幕，而不是单页。',
+        body: '用大白话说明要做什么——“一个引导流程，包含欢迎页、套餐选择页和确认页”。Open Design 会调用原型能力，生成多个相互关联的屏幕，而不是一个单页。',
         imageAlt: '插画：一个人在终端里用自然语言描述应用流程',
       },
       {
         title: '生成带样式的屏幕',
-        body: 'agent 套用 Open Design 的设计系统和原型模板，每个屏幕共享字体、间距和组件，而不是看起来像草稿。你得到的是一套连贯的屏幕，不是互不相干的 mockup。',
+        body: '智能助手会套用 Open Design 的设计系统和原型模板，让每个屏幕共享字体、间距和组件。你得到的是一套连贯的界面，而不是互不相干的静态示意图。',
         imageAlt: '插画：多个应用屏幕依次出现，全部共享同一套视觉风格',
       },
       {
@@ -704,7 +704,7 @@ export const ZH: SolutionLocaleCopy = {
       },
       {
         title: '迭代并交付',
-        body: '靠跟 agent 对话来改——"把套餐选择页改成三列布局"。因为产物就在你的项目里，设计和最终代码共享同一份事实来源，弥合了设计到工程的交接断层。',
+        body: '直接用语言修改——“把套餐选择页改成三列布局”。产物就在你的项目里，设计和最终代码共享同一份来源，减少设计到工程的交接损耗。',
         imageAlt: '插画：原型被修改后交给工程师，设计与代码合并成同一个文件',
       },
     ],
@@ -715,7 +715,7 @@ export const ZH: SolutionLocaleCopy = {
     tableRows: [
       {
         capability: '从想法到第一屏',
-        withOd: '在你本来就开着的 agent 里一句话',
+        withOd: '在你常用的编程助手里说一句话',
         without: '打开另一个工具、新建文件、手动拖框',
       },
       {
@@ -725,7 +725,7 @@ export const ZH: SolutionLocaleCopy = {
       },
       {
         capability: '一致的视觉系统',
-        withOd: '从可复用的设计系统里取，由 agent 套用',
+        withOd: '从可复用的设计系统中读取并自动套用',
         without: '每个文件重做一遍，或纯靠手维护',
       },
       {
@@ -735,7 +735,7 @@ export const ZH: SolutionLocaleCopy = {
       },
       {
         capability: '通往真实代码的路径',
-        withOd: '产物在你的 repo 里，设计与代码同源',
+        withOd: '产物在代码仓库里，设计与代码同源',
         without: '一次交接之后从零重建',
       },
       {
@@ -755,7 +755,7 @@ export const ZH: SolutionLocaleCopy = {
     ],
     galleryTitle: '别人用 Open Design 做出来的原型',
     galleryLead:
-      '下面每一个都是从一句 prompt 开始、渲染成可点击产物的。挑一个跟你想法接近的模板，描述你的改法，agent 帮你改。',
+      '下面每一个都从一句话需求开始，并渲染成可点击的真实产物。挑一个接近你想法的模板，描述要改的地方，智能助手会继续完善。',
     gallery: [
       { thumb: "example-dating-web", caption: "交友 Web 应用——多屏流程" },
       { thumb: "example-hr-onboarding", caption: "HR 入职流程" },
@@ -768,15 +768,15 @@ export const ZH: SolutionLocaleCopy = {
     faq: [
       {
         q: '用 Open Design 做原型需要 Figma 这类设计工具吗？',
-        a: '不需要。Open Design 在你的编码 agent 里运行，把原型渲染成 HTML。你用语言描述流程，agent 产出屏幕。没有额外的画布工具要学或要付费。',
+        a: '不需要。Open Design 在你的编程助手里运行，把原型渲染成 HTML。你用语言描述流程，它会产出屏幕，不需要另学或购买画布工具。',
       },
       {
-        q: '产出的是可交互原型还是静态 mockup？',
+        q: '产出的是可交互原型还是静态示意图？',
         a: '可交互。导航、标签页、弹窗都能用，因为输出是真实的 HTML 和 CSS。你能在任何浏览器里像用户一样点击体验。',
       },
       {
-        q: '可以用哪些 agent？',
-        a: 'Open Design 支持 Claude Code、Codex、Cursor Agent、Gemini CLI 等十多个一方适配。你自带 provider 密钥，没有任何东西替你托管。',
+        q: '可以用哪些编程助手？',
+        a: 'Open Design 支持 Claude Code、Codex、Cursor 和 Gemini CLI 等二十多种编程助手。',
       },
       {
         q: '原型能变成真正的产品吗？',
@@ -785,7 +785,7 @@ export const ZH: SolutionLocaleCopy = {
     ],
     ctaTitle: '今晚就把下一个想法做成原型',
     ctaBody:
-      '给 repo 点个 star、装上 Open Design，在你本来就用的 agent 里，把下一个"要是……"变成能点击的东西。',
+      '下载 Open Design，把下一个“要是……”变成真正能点击、能分享的原型。',
   },
   dashboard: {
     title: '用 Open Design + Claude Code 生成数据看板',
@@ -936,67 +936,67 @@ export const ZH: SolutionLocaleCopy = {
   slides: {
     title: '用 Open Design + Claude Code 生成演示文稿',
     description:
-      '把大纲变成有设计感、符合品牌的幻灯片，不用打开任何演示软件。Open Design 给编码 agent 提供 deck 模板和视觉系统，把幻灯片渲染成可演示、可导出、可分享的 HTML。',
+      '把大纲变成有设计感、符合品牌的幻灯片，不用打开任何演示软件。Open Design 为编程助手提供演示模板和视觉系统，把幻灯片渲染成可演示、可导出、可分享的 HTML。',
     breadcrumb: '幻灯片',
     label: '使用场景 · 幻灯片',
-    heading: '看起来精心设计的 deck，由一句 prompt 写出来',
-    lead: '把大纲和语气交给 agent。Open Design 套用 deck 模板和视觉系统，每一页都排好版、配好字、贴合品牌——不是空白底上的一串要点。',
-    heroImageAlt: '编辑风插画：左边的大纲变成右边一连串有设计感的演示幻灯片',
+    heading: '用一句话生成精心排版的演示文稿',
+    lead: '把大纲和语气交给智能助手。Open Design 会套用演示模板和视觉系统，让每一页都排好版、配好字、贴合品牌，而不是在空白底上堆一串要点。',
+    heroImageAlt: 'Open Design 正在生成一份真实的十二页演示文稿，包含演讲备注和可编辑的 HTML 源文件',
     tldrTitle: '一句话',
     tldrBody:
-      'Open Design 把大纲变成有设计感的 HTML deck，由 agent 一次生成——浏览器里全屏演示、导出 PDF 或 PPTX、源文件留在 repo。',
-    stepsTitle: '用 Open Design 做 deck 的流程',
+      'Open Design 把大纲变成有设计感的 HTML 演示文稿，由智能助手一次生成——可在浏览器全屏演示、导出 PDF 或 PPTX，源文件保留在代码仓库中。',
+    stepsTitle: '用 Open Design 做演示文稿的流程',
     steps: [
-      { title: '给它大纲', body: '粘贴你的要点或粗略结构。agent 加载 deck skill，产出一连串排好版的幻灯片，而不是一篇长文档。', imageAlt: '插画：一份文字大纲被交给 agent' },
-      { title: '选一个 deck 风格', body: 'Open Design 自带 deck 模板——编辑风、瑞士国际主义、深色技术风等。agent 套用其中一个，字体、网格、强调色在每页之间保持一致。', imageAlt: '插画：几种 deck 风格并排展示' },
+      { title: '给它大纲', body: '粘贴你的要点或粗略结构。智能助手会调用演示文稿能力，产出一连串排好版的幻灯片，而不是一篇长文档。', imageAlt: '插画：一份文字大纲被交给智能助手' },
+      { title: '选一个演示风格', body: 'Open Design 自带多种演示模板——编辑风、瑞士国际主义、深色技术风等。选定后，字体、网格和强调色会在每页之间保持一致。', imageAlt: '插画：几种演示风格并排展示' },
       { title: '生成幻灯片', body: '每个要点变成一页有层次的幻灯片——标题、辅助视觉、数据高亮。渲染成 HTML，任何浏览器都能全屏演示。', imageAlt: '插画：一连串风格一致的成品幻灯片' },
-      { title: '演示、导出、迭代', body: '从浏览器演示，或导出 PDF / PPTX 分享。靠跟 agent 对话来改——"收紧数据页、加一个结尾行动号召"。deck 源文件留在你的项目里。', imageAlt: '插画：一个 deck 被演示并导出成多种格式' },
+      { title: '演示、导出、迭代', body: '从浏览器演示，或导出 PDF / PPTX 分享。直接用语言修改——“收紧数据页、增加结尾行动号召”。源文件始终留在你的项目里。', imageAlt: '插画：一份演示文稿被演示并导出成多种格式' },
     ],
-    tableTitle: '用 Open Design 做 deck vs. 老办法',
+    tableTitle: '用 Open Design 做演示文稿 vs. 老办法',
     tableColCapability: '你需要什么',
     tableColWithOd: '用 Open Design',
     tableColWithout: 'PowerPoint / Keynote / AI 幻灯工具',
     tableRows: [
-      { capability: '从大纲到幻灯片', withOd: '一句话，agent 排布每一页', without: '一页页手搭，或跟模板较劲' },
-      { capability: '一致的设计', withOd: 'deck 模板带真实网格和字体系统', without: '主题跑偏、手动对齐、默认样式不贴品牌' },
+      { capability: '从大纲到幻灯片', withOd: '一句话，智能助手排布每一页', without: '一页页手搭，或跟模板较劲' },
+      { capability: '一致的设计', withOd: '演示模板带真实网格和字体系统', without: '主题跑偏、手动对齐、默认样式不贴品牌' },
       { capability: '数据与图示', withOd: '图表和高亮作为幻灯片的一部分渲染', without: '贴静态图，或每次重建图表' },
       { capability: '导出格式', withOd: 'HTML 演示，外加 PDF / PPTX 导出', without: '锁在某个软件的格式里' },
-      { capability: 'review 与版本化', withOd: '源文件在 repo 里，可 diff', without: '二进制文件，无法有意义地 diff' },
+      { capability: '评审与版本管理', withOd: '源文件在代码仓库中，可清楚比较改动', without: '二进制文件，难以比较改动' },
       { capability: '成本与锁定', withOd: '开源、自带密钥、本地运行', without: '软件授权或按席位的 AI 附加费' },
     ],
     featuresTitle: "你能演示什么",
     features: [
-      { title: "路演 deck", body: "投资和销售 deck，叙事有力、数据页干净。", thumb: "example-html-ppt-pitch-deck" },
+      { title: "路演演示文稿", body: "适合投资和销售场景，叙事有力、数据页干净。", thumb: "example-html-ppt-pitch-deck" },
       { title: "瑞士 / 编辑风", body: "网格驱动、排版讲究，看起来像艺术指导过。", thumb: "example-deck-swiss-international" },
-      { title: "课程模块", body: "教学 deck，步骤清晰、有重点、有节奏。", thumb: "example-html-ppt-course-module" },
-      { title: "数据图表 deck", body: "深色、图表为主，适合分析和复盘。", thumb: "example-html-ppt-graphify-dark-graph" },
-      { title: "演示者模式", body: "reveal 风格 deck，专为浏览器现场演示而建。", thumb: "example-html-ppt-presenter-mode-reveal" },
-      { title: "技术蓝图", body: "架构和知识 deck，把复杂系统讲清楚。", thumb: "example-html-ppt-knowledge-arch-blueprint" },
+      { title: "课程模块", body: "教学演示，步骤清晰、有重点、有节奏。", thumb: "example-html-ppt-course-module" },
+      { title: "数据图表演示", body: "深色、图表为主，适合分析和复盘。", thumb: "example-html-ppt-graphify-dark-graph" },
+      { title: "演示者模式", body: "专为浏览器现场演示而设计。", thumb: "example-html-ppt-presenter-mode-reveal" },
+      { title: "技术蓝图", body: "用架构图和知识页把复杂系统讲清楚。", thumb: "example-html-ppt-knowledge-arch-blueprint" },
     ],
-    galleryTitle: '别人用 Open Design 做出来的 deck',
-    galleryLead: '下面是从大纲渲染出的真实 deck。挑一个接近你演讲风格的，描述内容。',
+    galleryTitle: '别人用 Open Design 做出来的演示文稿',
+    galleryLead: '下面是从大纲渲染出的真实演示文稿。挑一个接近你演讲风格的，再描述内容。',
     gallery: [
-      { thumb: "example-deck-guizang-editorial", caption: "编辑杂志风 deck" },
+      { thumb: "example-deck-guizang-editorial", caption: "编辑杂志风演示" },
       { thumb: "example-guizang-ppt", caption: "插画风主题演讲" },
-      { thumb: "example-deck-open-slide-canvas", caption: "Open slide canvas deck" },
-      { thumb: "example-html-ppt-obsidian-claude-gradient", caption: "渐变主题 deck" },
+      { thumb: "example-deck-open-slide-canvas", caption: "开放式幻灯画布" },
+      { thumb: "example-html-ppt-obsidian-claude-gradient", caption: "渐变主题演示" },
     ],
     exampleHref: '/plugins/templates/',
-    exampleLinkLabel: '浏览 deck 模板',
+    exampleLinkLabel: '浏览演示文稿模板',
     faqTitle: '幻灯片常见问题',
     faq: [
-      { q: '需要 PowerPoint 或 Keynote 吗？', a: '不需要。Open Design 在你的编码 agent 里把 deck 渲染成 HTML，还能导出 PDF 或 PPTX。你从浏览器演示或交付文件——做的时候不需要任何演示软件。' },
-      { q: '这只是 AI 生成的要点吗？', a: '不是。agent 套用带网格、字号体系和视觉层次的真实 deck 模板，幻灯片看起来是设计出来的，而不是自动填的。' },
-      { q: '能导出可编辑的 PowerPoint 吗？', a: '能。Open Design 的 pptx-generator 把 deck 导出成真正的 .pptx——原生、可编辑的文字与形状，并经 HTML→PPTX 保真审计，不是一页一张截图；再加 PDF 和你用来演示的 HTML。想走"转换优先"的流程可以看 HTML to PPT 工具页。' },
-      { q: '可以用哪些 agent？', a: 'Claude Code、Codex、Cursor Agent、Gemini CLI 等一方适配，自带 provider 密钥。' },
+      { q: '需要 PowerPoint 或 Keynote 吗？', a: '不需要。Open Design 会把演示文稿渲染成 HTML，还能导出 PDF 或 PPTX。你可以从浏览器演示或直接交付文件。' },
+      { q: '这只是 AI 生成的要点吗？', a: '不是。智能助手会套用带网格、字号体系和视觉层次的真实演示模板，让幻灯片看起来经过设计，而不是自动填充。' },
+      { q: '能导出可编辑的 PowerPoint 吗？', a: '能。Open Design 会导出真正的 .pptx，文字与形状都可编辑，不是一页一张截图；同时保留 PDF 和用于演示的 HTML。' },
+      { q: '可以用哪些编程助手？', a: '支持 Claude Code、Codex、Cursor 和 Gemini CLI 等二十多种编程助手。' },
     ],
-    ctaTitle: '今晚就把下一个 deck 做出来',
-    ctaBody: '给 repo 点个 star、装上 Open Design，把你的大纲变成有设计感的 deck——在你本来就用的 agent 里。',
+    ctaTitle: '今晚就把下一份演示文稿做出来',
+    ctaBody: '下载 Open Design，把你的大纲变成有设计感、可演示也可导出的演示文稿。',
     relatedTitle: '相关工具与指南',
     related: [
       { href: '/solutions/html-to-ppt/', label: '用 Open Design 把 HTML 转成 PPT' },
       { href: '/solutions/design-to-code/', label: '用 Open Design 把设计转成代码' },
-      { href: '/plugins/templates/', label: '浏览 deck 模板' },
+      { href: '/plugins/templates/', label: '浏览演示文稿模板' },
       { href: '/solutions/marketing/', label: 'Open Design 给市场团队' },
     ],
   },
@@ -1357,33 +1357,33 @@ export const ZH: SolutionLocaleCopy = {
   roleProductManagers: {
     title: 'Open Design 给产品经理',
     description:
-      '别再为了讲清一个想法等设计排期。Open Design 让 PM 把一句 prompt 变成可点击的原型或线框——用来对齐干系人、给团队做 brief，不用开设计 ticket。',
+      '别再为了讲清一个想法等待设计排期。Open Design 让产品经理把一句话需求变成可点击的原型或线框图，用来对齐干系人、给团队说明需求。',
     breadcrumb: '产品经理',
     label: '适用于 · 产品经理',
-    heading: '在 kickoff 之前，先让想法能点击',
-    lead: '描述流程，agent 渲染出真实可点击的原型，你今天就能摆到干系人面前——让评审讨论的是实物，而不是文档里的一段话。',
-    heroImageAlt: '编辑风插画：PM 把一段文字想法变成可点击原型，展示给干系人',
+    heading: '项目启动前，先让想法能点击',
+    lead: '描述流程，智能助手会渲染出真实可点击的原型。今天就能拿给干系人体验，让评审讨论真实流程，而不是文档里的一段话。',
+    heroImageAlt: 'Open Design 生成的真实交互式团队看板，可直接用于干系人评审',
     tldrTitle: '一句话',
     tldrBody:
-      'Open Design 给 PM 一个不依赖设计的方式把想法做实：prompt 出原型用于对齐和 brief，不花团队的设计预算。',
+      'Open Design 让产品经理无需等待设计排期，也能把一句话需求做成可点击原型，用于对齐意见和说明需求。',
     stepsTitle: '产品经理怎么用 Open Design',
     steps: [
-      { title: '描述流程', body: '用大白话写用户旅程——屏幕、状态、happy path。不用线框工具。', imageAlt: '插画：PM 在描述一段用户流程' },
-      { title: '拿到可点击原型', body: 'agent 渲染出能真点击的可导航屏幕——给干系人评审，比一张幻灯片或一篇文档清楚得多。', imageAlt: '插画：从描述产出可点击原型' },
+      { title: '描述流程', body: '用大白话写下用户旅程——屏幕、状态和主要路径，不用线框工具。', imageAlt: '插画：产品经理在描述一段用户流程' },
+      { title: '拿到可点击原型', body: '智能助手会渲染出真正可点击、可导航的屏幕。拿给干系人评审，比一张幻灯片或一篇文档清楚得多。', imageAlt: '插画：从描述产出可点击原型' },
       { title: '对齐并交接', body: '分享链接，对着实物收集反馈，再把原型交给设计/工程，作为精确、共享的起点。', imageAlt: '插画：原型用于对齐后交给团队' },
     ],
-    tableTitle: 'PM 用 Open Design vs. 等设计',
+    tableTitle: '产品经理用 Open Design vs. 等设计排期',
     tableColCapability: '你需要什么',
     tableColWithOd: '用 Open Design',
     tableColWithout: '今天没有它',
     tableRows: [
-      { capability: '把想法做实', withOd: '自己 prompt → 可点击原型', without: '开设计 ticket 等排期' },
+      { capability: '把想法做实', withOd: '一句话需求 → 可点击原型', without: '提设计需求、等待排期' },
       { capability: '对齐干系人', withOd: '他们点击真实流程', without: '他们读文档、各自脑补' },
-      { capability: '给团队做 brief', withOd: '一个具体原型当规格', without: '一堵文字墙加反复来回' },
-      { capability: '开发前迭代', withOd: '一句 prompt 改完、再分享', without: '又一轮设计排队' },
-      { capability: '成本', withOd: '开源、在你本来就用的 agent 里', without: '设计工时花在用完即弃的概念上' },
+      { capability: '给团队说明需求', withOd: '一个具体原型当规格', without: '一堵文字墙加反复来回' },
+      { capability: '开发前迭代', withOd: '一句话改完、再次分享', without: '又一轮设计排队' },
+      { capability: '成本', withOd: '开源、使用你常用的编程助手', without: '设计工时花在用完即弃的概念上' },
     ],
-    featuresTitle: 'PM 能摆到人前的东西',
+    featuresTitle: '产品经理可以直接拿来评审的成果',
     features: [
       { title: '移动流程', body: '端到端应用旅程，可点击。', thumb: 'example-mobile-app' },
       { title: '入职流程', body: '欢迎 → 设置 → 首次使用。', thumb: 'example-mobile-onboarding' },
@@ -1404,13 +1404,13 @@ export const ZH: SolutionLocaleCopy = {
     exampleLinkLabel: '浏览模板',
     faqTitle: '产品经理常见问题',
     faq: [
-      { q: '我不会设计，这适合我吗？', a: '适合。你用文字描述流程，agent 让它可点击。它是用来沟通和对齐的，不需要设计工具。' },
-      { q: '是真原型还是 mockup？', a: '真实可点击——导航和状态都能用，干系人对着真实体验给反应。' },
+      { q: '我不会设计，这适合我吗？', a: '适合。你用文字描述流程，智能助手会让它变得可点击。它用于沟通和对齐，不要求你会用设计工具。' },
+      { q: '是真原型还是静态示意图？', a: '是真实可点击的原型——导航和状态都能用，干系人可以对着实际体验给反馈。' },
       { q: '它取代设计吗？', a: '不——它给设计和工程一个精确、共享的起点，而不是文字规格，并把设计精力留给真正需要的地方。' },
-      { q: '可以用哪些 agent？', a: 'Claude Code、Codex、Cursor Agent、Gemini CLI 等一方适配，自带 provider 密钥。' },
+      { q: '可以用哪些编程助手？', a: '支持 Claude Code、Codex、Cursor 和 Gemini CLI 等二十多种编程助手。' },
     ],
     ctaTitle: '今晚就让你的想法能点击',
-    ctaBody: '给 repo 点个 star、装上 Open Design，把下一份规格变成人能点击的东西——在你本来就用的 agent 里。',
+    ctaBody: '下载 Open Design，把下一份产品规格变成团队真正能点击、能评审的原型。',
   },
   roleMarketing: {
     title: 'Open Design 给市场团队',

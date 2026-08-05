@@ -1,10 +1,8 @@
 import { expect, test } from '@/playwright/suite';
-import { ensureRailOpen } from '@/playwright/rail';
 import { routeAgents } from '@/playwright/mock-factory';
 import type { Locator, Page } from '@playwright/test';
 
 const STORAGE_KEY = 'open-design:config';
-const OPEN_SETTINGS_LABEL = /Open settings|打开设置|開啟設定/i;
 const AUTOMATIONS_TITLE = /Automations|自动化/i;
 
 test.describe.configure({ timeout: 30_000 });
@@ -91,13 +89,16 @@ async function gotoEntryHome(page: Page) {
   if (await privacyDialog.isVisible().catch(() => false)) {
     await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
   }
-  await expect(page.getByRole('button', { name: OPEN_SETTINGS_LABEL })).toBeVisible();
+  // #5517 moved the settings entry into the collapsed-by-default nav rail, so it
+  // is not in the accessibility tree on load; the hero is the ready signal now.
+  await expect(page.getByTestId('home-hero')).toBeVisible();
 }
 
 async function gotoAutomations(page: Page) {
   await gotoEntryHome(page);
-  await ensureRailOpen(page);
-  await page.getByTestId('entry-nav-tasks').click();
+  // #5517's rail dropped the Automations destination; /automations is still the
+  // route the view lives on.
+  await page.goto('/automations', { waitUntil: 'domcontentloaded' });
   const view = page.getByTestId('tasks-view');
   await expect(view.getByRole('heading', { level: 1, name: AUTOMATIONS_TITLE })).toBeVisible();
   return view;

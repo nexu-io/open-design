@@ -1,3 +1,9 @@
+import type {
+  TrackingAmrOpenCodeErrorPhase,
+  TrackingAmrOpenCodeLastEventType,
+  TrackingAmrOpenCodeLastToolKind,
+  TrackingAmrOpenCodeLastToolStatus,
+} from '@open-design/contracts/analytics';
 import { redactSecrets } from './redact.js';
 
 export interface RunEventForDiagnostics {
@@ -50,6 +56,10 @@ export interface RunDiagnosticsAnalytics {
   approval_requested: boolean;
   artifact_write_seen: boolean;
   live_artifact_seen: boolean;
+  amr_opencode_error_phase?: TrackingAmrOpenCodeErrorPhase;
+  amr_opencode_last_event_type?: TrackingAmrOpenCodeLastEventType;
+  amr_opencode_last_tool_status?: TrackingAmrOpenCodeLastToolStatus;
+  amr_opencode_last_tool_kind?: TrackingAmrOpenCodeLastToolKind;
   // True when this run transparently re-seeded after an upstream session resume
   // failed (expired/pruned): the dead handle was cleared and the turn was re-run
   // with a fresh session + full transcript, with no user-facing error. Lets us
@@ -74,6 +84,92 @@ export type StdoutTailSummary = StreamTailSummary;
 
 const STDERR_TAIL_MAX_LINES = 20;
 const STDERR_TAIL_MAX_BYTES = 4 * 1024;
+
+function recordValue(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function amrOpenCodeErrorPhase(value: unknown): TrackingAmrOpenCodeErrorPhase | undefined {
+  if (typeof value !== 'string' || !value.trim()) return undefined;
+  switch (value.trim()) {
+    case 'timeout':
+    case 'event_stream_start':
+    case 'event_stream':
+    case 'prompt_async':
+      return value.trim() as TrackingAmrOpenCodeErrorPhase;
+    default:
+      return 'other';
+  }
+}
+
+function amrOpenCodeLastEventType(value: unknown): TrackingAmrOpenCodeLastEventType | undefined {
+  if (typeof value !== 'string' || !value.trim()) return undefined;
+  switch (value.trim()) {
+    case 'tool_call':
+    case 'tool_call_update':
+    case 'agent_message_chunk':
+    case 'agent_thought_chunk':
+    case 'done':
+      return value.trim() as TrackingAmrOpenCodeLastEventType;
+    default:
+      return 'other';
+  }
+}
+
+function amrOpenCodeLastToolStatus(value: unknown): TrackingAmrOpenCodeLastToolStatus | undefined {
+  if (typeof value !== 'string' || !value.trim()) return undefined;
+  const status = value.trim().toLowerCase().replace(/[\s-]+/g, '_');
+  if (status === 'pending') return 'pending';
+  if (status === 'running' || status === 'in_progress') return 'in_progress';
+  if (status === 'completed' || status === 'complete' || status === 'success' || status === 'succeeded') {
+    return 'completed';
+  }
+  if (
+    status === 'failed' ||
+    status === 'failure' ||
+    status === 'error' ||
+    status === 'cancelled' ||
+    status === 'canceled'
+  ) {
+    return 'failed';
+  }
+  return 'other';
+}
+
+function amrOpenCodeLastToolKind(value: unknown): TrackingAmrOpenCodeLastToolKind | undefined {
+  if (typeof value !== 'string' || !value.trim()) return undefined;
+  const kind = value.trim().toLowerCase().replace(/[\s-]+/g, '_');
+  if (/^(?:read|view|cat)$/.test(kind)) return 'read';
+  if (/^(?:write|create|save)$/.test(kind)) return 'write';
+  if (/^(?:edit|patch|replace)$/.test(kind)) return 'edit';
+  if (/^(?:grep|glob|search|find)$/.test(kind)) return 'search';
+  if (/^(?:bash|shell|exec|execute|command)$/.test(kind)) return 'execute';
+  if (/^(?:fetch|webfetch|web_fetch|websearch|web_search|browser)$/.test(kind)) return 'fetch';
+  return 'other';
+}
+
+function amrOpenCodeDiagnosticsFromError(data: unknown): Partial<RunDiagnosticsAnalytics> | null {
+  const error = recordValue(recordValue(data)?.error);
+  const details = recordValue(error?.details);
+  if (
+    details?.kind !== 'opencode_prompt_error' ||
+    (details.runtime !== undefined && details.runtime !== 'opencode')
+  ) {
+    return null;
+  }
+  const errorPhase = amrOpenCodeErrorPhase(details.phase);
+  const lastEventType = amrOpenCodeLastEventType(details.lastEventType);
+  const lastToolStatus = amrOpenCodeLastToolStatus(details.lastToolStatus);
+  const lastToolKind = amrOpenCodeLastToolKind(details.lastToolKind);
+  return {
+    ...(errorPhase ? { amr_opencode_error_phase: errorPhase } : {}),
+    ...(lastEventType ? { amr_opencode_last_event_type: lastEventType } : {}),
+    ...(lastToolStatus ? { amr_opencode_last_tool_status: lastToolStatus } : {}),
+    ...(lastToolKind ? { amr_opencode_last_tool_kind: lastToolKind } : {}),
+  };
+}
 
 export function summarizeRunToolProgress(
   events: RunEventForDiagnostics[] = [],
@@ -218,6 +314,7 @@ export function summarizeRunDiagnosticsForAnalytics(args: {
   let liveArtifactSeen = args.liveArtifactSeen === true;
   let recordedCloseReason: RunCloseReason | null = null;
   let resumeAutoReseeded = false;
+  let amrOpenCodeDiagnostics: Partial<RunDiagnosticsAnalytics> = {};
   for (const event of events) {
     if (event.event === 'stderr') {
       const chunk = readStderrChunk(event.data);
@@ -252,6 +349,10 @@ export function summarizeRunDiagnosticsForAnalytics(args: {
       (data.nativeSessionRecovery as Record<string, unknown>).state === 'auto_reseeded'
     ) {
       resumeAutoReseeded = true;
+    }
+    if (event.event === 'error') {
+      const structured = amrOpenCodeDiagnosticsFromError(event.data);
+      if (structured) amrOpenCodeDiagnostics = structured;
     }
     if (data.type === 'artifact') artifactWriteSeen = true;
     if (data.type === 'live_artifact' || event.event === 'live_artifact') {
@@ -315,5 +416,6 @@ export function summarizeRunDiagnosticsForAnalytics(args: {
     artifact_write_seen: artifactWriteSeen,
     live_artifact_seen: liveArtifactSeen,
     resume_auto_reseeded: resumeAutoReseeded,
+    ...amrOpenCodeDiagnostics,
   };
 }

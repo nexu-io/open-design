@@ -42,6 +42,11 @@
  *   FAKE_VELA_SESSION_NEW_ERROR  – when set, session/new returns a JSON-RPC error
  *   FAKE_VELA_SET_MODEL_ERROR    – when set, session/set_model returns a JSON-RPC error
  *   FAKE_VELA_PROMPT_ERROR       – when set, session/prompt returns a JSON-RPC error
+ *   FAKE_VELA_PROMPT_ERROR_ON_LOAD – when set, session/prompt errors only after session/load
+ *   FAKE_VELA_STALL_AFTER_PROMPT – when set to '1', session/prompt never completes
+ *                                   and emits non-substantive heartbeat updates
+ *   FAKE_VELA_PROMPT_RESULT_DELAY_MS – delay the terminal session/prompt result
+ *                                      after streaming substantive output
  *   FAKE_VELA_MODELS             – newline-separated `vela models` stdout
  *   FAKE_VELA_MODEL_PRESET_JSON  – JSON stdout for `model preset --format json`
  *   FAKE_VELA_MODEL_LIST_JSON    – JSON stdout for `model list --all --format json`
@@ -53,6 +58,7 @@
  */
 
 import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { spawn as spawnChild } from 'node:child_process';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { argv, stdin, stdout, stderr, env, exit } from 'node:process';
@@ -71,6 +77,12 @@ const THOUGHT_TEXT = env.FAKE_VELA_THOUGHT || '';
 const SESSION_NEW_ERROR = env.FAKE_VELA_SESSION_NEW_ERROR || '';
 const SET_MODEL_ERROR = env.FAKE_VELA_SET_MODEL_ERROR || '';
 const PROMPT_ERROR = env.FAKE_VELA_PROMPT_ERROR || '';
+const PROMPT_ERROR_ON_LOAD = env.FAKE_VELA_PROMPT_ERROR_ON_LOAD || '';
+const STALL_AFTER_PROMPT = env.FAKE_VELA_STALL_AFTER_PROMPT === '1';
+const TEXT_BEFORE_STALL = env.FAKE_VELA_TEXT_BEFORE_STALL === '1';
+const PROMPT_RESULT_DELAY_MS = Number(env.FAKE_VELA_PROMPT_RESULT_DELAY_MS) || 0;
+const OMIT_PROMPT_USAGE = env.FAKE_VELA_OMIT_PROMPT_USAGE === '1';
+const STAY_ALIVE_AFTER_PROMPT_MS = Number(env.FAKE_VELA_STAY_ALIVE_AFTER_PROMPT_MS) || 0;
 const AVAILABLE_MODELS = [
   { modelId: 'openai/gpt-5.4-mini', name: 'gpt-5.4-mini' },
   { modelId: 'anthropic/claude-3.7-sonnet', name: 'claude-3.7-sonnet' },
@@ -281,8 +293,9 @@ function handleMessage(msg) {
         });
         return;
       }
-      if (PROMPT_ERROR) {
-        writeError(id, PROMPT_ERROR, -32602);
+      const promptError = PROMPT_ERROR || (didLoad ? PROMPT_ERROR_ON_LOAD : '');
+      if (promptError) {
+        writeError(id, promptError, -32602);
         return;
       }
       const sessionId = typeof params?.sessionId === 'string' ? params.sessionId : SESSION_ID;
@@ -290,11 +303,35 @@ function handleMessage(msg) {
         writeError(id, 'session/set_model must be called before session/prompt', -32602);
         return;
       }
+      if (STALL_AFTER_PROMPT) {
+        if (TEXT_BEFORE_STALL) emitSessionUpdates(sessionId);
+        // Keep both the ACP stage watchdog and the outer chat inactivity
+        // watchdog fed without producing text, thinking, tools, artifacts, or
+        // a terminal prompt result. This models a provider bridge that stays
+        // transport-alive forever while never returning a first model output.
+        setInterval(() => {
+          writeNotification('session/update', {
+            sessionId,
+            update: { sessionUpdate: 'heartbeat' },
+          });
+        }, 20);
+        return;
+      }
       emitSessionUpdates(sessionId);
-      writeResult(id, {
-        stopReason: 'end_turn',
-        usage: { inputTokens: 12, outputTokens: 7, totalTokens: 19 },
-      });
+      const finishPrompt = () => {
+        writeResult(id, {
+          stopReason: 'end_turn',
+          ...(OMIT_PROMPT_USAGE
+            ? {}
+            : { usage: { inputTokens: 12, outputTokens: 7, totalTokens: 19 } }),
+        });
+        if (STAY_ALIVE_AFTER_PROMPT_MS > 0) setTimeout(() => {}, STAY_ALIVE_AFTER_PROMPT_MS);
+      };
+      if (PROMPT_RESULT_DELAY_MS > 0) {
+        setTimeout(finishPrompt, PROMPT_RESULT_DELAY_MS);
+      } else {
+        finishPrompt();
+      }
       return;
     }
     case 'session/cancel':
@@ -348,6 +385,61 @@ stdin.on('end', () => {
 // handler above ignores login mode so delayed login tests can keep this
 // process alive without opening the ACP stdio bridge.
 function loginAndExit() {
+  const logLoginLifecycle = (event) => {
+    if (!env.FAKE_VELA_LOGIN_INVOCATION_LOG) return;
+    appendFileSync(env.FAKE_VELA_LOGIN_INVOCATION_LOG, `${JSON.stringify({
+      event,
+      route: (env.VELA_API_URL ?? '').trim() ? 'proxy' : 'direct',
+    })}\n`);
+  };
+  logLoginLifecycle('start');
+  if (
+    env.FAKE_VELA_LOGIN_ACTIVATION_THEN_EXIT_DELAY_MS
+    && !(env.VELA_API_URL ?? '').trim()
+  ) {
+    const delayMs = Number(env.FAKE_VELA_LOGIN_ACTIVATION_THEN_EXIT_DELAY_MS) || 1;
+    const exitCode = Number(env.FAKE_VELA_LOGIN_ACTIVATION_THEN_EXIT_CODE) || 0;
+    const activationBlock = [
+      'Open this URL to continue:',
+      'https://fake-vela.example/cli/activate?deviceId=activation-then-exit',
+      '',
+      'Code: ACTIVATE-EXIT',
+      '',
+    ].join('\n');
+    setTimeout(() => {
+      stdout.write(activationBlock, () => {
+        logLoginLifecycle('exit');
+        exit(exitCode);
+      });
+    }, delayMs);
+    return;
+  }
+  if (
+    env.FAKE_VELA_LOGIN_ACTIVATION_AFTER_PARENT_EXIT_MS
+    && !(env.VELA_API_URL ?? '').trim()
+  ) {
+    const delayMs = Number(env.FAKE_VELA_LOGIN_ACTIVATION_AFTER_PARENT_EXIT_MS) || 50;
+    const activationBlock = [
+      'Open this URL to continue:',
+      'https://fake-vela.example/cli/activate?deviceId=late-drain',
+      '',
+      'Code: LATE-DRAIN',
+      '',
+    ].join('\n');
+    const exitParent = () => {
+      const grandchild = spawnChild(
+        process.execPath,
+        ['-e', `setTimeout(() => process.stdout.write(${JSON.stringify(activationBlock)}), ${delayMs})`],
+        { stdio: ['ignore', stdout, stderr] },
+      );
+      grandchild.unref();
+      exit(0);
+    };
+    const parentDelayMs = Number(env.FAKE_VELA_LOGIN_PARENT_EXIT_DELAY_MS) || 0;
+    if (parentDelayMs > 0) setTimeout(exitParent, parentDelayMs);
+    else exitParent();
+    return;
+  }
   if (env.FAKE_VELA_LOGIN_FAIL) {
     stderr.write(`${env.FAKE_VELA_LOGIN_FAIL}\n`);
     exit(1);
@@ -356,6 +448,17 @@ function loginAndExit() {
   // (#3726): fail unless the daemon routed login through its IPv4 API proxy
   // (which sets VELA_API_URL). Lets tests assert the direct-first / proxy-
   // fallback contract of the login route.
+  if (
+    env.FAKE_VELA_LOGIN_EXIT_ZERO_WITHOUT_API_URL_DELAY_MS &&
+    !(env.VELA_API_URL ?? '').trim()
+  ) {
+    const delayMs = Number(env.FAKE_VELA_LOGIN_EXIT_ZERO_WITHOUT_API_URL_DELAY_MS) || 0;
+    setTimeout(() => {
+      logLoginLifecycle('exit');
+      exit(0);
+    }, delayMs);
+    return;
+  }
   if (
     env.FAKE_VELA_LOGIN_FAIL_WITHOUT_API_URL &&
     !(env.VELA_API_URL ?? '').trim()
@@ -368,22 +471,25 @@ function loginAndExit() {
     if (failDelayMs > 0) {
       setTimeout(() => {
         stderr.write(`${env.FAKE_VELA_LOGIN_FAIL_WITHOUT_API_URL}\n`);
+        logLoginLifecycle('exit');
         exit(1);
       }, failDelayMs);
       return;
     }
     stderr.write(`${env.FAKE_VELA_LOGIN_FAIL_WITHOUT_API_URL}\n`);
+    logLoginLifecycle('exit');
     exit(1);
   }
   if (env.FAKE_VELA_ENV_DUMP_PATH) {
     writeFileSync(env.FAKE_VELA_ENV_DUMP_PATH, JSON.stringify(env, null, 2), 'utf8');
   }
   const profile = (env.VELA_PROFILE || 'prod').trim() || 'prod';
-  const allowed = new Set(['prod', 'test', 'local']);
+  const allowed = new Set(['prod', 'test', 'feature-test', 'local']);
   if (!allowed.has(profile)) {
-    stderr.write(`[fake-vela] unknown profile ${profile}; defaulting to prod\n`);
+    stderr.write(`[fake-vela] unknown profile ${profile}; expected prod, test, feature-test, or local\n`);
+    exit(1);
   }
-  const profileName = allowed.has(profile) ? profile : 'prod';
+  const profileName = profile;
   const delayMs = Number(env.FAKE_VELA_LOGIN_DELAY_MS) || 0;
   const userEmail = env.FAKE_VELA_LOGIN_USER_EMAIL || 'fake-user@example.com';
   const userPlan = env.FAKE_VELA_LOGIN_USER_PLAN || 'free';

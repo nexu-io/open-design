@@ -1,4 +1,4 @@
-import type { ProjectFile } from './files';
+import type { ProjectFile, ProjectFileKind } from './files';
 import type { RunResultPackageResponse, RunWorkspace } from './workspaces.js';
 import type {
   PreviewCommentAttachment,
@@ -13,7 +13,14 @@ import type { RunContextSelection } from './context.js';
 import type { MediaExecutionPolicy } from './media.js';
 import type { AppliedPluginSnapshot } from '../plugins/apply.js';
 import type { McpAuthMode, McpServerConfig, McpTransport } from './mcp';
-import type { TrackingRuntimeType } from '../analytics/public-params.js';
+import type {
+  AnalyticsAttributionQuality,
+  AnalyticsDistributionMechanism,
+  AnalyticsEntrySurface,
+  AnalyticsHostProduct,
+  AnalyticsPublisherClass,
+  TrackingRuntimeType,
+} from '../analytics/public-params.js';
 import type {
   TrackingRunFailureCategory,
   TrackingRunFailureDetail,
@@ -26,6 +33,7 @@ import type {
 // producer and consumer can't drift.
 export type RunFailureCategory = TrackingRunFailureCategory;
 export type RunFailureDetail = TrackingRunFailureDetail;
+export type RunFailureAction = 'relogin' | 'recharge' | 'upgrade' | 'retry' | 'none';
 
 export type ChatRole = 'user' | 'assistant';
 export type ChatSessionMode = 'design' | 'chat' | 'plan';
@@ -71,6 +79,10 @@ export interface ChatRequest {
   projectId?: string | null;
   conversationId?: string | null;
   sessionMode?: ChatSessionMode;
+  /** Client-minted id for the latest user turn. The daemon pins this row before
+   * the assistant row so concurrent best-effort message persistence cannot
+   * invert the visible turn order. */
+  userMessageId?: string | null;
   assistantMessageId?: string | null;
   clientRequestId?: string | null;
   skillId?: string | null;
@@ -229,6 +241,19 @@ export interface ChatAnalyticsHints {
   // `ai_refined` enrichment metadata on success. It carries no execution
   // semantics — omitting it just means the run is not an enrichment pass.
   dsEnrichment?: boolean;
+  /** Bounded source attribution for local MCP/plugin initiated runs. */
+  entrySurface?: AnalyticsEntrySurface;
+  hostProduct?: AnalyticsHostProduct;
+  externalPluginId?: string;
+  externalPluginVersion?: string;
+  distributionMechanism?: AnalyticsDistributionMechanism;
+  publisherClass?: AnalyticsPublisherClass;
+  attributionQuality?: AnalyticsAttributionQuality;
+  pluginWorkflowId?: string;
+  logicalRequestDigest?: string;
+  logicalRequestDigestVersion?: number;
+  /** Daemon-computed and frozen for Plugin generation maturity queries. */
+  generationSloWindowMs?: number;
 }
 
 export interface RunScopedMcpServerConfig extends Omit<McpServerConfig, 'enabled'> {
@@ -282,10 +307,16 @@ export interface BrowserUseRunState {
   diagnostics: BrowserUseDiscoveryFacts;
 }
 
+/**
+ * Web chat POST /api/runs body. `conversationId` is required (web always has a
+ * chat home). `assistantMessageId` is optional: when omitted the daemon mints
+ * one so multi-turn native session resume still gets a pin cursor.
+ */
 export interface ChatRunCreateRequest extends ChatRequest {
   projectId: string;
   conversationId: string;
-  assistantMessageId: string;
+  /** Client pin id; daemon mints when omitted (API / omit-pin clients). */
+  assistantMessageId?: string;
   clientRequestId: string;
 }
 
@@ -294,9 +325,19 @@ export interface ChatRunCreateRequest extends ChatRequest {
  * manage conversation state client-side. Only `projectId` is required;
  * `message` and `agentId` are optional — the daemon resolves `agentId` from
  * the saved app-config when it is omitted.
+ *
+ * Callers may optionally bind `conversationId` (and omit `assistantMessageId`);
+ * the daemon mints the pin and seeds the user message when the conversation
+ * is bound and owned by `projectId`.
  */
 export interface McpRunCreateRequest {
   projectId: string;
+  /** Optional bound conversation; when set without assistantMessageId the daemon mints a pin. */
+  conversationId?: string;
+  /** Optional client pin; omit to let the daemon mint when a conversation is bound. */
+  assistantMessageId?: string;
+  /** Stable id generated once per confirmed user action and reused on transport retry. */
+  clientRequestId?: string;
   message?: string;
   agentId?: string;
   skillId?: string;
@@ -306,6 +347,8 @@ export interface McpRunCreateRequest {
   pluginInputs?: Record<string, unknown>;
   mediaExecution?: MediaExecutionPolicy;
   toolBundle?: RunScopedToolBundle;
+  resume?: boolean;
+  analyticsHints?: ChatAnalyticsHints;
 }
 
 export const CHAT_RUN_STATUSES = [
@@ -383,6 +426,8 @@ export interface ChatRunCreateResponse {
   assistantMessageId?: string | null;
   appliedPluginSnapshotId?: string | null;
   pluginId?: string | null;
+  /** Analytics-only data-quality signal; it never changes run reuse semantics. */
+  analyticsAttributionMismatch?: boolean;
 }
 
 export type NativeSessionRecoveryState =
@@ -451,6 +496,8 @@ export interface ChatRunStatusResponse {
   projectId: string | null;
   conversationId: string | null;
   assistantMessageId: string | null;
+  /** Stable caller request id used to suppress duplicate logical runs. */
+  clientRequestId?: string | null;
   agentId: string | null;
   /** Design system whose prompt context was actually injected for this run. */
   designSystemId?: string | null;
@@ -483,6 +530,8 @@ export interface ChatRunStatusResponse {
    *  cli_not_installed, invalid_api_key, …). Primary key the UI maps to a named
    *  failure type + fix. Absent on success / older daemons. */
   failureDetail?: RunFailureDetail | null;
+  /** Recommended recovery action derived from the same failure classification. */
+  failureAction?: RunFailureAction | null;
   /** True when this terminal failure can be recovered by resuming the agent's
    *  existing CLI session (a transient upstream drop / inactivity timeout on a
    *  session-resuming runtime), rather than only restarting from scratch. The
@@ -502,6 +551,23 @@ export interface ChatRunStatusResponse {
   /** Authoritative artifact files created or modified by this run. Mirrors
    *  ChatSseEndPayload.artifactCount and run_finished.artifact_count. */
   artifactCount?: number;
+  /** Filesystem-backed validation of the one canonical artifact entry this
+   *  run can deliver. Present for terminal runs when the daemon can inspect
+   *  the project; callers must not infer validity from artifactCount alone. */
+  deliverableValid?: boolean;
+  deliverableValidation?:
+    | 'valid'
+    | 'not_succeeded'
+    | 'no_artifact'
+    | 'project_missing'
+    | 'entry_missing'
+    | 'entry_not_touched'
+    | 'entry_unreadable'
+    | 'type_mismatch';
+  /** Canonical project-relative file selected by deliverable validation. */
+  deliverableEntryFile?: string;
+  /** File kind of deliverableEntryFile, derived from the daemon file index. */
+  deliverableArtifactKind?: ProjectFileKind;
   /** Absolute path to the per-run JSONL event log the daemon mirrors
    *  the SSE stream to (see runs.ts `runsLogDir`). Null when the
    *  daemon was launched without event persistence configured. */

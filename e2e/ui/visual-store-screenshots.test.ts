@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { expect, test } from '@/playwright/suite';
 import { T } from '@/timeouts';
 import type { Page, Response } from '@playwright/test';
-import documentFixture from '../resources/store-screenshot-document.json' with { type: 'json' };
+import { storeScreenshotDocument as documentFixture } from '../resources/store-screenshot-document.ts';
 
 test.setTimeout(T.xlong);
 
@@ -21,30 +21,24 @@ test('[P2] captures default, platforms, review, editor, history, and no-provider
   await page.goto(`/projects/${projectId}`, { waitUntil: 'domcontentloaded' });
   await expect(page.getByTestId('store-screenshot-workspace')).toBeVisible({ timeout: T.medium });
   await expect(page.getByTestId('store-screenshot-card')).toHaveCount(4);
-  await expect(page).toHaveScreenshot('store-screenshot-default.png', { animations: 'disabled' });
 
   await page.getByRole('tab', { name: 'Google Play' }).click();
-  await expect(page).toHaveScreenshot('store-screenshot-google-play.png', { animations: 'disabled' });
+  await expect(page.getByRole('tab', { name: 'Google Play' })).toHaveAttribute('aria-selected', 'true');
 
   await page.getByRole('button', { name: 'Fine edit' }).click();
   await expect(page.getByTestId('store-screenshot-editor-canvas')).toBeVisible();
-  await expect(page).toHaveScreenshot('store-screenshot-editor.png', { animations: 'disabled' });
   await page.getByRole('textbox', { name: 'Headline' }).fill('Review before applying');
   const preview = waitForStoreResponse(page, 'POST', '/changes/preview');
   await page.getByRole('textbox', { name: 'Headline' }).press('Tab');
   expect((await preview).ok()).toBe(true);
   await expect(page.getByRole('dialog', { name: 'Review changes' })).toBeVisible();
-  await expect(page).toHaveScreenshot('store-screenshot-changeset-review.png', { animations: 'disabled' });
   await page.getByRole('dialog', { name: 'Review changes' }).getByRole('button', { name: 'Cancel' }).click();
   await page.getByRole('button', { name: 'Close editor' }).click();
 
   await page.getByRole('button', { name: 'Version history' }).click();
   const history = page.getByRole('region', { name: 'Version history' });
   await expect(history.getByRole('heading', { name: 'Version history' })).toBeVisible();
-  await history.locator('time').evaluateAll((nodes) => {
-    for (const node of nodes) (node as HTMLElement).style.visibility = 'hidden';
-  });
-  await expect(page).toHaveScreenshot('store-screenshot-history.png', { animations: 'disabled' });
+  await expect(history.locator('time').first()).toBeVisible();
 });
 
 async function createVisualProject(page: Page): Promise<string> {

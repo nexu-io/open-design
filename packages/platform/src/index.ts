@@ -33,6 +33,7 @@ export type {
   ProcessStampShape,
   SpawnProcessRequest,
   StampedProcessMatchCriteria,
+  StopProcessesOptions,
   StopProcessesResult,
 } from "./process.js";
 export {

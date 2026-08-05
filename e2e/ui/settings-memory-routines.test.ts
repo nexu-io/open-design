@@ -1,11 +1,11 @@
+import { fileURLToPath } from 'node:url';
 import { expect, test } from '@/playwright/suite';
-import { ensureRailOpen } from '@/playwright/rail';
 import { routeAgents } from '@/playwright/mock-factory';
+import { openSettingsDialog, settingsSurface } from '../lib/playwright/amr.js';
 import type { Locator, Page } from '@playwright/test';
-import { openSettingsDialog } from '../lib/playwright/amr.js';
 
 const STORAGE_KEY = 'open-design:config';
-const OPEN_SETTINGS_LABEL = /Open settings|打开设置|開啟設定/i;
+const APP_ICON_PATH = fileURLToPath(new URL('../../apps/web/public/app-icon.png', import.meta.url));
 
 test.describe.configure({ timeout: 30_000 });
 
@@ -71,6 +71,9 @@ async function seedSettingsBase(page: Page) {
   await page.route('**/api/skills', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: '{"skills":[]}' });
   });
+  await page.route('**/api/design-templates', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '{"designTemplates":[]}' });
+  });
   await page.route('**/api/design-systems', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: '{"designSystems":[]}' });
   });
@@ -96,7 +99,9 @@ async function gotoEntryHome(page: Page) {
   if (await privacyDialog.isVisible()) {
     await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
   }
-  await expect(page.getByRole('button', { name: OPEN_SETTINGS_LABEL })).toBeVisible();
+  // #5517 moved the settings entry into the collapsed-by-default nav rail, so it
+  // is not in the accessibility tree on load; the hero is the ready signal now.
+  await expect(page.getByTestId('home-hero')).toBeVisible();
 }
 
 async function openSettings(page: Page) {
@@ -112,6 +117,42 @@ async function openMemorySettings(page: Page) {
   await expect(dialog.getByText('Saved memory')).toBeVisible();
   return dialog;
 }
+
+test('[P1] Pets custom sprite upload exposes animation controls and removing it restores emoji mode', async ({ page }) => {
+  await seedSettingsBase(page);
+  await page.route('**/api/codex-pets', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ pets: [], rootDir: '' }),
+    });
+  });
+
+  const dialog = await openSettings(page);
+  await dialog.getByRole('button', { name: /^General$/i }).click();
+  await expect(dialog.getByRole('tab', { name: 'Custom', exact: true })).toHaveAttribute(
+    'aria-selected',
+    'false',
+  );
+  await dialog.getByRole('tab', { name: 'Custom', exact: true }).click();
+
+  const fileInputs = dialog.locator('input[type="file"]');
+  await expect(fileInputs).toHaveCount(2);
+  await fileInputs.nth(0).setInputFiles(APP_ICON_PATH);
+
+  await expect(dialog.locator('.pet-image-frames')).toBeVisible();
+  const frameInputs = dialog.locator('.pet-image-frames input[type="number"]');
+  await expect(frameInputs).toHaveCount(2);
+  await frameInputs.nth(0).fill('4');
+  await frameInputs.nth(1).fill('12');
+  await expect(frameInputs.nth(0)).toHaveValue('4');
+  await expect(frameInputs.nth(1)).toHaveValue('12');
+
+  await dialog.getByRole('button', { name: /Use emoji/i }).click();
+  await expect(dialog.locator('.pet-image-frames')).toHaveCount(0);
+  await expect(dialog.getByRole('button', { name: /Upload sprite/i })).toBeVisible();
+  await expect(dialog.getByRole('button', { name: /Use emoji/i })).toHaveCount(0);
+});
 
 async function openMemoryAddDialog(
   page: Page,
@@ -558,6 +599,8 @@ test.describe('Settings Memory and Automations flows', () => {
     await expect(dialog).toBeHidden();
     await expect(settingsDialog.locator('.library-card', { hasText: 'UI preferences' })).toBeVisible();
 
+    await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+    await expect(settingsSurface(page)).toHaveCount(0);
     await settingsDialog.getByRole('button', { name: 'Close', exact: true }).click();
     await expect(page.getByRole('dialog')).toHaveCount(0);
 
@@ -2240,8 +2283,9 @@ test.describe('Settings Memory and Automations flows', () => {
     });
 
     await gotoEntryHome(page);
-    await ensureRailOpen(page);
-    await page.getByTestId('entry-nav-tasks').click();
+    // #5517's rail dropped the Automations destination; /automations is still
+    // the route the view lives on.
+    await page.goto('/automations', { waitUntil: 'domcontentloaded' });
     const view = page.getByTestId('tasks-view');
     await expect(view.getByRole('heading', { name: 'Automations', exact: true })).toBeVisible();
 
@@ -2311,8 +2355,9 @@ test.describe('Settings Memory and Automations flows', () => {
     });
 
     await gotoEntryHome(page);
-    await ensureRailOpen(page);
-    await page.getByTestId('entry-nav-tasks').click();
+    // #5517's rail dropped the Automations destination; /automations is still
+    // the route the view lives on.
+    await page.goto('/automations', { waitUntil: 'domcontentloaded' });
     const view = page.getByTestId('tasks-view');
 
     await view.getByRole('button', { name: 'New automation' }).click();

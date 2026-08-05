@@ -3,16 +3,24 @@ import type { Locator, Page } from '@playwright/test';
 
 import {
   dismissPrivacyDialog,
+  mockAmrPersonalWorkspace,
   mockAmrWalletSnapshot,
   STORAGE_KEY,
   waitForLoadingToClear,
 } from '@/playwright/amr';
-import { fulfillAgentsRoute } from '@/playwright/mock-factory';
+import { expectStableCount } from '@/playwright/assertions';
+import {
+  fulfillAgentsRoute,
+  routeSuccessfulRuns,
+  successfulRunEventBody,
+  suppressWhatsNew,
+} from '@/playwright/mock-factory';
 import { T } from '@/timeouts';
 
 type OnboardingConfig = {
-  mode: 'daemon';
+  mode: 'daemon' | 'api';
   apiKey: string;
+  apiProtocol?: string;
   baseUrl: string;
   model: string;
   agentId: string | null;
@@ -34,6 +42,10 @@ declare global {
 }
 
 test.describe.configure({ timeout: T.xlong });
+
+test.beforeEach(async ({ page }) => {
+  await suppressWhatsNew(page);
+});
 
 test('[P0] @critical onboarding lets AMR Cloud sign in and complete setup after the login poll succeeds', async ({ page }) => {
   const config = await wireOnboardingMocks(page, {
@@ -283,13 +295,21 @@ test('[P0] onboarding cancel during a slow AMR status check does not start login
 
   const primary = cloudPrimaryButton(page);
   await expect(primary).toHaveText(/Sign in to Open Design|登录 Open Design/i);
-  await expect.poll(() => page.evaluate(() => window.__amrOnboardingCancelCalls ?? 0)).toBe(1);
+  // The status read was canceled before a daemon login attempt was created,
+  // so there is no attempt-scoped process for the client to cancel.
+  await expect.poll(() => page.evaluate(() => window.__amrOnboardingCancelCalls ?? 0)).toBe(0);
   await expect
     .poll(() => page.evaluate(() => window.__amrOnboardingSlowStatusResolved ?? false))
     .toBe(true);
-  await page.waitForTimeout(250);
   await expect(page.getByRole('button', { name: /Cancel sign-in/i })).toHaveCount(0);
-  await expect.poll(() => page.evaluate(() => window.__amrOnboardingLoginCalls ?? 0)).toBe(0);
+  await expectStableCount(
+    () => page.evaluate(() => window.__amrOnboardingLoginCalls ?? 0),
+    0,
+    {
+      timeout: 250,
+      message: 'cancelling onboarding should prevent the delayed status continuation from starting login',
+    },
+  );
 });
 
 // The AMR card + per-runtime model picker on the connect step were removed,
@@ -326,6 +346,11 @@ test('[P0] onboarding AMR runtime selection carries into the first Home run requ
     amrAvailable: true,
     initialLoggedIn: true,
   });
+  await mockAmrPersonalWorkspace(page, undefined, {
+    accountBalanceUsd: '20.00',
+    accountCredits: 2_000,
+    accountPlan: 'free',
+  });
 
   await seedOnboardingConfig(page, config);
   await gotoOnboarding(page);
@@ -334,36 +359,15 @@ test('[P0] onboarding AMR runtime selection carries into the first Home run requ
   await advanceFromAboutYouToBrand(page);
   await expectOnboardingFinished(page);
 
-  let runBody: Record<string, unknown> | null = null;
-  await page.route('**/api/runs', async (route) => {
-    if (route.request().method() !== 'POST') {
-      await route.continue();
-      return;
-    }
-    runBody = route.request().postDataJSON() as Record<string, unknown>;
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: JSON.stringify({ runId: 'amr-onboarding-first-run' }),
-    });
-  });
-  await page.route('**/api/runs/amr-onboarding-first-run/events', async (route) => {
-    await route.fulfill({
-      status: 200,
-      headers: {
-        'content-type': 'text/event-stream',
-        'cache-control': 'no-cache',
-      },
-      body: [
-        'event: start',
-        'data: {"bin":"vela"}',
-        '',
-        'event: end',
-        'data: {"code":0,"status":"succeeded"}',
-        '',
-        '',
-      ].join('\n'),
-    });
+  const runBodies: Array<Record<string, unknown>> = [];
+  const runRequests = await routeSuccessfulRuns(page, {
+    bodies: runBodies,
+    runId: 'amr-onboarding-first-run',
+    eventBody: successfulRunEventBody([
+      'event: start',
+      'data: {"bin":"vela"}',
+      '',
+    ]),
   });
 
   const input = page.getByTestId('home-hero-input');
@@ -372,7 +376,8 @@ test('[P0] onboarding AMR runtime selection carries into the first Home run requ
   await expect(page.getByTestId('home-hero-submit')).toBeEnabled();
   await page.getByTestId('home-hero-submit').click();
 
-  await expect.poll(() => runBody, { timeout: 10_000 }).toMatchObject({
+  await runRequests.expectCount(1);
+  expect(runBodies[0]).toMatchObject({
     agentId: 'amr',
   });
 });
@@ -392,8 +397,13 @@ test('[P0] onboarding gate cannot be bypassed by direct Home navigation or new-t
   await expect(connectLandingHeading(page)).toBeVisible();
   await expect(page).toHaveURL(/\/onboarding$/);
 
-  const newTabButton = page.getByTestId('workspace-tabs-new-tab');
-  await expect(newTabButton).toBeDisabled();
+  // #5517 removed the top-right "+" button, so it is no longer a bypass surface
+  // to gate — assert it is gone rather than asserting it renders disabled.
+  await expect(page.getByTestId('workspace-tabs-new-tab')).toHaveCount(0);
+
+  // The keyboard path survives and is now the only way to ask for a new tab, so
+  // it carries the whole P0 gate: createNewTab() must refuse while onboarding is
+  // active and leave the user on /onboarding.
   await page.keyboard.press(process.platform === 'darwin' ? 'Meta+T' : 'Control+T');
   await expect(page).toHaveURL(/\/onboarding$/);
   await expect(connectLandingHeading(page)).toBeVisible();
@@ -420,7 +430,7 @@ test('[P0] onboarding visited steps become locked again when the Connect runtime
   await expect(connectLandingHeading(page)).toBeVisible();
 
   await page.getByRole('button', { name: /Bring your own key/i }).click();
-  await expect(page.getByText('BYOK')).toBeVisible();
+  await expect(onboardingByokPanel(page)).toBeVisible();
 
   const continueButton = page.getByRole('button', { name: /^Continue$/i });
   await expect(continueButton).toHaveAttribute('aria-disabled', 'true');
@@ -611,8 +621,8 @@ test('[P0] @critical onboarding BYOK path can fetch models, test the provider, a
   await gotoOnboarding(page);
 
   await page.getByRole('button', { name: /Bring your own key/i }).click();
-  await expect(page.getByText('BYOK')).toBeVisible();
-  const byokPanel = page.locator('.onboarding-view__setup-panel').filter({ hasText: /BYOK/ });
+  const byokPanel = onboardingByokPanel(page);
+  await expect(byokPanel).toBeVisible();
 
   await fillInlineField(page, 'API key', 'test-api-key');
   await fillInlineField(page, 'Base URL', 'https://api.anthropic.com');
@@ -678,8 +688,8 @@ test('[P0] onboarding BYOK path cannot continue before a successful connection t
   await gotoOnboarding(page);
 
   await page.getByRole('button', { name: /Bring your own key/i }).click();
-  await expect(page.getByText('BYOK')).toBeVisible();
-  const byokPanel = page.locator('.onboarding-view__setup-panel').filter({ hasText: /BYOK/ });
+  const byokPanel = onboardingByokPanel(page);
+  await expect(byokPanel).toBeVisible();
 
   const continueButton = page.getByRole('button', { name: /^Continue$/i });
   await expect(continueButton).toHaveAttribute('aria-disabled', 'true');
@@ -736,7 +746,7 @@ test('[P0] onboarding BYOK path supports Anthropic model selection and API key v
   await expect(apiKeyInput).toHaveAttribute('type', 'text');
 
   await fillInlineField(page, 'Base URL', 'https://api.anthropic.com');
-  const byokPanel = page.locator('.onboarding-view__setup-panel').filter({ hasText: /BYOK/ });
+  const byokPanel = onboardingByokPanel(page);
   await selectOnboardingOption(byokPanel, 'Model', 'claude-sonnet-4-5');
   await page.getByRole('button', { name: /^Test$/i }).click();
   await expectProviderConnectionSuccess(page);
@@ -796,7 +806,7 @@ test('[P0] onboarding BYOK successful test is invalidated when connection settin
   await gotoOnboarding(page);
 
   await page.getByRole('button', { name: /Bring your own key/i }).click();
-  const byokPanel = page.locator('.onboarding-view__setup-panel').filter({ hasText: /BYOK/ });
+  const byokPanel = onboardingByokPanel(page);
   const continueButton = page.getByRole('button', { name: /^Continue$/i });
 
   await fillInlineField(page, 'API key', 'valid-api-key');
@@ -850,7 +860,7 @@ test('[P0] onboarding BYOK successful test is invalidated when Base URL or model
   await gotoOnboarding(page);
 
   await page.getByRole('button', { name: /Bring your own key/i }).click();
-  const byokPanel = page.locator('.onboarding-view__setup-panel').filter({ hasText: /BYOK/ });
+  const byokPanel = onboardingByokPanel(page);
   const continueButton = page.getByRole('button', { name: /^Continue$/i });
 
   await fillInlineField(page, 'API key', 'valid-api-key');
@@ -919,6 +929,7 @@ async function wireOnboardingMocks(
   let statusCalls = 0;
   let loginCalls = 0;
   let cancelCalls = 0;
+  let authAttemptId: string | null = null;
 
   await page.route('**/api/health', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' });
@@ -1036,6 +1047,11 @@ async function wireOnboardingMocks(
   }
 
   await page.route('**/api/integrations/vela/login', async (route) => {
+    const body = route.request().postDataJSON() as { authAttemptId?: string };
+    authAttemptId = body.authAttemptId ?? null;
+    expect(authAttemptId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
     loginCalls += 1;
     loginInFlight = true;
     if (!options.keepAmrLoginIncomplete) {
@@ -1047,11 +1063,17 @@ async function wireOnboardingMocks(
     }, loginCalls);
     await route.fulfill({
       status: 202,
-      json: { pid: 4242, startedAt: new Date().toISOString(), profile: 'local' },
+      json: {
+        pid: 4242,
+        startedAt: new Date().toISOString(),
+        profile: 'local',
+        authAttemptId,
+      },
     });
   });
 
   await page.route('**/api/integrations/vela/login/cancel', async (route) => {
+    expect(route.request().postDataJSON()).toEqual({ authAttemptId });
     cancelCalls += 1;
     loginInFlight = false;
     await page.evaluate((calls) => {
@@ -1115,7 +1137,13 @@ async function expectOnboardingFinished(page: Page) {
   }
   await expect(page).not.toHaveURL(/\/onboarding$/);
   await dismissPrivacyDialog(page);
-  await expect(page.getByRole('heading', { name: /What will you design with your agent today/i })).toBeVisible();
+  await expect(page.getByTestId('home-view')).toBeVisible();
+}
+
+function onboardingByokPanel(page: Page) {
+  return page.locator('.onboarding-view__setup-panel').filter({
+    has: page.getByText('API providers', { exact: true }),
+  });
 }
 
 async function expectFinalDesignSystemStep(page: Page) {

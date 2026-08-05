@@ -5,7 +5,7 @@ import JSZip from 'jszip';
 import { expect, test } from '@/playwright/suite';
 import { T } from '@/timeouts';
 import type { Page, Response } from '@playwright/test';
-import documentFixture from '../resources/store-screenshot-document.json' with { type: 'json' };
+import { storeScreenshotDocument as documentFixture } from '../resources/store-screenshot-document.ts';
 
 const STORAGE_KEY = 'open-design:config';
 const TINY_PNG = Buffer.from(

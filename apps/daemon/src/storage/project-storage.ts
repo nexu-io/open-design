@@ -349,7 +349,12 @@ export class S3ProjectStorage implements ProjectStorage {
     const init: RequestInit = {
       method:  args.method,
       headers,
-      ...(args.body ? { body: args.body } : {}),
+      // Node `Buffer` (ArrayBufferLike-backed) is not assignable to the DOM
+      // `BodyInit` union under `exactOptionalPropertyTypes`, and this module
+      // is also compiled from the e2e package where lib.dom is present.
+      ...(args.body
+        ? { body: args.body as unknown as NonNullable<RequestInit['body']> }
+        : {}),
     };
     return this.fetchFn(url, init);
   }

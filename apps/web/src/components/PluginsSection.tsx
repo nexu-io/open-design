@@ -38,7 +38,10 @@ import type {
 import {
   applyPlugin,
   renderPluginBriefTemplate,
+  resolvedWorkspaceContextForWrite,
 } from '../state/projects';
+import { useProjectCollabContext } from '../collab/collab-context';
+import { useWorkspaceContext } from '../collab/useWorkspaceContext';
 import { useI18n } from '../i18n';
 import { ContextChipStrip } from './ContextChipStrip';
 import { InlinePluginsRail } from './InlinePluginsRail';
@@ -99,8 +102,32 @@ export interface PluginsSectionHandle {
 export const PluginsSection = forwardRef<PluginsSectionHandle, Props>(
   function PluginsSection(props, ref) {
     const { locale } = useI18n();
+    const shellWorkspace = useWorkspaceContext();
+    const projectCollab = useProjectCollabContext();
     const [applied, setApplied] = useState<ApplyResult | null>(null);
     const [activeRecord, setActiveRecord] = useState<InstalledPluginRecord | null>(null);
+
+    const workspaceContextForAction = useCallback(() => {
+      if (props.projectId) {
+        if (projectCollab.workspaceContextLoading) {
+          throw new Error(
+            'Workspace context is unavailable. Try again when workspace sync finishes.',
+          );
+        }
+        return projectCollab.workspaceContext;
+      }
+      if (shellWorkspace.identityChangePending) {
+        throw new Error(
+          'Workspace context is unavailable. Try again when workspace sync finishes.',
+        );
+      }
+      return resolvedWorkspaceContextForWrite(shellWorkspace);
+    }, [
+      props.projectId,
+      projectCollab.workspaceContext,
+      projectCollab.workspaceContextLoading,
+      shellWorkspace,
+    ]);
 
     const handleApplied = useCallback(
       (record: InstalledPluginRecord | null, result: ApplyResult) => {
@@ -136,9 +163,16 @@ export const PluginsSection = forwardRef<PluginsSectionHandle, Props>(
       ref,
       () => ({
         applyById: async (pluginId, record = null) => {
+          let workspaceContext;
+          try {
+            workspaceContext = workspaceContextForAction();
+          } catch {
+            return null;
+          }
           const result = await applyPlugin(pluginId, {
             ...(props.projectId ? { projectId: props.projectId } : {}),
             locale,
+            workspaceContext,
           });
           if (!result) return null;
           handleApplied(record, result);
@@ -147,7 +181,14 @@ export const PluginsSection = forwardRef<PluginsSectionHandle, Props>(
         clear,
         getActiveRecord: () => activeRecord,
       }),
-      [props.projectId, locale, handleApplied, clear, activeRecord],
+      [
+        props.projectId,
+        locale,
+        workspaceContextForAction,
+        handleApplied,
+        clear,
+        activeRecord,
+      ],
     );
 
     const showRail = props.showRail ?? true;

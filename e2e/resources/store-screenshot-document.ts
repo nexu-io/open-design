@@ -1,0 +1,12 @@
+export const storeScreenshotDocument = {
+  product: {
+    name: 'Focus Atlas',
+    summary: 'Plan focused work with a calm daily rhythm.',
+    audience: 'Independent creators',
+    features: ['Plan the day', 'Focus deeply', 'Review progress', 'Build momentum'],
+  },
+  designSystemId: 'neutral-modern',
+  templateId: 'minimal-center',
+  pageCount: 4,
+  platforms: ['appStore', 'googlePlay'],
+} as const;

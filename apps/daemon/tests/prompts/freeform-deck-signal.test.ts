@@ -4,10 +4,12 @@ import { composeSystemPrompt, detectDeckIntentSignal } from '../../src/prompts/s
 
 const MAYBE_DECK_HEADING = '## If this brief is a slide deck / keynote / presentation';
 const DECK_FRAMEWORK_HEADING = '# Slide deck — fixed framework';
+const NESTED_DIAGRAM_HEADING = '## Nested / concentric diagram discipline';
 
 describe('detectDeckIntentSignal', () => {
   it('fires on English deck vocabulary', () => {
     expect(detectDeckIntentSignal('build me a pitch deck for investors')).toBe(true);
+    expect(detectDeckIntentSignal('Write a Seed Pitch like a Top Pre-Seed Founder')).toBe(true);
     expect(detectDeckIntentSignal('a 10-slide keynote')).toBe(true);
     expect(detectDeckIntentSignal('export the PPT')).toBe(true);
     expect(detectDeckIntentSignal('make a slideshow of the trip')).toBe(true);
@@ -45,6 +47,7 @@ describe('composeSystemPrompt — freeform maybe-deck gating', () => {
       const out = composeSystemPrompt(input);
       expect(out).toContain(MAYBE_DECK_HEADING);
       expect(out).toContain(DECK_FRAMEWORK_HEADING);
+      expect(out).toContain(NESTED_DIAGRAM_HEADING);
     }
   });
 
@@ -52,6 +55,7 @@ describe('composeSystemPrompt — freeform maybe-deck gating', () => {
     const out = composeSystemPrompt({ ...freeform, freeformDeckSignal: false });
     expect(out).not.toContain(MAYBE_DECK_HEADING);
     expect(out).not.toContain(DECK_FRAMEWORK_HEADING);
+    expect(out).not.toContain(NESTED_DIAGRAM_HEADING);
   });
 
   it('never gates deck-kind projects on the signal', () => {
@@ -61,6 +65,7 @@ describe('composeSystemPrompt — freeform maybe-deck gating', () => {
       freeformDeckSignal: false,
     });
     expect(out).toContain(DECK_FRAMEWORK_HEADING);
+    expect(out).toContain(NESTED_DIAGRAM_HEADING);
     expect(out).not.toContain(MAYBE_DECK_HEADING);
   });
 });

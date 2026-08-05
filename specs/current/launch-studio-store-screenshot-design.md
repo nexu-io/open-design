@@ -3,7 +3,7 @@
 ## 文档状态
 
 - 日期：2026-07-28
-- 状态：设计规格已确认，进入实施计划
+- 状态：第一阶段实现完成；验收受阻并继续进行
 - 产品：Launch Studio
 - 上游基线：`nexu-io/open-design` `main`，提交 `f52fda29a8a6fc65c501a45bb165b6f5208194a1`
 - 目标平台：macOS 和 Windows 桌面端

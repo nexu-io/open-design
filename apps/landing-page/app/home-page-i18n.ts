@@ -286,7 +286,7 @@ export const EXTRA_LOCALIZED_HOME_BODY_COPY: Partial<
       items: [
         { badge: 'Deck', title: 'Decks magazine', body: 'Slides éditoriales avec guizang-ppt. Layout magazine et hero WebGL inclus.' },
         { badge: 'Média', title: 'Matière synthétique', body: 'Gpt-image-2, Seedance et HyperFrames. Image, vidéo et audio dans la même surface de chat que le code.' },
-        { badge: 'Loop', title: 'Chorégraphie du prompt', body: 'Avant le premier pixel, un formulaire verrouille la direction. Trente secondes évitent des heures de reprises.' },
+        { badge: 'Loop', title: 'Chorégraphie du prompt', body: 'Un formulaire ciblé n’apparaît que lorsque des choix non résolus changeraient sensiblement le résultat.' },
         { badge: 'Critique', title: 'Raisonnement visuel', body: 'Une auto-critique en cinq axes protège chaque artifact : posture, hiérarchie, exécution, précision et retenue.' },
         { badge: 'Runtime', title: 'Systèmes souples', body: 'Iframe sandbox, todos en streaming, vrai système de fichiers cwd et boucles adaptatives humain-machine.' },
       ],
@@ -304,7 +304,7 @@ export const EXTRA_LOCALIZED_HOME_BODY_COPY: Partial<
       lead: 'Chaque étape est itérative, visuelle et ancrée dans la recherche : des fichiers composables plutôt que des prompts opaques.',
       steps: [
         { title: 'Détecter', body: (skills, systems) => `Le daemon inspecte $PATH pour 12 agents de code et charge ${skills} skills plus ${systems} systèmes au démarrage.` },
-        { title: 'Découvrir', body: () => 'Le premier tour est un formulaire : surface, audience, ton, échelle et contexte de marque sont fixés en 30 secondes.' },
+        { title: 'Découvrir', body: () => 'Clarifier seulement si nécessaire : des questions ciblées sur la surface, l’audience, le ton, l’échelle ou le contexte de marque non résolus.' },
         { title: 'Diriger', body: () => 'Choisissez une des 5 directions visuelles déterministes avec palette OKLch, pile typo et posture de layout.' },
         { title: 'Livrer', body: () => 'L’agent écrit sur disque, vous prévisualisez dans l’iframe sandbox et exportez HTML / PDF / PPTX / ZIP / Markdown.' },
       ],
@@ -441,7 +441,7 @@ export const EXTRA_LOCALIZED_HOME_BODY_COPY: Partial<
       items: [
         { badge: 'Deck', title: 'Журнальные decks', body: 'Редакционные слайды на guizang-ppt. Журнальная сетка и WebGL hero входят в комплект.' },
         { badge: 'Медиа', title: 'Синтетические медиа', body: 'Gpt-image-2, Seedance и HyperFrames. Изображения, видео и аудио на той же chat surface, что и code.' },
-        { badge: 'Loop', title: 'Хореография prompt', body: 'До первого пикселя форма вопросов фиксирует направление. 30 секунд выбора экономят долгие переделки.' },
+        { badge: 'Loop', title: 'Хореография prompt', body: 'Форма с точечными вопросами появляется только тогда, когда нерешённый выбор существенно меняет результат.' },
         { badge: 'Критика', title: 'Визуальное рассуждение', body: 'Пять осей self-critique защищают artifact: позиция, иерархия, исполнение, конкретность и сдержанность.' },
         { badge: 'Runtime', title: 'Мягкие системы', body: 'Sandbox iframe, streaming todo, реальная cwd file system и адаптивные циклы человека и машины.' },
       ],
@@ -459,7 +459,7 @@ export const EXTRA_LOCALIZED_HOME_BODY_COPY: Partial<
       lead: 'Каждый этап итеративен, визуален и основан на исследовании: составные файлы вместо непрозрачных prompts.',
       steps: [
         { title: 'Обнаружить', body: (skills, systems) => `Daemon сканирует $PATH для 12 coding agents и при старте загружает ${skills} skills и ${systems} систем.` },
-        { title: 'Исследовать', body: () => 'Первый turn — форма вопросов: surface, аудитория, тон, масштаб и бренд-контекст фиксируются за 30 секунд.' },
+        { title: 'Исследовать', body: () => 'Уточнять только при необходимости: задавать точечные вопросы о нерешённых surface, аудитории, тоне, масштабе или бренд-контексте.' },
         { title: 'Направить', body: () => 'Выберите одно из 5 детерминированных visual directions с OKLch-палитрой, font stack и layout posture.' },
         { title: 'Доставить', body: () => 'Agent пишет на диск, вы смотрите preview в sandbox iframe и экспортируете HTML / PDF / PPTX / ZIP / Markdown.' },
       ],
@@ -596,7 +596,7 @@ export const EXTRA_LOCALIZED_HOME_BODY_COPY: Partial<
       items: [
         { badge: 'Deck', title: 'Decks tipo revista', body: 'Slides editoriales con guizang-ppt. Layout de revista y hero WebGL incluidos.' },
         { badge: 'Media', title: 'Materia sintética', body: 'Gpt-image-2, Seedance y HyperFrames. Imagen, video y audio en la misma superficie de chat que el código.' },
-        { badge: 'Loop', title: 'Coreografía del prompt', body: 'Antes del primer píxel, un formulario fija la dirección. Treinta segundos evitan horas de retrabajo.' },
+        { badge: 'Loop', title: 'Coreografía del prompt', body: 'Solo cuando las decisiones pendientes cambiarían sustancialmente el resultado aparece un formulario de preguntas enfocado.' },
         { badge: 'Crítica', title: 'Razonamiento visual', body: 'Una auto-crítica de cinco ejes protege cada artifact: postura, jerarquía, ejecución, especificidad y contención.' },
         { badge: 'Runtime', title: 'Sistemas blandos', body: 'Iframe sandbox, todos en streaming, filesystem cwd real y bucles adaptativos humano-máquina.' },
       ],
@@ -614,7 +614,7 @@ export const EXTRA_LOCALIZED_HOME_BODY_COPY: Partial<
       lead: 'Cada etapa es iterativa, visual y basada en investigación: archivos componibles en lugar de prompts opacos.',
       steps: [
         { title: 'Detectar', body: (skills, systems) => `El daemon escanea $PATH en busca de 12 agentes de código y carga ${skills} skills más ${systems} sistemas al iniciar.` },
-        { title: 'Descubrir', body: () => 'El primer turn es un formulario: superficie, audiencia, tono, escala y contexto de marca quedan fijados en 30 segundos.' },
+        { title: 'Descubrir', body: () => 'Aclara solo cuando haga falta: preguntas enfocadas sobre superficie, audiencia, tono, escala o contexto de marca aún sin resolver.' },
         { title: 'Dirigir', body: () => 'Elige una de 5 direcciones visuales determinísticas con paleta OKLch, font stack y postura de layout.' },
         { title: 'Entregar', body: () => 'El agente escribe a disco, revisas en el iframe sandbox y exportas HTML / PDF / PPTX / ZIP / Markdown.' },
       ],
@@ -751,7 +751,7 @@ export const EXTRA_LOCALIZED_HOME_BODY_COPY: Partial<
       items: [
         { badge: 'Deck', title: 'Decks de revista', body: 'Slides editoriais com guizang-ppt. Layout de revista e hero WebGL incluídos.' },
         { badge: 'Mídia', title: 'Matéria sintética', body: 'Gpt-image-2, Seedance e HyperFrames. Imagem, vídeo e áudio na mesma superfície de chat do código.' },
-        { badge: 'Loop', title: 'Coreografia do prompt', body: 'Antes do primeiro pixel, um formulário fixa a direção. Trinta segundos evitam horas de retrabalho.' },
+        { badge: 'Loop', title: 'Coreografia do prompt', body: 'Só quando decisões em aberto mudariam materialmente o resultado, um formulário focado mantém a próxima iteração no rumo.' },
         { badge: 'Crítica', title: 'Raciocínio visual', body: 'Uma auto-crítica em cinco eixos protege cada artifact: postura, hierarquia, execução, especificidade e contenção.' },
         { badge: 'Runtime', title: 'Sistemas flexíveis', body: 'Iframe sandbox, todos em streaming, filesystem cwd real e loops adaptativos entre humano e máquina.' },
       ],
@@ -769,7 +769,7 @@ export const EXTRA_LOCALIZED_HOME_BODY_COPY: Partial<
       lead: 'Cada etapa é iterativa, visual e baseada em pesquisa: arquivos componíveis em vez de prompts opacos.',
       steps: [
         { title: 'Detectar', body: (skills, systems) => `O daemon varre o $PATH por 12 agentes de código e carrega ${skills} skills mais ${systems} sistemas ao iniciar.` },
-        { title: 'Descobrir', body: () => 'O primeiro turn é um formulário: superfície, público, tom, escala e contexto de marca são fixados em 30 segundos.' },
+        { title: 'Descobrir', body: () => 'Esclareça apenas quando necessário: perguntas focadas sobre superfície, público, tom, escala ou contexto de marca ainda não resolvidos.' },
         { title: 'Direcionar', body: () => 'Escolha uma das 5 direções visuais determinísticas com paleta OKLch, font stack e postura de layout.' },
         { title: 'Entregar', body: () => 'O agente escreve em disco, você revisa no iframe sandbox e exporta HTML / PDF / PPTX / ZIP / Markdown.' },
       ],
@@ -906,7 +906,7 @@ export const EXTRA_LOCALIZED_HOME_BODY_COPY: Partial<
       items: [
         { badge: 'Deck', title: 'Deck da rivista', body: 'Slide editoriali con guizang-ppt. Layout magazine e hero WebGL inclusi.' },
         { badge: 'Media', title: 'Materia sintetica', body: 'Gpt-image-2, Seedance e HyperFrames. Immagini, video e audio nella stessa superficie chat del codice.' },
-        { badge: 'Loop', title: 'Coreografia del prompt', body: 'Prima del primo pixel, un modulo fissa la direzione. Trenta secondi evitano ore di rilavorazione.' },
+        { badge: 'Loop', title: 'Coreografia del prompt', body: 'Un modulo mirato appare solo quando le scelte irrisolte cambierebbero materialmente il risultato.' },
         { badge: 'Critica', title: 'Ragionamento visivo', body: 'Una self-critique a cinque assi protegge ogni artifact: postura, gerarchia, esecuzione, specificità e misura.' },
         { badge: 'Runtime', title: 'Sistemi morbidi', body: 'Iframe sandbox, todo in streaming, filesystem cwd reale e loop adattivi tra umano e macchina.' },
       ],
@@ -924,7 +924,7 @@ export const EXTRA_LOCALIZED_HOME_BODY_COPY: Partial<
       lead: 'Ogni fase è iterativa, visiva e basata sulla ricerca: file componibili invece di prompt opachi.',
       steps: [
         { title: 'Rilevare', body: (skills, systems) => `Il daemon cerca 12 agenti di codice in $PATH e carica ${skills} skill più ${systems} sistemi all’avvio.` },
-        { title: 'Scoprire', body: () => 'Il primo turn è un modulo: superficie, pubblico, tono, scala e contesto del brand si fissano in 30 secondi.' },
+        { title: 'Scoprire', body: () => 'Chiarisci solo quando serve: domande mirate su superficie, pubblico, tono, scala o contesto del brand ancora irrisolti.' },
         { title: 'Guidare', body: () => 'Scegli una delle 5 direzioni visuali deterministiche con palette OKLch, font stack e postura di layout.' },
         { title: 'Consegnare', body: () => 'L’agente scrive su disco, controlli nell’iframe sandbox ed esporti HTML / PDF / PPTX / ZIP / Markdown.' },
       ],
@@ -1061,7 +1061,7 @@ export const EXTRA_LOCALIZED_HOME_BODY_COPY: Partial<
       items: [
         { badge: 'Deck', title: 'Deck kiểu tạp chí', body: 'Slide biên tập bằng guizang-ppt. Gồm layout tạp chí và hero WebGL.' },
         { badge: 'Media', title: 'Vật liệu tổng hợp', body: 'Gpt-image-2, Seedance và HyperFrames. Ảnh, video, âm thanh cùng bề mặt chat với code.' },
-        { badge: 'Loop', title: 'Biên đạo prompt', body: 'Trước pixel đầu tiên, form câu hỏi khóa hướng đi. Ba mươi giây chọn giúp tránh nhiều giờ sửa lại.' },
+        { badge: 'Loop', title: 'Biên đạo prompt', body: 'Chỉ khi lựa chọn chưa rõ làm thay đổi đáng kể kết quả, một form câu hỏi tập trung mới xuất hiện.' },
         { badge: 'Critique', title: 'Suy luận thị giác', body: 'Self-critique năm trục bảo vệ artifact: lập trường, phân cấp, thực thi, độ cụ thể và tiết chế.' },
         { badge: 'Runtime', title: 'Hệ mềm', body: 'Iframe sandbox, todo streaming, filesystem cwd thật và vòng lặp thích ứng giữa người và máy.' },
       ],
@@ -1079,7 +1079,7 @@ export const EXTRA_LOCALIZED_HOME_BODY_COPY: Partial<
       lead: 'Mỗi giai đoạn đều lặp, trực quan và dựa trên nghiên cứu: file có thể ghép thay vì prompt mơ hồ.',
       steps: [
         { title: 'Phát hiện', body: (skills, systems) => `Daemon quét $PATH để tìm 12 agent viết code và nạp ${skills} skill cùng ${systems} hệ thống khi khởi động.` },
-        { title: 'Khám phá', body: () => 'Turn đầu là form câu hỏi: bề mặt, người xem, tông, quy mô và ngữ cảnh brand được khóa trong 30 giây.' },
+        { title: 'Khám phá', body: () => 'Chỉ làm rõ khi cần: hỏi tập trung về bề mặt, người xem, tông, quy mô hoặc ngữ cảnh brand còn chưa rõ.' },
         { title: 'Định hướng', body: () => 'Chọn một trong 5 hướng thị giác xác định với palette OKLch, font stack và posture layout.' },
         { title: 'Giao hàng', body: () => 'Agent ghi ra disk, bạn xem trong iframe sandbox và export HTML / PDF / PPTX / ZIP / Markdown.' },
       ],
@@ -1216,7 +1216,7 @@ export const EXTRA_LOCALIZED_HOME_BODY_COPY: Partial<
       items: [
         { badge: 'Deck', title: 'Decki magazynowe', body: 'Slajdy redakcyjne z guizang-ppt. Layout magazynowy i hero WebGL w pakiecie.' },
         { badge: 'Media', title: 'Materia syntetyczna', body: 'Gpt-image-2, Seedance i HyperFrames. Obraz, wideo i audio na tej samej powierzchni czatu co kod.' },
-        { badge: 'Loop', title: 'Choreografia promptu', body: 'Przed pierwszym pikselem formularz pytań blokuje kierunek. Trzydzieści sekund wyboru oszczędza godziny poprawek.' },
+        { badge: 'Loop', title: 'Choreografia promptu', body: 'Ukierunkowany formularz pojawia się tylko wtedy, gdy nierozstrzygnięty wybór istotnie zmieniłby wynik.' },
         { badge: 'Krytyka', title: 'Rozumowanie wizualne', body: 'Pięcioosiowa self-critique chroni każdy artifact: postawę, hierarchię, wykonanie, konkret i powściągliwość.' },
         { badge: 'Runtime', title: 'Miękkie systemy', body: 'Iframe sandbox, streaming todo, prawdziwy filesystem cwd i adaptacyjne pętle człowiek-maszyna.' },
       ],
@@ -1234,7 +1234,7 @@ export const EXTRA_LOCALIZED_HOME_BODY_COPY: Partial<
       lead: 'Każdy etap jest iteracyjny, wizualny i badawczy: kompozycyjne pliki zamiast nieprzejrzystych promptów.',
       steps: [
         { title: 'Wykryj', body: (skills, systems) => `Daemon skanuje $PATH w poszukiwaniu 12 agentów do kodu i przy starcie ładuje ${skills} skills oraz ${systems} systemów.` },
-        { title: 'Odkryj', body: () => 'Pierwszy turn to formularz: powierzchnia, odbiorcy, ton, skala i kontekst marki są ustalone w 30 sekund.' },
+        { title: 'Odkryj', body: () => 'Doprecyzuj tylko w razie potrzeby: pytaj o nierozstrzygniętą powierzchnię, odbiorców, ton, skalę lub kontekst marki.' },
         { title: 'Pokieruj', body: () => 'Wybierz jeden z 5 deterministycznych kierunków wizualnych z paletą OKLch, font stack i postawą layoutu.' },
         { title: 'Dostarcz', body: () => 'Agent zapisuje na dysk, sprawdzasz w iframe sandbox i eksportujesz HTML / PDF / PPTX / ZIP / Markdown.' },
       ],
@@ -1371,7 +1371,7 @@ export const EXTRA_LOCALIZED_HOME_BODY_COPY: Partial<
       items: [
         { badge: 'Deck', title: 'Deck bergaya majalah', body: 'Slide editorial dengan guizang-ppt. Layout majalah dan hero WebGL disertakan.' },
         { badge: 'Media', title: 'Materi sintetis', body: 'Gpt-image-2, Seedance, dan HyperFrames. Gambar, video, dan audio di permukaan chat yang sama dengan kode.' },
-        { badge: 'Loop', title: 'Koreografi prompt', body: 'Sebelum pixel pertama, form pertanyaan mengunci arah. Tiga puluh detik pilihan menghindari jam revisi.' },
+        { badge: 'Loop', title: 'Koreografi prompt', body: 'Form pertanyaan terfokus hanya muncul ketika pilihan yang belum jelas akan mengubah hasil secara material.' },
         { badge: 'Kritik', title: 'Penalaran visual', body: 'Self-critique lima sumbu melindungi setiap artifact: sikap, hierarki, eksekusi, spesifisitas, dan kendali.' },
         { badge: 'Runtime', title: 'Sistem lunak', body: 'Iframe sandbox, todo streaming, filesystem cwd nyata, dan loop adaptif manusia-mesin.' },
       ],
@@ -1389,7 +1389,7 @@ export const EXTRA_LOCALIZED_HOME_BODY_COPY: Partial<
       lead: 'Setiap tahap iteratif, visual, dan berbasis riset: file komposable, bukan prompt yang kabur.',
       steps: [
         { title: 'Deteksi', body: (skills, systems) => `Daemon memindai $PATH untuk 12 agent coding dan memuat ${skills} skill plus ${systems} sistem saat start.` },
-        { title: 'Temukan', body: () => 'Turn pertama adalah form pertanyaan: permukaan, audiens, tone, skala, dan konteks brand dikunci dalam 30 detik.' },
+        { title: 'Temukan', body: () => 'Perjelas hanya bila perlu: tanyakan permukaan, audiens, tone, skala, atau konteks brand yang masih belum jelas.' },
         { title: 'Arahkan', body: () => 'Pilih satu dari 5 arah visual deterministik dengan palet OKLch, font stack, dan postur layout.' },
         { title: 'Kirim', body: () => 'Agent menulis ke disk, Anda cek di iframe sandbox dan mengekspor HTML / PDF / PPTX / ZIP / Markdown.' },
       ],
@@ -1526,7 +1526,7 @@ export const EXTRA_LOCALIZED_HOME_BODY_COPY: Partial<
       items: [
         { badge: 'Deck', title: 'Magazine-decks', body: 'Redactionele slides met guizang-ppt. Magazine-layout en WebGL-hero inbegrepen.' },
         { badge: 'Media', title: 'Synthetisch materiaal', body: 'Gpt-image-2, Seedance en HyperFrames. Beeld, video en audio op hetzelfde chatvlak als code.' },
-        { badge: 'Loop', title: 'Prompt-choreografie', body: 'Voor de eerste pixel vergrendelt een vragenformulier de richting. Dertig seconden kiezen voorkomt uren herwerk.' },
+        { badge: 'Loop', title: 'Prompt-choreografie', body: 'Een gericht vragenformulier verschijnt alleen wanneer een open keuze het resultaat wezenlijk zou veranderen.' },
         { badge: 'Kritiek', title: 'Visueel redeneren', body: 'Een vijfassige self-critique beschermt elk artifact: houding, hiërarchie, uitvoering, specificiteit en terughoudendheid.' },
         { badge: 'Runtime', title: 'Zachte systemen', body: 'Sandbox-iframe, streaming todo, echt cwd-filesystem en adaptieve mens-machine-loops.' },
       ],
@@ -1544,7 +1544,7 @@ export const EXTRA_LOCALIZED_HOME_BODY_COPY: Partial<
       lead: 'Elke stap is iteratief, visueel en onderzoeksgedreven: combineerbare bestanden in plaats van ondoorzichtige prompts.',
       steps: [
         { title: 'Detecteren', body: (skills, systems) => `De daemon scant $PATH voor 12 code-agents en laadt bij start ${skills} skills plus ${systems} systemen.` },
-        { title: 'Ontdekken', body: () => 'De eerste turn is een formulier: oppervlak, publiek, toon, schaal en merkcontext staan vast in 30 seconden.' },
+        { title: 'Ontdekken', body: () => 'Verduidelijk alleen wanneer nodig: gerichte vragen over onbeslist oppervlak, publiek, toon, schaal of merkcontext.' },
         { title: 'Sturen', body: () => 'Kies een van 5 deterministische visuele richtingen met OKLch-palet, font stack en layouthouding.' },
         { title: 'Leveren', body: () => 'De agent schrijft naar disk, jij bekijkt in de sandbox-iframe en exporteert HTML / PDF / PPTX / ZIP / Markdown.' },
       ],
@@ -1681,7 +1681,7 @@ export const EXTRA_LOCALIZED_HOME_BODY_COPY: Partial<
       items: [
         { badge: 'Deck', title: 'Decks بأسلوب المجلة', body: 'شرائح تحريرية عبر guizang-ppt. تشمل تخطيط المجلة وWebGL hero.' },
         { badge: 'Media', title: 'مادة اصطناعية', body: 'Gpt-image-2 وSeedance وHyperFrames. صورة وفيديو وصوت في نفس سطح chat مع code.' },
-        { badge: 'Loop', title: 'تصميم حركة prompt', body: 'قبل أول pixel، يثبت نموذج الأسئلة الاتجاه. ثلاثون ثانية توفر ساعات من إعادة العمل.' },
+        { badge: 'Loop', title: 'تصميم حركة prompt', body: 'لا يظهر نموذج الأسئلة المركّز إلا عندما يغيّر قرار غير محسوم النتيجة بصورة جوهرية.' },
         { badge: 'Critique', title: 'استدلال بصري', body: 'Self-critique بخمسة محاور يحمي كل artifact: الموقف، الهرمية، التنفيذ، التحديد، والضبط.' },
         { badge: 'Runtime', title: 'أنظمة مرنة', body: 'Iframe sandbox وtodo streaming وfilesystem cwd حقيقي وحلقات تكيف بين الإنسان والآلة.' },
       ],
@@ -1699,7 +1699,7 @@ export const EXTRA_LOCALIZED_HOME_BODY_COPY: Partial<
       lead: 'كل مرحلة تكرارية وبصرية ومدفوعة بالبحث: ملفات قابلة للتركيب بدلاً من prompts مبهمة.',
       steps: [
         { title: 'اكتشاف', body: (skills, systems) => `يفحص daemon المسار $PATH للعثور على 12 agent برمجة ويحمل ${skills} skills و ${systems} أنظمة عند البدء.` },
-        { title: 'استكشاف', body: () => 'أول turn هو نموذج أسئلة: السطح، الجمهور، النبرة، المقياس وسياق العلامة تثبت خلال 30 ثانية.' },
+        { title: 'استكشاف', body: () => 'وضّح عند الحاجة فقط: أسئلة مركّزة حول السطح أو الجمهور أو النبرة أو المقياس أو سياق العلامة غير المحسوم.' },
         { title: 'توجيه', body: () => 'اختر واحداً من 5 اتجاهات بصرية حتمية مع palette OKLch وfont stack ووضعية layout.' },
         { title: 'تسليم', body: () => 'يكتب الـ Agent على disk، تراجع داخل iframe sandbox ثم تصدر HTML / PDF / PPTX / ZIP / Markdown.' },
       ],
@@ -1836,7 +1836,7 @@ export const EXTRA_LOCALIZED_HOME_BODY_COPY: Partial<
       items: [
         { badge: 'Deck', title: 'Dergi deckleri', body: 'guizang-ppt ile editoryal slaytlar. Dergi layoutu ve WebGL hero dahil.' },
         { badge: 'Media', title: 'Sentetik materyal', body: 'Gpt-image-2, Seedance ve HyperFrames. Görsel, video ve ses kodla aynı chat yüzeyinde.' },
-        { badge: 'Loop', title: 'Prompt koreografisi', body: 'İlk pikselden önce soru formu yönü sabitler. Otuz saniyelik seçim saatlerce revizyonu önler.' },
+        { badge: 'Loop', title: 'Prompt koreografisi', body: 'Odaklı soru formu yalnızca çözülmemiş bir seçim sonucu önemli ölçüde değiştirecekse görünür.' },
         { badge: 'Critique', title: 'Görsel akıl yürütme', body: 'Beş eksenli self-critique her artifactı korur: duruş, hiyerarşi, uygulama, özgüllük ve ölçü.' },
         { badge: 'Runtime', title: 'Yumuşak sistemler', body: 'Sandbox iframe, streaming todo, gerçek cwd filesystem ve insan-makine adaptif döngüleri.' },
       ],
@@ -1854,7 +1854,7 @@ export const EXTRA_LOCALIZED_HOME_BODY_COPY: Partial<
       lead: 'Her aşama yinelemeli, görsel ve araştırma temellidir: opak promptlar yerine birleştirilebilir dosyalar.',
       steps: [
         { title: 'Algıla', body: (skills, systems) => `Daemon $PATH içinde 12 coding agent arar ve başlangıçta ${skills} skill ile ${systems} sistem yükler.` },
-        { title: 'Keşfet', body: () => 'İlk turn bir soru formudur: yüzey, kitle, ton, ölçek ve marka bağlamı 30 saniyede sabitlenir.' },
+        { title: 'Keşfet', body: () => 'Yalnızca gerektiğinde netleştir: çözülmemiş yüzey, kitle, ton, ölçek veya marka bağlamına odaklanan sorular sor.' },
         { title: 'Yönlendir', body: () => 'OKLch palette, font stack ve layout duruşuyla 5 deterministik görsel yönden birini seç.' },
         { title: 'Teslim et', body: () => 'Agent diske yazar, sandbox iframe içinde kontrol eder ve HTML / PDF / PPTX / ZIP / Markdown export edersin.' },
       ],
@@ -1991,7 +1991,7 @@ export const EXTRA_LOCALIZED_HOME_BODY_COPY: Partial<
       items: [
         { badge: 'Deck', title: 'Журнальні decks', body: 'Редакційні слайди на guizang-ppt. Журнальна сітка та WebGL hero включені.' },
         { badge: 'Media', title: 'Синтетичні медіа', body: 'Gpt-image-2, Seedance і HyperFrames. Зображення, відео й аудіо на тій самій chat surface, що й code.' },
-        { badge: 'Loop', title: 'Хореографія prompt', body: 'До першого pixel форма питань фіксує напрям. Тридцять секунд вибору економлять години переробок.' },
+        { badge: 'Loop', title: 'Хореографія prompt', body: 'Сфокусована форма з’являється лише тоді, коли невирішений вибір суттєво змінить результат.' },
         { badge: 'Critique', title: 'Візуальне мислення', body: 'П’ятиосьова self-critique захищає кожен artifact: позицію, ієрархію, виконання, конкретність і стриманість.' },
         { badge: 'Runtime', title: 'М’які системи', body: 'Sandbox iframe, streaming todo, реальний cwd filesystem і адаптивні цикли людини та машини.' },
       ],
@@ -2009,7 +2009,7 @@ export const EXTRA_LOCALIZED_HOME_BODY_COPY: Partial<
       lead: 'Кожен етап ітеративний, візуальний і дослідницький: composable files замість непрозорих prompts.',
       steps: [
         { title: 'Виявити', body: (skills, systems) => `Daemon сканує $PATH для 12 coding agents і під час старту завантажує ${skills} skills та ${systems} systems.` },
-        { title: 'Дослідити', body: () => 'Перший turn — форма питань: surface, аудиторія, тон, масштаб і контекст бренду фіксуються за 30 секунд.' },
+        { title: 'Дослідити', body: () => 'Уточнюйте лише за потреби: ставте сфокусовані питання про невирішені surface, аудиторію, тон, масштаб або контекст бренду.' },
         { title: 'Спрямувати', body: () => 'Оберіть один із 5 детермінованих visual directions з OKLch palette, font stack і layout posture.' },
         { title: 'Доставити', body: () => 'Agent пише на disk, ви перевіряєте в sandbox iframe і експортуєте HTML / PDF / PPTX / ZIP / Markdown.' },
       ],

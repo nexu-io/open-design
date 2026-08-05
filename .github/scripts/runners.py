@@ -7,8 +7,9 @@ from pathlib import Path
 
 GITHUB_HOSTED = ["ubuntu-24.04"]
 WINDOWS_HOSTED = ["windows-latest"]
-CONTABO_CONTROL = ["self-hosted", "Linux", "X64", "od-persistent-ci", "od-ci-hot-poc"]
-BLACKSMITH_4V = ["blacksmith-4vcpu-ubuntu-2404"]
+NEXU_SMALL = ["nexu-runners-small"]
+NEXU_MEDIUM = ["nexu-runners-medium"]
+NEXU_LARGE = ["nexu-runners-large"]
 
 
 def compact_json(value):
@@ -16,26 +17,26 @@ def compact_json(value):
 
 
 def normalize_mode(raw_mode):
-    mode = (raw_mode or "default").strip().lower()
+    mode = raw_mode or "default"
     if mode in {"default", "performance", "economic"}:
         return mode
     return "default"
 
 
 def resolve_contract(mode):
-    general_medium = BLACKSMITH_4V if mode == "performance" else GITHUB_HOSTED
-    hot_path = GITHUB_HOSTED if mode == "economic" else BLACKSMITH_4V
-    control = CONTABO_CONTROL if mode == "default" else GITHUB_HOSTED
+    control = GITHUB_HOSTED if mode == "economic" else NEXU_SMALL
+    workload = GITHUB_HOSTED if mode == "economic" else NEXU_MEDIUM
+    browser_workload = GITHUB_HOSTED if mode == "economic" else NEXU_LARGE
 
     return {
         "runs_on": {
             "control": control,
-            "general_medium": general_medium,
-            "workspace_unit": GITHUB_HOSTED,
+            "general_medium": workload,
+            "workspace_unit": workload,
             "windows_tools": WINDOWS_HOSTED,
-            "js_hot": hot_path,
-            "ui_hot": hot_path,
-            "visual_hot": hot_path,
+            "js_hot": workload,
+            "ui_hot": browser_workload,
+            "visual_hot": browser_workload,
         },
         "decision": {
             "schema_version": 1,

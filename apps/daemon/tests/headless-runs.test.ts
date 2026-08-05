@@ -30,6 +30,14 @@ describe('POST /api/runs headless fallbacks', () => {
     else process.env.OD_AGENT_HOME = oldAgentHome;
   });
 
+  it('does not expose the retired secure BYOK profile API', async () => {
+    started = await startTestServer();
+
+    const response = await fetch(`${started.url}/api/byok/profiles`);
+
+    expect(response.status).toBe(404);
+  });
+
   it('rejects incomplete BYOK OpenCode config before creating a run', async () => {
     started = await startTestServer();
     const incompleteConfigs = [
@@ -80,7 +88,9 @@ describe('POST /api/runs headless fallbacks', () => {
         await expect(runResponse.json()).resolves.toMatchObject({
           error: {
             code: 'VALIDATION_FAILED',
-            message: expect.stringContaining('provider, API key, and model'),
+            message: expect.stringMatching(
+              /complete provider configuration/iu,
+            ),
           },
         });
       }
@@ -119,8 +129,628 @@ describe('POST /api/runs headless fallbacks', () => {
       }),
     });
     expect(runResponse.status).toBe(202);
-    const runBody = await runResponse.json() as { conversationId: string | null };
+    const runBody = await runResponse.json() as {
+      conversationId: string | null;
+      assistantMessageId: string | null;
+    };
     expect(runBody.conversationId).toBe(seededConversationId);
+    // Headless omit path must still mint a pin id for session resume cursor.
+    expect(typeof runBody.assistantMessageId).toBe('string');
+    expect(runBody.assistantMessageId).toBeTruthy();
+  });
+
+  it('mints assistantMessageId when conversationId is present but pin id is omitted', async () => {
+    started = await startTestServer();
+    const { projectId, conversationId } = await createProject(
+      started.url,
+      'API client omitted assistantMessageId',
+    );
+
+    const runResponse = await fetch(`${started.url}/api/runs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        agentId: `missing-agent-${randomUUID()}`,
+        projectId,
+        conversationId,
+        message: 'Eval multi-turn prompt without client pin',
+      }),
+    });
+    expect(runResponse.status).toBe(202);
+    const runBody = await runResponse.json() as {
+      runId: string;
+      conversationId: string | null;
+      assistantMessageId: string | null;
+    };
+    expect(runBody.conversationId).toBe(conversationId);
+    expect(typeof runBody.assistantMessageId).toBe('string');
+    expect(runBody.assistantMessageId).toBeTruthy();
+
+    const messagesResponse = await fetch(
+      `${started.url}/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages`,
+    );
+    expect(messagesResponse.status).toBe(200);
+    const messagesBody = await messagesResponse.json() as {
+      messages: Array<{ id: string; role: string; content: string; runId?: string | null }>;
+    };
+    const assistant = messagesBody.messages.find((m) => m.id === runBody.assistantMessageId);
+    expect(assistant?.role).toBe('assistant');
+    expect(assistant?.runId).toBe(runBody.runId);
+    const user = messagesBody.messages.find(
+      (m) => m.role === 'user' && m.content.includes('Eval multi-turn prompt without client pin'),
+    );
+    expect(user).toBeTruthy();
+
+    // Client-supplied id must still win (no double-mint overwrite).
+    const clientId = `client-pin-${randomUUID()}`;
+    const run2 = await fetch(`${started.url}/api/runs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        agentId: `missing-agent-${randomUUID()}`,
+        projectId,
+        conversationId,
+        message: 'second turn with client pin',
+        assistantMessageId: clientId,
+      }),
+    });
+    expect(run2.status).toBe(202);
+    const run2Body = await run2.json() as { assistantMessageId: string | null };
+    expect(run2Body.assistantMessageId).toBe(clientId);
+  });
+
+  it('keeps a client-pinned user message before its assistant when the user PUT arrives late', async () => {
+    started = await startTestServer();
+    const { projectId, conversationId } = await createProject(
+      started.url,
+      'Client message pin ordering',
+    );
+    const userMessageId = `user-${randomUUID()}`;
+    const assistantMessageId = `assistant-${randomUUID()}`;
+    const prompt = `ordered user turn ${randomUUID()}`;
+    const createdAt = Date.now();
+
+    const runResponse = await fetch(`${started.url}/api/runs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        agentId: `missing-agent-${randomUUID()}`,
+        projectId,
+        conversationId,
+        userMessageId,
+        assistantMessageId,
+        message: prompt,
+        currentPrompt: prompt,
+      }),
+    });
+    expect(runResponse.status).toBe(202);
+
+    const lateUserPut = await fetch(
+      `${started.url}/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(userMessageId)}`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: userMessageId,
+          role: 'user',
+          content: prompt,
+          createdAt,
+        }),
+      },
+    );
+    expect(lateUserPut.status).toBe(200);
+
+    const messagesResponse = await fetch(
+      `${started.url}/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages`,
+    );
+    expect(messagesResponse.status).toBe(200);
+    const messagesBody = await messagesResponse.json() as {
+      messages: Array<{ id: string; role: string }>;
+    };
+    expect(messagesBody.messages.map(({ id, role }) => ({ id, role }))).toEqual([
+      { id: userMessageId, role: 'user' },
+      { id: assistantMessageId, role: 'assistant' },
+    ]);
+  });
+
+  it('seeds only currentPrompt when message is a full ChatRequest transcript', async () => {
+    started = await startTestServer();
+    const { projectId, conversationId } = await createProject(
+      started.url,
+      'Omit-pin prefers currentPrompt',
+    );
+    const latestTurn = `latest user turn ${randomUUID()}`;
+    const transcript = `## user\nprior turn\n\n## assistant\nprior reply\n\n## user\n${latestTurn}`;
+
+    const runResponse = await fetch(`${started.url}/api/runs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        agentId: `missing-agent-${randomUUID()}`,
+        projectId,
+        conversationId,
+        message: transcript,
+        currentPrompt: latestTurn,
+      }),
+    });
+    expect(runResponse.status).toBe(202);
+    const runBody = await runResponse.json() as { assistantMessageId: string | null };
+    expect(runBody.assistantMessageId).toBeTruthy();
+
+    const messagesResponse = await fetch(
+      `${started.url}/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages`,
+    );
+    expect(messagesResponse.status).toBe(200);
+    const messagesBody = await messagesResponse.json() as {
+      messages: Array<{ role: string; content: string }>;
+    };
+    const userMessages = messagesBody.messages.filter((m) => m.role === 'user');
+    expect(userMessages.some((m) => m.content === latestTurn)).toBe(true);
+    expect(userMessages.some((m) => m.content.includes('prior turn'))).toBe(false);
+    expect(userMessages.some((m) => m.content === transcript)).toBe(false);
+  });
+
+  it('preserves attachments and commentAttachments on omit-pin seeded user turns', async () => {
+    started = await startTestServer();
+    const { projectId, conversationId } = await createProject(
+      started.url,
+      'Omit-pin seeds attachment metadata',
+    );
+    const prompt = `omit-pin with attachments ${randomUUID()}`;
+    const attachmentPath = 'assets/hero.png';
+    const bmpAttachmentPath = 'assets/scan.bmp';
+    const commentAttachment = {
+      id: `comment-${randomUUID()}`,
+      order: 1,
+      filePath: 'deck.html',
+      elementId: 'hero-title',
+      selector: '#hero-title',
+      label: 'Hero title',
+      comment: 'Make this larger',
+      currentText: 'Welcome',
+      pagePosition: { x: 12, y: 24, width: 180, height: 40 },
+      htmlHint: '<h1 id="hero-title">Welcome</h1>',
+      // Deck annotations need slideIndex after reload for queuedSlideNavTarget.
+      slideIndex: 2,
+    };
+
+    const runResponse = await fetch(`${started.url}/api/runs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        agentId: `missing-agent-${randomUUID()}`,
+        projectId,
+        conversationId,
+        message: prompt,
+        attachments: [attachmentPath, bmpAttachmentPath],
+        commentAttachments: [commentAttachment],
+      }),
+    });
+    expect(runResponse.status).toBe(202);
+
+    const messagesResponse = await fetch(
+      `${started.url}/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages`,
+    );
+    expect(messagesResponse.status).toBe(200);
+    const messagesBody = await messagesResponse.json() as {
+      messages: Array<{
+        role: string;
+        content: string;
+        attachments?: Array<{ path: string; name: string; kind: string; order?: number }>;
+        commentAttachments?: Array<{
+          id: string;
+          filePath: string;
+          elementId: string;
+          comment: string;
+          selector: string;
+          slideIndex?: number;
+        }>;
+      }>;
+    };
+    const user = messagesBody.messages.find(
+      (m) => m.role === 'user' && m.content.includes(prompt),
+    );
+    expect(user).toBeTruthy();
+    expect(user?.attachments).toEqual([
+      {
+        path: attachmentPath,
+        name: 'hero.png',
+        kind: 'image',
+        order: 0,
+      },
+      {
+        path: bmpAttachmentPath,
+        name: 'scan.bmp',
+        kind: 'image',
+        order: 1,
+      },
+    ]);
+    expect(user?.commentAttachments).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: commentAttachment.id,
+          filePath: commentAttachment.filePath,
+          elementId: commentAttachment.elementId,
+          comment: commentAttachment.comment,
+          selector: commentAttachment.selector,
+          slideIndex: 2,
+        }),
+      ]),
+    );
+  });
+
+  it('preserves sessionMode and runContext on omit-pin seeded user turns', async () => {
+    started = await startTestServer();
+    const { projectId, conversationId } = await createProject(
+      started.url,
+      'Omit-pin seeds turn metadata',
+    );
+    const prompt = `omit-pin turn metadata ${randomUUID()}`;
+    const runContext = {
+      files: ['src/app.ts'],
+      designSystemId: 'ds_test',
+    };
+
+    const runResponse = await fetch(`${started.url}/api/runs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        agentId: `missing-agent-${randomUUID()}`,
+        projectId,
+        conversationId,
+        message: prompt,
+        sessionMode: 'chat',
+        context: runContext,
+      }),
+    });
+    expect(runResponse.status).toBe(202);
+
+    const messagesResponse = await fetch(
+      `${started.url}/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages`,
+    );
+    expect(messagesResponse.status).toBe(200);
+    const messagesBody = await messagesResponse.json() as {
+      messages: Array<{
+        role: string;
+        content: string;
+        sessionMode?: string;
+        runContext?: Record<string, unknown>;
+      }>;
+    };
+    const user = messagesBody.messages.find(
+      (m) => m.role === 'user' && m.content.includes(prompt),
+    );
+    expect(user).toBeTruthy();
+    expect(user?.sessionMode).toBe('chat');
+    expect(user?.runContext).toEqual(runContext);
+  });
+
+  it('bumps project updatedAt after omit-pin user message seed', async () => {
+    started = await startTestServer();
+    const older = await createProject(started.url, 'Older project for activity order');
+    await delay(5);
+    const newer = await createProject(started.url, 'Newer project for activity order');
+
+    // Confirm newer project currently sorts first.
+    const beforeResponse = await fetch(`${started.url}/api/projects`);
+    expect(beforeResponse.status).toBe(200);
+    const beforeBody = await beforeResponse.json() as {
+      projects: Array<{ id: string }>;
+    };
+    const beforeIds = beforeBody.projects.map((p) => p.id);
+    expect(beforeIds.indexOf(newer.projectId)).toBeLessThan(beforeIds.indexOf(older.projectId));
+
+    await delay(5);
+    const runResponse = await fetch(`${started.url}/api/runs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        agentId: `missing-agent-${randomUUID()}`,
+        projectId: older.projectId,
+        conversationId: older.conversationId,
+        message: `activity bump seed ${randomUUID()}`,
+      }),
+    });
+    expect(runResponse.status).toBe(202);
+
+    const afterResponse = await fetch(`${started.url}/api/projects`);
+    expect(afterResponse.status).toBe(200);
+    const afterBody = await afterResponse.json() as {
+      projects: Array<{ id: string }>;
+    };
+    const afterIds = afterBody.projects.map((p) => p.id);
+    // Seeding the older project's user turn must promote it above the newer one.
+    expect(afterIds.indexOf(older.projectId)).toBeLessThan(afterIds.indexOf(newer.projectId));
+  });
+
+  it('preserves empty currentPrompt for attachments-only omit-pin sends', async () => {
+    started = await startTestServer();
+    const { projectId, conversationId } = await createProject(
+      started.url,
+      'Omit-pin empty currentPrompt attachments-only',
+    );
+    const attachmentPath = 'assets/only-file.png';
+    // ChatRequest shape: message is the flattened transcript; currentPrompt is
+    // intentionally empty for attachments-only turns.
+    const transcript = `## user\nprior turn\n\n## assistant\nprior reply\n\n## user\n`;
+
+    const runResponse = await fetch(`${started.url}/api/runs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        agentId: `missing-agent-${randomUUID()}`,
+        projectId,
+        conversationId,
+        message: transcript,
+        currentPrompt: '',
+        attachments: [attachmentPath],
+      }),
+    });
+    expect(runResponse.status).toBe(202);
+
+    const messagesResponse = await fetch(
+      `${started.url}/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages`,
+    );
+    expect(messagesResponse.status).toBe(200);
+    const messagesBody = await messagesResponse.json() as {
+      messages: Array<{
+        role: string;
+        content: string;
+        attachments?: Array<{ path: string; name: string; kind: string; order?: number }>;
+      }>;
+    };
+    const userMessages = messagesBody.messages.filter((m) => m.role === 'user');
+    // Must not fall back to the full transcript when currentPrompt is empty.
+    expect(userMessages.some((m) => m.content === transcript)).toBe(false);
+    expect(userMessages.some((m) => m.content.includes('prior turn'))).toBe(false);
+    const emptyAttachmentTurn = userMessages.find(
+      (m) => m.content === '' && m.attachments?.some((a) => a.path === attachmentPath),
+    );
+    expect(emptyAttachmentTurn).toBeTruthy();
+    expect(emptyAttachmentTurn?.attachments).toEqual([
+      {
+        path: attachmentPath,
+        name: 'only-file.png',
+        kind: 'image',
+        order: 0,
+      },
+    ]);
+  });
+
+  it('seeds empty message attachments-only turns when currentPrompt is unset', async () => {
+    started = await startTestServer();
+    // Use a normal project kind (prototype) so default-scenario resolution can
+    // rewrite meta.message with a rendered brief for the run. Seeded chat
+    // content must still come from the original empty requestBody.message.
+    const { projectId, conversationId } = await createProject(
+      started.url,
+      'Omit-pin empty message attachments without currentPrompt',
+    );
+    const attachmentPath = 'assets/no-prompt.png';
+    const commentAttachment = {
+      id: `comment-${randomUUID()}`,
+      order: 0,
+      filePath: 'deck.html',
+      elementId: 'title',
+      selector: '#title',
+      label: 'Title',
+      comment: 'Bold this',
+      currentText: 'Hello',
+      pagePosition: { x: 1, y: 2, width: 10, height: 20 },
+      htmlHint: '<h1 id="title">Hello</h1>',
+      slideIndex: 0,
+    };
+
+    // Minimal omit-pin client: empty text, optional currentPrompt omitted,
+    // but attachment metadata present — must still seed the user turn with
+    // the original empty content (not a scenario plugin brief).
+    const runResponse = await fetch(`${started.url}/api/runs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        agentId: `missing-agent-${randomUUID()}`,
+        projectId,
+        conversationId,
+        message: '',
+        attachments: [attachmentPath],
+        commentAttachments: [commentAttachment],
+      }),
+    });
+    expect(runResponse.status).toBe(202);
+    const runBody = await runResponse.json() as {
+      assistantMessageId: string | null;
+      appliedPluginSnapshotId?: string | null;
+    };
+    expect(runBody.assistantMessageId).toBeTruthy();
+
+    const messagesResponse = await fetch(
+      `${started.url}/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages`,
+    );
+    expect(messagesResponse.status).toBe(200);
+    const messagesBody = await messagesResponse.json() as {
+      messages: Array<{
+        role: string;
+        content: string;
+        attachments?: Array<{ path: string; name: string; kind: string; order?: number }>;
+        commentAttachments?: Array<{ id: string; filePath: string; comment: string; slideIndex?: number }>;
+      }>;
+    };
+    // Default scenario may fill the run prompt, but visible user content must
+    // remain the original empty message — never the rendered plugin brief.
+    const emptyAttachmentTurn = messagesBody.messages.find(
+      (m) => m.role === 'user' && m.content === '',
+    );
+    expect(emptyAttachmentTurn).toBeTruthy();
+    expect(
+      messagesBody.messages.some(
+        (m) =>
+          m.role === 'user' &&
+          typeof m.content === 'string' &&
+          m.content.includes('product-studio'),
+      ),
+    ).toBe(false);
+    expect(emptyAttachmentTurn?.attachments).toEqual([
+      {
+        path: attachmentPath,
+        name: 'no-prompt.png',
+        kind: 'image',
+        order: 0,
+      },
+    ]);
+    expect(emptyAttachmentTurn?.commentAttachments).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: commentAttachment.id,
+          filePath: commentAttachment.filePath,
+          comment: commentAttachment.comment,
+          slideIndex: 0,
+        }),
+      ]),
+    );
+  });
+
+  it('seeds user prompt after conversation fallback even when pin is client-supplied', async () => {
+    started = await startTestServer();
+    const { projectId, conversationId: seededConversationId } = await createProject(
+      started.url,
+      'Fallback seed with client pin',
+    );
+    const prompt = `fallback seed with client pin ${randomUUID()}`;
+    const clientPin = `client-pin-${randomUUID()}`;
+
+    const runResponse = await fetch(`${started.url}/api/runs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        agentId: `missing-agent-${randomUUID()}`,
+        projectId,
+        // conversationId omitted → server binds default conversation
+        assistantMessageId: clientPin,
+        message: prompt,
+      }),
+    });
+    expect(runResponse.status).toBe(202);
+    const runBody = await runResponse.json() as {
+      conversationId: string | null;
+      assistantMessageId: string | null;
+    };
+    expect(runBody.conversationId).toBe(seededConversationId);
+    expect(runBody.assistantMessageId).toBe(clientPin);
+
+    const messagesResponse = await fetch(
+      `${started.url}/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(seededConversationId)}/messages`,
+    );
+    expect(messagesResponse.status).toBe(200);
+    const messagesBody = await messagesResponse.json() as {
+      messages: Array<{ id: string; role: string; content: string; runId?: string | null }>;
+    };
+    const assistant = messagesBody.messages.find((m) => m.id === clientPin);
+    expect(assistant?.role).toBe('assistant');
+    const user = messagesBody.messages.find(
+      (m) => m.role === 'user' && m.content.includes(prompt),
+    );
+    expect(user).toBeTruthy();
+  });
+
+  it('rejects cross-project conversationId before seeding omit-pin prompt', async () => {
+    started = await startTestServer();
+    const projectA = await createProject(started.url, 'Ownership project A');
+    const projectB = await createProject(started.url, 'Ownership project B');
+    const foreignPrompt = `cross-project omit-pin seed ${randomUUID()}`;
+
+    const runResponse = await fetch(`${started.url}/api/runs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        agentId: `missing-agent-${randomUUID()}`,
+        projectId: projectA.projectId,
+        conversationId: projectB.conversationId,
+        message: foreignPrompt,
+      }),
+    });
+    expect(runResponse.status).toBe(404);
+    await expect(runResponse.json()).resolves.toMatchObject({
+      error: {
+        code: 'CONVERSATION_NOT_FOUND',
+        message: 'conversation not found for project',
+      },
+    });
+
+    const messagesResponse = await fetch(
+      `${started.url}/api/projects/${encodeURIComponent(projectB.projectId)}/conversations/${encodeURIComponent(projectB.conversationId)}/messages`,
+    );
+    expect(messagesResponse.status).toBe(200);
+    const messagesBody = await messagesResponse.json() as {
+      messages: Array<{ role: string; content: string }>;
+    };
+    expect(
+      messagesBody.messages.some(
+        (m) => m.role === 'user' && m.content.includes(foreignPrompt),
+      ),
+    ).toBe(false);
+  });
+
+  it('rejects conversationId without projectId before seeding omit-pin prompt', async () => {
+    started = await startTestServer();
+    const { projectId, conversationId } = await createProject(
+      started.url,
+      'Missing projectId ownership project',
+    );
+    const prompt = `omit-pin without projectId ${randomUUID()}`;
+
+    const runResponse = await fetch(`${started.url}/api/runs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        agentId: `missing-agent-${randomUUID()}`,
+        conversationId,
+        message: prompt,
+      }),
+    });
+    expect(runResponse.status).toBe(404);
+    await expect(runResponse.json()).resolves.toMatchObject({
+      error: {
+        code: 'CONVERSATION_NOT_FOUND',
+        message: 'conversation not found for project',
+      },
+    });
+
+    const messagesResponse = await fetch(
+      `${started.url}/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages`,
+    );
+    expect(messagesResponse.status).toBe(200);
+    const messagesBody = await messagesResponse.json() as {
+      messages: Array<{ role: string; content: string }>;
+    };
+    expect(
+      messagesBody.messages.some(
+        (m) => m.role === 'user' && m.content.includes(prompt),
+      ),
+    ).toBe(false);
+  });
+
+  it('rejects nonexistent conversationId before minting omit-pin assistantMessageId', async () => {
+    started = await startTestServer();
+    const { projectId } = await createProject(started.url, 'Stale conversation project');
+    const missingConversationId = `missing-conv-${randomUUID()}`;
+
+    const runResponse = await fetch(`${started.url}/api/runs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        agentId: `missing-agent-${randomUUID()}`,
+        projectId,
+        conversationId: missingConversationId,
+        message: 'stale conversation omit-pin prompt',
+      }),
+    });
+    expect(runResponse.status).toBe(404);
+    await expect(runResponse.json()).resolves.toMatchObject({
+      error: {
+        code: 'CONVERSATION_NOT_FOUND',
+        message: 'conversation not found for project',
+      },
+    });
   });
 
   it('falls back past a stale saved agent to the first detected available runtime', async () => {

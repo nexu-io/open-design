@@ -1,6 +1,7 @@
 
 // @vitest-environment jsdom
 
+import { StrictMode } from 'react';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -70,6 +71,15 @@ const projectBeta: Project = {
   updatedAt: 2,
 };
 
+const projectGamma: Project = {
+  id: 'project-gamma',
+  name: 'Project Gamma',
+  skillId: null,
+  designSystemId: null,
+  createdAt: 3,
+  updatedAt: 3,
+};
+
 function createDataTransfer(): DataTransfer {
   const store = new Map<string, string>();
   return {
@@ -82,7 +92,29 @@ function createDataTransfer(): DataTransfer {
   } as unknown as DataTransfer;
 }
 
+// The active entry tab renders icon-only (sidebar toggle on the home view,
+// Home nav pill on any other section), so its current section is no longer
+// observable through textContent. Read it from the persisted tab state.
+function storedEntryTabView(): string | null {
+  const raw = window.localStorage.getItem('open-design:workspace-tabs:v1');
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as {
+      tabs?: Array<{ kind?: string; view?: string }>;
+    };
+    return parsed.tabs?.find((tab) => tab.kind === 'entry')?.view ?? null;
+  } catch {
+    return null;
+  }
+}
+
 function mockTabRect(element: HTMLElement, left: number, width = 100) {
+  // Drop hit-testing measures tabs in LAYOUT space (offsetLeft/offsetWidth) so
+  // the FLIP reorder slide and the drag transform can't shift the rects it
+  // reads. jsdom reports 0 for both, so stub them alongside the visual rect —
+  // the strip itself sits at x=0 with scrollLeft 0, so the two coincide here.
+  Object.defineProperty(element, 'offsetLeft', { configurable: true, value: left });
+  Object.defineProperty(element, 'offsetWidth', { configurable: true, value: width });
   Object.defineProperty(element, 'getBoundingClientRect', {
     configurable: true,
     value: () =>
@@ -130,13 +162,17 @@ describe('WorkspaceTabsBar navigation semantics', () => {
 
     expect(screen.getAllByRole('tab')).toHaveLength(1);
 
-    // Clicking 'New tab' when a Home tab already exists should activate the existing Home tab
-    fireEvent.click(screen.getByRole('button', { name: 'New tab' }));
-    fireEvent.click(screen.getByRole('button', { name: 'New tab' }));
+    // Asking for a new tab when a Home tab already exists should activate the
+    // existing Home tab. #5517 removed the top-right "+" button, so ⌘/Ctrl+T is
+    // now the only entry point — both used to funnel through createNewTab(), so
+    // the shortcut exercises the same singleton logic the "+" click did.
+    fireEvent.keyDown(document, { key: 't', metaKey: true });
+    fireEvent.keyDown(document, { key: 't', metaKey: true });
 
     await waitFor(() => {
-      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
-      expect(labels.filter((label) => label.includes('Home'))).toHaveLength(1);
+      expect(screen.getAllByRole('tab')).toHaveLength(1);
+      // The active Home tab renders as the sidebar toggle (icon-only pill).
+      expect(screen.getAllByTestId('workspace-home-rail-toggle')).toHaveLength(1);
     });
 
     // Navigate to projectRoute using rerender with a fresh object reference
@@ -155,10 +191,40 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     await waitFor(() => {
       const tabs = screen.getAllByRole('tab');
       const labels = tabs.map((tab) => tab.textContent ?? '');
-      // Expect that we still have 2 tabs (Home and Project Alpha)
+      // Expect that we still have 2 tabs (Home and Project Alpha). The active
+      // Home tab is the icon-only sidebar toggle, so assert its testid rather
+      // than a text label.
       expect(tabs).toHaveLength(2);
-      expect(labels.filter((label) => label.includes('Home'))).toHaveLength(1);
+      expect(screen.getAllByTestId('workspace-home-rail-toggle')).toHaveLength(1);
       expect(labels.filter((label) => label.includes('Project Alpha'))).toHaveLength(1);
+    });
+  });
+
+  // recvq5eKj2kdF0: Home's own project fetch (recent/drafts, capped) replaces
+  // the `projects` prop wholesale on every reload — App.tsx's
+  // reconcileFetchedProjects does not preserve entries for projects that are
+  // only open in a background tab. `displayTabFor` looked the tab's project up
+  // in that same list and fell back to the untitled label the instant the
+  // project dropped out, even though it plainly has a real name — switching to
+  // Home and back made an already-named tab regress to "Untitled".
+  it('keeps a project tab\'s real name after Home reloads a projects list that no longer includes it', async () => {
+    const { rerender } = render(
+      <WorkspaceTabsBar route={{ ...projectRoute }} projects={[project]} />,
+    );
+
+    await waitFor(() => {
+      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      expect(labels.some((label) => label.includes('Project Alpha'))).toBe(true);
+    });
+
+    // Switch to Home; Home's own fetch (simulated here by an empty list) does
+    // not include project-alpha at all.
+    rerender(<WorkspaceTabsBar route={{ kind: 'home', view: 'home' }} projects={[]} />);
+
+    await waitFor(() => {
+      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      expect(labels.some((label) => label.includes('Project Alpha'))).toBe(true);
+      expect(labels.some((label) => label.includes('Untitled'))).toBe(false);
     });
   });
 
@@ -172,8 +238,11 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     );
 
     await waitFor(() => {
-      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
-      expect(labels.some((label) => label.includes('Welcome'))).toBe(true);
+      // The active entry tab is icon-only (Home nav pill) on non-home views,
+      // so assert the parked Welcome view through the persisted tab state.
+      expect(screen.getAllByRole('tab')).toHaveLength(1);
+      expect(screen.getByTestId('workspace-home-nav')).toBeTruthy();
+      expect(storedEntryTabView()).toBe('onboarding');
     });
 
     // Completing onboarding via the design-system path navigates to a fresh
@@ -204,8 +273,9 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     );
 
     await waitFor(() => {
-      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
-      expect(labels.some((label) => label.includes('Welcome'))).toBe(true);
+      expect(screen.getAllByRole('tab')).toHaveLength(1);
+      expect(screen.getByTestId('workspace-home-nav')).toBeTruthy();
+      expect(storedEntryTabView()).toBe('onboarding');
     });
 
     rerender(
@@ -217,8 +287,7 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     );
 
     await waitFor(() => {
-      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
-      expect(labels.some((label) => label.includes('Design systems'))).toBe(true);
+      expect(storedEntryTabView()).toBe('design-systems');
     });
 
     rerender(
@@ -237,21 +306,25 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     });
   });
 
-  it('closes the Search tabs popover when the route flips to onboarding', async () => {
+  it('ships no tab-bar chrome buttons and no reachable Search tabs popover', async () => {
     const { rerender } = render(
       <WorkspaceTabsBar route={{ kind: 'home', view: 'home' }} projects={[project]} />,
     );
 
-    // Open the Search-tabs popover from the (non-onboarding) home view.
-    fireEvent.click(screen.getByRole('button', { name: 'Search tabs' }));
-    await waitFor(() => {
-      expect(screen.getByRole('dialog', { name: 'Search tabs' })).toBeTruthy();
-    });
+    // #5517 removed both top-right chrome buttons. The "+" was the radial
+    // template menu's only entry point and the magnifier was the Search-tabs
+    // popover's only entry point, so neither overlay can be opened any more.
+    // This is the regression guard for that removal: if a future change
+    // re-introduces either control it must be a deliberate decision that
+    // updates this test (and re-enables the popover-dismissal spec below).
+    expect(screen.queryByRole('button', { name: 'New tab' })).toBeNull();
+    expect(screen.queryByTestId('workspace-tabs-new-tab')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Search tabs' })).toBeNull();
+    expect(screen.queryByRole('dialog', { name: 'Search tabs' })).toBeNull();
 
-    // Onboarding hides the trigger button; the already-open popover must not
-    // survive the route transition (e.g. browser back/forward into
-    // /onboarding), or it floats over the first-run flow with no visible
-    // control to dismiss it.
+    // The popover must also stay absent across a route flip into /onboarding
+    // (e.g. browser back/forward, which bypasses activateTab/createNewTab).
+    // Nothing may float over the first-run flow with no control to dismiss it.
     rerender(
       <WorkspaceTabsBar route={{ kind: 'home', view: 'onboarding' }} projects={[project]} />,
     );
@@ -281,8 +354,11 @@ describe('WorkspaceTabsBar navigation semantics', () => {
       await waitFor(() => {
         const tabs = screen.getAllByRole('tab');
         // Exactly one tab the whole time — the section just switches the view.
+        // The active entry tab is the icon-only Home nav pill on non-home
+        // sections, so read the section from the persisted tab state.
         expect(tabs).toHaveLength(1);
-        expect(tabs[0]?.textContent ?? '').toContain(section.label);
+        expect(screen.getByTestId('workspace-home-nav')).toBeTruthy();
+        expect(storedEntryTabView()).toBe(section.view);
       });
     }
 
@@ -295,9 +371,9 @@ describe('WorkspaceTabsBar navigation semantics', () => {
       <WorkspaceTabsBar route={{ kind: 'home', view: 'design-systems' }} projects={[project]} />,
     );
     await waitFor(() => {
-      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
-      expect(labels).toHaveLength(1);
-      expect(labels[0]).toContain('Design systems');
+      expect(screen.getAllByRole('tab')).toHaveLength(1);
+      expect(screen.getByTestId('workspace-home-nav')).toBeTruthy();
+      expect(storedEntryTabView()).toBe('design-systems');
     });
 
     // Opening a project from the design-systems view must APPEND a project tab,
@@ -315,7 +391,7 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     await waitFor(() => {
       const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
       expect(labels).toHaveLength(2);
-      expect(labels.some((label) => label.includes('Automations'))).toBe(true);
+      expect(storedEntryTabView()).toBe('tasks');
       expect(labels.some((label) => label.includes('Project Alpha'))).toBe(true);
     });
   });
@@ -333,9 +409,9 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     );
     render(<WorkspaceTabsBar route={{ kind: 'home', view: 'projects' }} projects={[project]} />);
     await waitFor(() => {
-      const tabs = screen.getAllByRole('tab');
-      expect(tabs).toHaveLength(1);
-      expect(tabs[0]?.textContent ?? '').toContain('Projects');
+      expect(screen.getAllByRole('tab')).toHaveLength(1);
+      expect(screen.getByTestId('workspace-home-nav')).toBeTruthy();
+      expect(storedEntryTabView()).toBe('projects');
     });
   });
 
@@ -421,7 +497,8 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     await waitFor(() => {
       const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
       expect(labels).toHaveLength(2);
-      expect(labels.filter((label) => label.includes('Home'))).toHaveLength(1);
+      // The active Home tab renders as the icon-only sidebar toggle.
+      expect(screen.getAllByTestId('workspace-home-rail-toggle')).toHaveLength(1);
       expect(labels.filter((label) => label.includes('Project Alpha'))).toHaveLength(1);
     });
   });
@@ -539,9 +616,10 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     render(<WorkspaceTabsBar route={{ kind: 'home', view: 'home' }} projects={[project]} />);
 
     await waitFor(() => {
-      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
-      // Expect that the duplicate Home tabs are deduplicated to exactly one Home tab
-      expect(labels.filter((label) => label.includes('Home'))).toHaveLength(1);
+      // Expect that the duplicate Home tabs are deduplicated to exactly one
+      // Home tab — rendered as the sidebar toggle since it is active on home.
+      expect(screen.getAllByRole('tab')).toHaveLength(1);
+      expect(screen.getAllByTestId('workspace-home-rail-toggle')).toHaveLength(1);
     });
   });
 
@@ -552,9 +630,9 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     // no way to remove the last remaining tab.
     expect(screen.queryByRole('button', { name: 'Close' })).toBeNull();
 
-    const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
-    expect(labels).toHaveLength(1);
-    expect(labels[0]).toContain('Home');
+    expect(screen.getAllByRole('tab')).toHaveLength(1);
+    // Active on the home view, the pinned tab renders as the sidebar toggle.
+    expect(screen.getByTestId('workspace-home-rail-toggle')).toBeTruthy();
   });
 
   it('maps the browser new-tab shortcut to the workspace new-tab action', async () => {
@@ -569,7 +647,9 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     await waitFor(() => {
       const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
       expect(labels).toHaveLength(2);
-      expect(labels.some((label) => label.includes('Home'))).toBe(true);
+      // The shortcut activates the Home tab, which then renders as the
+      // icon-only sidebar toggle.
+      expect(screen.getAllByTestId('workspace-home-rail-toggle')).toHaveLength(1);
       expect(labels.some((label) => label.includes('Project Alpha'))).toBe(true);
     });
     expect(navigate).toHaveBeenCalledWith(homeRoute);
@@ -634,9 +714,10 @@ describe('WorkspaceTabsBar navigation semantics', () => {
 
     expect(allowedDefault).toBe(false);
     await waitFor(() => {
-      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
-      expect(labels).toHaveLength(1);
-      expect(labels[0]).toContain('Home');
+      // Closing the project tab falls back to the Home tab, which is active on
+      // the home view and therefore renders as the icon-only sidebar toggle.
+      expect(screen.getAllByRole('tab')).toHaveLength(1);
+      expect(screen.getByTestId('workspace-home-rail-toggle')).toBeTruthy();
     });
     expect(navigate).toHaveBeenCalledWith(homeRoute);
   });
@@ -705,7 +786,17 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     });
   });
 
-  it('dismisses tab search when a blank page area handles the mouse down', async () => {
+  // Blocked on a missing entry point, not obsolete. The Search-tabs popover,
+  // its capture-phase outside-click dismissal, and the Escape handler are all
+  // still implemented in WorkspaceTabsBar, but #5517 removed the magnifier
+  // button that was their only trigger — `setTabsMenuOpen` is now only ever
+  // called with `false`, so no user gesture can open the popover and this spec
+  // has no honest way to reach the state it asserts on. The body is kept intact
+  // (rather than deleted) so the invariant it guards — a blank area that calls
+  // stopPropagation() on mousedown must still dismiss the popover, which is why
+  // the listener is registered in the capture phase — comes back for free if an
+  // entry point is ever restored. Re-enable it together with that entry point.
+  it.skip('dismisses tab search when a blank page area handles the mouse down', async () => {
     const outsideArea = document.createElement('div');
     outsideArea.setAttribute('data-testid', 'blank-workspace-area');
     outsideArea.addEventListener('mousedown', (event) => event.stopPropagation());
@@ -724,96 +815,6 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     await waitFor(() => {
       expect(screen.queryByRole('dialog', { name: 'Search tabs' })).toBeNull();
     });
-  });
-
-  it('clamps the hover preview to 220px for narrow tabs', async () => {
-    window.localStorage.setItem(
-      'open-design:workspace-tabs:v1',
-      JSON.stringify({
-        activeTabId: 'entry:home:seed',
-        tabs: [
-          {
-            id: 'entry:home:seed',
-            kind: 'entry',
-            view: 'home',
-            createdAt: 1,
-            lastActiveAt: 2,
-          },
-          {
-            id: 'project:project-alpha',
-            kind: 'project',
-            projectId: 'project-alpha',
-            conversationId: null,
-            fileName: null,
-            createdAt: 2,
-            lastActiveAt: 1,
-          },
-        ],
-      }),
-    );
-
-    render(<WorkspaceTabsBar route={{ kind: 'home', view: 'home' }} projects={[project]} />);
-
-    await waitFor(() => {
-      expect(screen.getAllByRole('tab')).toHaveLength(2);
-    });
-
-    const projectTab = screen.getAllByRole('tab').find((tab) =>
-      (tab.textContent ?? '').includes('Project Alpha'),
-    ) as HTMLElement;
-    mockTabRect(projectTab, 32, 148);
-    fireEvent.mouseEnter(projectTab);
-
-    await new Promise((resolve) => window.setTimeout(resolve, 430));
-
-    const tooltip = await screen.findByRole('tooltip');
-    expect(tooltip.style.width).toBe('220px');
-    expect(tooltip.style.left).toBe('32px');
-  });
-
-  it('matches anchor width for tabs wider than the 220px floor', async () => {
-    window.localStorage.setItem(
-      'open-design:workspace-tabs:v1',
-      JSON.stringify({
-        activeTabId: 'entry:home:seed',
-        tabs: [
-          {
-            id: 'entry:home:seed',
-            kind: 'entry',
-            view: 'home',
-            createdAt: 1,
-            lastActiveAt: 2,
-          },
-          {
-            id: 'project:project-alpha',
-            kind: 'project',
-            projectId: 'project-alpha',
-            conversationId: null,
-            fileName: null,
-            createdAt: 2,
-            lastActiveAt: 1,
-          },
-        ],
-      }),
-    );
-
-    render(<WorkspaceTabsBar route={{ kind: 'home', view: 'home' }} projects={[project]} />);
-
-    await waitFor(() => {
-      expect(screen.getAllByRole('tab')).toHaveLength(2);
-    });
-
-    const projectTab = screen.getAllByRole('tab').find((tab) =>
-      (tab.textContent ?? '').includes('Project Alpha'),
-    ) as HTMLElement;
-    mockTabRect(projectTab, 50, 300);
-    fireEvent.mouseEnter(projectTab);
-
-    await new Promise((resolve) => window.setTimeout(resolve, 430));
-
-    const tooltip = await screen.findByRole('tooltip');
-    expect(tooltip.style.width).toBe('300px');
-    expect(tooltip.style.left).toBe('50px');
   });
 
   it('keeps the Home tab pinned leftmost when a tab is dropped onto its left edge', async () => {
@@ -973,6 +974,814 @@ describe('WorkspaceTabsBar navigation semantics', () => {
         expect.stringContaining('Project Beta'),
         expect.stringContaining('Project Alpha'),
       ]);
+    });
+  });
+});
+
+describe('WorkspaceTabsBar identity-scope tab reset', () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('keeps the current route tab when the first identityScopeKey resolves over an unowned legacy snapshot', async () => {
+    // A session persisted by a build that predates this feature: tabs with no
+    // `scopeKey` field at all. Such a snapshot has no owner stamp and is never
+    // adopted wholesale (see the discard tests below) — but the current URL
+    // stays route truth, so the deep-linked project keeps its tab and the
+    // first resolution must not navigate the user away.
+    window.localStorage.setItem(
+      'open-design:workspace-tabs:v1',
+      JSON.stringify({
+        tabs: [
+          { id: 'entry:home:a', kind: 'entry', view: 'home', createdAt: 1, lastActiveAt: 1 },
+          {
+            id: 'project:project-alpha:b',
+            kind: 'project',
+            projectId: 'project-alpha',
+            conversationId: null,
+            fileName: null,
+            createdAt: 2,
+            lastActiveAt: 2,
+          },
+        ],
+        activeTabId: 'project:project-alpha:b',
+      }),
+    );
+
+    render(
+      <WorkspaceTabsBar
+        route={{ ...projectRoute }}
+        projects={[project]}
+        identityScopeKey="user-1::ws-personal-1"
+      />,
+    );
+
+    await waitFor(() => {
+      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      expect(labels).toHaveLength(2);
+      expect(labels.some((label) => label.includes('Project Alpha'))).toBe(true);
+    });
+
+    // The now-known scope key is backfilled into storage so a later, REAL
+    // change has something to compare against.
+    await waitFor(() => {
+      const raw = window.localStorage.getItem('open-design:workspace-tabs:v1');
+      const parsed = JSON.parse(raw ?? '{}') as { scopeKey?: string };
+      expect(parsed.scopeKey).toBe('user-1::ws-personal-1');
+    });
+  });
+
+  it('closes every open tab down to a single fresh Home tab on sign-out', async () => {
+    const { rerender } = render(
+      <WorkspaceTabsBar
+        route={{ kind: 'home', view: 'home' }}
+        projects={[project]}
+        identityScopeKey="user-1::ws-personal-1"
+      />,
+    );
+    // Open a project tab under this (already-adopted) scope.
+    rerender(
+      <WorkspaceTabsBar
+        route={{ ...projectRoute }}
+        projects={[project]}
+        identityScopeKey="user-1::ws-personal-1"
+      />,
+    );
+    await waitFor(() => {
+      expect(screen.getAllByRole('tab')).toHaveLength(2);
+    });
+
+    // Sign out: the account bucket flips to the fixed anon::none scope.
+    rerender(
+      <WorkspaceTabsBar
+        route={{ ...projectRoute }}
+        projects={[project]}
+        identityScopeKey="anon::none"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('tab')).toHaveLength(1);
+      expect(screen.getByTestId('workspace-home-rail-toggle')).toBeTruthy();
+    });
+    // Route/tab-strip consistency: closing every tab down to Home also lands
+    // the app ON Home, matching what closing the last remaining tab already
+    // does elsewhere in this file — a stale route pointing at the project the
+    // user just signed out of would otherwise keep rendering underneath.
+    expect(navigate).toHaveBeenLastCalledWith(homeRoute);
+  });
+
+  it('keeps the active unbound local project open when anonymous auth resolves to a signed-in account', async () => {
+    const { rerender } = render(
+      <WorkspaceTabsBar
+        route={{ ...projectRoute }}
+        projects={[project]}
+        activeProjectWorkspaceId={null}
+        identityScopeKey="anon::ws-personal-1"
+      />,
+    );
+    await waitFor(() => {
+      expect(screen.getAllByRole('tab')).toHaveLength(2);
+      expect(screen.getByRole('tab', { name: /Project Alpha/ })).toBeTruthy();
+    });
+    vi.mocked(navigate).mockClear();
+
+    rerender(
+      <WorkspaceTabsBar
+        route={{ ...projectRoute }}
+        projects={[project]}
+        activeProjectWorkspaceId={null}
+        identityScopeKey="user-1::ws-personal-1"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('tab')).toHaveLength(2);
+      expect(screen.getByRole('tab', { name: /Project Alpha/ }).getAttribute('aria-selected')).toBe('true');
+    });
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it('keeps a Workspace-bound project when anonymous auth resolves with the same Workspace', async () => {
+    const { rerender } = render(
+      <WorkspaceTabsBar
+        route={{ ...projectRoute }}
+        projects={[{ ...project, workspaceId: 'ws-team-a' }]}
+        activeProjectWorkspaceId="ws-team-a"
+        identityScopeKey="anon::none"
+      />,
+    );
+    await waitFor(() => {
+      expect(screen.getAllByRole('tab')).toHaveLength(2);
+    });
+    vi.mocked(navigate).mockClear();
+
+    rerender(
+      <WorkspaceTabsBar
+        route={{ ...projectRoute }}
+        projects={[{ ...project, workspaceId: 'ws-team-a' }]}
+        activeProjectWorkspaceId="ws-team-a"
+        identityScopeKey="user-1::ws-team-a"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('tab')).toHaveLength(2);
+      expect(screen.getByRole('tab', { name: /Project Alpha/ }).getAttribute('aria-selected')).toBe('true');
+    });
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it('keeps an explicit AMR settings navigation when auth resolves as the project exits', async () => {
+    const { rerender } = render(
+      <WorkspaceTabsBar
+        route={{ ...projectRoute }}
+        projects={[project]}
+        activeProjectWorkspaceId={null}
+        identityScopeKey="anon::none"
+      />,
+    );
+    await waitFor(() => {
+      expect(screen.getAllByRole('tab')).toHaveLength(2);
+      expect(screen.getByRole('tab', { name: /Project Alpha/ })).toBeTruthy();
+    });
+    vi.mocked(navigate).mockClear();
+
+    // Leaving the project drops its exact Workspace scope before the AMR login
+    // resolves. Exercise both real transitions rather than collapsing them.
+    rerender(
+      <WorkspaceTabsBar
+        route={{ kind: 'home', view: 'settings' }}
+        projects={[project]}
+        activeProjectWorkspaceId={undefined}
+        identityScopeKey="anon::none"
+      />,
+    );
+    await waitFor(() => {
+      expect(storedEntryTabView()).toBe('settings');
+    });
+
+    rerender(
+      <WorkspaceTabsBar
+        route={{ kind: 'home', view: 'settings' }}
+        projects={[project]}
+        activeProjectWorkspaceId={undefined}
+        identityScopeKey="user-1::ws-personal-1"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(storedEntryTabView()).toBe('settings');
+    });
+    expect(navigate).not.toHaveBeenCalledWith(homeRoute);
+  });
+
+  it('still closes a Workspace-bound project when the signed-in witness names another Workspace', async () => {
+    const { rerender } = render(
+      <WorkspaceTabsBar
+        route={{ ...projectRoute }}
+        projects={[{ ...project, workspaceId: 'ws-team-a' }]}
+        activeProjectWorkspaceId="ws-team-a"
+        identityScopeKey="anon::none"
+      />,
+    );
+    await waitFor(() => {
+      expect(screen.getAllByRole('tab')).toHaveLength(2);
+    });
+    vi.mocked(navigate).mockClear();
+
+    rerender(
+      <WorkspaceTabsBar
+        route={{ ...projectRoute }}
+        projects={[{ ...project, workspaceId: 'ws-team-a' }]}
+        activeProjectWorkspaceId="ws-team-a"
+        identityScopeKey="user-1::ws-team-b"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('tab')).toHaveLength(1);
+      expect(screen.getByTestId('workspace-home-rail-toggle')).toBeTruthy();
+    });
+    expect(navigate).toHaveBeenLastCalledWith(homeRoute);
+  });
+
+  it('closes every open tab on a workspace switch, even for the same account', async () => {
+    const { rerender } = render(
+      <WorkspaceTabsBar
+        route={{ kind: 'home', view: 'home' }}
+        projects={[project]}
+        identityScopeKey="user-1::ws-team-a"
+      />,
+    );
+    rerender(
+      <WorkspaceTabsBar
+        route={{ ...projectRoute }}
+        projects={[project]}
+        identityScopeKey="user-1::ws-team-a"
+      />,
+    );
+    await waitFor(() => {
+      expect(screen.getAllByRole('tab')).toHaveLength(2);
+    });
+
+    rerender(
+      <WorkspaceTabsBar
+        route={{ ...projectRoute }}
+        projects={[project]}
+        identityScopeKey="user-1::ws-team-b"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('tab')).toHaveLength(1);
+      expect(screen.getByTestId('workspace-home-rail-toggle')).toBeTruthy();
+    });
+    expect(navigate).toHaveBeenLastCalledWith(homeRoute);
+  });
+
+  it('restores each workspace tab snapshot without leaking tabs across workspaces', async () => {
+    const projectBetaRoute: Route = {
+      kind: 'project',
+      projectId: 'project-beta',
+      conversationId: 'conversation-beta',
+      fileName: 'beta.html',
+    };
+    const projectGammaRoute: Route = {
+      kind: 'project',
+      projectId: 'project-gamma',
+      conversationId: 'conversation-gamma',
+      fileName: 'gamma.html',
+    };
+    const { rerender, unmount } = render(
+      <WorkspaceTabsBar
+        route={homeRoute}
+        projects={[project, projectBeta]}
+        identityScopeKey="user-1::ws-team-a"
+      />,
+    );
+
+    rerender(
+      <WorkspaceTabsBar
+        route={{ ...projectRoute, fileName: 'alpha.html' }}
+        projects={[project, projectBeta]}
+        identityScopeKey="user-1::ws-team-a"
+      />,
+    );
+    openWorkspaceTab(projectBetaRoute);
+    await waitFor(() => {
+      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      expect(labels).toEqual([
+        expect.stringContaining('Home'),
+        expect.stringContaining('Project Alpha'),
+        expect.stringContaining('Project Beta'),
+      ]);
+      expect(screen.getByRole('tab', { name: /Project Beta/ }).getAttribute('aria-selected')).toBe('true');
+    });
+
+    rerender(
+      <WorkspaceTabsBar
+        route={homeRoute}
+        projects={[projectGamma]}
+        identityScopeKey="user-1::ws-team-b"
+      />,
+    );
+    await waitFor(() => {
+      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      expect(labels).toHaveLength(1);
+      expect(labels.some((label) => label.includes('Project Alpha'))).toBe(false);
+      expect(labels.some((label) => label.includes('Project Beta'))).toBe(false);
+    });
+
+    openWorkspaceTab(projectGammaRoute);
+    await waitFor(() => {
+      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      expect(labels).toEqual([
+        expect.stringContaining('Home'),
+        expect.stringContaining('Project Gamma'),
+      ]);
+    });
+
+    rerender(
+      <WorkspaceTabsBar
+        route={homeRoute}
+        projects={[project, projectBeta]}
+        identityScopeKey="user-1::ws-team-a"
+      />,
+    );
+    await waitFor(() => {
+      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      expect(labels).toEqual([
+        expect.stringContaining('Home'),
+        expect.stringContaining('Project Alpha'),
+        expect.stringContaining('Project Beta'),
+      ]);
+      expect(screen.getByRole('tab', { name: /Project Beta/ }).getAttribute('aria-selected')).toBe('true');
+    });
+    expect(navigate).toHaveBeenLastCalledWith(projectBetaRoute);
+
+    // The multi-scope registry is persistent, not just an in-memory switch
+    // cache. Remounting directly in B restores only B's own active tab.
+    unmount();
+    render(
+      <WorkspaceTabsBar
+        route={projectGammaRoute}
+        projects={[projectGamma]}
+        identityScopeKey="user-1::ws-team-b"
+      />,
+    );
+    await waitFor(() => {
+      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      expect(labels).toEqual([
+        expect.stringContaining('Home'),
+        expect.stringContaining('Project Gamma'),
+      ]);
+      expect(labels.some((label) => label.includes('Project Alpha'))).toBe(false);
+      expect(labels.some((label) => label.includes('Project Beta'))).toBe(false);
+      expect(screen.getByRole('tab', { name: /Project Gamma/ }).getAttribute('aria-selected')).toBe('true');
+    });
+  });
+
+  it('migrates a v1 single-scope snapshot before switching away and back', async () => {
+    window.localStorage.setItem(
+      'open-design:workspace-tabs:v1',
+      JSON.stringify({
+        scopeKey: 'user-1::ws-team-a',
+        tabs: [
+          { id: 'entry:home:a', kind: 'entry', view: 'home', createdAt: 1, lastActiveAt: 1 },
+          {
+            id: 'project:project-alpha:a',
+            kind: 'project',
+            projectId: 'project-alpha',
+            conversationId: 'conversation-alpha',
+            fileName: 'alpha.html',
+            createdAt: 2,
+            lastActiveAt: 2,
+          },
+        ],
+        activeTabId: 'project:project-alpha:a',
+      }),
+    );
+    const { rerender } = render(
+      <WorkspaceTabsBar
+        route={{ ...projectRoute, fileName: 'alpha.html' }}
+        projects={[project]}
+        identityScopeKey="user-1::ws-team-a"
+      />,
+    );
+
+    rerender(
+      <WorkspaceTabsBar
+        route={homeRoute}
+        projects={[]}
+        identityScopeKey="user-1::ws-team-b"
+      />,
+    );
+    await waitFor(() => {
+      expect(screen.getAllByRole('tab')).toHaveLength(1);
+    });
+
+    rerender(
+      <WorkspaceTabsBar
+        route={homeRoute}
+        projects={[project]}
+        identityScopeKey="user-1::ws-team-a"
+      />,
+    );
+    await waitFor(() => {
+      expect(screen.getAllByRole('tab').map((tab) => tab.textContent ?? '')).toEqual([
+        expect.stringContaining('Home'),
+        expect.stringContaining('Project Alpha'),
+      ]);
+      expect(screen.getByRole('tab', { name: /Project Alpha/ }).getAttribute('aria-selected')).toBe('true');
+    });
+  });
+
+  it('retains only the twelve most recently visited workspace snapshots', async () => {
+    let now = 100;
+    const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => now++);
+    const { rerender } = render(
+      <WorkspaceTabsBar
+        route={homeRoute}
+        projects={[]}
+        identityScopeKey="user-1::ws-team-0"
+      />,
+    );
+
+    for (let index = 1; index <= 12; index += 1) {
+      const scopeKey = `user-1::ws-team-${index}`;
+      rerender(
+        <WorkspaceTabsBar
+          route={homeRoute}
+          projects={[]}
+          identityScopeKey={scopeKey}
+        />,
+      );
+      await waitFor(() => {
+        const parsed = JSON.parse(
+          window.localStorage.getItem('open-design:workspace-tabs:v1') ?? '{}',
+        ) as { scopeKey?: string };
+        expect(parsed.scopeKey).toBe(scopeKey);
+      });
+    }
+
+    const persisted = JSON.parse(
+      window.localStorage.getItem('open-design:workspace-tabs:v1') ?? '{}',
+    ) as { scopes?: Record<string, unknown> };
+    expect(Object.keys(persisted.scopes ?? {})).toHaveLength(12);
+    expect(persisted.scopes).not.toHaveProperty('user-1::ws-team-0');
+    expect(persisted.scopes).toHaveProperty('user-1::ws-team-12');
+    nowSpy.mockRestore();
+  });
+
+  it('keeps an outgoing route out of a different initial scope under StrictMode', async () => {
+    window.localStorage.setItem(
+      'open-design:workspace-tabs:v1',
+      JSON.stringify({
+        scopeKey: 'user-1::ws-team-a',
+        tabs: [
+          { id: 'entry:home:a', kind: 'entry', view: 'home', createdAt: 1, lastActiveAt: 1 },
+          {
+            id: 'project:project-alpha:a',
+            kind: 'project',
+            projectId: 'project-alpha',
+            conversationId: null,
+            fileName: 'alpha.html',
+            createdAt: 2,
+            lastActiveAt: 2,
+          },
+        ],
+        activeTabId: 'project:project-alpha:a',
+      }),
+    );
+
+    render(
+      <StrictMode>
+        <WorkspaceTabsBar
+          route={{ ...projectRoute, fileName: 'alpha.html' }}
+          projects={[project]}
+          identityScopeKey="user-1::ws-team-b"
+        />
+      </StrictMode>,
+    );
+
+    await waitFor(() => {
+      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      expect(labels).toHaveLength(1);
+      expect(labels.some((label) => label.includes('Project Alpha'))).toBe(false);
+      expect(screen.getByTestId('workspace-home-rail-toggle')).toBeTruthy();
+    });
+    expect(navigate).toHaveBeenLastCalledWith(homeRoute);
+  });
+
+  it('does not reset while onboarding is active, even if the scope changes underneath it', async () => {
+    const onboardingRoute: Route = { kind: 'home', view: 'onboarding' };
+    const { rerender } = render(
+      <WorkspaceTabsBar
+        route={onboardingRoute}
+        projects={[project]}
+        onboardingCompleted={false}
+        identityScopeKey="anon::none"
+      />,
+    );
+    await waitFor(() => {
+      expect(screen.getAllByRole('tab')).toHaveLength(1);
+      expect(storedEntryTabView()).toBe('onboarding');
+    });
+
+    // Signing in mid-onboarding flips the scope key — this must NOT eject the
+    // user from the Connect step before they finish it.
+    rerender(
+      <WorkspaceTabsBar
+        route={onboardingRoute}
+        projects={[project]}
+        onboardingCompleted={false}
+        identityScopeKey="user-1::ws-personal-1"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('tab')).toHaveLength(1);
+      expect(storedEntryTabView()).toBe('onboarding');
+    });
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it('never resets while identityScopeKey stays unresolved (default prop, back-compat)', async () => {
+    const { rerender } = render(
+      <WorkspaceTabsBar route={{ kind: 'home', view: 'home' }} projects={[project]} />,
+    );
+    rerender(<WorkspaceTabsBar route={{ ...projectRoute }} projects={[project]} />);
+    await waitFor(() => {
+      expect(screen.getAllByRole('tab')).toHaveLength(2);
+    });
+    // No identityScopeKey passed at all across any render — tabs must behave
+    // exactly as they did before this feature existed.
+    rerender(<WorkspaceTabsBar route={{ ...projectRoute }} projects={[projectBeta]} />);
+    await waitFor(() => {
+      expect(screen.getAllByRole('tab')).toHaveLength(2);
+    });
+  });
+
+  // Regression for the "team member's deep-linked/refreshed project bounces
+  // to Home" bug: amrLoginStatus and workspaceContext resolve on independent
+  // timers on every fresh boot, and a logged-in account's workspaceContext
+  // routinely lands after amrLoginStatus does. `deriveTabIdentityScope`'s
+  // `workspaceContextLoading` gate (see tab-scope.test.ts) keeps App.tsx from
+  // ever handing this component an intermediate "workspace: none" scopeKey
+  // while workspaceContext is still loading — so from THIS component's point
+  // of view, a fresh boot for an already-team-scoped member must go straight
+  // from unresolved (no identityScopeKey prop) to the real team scope key in
+  // one hop, never passing through a fabricated no-workspace key in between.
+  // This test locks in that the component does not treat that direct hop as
+  // a reset, closing the loop on the upstream fix.
+  it('adopts a team scope key silently when it resolves directly, with no intermediate no-workspace tick', async () => {
+    const { rerender } = render(
+      <WorkspaceTabsBar route={{ ...projectRoute }} projects={[project]} />,
+    );
+    await waitFor(() => {
+      expect(screen.getAllByRole('tab')).toHaveLength(2);
+    });
+
+    // workspaceContextLoading having gated the derivation, App.tsx never
+    // produces an intermediate "user-1::none" tick — the very first resolved
+    // key IS the real team workspace.
+    rerender(
+      <WorkspaceTabsBar
+        route={{ ...projectRoute }}
+        projects={[project]}
+        identityScopeKey="user-1::ws-team-a"
+      />,
+    );
+
+    // Silently adopted as the baseline: the project tab survives, nothing
+    // resets, and no navigation away from the deep-linked/refreshed project
+    // fires.
+    await waitFor(() => {
+      expect(screen.getAllByRole('tab')).toHaveLength(2);
+      expect(
+        screen.getAllByRole('tab').some((tab) => (tab.textContent ?? '').includes('Project Alpha')),
+      ).toBe(true);
+    });
+    expect(navigate).not.toHaveBeenCalledWith(homeRoute);
+  });
+
+  // recvqziATl6LlJ / recvqxKdOz0S6g: a legacy snapshot written by a build
+  // that predates tab scoping carries NO owner stamp. The account that owned
+  // those tabs may have switched since (the old build never closed tabs on an
+  // account swap), so adopting the whole snapshot into whichever scope
+  // happens to resolve first attributes another account's project tabs to
+  // the current account's workspace — QA reproduced exactly this as "the new
+  // workspace's tab strip shows a project that does not exist in it". Tabs
+  // are bookmarks: when attribution is unknowable the snapshot is dropped
+  // and the scope starts from route truth instead.
+  it('discards an unowned legacy snapshot instead of adopting it into the first resolved scope', async () => {
+    window.localStorage.setItem(
+      'open-design:workspace-tabs:v1',
+      JSON.stringify({
+        tabs: [
+          { id: 'entry:home:a', kind: 'entry', view: 'home', createdAt: 1, lastActiveAt: 1 },
+          {
+            id: 'project:project-alpha:b',
+            kind: 'project',
+            projectId: 'project-alpha',
+            conversationId: null,
+            fileName: null,
+            createdAt: 2,
+            lastActiveAt: 2,
+          },
+        ],
+        activeTabId: 'project:project-alpha:b',
+      }),
+    );
+
+    // App boots on Home with the identity still unresolved, then the first
+    // resolved scope belongs to a DIFFERENT account's brand-new workspace
+    // (the account swap happened before this session, on a build that never
+    // stamped an owner into the snapshot).
+    const { rerender } = render(
+      <WorkspaceTabsBar
+        route={homeRoute}
+        projects={[project]}
+        identityScopeKey={null}
+      />,
+    );
+    rerender(
+      <WorkspaceTabsBar
+        route={homeRoute}
+        projects={[project]}
+        identityScopeKey="user-2::ws-new-team"
+      />,
+    );
+
+    await waitFor(() => {
+      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      expect(labels).toHaveLength(1);
+      expect(labels.some((label) => label.includes('Project Alpha'))).toBe(false);
+    });
+    // The mis-attribution must not be persisted either: the new scope's
+    // registry entry must not contain the unowned project tab.
+    await waitFor(() => {
+      const parsed = JSON.parse(
+        window.localStorage.getItem('open-design:workspace-tabs:v1') ?? '{}',
+      ) as { scopeKey?: string; scopes?: Record<string, unknown> };
+      expect(parsed.scopeKey).toBe('user-2::ws-new-team');
+      expect(JSON.stringify(parsed.scopes?.['user-2::ws-new-team'] ?? {})).not.toContain(
+        'project-alpha',
+      );
+    });
+  });
+
+  it('rebuilds the first resolved scope from route truth alone when upgrading an unowned legacy snapshot', async () => {
+    // Same-account upgrade path: the legacy snapshot holds MORE tabs than the
+    // current URL. Even for the snapshot's rightful owner the per-tab
+    // workspace cannot be inferred (legacy tabs predate workspaces), so only
+    // the route-derived tab survives; background legacy tabs are dropped
+    // rather than guessed into the active workspace.
+    window.localStorage.setItem(
+      'open-design:workspace-tabs:v1',
+      JSON.stringify({
+        tabs: [
+          { id: 'entry:home:a', kind: 'entry', view: 'home', createdAt: 1, lastActiveAt: 1 },
+          {
+            id: 'project:project-alpha:b',
+            kind: 'project',
+            projectId: 'project-alpha',
+            conversationId: null,
+            fileName: 'alpha.html',
+            createdAt: 2,
+            lastActiveAt: 2,
+          },
+          {
+            id: 'project:project-beta:c',
+            kind: 'project',
+            projectId: 'project-beta',
+            conversationId: null,
+            fileName: 'beta.html',
+            createdAt: 3,
+            lastActiveAt: 3,
+          },
+        ],
+        activeTabId: 'project:project-beta:c',
+      }),
+    );
+
+    const { rerender } = render(
+      <WorkspaceTabsBar
+        route={{ ...projectRoute, fileName: 'alpha.html' }}
+        projects={[project, projectBeta]}
+        identityScopeKey={null}
+      />,
+    );
+    rerender(
+      <WorkspaceTabsBar
+        route={{ ...projectRoute, fileName: 'alpha.html' }}
+        projects={[project, projectBeta]}
+        identityScopeKey="user-1::ws-personal-1"
+      />,
+    );
+
+    await waitFor(() => {
+      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      expect(labels).toEqual([
+        expect.stringContaining('Home'),
+        expect.stringContaining('Project Alpha'),
+      ]);
+    });
+    await waitFor(() => {
+      const parsed = JSON.parse(
+        window.localStorage.getItem('open-design:workspace-tabs:v1') ?? '{}',
+      ) as { scopeKey?: string };
+      expect(parsed.scopeKey).toBe('user-1::ws-personal-1');
+    });
+  });
+
+  it("never re-homes another account's tabs into the incoming scope while onboarding is active", async () => {
+    // recvqziATl6LlJ leak family, second face: the onboarding branch of the
+    // scope effect re-homes the LIVE state into the incoming scope without
+    // resetting it, assuming only the pinned entry tab can exist mid-flow.
+    // But the live state can hold a snapshot restored at mount (localStorage
+    // outlives a daemon data-dir reset that replays onboarding), and the
+    // incoming scope can belong to a DIFFERENT account (direct account swap
+    // mid-onboarding, no sign-out hop). Re-homing is attribution: across
+    // accounts it must fail closed to a fresh Home state — while still never
+    // navigating away from the flow.
+    const onboardingRoute: Route = { kind: 'home', view: 'onboarding' };
+    const ownedSnapshot = {
+      tabs: [
+        { id: 'entry:home:a', kind: 'entry', view: 'home', createdAt: 1, lastActiveAt: 1 },
+        {
+          id: 'project:project-alpha:b',
+          kind: 'project',
+          projectId: 'project-alpha',
+          conversationId: null,
+          fileName: null,
+          createdAt: 2,
+          lastActiveAt: 2,
+        },
+      ],
+      activeTabId: 'project:project-alpha:b',
+    };
+    window.localStorage.setItem(
+      'open-design:workspace-tabs:v1',
+      JSON.stringify({
+        ...ownedSnapshot,
+        scopeKey: 'user-1::ws-a',
+        scopes: { 'user-1::ws-a': { state: ownedSnapshot, updatedAt: 1 } },
+      }),
+    );
+
+    const { rerender } = render(
+      <WorkspaceTabsBar
+        route={onboardingRoute}
+        projects={[project]}
+        onboardingCompleted={false}
+        identityScopeKey="user-1::ws-a"
+      />,
+    );
+    // Precondition: the owner's own scope restores its own tabs — allowed.
+    await waitFor(() => {
+      expect(screen.getAllByRole('tab')).toHaveLength(2);
+    });
+
+    // Direct account swap mid-onboarding.
+    rerender(
+      <WorkspaceTabsBar
+        route={onboardingRoute}
+        projects={[project]}
+        onboardingCompleted={false}
+        identityScopeKey="user-2::ws-b"
+      />,
+    );
+
+    await waitFor(() => {
+      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      expect(labels.some((label) => label.includes('Project Alpha'))).toBe(false);
+    });
+    // Stays in the onboarding flow: no navigation fired, entry tab still on
+    // the onboarding view.
+    expect(navigate).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(storedEntryTabView()).toBe('onboarding');
+    });
+    // Persisted registry: the incoming account's bucket must not have
+    // adopted the outgoing account's project tab, while the outgoing
+    // account's own bucket keeps it.
+    await waitFor(() => {
+      const parsed = JSON.parse(
+        window.localStorage.getItem('open-design:workspace-tabs:v1') ?? '{}',
+      ) as { scopes?: Record<string, unknown> };
+      expect(JSON.stringify(parsed.scopes?.['user-2::ws-b'] ?? {})).not.toContain(
+        'project-alpha',
+      );
+      expect(JSON.stringify(parsed.scopes?.['user-1::ws-a'] ?? {})).toContain(
+        'project-alpha',
+      );
     });
   });
 });

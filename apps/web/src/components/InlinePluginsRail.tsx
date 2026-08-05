@@ -6,12 +6,24 @@
 // ApplyResult upstream; the parent decides what to do with it
 // (hydrate the brief, show the input form, etc.).
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type {
   ApplyResult,
   InstalledPluginRecord,
 } from '@open-design/contracts';
-import { applyPlugin, listPlugins } from '../state/projects';
+import {
+  applyPlugin,
+  listPlugins,
+  resolvedWorkspaceContextForWrite,
+} from '../state/projects';
+import { useProjectCollabContext } from '../collab/collab-context';
+import {
+  currentWorkspaceAccountGeneration,
+  useWorkspaceContext,
+  workspaceIdentityCacheKey,
+} from '../collab/useWorkspaceContext';
+import { useWorkspaceInvalidation } from '../collab/workspace-events';
+import { useWorkspaceSnapshotActivation } from '../collab/workspace-snapshot-activation';
 import { useI18n } from '../i18n';
 import { localizePluginDescription, localizePluginTitle } from './plugins-home/localization';
 
@@ -46,33 +58,123 @@ interface Props {
 
 export function InlinePluginsRail(props: Props) {
   const { locale } = useI18n();
-  const [plugins, setPlugins] = useState<InstalledPluginRecord[]>([]);
+  const shellWorkspace = useWorkspaceContext();
+  const projectCollab = useProjectCollabContext();
+  const workspaceContext = props.projectId
+    ? projectCollab.workspaceContext
+    : shellWorkspace.context;
+  const workspaceContextUnavailable = props.projectId
+    ? projectCollab.workspaceContextLoading
+    : shellWorkspace.loading
+      || shellWorkspace.identityChangePending === true
+      || shellWorkspace.failure === 'unavailable';
+  const workspaceIdentity = JSON.stringify([
+    currentWorkspaceAccountGeneration(),
+    workspaceContextUnavailable ? 'workspace-unavailable' : workspaceIdentityCacheKey(workspaceContext),
+  ]);
+  const workspaceIdentityRef = useRef(workspaceIdentity);
+  workspaceIdentityRef.current = workspaceIdentity;
+  const pluginCatalogRequestGenerationRef = useRef(0);
+  const [pluginCatalog, setPluginCatalog] = useState<{
+    identity: string | null;
+    items: InstalledPluginRecord[];
+  }>({ identity: null, items: [] });
+  const plugins = pluginCatalog.identity === workspaceIdentity
+    ? pluginCatalog.items
+    : [];
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    let cancelled = false;
-    void listPlugins().then((rows) => {
-      if (cancelled) return;
-      setPlugins(filterPlugins(rows, props.filter));
+    setPendingId(null);
+    setError(null);
+  }, [workspaceIdentity]);
+
+  const refresh = useCallback(async () => {
+    if (workspaceContextUnavailable) return;
+    const requestGeneration = ++pluginCatalogRequestGenerationRef.current;
+    const issuedIdentity = workspaceIdentity;
+    const rows = await listPlugins({ workspaceContext });
+    if (
+      requestGeneration !== pluginCatalogRequestGenerationRef.current
+      || workspaceIdentityRef.current !== issuedIdentity
+    ) return;
+    setPluginCatalog({
+      identity: issuedIdentity,
+      items: filterPlugins(rows, props.filter),
     });
-    return () => {
-      cancelled = true;
-    };
   }, [
     props.filter?.taskKind,
     props.filter?.mode,
     props.filter?.kinds?.join(','),
     props.filter?.pluginIds?.join(','),
+    workspaceIdentity,
+    workspaceContextUnavailable,
   ]);
 
+  useEffect(() => {
+    if (workspaceContext?.workspaceType === 'team') return;
+    void refresh();
+    return () => {
+      // Prevent an in-flight read from committing after unmount or after a
+      // successor identity/filter effect has taken ownership.
+      pluginCatalogRequestGenerationRef.current += 1;
+    };
+  }, [refresh, workspaceContext?.workspaceType]);
+
+  const handlePluginStreamActive = useWorkspaceSnapshotActivation({
+    enabled: !workspaceContextUnavailable && workspaceContext?.workspaceType === 'team',
+    identity: workspaceIdentity,
+    refresh: () => { void refresh(); },
+  });
+
+  useWorkspaceInvalidation(
+    {
+      'team-resources-changed': (payload) => {
+        if (payload.resourceKind === 'plugin') void refresh();
+      },
+    },
+    {
+      workspaceContext:
+        !workspaceContextUnavailable && workspaceContext?.workspaceType === 'team'
+          ? workspaceContext
+          : null,
+      enabled:
+        !workspaceContextUnavailable && workspaceContext?.workspaceType === 'team',
+      onActive: handlePluginStreamActive,
+    },
+  );
+
   const onClick = async (record: InstalledPluginRecord) => {
+    const issuedIdentity = workspaceIdentity;
+    if (
+      workspaceContextUnavailable
+      || pluginCatalog.identity !== issuedIdentity
+    ) {
+      setError(
+        'Workspace context is unavailable. Try again when workspace sync finishes.',
+      );
+      return;
+    }
+    let writeWorkspaceContext;
+    try {
+      writeWorkspaceContext = props.projectId
+        ? projectCollab.workspaceContext
+        : resolvedWorkspaceContextForWrite(shellWorkspace);
+    } catch {
+      setError(
+        'Workspace context is unavailable. Try again when workspace sync finishes.',
+      );
+      return;
+    }
     setPendingId(record.id);
     setError(null);
     const result = await applyPlugin(record.id, {
       ...(props.projectId ? { projectId: props.projectId } : {}),
       locale,
+      workspaceContext: writeWorkspaceContext,
     });
+    if (workspaceIdentityRef.current !== issuedIdentity) return;
     setPendingId(null);
     if (!result) {
       setError(
@@ -104,7 +206,7 @@ export function InlinePluginsRail(props: Props) {
             role="listitem"
             className="inline-plugins-rail__card"
             onClick={() => onClick(p)}
-            disabled={pendingId !== null}
+            disabled={pendingId !== null || workspaceContextUnavailable}
             aria-busy={pendingId === p.id ? 'true' : undefined}
             data-plugin-id={p.id}
             title={description || title}

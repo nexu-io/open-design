@@ -51,7 +51,7 @@ describe('HandoffButton zero-editors fallback', () => {
     const fallback = (await screen.findByText('Finder')).closest('button') as HTMLButtonElement;
     fireEvent.click(fallback);
 
-    await waitFor(() => expect(openProjectInEditor).toHaveBeenCalledWith('p1', 'finder'));
+    await waitFor(() => expect(openProjectInEditor).toHaveBeenCalledWith('p1', 'finder', null));
   });
 
   it('surfaces a daemon spawn failure inline so the fallback is not a silent no-op', async () => {
@@ -79,8 +79,6 @@ describe('HandoffButton zero-editors fallback', () => {
   });
 
   it('copies a framework-specific CLI handoff prompt with the local project path', async () => {
-    const fetchMock = vi.fn(async () => new Response('{}', { status: 202 }));
-    vi.stubGlobal('fetch', fetchMock);
     fetchHostEditors.mockResolvedValue({
       platform: 'darwin',
       editors: [
@@ -122,18 +120,9 @@ describe('HandoffButton zero-editors fallback', () => {
 
     fireEvent.click(await screen.findByTestId('handoff-caret'));
     fireEvent.click(await screen.findByRole('tab', { name: '复制给 CLI' }));
-    const amrWebsiteLink = screen.getByRole('link', { name: /打开 Open Design Cloud 官网/ }) as HTMLAnchorElement;
-    expect(amrWebsiteLink.getAttribute('href'))
-      .toBe('https://open-design.ai/amr');
-    fireEvent.click(amrWebsiteLink);
-    const amrWebsiteUrl = new URL(amrWebsiteLink.href);
-    expect(amrWebsiteUrl.searchParams.get('od_origin')).toBe('open_design');
-    expect(amrWebsiteUrl.searchParams.get('od_entry_source')).toBe('handoff_amr_website');
-    expect(amrWebsiteUrl.searchParams.get('od_device_id')).toBe('od-install-abc');
-    expect(fetchMock).toHaveBeenCalledWith(
-      '/api/integrations/vela/analytics-entry',
-      expect.objectContaining({ method: 'POST' }),
-    );
+    // The "Open Design Cloud website" link was removed from the CLI tab
+    // (acceptance #101); the CLI agent cards remain the surface here.
+    expect(screen.queryByRole('link', { name: /打开 Open Design Cloud 官网/ })).toBeNull();
     expect(screen.getByTestId('handoff-cli-item-amr').textContent).toContain('Open Design');
     expect(screen.getByTestId('handoff-cli-item-amr').textContent).not.toContain('未安装');
     expect(

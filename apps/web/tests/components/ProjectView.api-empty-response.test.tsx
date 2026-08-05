@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import type { ReactNode } from 'react';
+import { useLayoutEffect, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ProjectView } from '../../src/components/ProjectView';
@@ -32,6 +32,8 @@ import type {
 const chatPaneMockState = vi.hoisted(() => ({
   attachments: [] as ChatAttachment[],
   commentAttachments: [] as ChatCommentAttachment[],
+  fireResizeObserverOnFocusedLayout: false,
+  resizeObserverCallbacks: [] as ResizeObserverCallback[],
 }));
 
 vi.mock('../../src/router', () => ({
@@ -121,9 +123,36 @@ vi.mock('../../src/components/AvatarMenu', () => ({
 
 vi.mock('../../src/components/FileWorkspace', () => ({
   DESIGN_SYSTEM_TAB: '__design_system__',
-  FileWorkspace: ({ openRequest }: { openRequest?: { name: string; nonce: number } | null }) => (
-    <div data-testid="file-workspace" data-open-request-name={openRequest?.name ?? ''} />
-  ),
+  FileWorkspace: ({
+    openRequest,
+    focusMode = false,
+    onFocusModeChange,
+  }: {
+    openRequest?: { name: string; nonce: number } | null;
+    focusMode?: boolean;
+    onFocusModeChange?: (focused: boolean) => void;
+  }) => {
+    useLayoutEffect(() => {
+      if (!focusMode || !chatPaneMockState.fireResizeObserverOnFocusedLayout) return;
+      for (const callback of chatPaneMockState.resizeObserverCallbacks) {
+        callback([], {} as ResizeObserver);
+      }
+    }, [focusMode]);
+
+    return (
+      <div data-testid="file-workspace" data-open-request-name={openRequest?.name ?? ''}>
+        {focusMode ? (
+          <button
+            type="button"
+            data-testid="workspace-focus-toggle"
+            onClick={() => onFocusModeChange?.(false)}
+          >
+            show chat
+          </button>
+        ) : null}
+      </div>
+    );
+  },
 }));
 
 vi.mock('../../src/components/Loading', () => ({
@@ -137,6 +166,7 @@ vi.mock('../../src/components/ChatPane', () => ({
     onRetry,
     error,
     projectHeader,
+    onCollapse,
   }: {
     messages: ChatMessage[];
     onSend: (
@@ -147,6 +177,7 @@ vi.mock('../../src/components/ChatPane', () => ({
     onRetry?: (assistantMessage: ChatMessage) => void;
     error?: string | null;
     projectHeader?: ReactNode;
+    onCollapse?: () => void;
   }) => {
     const lastMessage = messages[messages.length - 1];
     const retryMessage =
@@ -172,6 +203,9 @@ vi.mock('../../src/components/ChatPane', () => ({
         onClick={() => onSend('Create a login page', chatPaneMockState.attachments, chatPaneMockState.commentAttachments)}
       >
         send
+      </button>
+      <button type="button" data-testid="chat-collapse-toggle" onClick={onCollapse}>
+        collapse chat
       </button>
       {messages.map((message) => (
         <article key={message.id} data-testid={`message-${message.role}`}>
@@ -203,7 +237,7 @@ const mockedPlaySound = vi.mocked(playSound);
 const config: AppConfig = {
   mode: 'api',
   apiProtocol: 'openai',
-  apiKey: 'sk-test',
+  apiKey: 'byok-test-key',
   baseUrl: 'https://api.deepseek.com',
   model: 'deepseek-chat',
   agentId: null,
@@ -266,6 +300,8 @@ describe('ProjectView API empty response handling', () => {
   beforeEach(() => {
     chatPaneMockState.attachments = [];
     chatPaneMockState.commentAttachments = [];
+    chatPaneMockState.fireResizeObserverOnFocusedLayout = false;
+    chatPaneMockState.resizeObserverCallbacks = [];
     mockedStreamViaDaemon.mockReset();
     mockedFetchProjectFilePreview.mockReset();
     mockedFetchProjectFileText.mockReset();
@@ -363,6 +399,47 @@ describe('ProjectView API empty response handling', () => {
     expect(screen.queryByRole('button', { name: 'Continue in CLI' })).toBeNull();
   });
 
+  it('keeps an empty project workspace visible across repeated chat collapse cycles', async () => {
+    class MockResizeObserver implements ResizeObserver {
+      constructor(callback: ResizeObserverCallback) {
+        chatPaneMockState.resizeObserverCallbacks.push(callback);
+      }
+
+      disconnect() {}
+      observe() {}
+      unobserve() {}
+    }
+
+    vi.stubGlobal('ResizeObserver', MockResizeObserver);
+    chatPaneMockState.fireResizeObserverOnFocusedLayout = true;
+    renderProjectView();
+
+    await waitFor(() => expect(chatPaneMockState.resizeObserverCallbacks.length).toBeGreaterThan(0));
+
+    for (let round = 0; round < 3; round += 1) {
+      fireEvent.click(screen.getByTestId('chat-collapse-toggle'));
+
+      const split = document.querySelector<HTMLDivElement>('.split');
+      expect(split).not.toBeNull();
+      expect(split?.classList.contains('split-focus')).toBe(true);
+      expect(screen.getByTestId('file-workspace')).toBeTruthy();
+      expect(screen.getByTestId('workspace-focus-toggle')).toBeTruthy();
+      expect(split?.style.getPropertyValue('--project-chat-panel-width')).toBe('');
+      expect(split?.style.getPropertyValue('--project-chat-handle-width')).toBe('');
+      expect(split?.style.getPropertyValue('--project-workspace-panel-track')).toBe('');
+
+      const chatSlot = split?.querySelector<HTMLDivElement>('.split-chat-slot');
+      expect(chatSlot).not.toBeNull();
+      fireEvent.transitionEnd(split!, { propertyName: '--project-chat-panel-width' });
+      await waitFor(() => expect(chatSlot).toHaveAttribute('aria-hidden', 'true'));
+      expect(chatSlot).not.toHaveAttribute('hidden');
+
+      fireEvent.click(screen.getByTestId('workspace-focus-toggle'));
+      expect(split?.classList.contains('split-focus')).toBe(false);
+      expect(chatSlot).not.toHaveAttribute('aria-hidden');
+    }
+  });
+
   it('marks attached saved comments as failed when an API completion has no output', async () => {
     chatPaneMockState.commentAttachments = [
       {
@@ -388,11 +465,17 @@ describe('ProjectView API empty response handling', () => {
     await sendTestPrompt();
 
     await waitFor(() => {
+      // `patchPreviewCommentStatus` takes the acting workspace context as a
+      // fifth argument (1c15574c2), so the daemon can authorize the comment
+      // mutation. This harness has no cloud identity, so it is `null` — but the
+      // argument must still be matched: a four-argument matcher cannot match a
+      // five-argument call at all.
       expect(mockedPatchPreviewCommentStatus).toHaveBeenCalledWith(
         project.id,
         'conv-project-1',
         'comment-1',
         'failed',
+        null,
       );
     });
     await waitFor(() => {
@@ -748,7 +831,12 @@ describe('ProjectView API empty response handling', () => {
     await waitFor(() => expect(capturedOptions.current).not.toBeNull());
     expect(capturedOptions.current).toEqual(expect.objectContaining({
       agentId: 'byok-opencode',
-      byokProvider: expect.objectContaining({ protocol: 'openai', apiKey: 'sk-test' }),
+      byokProvider: expect.objectContaining({
+        protocol: 'openai',
+        apiKey: 'byok-test-key',
+        baseUrl: 'https://api.deepseek.com',
+        model: 'deepseek-chat',
+      }),
       byokMediaDefaults: {
         imageModel: 'gpt-image-2',
         speechModel: 'gpt-4o-mini-tts',
@@ -824,7 +912,7 @@ describe('ProjectView API empty response handling', () => {
 
 async function sendTestPrompt() {
   await waitFor(() => {
-    expect(mockedListMessages).toHaveBeenCalledWith(project.id, 'conv-project-1');
+    expect(mockedListMessages).toHaveBeenCalledWith(project.id, 'conv-project-1', null);
   });
   await new Promise((resolve) => setTimeout(resolve, 0));
   await waitFor(() => expect(screen.getByRole('button', { name: 'send' })).toBeTruthy());
