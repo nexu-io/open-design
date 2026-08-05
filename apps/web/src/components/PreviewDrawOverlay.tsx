@@ -490,7 +490,13 @@ export function PreviewDrawOverlay({
       if (now - anchorLastProbeAtRef.current < ANCHOR_PROBE_COOLDOWN_MS) return;
     }
     anchorLastProbeAtRef.current = Date.now();
+    // Generation token: a reply may resolve after the world it described is
+    // gone — the overlay was closed and reopened, the file changed on a reused
+    // iframe, or a NEWER probe (resize/scroll/pre-capture) has started. Each
+    // of those bumps the generation, so only the latest probe may commit.
+    const generation = ++anchorProbeGenerationRef.current;
     const response = await requestPreviewAnchorTargets(iframe);
+    if (anchorProbeGenerationRef.current !== generation) return;
     anchorSilentProbesRef.current = response.answered ? 0 : anchorSilentProbesRef.current + 1;
     // The await spans up to the bridge timeout, during which the world can
     // change under us: the active iframe can swap (srcDoc → URL once the
@@ -572,6 +578,10 @@ export function PreviewDrawOverlay({
   const anchorSilentProbesRef = useRef(0);
   const anchorLastProbeAtRef = useRef(0);
   const anchorProbeFrameRef = useRef<HTMLIFrameElement | null>(null);
+  // Monotonic probe generation — see syncContentAnchors. Bumped whenever a new
+  // probe starts and whenever the world a pending probe measured is
+  // invalidated (deactivation, file switch), so a late reply can never commit.
+  const anchorProbeGenerationRef = useRef(0);
   // The overlay can stay mounted (and even active) across a file switch; the
   // iframe element is often reused, so the per-frame reset above won't fire.
   // A new document is a new bridge — start its probe budget from zero.
@@ -579,6 +589,7 @@ export function PreviewDrawOverlay({
     anchorSilentProbesRef.current = 0;
     anchorLastProbeAtRef.current = 0;
     anchorProbeFrameRef.current = null;
+    anchorProbeGenerationRef.current += 1;
   }, [filePath]);
   const contentAnchorTimerRef = useRef<number | null>(null);
   const contentAnchorRanAtRef = useRef(0);
@@ -1016,6 +1027,7 @@ export function PreviewDrawOverlay({
     anchorSilentProbesRef.current = 0;
     anchorLastProbeAtRef.current = 0;
     anchorProbeFrameRef.current = null;
+    anchorProbeGenerationRef.current += 1;
     resetTextEditingState();
     commitTextMarks([]);
     setExtraFiles([]);

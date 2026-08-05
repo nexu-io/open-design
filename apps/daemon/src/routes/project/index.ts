@@ -1316,6 +1316,22 @@ function injectUrlPreviewBridge(html: string, bridge: 'scroll' | 'selection' | '
   return injectBeforeBodyClose(html, 'data-od-url-snapshot-bridge', URL_PREVIEW_SNAPSHOT_BRIDGE);
 }
 
+// Bridge scripts as a plain suffix, for responses that must keep streaming
+// from disk (HTML above HTML_PREVIEW_BRIDGE_MAX_BYTES). Browsers move trailing
+// scripts into the body, and every bridge is a self-contained IIFE with a
+// re-entry guard, so appending after the streamed bytes is equivalent to the
+// buffered injectBeforeBodyClose fallback for a document with no </body>.
+// Without this, a >2MiB powered artifact got no selection bridge, never
+// advertised markAnchors, and Draw kicked it back to the opaque srcDoc
+// sandbox that cannot run it (#6361 review).
+function urlPreviewBridgeSuffix(requestedBridge: unknown): string {
+  let suffix = '';
+  if (wantsUrlPreviewScrollBridge(requestedBridge)) suffix += URL_PREVIEW_SCROLL_BRIDGE;
+  if (wantsUrlPreviewSelectionBridge(requestedBridge)) suffix += URL_PREVIEW_SELECTION_BRIDGE;
+  if (wantsUrlPreviewSnapshotBridge(requestedBridge)) suffix += URL_PREVIEW_SNAPSHOT_BRIDGE;
+  return suffix;
+}
+
 function applyUrlPreviewBridgesToHtml(
   transformed: string | Buffer,
   mime: string,
@@ -5075,6 +5091,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     beforeSend?: (mime: string) => void,
     transformFile?: (file: { mime: string; buffer: Buffer }) => Buffer | string | Promise<Buffer | string>,
     revalidate = false,
+    streamHtmlSuffix = '',
   ) {
     const meta = await resolveProjectFilePath(
       PROJECTS_DIR,
@@ -5124,6 +5141,14 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         return res.status(416).end();
       }
 
+      // Bridge suffix only applies to a full-body HTML response: a Range
+      // request must return the file's exact bytes (offsets would otherwise
+      // shift between requests), and non-HTML never gets bridges.
+      const appendSuffix =
+        streamHtmlSuffix.length > 0 && !range && /^text\/html(?:;|$)/i.test(meta.mime)
+          ? Buffer.from(streamHtmlSuffix, 'utf8')
+          : null;
+
       let start;
       let end;
       let statusCode;
@@ -5136,7 +5161,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         start = 0;
         end = meta.size - 1;
         statusCode = 200;
-        res.setHeader('Content-Length', String(meta.size));
+        res.setHeader('Content-Length', String(meta.size + (appendSuffix?.byteLength ?? 0)));
       }
 
       res.status(statusCode);
@@ -5148,7 +5173,12 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
           res.destroy(streamErr);
         }
       });
-      stream.pipe(res);
+      if (appendSuffix) {
+        stream.pipe(res, { end: false });
+        stream.on('end', () => res.end(appendSuffix));
+      } else {
+        stream.pipe(res);
+      }
       return;
     }
 
@@ -5759,6 +5789,13 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       );
       const skipHtmlPreviewBridge =
         /^text\/html(?:;|$)/i.test(meta.mime) && meta.size > HTML_PREVIEW_BRIDGE_MAX_BYTES;
+      // Large HTML streams from disk without the buffered transform, but the
+      // preview bridges must still ride along or Draw/comment capabilities
+      // silently vanish above the size cutoff; append them after the streamed
+      // bytes instead (see urlPreviewBridgeSuffix).
+      const largeHtmlBridgeSuffix = skipHtmlPreviewBridge
+        ? urlPreviewBridgeSuffix(req.query.odPreviewBridge)
+        : '';
 
       await sendProjectFile(
         req,
@@ -5822,6 +5859,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
           );
         },
         true, // revalidate: emit ETag/Last-Modified so covers/preview/export reuse cached assets
+        largeHtmlBridgeSuffix,
       );
     } catch (err: any) {
       const status = err && err.code === 'ENOENT' ? 404 : 400;
@@ -5889,6 +5927,11 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
           });
           return applyUrlPreviewBridgesToHtml(transformed, file.mime, req.query.odPreviewBridge);
         },
+        false,
+        // Powered artifacts above the buffering cutoff still need the preview
+        // bridges (markAnchors gating: no bridge -> Draw falls back to srcDoc,
+        // which cannot run Worker/SAB/WASM content). Streamed + appended.
+        skipPoweredTransform ? urlPreviewBridgeSuffix(req.query.odPreviewBridge) : '',
       );
     } catch (err: any) {
       const status = err && err.code === 'ENOENT' ? 404 : 400;

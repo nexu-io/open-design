@@ -347,6 +347,35 @@ describe('GET /api/projects/:id/raw/* range request route', () => {
     expect(html).not.toContain('data-od-url-snapshot-bridge');
   });
 
+  it('appends the preview bridges after streamed large HTML (issue #6361 review)', async () => {
+    // A powered artifact above HTML_PREVIEW_BRIDGE_MAX_BYTES streams from
+    // disk, but must still carry the bridges: without markAnchors Draw kicks
+    // the powered URL iframe back to the opaque srcDoc sandbox that cannot
+    // run Worker/SAB/WASM content. The bridges arrive as a suffix on a full
+    // (non-Range) response; Range replies keep exact file bytes.
+    const res = await fetch(`${rawUrl('large.html')}?odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot`);
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain('Large Preview');
+    expect(html).toContain('data-od-url-scroll-bridge');
+    expect(html).toContain('data-od-url-selection-bridge');
+    expect(html).toContain('data-od-url-snapshot-bridge');
+    expect(html).toContain("type: 'od:url-selection-bridge-ready', markAnchors: true");
+    // The suffix follows the file's own bytes verbatim.
+    expect(html.indexOf('Large Preview')).toBeLessThan(html.indexOf('data-od-url-scroll-bridge'));
+    // Content-Length covers file + suffix so the response is not truncated.
+    expect(Number(res.headers.get('content-length'))).toBe(Buffer.byteLength(html, 'utf8'));
+  });
+
+  it('appends the preview bridges after streamed large HTML on the powered route too', async () => {
+    const res = await fetch(`${poweredUrl('large.html')}?odPreviewBridge=selection&odPreviewBridge=snapshot`);
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain('data-od-url-selection-bridge');
+    expect(html).toContain('data-od-url-snapshot-bridge');
+    expect(html).toContain("type: 'od:url-selection-bridge-ready', markAnchors: true");
+  });
+
   it('injects the URL preview scroll bridge only when requested', async () => {
     const plain = await fetch(rawUrl('page.html'));
     expect(await plain.text()).toBe('<html/>');

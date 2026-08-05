@@ -484,6 +484,111 @@ describe('PreviewDrawOverlay content anchoring (issue #6361)', () => {
     }
   });
 
+  it('discards a probe reply that resolves after the overlay was reopened', async () => {
+    // A pending probe survives deactivate -> reopen on the SAME iframe node
+    // with the SAME frame size, so the node/size guards cannot catch it. Only
+    // the generation token can: the stale reply carries the pre-reopen
+    // document's (scrolled) boxes, and committing it would re-project the
+    // fresh, already-anchored mark 100px off just before the send.
+    frame.w = 692;
+    frame.h = 666;
+    const restoreRect = installFrameGeometry();
+    const observer = installResizeObserver();
+    const anchors = vi.mocked(requestPreviewAnchorTargets);
+    anchors.mockClear();
+    const SCROLLED = ZOOMED.map((t) => ({
+      ...t,
+      position: { ...t.position, y: t.position.y - 100 },
+    }));
+    let releaseStale: (() => void) | null = null;
+    anchors
+      // probe 1: pre-reopen mark's commit pass — answers fast.
+      .mockImplementationOnce(async () => ({ answered: true, targets: ZOOMED }) as never)
+      // probe 2: hangs; will resolve with the pre-reopen scrolled boxes AFTER
+      // the overlay is reopened and a fresh anchored mark exists.
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            releaseStale = () => resolve({ answered: true, targets: SCROLLED } as never);
+          }) as never,
+      )
+      // probe 3 (post-reopen commit pass): current boxes anchor the new mark.
+      .mockImplementationOnce(async () => ({ answered: true, targets: ZOOMED }) as never)
+      // probe 4+ (incl. the pre-capture sync): a live bridge with no targets,
+      // so nothing re-corrects a mark corrupted by the stale commit.
+      .mockImplementation(async () => ({ answered: true, targets: [] }) as never);
+
+    const annotation = vi.fn((event: Event) => {
+      const detail = (event as CustomEvent<{ ack?: (r: { ok: boolean }) => void }>).detail;
+      detail.ack?.({ ok: true });
+    });
+    window.addEventListener('opendesign:annotation', annotation);
+
+    try {
+      const view = render(
+        <PreviewDrawOverlay active>
+          <iframe title="srcdoc" data-od-render-mode="srcdoc" data-od-active="true" />
+        </PreviewDrawOverlay>,
+      );
+      const wrap = view.container.querySelector<HTMLElement>('.preview-draw-overlay')!;
+      let canvas = view.container.querySelector<HTMLCanvasElement>('canvas')!;
+      Object.defineProperty(wrap, 'offsetWidth', { configurable: true, get: () => frame.w });
+      Object.defineProperty(wrap, 'offsetHeight', { configurable: true, get: () => frame.h });
+      observer.trigger();
+
+      // Pre-reopen mark: probe 1 anchors it. A resize then starts probe 2,
+      // which hangs.
+      fireEvent.pointerDown(canvas, { clientX: 40, clientY: 342, pointerId: 1 });
+      fireEvent.pointerMove(canvas, { clientX: 600, clientY: 382, pointerId: 1 });
+      fireEvent.pointerUp(canvas, { clientX: 600, clientY: 382, pointerId: 1 });
+      await waitFor(() => expect(anchors).toHaveBeenCalledTimes(1));
+      await new Promise((r) => setTimeout(r, 350));
+      observer.trigger();
+      await waitFor(() => expect(anchors).toHaveBeenCalledTimes(2));
+
+      // Reopen on the same iframe node / same frame size.
+      view.rerender(
+        <PreviewDrawOverlay active={false}>
+          <iframe title="srcdoc" data-od-render-mode="srcdoc" data-od-active="true" />
+        </PreviewDrawOverlay>,
+      );
+      view.rerender(
+        <PreviewDrawOverlay active>
+          <iframe title="srcdoc" data-od-render-mode="srcdoc" data-od-active="true" />
+        </PreviewDrawOverlay>,
+      );
+      observer.trigger();
+      canvas = view.container.querySelector<HTMLCanvasElement>('canvas')!;
+
+      // Fresh mark; its commit pass (probe 3) anchors it against ZOOMED.
+      fireEvent.pointerDown(canvas, { clientX: 40, clientY: 342, pointerId: 1 });
+      fireEvent.pointerMove(canvas, { clientX: 600, clientY: 382, pointerId: 1 });
+      fireEvent.pointerUp(canvas, { clientX: 600, clientY: 382, pointerId: 1 });
+      await waitFor(() => expect(anchors.mock.calls.length).toBeGreaterThanOrEqual(3));
+      await new Promise((r) => setTimeout(r, 350));
+
+      // NOW the pre-reopen probe resolves with scrolled boxes. Committing it
+      // re-projects the anchored fresh mark 100px up.
+      releaseStale!();
+      await new Promise((r) => setTimeout(r, 50));
+
+      const input = view.container.querySelector<HTMLInputElement>('.preview-draw-note-input')!;
+      fireEvent.change(input, { target: { value: 'Reopen must not resurrect stale replies.' } });
+      fireEvent.click(view.getByRole('button', { name: 'Send' }));
+
+      await waitFor(() => expect(annotation).toHaveBeenCalledTimes(1));
+      const detail = (annotation.mock.calls[0]?.[0] as CustomEvent<{
+        bounds?: { x: number; y: number; width: number; height: number };
+      }>).detail;
+
+      expect(detail.bounds!.y).toBeCloseTo(342, 0);
+    } finally {
+      window.removeEventListener('opendesign:annotation', annotation);
+      observer.restore();
+      restoreRect();
+    }
+  });
+
   it('resets the probe budget when the file changes under the open overlay', async () => {
     frame.w = 692;
     frame.h = 666;
