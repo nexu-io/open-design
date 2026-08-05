@@ -331,11 +331,16 @@ export function AvatarMenu({
     return () => window.removeEventListener(AMR_LOGIN_STATUS_EVENT, onLoginStatus);
   }, [amrLoginPending, stopAmrLoginPolling]);
 
-  // Clear any in-flight poll on unmount and mark the component as unmounted so
-  // a pending startVelaLogin cannot spawn a new unowned interval.
-  useEffect(() => () => {
-    amrMountedRef.current = false;
-    if (amrLoginPollRef.current) clearInterval(amrLoginPollRef.current);
+  // Track mount state so a pending startVelaLogin cannot spawn a new unowned
+  // interval after the menu tears down. The setup body re-arms the flag so
+  // React Strict Mode's development effect probe (setup → cleanup → setup)
+  // doesn't leave it permanently false and strand the login on "Signing in".
+  useEffect(() => {
+    amrMountedRef.current = true;
+    return () => {
+      amrMountedRef.current = false;
+      if (amrLoginPollRef.current) clearInterval(amrLoginPollRef.current);
+    };
   }, []);
 
   // Resolve the user's model + reasoning pick for the active agent. Falls

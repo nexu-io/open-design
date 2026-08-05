@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { useState } from 'react';
+import { StrictMode, useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { AvatarMenu } from '../../src/components/AvatarMenu';
@@ -382,6 +382,73 @@ describe('AvatarMenu', () => {
     // a different delay, so filter on our interval's cadence.
     const amrPollCalls = setIntervalSpy.mock.calls.filter(([, delay]) => delay === 2000);
     expect(amrPollCalls).toHaveLength(0);
+  });
+
+  it('proceeds with the login polling under React StrictMode', async () => {
+    // looper review on #6421: the mounted-flag effect must re-arm its setup
+    // body, or React Strict Mode's dev probe (setup → cleanup → setup) leaves
+    // the flag false and strands the signed-out login on "Signing in".
+    const amrAgent: AgentInfo = {
+      id: 'amr',
+      name: 'Open Design AMR',
+      bin: 'vela',
+      available: true,
+      models: [{ id: 'default', label: 'Default (CLI config)' }],
+    };
+    let resolveLogin: (value: Response) => void = () => {};
+    const loginPromise = new Promise<Response>((resolve) => {
+      resolveLogin = resolve;
+    });
+    const setIntervalSpy = vi.spyOn(globalThis, 'setInterval');
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === '/api/integrations/vela/status') {
+        return new Response(
+          JSON.stringify({
+            loggedIn: false,
+            loginInFlight: false,
+            profile: 'test',
+            user: null,
+            configPath: '/Users/test/.amr/config.json',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url === '/api/integrations/vela/login') return loginPromise;
+      return new Response('{}', { status: 200 });
+    }));
+
+    render(
+      <StrictMode>
+        <AvatarMenu
+          config={baseConfig}
+          agents={[codexAgent, claudeAgent, amrAgent]}
+          daemonLive
+          onModeChange={vi.fn()}
+          onAgentChange={vi.fn()}
+          onAgentModelChange={vi.fn()}
+          onOpenSettings={vi.fn()}
+          onRefreshAgents={vi.fn()}
+        />
+      </StrictMode>,
+    );
+    openMenu();
+    await waitFor(() => {
+      expect(screen.getByTestId('avatar-amr-row-signin')).toBeTruthy();
+    });
+    fireEvent.click(screen.getByTestId('avatar-amr-row-signin'));
+    resolveLogin(
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    // Under StrictMode the mounted flag must be re-armed, so the 2000ms
+    // polling interval IS created (the login path proceeds).
+    const amrPollCalls = setIntervalSpy.mock.calls.filter(([, delay]) => delay === 2000);
+    expect(amrPollCalls.length).toBeGreaterThan(0);
   });
 
   it('rescans agents and re-renders newly available CLI entries', async () => {
