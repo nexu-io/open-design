@@ -15,6 +15,7 @@ import {
   resolveExclusiveSurface,
 } from './prompts/system.js';
 import { emittedRenderableQuestionForm } from './question-form-detect.js';
+import { createFinalizedMessageTelemetryReporter as createFinalizedMessageTelemetryReporterWithContract } from './runtimes/telemetry-finalization.js';
 import { upsertSkillPluginCandidateAssistantMessage as upsertSkillPluginCandidateAssistantMessageWithContract } from './runtimes/skill-candidate-message.js';
 import { resolveProjectRoot } from './project-root.js';
 import {
@@ -1295,7 +1296,7 @@ user instruction and respond accordingly.
 
 `;
 
-export function createFinalizedMessageTelemetryReporter({
+export const createFinalizedMessageTelemetryReporter = ({
   design,
   db,
   dataDir,
@@ -1307,141 +1308,14 @@ export function createFinalizedMessageTelemetryReporter({
   db: unknown;
   dataDir: string;
   reportedRuns: Set<string>;
-  getAppVersion?: () => any;
+  getAppVersion?: () => unknown;
   report?: typeof reportRunCompletedFromDaemon;
-}) {
-  const appVersionForCapture = () => {
-    const appVersion = getAppVersion();
-    if (typeof appVersion === 'string') return appVersion;
-    if (appVersion && typeof appVersion.version === 'string') return appVersion.version;
-    if (typeof design?.getAppVersion === 'function') return design.getAppVersion();
-    return 'unknown';
-  };
-  const captureResult = ({
-    analyticsContext,
-    conversationId,
-    delivery,
-    durationMs,
-    projectId,
-    reportResult,
-    reportTrigger = 'final_message',
-    run,
-    runId,
-    skipReason,
-    status,
-  }) => {
-    const context = analyticsContext ?? run?.analyticsContext ?? null;
-    if (!context || !design?.analytics?.capture || !runId || !delivery) return;
-    const terminalResult = status ? runResultFromStatus(status) : undefined;
-    design.analytics.capture({
-      eventName: 'langfuse_report_result',
-      context,
-      appVersion: appVersionForCapture(),
-      properties: {
-        page_name: 'chat_panel',
-        area: 'chat_panel',
-        project_id: run?.projectId ?? projectId ?? null,
-        conversation_id: run?.conversationId ?? conversationId ?? null,
-        run_id: runId,
-        langfuse_trace_id: runId,
-        langfuse_expected: delivery.langfuse_expected,
-        langfuse_delivery_status: delivery.langfuse_delivery_status,
-        ...(delivery.langfuse_drop_reason
-          ? { langfuse_drop_reason: delivery.langfuse_drop_reason }
-          : {}),
-        langfuse_report_result: reportResult,
-        langfuse_report_trigger: reportTrigger,
-        ...(skipReason ? { langfuse_report_skip_reason: skipReason } : {}),
-        ...(durationMs !== undefined ? { report_duration_ms: durationMs } : {}),
-        ...(terminalResult ? { result: terminalResult } : {}),
-        ...(run?.errorCode ? { error_code: run.errorCode } : {}),
-        ...(run?.agentId ? { agent_provider_id: agentIdToTracking(run.agentId) } : {}),
-        ...(run?.model !== undefined ? { model_id: modelIdForTracking(run.model) } : {}),
-      },
-      insertId: `${runId}-langfuse-report-${reportTrigger}-${reportResult}${skipReason ? `-${skipReason}` : ''}`,
-    });
-  };
-  return (saved, body = {}, options = {}) => {
-    if (!shouldReportRunCompletedFromMessage(saved, body)) return;
-    const runId = saved.runId;
-    const run = design.runs.get(runId);
-    if (!run) {
-      captureResult({
-        analyticsContext: options.analyticsContext,
-        conversationId: options.conversationId ?? saved.conversationId,
-        delivery: {
-          langfuse_expected: true,
-          langfuse_delivery_status: 'failed',
-          langfuse_drop_reason: 'network_error',
-        },
-        projectId: options.projectId,
-        reportTrigger: options.reportTrigger,
-        reportResult: 'skipped',
-        runId,
-        skipReason: 'run_not_found',
-        status: saved.runStatus,
-      });
-      return;
-    }
-    const reportTrigger = options.reportTrigger ?? 'final_message';
-    if (reportedRuns.has(run.id)) {
-      captureResult({
-        analyticsContext: options.analyticsContext,
-        conversationId: options.conversationId ?? saved.conversationId,
-        delivery: {
-          langfuse_expected: true,
-          langfuse_delivery_status: 'failed',
-          langfuse_drop_reason: 'network_error',
-        },
-        projectId: options.projectId,
-        reportTrigger: options.reportTrigger,
-        reportResult: 'skipped',
-        run,
-        runId: run.id,
-        skipReason: 'duplicate_run',
-        status: saved.runStatus,
-      });
-      return;
-    }
-    if (reportTrigger !== 'terminal_fallback') {
-      reportedRuns.add(run.id);
-    }
-    void (async () => {
-      const start = Date.now();
-      const delivery = await report({
-        db,
-        dataDir,
-        run,
-        persistedRunStatus: saved.runStatus,
-        persistedEndedAt: saved.endedAt,
-        appVersion: getAppVersion(),
-      });
-      const state = delivery ?? {
-        langfuse_expected: true,
-        langfuse_delivery_status: 'accepted',
-      };
-      captureResult({
-        analyticsContext: options.analyticsContext,
-        conversationId: options.conversationId ?? saved.conversationId,
-        delivery: state,
-        durationMs: Date.now() - start,
-        projectId: options.projectId,
-        reportTrigger,
-        reportResult: state.langfuse_expected === false
-          ? 'skipped'
-          : state.langfuse_delivery_status === 'accepted'
-            ? 'accepted'
-            : state.langfuse_delivery_status === 'failed'
-              ? 'failed'
-              : 'skipped',
-        run,
-        runId: run.id,
-        skipReason: state.langfuse_expected === false ? 'not_expected' : undefined,
-        status: saved.runStatus,
-      });
-    })();
-  };
-}
+}) => createFinalizedMessageTelemetryReporterWithContract({
+  runs: design.runs,
+  analytics: design.analytics,
+  getAppVersion: () => getAppVersion() ?? (typeof design?.getAppVersion === 'function' ? design.getAppVersion() : null),
+  report,
+}, reportedRuns, db, dataDir);
 
 export function shouldReportRunCompletionTelemetryFallbackStatus(status: unknown): boolean {
   return status === 'failed' || status === 'canceled';
