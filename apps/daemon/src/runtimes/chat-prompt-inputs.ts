@@ -474,7 +474,7 @@ function shouldAllowCodexImagegenForMediaPolicy(
   return true;
 }
 
-export function normalizeCommentAttachments(input: readonly CommentAttachmentInput[] | null | undefined) {
+export function normalizeCommentAttachments(input: unknown) {
   if (!Array.isArray(input)) return [];
   return input
     .map((raw, index) => {
@@ -757,7 +757,7 @@ function isPathWithin(base: string, target: string) {
 
 export function resolveSafeProjectAttachments(
   cwd: string | null | undefined,
-  attachments: readonly string[] | null | undefined,
+  attachments: unknown,
   opts: {
     pathImpl?: typeof path;
     existsSync?: (path: string) => boolean;
@@ -871,7 +871,7 @@ export function formatDesignFilesWorkspaceHint(
 }
 
 export function resolveSafePromptImagePaths(
-  imagePaths: readonly string[] | null | undefined,
+  imagePaths: unknown,
   opts: {
     pathImpl?: typeof path;
     existsSync?: (path: string) => boolean;

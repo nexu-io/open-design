@@ -3285,7 +3285,7 @@ export async function startServer({
       critiqueShouldRun,
       designSystemSelection: {
         id: activeDesignSystemId,
-        requestedId: effectiveDesignSystemId,
+        requestedId: effectiveDesignSystemId ?? undefined,
         source: activeDesignSystemId ? designSystemSelection.source : 'none',
         digest: designSystemDigest,
       },
@@ -3366,7 +3366,7 @@ export async function startServer({
         runs.emit!(run as never, 'pipeline_stage_failed', {
           runId:      run.id,
           snapshotId: snapshot.snapshotId,
-          message:    String(err?.message ?? err),
+          message:    err instanceof Error ? err.message : String(err),
         });
       } catch { /* ignore */ }
     });
@@ -3418,7 +3418,10 @@ export async function startServer({
     // langfuse-bridge report path can include them without reaching back
     // into chatBody across the createChatRunService boundary. Each field
     // is optional and only set when the chat body actually carried it.
-    const telemetryPrompt = telemetryPromptFromRunRequest(message, currentPrompt);
+    const telemetryPrompt = telemetryPromptFromRunRequest(
+      typeof message === 'string' ? message : '',
+      currentPrompt,
+    );
     if (typeof telemetryPrompt === 'string') run.userPrompt = telemetryPrompt;
     if (typeof model === 'string' && model) run.model = model;
     if (typeof reasoning === 'string' && reasoning) run.reasoning = reasoning;
@@ -3433,7 +3436,7 @@ export async function startServer({
       sessionMode === 'chat' || sessionMode === 'design'
         ? normalizeConversationSessionMode(sessionMode)
         : normalizeConversationSessionMode(conversationSession?.sessionMode);
-    const def = getAgentDef(agentId);
+    const def = getAgentDef(typeof agentId === 'string' ? agentId : '');
     if (!def)
       return design.runs.fail(
         run,
