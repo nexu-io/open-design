@@ -822,6 +822,71 @@ describe('PreviewDrawOverlay content anchoring (issue #6361)', () => {
     }
   });
 
+  it('a dragged text label keeps its new position through the pre-send sync', async () => {
+    // Once a probe attaches an anchor to a text label, every later sync
+    // re-projects the label from its stored element. Dragging the label picks
+    // a NEW position — the commit must drop/rebind the anchor, or the awaited
+    // pre-capture sync in Send snaps the label back to the old element.
+    frame.w = 692;
+    frame.h = 666;
+    const restoreRect = installFrameGeometry();
+    const observer = installResizeObserver();
+    const anchors = vi.mocked(requestPreviewAnchorTargets);
+    anchors.mockReset();
+    anchors.mockImplementation(async () => ({ answered: true, targets: ZOOMED }) as never);
+
+    const annotation = vi.fn((event: Event) => {
+      const detail = (event as CustomEvent<{ ack?: (r: { ok: boolean }) => void }>).detail;
+      detail.ack?.({ ok: true });
+    });
+    window.addEventListener('opendesign:annotation', annotation);
+
+    try {
+      const { container, getByRole } = render(
+        <PreviewDrawOverlay active>
+          <iframe title="srcdoc" data-od-render-mode="srcdoc" data-od-active="true" />
+        </PreviewDrawOverlay>,
+      );
+      const wrap = container.querySelector<HTMLElement>('.preview-draw-overlay')!;
+      const canvas = container.querySelector<HTMLCanvasElement>('canvas')!;
+      Object.defineProperty(wrap, 'offsetWidth', { configurable: true, get: () => frame.w });
+      Object.defineProperty(wrap, 'offsetHeight', { configurable: true, get: () => frame.h });
+      observer.trigger();
+
+      // Drop a label on BAND 05 (y=342) and type into it; the commit-time
+      // probe anchors it to that band.
+      fireEvent.click(getByRole('button', { name: 'Text' }));
+      fireEvent.pointerDown(canvas, { clientX: 100, clientY: 352, pointerId: 1 });
+      const textarea = container.querySelector<HTMLTextAreaElement>('.preview-draw-text-layer textarea')!;
+      fireEvent.change(textarea, { target: { value: 'moved label' } });
+      fireEvent.blur(textarea);
+      await waitFor(() => expect(anchors).toHaveBeenCalled());
+      await new Promise((r) => setTimeout(r, 350));
+
+      // Drag the placed label from BAND 05 down to BAND 08 (y≈495).
+      const label = container.querySelector<HTMLElement>('.preview-draw-text-mark')!;
+      fireEvent.pointerDown(label, { clientX: 100, clientY: 352, pointerId: 2 });
+      fireEvent.pointerMove(label, { clientX: 100, clientY: 495, pointerId: 2 });
+      fireEvent.pointerUp(label, { clientX: 100, clientY: 495, pointerId: 2 });
+      await new Promise((r) => setTimeout(r, 350));
+
+      // Send. The pre-capture sync runs; the label must stay near BAND 08.
+      const input = container.querySelector<HTMLInputElement>('.preview-draw-note-input')!;
+      fireEvent.change(input, { target: { value: 'Label must stay where I dropped it.' } });
+      fireEvent.click(getByRole('button', { name: 'Send' }));
+
+      await waitFor(() => expect(annotation).toHaveBeenCalledTimes(1));
+      // Read the label's committed normalized position from the DOM style.
+      const topPct = Number.parseFloat(label.style.top);
+      // 495/666 ≈ 74.3%. The pre-fix snap-back would restore ~352/666 ≈ 52.9%.
+      expect(topPct).toBeGreaterThan(65);
+    } finally {
+      window.removeEventListener('opendesign:annotation', annotation);
+      observer.restore();
+      restoreRect();
+    }
+  });
+
   it('resets the probe budget when the file changes under the open overlay', async () => {
     frame.w = 692;
     frame.h = 666;

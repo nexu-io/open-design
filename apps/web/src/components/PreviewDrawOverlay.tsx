@@ -946,9 +946,16 @@ export function PreviewDrawOverlay({
     (e.currentTarget as Element).releasePointerCapture?.(e.pointerId);
     textDragRef.current = null;
     if (drag.moved) {
+      // The user chose a NEW position — the old element binding no longer
+      // describes this label. Drop it so the next sync re-anchors at the new
+      // location instead of snapping the label back to the old element (the
+      // pre-capture sync in Send would otherwise undo the drag).
       commitTextMarks(
-        textMarksRef.current.map((item) => (item.id === mark.id ? { ...item, x: drag.curX, y: drag.curY } : item)),
+        textMarksRef.current.map((item) =>
+          item.id === mark.id ? { ...item, x: drag.curX, y: drag.curY, anchor: undefined } : item,
+        ),
       );
+      scheduleContentReanchor();
       lastTextTapRef.current = null;
       return;
     }

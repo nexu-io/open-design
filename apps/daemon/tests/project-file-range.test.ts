@@ -367,6 +367,36 @@ describe('GET /api/projects/:id/raw/* range request route', () => {
     expect(Number(res.headers.get('content-length'))).toBe(Buffer.byteLength(html, 'utf8'));
   });
 
+  it('busts pre-suffix caches: a stale ETag revalidation returns the bridged body, not 304', async () => {
+    // A browser that cached the large HTML before the bridge suffix existed
+    // holds the plain size-mtime ETag. Revalidating with it must MISS (the
+    // suffix participates in the validator) and return the bridged bytes —
+    // a 304 here would pin a bridgeless document and Draw would silently
+    // fall back to srcDoc.
+    const url = `${rawUrl('large.html')}?odPreviewBridge=selection&odPreviewBridge=snapshot`;
+    const first = await fetch(url);
+    expect(first.status).toBe(200);
+    const freshEtag = first.headers.get('etag')!;
+    expect(freshEtag).toBeTruthy();
+
+    // Reconstruct the pre-fix validator (plain size-mtime, no suffix hash):
+    // strip the suffix segment from the fresh tag.
+    const preFixEtag = freshEtag.replace(/-[0-9a-f]{8}"$/, '"');
+    expect(preFixEtag).not.toBe(freshEtag);
+    const revalidated = await fetch(url, { headers: { 'If-None-Match': preFixEtag } });
+    expect(revalidated.status).toBe(200);
+    const html = await revalidated.text();
+    expect(html).toContain('data-od-url-selection-bridge');
+
+    // The fresh (suffix-aware) validator still 304s.
+    const fresh = await fetch(url, { headers: { 'If-None-Match': freshEtag } });
+    expect(fresh.status).toBe(304);
+
+    // And a bridge-less request keeps the plain validator (no false busting).
+    const plain = await fetch(rawUrl('large.html'));
+    expect(plain.headers.get('etag')).toBe(preFixEtag);
+  });
+
   it('appends the preview bridges after streamed large HTML on the powered route too', async () => {
     const res = await fetch(`${poweredUrl('large.html')}?odPreviewBridge=selection&odPreviewBridge=snapshot`);
     expect(res.status).toBe(200);

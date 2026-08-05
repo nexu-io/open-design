@@ -4992,9 +4992,20 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
   // the file's size+mtime, so any agent rewrite changes them and busts the cache
   // immediately; `no-cache` means "always revalidate" (never serve stale without
   // asking), so a 304 only happens when the bytes are genuinely unchanged.
-  function setRawRevalidationHeaders(res: Response, meta: { size: number; mtime: number }): string {
+  function setRawRevalidationHeaders(
+    res: Response,
+    meta: { size: number; mtime: number },
+    // Appended bridge bytes are part of the representation: the validator must
+    // change when the suffix changes (bridges requested, bridge script edits),
+    // or a client that cached the pre-suffix body revalidates to a 304 and
+    // keeps a bridgeless document — Draw then silently falls back to srcDoc.
+    bodySuffix = '',
+  ): string {
     const mtime = Math.floor(meta.mtime);
-    const etag = `W/"${meta.size.toString(16)}-${mtime.toString(16)}"`;
+    const suffixTag = bodySuffix.length > 0
+      ? `-${createHash('sha1').update(bodySuffix).digest('hex').slice(0, 8)}`
+      : '';
+    const etag = `W/"${meta.size.toString(16)}-${mtime.toString(16)}${suffixTag}"`;
     res.setHeader('ETag', etag);
     res.setHeader('Last-Modified', new Date(mtime).toUTCString());
     res.setHeader('Cache-Control', 'no-cache');
@@ -5128,9 +5139,14 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     const willSubstitute =
       !isStreamed && !!transformFile && /^text\/html(?:;|$)/i.test(meta.mime);
 
+    // A suffix applies only to full-body HTML responses (see appendSuffix
+    // below); it participates in the validator so pre-suffix caches revalidate
+    // to fresh bytes instead of 304ing a bridgeless body.
+    const validatorSuffix =
+      streamHtmlSuffix.length > 0 && /^text\/html(?:;|$)/i.test(meta.mime) ? streamHtmlSuffix : '';
     let currentEtag: string | null = null;
     if (revalidate && !willSubstitute) {
-      currentEtag = setRawRevalidationHeaders(res, meta);
+      currentEtag = setRawRevalidationHeaders(res, meta, validatorSuffix);
       if (rawRequestIsFresh(req, currentEtag, meta.mtime)) {
         return res.status(304).end();
       }
