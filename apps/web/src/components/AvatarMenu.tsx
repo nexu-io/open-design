@@ -5,6 +5,7 @@ import { getResolvedDeviceId } from '../analytics/client';
 import { amrHandoffDeviceId, attributedAmrUrl, recordAmrEntry } from '../analytics/amr-attribution';
 import { useAnalytics } from '../analytics/provider';
 import { useT } from '../i18n';
+import { Button } from '@open-design/components';
 import { AgentIcon } from './AgentIcon';
 import { PlanBadge } from './PlanBadge';
 import { RemixIcon } from './RemixIcon';
@@ -584,8 +585,8 @@ export function AvatarMenu({
                         </a>
                       ) : null}
                       {amrAccount && !amrAccount.loggedIn ? (
-                        <button
-                          type="button"
+                        <Button
+                          variant="ghost"
                           className="avatar-amr-row__signin"
                           data-testid="avatar-amr-row-signin"
                           disabled={amrLoginPending}
@@ -596,7 +597,7 @@ export function AvatarMenu({
                           {amrLoginPending
                             ? t('settings.amrSigningIn')
                             : t('settings.amrSignIn')}
-                        </button>
+                        </Button>
                       ) : null}
                     </div>
                   );
