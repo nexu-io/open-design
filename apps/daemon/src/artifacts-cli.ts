@@ -44,7 +44,7 @@ function fail(message: string, details?: unknown, status?: number): ArtifactCliR
   return { exitCode: 1 };
 }
 
-function parseOptions(args: string[]): ParsedOptions | { error: string } {
+function parseOptions(args: readonly string[]): ParsedOptions | { error: string } {
   const [command, ...rest] = args;
   const options: ParsedOptions = {
     command: command === '-h' || command === '--help' ? undefined : command,
@@ -103,7 +103,7 @@ async function readJsonObject(filePath: string): Promise<JsonObject> {
   return value as JsonObject;
 }
 
-export async function runArtifactsCli(args: string[]): Promise<ArtifactCliResult> {
+export async function runArtifactsCli(args: readonly string[]): Promise<ArtifactCliResult> {
   const options = parseOptions(args);
   if ('error' in options) return fail(options.error);
   if (options.help || !options.command) {

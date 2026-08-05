@@ -602,7 +602,9 @@ async function pollUntilDoneOrBudget(
 }
 
 function surfaceFetchError(err: unknown, daemonUrl: string): void {
-  const cause = err && typeof err === 'object' ? err.cause : null;
+  const cause = err && typeof err === 'object'
+    ? (err as { cause?: unknown }).cause
+    : null;
   const code =
     cause && typeof cause === 'object' && typeof cause.code === 'string'
       ? cause.code
@@ -627,7 +629,9 @@ function surfaceFetchError(err: unknown, daemonUrl: string): void {
 
 async function cliDaemonUrl(flags?: CliFlags): Promise<string> {
   const flagUrl = flags?.['daemon-url'];
-  return resolveDaemonUrl({ flagUrl: typeof flagUrl === 'string' ? flagUrl : undefined });
+  return typeof flagUrl === 'string'
+    ? resolveDaemonUrl({ flagUrl })
+    : resolveDaemonUrl();
 }
 
 async function cliDaemonBaseUrl(flags?: CliFlags): Promise<string> {
