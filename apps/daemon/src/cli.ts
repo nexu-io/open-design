@@ -18,6 +18,7 @@ import { BRAND_USAGE, isBrandHelpArg } from './brands-cli-help.js';
 import { parseDesignSystemRenameArgs } from './design-systems/rename-args.js';
 import { runLiveArtifactsToolCli } from './tools-live-artifacts-cli.js';
 import { buildGhShellCommand, buildLoginShellCommand } from './runtimes/shell-command.js';
+import { parsePluginSpecifier, resolvePluginVersion } from './runtimes/plugin-specifier.js';
 import { splitResearchSubcommand } from './research/cli-args.js';
 import { resolveDaemonUrl } from './daemon-url.js';
 import { requestJsonIpc } from '@open-design/sidecar';
@@ -2482,12 +2483,12 @@ async function runPluginInfo(rest) {
 }
 
 function resolveMarketplacePluginFromList(marketplaces, specifier) {
-  const parsed = parseCliPluginSpecifier(specifier);
+  const parsed = parsePluginSpecifier(specifier);
   const target = parsed.name.toLowerCase();
   for (const marketplace of marketplaces) {
     for (const entry of marketplace?.manifest?.plugins ?? []) {
       if (String(entry.name ?? '').toLowerCase() !== target) continue;
-      const version = resolveCliEntryVersion(entry, parsed.range);
+      const version = resolvePluginVersion(entry, parsed.range);
       if (!version) return null;
       return {
         marketplaceId: marketplace.id,
@@ -2503,33 +2504,6 @@ function resolveMarketplacePluginFromList(marketplaces, specifier) {
     }
   }
   return null;
-}
-
-function parseCliPluginSpecifier(input) {
-  const trimmed = String(input ?? '').trim();
-  const slash = trimmed.indexOf('/');
-  const at = trimmed.lastIndexOf('@');
-  if (slash > 0 && at > slash + 1) {
-    return { name: trimmed.slice(0, at), range: trimmed.slice(at + 1) };
-  }
-  return { name: trimmed, range: undefined };
-}
-
-function resolveCliEntryVersion(entry, range) {
-  if (entry?.yanked) return null;
-  const versions = Array.isArray(entry?.versions) ? entry.versions : [];
-  const target = range && range !== 'latest'
-    ? (entry?.distTags?.[range] ?? range)
-    : (entry?.distTags?.latest ?? entry?.version);
-  const version = versions.find((item) => item.version === target) ?? null;
-  if (version?.yanked) return null;
-  return {
-    version: target,
-    source: version?.source ?? entry?.source,
-    ref: version?.ref ?? entry?.ref,
-    integrity: version?.integrity ?? version?.dist?.integrity ?? entry?.integrity ?? entry?.dist?.integrity,
-    manifestDigest: version?.manifestDigest ?? version?.dist?.manifestDigest ?? entry?.manifestDigest ?? entry?.dist?.manifestDigest,
-  };
 }
 
 // Plan §3.MM1 — `od plugin manifest <id>`. Prints just the parsed
@@ -4202,7 +4176,7 @@ marks a version unresolvable for new installs while preserving lockfile replay.`
   }
   const spec = rest.find((a) => !a.startsWith('-') && a !== flags.reason && a !== flags.to);
   const reason = typeof flags.reason === 'string' ? flags.reason.trim() : '';
-  const parsed = parseCliPluginSpecifier(spec);
+  const parsed = parsePluginSpecifier(spec);
   if (!parsed.name || !parsed.range) {
     console.error('Usage: od plugin yank <vendor/plugin-name>@<version> --reason "<why>"');
     process.exit(2);
