@@ -602,6 +602,7 @@ import { registerSocialShareRoutes } from './routes/social-share.js';
 import { registerOpenDesignPublicMetadataRoutes } from './routes/open-design-public-metadata.js';
 import { registerMemoryRoutes } from './routes/memory.js';
 import { registerTelemetryRoutes } from './routes/telemetry.js';
+import { registerFigmaRoutes } from './routes/figma.js';
 import {
   assembleExample,
   registerAtomRoutes,
@@ -1876,14 +1877,6 @@ const pluginUpload = multer({
   },
 });
 
-// Figma `.fig` import — memory storage so the offline decoder gets the raw
-// bytes without a temp-file round-trip. The decoder unzips + kiwi-decodes
-// in-process and writes the snapshot under the project cwd.
-const figmaUpload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 200 * 1024 * 1024 },  // community kits run large
-});
-
 const pluginShareTaskStore = createPluginShareTaskStore({
   randomUUID,
   execCommandViaLoginShell,
@@ -2898,45 +2891,12 @@ export async function startServer({
     conversations: conversationDeps,
     auth: authDeps,
   });
-  app.post('/api/projects/:id/figma/import', (req, res) => {
-    figmaUpload.single('file')(req, res, async (err) => {
-      if (err) return sendMulterError(res, err);
-      try {
-        const project = getProject(db, req.params.id);
-        if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
-
-        const body = req.body && typeof req.body === 'object' ? req.body : {};
-        const figmaUrl = typeof body.figmaUrl === 'string' ? body.figmaUrl.trim() : '';
-        if (!req.file) {
-          if (figmaUrl) {
-            return sendApiError(
-              res,
-              409,
-              'FIGMA_URL_NEEDS_MIGRATION',
-              'Figma URL imports must run through the Figma migration flow.',
-              { details: { figmaUrl } },
-            );
-          }
-          return sendApiError(res, 400, 'BAD_REQUEST', 'file is required');
-        }
-
-        const projectRoot = resolveProjectDir(PROJECTS_DIR, req.params.id, project.metadata);
-        const notes = typeof body.notes === 'string' ? body.notes : undefined;
-        const result = await importFigmaFromBytes(req.file.buffer, {
-          cwd: projectRoot,
-          label: decodeMultipartFilename(req.file.originalname || 'figma-import.fig'),
-          notes,
-        });
-        return res.json(result);
-      } catch (caught) {
-        return sendApiError(
-          res,
-          400,
-          'FIGMA_IMPORT_FAILED',
-          caught instanceof Error ? caught.message : String(caught),
-        );
-      }
-    });
+  registerFigmaRoutes(app, {
+    db,
+    http: { sendApiError, sendMulterError },
+    projectsRoot: PROJECTS_DIR,
+    projects: { getProject, resolveProjectDir },
+    imports: { decodeMultipartFilename, importFigmaFromBytes },
   });
   registerSocialShareRoutes(app, { http: httpDeps });
   registerProjectRoutes(app, {
