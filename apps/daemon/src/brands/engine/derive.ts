@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * derive.ts — the heart of the engine.
  *
@@ -279,7 +278,7 @@ export function deriveTokens(seed: SeedToken, algorithm: ThemeAlgorithm = "defau
   const fontSize = seed.fontSize;
   const sizes = fontSizeLadder(fontSize);
   const lineHeight = (fontSize + 8) / fontSize;
-  const lineHeightHeading = (sizes[5] + 8) / sizes[5];
+  const lineHeightHeading = (sizes[5]! + 8) / sizes[5]!;
 
   // --- spacing ladder ---------------------------------------------------------
   // Each of the 8 steps is sizeUnit*(sizeStep + n). With the default 4/4 seed the
@@ -377,14 +376,14 @@ export function deriveTokens(seed: SeedToken, algorithm: ThemeAlgorithm = "defau
     fontFamily: seed.fontFamily,
     fontFamilyCode: seed.fontFamilyCode,
     fontSize,
-    fontSizeSM: sizes[0],
-    fontSizeLG: sizes[2],
-    fontSizeXL: sizes[3],
-    fontSizeHeading1: sizes[6],
-    fontSizeHeading2: sizes[5],
-    fontSizeHeading3: sizes[4],
-    fontSizeHeading4: sizes[3],
-    fontSizeHeading5: sizes[2],
+    fontSizeSM: sizes[0]!,
+    fontSizeLG: sizes[2]!,
+    fontSizeXL: sizes[3]!,
+    fontSizeHeading1: sizes[6]!,
+    fontSizeHeading2: sizes[5]!,
+    fontSizeHeading3: sizes[4]!,
+    fontSizeHeading4: sizes[3]!,
+    fontSizeHeading5: sizes[2]!,
     lineHeight,
     lineHeightHeading,
     fontWeightStrong: 600,
