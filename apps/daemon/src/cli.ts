@@ -8232,8 +8232,11 @@ function parseProfileBody(body: any) {
   for (const line of (body ?? '').split('\n')) {
     const match = /^\s*-\s+(.+?):\s*(.*)$/.exec(line);
     if (match) {
-      const label = match[1].replace(/\*\*/g, '').trim();
-      const value = match[2].replace(/^\*\*\s*/, '').replace(/\s*\*\*$/, '').trim();
+      const rawLabel = match[1];
+      const rawValue = match[2];
+      if (rawLabel === undefined || rawValue === undefined) continue;
+      const label = rawLabel.replace(/\*\*/g, '').trim();
+      const value = rawValue.replace(/^\*\*\s*/, '').replace(/\s*\*\*$/, '').trim();
       if (!byLabel.has(label)) labels.push(label);
       byLabel.set(label, value);
     } else if (line.trim().length > 0) {
