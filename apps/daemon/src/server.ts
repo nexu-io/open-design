@@ -630,6 +630,10 @@ import {
 import { mediaTaskSnapshot } from './runtimes/media-task.js';
 import { classifyUploadError } from './runtimes/upload-errors.js';
 import {
+  setLiveArtifactCodeHeaders,
+  setLiveArtifactPreviewHeaders,
+} from './runtimes/live-artifact-headers.js';
+import {
   composeProjectDisplayStatus,
   normalizeProjectDisplayStatus,
 } from './runtimes/project-status.js';
@@ -915,10 +919,6 @@ function getPublicBaseUrl(req) {
     configuredBaseUrl: process.env.OD_PUBLIC_BASE_URL,
     fallbackPort: process.env.OD_PORT,
   });
-}
-
-function mcpOAuthCallbackUrl(req) {
-  return `${getPublicBaseUrl(req)}/api/mcp/oauth/callback`;
 }
 
 /**
@@ -1902,36 +1902,6 @@ function requireLocalDaemonRequest(req, res, next) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   res.setHeader('Access-Control-Max-Age', '600');
   next();
-}
-
-function setLiveArtifactPreviewHeaders(res) {
-  res.setHeader('Content-Type', 'text/html; charset=utf-8');
-  res.setHeader('Cache-Control', 'no-store');
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('Referrer-Policy', 'no-referrer');
-  res.setHeader(
-    'Content-Security-Policy',
-    [
-      "default-src 'none'",
-      "base-uri 'none'",
-      "script-src 'none'",
-      "object-src 'none'",
-      "connect-src 'none'",
-      "form-action 'none'",
-      "frame-ancestors 'self'",
-      "img-src 'self' data: blob:",
-      "font-src 'self' data:",
-      "style-src 'unsafe-inline'",
-      'sandbox allow-same-origin',
-    ].join('; '),
-  );
-}
-
-function setLiveArtifactCodeHeaders(res) {
-  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-  res.setHeader('Cache-Control', 'no-store');
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('Referrer-Policy', 'no-referrer');
 }
 
 function authorizeToolRequest(req, res, operation) {
