@@ -88,6 +88,27 @@ export function rpcErrorRetryable(data: unknown): boolean | undefined {
   return typeof details?.retryable === 'boolean' ? details.retryable : undefined;
 }
 /**
+ * Fallback retryability inference from the error message/details text, used when
+ * the runtime does not set an explicit `retryable` field. `request_too_large`
+ * (the prompt must shrink) is non-retryable; upstream transport blips
+ * (`stream idle timeout`, `overloaded`, gateway/service outages) are retryable.
+ * Returns `undefined` when nothing matches so callers keep their own default.
+ */
+export function inferRpcErrorRetryable(message: string, data: unknown): boolean | undefined {
+  const details = asObject(data);
+  const text = [
+    message,
+    details ? JSON.stringify(details) : '',
+  ].join('\n');
+  if (/\b(request_too_large|request body exceeds configured limit)\b/i.test(text)) {
+    return false;
+  }
+  if (/\b(upstream_error|stream idle timeout|no data received within configured window|temporarily unavailable|overloaded|gateway timeout|service unavailable)\b/i.test(text)) {
+    return true;
+  }
+  return undefined;
+}
+/**
  * Promotes an opencode `ROLE_MARKER_HALLUCINATION` error embedded in an ACP
  * JSON-RPC `error.data` payload into a canonical Open Design error object.
  * Returns `null` when the data payload does not match the expected shape.

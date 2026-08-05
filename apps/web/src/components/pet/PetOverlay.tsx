@@ -14,6 +14,13 @@ interface Props {
   taskCenter?: PetTaskCenter;
   onOpenProject?: (projectId: string) => void;
   persistentBubble?: boolean;
+  /**
+   * Perch the pet on the workspace tab-bar line instead of the free-floating
+   * bottom-right corner. When docked the pet is top-anchored to the tab line
+   * and can only be dragged horizontally (its vertical rest is locked to the
+   * line); when not docked it keeps the classic drag-anywhere corner behavior.
+   */
+  dockLine?: boolean;
 }
 
 const STORAGE_KEY = 'open-design:pet-position';
@@ -55,6 +62,19 @@ interface Position {
 }
 
 const DEFAULT_POSITION: Position = { right: 24, bottom: 24 };
+
+// Height of the workspace tab bar (mirrors --workspace-tabs-chrome-height in
+// shell.css); its 1px bottom divider sits at this Y from the top of the
+// viewport. A docked pet is top-anchored relative to that line.
+const TAB_LINE_Y = 44;
+// Pull the docked sprite UP from the line so the drawn creature (which is
+// centered inside its 96px sprite box with padding above it) straddles the
+// line rather than floating a full sprite-height below it. Nudge this if the
+// pet sits too high or too low against the line.
+const DOCK_TOP_NUDGE = -30;
+// Where the docked pet's top edge lands (top-anchored). Kept >= 0 so it never
+// escapes above the viewport.
+const DOCK_TOP = Math.max(0, TAB_LINE_Y + DOCK_TOP_NUDGE);
 
 // How long the pet has to sit untouched before the overlay flips to
 // the "waiting" animation row. Sized to sit comfortably past a few
@@ -122,6 +142,7 @@ export function PetOverlay({
   taskCenter = EMPTY_TASK_CENTER,
   onOpenProject,
   persistentBubble = false,
+  dockLine = false,
 }: Props) {
   const t = useT();
   const active = useMemo(() => resolveActivePet(pet), [pet]);
@@ -349,8 +370,14 @@ export function PetOverlay({
     // The clamp budget (~120px) keeps the 96px sprite plus its drop
     // shadow on-screen even when dragged toward the opposite edge.
     const nextRight = Math.max(8, Math.min(window.innerWidth - 120, drag.startRight - dx));
-    const nextBottom = Math.max(8, Math.min(window.innerHeight - 120, drag.startBottom - dy));
-    setPosition({ right: nextRight, bottom: nextBottom });
+    if (dockLine) {
+      // Docked to the tab line: only the horizontal position is user-movable;
+      // the vertical rest stays locked on the line (rendered via `top`).
+      setPosition((prev) => ({ ...prev, right: nextRight }));
+    } else {
+      const nextBottom = Math.max(8, Math.min(window.innerHeight - 120, drag.startBottom - dy));
+      setPosition({ right: nextRight, bottom: nextBottom });
+    }
 
     // Classify the gesture direction once it clears the jitter floor
     // and one axis clearly dominates the other. The animation then
@@ -429,12 +456,15 @@ export function PetOverlay({
 
   return (
     <div
-      className="pet-overlay"
+      className={`pet-overlay${dockLine ? ' pet-overlay--docked' : ''}`}
       role="complementary"
       aria-label={t('pet.overlayAria')}
       style={{
         right: position.right,
-        bottom: position.bottom,
+        // Docked: top-anchored so the pet perches on the tab-bar line and any
+        // speech bubble grows downward (see `.pet-overlay--docked` CSS).
+        // Free-floating: bottom-anchored to the corner as before.
+        ...(dockLine ? { top: DOCK_TOP } : { bottom: position.bottom }),
         // The accent drives the halo, the bubble border, and the focus
         // ring on the action buttons via CSS custom property cascade.
         ['--pet-accent' as string]: active.accent,

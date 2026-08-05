@@ -370,6 +370,22 @@ describe('classifyRunFailure', () => {
     expect(
       classify(
         'AGENT_EXECUTION_FAILED',
+        'json-rpc id 4: opencode event stream: {"type":"session.error","properties":{"error":{"data":{"message":"\\"[code=upstream_error] stream idle timeout: no data received within configured window\\""}}}}',
+        [errorEvent(
+          'AGENT_EXECUTION_FAILED',
+          'json-rpc id 4: opencode event stream: {"type":"session.error","properties":{"error":{"data":{"message":"\\"[code=upstream_error] stream idle timeout: no data received within configured window\\""}}}}',
+          true,
+        )],
+      ),
+    ).toMatchObject({
+      failure_category: 'upstream_unavailable',
+      failure_detail: 'stream_disconnected',
+      retryable: true,
+      user_action: 'retry',
+    });
+    expect(
+      classify(
+        'AGENT_EXECUTION_FAILED',
         'json-rpc id 4: Cannot connect to API: The socket connection was closed unexpectedly. For more information, pass `verbose: true` in the second argument to fetch()',
       ),
     ).toMatchObject({
@@ -1096,6 +1112,21 @@ describe('classifyRunFailure — signal and interrupt attribution', () => {
     ).toMatchObject({
       failure_category: 'prompt_too_large',
       failure_detail: 'prompt_too_large',
+      failure_stage: 'prompt_send',
+      retryable: false,
+      user_action: 'reduce_context',
+    });
+
+    expect(
+      classify(
+        'AGENT_EXECUTION_FAILED',
+        'json-rpc id 4: opencode event stream: {"properties":{"error":{"data":{"message":"[code=request_too_large] request body exceeds configured limit"}}}}',
+      ),
+    ).toMatchObject({
+      failure_category: 'prompt_too_large',
+      // main 把带 [code=request_too_large] 的上游错误单独归到 request_too_large,
+      // 与「上下文放不下」的 prompt_too_large 区分开(分类仍是 prompt_too_large)。
+      failure_detail: 'request_too_large',
       failure_stage: 'prompt_send',
       retryable: false,
       user_action: 'reduce_context',

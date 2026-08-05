@@ -925,7 +925,7 @@ export function NewProjectPanel({
             title={workingDir ?? t('workingDirPicker.homeTitle')}
             data-tooltip={workingDir ?? t('workingDirPicker.homeTitle')}
           >
-            <Icon name="folder" size={13} />
+            <Icon name="folder" size={14} />
             <span>
               {workingDirPicking
                 ? t('workingDirPicker.processing')
@@ -944,7 +944,7 @@ export function NewProjectPanel({
               }}
               aria-label={t('workingDirPicker.clearAria')}
             >
-              <Icon name="close" size={10} />
+              <Icon name="close" size={14} />
             </button>
           ) : null}
         </div>
@@ -1110,7 +1110,7 @@ export function NewProjectPanel({
               : undefined
           }
         >
-          <Icon name="plus" size={13} />
+          <Icon name="plus" size={14} />
           <span>
             {tab === 'template'
               ? t('newproj.createFromTemplate')
@@ -1135,7 +1135,7 @@ export function NewProjectPanel({
               title={t('newproj.importClaudeZipTitle')}
               onClick={() => importInputRef.current?.click()}
             >
-              <Icon name="import" size={13} />
+              <Icon name="import" size={14} />
               <span>
                 {importing
                   ? t('newproj.importingClaudeZip')
@@ -1152,8 +1152,12 @@ export function NewProjectPanel({
               disabled={folderImport.importing}
               onClick={() => void folderImport.openFolder()}
             >
-              <Icon name="folder" size={13} />
-              <span>{folderImport.importing ? 'Opening...' : 'Open folder'}</span>
+              <Icon name="folder" size={14} />
+              <span>
+                {folderImport.importing
+                  ? t('newproj.openingFolder')
+                  : t('newproj.openFolder')}
+              </span>
             </button>
           </div>
         ) : null}
@@ -1549,12 +1553,12 @@ function HighFidelityArt() {
       <rect x="6" y="8" width="34" height="6" rx="2" fill="#1a1916" />
       <rect x="6" y="20" width="46" height="4" rx="2" fill="#74716b" />
       <rect x="6" y="28" width="42" height="4" rx="2" fill="#b3b0a8" />
-      <rect x="6" y="40" width="22" height="9" rx="2" fill="#c96442" />
+      <rect x="6" y="40" width="22" height="9" rx="2" fill="#87ea5c" />
       <rect x="64" y="8" width="50" height="54" rx="4" fill="#fbeee5" />
-      <rect x="70" y="14" width="38" height="4" rx="2" fill="#c96442" />
+      <rect x="70" y="14" width="38" height="4" rx="2" fill="#87ea5c" />
       <rect x="70" y="22" width="32" height="3" rx="1.5" fill="#74716b" />
       <rect x="70" y="29" width="36" height="3" rx="1.5" fill="#b3b0a8" />
-      <rect x="70" y="36" width="20" height="6" rx="2" fill="#c96442" />
+      <rect x="70" y="36" width="20" height="6" rx="2" fill="#87ea5c" />
     </svg>
   );
 }

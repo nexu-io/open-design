@@ -169,8 +169,12 @@ describe('syncConfigToDaemon', () => {
     expect(url).toBe('/api/app-config');
     expect(init.method).toBe('PUT');
     expect(init.headers).toEqual({ 'content-type': 'application/json' });
-    expect(JSON.parse(String(init.body))).toMatchObject({
-      onboardingCompleted: DEFAULT_CONFIG.onboardingCompleted,
+    const body = JSON.parse(String(init.body));
+    // A false `onboardingCompleted` is omitted rather than sent: the sync only
+    // ratchets it upward, so a stale local `false` can never re-arm first-run
+    // onboarding on the daemon. Resetting is opt-in via `allowOnboardingReset`.
+    expect(body).not.toHaveProperty('onboardingCompleted');
+    expect(body).toMatchObject({
       agentId: DEFAULT_CONFIG.agentId,
       agentModels: DEFAULT_CONFIG.agentModels,
       skillId: DEFAULT_CONFIG.skillId,
@@ -313,6 +317,44 @@ describe('syncMediaProvidersToDaemon', () => {
 });
 
 describe('mergeDaemonConfig', () => {
+  it('never un-completes onboarding from a daemon copy that predates the completion', () => {
+    // The user finished onboarding: the local copy flipped to true immediately,
+    // and the daemon PUT is asynchronous (and can fail outright). A daemon read
+    // that still says `false` must not roll the local completion back — the
+    // merged config is written straight back to BOTH localStorage and the
+    // daemon, so one stale read would permanently re-arm the first-run flow and
+    // the user would meet onboarding on every launch.
+    const merged = mergeDaemonConfig(
+      { ...DEFAULT_CONFIG, onboardingCompleted: true },
+      { onboardingCompleted: false },
+    );
+
+    expect(merged.onboardingCompleted).toBe(true);
+  });
+
+  it('lets an explicit reset clear onboarding once the local copy is already false', () => {
+    // Settings → "run setup again" writes false to both stores at once, so by
+    // the time the next merge runs the local copy is false too. The ratchet
+    // must not resurrect completion in that state.
+    const merged = mergeDaemonConfig(
+      { ...DEFAULT_CONFIG, onboardingCompleted: false },
+      { onboardingCompleted: false },
+    );
+
+    expect(merged.onboardingCompleted).toBe(false);
+  });
+
+  it('adopts a daemon completion for a local copy that never had one', () => {
+    // Fresh browser profile / cleared localStorage against a daemon that
+    // already recorded the completion: the user must not be re-onboarded.
+    const merged = mergeDaemonConfig(
+      { ...DEFAULT_CONFIG, onboardingCompleted: false },
+      { onboardingCompleted: true },
+    );
+
+    expect(merged.onboardingCompleted).toBe(true);
+  });
+
   it('clears stale local CLI env prefs when the daemon has none', () => {
     const merged = mergeDaemonConfig(
       {
@@ -1068,7 +1110,8 @@ describe('loadConfig', () => {
     expect(config.baseUrl).toBe('https://api.deepseek.com');
     expect(config.model).toBe('deepseek-v4-flash');
     expect(config.apiProtocol).toBe('openai');
-    expect(config.configMigrationVersion).toBe(2);
+    expect(config.configMigrationVersion).toBe(3);
+    expect(config.configMigrationVersion).toBe(3);
   });
 
   it('migrates retired provider defaults in active, protocol, and provider-draft configs', () => {
@@ -1109,7 +1152,7 @@ describe('loadConfig', () => {
     expect(
       config.byokProviderConfigDrafts?.[`openai:${moonshotBaseUrl}`]?.apiConfig.model,
     ).toBe('kimi-k2.6');
-    expect(config.configMigrationVersion).toBe(2);
+    expect(config.configMigrationVersion).toBe(3);
   });
 
   it('migrates legacy SiliconFlow Global configs to the known OpenAI preset', () => {
@@ -1128,7 +1171,7 @@ describe('loadConfig', () => {
 
     expect(config.apiProtocol).toBe('openai');
     expect(config.apiProviderBaseUrl).toBe('https://api.siliconflow.com/v1');
-    expect(config.configMigrationVersion).toBe(2);
+    expect(config.configMigrationVersion).toBe(3);
   });
 
   it('keeps the parsed config when re-persisting a downgraded protocol fails', () => {
@@ -1343,7 +1386,8 @@ describe('loadConfig', () => {
 
     expect(config.mode).toBe('daemon');
     expect(config.apiProtocol).toBe('openai');
-    expect(config.configMigrationVersion).toBe(2);
+    expect(config.configMigrationVersion).toBe(3);
+    expect(config.configMigrationVersion).toBe(3);
   });
 
   it('migrates legacy Ollama Cloud configs to an explicit ollama apiProtocol', () => {
@@ -1365,7 +1409,8 @@ describe('loadConfig', () => {
     expect(config.model).toBe('gpt-oss:120b');
     expect(config.apiProtocol).toBe('ollama');
     expect(config.apiProviderBaseUrl).toBe('https://ollama.com');
-    expect(config.configMigrationVersion).toBe(2);
+    expect(config.configMigrationVersion).toBe(3);
+    expect(config.configMigrationVersion).toBe(3);
   });
 
   it('migrates legacy ollama.com configs with a custom base URL path', () => {
@@ -1444,7 +1489,7 @@ describe('loadConfig', () => {
     expect(config.apiProtocol).toBe('anthropic');
   });
 
-  it('preserves a valid saved accent color', () => {
+  it('preserves a valid saved accent color while forcing the theme back to light', () => {
     const savedConfig: Partial<AppConfig> = {
       theme: 'dark',
       accentColor: '#4F46E5',
@@ -1453,7 +1498,10 @@ describe('loadConfig', () => {
 
     const config = loadConfig();
 
-    expect(config.theme).toBe('dark');
+    // The theme setting was removed and the app ships light-only, so a stored
+    // dark preference is coerced on read (see tests/state/force-light-theme).
+    // The accent, which has no such rule, must still survive.
+    expect(config.theme).toBe('light');
     expect(config.accentColor).toBe('#4f46e5');
   });
 
@@ -1487,8 +1535,39 @@ describe('loadConfig', () => {
 
   it('sets an explicit apiProtocol for new default configs', () => {
     expect(DEFAULT_CONFIG.apiProtocol).toBe('anthropic');
-    expect(DEFAULT_CONFIG.configMigrationVersion).toBe(2);
-    expect(DEFAULT_CONFIG.accentColor).toBe('#c96442');
+    expect(DEFAULT_CONFIG.configMigrationVersion).toBe(3);
+    expect(DEFAULT_CONFIG.accentColor).toBe('#353535');
+  });
+
+  // Long-lived installs carry whatever accent shipped as the default when they
+  // were first run. Those values are no longer offered in the swatches, so a
+  // config still holding one is a stale default, not a user choice — it kept
+  // old installs off the current accent everywhere it is used.
+  it.each(['#87ea5c', '#c96442'])(
+    'resets the legacy default accent %s to the current default',
+    (legacy) => {
+      store.set(
+        'open-design:config',
+        JSON.stringify({ accentColor: legacy, configMigrationVersion: 2 }),
+      );
+
+      const config = loadConfig();
+
+      expect(config.accentColor).toBe(DEFAULT_CONFIG.accentColor);
+      expect(config.configMigrationVersion).toBe(3);
+    },
+  );
+
+  it('keeps a deliberately chosen accent through the migration', () => {
+    store.set(
+      'open-design:config',
+      JSON.stringify({ accentColor: '#1A74FF', configMigrationVersion: 2 }),
+    );
+
+    expect(loadConfig().accentColor).toBe('#1a74ff');
+    expect(DEFAULT_CONFIG.configMigrationVersion).toBe(3);
+    // #5517 把默认强调色改成中性灰,#c96442 随之进了 LEGACY_DEFAULT_ACCENT_COLORS。
+    expect(DEFAULT_CONFIG.accentColor).toBe('#353535');
   });
 });
 

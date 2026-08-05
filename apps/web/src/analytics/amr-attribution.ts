@@ -35,6 +35,7 @@ const ENTRY_PAGE_BY_SOURCE: Record<TrackingAmrEntrySource, TrackingPageName> = {
   inline_model_switcher_amr_row: 'chat_panel',
   settings_amr_agent_card: 'settings',
   settings_amr_authorize: 'settings',
+  settings_cloud_callout: 'settings',
   settings_amr_console: 'settings',
   settings_amr_install: 'settings',
   avatar_amr_console: 'chat_panel',

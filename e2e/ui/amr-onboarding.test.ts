@@ -3,12 +3,18 @@ import type { Locator, Page } from '@playwright/test';
 
 import {
   dismissPrivacyDialog,
+  mockAmrPersonalWorkspace,
   mockAmrWalletSnapshot,
   STORAGE_KEY,
   waitForLoadingToClear,
 } from '@/playwright/amr';
 import { expectStableCount } from '@/playwright/assertions';
-import { fulfillAgentsRoute, routeSuccessfulRuns, successfulRunEventBody } from '@/playwright/mock-factory';
+import {
+  fulfillAgentsRoute,
+  routeSuccessfulRuns,
+  successfulRunEventBody,
+  suppressWhatsNew,
+} from '@/playwright/mock-factory';
 import { T } from '@/timeouts';
 
 type OnboardingConfig = {
@@ -36,6 +42,10 @@ declare global {
 }
 
 test.describe.configure({ timeout: T.xlong });
+
+test.beforeEach(async ({ page }) => {
+  await suppressWhatsNew(page);
+});
 
 test('[P0] @critical onboarding lets AMR Cloud sign in and complete setup after the login poll succeeds', async ({ page }) => {
   const config = await wireOnboardingMocks(page, {
@@ -336,6 +346,11 @@ test('[P0] onboarding AMR runtime selection carries into the first Home run requ
     amrAvailable: true,
     initialLoggedIn: true,
   });
+  await mockAmrPersonalWorkspace(page, undefined, {
+    accountBalanceUsd: '20.00',
+    accountCredits: 2_000,
+    accountPlan: 'free',
+  });
 
   await seedOnboardingConfig(page, config);
   await gotoOnboarding(page);
@@ -382,8 +397,13 @@ test('[P0] onboarding gate cannot be bypassed by direct Home navigation or new-t
   await expect(connectLandingHeading(page)).toBeVisible();
   await expect(page).toHaveURL(/\/onboarding$/);
 
-  const newTabButton = page.getByTestId('workspace-tabs-new-tab');
-  await expect(newTabButton).toBeDisabled();
+  // #5517 removed the top-right "+" button, so it is no longer a bypass surface
+  // to gate — assert it is gone rather than asserting it renders disabled.
+  await expect(page.getByTestId('workspace-tabs-new-tab')).toHaveCount(0);
+
+  // The keyboard path survives and is now the only way to ask for a new tab, so
+  // it carries the whole P0 gate: createNewTab() must refuse while onboarding is
+  // active and leave the user on /onboarding.
   await page.keyboard.press(process.platform === 'darwin' ? 'Meta+T' : 'Control+T');
   await expect(page).toHaveURL(/\/onboarding$/);
   await expect(connectLandingHeading(page)).toBeVisible();
@@ -410,7 +430,7 @@ test('[P0] onboarding visited steps become locked again when the Connect runtime
   await expect(connectLandingHeading(page)).toBeVisible();
 
   await page.getByRole('button', { name: /Bring your own key/i }).click();
-  await expect(page.getByText('BYOK')).toBeVisible();
+  await expect(onboardingByokPanel(page)).toBeVisible();
 
   const continueButton = page.getByRole('button', { name: /^Continue$/i });
   await expect(continueButton).toHaveAttribute('aria-disabled', 'true');
@@ -601,8 +621,8 @@ test('[P0] @critical onboarding BYOK path can fetch models, test the provider, a
   await gotoOnboarding(page);
 
   await page.getByRole('button', { name: /Bring your own key/i }).click();
-  await expect(page.getByText('BYOK')).toBeVisible();
-  const byokPanel = page.locator('.onboarding-view__setup-panel').filter({ hasText: /BYOK/ });
+  const byokPanel = onboardingByokPanel(page);
+  await expect(byokPanel).toBeVisible();
 
   await fillInlineField(page, 'API key', 'test-api-key');
   await fillInlineField(page, 'Base URL', 'https://api.anthropic.com');
@@ -668,8 +688,8 @@ test('[P0] onboarding BYOK path cannot continue before a successful connection t
   await gotoOnboarding(page);
 
   await page.getByRole('button', { name: /Bring your own key/i }).click();
-  await expect(page.getByText('BYOK')).toBeVisible();
-  const byokPanel = page.locator('.onboarding-view__setup-panel').filter({ hasText: /BYOK/ });
+  const byokPanel = onboardingByokPanel(page);
+  await expect(byokPanel).toBeVisible();
 
   const continueButton = page.getByRole('button', { name: /^Continue$/i });
   await expect(continueButton).toHaveAttribute('aria-disabled', 'true');
@@ -726,7 +746,7 @@ test('[P0] onboarding BYOK path supports Anthropic model selection and API key v
   await expect(apiKeyInput).toHaveAttribute('type', 'text');
 
   await fillInlineField(page, 'Base URL', 'https://api.anthropic.com');
-  const byokPanel = page.locator('.onboarding-view__setup-panel').filter({ hasText: /BYOK/ });
+  const byokPanel = onboardingByokPanel(page);
   await selectOnboardingOption(byokPanel, 'Model', 'claude-sonnet-4-5');
   await page.getByRole('button', { name: /^Test$/i }).click();
   await expectProviderConnectionSuccess(page);
@@ -786,7 +806,7 @@ test('[P0] onboarding BYOK successful test is invalidated when connection settin
   await gotoOnboarding(page);
 
   await page.getByRole('button', { name: /Bring your own key/i }).click();
-  const byokPanel = page.locator('.onboarding-view__setup-panel').filter({ hasText: /BYOK/ });
+  const byokPanel = onboardingByokPanel(page);
   const continueButton = page.getByRole('button', { name: /^Continue$/i });
 
   await fillInlineField(page, 'API key', 'valid-api-key');
@@ -840,7 +860,7 @@ test('[P0] onboarding BYOK successful test is invalidated when Base URL or model
   await gotoOnboarding(page);
 
   await page.getByRole('button', { name: /Bring your own key/i }).click();
-  const byokPanel = page.locator('.onboarding-view__setup-panel').filter({ hasText: /BYOK/ });
+  const byokPanel = onboardingByokPanel(page);
   const continueButton = page.getByRole('button', { name: /^Continue$/i });
 
   await fillInlineField(page, 'API key', 'valid-api-key');
@@ -1117,7 +1137,13 @@ async function expectOnboardingFinished(page: Page) {
   }
   await expect(page).not.toHaveURL(/\/onboarding$/);
   await dismissPrivacyDialog(page);
-  await expect(page.getByRole('heading', { name: /What will you design with your agent today/i })).toBeVisible();
+  await expect(page.getByTestId('home-view')).toBeVisible();
+}
+
+function onboardingByokPanel(page: Page) {
+  return page.locator('.onboarding-view__setup-panel').filter({
+    has: page.getByText('API providers', { exact: true }),
+  });
 }
 
 async function expectFinalDesignSystemStep(page: Page) {

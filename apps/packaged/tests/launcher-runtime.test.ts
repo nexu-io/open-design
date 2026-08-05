@@ -31,6 +31,7 @@ function fakeConfig(root: string, appVersion = "1.2.3-beta.4"): PackagedConfig {
     resourceRoot: join(root, "installed", "resources", "open-design"),
     telemetryRelayUrl: null,
     updateMetadataUrl: null,
+    velaWebUrl: null,
     webOutputMode: "server",
     webSidecarEntry: null,
     webStandaloneRoot: null,

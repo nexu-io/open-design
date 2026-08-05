@@ -394,6 +394,40 @@ describe("release workflows", () => {
     expect(stablePrepare).toContain('setOutput("publish_side_effects_enabled"');
   });
 
+  it("bakes both halves of the workspace-team gate into every shipping lane", async () => {
+    const [beta, preview, prerelease, stable] = await Promise.all([
+      readFile(new URL("../../../.github/workflows/release-beta.yml", import.meta.url), "utf8"),
+      readFile(new URL("../../../.github/workflows/release-preview.yml", import.meta.url), "utf8"),
+      readFile(new URL("../../../.github/workflows/release-prerelease.yml", import.meta.url), "utf8"),
+      readFile(new URL("../../../.github/workflows/release-stable.yml", import.meta.url), "utf8"),
+    ]);
+
+    // workspaceTeamTransportEnv (apps/packaged/src/workspace-team.ts) enables the
+    // four vela transports only when a known AMR profile AND a non-empty vela web
+    // origin are both baked in. A lane that bakes neither still builds, still
+    // installs, and still starts — the gap only surfaces as "Workspace Team does
+    // nothing" once a package reaches a user. So the presence of both halves is
+    // asserted per lane rather than left to the packaging step to notice.
+    for (const workflow of [beta, preview, prerelease, stable]) {
+      expect(workflow).toContain("OPEN_DESIGN_AMR_PROFILE:");
+      expect(workflow).toContain("OD_VELA_WEB_URL:");
+    }
+
+    // beta and prerelease are validation lanes and stay dispatch-driven, so an
+    // operator can aim a build at feature-test or test.
+    expect(beta).toContain("OPEN_DESIGN_AMR_PROFILE: ${{ inputs.amr_profile }}");
+    expect(prerelease).toContain("OPEN_DESIGN_AMR_PROFILE: ${{ inputs.amr_profile }}");
+
+    // preview and stable are production channels by definition. Pinning the pair
+    // instead of accepting an input removes the footgun of publishing a stable
+    // build wired to the test backend — there is no legitimate reason for one.
+    for (const workflow of [preview, stable]) {
+      expect(workflow).toContain("OPEN_DESIGN_AMR_PROFILE: prod");
+      expect(workflow).toContain("OD_VELA_WEB_URL: ${{ secrets.VELA_WEB_URL_PROD }}");
+      expect(workflow).not.toContain("inputs.amr_profile");
+    }
+  });
+
   it("passes launcher version floor repo vars through to metadata publish and verify verbatim", async () => {
     const [beta, betaSelfHosted, preview, prerelease, stable] = await Promise.all([
       readFile(new URL("../../../.github/workflows/release-beta.yml", import.meta.url), "utf8"),

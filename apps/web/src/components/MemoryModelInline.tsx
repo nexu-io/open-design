@@ -465,7 +465,7 @@ export function MemoryModelInline({
             display: 'inline-block',
             marginLeft: 8,
             marginTop: -2,
-            fontSize: 11,
+            fontSize: 12,
             fontWeight: 500,
             color: 'var(--text-success, #1f7a3a)',
             textTransform: 'none',
@@ -515,7 +515,7 @@ export function MemoryModelInline({
           </button>
         </div>
       ) : null}
-      <p className="hint" style={{ marginTop: 4, fontSize: 11 }}>
+      <p className="hint" style={{ marginTop: 4, fontSize: 12 }}>
         {mode === 'api'
           ? t('settings.memoryModelInlineHintByokNeutral')
           : effectiveChatProtocol

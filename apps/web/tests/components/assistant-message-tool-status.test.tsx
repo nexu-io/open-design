@@ -422,6 +422,37 @@ describe('AssistantMessage tool status', () => {
     expect(completedActivity.querySelector('.task-activity-complete-icon')).toBeNull();
   });
 
+  it('keeps streamed thinking expandable while the run is still in progress (recvqgLmAkUM6G)', () => {
+    // A run parked on "Thinking" (e.g. a hung provider) must let the user
+    // open the streamed reasoning mid-run — the pre-#5667 ThinkingBlock
+    // affordance — instead of a dead, non-interactive label.
+    render(
+      <AssistantMessage
+        projectKind="prototype"
+        conversationId="conv-1"
+        message={{
+          ...messageWithEvents([
+            { kind: 'thinking', text: 'Reviewing the request.' },
+          ]),
+          endedAt: undefined,
+          runStatus: 'running',
+        }}
+        streaming
+        projectId="project-1"
+      />,
+    );
+
+    const activity = screen.getByTestId('task-activity-current');
+    const toggle = activity.querySelector<HTMLButtonElement>('.thinking-toggle');
+    expect(toggle).not.toBeNull();
+    expect(activity.querySelector('.accordion-collapsible')?.classList.contains('open')).toBe(false);
+
+    fireEvent.click(toggle!);
+    const body = activity.querySelector('.accordion-collapsible');
+    expect(body?.classList.contains('open')).toBe(true);
+    expect(body?.textContent).toContain('Reviewing the request.');
+  });
+
   it('keeps the run state above the answer and groups thinking into the timeline', () => {
     const { container } = render(
       <AssistantMessage

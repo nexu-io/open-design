@@ -17,7 +17,6 @@ import { openSettingsDialog as openEntrySettingsDialog } from '../lib/playwright
 import { routeAgents } from '../lib/playwright/mock-factory.js';
 
 const STORAGE_KEY = 'open-design:config';
-const OPEN_SETTINGS_LABEL = /Open settings|打开设置|開啟設定/i;
 
 test.describe.configure({ timeout: 30_000 });
 
@@ -32,7 +31,9 @@ async function gotoEntryHome(page: Page) {
   if (await privacyDialog.isVisible().catch(() => false)) {
     await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
   }
-  await expect(page.getByRole('button', { name: OPEN_SETTINGS_LABEL })).toBeVisible();
+  // #5517 moved the settings entry into the collapsed-by-default nav rail, so it
+  // is not in the accessibility tree on load; the hero is the ready signal now.
+  await expect(page.getByTestId('home-hero')).toBeVisible();
 }
 
 async function openSettingsDialog(page: Page) {

@@ -5,11 +5,13 @@ import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
 const posthogCapture = vi.hoisted(() => vi.fn());
+const posthogGroupIdentify = vi.hoisted(() => vi.fn());
 const posthogShutdown = vi.hoisted(() => vi.fn(async () => undefined));
 const posthogCtor = vi.hoisted(() =>
   vi.fn(function PostHogMock(_key: string, _options?: Record<string, unknown>) {
     return {
       capture: posthogCapture,
+      groupIdentify: posthogGroupIdentify,
       on: vi.fn(),
       shutdown: posthogShutdown,
     };
@@ -90,6 +92,40 @@ describe('analytics telemetry environment', () => {
       properties: {
         env: 'local_development',
       },
+    });
+  });
+
+  it('updates a workspace group only when analytics consent is enabled', async () => {
+    posthogGroupIdentify.mockReset();
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'od-analytics-group-'));
+    await writeFile(path.join(dataDir, 'app-config.json'), JSON.stringify({
+      installationId: 'install-1',
+      telemetry: { metrics: true },
+    }));
+    const { createAnalyticsService } = await import('../src/analytics.js');
+    const analytics = createAnalyticsService({
+      dataDir,
+      env: { POSTHOG_KEY: 'phc_test', OD_TELEMETRY_ENV: 'local_development' },
+    });
+
+    await analytics.identifyGroup({
+      context: {
+        deviceId: 'device-1',
+        sessionId: 'session-1',
+        clientType: 'web',
+        locale: 'en',
+        requestId: null,
+      },
+      groupType: 'workspace',
+      groupKey: 'workspace-1',
+      properties: { member_count: 3, project_count: 8, ignored: null },
+    });
+
+    expect(posthogGroupIdentify).toHaveBeenCalledWith({
+      groupType: 'workspace',
+      groupKey: 'workspace-1',
+      distinctId: 'device-1',
+      properties: { member_count: 3, project_count: 8 },
     });
   });
 });
