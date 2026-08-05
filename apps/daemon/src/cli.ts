@@ -496,6 +496,35 @@ interface CliRunStartResponse {
   [key: string]: unknown;
 }
 
+interface BrandResponse {
+  id?: string;
+  projectId?: string;
+  designSystemId?: string;
+  file?: string;
+  brand?: {
+    name?: string;
+    tagline?: string;
+    colors?: Array<{ hex?: string }>;
+    [key: string]: unknown;
+  } | null;
+  meta?: {
+    id?: string;
+    sourceUrl?: string;
+    status?: string;
+    designSystemId?: string;
+    projectId?: string;
+    systemFiles?: string[];
+    error?: string;
+    [key: string]: unknown;
+  } | null;
+  [key: string]: unknown;
+}
+
+interface BrandListResponse {
+  brands?: BrandResponse[];
+  [key: string]: unknown;
+}
+
 async function runResearchCommand(args: readonly string[]): Promise<void> {
   return runResearch(args, {
     resolveDaemonUrl: cliDaemonUrl,
@@ -4889,7 +4918,7 @@ async function runBrandList(rest: readonly string[]) {
     process.exit(3);
   }
   if (!resp.ok) return structuredHttpFailure(resp);
-  const data = await resp.json();
+  const data = await resp.json() as BrandListResponse;
   if (flags.json) {
     process.stdout.write(JSON.stringify(data, null, 2) + '\n');
     return;
@@ -4950,7 +4979,7 @@ async function runBrandCreate(rest: readonly string[]) {
   // Extraction is agent-driven: this kickoff reserves the brand + a backing
   // project with the target site open in a browser tab and a seeded prompt.
   // The agent then runs the chain (measure → synthesize → `od brand finalize`).
-  const data = await resp.json();
+  const data = await resp.json() as BrandResponse;
   if (flags.json) {
     process.stdout.write(JSON.stringify({ ok: true, ...data }, null, 2) + '\n');
     return;
@@ -4977,7 +5006,7 @@ async function runBrandFinalize(rest: readonly string[]) {
     process.exit(2);
   }
   const base = await cliDaemonBaseUrl(flags);
-  const body = {};
+  const body: Record<string, string> = {};
   if (typeof flags.project === 'string' && flags.project.trim()) body.projectId = flags.project.trim();
   if (typeof flags.locale === 'string' && flags.locale.trim()) body.locale = flags.locale.trim();
   let resp;
@@ -4996,7 +5025,7 @@ async function runBrandFinalize(rest: readonly string[]) {
     process.exit(4);
   }
   if (!resp.ok) return structuredHttpFailure(resp);
-  const data = await resp.json();
+  const data = await resp.json() as BrandResponse;
   if (flags.json) {
     process.stdout.write(JSON.stringify({ ok: true, ...data }, null, 2) + '\n');
     return;
@@ -5009,10 +5038,10 @@ async function runBrandFinalize(rest: readonly string[]) {
 // Read a flag value as file content (or stdin when the value is "-"). Returns
 // null when the flag is unset. Mirrors readPromptFromFlags' file/stdin handling
 // but for an arbitrary flag name (--html-file / --css-file).
-async function readFileFlagOrStdin(value) {
+async function readFileFlagOrStdin(value: any): Promise<string | null> {
   if (typeof value !== 'string' || value.length === 0) return null;
   if (value === '-') {
-    return await new Promise((resolve, reject) => {
+    return await new Promise<string>((resolve, reject) => {
       let buf = '';
       process.stdin.setEncoding('utf8');
       process.stdin.on('data', (chunk) => { buf += chunk; });
@@ -5063,7 +5092,7 @@ async function runBrandExtractFromHtml(rest) {
       process.exit(2);
     }
   }
-  const body = { html };
+  const body: Record<string, string> = { html };
   if (css.trim()) body.css = css;
   if (typeof flags['base-url'] === 'string' && flags['base-url'].trim()) {
     body.baseUrl = flags['base-url'].trim();
@@ -5086,7 +5115,7 @@ async function runBrandExtractFromHtml(rest) {
     process.exit(4);
   }
   if (!resp.ok) return structuredHttpFailure(resp);
-  const data = await resp.json();
+  const data = await resp.json() as BrandResponse;
   if (flags.json) {
     process.stdout.write(JSON.stringify({ ok: true, ...data }, null, 2) + '\n');
     return;
@@ -5112,7 +5141,7 @@ async function runBrandPreview(rest) {
     process.exit(2);
   }
   const base = await cliDaemonBaseUrl(flags);
-  const body = {};
+  const body: Record<string, string> = {};
   if (typeof flags.project === 'string' && flags.project.trim()) body.projectId = flags.project.trim();
   if (typeof flags.locale === 'string' && flags.locale.trim()) body.locale = flags.locale.trim();
   let resp;
@@ -5131,7 +5160,7 @@ async function runBrandPreview(rest) {
     process.exit(4);
   }
   if (!resp.ok) return structuredHttpFailure(resp);
-  const data = await resp.json();
+  const data = await resp.json() as BrandResponse;
   if (flags.json) {
     process.stdout.write(JSON.stringify({ ok: true, ...data }, null, 2) + '\n');
     return;
@@ -5166,7 +5195,7 @@ async function runBrandGet(rest) {
     process.exit(4);
   }
   if (!resp.ok) return structuredHttpFailure(resp);
-  const data = await resp.json();
+  const data = await resp.json() as BrandResponse;
   if (flags.json) {
     process.stdout.write(JSON.stringify(data, null, 2) + '\n');
     return;
@@ -5211,7 +5240,7 @@ async function runBrandDelete(rest) {
     process.exit(3);
   }
   if (!resp.ok) return structuredHttpFailure(resp);
-  const data = await resp.json().catch(() => ({ ok: true }));
+  const data = await resp.json().catch(() => ({ ok: true })) as BrandResponse;
   if (flags.json) {
     process.stdout.write(JSON.stringify(data, null, 2) + '\n');
     return;
