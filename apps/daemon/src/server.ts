@@ -628,6 +628,7 @@ import {
 import { escapeHtml } from './runtimes/html-escaping.js';
 import { mediaTaskSnapshot } from './runtimes/media-task.js';
 import { classifyUploadError } from './runtimes/upload-errors.js';
+import { normalizePersistedToolInput } from './runtimes/persisted-tool-input.js';
 import {
   aggregateCloudflarePagesStatus,
   buildDeployFileSet,
@@ -1615,14 +1616,6 @@ export function daemonAgentPayloadToPersistedAgentEvent(data) {
   }
   if (type === 'raw' && typeof data.line === 'string') return { kind: 'raw', line: data.line };
   return null;
-}
-
-function normalizePersistedToolInput(input) {
-  if (!input || typeof input !== 'object') return input;
-  if ('filePath' in input && typeof input.filePath === 'string') {
-    return { ...input, file_path: input.filePath };
-  }
-  return input;
 }
 
 function pinAssistantMessageOnRunCreate(db, run) {
