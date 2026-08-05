@@ -150,19 +150,28 @@ describe('useAmrSignIn', () => {
     expect(screen.getByRole('button').textContent).toContain('error:');
   });
 
-  it('does not install a poller when the attempt is cancelled mid-start', async () => {
+  it('does not cancel another surface when the attempt is cancelled mid-start', async () => {
+    // looper review on #6438: a foreign login-canceled must NOT stop the poll
+    // (the child is draining); the hook enters reconcile — polling status until
+    // idle — but must not send a cancel targeting another surface's attempt.
     vi.useFakeTimers();
     let resolveLogin: (value: Response) => void = () => {};
     const loginPromise = new Promise<Response>((resolve) => {
       resolveLogin = resolve;
     });
-    const statusCalls: string[] = [];
+    const cancelCalls: string[] = [];
+    const statusBodies: Array<Record<string, unknown>> = [];
     vi.stubGlobal(
       'fetch',
       vi.fn(async (input: string | URL | Request) => {
         const url = typeof input === 'string' ? input : input.toString();
         if (url.endsWith('/api/integrations/vela/login')) return loginPromise;
-        if (url.endsWith('/api/integrations/vela/status')) statusCalls.push(url);
+        if (url.endsWith('/api/integrations/vela/login/cancel')) cancelCalls.push(url);
+        if (url.endsWith('/api/integrations/vela/status')) {
+          // Drain completes on the second reconcile poll.
+          statusBodies.push({ loggedIn: false, loginInFlight: statusBodies.length < 1 });
+          return new Response(JSON.stringify(statusBodies[statusBodies.length - 1]), { status: 200 });
+        }
         return new Response(JSON.stringify({}), { status: 200 });
       }),
     );
@@ -180,11 +189,13 @@ describe('useAmrSignIn', () => {
       }),
     );
 
-    // Even after the start resolves and the poll interval elapses, no status
-    // poll may fire for the superseded attempt.
+    // Reconcile polls status (not immediately stopped) until idle...
     await vi.advanceTimersByTimeAsync(100);
-    await vi.advanceTimersByTimeAsync(AMR_LOGIN_POLL_INTERVAL_MS);
-    expect(statusCalls).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(AMR_LOGIN_POLL_INTERVAL_MS * 3);
+    // ...and once idle, the action re-enables — but NO cancel was sent (the
+    // cancelled child belongs to another surface).
+    expect(screen.getByRole('button')).toHaveProperty('disabled', false);
+    expect(cancelCalls).toHaveLength(0);
   });
 
   it('refuses a broad "cancel latest" when the start omitted an authAttemptId', async () => {

@@ -115,14 +115,7 @@ export function useAmrSignIn({
         void fetchVelaLoginStatus()
           .then(async (status) => {
             if (!amrMountedRef.current || amrAttemptRef.current !== attempt) return;
-            if (status) {
-              // Adopt a status attempt id ONLY for this attempt's poll (the
-              // attempt token already guards against stale reads from an older
-              // attempt overwriting the ref).
-              amrLoginAttemptIdRef.current =
-                status.authAttemptId ?? amrLoginAttemptIdRef.current;
-              onStatusRef.current?.(status);
-            }
+            if (status) onStatusRef.current?.(status);
             const outcome = amrLoginPollOutcome(status, startedAt);
             if (outcome === 'signed-in') {
               stopAmrLoginPolling();
@@ -132,10 +125,20 @@ export function useAmrSignIn({
               notifyTeamProjectsChanged();
               return;
             }
+            if (outcome === 'stopped') {
+              // Browser closed without signing in; loginInFlight is false and
+              // startup has settled. Publish a terminal event and finish.
+              notifyAmrLoginStatusChanged('status-changed');
+              setAmrLoginError(null);
+              stopAmrLoginPolling();
+              return;
+            }
             if (outcome === 'timed-out' && !amrReconcileRef.current) {
               // A timed-out attempt's `vela login` child is often still alive.
-              // Cancel THIS attempt by id — never a body-less "cancel latest",
-              // which could terminate a newer attempt owned by another surface.
+              // Cancel THIS attempt by the id the START returned (never adopt a
+              // status id — that endpoint is daemon-global and may belong to
+              // another surface's attempt), and never a body-less "cancel
+              // latest". With no trustworthy id, refuse a broad cancel.
               amrReconcileRef.current = true;
               const cancel = amrLoginAttemptIdRef.current
                 ? await cancelVelaLogin(amrLoginAttemptIdRef.current)
@@ -156,10 +159,11 @@ export function useAmrSignIn({
               // Keep polling (pending stays true) until the daemon reports idle.
               return;
             }
-            // Daemon idle: browser closed (`stopped`) or the cancelled child has
-            // drained. Publish a terminal event, clear any error, and finish.
-            if (status?.loginInFlight === false) {
-              if (outcome !== 'timed-out') notifyAmrLoginStatusChanged('status-changed');
+            // Reconcile drain: after a timeout cancel OR a foreign cancel, keep
+            // pending until loginInFlight is false. On this path startedAt is
+            // already past the startup-settle window, so the raw idle read is a
+            // trustworthy "child drained" signal.
+            if (amrReconcileRef.current && status?.loginInFlight === false) {
               setAmrLoginError(null);
               stopAmrLoginPolling();
             }
@@ -187,7 +191,11 @@ export function useAmrSignIn({
         amrLoginStatusEventReason(event) === 'login-canceled'
         && !amrSelfCancelRef.current
       ) {
-        stopAmrLoginPolling();
+        // A foreign cancel (another surface) means the daemon child is being
+        // torn down but may still be draining through the kill grace period.
+        // Enter reconcile: keep pending true until a status poll confirms
+        // loginInFlight === false, so a fast retry does not 409 into the drain.
+        amrReconcileRef.current = true;
       }
     };
     window.addEventListener(AMR_LOGIN_STATUS_EVENT, onLoginStatus);
