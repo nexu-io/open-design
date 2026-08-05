@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { resolvePublicBaseUrl } from '../../src/runtimes/public-base-url.js';
+import {
+  createPublicBaseUrlResolver,
+  resolvePublicBaseUrl,
+} from '../../src/runtimes/public-base-url.js';
 
 function request(protocol = 'http', host?: string) {
   return { protocol, get: () => host };
@@ -27,5 +30,14 @@ describe('public base URL boundary', () => {
       .toBe('http://localhost:8123');
     expect(resolvePublicBaseUrl(request(), { fallbackPort: 8123 }))
       .toBe('http://localhost:7456');
+  });
+
+  it('creates a reusable resolver with fixed deployment configuration', () => {
+    const resolve = createPublicBaseUrlResolver({
+      configuredBaseUrl: 'https://configured.example.test/',
+      fallbackPort: '8123',
+    });
+    expect(resolve(request('http', 'request.example.test')))
+      .toBe('https://configured.example.test');
   });
 });

@@ -8,6 +8,14 @@ export interface PublicBaseUrlOptions {
   fallbackPort?: unknown;
 }
 
+export type PublicBaseUrlResolver = (req: PublicBaseUrlRequest) => string;
+
+export function createPublicBaseUrlResolver(
+  options: PublicBaseUrlOptions = {},
+): PublicBaseUrlResolver {
+  return (req) => resolvePublicBaseUrl(req, options);
+}
+
 /**
  * Resolve the browser-facing origin used by OAuth redirects and daemon
  * proxy links. A configured public URL wins over request-derived routing;

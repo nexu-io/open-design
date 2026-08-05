@@ -28,14 +28,12 @@ import {
   fetchVelaPresetModels,
   fetchVelaRemoteModelsWithRetry,
 } from '../runtimes/defs/amr.js';
-import { resolvePublicBaseUrl } from '../runtimes/public-base-url.js';
+import { createPublicBaseUrlResolver, type PublicBaseUrlResolver } from '../runtimes/public-base-url.js';
 
 const AMR_API_PROXY_PREFIX = '/api/integrations/vela/api-proxy';
 const AMR_API_UPSTREAM_ORIGIN = 'https://amr-api.open-design.ai';
 
 type ReadAppConfig = (dataDir: string) => Promise<AppConfigPrefs>;
-type PublicBaseUrlResolver = (req: Request) => string;
-
 export interface RegisterVelaRoutesDeps {
   paths: {
     RUNTIME_DATA_DIR: string;
@@ -133,11 +131,10 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
   const env = deps.env ?? process.env;
   const { RUNTIME_DATA_DIR } = deps.paths;
   const { readAppConfig } = deps.appConfig;
-  const getPublicBaseUrl = deps.http.getPublicBaseUrl ?? ((req: Request) =>
-    resolvePublicBaseUrl(req, {
-      configuredBaseUrl: env.OD_PUBLIC_BASE_URL,
-      fallbackPort: env.OD_PORT,
-    }));
+  const getPublicBaseUrl = deps.http.getPublicBaseUrl ?? createPublicBaseUrlResolver({
+    configuredBaseUrl: env.OD_PUBLIC_BASE_URL,
+    fallbackPort: env.OD_PORT,
+  });
 
   async function resolveAmrModelProbe(): Promise<AmrModelProbe> {
     const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
