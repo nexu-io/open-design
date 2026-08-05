@@ -50,6 +50,7 @@ import { runDiagnostics as runDiagnosticsCommand } from './diagnostics/cli.js';
 import { runVersion as runVersionCommand } from './version/cli.js';
 import { runMcp as runMcpCommand } from './mcp/cli.js';
 import { runExport as runExportCommand } from './export/cli.js';
+import { runMediaWait as runMediaWaitCommand } from './media/wait-cli.js';
 import { resolveDaemonUrl } from './daemon-url.js';
 import { requestJsonIpc } from '@open-design/sidecar';
 import { SIDECAR_ENV, SIDECAR_MESSAGES } from '@open-design/sidecar-proto';
@@ -357,6 +358,16 @@ async function runExportCommandWithDeps(args: readonly string[]): Promise<void> 
   });
 }
 
+async function runMediaWaitCommandWithDeps(args: readonly string[]): Promise<void> {
+  return runMediaWaitCommand(args, {
+    resolveDaemonUrl: cliDaemonUrl,
+    pollUntilDoneOrBudget,
+    writeStderr: (text) => { process.stderr.write(text); },
+    printHelp: printMediaHelp,
+    exit: process.exit,
+  });
+}
+
 type CliSubcommandHandler = (args: readonly string[]) => Promise<void> | void;
 
 const SUBCOMMAND_MAP: Record<string, CliSubcommandHandler> = {
@@ -592,7 +603,7 @@ async function runMedia(args) {
 
   const idx = args.indexOf(sub);
   const subArgs = [...args.slice(0, idx), ...args.slice(idx + 1)];
-  if (sub === 'wait') return runMediaWait(subArgs);
+  if (sub === 'wait') return runMediaWaitCommandWithDeps(subArgs);
   return runMediaGenerate(subArgs);
 }
 
@@ -678,31 +689,6 @@ async function runMediaGenerate(rawArgs) {
   await pollUntilDoneOrBudget(daemonUrl, taskId, 0, {
     stillRunningExitCode: 0,
   });
-}
-
-async function runMediaWait(rawArgs) {
-  const taskId = rawArgs.find((a) => a && !a.startsWith('--'));
-  if (!taskId) {
-    console.error('usage: od media wait <taskId> [--since <n>] [--daemon-url <url>]');
-    process.exit(2);
-  }
-  const flagsOnly = rawArgs.filter((a) => a !== taskId);
-  let flags;
-  try {
-    flags = parseFlags(flagsOnly, {
-      string: new Set(['since', 'daemon-url']),
-      boolean: new Set(['help', 'h']),
-    });
-  } catch (err) {
-    console.error(err.message);
-    printMediaHelp();
-    process.exit(2);
-  }
-  const daemonUrl = await cliDaemonUrl(flags);
-  const since = Number.isFinite(Number(flags.since))
-    ? Number(flags.since)
-    : 0;
-  await pollUntilDoneOrBudget(daemonUrl, taskId, since, { totalBudgetMs: 120_000 });
 }
 
 async function pollUntilDoneOrBudget(daemonUrl, taskId, sinceStart, options = {}) {
