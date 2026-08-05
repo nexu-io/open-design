@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * The themed component kit. Every component is a pure function returning an
  * HTML string whose colors/spacing/typography come *only* from the derived
