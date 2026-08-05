@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * email — a single-column, 600px, bulletproof-table promotional/announcement
  * email built to its content-structure playbook (docs/content-structures/
@@ -97,7 +96,7 @@ function preheader(brand: Brand): string {
     fromDesc,
     fromTone,
     adj.length >= 2
-      ? `${cap(adj[0])} and ${adj[1]} — the short version is inside.`
+      ? `${cap(adj[0]!)} and ${adj[1]} — the short version is inside.`
       : "",
     `A two-minute read on what ${brand.name} changes for your team.`,
   );
@@ -139,7 +138,7 @@ function benefits(brand: Brand): Array<{ title: string; body: string }> {
         body: body ?? `${cap(noDot(title))} is built into ${brand.name} from day one — not bolted on later.`,
       });
     } else {
-      out.push(FEATURE_FALLBACKS[i]);
+      out.push(FEATURE_FALLBACKS[i]!);
     }
   }
   return out;
