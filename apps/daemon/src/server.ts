@@ -160,7 +160,6 @@ import {
   isLoopbackHostname,
   isLoopbackPeerAddress,
   parseProjectPreviewAssetPath,
-  validateLocalDaemonRequest,
 } from './runtimes/local-request.js';
 import {
   buildCommandShellCommand,
@@ -619,11 +618,13 @@ import { composioConnectorProvider } from './connectors/composio.js';
 import { configureComposioConfigStore } from './connectors/composio-config.js';
 import { CHAT_TOOL_ENDPOINTS, CHAT_TOOL_OPERATIONS, toolTokenRegistry } from './tool-tokens.js';
 import {
-  bearerTokenFromAuthorizationHeader,
   requestProjectOverride,
   requestRunOverride,
-  toolTokenValidationStatus,
 } from './runtimes/tool-authorization.js';
+import {
+  createLocalDaemonRequestMiddleware,
+  createToolAuthorizationHandlers,
+} from './runtimes/request-authorization.js';
 import { mediaTaskSnapshot } from './runtimes/media-task.js';
 import { classifyUploadError } from './runtimes/upload-errors.js';
 import { sendLiveArtifactRouteError } from './runtimes/live-artifact-errors.js';
@@ -685,6 +686,11 @@ import { createOpenDesignPublicMetadataService } from './services/open-design-pu
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const requireLocalDaemonRequest = createLocalDaemonRequestMiddleware(sendApiError);
+const {
+  authorizeToolRequest,
+  optionalToolGrantFromRequest,
+} = createToolAuthorizationHandlers(toolTokenRegistry, sendApiError);
 const PROJECT_ROOT = resolveProjectRoot(__dirname);
 const RESOURCE_ROOT_ENV = 'OD_RESOURCE_ROOT';
 
@@ -1852,49 +1858,6 @@ async function checkCloudflarePagesDeploymentLinks(existing) {
       cloudflarePages,
     },
   };
-}
-
-function requireLocalDaemonRequest(req, res, next) {
-  const validation = validateLocalDaemonRequest({
-    remoteAddress: req.socket?.remoteAddress,
-    host: req.get('host'),
-    origin: req.get('origin'),
-  });
-  if (!validation.ok) {
-    return sendApiError(res, 403, 'FORBIDDEN', validation.message, validation.details ? { details: validation.details } : {});
-  }
-
-  res.setHeader('Vary', 'Origin');
-  if (validation.origin) {
-    res.setHeader('Access-Control-Allow-Origin', validation.origin);
-  }
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  res.setHeader('Access-Control-Max-Age', '600');
-  next();
-}
-
-function authorizeToolRequest(req, res, operation) {
-  const endpoint = req.path;
-  const validation = toolTokenRegistry.validate(
-    bearerTokenFromAuthorizationHeader(req.get('authorization')),
-    { endpoint, operation },
-  );
-  if (!validation.ok) {
-    sendApiError(res, toolTokenValidationStatus(validation.code), validation.code, validation.message, {
-      details: { endpoint, operation },
-    });
-    return null;
-  }
-  return validation.grant;
-}
-
-function optionalToolGrantFromRequest(req, options = {}) {
-  const validation = toolTokenRegistry.validate(
-    bearerTokenFromAuthorizationHeader(req.get('authorization')),
-    options,
-  );
-  return validation.ok ? validation.grant : null;
 }
 
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
