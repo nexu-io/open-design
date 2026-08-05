@@ -42,6 +42,16 @@ export interface UrlLoadDecision {
   /** Draw annotations need a snapshot bridge for screenshot export. */
   drawMode?: boolean;
   /**
+   * The URL-loaded artifact response answers `od:mark-anchor-request` and
+   * reports `od:preview-scroll`. Annotation marks anchor to the element they
+   * were drawn on so they survive a reflow (#6361), which means the frame the
+   * user sees — and that the compositor screenshots — must be the frame that
+   * reports element boxes and scroll. The raw preview route injects an older
+   * selection bridge that predates this protocol, so this stays false there and
+   * draw mode falls back to srcDoc.
+   */
+  urlAnchorBridge?: boolean;
+  /**
    * Artifact ships the class based tweaks template (`.tw-panel` / `.tw-hidden`)
    * and therefore needs the srcDoc tweaks bridge so the toolbar toggle can
    * detect availability and drive panel visibility. The bridge is injected by
@@ -102,10 +112,13 @@ export function shouldUrlLoadHtmlPreview(d: UrlLoadDecision): boolean {
   // Palette tweaks need the srcDoc-side bridge — `<iframe src=URL>` has
   // no parent-injected listener to recolor against.
   if (d.paletteActive) return false;
-  // Draw can stay on the URL-loaded iframe once the raw preview route has
-  // injected its snapshot bridge; otherwise fall back to srcDoc so capture
-  // still has a bridge to talk to.
-  if (d.drawMode && !d.urlSnapshotBridge) return false;
+  // Draw can stay on the URL-loaded iframe only when that frame can serve the
+  // whole annotation contract: the snapshot bridge for capture AND the anchor
+  // bridge for content-anchored marks (#6361). Resolving anchors against the
+  // hidden srcDoc twin while the user marks and screenshots the URL-loaded one
+  // silently diverges as soon as the visible frame is scrolled, so a frame that
+  // answers only half the contract falls back to srcDoc.
+  if (d.drawMode && !(d.urlSnapshotBridge && d.urlAnchorBridge)) return false;
   // The class based tweaks template relies on the srcDoc tweaks bridge
   // emitting `od:tweaks-available` on mount; on the URL load path the bridge
   // is never injected, so the toolbar toggle would stay disabled even though

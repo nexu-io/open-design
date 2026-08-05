@@ -1870,7 +1870,10 @@ function parsePrintReadyPdfOptions(value: unknown): PrintReadyPdfOptions {
 // Rectangle. Returns undefined (capture the full page) when the payload is
 // missing, not an object, or carries an invalid clip; valid clips are
 // rounded and clamped so x/y stay >= 0 and width/height stay >= 1.
-function parseCaptureClip(value: unknown): Electron.Rectangle | undefined {
+export function parseCaptureClip(
+  value: unknown,
+  zoomFactor = 1,
+): Electron.Rectangle | undefined {
   if (value == null || typeof value !== "object" || Array.isArray(value)) return undefined;
   const clip = (value as { clip?: unknown }).clip;
   if (clip == null || typeof clip !== "object" || Array.isArray(clip)) return undefined;
@@ -1888,11 +1891,19 @@ function parseCaptureClip(value: unknown): Electron.Rectangle | undefined {
   ) {
     return undefined;
   }
+  // Invariant (issue #6361): the renderer measures the preview frame in CSS
+  // pixels (getBoundingClientRect), but capturePage() clips in DIP page
+  // coordinates. Those two spaces only coincide at zoom factor 1 — at any
+  // other UI zoom a CSS-pixel clip lands on the wrong window region, so the
+  // annotation screenshot captures app chrome instead of the marked artifact
+  // and the structured position no longer describes the same pixels. Convert
+  // once, here, at the single boundary where the two spaces meet.
+  const zoom = Number.isFinite(zoomFactor) && zoomFactor > 0 ? zoomFactor : 1;
   return {
-    x: Math.max(0, Math.round(x)),
-    y: Math.max(0, Math.round(y)),
-    width: Math.max(1, Math.round(width)),
-    height: Math.max(1, Math.round(height)),
+    x: Math.max(0, Math.round(x * zoom)),
+    y: Math.max(0, Math.round(y * zoom)),
+    width: Math.max(1, Math.round(width * zoom)),
+    height: Math.max(1, Math.round(height * zoom)),
   };
 }
 
@@ -2581,7 +2592,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       return { ok: false, reason: 'capture sender not allowed' };
     }
     try {
-      const clip = parseCaptureClip(rawOptions);
+      const clip = parseCaptureClip(rawOptions, window.webContents.getZoomFactor());
       const image = clip
         ? await window.webContents.capturePage(clip)
         : await window.webContents.capturePage();

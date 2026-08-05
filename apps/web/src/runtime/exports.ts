@@ -399,6 +399,51 @@ export type PreviewSnapshotResult =
   | { ok: true; snapshot: PreviewSnapshot }
   | { ok: false; reason: 'loading' | 'post-message-error' | 'render-error' | 'timeout'; error?: string };
 
+/** An element box as the preview bridge reports it, in frame CSS pixels. */
+export type PreviewAnchorTarget = {
+  elementId: string;
+  selector: string;
+  position: { x: number; y: number; width: number; height: number };
+};
+
+/**
+ * Ask the preview frame for the boxes of every annotated element, so an
+ * annotation mark can be anchored to the content it was drawn on and survive a
+ * reflow (#6361). Resolves to an empty list rather than rejecting: anchoring is
+ * an enhancement over the frame-relative position, never a prerequisite for
+ * sending an annotation.
+ */
+export function requestPreviewAnchorTargets(
+  iframe: HTMLIFrameElement,
+  timeout = 1500,
+): Promise<PreviewAnchorTarget[]> {
+  const win = iframe.contentWindow;
+  if (!win) return Promise.resolve([]);
+  const id = `anchor-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  return new Promise((resolve) => {
+    let done = false;
+    function finish(targets: PreviewAnchorTarget[]) {
+      if (done) return;
+      done = true;
+      window.removeEventListener('message', onMsg);
+      resolve(targets);
+    }
+    function onMsg(ev: MessageEvent) {
+      if (ev.source !== win) return;
+      const d = ev.data as { type?: string; id?: string; targets?: unknown } | null;
+      if (!d || d.type !== 'od:mark-anchor-targets' || d.id !== id) return;
+      finish(Array.isArray(d.targets) ? (d.targets as PreviewAnchorTarget[]) : []);
+    }
+    window.addEventListener('message', onMsg);
+    try {
+      win.postMessage({ type: 'od:mark-anchor-request', id }, '*');
+    } catch {
+      finish([]);
+    }
+    setTimeout(() => finish([]), timeout);
+  });
+}
+
 export function requestPreviewSnapshotResult(
   iframe: HTMLIFrameElement,
   timeout = 8000,

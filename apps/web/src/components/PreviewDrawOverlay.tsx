@@ -5,16 +5,34 @@ import { Icon } from './Icon';
 import { RemixIcon } from './RemixIcon';
 import { useT } from '../i18n';
 import type { PreviewVisualMarkKind } from '../types';
-import { requestPreviewSnapshot } from '../runtime/exports';
+import { requestPreviewSnapshot, requestPreviewAnchorTargets } from '../runtime/exports';
 import { isImeComposing } from '../utils/imeComposing';
+import {
+  reanchorNormalizedPoint,
+  reanchorNormalizedRect,
+  shouldReanchorMarks,
+  type FrameSize,
+} from './preview-mark-geometry';
+import {
+  anchorMark,
+  chooseAnchorTarget,
+  resolveAnchor,
+  type AnchorTarget,
+  type MarkAnchor,
+} from './preview-mark-anchor';
 
 interface Point { x: number; y: number }
-interface Stroke { points: Point[] }
+// `anchor` binds the mark to the artifact element it was drawn on, so it keeps
+// pointing at the same content when the preview reflows (#6361). It is absent
+// when the preview could not report element boxes; the mark then falls back to
+// its frame-relative position.
+interface Stroke { points: Point[]; anchor?: MarkAnchor }
 interface NormalizedRect { x: number; y: number; width: number; height: number }
+interface AnchoredRect extends NormalizedRect { anchor?: MarkAnchor }
 // A free-floating text label the user drops onto the preview. `x`/`y` are the
 // top-left position normalized to the frame (0..1) so it tracks the artifact as
 // the device frame scales; `text` is the raw multi-line string.
-interface TextMark { id: number; x: number; y: number; text: string }
+interface TextMark { id: number; x: number; y: number; text: string; anchor?: MarkAnchor }
 interface Rect { x: number; y: number; width: number; height: number }
 type MarkTool = 'box' | 'pen' | 'text';
 type DrawDockLayout = 'floating' | 'docked';
@@ -151,7 +169,7 @@ export function PreviewDrawOverlay({
   const drawingRef = useRef<Stroke | null>(null);
   // Box-select accumulates: each drag commits another region, so the user can
   // mark several areas in one pass instead of one box replacing the last.
-  const selectionBoxesRef = useRef<NormalizedRect[]>([]);
+  const selectionBoxesRef = useRef<AnchoredRect[]>([]);
   const boxDraftRef = useRef<{ start: Point; current: Point } | null>(null);
   const composingRef = useRef(false);
   // Text tool: each drop is a transparent label — bare glyphs and a blinking
@@ -183,6 +201,11 @@ export function PreviewDrawOverlay({
   // Untransformed layout size of the frame, tracked so the text glyph size can
   // scale with the frame the same way the exported screenshot does.
   const [frameSize, setFrameSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
+  // Ref mirror of the layout size the committed marks are currently normalized
+  // against. The resize pass compares it with the incoming size to decide
+  // whether the marks need re-anchoring (issue #6361); a state read there would
+  // be stale, since this effect does not re-subscribe on frameSize.
+  const frameSizeRef = useRef<FrameSize>({ w: 0, h: 0 });
   const [hasInk, setHasInk] = useState(false);
   const [hasBox, setHasBox] = useState(false);
   const [hasText, setHasText] = useState(false);
@@ -285,6 +308,8 @@ export function PreviewDrawOverlay({
       // untransformed size, so the canvas fills the whole frame at any scale.
       const width = wrap.offsetWidth;
       const height = wrap.offsetHeight;
+      reanchorMarksToFrame({ w: width, h: height });
+      scheduleContentReanchor();
       const dpr = window.devicePixelRatio || 1;
       cvs.width = Math.max(1, Math.floor(width * dpr));
       cvs.height = Math.max(1, Math.floor(height * dpr));
@@ -332,6 +357,214 @@ export function PreviewDrawOverlay({
     setTextMarks(next);
     setHasText(next.some((mark) => mark.text.trim().length > 0));
   }
+
+  // Invariant (issue #6361): a committed mark identifies a fixed region of the
+  // previewed artifact, and resizing the preview frame must not change which
+  // region that is.
+  //
+  // Marks are stored as a fraction of the frame, which is exactly right while
+  // the frame only *scales* — a device-frame `transform: scale()` shell renders
+  // the same layout box larger, so the same fraction still lands on the same
+  // artifact pixels, and this pass correctly does nothing (the layout box is
+  // unchanged). But when the frame's layout box itself changes — UI zoom, a
+  // window resize, a sidebar toggle — the artifact re-lays-out instead of
+  // scaling, and a fraction of the new frame no longer addresses the pixels the
+  // user drew on. Re-normalize the stored marks here, at the one place the old
+  // and new frame sizes are both known, so everything downstream (on-screen
+  // redraw, exported PNG, the structured bounds handed to the agent) keeps
+  // agreeing with what the user marked.
+  function reanchorMarksToFrame(next: FrameSize) {
+    const previous = frameSizeRef.current;
+    frameSizeRef.current = next;
+    if (!shouldReanchorMarks(previous, next)) return;
+    // Spread the original first: this pass rewrites geometry only, and must not
+    // drop the content anchor that `syncContentAnchors` attached — losing it
+    // would make the mark look unanchored and get re-bound to whatever element
+    // now sits under its (not yet corrected) position.
+    selectionBoxesRef.current = selectionBoxesRef.current.map((box) => ({
+      ...box,
+      ...reanchorNormalizedRect(box, previous, next),
+    }));
+    const reanchorStroke = (stroke: Stroke): Stroke => ({
+      ...stroke,
+      points: stroke.points.map((point) => reanchorNormalizedPoint(point, previous, next)),
+    });
+    strokesRef.current = strokesRef.current.map(reanchorStroke);
+    // Undone strokes are re-anchored too, so a redo after a resize restores the
+    // stroke onto the artifact rather than onto a stale fraction of the frame.
+    undoneStrokesRef.current = undoneStrokesRef.current.map(reanchorStroke);
+    if (textMarksRef.current.length > 0) {
+      commitTextMarks(
+        textMarksRef.current.map((mark) => ({
+          ...mark,
+          ...reanchorNormalizedPoint({ x: mark.x, y: mark.y }, previous, next),
+        })),
+      );
+    }
+  }
+
+  function strokeBBox(points: Point[]): NormalizedRect | null {
+    if (points.length === 0) return null;
+    const xs = points.map((p) => p.x);
+    const ys = points.map((p) => p.y);
+    const x = Math.min(...xs);
+    const y = Math.min(...ys);
+    return { x, y, width: Math.max(...xs) - x, height: Math.max(...ys) - y };
+  }
+
+  function anchorFor(
+    rect: NormalizedRect,
+    frame: FrameSize,
+    targets: readonly AnchorTarget[],
+  ): MarkAnchor | null {
+    const target = chooseAnchorTarget(rect, frame, targets);
+    return target ? anchorMark(rect, frame, target) : null;
+  }
+
+  function syncStrokeAnchor(stroke: Stroke, frame: FrameSize, targets: readonly AnchorTarget[]): Stroke {
+    const box = strokeBBox(stroke.points);
+    if (!box) return stroke;
+    if (!stroke.anchor) {
+      const anchor = anchorFor(box, frame, targets);
+      return anchor ? { ...stroke, anchor } : stroke;
+    }
+    const next = resolveAnchor(stroke.anchor, frame, targets);
+    if (!next) return stroke;
+    // Move the whole stroke with its anchor element, scaling only if that
+    // element itself changed size; re-running this with unchanged targets is a
+    // no-op because the bbox already equals the resolved rect.
+    const sx = box.width > 0 ? next.width / box.width : 1;
+    const sy = box.height > 0 ? next.height / box.height : 1;
+    return {
+      anchor: stroke.anchor,
+      points: stroke.points.map((p) => ({
+        x: next.x + (p.x - box.x) * sx,
+        y: next.y + (p.y - box.y) * sy,
+      })),
+    };
+  }
+
+  // Invariant (issue #6361): a mark identifies artifact content, not a fraction
+  // of the preview frame. `reanchorMarksToFrame` keeps marks stable when the
+  // frame is merely resized, but it cannot see a *reflow* — narrowing the frame
+  // rewraps text and shifts every block below it, which no frame-level rule can
+  // predict. So each mark is additionally bound to the element it was drawn on
+  // and re-projected from that element's current box.
+  //
+  // One bridge round trip does both jobs: marks without an anchor acquire one,
+  // marks with an anchor are re-projected. Anchoring is best-effort — a preview
+  // that reports no elements leaves marks on their frame-relative position
+  // rather than blocking the annotation.
+  async function syncContentAnchors(): Promise<void> {
+    const wrap = wrapRef.current;
+    if (!wrap) return;
+    const frame: FrameSize = { w: wrap.offsetWidth, h: wrap.offsetHeight };
+    if (frame.w <= 0 || frame.h <= 0) return;
+    if (
+      selectionBoxesRef.current.length === 0 &&
+      strokesRef.current.length === 0 &&
+      textMarksRef.current.length === 0
+    ) {
+      return;
+    }
+    // A preview with no bridge (or no annotated elements) never answers. Learn
+    // that once from the pass that runs when the mark is committed, so the
+    // pre-capture sync stays instant instead of making every send wait out the
+    // bridge timeout.
+    if (anchorBridgeRef.current === false) return;
+    const iframe = snapshotHostIframe();
+    if (!iframe) return;
+    const targets = await requestPreviewAnchorTargets(iframe);
+    anchorBridgeRef.current = targets.length > 0;
+    if (targets.length === 0) return;
+
+    selectionBoxesRef.current = selectionBoxesRef.current.map((box) => {
+      if (!box.anchor) {
+        const anchor = anchorFor(box, frame, targets);
+        return anchor ? { ...box, anchor } : box;
+      }
+      const next = resolveAnchor(box.anchor, frame, targets);
+      return next ? { ...next, anchor: box.anchor } : box;
+    });
+
+    strokesRef.current = strokesRef.current.map((stroke) => syncStrokeAnchor(stroke, frame, targets));
+
+    const nextText = textMarksRef.current.map((mark) => {
+      const rect = { x: mark.x, y: mark.y, width: 0, height: 0 };
+      if (!mark.anchor) {
+        const anchor = anchorFor(rect, frame, targets);
+        return anchor ? { ...mark, anchor } : mark;
+      }
+      const next = resolveAnchor(mark.anchor, frame, targets);
+      return next ? { ...mark, x: next.x, y: next.y } : mark;
+    });
+    if (nextText.some((mark, i) => mark !== textMarksRef.current[i])) commitTextMarks(nextText);
+
+    redraw();
+  }
+
+  // Scrolling the artifact moves every element box the anchors resolve against,
+  // so a mark that is bound to content has to be re-projected then too — not
+  // only on resize (#6361). The preview reports its own scroll position; that
+  // signal is rAF-throttled at the source and paced `live` here so the mark
+  // tracks the content during the gesture rather than snapping after it.
+  useEffect(() => {
+    function onMessage(ev: MessageEvent) {
+      const data = ev.data as { type?: string } | null;
+      if (!data || data.type !== 'od:preview-scroll') return;
+      const wrap = wrapRef.current;
+      if (!wrap) return;
+      const frames = wrap.querySelectorAll('iframe');
+      for (const frame of frames) {
+        if (frame.contentWindow === ev.source) {
+          scheduleContentReanchor('live');
+          return;
+        }
+      }
+    }
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, []);
+
+  /** null = not yet probed, true = bridge answers, false = give up quietly. */
+  const anchorBridgeRef = useRef<boolean | null>(null);
+  const contentAnchorTimerRef = useRef<number | null>(null);
+  const contentAnchorRanAtRef = useRef(0);
+
+  /**
+   * Two pacing modes, because scrolling and resizing want opposite things.
+   *
+   * `settle` waits for quiet — right for a resize or a freshly committed mark,
+   * where only the final state matters. Using it for scroll is what made marks
+   * visibly snap into place only once the user stopped: every scroll event
+   * pushed the timer back, so the re-projection never ran mid-gesture.
+   *
+   * `live` runs on the leading edge and then at most once per interval while
+   * events keep arriving, so a mark tracks the content it is anchored to during
+   * the scroll instead of after it.
+   */
+  function scheduleContentReanchor(pacing: 'settle' | 'live' = 'settle') {
+    const run = () => {
+      contentAnchorTimerRef.current = null;
+      contentAnchorRanAtRef.current = Date.now();
+      void syncContentAnchors();
+    };
+    if (pacing === 'live') {
+      // Never restart a pending run — that would turn this back into a debounce.
+      if (contentAnchorTimerRef.current !== null) return;
+      const since = Date.now() - contentAnchorRanAtRef.current;
+      contentAnchorTimerRef.current = window.setTimeout(run, Math.max(0, 32 - since));
+      return;
+    }
+    if (contentAnchorTimerRef.current !== null) window.clearTimeout(contentAnchorTimerRef.current);
+    contentAnchorTimerRef.current = window.setTimeout(run, 120);
+  }
+  useEffect(
+    () => () => {
+      if (contentAnchorTimerRef.current !== null) window.clearTimeout(contentAnchorTimerRef.current);
+    },
+    [],
+  );
 
   function pointFromEvent(e: PointerEvent): Point {
     const cvs = canvasRef.current!;
@@ -408,6 +641,7 @@ export function PreviewDrawOverlay({
       const point = pointFromEvent(e);
       const id = (textIdRef.current += 1);
       commitTextMarks([...textMarksRef.current, { id, x: point.x, y: point.y, text: '' }]);
+      scheduleContentReanchor();
       setEditingTextId(id);
       return;
     }
@@ -453,6 +687,7 @@ export function PreviewDrawOverlay({
       if (next.width >= 0.006 && next.height >= 0.006) {
         selectionBoxesRef.current = [...selectionBoxesRef.current, next];
         bumpLayoutRevision();
+        scheduleContentReanchor();
       }
       syncHistoryState();
       redraw();
@@ -463,6 +698,7 @@ export function PreviewDrawOverlay({
       strokesRef.current.push(drawingRef.current);
       undoneStrokesRef.current = [];
       bumpLayoutRevision();
+      scheduleContentReanchor();
       syncHistoryState();
     }
     drawingRef.current = null;
@@ -857,6 +1093,11 @@ export function PreviewDrawOverlay({
   }
 
   async function requestSnapshot(): Promise<PreviewSnapshot | null> {
+    // Re-project marks onto the artifact's current layout before the pixels and
+    // the structured bounds are read (#6361). The debounced pass after a resize
+    // usually got here first; awaiting it once more makes the sent annotation
+    // correct even when the user zooms and submits in the same instant.
+    await syncContentAnchors();
     if (captureSnapshot) {
       // The host's captureSnapshot is a compositor screenshot of the on-screen
       // region, which would otherwise include this overlay's own strokes +

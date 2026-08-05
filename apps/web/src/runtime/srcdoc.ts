@@ -2340,6 +2340,28 @@ function meaningfulDomFallbackTarget(el) {
       scheduleRuntimeStateRestore(data.state);
       return;
     }
+    // Annotation marks anchor to content so they survive a reflow (#6361).
+    // They need element boxes on demand WITHOUT turning on comment mode, whose
+    // hover/click interception would fight the drawing canvas. Only the three
+    // fields anchoring uses are sent back, so a large document does not ship a
+    // full style snapshot per element across the bridge.
+    if (data.type === 'od:mark-anchor-request') {
+      var markTargets = [];
+      try {
+        var found = allTargets();
+        for (var mi = 0; mi < found.length; mi++) {
+          markTargets.push({
+            elementId: found[mi].elementId,
+            selector: found[mi].selector,
+            position: found[mi].position
+          });
+        }
+      } catch (_) {}
+      try {
+        window.parent.postMessage({ type: 'od:mark-anchor-targets', id: data.id, targets: markTargets }, '*');
+      } catch (_) {}
+      return;
+    }
     if (data.type === 'od:comment-mode') {
       commentEnabled = !!data.enabled;
       mode = data.mode === 'pod' ? 'pod' : 'picker';
