@@ -346,7 +346,7 @@ async function runMediaGenerateCommandWithDeps(args: readonly string[]): Promise
   });
 }
 
-type CliSubcommandHandler = (args: readonly string[]) => Promise<void> | void;
+type CliSubcommandHandler = (args: readonly string[]) => Promise<void | boolean> | void;
 
 const SUBCOMMAND_MAP: Record<string, CliSubcommandHandler> = {
   artifacts: runArtifacts,
