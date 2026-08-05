@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useAmrSignIn } from '../../src/components/useAmrSignIn';
 import {
   AMR_LOGIN_POLL_INTERVAL_MS,
+  AMR_LOGIN_STARTUP_SETTLE_MS,
   AMR_LOGIN_TIMEOUT_MS,
   AMR_LOGIN_STATUS_EVENT,
 } from '../../src/components/amrLoginPolling';
@@ -184,5 +185,111 @@ describe('useAmrSignIn', () => {
     await vi.advanceTimersByTimeAsync(100);
     await vi.advanceTimersByTimeAsync(AMR_LOGIN_POLL_INTERVAL_MS);
     expect(statusCalls).toHaveLength(0);
+  });
+
+  it('refuses a broad "cancel latest" when the start omitted an authAttemptId', async () => {
+    vi.useFakeTimers();
+    const cancelCalls: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString();
+        if (url.endsWith('/api/integrations/vela/login')) {
+          return new Response(JSON.stringify({ ok: true }), { status: 200 });
+        }
+        if (url.endsWith('/api/integrations/vela/login/cancel')) {
+          cancelCalls.push(url);
+          return new Response(
+            JSON.stringify({ ok: true, canceled: true }),
+            { status: 200 },
+          );
+        }
+        if (url.endsWith('/api/integrations/vela/status')) {
+          return new Response(
+            JSON.stringify({ loggedIn: false, loginInFlight: true }),
+            { status: 200 },
+          );
+        }
+        return new Response(JSON.stringify({}), { status: 200 });
+      }),
+    );
+
+    render(<Harness />);
+    fireEvent.click(screen.getByRole('button', { name: 'sign-in' }));
+
+    await vi.advanceTimersByTimeAsync(100);
+    await vi.advanceTimersByTimeAsync(AMR_LOGIN_TIMEOUT_MS);
+
+    // Without an attempt id the hook must NOT hit the body-less cancel-latest
+    // endpoint (which could terminate a newer attempt owned by another surface).
+    expect(cancelCalls).toHaveLength(0);
+    // ... and it surfaces the failure so retry is not silently re-enabled.
+    expect(screen.getByRole('button').textContent).toContain('error:');
+  });
+
+  it('does not clear the failure when the daemon reports canceled:false', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      'fetch',
+      stubFetch({
+        statusBody: () => ({ loggedIn: false, loginInFlight: true }),
+        cancelOk: true,
+      }),
+    );
+    // Override cancel to report ok:true, canceled:false.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString();
+        if (url.endsWith('/api/integrations/vela/login/cancel')) {
+          return new Response(
+            JSON.stringify({ ok: true, canceled: false }),
+            { status: 200 },
+          );
+        }
+        return stubFetch({
+          statusBody: () => ({ loggedIn: false, loginInFlight: true }),
+        })(input, init);
+      }),
+    );
+
+    render(<Harness />);
+    fireEvent.click(screen.getByRole('button', { name: 'sign-in' }));
+
+    await vi.advanceTimersByTimeAsync(100);
+    await vi.advanceTimersByTimeAsync(AMR_LOGIN_TIMEOUT_MS);
+
+    expect(screen.getByRole('button').textContent).toContain('error:');
+  });
+
+  it('emits login-canceled when the timeout cancel is confirmed, status-changed when stopped', async () => {
+    // Confirmed cancel → login-canceled.
+    vi.useFakeTimers();
+    const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
+    vi.stubGlobal(
+      'fetch',
+      stubFetch({
+        statusBody: () => ({ loggedIn: false, loginInFlight: true }),
+        cancelOk: true,
+      }),
+    );
+    render(<Harness />);
+    fireEvent.click(screen.getByRole('button', { name: 'sign-in' }));
+    await vi.advanceTimersByTimeAsync(100);
+    await vi.advanceTimersByTimeAsync(AMR_LOGIN_TIMEOUT_MS);
+    let events = dispatchSpy.mock.calls.map(([event]) => (event as Event).type);
+    expect(events).toContain('od:amr-login-status-change');
+
+    // Stopped (browser closed) → status-changed terminal event.
+    dispatchSpy.mockClear();
+    vi.stubGlobal(
+      'fetch',
+      stubFetch({ statusBody: () => ({ loggedIn: false, loginInFlight: false }) }),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'sign-in' }));
+    await vi.advanceTimersByTimeAsync(100);
+    await vi.advanceTimersByTimeAsync(AMR_LOGIN_POLL_INTERVAL_MS + AMR_LOGIN_STARTUP_SETTLE_MS);
+    events = dispatchSpy.mock.calls.map(([event]) => (event as Event).type);
+    expect(events).toContain('od:amr-login-status-change');
   });
 });

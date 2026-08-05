@@ -1810,6 +1810,16 @@ body:has(.artifact-version-panel) .ws-tabs-file-actions-before {
    `background` to transparent — a bare `.avatar-item--pinned` loses that
    property on source order alone, which let the model row underneath the
    sticky footer show/bleed through instead of being covered by it. */
+.avatar-amr-signin-wrap {
+  display: flex;
+  flex-direction: column;
+}
+.avatar-amr-signin-error {
+  padding: 0 12px 4px;
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--danger, #c33);
+}
 .avatar-item.avatar-item--pinned {
   position: sticky;
   bottom: -6px;

@@ -223,7 +223,7 @@ export function AvatarMenu({
   const [amrAccount, setAmrAccount] = useState<VelaLoginStatus | null>(null);
   // #5244: signed-out login entry — reuse the shared Vela login flow so the
   // popover exposes the same affordance as the Home nav-rail account menu.
-  const { amrLoginPending, handleAmrSignIn } = useAmrSignIn({
+  const { amrLoginPending, amrLoginError, handleAmrSignIn } = useAmrSignIn({
     metricsConsent: config.telemetry?.metrics === true,
     installationId: config.installationId,
     onStatus: (status) => setAmrAccount(status),
@@ -585,24 +585,37 @@ export function AvatarMenu({
               like the home switcher's, so a long model list cannot scroll it
               away. */}
           {amrAccount && !amrAccount.loggedIn ? (
-            <button
-              type="button"
-              className="avatar-item avatar-item--pinned avatar-amr-signin"
-              data-testid="avatar-amr-row-signin"
-              disabled={amrLoginPending}
-              onClick={() => {
-                void handleAmrSignIn();
-              }}
-            >
-              <span className="avatar-item-icon" aria-hidden>
-                <RemixIcon name="login-circle-line" size={15} />
-              </span>
-              <span>
-                {amrLoginPending
-                  ? t('settings.amrSigningIn')
-                  : t('settings.amrSignIn')}
-              </span>
-            </button>
+            <div className="avatar-amr-signin-wrap">
+              <button
+                type="button"
+                className="avatar-item avatar-item--pinned avatar-amr-signin"
+                data-testid="avatar-amr-row-signin"
+                disabled={amrLoginPending || !!amrLoginError}
+                onClick={() => {
+                  void handleAmrSignIn();
+                }}
+              >
+                <span className="avatar-item-icon" aria-hidden>
+                  <RemixIcon name="login-circle-line" size={15} />
+                </span>
+                <span>
+                  {amrLoginPending
+                    ? t('settings.amrSigningIn')
+                    : t('settings.amrSignIn')}
+                </span>
+              </button>
+              {amrLoginError ? (
+                <span
+                  className="avatar-amr-signin-error"
+                  role="alert"
+                  data-testid="avatar-amr-row-signin-error"
+                >
+                  {amrLoginError === 'settings.amrLoginErrorCompact'
+                    ? t('settings.amrLoginErrorCompact')
+                    : amrLoginError}
+                </span>
+              ) : null}
+            </div>
           ) : null}
           <button
             type="button"

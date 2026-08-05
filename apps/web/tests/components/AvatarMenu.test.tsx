@@ -406,6 +406,54 @@ describe('AvatarMenu', () => {
     });
   });
 
+  it('surfaces a sign-in failure as an alert and keeps retry disabled', async () => {
+    // looper review on #6438: the popover must not silently re-enable retry
+    // when the login/cancel fails while a daemon child may still be in flight.
+    const amrAgent: AgentInfo = {
+      id: 'amr',
+      name: 'Open Design AMR',
+      bin: 'vela',
+      available: true,
+      models: [{ id: 'default', label: 'Default (CLI config)' }],
+    };
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === '/api/integrations/vela/status') {
+        return new Response(
+          JSON.stringify({
+            loggedIn: false,
+            loginInFlight: false,
+            profile: 'test',
+            user: null,
+            configPath: '/Users/test/.amr/config.json',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url === '/api/integrations/vela/login') {
+        // Non-2xx → startVelaLogin returns not-ok → the hook surfaces the error.
+        return new Response(
+          JSON.stringify({ error: 'spawn failed' }),
+          { status: 500, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      return new Response('{}', { status: 200 });
+    }));
+
+    renderMenu({ agents: [codexAgent, claudeAgent, amrAgent] });
+    openMenu();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('avatar-amr-row-signin')).toBeTruthy();
+    });
+    fireEvent.click(screen.getByTestId('avatar-amr-row-signin'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('avatar-amr-row-signin-error')).toBeTruthy();
+    });
+    expect(screen.getByTestId('avatar-amr-row-signin')).toHaveProperty('disabled', true);
+  });
+
   it('renders the active reasoning effort as a read-only readout', () => {
     renderMenu();
 

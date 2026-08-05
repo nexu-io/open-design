@@ -54,6 +54,10 @@ export function useAmrSignIn({
   const amrLoginStartedAtRef = useRef<number | null>(null);
   const amrLoginPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const amrMountedRef = useRef(true);
+  // The authAttemptId of the CURRENT attempt, refreshed from every status so a
+  // start that omitted it (or a 409/poll) still resolves to the right target.
+  // Used for the targeted timeout cancel — never a body-less "cancel latest".
+  const amrLoginAttemptIdRef = useRef<string | undefined>(undefined);
   // Attempt generation: bumped on every stop/unmount so an in-flight start or a
   // delayed poll callback from a previous attempt cannot drive a newer one.
   const amrAttemptRef = useRef(0);
@@ -89,14 +93,18 @@ export function useAmrSignIn({
     const result = await startVelaLogin(null, odDeviceId);
     if (!amrMountedRef.current || amrAttemptRef.current !== attempt) return;
     if (result.ok || result.alreadyRunning) {
-      const authAttemptId = result.authAttemptId;
+      amrLoginAttemptIdRef.current = result.authAttemptId ?? amrLoginAttemptIdRef.current;
       notifyAmrLoginStatusChanged('login-started');
       amrLoginPollRef.current = setInterval(() => {
         if (amrAttemptRef.current !== attempt) return;
         void fetchVelaLoginStatus()
           .then(async (status) => {
             if (!amrMountedRef.current || amrAttemptRef.current !== attempt) return;
-            if (status) onStatusRef.current?.(status);
+            if (status) {
+              amrLoginAttemptIdRef.current =
+                status.authAttemptId ?? amrLoginAttemptIdRef.current;
+              onStatusRef.current?.(status);
+            }
             const outcome = amrLoginPollOutcome(status, startedAt);
             if (outcome === 'signed-in') {
               stopAmrLoginPolling();
@@ -112,13 +120,23 @@ export function useAmrSignIn({
               if (outcome === 'timed-out') {
                 // A timed-out attempt's `vela login` child is often still alive
                 // (the daemon never self-reported loginInFlight: false). Cancel
-                // THIS attempt by id so a retry does not 409 as alreadyRunning,
-                // and surface the failure if the cancel itself fails.
-                const cancel = await cancelVelaLogin(authAttemptId);
+                // THIS attempt by its id — never a body-less "cancel latest",
+                // which could terminate a newer attempt owned by another
+                // surface. Only report cancelled when the daemon confirms it.
+                const cancel = amrLoginAttemptIdRef.current
+                  ? await cancelVelaLogin(amrLoginAttemptIdRef.current)
+                  : null;
                 if (!amrMountedRef.current || amrAttemptRef.current !== attempt) return;
-                if (!cancel.ok) {
+                if (!cancel?.ok || cancel.canceled !== true) {
                   setAmrLoginError('settings.amrLoginErrorCompact');
                 }
+                notifyAmrLoginStatusChanged(
+                  cancel?.canceled === true ? 'login-canceled' : 'status-changed',
+                );
+              } else {
+                // Browser closed without signing in — publish a terminal event so
+                // app-wide caches (loginInFlight) refresh, not just this poll.
+                notifyAmrLoginStatusChanged('status-changed');
               }
               stopAmrLoginPolling();
             }
