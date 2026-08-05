@@ -620,6 +620,12 @@ import { composioConnectorProvider } from './connectors/composio.js';
 import { configureComposioConfigStore } from './connectors/composio-config.js';
 import { CHAT_TOOL_ENDPOINTS, CHAT_TOOL_OPERATIONS, toolTokenRegistry } from './tool-tokens.js';
 import {
+  bearerTokenFromAuthorizationHeader,
+  requestProjectOverride,
+  requestRunOverride,
+  toolTokenValidationStatus,
+} from './runtimes/tool-authorization.js';
+import {
   aggregateCloudflarePagesStatus,
   buildDeployFileSet,
   checkDeploymentUrl,
@@ -2107,19 +2113,14 @@ function setLiveArtifactCodeHeaders(res) {
   res.setHeader('Referrer-Policy', 'no-referrer');
 }
 
-function bearerTokenFromRequest(req) {
-  const header = req.get('authorization');
-  if (typeof header !== 'string') return undefined;
-  const match = /^Bearer\s+(.+)$/i.exec(header.trim());
-  return match?.[1];
-}
-
 function authorizeToolRequest(req, res, operation) {
   const endpoint = req.path;
-  const validation = toolTokenRegistry.validate(bearerTokenFromRequest(req), { endpoint, operation });
+  const validation = toolTokenRegistry.validate(
+    bearerTokenFromAuthorizationHeader(req.get('authorization')),
+    { endpoint, operation },
+  );
   if (!validation.ok) {
-    const status = validation.code === 'TOOL_ENDPOINT_DENIED' || validation.code === 'TOOL_OPERATION_DENIED' ? 403 : 401;
-    sendApiError(res, status, validation.code, validation.message, {
+    sendApiError(res, toolTokenValidationStatus(validation.code), validation.code, validation.message, {
       details: { endpoint, operation },
     });
     return null;
@@ -2128,16 +2129,11 @@ function authorizeToolRequest(req, res, operation) {
 }
 
 function optionalToolGrantFromRequest(req, options = {}) {
-  const validation = toolTokenRegistry.validate(bearerTokenFromRequest(req), options);
+  const validation = toolTokenRegistry.validate(
+    bearerTokenFromAuthorizationHeader(req.get('authorization')),
+    options,
+  );
   return validation.ok ? validation.grant : null;
-}
-
-function requestProjectOverride(projectId, tokenProjectId) {
-  return typeof projectId === 'string' && projectId.length > 0 && projectId !== tokenProjectId;
-}
-
-function requestRunOverride(runId, tokenRunId) {
-  return typeof runId === 'string' && runId.length > 0 && runId !== tokenRunId;
 }
 
 function openNativeFolderDialog() {
