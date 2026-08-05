@@ -1,4 +1,3 @@
-// @ts-nocheck
 // HTTP-layer test for `POST /api/projects/:id/figma/import` — spins up the
 // real daemon via `startServer({ port: 0 })`, uploads a synthetic `.fig`
 // through the multipart boundary (multer → importFigmaFromBytes), and asserts
@@ -13,6 +12,18 @@ import { buildSampleFig } from './helpers/fig-fixture.js';
 
 const PROJECT_ID = 'figma-import-route-fixture';
 
+type FigmaImportResponse = {
+  inventory: {
+    decoded: boolean;
+    nodeCount: number;
+    colors: string[];
+  };
+  snapshotDir: string;
+  files: string[];
+  suggestedPrompt: string;
+  error?: { code?: string } | string;
+};
+
 describe('POST /api/projects/:id/figma/import — HTTP layer', () => {
   let server: http.Server;
   let baseUrl: string;
@@ -26,8 +37,9 @@ describe('POST /api/projects/:id/figma/import — HTTP layer', () => {
     };
     baseUrl = started.url;
     server = started.server;
-    dataDir = process.env.OD_DATA_DIR;
-    if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+    const configuredDataDir = process.env.OD_DATA_DIR;
+    if (!configuredDataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+    dataDir = configuredDataDir;
 
     await fetch(`${baseUrl}/api/projects`, {
       method: 'POST',
@@ -51,7 +63,7 @@ describe('POST /api/projects/:id/figma/import — HTTP layer', () => {
       body: form,
     });
     expect(resp.status).toBe(200);
-    const body = await resp.json();
+    const body = (await resp.json()) as FigmaImportResponse;
 
     expect(body.inventory.decoded).toBe(true);
     expect(body.inventory.nodeCount).toBe(4);
@@ -87,7 +99,8 @@ describe('POST /api/projects/:id/figma/import — HTTP layer', () => {
       body: form,
     });
     expect(resp.status).toBe(409);
-    const body = await resp.json();
-    expect(body.error?.code ?? body.error).toMatch(/FIGMA_URL_NEEDS_MIGRATION/);
+    const body = (await resp.json()) as FigmaImportResponse;
+    const errorCode = typeof body.error === 'string' ? body.error : body.error?.code;
+    expect(errorCode ?? body.error).toMatch(/FIGMA_URL_NEEDS_MIGRATION/);
   });
 });
