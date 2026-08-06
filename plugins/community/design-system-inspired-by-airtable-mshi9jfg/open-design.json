@@ -1,0 +1,22 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-inspired-by-airtable-mshi9jfg",
+  "title": "Design System Inspired by Airtable",
+  "version": "0.1.0",
+  "description": "> Category: Design & Creative > Spreadsheet-database hybrid. Colorful, friendly, structured data aesthetic.",
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  }
+}

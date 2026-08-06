@@ -1,0 +1,19 @@
+{
+  "candidateId": "bf8d9a70-81b8-47f4-b93a-87b2b1d6937f",
+  "projectId": "brand-apple-5b9ab6",
+  "runId": "176e1cb1-9ee3-43d6-bbfc-a672eb283d35",
+  "conversationId": "14e79e2d-e1ea-468a-a2af-60a1c6c90d86",
+  "provenance": {
+    "summary": "Detected from context/input-DESIGN.md after a successful run.",
+    "detectedAt": 1786020108014
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "context/input-DESIGN.md",
+      "label": "context/input-DESIGN.md",
+      "size": 3664,
+      "copied": true
+    }
+  ]
+}
