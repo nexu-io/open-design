@@ -546,11 +546,20 @@ export function PreviewDrawOverlay({
     // bridge-ready message advertises markAnchors) and the frame can resize.
     // The reply describes the OLD document/geometry; committing it to the
     // shared mark refs would move marks to the wrong region right before a
-    // capture. Discard the stale reply — the pass that accompanies the change
-    // (resize observer, bridge-ready re-render, or the pre-capture sync)
-    // re-probes against the current frame.
-    if (anchorHostIframe() !== iframe) return;
-    if (wrap.offsetWidth !== frame.w || wrap.offsetHeight !== frame.h) return;
+    // capture. Discard the stale reply AND queue a trailing pass: the discard
+    // must not settle the shared chain with the current frame unprobed, or an
+    // awaiting pre-capture sync proceeds with marks that were never resolved
+    // against the document it is about to screenshot. The trailing pass runs
+    // inside the same chain (see syncContentAnchors), so awaiting callers see
+    // the re-probe complete.
+    if (anchorHostIframe() !== iframe) {
+      anchorSyncTrailingRef.current = true;
+      return;
+    }
+    if (wrap.offsetWidth !== frame.w || wrap.offsetHeight !== frame.h) {
+      anchorSyncTrailingRef.current = true;
+      return;
+    }
     const targets = response.targets;
     if (targets.length === 0) return;
 

@@ -1203,6 +1203,103 @@ describe('PreviewDrawOverlay content anchoring (issue #6361)', () => {
     }
   });
 
+  it('re-probes the new active frame when a stale reply is discarded mid-send', async () => {
+    // Draw starts on srcDoc; the pre-capture probe is in flight when the URL
+    // anchor bridge becomes ready and the host flips data-od-active to the
+    // URL iframe (same wrapper size — no resize/scroll follows). Discarding
+    // the stale reply must NOT settle the awaited chain with the new frame
+    // unprobed: the trailing pass must probe the URL frame before capture,
+    // so the marks resolve against the document the compositor screenshots.
+    frame.w = 692;
+    frame.h = 666;
+    const restoreRect = installFrameGeometry();
+    const observer = installResizeObserver();
+    const anchors = vi.mocked(requestPreviewAnchorTargets);
+    anchors.mockReset();
+    const probed: string[] = [];
+    // The URL frame's document is scrolled 100px relative to the srcDoc twin.
+    const URL_BOXES = ZOOMED.map((t) => ({
+      ...t,
+      position: { ...t.position, y: t.position.y - 100 },
+    }));
+    let releaseSecond: (() => void) | null = null;
+    let swapActive: (() => void) | null = null;
+    anchors.mockImplementation(async (iframe: HTMLIFrameElement) => {
+      const title = iframe.getAttribute('title') ?? '?';
+      probed.push(title);
+      if (probed.length === 2) {
+        // The probe Send OWNS (started by its pre-capture sync, no join):
+        // hang until released after the active swap.
+        return new Promise((resolve) => {
+          releaseSecond = () => resolve({ answered: true, targets: ZOOMED } as never);
+        }) as never;
+      }
+      return { answered: true, targets: title === 'url' ? URL_BOXES : ZOOMED } as never;
+    });
+
+    const annotation = vi.fn((event: Event) => {
+      const detail = (event as CustomEvent<{ ack?: (r: { ok: boolean }) => void }>).detail;
+      detail.ack?.({ ok: true });
+    });
+    window.addEventListener('opendesign:annotation', annotation);
+
+    try {
+      const view = render(
+        <PreviewDrawOverlay active>
+          <iframe title="srcdoc" data-od-render-mode="srcdoc" data-od-active="true" />
+          <iframe title="url" data-od-render-mode="url-load" data-od-active="false" />
+        </PreviewDrawOverlay>,
+      );
+      const wrap = view.container.querySelector<HTMLElement>('.preview-draw-overlay')!;
+      const canvas = view.container.querySelector<HTMLCanvasElement>('canvas')!;
+      Object.defineProperty(wrap, 'offsetWidth', { configurable: true, get: () => frame.w });
+      Object.defineProperty(wrap, 'offsetHeight', { configurable: true, get: () => frame.h });
+      observer.trigger();
+      swapActive = () => {
+        view.container.querySelector('iframe[title="srcdoc"]')!.setAttribute('data-od-active', 'false');
+        view.container.querySelector('iframe[title="url"]')!.setAttribute('data-od-active', 'true');
+      };
+
+      // Mark BAND 05 (342..382); the commit probe (srcDoc, probe #1)
+      // completes quickly and anchors the mark.
+      fireEvent.pointerDown(canvas, { clientX: 40, clientY: 342, pointerId: 1 });
+      fireEvent.pointerMove(canvas, { clientX: 600, clientY: 382, pointerId: 1 });
+      fireEvent.pointerUp(canvas, { clientX: 600, clientY: 382, pointerId: 1 });
+      await waitFor(() => expect(probed.length).toBe(1));
+      await new Promise((r) => setTimeout(r, 350));
+
+      // Send starts its OWN pre-capture probe (probe #2) — nothing in flight
+      // to join, so no trailing flag is set by the entry path.
+      const input = view.container.querySelector<HTMLInputElement>('.preview-draw-note-input')!;
+      fireEvent.change(input, { target: { value: 'Probe the new frame before capture.' } });
+      fireEvent.click(view.getByRole('button', { name: 'Send' }));
+      await waitFor(() => expect(probed.length).toBe(2));
+
+      // The active frame swaps mid-await, THEN the stale reply lands.
+      swapActive!();
+      releaseSecond!();
+
+      await waitFor(() => expect(annotation).toHaveBeenCalledTimes(1));
+      const detail = (annotation.mock.calls[0]?.[0] as CustomEvent<{
+        bounds?: { x: number; y: number; width: number; height: number };
+      }>).detail;
+
+      // The awaited chain must have probed the URL frame before capture —
+      // the pre-fix discard settled the chain with only the srcDoc probe.
+      expect(probed).toContain('url');
+      // The mark's anchor (band 5) resolves against the URL frame's boxes,
+      // where that band sits at 242 — the mark lands on the CONTENT in the
+      // document being captured. The pre-fix path settled without probing
+      // the URL frame and sent 342: the srcDoc twin's geometry, wrong for
+      // the screenshotted document.
+      expect(detail.bounds!.y).toBeCloseTo(242, 0);
+    } finally {
+      window.removeEventListener('opendesign:annotation', annotation);
+      observer.restore();
+      restoreRect();
+    }
+  });
+
   it('resets the probe budget when the file changes under the open overlay', async () => {
     frame.w = 692;
     frame.h = 666;
