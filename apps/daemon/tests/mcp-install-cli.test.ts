@@ -233,28 +233,36 @@ describe.skipIf(process.platform === 'win32')('od mcp install <agent> end-to-end
   });
 });
 
-// Blocking finding from the round-8 review (commit 7536bc7): returning
-// DEFAULT_DAEMON_URL for an ambiguous discovery result does not make it
-// inert, because resolveMcpLaunchSpec unconditionally fetched
+// Blocking findings from rounds 8 and 9 (commits 7536bc7, then a further
+// finding on top of it): returning DEFAULT_DAEMON_URL for an ambiguous
+// discovery result does not make it inert in EITHER of two ways.
+//
+// Round 8: resolveMcpLaunchSpec unconditionally fetched
 // `${base}/api/mcp/install-info` on whatever URL it got back -- if
 // something happens to be listening on the hardcoded legacy port
-// 127.0.0.1:7456 during that exact window (a leftover process, an
-// unrelated local service, even one of the very channels ambiguity
-// refused to choose between), the CLI would fetch and persist THAT
-// server's response anyway, defeating the entire point of the ambiguity
-// guard. Reproduced by the reviewer with live stable/beta responders plus
-// a plain HTTP server on 7456; fixed by having resolveMcpLaunchSpec check
-// resolveDaemonUrlDetailed's `ambiguous` flag and skip the fetch entirely
-// in that case (see daemon-url.ts / cli.ts).
+// 127.0.0.1:7456 during that exact INSTALL-TIME window, the CLI would
+// fetch and persist THAT server's response. Fixed by skipping the fetch
+// entirely when `ambiguous` is true.
+//
+// Round 9: skipping the install-time fetch only prevented THAT one fetch --
+// the self-reinvocation fallback spec still wrote `--daemon-url
+// http://127.0.0.1:7456` into the persisted agent config. `ensureMcpDaemonUrl`
+// (mcp-bootstrap.ts) treats an explicit --daemon-url as authoritative and
+// skips rediscovery on every LATER `od mcp` spawn, so whatever eventually
+// ends up owning port 7456 -- at any point after install, not just during
+// it -- would silently receive the MCP traffic from then on. The only fix
+// that actually holds end-to-end is refusing to persist ANY spec at all
+// when ambiguous: resolveMcpLaunchSpec now returns `null`, and
+// runMcpInstall fails the whole install rather than falling through to any
+// fallback.
 //
 // Requires exclusive use of the real, unparameterizable port 7456 -- see
 // DEFAULT_PORT_WAS_FREE above -- so this describe is skipped rather than
 // failing outright if something else already owns that port on the host
 // (e.g. a real Open Design daemon, or a source-checkout `od` dev instance,
 // which also defaults to 7456) when this suite runs.
-describe.skipIf(!DEFAULT_PORT_WAS_FREE)('od mcp install <agent> ambiguity skips the default-port fetch entirely (#6425)', () => {
+describe.skipIf(!DEFAULT_PORT_WAS_FREE)('od mcp install <agent> ambiguity refuses to persist any spec (#6425)', () => {
   let conventionalIpcBaseDir: string;
-  let defaultPortServer: http.Server;
   let stableIpc: JsonIpcServerHandle | null = null;
   let betaIpc: JsonIpcServerHandle | null = null;
 
@@ -264,23 +272,6 @@ describe.skipIf(!DEFAULT_PORT_WAS_FREE)('od mcp install <agent> ambiguity skips 
     // Short prefix deliberately: AF_UNIX's sun_path has a ~104-byte limit
     // (macOS), and this path is already deep (tmpdir + namespace + filename).
     conventionalIpcBaseDir = fs.mkdtempSync(pathResolve(os.tmpdir(), 'od-mcp-amb-'));
-
-    // Stands in for "something happens to be listening on the hardcoded
-    // legacy default port" -- must never be reached if the ambiguity guard
-    // works, regardless of what it would have returned.
-    defaultPortServer = http.createServer((req, res) => {
-      if (req.url === '/api/mcp/install-info') {
-        res.writeHead(200, { 'content-type': 'application/json' });
-        res.end(JSON.stringify({ command: UNRELATED_COMMAND, args: [], env: {} }));
-        return;
-      }
-      res.writeHead(404);
-      res.end();
-    });
-    await new Promise<void>((resolve, reject) => {
-      defaultPortServer.once('error', reject);
-      defaultPortServer.listen(DEFAULT_DAEMON_PORT, '127.0.0.1', resolve);
-    });
 
     const platform = currentReleasePlatform();
     const stableSocketPath = resolveAppIpcPath({
@@ -310,27 +301,65 @@ describe.skipIf(!DEFAULT_PORT_WAS_FREE)('od mcp install <agent> ambiguity skips 
   afterAll(async () => {
     await stableIpc?.close();
     await betaIpc?.close();
-    await new Promise<void>((resolve) => defaultPortServer.close(() => resolve()));
     fs.rmSync(conventionalIpcBaseDir, { recursive: true, force: true });
   });
 
-  it('falls back to self-reinvocation instead of fetching the daemon listening on the default port', async () => {
+  it('fails the install outright instead of persisting any spec', async () => {
     const result = await runCli(['mcp', 'install', 'claude', '--print', '--json'], {
       [SIDECAR_ENV.IPC_BASE]: conventionalIpcBaseDir,
     });
 
-    expect(result.code).toBe(0);
-    expect(result.stderr).toBe('');
-    const parsed = JSON.parse(result.stdout) as { ok: boolean; agent: string; kind: string; command: string };
-    expect(parsed.ok).toBe(true);
-    expect(parsed.kind).toBe('cli');
-    // The core regression: must NOT have fetched /api/mcp/install-info from
-    // the port-7456 listener, ambiguous or not.
-    expect(parsed.command).not.toContain(UNRELATED_COMMAND);
-    // Must be the inert self-reinvocation spec instead (process.execPath +
-    // this file's own cli.ts entry point).
-    expect(parsed.command).toContain('cli.ts');
-    expect(parsed.command).toContain(`--daemon-url http://127.0.0.1:${DEFAULT_DAEMON_PORT}`);
+    expect(result.code).not.toBe(0);
+    const parsed = JSON.parse(result.stdout) as { ok: boolean; agent: string; message: string };
+    expect(parsed.ok).toBe(false);
+    expect(parsed.agent).toBe('claude');
+    expect(parsed.message).toMatch(/refus/i);
+    // Nothing referencing the default port must appear anywhere in the
+    // output -- there is no spec left to carry a concrete URL. (The error
+    // message's own advisory text legitimately suggests the bare
+    // `--daemon-url` FLAG NAME as something the user could pass, so that
+    // substring alone isn't the thing to assert against here.)
+    expect(result.stdout).not.toContain(String(DEFAULT_DAEMON_PORT));
+  });
+
+  // Literal reproduction of the review's requested scenario, adapted to
+  // this fix's actual shape: since NOTHING is ever persisted when
+  // ambiguous, "starts a listener on the default port after the ambiguous
+  // install" can only meaningfully prove the refusal is structural (driven
+  // by the live channel sockets) rather than an accident of the default
+  // port happening to be empty at attempt time. Retries the exact same
+  // install after the listener appears and confirms it is refused again,
+  // identically, with the listener's response never surfacing anywhere.
+  it('still refuses once the default-port listener appears after the first refusal', async () => {
+    const before = await runCli(['mcp', 'install', 'claude', '--print', '--json'], {
+      [SIDECAR_ENV.IPC_BASE]: conventionalIpcBaseDir,
+    });
+    expect(before.code).not.toBe(0);
+
+    const defaultPortServer = http.createServer((req, res) => {
+      if (req.url === '/api/mcp/install-info') {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ command: UNRELATED_COMMAND, args: [], env: {} }));
+        return;
+      }
+      res.writeHead(404);
+      res.end();
+    });
+    await new Promise<void>((resolve, reject) => {
+      defaultPortServer.once('error', reject);
+      defaultPortServer.listen(DEFAULT_DAEMON_PORT, '127.0.0.1', resolve);
+    });
+    try {
+      const after = await runCli(['mcp', 'install', 'claude', '--print', '--json'], {
+        [SIDECAR_ENV.IPC_BASE]: conventionalIpcBaseDir,
+      });
+      expect(after.code).not.toBe(0);
+      expect(after.stdout).not.toContain(UNRELATED_COMMAND);
+      const parsed = JSON.parse(after.stdout) as { ok: boolean };
+      expect(parsed.ok).toBe(false);
+    } finally {
+      await new Promise<void>((resolve) => defaultPortServer.close(() => resolve()));
+    }
   });
 });
 

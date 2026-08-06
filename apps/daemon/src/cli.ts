@@ -2960,38 +2960,51 @@ To register this server into a coding agent's own config automatically:
 // Uses resolveDaemonUrlDetailed(), not the plain-string resolveDaemonUrl(),
 // specifically because this function is about to fetch AND PERSIST whatever
 // comes back at the resolved URL. When discovery is ambiguous (more than
-// one packaged channel simultaneously live, see daemon-url.ts), the
-// resolved URL is the legacy default port — but that port is not
-// necessarily inert: something could coincidentally be listening there
-// during this exact call (a leftover process, an unrelated local service,
-// even one of the very channels this refused to choose between), and
-// fetching it anyway would silently persist whatever it returns despite the
-// ambiguity guard existing precisely to prevent that. See the #6425 review
-// discussion for the reproduction. Skipping the fetch entirely when
-// `ambiguous` is true and falling straight through to the self-reinvocation
-// spec below is the only way to make "refuse to guess" actually hold.
+// one packaged channel simultaneously live, see daemon-url.ts), this
+// returns `null` instead of any spec at all — see the doc comment below for
+// why even the inert-looking self-reinvocation fallback isn't safe to
+// persist in that case.
+//
+// Returns `null` (never throws) when discovery is ambiguous; the caller
+// (runMcpInstall) must treat that as "refuse the whole install", not fall
+// through to any other spec.
 async function resolveMcpLaunchSpec(flags) {
   const { url: rawBase, ambiguous } = await resolveDaemonUrlDetailed({
     flagUrl: flags?.['daemon-url'],
     allowConventionalIpcDiscovery: true,
   });
+  if (ambiguous) {
+    // Skipping the /api/mcp/install-info fetch (see below) only prevents
+    // the INSTALL-TIME response from being persisted -- it does nothing
+    // about what gets baked into the config for every LATER run. The
+    // self-reinvocation fallback below writes `--daemon-url <base>` into
+    // the persisted agent config; ensureMcpDaemonUrl (mcp-bootstrap.ts)
+    // treats an explicit --daemon-url as authoritative and skips
+    // rediscovery entirely on every subsequent `od mcp` spawn. Baking in
+    // the legacy default port here would mean any daemon that later
+    // happens to own that port -- a dev instance, a leftover process, a
+    // different packaged channel -- silently receives the MCP traffic
+    // from then on, even though THIS install explicitly refused to choose
+    // between the live channels. The only way to make "refuse to guess"
+    // actually hold end-to-end is to refuse to persist anything at all.
+    // See the #6425 review discussion.
+    return null;
+  }
   const base = rawBase.replace(/\/$/, '');
-  if (!ambiguous) {
-    try {
-      const resp = await fetch(`${base}/api/mcp/install-info`);
-      if (resp.ok) {
-        const info = await resp.json();
-        if (info && typeof info.command === 'string' && Array.isArray(info.args)) {
-          return {
-            command: info.command,
-            args: info.args,
-            env: info.env && typeof info.env === 'object' ? info.env : {},
-          };
-        }
+  try {
+    const resp = await fetch(`${base}/api/mcp/install-info`);
+    if (resp.ok) {
+      const info = await resp.json();
+      if (info && typeof info.command === 'string' && Array.isArray(info.args)) {
+        return {
+          command: info.command,
+          args: info.args,
+          env: info.env && typeof info.env === 'object' ? info.env : {},
+        };
       }
-    } catch {
-      // daemon not running / unreachable — fall through to the minimal spec
     }
+  } catch {
+    // daemon not running / unreachable — fall through to the minimal spec
   }
   // Bare `od` collides with the system octal-dump utility on macOS/Linux
   // (issue #5120). Self-reinvoke via the absolute interpreter + entry-point
@@ -3079,8 +3092,20 @@ async function runMcpInstall(args) {
   const dryRun = Boolean(flags.print || flags['dry-run']);
   const serverName = flags.name || 'open-design';
 
-  const os = await import('node:os');
   const spec = await resolveMcpLaunchSpec(flags);
+  if (spec == null) {
+    // Ambiguous discovery (see resolveMcpLaunchSpec's doc comment): more
+    // than one packaged channel is simultaneously live and this install
+    // cannot know which one the caller meant. Refuse the whole install
+    // rather than persist a --daemon-url that would silently target
+    // whatever later happens to own that port -- see the #6425 review
+    // discussion.
+    const msg = `${slug}: multiple Open Design channels are currently running; refusing to guess which one to install against. Stop the extra instance(s), or pass --daemon-url explicitly, then retry.`;
+    emitInstallResult(useJson, { ok: false, agent: slug, message: msg });
+    process.exit(2);
+  }
+
+  const os = await import('node:os');
   const plan = planAgentInstall(slug, spec, {
     home: os.homedir(),
     platform: process.platform,
