@@ -39,7 +39,8 @@ import {
 import { readProcessStamp } from "@open-design/platform";
 
 import { createDesktopRuntime, type DesktopRuntime } from "./runtime.js";
-import { dispatchInviteDeeplink, registerInviteDeeplink, focusPrimaryWindow } from "./invite-deeplink.js";
+import { dispatchInviteDeeplink, registerInviteDeeplink } from "./invite-deeplink.js";
+import { focusDesktopForDeeplink } from "./deeplink-focus.js";
 import { setUpDesktopCrashReporter, writeDesktopGpuInfo } from "./crash-diagnostics.js";
 import { beginDesktopSession, clearReportedCrash, endDesktopSessionCleanly, markDesktopSessionRunning } from "./session-lifecycle.js";
 import {
@@ -1012,7 +1013,7 @@ export async function runDesktopMain(
   // Route opendesign:// team-invite deeplinks to the daemon (desktop wake-up).
   registerInviteDeeplink({
     resolveDaemonBaseUrl: resolveDaemonBaseUrl(runtime, options),
-    focus: focusPrimaryWindow,
+    focus: () => focusDesktopForDeeplink(desktop),
     onCompleted: (outcome) => {
       console.info("[open-design desktop] invite deeplink continuation completed", outcome);
     },

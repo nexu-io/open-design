@@ -1276,6 +1276,14 @@ describe('API proxy routes', () => {
       'https://token-plan-cn.xiaomimimo.com/anthropic',
       'https://token-plan-cn.xiaomimimo.com/anthropic/v1/messages',
     ],
+    [
+      'https://proxy.example.test/v1/',
+      'https://proxy.example.test/v1/messages',
+    ],
+    [
+      'https://proxy.example.test/custom/anthropic/v1/',
+      'https://proxy.example.test/custom/anthropic/v1/messages',
+    ],
   ])('routes Anthropic baseUrl %s to %s', async (input, expected) => {
     const fetchMock = vi.fn((req: FetchInput, init?: FetchInit) => {
       const url = String(req);

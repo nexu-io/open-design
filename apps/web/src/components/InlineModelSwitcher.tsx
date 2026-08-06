@@ -35,7 +35,10 @@ import {
 } from '../analytics/amr-attribution';
 import { amrPlansUrlForProfile } from '../runtime/amr-guidance';
 import { getResolvedDeviceId } from '../analytics/client';
-import { trackExecutionSettingsPopoverClick } from '../analytics/events';
+import {
+  trackDeepSeekCampaignModelBenefitSurfaceView,
+  trackExecutionSettingsPopoverClick,
+} from '../analytics/events';
 import {
   beginAmrAuthTracking,
   confirmAmrAuthTracking,
@@ -100,6 +103,11 @@ import {
   providerModelsCacheKey,
   type ProviderModelsCache,
 } from './providerModelsCache';
+import {
+  DEEPSEEK_V4_FLASH_CAMPAIGN,
+  isDeepSeekV4FlashCampaignModel,
+} from '../campaigns/deepseek-v4-flash';
+import { useDeepSeekV4FlashCampaignVisibility } from '../campaigns/use-deepseek-v4-flash-campaign';
 
 interface Props {
   config: AppConfig;
@@ -193,6 +201,30 @@ export function InlineModelSwitcher({
 }: Props) {
   const t = useT();
   const analytics = useAnalytics();
+  // Both flags are reserved presentation branches with no trigger wired yet:
+  // `campaignRestricted` (已暂停 badge) is reserved for the backend
+  // usage-limit signal — no trigger wired yet — and `campaignNeedsUpgrade`
+  // (升级可用 badge) is reserved for a real unpaid-audience signal reaching
+  // this component. Until those land, every campaign badge renders the paid
+  // state.
+  const campaignRestricted = false;
+  const campaignNeedsUpgrade = false;
+  const campaignVisibility = useDeepSeekV4FlashCampaignVisibility();
+  const campaignModelBadge = campaignRestricted
+    ? DEEPSEEK_V4_FLASH_CAMPAIGN.restricted.modelBadge
+    : campaignNeedsUpgrade
+      ? DEEPSEEK_V4_FLASH_CAMPAIGN.unpaid.modelBadge
+      : DEEPSEEK_V4_FLASH_CAMPAIGN.paid.modelBadge;
+  const campaignModelTooltip = campaignRestricted
+    ? DEEPSEEK_V4_FLASH_CAMPAIGN.restricted.tooltip
+    : campaignNeedsUpgrade
+      ? DEEPSEEK_V4_FLASH_CAMPAIGN.unpaid.tooltip
+      : DEEPSEEK_V4_FLASH_CAMPAIGN.ruleSummary;
+  const campaignBadgeStateClass = campaignRestricted
+    ? ' is-restricted'
+    : campaignNeedsUpgrade
+      ? ' is-unpaid'
+      : '';
   // recvqfYKutwWlQ: gate the AMR upgrade entry on billing permission below,
   // not just plan tier — a team member without `canManageBilling` (owner-only)
   // can't act on an upgrade even when the tier itself is upgradeable.
@@ -204,6 +236,7 @@ export function InlineModelSwitcher({
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const popoverRef = useRef<HTMLDivElement | null>(null);
+  const campaignBenefitTrackedForOpenRef = useRef(false);
   // Viewport clamp for the popover (issue #99): the anchor chip can sit
   // anywhere on screen (home hero mid-page, chat composer at the bottom), so
   // a fixed downward placement runs past the screen edge once the model list
@@ -260,7 +293,10 @@ export function InlineModelSwitcher({
   const amrAuthAttemptIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!open) setUncachedProviderModels(null);
+    if (!open) {
+      setUncachedProviderModels(null);
+      providerModelsFetchingRef.current.clear();
+    }
   }, [open]);
 
   const getModelPopoverBoundary = useCallback(() => {
@@ -600,14 +636,6 @@ export function InlineModelSwitcher({
       const triggerRect = trigger?.getBoundingClientRect();
       if (!triggerRect) return;
       const scrollRect = scrollContainer.getBoundingClientRect();
-      if (
-        triggerRect.width === 0 &&
-        triggerRect.height === 0 &&
-        scrollRect.width === 0 &&
-        scrollRect.height === 0
-      ) {
-        return;
-      }
       const topbar = scrollContainer.querySelector<HTMLElement>('.entry-main__topbar');
       const anchorInTopbar = trigger ? topbar?.contains(trigger) === true : false;
       const topbarBottom = topbar?.getBoundingClientRect().bottom;
@@ -710,7 +738,8 @@ export function InlineModelSwitcher({
   const normalizedCurrentModelId = normalizedCurrentChoice?.model ?? null;
   const normalizedCurrentReasoning = normalizedCurrentChoice?.reasoning;
   const normalizedCurrentServiceTier = normalizedCurrentChoice?.serviceTier;
-  const currentAgentModelIds = currentAgent?.models?.map((m) => m.id) ?? [];
+  const currentAgentModels = currentAgent?.models ?? [];
+  const currentAgentModelIds = currentAgentModels.map((m) => m.id);
   const configuredModelId =
     typeof effectiveCurrentChoice.model === 'string' && effectiveCurrentChoice.model
       ? effectiveCurrentChoice.model
@@ -723,7 +752,7 @@ export function InlineModelSwitcher({
       ? defaultAgentModelId(currentAgent)
       : configuredModelId ?? defaultAgentModelId(currentAgent);
   const currentModelOption =
-    currentAgent?.models?.find((m) => m.id === currentModelId) ?? null;
+    currentAgentModels.find((m) => m.id === currentModelId) ?? null;
 
   useEffect(() => {
     if (!currentAgentId || !normalizedCurrentModelId) return;
@@ -750,10 +779,10 @@ export function InlineModelSwitcher({
   const currentModelLabel =
     currentModelOption?.label ?? null;
   const inlineAgentModelOptions = useMemo(() => {
-    const models = currentAgent?.models ?? [];
+    const models = currentAgentModels;
     if (currentAgent?.id !== 'amr') return models;
     return orderModelOptionsByAvailability(models);
-  }, [currentAgent]);
+  }, [currentAgent?.id, currentAgentModels]);
 
   /**
    * The ONLY path from a model row to `onAgentModelChange` in this component.
@@ -767,7 +796,9 @@ export function InlineModelSwitcher({
     (modelId: string, extra?: { serviceTier?: string }) => {
       const agentId = currentAgent?.id;
       if (!agentId) return false;
-      if (!agentModelIsSelectable(currentAgent, modelId)) return false;
+      if (!agentModelIsSelectable(currentAgent, modelId)) {
+        return false;
+      }
       onAgentModelChange?.(agentId, { model: modelId, ...extra });
       return true;
     },
@@ -788,14 +819,55 @@ export function InlineModelSwitcher({
     [currentAgent, inlineAgentModelOptions],
   );
 
+  useEffect(() => {
+    if (!open) {
+      campaignBenefitTrackedForOpenRef.current = false;
+      return;
+    }
+    if (
+      !compact
+      || !campaignVisibility.visible
+      || campaignBenefitTrackedForOpenRef.current
+      || !compactModelRows.some(({ model }) => isDeepSeekV4FlashCampaignModel(model.id))
+    ) {
+      return;
+    }
+    campaignBenefitTrackedForOpenRef.current = true;
+    trackDeepSeekCampaignModelBenefitSurfaceView(analytics.track, {
+      page_name: 'home',
+      area: 'execution_settings_popover',
+      element: 'deepseek_v4_flash_benefit',
+      campaign_id: 'deepseek_v4_flash',
+      user_state: campaignNeedsUpgrade ? 'unpaid' : 'paid',
+      model_id: 'deepseek-v4-flash',
+    });
+  }, [
+    analytics.track,
+    campaignNeedsUpgrade,
+    campaignVisibility.visible,
+    compact,
+    compactModelRows,
+    open,
+  ]);
+
   /** Where a refused model pick sends the user instead — the same plans
    *  destination the settings picker's upgrade lock already opens. */
   const openAmrModelUpgrade = useCallback(() => {
     const attribution = recordAmrEntry(
       analytics.track,
-      'inline_amr_upgrade',
+      campaignNeedsUpgrade
+        ? 'deepseek_model_switcher_upgrade'
+        : 'inline_amr_upgrade',
       new Date(),
-      { metricsConsent: config.telemetry?.metrics === true },
+      {
+        metricsConsent: config.telemetry?.metrics === true,
+        ...(campaignNeedsUpgrade
+          ? {
+              campaignId: 'deepseek_v4_flash' as const,
+              conversionSource: 'deepseek_model_switcher_upgrade' as const,
+            }
+          : {}),
+      },
     );
     const deviceId = amrHandoffDeviceId({
       metricsConsent: config.telemetry?.metrics === true,
@@ -816,6 +888,7 @@ export function InlineModelSwitcher({
   }, [
     amrStatus?.profile,
     analytics.track,
+    campaignNeedsUpgrade,
     config.agentCliEnv?.amr?.OPEN_DESIGN_AMR_PROFILE,
     config.installationId,
     config.telemetry?.metrics,
@@ -905,7 +978,10 @@ export function InlineModelSwitcher({
   const amrStatusIconName = amrLoginPending ? 'spinner' : null;
 
   const apiProtocol = config.apiProtocol ?? 'anthropic';
-  const credentialSource = config.apiCredentialSource ?? 'user';
+  const credentialSource =
+    apiProtocol === 'openai' && config.apiCredentialSource === 'deployment'
+      ? 'deployment'
+      : 'user';
   const deploymentProviderModelsFingerprint =
     deploymentProviderModelsCacheFingerprint(deploymentProviderConfig);
   const providerForProtocol = useMemo(
@@ -927,7 +1003,9 @@ export function InlineModelSwitcher({
         config.apiKey,
         config.apiVersion ?? '',
         credentialSource,
-        credentialSource === 'deployment' ? deploymentProviderModelsFingerprint : '',
+        credentialSource === 'deployment'
+          ? deploymentProviderModelsFingerprint
+          : '',
       ),
     [
       apiProtocol,
@@ -954,11 +1032,17 @@ export function InlineModelSwitcher({
   // keyed identically to Settings (`providerModelsKey`), so a single fetch
   // serves both surfaces and replaces any stale slot.
   useEffect(() => {
-    if (!open || config.mode !== 'api' || !onProviderModelsCacheChange) return;
+    if (!open || config.mode !== 'api') return;
+    if (shouldCacheProviderModels && !onProviderModelsCacheChange) return;
     if (apiProtocol === 'azure' || apiProtocol === 'ollama') return;
-    const credentialSource = config.apiCredentialSource ?? 'user';
     if (credentialSource === 'deployment' && apiProtocol !== 'openai') return;
-    if (credentialSource !== 'deployment' && apiProtocol !== 'aihubmix' && !config.apiKey.trim()) return;
+    if (
+      credentialSource !== 'deployment' &&
+      apiProtocol !== 'aihubmix' &&
+      !config.apiKey.trim()
+    ) {
+      return;
+    }
     const baseUrl = config.baseUrl.trim();
     if (credentialSource !== 'deployment' && !/^https?:\/\//i.test(baseUrl)) return;
     const key = providerModelsKey;
@@ -978,7 +1062,7 @@ export function InlineModelSwitcher({
       .then((result) => {
         if (active && result.ok && result.models?.length) {
           if (shouldCacheProviderModels) {
-            onProviderModelsCacheChange((current) => ({
+            onProviderModelsCacheChange?.((current) => ({
               ...current,
               [key]: result.models ?? [],
             }));
@@ -999,15 +1083,14 @@ export function InlineModelSwitcher({
   }, [
     open,
     config.mode,
-    config.apiCredentialSource,
     config.apiKey,
     config.baseUrl,
     apiProtocol,
+    credentialSource,
     providerModelsKey,
     fetchedApiModelOptions.length,
-    shouldCacheProviderModels,
-    uncachedProviderModels,
     onProviderModelsCacheChange,
+    shouldCacheProviderModels,
   ]);
 
   const suggestedApiModelIds = useMemo(
@@ -1024,12 +1107,7 @@ export function InlineModelSwitcher({
         ),
       );
     },
-    [
-      apiProtocol,
-      credentialSource,
-      deploymentProviderConfig?.defaultModel,
-      providerForProtocol,
-    ],
+    [apiProtocol, credentialSource, deploymentProviderConfig?.defaultModel, providerForProtocol],
   );
   const apiModelOptions = useMemo(
     () => mergeProviderModelOptions(fetchedApiModelOptions, suggestedApiModelIds),
@@ -1046,24 +1124,27 @@ export function InlineModelSwitcher({
 
   // Chip text — keep it tight so the pill doesn't wrap on small viewports.
   // CLI: "Claude · Sonnet 4.5"; BYOK: "Anthropic · sonnet-4.5".
-  // Deployment mode is API execution without browser-held BYOK credentials.
   const chipMode =
     config.mode === 'daemon'
       ? t('inlineSwitcher.chipCli')
       : credentialSource === 'deployment'
-        ? deploymentProviderConfig?.label?.trim() || 'Deployment'
+        ? t('settings.modeApi')
         : t('inlineSwitcher.chipByok');
   const chipPrimary =
     config.mode === 'daemon'
       ? currentAgent
         ? displayAgentChipName(currentAgent)
         : t('inlineSwitcher.noAgent')
-      : apiProtocolLabel(apiProtocol);
+      : credentialSource === 'deployment'
+        ? deploymentProviderConfig?.label?.trim() || 'Deployment'
+        : apiProtocolLabel(apiProtocol);
   const chipModel =
     config.mode === 'daemon'
-      ? currentModelLabel && currentModelId !== 'default'
-        ? currentModelLabel
-        : t('inlineSwitcher.modelDefault')
+      ? isDeepSeekV4FlashCampaignModel(currentModelId)
+        ? currentModelLabel ?? 'DeepSeek V4 Flash'
+        : currentModelLabel && currentModelId !== 'default'
+          ? currentModelLabel
+          : t('inlineSwitcher.modelDefault')
       : config.model.trim() || t('inlineSwitcher.modelDefault');
 
   // Compact home chip surfaces the selected model name + a connection-status
@@ -1155,6 +1236,16 @@ export function InlineModelSwitcher({
               aria-hidden="true"
             />
             <span className="inline-switcher__chip-model-name">{chipModel}</span>
+            {campaignVisibility.visible && isDeepSeekV4FlashCampaignModel(currentModelId) ? (
+              <span
+                className={`inline-switcher__campaign-badge od-tooltip${campaignBadgeStateClass}`}
+                data-tooltip={campaignModelTooltip}
+                data-tooltip-placement="top"
+                aria-label={campaignModelTooltip}
+              >
+                {campaignModelBadge}
+              </span>
+            ) : null}
           </>
         ) : (
           <>
@@ -1260,7 +1351,108 @@ export function InlineModelSwitcher({
           </div>
           )}
 
-          {compact ? (
+          {/* The popover body always reflects the ACTIVE execution mode:
+              `compact` only chooses layout density, never which catalogue is
+              on offer. A BYOK chip therefore always opens onto the BYOK
+              provider's model list (regression: the compact home popover kept
+              listing the local CLI agent's cloud models while the chip showed
+              the BYOK model). */}
+          {config.mode === 'api' ? (
+            <>
+              {compact ? null : (
+              <div className="inline-switcher__row">
+                <span className="inline-switcher__label">
+                  {t('inlineSwitcher.providerLabel')}
+                </span>
+                <div className="inline-switcher__chips" role="tablist">
+                  {API_PROTOCOL_TABS.map((tab) => {
+                    const active = apiProtocol === tab.id;
+                    return (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={active}
+                        className={
+                          'inline-switcher__chip-tab' +
+                          (active ? ' is-active' : '')
+                        }
+                        data-testid={`inline-model-switcher-provider-${tab.id}`}
+                        onClick={() => {
+                          // Unlike Settings (which skips unmapped protocols),
+                          // report the click even when the protocol has no v2
+                          // provider_id (e.g. aihubmix) — just omit the field.
+                          trackExecutionSettingsPopoverClick(analytics.track, {
+                            page_name: 'home',
+                            area: 'execution_settings_popover',
+                            element: 'byok_provider_tab',
+                            provider_id:
+                              byokProtocolToTracking(tab.id) ?? undefined,
+                          });
+                          onApiProtocolChange?.(tab.id);
+                        }}
+                      >
+                        {tab.title}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              )}
+
+              <div className="inline-switcher__row">
+                <span className="inline-switcher__label">
+                  {t('inlineSwitcher.modelLabel')}
+                </span>
+                {apiModelOptions.length > 0 ? (
+                  <SearchableModelSelect
+                    className="inline-switcher__select"
+                    popoverClassName="inline-model-popover"
+                    data-testid="inline-model-switcher-api-model"
+                    searchInputTestId="inline-model-switcher-api-model-search"
+                    popoverTestId="inline-model-switcher-api-model-popover"
+                    searchPlaceholder={t('designs.searchPlaceholder')}
+                    getPopoverBoundary={getModelPopoverBoundary}
+                    aria-label={t('inlineSwitcher.modelLabel')}
+                    models={apiModelChoices}
+                    value={config.model}
+                    onChange={(nextValue) => {
+                      trackExecutionSettingsPopoverClick(analytics.track, {
+                        page_name: 'home',
+                        area: 'execution_settings_popover',
+                        element: 'model_dropdown',
+                        execution_mode: 'byok',
+                        provider_id:
+                          byokProtocolToTracking(apiProtocol) ?? undefined,
+                        model_id: modelIdForTracking(nextValue),
+                      });
+                      onApiModelChange?.(nextValue);
+                    }}
+                    additionalOptions={
+                      config.model && !apiModelIds.includes(config.model)
+                        ? [
+                            {
+                              value: config.model,
+                              label: `${config.model} ${t('inlineSwitcher.customSuffix')}`,
+                            },
+                          ]
+                        : undefined
+                    }
+                  />
+                ) : (
+                  <span className="inline-switcher__hint">
+                    {t('inlineSwitcher.openSettingsForModel')}
+                  </span>
+                )}
+              </div>
+
+              {credentialSource !== 'deployment' && !config.apiKey ? (
+                <div className="inline-switcher__warn" role="status">
+                  {t('inlineSwitcher.missingApiKey')}
+                </div>
+              ) : null}
+            </>
+          ) : compact ? (
             // Compact home popover: a plain list of the CURRENT agent's model
             // names (no header, no agent icons) — switching agents lives in
             // the execution settings entry below.
@@ -1272,6 +1464,8 @@ export function InlineModelSwitcher({
                     // A model above the caller's plan is shown, but honestly:
                     // disabled with the reason the settings picker already uses,
                     // never as a normal row whose click gets reverted.
+                    const campaignModel = campaignVisibility.visible
+                      && isDeepSeekV4FlashCampaignModel(m.id);
                     const lockedHint = selectable
                       ? null
                       : t('settings.amrModelUpgradeHint');
@@ -1295,7 +1489,9 @@ export function InlineModelSwitcher({
                             // the settings picker's lock) instead of writing a
                             // choice the config would revert.
                             if (!applyAgentModel(m.id)) {
-                              if (amrCanUpgrade) openAmrModelUpgrade();
+                              if (amrCanUpgrade || campaignNeedsUpgrade) {
+                                openAmrModelUpgrade();
+                              }
                               return;
                             }
                             trackExecutionSettingsPopoverClick(analytics.track, {
@@ -1329,6 +1525,16 @@ export function InlineModelSwitcher({
                           <span className="inline-switcher__agent-name">
                             {m.label}
                           </span>
+                          {campaignModel ? (
+                            <span
+                              className={`inline-switcher__campaign-badge od-tooltip${campaignBadgeStateClass}`}
+                              data-tooltip={campaignModelTooltip}
+                              data-tooltip-placement="top"
+                              aria-label={campaignModelTooltip}
+                            >
+                              {campaignModelBadge}
+                            </span>
+                          ) : null}
                           {lockedHint ? (
                             <span
                               className="inline-switcher__agent-lock"
@@ -1349,7 +1555,7 @@ export function InlineModelSwitcher({
                 </span>
               )}
             </div>
-          ) : config.mode === 'daemon' ? (
+          ) : (
             <>
               <div className="inline-switcher__row">
                 <span className="inline-switcher__label">
@@ -1608,99 +1814,6 @@ export function InlineModelSwitcher({
                         : undefined
                     }
                   />
-                </div>
-              ) : null}
-            </>
-          ) : (
-            <>
-              <div className="inline-switcher__row">
-                <span className="inline-switcher__label">
-                  {t('inlineSwitcher.providerLabel')}
-                </span>
-                <div className="inline-switcher__chips" role="tablist">
-                  {API_PROTOCOL_TABS.map((tab) => {
-                    const active = apiProtocol === tab.id;
-                    return (
-                      <button
-                        key={tab.id}
-                        type="button"
-                        role="tab"
-                        aria-selected={active}
-                        className={
-                          'inline-switcher__chip-tab' +
-                          (active ? ' is-active' : '')
-                        }
-                        data-testid={`inline-model-switcher-provider-${tab.id}`}
-                        onClick={() => {
-                          // Unlike Settings (which skips unmapped protocols),
-                          // report the click even when the protocol has no v2
-                          // provider_id (e.g. aihubmix) — just omit the field.
-                          trackExecutionSettingsPopoverClick(analytics.track, {
-                            page_name: 'home',
-                            area: 'execution_settings_popover',
-                            element: 'byok_provider_tab',
-                            provider_id:
-                              byokProtocolToTracking(tab.id) ?? undefined,
-                          });
-                          onApiProtocolChange?.(tab.id);
-                        }}
-                      >
-                        {tab.title}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="inline-switcher__row">
-                <span className="inline-switcher__label">
-                  {t('inlineSwitcher.modelLabel')}
-                </span>
-                {apiModelOptions.length > 0 ? (
-                  <SearchableModelSelect
-                    className="inline-switcher__select"
-                    popoverClassName="inline-model-popover"
-                    data-testid="inline-model-switcher-api-model"
-                    searchInputTestId="inline-model-switcher-api-model-search"
-                    popoverTestId="inline-model-switcher-api-model-popover"
-                    searchPlaceholder={t('designs.searchPlaceholder')}
-                    getPopoverBoundary={getModelPopoverBoundary}
-                    aria-label={t('inlineSwitcher.modelLabel')}
-                    models={apiModelChoices}
-                    value={config.model}
-                    onChange={(nextValue) => {
-                      trackExecutionSettingsPopoverClick(analytics.track, {
-                        page_name: 'home',
-                        area: 'execution_settings_popover',
-                        element: 'model_dropdown',
-                        execution_mode: 'byok',
-                        provider_id:
-                          byokProtocolToTracking(apiProtocol) ?? undefined,
-                        model_id: modelIdForTracking(nextValue),
-                      });
-                      onApiModelChange?.(nextValue);
-                    }}
-                    additionalOptions={
-                      config.model && !apiModelIds.includes(config.model)
-                        ? [
-                            {
-                              value: config.model,
-                              label: `${config.model} ${t('inlineSwitcher.customSuffix')}`,
-                            },
-                          ]
-                        : undefined
-                    }
-                  />
-                ) : (
-                  <span className="inline-switcher__hint">
-                    {t('inlineSwitcher.openSettingsForModel')}
-                  </span>
-                )}
-              </div>
-
-              {credentialSource !== 'deployment' && !config.apiKey ? (
-                <div className="inline-switcher__warn" role="status">
-                  {t('inlineSwitcher.missingApiKey')}
                 </div>
               ) : null}
             </>

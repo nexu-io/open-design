@@ -3,6 +3,7 @@ import { join } from 'node:path';
 
 import type { Browser, BrowserContext, Page, TestInfo } from '@playwright/test';
 
+import { seedCampaignDismissals } from './campaign-dismissals.ts';
 import { createToolsDevSuite, e2eWorkspaceRoot } from '../tools-dev/runtime.ts';
 import type { ToolsDevSuite } from '../tools-dev/types.ts';
 
@@ -53,39 +54,18 @@ export async function createCollabCluster(
   );
   await mkdir(clusterRoot, { recursive: true });
 
-  const started: CollabClusterClient[] = [];
   let closed = false;
-  try {
-    for (const spec of specs) {
-      const root = join(clusterRoot, sanitizeSegment(spec.id));
-      const scratchDir = join(root, 'scratch');
-      await mkdir(scratchDir, { recursive: true });
-      const runtime = createToolsDevSuite({
-        codexHomeDir: join(scratchDir, 'codex-home'),
-        dataDir: join(scratchDir, 'data'),
-        namespace: `collab-${process.pid}-${testInfo.workerIndex}-${sanitizeSegment(spec.id)}`,
-        root,
-        toolsDevRoot: join(scratchDir, 'tools-dev'),
-      });
-      let context: BrowserContext | null = null;
-      try {
-        await runtime.startWeb(spec.env);
-        context = await browser.newContext({ baseURL: runtime.url.web() });
-        const page = await context.newPage();
-        started.push({ ...spec, context, page, runtime });
-      } catch (error) {
-        await context?.close().catch(() => undefined);
-        try {
-          await attachRuntimeLogs(runtime, spec, testInfo);
-        } finally {
-          await runtime.stopWeb(spec.env).catch(() => undefined);
-        }
-        throw error;
-      }
-    }
-  } catch (error) {
+  const results = await Promise.allSettled(
+    specs.map((spec) => startClient(browser, testInfo, clusterRoot, spec)),
+  );
+  const started = results.flatMap((result) =>
+    result.status === 'fulfilled' ? [result.value] : []);
+  const failed = results.find(
+    (result): result is PromiseRejectedResult => result.status === 'rejected',
+  );
+  if (failed) {
     await closeStartedClients(started, clusterRoot, testInfo, true);
-    throw error;
+    throw failed.reason;
   }
 
   return {
@@ -103,20 +83,57 @@ export async function createCollabCluster(
   };
 }
 
+async function startClient(
+  browser: Browser,
+  testInfo: TestInfo,
+  clusterRoot: string,
+  spec: CollabClusterClientSpec,
+): Promise<CollabClusterClient> {
+  const root = join(clusterRoot, sanitizeSegment(spec.id));
+  const scratchDir = join(root, 'scratch');
+  await mkdir(scratchDir, { recursive: true });
+  const runtime = createToolsDevSuite({
+    codexHomeDir: join(scratchDir, 'codex-home'),
+    dataDir: join(scratchDir, 'data'),
+    namespace: `collab-${process.pid}-${testInfo.workerIndex}-${sanitizeSegment(spec.id)}`,
+    root,
+    toolsDevRoot: join(scratchDir, 'tools-dev'),
+  });
+  let context: BrowserContext | null = null;
+  try {
+    await runtime.startWeb(spec.env);
+    context = await browser.newContext({ baseURL: runtime.url.web() });
+    // Collab clients allocate their own BrowserContext, so the suite-level
+    // context fixture never runs here. Seed campaign dismissals before the
+    // first navigation or the home modal backdrop blocks rail clicks.
+    await seedCampaignDismissals(context);
+    const page = await context.newPage();
+    return { ...spec, context, page, runtime };
+  } catch (error) {
+    await context?.close().catch(() => undefined);
+    try {
+      await attachRuntimeLogs(runtime, spec, testInfo);
+    } finally {
+      await runtime.stopWeb(spec.env).catch(() => undefined);
+    }
+    throw error;
+  }
+}
+
 async function closeStartedClients(
   clients: readonly CollabClusterClient[],
   clusterRoot: string,
   testInfo: TestInfo,
   preserve: boolean,
 ): Promise<void> {
-  for (const client of [...clients].reverse()) {
+  await Promise.all(clients.map(async (client) => {
     await client.context.close().catch(() => undefined);
     try {
       if (preserve) await attachRuntimeLogs(client.runtime, client, testInfo);
     } finally {
       await client.runtime.stopWeb(client.env).catch(() => undefined);
     }
-  }
+  }));
   if (!preserve) {
     await rm(clusterRoot, { force: true, recursive: true });
   }

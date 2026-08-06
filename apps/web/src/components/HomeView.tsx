@@ -132,6 +132,8 @@ import { RecentProjectsStrip } from './RecentProjectsStrip';
 import type { Recommendation } from '../onboarding/recommendation';
 import type { OnboardingEntry } from '../onboarding/onboarding-entry';
 import { AnimatePresence } from 'motion/react';
+import { DeepSeekV4FlashCampaign } from './DeepSeekV4FlashCampaign';
+import type { DeepSeekV4FlashCampaignAudience } from '../campaigns/deepseek-v4-flash';
 
 export interface ActivePlugin {
   record: InstalledPluginRecord;
@@ -284,6 +286,15 @@ interface Props {
   onRecommendationDismiss?: () => void;
   executionSwitcher?: ReactNode;
   artifactUpgradeSlot?: ReactNode;
+  deepSeekV4FlashCampaignAudience?: DeepSeekV4FlashCampaignAudience;
+  /** Real model switch for the campaign modal's paid 立即使用 CTA (D5).
+   *  EntryShell owns the agent/model persistence callbacks; HomeView only
+   *  threads them through, like the audience above. */
+  onDeepSeekV4FlashCampaignUseNow?: (agentId: string, modelId: string) => void;
+  /** Telemetry opt-in + install id for the modal's consent-gated AMR
+   *  attribution — EntryShell reads them off config, HomeView threads. */
+  deepSeekV4FlashCampaignMetricsConsent?: boolean;
+  deepSeekV4FlashCampaignInstallationId?: string | null;
 }
 
 const EMPTY_DESIGN_SYSTEMS: DesignSystemSummary[] = [];
@@ -427,6 +438,10 @@ export function HomeView({
   onRecommendationDismiss,
   executionSwitcher,
   artifactUpgradeSlot,
+  deepSeekV4FlashCampaignAudience = 'unknown',
+  onDeepSeekV4FlashCampaignUseNow,
+  deepSeekV4FlashCampaignMetricsConsent = false,
+  deepSeekV4FlashCampaignInstallationId = null,
 }: Props) {
   const { locale, t } = useI18n();
   const analytics = useAnalytics();
@@ -2513,6 +2528,16 @@ export function HomeView({
       data-testid="home-view"
       ref={homeViewRef}
     >
+      {/* `active` gates the portal-escaping campaign dialog to the ACTIVE home
+          view: EntryShell only hides inactive views with display:none, which a
+          document.body portal ignores. */}
+      <DeepSeekV4FlashCampaign
+        audience={deepSeekV4FlashCampaignAudience}
+        active={isActive}
+        onUseCampaignModel={onDeepSeekV4FlashCampaignUseNow}
+        metricsConsent={deepSeekV4FlashCampaignMetricsConsent}
+        installationId={deepSeekV4FlashCampaignInstallationId}
+      />
       {isActive ? <AppWashKineticGrid clipBottomTo=".home-hero" /> : null}
       <HomeHero
         workspaceContext={workspaceContext}

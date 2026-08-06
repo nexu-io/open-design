@@ -498,6 +498,8 @@ interface Props {
     options?: AgentRefreshOptions,
   ) => AgentInfo[] | Promise<AgentInfo[] | void> | void;
   onAmrLoginStatusChange?: (status: VelaLoginStatus | null) => void;
+  /** Clear app-owned execution state after a confirmed active Cloud sign-out. */
+  onAmrSignedOut?: () => void | Promise<void>;
   daemonMediaProviders?: AppConfig['mediaProviders'] | null;
   daemonMediaProvidersFetchState?: 'idle' | 'ok' | 'error';
   mediaProvidersNotice?: string | null;
@@ -1568,6 +1570,7 @@ export function SettingsDialog({
   onResetOnboarding,
   onRefreshAgents,
   onAmrLoginStatusChange,
+  onAmrSignedOut,
   daemonMediaProviders,
   daemonMediaProvidersFetchState = 'idle',
   mediaProvidersNotice,
@@ -4618,6 +4621,7 @@ export function SettingsDialog({
                     metricsConsent={cfg.telemetry?.metrics === true}
                     installationId={cfg.installationId}
                     onStatusChange={setAmrCardStatus}
+                    onSignedOut={onAmrSignedOut}
                   />
                 </div>
               ) : null}
@@ -5118,6 +5122,7 @@ export function SettingsDialog({
                                         installationId={cfg.installationId}
                                         revealPendingCancelAction={amrRevealPendingCancelAction}
                                         onStatusChange={setAmrCardStatus}
+                                        onSignedOut={onAmrSignedOut}
                                       />
                                     </span>
                                   ) : (

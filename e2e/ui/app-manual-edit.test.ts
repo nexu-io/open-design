@@ -1,6 +1,6 @@
 import { expect, test } from '@/playwright/suite';
 import { expectStableCount } from '@/playwright/assertions';
-import { routeAgents, routeSuccessfulRuns } from '@/playwright/mock-factory';
+import { applyStandardMocks, routeAgents, routeSuccessfulRuns } from '@/playwright/mock-factory';
 import { clickDeckNextSlide, openAllProjectFiles } from '@/playwright/workspace';
 import type { Page } from '@playwright/test';
 import { T } from '@/timeouts';
@@ -19,44 +19,7 @@ function artifactPreviewFrame(page: Page) {
 }
 
 test.beforeEach(async ({ page }) => {
-  await page.addInitScript((key) => {
-    window.localStorage.setItem(
-      key,
-      JSON.stringify({
-        mode: 'daemon',
-        apiKey: '',
-        baseUrl: 'https://api.anthropic.com',
-        model: 'claude-sonnet-4-5',
-        agentId: 'mock',
-        skillId: null,
-        designSystemId: null,
-        onboardingCompleted: true,
-        agentModels: {},
-        privacyDecisionAt: 1,
-        telemetry: { metrics: false, content: false, artifactManifest: false },
-      }),
-    );
-  }, STORAGE_KEY);
-
-  await page.route('**/api/app-config', async (route) => {
-    if (route.request().method() !== 'GET') {
-      await route.continue();
-      return;
-    }
-    await route.fulfill({
-      json: {
-        config: {
-          onboardingCompleted: true,
-          agentId: 'mock',
-          skillId: null,
-          designSystemId: null,
-          agentModels: {},
-          privacyDecisionAt: 1,
-          telemetry: { metrics: false, content: false, artifactManifest: false },
-        },
-      },
-    });
-  });
+  await applyStandardMocks(page);
 });
 
 test('[P0] manual edit inspector previews and persists page and selected element styles', async ({ page }) => {
@@ -852,7 +815,7 @@ test('[P0] @critical edited HTML file restores selected tab and preview after re
   const restoredFrame = artifactPreviewFrame(page);
   const restoredTitle = restoredFrame.getByRole('heading', { name: 'Original Hero' });
   await expect(restoredTitle).toBeVisible();
-  await expect.poll(async () => restoredTitle.evaluate((el) => getComputedStyle(el).fontSize)).toBe('52px');
+  await expect(restoredTitle).toHaveCSS('font-size', '52px');
   await expect(restoredTitle).toHaveCSS('color', 'rgb(37, 99, 235)');
 });
 

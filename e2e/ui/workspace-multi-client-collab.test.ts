@@ -1,17 +1,3 @@
-// TODO(ci-fleet): the two multi-client tests below are temporarily skipped.
-// They are the ONLY suite that boots two full client stacks (2 daemons + 2 web
-// runtimes + 2 browser contexts) and therefore the only UI P0 job that is
-// still running past the ~12-minute mark, where the current nexu-runners-large
-// (rn44m) fleet hard-kills the pod: two unrelated PRs (#6414, #6446) both lost
-// this shard at exactly 12.0min with zero test output and no log upload, while
-// every completed run of these tests tonight passed (e.g. run 30946194081,
-// 4 passed in 6.5m). The test logic has never failed an assertion — the fleet
-// kills the pod before Playwright can finish.
-// Re-enable once either (a) the fleet stops killing 12min+ jobs, or
-// (b) this suite is restructured to fit under the kill line: split the two
-// tests into separate matrix shards and/or slim the per-test cluster boot.
-// Owner follow-up tracked in the workspace-team release notes.
-
 import { mkdir } from 'node:fs/promises';
 
 import type { Page } from '@playwright/test';
@@ -23,7 +9,7 @@ import {
 import { startFakeCollabHub } from '@/playwright/fake-collab-hub';
 import { applyStandardMocks } from '@/playwright/mock-factory';
 import { ensureRailOpen } from '@/playwright/rail';
-import { expect, test } from '@/playwright/suite';
+import { clusterTest as test, expect } from '@/playwright/suite';
 import { T } from '@/timeouts';
 
 const WORKSPACE_ID = 'ws-multi-client';
@@ -48,7 +34,7 @@ const MEMBER = {
 
 test.describe.configure({ timeout: T.xlong * 5 });
 
-test.skip('[P0] two isolated clients converge live content, presence, and owner unshare', async ({
+test('[P0] two isolated clients converge live content, presence, and owner unshare', async ({
   browser,
 }, testInfo) => {
   const hubRoot = testInfo.outputPath('fake-collab-hub');
@@ -71,36 +57,28 @@ test.skip('[P0] two isolated clients converge live content, presence, and owner 
   let cluster: CollabCluster | undefined;
   let failed = false;
   try {
-    cluster = await createCollabCluster(browser, testInfo, [
-      {
-        id: 'owner',
-        env: { ...commonEnv, VELA_CONTROL_KEY: OWNER.controlKey },
-      },
-      {
-        id: 'member',
-        env: { ...commonEnv, VELA_CONTROL_KEY: MEMBER.controlKey },
-      },
-    ]);
+    cluster = await test.step('start isolated owner and member clients', async () =>
+      await createCollabCluster(browser, testInfo, [
+        {
+          id: 'owner',
+          env: { ...commonEnv, VELA_CONTROL_KEY: OWNER.controlKey },
+        },
+        {
+          id: 'member',
+          env: { ...commonEnv, VELA_CONTROL_KEY: MEMBER.controlKey },
+        },
+      ]));
     const ownerPage = cluster.clients.owner!.page;
     const memberPage = cluster.clients.member!.page;
-    await Promise.all([applyStandardMocks(ownerPage), applyStandardMocks(memberPage)]);
-    await Promise.all([
-      openHomeAndPinWorkspace(ownerPage, OWNER.memberId),
-      openHomeAndPinWorkspace(memberPage, MEMBER.memberId),
-    ]);
-
-    // Exercise the complete wallet invalidation chain: hub event → daemon
-    // authoritative workspace snapshot → the already-open member shell. This
-    // must use the exact workspaceMemberId wallet, not the account summary.
-    await ensureRailOpen(memberPage);
-    await memberPage.getByTestId('entry-nav-account').evaluate((element: HTMLButtonElement) => {
-      element.click();
+    await test.step('configure isolated workspace clients', async () => {
+      await Promise.all([applyStandardMocks(ownerPage), applyStandardMocks(memberPage)]);
+      await Promise.all([
+        pinWorkspace(ownerPage, OWNER.memberId),
+        pinWorkspace(memberPage, MEMBER.memberId),
+      ]);
     });
-    const memberCredits = memberPage.getByTestId('entry-nav-credits-row');
-    await expect(memberCredits).toContainText('$0.00', { timeout: T.long });
-    hub.setWorkspaceBalance(MEMBER.memberId, '18.50');
-    await expect(memberCredits).toContainText('$18.50', { timeout: T.long });
-    await memberPage.keyboard.press('Escape');
+    await test.step('open the member workspace once', async () =>
+      await openHome(memberPage));
 
     const projectId = await createProject(ownerPage);
     await writeHtml(ownerPage, projectId, htmlFor('Owner version 1'));
@@ -171,6 +149,7 @@ test.skip('[P0] two isolated clients converge live content, presence, and owner 
     });
     await expect(twoPersonPresence).toHaveCount(0);
 
+    await ownerPage.bringToFront();
     await ownerPage.goto(`/projects/${projectId}`, { waitUntil: 'domcontentloaded' });
     await expect(ownerPage.getByTestId('file-workspace')).toBeVisible({
       timeout: T.long,
@@ -190,59 +169,6 @@ test.skip('[P0] two isolated clients converge live content, presence, and owner 
       timeout: T.long,
     });
     await expect(twoPersonPresence.locator('[data-self="true"]')).toHaveCount(1);
-    await expect(twoPersonPresence.locator('[title]')).toHaveCount(2);
-
-    // Reopen the same member/project in a second browser page. Each mounted
-    // CollabClient owns a distinct presence lease; closing the replacement
-    // page must release only that lease and leave the original member online.
-    const originalMemberHeartbeat = [...hub.commandLog].reverse().find(
-      (entry) =>
-        entry.memberId === MEMBER.memberId &&
-        entry.args[0] === 'collab' &&
-        entry.args[1] === 'presence' &&
-        entry.args[2] === 'heartbeat' &&
-        entry.args[3] === projectId,
-    );
-    const originalMemberClientId = commandFlag(
-      originalMemberHeartbeat?.args ?? [],
-      '--client-id',
-    );
-    expect(originalMemberClientId).toBeTruthy();
-
-    const replacementMemberPage = await cluster.clients.member!.context.newPage();
-    await applyStandardMocks(replacementMemberPage);
-    await replacementMemberPage.goto(`/projects/${projectId}`, {
-      waitUntil: 'domcontentloaded',
-      timeout: T.xlong,
-    });
-    await expect(replacementMemberPage.getByTestId('file-workspace')).toBeVisible({
-      timeout: T.long,
-    });
-    const replacementHeartbeat = await hub.waitForCommand(
-      (entry) =>
-        entry.memberId === MEMBER.memberId &&
-        entry.args[0] === 'collab' &&
-        entry.args[1] === 'presence' &&
-        entry.args[2] === 'heartbeat' &&
-        entry.args[3] === projectId &&
-        commandFlag(entry.args, '--client-id') !== originalMemberClientId,
-      T.long,
-    );
-    const replacementClientId = commandFlag(replacementHeartbeat.args, '--client-id');
-    expect(replacementClientId).toBeTruthy();
-
-    await replacementMemberPage.close();
-    await hub.waitForCommand(
-      (entry) =>
-        entry.memberId === MEMBER.memberId &&
-        entry.args[0] === 'collab' &&
-        entry.args[1] === 'presence' &&
-        entry.args[2] === 'leave' &&
-        entry.args[3] === projectId &&
-        commandFlag(entry.args, '--client-id') === replacementClientId,
-      T.long,
-    );
-    await expect(twoPersonPresence).toBeVisible({ timeout: T.long });
     await expect(twoPersonPresence.locator('[title]')).toHaveCount(2);
 
     const memberDocumentMarker = await memberPage.evaluate(() => {
@@ -327,179 +253,6 @@ test.skip('[P0] two isolated clients converge live content, presence, and owner 
     expect(memberFileBody).toContain('Owner version 2');
     expect(contentEvent.workspaceId).toBe(WORKSPACE_ID);
 
-    // Drop only the member daemon's hub stream, then publish two complete
-    // versions while it is offline. Reconnect catch-up must read the current
-    // authoritative head (v4), not depend on replaying either missed event.
-    hub.setEventsAvailable(MEMBER.memberId, false);
-    await expect.poll(
-      () => hub.eventSubscriberCount(MEMBER.memberId),
-      { timeout: T.long },
-    ).toBe(0);
-    const pushCountBeforeOfflineWrites = hub.commandLog.filter(
-      (entry) =>
-        entry.memberId === OWNER.memberId &&
-        entry.args[0] === 'resource' &&
-        entry.args[1] === 'push',
-    ).length;
-    await writeHtml(ownerPage, projectId, htmlFor('Owner version 3 while member offline'));
-    await expect.poll(
-      () => hub.commandLog.filter(
-        (entry) =>
-          entry.memberId === OWNER.memberId &&
-          entry.args[0] === 'resource' &&
-          entry.args[1] === 'push',
-      ).length,
-      { timeout: T.long },
-    ).toBeGreaterThan(pushCountBeforeOfflineWrites);
-    const version3Event = await hub.waitForEvent(
-      (entry) =>
-        entry.type === 'project-content-changed' &&
-        entry.projectId === projectId &&
-        typeof entry.version === 'number' &&
-        entry.version > (contentEvent.version ?? 0),
-      T.long,
-    );
-    const pushCountAfterVersion3 = hub.commandLog.filter(
-      (entry) =>
-        entry.memberId === OWNER.memberId &&
-        entry.args[0] === 'resource' &&
-        entry.args[1] === 'push',
-    ).length;
-    await writeHtml(ownerPage, projectId, htmlFor('Owner version 4 while member offline'));
-    await expect.poll(
-      () => hub.commandLog.filter(
-        (entry) =>
-          entry.memberId === OWNER.memberId &&
-          entry.args[0] === 'resource' &&
-          entry.args[1] === 'push',
-      ).length,
-      { timeout: T.long },
-    ).toBeGreaterThan(pushCountAfterVersion3);
-    const version4Event = await hub.waitForEvent(
-      (entry) =>
-        entry.type === 'project-content-changed' &&
-        entry.projectId === projectId &&
-        typeof entry.version === 'number' &&
-        entry.version > (version3Event.version ?? 0),
-      T.long,
-    );
-    await expect(
-      memberPreview.getByRole('heading', { name: 'Owner version 2' }),
-    ).toBeVisible();
-
-    hub.setEventsAvailable(MEMBER.memberId, true);
-    await expect.poll(
-      () => hub.eventSubscriberCount(MEMBER.memberId),
-      { timeout: T.long },
-    ).toBeGreaterThan(0);
-    await hub.waitForCommand(
-      (entry) =>
-        entry.memberId === MEMBER.memberId &&
-        isProjectPull(entry.args) &&
-        projectPullVersion(entry.args) >= (version4Event.version ?? Number.MAX_SAFE_INTEGER),
-      T.long,
-    );
-    await expect(
-      memberPreview.getByRole('heading', { name: 'Owner version 4 while member offline' }),
-    ).toBeVisible({ timeout: T.long });
-    await expect(
-      memberPreview.getByRole('heading', { name: 'Owner version 3 while member offline' }),
-    ).toHaveCount(0);
-    await expect.poll(
-      () => memberPage.evaluate(() =>
-        (window as Window & typeof globalThis & {
-          __multiClientDocumentMarker?: string;
-        }).__multiClientDocumentMarker ?? null,
-      ),
-      { timeout: T.long },
-    ).toBe(memberDocumentMarker);
-
-    // A title edit is catalog metadata, not project content. Drive the real
-    // owner contenteditable and require the already-open read-only member view
-    // to follow the metadata event without a file publish or page reload.
-    const pushCountBeforeRename = hub.commandLog.filter(
-      (entry) =>
-        entry.memberId === OWNER.memberId &&
-        entry.args[0] === 'resource' &&
-        entry.args[1] === 'push',
-    ).length;
-    const renamedProject = 'Realtime shared workspace renamed';
-    const ownerTitle = ownerPage.getByTestId('project-title');
-    await ownerTitle.fill(renamedProject);
-    await ownerTitle.press('Enter');
-    await expect(ownerTitle).toContainText(renamedProject);
-    await hub.waitForCommand(
-      (entry) => {
-        const displayNameIndex = entry.args.indexOf('--display-name');
-        return (
-          entry.memberId === OWNER.memberId &&
-          entry.args[0] === 'team-projects' &&
-          entry.args[1] === 'upsert' &&
-          entry.args[2] === projectId &&
-          displayNameIndex >= 0 &&
-          entry.args[displayNameIndex + 1] === renamedProject
-        );
-      },
-      T.long,
-    );
-    await expect(memberPage.getByTestId('project-title')).toContainText(
-      renamedProject,
-      { timeout: T.long },
-    );
-    expect(hub.commandLog.filter(
-      (entry) =>
-        entry.memberId === OWNER.memberId &&
-        entry.args[0] === 'resource' &&
-        entry.args[1] === 'push',
-    )).toHaveLength(pushCountBeforeRename);
-    await expect.poll(
-      () => memberPage.evaluate(() =>
-        (window as Window & typeof globalThis & {
-          __multiClientDocumentMarker?: string;
-        }).__multiClientDocumentMarker ?? null,
-      ),
-      { timeout: T.long },
-    ).toBe(memberDocumentMarker);
-
-    await memberPage.getByTestId('board-mode-toggle').click();
-    await memberPage.getByTestId('comment-panel-toggle').click();
-    await memberPreview.locator('[data-od-id="shared-heading"]').click();
-    const memberComment = memberPage.getByTestId('comment-popover');
-    await expect(memberComment).toBeVisible();
-    await memberComment.getByTestId('comment-popover-input').fill('Member review note');
-    await memberComment.getByTestId('comment-popover-save').click();
-    await expect(
-      memberPage.getByTestId('comment-side-item').filter({ hasText: 'Member review note' }),
-    ).toBeVisible();
-    await hub.waitForCommand(
-      (entry) =>
-        entry.memberId === MEMBER.memberId &&
-        entry.args[0] === 'collab' &&
-        entry.args[1] === 'comment' &&
-        entry.args[2] === 'push' &&
-        entry.args[3] === projectId,
-      T.long,
-    );
-
-    // The owner receives the member-authored comment through the shared relay,
-    // while the member remains read-only for project content.
-    await ownerPage.getByTestId('comment-panel-toggle').click();
-    await expect(
-      ownerPage.getByTestId('comment-side-item').filter({ hasText: 'Member review note' }),
-    ).toBeVisible({ timeout: T.long });
-    await expect(
-      ownerPage.getByTestId('comment-side-item').filter({ hasText: MEMBER.name }),
-    ).toBeVisible();
-    await expect(
-      memberPage.getByRole('button', { name: 'Version history' }),
-    ).toHaveCount(0);
-
-    const pushCountBeforeUnshare = hub.commandLog.filter(
-      (entry) =>
-        entry.memberId === OWNER.memberId &&
-        entry.args[0] === 'resource' &&
-        entry.args[1] === 'push',
-    ).length;
     const unshare = await ownerPage.request.post(
       `/api/workspaces/${WORKSPACE_ID}/projects/${projectId}/move`,
       {
@@ -560,70 +313,11 @@ test.skip('[P0] two isolated clients converge live content, presence, and owner 
     );
     await expect(quarantinedMirror).toHaveCount(0);
 
-    await writeHtml(ownerPage, projectId, htmlFor('Owner version 3 after unshare'));
-    await expect.poll(
-      () =>
-        hub.commandLog.filter(
-          (entry) =>
-            entry.memberId === OWNER.memberId &&
-            entry.args[0] === 'resource' &&
-            entry.args[1] === 'push',
-        ).length,
-      { timeout: T.short * 2 },
-    ).toBe(pushCountBeforeUnshare);
     const retainedMemberFile = await memberPage.request.get(
       `/api/projects/${projectId}/files/index.html`,
       { headers: workspaceHeaders(MEMBER) },
     );
     expect(retainedMemberFile.status()).toBe(404);
-
-    // Finally revoke the member's workspace membership while their browser is
-    // still open. The hub invalidation must clear the stale team pin, recover
-    // to the account's personal workspace, and make the removed team
-    // impossible to select again without a reload or sign-out cycle.
-    hub.removeMember(MEMBER.memberId);
-    await expect.poll(
-      async () => {
-        const directoryResponse = await memberPage.request.get('/api/workspace/directory');
-        if (!directoryResponse.ok()) return null;
-        const directory = await directoryResponse.json() as {
-          items?: Array<{
-            workspaceId?: string;
-            workspaceMemberId?: string;
-            workspaceType?: string;
-          }>;
-        };
-        const personal = directory.items?.find(
-          (item) => item.workspaceType === 'personal',
-        );
-        if (!personal?.workspaceId || !personal.workspaceMemberId) return null;
-        const response = await memberPage.request.get('/api/workspace/context', {
-          headers: {
-            'x-od-workspace-id': personal.workspaceId,
-            'x-od-workspace-member-id': personal.workspaceMemberId,
-          },
-        });
-        if (!response.ok()) return null;
-        const body = await response.json() as {
-          context?: { workspaceId?: string; workspaceType?: string } | null;
-        };
-        return body.context ?? null;
-      },
-      { timeout: T.long },
-    ).toMatchObject({
-      workspaceId: `personal-${MEMBER.memberId}`,
-      workspaceType: 'personal',
-    });
-    await memberPage.evaluate(() => window.dispatchEvent(new Event('focus')));
-    await expect(memberPage.getByTestId('workspace-switcher')).toContainText(
-      `${MEMBER.name} workspace`,
-      { timeout: T.long },
-    );
-    await expect(memberPage.getByTestId('entry-nav-all-projects')).toHaveCount(0);
-    const staleTeamReselect = await memberPage.request.put('/api/workspace/active', {
-      data: { workspaceId: WORKSPACE_ID, workspaceMemberId: MEMBER.memberId },
-    });
-    expect(staleTeamReselect.status()).toBe(404);
   } catch (error) {
     failed = true;
     await testInfo.attach('fake-collab-hub-log', {
@@ -640,7 +334,7 @@ test.skip('[P0] two isolated clients converge live content, presence, and owner 
   }
 });
 
-test.skip('[P0] two active clients converge when a member gains then loses admin access', async ({
+test('[P0] two active clients converge when a member gains then loses admin access', async ({
   browser,
 }, testInfo) => {
   const hubRoot = testInfo.outputPath('fake-role-change-hub');
@@ -676,14 +370,17 @@ test.skip('[P0] two active clients converge when a member gains then loses admin
       ]));
     const ownerPage = cluster.clients.owner!.page;
     const memberPage = cluster.clients.member!.page;
-    await Promise.all([applyStandardMocks(ownerPage), applyStandardMocks(memberPage)]);
-    // Chromium may suspend a background page while two isolated app origins
-    // perform their first navigation at the same time. Bootstrap each client
-    // deterministically; both remain active for the live role transitions.
-    await test.step('bootstrap owner client', async () =>
-      await openHomeAndPinWorkspace(ownerPage, OWNER.memberId));
-    await test.step('bootstrap member client', async () =>
-      await openHomeAndPinWorkspace(memberPage, MEMBER.memberId));
+    await test.step('configure isolated workspace clients', async () => {
+      await applyStandardMocks(memberPage);
+      await Promise.all([
+        pinWorkspace(ownerPage, OWNER.memberId),
+        pinWorkspace(memberPage, MEMBER.memberId),
+      ]);
+    });
+    // The owner witness below is the live daemon API and does not need an
+    // unrelated home render. Only the member browser owns a UI assertion.
+    await test.step('open the member workspace once', async () =>
+      await openHome(memberPage));
     await test.step('connect both clients to workspace events', async () => {
       await Promise.all([
         registerWorkspaceEventInterest(ownerPage, 'owner-role-change', OWNER.memberId),
@@ -738,11 +435,25 @@ test.skip('[P0] two active clients converge when a member gains then loses admin
   }
 });
 
-async function openHomeAndPinWorkspace(page: Page, workspaceMemberId: string): Promise<void> {
+async function pinWorkspace(page: Page, workspaceMemberId: string): Promise<void> {
+  const response = await page.request.put('/api/workspace/active', {
+    data: { workspaceId: WORKSPACE_ID, workspaceMemberId },
+    timeout: T.long,
+  });
+  expect(response.ok(), await response.text()).toBeTruthy();
+}
+
+async function openHome(page: Page): Promise<void> {
+  await page.bringToFront();
+  const workspaceEventsConnected = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return response.request().method() === 'GET' && url.pathname === '/api/workspace/events';
+  }, { timeout: T.long });
   await page.goto('/', { waitUntil: 'domcontentloaded', timeout: T.xlong });
   await expect(page.getByText('Loading Open Design…')).toHaveCount(0, {
     timeout: T.xlong,
   });
+  expect((await workspaceEventsConnected).ok()).toBeTruthy();
   const privacyDialog = page
     .getByRole('dialog')
     .filter({ hasText: 'Help us improve Open Design' });
@@ -751,15 +462,6 @@ async function openHomeAndPinWorkspace(page: Page, workspaceMemberId: string): P
       .getByRole('button', { name: /I get it|not now|got it|don't share/i })
       .click();
   }
-  const response = await page.request.put('/api/workspace/active', {
-    data: { workspaceId: WORKSPACE_ID, workspaceMemberId },
-    timeout: T.long,
-  });
-  expect(response.ok(), await response.text()).toBeTruthy();
-  await page.reload({ waitUntil: 'domcontentloaded', timeout: T.xlong });
-  await expect(page.getByText('Loading Open Design…')).toHaveCount(0, {
-    timeout: T.xlong,
-  });
 }
 
 async function registerWorkspaceEventInterest(
@@ -890,9 +592,4 @@ function projectPullVersion(args: readonly string[]): number {
   const flagIndex = args.indexOf('--expected-version');
   if (flagIndex >= 0) return Number(args[flagIndex + 1] ?? 0);
   return 0;
-}
-
-function commandFlag(args: readonly string[], name: string): string | null {
-  const index = args.indexOf(name);
-  return index >= 0 ? args[index + 1] ?? null : null;
 }

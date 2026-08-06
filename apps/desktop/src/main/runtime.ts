@@ -1729,8 +1729,10 @@ function showWindowButtons(window: BrowserWindow): void {
 // window minimized or hidden even when constructed with show:true,
 // leaving users unable to locate the window. Cross-platform safe: only
 // acts when the window is actually minimized or hidden, preserving any
-// user-adjusted window state.
-function ensureWindowVisible(window: BrowserWindow): void {
+// user-adjusted window state. Also the revealed path of `DesktopRuntime.show()`
+// (deeplink hand-off / external show): restore-before-focus is what brings a
+// minimized client back, so exported for regression coverage.
+export function ensureWindowVisible(window: BrowserWindow): void {
   if (window.isDestroyed()) return;
   if (window.isMinimized()) window.restore();
   if (!window.isVisible()) window.show();
@@ -3017,8 +3019,10 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
         }
         return;
       }
-      window.show();
-      window.focus();
+      // A minimized window must be restored before focus — `focus()` alone
+      // leaves it in the Dock, silently breaking the deeplink hand-off whose
+      // entire payload is this bring-to-front.
+      ensureWindowVisible(window);
     },
     status() {
       return {

@@ -1007,6 +1007,12 @@ describe('InlineModelSwitcher AMR row', () => {
     expect(optionLabels.some((text) => text?.includes('gpt-4o'))).toBe(false);
     expect(optionLabels.some((text) => text?.includes('o3'))).toBe(false);
     expect(screen.queryByText('API key not set — open Settings to add it.')).toBeNull();
+
+    fireEvent.click(chip);
+    fireEvent.click(chip);
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
   });
 
   it('does not fetch from the home picker for a keyed protocol with no API key', async () => {
@@ -1662,6 +1668,62 @@ describe('InlineModelSwitcher AMR row', () => {
       expect(loginCalls).toBe(1);
       expect(onAgentChange).toHaveBeenCalledWith('amr');
     });
+  });
+
+  it('offers the BYOK provider catalogue, not the CLI agent catalogue, in the compact home popover', () => {
+    // Bug: with BYOK active, the compact home-hero chip correctly showed the
+    // BYOK model (e.g. gpt-4o), but opening the popover listed the local CLI
+    // agent's models (the Open Design cloud catalogue) instead of the BYOK
+    // provider's catalogue. The popover body must always reflect the active
+    // execution mode; `compact` only affects layout density.
+    const onApiModelChange = vi.fn();
+    render(
+      <InlineModelSwitcher
+        config={{
+          ...baseConfig,
+          mode: 'api',
+          apiProtocol: 'openai',
+          baseUrl: 'https://api.openai.com/v1',
+          apiProviderBaseUrl: 'https://api.openai.com/v1',
+          apiKey: 'sk-test',
+          model: 'gpt-4o',
+        }}
+        agents={[amrAgent, codexAgent]}
+        compact
+        daemonLive={true}
+        onModeChange={vi.fn()}
+        onAgentChange={vi.fn()}
+        onAgentModelChange={vi.fn()}
+        onApiProtocolChange={vi.fn()}
+        onApiModelChange={onApiModelChange}
+        providerModelsCache={{
+          [providerModelsCacheKey('openai', 'https://api.openai.com/v1', 'sk-test', '')]: [
+            { id: 'gpt-4o', label: 'gpt-4o' },
+            { id: 'gpt-4o-mini', label: 'gpt-4o-mini' },
+            { id: 'gpt-5.5', label: 'gpt-5.5' },
+          ],
+        }}
+        onOpenSettings={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('inline-model-switcher-chip'));
+    const popover = screen.getByTestId('inline-model-switcher-popover');
+
+    // The CLI agent's catalogue must not leak into a BYOK popover.
+    expect(within(popover).queryByText('AMR Cloud Latest')).toBeNull();
+
+    // The BYOK provider's catalogue is on offer and picking a model writes
+    // through the BYOK sink.
+    fireEvent.click(within(popover).getByTestId('inline-model-switcher-api-model'));
+    const modelPopover = screen.getByTestId(
+      'inline-model-switcher-api-model-popover',
+    );
+    expect(optionNames(modelPopover)).toEqual(
+      expect.arrayContaining(['gpt-4o', 'gpt-4o-mini', 'gpt-5.5']),
+    );
+    fireEvent.click(within(modelPopover).getByRole('option', { name: 'gpt-5.5' }));
+    expect(onApiModelChange).toHaveBeenCalledWith('gpt-5.5');
   });
 
   it('lists fetched BYOK provider models from the shared cache', () => {

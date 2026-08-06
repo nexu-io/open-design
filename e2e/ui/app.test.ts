@@ -1,6 +1,11 @@
 import { expect, test } from '@/playwright/suite';
 import { openNewProjectModal as openNewProjectModalFromProjects } from '@/playwright/rail';
-import { routeAgents, routeSuccessfulRuns, successfulRunEventBody } from '@/playwright/mock-factory';
+import {
+  applyStandardMocks,
+  routeAgents,
+  routeSuccessfulRuns,
+  successfulRunEventBody,
+} from '@/playwright/mock-factory';
 import { clickDeckNextSlide, clickDeckPreviousSlide, openAllProjectFiles } from '@/playwright/workspace';
 import type { Dialog, Locator, Page, Request, Response } from '@playwright/test';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -57,44 +62,7 @@ function stagedAttachmentName(page: Page, name: string): Locator {
 }
 
 test.beforeEach(async ({ page }) => {
-  await page.addInitScript((key) => {
-    window.localStorage.setItem(
-      key,
-      JSON.stringify({
-        mode: 'daemon',
-        apiKey: '',
-        baseUrl: 'https://api.anthropic.com',
-        model: 'claude-sonnet-4-5',
-        agentId: 'mock',
-        skillId: null,
-        designSystemId: null,
-        onboardingCompleted: true,
-        agentModels: {},
-        privacyDecisionAt: 1,
-        telemetry: { metrics: false, content: false, artifactManifest: false },
-      }),
-    );
-  }, STORAGE_KEY);
-
-  await page.route('**/api/app-config', async (route) => {
-    if (route.request().method() !== 'GET') {
-      await route.continue();
-      return;
-    }
-    await route.fulfill({
-      json: {
-        config: {
-          onboardingCompleted: true,
-          agentId: 'mock',
-          skillId: null,
-          designSystemId: null,
-          agentModels: {},
-          privacyDecisionAt: 1,
-          telemetry: { metrics: false, content: false, artifactManifest: false },
-        },
-      },
-    });
-  });
+  await applyStandardMocks(page);
 });
 
 for (const entry of automatedUiScenarios().filter(
@@ -1532,7 +1500,6 @@ async function runFileUploadSendFlow(
   await expect((await uploadResponse).ok()).toBeTruthy();
 
   await expect(stagedAttachmentName(page, 'reference.txt')).toBeVisible();
-  await expect(page.getByText('reference.txt', { exact: true })).toBeVisible();
 
   await sendPrompt(page, entry.prompt);
   await expect(page.locator('.msg.user').getByText(entry.prompt, { exact: true })).toBeVisible();

@@ -26,6 +26,7 @@ type RuntimeMock = ToolsDevSuite & {
 };
 
 type ContextMock = BrowserContext & {
+  addInitScript: ReturnType<typeof vi.fn>;
   close: ReturnType<typeof vi.fn>;
   newPage: ReturnType<typeof vi.fn>;
 };
@@ -41,6 +42,52 @@ afterEach(async () => {
 });
 
 describe('createCollabCluster acquisition cleanup', () => {
+  it('starts and stops isolated client runtimes concurrently', async () => {
+    const firstRuntime = runtime('first');
+    const secondRuntime = runtime('second');
+    const firstStart = deferred<unknown>();
+    const firstStop = deferred<unknown>();
+    firstRuntime.startWeb.mockImplementationOnce(() => firstStart.promise);
+    firstRuntime.stopWeb.mockImplementationOnce(() => firstStop.promise);
+    runtimeMocks.createToolsDevSuite
+      .mockReturnValueOnce(firstRuntime)
+      .mockReturnValueOnce(secondRuntime);
+
+    const browser = {
+      newContext: vi.fn()
+        .mockResolvedValueOnce(contextWithPage())
+        .mockResolvedValueOnce(contextWithPage()),
+    } as unknown as Browser;
+
+    const clusterPromise = createCollabCluster(browser, info('passed'), specs());
+    let startAssertion: unknown;
+    try {
+      await vi.waitFor(() => expect(secondRuntime.startWeb).toHaveBeenCalledTimes(1), {
+        timeout: 1_000,
+      });
+    } catch (error) {
+      startAssertion = error;
+    } finally {
+      firstStart.resolve({});
+    }
+    const cluster = await clusterPromise;
+    if (startAssertion) throw startAssertion;
+
+    const closePromise = cluster.close();
+    let stopAssertion: unknown;
+    try {
+      await vi.waitFor(() => expect(secondRuntime.stopWeb).toHaveBeenCalledTimes(1), {
+        timeout: 1_000,
+      });
+    } catch (error) {
+      stopAssertion = error;
+    } finally {
+      firstStop.resolve(undefined);
+    }
+    await closePromise;
+    if (stopAssertion) throw stopAssertion;
+  });
+
   it('closes a successful cluster exactly once and removes its allocated root', async () => {
     const firstRuntime = runtime('first');
     const secondRuntime = runtime('second');
@@ -67,6 +114,17 @@ describe('createCollabCluster acquisition cleanup', () => {
     expect(secondSpec.root).toContain(runtimeMocks.workspaceRoot);
     expect(firstSpec.dataDir).toBe(join(firstSpec.root, 'scratch', 'data'));
     expect(secondSpec.dataDir).toBe(join(secondSpec.root, 'scratch', 'data'));
+    // Isolated cluster contexts never pass through the suite fixture, so
+    // campaign dismissal must be seeded on each newContext result — and
+    // before newPage, so the init script is installed for the first load.
+    expect(firstContext.addInitScript).toHaveBeenCalledTimes(1);
+    expect(secondContext.addInitScript).toHaveBeenCalledTimes(1);
+    expect(firstContext.addInitScript.mock.invocationCallOrder[0]).toBeLessThan(
+      firstContext.newPage.mock.invocationCallOrder[0]!,
+    );
+    expect(secondContext.addInitScript.mock.invocationCallOrder[0]).toBeLessThan(
+      secondContext.newPage.mock.invocationCallOrder[0]!,
+    );
 
     await cluster.close();
     await cluster.close();
@@ -143,6 +201,7 @@ function runtime(id: string): RuntimeMock {
 
 function contextWithPage(error?: Error): ContextMock {
   return {
+    addInitScript: vi.fn().mockResolvedValue(undefined),
     close: vi.fn().mockResolvedValue(undefined),
     newPage: error
       ? vi.fn().mockRejectedValue(error)
@@ -165,4 +224,15 @@ function specs() {
     { id: 'first', env: { CLIENT: 'first' } },
     { id: 'second', env: { CLIENT: 'second' } },
   ] as const;
+}
+
+function deferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+} {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((next) => {
+    resolve = next;
+  });
+  return { promise, resolve };
 }

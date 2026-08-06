@@ -296,6 +296,34 @@ const GOLDEN_CASES: readonly GoldenCase[] = [
     }),
   },
   {
+    name: "pull_request infra-cancel rerun surface arms e2e Vitest topology coverage",
+    context: PR,
+    files: [".github/scripts/rerun_infra_cancel.py"],
+    expected: expectedPlan({
+      ciMode: "hot",
+      scopes: [
+        "web_tests_required",
+        "ui_critical_validation_required",
+        "workspace_validation_required",
+      ],
+      runs: ["run_e2e_vitest", "run_playwright_critical", "run_web_workspace_tests"],
+    }),
+  },
+  {
+    name: "pull_request packaged-smoke topology test change runs e2e Vitest",
+    context: PR,
+    files: ["e2e/tests/packaged-smoke-workflow.test.ts"],
+    expected: expectedPlan({
+      ciMode: "hot",
+      scopes: [
+        "web_tests_required",
+        "ui_critical_validation_required",
+        "workspace_validation_required",
+      ],
+      runs: ["run_e2e_vitest", "run_playwright_critical", "run_web_workspace_tests"],
+    }),
+  },
+  {
     // Weird-but-current: a markdown file under skills/ triggers daemon+web tests
     // through the runtime-content prefix, while its .md extension exempts it from
     // arming the ui-critical fallback. workspace_validation is then re-derived
@@ -947,7 +975,14 @@ test("runtime-definition shadow fails closed for mixed, unknown, empty, and unre
     assert.equal(decision.mode, "full-fallback", files.join(", "));
     assert.deepEqual(
       decision.matrix.map((entry) => entry.name),
-      ["entry-settings", "project-workspace", "project-collab", "project-runtime", "workspace-restoration"],
+      [
+        "entry-settings",
+        "project-workspace",
+        "project-workspace-editor",
+        "project-collab",
+        "project-runtime",
+        "workspace-restoration",
+      ],
     );
   }
   assert.equal(evaluateUiP0Shadow([], false).reason, "files-unresolved");

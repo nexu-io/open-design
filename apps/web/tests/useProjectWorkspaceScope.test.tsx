@@ -590,4 +590,68 @@ describe('useProjectWorkspaceScope', () => {
     });
     expect(scopeCalls).toHaveLength(2);
   });
+
+  // A route bootstrap that answers AFTER ProjectView mounted flips
+  // `initialScope` from absent to present on an already-mounted hook. That must
+  // not strand the hook: the mount-time read is still the only thing that can
+  // settle state, because state was never seeded from the late prop.
+  //
+  // Regression: the initial-read skip keyed off the CURRENT render's
+  // "can seed" answer, so the late prop aborted the in-flight scope GET and
+  // returned without ever seeding a scope or clearing `loading`. `loading`
+  // then pinned `true` forever — and because the workspace invalidation SSE is
+  // only subscribed once a scope resolves, no later event could re-trigger the
+  // read either. ProjectView reads that stuck `loading` as
+  // `workspaceContextReadOnly`, so the whole workspace fell into the
+  // "This is a shared project — you can view and comment" read-only mode with a
+  // permanently non-editable composer.
+  it('settles when a bootstrap scope arrives after the initial read started', async () => {
+    vi.stubGlobal('EventSource', OpeningEventSource as unknown as typeof EventSource);
+    const bootstrapScope = {
+      kind: 'unbound',
+      projectId: 'project-late-bootstrap',
+      workspaceId: null,
+      context: null,
+    } as const;
+    const inFlight = deferred<Response>();
+    const scopeCalls: string[] = [];
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/workspace/context')) {
+        return Promise.resolve(new Response(JSON.stringify({ context: null }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }));
+      }
+      if (!url.includes('/workspace-scope')) {
+        throw new Error(`Unexpected fetch: ${url}`);
+      }
+      scopeCalls.push(url);
+      // The mount-time read is still in flight when the bootstrap prop lands.
+      if (scopeCalls.length === 1) return inFlight.promise;
+      return Promise.resolve(new Response(
+        JSON.stringify({ scope: bootstrapScope }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const hook = renderHook(
+      ({ initialScope }: { initialScope?: typeof bootstrapScope }) =>
+        useProjectWorkspaceScope('project-late-bootstrap', null, null, initialScope),
+      { initialProps: {} as { initialScope?: typeof bootstrapScope } },
+    );
+    await waitFor(() => expect(scopeCalls).toHaveLength(1));
+    expect(hook.result.current.loading).toBe(true);
+
+    // The route bootstrap answers now, after the hook already mounted.
+    hook.rerender({ initialScope: bootstrapScope });
+
+    await waitFor(() => {
+      expect(hook.result.current).toMatchObject({
+        loading: false,
+        scope: bootstrapScope,
+      });
+    });
+  });
 });

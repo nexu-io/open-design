@@ -362,6 +362,37 @@ describe('AMR attribution helper', () => {
     ).not.toContain('od_device_id');
   });
 
+  it('forwards campaign and conversion attribution for final payment joins', () => {
+    const track = vi.fn();
+    const attribution = recordAmrEntry(
+      track,
+      'deepseek_workbench_badge',
+      new Date('2026-08-05T12:00:00.000Z'),
+      {
+        campaignId: 'deepseek_v4_flash',
+        conversionSource: 'deepseek_workbench_badge',
+      },
+    );
+
+    expect(track).toHaveBeenCalledWith(
+      'ui_click',
+      expect.objectContaining({
+        entry_id: attribution.entryId,
+        source_detail: 'deepseek_workbench_badge',
+        campaign_id: 'deepseek_v4_flash',
+        conversion_source: 'deepseek_workbench_badge',
+      }),
+      undefined,
+    );
+    const url = new URL(
+      attributedAmrUrl('https://open-design.ai/zh/pricing/', attribution),
+    );
+    expect(url.searchParams.get('od_entry_id')).toBe(attribution.entryId);
+    expect(url.searchParams.get('od_entry_source')).toBe('deepseek_workbench_badge');
+    expect(url.searchParams.get('od_conversion_source')).toBe('deepseek_workbench_badge');
+    expect(url.searchParams.get('od_campaign_id')).toBe('deepseek_v4_flash');
+  });
+
   it('resolves the AMR handoff device id to the canonical id, gated on consent', () => {
     // Consent off: never forwarded, regardless of available ids.
     expect(

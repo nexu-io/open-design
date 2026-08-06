@@ -141,26 +141,13 @@ const packagedOnboardingExpression = `
   (() => {
     const onboardingShell = document.querySelector('.entry-shell--onboarding');
     const onboardingModal = document.querySelector('.entry-onboarding-modal');
-    // Redesigned connect step: a cloud sign-in landing (primary CTA + two
-    // secondary runtime links) replaces the old selectable runtime cards.
+    // Identity is the first gate; runtime selection follows Cloud sign-in.
     const cloudSignIn = document.querySelector('.onboarding-cloud__primary');
-    const secondaryLinks = Array.from(
-      document.querySelectorAll('.onboarding-cloud__secondary'),
-    );
-    const localLink = secondaryLinks[0] ?? null;
-    const byokLink = secondaryLinks[1] ?? null;
-    const backToCloud = document.querySelector('.onboarding-view__back-to-cloud');
-    const setupPanel = document.querySelector('.onboarding-view__setup-panel');
 
     return {
-      backVisible: backToCloud instanceof HTMLElement,
-      byokLinkVisible: byokLink instanceof HTMLElement,
       cloudSignInVisible: cloudSignIn instanceof HTMLElement,
       href: location.href,
-      inputCount: setupPanel instanceof HTMLElement ? setupPanel.querySelectorAll('input').length : 0,
-      localLinkVisible: localLink instanceof HTMLElement,
       onboardingVisible: onboardingShell instanceof HTMLElement && onboardingModal instanceof HTMLElement,
-      setupPanelVisible: setupPanel instanceof HTMLElement,
       text: onboardingModal?.textContent?.trim().slice(0, 2000) ?? null,
       title: document.title,
     };
@@ -346,20 +333,10 @@ type UpdaterRecoverySummary = {
   recovered: NonNullable<MacInspectResult['update']>;
 };
 
-// The redesigned connect step exposes the two alternative runtimes as
-// secondary links on the cloud sign-in landing (AMR is the primary cloud CTA,
-// not a selectable link).
-type OnboardingRuntime = 'local' | 'byok';
-
 type PackagedOnboardingEvalValue = {
-  backVisible: boolean;
-  byokLinkVisible: boolean;
   cloudSignInVisible: boolean;
   href: string;
-  inputCount: number;
-  localLinkVisible: boolean;
   onboardingVisible: boolean;
-  setupPanelVisible: boolean;
   text: string | null;
   title: string;
 };
@@ -1032,7 +1009,7 @@ macOnboardingDescribe('packaged mac onboarding AMR smoke', () => {
   let installedAppPath: string | null = null;
   let started = false;
 
-  test('[P0] @electron-smoke starts a fresh packaged app on onboarding with AMR, Local CLI, and BYOK visible', async () => {
+  test('[P0] @electron-smoke starts a fresh packaged app on the Cloud identity gate', async () => {
     const report = await createPackagedSmokeReport('mac');
     let passed = false;
     try {
@@ -1058,41 +1035,11 @@ macOnboardingDescribe('packaged mac onboarding AMR smoke', () => {
       expect(health.health.ok).toBe(true);
 
       const initial = await waitForPackagedOnboarding((snapshot) =>
-        snapshot.onboardingVisible &&
-        snapshot.cloudSignInVisible &&
-        snapshot.localLinkVisible &&
-        snapshot.byokLinkVisible,
-        'fresh packaged onboarding cloud sign-in landing',
+        snapshot.onboardingVisible && snapshot.cloudSignInVisible,
+        'fresh packaged onboarding Cloud identity gate',
       );
       expect(initial.href).toMatch(/^(od:\/\/app\/|http:\/\/127\.0\.0\.1:\d+\/)/);
       expect(initial.cloudSignInVisible).toBe(true);
-      expect(initial.localLinkVisible).toBe(true);
-      expect(initial.byokLinkVisible).toBe(true);
-
-      // Expand the BYOK panel from the landing, then collapse back via Back.
-      await clickPackagedOnboardingRuntime('byok');
-      const byok = await waitForPackagedOnboarding(
-        (snapshot) => snapshot.setupPanelVisible && snapshot.inputCount > 0,
-        'packaged onboarding BYOK setup panel',
-      );
-      expect(byok.setupPanelVisible).toBe(true);
-
-      // The secondary links only live on the landing, so Back before Local.
-      await clickPackagedOnboardingBack();
-      await clickPackagedOnboardingRuntime('local');
-      const local = await waitForPackagedOnboarding(
-        (snapshot) => snapshot.setupPanelVisible,
-        'packaged onboarding Local CLI setup panel',
-      );
-      expect(local.setupPanelVisible).toBe(true);
-
-      // Back once more lands on the cloud sign-in surface for the screenshot.
-      await clickPackagedOnboardingBack();
-      const landing = await waitForPackagedOnboarding(
-        (snapshot) => snapshot.cloudSignInVisible && !snapshot.setupPanelVisible,
-        'packaged onboarding cloud sign-in landing after Back',
-      );
-      expect(landing.cloudSignInVisible).toBe(true);
 
       const onboardingScreenshotPath = join(toolsPackDir, 'screenshots', `${namespace}-onboarding.png`);
       await mkdir(dirname(onboardingScreenshotPath), { recursive: true });
@@ -1101,11 +1048,8 @@ macOnboardingDescribe('packaged mac onboarding AMR smoke', () => {
       expect(await fileSizeBytes(onboardingScreenshotPath)).toBeGreaterThan(0);
       await report.report.save('screenshots/open-design-mac-onboarding-smoke.png', await readFile(onboardingScreenshotPath));
       await report.report.json('onboarding-summary.json', {
-        byok,
         health,
         initial,
-        landing,
-        local,
         namespace,
         screenshot: 'screenshots/open-design-mac-onboarding-smoke.png',
         start: {
@@ -2591,22 +2535,6 @@ async function waitForPackagedOnboarding(
   throw new Error(`${label}: packaged onboarding timed out: ${formatUnknown(lastResult)}`);
 }
 
-async function clickPackagedOnboardingRuntime(runtime: OnboardingRuntime): Promise<void> {
-  const inspect = await runToolsPackJson<MacInspectResult>('inspect', ['--expr', clickPackagedOnboardingRuntimeExpression(runtime)]);
-  const value = inspect.eval?.value;
-  if (!isRecord(value) || value.clicked !== true) {
-    throw new Error(`failed to click packaged onboarding ${runtime} runtime: ${formatUnknown(value)}`);
-  }
-}
-
-async function clickPackagedOnboardingBack(): Promise<void> {
-  const inspect = await runToolsPackJson<MacInspectResult>('inspect', ['--expr', clickPackagedOnboardingBackExpression()]);
-  const value = inspect.eval?.value;
-  if (!isRecord(value) || value.clicked !== true) {
-    throw new Error(`failed to click packaged onboarding back: ${formatUnknown(value)}`);
-  }
-}
-
 async function waitForUpdaterStatus(
   predicate: (inspect: MacInspectResult) => boolean,
   label: string,
@@ -2937,39 +2865,6 @@ function assertUpdaterClickEvalValue(value: unknown): UpdaterClickEvalValue {
   return normalized;
 }
 
-function clickPackagedOnboardingRuntimeExpression(runtime: OnboardingRuntime): string {
-  // Secondary runtime links on the cloud landing, in DOM order: [0] Local,
-  // [1] BYOK. Clicking one expands its setup panel.
-  const index = runtime === 'local' ? 0 : 1;
-  return `
-    (async () => {
-      const links = Array.from(document.querySelectorAll('.onboarding-cloud__secondary'));
-      const target = links[${index}] ?? null;
-      if (!(target instanceof HTMLElement)) {
-        return { clicked: false, reason: 'missing-runtime-link', runtime: ${JSON.stringify(runtime)} };
-      }
-      target.click();
-      await new Promise((resolve) => setTimeout(resolve, 250));
-      return { clicked: true, runtime: ${JSON.stringify(runtime)} };
-    })()
-  `;
-}
-
-function clickPackagedOnboardingBackExpression(): string {
-  // Collapse an expanded runtime setup panel back to the cloud sign-in landing.
-  return `
-    (async () => {
-      const target = document.querySelector('.onboarding-view__back-to-cloud');
-      if (!(target instanceof HTMLElement)) {
-        return { clicked: false, reason: 'missing-back' };
-      }
-      target.click();
-      await new Promise((resolve) => setTimeout(resolve, 250));
-      return { clicked: true };
-    })()
-  `;
-}
-
 function asHealthEvalValue(value: unknown): HealthEvalValue | null {
   if (!isRecord(value)) return null;
   if (typeof value.href !== 'string' || typeof value.status !== 'number' || typeof value.title !== 'string') return null;
@@ -2979,14 +2874,9 @@ function asHealthEvalValue(value: unknown): HealthEvalValue | null {
 
 function asPackagedOnboardingEvalValue(value: unknown): PackagedOnboardingEvalValue | null {
   if (!isRecord(value)) return null;
-  if (typeof value.backVisible !== 'boolean') return null;
-  if (typeof value.byokLinkVisible !== 'boolean') return null;
   if (typeof value.cloudSignInVisible !== 'boolean') return null;
   if (typeof value.href !== 'string') return null;
-  if (typeof value.inputCount !== 'number') return null;
-  if (typeof value.localLinkVisible !== 'boolean') return null;
   if (typeof value.onboardingVisible !== 'boolean') return null;
-  if (typeof value.setupPanelVisible !== 'boolean') return null;
   if (value.text != null && typeof value.text !== 'string') return null;
   if (typeof value.title !== 'string') return null;
   return value as PackagedOnboardingEvalValue;

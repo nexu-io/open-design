@@ -4,7 +4,7 @@
  */
 import type { TrackingOnboardingFirstLoopStep, TrackingOnboardingProductType, TrackingOnboardingRole, TrackingOnboardingUseCase } from './onboarding.js';
 import type { TrackingRunRecoveryActionType } from './result-events.js';
-import type { TrackingArtifactKind, TrackingNewProjectTab, TrackingProjectKind } from './shared-enums.js';
+import type { TrackingArtifactKind, TrackingCampaignId, TrackingCampaignUserState, TrackingNewProjectTab, TrackingProjectKind } from './shared-enums.js';
 import type { DesignSystemsPresetBrandPickerSurfaceViewProps } from './ui-click.js';
 import type { WorkspaceSurfaceViewProps } from './workspace.js';
 // ---- surface_view --------------------------------------------------------
@@ -31,6 +31,34 @@ export interface NewProjectModalSurfaceViewProps {
 export interface PluginReplacementModalSurfaceViewProps {
   page_name: 'home';
   area: 'plugin_replacement_modal';
+}
+
+// DeepSeek V4 Flash campaign discovery surfaces. These are separate from the
+// existing amr_entry click because an impression is the denominator while an
+// AMR entry is generated only after the user actively enters the billing path.
+export interface DeepSeekCampaignModalSurfaceViewProps {
+  page_name: 'home';
+  area: 'deepseek_campaign_modal';
+  element: 'modal';
+  campaign_id: TrackingCampaignId;
+  user_state: TrackingCampaignUserState;
+}
+
+export interface DeepSeekCampaignBadgeSurfaceViewProps {
+  page_name: 'home';
+  area: 'campaign_badge';
+  element: 'deepseek_v4_flash';
+  campaign_id: TrackingCampaignId;
+  user_state: TrackingCampaignUserState;
+}
+
+export interface DeepSeekCampaignModelBenefitSurfaceViewProps {
+  page_name: 'home';
+  area: 'execution_settings_popover';
+  element: 'deepseek_v4_flash_benefit';
+  campaign_id: TrackingCampaignId;
+  user_state: TrackingCampaignUserState;
+  model_id: string;
 }
 
 // Impression of the plugin detail modal opened from the home Community
@@ -243,6 +271,9 @@ export type SurfaceViewProps =
   | RunRecoveryActionSurfaceViewProps
   | RunStartBlockedSurfaceViewProps
   | PreviewRunStatusSurfaceViewProps
+  | DeepSeekCampaignModalSurfaceViewProps
+  | DeepSeekCampaignBadgeSurfaceViewProps
+  | DeepSeekCampaignModelBenefitSurfaceViewProps
   | HomeRecommendationSurfaceViewProps
   | StudioOnboardingHintSurfaceViewProps
   | HelpPopoverSurfaceViewProps

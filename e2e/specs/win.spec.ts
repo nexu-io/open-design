@@ -10,7 +10,16 @@ import { promisify } from 'node:util';
 
 import { describe, expect, test } from 'vitest';
 
+import {
+  packagedAppShellExpression,
+  PackagedOnboardingConfigError,
+  packagedOnboardingCompletedFromProbe,
+  packagedOnboardingConfigExpression,
+  runPackagedAppShellPhase,
+  type PackagedAppShellState,
+} from '@/vitest/packaged-app-shell';
 import { createPackagedSmokeReport } from '@/vitest/packaged-report';
+import { resolvePackagedSmokeProfile } from '@/vitest/packaged-smoke-profile';
 import {
   assertPackagedPtySmokeResult,
   packagedPtySmokeExpression,
@@ -31,7 +40,11 @@ const toolsPackDir = resolveFromWorkspace(process.env.OD_PACKAGED_E2E_TOOLS_PACK
 const namespace = resolvePackagedSmokeNamespace('win');
 const toolsPackBin = join(workspaceRoot, 'tools', 'pack', 'bin', 'tools-pack.mjs');
 const maxInstallDurationMs = Number.parseInt(process.env.OD_PACKAGED_E2E_WIN_MAX_INSTALL_MS ?? '120000', 10);
-const smokeProfile = process.env.OD_PACKAGED_E2E_WIN_SMOKE_PROFILE ?? 'core';
+// `??` would keep an EMPTY value, and the release workflows can hand one down
+// — see `resolvePackagedSmokeProfile` for why all three layers have to agree
+// that empty means unset. An empty value surviving here reads as "not core"
+// and silently selects the updater path.
+const smokeProfile = resolvePackagedSmokeProfile(process.env.OD_PACKAGED_E2E_WIN_SMOKE_PROFILE);
 const verifyCoreOnly = smokeProfile === 'core';
 const verifyReinstallWhileRunning = !verifyCoreOnly && process.env.OD_PACKAGED_E2E_WIN_VERIFY_REINSTALL !== '0';
 const verifyUpgradePersistence =
@@ -233,47 +246,17 @@ const clickUpdaterRailExpression = `
     return { clicked: true, hostStatus };
   })()
 `;
-const ensureMainAppShellExpression = `
-  (() => {
-    const onboarding = document.querySelector('.entry-shell--onboarding, .entry-onboarding-modal');
-    const home = document.querySelector('[data-testid="entry-nav-home"]');
-    const homeVisible = home instanceof HTMLElement && home.getClientRects().length > 0;
-    if (homeVisible) {
-      return { homeVisible: true, onboardingVisible: false, skipped: false };
-    }
-    return {
-      homeVisible: false,
-      onboardingVisible: onboarding instanceof HTMLElement,
-      skipped: false,
-      title: document.title,
-      text: document.body?.textContent?.trim().slice(0, 300) ?? '',
-    };
-  })()
-`;
 const packagedOnboardingExpression = `
   (() => {
     const onboardingShell = document.querySelector('.entry-shell--onboarding');
     const onboardingModal = document.querySelector('.entry-onboarding-modal');
-    // Redesigned connect step: a cloud sign-in landing (primary CTA + two
-    // secondary runtime links) replaces the old selectable runtime cards.
+    // Identity is the first gate; runtime selection follows Cloud sign-in.
     const cloudSignIn = document.querySelector('.onboarding-cloud__primary');
-    const secondaryLinks = Array.from(
-      document.querySelectorAll('.onboarding-cloud__secondary'),
-    );
-    const localLink = secondaryLinks[0] ?? null;
-    const byokLink = secondaryLinks[1] ?? null;
-    const backToCloud = document.querySelector('.onboarding-view__back-to-cloud');
-    const setupPanel = document.querySelector('.onboarding-view__setup-panel');
 
     return {
-      backVisible: backToCloud instanceof HTMLElement,
-      byokLinkVisible: byokLink instanceof HTMLElement,
       cloudSignInVisible: cloudSignIn instanceof HTMLElement,
       href: location.href,
-      inputCount: setupPanel instanceof HTMLElement ? setupPanel.querySelectorAll('input').length : 0,
-      localLinkVisible: localLink instanceof HTMLElement,
       onboardingVisible: onboardingShell instanceof HTMLElement && onboardingModal instanceof HTMLElement,
-      setupPanelVisible: setupPanel instanceof HTMLElement,
       text: onboardingModal?.textContent?.trim().slice(0, 2000) ?? null,
       title: document.title,
     };
@@ -496,20 +479,10 @@ type UpdaterClickEvalValue = {
   reason?: string;
 };
 
-// The redesigned connect step exposes the two alternative runtimes as
-// secondary links on the cloud sign-in landing (AMR is the primary cloud CTA,
-// not a selectable link).
-type OnboardingRuntime = 'local' | 'byok';
-
 type PackagedOnboardingEvalValue = {
-  backVisible: boolean;
-  byokLinkVisible: boolean;
   cloudSignInVisible: boolean;
   href: string;
-  inputCount: number;
-  localLinkVisible: boolean;
   onboardingVisible: boolean;
-  setupPanelVisible: boolean;
   text: string | null;
   title: string;
 };
@@ -540,6 +513,10 @@ winDescribe('packaged windows runtime smoke', () => {
     const report = await createPackagedSmokeReport('win');
     let passed = false;
     const timings: SmokeTiming[] = [];
+    let appShell: PackagedAppShellState | 'skipped' = 'skipped';
+    let firstRunAppShell: PackagedAppShellState | 'skipped' = 'skipped';
+    let seededOnboardingCompleted: boolean | 'skipped' = 'skipped';
+    let onboardingCompleted: boolean | 'skipped' = 'skipped';
     let intermediatePayloadUpdate: PayloadUpdateSummary | { skipped: true } = { skipped: true };
     let payloadUpdate: InstallerFallbackSummary | PayloadUpdateSummary | { skipped: true } = { skipped: true };
     let updaterRecovery: UpdaterRecoverySummary | { skipped: true } = { skipped: true };
@@ -591,6 +568,51 @@ winDescribe('packaged windows runtime smoke', () => {
             `top-level payload=${JSON.stringify(install.installPayload.topLevel.slice(0, 8))}`,
           ].join('\n'),
         );
+      }
+
+      // Phase 1 — the genuine first run. A packaged install nobody has signed
+      // into is real product behaviour, not a broken state: since
+      // `shouldRouteToFirstRunOnboarding` keys purely on `onboardingCompleted`,
+      // the cloud sign-in landing is its correct terminal surface, and it is
+      // accepted only when it actually rendered its sign-in CTA and both runtime
+      // links. Core-only on purpose — every release workflow defaults there, and
+      // the full profile needs its controlled updater environment from first
+      // launch, which a plain start before the fixture is wired would bypass.
+      if (verifyCoreOnly) {
+        await resetPackagedRuntimeDataRoot();
+        const firstRunStart = await measureSmokeStep(timings, 'start unseeded first run', async () =>
+          runToolsPackJson<WinStartResult>('start'),
+        );
+        started = true;
+        expect(firstRunStart.source).toBe('installed');
+        const firstRunInspect = await measureSmokeStep(timings, 'wait healthy unseeded first run', async () =>
+          waitForHealthyDesktop(),
+        );
+        expect(firstRunInspect.status?.state).toBe('running');
+        if (!firstRunInspect.desktopIpcUnavailable) {
+          const firstRunPhase = await measureSmokeStep(timings, 'ensure first-run app shell', async () =>
+            runPackagedAppShellPhase({
+              coreProfile: verifyCoreOnly,
+              describeLast: formatUnknown,
+              observe: observePackagedAppShell,
+              readOnboardingConfig: readPackagedOnboardingConfig,
+              scenario: 'first-run',
+            }),
+          );
+          expect(firstRunPhase.onboardingCompleted).toBe(false);
+          expect(firstRunPhase.appShell).toBe('onboarding-landing');
+          firstRunAppShell = firstRunPhase.appShell;
+        }
+        const firstRunStop = await measureSmokeStep(timings, 'stop unseeded first run', async () =>
+          runToolsPackJson<WinStopResult>('stop'),
+        );
+        started = false;
+        expect(firstRunStop.status).not.toBe('partial');
+        expect(firstRunStop.remainingPids).toEqual([]);
+        // Clear both the daemon data root and the Electron user-data partition
+        // so phase 2's seed lands on a true clean slate and no localStorage
+        // residue from this phase can ratchet into it.
+        await resetPackagedRuntimeDataRoot();
       }
 
       await seedPackagedOnboardingComplete();
@@ -667,6 +689,23 @@ winDescribe('packaged windows runtime smoke', () => {
       assertLauncherPointer(inspect.launcher.active, updateScenario.expectedCurrentVersion, 0, 'initial active');
       assertLauncherPointer(inspect.launcher.lastSuccessful, updateScenario.expectedCurrentVersion, 0, 'initial lastSuccessful');
 
+      // The seed's postcondition, asserted where it must hold: this process was
+      // started by `tools-pack win start`, which points the packaged runtime at
+      // the same data root `seedPackagedOnboardingComplete` wrote. If the daemon
+      // does not see it here, the completed-onboarding boot path is broken —
+      // the #4389-era failure where the seed landed in the AppData fallback and
+      // the daemon never read it. Fail with that named cause instead of letting
+      // it surface later as an unexplained onboarding screen.
+      if (!inspect.desktopIpcUnavailable) {
+        seededOnboardingCompleted = await measureSmokeStep(timings, 'verify seeded onboarding config', async () =>
+          packagedOnboardingCompletedFromProbe(await readPackagedOnboardingConfig()),
+        );
+        expect(
+          seededOnboardingCompleted,
+          'daemon did not read the seeded onboardingCompleted config; check that the packaged data root still resolves to the tools-pack runtime namespace root',
+        ).toBe(true);
+      }
+
       // Runtime registration must preserve the stable installed outer path;
       // pointing at a versioned payload would break the scheme after cleanup.
       await assertWindowsInviteProtocolRegistration(install.installDir);
@@ -708,7 +747,29 @@ winDescribe('packaged windows runtime smoke', () => {
       }
 
       if (!inspect.desktopIpcUnavailable) {
-        await measureSmokeStep(timings, 'ensure main app shell', async () => ensureMainAppShell());
+        // Re-read rather than reusing the value from the seeded start: the core
+        // profile stopped the app above and relaunched it through the OS
+        // protocol handler, and that cold start carries none of this process's
+        // environment — so it is a different daemon, and only it can say what
+        // config the surface being asserted on is actually running under.
+        // Phase 2 — the completed user. The seed must have been confirmed before
+        // this point; anything else means the run never established the fact
+        // this phase depends on.
+        if (seededOnboardingCompleted !== true) {
+          throw new Error('reached the completed-user app-shell check without a confirmed seeded onboarding state');
+        }
+        const completedUser = await measureSmokeStep(timings, 'ensure completed-user app shell', async () =>
+          runPackagedAppShellPhase({
+            coreProfile: verifyCoreOnly,
+            describeLast: formatUnknown,
+            observe: observePackagedAppShell,
+            readOnboardingConfig: readPackagedOnboardingConfig,
+            scenario: 'completed-user',
+          }),
+        );
+        onboardingCompleted = completedUser.onboardingCompleted;
+        appShell = completedUser.appShell;
+        expect(appShell).toBe('home');
 
         if (verifyUpgradePersistence) {
           const seedInspect = await measureSmokeStep(timings, 'seed pre-update persistence project', async () =>
@@ -892,6 +953,12 @@ winDescribe('packaged windows runtime smoke', () => {
       expect(uninstall.residueObservation?.userDesktopShortcutExists).toBe(false);
       await assertWindowsInviteProtocolRemoved();
       await report.saveSummary({
+        appShell,
+        onboarding: {
+          afterSeed: seededOnboardingCompleted,
+          atAppShell: onboardingCompleted,
+          firstRunAppShell,
+        },
         health: value,
         install: {
           desktopShortcutExists: install.desktopShortcutExists,
@@ -1201,7 +1268,7 @@ winOnboardingDescribe('packaged windows onboarding AMR smoke', () => {
   let installed = false;
   let started = false;
 
-  test('[P0] @electron-smoke starts a fresh packaged Windows app on onboarding with AMR, Local CLI, and BYOK visible', async () => {
+  test('[P0] @electron-smoke starts a fresh packaged Windows app on the Cloud identity gate', async () => {
     const report = await createPackagedSmokeReport('win');
     const timings: SmokeTiming[] = [];
     let install: WinInstallResult | null = null;
@@ -1240,11 +1307,8 @@ winOnboardingDescribe('packaged windows onboarding AMR smoke', () => {
       expect(health.health.ok).toBe(true);
 
       const initial = await waitForPackagedOnboarding((snapshot) =>
-        snapshot.onboardingVisible &&
-        snapshot.cloudSignInVisible &&
-        snapshot.localLinkVisible &&
-        snapshot.byokLinkVisible,
-        'fresh packaged Windows onboarding cloud sign-in landing',
+        snapshot.onboardingVisible && snapshot.cloudSignInVisible,
+        'fresh packaged Windows onboarding Cloud identity gate',
       );
       // Onboarding lives on a dedicated route since the #4513 cloud sign-in
       // redesign, so the href is `od://app/onboarding` (packaged) — not the
@@ -1254,33 +1318,6 @@ winOnboardingDescribe('packaged windows onboarding AMR smoke', () => {
       // is why the stale exact-match assertion went unnoticed.
       expect(initial.href).toMatch(/^(od:\/\/app\/|http:\/\/127\.0\.0\.1:\d+\/)/);
       expect(initial.cloudSignInVisible).toBe(true);
-      expect(initial.localLinkVisible).toBe(true);
-      expect(initial.byokLinkVisible).toBe(true);
-
-      // Expand the BYOK panel from the landing, then collapse back via Back.
-      await clickPackagedOnboardingRuntime('byok');
-      const byok = await waitForPackagedOnboarding(
-        (snapshot) => snapshot.setupPanelVisible && snapshot.inputCount > 0,
-        'packaged Windows onboarding BYOK setup panel',
-      );
-      expect(byok.setupPanelVisible).toBe(true);
-
-      // The secondary links only live on the landing, so Back before Local.
-      await clickPackagedOnboardingBack();
-      await clickPackagedOnboardingRuntime('local');
-      const local = await waitForPackagedOnboarding(
-        (snapshot) => snapshot.setupPanelVisible,
-        'packaged Windows onboarding Local CLI setup panel',
-      );
-      expect(local.setupPanelVisible).toBe(true);
-
-      // Back once more lands on the cloud sign-in surface for the screenshot.
-      await clickPackagedOnboardingBack();
-      const landing = await waitForPackagedOnboarding(
-        (snapshot) => snapshot.cloudSignInVisible && !snapshot.setupPanelVisible,
-        'packaged Windows onboarding cloud sign-in landing after Back',
-      );
-      expect(landing.cloudSignInVisible).toBe(true);
 
       const onboardingScreenshotPath = join(toolsPackDir, 'screenshots', `${namespace}-onboarding.png`);
       await mkdir(dirname(onboardingScreenshotPath), { recursive: true });
@@ -1289,11 +1326,8 @@ winOnboardingDescribe('packaged windows onboarding AMR smoke', () => {
       expect(await fileSizeBytes(onboardingScreenshotPath)).toBeGreaterThan(0);
       await report.report.save('screenshots/open-design-win-onboarding-smoke.png', await readFile(onboardingScreenshotPath));
       await report.report.json('onboarding-summary.json', {
-        byok,
         health,
         initial,
-        landing,
-        local,
         namespace,
         screenshot: 'screenshots/open-design-win-onboarding-smoke.png',
         start: {
@@ -2038,21 +2072,44 @@ async function fetchPackagedHealth(daemonUrl: string): Promise<HealthEvalValue> 
   }
 }
 
-async function ensureMainAppShell(timeoutMs = 45_000): Promise<void> {
-  const startedAt = Date.now();
-  let lastResult: unknown = null;
-  while (Date.now() - startedAt < timeoutMs) {
-    try {
-      const inspect = await runToolsPackJson<WinInspectResult>('inspect', ['--expr', ensureMainAppShellExpression]);
-      lastResult = inspect;
-      const value = inspect.eval?.value;
-      if (isRecord(value) && value.homeVisible === true) return;
-    } catch (error) {
-      lastResult = error;
-    }
-    await delay(750);
+/**
+ * What the running daemon reports for `onboardingCompleted`.
+ *
+ * This is the seed's actual postcondition. `seedPackagedOnboardingComplete`
+ * writes `<runtimeNamespaceRoot>/data/app-config.json`, and on a
+ * `tools-pack win start` the daemon resolves the same path — `tools-pack`
+ * rewrites the launch config's `namespaceBaseRoot` to the tools-pack runtime
+ * root (tools/pack/src/win/lifecycle.ts) and `apps/packaged/src/paths.ts`
+ * derives `join(namespaceBaseRoot, namespace, 'data')` from it. So a healthy
+ * seeded start MUST report true, and anything else is a real data-root
+ * regression rather than a test-fixture detail.
+ */
+async function readPackagedOnboardingConfig(): Promise<unknown> {
+  const inspect = await runToolsPackJson<WinInspectResult>('inspect', [
+    '--expr',
+    packagedOnboardingConfigExpression,
+  ]);
+  if (inspect.eval?.ok !== true) {
+    throw new PackagedOnboardingConfigError(`the renderer could not evaluate the probe: ${formatUnknown(inspect)}`);
   }
-  throw new Error(`packaged windows runtime did not reach main app shell: ${formatUnknown(lastResult)}`);
+  // Returns the raw probe outcome. Interpretation belongs to the scenario, not
+  // to the reader: an absent key means different things to a first run and to a
+  // run that seeded completion.
+  return inspect.eval.value;
+}
+
+/**
+ * One reading of the packaged renderer's app shell.
+ *
+ * Throws on an eval that did not run, so the settle loop records the whole
+ * inspect payload as the failure cause rather than an empty observation.
+ */
+async function observePackagedAppShell(): Promise<unknown> {
+  const inspect = await runToolsPackJson<WinInspectResult>('inspect', ['--expr', packagedAppShellExpression]);
+  if (inspect.eval?.ok !== true) {
+    throw new Error(`packaged windows renderer could not evaluate the app-shell probe: ${formatUnknown(inspect)}`);
+  }
+  return inspect.eval.value;
 }
 
 async function waitForHealthyDesktopVersion(
@@ -2126,22 +2183,6 @@ async function waitForPackagedOnboarding(
   }
 
   throw new Error(`${label}: packaged Windows onboarding timed out: ${formatUnknown(lastResult)}`);
-}
-
-async function clickPackagedOnboardingRuntime(runtime: OnboardingRuntime): Promise<void> {
-  const inspect = await runToolsPackJson<WinInspectResult>('inspect', ['--expr', clickPackagedOnboardingRuntimeExpression(runtime)]);
-  const value = inspect.eval?.value;
-  if (!isRecord(value) || value.clicked !== true) {
-    throw new Error(`failed to click packaged Windows onboarding ${runtime} runtime: ${formatUnknown(value)}`);
-  }
-}
-
-async function clickPackagedOnboardingBack(): Promise<void> {
-  const inspect = await runToolsPackJson<WinInspectResult>('inspect', ['--expr', clickPackagedOnboardingBackExpression()]);
-  const value = inspect.eval?.value;
-  if (!isRecord(value) || value.clicked !== true) {
-    throw new Error(`failed to click packaged Windows onboarding back: ${formatUnknown(value)}`);
-  }
 }
 
 async function repackWinPayloadFixture(
@@ -2499,49 +2540,11 @@ function asHealthEvalValue(value: unknown): HealthEvalValue | null {
   return value as HealthEvalValue;
 }
 
-function clickPackagedOnboardingRuntimeExpression(runtime: OnboardingRuntime): string {
-  // Secondary runtime links on the cloud landing, in DOM order: [0] Local,
-  // [1] BYOK. Clicking one expands its setup panel.
-  const index = runtime === 'local' ? 0 : 1;
-  return `
-    (async () => {
-      const links = Array.from(document.querySelectorAll('.onboarding-cloud__secondary'));
-      const target = links[${index}] ?? null;
-      if (!(target instanceof HTMLElement)) {
-        return { clicked: false, reason: 'missing-runtime-link', runtime: ${JSON.stringify(runtime)} };
-      }
-      target.click();
-      await new Promise((resolve) => setTimeout(resolve, 250));
-      return { clicked: true, runtime: ${JSON.stringify(runtime)} };
-    })()
-  `;
-}
-
-function clickPackagedOnboardingBackExpression(): string {
-  // Collapse an expanded runtime setup panel back to the cloud sign-in landing.
-  return `
-    (async () => {
-      const target = document.querySelector('.onboarding-view__back-to-cloud');
-      if (!(target instanceof HTMLElement)) {
-        return { clicked: false, reason: 'missing-back' };
-      }
-      target.click();
-      await new Promise((resolve) => setTimeout(resolve, 250));
-      return { clicked: true };
-    })()
-  `;
-}
-
 function asPackagedOnboardingEvalValue(value: unknown): PackagedOnboardingEvalValue | null {
   if (!isRecord(value)) return null;
-  if (typeof value.backVisible !== 'boolean') return null;
-  if (typeof value.byokLinkVisible !== 'boolean') return null;
   if (typeof value.cloudSignInVisible !== 'boolean') return null;
   if (typeof value.href !== 'string') return null;
-  if (typeof value.inputCount !== 'number') return null;
-  if (typeof value.localLinkVisible !== 'boolean') return null;
   if (typeof value.onboardingVisible !== 'boolean') return null;
-  if (typeof value.setupPanelVisible !== 'boolean') return null;
   if (value.text != null && typeof value.text !== 'string') return null;
   if (typeof value.title !== 'string') return null;
   return value as PackagedOnboardingEvalValue;

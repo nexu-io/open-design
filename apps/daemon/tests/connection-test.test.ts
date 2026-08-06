@@ -10,6 +10,16 @@ import { pathToFileURL } from 'node:url';
 import { Socks5ProxyAgent } from 'undici';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import * as platform from '@open-design/platform';
+
+const { resolveSystemProxyEnvMock } = vi.hoisted(() => ({
+  resolveSystemProxyEnvMock: vi.fn(() => ({})),
+}));
+
+vi.mock('@open-design/platform', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@open-design/platform')>()),
+  resolveSystemProxyEnv: resolveSystemProxyEnvMock,
+}));
+
 import {
   createAgentSink,
   isSmokeOkReply,
@@ -2850,7 +2860,7 @@ describe('POST /api/test/connection provider mode', () => {
     const proxySpy = vi.spyOn(platform, 'resolveSystemProxyEnv').mockReturnValue({});
 
     try {
-      const { close, requestInit } = proxyDispatcherRequestInit();
+      const { close, requestInit } = proxyDispatcherRequestInit({});
 
       expect(proxySpy).toHaveBeenCalledWith();
       expect(requestInit).toEqual({});

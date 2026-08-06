@@ -394,6 +394,28 @@ describe("release workflows", () => {
     expect(stablePrepare).toContain('setOutput("publish_side_effects_enabled"');
   });
 
+  it("never hands a shipping lane an empty windows smoke mode", async () => {
+    const notify = await readFile(
+      new URL("../../../.github/workflows/notify-release-feishu.yml", import.meta.url),
+      "utf8",
+    );
+
+    // A `workflow_call` `default:` applies only when an input is OMITTED, so
+    // forwarding an empty string defeats the declared `core` default. The empty
+    // value then survives `??` in the spec, `smokeProfile === 'core'` is false,
+    // and the run takes the `full` path — which demands an updater fixture only
+    // a genuine `full` request wires up, and dies before the smoke starts.
+    // That is how release/v0.18.1's first prerelease failed on its branch-cut
+    // commit; release/v0.18.0 stayed hidden behind a branch-name special case
+    // that produced `skip`, so its smoke never ran at all.
+    const modeLine = notify
+      .split("\n")
+      .find((line) => line.includes("win_x64_smoke_mode:") && line.includes("inputs.win_x64_smoke_mode"));
+    expect(modeLine, "notify-release-feishu must forward win_x64_smoke_mode").toBeDefined();
+    expect(modeLine).not.toMatch(/\|\|\s*''\s*\}\}/);
+    expect(modeLine).toMatch(/\|\|\s*'core'\s*\}\}/);
+  });
+
   it("bakes both halves of the workspace-team gate into every shipping lane", async () => {
     const [beta, preview, prerelease, stable] = await Promise.all([
       readFile(new URL("../../../.github/workflows/release-beta.yml", import.meta.url), "utf8"),

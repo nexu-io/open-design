@@ -52,7 +52,7 @@ function runDownloadDirectAssetGate(
   options: { userAgent: string; platform: string; maxTouchPoints: number },
 ) {
   const start = page.indexOf("      const ua = (navigator.userAgent || '').toLowerCase();");
-  const endMarker = '      // Live refetch: keep the hero CTA + matrix links current between rebuilds.';
+  const endMarker = '      // Live refetch: replace the complete visible release snapshot from the';
   const end = page.indexOf(endMarker, start);
   assert.ok(start >= 0 && end > start, 'download direct-asset enhancer not found');
   const script = page.slice(start, end);

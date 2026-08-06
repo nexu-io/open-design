@@ -417,6 +417,21 @@ export const scopeRules: readonly ScopeRule[] = [
     confidence: "medium",
   },
   {
+    // Trusted write-capable rerun atom + its topology/self-check coverage.
+    // web_tests_required arms run_e2e_vitest so PR CI exercises the helper
+    // self-check and packaged-smoke topology assertions before the merge queue.
+    id: "ci-rerun-infra-cancel-surface",
+    match: {
+      exact: [
+        ".github/workflows/rerun.atom.yml",
+        ".github/scripts/rerun_infra_cancel.py",
+        "e2e/tests/packaged-smoke-workflow.test.ts",
+      ],
+    },
+    effects: ["web_tests_required", "workspace_validation_required"],
+    confidence: "medium",
+  },
+  {
     id: "workspace-fallback",
     match: { excludeWhen: WORKSPACE_FALLBACK_EXCLUDED_SURFACE },
     effects: ["workspace_validation_required"],

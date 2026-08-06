@@ -18,6 +18,9 @@ import type {
   DesignSystemsTemplatesModalSurfaceViewProps,
   AssistantFeedbackReasonPanelSurfaceViewProps,
   QuestionsFormSurfaceViewProps,
+  DeepSeekCampaignModalSurfaceViewProps,
+  DeepSeekCampaignBadgeSurfaceViewProps,
+  DeepSeekCampaignModelBenefitSurfaceViewProps,
   // ui_click
   HomeNavClickProps,
   HelpPopoverClickProps,
@@ -75,6 +78,8 @@ import type {
   AmrAuthStageProps,
   AmrEntryClickProps,
   PreviewRunStatusSurfaceViewProps,
+  DeepSeekCampaignModalClickProps,
+  DeepSeekCampaignBadgeClickProps,
   RunFailedToastSurfaceViewProps,
   RunRecoveryActionSurfaceViewProps,
   RunStartBlockedSurfaceViewProps,
@@ -409,6 +414,41 @@ export function trackStudioOnboardingHintClick(
 export function trackAmrEntryClick(
   track: Track,
   props: AmrEntryClickProps,
+): void {
+  send(track, 'ui_click', props);
+}
+
+export function trackDeepSeekCampaignModalSurfaceView(
+  track: Track,
+  props: DeepSeekCampaignModalSurfaceViewProps,
+): void {
+  send(track, 'surface_view', props);
+}
+
+export function trackDeepSeekCampaignBadgeSurfaceView(
+  track: Track,
+  props: DeepSeekCampaignBadgeSurfaceViewProps,
+): void {
+  send(track, 'surface_view', props);
+}
+
+export function trackDeepSeekCampaignModelBenefitSurfaceView(
+  track: Track,
+  props: DeepSeekCampaignModelBenefitSurfaceViewProps,
+): void {
+  send(track, 'surface_view', props);
+}
+
+export function trackDeepSeekCampaignModalClick(
+  track: Track,
+  props: DeepSeekCampaignModalClickProps,
+): void {
+  send(track, 'ui_click', props);
+}
+
+export function trackDeepSeekCampaignBadgeClick(
+  track: Track,
+  props: DeepSeekCampaignBadgeClickProps,
 ): void {
   send(track, 'ui_click', props);
 }

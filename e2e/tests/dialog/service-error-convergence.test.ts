@@ -136,4 +136,93 @@ describe('dialog service error convergence', () => {
       expect(assistant?.runStatus).toBe('failed');
     });
   });
+
+  test('marks a model-not-found failure as MODEL_UNAVAILABLE with switch-model action', { timeout: 180_000 }, async () => {
+    await assertCodexFailureClassification({
+      suiteName: 'dialog-model-unavailable-convergence',
+      prompt: 'Return a daemon model-not-found failure',
+      expectedCategory: 'model_unavailable',
+      expectedDetail: 'model_not_found',
+      expectedAction: 'switch_model',
+      expectedMarker: 'retry_suppressed_reason":"non_retryable_category',
+    });
+  });
+
+  test('marks a provider timeout as TIMEOUT with retry action', { timeout: 180_000 }, async () => {
+    await assertCodexFailureClassification({
+      suiteName: 'dialog-timeout-convergence',
+      prompt: 'Return a daemon timeout failure',
+      expectedCategory: 'timeout',
+      expectedDetail: 'timeout',
+      expectedAction: 'retry',
+      expectedMarker: 'retry_reason":"transient_failure',
+    });
+  });
 });
+
+async function assertCodexFailureClassification(input: {
+  suiteName: string;
+  prompt: string;
+  expectedCategory: string;
+  expectedDetail: string;
+  expectedAction: 'retry' | 'switch_model';
+  expectedMarker: string;
+}) {
+  const suite = await createSmokeSuite(input.suiteName);
+
+  await suite.with.toolsDev(async ({ webUrl }) => {
+    const fakeAgents = await createFakeAgentRuntimes({
+      root: join(suite.scratchDir, 'fake-agents'),
+      runtimeIds: ['codex'],
+    });
+
+    await requestJson<{ config: Record<string, unknown> }>(webUrl, '/api/app-config', {
+      body: {
+        agentCliEnv: { codex: fakeAgents.codex.env },
+        agentId: 'codex',
+        agentModels: { codex: { model: 'default', reasoning: 'default' } },
+        designSystemId: null,
+        onboardingCompleted: true,
+        skillId: null,
+        telemetry: { artifactManifest: true, content: false, metrics: false },
+      },
+      method: 'PUT',
+    });
+
+    const project = await requestJson<ProjectResponse>(webUrl, '/api/projects', {
+      body: {
+        designSystemId: null,
+        id: randomUUID(),
+        metadata: { kind: 'prototype' },
+        name: input.suiteName,
+        pendingPrompt: null,
+        skillId: null,
+      },
+    });
+    const assistantMessageId = `assistant-${Date.now()}`;
+    const run = await startRun(webUrl, {
+      agentId: 'codex',
+      assistantMessageId,
+      clientRequestId: `req-${Date.now()}`,
+      conversationId: project.conversationId,
+      designSystemId: null,
+      message: input.prompt,
+      model: 'default',
+      projectId: project.project.id,
+      reasoning: 'default',
+      skillId: null,
+    });
+
+    const terminal = await waitForRunTerminal(webUrl, run.runId, { timeoutMs: 20_000 });
+    expect(terminal.status).toBe('failed');
+    expect(terminal.failureAction).toBe(input.expectedAction);
+    const events = await readRunEvents(webUrl, run.runId);
+    expect(events).toContain(input.expectedCategory);
+    expect(events).toContain(input.expectedDetail);
+    expect(events).toContain(input.expectedMarker);
+
+    const messages = await listMessages(webUrl, project.project.id, project.conversationId);
+    const assistant = messages.find((message) => message.id === assistantMessageId);
+    expect(assistant?.runStatus).toBe('failed');
+  });
+}

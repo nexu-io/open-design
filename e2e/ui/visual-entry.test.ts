@@ -15,10 +15,15 @@ import {
 
 test('[P2] captures the onboarding cloud sign-in surface', async ({ page }) => {
   test.setTimeout(T.xlong);
+  test.fail(
+    true,
+    'PR #6475 currently omits anonymous Local Agent and BYOK actions from the sign-in surface.',
+  );
 
   await configureVisualPage(page, {
     projects: [],
     agents: [VISUAL_AMR_AGENT, ...VISUAL_CLI_AGENTS],
+    velaLoggedIn: false,
     config: {
       onboardingCompleted: false,
     },

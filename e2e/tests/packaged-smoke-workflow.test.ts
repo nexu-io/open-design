@@ -30,6 +30,8 @@ const playwrightConfigPath = join(e2eRoot, "playwright.config.ts");
 const commentWorkflowPath = join(workspaceRoot, ".github", "workflows", "comment.atom.yml");
 const autofixWorkflowPath = join(workspaceRoot, ".github", "workflows", "autofix.atom.yml");
 const reportWorkflowPath = join(workspaceRoot, ".github", "workflows", "report.atom.yml");
+const rerunWorkflowPath = join(workspaceRoot, ".github", "workflows", "rerun.atom.yml");
+const rerunInfraCancelScriptPath = join(workspaceRoot, ".github", "scripts", "rerun_infra_cancel.py");
 const bakePluginPreviewsWorkflowPath = join(workspaceRoot, ".github", "workflows", "bake-plugin-previews.yml");
 const bakePluginPreviewsPrWorkflowPath = join(workspaceRoot, ".github", "workflows", "bake-plugin-previews-pr.yml");
 const dockerImageWorkflowPath = join(workspaceRoot, ".github", "workflows", "docker-image.yml");
@@ -397,6 +399,56 @@ describe("packaged smoke workflow", () => {
     expect(reportWorkflow).toContain("workflows: [ci]");
     expect(reportWorkflow).toContain("github.event.workflow_run.event == 'pull_request'");
     expect(reportWorkflow).not.toContain("merge_group");
+  });
+
+  it("[P2] gates infra-cancel auto-rerun as a trusted workflow_run consumer", async () => {
+    const [rerunWorkflow, rerunScript, ciWorkflow] = await Promise.all([
+      readFile(rerunWorkflowPath, "utf8"),
+      readFile(rerunInfraCancelScriptPath, "utf8"),
+      readFile(ciWorkflowPath, "utf8"),
+    ]);
+
+    // Triggered only by completed `ci` runs; never a business-layer write inside ci.yml.
+    expect(rerunWorkflow).toContain("workflows: [ci]");
+    expect(rerunWorkflow).toContain("types: [completed]");
+    expect(rerunWorkflow).toContain("actions: write");
+    // Annotations + commit→pulls need explicit read scopes when permissions: is set.
+    expect(rerunWorkflow).toContain("checks: read");
+    expect(rerunWorkflow).toContain("pull-requests: read");
+    expect(rerunWorkflow).toContain("group: rerun-${{ github.event.workflow_run.id }}");
+    expect(rerunWorkflow).toContain("cancel-in-progress: false");
+    expect(rerunWorkflow).toContain("github.event.repository.default_branch");
+    expect(rerunWorkflow).toContain("python3 .github/scripts/rerun_infra_cancel.py self-check");
+    expect(rerunWorkflow).toContain("python3 .github/scripts/rerun_infra_cancel.py run");
+
+    // pull_request + merge_group only, one automatic retry, skip green/skipped conclusions.
+    expect(rerunWorkflow).toContain("github.event.workflow_run.event == 'pull_request'");
+    expect(rerunWorkflow).toContain("github.event.workflow_run.event == 'merge_group'");
+    expect(rerunWorkflow).toContain("github.event.workflow_run.run_attempt < 2");
+    expect(rerunWorkflow).toContain("github.event.workflow_run.conclusion != 'success'");
+    expect(rerunWorkflow).toContain("github.event.workflow_run.conclusion != 'skipped'");
+    expect(rerunWorkflow).not.toContain("workflow_dispatch");
+
+    // Decision stays in the helper; ci.yml itself must not gain actions:write or gh run rerun.
+    expect(rerunScript).toContain("The runner has received a shutdown signal");
+    expect(rerunScript).toContain("gh run rerun");
+    expect(rerunScript).toContain("--failed");
+    expect(rerunScript).toContain("DEFAULT_MAX_ATTEMPT = 2");
+    // merge_group freshness: open PR still at the PR head SHA encoded in the
+    // queue branch (pr-N-<sha>), not live queue membership and not open-only.
+    // (required-check failure ejects the synthetic head before workflow_run completed).
+    expect(rerunScript).toContain("resolve_merge_group_open_pr");
+    expect(rerunScript).toContain("parse_merge_group_pr_number");
+    expect(rerunScript).toContain("parse_merge_group_pr_head_sha");
+    expect(rerunScript).toContain("no open PR at the merge_group originating head");
+    // Mixed ordinary failure + cancelled leaf must refuse --failed rerun.
+    expect(rerunScript).toContain("classify_non_success_jobs");
+    expect(rerunScript).toContain("ordinary non-infra failures present");
+    // Warning-level annotations (e.g. scopes.ts full-plan fallback) are not ordinary failures.
+    expect(rerunScript).toContain('level in {"notice", "warning"}');
+    expect(ciWorkflow).not.toContain("gh run rerun");
+    expect(ciWorkflow).toContain("actions: read");
+    expect(ciWorkflow).not.toContain("actions: write");
   });
 
   it("[P2] surfaces a merge-queue needs-validation ejection as a PR comment handoff", async () => {
@@ -1167,21 +1219,28 @@ process.stdin.on("end", () => {
     expect(uiP0CiMatrix.map((entry) => entry.name)).toEqual([
       "entry-settings",
       "project-workspace",
+      "project-workspace-editor",
       "project-collab",
       "project-runtime",
       "workspace-restoration",
     ]);
     expect(uiP0Groups["project-workspace"].files).toEqual([
       "ui/app.test.ts",
-      "ui/app-design-files.test.ts",
-      "ui/app-manual-edit.test.ts",
       "ui/project-management-flows.test.ts",
-      "ui/workspace-team-design-system-picker.test.ts",
+      "ui/workspace-keyboard-flows.test.ts",
     ]);
     expect(uiP0Groups["project-workspace"].workers).toBe(1);
+    expect(uiP0Groups["project-workspace-editor"]).toEqual({
+      grep: String.raw`\[P0\]`,
+      workers: 1,
+      files: [
+        "ui/app-design-files.test.ts",
+        "ui/app-manual-edit.test.ts",
+        "ui/workspace-team-design-system-picker.test.ts",
+      ],
+    });
     expect(uiP0Groups["project-collab"].files).toEqual([
       "ui/workspace-multi-client-collab.test.ts",
-      "ui/workspace-keyboard-flows.test.ts",
     ]);
     expect(uiP0Groups["project-collab"].workers).toBe(1);
     expect(uiP0Groups["critical-extras"]).toEqual({
@@ -1325,6 +1384,18 @@ process.stdin.on("end", () => {
     expect(performanceRunsOn.ui_p0).toEqual(["nexu-runners-xlarge"]);
     expect(performanceRunsOn.visual_hot).toEqual(["nexu-runners-large"]);
 
+    const blacksmithProfiles = await runRunners("blacksmith");
+    const blacksmithRunsOn = runnerRunsOn(blacksmithProfiles);
+    expect(runnerDecision(blacksmithProfiles)).toEqual({ schema_version: 1, mode: "blacksmith" });
+    expect(blacksmithRunsOn.control).toEqual(["blacksmith-4vcpu-ubuntu-2404"]);
+    expect(blacksmithRunsOn.general_medium).toEqual(["blacksmith-4vcpu-ubuntu-2404"]);
+    expect(blacksmithRunsOn.workspace_unit).toEqual(["blacksmith-4vcpu-ubuntu-2404"]);
+    expect(blacksmithRunsOn.windows_tools).toEqual(["windows-latest"]);
+    expect(blacksmithRunsOn.js_hot).toEqual(["blacksmith-4vcpu-ubuntu-2404"]);
+    expect(blacksmithRunsOn.ui_hot).toEqual(["blacksmith-8vcpu-ubuntu-2404"]);
+    expect(blacksmithRunsOn.ui_p0).toEqual(["blacksmith-8vcpu-ubuntu-2404"]);
+    expect(blacksmithRunsOn.visual_hot).toEqual(["blacksmith-8vcpu-ubuntu-2404"]);
+
     const economicProfiles = await runRunners("economic");
     const economicRunsOn = runnerRunsOn(economicProfiles);
     expect(runnerDecision(economicProfiles)).toEqual({ schema_version: 1, mode: "economic" });
@@ -1342,6 +1413,14 @@ process.stdin.on("end", () => {
       expect(runnerDecision(fallbackProfiles)).toEqual({ schema_version: 1, mode: "default" });
       expect(runnerRunsOn(fallbackProfiles).control).toEqual(["nexu-runners-small"]);
     }
+  });
+
+  it("[P1] keeps infra-cancel rerun eligibility gates unit-tested", async () => {
+    const { stdout, stderr } = await execFileAsync("python3", [rerunInfraCancelScriptPath, "self-check"], {
+      cwd: workspaceRoot,
+    });
+    expect(stderr).toBe("");
+    expect(stdout).toContain("rerun_infra_cancel self-check OK");
   });
 
   it("[P2] routes CI follow-ons through generic handoff workflows", async () => {
