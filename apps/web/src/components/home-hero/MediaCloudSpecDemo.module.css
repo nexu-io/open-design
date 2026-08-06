@@ -1,0 +1,482 @@
+.panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: -140px;
+  z-index: 70;
+  display: grid;
+  gap: 12px;
+  padding: 13px;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 72%, transparent);
+  border-radius: 13px;
+  background: var(--bg-panel);
+  box-shadow:
+    0 16px 40px rgb(0 0 0 / 12%),
+    0 2px 8px rgb(0 0 0 / 5%);
+  animation: panel-enter 200ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.panelImage {
+  width: min(408px, calc(100vw - 24px));
+}
+
+.panelVideo {
+  width: min(620px, calc(100vw - 24px));
+}
+
+.settingsPicker {
+  position: relative;
+  display: inline-flex;
+}
+
+.modelTrigger,
+.tab {
+  display: flex;
+  align-items: center;
+}
+
+.fields {
+  display: grid;
+  gap: 9px;
+}
+
+.fieldsImage {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.fieldsVideo {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.field {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+  color: var(--text-muted);
+  font-size: 9px;
+  font-weight: 680;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+}
+
+.fieldSelectTrigger:global(.od-select-trigger) {
+  width: 100%;
+  min-width: 0;
+  height: 36px;
+  min-height: 36px;
+  padding: 0 9px 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--bg-panel);
+  color: var(--text-strong);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 620;
+  letter-spacing: 0;
+  text-transform: none;
+  outline: none;
+  transition:
+    border-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    background-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    box-shadow 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.fieldSelectTrigger:global(.od-select-trigger):hover,
+.fieldSelectTrigger:global(.od-select-trigger):focus-visible,
+.fieldSelectTrigger:global(.od-select-trigger)[aria-expanded='true'] {
+  border-color: color-mix(in srgb, var(--selected) 42%, var(--border-strong));
+  background: color-mix(in srgb, var(--selected) 3%, var(--bg-panel));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--selected) 8%, transparent);
+}
+
+.fieldSelectMenu:global(.od-select-menu) {
+  padding: 4px;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 72%, transparent);
+  border-radius: 10px;
+  background: var(--bg-panel);
+  box-shadow:
+    0 14px 32px rgb(0 0 0 / 12%),
+    0 2px 7px rgb(0 0 0 / 5%);
+  backdrop-filter: none;
+}
+
+.fieldSelectMenu :global(.od-select-option) {
+  min-height: 32px;
+  padding: 6px 7px;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.aspectSelectMenu:global(.od-select-menu.inline) {
+  right: 0;
+  left: auto;
+  width: min(276px, calc(100vw - 24px));
+  max-height: min(360px, 52vh);
+}
+
+.aspectSelectMenu :global(.od-select-option.has-description) {
+  display: grid;
+  height: 36px;
+  min-height: 36px;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: stretch;
+  gap: 0;
+  padding: 8px 9px;
+  transition:
+    height 200ms cubic-bezier(0.23, 1, 0.32, 1),
+    background-color 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.aspectSelectMenu :global(.od-select-option.has-description.description-expanded) {
+  height: 64px;
+}
+
+.aspectSelectMenu :global(.od-select-option-main) {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: 8px;
+}
+
+.aspectRatioIcon {
+  display: inline-grid;
+  width: 20px;
+  height: 16px;
+  place-items: center;
+  color: var(--text-muted);
+}
+
+.aspectRatioIconShape {
+  box-sizing: border-box;
+  display: block;
+  border: 1.25px solid currentColor;
+  border-radius: 2px;
+  background: color-mix(in srgb, currentColor 6%, transparent);
+  transition:
+    color 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    background-color 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.aspectSelectMenu :global(.od-select-option:hover) .aspectRatioIcon,
+.aspectSelectMenu :global(.od-select-option.active) .aspectRatioIcon,
+.aspectSelectMenu :global(.od-select-option.selected) .aspectRatioIcon {
+  color: var(--text-strong);
+}
+
+.aspectSelectMenu :global(.od-select-option-details) {
+  display: grid;
+  min-width: 0;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-rows 200ms cubic-bezier(0.23, 1, 0.32, 1),
+    opacity 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.aspectSelectMenu :global(.description-expanded .od-select-option-details) {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+.aspectSelectMenu :global(.od-select-option-description) {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 520;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.aspectSelectMenu :global(.description-expanded .od-select-option-description) {
+  padding-top: 6px;
+}
+
+.modelPicker {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+}
+
+.modelTrigger {
+  appearance: none;
+  max-width: 176px;
+  height: 32px;
+  gap: 6px;
+  padding: 0 8px 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  transition:
+    background-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.modelTrigger:hover,
+.modelTrigger:focus-visible,
+.modelTriggerOpen {
+  border-color: color-mix(in srgb, var(--selected) 36%, var(--border));
+  background: color-mix(in srgb, var(--selected) 5%, var(--bg-panel));
+  color: var(--text-strong);
+  outline: none;
+}
+
+.modelTrigger > span:nth-child(2) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.modelTrigger > svg {
+  flex: 0 0 auto;
+  transition: transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.modelTriggerOpen > svg {
+  transform: rotate(180deg);
+}
+
+.modelMark {
+  display: inline-grid;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  border-radius: 6px;
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 720;
+}
+
+.modelMark img {
+  width: 72%;
+  height: 72%;
+  object-fit: contain;
+}
+
+.modelMenu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 90;
+  display: grid;
+  width: 300px;
+  gap: 3px;
+  padding: 6px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 72%, transparent);
+  border-radius: 12px;
+  background: var(--bg-panel);
+  box-shadow:
+    0 16px 38px rgb(0 0 0 / 13%),
+    0 2px 8px rgb(0 0 0 / 5%);
+  animation: menu-enter 160ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.modelMenuHeader {
+  padding: 3px 5px 6px;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 680;
+}
+
+.modelOption {
+  appearance: none;
+  display: grid;
+  width: 100%;
+  height: 38px;
+  grid-template-columns: minmax(0, 1fr);
+  justify-content: stretch;
+  justify-items: stretch;
+  gap: 0;
+  padding: 7px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition:
+    height 200ms cubic-bezier(0.23, 1, 0.32, 1),
+    background-color 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.modelOptionExpanded {
+  height: 66px;
+}
+
+.modelOption:hover,
+.modelOption:focus-visible,
+.modelOptionSelected {
+  background: var(--bg-subtle);
+  color: var(--text-strong);
+  outline: none;
+}
+
+.modelOptionTop {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-self: stretch;
+  min-width: 0;
+  gap: 8px;
+}
+
+.modelOptionTop strong {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.modelOptionTop > svg {
+  flex: 0 0 auto;
+  color: var(--selected);
+}
+
+.modelOptionPrice {
+  flex: 0 0 auto;
+  color: var(--selected);
+  font-size: 11px;
+  font-weight: 680;
+  font-variant-numeric: tabular-nums;
+}
+
+.modelOptionDetails {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-rows 200ms cubic-bezier(0.23, 1, 0.32, 1),
+    opacity 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.modelOptionDetails > span {
+  display: flex;
+  min-height: 0;
+  align-items: flex-start;
+  overflow: hidden;
+  padding-left: 28px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 550;
+}
+
+.modelOptionSummary {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.35;
+}
+
+.modelOptionDetailsVisible {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+.modelOptionDetailsVisible > span {
+  padding-top: 6px;
+}
+
+.tab {
+  appearance: none;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition:
+    background-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.tab:hover,
+.tab:focus-visible,
+.tabOpen {
+  border-color: color-mix(in srgb, var(--selected) 40%, var(--border));
+  background: color-mix(in srgb, var(--selected) 7%, var(--bg-panel));
+  color: var(--text-strong);
+  outline: none;
+}
+
+@keyframes panel-enter {
+  from {
+    opacity: 0;
+    transform: translateY(5px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes menu-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (max-width: 640px) {
+  .panel {
+    left: 8px;
+    bottom: 54px;
+    right: auto;
+    width: calc(100% - 16px);
+  }
+
+  .panel::after {
+    left: 152px;
+  }
+
+  .modelTrigger {
+    max-width: 132px;
+  }
+}
+
+@media (max-width: 420px) {
+  .fieldsImage,
+  .fieldsVideo {
+    grid-template-columns: 1fr;
+  }
+
+  .modelMenu {
+    width: min(300px, calc(100vw - 32px));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel,
+  .modelMenu {
+    animation: none;
+  }
+}

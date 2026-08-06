@@ -254,12 +254,24 @@ textarea { resize: vertical; font-family: inherit; }
 .od-select-trigger[aria-expanded='true'] svg {
   transform: rotate(180deg);
 }
-.od-select-value,
+.od-select-value-label,
 .od-select-option-label {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.od-select-value,
+.od-select-option-content {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+.od-select-leading-visual {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
 }
 .od-select-menu {
   z-index: 9000;

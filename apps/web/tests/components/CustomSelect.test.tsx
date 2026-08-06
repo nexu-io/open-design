@@ -99,4 +99,52 @@ describe('CustomSelect', () => {
       screen.getByRole('option', { name: /Second/ }).id,
     );
   });
+
+  it('reveals an option description on hover and keyboard navigation', () => {
+    render(
+      <CustomSelect
+        ariaLabel="Ratio"
+        value="1:1"
+        options={[
+          { value: '1:1', label: '1:1', description: 'Instagram feed · Amazon product images' },
+          { value: '9:16', label: '9:16', description: 'Instagram Reels · TikTok · Stories' },
+        ]}
+        onChange={() => undefined}
+      />,
+    );
+
+    const trigger = screen.getByRole('combobox', { name: 'Ratio: 1:1' });
+    fireEvent.click(trigger);
+    expect(screen.queryByText('Instagram feed · Amazon product images')).toBeNull();
+
+    fireEvent.mouseEnter(screen.getByRole('option', { name: '1:1' }));
+    expect(screen.getByText('Instagram feed · Amazon product images')).not.toBeNull();
+
+    fireEvent.mouseLeave(screen.getByRole('listbox', { name: 'Ratio' }));
+    expect(screen.queryByText('Instagram feed · Amazon product images')).toBeNull();
+
+    fireEvent.keyDown(trigger, { key: 'ArrowDown' });
+    expect(screen.getByText('Instagram Reels · TikTok · Stories')).not.toBeNull();
+  });
+
+  it('shows a leading visual in both the trigger and menu option', () => {
+    render(
+      <CustomSelect
+        ariaLabel="Ratio"
+        value="16:9"
+        options={[
+          {
+            value: '16:9',
+            label: '16:9',
+            leadingVisual: <span data-testid="ratio-visual" />,
+          },
+        ]}
+        onChange={() => undefined}
+      />,
+    );
+
+    expect(screen.getAllByTestId('ratio-visual')).toHaveLength(1);
+    fireEvent.click(screen.getByRole('combobox', { name: 'Ratio: 16:9' }));
+    expect(screen.getAllByTestId('ratio-visual')).toHaveLength(2);
+  });
 });

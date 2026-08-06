@@ -110,14 +110,14 @@ describe('HomeView media composer options', () => {
     expect(document.body.contains(popover)).toBe(true);
   });
 
-  it('surfaces the persistent design-system picker and no footer pills for Image/Video or HyperFrames/Audio', async () => {
+  it('surfaces the persistent design-system picker and compact media controls for Image/Video only', async () => {
     stubFetch();
     renderHome();
 
     // The design-system picker is now the persistent row below the composer, so
-    // it is present for every kind and no longer a footer pill. Image/Video add
-    // no inline footer pills either; ratio / duration / model / resolution are
-    // asked for during the run (mirroring prototype/deck).
+    // it is present for every kind and no longer a footer pill. Image/Video use
+    // dedicated model/settings controls; the legacy plugin footer pills stay
+    // absent so these controls cannot leak into the real run payload.
     expect(screen.getByTestId('home-hero-design-system-trigger')).toBeTruthy();
 
     await clickHomeRailChip('image');
@@ -128,6 +128,26 @@ describe('HomeView media composer options', () => {
     expect(screen.queryByTestId('home-hero-footer-option-ratio')).toBeNull();
     expect(screen.queryByTestId('home-hero-footer-option-resolution')).toBeNull();
     expect(screen.queryByTestId('home-hero-footer-option-duration')).toBeNull();
+    expect(screen.getByTestId('media-cloud-model-demo-picker')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'image model: Seedream 5 Lite' })).toBeTruthy();
+    expect(screen.queryByTestId('media-cloud-spec-demo-panel')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'image output settings' }));
+    expect(screen.getByTestId('media-cloud-spec-demo-panel')).toBeTruthy();
+    const imageResolution = screen.getByRole('combobox', { name: 'Resolution: 2K' });
+    expect(imageResolution).toBeTruthy();
+    expect(screen.getByRole('combobox', { name: 'Ratio: 1:1' })).toBeTruthy();
+    const imageQuantity = screen.getByRole('combobox', { name: 'Quantity: 1 image' });
+    fireEvent.click(imageQuantity);
+    fireEvent.click(screen.getByRole('option', { name: '4 images' }));
+    expect(screen.getByRole('combobox', { name: 'Quantity: 4 images' })).toBeTruthy();
+    expect(screen.queryByRole('combobox', { name: 'Duration: 5 seconds' })).toBeNull();
+    expect(screen.getByTestId('media-cloud-spec-demo-panel')).not.toHaveTextContent('~$0.04');
+    expect(screen.getByTestId('media-cloud-spec-demo-panel')).not.toHaveTextContent('Hosted');
+    expect(screen.getByTestId('media-cloud-spec-demo-panel')).not.toHaveTextContent('Image output');
+    expect(screen.getByTestId('media-cloud-spec-demo-panel')).not.toHaveTextContent('Balance');
+    fireEvent.click(imageResolution);
+    expect(screen.getByRole('option', { name: '2K' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('option', { name: '2K' }));
 
     await clickHomeRailChip('video');
     await waitFor(() => expect(screen.getByTestId('home-hero-template-trigger').textContent).not.toContain('None'));
@@ -137,6 +157,41 @@ describe('HomeView media composer options', () => {
     expect(screen.queryByTestId('home-hero-footer-option-ratio')).toBeNull();
     expect(screen.queryByTestId('home-hero-footer-option-duration')).toBeNull();
     expect(screen.queryByTestId('home-hero-footer-option-resolution')).toBeNull();
+    expect(screen.getByRole('button', { name: 'video model: Seedance 2.5' })).toBeTruthy();
+    const videoDuration = screen.getByRole('combobox', { name: 'Duration: 5 seconds' });
+    expect(videoDuration).toBeTruthy();
+    expect(screen.getByRole('combobox', { name: 'Quantity: 1 video' })).toBeTruthy();
+    const videoAudio = screen.getByRole('combobox', { name: 'Audio: Off' });
+    expect(videoAudio).toBeTruthy();
+    fireEvent.click(videoAudio);
+    expect(screen.getByRole('option', { name: 'On' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('option', { name: 'Off' }));
+    fireEvent.click(screen.getByRole('combobox', { name: 'Ratio: 16:9' }));
+    expect(
+      screen.getAllByRole('option').map((option) => option.textContent),
+    ).toEqual([
+      '1:1',
+      '1:2',
+      '2:1',
+      '9:16',
+      '16:9',
+      '3:4',
+      '4:3',
+      '3:2',
+      '2:3',
+      '5:4',
+      '4:5',
+      '21:9',
+      '9:21',
+    ]);
+    fireEvent.click(screen.getByRole('option', { name: '16:9' }));
+    const videoPanel = screen.getByTestId('media-cloud-spec-demo-panel');
+    expect(videoPanel).not.toHaveTextContent('~$0.36');
+    expect(videoPanel).not.toHaveTextContent('Seedance 2.5');
+    expect(videoPanel).not.toHaveTextContent('Video output');
+    fireEvent.click(videoDuration);
+    expect(screen.getByRole('option', { name: '5 seconds' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('option', { name: '5 seconds' }));
 
     // HyperFrames / Audio keep no pre-flight pills at all.
     await clickHomeRailChip('hyperframes');
@@ -145,6 +200,7 @@ describe('HomeView media composer options', () => {
     expect(screen.queryByTestId('home-hero-footer-option-ratio')).toBeNull();
     expect(screen.queryByTestId('home-hero-footer-option-duration')).toBeNull();
     expect(screen.queryByTestId('home-hero-footer-option-model')).toBeNull();
+    expect(screen.queryByTestId('media-cloud-spec-demo-panel')).toBeNull();
 
     await clickHomeRailChip('audio');
     await waitFor(() => expect(screen.getByTestId('home-hero-template-trigger').textContent).not.toContain('None'));
@@ -152,10 +208,123 @@ describe('HomeView media composer options', () => {
     expect(screen.queryByTestId('home-hero-footer-option-audioType')).toBeNull();
     expect(screen.queryByTestId('home-hero-footer-option-model')).toBeNull();
     expect(screen.queryByTestId('home-hero-footer-option-duration')).toBeNull();
+    expect(screen.queryByTestId('media-cloud-spec-demo-panel')).toBeNull();
     // Inline `{{slot}}` prompt widgets are gone too; nothing is injected into
     // the prompt body.
     expect(screen.queryByTestId('home-hero-prompt-slot-text')).toBeNull();
     expect(screen.queryByTestId('home-hero-prompt-slot-voice')).toBeNull();
+  });
+
+  it('keeps review-only AMR controls out of the user-facing media panel', async () => {
+    stubFetch();
+    renderHome();
+
+    await clickHomeRailChip('image');
+    fireEvent.click(screen.getByRole('button', { name: 'image output settings' }));
+    expect(screen.queryByText('Demo states')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Insufficient allowance' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Low allowance' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Upgrade benefits' })).toBeNull();
+  });
+
+  it('expands the hovered model row to reveal its description and price', async () => {
+    stubFetch();
+    renderHome();
+
+    await clickHomeRailChip('video');
+    fireEvent.click(screen.getByRole('button', { name: 'video output settings' }));
+    fireEvent.click(screen.getByRole('combobox', { name: 'Audio: Off' }));
+    fireEvent.click(screen.getByRole('option', { name: 'On' }));
+    const trigger = screen.getByRole('button', { name: 'video model: Seedance 2.5' });
+    fireEvent.click(trigger);
+
+    const listbox = screen.getByRole('listbox', { name: 'video models' });
+    const kling = within(listbox).getByRole('option', { name: 'Kling 3.0 Standard' });
+    expect(within(listbox).queryByText('Multi-shot video with native audio and voice control')).toBeNull();
+
+    fireEvent.mouseEnter(kling);
+    expect(kling.className).toContain('modelOptionExpanded');
+    const summary = within(kling).getByText('Multi-shot video with native audio and voice control');
+    expect(summary).toBeTruthy();
+    Object.defineProperty(summary, 'clientWidth', { configurable: true, value: 180 });
+    Object.defineProperty(summary, 'scrollWidth', { configurable: true, value: 320 });
+    fireEvent(window, new Event('resize'));
+    await waitFor(() => {
+      expect(summary.className).toContain('od-tooltip');
+      expect(summary.getAttribute('data-tooltip')).toBe('Multi-shot video with native audio and voice control');
+    });
+    const hoverPrice = within(kling).getByText('~$0.63 / 5 sec');
+    expect(hoverPrice).toBeTruthy();
+    expect(hoverPrice.parentElement?.className).toContain('modelOptionTop');
+
+    fireEvent.mouseLeave(listbox);
+    expect(kling.className).not.toContain('modelOptionExpanded');
+    expect(within(listbox).queryByText('Multi-shot video with native audio and voice control')).toBeNull();
+  });
+
+  it('shows the current document model families with their LobeHub logos', async () => {
+    stubFetch();
+    renderHome();
+
+    await clickHomeRailChip('image');
+    fireEvent.click(screen.getByRole('button', { name: 'image model: Seedream 5 Lite' }));
+    const imageModels = screen.getByRole('listbox', { name: 'image models' });
+    expect(within(imageModels).getAllByRole('option').map((option) => option.getAttribute('aria-label'))).toEqual([
+      'Seedream 5 Lite',
+      'Seedream 5 Pro',
+      'Nano Banana 2',
+      'GPT Image 2',
+    ]);
+    expect(
+      within(imageModels)
+        .getByRole('option', { name: 'Nano Banana 2' })
+        .querySelector('img')
+        ?.getAttribute('src'),
+    ).toBe('/model-icons/nanobanana-lobe.svg');
+
+    fireEvent.pointerDown(document.body);
+    await clickHomeRailChip('video');
+    fireEvent.click(screen.getByRole('button', { name: 'video model: Seedance 2.5' }));
+    const videoModels = screen.getByRole('listbox', { name: 'video models' });
+    expect(within(videoModels).getAllByRole('option').map((option) => option.getAttribute('aria-label'))).toEqual([
+      'Seedance 2.5',
+      'MiniMax H3',
+      'Kling 3.0 Standard',
+      'Kling 3.0 Pro',
+      'Kling 3.0 Turbo Standard',
+      'Kling 3.0 Turbo Pro',
+      'Kling 3.0 4K',
+    ]);
+    expect(
+      within(videoModels)
+        .getByRole('option', { name: 'Kling 3.0 Pro' })
+        .querySelector('img')
+        ?.getAttribute('src'),
+    ).toBe('/model-icons/kling-lobe.svg');
+  });
+
+  it('keeps media popovers mutually exclusive and closes settings on outside interaction', async () => {
+    stubFetch();
+    renderHome();
+
+    await clickHomeRailChip('video');
+    const modelTrigger = screen.getByRole('button', { name: 'video model: Seedance 2.5' });
+    const settingsTrigger = screen.getByRole('button', { name: 'video output settings' });
+
+    fireEvent.click(modelTrigger);
+    expect(screen.getByRole('listbox', { name: 'video models' })).toBeTruthy();
+
+    fireEvent.click(settingsTrigger);
+    expect(screen.queryByRole('listbox', { name: 'video models' })).toBeNull();
+    expect(screen.getByTestId('media-cloud-spec-demo-panel')).toBeTruthy();
+
+    fireEvent.pointerDown(document.body);
+    expect(screen.queryByTestId('media-cloud-spec-demo-panel')).toBeNull();
+
+    fireEvent.click(settingsTrigger);
+    fireEvent.click(modelTrigger);
+    expect(screen.queryByTestId('media-cloud-spec-demo-panel')).toBeNull();
+    expect(screen.getByRole('listbox', { name: 'video models' })).toBeTruthy();
   });
 
   it('includes only published user-created design systems in the Home style picker', async () => {
@@ -231,7 +400,7 @@ describe('HomeView media composer options', () => {
     expect(screen.queryByTestId('home-hero-prompt-slot-text')).toBeNull();
   });
 
-  it('hides the full selector grid for media surfaces', async () => {
+  it('keeps review specs isolated from the legacy plugin selector grid', async () => {
     stubFetch();
     renderHome();
 
@@ -239,14 +408,27 @@ describe('HomeView media composer options', () => {
     await waitFor(() => expect(screen.getByTestId('home-hero-template-trigger').textContent).not.toContain('None'));
     expect(screen.queryByRole('combobox', { name: 'Template' })).toBeNull();
     expect(screen.queryByRole('combobox', { name: 'Model' })).toBeNull();
-    expect(screen.queryByRole('combobox', { name: 'Ratio' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'image model: Seedream 5 Lite' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'image output settings' }));
+    expect(screen.getByRole('combobox', { name: 'Ratio: 1:1' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('combobox', { name: 'Resolution: 2K' }));
+    fireEvent.click(screen.getByRole('option', { name: '4K' }));
+    expect(screen.getByTestId('media-cloud-spec-demo-panel')).not.toHaveTextContent('~$0.08');
 
     await clickHomeRailChip('video');
     await waitFor(() => expect(screen.getByTestId('home-hero-template-trigger').textContent).not.toContain('None'));
-    expect(screen.queryByRole('combobox', { name: 'Duration' })).toBeNull();
+    expect(screen.getByRole('combobox', { name: 'Duration: 5 seconds' })).toBeTruthy();
     expect(screen.queryByRole('combobox', { name: 'Template' })).toBeNull();
     expect(screen.queryByRole('combobox', { name: 'Model' })).toBeNull();
-    expect(screen.queryByRole('combobox', { name: 'Ratio' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'video model: Seedance 2.5' })).toBeTruthy();
+    expect(screen.getByRole('combobox', { name: 'Ratio: 16:9' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('combobox', { name: 'Resolution: 720p' }));
+    fireEvent.click(screen.getByRole('option', { name: '1080p' }));
+    fireEvent.click(screen.getByRole('combobox', { name: 'Duration: 5 seconds' }));
+    fireEvent.click(screen.getByRole('option', { name: '10 seconds' }));
+    expect(screen.getByTestId('media-cloud-spec-demo-panel')).not.toHaveTextContent('~$1.24');
 
     await clickHomeRailChip('audio');
     await waitFor(() => expect(screen.getByTestId('home-hero-template-trigger').textContent).not.toContain('None'));

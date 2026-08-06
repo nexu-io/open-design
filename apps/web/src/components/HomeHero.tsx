@@ -117,6 +117,12 @@ import {
   PLACEHOLDER_BASE_HINT_KEY,
   type PlaceholderScenario,
 } from './home-hero/placeholderScenarios';
+import {
+  createMediaCloudSpecDemoState,
+  MediaCloudModelDemoPicker,
+  MediaCloudSpecDemoSettings,
+} from './home-hero/MediaCloudSpecDemo';
+import type { MediaCloudDemoSurface, MediaCloudDemoValue } from './home-hero/media-cloud-demo';
 
 export interface HomeHeroSubmitHandler {
   (): void;
@@ -382,6 +388,12 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   const [projectReferenceOpen, setProjectReferenceOpen] = useState(false);
   const [figmaHelpOpen, setFigmaHelpOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [mediaSpecsOpen, setMediaSpecsOpen] = useState(false);
+  const [mediaModelPickerOpen, setMediaModelPickerOpen] = useState(false);
+  const [mediaDemoValues, setMediaDemoValues] = useState(createMediaCloudSpecDemoState);
+  const mediaDemoSurface: MediaCloudDemoSurface | null =
+    activeChipId === 'image' || activeChipId === 'video' ? activeChipId : null;
+  const mediaDemoValue = mediaDemoSurface ? mediaDemoValues[mediaDemoSurface] : null;
   const homeHeroRef = useRef<HTMLElement | null>(null);
   // Two-flash attention pulse on the send button; armed via the
   // imperative `pulseSend()` handle, cleared when the animation ends.
@@ -404,6 +416,10 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   useEffect(() => {
     setPreviewTemplateId(null);
   }, [activeChipId]);
+  const updateMediaDemoValue = (value: MediaCloudDemoValue) => {
+    if (!mediaDemoSurface) return;
+    setMediaDemoValues((current) => ({ ...current, [mediaDemoSurface]: value }));
+  };
   const [selectedPromptExample, setSelectedPromptExample] = useState<SelectedPromptExample | null>(null);
   const [previewHomeFileKey, setPreviewHomeFileKey] = useState<string | null>(null);
   const [stagedFilePreviewUrls, setStagedFilePreviewUrls] = useState<Map<string, string>>(() => new Map());
@@ -1968,6 +1984,30 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 onClearActiveChip();
               }}
             />
+            {mediaDemoSurface && mediaDemoValue ? (
+              <>
+                <MediaCloudModelDemoPicker
+                  surface={mediaDemoSurface}
+                  value={mediaDemoValue}
+                  onChange={updateMediaDemoValue}
+                  open={mediaModelPickerOpen}
+                  onOpenChange={(open) => {
+                    setMediaModelPickerOpen(open);
+                    if (open) setMediaSpecsOpen(false);
+                  }}
+                />
+                <MediaCloudSpecDemoSettings
+                  surface={mediaDemoSurface}
+                  value={mediaDemoValue}
+                  onChange={updateMediaDemoValue}
+                  open={mediaSpecsOpen}
+                  onOpenChange={(open) => {
+                    setMediaSpecsOpen(open);
+                    if (open) setMediaModelPickerOpen(false);
+                  }}
+                />
+              </>
+            ) : null}
             {footerInputFields.length > 0 ? (
               <div className="home-hero__footer-options" data-testid="home-hero-footer-options">
                 {footerInputFields.map((field) => (

@@ -1269,7 +1269,12 @@ export function HomeView({
       // still matches the visible active state — concurrent clicks
       // would otherwise stomp a successful later apply.
       setActive((prev) => (prev?.record.id === record.id ? { ...prev, inputsValid: false } : prev));
-      setError(`Failed to apply ${record.title}. Make sure the daemon is reachable.`);
+      // Image/video currently expose a review-only local specification demo;
+      // selecting either surface must not show a misleading daemon failure
+      // before the production media execution contract is wired up.
+      if (!options?.mediaSurface) {
+        setError(`Failed to apply ${record.title}. Make sure the daemon is reachable.`);
+      }
       return false;
     }
     const reconciledInputs: Record<string, unknown> = { ...optimisticInputs };
