@@ -29,6 +29,13 @@ async function runCli(
   // resolveMcpLaunchSpec's discovery chain on its own terms.
   delete env.OD_DAEMON_URL;
   delete env.OD_SIDECAR_IPC_PATH;
+  // Regression coverage for the #6425 review: an inherited OD_SIDECAR_NAMESPACE
+  // (e.g. from a tools-dev or packaged run this Vitest process happens to be
+  // spawned under) would make conventionalIpcSocketPaths() probe that ONE
+  // namespace instead of sweeping the channel list, so the "stable" fixture
+  // socket the end-to-end test below sets up would never be reached and the
+  // CLI would silently fall back to the self-reinvocation spec instead.
+  delete env[SIDECAR_ENV.NAMESPACE];
   try {
     const { stdout, stderr } = await execFileP(process.execPath, [TSX_CLI, CLI_SRC, ...args], {
       cwd: DAEMON_ROOT,
