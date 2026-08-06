@@ -26,7 +26,8 @@ const campaignModalSource = readFileSync(
 describe('DeepSeek V4 Flash workbench campaign entry', () => {
   it('shows a top-right pricing badge for explicit campaign audiences', () => {
     expect(entryShellSource).toContain('deepseek-campaign-pricing-badge');
-    expect(entryShellSource).toContain('DeepSeek V4无限免费用');
+    expect(entryShellSource).toContain("t('campaign.deepseekV4Flash.workbenchBadge')");
+    expect(entryShellSource).toContain("t('campaign.deepseekV4Flash.workbenchBadgeAria')");
     expect(entryShellSource).toContain('deepSeekV4FlashCampaignAudience !== \'unknown\'');
   });
 

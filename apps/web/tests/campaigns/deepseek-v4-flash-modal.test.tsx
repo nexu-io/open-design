@@ -73,7 +73,7 @@ describe('paid 立即使用 switches the workbench onto the campaign model', () 
           onUseCampaignModel={onUseCampaignModel}
         />,
       );
-      fireEvent.click(screen.getByRole('button', { name: '立即使用' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Use now' }));
 
       // 产品拍板 D5: the CTA performs the real switch, not a picker tour.
       expect(onUseCampaignModel).toHaveBeenCalledWith(
@@ -132,7 +132,7 @@ describe('unpaid upgrade path carries telemetry consent', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: '升级套餐，立即使用' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Upgrade and use' }));
 
     expect(open).toHaveBeenCalledTimes(1);
     const url = new URL(String(open.mock.calls[0]?.[0]));
@@ -153,7 +153,7 @@ describe('unpaid upgrade path carries telemetry consent', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: '升级套餐，立即使用' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Upgrade and use' }));
 
     expect(open).toHaveBeenCalledTimes(1);
     const url = new URL(String(open.mock.calls[0]?.[0]));

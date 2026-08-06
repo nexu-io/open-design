@@ -94,10 +94,7 @@ import {
   providerModelsCacheKey,
   type ProviderModelsCache,
 } from './providerModelsCache';
-import {
-  DEEPSEEK_V4_FLASH_CAMPAIGN,
-  isDeepSeekV4FlashCampaignModel,
-} from '../campaigns/deepseek-v4-flash';
+import { isDeepSeekV4FlashCampaignModel } from '../campaigns/deepseek-v4-flash';
 import { useDeepSeekV4FlashCampaignVisibility } from '../campaigns/use-deepseek-v4-flash-campaign';
 
 interface Props {
@@ -200,15 +197,15 @@ export function InlineModelSwitcher({
   const campaignNeedsUpgrade = false;
   const campaignVisibility = useDeepSeekV4FlashCampaignVisibility();
   const campaignModelBadge = campaignRestricted
-    ? DEEPSEEK_V4_FLASH_CAMPAIGN.restricted.modelBadge
+    ? t('campaign.deepseekV4Flash.restricted.modelBadge')
     : campaignNeedsUpgrade
-      ? DEEPSEEK_V4_FLASH_CAMPAIGN.unpaid.modelBadge
-      : DEEPSEEK_V4_FLASH_CAMPAIGN.paid.modelBadge;
+      ? t('campaign.deepseekV4Flash.unpaid.modelBadge')
+      : t('campaign.deepseekV4Flash.paid.modelBadge');
   const campaignModelTooltip = campaignRestricted
-    ? DEEPSEEK_V4_FLASH_CAMPAIGN.restricted.tooltip
+    ? t('campaign.deepseekV4Flash.restricted.tooltip')
     : campaignNeedsUpgrade
-      ? DEEPSEEK_V4_FLASH_CAMPAIGN.unpaid.tooltip
-      : DEEPSEEK_V4_FLASH_CAMPAIGN.ruleSummary;
+      ? t('campaign.deepseekV4Flash.unpaid.tooltip')
+      : t('campaign.deepseekV4Flash.ruleSummary');
   const campaignBadgeStateClass = campaignRestricted
     ? ' is-restricted'
     : campaignNeedsUpgrade

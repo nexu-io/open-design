@@ -422,8 +422,11 @@ interface Props {
    * vela login-status account/user plan (ACCOUNT-scoped). Used for personal
    * workspaces so a confirmed free account is not stuck as campaign audience
    * `unknown` while billing summary leaves `membershipTier` empty.
+<<<<<<< HEAD
    * Must not be applied to team workspaces — team plan comes from workspace
    * billing/snapshot (see App `resolvedAmrPlan`).
+=======
+>>>>>>> caae6a373 (feat(web): localize DeepSeek V4 Flash campaign (19 locales) (#6561))
    */
   amrAccountPlan?: string | null;
   daemonLive: boolean;
@@ -627,12 +630,16 @@ export function EntryShell({
     workspaceContext,
   );
   const deepSeekCampaignVisibility = useDeepSeekV4FlashCampaignVisibility();
+<<<<<<< HEAD
   // Same personal-vs-team accountPlan rule as App's `resolvedAmrPlan`: team
   // entitlements live on the workspace snapshot, not the login projection.
   // Without personal `accountPlan: free`, a no-subscription user keeps
   // plan=null after billing settles (empty membershipTier + context
   // billingState "active" from lifecycle), audience stays unknown, and the
   // home campaign modal never opens — matching product unpaid free users.
+=======
+  // Same personal-vs-team accountPlan rule as App's `resolvedAmrPlan`.
+>>>>>>> caae6a373 (feat(web): localize DeepSeek V4 Flash campaign (19 locales) (#6561))
   const deepSeekCampaignPlan = resolvePlanLabelTier({
     billing: workspaceBilling,
     context: workspaceContext,
@@ -1566,10 +1573,13 @@ export function EntryShell({
               lives in the rail footer, and everything below is fixed-position
               or portalled so it occupies no layout space here. */}
           <WhatsNewPopup active={view === 'home'} />
+<<<<<<< HEAD
           {/* Portal to body so the pill is not trapped under
               .workspace-tabs-chrome (z-index 120) — the tabs strip is a
               full-width hit target in that header and was swallowing
               clicks on the top-right badge even after raising its own z-index. */}
+=======
+>>>>>>> caae6a373 (feat(web): localize DeepSeek V4 Flash campaign (19 locales) (#6561))
           {view === 'home'
             && deepSeekV4FlashCampaignAudience !== 'unknown'
             && typeof document !== 'undefined'
@@ -1578,10 +1588,17 @@ export function EntryShell({
                 type="button"
                 className="entry-deepseek-campaign-badge"
                 onClick={openDeepSeekCampaignPricing}
+<<<<<<< HEAD
                 aria-label="DeepSeek V4 无限免费用，查看官网 Pricing"
                 data-testid="deepseek-campaign-pricing-badge"
               >
                 <span>DeepSeek V4无限免费用</span>
+=======
+                aria-label={t('campaign.deepseekV4Flash.workbenchBadgeAria')}
+                data-testid="deepseek-campaign-pricing-badge"
+              >
+                <span>{t('campaign.deepseekV4Flash.workbenchBadge')}</span>
+>>>>>>> caae6a373 (feat(web): localize DeepSeek V4 Flash campaign (19 locales) (#6561))
                 <Icon name="arrow-right" size={13} />
               </button>,
               document.body,

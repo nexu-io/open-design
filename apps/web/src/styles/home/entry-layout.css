@@ -1054,8 +1054,12 @@
 
 .entry-deepseek-campaign-badge {
   position: fixed;
+<<<<<<< HEAD
   /* Portaled to document.body (EntryShell). Must clear .workspace-tabs-chrome
      (z-index: 120) and stay under campaign modal / dialogs (~1700). */
+=======
+  /* Portaled to document.body. Must clear .workspace-tabs-chrome (z-index: 120). */
+>>>>>>> caae6a373 (feat(web): localize DeepSeek V4 Flash campaign (19 locales) (#6561))
   z-index: 150;
   top: 18px;
   right: 22px;
@@ -1078,7 +1082,10 @@
   text-decoration: none;
   cursor: pointer;
   pointer-events: auto;
+<<<<<<< HEAD
   /* Header chrome is -webkit-app-region: drag; keep the pill clickable on desktop. */
+=======
+>>>>>>> caae6a373 (feat(web): localize DeepSeek V4 Flash campaign (19 locales) (#6561))
   -webkit-app-region: no-drag;
   transition: border-color 140ms ease, background 140ms ease, transform 140ms ease;
 }
