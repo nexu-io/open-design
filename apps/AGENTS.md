@@ -7,7 +7,8 @@ Follow the root `AGENTS.md` first. This file only records module-level boundarie
 - `apps/web`: Next.js 16 App Router + React 18 web runtime. Entrypoints live in `apps/web/app/`; the main client shell is `apps/web/src/App.tsx`. During local `tools-dev` web runs, `apps/web/next.config.ts` rewrites `/api/*`, `/artifacts/*`, and `/frames/*` to `OD_PORT`.
 - `apps/daemon`: Express + SQLite local daemon and `od` bin. It owns REST/SSE APIs, agent CLI spawning, skills, design systems, artifact persistence, static serving, and daemon-managed data. Before describing or changing daemon data paths, read the root `AGENTS.md` section **Daemon data directory contract**; it is mandatory and must not be restated here.
 - `apps/desktop`: Electron shell. Desktop does not guess the web port; it reads runtime status through sidecar IPC and opens the reported web URL.
-- `apps/packaged`: Thin packaged Electron runtime entry. It starts packaged daemon/web sidecars, registers the `od://` entry protocol, and delegates desktop host behavior to `apps/desktop`.
+- `apps/headless`: Shell-neutral product lifecycle for the Web + daemon closure. It coordinates explicit runtime adapters and paths without owning Desktop IPC, windows, shell update UI, or artifact selection.
+- `apps/packaged`: Thin packaged Electron runtime entry. During the G1 compatibility window it retains the legacy daemon/web startup adapter, registers the `od://` entry protocol, and delegates desktop host behavior to `apps/desktop`; new product-lifecycle behavior belongs in `apps/headless`.
 - `apps/landing-page`: Standalone static Astro marketing and public catalog site. It reads canonical repository content at build time, deploys independently, and must not import product-runtime internals from the other apps.
 
 ## Daemon layout
@@ -55,6 +56,9 @@ pnpm --filter @open-design/daemon test
 pnpm --filter @open-design/daemon build
 pnpm --filter @open-design/desktop typecheck
 pnpm --filter @open-design/desktop build
+pnpm --filter @open-design/headless typecheck
+pnpm --filter @open-design/headless test
+pnpm --filter @open-design/headless build
 pnpm --filter @open-design/packaged typecheck
 pnpm --filter @open-design/packaged build
 pnpm --filter @open-design/landing-page typecheck

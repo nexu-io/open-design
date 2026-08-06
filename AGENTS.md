@@ -20,7 +20,8 @@ This file is the single source of truth for agents entering this repository. Rea
 - `apps/web` is the Next.js 16 App Router + React 18 web runtime; do not restore `apps/nextjs`.
 - `apps/daemon` is the local privileged daemon and `od` bin. It owns `/api/*`, agent spawning, skills, design systems, artifacts, and static serving.
 - `apps/desktop` is the Electron shell; it discovers the web URL through sidecar IPC.
-- `apps/packaged` is the thin packaged Electron runtime entry; it starts packaged sidecars and owns the `od://` entry glue only.
+- `apps/headless` owns the shell-neutral Web + daemon product lifecycle; it receives explicit local paths and process adapters and does not own Desktop IPC, windows, or update UI.
+- `apps/packaged` is the thin packaged Electron runtime entry and owns the `od://` entry glue. During the G1 compatibility window it retains the legacy sidecar startup adapter; do not add new product-lifecycle behavior there.
 - `apps/landing-page` is the standalone static Astro marketing and public catalog site. It reads repository content at build time and is not part of the daemon/web product runtime.
 - `packages/contracts` is the pure TypeScript web/daemon app contract layer.
 - `packages/closure-proto` owns shell-neutral headless-closure candidate identity, local binding, artifact integrity, and shell compatibility declarations.
