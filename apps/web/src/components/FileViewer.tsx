@@ -3730,7 +3730,7 @@ function FileVersionManagerModal({
                         <iframe
                           ref={versionPreviewIframeRef}
                           title={selectedVersion ? `${file.name} v${selectedVersion.version}` : file.name}
-                          sandbox="allow-scripts allow-downloads"
+                          sandbox="allow-scripts allow-forms allow-popups allow-modals allow-downloads"
                           srcDoc={srcDoc}
                           onLoad={() => setLoadedSrcDoc(srcDoc)}
                         />
@@ -5857,7 +5857,7 @@ function ReactComponentViewer({
             <iframe
               data-testid="react-component-preview-frame"
               title={file.name}
-              sandbox="allow-scripts allow-downloads"
+              sandbox="allow-scripts allow-forms allow-popups allow-modals allow-downloads"
               srcDoc={srcDoc}
               style={{ width: '100%', height: '100%', border: 0 }}
             />
@@ -13445,7 +13445,7 @@ function HtmlViewer({
                         aria-hidden={useUrlLoadPreview ? true : undefined}
                         tabIndex={useUrlLoadPreview ? -1 : 0}
                         title={file.name}
-                        sandbox="allow-scripts allow-downloads"
+                        sandbox="allow-scripts allow-forms allow-popups allow-modals allow-downloads"
                         srcDoc={srcDocTransportContent}
                         onLoad={() => {
                           const frame = srcDocPreviewIframeRef.current;
@@ -13771,7 +13771,7 @@ function HtmlViewer({
           {effectiveDeck || !useUrlLoadPreview ? (
             <iframe
               title="present"
-              sandbox="allow-scripts allow-downloads"
+              sandbox="allow-scripts allow-forms allow-popups allow-modals allow-downloads"
               data-od-render-mode="srcdoc"
               srcDoc={effectiveDeck ? presentationSrcDoc : srcDoc}
             />
