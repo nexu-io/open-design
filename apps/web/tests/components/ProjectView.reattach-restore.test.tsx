@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, waitFor } from '@testing-library/react';
+import { act, cleanup, render, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   ProjectView,
@@ -446,6 +446,7 @@ describe('same-turn dedup for recovered prose-only artifacts (#4318)', () => {
 
 describe('ProjectView daemon reattach restore', () => {
   afterEach(() => {
+    vi.useRealTimers();
     cleanup();
     vi.clearAllMocks();
     chatPaneHarness.onSend = null;
@@ -559,6 +560,82 @@ describe('ProjectView daemon reattach restore', () => {
       expect(lastWithProduced?.producedFiles?.map((f) => f.name)).toEqual(['new.pptx']);
       expect(lastWithProduced?.runStatus).toBe('succeeded');
     });
+  });
+
+  it('settles one stalled terminal Design delivery verification without reattaching again', async () => {
+    vi.useFakeTimers();
+    const endedAt = Date.now();
+    let lateOnDone: (() => void) | null = null;
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-stalled-terminal-delivery',
+        role: 'assistant',
+        content: 'I finished the design.',
+        createdAt: endedAt - 1_000,
+        startedAt: endedAt - 1_000,
+        endedAt,
+        runId: 'run-stalled-terminal-delivery',
+        runStatus: 'succeeded',
+        sessionMode: 'design',
+        preTurnFileNames: [],
+        producedFiles: undefined,
+        traceObjectFiles: undefined,
+        events: [{ kind: 'tool_use', id: 'write-1', name: 'Write', input: { file_path: 'index.html' } }],
+      } satisfies ChatMessage,
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-stalled-terminal-delivery', status: 'succeeded', createdAt: endedAt - 1_000,
+      updatedAt: endedAt, exitCode: 0, signal: null,
+    });
+    reattachDaemonRun.mockImplementation(async (options: { handlers: { onDone: () => void } }) => {
+      lateOnDone = options.handlers.onDone;
+      return new Promise<void>(() => {});
+    });
+
+    renderProjectView();
+    for (let attempt = 0; attempt < 20 && reattachDaemonRun.mock.calls.length === 0; attempt += 1) {
+      await act(async () => {
+        await Promise.resolve();
+      });
+    }
+    expect(reattachDaemonRun).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_001);
+    });
+    for (let attempt = 0; attempt < 20 && saveMessage.mock.calls.length === 0; attempt += 1) {
+      await act(async () => {
+        await Promise.resolve();
+      });
+    }
+
+    const settled = saveMessage.mock.calls
+      .map((call) => call[2] as ChatMessage)
+      .find((message) => message.id === 'msg-stalled-terminal-delivery'
+        && message.resultDeliveryState === 'no_result');
+    expect(settled).toMatchObject({
+      runStatus: 'succeeded',
+      producedFiles: [],
+      traceObjectFiles: [],
+      resultDeliveryState: 'no_result',
+    });
+    const savesAtTimeout = saveMessage.mock.calls.length;
+    expect(lateOnDone).not.toBeNull();
+    await act(async () => {
+      await (lateOnDone as unknown as () => void)();
+    });
+    expect(saveMessage).toHaveBeenCalledTimes(savesAtTimeout);
+    const reattachOptions = reattachDaemonRun.mock.calls[0]?.[0] as { signal: AbortSignal } | undefined;
+    expect(reattachOptions?.signal.aborted).toBe(true);
+    expect(reattachDaemonRun).toHaveBeenCalledTimes(1);
   });
 
   it('does not publish a run-finished event while replaying a historical success', async () => {

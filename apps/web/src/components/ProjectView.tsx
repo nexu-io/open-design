@@ -4913,6 +4913,9 @@ export function ProjectView({
   // completion.  Transient null-status retries are bounded; after
   // MAX_TRANSIENT_RETRIES we add to completedReattachRunsRef to avoid spinning.
   const MAX_TRANSIENT_RETRIES = 2;
+  // A terminal Design run may need one short stream reattach to reconcile files,
+  // but that supplemental verification must never keep the chat loading forever.
+  const TERMINAL_DELIVERY_VERIFICATION_TIMEOUT_MS = 5_000;
 
   // Reset transient retry counts when the conversation or daemon connection
   // changes so stale counts from a previous session do not bleed in.  This
@@ -5421,6 +5424,63 @@ export function ProjectView({
           isActiveRunStatus(message.runStatus)
           || spuriouslyFailedPending
           || recoverableGenericDisconnectFailed;
+        const boundedTerminalDeliveryVerification =
+          replayingTerminalRun
+          && message.runStatus === 'succeeded'
+          && status.status === 'succeeded'
+          && designDeliveryVerificationPending(message);
+        let terminalDeliveryVerificationExpired = false;
+        let terminalDeliveryVerificationTimer: ReturnType<typeof setTimeout> | null = null;
+        if (boundedTerminalDeliveryVerification) {
+          terminalDeliveryVerificationTimer = scheduleProjectTimeout(() => {
+            if (reattachControllersRef.current.get(runId) !== controller) return;
+            terminalDeliveryVerificationExpired = true;
+            completedReattachRunsRef.current.add(runId);
+            reattachControllersRef.current.delete(runId);
+            reattachCancelControllersRef.current.delete(runId);
+            clearCurrentRunStreamingMarker(reattachConversationId, controller, cancelController);
+            controller.abort();
+            const timeoutOutcome = resolveDesignDeliveryOutcome({
+              sessionMode: message.sessionMode,
+              runStatus: message.runStatus,
+              content: message.content,
+              events: message.events,
+              producedFileCount: 0,
+              traceObjectFileCount: 0,
+            });
+            updateMessageById(
+              message.id,
+              (prev) => {
+                if (prev.runStatus !== 'succeeded' || !designDeliveryVerificationPending(prev)) {
+                  return prev;
+                }
+                const settled = {
+                  ...prev,
+                  content: prev.content || message.content,
+                  events: [...(message.events ?? []), ...(prev.events ?? [])],
+                  producedFiles: prev.producedFiles ?? [],
+                  traceObjectFiles: prev.traceObjectFiles ?? [],
+                };
+                return applyDesignDeliveryOutcome(
+                  settled,
+                  resolveDesignDeliveryOutcome({
+                    sessionMode: settled.sessionMode,
+                    runStatus: settled.runStatus,
+                    content: settled.content,
+                    events: settled.events,
+                    producedFileCount: settled.producedFiles.length,
+                    traceObjectFileCount: settled.traceObjectFiles.length,
+                  }),
+                );
+              },
+              true,
+              { telemetryFinalized: true },
+            );
+            if (timeoutOutcome === 'no_result' || timeoutOutcome === 'delivery_failed') {
+              setError(DESIGN_RESULT_MISSING_DETAIL);
+            }
+          }, TERMINAL_DELIVERY_VERIFICATION_TIMEOUT_MS);
+        }
         void reattachDaemonRun({
           runId,
           projectId: project.id,
@@ -5432,6 +5492,7 @@ export function ProjectView({
           publishRunFinishedEvent: shouldPublishRunFinishedEvent,
           handlers: {
             onDelta: (delta) => {
+              if (terminalDeliveryVerificationExpired) return;
               // First payload from the resumed stream is real recovery — the daemon is
               // sending data, not just answering REST status probes.  Reset the
               // transient retry budgets so a future disconnect starts from zero, but
@@ -5450,6 +5511,7 @@ export function ProjectView({
               textBuffer.appendContent(delta);
             },
             onAgentEvent: (ev) => {
+              if (terminalDeliveryVerificationExpired) return;
               transientFailedRetriesRef.current.delete(runId);
               if (!(replayingTerminalRun && !(message.producedFiles?.length))) {
                 genericDisconnectRetriesRef.current.delete(runId);
@@ -5459,6 +5521,15 @@ export function ProjectView({
               textBuffer.appendEvent(ev);
             },
             onDone: async () => {
+              if (terminalDeliveryVerificationTimer) {
+                clearProjectTimeout(terminalDeliveryVerificationTimer);
+                terminalDeliveryVerificationTimer = null;
+              }
+              if (terminalDeliveryVerificationExpired) {
+                textBuffer.cancel();
+                unregisterTextBuffer();
+                return;
+              }
               // A reattached run interrupted by a "send now" still receives a
               // late onDone from the daemon. Decide ownership first, then bail
               // BEFORE any current-run side effect (committing buffered text,
@@ -5629,6 +5700,15 @@ export function ProjectView({
               onProjectsRefresh();
             },
             onError: async (err) => {
+              if (terminalDeliveryVerificationTimer) {
+                clearProjectTimeout(terminalDeliveryVerificationTimer);
+                terminalDeliveryVerificationTimer = null;
+              }
+              if (terminalDeliveryVerificationExpired) {
+                textBuffer.cancel();
+                unregisterTextBuffer();
+                return;
+              }
               const errorCode = (err as Error & { code?: string }).code;
               const resumable = (err as Error & { resumable?: boolean }).resumable === true;
               let skipFinalPersistNow = false;
