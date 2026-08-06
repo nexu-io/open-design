@@ -5512,9 +5512,24 @@ export function ProjectView({
           && designDeliveryVerificationPending(message);
         let terminalDeliveryVerificationExpired = false;
         let terminalDeliveryVerificationTimer: ReturnType<typeof setTimeout> | null = null;
-        const settleTerminalDeliveryVerification = () => {
+        const settleTerminalDeliveryVerification = async (preserveReplayProgress = false) => {
           if (terminalDeliveryVerificationExpired) return;
           terminalDeliveryVerificationExpired = true;
+          const deliveryContent = preserveReplayProgress ? replayedContent : message.content;
+          const deliveryEvents = preserveReplayProgress
+            ? [...(message.events ?? []), ...replayedEvents]
+            : message.events;
+          let recoveredProducedFiles: ProjectFile[] = [];
+          let recoveredTraceObjectFiles: ProjectFile[] = [];
+          if (preserveReplayProgress) {
+            const nextFiles = await refreshProjectFiles();
+            const beforeFileNames = new Set(message.preTurnFileNames ?? nextFiles.map((file) => file.name));
+            const touchedFilePaths = extractTouchedFilePathsFromEvents(deliveryEvents);
+            recoveredProducedFiles = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
+            recoveredTraceObjectFiles = computeTraceObjectFiles(
+              beforeFileNames, nextFiles, touchedFilePaths, project.id, projectDetail.resolvedDir,
+            ) ?? [];
+          }
           if (terminalDeliveryVerificationTimer) {
             clearProjectTimeout(terminalDeliveryVerificationTimer);
             terminalDeliveryVerificationTimer = null;
@@ -5527,10 +5542,10 @@ export function ProjectView({
           const timeoutOutcome = resolveDesignDeliveryOutcome({
             sessionMode: message.sessionMode,
             runStatus: message.runStatus,
-            content: message.content,
-            events: message.events,
-            producedFileCount: 0,
-            traceObjectFileCount: 0,
+            content: deliveryContent,
+            events: deliveryEvents,
+            producedFileCount: recoveredProducedFiles.length,
+            traceObjectFileCount: recoveredTraceObjectFiles.length,
           });
           updateMessageById(
             message.id,
@@ -5540,10 +5555,12 @@ export function ProjectView({
               }
               const settled = {
                 ...prev,
-                content: prev.content || message.content,
-                events: [...(message.events ?? []), ...(prev.events ?? [])],
-                producedFiles: prev.producedFiles ?? [],
-                traceObjectFiles: prev.traceObjectFiles ?? [],
+                content: deliveryContent || prev.content || message.content,
+                events: preserveReplayProgress
+                  ? deliveryEvents
+                  : [...(message.events ?? []), ...(prev.events ?? [])],
+                producedFiles: prev.producedFiles ?? recoveredProducedFiles,
+                traceObjectFiles: prev.traceObjectFiles ?? recoveredTraceObjectFiles,
               };
               return applyDesignDeliveryOutcome(
                 settled,
@@ -5567,7 +5584,7 @@ export function ProjectView({
         if (boundedTerminalDeliveryVerification) {
           terminalDeliveryVerificationTimer = scheduleProjectTimeout(() => {
             if (reattachControllersRef.current.get(runId) !== controller) return;
-            settleTerminalDeliveryVerification();
+            void settleTerminalDeliveryVerification();
           }, TERMINAL_DELIVERY_VERIFICATION_TIMEOUT_MS);
         }
         void reattachDaemonRun({
@@ -5791,9 +5808,9 @@ export function ProjectView({
             onError: async (err) => {
               const genericDisconnect = isGenericDaemonDisconnect(err);
               if (boundedTerminalDeliveryVerification && genericDisconnect) {
-                textBuffer.cancel();
+                textBuffer.flush();
                 unregisterTextBuffer();
-                settleTerminalDeliveryVerification();
+                await settleTerminalDeliveryVerification(true);
                 return;
               }
               if (terminalDeliveryVerificationTimer) {

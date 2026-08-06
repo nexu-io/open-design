@@ -838,6 +838,7 @@ describe('ProjectView daemon reattach restore', () => {
     vi.useFakeTimers();
     const endedAt = Date.now();
     let terminalOnError: ((error: Error & { code?: string }) => Promise<void>) | null = null;
+    let terminalOnDelta: ((delta: string) => void) | null = null;
     listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
     listMessages.mockResolvedValue([
       {
@@ -866,8 +867,12 @@ describe('ProjectView daemon reattach restore', () => {
       updatedAt: endedAt, exitCode: 0, signal: null,
     });
     reattachDaemonRun.mockImplementation(async (options: {
-      handlers: { onError: (error: Error & { code?: string }) => Promise<void> };
+      handlers: {
+        onDelta: (delta: string) => void;
+        onError: (error: Error & { code?: string }) => Promise<void>;
+      };
     }) => {
+      terminalOnDelta = options.handlers.onDelta;
       terminalOnError = options.handlers.onError;
       return new Promise<void>(() => {});
     });
@@ -879,6 +884,10 @@ describe('ProjectView daemon reattach restore', () => {
       });
     }
     expect(terminalOnError).toBeTypeOf('function');
+    expect(terminalOnDelta).toBeTypeOf('function');
+    await act(async () => {
+      (terminalOnDelta as (delta: string) => void)('Recovered terminal delivery.');
+    });
     const genericDisconnect = Object.assign(
       new Error('daemon stream disconnected before run completed'),
       { code: 'GENERIC_DAEMON_DISCONNECT' },
@@ -896,6 +905,7 @@ describe('ProjectView daemon reattach restore', () => {
     expect(saveMessage.mock.calls.map((call) => call[2] as ChatMessage)).toContainEqual(expect.objectContaining({
       id: 'msg-terminal-generic-disconnect',
       runStatus: 'succeeded',
+      content: 'Recovered terminal delivery.',
       producedFiles: [],
       traceObjectFiles: [],
       resultDeliveryState: 'no_result',
