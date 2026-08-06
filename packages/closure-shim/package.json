@@ -1,0 +1,37 @@
+{
+  "name": "@open-design/closure-shim",
+  "version": "0.16.2",
+  "type": "module",
+  "description": "Shell-carried ensure and handoff entry for Open Design Headless Closure",
+  "main": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./testing": {
+      "types": "./dist/testing.d.ts",
+      "default": "./dist/testing.mjs"
+    }
+  },
+  "scripts": {
+    "build": "pnpm --filter @open-design/closure-proto build && pnpm --filter @open-design/closure-store build && pnpm --filter @open-design/closure-update build && pnpm --filter @open-design/headless-runtime build && tsx ./esbuild.config.ts && tsc -p tsconfig.json --emitDeclarationOnly",
+    "test": "pnpm --filter @open-design/closure-proto build && pnpm --filter @open-design/closure-store build && pnpm --filter @open-design/closure-update build && pnpm --filter @open-design/headless-runtime build && vitest run",
+    "typecheck": "pnpm --filter @open-design/closure-proto build && pnpm --filter @open-design/closure-store build && pnpm --filter @open-design/closure-update build && pnpm --filter @open-design/headless-runtime build && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
+  },
+  "dependencies": {
+    "@open-design/closure-proto": "workspace:*",
+    "@open-design/closure-store": "workspace:*",
+    "@open-design/closure-update": "workspace:*",
+    "@open-design/headless-runtime": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "24.12.2",
+    "esbuild": "0.28.0",
+    "jszip": "3.10.1",
+    "tsx": "4.22.3",
+    "typescript": "6.0.3",
+    "vitest": "4.1.6"
+  }
+}
