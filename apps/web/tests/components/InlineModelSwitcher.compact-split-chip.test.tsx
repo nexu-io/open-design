@@ -150,4 +150,45 @@ describe('InlineModelSwitcher compact split chip (#6501)', () => {
     expect(within(popover).queryByTestId('inline-model-switcher-agent-model')).toBeNull();
     expect(within(popover).queryByText(/^Model$/i)).toBeNull();
   });
+
+  it('lists BYOK provider models on the right segment, not leftover CLI models', () => {
+    const onApiModelChange = vi.fn();
+    render(
+      <InlineModelSwitcher
+        config={{
+          ...baseConfig,
+          mode: 'api',
+          apiKey: 'sk-test',
+          apiProtocol: 'openai',
+          model: 'gpt-4o',
+        }}
+        agents={[amrAgent, codexAgent]}
+        providerModelsCache={{}}
+        compact
+        daemonLive
+        onModeChange={vi.fn()}
+        onAgentChange={vi.fn()}
+        onAgentModelChange={vi.fn()}
+        onApiProtocolChange={vi.fn()}
+        onApiModelChange={onApiModelChange}
+        onOpenSettings={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('inline-model-switcher-chip-model'));
+    const popover = screen.getByTestId('inline-model-switcher-popover');
+
+    // Seed list for openai includes gpt-4o; must not show the CLI agent catalog.
+    expect(
+      within(popover).getByTestId('inline-model-switcher-compact-api-model-gpt-4o'),
+    ).toBeTruthy();
+    expect(
+      within(popover).queryByTestId('inline-model-switcher-compact-model-claude-opus-4.6'),
+    ).toBeNull();
+
+    fireEvent.click(
+      within(popover).getByTestId('inline-model-switcher-compact-api-model-gpt-4o'),
+    );
+    expect(onApiModelChange).toHaveBeenCalledWith('gpt-4o');
+  });
 });

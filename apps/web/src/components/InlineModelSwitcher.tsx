@@ -1243,9 +1243,74 @@ export function InlineModelSwitcher({
           ) : null}
 
           {compact && panel === 'model' ? (
-            // Compact home — right segment: model list for the current agent.
+            // Compact home — right segment: models for the ACTIVE mode.
+            // Daemon → current CLI agent catalog; BYOK → configured API
+            // provider catalog (not leftover CLI rows).
             <div className="inline-switcher__row">
-              {currentAgent && compactModelRows.length > 0 ? (
+              {config.mode === 'api' ? (
+                apiModelChoices.length > 0 ? (
+                  <div className="inline-switcher__agent-grid" role="radiogroup">
+                    {apiModelChoices.map((m) => {
+                      const active = config.model === m.id;
+                      return (
+                        <div key={m.id} className="inline-switcher__agent-row">
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={active}
+                            className={
+                              'inline-switcher__agent' +
+                              (active ? ' is-active' : '')
+                            }
+                            data-testid={`inline-model-switcher-compact-api-model-${m.id}`}
+                            onClick={() => {
+                              trackExecutionSettingsPopoverClick(analytics.track, {
+                                page_name: 'home',
+                                area: 'execution_settings_popover',
+                                element: 'model_dropdown',
+                                execution_mode: 'byok',
+                                provider_id:
+                                  byokProtocolToTracking(apiProtocol) ?? undefined,
+                                model_id: modelIdForTracking(m.id),
+                              });
+                              onApiModelChange?.(m.id);
+                              setPanel(null);
+                            }}
+                          >
+                            <span
+                              className="inline-switcher__agent-logo"
+                              aria-hidden="true"
+                            >
+                              {(() => {
+                                const src = modelProviderIconSrc(m.id);
+                                return src ? (
+                                  <img
+                                    src={src}
+                                    alt=""
+                                    width={16}
+                                    height={16}
+                                  />
+                                ) : (
+                                  <span className="inline-switcher__byok-glyph">
+                                    <Icon name="link" size={14} />
+                                  </span>
+                                );
+                              })()}
+                            </span>
+                            <span className="inline-switcher__agent-name">
+                              {m.label}
+                            </span>
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <span className="inline-switcher__hint">
+                    {t('inlineSwitcher.openSettingsForModel')}
+                  </span>
+                )
+              ) : currentAgent && compactModelRows.length > 0 ? (
                 <div className="inline-switcher__agent-grid" role="radiogroup">
                   {compactModelRows.map(({ model: m, selectable }) => {
                     const active = currentModelId === m.id;
