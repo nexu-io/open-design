@@ -185,6 +185,22 @@ describe('NewProjectPanel brand preview flyout', () => {
     });
   });
 
+  it('re-clicking the trigger closes the picker', () => {
+    renderPanel('user:brand-acme');
+
+    fireEvent.click(screen.getByTestId('design-system-trigger'));
+    expect(screen.getByRole('listbox')).toBeTruthy();
+
+    // Full user press: the outside-click handler runs on mousedown, then the
+    // trigger's onClick toggles. The mousedown must be recognized as inside the
+    // section (wrapRef) so it does not prematurely close the list; the click
+    // then toggles it shut.
+    fireEvent.mouseDown(screen.getByTestId('design-system-trigger'));
+    fireEvent.click(screen.getByTestId('design-system-trigger'));
+
+    expect(screen.queryByRole('listbox')).toBeNull();
+  });
+
   it('keeps the flyout hidden for a non-brand selection', () => {
     renderPanel('clay');
 
