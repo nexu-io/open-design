@@ -848,6 +848,97 @@ export function resolveSafeProjectAttachments(
   return out;
 }
 
+/**
+ * Image extensions accepted for CLI file-path image handoff (`-f` / ACP
+ * resources). Matches OpenCode attachment formats and the pi image allowlist.
+ */
+export const CHAT_IMAGE_ATTACHMENT_EXTENSIONS = new Set([
+  '.png',
+  '.jpg',
+  '.jpeg',
+  '.gif',
+  '.webp',
+]);
+
+/**
+ * Resolve project-relative chat `attachments` that are image files into
+ * absolute paths under `cwd`.
+ *
+ * The web UI uploads pasted/dropped images into the project and sends only
+ * `attachments` (project-relative paths) on `/api/runs` — not `imagePaths`
+ * (which is the separate upload-dir channel). Adapters that load pixels via
+ * absolute file flags (e.g. byok-opencode `-f`) need this handoff, or the
+ * model never sees the uploaded image (#6482 review).
+ */
+export function resolveAbsoluteProjectImageAttachments(
+  cwd: string | null | undefined,
+  attachments: readonly string[] | null | undefined,
+  opts: {
+    pathImpl?: typeof path;
+    existsSync?: (path: string) => boolean;
+    statSync?: (path: string) => { isFile(): boolean; size?: number };
+    maxBytes?: number;
+  } = {},
+): string[] {
+  if (!cwd || !Array.isArray(attachments) || attachments.length === 0) return [];
+  const pathImpl = opts.pathImpl ?? path;
+  const existsSync = opts.existsSync ?? fs.existsSync;
+  const statSync = opts.statSync ?? fs.statSync;
+  const maxBytes = Number.isFinite(opts.maxBytes)
+    ? Number(opts.maxBytes)
+    : MAX_CHAT_IMAGE_BYTES;
+  const root = pathImpl.resolve(cwd);
+  const out: string[] = [];
+  const seen = new Set<string>();
+
+  for (const attachment of attachments) {
+    if (typeof attachment !== 'string' || attachment.length === 0) continue;
+    let abs: string;
+    try {
+      abs = pathImpl.resolve(root, attachment);
+    } catch {
+      continue;
+    }
+    const relativePath = pathImpl.relative(root, abs);
+    const withinRoot =
+      relativePath === '' ||
+      (relativePath.length > 0 &&
+        !relativePath.startsWith('..') &&
+        !pathImpl.isAbsolute(relativePath));
+    if (!withinRoot || !existsSync(abs)) continue;
+    const ext = pathImpl.extname(abs).toLowerCase();
+    if (!CHAT_IMAGE_ATTACHMENT_EXTENSIONS.has(ext)) continue;
+    try {
+      const st = statSync(abs);
+      if (!st.isFile()) continue;
+      if (typeof st.size === 'number' && st.size > maxBytes) continue;
+    } catch {
+      continue;
+    }
+    if (seen.has(abs)) continue;
+    seen.add(abs);
+    out.push(abs);
+  }
+
+  return out;
+}
+
+/** Stable de-dupe merge of upload-dir imagePaths and project image attachments. */
+export function mergePromptImagePaths(
+  imagePaths: readonly string[] | null | undefined,
+  projectImageAbsPaths: readonly string[] | null | undefined,
+): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const p of [...(imagePaths || []), ...(projectImageAbsPaths || [])]) {
+    if (typeof p !== 'string' || p.length === 0) continue;
+    if (seen.has(p)) continue;
+    seen.add(p);
+    out.push(p);
+  }
+  return out;
+}
+
 export function formatProjectAttachmentHint(attachments: readonly string[] | null | undefined) {
   if (!Array.isArray(attachments) || attachments.length === 0) return '';
   return [

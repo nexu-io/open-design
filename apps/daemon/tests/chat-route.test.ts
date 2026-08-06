@@ -557,6 +557,93 @@ process.stdin.on('end', () => {
     );
   });
 
+  // Regression for #6482 review: web chat sends uploaded images as project
+  // `attachments` (relative paths), not `imagePaths`. The daemon must resolve
+  // those image attachments to absolute paths and pass them as OpenCode `-f`.
+  it('forwards project image attachments as OpenCode -f flags on the BYOK path', async () => {
+    if (!process.env.OD_DATA_DIR) {
+      throw new Error('OD_DATA_DIR is required for BYOK OpenCode attachment tests');
+    }
+
+    const projectId = `proj-${randomUUID()}`;
+    const markerDir = await fsp.mkdtemp(join(tmpdir(), 'od-byok-opencode-attach-'));
+    tempDirs.push(markerDir);
+    const argsFile = join(markerDir, 'args.json');
+
+    const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: projectId, name: 'BYOK OpenCode attachment fixture' }),
+    });
+    expect(createProjectResponse.ok).toBe(true);
+
+    // Match the live UI path: image lives in the project, request carries only
+    // the relative path under `attachments`.
+    const projectDir = resolve(process.env.OD_DATA_DIR, 'projects', projectId);
+    await fsp.mkdir(projectDir, { recursive: true });
+    // Minimal valid 1×1 PNG.
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+      'base64',
+    );
+    const relImage = 'uploads/shot.png';
+    await fsp.mkdir(join(projectDir, 'uploads'), { recursive: true });
+    await fsp.writeFile(join(projectDir, relImage), png);
+    const absImage = resolve(projectDir, relImage);
+
+    await withFakeAgent(
+      'opencode',
+      `
+const fs = require('node:fs');
+process.stdin.resume();
+process.stdin.on('end', () => {
+  fs.writeFileSync(${JSON.stringify(argsFile)}, JSON.stringify(process.argv.slice(2)));
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: 'byok-attach-ok' } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+      async () => {
+        const response = await fetch(`${baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'byok-opencode',
+            projectId,
+            message: 'What is in this screenshot?',
+            // No imagePaths — only the web attachment shape.
+            attachments: [relImage],
+            model: 'gpt-5.6-terra',
+            byokProvider: {
+              protocol: 'openai',
+              apiKey: 'sk-test-byok',
+              baseUrl: 'https://api.openai.com/v1',
+              model: 'gpt-5.6-terra',
+              requiresApiKey: true,
+            },
+          }),
+        });
+        const body = await response.text();
+        expect(response.ok).toBe(true);
+        expect(body).toContain('byok-attach-ok');
+
+        const args = JSON.parse(await fsp.readFile(argsFile, 'utf8')) as string[];
+        expect(args).toEqual([
+          'run',
+          '--format',
+          'json',
+          '--dir',
+          expect.stringContaining(projectId),
+          '-m',
+          'open-design-byok/gpt-5.6-terra',
+          '-f',
+          absImage,
+        ]);
+      },
+    );
+  });
+
   it('passes keyless BYOK provider config without auth fields to OpenCode', async () => {
     if (!process.env.OD_DATA_DIR) {
       throw new Error('OD_DATA_DIR is required for BYOK OpenCode config tests');
