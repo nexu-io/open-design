@@ -3,6 +3,7 @@ import { normalizeNamespace } from "@open-design/sidecar-proto";
 
 export const CLOSURE_SCHEMA_VERSION = 1 as const;
 export const CLOSURE_PROTOCOL_VERSION = 1 as const;
+export const CLOSURE_INVENTORY_SCHEMA_VERSION = 1 as const;
 export const CLOSURE_ARCHIVE_MEDIA_TYPE = "application/vnd.open-design.closure.zip-v1" as const;
 export const CLOSURE_ARCHIVE_ENTRY_PATH = "runtime.mjs" as const;
 
@@ -23,6 +24,7 @@ export type ClosureBindingIdentity = ClosureCandidateIdentity & {
 export type ClosureArtifactDescriptor = {
   digest: ClosureDigest;
   entryPath: typeof CLOSURE_ARCHIVE_ENTRY_PATH;
+  inventoryDigest: ClosureDigest;
   mediaType: typeof CLOSURE_ARCHIVE_MEDIA_TYPE;
   size: number;
   url: string;
@@ -39,6 +41,17 @@ export type ClosureCandidateManifest = {
   };
   identity: ClosureCandidateIdentity;
   schemaVersion: typeof CLOSURE_SCHEMA_VERSION;
+};
+
+export type ClosureFileInventoryEntry = {
+  digest: ClosureDigest;
+  path: string;
+  size: number;
+};
+
+export type ClosureFileInventory = {
+  files: ClosureFileInventoryEntry[];
+  schemaVersion: typeof CLOSURE_INVENTORY_SCHEMA_VERSION;
 };
 
 export class ClosureProtocolError extends Error {
@@ -92,6 +105,28 @@ function normalizePlatform(value: unknown): string {
 function normalizePositiveInteger(value: unknown, label: string): number {
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value <= 0) {
     throw new ClosureProtocolError(`${label} must be a positive safe integer`);
+  }
+  return value;
+}
+
+function normalizeNonNegativeInteger(value: unknown, label: string): number {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
+    throw new ClosureProtocolError(`${label} must be a non-negative safe integer`);
+  }
+  return value;
+}
+
+function normalizeInventoryPath(value: unknown): string {
+  if (typeof value !== "string" || value.length === 0) {
+    throw new ClosureProtocolError("closure inventory path must be a non-empty string");
+  }
+  if (
+    value.startsWith("/") ||
+    value.includes("\\") ||
+    value.includes("\0") ||
+    value.split("/").some((component) => component.length === 0 || component === "." || component === "..")
+  ) {
+    throw new ClosureProtocolError(`closure inventory path must be a safe relative POSIX path: ${value}`);
   }
   return value;
 }
@@ -197,6 +232,7 @@ export function validateClosureCandidateManifest(value: unknown): ClosureCandida
   const identity = validateClosureCandidateIdentity(manifest.identity);
   const artifact = requireRecord(manifest.artifact, "closure artifact");
   const digest = normalizeDigest(artifact.digest);
+  const inventoryDigest = normalizeDigest(artifact.inventoryDigest);
   if (digest !== identity.digest) {
     throw new ClosureProtocolError("closure artifact digest must match candidate identity digest");
   }
@@ -212,6 +248,7 @@ export function validateClosureCandidateManifest(value: unknown): ClosureCandida
     artifact: {
       digest,
       entryPath: CLOSURE_ARCHIVE_ENTRY_PATH,
+      inventoryDigest,
       mediaType: CLOSURE_ARCHIVE_MEDIA_TYPE,
       size: normalizePositiveInteger(artifact.size, "closure artifact size"),
       url: normalizeHttpUrl(artifact.url),
@@ -224,4 +261,35 @@ export function validateClosureCandidateManifest(value: unknown): ClosureCandida
     identity,
     schemaVersion: CLOSURE_SCHEMA_VERSION,
   };
+}
+
+export function validateClosureFileInventory(value: unknown): ClosureFileInventory {
+  const inventory = requireRecord(value, "closure file inventory");
+  if (inventory.schemaVersion !== CLOSURE_INVENTORY_SCHEMA_VERSION) {
+    throw new ClosureProtocolError(
+      `unsupported closure inventory schema version: ${String(inventory.schemaVersion)}`,
+    );
+  }
+  if (!Array.isArray(inventory.files)) {
+    throw new ClosureProtocolError("closure inventory files must be an array");
+  }
+  const files = inventory.files.map((entry) => {
+    const file = requireRecord(entry, "closure inventory file");
+    return {
+      digest: normalizeDigest(file.digest),
+      path: normalizeInventoryPath(file.path),
+      size: normalizeNonNegativeInteger(file.size, "closure inventory file size"),
+    };
+  });
+  for (let index = 1; index < files.length; index += 1) {
+    const previous = files[index - 1];
+    const current = files[index];
+    if (previous == null || current == null || previous.path >= current.path) {
+      throw new ClosureProtocolError("closure inventory paths must be strictly sorted and unique");
+    }
+  }
+  if (!files.some((file) => file.path === CLOSURE_ARCHIVE_ENTRY_PATH)) {
+    throw new ClosureProtocolError(`closure inventory must contain ${CLOSURE_ARCHIVE_ENTRY_PATH}`);
+  }
+  return { files, schemaVersion: CLOSURE_INVENTORY_SCHEMA_VERSION };
 }

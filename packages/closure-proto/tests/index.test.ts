@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   CLOSURE_ARCHIVE_ENTRY_PATH,
   CLOSURE_ARCHIVE_MEDIA_TYPE,
+  CLOSURE_INVENTORY_SCHEMA_VERSION,
   CLOSURE_PROTOCOL_VERSION,
   CLOSURE_SCHEMA_VERSION,
   ClosureProtocolError,
@@ -10,6 +11,7 @@ import {
   validateClosureBindingIdentity,
   validateClosureCandidateIdentity,
   validateClosureCandidateManifest,
+  validateClosureFileInventory,
   type ClosureCandidateIdentity,
   type ClosureCandidateManifest,
 } from "../src/index.js";
@@ -28,6 +30,7 @@ const manifest: ClosureCandidateManifest = {
   artifact: {
     digest,
     entryPath: CLOSURE_ARCHIVE_ENTRY_PATH,
+    inventoryDigest: digest,
     mediaType: CLOSURE_ARCHIVE_MEDIA_TYPE,
     size: 1024,
     url: "https://releases.open-design.ai/beta/closure/darwin-arm64/runtime.zip",
@@ -122,6 +125,7 @@ describe("closure candidate manifest", () => {
 
   it.each([
     ["entryPath", "headless.mjs"],
+    ["inventoryDigest", "sha256:invalid"],
     ["size", 0],
     ["url", "file:///tmp/runtime.zip"],
     ["mediaType", "application/zip"],
@@ -144,5 +148,37 @@ describe("closure candidate manifest", () => {
         },
       },
     })).toThrow(/minimum shell version/u);
+  });
+});
+
+describe("closure file inventory", () => {
+  const inventory = {
+    files: [
+      { digest, path: "runtime.mjs", size: 12 },
+      { digest, path: "web/server.js", size: 0 },
+    ],
+    schemaVersion: CLOSURE_INVENTORY_SCHEMA_VERSION,
+  };
+
+  it("validates a sorted, namespace-neutral payload inventory", () => {
+    expect(validateClosureFileInventory(inventory)).toEqual(inventory);
+  });
+
+  it.each([
+    ["absolute", "/runtime.mjs"],
+    ["parent", "../runtime.mjs"],
+    ["windows", "web\\server.js"],
+  ])("rejects an unsafe %s path", (_label, path) => {
+    expect(() => validateClosureFileInventory({
+      ...inventory,
+      files: [{ digest, path, size: 1 }],
+    })).toThrow(ClosureProtocolError);
+  });
+
+  it("rejects duplicate or unsorted paths", () => {
+    expect(() => validateClosureFileInventory({
+      ...inventory,
+      files: [...inventory.files].reverse(),
+    })).toThrow(/strictly sorted/u);
   });
 });

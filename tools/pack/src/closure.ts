@@ -16,10 +16,13 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import {
   CLOSURE_ARCHIVE_ENTRY_PATH,
   CLOSURE_ARCHIVE_MEDIA_TYPE,
+  CLOSURE_INVENTORY_SCHEMA_VERSION,
   CLOSURE_PROTOCOL_VERSION,
   CLOSURE_SCHEMA_VERSION,
   validateClosureCandidateManifest,
+  validateClosureFileInventory,
   type ClosureCandidateManifest,
+  type ClosureFileInventory,
 } from "@open-design/closure-proto";
 import { createPackageManagerInvocation } from "@open-design/platform";
 import { isReleaseChannel, parseReleaseVersion, type ReleaseChannel } from "@open-design/release";
@@ -86,11 +89,6 @@ export type ClosureBuildProvenanceV1 = {
   platform: ClosurePlatformTarget;
   schemaVersion: 1;
   version: string;
-};
-
-export type ClosureFileInventoryV1 = {
-  files: Array<{ digest: string; path: string; size: number }>;
-  schemaVersion: 1;
 };
 
 export type ClosureBuildReport = {
@@ -405,10 +403,12 @@ function toPosixPath(value: string): string {
   return value.split(sep).join("/");
 }
 
-async function collectFileInventory(root: string, current = root): Promise<ClosureFileInventoryV1["files"]> {
+async function collectFileInventory(root: string, current = root): Promise<ClosureFileInventory["files"]> {
   const entries = await readdir(current, { withFileTypes: true });
-  const files: ClosureFileInventoryV1["files"] = [];
-  for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
+  const files: ClosureFileInventory["files"] = [];
+  for (const entry of entries.sort((left, right) => (
+    left.name < right.name ? -1 : left.name > right.name ? 1 : 0
+  ))) {
     const absolutePath = join(current, entry.name);
     const metadata = await lstat(absolutePath);
     if (metadata.isSymbolicLink()) {
@@ -431,7 +431,7 @@ async function collectFileInventory(root: string, current = root): Promise<Closu
   return files;
 }
 
-function digestInventory(files: ClosureFileInventoryV1["files"]): string {
+function digestInventory(files: ClosureFileInventory["files"]): string {
   return `sha256:${createHash("sha256").update(JSON.stringify(files)).digest("hex")}`;
 }
 
@@ -541,11 +541,18 @@ export async function buildClosureArchive(options: ClosureBuildOptions): Promise
   await writeFile(entryPath, closureRuntimeSource(), { encoding: "utf8", mode: 0o700 });
   await chmod(entryPath, 0o700);
 
-  const files = await collectFileInventory(appRoot);
+  const files = (await collectFileInventory(appRoot)).sort((left, right) => (
+    left.path < right.path ? -1 : left.path > right.path ? 1 : 0
+  ));
   if (!files.some((file) => file.path === CLOSURE_ARCHIVE_ENTRY_PATH)) {
     throw new Error(`Closure archive entry is missing: ${CLOSURE_ARCHIVE_ENTRY_PATH}`);
   }
   await mkdir(outputRoot, { recursive: true });
+  const inventory = validateClosureFileInventory({
+    files,
+    schemaVersion: CLOSURE_INVENTORY_SCHEMA_VERSION,
+  });
+  const inventoryDigest = digestInventory(files);
   const archiveInvocation = resolveClosureArchiveInvocation({ artifactPath: archivePath, target });
   await run(archiveInvocation.command, archiveInvocation.args, { cwd: appRoot });
   const archiveBytes = await readFile(archivePath);
@@ -554,6 +561,7 @@ export async function buildClosureArchive(options: ClosureBuildOptions): Promise
     artifact: {
       digest,
       entryPath: CLOSURE_ARCHIVE_ENTRY_PATH,
+      inventoryDigest,
       mediaType: CLOSURE_ARCHIVE_MEDIA_TYPE,
       size: archiveBytes.byteLength,
       url: options.artifactUrl,
@@ -569,8 +577,6 @@ export async function buildClosureArchive(options: ClosureBuildOptions): Promise
     schemaVersion: CLOSURE_SCHEMA_VERSION,
   });
   const git = await resolveGitProvenance(workspaceRoot);
-  const inventory: ClosureFileInventoryV1 = { files, schemaVersion: 1 };
-  const inventoryDigest = digestInventory(files);
   const provenance: ClosureBuildProvenanceV1 = {
     artifact: {
       digest,
