@@ -7,6 +7,8 @@ from pathlib import Path
 
 GITHUB_HOSTED = ["ubuntu-24.04"]
 WINDOWS_HOSTED = ["windows-latest"]
+BLACKSMITH_4VCPU = ["blacksmith-4vcpu-ubuntu-2404"]
+BLACKSMITH_8VCPU = ["blacksmith-8vcpu-ubuntu-2404"]
 NEXU_SMALL = ["nexu-runners-small"]
 NEXU_MEDIUM = ["nexu-runners-medium"]
 NEXU_LARGE = ["nexu-runners-large"]
@@ -19,18 +21,29 @@ def compact_json(value):
 
 def normalize_mode(raw_mode):
     mode = raw_mode or "default"
-    if mode in {"default", "performance", "economic"}:
+    if mode in {"default", "performance", "economic", "blacksmith"}:
         return mode
     return "default"
 
 
 def resolve_contract(mode):
-    control = GITHUB_HOSTED if mode == "economic" else NEXU_SMALL
-    workload = GITHUB_HOSTED if mode == "economic" else NEXU_MEDIUM
-    browser_workload = GITHUB_HOSTED if mode == "economic" else NEXU_LARGE
-    # UI P0 is the memory-heavy Playwright domain suite; prefer the dedicated
-    # xlarge class once available so large remains headroom for lighter UI jobs.
-    ui_p0_workload = GITHUB_HOSTED if mode == "economic" else NEXU_XLARGE
+    if mode == "economic":
+        control = GITHUB_HOSTED
+        workload = GITHUB_HOSTED
+        browser_workload = GITHUB_HOSTED
+        ui_p0_workload = GITHUB_HOSTED
+    elif mode == "blacksmith":
+        control = BLACKSMITH_4VCPU
+        workload = BLACKSMITH_4VCPU
+        browser_workload = BLACKSMITH_8VCPU
+        ui_p0_workload = BLACKSMITH_8VCPU
+    else:
+        control = NEXU_SMALL
+        workload = NEXU_MEDIUM
+        browser_workload = NEXU_LARGE
+        # UI P0 is the memory-heavy Playwright domain suite; prefer the
+        # dedicated xlarge class so large remains headroom for lighter UI jobs.
+        ui_p0_workload = NEXU_XLARGE
 
     return {
         "runs_on": {

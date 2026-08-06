@@ -1385,6 +1385,18 @@ process.stdin.on("end", () => {
     expect(performanceRunsOn.ui_p0).toEqual(["nexu-runners-xlarge"]);
     expect(performanceRunsOn.visual_hot).toEqual(["nexu-runners-large"]);
 
+    const blacksmithProfiles = await runRunners("blacksmith");
+    const blacksmithRunsOn = runnerRunsOn(blacksmithProfiles);
+    expect(runnerDecision(blacksmithProfiles)).toEqual({ schema_version: 1, mode: "blacksmith" });
+    expect(blacksmithRunsOn.control).toEqual(["blacksmith-4vcpu-ubuntu-2404"]);
+    expect(blacksmithRunsOn.general_medium).toEqual(["blacksmith-4vcpu-ubuntu-2404"]);
+    expect(blacksmithRunsOn.workspace_unit).toEqual(["blacksmith-4vcpu-ubuntu-2404"]);
+    expect(blacksmithRunsOn.windows_tools).toEqual(["windows-latest"]);
+    expect(blacksmithRunsOn.js_hot).toEqual(["blacksmith-4vcpu-ubuntu-2404"]);
+    expect(blacksmithRunsOn.ui_hot).toEqual(["blacksmith-8vcpu-ubuntu-2404"]);
+    expect(blacksmithRunsOn.ui_p0).toEqual(["blacksmith-8vcpu-ubuntu-2404"]);
+    expect(blacksmithRunsOn.visual_hot).toEqual(["blacksmith-8vcpu-ubuntu-2404"]);
+
     const economicProfiles = await runRunners("economic");
     const economicRunsOn = runnerRunsOn(economicProfiles);
     expect(runnerDecision(economicProfiles)).toEqual({ schema_version: 1, mode: "economic" });
