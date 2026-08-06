@@ -973,9 +973,16 @@ export async function fetchAmrWalletSnapshot(options: { refresh?: boolean } = {}
   }
 }
 
-export async function fetchAmrModels(): Promise<AmrModelsResponse | null> {
+export async function fetchAmrModels(
+  workspaceContext?: WorkspaceCollabContext | null,
+): Promise<AmrModelsResponse | null> {
   try {
-    const resp = await fetch('/api/amr/models', { cache: 'no-store' });
+    const resp = await fetch('/api/amr/models', {
+      cache: 'no-store',
+      ...(workspaceContext
+        ? { headers: workspaceProjectHeaders(workspaceContext) }
+        : {}),
+    });
     if (!resp.ok) return null;
     return (await resp.json()) as AmrModelsResponse;
   } catch {

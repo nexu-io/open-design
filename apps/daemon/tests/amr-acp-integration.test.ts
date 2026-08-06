@@ -658,6 +658,39 @@ describe('AMR model loading cache', () => {
       models: [{ id: 'remote-prod', label: 'remote-prod' }],
     });
   });
+
+  it('drops every workspace-partitioned catalog when invalidateAll runs', async () => {
+    const cache = new AmrModelLoadingCache(60_000);
+    cache.warm('vela:personal', async () => [
+      { id: 'locked-personal', label: 'locked-personal', enabled: false },
+    ]);
+    cache.warm('vela:ws-team', async () => [
+      { id: 'unlocked-team', label: 'unlocked-team', enabled: true },
+    ]);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    cache.invalidateAll();
+
+    const personal = await cache.get('vela:personal', {
+      fetchPreset: async () => [{ id: 'preset-personal', label: 'preset-personal' }],
+      fetchRemote: async () => [{ id: 'remote-personal-new', label: 'remote-personal-new' }],
+    });
+    const team = await cache.get('vela:ws-team', {
+      fetchPreset: async () => [{ id: 'preset-team', label: 'preset-team' }],
+      fetchRemote: async () => [{ id: 'remote-team-new', label: 'remote-team-new' }],
+    });
+
+    expect(personal).toMatchObject({
+      source: 'preset',
+      models: [{ id: 'preset-personal', label: 'preset-personal' }],
+      refreshing: true,
+    });
+    expect(team).toMatchObject({
+      source: 'preset',
+      models: [{ id: 'preset-team', label: 'preset-team' }],
+      refreshing: true,
+    });
+  });
 });
 
 describe('AMR ACP transport — end-to-end against fake vela stub', () => {

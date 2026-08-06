@@ -68,6 +68,19 @@ export class AmrModelLoadingCache {
     this.states.delete(cacheKey);
   }
 
+  /**
+   * Drop every cached catalog entry.
+   *
+   * Path A discovery is workspace-partitioned (`velaWorkspaceId` is part of
+   * the cache key). Plan and wallet refreshes can change Link entitlements for
+   * every workspace that shares the active credential, so invalidating only
+   * the unscoped personal key would leave Team-scoped catalogs serving stale
+   * locks for up to the refresh TTL.
+   */
+  invalidateAll(): void {
+    this.states.clear();
+  }
+
   resetForTests(): void {
     this.states.clear();
   }

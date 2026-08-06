@@ -589,6 +589,20 @@ if (argv[2] === 'model' && argv.includes('--format') && argv.includes('json')) {
     exit(0);
   }
   if (argv[3] === 'list') {
+    // Optional Path A scope dump: OD hosts must pass VELA_WORKSPACE_ID (or
+    // --workspace-id) for Team entitlements. Tests assert the spawn env by
+    // pointing FAKE_VELA_MODEL_LIST_ENV_DUMP at a temp file.
+    if (env.FAKE_VELA_MODEL_LIST_ENV_DUMP) {
+      writeFileSync(
+        env.FAKE_VELA_MODEL_LIST_ENV_DUMP,
+        JSON.stringify({
+          VELA_WORKSPACE_ID: env.VELA_WORKSPACE_ID || null,
+          OPEN_DESIGN_WORKSPACE_ID: env.OPEN_DESIGN_WORKSPACE_ID || null,
+          args: argv.slice(2),
+        }),
+        'utf8',
+      );
+    }
     stdout.write(`${env.FAKE_VELA_MODEL_LIST_JSON || DEFAULT_MODEL_LIST_JSON}\n`);
     exit(0);
   }

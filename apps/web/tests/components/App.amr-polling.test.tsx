@@ -3,6 +3,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useSyncExternalStore } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { WorkspaceCollabContext } from '@open-design/contracts';
 
 import { App } from '../../src/App';
 import type { AppConfig } from '../../src/types';
@@ -18,6 +19,43 @@ import {
 import { fetchAmrModels, fetchVelaLoginStatus } from '../../src/providers/daemon';
 import { listProjects, listTemplates } from '../../src/state/projects';
 
+// Drive catalog authority (pending account / workspace identity) without
+// spinning the real workspace context network stack.
+const workspaceContextHarness = vi.hoisted(() => {
+  type Snapshot = {
+    context: WorkspaceCollabContext | null;
+    loading: boolean;
+    identityChangePending: boolean;
+  };
+  let snapshot: Snapshot = {
+    context: null,
+    loading: false,
+    identityChangePending: false,
+  };
+  const listeners = new Set<() => void>();
+  return {
+    getSnapshot: (): Snapshot => snapshot,
+    subscribe: (listener: () => void) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    set: (next: Partial<Snapshot>) => {
+      snapshot = { ...snapshot, ...next };
+      listeners.forEach((listener) => listener());
+    },
+    reset: () => {
+      snapshot = {
+        context: null,
+        loading: false,
+        identityChangePending: false,
+      };
+      listeners.forEach((listener) => listener());
+    },
+  };
+});
+
 // Settings is now a full-page route (`/settings`): App.openSettings navigates
 // instead of toggling a modal flag, so the router mock must feed navigate()
 // calls back into useRoute() (like the production useSyncExternalStore router)
@@ -25,6 +63,22 @@ import { listProjects, listTemplates } from '../../src/state/projects';
 const homeRouteMock = { kind: 'home' as const, view: 'home' as const };
 const routeListeners = new Set<() => void>();
 const useRouteMock = vi.fn(() => homeRouteMock);
+
+vi.mock('../../src/collab/useWorkspaceContext', async () => {
+  const actual = await vi.importActual<typeof import('../../src/collab/useWorkspaceContext')>(
+    '../../src/collab/useWorkspaceContext',
+  );
+  const React = await import('react');
+  return {
+    ...actual,
+    useWorkspaceContext: () =>
+      React.useSyncExternalStore(
+        workspaceContextHarness.subscribe,
+        workspaceContextHarness.getSnapshot,
+        workspaceContextHarness.getSnapshot,
+      ),
+  };
+});
 
 vi.mock('../../src/router', async () => {
   const actual = await vi.importActual<typeof import('../../src/router')>('../../src/router');
@@ -91,7 +145,9 @@ vi.mock('../../src/components/SettingsDialog', () => ({
     onAmrLoginStatusChange,
     onClose,
   }: {
-    onRefreshAgents: (options?: { agentCliEnv?: AppConfig['agentCliEnv'] }) => void | Promise<void>;
+    onRefreshAgents: (
+      options?: { agentCliEnv?: AppConfig['agentCliEnv'] },
+    ) => void | Promise<Array<{ id: string; models?: Array<{ id: string }> }>>;
     onAmrLoginStatusChange?: (status: {
       loggedIn: boolean;
       loginInFlight?: boolean;
@@ -112,6 +168,21 @@ vi.mock('../../src/components/SettingsDialog', () => ({
       >
         rescan agents
       </button>
+      <button
+        onClick={() => {
+          void Promise.resolve(onRefreshAgents()).then((agents) => {
+            const list = Array.isArray(agents) ? agents : [];
+            const amr = list.find((agent) => agent.id === 'amr');
+            const el = document.querySelector('[data-testid="refresh-agents-amr-model"]');
+            if (el) {
+              el.textContent = amr?.models?.[0]?.id ?? 'none';
+            }
+          });
+        }}
+      >
+        rescan agents bare
+      </button>
+      <div data-testid="refresh-agents-amr-model">unset</div>
       <button
         onClick={() => {
           window.dispatchEvent(new CustomEvent('od:amr-login-status-change'));
@@ -237,9 +308,33 @@ async function advanceTestClock(ms: number): Promise<void> {
   });
 }
 
+const retainedTeamWorkspace: WorkspaceCollabContext = {
+  workspaceId: 'ws-retained',
+  workspaceType: 'team',
+  workspaceMemberId: 'member-retained',
+  role: 'member',
+  memberStatus: 'active',
+  lifecycleState: 'active',
+  billingState: 'active',
+  planId: 'team_pro',
+  providerMode: 'platform_credits',
+  seatSummary: { seatLimit: 5, usedSeats: 1, availableSeats: 4, isSeatFull: false },
+  permissions: {
+    canManageMembers: false,
+    canManageBilling: false,
+    canInviteMembers: false,
+    canManageAutoRecharge: false,
+    canShareProjects: true,
+    canWriteSyncedFiles: true,
+    canViewWorkspaceSettings: false,
+    canManageSharedResources: false,
+  },
+};
+
 describe('App AMR polling', () => {
   beforeEach(() => {
     window.localStorage.clear();
+    workspaceContextHarness.reset();
     useRouteMock.mockReturnValue(homeRouteMock);
     mockedDaemonIsLive.mockResolvedValue(true);
     mockedFetchAgentsStream.mockResolvedValue([
@@ -554,13 +649,19 @@ describe('App AMR polling', () => {
     expect(mockedFetchAmrModels).toHaveBeenCalledTimes(11);
   });
 
-  it('does not merge stale AMR remote models over a rescan with new agent env', async () => {
+  it('does not keep a stale Path A catalog after a rescan with new agent env', async () => {
     mockedFetchAmrModels.mockReset();
-    mockedFetchAmrModels.mockResolvedValue({
-      source: 'remote',
-      refreshing: false,
-      models: [{ id: 'old-remote', label: 'old-remote' }],
-    });
+    mockedFetchAmrModels
+      .mockResolvedValueOnce({
+        source: 'remote',
+        refreshing: false,
+        models: [{ id: 'old-remote', label: 'old-remote' }],
+      })
+      .mockResolvedValueOnce({
+        source: 'remote',
+        refreshing: false,
+        models: [{ id: 'profile-remote', label: 'profile-remote' }],
+      });
     mockedFetchAgentsStream
       .mockResolvedValueOnce([
         {
@@ -579,6 +680,7 @@ describe('App AMR polling', () => {
           bin: 'vela',
           available: true,
           version: '1.0.0',
+          // Headerless agent discovery must not win over Path A authority.
           models: [{ id: 'new-probe', label: 'new-probe' }],
         },
       ]);
@@ -600,10 +702,173 @@ describe('App AMR polling', () => {
     // mock (which renders the amr-model probe) is mounted again.
     fireEvent.click(screen.getByText('close settings'));
 
+    // Profile change clears Path A and re-arms the scoped poll. Fail-closed
+    // merge strips the headerless new-probe; the restarted Path A catalog
+    // is what the picker must show.
     await waitFor(() => {
-      expect(screen.getByTestId('amr-model').textContent).toBe('new-probe');
+      expect(screen.getByTestId('amr-model').textContent).toBe('profile-remote');
     });
-    expect(mockedFetchAmrModels).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('amr-model').textContent).not.toBe('new-probe');
+    expect(mockedFetchAmrModels).toHaveBeenCalledTimes(2);
+  });
+
+  it('returns fail-closed AMR models from refreshAgents when Path A is empty', async () => {
+    // Settings retries stop when the returned AMR agent has models. If
+    // refreshAgents returned raw headerless `/api/agents` models while
+    // state was cleared, the loop exited early and the picker stayed loading.
+    mockedFetchAmrModels.mockReset();
+    mockedFetchAmrModels.mockResolvedValue(null);
+    mockedFetchAgentsStream.mockResolvedValue([
+      {
+        id: 'amr',
+        name: 'AMR',
+        bin: 'vela',
+        available: true,
+        version: '1.0.0',
+        models: [{ id: 'headerless-fallback', label: 'headerless-fallback' }],
+      },
+    ]);
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('amr-model').textContent).toBe('none');
+    });
+
+    fireEvent.click(screen.getByText('open settings'));
+    await waitFor(() => {
+      expect(screen.getByText('rescan agents bare')).toBeTruthy();
+    });
+    fireEvent.click(screen.getByText('rescan agents bare'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('refresh-agents-amr-model').textContent).toBe('none');
+    });
+    // Path A empty after rescan re-arms the scoped poll (not only state merge).
+    await waitFor(() => {
+      expect(mockedFetchAmrModels.mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
+  });
+
+  it('skips refreshAgents Path A re-probe while catalog authority is pending', async () => {
+    // Account transitions retain the prior workspace context while pending.
+    // Main poll already skips; refreshAgents must not re-probe that retained
+    // context (or a headerless personal catalog) and commit stale models.
+    workspaceContextHarness.set({
+      context: retainedTeamWorkspace,
+      loading: false,
+      identityChangePending: true,
+    });
+    mockedFetchAmrModels.mockReset();
+    mockedFetchAmrModels.mockResolvedValue({
+      source: 'remote',
+      refreshing: false,
+      models: [{ id: 'stale-retained-workspace', label: 'stale-retained-workspace' }],
+    });
+    mockedFetchAgentsStream.mockResolvedValue([
+      {
+        id: 'amr',
+        name: 'AMR',
+        bin: 'vela',
+        available: true,
+        version: '1.0.0',
+        models: [{ id: 'headerless-fallback', label: 'headerless-fallback' }],
+      },
+    ]);
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('amr-model').textContent).toBe('none');
+    });
+    // Pending catalog identity must not issue Path A discovery at all.
+    expect(mockedFetchAmrModels).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByText('open settings'));
+    await waitFor(() => {
+      expect(screen.getByText('rescan agents bare')).toBeTruthy();
+    });
+    fireEvent.click(screen.getByText('rescan agents bare'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('refresh-agents-amr-model').textContent).toBe('none');
+    });
+    // Settings retries must stay empty/fail-closed; no retained-catalog probe.
+    expect(mockedFetchAmrModels).not.toHaveBeenCalled();
+  });
+
+  it('discards refreshAgents Path A re-probe results after catalog identity changes', async () => {
+    workspaceContextHarness.set({
+      context: retainedTeamWorkspace,
+      loading: false,
+      identityChangePending: false,
+    });
+    const firstPoll = deferred<Awaited<ReturnType<typeof fetchAmrModels>>>();
+    const reProbe = deferred<Awaited<ReturnType<typeof fetchAmrModels>>>();
+    let amrModelCalls = 0;
+    mockedFetchAmrModels.mockReset();
+    mockedFetchAmrModels.mockImplementation(() => {
+      amrModelCalls += 1;
+      // First call is the initial Path A poll (empty so the rescan re-probe
+      // path is taken). The second call is the in-flight refreshAgents re-probe.
+      if (amrModelCalls === 1) return firstPoll.promise;
+      return reProbe.promise;
+    });
+    mockedFetchAgentsStream.mockResolvedValue([
+      {
+        id: 'amr',
+        name: 'AMR',
+        bin: 'vela',
+        available: true,
+        version: '1.0.0',
+        models: [{ id: 'headerless-fallback', label: 'headerless-fallback' }],
+      },
+    ]);
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(mockedFetchAmrModels).toHaveBeenCalledTimes(1);
+    });
+
+    // Leave the initial poll empty so amrModelsRef stays null and rescan re-probes.
+    firstPoll.resolve(null);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('amr-model').textContent).toBe('none');
+    });
+
+    fireEvent.click(screen.getByText('open settings'));
+    await waitFor(() => {
+      expect(screen.getByText('rescan agents bare')).toBeTruthy();
+    });
+    fireEvent.click(screen.getByText('rescan agents bare'));
+
+    await waitFor(() => {
+      expect(amrModelCalls).toBe(2);
+    });
+    const callsBeforeIdentityFlip = amrModelCalls;
+
+    // Enter pending while the re-probe is in flight: identity changes and the
+    // main poll skips, so only the discard path can apply this response.
+    act(() => {
+      workspaceContextHarness.set({
+        identityChangePending: true,
+      });
+    });
+
+    reProbe.resolve({
+      source: 'remote',
+      refreshing: false,
+      models: [{ id: 'stale-pre-switch-catalog', label: 'stale-pre-switch-catalog' }],
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('refresh-agents-amr-model').textContent).toBe('none');
+    });
+    // Pending gate must not start a replacement Path A probe for the discarded
+    // response either.
+    expect(amrModelCalls).toBe(callsBeforeIdentityFlip);
   });
 
   it('refreshes renderer config and clears stale AMR models after a desktop app-config change event', async () => {
@@ -615,13 +880,17 @@ describe('App AMR polling', () => {
       },
     });
     mockedFetchAmrModels.mockReset();
+    // Config change both restarts the Path A poll and re-probes inside
+    // refreshAgents when the catalog was cleared. Keep post-change answers
+    // durable so concurrent probes cannot exhaust a one-shot mock and clear
+    // the picker back to empty.
     mockedFetchAmrModels
       .mockResolvedValueOnce({
         source: 'remote',
         refreshing: false,
         models: [{ id: 'old-remote', label: 'old-remote' }],
       })
-      .mockResolvedValueOnce({
+      .mockResolvedValue({
         source: 'remote',
         refreshing: false,
         models: [{ id: 'local-remote', label: 'local-remote' }],
@@ -685,7 +954,7 @@ describe('App AMR polling', () => {
     await waitFor(() => {
       expect(mockedFetchAgentsStream).toHaveBeenCalledTimes(2);
     });
-    expect(mockedFetchAmrModels).toHaveBeenCalledTimes(2);
+    expect(mockedFetchAmrModels.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 
   it('ignores stale in-flight AMR model polls after a desktop app-config change restarts polling', async () => {
@@ -709,9 +978,14 @@ describe('App AMR polling', () => {
       agentCliEnv: daemon?.agentCliEnv ?? local.agentCliEnv,
     }));
     mockedFetchAmrModels.mockReset();
-    mockedFetchAmrModels
-      .mockReturnValueOnce(oldRemotePoll.promise)
-      .mockReturnValueOnce(localRemotePoll.promise);
+    let amrModelCalls = 0;
+    mockedFetchAmrModels.mockImplementation(() => {
+      amrModelCalls += 1;
+      // First (pre-change) poll stays in flight; every post-change probe
+      // shares the local catalog deferred so refreshAgents re-probe and the
+      // restarted poll effect do not diverge.
+      return amrModelCalls === 1 ? oldRemotePoll.promise : localRemotePoll.promise;
+    });
     mockedFetchAgentsStream
       .mockResolvedValueOnce([
         {
@@ -743,7 +1017,7 @@ describe('App AMR polling', () => {
     fireEvent(window, new CustomEvent('open-design:app-config-changed'));
 
     await waitFor(() => {
-      expect(mockedFetchAmrModels).toHaveBeenCalledTimes(2);
+      expect(mockedFetchAmrModels.mock.calls.length).toBeGreaterThanOrEqual(2);
     });
 
     localRemotePoll.resolve({

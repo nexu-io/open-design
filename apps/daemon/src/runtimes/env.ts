@@ -231,7 +231,15 @@ export function openDesignAmrTraceEnv(input: {
     OPEN_DESIGN_RUN_ID: runId,
     OPEN_DESIGN_RUN_ATTEMPT: String(Math.floor(input.runAttempt)),
     ...(conversationId ? { OPEN_DESIGN_SESSION_ID: conversationId } : {}),
-    ...(workspaceId ? { OPEN_DESIGN_WORKSPACE_ID: workspaceId } : {}),
+    ...(workspaceId
+      ? {
+          OPEN_DESIGN_WORKSPACE_ID: workspaceId,
+          // Belt-and-suspenders for any nested Path A `vela model list` spawn
+          // inside the agent tree. Agent auth still requires the Open Design
+          // run trace above; this only scopes plain model discovery.
+          VELA_WORKSPACE_ID: workspaceId,
+        }
+      : {}),
     ...(bounded('pluginWorkflowId')
       ? { OPEN_DESIGN_PLUGIN_WORKFLOW_ID: bounded('pluginWorkflowId')! }
       : {}),

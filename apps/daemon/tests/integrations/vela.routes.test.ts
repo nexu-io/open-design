@@ -37,6 +37,7 @@ import {
   velaLiveAccountCacheKey,
 } from '../../src/integrations/vela.js';
 import { registerVelaRoutes } from '../../src/routes/vela.js';
+import { amrModelLoadingCache } from '../../src/runtimes/amr-model-cache.js';
 
 interface StartedServer {
   url: string;
@@ -51,8 +52,11 @@ let server: http.Server;
 let originalHome: string | undefined;
 let tmpHome: string;
 
-async function getJson<T = unknown>(url: string): Promise<{ status: number; body: T }> {
-  const resp = await fetch(url);
+async function getJson<T = unknown>(
+  url: string,
+  headers: Record<string, string> = {},
+): Promise<{ status: number; body: T }> {
+  const resp = await fetch(url, Object.keys(headers).length > 0 ? { headers } : undefined);
   const parsedBody = (await resp.json()) as T;
   return { status: resp.status, body: parsedBody };
 }
@@ -72,16 +76,22 @@ async function postJson<T = unknown>(
   return { status: resp.status, body: parsedBody };
 }
 
+
+function amrModelLoadingCacheReset(): void {
+  amrModelLoadingCache.resetForTests();
+}
+
 async function waitForAmrModels(
   expectedSource: 'preset' | 'remote',
   timeoutMs = 5_000,
+  headers: Record<string, string> = {},
 ): Promise<{ status: number; body: { source: 'preset' | 'remote'; models: Array<{ id: string }> } }> {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
     const response = await getJson<{
       source: 'preset' | 'remote';
       models: Array<{ id: string }>;
-    }>(`${baseUrl}/api/amr/models`);
+    }>(`${baseUrl}/api/amr/models`, headers);
     if (response.body.source === expectedSource) return response;
     if (Date.now() >= deadline) {
       throw new Error(`timed out waiting for /api/amr/models source=${expectedSource}`);
@@ -261,6 +271,7 @@ afterEach(async () => {
     delete process.env.FAKE_VELA_BILLING_UNKNOWN_COMMAND;
     delete process.env.FAKE_VELA_MODEL_LIST_JSON;
     delete process.env.FAKE_VELA_MODEL_PRESET_JSON;
+    delete process.env.FAKE_VELA_MODEL_LIST_ENV_DUMP;
     delete process.env.FAKE_VELA_ENV_DUMP_PATH;
     delete process.env.FAKE_VELA_LOGIN_INVOCATION_LOG;
     delete process.env.FAKE_VELA_LOGIN_ACTIVATION_AFTER_PARENT_EXIT_MS;
@@ -280,6 +291,42 @@ afterEach(async () => {
       retryDelay: 50,
     });
   }
+});
+
+describe('GET /api/amr/models workspace scope', () => {
+  it('forwards the selected workspace as VELA_WORKSPACE_ID to vela model list', async () => {
+    seedLogin('local');
+    const dumpPath = path.join(tmpHome, 'model-list-env.json');
+    process.env.FAKE_VELA_MODEL_LIST_ENV_DUMP = dumpPath;
+    // Force a remote refresh path by waiting for remote source.
+    amrModelLoadingCacheReset();
+    const response = await waitForAmrModels('remote', 8_000, {
+      'x-od-workspace-id': 'ws-team-pro',
+      'x-od-workspace-member-id': 'member-1',
+    });
+    expect(response.status).toBe(200);
+    expect(response.body.source).toBe('remote');
+    expect(existsSync(dumpPath)).toBe(true);
+    const dump = JSON.parse(readFileSync(dumpPath, 'utf8')) as {
+      VELA_WORKSPACE_ID: string | null;
+      args: string[];
+    };
+    expect(dump.VELA_WORKSPACE_ID).toBe('ws-team-pro');
+    expect(dump.args.slice(0, 2)).toEqual(['model', 'list']);
+  });
+
+  it('rejects malformed x-od-workspace-id before probing or caching', async () => {
+    seedLogin('local');
+    amrModelLoadingCacheReset();
+    const dumpPath = path.join(tmpHome, 'model-list-invalid-env.json');
+    process.env.FAKE_VELA_MODEL_LIST_ENV_DUMP = dumpPath;
+    const response = await getJson<{ error: string }>(`${baseUrl}/api/amr/models`, {
+      'x-od-workspace-id': '../not a workspace!',
+    });
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({ error: 'invalid_workspace_id' });
+    expect(existsSync(dumpPath)).toBe(false);
+  });
 });
 
 describe('GET /api/integrations/vela/wallet', () => {
@@ -398,6 +445,54 @@ describe('GET /api/integrations/vela/wallet', () => {
     }
   });
 
+  it('invalidates workspace-scoped AMR model catalogs on wallet refresh', async () => {
+    const walletApi = await startWalletApi((_req, res) => {
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({
+        balanceUsd: '20.0000',
+        updatedAt: '2026-07-09T07:30:00.000Z',
+      }));
+    });
+    process.env.FAKE_VELA_MODEL_LIST_JSON = JSON.stringify({
+      source: 'remote',
+      data: [
+        { id: 'public_model_deepseek_v4_flash', enabled: false },
+      ],
+    });
+    seedLogin('local', {
+      apiUrl: walletApi.url,
+      controlKey: 'ck-wallet-refresh-ws',
+      runtimeKey: 'rt-wallet-refresh-ws',
+      user: { id: 'wallet-user', email: 'wallet@example.com', plan: 'free' },
+    });
+    const workspaceHeaders = {
+      'x-od-workspace-id': 'ws-team-pro',
+      'x-od-workspace-member-id': 'member-1',
+    };
+    try {
+      const warmed = await waitForAmrModels('remote', 8_000, workspaceHeaders);
+      expect(warmed.body.models).toEqual([
+        { id: 'deepseek-v4-flash', label: 'deepseek-v4-flash', enabled: false },
+      ]);
+
+      const refresh = await getJson<{ status: string }>(
+        `${baseUrl}/api/integrations/vela/wallet?refresh=1`,
+      );
+      expect(refresh.status).toBe(200);
+      expect(refresh.body.status).toBe('available');
+
+      const afterRefresh = await getJson<{
+        source: 'preset' | 'remote';
+        refreshing?: boolean;
+      }>(`${baseUrl}/api/amr/models`, workspaceHeaders);
+      expect(afterRefresh.status).toBe(200);
+      expect(afterRefresh.body.source).toBe('preset');
+      expect(afterRefresh.body.refreshing).toBe(true);
+    } finally {
+      await walletApi.close();
+    }
+  });
+
   it('invalidates the AMR model catalog cache when a forced status refresh observes a plan change', async () => {
     process.env.FAKE_VELA_BILLING_TIER = 'free';
     process.env.FAKE_VELA_BILLING_BALANCE_USD = '1.00';
@@ -436,6 +531,52 @@ describe('GET /api/integrations/vela/wallet', () => {
       refreshing?: boolean;
       models: Array<{ id: string }>;
     }>(`${baseUrl}/api/amr/models`);
+    expect(afterPlanChange.status).toBe(200);
+    expect(afterPlanChange.body.source).toBe('preset');
+    expect(afterPlanChange.body.refreshing).toBe(true);
+  });
+
+  it('invalidates workspace-scoped AMR model catalogs when a status refresh observes a plan change', async () => {
+    process.env.FAKE_VELA_BILLING_TIER = 'free';
+    process.env.FAKE_VELA_BILLING_BALANCE_USD = '1.00';
+    process.env.FAKE_VELA_MODEL_LIST_JSON = JSON.stringify({
+      source: 'remote',
+      data: [
+        { id: 'public_model_deepseek_v4_flash', enabled: false },
+      ],
+    });
+    seedLogin('local', {
+      controlKey: 'ck-status-refresh-ws',
+      runtimeKey: 'rt-status-refresh-ws',
+      user: { id: 'status-user', email: 'status@example.com', plan: 'free' },
+    });
+    const workspaceHeaders = {
+      'x-od-workspace-id': 'ws-team-pro',
+      'x-od-workspace-member-id': 'member-1',
+    };
+
+    const firstStatus = await getJson<{ account?: { plan?: string } }>(
+      `${baseUrl}/api/integrations/vela/status?refresh=1`,
+    );
+    expect(firstStatus.status).toBe(200);
+    expect(firstStatus.body.account?.plan).toBe('free');
+
+    const warmed = await waitForAmrModels('remote', 8_000, workspaceHeaders);
+    expect(warmed.body.models).toEqual([
+      { id: 'deepseek-v4-flash', label: 'deepseek-v4-flash', enabled: false },
+    ]);
+
+    process.env.FAKE_VELA_BILLING_TIER = 'pro';
+    const upgradedStatus = await getJson<{ account?: { plan?: string } }>(
+      `${baseUrl}/api/integrations/vela/status?refresh=1`,
+    );
+    expect(upgradedStatus.status).toBe(200);
+    expect(upgradedStatus.body.account?.plan).toBe('pro');
+
+    const afterPlanChange = await getJson<{
+      source: 'preset' | 'remote';
+      refreshing?: boolean;
+    }>(`${baseUrl}/api/amr/models`, workspaceHeaders);
     expect(afterPlanChange.status).toBe(200);
     expect(afterPlanChange.body.source).toBe('preset');
     expect(afterPlanChange.body.refreshing).toBe(true);
