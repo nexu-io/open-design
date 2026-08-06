@@ -754,6 +754,8 @@ describe('ProjectView daemon reattach restore', () => {
     let lateOnDone: (() => void) | null = null;
     let lateOnRunStatus: ((status: 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled') => void) | null = null;
     let lateOnRunEventId: ((eventId: string) => void) | null = null;
+    let lateOnError: ((error: Error & { code?: string }) => Promise<void>) | null = null;
+    let lateOnDelta: ((delta: string) => void) | null = null;
     listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
     listMessages.mockResolvedValue([
       {
@@ -784,11 +786,13 @@ describe('ProjectView daemon reattach restore', () => {
       updatedAt: endedAt, exitCode: 0, signal: null,
     });
     reattachDaemonRun.mockImplementation(async (options: {
-      handlers: { onDone: () => void };
+      handlers: { onDone: () => void; onDelta: (delta: string) => void; onError: (error: Error & { code?: string }) => Promise<void> };
       onRunStatus?: (status: 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled') => void;
       onRunEventId?: (eventId: string) => void;
     }) => {
       lateOnDone = options.handlers.onDone;
+      lateOnDelta = options.handlers.onDelta;
+      lateOnError = options.handlers.onError;
       lateOnRunStatus = options.onRunStatus ?? null;
       lateOnRunEventId = options.onRunEventId ?? null;
       return new Promise<void>(() => {});
@@ -801,6 +805,8 @@ describe('ProjectView daemon reattach restore', () => {
       });
     }
     expect(reattachDaemonRun).toHaveBeenCalledTimes(1);
+    expect(lateOnDelta).toBeTypeOf('function');
+    lateOnDelta!('late buffered delta');
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(5_001);
@@ -834,6 +840,9 @@ describe('ProjectView daemon reattach restore', () => {
     expect(saveMessage).toHaveBeenCalledTimes(savesAtTimeout);
     expect(lateOnRunEventId).toBeTypeOf('function');
     await act(async () => { (lateOnRunEventId as (eventId: string) => void)('late-event'); });
+    expect(saveMessage).toHaveBeenCalledTimes(savesAtTimeout);
+    expect(lateOnError).toBeTypeOf('function');
+    await act(async () => { await (lateOnError as (error: Error & { code?: string }) => Promise<void>)(Object.assign(new Error('late disconnect'), { code: 'GENERIC_DAEMON_DISCONNECT' })); });
     expect(saveMessage).toHaveBeenCalledTimes(savesAtTimeout);
     const reattachOptions = reattachDaemonRun.mock.calls[0]?.[0] as { signal: AbortSignal } | undefined;
     expect(reattachOptions?.signal.aborted).toBe(true);

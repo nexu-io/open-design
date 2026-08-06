@@ -5515,6 +5515,8 @@ export function ProjectView({
         const settleTerminalDeliveryVerification = async (preserveReplayProgress = false) => {
           if (terminalDeliveryVerificationExpired) return;
           terminalDeliveryVerificationExpired = true;
+          textBuffer.cancel();
+          unregisterTextBuffer();
           const deliveryContent = preserveReplayProgress ? replayedContent : message.content;
           const deliveryEvents = preserveReplayProgress
             ? [...(message.events ?? []), ...replayedEvents]
@@ -5806,6 +5808,11 @@ export function ProjectView({
               onProjectsRefresh();
             },
             onError: async (err) => {
+              if (terminalDeliveryVerificationExpired) {
+                textBuffer.cancel();
+                unregisterTextBuffer();
+                return;
+              }
               const genericDisconnect = isGenericDaemonDisconnect(err);
               if (boundedTerminalDeliveryVerification && genericDisconnect) {
                 textBuffer.flush();
@@ -6157,7 +6164,9 @@ export function ProjectView({
             }
           })
           .finally(() => {
-            textBuffer.flush();
+            if (!terminalDeliveryVerificationExpired) {
+              textBuffer.flush();
+            }
             textBuffer.cancel();
             unregisterTextBuffer();
             if (persistTimer) clearProjectTimeout(persistTimer);
