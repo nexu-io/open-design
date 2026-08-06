@@ -776,7 +776,7 @@ describe('ProjectView daemon reattach restore', () => {
     ]);
     fetchPreviewComments.mockResolvedValue([]);
     loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
-    fetchProjectFiles.mockResolvedValue([]);
+    fetchProjectFiles.mockResolvedValue([{ name: 'index.html', path: 'index.html', size: 23, mtime: endedAt, kind: 'html', mime: 'text/html' }]);
     fetchLiveArtifacts.mockResolvedValue([]);
     fetchSkill.mockResolvedValue(null);
     fetchDesignSystem.mockResolvedValue(null);
@@ -822,12 +822,12 @@ describe('ProjectView daemon reattach restore', () => {
     const settled = saveMessage.mock.calls
       .map((call) => call[2] as ChatMessage)
       .find((message) => message.id === 'msg-stalled-terminal-delivery'
-        && message.resultDeliveryState === 'no_result');
+        && message.resultDeliveryState !== undefined);
     expect(settled).toMatchObject({
       runStatus: 'succeeded',
-      producedFiles: [],
-      traceObjectFiles: [],
-      resultDeliveryState: 'no_result',
+      content: 'late buffered delta',
+      producedFiles: [expect.objectContaining({ name: 'index.html' })],
+      traceObjectFiles: [expect.objectContaining({ name: 'index.html' })],
     });
     const savesAtTimeout = saveMessage.mock.calls.length;
     expect(lateOnDone).not.toBeNull();

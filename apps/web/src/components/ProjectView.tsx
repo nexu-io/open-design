@@ -5586,7 +5586,7 @@ export function ProjectView({
         if (boundedTerminalDeliveryVerification) {
           terminalDeliveryVerificationTimer = scheduleProjectTimeout(() => {
             if (reattachControllersRef.current.get(runId) !== controller) return;
-            void settleTerminalDeliveryVerification();
+            void settleTerminalDeliveryVerification(true);
           }, TERMINAL_DELIVERY_VERIFICATION_TIMEOUT_MS);
         }
         void reattachDaemonRun({
