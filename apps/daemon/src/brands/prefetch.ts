@@ -1,4 +1,3 @@
-// @ts-nocheck
 import fs from "node:fs";
 import path from "node:path";
 import { harvestFonts, type FontFile } from "./fonts.js";
@@ -303,7 +302,7 @@ export function normalizeColor(raw: string): string | null {
   const v = raw.trim().toLowerCase();
   const hex = /^#([0-9a-f]{3,8})$/.exec(v);
   if (hex) {
-    let h = hex[1];
+    let h = hex[1]!;
     if (h.length === 3 || h.length === 4) {
       h = h.slice(0, 3).split("").map((c) => c + c).join("");
     } else if (h.length === 8) {
@@ -381,7 +380,7 @@ function mergeColorCandidates(...groups: ColorCandidate[][]): ColorCandidate[] {
     for (const candidate of group) {
       const existing = counts.get(candidate.hex) ?? { count: 0, sources: new Set<string>() };
       existing.count += candidate.count;
-      existing.extreme ||= candidate.extreme;
+      if (candidate.extreme) existing.extreme = true;
       for (const source of candidate.sources ?? []) existing.sources.add(source);
       counts.set(candidate.hex, existing);
     }
@@ -486,7 +485,7 @@ export function extractFonts(css: string): { fonts: FontCandidate[]; fontFaceFam
   const counts = new Map<string, number>();
   for (const m of css.matchAll(/font-family\s*:\s*([^;}{!]+)/gi)) {
     // First non-generic family in the stack is the intended face.
-    for (const partRaw of m[1].split(",")) {
+    for (const partRaw of m[1]!.split(",")) {
       const part = decodeEntities(partRaw).trim().replace(/^["']|["']$/g, "").trim();
       if (!part || part.startsWith("var(")) continue;
       if (part.includes('&quot') || /placeholder$/i.test(part)) continue;
@@ -498,7 +497,7 @@ export function extractFonts(css: string): { fonts: FontCandidate[]; fontFaceFam
   }
   const fontFace = new Set<string>();
   for (const m of css.matchAll(/@font-face\s*{[^}]*font-family\s*:\s*["']?([^;"'}]+)/gi)) {
-    const family = decodeEntities(m[1]).trim().replace(/^["']|["']$/g, "").trim();
+    const family = decodeEntities(m[1]!).trim().replace(/^["']|["']$/g, "").trim();
     if (!family || /placeholder$/i.test(family) || isIconFontFamily(family)) continue;
     fontFace.add(family);
   }
@@ -516,7 +515,7 @@ export function extractFonts(css: string): { fonts: FontCandidate[]; fontFaceFam
 function matchAll1(html: string, re: RegExp): string[] {
   const out: string[] = [];
   for (const m of html.matchAll(re)) {
-    const t = stripTags(m[1]).trim();
+    const t = stripTags(m[1]!).trim();
     if (t) out.push(t);
   }
   return out;
@@ -540,7 +539,7 @@ function extFor(contentType: string, url: string): string {
   if (contentType.includes("gif")) return ".gif";
   if (contentType.includes("icon") || contentType.includes("ico")) return ".ico";
   const m = /\.(svg|png|jpe?g|webp|gif|ico)(?:[?#]|$)/i.exec(url);
-  return m ? `.${m[1].toLowerCase()}` : ".png";
+  return m ? `.${m[1]!.toLowerCase()}` : ".png";
 }
 
 /** Width/height of a PNG buffer (IHDR), or null when it isn't a PNG. */
@@ -641,10 +640,10 @@ function extractNavLinks(html: string, baseUrl: string): Array<{ label: string; 
   const out: Array<{ label: string; url: string }> = [];
   const scope = /<nav[\s\S]{0,12000}?<\/nav>/i.exec(html)?.[0] ?? html.slice(0, 30000);
   for (const m of scope.matchAll(/<a[^>]+href=["']([^"'#]+)["'][^>]*>([\s\S]{0,200}?)<\/a>/gi)) {
-    const label = stripTags(m[2]);
+    const label = stripTags(m[2]!);
     if (!label || label.length > 40) continue;
     try {
-      out.push({ label, url: new URL(decodeEntities(m[1]), baseUrl).href });
+      out.push({ label, url: new URL(decodeEntities(m[1]!), baseUrl).href });
     } catch {
       /* skip */
     }
@@ -768,7 +767,7 @@ export async function prefetchBrand(
   const { signal } = opts;
   throwIfPrefetchAborted(signal);
   onProgress("fetch", url);
-  let page = await fetchText(url, HTML_CAP, { allowHttpError: true, signal });
+  let page = await fetchText(url, HTML_CAP, { allowHttpError: true, ...(signal ? { signal } : {}) });
   throwIfPrefetchAborted(signal);
   // A non-2xx body is only useful when it's a bot-wall challenge page (it
   // routes into blocked mode below). A site's own 404/500 page is not the
@@ -792,7 +791,7 @@ export async function prefetchBrand(
     // Plain fetch blocked outright with nothing usable.
     return null;
   }
-  return harvestFromHtml(html, baseUrl, brandDir, { url, onProgress, signal });
+  return harvestFromHtml(html, baseUrl, brandDir, { url, onProgress, ...(signal ? { signal } : {}) });
 }
 
 interface HarvestFromHtmlOptions {
@@ -838,9 +837,9 @@ async function harvestFromHtml(
     onProgress("css");
     const cssChunks: string[] = [];
     if (opts.cssSeed && opts.cssSeed.trim()) cssChunks.push(opts.cssSeed);
-    for (const m of html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)) cssChunks.push(m[1]);
+    for (const m of html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)) cssChunks.push(m[1]!);
     for (const m of html.matchAll(/<([a-z][\w:-]*)([^>]{0,2000}?)\sstyle=["']([^"']{1,2000})["'][^>]*>/gi)) {
-      cssChunks.push(`${inlineStyleSelector(m[1], m[2] ?? '')}{${m[3]};}`);
+      cssChunks.push(`${inlineStyleSelector(m[1]!, m[2] ?? '')}{${m[3]!};}`);
     }
 
     const cssLinks: string[] = [];
@@ -856,12 +855,12 @@ async function harvestFromHtml(
       }
     }
     const cssResults = await Promise.all(
-      cssLinks.slice(0, MAX_CSS_FILES).map((u) => fetchText(u, CSS_CAP, { signal })),
+      cssLinks.slice(0, MAX_CSS_FILES).map((u) => fetchText(u, CSS_CAP, signal ? { signal } : undefined)),
     );
     for (const r of cssResults) if (r) cssChunks.push(r.text);
     // Google Fonts CSS carries the canonical family names — fetch those too.
     const gfResults = await Promise.all(
-      googleFontsUrls.slice(0, 2).map((u) => fetchText(u, CSS_CAP, { signal })),
+      googleFontsUrls.slice(0, 2).map((u) => fetchText(u, CSS_CAP, signal ? { signal } : undefined)),
     );
     for (const r of gfResults) if (r) cssChunks.push(r.text);
     allCss = cssChunks.join("\n");
@@ -980,7 +979,7 @@ async function harvestFromHtml(
   const candidates = navLinks.filter((l) => sameHost(l.url) && EXTRA_PAGE_HINTS.test(l.url));
   for (const cand of candidates.slice(0, MAX_EXTRA_PAGES)) {
     onProgress("extra-page", cand.url);
-    const extra = await fetchText(cand.url, HTML_CAP, { signal });
+    const extra = await fetchText(cand.url, HTML_CAP, signal ? { signal } : undefined);
     if (!extra) continue;
     const t = decodeEntities(/<title[^>]*>([\s\S]*?)<\/title>/i.exec(extra.text)?.[1] ?? "").trim();
     const text = [

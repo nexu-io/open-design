@@ -1,4 +1,3 @@
-// @ts-nocheck
 import fs from "node:fs";
 import path from "node:path";
 
@@ -70,7 +69,7 @@ const FORMAT_EXT: Record<string, string> = {
 function formatFromUrl(url: string): string | null {
   const m = /\.(woff2|woff|otf|ttf)(?:[?#]|$)/i.exec(url);
   if (!m) return null;
-  const ext = m[1].toLowerCase();
+  const ext = m[1]!.toLowerCase();
   return ext === "otf" ? "opentype" : ext === "ttf" ? "truetype" : ext;
 }
 
@@ -78,7 +77,7 @@ function formatFromUrl(url: string): string | null {
 export function parseFontFaces(css: string, baseUrl: string): FontFaceRef[] {
   const out: FontFaceRef[] = [];
   for (const block of css.matchAll(/@font-face\s*\{([^}]+)\}/gi)) {
-    const body = block[1];
+    const body = block[1]!;
     const family = /font-family\s*:\s*["']?([^;"'}]+?)["']?\s*(?:;|$)/i.exec(body)?.[1]?.trim();
     if (!family || ICON_FAMILY_RE.test(family)) continue;
     const weight = /font-weight\s*:\s*([^;}]+)/i.exec(body)?.[1]?.trim() ?? "400";
@@ -91,10 +90,10 @@ export function parseFontFaces(css: string, baseUrl: string): FontFaceRef[] {
     // because a naive `src: [^;]+` slice truncates `data:...;base64,` URIs.
     let best: { url: string; format: string; rank: number } | null = null;
     for (const m of body.matchAll(/url\(\s*["']?([^"')]+)["']?\s*\)(?:\s*format\(\s*["']?([^"')]+)["']?\s*\))?/gi)) {
-      const rawUrl = m[1].trim();
+      const rawUrl = m[1]!.trim();
       const fmt = (m[2]?.trim().toLowerCase() ?? formatFromUrl(rawUrl)) || null;
       if (!fmt || !(fmt in FORMAT_RANK)) continue;
-      const rank = FORMAT_RANK[fmt];
+      const rank = FORMAT_RANK[fmt]!;
       if (best && best.rank <= rank) continue;
       if (rawUrl.startsWith("data:")) {
         best = { url: rawUrl, format: fmt, rank };
@@ -107,7 +106,14 @@ export function parseFontFaces(css: string, baseUrl: string): FontFaceRef[] {
       }
     }
     if (!best) continue;
-    out.push({ family, weight, style, url: best.url, format: best.format, unicodeRange });
+    out.push({
+      family,
+      weight,
+      style,
+      url: best.url,
+      format: best.format,
+      ...(unicodeRange ? { unicodeRange } : {}),
+    });
   }
   return out;
 }
@@ -133,7 +139,9 @@ async function fetchFont(url: string, referer?: string): Promise<Buffer | null> 
     const m = /^data:[^,;]*(;base64)?,([\s\S]*)$/.exec(url);
     if (!m) return null;
     try {
-      return m[1] ? Buffer.from(m[2], "base64") : Buffer.from(decodeURIComponent(m[2]), "utf8");
+      return m[1]
+        ? Buffer.from(m[2]!, "base64")
+        : Buffer.from(decodeURIComponent(m[2]!), "utf8");
     } catch {
       return null;
     }
