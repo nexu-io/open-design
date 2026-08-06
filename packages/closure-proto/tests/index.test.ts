@@ -22,6 +22,9 @@ import {
   validateClosureCandidateSignature,
   validateClosureFileInventory,
   validateClosureHandoffEnvelope,
+  validateClosureRuntimeStatus,
+  validateClosureShellCapabilityRequest,
+  validateClosureShellCapabilityResult,
   validateClosureShimRequest,
   validateClosureShimResult,
   type ClosureCandidateIdentity,
@@ -201,7 +204,8 @@ async function fixture(name: string): Promise<unknown> {
 
 describe("closure shim and handoff protocol", () => {
   it("keeps the shell request and ready result fixtures executable", async () => {
-    await expect(validateClosureShimRequest(await fixture("shim-request-v1.json"))).toEqual({
+    const request = validateClosureShimRequest(await fixture("shim-request-v1.json"));
+    expect(request).toEqual({
       channel: "beta",
       namespace: "release-beta",
       platform: "darwin-arm64",
@@ -211,7 +215,10 @@ describe("closure shim and handoff protocol", () => {
         version: "0.19.0-beta.1",
       },
     });
-    await expect(validateClosureShimResult(await fixture("handoff-ready-v1.json"))).toMatchObject({
+    await expect(validateClosureShimResult(
+      await fixture("handoff-ready-v1.json"),
+      request,
+    )).toMatchObject({
       outcome: "ready",
       schemaVersion: CLOSURE_SHIM_SCHEMA_VERSION,
     });
@@ -266,6 +273,111 @@ describe("closure shim and handoff protocol", () => {
     };
 
     expect(validateClosureHandoffEnvelope(fixtureValue)).not.toHaveProperty("futureCapability");
+  });
+});
+
+describe("closure shell capability protocol", () => {
+  it("keeps generation-bound request and result fixtures executable", async () => {
+    const request = validateClosureShellCapabilityRequest(
+      await fixture("shell-capability-request-v1.json"),
+    );
+
+    expect(request).toMatchObject({
+      capability: "select-file",
+      input: { accept: ["image/png"] },
+      requestId: "select-file-1",
+      schemaVersion: CLOSURE_HANDOFF_SCHEMA_VERSION,
+    });
+    await expect(validateClosureShellCapabilityResult(
+      await fixture("shell-capability-completed-v1.json"),
+      { handoff: request.handoff, requestId: request.requestId },
+    )).toMatchObject({
+      outcome: "completed",
+      output: { paths: ["selected.png"] },
+    });
+    await expect(validateClosureShellCapabilityResult(
+      await fixture("shell-capability-unsupported-v1.json"),
+      { handoff: request.handoff, requestId: request.requestId },
+    )).toMatchObject({ outcome: "unsupported" });
+    await expect(validateClosureShellCapabilityResult(
+      await fixture("shell-capability-failed-v1.json"),
+      { handoff: request.handoff, requestId: request.requestId },
+    )).toMatchObject({
+      error: { code: "permission-denied" },
+      outcome: "failed",
+    });
+  });
+
+  it("rejects stale generations and unrelated results", async () => {
+    const request = validateClosureShellCapabilityRequest(
+      await fixture("shell-capability-request-v1.json"),
+    );
+
+    expect(() => validateClosureShellCapabilityRequest({
+      ...request,
+      handoff: {
+        ...request.handoff,
+        identity: {
+          ...request.handoff.identity,
+          generation: request.handoff.identity.generation + 1,
+        },
+      },
+    }, { handoff: request.handoff })).toThrow(/generation/u);
+    expect(() => validateClosureShellCapabilityResult({
+      handoff: request.handoff,
+      outcome: "unsupported",
+      requestId: "another-request",
+      schemaVersion: CLOSURE_HANDOFF_SCHEMA_VERSION,
+    }, {
+      handoff: request.handoff,
+      requestId: request.requestId,
+    })).toThrow(/requestId/u);
+  });
+
+  it("accepts additive fields but rejects non-JSON capability payloads", async () => {
+    const fixtureValue = await fixture("shell-capability-request-v1.json") as Record<string, unknown>;
+
+    expect(validateClosureShellCapabilityRequest({
+      ...fixtureValue,
+      futureTransportHint: "ignored",
+    })).not.toHaveProperty("futureTransportHint");
+    expect(() => validateClosureShellCapabilityRequest({
+      ...fixtureValue,
+      input: { callback: () => undefined },
+    })).toThrow(/JSON/u);
+  });
+});
+
+describe("closure runtime lifecycle protocol", () => {
+  it.each([
+    ["runtime-running-v1.json", "running"],
+    ["runtime-stopped-v1.json", "stopped"],
+    ["runtime-failed-v1.json", "failed"],
+  ])("keeps %s executable", async (name, state) => {
+    expect(validateClosureRuntimeStatus(await fixture(name))).toMatchObject({
+      schemaVersion: CLOSURE_HANDOFF_SCHEMA_VERSION,
+      state,
+    });
+  });
+
+  it("fences terminal status to the exact handoff generation", async () => {
+    const running = validateClosureRuntimeStatus(await fixture("runtime-running-v1.json"));
+    const stopped = await fixture("runtime-stopped-v1.json");
+
+    expect(validateClosureRuntimeStatus(stopped, {
+      handoff: running.handoff,
+      state: "stopped",
+    })).toMatchObject({ state: "stopped" });
+    expect(() => validateClosureRuntimeStatus({
+      ...(stopped as Record<string, unknown>),
+      handoff: {
+        ...running.handoff,
+        identity: {
+          ...running.handoff.identity,
+          namespace: "release-preview",
+        },
+      },
+    }, { handoff: running.handoff })).toThrow(/namespace/u);
   });
 });
 

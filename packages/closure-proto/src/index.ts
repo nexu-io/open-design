@@ -62,6 +62,14 @@ export type ClosureRuntimeIdentity = ClosureBindingIdentity & {
   generation: number;
 };
 
+export type ClosureProtocolJsonValue =
+  | boolean
+  | null
+  | number
+  | string
+  | ClosureProtocolJsonValue[]
+  | { [key: string]: ClosureProtocolJsonValue };
+
 /**
  * Stable, additive identity envelope passed from the shell-carried shim to one
  * Closure body generation. Body layout and transport deliberately stay out of
@@ -71,6 +79,75 @@ export type ClosureHandoffEnvelope = {
   identity: ClosureRuntimeIdentity;
   schemaVersion: typeof CLOSURE_HANDOFF_SCHEMA_VERSION;
 };
+
+type ClosureShellCapabilityExchange = {
+  handoff: ClosureHandoffEnvelope;
+  requestId: string;
+  schemaVersion: typeof CLOSURE_HANDOFF_SCHEMA_VERSION;
+};
+
+/**
+ * One generation-bound request from a Closure body to its carrying shell.
+ * Capability payloads stay JSON-shaped so the physical IPC remains replaceable.
+ */
+export type ClosureShellCapabilityRequest = ClosureShellCapabilityExchange & {
+  capability: string;
+  input: ClosureProtocolJsonValue;
+};
+
+export type ClosureShellCapabilityCompletedResult = ClosureShellCapabilityExchange & {
+  outcome: "completed";
+  output: ClosureProtocolJsonValue;
+};
+
+export type ClosureShellCapabilityUnsupportedResult = ClosureShellCapabilityExchange & {
+  outcome: "unsupported";
+};
+
+export type ClosureShellCapabilityFailedResult = ClosureShellCapabilityExchange & {
+  error: {
+    code: string;
+  };
+  outcome: "failed";
+};
+
+export type ClosureShellCapabilityResult =
+  | ClosureShellCapabilityCompletedResult
+  | ClosureShellCapabilityUnsupportedResult
+  | ClosureShellCapabilityFailedResult;
+
+export interface ClosureShellCapabilityPort {
+  invoke(request: ClosureShellCapabilityRequest): Promise<ClosureShellCapabilityResult>;
+}
+
+type ClosureRuntimeStatusBase = {
+  handoff: ClosureHandoffEnvelope;
+  pid: number;
+  schemaVersion: typeof CLOSURE_HANDOFF_SCHEMA_VERSION;
+};
+
+export type ClosureRuntimeRunningStatus = ClosureRuntimeStatusBase & {
+  state: "running";
+};
+
+export type ClosureRuntimeStoppedStatus = ClosureRuntimeStatusBase & {
+  state: "stopped";
+};
+
+export type ClosureRuntimeFailedStatus = ClosureRuntimeStatusBase & {
+  error: {
+    code: string;
+  };
+  state: "failed";
+};
+
+export type ClosureRuntimeTerminalStatus =
+  | ClosureRuntimeStoppedStatus
+  | ClosureRuntimeFailedStatus;
+
+export type ClosureRuntimeStatus =
+  | ClosureRuntimeRunningStatus
+  | ClosureRuntimeTerminalStatus;
 
 export type ClosureShimRequest = {
   channel: ReleaseChannel;
@@ -190,6 +267,63 @@ function normalizeSignatureValue(value: unknown): string {
     throw new ClosureProtocolError("closure signature value must be unpadded base64url");
   }
   return value;
+}
+
+function normalizeProtocolToken(value: unknown, label: string): string {
+  if (
+    typeof value !== "string"
+    || !/^[a-z0-9](?:[a-z0-9._-]{0,127})$/u.test(value)
+  ) {
+    throw new ClosureProtocolError(`${label} must be a lowercase protocol token`);
+  }
+  return value;
+}
+
+function normalizeProtocolJsonValue(
+  value: unknown,
+  label: string,
+  seen: Set<object> = new Set(),
+): ClosureProtocolJsonValue {
+  if (
+    value === null
+    || typeof value === "boolean"
+    || typeof value === "string"
+  ) {
+    return value;
+  }
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) {
+      throw new ClosureProtocolError(`${label} numbers must be finite`);
+    }
+    return value;
+  }
+  if (typeof value !== "object") {
+    throw new ClosureProtocolError(`${label} must contain only JSON values`);
+  }
+  if (seen.has(value)) {
+    throw new ClosureProtocolError(`${label} must not contain cycles`);
+  }
+  seen.add(value);
+  try {
+    if (Array.isArray(value)) {
+      return value.map((entry, index) => normalizeProtocolJsonValue(
+        entry,
+        `${label}[${index}]`,
+        seen,
+      ));
+    }
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) {
+      throw new ClosureProtocolError(`${label} objects must be plain JSON records`);
+    }
+    const record = value as Record<string, unknown>;
+    return Object.fromEntries(Object.entries(record).map(([key, entry]) => [
+      key,
+      normalizeProtocolJsonValue(entry, `${label}.${key}`, seen),
+    ]));
+  } finally {
+    seen.delete(value);
+  }
 }
 
 function normalizeInventoryPath(value: unknown): string {
@@ -431,6 +565,164 @@ export function validateClosureHandoffEnvelope(
   };
 }
 
+function validateCapabilityExchange(
+  value: Record<string, unknown>,
+  expected?: {
+    handoff?: ClosureHandoffEnvelope;
+    requestId?: string;
+  },
+): ClosureShellCapabilityExchange {
+  if (value.schemaVersion !== CLOSURE_HANDOFF_SCHEMA_VERSION) {
+    throw new ClosureProtocolError(
+      `unsupported closure shell capability schema version: ${String(value.schemaVersion)}`,
+    );
+  }
+  const expectedIdentity = expected?.handoff?.identity;
+  const handoff = validateClosureHandoffEnvelope(value.handoff, expectedIdentity == null
+    ? undefined
+    : {
+        channel: expectedIdentity.channel,
+        generation: expectedIdentity.generation,
+        namespace: expectedIdentity.namespace,
+        platform: expectedIdentity.platform,
+      });
+  if (
+    expected?.handoff != null
+    && handoff.identity.digest !== expected.handoff.identity.digest
+  ) {
+    throw new ClosureProtocolError("closure shell capability handoff digest does not match expected handoff");
+  }
+  if (
+    expected?.handoff != null
+    && handoff.identity.version !== expected.handoff.identity.version
+  ) {
+    throw new ClosureProtocolError("closure shell capability handoff version does not match expected handoff");
+  }
+  const requestId = normalizeProtocolToken(value.requestId, "closure shell capability requestId");
+  if (expected?.requestId != null && requestId !== expected.requestId) {
+    throw new ClosureProtocolError(
+      `closure shell capability requestId ${requestId} does not match expected requestId ${expected.requestId}`,
+    );
+  }
+  return {
+    handoff,
+    requestId,
+    schemaVersion: CLOSURE_HANDOFF_SCHEMA_VERSION,
+  };
+}
+
+export function validateClosureShellCapabilityRequest(
+  value: unknown,
+  expected?: { handoff?: ClosureHandoffEnvelope },
+): ClosureShellCapabilityRequest {
+  const request = requireRecord(value, "closure shell capability request");
+  return {
+    ...validateCapabilityExchange(request, expected),
+    capability: normalizeProtocolToken(
+      request.capability,
+      "closure shell capability name",
+    ),
+    input: normalizeProtocolJsonValue(request.input, "closure shell capability input"),
+  };
+}
+
+export function validateClosureShellCapabilityResult(
+  value: unknown,
+  expected?: {
+    handoff?: ClosureHandoffEnvelope;
+    requestId?: string;
+  },
+): ClosureShellCapabilityResult {
+  const result = requireRecord(value, "closure shell capability result");
+  const exchange = validateCapabilityExchange(result, expected);
+  if (result.outcome === "completed") {
+    return {
+      ...exchange,
+      outcome: "completed",
+      output: normalizeProtocolJsonValue(result.output, "closure shell capability output"),
+    };
+  }
+  if (result.outcome === "unsupported") {
+    return {
+      ...exchange,
+      outcome: "unsupported",
+    };
+  }
+  if (result.outcome === "failed") {
+    const error = requireRecord(result.error, "closure shell capability error");
+    return {
+      ...exchange,
+      error: {
+        code: normalizeProtocolToken(error.code, "closure shell capability error code"),
+      },
+      outcome: "failed",
+    };
+  }
+  throw new ClosureProtocolError(
+    `unsupported closure shell capability outcome: ${String(result.outcome)}`,
+  );
+}
+
+export function validateClosureRuntimeStatus(
+  value: unknown,
+  expected?: {
+    handoff?: ClosureHandoffEnvelope;
+    state?: ClosureRuntimeStatus["state"];
+  },
+): ClosureRuntimeStatus {
+  const status = requireRecord(value, "closure runtime status");
+  if (status.schemaVersion !== CLOSURE_HANDOFF_SCHEMA_VERSION) {
+    throw new ClosureProtocolError(
+      `unsupported closure runtime status schema version: ${String(status.schemaVersion)}`,
+    );
+  }
+  const expectedIdentity = expected?.handoff?.identity;
+  const handoff = validateClosureHandoffEnvelope(status.handoff, expectedIdentity == null
+    ? undefined
+    : {
+        channel: expectedIdentity.channel,
+        generation: expectedIdentity.generation,
+        namespace: expectedIdentity.namespace,
+        platform: expectedIdentity.platform,
+      });
+  if (
+    expected?.handoff != null
+    && (
+      handoff.identity.digest !== expected.handoff.identity.digest
+      || handoff.identity.version !== expected.handoff.identity.version
+    )
+  ) {
+    throw new ClosureProtocolError("closure runtime status does not match expected handoff candidate");
+  }
+  const pid = normalizePositiveInteger(status.pid, "closure runtime pid");
+  if (expected?.state != null && status.state !== expected.state) {
+    throw new ClosureProtocolError(
+      `closure runtime state ${String(status.state)} does not match expected state ${expected.state}`,
+    );
+  }
+  if (status.state === "running" || status.state === "stopped") {
+    return {
+      handoff,
+      pid,
+      schemaVersion: CLOSURE_HANDOFF_SCHEMA_VERSION,
+      state: status.state,
+    };
+  }
+  if (status.state === "failed") {
+    const error = requireRecord(status.error, "closure runtime error");
+    return {
+      error: {
+        code: normalizeProtocolToken(error.code, "closure runtime error code"),
+      },
+      handoff,
+      pid,
+      schemaVersion: CLOSURE_HANDOFF_SCHEMA_VERSION,
+      state: "failed",
+    };
+  }
+  throw new ClosureProtocolError(`unsupported closure runtime state: ${String(status.state)}`);
+}
+
 export function validateClosureShimRequest(value: unknown): ClosureShimRequest {
   const request = requireRecord(value, "closure shim request");
   if (request.schemaVersion !== CLOSURE_SHIM_SCHEMA_VERSION) {
@@ -451,7 +743,14 @@ export function validateClosureShimRequest(value: unknown): ClosureShimRequest {
   };
 }
 
-export function validateClosureShimResult(value: unknown): ClosureShimResult {
+export function validateClosureShimResult(
+  value: unknown,
+  expected?: {
+    channel: string;
+    namespace: string;
+    platform: string;
+  },
+): ClosureShimResult {
   const result = requireRecord(value, "closure shim result");
   if (result.schemaVersion !== CLOSURE_SHIM_SCHEMA_VERSION) {
     throw new ClosureProtocolError(
@@ -470,7 +769,7 @@ export function validateClosureShimResult(value: unknown): ClosureShimResult {
       throw new ClosureProtocolError("ready closure shim result must declare reused and rolledBack");
     }
     return {
-      handoff: validateClosureHandoffEnvelope(result.handoff),
+      handoff: validateClosureHandoffEnvelope(result.handoff, expected),
       outcome: "ready",
       reused: result.reused,
       rolledBack: result.rolledBack,
