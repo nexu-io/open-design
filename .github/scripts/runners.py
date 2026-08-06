@@ -28,9 +28,11 @@ def resolve_contract(mode):
     control = GITHUB_HOSTED if mode == "economic" else NEXU_SMALL
     workload = GITHUB_HOSTED if mode == "economic" else NEXU_MEDIUM
     browser_workload = GITHUB_HOSTED if mode == "economic" else NEXU_LARGE
-    # UI P0 is the memory-heavy Playwright domain suite; prefer the dedicated
-    # xlarge class once available so large remains headroom for lighter UI jobs.
-    ui_p0_workload = GITHUB_HOSTED if mode == "economic" else NEXU_XLARGE
+    # Measured UI P0 shards fit medium (mem well under 14Gi lim). Keep a
+    # dedicated heavy class for multi-client collab, which has hit large/xlarge
+    # memory ceilings and is not covered by the medium right-size evidence.
+    ui_p0_workload = GITHUB_HOSTED if mode == "economic" else NEXU_MEDIUM
+    ui_p0_heavy_workload = GITHUB_HOSTED if mode == "economic" else NEXU_XLARGE
 
     return {
         "runs_on": {
@@ -41,6 +43,7 @@ def resolve_contract(mode):
             "js_hot": workload,
             "ui_hot": browser_workload,
             "ui_p0": ui_p0_workload,
+            "ui_p0_heavy": ui_p0_heavy_workload,
             "visual_hot": browser_workload,
         },
         "decision": {
