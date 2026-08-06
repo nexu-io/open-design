@@ -27,6 +27,12 @@ import { app, dialog } from "electron";
 
 import { readPackagedConfig } from "./config.js";
 import {
+  confirmPackagedClosureRuntime,
+  createPackagedRuntimeIdentity,
+  resolvePackagedClosureRuntime,
+  startPackagedClosureRuntime,
+} from "./closure-runtime.js";
+import {
   claimPackagedDownloadAttribution,
   discoverPackagedDownloadAttribution,
 } from "./download-attribution.js";
@@ -168,7 +174,7 @@ async function main(): Promise<void> {
     app.exit(0);
     return;
   }
-  const activeConfig = launcherRuntime.config;
+  const shellConfig = launcherRuntime.config;
   const paths = launcherRuntime.paths;
   const mcpBootstrap = resolvePackagedMcpBootstrapLaunch({
     installedLaunchPath: launcherRuntime.installedLaunchPath,
@@ -178,9 +184,9 @@ async function main(): Promise<void> {
   // startPackagedSidecars call below is THE failure this covers (daemon/web
   // dying before reporting status, e.g. issue #4638's missing better-sqlite3).
   startupTelemetryContext = {
-    posthogKey: activeConfig.posthogKey,
-    posthogHost: activeConfig.posthogHost,
-    appVersion: activeConfig.appVersion,
+    posthogKey: shellConfig.posthogKey,
+    posthogHost: shellConfig.posthogHost,
+    appVersion: shellConfig.appVersion,
     namespace,
     source: SIDECAR_SOURCES.PACKAGED,
     // Pass installationRoot explicitly: OD_INSTALLATION_DIR is only set in the
@@ -218,13 +224,12 @@ async function main(): Promise<void> {
     platform: process.platform,
   });
   applyPackagedElectronPathOverrides(paths);
-  applyPackagedUpdaterEnv(activeConfig.updateMetadataUrl);
+  applyPackagedUpdaterEnv(shellConfig.updateMetadataUrl);
   if (!claimPackagedSingleInstanceLock(app, (argv) => {
     secondInstanceHandoff.handle(findPackagedDeeplinkArg(argv));
   })) {
     return;
   }
-  const identity = await writePackagedDesktopIdentity({ paths, stamp });
   await app.whenReady();
 
   // Show the brand splash IMMEDIATELY, before we await the daemon/web sidecars
@@ -236,6 +241,23 @@ async function main(): Promise<void> {
   // BEFORE the sidecar boot below — rather than re-adding the delay afterwards.
   const splash = createSplashWindow();
 
+  let closureRuntime = await resolvePackagedClosureRuntime({
+    channel: launcherRuntime.launcherPaths.channel,
+    installationRoot: launcherRuntime.launcherPaths.root,
+    legacyConfig: shellConfig,
+    namespace,
+    shellVersion: shellConfig.appVersion,
+  });
+  const identity = await writePackagedDesktopIdentity({
+    paths,
+    runtimeIdentity: createPackagedRuntimeIdentity({
+      closure: closureRuntime,
+      shellSource: launcherRuntime.source,
+      shellVersion: shellConfig.appVersion,
+    }),
+    stamp,
+  });
+
   applyLaunchEnv(paths.runtimeRoot, stamp);
 
   const runtime = bootstrapSidecarRuntime(stamp, process.env, {
@@ -244,43 +266,60 @@ async function main(): Promise<void> {
     contract: OPEN_DESIGN_SIDECAR_CONTRACT,
   });
 
-  const sidecars = await startPackagedSidecars(runtime, paths, {
-    appVersion: activeConfig.appVersion,
-    amrProfile: activeConfig.amrProfile,
-    daemonCliEntry: activeConfig.daemonCliEntry,
-    daemonSidecarEntry: activeConfig.daemonSidecarEntry,
-    electronNodeCommand: launcherRuntime.electronNodeCommand,
-    mcpBootstrapArgs: mcpBootstrap.args,
-    mcpBootstrapCommand: mcpBootstrap.command,
-    nodeCommand: activeConfig.nodeCommand,
-    telemetryRelayUrl: activeConfig.telemetryRelayUrl,
-    posthogKey: activeConfig.posthogKey,
-    posthogHost: activeConfig.posthogHost,
-    velaWebUrl: activeConfig.velaWebUrl,
-    // PR #974 round-5 (lefarcen P2): the Electron entry runs desktop
-    // main alongside the daemon, so the import-folder gate must be
-    // pinned ON from request 0. See `apps/packaged/src/headless-runtime.ts`
-    // for the windowless counterpart that passes `false`.
-    requireDesktopAuth: true,
-    webSidecarEntry: activeConfig.webSidecarEntry,
-    webStandaloneRoot: activeConfig.webStandaloneRoot,
-    webOutputMode: activeConfig.webOutputMode,
-    // Surface each sidecar boot phase on the splash status line so a slow
-    // cold start (Defender scans, native module loads) never reads as a hang.
-    // Both the "spawning" and "ready" edges are mapped so the step counter
-    // advances the instant each long native wait clears.
-    onPhase(phase) {
-      const stage =
-        phase === "daemon-spawning"
-          ? "engine"
-          : phase === "daemon-ready"
-            ? "engineReady"
-            : phase === "web-spawning"
-              ? "interface"
-              : "interfaceReady";
-      setSplashStage(splash.window, stage);
-    },
-  });
+  const started = await startPackagedClosureRuntime(
+    closureRuntime,
+    async (runtimeConfig) => await startPackagedSidecars(
+      runtime,
+      { ...paths, resourceRoot: runtimeConfig.resourceRoot },
+      {
+        appVersion: runtimeConfig.appVersion,
+        amrProfile: runtimeConfig.amrProfile,
+        daemonCliEntry: runtimeConfig.daemonCliEntry,
+        daemonSidecarEntry: runtimeConfig.daemonSidecarEntry,
+        electronNodeCommand: launcherRuntime.electronNodeCommand,
+        mcpBootstrapArgs: mcpBootstrap.args,
+        mcpBootstrapCommand: mcpBootstrap.command,
+        nodeCommand: runtimeConfig.nodeCommand,
+        telemetryRelayUrl: runtimeConfig.telemetryRelayUrl,
+        posthogKey: runtimeConfig.posthogKey,
+        posthogHost: runtimeConfig.posthogHost,
+        velaWebUrl: runtimeConfig.velaWebUrl,
+        // PR #974 round-5 (lefarcen P2): the Electron entry runs desktop
+        // main alongside the daemon, so the import-folder gate must be
+        // pinned ON from request 0. See `apps/packaged/src/headless-runtime.ts`
+        // for the windowless counterpart that passes `false`.
+        requireDesktopAuth: true,
+        webSidecarEntry: runtimeConfig.webSidecarEntry,
+        webStandaloneRoot: runtimeConfig.webStandaloneRoot,
+        webOutputMode: runtimeConfig.webOutputMode,
+        // Surface each sidecar boot phase on the splash status line so a slow
+        // cold start (Defender scans, native module loads) never reads as a hang.
+        // Both the "spawning" and "ready" edges are mapped so the step counter
+        // advances the instant each long native wait clears.
+        onPhase(phase) {
+          const stage =
+            phase === "daemon-spawning"
+              ? "engine"
+              : phase === "daemon-ready"
+                ? "engineReady"
+                : phase === "web-spawning"
+                  ? "interface"
+                  : "interfaceReady";
+          setSplashStage(splash.window, stage);
+        },
+      },
+    ),
+  );
+  closureRuntime = started.runtime;
+  const sidecars = started.value;
+  await identity.updateRuntimeIdentity(createPackagedRuntimeIdentity({
+    closure: closureRuntime,
+    shellSource: launcherRuntime.source,
+    shellVersion: shellConfig.appVersion,
+  }));
+  if (startupTelemetryContext != null) {
+    startupTelemetryContext.appVersion = closureRuntime.runtimeConfig.appVersion;
+  }
   if (sidecars.daemon.url) {
     void claimPackagedDownloadAttribution({
       attribution: downloadAttribution,
@@ -323,7 +362,7 @@ async function main(): Promise<void> {
     async discoverDaemonUrl() {
       return sidecars.daemon.url;
     },
-    windowTitle: resolvePackagedWindowTitle(activeConfig),
+    windowTitle: resolvePackagedWindowTitle(shellConfig),
     inviteProtocolClientPath:
       process.platform === "win32" ? launcherRuntime.installedLaunchPath : null,
     async onExternalShow() {
@@ -332,6 +371,9 @@ async function main(): Promise<void> {
     onDesktopReady(controls) {
       void confirmPackagedLauncherRuntime(launcherRuntime).catch((error: unknown) => {
         packagedLogger?.warn("failed to confirm packaged launcher runtime", { error });
+      });
+      void confirmPackagedClosureRuntime(closureRuntime).catch((error: unknown) => {
+        packagedLogger?.warn("failed to confirm packaged Closure runtime", { error });
       });
       void syncWindowsUninstallDisplayVersion({
         namespace,
@@ -346,12 +388,12 @@ async function main(): Promise<void> {
     },
     preloadPath: join(app.getAppPath(), "preload.cjs"),
     update: {
-      currentVersion: activeConfig.appVersion,
+      currentVersion: shellConfig.appVersion,
       downloadRoot: paths.updateRoot,
       installerObservationRoot: paths.installerObservationRoot,
       launcherLaunchPath: launcherRuntime.installedLaunchPath,
       launcherRoot: launcherRuntime.launcherPaths.root,
-      launcherPayloadExtractorPath: activeConfig.resourceRoot == null ? null : join(activeConfig.resourceRoot, "bin", "7z.exe"),
+      launcherPayloadExtractorPath: shellConfig.resourceRoot == null ? null : join(shellConfig.resourceRoot, "bin", "7z.exe"),
       launcherRuntimePath: launcherRuntime.launcherPaths.runtimePath,
     },
   });

@@ -40,9 +40,9 @@ describe("tools-pack Closure archive", () => {
     expect(source).toContain('export * from "@open-design/headless"');
     expect(source).toContain("resolveOpenDesignClosureLayout");
     expect(source).toContain("daemonCliEntry");
+    expect(source).toContain("daemonSidecarEntry");
     expect(source).toContain("webServerEntry");
     expect(source).toContain("webSidecarEntry");
-    expect(source).not.toContain("daemonSidecarEntry");
     expect(source).not.toContain("payload-desktop-handoff");
     expect(source).not.toContain("desktop");
     expect(source).not.toContain("namespace");

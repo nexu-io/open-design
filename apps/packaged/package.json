@@ -24,6 +24,7 @@
     "typecheck": "pnpm --filter @open-design/desktop build && pnpm --filter @open-design/headless-runtime build && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
   },
   "dependencies": {
+    "@open-design/closure-store": "workspace:*",
     "@open-design/contracts": "workspace:*",
     "@open-design/daemon": "workspace:*",
     "@open-design/desktop": "workspace:*",
@@ -36,6 +37,7 @@
     "@open-design/web": "workspace:*"
   },
   "devDependencies": {
+    "@open-design/closure-proto": "workspace:*",
     "@types/node": "24.12.2",
     "electron": "41.3.0",
     "esbuild": "0.28.0",

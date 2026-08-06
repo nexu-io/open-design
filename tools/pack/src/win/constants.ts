@@ -32,6 +32,8 @@ export const NSIS_INSTALLER_LANGUAGE_BY_WEB_LOCALE = {
 export const INTERNAL_PACKAGES = [
   { directory: "packages/release", name: "@open-design/release" },
   { directory: "packages/components", name: "@open-design/components" },
+  { directory: "packages/closure-proto", name: "@open-design/closure-proto" },
+  { directory: "packages/closure-store", name: "@open-design/closure-store" },
   { directory: "packages/contracts", name: "@open-design/contracts" },
   { directory: "packages/registry-protocol", name: "@open-design/registry-protocol" },
   { directory: "packages/sidecar-proto", name: "@open-design/sidecar-proto" },

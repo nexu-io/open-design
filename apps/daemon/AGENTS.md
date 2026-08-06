@@ -9,7 +9,9 @@ Follow the root `AGENTS.md` and `apps/AGENTS.md` first. This file records daemon
 - `/api/*` HTTP routes and SSE streams.
 - The `od` CLI entrypoint in `src/cli.ts`.
 - Project persistence, generated files, artifacts, media, skills, design systems, plugins, MCP, connector credentials, automation state, agent spawning, and static serving.
-- The daemon sidecar entry under `sidecar/`.
+- Daemon sidecar entries under `sidecar/`: shared bootstrap/startup stays in
+  `runtime.ts`, `index.ts` preserves the historical packaged Desktop handoff,
+  and `daemon-sidecar.ts` is the shell-neutral Closure entry.
 
 The daemon is not a shared library for the web app. Do not import daemon private `src/` modules from `apps/web`; shared web/daemon contracts belong in `packages/contracts`.
 

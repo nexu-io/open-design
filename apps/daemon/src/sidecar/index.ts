@@ -1,21 +1,14 @@
-import { APP_KEYS, OPEN_DESIGN_SIDECAR_CONTRACT } from "@open-design/sidecar-proto";
-import { bootstrapSidecarRuntime } from "@open-design/sidecar";
-import { readProcessStamp } from "@open-design/platform";
-
-import { startDaemonSidecar } from "./server.js";
 import {
   executeLegacyPayloadDesktopHandoff,
   prepareLegacyPayloadDesktopHandoff,
 } from "./payload-desktop-handoff.js";
+import {
+  bootstrapDaemonSidecarRuntime,
+  startAndReportDaemonSidecar,
+} from "./runtime.js";
 
 async function main(): Promise<void> {
-  const stamp = readProcessStamp(process.argv.slice(2), OPEN_DESIGN_SIDECAR_CONTRACT);
-  if (stamp == null) throw new Error("sidecar stamp is required");
-
-  const runtime = bootstrapSidecarRuntime(stamp, process.env, {
-    app: APP_KEYS.DAEMON,
-    contract: OPEN_DESIGN_SIDECAR_CONTRACT,
-  });
+  const runtime = bootstrapDaemonSidecarRuntime();
   const desktopHandoff = await prepareLegacyPayloadDesktopHandoff({
     namespace: runtime.namespace,
     runtimeRoot: runtime.base,
@@ -24,9 +17,7 @@ async function main(): Promise<void> {
     console.warn("[packaged desktop handoff] prepare failed", error);
     return null;
   });
-  const server = await startDaemonSidecar(runtime);
-
-  process.stdout.write(`${JSON.stringify(await server.status(), null, 2)}\n`);
+  const server = await startAndReportDaemonSidecar(runtime);
   if (desktopHandoff?.kind === "none") {
     console.info("[packaged desktop handoff] skipped", { reason: desktopHandoff.reason });
   }

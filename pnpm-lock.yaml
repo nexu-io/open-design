@@ -287,6 +287,9 @@ importers:
 
   apps/packaged:
     dependencies:
+      '@open-design/closure-store':
+        specifier: workspace:*
+        version: link:../../packages/closure-store
       '@open-design/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
@@ -315,6 +318,9 @@ importers:
         specifier: workspace:*
         version: link:../web
     devDependencies:
+      '@open-design/closure-proto':
+        specifier: workspace:*
+        version: link:../../packages/closure-proto
       '@types/node':
         specifier: 24.12.2
         version: 24.12.2

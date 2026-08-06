@@ -38,6 +38,8 @@ export const MAC_PREBUNDLE_COPIED_RUNTIME_DEPENDENCIES = {
 } as const;
 
 export const MAC_STANDALONE_PREBUNDLE_EXCLUDED_INTERNAL_PACKAGES = [
+  "@open-design/closure-proto",
+  "@open-design/closure-store",
   "@open-design/daemon",
   "@open-design/desktop",
   "@open-design/launcher-proto",

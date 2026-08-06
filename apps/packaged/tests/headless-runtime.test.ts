@@ -92,6 +92,7 @@ describe("acquirePackagedHeadlessStartup", () => {
             closed.push("identity");
           },
           identity: {} as never,
+          updateRuntimeIdentity: async () => undefined,
         })),
         writeWebIdentity: vi.fn(async () => {
           if (failAt === "web-identity") {

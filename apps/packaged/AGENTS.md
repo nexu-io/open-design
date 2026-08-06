@@ -7,6 +7,7 @@ Follow the root `AGENTS.md` and `apps/AGENTS.md` first. This app owns only the p
 - Packaged Electron entry glue.
 - Packaged config loading.
 - Packaged process/path adapters supplied to the public Headless lifecycle.
+- Attachment of a verified local active Closure, with a one-way fallback to the legacy combined payload.
 - `od://` packaged entry routing to the internal web runtime.
 
 ## Does not own
@@ -14,6 +15,7 @@ Follow the root `AGENTS.md` and `apps/AGENTS.md` first. This app owns only the p
 - Product/business logic.
 - Web, daemon, or desktop implementation details.
 - Sidecar protocol definitions or process stamp semantics.
+- Closure download, extraction, release discovery, or update selection.
 
 ## Rules
 

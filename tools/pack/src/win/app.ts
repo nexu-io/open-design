@@ -185,7 +185,7 @@ export async function createWorkspaceTarballsCacheKey(
     packageManager: rootPackageJson.packageManager,
     pnpmLock: await hashPath(join(config.workspaceRoot, "pnpm-lock.yaml")),
     prebundle: shouldUseWinStandalonePrebundle(config.webOutputMode),
-    schemaVersion: 7,
+    schemaVersion: 8,
     webOutputMode: config.webOutputMode,
     workspaceBuildKey,
   });

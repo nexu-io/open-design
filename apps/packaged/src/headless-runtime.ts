@@ -13,6 +13,12 @@ import { bootstrapSidecarRuntime, createJsonIpcServer, resolveAppIpcPath } from 
 import type { JsonIpcServerHandle } from "@open-design/sidecar";
 
 import type { PackagedConfig } from "./config.js";
+import {
+  confirmPackagedClosureRuntime,
+  createPackagedRuntimeIdentity,
+  resolvePackagedClosureRuntime,
+  startPackagedClosureRuntime,
+} from "./closure-runtime.js";
 import type { PackagedDesktopIdentityHandle } from "./identity.js";
 import { writePackagedDesktopIdentity, writePackagedWebIdentity } from "./identity.js";
 import { confirmPackagedLauncherRuntime, resolvePackagedLauncherRuntime } from "./launcher-runtime.js";
@@ -172,8 +178,16 @@ export async function runPackagedHeadless(
     process.env,
   );
   const launcherRuntime = await resolvePackagedLauncherRuntime(config, initialPaths);
-  const activeConfig = launcherRuntime.config;
+  const shellConfig = launcherRuntime.config;
   const paths = launcherRuntime.paths;
+  let closureRuntime = await resolvePackagedClosureRuntime({
+    channel: launcherRuntime.launcherPaths.channel,
+    installationRoot: launcherRuntime.launcherPaths.root,
+    legacyConfig: shellConfig,
+    namespace: config.namespace,
+    shellVersion: shellConfig.appVersion,
+  });
+  let identityHandle: PackagedDesktopIdentityHandle | null = null;
   const stamp = createHeadlessStamp(config.namespace);
   const mcpBootstrap =
     options.mcpBootstrapLaunch
@@ -190,7 +204,10 @@ export async function runPackagedHeadless(
   });
 
   const { shutdown, webUrl } = await acquirePackagedHeadlessStartup({
-    confirmRuntime: async () => await confirmPackagedLauncherRuntime(launcherRuntime),
+    confirmRuntime: async () => {
+      await confirmPackagedLauncherRuntime(launcherRuntime);
+      await confirmPackagedClosureRuntime(closureRuntime);
+    },
     createIpcServer: async ({ shutdown: stop, webUrl: activeWebUrl }) =>
       await createJsonIpcServer({
         socketPath: stamp.ipc,
@@ -219,42 +236,64 @@ export async function runPackagedHeadless(
         await installCodexMcp(daemonUrl);
       }
     },
-    startSidecars: async () =>
-      await startPackagedSidecars(runtime, paths, {
-        appVersion: activeConfig.appVersion,
-        amrProfile: activeConfig.amrProfile,
-        daemonCliEntry: activeConfig.daemonCliEntry,
-        daemonSidecarEntry: activeConfig.daemonSidecarEntry,
-        electronNodeCommand: launcherRuntime.electronNodeCommand,
-        mcpBootstrapArgs: mcpBootstrap.args,
-        mcpBootstrapCommand: mcpBootstrap.command,
-        nodeCommand: activeConfig.nodeCommand,
-        telemetryRelayUrl: activeConfig.telemetryRelayUrl,
-        posthogKey: activeConfig.posthogKey,
-        posthogHost: activeConfig.posthogHost,
-        velaWebUrl: activeConfig.velaWebUrl,
-        // PR #974 round-5 (lefarcen P2): headless packaged mode uses the signed
-        // Electron entry as a lifecycle owner, but creates no BrowserWindow and
-        // exposes no privileged shell.openPath surface.
-        // Pinning OD_REQUIRE_DESKTOP_AUTH here would arm a gate no client
-        // can ever satisfy (no desktop window/main bridge to register a secret),
-        // so folder import would permanently return DESKTOP_AUTH_PENDING.
-        // The Electron entry counterpart in `apps/packaged/src/index.ts`
-        // passes `true` because it does start that desktop bridge.
-        requireDesktopAuth: false,
-        webSidecarEntry: activeConfig.webSidecarEntry,
-        webStandaloneRoot: activeConfig.webStandaloneRoot,
-        webOutputMode: activeConfig.webOutputMode,
-      }),
+    startSidecars: async () => {
+      const started = await startPackagedClosureRuntime(
+        closureRuntime,
+        async (runtimeConfig) => await startPackagedSidecars(
+          runtime,
+          { ...paths, resourceRoot: runtimeConfig.resourceRoot },
+          {
+            appVersion: runtimeConfig.appVersion,
+            amrProfile: runtimeConfig.amrProfile,
+            daemonCliEntry: runtimeConfig.daemonCliEntry,
+            daemonSidecarEntry: runtimeConfig.daemonSidecarEntry,
+            electronNodeCommand: launcherRuntime.electronNodeCommand,
+            mcpBootstrapArgs: mcpBootstrap.args,
+            mcpBootstrapCommand: mcpBootstrap.command,
+            nodeCommand: runtimeConfig.nodeCommand,
+            telemetryRelayUrl: runtimeConfig.telemetryRelayUrl,
+            posthogKey: runtimeConfig.posthogKey,
+            posthogHost: runtimeConfig.posthogHost,
+            velaWebUrl: runtimeConfig.velaWebUrl,
+            // PR #974 round-5 (lefarcen P2): headless packaged mode uses the signed
+            // Electron entry as a lifecycle owner, but creates no BrowserWindow and
+            // exposes no privileged shell.openPath surface.
+            // Pinning OD_REQUIRE_DESKTOP_AUTH here would arm a gate no client
+            // can ever satisfy (no desktop window/main bridge to register a secret),
+            // so folder import would permanently return DESKTOP_AUTH_PENDING.
+            // The Electron entry counterpart in `apps/packaged/src/index.ts`
+            // passes `true` because it does start that desktop bridge.
+            requireDesktopAuth: false,
+            webSidecarEntry: runtimeConfig.webSidecarEntry,
+            webStandaloneRoot: runtimeConfig.webStandaloneRoot,
+            webOutputMode: runtimeConfig.webOutputMode,
+          },
+        ),
+      );
+      closureRuntime = started.runtime;
+      await identityHandle?.updateRuntimeIdentity(createPackagedRuntimeIdentity({
+        closure: closureRuntime,
+        shellSource: launcherRuntime.source,
+        shellVersion: shellConfig.appVersion,
+      }));
+      return started.value;
+    },
     // Write a headless-specific identity marker so `tools-pack linux stop
     // --headless` can find this process without confusing it for a
     // menu-launched AppImage that owns desktop-root.json in the same namespace.
-    writeIdentity: async () =>
-      await writePackagedDesktopIdentity({
+    writeIdentity: async () => {
+      identityHandle = await writePackagedDesktopIdentity({
         identityPath: paths.headlessIdentityPath,
         paths,
+        runtimeIdentity: createPackagedRuntimeIdentity({
+          closure: closureRuntime,
+          shellSource: launcherRuntime.source,
+          shellVersion: shellConfig.appVersion,
+        }),
         stamp,
-      }),
+      });
+      return identityHandle;
+    },
     writeWebIdentity: async (activeWebUrl) =>
       await writePackagedWebIdentity({
         paths,

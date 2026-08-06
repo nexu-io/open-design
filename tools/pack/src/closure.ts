@@ -295,6 +295,7 @@ export function resolveOpenDesignClosureLayout() {
   if (webServerEntry == null) throw new Error("Closure Web standalone entry is missing");
   return Object.freeze({
     daemonCliEntry: join(root, "daemon", "daemon-cli.mjs"),
+    daemonSidecarEntry: join(root, "daemon", "daemon-sidecar.mjs"),
     resourceRoot: join(root, "resources", "open-design"),
     webServerEntry,
     webSidecarEntry: join(root, "web", "web-sidecar.mjs"),
@@ -327,6 +328,14 @@ async function buildClosurePrebundles(
   const entryRoot = join(stageRoot, "entries");
   const metadataRoot = join(stageRoot, "metadata");
   const daemonEntry = join(entryRoot, "daemon-cli.mjs");
+  const daemonSidecarEntry = join(
+    workspaceRoot,
+    "apps",
+    "daemon",
+    "src",
+    "sidecar",
+    "daemon-sidecar.ts",
+  );
   const daemonOutputRoot = join(appRoot, "daemon");
   const daemonMetafile = join(metadataRoot, "daemon.json");
   const webOutput = join(appRoot, "web", "web-sidecar.mjs");
@@ -347,6 +356,7 @@ async function buildClosurePrebundles(
   );
   await runEsbuild(workspaceRoot, [
     daemonEntry,
+    daemonSidecarEntry,
     "--bundle",
     "--splitting",
     "--platform=node",

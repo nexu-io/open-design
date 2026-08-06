@@ -70,6 +70,21 @@ describe("packaged identity markers", () => {
       expect(await pathExists(paths.headlessIdentityPath)).toBe(true);
       expect(await pathExists(paths.desktopIdentityPath)).toBe(false);
 
+      await handle.updateRuntimeIdentity({
+        closure: {
+          reason: "no-active-closure",
+          source: "legacy-combined",
+          version: "0.18.0-beta.4",
+        },
+        shell: { source: "current-package", version: "0.18.0-beta.4" },
+      });
+      expect(JSON.parse(await readFile(paths.headlessIdentityPath, "utf8"))).toMatchObject({
+        runtime: {
+          closure: { source: "legacy-combined", version: "0.18.0-beta.4" },
+          shell: { source: "current-package", version: "0.18.0-beta.4" },
+        },
+      });
+
       await handle.close();
       expect(await pathExists(paths.headlessIdentityPath)).toBe(false);
     } finally {

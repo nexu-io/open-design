@@ -4,6 +4,7 @@ import { removeFile, writeJsonFile } from "@open-design/sidecar";
 import type { SidecarStamp } from "@open-design/sidecar-proto";
 
 import type { PackagedNamespacePaths } from "./paths.js";
+import type { PackagedRuntimeIdentity } from "./closure-runtime.js";
 
 export type PackagedDesktopRootIdentity = {
   appPath: string;
@@ -12,6 +13,7 @@ export type PackagedDesktopRootIdentity = {
   namespaceRoot: string;
   pid: number;
   ppid: number;
+  runtime?: PackagedRuntimeIdentity;
   stamp: SidecarStamp;
   startedAt: string;
   updatedAt: string;
@@ -29,6 +31,7 @@ export type PackagedWebRootIdentity = {
 export type PackagedDesktopIdentityHandle = {
   close(): Promise<void>;
   identity: PackagedDesktopRootIdentity;
+  updateRuntimeIdentity(runtime: PackagedRuntimeIdentity): Promise<void>;
 };
 
 function resolveCurrentMacAppPath(executablePath: string): string {
@@ -37,6 +40,7 @@ function resolveCurrentMacAppPath(executablePath: string): string {
 
 function createPackagedDesktopRootIdentity(options: {
   paths: PackagedNamespacePaths;
+  runtimeIdentity?: PackagedRuntimeIdentity;
   stamp: SidecarStamp;
 }): PackagedDesktopRootIdentity {
   const now = new Date().toISOString();
@@ -49,6 +53,7 @@ function createPackagedDesktopRootIdentity(options: {
     namespaceRoot: options.paths.namespaceRoot,
     pid: process.pid,
     ppid: process.ppid,
+    ...(options.runtimeIdentity == null ? {} : { runtime: options.runtimeIdentity }),
     stamp: options.stamp,
     startedAt: now,
     updatedAt: now,
@@ -59,6 +64,7 @@ function createPackagedDesktopRootIdentity(options: {
 export async function writePackagedDesktopIdentity(options: {
   identityPath?: string;
   paths: PackagedNamespacePaths;
+  runtimeIdentity?: PackagedRuntimeIdentity;
   stamp: SidecarStamp;
 }): Promise<PackagedDesktopIdentityHandle> {
   const identity = createPackagedDesktopRootIdentity(options);
@@ -81,6 +87,10 @@ export async function writePackagedDesktopIdentity(options: {
       await removeFile(identityPath).catch(() => undefined);
     },
     identity,
+    async updateRuntimeIdentity(runtime) {
+      identity.runtime = runtime;
+      await writeIdentity();
+    },
   };
 }
 
