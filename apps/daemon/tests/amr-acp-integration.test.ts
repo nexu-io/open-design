@@ -168,6 +168,20 @@ describe('AMR runtime def', () => {
     expect(ids).toEqual([]);
   });
 
+  it('passes major-only claude ids through unchanged (#6529)', () => {
+    // `vela model list --all --format json` returns BARE major-only ids for
+    // the 5-generation (verified against the live AMR endpoint: the JSON `id`
+    // is exactly "claude-opus-5", not a dated form). The versioned regex in
+    // normalizeKnownVelaVersionId requires major AND minor, so these must
+    // fall through to the underscore fallback and come back untouched —
+    // a regression here is how a model "disappears" from the picker.
+    expect(normalizeVelaModelId('claude-opus-5')).toBe('claude-opus-5');
+    expect(normalizeVelaModelId('claude-sonnet-5')).toBe('claude-sonnet-5');
+    expect(normalizeVelaModelId('claude-fable-5')).toBe('claude-fable-5');
+    // Dated major.minor forms keep normalizing as before.
+    expect(normalizeVelaModelId('claude_opus_4_8')).toBe('claude-opus-4.8');
+  });
+
   it('normalizes Vela public model ids to link-canonical ACP model ids', () => {
     expect(normalizeVelaModelId('public_model_deepseek_v3_2')).toBe('deepseek-v3.2');
     expect(normalizeVelaModelId('public_model_kimi_k2_6')).toBe('kimi-k2.6');
