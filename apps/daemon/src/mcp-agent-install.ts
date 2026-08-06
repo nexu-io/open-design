@@ -301,6 +301,18 @@ export function planAgentInstall(
         entry: jsonEntry(spec),
       };
     case 'claude-desktop':
+      if (platform !== 'darwin' && platform !== 'win32') {
+        return {
+          kind: 'manual',
+          slug,
+          format: 'json',
+          configPath: null,
+          snippet: genericMcpServersSnippet(spec, serverName),
+          reason:
+            'Claude Desktop is only supported on macOS and Windows. ' +
+            'This platform is not supported.',
+        };
+      }
       return {
         kind: 'json',
         slug,
@@ -385,11 +397,10 @@ function claudeDesktopConfigPath(home: string, platform: NodeJS.Platform): strin
   if (platform === 'darwin') {
     return path.join(home, 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json');
   }
-  if (platform === 'win32') {
-    const appData = process.env.APPDATA ?? path.join(home, 'AppData', 'Roaming');
-    return path.join(appData, 'Claude', 'claude_desktop_config.json');
-  }
-  return path.join(home, '.config', 'Claude', 'claude_desktop_config.json');
+  // platform === 'win32' — the planAgentInstall case already guards
+  // against unsupported platforms before calling this helper.
+  const appData = process.env.APPDATA ?? path.join(home, 'AppData', 'Roaming');
+  return path.join(appData, 'Claude', 'claude_desktop_config.json');
 }
 
 // --- Pure JSON merge / removal (the heart of the 'json' strategy) -------

@@ -192,10 +192,12 @@ describe('JSON-config agents', () => {
     });
   });
 
-  it('claude-desktop on Linux writes to .config/Claude', () => {
+  it('claude-desktop on Linux returns manual plan (unsupported platform)', () => {
     const plan = planAgentInstall('claude-desktop', SPEC, ctx('linux'));
-    if (plan.kind !== 'json') throw new Error('expected json');
-    expect(plan.configPath).toBe('/home/u/.config/Claude/claude_desktop_config.json');
+    expect(plan.kind).toBe('manual');
+    if (plan.kind !== 'manual') throw new Error('expected manual');
+    expect(plan.configPath).toBeNull();
+    expect(plan.reason).toContain('only supported on macOS and Windows');
   });
 });
 
