@@ -1,6 +1,12 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, relative, sep } from "node:path";
+import {
+  validateClosureCandidateManifest,
+  validateClosureFileInventory,
+  type ClosureCandidateManifest,
+} from "@open-design/closure-proto";
 import {
   bool,
   contentType,
@@ -36,6 +42,16 @@ type TargetConfig = {
   signed: boolean;
 };
 
+type ClosurePublication = {
+  assets: {
+    archive: AssetEntry;
+    inventory: AssetEntry;
+    manifest: AssetEntry;
+    provenance: AssetEntry;
+  };
+  manifest: ClosureCandidateManifest;
+};
+
 const target = requiredTarget();
 const releaseChannel = releaseChannelDescriptor(required("RELEASE_CHANNEL")).channel;
 const countedReleaseChannel = releaseChannel === "stable" ? null : releaseChannel;
@@ -52,6 +68,7 @@ const latestPrefix = `${releaseChannel}/latest`;
 const reportRoot = optional("RELEASE_REPORT_DIR");
 const reportZipPath = optional("RELEASE_REPORT_ZIP_PATH");
 const versionLockRequired = bool("RELEASE_VERSION_LOCK_REQUIRED");
+const closureEnabled = bool("RELEASE_CLOSURE_ENABLED");
 const versionLockKey = optional(
   "RELEASE_VERSION_LOCK_KEY",
   countedReleaseChannel == null ? "" : versionLockObjectKey(releaseVersion, countedReleaseChannel),
@@ -82,6 +99,100 @@ function assetEntry(name: string): AssetEntry {
     entry.sha256Url = publicUrl(publicOrigin, versionPrefix, `${name}.sha256`);
   }
   return entry;
+}
+
+function sha256Digest(path: string): string {
+  return `sha256:${createHash("sha256").update(readFileSync(path)).digest("hex")}`;
+}
+
+function closureTarget(): "darwin-arm64" | "win32-x64" | null {
+  if (target === "mac_arm64") return "darwin-arm64";
+  if (target === "win_x64") return "win32-x64";
+  return null;
+}
+
+function closureAssetBase(): string {
+  if (target === "mac_arm64") return `open-design-${releaseVersion}${assetSuffix}-mac-arm64-closure`;
+  if (target === "win_x64") return `open-design-${releaseVersion}${assetSuffix}-win-x64-closure`;
+  throw new Error(`Closure publication is not supported for ${target}`);
+}
+
+function closurePublication(): { assetNames: string[]; publication: ClosurePublication } | null {
+  if (!closureEnabled) return null;
+  const expectedPlatform = closureTarget();
+  if (expectedPlatform == null) {
+    throw new Error(`RELEASE_CLOSURE_ENABLED is not supported for ${target}`);
+  }
+
+  const base = closureAssetBase();
+  const names = {
+    archive: `${base}.zip`,
+    inventory: `${base}-inventory.json`,
+    manifest: `${base}-manifest.json`,
+    provenance: `${base}-provenance.json`,
+  } as const;
+  const assets = {
+    archive: assetEntry(names.archive),
+    inventory: assetEntry(names.inventory),
+    manifest: assetEntry(names.manifest),
+    provenance: assetEntry(names.provenance),
+  };
+  const manifest = validateClosureCandidateManifest(
+    JSON.parse(readFileSync(join(releaseAssetsDir, names.manifest), "utf8")) as unknown,
+  );
+  const inventory = validateClosureFileInventory(
+    JSON.parse(readFileSync(join(releaseAssetsDir, names.inventory), "utf8")) as unknown,
+  );
+  const inventoryDigest = `sha256:${createHash("sha256").update(JSON.stringify(inventory.files)).digest("hex")}`;
+  const archiveDigest = sha256Digest(join(releaseAssetsDir, names.archive));
+  if (manifest.identity.channel !== releaseChannel) {
+    throw new Error(`Closure channel ${manifest.identity.channel} does not match release channel ${releaseChannel}`);
+  }
+  if (manifest.identity.version !== releaseVersion) {
+    throw new Error(`Closure version ${manifest.identity.version} does not match release version ${releaseVersion}`);
+  }
+  if (manifest.identity.platform !== expectedPlatform) {
+    throw new Error(`Closure platform ${manifest.identity.platform} does not match release target ${target}`);
+  }
+  if (manifest.artifact.url !== assets.archive.url) {
+    throw new Error(`Closure archive URL ${manifest.artifact.url} does not match published URL ${assets.archive.url}`);
+  }
+  if (manifest.artifact.size !== assets.archive.size) {
+    throw new Error(`Closure archive size ${manifest.artifact.size} does not match published size ${assets.archive.size}`);
+  }
+  if (manifest.artifact.digest !== archiveDigest || manifest.identity.digest !== archiveDigest) {
+    throw new Error(`Closure archive digest does not match ${names.archive}`);
+  }
+  if (manifest.artifact.inventoryDigest !== inventoryDigest) {
+    throw new Error(`Closure inventory digest does not match ${names.inventory}`);
+  }
+
+  const provenance = JSON.parse(
+    readFileSync(join(releaseAssetsDir, names.provenance), "utf8"),
+  ) as Record<string, unknown>;
+  const provenanceArtifact = provenance.artifact as Record<string, unknown> | null | undefined;
+  if (
+    provenance.schemaVersion !== 1
+    || provenance.channel !== releaseChannel
+    || provenance.version !== releaseVersion
+    || provenance.platform !== expectedPlatform
+    || provenanceArtifact?.digest !== archiveDigest
+    || provenanceArtifact?.inventoryDigest !== inventoryDigest
+    || provenanceArtifact?.size !== assets.archive.size
+  ) {
+    throw new Error(`Closure provenance does not match ${target} release identity`);
+  }
+
+  return {
+    assetNames: [
+      names.archive,
+      `${names.archive}.sha256`,
+      names.inventory,
+      names.manifest,
+      names.provenance,
+    ],
+    publication: { assets, manifest },
+  };
 }
 
 function normalizePath(value: string): string {
@@ -249,7 +360,8 @@ function targetConfig(): TargetConfig {
 }
 
 const config = targetConfig();
-for (const name of config.assetNames) {
+const closure = closurePublication();
+for (const name of [...config.assetNames, ...(closure?.assetNames ?? [])]) {
   await upload(join(releaseAssetsDir, name), `${versionPrefix}/${name}`, "public, max-age=31536000, immutable");
 }
 
@@ -260,6 +372,7 @@ const manifest = {
   arch: config.arch,
   artifacts: config.artifacts,
   channel: releaseChannel,
+  ...(closure == null ? {} : { closure: closure.publication }),
   enabled: true,
   feed: config.feed,
   generatedAt: new Date().toISOString(),
@@ -298,6 +411,11 @@ const outputs: Record<string, string> = {
 };
 for (const [artifactName, artifact] of Object.entries(config.artifacts)) {
   outputs[`${artifactName}_url`] = artifact.url;
+}
+if (closure != null) {
+  for (const [artifactName, artifact] of Object.entries(closure.publication.assets)) {
+    outputs[`closure_${artifactName}_url`] = artifact.url;
+  }
 }
 if (config.feed != null) outputs.feed_url = config.feed.latestUrl;
 if (report != null && typeof report.url === "string") outputs.report_url = report.url;

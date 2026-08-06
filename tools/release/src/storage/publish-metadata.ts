@@ -30,6 +30,17 @@ import {
 type PlatformManifest = {
   artifacts?: Record<string, { url?: string }>;
   channel?: string;
+  closure?: {
+    assets?: Record<string, { url?: string }>;
+    manifest?: {
+      artifact?: { url?: string };
+      identity?: {
+        channel?: string;
+        platform?: string;
+        version?: string;
+      };
+    };
+  };
   enabled?: boolean;
   feed?: {
     name?: string;
@@ -78,6 +89,7 @@ const versionLockKey = optional(
   countedReleaseChannel == null ? "" : versionLockObjectKey(releaseVersion, countedReleaseChannel),
 );
 const latestCasRequired = process.env.RELEASE_LATEST_CAS_REQUIRED === "true";
+const closureRequired = process.env.RELEASE_CLOSURE_REQUIRED === "true";
 const storage = publishSideEffectsEnabled || versionLockRequired ? storageConfigFromEnv() : null;
 
 // Operator-supplied installer-reinstall floor: one repo-vars pair per channel,
@@ -294,6 +306,26 @@ function validateManifest(target: string, manifest: PlatformManifest): string | 
   if (manifest.r2?.versionPrefix == null || !manifest.r2.versionPrefix.includes(`/versions/${releaseVersion}`)) {
     return `versionPrefix=${String(manifest.r2?.versionPrefix)}`;
   }
+  if (closureRequired && (target === "mac_arm64" || target === "win_x64") && manifest.closure == null) {
+    return "closure=missing";
+  }
+  if (manifest.closure != null) {
+    if (target !== "mac_arm64" && target !== "win_x64") return "closure=unsupported-target";
+    const expectedPlatform = target === "mac_arm64" ? "darwin-arm64" : "win32-x64";
+    const identity = manifest.closure?.manifest?.identity;
+    if (identity?.channel !== releaseChannel) return `closure.channel=${String(identity?.channel)}`;
+    if (identity.version !== releaseVersion) return `closure.version=${String(identity.version)}`;
+    if (identity.platform !== expectedPlatform) return `closure.platform=${String(identity.platform)}`;
+    const closurePrefix = `${publicOrigin}/${manifest.r2.versionPrefix.replace(/^\/+|\/+$/gu, "")}/`;
+    for (const asset of ["archive", "inventory", "manifest", "provenance"] as const) {
+      const url = manifest.closure.assets?.[asset]?.url;
+      if (url == null) return `closure.assets.${asset}.url=missing`;
+      if (!url.startsWith(closurePrefix)) return `closure.assets.${asset}.url=${url}`;
+    }
+    if (manifest.closure.manifest?.artifact?.url !== manifest.closure.assets?.archive?.url) {
+      return "closure.manifest.artifact.url=mismatch";
+    }
+  }
   return null;
 }
 
@@ -414,6 +446,9 @@ for (const [target, manifest] of Object.entries(releaseTargets)) {
   if (manifest.status !== "published") continue;
   for (const [artifactName, artifact] of Object.entries(manifest.artifacts ?? {})) {
     if (artifact.url != null) outputs[`${target}_${artifactName}_url`] = artifact.url;
+  }
+  for (const [artifactName, artifact] of Object.entries(manifest.closure?.assets ?? {})) {
+    if (artifact.url != null) outputs[`${target}_closure_${artifactName}_url`] = artifact.url;
   }
   if ((manifest as { feed?: { latestUrl?: string } }).feed?.latestUrl != null) {
     outputs[`${target}_feed_url`] = (manifest as { feed: { latestUrl: string } }).feed.latestUrl;

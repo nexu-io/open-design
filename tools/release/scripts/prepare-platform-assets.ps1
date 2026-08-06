@@ -19,7 +19,8 @@ param(
   [string]$ReleasePublicOrigin,
   [string]$ReleaseVersionPrefix = "",
   [string]$ReleaseNotes = "",
-  [bool]$IncludeZip = $true
+  [bool]$IncludeZip = $true,
+  [string]$ClosureDir = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -65,6 +66,28 @@ if ($IncludeZip) {
   Copy-Item -LiteralPath $sourceZip -Destination $zipPath -Force
   $zipHash = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
   "$zipHash  $versionedZip" | Set-Content -Path "$zipPath.sha256" -Encoding utf8
+}
+
+if (-not [string]::IsNullOrWhiteSpace($ClosureDir)) {
+  $closureBase = "open-design-$ReleaseVersion$ReleaseAssetSuffix-win-x64-closure"
+  $closureAssets = [ordered]@{
+    "closure.zip" = "$closureBase.zip"
+    "inventory.json" = "$closureBase-inventory.json"
+    "manifest.json" = "$closureBase-manifest.json"
+    "provenance.json" = "$closureBase-provenance.json"
+  }
+  foreach ($entry in $closureAssets.GetEnumerator()) {
+    $sourcePath = Join-Path $ClosureDir $entry.Key
+    if (-not (Test-Path -LiteralPath $sourcePath)) {
+      throw "expected Closure asset not found at $sourcePath"
+    }
+    $targetPath = Join-Path $ReleaseAssetsDir $entry.Value
+    Copy-Item -LiteralPath $sourcePath -Destination $targetPath -Force
+    if ($entry.Key -eq "closure.zip") {
+      $closureHash = (Get-FileHash -LiteralPath $targetPath -Algorithm SHA256).Hash.ToLowerInvariant()
+      "$closureHash  $($entry.Value)" | Set-Content -Path "$targetPath.sha256" -Encoding utf8
+    }
+  }
 }
 
 $installerBytes = [System.IO.File]::ReadAllBytes($installerPath)

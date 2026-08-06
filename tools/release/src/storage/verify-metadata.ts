@@ -29,9 +29,21 @@ const metadata = (metadataPath.length > 0
   channel?: string;
   control?: { launcher?: { version?: { min?: string; url?: string } } };
   releaseState?: string;
-  releaseTargets?: Record<string, { artifacts?: Record<string, { url?: string }>; status?: string }>;
+  releaseTargets?: Record<string, {
+    artifacts?: Record<string, { url?: string }>;
+    closure?: {
+      assets?: Record<string, { url?: string }>;
+      manifest?: {
+        artifact?: { url?: string };
+        identity?: { channel?: string; platform?: string; version?: string };
+      };
+    };
+    status?: string;
+  }>;
   [key: string]: unknown;
 };
+
+const closureRequired = process.env.RELEASE_CLOSURE_REQUIRED === "true";
 
 if (metadata.channel !== releaseChannel) {
   throw new Error(`metadata channel mismatch: expected ${releaseChannel}, got ${String(metadata.channel)}`);
@@ -95,6 +107,31 @@ for (const target of ["mac_arm64", "win_x64", "mac_x64", "linux_x64"]) {
   if (result !== "success" || targetMetadata == null) continue;
   if ((target === "mac_arm64" || target === "win_x64") && targetMetadata.artifacts?.payload?.url == null) {
     throw new Error(`metadata target ${target} is missing launcher payload artifact`);
+  }
+  if (closureRequired && (target === "mac_arm64" || target === "win_x64") && targetMetadata.closure == null) {
+    throw new Error(`metadata target ${target} is missing Closure publication`);
+  }
+  if (targetMetadata.closure != null) {
+    if (target !== "mac_arm64" && target !== "win_x64") {
+      throw new Error(`metadata target ${target} must not publish a Closure`);
+    }
+    const closure = targetMetadata.closure;
+    const expectedPlatform = target === "mac_arm64" ? "darwin-arm64" : "win32-x64";
+    if (
+      closure?.manifest?.identity?.channel !== releaseChannel
+      || closure.manifest.identity.version !== releaseVersion
+      || closure.manifest.identity.platform !== expectedPlatform
+    ) {
+      throw new Error(`metadata target ${target} has an invalid Closure identity`);
+    }
+    for (const asset of ["archive", "inventory", "manifest", "provenance"] as const) {
+      if (closure.assets?.[asset]?.url == null) {
+        throw new Error(`metadata target ${target} is missing Closure ${asset} artifact`);
+      }
+    }
+    if (closure.manifest?.artifact?.url !== closure.assets?.archive?.url) {
+      throw new Error(`metadata target ${target} Closure archive URL does not match its manifest`);
+    }
   }
 }
 

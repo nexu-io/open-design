@@ -29,6 +29,34 @@ required TOOLS_PACK_DIR
 
 RELEASE_ASSET_SUFFIX="${RELEASE_ASSET_SUFFIX:-}"
 
+prepare_closure_assets() {
+  if [ -z "${RELEASE_CLOSURE_DIR:-}" ]; then
+    return 0
+  fi
+  local base source_name target_name
+  case "$RELEASE_TARGET" in
+    mac_arm64) base="open-design-$RELEASE_VERSION$RELEASE_ASSET_SUFFIX-mac-arm64-closure" ;;
+    win_x64) base="open-design-$RELEASE_VERSION$RELEASE_ASSET_SUFFIX-win-x64-closure" ;;
+    *) echo "Closure assets are not supported for $RELEASE_TARGET" >&2; exit 1 ;;
+  esac
+  for source_name in closure.zip inventory.json manifest.json provenance.json; do
+    if [ ! -f "$RELEASE_CLOSURE_DIR/$source_name" ]; then
+      echo "expected Closure asset not found at $RELEASE_CLOSURE_DIR/$source_name" >&2
+      exit 1
+    fi
+    case "$source_name" in
+      closure.zip) target_name="$base.zip" ;;
+      inventory.json) target_name="$base-inventory.json" ;;
+      manifest.json) target_name="$base-manifest.json" ;;
+      provenance.json) target_name="$base-provenance.json" ;;
+    esac
+    cp "$RELEASE_CLOSURE_DIR/$source_name" "$RELEASE_ASSETS_DIR/$target_name"
+    if [ "$source_name" = "closure.zip" ]; then
+      sha256_file "$RELEASE_ASSETS_DIR/$target_name"
+    fi
+  done
+}
+
 mkdir -p "$RELEASE_ASSETS_DIR"
 
 case "$RELEASE_TARGET" in
@@ -67,6 +95,7 @@ case "$RELEASE_TARGET" in
     fi
 
     if [ "$artifact_mode" = "dmg-only" ] || [ "$artifact_mode" = "dmg-and-payload" ]; then
+      prepare_closure_assets
       exit 0
     fi
     if [ ! -f "$source_zip" ]; then
@@ -93,6 +122,7 @@ sha512: "$zip_sha512"
 releaseDate: "$release_date"
 releaseNotes: "$release_notes"
 EOF
+    prepare_closure_assets
     ;;
   linux_x64)
     source_appimage="$TOOLS_PACK_DIR/out/linux/namespaces/$RELEASE_NAMESPACE/builder/Open Design-$RELEASE_NAMESPACE.AppImage"

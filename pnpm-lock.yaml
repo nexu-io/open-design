@@ -956,6 +956,9 @@ importers:
 
   tools/release:
     dependencies:
+      '@open-design/closure-proto':
+        specifier: workspace:*
+        version: link:../../packages/closure-proto
       '@open-design/launcher-proto':
         specifier: workspace:*
         version: link:../../packages/launcher-proto
