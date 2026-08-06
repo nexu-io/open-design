@@ -7923,8 +7923,9 @@ function MediaProvidersSection({
             </div>
           </div>
           {activeProvider.id === 'grok' ? <XaiOAuthControl /> : null}
-          {activeRequiresCredentials ? (
+          {activeRequiresCredentials || activeProvider?.defaultBaseUrl ? (
             <div className="media-provider-detail-grid">
+              {activeRequiresCredentials ? (
               <label className="media-provider-detail-field">
                 <span>{t('settings.mediaProviderApiKey')}</span>
                 <div className="media-provider-secret-field">
@@ -7959,6 +7960,7 @@ function MediaProvidersSection({
                   </button>
                 </div>
               </label>
+              ) : null}
               <label className="media-provider-detail-field">
                 <span>{t('settings.mediaProviderBaseUrl')}</span>
                 <input

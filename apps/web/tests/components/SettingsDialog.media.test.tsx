@@ -518,6 +518,22 @@ describe('SettingsDialog media providers', () => {
     expect(confirmSpy).toHaveBeenCalledTimes(1);
     confirmSpy.mockRestore();
   });
+
+  it('keeps keyless providers like ComfyUI editable with their own base URL and model fields', () => {
+    renderDialog({
+      ...DEFAULT_CONFIG,
+      mediaProviders: {},
+    });
+
+    // Keyless provider must keep its config surface: no API key field,
+    // but base URL + custom model stay editable.
+    fireEvent.click(screen.getByRole('tab', { name: /ComfyUI/ }));
+    expect(screen.queryByLabelText('ComfyUI API key')).toBeNull();
+    const baseUrlInput = screen.getByLabelText('ComfyUI Base URL') as HTMLInputElement;
+    expect(baseUrlInput.getAttribute('placeholder')).toBe('http://127.0.0.1:8188');
+    const modelInput = screen.getByLabelText('ComfyUI Model') as HTMLInputElement;
+    expect(modelInput.getAttribute('placeholder')).toBe('sd_xl_base_1.0.safetensors');
+  });
 });
 
 function renderDialog(
