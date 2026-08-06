@@ -4,6 +4,10 @@ This handoff operationalizes [ADR 0002](../adr/0002-stabilize-headless-closure-h
 It is the shared boundary for the Shell/Installer and Closure implementation
 tracks; it is not a second architecture specification.
 
+The broader local-debug, release, platform, installer, and cutover route lives
+in the [Headless Closure delivery matrix](headless-closure-delivery-matrix.md).
+This document remains the seam-level handoff and does not duplicate that map.
+
 ## Frozen seam
 
 The following are safe to build against:
