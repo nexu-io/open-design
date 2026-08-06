@@ -25,6 +25,7 @@ const PACKAGE_DIRS = [
   "packages/dsh-runtime",
   "packages/headless-runtime",
   "apps/daemon",
+  "apps/headless",
   "apps/web",
   "apps/desktop",
   "apps/packaged",
@@ -163,6 +164,32 @@ describe("ensureWorkspaceBuildArtifacts", () => {
         "win.workspace-build",
       ]);
       expect(await readFile(join(root, "apps/packaged/dist/index.mjs"), "utf8")).toBe("build-1\n");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("does not invalidate the shell build for a Closure-only entrypoint change", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-workspace-build-boundary-"));
+    const cache = new ToolPackCache(join(root, ".cache"));
+    const config = createConfig(root, cache.root);
+    let builds = 0;
+
+    try {
+      await writeWorkspace(root);
+      const build = async () => {
+        builds += 1;
+        await writeOutputs(root, `build-${builds}`);
+      };
+      await ensureWorkspaceBuildArtifacts(config, cache, build);
+      await writeFile(join(root, "apps/headless/src/index.ts"), "export const value = 2;\n", "utf8");
+      await ensureWorkspaceBuildArtifacts(config, cache, build);
+      expect(builds).toBe(1);
+
+      await writeFile(join(root, "apps/desktop/src/index.ts"), "export const value = 2;\n", "utf8");
+      await ensureWorkspaceBuildArtifacts(config, cache, build);
+      expect(builds).toBe(2);
+      expect(cache.report().entries.map((entry) => entry.status)).toEqual(["miss", "hit", "miss"]);
     } finally {
       await rm(root, { force: true, recursive: true });
     }

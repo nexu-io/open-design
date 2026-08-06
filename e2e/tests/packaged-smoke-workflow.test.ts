@@ -2773,10 +2773,17 @@ process.stdin.on("end", () => {
     const publishJob = workflow.slice(publishStart);
 
     expect(workflow).toContain("CLOSURE_MIN_SHELL_VERSION: 0.16.2");
+    expect(workflow).toContain("closure_version:");
+    expect(workflow).toContain("closure_version: ${{ inputs.closure_version != ''");
     expect(macJob).toContain("Build beta mac_arm64 Headless Closure");
     expect(macJob).toContain("tools-pack closure build");
     expect(macJob).toContain("--platform darwin-arm64");
-    expect(macJob).toContain("--skip-workspace-build");
+    expect(macJob).toContain('--cache-dir "$RUNNER_TEMP/tools-pack-cache"');
+    expect(macJob).toContain("/beta/closure/darwin-arm64/versions/$version/");
+    expect(macJob).toContain("open-design-$version-mac-arm64-closure.zip");
+    expect(macJob).not.toContain("open-design-$version.signed-mac-arm64-closure.zip");
+    expect(macJob).toContain("needs.metadata.outputs.closure_version");
+    expect(macJob).not.toContain("--skip-workspace-build");
     expect(macJob).toContain("OD_PACKAGED_E2E_CLOSURE_BUILD_JSON_PATH:");
     expect(macJob).toContain("RELEASE_CLOSURE_DIR:");
     expect(macJob).toContain('RELEASE_CLOSURE_ENABLED: "true"');
@@ -2784,6 +2791,12 @@ process.stdin.on("end", () => {
     expect(winJob).toContain("Build beta win_x64 Headless Closure");
     expect(winJob).toContain("tools-pack closure build");
     expect(winJob).toContain("--platform win32-x64");
+    expect(winJob).toContain('--cache-dir "${{ runner.temp }}\\tools-pack-cache"');
+    expect(winJob).toContain("/beta/closure/win32-x64/versions/$version/");
+    expect(winJob).toContain("open-design-$version-win-x64-closure.zip");
+    expect(winJob).not.toContain("open-design-$version.unsigned-win-x64-closure.zip");
+    expect(winJob).toContain("needs.metadata.outputs.closure_version");
+    expect(winJob).not.toContain("--skip-workspace-build");
     expect(winJob).toContain("OD_PACKAGED_E2E_CLOSURE_BUILD_JSON_PATH:");
     expect(winJob).toContain("-ClosureDir");
     expect(winJob).toContain('RELEASE_CLOSURE_ENABLED: "true"');

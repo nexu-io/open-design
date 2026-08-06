@@ -149,7 +149,7 @@ export function selectClosureReleaseCandidate(
   if (root.releaseState !== "complete") {
     throw new ClosureUpdateError(`release metadata is not complete: ${String(root.releaseState)}`);
   }
-  const releaseVersion = requireString(root.releaseVersion, "release metadata version");
+  requireString(root.releaseVersion, "release metadata version");
   const targets = requireRecord(root.releaseTargets, "release metadata targets");
   const target = requireRecord(targets[input.releaseTarget], `release target ${input.releaseTarget}`);
   if (target.status !== "published" || target.enabled !== true) {
@@ -173,9 +173,6 @@ export function selectClosureReleaseCandidate(
     throw new ClosureUpdateError(
       `Closure candidate platform ${manifest.identity.platform} does not match ${input.platform}`,
     );
-  }
-  if (manifest.identity.version !== releaseVersion) {
-    throw new ClosureUpdateError("Closure candidate version does not match its release metadata");
   }
   const assets = requireRecord(closure.assets, "Closure release assets");
   const archive = assetUrl(assets, "archive")!;

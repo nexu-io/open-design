@@ -18,6 +18,7 @@ import {
 import {
   parseCountedReleaseVersion,
   parseReleaseBaseVersion,
+  parseReleaseVersion,
   releaseChannelDescriptor,
   releaseMetadataVersionFields,
   type CountedReleaseChannel,
@@ -314,9 +315,13 @@ function validateManifest(target: string, manifest: PlatformManifest): string | 
     const expectedPlatform = target === "mac_arm64" ? "darwin-arm64" : "win32-x64";
     const identity = manifest.closure?.manifest?.identity;
     if (identity?.channel !== releaseChannel) return `closure.channel=${String(identity?.channel)}`;
-    if (identity.version !== releaseVersion) return `closure.version=${String(identity.version)}`;
+    try {
+      parseReleaseVersion(String(identity.version), releaseChannel);
+    } catch {
+      return `closure.version=${String(identity.version)}`;
+    }
     if (identity.platform !== expectedPlatform) return `closure.platform=${String(identity.platform)}`;
-    const closurePrefix = `${publicOrigin}/${manifest.r2.versionPrefix.replace(/^\/+|\/+$/gu, "")}/`;
+    const closurePrefix = `${publicOrigin}/${releaseChannel}/closure/${expectedPlatform}/versions/${identity.version}/`;
     for (const asset of ["archive", "inventory", "manifest", "provenance"] as const) {
       const url = manifest.closure.assets?.[asset]?.url;
       if (url == null) return `closure.assets.${asset}.url=missing`;

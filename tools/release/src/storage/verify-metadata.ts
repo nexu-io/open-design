@@ -3,7 +3,7 @@ import {
   assertLauncherVersionFloorSatisfiable,
   resolveLauncherVersionFloor,
 } from "./launcher-version-floor.ts";
-import { releaseChannelDescriptor } from "@open-design/release";
+import { parseReleaseVersion, releaseChannelDescriptor } from "@open-design/release";
 import { readFile } from "node:fs/promises";
 import { parseReleaseNotePublication, releaseNoteMetadataFromPublication } from "../release-note/publication.ts";
 
@@ -119,14 +119,23 @@ for (const target of ["mac_arm64", "win_x64", "mac_x64", "linux_x64"]) {
     const expectedPlatform = target === "mac_arm64" ? "darwin-arm64" : "win32-x64";
     if (
       closure?.manifest?.identity?.channel !== releaseChannel
-      || closure.manifest.identity.version !== releaseVersion
       || closure.manifest.identity.platform !== expectedPlatform
     ) {
       throw new Error(`metadata target ${target} has an invalid Closure identity`);
     }
+    try {
+      parseReleaseVersion(String(closure.manifest.identity.version), releaseChannel);
+    } catch {
+      throw new Error(`metadata target ${target} has an invalid Closure version`);
+    }
+    const closurePrefix = `${releaseDescriptor.storagePrefix}/closure/${expectedPlatform}/versions/${closure.manifest.identity.version}/`;
     for (const asset of ["archive", "inventory", "manifest", "provenance"] as const) {
       if (closure.assets?.[asset]?.url == null) {
         throw new Error(`metadata target ${target} is missing Closure ${asset} artifact`);
+      }
+      const assetUrl = new URL(closure.assets[asset].url);
+      if (!assetUrl.pathname.includes(`/${closurePrefix}`)) {
+        throw new Error(`metadata target ${target} Closure ${asset} artifact is outside its version prefix`);
       }
     }
     if (closure.manifest?.artifact?.url !== closure.assets?.archive?.url) {

@@ -6,10 +6,12 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   CLOSURE_DAEMON_EXTERNALS,
+  CLOSURE_BUILD_SOURCE_PATHS,
   CLOSURE_ELECTRON_NATIVE_MODULES,
   CLOSURE_INTERNAL_PACKAGES,
   CLOSURE_PLATFORM_TARGETS,
   closureRuntimeSource,
+  createClosureBuildCacheKey,
   createClosureElectronRebuildOptions,
   materializeClosureWebPublicHoist,
   normalizeClosurePlatformTarget,
@@ -94,6 +96,43 @@ describe("tools-pack Closure archive", () => {
     expect(names).not.toContain("@open-design/daemon");
     expect(names).not.toContain("@open-design/desktop");
     expect(names).not.toContain("@open-design/packaged");
+  });
+
+  it("keys Closure builds independently from shell-only sources", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-closure-build-key-"));
+    roots.push(root);
+    await writeFile(join(root, "package.json"), JSON.stringify({ packageManager: "pnpm@10.33.2" }));
+    await writeFile(join(root, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\n");
+    for (const sourcePath of CLOSURE_BUILD_SOURCE_PATHS) {
+      const absolutePath = join(root, sourcePath);
+      if (sourcePath.endsWith(".json") || sourcePath.endsWith(".ts")) {
+        await mkdir(join(absolutePath, ".."), { recursive: true });
+        await writeFile(absolutePath, `source:${sourcePath}\n`);
+      } else {
+        await mkdir(absolutePath, { recursive: true });
+        await writeFile(join(absolutePath, "source.txt"), `source:${sourcePath}\n`);
+      }
+    }
+    await mkdir(join(root, "apps", "desktop", "src"), { recursive: true });
+    await writeFile(join(root, "apps", "desktop", "src", "index.ts"), "export const shell = 1;\n");
+    const options = {
+      artifactUrl: "https://releases.open-design.test/beta/closure/darwin-arm64/versions/0.18.0-beta.4/closure.zip",
+      channel: "beta" as const,
+      electronVersion: "41.3.0",
+      minShellVersion: "0.16.2",
+      platform: CLOSURE_PLATFORM_TARGETS.DARWIN_ARM64,
+      version: "0.18.0-beta.4",
+      workspaceRoot: root,
+    };
+
+    const initial = await createClosureBuildCacheKey(options);
+    await writeFile(join(root, "apps", "desktop", "src", "index.ts"), "export const shell = 2;\n");
+    expect(await createClosureBuildCacheKey(options)).toBe(initial);
+
+    await writeFile(join(root, "apps", "headless", "source.txt"), "headless changed\n");
+    expect(await createClosureBuildCacheKey(options)).not.toBe(initial);
+    expect(CLOSURE_BUILD_SOURCE_PATHS).not.toContain("apps/desktop");
+    expect(CLOSURE_BUILD_SOURCE_PATHS).not.toContain("apps/packaged");
   });
 
   it("takes external runtime versions from the daemon dependency contract", async () => {

@@ -28,7 +28,9 @@ import {
 import { createPackageManagerInvocation } from "@open-design/platform";
 import { isReleaseChannel, parseReleaseVersion, type ReleaseChannel } from "@open-design/release";
 
+import { hashJson, hashPath, ToolPackCache, type CacheInvalidation } from "./cache.js";
 import { resolveElectronVersion, WORKSPACE_ROOT } from "./config.js";
+import { hashPackageSourcePath } from "./package-source-hash.js";
 import { copyBundledResourceTrees, winResources } from "./resources.js";
 
 export const CLOSURE_PLATFORM_TARGETS = Object.freeze({
@@ -61,6 +63,7 @@ export type ClosureArchiveInvocation = {
 
 export type ClosureBuildOptions = {
   artifactUrl: string;
+  cacheDir?: string;
   channel: string;
   dir?: string;
   minShellVersion: string;
@@ -69,6 +72,39 @@ export type ClosureBuildOptions = {
   version: string;
   workspaceRoot?: string;
 };
+
+export const CLOSURE_BUILD_SOURCE_PATHS = [
+  "apps/daemon",
+  "apps/headless",
+  "apps/web",
+  "packages/agui-adapter",
+  "packages/components",
+  "packages/contracts",
+  "packages/diagnostics",
+  "packages/headless-runtime",
+  "packages/host",
+  "packages/launcher-proto",
+  "packages/platform",
+  "packages/plugin-runtime",
+  "packages/registry-protocol",
+  "packages/release",
+  "packages/sidecar",
+  "packages/sidecar-proto",
+  "tools/pack/package.json",
+  "tools/pack/resources",
+  "tools/pack/src/closure.ts",
+  "tools/pack/src/resources.ts",
+  "assets/community-pets",
+  "assets/frames",
+  "craft",
+  "data/plugin-previews",
+  "design-systems",
+  "design-templates",
+  "plugins/_official",
+  "plugins/registry",
+  "prompt-templates",
+  "skills",
+] as const;
 
 export type ClosureBuildProvenanceV1 = {
   artifact: {
@@ -104,6 +140,37 @@ export type ClosureBuildReport = {
   provenance: ClosureBuildProvenanceV1;
   provenancePath: string;
 };
+
+export async function createClosureBuildCacheKey(options: {
+  artifactUrl: string;
+  channel: ReleaseChannel;
+  electronVersion: string;
+  minShellVersion: string;
+  platform: ClosurePlatformTarget;
+  version: string;
+  workspaceRoot: string;
+}): Promise<string> {
+  const sourceHashes: Record<string, string> = {};
+  for (const sourcePath of CLOSURE_BUILD_SOURCE_PATHS) {
+    sourceHashes[sourcePath] = await hashPackageSourcePath(join(options.workspaceRoot, sourcePath));
+  }
+  const rootPackage = JSON.parse(
+    await readFile(join(options.workspaceRoot, "package.json"), "utf8"),
+  ) as { packageManager?: unknown };
+  return hashJson({
+    artifactUrl: options.artifactUrl,
+    channel: options.channel,
+    electronVersion: options.electronVersion,
+    minShellVersion: options.minShellVersion,
+    nodeVersion: process.version,
+    packageManager: rootPackage.packageManager,
+    platform: options.platform,
+    pnpmLock: await hashPath(join(options.workspaceRoot, "pnpm-lock.yaml")),
+    schemaVersion: 1,
+    sourceHashes,
+    version: options.version,
+  });
+}
 
 function hostTarget(
   platform: NodeJS.Platform = process.platform,
@@ -581,7 +648,7 @@ function resolveOutputRoot(root: string, channel: ReleaseChannel, target: Closur
   return outputRoot;
 }
 
-export async function buildClosureArchive(options: ClosureBuildOptions): Promise<ClosureBuildReport> {
+async function buildClosureArchiveUncached(options: ClosureBuildOptions): Promise<ClosureBuildReport> {
   const workspaceRoot = resolve(options.workspaceRoot ?? WORKSPACE_ROOT);
   const target = normalizeClosurePlatformTarget(options.platform);
   assertNativeBuildHost(target);
@@ -721,4 +788,135 @@ export async function buildClosureArchive(options: ClosureBuildOptions): Promise
   await writeFile(provenancePath, `${JSON.stringify(provenance, null, 2)}\n`, "utf8");
   await rm(stageRoot, { force: true, recursive: true });
   return { archivePath, inventoryPath, manifest, manifestPath, outputRoot, provenance, provenancePath };
+}
+
+function closureOutputRoot(options: ClosureBuildOptions): {
+  channel: ReleaseChannel;
+  outputRoot: string;
+  platform: ClosurePlatformTarget;
+  workspaceRoot: string;
+} {
+  const workspaceRoot = resolve(options.workspaceRoot ?? WORKSPACE_ROOT);
+  const platform = normalizeClosurePlatformTarget(options.platform);
+  const channel = resolveChannel(options.channel, options.version);
+  const toolRoot = resolve(workspaceRoot, options.dir ?? ".tmp/tools-pack");
+  return {
+    channel,
+    outputRoot: resolveOutputRoot(toolRoot, channel, platform, options.version),
+    platform,
+    workspaceRoot,
+  };
+}
+
+async function readClosureBuildReport(
+  outputRoot: string,
+  expected: {
+    artifactUrl: string;
+    channel: ReleaseChannel;
+    minShellVersion: string;
+    platform: ClosurePlatformTarget;
+    version: string;
+  },
+): Promise<ClosureBuildReport> {
+  const archivePath = join(outputRoot, "closure.zip");
+  const inventoryPath = join(outputRoot, "inventory.json");
+  const manifestPath = join(outputRoot, "manifest.json");
+  const provenancePath = join(outputRoot, "provenance.json");
+  const [archiveBytes, inventoryValue, manifestValue, provenanceValue] = await Promise.all([
+    readFile(archivePath),
+    readFile(inventoryPath, "utf8").then((value) => JSON.parse(value) as unknown),
+    readFile(manifestPath, "utf8").then((value) => JSON.parse(value) as unknown),
+    readFile(provenancePath, "utf8").then((value) => JSON.parse(value) as ClosureBuildProvenanceV1),
+  ]);
+  const inventory = validateClosureFileInventory(inventoryValue);
+  const manifest = validateClosureCandidateManifest(manifestValue);
+  const provenance = provenanceValue;
+  const archiveDigest = `sha256:${createHash("sha256").update(archiveBytes).digest("hex")}`;
+  const inventoryDigest = digestInventory(inventory.files);
+  if (
+    manifest.identity.channel !== expected.channel
+    || manifest.identity.platform !== expected.platform
+    || manifest.identity.version !== expected.version
+    || manifest.artifact.url !== new URL(expected.artifactUrl).toString()
+    || manifest.compatibility.shell.minVersion !== expected.minShellVersion
+    || manifest.artifact.digest !== archiveDigest
+    || manifest.identity.digest !== archiveDigest
+    || manifest.artifact.size !== archiveBytes.byteLength
+    || manifest.artifact.inventoryDigest !== inventoryDigest
+  ) {
+    throw new Error("cached Closure output does not match its build identity");
+  }
+  if (
+    provenance.schemaVersion !== 1
+    || provenance.channel !== expected.channel
+    || provenance.platform !== expected.platform
+    || provenance.version !== expected.version
+    || provenance.artifact.digest !== archiveDigest
+    || provenance.artifact.inventoryDigest !== inventoryDigest
+    || provenance.artifact.size !== archiveBytes.byteLength
+  ) {
+    throw new Error("cached Closure provenance does not match its build identity");
+  }
+  return {
+    archivePath,
+    inventoryPath,
+    manifest,
+    manifestPath,
+    outputRoot,
+    provenance,
+    provenancePath,
+  };
+}
+
+export async function buildClosureArchive(options: ClosureBuildOptions): Promise<ClosureBuildReport> {
+  const resolved = closureOutputRoot(options);
+  if (options.cacheDir == null) return await buildClosureArchiveUncached(options);
+  const electronVersion = resolveElectronVersion(resolved.workspaceRoot);
+  const key = await createClosureBuildCacheKey({
+    artifactUrl: options.artifactUrl,
+    channel: resolved.channel,
+    electronVersion,
+    minShellVersion: options.minShellVersion,
+    platform: resolved.platform,
+    version: options.version,
+    workspaceRoot: resolved.workspaceRoot,
+  });
+  const cache = new ToolPackCache(resolve(resolved.workspaceRoot, options.cacheDir));
+  const expected = {
+    artifactUrl: options.artifactUrl,
+    channel: resolved.channel,
+    minShellVersion: options.minShellVersion,
+    platform: resolved.platform,
+    version: options.version,
+  };
+  await cache.acquire<{
+    manifest: ClosureCandidateManifest;
+    provenance: ClosureBuildProvenanceV1;
+  }>({
+    materialize: [{ from: "output", to: resolved.outputRoot }],
+    node: {
+      id: `${resolved.platform}.closure-build`,
+      key,
+      outputs: [
+        "output/closure.zip",
+        "output/inventory.json",
+        "output/manifest.json",
+        "output/provenance.json",
+      ],
+      invalidate: async ({ entryRoot }): Promise<CacheInvalidation | null> => {
+        try {
+          await readClosureBuildReport(join(entryRoot, "output"), expected);
+          return null;
+        } catch (error) {
+          return { reason: error instanceof Error ? error.message : String(error) };
+        }
+      },
+      build: async ({ entryRoot }) => {
+        const report = await buildClosureArchiveUncached({ ...options, cacheDir: undefined });
+        await cp(report.outputRoot, join(entryRoot, "output"), { recursive: true });
+        return { manifest: report.manifest, provenance: report.provenance };
+      },
+    },
+  });
+  return await readClosureBuildReport(resolved.outputRoot, expected);
 }

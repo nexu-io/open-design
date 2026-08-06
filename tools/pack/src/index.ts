@@ -117,6 +117,7 @@ const cli = cac("tools-pack");
 
 cli.command("closure <action>", "Headless Closure commands: build")
   .option("--artifact-url <url>", "immutable public URL intended for closure.zip")
+  .option("--cache-dir <path>", "independent Closure build cache root")
   .option("--channel <channel>", "release channel")
   .option("--dir <path>", "tools-pack output/staging root directory")
   .option("--json", "print JSON")
@@ -140,6 +141,7 @@ cli.command("closure <action>", "Headless Closure commands: build")
     }
     printJson(await buildClosureArchive({
       artifactUrl: options.artifactUrl,
+      ...(options.cacheDir == null ? {} : { cacheDir: options.cacheDir }),
       channel: options.channel,
       ...(options.dir == null ? {} : { dir: options.dir }),
       minShellVersion: options.minShellVersion,

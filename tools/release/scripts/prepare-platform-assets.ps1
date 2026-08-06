@@ -10,6 +10,7 @@ param(
   [string]$ReleaseNamespace,
   [Parameter(Mandatory = $true)]
   [string]$ReleaseVersion,
+  [string]$ClosureVersion = "",
   [Parameter(Mandatory = $true)]
   [AllowEmptyString()]
   [string]$ReleaseAssetSuffix,
@@ -27,6 +28,10 @@ $ErrorActionPreference = "Stop"
 
 if ($ReleaseTarget -ne "win_x64") {
   throw "prepare-platform-assets.ps1 only supports win_x64"
+}
+
+if ([string]::IsNullOrWhiteSpace($ClosureVersion)) {
+  $ClosureVersion = $ReleaseVersion
 }
 
 New-Item -ItemType Directory -Force -Path $ReleaseAssetsDir | Out-Null
@@ -69,7 +74,7 @@ if ($IncludeZip) {
 }
 
 if (-not [string]::IsNullOrWhiteSpace($ClosureDir)) {
-  $closureBase = "open-design-$ReleaseVersion$ReleaseAssetSuffix-win-x64-closure"
+  $closureBase = "open-design-$ClosureVersion-win-x64-closure"
   $closureAssets = [ordered]@{
     "closure.zip" = "$closureBase.zip"
     "inventory.json" = "$closureBase-inventory.json"

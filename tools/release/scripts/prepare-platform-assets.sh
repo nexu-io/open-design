@@ -28,6 +28,7 @@ required RELEASE_VERSION
 required TOOLS_PACK_DIR
 
 RELEASE_ASSET_SUFFIX="${RELEASE_ASSET_SUFFIX:-}"
+RELEASE_CLOSURE_VERSION="${RELEASE_CLOSURE_VERSION:-$RELEASE_VERSION}"
 
 prepare_closure_assets() {
   if [ -z "${RELEASE_CLOSURE_DIR:-}" ]; then
@@ -35,8 +36,8 @@ prepare_closure_assets() {
   fi
   local base source_name target_name
   case "$RELEASE_TARGET" in
-    mac_arm64) base="open-design-$RELEASE_VERSION$RELEASE_ASSET_SUFFIX-mac-arm64-closure" ;;
-    win_x64) base="open-design-$RELEASE_VERSION$RELEASE_ASSET_SUFFIX-win-x64-closure" ;;
+    mac_arm64) base="open-design-$RELEASE_CLOSURE_VERSION-mac-arm64-closure" ;;
+    win_x64) base="open-design-$RELEASE_CLOSURE_VERSION-win-x64-closure" ;;
     *) echo "Closure assets are not supported for $RELEASE_TARGET" >&2; exit 1 ;;
   esac
   for source_name in closure.zip inventory.json manifest.json provenance.json; do

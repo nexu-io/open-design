@@ -20,7 +20,7 @@ import {
 } from "./common.ts";
 import { assertCurrentVersionReservation, versionLockObjectKey } from "./beta-version-reservation.ts";
 import { putStorageObject } from "./s3-upload.ts";
-import { releaseChannelDescriptor } from "@open-design/release";
+import { parseReleaseVersion, releaseChannelDescriptor } from "@open-design/release";
 
 type AssetEntry = {
   contentType: string;
@@ -69,6 +69,7 @@ const reportRoot = optional("RELEASE_REPORT_DIR");
 const reportZipPath = optional("RELEASE_REPORT_ZIP_PATH");
 const versionLockRequired = bool("RELEASE_VERSION_LOCK_REQUIRED");
 const closureEnabled = bool("RELEASE_CLOSURE_ENABLED");
+const closureVersion = optional("RELEASE_CLOSURE_VERSION", releaseVersion);
 const versionLockKey = optional(
   "RELEASE_VERSION_LOCK_KEY",
   countedReleaseChannel == null ? "" : versionLockObjectKey(releaseVersion, countedReleaseChannel),
@@ -84,7 +85,7 @@ if (versionLockRequired) {
   console.log(`verified ${countedReleaseChannel} version reservation ${versionLockKey}`);
 }
 
-function assetEntry(name: string): AssetEntry {
+function assetEntry(name: string, prefix = versionPrefix): AssetEntry {
   const path = join(releaseAssetsDir, name);
   if (!existsSync(path) || !statSync(path).isFile()) {
     throw new Error(`expected release asset not found: ${path}`);
@@ -93,10 +94,10 @@ function assetEntry(name: string): AssetEntry {
     contentType: contentType(name),
     name,
     size: statSync(path).size,
-    url: publicUrl(publicOrigin, versionPrefix, name),
+    url: publicUrl(publicOrigin, prefix, name),
   };
   if (existsSync(`${path}.sha256`)) {
-    entry.sha256Url = publicUrl(publicOrigin, versionPrefix, `${name}.sha256`);
+    entry.sha256Url = publicUrl(publicOrigin, prefix, `${name}.sha256`);
   }
   return entry;
 }
@@ -112,17 +113,26 @@ function closureTarget(): "darwin-arm64" | "win32-x64" | null {
 }
 
 function closureAssetBase(): string {
-  if (target === "mac_arm64") return `open-design-${releaseVersion}${assetSuffix}-mac-arm64-closure`;
-  if (target === "win_x64") return `open-design-${releaseVersion}${assetSuffix}-win-x64-closure`;
+  if (target === "mac_arm64") return `open-design-${closureVersion}-mac-arm64-closure`;
+  if (target === "win_x64") return `open-design-${closureVersion}-win-x64-closure`;
   throw new Error(`Closure publication is not supported for ${target}`);
 }
 
-function closurePublication(): { assetNames: string[]; publication: ClosurePublication } | null {
+function closurePublication(): {
+  assetNames: string[];
+  publication: ClosurePublication;
+  versionPrefix: string;
+} | null {
   if (!closureEnabled) return null;
   const expectedPlatform = closureTarget();
   if (expectedPlatform == null) {
     throw new Error(`RELEASE_CLOSURE_ENABLED is not supported for ${target}`);
   }
+  parseReleaseVersion(closureVersion, releaseChannel);
+  const closureVersionPrefix = optional(
+    "RELEASE_CLOSURE_VERSION_PREFIX",
+    `${releaseChannel}/closure/${expectedPlatform}/versions/${closureVersion}`,
+  );
 
   const base = closureAssetBase();
   const names = {
@@ -132,10 +142,10 @@ function closurePublication(): { assetNames: string[]; publication: ClosurePubli
     provenance: `${base}-provenance.json`,
   } as const;
   const assets = {
-    archive: assetEntry(names.archive),
-    inventory: assetEntry(names.inventory),
-    manifest: assetEntry(names.manifest),
-    provenance: assetEntry(names.provenance),
+    archive: assetEntry(names.archive, closureVersionPrefix),
+    inventory: assetEntry(names.inventory, closureVersionPrefix),
+    manifest: assetEntry(names.manifest, closureVersionPrefix),
+    provenance: assetEntry(names.provenance, closureVersionPrefix),
   };
   const manifest = validateClosureCandidateManifest(
     JSON.parse(readFileSync(join(releaseAssetsDir, names.manifest), "utf8")) as unknown,
@@ -148,8 +158,8 @@ function closurePublication(): { assetNames: string[]; publication: ClosurePubli
   if (manifest.identity.channel !== releaseChannel) {
     throw new Error(`Closure channel ${manifest.identity.channel} does not match release channel ${releaseChannel}`);
   }
-  if (manifest.identity.version !== releaseVersion) {
-    throw new Error(`Closure version ${manifest.identity.version} does not match release version ${releaseVersion}`);
+  if (manifest.identity.version !== closureVersion) {
+    throw new Error(`Closure version ${manifest.identity.version} does not match requested Closure version ${closureVersion}`);
   }
   if (manifest.identity.platform !== expectedPlatform) {
     throw new Error(`Closure platform ${manifest.identity.platform} does not match release target ${target}`);
@@ -174,7 +184,7 @@ function closurePublication(): { assetNames: string[]; publication: ClosurePubli
   if (
     provenance.schemaVersion !== 1
     || provenance.channel !== releaseChannel
-    || provenance.version !== releaseVersion
+    || provenance.version !== closureVersion
     || provenance.platform !== expectedPlatform
     || provenanceArtifact?.digest !== archiveDigest
     || provenanceArtifact?.inventoryDigest !== inventoryDigest
@@ -192,6 +202,7 @@ function closurePublication(): { assetNames: string[]; publication: ClosurePubli
       names.provenance,
     ],
     publication: { assets, manifest },
+    versionPrefix: closureVersionPrefix,
   };
 }
 
@@ -361,8 +372,17 @@ function targetConfig(): TargetConfig {
 
 const config = targetConfig();
 const closure = closurePublication();
-for (const name of [...config.assetNames, ...(closure?.assetNames ?? [])]) {
+for (const name of config.assetNames) {
   await upload(join(releaseAssetsDir, name), `${versionPrefix}/${name}`, "public, max-age=31536000, immutable");
+}
+if (closure != null) {
+  for (const name of closure.assetNames) {
+    await upload(
+      join(releaseAssetsDir, name),
+      `${closure.versionPrefix}/${name}`,
+      "public, max-age=31536000, immutable",
+    );
+  }
 }
 
 const report = config.reportDirectory == null ? null : await uploadReport(config.reportDirectory);
@@ -416,6 +436,8 @@ if (closure != null) {
   for (const [artifactName, artifact] of Object.entries(closure.publication.assets)) {
     outputs[`closure_${artifactName}_url`] = artifact.url;
   }
+  outputs.closure_version = closureVersion;
+  outputs.closure_version_prefix = closure.versionPrefix;
 }
 if (config.feed != null) outputs.feed_url = config.feed.latestUrl;
 if (report != null && typeof report.url === "string") outputs.report_url = report.url;

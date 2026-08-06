@@ -58,7 +58,7 @@ async function createStore(): Promise<ClosureStorePaths> {
 
 function metadata(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   const version = "0.18.0-beta.4";
-  const archiveUrl = `https://releases.open-design.test/beta/versions/${version}/closure.zip`;
+  const archiveUrl = `https://releases.open-design.test/beta/closure/darwin-arm64/versions/${version}/closure.zip`;
   return {
     channel: "beta",
     releaseState: "complete",
@@ -211,6 +211,12 @@ describe("Closure release update selection", () => {
       version: "0.18.0-beta.4",
     });
     expect(candidate.assets.archive).toBe(candidate.manifest.artifact.url);
+  });
+
+  it("selects a Closure version independently from the shell release version", () => {
+    const candidate = select(metadata({ releaseVersion: "0.18.0-beta.3" }));
+
+    expect(candidate.manifest.identity.version).toBe("0.18.0-beta.4");
   });
 
   it("discovers the Closure from the combined release metadata endpoint", async () => {

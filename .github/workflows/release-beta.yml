@@ -38,13 +38,11 @@ on:
         required: false
         type: string
         default: ""
-      release_origin:
-        description: "Release storage origin."
-        required: true
-        type: choice
-        options:
-          - cloudflare-r2
-        default: cloudflare-r2
+      closure_version:
+        description: "Optional Headless Closure beta version. Empty uses the shell release version."
+        required: false
+        type: string
+        default: ""
       release_public_origin:
         description: "Optional public release origin override."
         required: false
@@ -203,6 +201,10 @@ on:
         required: false
         type: string
         default: ""
+      closure_version:
+        required: false
+        type: string
+        default: ""
       release_origin:
         required: false
         type: string
@@ -279,6 +281,9 @@ on:
       beta_version:
         description: "The beta version that was built."
         value: ${{ jobs.metadata.outputs.beta_version }}
+      closure_version:
+        description: "The Headless Closure version that was built or reused."
+        value: ${{ jobs.metadata.outputs.closure_version }}
       branch:
         description: "The branch that was built."
         value: ${{ jobs.metadata.outputs.branch }}
@@ -369,6 +374,7 @@ jobs:
       asset_version_suffix: ${{ steps.beta.outputs.asset_version_suffix }}
       base_version: ${{ steps.beta.outputs.base_version }}
       beta_version: ${{ inputs.release_version != '' && inputs.release_version || steps.beta.outputs.beta_version }}
+      closure_version: ${{ inputs.closure_version != '' && inputs.closure_version || inputs.release_version != '' && inputs.release_version || steps.beta.outputs.beta_version }}
       branch: ${{ steps.identity.outputs.branch }}
       commit: ${{ steps.identity.outputs.commit }}
       previous_commit: ${{ steps.prev.outputs.previous_commit }}
@@ -434,7 +440,7 @@ jobs:
       - name: Validate beta inputs
         run: |
           set -euo pipefail
-          if [ "${{ inputs.release_origin }}" != "cloudflare-r2" ]; then
+          if [ -n "${{ inputs.release_origin }}" ] && [ "${{ inputs.release_origin }}" != "cloudflare-r2" ]; then
             echo "release-beta supports release_origin=cloudflare-r2 only" >&2
             exit 1
           fi
@@ -630,16 +636,16 @@ jobs:
           RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
         run: |
           set -euo pipefail
-          version="${{ needs.metadata.outputs.beta_version }}"
-          artifact_url="$RELEASE_PUBLIC_ORIGIN/beta/versions/$version.signed/open-design-$version.signed-mac-arm64-closure.zip"
+          version="${{ needs.metadata.outputs.closure_version }}"
+          artifact_url="$RELEASE_PUBLIC_ORIGIN/beta/closure/darwin-arm64/versions/$version/open-design-$version-mac-arm64-closure.zip"
           mkdir -p "$RUNNER_TEMP/release-build/mac_arm64"
           pnpm exec tools-pack closure build \
             --artifact-url "$artifact_url" \
+            --cache-dir "$RUNNER_TEMP/tools-pack-cache" \
             --channel beta \
             --dir "$RUNNER_TEMP/tools-pack" \
             --min-shell-version "$CLOSURE_MIN_SHELL_VERSION" \
             --platform darwin-arm64 \
-            --skip-workspace-build \
             --version "$version" \
             --json > "$RUNNER_TEMP/release-build/mac_arm64/closure.json"
 
@@ -650,8 +656,8 @@ jobs:
           DOGFOOD_BUILD_ID: ${{ github.run_id }}-${{ github.run_attempt }}-mac-arm64-closure
           DOGFOOD_BUILD_JSON_KEYS: archivePath,inventoryPath,manifestPath,provenancePath
           DOGFOOD_BUILD_JSON_PATH: ${{ runner.temp }}/release-build/mac_arm64/closure.json
-          DOGFOOD_LABEL: macOS arm64 beta Headless Closure ${{ needs.metadata.outputs.beta_version }}
-          DOGFOOD_VERSION: ${{ needs.metadata.outputs.beta_version }}
+          DOGFOOD_LABEL: macOS arm64 beta Headless Closure ${{ needs.metadata.outputs.closure_version }}
+          DOGFOOD_VERSION: ${{ needs.metadata.outputs.closure_version }}
           RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
           RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
           RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
@@ -825,7 +831,8 @@ jobs:
           RELEASE_ASSET_SUFFIX: .signed
           RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets/mac_arm64
           RELEASE_CHANNEL: beta
-          RELEASE_CLOSURE_DIR: ${{ runner.temp }}/tools-pack/out/closure/beta/darwin-arm64/versions/${{ needs.metadata.outputs.beta_version }}
+          RELEASE_CLOSURE_DIR: ${{ runner.temp }}/tools-pack/out/closure/beta/darwin-arm64/versions/${{ needs.metadata.outputs.closure_version }}
+          RELEASE_CLOSURE_VERSION: ${{ needs.metadata.outputs.closure_version }}
           RELEASE_NAMESPACE: release-beta
           RELEASE_NOTES: Open Design beta ${{ needs.metadata.outputs.beta_version }}.signed
           RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
@@ -842,6 +849,7 @@ jobs:
           RELEASE_ARTIFACT_MODE: dmg-and-payload
           RELEASE_CHANNEL: beta
           RELEASE_CLOSURE_ENABLED: "true"
+          RELEASE_CLOSURE_VERSION: ${{ needs.metadata.outputs.closure_version }}
           RELEASE_MANIFEST_DIR: ${{ runner.temp }}/release-platform-manifests
           RELEASE_OUTPUTS_PATH: ${{ runner.temp }}/release-platform-outputs/mac_arm64.json
           RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
@@ -1273,15 +1281,15 @@ jobs:
           RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
         run: |
           $ErrorActionPreference = "Stop"
-          $version = "${{ needs.metadata.outputs.beta_version }}"
-          $artifactUrl = "$env:RELEASE_PUBLIC_ORIGIN/beta/versions/$version.unsigned/open-design-$version.unsigned-win-x64-closure.zip"
+          $version = "${{ needs.metadata.outputs.closure_version }}"
+          $artifactUrl = "$env:RELEASE_PUBLIC_ORIGIN/beta/closure/win32-x64/versions/$version/open-design-$version-win-x64-closure.zip"
           $closureOutput = pnpm.cmd exec tools-pack closure build `
             --artifact-url $artifactUrl `
+            --cache-dir "${{ runner.temp }}\tools-pack-cache" `
             --channel beta `
             --dir "${{ runner.temp }}\tools-pack" `
             --min-shell-version $env:CLOSURE_MIN_SHELL_VERSION `
             --platform win32-x64 `
-            --skip-workspace-build `
             --version $version `
             --json
           if ($LASTEXITCODE -ne 0) { throw "Headless Closure build failed with exit code $LASTEXITCODE" }
@@ -1294,8 +1302,8 @@ jobs:
           DOGFOOD_BUILD_ID: ${{ github.run_id }}-${{ github.run_attempt }}-win-x64-closure
           DOGFOOD_BUILD_JSON_KEYS: archivePath,inventoryPath,manifestPath,provenancePath
           DOGFOOD_BUILD_JSON_PATH: ${{ runner.temp }}\release-build\win_x64\closure.json
-          DOGFOOD_LABEL: Windows x64 beta Headless Closure ${{ needs.metadata.outputs.beta_version }}
-          DOGFOOD_VERSION: ${{ needs.metadata.outputs.beta_version }}
+          DOGFOOD_LABEL: Windows x64 beta Headless Closure ${{ needs.metadata.outputs.closure_version }}
+          DOGFOOD_VERSION: ${{ needs.metadata.outputs.closure_version }}
           RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
           RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
           RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
@@ -1449,10 +1457,11 @@ jobs:
             -BuildJsonPath "${{ runner.temp }}\release-build\win_x64\build.json" `
             -ReleaseNamespace release-beta-win `
             -ReleaseVersion "${{ needs.metadata.outputs.beta_version }}" `
+            -ClosureVersion "${{ needs.metadata.outputs.closure_version }}" `
             -ReleaseAssetSuffix ".unsigned" `
             -ReleaseChannel beta `
             -ReleasePublicOrigin "${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}" `
-            -ClosureDir "${{ runner.temp }}\tools-pack\out\closure\beta\win32-x64\versions\${{ needs.metadata.outputs.beta_version }}" `
+            -ClosureDir "${{ runner.temp }}\tools-pack\out\closure\beta\win32-x64\versions\${{ needs.metadata.outputs.closure_version }}" `
             -IncludeZip $${{ inputs.win_x64_target == 'all' || inputs.win_x64_target == 'zip' }}
 
       - name: Publish win_x64 platform
@@ -1462,6 +1471,7 @@ jobs:
           RELEASE_ASSETS_DIR: ${{ runner.temp }}\release-assets\win_x64
           RELEASE_CHANNEL: beta
           RELEASE_CLOSURE_ENABLED: "true"
+          RELEASE_CLOSURE_VERSION: ${{ needs.metadata.outputs.closure_version }}
           RELEASE_MANIFEST_DIR: ${{ runner.temp }}\release-platform-manifests
           RELEASE_OUTPUTS_PATH: ${{ runner.temp }}\release-platform-outputs\win_x64.json
           RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
