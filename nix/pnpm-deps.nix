@@ -9,6 +9,8 @@
   # 1. Temporarily set the consuming `hash = lib.fakeHash;`
   # 2. Run the relevant nix build/flake check
   # 3. Copy the expected hash printed by Nix into the matching field below
-  daemonHash = "sha256-YQvGfoSFGgSqdCezSTNrTBIlEpnPFPH04vUzZf5RJc0=";
-  webHash = "sha256-T6z+ZjG/+KOD9qBqO/WguX6F9C+Z1mGdQlDxw/5Ddq0=";
+  # Refreshed after #6487 CVE lockfile bumps + vela-cli optional restore
+  # (hashes from nix flake check on PR head b516fed).
+  daemonHash = "sha256-MEsOfKEYtBTPpikA72zE5ksSYM1EQ0+IyaF0S8zVKBE=";
+  webHash = "sha256-yIXD/3BoefpU42WPFC6Tw/e+Cir2F6Ln2ygyCQ6wLBM=";
 }
