@@ -3001,8 +3001,32 @@ async function resolveMcpLaunchSpec(flags) {
   return {
     command: process.execPath,
     args: [process.argv[1], 'mcp', '--daemon-url', base],
-    env: {},
+    env: selfReinvocationRuntimeEnv(),
   };
+}
+
+// Runtime env values this process's own invocation carries that a
+// self-reinvocation spec must also carry, or a later run of the persisted
+// command silently drops behavior this exact process depends on. There is
+// no live daemon to ask for its authoritative values on this fallback path
+// (that's the whole reason it's the fallback), so the best available
+// signal is what this process itself already inherited:
+//
+// - ELECTRON_RUN_AS_NODE=1: in a packaged build, process.execPath here is
+//   Electron, not a bundled Node binary. Without this flag on the spawned
+//   process too, Electron launches the GUI app instead of running
+//   daemon-cli.mjs as plain Node.
+// - OD_DATA_DIR: pins the spawned `od mcp` to the same data root this
+//   process resolved. Without it, `od mcp` falls back to `<cwd>/.od/...`,
+//   which is the read-only macOS app bundle for packaged installs and
+//   trips EPERM (issue #848, see the matching comment in
+//   mcp-install-info.ts's buildMcpInstallPayload — the normal, non-fallback
+//   /api/mcp/install-info path already preserves both of these).
+function selfReinvocationRuntimeEnv() {
+  const env = {};
+  if (process.env.OD_DATA_DIR) env.OD_DATA_DIR = process.env.OD_DATA_DIR;
+  if (process.env.ELECTRON_RUN_AS_NODE === '1') env.ELECTRON_RUN_AS_NODE = '1';
+  return env;
 }
 
 function emitInstallResult(useJson, result) {

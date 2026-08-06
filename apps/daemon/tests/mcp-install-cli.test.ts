@@ -45,7 +45,13 @@ async function runCli(
   args: string[],
   extraEnv: NodeJS.ProcessEnv = {},
 ): Promise<{ stdout: string; stderr: string; code: number | null }> {
-  const env: NodeJS.ProcessEnv = { ...process.env, ...extraEnv };
+  // Deletions happen on the base inherited env BEFORE extraEnv is applied
+  // (not merged-then-deleted) specifically so a test can still explicitly
+  // set one of these vars via extraEnv when it wants that exact scenario —
+  // e.g. the Electron-as-Node fallback regression below intentionally sets
+  // ELECTRON_RUN_AS_NODE/OD_DATA_DIR, while every other test relies on them
+  // being absent unless it says otherwise.
+  const env: NodeJS.ProcessEnv = { ...process.env };
   delete env.NODE_OPTIONS;
   // Never let this test's actual invoking environment leak a real daemon
   // endpoint into the child — every scenario here needs to reach
@@ -59,6 +65,13 @@ async function runCli(
   // socket the end-to-end test below sets up would never be reached and the
   // CLI would silently fall back to the self-reinvocation spec instead.
   delete env[SIDECAR_ENV.NAMESPACE];
+  // Regression coverage for the #6425 review (round 9): these two vars must
+  // only appear in a test's env because IT put them there via extraEnv, not
+  // because this Vitest process happened to inherit them (e.g. if it's
+  // itself running under Electron-as-Node tooling).
+  delete env.ELECTRON_RUN_AS_NODE;
+  delete env.OD_DATA_DIR;
+  Object.assign(env, extraEnv);
   try {
     const { stdout, stderr } = await execFileP(process.execPath, [TSX_CLI, CLI_SRC, ...args], {
       cwd: DAEMON_ROOT,
@@ -318,5 +331,88 @@ describe.skipIf(!DEFAULT_PORT_WAS_FREE)('od mcp install <agent> ambiguity skips 
     // this file's own cli.ts entry point).
     expect(parsed.command).toContain('cli.ts');
     expect(parsed.command).toContain(`--daemon-url http://127.0.0.1:${DEFAULT_DAEMON_PORT}`);
+  });
+});
+
+// Blocking finding from the round-9 review (commit d9043a7): the
+// self-reinvocation fallback in resolveMcpLaunchSpec (cli.ts) built its
+// spec with an empty `env` map. In a packaged Electron build,
+// process.execPath there is Electron, not a bundled Node binary --
+// ELECTRON_RUN_AS_NODE=1 must be set on the SPAWNED process too, or
+// Electron launches the GUI app instead of running daemon-cli.mjs as
+// plain Node when the agent later runs this persisted command.
+// OD_DATA_DIR must also carry over, or the spawned `od mcp` falls back to
+// `<cwd>/.od/...`, which is the read-only macOS app bundle for packaged
+// installs and trips EPERM (issue #848). The normal, non-fallback
+// /api/mcp/install-info path already preserves both (see
+// apps/daemon/src/mcp-install-info.ts); this exercises the path where no
+// live daemon is reachable at all, so the fallback spec is what actually
+// gets persisted.
+//
+// Not gated to POSIX: the isolated, empty IPC base directory below means
+// conventionalIpcSocketPaths() finds nothing on any platform (on win32 it
+// already returns no candidates unconditionally), so this always exercises
+// the "no live daemon" fallback regardless of host OS.
+describe('od mcp install <agent> self-reinvocation fallback env (#6425)', () => {
+  it('propagates ELECTRON_RUN_AS_NODE and OD_DATA_DIR from the current process into the persisted spec', async () => {
+    const isolatedIpcBase = fs.mkdtempSync(pathResolve(os.tmpdir(), 'od-mcp-fb-ipc-'));
+    const unreachableBinDir = fs.mkdtempSync(pathResolve(os.tmpdir(), 'od-mcp-fb-bin-'));
+    const fakeDataDir = fs.mkdtempSync(pathResolve(os.tmpdir(), 'od-mcp-fb-data-'));
+    try {
+      const result = await runCli(['mcp', 'install', 'claude', '--print', '--json'], {
+        // No pnpm on PATH -> tools-dev discovery fails too, so every
+        // discovery mechanism comes up empty and resolveMcpLaunchSpec must
+        // take the self-reinvocation fallback branch.
+        PATH: unreachableBinDir,
+        [SIDECAR_ENV.IPC_BASE]: isolatedIpcBase,
+        ELECTRON_RUN_AS_NODE: '1',
+        OD_DATA_DIR: fakeDataDir,
+      });
+
+      expect(result.code).toBe(0);
+      expect(result.stderr).toBe('');
+      const parsed = JSON.parse(result.stdout) as {
+        ok: boolean;
+        kind: string;
+        launchSpec: { command: string; args: string[]; env: Record<string, string> };
+      };
+      expect(parsed.ok).toBe(true);
+      expect(parsed.kind).toBe('cli');
+      // Confirms this actually took the fallback branch, not a coincidental
+      // live-daemon hit.
+      expect(parsed.launchSpec.args.some((arg) => arg.includes('cli.ts'))).toBe(true);
+      expect(parsed.launchSpec.env).toMatchObject({
+        ELECTRON_RUN_AS_NODE: '1',
+        OD_DATA_DIR: fakeDataDir,
+      });
+    } finally {
+      fs.rmSync(isolatedIpcBase, { recursive: true, force: true });
+      fs.rmSync(unreachableBinDir, { recursive: true, force: true });
+      fs.rmSync(fakeDataDir, { recursive: true, force: true });
+    }
+  });
+
+  it('omits ELECTRON_RUN_AS_NODE and OD_DATA_DIR from the persisted spec when neither is set (source-checkout Node case)', async () => {
+    const isolatedIpcBase = fs.mkdtempSync(pathResolve(os.tmpdir(), 'od-mcp-fb-ipc-'));
+    const unreachableBinDir = fs.mkdtempSync(pathResolve(os.tmpdir(), 'od-mcp-fb-bin-'));
+    try {
+      const result = await runCli(['mcp', 'install', 'claude', '--print', '--json'], {
+        PATH: unreachableBinDir,
+        [SIDECAR_ENV.IPC_BASE]: isolatedIpcBase,
+      });
+
+      expect(result.code).toBe(0);
+      expect(result.stderr).toBe('');
+      const parsed = JSON.parse(result.stdout) as {
+        ok: boolean;
+        launchSpec: { env: Record<string, string> };
+      };
+      expect(parsed.ok).toBe(true);
+      expect(parsed.launchSpec.env).not.toHaveProperty('ELECTRON_RUN_AS_NODE');
+      expect(parsed.launchSpec.env).not.toHaveProperty('OD_DATA_DIR');
+    } finally {
+      fs.rmSync(isolatedIpcBase, { recursive: true, force: true });
+      fs.rmSync(unreachableBinDir, { recursive: true, force: true });
+    }
   });
 });
