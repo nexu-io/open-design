@@ -431,14 +431,22 @@ export type PreviewAnchorResponse = {
  * though anchoring is documented as best-effort. Invalid entries are dropped;
  * a reply that is not an array at all counts as answered-empty.
  */
+// The injected bridges cap their own enumeration at 1500 nodes; a reply above
+// that (or carrying absurd strings) cannot come from our bridge, so treat it
+// as forged and refuse it outright rather than paying to iterate it — this
+// handler runs synchronously on the UI thread.
+const ANCHOR_REPLY_MAX_TARGETS = 1500;
+const ANCHOR_REPLY_MAX_STRING = 512;
+
 function sanitizeAnchorTargets(value: unknown): PreviewAnchorTarget[] {
   if (!Array.isArray(value)) return [];
+  if (value.length > ANCHOR_REPLY_MAX_TARGETS) return [];
   const targets: PreviewAnchorTarget[] = [];
   for (const item of value) {
     if (item == null || typeof item !== 'object') continue;
     const t = item as { elementId?: unknown; selector?: unknown; position?: unknown };
-    if (typeof t.elementId !== 'string' || t.elementId.length === 0) continue;
-    if (typeof t.selector !== 'string' || t.selector.length === 0) continue;
+    if (typeof t.elementId !== 'string' || t.elementId.length === 0 || t.elementId.length > ANCHOR_REPLY_MAX_STRING) continue;
+    if (typeof t.selector !== 'string' || t.selector.length === 0 || t.selector.length > ANCHOR_REPLY_MAX_STRING) continue;
     const p = t.position as { x?: unknown; y?: unknown; width?: unknown; height?: unknown } | null;
     if (p == null || typeof p !== 'object') continue;
     const { x, y, width, height } = p;

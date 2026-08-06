@@ -1627,6 +1627,35 @@ describe('requestPreviewAnchorTargets payload sanitization (#6476 review)', () =
     expect(res.answered).toBe(true);
     expect(res.targets).toEqual([]);
   });
+
+  it('refuses an oversized forged reply without iterating it', async () => {
+    // Our bridges cap enumeration at 1500 targets, so a bigger array cannot
+    // be a legitimate reply. It is rejected wholesale (answered-empty) —
+    // frame-relative fallback still applies — and per-entry strings above
+    // 512 chars are dropped too.
+    const oversized = Array.from({ length: 5000 }, (_, i) => ({
+      elementId: `e${i}`,
+      selector: `#e${i}`,
+      position: { x: 0, y: i, width: 10, height: 10 },
+    }));
+    const res = await requestPreviewAnchorTargets(bridgeReply(oversized), 500);
+    expect(res.answered).toBe(true);
+    expect(res.targets).toEqual([]);
+
+    const hugeStrings = [{
+      elementId: 'x'.repeat(600),
+      selector: '#ok',
+      position: { x: 0, y: 0, width: 10, height: 10 },
+    }, {
+      elementId: 'ok',
+      selector: '#ok',
+      position: { x: 1, y: 2, width: 3, height: 4 },
+    }];
+    const res2 = await requestPreviewAnchorTargets(bridgeReply(hugeStrings), 500);
+    expect(res2.targets).toEqual([
+      { elementId: 'ok', selector: '#ok', position: { x: 1, y: 2, width: 3, height: 4 } },
+    ]);
+  });
 });
 
 describe('exportAsImage', () => {
