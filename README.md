@@ -18,7 +18,7 @@
 
 <p align="center">
   <a href="https://github.com/nexu-io/open-design/releases"><img alt="release" src="https://img.shields.io/github/v/release/nexu-io/open-design?style=flat&color=blueviolet&label=release&include_prereleases&display_name=tag" /></a>
-  <a href="LICENSE"><img alt="license" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg?style=flat" /></a>
+  <a href="LICENSE"><img alt="license" src="https://img.shields.io/badge/license-modified%20Apache%202.0-blue.svg?style=flat" /></a>
   <a href="https://discord.gg/mHAjSMV6gz"><img alt="discord" src="https://img.shields.io/discord/1479002485040480266?style=flat&logo=discord&logoColor=white&label=discord&color=5865F2&cacheSeconds=3600" /></a>
   <a href="QUICKSTART.md"><img alt="quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat" /></a>
 </p>
@@ -272,7 +272,7 @@ Open Design (OD) is the open-source alternative. Same loop, same artifact-first 
 
 | | Claude Design | Figma | Lovable / v0 / Bolt | **Open Design** |
 |---|---|---|---|---|
-| Open source | ❌ | ❌ | ❌ | **✅ Apache-2.0** |
+| Open source | ❌ | ❌ | ❌ | **✅ Modified Apache-2.0** |
 | Self-host / desktop | ❌ | ❌ | ❌ | **✅ macOS + Windows + Docker + Vercel web** |
 | Agent-native (runs in your CLI) | Anthropic only | ❌ | Cloud agent only | **✅ 25 CLIs + BYOK** |
 | Brand-grade `DESIGN.md` | Proprietary | Theme JSON | Limited tokens | **✅ 151 systems shipped** |
@@ -769,4 +769,4 @@ Detailed provenance → [`docs/references.md`](docs/references.md).
 
 ## License
 
-Apache-2.0. Bundled skills and templates with their own `LICENSE` files retain those licenses, including `design-templates/guizang-ppt/` (MIT, [@op7418](https://github.com/op7418)), `design-templates/html-ppt/` (MIT, [@lewislulu](https://github.com/lewislulu)), and `skills/web-clone/` (MIT, [@Jane-xiaoer](https://github.com/Jane-xiaoer)).
+Open Design uses a [modified Apache License 2.0](LICENSE). Commercial use and internal use are allowed, but providing Open Design as a hosted service to third parties, embedding it in a commercial offering, or removing frontend LOGO and copyright information requires authorization from Powerformer, Inc. Internal use within a single organization, including multiple workspaces, does not require a commercial license. Bundled skills and templates with their own `LICENSE` files retain those licenses, including `design-templates/guizang-ppt/` (MIT, [@op7418](https://github.com/op7418)), `design-templates/html-ppt/` (MIT, [@lewislulu](https://github.com/lewislulu)), and `skills/web-clone/` (MIT, [@Jane-xiaoer](https://github.com/Jane-xiaoer)).

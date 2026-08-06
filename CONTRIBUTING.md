@@ -260,7 +260,10 @@ Beyond that:
 - **No squash-during-review.** Push fixups; we'll squash on merge.
 - **No force-push to a shared branch** unless the reviewer asked.
 
-We don't enforce a CLA. Apache-2.0 covers us; your contribution is licensed under the same.
+We do not require a separate CLA. By submitting a contribution, you agree to
+the contributor terms in section 2 of the repository's [LICENSE](LICENSE),
+including commercial use of contributed code, and confirm that you have the
+right to grant those permissions.
 
 ---
 

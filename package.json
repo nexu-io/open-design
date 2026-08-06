@@ -5,7 +5,7 @@
   "packageManager": "pnpm@10.33.2",
   "type": "module",
   "description": "Local-first design product: detects your installed code-agent CLI, runs design skills + design systems, streams artifacts into a sandboxed preview.",
-  "license": "Apache-2.0",
+  "license": "SEE LICENSE IN LICENSE",
   "bin": {
     "od": "./apps/daemon/bin/od.mjs"
   },

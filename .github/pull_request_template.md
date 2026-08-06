@@ -68,3 +68,12 @@ Fixes #
      (e.g. `pnpm --filter @open-design/web test`). -->
 
 -
+
+
+## Contribution license
+
+<!-- Required for every PR that changes a file governed by the root LICENSE. -->
+
+- [ ] I have read and agree to the contributor terms in section 2 of the
+  repository `LICENSE`, submit my contribution under those terms, and have the
+  authority to grant the rights stated there.
