@@ -4992,6 +4992,36 @@ export function ProjectView({
           hasGenericDisconnectFailureEvent(message);
         const replayingTerminalRun =
           shouldReplayTerminalRunMessage(message) || spuriouslyFailedPending;
+        const terminalDeliveryReplayIsIneligible =
+          message.runStatus === 'succeeded'
+          && designDeliveryVerificationPending(message)
+          && message.endedAt != null
+          && !isFreshTerminalDeliveryReplayTimestamp(message.endedAt);
+        if (terminalDeliveryReplayIsIneligible) {
+          const deliveryOutcome = resolveDesignDeliveryOutcome({
+            sessionMode: message.sessionMode,
+            runStatus: 'succeeded',
+            content: message.content,
+            events: message.events,
+            producedFileCount: 0,
+            traceObjectFileCount: 0,
+          });
+          updateMessageById(
+            message.id,
+            (prev) => applyDesignDeliveryOutcome(
+              { ...prev, producedFiles: [], traceObjectFiles: [] },
+              deliveryOutcome,
+            ),
+            true,
+            { telemetryFinalized: true },
+          );
+          if (message.runId) {
+            completedReattachRunsRef.current.add(message.runId);
+            genericDisconnectRetriesRef.current.delete(message.runId);
+            genericDisconnectBackoffUntilRef.current.delete(message.runId);
+          }
+          continue;
+        }
         const needsFullReplay =
           isActiveRunStatus(message.runStatus) ||
           replayingTerminalRun ||
@@ -5183,6 +5213,16 @@ export function ProjectView({
             true,
             { telemetryFinalized: true },
           );
+          completedReattachRunsRef.current.add(runId);
+          genericDisconnectRetriesRef.current.delete(runId);
+          genericDisconnectBackoffUntilRef.current.delete(runId);
+          continue;
+        }
+
+        if (
+          terminalDeliveryReplayNeedsAuthoritativeAge
+          && (status.status === 'failed' || status.status === 'canceled')
+        ) {
           completedReattachRunsRef.current.add(runId);
           genericDisconnectRetriesRef.current.delete(runId);
           genericDisconnectBackoffUntilRef.current.delete(runId);

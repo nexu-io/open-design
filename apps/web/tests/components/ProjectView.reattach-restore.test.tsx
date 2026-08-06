@@ -562,6 +562,100 @@ describe('ProjectView daemon reattach restore', () => {
     });
   });
 
+  it('settles a stale observed terminal Design timestamp without status probing or reattach', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2030-01-01T00:00:00.000Z'));
+    const now = Date.now();
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-stale-observed-terminal-delivery',
+        role: 'assistant',
+        content: 'I finished the design.',
+        createdAt: now - 120_000,
+        startedAt: now - 120_000,
+        endedAt: now - 60_001,
+        runId: 'run-stale-observed-terminal-delivery',
+        runStatus: 'succeeded',
+        sessionMode: 'design',
+        preTurnFileNames: [],
+        events: [{ kind: 'tool_use', id: 'write-stale', name: 'Write', input: { file_path: 'index.html' } }],
+      } satisfies ChatMessage,
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+
+    renderProjectView();
+    for (let attempt = 0; attempt < 20 && saveMessage.mock.calls.length === 0; attempt += 1) {
+      await act(async () => {
+        await Promise.resolve();
+      });
+    }
+
+    expect(fetchChatRunStatus).not.toHaveBeenCalled();
+    expect(reattachDaemonRun).not.toHaveBeenCalled();
+    expect(saveMessage.mock.calls.map((call) => call[2] as ChatMessage)).toContainEqual(expect.objectContaining({
+      id: 'msg-stale-observed-terminal-delivery',
+      runStatus: 'succeeded',
+      endedAt: now - 60_001,
+      producedFiles: [],
+      traceObjectFiles: [],
+      resultDeliveryState: 'no_result',
+    }));
+  });
+
+  it('does not reattach a missing-endedAt Design snapshot when daemon status is failed', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2030-01-01T00:00:00.000Z'));
+    const now = Date.now();
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-daemon-failed-terminal-delivery',
+        role: 'assistant',
+        content: 'I finished the design.',
+        createdAt: now - 61_000,
+        startedAt: now - 61_000,
+        runId: 'run-daemon-failed-terminal-delivery',
+        runStatus: 'succeeded',
+        sessionMode: 'design',
+        preTurnFileNames: [],
+        events: [{ kind: 'tool_use', id: 'write-failed', name: 'Write', input: { file_path: 'index.html' } }],
+      } satisfies ChatMessage,
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-daemon-failed-terminal-delivery', status: 'failed', createdAt: now - 61_000,
+      updatedAt: now, exitCode: 1, signal: null,
+    });
+    reattachDaemonRun.mockResolvedValue(undefined);
+
+    renderProjectView();
+    for (let attempt = 0; attempt < 20 && saveMessage.mock.calls.length === 0; attempt += 1) {
+      await act(async () => {
+        await Promise.resolve();
+      });
+    }
+
+    expect(fetchChatRunStatus).toHaveBeenCalledWith('run-daemon-failed-terminal-delivery', null);
+    expect(reattachDaemonRun).not.toHaveBeenCalled();
+    expect(saveMessage.mock.calls.map((call) => call[2] as ChatMessage)).toContainEqual(expect.objectContaining({
+      id: 'msg-daemon-failed-terminal-delivery',
+      runStatus: 'failed',
+    }));
+  });
+
   it('probes a long terminal Design run without endedAt and reattaches when daemon completion is fresh', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2030-01-01T00:00:00.000Z'));
