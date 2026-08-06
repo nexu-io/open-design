@@ -6131,6 +6131,7 @@ export function ProjectView({
             }
           },
           onRunEventId: (lastRunEventId) => {
+            if (terminalDeliveryVerificationExpired) return;
             textBuffer.flush();
             updateMessageById(message.id, (prev) => ({ ...prev, lastRunEventId }));
             persistSoon();

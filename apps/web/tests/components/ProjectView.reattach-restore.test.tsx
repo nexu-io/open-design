@@ -753,6 +753,7 @@ describe('ProjectView daemon reattach restore', () => {
     const endedAt = Date.now();
     let lateOnDone: (() => void) | null = null;
     let lateOnRunStatus: ((status: 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled') => void) | null = null;
+    let lateOnRunEventId: ((eventId: string) => void) | null = null;
     listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
     listMessages.mockResolvedValue([
       {
@@ -785,9 +786,11 @@ describe('ProjectView daemon reattach restore', () => {
     reattachDaemonRun.mockImplementation(async (options: {
       handlers: { onDone: () => void };
       onRunStatus?: (status: 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled') => void;
+      onRunEventId?: (eventId: string) => void;
     }) => {
       lateOnDone = options.handlers.onDone;
       lateOnRunStatus = options.onRunStatus ?? null;
+      lateOnRunEventId = options.onRunEventId ?? null;
       return new Promise<void>(() => {});
     });
 
@@ -828,6 +831,9 @@ describe('ProjectView daemon reattach restore', () => {
     await act(async () => {
       (lateOnRunStatus as unknown as (status: 'running') => void)('running');
     });
+    expect(saveMessage).toHaveBeenCalledTimes(savesAtTimeout);
+    expect(lateOnRunEventId).toBeTypeOf('function');
+    await act(async () => { (lateOnRunEventId as (eventId: string) => void)('late-event'); });
     expect(saveMessage).toHaveBeenCalledTimes(savesAtTimeout);
     const reattachOptions = reattachDaemonRun.mock.calls[0]?.[0] as { signal: AbortSignal } | undefined;
     expect(reattachOptions?.signal.aborted).toBe(true);
