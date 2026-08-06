@@ -122,6 +122,7 @@ cli.command("closure <action>", "Headless Closure commands: build")
   .option("--json", "print JSON")
   .option("--min-shell-version <version>", "minimum compatible shell version")
   .option("--platform <target>", "closure target: darwin-arm64|win32-x64 (default: current host)")
+  .option("--skip-workspace-build", "reuse workspace outputs built earlier in the same release job")
   .option("--version <version>", "Closure release version")
   .action(async (action: string, options: CliOptions) => {
     if (action !== "build") throw new Error(`unsupported closure action: ${action}`);
@@ -143,6 +144,7 @@ cli.command("closure <action>", "Headless Closure commands: build")
       ...(options.dir == null ? {} : { dir: options.dir }),
       minShellVersion: options.minShellVersion,
       ...(options.platform == null ? {} : { platform: options.platform }),
+      skipWorkspaceBuild: options.skipWorkspaceBuild === true,
       version: options.version,
     }));
   });

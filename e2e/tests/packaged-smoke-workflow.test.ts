@@ -1920,8 +1920,9 @@ process.stdin.on("end", () => {
     // A publish=false dispatch is the standing shape for dogfood/QA builds: they
     // must never enter the public beta feed. mac already handed back a DMG, but
     // the Windows job produced nothing retrievable at all, so a Windows dogfood
-    // build was impossible without also publishing. Both platforms now emit a
-    // GitHub artifact plus an R2 upload under the dogfood prefix.
+    // build was impossible without also publishing. Both shell artifacts emit
+    // a GitHub artifact plus an R2 upload; Closure stays on the direct-storage
+    // path and receives its own collision-free dogfood build id per platform.
     const workflow = await readFile(releaseBetaWorkflowPath, "utf8");
     const macJob = sectionBetween(workflow, "  build_mac_arm64:", "  build_mac_x64:");
     const winJob = sectionBetween(workflow, "  build_win_x64:", "  build_linux_x64:");
@@ -1947,7 +1948,7 @@ process.stdin.on("end", () => {
     const dogfoodSteps = workflow.split("\n      - name: ").filter((step) =>
       /publish-dogfood|for manual distribution/.test(step)
     );
-    expect(dogfoodSteps).toHaveLength(4);
+    expect(dogfoodSteps).toHaveLength(6);
     for (const step of dogfoodSteps) {
       expect(step, step.split("\n")[0]).toContain("if: ${{ !cancelled() && !inputs.publish }}");
     }
@@ -2761,6 +2762,32 @@ process.stdin.on("end", () => {
     expect(platformPublishScript).toContain("open-design-${releaseVersion}${assetSuffix}-win-x64-payload.7z");
     expect(publishMetadataScript).toContain("for (const [artifactName, artifact] of Object.entries(manifest.artifacts ?? {}))");
     expect(publishMetadataScript).toContain("outputs[`${target}_${artifactName}_url`] = artifact.url");
+  });
+
+  it("builds and publishes shell-neutral Closure assets in the release-beta mac_arm64 and win_x64 lanes", async () => {
+    const workflow = await readFile(releaseBetaWorkflowPath, "utf8");
+    const macJob = sectionBetween(workflow, "  build_mac_arm64:", "  build_mac_x64:");
+    const winJob = sectionBetween(workflow, "  build_win_x64:", "  build_linux_x64:");
+    const publishStart = workflow.indexOf("\n  publish:");
+    expect(publishStart).toBeGreaterThan(0);
+    const publishJob = workflow.slice(publishStart);
+
+    expect(workflow).toContain("CLOSURE_MIN_SHELL_VERSION: 0.16.2");
+    expect(macJob).toContain("Build beta mac_arm64 Headless Closure");
+    expect(macJob).toContain("tools-pack closure build");
+    expect(macJob).toContain("--platform darwin-arm64");
+    expect(macJob).toContain("--skip-workspace-build");
+    expect(macJob).toContain("RELEASE_CLOSURE_DIR:");
+    expect(macJob).toContain('RELEASE_CLOSURE_ENABLED: "true"');
+    expect(macJob).toContain("DOGFOOD_BUILD_JSON_KEYS: archivePath,inventoryPath,manifestPath,provenancePath");
+    expect(winJob).toContain("Build beta win_x64 Headless Closure");
+    expect(winJob).toContain("tools-pack closure build");
+    expect(winJob).toContain("--platform win32-x64");
+    expect(winJob).toContain("-ClosureDir");
+    expect(winJob).toContain('RELEASE_CLOSURE_ENABLED: "true"');
+    expect(publishJob).toContain('RELEASE_CLOSURE_REQUIRED: "true"');
+    expect(publishJob).toContain("mac_arm64_closure_url:");
+    expect(publishJob).toContain("win_x64_closure_url:");
   });
 
   it("publishes release-betas mac_x64 payloads while preserving the zip feed", async () => {

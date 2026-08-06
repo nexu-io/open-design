@@ -154,14 +154,23 @@ function run(command: string, args: readonly string[], options: {
     const child = spawn(command, [...args], {
       cwd: options.cwd,
       env: options.env ?? process.env,
-      stdio: options.capture === true ? ["ignore", "pipe", "pipe"] : "inherit",
+      // Keep the Closure CLI stdout machine-readable: internal build output is
+      // diagnostic and belongs on stderr, while the command's final --json
+      // report is written by the CLI entrypoint itself.
+      stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
       windowsVerbatimArguments: options.windowsVerbatimArguments,
     });
     child.stdout?.setEncoding("utf8");
     child.stderr?.setEncoding("utf8");
-    child.stdout?.on("data", (chunk: string) => { stdout += chunk; });
-    child.stderr?.on("data", (chunk: string) => { stderr += chunk; });
+    child.stdout?.on("data", (chunk: string) => {
+      if (options.capture === true) stdout += chunk;
+      else process.stderr.write(chunk);
+    });
+    child.stderr?.on("data", (chunk: string) => {
+      if (options.capture === true) stderr += chunk;
+      else process.stderr.write(chunk);
+    });
     child.once("error", rejectRun);
     child.once("close", (code, signal) => {
       if (code === 0 && signal == null) {
