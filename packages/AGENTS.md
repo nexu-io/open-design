@@ -7,6 +7,7 @@ Follow the root `AGENTS.md` first. This file only records module-level boundarie
 - `packages/agui-adapter`: pure TypeScript adapter between persisted Open Design agent/GenUI/plugin-pipeline events and the AG-UI event protocol. Keep transport and filesystem concerns out; daemon producers and web/CopilotKit consumers share this conversion boundary.
 - `packages/contracts`: web/daemon app contract layer. Keep it pure TypeScript; it must not depend on Next.js, Express, Node filesystem/process APIs, browser APIs, SQLite, daemon internals, or the sidecar control-plane protocol.
 - `packages/components`: shared React UI primitives and primitive CSS. It may depend on React types/runtime only; keep product workflows and app-specific layout/styling in the apps.
+- `packages/closure-proto`: pure TypeScript headless-closure protocol. It owns namespace-neutral candidate identity, local product-namespace binding, artifact integrity, and shell compatibility declarations; it must not own process orchestration, filesystem state, downloads, or Desktop launcher behavior.
 - `packages/diagnostics`: shared diagnostics export primitives for log collection, redaction, manifests, crash-report discovery, and zip packaging used by daemon and desktop.
 - `packages/download`: managed-download runtime. Owns resumable and checksum-verified transfers, concurrent-request deduplication, target locking, inspection/removal, copy-and-clear, and pruning; callers supply the download identity and storage base.
 - `packages/host`: web/desktop host bridge contract. It models renderer-facing host capabilities and helpers while keeping `window.__od__` access out of app UI code.
@@ -23,6 +24,7 @@ Follow the root `AGENTS.md` first. This file only records module-level boundarie
 
 - `packages/shared` has been removed; do not restore it.
 - For new shared types, choose the boundary first: web/daemon app DTOs go in `contracts`; sidecar control-plane protocol goes in `sidecar-proto`; generic runtime code goes in `sidecar`; generic OS/process code goes in `platform`.
+- Closure candidate/binding identity belongs in `closure-proto`; Desktop payload and installed-outer state remains in `launcher-proto`.
 
 ## Boundary checklist
 
@@ -38,6 +40,8 @@ Follow the root `AGENTS.md` first. This file only records module-level boundarie
 pnpm --filter @open-design/agui-adapter typecheck
 pnpm --filter @open-design/agui-adapter test
 pnpm --filter @open-design/contracts typecheck
+pnpm --filter @open-design/closure-proto typecheck
+pnpm --filter @open-design/closure-proto test
 pnpm --filter @open-design/diagnostics typecheck
 pnpm --filter @open-design/diagnostics test
 pnpm --filter @open-design/download typecheck
