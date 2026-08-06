@@ -29,6 +29,12 @@ import {
   applyPackagedUpdateEnv,
   resolvePackagedUpdateScenario,
 } from '@/vitest/packaged-update-scenario';
+import {
+  activateBrokenClosureSuccessor,
+  readPackagedClosureFixtureRuntime,
+  resetPackagedClosureFixture,
+  seedPackagedClosureFixture,
+} from '@/vitest/packaged-closure-fixture';
 import { releaseAppVersionArgs, resolvePackagedWinInstallIdentity } from '@/vitest/packaged-win-identity';
 import { resolvePackagedSmokeNamespace } from '@/vitest/suite';
 import { startToolsServeUpdaterFixture, type ToolsServeUpdaterFixture } from '@/vitest/tools-serve-updater-fixture';
@@ -57,6 +63,7 @@ const intermediateUpdateBuildJsonPath = normalizeOptionalEnv(
   process.env.OD_PACKAGED_E2E_WIN_INTERMEDIATE_UPDATE_BUILD_JSON_PATH,
 );
 const updateFixture = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_WIN_UPDATE_FIXTURE);
+const closureBuildJsonPath = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_CLOSURE_BUILD_JSON_PATH);
 const updateFixturePort = resolveOptionalFixturePort(process.env.OD_PACKAGED_E2E_WIN_UPDATE_FIXTURE_PORT);
 const updateFixtureMode = resolveUpdateFixtureMode(process.env.OD_PACKAGED_E2E_WIN_UPDATE_MODE);
 const releaseChannel = process.env.OD_PACKAGED_E2E_RELEASE_CHANNEL;
@@ -464,6 +471,19 @@ type DesktopIdentityMarker = {
   appPath: string;
   executablePath: string;
   pid: number;
+  runtime?: {
+    closure?: {
+      digest?: string;
+      generation?: number;
+      reason?: string;
+      source?: string;
+      version?: string | null;
+    };
+    shell?: {
+      source?: string;
+      version?: string | null;
+    };
+  };
   version: number;
 };
 
@@ -502,6 +522,9 @@ type UpdateFixtureMode = 'installer' | 'payload';
 
 const shouldRunPackagedWinSmoke = process.platform === 'win32' && process.env.OD_PACKAGED_E2E_WIN === '1';
 const winDescribe = shouldRunPackagedWinSmoke ? describe : describe.skip;
+const winClosureDescribe = shouldRunPackagedWinSmoke && closureBuildJsonPath != null
+  ? describe
+  : describe.skip;
 const shouldRunPackagedWinOnboardingSmoke =
   shouldRunPackagedWinSmoke && process.env.OD_PACKAGED_E2E_WIN_ONBOARDING_SMOKE === '1';
 const winOnboardingDescribe = shouldRunPackagedWinOnboardingSmoke ? describe : describe.skip;
@@ -1260,6 +1283,79 @@ winDescribe('packaged windows runtime smoke', () => {
           console.error('failed to uninstall packaged windows app during rollback cleanup', error);
         });
       }
+    }
+  }, 720_000);
+});
+
+winClosureDescribe('packaged Windows Headless Closure release acceptance', () => {
+  test('[P0] attaches a release Closure across cold start and reinstall, then rolls a damaged successor back', async () => {
+    const installationRoot = join(toolsPackDir, 'runtime', 'win');
+    let installed = false;
+    let started = false;
+    try {
+      await runToolsPackJson<WinUninstallResult>('uninstall', ['--remove-product-user-data']).catch(() => null);
+      await resetPackagedUpdaterNamespaceRoots();
+      await resetPackagedClosureFixture({
+        channel: updateScenario.channel,
+        installationRoot,
+        namespace,
+      });
+      await runToolsPackJson<WinInstallResult>('install');
+      installed = true;
+      await seedPackagedOnboardingComplete();
+      const fixture = await seedPackagedClosureFixture({
+        buildJsonPath: closureBuildJsonPath!,
+        channel: updateScenario.channel,
+        expectedPlatform: 'win32-x64',
+        installationRoot,
+        namespace,
+        workspaceRoot,
+      });
+
+      const firstStart = await runToolsPackJson<WinStartResult>('start');
+      started = true;
+      const firstInspect = await waitForHealthyDesktop();
+      expect(assertHealthEvalValue(firstInspect.eval?.value).health.ok).toBe(true);
+      assertClosureDesktopIdentity(await readDesktopIdentityMarker(), fixture.manifest.identity.version);
+
+      const reinstallStop = await runToolsPackJson<WinStopResult>('stop');
+      started = false;
+      expect(reinstallStop.remainingPids).toEqual([]);
+      await runToolsPackJson<WinInstallResult>('install');
+      const reinstallStart = await runToolsPackJson<WinStartResult>('start');
+      started = true;
+      expect(reinstallStart.pid).not.toBe(firstStart.pid);
+      await waitForHealthyDesktop();
+      assertClosureDesktopIdentity(await readDesktopIdentityMarker(), fixture.manifest.identity.version);
+
+      const faultStop = await runToolsPackJson<WinStopResult>('stop');
+      started = false;
+      expect(faultStop.remainingPids).toEqual([]);
+      await activateBrokenClosureSuccessor(fixture);
+      await runToolsPackJson<WinStartResult>('start');
+      started = true;
+      await waitForHealthyDesktop();
+      assertLegacyDesktopIdentity(await readDesktopIdentityMarker(), 'candidate-invalid');
+      expect((await readPackagedClosureFixtureRuntime(fixture)).active).toEqual(fixture.pointer);
+
+      const recoveryStop = await runToolsPackJson<WinStopResult>('stop');
+      started = false;
+      expect(recoveryStop.remainingPids).toEqual([]);
+      await runToolsPackJson<WinStartResult>('start');
+      started = true;
+      await waitForHealthyDesktop();
+      assertClosureDesktopIdentity(await readDesktopIdentityMarker(), fixture.manifest.identity.version);
+      expect((await readPackagedClosureFixtureRuntime(fixture)).lastSuccessful).toEqual(fixture.pointer);
+    } finally {
+      if (started) await runToolsPackJson<WinStopResult>('stop').catch(() => undefined);
+      if (installed) {
+        await runToolsPackJson<WinUninstallResult>('uninstall', ['--remove-product-user-data']).catch(() => undefined);
+      }
+      await resetPackagedClosureFixture({
+        channel: updateScenario.channel,
+        installationRoot,
+        namespace,
+      }).catch(() => undefined);
     }
   }, 720_000);
 });
@@ -2430,6 +2526,26 @@ async function readDesktopIdentityMarker(): Promise<DesktopIdentityMarker> {
     throw new Error(`invalid packaged desktop identity at ${markerPath}: ${formatUnknown(value)}`);
   }
   return value as DesktopIdentityMarker;
+}
+
+function assertClosureDesktopIdentity(identity: DesktopIdentityMarker, version: string): void {
+  if (identity.runtime?.closure?.source !== 'closure') {
+    throw new Error(`packaged Windows did not attach the seeded Closure: ${formatUnknown(identity.runtime)}`);
+  }
+  expect(identity.runtime?.closure).toMatchObject({
+    source: 'closure',
+    version,
+  });
+  expect(identity.runtime?.closure?.digest).toMatch(/^sha256:[a-f0-9]{64}$/);
+  expect(identity.runtime?.closure?.generation).toBeGreaterThanOrEqual(0);
+  expect(identity.runtime?.shell?.source).toMatch(/^(current-package|payload)$/);
+}
+
+function assertLegacyDesktopIdentity(identity: DesktopIdentityMarker, reason: string): void {
+  expect(identity.runtime?.closure).toMatchObject({
+    reason,
+    source: 'legacy-combined',
+  });
 }
 
 async function assertPayloadDesktopIdentity(

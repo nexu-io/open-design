@@ -18,6 +18,12 @@ import {
   applyPackagedUpdateEnv,
   resolvePackagedUpdateScenario,
 } from '@/vitest/packaged-update-scenario';
+import {
+  activateBrokenClosureSuccessor,
+  readPackagedClosureFixtureRuntime,
+  resetPackagedClosureFixture,
+  seedPackagedClosureFixture,
+} from '@/vitest/packaged-closure-fixture';
 import { resolvePackagedSmokeNamespace } from '@/vitest/suite';
 import { startToolsServeUpdaterFixture, type ToolsServeUpdaterFixture } from '@/vitest/tools-serve-updater-fixture';
 import { createDesktopHarness, STORAGE_KEY, waitFor } from '../lib/desktop/desktop-test-helpers.ts';
@@ -39,6 +45,7 @@ const updateMetadataUrl = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_MAC_U
 const updateVersion = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_MAC_UPDATE_VERSION);
 const updateBuildJsonPath = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_MAC_UPDATE_BUILD_JSON_PATH);
 const updateFixture = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_MAC_UPDATE_FIXTURE);
+const closureBuildJsonPath = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_CLOSURE_BUILD_JSON_PATH);
 const packagedInviteDeeplink =
   'opendesign://workspace/invite/continue?workspace_id=packaged-smoke-workspace&member_id=packaged-smoke-member&invite_id=packaged-smoke-invite&nonce=packaged-smoke-nonce';
 
@@ -297,6 +304,19 @@ type DesktopIdentityMarker = {
   appPath: string;
   executablePath: string;
   pid: number;
+  runtime?: {
+    closure?: {
+      digest?: string;
+      generation?: number;
+      reason?: string;
+      source?: string;
+      version?: string | null;
+    };
+    shell?: {
+      source?: string;
+      version?: string | null;
+    };
+  };
   version: number;
 };
 
@@ -343,6 +363,9 @@ type PackagedOnboardingEvalValue = {
 
 const shouldRunPackagedMacSmoke = process.platform === 'darwin' && process.env.OD_PACKAGED_E2E_MAC === '1';
 const macDescribe = shouldRunPackagedMacSmoke ? describe : describe.skip;
+const macClosureDescribe = shouldRunPackagedMacSmoke && closureBuildJsonPath != null
+  ? describe
+  : describe.skip;
 const shouldRunPackagedMacOnboardingSmoke =
   shouldRunPackagedMacSmoke && process.env.OD_PACKAGED_E2E_MAC_ONBOARDING_SMOKE === '1';
 const macOnboardingDescribe = shouldRunPackagedMacOnboardingSmoke ? describe : describe.skip;
@@ -1001,6 +1024,76 @@ macDescribe('packaged mac runtime smoke', () => {
           console.error('failed to uninstall packaged mac app during rollback cleanup', error);
         });
       }
+    }
+  }, 360_000);
+});
+
+macClosureDescribe('packaged mac Headless Closure release acceptance', () => {
+  test('[P0] attaches a release Closure across cold start and reinstall, then rolls a damaged successor back', async () => {
+    const installationRoot = join(toolsPackDir, 'runtime', 'mac');
+    let installed = false;
+    let started = false;
+    try {
+      await resetPackagedRuntimeState();
+      await resetPackagedClosureFixture({
+        channel: updateScenario.channel,
+        installationRoot,
+        namespace,
+      });
+      await runToolsPackJson<MacInstallResult>('install');
+      installed = true;
+      await seedPackagedOnboardingComplete();
+      const fixture = await seedPackagedClosureFixture({
+        buildJsonPath: closureBuildJsonPath!,
+        channel: updateScenario.channel,
+        expectedPlatform: 'darwin-arm64',
+        installationRoot,
+        namespace,
+        workspaceRoot,
+      });
+
+      const firstStart = await runToolsPackJson<MacStartResult>('start');
+      started = true;
+      const firstInspect = await waitForHealthyDesktop();
+      expect(assertHealthEvalValue(firstInspect.eval?.value).health.ok).toBe(true);
+      assertClosureDesktopIdentity(await readDesktopIdentityMarker(), fixture.manifest.identity.version);
+
+      const reinstallStop = await runToolsPackJson<MacStopResult>('stop');
+      started = false;
+      expect(reinstallStop.remainingPids).toEqual([]);
+      await runToolsPackJson<MacInstallResult>('install');
+      const reinstallStart = await runToolsPackJson<MacStartResult>('start');
+      started = true;
+      expect(reinstallStart.pid).not.toBe(firstStart.pid);
+      await waitForHealthyDesktop();
+      assertClosureDesktopIdentity(await readDesktopIdentityMarker(), fixture.manifest.identity.version);
+
+      const faultStop = await runToolsPackJson<MacStopResult>('stop');
+      started = false;
+      expect(faultStop.remainingPids).toEqual([]);
+      await activateBrokenClosureSuccessor(fixture);
+      await runToolsPackJson<MacStartResult>('start');
+      started = true;
+      await waitForHealthyDesktop();
+      assertLegacyDesktopIdentity(await readDesktopIdentityMarker(), 'candidate-invalid');
+      expect((await readPackagedClosureFixtureRuntime(fixture)).active).toEqual(fixture.pointer);
+
+      const recoveryStop = await runToolsPackJson<MacStopResult>('stop');
+      started = false;
+      expect(recoveryStop.remainingPids).toEqual([]);
+      await runToolsPackJson<MacStartResult>('start');
+      started = true;
+      await waitForHealthyDesktop();
+      assertClosureDesktopIdentity(await readDesktopIdentityMarker(), fixture.manifest.identity.version);
+      expect((await readPackagedClosureFixtureRuntime(fixture)).lastSuccessful).toEqual(fixture.pointer);
+    } finally {
+      if (started) await runToolsPackJson<MacStopResult>('stop').catch(() => undefined);
+      if (installed) await runToolsPackJson<MacUninstallResult>('uninstall').catch(() => undefined);
+      await resetPackagedClosureFixture({
+        channel: updateScenario.channel,
+        installationRoot,
+        namespace,
+      }).catch(() => undefined);
     }
   }, 360_000);
 });
@@ -2393,6 +2486,26 @@ async function readDesktopIdentityMarker(): Promise<DesktopIdentityMarker> {
     throw new Error(`invalid packaged desktop identity at ${markerPath}: ${formatUnknown(value)}`);
   }
   return value as DesktopIdentityMarker;
+}
+
+function assertClosureDesktopIdentity(identity: DesktopIdentityMarker, version: string): void {
+  if (identity.runtime?.closure?.source !== 'closure') {
+    throw new Error(`packaged mac did not attach the seeded Closure: ${formatUnknown(identity.runtime)}`);
+  }
+  expect(identity.runtime?.closure).toMatchObject({
+    source: 'closure',
+    version,
+  });
+  expect(identity.runtime?.closure?.digest).toMatch(/^sha256:[a-f0-9]{64}$/);
+  expect(identity.runtime?.closure?.generation).toBeGreaterThanOrEqual(0);
+  expect(identity.runtime?.shell?.source).toMatch(/^(current-package|payload)$/);
+}
+
+function assertLegacyDesktopIdentity(identity: DesktopIdentityMarker, reason: string): void {
+  expect(identity.runtime?.closure).toMatchObject({
+    reason,
+    source: 'legacy-combined',
+  });
 }
 
 function assertPayloadDesktopIdentity(

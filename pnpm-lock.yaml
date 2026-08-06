@@ -466,6 +466,12 @@ importers:
       '@aws-sdk/client-s3':
         specifier: 3.1050.0
         version: 3.1050.0
+      '@open-design/closure-proto':
+        specifier: workspace:*
+        version: link:../packages/closure-proto
+      '@open-design/closure-store':
+        specifier: workspace:*
+        version: link:../packages/closure-store
       '@open-design/contracts':
         specifier: workspace:*
         version: link:../packages/contracts
@@ -481,6 +487,9 @@ importers:
       '@types/pngjs':
         specifier: 6.0.5
         version: 6.0.5
+      extract-zip:
+        specifier: 2.0.1
+        version: 2.0.1
       pixelmatch:
         specifier: 7.2.0
         version: 7.2.0

@@ -2777,12 +2777,14 @@ process.stdin.on("end", () => {
     expect(macJob).toContain("tools-pack closure build");
     expect(macJob).toContain("--platform darwin-arm64");
     expect(macJob).toContain("--skip-workspace-build");
+    expect(macJob).toContain("OD_PACKAGED_E2E_CLOSURE_BUILD_JSON_PATH:");
     expect(macJob).toContain("RELEASE_CLOSURE_DIR:");
     expect(macJob).toContain('RELEASE_CLOSURE_ENABLED: "true"');
     expect(macJob).toContain("DOGFOOD_BUILD_JSON_KEYS: archivePath,inventoryPath,manifestPath,provenancePath");
     expect(winJob).toContain("Build beta win_x64 Headless Closure");
     expect(winJob).toContain("tools-pack closure build");
     expect(winJob).toContain("--platform win32-x64");
+    expect(winJob).toContain("OD_PACKAGED_E2E_CLOSURE_BUILD_JSON_PATH:");
     expect(winJob).toContain("-ClosureDir");
     expect(winJob).toContain('RELEASE_CLOSURE_ENABLED: "true"');
     expect(publishJob).toContain('RELEASE_CLOSURE_REQUIRED: "true"');
