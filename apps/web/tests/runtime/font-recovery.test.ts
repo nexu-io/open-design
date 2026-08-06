@@ -7,19 +7,47 @@ interface FakeFontFace {
   status: string;
 }
 
-function fakeDocument(faces: FakeFontFace[]): { doc: Document; added: FakeFontFace[] } {
+type FontListener = (event?: Event) => void;
+
+function fakeDocument(faces: FakeFontFace[]): {
+  doc: Document;
+  added: FakeFontFace[];
+  faces: FakeFontFace[];
+  dispatchLoadingError: () => void;
+} {
   const added: FakeFontFace[] = [];
-  const doc = {
-    fonts: {
-      forEach: (cb: (face: FakeFontFace) => void) => {
-        for (const face of [...faces, ...added]) cb(face);
-      },
-      add: (face: FakeFontFace) => {
-        added.push(face);
-      },
+  const liveFaces = [...faces];
+  const listeners = new Map<string, Set<FontListener>>();
+
+  const fonts = {
+    forEach: (cb: (face: FakeFontFace) => void) => {
+      for (const face of [...liveFaces, ...added]) cb(face);
     },
-  } as unknown as Document;
-  return { doc, added };
+    add: (face: FakeFontFace) => {
+      added.push(face);
+    },
+    addEventListener: (type: string, listener: FontListener) => {
+      const set = listeners.get(type) ?? new Set();
+      set.add(listener);
+      listeners.set(type, set);
+    },
+    removeEventListener: (type: string, listener: FontListener) => {
+      listeners.get(type)?.delete(listener);
+    },
+  };
+
+  const doc = { fonts } as unknown as Document;
+
+  return {
+    doc,
+    added,
+    faces: liveFaces,
+    dispatchLoadingError: () => {
+      for (const listener of listeners.get('loadingerror') ?? []) {
+        listener();
+      }
+    },
+  };
 }
 
 describe('installFontRecovery', () => {
@@ -113,12 +141,52 @@ describe('installFontRecovery', () => {
     cancel();
   });
 
-  it('cancel stops pending sweeps', async () => {
-    const { doc, added } = fakeDocument([{ family: 'remixicon', status: 'error' }]);
+  // Regression for #6498 review: Cyrillic-range Noto faces stay unloaded
+  // until the first ru glyph request, which may error *after* the timed
+  // startup sweeps. loadingerror must still recover them.
+  it('recovers Noto faces on a late loadingerror after startup sweeps finished', async () => {
+    const { doc, added, faces, dispatchLoadingError } = fakeDocument([
+      // Unloaded range-limited face — not yet errored at English startup.
+      { family: 'Noto Sans', status: 'unloaded' },
+    ]);
+    const cancel = installFontRecovery(doc);
+
+    // Drain every scheduled sweep; Noto is still unloaded, so nothing recovers.
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(added).toHaveLength(0);
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    // Locale switch / first Cyrillic paint: Chromium loads then errors the face.
+    faces[0]!.status = 'error';
+    dispatchLoadingError();
+    // loadingerror handler kicks off an async sweep (fetch → load → add).
+    await flushMicrotasks();
+
+    expect(added.filter((f) => f.family === 'Noto Sans')).toHaveLength(4);
+    expect(fetchMock).toHaveBeenCalledWith('/fonts/noto-sans-cyrillic-wght-normal.woff2');
+    cancel();
+  });
+
+  it('cancel stops pending sweeps and removes the loadingerror listener', async () => {
+    const { doc, added, faces, dispatchLoadingError } = fakeDocument([
+      { family: 'Noto Sans', status: 'unloaded' },
+    ]);
     const cancel = installFontRecovery(doc);
     cancel();
 
     await vi.advanceTimersByTimeAsync(60_000);
+    faces[0]!.status = 'error';
+    dispatchLoadingError();
+    await flushMicrotasks();
+
     expect(added).toHaveLength(0);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
+
+/** Drain enough microtasks for recoverFont's await chain to settle. */
+async function flushMicrotasks(ticks = 20): Promise<void> {
+  for (let i = 0; i < ticks; i += 1) {
+    await Promise.resolve();
+  }
+}

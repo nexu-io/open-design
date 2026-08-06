@@ -11,6 +11,11 @@
 // alongside the errored CSS one and the glyphs repaint immediately. The
 // same sweep also self-heals dev/HTTP sessions where a font fetch lost a
 // startup race.
+//
+// Cyrillic-range Noto faces (#6478) often stay unloaded until the first
+// Russian glyph request. On od:// that late load then errors *after* the
+// timed startup sweeps have finished. Subscribe to FontFaceSet
+// `loadingerror` so a later locale switch still recovers those faces.
 type RecoverableFont = {
   family: string;
   url: string;
@@ -71,12 +76,16 @@ const RECOVERABLE_FONTS: RecoverableFont[] = [
 // still congested.
 const RETRY_DELAYS_MS = [0, 4_000, 15_000, 45_000];
 
+function normalizeFamily(family: string): string {
+  return family.replace(/^["']|["']$/g, '');
+}
+
 function erroredFamilies(doc: Document): Set<string> {
   const errored = new Set<string>();
   if (!doc.fonts || typeof doc.fonts.forEach !== 'function') return errored;
   doc.fonts.forEach((face) => {
     if (face.status === 'error') {
-      errored.add(face.family.replace(/^["']|["']$/g, ''));
+      errored.add(normalizeFamily(face.family));
     }
   });
   return errored;
@@ -98,14 +107,19 @@ async function recoverFont(doc: Document, font: RecoverableFont): Promise<boolea
 
 /**
  * Schedules post-startup sweeps that re-load any recoverable font whose
- * CSS-declared FontFace settled in the terminal `error` state. Idempotent
- * per call; returns a cancel function for unmount/tests.
+ * CSS-declared FontFace settled in the terminal `error` state. Also listens
+ * for FontFaceSet `loadingerror` so late range-limited loads (e.g. Cyrillic
+ * Noto after an English → ru locale switch) are recovered after the timed
+ * sweeps have finished. Idempotent per call; returns a cancel function for
+ * unmount/tests.
  */
 export function installFontRecovery(doc: Document = document): () => void {
   const recovered = new Set<RecoverableFont>();
   const timers: ReturnType<typeof setTimeout>[] = [];
+  let cancelled = false;
 
   const sweep = async () => {
+    if (cancelled) return;
     const errored = erroredFamilies(doc);
     for (const font of RECOVERABLE_FONTS) {
       if (recovered.has(font) || !errored.has(font.family)) continue;
@@ -113,10 +127,24 @@ export function installFontRecovery(doc: Document = document): () => void {
     }
   };
 
+  const onLoadingError = () => {
+    void sweep();
+  };
+
+  const fonts = doc.fonts as FontFaceSet | undefined;
+  if (fonts && typeof fonts.addEventListener === 'function') {
+    fonts.addEventListener('loadingerror', onLoadingError);
+  }
+
   for (const delay of RETRY_DELAYS_MS) {
     timers.push(setTimeout(() => void sweep(), delay));
   }
+
   return () => {
+    cancelled = true;
     for (const timer of timers) clearTimeout(timer);
+    if (fonts && typeof fonts.removeEventListener === 'function') {
+      fonts.removeEventListener('loadingerror', onLoadingError);
+    }
   };
 }
