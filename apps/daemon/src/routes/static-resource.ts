@@ -30,6 +30,7 @@ import {
   getWorkspaceResource,
   getWorkspaceResourceByResourceId,
 } from '../db.js';
+import { reconcileWorkspaceResourceBindings } from '../workspace-resource-reconciliation.js';
 import {
   enforceVerifiedWorkspaceResourceMutation,
   resolveOptionalWorkspaceRequestAuthority,
@@ -475,6 +476,62 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
       }
     } finally {
       res.end();
+    }
+  });
+
+  /**
+   * Explicit #6528 recovery for the static-resource catalogs.
+   *
+   * Adopts legacy user skills and design systems that carry no
+   * `workspace_resources` binding, and repairs Personal bindings a writer
+   * left with an empty creator (unreachable by every member, since the
+   * personal branch of each visibility check requires an exact creator match).
+   *
+   * Deliberately a POST the user triggers rather than a side effect of the
+   * GET catalogs: passive adoption would contradict the quarantine rule those
+   * catalogs document — and that `skills-workspace-scope.test.ts` asserts in
+   * "quarantines an unclaimed user skill from every explicit workspace" — and
+   * on a multi-workspace machine it would silently hand every legacy resource
+   * to whichever Workspace loaded its catalog first.
+   */
+  app.post('/api/workspace/reconcile-resource-bindings', async (req, res) => {
+    try {
+      const authority = await resolveWorkspaceAuthority(req, res);
+      if (authority === undefined) return;
+      const workspaceId = authority?.workspaceId?.trim();
+      const workspaceMemberId = authority?.workspaceMemberId?.trim();
+      if (!workspaceId || !workspaceMemberId) {
+        return sendApiError(
+          res,
+          403,
+          'WORKSPACE_AUTHORITY_REQUIRED',
+          'a verified workspace member is required to adopt legacy resources',
+        );
+      }
+
+      const userSkills = await listSkills(USER_SKILLS_DIR);
+      const skills = reconcileWorkspaceResourceBindings(db, {
+        resourceType: 'skill',
+        resourceIds: userSkills.map((skill) => skill.id),
+        workspaceId,
+        workspaceMemberId,
+      });
+
+      // Unscoped (workspaceId omitted entirely) so the pre-adoption view still
+      // contains the quarantined systems this endpoint exists to recover.
+      const allSystems = await listAllDesignSystems({});
+      const designSystems = reconcileWorkspaceResourceBindings(db, {
+        resourceType: 'design_system',
+        resourceIds: allSystems
+          .filter((system) => system.source === 'user' && system.teamSynced !== true)
+          .map((system) => system.id),
+        workspaceId,
+        workspaceMemberId,
+      });
+
+      res.json({ skills, designSystems });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
     }
   });
 

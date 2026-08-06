@@ -32,7 +32,8 @@ import type {
   TrustTier,
 } from '@open-design/contracts';
 import { defaultTrustForRecord, resolveCapabilitiesGranted } from './trust.js';
-import { ensureWorkspaceResource, getWorkspaceResourceByResourceId } from '../db.js';
+import { getWorkspaceResourceByResourceId } from '../db.js';
+import { reconcileWorkspaceResourceBindings } from '../workspace-resource-reconciliation.js';
 import type Database from 'better-sqlite3';
 
 type SqliteDb = Database.Database;
@@ -298,31 +299,30 @@ function pluginVisibleFromWorkspace(
  * - Idempotent: `ensureWorkspaceResource` keys on `(resource_type,
  *   resource_id)`, so a plugin already bound anywhere — including to another
  *   Workspace on a multi-workspace machine — is left untouched.
+ *
+ * Returns the number of rows written (bindings created + creatorless bindings
+ * repaired). See `workspace-resource-reconciliation.ts` for the shared
+ * implementation used by the skill and design-system catalogs.
  */
 export function reconcileUnboundUserPluginsForWorkspace(
   db: SqliteDb,
   workspaceId: string | null | undefined,
   workspaceMemberId: string | null | undefined,
 ): number {
-  const scopeId = workspaceId?.trim();
-  const memberId = workspaceMemberId?.trim();
-  if (!scopeId || !memberId) return 0;
   const rows = db.prepare(`SELECT * FROM installed_plugins`).all() as DbRow[];
-  let adopted = 0;
-  for (const row of rows) {
-    const record = rowToInstalledPlugin(row);
-    if (record.sourceKind === 'bundled') continue;
-    if (typeof record.source === 'string' && record.source.startsWith('team:plugin:')) continue;
-    const binding = getWorkspaceResourceByResourceId(db, 'plugin', record.id);
-    if (binding) continue;
-    ensureWorkspaceResource(db, 'plugin', scopeId, record.id, {
-      visibility: 'personal',
-      resourceState: 'active',
-      createdByWorkspaceMemberId: memberId,
-    });
-    adopted += 1;
-  }
-  return adopted;
+  const resourceIds = rows
+    .map(rowToInstalledPlugin)
+    .filter((record) => record.sourceKind !== 'bundled')
+    // Team materializations are managed by the hub reconciliation path.
+    .filter((record) => !(typeof record.source === 'string' && record.source.startsWith('team:plugin:')))
+    .map((record) => record.id);
+  const { adopted, repaired } = reconcileWorkspaceResourceBindings(db, {
+    resourceType: 'plugin',
+    resourceIds,
+    workspaceId,
+    workspaceMemberId,
+  });
+  return adopted + repaired;
 }
 
 /**

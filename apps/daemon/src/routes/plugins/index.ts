@@ -434,7 +434,40 @@ export function registerPluginRoutes(app: Express, deps: RegisterPluginRoutesDep
     return binding.visibility === 'team'
       || binding.createdByWorkspaceMemberId === authority.workspaceMemberId;
   };
-  app.get('/api/plugins', async (req, res) => { try { const authority = await resolveWorkspaceAuthority(req, res); if (authority === undefined) return; if (authority?.workspaceId && authority.workspaceMemberId) { plugins.reconcileUnboundUserPlugins?.(db, authority.workspaceId, authority.workspaceMemberId); } const visible = await plugins.listInstalledPlugins(db, authority?.workspaceId ?? null, authority?.workspaceMemberId ?? null); res.json({ plugins: helpers.applyBakedPreviews(visible, helpers.PLUGIN_PREVIEWS_DIR) }); } catch (err) { res.status(500).json({ error: String(err) }); } });
+  app.get('/api/plugins', async (req, res) => { try { const authority = await resolveWorkspaceAuthority(req, res); if (authority === undefined) return; const visible = await plugins.listInstalledPlugins(db, authority?.workspaceId ?? null, authority?.workspaceMemberId ?? null); res.json({ plugins: helpers.applyBakedPreviews(visible, helpers.PLUGIN_PREVIEWS_DIR) }); } catch (err) { res.status(500).json({ error: String(err) }); } });
+
+  /**
+   * Explicit #6528 recovery: adopt legacy unbound plugins into the caller's
+   * Workspace. Deliberately a POST the user triggers, NOT a side effect of
+   * `GET /api/plugins` — passive adoption would contradict the isolation rule
+   * that `pluginVisibleFromWorkspace` documents and that
+   * `plugins-workspace-scope.test.ts` asserts ("quarantines an unbound user
+   * plugin from every explicit workspace"), and on a multi-workspace machine
+   * it would hand every legacy resource to whichever Workspace happened to
+   * load its catalog first.
+   */
+  app.post('/api/plugins/reconcile-workspace-bindings', async (req, res) => {
+    try {
+      const authority = await resolveWorkspaceAuthority(req, res);
+      if (authority === undefined) return;
+      if (!authority?.workspaceId || !authority.workspaceMemberId) {
+        return helpers.sendApiError(
+          res,
+          403,
+          'WORKSPACE_AUTHORITY_REQUIRED',
+          'a verified workspace member is required to adopt legacy resources',
+        );
+      }
+      const reconciled = plugins.reconcileUnboundUserPlugins?.(
+        db,
+        authority.workspaceId,
+        authority.workspaceMemberId,
+      ) ?? 0;
+      res.json({ reconciled });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
   // Keep this static route before /api/plugins/:id; Express matches in
   // registration order and would otherwise interpret "stats" as a plugin id.
   app.get('/api/plugins/stats', async (req, res) => {
