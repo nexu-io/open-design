@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
+import { CLOSURE_INTERNAL_PACKAGES } from "../src/closure.js";
 import { INTERNAL_PACKAGES as LINUX_INTERNAL_PACKAGES } from "../src/linux.js";
 import { INTERNAL_PACKAGES as MAC_INTERNAL_PACKAGES } from "../src/mac/constants.js";
 import { shouldInstallInternalPackageForMacPrebundle } from "../src/mac-prebundle.js";
@@ -43,6 +44,11 @@ function runtimeWorkspaceDeps(directory: string): string[] {
 //     lanes correctly omit them. Adding download/host there would be dead
 //     weight and would drag in the shared workspace-build cache.
 const LANES: { name: string; packages: readonly PackageEntry[]; isInstalled: (pkg: PackageEntry) => boolean }[] = [
+  {
+    name: "closure",
+    packages: CLOSURE_INTERNAL_PACKAGES,
+    isInstalled: () => true,
+  },
   {
     name: "linux",
     packages: LINUX_INTERNAL_PACKAGES,

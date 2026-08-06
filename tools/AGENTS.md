@@ -8,7 +8,7 @@ Follow the root `AGENTS.md` first. This file only records module-level boundarie
 - `pnpm tools-dev` manages daemon -> web -> desktop.
 - `pnpm tools-dev run web` runs foreground daemon + web for the Playwright webServer flow.
 - `pnpm tools-dev inspect desktop ...` inspects the desktop runtime through sidecar IPC.
-- `tools/pack` provides `@open-design/tools-pack` and the `tools-pack` bin. The active slice is packaged artifact build/install/start/stop/logs/uninstall/cleanup/list/reset plus beta release artifact preparation for mac and Windows lanes, plus a Linux AppImage lane with optional containerized builds.
+- `tools/pack` provides `@open-design/tools-pack` and the `tools-pack` bin. The active slice is packaged artifact build/install/start/stop/logs/uninstall/cleanup/list/reset, shell-neutral Headless Closure archive construction, beta release artifact preparation for mac and Windows lanes, plus a Linux AppImage lane with optional containerized builds.
 - `tools/serve` provides `@open-design/tools-serve` and the `tools-serve` bin. It owns local fixture services such as `tools-serve start updater`.
 - `tools/release` provides `@open-design/tools-release` and the `tools-release` bin. It owns release metadata, storage publishing, release reports, and notification-facing file/data contracts; artifact build, cache, installer, payload, and smoke work stays in `tools/pack`.
 
@@ -48,6 +48,7 @@ pnpm tools-dev check
 pnpm tools-pack mac build --to all
 pnpm tools-pack mac install
 pnpm tools-pack mac cleanup
+pnpm tools-pack closure build --channel stable --version 0.16.2 --platform darwin-arm64 --min-shell-version 0.16.2 --artifact-url https://releases.open-design.ai/stable/closure/darwin-arm64/versions/0.16.2/closure.zip
 pnpm tools-pack win build --to nsis
 pnpm tools-pack win install
 pnpm tools-pack win inspect --expr "document.title"

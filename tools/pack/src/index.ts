@@ -1,6 +1,7 @@
 import { cac } from "cac";
 import type { CAC } from "cac";
 
+import { buildClosureArchive } from "./closure.js";
 import { resolveToolPackConfig, type ToolPackCliOptions, type ToolPackPlatform } from "./config.js";
 import {
   cleanupPackedMacNamespace,
@@ -113,6 +114,38 @@ function addWinLifecycleOptions(command: CacCommand) {
 }
 
 const cli = cac("tools-pack");
+
+cli.command("closure <action>", "Headless Closure commands: build")
+  .option("--artifact-url <url>", "immutable public URL intended for closure.zip")
+  .option("--channel <channel>", "release channel")
+  .option("--dir <path>", "tools-pack output/staging root directory")
+  .option("--json", "print JSON")
+  .option("--min-shell-version <version>", "minimum compatible shell version")
+  .option("--platform <target>", "closure target: darwin-arm64|win32-x64 (default: current host)")
+  .option("--version <version>", "Closure release version")
+  .action(async (action: string, options: CliOptions) => {
+    if (action !== "build") throw new Error(`unsupported closure action: ${action}`);
+    if (options.artifactUrl == null || options.artifactUrl.length === 0) {
+      throw new Error("closure build requires --artifact-url");
+    }
+    if (options.channel == null || options.channel.length === 0) {
+      throw new Error("closure build requires --channel");
+    }
+    if (options.minShellVersion == null || options.minShellVersion.length === 0) {
+      throw new Error("closure build requires --min-shell-version");
+    }
+    if (options.version == null || options.version.length === 0) {
+      throw new Error("closure build requires --version");
+    }
+    printJson(await buildClosureArchive({
+      artifactUrl: options.artifactUrl,
+      channel: options.channel,
+      ...(options.dir == null ? {} : { dir: options.dir }),
+      minShellVersion: options.minShellVersion,
+      ...(options.platform == null ? {} : { platform: options.platform }),
+      version: options.version,
+    }));
+  });
 
 addMacBuildOptions(addSharedOptions(cli.command("mac <action>", "Mac packaging commands: build|install|start|stop|logs|uninstall|cleanup|inspect"))).action(
   async (action: string, options: CliOptions) => {

@@ -4,6 +4,7 @@ import { normalizeNamespace } from "@open-design/sidecar-proto";
 export const CLOSURE_SCHEMA_VERSION = 1 as const;
 export const CLOSURE_PROTOCOL_VERSION = 1 as const;
 export const CLOSURE_ARCHIVE_MEDIA_TYPE = "application/vnd.open-design.closure.zip-v1" as const;
+export const CLOSURE_ARCHIVE_ENTRY_PATH = "runtime.mjs" as const;
 
 export type ClosureDigest = `sha256:${string}`;
 
@@ -21,6 +22,7 @@ export type ClosureBindingIdentity = ClosureCandidateIdentity & {
 
 export type ClosureArtifactDescriptor = {
   digest: ClosureDigest;
+  entryPath: typeof CLOSURE_ARCHIVE_ENTRY_PATH;
   mediaType: typeof CLOSURE_ARCHIVE_MEDIA_TYPE;
   size: number;
   url: string;
@@ -201,11 +203,15 @@ export function validateClosureCandidateManifest(value: unknown): ClosureCandida
   if (artifact.mediaType !== CLOSURE_ARCHIVE_MEDIA_TYPE) {
     throw new ClosureProtocolError(`unsupported closure artifact media type: ${String(artifact.mediaType)}`);
   }
+  if (artifact.entryPath !== CLOSURE_ARCHIVE_ENTRY_PATH) {
+    throw new ClosureProtocolError(`unsupported closure artifact entry path: ${String(artifact.entryPath)}`);
+  }
   const compatibility = requireRecord(manifest.compatibility, "closure compatibility");
   const shell = requireRecord(compatibility.shell, "closure shell compatibility");
   return {
     artifact: {
       digest,
+      entryPath: CLOSURE_ARCHIVE_ENTRY_PATH,
       mediaType: CLOSURE_ARCHIVE_MEDIA_TYPE,
       size: normalizePositiveInteger(artifact.size, "closure artifact size"),
       url: normalizeHttpUrl(artifact.url),

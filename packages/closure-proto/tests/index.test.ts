@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  CLOSURE_ARCHIVE_ENTRY_PATH,
   CLOSURE_ARCHIVE_MEDIA_TYPE,
   CLOSURE_PROTOCOL_VERSION,
   CLOSURE_SCHEMA_VERSION,
@@ -26,6 +27,7 @@ const candidate: ClosureCandidateIdentity = {
 const manifest: ClosureCandidateManifest = {
   artifact: {
     digest,
+    entryPath: CLOSURE_ARCHIVE_ENTRY_PATH,
     mediaType: CLOSURE_ARCHIVE_MEDIA_TYPE,
     size: 1024,
     url: "https://releases.open-design.ai/beta/closure/darwin-arm64/runtime.zip",
@@ -119,6 +121,7 @@ describe("closure candidate manifest", () => {
   });
 
   it.each([
+    ["entryPath", "headless.mjs"],
     ["size", 0],
     ["url", "file:///tmp/runtime.zip"],
     ["mediaType", "application/zip"],

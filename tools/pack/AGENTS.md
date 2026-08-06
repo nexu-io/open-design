@@ -7,6 +7,7 @@ Read `tools/pack/CACHE.md` before changing any build-cache node key, adding a ca
 ## Owns
 
 - Local packaging orchestration for packaged Open Design artifacts.
+- Namespace-neutral Headless Closure archive construction for platform-native Web + daemon bytes, manifest, inventory, and provenance.
 - mac build/install/start/stop/logs/uninstall/cleanup smoke commands.
 - Windows NSIS build/install/start/stop/logs/uninstall/cleanup/list/reset smoke commands.
 - Windows registry observation/cleanup must go through `reg.exe` and stay scoped to entries matching the namespace install/uninstaller paths.
@@ -22,6 +23,7 @@ Read `tools/pack/CACHE.md` before changing any build-cache node key, adding a ca
 - Sidecar protocol definitions.
 - A second process identity model.
 - Product/business update runtime integration.
+- Closure publication, local activation pointers, or shell attachment policy.
 
 ## Rules
 
@@ -30,6 +32,8 @@ Read `tools/pack/CACHE.md` before changing any build-cache node key, adding a ca
 - Public release artifacts must use channel-specific app identity: stable uses `Open Design`, beta uses `Open Design Beta`, prerelease uses `Open Design Prerelease`, and preview uses `Open Design Preview`. Local tools-pack installs may still use namespace-scoped install paths only as a developer multi-instance validation convention.
 - Do not let namespace-named `.app` installs change data/log/runtime/cache path conventions.
 - `--dir` controls tools-pack output/runtime/install validation roots only. It must not be treated as the cache root. The default workspace tools-pack cache is the hot path. `--cache-dir` is a special-case escape hatch for cache isolation or cold-cache validation, not a routine QA/build parameter.
+- `tools-pack closure build` is namespace-neutral: its output coordinates are channel + platform + version, and neither the archive nor its candidate manifest may contain a local namespace, launcher pointer, Desktop IPC state, or shell bytes.
+- Closure archives expose the protocol-fixed `runtime.mjs` entry and explicit Web/daemon layout. Keep Desktop, Electron, packaged launch, updater selection, and publication metadata out of this build determinant.
 - Use `--portable` for public/release artifacts so packaged config does not bake local tools-pack runtime roots from the build machine.
 - Pack resource files used by electron-builder belong under `tools/pack/resources/`; do not point pack logic at Downloads, web public assets, docs assets, or other app-owned resource paths.
 - For ordinary Windows NSIS smoke tests, use short namespaces such as `rg`, `smoke`, or `nsis-a`. NSIS extracts deeply nested Next.js standalone files under the namespace-scoped install directory; long namespaces can push installed paths past the traditional Windows 260-character limit even when builder `win-unpacked` output is correct. During merge regression, namespace `regression-merge-nsis` produced an installed path length of 264 characters and missed `next/dist/server/route-matcher-providers/helpers/cached-route-matcher-provider.js` in the installed directory, while the same NSIS smoke passed with namespace `rg`. Use long namespaces only when intentionally testing installer path-length behavior.

@@ -869,6 +869,9 @@ importers:
       '@electron/rebuild':
         specifier: 4.0.4
         version: 4.0.4
+      '@open-design/closure-proto':
+        specifier: workspace:*
+        version: link:../../packages/closure-proto
       '@open-design/launcher-proto':
         specifier: workspace:*
         version: link:../../packages/launcher-proto
