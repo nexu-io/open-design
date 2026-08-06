@@ -65,7 +65,7 @@ const SERVER_NAME = 'open-design';
 const SERVER_VERSION = '0.2.0';
 const MCP_STDIO_IDLE_EXIT_MS = 30 * 60 * 1000;
 const OPEN_DESIGN_BRIEF_APP_RESOURCE =
-  'ui://open-design/artifact-card-v6.html';
+  'ui://open-design/artifact-card-v8.html';
 
 export const MCP_SERVER_INSTRUCTIONS = [
   'Use only these product names in user-facing replies: Open Design Cloud and Local Codex.',
@@ -73,7 +73,10 @@ export const MCP_SERVER_INSTRUCTIONS = [
 ].join('\n');
 
 type JsonObject = Record<string, unknown>;
-interface RunMcpOptions { daemonUrl: string | URL }
+interface RunMcpOptions {
+  daemonUrl: string | URL;
+  resolveDaemonUrl?: () => Promise<string | URL>;
+}
 interface CatalogItem { id: string; name?: string; title?: string; description?: string; summary?: string }
 interface SkillsPayload { skills?: CatalogItem[] }
 interface PluginsPayload { plugins?: CatalogItem[] }
@@ -104,6 +107,89 @@ interface McpToolCallResult {
   content: Array<{ type: 'text'; text: string }>;
   structuredContent?: JsonObject;
   isError?: boolean;
+}
+
+const SAFE_MCP_DAEMON_RETRY_CALLS = new Set([
+  'get_active_context',
+  'get_artifact',
+  'get_file',
+  'get_project',
+  'get_run',
+  'get_vela_login_status',
+  'list_agents',
+  'list_files',
+  'list_plugins',
+  'list_projects',
+  'list_resources',
+  'list_skills',
+  'read_resource',
+  'search_files',
+]);
+
+function normalizeDaemonUrl(value: string | URL): string {
+  return String(value).replace(/\/$/, '');
+}
+
+function isDaemonUnreachableResult(result: McpToolCallResult): boolean {
+  return result.isError === true
+    && result.content.some((item) =>
+      item.text.includes('cannot reach the Open Design daemon'),
+    );
+}
+
+export function createMcpDaemonTarget(options: RunMcpOptions): {
+  call(
+    name: string,
+    args: McpArgs,
+    handler: (baseUrl: string) => Promise<McpToolCallResult>,
+  ): Promise<McpToolCallResult>;
+  currentUrl(): string;
+  refresh(): Promise<string>;
+} {
+  let current = normalizeDaemonUrl(options.daemonUrl);
+  let refreshTask: Promise<string> | null = null;
+
+  const refresh = async (): Promise<string> => {
+    if (!options.resolveDaemonUrl) return current;
+    refreshTask ??= options.resolveDaemonUrl()
+      .then((url) => {
+        current = normalizeDaemonUrl(url);
+        return current;
+      })
+      .catch(() => current)
+      .finally(() => {
+        refreshTask = null;
+      });
+    return await refreshTask;
+  };
+
+  return {
+    currentUrl: () => current,
+    refresh,
+    async call(name, _args, handler) {
+      const invoke = async (baseUrl: string): Promise<McpToolCallResult> => {
+        try {
+          return await handler(baseUrl);
+        } catch (error) {
+          return errorResult(formatError(error, baseUrl));
+        }
+      };
+      const firstUrl = await refresh();
+      const first = await invoke(firstUrl);
+      if (!isDaemonUnreachableResult(first) || !options.resolveDaemonUrl) {
+        return first;
+      }
+
+      const recoveredUrl = await refresh();
+      if (!SAFE_MCP_DAEMON_RETRY_CALLS.has(name)) {
+        // A failed write is ambiguous: the daemon may have committed it before
+        // the transport broke. Refresh the target for the next request, but do
+        // not replay a mutation and risk duplicate projects/runs/files.
+        return first;
+      }
+      return await invoke(recoveredUrl);
+    },
+  };
 }
 
 export function _localeFromMcpToolMetadata(meta: unknown): string | undefined {
@@ -922,11 +1008,15 @@ export class McpObservabilitySession {
   private readonly polls = new BoundedLruMap<string, number>(4_096);
 
   private constructor(
-    private readonly baseUrl: string,
+    private baseUrl: string,
     private readonly identity: McpAnalyticsContextResponse,
     clientInfo: { name?: unknown; version?: unknown } | null | undefined,
   ) {
     this.hostProduct = mapMcpHostProduct(clientInfo);
+  }
+
+  updateBaseUrl(baseUrl: string): void {
+    this.baseUrl = normalizeDaemonUrl(baseUrl);
   }
 
   static async create(
@@ -1302,7 +1392,7 @@ function mcpFailureFacts(
 async function observeMcpToolCall(
   session: McpObservabilitySession,
   briefStore: LocalMcpBriefStore,
-  baseUrl: string,
+  daemonTarget: ReturnType<typeof createMcpDaemonTarget>,
   nameValue: unknown,
   args: McpArgs,
 ): Promise<McpToolCallResult> {
@@ -1385,17 +1475,20 @@ async function observeMcpToolCall(
   };
   await session.emit('mcp_tool_started', attribution, common);
 
-  const result = await handleMcpToolCall(baseUrl, name, args, {
-    briefStore,
-    analyticsHeaders: session.headers(attribution, requestId),
-    pluginAttribution: attribution,
-    ...(attribution
-      ? {
-          briefState: briefStore.briefStateForWorkflow(
-            attribution.pluginWorkflowId,
-          ),
-        }
-      : {}),
+  const result = await daemonTarget.call(name, args, async (baseUrl) => {
+    session.updateBaseUrl(baseUrl);
+    return await handleMcpToolCall(baseUrl, name, args, {
+      briefStore,
+      analyticsHeaders: session.headers(attribution, requestId),
+      pluginAttribution: attribution,
+      ...(attribution
+        ? {
+            briefState: briefStore.briefStateForWorkflow(
+              attribution.pluginWorkflowId,
+            ),
+          }
+        : {}),
+    });
   });
   const payload = parseMcpResult(result);
   if (
@@ -1543,8 +1636,8 @@ function mcpDeliveryFacts(
   };
 }
 
-export async function runMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
-  const baseUrl = String(daemonUrl).replace(/\/$/, '');
+export async function runMcpStdio(options: RunMcpOptions): Promise<void> {
+  const daemonTarget = createMcpDaemonTarget(options);
   const briefStore = createLocalMcpBriefStore();
   let observabilityPromise: Promise<McpObservabilitySession> | null = null;
   let closeTransportForIdle: (() => void) | null = null;
@@ -1678,10 +1771,20 @@ export async function runMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
   })));
 
   server.setRequestHandler(ListResourcesRequestSchema, withMcpActivity(async () => {
-    const [skillsData, dsData] = await Promise.all([
-      getJson<SkillsPayload>(`${baseUrl}/api/skills`).catch((): SkillsPayload => ({ skills: [] })),
-      getJson<DesignSystemsPayload>(`${baseUrl}/api/design-systems`).catch((): DesignSystemsPayload => ({ designSystems: [] })),
-    ]);
+    const catalog = await daemonTarget.call(
+      'list_resources',
+      {},
+      async (baseUrl) => {
+        const [skillsData, dsData] = await Promise.all([
+          getJson<SkillsPayload>(`${baseUrl}/api/skills`).catch((): SkillsPayload => ({ skills: [] })),
+          getJson<DesignSystemsPayload>(`${baseUrl}/api/design-systems`).catch((): DesignSystemsPayload => ({ designSystems: [] })),
+        ]);
+        return ok({ skillsData, dsData });
+      },
+    );
+    const catalogPayload = parseMcpResult(catalog);
+    const skillsData = (catalogPayload?.skillsData ?? {}) as SkillsPayload;
+    const dsData = (catalogPayload?.dsData ?? {}) as DesignSystemsPayload;
     const resources = [
       ...localMcpResourceDefinitions(),
       {
@@ -1727,7 +1830,11 @@ export async function runMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
       };
     }
     if (uri === 'od://focus/active') {
-      const data = await getJson<ActiveContext>(`${baseUrl}/api/active`);
+      const result = await daemonTarget.call('read_resource', {}, async (baseUrl) =>
+        ok(await getJson<ActiveContext>(`${baseUrl}/api/active`)),
+      );
+      if (result.isError === true) throw new Error(result.content[0]?.text);
+      const data = parseMcpResult(result);
       return {
         contents: [
           {
@@ -1744,9 +1851,13 @@ export async function runMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
     }
     const [, kind, id] = m as [string, 'skills' | 'design-systems', string, string];
     const route = kind === 'skills' ? 'skills' : 'design-systems';
-    const data = await getJson<ResourcePayload>(
-      `${baseUrl}/api/${route}/${encodeURIComponent(decodeURIComponent(id))}`,
+    const result = await daemonTarget.call('read_resource', {}, async (baseUrl) =>
+      ok(await getJson<ResourcePayload>(
+        `${baseUrl}/api/${route}/${encodeURIComponent(decodeURIComponent(id))}`,
+      )),
     );
+    if (result.isError === true) throw new Error(result.content[0]?.text);
+    const data = parseMcpResult(result) as ResourcePayload | null;
     const text =
       data?.skill?.body ??
       data?.skill?.content ??
@@ -1777,15 +1888,17 @@ export async function runMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
       );
       if (locale) args.locale = locale;
     }
+    const baseUrl = await daemonTarget.refresh();
     observabilityPromise ??= McpObservabilitySession.create(
       baseUrl,
       server.getClientVersion(),
     );
     const observability = await observabilityPromise;
+    observability.updateBaseUrl(baseUrl);
     return observeMcpToolCall(
       observability,
       briefStore,
-      baseUrl,
+      daemonTarget,
       name,
       args,
     );
@@ -1956,7 +2069,18 @@ async function handleMcpToolCall(
               // history for the project. Both omitted when their
               // prerequisites aren't met.
               ...(previewUrl ? { previewUrl } : {}),
-              ...(studioUrl ? { studioUrl } : {}),
+              ...(previewUrl
+                ? {
+                    artifactRef: { projectId: id, entryFile },
+                    previewUrlLifetime: 'current_daemon_session',
+                  }
+                : {}),
+              ...(studioUrl
+                ? {
+                    studioUrl,
+                    studioUrlLifetime: 'current_daemon_session',
+                  }
+                : {}),
             },
             active,
             resolved,
@@ -2355,8 +2479,13 @@ async function startRun(
                 options.pluginAttribution.pluginWorkflowId,
             }
           : {}),
-        ...(studioUrl ? { studioUrl } : {}),
-        hint: 'Run started. Open Design generation normally takes 5–30 minutes. Polls showing status:running with no new files / unchanged file mtimes is the inner agent thinking, NOT a hang — DO NOT cancel_run out of impatience and DO NOT substitute write_file to produce the design yourself; OD\'s pipeline is what gives the result its design quality. Poll get_run(runId) every 30–60 seconds; report "still working" to the user between polls and keep waiting. On terminal status, previewUrl + agentMessage are the canonical deliverable. When previewUrl is present, hand previewUrl to the user as the primary stable rendered artifact link. Treat studioUrl as an optional Open Design workspace/editing link.',
+        ...(studioUrl
+          ? {
+              studioUrl,
+              studioUrlLifetime: 'current_daemon_session',
+            }
+          : {}),
+        hint: 'Run started. Open Design generation normally takes 5–30 minutes. Polls showing status:running with no new files / unchanged file mtimes is the inner agent thinking, NOT a hang — DO NOT cancel_run out of impatience and DO NOT substitute write_file to produce the design yourself; OD\'s pipeline is what gives the result its design quality. Poll get_run(runId) every 30–60 seconds; report "still working" to the user between polls and keep waiting. On terminal status, artifactRef is the durable identity; previewUrl and studioUrl are browser links for the current Open Design runtime and must be refreshed with get_run after Open Design restarts.',
       },
       active,
       resolved,
@@ -2397,7 +2526,7 @@ async function getRun(baseUrl: string, args: McpArgs) {
         enriched.hint = 'Run still in flight. Tail eventsLogPath in your own shell (e.g. `tail -n 50 -f "' + status.eventsLogPath + '"`) to see live text_delta / tool_use events from the inner agent — that is your in-flight progress signal. Keep polling get_run every 30–60s; do not cancel because file mtimes look static, that is the agent thinking between writes.';
       }
       if (studioUrl) {
-        enriched.hint += ` While the run is in flight, studioUrl can be used as an optional workspace progress link — render it as \`[Watch progress in Open Design studio](${studioUrl})\` if you choose to show it. On terminal delivery, prefer previewUrl as the stable rendered artifact link when available.`;
+        enriched.hint += ` While the run is in flight, studioUrl can be used as an optional workspace progress link — render it as \`[Watch progress in Open Design studio](${studioUrl})\` if you choose to show it. This URL is valid for the current Open Design runtime; call get_run again after Open Design restarts.`;
       }
     }
     return ok(enriched);
@@ -2431,10 +2560,17 @@ async function getRun(baseUrl: string, args: McpArgs) {
   const enriched: JsonObject = { ...status };
   if (previewUrl) enriched.previewUrl = previewUrl;
   if (entryFile) enriched.entryFile = entryFile;
+  if (previewUrl && entryFile) {
+    enriched.artifactRef = { projectId: status.projectId, entryFile };
+    enriched.previewUrlLifetime = 'current_daemon_session';
+  }
   if (agentMessage) enriched.agentMessage = agentMessage;
-  if (studioUrl) enriched.studioUrl = studioUrl;
+  if (studioUrl) {
+    enriched.studioUrl = studioUrl;
+    enriched.studioUrlLifetime = 'current_daemon_session';
+  }
   enriched.hint = previewUrl
-    ? `Run finished. previewUrl is the primary stable rendered artifact link to hand the user; render it as a clickable markdown link. studioUrl, when present, is an optional Open Design workspace/editing link that may depend on host WebView handoff or desktop trust state, so do not use it as the only completion link. If studioUrl hangs, shows a loading shell, or fails in the host browser, stop retrying studioUrl and fall back to previewUrl. agentMessage carries the inner agent's explanation; show it alongside the link. Call get_artifact({ project: "${status.projectId}" }) when you need the source files — always pass project explicitly; omitting it falls back to the active project, which may differ. eventsLogPath, when present, holds the full inner-agent event log for forensics.`
+    ? `Run finished. artifactRef is the durable project/file identity. previewUrl and studioUrl are browser links for the current Open Design runtime only; if either stops working after Open Design restarts, call get_run again with this runId to obtain current links. Render previewUrl as a clickable link now. agentMessage carries the inner agent's explanation; show it alongside the link. Call get_artifact({ project: "${status.projectId}" }) when you need the source files — always pass project explicitly; omitting it falls back to the active project, which may differ. eventsLogPath, when present, holds the full inner-agent event log for forensics.`
     : 'Run finished but produced no files. The inner agent\'s output is in agentMessage — relay it to the user verbatim. Most often this is a clarifying question (e.g. a <question-form>) you should answer by calling start_run again with a more specific prompt or a chosen plugin. When studioUrl is present, show it as a clickable markdown link (`[Open Open Design studio](STUDIO_URL)`) so the user can navigate to the OD page that shows the chat history — never render it as inline code. eventsLogPath, when present, holds the full event log if you need to inspect what happened.';
   return ok(enriched);
 }

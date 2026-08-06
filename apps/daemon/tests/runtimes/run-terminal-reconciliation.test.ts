@@ -312,4 +312,63 @@ describe('durable run terminal reconciliation', () => {
     expect(JSON.parse(fs.readFileSync(path.join(runDir, 'state.json'), 'utf8')))
       .not.toHaveProperty('langfuseCompletedAt');
   });
+
+  it('retries an accepted telemetry delivery after a crash before checkpoint', async () => {
+    const runId = 'run-langfuse-crash-window';
+    const runDir = path.join(tmpDir, runId);
+    fs.mkdirSync(runDir, { recursive: true });
+    fs.writeFileSync(path.join(runDir, 'state.json'), JSON.stringify({
+      schemaVersion: 1,
+      id: runId,
+      projectId: 'p1',
+      conversationId: 'c1',
+      assistantMessageId: 'm1',
+      agentId: 'codex',
+      status: 'failed',
+      createdAt: 1_000,
+      updatedAt: 2_000,
+      errorCode: 'AGENT_EXIT_1',
+    }));
+    const calls: Array<Record<string, unknown>> = [];
+    let firstAttempt = true;
+    const reportLangfuse = vi.fn(async (args: Record<string, unknown>) => {
+      calls.push(args);
+      if (firstAttempt) {
+        firstAttempt = false;
+        // The upstream has accepted the request, but the daemon dies before
+        // reconcileDurableRunTerminals can persist langfuseCompletedAt.
+        throw new Error('simulated crash after telemetry acceptance');
+      }
+      return {
+        langfuse_expected: true,
+        langfuse_delivery_status: 'accepted' as const,
+      };
+    });
+    const options = {
+      analytics: { capture: vi.fn() },
+      appVersion: '0.15.1',
+      db,
+      reportLangfuse,
+      runsLogDir: tmpDir,
+    };
+
+    await expect(reconcileDurableRunTerminals(options)).rejects.toThrow(
+      'simulated crash after telemetry acceptance',
+    );
+    expect(JSON.parse(fs.readFileSync(path.join(runDir, 'state.json'), 'utf8')))
+      .not.toHaveProperty('langfuseCompletedAt');
+
+    await expect(reconcileDurableRunTerminals(options)).resolves.toMatchObject({
+      langfuseReplayed: 1,
+    });
+    expect(reportLangfuse).toHaveBeenCalledTimes(2);
+    expect(calls[1]).toMatchObject({
+      run: expect.objectContaining({ id: runId, status: 'failed' }),
+      persistedRunStatus: 'failed',
+      persistedEndedAt: 2_000,
+    });
+    expect(calls[1]?.run).toEqual(calls[0]?.run);
+    expect(JSON.parse(fs.readFileSync(path.join(runDir, 'state.json'), 'utf8')))
+      .toMatchObject({ langfuseCompletedAt: expect.any(Number) });
+  });
 });

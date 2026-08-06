@@ -2,15 +2,33 @@
 
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { ComponentProps } from 'react';
+import {
+  buildWorkspacePermissions,
+  buildWorkspaceSeatSummary,
+  type WorkspaceCollabContext,
+} from '@open-design/contracts';
 
 import { CritiqueTheaterMount } from '../../../src/components/Theater/CritiqueTheaterMount';
 import type { CritiqueAction } from '../../../src/components/Theater/state/reducer';
+import type { CritiqueEventsConnectionOptions } from '../../../src/components/Theater/state/sse';
+import { WORKSPACE_CONTEXT_REFRESH_EVENT } from '../../../src/collab/useWorkspaceContext';
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
+
+function TestCritiqueTheaterMount(
+  props: Omit<ComponentProps<typeof CritiqueTheaterMount>, 'workspaceContext'>,
+) {
+  return <CritiqueTheaterMount {...props} workspaceContext={null} />;
+}
 
 interface FactoryHandle {
   send: (action: CritiqueAction) => void;
   closed: boolean;
+  workspaceContext: WorkspaceCollabContext | null;
 }
 
 function makeFactory() {
@@ -18,10 +36,12 @@ function makeFactory() {
   const factory = (
     _projectId: string,
     onEvent: (action: CritiqueAction) => void,
+    options: CritiqueEventsConnectionOptions,
   ) => {
     const handle: FactoryHandle = {
       send: (action) => onEvent(action),
       closed: false,
+      workspaceContext: options.workspaceContext ?? null,
     };
     handles.push(handle);
     return {
@@ -33,11 +53,34 @@ function makeFactory() {
   return { factory, handles };
 }
 
-describe('<CritiqueTheaterMount> (Phase 9.1)', () => {
+function teamContext(
+  workspaceId: string,
+  workspaceMemberId: string,
+): WorkspaceCollabContext {
+  return {
+    workspaceId,
+    workspaceType: 'team',
+    workspaceMemberId,
+    role: 'member',
+    memberStatus: 'active',
+    lifecycleState: 'active',
+    billingState: 'active',
+    planId: 'team_plus',
+    providerMode: 'platform_credits',
+    teamId: `team-${workspaceId}`,
+    seatSummary: buildWorkspaceSeatSummary({ seatLimit: 3, usedSeats: 2 }),
+    permissions: buildWorkspacePermissions({
+      role: 'member',
+      lifecycleState: 'active',
+    }),
+  };
+}
+
+describe('<TestCritiqueTheaterMount> (Phase 9.1)', () => {
   it('renders nothing when disabled even if a runs starts later', () => {
     const { factory } = makeFactory();
     const { container } = render(
-      <CritiqueTheaterMount projectId="p-1" enabled={false} connectionFactory={factory} />,
+      <TestCritiqueTheaterMount projectId="p-1" enabled={false} connectionFactory={factory} />,
     );
     expect(container.firstChild).toBeNull();
   });
@@ -45,7 +88,7 @@ describe('<CritiqueTheaterMount> (Phase 9.1)', () => {
   it('renders nothing while idle, then mounts the stage on run_started', () => {
     const { factory, handles } = makeFactory();
     const { container } = render(
-      <CritiqueTheaterMount projectId="p-1" enabled connectionFactory={factory} />,
+      <TestCritiqueTheaterMount projectId="p-1" enabled connectionFactory={factory} />,
     );
     // Idle pre-event: no DOM.
     expect(container.firstChild).toBeNull();
@@ -69,7 +112,7 @@ describe('<CritiqueTheaterMount> (Phase 9.1)', () => {
   it('flips the kill button to pending and synthesizes interrupted on click', async () => {
     const { factory, handles } = makeFactory();
     render(
-      <CritiqueTheaterMount
+      <TestCritiqueTheaterMount
         projectId="p-1"
         enabled
         connectionFactory={factory}
@@ -111,13 +154,13 @@ describe('<CritiqueTheaterMount> (Phase 9.1)', () => {
   it('tears down the connection when enabled flips to false', () => {
     const { factory, handles } = makeFactory();
     const { rerender } = render(
-      <CritiqueTheaterMount projectId="p-1" enabled connectionFactory={factory} />,
+      <TestCritiqueTheaterMount projectId="p-1" enabled connectionFactory={factory} />,
     );
     expect(handles).toHaveLength(1);
     expect(handles[0]!.closed).toBe(false);
 
     rerender(
-      <CritiqueTheaterMount projectId="p-1" enabled={false} connectionFactory={factory} />,
+      <TestCritiqueTheaterMount projectId="p-1" enabled={false} connectionFactory={factory} />,
     );
     expect(handles[0]!.closed).toBe(true);
   });
@@ -134,7 +177,7 @@ describe('<CritiqueTheaterMount> (Phase 9.1)', () => {
       return new Response(null, { status: 204 });
     });
     render(
-      <CritiqueTheaterMount
+      <TestCritiqueTheaterMount
         projectId="proj-42"
         enabled
         connectionFactory={factory}
@@ -161,6 +204,107 @@ describe('<CritiqueTheaterMount> (Phase 9.1)', () => {
     expect(fetchCalls[0]!.init.method).toBe('POST');
   });
 
+  it('sends the exact persisted project identity on interrupt', () => {
+    const workspaceA = teamContext('workspace-a', 'member-a');
+    const { factory, handles } = makeFactory();
+    let interruptInit: RequestInit | undefined;
+    const fetchInterrupt = vi.fn(async (_url: string, init: RequestInit) => {
+      interruptInit = init;
+      return new Response(null, { status: 204 });
+    });
+    render(
+      <CritiqueTheaterMount
+        projectId="project-a"
+        enabled
+        workspaceContext={workspaceA}
+        connectionFactory={factory}
+        fetchInterrupt={fetchInterrupt}
+      />,
+    );
+    act(() => {
+      handles[0]!.send({
+        type: 'run_started',
+        runId: 'run-a',
+        protocolVersion: 1,
+        cast: ['critic'],
+        maxRounds: 3,
+        threshold: 8,
+        scale: 10,
+      });
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Interrupt' }));
+
+    const headers = new Headers(interruptInit?.headers);
+    expect(headers.get('x-od-workspace-id')).toBe('workspace-a');
+    expect(headers.get('x-od-workspace-member-id')).toBe('member-a');
+  });
+
+  it('pins project A through a shell Workspace refresh instead of reconnecting as B or unbound', async () => {
+    const workspaceA = teamContext('workspace-a', 'member-a');
+    let releaseRefresh: (() => void) | null = null;
+    let reads = 0;
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      if (!String(input).endsWith('/api/projects/project-a/workspace-scope')) {
+        return new Response(null, { status: 404 });
+      }
+      reads += 1;
+      if (reads > 1) {
+        await new Promise<void>((resolve) => {
+          releaseRefresh = resolve;
+        });
+      }
+      return Response.json({
+        scope: {
+          kind: 'team',
+          projectId: 'project-a',
+          workspaceId: 'workspace-a',
+          context: workspaceA,
+        },
+      });
+    }));
+    const { factory, handles } = makeFactory();
+    render(
+      <CritiqueTheaterMount
+        projectId="project-a"
+        enabled
+        callerWorkspaceContext={workspaceA}
+        persistedProjectWorkspaceId="workspace-a"
+        connectionFactory={factory}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(handles).toHaveLength(1);
+    });
+    const firstScopeRead = vi.mocked(fetch).mock.calls[0]!;
+    const firstScopeHeaders = new Headers(firstScopeRead[1]?.headers);
+    expect(firstScopeHeaders.get('x-od-workspace-id')).toBe('workspace-a');
+    expect(firstScopeHeaders.get('x-od-workspace-member-id')).toBe('member-a');
+    expect(handles[0]!.workspaceContext?.workspaceId).toBe('workspace-a');
+
+    // The navigation rail broadcasts this when the shell moves to B. The
+    // project scope endpoint remains the only authority and is intentionally
+    // held pending here to expose any headerless reconnect.
+    act(() => {
+      window.dispatchEvent(new Event(WORKSPACE_CONTEXT_REFRESH_EVENT));
+    });
+    await waitFor(() => {
+      expect(reads).toBeGreaterThan(1);
+    });
+    expect(handles).toHaveLength(1);
+    expect(handles[0]!.closed).toBe(false);
+    expect(handles[0]!.workspaceContext?.workspaceId).toBe('workspace-a');
+
+    act(() => {
+      releaseRefresh?.();
+    });
+    await waitFor(() => {
+      expect(reads).toBe(2);
+    });
+    expect(handles).toHaveLength(1);
+  });
+
   it('leaves the UI in running phase when the daemon rejects the interrupt (Siri-Ray P1 on PR #1316)', async () => {
     // Previously a rejected fetch (network error OR 404 / 409 from
     // the daemon) still optimistically terminalized the run, which
@@ -173,7 +317,7 @@ describe('<CritiqueTheaterMount> (Phase 9.1)', () => {
       throw new Error('boom');
     });
     render(
-      <CritiqueTheaterMount
+      <TestCritiqueTheaterMount
         projectId="proj-1"
         enabled
         connectionFactory={factory}
@@ -212,7 +356,7 @@ describe('<CritiqueTheaterMount> (Phase 9.1)', () => {
       async () => new Response(null, { status: 404 }),
     );
     render(
-      <CritiqueTheaterMount
+      <TestCritiqueTheaterMount
         projectId="proj-1"
         enabled
         connectionFactory={factory}
@@ -244,7 +388,7 @@ describe('<CritiqueTheaterMount> (Phase 9.1)', () => {
     // button stuck in the "Interrupting…" state.
     const { factory, handles } = makeFactory();
     render(
-      <CritiqueTheaterMount
+      <TestCritiqueTheaterMount
         projectId="proj-1"
         enabled
         connectionFactory={factory}
@@ -296,7 +440,7 @@ describe('<CritiqueTheaterMount> (Phase 9.1)', () => {
     // round and the score it advertises always refer to the same round.
     const { factory, handles } = makeFactory();
     render(
-      <CritiqueTheaterMount
+      <TestCritiqueTheaterMount
         projectId="proj-1"
         enabled
         connectionFactory={factory}

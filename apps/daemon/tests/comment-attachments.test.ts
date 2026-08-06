@@ -13,6 +13,7 @@ import {
   listMessages,
   listPreviewComments,
   openDatabase,
+  updatePreviewCommentAnchor,
   updatePreviewCommentStatus,
   upsertMessage,
   upsertPreviewComment,
@@ -57,7 +58,68 @@ describe('preview comment persistence', () => {
     expect(critiqueTable?.name).toBe('critique_runs');
   });
 
-  it('upserts the latest comment by conversation, file, and element', () => {
+  it('adds the team-collab anchor columns on a fresh database', () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-comments-'));
+    const db = openDatabase(tempDir);
+    expect(tableColumnNames(db.prepare(`PRAGMA table_info(preview_comments)`).all())).toEqual(
+      expect.arrayContaining([
+        'anchor_state',
+        'anchored_version',
+        'author_member_id',
+        'last_good_position_json',
+      ]),
+    );
+  });
+
+  it('round-trips team-collab anchor creation metadata and defers resolved state', () => {
+    const db = seededDb();
+    const saved = upsertPreviewComment(db, 'project-1', 'conversation-1', {
+      target: target({ elementId: 'hero-title', anchoredVersion: 7 }),
+      note: 'Anchor me',
+      authorMemberId: 'member-42',
+    });
+    if (!saved) throw new Error('comment upsert failed');
+    // Creation metadata persists...
+    expect(saved.anchoredVersion).toBe(7);
+    expect(saved.authorMemberId).toBe('member-42');
+    // ...while the resolved state is left for the drift ladder to fill in.
+    expect(saved.anchorState).toBeUndefined();
+    expect(saved.lastGoodPosition).toBeUndefined();
+    // Survives the re-fetch (the list read path).
+    const [listed] = listPreviewComments(db, 'project-1', 'conversation-1');
+    expect(listed?.anchoredVersion).toBe(7);
+    expect(listed?.authorMemberId).toBe('member-42');
+  });
+
+  it('writes back resolved anchor state and keeps last-good position on a lost resolve', () => {
+    const db = seededDb();
+    const saved = upsertPreviewComment(db, 'project-1', 'conversation-1', {
+      target: target({ elementId: 'hero-title' }),
+      note: 'Anchor me',
+    });
+    if (!saved) throw new Error('comment upsert failed');
+
+    // Engine resolves it (anchored) and writes back a known-good position.
+    const good = { x: 5, y: 15, width: 120, height: 40 };
+    const anchored = updatePreviewCommentAnchor(db, 'project-1', 'conversation-1', saved.id, {
+      anchorState: 'anchored',
+      lastGoodPosition: good,
+      anchoredVersion: 3,
+    });
+    expect(anchored?.anchorState).toBe('anchored');
+    expect(anchored?.lastGoodPosition).toEqual(good);
+    expect(anchored?.anchoredVersion).toBe(3);
+
+    // Later the element vanishes → 'lost' with no new position. Last-good must survive.
+    const lost = updatePreviewCommentAnchor(db, 'project-1', 'conversation-1', saved.id, {
+      anchorState: 'lost',
+    });
+    expect(lost?.anchorState).toBe('lost');
+    expect(lost?.lastGoodPosition).toEqual(good); // COALESCE preserved it
+    expect(lost?.anchoredVersion).toBe(3); // COALESCE preserved it
+  });
+
+  it('creates multiple comments on the same element unless an id is provided', () => {
     const db = seededDb();
     const first = upsertPreviewComment(db, 'project-1', 'conversation-1', {
       target: target({ elementId: 'hero-title', text: 'Old title' }),
@@ -71,9 +133,27 @@ describe('preview comment persistence', () => {
     expect(first).not.toBeNull();
     expect(second).not.toBeNull();
     if (!first || !second) throw new Error('comment upsert failed');
-    expect(second.id).toBe(first.id);
-    expect(second.note).toBe('Make it more specific');
-    expect(second.text).toBe('New title');
+    expect(second.id).not.toBe(first.id);
+    expect(listPreviewComments(db, 'project-1', 'conversation-1')).toHaveLength(2);
+  });
+
+  it('updates an existing comment when its id is provided', () => {
+    const db = seededDb();
+    const first = upsertPreviewComment(db, 'project-1', 'conversation-1', {
+      target: target({ elementId: 'hero-title', text: 'Old title' }),
+      note: 'Shorten this',
+    });
+    if (!first) throw new Error('comment upsert failed');
+
+    const second = upsertPreviewComment(db, 'project-1', 'conversation-1', {
+      id: first.id,
+      target: target({ elementId: 'hero-title', text: 'New title' }),
+      note: 'Make it more specific',
+    });
+
+    expect(second?.id).toBe(first.id);
+    expect(second?.note).toBe('Make it more specific');
+    expect(second?.text).toBe('New title');
     expect(listPreviewComments(db, 'project-1', 'conversation-1')).toHaveLength(1);
   });
 
@@ -112,6 +192,7 @@ describe('preview comment persistence', () => {
       ],
     });
     const second = upsertPreviewComment(db, 'project-1', 'conversation-1', {
+      id: first?.id,
       target: target({ elementId: 'hero-title' }),
       note: 'Still match this reference',
     });
@@ -163,6 +244,7 @@ describe('preview comment persistence', () => {
       note: 'Fix slide two',
     });
     const firstSlideEdit = upsertPreviewComment(db, 'project-1', 'conversation-1', {
+      id: firstSlide?.id,
       target: target({ elementId: 'hero-title', slideIndex: 0, text: 'Updated slide one title' }),
       note: 'Revise slide one',
     });
@@ -273,14 +355,26 @@ describe('preview comment persistence', () => {
       .prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'preview_comments'`)
       .get() as { sql?: string } | undefined;
     expect(table?.sql).toMatch(/slide_key INTEGER NOT NULL DEFAULT -1/);
-    expect(table?.sql).toMatch(/UNIQUE\(project_id, conversation_id, file_path, element_id, slide_key\)/);
+    // Comments are keyed by id only; multiple notes can target the same element.
+    expect(table?.sql).not.toMatch(/UNIQUE\(project_id, conversation_id, file_path, element_id/);
     expect(listPreviewComments(db, 'project-1', 'conversation-1')[0]?.slideIndex).toBe(0);
+    // Anchor columns are backfilled even though the table was rebuilt for the
+    // slide-key migration (the ALTERs run after the rebuild).
+    expect(tableColumnNames(db.prepare(`PRAGMA table_info(preview_comments)`).all())).toEqual(
+      expect.arrayContaining([
+        'anchor_state',
+        'anchored_version',
+        'author_member_id',
+        'last_good_position_json',
+      ]),
+    );
 
     const secondSlide = upsertPreviewComment(db, 'project-1', 'conversation-1', {
       target: target({ elementId: 'hero-title', slideIndex: 1, text: 'Slide two title' }),
       note: 'Fix slide two',
     });
     const firstSlideEdit = upsertPreviewComment(db, 'project-1', 'conversation-1', {
+      id: 'legacy-slide-0',
       target: target({ elementId: 'hero-title', slideIndex: 0, text: 'Updated slide one title' }),
       note: 'Revise slide one',
     });

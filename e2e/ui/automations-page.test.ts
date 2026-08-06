@@ -1,10 +1,8 @@
 import { expect, test } from '@/playwright/suite';
-import { ensureRailOpen } from '@/playwright/rail';
 import { routeAgents } from '@/playwright/mock-factory';
 import type { Locator, Page } from '@playwright/test';
 
 const STORAGE_KEY = 'open-design:config';
-const OPEN_SETTINGS_LABEL = /Open settings|打开设置|開啟設定/i;
 const AUTOMATIONS_TITLE = /Automations|自动化/i;
 
 test.describe.configure({ timeout: 30_000 });
@@ -91,20 +89,23 @@ async function gotoEntryHome(page: Page) {
   if (await privacyDialog.isVisible().catch(() => false)) {
     await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
   }
-  await expect(page.getByRole('button', { name: OPEN_SETTINGS_LABEL })).toBeVisible();
+  // #5517 moved the settings entry into the collapsed-by-default nav rail, so it
+  // is not in the accessibility tree on load; the hero is the ready signal now.
+  await expect(page.getByTestId('home-hero')).toBeVisible();
 }
 
 async function gotoAutomations(page: Page) {
   await gotoEntryHome(page);
-  await ensureRailOpen(page);
-  await page.getByTestId('entry-nav-tasks').click();
+  // #5517's rail dropped the Automations destination; /automations is still the
+  // route the view lives on.
+  await page.goto('/automations', { waitUntil: 'domcontentloaded' });
   const view = page.getByTestId('tasks-view');
   await expect(view.getByRole('heading', { level: 1, name: AUTOMATIONS_TITLE })).toBeVisible();
   return view;
 }
 
 test.describe('Automations page', () => {
-  test('[P0] renders the page hero, summary metrics, filters, and saved rows', async ({ page }) => {
+  test('[P1] renders the page hero, summary metrics, filters, and saved rows', async ({ page }) => {
     await seedAutomationsBase(page);
 
     let routines: Array<Record<string, unknown>> = [
@@ -192,7 +193,7 @@ test.describe('Automations page', () => {
     await expect(view.getByRole('status')).toContainText('No templates in this category yet.');
   });
 
-  test('[P0] @critical creates an automation from the page and runs it into a project conversation', async ({ page }) => {
+  test('[P1] creates an automation from the page and runs it into a project conversation', async ({ page }) => {
     await seedAutomationsBase(page);
 
     const projects = [
@@ -980,7 +981,7 @@ test.describe('Automations page', () => {
     ]);
   });
 
-  test('[P0] keeps the automation modal open with the typed values when creation fails', async ({ page }) => {
+  test('[P1] keeps the automation modal open with the typed values when creation fails', async ({ page }) => {
     await seedAutomationsBase(page);
 
     await page.route('**/api/projects', async (route) => {
@@ -1050,7 +1051,7 @@ test.describe('Automations page', () => {
     await expect(view.getByText('No automations yet')).toBeVisible();
   });
 
-  test('[P0] shows a page error and keeps the row usable when Run fails', async ({ page }) => {
+  test('[P1] shows a page error and keeps the row usable when Run fails', async ({ page }) => {
     await seedAutomationsBase(page);
 
     const routines = [
@@ -1126,7 +1127,7 @@ test.describe('Automations page', () => {
     await expect(row.getByRole('button', { name: 'Pause' })).toBeVisible();
   });
 
-  test('[P0] pauses, expands history, and deletes an automation from the saved list', async ({ page }) => {
+  test('[P1] pauses, expands history, and deletes an automation from the saved list', async ({ page }) => {
     await seedAutomationsBase(page);
 
     let routines: Array<Record<string, unknown>> = [
@@ -1885,7 +1886,7 @@ test.describe('Automations page', () => {
     await expect(view.getByRole('status')).toHaveCount(0);
   });
 
-  test('[P0] @critical creates an automation from a catalog template with derived prompt context', async ({ page }) => {
+  test('[P1] creates an automation from a catalog template with derived prompt context', async ({ page }) => {
     await seedAutomationsBase(page);
 
     const createBodies: Array<Record<string, unknown>> = [];

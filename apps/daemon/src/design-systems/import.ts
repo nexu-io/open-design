@@ -129,9 +129,8 @@ export async function importLocalDesignSystemProject(
 
   const scan = await scanProject(sourceRoot);
   const displayName = cleanDisplayName(options.name ?? scan.packageName ?? options.fallbackName ?? path.basename(sourceRoot));
-  const id = await nextAvailableSlug(userDesignSystemsRoot, slugify(displayName), options.reservedIds);
+  const id = await reserveNextAvailableSlug(userDesignSystemsRoot, slugify(displayName), options.reservedIds);
   const outDir = path.join(userDesignSystemsRoot, id);
-  await mkdir(outDir, { recursive: true });
   const importMode = normalizeImportMode(options.importMode);
   const craftApplies = normalizeCraftList(options.craftApplies);
   const now = options.now ?? new Date();
@@ -399,7 +398,7 @@ async function copyFonts(fonts: FileCandidate[], outDir: string): Promise<string
   return copied;
 }
 
-async function nextAvailableSlug(
+async function reserveNextAvailableSlug(
   root: string,
   preferred: string,
   reservedIds: Iterable<string> = [],
@@ -411,9 +410,10 @@ async function nextAvailableSlug(
     const id = index === 1 ? base : `${base}-${index}`;
     if (reserved.has(id)) continue;
     try {
-      await stat(path.join(root, id));
-    } catch {
+      await mkdir(path.join(root, id));
       return id;
+    } catch (error: any) {
+      if (error?.code !== 'EEXIST') throw error;
     }
   }
   throw new LocalDesignSystemImportError('INTERNAL_ERROR', 'could not allocate design system id');

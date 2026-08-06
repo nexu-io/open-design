@@ -11,6 +11,11 @@
  */
 
 export type PlanTier = 'plus' | 'pro' | 'max';
+export type TeamPlanTier =
+  | 'team_basic'
+  | 'team_plus'
+  | 'team_pro'
+  | 'team_max';
 export type BillingInterval = 'monthly' | 'yearly';
 
 export interface PlanMonthlyConfig {
@@ -41,6 +46,29 @@ export interface PlanTierConfig {
   deployLimit: number;
 }
 
+export interface TeamPlanIntervalConfig {
+  /** Recurring per-seat price for the complete billing period. */
+  priceUsd: number;
+  /** Introductory per-seat price for the first billing period. */
+  introPriceUsd: number;
+}
+
+export interface TeamPlanYearlyConfig extends TeamPlanIntervalConfig {
+  /** Savings against twelve recurring monthly payments. */
+  discountPct: number;
+}
+
+export interface TeamPlanTierConfig {
+  tier: TeamPlanTier;
+  rank: number;
+  recommended: boolean;
+  minSeats: number;
+  /** Model-credit allowance granted to each seat every month. */
+  monthlyCreditsPerSeatUsd: number;
+  monthly: TeamPlanIntervalConfig;
+  yearly: TeamPlanYearlyConfig;
+}
+
 export interface PricingContract {
   /** Contract version; bump in vela when the shape changes. */
   version: number;
@@ -48,42 +76,45 @@ export interface PricingContract {
   /** Per-deploy overage price once `deployLimit` is exceeded, USD. */
   overageDeployPriceUsd: number;
   tiers: PlanTierConfig[];
+  teamTiers: TeamPlanTierConfig[];
 }
 
-/** Production public host for the Open Design Cloud commerce app. */
-export const CLOUD_BASE_URL = 'https://open-design.ai/cloud';
+/** Production dashboard that owns the authenticated billing-plan dialog. */
+export const CLOUD_BASE_URL = 'https://open-design.ai/cloud/dashboard';
 
 /** Public pricing contract served by the landing page. */
 export const PLANS_JSON_URL = '/pricing/plans.json';
 
 /**
- * Cloud billing console (the vela "wallet"). This is where subscriptions are
- * managed and where a successful Stripe checkout returns. Use this for any
- * "go to the console" link.
+ * Stable Vela contract for opening the billing plan chooser. `view=plans` and
+ * `checkout=auto` are wallet-era compatibility aliases and must not be emitted
+ * by the landing page.
  */
-export const CLOUD_CONSOLE_URL = `${CLOUD_BASE_URL}/wallet`;
+export const CLOUD_CONSOLE_URL = `${CLOUD_BASE_URL}?billing=plan`;
 
 /**
- * Deep link that starts subscription checkout for one tier inside the cloud
- * console, then returns to the console on success.
- *
- * The console is auth-gated by the cloud app: an unauthenticated visitor is
- * bounced to the login/registration page and returned to this exact URL after
- * authenticating — so the same intent resumes with no extra step. The
- * `checkout=auto` flag asks the console to open the Stripe checkout for
- * `{plan, interval}` immediately instead of just showing the plans modal.
+ * Compatibility helper retained for existing call sites. Landing pricing is a
+ * static comparison surface, so every CTA opens the authoritative plan chooser
+ * rather than guessing a user's current workspace, plan, or permitted change.
  */
 export function cloudSubscribeUrl(
-  tier: string,
-  interval: 'monthly' | 'yearly',
+  _tier: string,
+  _interval: 'monthly' | 'yearly',
 ): string {
-  const params = new URLSearchParams({
-    view: 'plans',
-    plan: tier,
-    interval,
-    checkout: 'auto',
-  });
-  return `${CLOUD_CONSOLE_URL}?${params.toString()}`;
+  return CLOUD_CONSOLE_URL;
+}
+
+/**
+ * Preserve an explicitly supplied workspace scope without inventing one from
+ * local state. The browser enhancement calls this same URL contract when the
+ * public pricing page itself was opened with `?workspaceId=...`.
+ */
+export function scopedBillingPlanUrl(workspaceId?: string | null): string {
+  const normalized = workspaceId?.trim();
+  if (!normalized) return CLOUD_CONSOLE_URL;
+  const url = new URL(CLOUD_CONSOLE_URL);
+  url.searchParams.set('workspaceId', normalized);
+  return url.toString();
 }
 
 /**
@@ -92,7 +123,7 @@ export function cloudSubscribeUrl(
  * published JSON.
  */
 export const PRICING_SNAPSHOT: PricingContract = {
-  version: 1,
+  version: 2,
   currency: 'USD',
   overageDeployPriceUsd: 2,
   tiers: [
@@ -108,17 +139,55 @@ export const PRICING_SNAPSHOT: PricingContract = {
       tier: 'pro',
       rank: 2,
       recommended: true,
-      monthly: { priceUsd: 100, introPriceUsd: 70, grantUsd: 100 },
-      yearly: { priceUsd: 720, discountPct: 40, grantUsd: 1200 },
+      monthly: { priceUsd: 100, introPriceUsd: 70, grantUsd: 120 },
+      yearly: { priceUsd: 720, discountPct: 40, grantUsd: 1440 },
       deployLimit: 20,
     },
     {
       tier: 'max',
       rank: 3,
       recommended: false,
-      monthly: { priceUsd: 200, introPriceUsd: 120, grantUsd: 200 },
-      yearly: { priceUsd: 1176, discountPct: 51, grantUsd: 2400 },
+      monthly: { priceUsd: 200, introPriceUsd: 120, grantUsd: 300 },
+      yearly: { priceUsd: 1176, discountPct: 51, grantUsd: 3600 },
       deployLimit: 50,
+    },
+  ],
+  teamTiers: [
+    {
+      tier: 'team_basic',
+      rank: 0,
+      recommended: false,
+      minSeats: 3,
+      monthlyCreditsPerSeatUsd: 0,
+      monthly: { priceUsd: 20, introPriceUsd: 16 },
+      yearly: { priceUsd: 240, introPriceUsd: 168, discountPct: 30 },
+    },
+    {
+      tier: 'team_plus',
+      rank: 1,
+      recommended: false,
+      minSeats: 3,
+      monthlyCreditsPerSeatUsd: 20,
+      monthly: { priceUsd: 40, introPriceUsd: 32 },
+      yearly: { priceUsd: 480, introPriceUsd: 336, discountPct: 30 },
+    },
+    {
+      tier: 'team_pro',
+      rank: 2,
+      recommended: true,
+      minSeats: 3,
+      monthlyCreditsPerSeatUsd: 100,
+      monthly: { priceUsd: 120, introPriceUsd: 84 },
+      yearly: { priceUsd: 1440, introPriceUsd: 864, discountPct: 40 },
+    },
+    {
+      tier: 'team_max',
+      rank: 3,
+      recommended: false,
+      minSeats: 3,
+      monthlyCreditsPerSeatUsd: 200,
+      monthly: { priceUsd: 220, introPriceUsd: 132 },
+      yearly: { priceUsd: 2640, introPriceUsd: 1296, discountPct: 51 },
     },
   ],
 };
@@ -131,4 +200,13 @@ export function formatUsd(amount: number): string {
 /** Monthly-equivalent of an annual price, rounded to whole dollars. */
 export function yearlyMonthlyEquivalent(yearlyPriceUsd: number): number {
   return Math.round(yearlyPriceUsd / 12);
+}
+
+/** Introductory Team charge for the selected billing period and seat count. */
+export function teamIntroTotalUsd(
+  tier: TeamPlanTierConfig,
+  interval: BillingInterval,
+  seats: number,
+): number {
+  return tier[interval].introPriceUsd * seats;
 }

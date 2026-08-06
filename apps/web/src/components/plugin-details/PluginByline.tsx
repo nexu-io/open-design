@@ -59,7 +59,7 @@ export function PluginByline({ record, variant = 'default' }: Props) {
                 target="_blank"
                 rel="noreferrer"
               >
-                <Icon name="github" size={11} />
+                <Icon name="github" size={14} />
                 <span>{githubProfileLabel(links.authorProfileUrl)}</span>
               </a>
             ) : null}
@@ -70,7 +70,7 @@ export function PluginByline({ record, variant = 'default' }: Props) {
                 target="_blank"
                 rel="noreferrer"
               >
-                <Icon name="external-link" size={11} />
+                <Icon name="external-link" size={14} />
                 <span>Homepage</span>
               </a>
             ) : null}
@@ -88,7 +88,7 @@ export function PluginByline({ record, variant = 'default' }: Props) {
               >
                 <Icon
                   name={links.contributeOnGithub ? 'github' : 'external-link'}
-                  size={11}
+                  size={14}
                 />
                 <span>Contribute</span>
               </a>

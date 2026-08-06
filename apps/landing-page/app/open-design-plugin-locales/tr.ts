@@ -14,7 +14,7 @@ const tr: OpenDesignPluginCopy = {
     chatgptLabel: 'ChatGPT masaüstü uygulaması',
     installAria: 'Open Design Cloud eklentisini Codex/ChatGPT’ye kur',
     copy: 'Kopyala',
-    github: 'Kaynak kodu GitHub’da görüntüle ↗',
+    github: 'GitHub’da kurulum kılavuzunu görüntüle ↗',
   },
   demo: {
     title: 'Bir kez kurun. Codex/ChatGPT içinden tasarlayın.',
@@ -29,7 +29,7 @@ const tr: OpenDesignPluginCopy = {
     installPhase: 'Kurulum',
     installTitle: 'Kurulumu Codex’e yaptırın',
     installBody:
-      'Bu talimatı bir Codex görevine yapıştırın. Codex, herkese açık bir eklenti mağazası kaydına ihtiyaç duymadan depodaki kurulum yönergelerini okur; eklentiyi ve yerel MCP bağlantısını tamamlar.',
+      'Bu talimatı bir Codex görevine yapıştırın. Codex, kanonik Git eklenti mağazası kaynağını ekler, eklentiyi yalnızca eksikse kurar ve herkese açık bir katalog kaydı gerektirmeden yerel MCP kurulumunu tamamlar.',
     installNote: 'Codex’e bir kez yapıştırın; tüm kurulum ayrıntıları sizin için halledilir.',
     steps: [
       {

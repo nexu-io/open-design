@@ -91,7 +91,7 @@ function resolveCustomPet(c: PetCustom): ResolvedPet {
     id: CUSTOM_PET_ID,
     name: c.name?.trim() || 'Buddy',
     glyph: c.glyph?.trim() || '🦄',
-    accent: c.accent?.trim() || '#c96442',
+    accent: c.accent?.trim() || '#87ea5c',
     greeting: c.greeting?.trim() || 'Hi! I am here whenever you need me.',
     // Custom pets get the gentle float animation by default. We could
     // expose this in the editor later; today's UX keeps the picker
@@ -256,7 +256,7 @@ export function defaultCustomPet(): PetCustom {
   return {
     name: 'Buddy',
     glyph: '🦄',
-    accent: '#c96442',
+    accent: '#87ea5c',
     greeting: 'Hi! I am here whenever you need me.',
   };
 }
@@ -332,7 +332,7 @@ export async function prepareCodexPetCustom(pet: CodexPetSummary): Promise<PetCu
   return {
     name: pet.displayName || pet.id,
     glyph: '🦄',
-    accent: '#c96442',
+    accent: '#87ea5c',
     greeting: pet.description || `Hi! I am ${pet.displayName || pet.id}.`,
     imageUrl: prepared.dataUrl,
     frames: 1,

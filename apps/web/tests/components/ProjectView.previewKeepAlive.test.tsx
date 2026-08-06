@@ -21,6 +21,10 @@ import {
   loadTabs,
 } from '../../src/state/projects';
 import { fetchPreviewComments } from '../../src/providers/registry';
+import {
+  getHtmlSourceSnapshot,
+  setHtmlSourceSnapshot,
+} from '../../src/components/html-source-snapshot-cache';
 
 const evictProjectMock = vi.fn();
 
@@ -212,6 +216,8 @@ describe('ProjectView preview keep-alive invalidation', () => {
       evict: vi.fn(),
       evictProject: evictProjectMock,
       evictMatching: vi.fn(),
+      subscribe: vi.fn(() => () => {}),
+      revision: vi.fn(() => 0),
     });
     mockedListConversations.mockResolvedValue([conversation]);
     mockedCreateConversation.mockResolvedValue(conversation);
@@ -254,5 +260,78 @@ describe('ProjectView preview keep-alive invalidation', () => {
     await waitFor(() => {
       expect(evictProjectMock).toHaveBeenCalledWith('project-1', { includeActive: true });
     });
+  });
+
+  it('keeps HTML snapshots across project-internal child remounts but clears them when authorization scope remounts ProjectView', () => {
+    const view = renderProjectView();
+    setHtmlSourceSnapshot({
+      authorizationScopeKey: 'local',
+      projectId: project.id,
+      fileName: 'preview.html',
+      refreshKey: '1:1:0',
+      source: '<html>authorized</html>',
+    });
+
+    // Root-tab switches replace FileWorkspace/FileViewer children while this
+    // ProjectView stays mounted. No child lifecycle may clear this snapshot.
+    view.rerender(
+      <ProjectView
+        project={project}
+        routeFileName={null}
+        config={config}
+        agents={[] as AgentInfo[]}
+        skills={[skill]}
+        designTemplates={[] as SkillSummary[]}
+        designSystems={[designSystem]}
+        daemonLive
+        onModeChange={vi.fn()}
+        onAgentChange={vi.fn()}
+        onAgentModelChange={vi.fn()}
+        onRefreshAgents={vi.fn()}
+        onOpenSettings={vi.fn()}
+        onBack={vi.fn()}
+        onClearPendingPrompt={vi.fn()}
+        onTouchProject={vi.fn()}
+        onProjectChange={vi.fn()}
+        onProjectsRefresh={vi.fn()}
+      />,
+    );
+    expect(getHtmlSourceSnapshot('local', project.id, 'preview.html', '1:1:0')?.source)
+      .toBe('<html>authorized</html>');
+
+    view.rerender(
+      <ProjectView
+        key="workspace-b:member-b:project-1"
+        project={project}
+        routeFileName={null}
+        config={config}
+        agents={[] as AgentInfo[]}
+        skills={[skill]}
+        designTemplates={[] as SkillSummary[]}
+        designSystems={[designSystem]}
+        daemonLive
+        onModeChange={vi.fn()}
+        onAgentChange={vi.fn()}
+        onAgentModelChange={vi.fn()}
+        onRefreshAgents={vi.fn()}
+        onOpenSettings={vi.fn()}
+        onBack={vi.fn()}
+        onClearPendingPrompt={vi.fn()}
+        onTouchProject={vi.fn()}
+        onProjectChange={vi.fn()}
+        onProjectsRefresh={vi.fn()}
+      />,
+    );
+    expect(getHtmlSourceSnapshot('local', project.id, 'preview.html', '1:1:0')).toBeNull();
+
+    setHtmlSourceSnapshot({
+      authorizationScopeKey: 'local',
+      projectId: project.id,
+      fileName: 'preview.html',
+      refreshKey: '1:1:0',
+      source: '<html>reauthorized</html>',
+    });
+    view.unmount();
+    expect(getHtmlSourceSnapshot('local', project.id, 'preview.html', '1:1:0')).toBeNull();
   });
 });

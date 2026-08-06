@@ -1,6 +1,13 @@
 import { readFileSync } from 'node:fs';
 import { expect, test } from '@/playwright/suite';
-import { ensureRailOpen } from '@/playwright/rail';
+import { ensureRailOpen, openNewProjectModal } from '@/playwright/rail';
+import { settingsSurface } from '@/playwright/amr';
+import { expectStableCount } from '@/playwright/assertions';
+import { openHomeTemplateMenu, pickHomeTemplate } from '@/playwright/home-hero';
+import type {
+  WorkspaceCollabContext,
+  WorkspaceDirectoryItem,
+} from '@open-design/contracts';
 import type { Locator, Page, Request } from '@playwright/test';
 import { applyStandardMocks, fulfillAgentsRoute, routeSuccessfulRuns, STORAGE_KEY } from '@/playwright/mock-factory';
 import { T } from '@/timeouts';
@@ -118,6 +125,24 @@ const DESIGN_SYSTEMS = [
     swatches: ['#111827', '#38bdf8'],
   },
 ] as const;
+const TAB_PERSONAL_WORKSPACE = {
+  workspaceId: 'ws-tab-personal',
+  workspaceName: 'Personal workspace',
+  workspaceType: 'personal',
+  workspaceMemberId: 'wm-tab-personal',
+  role: 'owner',
+  memberStatus: 'active',
+  lifecycleState: 'active',
+} satisfies WorkspaceDirectoryItem;
+const TAB_TEAM_WORKSPACE = {
+  workspaceId: 'ws-tab-team',
+  workspaceName: 'Team Atlas',
+  workspaceType: 'team',
+  workspaceMemberId: 'wm-tab-team',
+  role: 'owner',
+  memberStatus: 'active',
+  lifecycleState: 'active',
+} satisfies WorkspaceDirectoryItem;
 
 test.describe.configure({ timeout: T.xlong });
 
@@ -135,15 +160,13 @@ test('[P0] @critical entry chrome exposes the primary home creation surface and 
   });
 
   await gotoEntryHome(page);
-  await expect(page.getByTestId('entry-star-badge')).toBeVisible();
-  await expect(page.getByTestId('entry-use-everywhere-button')).toBeVisible();
   await expect(page.getByTestId('recent-projects-strip')).toHaveCount(0);
-  // The nav rail is collapsed by default — only the topbar toggle shows.
-  // Expand it to assert the rail and its logo are reachable.
-  await expect(page.getByTestId('entry-rail-toggle')).toBeVisible();
-  await page.getByTestId('entry-rail-toggle').click();
+  // The nav rail is collapsed by default — the pinned Home tab in the
+  // workspace tabs bar is the expand toggle (#5517: no entry topbar).
+  await expect(page.getByTestId('workspace-home-rail-toggle')).toBeVisible();
+  await page.getByTestId('workspace-home-rail-toggle').click();
   await expect(page.locator('.entry-nav-rail')).toBeVisible();
-  await expect(page.getByTestId('entry-nav-logo')).toBeVisible();
+  await expect(page.getByTestId('entry-nav-search')).toBeVisible();
   await expect(page.locator('.entry-brand')).toHaveCount(0);
   await expect(page.getByTestId('home-hero-input')).toBeVisible();
   await expect(page.getByTestId('home-hero-plus-trigger')).toBeVisible();
@@ -152,30 +175,134 @@ test('[P0] @critical entry chrome exposes the primary home creation surface and 
   await expect(page.getByTestId('home-hero-template-picker')).toBeVisible();
   await expect(page.getByTestId('home-hero-design-system-picker')).toBeVisible();
   await expect(page.getByTestId('working-dir-picker')).toBeVisible();
-  await expect(page.getByTestId('home-hero-template-section')).toBeVisible();
-  await expect(page.getByTestId('home-hero-blank-project')).toBeVisible();
-  const createTabs = page.getByTestId('home-hero-type-tabs');
-  await expect(createTabs).toBeVisible();
-  await expect(page.getByTestId('home-hero-rail-prototype')).toBeVisible();
-  await expect(page.getByTestId('home-hero-rail-live-artifact')).toBeVisible();
-  await expect(page.getByTestId('home-hero-rail-deck')).toBeVisible();
-  await expect(page.getByTestId('home-hero-rail-image')).toBeVisible();
-  await expect(page.getByTestId('home-hero-rail-video')).toBeVisible();
-  await expect(page.getByTestId('home-hero-rail-hyperframes')).toBeVisible();
-  await expect(page.getByTestId('home-hero-rail-audio')).toBeVisible();
+  // #5517 deleted the inline scenario rail (the "Start from a template… / …or
+  // create a blank project" row and its cards); the composer footer's Template
+  // picker owns every project type now.
+  const templateMenu = await openHomeTemplateMenu(page);
+  for (const id of ['prototype', 'live-artifact', 'deck', 'image', 'video', 'hyperframes', 'audio']) {
+    await expect(templateMenu.getByTestId(`home-hero-template-wedge-${id}`)).toBeVisible();
+  }
+  await page.keyboard.press('Escape');
+  await expect(templateMenu).toHaveCount(0);
 
   // The pet picker rail was removed; pet adoption now lives in
   // Settings → Pet exclusively. Make sure no rail leaks back into the
   // entry layout.
   await expect(page.locator('.pet-rail')).toHaveCount(0);
 
-  await page.getByTestId('entry-settings-menu-trigger').click();
-  await page.getByTestId('entry-settings-open-details').click();
-  const settingsDialog = page.getByRole('dialog');
+  await page.getByTestId('entry-settings-button').click();
+  // From the entry, settings routes to a page surface rather than a modal.
+  const settingsDialog = settingsSurface(page);
   await expect(settingsDialog).toBeVisible();
-  await expect(settingsDialog.getByRole('heading', { name: 'Execution mode' })).toBeVisible();
+  // The surface's own <h2> is consumed as its accessible name (aria-labelledby),
+  // so assert on the section nav instead.
+  await expect(settingsDialog.getByTestId('settings-nav-execution')).toBeVisible();
   await expect(settingsDialog.getByRole('button', { name: /hide pet picker/i })).toHaveCount(0);
   await expect(settingsDialog.getByRole('button', { name: /show pet picker/i })).toHaveCount(0);
+});
+
+test('[P0] @critical workspace selection remains isolated across two browser tabs', async ({ page, context }) => {
+  const server = { activeWorkspaceId: TAB_PERSONAL_WORKSPACE.workspaceId };
+  const requestsA: WorkspaceContextRequestWitness[] = [];
+  const requestsB: WorkspaceContextRequestWitness[] = [];
+  await routeTabWorkspaceApi(page, server, requestsA);
+
+  const pageB = await context.newPage();
+  try {
+    await applyStandardMocks(pageB);
+    await routeTabWorkspaceApi(pageB, server, requestsB);
+
+    await Promise.all([gotoEntryHome(page), gotoEntryHome(pageB)]);
+    await Promise.all([ensureRailOpen(page), ensureRailOpen(pageB)]);
+
+    await expect(page.getByTestId('workspace-switcher')).toContainText(
+      TAB_PERSONAL_WORKSPACE.workspaceName,
+    );
+    await expect(pageB.getByTestId('workspace-switcher')).toContainText(
+      TAB_PERSONAL_WORKSPACE.workspaceName,
+    );
+    expect(await readTabWorkspaceSelection(page)).toEqual({
+      workspaceId: TAB_PERSONAL_WORKSPACE.workspaceId,
+      workspaceMemberId: TAB_PERSONAL_WORKSPACE.workspaceMemberId,
+    });
+    expect(await readTabWorkspaceSelection(pageB)).toEqual({
+      workspaceId: TAB_PERSONAL_WORKSPACE.workspaceId,
+      workspaceMemberId: TAB_PERSONAL_WORKSPACE.workspaceMemberId,
+    });
+
+    await page.getByTestId('workspace-switcher').click();
+    await page.getByRole('menuitem', { name: TAB_TEAM_WORKSPACE.workspaceName }).click();
+    await expect(page.getByTestId('workspace-switcher')).toContainText(
+      TAB_TEAM_WORKSPACE.workspaceName,
+    );
+
+    // The compatibility endpoint's echo changed to Team, but that server-side
+    // value is not browser authority. Tab B keeps its own session selection.
+    expect(server.activeWorkspaceId).toBe(TAB_TEAM_WORKSPACE.workspaceId);
+    expect(await readTabWorkspaceSelection(page)).toEqual({
+      workspaceId: TAB_TEAM_WORKSPACE.workspaceId,
+      workspaceMemberId: TAB_TEAM_WORKSPACE.workspaceMemberId,
+    });
+    expect(await readTabWorkspaceSelection(pageB)).toEqual({
+      workspaceId: TAB_PERSONAL_WORKSPACE.workspaceId,
+      workspaceMemberId: TAB_PERSONAL_WORKSPACE.workspaceMemberId,
+    });
+    await expect(pageB.getByTestId('workspace-switcher')).toContainText(
+      TAB_PERSONAL_WORKSPACE.workspaceName,
+    );
+
+    // An ambient Personal read may already be in flight when the switch click
+    // begins. The switch response retires that request before it can commit,
+    // but the mock records requests at dispatch time. Start the post-switch
+    // witness after the Team selection is visibly and durably adopted so only
+    // reads issued under the new identity are judged below.
+    const requestsABeforeSwitch = requestsA.length;
+
+    // Exercise both ambient revalidation edges with the two tabs active at the
+    // same time. The poll retries only an idempotent browser event until the
+    // one-second GET coalescing window expires; there is no fixed sleep.
+    await refreshTabsInterleaved(
+      { page, eventName: 'focus', requests: requestsA },
+      { page: pageB, eventName: 'pageshow', requests: requestsB },
+    );
+    await refreshTabsInterleaved(
+      { page, eventName: 'pageshow', requests: requestsA },
+      { page: pageB, eventName: 'focus', requests: requestsB },
+    );
+
+    const teamReads = requestsA.slice(requestsABeforeSwitch);
+    expect(teamReads.length).toBeGreaterThanOrEqual(2);
+    for (const request of teamReads) {
+      expect(request).toEqual({
+        workspaceId: TAB_TEAM_WORKSPACE.workspaceId,
+        workspaceMemberId: TAB_TEAM_WORKSPACE.workspaceMemberId,
+      });
+    }
+    expect(requestsB.length).toBeGreaterThanOrEqual(3);
+    for (const request of requestsB) {
+      expect(request).toEqual({
+        workspaceId: TAB_PERSONAL_WORKSPACE.workspaceId,
+        workspaceMemberId: TAB_PERSONAL_WORKSPACE.workspaceMemberId,
+      });
+    }
+
+    expect(await readTabWorkspaceSelection(page)).toEqual({
+      workspaceId: TAB_TEAM_WORKSPACE.workspaceId,
+      workspaceMemberId: TAB_TEAM_WORKSPACE.workspaceMemberId,
+    });
+    expect(await readTabWorkspaceSelection(pageB)).toEqual({
+      workspaceId: TAB_PERSONAL_WORKSPACE.workspaceId,
+      workspaceMemberId: TAB_PERSONAL_WORKSPACE.workspaceMemberId,
+    });
+    await expect(page.getByTestId('workspace-switcher')).toContainText(
+      TAB_TEAM_WORKSPACE.workspaceName,
+    );
+    await expect(pageB.getByTestId('workspace-switcher')).toContainText(
+      TAB_PERSONAL_WORKSPACE.workspaceName,
+    );
+  } finally {
+    await pageB.close();
+  }
 });
 
 test('[P0] @critical home hero submit creates a project and lands on a usable workspace', async ({ page }) => {
@@ -204,7 +331,7 @@ test('[P0] @critical home hero submit creates a project and lands on a usable wo
   await expect(page.getByTestId('file-workspace')).toBeVisible();
 });
 
-test('[P1] onboarding recommendation creates a project with prefilled first prompt context', async ({ page }) => {
+test('[P1] onboarding lands on the home composer without a recommended-start strip', async ({ page }) => {
   const createdBodies: Array<Record<string, unknown>> = [];
   const runBodies: Array<Record<string, unknown>> = [];
   const runRequests = await routeSuccessfulRuns(page, {
@@ -274,40 +401,46 @@ test('[P1] onboarding recommendation creates a project with prefilled first prom
       },
     });
   });
+  await page.route('**/api/integrations/vela/status', async (route) => {
+    await route.fulfill({
+      json: {
+        loggedIn: true,
+        loginInFlight: false,
+        profile: 'local',
+        configPath: '/tmp/.amr/config.json',
+        user: { id: 'entry-onboarding', email: 'entry-onboarding@example.com' },
+      },
+    });
+  });
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
-  await page.getByRole('button', { name: LOCAL_CLI_LABEL }).click();
-  await page.getByRole('button', { name: /^Continue$/i }).click();
-  await page.getByRole('button', { name: /Engineer$/i }).click();
-  await page.getByRole('button', { name: /Product design/i }).click();
-  await page.getByRole('button', { name: /^Continue$/i }).click();
-  await page.getByRole('button', { name: /^Continue$/i }).click();
-  await page.getByRole('button', { name: 'Go to home' }).click();
 
-  await expect(page.getByTestId('home-recommendation')).toBeVisible();
-  await page.getByTestId('home-recommendation-start').click();
+  // Cloud-first onboarding no longer contains the legacy runtime/About-you/
+  // Product-design survey. A signed-in user accepts the recommended Hosted
+  // source and lands directly on Home.
+  const cloudPrimary = page.locator('.onboarding-cloud__primary');
+  await expect(cloudPrimary).toBeEnabled();
+  await cloudPrimary.click();
+  await expect(page.getByRole('heading', { name: /Choose your model source|选择模型来源/i })).toBeVisible();
+  await page.getByRole('radio', { name: /Open Design Hosted/i }).click();
+  await page.getByRole('button', { name: /^Continue$/i }).click();
 
-  await expect.poll(() => createdBodies.length).toBe(1);
-  const body = createdBodies[0] as {
-    pendingPrompt?: string;
-    metadata?: { kind?: string };
-  };
-  expect(body.pendingPrompt ?? '').toContain('product');
-  expect(typeof body.metadata?.kind).toBe('string');
-  await expect(page).toHaveURL(new RegExp(`/projects/${projectId}`));
-  await expect
-    .poll(() => page.evaluate((id) => window.sessionStorage.getItem(`open-design:first-loop-entry:${id}`), projectId))
-    .toContain('product_ui_prototype');
-  const firstLoopEntry = await page.evaluate((id) => {
-    const raw = window.sessionStorage.getItem(`open-design:first-loop-entry:${id}`);
-    return raw ? JSON.parse(raw) as { recommendationId?: string; productType?: string } : null;
-  }, projectId);
-  expect(firstLoopEntry).toMatchObject({
-    productType: 'product_ui',
-    recommendationId: 'product_ui_prototype',
+  // Finishing model-source setup lands the user on Home with the composer
+  // ready — and NOT on the old recommended-start strip. That strip (sparkle +
+  // 「Start with your first project」 + 全部类型 / 开始创作) sat between the
+  // composer and the template line, offering a third way to say what the two
+  // around it already said, and has been removed. Nothing may create a project
+  // or start a run on the user's behalf on the way here.
+  await expect(page.getByTestId('home-hero-input')).toBeVisible();
+  await expect(page.getByTestId('home-recommendation')).toHaveCount(0);
+  await expect(page.getByTestId('home-recommendation-start')).toHaveCount(0);
+
+  await expectStableCount(() => createdBodies.length, 0, {
+    timeout: T.short,
+    message: 'finishing onboarding should not create a project automatically',
   });
   await runRequests.expectNone({
-    message: 'onboarding recommendations should seed first-loop context without auto-sending a run',
+    message: 'finishing onboarding should not start a run automatically',
   });
 });
 
@@ -315,52 +448,61 @@ test('[P1] entry top navigation matches the current home tab structure', async (
   await gotoEntryHome(page);
   await ensureRailOpen(page);
 
-  await expect(page.getByTestId('entry-nav-logo')).toBeVisible();
+  // The rail is header-free: no logo, no in-rail collapse control — the
+  // column starts at the search box, and folding lives in the pinned Home
+  // tab's toggle on the workspace tabs bar.
+  await expect(page.getByTestId('entry-nav-logo')).toHaveCount(0);
+  await expect(page.getByTestId('entry-nav-collapse')).toHaveCount(0);
+  await expect(page.getByTestId('entry-nav-search')).toBeVisible();
   await expect(page.getByTestId('entry-nav-home')).toHaveAttribute('aria-current', 'page');
-  await expect(page.getByTestId('entry-nav-new-project')).toBeVisible();
-  await expect(page.getByTestId('entry-nav-projects')).toBeVisible();
-  await expect(page.getByTestId('entry-nav-tasks')).toBeVisible();
-  await expect(page.getByTestId('entry-nav-design-systems')).toBeVisible();
+  await expect(page.getByTestId('entry-nav-community')).toBeVisible();
+  await expect(page.locator('.entry-nav-rail__group').getByTestId('entry-nav-design-systems')).toBeVisible();
   await expect(page.locator('.entry-nav-rail__group').getByTestId('entry-nav-plugins')).toBeVisible();
-  await expect(page.locator('.entry-nav-rail__group').getByTestId('entry-nav-integrations')).toBeVisible();
+  // #5517's rail dropped the "+ New project", Projects, Automations and
+  // Integrations destinations. New project is now the Projects view's own CTA,
+  // and Automations / Integrations keep their routes without a rail entry.
+  await expect(page.getByTestId('entry-nav-new-project')).toHaveCount(0);
+  await expect(page.getByTestId('entry-nav-projects')).toHaveCount(0);
+  await expect(page.getByTestId('entry-nav-tasks')).toHaveCount(0);
+  await expect(page.getByTestId('entry-nav-integrations')).toHaveCount(0);
+  // Signed-out settings is the nav group's own item right under 扩展 — #5517
+  // dropped the footer settings chip, so the footer carries no settings entry
+  // (nor any other nav destination, e.g. plugins).
+  await expect(page.locator('.entry-nav-rail__group').getByTestId('entry-settings-button')).toBeVisible();
+  await expect(page.locator('.entry-nav-rail__footer').getByTestId('entry-settings-button')).toHaveCount(0);
   await expect(page.locator('.entry-nav-rail__footer').getByTestId('entry-nav-plugins')).toHaveCount(0);
-  await expect(page.locator('.entry-nav-rail__footer').getByTestId('entry-nav-integrations')).toHaveCount(0);
+
   await expect(page.getByTestId('home-hero-template-picker')).toBeVisible();
-  await expect(page.getByTestId('home-hero-template-section')).toBeVisible();
-  await expect(page.getByTestId('home-hero-type-tabs')).toBeVisible();
-  await expect(page.getByTestId('home-hero-active-type-chip')).toHaveCount(0);
-  await expect(page.getByTestId('home-hero-rail-prototype')).toHaveAttribute('aria-selected', 'false');
+  // Nothing is applied on a fresh Home: no template pill reset, no plugin
+  // chip, no template-driven footer options or presets.
+  await expect(page.getByTestId('home-hero-template-reset')).toHaveCount(0);
+  await expect(page.getByTestId('home-hero-active-plugin')).toHaveCount(0);
   await expect(page.getByTestId('home-hero-footer-options')).toHaveCount(0);
   await expect(page.getByTestId('home-hero-plugin-presets')).toHaveCount(0);
-  await expect(page.getByTestId('plugins-home-row-subcategory-prototype')).toHaveCount(0);
 });
 
 test('[P1] home view exposes the redesigned hero, recent projects, and starters', async ({ page }) => {
   await createProject(page, 'Home structure recent project');
   await gotoEntryHome(page);
 
-  // The redesigned entry shell keeps every view mounted (only the active one
-  // is visible), so `plugins-home-section` exists in both the home and plugins
-  // views; scope the lookup to the home view to keep the locator unambiguous.
   const home = page.getByTestId('entry-view-home');
   await expect(page.getByTestId('recent-projects-strip')).toBeVisible();
-  await expect(page.getByTestId('recent-projects-view-all')).toBeVisible();
-  await expect(home.getByTestId('plugins-home-section')).toBeVisible();
-  await expect(home.getByTestId('plugins-home-browse-registry')).toBeVisible();
-  // The Community gallery defaults to the All slice (#5759).
-  await expect(home.getByTestId('plugins-home-pill-category-all')).toHaveAttribute('aria-selected', 'true');
-  await expect(home.getByTestId('plugins-home-pill-category-deck')).toHaveAttribute('aria-selected', 'false');
+  await expect(home.getByTestId('home-hero-template-picker')).toBeVisible();
   await expect(page.getByTestId('home-hero')).toBeVisible();
-  await expect(page.getByTestId('home-templates-hint')).toHaveCount(0);
   await expect(page.getByTestId('entry-nav-home')).toHaveAttribute('aria-current', 'page');
 
-  await ensureRailOpen(page);
-  await page.getByTestId('entry-nav-projects').click();
+  // NOTE: /projects currently has no UI entry. #5517 dropped the rail's
+  // Projects destination, and Home passes `heading` to RecentProjectsStrip,
+  // which flips it into the full-page-grid header that omits the
+  // `recent-projects-view-all` button — so `HomeView.onViewAllProjects` is
+  // wired but unreachable. Drive the route directly until an entry returns.
+  await page.goto('/projects', { waitUntil: 'domcontentloaded' });
+  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
   await expect(page).toHaveURL(/\/projects$/);
-  await expect(page.getByTestId('entry-nav-projects')).toHaveAttribute('aria-current', 'page');
+  await expect(page.getByTestId('entry-view-projects')).toBeVisible();
 });
 
-test('[P0] @critical recent projects strip opens a project card and view all routes to the projects index', async ({ page }) => {
+test('[P0] @critical recent projects strip opens a project card from Home', async ({ page }) => {
   const created = await createProject(page, 'Recent project entry point');
   await gotoEntryHome(page);
 
@@ -368,11 +510,6 @@ test('[P0] @critical recent projects strip opens a project card and view all rou
   await expect(recentStrip).toBeVisible();
   await recentStrip.locator(`[data-project-id="${created.project.id}"]`).click();
   await expect(page).toHaveURL(new RegExp(`/projects/${created.project.id}`));
-
-  await gotoEntryHome(page);
-  await page.getByTestId('recent-projects-view-all').click();
-  await expect(page).toHaveURL(/\/projects$/);
-  await expect(page.getByTestId('entry-nav-projects')).toHaveAttribute('aria-current', 'page');
 });
 
 test('[P1] design systems page is reachable from entry nav and supports search, preview, and default selection', async ({ page }) => {
@@ -479,16 +616,14 @@ test('[P1] disabled design systems are filtered from entry creation surfaces', a
   await expect(homePicker.getByTestId('project-ds-picker-option-airbnb')).toHaveCount(0);
   await page.keyboard.press('Escape');
 
-  await ensureRailOpen(page);
-  await page.getByTestId('entry-nav-new-project').click();
+  // The rail's "+ New project" button is gone (#5517); the shared helper opens
+  // the modal from the Projects view's own CTA instead.
+  await openNewProjectModal(page);
   const modal = page.getByTestId('new-project-modal');
   await expect(modal).toBeVisible();
   await modal.getByTestId('design-system-trigger').click();
-  // The picker popover renders through a document.body portal (so short
-  // viewports cannot clip it), so its options live outside the modal subtree.
-  const modalPicker = page.locator('.ds-picker-popover');
-  await expect(modalPicker.getByRole('option', { name: /Agentic/i })).toBeVisible();
-  await expect(modalPicker.getByRole('option', { name: /Airbnb/i })).toHaveCount(0);
+  await expect(modal.getByRole('option', { name: /Agentic/i })).toBeVisible();
+  await expect(modal.getByRole('option', { name: /Airbnb/i })).toHaveCount(0);
   await page.keyboard.press('Escape');
   await page.keyboard.press('Escape');
   await expect(modal).toHaveCount(0);
@@ -503,24 +638,25 @@ test('[P1] disabled design systems are filtered from entry creation surfaces', a
 test('[P2] entry chrome avoids horizontal overflow on compact desktop width', async ({ page }) => {
   await page.setViewportSize({ width: 820, height: 900 });
   await gotoEntryHome(page);
-  await expect(page.locator('.entry-main__topbar')).toBeVisible();
 
-  const { pageOverflow, topbarOverflow } = await page.evaluate(() => {
-    const topbar = document.querySelector('.entry-main__topbar');
+  // The entry topbar is gone (#5517), so the composer card is the widest fixed
+  // chrome left on the entry: neither it nor the page may scroll sideways.
+  const { pageOverflow, composerOverflow } = await page.evaluate(() => {
+    const composer = document.querySelector('[data-testid="home-hero"]');
     return {
       pageOverflow: Math.max(
         0,
         document.documentElement.scrollWidth - document.documentElement.clientWidth,
       ),
-      topbarOverflow:
-        topbar instanceof HTMLElement
-          ? Math.max(0, topbar.scrollWidth - topbar.clientWidth)
+      composerOverflow:
+        composer instanceof HTMLElement
+          ? Math.max(0, composer.scrollWidth - composer.clientWidth)
           : null,
     };
   });
 
-  expect(topbarOverflow).not.toBeNull();
-  expect(topbarOverflow!).toBeLessThanOrEqual(2);
+  expect(composerOverflow).not.toBeNull();
+  expect(composerOverflow!).toBeLessThanOrEqual(2);
   expect(pageOverflow).toBeLessThanOrEqual(2);
 });
 
@@ -609,25 +745,24 @@ test('[P0] @critical entry execution pill opens the Local CLI and BYOK switcher 
 
   await gotoEntryHome(page);
 
+  // The pill now lives in the Home composer footer as the compact, icon-only
+  // variant: the selected agent + model are on its accessible name, and the
+  // popover drops the Local CLI / BYOK segmented control in favour of the
+  // agent list plus an Execution-settings entry.
   const pill = page.getByTestId('inline-model-switcher-chip');
-  await expect(pill).toContainText(LOCAL_CLI_LABEL);
-  await expect(pill).toContainText('Codex CLI');
-  const popover = await openInlineModelSwitcher(page);
-  await expect(popover).toBeVisible();
-  await expect(page.getByTestId('inline-model-switcher-mode-daemon')).toHaveAttribute(
-    'aria-selected',
-    'true',
-  );
-  await expect(page.getByTestId('inline-model-switcher-mode-api')).toBeVisible();
-  await expect(page.getByTestId('inline-model-switcher-agent-claude')).toBeVisible();
-  await expect(page.getByTestId('inline-model-switcher-agent-codex')).toBeVisible();
-  await expect(page.getByTestId('inline-model-switcher-agent-opencode')).toBeVisible();
-  await expect(page.getByTestId('inline-model-switcher-agent-hermes')).toBeVisible();
-  await expect(page.getByTestId('inline-model-switcher-agent-cursor-agent')).toBeVisible();
+  await expect(pill).toHaveAttribute('aria-label', /Codex CLI/i);
+  await pill.click();
 
-  await openInlineModelSwitcherSettingsDialog(page);
-  await expect(page.getByRole('dialog')).toBeVisible();
-  await expect(page.getByRole('tab', { name: LOCAL_CLI_LABEL })).toBeVisible();
+  const popover = page.getByTestId('inline-model-switcher-popover');
+  await expect(popover).toBeVisible();
+  await expect(popover.getByTestId('inline-model-switcher-mode-daemon')).toHaveCount(0);
+  await expect(popover.getByTestId('inline-model-switcher-agent-claude')).toHaveCount(0);
+  await expect(popover.getByTestId('inline-model-switcher-open-settings')).toBeVisible();
+
+  await page.getByTestId('inline-model-switcher-open-settings').click();
+  const settings = settingsSurface(page);
+  await expect(settings).toBeVisible();
+  await expect(settings.getByRole('tab', { name: LOCAL_CLI_LABEL })).toBeVisible();
 });
 
 test('[P1] Settings About reads desktop updater status and runs a manual update check', async ({ page }) => {
@@ -715,6 +850,11 @@ test('[P1] Settings About reads desktop updater status and runs a manual update 
     .toEqual(['check']);
 });
 
+// The entry help launcher (`entry-help-trigger` / `.entry-help-popover`, the X
+// + Discord community links) went away with the entry topbar in #5517 —
+// `EntryHelpMenu` is no longer rendered anywhere — and so did the topbar's
+// "Use everywhere" button. Its spec is gone; the Use-everywhere guide itself
+// still lives on the Integrations view and is covered below.
 test('[P1] Settings About surfaces prerelease updater check failures with retry affordance', async ({ page }) => {
   await page.addInitScript(() => {
     const idleStatus = {
@@ -898,40 +1038,6 @@ test('[P1] Settings BYOK connection failures emit a classified analytics error c
   expect(captured).toContain('unknown');
 });
 
-test('[P2] entry help menu exposes community links and topbar routes Use everywhere', async ({ page }) => {
-  await gotoEntryHome(page);
-
-  // The help launcher lives in the (collapsed-by-default) rail footer.
-  await ensureRailOpen(page);
-  await page.getByTestId('entry-help-trigger').click();
-  const menu = page.locator('.entry-help-popover[role="menu"]');
-  await expect(menu).toBeVisible();
-  await expect(menu.getByRole('menuitem', { name: /Follow @OpenDesignHQ on X/i })).toHaveAttribute(
-    'href',
-    'https://x.com/OpenDesignHQ',
-  );
-  await expect(menu.getByRole('menuitem', { name: /Join Discord/i })).toHaveAttribute(
-    'href',
-    'https://discord.gg/mHAjSMV6gz',
-  );
-
-  await page.getByTestId('entry-use-everywhere-button').click();
-  await expect(page.getByRole('heading', { name: 'Integrations' })).toBeVisible();
-  await expect(page.getByTestId('integrations-tab-use-everywhere')).toHaveAttribute(
-    'aria-selected',
-    'true',
-  );
-
-  await ensureRailOpen(page);
-  // Return home via the explicit Home nav (the logo is overlaid by the
-  // collapse button on hover, which would intercept the click).
-  await page.getByTestId('entry-nav-home').click();
-  await expect(page.getByTestId('home-hero')).toBeVisible();
-  await page.getByTestId('entry-help-trigger').click();
-  await expect(menu).toBeVisible();
-  await page.keyboard.press('Escape');
-  await expect(menu).toHaveCount(0);
-});
 
 test('[P1] Use everywhere guide uses daemon MCP install info and copies an agent guide', async ({ page }) => {
   await page.addInitScript(() => {
@@ -963,8 +1069,14 @@ test('[P1] Use everywhere guide uses daemon MCP install info and copies an agent
   });
 
   await gotoEntryHome(page);
-  await page.getByTestId('entry-use-everywhere-button').click();
+  // With the topbar's "Use everywhere" button gone (#5517) the Integrations
+  // route is the entry; its default tab is still the Use everywhere guide.
+  await page.goto('/integrations', { waitUntil: 'domcontentloaded' });
+  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
   await expect(page.getByRole('heading', { name: 'Integrations' })).toBeVisible();
+  // Landing on the route directly opens the view's own default tab, so select
+  // the Use everywhere guide explicitly.
+  await page.getByTestId('integrations-tab-use-everywhere').click();
   await expect(page.getByTestId('integrations-tab-use-everywhere')).toHaveAttribute(
     'aria-selected',
     'true',
@@ -997,14 +1109,13 @@ test('[P2] home topbar overlays close on outside click, Escape, and Settings ope
   await pill.click();
   await expect(executionPopover).toBeVisible();
 
-  // The settings entry is a menu; opening it dismisses the execution popover,
-  // and its "Settings" item opens the full dialog.
-  await page.getByTestId('entry-settings-menu-trigger').click();
+  // Settings is a rail nav item now, and the collapsed rail is `inert`.
+  await ensureRailOpen(page);
+  await page.getByTestId('entry-settings-button').click();
   await expect(executionPopover).toHaveCount(0);
-  await page.getByTestId('entry-settings-open-details').click();
-  await expect(page.getByRole('dialog')).toBeVisible();
+  await expect(settingsSurface(page)).toBeVisible();
   await page.keyboard.press('Escape');
-  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(settingsSurface(page)).toHaveCount(0);
 
   await pill.click();
   await expect(executionPopover).toBeVisible();
@@ -1018,29 +1129,38 @@ test('[P2] home topbar overlays close on outside click, Escape, and Settings ope
   await expect(executionPopover).toHaveCount(0);
 });
 
-test('[P1] entry execution pill remains available across secondary entry pages', async ({ page }) => {
+// The execution pill is no longer entry-wide chrome: with the topbar gone
+// (#5517) `EntryShell` hands the switcher to `HomeView` only, so it renders
+// inside the Home composer footer and does not follow the user to secondary
+// entry pages. This spec now pins the rail's surviving destinations plus the
+// pill at its new, Home-only home.
+test('[P1] rail destinations navigate and Home keeps its composer execution pill', async ({ page }) => {
   await routeDesignSystems(page);
   await gotoEntryHome(page);
 
   const destinations = [
-    { nav: 'entry-nav-projects', heading: 'Projects' },
-    { nav: 'entry-nav-tasks', heading: 'Automations' },
-    { nav: 'entry-nav-plugins', heading: 'Plugins' },
-    { nav: 'entry-nav-design-systems', heading: 'Design systems' },
-    { nav: 'entry-nav-integrations', heading: 'Integrations' },
+    { nav: 'entry-nav-design-systems', url: /\/design-systems$/ },
+    { nav: 'entry-nav-plugins', url: /\/plugins$/ },
+    { nav: 'entry-nav-community', url: /\/community$/ },
   ];
 
   for (const destination of destinations) {
     await ensureRailOpen(page);
     await page.getByTestId(destination.nav).click();
-    await expect(
-      page.locator('h1').filter({ hasText: destination.heading }).first(),
-    ).toBeVisible();
-
-    await openInlineModelSwitcher(page);
-    await page.keyboard.press('Escape');
-    await expect(page.getByTestId('inline-model-switcher-popover')).toHaveCount(0);
+    await expect(page).toHaveURL(destination.url);
+    await expect(page.getByTestId(destination.nav)).toHaveAttribute('aria-current', 'page');
   }
+
+  await ensureRailOpen(page);
+  await page.getByTestId('entry-nav-home').click();
+  await expect(page.getByTestId('home-hero')).toBeVisible();
+
+  const pill = page.getByTestId('inline-model-switcher-chip');
+  await expect(pill).toBeVisible();
+  await pill.click();
+  await expect(page.getByTestId('inline-model-switcher-popover')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('inline-model-switcher-popover')).toHaveCount(0);
 });
 
 test('[P1] home starters can browse registry and use a starter from Home', async ({ page }) => {
@@ -1056,11 +1176,9 @@ test('[P1] home starters can browse registry and use a starter from Home', async
   });
 
   await gotoEntryHome(page);
-  // The browse link lives inside the first-run reveal container; reveal it
-  // first or the collapsed overlay intercepts the click.
-  const home = await revealHomeTemplates(page);
-  await expect(home.getByTestId('plugins-home-browse-registry')).toBeVisible();
-  await home.getByTestId('plugins-home-browse-registry').click();
+  await skipWithoutHomeStarters(page);
+  await expect(page.getByTestId('plugins-home-browse-registry')).toBeVisible();
+  await page.getByTestId('plugins-home-browse-registry').click();
   await expect(page).toHaveURL(/\/plugins$/);
   await expect(page.getByTestId('entry-nav-plugins')).toHaveAttribute('aria-current', 'page');
   await expect(page.locator('h1').filter({ hasText: 'Plugins' })).toBeVisible();
@@ -1122,6 +1240,7 @@ test('[P2] home starters shows the empty catalog state when no plugins are avail
   });
 
   await gotoEntryHome(page);
+  await skipWithoutHomeStarters(page);
   // `plugins-home-section` is rendered in both the home and plugins views (both
   // stay mounted), so scope to the home view to keep the locator unambiguous.
   await expect(page.getByTestId('entry-view-home').getByTestId('plugins-home-section')).toContainText(
@@ -1141,15 +1260,19 @@ test('[P2] home starters search and facet filters narrow the visible gallery', a
   await gotoEntryHome(page);
 
   const home = await revealHomeTemplates(page);
-  const deckCategory = home.getByTestId('plugins-home-pill-category-deck');
-  // The gallery defaults to the All slice (#5759); pick Deck explicitly
-  // before asserting the deck-only visibility set.
-  await deckCategory.click();
-  await expect(deckCategory).toHaveAttribute('aria-selected', 'true');
+  await expect(home.getByTestId('plugins-home-pill-category-all')).toContainText('4');
+
+  await home.getByTestId('plugins-home-pill-category-deck').click({ force: true });
   await expect(home.locator('[data-plugin-id="deck-writer"]')).toBeVisible();
   await expect(home.locator('[data-plugin-id="figma-importer"]')).toHaveCount(0);
   await expect(home.locator('[data-plugin-id="localized-plugin"]')).toHaveCount(0);
   await expect(home.locator('[data-plugin-id="hyperframes-video"]')).toHaveCount(0);
+
+  await home.getByTestId('plugins-home-pill-category-all').click({ force: true });
+  await expect(home.locator('[data-plugin-id="figma-importer"]')).toBeVisible();
+  await expect(home.locator('[data-plugin-id="localized-plugin"]')).toBeVisible();
+  await expect(home.locator('[data-plugin-id="hyperframes-video"]')).toBeVisible();
+  await expect(home.locator('[data-plugin-id="deck-writer"]')).toBeVisible();
 
   const search = home.getByTestId('plugins-home-search');
   await search.fill('Deck Writer');
@@ -1157,7 +1280,7 @@ test('[P2] home starters search and facet filters narrow the visible gallery', a
   await expect(home.locator('[data-plugin-id="localized-plugin"]')).toHaveCount(0);
   await expect(home.locator('[data-plugin-id="hyperframes-video"]')).toHaveCount(0);
   await home.getByTestId('plugins-home-search-clear').click({ force: true });
-  await expect(home.locator('[data-plugin-id="deck-writer"]')).toBeVisible();
+  await expect(home.locator('[data-plugin-id="localized-plugin"]')).toBeVisible();
 });
 
 test('[P1] home starters category tabs and subcategory tabs switch the gallery slice', async ({ page }) => {
@@ -1172,12 +1295,9 @@ test('[P1] home starters category tabs and subcategory tabs switch the gallery s
   await gotoEntryHome(page);
   const home = await revealHomeTemplates(page);
 
-  // The gallery defaults to the All slice (#5759): the All pill is selected
-  // and every facet is visible until a category is picked.
-  await expect(home.getByTestId('plugins-home-pill-category-all')).toHaveAttribute('aria-selected', 'true');
-  await expect(home.getByTestId('plugins-home-pill-category-deck')).toHaveAttribute('aria-selected', 'false');
-  await expect(home.locator('[data-plugin-id="facet-deck"]')).toBeVisible();
+  await expect(home.getByTestId('plugins-home-pill-category-all')).toContainText('8');
   await expect(home.locator('[data-plugin-id="facet-landing-prototype"]')).toBeVisible();
+  await expect(home.locator('[data-plugin-id="facet-audio"]')).toBeVisible();
 
   const categoryCases = [
     ['prototype', 'facet-landing-prototype', 'facet-deck'],
@@ -1199,10 +1319,12 @@ test('[P1] home starters category tabs and subcategory tabs switch the gallery s
     await expect(home.locator(`[data-plugin-id="${hiddenId}"]`)).toHaveCount(0);
   }
 
-  const prototypeCategory = home.getByTestId('plugins-home-pill-category-prototype');
-  await prototypeCategory.scrollIntoViewIfNeeded();
-  await expect(prototypeCategory).toBeVisible();
-  await prototypeCategory.click();
+  await home.getByTestId('plugins-home-pill-category-all').click({ force: true });
+  await expect(home.getByTestId('plugins-home-pill-category-all')).toHaveAttribute('aria-selected', 'true');
+  await expect(home.locator('[data-plugin-id="facet-landing-prototype"]')).toBeVisible();
+  await expect(home.locator('[data-plugin-id="facet-audio"]')).toBeVisible();
+
+  await home.getByTestId('plugins-home-pill-category-prototype').click({ force: true });
   await expect(home.getByTestId('plugins-home-row-subcategory-prototype')).toBeVisible();
   await home.getByTestId('plugins-home-pill-subcategory-prototype-landing-marketing').click({ force: true });
   await expect(home.getByTestId('plugins-home-pill-subcategory-prototype-landing-marketing')).toHaveAttribute('aria-selected', 'true');
@@ -1229,10 +1351,8 @@ test('[P1] home starters can jump into plugin creation through the registry brow
   });
 
   await gotoEntryHome(page);
-  // The browse link lives inside the first-run reveal container; reveal it
-  // first or the collapsed overlay intercepts the click.
-  const home = await revealHomeTemplates(page);
-  await home.getByTestId('plugins-home-browse-registry').click();
+  await skipWithoutHomeStarters(page);
+  await page.getByTestId('plugins-home-browse-registry').click();
   await expect(page).toHaveURL(/\/plugins$/);
   await expect(page.locator('h1').filter({ hasText: 'Plugins' })).toBeVisible();
   await page.getByTestId('plugins-create-button').click();
@@ -1250,11 +1370,13 @@ test('[P2] home starters search can enter a no-results state and recover with cl
   });
 
   await gotoEntryHome(page);
+  await skipWithoutHomeStarters(page);
 
   // `plugins-home-section` and its children are rendered in both the home and
   // plugins views (both stay mounted), so scope to the home view to keep these
   // strict-mode locators unambiguous.
   const home = await revealHomeTemplates(page);
+  await home.getByTestId('plugins-home-pill-category-all').click({ force: true });
   const search = home.getByTestId('plugins-home-search');
   await search.click({ force: true });
   await search.fill('no-such-starter');
@@ -1845,10 +1967,9 @@ test('[P1] home starters Use plugin from the details modal applies the plugin to
   });
 
   await gotoEntryHome(page);
-  // Reveal first: a force-click on the details testid inside the collapsed
-  // (inert) reveal container is silently swallowed.
-  const detailHome = await revealHomeTemplates(page);
-  await detailHome.getByTestId('plugins-home-details-detail-use-plugin').click({ force: true });
+  await skipWithoutHomeStarters(page);
+  await page.locator('article.plugins-home__card[data-plugin-id="detail-use-plugin"]').hover();
+  await page.getByTestId('plugins-home-details-detail-use-plugin').click({ force: true });
 
   const dialog = page.getByRole('dialog', { name: /Detail Use Plugin preview/i });
   await expect(dialog).toBeVisible();
@@ -1865,7 +1986,7 @@ test('[P1] home starters Use plugin from the details modal applies the plugin to
   await expect(page.getByTestId('home-hero-input')).toHaveText('');
 });
 
-test('[P0] @critical home starters Use-plugin-only routes the plugin as the active driver and keeps the prompt freeform', async ({ page }) => {
+test('[P2] home starters Use-plugin-only routes the plugin as the active driver and keeps the prompt freeform', async ({ page }) => {
   await page.route('**/api/plugins', async (route) => {
     await route.fulfill({
       json: {
@@ -1878,6 +1999,9 @@ test('[P0] @critical home starters Use-plugin-only routes the plugin as the acti
   });
 
   await gotoEntryHome(page);
+  // Guard before arming waitForResponse: a mid-flight skip inside
+  // openHomePluginDetails would leave that promise dangling.
+  await skipWithoutHomeStarters(page);
 
   const input = page.getByTestId('home-hero-input');
   await expect(input).toHaveText('');
@@ -1938,6 +2062,7 @@ test('[P1] home starters route the picked plugin as the active driver from its d
   });
 
   await gotoEntryHome(page);
+  await skipWithoutHomeStarters(page);
 
   const starterCard = page.locator('[data-plugin-id="localized-plugin"]').first();
   await starterCard.scrollIntoViewIfNeeded();
@@ -1950,7 +2075,7 @@ test('[P1] home starters route the picked plugin as the active driver from its d
   await expect(page.getByTestId('home-hero-active-plugin')).toBeVisible();
 });
 
-test('[P0] @critical home starters Use with query carries the hydrated starter prompt into the created project and first user turn', async ({ page }) => {
+test('[P2] home starters Use with query carries the hydrated starter prompt into the created project and first user turn', async ({ page }) => {
   await page.route('**/api/plugins', async (route) => {
     await route.fulfill({
       json: {
@@ -1963,6 +2088,7 @@ test('[P0] @critical home starters Use with query carries the hydrated starter p
   });
 
   await gotoEntryHome(page);
+  await skipWithoutHomeStarters(page);
 
   const input = page.getByTestId('home-hero-input');
   const home = await revealHomeTemplates(page);
@@ -1996,71 +2122,7 @@ test('[P0] @critical home starters Use with query carries the hydrated starter p
   expect(typeof projectBody.metadata?.kind).toBe('string');
 });
 
-test('[P0] @critical home plugin input edits are resolved and carried into project creation', async ({ page }) => {
-  const parameterizedPlugin = makeStarterPlugin({
-    id: 'parameterized-deck-plugin',
-    title: 'Parameterized Deck Plugin',
-    mode: 'deck',
-    featured: true,
-    query: 'Draft a {{topic}} deck with {{notes}}.',
-    inputs: [
-      { name: 'topic', type: 'string', default: 'quarterly review' },
-      { name: 'notes', type: 'string', default: 'speaker notes' },
-    ],
-  });
-  const applyBodies: Array<Record<string, unknown>> = [];
-
-  await page.route('**/api/plugins', async (route) => {
-    await route.fulfill({ json: { plugins: [parameterizedPlugin] } });
-  });
-  await page.route('**/api/plugins/parameterized-deck-plugin/apply', async (route) => {
-    const body = route.request().postDataJSON() as { inputs?: Record<string, unknown> };
-    applyBodies.push(body);
-    const result = makeApplyResult(
-      'parameterized-deck-plugin',
-      'Draft a {{topic}} deck with {{notes}}.',
-      body.inputs ?? {},
-    );
-    await route.fulfill({
-      json: {
-        ...result,
-        inputs: parameterizedPlugin.manifest.od.inputs,
-      },
-    });
-  });
-
-  await gotoEntryHome(page);
-  const home = await revealHomeTemplates(page);
-  await home.getByTestId('plugins-home-details-parameterized-deck-plugin').click({ force: true });
-  await page.getByTestId('plugin-details-use-parameterized-deck-plugin').click();
-  await expect(page.getByTestId('home-hero-active-plugin')).toContainText('Parameterized Deck Plugin');
-
-  const input = page.getByTestId('home-hero-input');
-  await expect(input).toContainText('quarterly review');
-  await input.fill('Draft a Liquid Glasses deck with narrated speaker notes.');
-
-  const projectRequestPromise = page.waitForRequest(isCreateProjectRequest);
-  await expect(page.getByTestId('home-hero-submit')).toBeEnabled();
-  await page.getByTestId('home-hero-submit').click();
-
-  const request = await projectRequestPromise;
-  const body = request.postDataJSON() as {
-    pendingPrompt?: string;
-    pluginId?: string;
-    pluginInputs?: Record<string, unknown>;
-    appliedPluginSnapshotId?: string;
-  };
-  expect(body.pluginId).toBe('parameterized-deck-plugin');
-  expect(body.pendingPrompt).toBe('Draft a Liquid Glasses deck with narrated speaker notes.');
-  expect(body.pluginInputs).toMatchObject({
-    topic: 'Liquid Glasses',
-    notes: 'narrated speaker notes',
-  });
-  expect(body.appliedPluginSnapshotId).toBe('snap-parameterized-deck-plugin');
-  expect(applyBodies.at(-1)?.inputs).toMatchObject(body.pluginInputs ?? {});
-});
-
-test('[P0] @critical required home plugin prompt parameters gate submit and bind the project snapshot', async ({ page }) => {
+test('[P2] required home plugin prompt parameters gate submit and bind the project snapshot', async ({ page }) => {
   const guidedDeckPlugin = makeStarterPlugin({
     id: 'guided-deck-plugin',
     title: 'Guided Deck Plugin',
@@ -2102,6 +2164,7 @@ test('[P0] @critical required home plugin prompt parameters gate submit and bind
   });
 
   await gotoEntryHome(page);
+  await skipWithoutHomeStarters(page);
   const home = await revealHomeTemplates(page);
   await openHomePluginDetails(page, 'guided-deck-plugin', /Guided Deck Plugin/i, home);
   await page.getByTestId('plugin-details-use-guided-deck-plugin').click();
@@ -2139,7 +2202,7 @@ test('[P0] @critical required home plugin prompt parameters gate submit and bind
 test('[P0] @critical home composer routes free-form prompts through the design router by default', async ({ page }) => {
   await gotoEntryHome(page);
 
-  await expect(page.getByTestId('session-mode-trigger')).toHaveAttribute('aria-label', 'Design mode');
+  await expect(page.getByTestId('composer-mode-trigger')).toHaveAttribute('aria-label', 'Mode: Design');
 
   const input = page.getByTestId('home-hero-input');
   const prompt =
@@ -2241,7 +2304,7 @@ test('[P0] @critical clearing the home working directory removes linked dirs fro
 
   await page.getByTestId('working-dir-trigger').click();
   await page.getByTestId('working-dir-clear').click();
-  await expect(page.getByTestId('working-dir-trigger')).toContainText('Select working directory');
+  await expect(page.getByTestId('working-dir-trigger')).toContainText('Working directory');
 
   await page.getByTestId('home-hero-input').fill('Create a premium dashboard without local folder context.');
 
@@ -2432,7 +2495,7 @@ test('[P1] collapsed rail stays out of the keyboard tab order on the home view',
   // Once expanded the rail becomes interactive again and drops inert.
   await ensureRailOpen(page);
   await expect(rail).not.toHaveAttribute('inert', '');
-  await expect(page.getByTestId('entry-nav-new-project')).toBeVisible();
+  await expect(page.getByTestId('entry-nav-home')).toBeVisible();
 });
 
 test('[P1] collapsed new-user templates gallery stays out of the keyboard tab order', async ({ page }) => {
@@ -2446,6 +2509,7 @@ test('[P1] collapsed new-user templates gallery stays out of the keyboard tab or
     await route.continue();
   });
   await gotoEntryHome(page);
+  await skipWithoutHomeStarters(page);
 
   const body = page.locator('.home-templates-reveal__body');
   await expect(body).toHaveAttribute('inert', '');
@@ -2467,10 +2531,10 @@ test('[P1] collapsed new-user templates gallery stays out of the keyboard tab or
 });
 
 test('[P1] rail can be collapsed again on coarse-pointer / non-hover devices', async ({ page }) => {
-  // Emulate a touch device where `(hover: none)` matches: the collapse button
-  // can't be revealed by hover and the topbar toggle is display:none once the
-  // rail docks, so the rail must stay foldable through the always-visible
-  // collapse control. emulateMedia() doesn't cover `hover`, so use CDP.
+  // Emulate a touch device where `(hover: none)` matches. The rail has no
+  // in-rail collapse control, so folding must work through the pinned Home
+  // tab's toggle — which must stay tappable without any hover affordance.
+  // emulateMedia() doesn't cover `hover`, so use CDP.
   const cdp = await page.context().newCDPSession(page);
   await cdp.send('Emulation.setEmulatedMedia', {
     features: [
@@ -2482,31 +2546,193 @@ test('[P1] rail can be collapsed again on coarse-pointer / non-hover devices', a
   await gotoEntryHome(page);
   await ensureRailOpen(page);
 
-  // Without a hover, the collapse control must still be visible and tappable,
-  // and tapping it must actually fold the rail back.
-  const collapse = page.getByTestId('entry-nav-collapse');
-  await collapse.focus();
-  await expect(collapse).toBeVisible();
-  await collapse.click();
+  const toggle = page.getByTestId('workspace-home-rail-toggle');
+  await expect(toggle).toBeVisible();
+  await toggle.click();
   await expect(page.locator('.entry')).not.toHaveClass(/entry--rail-open/);
 });
 
-async function gotoEntryHome(page: Page) {
-  // The home surface re-renders (and can remount transient UI such as the
-  // templates reveal container or an open details modal) when the async
-  // projects list resolves. Arm the waiter before navigating and hold until
-  // that fetch settles so tests never interact inside the remount window.
-  const projectsSettled = page
-    .waitForResponse(
-      (response) =>
-        new URL(response.url()).pathname === '/api/projects' &&
-        response.request().method() === 'GET',
-      { timeout: 10_000 },
+interface WorkspaceContextRequestWitness {
+  workspaceId: string | null;
+  workspaceMemberId: string | null;
+}
+
+interface TabWorkspaceMockState {
+  activeWorkspaceId: string;
+}
+
+function tabWorkspaceContext(item: WorkspaceDirectoryItem): WorkspaceCollabContext {
+  return {
+    ...item,
+    billingState: item.workspaceType === 'team' ? 'active' : 'free',
+    planId: item.workspaceType === 'team' ? 'team_basic' : null,
+    providerMode: 'platform_credits',
+    seatSummary: {
+      seatLimit: item.workspaceType === 'team' ? 5 : 1,
+      usedSeats: 1,
+      availableSeats: item.workspaceType === 'team' ? 4 : 0,
+      isSeatFull: item.workspaceType !== 'team',
+    },
+    permissions: {
+      canManageMembers: true,
+      canManageBilling: true,
+      canInviteMembers: true,
+      canManageAutoRecharge: true,
+      canShareProjects: true,
+      canWriteSyncedFiles: true,
+      canViewWorkspaceSettings: true,
+      canManageSharedResources: true,
+    },
+    ...(item.workspaceType === 'team'
+      ? {
+          teamId: 'team-tab-atlas',
+          teamName: item.workspaceName,
+          workspaceSettingsUrl: 'https://example.invalid/team-tab-atlas',
+        }
+      : {}),
+  };
+}
+
+async function routeTabWorkspaceApi(
+  page: Page,
+  state: TabWorkspaceMockState,
+  contextRequests: WorkspaceContextRequestWitness[],
+): Promise<void> {
+  const directory = [TAB_PERSONAL_WORKSPACE, TAB_TEAM_WORKSPACE];
+
+  await page.route('**/api/workspace/directory', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.fallback();
+      return;
+    }
+    await route.fulfill({
+      json: {
+        items: directory,
+        activeWorkspaceId: state.activeWorkspaceId,
+      },
+    });
+  });
+
+  await page.route('**/api/workspace/context', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.fallback();
+      return;
+    }
+    const headers = route.request().headers();
+    const witness = {
+      workspaceId: headers['x-od-workspace-id'] ?? null,
+      workspaceMemberId: headers['x-od-workspace-member-id'] ?? null,
+    };
+    contextRequests.push(witness);
+    const selected = directory.find(
+      (item) =>
+        item.workspaceId === witness.workspaceId
+        && item.workspaceMemberId === witness.workspaceMemberId,
+    );
+    if (!selected) {
+      await route.fulfill({
+        status: 400,
+        json: { error: 'exact_workspace_scope_required' },
+      });
+      return;
+    }
+    await route.fulfill({ json: { context: tabWorkspaceContext(selected) } });
+  });
+
+  await page.route('**/api/workspace/active', async (route) => {
+    if (route.request().method() !== 'PUT') {
+      await route.fallback();
+      return;
+    }
+    const body = route.request().postDataJSON() as {
+      workspaceId?: unknown;
+      workspaceMemberId?: unknown;
+    };
+    const selected = directory.find(
+      (item) =>
+        item.workspaceId === body.workspaceId
+        && item.workspaceMemberId === body.workspaceMemberId,
+    );
+    if (!selected) {
+      await route.fulfill({
+        status: 400,
+        json: { error: 'exact_workspace_scope_required' },
+      });
+      return;
+    }
+    state.activeWorkspaceId = selected.workspaceId;
+    await route.fulfill({
+      json: {
+        activeWorkspaceId: selected.workspaceId,
+        context: tabWorkspaceContext(selected),
+      },
+    });
+  });
+}
+
+async function readTabWorkspaceSelection(page: Page): Promise<WorkspaceContextRequestWitness> {
+  return page.evaluate(() => {
+    const raw = JSON.parse(
+      window.sessionStorage.getItem('od.workspaceSelection.v1') ?? 'null',
+    ) as {
+      workspaceId?: unknown;
+      workspaceMemberId?: unknown;
+    } | null;
+    return {
+      workspaceId: typeof raw?.workspaceId === 'string' ? raw.workspaceId : null,
+      workspaceMemberId:
+        typeof raw?.workspaceMemberId === 'string' ? raw.workspaceMemberId : null,
+    };
+  });
+}
+
+async function refreshTabsInterleaved(
+  first: {
+    page: Page;
+    eventName: 'focus' | 'pageshow';
+    requests: WorkspaceContextRequestWitness[];
+  },
+  second: {
+    page: Page;
+    eventName: 'focus' | 'pageshow';
+    requests: WorkspaceContextRequestWitness[];
+  },
+): Promise<void> {
+  const firstCount = first.requests.length;
+  const secondCount = second.requests.length;
+  await expect
+    .poll(
+      async () => {
+        await Promise.all([
+          dispatchAmbientWorkspaceEvent(first.page, first.eventName),
+          dispatchAmbientWorkspaceEvent(second.page, second.eventName),
+        ]);
+        return {
+          first: first.requests.length > firstCount,
+          second: second.requests.length > secondCount,
+        };
+      },
+      { timeout: T.medium },
     )
-    .catch(() => null);
+    .toEqual({ first: true, second: true });
+}
+
+async function dispatchAmbientWorkspaceEvent(
+  page: Page,
+  eventName: 'focus' | 'pageshow',
+): Promise<void> {
+  await page.evaluate((name) => {
+    window.dispatchEvent(
+      name === 'pageshow'
+        ? new PageTransitionEvent('pageshow', { persisted: false })
+        : new Event('focus'),
+    );
+  }, eventName);
+}
+
+async function gotoEntryHome(page: Page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
-  await projectsSettled;
   const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
   if (await privacyDialog.isVisible()) {
     await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
@@ -2524,93 +2750,47 @@ async function gotoEntryHome(page: Page) {
   await expect(page.getByTestId('home-hero-input')).toBeVisible();
 }
 
-async function openInlineModelSwitcher(page: Page): Promise<Locator> {
-  const popover = page.getByTestId('inline-model-switcher-popover');
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    if (await popover.isVisible().catch(() => false)) {
-      return popover;
-    }
-    const pill = page.getByTestId('inline-model-switcher-chip');
-    await expect(pill).toBeVisible();
-    await expect(pill).toBeEnabled();
-    await pill.click();
-    try {
-      await expect(popover).toBeVisible({ timeout: 750 });
-      return popover;
-    } catch {
-      await pill.focus();
-      await page.keyboard.press('Enter');
-      try {
-        await expect(popover).toBeVisible({ timeout: 750 });
-        return popover;
-      } catch {
-        await page.waitForTimeout(100);
-      }
-    }
-  }
-  await expect(popover).toBeVisible();
-  return popover;
-}
+/**
+ * Home's starters gallery. #5517 removed both the scroll-up reveal
+ * (`HomeTemplatesReveal`, no longer rendered) and the gallery itself:
+ * `PluginsHomeSection` is only mounted by `PluginsView`, and the entry shell
+ * now renders `ExtensionsMarketplace` instead, so `plugins-home-section` is not
+ * on Home — or anywhere. Community browsing moved to `CommunityView`, which
+ * ships no test hooks.
+ *
+ * Rather than delete a dozen-plus specs for a capability that plausibly comes
+ * back, they self-skip while the surface is absent and light up again the
+ * moment `plugins-home-section` renders. If the gallery is NOT coming back,
+ * delete these specs outright rather than leaving them skipped forever.
+ */
+const HOME_STARTERS_MISSING =
+  'Home starters gallery (plugins-home-section) is not rendered after #5517; see revealHomeTemplates.';
 
-async function openInlineModelSwitcherSettingsDialog(page: Page): Promise<void> {
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    const popover = await openInlineModelSwitcher(page);
-    const settingsButton = popover.getByTestId('inline-model-switcher-open-settings');
-    await expect(settingsButton).toBeVisible();
-    try {
-      await settingsButton.click({ timeout: 5_000 });
-      await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5_000 });
-      return;
-    } catch {
-      if (await page.getByRole('dialog').isVisible().catch(() => false)) {
-        return;
-      }
-      await page.keyboard.press('Escape').catch(() => undefined);
-      await page.waitForTimeout(100);
-    }
-  }
-  const popover = await openInlineModelSwitcher(page);
-  await popover.getByTestId('inline-model-switcher-open-settings').click();
+/** Same guard as `revealHomeTemplates`, for specs that hit the gallery directly. */
+async function skipWithoutHomeStarters(page: Page) {
+  const section = page.getByTestId('entry-view-home').getByTestId('plugins-home-section');
+  test.skip((await section.count()) === 0, HOME_STARTERS_MISSING);
 }
 
 async function revealHomeTemplates(page: Page) {
   const home = page.locator('[data-testid="entry-view-home"][data-active="true"]');
   const section = home.getByTestId('plugins-home-section');
-  const reveal = home.locator('.home-templates-reveal');
-  const isRevealed = () =>
-    reveal.evaluate((node) => node.classList.contains('is-revealed')).catch(() => false);
-  // `HomeTemplatesReveal` keeps its revealed flag in component state, and the
-  // async projects fetch can remount it (or flip `enabled`) after we reveal,
-  // silently collapsing the gallery again. Reveal, then require the revealed
-  // state to survive a settle window before trusting it; retry on regression.
-  for (let attempt = 0; attempt < 4; attempt += 1) {
-    if (!(await reveal.count())) {
-      // Looks like pass-through mode, but the wrapper can mount late (React
-      // may still be processing the projects response and flip `enabled`
-      // right after we look). Hold one settle window and re-check; only a
-      // stable absence is really pass-through.
-      await page.waitForTimeout(600);
-      if (!(await reveal.count())) break;
-      continue;
+  test.skip((await section.count()) === 0, HOME_STARTERS_MISSING);
+  const hint = home.getByTestId('home-templates-hint');
+  if (await hint.count()) {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      if (await home.locator('.home-templates-reveal').evaluate((node) => node.classList.contains('is-revealed')).catch(() => false)) break;
+      await page.mouse.wheel(0, 900);
+      await page.waitForTimeout(120);
     }
-    const hint = home.getByTestId('home-templates-hint');
-    if (!(await isRevealed())) {
-      for (let wheel = 0; wheel < 3 && !(await isRevealed()); wheel += 1) {
-        await page.mouse.wheel(0, 900);
-        await page.waitForTimeout(120);
-      }
-      if (!(await isRevealed()) && (await hint.count())) {
-        await hint.scrollIntoViewIfNeeded();
-        await expect(hint).toBeVisible();
-        await hint.click();
-      }
+    if (!(await home.locator('.home-templates-reveal').evaluate((node) => node.classList.contains('is-revealed')).catch(() => false))) {
+      await hint.scrollIntoViewIfNeeded();
+      await expect(hint).toBeVisible();
+      await hint.click();
     }
-    await page.waitForTimeout(600);
-    if (await isRevealed()) break;
-  }
-  if (await reveal.count()) {
-    await expect(reveal).toHaveClass(/is-revealed/);
+    await expect(home.locator('.home-templates-reveal')).toHaveClass(/is-revealed/);
     await expect(home.locator('.home-templates-reveal__body')).not.toHaveAttribute('inert', '');
+    await page.waitForTimeout(450);
   }
   await expect(section).toBeVisible();
   await page.locator('.entry-main--scroll').evaluate((node) => {
@@ -2625,25 +2805,15 @@ async function openHomePluginDetails(
   name: RegExp,
   scopedHome = page.locator('[data-testid="entry-view-home"][data-active="true"]'),
 ) {
-  // Always walk the reveal path (it is idempotent when the templates are
-  // already expanded): a card inside the collapsed first-run reveal container
-  // still reports isVisible(), so gating the reveal on card visibility leaves
-  // the card without an actionable click point whenever the previous test in
-  // the worker left the home in its collapsed hero state.
-  await revealHomeTemplates(page);
-  const home = scopedHome;
-  const card = home.locator(`article.plugins-home__card[data-plugin-id="${pluginId}"]`).first();
+  let home = scopedHome;
+  let card = home.locator(`article.plugins-home__card[data-plugin-id="${pluginId}"]`).first();
+  if (!(await card.isVisible().catch(() => false))) {
+    home = await revealHomeTemplates(page);
+    card = home.locator(`article.plugins-home__card[data-plugin-id="${pluginId}"]`).first();
+  }
   await expect(card).toBeVisible();
-  const detailsButton = card.getByTestId(`plugins-home-details-${pluginId}`);
-  await expect(detailsButton).toBeVisible();
+  await clickCardAtActionablePoint(page, card);
   const dialog = page.getByRole('dialog').filter({ hasText: name });
-  await scrollCardIntoActionableView(card);
-  await expect
-    .poll(async () => {
-      return (await getActionablePoint(detailsButton).catch(() => null)) !== null;
-    }, { timeout: T.medium })
-    .toBe(true);
-  await detailsButton.dispatchEvent('click');
   await expect(dialog).toBeVisible();
   return dialog;
 }
@@ -2663,18 +2833,18 @@ async function clickCardAtActionablePoint(page: Page, card: Locator) {
   await scrollCardIntoActionableView(card);
   await expect
     .poll(async () => {
-      return (await getActionablePoint(card)) !== null;
+      return (await getCardActionablePoint(card)) !== null;
     }, { timeout: 5_000 })
     .toBe(true);
-  const point = await getActionablePoint(card);
+  const point = await getCardActionablePoint(card);
   if (!point) {
     throw new Error('Plugin card did not expose an actionable click point.');
   }
   await page.mouse.click(point.x, point.y);
 }
 
-async function getActionablePoint(target: Locator) {
-  return target.evaluate((element) => {
+async function getCardActionablePoint(card: Locator) {
+  return card.evaluate((element) => {
     const rect = element.getBoundingClientRect();
     const points = [
       { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 },

@@ -8,6 +8,7 @@ import {
   resolveRelativeAssetPath,
   rewriteInlinedCssAssetRefs,
   rewriteInlinedScriptAssetRefs,
+  rewriteProjectAssetRefsToRawUrls,
   rootRelativeProjectAssetPath,
 } from '../../src/components/file-viewer-preview-assets';
 
@@ -115,6 +116,18 @@ describe('collectPreviewAssetPaths', () => {
     ]);
   });
 
+  it('does not reinterpret an already rewritten raw API URL as a project path', () => {
+    const html = [
+      '<style>',
+      '@font-face {',
+      '  src: url("/api/projects/project-1/raw/fonts/inter.woff2?workspaceId=ws-1");',
+      '}',
+      '</style>',
+    ].join('\n');
+
+    expect(collectPreviewAssetPaths(html, 'brand.html', null)).toEqual([]);
+  });
+
   it('rejects external schemes, navigation links, and traversal refs', () => {
     const html = [
       '<img src="https://cdn.example.com/a.png">',
@@ -208,6 +221,35 @@ describe('normalizeRootRelativeProjectAssetRefs', () => {
       '<link rel="stylesheet" href="/api/projects/p1/raw/reference-assets/main.css">',
     ].join('\n');
     expect(normalizeRootRelativeProjectAssetRefs(html, 'index.html', files)).toBe(html);
+  });
+});
+
+describe('rewriteProjectAssetRefsToRawUrls', () => {
+  it('keeps explicit Workspace scope on relative font and image requests from srcDoc', () => {
+    const files = new Set([
+      'fonts/inter-variable-400.woff2',
+      'system/images/poster.png',
+    ]);
+    const scopedRawUrl = (path: string) =>
+      `/api/projects/p1/raw/${path}?workspaceId=ws-1&workspaceMemberId=member-1`;
+    const html = [
+      '<style>@font-face { src: url("../../fonts/inter-variable-400.woff2"); }</style>',
+      '<img src="../images/poster.png?v=2">',
+    ].join('');
+
+    const rewritten = rewriteProjectAssetRefsToRawUrls(
+      html,
+      'system/artifacts/poster.html',
+      files,
+      scopedRawUrl,
+    );
+
+    expect(rewritten).toContain(
+      'url("/api/projects/p1/raw/fonts/inter-variable-400.woff2?workspaceId=ws-1&workspaceMemberId=member-1")',
+    );
+    expect(rewritten).toContain(
+      'src="/api/projects/p1/raw/system/images/poster.png?workspaceId=ws-1&workspaceMemberId=member-1&v=2"',
+    );
   });
 });
 

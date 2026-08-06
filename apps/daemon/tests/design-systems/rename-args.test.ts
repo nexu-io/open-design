@@ -3,6 +3,20 @@ import { describe, expect, it } from 'vitest';
 import { parseDesignSystemRenameArgs } from '../../src/design-systems/rename-args.js';
 
 describe('parseDesignSystemRenameArgs', () => {
+  it('does not treat exact workspace flag values as the id or title', () => {
+    expect(parseDesignSystemRenameArgs([
+      'user:brand',
+      '--title',
+      'Renamed Brand',
+      '--workspace',
+      'workspace-a',
+      '--workspace-member',
+      'member-a',
+    ])).toEqual({
+      id: 'user:brand',
+      title: 'Renamed Brand',
+    });
+  });
   it('reads the id positional and the title from --title', () => {
     expect(parseDesignSystemRenameArgs(['user:acme', '--title', 'Acme v2'])).toEqual({
       id: 'user:acme',

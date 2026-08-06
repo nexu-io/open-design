@@ -39,6 +39,8 @@ import {
 import { readProcessStamp } from "@open-design/platform";
 
 import { createDesktopRuntime, type DesktopRuntime } from "./runtime.js";
+import { dispatchInviteDeeplink, registerInviteDeeplink } from "./invite-deeplink.js";
+import { focusDesktopForDeeplink } from "./deeplink-focus.js";
 import { setUpDesktopCrashReporter, writeDesktopGpuInfo } from "./crash-diagnostics.js";
 import { beginDesktopSession, clearReportedCrash, endDesktopSessionCleanly, markDesktopSessionRunning } from "./session-lifecycle.js";
 import {
@@ -104,7 +106,7 @@ export {
 const TOOLS_DEV_PARENT_PID_ENV = SIDECAR_ENV.TOOLS_DEV_PARENT_PID;
 const AMR_PROFILE_ENV_KEY = "OPEN_DESIGN_AMR_PROFILE";
 const AMR_PROFILE_AGENT_ID = "amr";
-const AMR_ENVIRONMENT_PROFILES = ["prod", "test", "local"] as const;
+const AMR_ENVIRONMENT_PROFILES = ["prod", "test", "feature-test", "local"] as const;
 const APP_CONFIG_CHANGED_IPC_CHANNEL = "od:app-config-changed";
 type AmrEnvironmentProfile = (typeof AMR_ENVIRONMENT_PROFILES)[number];
 type DesktopAppConfigPrefs = {
@@ -140,6 +142,27 @@ export function applyOsLocaleSwitch(electronApp: Electron.App): string {
   return osLocale;
 }
 
+/**
+ * Lift Chromium's hardcoded 6-connections-per-origin socket cap for the
+ * loopback hosts every Open Design renderer talks to (directly in dev,
+ * through the od:// proxy's main-process net.fetch when packaged).
+ *
+ * Long-lived SSE streams pin pool slots, and once the pool saturates,
+ * queued requests cannot even be aborted before a Response exists
+ * (electron/electron#47097), which deadlocked the packaged app until
+ * restart. `ignore-connections-limit` is Electron's own escape hatch:
+ * matching hosts get LOAD_IGNORE_LIMITS. Loopback-only, so the extra
+ * parallelism has no upstream cost.
+ *
+ * Must run before `app.whenReady()`; Chromium consumes the switch at
+ * network-service startup.
+ */
+export function applyLoopbackConnectionLimitSwitch(electronApp: Electron.App): void {
+  if (!electronApp.isReady()) {
+    electronApp.commandLine.appendSwitch("ignore-connections-limit", "127.0.0.1,localhost");
+  }
+}
+
 export type DesktopMainOptions = {
   beforeShutdown?: () => Promise<void>;
   onExternalShow?: () => void | Promise<void>;
@@ -154,9 +177,14 @@ export type DesktopMainOptions = {
    * Node fetch can hit.
    */
   discoverDaemonUrl?: () => Promise<string | null>;
+  /** Stable installed launcher used for Windows opendesign:// registration. */
+  inviteProtocolClientPath?: string | null;
   preloadPath?: string;
   windowTitle?: string;
-  onDesktopReady?: (controls: { show(): void }) => void;
+  onDesktopReady?: (controls: {
+    dispatchInviteDeeplink(url: string | null): void;
+    show(): void;
+  }) => void;
   /**
    * Optional pre-created splash window. The packaged entry creates it before
    * awaiting the daemon/web sidecars so the brand animation overlaps the cold
@@ -256,7 +284,9 @@ export function mergeAmrEnvironmentProfileConfig(
   profile: AmrEnvironmentProfile,
 ): DesktopAppConfigPrefs {
   if (!AMR_ENVIRONMENT_PROFILES.includes(profile)) {
-    throw new Error(`Unsupported AMR Environment Profile: ${String(profile)}`);
+    throw new Error(
+      `AMR Environment Profile must be prod, test, feature-test, or local: ${String(profile)}`,
+    );
   }
   const currentProfile = normalizeAmrEnvironmentProfile(
     config.agentCliEnv?.[AMR_PROFILE_AGENT_ID]?.[AMR_PROFILE_ENV_KEY],
@@ -680,6 +710,9 @@ export async function runDesktopMain(
   // its own `whenReady`; this call is then a no-op for the switch and
   // only recovers the locale string for the BrowserWindow below.
   const osLocale = applyOsLocaleSwitch(app);
+  // Same dev-vs-packaged split as the locale switch above: dev lands the
+  // switch here, packaged has already applied it pre-whenReady.
+  applyLoopbackConnectionLimitSwitch(app);
 
   await app.whenReady();
   configureAboutPanel(options);
@@ -868,6 +901,7 @@ export async function runDesktopMain(
             return activeDesktop.console();
           case SIDECAR_MESSAGES.SHOW:
             activeDesktop.show();
+            dispatchInviteDeeplink(request.input?.deeplinkUrl ?? null);
             notifyDesktopExternalShow(options.onExternalShow);
             return { accepted: true };
           case SIDECAR_MESSAGES.CLICK:
@@ -944,6 +978,7 @@ export async function runDesktopMain(
   }
   console.info("[open-design desktop] desktop runtime created");
   options.onDesktopReady?.({
+    dispatchInviteDeeplink,
     show: () => {
       void Promise.resolve(options.onExternalShow?.()).finally(() => desktop?.show());
     },
@@ -974,6 +1009,15 @@ export async function runDesktopMain(
   );
   removeDiagnosticsIpc = registerDesktopDiagnosticsIpc({
     discoverDaemonBaseUrl: resolveDaemonBaseUrl(runtime, options),
+  });
+  // Route opendesign:// team-invite deeplinks to the daemon (desktop wake-up).
+  registerInviteDeeplink({
+    resolveDaemonBaseUrl: resolveDaemonBaseUrl(runtime, options),
+    focus: () => focusDesktopForDeeplink(desktop),
+    onCompleted: (outcome) => {
+      console.info("[open-design desktop] invite deeplink continuation completed", outcome);
+    },
+    protocolClientPath: options.inviteProtocolClientPath,
   });
   const discoverUpdaterAppConfigBaseUrl = resolveDaemonBaseUrl(runtime, options);
   updateScheduler = createDesktopUpdaterScheduler(updater, {

@@ -146,6 +146,9 @@
           "path": "./SKILL.md"
         }
       ],
+      "craft": [
+        "typography"
+      ],
       "assets": [
         "./example.html"
       ]

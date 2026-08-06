@@ -17,6 +17,15 @@ describe('chat disclosure accessibility styles', () => {
     expect(declarations(toolsCss, '.op-status-category')).not.toMatch(/(?:^|\n)\s*color\s*:/);
   });
 
+  it('keeps the thinking accordion expandable in the compact current activity row', () => {
+    // The compact running row strips tool-card disclosures, but the thinking
+    // block's accordion must stay displayable so streamed reasoning can be
+    // expanded mid-run (incident recvqgLmAkUM6G). Hiding every
+    // .accordion-collapsible under the row regresses that.
+    expect(routinesCss).not.toMatch(/task-activity-current-row \.accordion-collapsible/);
+    expect(routinesCss).toContain('.app .task-activity-current-row .op-card .accordion-collapsible');
+  });
+
   it('keeps completed assistant controls discoverable without hover', () => {
     expect(composioCss).toContain('@media (hover: none) {\n  .assistant-footer { opacity: 1; }\n}');
     expect(routinesCss).toContain('@media (hover: none) {\n  .app .assistant-footer { opacity: 1; }\n}');

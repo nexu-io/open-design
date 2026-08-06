@@ -134,9 +134,12 @@ export interface RunUsageAnalytics {
   // (codex emits only a cumulative `turn.completed` usage, so its first-call
   // number is sourced from the rollout separately, not from these stream fields.)
   first_call_input_tokens?: number;
+  first_call_input_tokens_effective?: number;
   first_call_cache_read_input_tokens?: number;
+  first_call_cache_creation_input_tokens?: number;
   first_call_cache_hit_ratio?: number;
   cache_token_source: 'anthropic' | 'openai' | 'unavailable';
+  input_accounting_mode: 'inclusive' | 'additive' | 'unknown';
   token_count_source: 'provider_usage' | 'estimated' | 'unknown';
   agent_reported_model: string | null;
 }
@@ -453,6 +456,19 @@ function resolveEffectiveInputTokens(
   };
 }
 
+export function inputAccountingModeForUsage(
+  inputTokens: number | undefined,
+  cacheReadInputTokens: number | undefined,
+  cacheTokenSource: RunUsageAnalytics['cache_token_source'],
+): RunUsageAnalytics['input_accounting_mode'] {
+  if (inputTokens === undefined) return 'unknown';
+  if (cacheTokenSource === 'anthropic') return 'additive';
+  if (cacheTokenSource !== 'openai') return 'unknown';
+  return cacheReadInputTokens !== undefined && cacheReadInputTokens > inputTokens
+    ? 'additive'
+    : 'inclusive';
+}
+
 export function scanRunEventsForUsageAnalytics(
   events: RunEventForAnalyticsObservability[],
   reqBodyModel: unknown,
@@ -637,6 +653,11 @@ export function scanRunEventsForUsageAnalytics(
     firstCallCacheReadInputTokens !== undefined
       ? firstCallCacheReadInputTokens / firstCallInputEffective
       : undefined;
+  const inputAccountingMode = inputAccountingModeForUsage(
+    inputTokens,
+    cacheReadInputTokens,
+    cacheTokenSource,
+  );
 
   const { effectiveInput: inputTokensEffective, uncachedInput: uncachedInputTokens } =
     resolveEffectiveInputTokens(
@@ -689,13 +710,20 @@ export function scanRunEventsForUsageAnalytics(
     ...(firstCallInputTokens !== undefined
       ? { first_call_input_tokens: firstCallInputTokens }
       : {}),
+    ...(firstCallInputEffective !== undefined
+      ? { first_call_input_tokens_effective: firstCallInputEffective }
+      : {}),
     ...(firstCallInputTokens !== undefined && firstCallCacheReadInputTokens !== undefined
       ? { first_call_cache_read_input_tokens: firstCallCacheReadInputTokens }
+      : {}),
+    ...(firstCallInputTokens !== undefined && firstCallCacheCreationInputTokens !== undefined
+      ? { first_call_cache_creation_input_tokens: firstCallCacheCreationInputTokens }
       : {}),
     ...(firstCallCacheHitRatio !== undefined
       ? { first_call_cache_hit_ratio: firstCallCacheHitRatio }
       : {}),
     cache_token_source: cacheTokenSource,
+    input_accounting_mode: inputAccountingMode,
     token_count_source: haveProviderUsage ? 'provider_usage' : 'unknown',
     agent_reported_model: agentReportedModel,
   };

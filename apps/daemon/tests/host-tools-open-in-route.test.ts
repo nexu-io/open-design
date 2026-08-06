@@ -68,6 +68,7 @@ beforeAll(async () => {
       getProject: (_db: unknown, id: string) =>
         id === 'p1' ? { id, metadata: { baseDir: PROJECT_DIR } } : null,
     },
+    authorizeProjectRequest: async () => true,
     projectFiles: { resolveProjectDir: () => PROJECT_DIR },
   } as unknown as RegisterHostToolsRoutesDeps);
   server = app.listen(0);

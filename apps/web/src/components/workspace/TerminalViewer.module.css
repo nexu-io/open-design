@@ -227,13 +227,13 @@
 
 .loadingTitle {
   font-size: 14px;
-  font-weight: 650;
+  font-weight: 600;
   line-height: 1.35;
   color: var(--terminal-fg);
 }
 
 .loadingDescription {
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.45;
   color: var(--terminal-muted-fg);
 }
@@ -311,7 +311,7 @@
   align-items: center;
   gap: 10px;
   padding: 7px 14px;
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--terminal-muted-fg);
   background: var(--terminal-banner-bg);
   border-top: 1px solid var(--terminal-banner-border);
@@ -336,7 +336,7 @@
   color: var(--terminal-fg);
   background: var(--terminal-button-bg);
   border: 1px solid var(--terminal-button-border);
-  border-radius: 6px;
+  border-radius: var(--radius-medium, 4px);
   cursor: pointer;
   transition:
     background 200ms cubic-bezier(0.23, 1, 0.32, 1),

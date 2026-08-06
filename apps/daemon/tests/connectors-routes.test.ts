@@ -998,13 +998,23 @@ describe('connector routes', () => {
             ok: true,
             headers: new Headers({ 'content-type': 'image/png' }),
             arrayBuffer: async () => {
-              await new Promise((resolve) => setTimeout(resolve, 2_100));
-              if (!init?.signal) throw new Error('expected fetch timeout signal');
-              if (init.signal.aborted) {
-                firstBodyReadAborted = true;
-                throw (init.signal.reason ?? new DOMException('Aborted', 'AbortError'));
-              }
-              return Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+              const signal = init?.signal;
+              if (!signal) throw new Error('expected fetch timeout signal');
+              // Reject as soon as the route's AbortSignal fires (2s production
+              // timeout) instead of sleeping past it with a fixed wall clock.
+              // That preserves the cancellation assertion without adding a
+              // guaranteed multi-second wait to every CI run.
+              await new Promise<never>((_, reject) => {
+                const abort = () => {
+                  firstBodyReadAborted = true;
+                  reject(signal.reason ?? new DOMException('Aborted', 'AbortError'));
+                };
+                if (signal.aborted) {
+                  abort();
+                  return;
+                }
+                signal.addEventListener('abort', abort, { once: true });
+              });
             },
           } as unknown as Response;
         }

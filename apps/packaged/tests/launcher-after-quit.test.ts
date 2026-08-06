@@ -191,6 +191,7 @@ describe("inspectExistingDesktopForLauncher", () => {
       const paths = fakePaths(root);
 
       const result = await inspectExistingDesktopForLauncher("release-beta-win", {
+        deeplinkUrl: "opendesign://workspace/invite/continue?nonce=hot-delivery",
         incomingVersion,
         paths,
         requestIpc: (async (ipcPath: string, message: unknown, options?: { timeoutMs?: number }) => {
@@ -215,7 +216,10 @@ describe("inspectExistingDesktopForLauncher", () => {
         { type: SIDECAR_MESSAGES.STATUS },
         { type: SIDECAR_MESSAGES.STATUS },
         { type: SIDECAR_MESSAGES.STATUS },
-        { type: SIDECAR_MESSAGES.SHOW },
+        {
+          input: { deeplinkUrl: "opendesign://workspace/invite/continue?nonce=hot-delivery" },
+          type: SIDECAR_MESSAGES.SHOW,
+        },
       ]);
       const log = await readFile(join(root, "logs", "launcher", "after-quit.log"), "utf8");
       expect(log).toContain("inspect-found-existing namespace=release-beta-win focus=accepted");

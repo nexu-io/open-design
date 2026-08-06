@@ -47,7 +47,17 @@ runs:
           echo "enabled=true" >> "$GITHUB_OUTPUT"
           echo "path=$store_dir" >> "$GITHUB_OUTPUT"
         else
+          # Force a stable home store path so actions/cache version hashes match
+          # across fleets (hosted vs Nexu ARC). ARC may copy instead of hardlink;
+          # that is acceptable for cache hit stability.
+          store_dir="$HOME/.pnpm-store"
+          mkdir -p "$store_dir"
+          {
+            echo "NPM_CONFIG_STORE_DIR=$store_dir"
+            echo "npm_config_store_dir=$store_dir"
+          } >> "$GITHUB_ENV"
           echo "enabled=false" >> "$GITHUB_OUTPUT"
+          echo "path=$store_dir" >> "$GITHUB_OUTPUT"
         fi
 
     - name: Setup pnpm
@@ -73,6 +83,8 @@ runs:
       with:
         path: ${{ steps.pnpm-store.outputs.path }}
         key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+        restore-keys: |
+          pnpm-store-${{ runner.os }}-
 
     - name: Install dependencies
       shell: bash

@@ -8,6 +8,7 @@ import type {
   OpenDesignHostCaptureResult,
   OpenDesignHostFailure,
   OpenDesignHostProjectImportResult,
+  OpenDesignHostProjectImportInit,
   OpenDesignHostProjectReplaceWorkingDirResult,
   OpenDesignHostPickWorkingDirResult,
   OpenDesignHostUpdaterActionOptions,
@@ -178,7 +179,7 @@ type DesktopDiagnosticsExportResult =
 
 const project = {
   pickAndImport: (
-    init?: { name?: string; skillId?: string | null; designSystemId?: string | null },
+    init?: OpenDesignHostProjectImportInit,
   ): Promise<OpenDesignHostProjectImportResult> =>
     ipcRenderer.invoke('dialog:pick-and-import', init ?? null)
       .then(normalizeProjectImportResult)
@@ -308,6 +309,12 @@ const hostBridge = {
     type: 'desktop',
     platform: process.platform,
     ...(osLocale !== undefined ? { osLocale } : {}),
+  },
+  appearance: {
+    // Pin the native window appearance (macOS vibrancy glass material) to the
+    // app theme. Fire-and-forget: the main process validates the value.
+    setTheme: (theme: 'light' | 'dark' | 'system'): void =>
+      ipcRenderer.send('od:appearance:set-theme', theme),
   },
   shell,
   browser,

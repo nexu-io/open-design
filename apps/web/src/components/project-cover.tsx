@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react';
+import type { WorkspaceCollabContext } from '@open-design/contracts';
 import { projectFileUrl } from '../providers/registry';
 import type { ProjectFile } from '../types';
+import {
+  THUMBNAIL_OVERSCAN_MARGIN,
+  useThumbnailLoadSlot,
+} from '../lib/thumbnail-load-gate';
+import { useInView } from './plugins-home/useInView';
 
 export type ProjectCoverKind = 'html' | 'image' | 'video' | 'logo';
 
@@ -39,8 +45,13 @@ export function selectProjectFileCover(files: ProjectFile[]): ProjectCoverOverri
   return null;
 }
 
-export function projectCoverUrl(projectId: string, name: string, version?: number): string {
-  const url = projectFileUrl(projectId, name);
+export function projectCoverUrl(
+  projectId: string,
+  name: string,
+  version?: number,
+  workspaceContext?: WorkspaceCollabContext | null,
+): string {
+  const url = projectFileUrl(projectId, name, workspaceContext);
   if (!Number.isFinite(version) || version === undefined || version <= 0) return url;
   const separator = url.includes('?') ? '&' : '?';
   return `${url}${separator}v=${encodeURIComponent(String(Math.trunc(version)))}`;
@@ -61,9 +72,15 @@ export function HtmlProjectCoverFrame({
 }) {
   const [failed, setFailed] = useState(false);
   const [verified, setVerified] = useState(false);
+  // Cover work is deferred until the card is near the viewport, and the
+  // iframe document load itself is budgeted by the shared thumbnail gate so a
+  // large grid cannot saturate the daemon connection pool (Batch A §4.2).
+  const { ref: inViewRef, inView } = useInView<HTMLSpanElement>({
+    rootMargin: THUMBNAIL_OVERSCAN_MARGIN,
+  });
 
   useEffect(() => {
-    if (!src) {
+    if (!src || !inView) {
       setFailed(false);
       setVerified(false);
       return;
@@ -98,10 +115,18 @@ export function HtmlProjectCoverFrame({
       disposed = true;
       controller.abort();
     };
-  }, [src, diagnostic]);
+  }, [src, diagnostic, inView]);
 
-  if (!src || failed || !verified) {
-    return <span className={glyphClassName}>{initial}</span>;
+  const { canLoad, settle } = useThumbnailLoadSlot(
+    Boolean(src) && inView && verified && !failed,
+  );
+
+  if (!src || failed || !verified || !canLoad) {
+    return (
+      <span ref={inViewRef} className={glyphClassName}>
+        {initial}
+      </span>
+    );
   }
 
   return (
@@ -112,7 +137,9 @@ export function HtmlProjectCoverFrame({
       loading="lazy"
       sandbox="allow-scripts"
       tabIndex={-1}
+      onLoad={settle}
       onError={() => {
+        settle();
         console.warn('[project-cover] failed to load HTML cover:', diagnostic);
         setFailed(true);
       }}

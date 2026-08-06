@@ -10,7 +10,12 @@ export const DESIGN_SYSTEMS_USAGE = `Usage:
   od design-systems import-local <path>        Import a local project.
   od design-systems import-github <url>        Import a public GitHub repo.
   od design-systems import-shadcn <reference>  Import a shadcn registry item.
-  od design-systems rebuild-token-contract <id>  Start a token contract rebuild review.`;
+  od design-systems rebuild-token-contract <id>  Start a token contract rebuild review.
+
+Workspace options:
+  --workspace <id>         Exact Workspace for a bound design system.
+  --workspace-member <id>  Exact caller membership for a bound design system.
+                           Pass both together, or omit both for legacy local data.`;
 
 // `help`, `--help`, and `-h` all route to the usage text above. Without the
 // flag forms, `od design-systems --help` falls through to the generic library

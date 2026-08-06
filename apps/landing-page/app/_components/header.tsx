@@ -36,7 +36,7 @@ const CLOUD_API_BASE =
 const CLOUD_CONSOLE_URL =
   env.PUBLIC_CLOUD_CONSOLE_URL ??
   env.PUBLIC_AMR_CONSOLE_URL ??
-  'https://open-design.ai/cloud/wallet?source=open_design';
+  'https://open-design.ai/cloud/dashboard?source=open_design';
 
 // Solution → Use cases / Roles. Hrefs mirror upstream main's header 1:1 and
 // pair positionally with the localized `useCaseItems` / `roleItems` tuples.
@@ -280,7 +280,7 @@ export function Header({
                     </li>
                     <li>
                       <a
-                        href={href('/open-design-pugin/')}
+                        href={href('/codex-plugin/')}
                         className={active === 'open-design-plugin' ? 'is-active' : undefined}
                       >
                         <span className='dropdown-name'>Open Design Plugin</span>

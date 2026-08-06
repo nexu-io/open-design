@@ -125,6 +125,59 @@ describe('archive installer', () => {
     expect(row).toEqual({ source_kind: 'github', source: 'github:open-design/sample-plugin' });
   });
 
+  it('normalizes a browser GitHub repository URL through the GitHub installer', async () => {
+    const tarball = await buildFixtureTarball({ rootPrefix: 'sample-plugin-abc123' });
+    let urlSeen = '';
+    const fetcher: ArchiveFetcher = async (u) => {
+      urlSeen = u;
+      return makeFetcher(tarball)('');
+    };
+    let success = false;
+    let error: string | undefined;
+    for await (const ev of installPlugin(db, {
+      source: 'https://github.com/open-design/sample-plugin/',
+      roots: { userPluginsRoot: pluginsRoot },
+      fetcher,
+    })) {
+      if (ev.kind === 'success') success = true;
+      if (ev.kind === 'error') error = ev.message;
+    }
+    if (!success) {
+      throw new Error(`install failed: ${error}`);
+    }
+
+    expect(urlSeen).toBe('https://codeload.github.com/open-design/sample-plugin/tar.gz/HEAD');
+    const row = db.prepare(
+      `SELECT source_kind, source FROM installed_plugins WHERE id = 'sample-plugin'`,
+    ).get();
+    expect(row).toEqual({
+      source_kind: 'github',
+      source: 'github:open-design/sample-plugin',
+    });
+  });
+
+  it.each([
+    'https://github.com/open-design/sample-plugin/issues',
+    'https://github.com/open-design/sample-plugin/tree/main',
+    'https://github.com/open-design/sample-plugin?tab=readme',
+  ])('rejects a non-root GitHub browser URL before fetching it: %s', async (source) => {
+    let fetched = false;
+    let error: string | undefined;
+    for await (const ev of installPlugin(db, {
+      source,
+      roots: { userPluginsRoot: pluginsRoot },
+      fetcher: async () => {
+        fetched = true;
+        return makeResponse('should not fetch');
+      },
+    })) {
+      if (ev.kind === 'error') error = ev.message;
+    }
+
+    expect(fetched).toBe(false);
+    expect(error).toContain('repository root only');
+  });
+
   it('extracts a github source with a ref and plugin subpath', async () => {
     const fixtureSrc = path.join(__dirname, 'fixtures', 'plugin-fixtures', 'sample-plugin');
     const fixtureFiles = await readdir(fixtureSrc);

@@ -383,7 +383,7 @@ function FileWriteCard({
         <span className={`op-title${isRunning ? ' shimmer-text' : ''}`}>{t('tool.write')}</span>
         <span className="op-meta">{baseName}{lines !== null ? ` · ${t('tool.lines', { n: lines })}` : ''}</span>
         <span className="op-expand-chev" aria-hidden>
-          <Icon name={open ? "chevron-down" : "chevron-right"} size={11} />
+          <Icon name={open ? "chevron-down" : "chevron-right"} size={14} />
         </span>
       </button>
       <div className={`accordion-collapsible${open ? ' open' : ''}`}>
@@ -432,7 +432,7 @@ function FileEditCard({
         <span className={`op-title${isRunning ? ' shimmer-text' : ''}`}>{t('tool.edit')}</span>
         <span className="op-meta">{baseName} · {editCount} {editCount === 1 ? t('tool.changeSingular') : t('tool.changePlural')}</span>
         <span className="op-expand-chev" aria-hidden>
-          <Icon name={open ? "chevron-down" : "chevron-right"} size={11} />
+          <Icon name={open ? "chevron-down" : "chevron-right"} size={14} />
         </span>
       </button>
       <div className={`accordion-collapsible${open ? ' open' : ''}`}>
@@ -473,7 +473,7 @@ function FileReadCard({
         <span className={`op-title${isRunning ? ' shimmer-text' : ''}`}>{t('tool.read')}</span>
         <span className="op-meta">{baseName}</span>
         <span className="op-expand-chev" aria-hidden>
-          <Icon name={open ? "chevron-down" : "chevron-right"} size={11} />
+          <Icon name={open ? "chevron-down" : "chevron-right"} size={14} />
         </span>
       </button>
       <div className={`accordion-collapsible${open ? ' open' : ''}`}>
@@ -507,7 +507,7 @@ function BashCard({ input, result, runStreaming, runSucceeded }: { input: unknow
         <span className={`op-title${isRunning ? ' shimmer-text' : ''}`}>{t('tool.bash')}</span>
         {desc ? <span className="op-meta op-desc">{desc}</span> : null}
         <span className="op-expand-chev" aria-hidden>
-          <Icon name={open ? "chevron-down" : "chevron-right"} size={11} />
+          <Icon name={open ? "chevron-down" : "chevron-right"} size={14} />
         </span>
       </button>
       <div className={`accordion-collapsible${open ? ' open' : ''}`}>

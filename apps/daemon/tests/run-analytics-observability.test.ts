@@ -613,6 +613,7 @@ describe('scanRunEventsForUsageAnalytics', () => {
         output_tokens: 7,
         total_tokens: 19,
         cache_token_source: 'unavailable',
+        input_accounting_mode: 'unknown',
         token_count_source: 'provider_usage',
       },
     },
@@ -734,6 +735,7 @@ describe('scanRunEventsForUsageAnalytics', () => {
       uncached_input_tokens: 180,
       estimated_context_tokens: 220,
       cache_token_source: 'openai',
+      input_accounting_mode: 'inclusive',
       token_count_source: 'provider_usage',
       agent_reported_model: 'claude-opus-4-1',
     });
@@ -968,6 +970,7 @@ describe('scanRunEventsForUsageAnalytics', () => {
     expect(result).toEqual({
       total_tokens: 345,
       cache_token_source: 'unavailable',
+      input_accounting_mode: 'unknown',
       // Any real provider token field (including total-only) is provider_usage.
       token_count_source: 'provider_usage',
       agent_reported_model: null,
@@ -1031,6 +1034,7 @@ describe('scanRunEventsForUsageAnalytics', () => {
       cache_read_input_tokens: 33,
       cache_creation_input_tokens: 7,
       cache_token_source: 'openai',
+      input_accounting_mode: 'unknown',
       token_count_source: 'provider_usage',
       agent_reported_model: null,
     });
@@ -1045,6 +1049,7 @@ describe('scanRunEventsForUsageAnalytics', () => {
 
     expect(result).toEqual({
       cache_token_source: 'unavailable',
+      input_accounting_mode: 'unknown',
       token_count_source: 'unknown',
       agent_reported_model: null,
     });

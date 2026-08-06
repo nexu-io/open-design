@@ -78,18 +78,14 @@ function file(name: string, kind: ProjectFile['kind'], mtime: number): ProjectFi
 }
 
 describe('ChatPane starter prompts', () => {
-  it('shows four default starter prompts and fills the composer from a card', () => {
+  // #5517: an empty conversation renders a clean pane — no 开始一个对话 title
+  // and no starter template cards.
+  it('renders no starter title or example cards in an empty conversation', () => {
     renderPane({});
 
-    const starterCards = screen.getAllByRole('listitem');
-    expect(starterCards).toHaveLength(4);
-    expect(screen.getByText('chat.example1Title')).toBeTruthy();
-    expect(screen.getByText('chat.example2Title')).toBeTruthy();
-    expect(screen.getByText('chat.example3Title')).toBeTruthy();
-    expect(screen.getByText('chat.example4Title')).toBeTruthy();
-
-    fireEvent.click(screen.getByText('chat.example4Title').closest('button')!);
-    expect(composerMocks.setDraft).toHaveBeenCalledWith('chat.example4Prompt');
+    expect(screen.queryByText('chat.startTitle')).toBeNull();
+    expect(screen.queryByText('chat.example1Title')).toBeNull();
+    expect(document.querySelector('.chat-examples')).toBeNull();
   });
 });
 

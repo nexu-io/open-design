@@ -66,6 +66,7 @@ describe("desktop updater host boundary", () => {
     expect(clickStart).toBeGreaterThan(showStart);
     const showHandler = main.slice(showStart, clickStart);
     expect(showHandler).toContain("activeDesktop.show()");
+    expect(showHandler).toContain("dispatchInviteDeeplink(request.input?.deeplinkUrl ?? null)");
     expect(showHandler).toContain("notifyDesktopExternalShow(options.onExternalShow)");
     expect(showHandler.indexOf("activeDesktop.show()"))
       .toBeLessThan(showHandler.indexOf("notifyDesktopExternalShow(options.onExternalShow)"));

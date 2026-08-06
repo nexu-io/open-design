@@ -381,6 +381,9 @@ importers:
       shiki:
         specifier: 4.1.0
         version: 4.1.0
+      three:
+        specifier: 0.185.1
+        version: 0.185.1
     devDependencies:
       '@tailwindcss/postcss':
         specifier: 4.3.0
@@ -403,6 +406,9 @@ importers:
       '@types/react-dom':
         specifier: 18.3.7
         version: 18.3.7(@types/react@18.3.28)
+      '@types/three':
+        specifier: 0.185.1
+        version: 0.185.1
       jsdom:
         specifier: 29.1.1
         version: 29.1.1
@@ -804,8 +810,8 @@ importers:
         version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@24.12.2)(jsdom@29.1.1)(vite@7.3.3(@types/node@24.12.2)(jiti@2.6.1)(lightningcss@1.32.0)(tsx@4.22.3)(yaml@2.9.0))
     optionalDependencies:
       '@powerformer/vela-cli':
-        specifier: 0.0.27
-        version: 0.0.27
+        specifier: 0.0.28
+        version: 0.0.28
 
   tools/release:
     dependencies:
@@ -1166,6 +1172,9 @@ packages:
   '@develar/schema-utils@2.6.5':
     resolution: {integrity: sha512-0cp4PsWQ/9avqTVMCtZ+GirikIA36ikvjtHweU4/j8yLtgObI0+JUPhYFScgwlteveGB1rt3Cm8UhN04XayDig==}
     engines: {node: '>= 8.9.0'}
+
+  '@dimforge/rapier3d-compat@0.12.0':
+    resolution: {integrity: sha512-uekIGetywIgopfD97oDL5PfeezkFpNhwlzlaEYNOA0N6ghdsOvh/HYjSMek5Q2O1PYvRSDFcqFVJl4r4ZBwOow==}
 
   '@electron/asar@3.4.1':
     resolution: {integrity: sha512-i4/rNPRS84t0vSRa2HorerGRXWyF4vThfHesw0dmcWHp+cspK743UanA0suA5Q5y8kzY2y6YKrvbIUn69BCAiA==}
@@ -2044,33 +2053,33 @@ packages:
   '@posthog/types@1.374.2':
     resolution: {integrity: sha512-ZghQSFMi+HFJNPvPjBoyY/jWQ+q6mSQVtWQxOHMSbBidUZjsyYbxYxBFbHy2qWLNe4mEpX+Wqir2Q4I/4AVvJQ==}
 
-  '@powerformer/vela-cli-darwin-arm64@0.0.27':
-    resolution: {integrity: sha512-ipCV4yFi2Jj0vfu918gyF5xVd1HsHHZAmFiDZZEBglAwLF+gR5Vltvva7h26cO0fnAr8caS1182CyzqxJ9XsjQ==}
+  '@powerformer/vela-cli-darwin-arm64@0.0.28':
+    resolution: {integrity: sha512-CFJfjaG12xZ8Uw24irvYEe+rRPZiX2I+6MSP/5HN70gcHWz/bJLIuNBU0pVSMK27FETUwdk6r4vki6Wolb9RHQ==}
     cpu: [arm64]
     os: [darwin]
 
-  '@powerformer/vela-cli-darwin-x64@0.0.27':
-    resolution: {integrity: sha512-7vUugZMZfIZXqKubec/nuFY1gYVWubNu9Yo4+ImOctT5DiD5YS9RJE4ua2lMN/d51Bl9cxcV7qBFpt6n3+4f3w==}
+  '@powerformer/vela-cli-darwin-x64@0.0.28':
+    resolution: {integrity: sha512-tAQi3i7w7j0U30XuOeTC7nt6vjfXUK12Uq++7KSL0PxNAtJTbF/Oe5OydsVKS9MHEFw/s1AnuHc2DG0RWcpEwg==}
     cpu: [x64]
     os: [darwin]
 
-  '@powerformer/vela-cli-linux-arm64@0.0.27':
-    resolution: {integrity: sha512-EzZcRhDALS++qBgJ8LHBOdAB6M9yejDO35j+wChokkAVQzrYUMAe+z9lN7DZycQro6LSlJ1x22MYrVSI/uWKLQ==}
+  '@powerformer/vela-cli-linux-arm64@0.0.28':
+    resolution: {integrity: sha512-cRo4iIWBYRx9LYD2v5MdccgyU0Pqa0uNrdfGqgGsPqznY+CQPEuxOkpQiFOomH8l8waHYBsbkpUE/JtkqVWBUA==}
     cpu: [arm64]
     os: [linux]
 
-  '@powerformer/vela-cli-linux-x64@0.0.27':
-    resolution: {integrity: sha512-OJsRIBQm+1VOhW7Su+j7dzr0/SJLd3KfIbA+TFbDK6OEPWAbamrbfVrFi1O7UCKOAHF//du8n1R6fbYuUHE1Ng==}
+  '@powerformer/vela-cli-linux-x64@0.0.28':
+    resolution: {integrity: sha512-+b6CykVp82WIAC7vkQTEmcU5cQ8Am9C1cZh7CblHHTTD7Y7C+JTYEEQgoPlD2iu59UJr9RjIkWF9PsDcgaMR/A==}
     cpu: [x64]
     os: [linux]
 
-  '@powerformer/vela-cli-win32-x64@0.0.27':
-    resolution: {integrity: sha512-fXSDkX8P5CTPF2V2QGrjOzvApsZA+7deG6YZSy50mSYbpn/5XQKyb6A5IohfeO3sLCyTtTtmQGaTHZ50xplLnQ==}
+  '@powerformer/vela-cli-win32-x64@0.0.28':
+    resolution: {integrity: sha512-jc/SCPViA4Uiktzae2XboHCl77V5FKbMzCIf2Dt0o7K0zlz3Kl2kbWVvBzm/0QDUKtzzrNIPliC9Wa+vVUQplA==}
     cpu: [x64]
     os: [win32]
 
-  '@powerformer/vela-cli@0.0.27':
-    resolution: {integrity: sha512-CsFglJVJtlpdfg1RNYIcoghIpwK4Q7SgqhC47f+DSW3401vy6j411hTE7BuA5LdZMjYlZF089O1pPCOzVpQmLg==}
+  '@powerformer/vela-cli@0.0.28':
+    resolution: {integrity: sha512-CZRKK/e/jm63cxM/DqxiegmzWil2od6q1aNmTRq3WCjDz8vTSby72qzD9R4akILLK7oOMXe99t7mOfzySTKlCQ==}
     hasBin: true
 
   '@preact/signals-core@1.14.2':
@@ -2729,6 +2738,9 @@ packages:
       '@types/react-dom':
         optional: true
 
+  '@tweenjs/tween.js@23.1.3':
+    resolution: {integrity: sha512-vJmvvwFxYuGnF2axRtPYocag6Clbb5YS7kLL+SO/TeVFzHqDIWrNKYtcsPMibjDx9O+bu+psAy9NKfWklassUA==}
+
   '@types/aria-query@5.0.4':
     resolution: {integrity: sha512-rfT93uj5s0PRL7EzccGMs3brplhcrghnDoV26NqKhCAS1hVo+WdNsPvE/yb6ilfr5hi2MEk6d5EWJTKdxg8jVw==}
 
@@ -2947,6 +2959,12 @@ packages:
   '@types/serve-static@2.2.0':
     resolution: {integrity: sha512-8mam4H1NHLtu7nmtalF7eyBH14QyOASmcxHhSfEoRyr0nP/YdoesEtU+uSRvMe96TW/HPTtkoKqQLl53N7UXMQ==}
 
+  '@types/stats.js@0.17.4':
+    resolution: {integrity: sha512-jIBvWWShCvlBqBNIZt0KAshWpvSjhkwkEu4ZUcASoAvhmrgAUI2t1dXrjSL4xXVLB4FznPrIsX3nKXFl/Dt4vA==}
+
+  '@types/three@0.185.1':
+    resolution: {integrity: sha512-db1xTb+EgYF2didW+eudSvVPtn75zo+fGsY8ShQrJY/B5ZBmC2Fiaykv3aImHAlCNEGuMPkPGXBJGLwzu5mC7A==}
+
   '@types/tough-cookie@4.0.5':
     resolution: {integrity: sha512-/Ad8+nIOV7Rl++6f1BdKxFSMgmoqEoYbHRpPcx3JEfv8VRsQe9Z4mCXeJBzxs7mbHY/XOZZuXlRNfhpVPbs6ZA==}
 
@@ -2958,6 +2976,9 @@ packages:
 
   '@types/verror@1.10.11':
     resolution: {integrity: sha512-RlDm9K7+o5stv0Co8i8ZRGxDbrTxhJtgjqjFyVh/tXQyl/rYtTKlnTvZ88oSTeYREWurwx20Js4kTuKCsFkUtg==}
+
+  '@types/webxr@0.5.24':
+    resolution: {integrity: sha512-h8fgEd/DpoS9CBrjEQXR+dIDraopAEfu4wYVNY2tEPwk60stPWhvZMf4Foo5FakuQ7HFZoa8WceaWFervK2Ovg==}
 
   '@types/yauzl@2.10.3':
     resolution: {integrity: sha512-oJoftv0LSuaDZE3Le4DbKX+KS9G36NzOeSap90UIK0yMA/NhKJhqlSGtNDORNRaIbQfzjXDrQa0ytJ6mNRGz/Q==}
@@ -4788,6 +4809,9 @@ packages:
   mermaid@11.16.0:
     resolution: {integrity: sha512-Zvm3kbstgdpvIJPPItlL7fppIZ3kibvc1oZIGxdvk9t6UFz6flv+Jw7FtRGKwfcI8OckmH04LqG6LlS6X4B1pA==}
 
+  meshoptimizer@1.1.1:
+    resolution: {integrity: sha512-oRFNWJRDA/WTrVj7NWvqa5HqE1t9MYDj2VaWirQCzCCrAd2GHrqR/sQezCxiWATPNlKTcRaPRHPJwIRoPBAp5g==}
+
   micromark-core-commonmark@2.0.3:
     resolution: {integrity: sha512-RDBrHEMSxVFLg6xvnXmb1Ayr2WzLAWjeSATAoxwKYJV94TeNavgoIdA0a9ytzDSVzBy2YKFK+emCPOEibLeCrg==}
 
@@ -5880,6 +5904,9 @@ packages:
 
   text-segmentation@1.0.3:
     resolution: {integrity: sha512-iOiPUo/BGnZ6+54OsWxZidGCsdU8YbE4PSpdPinp7DeMtUJNJBoJ/ouUSTJjHkh1KntHaltHl/gDs2FC4i5+Nw==}
+
+  three@0.185.1:
+    resolution: {integrity: sha512-5aojFCXKwnjBRZvUnt3WFfEcvUJgkN5LlijRFN95hMy8WVkG4I0QNcJE+OuWvuJ0bOdStrbfXn0pkd6/QyiAlg==}
 
   tiny-async-pool@1.3.0:
     resolution: {integrity: sha512-01EAw5EDrcVrdgyCLgoSPvqznC0sVxDSVeiOz09FUpjh71G79VCqneOr+xvt7T1r76CF6ZZfPjHorN2+d+3mqA==}
@@ -7048,6 +7075,8 @@ snapshots:
       ajv: 6.15.0
       ajv-keywords: 3.5.2(ajv@6.15.0)
 
+  '@dimforge/rapier3d-compat@0.12.0': {}
+
   '@electron/asar@3.4.1':
     dependencies:
       commander: 5.1.0
@@ -7882,28 +7911,28 @@ snapshots:
 
   '@posthog/types@1.374.2': {}
 
-  '@powerformer/vela-cli-darwin-arm64@0.0.27':
+  '@powerformer/vela-cli-darwin-arm64@0.0.28':
     optional: true
 
-  '@powerformer/vela-cli-darwin-x64@0.0.27':
+  '@powerformer/vela-cli-darwin-x64@0.0.28':
     optional: true
 
-  '@powerformer/vela-cli-linux-arm64@0.0.27':
+  '@powerformer/vela-cli-linux-arm64@0.0.28':
     optional: true
 
-  '@powerformer/vela-cli-linux-x64@0.0.27':
+  '@powerformer/vela-cli-linux-x64@0.0.28':
     optional: true
 
-  '@powerformer/vela-cli-win32-x64@0.0.27':
+  '@powerformer/vela-cli-win32-x64@0.0.28':
     optional: true
 
-  '@powerformer/vela-cli@0.0.27':
+  '@powerformer/vela-cli@0.0.28':
     optionalDependencies:
-      '@powerformer/vela-cli-darwin-arm64': 0.0.27
-      '@powerformer/vela-cli-darwin-x64': 0.0.27
-      '@powerformer/vela-cli-linux-arm64': 0.0.27
-      '@powerformer/vela-cli-linux-x64': 0.0.27
-      '@powerformer/vela-cli-win32-x64': 0.0.27
+      '@powerformer/vela-cli-darwin-arm64': 0.0.28
+      '@powerformer/vela-cli-darwin-x64': 0.0.28
+      '@powerformer/vela-cli-linux-arm64': 0.0.28
+      '@powerformer/vela-cli-linux-x64': 0.0.28
+      '@powerformer/vela-cli-win32-x64': 0.0.28
     optional: true
 
   '@preact/signals-core@1.14.2': {}
@@ -8508,6 +8537,8 @@ snapshots:
       '@types/react': 18.3.28
       '@types/react-dom': 18.3.7(@types/react@18.3.28)
 
+  '@tweenjs/tween.js@23.1.3': {}
+
   '@types/aria-query@5.0.4': {}
 
   '@types/better-sqlite3@7.6.13':
@@ -8782,6 +8813,17 @@ snapshots:
       '@types/http-errors': 2.0.5
       '@types/node': 24.12.2
 
+  '@types/stats.js@0.17.4': {}
+
+  '@types/three@0.185.1':
+    dependencies:
+      '@dimforge/rapier3d-compat': 0.12.0
+      '@tweenjs/tween.js': 23.1.3
+      '@types/stats.js': 0.17.4
+      '@types/webxr': 0.5.24
+      fflate: 0.8.3
+      meshoptimizer: 1.1.1
+
   '@types/tough-cookie@4.0.5': {}
 
   '@types/trusted-types@2.0.7':
@@ -8791,6 +8833,8 @@ snapshots:
 
   '@types/verror@1.10.11':
     optional: true
+
+  '@types/webxr@0.5.24': {}
 
   '@types/yauzl@2.10.3':
     dependencies:
@@ -11033,6 +11077,8 @@ snapshots:
       ts-dedent: 2.3.0
       uuid: 14.0.1
 
+  meshoptimizer@1.1.1: {}
+
   micromark-core-commonmark@2.0.3:
     dependencies:
       decode-named-character-reference: 1.3.0
@@ -12348,6 +12394,8 @@ snapshots:
     dependencies:
       utrie: 1.0.2
     optional: true
+
+  three@0.185.1: {}
 
   tiny-async-pool@1.3.0:
     dependencies:
