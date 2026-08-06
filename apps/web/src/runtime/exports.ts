@@ -424,6 +424,34 @@ export type PreviewAnchorResponse = {
  * over the frame-relative position, never a prerequisite for sending an
  * annotation.
  */
+/**
+ * Bridge replies cross an origin boundary — treat them as data, not as typed
+ * objects. A malformed or forged entry (null, missing selector, NaN box)
+ * would otherwise throw inside the anchor chooser and abort the send, even
+ * though anchoring is documented as best-effort. Invalid entries are dropped;
+ * a reply that is not an array at all counts as answered-empty.
+ */
+function sanitizeAnchorTargets(value: unknown): PreviewAnchorTarget[] {
+  if (!Array.isArray(value)) return [];
+  const targets: PreviewAnchorTarget[] = [];
+  for (const item of value) {
+    if (item == null || typeof item !== 'object') continue;
+    const t = item as { elementId?: unknown; selector?: unknown; position?: unknown };
+    if (typeof t.elementId !== 'string' || t.elementId.length === 0) continue;
+    if (typeof t.selector !== 'string' || t.selector.length === 0) continue;
+    const p = t.position as { x?: unknown; y?: unknown; width?: unknown; height?: unknown } | null;
+    if (p == null || typeof p !== 'object') continue;
+    const { x, y, width, height } = p;
+    if (![x, y, width, height].every((n) => typeof n === 'number' && Number.isFinite(n))) continue;
+    targets.push({
+      elementId: t.elementId,
+      selector: t.selector,
+      position: { x: x as number, y: y as number, width: width as number, height: height as number },
+    });
+  }
+  return targets;
+}
+
 export function requestPreviewAnchorTargets(
   iframe: HTMLIFrameElement,
   timeout = 1500,
@@ -445,7 +473,7 @@ export function requestPreviewAnchorTargets(
       if (!d || d.type !== 'od:mark-anchor-targets' || d.id !== id) return;
       finish({
         answered: true,
-        targets: Array.isArray(d.targets) ? (d.targets as PreviewAnchorTarget[]) : [],
+        targets: sanitizeAnchorTargets(d.targets),
       });
     }
     window.addEventListener('message', onMsg);

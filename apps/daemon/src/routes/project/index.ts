@@ -955,23 +955,32 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
       // the visible element the user actually marked and drag the annotation
       // onto hidden content on reflow. Mirrors the srcDoc bridge's
       // elementVisibleForComment gate.
+      // Lean enumerator: anchoring needs only elementId/selector/position for
+      // annotated nodes, and this runs on the 32ms scroll pacing — walking
+      // targetFrom()'s full comment payload (text, htmlHint, computed style)
+      // per node made large artifacts jank during a scroll gesture. Capped so
+      // a pathological document bounds the walk; visibility-filtered so a
+      // hidden nested panel cannot out-rank the visible element the user
+      // marked. Keep in sync with the srcDoc bridge.
       var markTargets = [];
       try {
-        var found = allTargets();
-        for (var mi = 0; mi < found.length; mi++) {
-          var anchorEl = null;
-          try { anchorEl = document.querySelector(found[mi].selector); } catch (_) { anchorEl = null; }
-          if (!anchorEl) continue;
-          var anchorPos = found[mi].position;
-          if (!anchorPos || anchorPos.width <= 0 || anchorPos.height <= 0) continue;
+        var anchorNodes = document.querySelectorAll('[data-od-id], [data-screen-label]');
+        var anchorCap = Math.min(anchorNodes.length, 1500);
+        for (var mi = 0; mi < anchorCap; mi++) {
+          var anchorEl = anchorNodes[mi];
+          var anchorSel = annotatedSelectorFor(anchorEl);
+          var anchorId = anchorEl.getAttribute('data-od-id') || anchorEl.getAttribute('data-screen-label');
+          if (!anchorSel || !anchorId) continue;
+          var anchorRect = anchorEl.getBoundingClientRect();
+          if (!anchorRect || anchorRect.width <= 0 || anchorRect.height <= 0) continue;
           try {
             var anchorCs = window.getComputedStyle(anchorEl);
             if (anchorCs.display === 'none' || anchorCs.visibility === 'hidden' || Number(anchorCs.opacity) === 0) continue;
           } catch (_) {}
           markTargets.push({
-            elementId: found[mi].elementId,
-            selector: found[mi].selector,
-            position: found[mi].position
+            elementId: String(anchorId),
+            selector: anchorSel,
+            position: { x: Math.round(anchorRect.x), y: Math.round(anchorRect.y), width: Math.round(anchorRect.width), height: Math.round(anchorRect.height) }
           });
         }
       } catch (_) {

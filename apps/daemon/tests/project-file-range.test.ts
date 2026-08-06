@@ -489,7 +489,13 @@ describe('GET /api/projects/:id/raw/* range request route', () => {
     expect(anchorHandler).toContain("visibility === 'hidden'");
     expect(anchorHandler).toContain("display === 'none'");
     expect(anchorHandler).toContain('Number(anchorCs.opacity) === 0');
-    expect(anchorHandler).toContain('anchorPos.width <= 0');
+    expect(anchorHandler).toContain('anchorRect.width <= 0');
+    // The probe walker is lean and bounded: it queries only annotated nodes
+    // and caps the walk, instead of reusing the full comment-payload
+    // enumerator on every 32ms scroll probe.
+    expect(anchorHandler).toContain("querySelectorAll('[data-od-id], [data-screen-label]')");
+    expect(anchorHandler).toContain('Math.min(anchorNodes.length, 1500)');
+    expect(anchorHandler).not.toContain('allTargets()');
   });
 
   it('injects the URL preview snapshot bridge only when requested', async () => {

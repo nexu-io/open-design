@@ -2351,14 +2351,27 @@ function meaningfulDomFallbackTarget(el) {
       // exception would read as a healthy empty document and pin marks
       // frame-relative. Keep in sync with the URL bridge in
       // apps/daemon/src/routes/project/index.ts.
+      // Lean, capped, visibility-filtered enumerator — see the URL bridge in
+      // apps/daemon/src/routes/project/index.ts for rationale; keep in sync.
       var markTargets = [];
       try {
-        var found = allTargets();
-        for (var mi = 0; mi < found.length; mi++) {
+        var anchorNodes = document.querySelectorAll('[data-od-id], [data-screen-label]');
+        var anchorCap = Math.min(anchorNodes.length, 1500);
+        for (var mi = 0; mi < anchorCap; mi++) {
+          var anchorEl = anchorNodes[mi];
+          var anchorSel = annotatedSelectorFor(anchorEl);
+          var anchorId = anchorEl.getAttribute('data-od-id') || anchorEl.getAttribute('data-screen-label');
+          if (!anchorSel || !anchorId) continue;
+          var anchorRect = anchorEl.getBoundingClientRect();
+          if (!anchorRect || anchorRect.width <= 0 || anchorRect.height <= 0) continue;
+          try {
+            var anchorCs = window.getComputedStyle(anchorEl);
+            if (anchorCs.display === 'none' || anchorCs.visibility === 'hidden' || Number(anchorCs.opacity) === 0) continue;
+          } catch (_) {}
           markTargets.push({
-            elementId: found[mi].elementId,
-            selector: found[mi].selector,
-            position: found[mi].position
+            elementId: String(anchorId),
+            selector: anchorSel,
+            position: { x: Math.round(anchorRect.x), y: Math.round(anchorRect.y), width: Math.round(anchorRect.width), height: Math.round(anchorRect.height) }
           });
         }
       } catch (_) {
