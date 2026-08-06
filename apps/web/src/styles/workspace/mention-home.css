@@ -2036,12 +2036,29 @@
   flex-wrap: wrap;
   gap: 8px;
 }
-.settings-test-btn {
+/* Text CTA (测试 / 重新测试): outline pill — same chrome as
+   `.agent-card-test-btn` (CLI cards). Not a square `icon-btn`. */
+button.settings-test-btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   min-width: 64px;
+  height: 36px;
+  padding: 0 18px;
   justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill, 999px);
+  background: var(--bg-panel);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: none;
+}
+button.settings-test-btn:hover:not(:disabled),
+button.settings-test-btn:focus-visible:not(:disabled) {
+  background: color-mix(in srgb, var(--accent-tint) 58%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+  color: var(--accent-strong);
 }
 .settings-test-btn.loading {
   border-color: var(--accent-soft);

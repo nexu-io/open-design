@@ -2619,24 +2619,10 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
 .settings-byok-ready {
   color: var(--text-muted);
 }
-.settings-section-byok .settings-test-btn,
-.settings-section-byok .settings-test-btn.loading {
-  border-color: var(--selected);
-  background: var(--selected);
-  color: #fff;
-  box-shadow:
-    0 0 0 3px var(--selected-soft),
-    0 1px 2px color-mix(in srgb, var(--selected) 22%, transparent);
-}
-.settings-section-byok .settings-test-btn:hover:not(:disabled),
-.settings-section-byok .settings-test-btn:focus-visible:not(:disabled) {
-  border-color: color-mix(in srgb, var(--selected) 82%, var(--text-strong));
-  background: color-mix(in srgb, var(--selected) 88%, var(--text-strong));
-  color: #fff;
-}
+/* BYOK "测试" uses the shared outline-pill `.settings-test-btn` chrome
+   (same as Local CLI agent cards). Do not restyle it as a filled primary. */
 .settings-section-byok .settings-test-btn:disabled {
   opacity: 0.72;
-  color: #fff;
 }
 .settings-memory-summary-value {
   color: var(--text-muted);

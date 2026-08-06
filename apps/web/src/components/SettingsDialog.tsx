@@ -4950,7 +4950,7 @@ export function SettingsDialog({
                                   <button
                                     type="button"
                                     className={
-                                      'ghost icon-btn settings-test-btn agent-card-test-btn' +
+                                      'ghost settings-test-btn agent-card-test-btn' +
                                       (running ? ' loading' : '')
                                     }
                                     onClick={() => void handleTestAgent()}
@@ -5025,7 +5025,7 @@ export function SettingsDialog({
                                         <div className="settings-test-actions-row">
                                           <button
                                             type="button"
-                                            className="ghost icon-btn settings-test-btn"
+                                            className="ghost settings-test-btn"
                                             onClick={() => void handleTestAgent()}
                                           >
                                             <Icon name="reload" size={13} />

@@ -76,7 +76,7 @@ export function ByokConnectionTestControl({
         <button
           type="button"
           className={
-            'ghost icon-btn settings-test-btn' +
+            'settings-test-btn' +
             (providerTestState.status === 'running' ? ' loading' : '')
           }
           onClick={() => void onTestProvider()}
