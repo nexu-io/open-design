@@ -26,6 +26,7 @@ This file is the single source of truth for agents entering this repository. Rea
 - `packages/contracts` is the pure TypeScript web/daemon app contract layer.
 - `packages/closure-proto` owns shell-neutral headless-closure candidate identity, local binding, artifact integrity, and shell compatibility declarations.
 - `packages/closure-store` owns shell-neutral materialized Closure verification plus channel/namespace-scoped active, attempt, and last-successful state.
+- `packages/closure-update` owns shell-neutral release-candidate selection and Closure update orchestration; shells supply platform, paths, and scheduling.
 - `packages/headless-runtime` owns reusable Headless lifecycle primitives shared by the Headless app and launcher adapters.
 - `packages/sidecar-proto` owns the Open Design sidecar business protocol; `packages/sidecar` owns the generic sidecar runtime; `packages/platform` owns generic OS process primitives.
 - `tools/dev` is the local development lifecycle control plane.

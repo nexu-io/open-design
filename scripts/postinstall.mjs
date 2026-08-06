@@ -23,6 +23,7 @@ const buildTargets = [
   "packages/launcher-proto",
   "packages/sidecar",
   "packages/closure-store",
+  "packages/closure-update",
   "packages/diagnostics",
   "packages/dsh-runtime",
   "apps/daemon",

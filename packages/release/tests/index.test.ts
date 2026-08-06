@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   formatReleaseVersion,
   compareReleaseBaseVersions,
+  compareReleaseVersions,
   parseReleaseBaseVersion,
   parseReleaseVersion,
   releaseChannelDescriptor,
@@ -30,6 +31,13 @@ describe("@open-design/release", () => {
     expect(compareReleaseBaseVersions([1, 2, 4], [1, 2, 3])).toBe(1);
     expect(compareReleaseBaseVersions([1, 2, 3], [1, 2, 3])).toBe(0);
     expect(compareReleaseBaseVersions([1, 2, 3], [1, 3, 0])).toBe(-1);
+  });
+
+  it("orders complete release versions within one channel", () => {
+    expect(compareReleaseVersions("1.2.4-beta.1", "1.2.3-beta.99", "beta")).toBe(1);
+    expect(compareReleaseVersions("1.2.3-beta.10", "1.2.3-beta.9", "beta")).toBe(1);
+    expect(compareReleaseVersions("1.2.3-beta.9", "1.2.3-beta.9", "beta")).toBe(0);
+    expect(compareReleaseVersions("1.2.3", "1.2.4", "stable")).toBe(-1);
   });
 
   it("derives metadata fields from the channel descriptor", () => {

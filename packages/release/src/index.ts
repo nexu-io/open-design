@@ -196,6 +196,27 @@ export function compareReleaseBaseVersions(left: ReleaseBaseVersionTuple, right:
   return 0;
 }
 
+export function compareReleaseVersions(
+  left: string,
+  right: string,
+  channel: ReleaseChannel,
+): number {
+  const parsedLeft = parseReleaseVersion(left, channel);
+  const parsedRight = parseReleaseVersion(right, channel);
+  const leftBase = parseReleaseBaseVersion(parsedLeft.baseVersion);
+  const rightBase = parseReleaseBaseVersion(parsedRight.baseVersion);
+  if (leftBase == null || rightBase == null) {
+    throw new Error(`release version base could not be compared: ${left} vs ${right}`);
+  }
+  const baseComparison = compareReleaseBaseVersions(leftBase, rightBase);
+  if (baseComparison !== 0) return baseComparison;
+  if (parsedLeft.channel === "stable" && parsedRight.channel === "stable") return 0;
+  if (parsedLeft.channel === "stable" || parsedRight.channel === "stable") {
+    throw new Error(`release channel mismatch while comparing ${left} and ${right}`);
+  }
+  return Math.sign(parsedLeft.number - parsedRight.number);
+}
+
 export function parseReleaseVersion(value: string, channel: ReleaseChannel): ParsedReleaseVersion {
   if (channel === "stable") {
     const parsed = parseStableReleaseVersion(value);
