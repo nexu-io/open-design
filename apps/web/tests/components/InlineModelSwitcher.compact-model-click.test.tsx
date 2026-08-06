@@ -125,7 +125,8 @@ function chipText(): string {
 }
 
 function openSwitcher(): HTMLElement {
-  fireEvent.click(screen.getByTestId('inline-model-switcher-chip'));
+  const modelSeg = screen.queryByTestId('inline-model-switcher-chip-model');
+  fireEvent.click(modelSeg ?? screen.getByTestId('inline-model-switcher-chip'));
   return screen.getByTestId('inline-model-switcher-popover');
 }
 

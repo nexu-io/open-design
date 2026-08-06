@@ -1,12 +1,11 @@
-// InlineModelSwitcher — top-bar chip exposing CLI/BYOK + model picker.
+// InlineModelSwitcher — top-bar / home-composer chip for CLI/BYOK + model.
 //
-// Lives in the entry view's sticky top-bar so users can swap between a
-// local CLI and BYOK (and the active model under either) without having
-// to open the full Settings dialog. The chip is intentionally narrow —
-// it shows the active mode + agent/provider + model in one line and
-// opens a compact popover for switching. All persistence is delegated
-// upward through the same callbacks `AvatarMenu` already uses, so the
-// switcher inherits autosave + daemon sync without re-implementing it.
+// Non-compact (entry top-bar): one chip opens a full popover (mode + agent /
+// provider + model). Compact (home hero, #6501): a split chip — left icon
+// opens CLI/BYOK switching, right status+model opens the model list. All
+// persistence is delegated upward through the same callbacks `AvatarMenu`
+// already uses, so the switcher inherits autosave + daemon sync without
+// re-implementing it.
 
 import {
   useCallback,
@@ -134,6 +133,11 @@ const API_PROTOCOL_TABS: Array<{ id: ApiProtocol; title: string }> = [
 const AMR_REMINDER_SEEN_KEY = 'open-design:inline-amr-cli-reminder-seen:v2';
 let amrReminderSeenFallback = false;
 
+/** Which popover surface is open. Compact home uses a split chip: left opens
+ *  `agent` (CLI / BYOK), right opens `model`. Non-compact keeps a single `full`
+ *  panel. */
+type SwitcherPanel = 'full' | 'agent' | 'model';
+
 function readAmrReminderSeen(): boolean {
   if (typeof window === 'undefined') return true;
   try {
@@ -190,7 +194,8 @@ export function InlineModelSwitcher({
     loading: workspaceContextLoading,
   } = useWorkspaceContext();
   const workspaceBillingResponse = useWorkspaceBillingResponse();
-  const [open, setOpen] = useState(false);
+  const [panel, setPanel] = useState<SwitcherPanel | null>(null);
+  const open = panel !== null;
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const popoverRef = useRef<HTMLDivElement | null>(null);
   // Viewport clamp for the popover (issue #99): the anchor chip can sit
@@ -227,7 +232,7 @@ export function InlineModelSwitcher({
       window.removeEventListener('scroll', update, true);
     };
   }, [open]);
-  const chipRef = useRef<HTMLButtonElement | null>(null);
+  const chipRef = useRef<HTMLElement | null>(null);
   const providerModelsFetchingRef = useRef<Set<string>>(new Set());
   const [amrStatus, setAmrStatus] = useState<VelaLoginStatus | null>(null);
   const [amrWalletSnapshot, setAmrWalletSnapshot] =
@@ -557,10 +562,10 @@ export function InlineModelSwitcher({
       ) {
         return;
       }
-      setOpen(false);
+      setPanel(null);
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
+      if (e.key === 'Escape') setPanel(null);
     };
     document.addEventListener('mousedown', onClick);
     document.addEventListener('keydown', onKey);
@@ -596,7 +601,7 @@ export function InlineModelSwitcher({
         triggerRect.right <= safeLeft ||
         triggerRect.left >= safeRight
       ) {
-        setOpen(false);
+        setPanel(null);
       }
     };
     const scheduleVisibilityUpdate = () => {
@@ -1007,7 +1012,7 @@ export function InlineModelSwitcher({
     : t('inlineSwitcher.chipTitle');
 
   const handleChipClick = useCallback(() => {
-    const nextOpen = !open;
+    const nextOpen = panel !== 'full';
     if (nextOpen && showAmrReminder) {
       setShowAmrReminderInPopover(true);
       setAmrReminderSeen(true);
@@ -1015,8 +1020,24 @@ export function InlineModelSwitcher({
     } else if (!nextOpen) {
       setShowAmrReminderInPopover(false);
     }
-    setOpen(nextOpen);
-  }, [open, showAmrReminder]);
+    setPanel(nextOpen ? 'full' : null);
+  }, [panel, showAmrReminder]);
+
+  /** Compact home split chip: left opens CLI/BYOK, right opens models. */
+  const handleCompactSegmentClick = useCallback(
+    (next: 'agent' | 'model') => {
+      const closing = panel === next;
+      if (!closing && showAmrReminder && next === 'agent') {
+        setShowAmrReminderInPopover(true);
+        setAmrReminderSeen(true);
+        markAmrReminderSeen();
+      } else if (closing || next !== 'agent') {
+        setShowAmrReminderInPopover(false);
+      }
+      setPanel(closing ? null : next);
+    },
+    [panel, showAmrReminder],
+  );
 
   useEffect(() => {
     if (!open || config.mode !== 'daemon' || config.agentId === 'amr') {
@@ -1030,42 +1051,38 @@ export function InlineModelSwitcher({
       ref={wrapRef}
       data-testid="inline-model-switcher"
     >
-      <button
-        ref={chipRef}
-        type="button"
-        className={
-          'inline-switcher__chip od-tooltip' +
-          (compact ? ' inline-switcher__chip--icon' : '') +
-          (showAmrReminder ? ' has-amr-reminder' : '')
-        }
-        data-testid="inline-model-switcher-chip"
-        onClick={handleChipClick}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-label={
-          compact
-            ? `${chipAgentLabel} · ${chipModel}`
-            : `${chipMode} · ${chipPrimary} · ${chipModel}`
-        }
-        data-tooltip={
-          compact
-            ? `${chipAgentLabel} · ${chipModel}`
-            : `${chipMode} · ${chipPrimary} · ${chipModel}`
-        }
-        data-tooltip-placement="bottom"
-      >
-        {showAmrReminder ? (
-          <span
-            className="inline-switcher__amr-reminder-dot inline-switcher__amr-reminder-dot--chip"
-            data-testid="inline-model-switcher-amr-reminder"
-            aria-hidden="true"
-          />
-        ) : null}
-        {compact ? (
-          <>
-            {/* Same agent logo (with the BYOK link-glyph fallback) the full
-                chip leads with, so the compact pill still says which agent the
-                model belongs to. */}
+      {compact ? (
+        <div
+          ref={(node) => {
+            chipRef.current = node;
+          }}
+          className={
+            'inline-switcher__chip inline-switcher__chip--split inline-switcher__chip--icon' +
+            (showAmrReminder ? ' has-amr-reminder' : '')
+          }
+          data-testid="inline-model-switcher-chip"
+        >
+          {showAmrReminder ? (
+            <span
+              className="inline-switcher__amr-reminder-dot inline-switcher__amr-reminder-dot--chip"
+              data-testid="inline-model-switcher-amr-reminder"
+              aria-hidden="true"
+            />
+          ) : null}
+          <button
+            type="button"
+            className={
+              'inline-switcher__chip-seg inline-switcher__chip-seg--agent od-tooltip' +
+              (panel === 'agent' ? ' is-expanded' : '')
+            }
+            data-testid="inline-model-switcher-chip-agent"
+            onClick={() => handleCompactSegmentClick('agent')}
+            aria-haspopup="menu"
+            aria-expanded={panel === 'agent'}
+            aria-label={t('inlineSwitcher.agentLabel')}
+            data-tooltip={chipAgentLabel}
+            data-tooltip-placement="bottom"
+          >
             <span className="inline-switcher__chip-icon" aria-hidden="true">
               {config.mode === 'daemon' && currentAgent ? (
                 <AgentIcon id={currentAgent.id} size={18} />
@@ -1075,19 +1092,55 @@ export function InlineModelSwitcher({
                 </span>
               )}
             </span>
-            {/* Divider sits right after the agent logo; the status dot then
-                leads the model name so the dot reads as part of the model
-                label rather than trailing the logo. */}
-            <span className="inline-switcher__chip-divider" aria-hidden="true" />
+          </button>
+          <span className="inline-switcher__chip-divider" aria-hidden="true" />
+          <button
+            type="button"
+            className={
+              'inline-switcher__chip-seg inline-switcher__chip-seg--model od-tooltip' +
+              (panel === 'model' ? ' is-expanded' : '')
+            }
+            data-testid="inline-model-switcher-chip-model"
+            onClick={() => handleCompactSegmentClick('model')}
+            aria-haspopup="menu"
+            aria-expanded={panel === 'model'}
+            aria-label={`${t('inlineSwitcher.modelLabel')}: ${chipModel}`}
+            data-tooltip={`${chipAgentLabel} · ${chipModel}`}
+            data-tooltip-placement="bottom"
+          >
             <span
               className="inline-switcher__chip-conn"
               data-connected={chipConnected ? 'true' : 'false'}
               aria-hidden="true"
             />
             <span className="inline-switcher__chip-model-name">{chipModel}</span>
-          </>
-        ) : (
-          <>
+          </button>
+        </div>
+      ) : (
+      <button
+        ref={(node) => {
+          chipRef.current = node;
+        }}
+        type="button"
+        className={
+          'inline-switcher__chip od-tooltip' +
+          (showAmrReminder ? ' has-amr-reminder' : '')
+        }
+        data-testid="inline-model-switcher-chip"
+        onClick={handleChipClick}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={`${chipMode} · ${chipPrimary} · ${chipModel}`}
+        data-tooltip={`${chipMode} · ${chipPrimary} · ${chipModel}`}
+        data-tooltip-placement="bottom"
+      >
+        {showAmrReminder ? (
+          <span
+            className="inline-switcher__amr-reminder-dot inline-switcher__amr-reminder-dot--chip"
+            data-testid="inline-model-switcher-amr-reminder"
+            aria-hidden="true"
+          />
+        ) : null}
             <span className="inline-switcher__chip-icon" aria-hidden="true">
               {config.mode === 'daemon' && currentAgent ? (
                 <AgentIcon id={currentAgent.id} size={18} />
@@ -1113,19 +1166,18 @@ export function InlineModelSwitcher({
               size={12}
               className="inline-switcher__chip-chevron"
             />
-          </>
-        )}
       </button>
+      )}
 
       {open ? (
         <div
           ref={popoverRef}
-          className={`inline-switcher__popover${popoverPlacement?.up ? ' inline-switcher__popover--up' : ''}`}
+          className={`inline-switcher__popover${popoverPlacement?.up ? ' inline-switcher__popover--up' : ''}${compact && panel === 'agent' ? ' inline-switcher__popover--agent' : ''}${compact && panel === 'model' ? ' inline-switcher__popover--model' : ''}`}
           role="menu"
           data-testid="inline-model-switcher-popover"
           style={popoverPlacement ? { maxHeight: `${popoverPlacement.maxHeight}px`, overflowY: 'auto' } : undefined}
         >
-          {compact ? null : (
+          {(!compact || panel === 'agent') ? (
           <div className="inline-switcher__row">
             <span className="inline-switcher__label">
               {t('inlineSwitcher.modeLabel')}
@@ -1153,7 +1205,7 @@ export function InlineModelSwitcher({
                   // pattern is applied to every callback below.
                   onModeChange?.('daemon');
                   if (!daemonLive) {
-                    setOpen(false);
+                    setPanel(null);
                     onOpenSettings?.('execution');
                   }
                 }}
@@ -1188,12 +1240,10 @@ export function InlineModelSwitcher({
               </button>
             </div>
           </div>
-          )}
+          ) : null}
 
-          {compact ? (
-            // Compact home popover: a plain list of the CURRENT agent's model
-            // names (no header, no agent icons) — switching agents lives in
-            // the execution settings entry below.
+          {compact && panel === 'model' ? (
+            // Compact home — right segment: model list for the current agent.
             <div className="inline-switcher__row">
               {currentAgent && compactModelRows.length > 0 ? (
                 <div className="inline-switcher__agent-grid" role="radiogroup">
@@ -1201,7 +1251,7 @@ export function InlineModelSwitcher({
                     const active = currentModelId === m.id;
                     // A model above the caller's plan is shown, but honestly:
                     // disabled with the reason the settings picker already uses,
-                    // never as a normal row whose click gets reverted.
+                    // never as a normal row whose click silently gets reverted.
                     const lockedHint = selectable
                       ? null
                       : t('settings.amrModelUpgradeHint');
@@ -1235,7 +1285,7 @@ export function InlineModelSwitcher({
                               execution_mode: 'local_cli',
                               model_id: modelIdForTracking(m.id),
                             });
-                            setOpen(false);
+                            setPanel(null);
                           }}
                         >
                           <span
@@ -1279,7 +1329,7 @@ export function InlineModelSwitcher({
                 </span>
               )}
             </div>
-          ) : config.mode === 'daemon' ? (
+          ) : (!compact || panel === 'agent') && config.mode === 'daemon' ? (
             <>
               <div className="inline-switcher__row">
                 <span className="inline-switcher__label">
@@ -1470,7 +1520,8 @@ export function InlineModelSwitcher({
               ) : null}
               </div>
 
-              {currentAgent &&
+              {panel === 'full' &&
+              currentAgent &&
               currentAgent.models &&
               currentAgent.models.length > 0 ? (
                 <div className="inline-switcher__row">
@@ -1582,6 +1633,7 @@ export function InlineModelSwitcher({
                 </div>
               </div>
 
+              {panel === 'full' ? (
               <div className="inline-switcher__row">
                 <span className="inline-switcher__label">
                   {t('inlineSwitcher.modelLabel')}
@@ -1627,8 +1679,9 @@ export function InlineModelSwitcher({
                   </span>
                 )}
               </div>
+              ) : null}
 
-              {!config.apiKey ? (
+              {panel === 'full' && !config.apiKey ? (
                 <div className="inline-switcher__warn" role="status">
                   {t('inlineSwitcher.missingApiKey')}
                 </div>
@@ -1646,7 +1699,7 @@ export function InlineModelSwitcher({
                 area: 'execution_settings_popover',
                 element: 'open_execution_settings',
               });
-              setOpen(false);
+              setPanel(null);
               onOpenSettings?.('execution');
             }}
           >

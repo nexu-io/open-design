@@ -1183,6 +1183,53 @@
   border-radius: var(--radius-pill);
   box-shadow: none;
 }
+/* #6501: compact chip is a split control — left icon switches CLI/BYOK,
+   right status+model opens the model list. Keep one pill chrome. */
+.home-hero__execution-switcher .inline-switcher__chip--split {
+  display: inline-flex;
+  align-items: center;
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+}
+.home-hero__execution-switcher .inline-switcher__chip-seg {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  margin: 0;
+  padding: 0 10px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  gap: 7px;
+  min-width: 0;
+}
+.home-hero__execution-switcher .inline-switcher__chip-seg--agent {
+  flex: 0 0 auto;
+  padding-left: 12px;
+  padding-right: 8px;
+}
+.home-hero__execution-switcher .inline-switcher__chip-seg--model {
+  flex: 1 1 auto;
+  justify-content: flex-start;
+  padding-left: 8px;
+  padding-right: 14px;
+  min-width: 0;
+}
+.home-hero__execution-switcher .inline-switcher__chip-seg:hover,
+.home-hero__execution-switcher .inline-switcher__chip-seg.is-expanded,
+.home-hero__execution-switcher .inline-switcher__chip-seg[aria-expanded='true'] {
+  background: color-mix(in srgb, var(--bg-subtle) 70%, transparent);
+}
+.home-hero__execution-switcher .inline-switcher__chip--split .inline-switcher__chip-divider {
+  flex: 0 0 auto;
+  align-self: stretch;
+  width: 1px;
+  margin: 8px 0;
+  background: var(--border-subtle, rgba(0, 0, 0, 0.08));
+}
 .home-hero__execution-switcher .inline-switcher__chip:hover,
 .home-hero__execution-switcher .inline-switcher__chip[aria-expanded='true'] {
   border-color: transparent;
@@ -2974,6 +3021,15 @@
   .home-hero__execution-switcher .inline-switcher__chip {
     width: 36px;
     max-width: 36px;
+  }
+  /* Split chip (#6501): on narrow screens keep only the CLI icon target. */
+  .home-hero__execution-switcher .inline-switcher__chip--split .inline-switcher__chip-divider,
+  .home-hero__execution-switcher .inline-switcher__chip--split .inline-switcher__chip-seg--model {
+    display: none;
+  }
+  .home-hero__execution-switcher .inline-switcher__chip--split .inline-switcher__chip-seg--agent {
+    width: 36px;
+    padding: 0;
   }
 }
 
