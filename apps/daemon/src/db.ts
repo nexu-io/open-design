@@ -216,6 +216,7 @@ function migrate(db: SqliteDb): void {
       pre_turn_file_names_json TEXT,
       session_mode TEXT,
       run_context_json TEXT,
+      task_analytics_json TEXT,
       applied_plugin_snapshot_json TEXT,
       telemetry_finalized_at INTEGER,
       started_at INTEGER,
@@ -416,6 +417,9 @@ function migrate(db: SqliteDb): void {
   }
   if (!messageCols.some((c: DbRow) => c.name === 'run_context_json')) {
     db.exec(`ALTER TABLE messages ADD COLUMN run_context_json TEXT`);
+  }
+  if (!messageCols.some((c: DbRow) => c.name === 'task_analytics_json')) {
+    db.exec(`ALTER TABLE messages ADD COLUMN task_analytics_json TEXT`);
   }
   if (!messageCols.some((c: DbRow) => c.name === 'applied_plugin_snapshot_json')) {
     db.exec(`ALTER TABLE messages ADD COLUMN applied_plugin_snapshot_json TEXT`);
@@ -2512,6 +2516,7 @@ export function listMessages(db: SqliteDb, conversationId: string) {
               pre_turn_file_names_json AS preTurnFileNamesJson,
               session_mode AS sessionMode,
               run_context_json AS runContextJson,
+              task_analytics_json AS taskAnalyticsJson,
               applied_plugin_snapshot_json AS appliedPluginSnapshotJson,
               created_at AS createdAt, started_at AS startedAt, ended_at AS endedAt,
               position
@@ -2565,7 +2570,8 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
               events_json = ?, attachments_json = ?, comment_attachments_json = ?,
               produced_files_json = ?, trace_object_files_json = ?, feedback_json = ?,
               pre_turn_file_names_json = ?,
-              session_mode = ?, run_context_json = ?, applied_plugin_snapshot_json = ?,
+              session_mode = ?, run_context_json = ?, task_analytics_json = ?,
+              applied_plugin_snapshot_json = ?,
               telemetry_finalized_at = CASE
                 WHEN ? THEN COALESCE(telemetry_finalized_at, ?)
                 ELSE telemetry_finalized_at
@@ -2590,6 +2596,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
       m.preTurnFileNames ? JSON.stringify(m.preTurnFileNames) : null,
       normalizeMessageSessionModeForStorage(m.sessionMode),
       m.runContext ? JSON.stringify(m.runContext) : null,
+      m.taskAnalytics ? JSON.stringify(m.taskAnalytics) : null,
       m.appliedPluginSnapshot ? JSON.stringify(m.appliedPluginSnapshot) : null,
       m.telemetryFinalized === true ? 1 : 0,
       now,
@@ -2611,17 +2618,18 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
     // run_id, run_status, result_delivery_state, last_run_event_id, events_json, attachments_json,
     // comment_attachments_json, produced_files_json, trace_object_files_json,
     // feedback_json, pre_turn_file_names_json, session_mode, run_context_json,
-    // applied_plugin_snapshot_json, telemetry_finalized_at, started_at,
-    // ended_at, position, created_at.
+    // task_analytics_json, applied_plugin_snapshot_json,
+    // telemetry_finalized_at, started_at, ended_at, position, created_at.
     db.prepare(
       `INSERT INTO messages
          (id, conversation_id, role, content, agent_id, agent_name,
           run_id, run_status, result_delivery_state, last_run_event_id, events_json,
           attachments_json, comment_attachments_json, produced_files_json,
           trace_object_files_json, feedback_json, pre_turn_file_names_json,
-          session_mode, run_context_json, applied_plugin_snapshot_json,
+          session_mode, run_context_json, task_analytics_json,
+          applied_plugin_snapshot_json,
           telemetry_finalized_at, started_at, ended_at, position, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       m.id,
       conversationId,
@@ -2642,6 +2650,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
       m.preTurnFileNames ? JSON.stringify(m.preTurnFileNames) : null,
       normalizeMessageSessionModeForStorage(m.sessionMode),
       m.runContext ? JSON.stringify(m.runContext) : null,
+      m.taskAnalytics ? JSON.stringify(m.taskAnalytics) : null,
       m.appliedPluginSnapshot ? JSON.stringify(m.appliedPluginSnapshot) : null,
       m.telemetryFinalized === true ? now : null,
       m.startedAt ?? null,
@@ -2670,6 +2679,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
               pre_turn_file_names_json AS preTurnFileNamesJson,
               session_mode AS sessionMode,
               run_context_json AS runContextJson,
+              task_analytics_json AS taskAnalyticsJson,
               applied_plugin_snapshot_json AS appliedPluginSnapshotJson,
               created_at AS createdAt, started_at AS startedAt, ended_at AS endedAt,
               position
@@ -3675,6 +3685,7 @@ function normalizeMessage(row: DbRow) {
     preTurnFileNames: parseJsonOrUndef(row.preTurnFileNamesJson),
     sessionMode: normalizeMessageSessionMode(row.sessionMode),
     runContext: parseJsonOrUndef(row.runContextJson),
+    taskAnalytics: parseJsonOrUndef(row.taskAnalyticsJson),
     appliedPluginSnapshot: parseJsonOrUndef(row.appliedPluginSnapshotJson),
     createdAt: row.createdAt ?? undefined,
     startedAt: row.startedAt ?? undefined,

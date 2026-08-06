@@ -13,6 +13,8 @@
 
 import {
   byokProtocolToTracking,
+  buildRunCreatedV4Aliases,
+  buildRunFinishedV4Aliases,
   modelIdForTracking,
   sessionModeToTracking,
   type RunCreatedProps,
@@ -23,7 +25,7 @@ import {
   type TrackingRunResult,
   type TrackingSessionMode,
 } from '@open-design/contracts/analytics';
-import type { ChatSessionMode } from '@open-design/contracts';
+import type { ChatSessionMode, ChatTaskExecutionAnalytics } from '@open-design/contracts';
 import type { ApiProtocol } from '../types';
 
 // Map the BYOK transport protocol to the tracking provider id.
@@ -44,6 +46,8 @@ export interface ByokRunBaseInput {
   apiProtocol: ApiProtocol | undefined;
   skillId: string | null;
   sessionMode?: TrackingSessionMode;
+  taskAnalytics: ChatTaskExecutionAnalytics;
+  hasExistingArtifact?: boolean;
 }
 
 export function byokSessionModeForTracking(
@@ -67,6 +71,9 @@ function baseRunProps(input: ByokRunBaseInput) {
     // BYOK composer runs are not design-system generation runs (those go
     // through the daemon path), so no design system is in play.
     design_system_source: 'not_applicable' as const,
+    ...(input.hasExistingArtifact !== undefined
+      ? { has_existing_artifact: input.hasExistingArtifact }
+      : {}),
     has_attachment: input.hasAttachment,
     user_query_tokens: input.userQueryTokens,
     model_id: modelIdForTracking(input.model),
@@ -82,10 +89,25 @@ function baseRunProps(input: ByokRunBaseInput) {
 }
 
 export function buildByokRunCreatedProps(input: ByokRunBaseInput): RunCreatedProps {
+  const legacy = baseRunProps(input);
   return {
     page_name: 'chat_panel',
     area: 'chat_composer',
-    ...baseRunProps(input),
+    ...legacy,
+    ...buildRunCreatedV4Aliases(legacy, {
+      task_execution_id: input.taskAnalytics.taskExecutionId,
+      initial_run_id: input.taskAnalytics.initialRunId ?? input.runId,
+      task_run_index: input.taskAnalytics.taskRunIndex,
+      ...(input.taskAnalytics.sourceRunId
+        ? { source_run_id: input.taskAnalytics.sourceRunId }
+        : {}),
+      ...(input.taskAnalytics.recoveryActionType
+        ? { recovery_action_type: input.taskAnalytics.recoveryActionType }
+        : {}),
+      ...(input.taskAnalytics.recoveryActionInstanceId
+        ? { recovery_action_instance_id: input.taskAnalytics.recoveryActionInstanceId }
+        : {}),
+    }),
   };
 }
 
@@ -99,13 +121,42 @@ export interface ByokRunFinishedInput extends ByokRunBaseInput {
 export function buildByokRunFinishedProps(
   input: ByokRunFinishedInput,
 ): RunFinishedProps {
-  return {
-    page_name: 'chat_panel',
-    area: 'chat_panel',
+  const legacy = {
     ...baseRunProps(input),
     result: input.result,
     artifact_count: input.artifactCount,
     asked_user_question: input.askedUserQuestion,
     total_duration_ms: input.totalDurationMs,
+  };
+  const lineage = {
+    task_execution_id: input.taskAnalytics.taskExecutionId,
+    initial_run_id: input.taskAnalytics.initialRunId ?? input.runId,
+    task_run_index: input.taskAnalytics.taskRunIndex,
+    ...(input.taskAnalytics.sourceRunId
+      ? { source_run_id: input.taskAnalytics.sourceRunId }
+      : {}),
+    ...(input.taskAnalytics.recoveryActionType
+      ? { recovery_action_type: input.taskAnalytics.recoveryActionType }
+      : {}),
+    ...(input.taskAnalytics.recoveryActionInstanceId
+      ? { recovery_action_instance_id: input.taskAnalytics.recoveryActionInstanceId }
+      : {}),
+  };
+  return {
+    page_name: 'chat_panel',
+    area: 'chat_panel',
+    ...legacy,
+    ...buildRunFinishedV4Aliases(legacy, lineage, {
+      ...(input.sessionMode === 'design' && !input.askedUserQuestion
+        ? {
+            primaryArtifactChange: input.artifactCount > 0
+              ? input.hasExistingArtifact ? 'modified' : 'created'
+              : 'none',
+          }
+        : {}),
+      artifactFiles: {
+        changed_file_count: input.artifactCount,
+      },
+    }),
   };
 }

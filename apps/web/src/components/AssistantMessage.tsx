@@ -114,6 +114,7 @@ export type QuestionFormSubmitHandler = (
   text: string,
   attachments?: ChatAttachment[],
   context?: RunContextSelection,
+  sourceAssistantMessageId?: string,
 ) => boolean | void | Promise<boolean | void>;
 
 const DISCORD_INVITE_URL = "https://discord.gg/mHAjSMV6gz";

@@ -12,6 +12,10 @@ import { createRunLifecycleTracer } from '../run-lifecycle-tracer.js';
 import { projectWorkspaceProvenance } from '../workspace-contract.js';
 import { OPEN_DESIGN_PLUGIN_ID } from '../mcp-observability.js';
 import {
+  scanRunEventsForUsageAnalytics,
+  summarizeRunTimingAnalytics,
+} from '../run-analytics-observability.js';
+import {
   interruptDurableRunAfterDaemonRestart,
   RESTART_ERROR_CODE,
   RESTART_ERROR_MESSAGE,
@@ -20,6 +24,463 @@ import {
 export const TERMINAL_RUN_STATUSES = new Set(['succeeded', 'failed', 'canceled']);
 
 const RUN_STATE_SCHEMA_VERSION = 1;
+
+const DIAGNOSTIC_SOURCE = 'open-design-daemon';
+
+function availableDiagnostic(value, definition, complete = true, source = DIAGNOSTIC_SOURCE) {
+  return {
+    state: 'available',
+    value,
+    evidence: 'computed',
+    source,
+    complete,
+    definition,
+  };
+}
+
+function missingDiagnostic(missingReason, source = DIAGNOSTIC_SOURCE, state = 'not_collected') {
+  return { state, source, missingReason };
+}
+
+function optionalDiagnostic(value, definition, complete = true, missingReason = 'upstream_did_not_emit_metric', source = DIAGNOSTIC_SOURCE) {
+  return value === undefined
+    ? missingDiagnostic(missingReason, source, 'upstream_unavailable')
+    : availableDiagnostic(value, definition, complete, source);
+}
+
+function summarizeToolEvents(events, complete) {
+  const calls = new Map();
+  const byName = {};
+  for (const record of events) {
+    if (record?.event !== 'agent' || !record.data || typeof record.data !== 'object') continue;
+    const data = record.data;
+    if (data.type === 'tool_use' && typeof data.id === 'string') {
+      const name = typeof data.name === 'string' && data.name.trim() ? data.name.trim() : 'unknown';
+      const startedAt = typeof data.startedAt === 'number' && Number.isFinite(data.startedAt)
+        ? data.startedAt
+        : record.timestamp;
+      calls.set(data.id, { name, startedAt, status: 'unknown' });
+      byName[name] = (byName[name] ?? 0) + 1;
+    } else if (data.type === 'tool_result' && typeof data.toolUseId === 'string') {
+      const call = calls.get(data.toolUseId);
+      if (!call) continue;
+      call.status = data.isError === true ? 'error' : 'ok';
+      if (
+        typeof record.timestamp === 'number' &&
+        typeof call.startedAt === 'number' &&
+        record.timestamp >= call.startedAt
+      ) {
+        call.durationMs = record.timestamp - call.startedAt;
+      }
+    }
+  }
+  let succeeded = 0;
+  let failed = 0;
+  let unknown = 0;
+  let durationMs = 0;
+  for (const call of calls.values()) {
+    if (call.status === 'ok') succeeded += 1;
+    else if (call.status === 'error') failed += 1;
+    else unknown += 1;
+    if (typeof call.durationMs === 'number') durationMs += call.durationMs;
+  }
+  return { total: calls.size, succeeded, failed, unknown, durationMs, byName, complete };
+}
+
+function percentileNearestRank(values, percentile) {
+  if (!Array.isArray(values) || values.length === 0) return undefined;
+  const sorted = [...values].sort((a, b) => a - b);
+  const index = Math.max(0, Math.ceil(percentile * sorted.length) - 1);
+  return sorted[index];
+}
+
+function summarizeModelStepEvents(events) {
+  const steps = new Map();
+  let lifecycleObserved = false;
+  let retryCount = 0;
+  let fallbackOrdinal = 0;
+  for (const record of events) {
+    if (record?.event !== 'agent' || !record.data || typeof record.data !== 'object') continue;
+    const data = record.data;
+    if (data.type !== 'diagnostic') continue;
+    if (data.name === 'model_retry') {
+      retryCount += 1;
+      continue;
+    }
+    if (data.name !== 'model_step_lifecycle') continue;
+    lifecycleObserved = true;
+    const messageIndex = Number.isFinite(data.assistantMessageIndex)
+      ? data.assistantMessageIndex
+      : 'unknown';
+    const stepIndex = Number.isFinite(data.stepIndex) ? data.stepIndex : undefined;
+    const key = stepIndex === undefined
+      ? `fallback-${fallbackOrdinal += 1}`
+      : `${messageIndex}:${stepIndex}`;
+    const current = steps.get(key) ?? {
+      status: 'incomplete',
+      startedAtMs: undefined,
+      endedAtMs: undefined,
+      durationMs: undefined,
+      reasoningTokens: undefined,
+    };
+    if (data.phase === 'start') {
+      if (Number.isFinite(data.startedAtMs)) current.startedAtMs = data.startedAtMs;
+    } else if (data.phase === 'end') {
+      if (Number.isFinite(data.startedAtMs)) current.startedAtMs = data.startedAtMs;
+      if (Number.isFinite(data.endedAtMs)) current.endedAtMs = data.endedAtMs;
+      const usage = data.usage && typeof data.usage === 'object' ? data.usage : undefined;
+      if (Number.isFinite(usage?.reasoningTokens) && usage.reasoningTokens >= 0) {
+        current.reasoningTokens = usage.reasoningTokens;
+      }
+      const preciseDurationBoundary = data.timingEvidence !== 'first_output_fallback';
+      if (preciseDurationBoundary && Number.isFinite(data.durationMs) && data.durationMs >= 0) {
+        current.durationMs = data.durationMs;
+      } else if (
+        preciseDurationBoundary &&
+        Number.isFinite(current.startedAtMs) &&
+        Number.isFinite(current.endedAtMs) &&
+        current.endedAtMs >= current.startedAtMs
+      ) {
+        current.durationMs = current.endedAtMs - current.startedAtMs;
+      }
+      current.status =
+        data.status === 'failed' || data.status === 'cancelled' || data.status === 'completed'
+          ? data.status
+          : 'incomplete';
+    }
+    steps.set(key, current);
+  }
+  const durations = [];
+  let completed = 0;
+  let failed = 0;
+  let cancelled = 0;
+  let incomplete = 0;
+  let reasoningTokens = 0;
+  let reasoningTokenSampleCount = 0;
+  for (const step of steps.values()) {
+    if (Number.isFinite(step.durationMs) && step.durationMs >= 0) durations.push(step.durationMs);
+    if (Number.isFinite(step.reasoningTokens) && step.reasoningTokens >= 0) {
+      reasoningTokens += step.reasoningTokens;
+      reasoningTokenSampleCount += 1;
+    }
+    if (step.status === 'completed') completed += 1;
+    else if (step.status === 'failed') failed += 1;
+    else if (step.status === 'cancelled') cancelled += 1;
+    else incomplete += 1;
+  }
+  const totalDurationMs = durations.reduce((sum, value) => sum + value, 0);
+  return {
+    lifecycleObserved,
+    count: steps.size,
+    durations,
+    durationSampleCount: durations.length,
+    durationComplete: steps.size > 0 && durations.length === steps.size,
+    totalDurationMs,
+    averageDurationMs: durations.length > 0 ? totalDurationMs / durations.length : undefined,
+    p50DurationMs: percentileNearestRank(durations, 0.5),
+    p90DurationMs: percentileNearestRank(durations, 0.9),
+    maxDurationMs: durations.length > 0 ? Math.max(...durations) : undefined,
+    over60sCount: durations.filter((duration) => duration > 60_000).length,
+    completed,
+    failed,
+    cancelled,
+    incomplete,
+    retryCount,
+    // AMR/OpenCode reports provider usage per model step. Summing the unique
+    // step records recovers the turn total without treating the values as
+    // cumulative snapshots or double-counting repeated lifecycle frames.
+    reasoningTokens: reasoningTokenSampleCount > 0 ? reasoningTokens : undefined,
+    reasoningTokensComplete: steps.size > 0 && reasoningTokenSampleCount === steps.size,
+  };
+}
+
+function summarizeAssistantMessageEvents(events) {
+  const messages = new Map();
+  let lifecycleObserved = false;
+  let retryCount = 0;
+  let rateLimitedCount = 0;
+  let timeoutCount = 0;
+  let upstreamErrorCount = 0;
+  let provider;
+  let model;
+  let fallbackOrdinal = 0;
+  const countErrorClass = (value) => {
+    if (value === 'rate_limited') rateLimitedCount += 1;
+    else if (value === 'timeout') timeoutCount += 1;
+    else if (value === 'upstream_error') upstreamErrorCount += 1;
+  };
+  for (const record of events) {
+    if (record?.event !== 'agent' || !record.data || typeof record.data !== 'object') continue;
+    const data = record.data;
+    if (data.type !== 'diagnostic') continue;
+    if (data.name === 'model_retry') {
+      retryCount += 1;
+      countErrorClass(data.errorClass);
+      continue;
+    }
+    if (data.name !== 'assistant_message_lifecycle') continue;
+    lifecycleObserved = true;
+    if (typeof data.provider === 'string' && data.provider.trim()) provider = data.provider.trim();
+    if (typeof data.model === 'string' && data.model.trim()) model = data.model.trim();
+    const messageIndex = Number.isFinite(data.assistantMessageIndex)
+      ? data.assistantMessageIndex
+      : `fallback-${fallbackOrdinal += 1}`;
+    const current = messages.get(messageIndex) ?? {
+      status: 'incomplete',
+      startedAtMs: undefined,
+      endedAtMs: undefined,
+      durationMs: undefined,
+    };
+    if (data.phase === 'start') {
+      if (Number.isFinite(data.startedAtMs)) current.startedAtMs = data.startedAtMs;
+    } else if (data.phase === 'end') {
+      if (Number.isFinite(data.startedAtMs)) current.startedAtMs = data.startedAtMs;
+      if (Number.isFinite(data.endedAtMs)) current.endedAtMs = data.endedAtMs;
+      if (Number.isFinite(data.durationMs) && data.durationMs >= 0) {
+        current.durationMs = data.durationMs;
+      } else if (
+        Number.isFinite(current.startedAtMs)
+        && Number.isFinite(current.endedAtMs)
+        && current.endedAtMs >= current.startedAtMs
+      ) {
+        current.durationMs = current.endedAtMs - current.startedAtMs;
+      }
+      current.status =
+        data.status === 'failed' || data.status === 'cancelled' || data.status === 'completed'
+          ? data.status
+          : 'incomplete';
+      countErrorClass(data.errorClass);
+    }
+    messages.set(messageIndex, current);
+  }
+  const durations = [];
+  let completed = 0;
+  let failed = 0;
+  let cancelled = 0;
+  let incomplete = 0;
+  for (const message of messages.values()) {
+    if (Number.isFinite(message.durationMs) && message.durationMs >= 0) durations.push(message.durationMs);
+    if (message.status === 'completed') completed += 1;
+    else if (message.status === 'failed') failed += 1;
+    else if (message.status === 'cancelled') cancelled += 1;
+    else incomplete += 1;
+  }
+  const totalDurationMs = durations.reduce((sum, value) => sum + value, 0);
+  return {
+    lifecycleObserved,
+    count: messages.size,
+    durationSampleCount: durations.length,
+    durationComplete: messages.size > 0 && durations.length === messages.size,
+    totalDurationMs,
+    averageDurationMs: durations.length > 0 ? totalDurationMs / durations.length : undefined,
+    maxDurationMs: durations.length > 0 ? Math.max(...durations) : undefined,
+    completed,
+    failed,
+    cancelled,
+    incomplete,
+    retryCount,
+    rateLimitedCount,
+    timeoutCount,
+    upstreamErrorCount,
+    provider,
+    model,
+  };
+}
+
+function classifyTerminalRunError(run) {
+  const value = `${run.errorCode ?? ''} ${run.error ?? ''}`.trim().toLowerCase();
+  if (!value) return undefined;
+  if (value.includes('429') || value.includes('rate limit') || value.includes('too many requests')) {
+    return 'rate_limited';
+  }
+  if (value.includes('timeout') || value.includes('timed out') || value.includes('deadline exceeded')) {
+    return 'timeout';
+  }
+  if (value.includes('upstream') || value.includes('service unavailable') || value.includes('bad gateway') || value.includes('gateway timeout')) {
+    return 'upstream_error';
+  }
+  return undefined;
+}
+
+function buildExecutionDiagnostics(run) {
+  if (!TERMINAL_RUN_STATUSES.has(run.status)) return undefined;
+  const eventStreamComplete = run.events.length === 0 || run.events[0]?.id === 1;
+  const timing = summarizeRunTimingAnalytics({
+    runCreatedAt: run.createdAt,
+    runUpdatedAt: run.updatedAt,
+    analyticsCapturedAt: run.updatedAt,
+    ...(run.analyticsTelemetry ? { telemetry: run.analyticsTelemetry } : {}),
+    events: run.events,
+  });
+  const usage = scanRunEventsForUsageAnalytics(run.events, run.model, 0);
+  const tools = summarizeToolEvents(run.events, eventStreamComplete);
+  const modelSteps = summarizeModelStepEvents(run.events);
+  const assistantMessages = summarizeAssistantMessageEvents(run.events);
+  const terminalErrorClass = classifyTerminalRunError(run);
+  const firstModelEventAt = run.analyticsTelemetry?.firstModelEventAt;
+  const agentExecutionDurationMs =
+    typeof firstModelEventAt === 'number' && run.updatedAt >= firstModelEventAt
+      ? Math.round(run.updatedAt - firstModelEventAt)
+      : undefined;
+  const eventCompletenessReason = eventStreamComplete
+    ? undefined
+    : 'run_event_ring_buffer_truncated';
+  const toolValue = (value, definition) =>
+    eventStreamComplete
+      ? availableDiagnostic(value, definition, true)
+      : missingDiagnostic(eventCompletenessReason);
+  const cacheSource = usage.cache_token_source === 'unavailable'
+    ? 'model-provider'
+    : 'agent-runtime';
+  const cacheMetric = (value, definition) => optionalDiagnostic(
+    value,
+    definition,
+    eventStreamComplete,
+    usage.cache_token_source === 'unavailable'
+      ? 'model_provider_did_not_return_cache_usage'
+      : eventCompletenessReason ?? 'upstream_did_not_emit_metric',
+    cacheSource,
+  );
+  const modelStepMetric = (value, definition, complete = modelSteps.durationComplete) => {
+    if (!eventStreamComplete) return missingDiagnostic(eventCompletenessReason, 'agent-runtime');
+    if (!modelSteps.lifecycleObserved) {
+      return missingDiagnostic('assistant_message_lifecycle_not_exposed_by_runtime', 'agent-runtime');
+    }
+    return value === undefined
+      ? missingDiagnostic('model_step_duration_boundary_incomplete', 'agent-runtime', 'upstream_unavailable')
+      : availableDiagnostic(value, definition, complete, 'agent-runtime');
+  };
+  const percentileMetric = (value, definition, minimumSamples) => {
+    if (!eventStreamComplete) return missingDiagnostic(eventCompletenessReason, 'agent-runtime');
+    if (!modelSteps.lifecycleObserved) {
+      return missingDiagnostic('assistant_message_lifecycle_not_exposed_by_runtime', 'agent-runtime');
+    }
+    if (modelSteps.durationSampleCount < minimumSamples) {
+      return missingDiagnostic(
+        `insufficient_model_step_samples_min_${minimumSamples}`,
+        'agent-runtime',
+        'upstream_unavailable',
+      );
+    }
+    return availableDiagnostic(value, definition, modelSteps.durationComplete, 'agent-runtime');
+  };
+  const assistantMetric = (value, definition, complete = assistantMessages.durationComplete) => {
+    if (!eventStreamComplete) return missingDiagnostic(eventCompletenessReason, 'agent-runtime');
+    if (!assistantMessages.lifecycleObserved) {
+      return missingDiagnostic('assistant_message_lifecycle_not_exposed_by_runtime', 'agent-runtime');
+    }
+    return value === undefined
+      ? missingDiagnostic('assistant_message_duration_boundary_incomplete', 'agent-runtime', 'upstream_unavailable')
+      : availableDiagnostic(value, definition, complete, 'agent-runtime');
+  };
+  const anomalyMetric = (value, definition) => eventStreamComplete
+    ? availableDiagnostic(value, definition, true, 'agent-runtime')
+    : missingDiagnostic(eventCompletenessReason, 'agent-runtime');
+  const reasoningTokens = usage.thought_tokens ?? modelSteps.reasoningTokens;
+  const reasoningTokensComplete = usage.thought_tokens !== undefined
+    ? eventStreamComplete
+    : eventStreamComplete && modelSteps.reasoningTokensComplete;
+
+  return {
+    schemaVersion: 1,
+    collectorVersion: 'open-design-execution-diagnostics-v2',
+    collectedAt: run.updatedAt,
+    eventStreamCompleteness: eventStreamComplete ? 'complete' : 'partial',
+    timing: {
+      queueDurationMs: optionalDiagnostic(timing.queue_duration_ms, 'run accepted to execution start'),
+      promptBuildDurationMs: optionalDiagnostic(timing.prompt_build_duration_ms, 'prompt build start to end'),
+      launchPreflightDurationMs: optionalDiagnostic(timing.launch_preflight_duration_ms, 'runtime preflight start to end'),
+      processSpawnDurationMs: optionalDiagnostic(timing.process_spawn_duration_ms, 'process spawn start to child ready'),
+      stdinWriteDurationMs: optionalDiagnostic(timing.stdin_write_duration_ms, 'prompt stdin write start to end'),
+      firstModelEventWaitMs: optionalDiagnostic(timing.time_to_first_model_event_ms, 'execution start to first model event'),
+      firstVisibleOutputWaitMs: optionalDiagnostic(timing.time_to_first_visible_output_ms, 'execution start to first visible assistant output'),
+      agentExecutionDurationMs: optionalDiagnostic(agentExecutionDurationMs, 'first model event to terminal run state'),
+      toolDurationMs: optionalDiagnostic(timing.tool_duration_ms, 'sum of paired tool_use to tool_result intervals', eventStreamComplete, eventCompletenessReason ?? 'no_paired_tool_duration'),
+      artifactWriteDurationMs: optionalDiagnostic(timing.artifact_write_duration_ms, 'first observed artifact-write tool interval'),
+      totalDurationMs: availableDiagnostic(timing.total_duration_ms, 'run accepted to terminal state'),
+      ...(timing.phase_timing_status ? { phaseTimingStatus: timing.phase_timing_status } : {}),
+      ...(timing.bottleneck_phase ? { bottleneckPhase: timing.bottleneck_phase } : {}),
+    },
+    modelSteps: {
+      count: modelStepMetric(modelSteps.count, 'unique observed model-step lifecycle records', true),
+      totalDurationMs: modelStepMetric(modelSteps.durationSampleCount > 0 ? modelSteps.totalDurationMs : undefined, 'sum of measured model-step durations'),
+      averageDurationMs: percentileMetric(modelSteps.averageDurationMs, 'average measured model-step duration; shown with at least 3 samples', 3),
+      p50DurationMs: percentileMetric(modelSteps.p50DurationMs, 'nearest-rank p50 measured model-step duration; shown with at least 3 samples', 3),
+      p90DurationMs: percentileMetric(modelSteps.p90DurationMs, 'nearest-rank p90 measured model-step duration; shown with at least 10 samples', 10),
+      maxDurationMs: modelStepMetric(modelSteps.maxDurationMs, 'maximum measured model-step duration'),
+      over60sCount: modelStepMetric(modelSteps.durationSampleCount > 0 ? modelSteps.over60sCount : undefined, 'measured model steps longer than 60 seconds'),
+      durationSampleCount: modelStepMetric(modelSteps.durationSampleCount, 'model steps with both start and end timing boundaries', true),
+      completed: modelStepMetric(modelSteps.completed, 'model steps ending completed', true),
+      failed: modelStepMetric(modelSteps.failed, 'model steps ending failed', true),
+      cancelled: modelStepMetric(modelSteps.cancelled, 'model steps ending cancelled', true),
+      incomplete: modelStepMetric(modelSteps.incomplete, 'model steps without a terminal lifecycle event', true),
+      retryCount: modelStepMetric(modelSteps.retryCount, 'runtime-observed model retry events; retries do not increment model-step count', true),
+      reasoningTokens: optionalDiagnostic(reasoningTokens, 'provider-reported reasoning token count summed across unique model steps when turn-level usage is absent', reasoningTokensComplete, 'model_provider_did_not_return_reasoning_tokens', 'model-provider'),
+      reasoningDurationMs: missingDiagnostic('reasoning_interval_boundaries_not_exposed_by_runtime', 'agent-runtime'),
+    },
+    assistantMessages: {
+      count: assistantMetric(assistantMessages.count, 'unique observed assistant-message lifecycle records', true),
+      totalDurationMs: assistantMetric(assistantMessages.durationSampleCount > 0 ? assistantMessages.totalDurationMs : undefined, 'sum of measured assistant-message durations'),
+      averageDurationMs: assistantMetric(assistantMessages.averageDurationMs, 'average measured assistant-message duration'),
+      maxDurationMs: assistantMetric(assistantMessages.maxDurationMs, 'maximum measured assistant-message duration'),
+      durationSampleCount: assistantMetric(assistantMessages.durationSampleCount, 'assistant messages with both timing boundaries', true),
+      completed: assistantMetric(assistantMessages.completed, 'assistant messages ending completed', true),
+      failed: assistantMetric(assistantMessages.failed, 'assistant messages ending failed', true),
+      cancelled: assistantMetric(assistantMessages.cancelled, 'assistant messages ending cancelled', true),
+      incomplete: assistantMetric(assistantMessages.incomplete, 'assistant messages without a terminal lifecycle event', true),
+    },
+    anomalies: {
+      retryCount: anomalyMetric(assistantMessages.retryCount, 'runtime-observed model retry events'),
+      rateLimitedCount: anomalyMetric(Math.max(assistantMessages.rateLimitedCount, terminalErrorClass === 'rate_limited' ? 1 : 0), 'runtime-observed 429 or rate-limit events'),
+      timeoutCount: anomalyMetric(Math.max(assistantMessages.timeoutCount, terminalErrorClass === 'timeout' ? 1 : 0), 'runtime-observed provider timeout events'),
+      upstreamErrorCount: anomalyMetric(Math.max(assistantMessages.upstreamErrorCount, terminalErrorClass === 'upstream_error' ? 1 : 0), 'runtime-observed upstream provider errors'),
+    },
+    tools: {
+      total: toolValue(tools.total, 'count of observed tool_use events'),
+      succeeded: toolValue(tools.succeeded, 'tool_result events without isError'),
+      failed: toolValue(tools.failed, 'tool_result events with isError'),
+      unknown: toolValue(tools.unknown, 'tool_use events without a matching terminal result'),
+      durationMs: toolValue(tools.durationMs, 'sum of paired tool_use to tool_result intervals'),
+      byName: toolValue(tools.byName, 'tool_use count grouped by redacted tool name'),
+    },
+    cache: {
+      inputTokensEffective: cacheMetric(usage.input_tokens_effective, 'normalized full prompt tokens'),
+      cacheReadInputTokens: cacheMetric(usage.cache_read_input_tokens, 'provider-reported cache-read input tokens'),
+      cacheCreationInputTokens: cacheMetric(usage.cache_creation_input_tokens, 'provider-reported cache-write input tokens'),
+      uncachedInputTokens: cacheMetric(usage.uncached_input_tokens, 'normalized uncached input tokens'),
+      cacheHitRatio: cacheMetric(usage.cache_hit_ratio, 'cache read tokens divided by effective input tokens'),
+      firstCallInputTokens: cacheMetric(usage.first_call_input_tokens, 'opening model call input tokens'),
+      firstCallCacheReadInputTokens: cacheMetric(usage.first_call_cache_read_input_tokens, 'opening model call cache-read tokens'),
+      firstCallCacheHitRatio: cacheMetric(usage.first_call_cache_hit_ratio, 'opening model call cache read divided by effective input'),
+      stablePromptCacheHit: run.promptCache
+        ? availableDiagnostic(Boolean(run.promptCache.hit), 'local stable-prompt hash matched the prior run')
+        : missingDiagnostic('stable_prompt_cache_not_enabled'),
+      stablePromptCacheMissReason: run.promptCache?.missReason
+        ? availableDiagnostic(run.promptCache.missReason, 'local stable-prompt cache miss classification')
+        : missingDiagnostic(run.promptCache?.hit ? 'stable_prompt_cache_hit' : 'stable_prompt_cache_not_enabled'),
+    },
+    environment: {
+      agentId: run.agentId
+        ? availableDiagnostic(run.agentId, 'requested agent runtime', true, 'agent-runtime')
+        : missingDiagnostic('agent_id_not_recorded', 'agent-runtime'),
+      provider: assistantMessages.provider
+        ? availableDiagnostic(assistantMessages.provider, 'provider id reported by the agent runtime', true, 'agent-runtime')
+        : missingDiagnostic('provider_not_reported_by_runtime', 'agent-runtime'),
+      requestedModel: run.model
+        ? availableDiagnostic(run.model, 'requested model configuration', true, 'agent-runtime')
+        : missingDiagnostic('requested_model_not_recorded', 'agent-runtime'),
+      resolvedModel: run.resolvedModelId || assistantMessages.model
+        ? availableDiagnostic(run.resolvedModelId || assistantMessages.model, 'runtime-resolved model id', true, 'agent-runtime')
+        : missingDiagnostic('resolved_model_not_reported', 'agent-runtime'),
+      reasoning: run.reasoning
+        ? availableDiagnostic(run.reasoning, 'requested reasoning configuration', true, 'agent-runtime')
+        : missingDiagnostic('reasoning_configuration_not_recorded', 'agent-runtime'),
+      agentCliVersion: run.preflightAgentCliVersion
+        ? availableDiagnostic(run.preflightAgentCliVersion, 'runtime CLI version observed during preflight', true, 'agent-runtime')
+        : missingDiagnostic('agent_cli_version_not_recorded', 'agent-runtime'),
+    },
+  };
+}
 
 function atomicWriteJson(filePath, value) {
   const tempPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
@@ -687,6 +1148,9 @@ export function createChatRunService({
       : {}),
     ...(typeof run.deliverableArtifactKind === 'string'
       ? { deliverableArtifactKind: run.deliverableArtifactKind }
+      : {}),
+    ...(TERMINAL_RUN_STATUSES.has(run.status)
+      ? { executionDiagnostics: buildExecutionDiagnostics(run) }
       : {}),
   });
 

@@ -25,6 +25,7 @@ const configureCiParallelismActionPath = join(
   "action.yml",
 );
 const uiExtendedMainWorkflowPath = join(workspaceRoot, ".github", "workflows", "ui-extended-main.yml");
+const visualBaselineWorkflowPath = join(workspaceRoot, ".github", "workflows", "visual-baseline.yml");
 const playwrightConfigPath = join(e2eRoot, "playwright.config.ts");
 const commentWorkflowPath = join(workspaceRoot, ".github", "workflows", "comment.atom.yml");
 const autofixWorkflowPath = join(workspaceRoot, ".github", "workflows", "autofix.atom.yml");
@@ -1148,13 +1149,20 @@ process.stdin.on("end", () => {
     expect(webWorkspaceTests).toContain("fromJSON(needs.runners.outputs.runs_on).js_hot");
     expect(webWorkspaceTests).toContain("toJSON(fromJSON(needs.runners.outputs.runs_on).js_hot)");
     expect(webWorkspaceTests).not.toContain('"od-persistent-ci"');
+    // Pin two-way vitest sharding so a later YAML edit cannot collapse the split or restore the
+    // monolithic `pnpm --filter @open-design/web test` command while this suite still passes.
+    expect(webWorkspaceTests).toContain("fail-fast: false");
+    expect(webWorkspaceTests).toContain("shard: [1, 2]");
+    expect(webWorkspaceTests).toContain(
+      "pnpm --filter @open-design/web exec vitest run -c vitest.config.ts --maxWorkers=2 --shard=${{ matrix.shard }}/2",
+    );
     expect(e2eVitest).toContain("fromJSON(needs.runners.outputs.runs_on).js_hot");
     expect(e2eVitest).toContain("toJSON(fromJSON(needs.runners.outputs.runs_on).js_hot)");
     expect(e2eVitest).not.toContain('"od-persistent-ci"');
     expect(preflight).toContain("fromJSON(needs.runners.outputs.runs_on).general_medium");
     expect(preflight).toContain("toJSON(fromJSON(needs.runners.outputs.runs_on).general_medium)");
-    expect(uiP0).toContain("fromJSON(needs.runners.outputs.runs_on).ui_hot");
-    expect(uiP0).toContain("toJSON(fromJSON(needs.runners.outputs.runs_on).ui_hot)");
+    expect(uiP0).toContain("fromJSON(needs.runners.outputs.runs_on).ui_p0");
+    expect(uiP0).toContain("toJSON(fromJSON(needs.runners.outputs.runs_on).ui_p0)");
     expect(uiP0).toContain("include: ${{ fromJSON(needs.scopes.outputs.ui_p0_matrix) }}");
     expect(uiP0CiMatrix.map((entry) => entry.name)).toEqual([
       "entry-settings",
@@ -1191,6 +1199,25 @@ process.stdin.on("end", () => {
     expect(uiP0).toContain("Preserve project-runtime domain artifact");
     expect(visual).toContain("fromJSON(needs.runners.outputs.runs_on).visual_hot");
     expect(visual).toContain("toJSON(fromJSON(needs.runners.outputs.runs_on).visual_hot)");
+    // visual-pr-capture-* is consumed by report.atom.yml; pin retain-on-failure traces so a
+    // later YAML edit cannot drop e2e/ui/reports/visual-test-results while the suite still passes.
+    expect(visual).toContain(
+      "name: visual-pr-capture-${{ github.event.pull_request.number }}-${{ github.run_id }}-${{ matrix.name }}",
+    );
+    expect(visual).toContain("name: visual-ci-${{ github.run_id }}-${{ matrix.name }}");
+    expect(visual).toContain("e2e/ui/reports/visual-test-results");
+    // Both PR and manual upload path lists include retain-on-failure diagnostics.
+    expect(visual.match(/e2e\/ui\/reports\/visual-test-results/g)?.length).toBe(2);
+    // visual-baseline.yml shares playwright.visual.config.ts; pin its debug artifact so baseline
+    // failures keep the same retain-on-failure path that ci.yml already uploads.
+    const visualBaseline = await readFile(visualBaselineWorkflowPath, "utf8");
+    const baselineDebugArtifact = sectionBetween(
+      visualBaseline,
+      "      - name: Upload baseline debug artifact",
+      "          retention-days: 7",
+    );
+    expect(baselineDebugArtifact).toContain("if: ${{ always() }}");
+    expect(baselineDebugArtifact).toContain("e2e/ui/reports/visual-test-results");
     expect(workflow).not.toContain("needs.runners.outputs.contabo_control");
     expect(workflow).not.toContain("needs.runners.outputs.hosted_or_blacksmith");
     expect(workflow).not.toContain("needs.runners.outputs.blacksmith_default");
@@ -1247,6 +1274,7 @@ process.stdin.on("end", () => {
     expect(benchmarkWorkflow).toContain("Preserve project-runtime domain artifact");
     expect(benchmarkWorkflow).toContain("--grep-invert '@merge-extra'");
     expect(benchmarkWorkflow).toContain("name: project-workspace");
+    expect(benchmarkWorkflow).toContain("fromJSON(needs.p0_runners.outputs.runs_on).ui_p0");
     expect(fullUi).toContain("fromJSON(needs.p0_runners.outputs.runs_on).ui_hot");
     expect(fullUi).toContain("shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]");
     expect(fullUi).toContain('OD_PLAYWRIGHT_FULLY_PARALLEL: "1"');
@@ -1268,6 +1296,7 @@ process.stdin.on("end", () => {
       "general_medium",
       "js_hot",
       "ui_hot",
+      "ui_p0",
       "visual_hot",
       "windows_tools",
       "workspace_unit",
@@ -1278,6 +1307,7 @@ process.stdin.on("end", () => {
     expect(defaultRunsOn.windows_tools).toEqual(["windows-latest"]);
     expect(defaultRunsOn.js_hot).toEqual(["nexu-runners-medium"]);
     expect(defaultRunsOn.ui_hot).toEqual(["nexu-runners-large"]);
+    expect(defaultRunsOn.ui_p0).toEqual(["nexu-runners-xlarge"]);
     expect(defaultRunsOn.visual_hot).toEqual(["nexu-runners-large"]);
     expect(defaultProfiles).not.toHaveProperty("contabo_control");
     expect(defaultProfiles).not.toHaveProperty("hosted_or_blacksmith");
@@ -1292,6 +1322,7 @@ process.stdin.on("end", () => {
     expect(performanceRunsOn.windows_tools).toEqual(["windows-latest"]);
     expect(performanceRunsOn.js_hot).toEqual(["nexu-runners-medium"]);
     expect(performanceRunsOn.ui_hot).toEqual(["nexu-runners-large"]);
+    expect(performanceRunsOn.ui_p0).toEqual(["nexu-runners-xlarge"]);
     expect(performanceRunsOn.visual_hot).toEqual(["nexu-runners-large"]);
 
     const economicProfiles = await runRunners("economic");
@@ -1303,6 +1334,7 @@ process.stdin.on("end", () => {
     expect(economicRunsOn.windows_tools).toEqual(["windows-latest"]);
     expect(economicRunsOn.js_hot).toEqual(["ubuntu-24.04"]);
     expect(economicRunsOn.ui_hot).toEqual(["ubuntu-24.04"]);
+    expect(economicRunsOn.ui_p0).toEqual(["ubuntu-24.04"]);
     expect(economicRunsOn.visual_hot).toEqual(["ubuntu-24.04"]);
 
     for (const invalidMode of ["Economic", " economic "]) {
