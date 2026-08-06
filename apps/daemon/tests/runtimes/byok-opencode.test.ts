@@ -37,6 +37,45 @@ describe('byok-opencode runtime config', () => {
     }
   });
 
+  // Regression for #6482: OpenCode only loads image attachments when they are
+  // passed as absolute `-f`/`--file` paths. Relative tokens and empty values
+  // must not be forwarded (and must not be treated as yargs array greed).
+  it('forwards absolute image attachments as repeated -f flags after model selection', () => {
+    agentCapabilities.delete('byok-opencode');
+    const absA = '/tmp/od-uploads/shot-a.png';
+    const absB = '/var/folders/xx/od-uploads/shot-b.jpg';
+    expect(
+      byokOpenCodeAgentDef.buildArgs(
+        '',
+        [absA, 'relative/skip.png', '', absB, null as unknown as string],
+        [],
+        { model: 'gpt-5.6-terra' },
+        { cwd: '/projects/demo' },
+      ),
+    ).toEqual([
+      'run',
+      '--format',
+      'json',
+      '--dir',
+      '/projects/demo',
+      '-m',
+      'open-design-byok/gpt-5.6-terra',
+      '-f',
+      absA,
+      '-f',
+      absB,
+    ]);
+  });
+
+  it('omits -f when no absolute image paths are supplied', () => {
+    agentCapabilities.delete('byok-opencode');
+    expect(
+      byokOpenCodeAgentDef.buildArgs('', ['relative.png', 'assets/foo.png'], [], {
+        model: 'gpt-4o-mini',
+      }),
+    ).toEqual(['run', '--format', 'json', '-m', 'open-design-byok/gpt-4o-mini']);
+  });
+
   it('prefixes raw BYOK models with the run-scoped OpenCode provider id', () => {
     expect(opencodeByokModelId('gpt-4o-mini')).toBe('open-design-byok/gpt-4o-mini');
     expect(opencodeByokModelId('open-design-byok/gpt-4o-mini')).toBe('open-design-byok/gpt-4o-mini');
@@ -67,6 +106,13 @@ describe('byok-opencode runtime config', () => {
           models: {
             'deepseek-v4-flash': {
               name: 'deepseek-v4-flash',
+              // #6482 — custom BYOK models default to text-only in OpenCode
+              // unless the provider entry advertises image input.
+              attachment: true,
+              modalities: {
+                input: ['text', 'image'],
+                output: ['text'],
+              },
               limit: {
                 context: 128_000,
                 output: 16_384,
@@ -74,6 +120,38 @@ describe('byok-opencode runtime config', () => {
             },
           },
         },
+      },
+    });
+  });
+
+  // Regression for #6482: without attachment/modalities OpenCode resolves the
+  // custom model as capabilities.input.image=false and rewrites image tool
+  // results to "this model does not support image input".
+  it('declares multimodal image input on every BYOK model entry', () => {
+    const out = buildOpenCodeByokProviderConfig(
+      {
+        protocol: 'openai',
+        apiKey: 'sk-openai',
+        baseUrl: 'https://api.openai.com/v1',
+      },
+      'gpt-5.6-terra',
+    );
+
+    const models = (
+      out?.config.provider as
+        | Record<string, { models?: Record<string, Record<string, unknown>> }>
+        | undefined
+    )?.[BYOK_OPENCODE_PROVIDER_ID]?.models;
+    expect(models?.['gpt-5.6-terra']).toEqual({
+      name: 'gpt-5.6-terra',
+      attachment: true,
+      modalities: {
+        input: ['text', 'image'],
+        output: ['text'],
+      },
+      limit: {
+        context: 128_000,
+        output: 16_384,
       },
     });
   });

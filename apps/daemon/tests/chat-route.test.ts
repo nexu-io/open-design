@@ -541,6 +541,12 @@ process.stdin.on('end', () => {
         });
         expect(provider?.models?.['deepseek-v4-flash']).toEqual({
           name: 'deepseek-v4-flash',
+          // Multimodal metadata so OpenCode accepts image attachments (#6482).
+          attachment: true,
+          modalities: {
+            input: ['text', 'image'],
+            output: ['text'],
+          },
           limit: {
             context: 128_000,
             output: 16_384,

@@ -79,6 +79,18 @@ export function buildOpenCodeByokProviderConfig(
         models: {
           [rawModel]: {
             name: rawModel,
+            // OpenCode treats custom provider models as text-only unless the
+            // entry declares image input. BYOK users pick models for design
+            // work that routinely includes screenshots / pasted images, so
+            // advertise multimodal input here; without it OpenCode rewrites
+            // image tool results to "this model does not support image input"
+            // even when the upstream endpoint accepts image_url payloads
+            // (issue #6482).
+            attachment: true,
+            modalities: {
+              input: ['text', 'image'],
+              output: ['text'],
+            },
             limit: {
               context: DEFAULT_CONTEXT_TOKEN_LIMIT,
               output: DEFAULT_OUTPUT_TOKEN_LIMIT,
