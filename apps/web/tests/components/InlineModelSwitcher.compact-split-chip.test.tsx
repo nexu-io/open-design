@@ -1,13 +1,16 @@
 // @vitest-environment jsdom
 //
 // Home compact chip is a split control (#6501):
-// - left (CLI icon) opens agent / mode switching
+// - left (CLI icon) opens local CLI agent switching only
 // - right (status + model name) opens the model list
+// BYOK / provider switching stays in Settings until maintainers decide
+// how it should appear on home.
 //
 // Before the fix both halves were one button that only opened the model list,
 // so switching CLI still required Settings.
 
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { InlineModelSwitcher } from '../../src/components/InlineModelSwitcher';
 import type { AgentInfo, AppConfig } from '../../src/types';
@@ -55,22 +58,36 @@ const codexAgent: AgentInfo = {
   models: [{ id: 'gpt-5', label: 'gpt-5', enabled: true, default: true }],
 };
 
-function renderCompact(onAgentChange = vi.fn()) {
-  return render(
+function StatefulCompact({
+  initialConfig = baseConfig,
+  onAgentChange,
+}: {
+  initialConfig?: AppConfig;
+  onAgentChange?: (id: string) => void;
+}) {
+  const [config, setConfig] = useState(initialConfig);
+  return (
     <InlineModelSwitcher
-      config={baseConfig}
+      config={config}
       agents={[amrAgent, codexAgent]}
       providerModelsCache={{}}
       compact
       daemonLive
-      onModeChange={vi.fn()}
-      onAgentChange={onAgentChange}
+      onModeChange={(mode) => setConfig((c) => ({ ...c, mode }))}
+      onAgentChange={(id) => {
+        onAgentChange?.(id);
+        setConfig((c) => ({ ...c, agentId: id, mode: 'daemon' }));
+      }}
       onAgentModelChange={vi.fn()}
       onApiProtocolChange={vi.fn()}
       onApiModelChange={vi.fn()}
       onOpenSettings={vi.fn()}
-    />,
+    />
   );
+}
+
+function renderCompact(onAgentChange?: (id: string) => void) {
+  return render(<StatefulCompact onAgentChange={onAgentChange} />);
 }
 
 afterEach(() => {
@@ -96,10 +113,75 @@ describe('InlineModelSwitcher compact split chip (#6501)', () => {
     const popover = screen.getByTestId('inline-model-switcher-popover');
 
     expect(within(popover).getByTestId('inline-model-switcher-agent-codex')).toBeTruthy();
-    expect(within(popover).getByTestId('inline-model-switcher-mode-daemon')).toBeTruthy();
+    // Home compact defers BYOK / mode tabs to Settings (#6501 scope).
+    expect(within(popover).queryByTestId('inline-model-switcher-mode-daemon')).toBeNull();
+    expect(within(popover).queryByTestId('inline-model-switcher-mode-api')).toBeNull();
     expect(
       within(popover).queryByTestId('inline-model-switcher-compact-model-claude-opus-4.6'),
     ).toBeNull();
+  });
+
+  it('does not list BYOK protocol tabs on the left CLI panel', () => {
+    render(
+      <InlineModelSwitcher
+        config={{
+          ...baseConfig,
+          mode: 'api',
+          apiKey: 'sk-test',
+          apiProtocol: 'openai',
+          model: 'gpt-4o',
+        }}
+        agents={[amrAgent, codexAgent]}
+        providerModelsCache={{}}
+        compact
+        daemonLive
+        onModeChange={vi.fn()}
+        onAgentChange={vi.fn()}
+        onAgentModelChange={vi.fn()}
+        onApiProtocolChange={vi.fn()}
+        onApiModelChange={vi.fn()}
+        onOpenSettings={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('inline-model-switcher-chip-agent'));
+    const popover = screen.getByTestId('inline-model-switcher-popover');
+
+    expect(within(popover).getByTestId('inline-model-switcher-agent-codex')).toBeTruthy();
+    expect(within(popover).queryByTestId('inline-model-switcher-provider-openai')).toBeNull();
+    expect(within(popover).queryByTestId('inline-model-switcher-mode-api')).toBeNull();
+  });
+
+  it('returns to Local CLI when picking an agent while BYOK is active', () => {
+    const onModeChange = vi.fn();
+    const onAgentChange = vi.fn();
+    render(
+      <InlineModelSwitcher
+        config={{
+          ...baseConfig,
+          mode: 'api',
+          apiKey: 'sk-test',
+          apiProtocol: 'openai',
+          model: 'gpt-4o',
+        }}
+        agents={[amrAgent, codexAgent]}
+        providerModelsCache={{}}
+        compact
+        daemonLive
+        onModeChange={onModeChange}
+        onAgentChange={onAgentChange}
+        onAgentModelChange={vi.fn()}
+        onApiProtocolChange={vi.fn()}
+        onApiModelChange={vi.fn()}
+        onOpenSettings={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('inline-model-switcher-chip-agent'));
+    fireEvent.click(screen.getByTestId('inline-model-switcher-agent-codex'));
+
+    expect(onModeChange).toHaveBeenCalledWith('daemon');
+    expect(onAgentChange).toHaveBeenCalledWith('codex');
   });
 
   it('opens the model list from the right segment', () => {
@@ -122,6 +204,39 @@ describe('InlineModelSwitcher compact split chip (#6501)', () => {
     fireEvent.click(screen.getByTestId('inline-model-switcher-agent-codex'));
 
     expect(onAgentChange).toHaveBeenCalledWith('codex');
+  });
+
+  it('opens the model list after picking a CLI with no recorded model', () => {
+    renderCompact();
+
+    fireEvent.click(screen.getByTestId('inline-model-switcher-chip-agent'));
+    fireEvent.click(screen.getByTestId('inline-model-switcher-agent-codex'));
+
+    const popover = screen.getByTestId('inline-model-switcher-popover');
+    expect(
+      within(popover).getByTestId('inline-model-switcher-compact-model-gpt-5'),
+    ).toBeTruthy();
+    expect(within(popover).queryByTestId('inline-model-switcher-agent-codex')).toBeNull();
+  });
+
+  it('keeps the recorded model and closes when the CLI already has a saved choice', () => {
+    render(
+      <StatefulCompact
+        initialConfig={{
+          ...baseConfig,
+          agentModels: {
+            amr: { model: 'claude-opus-4.6' },
+            codex: { model: 'gpt-5' },
+          },
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('inline-model-switcher-chip-agent'));
+    fireEvent.click(screen.getByTestId('inline-model-switcher-agent-codex'));
+
+    expect(screen.queryByTestId('inline-model-switcher-popover')).toBeNull();
+    expect(screen.getByTestId('inline-model-switcher-chip').textContent).toContain('gpt-5');
   });
 
   it('toggling the same segment closes the panel; the other segment swaps panels', () => {

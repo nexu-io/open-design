@@ -2,8 +2,9 @@
 //
 // Non-compact (entry top-bar): one chip opens a full popover (mode + agent /
 // provider + model). Compact (home hero, #6501): a split chip — left icon
-// opens CLI/BYOK switching, right status+model opens the model list. All
-// persistence is delegated upward through the same callbacks `AvatarMenu`
+// opens local CLI agent switching only (BYOK provider UI deferred to
+// Settings / maintainer follow-up), right status+model opens the model list.
+// All persistence is delegated upward through the same callbacks `AvatarMenu`
 // already uses, so the switcher inherits autosave + daemon sync without
 // re-implementing it.
 
@@ -134,7 +135,8 @@ const AMR_REMINDER_SEEN_KEY = 'open-design:inline-amr-cli-reminder-seen:v2';
 let amrReminderSeenFallback = false;
 
 /** Which popover surface is open. Compact home uses a split chip: left opens
- *  `agent` (CLI / BYOK), right opens `model`. Non-compact keeps a single `full`
+ *  local CLI agents only (BYOK / provider UI stays in Settings for now —
+ *  #6501), right opens the model list. Non-compact keeps a single `full`
  *  panel. */
 type SwitcherPanel = 'full' | 'agent' | 'model';
 
@@ -168,6 +170,15 @@ function displayAgentName(agent: Pick<AgentInfo, 'id' | 'name'>): string {
 
 function displayAgentChipName(agent: Pick<AgentInfo, 'id' | 'name'>): string {
   return agent.id === 'amr' ? 'Open Design' : displayAgentName(agent);
+}
+
+/** True when the user previously saved a model for this CLI (`agentModels`). */
+function hasRecordedAgentModel(
+  agentModels: AppConfig['agentModels'] | undefined,
+  agentId: string,
+): boolean {
+  const model = agentModels?.[agentId]?.model;
+  return typeof model === 'string' && model.trim().length > 0;
 }
 
 export function InlineModelSwitcher({
@@ -511,6 +522,19 @@ export function InlineModelSwitcher({
     t,
   ]);
 
+  /**
+   * Compact home: after picking a CLI, reuse `agentModels[agentId]` when the
+   * user already chose a model for that agent; otherwise open the model list
+   * so they do not silently run on the catalog default.
+   */
+  const finishCompactAgentPick = useCallback(
+    (agentId: string) => {
+      if (!compact) return;
+      setPanel(hasRecordedAgentModel(config.agentModels, agentId) ? null : 'model');
+    },
+    [compact, config.agentModels],
+  );
+
   const handleAgentButtonClick = useCallback(
     async (agentId: string) => {
       trackExecutionSettingsPopoverClick(analytics.track, {
@@ -519,8 +543,15 @@ export function InlineModelSwitcher({
         element: 'agent_card',
         cli_provider_id: agentIdToTracking(agentId),
       });
+      // Compact home lists CLI agents even when the active mode is BYOK
+      // (BYOK provider UI is not on that surface yet). Picking an agent
+      // must return execution to Local CLI.
+      if (config.mode === 'api') onModeChange?.('daemon');
       onAgentChange?.(agentId);
-      if (agentId !== 'amr') return;
+      if (agentId !== 'amr') {
+        finishCompactAgentPick(agentId);
+        return;
+      }
       if (amrLoginPending) {
         await handleAmrCancelLogin();
         return;
@@ -532,15 +563,25 @@ export function InlineModelSwitcher({
         { metricsConsent: config.telemetry?.metrics === true },
       );
       const latest = await refreshAmrStatus();
-      if (latest?.loggedIn) return;
+      if (latest?.loggedIn) {
+        finishCompactAgentPick(agentId);
+        return;
+      }
+      // Login required — do not open the model list until AMR is ready.
+      if (compact) setPanel(null);
       await handleAmrSignIn(attribution);
     },
     [
       amrLoginPending,
       analytics.track,
+      compact,
+      config.mode,
+      config.telemetry?.metrics,
+      finishCompactAgentPick,
       handleAmrCancelLogin,
       handleAmrSignIn,
       onAgentChange,
+      onModeChange,
       refreshAmrStatus,
     ],
   );
@@ -1023,7 +1064,7 @@ export function InlineModelSwitcher({
     setPanel(nextOpen ? 'full' : null);
   }, [panel, showAmrReminder]);
 
-  /** Compact home split chip: left opens CLI/BYOK, right opens models. */
+  /** Compact home split chip: left opens local CLI agents, right opens models. */
   const handleCompactSegmentClick = useCallback(
     (next: 'agent' | 'model') => {
       const closing = panel === next;
@@ -1177,7 +1218,7 @@ export function InlineModelSwitcher({
           data-testid="inline-model-switcher-popover"
           style={popoverPlacement ? { maxHeight: `${popoverPlacement.maxHeight}px`, overflowY: 'auto' } : undefined}
         >
-          {(!compact || panel === 'agent') ? (
+          {!compact ? (
           <div className="inline-switcher__row">
             <span className="inline-switcher__label">
               {t('inlineSwitcher.modeLabel')}
@@ -1394,7 +1435,8 @@ export function InlineModelSwitcher({
                 </span>
               )}
             </div>
-          ) : (!compact || panel === 'agent') && config.mode === 'daemon' ? (
+          ) : (!compact && config.mode === 'daemon') ||
+            (compact && panel === 'agent') ? (
             <>
               <div className="inline-switcher__row">
                 <span className="inline-switcher__label">
