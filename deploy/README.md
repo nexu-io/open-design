@@ -84,6 +84,58 @@ The image intentionally does not bundle Claude/Codex/Gemini CLI binaries. Keep
 those outside the image, or build a separate private runtime layer if a server
 deployment needs local code-agent CLIs installed in the container.
 
+### Snap Docker (Linux): `exec /sbin/tini: operation not permitted`
+
+On Ubuntu and other distros where Docker is installed from **snap**
+(`snap install docker`), Compose may crash-loop even when a plain
+`docker run …` of the same image works.
+
+**Symptom** — `docker logs open-design` repeats:
+
+```text
+exec /sbin/tini: operation not permitted
+```
+
+**Cause** — the base `docker-compose.yml` hardens the service with
+`read_only: true` and `security_opt: [no-new-privileges:true]`. Those
+defaults are fine under Docker Engine from apt/get, but snap's AppArmor
+profile blocks the image `ENTRYPOINT` (`/sbin/tini`) under that
+combination.
+
+**Preferred fix** — install Docker Engine from Docker's official packages
+instead of snap, then re-run Compose with the base file only:
+
+- https://docs.docker.com/engine/install/
+
+**Escape hatch** — keep snap Docker and relax only the two conflicting
+flags via `docker-compose.snap.yml`:
+
+```bash
+# from deploy/
+docker compose \
+  -f docker-compose.yml \
+  -f docker-compose.snap.yml \
+  up -d --no-build
+```
+
+With the Linux host-network override:
+
+```bash
+docker compose \
+  -f docker-compose.yml \
+  -f docker-compose.linux.yml \
+  -f docker-compose.snap.yml \
+  up -d --no-build
+```
+
+`deploy/scripts/install.sh` and `update.sh` detect snap-packaged Docker
+and apply `docker-compose.snap.yml` automatically, with a warning that
+the hardening defaults were relaxed for compatibility.
+
+Trade-off: the container root filesystem is writable and
+`no-new-privileges` is not enforced. Use the official Docker Engine
+install when you want the full hardening defaults.
+
 ## Linux: mounting host agent CLIs
 
 On Linux you can mount host-installed agent CLIs (Claude Code, opencode, Codex,
