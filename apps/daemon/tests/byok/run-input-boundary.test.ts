@@ -32,6 +32,18 @@ describe('BYOK run input boundary', () => {
     })).toBe(true);
   });
 
+  it('rejects a deployment credential selection without a concrete model', () => {
+    expect(__forTestHasCompleteByokOpenCodeConfig({
+      agentId: 'byok-opencode',
+      byokCredentialSource: 'deployment',
+    })).toBe(false);
+    expect(__forTestHasCompleteByokOpenCodeConfig({
+      agentId: 'byok-opencode',
+      model: 'default',
+      byokCredentialSource: 'deployment',
+    })).toBe(false);
+  });
+
   it('accepts a keyless run-scoped provider when the protocol permits it', () => {
     expect(__forTestHasCompleteByokOpenCodeConfig({
       agentId: 'byok-opencode',

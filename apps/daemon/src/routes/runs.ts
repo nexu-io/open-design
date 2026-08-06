@@ -869,7 +869,10 @@ function hasCompleteByokOpenCodeConfig(meta: JsonRecord): boolean {
   }
   if (meta.agentId !== BYOK_OPENCODE_AGENT_ID) return !usesDeploymentCredential;
   if (usesDeploymentCredential) {
-    return !Object.prototype.hasOwnProperty.call(meta, 'byokProvider');
+    const model = typeof meta.model === 'string' ? meta.model.trim() : '';
+    return !Object.prototype.hasOwnProperty.call(meta, 'byokProvider')
+      && Boolean(model)
+      && model.toLowerCase() !== 'default';
   }
   const provider = meta.byokProvider as ByokChatProviderConfig | null | undefined;
   if (provider?.credentialSource === 'deployment') return false;
