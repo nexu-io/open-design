@@ -6,6 +6,12 @@
 
 **参考实现：** `feat/codex-plugin-dev-loop@2e41b695d8f97eb21d61cb2555ff2e336927d26b`（只读参考，不作为实现基座）
 
+> **2026-08-07 更新：** 本文保留最初的三代迁移与原子任务估算作为背景。
+> 下一版本的并行交付边界由
+> [ADR 0002](../adr/0002-stabilize-headless-closure-handoff.md) 与
+> [Headless Closure parallel handoff](../handoffs/headless-closure-parallel-handoff.md)
+> 收紧：先固定 shell-carried shim/handoff，再由 Shell 与 Closure 两侧并行实现。
+
 ## 1. 结论
 
 Open Design 已经具备可靠的 Web/daemon sidecar、namespace/data-root、Desktop launcher、payload 更新、失败回滚和跨平台产品验收。当前任务不重写这些能力，而是把已经成立的产品边界迁移到正确的代码和交付边界，并在迁移完成后删除历史组合路径。
