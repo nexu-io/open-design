@@ -3092,14 +3092,27 @@ async function runMcpInstall(args) {
   const dryRun = Boolean(flags.print || flags['dry-run']);
   const serverName = flags.name || 'open-design';
 
-  const spec = await resolveMcpLaunchSpec(flags);
+  // Uninstall never needs a live daemon: planAgentInstall's remove-side
+  // fields (removeArgv, configPath/keyPath/serverKey for the JSON planners)
+  // never derive from `spec` -- only the add-side fields do. Skip discovery
+  // (and its ambiguous-discovery refusal below) entirely on this path, so
+  // "two packaged channels happen to be running" can never strand a stale
+  // MCP registration in an agent's config that the user is trying to clean
+  // up. planAgentInstall still needs SOME spec argument to build the full
+  // plan object (it computes the add-side shape unconditionally even when
+  // only the remove-side is about to be used) -- this placeholder is inert
+  // and never reaches an actual command line on the uninstall path.
+  const spec = uninstall
+    ? { command: '', args: [], env: {} }
+    : await resolveMcpLaunchSpec(flags);
   if (spec == null) {
     // Ambiguous discovery (see resolveMcpLaunchSpec's doc comment): more
     // than one packaged channel is simultaneously live and this install
     // cannot know which one the caller meant. Refuse the whole install
     // rather than persist a --daemon-url that would silently target
     // whatever later happens to own that port -- see the #6425 review
-    // discussion.
+    // discussion. (Never reached for `uninstall`, which takes the
+    // placeholder-spec branch above instead.)
     const msg = `${slug}: multiple Open Design channels are currently running; refusing to guess which one to install against. Stop the extra instance(s), or pass --daemon-url explicitly, then retry.`;
     emitInstallResult(useJson, { ok: false, agent: slug, message: msg });
     process.exit(2);

@@ -361,6 +361,34 @@ describe.skipIf(!DEFAULT_PORT_WAS_FREE)('od mcp install <agent> ambiguity refuse
       await new Promise<void>((resolve) => defaultPortServer.close(() => resolve()));
     }
   });
+
+  // Blocking finding from the round-11 review, on top of cb3a098: the
+  // `spec == null` ambiguity refusal in runMcpInstall fired unconditionally
+  // -- including for `--uninstall`, which never needed a live daemon or any
+  // launch-spec resolution at all (planAgentInstall's removeArgv /
+  // configPath / keyPath / serverKey fields never derive from `spec`; only
+  // the add-side fields do). With two conventional channel sockets live,
+  // `--uninstall` would hit the same ambiguous-null exit as install and
+  // bail with code 2 before ever reaching plan.removeArgv, stranding a
+  // stale MCP registration the user was specifically trying to clean up.
+  // Fixed by moving the uninstall check ahead of resolveMcpLaunchSpec
+  // entirely, so it takes a harmless placeholder spec instead of ever
+  // calling into discovery.
+  it('--uninstall is not blocked by ambiguous discovery', async () => {
+    const result = await runCli(['mcp', 'install', 'claude', '--uninstall', '--print', '--json'], {
+      [SIDECAR_ENV.IPC_BASE]: conventionalIpcBaseDir,
+    });
+
+    expect(result.code).toBe(0);
+    expect(result.stderr).toBe('');
+    const parsed = JSON.parse(result.stdout) as { ok: boolean; agent: string; kind: string; command: string };
+    expect(parsed.ok).toBe(true);
+    expect(parsed.agent).toBe('claude');
+    expect(parsed.kind).toBe('cli');
+    // plan.removeArgv for claude, not the ambiguity-refusal message and not
+    // any add-side command derived from the placeholder spec.
+    expect(parsed.command).toContain('mcp remove');
+  });
 });
 
 // Blocking finding from the round-9 review (commit d9043a7): the
