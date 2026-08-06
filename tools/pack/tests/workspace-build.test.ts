@@ -23,6 +23,7 @@ const PACKAGE_DIRS = [
   "packages/plugin-runtime",
   "packages/diagnostics",
   "packages/dsh-runtime",
+  "packages/headless-runtime",
   "apps/daemon",
   "apps/web",
   "apps/desktop",
@@ -58,6 +59,8 @@ const OUTPUT_FILES = [
   "packages/diagnostics/dist/index.d.ts",
   "packages/dsh-runtime/dist/index.js",
   "packages/dsh-runtime/dist/types/index.d.ts",
+  "packages/headless-runtime/dist/index.mjs",
+  "packages/headless-runtime/dist/index.d.ts",
   "apps/daemon/dist/cli.js",
   "apps/daemon/dist/cli.d.ts",
   "apps/daemon/dist/sidecar/index.js",
@@ -272,6 +275,50 @@ describe("ensureWorkspaceBuildArtifacts", () => {
       expect(builds).toBe(1);
       expect(cache.report().entries.map((entry) => entry.status)).toEqual(["miss", "hit"]);
       expect(await readFile(join(root, "packages/host/dist/index.mjs"), "utf8")).toBe("build-1\n");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("keys and materializes the headless runtime build output", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-workspace-build-headless-runtime-"));
+    const cache = new ToolPackCache(join(root, ".cache"));
+    const config = createConfig(root, cache.root);
+    let builds = 0;
+
+    try {
+      await writeWorkspace(root);
+      await ensureWorkspaceBuildArtifacts(config, cache, async () => {
+        builds += 1;
+        await writeOutputs(root, `build-${builds}`);
+      });
+
+      await writeFile(
+        join(root, "packages/headless-runtime/src/index.ts"),
+        "export const value = 2;\n",
+        "utf8",
+      );
+      await ensureWorkspaceBuildArtifacts(config, cache, async () => {
+        builds += 1;
+        await writeOutputs(root, `build-${builds}`);
+      });
+      expect(builds).toBe(2);
+
+      await writeFile(join(root, "packages/headless-runtime/dist/index.mjs"), "non-input\n", "utf8");
+      await ensureWorkspaceBuildArtifacts(config, cache, async () => {
+        builds += 1;
+        await writeOutputs(root, `build-${builds}`);
+      });
+      expect(builds).toBe(2);
+
+      await rm(join(root, "packages/headless-runtime/dist/index.mjs"), { force: true });
+      await ensureWorkspaceBuildArtifacts(config, cache, async () => {
+        builds += 1;
+        await writeOutputs(root, `build-${builds}`);
+      });
+      expect(builds).toBe(2);
+      expect(await readFile(join(root, "packages/headless-runtime/dist/index.mjs"), "utf8")).toBe("build-2\n");
+      expect(cache.report().entries.map((entry) => entry.status)).toEqual(["miss", "miss", "hit", "hit"]);
     } finally {
       await rm(root, { force: true, recursive: true });
     }
