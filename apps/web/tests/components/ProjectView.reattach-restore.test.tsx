@@ -562,6 +562,98 @@ describe('ProjectView daemon reattach restore', () => {
     });
   });
 
+  it('probes a long terminal Design run without endedAt and reattaches when daemon completion is fresh', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2030-01-01T00:00:00.000Z'));
+    const now = Date.now();
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-long-terminal-delivery',
+        role: 'assistant',
+        content: 'I finished the design.',
+        createdAt: now - 61_000,
+        startedAt: now - 61_000,
+        runId: 'run-long-terminal-delivery',
+        runStatus: 'succeeded',
+        sessionMode: 'design',
+        preTurnFileNames: [],
+        events: [{ kind: 'tool_use', id: 'write-long', name: 'Write', input: { file_path: 'index.html' } }],
+      } satisfies ChatMessage,
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-long-terminal-delivery', status: 'succeeded', createdAt: now - 61_000,
+      updatedAt: now, exitCode: 0, signal: null,
+    });
+    reattachDaemonRun.mockImplementation(async () => new Promise<void>(() => {}));
+
+    renderProjectView();
+    for (let attempt = 0; attempt < 20 && reattachDaemonRun.mock.calls.length === 0; attempt += 1) {
+      await act(async () => {
+        await Promise.resolve();
+      });
+    }
+
+    expect(fetchChatRunStatus).toHaveBeenCalledWith('run-long-terminal-delivery', null);
+    expect(reattachDaemonRun).toHaveBeenCalledTimes(1);
+  });
+
+  it('settles a missing-endedAt Design row when the daemon completion is historical', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2030-01-01T00:00:00.000Z'));
+    const now = Date.now();
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-historical-terminal-delivery',
+        role: 'assistant',
+        content: 'I finished the design.',
+        createdAt: now - 120_000,
+        startedAt: now - 120_000,
+        runId: 'run-historical-terminal-delivery',
+        runStatus: 'succeeded',
+        sessionMode: 'design',
+        preTurnFileNames: [],
+        events: [{ kind: 'tool_use', id: 'write-historical', name: 'Write', input: { file_path: 'index.html' } }],
+      } satisfies ChatMessage,
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-historical-terminal-delivery', status: 'succeeded', createdAt: now - 120_000,
+      updatedAt: now - 60_001, exitCode: 0, signal: null,
+    });
+
+    renderProjectView();
+    for (let attempt = 0; attempt < 20 && saveMessage.mock.calls.length === 0; attempt += 1) {
+      await act(async () => {
+        await Promise.resolve();
+      });
+    }
+
+    expect(fetchChatRunStatus).toHaveBeenCalledWith('run-historical-terminal-delivery', null);
+    expect(reattachDaemonRun).not.toHaveBeenCalled();
+    expect(saveMessage.mock.calls.map((call) => call[2] as ChatMessage)).toContainEqual(expect.objectContaining({
+      id: 'msg-historical-terminal-delivery',
+      runStatus: 'succeeded',
+      endedAt: now - 60_001,
+      producedFiles: [],
+      traceObjectFiles: [],
+    }));
+  });
+
   it('settles one stalled terminal Design delivery verification without reattaching again', async () => {
     vi.useFakeTimers();
     const endedAt = Date.now();

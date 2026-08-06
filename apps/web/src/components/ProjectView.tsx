@@ -5148,6 +5148,47 @@ export function ProjectView({
           );
         }
 
+        const terminalDeliveryReplayNeedsAuthoritativeAge =
+          replayingTerminalRun
+          && message.runStatus === 'succeeded'
+          && designDeliveryVerificationPending(message)
+          && message.endedAt == null;
+        if (
+          terminalDeliveryReplayNeedsAuthoritativeAge
+          && status.status === 'succeeded'
+          && !isFreshTerminalDeliveryReplayTimestamp(status.updatedAt)
+        ) {
+          const deliveryOutcome = resolveDesignDeliveryOutcome({
+            sessionMode: message.sessionMode,
+            runStatus: 'succeeded',
+            content: message.content,
+            events: message.events,
+            producedFileCount: 0,
+            traceObjectFileCount: 0,
+          });
+          const endedAt = isSafeTerminalTimestamp(status.updatedAt)
+            ? status.updatedAt
+            : undefined;
+          updateMessageById(
+            message.id,
+            (prev) => applyDesignDeliveryOutcome(
+              {
+                ...prev,
+                producedFiles: [],
+                traceObjectFiles: [],
+                ...(prev.endedAt == null && endedAt !== undefined ? { endedAt } : {}),
+              },
+              deliveryOutcome,
+            ),
+            true,
+            { telemetryFinalized: true },
+          );
+          completedReattachRunsRef.current.add(runId);
+          genericDisconnectRetriesRef.current.delete(runId);
+          genericDisconnectBackoffUntilRef.current.delete(runId);
+          continue;
+        }
+
         if (shouldReplayTerminalRunMessage(message)) {
           const replayedContent = textContentFromAgentEvents(message.events);
           if (replayedContent.trim().length > 0) {
@@ -11443,19 +11484,24 @@ function artifactFromRecoverableSourceText(sourceText: string): Artifact | null 
 
 const TERMINAL_DELIVERY_REPLAY_WINDOW_MS = 60_000;
 
+function isSafeTerminalTimestamp(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value <= Date.now();
+}
+
+function isFreshTerminalDeliveryReplayTimestamp(value: unknown): boolean {
+  return isSafeTerminalTimestamp(value) && Date.now() - value <= TERMINAL_DELIVERY_REPLAY_WINDOW_MS;
+}
+
 export function shouldReplayTerminalRunMessage(message: ChatMessage): boolean {
   if (message.role !== 'assistant') return false;
   if (!message.runId) return false;
   if (message.runStatus !== 'succeeded') return false;
-  // A daemon can persist terminal success before the browser finishes its
-  // project-file refresh. Reattach only during that bounded handoff window;
-  // replaying historical terminal rows with incomplete delivery metadata can
-  // otherwise keep a conversation loading forever after reload. Timestamp-less
-  // legacy rows retain the established recovery path because their age cannot
-  // be distinguished safely here.
+  // With a stored terminal timestamp, the browser can make a local bounded
+  // decision. Without it, createdAt/startedAt describe run start rather than
+  // completion, so leave the row eligible solely for an authoritative daemon
+  // status probe below.
   if (designDeliveryVerificationPending(message)) {
-    const terminalAt = message.endedAt ?? message.createdAt ?? message.startedAt;
-    return terminalAt == null || Date.now() - terminalAt <= TERMINAL_DELIVERY_REPLAY_WINDOW_MS;
+    return message.endedAt == null || isFreshTerminalDeliveryReplayTimestamp(message.endedAt);
   }
   if (message.content.trim().length > 0) return false;
   if (

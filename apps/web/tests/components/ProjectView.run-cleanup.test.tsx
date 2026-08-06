@@ -652,65 +652,29 @@ describe('ProjectView daemon cleanup', () => {
     expect(resolveSucceededRunStatus('canceled')).toBe('canceled');
   });
 
-  it('only replays a freshly completed unverified terminal Design-mode result', () => {
+  it('uses only a valid terminal timestamp to bound unverified Design replay', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2030-01-01T00:00:00.000Z'));
     const now = Date.now();
-    expect(
-      shouldReplayTerminalRunMessage({
-        id: 'msg-fresh-unverified-delivery',
-        role: 'assistant',
-        content: 'I finished the design.',
-        runId: 'run-fresh-unverified-delivery',
-        runStatus: 'succeeded',
-        sessionMode: 'design',
-        startedAt: now - 1_000,
-        endedAt: now,
-      }),
-    ).toBe(true);
-    expect(
-      shouldReplayTerminalRunMessage({
-        id: 'msg-historical-unverified-delivery',
-        role: 'assistant',
-        content: 'I finished the design.',
-        runId: 'run-historical-unverified-delivery',
-        runStatus: 'succeeded',
-        sessionMode: 'design',
-        startedAt: 1,
-        endedAt: 1,
-      }),
-    ).toBe(false);
-    expect(
-      shouldReplayTerminalRunMessage({
-        id: 'msg-stale-unverified-delivery',
-        role: 'assistant',
-        content: 'I finished the design.',
-        runId: 'run-stale-unverified-delivery',
-        runStatus: 'succeeded',
-        sessionMode: 'design',
-        startedAt: now - 60_001,
-        endedAt: now - 60_001,
-      }),
-    ).toBe(false);
-    expect(
-      shouldReplayTerminalRunMessage({
-        id: 'msg-legacy-unverified-delivery',
-        role: 'assistant',
-        content: 'I finished the design.',
-        runId: 'run-legacy-unverified-delivery',
-        runStatus: 'succeeded',
-        sessionMode: 'design',
-      }),
-    ).toBe(true);
-    expect(
-      shouldReplayTerminalRunMessage({
-        id: 'msg-chat-answer',
-        role: 'assistant',
-        content: 'Here is the answer.',
-        runId: 'run-chat-answer',
-        runStatus: 'succeeded',
-        sessionMode: 'chat',
-        startedAt: 1,
-      }),
-    ).toBe(false);
+    const message = (id: string, endedAt?: number): ChatMessage => ({
+      id,
+      role: 'assistant',
+      content: 'I finished the design.',
+      runId: `run-${id}`,
+      runStatus: 'succeeded',
+      sessionMode: 'design',
+      createdAt: now - 61_000,
+      startedAt: now - 61_000,
+      ...(endedAt === undefined ? {} : { endedAt }),
+    });
+
+    expect(shouldReplayTerminalRunMessage(message('fresh', now))).toBe(true);
+    expect(shouldReplayTerminalRunMessage(message('boundary', now - 60_000))).toBe(true);
+    expect(shouldReplayTerminalRunMessage(message('stale', now - 60_001))).toBe(false);
+    expect(shouldReplayTerminalRunMessage(message('future', now + 1))).toBe(false);
+    // No stored terminal timestamp means the effect must consult daemon updatedAt,
+    // not infer completion age from the much older run start timestamps.
+    expect(shouldReplayTerminalRunMessage(message('missing-ended-at'))).toBe(true);
   });
 
   // Regression: a phantom 'running' row in DB (no runId, no matching active
