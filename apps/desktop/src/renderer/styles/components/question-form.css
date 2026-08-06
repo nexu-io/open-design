@@ -1,0 +1,31 @@
+/*
+ * Prevents the required marker in question cards from wrapping.
+ * The label absorbs shrink pressure and long copy wraps inside it,
+ * while the marker remains a stable single-line element.
+ */
+.question-form-row {
+  display: flex;
+  align-items: flex-start;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.qf-label {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow-wrap: anywhere;
+  line-height: 20px;
+}
+
+.qf-required {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  line-height: 20px;
+}
+
+.qf-required,
+.qf-required > span,
+.qf-required > button,
+.qf-required button {
+  white-space: nowrap;
+}
