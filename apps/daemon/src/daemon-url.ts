@@ -80,6 +80,30 @@ type IpcDiscoveryResult =
   | { kind: "ambiguous" };
 
 /**
+ * `resolveDaemonUrlDetailed`'s result. `url` is always a usable HTTP base —
+ * legacy callers that only need the URL string can keep calling
+ * `resolveDaemonUrl` — but `ambiguous` is the load-bearing field for any
+ * caller that is about to PERSIST something derived from fetching that URL
+ * (see `resolveMcpLaunchSpec` in cli.ts).
+ *
+ * `url` being `DEFAULT_DAEMON_URL` does NOT by itself mean "no daemon was
+ * found and this is inert": it's also what's returned when discovery was
+ * ambiguous, and *something* could coincidentally be listening on that
+ * hardcoded legacy port during the exact window a caller queries it (a
+ * leftover process, an unrelated local service, even one of the very
+ * packaged channels this call refused to choose between). The #6425 review
+ * reproduced exactly this: two live channel sockets plus a plain HTTP
+ * server on 127.0.0.1:7456 caused `resolveMcpLaunchSpec` to fetch and
+ * persist that server's response despite the ambiguity guard. A caller
+ * that skips its own fetch/persist step whenever `ambiguous` is true does
+ * not have this problem, regardless of what `url` happens to be.
+ */
+export interface ResolveDaemonUrlResult {
+  url: string;
+  ambiguous: boolean;
+}
+
+/**
  * Resolve the daemon HTTP base URL for `od` client commands.
  *
  * Spawn order: explicit `--daemon-url` flag, `OD_DAEMON_URL` env, then
@@ -90,32 +114,50 @@ type IpcDiscoveryResult =
  * the default `tools-dev status --json` runtime. Falls back to the legacy
  * default for direct `od` launches that do not run as a sidecar.
  *
- * An ambiguous IPC result (more than one packaged channel answered, see
- * `IpcDiscoveryResult`) skips tools-dev discovery entirely and returns the
- * legacy default directly — refusing to guess extends to every later
- * discovery mechanism, not just the conventional channel sweep, since a
- * live tools-dev daemon answering in that window is just as much an
- * unrelated runtime as a wrongly-picked packaged channel would have been.
+ * A thin wrapper over `resolveDaemonUrlDetailed` for callers that only need
+ * the URL string and never persist anything derived from fetching it. Any
+ * caller that DOES persist something (currently just `resolveMcpLaunchSpec`
+ * in cli.ts) must call `resolveDaemonUrlDetailed` directly instead and
+ * check its `ambiguous` field — see that function's doc comment for why a
+ * bare URL string cannot safely carry this distinction on its own.
  */
 export async function resolveDaemonUrl(
   options: ResolveDaemonUrlOptions = {},
 ): Promise<string> {
+  return (await resolveDaemonUrlDetailed(options)).url;
+}
+
+/**
+ * Like `resolveDaemonUrl`, but also reports whether the result came from an
+ * ambiguous multi-channel discovery (see `ResolveDaemonUrlResult`).
+ *
+ * An ambiguous IPC result (more than one packaged channel answered, see
+ * `IpcDiscoveryResult`) skips tools-dev discovery entirely and returns the
+ * legacy default directly with `ambiguous: true` — refusing to guess
+ * extends to every later discovery mechanism, not just the conventional
+ * channel sweep, since a live tools-dev daemon answering in that window is
+ * just as much an unrelated runtime as a wrongly-picked packaged channel
+ * would have been.
+ */
+export async function resolveDaemonUrlDetailed(
+  options: ResolveDaemonUrlOptions = {},
+): Promise<ResolveDaemonUrlResult> {
   const env = options.env ?? process.env;
   const flagUrl = options.flagUrl ?? null;
-  if (flagUrl != null && flagUrl.length > 0) return flagUrl;
+  if (flagUrl != null && flagUrl.length > 0) return { url: flagUrl, ambiguous: false };
   const envUrl = env.OD_DAEMON_URL;
-  if (envUrl != null && envUrl.length > 0) return envUrl;
+  if (envUrl != null && envUrl.length > 0) return { url: envUrl, ambiguous: false };
   const discovered = await discoverDaemonUrlFromIpc(
     env,
     options.timeoutMs ?? 800,
     options.allowConventionalIpcDiscovery ?? false,
     options.platform,
   );
-  if (discovered.kind === "found") return discovered.url;
-  if (discovered.kind === "ambiguous") return DEFAULT_DAEMON_URL;
+  if (discovered.kind === "found") return { url: discovered.url, ambiguous: false };
+  if (discovered.kind === "ambiguous") return { url: DEFAULT_DAEMON_URL, ambiguous: true };
   const toolsDevUrl = await discoverDaemonUrlFromToolsDev(env, options.timeoutMs ?? 800);
-  if (toolsDevUrl != null) return toolsDevUrl;
-  return DEFAULT_DAEMON_URL;
+  if (toolsDevUrl != null) return { url: toolsDevUrl, ambiguous: false };
+  return { url: DEFAULT_DAEMON_URL, ambiguous: false };
 }
 
 async function discoverDaemonUrlFromIpc(

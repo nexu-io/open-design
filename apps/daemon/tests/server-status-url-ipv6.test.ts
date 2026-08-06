@@ -26,7 +26,13 @@ describe('startServer status URL formatting', () => {
   let started: StartedServer | null = null;
 
   afterEach(async () => {
+    // `shutdown` (startServer's returned shutdownDaemonRuns) drains daemon
+    // work; it does NOT close the HTTP server itself, so that has to happen
+    // separately or every test here leaks a live listener/open handle.
     await Promise.resolve(started?.shutdown?.());
+    if (started?.server) {
+      await new Promise<void>((resolve) => started?.server.close(() => resolve()));
+    }
     started = null;
   });
 

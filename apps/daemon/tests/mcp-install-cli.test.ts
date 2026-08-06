@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import http from 'node:http';
+import net from 'node:net';
 import os from 'node:os';
 import { dirname, resolve as pathResolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -17,6 +18,28 @@ const DAEMON_ROOT = pathResolve(__dirname, '..');
 const REPO_ROOT = pathResolve(__dirname, '../../..');
 const CLI_SRC = pathResolve(__dirname, '../src/cli.ts');
 const TSX_CLI = pathResolve(REPO_ROOT, 'node_modules/tsx/dist/cli.mjs');
+
+// The legacy default port daemon-url.ts's DEFAULT_DAEMON_URL hardcodes.
+// resolveMcpLaunchSpec fetches this exact address when discovery is
+// ambiguous, so the regression below needs a real listener bound there --
+// there is no env-level way to redirect that hardcoded address.
+const DEFAULT_DAEMON_PORT = 7456;
+
+async function isPortFree(port: number, host = '127.0.0.1'): Promise<boolean> {
+  return await new Promise((resolve) => {
+    const probe = net.createServer();
+    probe.once('error', () => resolve(false));
+    probe.listen(port, host, () => {
+      probe.close(() => resolve(true));
+    });
+  });
+}
+
+// Decided once, at module load (before any describe/it registers), since
+// `it`/`describe.skipIf` conditions must be synchronous by the time
+// Vitest collects this file -- a beforeAll can't retroactively skip tests
+// already queued for the run.
+const DEFAULT_PORT_WAS_FREE = process.platform === 'win32' ? false : await isPortFree(DEFAULT_DAEMON_PORT);
 
 async function runCli(
   args: string[],
@@ -194,5 +217,106 @@ describe.skipIf(process.platform === 'win32')('od mcp install <agent> end-to-end
     // server through conventional discovery, not the degraded fallback.
     expect(parsed.command).toContain(FAKE_COMMAND);
     expect(parsed.command).toContain(FAKE_ARGS.join(' '));
+  });
+});
+
+// Blocking finding from the round-8 review (commit 7536bc7): returning
+// DEFAULT_DAEMON_URL for an ambiguous discovery result does not make it
+// inert, because resolveMcpLaunchSpec unconditionally fetched
+// `${base}/api/mcp/install-info` on whatever URL it got back -- if
+// something happens to be listening on the hardcoded legacy port
+// 127.0.0.1:7456 during that exact window (a leftover process, an
+// unrelated local service, even one of the very channels ambiguity
+// refused to choose between), the CLI would fetch and persist THAT
+// server's response anyway, defeating the entire point of the ambiguity
+// guard. Reproduced by the reviewer with live stable/beta responders plus
+// a plain HTTP server on 7456; fixed by having resolveMcpLaunchSpec check
+// resolveDaemonUrlDetailed's `ambiguous` flag and skip the fetch entirely
+// in that case (see daemon-url.ts / cli.ts).
+//
+// Requires exclusive use of the real, unparameterizable port 7456 -- see
+// DEFAULT_PORT_WAS_FREE above -- so this describe is skipped rather than
+// failing outright if something else already owns that port on the host
+// (e.g. a real Open Design daemon, or a source-checkout `od` dev instance,
+// which also defaults to 7456) when this suite runs.
+describe.skipIf(!DEFAULT_PORT_WAS_FREE)('od mcp install <agent> ambiguity skips the default-port fetch entirely (#6425)', () => {
+  let conventionalIpcBaseDir: string;
+  let defaultPortServer: http.Server;
+  let stableIpc: JsonIpcServerHandle | null = null;
+  let betaIpc: JsonIpcServerHandle | null = null;
+
+  const UNRELATED_COMMAND = 'open-design-unrelated-default-port-daemon';
+
+  beforeAll(async () => {
+    // Short prefix deliberately: AF_UNIX's sun_path has a ~104-byte limit
+    // (macOS), and this path is already deep (tmpdir + namespace + filename).
+    conventionalIpcBaseDir = fs.mkdtempSync(pathResolve(os.tmpdir(), 'od-mcp-amb-'));
+
+    // Stands in for "something happens to be listening on the hardcoded
+    // legacy default port" -- must never be reached if the ambiguity guard
+    // works, regardless of what it would have returned.
+    defaultPortServer = http.createServer((req, res) => {
+      if (req.url === '/api/mcp/install-info') {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ command: UNRELATED_COMMAND, args: [], env: {} }));
+        return;
+      }
+      res.writeHead(404);
+      res.end();
+    });
+    await new Promise<void>((resolve, reject) => {
+      defaultPortServer.once('error', reject);
+      defaultPortServer.listen(DEFAULT_DAEMON_PORT, '127.0.0.1', resolve);
+    });
+
+    const platform = currentReleasePlatform();
+    const stableSocketPath = resolveAppIpcPath({
+      app: APP_KEYS.DAEMON,
+      contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+      env: { [SIDECAR_ENV.IPC_BASE]: conventionalIpcBaseDir },
+      namespace: releaseNamespace('stable', platform),
+    });
+    const betaSocketPath = resolveAppIpcPath({
+      app: APP_KEYS.DAEMON,
+      contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+      env: { [SIDECAR_ENV.IPC_BASE]: conventionalIpcBaseDir },
+      namespace: releaseNamespace('beta', platform),
+    });
+    fs.mkdirSync(pathResolve(stableSocketPath, '..'), { recursive: true });
+    fs.mkdirSync(pathResolve(betaSocketPath, '..'), { recursive: true });
+    stableIpc = await createJsonIpcServer({
+      socketPath: stableSocketPath,
+      handler: () => ({ pid: 1, state: 'running', updatedAt: new Date().toISOString(), url: 'http://127.0.0.1:56666' }),
+    });
+    betaIpc = await createJsonIpcServer({
+      socketPath: betaSocketPath,
+      handler: () => ({ pid: 2, state: 'running', updatedAt: new Date().toISOString(), url: 'http://127.0.0.1:57777' }),
+    });
+  });
+
+  afterAll(async () => {
+    await stableIpc?.close();
+    await betaIpc?.close();
+    await new Promise<void>((resolve) => defaultPortServer.close(() => resolve()));
+    fs.rmSync(conventionalIpcBaseDir, { recursive: true, force: true });
+  });
+
+  it('falls back to self-reinvocation instead of fetching the daemon listening on the default port', async () => {
+    const result = await runCli(['mcp', 'install', 'claude', '--print', '--json'], {
+      [SIDECAR_ENV.IPC_BASE]: conventionalIpcBaseDir,
+    });
+
+    expect(result.code).toBe(0);
+    expect(result.stderr).toBe('');
+    const parsed = JSON.parse(result.stdout) as { ok: boolean; agent: string; kind: string; command: string };
+    expect(parsed.ok).toBe(true);
+    expect(parsed.kind).toBe('cli');
+    // The core regression: must NOT have fetched /api/mcp/install-info from
+    // the port-7456 listener, ambiguous or not.
+    expect(parsed.command).not.toContain(UNRELATED_COMMAND);
+    // Must be the inert self-reinvocation spec instead (process.execPath +
+    // this file's own cli.ts entry point).
+    expect(parsed.command).toContain('cli.ts');
+    expect(parsed.command).toContain(`--daemon-url http://127.0.0.1:${DEFAULT_DAEMON_PORT}`);
   });
 });
