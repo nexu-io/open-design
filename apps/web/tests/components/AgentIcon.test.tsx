@@ -41,6 +41,34 @@ describe('AgentIcon', () => {
     expect(markup).not.toContain('agent-icon-mono');
   });
 
+  it('renders the Kiro SVG with a background tile that actually paints', () => {
+    // Regression guard. The tile was authored as `<rect fill="#9046ff" rx="260"/>`
+    // — no width, no height. Per SVG 2 both default to `auto`, which resolves to
+    // 0 and disables rendering of the element, so the purple tile silently
+    // vanished and the mark degraded to a bare white ghost: invisible against a
+    // light panel, and nothing failed.
+    const kiroSvg = readFileSync(
+      new URL('../../public/agent-icons/kiro.svg', import.meta.url),
+      'utf8',
+    );
+
+    expect(kiroSvg).toMatch(/^<svg\b/);
+    const rects = kiroSvg.match(/<rect\b[^>]*>/g) ?? [];
+    expect(rects).toHaveLength(1);
+    expect(rects[0]).toMatch(/\bwidth=/);
+    expect(rects[0]).toMatch(/\bheight=/);
+    // Kiro's product purple, matching the kiro.dev mark. This is the CLI agent's
+    // brand tile — deliberately not the macOS app icon used by the editor tile,
+    // which is a separate official asset (dark, ghost in shades).
+    expect(rects[0]).toContain('#9046ff');
+
+    // Colors are baked, so it renders through <img> rather than the
+    // currentColor mask, which would flatten it to a solid square.
+    const markup = renderToStaticMarkup(<AgentIcon id="kiro" size={24} />);
+    expect(markup).toContain('src="/agent-icons/kiro.svg"');
+    expect(markup).not.toContain('agent-icon-mono');
+  });
+
   it('renders Devin as a PNG (Cognition does not publish an SVG mark)', () => {
     const markup = renderToStaticMarkup(<AgentIcon id="devin" size={24} />);
 
