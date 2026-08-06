@@ -5512,54 +5512,62 @@ export function ProjectView({
           && designDeliveryVerificationPending(message);
         let terminalDeliveryVerificationExpired = false;
         let terminalDeliveryVerificationTimer: ReturnType<typeof setTimeout> | null = null;
+        const settleTerminalDeliveryVerification = () => {
+          if (terminalDeliveryVerificationExpired) return;
+          terminalDeliveryVerificationExpired = true;
+          if (terminalDeliveryVerificationTimer) {
+            clearProjectTimeout(terminalDeliveryVerificationTimer);
+            terminalDeliveryVerificationTimer = null;
+          }
+          completedReattachRunsRef.current.add(runId);
+          reattachControllersRef.current.delete(runId);
+          reattachCancelControllersRef.current.delete(runId);
+          clearCurrentRunStreamingMarker(reattachConversationId, controller, cancelController);
+          controller.abort();
+          const timeoutOutcome = resolveDesignDeliveryOutcome({
+            sessionMode: message.sessionMode,
+            runStatus: message.runStatus,
+            content: message.content,
+            events: message.events,
+            producedFileCount: 0,
+            traceObjectFileCount: 0,
+          });
+          updateMessageById(
+            message.id,
+            (prev) => {
+              if (prev.runStatus !== 'succeeded' || !designDeliveryVerificationPending(prev)) {
+                return prev;
+              }
+              const settled = {
+                ...prev,
+                content: prev.content || message.content,
+                events: [...(message.events ?? []), ...(prev.events ?? [])],
+                producedFiles: prev.producedFiles ?? [],
+                traceObjectFiles: prev.traceObjectFiles ?? [],
+              };
+              return applyDesignDeliveryOutcome(
+                settled,
+                resolveDesignDeliveryOutcome({
+                  sessionMode: settled.sessionMode,
+                  runStatus: settled.runStatus,
+                  content: settled.content,
+                  events: settled.events,
+                  producedFileCount: settled.producedFiles.length,
+                  traceObjectFileCount: settled.traceObjectFiles.length,
+                }),
+              );
+            },
+            true,
+            { telemetryFinalized: true },
+          );
+          if (timeoutOutcome === 'no_result' || timeoutOutcome === 'delivery_failed') {
+            setError(DESIGN_RESULT_MISSING_DETAIL);
+          }
+        };
         if (boundedTerminalDeliveryVerification) {
           terminalDeliveryVerificationTimer = scheduleProjectTimeout(() => {
             if (reattachControllersRef.current.get(runId) !== controller) return;
-            terminalDeliveryVerificationExpired = true;
-            completedReattachRunsRef.current.add(runId);
-            reattachControllersRef.current.delete(runId);
-            reattachCancelControllersRef.current.delete(runId);
-            clearCurrentRunStreamingMarker(reattachConversationId, controller, cancelController);
-            controller.abort();
-            const timeoutOutcome = resolveDesignDeliveryOutcome({
-              sessionMode: message.sessionMode,
-              runStatus: message.runStatus,
-              content: message.content,
-              events: message.events,
-              producedFileCount: 0,
-              traceObjectFileCount: 0,
-            });
-            updateMessageById(
-              message.id,
-              (prev) => {
-                if (prev.runStatus !== 'succeeded' || !designDeliveryVerificationPending(prev)) {
-                  return prev;
-                }
-                const settled = {
-                  ...prev,
-                  content: prev.content || message.content,
-                  events: [...(message.events ?? []), ...(prev.events ?? [])],
-                  producedFiles: prev.producedFiles ?? [],
-                  traceObjectFiles: prev.traceObjectFiles ?? [],
-                };
-                return applyDesignDeliveryOutcome(
-                  settled,
-                  resolveDesignDeliveryOutcome({
-                    sessionMode: settled.sessionMode,
-                    runStatus: settled.runStatus,
-                    content: settled.content,
-                    events: settled.events,
-                    producedFileCount: settled.producedFiles.length,
-                    traceObjectFileCount: settled.traceObjectFiles.length,
-                  }),
-                );
-              },
-              true,
-              { telemetryFinalized: true },
-            );
-            if (timeoutOutcome === 'no_result' || timeoutOutcome === 'delivery_failed') {
-              setError(DESIGN_RESULT_MISSING_DETAIL);
-            }
+            settleTerminalDeliveryVerification();
           }, TERMINAL_DELIVERY_VERIFICATION_TIMEOUT_MS);
         }
         void reattachDaemonRun({
@@ -5781,6 +5789,13 @@ export function ProjectView({
               onProjectsRefresh();
             },
             onError: async (err) => {
+              const genericDisconnect = isGenericDaemonDisconnect(err);
+              if (boundedTerminalDeliveryVerification && genericDisconnect) {
+                textBuffer.cancel();
+                unregisterTextBuffer();
+                settleTerminalDeliveryVerification();
+                return;
+              }
               if (terminalDeliveryVerificationTimer) {
                 clearProjectTimeout(terminalDeliveryVerificationTimer);
                 terminalDeliveryVerificationTimer = null;
@@ -5794,7 +5809,6 @@ export function ProjectView({
               const resumable = (err as Error & { resumable?: boolean }).resumable === true;
               let skipFinalPersistNow = false;
               let retryFullReplayAfterCleanup = false;
-              const genericDisconnect = isGenericDaemonDisconnect(err);
               const failure = runFailureFieldsFromError(err);
               // A superseded reattached run must not paint a global failure
               // banner or re-finalize its message over the replacement run.

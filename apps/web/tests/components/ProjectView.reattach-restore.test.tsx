@@ -834,6 +834,78 @@ describe('ProjectView daemon reattach restore', () => {
     expect(reattachDaemonRun).toHaveBeenCalledTimes(1);
   });
 
+  it('settles a terminal Design verification on generic disconnect without retrying', async () => {
+    vi.useFakeTimers();
+    const endedAt = Date.now();
+    let terminalOnError: ((error: Error & { code?: string }) => Promise<void>) | null = null;
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-terminal-generic-disconnect',
+        role: 'assistant',
+        content: 'I finished the design.',
+        createdAt: endedAt - 1_000,
+        startedAt: endedAt - 1_000,
+        endedAt,
+        runId: 'run-terminal-generic-disconnect',
+        runStatus: 'succeeded',
+        sessionMode: 'design',
+        preTurnFileNames: [],
+        events: [{ kind: 'tool_use', id: 'write-generic-disconnect', name: 'Write', input: { file_path: 'index.html' } }],
+      } satisfies ChatMessage,
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-terminal-generic-disconnect', status: 'succeeded', createdAt: endedAt - 1_000,
+      updatedAt: endedAt, exitCode: 0, signal: null,
+    });
+    reattachDaemonRun.mockImplementation(async (options: {
+      handlers: { onError: (error: Error & { code?: string }) => Promise<void> };
+    }) => {
+      terminalOnError = options.handlers.onError;
+      return new Promise<void>(() => {});
+    });
+
+    renderProjectView();
+    for (let attempt = 0; attempt < 20 && terminalOnError === null; attempt += 1) {
+      await act(async () => {
+        await Promise.resolve();
+      });
+    }
+    expect(terminalOnError).toBeTypeOf('function');
+    const genericDisconnect = Object.assign(
+      new Error('daemon stream disconnected before run completed'),
+      { code: 'GENERIC_DAEMON_DISCONNECT' },
+    );
+    await act(async () => {
+      await (terminalOnError as (error: typeof genericDisconnect) => Promise<void>)(genericDisconnect);
+    });
+    for (let attempt = 0; attempt < 20 && !saveMessage.mock.calls.some((call) =>
+      (call[2] as ChatMessage).resultDeliveryState === 'no_result'); attempt += 1) {
+      await act(async () => {
+        await Promise.resolve();
+      });
+    }
+
+    expect(saveMessage.mock.calls.map((call) => call[2] as ChatMessage)).toContainEqual(expect.objectContaining({
+      id: 'msg-terminal-generic-disconnect',
+      runStatus: 'succeeded',
+      producedFiles: [],
+      traceObjectFiles: [],
+      resultDeliveryState: 'no_result',
+    }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(6_000);
+    });
+    expect(reattachDaemonRun).toHaveBeenCalledTimes(1);
+  });
+
   it('does not publish a run-finished event while replaying a historical success', async () => {
     const startedAt = Date.now() - 10_000;
     listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
