@@ -228,6 +228,11 @@ export interface RegisterPluginRoutesDeps {
       workspaceMemberId?: string | null,
     ) => InstalledPluginLike[] | Promise<InstalledPluginLike[]>;
     getInstalledPlugin: (db: SqliteDbLike, id: string) => InstalledPluginLike | null;
+    reconcileUnboundUserPlugins?: (
+      db: SqliteDbLike,
+      workspaceId: string | null | undefined,
+      workspaceMemberId: string | null | undefined,
+    ) => number;
     getWorkspacePlugin?: (
       db: SqliteDbLike,
       id: string,
@@ -429,7 +434,7 @@ export function registerPluginRoutes(app: Express, deps: RegisterPluginRoutesDep
     return binding.visibility === 'team'
       || binding.createdByWorkspaceMemberId === authority.workspaceMemberId;
   };
-  app.get('/api/plugins', async (req, res) => { try { const authority = await resolveWorkspaceAuthority(req, res); if (authority === undefined) return; const visible = await plugins.listInstalledPlugins(db, authority?.workspaceId ?? null, authority?.workspaceMemberId ?? null); res.json({ plugins: helpers.applyBakedPreviews(visible, helpers.PLUGIN_PREVIEWS_DIR) }); } catch (err) { res.status(500).json({ error: String(err) }); } });
+  app.get('/api/plugins', async (req, res) => { try { const authority = await resolveWorkspaceAuthority(req, res); if (authority === undefined) return; if (authority?.workspaceId && authority.workspaceMemberId) { plugins.reconcileUnboundUserPlugins?.(db, authority.workspaceId, authority.workspaceMemberId); } const visible = await plugins.listInstalledPlugins(db, authority?.workspaceId ?? null, authority?.workspaceMemberId ?? null); res.json({ plugins: helpers.applyBakedPreviews(visible, helpers.PLUGIN_PREVIEWS_DIR) }); } catch (err) { res.status(500).json({ error: String(err) }); } });
   // Keep this static route before /api/plugins/:id; Express matches in
   // registration order and would otherwise interpret "stats" as a plugin id.
   app.get('/api/plugins/stats', async (req, res) => {

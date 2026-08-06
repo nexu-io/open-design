@@ -32,7 +32,7 @@ import type {
   TrustTier,
 } from '@open-design/contracts';
 import { defaultTrustForRecord, resolveCapabilitiesGranted } from './trust.js';
-import { getWorkspaceResourceByResourceId } from '../db.js';
+import { ensureWorkspaceResource, getWorkspaceResourceByResourceId } from '../db.js';
 import type Database from 'better-sqlite3';
 
 type SqliteDb = Database.Database;
@@ -274,6 +274,55 @@ function pluginVisibleFromWorkspace(
   const creatorId = binding?.createdByWorkspaceMemberId?.trim();
   const callerId = workspaceMemberId?.trim();
   return Boolean(creatorId && callerId && creatorId === callerId);
+}
+
+/**
+ * Adopt legacy pre-workspace-isolation plugins into the requesting Workspace.
+ *
+ * Plugins installed before the `workspace_resources` table existed (#6528)
+ * have no binding row, so `pluginVisibleFromWorkspace` quarantines them from
+ * every explicit Workspace and they silently vanish from the UI after the
+ * upgrade. This reconciler runs on demand from `GET /api/plugins` AFTER
+ * `resolveWorkspaceAuthority` has verified the caller, and claims each
+ * still-unbound user plugin as a Personal resource created by the
+ * authenticated member — the same rows a fresh install would have written.
+ *
+ * Deliberate constraints:
+ * - Requires BOTH a verified workspace id and member id: adoption is an
+ *   ownership claim, so an unauthenticated or headerless caller never
+ *   triggers it (the "no caller may adopt legacy bytes merely by viewing
+ *   them" rule in `pluginVisibleFromWorkspace` still holds for them).
+ * - `bundled` plugins stay global and are never bound.
+ * - Team materializations (`team:plugin:` sources) are managed by the hub
+ *   reconciliation path and are skipped here.
+ * - Idempotent: `ensureWorkspaceResource` keys on `(resource_type,
+ *   resource_id)`, so a plugin already bound anywhere — including to another
+ *   Workspace on a multi-workspace machine — is left untouched.
+ */
+export function reconcileUnboundUserPluginsForWorkspace(
+  db: SqliteDb,
+  workspaceId: string | null | undefined,
+  workspaceMemberId: string | null | undefined,
+): number {
+  const scopeId = workspaceId?.trim();
+  const memberId = workspaceMemberId?.trim();
+  if (!scopeId || !memberId) return 0;
+  const rows = db.prepare(`SELECT * FROM installed_plugins`).all() as DbRow[];
+  let adopted = 0;
+  for (const row of rows) {
+    const record = rowToInstalledPlugin(row);
+    if (record.sourceKind === 'bundled') continue;
+    if (typeof record.source === 'string' && record.source.startsWith('team:plugin:')) continue;
+    const binding = getWorkspaceResourceByResourceId(db, 'plugin', record.id);
+    if (binding) continue;
+    ensureWorkspaceResource(db, 'plugin', scopeId, record.id, {
+      visibility: 'personal',
+      resourceState: 'active',
+      createdByWorkspaceMemberId: memberId,
+    });
+    adopted += 1;
+  }
+  return adopted;
 }
 
 /**

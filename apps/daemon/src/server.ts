@@ -392,6 +392,7 @@ import {
   resolveAndActivateWorkspaceTeamPlugin,
   resolvePluginFolder,
   resolveWorkspaceTeamPluginWithBindingGate,
+  reconcileUnboundUserPluginsForWorkspace,
   workspaceTeamPluginBindingActivationFence,
   workspaceTeamPluginBindingAllowsRead,
   workspaceTeamPluginBindingResourceId,
@@ -7913,6 +7914,7 @@ export async function startServer({
     plugins: {
       listInstalledPlugins: listWorkspacePlugins,
       getInstalledPlugin,
+      reconcileUnboundUserPlugins: reconcileUnboundUserPluginsForWorkspace,
       getWorkspacePlugin: getWorkspacePluginForRequest,
       installPlugin,
       isSafePluginId,
