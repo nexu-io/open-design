@@ -6110,6 +6110,9 @@ export function ProjectView({
           },
           onRunStatus: (runStatus) => {
             if (terminalDeliveryVerificationExpired) return;
+            if (boundedTerminalDeliveryVerification && (runStatus === 'queued' || runStatus === 'running')) {
+              return;
+            }
             textBuffer.flush();
             updateMessageById(
               message.id,

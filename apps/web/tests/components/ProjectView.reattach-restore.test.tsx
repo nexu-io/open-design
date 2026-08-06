@@ -805,6 +805,8 @@ describe('ProjectView daemon reattach restore', () => {
       });
     }
     expect(reattachDaemonRun).toHaveBeenCalledTimes(1);
+    expect(lateOnRunStatus).toBeTypeOf('function');
+    lateOnRunStatus!('running');
     expect(lateOnDelta).toBeTypeOf('function');
     lateOnDelta!('late buffered delta');
 
