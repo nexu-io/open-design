@@ -13,7 +13,8 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.mjs"
-    }
+    },
+    "./fixtures/*": "./fixtures/*"
   },
   "scripts": {
     "build": "tsx ./esbuild.config.ts && tsc -p tsconfig.json --emitDeclarationOnly",

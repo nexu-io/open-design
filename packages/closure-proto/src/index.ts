@@ -4,8 +4,12 @@ import { normalizeNamespace } from "@open-design/sidecar-proto";
 export const CLOSURE_SCHEMA_VERSION = 1 as const;
 export const CLOSURE_PROTOCOL_VERSION = 1 as const;
 export const CLOSURE_INVENTORY_SCHEMA_VERSION = 1 as const;
+export const CLOSURE_HANDOFF_SCHEMA_VERSION = 1 as const;
+export const CLOSURE_SHIM_SCHEMA_VERSION = 1 as const;
+export const CLOSURE_SIGNATURE_SCHEMA_VERSION = 1 as const;
 export const CLOSURE_ARCHIVE_MEDIA_TYPE = "application/vnd.open-design.closure.zip-v1" as const;
 export const CLOSURE_ARCHIVE_ENTRY_PATH = "runtime.mjs" as const;
+export const CLOSURE_SIGNATURE_ALGORITHM = "ed25519" as const;
 
 export type ClosureDigest = `sha256:${string}`;
 
@@ -52,6 +56,57 @@ export type ClosureFileInventoryEntry = {
 export type ClosureFileInventory = {
   files: ClosureFileInventoryEntry[];
   schemaVersion: typeof CLOSURE_INVENTORY_SCHEMA_VERSION;
+};
+
+export type ClosureRuntimeIdentity = ClosureBindingIdentity & {
+  generation: number;
+};
+
+/**
+ * Stable, additive identity envelope passed from the shell-carried shim to one
+ * Closure body generation. Body layout and transport deliberately stay out of
+ * this contract.
+ */
+export type ClosureHandoffEnvelope = {
+  identity: ClosureRuntimeIdentity;
+  schemaVersion: typeof CLOSURE_HANDOFF_SCHEMA_VERSION;
+};
+
+export type ClosureShimRequest = {
+  channel: ReleaseChannel;
+  namespace: string;
+  platform: string;
+  schemaVersion: typeof CLOSURE_SHIM_SCHEMA_VERSION;
+  shell: {
+    type: string;
+    version: string;
+  };
+};
+
+export type ClosureShimReadyResult = {
+  handoff: ClosureHandoffEnvelope;
+  outcome: "ready";
+  reused: boolean;
+  rolledBack: boolean;
+  schemaVersion: typeof CLOSURE_SHIM_SCHEMA_VERSION;
+};
+
+export type ClosureShimInstallerReinstallResult = {
+  minShellVersion: string;
+  outcome: "installer-reinstall";
+  schemaVersion: typeof CLOSURE_SHIM_SCHEMA_VERSION;
+};
+
+export type ClosureShimResult =
+  | ClosureShimReadyResult
+  | ClosureShimInstallerReinstallResult;
+
+/** Detached signature over serializeClosureCandidateManifestForSigning(). */
+export type ClosureCandidateSignature = {
+  algorithm: typeof CLOSURE_SIGNATURE_ALGORITHM;
+  keyId: string;
+  schemaVersion: typeof CLOSURE_SIGNATURE_SCHEMA_VERSION;
+  value: string;
 };
 
 export class ClosureProtocolError extends Error {
@@ -112,6 +167,27 @@ function normalizePositiveInteger(value: unknown, label: string): number {
 function normalizeNonNegativeInteger(value: unknown, label: string): number {
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
     throw new ClosureProtocolError(`${label} must be a non-negative safe integer`);
+  }
+  return value;
+}
+
+function normalizeShellType(value: unknown): string {
+  if (typeof value !== "string" || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(value)) {
+    throw new ClosureProtocolError("closure shell type must be a lowercase token");
+  }
+  return value;
+}
+
+function normalizeKeyId(value: unknown): string {
+  if (typeof value !== "string" || !/^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,127})$/u.test(value)) {
+    throw new ClosureProtocolError("closure signature keyId must be a safe token");
+  }
+  return value;
+}
+
+function normalizeSignatureValue(value: unknown): string {
+  if (typeof value !== "string" || !/^[A-Za-z0-9_-]+$/u.test(value)) {
+    throw new ClosureProtocolError("closure signature value must be unpadded base64url");
   }
   return value;
 }
@@ -292,4 +368,138 @@ export function validateClosureFileInventory(value: unknown): ClosureFileInvento
     throw new ClosureProtocolError(`closure inventory must contain ${CLOSURE_ARCHIVE_ENTRY_PATH}`);
   }
   return { files, schemaVersion: CLOSURE_INVENTORY_SCHEMA_VERSION };
+}
+
+export function createClosureHandoffEnvelope(
+  identity: ClosureRuntimeIdentity,
+): ClosureHandoffEnvelope {
+  return validateClosureHandoffEnvelope({
+    identity,
+    schemaVersion: CLOSURE_HANDOFF_SCHEMA_VERSION,
+  });
+}
+
+export function validateClosureHandoffEnvelope(
+  value: unknown,
+  expected?: {
+    channel?: string;
+    generation?: number;
+    namespace?: string;
+    platform?: string;
+  },
+): ClosureHandoffEnvelope {
+  const envelope = requireRecord(value, "closure handoff envelope");
+  if (envelope.schemaVersion !== CLOSURE_HANDOFF_SCHEMA_VERSION) {
+    throw new ClosureProtocolError(
+      `unsupported closure handoff schema version: ${String(envelope.schemaVersion)}`,
+    );
+  }
+  const identityValue = requireRecord(envelope.identity, "closure handoff identity");
+  const identity: ClosureRuntimeIdentity = {
+    ...validateClosureBindingIdentity(identityValue),
+    generation: normalizeNonNegativeInteger(identityValue.generation, "closure generation"),
+  };
+  if (expected?.channel != null && identity.channel !== normalizeChannel(expected.channel)) {
+    throw new ClosureProtocolError(
+      `closure handoff channel ${identity.channel} does not match expected channel ${expected.channel}`,
+    );
+  }
+  if (
+    expected?.namespace != null
+    && identity.namespace !== normalizeProductNamespace(expected.namespace)
+  ) {
+    throw new ClosureProtocolError(
+      `closure handoff namespace ${identity.namespace} does not match expected namespace ${expected.namespace}`,
+    );
+  }
+  if (expected?.platform != null && identity.platform !== normalizePlatform(expected.platform)) {
+    throw new ClosureProtocolError(
+      `closure handoff platform ${identity.platform} does not match expected platform ${expected.platform}`,
+    );
+  }
+  if (
+    expected?.generation != null
+    && identity.generation !== normalizeNonNegativeInteger(expected.generation, "expected closure generation")
+  ) {
+    throw new ClosureProtocolError(
+      `closure handoff generation ${identity.generation} does not match expected generation ${expected.generation}`,
+    );
+  }
+  return {
+    identity,
+    schemaVersion: CLOSURE_HANDOFF_SCHEMA_VERSION,
+  };
+}
+
+export function validateClosureShimRequest(value: unknown): ClosureShimRequest {
+  const request = requireRecord(value, "closure shim request");
+  if (request.schemaVersion !== CLOSURE_SHIM_SCHEMA_VERSION) {
+    throw new ClosureProtocolError(
+      `unsupported closure shim schema version: ${String(request.schemaVersion)}`,
+    );
+  }
+  const shell = requireRecord(request.shell, "closure shim shell identity");
+  return {
+    channel: normalizeChannel(request.channel),
+    namespace: normalizeProductNamespace(request.namespace),
+    platform: normalizePlatform(request.platform),
+    schemaVersion: CLOSURE_SHIM_SCHEMA_VERSION,
+    shell: {
+      type: normalizeShellType(shell.type),
+      version: normalizeVersion(shell.version, "closure shell version"),
+    },
+  };
+}
+
+export function validateClosureShimResult(value: unknown): ClosureShimResult {
+  const result = requireRecord(value, "closure shim result");
+  if (result.schemaVersion !== CLOSURE_SHIM_SCHEMA_VERSION) {
+    throw new ClosureProtocolError(
+      `unsupported closure shim schema version: ${String(result.schemaVersion)}`,
+    );
+  }
+  if (result.outcome === "installer-reinstall") {
+    return {
+      minShellVersion: normalizeVersion(result.minShellVersion, "closure minimum shell version"),
+      outcome: "installer-reinstall",
+      schemaVersion: CLOSURE_SHIM_SCHEMA_VERSION,
+    };
+  }
+  if (result.outcome === "ready") {
+    if (typeof result.reused !== "boolean" || typeof result.rolledBack !== "boolean") {
+      throw new ClosureProtocolError("ready closure shim result must declare reused and rolledBack");
+    }
+    return {
+      handoff: validateClosureHandoffEnvelope(result.handoff),
+      outcome: "ready",
+      reused: result.reused,
+      rolledBack: result.rolledBack,
+      schemaVersion: CLOSURE_SHIM_SCHEMA_VERSION,
+    };
+  }
+  throw new ClosureProtocolError(`unsupported closure shim outcome: ${String(result.outcome)}`);
+}
+
+export function validateClosureCandidateSignature(value: unknown): ClosureCandidateSignature {
+  const signature = requireRecord(value, "closure candidate signature");
+  if (signature.schemaVersion !== CLOSURE_SIGNATURE_SCHEMA_VERSION) {
+    throw new ClosureProtocolError(
+      `unsupported closure signature schema version: ${String(signature.schemaVersion)}`,
+    );
+  }
+  if (signature.algorithm !== CLOSURE_SIGNATURE_ALGORITHM) {
+    throw new ClosureProtocolError(
+      `unsupported closure signature algorithm: ${String(signature.algorithm)}`,
+    );
+  }
+  return {
+    algorithm: CLOSURE_SIGNATURE_ALGORITHM,
+    keyId: normalizeKeyId(signature.keyId),
+    schemaVersion: CLOSURE_SIGNATURE_SCHEMA_VERSION,
+    value: normalizeSignatureValue(signature.value),
+  };
+}
+
+export function serializeClosureCandidateManifestForSigning(value: unknown): string {
+  return `${JSON.stringify(validateClosureCandidateManifest(value))}\n`;
 }
