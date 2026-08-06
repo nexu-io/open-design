@@ -100,6 +100,19 @@ describe('installFontRecovery', () => {
     cancel();
   });
 
+  it('recovers the four Noto Sans Cyrillic subsets when errored (#6478)', async () => {
+    const { doc, added } = fakeDocument([{ family: 'Noto Sans', status: 'error' }]);
+    const cancel = installFontRecovery(doc);
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(added.filter((f) => f.family === 'Noto Sans')).toHaveLength(4);
+    expect(fetchMock).toHaveBeenCalledWith('/fonts/noto-sans-cyrillic-wght-normal.woff2');
+    expect(fetchMock).toHaveBeenCalledWith('/fonts/noto-sans-cyrillic-ext-wght-normal.woff2');
+    expect(fetchMock).toHaveBeenCalledWith('/fonts/noto-sans-cyrillic-wght-italic.woff2');
+    expect(fetchMock).toHaveBeenCalledWith('/fonts/noto-sans-cyrillic-ext-wght-italic.woff2');
+    cancel();
+  });
+
   it('cancel stops pending sweeps', async () => {
     const { doc, added } = fakeDocument([{ family: 'remixicon', status: 'error' }]);
     const cancel = installFontRecovery(doc);

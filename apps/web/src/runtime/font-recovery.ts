@@ -29,6 +29,41 @@ const RECOVERABLE_FONTS: RecoverableFont[] = [
     url: '/fonts/AlbertSans-Italic-VariableFont_wght.ttf',
     descriptors: { weight: '100 900', style: 'italic' },
   },
+  // Cyrillic-only fallback faces (#6478). Same od:// recovery path as Albert.
+  {
+    family: 'Noto Sans',
+    url: '/fonts/noto-sans-cyrillic-wght-normal.woff2',
+    descriptors: {
+      weight: '100 900',
+      unicodeRange: 'U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116',
+    },
+  },
+  {
+    family: 'Noto Sans',
+    url: '/fonts/noto-sans-cyrillic-ext-wght-normal.woff2',
+    descriptors: {
+      weight: '100 900',
+      unicodeRange: 'U+0460-052F,U+1C80-1C8A,U+20B4,U+2DE0-2DFF,U+A640-A69F,U+FE2E-FE2F',
+    },
+  },
+  {
+    family: 'Noto Sans',
+    url: '/fonts/noto-sans-cyrillic-wght-italic.woff2',
+    descriptors: {
+      weight: '100 900',
+      style: 'italic',
+      unicodeRange: 'U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116',
+    },
+  },
+  {
+    family: 'Noto Sans',
+    url: '/fonts/noto-sans-cyrillic-ext-wght-italic.woff2',
+    descriptors: {
+      weight: '100 900',
+      style: 'italic',
+      unicodeRange: 'U+0460-052F,U+1C80-1C8A,U+20B4,U+2DE0-2DFF,U+A640-A69F,U+FE2E-FE2F',
+    },
+  },
 ];
 
 // Packaged builds fail 100% of url() font loads, so sweep immediately on

@@ -32,6 +32,9 @@ describe('default app background colors', () => {
     expect(sans).toBeDefined();
     expect(sans).toContain('"Albert Sans"');
     expect(sans).not.toContain("'Inter'");
-    expect(sans).toMatch(/"Albert Sans", "PingFang SC", "Microsoft YaHei"/);
+    // Noto Sans is the Cyrillic-range fallback (#6478); OS CJK faces stay after it.
+    expect(sans).toMatch(
+      /"Albert Sans", "Noto Sans", "PingFang SC", "Microsoft YaHei"/,
+    );
   });
 });

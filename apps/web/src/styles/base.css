@@ -16,6 +16,44 @@
   font-weight: 100 900;
 }
 
+/* Cyrillic-only Noto Sans fallback (#6478). unicode-range keeps Latin on
+   Albert Sans; these faces only enter matching for Cyrillic code points. */
+@font-face {
+  font-family: "Noto Sans";
+  src: url("/fonts/noto-sans-cyrillic-wght-normal.woff2") format("woff2-variations");
+  font-display: swap;
+  font-style: normal;
+  font-weight: 100 900;
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+
+@font-face {
+  font-family: "Noto Sans";
+  src: url("/fonts/noto-sans-cyrillic-ext-wght-normal.woff2") format("woff2-variations");
+  font-display: swap;
+  font-style: normal;
+  font-weight: 100 900;
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+
+@font-face {
+  font-family: "Noto Sans";
+  src: url("/fonts/noto-sans-cyrillic-wght-italic.woff2") format("woff2-variations");
+  font-display: swap;
+  font-style: italic;
+  font-weight: 100 900;
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+
+@font-face {
+  font-family: "Noto Sans";
+  src: url("/fonts/noto-sans-cyrillic-ext-wght-italic.woff2") format("woff2-variations");
+  font-display: swap;
+  font-style: italic;
+  font-weight: 100 900;
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+
 @font-face {
   font-family: "JiduMono Pro";
   src: url("/fonts/JiduMonoPro-Regular.otf") format("opentype");

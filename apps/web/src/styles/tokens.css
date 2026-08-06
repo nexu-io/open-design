@@ -114,8 +114,9 @@
   --selected: #353535;
   --selected-soft: color-mix(in srgb, #353535 12%, transparent);
 
-  --serif: "Albert Sans", "PingFang SC", "Microsoft YaHei", sans-serif;
-  --sans: "Albert Sans", "PingFang SC", "Microsoft YaHei", sans-serif;
+  /* Noto Sans is Cyrillic-range-only (see base.css); Latin stays on Albert Sans. */
+  --serif: "Albert Sans", "Noto Sans", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --sans: "Albert Sans", "Noto Sans", "PingFang SC", "Microsoft YaHei", sans-serif;
   --mono: "JiduMono Pro", ui-monospace, "SFMono-Regular", monospace;
 
   /* Chat prose scale: body 13, headings 14, top-level emphasis 16 — the
