@@ -64,6 +64,22 @@ export interface ResolveDaemonUrlOptions {
 }
 
 /**
+ * Outcome of the sidecar IPC discovery stage, distinguishing "nothing
+ * answered" (the caller should keep trying the next discovery mechanism)
+ * from "more than one channel answered and this function refuses to guess
+ * which one is meant" (the caller must NOT keep trying — see
+ * `resolveDaemonUrl`'s handling of `kind: "ambiguous"`). Collapsing both
+ * into a bare `null` was the bug the #6425 review caught: `resolveDaemonUrl`
+ * would fall through to `discoverDaemonUrlFromToolsDev` either way, so an
+ * ambiguous conventional-discovery result could still be silently
+ * overridden by an unrelated live tools-dev daemon.
+ */
+type IpcDiscoveryResult =
+  | { kind: "found"; url: string }
+  | { kind: "not-found" }
+  | { kind: "ambiguous" };
+
+/**
  * Resolve the daemon HTTP base URL for `od` client commands.
  *
  * Spawn order: explicit `--daemon-url` flag, `OD_DAEMON_URL` env, then
@@ -73,6 +89,13 @@ export interface ResolveDaemonUrlOptions {
  * see `allowConventionalIpcDiscovery` / `conventionalIpcSocketPaths`), then
  * the default `tools-dev status --json` runtime. Falls back to the legacy
  * default for direct `od` launches that do not run as a sidecar.
+ *
+ * An ambiguous IPC result (more than one packaged channel answered, see
+ * `IpcDiscoveryResult`) skips tools-dev discovery entirely and returns the
+ * legacy default directly — refusing to guess extends to every later
+ * discovery mechanism, not just the conventional channel sweep, since a
+ * live tools-dev daemon answering in that window is just as much an
+ * unrelated runtime as a wrongly-picked packaged channel would have been.
  */
 export async function resolveDaemonUrl(
   options: ResolveDaemonUrlOptions = {},
@@ -88,7 +111,8 @@ export async function resolveDaemonUrl(
     options.allowConventionalIpcDiscovery ?? false,
     options.platform,
   );
-  if (discovered != null) return discovered;
+  if (discovered.kind === "found") return discovered.url;
+  if (discovered.kind === "ambiguous") return DEFAULT_DAEMON_URL;
   const toolsDevUrl = await discoverDaemonUrlFromToolsDev(env, options.timeoutMs ?? 800);
   if (toolsDevUrl != null) return toolsDevUrl;
   return DEFAULT_DAEMON_URL;
@@ -99,7 +123,7 @@ async function discoverDaemonUrlFromIpc(
   timeoutMs: number,
   allowConventionalIpcDiscovery: boolean,
   platform?: ReleasePlatform,
-): Promise<string | null> {
+): Promise<IpcDiscoveryResult> {
   const explicitSocketPath = env[SIDECAR_ENV.IPC_PATH];
   if (explicitSocketPath != null && explicitSocketPath.length > 0) {
     // Unrestricted: this path is a concrete endpoint the lifecycle owner
@@ -107,9 +131,11 @@ async function discoverDaemonUrlFromIpc(
     // the loopback nor the ownership gate applies here. A daemon started
     // with a non-default --host (Tailscale, a specific interface, …) must
     // keep working when the caller was explicitly told its socket path.
-    return await probeIpcSocket(explicitSocketPath, timeoutMs);
+    // Never ambiguous: exactly one concrete path is ever probed here.
+    const url = await probeIpcSocket(explicitSocketPath, timeoutMs);
+    return url != null ? { kind: "found", url } : { kind: "not-found" };
   }
-  if (!allowConventionalIpcDiscovery) return null;
+  if (!allowConventionalIpcDiscovery) return { kind: "not-found" };
   // `OD_SIDECAR_IPC_PATH` is only ever stamped by the packaged app into its
   // OWN spawned child processes (see apps/packaged/src/sidecars.ts) — an
   // ordinary user terminal never has it set. Without this fallback, `od mcp
@@ -121,7 +147,7 @@ async function discoverDaemonUrlFromIpc(
   // keeps requiring an explicit IPC path / --daemon-url instead of silently
   // latching onto an unrelated already-running packaged daemon. See #6424.
   const candidates = conventionalIpcSocketPaths(env, platform);
-  if (candidates.length === 0) return null;
+  if (candidates.length === 0) return { kind: "not-found" };
   const results = await Promise.allSettled(
     candidates.map((socketPath) =>
       probeIpcSocket(socketPath, timeoutMs, { requireLoopback: true, requireOwnerMatch: true }),
@@ -136,18 +162,21 @@ async function discoverDaemonUrlFromIpc(
   // code deterministically preferred "stable", but determinism is not
   // correctness: resolveMcpLaunchSpec() would persist that guess's absolute
   // paths into the agent's config, silently wiring it to the WRONG packaged
-  // channel. Refuse to choose and return null instead, so the caller falls
-  // through to tools-dev discovery and then the legacy default — a safe,
-  // inert self-reinvocation spec rather than a confidently wrong one. See
-  // the #6425 review discussion. Deduplicated by URL VALUE, not candidate
-  // count: releaseNamespaceCandidates() can list more than one namespace
-  // alias for the same channel (see conventionalIpcSocketPaths()), and two
-  // aliases resolving to the same live daemon is not actually ambiguous.
+  // channel. Reports `kind: "ambiguous"` instead of a bare `null` so
+  // `resolveDaemonUrl` stops entirely rather than letting a DIFFERENT
+  // unrelated discovery mechanism (tools-dev) silently win in this case —
+  // see `IpcDiscoveryResult`'s doc comment and the #6425 review discussion.
+  // Deduplicated by URL VALUE, not candidate count: releaseNamespaceCandidates()
+  // can list more than one namespace alias for the same channel (see
+  // conventionalIpcSocketPaths()), and two aliases resolving to the same
+  // live daemon is not actually ambiguous.
   const found = results
     .filter((result): result is PromiseFulfilledResult<string> => result.status === "fulfilled" && result.value != null)
     .map((result) => result.value);
   const distinct = Array.from(new Set(found));
-  return distinct.length === 1 ? distinct[0]! : null;
+  if (distinct.length === 0) return { kind: "not-found" };
+  if (distinct.length > 1) return { kind: "ambiguous" };
+  return { kind: "found", url: distinct[0]! };
 }
 
 async function probeIpcSocket(

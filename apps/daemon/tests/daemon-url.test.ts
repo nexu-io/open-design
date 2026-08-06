@@ -468,6 +468,76 @@ describe("resolveDaemonUrl", () => {
       }
     });
 
+    // Regression coverage for the #6425 review (round 7): ambiguity must stop
+    // discovery outright, not just the conventional channel sweep. A prior
+    // version of this fix had discoverDaemonUrlFromIpc return a bare `null`
+    // for "ambiguous" and "not-found" alike, so resolveDaemonUrl treated them
+    // identically and fell through to discoverDaemonUrlFromToolsDev — if a
+    // live tools-dev daemon ALSO happened to answer in that window, it would
+    // win and get persisted as the launch spec despite the stated goal of
+    // refusing to guess between packaged channels. Sets up the same two live
+    // channel sockets as the test above, but this time leaves a live
+    // tools-dev responder reachable on PATH too (the fixture used by
+    // "discovers the default tools-dev daemon URL" above) — the assertion
+    // only holds if resolveDaemonUrl recognizes the ambiguous IPC result and
+    // stops before ever calling discoverDaemonUrlFromToolsDev.
+    it("does not fall through to tools-dev discovery when channels are ambiguous", async () => {
+      const stableSocketPath = resolveAppIpcPath({
+        app: APP_KEYS.DAEMON,
+        contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+        env: { [SIDECAR_ENV.IPC_BASE]: conventionalIpcBaseDir },
+        namespace: releaseNamespace("stable", CURRENT_RELEASE_PLATFORM),
+      });
+      const betaSocketPath = resolveAppIpcPath({
+        app: APP_KEYS.DAEMON,
+        contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+        env: { [SIDECAR_ENV.IPC_BASE]: conventionalIpcBaseDir },
+        namespace: releaseNamespace("beta", CURRENT_RELEASE_PLATFORM),
+      });
+      fs.mkdirSync(path.dirname(stableSocketPath), { recursive: true });
+      fs.mkdirSync(path.dirname(betaSocketPath), { recursive: true });
+
+      const toolsDevBinDir = fs.mkdtempSync(path.join(os.tmpdir(), "od-conventional-ipc-toolsdev-"));
+      const pnpmBin = path.join(toolsDevBinDir, process.platform === "win32" ? "pnpm.cmd" : "pnpm");
+      const toolsDevStatusJson = JSON.stringify({ apps: { daemon: { url: "http://127.0.0.1:60999" } } });
+      if (process.platform === "win32") {
+        fs.writeFileSync(pnpmBin, `@echo off\r\necho ${toolsDevStatusJson.replace(/"/g, '\\"')}\r\n`);
+      } else {
+        fs.writeFileSync(pnpmBin, `#!/bin/sh\nprintf '%s\\n' '${toolsDevStatusJson}'\n`);
+        fs.chmodSync(pnpmBin, 0o755);
+      }
+
+      let stableIpc: JsonIpcServerHandle | null = null;
+      let betaIpc: JsonIpcServerHandle | null = null;
+      try {
+        betaIpc = await createJsonIpcServer({
+          socketPath: betaSocketPath,
+          handler: () => ({ pid: 2, state: "running", updatedAt: new Date().toISOString(), url: "http://127.0.0.1:57777" }),
+        });
+        stableIpc = await createJsonIpcServer({
+          socketPath: stableSocketPath,
+          handler: () => ({ pid: 1, state: "running", updatedAt: new Date().toISOString(), url: "http://127.0.0.1:56666" }),
+        });
+
+        const url = await resolveDaemonUrl({
+          env: {
+            // A live, reachable tools-dev responder -- if the ambiguity
+            // short-circuit ever regresses to a bare `null`, this is what
+            // would win instead of the expected DEFAULT_DAEMON_URL.
+            PATH: `${toolsDevBinDir}${path.delimiter}${process.env.PATH ?? ""}`,
+            [SIDECAR_ENV.IPC_BASE]: conventionalIpcBaseDir,
+          },
+          timeoutMs: 1000,
+          allowConventionalIpcDiscovery: true,
+        });
+        expect(url).toBe(DEFAULT_DAEMON_URL);
+      } finally {
+        await stableIpc?.close();
+        await betaIpc?.close();
+        fs.rmSync(toolsDevBinDir, { recursive: true, force: true });
+      }
+    });
+
     // Regression coverage for the #6425 review: WHATWG's URL always brackets
     // an IPv6 literal in `.hostname` (`new URL("http://[::1]:1234").hostname
     // === "[::1]"`, never the bare "::1"), so a bare-string comparison here
