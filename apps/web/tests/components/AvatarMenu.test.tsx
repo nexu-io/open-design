@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { WorkspaceCollabContext } from '@open-design/contracts';
 
 import { AvatarMenu } from '../../src/components/AvatarMenu';
+import { providerModelsCacheKey } from '../../src/components/providerModelsCache';
 import type { ProjectWorkspaceScopeState } from '../../src/collab/useProjectWorkspaceScope';
 import type { AgentInfo, AppConfig, ExecMode } from '../../src/types';
 
@@ -523,6 +524,53 @@ describe('AvatarMenu', () => {
     expect(screen.queryByRole('link', {
       name: 'settings.amrUpgrade',
     })).toBeNull();
+  });
+
+  it('lets the user switch the BYOK model from the composer popover', () => {
+    // Regression (#6142): in BYOK mode the composer popover collapsed the
+    // model area into a read-only box showing the current model, so switching
+    // BYOK models from the composer became impossible. The popover is the
+    // model picker for the ACTIVE execution mode — in BYOK mode that means a
+    // selectable provider-catalogue list writing through onApiModelChange,
+    // exactly like the daemon-mode list writes through onAgentModelChange.
+    const onApiModelChange = vi.fn<(model: string) => void>();
+    render(
+      <AvatarMenu
+        config={{
+          ...baseConfig,
+          mode: 'api',
+          apiProtocol: 'openai',
+          baseUrl: 'https://api.openai.com/v1',
+          apiProviderBaseUrl: 'https://api.openai.com/v1',
+          apiKey: 'sk-test',
+          model: 'gpt-4o',
+        }}
+        agents={[codexAgent, claudeAgent]}
+        daemonLive={true}
+        onModeChange={vi.fn()}
+        onAgentChange={vi.fn()}
+        onAgentModelChange={vi.fn()}
+        onApiModelChange={onApiModelChange}
+        providerModelsCache={{
+          [providerModelsCacheKey('openai', 'https://api.openai.com/v1', 'sk-test', '')]: [
+            { id: 'gpt-4o', label: 'gpt-4o' },
+            { id: 'gpt-4o-mini', label: 'gpt-4o-mini' },
+            { id: 'gpt-5.5', label: 'gpt-5.5' },
+          ],
+        }}
+        onOpenSettings={vi.fn()}
+        onRefreshAgents={vi.fn()}
+      />,
+    );
+
+    const menu = openMenu();
+    // The current model reads as the checked option, not as a dead-end box.
+    const current = within(menu).getByRole('radio', { name: 'gpt-4o' });
+    expect(current.getAttribute('aria-checked')).toBe('true');
+
+    fireEvent.click(within(menu).getByRole('radio', { name: 'gpt-5.5' }));
+    expect(onApiModelChange).toHaveBeenCalledWith('gpt-5.5');
+    expect(screen.queryByRole('dialog', { name: 'avatar.title' })).toBeNull();
   });
 
   it('routes a locked model only when the exact project member can upgrade', async () => {

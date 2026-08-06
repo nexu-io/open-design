@@ -13,6 +13,13 @@ import {
   effectiveAgentModelChoice,
 } from './agentModelSelection';
 import { orderModelOptionsByAvailability } from './modelOptions';
+import {
+  mergeProviderModelOptions,
+  providerModelsCacheKey,
+} from './providerModelsCache';
+import { KNOWN_PROVIDERS } from '../state/config';
+import { SUGGESTED_MODELS_BY_PROTOCOL } from '../state/apiProtocols';
+import { fetchProviderModels } from '../providers/provider-models';
 import type { AgentInfo, AppConfig, ExecMode, ProviderModelOption } from '../types';
 import {
   canUpgradeVelaPlan,
@@ -71,6 +78,8 @@ export function AvatarMenu({
   agents,
   onAgentChange,
   onAgentModelChange,
+  onApiModelChange,
+  providerModelsCache,
   onOpenSettings,
   onBack,
   placement = 'down',
@@ -317,6 +326,86 @@ export function AvatarMenu({
     currentAgent?.reasoningOptions?.find((option) => option.id === currentReasoningId)?.label ??
     currentReasoningId;
   const apiModelLabel = config.model?.trim() || null;
+
+  // BYOK catalogue for the composer popover. The popover is the model picker
+  // for the ACTIVE execution mode, so BYOK mode offers a selectable provider
+  // catalogue writing through `onApiModelChange`, exactly like daemon mode
+  // offers the agent catalogue through `onAgentModelChange` (regression
+  // #6142 collapsed this into a read-only readout). Models come from the
+  // shared Settings cache when the host passes one, with a local discovery
+  // fetch as fallback so surfaces without cache wiring still get the live
+  // catalogue; the curated suggested list seeds the merge either way.
+  const apiProtocol = config.apiProtocol ?? 'anthropic';
+  const byokProvider = useMemo(
+    () =>
+      KNOWN_PROVIDERS.find(
+        (provider) =>
+          provider.protocol === apiProtocol &&
+          (config.apiProviderBaseUrl
+            ? provider.baseUrl === config.apiProviderBaseUrl
+            : false),
+      ) ?? KNOWN_PROVIDERS.find((provider) => provider.protocol === apiProtocol),
+    [apiProtocol, config.apiProviderBaseUrl],
+  );
+  const byokModelsKey = providerModelsCacheKey(
+    apiProtocol,
+    config.baseUrl ?? '',
+    config.apiKey ?? '',
+    config.apiVersion ?? '',
+  );
+  const [discoveredByokModels, setDiscoveredByokModels] = useState<
+    Record<string, ProviderModelOption[]>
+  >({});
+  const fetchedByokModels =
+    providerModelsCache?.[byokModelsKey] ??
+    discoveredByokModels[byokModelsKey] ??
+    [];
+
+  useEffect(() => {
+    if (!open || config.mode !== 'api') return;
+    if (fetchedByokModels.length > 0) return;
+    if (apiProtocol === 'azure' || apiProtocol === 'ollama') return;
+    const baseUrl = config.baseUrl?.trim() ?? '';
+    if (!/^https?:\/\//i.test(baseUrl)) return;
+    // AIHubMix's catalogue is public; every other protocol needs a key.
+    if (apiProtocol !== 'aihubmix' && !(config.apiKey ?? '').trim()) return;
+    const key = byokModelsKey;
+    let cancelled = false;
+    void fetchProviderModels({
+      protocol: apiProtocol,
+      baseUrl,
+      apiKey: config.apiKey ?? '',
+    })
+      .then((result) => {
+        if (cancelled || !result.ok || !result.models?.length) return;
+        setDiscoveredByokModels((current) => ({
+          ...current,
+          [key]: result.models ?? [],
+        }));
+      })
+      .catch(() => {
+        // Non-fatal: the list falls back to the suggested seed models.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    open,
+    config.mode,
+    apiProtocol,
+    config.baseUrl,
+    config.apiKey,
+    byokModelsKey,
+    fetchedByokModels.length,
+  ]);
+
+  const byokModelOptions = mergeProviderModelOptions(
+    fetchedByokModels,
+    byokProvider?.preferredModels.length
+      ? byokProvider.preferredModels
+      : SUGGESTED_MODELS_BY_PROTOCOL[apiProtocol] ?? [],
+  );
+
   // Selected-model readout shown inside the trigger (left of the Send button).
   // Hidden by default in CSS; composer-row contexts opt it in.
   const triggerModelLabel =
@@ -559,15 +648,87 @@ export function AvatarMenu({
             </>
           ) : null}
 
-          {config.mode === 'api' && apiModelLabel ? (
-            <div className="avatar-model-section">
-              <div className="avatar-select-row">
-                <span className="avatar-select-label">
-                  {t('avatar.modelLabel')}
-                </span>
-                <div className="avatar-static-value">{apiModelLabel}</div>
+          {config.mode === 'api' ? (
+            byokModelOptions.length > 0 ? (
+              <div className="avatar-model-section">
+                <div className="avatar-select-row">
+                  <span className="avatar-select-label">
+                    {t('avatar.modelLabel')}
+                  </span>
+                  <div
+                    className="avatar-model-list"
+                    role="radiogroup"
+                    aria-label={t('avatar.modelLabel')}
+                    data-testid="avatar-model-list"
+                  >
+                    {(config.model &&
+                    !byokModelOptions.some((m) => m.id === config.model)
+                      ? [
+                          ...byokModelOptions,
+                          {
+                            id: config.model,
+                            label: `${config.model} ${t('avatar.customSuffix')}`,
+                          },
+                        ]
+                      : byokModelOptions
+                    ).map((model) => {
+                      const active = model.id === config.model;
+                      return (
+                        <button
+                          key={model.id}
+                          type="button"
+                          role="radio"
+                          aria-checked={active}
+                          className={`avatar-model-option${active ? ' is-active' : ''}`}
+                          data-testid={`avatar-model-option-${model.id}`}
+                          onClick={() => {
+                            onApiModelChange?.(model.id);
+                            // Selection made — dismiss the popover right away.
+                            setOpen(false);
+                          }}
+                        >
+                          <span
+                            className="avatar-model-option-logo"
+                            aria-hidden="true"
+                          >
+                            {(() => {
+                              const src = modelProviderIconSrc(model.id);
+                              return src ? (
+                                <img src={src} alt="" width={16} height={16} />
+                              ) : (
+                                <RemixIcon name="link" size={16} />
+                              );
+                            })()}
+                          </span>
+                          <span className="avatar-model-option-label">
+                            {model.label}
+                          </span>
+                          {active ? (
+                            <RemixIcon
+                              name="check-line"
+                              size={14}
+                              className="avatar-model-option-check"
+                            />
+                          ) : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
-            </div>
+            ) : apiModelLabel ? (
+              // Never an empty shell: with no catalogue to offer (e.g. Azure
+              // deployments are free-form names), keep the current model
+              // visible as a readout.
+              <div className="avatar-model-section">
+                <div className="avatar-select-row">
+                  <span className="avatar-select-label">
+                    {t('avatar.modelLabel')}
+                  </span>
+                  <div className="avatar-static-value">{apiModelLabel}</div>
+                </div>
+              </div>
+            ) : null
           ) : null}
 
           {/* The one link out to 设置 → 执行. #5517's popover has no such entry,
