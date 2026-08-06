@@ -17,7 +17,7 @@
 import { cleanup, act, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { App } from '../../src/App';
+import { App, resetExecutionConfigAfterSignOut } from '../../src/App';
 import type { AppConfig } from '../../src/types';
 import { loadConfig, fetchDaemonConfig, syncConfigToDaemon } from '../../src/state/config';
 import {
@@ -51,6 +51,7 @@ const entryViewCapture = vi.hoisted(() => ({
   firstRefreshAgents: null as null | ((
     options?: { throwOnError?: boolean; agentCliEnv?: AppConfig['agentCliEnv'] },
   ) => unknown),
+  activeSignOut: null as null | (() => void | Promise<void>),
 }));
 
 const settingsCapture = vi.hoisted(() => ({
@@ -81,6 +82,7 @@ vi.mock('../../src/components/EntryView', () => ({
     onAgentChange,
     onCompleteOnboarding,
     onRefreshAgents,
+    onSignedOut,
   }: {
     config: AppConfig;
     onAgentChange: (agentId: string) => void;
@@ -88,10 +90,12 @@ vi.mock('../../src/components/EntryView', () => ({
     onRefreshAgents: (
       options?: { throwOnError?: boolean; agentCliEnv?: AppConfig['agentCliEnv'] },
     ) => unknown;
+    onSignedOut: () => void | Promise<void>;
   }) => {
     entryViewCapture.firstAgentChange ??= onAgentChange;
     entryViewCapture.firstCompleteOnboarding ??= onCompleteOnboarding;
     entryViewCapture.firstRefreshAgents ??= onRefreshAgents;
+    entryViewCapture.activeSignOut = onSignedOut;
     return (
       <>
         <div data-testid="onboarding-completed">{String(config.onboardingCompleted)}</div>
@@ -254,6 +258,7 @@ describe('App onboarding completion persistence', () => {
     entryViewCapture.firstAgentChange = null;
     entryViewCapture.firstCompleteOnboarding = null;
     entryViewCapture.firstRefreshAgents = null;
+    entryViewCapture.activeSignOut = null;
     settingsCapture.resetOnboarding = null;
     mockedDaemonIsLive.mockResolvedValue(true);
     mockedFetchAgentsStream.mockResolvedValue([]);
@@ -278,6 +283,102 @@ describe('App onboarding completion persistence', () => {
     cleanup();
     vi.unstubAllGlobals();
     vi.clearAllMocks();
+  });
+
+  it('clears only execution and onboarding state for an active Cloud sign-out', () => {
+    const current = {
+      ...returningUserConfig(),
+      mode: 'api',
+      apiKey: 'secret',
+      apiProtocol: 'openai',
+      apiVersion: '2026-01-01',
+      baseUrl: 'https://example.com/v1',
+      model: 'private-model',
+      apiProviderBaseUrl: 'https://example.com/v1',
+      apiProtocolConfigs: {
+        openai: {
+          apiKey: 'secret',
+          baseUrl: 'https://example.com/v1',
+          model: 'private-model',
+        },
+      },
+      byokImageModel: 'private-image-model',
+      byokVideoModel: 'private-video-model',
+      byokSpeechModel: 'private-speech-model',
+      byokSpeechVoice: 'private-voice',
+      byokProviderConfigDrafts: {
+        'openai:https://example.com/v1': {
+          apiConfig: {
+            apiKey: 'draft-secret',
+            baseUrl: 'https://example.com/v1',
+            model: 'draft-model',
+          },
+          maxTokens: 8192,
+        },
+      },
+      byokPendingProviderKey: 'openai:https://example.com/v1',
+      maxTokens: 12345,
+      agentId: 'claude-code',
+      agentModels: { 'claude-code': { model: 'sonnet' } },
+      agentCliEnv: { 'claude-code': { TOKEN: 'secret' } },
+      agentCliEnvIntent: { 'claude-code': { TOKEN: 'set' } },
+      designSystemId: 'keep-design-system',
+      telemetry: { metrics: false, content: false },
+    } as AppConfig;
+
+    expect(resetExecutionConfigAfterSignOut(current)).toMatchObject({
+      onboardingCompleted: false,
+      mode: 'daemon',
+      agentId: null,
+      agentModels: {},
+      agentCliEnv: {},
+      agentCliEnvIntent: {},
+      apiKey: '',
+      apiProtocol: 'anthropic',
+      apiVersion: '',
+      baseUrl: 'https://api.anthropic.com',
+      model: 'claude-sonnet-4-5',
+      apiProviderBaseUrl: 'https://api.anthropic.com',
+      apiProtocolConfigs: {},
+      byokImageModel: undefined,
+      byokVideoModel: undefined,
+      byokSpeechModel: undefined,
+      byokSpeechVoice: undefined,
+      byokProviderConfigDrafts: {},
+      byokPendingProviderKey: undefined,
+      maxTokens: undefined,
+      designSystemId: 'keep-design-system',
+      telemetry: { metrics: false, content: false },
+    });
+  });
+
+  it('persists the cleared execution state and returns to onboarding after active sign-out', async () => {
+    mockedLoadConfig.mockReturnValue(returningUserConfig());
+    mockedFetchDaemonConfig.mockResolvedValue({ onboardingCompleted: true });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(entryViewCapture.activeSignOut).toEqual(expect.any(Function));
+    });
+    await act(async () => {
+      await entryViewCapture.activeSignOut?.();
+    });
+
+    expect(screen.getByTestId('onboarding-completed').textContent).toBe('false');
+    expect(screen.getByTestId('agent-id').textContent).toBe('none');
+    expect(mockedSyncConfigToDaemon).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        onboardingCompleted: false,
+        mode: 'daemon',
+        agentId: null,
+        apiKey: '',
+        agentModels: {},
+        apiProtocolConfigs: {},
+      }),
+      { allowOnboardingReset: true },
+    );
+    expect(await navigatedToOnboarding()).toBe(true);
   });
 
   it('keeps a completed user out of onboarding when the daemon copy still says false', async () => {

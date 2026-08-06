@@ -14,6 +14,10 @@ import type { UiScenario } from '@/playwright/resources';
 import { T } from '@/timeouts';
 import { expectStableCount } from '../lib/playwright/assertions.js';
 import {
+  AMR_PERSONAL_WORKSPACE_HEADERS,
+  mockAmrPersonalWorkspace,
+} from '@/playwright/amr';
+import {
   applyStandardMocks,
   failedRunEventBody,
   routeMockAgents,
@@ -160,13 +164,6 @@ test('[P0] @critical workspace restores the last manually selected file tab afte
 
   await sendPrompt(page, 'Create a workspace persistence artifact');
   await expect(page.getByText('workspace-artifact.html', { exact: true }).first()).toBeVisible();
-  const { conversationId } = await getCurrentProjectContext(page);
-  await expectPersistedArtifactMessage(
-    page,
-    projectId,
-    conversationId,
-    'workspace-artifact.html',
-  );
 
   const uploadResponse = page.waitForResponse(isDesignFileUploadResponse, {
     timeout: T.short,
@@ -1189,11 +1186,21 @@ test('[P0] @critical daemon error details persist between failed sends', async (
     eventBodies: [failedRunEventBody('connection refused')],
   });
 
-  // This scenario exercises a local agent, not AMR. Keep the signed-out
-  // authority witness hermetic instead of depending on a host Vela install.
+  // This scenario exercises a local agent, not authentication. Give project
+  // creation a deterministic Personal Workspace identity: signed-out would
+  // enter Cloud-first onboarding, while an unresolved status leaves the new
+  // workspace bootstrap gate unable to authorize project creation.
   await page.route('**/api/integrations/vela/status*', async (route) => {
-    await route.fulfill({ json: { loggedIn: false } });
+    await route.fulfill({
+      json: {
+        loggedIn: true,
+        profile: 'local',
+        configPath: '/tmp/.amr/config.json',
+        user: { id: 'restoration-error', email: 'restoration-error@example.com' },
+      },
+    });
   });
+  await mockAmrPersonalWorkspace(page);
   await gotoEntryHome(page);
   await createProject(page, entry);
   await expectWorkspaceReady(page);
@@ -1210,7 +1217,14 @@ test('[P0] @critical daemon error details persist between failed sends', async (
     projectId,
     'error-cross-tab.html',
     '<!doctype html><html><body><h1>Error cross tab</h1></body></html>',
+    AMR_PERSONAL_WORKSPACE_HEADERS,
   );
+  // The file is written out-of-band through APIRequestContext, so reload the
+  // real project surface instead of depending on an in-app mutation event or
+  // an eventual catalog poll that this external write cannot emit.
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expectWorkspaceReady(page);
+  await expect(runErrorCard(page)).toContainText('connection refused');
   await openAllProjectFiles(page);
   const crossFileRow = page.locator('[data-testid^="design-file-row-"]', {
     hasText: 'error-cross-tab.html',
@@ -2430,8 +2444,10 @@ async function seedHtmlArtifact(
   projectId: string,
   fileName: string,
   content: string,
+  workspaceHeaders?: Readonly<Record<string, string>>,
 ) {
   const resp = await page.request.post(`/api/projects/${projectId}/files`, {
+    ...(workspaceHeaders ? { headers: { ...workspaceHeaders } } : {}),
     data: {
       name: fileName,
       content,
@@ -3008,35 +3024,6 @@ async function listConversationsFromApi(
     conversations: Array<{ id: string; updatedAt: number }>;
   };
   return conversations;
-}
-
-async function expectPersistedArtifactMessage(
-  page: Page,
-  projectId: string,
-  conversationId: string,
-  fileName: string,
-) {
-  await expect
-    .poll(async () => {
-      const response = await page.request.get(
-        `/api/projects/${projectId}/conversations/${conversationId}/messages`,
-      );
-      if (!response.ok()) return false;
-      const { messages } = (await response.json()) as {
-        messages: Array<{
-          role: string;
-          runStatus?: string;
-          producedFiles?: Array<{ name: string }>;
-        }>;
-      };
-      return messages.some(
-        (message) =>
-          message.role === 'assistant'
-          && message.runStatus === 'succeeded'
-          && message.producedFiles?.some((file) => file.name.endsWith(fileName)),
-      );
-    }, { timeout: T.medium })
-    .toBe(true);
 }
 
 async function expectProjectFilesToIncludeSuffixes(

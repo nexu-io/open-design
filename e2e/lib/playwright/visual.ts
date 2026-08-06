@@ -179,6 +179,8 @@ type VisualPageOptions = {
   projects?: readonly VisualProject[];
   config?: Partial<VisualConfig>;
   agents?: readonly unknown[];
+  /** Signed-in by default so non-auth visual surfaces can reach Home. */
+  velaLoggedIn?: boolean;
 };
 
 type VisualVelaAccountOptions = {
@@ -336,12 +338,24 @@ export async function configureVisualPage(page: Page, options: VisualPageOptions
   });
 
   await page.route('**/api/integrations/vela/status', async (route) => {
-    await fulfillGet(route, {
-      loggedIn: false,
-      profile: 'local',
-      configPath: '/tmp/.amr/config.json',
-      user: null,
-    });
+    const loggedIn = options.velaLoggedIn ?? true;
+    await fulfillGet(
+      route,
+      loggedIn
+        ? {
+            loggedIn: true,
+            loginInFlight: false,
+            profile: 'visual',
+            configPath: '/tmp/.amr/config.json',
+            user: { id: 'visual-user', email: 'visual@example.com' },
+          }
+        : {
+            loggedIn: false,
+            profile: 'local',
+            configPath: '/tmp/.amr/config.json',
+            user: null,
+          },
+    );
   });
 
   await page.route('**/api/media/providers/aihubmix/models**', async (route) => {

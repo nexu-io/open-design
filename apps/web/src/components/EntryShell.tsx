@@ -23,17 +23,14 @@ import {
 } from 'react';
 import {
   defaultScenarioPluginIdForProjectMetadata,
-  PROFILE_MEMORY_ID,
   type AmrWalletSnapshot,
   type ChatSessionMode,
   type ConnectorDetail,
   type InstalledPluginRecord,
   type RunContextSelection,
-  type UpsertMemoryRequest,
   type WorkspaceProjectSummary,
 } from '@open-design/contracts';
 import type { OpenDesignHostProjectImportSuccess } from '@open-design/host';
-import type { DesignSystemGenerateSnapshot } from './DesignSystemFlow';
 import { useAnalytics } from '../analytics/provider';
 import {
   trackHomeNavClick,
@@ -46,7 +43,6 @@ import {
 import {
   amrHandoffDeviceId,
   recordAmrEntry,
-  syncAmrAttributionWithOnboardingProfile,
   type AmrEntryAttribution,
 } from '../analytics/amr-attribution';
 import { getResolvedDeviceId } from '../analytics/client';
@@ -57,7 +53,6 @@ import {
   reconcileAmrAuthAttemptId,
   resolveAmrAuthTracking,
 } from '../analytics/amr-auth';
-import { setOnboardingAttributionPersonProperties } from '../analytics/source-attribution';
 import {
   clearOnboardingSessionId,
   getOrCreateOnboardingSessionId,
@@ -76,7 +71,6 @@ import type {
 import { agentIdToTracking } from '@open-design/contracts/analytics';
 import { useT } from '../i18n';
 import { navigate, useRoute } from '../router';
-import { setPendingDesignSystemCreateEntry } from '../analytics/ds-create-entry';
 import type {
   AgentInfo,
   ApiProtocol,
@@ -123,13 +117,7 @@ import {
   takeHomePromptHandoff,
   type HomePromptHandoff,
 } from './home-hero/plugin-authoring';
-import {
-  buildRecommendation,
-  type Recommendation,
-} from '../onboarding/recommendation';
 import type { OnboardingEntry } from '../onboarding/onboarding-entry';
-import { ONBOARDING_ARTIFACT_CHIP_IDS } from './home-hero/chips';
-import { homeHeroChipLabel } from './home-hero/chip-labels';
 import type { PluginUseAction } from './plugins-home/useActions';
 import { Icon } from './Icon';
 import { Button } from '@open-design/components';
@@ -199,7 +187,6 @@ import {
 } from '../state/apiProtocols';
 import { defaultKnownProviderModel, KNOWN_PROVIDERS } from '../state/config';
 import type { KnownProvider } from '../state/config';
-import { saveOnboardingProfile } from '../state/onboarding-profile';
 import { testAgent, testApiProvider } from '../providers/connection-test';
 import { fetchProviderModels } from '../providers/provider-models';
 import { invalidateProjectFilesCache } from '../providers/registry';
@@ -230,6 +217,7 @@ import {
 } from './entryRailBridge';
 import { enterpriseUrl } from './enterpriseUrl';
 import { resolveByokModelPreference } from './byok/validation';
+import onboardingSourceStyles from './OnboardingModelSource.module.css';
 
 // Persist the entry nav-rail open/collapsed state so it survives both a
 // home -> project -> home navigation (EntryShell unmounts on the project
@@ -268,13 +256,6 @@ type OnboardingAgentTestState =
 // and `/api/runs` fallbacks resolve to the same plugin id when no
 // `pluginId` is on the request body — plan §3.3 of
 // `specs/current/plugin-driven-flow-plan.md`.
-// Newsletter signup endpoint. Lives on the marketing site (Cloudflare Pages
-// Function backed by KV), so this is a cross-origin POST from the desktop
-// client. Overridable at build time via NEXT_PUBLIC_NEWSLETTER_URL — e.g. point
-// it at a local `wrangler pages dev` instance during development.
-const NEWSLETTER_SUBSCRIBE_URL =
-  process.env.NEXT_PUBLIC_NEWSLETTER_URL ?? 'https://open-design.ai/subscribe';
-const NEWSLETTER_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const ONBOARDING_BYOK_AUTO_FETCH_DELAY_MS = 300;
 const ONBOARDING_BYOK_AUTO_TEST_DELAY_MS = 500;
 
@@ -284,18 +265,6 @@ const ONBOARDING_AMR_MODEL_OPTIONS: NonNullable<AgentInfo['models']> = [
   { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
   { id: 'glm-5.1', label: 'GLM 5.1' },
 ];
-
-type OnboardingProfileState = {
-  role: string;
-  orgSize: string;
-  useCase: string[];
-  source: string;
-  // Free-text detail when `source === 'other'`. Kept separate from `source`
-  // so attribution can still aggregate on the 'other' bucket while capturing
-  // the raw self-reported channel.
-  sourceOther: string;
-  email: string;
-};
 
 type EntryCreateProjectInput = Omit<CreateInput, 'metadata'> & {
   metadata?: CreateInput['metadata'];
@@ -484,17 +453,16 @@ interface Props {
   ) => Promise<boolean> | boolean;
   onChangeDefaultDesignSystem: (id: string) => void;
   onCreateDesignSystem?: () => void;
-  // NOTE: first-run onboarding intentionally no longer hosts guided
-  // design-system creation. The previous step-3 design-system surface was
-  // replaced by the newsletter and brand-extraction steps, so EntryShell does
-  // not accept a `renderDesignSystemCreation` renderer. Guided creation stays
-  // reachable from the standalone `design-system-create` route and the
-  // Design Systems tab; do not re-thread an onboarding renderer here.
+  // First-run onboarding intentionally stops after model-source setup.
+  // Guided design-system creation stays reachable from the standalone
+  // `design-system-create` route and the Design Systems tab.
   onOpenDesignSystem?: (id: string) => void;
   onDesignSystemsRefresh?: () => Promise<void> | void;
   onPersistComposioKey: (composio: AppConfig['composio']) => Promise<void> | void;
   onOpenSettings: (section?: EntrySettingsSection) => void;
   onCompleteOnboarding: () => void;
+  onSignedOut?: () => void | Promise<void>;
+  onAmrLoginStatusChange?: (status: VelaLoginStatus | null) => void;
   artifactUpgradeSlot?: ReactNode;
 }
 
@@ -597,6 +565,8 @@ export function EntryShell({
   onPersistComposioKey,
   onOpenSettings,
   onCompleteOnboarding,
+  onSignedOut,
+  onAmrLoginStatusChange,
   artifactUpgradeSlot,
 }: Props) {
   const t = useT();
@@ -606,6 +576,13 @@ export function EntryShell({
   // view from the route rather than keeping it in component state.
   const route = useRoute();
   const view: EntryViewKind = route.kind === 'home' ? route.view : 'home';
+  useEffect(() => {
+    // The entry shell is the authenticated Home surface. A definitive
+    // signed-out result returns it to the Cloud identity gate while leaving
+    // the saved model source untouched for passive reauthentication.
+    if (amrLoggedIn !== false || view === 'onboarding') return;
+    navigate({ kind: 'home', view: 'onboarding' }, { replace: true });
+  }, [amrLoggedIn, view]);
   // The one shared workspace context. Any non-null context is a real workspace
   // (personal or team); workspace surfaces gate on B's permission bits, not on
   // workspaceType.
@@ -1065,12 +1042,6 @@ export function EntryShell({
   const [homePromptHandoff, setHomePromptHandoff] = useState<HomePromptHandoff | null>(
     () => takeHomePromptHandoff(),
   );
-  // Personalized first-run starting point. Computed once, in memory, when the
-  // user finishes the About-you survey with real answers (see
-  // `finishOnboarding`); null for returning users, skipped/blank surveys, and
-  // after any page refresh (deliberately not persisted, per onboarding spec
-  // §7.1). Cleared as soon as the user takes any concrete entry (spec §7.4).
-  const [onboardingRec, setOnboardingRec] = useState<Recommendation | null>(null);
   const entryMainScrollRef = useRef<HTMLElement | null>(null);
   // Entry views share this element, so route changes must not inherit the previous view's offset.
   useLayoutEffect(() => {
@@ -1191,9 +1162,6 @@ export function EntryShell({
     // is intentionally explicit so future kind-specific scenarios
     // (e.g. a deck- or image-specialized pipeline) can take over a
     // single row without touching the form.
-    // New-project modal / template / import is a concrete entry — retire any
-    // pending Home recommendation (spec §7.1 / §7.4).
-    dismissRecommendation();
     const pluginId = defaultPluginIdForMetadata(input.metadata);
     const pluginInputs = defaultPluginInputsForCreate(input, pluginId);
     return onCreateProject({
@@ -1276,11 +1244,6 @@ export function EntryShell({
         return 'blocked' as const;
       }
     }
-    // Starting from the Home composer is a concrete entry — retire the
-    // recommendation (spec §7.4). Done only once the submit actually proceeds
-    // to create (past any AMR balance gate) so a blocked/cancelled submit
-    // leaves the recommendation intact for the user.
-    dismissRecommendation();
     const summarizedName = summarizeProjectNameFromPrompt(payload.prompt);
     const head = payload.prompt.trim().split(/\s+/).slice(0, 8).join(' ');
     const firstAttachmentName = payload.attachments?.[0]?.name ?? '';
@@ -1370,14 +1333,7 @@ export function EntryShell({
     notifyTeamProjectsChanged();
   }
 
-  // Called when the welcome flow ends. `survey` is present on the About-you
-  // completion paths; we only build a recommendation when the user actually
-  // provided a role or use-case, so a skipped/blank survey lands on the
-  // generic Home entry (spec §6.2 / §7.1).
-  function finishOnboarding(survey?: { role: string; useCases: string[] }) {
-    if (survey && (survey.role.trim() || survey.useCases.length > 0)) {
-      setOnboardingRec(buildRecommendation(survey));
-    }
+  function finishOnboarding() {
     onCompleteOnboarding();
     refreshWorkspaceSurfacesAfterOnboarding();
     changeView('home');
@@ -1404,51 +1360,6 @@ export function EntryShell({
     />
   );
 
-  // Drop the personalized recommendation. Fired when the user browses all
-  // types, or as soon as they take any other concrete entry, so Home never
-  // re-shows a recommendation the user has moved past (spec §7.4).
-  function dismissRecommendation() {
-    setOnboardingRec((current) => (current ? null : current));
-  }
-
-  // "进入 Studio" from the Home recommendation. Creates the project with the
-  // recommended first request pre-filled into the composer but NOT auto-sent —
-  // the user keeps control and can edit or clear it (spec §7.4 / §8.2).
-  async function handleRecommendationStart(input: {
-    name: string;
-    prompt: string;
-    metadata: ProjectMetadata;
-    onboardingEntry: OnboardingEntry;
-  }): Promise<boolean> {
-    const pluginId = defaultPluginIdForMetadata(input.metadata);
-    // Create FIRST, then tear down the recommendation only once it actually
-    // opened. Dismissing up-front turned a transient create/navigation failure
-    // into an onboarding dead-end: the user dropped back to generic Home with
-    // no way to retry the starter they just picked. On failure we keep the
-    // recommendation mounted. The onboarding entry rides along so the create
-    // success path stashes it keyed by the created project id — nothing is
-    // written on failure.
-    //
-    // Do NOT swallow the failure here: `onCreateProject` throws on real create
-    // failures, and a silent `catch` would leave the CTA looking clickable with
-    // no feedback. Let the error propagate so Home surfaces it in the same
-    // error channel the other entry actions use (HomeView owns `setError`), and
-    // return `false` for a clean no-project result so the caller can retry.
-    const ok =
-      (await onCreateProject({
-        name: input.name,
-        skillId: null,
-        designSystemId: null,
-        metadata: input.metadata,
-        pendingPrompt: input.prompt,
-        ...(pluginId ? { pluginId } : {}),
-        autoSendFirstMessage: false,
-        onboardingEntry: input.onboardingEntry,
-      })) !== false;
-    if (ok) dismissRecommendation();
-    return ok;
-  }
-
   // #5517 removes the entry top-bar settings cog: the nav-rail account menu owns
   // the settings entry (EntryNavRail onOpenSettings), so the top strip no longer
   // carries a redundant one.
@@ -1472,13 +1383,8 @@ export function EntryShell({
             onApiModelChange={onApiModelChange}
             onConfigPersist={onConfigPersist}
             onRefreshAgents={onRefreshAgents}
+            onAmrLoginStatusChange={onAmrLoginStatusChange}
             onFinish={finishOnboarding}
-            onGoBuild={() => {
-              onCompleteOnboarding();
-              refreshWorkspaceSurfacesAfterOnboarding();
-              setPendingDesignSystemCreateEntry('onboarding');
-              navigate({ kind: 'design-system-create' });
-            }}
           />
         </main>
       </div>
@@ -1529,6 +1435,7 @@ export function EntryShell({
           onOpenSettings={onOpenSettings}
           onInvite={() => changeView('members')}
           onSignInCloud={() => navigate({ kind: 'home', view: 'onboarding' })}
+          onSignedOut={onSignedOut}
           updaterSlot={updaterSlot}
           // A loading or unavailable workspace read is not proof of sign-out.
           // Keep the account slot neutral until Cloud answers successfully;
@@ -1617,9 +1524,6 @@ export function EntryShell({
                 skillsLoading={skillsLoading}
                 connectors={connectors}
                 promptTemplates={promptTemplates}
-                recommendation={onboardingRec}
-                onRecommendationStart={handleRecommendationStart}
-                onRecommendationDismiss={dismissRecommendation}
                 executionSwitcher={view === 'home' ? homeExecutionSwitcher : undefined}
                 artifactUpgradeSlot={artifactUpgradeSlot}
               />
@@ -1924,8 +1828,8 @@ function OnboardingView({
   onApiModelChange,
   onConfigPersist,
   onRefreshAgents,
+  onAmrLoginStatusChange,
   onFinish,
-  onGoBuild,
 }: {
   config: AppConfig;
   providerModelsCache?: ProviderModelsCache;
@@ -1943,20 +1847,17 @@ function OnboardingView({
   onApiModelChange: (model: string) => void;
   onConfigPersist: (cfg: AppConfig) => Promise<void> | void;
   onRefreshAgents: () => Promise<AgentInfo[]> | AgentInfo[];
-  // `survey` is passed on the About-you completion paths (not on skip) so the
-  // shell can build a personalized Home recommendation.
-  onFinish: (survey?: { role: string; useCases: string[] }) => void;
-  onGoBuild: () => void;
+  onAmrLoginStatusChange?: (status: VelaLoginStatus | null) => void;
+  onFinish: () => void;
 }) {
   const t = useT();
   const analytics = useAnalytics();
   const [step, setStep] = useState(0);
   const [runtime, setRuntime] = useState<'amr' | 'local' | 'byok' | null>(null);
-  // Connect step (step 0) faces: the minimal cloud sign-in landing (null), or
-  // a single dedicated setup page for the local CLI or BYOK that the landing's
-  // two secondary links open directly. AMR has no card anymore — it signs in
-  // straight from the landing's primary button.
-  const [connectExpanded, setConnectExpanded] = useState<'local' | 'byok' | null>(null);
+  const [modelSource, setModelSource] = useState<'amr' | 'local' | 'byok'>('amr');
+  const modelSourceOptionRefs = useRef<
+    Record<'amr' | 'local' | 'byok', HTMLButtonElement | null>
+  >({ amr: null, local: null, byok: null });
   const [apiKeyVisible, setApiKeyVisible] = useState(false);
   const [cliScanStatus, setCliScanStatus] = useState<'idle' | 'scanning' | 'done'>('idle');
   const [amrStatus, setAmrStatus] = useState<VelaLoginStatus | null>(null);
@@ -1966,7 +1867,7 @@ function OnboardingView({
   const [amrStatusResolved, setAmrStatusResolved] = useState(false);
   const [amrLoginPending, setAmrLoginPending] = useState(false);
   const [amrLoginCancelPending, setAmrLoginCancelPending] = useState(false);
-  const [newsletterSubmitting, setNewsletterSubmitting] = useState(false);
+  const passiveReauthCompletedRef = useRef(false);
   const [amrLoginError, setAmrLoginError] = useState<string | null>(null);
   // Local dismissal for the cloud landing's activation-retry card only (its
   // own × close, distinct from "取消登录" which cancels the whole vela login).
@@ -2002,41 +1903,6 @@ function OnboardingView({
     hasSharedProviderModelsCache
       ? onProviderModelsCacheChange!
       : setLocalProviderModelsCache;
-  const [profile, setProfile] = useState<OnboardingProfileState>({
-    role: '',
-    orgSize: '',
-    useCase: [] as string[],
-    source: '',
-    sourceOther: '',
-    email: '',
-  });
-  // Live mirror of `profile` so closures that fire faster than React
-  // commits (rapid dropdown picks, the Finish-setup click after the
-  // last onChange) read the latest selection instead of the value the
-  // closure captured at render-time. Multi-select use_case in
-  // particular needed this: two quick adds within one commit cycle
-  // both read `previous = new Set(profile.useCase = stale [])` and
-  // emitted on both — fine — but reading any cumulative summary off
-  // `profile` directly missed the second pick until the next commit.
-  const profileRef = useRef(profile);
-  const lastPersistedOnboardingProfileBodyRef = useRef<string>('');
-  useEffect(() => {
-    profileRef.current = profile;
-  }, [profile]);
-  // Update the About-you profile through this helper (not `setProfile`
-  // directly) whenever the value feeds an imperative read. It mirrors the new
-  // value into `profileRef.current` synchronously, so paths that read the live
-  // ref before React's state→ref sync effect runs — `emitAboutYouSubmit`, the
-  // Memory note, the newsletter submit — never see a stale field even when the
-  // user changes an answer and immediately continues.
-  const updateProfile = useCallback(
-    (producer: (current: OnboardingProfileState) => OnboardingProfileState) => {
-      const next = producer(profileRef.current);
-      profileRef.current = next;
-      setProfile(next);
-    },
-    [],
-  );
   const agentRevealTimersRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
   const cliScanTokenRef = useRef(0);
   const cliScanTelemetryRef = useRef<{
@@ -2049,7 +1915,6 @@ function OnboardingView({
   const amrLoginStartPendingRef = useRef(false);
   const amrLoginCancelRequestedRef = useRef(false);
   const amrAuthAttemptIdRef = useRef<string | null>(null);
-  const amrAgentRefreshAttemptedRef = useRef(false);
   const providerModelsAutoFetchKeyRef = useRef<string | null>(null);
   const providerAutoTestKeyRef = useRef<string | null>(null);
   const providerModelAutoSelectRef = useRef({
@@ -2108,9 +1973,7 @@ function OnboardingView({
   ) ?? null;
   const availableCliAgents = agents.filter((agent) => agent.available && agent.id !== 'amr');
   const visibleAgents = availableCliAgents.filter((agent) => visibleAgentIds.includes(agent.id));
-  const amrAgent = agents.find((agent) => agent.id === 'amr' && agent.available) ?? null;
   const amrSignedIn = amrStatus?.loggedIn === true;
-  const amrSelectedAndSignedOut = runtime === 'amr' && !amrSignedIn;
   const selectedAgent = visibleAgents.find((agent) => agent.id === config.agentId) ?? null;
   const selectedAgentChoice = selectedAgent ? (config.agentModels?.[selectedAgent.id] ?? {}) : {};
   const normalizedSelectedAgentChoice = effectiveAgentModelChoice(selectedAgent, selectedAgentChoice) ?? selectedAgentChoice;
@@ -2128,46 +1991,42 @@ function OnboardingView({
       ? agentTestState
       : { status: 'idle' as const };
   const canTestAgent = Boolean(selectedAgent) && daemonLive;
-  // Connect-step (step 0) gate. Continue may only advance once the selected
-  // runtime is actually usable: AMR signed in, an available local CLI chosen,
-  // or a BYOK provider whose connection test passed. AMR-selected-but-signed-out
-  // is the deliberate exception — there the primary CTA turns into "Sign in to
-  // continue" and must stay enabled so the user can trigger the login that
-  // satisfies the gate (see handlePrimaryAction / amrSelectedAndSignedOut).
+  const runtimeSetupStep = step === 2;
   const byokConnectionVerified =
     visibleProviderTestState.status === 'done' && visibleProviderTestState.result.ok;
+  const localConnectionVerified =
+    visibleAgentTestState.status === 'done' && visibleAgentTestState.result.ok;
   const connectStepRuntimeReady =
-    (runtime === 'amr' && amrSignedIn) ||
-    (runtime === 'local' && selectedAgent !== null) ||
+    (runtime === 'local' && selectedAgent !== null && localConnectionVerified) ||
     (runtime === 'byok' && byokConnectionVerified);
-  const connectStepBlocked =
-    step === 0 && !amrSelectedAndSignedOut && !connectStepRuntimeReady;
-  // Which Connect gate is in the way, for the Continue tooltip. The three
-  // "blocked" reasons hold Continue disabled; `amr_signed_out` is the
-  // "Sign in to continue" CTA — still clickable, but the tooltip explains why
-  // the next steps need a runtime first.
-  const connectGateReason: 'no_runtime' | 'amr_signed_out' | 'local_agent_unavailable' | 'byok_unverified' | null =
-    step !== 0
+  const connectStepBlocked = runtimeSetupStep && !connectStepRuntimeReady;
+  const connectGateReason: 'no_runtime' | 'local_agent_unavailable' | 'byok_unverified' | null =
+    !runtimeSetupStep
       ? null
-      : amrSelectedAndSignedOut
-        ? 'amr_signed_out'
-        : connectStepBlocked
-          ? runtime === 'local'
-            ? 'local_agent_unavailable'
-            : runtime === 'byok'
-              ? 'byok_unverified'
-              : 'no_runtime'
-          : null;
+      : connectStepBlocked
+        ? runtime === 'local'
+          ? 'local_agent_unavailable'
+          : runtime === 'byok'
+            ? 'byok_unverified'
+            : 'no_runtime'
+        : null;
   const connectGateTooltip =
-    connectGateReason === 'amr_signed_out'
-      ? t('settings.onboardingGateTooltipAmr')
-      : connectGateReason === 'local_agent_unavailable'
-        ? t('settings.onboardingGateTooltipLocal')
-        : connectGateReason === 'byok_unverified'
-          ? t('settings.onboardingGateTooltipByok')
-          : connectGateReason === 'no_runtime'
-            ? t('settings.onboardingGateTooltipNoRuntime')
-            : null;
+    connectGateReason === 'local_agent_unavailable'
+      ? t('settings.onboardingGateTooltipLocal')
+      : connectGateReason === 'byok_unverified'
+        ? t('settings.onboardingGateTooltipByok')
+        : connectGateReason === 'no_runtime'
+          ? t('settings.onboardingGateTooltipNoRuntime')
+          : null;
+
+  const hasRestorableModelSourceConfig =
+    config.mode === 'api'
+      ? Boolean(config.apiKey.trim() && config.baseUrl.trim() && config.model.trim())
+      : config.agentId === 'amr'
+        || Boolean(
+          config.agentId
+          && agents.some((agent) => agent.id === config.agentId && agent.available),
+        );
 
   useEffect(() => {
     return () => {
@@ -2176,13 +2035,6 @@ function OnboardingView({
       agentRevealTimersRef.current = [];
     };
   }, []);
-
-  useEffect(() => {
-    if (!amrAgent || runtime !== null) return;
-    setRuntime('amr');
-    onModeChange('daemon');
-    onAgentChange('amr');
-  }, [amrAgent, onAgentChange, onModeChange, runtime]);
 
   useEffect(() => {
     if (runtime !== 'local') return;
@@ -2215,21 +2067,15 @@ function OnboardingView({
   }, [agents, agentsLoading, cliScanStatus, config.agentId, runtime]);
 
   useEffect(() => {
-    // The cold-start stream finished without AMR. Re-probe once before we
-    // conclude AMR is unavailable, so the cloud sign-in stays usable even when
-    // AMR was slow to surface in the initial agent list.
-    if (amrAgent || amrAgentRefreshAttemptedRef.current || agentsLoading) return;
-    amrAgentRefreshAttemptedRef.current = true;
-    void Promise.resolve(onRefreshAgents()).catch(() => undefined);
-  }, [amrAgent, agentsLoading, onRefreshAgents]);
-
-  useEffect(() => {
     // Fetch login status on mount in parallel with agent discovery so the
     // landing CTA settles quickly for already-authenticated users.
     let cancelled = false;
     void fetchVelaLoginStatus()
       .then((next) => {
-        if (!cancelled && next) setAmrStatus(next);
+        if (!cancelled && next) {
+          setAmrStatus(next);
+          onAmrLoginStatusChange?.(next);
+        }
       })
       .finally(() => {
         if (!cancelled) setAmrStatusResolved(true);
@@ -2237,7 +2083,32 @@ function OnboardingView({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [onAmrLoginStatusChange]);
+
+  useEffect(() => {
+    if (
+      !amrStatusResolved
+      || !amrSignedIn
+      || config.onboardingCompleted !== true
+      || !hasRestorableModelSourceConfig
+      || (config.mode === 'daemon' && config.agentId !== 'amr' && agentsLoading)
+      || passiveReauthCompletedRef.current
+    ) {
+      return;
+    }
+    passiveReauthCompletedRef.current = true;
+    clearOnboardingSessionId();
+    onFinish();
+  }, [
+    agentsLoading,
+    amrSignedIn,
+    amrStatusResolved,
+    config.agentId,
+    config.mode,
+    config.onboardingCompleted,
+    hasRestorableModelSourceConfig,
+    onFinish,
+  ]);
 
   useEffect(() => {
     if (runtime === 'amr') return;
@@ -2246,16 +2117,13 @@ function OnboardingView({
     setAmrLoginCancelPending(false);
   }, [runtime]);
 
-  // Onboarding step exposure. Design-system intake used to live here
-  // as step 3, but it is temporarily removed from first-run
-  // onboarding and remains available from the app surfaces.
+  // Onboarding step exposure for identity, source choice, and optional setup.
   //
   // We do NOT clear on unmount: route changes can remount the shell
-  // during first-run setup. Skip / Back / last-step Continue clear
-  // inline in their respective handlers below; abandoned sessions clear
-  // on sessionStorage tab close.
+  // during first-run setup. Completion clears inline; abandoned sessions
+  // clear on sessionStorage tab close.
   const onboardingSessionIdRef = useRef<string>('');
-  if (!onboardingSessionIdRef.current) {
+  if (!onboardingSessionIdRef.current && config.onboardingCompleted !== true) {
     onboardingSessionIdRef.current = getOrCreateOnboardingSessionId();
   }
   useEffect(() => {
@@ -2274,16 +2142,10 @@ function OnboardingView({
   // Onboarding analytics helpers. Wall-clock start so the lifecycle
   // result event can carry `duration_ms`; `runtime` state is the user's
   // current pick at click time so `runtime_type` rides along on every
-  // click. The `_lifecycleReportedRef` guards against double-firing the
-  // completion event when the user fires both Skip and unmount in the
-  // same tick (the unmount path also clears the session id; see the
-  // PR #2453 follow-up).
+  // click. The lifecycle guard keeps rapid repeated completion actions from
+  // double-firing the terminal event.
   const onboardingStartedAtRef = useRef<number>(Date.now());
   const lifecycleReportedRef = useRef(false);
-  // Guards `about_you_submit` to exactly one emit per onboarding session,
-  // independent of how many times the user crosses the About-you step via
-  // the clickable stepper or Back/Continue.
-  const aboutYouReportedRef = useRef(false);
   function currentRuntimeType(): TrackingOnboardingRuntimeType {
     if (runtime === 'amr') return 'amr_cloud';
     if (runtime === 'local') return 'local_cli';
@@ -2296,9 +2158,10 @@ function OnboardingView({
     stepName: TrackingOnboardingStepName;
   } {
     if (stepIdx === 0) return { area: 'runtime', stepIndex: '1', stepName: 'connect' };
-    if (stepIdx === 1) return { area: 'about_you', stepIndex: '2', stepName: 'about_you' };
-    if (stepIdx === 2) return { area: 'newsletter', stepIndex: '3', stepName: 'newsletter' };
-    return { area: 'design_system', stepIndex: '4', stepName: 'design_system' };
+    if (stepIdx === 1) {
+      return { area: 'model_source', stepIndex: '2', stepName: 'model_source' };
+    }
+    return { area: 'runtime_setup', stepIndex: '3', stepName: 'runtime_setup' };
   }
   function emitOnboardingClick(
     element: TrackingOnboardingClickElement,
@@ -2327,15 +2190,7 @@ function OnboardingView({
     completionType: TrackingOnboardingCompletionType,
     extra: {
       errorCode?: string;
-      // Generate-path callers pass the embedded DS creation flow's
-      // snapshot so the wire row reflects the actual source-count
-      // and brand-description the user typed, not the (always-null)
-      // `designSource` card-pick state. E2E (2026-05-21) showed the
-      // user can click Generate without first clicking one of the
-      // three source-type cards — they go straight to typing a
-      // brand prompt — so reading `designSource` alone yielded
-      // `has_design_system_request: false` despite a real request.
-      sourceSnapshot?: DesignSystemGenerateSnapshot;
+      runtimeType?: TrackingOnboardingRuntimeType;
     } = {},
   ): void {
     if (lifecycleReportedRef.current) return;
@@ -2343,168 +2198,21 @@ function OnboardingView({
     if (!onboardingSessionId) return;
     lifecycleReportedRef.current = true;
     const info = stepInfo(step);
-    const snapshot = extra.sourceSnapshot;
-    // Onboarding no longer hosts a design-system step, so a completion
-    // never carries a DS request unless a caller passes an explicit
-    // snapshot (none do today).
-    const hasRequest = snapshot
-      ? snapshot.sourceCount > 0 || snapshot.hasBrandDescription
-      : false;
-    const sourceCount = snapshot ? snapshot.sourceCount : 0;
-    // Read from `profileRef` for the same reason `emitAboutYouSubmit`
-    // does: a Finish-setup click may fire before React commits the
-    // latest dropdown pick, leaving `profile` (closure-captured at
-    // render time) one tick behind.
-    const liveProfile = profileRef.current;
-    const hasAboutYou = Boolean(
-      liveProfile.role
-        || liveProfile.orgSize
-        || liveProfile.useCase.length > 0
-        || liveProfile.source,
-    );
     trackOnboardingCompleteResult(analytics.track, {
       page_name: 'onboarding',
       area: 'onboarding',
       result,
       exit_step_name: info.stepName,
       completion_type: completionType,
-      runtime_type: currentRuntimeType(),
-      has_about_you: hasAboutYou,
-      has_design_system_request: hasRequest,
-      source_count: sourceCount,
+      runtime_type: extra.runtimeType ?? currentRuntimeType(),
+      has_about_you: false,
+      has_design_system_request: false,
+      source_count: 0,
       ...(extra.errorCode ? { error_code: extra.errorCode } : {}),
       duration_ms: Math.max(0, Date.now() - onboardingStartedAtRef.current),
       onboarding_session_id: onboardingSessionId,
-      // Survey-snapshot mirror of `about_you_submit` so the funnel has
-      // a second carrier for the user's picks. Only attached when the
-      // user actually touched the About-you step.
-      ...(hasAboutYou ? {
-        role: liveProfile.role || 'unknown',
-        organization_size: liveProfile.orgSize || 'unknown',
-        use_cases: liveProfile.useCase.length > 0
-          ? liveProfile.useCase
-          : ['unknown'],
-        // Only the enumerated bucket ships to analytics. The raw "Other"
-        // free-text is deliberately NOT forwarded here: analytics events must
-        // stay free-text/PII-free (see the contract note on OnboardingClickProps),
-        // and the scrubber does not sanitize arbitrary event properties. The
-        // typed detail lives only in app-owned local storage (Memory note).
-        discovery_source: liveProfile.source || 'unknown',
-      } : {}),
     });
   }
-
-  const isLastStep = step === 3;
-
-  const roleOptions = [
-    { value: 'agency', label: t('settings.onboardingRoleAgency') },
-    { value: 'pm', label: t('settings.onboardingRolePm') },
-    { value: 'designer', label: t('settings.onboardingRoleDesigner') },
-    { value: 'engineer', label: t('settings.onboardingRoleEngineer') },
-    { value: 'growth', label: t('settings.onboardingRoleGrowth') },
-    { value: 'ops', label: t('settings.onboardingRoleOps') },
-    { value: 'founder', label: t('settings.onboardingRoleFounder') },
-    { value: 'student', label: t('settings.onboardingRoleStudent') },
-    { value: 'other', label: t('settings.onboardingRoleOther') },
-  ];
-  const orgSizeOptions = [
-    { value: 'solo', label: t('settings.onboardingOrgSolo') },
-    { value: 'team', label: t('settings.onboardingOrgTeam') },
-    { value: 'startup', label: t('settings.onboardingOrgStartup') },
-    { value: 'growth', label: t('settings.onboardingOrgGrowth') },
-    { value: 'midmarket', label: t('settings.onboardingOrgMidMarket') },
-    { value: 'enterprise', label: t('settings.onboardingOrgEnterprise') },
-  ];
-  const useCaseOptions = [
-    { value: 'product', label: t('settings.onboardingUseProduct') },
-    { value: 'design-system', label: t('settings.onboardingUseDesignSystem') },
-    { value: 'prototype', label: t('settings.onboardingUsePrototype') },
-    { value: 'landing', label: t('settings.onboardingUseLanding') },
-    { value: 'marketing', label: t('settings.onboardingUseMarketing') },
-    { value: 'ads', label: t('settings.onboardingUseAds') },
-    { value: 'dashboard', label: t('settings.onboardingUseDashboard') },
-    { value: 'deck', label: t('settings.onboardingUseDeck') },
-    { value: 'engineering', label: t('settings.onboardingUseEngineering') },
-    { value: 'agency', label: t('settings.onboardingUseAgency') },
-  ];
-  const sourceOptions = [
-    { value: 'x', label: t('settings.onboardingSourceX') },
-    { value: 'github', label: t('settings.onboardingSourceGithub') },
-    { value: 'youtube', label: t('settings.onboardingSourceYoutube') },
-    { value: 'tiktok', label: t('settings.onboardingSourceTiktok') },
-    { value: 'reddit', label: t('settings.onboardingSourceReddit') },
-    { value: 'linkedin', label: t('settings.onboardingSourceLinkedin') },
-    { value: 'meta_social', label: t('settings.onboardingSourceMetaSocial') },
-    { value: 'search', label: t('settings.onboardingSourceSearch') },
-    { value: 'ai_tool', label: t('settings.onboardingSourceAiTool') },
-    { value: 'friend', label: t('settings.onboardingSourceFriend') },
-    { value: 'community', label: t('settings.onboardingSourceCommunity') },
-    { value: 'email', label: t('settings.onboardingSourceEmail') },
-    { value: 'blog', label: t('settings.onboardingSourceBlog') },
-    { value: 'other', label: t('settings.onboardingSourceOther') },
-  ];
-
-  function cleanOnboardingOptionLabel(label: string): string {
-    const trimmed = label.trim();
-    return trimmed.replace(/^[^\p{L}\p{N}]+/u, '').trim() || trimmed;
-  }
-
-  function optionLabel(
-    options: ReadonlyArray<{ value: string; label: string }>,
-    value: string,
-  ): string {
-    const option = options.find((item) => item.value === value);
-    return cleanOnboardingOptionLabel(option?.label ?? value);
-  }
-
-  function buildOnboardingProfileBody(snapshot: OnboardingProfileState): string {
-    const fields: Array<[string, string]> = [];
-    if (snapshot.role) {
-      fields.push(['Role', optionLabel(roleOptions, snapshot.role)]);
-    }
-    if (snapshot.orgSize) {
-      fields.push(['Organization size', optionLabel(orgSizeOptions, snapshot.orgSize)]);
-    }
-    if (snapshot.useCase.length > 0) {
-      fields.push([
-        'Use cases',
-        snapshot.useCase.map((value) => optionLabel(useCaseOptions, value)).join(', '),
-      ]);
-    }
-    if (snapshot.source) {
-      const sourceLabel = optionLabel(sourceOptions, snapshot.source);
-      const custom = snapshot.source === 'other' ? snapshot.sourceOther.trim() : '';
-      fields.push([
-        'Discovery source',
-        custom ? `${sourceLabel} (${custom})` : sourceLabel,
-      ]);
-    }
-    return fields.map(([label, value]) => `- ${label}: ${value}`).join('\n');
-  }
-
-  async function persistOnboardingProfileToMemory(): Promise<void> {
-    const body = buildOnboardingProfileBody(profileRef.current);
-    if (!body || body === lastPersistedOnboardingProfileBodyRef.current) return;
-    const payload: UpsertMemoryRequest = {
-      type: 'profile',
-      name: t('settings.memoryProfileName'),
-      description: t('settings.memoryProfileDescription'),
-      body,
-    };
-    try {
-      const resp = await fetch(`/api/memory/${encodeURIComponent(PROFILE_MEMORY_ID)}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      if (resp.ok) {
-        lastPersistedOnboardingProfileBodyRef.current = body;
-      }
-    } catch {
-      // Onboarding completion should not fail because local memory is unavailable.
-    }
-  }
-
   const protocolProviders = KNOWN_PROVIDERS.filter((provider) => provider.protocol === apiProtocol);
   const hasProtocolOwnedEmptyProvider =
     apiProtocol === 'azure' && protocolProviders.some((provider) => provider.baseUrl === '');
@@ -2572,7 +2280,7 @@ function OnboardingView({
     const current = providerModelAutoSelectRef.current;
     if (
       current.runtime !== 'byok' ||
-      current.step !== 0 ||
+      current.step !== 2 ||
       current.providerModelsInputKey !== expectedInputKey ||
       current.model.trim()
     ) {
@@ -2678,53 +2386,109 @@ function OnboardingView({
   }
 
   function handleBackWithTracking(): void {
-    if (newsletterSubmitting) return;
-    // The secondary button only renders for step > 0 — the Connect step has no
-    // earlier step and no Skip affordance — so this is always a real Back.
-    // (The former step-0 "Skip" path, which emitted the onboarding `skip` /
-    // `skipped` events, was removed when Skip was dropped; those enums are now
-    // deprecated and unused. See packages/contracts/src/analytics/events.ts.)
     emitOnboardingClick('back', 'back');
-    setStep((current) => current - 1);
-  }
-  async function handlePrimaryAction() {
-    if (newsletterSubmitting) return;
-    // Connect gate: the button is `aria-disabled` (not natively disabled, so it
-    // can still surface its tooltip on hover), so guard the click here — a
-    // blocked Continue must not advance past the Connect step.
-    if (connectStepBlocked) return;
-    if (step === 0 && amrSelectedAndSignedOut) {
-      const attribution = recordAmrEntry(
-        analytics.track,
-        'onboarding_amr_sign_in_continue',
-        new Date(),
-        {
-          metricsConsent: config.telemetry?.metrics === true,
-          reuseExistingFrom: ['onboarding_amr_card'],
-        },
-      );
-      void handleAmrSignInToContinue(attribution);
-      return;
-    }
-    if (isLastStep) {
-      await runOnboardingCompletion('completed_without_design_system');
-      onFinish({
-        role: profileRef.current.role,
-        useCases: profileRef.current.useCase,
-      });
-      return;
-    }
-    emitOnboardingClick('continue', 'continue');
-    if (step === 1) {
-      void persistOnboardingProfileToMemory();
-    }
-    setStep((current) => current + 1);
+    clearAgentRevealTimers();
+    setRuntime(null);
+    setStep(1);
   }
 
-  // Cloud-landing primary CTA: pick the AMR cloud runtime and kick off the
-  // Open Design Cloud sign-in in one gesture. Mirrors the old AMR card's
-  // selection side effects (mode/agent) followed by the sign-in path, so a
-  // successful login advances to the next onboarding step exactly the same way.
+  function completeStreamlinedOnboarding(
+    runtimeType: TrackingOnboardingRuntimeType,
+  ): void {
+    emitOnboardingComplete('completed', 'completed_without_design_system', {
+      runtimeType,
+    });
+    clearOnboardingSessionId();
+    onFinish();
+  }
+
+  function continueAfterCloudSignIn(): void {
+    if (config.onboardingCompleted === true && hasRestorableModelSourceConfig) {
+      if (passiveReauthCompletedRef.current) return;
+      passiveReauthCompletedRef.current = true;
+      clearOnboardingSessionId();
+      onFinish();
+      return;
+    }
+    setStep(1);
+  }
+
+  function handleModelSourceKeyDown(
+    event: ReactKeyboardEvent<HTMLButtonElement>,
+    currentSource: 'amr' | 'local' | 'byok',
+  ): void {
+    const sources = ['amr', 'local', 'byok'] as const;
+    const currentIndex = sources.indexOf(currentSource);
+    let nextIndex: number | null = null;
+
+    if (event.key === 'ArrowDown' || event.key === 'ArrowRight') {
+      nextIndex = (currentIndex + 1) % sources.length;
+    } else if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') {
+      nextIndex = (currentIndex - 1 + sources.length) % sources.length;
+    } else if (event.key === 'Home') {
+      nextIndex = 0;
+    } else if (event.key === 'End') {
+      nextIndex = sources.length - 1;
+    }
+
+    if (nextIndex === null) return;
+    event.preventDefault();
+    const nextSource = sources[nextIndex];
+    if (!nextSource) return;
+    setModelSource(nextSource);
+    modelSourceOptionRefs.current[nextSource]?.focus();
+  }
+
+  function continueWithModelSource(): void {
+    if (modelSource === 'amr') {
+      emitOnboardingClick('amr_cloud', 'select_runtime', {
+        runtime_type: 'amr_cloud',
+        is_recommended: true,
+      });
+      setRuntime('amr');
+      onModeChange('daemon');
+      onAgentChange('amr');
+      completeStreamlinedOnboarding('amr_cloud');
+      return;
+    }
+
+    if (modelSource === 'local') {
+      emitOnboardingClick('local_coding_agent', 'select_runtime', {
+        runtime_type: 'local_cli',
+      });
+      setRuntime('local');
+      void scanCliAgents({ preferExisting: true });
+      setStep(2);
+      return;
+    }
+
+    emitOnboardingClick('byok', 'select_runtime', { runtime_type: 'byok' });
+    setRuntime('byok');
+    setStep(2);
+  }
+  async function handlePrimaryAction() {
+    if (connectStepBlocked) return;
+    if (runtime === 'local' && selectedAgent) {
+      await onConfigPersist({
+        ...config,
+        mode: 'daemon',
+        agentId: selectedAgent.id,
+      });
+      emitOnboardingClick('continue', 'continue', { runtime_type: 'local_cli' });
+      completeStreamlinedOnboarding('local_cli');
+      return;
+    }
+    if (runtime === 'byok') {
+      await onConfigPersist({ ...config, mode: 'api' });
+      emitOnboardingClick('continue', 'continue', { runtime_type: 'byok' });
+      completeStreamlinedOnboarding('byok');
+      return;
+    }
+  }
+
+  // Cloud login establishes identity only. The model source is deliberately
+  // chosen on the following screen so signing in never overwrites a restored
+  // Local/BYOK configuration.
   async function handleCloudSignIn() {
     if (amrLoginPending || amrLoginCancelPending) return;
     const cardAttribution = recordAmrEntry(
@@ -2733,9 +2497,6 @@ function OnboardingView({
       new Date(),
       { metricsConsent: config.telemetry?.metrics === true },
     );
-    setRuntime('amr');
-    onModeChange('daemon');
-    onAgentChange('amr');
     const attribution = recordAmrEntry(
       analytics.track,
       'onboarding_amr_sign_in_continue',
@@ -2746,49 +2507,6 @@ function OnboardingView({
       },
     ) ?? cardAttribution;
     await handleAmrSignInToContinue(attribution);
-  }
-
-  // Shared finish work for the final step, independent of where the user lands
-  // next. Emits the About-you snapshot + completion analytics exactly once
-  // (both are idempotent per session), submits the newsletter if an email was
-  // entered, then clears the session. Reading `profileRef` captures the user's
-  // final picks even on a fast click before React commits the latest state.
-  // Callers pick the destination: home (`onFinish`) or the design-system
-  // create flow (`onGoBuild`).
-  // `completionType` distinguishes the final-step fork (C2, tracking spec §3.1):
-  // 'completed_with_design_system' when the user chose "Build a design system",
-  // 'completed_without_design_system' when they went straight Home. Lets the
-  // funnel measure how many users skip DS creation at onboarding.
-  async function runOnboardingCompletion(
-    completionType: TrackingOnboardingCompletionType,
-  ): Promise<void> {
-    emitAboutYouSubmit();
-    void persistOnboardingProfileToMemory();
-    const newsletterEmail = profileRef.current.email;
-    const shouldSubmitNewsletter =
-      NEWSLETTER_EMAIL_RE.test(newsletterEmail.trim().toLowerCase());
-    if (shouldSubmitNewsletter) {
-      setNewsletterSubmitting(true);
-      await submitNewsletterEmail(newsletterEmail);
-    }
-    emitOnboardingClick('continue', 'continue');
-    emitOnboardingComplete('completed', completionType);
-    clearOnboardingSessionId();
-  }
-
-  async function handleFinishToHome(): Promise<void> {
-    if (newsletterSubmitting) return;
-    await runOnboardingCompletion('completed_without_design_system');
-    onFinish({
-      role: profileRef.current.role,
-      useCases: profileRef.current.useCase,
-    });
-  }
-
-  async function handleFinishToBuild(): Promise<void> {
-    if (newsletterSubmitting) return;
-    await runOnboardingCompletion('completed_with_design_system');
-    onGoBuild();
   }
 
   async function handleAmrSignInToContinue(
@@ -2802,9 +2520,12 @@ function OnboardingView({
     try {
       const currentStatus = await fetchVelaLoginStatus();
       if (amrLoginPollCancelledRef.current) return;
-      if (currentStatus) setAmrStatus(currentStatus);
+      if (currentStatus) {
+        setAmrStatus(currentStatus);
+        onAmrLoginStatusChange?.(currentStatus);
+      }
       if (currentStatus?.loggedIn) {
-        setStep((current) => current + 1);
+        continueAfterCloudSignIn();
         return;
       }
       if (amrLoginPollCancelledRef.current) return;
@@ -2905,7 +2626,7 @@ function OnboardingView({
         return;
       }
       if (await pollAmrLoginCompletion()) {
-        setStep((current) => current + 1);
+        continueAfterCloudSignIn();
       }
     } finally {
       setAmrLoginPending(false);
@@ -2975,7 +2696,10 @@ function OnboardingView({
       );
       if (amrLoginPollCancelledRef.current) return false;
       const nextStatus = await fetchVelaLoginStatus();
-      if (nextStatus) setAmrStatus(nextStatus);
+      if (nextStatus) {
+        setAmrStatus(nextStatus);
+        onAmrLoginStatusChange?.(nextStatus);
+      }
       const authAttemptId = amrAuthAttemptIdRef.current;
       if (nextStatus && authAttemptId) {
         observeAmrAuthTracking(analytics.track, nextStatus, authAttemptId);
@@ -3022,91 +2746,6 @@ function OnboardingView({
       }
     }
     return false;
-  }
-
-  // Survey snapshot. Reads `profileRef.current` rather than `profile`
-  // because Finish-setup may fire within the same render commit as the
-  // user's last dropdown pick, before React has rebound the closure to
-  // the latest state. `'unknown'` covers an untouched field on the
-  // About-you step (the spec keeps the wire type open-string so a new
-  // role / use-case option doesn't force a contract bump).
-  //
-  // This now fires from the completion path (the final brand-extraction step),
-  // so it stamps the About-you step coordinates explicitly instead of
-  // reading the live `step` via `emitOnboardingClick`: the event describes
-  // the About-you submission, not whatever step the user finished on. The
-  // `aboutYouReportedRef` guard keeps it exactly-once per session.
-  function emitAboutYouSubmit(): void {
-    if (aboutYouReportedRef.current) return;
-    const onboardingSessionId = onboardingSessionIdRef.current;
-    if (!onboardingSessionId) return;
-    aboutYouReportedRef.current = true;
-    const snapshot = profileRef.current;
-    const submittedAt = new Date();
-    // The raw "Other" free-text is intentionally excluded from the attribution
-    // profile: it flows into analytics (person properties) and AMR, which must
-    // stay free-text/PII-free. Only the enumerated `source` bucket is carried.
-    // The typed detail is preserved solely in the app-owned Memory note below.
-    const attributionProfile = {
-      role: snapshot.role,
-      orgSize: snapshot.orgSize,
-      useCase: snapshot.useCase,
-      source: snapshot.source,
-      completedAt: submittedAt.toISOString(),
-    };
-    // Persist the survey so later AMR entries (outside onboarding) can forward
-    // the visitor's profile to AMR for paid-conversion segmentation.
-    saveOnboardingProfile(attributionProfile, submittedAt);
-    setOnboardingAttributionPersonProperties(attributionProfile, submittedAt);
-    syncAmrAttributionWithOnboardingProfile(
-      attributionProfile,
-      {
-        metricsConsent: config.telemetry?.metrics === true,
-        odDeviceId: amrHandoffDeviceId({
-          metricsConsent: config.telemetry?.metrics === true,
-          resolvedDeviceId: getResolvedDeviceId(),
-          installationId: config.installationId,
-        }),
-      },
-    );
-    trackOnboardingClick(analytics.track, {
-      page_name: 'onboarding',
-      area: 'about_you',
-      element: 'about_you_submit',
-      action: 'continue',
-      step_index: '2',
-      step_name: 'about_you',
-      onboarding_session_id: onboardingSessionId,
-      role: snapshot.role || 'unknown',
-      organization_size: snapshot.orgSize || 'unknown',
-      use_cases: snapshot.useCase.length > 0 ? snapshot.useCase : ['unknown'],
-      discovery_source: snapshot.source || 'unknown',
-    });
-  }
-
-  // Optional newsletter signup captured on the Newsletter step. The last-step
-  // button shows loading while this settles; failures are swallowed so
-  // onboarding completion never depends on the marketing site. A blank or
-  // malformed email is simply skipped. Only a boolean opt-in is tracked — the
-  // address itself is never sent to analytics.
-  async function submitNewsletterEmail(rawEmail: string): Promise<void> {
-    const email = rawEmail.trim().toLowerCase();
-    if (!email || !NEWSLETTER_EMAIL_RE.test(email)) return;
-    emitOnboardingClick('newsletter_email', 'subscribe', { newsletter_opt_in: true });
-    const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 5000);
-    try {
-      await fetch(NEWSLETTER_SUBSCRIBE_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, source: 'client' }),
-        signal: controller.signal,
-      });
-    } catch {
-      // Swallow — onboarding completion must not depend on the marketing site.
-    } finally {
-      window.clearTimeout(timeout);
-    }
   }
 
   async function scanCliAgents(options: { preferExisting?: boolean } = {}) {
@@ -3287,7 +2926,7 @@ function OnboardingView({
   }
 
   useEffect(() => {
-    if (runtime !== 'byok' || step !== 0) return;
+    if (runtime !== 'byok' || !runtimeSetupStep) return;
     if (!canFetchProviderModels) return;
     if (providerModelsState.status === 'running') return;
     if (providerModelsAutoFetchKeyRef.current === providerModelsInputKey) return;
@@ -3304,7 +2943,7 @@ function OnboardingView({
   ]);
 
   useEffect(() => {
-    if (runtime !== 'byok' || step !== 0) return;
+    if (runtime !== 'byok' || !runtimeSetupStep) return;
     if (!canTestProvider) return;
     if (providerTestState.status === 'running') return;
     if (providerAutoTestKeyRef.current === providerTestInputKey) return;
@@ -3320,21 +2959,11 @@ function OnboardingView({
     step,
   ]);
 
-  const onboardingNavigationLocked = newsletterSubmitting;
-  const primaryActionLabel = isLastStep && newsletterSubmitting
-    ? t('common.loading')
-    : step === 0 && amrLoginPending
-    ? t('settings.amrSigningIn')
-    : step === 0 && amrSelectedAndSignedOut
-      ? t('settings.amrSignInToContinue')
-    : isLastStep
-      ? t('settings.onboardingFinish')
-      : t('settings.onboardingContinue');
+  const primaryActionLabel = t('settings.onboardingContinue');
 
-  // Connect step, default face: a minimal, centered Open Design Cloud sign-in
-  // landing. No stepper, no runtime cards — just the cloud CTA, a secondary
-  // link into the full runtime chooser, and a footer language switcher.
-  if (step === 0 && connectExpanded === null) {
+  // Step 1 is identity only: every user signs into Open Design Cloud before
+  // choosing Hosted, Local, or BYOK on the next screen.
+  if (step === 0) {
     const cloudBusy = amrLoginPending;
     const amrStatusResolving = !amrStatusResolved;
     return (
@@ -3355,9 +2984,6 @@ function OnboardingView({
                   recordAmrEntry(analytics.track, 'onboarding_amr_card', new Date(), {
                     metricsConsent: config.telemetry?.metrics === true,
                   });
-                  setRuntime('amr');
-                  onModeChange('daemon');
-                  onAgentChange('amr');
                   recordAmrEntry(
                     analytics.track,
                     'onboarding_amr_sign_in_continue',
@@ -3367,7 +2993,7 @@ function OnboardingView({
                       reuseExistingFrom: ['onboarding_amr_card'],
                     },
                   );
-                  setStep((current) => current + 1);
+                  continueAfterCloudSignIn();
                   return;
                 }
                 void handleCloudSignIn();
@@ -3431,42 +3057,7 @@ function OnboardingView({
               >
                 {t('settings.amrCancelSignIn')}
               </button>
-            ) : (
-              <div className="onboarding-cloud__alts">
-                <Button
-                  variant="subtle"
-                  className="onboarding-cloud__alt-btn"
-                  onClick={() => {
-                    emitOnboardingClick('local_coding_agent', 'select_runtime', {
-                      runtime_type: 'local_cli',
-                    });
-                    setRuntime('local');
-                    onModeChange('daemon');
-                    void scanCliAgents({ preferExisting: true });
-                    setConnectExpanded('local');
-                  }}
-                >
-                  <Icon name="robot" size={16} />
-                  {t('settings.onboardingLocalTitle')}
-                </Button>
-                <span className="onboarding-cloud__alts-or">
-                  {t('settings.onboardingCloudOr')}
-                </span>
-                <Button
-                  variant="subtle"
-                  className="onboarding-cloud__alt-btn"
-                  onClick={() => {
-                    emitOnboardingClick('byok', 'select_runtime', { runtime_type: 'byok' });
-                    setRuntime('byok');
-                    onModeChange('api');
-                    setConnectExpanded('byok');
-                  }}
-                >
-                  <Icon name="key" size={16} />
-                  {t('settings.onboardingByokTitle')}
-                </Button>
-              </div>
-            )}
+            ) : null}
           </div>
           <footer className="onboarding-cloud__footer">
             <LanguageMenu placement="up" align="start" />
@@ -3482,393 +3073,252 @@ function OnboardingView({
     );
   }
 
+  if (step === 1) {
+    return (
+      <section
+        className="onboarding-view onboarding-view--cloud"
+        aria-label={t('settings.onboardingExecutionTitle')}
+      >
+        <div className={`onboarding-cloud__pane ${onboardingSourceStyles.pane}`}>
+          <div className={`onboarding-cloud__center ${onboardingSourceStyles.center}`}>
+            <h1 className="onboarding-cloud__title">
+              {t('settings.onboardingExecutionTitle')}
+            </h1>
+            <p className="onboarding-cloud__body">
+              {t('settings.onboardingExecutionBody')}
+            </p>
+            <div
+              className={onboardingSourceStyles.options}
+              role="radiogroup"
+              aria-label={t('settings.onboardingExecutionTitle')}
+            >
+              <Button
+                ref={(node) => {
+                  modelSourceOptionRefs.current.amr = node;
+                }}
+                variant="subtle"
+                role="radio"
+                aria-checked={modelSource === 'amr'}
+                tabIndex={modelSource === 'amr' ? 0 : -1}
+                className={`${onboardingSourceStyles.option} ${
+                  onboardingSourceStyles.hostedOption
+                } ${modelSource === 'amr' ? onboardingSourceStyles.optionActive : ''}`}
+                onClick={() => setModelSource('amr')}
+                onKeyDown={(event) => handleModelSourceKeyDown(event, 'amr')}
+              >
+                <span className={onboardingSourceStyles.optionIcon}>
+                  <Icon name="sparkles" size={17} />
+                </span>
+                <span className={onboardingSourceStyles.optionCopy}>
+                  <span className={onboardingSourceStyles.optionHeading}>
+                    <strong className={onboardingSourceStyles.optionTitle}>
+                      {t('settings.onboardingAmrModelSourceLabel')}
+                    </strong>
+                    <span className={onboardingSourceStyles.recommendedBadge}>
+                      {t('settings.onboardingRecommended')}
+                    </span>
+                  </span>
+                  <span className={onboardingSourceStyles.optionBody}>
+                    {t('settings.onboardingAmrCloudBenefitModels')}
+                  </span>
+                </span>
+                <span className={onboardingSourceStyles.radio} aria-hidden="true" />
+              </Button>
+              <Button
+                ref={(node) => {
+                  modelSourceOptionRefs.current.local = node;
+                }}
+                variant="subtle"
+                role="radio"
+                aria-checked={modelSource === 'local'}
+                tabIndex={modelSource === 'local' ? 0 : -1}
+                className={`${onboardingSourceStyles.option} ${
+                  modelSource === 'local' ? onboardingSourceStyles.optionActive : ''
+                }`}
+                onClick={() => setModelSource('local')}
+                onKeyDown={(event) => handleModelSourceKeyDown(event, 'local')}
+              >
+                <span className={onboardingSourceStyles.optionIcon}>
+                  <Icon name="robot" size={17} />
+                </span>
+                <span className={onboardingSourceStyles.optionCopy}>
+                  <strong className={onboardingSourceStyles.optionTitle}>
+                    {t('settings.onboardingLocalTitle')}
+                  </strong>
+                  <span className={onboardingSourceStyles.optionBody}>
+                    {t('settings.onboardingLocalBody')}
+                  </span>
+                </span>
+                <span className={onboardingSourceStyles.radio} aria-hidden="true" />
+              </Button>
+              <Button
+                ref={(node) => {
+                  modelSourceOptionRefs.current.byok = node;
+                }}
+                variant="subtle"
+                role="radio"
+                aria-checked={modelSource === 'byok'}
+                tabIndex={modelSource === 'byok' ? 0 : -1}
+                className={`${onboardingSourceStyles.option} ${
+                  modelSource === 'byok' ? onboardingSourceStyles.optionActive : ''
+                }`}
+                onClick={() => setModelSource('byok')}
+                onKeyDown={(event) => handleModelSourceKeyDown(event, 'byok')}
+              >
+                <span className={onboardingSourceStyles.optionIcon}>
+                  <Icon name="key" size={17} />
+                </span>
+                <span className={onboardingSourceStyles.optionCopy}>
+                  <strong className={onboardingSourceStyles.optionTitle}>
+                    {t('settings.onboardingByokTitle')}
+                  </strong>
+                  <span className={onboardingSourceStyles.optionBody}>
+                    {t('settings.onboardingByokBody')}
+                  </span>
+                </span>
+                <span className={onboardingSourceStyles.radio} aria-hidden="true" />
+              </Button>
+            </div>
+            <button
+              type="button"
+              className="onboarding-cloud__primary"
+              onClick={continueWithModelSource}
+            >
+              {t('settings.onboardingContinue')}
+            </button>
+          </div>
+          <footer className="onboarding-cloud__footer">
+            <LanguageMenu placement="up" align="start" />
+            <span>
+              © {new Date().getFullYear()} Open Design ·{' '}
+              {t('settings.onboardingCloudRights')}
+            </span>
+          </footer>
+        </div>
+        <div className="onboarding-cloud__art" aria-hidden="true">
+          <img src="/onboarding/onboarding-cloud-art.webp" alt="" />
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="onboarding-view" aria-label={t('settings.welcomeTitle')}>
-      {t('settings.welcomeKicker') || t('settings.welcomeSubtitle') ? (
-        <header className="onboarding-view__hero">
-          {t('settings.welcomeKicker') ? (
-            <span className="onboarding-view__kicker">{t('settings.welcomeKicker')}</span>
-          ) : null}
-          {t('settings.welcomeSubtitle') ? <p>{t('settings.welcomeSubtitle')}</p> : null}
-        </header>
-      ) : null}
       <div className="onboarding-view__body">
         <div className="onboarding-view__content">
-          {step === 0 ? (
-            <div className="onboarding-view__panel">
-              <button
-                type="button"
-                className="onboarding-view__back-to-cloud"
-                onClick={() => setConnectExpanded(null)}
-              >
-                <Icon name="chevron-left" size={14} />
-                <span>{t('settings.onboardingBack')}</span>
-              </button>
-              <OnboardingPanelHeader
-                title={
-                  connectExpanded === 'byok'
-                    ? t('settings.onboardingByokTitle')
-                    : t('settings.onboardingLocalTitle')
-                }
-                body={
-                  connectExpanded === 'byok'
-                    ? t('settings.onboardingByokBody')
-                    : t('settings.onboardingLocalBody')
-                }
-              />
-              <div className="onboarding-view__runtime-stack">
-                {connectExpanded === 'local' ? (
-                  <OnboardingCliSetupPanel
-                    agents={visibleAgents}
-                    daemonLive={daemonLive}
-                    selectedAgentId={config.agentId}
-                    selectedAgent={selectedAgent}
-                    selectedModel={normalizedSelectedAgentChoice.model ?? defaultAgentModelId(selectedAgent) ?? ''}
-                    modelOptions={agentModelOptions}
-                    scanStatus={cliScanStatus}
-                    onRefresh={() => void scanCliAgents()}
-                    onSelectAgent={(agentId) => {
-                      onModeChange('daemon');
-                      onAgentChange(agentId);
-                    }}
-                    onSelectModel={(model) => {
-                      if (!selectedAgent) return;
-                      onAgentModelChange(selectedAgent.id, {
-                        model,
-                        serviceTier: undefined,
-                      });
-                    }}
-                    testState={visibleAgentTestState}
-                    canTest={canTestAgent}
-                    onTest={() => void testAgentInline()}
-                  />
-                ) : null}
-                {connectExpanded === 'byok' ? (
-                  <OnboardingByokSetupPanel
-                    apiProtocol={apiProtocol}
-                    apiKey={config.apiKey}
-                    baseUrl={config.baseUrl}
-                    model={config.model}
-                    selectedProvider={selectedProvider}
-                    providerOptions={byokProviderOptions}
-                    apiKeyVisible={apiKeyVisible}
-                    onToggleApiKey={() => setApiKeyVisible((current) => !current)}
-                    onProtocolChange={(protocol) => {
-                      onApiProtocolChange(protocol);
-                    }}
-                    onProviderChange={(baseUrl) => {
-                      const provider = KNOWN_PROVIDERS.find(
-                        (item) => item.protocol === apiProtocol && item.baseUrl === baseUrl,
-                      );
-                      updateApiConfig({
-                        baseUrl: provider?.baseUrl ?? '',
-                        model: defaultKnownProviderModel(provider),
-                        apiProviderBaseUrl: provider?.baseUrl ?? null,
-                      });
-                    }}
-                    onApiKeyChange={(apiKey) => updateApiConfig({ apiKey })}
-                    onModelChange={(model) => {
-                      onApiModelChange(model);
-                      updateApiConfig({ model });
-                    }}
-                    onBaseUrlChange={(baseUrl) =>
-                      updateApiConfig({
-                        baseUrl,
-                        apiProviderBaseUrl: apiProtocol === 'azure' ? '' : null,
-                      })
-                    }
-                    modelOptions={byokModelOptions}
-                    testState={visibleProviderTestState}
-                    canTest={canTestProvider}
-                    onTest={() => void testProviderInline()}
-                    modelsState={visibleProviderModelsState}
-                    canFetchModels={canFetchProviderModels}
-                    onFetchModels={() => void fetchProviderModelsInline()}
-                  />
-                ) : null}
-              </div>
-            </div>
-          ) : null}
-
-          {step === 1 ? (
-            <div className="onboarding-view__panel">
-              <button
-                type="button"
-                className="onboarding-view__back-to-cloud"
-                onClick={handleBackWithTracking}
-                disabled={onboardingNavigationLocked}
-              >
-                <Icon name="chevron-left" size={14} />
-                <span>{t('settings.onboardingBack')}</span>
-              </button>
-              <OnboardingPanelHeader
-                title={t('settings.onboardingProfileTitle')}
-                body={t('settings.onboardingProfileBody')}
-              />
-              <div className="onboarding-view__form-grid">
-                <OnboardingChipField
-                  label={t('settings.onboardingRoleLabel')}
-                  value={profile.role}
-                  options={roleOptions}
-                  onChange={(value) => {
-                    if (typeof value === 'string' && value) {
-                      emitOnboardingClick('role', 'select_option', {
-                        role: value,
-                      });
-                    }
-                    updateProfile((current) => ({ ...current, role: value }));
-                  }}
-                />
-                <OnboardingChipField
-                  label={t('settings.onboardingOrgSizeLabel')}
-                  value={profile.orgSize}
-                  options={orgSizeOptions}
-                  onChange={(value) => {
-                    if (typeof value === 'string' && value) {
-                      emitOnboardingClick('organization_size', 'select_option', {
-                        organization_size: value,
-                      });
-                    }
-                    updateProfile((current) => ({ ...current, orgSize: value }));
-                  }}
-                />
-                <OnboardingChipField
-                  label={t('settings.onboardingUseCaseLabel')}
-                  value={profile.useCase}
-                  options={useCaseOptions}
-                  multiple
-                  onChange={(value) => {
-                    if (!Array.isArray(value)) return;
-                    // Multi-select: emit one click per newly added
-                    // value (delta), not per render of the whole
-                    // selection. The dashboard then sees one row per
-                    // use_case chosen. Compare against `profileRef`
-                    // not `profile` — rapid picks can fire onChange
-                    // before React commits the previous pick, so a
-                    // closure-captured `profile.useCase` is one tick
-                    // behind and re-emits the prior pick on every
-                    // subsequent change.
-                    const previousSet = new Set(profileRef.current.useCase);
-                    for (const v of value) {
-                      if (!previousSet.has(v)) {
-                        emitOnboardingClick('use_case', 'select_option', { use_case: v });
-                      }
-                    }
-                    updateProfile((current) => ({ ...current, useCase: value }));
-                  }}
-                />
-                <OnboardingChipField
-                  label={t('settings.onboardingSourceLabel')}
-                  value={profile.source}
-                  options={sourceOptions}
-                  onChange={(value) => {
-                    if (typeof value === 'string' && value) {
-                      emitOnboardingClick('hear_about_us', 'select_option', {
-                        discovery_source: value,
-                      });
-                    }
-                    // Clear the free-text detail whenever the chip changes away
-                    // from 'Other' so a stale custom value never leaks into
-                    // attribution for a different bucket. Routed through
-                    // updateProfile so the live ref reflects the cleared value
-                    // immediately, even if the user changes chip then continues.
-                    updateProfile((current) => ({
-                      ...current,
-                      source: typeof value === 'string' ? value : current.source,
-                      sourceOther: value === 'other' ? current.sourceOther : '',
-                    }));
-                  }}
-                  trailing={
-                    profile.source === 'other' ? (
-                      <input
-                        type="text"
-                        className="onboarding-chip-field__other-input"
-                        maxLength={64}
-                        autoComplete="off"
-                        autoFocus
-                        placeholder={t('settings.onboardingSourceOtherPlaceholder')}
-                        aria-label={t('settings.onboardingSourceOtherPlaceholder')}
-                        value={profile.sourceOther}
-                        onChange={(event) => {
-                          const next = event.target.value;
-                          // updateProfile keeps profileRef in sync synchronously
-                          // so the Memory note (written from the live ref) never
-                          // drops the latest keystrokes on a fast type-then-
-                          // Continue.
-                          updateProfile((current) => ({ ...current, sourceOther: next }));
-                        }}
-                      />
-                    ) : null
+          <div className="onboarding-view__panel">
+            <button
+              type="button"
+              className="onboarding-view__back-to-cloud"
+              onClick={handleBackWithTracking}
+            >
+              <Icon name="chevron-left" size={14} />
+              <span>{t('settings.onboardingBack')}</span>
+            </button>
+            <OnboardingPanelHeader
+              title={
+                runtime === 'byok'
+                  ? t('settings.onboardingByokTitle')
+                  : t('settings.onboardingLocalTitle')
+              }
+              body={
+                runtime === 'byok'
+                  ? t('settings.onboardingByokBody')
+                  : t('settings.onboardingLocalBody')
+              }
+            />
+            <div className="onboarding-view__runtime-stack">
+              {runtime === 'local' ? (
+                <OnboardingCliSetupPanel
+                  agents={visibleAgents}
+                  daemonLive={daemonLive}
+                  selectedAgentId={config.agentId}
+                  selectedAgent={selectedAgent}
+                  selectedModel={
+                    normalizedSelectedAgentChoice.model
+                    ?? defaultAgentModelId(selectedAgent)
+                    ?? ''
                   }
+                  modelOptions={agentModelOptions}
+                  scanStatus={cliScanStatus}
+                  onRefresh={() => void scanCliAgents()}
+                  onSelectAgent={(agentId) => {
+                    onModeChange('daemon');
+                    onAgentChange(agentId);
+                  }}
+                  onSelectModel={(model) => {
+                    if (!selectedAgent) return;
+                    onAgentModelChange(selectedAgent.id, {
+                      model,
+                      serviceTier: undefined,
+                    });
+                  }}
+                  testState={visibleAgentTestState}
+                  canTest={canTestAgent}
+                  onTest={() => void testAgentInline()}
                 />
-              </div>
-            </div>
-          ) : null}
-
-          {step === 2 ? (
-            <div className="onboarding-view__panel onboarding-view__panel--newsletter">
-              <button
-                type="button"
-                className="onboarding-view__back-to-cloud"
-                onClick={handleBackWithTracking}
-                disabled={onboardingNavigationLocked}
-              >
-                <Icon name="chevron-left" size={14} />
-                <span>{t('settings.onboardingBack')}</span>
-              </button>
-              <OnboardingPanelHeader
-                title={t('settings.onboardingNewsletterTitle')}
-                body={t('settings.onboardingNewsletterBody')}
-              />
-              <label className="onboarding-view__email-field">
-                <span className="onboarding-view__email-label">
-                  {t('newsletter.label')}
-                </span>
-                <input
-                  className="onboarding-view__email-input"
-                  type="email"
-                  autoComplete="email"
-                  inputMode="email"
-                  placeholder={t('newsletter.placeholder')}
-                  value={profile.email}
-                  onChange={(event) =>
-                    updateProfile((current) => ({ ...current, email: event.target.value }))
+              ) : null}
+              {runtime === 'byok' ? (
+                <OnboardingByokSetupPanel
+                  apiProtocol={apiProtocol}
+                  apiKey={config.apiKey}
+                  baseUrl={config.baseUrl}
+                  model={config.model}
+                  selectedProvider={selectedProvider}
+                  providerOptions={byokProviderOptions}
+                  apiKeyVisible={apiKeyVisible}
+                  onToggleApiKey={() => setApiKeyVisible((current) => !current)}
+                  onProtocolChange={onApiProtocolChange}
+                  onProviderChange={(baseUrl) => {
+                    const provider = KNOWN_PROVIDERS.find(
+                      (item) => item.protocol === apiProtocol && item.baseUrl === baseUrl,
+                    );
+                    updateApiConfig({
+                      baseUrl: provider?.baseUrl ?? '',
+                      model: defaultKnownProviderModel(provider),
+                      apiProviderBaseUrl: provider?.baseUrl ?? null,
+                    });
+                  }}
+                  onApiKeyChange={(apiKey) => updateApiConfig({ apiKey })}
+                  onModelChange={(model) => {
+                    onApiModelChange(model);
+                    updateApiConfig({ model });
+                  }}
+                  onBaseUrlChange={(baseUrl) =>
+                    updateApiConfig({
+                      baseUrl,
+                      apiProviderBaseUrl: apiProtocol === 'azure' ? '' : null,
+                    })
                   }
+                  modelOptions={byokModelOptions}
+                  testState={visibleProviderTestState}
+                  canTest={canTestProvider}
+                  onTest={() => void testProviderInline()}
+                  modelsState={visibleProviderModelsState}
+                  canFetchModels={canFetchProviderModels}
+                  onFetchModels={() => void fetchProviderModelsInline()}
                 />
-              </label>
+              ) : null}
             </div>
-          ) : null}
-
-          {step === 3 ? (
-            <div className="onboarding-view__panel onboarding-view__build">
-              <span className="onboarding-view__build-badge">
-                <Icon name="sparkles" size={13} aria-hidden />
-                <span>{t('settings.onboardingDesignTitle')}</span>
+          </div>
+          <div className="onboarding-view__actions">
+            {amrLoginError ? (
+              <span className="onboarding-view__action-status is-error" role="alert">
+                {amrLoginError}
               </span>
-              <div className="onboarding-view__build-layout">
-                <div className="onboarding-view__build-copy">
-                  <div className="onboarding-view__build-head">
-                    <h2>{t('onboarding.buildTitle')}</h2>
-                    <p>{t('onboarding.buildBody')}</p>
-                  </div>
-                  <div className="onboarding-view__build-benefits">
-                    <div>
-                      <Icon name="file-text" size={15} aria-hidden />
-                      <strong>{t('onboarding.buildBenefitMemoryTitle')}</strong>
-                      <span>{t('onboarding.buildBenefitMemoryBody')}</span>
-                    </div>
-                    <div>
-                      <Icon name="swatchbook" size={15} aria-hidden />
-                      <strong>{t('onboarding.buildBenefitAlignedTitle')}</strong>
-                      <span>{t('onboarding.buildBenefitAlignedBody')}</span>
-                    </div>
-                    <div>
-                      <Icon name="github" size={15} aria-hidden />
-                      <strong>{t('onboarding.buildBenefitSourcesTitle')}</strong>
-                      <span>{t('onboarding.buildBenefitSourcesBody')}</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="onboarding-view__build-preview" aria-hidden>
-                  <div className="onboarding-view__build-preview-head">
-                    <span />
-                    <span />
-                    <span />
-                    <strong>DESIGN.md</strong>
-                  </div>
-                  <div className="onboarding-view__build-preview-body">
-                    <small>{t('onboarding.buildPreviewLabel')}</small>
-                    <div className="onboarding-view__build-preview-swatches">
-                      <i />
-                      <i />
-                      <i />
-                      <i />
-                    </div>
-                    <div className="onboarding-view__build-preview-type">
-                      <strong>Aa</strong>
-                      <span>Aa</span>
-                      <em>Aa</em>
-                    </div>
-                    <div className="onboarding-view__build-preview-lines">
-                      <span />
-                      <span />
-                      <span />
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <ul className="onboarding-view__build-chips">
-                {ONBOARDING_ARTIFACT_CHIP_IDS.map((chipId) => (
-                  <li key={chipId}>{homeHeroChipLabel(chipId, t)}</li>
-                ))}
-              </ul>
-              <div className="onboarding-view__build-actions">
-                <button
-                  type="button"
-                  className="onboarding-view__ghost onboarding-view__build-back"
-                  onClick={handleBackWithTracking}
-                  disabled={onboardingNavigationLocked}
-                >
-                  {t('settings.onboardingBack')}
-                </button>
-                <button
-                  type="button"
-                  className="onboarding-view__secondary"
-                  onClick={() => {
-                    void handleFinishToHome();
-                  }}
-                  disabled={newsletterSubmitting}
-                >
-                  {t('onboarding.buildHome')}
-                </button>
-                <button
-                  type="button"
-                  className="onboarding-view__primary"
-                  onClick={() => {
-                    void handleFinishToBuild();
-                  }}
-                  disabled={newsletterSubmitting}
-                  aria-busy={newsletterSubmitting ? true : undefined}
-                >
-                  <span>{t('onboarding.buildStart')}</span>
-                </button>
-              </div>
-            </div>
-          ) : null}
-
-          {step === 3 ? null : (
-            <div className="onboarding-view__actions">
-              {step === 0 && amrLoginError ? (
-                <span className="onboarding-view__action-status is-error" role="alert">
-                  {amrLoginError}
-                </span>
-              ) : null}
-              {step === 0 && amrLoginPending ? (
-                <button
-                  type="button"
-                  className="onboarding-view__secondary"
-                  onClick={handleCancelAmrLogin}
-                  disabled={amrLoginCancelPending}
-                >
-                  {t('settings.amrCancelSignIn')}
-                </button>
-              ) : null}
-              <button
-                type="button"
-                className={`onboarding-view__primary${
-                  connectGateTooltip ? ' od-tooltip' : ''
-                }`}
-                onClick={handlePrimaryAction}
-                disabled={amrLoginPending || amrLoginCancelPending || onboardingNavigationLocked}
-                aria-disabled={connectStepBlocked || undefined}
-                data-tooltip={connectGateTooltip ?? undefined}
-                data-tooltip-placement="top"
-                aria-busy={newsletterSubmitting ? true : undefined}
-              >
-                <span>{primaryActionLabel}</span>
-              </button>
-            </div>
-          )}
+            ) : null}
+            <button
+              type="button"
+              className={`onboarding-view__primary${connectGateTooltip ? ' od-tooltip' : ''}`}
+              onClick={handlePrimaryAction}
+              disabled={amrLoginPending || amrLoginCancelPending}
+              aria-disabled={connectStepBlocked || undefined}
+              data-tooltip={connectGateTooltip ?? undefined}
+              data-tooltip-placement="top"
+            >
+              <span>{primaryActionLabel}</span>
+            </button>
+          </div>
         </div>
       </div>
     </section>
@@ -4463,72 +3913,6 @@ function OnboardingPanelHeader({ title, body }: { title: string; body: string })
     <div className="onboarding-view__panel-head">
       <h2>{title}</h2>
       <p>{body}</p>
-    </div>
-  );
-}
-
-type OnboardingChipFieldProps = (
-  | {
-      label: string;
-      options: Array<{ value: string; label: string }>;
-      value: string;
-      onChange: (value: string) => void;
-      multiple?: false;
-    }
-  | {
-      label: string;
-      options: Array<{ value: string; label: string }>;
-      value: string[];
-      onChange: (value: string[]) => void;
-      multiple: true;
-    }
-) & {
-  // Optional element rendered inline at the end of the chip row (e.g. a
-  // free-text input revealed by an "Other" pick), so it reads as attached
-  // to the last chip rather than floating below the group.
-  trailing?: ReactNode;
-};
-
-// Profile fields render their options as flat toggleable chips so every choice
-// is visible and a selection takes one tap instead of opening a dropdown first.
-function OnboardingChipField(props: OnboardingChipFieldProps) {
-  const { label, options, trailing } = props;
-  const selected = props.multiple
-    ? props.value
-    : props.value
-      ? [props.value]
-      : [];
-
-  return (
-    <div className="onboarding-chip-field">
-      <span className="onboarding-chip-field__label">{label}</span>
-      <div className="onboarding-chip-field__chips">
-        {options.map((option) => {
-          const active = selected.includes(option.value);
-          return (
-            <button
-              type="button"
-              key={option.value}
-              className={`onboarding-chip${active ? ' is-selected' : ''}`}
-              aria-pressed={active}
-              onClick={() => {
-                if (props.multiple) {
-                  props.onChange(
-                    active
-                      ? props.value.filter((value) => value !== option.value)
-                      : [...props.value, option.value],
-                  );
-                } else {
-                  props.onChange(active ? '' : option.value);
-                }
-              }}
-            >
-              {option.label}
-            </button>
-          );
-        })}
-        {trailing}
-      </div>
     </div>
   );
 }

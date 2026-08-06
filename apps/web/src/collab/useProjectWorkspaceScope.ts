@@ -377,6 +377,19 @@ export function useProjectWorkspaceScope(
     resolvedCallerIdentityKey: initialScopeCanSeed ? callerIdentityKey : 'none',
   }));
   const skipFirstActiveRevalidationRef = useRef(initialScopeCanSeed);
+  /**
+   * Whether this hook's state was actually seeded from `initialScope` at mount.
+   *
+   * Only a seeded mount already holds the answer the initial read would fetch.
+   * A route bootstrap that resolves AFTER the hook mounted flips
+   * `initialScopeCanSeed` on an already-running hook, but cannot retroactively
+   * seed state — the state initializer ran once, without it. Skipping the
+   * initial read on that late flip therefore cancels the in-flight scope GET
+   * that is the only thing able to settle `loading`, and strands the hook at
+   * `{ loading: true, scope: null }` forever (no scope also means the workspace
+   * invalidation SSE never subscribes, so no later event can re-trigger it).
+   */
+  const seededFromInitialScopeRef = useRef(initialScopeCanSeed);
 
   const scheduleDeferredRevalidation = useCallback(() => {
     // The daemon shares a short successful directory cache between the scope
@@ -467,7 +480,7 @@ export function useProjectWorkspaceScope(
     let firstAttempt = true;
     const refreshRevision = refreshRequest.revision;
 
-    if (refreshRevision === 0 && initialScopeCanSeed) {
+    if (refreshRevision === 0 && initialScopeCanSeed && seededFromInitialScopeRef.current) {
       return () => controller.abort();
     }
 

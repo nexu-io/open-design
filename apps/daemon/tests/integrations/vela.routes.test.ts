@@ -30,6 +30,7 @@ import { readAppConfig, writeAppConfig } from '../../src/app-config.js';
 import {
   clearAllVelaLiveAccounts,
   clearVelaLiveAccountRefreshThrottle,
+  isVelaLoginSupervisorSettled,
   parseAmrEntryAnalyticsPayload,
   parseAmrOnboardingProfileAnalyticsPayload,
   readVelaCredentialRevision,
@@ -100,6 +101,21 @@ async function waitForVelaLoginIdle(timeoutMs = 10_000): Promise<void> {
       throw new Error('timed out waiting for vela login subprocess to become idle');
     }
     await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+}
+
+// Wait for the close/error terminal handler (and any late proxy fallback it
+// starts), not the public loginInFlight projection. Status can report idle
+// between the child's exit and close once exitCode is set — especially after
+// cancel, which suppresses the fallbackPending bridge that covers that gap.
+async function waitForVelaLoginSupervisorSettled(timeoutMs = 10_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    if (isVelaLoginSupervisorSettled()) return;
+    if (Date.now() >= deadline) {
+      throw new Error('timed out waiting for vela login supervisor to settle');
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20));
   }
 }
 
@@ -1263,9 +1279,35 @@ describe('POST /api/integrations/vela/login', () => {
 
     const login = await postJson(`${baseUrl}/api/integrations/vela/login`);
     expect(login.status).toBe(202);
-    await new Promise((resolve) => setTimeout(resolve, 700));
-
-    const status = await getJson<{
+    const activationDeadline = Date.now() + 5_000;
+    let status: {
+      status: number;
+      body: {
+        authRoute?: string;
+        fallbackUsed?: boolean;
+        authStages?: Array<{ stage: string; result: string; route: string }>;
+      };
+    };
+    for (;;) {
+      status = await getJson<{
+        authRoute?: string;
+        fallbackUsed?: boolean;
+        authStages?: Array<{ stage: string; result: string; route: string }>;
+      }>(`${baseUrl}/api/integrations/vela/status`);
+      if (
+        status.body.authStages?.some(
+          (stage) => stage.stage === 'activation_ready' && stage.result === 'success',
+        )
+      ) {
+        break;
+      }
+      if (Date.now() >= activationDeadline) {
+        throw new Error('timed out waiting for activation_ready auth stage');
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    await waitForVelaLoginSupervisorSettled();
+    status = await getJson<{
       authRoute?: string;
       fallbackUsed?: boolean;
       authStages?: Array<{ stage: string; result: string; route: string }>;
@@ -1304,7 +1346,10 @@ describe('POST /api/integrations/vela/login', () => {
       `${baseUrl}/api/integrations/vela/login/cancel`,
     );
     expect(cancel.body.canceled).toBe(true);
-    await new Promise((resolve) => setTimeout(resolve, 1_300));
+    // Must wait for close-deferred terminal handling, not loginInFlight=false:
+    // idle can land between exit and close while the late-fallback guard still
+    // has not run.
+    await waitForVelaLoginSupervisorSettled();
 
     const status = await getJson<{ loginInFlight: boolean }>(
       `${baseUrl}/api/integrations/vela/status`,

@@ -401,17 +401,31 @@ test('[P1] onboarding lands on the home composer without a recommended-start str
       },
     });
   });
+  await page.route('**/api/integrations/vela/status', async (route) => {
+    await route.fulfill({
+      json: {
+        loggedIn: true,
+        loginInFlight: false,
+        profile: 'local',
+        configPath: '/tmp/.amr/config.json',
+        user: { id: 'entry-onboarding', email: 'entry-onboarding@example.com' },
+      },
+    });
+  });
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
-  await page.getByRole('button', { name: LOCAL_CLI_LABEL }).click();
-  await page.getByRole('button', { name: /^Continue$/i }).click();
-  await page.getByRole('button', { name: /Engineer$/i }).click();
-  await page.getByRole('button', { name: /Product design/i }).click();
-  await page.getByRole('button', { name: /^Continue$/i }).click();
-  await page.getByRole('button', { name: /^Continue$/i }).click();
-  await page.getByRole('button', { name: 'Go to home' }).click();
 
-  // Finishing the About-you survey lands the user on Home with the composer
+  // Cloud-first onboarding no longer contains the legacy runtime/About-you/
+  // Product-design survey. A signed-in user accepts the recommended Hosted
+  // source and lands directly on Home.
+  const cloudPrimary = page.locator('.onboarding-cloud__primary');
+  await expect(cloudPrimary).toBeEnabled();
+  await cloudPrimary.click();
+  await expect(page.getByRole('heading', { name: /Choose your model source|选择模型来源/i })).toBeVisible();
+  await page.getByRole('radio', { name: /Open Design Hosted/i }).click();
+  await page.getByRole('button', { name: /^Continue$/i }).click();
+
+  // Finishing model-source setup lands the user on Home with the composer
   // ready — and NOT on the old recommended-start strip. That strip (sparkle +
   // 「Start with your first project」 + 全部类型 / 开始创作) sat between the
   // composer and the template line, offering a third way to say what the two

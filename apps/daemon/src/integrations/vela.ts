@@ -710,6 +710,11 @@ interface VelaLoginAttemptState extends VelaLoginAttemptRef {
 
 let loginGeneration = 0;
 let latestLoginAttempt: VelaLoginAttemptState | null = null;
+// Children registered for supervision until their `close`/`error` terminal
+// handler runs. Distinct from `isVelaLoginInFlight()`: status can drop the
+// public idle projection between `exit` and `close` once `exitCode` is set
+// (especially after cancel, which suppresses the fallbackPending bridge).
+let pendingVelaLoginTerminals = 0;
 const LOGIN_STARTUP_GRACE_MS = 250;
 const LOGIN_ACTIVATION_GRACE_MS = 10_000;
 const LOGIN_CANCEL_KILL_GRACE_MS = 2000;
@@ -866,6 +871,19 @@ function hasRunningVelaLoginChild(): boolean {
 export function isVelaLoginInFlight(): boolean {
   return hasRunningVelaLoginChild()
     || Boolean(latestLoginAttempt?.fallbackPending && !latestLoginAttempt.canceled);
+}
+
+/**
+ * True once every supervised login child has finished its `close`/`error`
+ * terminal handler and no late proxy fallback is still pending.
+ *
+ * Stronger than `isVelaLoginInFlight()` for tests that must observe the
+ * close-deferred late-fallback decision: the public idle projection can
+ * flip true between `exit` and `close` when the attempt was canceled.
+ */
+export function isVelaLoginSupervisorSettled(): boolean {
+  return pendingVelaLoginTerminals === 0
+    && !Boolean(latestLoginAttempt?.fallbackPending && !latestLoginAttempt.canceled);
 }
 
 export interface CancelVelaLoginResult {
@@ -1187,6 +1205,7 @@ async function spawnVelaLoginAttempt(
     throw new Error('failed to spawn vela login');
   }
   activeLoginProcs.set(child.pid, child);
+  pendingVelaLoginTerminals += 1;
   attemptState.currentPid = child.pid;
   recordVelaAuthStage(
     deps.attempt,
@@ -1205,6 +1224,7 @@ async function spawnVelaLoginAttempt(
   ) => {
     if (terminalHandled) return;
     terminalHandled = true;
+    pendingVelaLoginTerminals = Math.max(0, pendingVelaLoginTerminals - 1);
     if (typeof child.pid === 'number') activeLoginProcs.delete(child.pid);
     const current = currentVelaLoginAttempt(deps.attempt);
     if (!current || current.currentPid !== child.pid) return;

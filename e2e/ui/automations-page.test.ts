@@ -105,7 +105,7 @@ async function gotoAutomations(page: Page) {
 }
 
 test.describe('Automations page', () => {
-  test('[P0] renders the page hero, summary metrics, filters, and saved rows', async ({ page }) => {
+  test('[P1] renders the page hero, summary metrics, filters, and saved rows', async ({ page }) => {
     await seedAutomationsBase(page);
 
     let routines: Array<Record<string, unknown>> = [
@@ -193,7 +193,7 @@ test.describe('Automations page', () => {
     await expect(view.getByRole('status')).toContainText('No templates in this category yet.');
   });
 
-  test('[P0] @critical creates an automation from the page and runs it into a project conversation', async ({ page }) => {
+  test('[P1] creates an automation from the page and runs it into a project conversation', async ({ page }) => {
     await seedAutomationsBase(page);
 
     const projects = [
@@ -981,7 +981,7 @@ test.describe('Automations page', () => {
     ]);
   });
 
-  test('[P0] keeps the automation modal open with the typed values when creation fails', async ({ page }) => {
+  test('[P1] keeps the automation modal open with the typed values when creation fails', async ({ page }) => {
     await seedAutomationsBase(page);
 
     await page.route('**/api/projects', async (route) => {
@@ -1051,7 +1051,7 @@ test.describe('Automations page', () => {
     await expect(view.getByText('No automations yet')).toBeVisible();
   });
 
-  test('[P0] shows a page error and keeps the row usable when Run fails', async ({ page }) => {
+  test('[P1] shows a page error and keeps the row usable when Run fails', async ({ page }) => {
     await seedAutomationsBase(page);
 
     const routines = [
@@ -1127,7 +1127,7 @@ test.describe('Automations page', () => {
     await expect(row.getByRole('button', { name: 'Pause' })).toBeVisible();
   });
 
-  test('[P0] pauses, expands history, and deletes an automation from the saved list', async ({ page }) => {
+  test('[P1] pauses, expands history, and deletes an automation from the saved list', async ({ page }) => {
     await seedAutomationsBase(page);
 
     let routines: Array<Record<string, unknown>> = [
@@ -1886,7 +1886,7 @@ test.describe('Automations page', () => {
     await expect(view.getByRole('status')).toHaveCount(0);
   });
 
-  test('[P0] @critical creates an automation from a catalog template with derived prompt context', async ({ page }) => {
+  test('[P1] creates an automation from a catalog template with derived prompt context', async ({ page }) => {
     await seedAutomationsBase(page);
 
     const createBodies: Array<Record<string, unknown>> = [];

@@ -1190,7 +1190,108 @@ export function InlineModelSwitcher({
           </div>
           )}
 
-          {compact ? (
+          {/* The popover body always reflects the ACTIVE execution mode:
+              `compact` only chooses layout density, never which catalogue is
+              on offer. A BYOK chip therefore always opens onto the BYOK
+              provider's model list (regression: the compact home popover kept
+              listing the local CLI agent's cloud models while the chip showed
+              the BYOK model). */}
+          {config.mode === 'api' ? (
+            <>
+              {compact ? null : (
+              <div className="inline-switcher__row">
+                <span className="inline-switcher__label">
+                  {t('inlineSwitcher.providerLabel')}
+                </span>
+                <div className="inline-switcher__chips" role="tablist">
+                  {API_PROTOCOL_TABS.map((tab) => {
+                    const active = apiProtocol === tab.id;
+                    return (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={active}
+                        className={
+                          'inline-switcher__chip-tab' +
+                          (active ? ' is-active' : '')
+                        }
+                        data-testid={`inline-model-switcher-provider-${tab.id}`}
+                        onClick={() => {
+                          // Unlike Settings (which skips unmapped protocols),
+                          // report the click even when the protocol has no v2
+                          // provider_id (e.g. aihubmix) — just omit the field.
+                          trackExecutionSettingsPopoverClick(analytics.track, {
+                            page_name: 'home',
+                            area: 'execution_settings_popover',
+                            element: 'byok_provider_tab',
+                            provider_id:
+                              byokProtocolToTracking(tab.id) ?? undefined,
+                          });
+                          onApiProtocolChange?.(tab.id);
+                        }}
+                      >
+                        {tab.title}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              )}
+
+              <div className="inline-switcher__row">
+                <span className="inline-switcher__label">
+                  {t('inlineSwitcher.modelLabel')}
+                </span>
+                {apiModelOptions.length > 0 ? (
+                  <SearchableModelSelect
+                    className="inline-switcher__select"
+                    popoverClassName="inline-model-popover"
+                    data-testid="inline-model-switcher-api-model"
+                    searchInputTestId="inline-model-switcher-api-model-search"
+                    popoverTestId="inline-model-switcher-api-model-popover"
+                    searchPlaceholder={t('designs.searchPlaceholder')}
+                    getPopoverBoundary={getModelPopoverBoundary}
+                    aria-label={t('inlineSwitcher.modelLabel')}
+                    models={apiModelChoices}
+                    value={config.model}
+                    onChange={(nextValue) => {
+                      trackExecutionSettingsPopoverClick(analytics.track, {
+                        page_name: 'home',
+                        area: 'execution_settings_popover',
+                        element: 'model_dropdown',
+                        execution_mode: 'byok',
+                        provider_id:
+                          byokProtocolToTracking(apiProtocol) ?? undefined,
+                        model_id: modelIdForTracking(nextValue),
+                      });
+                      onApiModelChange?.(nextValue);
+                    }}
+                    additionalOptions={
+                      config.model && !apiModelIds.includes(config.model)
+                        ? [
+                            {
+                              value: config.model,
+                              label: `${config.model} ${t('inlineSwitcher.customSuffix')}`,
+                            },
+                          ]
+                        : undefined
+                    }
+                  />
+                ) : (
+                  <span className="inline-switcher__hint">
+                    {t('inlineSwitcher.openSettingsForModel')}
+                  </span>
+                )}
+              </div>
+
+              {!config.apiKey ? (
+                <div className="inline-switcher__warn" role="status">
+                  {t('inlineSwitcher.missingApiKey')}
+                </div>
+              ) : null}
+            </>
+          ) : compact ? (
             // Compact home popover: a plain list of the CURRENT agent's model
             // names (no header, no agent icons) — switching agents lives in
             // the execution settings entry below.
@@ -1279,7 +1380,7 @@ export function InlineModelSwitcher({
                 </span>
               )}
             </div>
-          ) : config.mode === 'daemon' ? (
+          ) : (
             <>
               <div className="inline-switcher__row">
                 <span className="inline-switcher__label">
@@ -1538,99 +1639,6 @@ export function InlineModelSwitcher({
                         : undefined
                     }
                   />
-                </div>
-              ) : null}
-            </>
-          ) : (
-            <>
-              <div className="inline-switcher__row">
-                <span className="inline-switcher__label">
-                  {t('inlineSwitcher.providerLabel')}
-                </span>
-                <div className="inline-switcher__chips" role="tablist">
-                  {API_PROTOCOL_TABS.map((tab) => {
-                    const active = apiProtocol === tab.id;
-                    return (
-                      <button
-                        key={tab.id}
-                        type="button"
-                        role="tab"
-                        aria-selected={active}
-                        className={
-                          'inline-switcher__chip-tab' +
-                          (active ? ' is-active' : '')
-                        }
-                        data-testid={`inline-model-switcher-provider-${tab.id}`}
-                        onClick={() => {
-                          // Unlike Settings (which skips unmapped protocols),
-                          // report the click even when the protocol has no v2
-                          // provider_id (e.g. aihubmix) — just omit the field.
-                          trackExecutionSettingsPopoverClick(analytics.track, {
-                            page_name: 'home',
-                            area: 'execution_settings_popover',
-                            element: 'byok_provider_tab',
-                            provider_id:
-                              byokProtocolToTracking(tab.id) ?? undefined,
-                          });
-                          onApiProtocolChange?.(tab.id);
-                        }}
-                      >
-                        {tab.title}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="inline-switcher__row">
-                <span className="inline-switcher__label">
-                  {t('inlineSwitcher.modelLabel')}
-                </span>
-                {apiModelOptions.length > 0 ? (
-                  <SearchableModelSelect
-                    className="inline-switcher__select"
-                    popoverClassName="inline-model-popover"
-                    data-testid="inline-model-switcher-api-model"
-                    searchInputTestId="inline-model-switcher-api-model-search"
-                    popoverTestId="inline-model-switcher-api-model-popover"
-                    searchPlaceholder={t('designs.searchPlaceholder')}
-                    getPopoverBoundary={getModelPopoverBoundary}
-                    aria-label={t('inlineSwitcher.modelLabel')}
-                    models={apiModelChoices}
-                    value={config.model}
-                    onChange={(nextValue) => {
-                      trackExecutionSettingsPopoverClick(analytics.track, {
-                        page_name: 'home',
-                        area: 'execution_settings_popover',
-                        element: 'model_dropdown',
-                        execution_mode: 'byok',
-                        provider_id:
-                          byokProtocolToTracking(apiProtocol) ?? undefined,
-                        model_id: modelIdForTracking(nextValue),
-                      });
-                      onApiModelChange?.(nextValue);
-                    }}
-                    additionalOptions={
-                      config.model && !apiModelIds.includes(config.model)
-                        ? [
-                            {
-                              value: config.model,
-                              label: `${config.model} ${t('inlineSwitcher.customSuffix')}`,
-                            },
-                          ]
-                        : undefined
-                    }
-                  />
-                ) : (
-                  <span className="inline-switcher__hint">
-                    {t('inlineSwitcher.openSettingsForModel')}
-                  </span>
-                )}
-              </div>
-
-              {!config.apiKey ? (
-                <div className="inline-switcher__warn" role="status">
-                  {t('inlineSwitcher.missingApiKey')}
                 </div>
               ) : null}
             </>

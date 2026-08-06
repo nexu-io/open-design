@@ -552,6 +552,7 @@ function collectAgentEvents(
         typeof data.label === 'string' && data.label.length > 0
           ? data.label
           : 'working';
+      if (label === 'tool_call' || label === 'tool_call_update') continue;
       const index = statusCounts.get(label) ?? 0;
       statusCounts.set(label, index + 1);
       out.push({

@@ -39,11 +39,6 @@ export const uiP0Groups = {
       "ui/workspace-team-interactions.test.ts",
     ],
   },
-  "entry-automations": {
-    grep: String.raw`\[P0\]`,
-    workers: 1,
-    files: ["ui/automations-page.test.ts"],
-  },
   "project-workspace": {
     grep: String.raw`\[P0\]`,
     workers: 1,
@@ -94,7 +89,6 @@ export type UiP0GroupName = keyof typeof uiP0Groups;
 
 export const uiP0CiMatrix = [
   { name: "entry-settings", shard: "entry-settings" },
-  { name: "entry-automations", shard: "entry-automations" },
   { name: "project-workspace", shard: "project-workspace" },
   { name: "project-workspace-editor", shard: "project-workspace-editor" },
   { name: "project-collab", shard: "project-collab" },
@@ -116,7 +110,6 @@ const uiP0CoverageFiles = [
   "ui/app-manual-edit.test.ts",
   "ui/app-restoration.test.ts",
   "ui/app.test.ts",
-  "ui/automations-page.test.ts",
   "ui/critical-smoke.test.ts",
   "ui/entry-chrome-flows.test.ts",
   "ui/entry-configuration-flows.test.ts",
