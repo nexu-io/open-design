@@ -240,12 +240,20 @@ describe("packaged Closure selection", () => {
       if (config.appVersion === second.binding.version) throw new Error("Closure boot failed");
       return "legacy-ready";
     });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
 
     const started = await startPackagedClosureRuntime(selected, start);
 
     expect(started.value).toBe("legacy-ready");
     expect(started.runtime).toMatchObject({ reason: "closure-start-failed", source: "legacy" });
     expect(start).toHaveBeenCalledTimes(2);
+    expect(warn).toHaveBeenCalledWith(
+      "[open-design packaged] active Closure failed to start; retrying the legacy combined runtime",
+      {
+        closureVersion: second.binding.version,
+        error: "Closure boot failed",
+      },
+    );
     expect((await readClosureRuntimeDescriptor(paths)).active).toEqual(first.activated.pointer);
   });
 

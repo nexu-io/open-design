@@ -1,15 +1,28 @@
-import { describe, expect, it } from "vitest";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { afterEach, describe, expect, it } from "vitest";
 
 import {
   CLOSURE_DAEMON_EXTERNALS,
+  CLOSURE_ELECTRON_NATIVE_MODULES,
   CLOSURE_INTERNAL_PACKAGES,
   CLOSURE_PLATFORM_TARGETS,
   closureRuntimeSource,
+  createClosureElectronRebuildOptions,
+  materializeClosureWebPublicHoist,
   normalizeClosurePlatformTarget,
   resolveClosureArchiveInvocation,
   resolveClosureRuntimeDependencies,
 } from "../src/closure.js";
 import { WORKSPACE_ROOT } from "../src/config.js";
+
+const roots: string[] = [];
+
+afterEach(async () => {
+  await Promise.all(roots.splice(0).map(async (root) => await rm(root, { force: true, recursive: true })));
+});
 
 describe("tools-pack Closure archive", () => {
   it("normalizes only the two G2 platform targets", () => {
@@ -33,6 +46,33 @@ describe("tools-pack Closure archive", () => {
     });
     expect(windows.command).toMatch(/[\\/]resources[\\/]win[\\/]7zip[\\/]7z\.exe$/u);
     expect(windows.args).toEqual(["a", "-tzip", "-mx=5", "C:\\closure.zip", ".\\*"]);
+  });
+
+  it("rebuilds Closure native modules for the shell Electron ABI", () => {
+    expect(createClosureElectronRebuildOptions({
+      appRoot: "/tmp/closure",
+      electronVersion: "41.3.0",
+      target: CLOSURE_PLATFORM_TARGETS.DARWIN_ARM64,
+    })).toMatchObject({
+      arch: "arm64",
+      buildPath: "/tmp/closure",
+      electronVersion: "41.3.0",
+      onlyModules: [...CLOSURE_ELECTRON_NATIVE_MODULES],
+      platform: "darwin",
+      projectRootPath: "/tmp/closure",
+    });
+    expect(createClosureElectronRebuildOptions({
+      appRoot: "C:\\closure",
+      electronVersion: "41.3.0",
+      target: CLOSURE_PLATFORM_TARGETS.WIN32_X64,
+    })).toMatchObject({
+      arch: "x64",
+      buildPath: "C:\\closure",
+      electronVersion: "41.3.0",
+      onlyModules: [...CLOSURE_ELECTRON_NATIVE_MODULES],
+      platform: "win32",
+      projectRootPath: "C:\\closure",
+    });
   });
 
   it("publishes one shell-neutral entry with explicit Web and daemon layout", () => {
@@ -63,5 +103,28 @@ describe("tools-pack Closure archive", () => {
     expect(Object.values(dependencies).every(
       (version) => /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u.test(version),
     )).toBe(true);
+  });
+
+  it("materializes pnpm public-hoist packages required by the archived Next server", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-closure-web-hoist-"));
+    roots.push(root);
+    const hoistRoot = join(root, "node_modules", ".pnpm", "node_modules");
+    await Promise.all([
+      mkdir(join(hoistRoot, "@swc", "helpers"), { recursive: true }),
+      mkdir(join(hoistRoot, "next"), { recursive: true }),
+    ]);
+    await Promise.all([
+      writeFile(join(hoistRoot, "@swc", "helpers", "package.json"), '{"name":"@swc/helpers"}\n'),
+      writeFile(join(hoistRoot, "next", "package.json"), '{"name":"next"}\n'),
+    ]);
+
+    expect(await materializeClosureWebPublicHoist(root)).toEqual([
+      "node_modules/@swc/helpers",
+      "node_modules/next",
+    ]);
+    expect(await readFile(join(root, "node_modules", "@swc", "helpers", "package.json"), "utf8"))
+      .toContain('@swc/helpers');
+    expect(await readFile(join(root, "node_modules", "next", "package.json"), "utf8"))
+      .toContain('next');
   });
 });

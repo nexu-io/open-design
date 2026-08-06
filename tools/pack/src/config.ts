@@ -323,7 +323,7 @@ function resolveToolPackUpdateMetadataUrl(value: string | undefined): string | u
   return normalized;
 }
 
-function resolveElectronVersion(workspaceRoot: string): string {
+export function resolveElectronVersion(workspaceRoot: string): string {
   const require = createRequire(join(workspaceRoot, "apps/desktop/package.json"));
   const desktopPackage = require(join(workspaceRoot, "apps/desktop/package.json")) as {
     devDependencies?: Record<string, string>;

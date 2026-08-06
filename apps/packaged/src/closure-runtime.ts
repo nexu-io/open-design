@@ -302,6 +302,13 @@ export async function startPackagedClosureRuntime<T>(
   } catch (closureError) {
     if (runtime.source !== "closure") throw closureError;
     await recoverClosureRuntime(runtime.storePaths).catch(() => undefined);
+    console.warn(
+      "[open-design packaged] active Closure failed to start; retrying the legacy combined runtime",
+      {
+        closureVersion: runtime.pointer.version,
+        error: errorMessage(closureError),
+      },
+    );
     const fallback = legacyRuntime(runtime.legacyConfig, "closure-start-failed", closureError);
     try {
       return { runtime: fallback, value: await start(fallback.runtimeConfig) };

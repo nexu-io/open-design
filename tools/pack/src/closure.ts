@@ -13,6 +13,7 @@ import {
 } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
+import { rebuild, type RebuildOptions } from "@electron/rebuild";
 import {
   CLOSURE_ARCHIVE_ENTRY_PATH,
   CLOSURE_ARCHIVE_MEDIA_TYPE,
@@ -27,7 +28,7 @@ import {
 import { createPackageManagerInvocation } from "@open-design/platform";
 import { isReleaseChannel, parseReleaseVersion, type ReleaseChannel } from "@open-design/release";
 
-import { WORKSPACE_ROOT } from "./config.js";
+import { resolveElectronVersion, WORKSPACE_ROOT } from "./config.js";
 import { copyBundledResourceTrees, winResources } from "./resources.js";
 
 export const CLOSURE_PLATFORM_TARGETS = Object.freeze({
@@ -44,6 +45,7 @@ export const CLOSURE_INTERNAL_PACKAGES = [
 ] as const;
 
 export const CLOSURE_DAEMON_EXTERNALS = ["better-sqlite3", "blake3-wasm", "node-pty"] as const;
+export const CLOSURE_ELECTRON_NATIVE_MODULES = ["better-sqlite3"] as const;
 const CLOSURE_FORBIDDEN_BUNDLE_INPUTS = [
   "/apps/desktop/",
   "/apps/packaged/",
@@ -75,6 +77,8 @@ export type ClosureBuildProvenanceV1 = {
     size: number;
   };
   build: {
+    electronVersion: string;
+    nativeModules: readonly string[];
     nodeVersion: string;
     sourceRevision: string | null;
     workspaceDirty: boolean | null;
@@ -131,6 +135,58 @@ export function resolveClosureArchiveInvocation(options: {
     args: ["a", "-tzip", "-mx=5", options.artifactPath, ".\\*"],
     command: winResources.sevenZipExe,
   };
+}
+
+export function createClosureElectronRebuildOptions(options: {
+  appRoot: string;
+  electronVersion: string;
+  target: ClosurePlatformTarget;
+}): RebuildOptions {
+  const target = normalizeClosurePlatformTarget(options.target);
+  return {
+    arch: target === CLOSURE_PLATFORM_TARGETS.DARWIN_ARM64 ? "arm64" : "x64",
+    buildFromSource: false,
+    buildPath: options.appRoot,
+    electronVersion: options.electronVersion,
+    force: true,
+    mode: "sequential",
+    onlyModules: [...CLOSURE_ELECTRON_NATIVE_MODULES],
+    platform: target === CLOSURE_PLATFORM_TARGETS.DARWIN_ARM64 ? "darwin" : "win32",
+    projectRootPath: options.appRoot,
+  };
+}
+
+function closureNativeRebuildOutputPath(appRoot: string): string {
+  return join(appRoot, "node_modules", "better-sqlite3", "build", "Release", "better_sqlite3.node");
+}
+
+export async function runClosureElectronRebuild(options: {
+  appRoot: string;
+  electronVersion: string;
+  target: ClosurePlatformTarget;
+}): Promise<void> {
+  const foundModules = new Set<string>();
+  const rebuildResult = rebuild(createClosureElectronRebuildOptions(options));
+  rebuildResult.lifecycle.on("modules-found", (modules: string[]) => {
+    for (const moduleName of modules) foundModules.add(moduleName);
+    process.stderr.write(
+      `[tools-pack closure] rebuilding Electron ABI modules: ${modules.join(", ") || "none"}\n`,
+    );
+  });
+  await rebuildResult;
+  const missingModules = CLOSURE_ELECTRON_NATIVE_MODULES.filter(
+    (moduleName) => !foundModules.has(moduleName),
+  );
+  if (missingModules.length > 0) {
+    throw new Error(
+      `Closure Electron ABI rebuild did not discover required native module(s): ${missingModules.join(", ")}`,
+    );
+  }
+  const nativePath = closureNativeRebuildOutputPath(options.appRoot);
+  const metadata = await stat(nativePath).catch(() => null);
+  if (metadata == null || !metadata.isFile() || metadata.size < 100_000) {
+    throw new Error(`Closure Electron ABI rebuild output is missing or invalid: ${nativePath}`);
+  }
 }
 
 function assertNativeBuildHost(target: ClosurePlatformTarget): void {
@@ -402,6 +458,7 @@ async function copyWebRuntime(workspaceRoot: string, appRoot: string): Promise<v
     throw new Error(`Closure Web standalone output is missing: ${standaloneSource}`);
   }
   await cp(standaloneSource, standaloneTarget, { dereference: true, recursive: true });
+  await materializeClosureWebPublicHoist(standaloneTarget);
 
   const appRelativeRoot = await stat(join(standaloneTarget, "apps", "web", "server.js"))
     .then(() => join(standaloneTarget, "apps", "web"))
@@ -416,6 +473,43 @@ async function copyWebRuntime(workspaceRoot: string, appRoot: string): Promise<v
   if ((await stat(publicRoot).catch(() => null))?.isDirectory()) {
     await cp(publicRoot, join(appRelativeRoot, "public"), { dereference: true, recursive: true });
   }
+}
+
+/**
+ * Next's pnpm standalone output resolves transitive packages through
+ * `node_modules/.pnpm/node_modules`, with public entries represented as
+ * symlinks. Closure archives intentionally contain no symlinks, and the broad
+ * dereferenced copy above does not reliably recreate those public entries on
+ * every host. Materialize each hoisted package explicitly so the archived
+ * server has the same Node resolution surface as the Desktop after-pack copy.
+ */
+export async function materializeClosureWebPublicHoist(standaloneRoot: string): Promise<string[]> {
+  const nodeModulesRoot = join(standaloneRoot, "node_modules");
+  const hoistRoot = join(nodeModulesRoot, ".pnpm", "node_modules");
+  const entries = await readdir(hoistRoot, { withFileTypes: true }).catch(() => []);
+  const materialized: string[] = [];
+
+  const materialize = async (sourcePath: string, destinationPath: string): Promise<void> => {
+    await rm(destinationPath, { force: true, recursive: true });
+    await mkdir(dirname(destinationPath), { recursive: true });
+    await cp(sourcePath, destinationPath, { dereference: true, recursive: true });
+    materialized.push(toPosixPath(relative(standaloneRoot, destinationPath)));
+  };
+
+  for (const entry of entries) {
+    const sourcePath = join(hoistRoot, entry.name);
+    if (entry.name.startsWith("@") && entry.isDirectory()) {
+      for (const scopedEntry of await readdir(sourcePath)) {
+        await materialize(
+          join(sourcePath, scopedEntry),
+          join(nodeModulesRoot, entry.name, scopedEntry),
+        );
+      }
+      continue;
+    }
+    await materialize(sourcePath, join(nodeModulesRoot, entry.name));
+  }
+  return materialized.sort();
 }
 
 function toPosixPath(value: string): string {
@@ -532,6 +626,8 @@ export async function buildClosureArchive(options: ClosureBuildOptions): Promise
     "--omit=dev",
     "--no-package-lock",
   ], { cwd: appRoot });
+  const electronVersion = resolveElectronVersion(workspaceRoot);
+  await runClosureElectronRebuild({ appRoot, electronVersion, target });
   await pruneForeignNodePtyPrebuilds(appRoot, target);
   await rm(join(appRoot, "node_modules", ".bin"), { force: true, recursive: true });
   await rm(join(appRoot, "node_modules", ".package-lock.json"), { force: true });
@@ -603,6 +699,8 @@ export async function buildClosureArchive(options: ClosureBuildOptions): Promise
       size: archiveBytes.byteLength,
     },
     build: {
+      electronVersion,
+      nativeModules: [...CLOSURE_ELECTRON_NATIVE_MODULES],
       nodeVersion: process.version,
       sourceRevision: git.sourceRevision,
       workspaceDirty: git.workspaceDirty,
