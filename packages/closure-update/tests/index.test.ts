@@ -32,6 +32,7 @@ import {
   applyClosureUpdate,
   compareClosureShellVersions,
   decideClosureUpdate,
+  discoverClosureReleaseCandidate,
   selectClosureReleaseCandidate,
   type ClosureReleaseCandidate,
 } from "../src/index.js";
@@ -210,6 +211,24 @@ describe("Closure release update selection", () => {
       version: "0.18.0-beta.4",
     });
     expect(candidate.assets.archive).toBe(candidate.manifest.artifact.url);
+  });
+
+  it("discovers the Closure from the combined release metadata endpoint", async () => {
+    const fetch = vi.fn(async () => new Response(JSON.stringify(metadata()), { status: 200 })) as typeof globalThis.fetch;
+
+    const candidate = await discoverClosureReleaseCandidate({
+      channel: "beta",
+      fetch,
+      metadataUrl: "https://releases.open-design.test/beta/metadata.json",
+      platform: "darwin-arm64",
+      releaseTarget: "mac_arm64",
+    });
+
+    expect(candidate.releaseTarget).toBe("mac_arm64");
+    expect(fetch).toHaveBeenCalledWith(
+      "https://releases.open-design.test/beta/metadata.json",
+      { headers: { accept: "application/json" } },
+    );
   });
 
   it("rejects incomplete, cross-channel, and cross-platform metadata", () => {

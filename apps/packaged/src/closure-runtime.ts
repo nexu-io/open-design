@@ -64,6 +64,7 @@ export type PackagedRuntimeIdentity = {
         namespace: string;
         platform: string;
         protocolVersion: number;
+        shellMinVersion: string;
         source: "closure";
         version: string;
       }
@@ -340,6 +341,7 @@ export function createPackagedRuntimeIdentity(input: {
           namespace: input.closure.pointer.namespace,
           platform: input.closure.pointer.platform,
           protocolVersion: input.closure.pointer.protocolVersion,
+          shellMinVersion: input.closure.verification.manifest.compatibility.shell.minVersion,
           source: "closure",
           version: input.closure.pointer.version,
         }

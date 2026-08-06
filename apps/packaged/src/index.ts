@@ -32,6 +32,7 @@ import {
   resolvePackagedClosureRuntime,
   startPackagedClosureRuntime,
 } from "./closure-runtime.js";
+import { checkForPackagedClosureUpdate } from "./closure-update.js";
 import {
   claimPackagedDownloadAttribution,
   discoverPackagedDownloadAttribution,
@@ -372,8 +373,24 @@ async function main(): Promise<void> {
       void confirmPackagedLauncherRuntime(launcherRuntime).catch((error: unknown) => {
         packagedLogger?.warn("failed to confirm packaged launcher runtime", { error });
       });
-      void confirmPackagedClosureRuntime(closureRuntime).catch((error: unknown) => {
-        packagedLogger?.warn("failed to confirm packaged Closure runtime", { error });
+      void (async () => {
+        await confirmPackagedClosureRuntime(closureRuntime);
+        const update = await checkForPackagedClosureUpdate({
+          channel: launcherRuntime.launcherPaths.channel,
+          installationRoot: launcherRuntime.launcherPaths.root,
+          metadataUrl: process.env.OD_UPDATE_METADATA_URL?.trim() || shellConfig.updateMetadataUrl,
+          namespace,
+          shellVersion: shellConfig.appVersion,
+        });
+        packagedLogger?.info("packaged Closure update check completed", {
+          reason: update.reason,
+          state: update.state,
+          ...(update.state === "skipped"
+            ? {}
+            : { candidateVersion: update.candidate.manifest.identity.version }),
+        });
+      })().catch((error: unknown) => {
+        packagedLogger?.warn("failed to confirm or update packaged Closure runtime", { error });
       });
       void syncWindowsUninstallDisplayVersion({
         namespace,

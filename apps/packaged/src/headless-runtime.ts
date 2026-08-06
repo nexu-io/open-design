@@ -13,6 +13,7 @@ import { bootstrapSidecarRuntime, createJsonIpcServer, resolveAppIpcPath } from 
 import type { JsonIpcServerHandle } from "@open-design/sidecar";
 
 import type { PackagedConfig } from "./config.js";
+import { checkForPackagedClosureUpdate } from "./closure-update.js";
 import {
   confirmPackagedClosureRuntime,
   createPackagedRuntimeIdentity,
@@ -207,6 +208,23 @@ export async function runPackagedHeadless(
     confirmRuntime: async () => {
       await confirmPackagedLauncherRuntime(launcherRuntime);
       await confirmPackagedClosureRuntime(closureRuntime);
+      void checkForPackagedClosureUpdate({
+        channel: launcherRuntime.launcherPaths.channel,
+        installationRoot: launcherRuntime.launcherPaths.root,
+        metadataUrl: shellConfig.updateMetadataUrl,
+        namespace: config.namespace,
+        shellVersion: shellConfig.appVersion,
+      }).then((update) => {
+        console.info("[open-design headless] Closure update check completed", {
+          reason: update.reason,
+          state: update.state,
+          ...(update.state === "skipped"
+            ? {}
+            : { candidateVersion: update.candidate.manifest.identity.version }),
+        });
+      }).catch((error: unknown) => {
+        console.warn("[open-design headless] Closure update check failed", error);
+      });
     },
     createIpcServer: async ({ shutdown: stop, webUrl: activeWebUrl }) =>
       await createJsonIpcServer({

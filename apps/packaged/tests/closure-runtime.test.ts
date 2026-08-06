@@ -277,6 +277,7 @@ describe("packaged Closure selection", () => {
         namespace: "release-beta",
         platform: "darwin-arm64",
         protocolVersion: CLOSURE_PROTOCOL_VERSION,
+        shellMinVersion: "0.16.2",
         source: "closure",
         version: "0.18.0-beta.5",
       },

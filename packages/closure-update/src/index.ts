@@ -194,6 +194,22 @@ export function selectClosureReleaseCandidate(
   };
 }
 
+export async function discoverClosureReleaseCandidate(input: {
+  channel: string;
+  fetch?: typeof globalThis.fetch;
+  metadataUrl: string;
+  platform: string;
+  releaseTarget: string;
+}): Promise<ClosureReleaseCandidate> {
+  const metadataUrl = requireHttpUrl(input.metadataUrl, "Closure release metadata URL");
+  const metadata = await fetchJsonDocument(
+    metadataUrl,
+    "Closure release metadata",
+    input.fetch ?? globalThis.fetch,
+  );
+  return selectClosureReleaseCandidate(metadata, input);
+}
+
 type ComparableVersion = {
   core: readonly [number, number, number];
   prerelease: string[];
@@ -561,4 +577,22 @@ export async function applyClosureUpdate(input: {
   } finally {
     await releaseUpdateLock(lock);
   }
+}
+
+export async function updateClosureFromRelease(input: {
+  channel: string;
+  fetch?: typeof globalThis.fetch;
+  metadataUrl: string;
+  paths: ClosureStorePaths;
+  platform: string;
+  releaseTarget: string;
+  shellVersion: string;
+}): Promise<ApplyClosureUpdateResult> {
+  const candidate = await discoverClosureReleaseCandidate(input);
+  return await applyClosureUpdate({
+    candidate,
+    ...(input.fetch == null ? {} : { fetch: input.fetch }),
+    paths: input.paths,
+    shellVersion: input.shellVersion,
+  });
 }

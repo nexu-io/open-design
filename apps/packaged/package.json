@@ -25,6 +25,7 @@
   },
   "dependencies": {
     "@open-design/closure-store": "workspace:*",
+    "@open-design/closure-update": "workspace:*",
     "@open-design/contracts": "workspace:*",
     "@open-design/daemon": "workspace:*",
     "@open-design/desktop": "workspace:*",

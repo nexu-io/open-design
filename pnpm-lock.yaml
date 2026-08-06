@@ -290,6 +290,9 @@ importers:
       '@open-design/closure-store':
         specifier: workspace:*
         version: link:../../packages/closure-store
+      '@open-design/closure-update':
+        specifier: workspace:*
+        version: link:../../packages/closure-update
       '@open-design/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
