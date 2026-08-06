@@ -8,10 +8,15 @@ import {
   serializeClosureCandidateManifestForSigning,
   validateClosureCandidateManifest,
   validateClosureCandidateSignature,
-  validateClosureHandoffEnvelope,
+  validateClosureRuntimeStatus,
+  validateClosureShellCapabilityRequest,
+  validateClosureShellCapabilityResult,
   validateClosureShimRequest,
   type ClosureCandidateSignature,
   type ClosureHandoffEnvelope,
+  type ClosureRuntimeStatus,
+  type ClosureRuntimeTerminalStatus,
+  type ClosureShellCapabilityPort,
   type ClosureShimInstallerReinstallResult,
   type ClosureShimReadyResult,
   type ClosureShimRequest,
@@ -19,7 +24,6 @@ import {
 import {
   armClosureRuntimeAttempt,
   confirmClosureRuntime,
-  readClosureRuntimeDescriptor,
   recoverClosureRuntime,
   resolveClosureStorePaths,
   verifyStoredClosureCandidate,
@@ -58,20 +62,18 @@ export type SignedClosureReleaseCandidate = {
   signature: ClosureCandidateSignature;
 };
 
-export type ClosureBodyStatus = {
-  handoff: ClosureHandoffEnvelope;
-  pid: number;
-  state: "running";
-};
+export type ClosureBodyStatus = ClosureRuntimeStatus;
 
 export interface ClosureBodyHandle {
   close(): Promise<void>;
   readStatus(): Promise<ClosureBodyStatus>;
+  waitForTerminal(): Promise<ClosureRuntimeTerminalStatus>;
 }
 
 export type ClosureBodyHandoffInput = {
   handoff: ClosureHandoffEnvelope;
   paths: Readonly<HeadlessClosurePaths>;
+  shell: ClosureShellCapabilityPort;
 };
 
 export type ClosureBodyModule = {
@@ -81,9 +83,10 @@ export type ClosureBodyModule = {
 };
 
 export type ClosureShimReady = {
-  close(): Promise<void>;
+  close(): Promise<ClosureRuntimeTerminalStatus>;
   handle: ClosureBodyHandle;
   result: ClosureShimReadyResult;
+  waitForTerminal(): Promise<ClosureRuntimeTerminalStatus>;
 };
 
 export type ClosureShimInstallerReinstall = {
@@ -100,6 +103,7 @@ export type EnsureAndHandoffClosureOptions = {
   onTrace?: (event: ClosureShimTraceEvent) => void;
   paths: HeadlessClosurePaths;
   request: ClosureShimRequest;
+  shellCapabilities: ClosureShellCapabilityPort;
   trustedKeys: Readonly<Record<string, string>>;
 };
 
@@ -272,11 +276,60 @@ async function selectedPointer(paths: ClosureStorePaths): Promise<ClosureRuntime
   return recovered.selection.pointer;
 }
 
+function bindShellCapabilities(
+  port: ClosureShellCapabilityPort,
+  handoff: ClosureHandoffEnvelope,
+): ClosureShellCapabilityPort {
+  return {
+    invoke: async (value) => {
+      const request = validateClosureShellCapabilityRequest(value, { handoff });
+      const result = await port.invoke(request);
+      return validateClosureShellCapabilityResult(result, {
+        handoff,
+        requestId: request.requestId,
+      });
+    },
+  };
+}
+
+function validateTerminalStatus(
+  value: unknown,
+  handoff: ClosureHandoffEnvelope,
+): ClosureRuntimeTerminalStatus {
+  const status = validateClosureRuntimeStatus(value, { handoff });
+  if (status.state === "running") {
+    throw new ClosureShimError(
+      "handoff-failed",
+      "Closure body reported running while a terminal status was required",
+    );
+  }
+  return status;
+}
+
+function readyOutcome(input: {
+  handle: ClosureBodyHandle;
+  result: ClosureShimReadyResult;
+}): ClosureShimReady {
+  const waitForTerminal = async (): Promise<ClosureRuntimeTerminalStatus> => {
+    return validateTerminalStatus(await input.handle.waitForTerminal(), input.result.handoff);
+  };
+  return {
+    close: async () => {
+      await input.handle.close();
+      return await waitForTerminal();
+    },
+    handle: input.handle,
+    result: input.result,
+    waitForTerminal,
+  };
+}
+
 async function startPointer(input: {
   importBody: NonNullable<EnsureAndHandoffClosureOptions["importBody"]>;
   onTrace: EnsureAndHandoffClosureOptions["onTrace"];
   paths: Readonly<HeadlessClosurePaths>;
   pointer: ClosureRuntimePointer;
+  shellCapabilities: ClosureShellCapabilityPort;
   storePaths: ClosureStorePaths;
 }): Promise<{ handle: ClosureBodyHandle; handoff: ClosureHandoffEnvelope }> {
   const handoff = createClosureHandoffEnvelope(input.pointer);
@@ -287,25 +340,14 @@ async function startPointer(input: {
   try {
     const verification = await verifyStoredClosureCandidate(input.storePaths, input.pointer);
     const startBody = await loadBody(verification, input.importBody);
-    handle = await startBody({ handoff, paths: input.paths });
-    const status = await handle.readStatus();
-    if (status.state !== "running") {
-      throw new ClosureShimError(
-        "handoff-failed",
-        `Closure body reported unexpected state: ${String(status.state)}`,
-      );
-    }
-    if (!Number.isSafeInteger(status.pid) || status.pid <= 0) {
-      throw new ClosureShimError(
-        "handoff-failed",
-        `Closure body reported an invalid pid: ${String(status.pid)}`,
-      );
-    }
-    validateClosureHandoffEnvelope(status.handoff, {
-      channel: input.pointer.channel,
-      generation: input.pointer.generation,
-      namespace: input.pointer.namespace,
-      platform: input.pointer.platform,
+    handle = await startBody({
+      handoff,
+      paths: input.paths,
+      shell: bindShellCapabilities(input.shellCapabilities, handoff),
+    });
+    validateClosureRuntimeStatus(await handle.readStatus(), {
+      handoff,
+      state: "running",
     });
     trace(input.onTrace, "body:ready");
     await confirmClosureRuntime(input.storePaths, input.pointer);
@@ -380,10 +422,10 @@ export async function ensureAndHandoffClosure(
       onTrace: options.onTrace,
       paths: options.paths,
       pointer,
+      shellCapabilities: options.shellCapabilities,
       storePaths,
     });
-    return {
-      close: async () => await started.handle.close(),
+    return readyOutcome({
       handle: started.handle,
       result: {
         handoff: started.handoff,
@@ -392,7 +434,7 @@ export async function ensureAndHandoffClosure(
         rolledBack: false,
         schemaVersion: CLOSURE_SHIM_SCHEMA_VERSION,
       },
-    };
+    });
   } catch (activeError) {
     const failedPointer = pointer;
     const recovery = await recoverClosureRuntime(storePaths);
@@ -422,10 +464,10 @@ export async function ensureAndHandoffClosure(
         onTrace: options.onTrace,
         paths: options.paths,
         pointer,
+        shellCapabilities: options.shellCapabilities,
         storePaths,
       });
-      return {
-        close: async () => await started.handle.close(),
+      return readyOutcome({
         handle: started.handle,
         result: {
           handoff: started.handoff,
@@ -434,7 +476,7 @@ export async function ensureAndHandoffClosure(
           rolledBack: true,
           schemaVersion: CLOSURE_SHIM_SCHEMA_VERSION,
         },
-      };
+      });
     } catch (rollbackError) {
       await recoverClosureRuntime(storePaths).catch(() => undefined);
       throw new AggregateError(

@@ -14,13 +14,14 @@ primitives without becoming another product identity or state machine.
 - Selection, attempt arming, body handoff, health confirmation, and rollback
   through the existing Closure Store.
 - The opaque dynamic body-entry contract and stable handoff result.
+- Generation fencing for runtime status and Closure-to-Shell capability calls.
 
 ## Does not own
 
 - Shell update UX, installer launch, permissions, windows, menus, or retries.
 - Release publication, key rotation, body component selection, or live swap.
 - Store layout, candidate download mechanics, Web/daemon internals, sidecar
-  transport, or a general multi-shell lease.
+  transport, a general message bus, or a general multi-shell lease.
 
 ## Rules
 

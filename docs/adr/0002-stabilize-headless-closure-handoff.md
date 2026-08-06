@@ -47,6 +47,14 @@ installer-reinstall, windows, menus, and OS integration. The Closure side owns
 candidate trust and integrity, materialization, Store truth, activation,
 rollback, body startup, health confirmation, and body shutdown.
 
+The seam carries two minimal interaction primitives beyond startup: a
+generation-bound request/result port for Closure-to-Shell capabilities, and a
+generation-bound runtime observation that distinguishes running, requested
+stop, and unexpected failure. They establish correlation and lifecycle
+ownership without selecting Electron IPC, HTTP, stdio, or a general event bus.
+An unsupported Shell capability is an explicit result; a required capability
+is gated by the existing Shell minimum version.
+
 The first handoff protocol is versioned and additive, but exposes only one
 legal body form: the atomic Web + daemon Closure release-set. Body paths and
 module layout remain opaque to the shell. Background updates may prepare a
@@ -68,6 +76,8 @@ Before Shell and Closure work proceeds in parallel, the seam must provide:
    installer-reinstall, and unhealthy-candidate rollback;
 4. protocol tests for namespace isolation and stale generation rejection;
 5. fake Shell and fake body surfaces so either side can develop independently.
+6. independent Shell-side and Closure-side demos for reverse capability calls,
+   requested stop, unexpected exit, and stale-generation rejection.
 
 macOS runs the full demo before handoff. Windows must run protocol, build, and
 real child-process smoke before product integration is accepted. Full Desktop
@@ -82,6 +92,8 @@ after a compatible shim is reachable, while historical combined payload code
 remains a one-way, removable recovery path during the transition.
 
 The seam deliberately freezes less than the implementation: handoff semantics,
-result codes, lifecycle invariants, fixtures, and golden traces are contract;
-Store layout, download implementation, body module structure, and sidecar
-transport are not.
+result codes, capability correlation, lifecycle invariants, fixtures, and
+golden traces are contract; Store layout, download implementation, body module
+structure, and physical sidecar transport are not. Filling an agreed capability
+matrix may add typed operations and handlers, but must not require another
+identity, transport, lifecycle plane, or process owner.

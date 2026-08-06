@@ -10,6 +10,7 @@ import { join } from "node:path";
 import {
   CLOSURE_ARCHIVE_ENTRY_PATH,
   CLOSURE_ARCHIVE_MEDIA_TYPE,
+  CLOSURE_HANDOFF_SCHEMA_VERSION,
   CLOSURE_INVENTORY_SCHEMA_VERSION,
   CLOSURE_PROTOCOL_VERSION,
   CLOSURE_SCHEMA_VERSION,
@@ -19,6 +20,8 @@ import {
   serializeClosureCandidateManifestForSigning,
   type ClosureCandidateManifest,
   type ClosureCandidateSignature,
+  type ClosureShellCapabilityPort,
+  type ClosureShellCapabilityRequest,
   type ClosureShimRequest,
 } from "@open-design/closure-proto";
 import {
@@ -59,7 +62,7 @@ function digest(bytes: string | Buffer): `sha256:${string}` {
   return `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
 }
 
-function bodyRuntimeSource(mode: "healthy" | "unhealthy"): string {
+function bodyRuntimeSource(mode: "healthy" | "unexpected-exit" | "unhealthy"): string {
   return `import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { createInterface } from "node:readline";
@@ -73,16 +76,48 @@ export async function handoffOpenDesignClosure(input) {
   ], { stdio: ["ignore", "pipe", "inherit"] });
   const lines = createInterface({ input: child.stdout });
   const [line] = await once(lines, "line");
-  const status = JSON.parse(String(line));
+  let status = JSON.parse(String(line));
+  let settleTerminal;
+  const terminal = new Promise((resolve) => {
+    settleTerminal = resolve;
+  });
+  let unexpectedExitTriggered = false;
+  lines.on("line", (nextLine) => {
+    const next = JSON.parse(String(nextLine));
+    status = next;
+    if (next.state !== "running") settleTerminal(next);
+  });
+  child.once("close", () => {
+    if (status.state === "running") {
+      status = {
+        error: { code: "process-exited" },
+        handoff: input.handoff,
+        pid: child.pid,
+        schemaVersion: 1,
+        state: "failed",
+      };
+    }
+    settleTerminal(status);
+  });
   return {
     async close() {
+      if (child.exitCode === null) child.kill("SIGTERM");
+      await terminal;
       lines.close();
-      if (child.exitCode !== null) return;
-      child.kill("SIGTERM");
-      await once(child, "exit");
     },
     async readStatus() {
       return status;
+    },
+    async waitForTerminal() {
+      if (
+        "${mode}" === "unexpected-exit"
+        && !unexpectedExitTriggered
+        && child.exitCode === null
+      ) {
+        unexpectedExitTriggered = true;
+        child.kill("SIGKILL");
+      }
+      return await terminal;
     },
   };
 }
@@ -94,8 +129,17 @@ const mode = process.argv[3];
 process.stdout.write(JSON.stringify({
   handoff,
   pid: process.pid,
-  state: mode === "healthy" ? "running" : "failed",
+  schemaVersion: 1,
+  state: mode === "unhealthy" ? "failed" : "running",
 }) + "\\n");
+process.on("SIGTERM", () => {
+  process.stdout.write(JSON.stringify({
+    handoff,
+    pid: process.pid,
+    schemaVersion: 1,
+    state: "stopped",
+  }) + "\\n", () => process.exit(0));
+});
 setInterval(() => undefined, 1000);
 `;
 
@@ -110,7 +154,7 @@ type CandidateFixture = SignedClosureReleaseCandidate & {
 
 async function candidateFixture(input: {
   minShellVersion?: string;
-  mode?: "healthy" | "unhealthy";
+  mode?: "healthy" | "unexpected-exit" | "unhealthy";
   version: string;
 }): Promise<CandidateFixture> {
   const runtimeSource = bodyRuntimeSource(input.mode ?? "healthy");
@@ -214,15 +258,33 @@ function expectReady(outcome: ClosureShimOutcome): asserts outcome is Extract<Cl
   expect(outcome.handle).not.toBeNull();
 }
 
+function fakeShellCapabilities(
+  invocations: ClosureShellCapabilityRequest[] = [],
+): ClosureShellCapabilityPort {
+  return {
+    invoke: async (request) => {
+      invocations.push(request);
+      return {
+        handoff: request.handoff,
+        outcome: "unsupported",
+        requestId: request.requestId,
+        schemaVersion: CLOSURE_HANDOFF_SCHEMA_VERSION,
+      };
+    },
+  };
+}
+
 async function launch(
   context: Awaited<ReturnType<typeof demoContext>>,
   fixture?: CandidateFixture,
+  shellCapabilities: ClosureShellCapabilityPort = fakeShellCapabilities(),
 ): Promise<ClosureShimOutcome> {
   return await ensureAndHandoffClosure({
     ...(fixture == null ? {} : { candidate: fixture, fetch: fixture.fetch }),
     onTrace: (event) => context.traces.push(event),
     paths: context.paths,
     request: context.request,
+    shellCapabilities,
     trustedKeys: { "demo-root-2026": trustedPublicKey },
   });
 }
@@ -256,7 +318,11 @@ describe("Closure shim conformance demo", () => {
       lastSuccessful: outcome.result.handoff.identity,
     });
     await expect(readClosureAttemptDescriptor(storePaths)).resolves.toBeNull();
-    await outcome.close();
+    await expect(outcome.close()).resolves.toMatchObject({
+      handoff: outcome.result.handoff,
+      schemaVersion: CLOSURE_HANDOFF_SCHEMA_VERSION,
+      state: "stopped",
+    });
   });
 
   it("reuses the verified active body on the second launch", async () => {
@@ -401,6 +467,115 @@ describe("Closure shim conformance demo", () => {
     await recovered.close();
   });
 
+  it("reports an unexpected real child exit as a generation-bound terminal failure", async () => {
+    const context = await demoContext();
+    const fixture = await candidateFixture({
+      mode: "unexpected-exit",
+      version: "0.19.0-beta.1",
+    });
+
+    const outcome = await launch(context, fixture);
+    expectReady(outcome);
+
+    await expect(outcome.waitForTerminal()).resolves.toMatchObject({
+      error: { code: "process-exited" },
+      handoff: outcome.result.handoff,
+      schemaVersion: CLOSURE_HANDOFF_SCHEMA_VERSION,
+      state: "failed",
+    });
+  });
+
+  it("binds a Closure-to-Shell capability exchange to the active generation", async () => {
+    const context = await demoContext();
+    const fixture = await candidateFixture({ version: "0.19.0-beta.1" });
+    const invocations: ClosureShellCapabilityRequest[] = [];
+    const shellCapabilities: ClosureShellCapabilityPort = {
+      invoke: async (request) => {
+        invocations.push(request);
+        return {
+          handoff: request.handoff,
+          outcome: "completed",
+          output: { paths: ["selected.png"] },
+          requestId: request.requestId,
+          schemaVersion: CLOSURE_HANDOFF_SCHEMA_VERSION,
+        };
+      },
+    };
+    const body = createFakeClosureBody({
+      onHandoff: async ({ handoff, shell }) => {
+        const result = await shell.invoke({
+          capability: "select-file",
+          handoff,
+          input: { accept: ["image/png"] },
+          requestId: "select-file-1",
+          schemaVersion: CLOSURE_HANDOFF_SCHEMA_VERSION,
+        });
+        expect(result).toMatchObject({
+          outcome: "completed",
+          output: { paths: ["selected.png"] },
+        });
+      },
+    });
+
+    const outcome = await ensureAndHandoffClosure({
+      candidate: fixture,
+      fetch: fixture.fetch,
+      importBody: async () => body.module,
+      paths: context.paths,
+      request: context.request,
+      shellCapabilities,
+      trustedKeys: { "demo-root-2026": trustedPublicKey },
+    });
+    expectReady(outcome);
+
+    expect(invocations).toHaveLength(1);
+    expect(invocations[0]).toMatchObject({
+      capability: "select-file",
+      handoff: outcome.result.handoff,
+      requestId: "select-file-1",
+    });
+    await outcome.close();
+  });
+
+  it("rejects a stale capability result before the body can become ready", async () => {
+    const context = await demoContext();
+    const fixture = await candidateFixture({ version: "0.19.0-beta.1" });
+    const body = createFakeClosureBody({
+      onHandoff: async ({ handoff, shell }) => {
+        await shell.invoke({
+          capability: "select-file",
+          handoff,
+          input: null,
+          requestId: "select-file-1",
+          schemaVersion: CLOSURE_HANDOFF_SCHEMA_VERSION,
+        });
+      },
+    });
+
+    await expect(ensureAndHandoffClosure({
+      candidate: fixture,
+      fetch: fixture.fetch,
+      importBody: async () => body.module,
+      paths: context.paths,
+      request: context.request,
+      shellCapabilities: {
+        invoke: async (request) => ({
+          handoff: {
+            ...request.handoff,
+            identity: {
+              ...request.handoff.identity,
+              generation: request.handoff.identity.generation + 1,
+            },
+          },
+          outcome: "unsupported",
+          requestId: request.requestId,
+          schemaVersion: CLOSURE_HANDOFF_SCHEMA_VERSION,
+        }),
+      },
+      trustedKeys: { "demo-root-2026": trustedPublicKey },
+    })).rejects.toThrow(/no last-successful/u);
+  });
+
   it("rejects stale body readiness without confirming the attempt", async () => {
     const context = await demoContext();
     const fixture = await candidateFixture({ version: "0.19.0-beta.1" });
@@ -417,6 +592,7 @@ describe("Closure shim conformance demo", () => {
       importBody: async () => body.module,
       paths: context.paths,
       request: context.request,
+      shellCapabilities: fakeShellCapabilities(),
       trustedKeys: { "demo-root-2026": trustedPublicKey },
     })).rejects.toThrow(/no last-successful/u);
 
