@@ -1120,6 +1120,89 @@ describe('PreviewDrawOverlay content anchoring (issue #6361)', () => {
     }
   });
 
+  it('deactivating Draw mid-capture does not clear the marks the send is reading', async () => {
+    // Escape (or a file switch) can flip active=false while send() is still
+    // between requestSnapshot and its bounds read. The inactive cleanup must
+    // defer until the send settles — clearing the refs mid-flight emits an
+    // annotation whose PNG has no mark and whose bounds are undefined.
+    frame.w = 692;
+    frame.h = 666;
+    const restoreRect = installFrameGeometry();
+    const observer = installResizeObserver();
+    const anchors = vi.mocked(requestPreviewAnchorTargets);
+    anchors.mockReset();
+    anchors.mockImplementation(async () => ({ answered: true, targets: [] }) as never);
+
+    const annotation = vi.fn((event: Event) => {
+      const detail = (event as CustomEvent<{ ack?: (r: { ok: boolean }) => void }>).detail;
+      detail.ack?.({ ok: true });
+    });
+    window.addEventListener('opendesign:annotation', annotation);
+
+    let deactivate: (() => void) | null = null;
+    let midCapture: (() => Promise<void>) | null = null;
+    const captureSnapshot = vi.fn(async () => {
+      if (midCapture) await midCapture();
+      return { dataUrl: 'data:image/png;base64,cG5n', w: 692, h: 666 };
+    });
+    const composite = installRecordingCompositeMocks();
+
+    try {
+      const view = render(
+        <PreviewDrawOverlay active captureSnapshot={captureSnapshot} onActiveChange={() => {}}>
+          <iframe title="srcdoc" data-od-render-mode="srcdoc" data-od-active="true" />
+        </PreviewDrawOverlay>,
+      );
+      deactivate = () => {
+        view.rerender(
+          <PreviewDrawOverlay active={false} captureSnapshot={captureSnapshot} onActiveChange={() => {}}>
+            <iframe title="srcdoc" data-od-render-mode="srcdoc" data-od-active="true" />
+          </PreviewDrawOverlay>,
+        );
+      };
+      const wrap = view.container.querySelector<HTMLElement>('.preview-draw-overlay')!;
+      const canvas = view.container.querySelector<HTMLCanvasElement>('canvas')!;
+      Object.defineProperty(wrap, 'offsetWidth', { configurable: true, get: () => frame.w });
+      Object.defineProperty(wrap, 'offsetHeight', { configurable: true, get: () => frame.h });
+      observer.trigger();
+
+      // Box over BAND 05 (342..382).
+      fireEvent.pointerDown(canvas, { clientX: 40, clientY: 342, pointerId: 1 });
+      fireEvent.pointerMove(canvas, { clientX: 600, clientY: 382, pointerId: 1 });
+      fireEvent.pointerUp(canvas, { clientX: 600, clientY: 382, pointerId: 1 });
+      await new Promise((r) => setTimeout(r, 350));
+
+      // Mid-capture: Draw deactivates (Escape / file switch).
+      midCapture = async () => {
+        deactivate!();
+        await new Promise((r) => setTimeout(r, 60));
+      };
+
+      const input = view.container.querySelector<HTMLInputElement>('.preview-draw-note-input')!;
+      fireEvent.change(input, { target: { value: 'Escape must not eat the annotation.' } });
+      fireEvent.click(view.getByRole('button', { name: 'Send' }));
+
+      await waitFor(() => expect(annotation).toHaveBeenCalledTimes(1));
+      const detail = (annotation.mock.calls[0]?.[0] as CustomEvent<{
+        bounds?: { x: number; y: number; width: number; height: number };
+        markKind?: string;
+      }>).detail;
+
+      // The annotation must still carry the mark: structured bounds intact...
+      expect(detail.bounds).toBeDefined();
+      expect(detail.bounds!.y).toBeCloseTo(342, 0);
+      expect(detail.bounds!.height).toBeCloseTo(40, 0);
+      // ...and the compositor painted it into the PNG.
+      const markRect = composite.painted.find((r) => r.w > 500 && r.h > 20 && r.h < 100);
+      expect(markRect).toBeTruthy();
+    } finally {
+      window.removeEventListener('opendesign:annotation', annotation);
+      composite.restore();
+      observer.restore();
+      restoreRect();
+    }
+  });
+
   it('resets the probe budget when the file changes under the open overlay', async () => {
     frame.w = 692;
     frame.h = 666;

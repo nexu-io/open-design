@@ -662,6 +662,9 @@ export function PreviewDrawOverlay({
   // the bounds reader must multiply by the SAME size the PNG was composited
   // against — the live canvas can grow mid-capture even when the refs do not.
   const frozenLayoutSizeRef = useRef<{ width: number; height: number } | null>(null);
+  // Deactivation arrived while send() was in flight; run the full inactive
+  // cleanup once the send settles (see the active-cleanup effect).
+  const cleanupAfterSendRef = useRef(false);
   // The overlay can stay mounted (and even active) across a file switch; the
   // iframe element is often reused, so the per-frame reset above won't fire.
   // A new document is a new bridge — start its probe budget from zero.
@@ -1103,6 +1106,19 @@ export function PreviewDrawOverlay({
 
   useEffect(() => {
     if (active) return;
+    // Deactivating mid-send (Escape, file switch) must not clear the refs the
+    // compositor and annotationBounds are still reading — send() holds the
+    // frozen layout and the marks until its finally. Defer the cleanup; the
+    // send path runs it on completion when the overlay is still inactive.
+    if (sending) {
+      cleanupAfterSendRef.current = true;
+      return;
+    }
+    cleanupInactiveOverlay();
+  }, [active, redraw, sending]);
+
+  function cleanupInactiveOverlay() {
+    cleanupAfterSendRef.current = false;
     strokesRef.current = [];
     undoneStrokesRef.current = [];
     drawingRef.current = null;
@@ -1126,7 +1142,7 @@ export function PreviewDrawOverlay({
     syncHistoryState();
     redraw();
     bumpLayoutRevision();
-  }, [active, redraw]);
+  }
 
   // Bounds read for the annotation payload must be in the frame's *layout*
   // space (offsetWidth/Height), matching the snapshot the marks are composited
@@ -1517,6 +1533,8 @@ export function PreviewDrawOverlay({
           scheduleContentReanchor();
         }
       }
+      // A deactivation deferred by the in-flight send runs its cleanup now.
+      if (cleanupAfterSendRef.current) cleanupInactiveOverlay();
     }
   }
 
