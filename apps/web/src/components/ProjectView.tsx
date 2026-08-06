@@ -6024,6 +6024,7 @@ export function ProjectView({
           },
         })
           .catch((err) => {
+            if (terminalDeliveryVerificationExpired) return;
             // Skip AbortError (expected on interrupt) and any error from a run
             // that was tagged superseded by a send-now interrupt — it must not
             // surface a global failure over the replacement.
