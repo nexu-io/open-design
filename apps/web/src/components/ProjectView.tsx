@@ -6031,6 +6031,7 @@ export function ProjectView({
             },
           },
           onRunStatus: (runStatus) => {
+            if (terminalDeliveryVerificationExpired) return;
             textBuffer.flush();
             updateMessageById(
               message.id,

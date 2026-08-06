@@ -658,6 +658,7 @@ describe('ProjectView daemon reattach restore', () => {
     vi.useFakeTimers();
     const endedAt = Date.now();
     let lateOnDone: (() => void) | null = null;
+    let lateOnRunStatus: ((status: 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled') => void) | null = null;
     listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
     listMessages.mockResolvedValue([
       {
@@ -687,8 +688,12 @@ describe('ProjectView daemon reattach restore', () => {
       id: 'run-stalled-terminal-delivery', status: 'succeeded', createdAt: endedAt - 1_000,
       updatedAt: endedAt, exitCode: 0, signal: null,
     });
-    reattachDaemonRun.mockImplementation(async (options: { handlers: { onDone: () => void } }) => {
+    reattachDaemonRun.mockImplementation(async (options: {
+      handlers: { onDone: () => void };
+      onRunStatus?: (status: 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled') => void;
+    }) => {
       lateOnDone = options.handlers.onDone;
+      lateOnRunStatus = options.onRunStatus ?? null;
       return new Promise<void>(() => {});
     });
 
@@ -723,6 +728,11 @@ describe('ProjectView daemon reattach restore', () => {
     expect(lateOnDone).not.toBeNull();
     await act(async () => {
       await (lateOnDone as unknown as () => void)();
+    });
+    expect(saveMessage).toHaveBeenCalledTimes(savesAtTimeout);
+    expect(lateOnRunStatus).toBeTypeOf('function');
+    await act(async () => {
+      (lateOnRunStatus as unknown as (status: 'running') => void)('running');
     });
     expect(saveMessage).toHaveBeenCalledTimes(savesAtTimeout);
     const reattachOptions = reattachDaemonRun.mock.calls[0]?.[0] as { signal: AbortSignal } | undefined;
