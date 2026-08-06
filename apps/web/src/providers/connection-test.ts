@@ -10,6 +10,19 @@ import type {
   ProviderTestRequest,
 } from '../types';
 
+/**
+ * Returns the daemon's OD_API_TOKEN as injected by the daemon into the served
+ * HTML (`window.__OD_API_TOKEN`). When the daemon runs with a non-loopback
+ * bind (Docker / hosted deployments) it enforces `Authorization: Bearer <token>`
+ * on every `/api/*` call. When no token is configured (loopback desktop dev)
+ * the injection script is omitted and this returns undefined.
+ */
+function getDaemonApiToken(): string | undefined {
+  if (typeof window === 'undefined') return undefined;
+  const token = (window as { __OD_API_TOKEN?: unknown }).__OD_API_TOKEN;
+  return typeof token === 'string' && token.length > 0 ? token : undefined;
+}
+
 function requestModel(body: ConnectionTestRequest): string | undefined {
   const model = (body as { model?: unknown }).model;
   if (typeof model === 'string' && model.trim()) return model.trim();
@@ -24,7 +37,10 @@ async function postTest(
   try {
     const response = await fetch('/api/test/connection', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        'content-type': 'application/json',
+        ...(getDaemonApiToken() ? { authorization: `Bearer ${getDaemonApiToken()}` } : {}),
+      },
       body: JSON.stringify(body),
       signal,
     });
