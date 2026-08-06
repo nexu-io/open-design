@@ -1,4 +1,25 @@
-import { describe, expect, it } from "vitest";
+import { createHash } from "node:crypto";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import {
+  CLOSURE_ARCHIVE_ENTRY_PATH,
+  CLOSURE_ARCHIVE_MEDIA_TYPE,
+  CLOSURE_INVENTORY_SCHEMA_VERSION,
+  CLOSURE_PROTOCOL_VERSION,
+  CLOSURE_SCHEMA_VERSION,
+  type ClosureCandidateManifest,
+} from "@open-design/closure-proto";
+import {
+  readClosureAttemptDescriptor,
+  readClosureRuntimeDescriptor,
+  resolveClosureStorePaths,
+  verifyStoredClosureCandidate,
+  type ClosureStorePaths,
+} from "@open-design/closure-store";
+import JSZip from "jszip";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type {
   ClosureAttemptDescriptor,
@@ -8,6 +29,7 @@ import type {
 
 import {
   ClosureUpdateError,
+  applyClosureUpdate,
   compareClosureShellVersions,
   decideClosureUpdate,
   selectClosureReleaseCandidate,
@@ -16,6 +38,22 @@ import {
 
 const DIGEST = `sha256:${"a".repeat(64)}` as const;
 const OTHER_DIGEST = `sha256:${"b".repeat(64)}` as const;
+const roots: string[] = [];
+
+afterEach(async () => {
+  vi.restoreAllMocks();
+  await Promise.all(roots.splice(0).map(async (root) => await rm(root, { force: true, recursive: true })));
+});
+
+function digest(bytes: string | Buffer): `sha256:${string}` {
+  return `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
+}
+
+async function createStore(): Promise<ClosureStorePaths> {
+  const root = await mkdtemp(join(tmpdir(), "od-closure-update-"));
+  roots.push(root);
+  return resolveClosureStorePaths({ channel: "beta", namespace: "release-beta", root });
+}
 
 function metadata(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   const version = "0.18.0-beta.4";
@@ -91,6 +129,74 @@ function runtime(active: ClosureRuntimePointer | null): ClosureRuntimeDescriptor
     schemaVersion: 1,
     updatedAt: new Date(0).toISOString(),
   };
+}
+
+async function downloadableCandidate(): Promise<{
+  archive: Buffer;
+  candidate: ClosureReleaseCandidate;
+  fetch: typeof globalThis.fetch;
+}> {
+  const runtimeBytes = "export const ready = true;\n";
+  const zip = new JSZip();
+  zip.file(CLOSURE_ARCHIVE_ENTRY_PATH, runtimeBytes);
+  const archive = await zip.generateAsync({ compression: "DEFLATE", type: "nodebuffer" });
+  const archiveDigest = digest(archive);
+  const version = "0.18.0-beta.4";
+  const baseUrl = `https://releases.open-design.test/beta/closure/darwin-arm64/versions/${version}`;
+  const inventory = {
+    files: [{
+      digest: digest(runtimeBytes),
+      path: CLOSURE_ARCHIVE_ENTRY_PATH,
+      size: Buffer.byteLength(runtimeBytes),
+    }],
+    schemaVersion: CLOSURE_INVENTORY_SCHEMA_VERSION,
+  };
+  const manifest: ClosureCandidateManifest = {
+    artifact: {
+      digest: archiveDigest,
+      entryPath: CLOSURE_ARCHIVE_ENTRY_PATH,
+      inventoryDigest: digest(JSON.stringify(inventory.files)),
+      mediaType: CLOSURE_ARCHIVE_MEDIA_TYPE,
+      size: archive.byteLength,
+      url: `${baseUrl}/closure.zip`,
+    },
+    compatibility: { shell: { minVersion: "0.16.2" } },
+    identity: {
+      channel: "beta",
+      digest: archiveDigest,
+      platform: "darwin-arm64",
+      protocolVersion: CLOSURE_PROTOCOL_VERSION,
+      version,
+    },
+    schemaVersion: CLOSURE_SCHEMA_VERSION,
+  };
+  const candidate: ClosureReleaseCandidate = {
+    assets: {
+      archive: manifest.artifact.url,
+      inventory: `${baseUrl}/inventory.json`,
+      manifest: `${baseUrl}/manifest.json`,
+      provenance: null,
+    },
+    manifest,
+    releaseTarget: "mac_arm64",
+  };
+  const fetch = vi.fn(async (input: string | URL | Request) => {
+    const url = input instanceof Request ? input.url : String(input);
+    if (url === candidate.assets.manifest) {
+      return new Response(JSON.stringify(manifest), { status: 200 });
+    }
+    if (url === candidate.assets.inventory) {
+      return new Response(JSON.stringify(inventory), { status: 200 });
+    }
+    if (url === candidate.assets.archive) {
+      return new Response(archive, {
+        headers: { "content-length": String(archive.byteLength) },
+        status: 200,
+      });
+    }
+    return new Response("not found", { status: 404 });
+  }) as typeof globalThis.fetch;
+  return { archive, candidate, fetch };
 }
 
 describe("Closure release update selection", () => {
@@ -176,5 +282,85 @@ describe("Closure release update selection", () => {
     expect(compareClosureShellVersions("0.18.0-beta.4", "0.18.0-beta.3")).toBe(1);
     expect(compareClosureShellVersions("0.18.0-beta-internal.2", "0.18.0-beta-internal.1")).toBe(1);
     expect(compareClosureShellVersions("0.18.0-beta.3", "0.18.0")).toBe(-1);
+  });
+});
+
+describe("Closure release update application", () => {
+  it("downloads, verifies, and atomically activates a candidate", async () => {
+    const paths = await createStore();
+    const fixture = await downloadableCandidate();
+
+    const result = await applyClosureUpdate({
+      candidate: fixture.candidate,
+      fetch: fixture.fetch,
+      paths,
+      shellVersion: "0.16.2",
+    });
+
+    expect(result).toMatchObject({ reason: "no-active-closure", state: "activated" });
+    const descriptor = await readClosureRuntimeDescriptor(paths);
+    expect(descriptor.active).toMatchObject(fixture.candidate.manifest.identity);
+    expect(await readClosureAttemptDescriptor(paths)).toBeNull();
+    const verified = await verifyStoredClosureCandidate(paths, {
+      ...fixture.candidate.manifest.identity,
+      namespace: paths.namespace,
+    });
+    expect(await readFile(verified.paths.archivePath)).toEqual(fixture.archive);
+
+    const fetchCount = vi.mocked(fixture.fetch).mock.calls.length;
+    const retained = await applyClosureUpdate({
+      candidate: fixture.candidate,
+      fetch: fixture.fetch,
+      paths,
+      shellVersion: "0.16.2",
+    });
+    expect(retained).toMatchObject({ reason: "already-active", state: "retained" });
+    expect(vi.mocked(fixture.fetch).mock.calls).toHaveLength(fetchCount);
+  });
+
+  it("does not mutate runtime state when the archive fails verification", async () => {
+    const paths = await createStore();
+    const fixture = await downloadableCandidate();
+    const corruptFetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = input instanceof Request ? input.url : String(input);
+      if (url === fixture.candidate.assets.archive) {
+        return new Response("corrupt archive", {
+          headers: { "content-length": "15" },
+          status: 200,
+        });
+      }
+      return await fixture.fetch(input, init);
+    }) as typeof globalThis.fetch;
+
+    await expect(applyClosureUpdate({
+      candidate: fixture.candidate,
+      fetch: corruptFetch,
+      paths,
+      shellVersion: "0.16.2",
+    })).rejects.toThrow(/checksum/u);
+
+    expect((await readClosureRuntimeDescriptor(paths)).active).toBeNull();
+    expect(await readClosureAttemptDescriptor(paths)).toBeNull();
+  });
+
+  it("leaves an active updater lock untouched", async () => {
+    const paths = await createStore();
+    const fixture = await downloadableCandidate();
+    const lockPath = join(paths.stateRoot, "update.lock");
+    await mkdir(paths.stateRoot, { recursive: true });
+    await writeFile(lockPath, `${JSON.stringify({
+      createdAt: new Date().toISOString(),
+      pid: process.pid,
+      token: "live-updater",
+    })}\n`);
+
+    await expect(applyClosureUpdate({
+      candidate: fixture.candidate,
+      fetch: fixture.fetch,
+      paths,
+      shellVersion: "0.16.2",
+    })).resolves.toMatchObject({ reason: "another-updater-active", state: "busy" });
+    expect(await readFile(lockPath, "utf8")).toContain("live-updater");
+    expect(vi.mocked(fixture.fetch)).not.toHaveBeenCalled();
   });
 });

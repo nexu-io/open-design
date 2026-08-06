@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -24,6 +24,7 @@ import {
   recoverClosureRuntime,
   resolveClosureStorePaths,
   resolveClosureStoreVersionPaths,
+  verifyMaterializedClosureCandidate,
   verifyStoredClosureCandidate,
   type ClosureStorePaths,
 } from "../src/index.js";
@@ -123,6 +124,28 @@ describe("stored Closure verification", () => {
       "web/server.js",
     ]);
     expect(verified.inventoryDigest).toMatch(/^sha256:[0-9a-f]{64}$/u);
+  });
+
+  it("verifies an isolated staging tree before it becomes a version root", async () => {
+    const paths = await createStore();
+    const { binding } = await materializeCandidate(paths, "0.18.0-beta.1");
+    const finalPaths = resolveClosureStoreVersionPaths(paths, binding);
+    const stageRoot = join(paths.stagingRoot, "candidate");
+    const stagedPaths = {
+      ...finalPaths,
+      archivePath: join(stageRoot, "closure.zip"),
+      inventoryPath: join(stageRoot, "inventory.json"),
+      manifestPath: join(stageRoot, "manifest.json"),
+      payloadRoot: join(stageRoot, "payload"),
+      versionRoot: stageRoot,
+    };
+    await mkdir(paths.stagingRoot, { recursive: true });
+    await cp(finalPaths.versionRoot, stageRoot, { recursive: true });
+
+    const verified = await verifyMaterializedClosureCandidate(paths, binding, stagedPaths);
+
+    expect(verified.paths.versionRoot).toBe(stageRoot);
+    expect(verified.binding).toEqual(binding);
   });
 
   it("refuses archive or payload drift before activation", async () => {

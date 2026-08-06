@@ -370,6 +370,32 @@ export async function verifyStoredClosureCandidate(
 ): Promise<StoredClosureVerification> {
   const binding = validateClosureBindingIdentity(expectedBinding, paths);
   const versionPaths = resolveClosureStoreVersionPaths(paths, binding);
+  return await verifyMaterializedClosureCandidate(paths, binding, versionPaths);
+}
+
+export async function verifyMaterializedClosureCandidate(
+  paths: ClosureStorePaths,
+  expectedBinding: ClosureBindingIdentity,
+  materializedPaths: ClosureStoreVersionPaths,
+): Promise<StoredClosureVerification> {
+  const binding = validateClosureBindingIdentity(expectedBinding, paths);
+  if (
+    materializedPaths.root !== paths.root
+    || materializedPaths.channel !== paths.channel
+    || materializedPaths.namespace !== paths.namespace
+    || materializedPaths.version !== binding.version
+    || materializedPaths.digest !== binding.digest.slice("sha256:".length)
+  ) {
+    throw new ClosureStoreError("materialized Closure paths do not match their Store binding");
+  }
+  const versionPaths: ClosureStoreVersionPaths = {
+    ...materializedPaths,
+    archivePath: assertUnderRoot(paths.root, materializedPaths.archivePath),
+    inventoryPath: assertUnderRoot(paths.root, materializedPaths.inventoryPath),
+    manifestPath: assertUnderRoot(paths.root, materializedPaths.manifestPath),
+    payloadRoot: assertUnderRoot(paths.root, materializedPaths.payloadRoot),
+    versionRoot: assertUnderRoot(paths.root, materializedPaths.versionRoot),
+  };
   const manifest = validateClosureCandidateManifest(
     await readRequiredJson(versionPaths.manifestPath, "Closure candidate manifest"),
   );

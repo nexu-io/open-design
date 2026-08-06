@@ -1,5 +1,18 @@
+import { createHash, randomUUID } from "node:crypto";
 import {
+  mkdir,
+  readFile,
+  rename,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
+import { dirname, join } from "node:path";
+
+import {
+  bindClosureCandidateIdentity,
   validateClosureCandidateManifest,
+  validateClosureFileInventory,
   type ClosureCandidateManifest,
 } from "@open-design/closure-proto";
 import type {
@@ -7,10 +20,24 @@ import type {
   ClosureRuntimeDescriptor,
 } from "@open-design/closure-store";
 import {
+  activateStoredClosureCandidate,
+  readClosureAttemptDescriptor,
+  readClosureRuntimeDescriptor,
+  resolveClosureStoreVersionPaths,
+  verifyMaterializedClosureCandidate,
+  verifyStoredClosureCandidate,
+  type ClosureRuntimePointer,
+  type ClosureStorePaths,
+  type ClosureStoreVersionPaths,
+} from "@open-design/closure-store";
+import { downloadCopyAndClear } from "@open-design/download";
+import { isProcessAlive } from "@open-design/platform";
+import {
   compareReleaseVersions,
   isReleaseChannel,
   type ReleaseChannel,
 } from "@open-design/release";
+import extractZip from "extract-zip";
 
 export type ClosureReleaseAssetUrls = {
   archive: string;
@@ -25,20 +52,24 @@ export type ClosureReleaseCandidate = {
   releaseTarget: string;
 };
 
+export type ClosureUpdateActivationReason = "newer-closure" | "no-active-closure";
+
+export type ClosureUpdateRetainReason =
+  | "already-active"
+  | "candidate-not-newer"
+  | "runtime-attempt-pending"
+  | "shell-incompatible";
+
 export type ClosureUpdateDecision =
   | {
       action: "activate";
       candidate: ClosureReleaseCandidate;
-      reason: "newer-closure" | "no-active-closure";
+      reason: ClosureUpdateActivationReason;
     }
   | {
       action: "retain";
       candidate: ClosureReleaseCandidate;
-      reason:
-        | "already-active"
-        | "candidate-not-newer"
-        | "runtime-attempt-pending"
-        | "shell-incompatible";
+      reason: ClosureUpdateRetainReason;
     };
 
 export class ClosureUpdateError extends Error {
@@ -47,6 +78,24 @@ export class ClosureUpdateError extends Error {
     this.name = "ClosureUpdateError";
   }
 }
+
+export type ApplyClosureUpdateResult =
+  | {
+      candidate: ClosureReleaseCandidate;
+      pointer: ClosureRuntimePointer;
+      reason: ClosureUpdateActivationReason;
+      state: "activated";
+    }
+  | {
+      candidate: ClosureReleaseCandidate;
+      reason: ClosureUpdateRetainReason;
+      state: "retained";
+    }
+  | {
+      candidate: ClosureReleaseCandidate;
+      reason: "another-updater-active";
+      state: "busy";
+    };
 
 function requireRecord(value: unknown, label: string): Record<string, unknown> {
   if (value == null || typeof value !== "object" || Array.isArray(value)) {
@@ -241,4 +290,275 @@ export function decideClosureUpdate(input: {
   return comparison > 0
     ? { action: "activate", candidate, reason: "newer-closure" }
     : { action: "retain", candidate, reason: "candidate-not-newer" };
+}
+
+type UpdateLock = {
+  path: string;
+  token: string;
+};
+
+type UpdateLockRecord = {
+  createdAt: string;
+  pid: number;
+  token: string;
+};
+
+const INCOMPLETE_UPDATE_LOCK_GRACE_MS = 30_000;
+
+function errorCode(error: unknown): string | null {
+  if (error == null || typeof error !== "object" || !("code" in error)) return null;
+  const code = (error as { code?: unknown }).code;
+  return code == null ? null : String(code);
+}
+
+function isUpdateLockRecord(value: unknown): value is UpdateLockRecord {
+  if (value == null || typeof value !== "object" || Array.isArray(value)) return false;
+  const lock = value as Partial<UpdateLockRecord>;
+  return typeof lock.createdAt === "string"
+    && typeof lock.pid === "number"
+    && Number.isSafeInteger(lock.pid)
+    && lock.pid > 0
+    && typeof lock.token === "string"
+    && lock.token.length > 0;
+}
+
+async function readUpdateLock(path: string): Promise<UpdateLockRecord | null> {
+  try {
+    const value = JSON.parse(await readFile(path, "utf8")) as unknown;
+    return isUpdateLockRecord(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+async function acquireUpdateLock(paths: ClosureStorePaths): Promise<UpdateLock | null> {
+  const path = join(paths.stateRoot, "update.lock");
+  await mkdir(paths.stateRoot, { recursive: true });
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const token = randomUUID();
+    try {
+      await writeFile(path, `${JSON.stringify({
+        createdAt: new Date().toISOString(),
+        pid: process.pid,
+        token,
+      } satisfies UpdateLockRecord)}\n`, { flag: "wx" });
+      return { path, token };
+    } catch (error) {
+      if (errorCode(error) !== "EEXIST") throw error;
+      const existing = await readUpdateLock(path);
+      const lockStat = existing == null ? await stat(path).catch(() => null) : null;
+      const incompleteLockIsStale = lockStat != null
+        && Date.now() - lockStat.mtimeMs >= INCOMPLETE_UPDATE_LOCK_GRACE_MS;
+      if (
+        attempt === 0
+        && (
+          (existing == null && incompleteLockIsStale)
+          || (existing != null && !isProcessAlive(existing.pid))
+        )
+      ) {
+        await rm(path, { force: true }).catch(() => undefined);
+        continue;
+      }
+      return null;
+    }
+  }
+  return null;
+}
+
+async function releaseUpdateLock(lock: UpdateLock): Promise<void> {
+  const current = await readUpdateLock(lock.path);
+  if (current?.token === lock.token) await rm(lock.path, { force: true }).catch(() => undefined);
+}
+
+function sameCandidate(
+  pointer: Pick<ClosureRuntimePointer, "channel" | "digest" | "namespace" | "platform" | "protocolVersion" | "version">,
+  binding: ReturnType<typeof bindClosureCandidateIdentity>,
+): boolean {
+  return pointer.channel === binding.channel
+    && pointer.digest === binding.digest
+    && pointer.namespace === binding.namespace
+    && pointer.platform === binding.platform
+    && pointer.protocolVersion === binding.protocolVersion
+    && pointer.version === binding.version;
+}
+
+async function fetchJsonDocument(
+  url: string,
+  label: string,
+  fetchImpl: typeof globalThis.fetch,
+): Promise<unknown> {
+  const response = await fetchImpl(url, { headers: { accept: "application/json" } });
+  if (!response.ok) throw new ClosureUpdateError(`${label} request returned HTTP ${response.status}`);
+  const text = await response.text();
+  if (Buffer.byteLength(text) > 16 * 1024 * 1024) {
+    throw new ClosureUpdateError(`${label} exceeds the 16 MiB metadata limit`);
+  }
+  try {
+    return JSON.parse(text) as unknown;
+  } catch (error) {
+    throw new ClosureUpdateError(
+      `${label} is not valid JSON: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
+function inventoryDigest(files: ReturnType<typeof validateClosureFileInventory>["files"]): string {
+  return `sha256:${createHash("sha256").update(JSON.stringify(files)).digest("hex")}`;
+}
+
+async function fetchCandidateDocuments(
+  candidate: ClosureReleaseCandidate,
+  fetchImpl: typeof globalThis.fetch,
+): Promise<{
+  inventory: ReturnType<typeof validateClosureFileInventory>;
+  manifest: ClosureCandidateManifest;
+}> {
+  const [manifestValue, inventoryValue] = await Promise.all([
+    fetchJsonDocument(candidate.assets.manifest, "Closure manifest", fetchImpl),
+    fetchJsonDocument(candidate.assets.inventory, "Closure inventory", fetchImpl),
+  ]);
+  const manifest = validateClosureCandidateManifest(manifestValue);
+  if (JSON.stringify(manifest) !== JSON.stringify(candidate.manifest)) {
+    throw new ClosureUpdateError("downloaded Closure manifest does not match release metadata");
+  }
+  const inventory = validateClosureFileInventory(inventoryValue);
+  if (inventoryDigest(inventory.files) !== manifest.artifact.inventoryDigest) {
+    throw new ClosureUpdateError("downloaded Closure inventory does not match its manifest digest");
+  }
+  return { inventory, manifest };
+}
+
+function stagedVersionPaths(
+  finalPaths: ClosureStoreVersionPaths,
+  stageRoot: string,
+): ClosureStoreVersionPaths {
+  return {
+    ...finalPaths,
+    archivePath: join(stageRoot, "closure.zip"),
+    inventoryPath: join(stageRoot, "inventory.json"),
+    manifestPath: join(stageRoot, "manifest.json"),
+    payloadRoot: join(stageRoot, "payload"),
+    versionRoot: stageRoot,
+  };
+}
+
+function candidateIsReferenced(
+  runtime: ClosureRuntimeDescriptor,
+  binding: ReturnType<typeof bindClosureCandidateIdentity>,
+): boolean {
+  return (runtime.active != null && sameCandidate(runtime.active, binding))
+    || (runtime.lastSuccessful != null && sameCandidate(runtime.lastSuccessful, binding));
+}
+
+async function ensureCandidateMaterialized(input: {
+  candidate: ClosureReleaseCandidate;
+  fetchImpl: typeof globalThis.fetch;
+  paths: ClosureStorePaths;
+  runtime: ClosureRuntimeDescriptor;
+}): Promise<ReturnType<typeof bindClosureCandidateIdentity>> {
+  const binding = bindClosureCandidateIdentity(input.candidate.manifest.identity, input.paths.namespace);
+  const finalPaths = resolveClosureStoreVersionPaths(input.paths, binding);
+  const existing = await stat(finalPaths.versionRoot).catch(() => null);
+  if (existing != null) {
+    try {
+      await verifyStoredClosureCandidate(input.paths, binding);
+      return binding;
+    } catch (error) {
+      if (candidateIsReferenced(input.runtime, binding)) throw error;
+      await rm(finalPaths.versionRoot, { force: true, recursive: true });
+    }
+  }
+
+  const stageRoot = join(
+    input.paths.stagingRoot,
+    `${binding.version}-${binding.digest.slice("sha256:".length)}-${randomUUID()}`,
+  );
+  const stagePaths = stagedVersionPaths(finalPaths, stageRoot);
+  await mkdir(stagePaths.payloadRoot, { recursive: true });
+  try {
+    const documents = await fetchCandidateDocuments(input.candidate, input.fetchImpl);
+    await Promise.all([
+      writeFile(stagePaths.manifestPath, `${JSON.stringify(documents.manifest, null, 2)}\n`, "utf8"),
+      writeFile(stagePaths.inventoryPath, `${JSON.stringify(documents.inventory, null, 2)}\n`, "utf8"),
+      downloadCopyAndClear({
+        basePath: join(input.paths.stagingRoot, "downloads"),
+        bucket: "closure",
+        fetch: input.fetchImpl,
+        fileName: `${binding.digest.slice("sha256:".length)}.zip`,
+        outputPath: stagePaths.archivePath,
+        payload: {
+          checksum: {
+            algorithm: "sha256",
+            value: binding.digest.slice("sha256:".length),
+          },
+          url: input.candidate.assets.archive,
+        },
+      }),
+    ]);
+    await extractZip(stagePaths.archivePath, { dir: stagePaths.payloadRoot });
+    await verifyMaterializedClosureCandidate(input.paths, binding, stagePaths);
+    await mkdir(dirname(finalPaths.versionRoot), { recursive: true });
+    try {
+      await rename(stageRoot, finalPaths.versionRoot);
+    } catch (error) {
+      if (errorCode(error) !== "EEXIST" && errorCode(error) !== "ENOTEMPTY") throw error;
+      await verifyStoredClosureCandidate(input.paths, binding);
+    }
+    await verifyStoredClosureCandidate(input.paths, binding);
+    return binding;
+  } finally {
+    await rm(stageRoot, { force: true, recursive: true }).catch(() => undefined);
+  }
+}
+
+export async function applyClosureUpdate(input: {
+  candidate: ClosureReleaseCandidate;
+  fetch?: typeof globalThis.fetch;
+  paths: ClosureStorePaths;
+  shellVersion: string;
+}): Promise<ApplyClosureUpdateResult> {
+  const lock = await acquireUpdateLock(input.paths);
+  if (lock == null) {
+    return { candidate: input.candidate, reason: "another-updater-active", state: "busy" };
+  }
+  try {
+    const runtime = await readClosureRuntimeDescriptor(input.paths);
+    const attempt = await readClosureAttemptDescriptor(input.paths);
+    const decision = decideClosureUpdate({
+      attempt,
+      candidate: input.candidate,
+      runtime,
+      shellVersion: input.shellVersion,
+    });
+    if (decision.action === "retain") {
+      return { candidate: input.candidate, reason: decision.reason, state: "retained" };
+    }
+    const binding = await ensureCandidateMaterialized({
+      candidate: input.candidate,
+      fetchImpl: input.fetch ?? globalThis.fetch,
+      paths: input.paths,
+      runtime,
+    });
+
+    const currentRuntime = await readClosureRuntimeDescriptor(input.paths);
+    const currentAttempt = await readClosureAttemptDescriptor(input.paths);
+    const currentDecision = decideClosureUpdate({
+      attempt: currentAttempt,
+      candidate: input.candidate,
+      runtime: currentRuntime,
+      shellVersion: input.shellVersion,
+    });
+    if (currentDecision.action === "retain") {
+      return { candidate: input.candidate, reason: currentDecision.reason, state: "retained" };
+    }
+    const activated = await activateStoredClosureCandidate(input.paths, binding);
+    return {
+      candidate: input.candidate,
+      pointer: activated.pointer,
+      reason: currentDecision.reason,
+      state: "activated",
+    };
+  } finally {
+    await releaseUpdateLock(lock);
+  }
 }

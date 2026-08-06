@@ -589,9 +589,18 @@ importers:
       '@open-design/closure-store':
         specifier: workspace:*
         version: link:../closure-store
+      '@open-design/download':
+        specifier: workspace:*
+        version: link:../download
+      '@open-design/platform':
+        specifier: workspace:*
+        version: link:../platform
       '@open-design/release':
         specifier: workspace:*
         version: link:../release
+      extract-zip:
+        specifier: 2.0.1
+        version: 2.0.1
     devDependencies:
       '@types/node':
         specifier: 24.12.2
@@ -599,6 +608,9 @@ importers:
       esbuild:
         specifier: 0.28.0
         version: 0.28.0
+      jszip:
+        specifier: 3.10.1
+        version: 3.10.1
       tsx:
         specifier: 4.22.3
         version: 4.22.3
