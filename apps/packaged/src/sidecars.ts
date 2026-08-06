@@ -5,6 +5,10 @@ import { delimiter, dirname, join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 
 import {
+  acquireHeadlessClosure,
+  type HeadlessRuntimeHandle,
+} from "@open-design/headless-runtime";
+import {
   APP_KEYS,
   OPEN_DESIGN_SIDECAR_CONTRACT,
   SIDECAR_ENV,
@@ -333,12 +337,14 @@ export function createWebSidecarSupervisor<
   now?: () => number;
   onExit: (child: TChild, listener: () => void) => void;
   policy?: RestartPolicy;
+  deferInitialRegistration?: boolean;
   registerUrl: (url: string) => Promise<void>;
   spawn: () => Promise<TChild>;
   waitUntilReady: (child: TChild) => Promise<TStatus>;
 }): {
   close(): Promise<void>;
   currentUrl(): string;
+  registerInitialUrl(expectedUrl: string): Promise<void>;
   start(): Promise<TStatus>;
 } {
   const policy = options.policy ?? createRestartPolicy();
@@ -349,6 +355,9 @@ export function createWebSidecarSupervisor<
   let closeTask: Promise<void> | null = null;
   let currentUrl = "";
   let pendingExitedChild: TChild | null = null;
+  let pendingInitialRegistration:
+    | { register(): Promise<void>; url: string }
+    | null = null;
   let restartTask: Promise<void> | null = null;
 
   const closeChildOnce = async (child: TChild): Promise<void> => {
@@ -358,7 +367,7 @@ export function createWebSidecarSupervisor<
     await options.closeChild(child);
   };
 
-  const spawnAndPromote = async (): Promise<TStatus> => {
+  const spawnAndPromote = async (deferRegistration = false): Promise<TStatus> => {
     const child = await options.spawn();
     children.add(child);
     let promoted = false;
@@ -375,23 +384,35 @@ export function createWebSidecarSupervisor<
     try {
       if (closing) throw new Error("packaged web sidecar supervisor is closing");
       const status = await options.waitUntilReady(child);
-      if (status.url == null) throw new Error("web did not report a URL");
+      const readyUrl = status.url;
+      if (readyUrl == null) throw new Error("web did not report a URL");
       if (closing) throw new Error("packaged web sidecar supervisor is closing");
       if (exited || options.hasExited(child)) {
         throw new Error("web exited before its ready status could be promoted");
       }
 
-      await options.registerUrl(status.url);
-      if (closing) throw new Error("packaged web sidecar supervisor is closing");
-      if (exited || options.hasExited(child)) {
-        throw new Error("web exited while its ready status was being registered");
-      }
+      const register = async (): Promise<void> => {
+        if (closing) throw new Error("packaged web sidecar supervisor is closing");
+        if (exited || options.hasExited(child)) {
+          throw new Error("web exited before its ready status could be registered");
+        }
+        await options.registerUrl(readyUrl);
+        if (closing) throw new Error("packaged web sidecar supervisor is closing");
+        if (exited || options.hasExited(child)) {
+          throw new Error("web exited while its ready status was being registered");
+        }
 
-      // These assignments are synchronous: once promoted is true, any later
-      // exit event schedules another restart instead of being mistaken for a
-      // boot failure owned by the current restart loop.
-      promoted = true;
-      currentUrl = status.url;
+        // These assignments are synchronous: once promoted is true, any later
+        // exit event schedules another restart instead of being mistaken for a
+        // boot failure owned by the current restart loop.
+        promoted = true;
+        currentUrl = readyUrl;
+      };
+      if (deferRegistration) {
+        pendingInitialRegistration = { register, url: readyUrl };
+      } else {
+        await register();
+      }
       return status;
     } catch (error) {
       await closeChildOnce(child).catch(() => undefined);
@@ -445,6 +466,7 @@ export function createWebSidecarSupervisor<
       if (closeTask != null) return await closeTask;
       closing = true;
       pendingExitedChild = null;
+      pendingInitialRegistration = null;
       closeTask = (async () => {
         // Close children already known to the supervisor first. Then await an
         // in-flight deferred spawn: spawnAndPromote re-checks closing as soon as
@@ -461,7 +483,18 @@ export function createWebSidecarSupervisor<
       return await closeTask;
     },
     currentUrl: () => currentUrl,
-    start: spawnAndPromote,
+    async registerInitialUrl(expectedUrl: string): Promise<void> {
+      const pending = pendingInitialRegistration;
+      if (pending == null) {
+        throw new Error("packaged web sidecar has no pending initial registration");
+      }
+      if (pending.url !== expectedUrl) {
+        throw new Error("packaged web sidecar initial URL changed before registration");
+      }
+      pendingInitialRegistration = null;
+      await pending.register();
+    },
+    start: async () => await spawnAndPromote(options.deferInitialRegistration ?? false),
   };
 }
 
@@ -907,19 +940,6 @@ export async function startPackagedSidecars(
     onPhase?: (phase: "daemon-spawning" | "daemon-ready" | "web-spawning" | "web-ready") => void;
   },
 ): Promise<PackagedSidecarHandle> {
-  await mkdir(paths.namespaceRoot, { recursive: true });
-  await mkdir(paths.cacheRoot, { recursive: true });
-  await mkdir(paths.dataRoot, { recursive: true });
-  await mkdir(paths.logsRoot, { recursive: true });
-  await mkdir(paths.desktopLogsRoot, { recursive: true });
-  await mkdir(paths.runtimeRoot, { recursive: true });
-  await mkdir(paths.updateRoot, { recursive: true });
-  await mkdir(paths.electronUserDataRoot, { recursive: true });
-  await mkdir(paths.electronSessionDataRoot, { recursive: true });
-
-  const children: ManagedSidecarChild[] = [];
-  let webSupervisor: { close(): Promise<void> } | null = null;
-
   const daemonSidecarEntry =
     options.daemonSidecarEntry ?? resolveSidecarEntry("@open-design/daemon", "sidecar");
   const webSidecarEntry =
@@ -927,139 +947,212 @@ export async function startPackagedSidecars(
   const prewarmLog = (message: string): void => {
     void appendSidecarLifecycleLog(join(paths.logsRoot, "launcher", "latest.log"), message);
   };
+  let daemonChild: ManagedSidecarChild | null = null;
+  let daemonStatus: DaemonStatusSnapshot | null = null;
+  let webPrewarm: Promise<unknown> | null = null;
+  let webStatus: WebStatusSnapshot | null = null;
+  let webSupervisor: ReturnType<
+    typeof createWebSidecarSupervisor<ManagedSidecarChild, WebStatusSnapshot>
+  > | null = null;
 
-  try {
-    // Issue #5835: on Linux AppImage the payload lives on a fresh FUSE mount
-    // with a cold page cache. Read the daemon's cold-start set (bundled node
-    // binary + daemon dist) into the page cache BEFORE spawning, so the
-    // timed status window covers real daemon work instead of demand-paging
-    // ~145 MB through FUSE page fault by page fault. Best-effort and gated
-    // to linux+FUSE inside prewarmPackagedFiles; plain-file installs skip.
-    await prewarmPackagedFiles(
-      resolveDaemonPrewarmTargets({
-        nodeCommand: options.nodeCommand,
-        daemonSidecarEntry,
-        resourceRoot: paths.resourceRoot,
-      }),
-      { log: prewarmLog },
-    );
+  const closure = await acquireHeadlessClosure<
+    DaemonStatusSnapshot,
+    WebStatusSnapshot
+  >({
+    namespace: runtime.namespace,
+    paths: {
+      cacheRoot: paths.cacheRoot,
+      dataRoot: paths.dataRoot,
+      installationRoot: paths.installationRoot,
+      logsRoot: paths.logsRoot,
+      resourceRoot: paths.resourceRoot,
+      runtimeRoot: paths.runtimeRoot,
+    },
+    dependencies: {
+      preparePaths: async (headlessPaths) => {
+        await mkdir(paths.namespaceRoot, { recursive: true });
+        await mkdir(headlessPaths.cacheRoot, { recursive: true });
+        await mkdir(headlessPaths.dataRoot, { recursive: true });
+        await mkdir(headlessPaths.logsRoot, { recursive: true });
+        await mkdir(paths.desktopLogsRoot, { recursive: true });
+        await mkdir(headlessPaths.runtimeRoot, { recursive: true });
+        await mkdir(paths.updateRoot, { recursive: true });
+        await mkdir(paths.electronUserDataRoot, { recursive: true });
+        await mkdir(paths.electronSessionDataRoot, { recursive: true });
+      },
+      startDaemon: async ({
+        paths: headlessPaths,
+      }): Promise<HeadlessRuntimeHandle<DaemonStatusSnapshot>> => {
+        // Issue #5835: on Linux AppImage the payload lives on a fresh FUSE
+        // mount with a cold page cache. Warm the daemon before its status
+        // window starts; plain-file installs skip this best-effort path.
+        await prewarmPackagedFiles(
+          resolveDaemonPrewarmTargets({
+            nodeCommand: options.nodeCommand,
+            daemonSidecarEntry,
+            resourceRoot: headlessPaths.resourceRoot,
+          }),
+          { log: prewarmLog },
+        );
 
-    options.onPhase?.("daemon-spawning");
-    const daemon = await spawnSidecarChild({
-      app: APP_KEYS.DAEMON,
-      entryPath: daemonSidecarEntry,
-      env: buildPackagedDaemonSpawnEnv(paths, {
-        appVersion: options.appVersion,
-        amrProfile: options.amrProfile,
-        daemonCliEntry: options.daemonCliEntry,
-        desktopHandoffEnv: process.env,
-        legacyDataDir: process.env.OD_LEGACY_DATA_DIR ?? null,
-        mcpBootstrapArgs: options.mcpBootstrapArgs,
-        mcpBootstrapCommand: options.mcpBootstrapCommand,
-        nodeCommand: options.nodeCommand,
-        requireDesktopAuth: options.requireDesktopAuth,
-        telemetryRelayUrl: options.telemetryRelayUrl,
-        posthogKey: options.posthogKey,
-        posthogHost: options.posthogHost,
-        velaWebUrl: options.velaWebUrl,
-      }),
-      electronNodeCommand: options.electronNodeCommand,
-      nodeCommand: options.nodeCommand,
-      paths,
-      runtime,
-    });
-    children.push(daemon);
-    // The web prewarm overlaps the daemon's boot wait: its read set (web
-    // sidecar dist, .next/server chunks, Next framework code) is disjoint
-    // from the daemon's already-warm working set, so the FUSE server stays
-    // busy on sequential reads while the daemon does CPU/SQLite work.
-    const webPrewarm = prewarmPackagedFiles(
-      resolveWebPrewarmTargets({
-        webSidecarEntry,
-        webStandaloneRoot: options.webStandaloneRoot,
-      }),
-      { log: prewarmLog },
-    );
-    const daemonStatus = await waitForStatus<DaemonStatusSnapshot>(
-      daemon.ipcPath,
-      (status) => status.url != null,
-      resolveDaemonStatusTimeoutMs(),
-      // Race the IPC polling against the daemon child's exit. Without
-      // this, a daemon that throws at startup (LegacyMigrationError on
-      // invalid OD_LEGACY_DATA_DIR, existing target payload, symlink,
-      // marker write failure) leaves the packaged app waiting the full
-      // 30-minute migration budget for a process that already died.
-      { child: daemon.child, logPath: logPathFor(paths, APP_KEYS.DAEMON) },
-    );
-    if (daemonStatus.url == null) throw new Error("daemon did not report a URL");
-    options.onPhase?.("daemon-ready");
+        options.onPhase?.("daemon-spawning");
+        const child = await spawnSidecarChild({
+          app: APP_KEYS.DAEMON,
+          entryPath: daemonSidecarEntry,
+          env: buildPackagedDaemonSpawnEnv(paths, {
+            appVersion: options.appVersion,
+            amrProfile: options.amrProfile,
+            daemonCliEntry: options.daemonCliEntry,
+            desktopHandoffEnv: process.env,
+            legacyDataDir: process.env.OD_LEGACY_DATA_DIR ?? null,
+            mcpBootstrapArgs: options.mcpBootstrapArgs,
+            mcpBootstrapCommand: options.mcpBootstrapCommand,
+            nodeCommand: options.nodeCommand,
+            requireDesktopAuth: options.requireDesktopAuth,
+            telemetryRelayUrl: options.telemetryRelayUrl,
+            posthogKey: options.posthogKey,
+            posthogHost: options.posthogHost,
+            velaWebUrl: options.velaWebUrl,
+          }),
+          electronNodeCommand: options.electronNodeCommand,
+          nodeCommand: options.nodeCommand,
+          paths,
+          runtime,
+        });
+        daemonChild = child;
 
-    // The web payload must be in the page cache before the web sidecar
-    // enters its own timed status window.
-    await webPrewarm;
+        // Keep the established cold-start overlap: Web prewarm runs while the
+        // daemon performs native load, SQLite open, and migration work.
+        webPrewarm = prewarmPackagedFiles(
+          resolveWebPrewarmTargets({
+            webSidecarEntry,
+            webStandaloneRoot: options.webStandaloneRoot,
+          }),
+          { log: prewarmLog },
+        );
 
-    // Resolved out here rather than inside `spawnWeb`: the null check
-    // above narrows `daemonStatus.url` to string, but TypeScript drops
-    // property narrowing inside a closure that could run later.
-    const daemonPort = extractPort(daemonStatus.url);
-
-    const supervisor = createWebSidecarSupervisor<ManagedSidecarChild, WebStatusSnapshot>({
-      closeChild: closeManagedChild,
-      hasExited: (web) => web.child.exitCode !== null || web.child.signalCode !== null,
-      onExit: (web, listener) => web.child.once("exit", listener),
-      registerUrl: async (url) => await registerPackagedWebUrl(daemon.ipcPath, url),
-      spawn: async () => await spawnSidecarChild({
-        app: APP_KEYS.WEB,
-        entryPath: webSidecarEntry,
-        env: {
-          [SIDECAR_ENV.DAEMON_PORT]: daemonPort,
-          [SIDECAR_ENV.WEB_PORT]: "0",
-          ...(options.webStandaloneRoot == null ? {} : { OD_WEB_STANDALONE_ROOT: options.webStandaloneRoot }),
-          OD_WEB_OUTPUT_MODE: options.webOutputMode,
-          PORT: "0",
-        },
-        electronNodeCommand: options.electronNodeCommand,
-        nodeCommand: options.nodeCommand,
-        paths,
-        runtime,
-      }),
-      waitUntilReady: async (web) => await waitForStatus<WebStatusSnapshot>(
-        web.ipcPath,
-        (candidate) => candidate.url != null,
-        // Web has no legacy-migration path, so it uses the plain platform
-        // baseline (still widened on win32, where AV scanning can also slow the
-        // web sidecar's first bind) rather than resolveDaemonStatusTimeoutMs.
-        baseStatusTimeoutMs(),
-        { child: web.child, logPath: logPathFor(paths, APP_KEYS.WEB) },
-      ),
-    });
-    webSupervisor = supervisor;
-
-    // Phase callbacks drive the splash screen, so they stay on the
-    // first-boot path only: a mid-session respawn must not rewind the
-    // user's splash back to "web-spawning".
-    options.onPhase?.("web-spawning");
-    const webStatus = await supervisor.start();
-    options.onPhase?.("web-ready");
-
-    return {
-      daemon: daemonStatus,
-      web: webStatus,
-      currentWebUrl: supervisor.currentUrl,
-      async close() {
-        await supervisor.close();
-        for (const child of [...children].reverse()) {
-          await closeManagedChild(child).catch((error: unknown) => {
-            console.error(`failed to close packaged ${child.app} sidecar`, error);
-          });
+        try {
+          const status = await waitForStatus<DaemonStatusSnapshot>(
+            child.ipcPath,
+            (candidate) => candidate.url != null,
+            resolveDaemonStatusTimeoutMs(),
+            { child: child.child, logPath: logPathFor(paths, APP_KEYS.DAEMON) },
+          );
+          if (status.url == null) throw new Error("daemon did not report a URL");
+          daemonStatus = status;
+          options.onPhase?.("daemon-ready");
+          return {
+            status,
+            readStatus: async () => await requestJsonIpc<DaemonStatusSnapshot>(
+              child.ipcPath,
+              { type: SIDECAR_MESSAGES.STATUS },
+              { timeoutMs: 800 },
+            ),
+            close: async () => {
+              await closeManagedChild(child).catch((error: unknown) => {
+                console.error(`failed to close packaged ${child.app} sidecar`, error);
+              });
+            },
+          };
+        } catch (error) {
+          await closeManagedChild(child).catch(() => undefined);
+          throw error;
         }
       },
-    };
-  } catch (error) {
-    await webSupervisor?.close().catch(() => undefined);
-    for (const child of [...children].reverse()) {
-      await closeManagedChild(child).catch(() => undefined);
-    }
-    throw error;
+      startWeb: async ({ daemon }): Promise<HeadlessRuntimeHandle<WebStatusSnapshot>> => {
+        const activeDaemon = daemonChild;
+        if (activeDaemon == null || daemon.url == null || webPrewarm == null) {
+          throw new Error("packaged daemon was not ready before Web startup");
+        }
+        await webPrewarm;
+        const daemonPort = extractPort(daemon.url);
+        const supervisor = createWebSidecarSupervisor<
+          ManagedSidecarChild,
+          WebStatusSnapshot
+        >({
+          closeChild: closeManagedChild,
+          hasExited: (web) => web.child.exitCode !== null || web.child.signalCode !== null,
+          onExit: (web, listener) => web.child.once("exit", listener),
+          // Initial registration is the Headless lifecycle's readiness edge.
+          // Respawns still register inside the supervisor before promotion.
+          deferInitialRegistration: true,
+          registerUrl: async (url) => await registerPackagedWebUrl(activeDaemon.ipcPath, url),
+          spawn: async () => await spawnSidecarChild({
+            app: APP_KEYS.WEB,
+            entryPath: webSidecarEntry,
+            env: {
+              [SIDECAR_ENV.DAEMON_PORT]: daemonPort,
+              [SIDECAR_ENV.WEB_PORT]: "0",
+              ...(options.webStandaloneRoot == null
+                ? {}
+                : { OD_WEB_STANDALONE_ROOT: options.webStandaloneRoot }),
+              OD_WEB_OUTPUT_MODE: options.webOutputMode,
+              PORT: "0",
+            },
+            electronNodeCommand: options.electronNodeCommand,
+            nodeCommand: options.nodeCommand,
+            paths,
+            runtime,
+          }),
+          waitUntilReady: async (web) => await waitForStatus<WebStatusSnapshot>(
+            web.ipcPath,
+            (candidate) => candidate.url != null,
+            baseStatusTimeoutMs(),
+            { child: web.child, logPath: logPathFor(paths, APP_KEYS.WEB) },
+          ),
+        });
+        webSupervisor = supervisor;
+
+        // Desktop splash callbacks describe first boot only; a mid-session Web
+        // respawn must not rewind the splash state.
+        options.onPhase?.("web-spawning");
+        const status = await supervisor.start();
+        webStatus = status;
+        return {
+          status,
+          readStatus: async () => await requestJsonIpc<WebStatusSnapshot>(
+            resolveAppIpcPath({
+              app: APP_KEYS.WEB,
+              contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+              namespace: runtime.namespace,
+            }),
+            { type: SIDECAR_MESSAGES.STATUS },
+            { timeoutMs: 800 },
+          ),
+          close: async () => await supervisor.close(),
+        };
+      },
+      registerWebUrl: async ({ webUrl }) => {
+        const supervisor = webSupervisor;
+        if (supervisor == null || daemonChild == null) {
+          throw new Error("packaged runtime disappeared before Web registration");
+        }
+        await supervisor.registerInitialUrl(webUrl);
+        options.onPhase?.("web-ready");
+      },
+    },
+  });
+
+  const activeDaemonStatus = daemonStatus;
+  const activeWebStatus = webStatus;
+  if (
+    activeDaemonStatus == null
+    || activeWebStatus == null
+  ) {
+    await closure.close().catch(() => undefined);
+    throw new Error("packaged Headless adapter completed without both runtimes");
   }
+
+  return {
+    daemon: activeDaemonStatus,
+    web: activeWebStatus,
+    currentWebUrl: () => {
+      const supervisor = webSupervisor;
+      if (supervisor == null) {
+        throw new Error("packaged Web supervisor is unavailable");
+      }
+      return supervisor.currentUrl();
+    },
+    close: async () => await closure.close(),
+  };
 }

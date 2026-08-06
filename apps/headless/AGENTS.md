@@ -1,13 +1,12 @@
 # apps/headless
 
-Follow the root `AGENTS.md` and `apps/AGENTS.md` first. This app owns the shell-neutral Open Design product lifecycle.
+Follow the root `AGENTS.md` and `apps/AGENTS.md` first. This app owns the deployable shell-neutral Open Design product composition.
 
 ## Owns
 
-- Ordered startup and readiness of the daemon and Web runtimes.
-- Product-level health and lifecycle diagnostics.
-- Reverse-order, idempotent runtime shutdown.
-- Explicit propagation of namespace-scoped data, resource, runtime, log, cache, and installation roots.
+- The public Headless application boundary and future executable entry.
+- Composition of Web and daemon adapters into one product closure.
+- Product-facing exposure of common readiness, health, diagnostics, and shutdown.
 
 ## Does not own
 
@@ -19,6 +18,7 @@ Follow the root `AGENTS.md` and `apps/AGENTS.md` first. This app owns the shell-
 ## Rules
 
 - Consume runtime behavior through injected public adapters; do not import another app's private `src` tree.
+- Reuse `@open-design/headless-runtime`; do not duplicate its lifecycle state machine.
 - Never infer or normalize product paths. The launcher adapter supplies already-resolved roots.
 - Always attempt shutdown in reverse startup order, even when one runtime fails to close.
 - Keep candidate identity and compatibility parsing in `@open-design/closure-proto`.

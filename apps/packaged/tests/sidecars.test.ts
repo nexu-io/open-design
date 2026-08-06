@@ -965,6 +965,77 @@ describe('createWebSidecarSupervisor', () => {
     expect(closed).toEqual(['initial', 'failed-replacement', 'recovered']);
   });
 
+  it('lets Headless publish the initial URL while retaining respawn registration', async () => {
+    const initial = child('initial');
+    const recovered = child('recovered');
+    const spawnQueue = [initial, recovered];
+    const registered: string[] = [];
+
+    const supervisor = createWebSidecarSupervisor<SupervisorChild, { url: string | null }>({
+      closeChild: async () => undefined,
+      hasExited: (value) => value.exited,
+      onExit: (value, listener) => value.exitListeners.push(listener),
+      deferInitialRegistration: true,
+      registerUrl: async (url) => {
+        registered.push(url);
+      },
+      spawn: async () => {
+        const value = spawnQueue.shift();
+        if (value == null) throw new Error('unexpected extra spawn');
+        return value;
+      },
+      waitUntilReady: async (value) => ({
+        url: value === initial
+          ? 'http://127.0.0.1:61201'
+          : 'http://127.0.0.1:61202',
+      }),
+    });
+
+    await supervisor.start();
+    expect(registered).toEqual([]);
+    expect(supervisor.currentUrl()).toBe('');
+
+    await supervisor.registerInitialUrl('http://127.0.0.1:61201');
+    expect(registered).toEqual(['http://127.0.0.1:61201']);
+    expect(supervisor.currentUrl()).toBe('http://127.0.0.1:61201');
+
+    initial.exit();
+    await vi.waitFor(() => {
+      expect(supervisor.currentUrl()).toBe('http://127.0.0.1:61202');
+    });
+    expect(registered).toEqual([
+      'http://127.0.0.1:61201',
+      'http://127.0.0.1:61202',
+    ]);
+    await supervisor.close();
+  });
+
+  it('rejects a deferred initial registration after the child exits', async () => {
+    const initial = child('initial');
+    const registered: string[] = [];
+    const supervisor = createWebSidecarSupervisor<SupervisorChild, { url: string | null }>({
+      closeChild: async () => undefined,
+      deferInitialRegistration: true,
+      hasExited: (value) => value.exited,
+      onExit: (value, listener) => value.exitListeners.push(listener),
+      registerUrl: async (url) => {
+        registered.push(url);
+      },
+      spawn: async () => initial,
+      waitUntilReady: async () => ({ url: 'http://127.0.0.1:61301' }),
+    });
+
+    await supervisor.start();
+    initial.exit();
+
+    await expect(
+      supervisor.registerInitialUrl('http://127.0.0.1:61301'),
+    ).rejects.toThrow('web exited before its ready status could be registered');
+    expect(registered).toEqual([]);
+    expect(supervisor.currentUrl()).toBe('');
+    await supervisor.close();
+  });
+
   it('stops retrying when boot failures exhaust the restart budget', async () => {
     const initial = child('initial');
     const failedOne = child('failed-one');
