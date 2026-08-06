@@ -652,16 +652,52 @@ describe('ProjectView daemon cleanup', () => {
     expect(resolveSucceededRunStatus('canceled')).toBe('canceled');
   });
 
-  it('replays an unverified terminal Design-mode result after reload', () => {
+  it('only replays a freshly completed unverified terminal Design-mode result', () => {
+    const now = Date.now();
     expect(
       shouldReplayTerminalRunMessage({
-        id: 'msg-unverified-delivery',
+        id: 'msg-fresh-unverified-delivery',
         role: 'assistant',
         content: 'I finished the design.',
-        runId: 'run-unverified-delivery',
+        runId: 'run-fresh-unverified-delivery',
+        runStatus: 'succeeded',
+        sessionMode: 'design',
+        startedAt: now - 1_000,
+        endedAt: now,
+      }),
+    ).toBe(true);
+    expect(
+      shouldReplayTerminalRunMessage({
+        id: 'msg-historical-unverified-delivery',
+        role: 'assistant',
+        content: 'I finished the design.',
+        runId: 'run-historical-unverified-delivery',
         runStatus: 'succeeded',
         sessionMode: 'design',
         startedAt: 1,
+        endedAt: 1,
+      }),
+    ).toBe(false);
+    expect(
+      shouldReplayTerminalRunMessage({
+        id: 'msg-stale-unverified-delivery',
+        role: 'assistant',
+        content: 'I finished the design.',
+        runId: 'run-stale-unverified-delivery',
+        runStatus: 'succeeded',
+        sessionMode: 'design',
+        startedAt: now - 60_001,
+        endedAt: now - 60_001,
+      }),
+    ).toBe(false);
+    expect(
+      shouldReplayTerminalRunMessage({
+        id: 'msg-legacy-unverified-delivery',
+        role: 'assistant',
+        content: 'I finished the design.',
+        runId: 'run-legacy-unverified-delivery',
+        runStatus: 'succeeded',
+        sessionMode: 'design',
       }),
     ).toBe(true);
     expect(

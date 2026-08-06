@@ -1767,6 +1767,7 @@ describe('ProjectView conversation run isolation', () => {
       {
         ...succeededAssistant,
         content: '',
+        endedAt: Date.now(),
         sessionMode: 'design',
         events: [
           { kind: 'text', text: 'I finished the design.' },
@@ -1826,6 +1827,7 @@ describe('ProjectView conversation run isolation', () => {
       {
         ...succeededAssistant,
         content: '',
+        endedAt: Date.now(),
         sessionMode: 'design',
         events: [{ kind: 'text', text: 'The hero image contrast is too low.' }],
         preTurnFileNames: [],

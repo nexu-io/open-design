@@ -11360,14 +11360,22 @@ function artifactFromRecoverableSourceText(sourceText: string): Artifact | null 
   };
 }
 
+const TERMINAL_DELIVERY_REPLAY_WINDOW_MS = 60_000;
+
 export function shouldReplayTerminalRunMessage(message: ChatMessage): boolean {
   if (message.role !== 'assistant') return false;
   if (!message.runId) return false;
   if (message.runStatus !== 'succeeded') return false;
   // A daemon can persist terminal success before the browser finishes its
-  // project-file refresh. Reattach once even when prose already exists so the
-  // delivery invariant can confirm a file or downgrade the turn after reload.
-  if (designDeliveryVerificationPending(message)) return true;
+  // project-file refresh. Reattach only during that bounded handoff window;
+  // replaying historical terminal rows with incomplete delivery metadata can
+  // otherwise keep a conversation loading forever after reload. Timestamp-less
+  // legacy rows retain the established recovery path because their age cannot
+  // be distinguished safely here.
+  if (designDeliveryVerificationPending(message)) {
+    const terminalAt = message.endedAt ?? message.createdAt ?? message.startedAt;
+    return terminalAt == null || Date.now() - terminalAt <= TERMINAL_DELIVERY_REPLAY_WINDOW_MS;
+  }
   if (message.content.trim().length > 0) return false;
   if (
     message.startedAt == null
