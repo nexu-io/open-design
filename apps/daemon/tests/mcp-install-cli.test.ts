@@ -106,7 +106,18 @@ describe('od mcp install CLI identity probe', () => {
 // resolveDaemonUrl()'s discovery in isolation, but nothing proved the full
 // `od mcp install` CLI closure actually wires a discovered daemon's install
 // info through to the printed install plan.
-describe('od mcp install <agent> end-to-end via conventional IPC discovery (#6424/#6425)', () => {
+//
+// POSIX-only, matching the implementation's own scope (see
+// `conventionalIpcSocketPaths` / `isOwnedByCurrentProcess` in
+// daemon-url.ts): on win32, `currentReleasePlatform()` resolves to "win",
+// `conventionalIpcSocketPaths()` unconditionally returns no candidates, and
+// `resolveAppIpcPath()` would return a named-pipe path -- `fs.mkdirSync` on
+// its dirname is meaningless there, and the CLI would correctly fall back
+// to the self-reinvocation spec instead of reaching the fake socket set up
+// below, failing the FAKE_COMMAND assertion for reasons unrelated to a real
+// regression. Windows coverage of the CLI closure would need a dedicated
+// named-pipe variant of this fixture, not this one running unconditionally.
+describe.skipIf(process.platform === 'win32')('od mcp install <agent> end-to-end via conventional IPC discovery (#6424/#6425)', () => {
   let conventionalIpcBaseDir: string;
   let httpServer: http.Server;
   let httpPort: number;
