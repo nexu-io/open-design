@@ -7070,6 +7070,26 @@ export function fileViewerSourceAuthorizationScopeKey(
   return null;
 }
 
+/**
+ * A srcdoc document whose `load` completed while the browser tab was hidden
+ * has never experienced a real layout pass: Chrome keeps the hidden iframe's
+ * child viewport at 0x0, so a fixed-canvas deck's one-shot fit resolves to
+ * `transform: scale(0)`, and the in-frame recovery loop (`chaseFirstLayout`
+ * in runtime/srcdoc.ts) is exhausted by background-timer throttling before
+ * the user returns — leaving the main stage permanently white (issue #6583).
+ * Such a document must be given a fresh srcdoc parse on the first return to
+ * a visible document. Scoped to decks, which always render through the
+ * srcdoc transport and carry the one-shot fit; other srcdoc artifacts
+ * re-layout on their own.
+ */
+function srcDocLoadRequiresFreshParseOnReturnToVisible(state: {
+  loadedWhileDocumentHidden: boolean;
+  srcDocIsActiveTransport: boolean;
+  isDeck: boolean;
+}): boolean {
+  return state.loadedWhileDocumentHidden && state.srcDocIsActiveTransport && state.isDeck;
+}
+
 function HtmlViewer({
   projectId,
   projectKind,
@@ -8069,6 +8089,10 @@ function HtmlViewer({
   const previewFileIdentityRef = useRef(`${projectId}\u0000${file.name}`);
   previewFileIdentityRef.current = `${projectId}\u0000${file.name}`;
   const activatedSrcDocTransportHtmlRef = useRef<string | null>(null);
+  // Latched by the srcDoc onLoad handler when a load completes in a hidden
+  // browser tab; consumed (one-shot) by the visibilitychange recovery effect.
+  // See srcDocLoadRequiresFreshParseOnReturnToVisible.
+  const srcDocLoadedWhileDocumentHiddenRef = useRef(false);
   // Tracks the iframe DOM node whose dedupe ref was last reset by the
   // srcDoc onLoad handler. We reset the dedupe exactly once per freshly
   // mounted iframe (the first load is the shell HTML), and skip every
@@ -10266,7 +10290,29 @@ function HtmlViewer({
     wasUrlLoadPreviewRef.current = false;
     activateSrcDocTransport();
   }, [activateSrcDocTransport, useUrlLoadPreview, useLazySrcDocTransport]);
-  
+  // Recovery for a deck that parsed into the srcdoc iframe while the browser
+  // tab was hidden: on the first return to a visible document, remount the
+  // iframe for a fresh srcdoc parse (the mechanism Comment re-activation
+  // already relies on) and clear the latch so visibility round-trips after a
+  // healthy load never remount. Only the active viewer owns recovery —
+  // retained viewers keep their #6519 activation contract untouched.
+  useEffect(() => {
+    if (!workspaceActive || typeof document === 'undefined') return;
+    function onVisibilityChange() {
+      if (document.visibilityState !== 'visible') return;
+      if (!srcDocLoadRequiresFreshParseOnReturnToVisible({
+        loadedWhileDocumentHidden: srcDocLoadedWhileDocumentHiddenRef.current,
+        srcDocIsActiveTransport: !useUrlLoadPreview,
+        isDeck: effectiveDeck,
+      })) return;
+      srcDocLoadedWhileDocumentHiddenRef.current = false;
+      activatedSrcDocTransportHtmlRef.current = null;
+      setSrcDocTransportResetKey((key) => key + 1);
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+  }, [workspaceActive, useUrlLoadPreview, effectiveDeck]);
+
   useEffect(() => {
     if (!workspaceActive) return;
     restorePreviewScrollPosition();
@@ -15416,6 +15462,13 @@ function HtmlViewer({
                         srcDoc={srcDocTransportContent}
                         onLoad={() => {
                           const frame = srcDocPreviewIframeRef.current;
+                          // Record whether this load ever saw a real layout
+                          // pass — a load completing in a hidden browser tab
+                          // did not, and decks then need a fresh parse on
+                          // return to visible (#6583). See
+                          // srcDocLoadRequiresFreshParseOnReturnToVisible.
+                          srcDocLoadedWhileDocumentHiddenRef.current =
+                            document.visibilityState === 'hidden';
                           if (!useUrlLoadPreview) iframeRef.current = frame;
                           if (frame) {
                             frame.dataset.odLoadedPreviewEpoch =
