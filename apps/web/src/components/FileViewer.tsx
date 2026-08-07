@@ -228,6 +228,7 @@ import {
   liveSnapshotForComment,
   overlayBoundsFromSnapshot,
   planLostAnchorWriteBacks,
+  provisionalNextPinNumber,
   resolveCommentAnchor,
   selectionKindLabel,
   targetFromSnapshot,
@@ -5668,6 +5669,7 @@ function anchorStateLabel(state: PreviewCommentAnchorState): string {
 
 function CommentPreviewOverlays({
   comments,
+  provisionalPinNumber,
   liveTargets,
   hoveredTarget,
   hoveredPodMemberId,
@@ -5686,6 +5688,10 @@ function CommentPreviewOverlays({
   onOpenComment,
 }: {
   comments: PreviewComment[];
+  /** Next pin number for a brand-new comment. Computed by the caller over the
+   *  file's comments across ALL statuses (see `provisionalNextPinNumber`) —
+   *  wider than `comments`, which carries only the open ones the canvas pins. */
+  provisionalPinNumber: number;
   liveTargets: Map<string, PreviewCommentSnapshot>;
   hoveredTarget: PreviewCommentSnapshot | null;
   hoveredPodMemberId: string | null;
@@ -5822,10 +5828,12 @@ function CommentPreviewOverlays({
   const activeSavedComment = activeSavedIndex >= 0 ? comments[activeSavedIndex] : undefined;
   const activePinNumber = activeSavedComment
     ? (typeof activeSavedComment.pinSeq === 'number' ? activeSavedComment.pinSeq : activeSavedIndex + 1)
-    // A brand-new, not-yet-saved comment: `comments.length + 1` is a
-    // provisional guess at what the daemon will assign — matches the
-    // "provisional local pin_seq" the server itself computes on create.
-    : comments.length + 1;
+    // A brand-new, not-yet-saved comment: provisional guess at what the
+    // daemon will assign on create — `MAX(pin_seq)+1` across ALL of the
+    // file's comments regardless of status, never open-count+1 (pin
+    // numbers are permanent; deletion or resolution retires them, so a
+    // count-based guess would collide with or resurrect a taken number).
+    : provisionalPinNumber;
   const targetOverlay = activeTarget ?? hoveredTarget;
   return (
     <div className="comment-overlay-layer" aria-hidden={false}>
@@ -13569,6 +13577,18 @@ function HtmlViewer({
       .sort((a, b) => commentCreatedAt(a) - commentCreatedAt(b)),
     [file.name, previewComments],
   );
+  // Provisional number for the next (not-yet-saved) pin. Computed over the
+  // file's comments across ALL statuses — a resolved/attached/failed comment
+  // keeps its pin_seq row in the daemon DB, so its number stays retired even
+  // though the canvas renders no marker for it (see provisionalNextPinNumber).
+  const nextProvisionalPinNumber = useMemo(
+    () => provisionalNextPinNumber(
+      previewComments
+        .filter((comment) => comment.filePath === file.name)
+        .sort((a, b) => commentCreatedAt(a) - commentCreatedAt(b)),
+    ),
+    [file.name, previewComments],
+  );
   // Sidebar display order: descending by `sortKey` (a fresh comment gets the
   // largest sortKey, so it shows first by default — "newest at the front").
   // A legacy/un-migrated row without a sortKey falls back to its createdAt,
@@ -15493,6 +15513,7 @@ function HtmlViewer({
               {boardMode ? (
                 <CommentPreviewOverlays
                   comments={commentCreateMode ? creationSortedSideComments : []}
+                  provisionalPinNumber={nextProvisionalPinNumber}
                   driftLadder={collab.enabled}
                   currentVersion={collab.publishedVersion ?? undefined}
                   {...(collab.onLostAnchors ? { onLostAnchors: collab.onLostAnchors } : {})}
