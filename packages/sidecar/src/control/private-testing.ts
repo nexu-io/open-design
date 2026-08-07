@@ -1,7 +1,11 @@
+import { access } from "node:fs/promises";
+
+import { isWindowsNamedPipePath } from "../ipc-path.js";
 import {
   createPrivateRequest,
   createPrivateLaunchMetadata,
   installPrivateLaunchMetadata,
+  privateControlPaths,
   type PrivateLaunchMetadata,
   type PrivateControlOperation,
   type PrivateControlResponse,
@@ -37,4 +41,26 @@ export async function sendPrivateRequestForTest(
     identity: input.identity ?? metadata.identity,
   };
   return await requestJsonIpc<PrivateControlResponse>(metadata.endpointPath, request);
+}
+
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function privateLaunchStateForTest(metadata: PrivateLaunchMetadata): Promise<{
+  descriptorExists: boolean;
+  endpointExists: boolean;
+}> {
+  const paths = privateControlPaths(metadata.identity, metadata.roots);
+  return {
+    descriptorExists: await pathExists(paths.descriptorPath),
+    endpointExists: isWindowsNamedPipePath(paths.endpointPath)
+      ? false
+      : await pathExists(paths.endpointPath),
+  };
 }

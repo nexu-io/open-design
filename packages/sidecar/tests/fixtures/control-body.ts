@@ -11,6 +11,9 @@ export async function attachDemoBody(
 ): Promise<AttachedSidecar> {
   return await attachSidecar<DemoMethods>({
     handlers: {
+      context(_input, context) {
+        return context;
+      },
       echo(input, context) {
         observeContext(context);
         return { value: input.value };

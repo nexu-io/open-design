@@ -11,4 +11,7 @@ await attachSidecar<DemoMethods>({
       return { value: input.value };
     },
   },
+  async onStopRequested() {
+    await new Promise<never>(() => undefined);
+  },
 });

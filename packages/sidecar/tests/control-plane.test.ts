@@ -7,6 +7,7 @@ import * as publicControl from "../src/control/index.js";
 import {
   createPrivateLaunchForTest,
   installPrivateLaunchForTest,
+  privateLaunchStateForTest,
   sendPrivateRequestForTest,
 } from "../src/control/private-testing.js";
 import { attachDemoBody } from "./fixtures/control-body.js";
@@ -85,7 +86,34 @@ describe("independent sidecar controller and body", () => {
     await expect(launch.client.call("echo", { value: "real-child" })).resolves.toEqual({
       value: "real-child",
     });
+    await expect(launch.client.call("context", {})).resolves.toEqual({
+      identity: { ...scope, service: "daemon" },
+      roots,
+    });
     await expect(launch.stop()).resolves.toMatchObject({ code: 0, signal: null });
+    await expect(controller.connect("daemon")).rejects.toThrow(/unavailable/);
+  });
+
+  it("force-terminates an uncooperative body and converges its control state", async () => {
+    const { roots, scope } = await createFixture();
+    const controller = createDemoController(scope, roots);
+    const childEntry = join(import.meta.dirname, "fixtures", "control-uncooperative-child.ts");
+    const launch = await controller.launch<DemoMethods>({
+      args: ["--import", "tsx", childEntry],
+      executable: process.execPath,
+      service: "daemon",
+      stopTimeoutMs: 50,
+    });
+    cleanups.push(async () => {
+      await launch.stop();
+    });
+
+    await expect(launch.stop()).resolves.toMatchObject({ code: null });
+    await expect(controller.connect("daemon")).rejects.toThrow(/unavailable/);
+    const privateState = await privateLaunchStateForTest(
+      createPrivateLaunchForTest({ roots, scope, service: "daemon" }),
+    );
+    expect(privateState).toEqual({ descriptorExists: false, endpointExists: false });
   });
 
   it("does not replace a live peer when a duplicate launch loses endpoint ownership", async () => {

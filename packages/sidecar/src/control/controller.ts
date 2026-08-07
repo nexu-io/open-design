@@ -3,7 +3,8 @@ import { watch, type FSWatcher } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 
-import { readJsonFile } from "../json-file.js";
+import { readJsonFile, removeFile } from "../json-file.js";
+import { isWindowsNamedPipePath } from "../ipc-path.js";
 import { requestJsonIpc } from "../json-ipc.js";
 import { SidecarControlError } from "./error.js";
 import {
@@ -101,6 +102,14 @@ function createClient<TMethods>(descriptor: PrivateReadyDescriptor): SidecarCont
       return (await invoke({ kind: "request-stop" })) as SidecarStopResult;
     },
   });
+}
+
+async function convergeExitedLaunch(descriptor: PrivateLaunchMetadata): Promise<void> {
+  const { descriptorPath, endpointPath } = privateControlPaths(descriptor.identity, descriptor.roots);
+  const current = await readJsonFile<Partial<PrivateReadyDescriptor>>(descriptorPath);
+  if (current?.incarnation !== descriptor.incarnation) return;
+  if (!isWindowsNamedPipePath(endpointPath)) await removeFile(endpointPath);
+  await removeFile(descriptorPath);
 }
 
 async function waitForLaunchedClient<TMethods>(input: {
@@ -201,7 +210,9 @@ export function bootstrapControlPlane({
   const scope = normalizeControlScope(scopeInput);
   const connect = async <TMethods>(service: string): Promise<SidecarControlClient<TMethods>> => {
     const identity = normalizeControlIdentity({ ...scope, service });
-    return createClient<TMethods>(await readCurrentDescriptor(identity, roots));
+    const client = createClient<TMethods>(await readCurrentDescriptor(identity, roots));
+    await client.probe();
+    return client;
   };
   const launch = async <TMethods>(options: SidecarLaunchOptions): Promise<SidecarLaunch<TMethods>> => {
     if (typeof options.executable !== "string" || options.executable.length === 0) {
@@ -215,7 +226,10 @@ export function bootstrapControlPlane({
       env: createPrivateLaunchEnv(descriptor, options.env),
       stdio: options.output ?? "ignore",
     });
-    const exited = childExit(child);
+    const exited = childExit(child).then(async (exit) => {
+      await convergeExitedLaunch(descriptor);
+      return exit;
+    });
     let client: SidecarControlClient<TMethods>;
     try {
       client = await waitForLaunchedClient<TMethods>({ descriptor, exited, timeoutMs: readyTimeoutMs });
