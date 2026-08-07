@@ -64,7 +64,7 @@ describe('FileViewer source syntax highlighting', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /^code$/i }));
+    fireEvent.click(screen.getByRole('tab', { name: /^code$/i }));
 
     await waitFor(() => {
       expect(highlightCodeTokensMock).toHaveBeenCalledWith(source, 'html');
@@ -154,7 +154,7 @@ describe('FileViewer source syntax highlighting', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /^code$/i }));
+    fireEvent.click(screen.getByRole('tab', { name: /^code$/i }));
 
     await waitFor(() => {
       expect(container.querySelector('.viewer-source')?.textContent).toBe(source);
