@@ -39,7 +39,7 @@ afterEach(() => {
 
 describe('MCP workspace-scoped project tools (#6569)', () => {
   it('list_projects calls the workspace-scoped catalog with workspace headers', async () => {
-    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const calls: Array<{ url: string; init?: RequestInit | undefined }> = [];
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
       calls.push({ url, init });
       if (url.endsWith('/api/workspace/directory')) return directoryResponse();
@@ -76,7 +76,7 @@ describe('MCP workspace-scoped project tools (#6569)', () => {
 
   it('get_project sends workspace headers on the bound-project read', async () => {
     const projectId = '11111111-1111-1111-1111-111111111111';
-    const seen: Array<{ url: string; init?: RequestInit }> = [];
+    const seen: Array<{ url: string; init?: RequestInit | undefined }> = [];
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
       seen.push({ url, init });
       if (url.endsWith('/api/workspace/directory')) return directoryResponse();
@@ -108,7 +108,7 @@ describe('MCP workspace-scoped project tools (#6569)', () => {
 
   it('write_file sends workspace headers on the project-file write', async () => {
     const projectId = '11111111-1111-1111-1111-111111111111';
-    const seen: Array<{ url: string; init?: RequestInit }> = [];
+    const seen: Array<{ url: string; init?: RequestInit | undefined }> = [];
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
       seen.push({ url, init });
       if (url.endsWith('/api/workspace/directory')) return directoryResponse();
@@ -156,7 +156,7 @@ describe('MCP workspace-scoped project tools (#6569)', () => {
   });
 
   it('name resolution uses the workspace-scoped catalog', async () => {
-    const seen: Array<{ url: string; init?: RequestInit }> = [];
+    const seen: Array<{ url: string; init?: RequestInit | undefined }> = [];
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
       seen.push({ url, init });
       if (url.endsWith('/api/workspace/directory')) return directoryResponse();
@@ -196,7 +196,7 @@ describe('MCP workspace-scoped project tools (#6569)', () => {
 
 describe('MCP headerless fallback (#6569)', () => {
   it('list_projects stays headerless when the directory has no membership', async () => {
-    const seen: Array<{ url: string; init?: RequestInit }> = [];
+    const seen: Array<{ url: string; init?: RequestInit | undefined }> = [];
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
       seen.push({ url, init });
       if (url.endsWith('/api/workspace/directory')) {
