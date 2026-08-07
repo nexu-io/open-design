@@ -7289,6 +7289,11 @@ export async function startServer({
       // and `syncSharedTeamDesignSystem` kept re-stamping `markTeamSynced()`
       // onto every teammate forever.
       unshareTeamDesignSystemIfShared: async (id, req) => {
+        const requestContext = workspaceResourceContextFromRequest(req);
+        const hasWorkspaceContextHeaders = Object.keys(req.headers ?? {}).some(
+          (name) => name.startsWith('x-od-workspace-') || name === 'x-od-app-user-id',
+        );
+        if (requestContext === null && !hasWorkspaceContextHeaders) return false;
         const verified = await verifyExplicitWorkspaceRequestContext({
           req,
           requireTeam: false,
