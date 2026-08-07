@@ -1781,6 +1781,113 @@ describe('InlineModelSwitcher AMR row', () => {
     });
   });
 
+  it('drops the pending AMR handoff when another CLI is picked mid-login', async () => {
+    // Regression (review thread): `pendingCompactAmrPickRef` used to survive
+    // a non-AMR pick mid-login. When AMR eventually reported signed-in,
+    // `resumePendingCompactAmrPick` would reopen the model list (or close
+    // the new agent's panel) even though the active agent had moved on.
+    // The handoff is now scoped to the originating agent and dropped the
+    // moment `config.agentId` leaves 'amr'.
+    const authAttemptId = '33333333-3333-4333-8333-333333333333';
+    let loginStarted = false;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === '/api/integrations/vela/status') {
+        return new Response(
+          JSON.stringify({
+            loggedIn: loginStarted,
+            loginInFlight: false,
+            authAttemptId,
+            profile: 'default',
+            user: loginStarted
+              ? { id: 'user-1', email: 'amr@example.local' }
+              : null,
+            configPath: '/Users/test/.amr/config.json',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url === '/api/integrations/vela/login' && init?.method === 'POST') {
+        loginStarted = true;
+        return new Response(JSON.stringify({ pid: 42, authAttemptId }), {
+          status: 202,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (
+        url.startsWith('/api/integrations/vela/wallet') ||
+        url.startsWith('/api/workspace/')
+      ) {
+        return new Response(JSON.stringify({}), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    function StatefulCompact() {
+      const [config, setConfig] = useState<AppConfig>({
+        ...baseConfig,
+        agentId: 'codex',
+        agentModels: {},
+      });
+      return (
+        <InlineModelSwitcher
+          config={config}
+          agents={[amrAgent, codexAgent]}
+          providerModelsCache={{}}
+          compact
+          daemonLive
+          onModeChange={(mode) => setConfig((c) => ({ ...c, mode }))}
+          onAgentChange={(id) =>
+            setConfig((c) => ({ ...c, agentId: id, mode: 'daemon' }))
+          }
+          onAgentModelChange={vi.fn()}
+          onApiProtocolChange={vi.fn()}
+          onApiModelChange={vi.fn()}
+          onOpenSettings={vi.fn()}
+        />
+      );
+    }
+
+    render(<StatefulCompact />);
+    // Pick AMR (signed out) — login starts, agent panel closes.
+    fireEvent.click(screen.getByTestId('inline-model-switcher-chip-agent'));
+    fireEvent.click(screen.getByTestId('inline-model-switcher-agent-amr'));
+    await waitFor(() => {
+      expect(loginStarted).toBe(true);
+      expect(screen.queryByTestId('inline-model-switcher-popover')).toBeNull();
+    });
+
+    // Mid-login, switch to Codex (no saved model — finishCompactAgentPick
+    // opens the model panel for the new agent). The pending AMR handoff must
+    // drop the moment the active agent leaves 'amr'.
+    fireEvent.click(screen.getByTestId('inline-model-switcher-chip-agent'));
+    fireEvent.click(screen.getByTestId('inline-model-switcher-agent-codex'));
+    expect(
+      screen.getByTestId('inline-model-switcher-compact-model-default'),
+    ).toBeTruthy();
+
+    // AMR eventually reports signed-in. The chip must stay on Codex's model
+    // ('default' for the codex fixture), and the model panel that
+    // `finishCompactAgentPick('codex')` just opened must not be force-closed
+    // by the resume path — the user explicitly switched agents and that
+    // panel state belongs to them now.
+    await waitFor(() => {
+      expect(
+        screen.getByTestId('inline-model-switcher-chip').textContent ?? '',
+      ).toContain('default');
+    });
+    expect(
+      screen.getByTestId('inline-model-switcher-compact-model-default'),
+    ).toBeTruthy();
+    expect(
+      screen.queryByTestId('inline-model-switcher-agent-amr'),
+    ).toBeNull();
+  });
+
   it('opens the compact model list when the saved AMR model id is stale', async () => {
     // Regression (review thread): `hasRecordedAgentModel` treated any non-empty
     // id as a saved choice. An AMR id the live catalog no longer contains is

@@ -341,9 +341,11 @@ export function InlineModelSwitcher({
   const amrLoginStartPendingRef = useRef(false);
   const amrLoginCancelRequestedRef = useRef(false);
   const amrAuthAttemptIdRef = useRef<string | null>(null);
-  /** Compact home: resume after AMR sign-in. `'model'` opens the list;
-   *  `'close'` keeps the chip closed (saved model already on file). */
-  const pendingCompactAmrPickRef = useRef<'model' | 'close' | null>(null);
+  /** Compact home: resume after AMR sign-in. The carried `agentId` scopes
+   *  the handoff to the agent that started login — if the user switches to a
+   *  different CLI while AMR is signing in, the resume no-ops and the
+   *  unrelated agent's panel state is left alone. */
+  const pendingCompactAmrPickRef = useRef<{ agentId: 'amr'; mode: 'model' | 'close' } | null>(null);
 
   const getModelPopoverBoundary = useCallback(() => {
     const scrollContainer = wrapRef.current?.closest<HTMLElement>(
@@ -399,10 +401,14 @@ export function InlineModelSwitcher({
     if (!pending) return;
     pendingCompactAmrPickRef.current = null;
     if (!compact) return;
-    // Decision was captured at pick time so a default written during login
-    // cannot swallow the no-saved-model prompt.
-    setPanel(pending === 'model' ? 'model' : null);
-  }, [compact]);
+    // Scope to the originating pick: a non-AMR selection mid-login must NOT
+    // reopen or close the new agent's panel just because AMR finished. The
+    // clearing useEffect below also drops this ref when config.agentId
+    // leaves 'amr', so reaching here with a different agent means the
+    // effect already ran and the ref is empty — but gate defensively too.
+    if (config.agentId !== pending.agentId) return;
+    setPanel(pending.mode === 'model' ? 'model' : null);
+  }, [compact, config.agentId]);
   const resumePendingCompactAmrPickRef = useRef(resumePendingCompactAmrPick);
   resumePendingCompactAmrPickRef.current = resumePendingCompactAmrPick;
 
@@ -701,14 +707,18 @@ export function InlineModelSwitcher({
       }
       // Login required — close the agent panel; resume after sign-in using the
       // pick-time saved-model decision so an unset agentModels[amr] still opens
-      // the model list.
+      // the model list. The carried `agentId: 'amr'` scopes the resume — if
+      // the user switches to another CLI mid-login, the resume is dropped.
       if (compact) {
-        pendingCompactAmrPickRef.current = hasUsableSavedAgentModel(
-          config.agentModels,
-          agents.find((a) => a.id === agentId) ?? null,
-        )
-          ? 'close'
-          : 'model';
+        pendingCompactAmrPickRef.current = {
+          agentId: 'amr',
+          mode: hasUsableSavedAgentModel(
+            config.agentModels,
+            agents.find((a) => a.id === agentId) ?? null,
+          )
+            ? 'close'
+            : 'model',
+        };
         setPanel(null);
       }
       await handleAmrSignIn(attribution);
@@ -1088,6 +1098,16 @@ export function InlineModelSwitcher({
     config.telemetry?.metrics,
   ]);
   const amrLoggedIn = amrStatus?.loggedIn === true;
+
+  // Drop the pending AMR handoff the moment the active agent leaves AMR — a
+  // mid-login switch to another CLI must not leave the new agent's panel
+  // state hostage to the AMR sign-in completing. Without this, the resume
+  // path runs at login-settled time and reopens the unrelated panel.
+  useEffect(() => {
+    if (config.agentId !== 'amr') {
+      pendingCompactAmrPickRef.current = null;
+    }
+  }, [config.agentId]);
 
   useEffect(() => {
     if (!amrLoggedIn || workspaceContext?.workspaceType === 'team') {
