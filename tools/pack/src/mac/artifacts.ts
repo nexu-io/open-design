@@ -3,7 +3,7 @@ import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/p
 import { basename, dirname, join } from "node:path";
 
 import type { ToolPackConfig } from "../config.js";
-import { PRODUCT_NAME } from "./constants.js";
+import { macArtifactProductName } from "./identity.js";
 import { pathExists, scrubMacExtendedAttributes } from "./fs.js";
 import { readPackagedVersion } from "./manifest.js";
 import { sanitizeNamespace } from "./paths.js";
@@ -66,6 +66,7 @@ export async function finalizeMacArtifacts(
   paths: MacPaths,
 ): Promise<Pick<MacPackResult, "dmgPath" | "latestMacYmlPath" | "zipPath">> {
   const namespaceToken = sanitizeNamespace(config.namespace);
+  const productName = macArtifactProductName(config);
   let dmgPath: string | null = null;
   let latestMacYmlPath: string | null = null;
   let zipPath: string | null = null;
@@ -74,7 +75,7 @@ export async function finalizeMacArtifacts(
     dmgPath = await moveBuilderArtifact({
       destinationPath: paths.dmgPath,
       label: "dmg artifact",
-      sourcePath: join(paths.appBuilderOutputRoot, `${PRODUCT_NAME}-${namespaceToken}.dmg`),
+      sourcePath: join(paths.appBuilderOutputRoot, `${productName}-${namespaceToken}.dmg`),
     });
   }
 
@@ -82,7 +83,7 @@ export async function finalizeMacArtifacts(
     zipPath = await moveBuilderArtifact({
       destinationPath: paths.zipPath,
       label: "zip artifact",
-      sourcePath: join(paths.appBuilderOutputRoot, `${PRODUCT_NAME}-${namespaceToken}.zip`),
+      sourcePath: join(paths.appBuilderOutputRoot, `${productName}-${namespaceToken}.zip`),
     });
     await writeLocalLatestMacYml(config, paths);
     latestMacYmlPath = paths.latestMacYmlPath;

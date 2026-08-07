@@ -140,7 +140,6 @@ export const CERTAIN_EXEMPT_PREFIXES = [
   ".vscode/",
   ".idea/",
   "docs/",
-  "apps/landing-page/",
   ".github/ISSUE_TEMPLATE/",
 ] as const;
 
@@ -210,10 +209,6 @@ const MEDIUM_EXEMPT_EXACT = [
   ".editorconfig",
   "flake.nix",
   "flake.lock",
-  ".github/workflows/landing-page-ci.yml",
-  ".github/workflows/landing-page-staging.yml",
-  ".github/workflows/landing-page-production.yml",
-  ".github/workflows/blog-indexing-on-deploy.yml",
   ".github/workflows/autofix.atom.yml",
   ".github/workflows/comment.atom.yml",
   ".github/workflows/report.atom.yml",

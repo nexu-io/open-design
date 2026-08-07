@@ -10,6 +10,8 @@ import {
 import { resolveNamespace } from "@open-design/sidecar";
 import { releaseChannelFromVersion, releaseNamespace } from "@open-design/release";
 
+import { resolveBrandFromEnv, type ToolPackBrand } from "./brand.js";
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export const WORKSPACE_ROOT = resolve(__dirname, "../../..");
@@ -75,6 +77,13 @@ export type ToolPackConfig = {
   macNotarize?: boolean;
   namespace: string;
   platform: ToolPackPlatform;
+  /**
+   * Fork brand overlay, sourced from `OD_PRODUCT_NAME` (plus optional
+   * `OD_APP_ID` / `OD_MAC_ICON`) at packaging time. When undefined the build is
+   * unbranded upstream Open Design; when set, productName/appId/icon resolve to
+   * the fork identity at every install-identity point. See `brand.ts`.
+   */
+  brand?: ToolPackBrand;
   portable: boolean;
   removeCache?: boolean;
   removeData: boolean;
@@ -368,6 +377,7 @@ export function resolveToolPackConfig(
     macNotarize: options.notarize === true,
     namespace,
     platform,
+    brand: resolveBrandFromEnv(process.env),
     portable: options.portable === true,
     roots: {
       output: {

@@ -104,3 +104,53 @@ describe("resolveMacInstallIdentity", () => {
     });
   });
 });
+
+describe("resolveMacInstallIdentity brand overlay", () => {
+  it("uses branded productName/appId and drops the namespace suffix from the bundle name", () => {
+    const config = {
+      ...makeConfig("/work", "xdesign-local"),
+      brand: { productName: "xDesign", appId: "io.xdesign.desktop", macIcon: "/x/icon.icns" },
+    };
+
+    expect(resolveMacInstallIdentity(config)).toEqual({
+      appId: "io.xdesign.desktop",
+      executableName: "xDesign",
+      installerTitle: "xDesign",
+      productName: "xDesign",
+      publicAppBundleName: "xDesign.app",
+      systemAppBundleName: "xDesign.app",
+    });
+    expect(resolveMacPaths(config).appPath).toMatch(/xDesign\.app$/);
+  });
+
+  it("throws when a brand omits appId (would collide with the upstream identity)", () => {
+    const config = { ...makeConfig("/work", "xdesign-local"), brand: { productName: "xDesign" } };
+    expect(() => resolveMacInstallIdentity(config)).toThrow(/OD_APP_ID/);
+  });
+
+  it("brand wins over a derived release channel for productName", () => {
+    // A branded build carrying a beta-ish version still ships under the brand
+    // name — brand is a fork identity, not a channel.
+    const config = {
+      ...makeConfig("/work", "release-beta"),
+      appVersion: "0.8.0-beta.1",
+      brand: { productName: "xDesign", appId: "io.xdesign.desktop" },
+    };
+    expect(resolveMacInstallIdentity(config).productName).toBe("xDesign");
+  });
+
+  it("brands the dmg/zip/payload artifact filenames (builder↔artifacts↔paths stay consistent)", () => {
+    // The electron-builder artifactName, the artifacts.ts sourcePath lookup, and
+    // the paths.ts destination must all derive the same name — otherwise a
+    // branded `--to dmg` build fails with "no dmg artifact produced". This is the
+    // witness that they share macArtifactProductName.
+    const config = {
+      ...makeConfig("/work", "xdesign-local"),
+      brand: { productName: "xDesign", appId: "io.xdesign.desktop" },
+    };
+    const paths = resolveMacPaths(config);
+    expect(paths.dmgPath).toMatch(/xDesign-xdesign-local\.dmg$/);
+    expect(paths.zipPath).toMatch(/xDesign-xdesign-local\.zip$/);
+    expect(paths.payloadZipPath).toMatch(/xDesign-xdesign-local-payload\.zip$/);
+  });
+});

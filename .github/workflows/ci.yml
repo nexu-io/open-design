@@ -278,7 +278,7 @@ jobs:
       - name: Typecheck workspaces
         if: ${{ needs.scopes.outputs.run_preflight_typecheck == 'true' }}
         run: |
-          pnpm -r --filter '!open-design' --filter '!@open-design/landing-page' --workspace-concurrency="${OPEN_DESIGN_WORKSPACE_CONCURRENCY:-1}" --if-present run typecheck
+          pnpm -r --filter '!open-design' --workspace-concurrency="${OPEN_DESIGN_WORKSPACE_CONCURRENCY:-1}" --if-present run typecheck
           pnpm exec tsc -p scripts/tsconfig.json --noEmit
 
       - name: Check repository layout policies

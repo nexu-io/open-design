@@ -68,11 +68,6 @@ const notifyDailyFeishuWorkflowPath = join(workspaceRoot, ".github", "workflows"
 const cutReleaseWorkflowPath = join(workspaceRoot, ".github", "workflows", "cut-release.yml");
 const cutPatchReleaseWorkflowPath = join(workspaceRoot, ".github", "workflows", "cut-patch-release.yml");
 const feishuNoticeScriptPath = join(workspaceRoot, "tools", "release", "src", "notifications", "feishu-notice.ts");
-const landingPageDailyFeishuWorkflowPath = join(workspaceRoot, ".github", "workflows", "landing-page-daily-feishu.yml");
-const landingPageCiWorkflowPath = join(workspaceRoot, ".github", "workflows", "landing-page-ci.yml");
-const landingPageStagingWorkflowPath = join(workspaceRoot, ".github", "workflows", "landing-page-staging.yml");
-const landingPageProductionWorkflowPath = join(workspaceRoot, ".github", "workflows", "landing-page-production.yml");
-const landingPageDailyFeishuScriptPath = join(workspaceRoot, ".github", "scripts", "landing-page-daily-feishu.ts");
 const releasePublishMetadataScriptPath = join(
   workspaceRoot,
   "tools",
@@ -1945,73 +1940,6 @@ process.stdin.on("end", () => {
     // The patch workflow's eager card only fires on the happy (published) path.
     const patchNotice = sectionBetween(patchCut, "- name: Notify Feishu that the branch was cut", "\n        run:");
     expect(patchNotice).toContain("if: steps.guard.outputs.published == 'true'");
-  });
-
-  it("[P2] sends the daily landing PR summary to Feishu with staging deployment status", async () => {
-    const [workflow, ciWorkflow, stagingWorkflow, productionWorkflow, script] = await Promise.all([
-      readFile(landingPageDailyFeishuWorkflowPath, "utf8"),
-      readFile(landingPageCiWorkflowPath, "utf8"),
-      readFile(landingPageStagingWorkflowPath, "utf8"),
-      readFile(landingPageProductionWorkflowPath, "utf8"),
-      readFile(landingPageDailyFeishuScriptPath, "utf8"),
-    ]);
-    const trigger = sectionBetween(workflow, "on:", "\npermissions:");
-    const productionCheckout = sectionBetween(productionWorkflow, "- name: Checkout", "- name: Setup pnpm");
-
-    expect(trigger).toContain('cron: "0 1 * * *"');
-    expect(trigger).not.toContain("lookback_hours:");
-    expect(workflow).toContain("actions: read");
-    expect(workflow).toContain("contents: read");
-    expect(workflow).toContain("pull-requests: read");
-    expect(workflow).toContain("github.ref == 'refs/heads/main'");
-    expect(workflow).toContain("FEISHU_WEBHOOK: ${{ secrets.FEISHU_LANDING_WEBHOOK || secrets.FEISHU_RELEASE_WEBHOOK }}");
-    expect(workflow).toContain("FEISHU_SIGN_SECRET: ${{ secrets.FEISHU_LANDING_SIGN_SECRET || secrets.FEISHU_RELEASE_SIGN_SECRET }}");
-    expect(workflow).toContain("node --experimental-strip-types .github/scripts/landing-page-daily-feishu.ts self-check");
-    expect(workflow).toContain("node --experimental-strip-types .github/scripts/landing-page-daily-feishu.ts");
-    expect(workflow).toContain("ref: main");
-    expect(workflow).toContain("fetch-depth: 0");
-    expect(productionCheckout).toContain("ref: ${{ github.sha }}");
-    expect(productionCheckout).not.toContain("ref: main");
-    expect(productionCheckout).toContain("Verify production checkout commit");
-    expect(productionCheckout).toContain('deployed_sha="$(git rev-parse HEAD)"');
-    expect(productionCheckout).toContain('$deployed_sha" != "$GITHUB_SHA');
-    expect(productionCheckout).toContain('main_sha="$(git ls-remote origin refs/heads/main');
-    expect(productionCheckout).toContain('$GITHUB_SHA" != "$main_sha');
-    expect(productionCheckout).toContain("refusing production deploy for stale workflow SHA");
-
-    // Wrangler Pages ignores custom --config paths. Before every staging
-    // migration/deploy, replace the default config with staging's isolated
-    // bindings so preview/staging traffic can never touch production KV/D1.
-    for (const stagingDeployWorkflow of [ciWorkflow, stagingWorkflow]) {
-      expect(stagingDeployWorkflow).toContain("Prepare staging Pages configuration");
-      expect(stagingDeployWorkflow).toContain("cp apps/landing-page/wrangler.staging.toml apps/landing-page/wrangler.toml");
-      expect(stagingDeployWorkflow).toContain('wranglerVersion: "4.110.0"');
-      expect(stagingDeployWorkflow).toContain("d1 migrations apply open-design-landing-staging-attribution --remote");
-      expect(stagingDeployWorkflow).not.toContain("--config wrangler.staging.toml");
-    }
-    expect(productionWorkflow).toContain('wranglerVersion: "4.110.0"');
-    expect(productionWorkflow).toContain("d1 migrations apply open-design-landing-attribution --remote");
-
-    expect(script).toContain('const STAGING_URL = "https://staging.open-design.ai"');
-    expect(script).toContain('const STAGING_WORKFLOW = "landing-page-staging.yml"');
-    expect(script).toContain('const PRODUCTION_WORKFLOW = "landing-page-production.yml"');
-    expect(script).toContain("type StagingSnapshot");
-    expect(script).toContain("createStagingSnapshot");
-    expect(script).toContain("run_started_at");
-    expect(script).toContain("run_attempt");
-    expect(script).toContain("runOperationalTime");
-    expect(script).toContain("staging: StagingSnapshot");
-    expect(script).toContain("historical staging success not to count as current staging deployment");
-    expect(script).toContain("rerun historical staging success to become current staging deployment");
-    expect(script).toContain("rerun staging header to use the rerun historical deployment");
-    expect(script).toContain("No successful ${PRODUCTION_WORKFLOW} run found on main");
-    expect(script).toContain("正式环境基线");
-    expect(script).toContain("待 QA 验收");
-    expect(script).toContain("git\", [\"merge-base\", \"--is-ancestor\"");
-    expect(script).toContain("已自动部署到当前 staging.open-design.ai");
-    expect(script).toContain("正在部署到 staging.open-design.ai");
-    expect(script).toContain("apps/landing-page/");
-    expect(script).toContain(".github/workflows/landing-page-staging.yml");
   });
 
   it("[P2] supports stable metadata, prepublish, and publish dispatch modes", async () => {

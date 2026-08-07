@@ -27,7 +27,6 @@ import { CERTAIN_EXEMPT_EXACT, CERTAIN_EXEMPT_PREFIXES } from "./scopes.ts";
 // - root `scripts/` — policy-floor code. Preflight is armed on every plan, so
 //   its guard checks may read the exempt surface (product neutrality validates
 //   docs/ prose on every run).
-// - `apps/landing-page/` — it IS the exempt surface; landing-page CI owns it.
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 
@@ -45,7 +44,7 @@ const skippedDirectoryNames = new Set([
   "vendor",
 ]);
 
-const skippedRepositoryPrefixes = ["apps/landing-page/"];
+const skippedRepositoryPrefixes: readonly string[] = [];
 
 const checkedExtensions = new Set([".ts", ".tsx"]);
 

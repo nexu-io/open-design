@@ -8,7 +8,6 @@ Follow the root `AGENTS.md` first. This file only records module-level boundarie
 - `apps/daemon`: Express + SQLite local daemon and `od` bin. It owns REST/SSE APIs, agent CLI spawning, skills, design systems, artifact persistence, static serving, and daemon-managed data. Before describing or changing daemon data paths, read the root `AGENTS.md` section **Daemon data directory contract**; it is mandatory and must not be restated here.
 - `apps/desktop`: Electron shell. Desktop does not guess the web port; it reads runtime status through sidecar IPC and opens the reported web URL.
 - `apps/packaged`: Thin packaged Electron runtime entry. It starts packaged daemon/web sidecars, registers the `od://` entry protocol, and delegates desktop host behavior to `apps/desktop`.
-- `apps/landing-page`: Standalone static Astro marketing and public catalog site. It reads canonical repository content at build time, deploys independently, and must not import product-runtime internals from the other apps.
 
 ## Daemon layout
 
@@ -57,6 +56,4 @@ pnpm --filter @open-design/desktop typecheck
 pnpm --filter @open-design/desktop build
 pnpm --filter @open-design/packaged typecheck
 pnpm --filter @open-design/packaged build
-pnpm --filter @open-design/landing-page typecheck
-pnpm --filter @open-design/landing-page build:static
 ```

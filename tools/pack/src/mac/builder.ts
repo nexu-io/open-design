@@ -19,7 +19,7 @@ import {
   WEB_STANDALONE_RESOURCE_NAME,
 } from "./constants.js";
 import { pathExists } from "./fs.js";
-import { resolveMacInstallIdentity } from "./identity.js";
+import { macArtifactProductName, resolveMacInstallIdentity } from "./identity.js";
 import { readPackagedVersion } from "./manifest.js";
 import { sanitizeNamespace } from "./paths.js";
 import type { ElectronBuilderTarget, MacBuildOutput, MacPaths } from "./types.js";
@@ -93,9 +93,15 @@ export async function runElectronBuilder(
   const webStandaloneHookConfigPath = config.webOutputMode === "standalone"
     ? await writeWebStandaloneHookConfig(config, paths)
     : null;
+  // Brand overlay: a fork build (OD_PRODUCT_NAME set) ships under its own icon
+  // and uses its product name for artifact filenames / protocol labels. When
+  // unbranded, both fall back to the upstream PRODUCT_NAME / mac icon so
+  // upstream artifact naming is byte-for-byte unchanged.
+  const macIcon = config.brand?.macIcon ?? macResources.icon;
+  const displayName = macArtifactProductName(config);
   const builderConfig = {
     appId: identity.appId,
-    artifactName: `${PRODUCT_NAME}-${namespaceToken}.\${ext}`,
+    artifactName: `${displayName}-${namespaceToken}.\${ext}`,
     afterPack: webStandaloneHookConfigPath == null ? undefined : macResources.webStandaloneAfterPackHook,
     afterSign: config.signed && config.macNotarize ? macResources.notarizeHook : undefined,
     asar: ELECTRON_BUILDER_ASAR,
@@ -105,7 +111,7 @@ export async function runElectronBuilder(
       output: paths.appBuilderOutputRoot,
     },
     dmg: {
-      icon: macResources.icon,
+      icon: macIcon,
       iconSize: 96,
       title: identity.installerTitle,
     },
@@ -132,7 +138,7 @@ export async function runElectronBuilder(
       entitlementsInherit: config.signed ? macResources.entitlementsInherit : undefined,
       gatekeeperAssess: false,
       hardenedRuntime: config.signed,
-      icon: macResources.icon,
+      icon: macIcon,
       identity: config.signed ? undefined : null,
       notarize: config.macNotarize ? undefined : false,
       target: targets,
@@ -145,14 +151,14 @@ export async function runElectronBuilder(
     // apps/desktop/src/main/invite-deeplink-core.ts.
     protocols: [
       {
-        name: `${PRODUCT_NAME} Invite`,
+        name: `${displayName} Invite`,
         schemes: ["opendesign"],
       },
     ],
     nodeGypRebuild: false,
     npmRebuild: false,
     productName: identity.productName,
-    icon: macResources.icon,
+    icon: macIcon,
     publish: [
       {
         provider: "generic",

@@ -491,13 +491,13 @@ const GOLDEN_CASES: readonly GoldenCase[] = [
   },
   {
     // The first certain-tier promotion: a group confined to the certain-exempt
-    // core (docs/, landing-page, editor configs, LICENSE/CODEOWNERS) drops to
+    // core (docs/, editor configs, LICENSE/CODEOWNERS) drops to
     // the preflight policy floor instead of running everything. Guarded by
     // the "certain-exempt surface consumption" guard check; methodology in
     // specs/current/ci.md.
     name: "merge_group certain-exempt core group drops to the policy floor",
     context: { eventName: "merge_group" },
-    files: ["docs/architecture.md", "docs/nested/guide.mdx", "apps/landing-page/src/pages/index.astro", "LICENSE", ".github/CODEOWNERS"],
+    files: ["docs/architecture.md", "docs/nested/guide.mdx", ".github/ISSUE_TEMPLATE/bug-report.md", "LICENSE", ".github/CODEOWNERS"],
     expected: expectedPlan({ ciMode: "full" }),
   },
   {
@@ -667,7 +667,7 @@ test("certain rules must name a guard that resolves to a real guard check", asyn
 
 test("certain-exempt markdown matches only the certain rule (no medium co-match neutralizes the promotion)", async () => {
   const { scopeRules, matchesRuleMatch } = await import("../../../scripts/scopes.ts");
-  for (const file of ["docs/architecture.md", "docs/nested/guide.mdx", "apps/landing-page/README.md"]) {
+  for (const file of ["docs/architecture.md", "docs/nested/guide.mdx", ".github/ISSUE_TEMPLATE/bug-report.md"]) {
     const matched = scopeRules.filter((rule) => matchesRuleMatch(file, rule.match)).map((rule) => rule.id);
     assert.deepEqual(matched, ["certain-exempt-surface"], file);
   }
