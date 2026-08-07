@@ -325,6 +325,11 @@ function hasProbeSatisfyingApiKey(agentId: string, env: RuntimeEnv): boolean {
     return hasNonEmptyEnv(env, ['CODEX_API_KEY', 'OPENAI_API_KEY']);
   }
   if (agentId === 'claude') {
+    // Bedrock/IAM auth has no claude.ai session for `claude auth status` to
+    // find, so it always reports {"authenticated": false} even when the CLI
+    // is genuinely working end-to-end via AWS credentials. Short-circuit the
+    // probe the same way we do for a real API key.
+    if (hasNonEmptyEnv(env, ['CLAUDE_CODE_USE_BEDROCK'])) return true;
     return hasNonEmptyEnv(env, ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN']);
   }
   return false;
