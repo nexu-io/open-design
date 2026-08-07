@@ -317,15 +317,6 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
     incoming: Record<string, unknown>,
   ): Record<string, unknown> => {
     if (!stored || stored.role !== 'assistant' || !stored.runId) return incoming;
-    // A legitimate same-message retry reuses the failed assistant's id, and
-    // `pinAssistantMessageOnRunCreate` assigns a NEW run id while deliberately
-    // keeping the old terminal status/events/content/startedAt until the
-    // retry's final PUT. A snapshot carrying a different runId is that retry,
-    // not a stale copy of the old run, so let it flow through untouched —
-    // otherwise the retry stays stuck on the previous attempt's failure.
-    if (typeof incoming.runId === 'string' && incoming.runId !== stored.runId) {
-      return incoming;
-    }
     const incomingEvents = Array.isArray(incoming.events) ? incoming.events : [];
     const shrinksEvents =
       Boolean(stored.events) &&
@@ -341,9 +332,17 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
       // A pinned-but-event-less daemon-backed row can still be hit by a stale
       // pre-run snapshot that omits `runId` (the web persisted the assistant
       // placeholder before /api/runs assigned ownership). Preserve the
-      // daemon-ownership markers so the row does not drop out of the protected
-      // path on the next stale PUT (#6418 review).
-      return { ...incoming, role: stored.role, runId: stored.runId };
+      // daemon-ownership markers AND the pin-written start time so the row does
+      // not drop out of the protected path or lose its lifecycle timestamps on
+      // the next stale PUT (#6418 review). A same-message retry is handled at
+      // pin time (pinAssistantMessageOnRunCreate resets the generation), so no
+      // runId carve-out is needed here.
+      return {
+        ...incoming,
+        role: stored.role,
+        runId: stored.runId,
+        startedAt: stored.startedAt ?? incoming.startedAt,
+      };
     }
     // Daemon-written lifecycle timestamps. startedAt is the daemon's first
     // start (COALESCE keeps it), so a stale snapshot must never regress it —

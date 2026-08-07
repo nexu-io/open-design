@@ -310,16 +310,23 @@ export function pinAssistantMessageOnRunCreate(db: SqliteDb, run: ChatRunMessage
     .prepare(`SELECT id FROM messages WHERE id = ?`)
     .get(run.assistantMessageId);
   if (existing) {
+    // This is the generation boundary: a run creation that rebinds a message
+    // to a NEW run id (e.g. a same-message retry reusing the failed
+    // assistant's id) must reset the run-owned fields to this run's start —
+    // the old attempt's terminal status, events, content, and timestamps must
+    // not survive into the new generation, or the retry's final web PUT gets
+    // misclassified as a stale regression and stays stuck on the old failure
+    // (#6418 review).
     db.prepare(
       `UPDATE messages
           SET run_id = ?,
-              run_status = CASE
-                WHEN run_status IN ('succeeded', 'failed', 'canceled') THEN run_status
-                ELSE ?
-              END,
+              run_status = ?,
               session_mode = ?,
               run_context_json = ?,
-              started_at = COALESCE(started_at, ?)
+              events_json = NULL,
+              content = '',
+              ended_at = NULL,
+              started_at = ?
         WHERE id = ?`,
     ).run(
       run.id,

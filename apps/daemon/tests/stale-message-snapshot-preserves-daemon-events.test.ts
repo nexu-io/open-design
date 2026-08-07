@@ -488,7 +488,8 @@ describe('stale web message snapshot does not wipe daemon-owned run events', () 
     const messageId = `pinned_${randomUUID()}`;
     const url = `${started.url}/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}`;
 
-    // Daemon pins the run (assistant placeholder + runId, no events yet).
+    // Daemon pins the run (assistant placeholder + runId + start time, no
+    // events yet).
     const pinned = await fetch(url, {
       method: 'PUT',
       headers: { 'content-type': 'application/json' },
@@ -499,11 +500,12 @@ describe('stale web message snapshot does not wipe daemon-owned run events', () 
         runId: 'run-pinned',
         runStatus: 'queued',
         events: [],
+        startedAt: 100,
       }),
     });
     expect(pinned.status).toBe(200);
 
-    // A stale pre-run snapshot (no runId) lands after the pin.
+    // A stale pre-run snapshot (no runId, no startedAt) lands after the pin.
     const stale = await fetch(url, {
       method: 'PUT',
       headers: { 'content-type': 'application/json' },
@@ -523,18 +525,19 @@ describe('stale web message snapshot does not wipe daemon-owned run events', () 
       conversationId,
       messageId,
     );
-    // run_id must survive the stale snapshot; the non-terminal status the
-    // client carries is still allowed to flow.
+    // run_id and the pin-written start time must survive the stale snapshot;
+    // the non-terminal status the client carries is still allowed to flow.
     expect(stored?.runId).toBe('run-pinned');
     expect(stored?.runStatus).toBe('running');
+    expect(stored?.startedAt).toBe(100);
   });
 
-  it('lets a same-message retry with a new runId replace the failed attempt', async () => {
-    // nettee review (#6418): side-chat retries reuse the failed assistant's
-    // id, and pinAssistantMessageOnRunCreate assigns a NEW run id while
-    // keeping the old terminal status/events/content until the retry's final
-    // PUT. The stale-write guard must not treat that snapshot as stale —
-    // otherwise the retry stays stuck on the previous attempt's failure.
+  it('lets a same-message retry snapshot replace the pinned generation', async () => {
+    // mrcfps review (#6418): pinAssistantMessageOnRunCreate is the generation
+    // boundary — it rebinds run_id and resets the run-owned fields to the new
+    // run's start, so the retry's final PUT shares the pinned runId with a
+    // non-terminal stored status and must flow through the no-regression guard
+    // even though it carries fewer client events and a fresh terminal status.
     delete process.env.POSTHOG_KEY;
     delete process.env.POSTHOG_HOST;
     delete process.env.LANGFUSE_PUBLIC_KEY;
@@ -553,22 +556,24 @@ describe('stale web message snapshot does not wipe daemon-owned run events', () 
     const messageId = `retry_${randomUUID()}`;
     const url = `${started.url}/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}`;
 
-    // The failed attempt persisted with run A.
-    const failed = await fetch(url, {
+    // Post-pin shape: the retry's run B is pinned with a non-terminal status,
+    // no events yet, and its own startedAt (the old attempt was reset).
+    const pinned = await fetch(url, {
       method: 'PUT',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         id: messageId,
         role: 'assistant',
-        content: 'failed attempt',
-        runId: 'run-a',
-        runStatus: 'failed',
-        events: [{ kind: 'status', label: 'error', detail: 'boom' }],
+        content: '',
+        runId: 'run-b',
+        runStatus: 'running',
+        events: [],
+        startedAt: 100,
       }),
     });
-    expect(failed.status).toBe(200);
+    expect(pinned.status).toBe(200);
 
-    // The retry pins run B; its final snapshot replaces the failed attempt.
+    // The retry's final PUT carries the new attempt (fewer events + terminal).
     const retried = await fetch(url, {
       method: 'PUT',
       headers: { 'content-type': 'application/json' },
