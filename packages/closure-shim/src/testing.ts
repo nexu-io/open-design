@@ -7,30 +7,30 @@ import {
   type ClosureRuntimeTerminalStatus,
   type ClosureShimRequest,
 } from "@open-design/closure-proto";
-import type { HeadlessClosurePaths } from "@open-design/headless-runtime";
+import type { StandalonePaths } from "@open-design/standalone-runtime";
 
 import type {
-  ClosureBodyHandoffInput,
-  ClosureBodyModule,
-  ClosureBodyStatus,
+  StandaloneHandoffInput,
+  StandaloneModule,
+  StandaloneStatus,
 } from "./index.js";
 
-export type FakeClosureBody = {
+export type FakeStandalone = {
   readonly closed: number;
-  readonly handoffs: readonly ClosureBodyHandoffInput[];
+  readonly handoffs: readonly StandaloneHandoffInput[];
   fail(errorCode?: string): void;
-  module: ClosureBodyModule;
+  module: StandaloneModule;
 };
 
-export function createFakeClosureBody(options: {
-  onHandoff?: (input: ClosureBodyHandoffInput) => Promise<void> | void;
+export function createFakeStandalone(options: {
+  onHandoff?: (input: StandaloneHandoffInput) => Promise<void> | void;
   pid?: number;
   transformHandoff?: (handoff: ClosureHandoffEnvelope) => ClosureHandoffEnvelope;
-} = {}): FakeClosureBody {
-  const handoffs: ClosureBodyHandoffInput[] = [];
+} = {}): FakeStandalone {
+  const handoffs: StandaloneHandoffInput[] = [];
   let closed = 0;
   let failLatest: ((errorCode: string) => void) | null = null;
-  const fake: FakeClosureBody = {
+  const fake: FakeStandalone = {
     get closed() {
       return closed;
     },
@@ -39,17 +39,17 @@ export function createFakeClosureBody(options: {
     },
     fail(errorCode = "process-exited") {
       if (failLatest == null) {
-        throw new Error("Fake Closure body has not been handed off");
+        throw new Error("Fake Standalone has not been handed off");
       }
       failLatest(errorCode);
     },
     module: {
-      handoffOpenDesignClosure: async (input) => {
+      handoffOpenDesignStandalone: async (input) => {
         handoffs.push(input);
         await options.onHandoff?.(input);
         const handoff = options.transformHandoff?.(input.handoff) ?? input.handoff;
         const pid = options.pid ?? 123;
-        let status: ClosureBodyStatus = {
+        let status: StandaloneStatus = {
           handoff,
           pid,
           schemaVersion: CLOSURE_HANDOFF_SCHEMA_VERSION,
@@ -113,7 +113,7 @@ export function createFakeClosureShimRequest(
   };
 }
 
-export function createFakeHeadlessClosurePaths(root: string): HeadlessClosurePaths {
+export function createFakeStandalonePaths(root: string): StandalonePaths {
   return {
     cacheRoot: join(root, "cache"),
     dataRoot: join(root, "data"),

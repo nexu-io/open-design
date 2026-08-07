@@ -109,7 +109,7 @@ afterEach(async () => {
   await Promise.all(temporaryRoots.splice(0).map(async (root) => await rm(root, { force: true, recursive: true })));
 });
 
-describe("Headless Closure release publication", () => {
+describe("Standalone Closure release publication", () => {
   it("publishes Closure and legacy payload identities on the same platform metadata surface", async () => {
     const root = await mkdtemp(join(tmpdir(), "od-closure-release-"));
     temporaryRoots.push(root);

@@ -25,7 +25,7 @@ services:
     image: ${OD_IMAGE:-ghcr.io/nexu-io/od:latest}
     container_name: od
 
-    # Spec §15.3 — every dimension the daemon respects in headless
+    # Spec §15.3 — every dimension the daemon respects in standalone
     # mode. OD_BIND_HOST=0.0.0.0 + OD_API_TOKEN is the canonical
     # hosted-mode tuple; remove these two if running on a private
     # docker network with an upstream reverse proxy that already

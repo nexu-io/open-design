@@ -1,16 +1,16 @@
-# Headless Closure delivery matrix
+# Standalone Closure delivery matrix
 
-This document turns [ADR 0002](../adr/0002-stabilize-headless-closure-handoff.md)
-and the [parallel handoff](headless-closure-parallel-handoff.md) into an
+This document turns [ADR 0002](../adr/0002-stabilize-standalone-closure-handoff.md)
+and the [parallel handoff](standalone-closure-parallel-handoff.md) into an
 implementation-ready delivery map. It is intentionally a map, not another
 runtime protocol. Its machine-readable companion is
-[`e2e/resources/headless-closure-delivery-matrix.ts`](../../e2e/resources/headless-closure-delivery-matrix.ts),
+[`e2e/resources/standalone-closure-delivery-matrix.ts`](../../e2e/resources/standalone-closure-delivery-matrix.ts),
 which is consumed only by tests.
 
 ## Fixed shape
 
 ```text
-Shell / Installer -> thin shim (ensure + handoff) -> atomic Closure (Web + daemon)
+Shell / Installer -> thin shim (ensure + handoff) -> atomic Closure -> Standalone (Web + daemon)
 ```
 
 - `channel` selects an evolving release line; a Closure candidate is
@@ -22,8 +22,9 @@ Shell / Installer -> thin shim (ensure + handoff) -> atomic Closure (Web + daemo
 - sidecars remain the process/host adaptation boundary. They do not become a
   fourth product identity or a second persistent truth source.
 - the Shell owns OS integration, visible UX, invocation timing, and installer
-  actions. Closure owns trust, Store truth, update, rollback, Web + daemon
-  lifecycle, and shutdown.
+  actions. Closure owns trust, Store truth, update, rollback, and selection of
+  exactly one Standalone body. Standalone owns the joined Web + daemon process
+  lifecycle and shutdown.
 - the running body is never live-swapped. A prepared candidate becomes active
   on a later launch; `minVersion` exits to installer-reinstall before body
   download or startup.
@@ -40,8 +41,8 @@ the shell. A green legacy product test therefore cannot close a new-shim gate.
 | Lane | Lifecycle requirement | Proven now | Product closure |
 | --- | --- | --- | --- |
 | Shell shim | invoke ensure once → `ready` or `installer-reinstall`; correlate reverse capabilities; observe requested stop vs unexpected failure | independent Shell parser/producer and real shim conformance | installed shell never reads Store/body layout; one real host capability and terminal UX pass on each platform |
-| Local debug | start → status/logs → stop → namespace cleanup, without a release publish | `tools-dev` already owns daemon/Web/Desktop local lifecycle; `apps/headless` exports the shell-neutral product lifecycle | add a Closure product target inside `tools-dev`; do not add a second CLI or control plane |
-| Process lifecycle | daemon ready → Web ready → running; stop Web → stop daemon; converge partial startup | `@open-design/headless-runtime` lifecycle tests plus real child shim demo | real archived body exports `handoffOpenDesignClosure()` and emits generation-bound status through installed shells |
+| Local debug | start → status/logs → stop → namespace cleanup, without a release publish | `tools-dev` already owns daemon/Web/Desktop local lifecycle; `apps/standalone` exports the shell-neutral product lifecycle | add a Closure product target inside `tools-dev`; do not add a second CLI or control plane |
+| Process lifecycle | daemon ready → Web ready → running; stop Web → stop daemon; converge partial startup | `@open-design/standalone-runtime` lifecycle tests plus real child shim demo | real archived Standalone exports `handoffOpenDesignStandalone()` and emits generation-bound status through installed shells |
 | Update lifecycle | discover → trust → materialize → activate → arm → confirm, or one bounded rollback | Closure update/Store/shim tests cover integrity, isolation, minVersion, reuse, and rollback | release candidate discovery and trusted keys enter through the shim; shells stop selecting or confirming bodies |
 | Distribution | build namespace-neutral platform body → sign inventory/manifest → store version → bind from channel metadata | `tools-pack closure build`, `tools-release` publication tests, and release-beta lanes | publish=false QA resolves bytes and metadata from release storage; GitHub artifacts are never authoritative inputs |
 | Local real-real | local release source → real shim → real body → exact ready/terminal signals | bilateral conformance and the reusable packaged Closure fixture | one deterministic test covers fresh, reuse, reject, reinstall, rollback, capability, stop, and failure without fixed sleeps |
@@ -62,25 +63,25 @@ new shim entry.
 
 ## Delivery cuts
 
-These are atomic outcomes, not time estimates. HC-01/02 and HC-03 can proceed
+These are atomic outcomes, not time estimates. SC-01/02 and SC-03 can proceed
 in parallel against the frozen fixtures. Dependency order is also encoded in
 the machine-readable matrix.
 
 | Atom | Track | Single done condition |
 | --- | --- | --- |
-| HC-01 | Closure body | archived `runtime.mjs` accepts the handoff and owns Web + daemon start, health, and stop |
-| HC-02 | Closure acquisition | shim owns candidate discovery/trust, Store selection, activation, confirmation, and rollback |
-| HC-03 | Shell | packaged shell calls only ensure + handoff and maps capability, terminal, and reinstall outcomes |
-| HC-04 | Developer experience | `tools-dev` controls source Closure start/status/logs/stop/cleanup as one product |
-| HC-05 | Integration | deterministic local source drives real shim + real body through the complete trace |
-| HC-06 | Distribution | beta builds/signs/stores/resolves Closure independently, including publish=false QA retrieval |
-| HC-07 | macOS | installed shell passes cold start, reuse, reinstall, failure, and rollback through the new seam |
-| HC-08 | Windows installer | installer preserves namespace identity, stops the owner, and fulfills minVersion reinstall |
-| HC-09 | Windows | installed shell passes cold start, reuse, reinstall, failure, rollback, and clean uninstall through the new seam |
-| HC-10 | Cutover | minVersion rises only after both platform mixed-generation gates pass |
-| HC-11 | Retirement | historical combined-payload selection is removed after the compatibility observation window |
+| SC-01 | Standalone body | archived `runtime.mjs` accepts the handoff and owns Web + daemon start, health, and stop |
+| SC-02 | Closure acquisition | shim owns candidate discovery/trust, Store selection, activation, confirmation, and rollback |
+| SC-03 | Shell | packaged shell calls only ensure + handoff and maps capability, terminal, and reinstall outcomes |
+| SC-04 | Developer experience | `tools-dev` controls source Standalone start/status/logs/stop/cleanup as one product |
+| SC-05 | Integration | deterministic local source drives real shim + real body through the complete trace |
+| SC-06 | Distribution | beta builds/signs/stores/resolves Closure independently, including publish=false QA retrieval |
+| SC-07 | macOS | installed shell passes cold start, reuse, reinstall, failure, and rollback through the new seam |
+| SC-08 | Windows installer | installer preserves namespace identity, stops the owner, and fulfills minVersion reinstall |
+| SC-09 | Windows | installed shell passes cold start, reuse, reinstall, failure, rollback, and clean uninstall through the new seam |
+| SC-10 | Cutover | minVersion rises only after both platform mixed-generation gates pass |
+| SC-11 | Retirement | historical combined-payload selection is removed after the compatibility observation window |
 
-The next release contains HC-01 through HC-10. HC-11 is deliberately separate:
+The next release contains SC-01 through SC-10. SC-11 is deliberately separate:
 short-term fallback remains one-way and observable; it is not allowed to select
 or mutate the new Closure truth. This preserves the agreed “next release puts
 the architecture on the table” scope while keeping irreversible cleanup out of
@@ -108,7 +109,7 @@ The implementation should grow the proof in this order:
 
 ```text
 closure-proto / closure-shim contract
-  -> headless body and tools-dev component tests
+  -> Standalone body and tools-dev component tests
   -> deterministic local real-real trace
   -> release-beta publish=false retrieval
   -> macOS installed product gate

@@ -1,6 +1,6 @@
-# packages/headless-runtime
+# packages/standalone-runtime
 
-Follow the root `AGENTS.md` and `packages/AGENTS.md` first. This package owns reusable, shell-neutral Headless lifecycle primitives.
+Follow the root `AGENTS.md` and `packages/AGENTS.md` first. This package owns reusable, shell-neutral Standalone lifecycle primitives.
 
 ## Owns
 
@@ -11,7 +11,7 @@ Follow the root `AGENTS.md` and `packages/AGENTS.md` first. This package owns re
 
 ## Does not own
 
-- The deployable `apps/headless` product composition.
+- The deployable `apps/standalone` product composition.
 - OS process spawning, sidecar stamps, ports, filesystem path inference, or shell IPC.
 - Release artifact discovery, activation, rollback, or update UI.
 

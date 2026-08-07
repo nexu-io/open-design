@@ -1,14 +1,16 @@
-export const headlessClosureDeliveryMatrix = {
+export const standaloneClosureDeliveryMatrix = {
   "schemaVersion": 1,
   "role": "test-only-acceptance-map",
   "architecture": {
     "activation": "next-launch",
-    "body": "web+daemon",
+    "artifact": "closure",
+    "body": "standalone(web+daemon)",
     "coordinates": [
       "channel",
       "namespace",
       "generation"
     ],
+    "launcher": "standalone-launcher",
     "persistentTruthOwner": "closure",
     "shellBoundary": "ensure+handoff"
   },
@@ -62,7 +64,7 @@ export const headlessClosureDeliveryMatrix = {
       "id": "local-debug",
       "owners": [
         "tools/dev",
-        "apps/headless"
+        "apps/standalone"
       ],
       "coordinates": [
         "namespace",
@@ -92,14 +94,14 @@ export const headlessClosureDeliveryMatrix = {
         },
         {
           "role": "reusable-substrate",
-          "path": "apps/headless/src/index.ts"
+          "path": "apps/standalone/src/index.ts"
         }
       ]
     },
     {
       "id": "process-lifecycle",
       "owners": [
-        "packages/headless-runtime",
+        "packages/standalone-runtime",
         "packages/closure-shim"
       ],
       "coordinates": [
@@ -116,7 +118,7 @@ export const headlessClosureDeliveryMatrix = {
         {
           "level": "component",
           "state": "proven",
-          "witness": "packages/headless-runtime/tests/lifecycle.test.ts"
+          "witness": "packages/standalone-runtime/tests/lifecycle.test.ts"
         },
         {
           "level": "local-real",
@@ -308,7 +310,7 @@ export const headlessClosureDeliveryMatrix = {
   ],
   "tasks": [
     {
-      "id": "HC-01",
+      "id": "SC-01",
       "delivery": "next-release",
       "track": "closure",
       "outcome": "The archived body exports the handoff entry and owns Web plus daemon startup, health, and shutdown.",
@@ -317,12 +319,12 @@ export const headlessClosureDeliveryMatrix = {
         "process-lifecycle"
       ],
       "ownerPaths": [
-        "apps/headless",
+        "apps/standalone",
         "tools/pack"
       ]
     },
     {
-      "id": "HC-02",
+      "id": "SC-02",
       "delivery": "next-release",
       "track": "closure",
       "outcome": "The shim discovers one signed candidate and owns trust, Store selection, activation, confirmation, and rollback.",
@@ -336,7 +338,7 @@ export const headlessClosureDeliveryMatrix = {
       ]
     },
     {
-      "id": "HC-03",
+      "id": "SC-03",
       "delivery": "next-release",
       "track": "shell",
       "outcome": "The packaged shell invokes only ensure plus handoff and maps capability, terminal, and installer-reinstall results to shell UX.",
@@ -349,12 +351,12 @@ export const headlessClosureDeliveryMatrix = {
       ]
     },
     {
-      "id": "HC-04",
+      "id": "SC-04",
       "delivery": "next-release",
       "track": "developer-experience",
-      "outcome": "tools-dev controls a source Closure as one namespace-scoped product with start, status, logs, stop, and cleanup.",
+      "outcome": "tools-dev controls a source Standalone as one namespace-scoped product with start, status, logs, stop, and cleanup.",
       "dependsOn": [
-        "HC-01"
+        "SC-01"
       ],
       "lanes": [
         "local-debug"
@@ -364,15 +366,15 @@ export const headlessClosureDeliveryMatrix = {
       ]
     },
     {
-      "id": "HC-05",
+      "id": "SC-05",
       "delivery": "next-release",
       "track": "integration",
       "outcome": "A deterministic local source drives the real shim and real body through the complete lifecycle trace without publication.",
       "dependsOn": [
-        "HC-01",
-        "HC-02",
-        "HC-03",
-        "HC-04"
+        "SC-01",
+        "SC-02",
+        "SC-03",
+        "SC-04"
       ],
       "lanes": [
         "local-e2e"
@@ -382,13 +384,13 @@ export const headlessClosureDeliveryMatrix = {
       ]
     },
     {
-      "id": "HC-06",
+      "id": "SC-06",
       "delivery": "next-release",
       "track": "distribution",
       "outcome": "Release beta builds, signs, stores, and resolves Closure independently from shell artifacts, including publish=false QA retrieval.",
       "dependsOn": [
-        "HC-01",
-        "HC-02"
+        "SC-01",
+        "SC-02"
       ],
       "lanes": [
         "distribution"
@@ -399,14 +401,14 @@ export const headlessClosureDeliveryMatrix = {
       ]
     },
     {
-      "id": "HC-07",
+      "id": "SC-07",
       "delivery": "next-release",
       "track": "mac-product",
       "outcome": "The installed macOS shell passes cold start, reuse, reinstall, failure presentation, and rollback through the new seam.",
       "dependsOn": [
-        "HC-03",
-        "HC-05",
-        "HC-06"
+        "SC-03",
+        "SC-05",
+        "SC-06"
       ],
       "lanes": [
         "shell-shim",
@@ -417,13 +419,13 @@ export const headlessClosureDeliveryMatrix = {
       ]
     },
     {
-      "id": "HC-08",
+      "id": "SC-08",
       "delivery": "next-release",
       "track": "windows-installer",
       "outcome": "The Windows installer preserves namespace identity, stops the owning shell, and fulfills shim-requested min-version reinstall.",
       "dependsOn": [
-        "HC-03",
-        "HC-06"
+        "SC-03",
+        "SC-06"
       ],
       "lanes": [
         "windows-installer"
@@ -434,13 +436,13 @@ export const headlessClosureDeliveryMatrix = {
       ]
     },
     {
-      "id": "HC-09",
+      "id": "SC-09",
       "delivery": "next-release",
       "track": "windows-product",
       "outcome": "The installed Windows shell passes cold start, reuse, reinstall, failure presentation, rollback, and clean uninstall through the new seam.",
       "dependsOn": [
-        "HC-05",
-        "HC-08"
+        "SC-05",
+        "SC-08"
       ],
       "lanes": [
         "local-e2e",
@@ -451,13 +453,13 @@ export const headlessClosureDeliveryMatrix = {
       ]
     },
     {
-      "id": "HC-10",
+      "id": "SC-10",
       "delivery": "next-release",
       "track": "cutover",
       "outcome": "The release raises shell minVersion only after macOS and Windows mixed-generation acceptance proves the new seam reachable.",
       "dependsOn": [
-        "HC-07",
-        "HC-09"
+        "SC-07",
+        "SC-09"
       ],
       "lanes": [
         "shell-shim",
@@ -470,12 +472,12 @@ export const headlessClosureDeliveryMatrix = {
       ]
     },
     {
-      "id": "HC-11",
+      "id": "SC-11",
       "delivery": "later-retirement",
       "track": "cleanup",
       "outcome": "The historical combined-payload selector is removed after the compatibility observation window closes.",
       "dependsOn": [
-        "HC-10"
+        "SC-10"
       ],
       "lanes": [
         "shell-shim",

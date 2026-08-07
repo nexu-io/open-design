@@ -164,7 +164,7 @@ describe("resolvePackagedNamespacePaths", () => {
     expect(paths.runtimeRoot).toBe(join(config.namespaceBaseRoot, config.namespace, "runtime"));
   });
 
-  it("does not read process.env implicitly so headless can keep namespace-root OD_DATA_DIR semantics", () => {
+  it("does not read process.env implicitly so standalone can keep namespace-root OD_DATA_DIR semantics", () => {
     const config = fakeConfig();
     const original = process.env.OD_DATA_DIR;
     try {

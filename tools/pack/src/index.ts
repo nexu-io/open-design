@@ -30,17 +30,17 @@ import {
 import {
   cleanupPackedLinuxNamespace,
   installPackedLinuxApp,
-  installPackedLinuxHeadless,
+  installPackedLinuxStandalone,
   inspectPackedLinuxApp,
   packLinux,
   readPackedLinuxLogs,
   resolveLinuxLifecycleMode,
   startPackedLinuxApp,
-  startPackedLinuxHeadless,
+  startPackedLinuxStandalone,
   stopPackedLinuxApp,
-  stopPackedLinuxHeadless,
+  stopPackedLinuxStandalone,
   uninstallPackedLinuxApp,
-  uninstallPackedLinuxHeadless,
+  uninstallPackedLinuxStandalone,
 } from "./linux.js";
 
 type CliOptions = ToolPackCliOptions;
@@ -115,7 +115,7 @@ function addWinLifecycleOptions(command: CacCommand) {
 
 const cli = cac("tools-pack");
 
-cli.command("closure <action>", "Headless Closure commands: build")
+cli.command("closure <action>", "Standalone Closure commands: build")
   .option("--artifact-url <url>", "immutable public URL intended for closure.zip")
   .option("--cache-dir <path>", "independent Closure build cache root")
   .option("--channel <channel>", "release channel")
@@ -253,7 +253,7 @@ addWinLifecycleOptions(
 
 addBuildOptions(addSharedOptions(cli.command("linux <action>", "Linux packaging commands: build|install|start|stop|logs|uninstall|cleanup|inspect")), "linux")
   .option("--containerized", "build inside electronuserland/builder Docker for wider glibc compatibility")
-  .option("--headless", "install/start/stop/uninstall/cleanup the headless entry; inspect returns status only")
+  .option("--standalone", "install/start/stop/uninstall/cleanup the standalone entry; inspect returns status only")
   .action(async (action: string, options: CliOptions) => {
     const config = resolveToolPackConfig("linux", options);
     switch (action) {
@@ -262,17 +262,17 @@ addBuildOptions(addSharedOptions(cli.command("linux <action>", "Linux packaging 
         return;
       case "install": {
         const mode = resolveLinuxLifecycleMode(options, "install");
-        printJson(await (mode === "headless" ? installPackedLinuxHeadless(config) : installPackedLinuxApp(config)));
+        printJson(await (mode === "standalone" ? installPackedLinuxStandalone(config) : installPackedLinuxApp(config)));
         return;
       }
       case "start": {
         const mode = resolveLinuxLifecycleMode(options, "start");
-        printJson(await (mode === "headless" ? startPackedLinuxHeadless(config) : startPackedLinuxApp(config)));
+        printJson(await (mode === "standalone" ? startPackedLinuxStandalone(config) : startPackedLinuxApp(config)));
         return;
       }
       case "stop": {
         const mode = resolveLinuxLifecycleMode(options, "stop");
-        printJson(await (mode === "headless" ? stopPackedLinuxHeadless(config) : stopPackedLinuxApp(config)));
+        printJson(await (mode === "standalone" ? stopPackedLinuxStandalone(config) : stopPackedLinuxApp(config)));
         return;
       }
       case "logs":
@@ -281,13 +281,13 @@ addBuildOptions(addSharedOptions(cli.command("linux <action>", "Linux packaging 
       case "inspect":
         printJson(await inspectPackedLinuxApp(config, {
           expr: options.expr,
-          headless: options.headless === true,
+          standalone: options.standalone === true,
           path: options.path,
         }));
         return;
       case "uninstall": {
         const mode = resolveLinuxLifecycleMode(options, "uninstall");
-        printJson(await (mode === "headless" ? uninstallPackedLinuxHeadless(config) : uninstallPackedLinuxApp(config)));
+        printJson(await (mode === "standalone" ? uninstallPackedLinuxStandalone(config) : uninstallPackedLinuxApp(config)));
         return;
       }
       case "cleanup":

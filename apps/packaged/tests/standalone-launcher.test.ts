@@ -1,26 +1,26 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
-  acquirePackagedHeadlessStartup,
-  parsePackagedHeadlessRequest,
+  acquirePackagedStandaloneStartup,
+  parsePackagedStandaloneRequest,
   resolvePackagedMcpBootstrapLaunch,
-} from "../src/headless-runtime.js";
+} from "../src/standalone-launcher.js";
 
-describe("parsePackagedHeadlessRequest", () => {
-  it("accepts a headless Codex MCP install request", () => {
-    expect(parsePackagedHeadlessRequest([
-      "--headless",
+describe("parsePackagedStandaloneRequest", () => {
+  it("accepts a standalone Codex MCP install request", () => {
+    expect(parsePackagedStandaloneRequest([
+      "--standalone",
       "--mcp-install",
       "codex",
     ])).toEqual({
-      headless: true,
+      standalone: true,
       mcpInstallAgent: "codex",
     });
   });
 
   it("rejects unsupported MCP install targets", () => {
-    expect(() => parsePackagedHeadlessRequest([
-      "--headless",
+    expect(() => parsePackagedStandaloneRequest([
+      "--standalone",
       "--mcp-install",
       "claude",
     ])).toThrow(/only supports codex/i);
@@ -41,7 +41,7 @@ describe("resolvePackagedMcpBootstrapLaunch", () => {
         "-j",
         "/Applications/Open Design.app",
         "--args",
-        "--headless",
+        "--standalone",
       ],
     });
   });
@@ -53,12 +53,12 @@ describe("resolvePackagedMcpBootstrapLaunch", () => {
       platform: "linux",
     })).toEqual({
       command: "/opt/open-design/open-design",
-      args: ["--headless"],
+      args: ["--standalone"],
     });
   });
 });
 
-describe("acquirePackagedHeadlessStartup", () => {
+describe("acquirePackagedStandaloneStartup", () => {
   function createDependencies(failAt: "mcp" | "web-identity") {
     const closed: string[] = [];
     const exit = vi.fn();
@@ -107,7 +107,7 @@ describe("acquirePackagedHeadlessStartup", () => {
   it("closes identity and sidecars when MCP installation fails", async () => {
     const { closed, dependencies, exit } = createDependencies("mcp");
 
-    await expect(acquirePackagedHeadlessStartup(dependencies)).rejects.toThrow(
+    await expect(acquirePackagedStandaloneStartup(dependencies)).rejects.toThrow(
       "MCP install failed",
     );
 
@@ -118,7 +118,7 @@ describe("acquirePackagedHeadlessStartup", () => {
   it("closes IPC, sidecars, and identity when identity publication fails", async () => {
     const { closed, dependencies, exit } = createDependencies("web-identity");
 
-    await expect(acquirePackagedHeadlessStartup(dependencies)).rejects.toThrow(
+    await expect(acquirePackagedStandaloneStartup(dependencies)).rejects.toThrow(
       "web identity write failed",
     );
 

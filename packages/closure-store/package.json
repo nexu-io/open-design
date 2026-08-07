@@ -3,7 +3,7 @@
   "version": "0.16.2",
   "private": true,
   "type": "module",
-  "description": "Shell-neutral local store and rollback state for Open Design Headless Closure.",
+  "description": "Shell-neutral local store and rollback state for Open Design Standalone Closure.",
   "main": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
   "files": [

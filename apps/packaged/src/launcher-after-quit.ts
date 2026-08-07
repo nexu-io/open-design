@@ -17,7 +17,7 @@ import type { PackagedNamespacePaths } from "./paths.js";
 type LauncherAfterQuitLogger = Pick<Console, "warn"> & Partial<Pick<Console, "info">>;
 
 export type LauncherExistingDesktopGateResult =
-  | { action: "continue"; reason: "headless-owner" | "inspect-failed" | "not-running" | "stale-sidecar" | "superseded-version" }
+  | { action: "continue"; reason: "standalone-owner" | "inspect-failed" | "not-running" | "stale-sidecar" | "superseded-version" }
   | { action: "exit"; reason: "existing-focused" | "existing-focus-failed" };
 
 /**
@@ -90,7 +90,7 @@ async function restartExistingDesktop(
     namespace: string;
     paths: PackagedNamespacePaths;
     pid: number | null;
-    reason: "headless-owner" | "stale-sidecar" | "superseded-version";
+    reason: "standalone-owner" | "stale-sidecar" | "superseded-version";
     requestIpc: typeof requestJsonIpc;
     stop: typeof stopProcesses;
     waitForExit: typeof waitForProcessExit;
@@ -264,7 +264,7 @@ export async function inspectExistingDesktopForLauncher(
     const pid = typeof status.pid === "number" ? status.pid : null;
     await writeLauncherAfterQuitLog(
       options.paths,
-      `inspect-found-existing namespace=${namespace} action=restart reason=headless-owner pid=${pid ?? "unknown"}`,
+      `inspect-found-existing namespace=${namespace} action=restart reason=standalone-owner pid=${pid ?? "unknown"}`,
     );
     const restarted = await restartExistingDesktop({
       ipcPath,
@@ -272,13 +272,13 @@ export async function inspectExistingDesktopForLauncher(
       namespace,
       paths: options.paths,
       pid,
-      reason: "headless-owner",
+      reason: "standalone-owner",
       requestIpc,
       stop,
       waitForExit,
     });
     if (!restarted) return { action: "exit", reason: "existing-focus-failed" };
-    return { action: "continue", reason: "headless-owner" };
+    return { action: "continue", reason: "standalone-owner" };
   }
 
   try {

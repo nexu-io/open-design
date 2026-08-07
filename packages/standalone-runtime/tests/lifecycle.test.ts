@@ -1,16 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
-  acquireHeadlessClosure,
-  type HeadlessClosureDependencies,
-  type HeadlessClosurePaths,
-  type HeadlessRuntimeHandle,
-  type HeadlessRuntimeStatus,
+  acquireStandalone,
+  type StandaloneDependencies,
+  type StandalonePaths,
+  type StandaloneRuntimeHandle,
+  type StandaloneRuntimeStatus,
 } from "../src/index.js";
 
-type TestStatus = HeadlessRuntimeStatus & { pid: number };
+type TestStatus = StandaloneRuntimeStatus & { pid: number };
 
-const paths: HeadlessClosurePaths = {
+const paths: StandalonePaths = {
   cacheRoot: "/channel/namespaces/release-beta/cache",
   dataRoot: "/channel/namespaces/release-beta/data",
   installationRoot: "/channel",
@@ -22,7 +22,7 @@ const paths: HeadlessClosurePaths = {
 function runtime(
   status: TestStatus,
   close: () => Promise<void>,
-): HeadlessRuntimeHandle<TestStatus> {
+): StandaloneRuntimeHandle<TestStatus> {
   return {
     close,
     readStatus: async () => status,
@@ -42,7 +42,7 @@ function fixture(options: { failWeb?: boolean } = {}) {
     state: "running",
     url: "http://127.0.0.1:4200",
   };
-  const dependencies: HeadlessClosureDependencies<TestStatus, TestStatus> = {
+  const dependencies: StandaloneDependencies<TestStatus, TestStatus> = {
     onDiagnostic: (value) => events.push(`phase:${value.phase}`),
     preparePaths: vi.fn(async (received) => {
       events.push("prepare");
@@ -70,11 +70,11 @@ function fixture(options: { failWeb?: boolean } = {}) {
   return { daemonStatus, dependencies, events, webStatus };
 }
 
-describe("acquireHeadlessClosure", () => {
+describe("acquireStandalone", () => {
   it("owns ordered Web + daemon readiness and preserves launcher paths", async () => {
     const { dependencies, events } = fixture();
 
-    const closure = await acquireHeadlessClosure({
+    const closure = await acquireStandalone({
       dependencies,
       namespace: "release-beta",
       paths,
@@ -105,7 +105,7 @@ describe("acquireHeadlessClosure", () => {
 
   it("reports product health for both runtimes", async () => {
     const { daemonStatus, dependencies, webStatus } = fixture();
-    const closure = await acquireHeadlessClosure({
+    const closure = await acquireStandalone({
       dependencies,
       namespace: "release-beta",
       paths,
@@ -123,7 +123,7 @@ describe("acquireHeadlessClosure", () => {
   it("converges started children when Web startup fails", async () => {
     const { dependencies, events } = fixture({ failWeb: true });
 
-    await expect(acquireHeadlessClosure({
+    await expect(acquireStandalone({
       dependencies,
       namespace: "release-beta",
       paths,
@@ -138,7 +138,7 @@ describe("acquireHeadlessClosure", () => {
       throw new Error("registration failed");
     });
 
-    await expect(acquireHeadlessClosure({
+    await expect(acquireStandalone({
       dependencies,
       namespace: "release-beta",
       paths,
@@ -164,7 +164,7 @@ describe("acquireHeadlessClosure", () => {
         url: "http://127.0.0.1:4200",
       },
     }));
-    const closure = await acquireHeadlessClosure({
+    const closure = await acquireStandalone({
       dependencies,
       namespace: "release-beta",
       paths,
@@ -179,7 +179,7 @@ describe("acquireHeadlessClosure", () => {
 
   it("closes Web before daemon and makes shutdown idempotent", async () => {
     const { dependencies, events } = fixture();
-    const closure = await acquireHeadlessClosure({
+    const closure = await acquireStandalone({
       dependencies,
       namespace: "release-beta",
       paths,
@@ -205,14 +205,14 @@ describe("acquireHeadlessClosure", () => {
         throw new Error("web close failed");
       },
     ));
-    const closure = await acquireHeadlessClosure({
+    const closure = await acquireStandalone({
       dependencies,
       namespace: "release-beta",
       paths,
     });
 
     await expect(closure.close()).rejects.toThrow(
-      "failed to stop every headless closure runtime",
+      "failed to stop every standalone runtime",
     );
     expect(events).toContain("daemon:close");
     expect(closure.diagnostic()).toMatchObject({ phase: "failed" });

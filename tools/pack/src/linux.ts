@@ -64,7 +64,7 @@ export const INTERNAL_PACKAGES = [
   { directory: "packages/agui-adapter", name: "@open-design/agui-adapter" },
   { directory: "packages/plugin-runtime", name: "@open-design/plugin-runtime" },
   { directory: "packages/diagnostics", name: "@open-design/diagnostics" },
-  { directory: "packages/headless-runtime", name: "@open-design/headless-runtime" },
+  { directory: "packages/standalone-runtime", name: "@open-design/standalone-runtime" },
   { directory: "apps/daemon", name: "@open-design/daemon" },
   { directory: "apps/web", name: "@open-design/web" },
   { directory: "apps/desktop", name: "@open-design/desktop" },
@@ -76,13 +76,13 @@ export function sanitizeNamespace(value: string): string {
 }
 
 export type LinuxLifecycleAction = "cleanup" | "install" | "start" | "stop" | "uninstall";
-export type LinuxLifecycleMode = "appimage" | "headless";
+export type LinuxLifecycleMode = "appimage" | "standalone";
 
 export function resolveLinuxLifecycleMode(
-  options: { headless?: boolean },
+  options: { standalone?: boolean },
   _action: LinuxLifecycleAction,
 ): LinuxLifecycleMode {
-  return options.headless === true ? "headless" : "appimage";
+  return options.standalone === true ? "standalone" : "appimage";
 }
 
 async function pathExists(path: string): Promise<boolean> {
@@ -894,7 +894,7 @@ export type LinuxInspectResult = {
   status: DesktopStatusSnapshot | null;
 };
 
-export function shouldRejectLinuxHeadlessInspectOptions(options: {
+export function shouldRejectLinuxStandaloneInspectOptions(options: {
   expr?: string;
   path?: string;
 }): boolean {
@@ -988,11 +988,11 @@ async function readDesktopRootIdentityMarker(config: ToolPackConfig): Promise<{
   return readRootIdentityMarker(desktopIdentityPath(config));
 }
 
-async function readHeadlessRootIdentityMarker(config: ToolPackConfig): Promise<{
+async function readStandaloneRootIdentityMarker(config: ToolPackConfig): Promise<{
   fallback: DesktopRootIdentityFallback;
   marker: DesktopRootIdentityMarker | null;
 }> {
-  return readRootIdentityMarker(headlessIdentityPath(config));
+  return readRootIdentityMarker(standaloneIdentityPath(config));
 }
 
 async function readProcessEnv(pid: number): Promise<Record<string, string>> {
@@ -1075,8 +1075,8 @@ function desktopIdentityPath(config: ToolPackConfig): string {
   return join(config.roots.runtime.namespaceRoot, "runtime", "desktop-root.json");
 }
 
-function headlessIdentityPath(config: ToolPackConfig): string {
-  return join(config.roots.runtime.namespaceRoot, "runtime", "headless-root.json");
+function standaloneIdentityPath(config: ToolPackConfig): string {
+  return join(config.roots.runtime.namespaceRoot, "runtime", "standalone-root.json");
 }
 
 function linuxDesktopStamp(config: ToolPackConfig): SidecarStamp {
@@ -1297,10 +1297,10 @@ export async function readPackedLinuxLogs(config: ToolPackConfig): Promise<{
 
 export async function inspectPackedLinuxApp(
   config: ToolPackConfig,
-  options: { expr?: string; headless?: boolean; path?: string },
+  options: { expr?: string; standalone?: boolean; path?: string },
 ): Promise<LinuxInspectResult> {
-  if (options.headless === true && shouldRejectLinuxHeadlessInspectOptions(options)) {
-    throw new Error("linux inspect --headless supports status only; omit --expr and --path");
+  if (options.standalone === true && shouldRejectLinuxStandaloneInspectOptions(options)) {
+    throw new Error("linux inspect --standalone supports status only; omit --expr and --path");
   }
 
   const stamp = linuxDesktopStamp(config);
@@ -1310,7 +1310,7 @@ export async function inspectPackedLinuxApp(
     { timeoutMs: 2000 },
   ).catch(() => null);
 
-  if (options.headless === true) {
+  if (options.standalone === true) {
     return { status };
   }
 
@@ -1405,18 +1405,18 @@ export async function uninstallPackedLinuxApp(config: ToolPackConfig): Promise<L
   };
 }
 
-export type LinuxHeadlessUninstallResult = {
+export type LinuxStandaloneUninstallResult = {
   launcherPath: string;
   namespace: string;
   removed: "ok" | "already-removed" | "skipped-process-running";
   stop: LinuxStopResult;
 };
 
-export async function uninstallPackedLinuxHeadless(
+export async function uninstallPackedLinuxStandalone(
   config: ToolPackConfig,
-): Promise<LinuxHeadlessUninstallResult> {
-  const stop = await stopPackedLinuxHeadless(config);
-  const launcherPath = headlessLauncherPath(config);
+): Promise<LinuxStandaloneUninstallResult> {
+  const stop = await stopPackedLinuxStandalone(config);
+  const launcherPath = standaloneLauncherPath(config);
 
   if (!isSafeToRemoveInstallFiles(stop)) {
     return {
@@ -1450,36 +1450,36 @@ export type LinuxCleanupResult = {
   stop: LinuxStopResult;
 };
 
-// --- Headless lifecycle ---
+// --- Standalone lifecycle ---
 
 // Paths resolved relative to the assembled app written during `tools-pack linux build`.
-// The headless entry lives at:
-//   <assembledAppRoot>/node_modules/@open-design/packaged/dist/headless.mjs
+// The standalone entry lives at:
+//   <assembledAppRoot>/node_modules/@open-design/packaged/dist/standalone-launcher.mjs
 // The bundled Node binary lives at:
 //   <namespaceRoot>/resources/open-design/bin/node  (populated by copyResourceTree)
 
-function resolveHeadlessEntryPath(paths: LinuxPaths): string {
-  return join(paths.assembledAppRoot, "node_modules", "@open-design", "packaged", "dist", "headless.mjs");
+function resolveStandaloneEntryPath(paths: LinuxPaths): string {
+  return join(paths.assembledAppRoot, "node_modules", "@open-design", "packaged", "dist", "standalone-launcher.mjs");
 }
 
-function resolveHeadlessBundledNodePath(paths: LinuxPaths): string {
+function resolveStandaloneBundledNodePath(paths: LinuxPaths): string {
   return join(paths.resourceRoot, "bin", "node");
 }
 
-function headlessLauncherPath(config: ToolPackConfig): string {
-  return join(homedir(), ".local", "bin", `open-design-headless-${sanitizeNamespace(config.namespace)}`);
+function standaloneLauncherPath(config: ToolPackConfig): string {
+  return join(homedir(), ".local", "bin", `open-design-standalone-${sanitizeNamespace(config.namespace)}`);
 }
 
-function headlessLogPath(config: ToolPackConfig): string {
+function standaloneLogPath(config: ToolPackConfig): string {
   return join(config.roots.runtime.namespaceRoot, "logs", APP_KEYS.DESKTOP, "latest.log");
 }
 
-export type LinuxHeadlessInstallResult = {
+export type LinuxStandaloneInstallResult = {
   launcherPath: string;
   namespace: string;
 };
 
-export type LinuxHeadlessStartResult = {
+export type LinuxStandaloneStartResult = {
   launcherPath: string;
   logPath: string;
   namespace: string;
@@ -1531,14 +1531,14 @@ async function waitForWebIdentity(config: ToolPackConfig, childPid: number, time
   return null;
 }
 
-export async function installPackedLinuxHeadless(config: ToolPackConfig): Promise<LinuxHeadlessInstallResult> {
+export async function installPackedLinuxStandalone(config: ToolPackConfig): Promise<LinuxStandaloneInstallResult> {
   const paths = resolveLinuxPaths(config);
-  const entryPath = resolveHeadlessEntryPath(paths);
-  const nodePath = resolveHeadlessBundledNodePath(paths);
+  const entryPath = resolveStandaloneEntryPath(paths);
+  const nodePath = resolveStandaloneBundledNodePath(paths);
 
   if (!(await pathExists(entryPath))) {
     throw new Error(
-      `headless entry not found at ${entryPath}; run \`tools-pack linux build\` first`,
+      `standalone entry not found at ${entryPath}; run \`tools-pack linux build\` first`,
     );
   }
   if (!(await pathExists(nodePath))) {
@@ -1547,18 +1547,18 @@ export async function installPackedLinuxHeadless(config: ToolPackConfig): Promis
     );
   }
 
-  const launcherPath = headlessLauncherPath(config);
+  const launcherPath = standaloneLauncherPath(config);
   await mkdir(dirname(launcherPath), { recursive: true });
 
   // Write a self-contained launcher script. The namespace is baked in so the
   // launcher name and the runtime namespace always agree. namespace is
   // pre-sanitized by sidecar-proto to [A-Za-z0-9._-]. OD_DATA_DIR is baked
-  // so the headless process writes its runtime data under the same paths that
+  // so the standalone process writes its runtime data under the same paths that
   // tools-pack stop/logs expect.
   const dataDir = dirname(config.roots.runtime.namespaceBaseRoot);
   const script = [
     "#!/bin/sh",
-    `# Open Design headless launcher — namespace: ${config.namespace}`,
+    `# Open Design standalone launcher — namespace: ${config.namespace}`,
     `OD_PACKAGED_NAMESPACE=${JSON.stringify(config.namespace)} OD_DATA_DIR=${JSON.stringify(dataDir)} OD_RESOURCE_ROOT=${JSON.stringify(paths.resourceRoot)} exec ${JSON.stringify(nodePath)} ${JSON.stringify(entryPath)} "$@"`,
   ].join("\n") + "\n";
 
@@ -1569,30 +1569,30 @@ export async function installPackedLinuxHeadless(config: ToolPackConfig): Promis
 
 // Waits up to 35s for the desktop identity marker, then up to 60s for the
 // web identity (95s total).
-export async function startPackedLinuxHeadless(config: ToolPackConfig): Promise<LinuxHeadlessStartResult> {
+export async function startPackedLinuxStandalone(config: ToolPackConfig): Promise<LinuxStandaloneStartResult> {
   const paths = resolveLinuxPaths(config);
-  const entryPath = resolveHeadlessEntryPath(paths);
-  const nodePath = resolveHeadlessBundledNodePath(paths);
+  const entryPath = resolveStandaloneEntryPath(paths);
+  const nodePath = resolveStandaloneBundledNodePath(paths);
 
   if (!(await pathExists(entryPath))) {
     throw new Error(
-      `headless entry not found at ${entryPath}; run \`tools-pack linux build\` first`,
+      `standalone entry not found at ${entryPath}; run \`tools-pack linux build\` first`,
     );
   }
 
   const nodeCommand = (await pathExists(nodePath)) ? nodePath : process.execPath;
-  const logPath = headlessLogPath(config);
+  const logPath = standaloneLogPath(config);
   await mkdir(dirname(logPath), { recursive: true });
   await writeFile(logPath, "", "utf8");
 
-  // Remove stale headless identity markers from a previous run so waitForMarker
+  // Remove stale standalone identity markers from a previous run so waitForMarker
   // and waitForWebIdentity below wait for the newly spawned process. Leave
   // desktop-root.json alone: a menu-launched AppImage uses that marker and
-  // headless start/stop must not claim or erase it.
-  await rm(headlessIdentityPath(config), { force: true }).catch(() => undefined);
+  // standalone start/stop must not claim or erase it.
+  await rm(standaloneIdentityPath(config), { force: true }).catch(() => undefined);
   await rm(webIdentityPath(config), { force: true }).catch(() => undefined);
 
-  // Open the log file so stdout/stderr from the headless process are captured.
+  // Open the log file so stdout/stderr from the standalone process are captured.
   const logHandle = await open(logPath, "a");
   let child: { pid: number };
   try {
@@ -1602,12 +1602,12 @@ export async function startPackedLinuxHeadless(config: ToolPackConfig): Promise<
       cwd: dirname(entryPath),
       env: {
         ...process.env,
-        // Bake in the packaged namespace so headless uses the same namespace
+        // Bake in the packaged namespace so standalone uses the same namespace
         // as the tools-pack config regardless of the caller's environment.
         OD_PACKAGED_NAMESPACE: config.namespace,
-        // Point the headless data root at the tools-pack runtime directory so
+        // Point the standalone data root at the tools-pack runtime directory so
         // the identity marker is written to the path this function polls.
-        // headless.ts computes: join(OD_DATA_DIR, "namespaces") which must
+        // standalone.ts computes: join(OD_DATA_DIR, "namespaces") which must
         // equal config.roots.runtime.namespaceBaseRoot.
         OD_DATA_DIR: dirname(config.roots.runtime.namespaceBaseRoot),
         OD_RESOURCE_ROOT: paths.resourceRoot,
@@ -1619,11 +1619,11 @@ export async function startPackedLinuxHeadless(config: ToolPackConfig): Promise<
     await logHandle.close().catch(() => undefined);
   }
 
-  const markerPath = headlessIdentityPath(config);
+  const markerPath = standaloneIdentityPath(config);
   const ready = await waitForMarker(markerPath, 35_000);
   if (!ready) {
     await teardownOrphanedStart(child.pid).catch(() => undefined);
-    throw new Error(`headless-root.json not written within 35s at ${markerPath}`);
+    throw new Error(`standalone-root.json not written within 35s at ${markerPath}`);
   }
 
   const webIdentity = await waitForWebIdentity(config, child.pid, 60_000);
@@ -1633,7 +1633,7 @@ export async function startPackedLinuxHeadless(config: ToolPackConfig): Promise<
   }
 
   return {
-    launcherPath: headlessLauncherPath(config),
+    launcherPath: standaloneLauncherPath(config),
     logPath,
     namespace: config.namespace,
     pid: child.pid,
@@ -1641,8 +1641,8 @@ export async function startPackedLinuxHeadless(config: ToolPackConfig): Promise<
   };
 }
 
-export async function stopPackedLinuxHeadless(config: ToolPackConfig): Promise<LinuxStopResult> {
-  const { fallback, marker } = await readHeadlessRootIdentityMarker(config);
+export async function stopPackedLinuxStandalone(config: ToolPackConfig): Promise<LinuxStopResult> {
+  const { fallback, marker } = await readStandaloneRootIdentityMarker(config);
 
   if (marker == null) {
     return {
@@ -1668,9 +1668,9 @@ export async function stopPackedLinuxHeadless(config: ToolPackConfig): Promise<L
     };
   }
 
-  // Validate the stamp from headless-root.json. A menu-launched AppImage writes
+  // Validate the stamp from standalone-root.json. A menu-launched AppImage writes
   // the same PACKAGED source to desktop-root.json, so the distinct marker path
-  // is the ownership boundary that keeps --headless stop/cleanup from claiming
+  // is the ownership boundary that keeps --standalone stop/cleanup from claiming
   // the AppImage runtime.
   const expectedIpc = resolveAppIpcPath({
     app: APP_KEYS.DESKTOP,
@@ -1712,7 +1712,7 @@ export async function stopPackedLinuxHeadless(config: ToolPackConfig): Promise<L
   const result = await stopProcesses(treePids);
 
   if (result.remainingPids.length === 0) {
-    await rm(headlessIdentityPath(config), { force: true }).catch(() => undefined);
+    await rm(standaloneIdentityPath(config), { force: true }).catch(() => undefined);
     await rm(webIdentityPath(config), { force: true }).catch(() => undefined);
   }
 
@@ -1727,11 +1727,11 @@ export async function stopPackedLinuxHeadless(config: ToolPackConfig): Promise<L
 
 export async function cleanupPackedLinuxNamespace(
   config: ToolPackConfig,
-  options: { headless?: boolean } = {},
+  options: { standalone?: boolean } = {},
 ): Promise<LinuxCleanupResult> {
   const mode = resolveLinuxLifecycleMode(options, "cleanup");
-  const stop = mode === "headless"
-    ? await stopPackedLinuxHeadless(config)
+  const stop = mode === "standalone"
+    ? await stopPackedLinuxStandalone(config)
     : await stopPackedLinuxApp(config);
   const outputRoot = config.roots.output.namespaceRoot;
   const runtimeNamespaceRoot = config.roots.runtime.namespaceRoot;
@@ -1748,7 +1748,7 @@ export async function cleanupPackedLinuxNamespace(
     };
   }
 
-  if (mode === "headless") {
+  if (mode === "standalone") {
     const { marker } = await readDesktopRootIdentityMarker(config);
     if (marker != null) {
       const desktop = await validateDesktopAppImageMarker(config, marker, await listProcessSnapshots());

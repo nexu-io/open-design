@@ -1,5 +1,5 @@
-/** Shell-neutral lifecycle shared by the Headless app and launcher adapters. */
-export const HEADLESS_CLOSURE_PHASES = {
+/** Shell-neutral lifecycle shared by the Standalone app and launcher adapters. */
+export const STANDALONE_PHASES = {
   PREPARING: "preparing",
   DAEMON_STARTING: "daemon-starting",
   DAEMON_READY: "daemon-ready",
@@ -11,15 +11,15 @@ export const HEADLESS_CLOSURE_PHASES = {
   FAILED: "failed",
 } as const;
 
-export type HeadlessClosurePhase =
-  (typeof HEADLESS_CLOSURE_PHASES)[keyof typeof HEADLESS_CLOSURE_PHASES];
+export type StandalonePhase =
+  (typeof STANDALONE_PHASES)[keyof typeof STANDALONE_PHASES];
 
 /**
  * Roots already resolved by a launcher for one local product namespace.
- * Headless deliberately preserves these values verbatim: path discovery and
+ * Standalone deliberately preserves these values verbatim: path discovery and
  * shell-specific storage policy belong to the launcher adapter.
  */
-export interface HeadlessClosurePaths {
+export interface StandalonePaths {
   cacheRoot: string;
   dataRoot: string;
   installationRoot: string;
@@ -28,39 +28,39 @@ export interface HeadlessClosurePaths {
   runtimeRoot: string;
 }
 
-export interface HeadlessRuntimeStatus {
+export interface StandaloneRuntimeStatus {
   state: string;
   url: string | null;
 }
 
-export interface HeadlessRuntimeHandle<
-  TStatus extends HeadlessRuntimeStatus = HeadlessRuntimeStatus,
+export interface StandaloneRuntimeHandle<
+  TStatus extends StandaloneRuntimeStatus = StandaloneRuntimeStatus,
 > {
   close(): Promise<void>;
   readStatus(): Promise<TStatus>;
   status: TStatus;
 }
 
-export interface StartHeadlessWebInput<
-  TDaemonStatus extends HeadlessRuntimeStatus = HeadlessRuntimeStatus,
+export interface StartStandaloneWebInput<
+  TDaemonStatus extends StandaloneRuntimeStatus = StandaloneRuntimeStatus,
 > {
   daemon: TDaemonStatus;
   namespace: string;
-  paths: Readonly<HeadlessClosurePaths>;
+  paths: Readonly<StandalonePaths>;
 }
 
-export interface HeadlessClosureDiagnostic {
+export interface StandaloneDiagnostic {
   daemonUrl: string | null;
   error: string | null;
   namespace: string;
-  paths: Readonly<HeadlessClosurePaths>;
-  phase: HeadlessClosurePhase;
+  paths: Readonly<StandalonePaths>;
+  phase: StandalonePhase;
   webUrl: string | null;
 }
 
-export interface HeadlessClosureHealth<
-  TDaemonStatus extends HeadlessRuntimeStatus = HeadlessRuntimeStatus,
-  TWebStatus extends HeadlessRuntimeStatus = HeadlessRuntimeStatus,
+export interface StandaloneHealth<
+  TDaemonStatus extends StandaloneRuntimeStatus = StandaloneRuntimeStatus,
+  TWebStatus extends StandaloneRuntimeStatus = StandaloneRuntimeStatus,
 > {
   daemon: TDaemonStatus | null;
   issues: string[];
@@ -69,43 +69,43 @@ export interface HeadlessClosureHealth<
   web: TWebStatus | null;
 }
 
-export interface HeadlessClosureDependencies<
-  TDaemonStatus extends HeadlessRuntimeStatus = HeadlessRuntimeStatus,
-  TWebStatus extends HeadlessRuntimeStatus = HeadlessRuntimeStatus,
+export interface StandaloneDependencies<
+  TDaemonStatus extends StandaloneRuntimeStatus = StandaloneRuntimeStatus,
+  TWebStatus extends StandaloneRuntimeStatus = StandaloneRuntimeStatus,
 > {
-  onDiagnostic?(diagnostic: HeadlessClosureDiagnostic): void;
-  preparePaths(paths: Readonly<HeadlessClosurePaths>): Promise<void>;
+  onDiagnostic?(diagnostic: StandaloneDiagnostic): void;
+  preparePaths(paths: Readonly<StandalonePaths>): Promise<void>;
   registerWebUrl(input: {
     daemon: TDaemonStatus;
     webUrl: string;
   }): Promise<void>;
   startDaemon(input: {
     namespace: string;
-    paths: Readonly<HeadlessClosurePaths>;
-  }): Promise<HeadlessRuntimeHandle<TDaemonStatus>>;
+    paths: Readonly<StandalonePaths>;
+  }): Promise<StandaloneRuntimeHandle<TDaemonStatus>>;
   startWeb(
-    input: StartHeadlessWebInput<TDaemonStatus>,
-  ): Promise<HeadlessRuntimeHandle<TWebStatus>>;
+    input: StartStandaloneWebInput<TDaemonStatus>,
+  ): Promise<StandaloneRuntimeHandle<TWebStatus>>;
 }
 
-export interface AcquireHeadlessClosureOptions<
-  TDaemonStatus extends HeadlessRuntimeStatus = HeadlessRuntimeStatus,
-  TWebStatus extends HeadlessRuntimeStatus = HeadlessRuntimeStatus,
+export interface AcquireStandaloneOptions<
+  TDaemonStatus extends StandaloneRuntimeStatus = StandaloneRuntimeStatus,
+  TWebStatus extends StandaloneRuntimeStatus = StandaloneRuntimeStatus,
 > {
-  dependencies: HeadlessClosureDependencies<TDaemonStatus, TWebStatus>;
+  dependencies: StandaloneDependencies<TDaemonStatus, TWebStatus>;
   namespace: string;
-  paths: HeadlessClosurePaths;
+  paths: StandalonePaths;
 }
 
-export interface HeadlessClosureHandle<
-  TDaemonStatus extends HeadlessRuntimeStatus = HeadlessRuntimeStatus,
-  TWebStatus extends HeadlessRuntimeStatus = HeadlessRuntimeStatus,
+export interface StandaloneHandle<
+  TDaemonStatus extends StandaloneRuntimeStatus = StandaloneRuntimeStatus,
+  TWebStatus extends StandaloneRuntimeStatus = StandaloneRuntimeStatus,
 > {
   close(): Promise<void>;
-  diagnostic(): HeadlessClosureDiagnostic;
-  health(): Promise<HeadlessClosureHealth<TDaemonStatus, TWebStatus>>;
+  diagnostic(): StandaloneDiagnostic;
+  health(): Promise<StandaloneHealth<TDaemonStatus, TWebStatus>>;
   readonly namespace: string;
-  readonly paths: Readonly<HeadlessClosurePaths>;
+  readonly paths: Readonly<StandalonePaths>;
   readonly webUrl: string;
 }
 
@@ -113,7 +113,7 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function assertReadyUrl(runtime: "daemon" | "web", status: HeadlessRuntimeStatus): string {
+function assertReadyUrl(runtime: "daemon" | "web", status: StandaloneRuntimeStatus): string {
   if (status.state !== "running" || status.url == null || status.url.length === 0) {
     throw new Error(
       `${runtime} did not report a running status with a URL`,
@@ -123,8 +123,8 @@ function assertReadyUrl(runtime: "daemon" | "web", status: HeadlessRuntimeStatus
 }
 
 function reportDiagnostic(
-  listener: HeadlessClosureDependencies["onDiagnostic"],
-  diagnostic: HeadlessClosureDiagnostic,
+  listener: StandaloneDependencies["onDiagnostic"],
+  diagnostic: StandaloneDiagnostic,
 ): void {
   try {
     listener?.(diagnostic);
@@ -133,27 +133,27 @@ function reportDiagnostic(
   }
 }
 
-export async function acquireHeadlessClosure<
-  TDaemonStatus extends HeadlessRuntimeStatus,
-  TWebStatus extends HeadlessRuntimeStatus,
+export async function acquireStandalone<
+  TDaemonStatus extends StandaloneRuntimeStatus,
+  TWebStatus extends StandaloneRuntimeStatus,
 >(
-  options: AcquireHeadlessClosureOptions<TDaemonStatus, TWebStatus>,
-): Promise<HeadlessClosureHandle<TDaemonStatus, TWebStatus>> {
+  options: AcquireStandaloneOptions<TDaemonStatus, TWebStatus>,
+): Promise<StandaloneHandle<TDaemonStatus, TWebStatus>> {
   const { dependencies, namespace } = options;
   if (namespace.trim().length === 0) {
-    throw new Error("headless closure namespace must not be empty");
+    throw new Error("standalone namespace must not be empty");
   }
 
   const paths = Object.freeze({ ...options.paths });
-  let phase: HeadlessClosurePhase = HEADLESS_CLOSURE_PHASES.PREPARING;
+  let phase: StandalonePhase = STANDALONE_PHASES.PREPARING;
   let lastError: string | null = null;
-  let daemon: HeadlessRuntimeHandle<TDaemonStatus> | null = null;
-  let web: HeadlessRuntimeHandle<TWebStatus> | null = null;
+  let daemon: StandaloneRuntimeHandle<TDaemonStatus> | null = null;
+  let web: StandaloneRuntimeHandle<TWebStatus> | null = null;
   let daemonUrl: string | null = null;
   let webUrl: string | null = null;
   let closeTask: Promise<void> | null = null;
 
-  const diagnostic = (): HeadlessClosureDiagnostic => ({
+  const diagnostic = (): StandaloneDiagnostic => ({
     daemonUrl,
     error: lastError,
     namespace,
@@ -161,7 +161,7 @@ export async function acquireHeadlessClosure<
     phase,
     webUrl,
   });
-  const transition = (nextPhase: HeadlessClosurePhase): void => {
+  const transition = (nextPhase: StandalonePhase): void => {
     phase = nextPhase;
     reportDiagnostic(dependencies.onDiagnostic, diagnostic());
   };
@@ -177,21 +177,21 @@ export async function acquireHeadlessClosure<
     if (failures.length > 0) {
       throw new AggregateError(
         failures,
-        "failed to stop every headless closure runtime",
+        "failed to stop every standalone runtime",
       );
     }
   };
 
   try {
-    transition(HEADLESS_CLOSURE_PHASES.PREPARING);
+    transition(STANDALONE_PHASES.PREPARING);
     await dependencies.preparePaths(paths);
 
-    transition(HEADLESS_CLOSURE_PHASES.DAEMON_STARTING);
+    transition(STANDALONE_PHASES.DAEMON_STARTING);
     daemon = await dependencies.startDaemon({ namespace, paths });
     daemonUrl = assertReadyUrl("daemon", daemon.status);
-    transition(HEADLESS_CLOSURE_PHASES.DAEMON_READY);
+    transition(STANDALONE_PHASES.DAEMON_READY);
 
-    transition(HEADLESS_CLOSURE_PHASES.WEB_STARTING);
+    transition(STANDALONE_PHASES.WEB_STARTING);
     web = await dependencies.startWeb({
       daemon: daemon.status,
       namespace,
@@ -199,12 +199,12 @@ export async function acquireHeadlessClosure<
     });
     webUrl = assertReadyUrl("web", web.status);
     await dependencies.registerWebUrl({ daemon: daemon.status, webUrl });
-    transition(HEADLESS_CLOSURE_PHASES.WEB_READY);
-    transition(HEADLESS_CLOSURE_PHASES.RUNNING);
+    transition(STANDALONE_PHASES.WEB_READY);
+    transition(STANDALONE_PHASES.RUNNING);
   } catch (error) {
     lastError = errorMessage(error);
     await closeStartedRuntimes().catch(() => undefined);
-    transition(HEADLESS_CLOSURE_PHASES.FAILED);
+    transition(STANDALONE_PHASES.FAILED);
     throw error;
   }
 
@@ -212,30 +212,30 @@ export async function acquireHeadlessClosure<
   const activeWeb = web;
   const activeWebUrl = webUrl;
   if (activeDaemon == null || activeWeb == null || activeWebUrl == null) {
-    throw new Error("headless closure reached an impossible incomplete state");
+    throw new Error("standalone reached an impossible incomplete state");
   }
 
   return {
     async close(): Promise<void> {
       if (closeTask != null) return await closeTask;
-      transition(HEADLESS_CLOSURE_PHASES.STOPPING);
+      transition(STANDALONE_PHASES.STOPPING);
       closeTask = (async () => {
         try {
           await closeStartedRuntimes();
-          transition(HEADLESS_CLOSURE_PHASES.STOPPED);
+          transition(STANDALONE_PHASES.STOPPED);
         } catch (error) {
           lastError = errorMessage(error);
-          transition(HEADLESS_CLOSURE_PHASES.FAILED);
+          transition(STANDALONE_PHASES.FAILED);
           throw error;
         }
       })();
       return await closeTask;
     },
     diagnostic,
-    async health(): Promise<HeadlessClosureHealth<TDaemonStatus, TWebStatus>> {
+    async health(): Promise<StandaloneHealth<TDaemonStatus, TWebStatus>> {
       if (
-        phase === HEADLESS_CLOSURE_PHASES.STOPPED
-        || phase === HEADLESS_CLOSURE_PHASES.STOPPING
+        phase === STANDALONE_PHASES.STOPPED
+        || phase === STANDALONE_PHASES.STOPPING
       ) {
         return {
           daemon: null,

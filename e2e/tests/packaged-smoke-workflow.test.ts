@@ -2775,7 +2775,7 @@ process.stdin.on("end", () => {
     expect(workflow).toContain("CLOSURE_MIN_SHELL_VERSION: 0.16.2");
     expect(workflow).toContain("closure_version:");
     expect(workflow).toContain("closure_version: ${{ inputs.closure_version != ''");
-    expect(macJob).toContain("Build beta mac_arm64 Headless Closure");
+    expect(macJob).toContain("Build beta mac_arm64 Standalone Closure");
     expect(macJob).toContain("tools-pack closure build");
     expect(macJob).toContain("--platform darwin-arm64");
     expect(macJob).toContain('--cache-dir "$RUNNER_TEMP/tools-pack-cache"');
@@ -2788,7 +2788,7 @@ process.stdin.on("end", () => {
     expect(macJob).toContain("RELEASE_CLOSURE_DIR:");
     expect(macJob).toContain('RELEASE_CLOSURE_ENABLED: "true"');
     expect(macJob).toContain("DOGFOOD_BUILD_JSON_KEYS: archivePath,inventoryPath,manifestPath,provenancePath");
-    expect(winJob).toContain("Build beta win_x64 Headless Closure");
+    expect(winJob).toContain("Build beta win_x64 Standalone Closure");
     expect(winJob).toContain("tools-pack closure build");
     expect(winJob).toContain("--platform win32-x64");
     expect(winJob).toContain('--cache-dir "${{ runner.temp }}\\tools-pack-cache"');

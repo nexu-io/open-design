@@ -4,9 +4,9 @@ import { join, resolve } from "node:path";
 import { SIDECAR_DEFAULTS, normalizeNamespace } from "@open-design/sidecar-proto";
 
 // `electron` is loaded lazily so this module can also be imported from the
-// headless entry, which runs in a plain Node process without the electron
+// standalone entry, which runs in a plain Node process without the electron
 // dependency on disk. Top-level `import { app } from "electron"` would crash
-// headless at module-load with ERR_MODULE_NOT_FOUND.
+// standalone at module-load with ERR_MODULE_NOT_FOUND.
 async function loadElectronApp() {
   const electron = await import("electron");
   return electron.app;

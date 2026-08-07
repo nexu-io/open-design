@@ -28,7 +28,7 @@ function fakePaths(root: string): PackagedNamespacePaths {
     desktopLogsRoot: join(root, "logs", "desktop"),
     electronSessionDataRoot: join(root, "user-data", "session"),
     electronUserDataRoot: join(root, "user-data"),
-    headlessIdentityPath: join(root, "runtime", "headless-root.json"),
+    standaloneIdentityPath: join(root, "runtime", "standalone-root.json"),
     installationRoot: root,
     installerObservationRoot: join(root, "data", "observations", "installer"),
     logsRoot: join(root, "logs"),

@@ -139,7 +139,7 @@ describe("closure candidate manifest", () => {
   });
 
   it.each([
-    ["entryPath", "headless.mjs"],
+    ["entryPath", "standalone.mjs"],
     ["inventoryDigest", "sha256:invalid"],
     ["size", 0],
     ["url", "file:///tmp/runtime.zip"],

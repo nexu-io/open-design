@@ -1,9 +1,9 @@
 {
-  "name": "@open-design/headless-runtime",
+  "name": "@open-design/standalone-runtime",
   "version": "0.16.2",
   "private": true,
   "type": "module",
-  "description": "Reusable shell-neutral lifecycle for the Open Design Headless product.",
+  "description": "Reusable shell-neutral lifecycle for the Open Design Standalone product.",
   "main": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
   "files": [

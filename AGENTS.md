@@ -20,15 +20,15 @@ This file is the single source of truth for agents entering this repository. Rea
 - `apps/web` is the Next.js 16 App Router + React 18 web runtime; do not restore `apps/nextjs`.
 - `apps/daemon` is the local privileged daemon and `od` bin. It owns `/api/*`, agent spawning, skills, design systems, artifacts, and static serving.
 - `apps/desktop` is the Electron shell; it discovers the web URL through sidecar IPC.
-- `apps/headless` owns the shell-neutral Web + daemon product composition and does not own Desktop IPC, windows, or update UI.
+- `apps/standalone` owns the shell-neutral Web + daemon product composition and does not own Desktop IPC, windows, or update UI.
 - `apps/packaged` is the thin packaged Electron runtime entry; it adapts packaged paths/processes to the Headless lifecycle and owns the `od://` entry glue only.
 - `apps/landing-page` is the standalone static Astro marketing and public catalog site. It reads repository content at build time and is not part of the daemon/web product runtime.
 - `packages/contracts` is the pure TypeScript web/daemon app contract layer.
-- `packages/closure-proto` owns shell-neutral headless-closure identity, integrity, compatibility, generation-bound lifecycle status, and Shell capability envelopes.
+- `packages/closure-proto` owns shell-neutral standalone-closure identity, integrity, compatibility, generation-bound lifecycle status, and Shell capability envelopes.
 - `packages/closure-shim` owns the thin, shell-carried `ensure + handoff` seam, generation fencing, and bounded startup rollback while keeping body layout and physical transport opaque to shells.
 - `packages/closure-store` owns shell-neutral materialized Closure verification plus channel/namespace-scoped active, attempt, and last-successful state.
 - `packages/closure-update` owns shell-neutral release-candidate selection and Closure update orchestration; shells supply platform, paths, and scheduling.
-- `packages/headless-runtime` owns reusable Headless lifecycle primitives shared by the Headless app and launcher adapters.
+- `packages/standalone-runtime` owns reusable Headless lifecycle primitives shared by the Headless app and launcher adapters.
 - `packages/sidecar-proto` owns the Open Design sidecar business protocol; `packages/sidecar` owns the generic sidecar runtime; `packages/platform` owns generic OS process primitives.
 - `tools/dev` is the local development lifecycle control plane.
 - `tools/pack` is the local packaged build/start/stop/logs control plane, packaged updater harness, installer identity/registry validation surface, and mac beta release artifact preparation surface.

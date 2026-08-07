@@ -1,11 +1,11 @@
-# Headless Closure parallel handoff
+# Standalone Closure parallel handoff
 
-This handoff operationalizes [ADR 0002](../adr/0002-stabilize-headless-closure-handoff.md).
+This handoff operationalizes [ADR 0002](../adr/0002-stabilize-standalone-closure-handoff.md).
 It is the shared boundary for the Shell/Installer and Closure implementation
 tracks; it is not a second architecture specification.
 
 The broader local-debug, release, platform, installer, and cutover route lives
-in the [Headless Closure delivery matrix](headless-closure-delivery-matrix.md).
+in the [Standalone Closure delivery matrix](standalone-closure-delivery-matrix.md).
 This document remains the seam-level handoff and does not duplicate that map.
 
 ## Frozen seam
@@ -16,7 +16,7 @@ The following are safe to build against:
   descriptor, validators, and JSON fixtures;
 - `@open-design/closure-shim` `ensureAndHandoffClosure()` and its five stable
   error codes;
-- the body export `handoffOpenDesignClosure()` and readiness proof bound to the
+- the body export `handoffOpenDesignStandalone()` and readiness proof bound to the
   exact channel, namespace, platform, and generation;
 - the generation-bound Shell capability request/result and runtime terminal
   status fixtures;
@@ -33,9 +33,9 @@ approved.
 | --- | --- | --- |
 | Invocation | Supplies resolved roots, shell identity, timing, UX, and reinstall action | Validates request and returns `ready` or `installer-reinstall` |
 | Candidate | Supplies configured release source and pinned public key material | Verifies trust, integrity, compatibility, materialization, and Store state |
-| Runtime | Does not inspect body layout or active pointer | Loads the opaque entry, owns handoff, health confirmation, shutdown, and bounded rollback |
+| Runtime | Does not inspect body layout or active pointer | Closure selects the opaque entry; Standalone owns joined Web + daemon health and shutdown; Closure owns bounded rollback |
 | Sidecar | Owns host UI and OS integration; serves supported Shell capabilities | Proves readiness and terminal status for the exact handoff generation |
-| Updates | Presents progress/retry and upgrades the shell | Prepares/activates the atomic Web + daemon release-set; no live swap |
+| Updates | Presents progress/retry and upgrades the shell | Prepares/activates the atomic Closure carrying one Standalone body; no live swap |
 
 Each track develops against the other side's public seam. Tests may use
 `@open-design/closure-shim/testing` for a fake request, resolved test roots, and
@@ -116,7 +116,7 @@ Stop parallel implementation and reopen the boundary decision before adding:
 - component-level Web/daemon/resources activation;
 - generic multi-shell leases, migration, GC, key rotation, or publication
   framework;
-- any shell read of Closure body layout or Store state.
+- any shell read of Standalone layout or Store state.
 
 Ordinary implementation changes that preserve the fixtures, golden traces,
 outcomes, and ownership table do not require both tracks to move together.

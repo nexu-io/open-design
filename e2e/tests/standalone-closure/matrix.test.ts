@@ -1,10 +1,10 @@
-import { stat } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { dirname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-import { headlessClosureDeliveryMatrix } from "../../resources/headless-closure-delivery-matrix.js";
+import { standaloneClosureDeliveryMatrix } from "../../resources/standalone-closure-delivery-matrix.js";
 
 const workspaceRoot = dirname(dirname(dirname(dirname(fileURLToPath(import.meta.url)))));
 
@@ -92,8 +92,10 @@ type Matrix = {
   acceptanceLevels: string[];
   architecture: {
     activation: string;
+    artifact: string;
     body: string;
     coordinates: string[];
+    launcher: string;
     persistentTruthOwner: string;
     shellBoundary: string;
   };
@@ -104,7 +106,7 @@ type Matrix = {
 };
 
 async function readMatrix(): Promise<Matrix> {
-  return JSON.parse(JSON.stringify(headlessClosureDeliveryMatrix)) as Matrix;
+  return JSON.parse(JSON.stringify(standaloneClosureDeliveryMatrix)) as Matrix;
 }
 
 function absoluteWorkspacePath(relativePath: string): string {
@@ -136,7 +138,37 @@ function expectAcyclicTasks(tasks: Task[]): void {
   }
 }
 
-describe("Headless Closure delivery matrix", () => {
+describe("Standalone Closure delivery matrix", () => {
+  it("keeps Standalone product code distinct from the shell-side launcher", async () => {
+    await Promise.all([
+      expectPath("apps/standalone"),
+      expectPath("packages/standalone-runtime"),
+    ]);
+    await Promise.all([
+      expect(stat(absoluteWorkspacePath("apps/headless"))).rejects.toMatchObject({ code: "ENOENT" }),
+      expect(stat(absoluteWorkspacePath("packages/headless-runtime"))).rejects.toMatchObject({ code: "ENOENT" }),
+    ]);
+
+    const standalonePackage = JSON.parse(await readFile(
+      absoluteWorkspacePath("apps/standalone/package.json"),
+      "utf8",
+    )) as { name: string };
+    const runtimePackage = JSON.parse(await readFile(
+      absoluteWorkspacePath("packages/standalone-runtime/package.json"),
+      "utf8",
+    )) as { name: string };
+    const packagedPackage = JSON.parse(await readFile(
+      absoluteWorkspacePath("apps/packaged/package.json"),
+      "utf8",
+    )) as { exports: Record<string, { default: string }> };
+
+    expect(standalonePackage.name).toBe("@open-design/standalone");
+    expect(runtimePackage.name).toBe("@open-design/standalone-runtime");
+    expect(packagedPackage.exports["./standalone-launcher"]?.default)
+      .toBe("./dist/standalone-launcher.mjs");
+    expect(packagedPackage.exports).not.toHaveProperty("./headless");
+  });
+
   it("freezes the hard-won identity, ownership, and activation shape", async () => {
     const matrix = await readMatrix();
 
@@ -146,8 +178,10 @@ describe("Headless Closure delivery matrix", () => {
     });
     expect(matrix.architecture).toEqual({
       activation: "next-launch",
-      body: "web+daemon",
+      artifact: "closure",
+      body: "standalone(web+daemon)",
       coordinates: ["channel", "namespace", "generation"],
+      launcher: "standalone-launcher",
       persistentTruthOwner: "closure",
       shellBoundary: "ensure+handoff",
     });
@@ -206,22 +240,22 @@ describe("Headless Closure delivery matrix", () => {
     const laneIds = new Set(Object.keys(requiredOutcomes));
 
     expect(taskIds).toEqual([
-      "HC-01",
-      "HC-02",
-      "HC-03",
-      "HC-04",
-      "HC-05",
-      "HC-06",
-      "HC-07",
-      "HC-08",
-      "HC-09",
-      "HC-10",
-      "HC-11",
+      "SC-01",
+      "SC-02",
+      "SC-03",
+      "SC-04",
+      "SC-05",
+      "SC-06",
+      "SC-07",
+      "SC-08",
+      "SC-09",
+      "SC-10",
+      "SC-11",
     ]);
     expect(taskIdSet.size).toBe(matrix.tasks.length);
     expect(matrix.tasks.filter((task) => task.delivery === "next-release")).toHaveLength(10);
     expect(matrix.tasks.filter((task) => task.delivery === "later-retirement").map((task) => task.id))
-      .toEqual(["HC-11"]);
+      .toEqual(["SC-11"]);
 
     for (const task of matrix.tasks) {
       expect(task.outcome.trim().split(/\n/u)).toHaveLength(1);
@@ -236,10 +270,10 @@ describe("Headless Closure delivery matrix", () => {
     expectAcyclicTasks(matrix.tasks);
     expect(new Set(matrix.tasks.flatMap((task) => task.lanes))).toEqual(laneIds);
 
-    expect(matrix.tasks.find((task) => task.id === "HC-01")?.dependsOn).toEqual([]);
-    expect(matrix.tasks.find((task) => task.id === "HC-02")?.dependsOn).toEqual([]);
-    expect(matrix.tasks.find((task) => task.id === "HC-03")?.dependsOn).toEqual([]);
-    expect(matrix.tasks.find((task) => task.id === "HC-10")?.dependsOn).toEqual(["HC-07", "HC-09"]);
-    expect(matrix.tasks.find((task) => task.id === "HC-11")?.dependsOn).toEqual(["HC-10"]);
+    expect(matrix.tasks.find((task) => task.id === "SC-01")?.dependsOn).toEqual([]);
+    expect(matrix.tasks.find((task) => task.id === "SC-02")?.dependsOn).toEqual([]);
+    expect(matrix.tasks.find((task) => task.id === "SC-03")?.dependsOn).toEqual([]);
+    expect(matrix.tasks.find((task) => task.id === "SC-10")?.dependsOn).toEqual(["SC-07", "SC-09"]);
+    expect(matrix.tasks.find((task) => task.id === "SC-11")?.dependsOn).toEqual(["SC-10"]);
   });
 });

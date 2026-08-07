@@ -20,7 +20,7 @@ vi.mock("@open-design/sidecar", async (importOriginal) => {
   return {
     ...actual,
     requestJsonIpc: vi.fn(async () => {
-      throw new Error("requestJsonIpc should not be called for invalid headless inspect options");
+      throw new Error("requestJsonIpc should not be called for invalid standalone inspect options");
     }),
   };
 });
@@ -38,10 +38,10 @@ import {
   renderLinuxPackagedMainEntry,
   resolveLinuxLifecycleMode,
   resolveProductionInstallCommand,
-  shouldRejectLinuxHeadlessInspectOptions,
+  shouldRejectLinuxStandaloneInspectOptions,
   stopPackedLinuxApp,
   sanitizeNamespace,
-  stopPackedLinuxHeadless,
+  stopPackedLinuxStandalone,
 } from "../src/linux.js";
 
 async function pathExists(path: string): Promise<boolean> {
@@ -324,9 +324,9 @@ describe("buildDockerArgs", () => {
   });
 });
 
-describe("stopPackedLinuxHeadless", () => {
-  it("ignores the desktop AppImage identity marker and reads only the headless marker", async () => {
-    const root = await mkdtemp(join(tmpdir(), "od-linux-headless-marker-"));
+describe("stopPackedLinuxStandalone", () => {
+  it("ignores the desktop AppImage identity marker and reads only the standalone marker", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-linux-standalone-marker-"));
     const namespace = "marker-split";
     const namespaceRoot = join(root, "runtime", "linux", "namespaces", namespace);
     const config: ToolPackConfig = {
@@ -372,18 +372,18 @@ describe("stopPackedLinuxHeadless", () => {
         "utf8",
       );
 
-      const result = await stopPackedLinuxHeadless(config);
+      const result = await stopPackedLinuxStandalone(config);
 
       expect(result.status).toBe("not-running");
       expect(result.fallback?.reason).toBe("marker-not-found");
-      expect(result.fallback?.markerPath).toBe(join(namespaceRoot, "runtime", "headless-root.json"));
+      expect(result.fallback?.markerPath).toBe(join(namespaceRoot, "runtime", "standalone-root.json"));
     } finally {
       await rm(root, { force: true, recursive: true });
     }
   });
 
-  it("removes stale desktop AppImage markers during headless cleanup", async () => {
-    const root = await mkdtemp(join(tmpdir(), "od-linux-headless-cleanup-"));
+  it("removes stale desktop AppImage markers during standalone cleanup", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-linux-standalone-cleanup-"));
     const namespace = "cleanup-split";
     const namespaceRoot = join(root, "runtime", "linux", "namespaces", namespace);
     const config: ToolPackConfig = {
@@ -434,7 +434,7 @@ describe("stopPackedLinuxHeadless", () => {
       );
       await mkdir(config.roots.output.namespaceRoot, { recursive: true });
 
-      const result = await cleanupPackedLinuxNamespace(config, { headless: true });
+      const result = await cleanupPackedLinuxNamespace(config, { standalone: true });
 
       expect(result.skipped).toBe(false);
       expect(result.removedOutputRoot).toBe(true);
@@ -447,8 +447,8 @@ describe("stopPackedLinuxHeadless", () => {
     }
   });
 
-  it("skips headless cleanup while the desktop marker PID is live in the snapshot table", async () => {
-    const root = await mkdtemp(join(tmpdir(), "od-linux-headless-cleanup-live-"));
+  it("skips standalone cleanup while the desktop marker PID is live in the snapshot table", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-linux-standalone-cleanup-live-"));
     const namespace = "cleanup-split-live";
     const namespaceRoot = join(root, "runtime", "linux", "namespaces", namespace);
     const config: ToolPackConfig = {
@@ -503,7 +503,7 @@ describe("stopPackedLinuxHeadless", () => {
       );
       await mkdir(config.roots.output.namespaceRoot, { recursive: true });
 
-      const result = await cleanupPackedLinuxNamespace(config, { headless: true });
+      const result = await cleanupPackedLinuxNamespace(config, { standalone: true });
 
       expect(result.skipped).toBe(true);
       expect(result.removedOutputRoot).toBe(false);
@@ -847,15 +847,15 @@ describe("sanitizeNamespace", () => {
 });
 
 describe("resolveLinuxLifecycleMode", () => {
-  it("uses headless mode for every lifecycle action when --headless is set", () => {
-    expect(resolveLinuxLifecycleMode({ headless: true }, "install")).toBe("headless");
-    expect(resolveLinuxLifecycleMode({ headless: true }, "start")).toBe("headless");
-    expect(resolveLinuxLifecycleMode({ headless: true }, "stop")).toBe("headless");
-    expect(resolveLinuxLifecycleMode({ headless: true }, "uninstall")).toBe("headless");
-    expect(resolveLinuxLifecycleMode({ headless: true }, "cleanup")).toBe("headless");
+  it("uses standalone mode for every lifecycle action when --standalone is set", () => {
+    expect(resolveLinuxLifecycleMode({ standalone: true }, "install")).toBe("standalone");
+    expect(resolveLinuxLifecycleMode({ standalone: true }, "start")).toBe("standalone");
+    expect(resolveLinuxLifecycleMode({ standalone: true }, "stop")).toBe("standalone");
+    expect(resolveLinuxLifecycleMode({ standalone: true }, "uninstall")).toBe("standalone");
+    expect(resolveLinuxLifecycleMode({ standalone: true }, "cleanup")).toBe("standalone");
   });
 
-  it("uses appimage mode when --headless is omitted", () => {
+  it("uses appimage mode when --standalone is omitted", () => {
     expect(resolveLinuxLifecycleMode({}, "install")).toBe("appimage");
     expect(resolveLinuxLifecycleMode({}, "start")).toBe("appimage");
     expect(resolveLinuxLifecycleMode({}, "stop")).toBe("appimage");
@@ -864,16 +864,16 @@ describe("resolveLinuxLifecycleMode", () => {
   });
 });
 
-describe("shouldRejectLinuxHeadlessInspectOptions", () => {
-  it("allows status-only headless inspect", () => {
-    expect(shouldRejectLinuxHeadlessInspectOptions({})).toBe(false);
+describe("shouldRejectLinuxStandaloneInspectOptions", () => {
+  it("allows status-only standalone inspect", () => {
+    expect(shouldRejectLinuxStandaloneInspectOptions({})).toBe(false);
   });
 
-  it("rejects headless eval and screenshot requests", () => {
-    expect(shouldRejectLinuxHeadlessInspectOptions({ expr: "document.title" })).toBe(true);
-    expect(shouldRejectLinuxHeadlessInspectOptions({ path: "/tmp/open-design-linux.png" })).toBe(true);
+  it("rejects standalone eval and screenshot requests", () => {
+    expect(shouldRejectLinuxStandaloneInspectOptions({ expr: "document.title" })).toBe(true);
+    expect(shouldRejectLinuxStandaloneInspectOptions({ path: "/tmp/open-design-linux.png" })).toBe(true);
     expect(
-      shouldRejectLinuxHeadlessInspectOptions({
+      shouldRejectLinuxStandaloneInspectOptions({
         expr: "document.title",
         path: "/tmp/open-design-linux.png",
       }),
@@ -882,20 +882,20 @@ describe("shouldRejectLinuxHeadlessInspectOptions", () => {
 });
 
 describe("inspectPackedLinuxApp", () => {
-  it("rejects unsupported headless inspect options before opening IPC", async () => {
+  it("rejects unsupported standalone inspect options before opening IPC", async () => {
     const requestJsonIpcMock = vi.mocked(requestJsonIpc);
     requestJsonIpcMock.mockClear();
 
     await expect(
       inspectPackedLinuxApp(makeConfig(), {
         expr: "document.title",
-        headless: true,
+        standalone: true,
       }),
-    ).rejects.toThrow("linux inspect --headless supports status only; omit --expr and --path");
+    ).rejects.toThrow("linux inspect --standalone supports status only; omit --expr and --path");
     expect(requestJsonIpcMock).not.toHaveBeenCalled();
   });
 
-  it("allows desktop inspect eval and screenshot options when headless is omitted", async () => {
+  it("allows desktop inspect eval and screenshot options when standalone is omitted", async () => {
     const requestJsonIpcMock = vi.mocked(requestJsonIpc);
     requestJsonIpcMock.mockReset();
     requestJsonIpcMock

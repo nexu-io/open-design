@@ -14,7 +14,7 @@ export type PackagedNamespacePaths = {
   desktopLogsRoot: string;
   electronSessionDataRoot: string;
   electronUserDataRoot: string;
-  headlessIdentityPath: string;
+  standaloneIdentityPath: string;
   /**
    * Channel-root directory — one level above the `namespaces/` parent. The
    * daemon writes `installation.json` here so installationId survives any
@@ -120,7 +120,7 @@ export function resolvePackagedNamespacePaths(
     desktopLogsRoot: join(namespaceRoot, "logs", APP_KEYS.DESKTOP),
     electronSessionDataRoot: join(namespaceRoot, "user-data", "session"),
     electronUserDataRoot: join(namespaceRoot, "user-data"),
-    headlessIdentityPath: join(namespaceRoot, "runtime", "headless-root.json"),
+    standaloneIdentityPath: join(namespaceRoot, "runtime", "standalone-root.json"),
     installationRoot,
     installerObservationRoot: join(dataRoot, "observations", "installer"),
     logsRoot: join(namespaceRoot, "logs"),

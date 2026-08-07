@@ -39,7 +39,7 @@ on:
         type: string
         default: ""
       closure_version:
-        description: "Optional Headless Closure beta version. Empty uses the shell release version."
+        description: "Optional Standalone Closure beta version. Empty uses the shell release version."
         required: false
         type: string
         default: ""
@@ -282,7 +282,7 @@ on:
         description: "The beta version that was built."
         value: ${{ jobs.metadata.outputs.beta_version }}
       closure_version:
-        description: "The Headless Closure version that was built or reused."
+        description: "The Standalone Closure version that was built or reused."
         value: ${{ jobs.metadata.outputs.closure_version }}
       branch:
         description: "The branch that was built."
@@ -303,13 +303,13 @@ on:
         description: "macOS arm64 dmg download URL."
         value: ${{ jobs.publish.outputs.mac_arm64_url || jobs.build_mac_arm64.outputs.mac_arm64_url }}
       mac_arm64_closure_url:
-        description: "macOS arm64 Headless Closure archive URL."
+        description: "macOS arm64 Standalone Closure archive URL."
         value: ${{ jobs.publish.outputs.mac_arm64_closure_url }}
       win_x64_url:
         description: "Windows x64 installer download URL."
         value: ${{ jobs.publish.outputs.win_x64_url || jobs.build_win_x64.outputs.win_x64_url }}
       win_x64_closure_url:
-        description: "Windows x64 Headless Closure archive URL."
+        description: "Windows x64 Standalone Closure archive URL."
         value: ${{ jobs.publish.outputs.win_x64_closure_url }}
       mac_arm64_smoke_result:
         description: "macOS arm64 packaged smoke outcome; advisory to publication."
@@ -334,7 +334,7 @@ concurrency:
 
 env:
   # G2 compatibility floor: the first packaged shell that can attach an
-  # independently published Headless Closure. Raise only after mixed-generation
+  # independently published Standalone Closure. Raise only after mixed-generation
   # upgrade evidence proves the older shell can be retired.
   CLOSURE_MIN_SHELL_VERSION: 0.16.2
   OPEN_DESIGN_TELEMETRY_RELAY_URL: ${{ vars.OPEN_DESIGN_TELEMETRY_RELAY_URL }}
@@ -631,7 +631,7 @@ jobs:
             exit "$build_status"
           fi
 
-      - name: Build beta mac_arm64 Headless Closure
+      - name: Build beta mac_arm64 Standalone Closure
         env:
           RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
         run: |
@@ -649,14 +649,14 @@ jobs:
             --version "$version" \
             --json > "$RUNNER_TEMP/release-build/mac_arm64/closure.json"
 
-      - name: Upload mac_arm64 Headless Closure dogfood build to release storage
+      - name: Upload mac_arm64 Standalone Closure dogfood build to release storage
         if: ${{ !cancelled() && !inputs.publish }}
         continue-on-error: true
         env:
           DOGFOOD_BUILD_ID: ${{ github.run_id }}-${{ github.run_attempt }}-mac-arm64-closure
           DOGFOOD_BUILD_JSON_KEYS: archivePath,inventoryPath,manifestPath,provenancePath
           DOGFOOD_BUILD_JSON_PATH: ${{ runner.temp }}/release-build/mac_arm64/closure.json
-          DOGFOOD_LABEL: macOS arm64 beta Headless Closure ${{ needs.metadata.outputs.closure_version }}
+          DOGFOOD_LABEL: macOS arm64 beta Standalone Closure ${{ needs.metadata.outputs.closure_version }}
           DOGFOOD_VERSION: ${{ needs.metadata.outputs.closure_version }}
           RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
           RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
@@ -1275,7 +1275,7 @@ jobs:
           $build = $buildOutput | ConvertFrom-Json
           pnpm.cmd exec tools-pack win validate-payload --namespace release-beta-win --payload-path $build.payloadPath --expected-version "${{ needs.metadata.outputs.beta_version }}" --json
 
-      - name: Build beta win_x64 Headless Closure
+      - name: Build beta win_x64 Standalone Closure
         shell: pwsh
         env:
           RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
@@ -1292,17 +1292,17 @@ jobs:
             --platform win32-x64 `
             --version $version `
             --json
-          if ($LASTEXITCODE -ne 0) { throw "Headless Closure build failed with exit code $LASTEXITCODE" }
+          if ($LASTEXITCODE -ne 0) { throw "Standalone Closure build failed with exit code $LASTEXITCODE" }
           $closureOutput | Set-Content -Path "${{ runner.temp }}\release-build\win_x64\closure.json" -Encoding utf8
 
-      - name: Upload win_x64 Headless Closure dogfood build to release storage
+      - name: Upload win_x64 Standalone Closure dogfood build to release storage
         if: ${{ !cancelled() && !inputs.publish }}
         continue-on-error: true
         env:
           DOGFOOD_BUILD_ID: ${{ github.run_id }}-${{ github.run_attempt }}-win-x64-closure
           DOGFOOD_BUILD_JSON_KEYS: archivePath,inventoryPath,manifestPath,provenancePath
           DOGFOOD_BUILD_JSON_PATH: ${{ runner.temp }}\release-build\win_x64\closure.json
-          DOGFOOD_LABEL: Windows x64 beta Headless Closure ${{ needs.metadata.outputs.closure_version }}
+          DOGFOOD_LABEL: Windows x64 beta Standalone Closure ${{ needs.metadata.outputs.closure_version }}
           DOGFOOD_VERSION: ${{ needs.metadata.outputs.closure_version }}
           RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
           RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}

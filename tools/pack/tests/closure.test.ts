@@ -79,7 +79,7 @@ describe("tools-pack Closure archive", () => {
 
   it("publishes one shell-neutral entry with explicit Web and daemon layout", () => {
     const source = closureRuntimeSource();
-    expect(source).toContain('export * from "@open-design/headless"');
+    expect(source).toContain('export * from "@open-design/standalone"');
     expect(source).toContain("resolveOpenDesignClosureLayout");
     expect(source).toContain("daemonCliEntry");
     expect(source).toContain("daemonSidecarEntry");
@@ -92,7 +92,7 @@ describe("tools-pack Closure archive", () => {
 
   it("keeps shell applications outside the Closure install set", () => {
     const names = CLOSURE_INTERNAL_PACKAGES.map((entry) => entry.name);
-    expect(names).toContain("@open-design/headless");
+    expect(names).toContain("@open-design/standalone");
     expect(names).not.toContain("@open-design/daemon");
     expect(names).not.toContain("@open-design/desktop");
     expect(names).not.toContain("@open-design/packaged");
@@ -129,7 +129,7 @@ describe("tools-pack Closure archive", () => {
     await writeFile(join(root, "apps", "desktop", "src", "index.ts"), "export const shell = 2;\n");
     expect(await createClosureBuildCacheKey(options)).toBe(initial);
 
-    await writeFile(join(root, "apps", "headless", "source.txt"), "headless changed\n");
+    await writeFile(join(root, "apps", "standalone", "source.txt"), "standalone changed\n");
     expect(await createClosureBuildCacheKey(options)).not.toBe(initial);
     expect(CLOSURE_BUILD_SOURCE_PATHS).not.toContain("apps/desktop");
     expect(CLOSURE_BUILD_SOURCE_PATHS).not.toContain("apps/packaged");

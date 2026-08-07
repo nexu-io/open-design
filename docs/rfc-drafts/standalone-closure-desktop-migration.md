@@ -1,4 +1,4 @@
-# RFC Draft: Headless Closure 与 Desktop 三代迁移
+# RFC Draft: Standalone Closure 与 Desktop 三代迁移
 
 **状态：** Working Draft
 
@@ -8,8 +8,8 @@
 
 > **2026-08-07 更新：** 本文保留最初的三代迁移与原子任务估算作为背景。
 > 下一版本的并行交付边界由
-> [ADR 0002](../adr/0002-stabilize-headless-closure-handoff.md) 与
-> [Headless Closure parallel handoff](../handoffs/headless-closure-parallel-handoff.md)
+> [ADR 0002](../adr/0002-stabilize-standalone-closure-handoff.md) 与
+> [Standalone Closure parallel handoff](../handoffs/standalone-closure-parallel-handoff.md)
 > 收紧：先固定 shell-carried shim/handoff，再由 Shell 与 Closure 两侧并行实现。
 
 ## 1. 结论
@@ -18,7 +18,7 @@ Open Design 已经具备可靠的 Web/daemon sidecar、namespace/data-root、Des
 
 目标边界：
 
-- `headless closure = web + daemon`，拥有一个版本、一个摘要和一个产品生命周期；
+- `standalone closure = web + daemon`，拥有一个版本、一个摘要和一个产品生命周期；
 - Desktop 是 shell，窗口、安装器、IPC、宿主权限和 shell 更新归 Desktop；
 - shell launcher identity 与 closure identity 独立；
 - packaged 只保留兼容入口和装配职责，最终不再拥有产品内核生命周期；
@@ -30,15 +30,15 @@ Open Design 已经具备可靠的 Web/daemon sidecar、namespace/data-root、Des
 
 以下 `origin/main` 能力构成本次迁移的基座：
 
-- `apps/packaged/src/headless-runtime.ts` 已组合启动 Web 与 daemon，并拥有共同就绪、退出和状态面；
-- `apps/packaged/src/headless.ts` 已提供无 Electron 的 headless 入口；
+- `apps/packaged/src/standalone-launcher.ts` 已组合启动 Web 与 daemon，并拥有共同就绪、退出和状态面；
+- `apps/packaged/src/standalone-launcher-entry.ts` 已提供无 Electron 的壳侧入口；
 - `apps/packaged/src/sidecars.ts` 已拥有跨平台子进程启动、健康等待和数据根传播；
 - `packages/launcher-proto/src/index.ts` 已拥有 Desktop payload 的 active、attempt、last-successful 与 rollback 原语；
 - `tools/pack/src/mac/payload.ts` 与 `tools/pack/src/win/payload.ts` 已生成 versioned Desktop payload；
 - `e2e/specs/mac.spec.ts` 与 `e2e/specs/win.spec.ts` 已验证 payload 更新、冷启动、失败回滚和恢复；
 - `control.launcher.version.min` 已能要求旧 outer 走 installer-reinstall。
 
-当前缺口不是功能空白，而是所有权错位：Headless 生命周期仍归 `apps/packaged`，现有 payload 仍同时包含 shell 与产品内核，launcher pointer 选择的是完整 Electron payload，而不是独立 Closure。
+当前缺口不是功能空白，而是所有权错位：Standalone 生命周期仍归 `apps/packaged`，现有 payload 仍同时包含 shell 与产品内核，launcher pointer 选择的是完整 Electron payload，而不是独立 Closure。
 
 ## 3. 长期不变量
 
@@ -63,19 +63,19 @@ Open Design 已经具备可靠的 Web/daemon sidecar、namespace/data-root、Des
 
 完成信号：Closure 身份不依赖 Desktop、packaged 或 Codex 类型。
 
-#### PR2：提炼 `apps/headless`
+#### PR2：提炼 `apps/standalone`
 
-- A05：建立 shell-neutral Headless 应用边界；
+- A05：建立 shell-neutral Standalone 应用边界；
 - A06：迁移 Web + daemon 共同启动；
 - A07：迁移共同就绪、健康与诊断；
 - A08：迁移共同退出和子进程收敛；
 - A09：保持现有数据根和资源根传播不变。
 
-完成信号：`apps/headless` 可独立证明产品生命周期，且不拥有 Desktop IPC、窗口或更新 UI。
+完成信号：`apps/standalone` 可独立证明产品生命周期，且不拥有 Desktop IPC、窗口或更新 UI。
 
 #### PR3：packaged 兼容适配
 
-- A10：packaged 改为调用 Headless 边界；
+- A10：packaged 改为调用 Standalone 边界；
 - A11：现有 Desktop/CLI 入口、路径和启动语义保持兼容；
 - A12：macOS 与 Windows 当前产品 smoke 保持等价；
 - A13：记录 G1 shell capability，供下一代迁移裁决。
@@ -132,7 +132,7 @@ Open Design 已经具备可靠的 Web/daemon sidecar、namespace/data-root、Des
 
 #### PR10：删除兼容层
 
-- A38：删除 packaged 私有 Headless 生命周期；
+- A38：删除 packaged 私有 Standalone 生命周期；
 - A39：删除 legacy combined fallback 与历史状态翻译；
 - A40：删除不再使用的构建节点和重复测试；
 - A41：完成 macOS/Windows 最终产品 E2E、架构文档和退出证明。

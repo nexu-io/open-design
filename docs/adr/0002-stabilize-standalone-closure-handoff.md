@@ -1,4 +1,4 @@
-# 0002. Stabilize the Headless Closure handoff
+# 0002. Stabilize the Standalone Closure handoff
 
 ## Status
 
@@ -28,7 +28,7 @@ new current behavior by itself.
 Introduce one stable, Closure-owned shim/handoff seam:
 
 ```text
-Shell / Installer -> thin Closure shim -> monolithic Closure body
+Shell / Installer -> thin Closure shim -> atomic Closure -> Standalone (Web + daemon)
 ```
 
 The shim is physically carried by the shell or installer so a compatible entry
@@ -43,9 +43,10 @@ The existing coordinates retain their meanings:
   another generation cannot confirm it.
 
 The shell owns launch timing, visible UX, permissions, retry presentation,
-installer-reinstall, windows, menus, and OS integration. The Closure side owns
-candidate trust and integrity, materialization, Store truth, activation,
-rollback, body startup, health confirmation, and body shutdown.
+installer-reinstall, windows, menus, and OS integration. Closure owns candidate
+trust and integrity, materialization, Store truth, activation, rollback, and
+selection of exactly one Standalone body. Standalone owns joined Web + daemon
+startup, health confirmation, and shutdown.
 
 The seam carries two minimal interaction primitives beyond startup: a
 generation-bound request/result port for Closure-to-Shell capabilities, and a
@@ -56,9 +57,10 @@ An unsupported Shell capability is an explicit result; a required capability
 is gated by the existing Shell minimum version.
 
 The first handoff protocol is versioned and additive, but exposes only one
-legal body form: the atomic Web + daemon Closure release-set. Body paths and
-module layout remain opaque to the shell. Background updates may prepare a
-candidate for a later launch; this release does not live-swap a running body.
+legal body form: one Standalone (Web + daemon) carried by an atomic Closure
+release-set. Body paths and module layout remain opaque to the shell.
+Background updates may prepare a candidate for a later launch; this release
+does not live-swap a running body.
 
 A future idea may enter the shim/handoff only as a seed when it introduces no
 reachable state, no persistent truth, no lifecycle branch, no compatibility

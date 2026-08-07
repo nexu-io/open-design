@@ -13,13 +13,13 @@ import {
   type PackagedConfig,
 } from "./config.js";
 import {
-  parsePackagedHeadlessRequest,
-  runPackagedHeadless,
-} from "./headless-runtime.js";
+  parsePackagedStandaloneRequest,
+  runPackagedStandalone,
+} from "./standalone-launcher.js";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
-function resolveHeadlessNamespaceBaseRoot(): string {
+function resolveStandaloneNamespaceBaseRoot(): string {
   const odDataDir = process.env.OD_DATA_DIR;
   if (odDataDir != null && odDataDir.length > 0) {
     return join(resolve(odDataDir.replace(/^~/, homedir())), "namespaces");
@@ -32,25 +32,25 @@ function resolveHeadlessNamespaceBaseRoot(): string {
   return join(dataBase, "open-design", "namespaces");
 }
 
-function resolveHeadlessAmrProfile(): PackagedConfig["amrProfile"] {
+function resolveStandaloneAmrProfile(): PackagedConfig["amrProfile"] {
   return resolvePackagedAmrProfile(process.env.OPEN_DESIGN_AMR_PROFILE);
 }
 
-function resolveHeadlessConfig(): PackagedConfig {
+function resolveStandaloneConfig(): PackagedConfig {
   const namespace = OPEN_DESIGN_SIDECAR_CONTRACT.normalizeNamespace(
     process.env[PACKAGED_NAMESPACE_ENV] ?? SIDECAR_DEFAULTS.namespace,
   );
-  const namespaceBaseRoot = resolveHeadlessNamespaceBaseRoot();
+  const namespaceBaseRoot = resolveStandaloneNamespaceBaseRoot();
 
   // OD_RESOURCE_ROOT may be set by a launcher script; otherwise default to a
   // sibling open-design/ directory relative to the node_modules that contain
-  // this file — the layout written by tools-pack linux headless-install.
+  // this file — the layout written by tools-pack linux standalone-install.
   const resourceRoot =
     process.env.OD_RESOURCE_ROOT
     ?? join(__dirname, "..", "..", "..", "open-design");
 
   return {
-    amrProfile: resolveHeadlessAmrProfile(),
+    amrProfile: resolveStandaloneAmrProfile(),
     appVersion: null,
     daemonCliEntry: null,
     daemonSidecarEntry: null,
@@ -70,23 +70,23 @@ function resolveHeadlessConfig(): PackagedConfig {
   };
 }
 
-const headlessRequest = parsePackagedHeadlessRequest([
-  "--headless",
+const standaloneRequest = parsePackagedStandaloneRequest([
+  "--standalone",
   ...process.argv.slice(2),
 ]);
 
-void runPackagedHeadless(
-  resolveHeadlessConfig(),
-  headlessRequest,
+void runPackagedStandalone(
+  resolveStandaloneConfig(),
+  standaloneRequest,
   {
     mcpBootstrapLaunch: {
       command: process.execPath,
-      args: [fileURLToPath(import.meta.url), "--headless"],
+      args: [fileURLToPath(import.meta.url), "--standalone"],
     },
   },
 ).catch((error: unknown) => {
   process.stderr.write(
-    `open-design headless failed: ${
+    `open-design standalone failed: ${
       error instanceof Error ? error.message : String(error)
     }\n`,
   );

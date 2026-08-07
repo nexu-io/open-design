@@ -2,7 +2,7 @@
 
 Follow the root `AGENTS.md` and `packages/AGENTS.md` first.
 
-This package owns the local, shell-neutral Headless Closure store. It verifies
+This package owns the local, shell-neutral Standalone Closure store. It verifies
 materialized immutable candidates and coordinates one `active`, `attempt`, and
 `lastSuccessful` state machine per `<channel, namespace>`.
 

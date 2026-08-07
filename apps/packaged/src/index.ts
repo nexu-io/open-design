@@ -39,9 +39,9 @@ import {
 } from "./download-attribution.js";
 import { writePackagedDesktopIdentity } from "./identity.js";
 import {
-  parsePackagedHeadlessRequest,
+  parsePackagedStandaloneRequest,
   resolvePackagedMcpBootstrapLaunch,
-} from "./headless-runtime.js";
+} from "./standalone-launcher.js";
 import { PackagedPathAccessError } from "./errors.js";
 import {
   exitPackagedLauncherForExistingDesktop,
@@ -124,10 +124,10 @@ function applyPackagedUpdaterEnv(updateMetadataUrl: string | null): void {
 
 async function main(): Promise<void> {
   const config = await readPackagedConfig();
-  const headlessRequest = parsePackagedHeadlessRequest(process.argv.slice(1));
-  if (headlessRequest.headless) {
-    const { runPackagedHeadless } = await import("./headless-runtime.js");
-    await runPackagedHeadless(config, headlessRequest);
+  const standaloneRequest = parsePackagedStandaloneRequest(process.argv.slice(1));
+  if (standaloneRequest.standalone) {
+    const { runPackagedStandalone } = await import("./standalone-launcher.js");
+    await runPackagedStandalone(config, standaloneRequest);
     return;
   }
 
@@ -287,7 +287,7 @@ async function main(): Promise<void> {
         velaWebUrl: runtimeConfig.velaWebUrl,
         // PR #974 round-5 (lefarcen P2): the Electron entry runs desktop
         // main alongside the daemon, so the import-folder gate must be
-        // pinned ON from request 0. See `apps/packaged/src/headless-runtime.ts`
+        // pinned ON from request 0. See `apps/packaged/src/standalone-launcher.ts`
         // for the windowless counterpart that passes `false`.
         requireDesktopAuth: true,
         webSidecarEntry: runtimeConfig.webSidecarEntry,

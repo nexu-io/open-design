@@ -72,7 +72,7 @@ export type ClosureProtocolJsonValue =
 
 /**
  * Stable, additive identity envelope passed from the shell-carried shim to one
- * Closure body generation. Body layout and transport deliberately stay out of
+ * Standalone generation. Body layout and transport deliberately stay out of
  * this contract.
  */
 export type ClosureHandoffEnvelope = {
@@ -87,7 +87,7 @@ type ClosureShellCapabilityExchange = {
 };
 
 /**
- * One generation-bound request from a Closure body to its carrying shell.
+ * One generation-bound request from a Standalone to its carrying shell.
  * Capability payloads stay JSON-shaped so the physical IPC remains replaceable.
  */
 export type ClosureShellCapabilityRequest = ClosureShellCapabilityExchange & {

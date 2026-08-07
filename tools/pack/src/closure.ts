@@ -42,8 +42,8 @@ export type ClosurePlatformTarget =
   (typeof CLOSURE_PLATFORM_TARGETS)[keyof typeof CLOSURE_PLATFORM_TARGETS];
 
 export const CLOSURE_INTERNAL_PACKAGES = [
-  { directory: "packages/headless-runtime", name: "@open-design/headless-runtime" },
-  { directory: "apps/headless", name: "@open-design/headless" },
+  { directory: "packages/standalone-runtime", name: "@open-design/standalone-runtime" },
+  { directory: "apps/standalone", name: "@open-design/standalone" },
 ] as const;
 
 export const CLOSURE_DAEMON_EXTERNALS = ["better-sqlite3", "blake3-wasm", "node-pty"] as const;
@@ -75,13 +75,13 @@ export type ClosureBuildOptions = {
 
 export const CLOSURE_BUILD_SOURCE_PATHS = [
   "apps/daemon",
-  "apps/headless",
+  "apps/standalone",
   "apps/web",
   "packages/agui-adapter",
   "packages/components",
   "packages/contracts",
   "packages/diagnostics",
-  "packages/headless-runtime",
+  "packages/standalone-runtime",
   "packages/host",
   "packages/launcher-proto",
   "packages/platform",
@@ -324,7 +324,7 @@ async function runPnpm(
 
 async function buildWorkspace(workspaceRoot: string): Promise<void> {
   await runPnpm(workspaceRoot, ["--filter", "@open-design/daemon...", "build"]);
-  await runPnpm(workspaceRoot, ["--filter", "@open-design/headless", "build"]);
+  await runPnpm(workspaceRoot, ["--filter", "@open-design/standalone", "build"]);
   await runPnpm(
     workspaceRoot,
     ["--filter", "@open-design/web...", "build"],
@@ -413,7 +413,7 @@ export function closureRuntimeSource(): string {
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export * from "@open-design/headless";
+export * from "@open-design/standalone";
 
 const root = dirname(fileURLToPath(import.meta.url));
 
@@ -676,8 +676,8 @@ async function buildClosureArchiveUncached(options: ClosureBuildOptions): Promis
     join(appRoot, "package.json"),
     `${JSON.stringify({
       dependencies: { ...dependencies, ...runtimeDependencies },
-      description: "Open Design Headless Closure runtime",
-      name: "open-design-headless-closure",
+      description: "Open Design Standalone Closure runtime",
+      name: "open-design-standalone-closure",
       private: true,
       type: "module",
       version: options.version,
@@ -704,8 +704,8 @@ async function buildClosureArchiveUncached(options: ClosureBuildOptions): Promis
   await writeFile(
     join(appRoot, "package.json"),
     `${JSON.stringify({
-      description: "Open Design Headless Closure runtime",
-      name: "open-design-headless-closure",
+      description: "Open Design Standalone Closure runtime",
+      name: "open-design-standalone-closure",
       private: true,
       type: "module",
       version: options.version,

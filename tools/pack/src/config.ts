@@ -30,7 +30,7 @@ export type ToolPackCliOptions = {
   diagnoseAttempts?: string | number;
   expectedVersion?: string;
   expr?: string;
-  headless?: boolean;
+  standalone?: boolean;
   json?: boolean;
   macCompression?: string;
   minShellVersion?: string;

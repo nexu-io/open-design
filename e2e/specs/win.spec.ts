@@ -1287,7 +1287,7 @@ winDescribe('packaged windows runtime smoke', () => {
   }, 720_000);
 });
 
-winClosureDescribe('packaged Windows Headless Closure release acceptance', () => {
+winClosureDescribe('packaged Windows Standalone Closure release acceptance', () => {
   test('[P0] attaches a release Closure across cold start and reinstall, then rolls a damaged successor back', async () => {
     const installationRoot = join(toolsPackDir, 'runtime', 'win');
     let installed = false;

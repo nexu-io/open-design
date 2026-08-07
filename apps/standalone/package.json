@@ -1,5 +1,5 @@
 {
-  "name": "@open-design/headless",
+  "name": "@open-design/standalone",
   "version": "0.16.2",
   "private": true,
   "type": "module",
@@ -16,12 +16,12 @@
     }
   },
   "scripts": {
-    "build": "pnpm --filter @open-design/headless-runtime build && tsx ./esbuild.config.ts && tsc -p tsconfig.json --emitDeclarationOnly",
-    "test": "pnpm --filter @open-design/headless-runtime build && vitest run",
-    "typecheck": "pnpm --filter @open-design/headless-runtime build && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
+    "build": "pnpm --filter @open-design/standalone-runtime build && tsx ./esbuild.config.ts && tsc -p tsconfig.json --emitDeclarationOnly",
+    "test": "pnpm --filter @open-design/standalone-runtime build && vitest run",
+    "typecheck": "pnpm --filter @open-design/standalone-runtime build && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
   },
   "dependencies": {
-    "@open-design/headless-runtime": "workspace:*"
+    "@open-design/standalone-runtime": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "24.12.2",

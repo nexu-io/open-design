@@ -32,7 +32,7 @@ function fakePaths(root: string): PackagedNamespacePaths {
     desktopLogsRoot: join(root, "logs", "desktop"),
     electronSessionDataRoot: join(root, "user-data", "session"),
     electronUserDataRoot: join(root, "user-data"),
-    headlessIdentityPath: join(root, "runtime", "headless-root.json"),
+    standaloneIdentityPath: join(root, "runtime", "standalone-root.json"),
     installationRoot: join(root, ".."),
     installerObservationRoot: join(root, "data", "observations", "installer"),
     logsRoot: join(root, "logs"),
@@ -45,7 +45,7 @@ function fakePaths(root: string): PackagedNamespacePaths {
 }
 
 describe("packaged identity markers", () => {
-  it("can write and close the desktop identity shape at the headless marker path", async () => {
+  it("can write and close the desktop identity shape at the standalone marker path", async () => {
     const root = join(tmpdir(), `od-packaged-identity-${process.pid}-${Date.now()}`);
     const paths = fakePaths(root);
     const stamp = {
@@ -62,12 +62,12 @@ describe("packaged identity markers", () => {
 
     try {
       const handle = await writePackagedDesktopIdentity({
-        identityPath: paths.headlessIdentityPath,
+        identityPath: paths.standaloneIdentityPath,
         paths,
         stamp,
       });
 
-      expect(await pathExists(paths.headlessIdentityPath)).toBe(true);
+      expect(await pathExists(paths.standaloneIdentityPath)).toBe(true);
       expect(await pathExists(paths.desktopIdentityPath)).toBe(false);
 
       await handle.updateRuntimeIdentity({
@@ -78,7 +78,7 @@ describe("packaged identity markers", () => {
         },
         shell: { source: "current-package", version: "0.18.0-beta.4" },
       });
-      expect(JSON.parse(await readFile(paths.headlessIdentityPath, "utf8"))).toMatchObject({
+      expect(JSON.parse(await readFile(paths.standaloneIdentityPath, "utf8"))).toMatchObject({
         runtime: {
           closure: { source: "legacy-combined", version: "0.18.0-beta.4" },
           shell: { source: "current-package", version: "0.18.0-beta.4" },
@@ -86,7 +86,7 @@ describe("packaged identity markers", () => {
       });
 
       await handle.close();
-      expect(await pathExists(paths.headlessIdentityPath)).toBe(false);
+      expect(await pathExists(paths.standaloneIdentityPath)).toBe(false);
     } finally {
       await rm(root, { force: true, recursive: true });
     }

@@ -16,6 +16,6 @@ await build({
 
 await build({
   ...sharedOptions,
-  entryPoints: ["./src/headless.ts"],
-  outfile: "./dist/headless.mjs",
+  entryPoints: ["./src/standalone-launcher-entry.ts"],
+  outfile: "./dist/standalone-launcher.mjs",
 });

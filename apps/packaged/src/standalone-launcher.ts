@@ -27,7 +27,7 @@ import { resolvePackagedNamespacePaths } from "./paths.js";
 import type { PackagedSidecarHandle } from "./sidecars.js";
 import { startPackagedSidecars } from "./sidecars.js";
 
-function createHeadlessStamp(namespace: string): SidecarStamp {
+function createStandaloneStamp(namespace: string): SidecarStamp {
   return {
     app: APP_KEYS.DESKTOP,
     ipc: resolveAppIpcPath({
@@ -51,16 +51,16 @@ export interface PackagedMcpBootstrapLaunch {
   command: string;
 }
 
-export interface PackagedHeadlessRequest {
-  headless: boolean;
+export interface PackagedStandaloneRequest {
+  standalone: boolean;
   mcpInstallAgent: "codex" | null;
 }
 
-export interface RunPackagedHeadlessOptions {
+export interface RunPackagedStandaloneOptions {
   mcpBootstrapLaunch?: PackagedMcpBootstrapLaunch;
 }
 
-export interface PackagedHeadlessStartupDependencies {
+export interface PackagedStandaloneStartupDependencies {
   confirmRuntime(): Promise<void>;
   createIpcServer(options: {
     shutdown(): Promise<void>;
@@ -73,14 +73,14 @@ export interface PackagedHeadlessStartupDependencies {
   writeWebIdentity(webUrl: string): Promise<void>;
 }
 
-export interface PackagedHeadlessStartupHandle {
+export interface PackagedStandaloneStartupHandle {
   shutdown(): Promise<void>;
   webUrl: string;
 }
 
-export async function acquirePackagedHeadlessStartup(
-  dependencies: PackagedHeadlessStartupDependencies,
-): Promise<PackagedHeadlessStartupHandle> {
+export async function acquirePackagedStandaloneStartup(
+  dependencies: PackagedStandaloneStartupDependencies,
+): Promise<PackagedStandaloneStartupHandle> {
   let identity: PackagedDesktopIdentityHandle | null = null;
   let sidecars: PackagedSidecarHandle | null = null;
   let ipcServer: JsonIpcServerHandle | null = null;
@@ -118,22 +118,22 @@ export async function acquirePackagedHeadlessStartup(
   }
 }
 
-export function parsePackagedHeadlessRequest(
+export function parsePackagedStandaloneRequest(
   argv: readonly string[],
-): PackagedHeadlessRequest {
-  const headless = argv.includes("--headless");
+): PackagedStandaloneRequest {
+  const standalone = argv.includes("--standalone");
   const installIndex = argv.indexOf("--mcp-install");
-  if (installIndex === -1) return { headless, mcpInstallAgent: null };
-  if (!headless) {
-    throw new Error("--mcp-install requires --headless");
+  if (installIndex === -1) return { standalone, mcpInstallAgent: null };
+  if (!standalone) {
+    throw new Error("--mcp-install requires --standalone");
   }
   const agent = argv[installIndex + 1];
   if (agent !== "codex") {
     throw new Error(
-      "Packaged headless MCP installation currently only supports codex.",
+      "Packaged standalone MCP installation currently only supports codex.",
     );
   }
-  return { headless: true, mcpInstallAgent: agent };
+  return { standalone: true, mcpInstallAgent: agent };
 }
 
 export function resolvePackagedMcpBootstrapLaunch(options: {
@@ -155,23 +155,23 @@ export function resolvePackagedMcpBootstrapLaunch(options: {
         "-j",
         options.installedLaunchPath,
         "--args",
-        "--headless",
+        "--standalone",
       ],
     };
   }
   return {
     command: options.installedLaunchPath ?? currentExecutablePath,
-    args: ["--headless"],
+    args: ["--standalone"],
   };
 }
 
-export async function runPackagedHeadless(
+export async function runPackagedStandalone(
   config: PackagedConfig,
-  request: PackagedHeadlessRequest = {
-    headless: true,
+  request: PackagedStandaloneRequest = {
+    standalone: true,
     mcpInstallAgent: null,
   },
-  options: RunPackagedHeadlessOptions = {},
+  options: RunPackagedStandaloneOptions = {},
 ): Promise<void> {
   const initialPaths = resolvePackagedNamespacePaths(
     config,
@@ -189,7 +189,7 @@ export async function runPackagedHeadless(
     shellVersion: shellConfig.appVersion,
   });
   let identityHandle: PackagedDesktopIdentityHandle | null = null;
-  const stamp = createHeadlessStamp(config.namespace);
+  const stamp = createStandaloneStamp(config.namespace);
   const mcpBootstrap =
     options.mcpBootstrapLaunch
     ?? resolvePackagedMcpBootstrapLaunch({
@@ -204,7 +204,7 @@ export async function runPackagedHeadless(
     contract: OPEN_DESIGN_SIDECAR_CONTRACT,
   });
 
-  const { shutdown, webUrl } = await acquirePackagedHeadlessStartup({
+  const { shutdown, webUrl } = await acquirePackagedStandaloneStartup({
     confirmRuntime: async () => {
       await confirmPackagedLauncherRuntime(launcherRuntime);
       await confirmPackagedClosureRuntime(closureRuntime);
@@ -215,7 +215,7 @@ export async function runPackagedHeadless(
         namespace: config.namespace,
         shellVersion: shellConfig.appVersion,
       }).then((update) => {
-        console.info("[open-design headless] Closure update check completed", {
+        console.info("[open-design standalone] Closure update check completed", {
           reason: update.reason,
           state: update.state,
           ...(update.state === "skipped"
@@ -223,7 +223,7 @@ export async function runPackagedHeadless(
             : { candidateVersion: update.candidate.manifest.identity.version }),
         });
       }).catch((error: unknown) => {
-        console.warn("[open-design headless] Closure update check failed", error);
+        console.warn("[open-design standalone] Closure update check failed", error);
       });
     },
     createIpcServer: async ({ shutdown: stop, webUrl: activeWebUrl }) =>
@@ -273,7 +273,7 @@ export async function runPackagedHeadless(
             posthogKey: runtimeConfig.posthogKey,
             posthogHost: runtimeConfig.posthogHost,
             velaWebUrl: runtimeConfig.velaWebUrl,
-            // PR #974 round-5 (lefarcen P2): headless packaged mode uses the signed
+            // PR #974 round-5 (lefarcen P2): standalone packaged mode uses the signed
             // Electron entry as a lifecycle owner, but creates no BrowserWindow and
             // exposes no privileged shell.openPath surface.
             // Pinning OD_REQUIRE_DESKTOP_AUTH here would arm a gate no client
@@ -296,12 +296,12 @@ export async function runPackagedHeadless(
       }));
       return started.value;
     },
-    // Write a headless-specific identity marker so `tools-pack linux stop
-    // --headless` can find this process without confusing it for a
+    // Write a standalone-specific identity marker so `tools-pack linux stop
+    // --standalone` can find this process without confusing it for a
     // menu-launched AppImage that owns desktop-root.json in the same namespace.
     writeIdentity: async () => {
       identityHandle = await writePackagedDesktopIdentity({
-        identityPath: paths.headlessIdentityPath,
+        identityPath: paths.standaloneIdentityPath,
         paths,
         runtimeIdentity: createPackagedRuntimeIdentity({
           closure: closureRuntime,

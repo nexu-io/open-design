@@ -27,9 +27,9 @@ const screenshotPath = resolveFromWorkspace(
   process.env.OD_PACKAGED_E2E_SCREENSHOT_PATH ?? join(toolsPackDir, 'screenshots', `${namespace}.png`),
 );
 const healthExpression = "fetch('/api/health').then(async response => ({ health: await response.json(), href: location.href, status: response.status, title: document.title }))";
-const shouldRunLinuxHeadlessSmoke =
+const shouldRunLinuxStandaloneSmoke =
   process.platform === 'linux' && process.env.OD_PACKAGED_E2E_LINUX_HEADLESS === '1';
-const linuxHeadlessDescribe = shouldRunLinuxHeadlessSmoke ? describe : describe.skip;
+const linuxStandaloneDescribe = shouldRunLinuxStandaloneSmoke ? describe : describe.skip;
 const shouldRunLinuxAppImageSmoke =
   process.platform === 'linux' && process.env.OD_PACKAGED_E2E_LINUX_APPIMAGE === '1';
 const linuxAppImageDescribe = shouldRunLinuxAppImageSmoke ? describe : describe.skip;
@@ -37,12 +37,12 @@ const linuxAppImageDescribe = shouldRunLinuxAppImageSmoke ? describe : describe.
 const runtimeNamespaceRoot = join(toolsPackDir, 'runtime', 'linux', 'namespaces', namespace);
 const userHome = linuxUserHome();
 
-type LinuxHeadlessInstallResult = {
+type LinuxStandaloneInstallResult = {
   launcherPath: string;
   namespace: string;
 };
 
-type LinuxHeadlessStartResult = {
+type LinuxStandaloneStartResult = {
   launcherPath: string;
   logPath: string;
   namespace: string;
@@ -78,7 +78,7 @@ type LinuxStopResult = {
   status: string;
 };
 
-type LinuxHeadlessUninstallResult = {
+type LinuxStandaloneUninstallResult = {
   launcherPath: string;
   namespace: string;
   removed: string;
@@ -135,20 +135,20 @@ type HealthEvalValue = {
   title: string;
 };
 
-linuxHeadlessDescribe('packaged linux headless runtime smoke', () => {
+linuxStandaloneDescribe('packaged linux standalone runtime smoke', () => {
   let installed = false;
   let started = false;
 
-  test('installs, starts, inspects status, logs, stops, uninstalls, and cleans up headless runtime', async () => {
+  test('installs, starts, inspects status, logs, stops, uninstalls, and cleans up standalone runtime', async () => {
     let passed = false;
     try {
-      const install = await runToolsPackJson<LinuxHeadlessInstallResult>('install', ['--headless']);
+      const install = await runToolsPackJson<LinuxStandaloneInstallResult>('install', ['--standalone']);
       installed = true;
       expect(install.namespace).toBe(namespace);
       expectPathInside(install.launcherPath, join(userHome, '.local', 'bin'));
       expect(await pathExists(install.launcherPath)).toBe(true);
 
-      const start = await runToolsPackJson<LinuxHeadlessStartResult>('start', ['--headless']);
+      const start = await runToolsPackJson<LinuxStandaloneStartResult>('start', ['--standalone']);
       started = true;
       expect(start.namespace).toBe(namespace);
       expect(start.pid).toBeGreaterThan(0);
@@ -156,7 +156,7 @@ linuxHeadlessDescribe('packaged linux headless runtime smoke', () => {
       expect(start.status.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/?$/);
       expectPathInside(start.logPath, join(runtimeNamespaceRoot, 'logs', 'desktop'));
 
-      const inspect = await runToolsPackJson<LinuxInspectResult>('inspect', ['--headless']);
+      const inspect = await runToolsPackJson<LinuxInspectResult>('inspect', ['--standalone']);
       expect(inspect.status?.state).toBe('running');
       expect(inspect.status?.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/?$/);
 
@@ -169,19 +169,19 @@ linuxHeadlessDescribe('packaged linux headless runtime smoke', () => {
       expectPathInside(desktopLog.logPath, join(runtimeNamespaceRoot, 'logs', 'desktop'));
       expect(desktopLog.lines.join('\n')).toContain('Open Design is running');
 
-      const stop = await runToolsPackJson<LinuxStopResult>('stop', ['--headless']);
+      const stop = await runToolsPackJson<LinuxStopResult>('stop', ['--standalone']);
       started = false;
       expect(stop.namespace).toBe(namespace);
       expect(stop.status).not.toBe('partial');
       expect(stop.remainingPids).toEqual([]);
 
-      const uninstall = await runToolsPackJson<LinuxHeadlessUninstallResult>('uninstall', ['--headless']);
+      const uninstall = await runToolsPackJson<LinuxStandaloneUninstallResult>('uninstall', ['--standalone']);
       installed = false;
       expect(uninstall.namespace).toBe(namespace);
-      expectLinuxRemovedStatus('headless launcher', uninstall.removed);
+      expectLinuxRemovedStatus('standalone launcher', uninstall.removed);
       expect(await pathExists(install.launcherPath)).toBe(false);
 
-      const cleanup = await runToolsPackJson<LinuxCleanupResult>('cleanup', ['--headless']);
+      const cleanup = await runToolsPackJson<LinuxCleanupResult>('cleanup', ['--standalone']);
       expect(cleanup.skipped).toBe(false);
       passed = true;
     } finally {
@@ -191,8 +191,8 @@ linuxHeadlessDescribe('packaged linux headless runtime smoke', () => {
         });
       }
       if (started || installed) {
-        await runToolsPackJson<LinuxHeadlessUninstallResult>('uninstall', ['--headless']).catch((error: unknown) => {
-          console.error('failed to uninstall packaged linux headless runtime during cleanup', error);
+        await runToolsPackJson<LinuxStandaloneUninstallResult>('uninstall', ['--standalone']).catch((error: unknown) => {
+          console.error('failed to uninstall packaged linux standalone runtime during cleanup', error);
         });
         started = false;
         installed = false;

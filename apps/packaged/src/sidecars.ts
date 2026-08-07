@@ -5,9 +5,9 @@ import { delimiter, dirname, join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 
 import {
-  acquireHeadlessClosure,
-  type HeadlessRuntimeHandle,
-} from "@open-design/headless-runtime";
+  acquireStandalone,
+  type StandaloneRuntimeHandle,
+} from "@open-design/standalone-runtime";
 import {
   APP_KEYS,
   OPEN_DESIGN_SIDECAR_CONTRACT,
@@ -689,11 +689,11 @@ export type PackagedDaemonSpawnEnvOptions = {
   /**
    * PR #974 round-5 (lefarcen P2): only pin the daemon's import-folder
    * gate ON when the desktop runtime is actually being started in the
-   * same packaged process group. Headless packaged deployments
-   * (`tools-pack linux start --headless`) have no `shell.openPath`
+   * same packaged process group. Standalone packaged deployments
+   * (`tools-pack linux start --standalone`) have no `shell.openPath`
    * surface, so leaving the gate dormant avoids the impossible-auth
    * state where the daemon waits forever for a registration that the
-   * headless runtime can never deliver.
+   * standalone runtime can never deliver.
    */
   requireDesktopAuth: boolean;
   legacyDataDir?: string | null;
@@ -721,10 +721,10 @@ export function buildPackagedDaemonSpawnEnv(
     [SIDECAR_ENV.DAEMON_PORT]: "0",
     ...(options.daemonCliEntry == null ? {} : { [SIDECAR_ENV.DAEMON_CLI_PATH]: options.daemonCliEntry }),
     // PR #974 round-4 P1 + round-5 P2: pinned ON when a desktop is
-    // being started, OFF for headless. The daemon-side flag refuses
+    // being started, OFF for standalone. The daemon-side flag refuses
     // tokenless imports even before the desktop main process has
     // finished registering, closing the daemon-restart-mid-session
-    // bypass that a runtime-only handshake left open. Headless skips
+    // bypass that a runtime-only handshake left open. Standalone skips
     // it because there is no privileged shell.openPath surface and
     // no client to register a secret.
     ...(options.requireDesktopAuth ? { OD_REQUIRE_DESKTOP_AUTH: "1" } : {}),
@@ -919,8 +919,8 @@ export async function startPackagedSidecars(
     /**
      * PR #974 round-5 (lefarcen P2): caller asserts whether a desktop
      * runtime is being started in this packaged process group. The
-     * Electron entry passes `true`; `headless.ts` passes `false` so the
-     * daemon's import-folder gate stays dormant in headless mode where
+     * Electron entry passes `true`; `standalone.ts` passes `false` so the
+     * daemon's import-folder gate stays dormant in standalone mode where
      * there is no `shell.openPath` surface and no client to register a
      * secret. Required (no default) so a future packaged caller cannot
      * silently regress the gate by omitting it.
@@ -935,7 +935,7 @@ export async function startPackagedSidecars(
      * edge once it reports a usable URL. The Electron entry forwards these to
      * the splash status line so a slow cold boot shows which phase is underway
      * (and visibly advances the step counter the moment each long native wait
-     * clears) instead of a frozen frame; headless callers omit it.
+     * clears) instead of a frozen frame; standalone callers omit it.
      */
     onPhase?: (phase: "daemon-spawning" | "daemon-ready" | "web-spawning" | "web-ready") => void;
   },
@@ -955,7 +955,7 @@ export async function startPackagedSidecars(
     typeof createWebSidecarSupervisor<ManagedSidecarChild, WebStatusSnapshot>
   > | null = null;
 
-  const closure = await acquireHeadlessClosure<
+  const closure = await acquireStandalone<
     DaemonStatusSnapshot,
     WebStatusSnapshot
   >({
@@ -969,20 +969,20 @@ export async function startPackagedSidecars(
       runtimeRoot: paths.runtimeRoot,
     },
     dependencies: {
-      preparePaths: async (headlessPaths) => {
+      preparePaths: async (standalonePaths) => {
         await mkdir(paths.namespaceRoot, { recursive: true });
-        await mkdir(headlessPaths.cacheRoot, { recursive: true });
-        await mkdir(headlessPaths.dataRoot, { recursive: true });
-        await mkdir(headlessPaths.logsRoot, { recursive: true });
+        await mkdir(standalonePaths.cacheRoot, { recursive: true });
+        await mkdir(standalonePaths.dataRoot, { recursive: true });
+        await mkdir(standalonePaths.logsRoot, { recursive: true });
         await mkdir(paths.desktopLogsRoot, { recursive: true });
-        await mkdir(headlessPaths.runtimeRoot, { recursive: true });
+        await mkdir(standalonePaths.runtimeRoot, { recursive: true });
         await mkdir(paths.updateRoot, { recursive: true });
         await mkdir(paths.electronUserDataRoot, { recursive: true });
         await mkdir(paths.electronSessionDataRoot, { recursive: true });
       },
       startDaemon: async ({
-        paths: headlessPaths,
-      }): Promise<HeadlessRuntimeHandle<DaemonStatusSnapshot>> => {
+        paths: standalonePaths,
+      }): Promise<StandaloneRuntimeHandle<DaemonStatusSnapshot>> => {
         // Issue #5835: on Linux AppImage the payload lives on a fresh FUSE
         // mount with a cold page cache. Warm the daemon before its status
         // window starts; plain-file installs skip this best-effort path.
@@ -990,7 +990,7 @@ export async function startPackagedSidecars(
           resolveDaemonPrewarmTargets({
             nodeCommand: options.nodeCommand,
             daemonSidecarEntry,
-            resourceRoot: headlessPaths.resourceRoot,
+            resourceRoot: standalonePaths.resourceRoot,
           }),
           { log: prewarmLog },
         );
@@ -1059,7 +1059,7 @@ export async function startPackagedSidecars(
           throw error;
         }
       },
-      startWeb: async ({ daemon }): Promise<HeadlessRuntimeHandle<WebStatusSnapshot>> => {
+      startWeb: async ({ daemon }): Promise<StandaloneRuntimeHandle<WebStatusSnapshot>> => {
         const activeDaemon = daemonChild;
         if (activeDaemon == null || daemon.url == null || webPrewarm == null) {
           throw new Error("packaged daemon was not ready before Web startup");
@@ -1073,7 +1073,7 @@ export async function startPackagedSidecars(
           closeChild: closeManagedChild,
           hasExited: (web) => web.child.exitCode !== null || web.child.signalCode !== null,
           onExit: (web, listener) => web.child.once("exit", listener),
-          // Initial registration is the Headless lifecycle's readiness edge.
+          // Initial registration is the Standalone lifecycle's readiness edge.
           // Respawns still register inside the supervisor before promotion.
           deferInitialRegistration: true,
           registerUrl: async (url) => await registerPackagedWebUrl(activeDaemon.ipcPath, url),
@@ -1140,7 +1140,7 @@ export async function startPackagedSidecars(
     || activeWebStatus == null
   ) {
     await closure.close().catch(() => undefined);
-    throw new Error("packaged Headless adapter completed without both runtimes");
+    throw new Error("packaged Standalone adapter completed without both runtimes");
   }
 
   return {

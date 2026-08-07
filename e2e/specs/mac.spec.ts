@@ -1028,7 +1028,7 @@ macDescribe('packaged mac runtime smoke', () => {
   }, 360_000);
 });
 
-macClosureDescribe('packaged mac Headless Closure release acceptance', () => {
+macClosureDescribe('packaged mac Standalone Closure release acceptance', () => {
   test('[P0] attaches a release Closure across cold start and reinstall, then rolls a damaged successor back', async () => {
     const installationRoot = join(toolsPackDir, 'runtime', 'mac');
     let installed = false;

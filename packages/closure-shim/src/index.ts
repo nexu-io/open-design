@@ -36,7 +36,7 @@ import {
   compareClosureShellVersions,
   type ClosureReleaseCandidate,
 } from "@open-design/closure-update";
-import type { HeadlessClosurePaths } from "@open-design/headless-runtime";
+import type { StandalonePaths } from "@open-design/standalone-runtime";
 
 export type ClosureShimTraceEvent =
   | "request:validated"
@@ -62,29 +62,29 @@ export type SignedClosureReleaseCandidate = {
   signature: ClosureCandidateSignature;
 };
 
-export type ClosureBodyStatus = ClosureRuntimeStatus;
+export type StandaloneStatus = ClosureRuntimeStatus;
 
-export interface ClosureBodyHandle {
+export interface StandaloneHandle {
   close(): Promise<void>;
-  readStatus(): Promise<ClosureBodyStatus>;
+  readStatus(): Promise<StandaloneStatus>;
   waitForTerminal(): Promise<ClosureRuntimeTerminalStatus>;
 }
 
-export type ClosureBodyHandoffInput = {
+export type StandaloneHandoffInput = {
   handoff: ClosureHandoffEnvelope;
-  paths: Readonly<HeadlessClosurePaths>;
+  paths: Readonly<StandalonePaths>;
   shell: ClosureShellCapabilityPort;
 };
 
-export type ClosureBodyModule = {
-  handoffOpenDesignClosure?: (
-    input: ClosureBodyHandoffInput,
-  ) => Promise<ClosureBodyHandle>;
+export type StandaloneModule = {
+  handoffOpenDesignStandalone?: (
+    input: StandaloneHandoffInput,
+  ) => Promise<StandaloneHandle>;
 };
 
 export type ClosureShimReady = {
   close(): Promise<ClosureRuntimeTerminalStatus>;
-  handle: ClosureBodyHandle;
+  handle: StandaloneHandle;
   result: ClosureShimReadyResult;
   waitForTerminal(): Promise<ClosureRuntimeTerminalStatus>;
 };
@@ -99,9 +99,9 @@ export type ClosureShimOutcome = ClosureShimReady | ClosureShimInstallerReinstal
 export type EnsureAndHandoffClosureOptions = {
   candidate?: SignedClosureReleaseCandidate;
   fetch?: typeof globalThis.fetch;
-  importBody?: (entryUrl: string) => Promise<ClosureBodyModule>;
+  importStandalone?: (entryUrl: string) => Promise<StandaloneModule>;
   onTrace?: (event: ClosureShimTraceEvent) => void;
-  paths: HeadlessClosurePaths;
+  paths: StandalonePaths;
   request: ClosureShimRequest;
   shellCapabilities: ClosureShellCapabilityPort;
   trustedKeys: Readonly<Record<string, string>>;
@@ -243,26 +243,26 @@ function requiresInstallerReinstall(
   return compareClosureShellVersions(shellVersion, minShellVersion) < 0;
 }
 
-async function defaultImportBody(entryUrl: string): Promise<ClosureBodyModule> {
-  return await import(entryUrl) as ClosureBodyModule;
+async function defaultImportStandalone(entryUrl: string): Promise<StandaloneModule> {
+  return await import(entryUrl) as StandaloneModule;
 }
 
-async function loadBody(
+async function loadStandalone(
   verification: StoredClosureVerification,
-  importBody: NonNullable<EnsureAndHandoffClosureOptions["importBody"]>,
-): Promise<NonNullable<ClosureBodyModule["handoffOpenDesignClosure"]>> {
+  importStandalone: NonNullable<EnsureAndHandoffClosureOptions["importStandalone"]>,
+): Promise<NonNullable<StandaloneModule["handoffOpenDesignStandalone"]>> {
   const entryUrl = pathToFileURL(join(
     verification.paths.payloadRoot,
     verification.manifest.artifact.entryPath,
   )).href;
-  const body = await importBody(entryUrl);
-  if (typeof body.handoffOpenDesignClosure !== "function") {
+  const standalone = await importStandalone(entryUrl);
+  if (typeof standalone.handoffOpenDesignStandalone !== "function") {
     throw new ClosureShimError(
       "handoff-failed",
-      "Closure body does not export handoffOpenDesignClosure",
+      "Standalone does not export handoffOpenDesignStandalone",
     );
   }
-  return body.handoffOpenDesignClosure;
+  return standalone.handoffOpenDesignStandalone;
 }
 
 async function selectedPointer(paths: ClosureStorePaths): Promise<ClosureRuntimePointer> {
@@ -270,7 +270,7 @@ async function selectedPointer(paths: ClosureStorePaths): Promise<ClosureRuntime
   if (!recovered.selection.selected) {
     throw new ClosureShimError(
       "body-unavailable",
-      "No compatible Closure body is available",
+      "No compatible Standalone is available",
     );
   }
   return recovered.selection.pointer;
@@ -300,14 +300,14 @@ function validateTerminalStatus(
   if (status.state === "running") {
     throw new ClosureShimError(
       "handoff-failed",
-      "Closure body reported running while a terminal status was required",
+      "Standalone reported running while a terminal status was required",
     );
   }
   return status;
 }
 
 function readyOutcome(input: {
-  handle: ClosureBodyHandle;
+  handle: StandaloneHandle;
   result: ClosureShimReadyResult;
 }): ClosureShimReady {
   const waitForTerminal = async (): Promise<ClosureRuntimeTerminalStatus> => {
@@ -325,22 +325,22 @@ function readyOutcome(input: {
 }
 
 async function startPointer(input: {
-  importBody: NonNullable<EnsureAndHandoffClosureOptions["importBody"]>;
+  importStandalone: NonNullable<EnsureAndHandoffClosureOptions["importStandalone"]>;
   onTrace: EnsureAndHandoffClosureOptions["onTrace"];
-  paths: Readonly<HeadlessClosurePaths>;
+  paths: Readonly<StandalonePaths>;
   pointer: ClosureRuntimePointer;
   shellCapabilities: ClosureShellCapabilityPort;
   storePaths: ClosureStorePaths;
-}): Promise<{ handle: ClosureBodyHandle; handoff: ClosureHandoffEnvelope }> {
+}): Promise<{ handle: StandaloneHandle; handoff: ClosureHandoffEnvelope }> {
   const handoff = createClosureHandoffEnvelope(input.pointer);
   await armClosureRuntimeAttempt(input.storePaths, input.pointer);
   trace(input.onTrace, "handoff:armed");
 
-  let handle: ClosureBodyHandle | null = null;
+  let handle: StandaloneHandle | null = null;
   try {
     const verification = await verifyStoredClosureCandidate(input.storePaths, input.pointer);
-    const startBody = await loadBody(verification, input.importBody);
-    handle = await startBody({
+    const startStandalone = await loadStandalone(verification, input.importStandalone);
+    handle = await startStandalone({
       handoff,
       paths: input.paths,
       shell: bindShellCapabilities(input.shellCapabilities, handoff),
@@ -415,10 +415,10 @@ export async function ensureAndHandoffClosure(
     return installerReinstall(minShellVersion);
   }
 
-  const importBody = options.importBody ?? defaultImportBody;
+  const importStandalone = options.importStandalone ?? defaultImportStandalone;
   try {
     const started = await startPointer({
-      importBody,
+      importStandalone,
       onTrace: options.onTrace,
       paths: options.paths,
       pointer,
@@ -444,7 +444,7 @@ export async function ensureAndHandoffClosure(
     ) {
       throw new ClosureShimError(
         "handoff-failed",
-        "Closure body failed and no last-successful body is available",
+        "Standalone failed and no last-successful Standalone is available",
         { cause: activeError },
       );
     }
@@ -460,7 +460,7 @@ export async function ensureAndHandoffClosure(
     }
     try {
       const started = await startPointer({
-        importBody,
+        importStandalone,
         onTrace: options.onTrace,
         paths: options.paths,
         pointer,

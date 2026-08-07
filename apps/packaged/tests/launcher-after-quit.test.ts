@@ -39,7 +39,7 @@ function fakePaths(root: string): PackagedNamespacePaths {
     desktopLogsRoot: join(root, "logs", "desktop"),
     electronSessionDataRoot: join(root, "user-data", "session"),
     electronUserDataRoot: join(root, "user-data"),
-    headlessIdentityPath: join(root, "runtime", "headless-root.json"),
+    standaloneIdentityPath: join(root, "runtime", "standalone-root.json"),
     installationRoot: root,
     installerObservationRoot: join(root, "data", "observations", "installer"),
     logsRoot: join(root, "logs"),
@@ -228,8 +228,8 @@ describe("inspectExistingDesktopForLauncher", () => {
     }
   });
 
-  it("replaces a healthy headless owner before opening the desktop window", async () => {
-    const root = await mkdtemp(join(tmpdir(), "od-launcher-inspect-headless-"));
+  it("replaces a healthy standalone owner before opening the desktop window", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-launcher-inspect-standalone-"));
     const requests: unknown[] = [];
     try {
       const paths = fakePaths(root);
@@ -261,7 +261,7 @@ describe("inspectExistingDesktopForLauncher", () => {
         waitForExit: (async (pid: number) => pid === 1234) as typeof import("@open-design/platform").waitForProcessExit,
       });
 
-      expect(result).toEqual({ action: "continue", reason: "headless-owner" });
+      expect(result).toEqual({ action: "continue", reason: "standalone-owner" });
       expect(requests).toEqual([
         { type: SIDECAR_MESSAGES.STATUS },
         { type: SIDECAR_MESSAGES.STATUS },
@@ -269,8 +269,8 @@ describe("inspectExistingDesktopForLauncher", () => {
         { type: SIDECAR_MESSAGES.SHUTDOWN },
       ]);
       const log = await readFile(join(root, "logs", "launcher", "after-quit.log"), "utf8");
-      expect(log).toContain("action=restart reason=headless-owner pid=1234");
-      expect(log).toContain("shutdown=exited reason=headless-owner pid=1234");
+      expect(log).toContain("action=restart reason=standalone-owner pid=1234");
+      expect(log).toContain("shutdown=exited reason=standalone-owner pid=1234");
     } finally {
       await rm(root, { force: true, recursive: true });
     }

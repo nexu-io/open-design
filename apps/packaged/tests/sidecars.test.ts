@@ -399,7 +399,7 @@ function fakeChild(): EventEmitter & {
 describe('buildPackagedDaemonSpawnEnv', () => {
   // PR #974 round-5 (lefarcen P2): the daemon's import-folder gate must
   // be ON when an Electron desktop is being started alongside the daemon
-  // and OFF in headless packaged mode (daemon+web only, no shell.openPath
+  // and OFF in standalone packaged mode (daemon+web only, no shell.openPath
   // surface, no client to register a secret). Pin both branches against
   // a real pure-helper invocation so a future refactor can't silently
   // regress either side.
@@ -412,7 +412,7 @@ describe('buildPackagedDaemonSpawnEnv', () => {
       desktopLogsRoot: '/tmp/od-pkg/logs/desktop',
       electronSessionDataRoot: '/tmp/od-pkg/user-data/session',
       electronUserDataRoot: '/tmp/od-pkg/user-data',
-      headlessIdentityPath: '/tmp/od-pkg/runtime/headless-root.json',
+      standaloneIdentityPath: '/tmp/od-pkg/runtime/standalone-root.json',
       installationRoot: '/tmp/od-pkg/..',
       installerObservationRoot: '/tmp/od-pkg/data/observations/installer',
       logsRoot: '/tmp/od-pkg/logs',
@@ -480,7 +480,7 @@ describe('buildPackagedDaemonSpawnEnv', () => {
     expect(env.PATH).toBeUndefined();
   });
 
-  it('omits OD_REQUIRE_DESKTOP_AUTH entirely when requireDesktopAuth=false (headless)', () => {
+  it('omits OD_REQUIRE_DESKTOP_AUTH entirely when requireDesktopAuth=false (standalone)', () => {
     const env = buildPackagedDaemonSpawnEnv(fakePaths(), {
       appVersion: null,
       daemonCliEntry: null,
@@ -497,7 +497,7 @@ describe('buildPackagedDaemonSpawnEnv', () => {
     expect(env.OD_APP_VERSION).toBeUndefined();
   });
 
-  it('forwards the signed packaged launcher used to bootstrap MCP headlessly', () => {
+  it('forwards the signed packaged launcher used to bootstrap MCP standalonely', () => {
     const env = buildPackagedDaemonSpawnEnv(fakePaths(), {
       appVersion: '1.2.3',
       daemonCliEntry: '/Applications/Open Design.app/Contents/Resources/app/prebundled/daemon/daemon-cli.mjs',
@@ -507,7 +507,7 @@ describe('buildPackagedDaemonSpawnEnv', () => {
         '-j',
         '/Applications/Open Design.app',
         '--args',
-        '--headless',
+        '--standalone',
       ],
       mcpBootstrapCommand:
         '/usr/bin/open',
@@ -522,7 +522,7 @@ describe('buildPackagedDaemonSpawnEnv', () => {
       '-j',
       '/Applications/Open Design.app',
       '--args',
-      '--headless',
+      '--standalone',
     ]);
   });
 
@@ -965,7 +965,7 @@ describe('createWebSidecarSupervisor', () => {
     expect(closed).toEqual(['initial', 'failed-replacement', 'recovered']);
   });
 
-  it('lets Headless publish the initial URL while retaining respawn registration', async () => {
+  it('lets Standalone publish the initial URL while retaining respawn registration', async () => {
     const initial = child('initial');
     const recovered = child('recovered');
     const spawnQueue = [initial, recovered];

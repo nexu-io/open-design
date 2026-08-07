@@ -3,7 +3,7 @@
   "version": "0.16.2",
   "private": true,
   "type": "module",
-  "description": "Shell-neutral Open Design headless closure identity and candidate protocol.",
+  "description": "Shell-neutral Open Design standalone closure identity and candidate protocol.",
   "main": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
   "files": [

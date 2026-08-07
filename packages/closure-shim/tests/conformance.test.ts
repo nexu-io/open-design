@@ -30,7 +30,7 @@ import {
   resolveClosureStorePaths,
 } from "@open-design/closure-store";
 import type { ClosureReleaseCandidate } from "@open-design/closure-update";
-import type { HeadlessClosurePaths } from "@open-design/headless-runtime";
+import type { StandalonePaths } from "@open-design/standalone-runtime";
 import JSZip from "jszip";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -41,9 +41,9 @@ import {
   type SignedClosureReleaseCandidate,
 } from "../src/index.js";
 import {
-  createFakeClosureBody,
+  createFakeStandalone,
   createFakeClosureShimRequest,
-  createFakeHeadlessClosurePaths,
+  createFakeStandalonePaths,
 } from "../src/testing.js";
 
 const roots: string[] = [];
@@ -68,7 +68,7 @@ import { once } from "node:events";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 
-export async function handoffOpenDesignClosure(input) {
+export async function handoffOpenDesignStandalone(input) {
   const child = spawn(process.execPath, [
     fileURLToPath(new URL("./body-worker.mjs", import.meta.url)),
     JSON.stringify(input.handoff),
@@ -240,14 +240,14 @@ async function candidateFixture(input: {
 }
 
 async function demoContext(): Promise<{
-  paths: HeadlessClosurePaths;
+  paths: StandalonePaths;
   request: ClosureShimRequest;
   traces: ClosureShimTraceEvent[];
 }> {
   const root = await mkdtemp(join(tmpdir(), "od-closure-shim-"));
   roots.push(root);
   return {
-    paths: createFakeHeadlessClosurePaths(root),
+    paths: createFakeStandalonePaths(root),
     request: createFakeClosureShimRequest(),
     traces: [],
   };
@@ -501,7 +501,7 @@ describe("Closure shim conformance demo", () => {
         };
       },
     };
-    const body = createFakeClosureBody({
+    const body = createFakeStandalone({
       onHandoff: async ({ handoff, shell }) => {
         const result = await shell.invoke({
           capability: "select-file",
@@ -520,7 +520,7 @@ describe("Closure shim conformance demo", () => {
     const outcome = await ensureAndHandoffClosure({
       candidate: fixture,
       fetch: fixture.fetch,
-      importBody: async () => body.module,
+      importStandalone: async () => body.module,
       paths: context.paths,
       request: context.request,
       shellCapabilities,
@@ -540,7 +540,7 @@ describe("Closure shim conformance demo", () => {
   it("rejects a stale capability result before the body can become ready", async () => {
     const context = await demoContext();
     const fixture = await candidateFixture({ version: "0.19.0-beta.1" });
-    const body = createFakeClosureBody({
+    const body = createFakeStandalone({
       onHandoff: async ({ handoff, shell }) => {
         await shell.invoke({
           capability: "select-file",
@@ -555,7 +555,7 @@ describe("Closure shim conformance demo", () => {
     await expect(ensureAndHandoffClosure({
       candidate: fixture,
       fetch: fixture.fetch,
-      importBody: async () => body.module,
+      importStandalone: async () => body.module,
       paths: context.paths,
       request: context.request,
       shellCapabilities: {
@@ -579,7 +579,7 @@ describe("Closure shim conformance demo", () => {
   it("rejects stale body readiness without confirming the attempt", async () => {
     const context = await demoContext();
     const fixture = await candidateFixture({ version: "0.19.0-beta.1" });
-    const body = createFakeClosureBody({
+    const body = createFakeStandalone({
       transformHandoff: (handoff) => ({
         ...handoff,
         identity: { ...handoff.identity, generation: handoff.identity.generation + 1 },
@@ -589,7 +589,7 @@ describe("Closure shim conformance demo", () => {
     await expect(ensureAndHandoffClosure({
       candidate: fixture,
       fetch: fixture.fetch,
-      importBody: async () => body.module,
+      importStandalone: async () => body.module,
       paths: context.paths,
       request: context.request,
       shellCapabilities: fakeShellCapabilities(),
