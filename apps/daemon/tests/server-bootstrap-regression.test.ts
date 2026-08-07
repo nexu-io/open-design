@@ -223,7 +223,6 @@ describe('server route inventory', () => {
       'POST /api/dialog/open-folder',
       'GET /api/fs-browser/roots',
       'GET /api/fs-browser/list',
-      'POST /api/fs-browser/mkdir',
       'POST /api/projects/:id/media/generate',
       'POST /api/tools/media/generate',
       'POST /api/research/search',

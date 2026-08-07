@@ -112,7 +112,7 @@ describe('native folder dialog route', () => {
     expect(response.status).toBe(503);
     expect(await response.json()).toEqual({
       code: 'NATIVE_FOLDER_DIALOG_UNAVAILABLE',
-      message: 'Could not open folder picker: cannot open display',
+      message: 'Could not open folder picker on this host',
       fallback: 'server-directory-picker',
     });
   });

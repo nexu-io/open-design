@@ -26,20 +26,8 @@ export interface FsBrowserListResponse {
   truncated: boolean;
 }
 
-export interface FsBrowserMkdirRequest {
-  parentPath: string;
-  name: string;
-}
-
-export interface FsBrowserMkdirResponse {
-  path: string;
-}
-
 export type FsBrowserErrorCode =
   | 'PATH_REQUIRED'
-  | 'NAME_REQUIRED'
-  | 'NAME_INVALID'
-  | 'PATH_ALREADY_EXISTS'
   | 'PATH_MUST_BE_ABSOLUTE'
   | 'PATH_OUTSIDE_ALLOWED_ROOTS'
   | 'PATH_NOT_FOUND'
@@ -51,7 +39,34 @@ export interface FsBrowserErrorResponse {
   message: string;
 }
 
+export interface NativeFolderDialogSelectedResponse {
+  path: string;
+}
+
+export interface NativeFolderDialogCancelledResponse {
+  path: null;
+}
+
+export interface NativeFolderDialogRemoteResponse {
+  code: 'NATIVE_FOLDER_DIALOG_REMOTE';
+  message: string;
+  fallback: 'server-directory-picker';
+}
+
+export interface NativeFolderDialogUnavailableResponse {
+  code: 'NATIVE_FOLDER_DIALOG_UNAVAILABLE';
+  message: string;
+  fallback: 'server-directory-picker';
+}
+
+export type NativeFolderDialogSelectionResponse =
+  | NativeFolderDialogSelectedResponse
+  | NativeFolderDialogCancelledResponse;
+
+export type NativeFolderDialogFallbackResponse =
+  | NativeFolderDialogRemoteResponse
+  | NativeFolderDialogUnavailableResponse;
+
 export type NativeFolderDialogResponse =
-  | { path: string }
-  | { path: null; error: 'cancelled' }
-  | { path: null; error: 'exec-failed'; detail: string };
+  | NativeFolderDialogSelectionResponse
+  | NativeFolderDialogFallbackResponse;

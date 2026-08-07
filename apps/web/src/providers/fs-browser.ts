@@ -1,6 +1,5 @@
 import type {
   FsBrowserListResponse,
-  FsBrowserMkdirResponse,
   FsBrowserRootsResponse,
 } from '@open-design/contracts';
 
@@ -27,19 +26,4 @@ export async function listServerDirectory(path: string): Promise<FsBrowserListRe
   const response = await fetch(`/api/fs-browser/list?path=${encodeURIComponent(path)}`);
   if (!response.ok) throw await apiError(response);
   return await response.json() as FsBrowserListResponse;
-}
-
-export async function createServerDirectory(
-  parentPath: string,
-  name: string,
-  signal?: AbortSignal,
-): Promise<FsBrowserMkdirResponse> {
-  const response = await fetch('/api/fs-browser/mkdir', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ parentPath, name }),
-    signal,
-  });
-  if (!response.ok) throw await apiError(response);
-  return await response.json() as FsBrowserMkdirResponse;
 }

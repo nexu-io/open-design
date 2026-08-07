@@ -11,7 +11,6 @@ import {
   updateProjectLocations,
 } from '../../src/state/project-locations';
 import {
-  createServerDirectory,
   listServerDirectory,
   listServerDirectoryRoots,
 } from '../../src/providers/fs-browser';
@@ -31,7 +30,6 @@ vi.mock('../../src/state/project-locations', async () => {
 });
 
 vi.mock('../../src/providers/fs-browser', () => ({
-  createServerDirectory: vi.fn(),
   listServerDirectory: vi.fn(),
   listServerDirectoryRoots: vi.fn(),
 }));
@@ -40,7 +38,6 @@ const mockedFetchLocations = vi.mocked(fetchProjectLocations);
 const mockedOpenDialog = vi.mocked(openProjectLocationFolderDialog);
 const mockedScanLocations = vi.mocked(scanProjectLocations);
 const mockedUpdateLocations = vi.mocked(updateProjectLocations);
-const mockedCreateDirectory = vi.mocked(createServerDirectory);
 const mockedListDirectory = vi.mocked(listServerDirectory);
 const mockedListRoots = vi.mocked(listServerDirectoryRoots);
 
@@ -69,7 +66,6 @@ describe('ProjectLocationsSection remote folder selection', () => {
     });
     mockedScanLocations.mockResolvedValue({ scanned: 0, imported: [], existing: [], skipped: [] });
     mockedUpdateLocations.mockResolvedValue([]);
-    mockedCreateDirectory.mockResolvedValue({ path: '/home/user/new-folder' });
 
     render(
       <ProjectLocationsSection

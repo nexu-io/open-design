@@ -5,7 +5,6 @@ import type {
   FsBrowserEntry,
   FsBrowserErrorCode,
   FsBrowserListResponse,
-  FsBrowserMkdirResponse,
   FsBrowserRoot,
   FsBrowserRootKind,
   FsBrowserRootsResponse,
@@ -179,47 +178,6 @@ async function resolveListPath(req: Request, roots: readonly AllowedRoot[]): Pro
   return realPath;
 }
 
-function requestBodyRecord(req: Request): Record<string, unknown> {
-  return req.body && typeof req.body === 'object' ? req.body as Record<string, unknown> : {};
-}
-
-function mkdirNameForRequest(req: Request): string {
-  const body = requestBodyRecord(req);
-  const name = typeof body.name === 'string' ? body.name.trim() : '';
-  if (!name) {
-    throw new FsBrowserRouteError(400, 'NAME_REQUIRED', 'directory name is required');
-  }
-  if (
-    name === '.' ||
-    name === '..' ||
-    name.includes('/') ||
-    name.includes('\\') ||
-    path.basename(name) !== name
-  ) {
-    throw new FsBrowserRouteError(400, 'NAME_INVALID', 'directory name must be a single path segment');
-  }
-  return name;
-}
-
-async function resolveParentPathForRequest(req: Request, roots: readonly AllowedRoot[]): Promise<string> {
-  const body = requestBodyRecord(req);
-  const requestedPath = typeof body.parentPath === 'string' ? body.parentPath : '';
-  if (!requestedPath) {
-    throw new FsBrowserRouteError(400, 'PATH_REQUIRED', 'parentPath is required');
-  }
-  if (!path.isAbsolute(requestedPath)) {
-    throw new FsBrowserRouteError(400, 'PATH_MUST_BE_ABSOLUTE', 'parentPath must be absolute');
-  }
-
-  const realPath = await realpathForRequest(requestedPath);
-  ensureAllowedPath(realPath, roots);
-  const stat = await fs.stat(realPath);
-  if (!stat.isDirectory()) {
-    throw new FsBrowserRouteError(400, 'PATH_NOT_DIRECTORY', 'parentPath is not a directory');
-  }
-  return realPath;
-}
-
 async function resolveEntry(
   dirPath: string,
   name: string,
@@ -308,38 +266,9 @@ export function registerFsBrowserRoutes(app: Express, deps: RegisterFsBrowserRou
       }
       res.status(500).json({
         error: 'PATH_ACCESS_DENIED' satisfies FsBrowserErrorCode,
-        message: err instanceof Error ? err.message : String(err),
+        message: 'filesystem request failed',
       });
     }
   });
 
-  app.post('/api/fs-browser/mkdir', async (req, res) => {
-    if (!requireLocalOrigin(req, res, deps.http)) return;
-    try {
-      const roots = await resolveAllowedRoots(deps);
-      const parentPath = await resolveParentPathForRequest(req, roots);
-      const name = mkdirNameForRequest(req);
-      const targetPath = path.join(parentPath, name);
-      ensureAllowedPath(targetPath, roots);
-      try {
-        await fs.mkdir(targetPath);
-      } catch (err) {
-        if ((err as NodeJS.ErrnoException).code === 'EEXIST') {
-          throw new FsBrowserRouteError(409, 'PATH_ALREADY_EXISTS', 'directory already exists');
-        }
-        throw err;
-      }
-      const response: FsBrowserMkdirResponse = { path: await fs.realpath(targetPath) };
-      res.json(response);
-    } catch (err) {
-      if (err instanceof FsBrowserRouteError) {
-        sendFsBrowserError(res, err);
-        return;
-      }
-      res.status(500).json({
-        error: 'PATH_ACCESS_DENIED' satisfies FsBrowserErrorCode,
-        message: err instanceof Error ? err.message : String(err),
-      });
-    }
-  });
 }

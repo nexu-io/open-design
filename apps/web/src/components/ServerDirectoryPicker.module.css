@@ -95,60 +95,9 @@
   white-space: nowrap;
 }
 
-.newFolderButton {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 30px;
-  padding: 4px 9px;
-  font-size: 12px;
-}
-
-.createForm {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: end;
-  gap: 8px;
-  padding: 10px 18px;
-  border-bottom: 1px solid var(--border);
-}
-
-.createLabel {
-  display: grid;
-  gap: 5px;
-  min-width: 0;
-  color: var(--text-muted);
-  font-size: 11px;
-}
-
-.createLabel input {
-  width: 100%;
-  min-width: 0;
-  height: 32px;
-  padding: 0 10px;
-  color: var(--text);
-  font: inherit;
-  font-size: 13px;
-  background: var(--bg);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-}
-
-.createLabel input:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-
-.createError {
-  grid-column: 1 / -1;
-  margin: 0;
-  color: var(--danger, #e5484d);
-  font-size: 12px;
-}
-
 .browser {
-  min-height: 260px;
+  flex: 1 1 260px;
+  min-height: 0;
   overflow: auto;
 }
 
@@ -211,7 +160,7 @@
   align-items: center;
   justify-content: center;
   gap: 10px;
-  min-height: 260px;
+  min-height: 100%;
   padding: 28px;
   color: var(--text-muted);
   font-size: 13px;
@@ -233,6 +182,7 @@
 
 .footer {
   display: flex;
+  flex: 0 0 auto;
   justify-content: flex-end;
   gap: 8px;
   padding: 12px 18px;
@@ -270,22 +220,8 @@
     padding-left: 12px;
   }
 
-  .locationBar,
-  .createForm {
+  .locationBar {
     flex-wrap: wrap;
-  }
-
-  .newFolderButton {
-    max-width: 100%;
-  }
-
-  .createForm {
-    grid-template-columns: 1fr;
-  }
-
-  .browser,
-  .state {
-    min-height: 220px;
   }
 
   .entry {

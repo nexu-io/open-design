@@ -1,4 +1,6 @@
 import type {
+  NativeFolderDialogFallbackResponse,
+  NativeFolderDialogSelectionResponse,
   ProjectLocation,
   ProjectLocationsResponse,
   ScanProjectLocationsResponse,
@@ -43,6 +45,21 @@ export async function scanProjectLocations(): Promise<ScanProjectLocationsRespon
   }
 }
 
+function isDialogSelectionResponse(value: unknown): value is NativeFolderDialogSelectionResponse {
+  if (!value || typeof value !== 'object') return false;
+  const path = (value as Record<string, unknown>).path;
+  return path === null || (typeof path === 'string' && path.length > 0);
+}
+
+function isDialogFallbackResponse(value: unknown): value is NativeFolderDialogFallbackResponse {
+  if (!value || typeof value !== 'object') return false;
+  const body = value as Record<string, unknown>;
+  return body.fallback === 'server-directory-picker'
+    && (body.code === 'NATIVE_FOLDER_DIALOG_REMOTE'
+      || body.code === 'NATIVE_FOLDER_DIALOG_UNAVAILABLE')
+    && typeof body.message === 'string';
+}
+
 export type ProjectLocationFolderDialogResult =
   | { status: 'selected'; path: string }
   | { status: 'cancelled' }
@@ -57,26 +74,26 @@ export async function openProjectLocationFolderDialog(): Promise<ProjectLocation
     return { status: 'error', reason: 'request-failed' };
   }
 
-  let body: Record<string, unknown> = {};
+  let body: unknown = {};
   try {
-    body = await response.json() as Record<string, unknown>;
+    body = await response.json() as unknown;
   } catch {
     // Preserve the HTTP status when a reverse proxy returns a non-JSON error.
   }
 
   if (response.ok) {
-    if (typeof body.path === 'string' && body.path) {
+    if (isDialogSelectionResponse(body)) {
+      if (body.path === null) return { status: 'cancelled' };
       return { status: 'selected', path: body.path };
     }
-    if (body.path === null) return { status: 'cancelled' };
     return { status: 'error', reason: 'invalid-response' };
   }
 
-  if (body.fallback === 'server-directory-picker' && body.code === 'NATIVE_FOLDER_DIALOG_REMOTE') {
+  if (isDialogFallbackResponse(body) && body.code === 'NATIVE_FOLDER_DIALOG_REMOTE') {
     return { status: 'fallback', reason: 'remote' };
   }
   if (
-    (body.fallback === 'server-directory-picker'
+    (isDialogFallbackResponse(body)
       && body.code === 'NATIVE_FOLDER_DIALOG_UNAVAILABLE')
     || response.status >= 500
   ) {

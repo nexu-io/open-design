@@ -1,6 +1,6 @@
 import express from 'express';
-import { mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
-import { mkdir } from 'node:fs/promises';
+import { existsSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import fs, { mkdir } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -204,55 +204,47 @@ describe('fs browser routes', () => {
     });
   });
 
-  it('creates a directory inside an allowed root', async () => {
-    const root = makeTempDir('od-fs-browser-mkdir-root-');
+  it('does not expose a server-side mkdir mutation', async () => {
+    const root = makeTempDir('od-fs-browser-read-only-root-');
     const app = await start({ roots: [root] });
+    const blocked = path.join(root, 'must-not-exist');
 
     const response = await fetch(`${app.baseUrl}/api/fs-browser/mkdir`, {
       method: 'POST',
       headers: { Origin: app.baseUrl, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ parentPath: root, name: 'new-project' }),
+      body: JSON.stringify({ parentPath: root, name: 'must-not-exist' }),
     });
 
-    expect(response.status).toBe(200);
-    expect(await jsonOf(response)).toEqual({
-      path: realpathSync(path.join(root, 'new-project')),
-    });
+    expect(response.status).toBe(404);
+    expect(existsSync(blocked)).toBe(false);
   });
 
-  it('rejects new directory names that escape the parent path', async () => {
-    const root = makeTempDir('od-fs-browser-mkdir-name-root-');
+  it('does not disclose raw filesystem errors', async () => {
+    const root = makeTempDir('od-fs-browser-error-root-');
     const app = await start({ roots: [root] });
-
-    const response = await fetch(`${app.baseUrl}/api/fs-browser/mkdir`, {
-      method: 'POST',
-      headers: { Origin: app.baseUrl, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ parentPath: root, name: '../escape' }),
+    const originalStat = fs.stat.bind(fs);
+    let statCalls = 0;
+    vi.spyOn(fs, 'stat').mockImplementation(async (...args) => {
+      statCalls += 1;
+      if (statCalls === 2) {
+        throw new Error(`sensitive host detail: ${path.join(root, '.secret')}`);
+      }
+      return originalStat(...args);
     });
 
-    expect(response.status).toBe(400);
-    expect(await jsonOf(response)).toMatchObject({
-      error: 'NAME_INVALID',
-      message: expect.any(String),
-    });
-  });
+    const response = await fetch(
+      `${app.baseUrl}/api/fs-browser/list?path=${encodeURIComponent(root)}`,
+      { headers: { Origin: app.baseUrl } },
+    );
+    const body = await jsonOf<{ error: string; message: string }>(response);
 
-  it('rejects creating a directory over an existing path', async () => {
-    const root = makeTempDir('od-fs-browser-mkdir-existing-root-');
-    await mkdir(path.join(root, 'existing'));
-    const app = await start({ roots: [root] });
-
-    const response = await fetch(`${app.baseUrl}/api/fs-browser/mkdir`, {
-      method: 'POST',
-      headers: { Origin: app.baseUrl, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ parentPath: root, name: 'existing' }),
+    expect(response.status).toBe(500);
+    expect(body).toEqual({
+      error: 'PATH_ACCESS_DENIED',
+      message: 'filesystem request failed',
     });
-
-    expect(response.status).toBe(409);
-    expect(await jsonOf(response)).toMatchObject({
-      error: 'PATH_ALREADY_EXISTS',
-      message: expect.any(String),
-    });
+    expect(JSON.stringify(body)).not.toContain(root);
+    expect(JSON.stringify(body)).not.toContain('sensitive host detail');
   });
 
   it('rejects paths outside allowed roots', async () => {

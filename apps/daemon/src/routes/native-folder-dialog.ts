@@ -1,4 +1,9 @@
 import type { Express, Request } from 'express';
+import type {
+  NativeFolderDialogRemoteResponse,
+  NativeFolderDialogSelectionResponse,
+  NativeFolderDialogUnavailableResponse,
+} from '@open-design/contracts';
 import { isLoopbackHostname, isLoopbackPeerAddress } from '../http/local-daemon-request.js';
 import { parseHostHeader } from '../origin-validation.js';
 
@@ -40,24 +45,26 @@ export function registerNativeFolderDialogRoute(
 
     const isLocalBrowser = deps.isLocalBrowserRequest ?? defaultIsLocalBrowserRequest;
     if (!isLocalBrowser(req)) {
-      res.status(403).json({
+      const response: NativeFolderDialogRemoteResponse = {
         code: 'NATIVE_FOLDER_DIALOG_REMOTE',
         message: 'Native folder picker is unavailable to a remote browser',
         fallback: 'server-directory-picker',
-      });
+      };
+      res.status(403).json(response);
       return;
     }
 
     try {
       const selected = await deps.nativeDialogs.openNativeFolderDialog();
-      res.json({ path: selected });
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : String(error);
-      res.status(503).json({
+      const response: NativeFolderDialogSelectionResponse = { path: selected };
+      res.json(response);
+    } catch {
+      const response: NativeFolderDialogUnavailableResponse = {
         code: 'NATIVE_FOLDER_DIALOG_UNAVAILABLE',
-        message: `Could not open folder picker: ${detail}`,
+        message: 'Could not open folder picker on this host',
         fallback: 'server-directory-picker',
-      });
+      };
+      res.status(503).json(response);
     }
   });
 }

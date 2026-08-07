@@ -5,18 +5,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ServerDirectoryPicker } from '../../src/components/ServerDirectoryPicker';
 import {
-  createServerDirectory,
   listServerDirectory,
   listServerDirectoryRoots,
 } from '../../src/providers/fs-browser';
 
 vi.mock('../../src/providers/fs-browser', () => ({
-  createServerDirectory: vi.fn(),
   listServerDirectory: vi.fn(),
   listServerDirectoryRoots: vi.fn(),
 }));
 
-const mockCreateDirectory = vi.mocked(createServerDirectory);
 const mockListRoots = vi.mocked(listServerDirectoryRoots);
 const mockListDirectory = vi.mocked(listServerDirectory);
 
@@ -62,7 +59,6 @@ describe('ServerDirectoryPicker', () => {
   beforeEach(() => {
     mockListRoots.mockReset();
     mockListDirectory.mockReset();
-    mockCreateDirectory.mockReset();
   });
 
   afterEach(() => {
@@ -139,55 +135,15 @@ describe('ServerDirectoryPicker', () => {
     );
   });
 
-  it('creates a directory, refreshes, and opens the new directory', async () => {
-    mockListRoots.mockResolvedValue(roots);
-    mockListDirectory
-      .mockResolvedValueOnce(directory('/workspace'))
-      .mockResolvedValueOnce(directory('/workspace/new-folder'));
-    mockCreateDirectory.mockResolvedValue({ path: '/workspace/new-folder' });
-
-    render(
-      <ServerDirectoryPicker open initialPath="/workspace" onSelect={vi.fn()} onClose={vi.fn()} />,
-    );
-
-    expect(await screen.findByText('/workspace')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'New folder' }));
-    fireEvent.change(screen.getByLabelText('Folder name'), {
-      target: { value: 'new-folder' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Create folder' }));
-
-    await waitFor(() => {
-      expect(mockCreateDirectory).toHaveBeenCalledWith(
-        '/workspace',
-        'new-folder',
-        expect.any(AbortSignal),
-      );
-    });
-    expect(await screen.findByText('/workspace/new-folder')).toBeTruthy();
-    expect(mockListDirectory).toHaveBeenLastCalledWith('/workspace/new-folder');
-  });
-
-  it('shows directory creation errors without leaving the current directory', async () => {
+  it('keeps the remote picker read-only', async () => {
     mockListRoots.mockResolvedValue(roots);
     mockListDirectory.mockResolvedValue(directory('/workspace'));
-    mockCreateDirectory.mockRejectedValue(new Error('directory already exists'));
 
-    render(
-      <ServerDirectoryPicker open initialPath="/workspace" onSelect={vi.fn()} onClose={vi.fn()} />,
-    );
+    render(<ServerDirectoryPicker open onSelect={vi.fn()} onClose={vi.fn()} />);
 
     expect(await screen.findByText('/workspace')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'New folder' }));
-    fireEvent.change(screen.getByLabelText('Folder name'), {
-      target: { value: 'existing' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Create folder' }));
-
-    expect((await screen.findByRole('alert')).textContent).toContain(
-      'Could not create folder.',
-    );
-    expect(screen.getByText('/workspace')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'New folder' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Create folder' })).toBeNull();
   });
 
   it('navigates into a child directory and back to its parent', async () => {
@@ -304,38 +260,6 @@ describe('ServerDirectoryPicker', () => {
 
     rerender(<ServerDirectoryPicker open={false} onSelect={vi.fn()} onClose={vi.fn()} />);
     expect(document.activeElement).toBe(trigger);
-  });
-
-  it('aborts and fences a late mkdir response when the picker closes', async () => {
-    const pendingCreate = deferred<{ path: string }>();
-    mockListRoots.mockResolvedValue(roots);
-    mockListDirectory.mockResolvedValue(directory('/workspace'));
-    mockCreateDirectory.mockReturnValue(pendingCreate.promise);
-
-    const props = { initialPath: '/workspace', onSelect: vi.fn(), onClose: vi.fn() };
-    const { rerender } = render(<ServerDirectoryPicker open {...props} />);
-
-    expect(await screen.findByText('/workspace')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'New folder' }));
-    fireEvent.change(screen.getByLabelText('Folder name'), {
-      target: { value: 'late-folder' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Create folder' }));
-
-    await waitFor(() => expect(mockCreateDirectory).toHaveBeenCalledTimes(1));
-    const signal = mockCreateDirectory.mock.calls[0]?.[2];
-    expect(signal).toBeInstanceOf(AbortSignal);
-
-    rerender(<ServerDirectoryPicker open={false} {...props} />);
-    expect(signal?.aborted).toBe(true);
-    rerender(<ServerDirectoryPicker open {...props} />);
-    pendingCreate.resolve({ path: '/workspace/late-folder' });
-
-    await waitFor(() => {
-      expect(mockListDirectory.mock.calls.map(([path]) => path)).not.toContain(
-        '/workspace/late-folder',
-      );
-    });
   });
 
   it('does not let a stale directory response overwrite newer navigation', async () => {

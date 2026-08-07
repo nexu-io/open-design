@@ -48,7 +48,11 @@ describe('openProjectLocationFolderDialog', () => {
 
   it('requests the server picker when the native host dialog cannot execute', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(
-      JSON.stringify({ error: 'Could not open folder picker: cannot open display' }),
+      JSON.stringify({
+        code: 'NATIVE_FOLDER_DIALOG_UNAVAILABLE',
+        message: 'Could not open folder picker on this host',
+        fallback: 'server-directory-picker',
+      }),
       { status: 500, headers: { 'content-type': 'application/json' } },
     )));
 

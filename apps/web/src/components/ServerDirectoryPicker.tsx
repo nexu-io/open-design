@@ -4,7 +4,6 @@ import { Button } from '@open-design/components';
 import type { FsBrowserListResponse, FsBrowserRoot } from '@open-design/contracts';
 
 import {
-  createServerDirectory,
   listServerDirectory,
   listServerDirectoryRoots,
 } from '../providers/fs-browser';
@@ -31,16 +30,11 @@ export function ServerDirectoryPicker({
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
   const lifecycleIdRef = useRef(0);
   const directoryRequestIdRef = useRef(0);
-  const createDirectoryAbortRef = useRef<AbortController | null>(null);
   const retryPathRef = useRef<string | null>(null);
   const [roots, setRoots] = useState<FsBrowserRoot[]>([]);
   const [listing, setListing] = useState<FsBrowserListResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [creatingDirectory, setCreatingDirectory] = useState(false);
-  const [createDirectoryName, setCreateDirectoryName] = useState('');
-  const [createDirectoryError, setCreateDirectoryError] = useState<string | null>(null);
-  const [createDirectoryPending, setCreateDirectoryPending] = useState(false);
   const [rootReloadNonce, setRootReloadNonce] = useState(0);
 
   const loadDirectory = useCallback(async (path: string) => {
@@ -61,68 +55,19 @@ export function ServerDirectoryPicker({
     }
   }, [t]);
 
-  const resetCreateDirectory = useCallback(() => {
-    createDirectoryAbortRef.current?.abort();
-    createDirectoryAbortRef.current = null;
-    setCreatingDirectory(false);
-    setCreateDirectoryName('');
-    setCreateDirectoryError(null);
-    setCreateDirectoryPending(false);
-  }, []);
-
-  const handleCreateDirectory = useCallback(async () => {
-    const parentPath = listing?.path;
-    if (!parentPath || createDirectoryPending) return;
-    const name = createDirectoryName.trim();
-    if (!name) {
-      setCreateDirectoryError(t('serverDirectoryPicker.folderName'));
-      return;
-    }
-    setCreateDirectoryPending(true);
-    setCreateDirectoryError(null);
-    const lifecycleId = lifecycleIdRef.current;
-    const controller = new AbortController();
-    createDirectoryAbortRef.current?.abort();
-    createDirectoryAbortRef.current = controller;
-    try {
-      const response = await createServerDirectory(parentPath, name, controller.signal);
-      if (controller.signal.aborted || lifecycleId !== lifecycleIdRef.current) return;
-      resetCreateDirectory();
-      await loadDirectory(response.path);
-    } catch {
-      if (controller.signal.aborted || lifecycleId !== lifecycleIdRef.current) return;
-      setCreateDirectoryError(t('serverDirectoryPicker.createFolderFailed'));
-    } finally {
-      if (createDirectoryAbortRef.current === controller) {
-        createDirectoryAbortRef.current = null;
-        if (lifecycleId === lifecycleIdRef.current) setCreateDirectoryPending(false);
-      }
-    }
-  }, [
-    createDirectoryName,
-    createDirectoryPending,
-    listing?.path,
-    loadDirectory,
-    resetCreateDirectory,
-    t,
-  ]);
-
   useEffect(() => {
     if (!open) {
       lifecycleIdRef.current += 1;
       directoryRequestIdRef.current += 1;
-      createDirectoryAbortRef.current?.abort();
-      createDirectoryAbortRef.current = null;
       return;
     }
 
     const lifecycleId = ++lifecycleIdRef.current;
     setRoots([]);
-      setListing(null);
-      setError(null);
-      setLoading(true);
-      resetCreateDirectory();
-      retryPathRef.current = null;
+    setListing(null);
+    setError(null);
+    setLoading(true);
+    retryPathRef.current = null;
 
     void listServerDirectoryRoots()
       .then((response) => {
@@ -145,10 +90,8 @@ export function ServerDirectoryPicker({
     return () => {
       lifecycleIdRef.current += 1;
       directoryRequestIdRef.current += 1;
-      createDirectoryAbortRef.current?.abort();
-      createDirectoryAbortRef.current = null;
     };
-  }, [initialPath, loadDirectory, open, resetCreateDirectory, rootReloadNonce]);
+  }, [initialPath, loadDirectory, open, rootReloadNonce]);
 
   useEffect(() => {
     if (!open) return;
@@ -265,59 +208,7 @@ export function ServerDirectoryPicker({
           <div className={styles.path} title={currentPath ?? undefined}>
             {currentPath ?? retryPath ?? t('serverDirectoryPicker.loading')}
           </div>
-          <Button
-            variant="ghost"
-            className={styles.newFolderButton}
-            onClick={() => {
-              setCreatingDirectory((value) => !value);
-              setCreateDirectoryError(null);
-            }}
-            disabled={!currentPath || loading || Boolean(error)}
-          >
-            <Icon name="plus" size={14} />
-            {t('serverDirectoryPicker.newFolder')}
-          </Button>
         </div>
-
-        {creatingDirectory ? (
-          <form
-            className={styles.createForm}
-            onSubmit={(event) => {
-              event.preventDefault();
-              void handleCreateDirectory();
-            }}
-          >
-            <label className={styles.createLabel}>
-              <span>{t('serverDirectoryPicker.folderName')}</span>
-              <input
-                value={createDirectoryName}
-                onChange={(event) => {
-                  setCreateDirectoryName(event.target.value);
-                  setCreateDirectoryError(null);
-                }}
-                placeholder={t('serverDirectoryPicker.folderNamePlaceholder')}
-                aria-label={t('serverDirectoryPicker.folderName')}
-                disabled={createDirectoryPending}
-              />
-            </label>
-            <Button
-              type="submit"
-              variant="primary"
-              disabled={createDirectoryPending || !createDirectoryName.trim()}
-            >
-              <Icon name="plus" size={14} />
-              {t('serverDirectoryPicker.createFolder')}
-            </Button>
-            <Button type="button" variant="ghost" onClick={resetCreateDirectory}>
-              {t('serverDirectoryPicker.cancel')}
-            </Button>
-            {createDirectoryError ? (
-              <p className={styles.createError} role="alert">
-                {createDirectoryError}
-              </p>
-            ) : null}
-          </form>
-        ) : null}
 
         <div className={styles.browser} aria-busy={loading}>
           {loading ? (
