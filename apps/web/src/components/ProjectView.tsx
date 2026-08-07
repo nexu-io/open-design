@@ -4913,6 +4913,9 @@ export function ProjectView({
   // completion.  Transient null-status retries are bounded; after
   // MAX_TRANSIENT_RETRIES we add to completedReattachRunsRef to avoid spinning.
   const MAX_TRANSIENT_RETRIES = 2;
+  // A terminal Design run may need one short stream reattach to reconcile files,
+  // but that supplemental verification must never keep the chat loading forever.
+  const TERMINAL_DELIVERY_VERIFICATION_TIMEOUT_MS = 5_000;
 
   // Reset transient retry counts when the conversation or daemon connection
   // changes so stale counts from a previous session do not bleed in.  This
@@ -4989,6 +4992,36 @@ export function ProjectView({
           hasGenericDisconnectFailureEvent(message);
         const replayingTerminalRun =
           shouldReplayTerminalRunMessage(message) || spuriouslyFailedPending;
+        const terminalDeliveryReplayIsIneligible =
+          message.runStatus === 'succeeded'
+          && designDeliveryVerificationPending(message)
+          && message.endedAt != null
+          && !isFreshTerminalDeliveryReplayTimestamp(message.endedAt);
+        if (terminalDeliveryReplayIsIneligible) {
+          const deliveryOutcome = resolveDesignDeliveryOutcome({
+            sessionMode: message.sessionMode,
+            runStatus: 'succeeded',
+            content: message.content,
+            events: message.events,
+            producedFileCount: 0,
+            traceObjectFileCount: 0,
+          });
+          updateMessageById(
+            message.id,
+            (prev) => applyDesignDeliveryOutcome(
+              { ...prev, producedFiles: [], traceObjectFiles: [] },
+              deliveryOutcome,
+            ),
+            true,
+            { telemetryFinalized: true },
+          );
+          if (message.runId) {
+            completedReattachRunsRef.current.add(message.runId);
+            genericDisconnectRetriesRef.current.delete(message.runId);
+            genericDisconnectBackoffUntilRef.current.delete(message.runId);
+          }
+          continue;
+        }
         const needsFullReplay =
           isActiveRunStatus(message.runStatus) ||
           replayingTerminalRun ||
@@ -5143,6 +5176,57 @@ export function ProjectView({
             }),
             true,
           );
+        }
+
+        const terminalDeliveryReplayNeedsAuthoritativeAge =
+          replayingTerminalRun
+          && message.runStatus === 'succeeded'
+          && designDeliveryVerificationPending(message)
+          && message.endedAt == null;
+        if (
+          terminalDeliveryReplayNeedsAuthoritativeAge
+          && status.status === 'succeeded'
+          && !isFreshTerminalDeliveryReplayTimestamp(status.updatedAt)
+        ) {
+          const deliveryOutcome = resolveDesignDeliveryOutcome({
+            sessionMode: message.sessionMode,
+            runStatus: 'succeeded',
+            content: message.content,
+            events: message.events,
+            producedFileCount: 0,
+            traceObjectFileCount: 0,
+          });
+          const endedAt = isSafeTerminalTimestamp(status.updatedAt)
+            ? status.updatedAt
+            : undefined;
+          updateMessageById(
+            message.id,
+            (prev) => applyDesignDeliveryOutcome(
+              {
+                ...prev,
+                producedFiles: [],
+                traceObjectFiles: [],
+                ...(prev.endedAt == null && endedAt !== undefined ? { endedAt } : {}),
+              },
+              deliveryOutcome,
+            ),
+            true,
+            { telemetryFinalized: true },
+          );
+          completedReattachRunsRef.current.add(runId);
+          genericDisconnectRetriesRef.current.delete(runId);
+          genericDisconnectBackoffUntilRef.current.delete(runId);
+          continue;
+        }
+
+        if (
+          terminalDeliveryReplayNeedsAuthoritativeAge
+          && (status.status === 'failed' || status.status === 'canceled')
+        ) {
+          completedReattachRunsRef.current.add(runId);
+          genericDisconnectRetriesRef.current.delete(runId);
+          genericDisconnectBackoffUntilRef.current.delete(runId);
+          continue;
         }
 
         if (shouldReplayTerminalRunMessage(message)) {
@@ -5421,6 +5505,90 @@ export function ProjectView({
           isActiveRunStatus(message.runStatus)
           || spuriouslyFailedPending
           || recoverableGenericDisconnectFailed;
+        const boundedTerminalDeliveryVerification =
+          replayingTerminalRun
+          && message.runStatus === 'succeeded'
+          && status.status === 'succeeded'
+          && designDeliveryVerificationPending(message);
+        let terminalDeliveryVerificationExpired = false;
+        let terminalDeliveryVerificationTimer: ReturnType<typeof setTimeout> | null = null;
+        const settleTerminalDeliveryVerification = async (preserveReplayProgress = false) => {
+          if (terminalDeliveryVerificationExpired) return;
+          terminalDeliveryVerificationExpired = true;
+          textBuffer.cancel();
+          unregisterTextBuffer();
+          const deliveryContent = preserveReplayProgress ? replayedContent : message.content;
+          const deliveryEvents = preserveReplayProgress
+            ? [...(message.events ?? []), ...replayedEvents]
+            : message.events;
+          let recoveredProducedFiles: ProjectFile[] = [];
+          let recoveredTraceObjectFiles: ProjectFile[] = [];
+          if (preserveReplayProgress) {
+            const nextFiles = await refreshProjectFiles();
+            const beforeFileNames = new Set(message.preTurnFileNames ?? nextFiles.map((file) => file.name));
+            const touchedFilePaths = extractTouchedFilePathsFromEvents(deliveryEvents);
+            recoveredProducedFiles = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
+            recoveredTraceObjectFiles = computeTraceObjectFiles(
+              beforeFileNames, nextFiles, touchedFilePaths, project.id, projectDetail.resolvedDir,
+            ) ?? [];
+          }
+          if (terminalDeliveryVerificationTimer) {
+            clearProjectTimeout(terminalDeliveryVerificationTimer);
+            terminalDeliveryVerificationTimer = null;
+          }
+          completedReattachRunsRef.current.add(runId);
+          reattachControllersRef.current.delete(runId);
+          reattachCancelControllersRef.current.delete(runId);
+          clearCurrentRunStreamingMarker(reattachConversationId, controller, cancelController);
+          controller.abort();
+          const timeoutOutcome = resolveDesignDeliveryOutcome({
+            sessionMode: message.sessionMode,
+            runStatus: message.runStatus,
+            content: deliveryContent,
+            events: deliveryEvents,
+            producedFileCount: recoveredProducedFiles.length,
+            traceObjectFileCount: recoveredTraceObjectFiles.length,
+          });
+          updateMessageById(
+            message.id,
+            (prev) => {
+              if (prev.runStatus !== 'succeeded' || !designDeliveryVerificationPending(prev)) {
+                return prev;
+              }
+              const settled = {
+                ...prev,
+                content: deliveryContent || prev.content || message.content,
+                events: preserveReplayProgress
+                  ? deliveryEvents
+                  : [...(message.events ?? []), ...(prev.events ?? [])],
+                producedFiles: prev.producedFiles ?? recoveredProducedFiles,
+                traceObjectFiles: prev.traceObjectFiles ?? recoveredTraceObjectFiles,
+              };
+              return applyDesignDeliveryOutcome(
+                settled,
+                resolveDesignDeliveryOutcome({
+                  sessionMode: settled.sessionMode,
+                  runStatus: settled.runStatus,
+                  content: settled.content,
+                  events: settled.events,
+                  producedFileCount: settled.producedFiles.length,
+                  traceObjectFileCount: settled.traceObjectFiles.length,
+                }),
+              );
+            },
+            true,
+            { telemetryFinalized: true },
+          );
+          if (timeoutOutcome === 'no_result' || timeoutOutcome === 'delivery_failed') {
+            setError(DESIGN_RESULT_MISSING_DETAIL);
+          }
+        };
+        if (boundedTerminalDeliveryVerification) {
+          terminalDeliveryVerificationTimer = scheduleProjectTimeout(() => {
+            if (reattachControllersRef.current.get(runId) !== controller) return;
+            void settleTerminalDeliveryVerification(true);
+          }, TERMINAL_DELIVERY_VERIFICATION_TIMEOUT_MS);
+        }
         void reattachDaemonRun({
           runId,
           projectId: project.id,
@@ -5432,6 +5600,7 @@ export function ProjectView({
           publishRunFinishedEvent: shouldPublishRunFinishedEvent,
           handlers: {
             onDelta: (delta) => {
+              if (terminalDeliveryVerificationExpired) return;
               // First payload from the resumed stream is real recovery — the daemon is
               // sending data, not just answering REST status probes.  Reset the
               // transient retry budgets so a future disconnect starts from zero, but
@@ -5450,6 +5619,7 @@ export function ProjectView({
               textBuffer.appendContent(delta);
             },
             onAgentEvent: (ev) => {
+              if (terminalDeliveryVerificationExpired) return;
               transientFailedRetriesRef.current.delete(runId);
               if (!(replayingTerminalRun && !(message.producedFiles?.length))) {
                 genericDisconnectRetriesRef.current.delete(runId);
@@ -5459,6 +5629,15 @@ export function ProjectView({
               textBuffer.appendEvent(ev);
             },
             onDone: async () => {
+              if (terminalDeliveryVerificationTimer) {
+                clearProjectTimeout(terminalDeliveryVerificationTimer);
+                terminalDeliveryVerificationTimer = null;
+              }
+              if (terminalDeliveryVerificationExpired) {
+                textBuffer.cancel();
+                unregisterTextBuffer();
+                return;
+              }
               // A reattached run interrupted by a "send now" still receives a
               // late onDone from the daemon. Decide ownership first, then bail
               // BEFORE any current-run side effect (committing buffered text,
@@ -5629,11 +5808,31 @@ export function ProjectView({
               onProjectsRefresh();
             },
             onError: async (err) => {
+              if (terminalDeliveryVerificationExpired) {
+                textBuffer.cancel();
+                unregisterTextBuffer();
+                return;
+              }
+              const genericDisconnect = isGenericDaemonDisconnect(err);
+              if (boundedTerminalDeliveryVerification && genericDisconnect) {
+                textBuffer.flush();
+                unregisterTextBuffer();
+                await settleTerminalDeliveryVerification(true);
+                return;
+              }
+              if (terminalDeliveryVerificationTimer) {
+                clearProjectTimeout(terminalDeliveryVerificationTimer);
+                terminalDeliveryVerificationTimer = null;
+              }
+              if (terminalDeliveryVerificationExpired) {
+                textBuffer.cancel();
+                unregisterTextBuffer();
+                return;
+              }
               const errorCode = (err as Error & { code?: string }).code;
               const resumable = (err as Error & { resumable?: boolean }).resumable === true;
               let skipFinalPersistNow = false;
               let retryFullReplayAfterCleanup = false;
-              const genericDisconnect = isGenericDaemonDisconnect(err);
               const failure = runFailureFieldsFromError(err);
               // A superseded reattached run must not paint a global failure
               // banner or re-finalize its message over the replacement run.
@@ -5910,6 +6109,10 @@ export function ProjectView({
             },
           },
           onRunStatus: (runStatus) => {
+            if (terminalDeliveryVerificationExpired) return;
+            if (boundedTerminalDeliveryVerification && (runStatus === 'queued' || runStatus === 'running')) {
+              return;
+            }
             textBuffer.flush();
             updateMessageById(
               message.id,
@@ -5938,12 +6141,14 @@ export function ProjectView({
             }
           },
           onRunEventId: (lastRunEventId) => {
+            if (terminalDeliveryVerificationExpired) return;
             textBuffer.flush();
             updateMessageById(message.id, (prev) => ({ ...prev, lastRunEventId }));
             persistSoon();
           },
         })
           .catch((err) => {
+            if (terminalDeliveryVerificationExpired) return;
             // Skip AbortError (expected on interrupt) and any error from a run
             // that was tagged superseded by a send-now interrupt — it must not
             // surface a global failure over the replacement.
@@ -5962,7 +6167,9 @@ export function ProjectView({
             }
           })
           .finally(() => {
-            textBuffer.flush();
+            if (!terminalDeliveryVerificationExpired) {
+              textBuffer.flush();
+            }
             textBuffer.cancel();
             unregisterTextBuffer();
             if (persistTimer) clearProjectTimeout(persistTimer);
@@ -11360,14 +11567,27 @@ function artifactFromRecoverableSourceText(sourceText: string): Artifact | null 
   };
 }
 
+const TERMINAL_DELIVERY_REPLAY_WINDOW_MS = 60_000;
+
+function isSafeTerminalTimestamp(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value <= Date.now();
+}
+
+function isFreshTerminalDeliveryReplayTimestamp(value: unknown): boolean {
+  return isSafeTerminalTimestamp(value) && Date.now() - value <= TERMINAL_DELIVERY_REPLAY_WINDOW_MS;
+}
+
 export function shouldReplayTerminalRunMessage(message: ChatMessage): boolean {
   if (message.role !== 'assistant') return false;
   if (!message.runId) return false;
   if (message.runStatus !== 'succeeded') return false;
-  // A daemon can persist terminal success before the browser finishes its
-  // project-file refresh. Reattach once even when prose already exists so the
-  // delivery invariant can confirm a file or downgrade the turn after reload.
-  if (designDeliveryVerificationPending(message)) return true;
+  // With a stored terminal timestamp, the browser can make a local bounded
+  // decision. Without it, createdAt/startedAt describe run start rather than
+  // completion, so leave the row eligible solely for an authoritative daemon
+  // status probe below.
+  if (designDeliveryVerificationPending(message)) {
+    return message.endedAt == null || isFreshTerminalDeliveryReplayTimestamp(message.endedAt);
+  }
   if (message.content.trim().length > 0) return false;
   if (
     message.startedAt == null

@@ -652,29 +652,29 @@ describe('ProjectView daemon cleanup', () => {
     expect(resolveSucceededRunStatus('canceled')).toBe('canceled');
   });
 
-  it('replays an unverified terminal Design-mode result after reload', () => {
-    expect(
-      shouldReplayTerminalRunMessage({
-        id: 'msg-unverified-delivery',
-        role: 'assistant',
-        content: 'I finished the design.',
-        runId: 'run-unverified-delivery',
-        runStatus: 'succeeded',
-        sessionMode: 'design',
-        startedAt: 1,
-      }),
-    ).toBe(true);
-    expect(
-      shouldReplayTerminalRunMessage({
-        id: 'msg-chat-answer',
-        role: 'assistant',
-        content: 'Here is the answer.',
-        runId: 'run-chat-answer',
-        runStatus: 'succeeded',
-        sessionMode: 'chat',
-        startedAt: 1,
-      }),
-    ).toBe(false);
+  it('uses only a valid terminal timestamp to bound unverified Design replay', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2030-01-01T00:00:00.000Z'));
+    const now = Date.now();
+    const message = (id: string, endedAt?: number): ChatMessage => ({
+      id,
+      role: 'assistant',
+      content: 'I finished the design.',
+      runId: `run-${id}`,
+      runStatus: 'succeeded',
+      sessionMode: 'design',
+      createdAt: now - 61_000,
+      startedAt: now - 61_000,
+      ...(endedAt === undefined ? {} : { endedAt }),
+    });
+
+    expect(shouldReplayTerminalRunMessage(message('fresh', now))).toBe(true);
+    expect(shouldReplayTerminalRunMessage(message('boundary', now - 60_000))).toBe(true);
+    expect(shouldReplayTerminalRunMessage(message('stale', now - 60_001))).toBe(false);
+    expect(shouldReplayTerminalRunMessage(message('future', now + 1))).toBe(false);
+    // No stored terminal timestamp means the effect must consult daemon updatedAt,
+    // not infer completion age from the much older run start timestamps.
+    expect(shouldReplayTerminalRunMessage(message('missing-ended-at'))).toBe(true);
   });
 
   // Regression: a phantom 'running' row in DB (no runId, no matching active

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, waitFor } from '@testing-library/react';
+import { act, cleanup, render, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   ProjectView,
@@ -446,6 +446,7 @@ describe('same-turn dedup for recovered prose-only artifacts (#4318)', () => {
 
 describe('ProjectView daemon reattach restore', () => {
   afterEach(() => {
+    vi.useRealTimers();
     cleanup();
     vi.clearAllMocks();
     chatPaneHarness.onSend = null;
@@ -559,6 +560,377 @@ describe('ProjectView daemon reattach restore', () => {
       expect(lastWithProduced?.producedFiles?.map((f) => f.name)).toEqual(['new.pptx']);
       expect(lastWithProduced?.runStatus).toBe('succeeded');
     });
+  });
+
+  it('settles a stale observed terminal Design timestamp without status probing or reattach', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2030-01-01T00:00:00.000Z'));
+    const now = Date.now();
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-stale-observed-terminal-delivery',
+        role: 'assistant',
+        content: 'I finished the design.',
+        createdAt: now - 120_000,
+        startedAt: now - 120_000,
+        endedAt: now - 60_001,
+        runId: 'run-stale-observed-terminal-delivery',
+        runStatus: 'succeeded',
+        sessionMode: 'design',
+        preTurnFileNames: [],
+        events: [{ kind: 'tool_use', id: 'write-stale', name: 'Write', input: { file_path: 'index.html' } }],
+      } satisfies ChatMessage,
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+
+    renderProjectView();
+    for (let attempt = 0; attempt < 20 && saveMessage.mock.calls.length === 0; attempt += 1) {
+      await act(async () => {
+        await Promise.resolve();
+      });
+    }
+
+    expect(fetchChatRunStatus).not.toHaveBeenCalled();
+    expect(reattachDaemonRun).not.toHaveBeenCalled();
+    expect(saveMessage.mock.calls.map((call) => call[2] as ChatMessage)).toContainEqual(expect.objectContaining({
+      id: 'msg-stale-observed-terminal-delivery',
+      runStatus: 'succeeded',
+      endedAt: now - 60_001,
+      producedFiles: [],
+      traceObjectFiles: [],
+      resultDeliveryState: 'no_result',
+    }));
+  });
+
+  it('does not reattach a missing-endedAt Design snapshot when daemon status is failed', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2030-01-01T00:00:00.000Z'));
+    const now = Date.now();
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-daemon-failed-terminal-delivery',
+        role: 'assistant',
+        content: 'I finished the design.',
+        createdAt: now - 61_000,
+        startedAt: now - 61_000,
+        runId: 'run-daemon-failed-terminal-delivery',
+        runStatus: 'succeeded',
+        sessionMode: 'design',
+        preTurnFileNames: [],
+        events: [{ kind: 'tool_use', id: 'write-failed', name: 'Write', input: { file_path: 'index.html' } }],
+      } satisfies ChatMessage,
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-daemon-failed-terminal-delivery', status: 'failed', createdAt: now - 61_000,
+      updatedAt: now, exitCode: 1, signal: null,
+    });
+    reattachDaemonRun.mockResolvedValue(undefined);
+
+    renderProjectView();
+    for (let attempt = 0; attempt < 20 && saveMessage.mock.calls.length === 0; attempt += 1) {
+      await act(async () => {
+        await Promise.resolve();
+      });
+    }
+
+    expect(fetchChatRunStatus).toHaveBeenCalledWith('run-daemon-failed-terminal-delivery', null);
+    expect(reattachDaemonRun).not.toHaveBeenCalled();
+    expect(saveMessage.mock.calls.map((call) => call[2] as ChatMessage)).toContainEqual(expect.objectContaining({
+      id: 'msg-daemon-failed-terminal-delivery',
+      runStatus: 'failed',
+    }));
+  });
+
+  it('probes a long terminal Design run without endedAt and reattaches when daemon completion is fresh', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2030-01-01T00:00:00.000Z'));
+    const now = Date.now();
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-long-terminal-delivery',
+        role: 'assistant',
+        content: 'I finished the design.',
+        createdAt: now - 61_000,
+        startedAt: now - 61_000,
+        runId: 'run-long-terminal-delivery',
+        runStatus: 'succeeded',
+        sessionMode: 'design',
+        preTurnFileNames: [],
+        events: [{ kind: 'tool_use', id: 'write-long', name: 'Write', input: { file_path: 'index.html' } }],
+      } satisfies ChatMessage,
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-long-terminal-delivery', status: 'succeeded', createdAt: now - 61_000,
+      updatedAt: now, exitCode: 0, signal: null,
+    });
+    reattachDaemonRun.mockImplementation(async () => new Promise<void>(() => {}));
+
+    renderProjectView();
+    for (let attempt = 0; attempt < 20 && reattachDaemonRun.mock.calls.length === 0; attempt += 1) {
+      await act(async () => {
+        await Promise.resolve();
+      });
+    }
+
+    expect(fetchChatRunStatus).toHaveBeenCalledWith('run-long-terminal-delivery', null);
+    expect(reattachDaemonRun).toHaveBeenCalledTimes(1);
+  });
+
+  it('settles a missing-endedAt Design row when the daemon completion is historical', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2030-01-01T00:00:00.000Z'));
+    const now = Date.now();
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-historical-terminal-delivery',
+        role: 'assistant',
+        content: 'I finished the design.',
+        createdAt: now - 120_000,
+        startedAt: now - 120_000,
+        runId: 'run-historical-terminal-delivery',
+        runStatus: 'succeeded',
+        sessionMode: 'design',
+        preTurnFileNames: [],
+        events: [{ kind: 'tool_use', id: 'write-historical', name: 'Write', input: { file_path: 'index.html' } }],
+      } satisfies ChatMessage,
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-historical-terminal-delivery', status: 'succeeded', createdAt: now - 120_000,
+      updatedAt: now - 60_001, exitCode: 0, signal: null,
+    });
+
+    renderProjectView();
+    for (let attempt = 0; attempt < 20 && saveMessage.mock.calls.length === 0; attempt += 1) {
+      await act(async () => {
+        await Promise.resolve();
+      });
+    }
+
+    expect(fetchChatRunStatus).toHaveBeenCalledWith('run-historical-terminal-delivery', null);
+    expect(reattachDaemonRun).not.toHaveBeenCalled();
+    expect(saveMessage.mock.calls.map((call) => call[2] as ChatMessage)).toContainEqual(expect.objectContaining({
+      id: 'msg-historical-terminal-delivery',
+      runStatus: 'succeeded',
+      endedAt: now - 60_001,
+      producedFiles: [],
+      traceObjectFiles: [],
+    }));
+  });
+
+  it('settles one stalled terminal Design delivery verification without reattaching again', async () => {
+    vi.useFakeTimers();
+    const endedAt = Date.now();
+    let lateOnDone: (() => void) | null = null;
+    let lateOnRunStatus: ((status: 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled') => void) | null = null;
+    let lateOnRunEventId: ((eventId: string) => void) | null = null;
+    let lateOnError: ((error: Error & { code?: string }) => Promise<void>) | null = null;
+    let lateOnDelta: ((delta: string) => void) | null = null;
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-stalled-terminal-delivery',
+        role: 'assistant',
+        content: 'I finished the design.',
+        createdAt: endedAt - 1_000,
+        startedAt: endedAt - 1_000,
+        endedAt,
+        runId: 'run-stalled-terminal-delivery',
+        runStatus: 'succeeded',
+        sessionMode: 'design',
+        preTurnFileNames: [],
+        producedFiles: undefined,
+        traceObjectFiles: undefined,
+        events: [{ kind: 'tool_use', id: 'write-1', name: 'Write', input: { file_path: 'index.html' } }],
+      } satisfies ChatMessage,
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([{ name: 'index.html', path: 'index.html', size: 23, mtime: endedAt, kind: 'html', mime: 'text/html' }]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-stalled-terminal-delivery', status: 'succeeded', createdAt: endedAt - 1_000,
+      updatedAt: endedAt, exitCode: 0, signal: null,
+    });
+    reattachDaemonRun.mockImplementation(async (options: {
+      handlers: { onDone: () => void; onDelta: (delta: string) => void; onError: (error: Error & { code?: string }) => Promise<void> };
+      onRunStatus?: (status: 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled') => void;
+      onRunEventId?: (eventId: string) => void;
+    }) => {
+      lateOnDone = options.handlers.onDone;
+      lateOnDelta = options.handlers.onDelta;
+      lateOnError = options.handlers.onError;
+      lateOnRunStatus = options.onRunStatus ?? null;
+      lateOnRunEventId = options.onRunEventId ?? null;
+      return new Promise<void>(() => {});
+    });
+
+    renderProjectView();
+    for (let attempt = 0; attempt < 20 && reattachDaemonRun.mock.calls.length === 0; attempt += 1) {
+      await act(async () => {
+        await Promise.resolve();
+      });
+    }
+    expect(reattachDaemonRun).toHaveBeenCalledTimes(1);
+    expect(lateOnRunStatus).toBeTypeOf('function');
+    lateOnRunStatus!('running');
+    expect(lateOnDelta).toBeTypeOf('function');
+    lateOnDelta!('late buffered delta');
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_001);
+    });
+    for (let attempt = 0; attempt < 20 && saveMessage.mock.calls.length === 0; attempt += 1) {
+      await act(async () => {
+        await Promise.resolve();
+      });
+    }
+
+    const settled = saveMessage.mock.calls
+      .map((call) => call[2] as ChatMessage)
+      .find((message) => message.id === 'msg-stalled-terminal-delivery'
+        && message.resultDeliveryState !== undefined);
+    expect(settled).toMatchObject({
+      runStatus: 'succeeded',
+      content: 'late buffered delta',
+      producedFiles: [expect.objectContaining({ name: 'index.html' })],
+      traceObjectFiles: [expect.objectContaining({ name: 'index.html' })],
+    });
+    const savesAtTimeout = saveMessage.mock.calls.length;
+    expect(lateOnDone).not.toBeNull();
+    await act(async () => {
+      await (lateOnDone as unknown as () => void)();
+    });
+    expect(saveMessage).toHaveBeenCalledTimes(savesAtTimeout);
+    expect(lateOnRunStatus).toBeTypeOf('function');
+    await act(async () => {
+      (lateOnRunStatus as unknown as (status: 'running') => void)('running');
+    });
+    expect(saveMessage).toHaveBeenCalledTimes(savesAtTimeout);
+    expect(lateOnRunEventId).toBeTypeOf('function');
+    await act(async () => { (lateOnRunEventId as (eventId: string) => void)('late-event'); });
+    expect(saveMessage).toHaveBeenCalledTimes(savesAtTimeout);
+    expect(lateOnError).toBeTypeOf('function');
+    await act(async () => { await (lateOnError as (error: Error & { code?: string }) => Promise<void>)(Object.assign(new Error('late disconnect'), { code: 'GENERIC_DAEMON_DISCONNECT' })); });
+    expect(saveMessage).toHaveBeenCalledTimes(savesAtTimeout);
+    const reattachOptions = reattachDaemonRun.mock.calls[0]?.[0] as { signal: AbortSignal } | undefined;
+    expect(reattachOptions?.signal.aborted).toBe(true);
+    expect(reattachDaemonRun).toHaveBeenCalledTimes(1);
+  });
+
+  it('settles a terminal Design verification on generic disconnect without retrying', async () => {
+    vi.useFakeTimers();
+    const endedAt = Date.now();
+    let terminalOnError: ((error: Error & { code?: string }) => Promise<void>) | null = null;
+    let terminalOnDelta: ((delta: string) => void) | null = null;
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-terminal-generic-disconnect',
+        role: 'assistant',
+        content: 'I finished the design.',
+        createdAt: endedAt - 1_000,
+        startedAt: endedAt - 1_000,
+        endedAt,
+        runId: 'run-terminal-generic-disconnect',
+        runStatus: 'succeeded',
+        sessionMode: 'design',
+        preTurnFileNames: [],
+        events: [{ kind: 'tool_use', id: 'write-generic-disconnect', name: 'Write', input: { file_path: 'index.html' } }],
+      } satisfies ChatMessage,
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-terminal-generic-disconnect', status: 'succeeded', createdAt: endedAt - 1_000,
+      updatedAt: endedAt, exitCode: 0, signal: null,
+    });
+    reattachDaemonRun.mockImplementation(async (options: {
+      handlers: {
+        onDelta: (delta: string) => void;
+        onError: (error: Error & { code?: string }) => Promise<void>;
+      };
+    }) => {
+      terminalOnDelta = options.handlers.onDelta;
+      terminalOnError = options.handlers.onError;
+      return new Promise<void>(() => {});
+    });
+
+    renderProjectView();
+    for (let attempt = 0; attempt < 20 && terminalOnError === null; attempt += 1) {
+      await act(async () => {
+        await Promise.resolve();
+      });
+    }
+    expect(terminalOnError).toBeTypeOf('function');
+    expect(terminalOnDelta).toBeTypeOf('function');
+    await act(async () => {
+      (terminalOnDelta as (delta: string) => void)('Recovered terminal delivery.');
+    });
+    const genericDisconnect = Object.assign(
+      new Error('daemon stream disconnected before run completed'),
+      { code: 'GENERIC_DAEMON_DISCONNECT' },
+    );
+    await act(async () => {
+      await (terminalOnError as (error: typeof genericDisconnect) => Promise<void>)(genericDisconnect);
+    });
+    for (let attempt = 0; attempt < 20 && !saveMessage.mock.calls.some((call) =>
+      (call[2] as ChatMessage).resultDeliveryState === 'no_result'); attempt += 1) {
+      await act(async () => {
+        await Promise.resolve();
+      });
+    }
+
+    expect(saveMessage.mock.calls.map((call) => call[2] as ChatMessage)).toContainEqual(expect.objectContaining({
+      id: 'msg-terminal-generic-disconnect',
+      runStatus: 'succeeded',
+      content: 'Recovered terminal delivery.',
+      producedFiles: [],
+      traceObjectFiles: [],
+      resultDeliveryState: 'no_result',
+    }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(6_000);
+    });
+    expect(reattachDaemonRun).toHaveBeenCalledTimes(1);
   });
 
   it('does not publish a run-finished event while replaying a historical success', async () => {
