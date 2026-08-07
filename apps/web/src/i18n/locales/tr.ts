@@ -3731,6 +3731,7 @@ export const tr: Dict = {
   'pet.slashPopoverTitle': 'Komutlar',
   'pet.slashPopoverHint': '↑↓ gez · enter seç · esc kapat',
   'pet.slashPet': 'Peti aç/kapat, evlat edin veya ayarları aç.',
+  'pet.slashMcp': 'Open MCP server settings or insert a server tool hint.',
   'pet.slashPetWake': 'Yüzen peti uyandır.',
   'pet.slashPetTuck': 'Peti şimdilik sakla.',
   'pet.slashHatch': 'hatch-pet skill\'i ile bir Codex peti üret.',

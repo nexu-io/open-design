@@ -3731,6 +3731,7 @@ export const it: Dict = {
   'pet.slashPopoverTitle': 'Comandi',
   'pet.slashPopoverHint': '↑↓ naviga · invio per scegliere · esc per chiudere',
   'pet.slashPet': 'Alterna, adotta o vai alle impostazioni del compagno.',
+  'pet.slashMcp': 'Open MCP server settings or insert a server tool hint.',
   'pet.slashPetWake': 'Sveglia l\'overlay fluttuante del compagno.',
   'pet.slashPetTuck': 'Nascondi il compagno per ora.',
   'pet.slashHatch': 'Genera un pet Codex tramite la competenza hatch-pet.',

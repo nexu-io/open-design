@@ -3731,6 +3731,7 @@ export const de: Dict = {
   'pet.slashPopoverTitle': 'Befehle',
   'pet.slashPopoverHint': '↑↓ navigieren · enter auswählen · esc schließen',
   'pet.slashPet': 'Pet umschalten, adoptieren oder Einstellungen öffnen.',
+  'pet.slashMcp': 'Open MCP server settings or insert a server tool hint.',
   'pet.slashPetWake': 'Schwebende Pet-Anzeige aufwecken.',
   'pet.slashPetTuck': 'Pet vorerst wegstecken.',
   'pet.slashHatch': 'Codex-Pet mit dem hatch-pet-Skill erzeugen.',

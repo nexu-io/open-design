@@ -3945,6 +3945,7 @@ export const zhTW: Dict = {
   "pet.slashPopoverTitle": "命令",
   "pet.slashPopoverHint": "↑↓ 切換 · enter 選擇 · esc 關閉",
   "pet.slashPet": "切換、領養或跳到寵物設定。",
+  "pet.slashMcp": "開啟 MCP 伺服器設定，或插入伺服器工具提示。",
   "pet.slashPetWake": "喚醒漂浮的寵物。",
   "pet.slashPetTuck": "把寵物收起來。",
   "pet.slashHatch": "呼叫 hatch-pet 技能生成一隻 Codex 寵物。",

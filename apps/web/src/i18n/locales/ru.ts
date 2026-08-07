@@ -3731,6 +3731,7 @@ export const ru: Dict = {
   'pet.slashPopoverTitle': 'Команды',
   'pet.slashPopoverHint': '↑↓ навигация · enter выбрать · esc закрыть',
   'pet.slashPet': 'Переключить, выбрать или открыть настройки пета.',
+  'pet.slashMcp': 'Open MCP server settings or insert a server tool hint.',
   'pet.slashPetWake': 'Разбудить плавающего пета.',
   'pet.slashPetTuck': 'Спрятать пета на время.',
   'pet.slashHatch': 'Создать Codex-пета через навык hatch-pet.',

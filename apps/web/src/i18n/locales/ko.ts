@@ -3731,6 +3731,7 @@ export const ko: Dict = {
   'pet.slashPopoverTitle': '명령',
   'pet.slashPopoverHint': '↑↓ 이동 · enter 선택 · esc 닫기',
   'pet.slashPet': '펫을 토글하거나 입양 또는 설정으로 이동.',
+  'pet.slashMcp': 'Open MCP server settings or insert a server tool hint.',
   'pet.slashPetWake': '플로팅 펫을 깨우기.',
   'pet.slashPetTuck': '펫을 잠시 치우기.',
   'pet.slashHatch': 'hatch-pet 스킬로 Codex 펫 생성.',

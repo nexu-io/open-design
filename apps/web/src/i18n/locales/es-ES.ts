@@ -3731,6 +3731,7 @@ export const esES: Dict = {
   'pet.slashPopoverTitle': 'Comandos',
   'pet.slashPopoverHint': '↑↓ navegar · enter elegir · esc cerrar',
   'pet.slashPet': 'Alternar, adoptar o ir a ajustes de mascota.',
+  'pet.slashMcp': 'Open MCP server settings or insert a server tool hint.',
   'pet.slashPetWake': 'Despertar la mascota flotante.',
   'pet.slashPetTuck': 'Guardar la mascota por ahora.',
   'pet.slashHatch': 'Genera una mascota Codex con la skill hatch-pet.',

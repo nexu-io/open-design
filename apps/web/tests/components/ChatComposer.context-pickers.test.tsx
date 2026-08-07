@@ -410,6 +410,23 @@ describe('ChatComposer context pickers', () => {
     expect(screen.queryByText('No results for “missing”.')).toBeNull();
   });
 
+  it('describes /mcp slash commands as MCP actions instead of pet actions', async () => {
+    renderComposer();
+    await flushMounts();
+
+    await typeAndSettle('/');
+
+    const popover = await screen.findByTestId('slash-popover');
+    const settingsRow = within(popover).getByText('/mcp').closest('button');
+    const mcpRow = within(popover).getByText('/mcp slack').closest('button');
+    expect(settingsRow).toBeTruthy();
+    expect(mcpRow).toBeTruthy();
+    expect(settingsRow?.textContent).toContain('Open MCP server settings or insert a server tool hint.');
+    expect(settingsRow?.textContent).not.toContain('Toggle, adopt, or jump to pet settings.');
+    expect(mcpRow?.textContent).toContain('Open MCP server settings or insert a server tool hint.');
+    expect(mcpRow?.textContent).not.toContain('Toggle, adopt, or jump to pet settings.');
+  });
+
   it('lists Design Files first in All and picks the first file with Enter', async () => {
     renderComposer({
       projectFiles: [

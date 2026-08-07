@@ -3731,6 +3731,7 @@ export const ja: Dict = {
   'pet.slashPopoverTitle': 'コマンド',
   'pet.slashPopoverHint': '↑↓ で移動 · enter で選択 · esc で閉じる',
   'pet.slashPet': 'ペットを切替・採用、または設定を開く。',
+  'pet.slashMcp': 'Open MCP server settings or insert a server tool hint.',
   'pet.slashPetWake': '浮遊ペットを起こす。',
   'pet.slashPetTuck': 'ペットを一旦しまう。',
   'pet.slashHatch': 'hatch-pet スキルで Codex ペットを生成。',

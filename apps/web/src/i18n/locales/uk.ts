@@ -3731,6 +3731,7 @@ export const uk: Dict = {
   'pet.slashPopoverTitle': 'Команди',
   'pet.slashPopoverHint': '↑↓ навігація · enter для вибору · esc для закриття',
   'pet.slashPet': 'Перемикання, встановлення або перехід до параметрів домашної тварини.',
+  'pet.slashMcp': 'Open MCP server settings or insert a server tool hint.',
   'pet.slashPetWake': 'Розбудити накладку плаваючої домашної тварини.',
   'pet.slashPetTuck': 'Сховати домашну тварину на цей час.',
   'pet.slashHatch': 'Створити домашну тварину Codex через навичку hatch-pet.',

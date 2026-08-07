@@ -3731,6 +3731,7 @@ export const fa: Dict = {
   'pet.slashPopoverTitle': 'دستورها',
   'pet.slashPopoverHint': '↑↓ پیمایش · enter انتخاب · esc بستن',
   'pet.slashPet': 'پت را روشن/خاموش کنید، انتخاب کنید یا تنظیمات را باز کنید.',
+  'pet.slashMcp': 'Open MCP server settings or insert a server tool hint.',
   'pet.slashPetWake': 'پت شناور را بیدار کنید.',
   'pet.slashPetTuck': 'پت را فعلاً جمع کنید.',
   'pet.slashHatch': 'با مهارت hatch-pet یک پت Codex بسازید.',

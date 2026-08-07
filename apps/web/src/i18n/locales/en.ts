@@ -3769,6 +3769,7 @@ export const en: Dict = {
   'pet.slashPopoverTitle': 'Commands',
   'pet.slashPopoverHint': '↑↓ navigate · enter to pick · esc to dismiss',
   'pet.slashPet': 'Toggle, adopt, or jump to pet settings.',
+  'pet.slashMcp': 'Open MCP server settings or insert a server tool hint.',
   'pet.slashPetWake': 'Wake the floating pet overlay.',
   'pet.slashPetTuck': 'Tuck the pet away for now.',
   'pet.slashHatch': 'Generate a Codex pet via the hatch-pet skill.',

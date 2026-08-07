@@ -989,7 +989,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
           id: 'mcp',
           label: '/mcp',
           insert: '/mcp ',
-          descKey: 'pet.slashPet',
+          descKey: 'pet.slashMcp',
           icon: 'sliders',
           argHint: 'open settings · <server-id> to insert hint',
         });
@@ -999,7 +999,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
           id: `mcp-${s.id}`,
           label: `/mcp ${s.id}`,
           insert: `Use the \`${s.id}\` MCP server tools. `,
-          descKey: 'pet.slashPet',
+          descKey: 'pet.slashMcp',
           icon: 'sparkles',
           argHint: s.label || s.transport,
         });

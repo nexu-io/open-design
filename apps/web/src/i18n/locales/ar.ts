@@ -3731,6 +3731,7 @@ export const ar: Dict = {
   'pet.slashPopoverTitle': 'الأوامر',
   'pet.slashPopoverHint': '↑↓ للتنقل · enter للاختيار · esc للتجاهل',
   'pet.slashPet': 'تبديل، تبني، أو الانتقال لإعدادات الحيوانات الأليفة.',
+  'pet.slashMcp': 'Open MCP server settings or insert a server tool hint.',
   'pet.slashPetWake': 'إيقاظ طبقة الحيوان الأليف العائمة.',
   'pet.slashPetTuck': 'إخفاء الحيوان الأليف حالياً.',
   'pet.slashHatch': 'توليد حيوان Codex عبر مهارة hatch-pet.',

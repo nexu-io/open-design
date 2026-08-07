@@ -3731,6 +3731,7 @@ export const th: Dict = {
   'pet.slashPopoverTitle': 'สั่งทำงานตามคำพูดตรง',
   'pet.slashPopoverHint': 'ไล่ชี้จากทิศทาง ↑↓ นำเอา enter เข้าจับสั่ง · esc ไม่เอาหน้าต่างแล้วออกไป',
   'pet.slashPet': 'โหมดตั้งกลับแบบ เปิดเอา/ปิดรับ พร้อมการเข้าจัดระบบตัวของสัตว์เลยทันใจ',
+  'pet.slashMcp': 'Open MCP server settings or insert a server tool hint.',
   'pet.slashPetWake': 'เรียกตัวที่เตรียมลอยมาโชว์รับในจอ',
   'pet.slashPetTuck': 'เอากลับพับโชว์เข้าที่ไปตอนนี้นี่แหล่ะ',
   'pet.slashHatch': 'ก่อแบบเสกตัวของจากแบบฉบับ Codex ทำเข้าจากตรงระบบความสามารถ hatch-pet เสียด้วย',

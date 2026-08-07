@@ -3731,6 +3731,7 @@ export const hu: Dict = {
   'pet.slashPopoverTitle': 'Parancsok',
   'pet.slashPopoverHint': '↑↓ navigáció · enter választás · esc kilépés',
   'pet.slashPet': 'Háziállat váltása, befogadása vagy a beállítások megnyitása.',
+  'pet.slashMcp': 'Open MCP server settings or insert a server tool hint.',
   'pet.slashPetWake': 'Lebegő háziállat-réteg ébresztése.',
   'pet.slashPetTuck': 'Háziállat elrejtése egy időre.',
   'pet.slashHatch': 'Codex háziállat generálása a hatch-pet skill-lel.',

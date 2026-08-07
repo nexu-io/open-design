@@ -3731,6 +3731,7 @@ export const pl: Dict = {
   'pet.slashPopoverTitle': 'Polecenia',
   'pet.slashPopoverHint': '↑↓ nawigacja · enter wybierz · esc zamknij',
   'pet.slashPet': 'Przełącz, adoptuj lub otwórz ustawienia peta.',
+  'pet.slashMcp': 'Open MCP server settings or insert a server tool hint.',
   'pet.slashPetWake': 'Obudź pływającego peta.',
   'pet.slashPetTuck': 'Schowaj peta na razie.',
   'pet.slashHatch': 'Wygeneruj peta Codex skillem hatch-pet.',

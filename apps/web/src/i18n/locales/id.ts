@@ -3731,6 +3731,7 @@ export const id: Dict = {
   'pet.slashPopoverTitle': 'Perintah',
   'pet.slashPopoverHint': 'atas/bawah untuk navigasi - enter untuk pilih - esc untuk tutup',
   'pet.slashPet': 'Toggle, adopsi, atau buka pengaturan pet.',
+  'pet.slashMcp': 'Open MCP server settings or insert a server tool hint.',
   'pet.slashPetWake': 'Bangunkan overlay pet melayang.',
   'pet.slashPetTuck': 'Sembunyikan pet untuk sekarang.',
   'pet.slashHatch': 'Buat pet Codex lewat skill hatch-pet.',

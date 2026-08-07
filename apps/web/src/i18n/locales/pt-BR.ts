@@ -3731,6 +3731,7 @@ export const ptBR: Dict = {
   'pet.slashPopoverTitle': 'Comandos',
   'pet.slashPopoverHint': '↑↓ navegar · enter escolher · esc fechar',
   'pet.slashPet': 'Alternar, adotar ou abrir as configurações do pet.',
+  'pet.slashMcp': 'Open MCP server settings or insert a server tool hint.',
   'pet.slashPetWake': 'Acordar o pet flutuante.',
   'pet.slashPetTuck': 'Guardar o pet por agora.',
   'pet.slashHatch': 'Gere um pet Codex com a skill hatch-pet.',

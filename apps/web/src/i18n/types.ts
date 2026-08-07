@@ -4578,6 +4578,7 @@ export interface Dict {
   'pet.slashPopoverTitle': string;
   'pet.slashPopoverHint': string;
   'pet.slashPet': string;
+  'pet.slashMcp': string;
   'pet.slashPetWake': string;
   'pet.slashPetTuck': string;
   'pet.slashHatch': string;
