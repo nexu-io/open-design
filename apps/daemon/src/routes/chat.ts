@@ -25,6 +25,10 @@ import {
   type ImageToolResult,
 } from '../byok-tools.js';
 import {
+  envByokDefaultForProtocol,
+  envByokDefaultsView,
+} from '../byok-env.js';
+import {
   AIHUBMIX_DEFAULT_BASE_URL,
   aihubmixHeaders,
   aihubmixAppCodeHeader,
@@ -985,8 +989,13 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     /** @type {Partial<ProxyStreamRequest>} */
     const proxyBody = req.body || {};
     if (rejectProxyPluginContext(proxyBody, res)) return;
-    const { baseUrl, apiKey, model, systemPrompt, messages, maxTokens } =
-      proxyBody;
+    const { systemPrompt, messages, maxTokens } = proxyBody;
+    // Host-managed default (OD_BYOK_*): a server deployment's browser need
+    // not send the key at all — the daemon fills it here, server-side only.
+    const envDefault = envByokDefaultForProtocol('anthropic');
+    const baseUrl = proxyBody.baseUrl ?? envDefault?.provider.baseUrl;
+    const apiKey = proxyBody.apiKey ?? envDefault?.provider.apiKey;
+    const model = proxyBody.model ?? envDefault?.model;
     if (!baseUrl || !apiKey || !model) {
       return sendApiError(
         res,
@@ -1031,8 +1040,12 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     /** @type {Partial<ProxyStreamRequest>} */
     const proxyBody = req.body || {};
     if (rejectProxyPluginContext(proxyBody, res)) return;
-    const { baseUrl, apiKey, model, systemPrompt, messages, maxTokens } =
-      proxyBody;
+    const { systemPrompt, messages, maxTokens } = proxyBody;
+    // Host-managed default (OD_BYOK_*), same as the anthropic route.
+    const envDefault = envByokDefaultForProtocol('openai');
+    const baseUrl = proxyBody.baseUrl ?? envDefault?.provider.baseUrl;
+    const apiKey = proxyBody.apiKey ?? envDefault?.provider.apiKey;
+    const model = proxyBody.model ?? envDefault?.model;
     if (!baseUrl || !apiKey || !model) {
       return sendApiError(
         res,
@@ -2358,6 +2371,13 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     runSpeech: executeAIHubMixGenerateSpeech,
     runVideo: executeAIHubMixGenerateVideo,
     routeByModel: true,
+  });
+
+  // What the web may learn about a host-managed provider (OD_BYOK_*):
+  // enough to badge "managed by host environment" and pre-fill the model —
+  // never the key.
+  app.get('/api/byok-defaults', (_req, res) => {
+    res.json(envByokDefaultsView());
   });
 
   app.post('/api/proxy/:provider/stream', (req, res) => {
