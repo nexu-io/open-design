@@ -8,26 +8,26 @@ Follow the root `AGENTS.md` first. This file only records module-level boundarie
 - `packages/contracts`: web/daemon app contract layer. Keep it pure TypeScript; it must not depend on Next.js, Express, Node filesystem/process APIs, browser APIs, SQLite, daemon internals, or the sidecar control-plane protocol.
 - `packages/components`: shared React UI primitives and primitive CSS. It may depend on React types/runtime only; keep product workflows and app-specific layout/styling in the apps.
 - `packages/closure-proto`: pure TypeScript standalone-closure protocol. It owns namespace-neutral candidate identity, local product-namespace binding, artifact integrity, shell compatibility, generation-bound runtime status, and Shell capability envelopes; it must not own physical transport, process orchestration, filesystem state, downloads, or Desktop launcher behavior.
-- `packages/closure-shim`: Closure-owned, shell-carried `ensure + handoff` entry. It verifies the pinned-key candidate envelope, composes Store/update primitives, binds body readiness to one namespace/generation, and owns bounded rollback without owning shell UX or body internals.
-- `packages/closure-store`: shell-neutral local Closure storage and rollback state. It verifies materialized immutable candidates and owns active/attempt/last-successful per channel/namespace; it must not download, extract, launch, select updates, or depend on Desktop launcher state.
-- `packages/closure-update`: shell-neutral Closure release selection and update orchestration. It may compose `closure-proto`, `closure-store`, and managed downloads, but must not update a shell, own UI, infer a shell's paths, or depend on Desktop/Codex private state.
+- `packages/closure-shim`: fossil Shell-to-Closure entry. It validates one committed locator/bootstrap and enters it once; it must not own network, candidate selection, Store/history, update, rollback, body layout, or health-based fallback.
+- `packages/closure-store`: Closure-internal immutable materialization and commit primitives. Shells and the fossil shim must not inspect its candidate history or use it as a fallback selector.
+- `packages/closure-update`: Closure-internal release selection and update orchestration. It may compose Closure storage and managed downloads, but must not update a shell or create a second committed-locator authority.
 - `packages/diagnostics`: shared diagnostics export primitives for log collection, redaction, manifests, crash-report discovery, and zip packaging used by daemon and desktop.
 - `packages/download`: managed-download runtime. Owns resumable and checksum-verified transfers, concurrent-request deduplication, target locking, inspection/removal, copy-and-clear, and pruning; callers supply the download identity and storage base.
 - `packages/host`: web/desktop host bridge contract. It models renderer-facing host capabilities and helpers while keeping `window.__od__` access out of app UI code.
-- `packages/standalone-runtime`: reusable shell-neutral lifecycle primitives for the Headless product. It coordinates injected daemon/Web adapters, product health/diagnostics, explicit paths, and reverse shutdown; deployable composition remains in `apps/standalone`.
+- `packages/standalone-runtime`: reusable shell-neutral lifecycle primitives for the Standalone product. It coordinates injected daemon/Web adapters, product health/diagnostics, explicit paths, and reverse shutdown; deployable composition remains in `apps/standalone`.
 - `packages/launcher-proto`: launcher protocol and path/state primitives. Owns channel/version/namespace validation, launcher directory derivation, runtime and cleanup descriptors, target selection, and after-quit argument parsing without owning launcher process orchestration.
 - `packages/metatool`: internal metadata helpers for repo-local tool build outputs. Keep reusable hash/check/write mechanics here; each concrete tool owns its own `meta.json`.
 - `packages/plugin-runtime`: pure TypeScript plugin manifest/marketplace parsers, source adapters, merge/ref resolution, validation, digesting, and pipeline-fallback selection. Daemon, web, and CI inject I/O rather than adding filesystem access here.
 - `packages/registry-protocol`: pure TypeScript plugin-registry backend protocol and schemas. Owns backend list/search/resolve/manifest/doctor plus optional publish/yank interfaces, not concrete network or storage integrations.
 - `packages/release`: pure release-domain primitives. Owns release channel names, version parsing/formatting, metadata field derivation, storage prefixes, release namespaces, and app identity data. It must not read/write files, call GitHub/R2, spawn build tools, or own workflow execution.
-- `packages/sidecar-proto`: Open Design sidecar business protocol. Owns app/mode/source constants, namespace validation, stamp descriptor/fields/flags, IPC message schema, status shapes, error semantics, and default product path constants.
-- `packages/sidecar`: generic sidecar runtime primitives. Includes bootstrap, IPC transport, path/runtime resolution, launch env, and JSON runtime file helpers; it must not hard-code Open Design app keys or IPC business messages.
-- `packages/platform`: generic OS process primitives. Includes stamp serialization, command parsing, process matching/search, and well-known user-toolchain bin discovery; it must consume the `sidecar-proto` descriptor and must not hard-code `--od-stamp-*` details. The toolchain helper is the single source of truth shared by the daemon runtime executable resolver (`apps/daemon/src/runtimes/executables.ts`) and the packaged sidecar PATH builder (`apps/packaged/src/sidecars.ts`) so neither layer can drift the search list.
+- `packages/sidecar`: sole target public sidecar control plane. It owns canonical `<channel, namespace, generation, service>` identity, caller-root validation/propagation, hidden launch metadata, connect/probe/request-stop mechanics, package-private restart incarnation, endpoint/transport adapters, and process convergence. It owns no product method catalog or caller retry/update/UX policy.
+- `packages/sidecar-proto`: legacy migration surface only. Move shared product DTOs to `contracts`, Desktop host/updater DTOs to `host`, and Shell/Closure semantics to `closure-proto`, then delete this package without compatibility aliases.
+- `packages/platform`: generic OS process and toolchain primitives. Sidecar-specific stamp/match protocols must be internalized by `sidecar` rather than consumed as a second public control plane. The toolchain helper remains the single source of truth shared by daemon and packaged executable resolution.
 
 ## Removed directories
 
 - `packages/shared` has been removed; do not restore it.
-- For new shared types, choose the boundary first: web/daemon app DTOs go in `contracts`; sidecar control-plane protocol goes in `sidecar-proto`; generic runtime code goes in `sidecar`; generic OS/process code goes in `platform`.
+- For new shared types, choose the boundary first: web/daemon product DTOs go in `contracts`; Desktop host/updater DTOs go in `host`; Shell/Closure semantics go in `closure-proto`; business-neutral sidecar mechanics go in `sidecar`; generic OS primitives go in `platform`.
 - Closure candidate/binding identity belongs in `closure-proto`; Desktop payload and installed-outer state remains in `launcher-proto`.
 
 ## Boundary checklist
@@ -35,8 +35,8 @@ Follow the root `AGENTS.md` first. This file only records module-level boundarie
 - Package tests live in each package's `tests/` directory, sibling to `src/`; keep `src/` source-only and do not add new `*.test.ts` or `*.test.tsx` files under `src/`.
 - Keep cross-runtime DTO and plugin wire-shape validation schemas in `contracts` when callers need the same runtime parser, while keeping app-specific parsing, I/O, and enforcement in the owning app or package.
 - Do not let app packages depend directly on sidecar control-plane details.
-- Do not hard-code Open Design app/source/mode constants in `sidecar` or `platform`.
-- Keep stamp fields limited to five: `app`, `mode`, `namespace`, `ipc`, and `source`.
+- Do not hard-code Open Design app/source/mode constants or business method names in `sidecar` or `platform`.
+- New consumers must not import raw sidecar stamps, endpoints, launch env/argv, JSON IPC, transport, or process-match helpers. Public identity is only independent `channel`, `namespace`, `generation`, and opaque `service`; same-generation restart fencing remains package-private.
 
 ## Common package commands
 

@@ -2,9 +2,13 @@ import { build } from "esbuild";
 
 await build({
   bundle: true,
-  entryPoints: ["./src/index.ts"],
+  entryPoints: {
+    index: "./src/index.ts",
+    "control/index": "./src/control/index.ts",
+  },
   format: "esm",
-  outfile: "./dist/index.mjs",
+  outdir: "./dist",
+  outExtension: { ".js": ".mjs" },
   packages: "external",
   platform: "node",
   target: "node24",

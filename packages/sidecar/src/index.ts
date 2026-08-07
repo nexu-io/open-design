@@ -48,3 +48,22 @@ export { bootstrapSidecarRuntime, createSidecarLaunchEnv } from "./bootstrap.js"
 export { allocatePort } from "./port.js";
 export { readJsonFile, removeFile, removePointerIfCurrent, writeJsonFile } from "./json-file.js";
 export { createJsonIpcServer, requestJsonIpc } from "./json-ipc.js";
+export { SidecarControlError, attachSidecar, bootstrapControlPlane } from "./control/index.js";
+export type {
+  AttachedSidecar,
+  AttachSidecarOptions,
+  BootstrapControlPlaneOptions,
+  SidecarControlClient,
+  SidecarControlContext,
+  SidecarControlIdentity,
+  SidecarControlPlane,
+  SidecarControlRoots,
+  SidecarControlScope,
+  SidecarExit,
+  SidecarLaunch,
+  SidecarLaunchOptions,
+  SidecarMethod,
+  SidecarMethodHandlers,
+  SidecarProbeResult,
+  SidecarStopResult,
+} from "./control/index.js";

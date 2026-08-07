@@ -12,6 +12,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.mjs"
+    },
+    "./control": {
+      "types": "./dist/control/index.d.ts",
+      "default": "./dist/control/index.mjs"
     }
   },
   "scripts": {
@@ -22,6 +26,7 @@
   "devDependencies": {
     "@types/node": "24.12.2",
     "esbuild": "0.28.0",
+    "tsx": "4.22.3",
     "typescript": "6.0.3",
     "vitest": "4.1.6"
   },

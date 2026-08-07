@@ -21,15 +21,14 @@ This file is the single source of truth for agents entering this repository. Rea
 - `apps/daemon` is the local privileged daemon and `od` bin. It owns `/api/*`, agent spawning, skills, design systems, artifacts, and static serving.
 - `apps/desktop` is the Electron shell; it discovers the web URL through sidecar IPC.
 - `apps/standalone` owns the shell-neutral Web + daemon product composition and does not own Desktop IPC, windows, or update UI.
-- `apps/packaged` is the thin packaged Electron runtime entry; it adapts packaged paths/processes to the Headless lifecycle and owns the `od://` entry glue only.
+- `apps/packaged` is the thin packaged Electron runtime entry; it adapts packaged paths/processes to the Standalone lifecycle and owns the `od://` entry glue only.
 - `apps/landing-page` is the standalone static Astro marketing and public catalog site. It reads repository content at build time and is not part of the daemon/web product runtime.
 - `packages/contracts` is the pure TypeScript web/daemon app contract layer.
 - `packages/closure-proto` owns shell-neutral standalone-closure identity, integrity, compatibility, generation-bound lifecycle status, and Shell capability envelopes.
-- `packages/closure-shim` owns the thin, shell-carried `ensure + handoff` seam, generation fencing, and bounded startup rollback while keeping body layout and physical transport opaque to shells.
-- `packages/closure-store` owns shell-neutral materialized Closure verification plus channel/namespace-scoped active, attempt, and last-successful state.
-- `packages/closure-update` owns shell-neutral release-candidate selection and Closure update orchestration; shells supply platform, paths, and scheduling.
-- `packages/standalone-runtime` owns reusable Headless lifecycle primitives shared by the Headless app and launcher adapters.
-- `packages/sidecar-proto` owns the Open Design sidecar business protocol; `packages/sidecar` owns the generic sidecar runtime; `packages/platform` owns generic OS process primitives.
+- `packages/closure-shim` owns only the fossil entry that validates one committed locator/bootstrap and enters it once; it must not select candidates, read Closure history, update, or roll back.
+- `packages/closure-store` and `packages/closure-update` are Closure-internal materialization/update primitives; shells and the fossil shim must not consume their history or policy APIs.
+- `packages/standalone-runtime` owns reusable Standalone Web + daemon lifecycle primitives shared by host adapters.
+- `packages/sidecar` is the sole target public sidecar control plane: it owns canonical control identity, hidden launch/connect/stop mechanics, fencing, transport, and process convergence while callers retain executable and product policy. `packages/sidecar-proto` is transitional and must disappear after business DTO migration; `packages/platform` retains only generic OS primitives.
 - `tools/dev` is the local development lifecycle control plane.
 - `tools/pack` is the local packaged build/start/stop/logs control plane, packaged updater harness, installer identity/registry validation surface, and mac beta release artifact preparation surface.
 - `tools/serve` is the local fixture-service control plane; first service is `tools-serve start updater` for deterministic updater metadata and artifacts.
@@ -177,10 +176,10 @@ Do not add a new business-named follow-on workflow such as `foo.comment.atom.yml
 - New `.js`, `.mjs`, or `.cjs` files need an explicit generated/vendor/compatibility reason and must pass `pnpm guard`.
 - App business logic must not know about sidecar/control-plane concepts. Keep sidecar awareness in `apps/<app>/sidecar` or the desktop sidecar entry wrapper.
 - Shared web/daemon app contracts belong in `packages/contracts`; that package must not depend on Next.js, Express, Node filesystem/process APIs, browser APIs, SQLite, daemon internals, or the sidecar control-plane protocol.
-- Sidecar process stamps must have exactly five fields: `app`, `mode`, `namespace`, `ipc`, and `source`.
-- Orchestration layers (`tools-dev`, `tools-pack`, packaged launchers) must call package primitives; do not hand-build `--od-stamp-*` args or process-scan regexes.
+- New sidecar consumers identify peers only by independent `channel`, `namespace`, `generation`, and opaque `service`; `mode`, `source`, raw stamps, IPC paths, argv/env flags, and process-match criteria are not ownership truth or new public API.
+- Orchestration layers (`tools-dev`, `tools-pack`, packaged launchers) must call semantic `@open-design/sidecar` operations; do not hand-build sidecar argv/env, endpoints, JSON IPC, stamps, or process-scan regexes.
 - Packaged runtime paths must be namespace-scoped and independent from daemon/web ports; ports are transient transport details only.
-- Default runtime files live under `<project-root>/.tmp/<source>/<namespace>/...`; POSIX IPC sockets are fixed at `/tmp/open-design/ipc/<namespace>/<app>.sock`.
+- Product data/resource/runtime roots are selected by the caller and propagated by the sidecar package; physical sockets/pipes and package-private launch incarnations must stay hidden.
 
 ## Capability exposure (UI/CLI dual-track)
 
@@ -365,9 +364,9 @@ The current web runtime is `apps/web`. The historical `apps/nextjs` layout has b
 
 Desktop queries runtime status through sidecar IPC. The web URL comes from `tools-dev` launch status, not from desktop guessing ports or reading web internals.
 
-## How are sidecar-proto, sidecar, and platform split?
+## How are sidecar, product contracts, and platform split?
 
-`@open-design/sidecar-proto` owns Open Design app/mode/source constants, namespace validation, stamp fields/flags, IPC message schema, status shapes, and error semantics. `@open-design/sidecar` provides only generic bootstrap, IPC transport, path/runtime resolution, launch env, and JSON runtime files. `@open-design/platform` provides only generic OS process stamp serialization, command parsing, and process matching/search primitives, consuming the proto descriptor.
+`@open-design/sidecar` owns the business-neutral mechanical control plane and hides endpoint, launch metadata, fencing incarnation, transport, and process matching. Callers own executable choice, timing, restart/update/UX policy, roots, and business handlers. Shared product DTOs belong in `@open-design/contracts`, Desktop host/updater DTOs in `@open-design/host`, and Shell/Closure meaning in `@open-design/closure-proto`. `@open-design/platform` may provide generic OS primitives internally but is not a second sidecar protocol. `@open-design/sidecar-proto` is legacy migration surface, not a destination for new code.
 
 ## When is `pnpm install` required?
 
