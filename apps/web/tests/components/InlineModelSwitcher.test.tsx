@@ -1929,4 +1929,82 @@ describe('InlineModelSwitcher AMR row', () => {
       }),
     ).toBeTruthy();
   });
+
+  it('still polls when a login-started broadcast sees a transient status null', async () => {
+    // Regression (review thread): the previous idempotent fallback was gated
+    // by `next && ...`, but `fetchVelaLoginStatus` returns null on HTTP or
+    // network errors. A null follow-up status during the login-started
+    // window must still start the fallback poll — otherwise the switcher
+    // stays in "Signing in" forever after the originating surface unmounts.
+    let loginStarted = false;
+    let transientFail = true;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === '/api/integrations/vela/status') {
+        if (transientFail) {
+          return new Response(null, { status: 503 });
+        }
+        return new Response(
+          JSON.stringify({
+            loggedIn: loginStarted,
+            loginInFlight: false,
+            profile: 'default',
+            user: loginStarted
+              ? { id: 'user-1', email: 'amr@example.local' }
+              : null,
+            configPath: '/Users/test/.amr/config.json',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url === '/api/integrations/vela/login' && init?.method === 'POST') {
+        loginStarted = true;
+        return new Response(JSON.stringify({ pid: 4242 }), {
+          status: 202,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === '/api/integrations/vela/wallet') {
+        return new Response(JSON.stringify({}), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderSwitcher();
+
+    // A separate surface starts login and broadcasts; the switcher's follow-up
+    // status read resolves null (transient failure). The fallback must still
+    // start a poll.
+    vi.useFakeTimers();
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent(AMR_LOGIN_STATUS_EVENT, { detail: { reason: 'login-started' } }),
+      );
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(loginStarted).toBe(false);
+
+    // The transient failure clears; the very next poll tick reads a clean
+    // status. Flip the status to signed-in and the poll must converge.
+    transientFail = false;
+    loginStarted = true;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AMR_LOGIN_POLL_INTERVAL_MS);
+    });
+
+    vi.useRealTimers();
+    fireEvent.click(screen.getByTestId('inline-model-switcher-chip'));
+    const popover = screen.getByTestId('inline-model-switcher-popover');
+    expect(
+      await within(popover).findByRole('radio', {
+        name: /^Open Design\s+Signed in$/i,
+      }),
+    ).toBeTruthy();
+  });
 });

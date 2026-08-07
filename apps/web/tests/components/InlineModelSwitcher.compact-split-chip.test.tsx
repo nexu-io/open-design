@@ -462,6 +462,40 @@ describe('InlineModelSwitcher compact split chip (#6501)', () => {
     ).toBeTruthy();
   });
 
+  it('shows the missing-key warning when the BYOK key is whitespace only', () => {
+    // The provider-fetch precondition treats whitespace as missing; the
+    // compact BYOK warning must agree so the user does not silently pick a
+    // seeded model that the next run cannot authenticate with.
+    render(
+      <InlineModelSwitcher
+        config={{
+          ...baseConfig,
+          mode: 'api',
+          apiProtocol: 'anthropic',
+          apiKey: '   ',
+          model: 'claude-sonnet-4-5',
+        }}
+        agents={[amrAgent, codexAgent]}
+        providerModelsCache={{}}
+        compact
+        daemonLive
+        onModeChange={vi.fn()}
+        onAgentChange={vi.fn()}
+        onAgentModelChange={vi.fn()}
+        onApiProtocolChange={vi.fn()}
+        onApiModelChange={vi.fn()}
+        onOpenSettings={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('inline-model-switcher-chip-model'));
+    const popover = screen.getByTestId('inline-model-switcher-popover');
+
+    expect(
+      within(popover).getByText(/API key not set/i),
+    ).toBeTruthy();
+  });
+
   it('keeps the model menu closed when the saved custom id is rejected by the adapter', () => {
     // Adapters with `supportsCustomModel: false` cannot honor a free-form
     // model id, so the compact list has no row for it. The panel must open

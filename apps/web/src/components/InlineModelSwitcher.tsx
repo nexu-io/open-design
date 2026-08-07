@@ -861,14 +861,17 @@ export function InlineModelSwitcher({
         // path (it starts its own poll synchronously), and a cancel or
         // settle-window expiry clears `amrLoginStartedAtRef`, so this can
         // neither duplicate nor resurrect a login that is no longer pending.
+        // `fetchVelaLoginStatus` returns null on transient HTTP/network
+        // errors; that null is also a legitimate "neither signed-in nor
+        // in-flight, but a login is still being awaited" signal and must
+        // not strand the switcher in Signing in forever.
         if (
-          next &&
           amrPollRef.current === null &&
           amrLoginStartedAtRef.current !== null
         ) {
           startAmrPolling(
             amrLoginStartedAtRef.current,
-            next.authAttemptId ?? null,
+            next?.authAttemptId ?? null,
           );
         }
       });
@@ -1698,7 +1701,7 @@ export function InlineModelSwitcher({
                 </span>
               )}
             </div>
-            {config.mode === 'api' && !config.apiKey ? (
+            {config.mode === 'api' && !config.apiKey.trim() ? (
               <div className="inline-switcher__warn" role="status">
                 {t('inlineSwitcher.missingApiKey')}
               </div>
