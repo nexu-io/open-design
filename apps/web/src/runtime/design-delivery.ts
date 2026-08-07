@@ -134,18 +134,25 @@ export function designDeliveryVerificationPending(
 export function designDeliveryReconciliationStale(
   message: Pick<
     ChatMessage,
-    'sessionMode' | 'runStatus' | 'resultDeliveryState' | 'endedAt'
+    | 'sessionMode'
+    | 'runStatus'
+    | 'resultDeliveryState'
+    | 'endedAt'
+    | 'startedAt'
+    | 'createdAt'
   >,
   now: number = Date.now(),
 ): boolean {
   if (message.sessionMode !== 'design' || message.runStatus !== 'succeeded') return false;
   if (message.resultDeliveryState) return false;
-  const terminalAt = message.endedAt;
-  // No terminal timestamp (legacy row) — defer to the existing verification
-  // logic rather than guessing an age.
+  // The #6505 legacy shape can lack `endedAt` entirely (rows persisted before
+  // `endedAt` existed), so bound the reconciliation age from any persisted
+  // terminal timestamp — `endedAt` first, then the run/message start time. A
+  // row with no timestamp at all defers to the existing verification logic.
+  const terminalAt = message.endedAt ?? message.startedAt ?? message.createdAt;
   if (terminalAt == null) return false;
   return now - terminalAt > DESIGN_DELIVERY_RECONCILIATION_WINDOW_MS;
 }
 
-/** How long after a run's `endedAt` a Design-mode delivery may be reconciled. */
+/** How long after a run's terminal time a Design-mode delivery may be reconciled. */
 export const DESIGN_DELIVERY_RECONCILIATION_WINDOW_MS = 5 * 60 * 1000;

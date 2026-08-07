@@ -269,13 +269,24 @@ describe('designDeliveryReconciliationStale', () => {
     ).toBe(false);
   });
 
-  it('does not mark a row without a terminal timestamp as stale', () => {
+  it('does not mark a row with no timestamp at all as stale', () => {
     expect(
       designDeliveryReconciliationStale(
-        { sessionMode: 'design', runStatus: 'succeeded', startedAt: 1 },
+        { sessionMode: 'design', runStatus: 'succeeded' },
         now,
       ),
     ).toBe(false);
+  });
+
+  it('treats a legacy row without endedAt as stale when its start time is old', () => {
+    // #6505 rows persisted before `endedAt` existed carry only `startedAt`;
+    // the age bound falls back to it so reloads stop auto-replaying.
+    expect(
+      designDeliveryReconciliationStale(
+        { sessionMode: 'design', runStatus: 'succeeded', startedAt: now - 24 * 60 * 60 * 1000 },
+        now,
+      ),
+    ).toBe(true);
   });
 
   it('ignores already-resolved deliveries and non-design/non-succeeded rows', () => {

@@ -679,7 +679,10 @@ const succeededAssistant: ChatMessage = {
   ...runningAssistant,
   content: 'done',
   runStatus: 'succeeded',
-  endedAt: 2,
+  // Realistic terminal timestamp: a synthetic epoch value would read as years
+  // old to designDeliveryReconciliationStale's age bound and suppress the
+  // reload reconciliation these suites exercise.
+  endedAt: Date.now(),
 };
 
 const previewComment: PreviewComment = {
