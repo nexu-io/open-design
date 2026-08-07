@@ -465,6 +465,70 @@ describe('stale web message snapshot does not wipe daemon-owned run events', () 
     ]);
   });
 
+  it('does not let a stale pre-run snapshot clear the pinned runId', async () => {
+    // nettee review (#6418): a daemon-backed row pinned by /api/runs (runId
+    // set, runStatus queued, no events yet) followed by a stale web snapshot
+    // that omits runId must not null `run_id` — otherwise the row drops out of
+    // the protected path and the next stale PUT can wipe events once they land.
+    delete process.env.POSTHOG_KEY;
+    delete process.env.POSTHOG_HOST;
+    delete process.env.LANGFUSE_PUBLIC_KEY;
+    delete process.env.LANGFUSE_SECRET_KEY;
+    delete process.env.LANGFUSE_BASE_URL;
+    delete process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL;
+
+    started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
+    await putConfig(started.url, {
+      agentId: 'claude',
+      telemetry: { metrics: true, content: false, artifactManifest: false },
+      privacyDecisionAt: Date.now(),
+    });
+
+    const { projectId, conversationId } = await createConversation(started.url);
+    const messageId = `pinned_${randomUUID()}`;
+    const url = `${started.url}/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}`;
+
+    // Daemon pins the run (assistant placeholder + runId, no events yet).
+    const pinned = await fetch(url, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: messageId,
+        role: 'assistant',
+        content: '',
+        runId: 'run-pinned',
+        runStatus: 'queued',
+        events: [],
+      }),
+    });
+    expect(pinned.status).toBe(200);
+
+    // A stale pre-run snapshot (no runId) lands after the pin.
+    const stale = await fetch(url, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: messageId,
+        role: 'assistant',
+        content: 'client copy',
+        runStatus: 'running',
+        events: [],
+      }),
+    });
+    expect(stale.status).toBe(200);
+
+    const stored = await fetchAssistantMessage(
+      started.url,
+      projectId,
+      conversationId,
+      messageId,
+    );
+    // run_id must survive the stale snapshot; the non-terminal status the
+    // client carries is still allowed to flow.
+    expect(stored?.runId).toBe('run-pinned');
+    expect(stored?.runStatus).toBe('running');
+  });
+
   it('still lets the client write non-daemon-backed messages', async () => {
     delete process.env.POSTHOG_KEY;
     delete process.env.POSTHOG_HOST;

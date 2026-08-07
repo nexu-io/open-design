@@ -328,7 +328,14 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
       stored.runStatus !== undefined &&
       TERMINAL_RUN_STATUSES.has(stored.runStatus) &&
       incomingStatus !== stored.runStatus;
-    if (!shrinksEvents && !regressesTerminalStatus) return incoming;
+    if (!shrinksEvents && !regressesTerminalStatus) {
+      // A pinned-but-event-less daemon-backed row can still be hit by a stale
+      // pre-run snapshot that omits `runId` (the web persisted the assistant
+      // placeholder before /api/runs assigned ownership). Preserve the
+      // daemon-ownership markers so the row does not drop out of the protected
+      // path on the next stale PUT (#6418 review).
+      return { ...incoming, role: stored.role, runId: stored.runId };
+    }
     // Daemon-written lifecycle timestamps. startedAt is the daemon's first
     // start (COALESCE keeps it), so a stale snapshot must never regress it —
     // keep the stored value unconditionally. endedAt is a watermark that only
