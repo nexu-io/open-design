@@ -1,9 +1,9 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { resolveStaticSpaFallbackPath } from '../../src/server.js';
+import { registerStaticSpaFallback, resolveStaticSpaFallbackPath } from '../../src/static-spa.js';
 
 describe('static SPA fallback', () => {
   let tempDir: string;
@@ -33,6 +33,21 @@ describe('static SPA fallback', () => {
       .toBe(path.join(tempDir, 'index.html'));
     expect(resolveStaticSpaFallbackPath(request('/projects/proj-1/files/index.html'), tempDir))
       .toBe(path.join(tempDir, 'index.html'));
+  });
+
+  it('sends the shell relative to its root so dot-prefixed installation paths are allowed', () => {
+    const get = vi.fn();
+    registerStaticSpaFallback({ get } as never, tempDir);
+
+    const handler = get.mock.calls[0]?.[1] as (
+      req: ReturnType<typeof request>,
+      res: { sendFile: (path: string, options: { root: string }) => void },
+      next: () => void,
+    ) => void;
+    const sendFile = vi.fn();
+    handler(request('/projects/project-1'), { sendFile }, vi.fn());
+
+    expect(sendFile).toHaveBeenCalledWith('index.html', { root: tempDir });
   });
 
   it('leaves API and framework asset misses to downstream 404 handling', () => {
