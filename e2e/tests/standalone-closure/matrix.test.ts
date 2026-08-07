@@ -12,7 +12,8 @@ const requiredOutcomes = {
   "distribution": [
     "namespace-neutral-platform-archive",
     "shell-and-closure-build-independence",
-    "signed-manifest-and-inventory",
+    "manifest-inventory-digest-consistency",
+    "detached-manifest-signature-assets",
     "publish-false-release-storage-retrieval",
   ],
   "local-debug": [
@@ -231,9 +232,20 @@ describe("Standalone Closure delivery matrix", () => {
     expect(legacyReferences.every((entry) => (
       entry.path.startsWith("apps/packaged/") || entry.path.startsWith("e2e/specs/")
     ))).toBe(true);
+
+    const syntheticWitness = "packages/closure-shim/tests/conformance.test.ts";
+    for (const id of ["process-lifecycle", "update-lifecycle"] as const) {
+      expect(lanes.get(id)?.gates).not.toContainEqual(expect.objectContaining({
+        level: "local-real",
+        state: "proven",
+        witness: syntheticWitness,
+      }));
+    }
+    expect(lanes.get("distribution")?.gates.some((gate) => gate.state === "proven"))
+      .toBe(false);
   });
 
-  it("keeps the next-release cut atomic, parallelizable, and honest about retirement", async () => {
+  it("keeps the next-release delivery gates explicit, ordered, and honest about retirement", async () => {
     const matrix = await readMatrix();
     const taskIds = matrix.tasks.map((task) => task.id);
     const taskIdSet = new Set(taskIds);
@@ -272,7 +284,7 @@ describe("Standalone Closure delivery matrix", () => {
 
     expect(matrix.tasks.find((task) => task.id === "SC-01")?.dependsOn).toEqual([]);
     expect(matrix.tasks.find((task) => task.id === "SC-02")?.dependsOn).toEqual([]);
-    expect(matrix.tasks.find((task) => task.id === "SC-03")?.dependsOn).toEqual([]);
+    expect(matrix.tasks.find((task) => task.id === "SC-03")?.dependsOn).toEqual(["SC-01", "SC-02"]);
     expect(matrix.tasks.find((task) => task.id === "SC-10")?.dependsOn).toEqual(["SC-07", "SC-09"]);
     expect(matrix.tasks.find((task) => task.id === "SC-11")?.dependsOn).toEqual(["SC-10"]);
   });

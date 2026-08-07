@@ -121,11 +121,6 @@ export const standaloneClosureDeliveryMatrix = {
           "witness": "packages/standalone-runtime/tests/lifecycle.test.ts"
         },
         {
-          "level": "local-real",
-          "state": "proven",
-          "witness": "packages/closure-shim/tests/conformance.test.ts"
-        },
-        {
           "level": "platform-product",
           "state": "planned"
         }
@@ -166,11 +161,6 @@ export const standaloneClosureDeliveryMatrix = {
           "witness": "packages/closure-update/tests/index.test.ts"
         },
         {
-          "level": "local-real",
-          "state": "proven",
-          "witness": "packages/closure-shim/tests/conformance.test.ts"
-        },
-        {
           "level": "platform-product",
           "state": "planned"
         }
@@ -198,14 +188,14 @@ export const standaloneClosureDeliveryMatrix = {
       "requiredOutcomes": [
         "namespace-neutral-platform-archive",
         "shell-and-closure-build-independence",
-        "signed-manifest-and-inventory",
+        "manifest-inventory-digest-consistency",
+        "detached-manifest-signature-assets",
         "publish-false-release-storage-retrieval"
       ],
       "gates": [
         {
           "level": "component",
-          "state": "proven",
-          "witness": "tools/release/tests/closure-publication.test.ts"
+          "state": "planned"
         },
         {
           "level": "platform-product",
@@ -327,7 +317,7 @@ export const standaloneClosureDeliveryMatrix = {
       "id": "SC-02",
       "delivery": "next-release",
       "track": "closure",
-      "outcome": "The shim discovers one signed candidate and owns trust, Store selection, activation, confirmation, and rollback.",
+      "outcome": "The product supplies release source and trust roots; the shim discovers one detached-signature candidate and owns Store selection, activation, confirmation, rollback, and the stable error envelope.",
       "dependsOn": [],
       "lanes": [
         "update-lifecycle"
@@ -342,7 +332,10 @@ export const standaloneClosureDeliveryMatrix = {
       "delivery": "next-release",
       "track": "shell",
       "outcome": "The packaged shell invokes only ensure plus handoff and maps capability, terminal, and installer-reinstall results to shell UX.",
-      "dependsOn": [],
+      "dependsOn": [
+        "SC-01",
+        "SC-02"
+      ],
       "lanes": [
         "shell-shim"
       ],
@@ -387,7 +380,7 @@ export const standaloneClosureDeliveryMatrix = {
       "id": "SC-06",
       "delivery": "next-release",
       "track": "distribution",
-      "outcome": "Release beta builds, signs, stores, and resolves Closure independently from shell artifacts, including publish=false QA retrieval.",
+      "outcome": "Release beta signs the canonical manifest, stores and resolves Closure independently from shell artifacts, and supports publish=false QA retrieval.",
       "dependsOn": [
         "SC-01",
         "SC-02"
