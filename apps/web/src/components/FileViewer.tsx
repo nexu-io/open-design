@@ -15542,14 +15542,19 @@ function HtmlViewer({
                           <CenteredLoader label={t('fileViewer.loading')} />
                         </div>
                       ) : null}
-                      {!useUrlLoadPreview && !srcDocTransportContent ? (
+                      {!useUrlLoadPreview && !srcDocTransportContent && previewSource === null ? (
                         // srcDoc-path twin of the cover above: while the
-                        // srcdoc document is still empty — the scoped-asset
+                        // preview content is still PENDING — the scoped-asset
                         // rewrite waiting on the project file list (deck on a
                         // workspace-scoped project), or a Reload's synchronous
                         // clear before its re-fetch lands — the active iframe
                         // is a blank document and the pane reads as a dead
-                        // white screen without this cover.
+                        // white screen without this cover. Both hold states
+                        // are exactly `previewSource === null`; a loaded
+                        // zero-byte file is `previewSource === ''` (empty
+                        // srcDoc with nothing in flight), so keying on srcDoc
+                        // emptiness alone would pin this loader forever over
+                        // a legitimately empty document.
                         <div
                           className="artifact-preview-first-load"
                           role="status"
