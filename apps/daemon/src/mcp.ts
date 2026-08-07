@@ -35,6 +35,7 @@ import {
   buildProjectRawFileUrl,
   type McpAnalyticsContextResponse,
 } from '@open-design/contracts';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 
 import { postCreateArtifactRequest } from './artifacts/create.js';
@@ -66,6 +67,7 @@ const SERVER_VERSION = '0.2.0';
 const MCP_STDIO_IDLE_EXIT_MS = 30 * 60 * 1000;
 const OPEN_DESIGN_BRIEF_APP_RESOURCE =
   'ui://open-design/artifact-card-v8.html';
+const mcpRequestSignal = new AsyncLocalStorage<AbortSignal>();
 
 export const MCP_SERVER_INSTRUCTIONS = [
   'Use only these product names in user-facing replies: Open Design Cloud and Local Codex.',
@@ -76,6 +78,8 @@ type JsonObject = Record<string, unknown>;
 interface RunMcpOptions {
   daemonUrl: string | URL;
   resolveDaemonUrl?: () => Promise<string | URL>;
+  refreshDaemonUrlBeforeCall?: boolean;
+  throwDaemonRecoveryErrors?: boolean;
 }
 interface CatalogItem { id: string; name?: string; title?: string; description?: string; summary?: string }
 interface SkillsPayload { skills?: CatalogItem[] }
@@ -156,7 +160,6 @@ export function createMcpDaemonTarget(options: RunMcpOptions): {
         current = normalizeDaemonUrl(url);
         return current;
       })
-      .catch(() => current)
       .finally(() => {
         refreshTask = null;
       });
@@ -174,20 +177,45 @@ export function createMcpDaemonTarget(options: RunMcpOptions): {
           return errorResult(formatError(error, baseUrl));
         }
       };
-      const firstUrl = await refresh();
+      let firstUrl = current;
+      if (options.refreshDaemonUrlBeforeCall !== false) {
+        try {
+          firstUrl = await refresh();
+        } catch (error) {
+          if (options.throwDaemonRecoveryErrors) throw error;
+        }
+      }
       const first = await invoke(firstUrl);
       if (!isDaemonUnreachableResult(first) || !options.resolveDaemonUrl) {
         return first;
       }
 
-      const recoveredUrl = await refresh();
+      let recoveredUrl = current;
+      if (current === firstUrl) {
+        try {
+          recoveredUrl = await refresh();
+        } catch (error) {
+          if (options.throwDaemonRecoveryErrors) throw error;
+          return first;
+        }
+      }
       if (!SAFE_MCP_DAEMON_RETRY_CALLS.has(name)) {
         // A failed write is ambiguous: the daemon may have committed it before
         // the transport broke. Refresh the target for the next request, but do
         // not replay a mutation and risk duplicate projects/runs/files.
         return first;
       }
-      return await invoke(recoveredUrl);
+      const retried = await invoke(recoveredUrl);
+      if (
+        options.throwDaemonRecoveryErrors
+        && isDaemonUnreachableResult(retried)
+      ) {
+        throw new Error(
+          'Open Design daemon recovery completed, but the retry failed: '
+          + 'the rediscovered Open Design daemon is still unreachable',
+        );
+      }
+      return retried;
     },
   };
 }
@@ -1636,19 +1664,43 @@ function mcpDeliveryFacts(
   };
 }
 
-export async function runMcpStdio(options: RunMcpOptions): Promise<void> {
-  const daemonTarget = createMcpDaemonTarget(options);
+interface CreateOpenDesignMcpServerOptions extends RunMcpOptions {
+  daemonTarget?: ReturnType<typeof createMcpDaemonTarget>;
+  trackRequest?: <T>(fn: () => T | Promise<T>) => Promise<T>;
+}
+
+export function createOpenDesignMcpServer({
+  daemonTarget: providedDaemonTarget,
+  daemonUrl,
+  refreshDaemonUrlBeforeCall,
+  resolveDaemonUrl,
+  throwDaemonRecoveryErrors,
+  trackRequest,
+}: CreateOpenDesignMcpServerOptions): Server {
+  const daemonTarget = providedDaemonTarget ?? createMcpDaemonTarget({
+    daemonUrl,
+    ...(resolveDaemonUrl ? { resolveDaemonUrl } : {}),
+    ...(refreshDaemonUrlBeforeCall === undefined
+      ? {}
+      : { refreshDaemonUrlBeforeCall }),
+    ...(throwDaemonRecoveryErrors === undefined
+      ? {}
+      : { throwDaemonRecoveryErrors }),
+  });
   const briefStore = createLocalMcpBriefStore();
   let observabilityPromise: Promise<McpObservabilitySession> | null = null;
-  let closeTransportForIdle: (() => void) | null = null;
-  const idleExit = _createMcpIdleExitController({
-    idleMs: MCP_STDIO_IDLE_EXIT_MS,
-    onIdle: () => closeTransportForIdle?.(),
-  });
   const withMcpActivity =
     <Args extends unknown[], Result>(handler: (...args: Args) => Result | Promise<Result>) =>
-      (...args: Args) =>
-        idleExit.trackRequest(() => handler(...args));
+      (...args: Args) => {
+        const execute = () =>
+          trackRequest ? trackRequest(() => handler(...args)) : handler(...args);
+        const requestSignal = (
+          args[1] as { signal?: unknown } | undefined
+        )?.signal;
+        return requestSignal instanceof AbortSignal
+          ? mcpRequestSignal.run(requestSignal, execute)
+          : execute();
+      };
 
   const server = new Server(
     { name: SERVER_NAME, version: SERVER_VERSION },
@@ -1888,7 +1940,7 @@ export async function runMcpStdio(options: RunMcpOptions): Promise<void> {
       );
       if (locale) args.locale = locale;
     }
-    const baseUrl = await daemonTarget.refresh();
+    const baseUrl = daemonTarget.currentUrl();
     observabilityPromise ??= McpObservabilitySession.create(
       baseUrl,
       server.getClientVersion(),
@@ -1903,6 +1955,20 @@ export async function runMcpStdio(options: RunMcpOptions): Promise<void> {
       args,
     );
   }));
+
+  return server;
+}
+
+export async function runMcpStdio(options: RunMcpOptions): Promise<void> {
+  let closeTransportForIdle: (() => void) | null = null;
+  const idleExit = _createMcpIdleExitController({
+    idleMs: MCP_STDIO_IDLE_EXIT_MS,
+    onIdle: () => closeTransportForIdle?.(),
+  });
+  const server = createOpenDesignMcpServer({
+    ...options,
+    trackRequest: (fn) => idleExit.trackRequest(fn),
+  });
 
   const transport = new StdioServerTransport();
   try {
@@ -2197,7 +2263,7 @@ async function writeFile(baseUrl: string, args: McpArgs) {
   // the default writeProjectFile path, which overwrites the target. This
   // is the exact shape `od files write` uses (see apps/daemon/src/cli.ts).
   const url = `${baseUrl}/api/projects/${encodeURIComponent(id)}/files`;
-  const resp = await fetch(url, {
+  const resp = await mcpFetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name: args.path, content: args.content, encoding }),
@@ -2220,7 +2286,7 @@ async function deleteFile(baseUrl: string, args: McpArgs) {
     .filter((s) => s.length > 0)
     .map(encodeURIComponent);
   const url = `${baseUrl}/api/projects/${encodeURIComponent(id)}/raw/${segments.join('/')}`;
-  const resp = await fetch(url, { method: 'DELETE' });
+  const resp = await mcpFetch(url, { method: 'DELETE' });
   if (!resp.ok) {
     return errorResult(await formatDaemonError(resp, url));
   }
@@ -2242,7 +2308,7 @@ async function deleteProject(baseUrl: string, args: McpArgs) {
   }
   const { id, resolved } = await resolveProjectArg(baseUrl, args.project);
   const url = `${baseUrl}/api/projects/${encodeURIComponent(id)}`;
-  const resp = await fetch(url, { method: 'DELETE' });
+  const resp = await mcpFetch(url, { method: 'DELETE' });
   if (!resp.ok) {
     return errorResult(await formatDaemonError(resp, url));
   }
@@ -2274,7 +2340,7 @@ async function postJson<T>(
   body: unknown,
   headers: Record<string, string> = {},
 ): Promise<T> {
-  const resp = await fetch(url, {
+  const resp = await mcpFetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...headers },
     body: JSON.stringify(body ?? {}),
@@ -2582,7 +2648,7 @@ async function getRun(baseUrl: string, args: McpArgs) {
 // caller just omits the field.
 async function fetchRunAgentMessage(baseUrl: string, runId: string): Promise<string | null> {
   try {
-    const resp = await fetch(`${baseUrl}/api/runs/${encodeURIComponent(runId)}/events`);
+    const resp = await mcpFetch(`${baseUrl}/api/runs/${encodeURIComponent(runId)}/events`);
     if (!resp.ok) return null;
     const body = await resp.text();
     const parts: string[] = [];
@@ -2747,6 +2813,7 @@ async function createArtifact(baseUrl: string, args: McpArgs) {
     args.artifactManifest
       ? args.artifactManifest
       : undefined;
+  const requestSignal = mcpRequestSignal.getStore();
   const payload = await postCreateArtifactRequest({
     baseUrl,
     projectId: id,
@@ -2756,6 +2823,7 @@ async function createArtifact(baseUrl: string, args: McpArgs) {
       encoding: args.encoding === 'base64' ? 'base64' : 'utf8',
       ...(artifactManifest === undefined ? {} : { artifactManifest }),
     },
+    ...(requestSignal ? { signal: requestSignal } : {}),
   });
   const result = payload && typeof payload === 'object' && !Array.isArray(payload)
     ? (payload as JsonObject)
@@ -2863,7 +2931,7 @@ async function resolveProjectId(baseUrl: string, arg: unknown): Promise<Resolved
 }
 
 async function getJson<T>(url: string): Promise<T> {
-  const resp = await fetch(url);
+  const resp = await mcpFetch(url);
   if (!resp.ok) {
     const body = await safeText(resp);
     throw new Error(`daemon ${resp.status} on ${url}: ${body || resp.statusText}`);
@@ -2877,7 +2945,7 @@ async function getFile(baseUrl: string, project: string, relPath: string, active
     .filter((s) => s.length > 0)
     .map(encodeURIComponent);
   const url = `${baseUrl}/api/projects/${encodeURIComponent(project)}/raw/${segments.join('/')}`;
-  const resp = await fetch(url);
+  const resp = await mcpFetch(url);
   if (!resp.ok) {
     const body = await safeText(resp);
     return errorResult(
@@ -3087,7 +3155,7 @@ async function fetchProjectFile(baseUrl: string, projectId: string, relPath: str
     .filter((s) => s.length > 0)
     .map(encodeURIComponent);
   const url = `${baseUrl}/api/projects/${encodeURIComponent(projectId)}/raw/${segments.join('/')}`;
-  const resp = await fetch(url);
+  const resp = await mcpFetch(url);
   if (!resp.ok) {
     const body = await safeText(resp);
     throw new Error(`daemon ${resp.status} on ${url}: ${body || resp.statusText}`);
@@ -3248,6 +3316,15 @@ async function safeText(resp: Response): Promise<string> {
   } catch {
     return '';
   }
+}
+
+function mcpFetch(
+  input: string | URL | globalThis.Request,
+  init?: RequestInit,
+): Promise<Response> {
+  const inheritedSignal = mcpRequestSignal.getStore();
+  if (!inheritedSignal || init?.signal) return fetch(input, init);
+  return fetch(input, { ...init, signal: inheritedSignal });
 }
 
 function formatError(err: unknown, daemonUrl: string): string {

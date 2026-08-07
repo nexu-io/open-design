@@ -87,11 +87,33 @@ const MEDIA_GENERATE_BOOLEAN_FLAGS = new Set([
 
 const MCP_STRING_FLAGS = new Set([
   'daemon-url',
+  'transport',
+  'host',
+  'port',
+  'max-sessions',
+  'session-idle-timeout',
 ]);
 const MCP_BOOLEAN_FLAGS = new Set([
   'help',
   'h',
 ]);
+
+function parseDurationMs(value) {
+  const match = String(value).trim().match(/^(\d+(?:\.\d+)?)(ms|s|m|h)?$/i);
+  if (!match) {
+    throw new Error(
+      '--session-idle-timeout must be a duration such as 30m, 60s, or 1800000ms',
+    );
+  }
+  const amount = Number(match[1]);
+  const unit = (match[2] ?? 'ms').toLowerCase();
+  const multiplier = { ms: 1, s: 1_000, m: 60_000, h: 3_600_000 }[unit];
+  const durationMs = amount * multiplier;
+  if (!Number.isFinite(durationMs)) {
+    throw new Error('--session-idle-timeout is too large');
+  }
+  return durationMs;
+}
 
 // Hoisted next to MCP_*_FLAGS for the same TDZ reason as the MEDIA flags
 // above: `od mcp install <agent>` dispatches through SUBCOMMAND_MAP during
@@ -1893,32 +1915,98 @@ async function runMcp(args) {
     return;
   }
 
+  const transport = flags.transport ?? 'stdio';
+  if (transport !== 'stdio' && transport !== 'http') {
+    console.error('--transport must be either stdio or http');
+    process.exit(2);
+  }
+  const httpOnlyFlags = [
+    'host',
+    'port',
+    'max-sessions',
+    'session-idle-timeout',
+  ];
+  const unexpectedHttpFlag = httpOnlyFlags.find(
+    (flag) => flags[flag] !== undefined,
+  );
+  if (transport === 'stdio' && unexpectedHttpFlag) {
+    console.error(`--${unexpectedHttpFlag} requires --transport http`);
+    process.exit(2);
+  }
+
+  let httpOptions = {};
+  let httpModule;
+  if (transport === 'http') {
+    try {
+      httpOptions = {
+        host: flags.host,
+        port: flags.port === undefined ? undefined : Number(flags.port),
+        maxSessions:
+          flags['max-sessions'] === undefined
+            ? undefined
+            : Number(flags['max-sessions']),
+        sessionIdleTimeoutMs:
+          flags['session-idle-timeout'] === undefined
+            ? undefined
+            : parseDurationMs(flags['session-idle-timeout']),
+      };
+      httpModule = await import('./mcp/http.js');
+      httpModule.validateMcpHttpOptions(httpOptions);
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error));
+      process.exit(2);
+    }
+  }
+
   const { ensureMcpDaemonUrl } = await import('./mcp-bootstrap.js');
   const daemonUrl = await ensureMcpDaemonUrl({
     flagUrl: flags['daemon-url'],
   });
 
-  const { runMcpStdio } = await import('./mcp.js');
-  await runMcpStdio({
-    daemonUrl,
-    ...(flags['daemon-url']
-      ? {}
-      : {
-          resolveDaemonUrl: async () => await ensureMcpDaemonUrl({}),
-        }),
-  });
+  const explicitDaemonUrl =
+    (typeof flags['daemon-url'] === 'string' && flags['daemon-url'].length > 0)
+    || (typeof process.env.OD_DAEMON_URL === 'string'
+      && process.env.OD_DAEMON_URL.length > 0);
+  if (transport === 'stdio') {
+    const { runMcpStdio } = await import('./mcp.js');
+    await runMcpStdio({
+      daemonUrl,
+      ...(!explicitDaemonUrl
+        ? { resolveDaemonUrl: () => ensureMcpDaemonUrl({}) }
+        : {}),
+    });
+    return;
+  }
+  try {
+    await httpModule.runMcpHttp({
+      daemonUrl,
+      ...httpOptions,
+      ...(!explicitDaemonUrl
+        ? { rediscoverDaemonUrl: () => ensureMcpDaemonUrl() }
+        : {}),
+    });
+  } catch (error) {
+    console.error(
+      `Open Design MCP HTTP server failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    process.exit(1);
+  }
 }
 
 function printMcpHelp() {
-  console.log(`Usage: od mcp [--daemon-url <url>]
+  console.log(`Usage: od mcp [--daemon-url <url>] [--transport <stdio|http>]
 
-Run a stdio MCP (Model Context Protocol) server that proxies project
-tool calls to a running Open Design daemon. Wire it into a coding agent
-in another repo so the agent can pull files from a local Open Design
-project and create project-scoped artifacts without exporting a zip
-every iteration.
+Run an MCP (Model Context Protocol) server that proxies project tool calls
+to a running Open Design daemon. Stdio remains the default; Streamable HTTP
+is opt-in for sharing one adapter process across multiple MCP clients.
 
 Options:
+  --transport <type>    MCP transport (default: stdio).
+  --host <address>      HTTP bind address (default: 127.0.0.1; loopback only).
+  --port <number>       HTTP listener port (default: 7457).
+  --max-sessions <n>    Maximum concurrent HTTP sessions (default: 64).
+  --session-idle-timeout <duration>
+                       Close idle HTTP sessions (default: 30m).
   --daemon-url <url>   Open Design daemon HTTP base URL. Resolution
                        order: this flag, OD_DAEMON_URL, OD_SIDECAR_IPC_PATH,
                        then http://127.0.0.1:7456. Each new MCP spawn
@@ -1927,11 +2015,16 @@ Options:
                        restarts even when the port is ephemeral. A
                        packaged install also starts the signed Open
                        Design app in --headless mode when its daemon
-                       is stopped; no Electron window is opened. The
-                       MCP server re-discovers the registered runtime
-                       before calls and safely retries reads when the
-                       daemon changes ports, so an existing task can
-                       survive an Open Design restart.
+                       is stopped; no Electron window is opened.
+                       For an implicitly discovered URL, stdio refreshes the
+                       registered runtime before calls and HTTP rediscovers
+                       it after a connection failure. Safe reads are retried;
+                       ambiguous writes are not replayed. An explicit URL stays
+                       fixed and is never replaced automatically.
+
+HTTP mode listens in the foreground at http://127.0.0.1:7457/mcp by
+default. Stop it with Ctrl+C or SIGTERM. It accepts loopback hosts only;
+remote access, TLS, and authentication are intentionally unsupported.
 
 Tools exposed:
   list_projects                  list every Open Design project
