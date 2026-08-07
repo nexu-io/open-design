@@ -401,17 +401,31 @@ test('[P1] onboarding lands on the home composer without a recommended-start str
       },
     });
   });
+  await page.route('**/api/integrations/vela/status', async (route) => {
+    await route.fulfill({
+      json: {
+        loggedIn: true,
+        loginInFlight: false,
+        profile: 'local',
+        configPath: '/tmp/.amr/config.json',
+        user: { id: 'entry-onboarding', email: 'entry-onboarding@example.com' },
+      },
+    });
+  });
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
-  await page.getByRole('button', { name: LOCAL_CLI_LABEL }).click();
-  await page.getByRole('button', { name: /^Continue$/i }).click();
-  await page.getByRole('button', { name: /Engineer$/i }).click();
-  await page.getByRole('button', { name: /Product design/i }).click();
-  await page.getByRole('button', { name: /^Continue$/i }).click();
-  await page.getByRole('button', { name: /^Continue$/i }).click();
-  await page.getByRole('button', { name: 'Go to home' }).click();
 
-  // Finishing the About-you survey lands the user on Home with the composer
+  // Cloud-first onboarding no longer contains the legacy runtime/About-you/
+  // Product-design survey. A signed-in user accepts the recommended Hosted
+  // source and lands directly on Home.
+  const cloudPrimary = page.locator('.onboarding-cloud__primary');
+  await expect(cloudPrimary).toBeEnabled();
+  await cloudPrimary.click();
+  await expect(page.getByRole('heading', { name: /Choose your model source|选择模型来源/i })).toBeVisible();
+  await page.getByRole('radio', { name: /Open Design Hosted/i }).click();
+  await page.getByRole('button', { name: /^Continue$/i }).click();
+
+  // Finishing model-source setup lands the user on Home with the composer
   // ready — and NOT on the old recommended-start strip. That strip (sparkle +
   // 「Start with your first project」 + 全部类型 / 开始创作) sat between the
   // composer and the template line, offering a third way to say what the two
@@ -2763,20 +2777,54 @@ async function revealHomeTemplates(page: Page) {
   const section = home.getByTestId('plugins-home-section');
   test.skip((await section.count()) === 0, HOME_STARTERS_MISSING);
   const hint = home.getByTestId('home-templates-hint');
+  const reveal = home.locator('.home-templates-reveal');
+  const revealBody = home.locator('.home-templates-reveal__body');
   if (await hint.count()) {
     for (let attempt = 0; attempt < 3; attempt += 1) {
-      if (await home.locator('.home-templates-reveal').evaluate((node) => node.classList.contains('is-revealed')).catch(() => false)) break;
+      if (await reveal.evaluate((node) => node.classList.contains('is-revealed')).catch(() => false)) {
+        break;
+      }
+      // The product listens for a positive wheel delta anywhere on the window
+      // (`HomeTemplatesReveal`). Wait for the reveal class itself — the state
+      // flip is synchronous with the listener — instead of sleeping 120ms.
       await page.mouse.wheel(0, 900);
-      await page.waitForTimeout(120);
+      if (
+        await reveal
+          .evaluate((node) => node.classList.contains('is-revealed'))
+          .catch(() => false)
+      ) {
+        break;
+      }
+      await expect
+        .poll(
+          async () => reveal.evaluate((node) => node.classList.contains('is-revealed')).catch(() => false),
+          { timeout: T.short, intervals: [50] },
+        )
+        .toBe(true)
+        .catch(() => undefined);
     }
-    if (!(await home.locator('.home-templates-reveal').evaluate((node) => node.classList.contains('is-revealed')).catch(() => false))) {
+    if (!(await reveal.evaluate((node) => node.classList.contains('is-revealed')).catch(() => false))) {
       await hint.scrollIntoViewIfNeeded();
       await expect(hint).toBeVisible();
       await hint.click();
     }
-    await expect(home.locator('.home-templates-reveal')).toHaveClass(/is-revealed/);
-    await expect(home.locator('.home-templates-reveal__body')).not.toHaveAttribute('inert', '');
-    await page.waitForTimeout(450);
+    await expect(reveal).toHaveClass(/is-revealed/);
+    await expect(revealBody).not.toHaveAttribute('inert', '');
+    // The accordion uses `grid-template-rows` + opacity transitions
+    // (~420ms). Wait for the body to finish expanding so follow-up clicks
+    // land on actionable gallery cards instead of a mid-transition hitbox.
+    await expect
+      .poll(async () => {
+        return revealBody.evaluate((node) => {
+          const style = getComputedStyle(node);
+          const rowsDone = style.gridTemplateRows !== '0fr' && !style.gridTemplateRows.startsWith('0');
+          const opacityDone = Number.parseFloat(style.opacity || '0') >= 0.99;
+          const rect = node.getBoundingClientRect();
+          return rowsDone && opacityDone && rect.height > 0;
+        });
+      }, { timeout: T.short, intervals: [50] })
+      .toBe(true);
+    await expect(section).toBeVisible();
   }
   await expect(section).toBeVisible();
   await page.locator('.entry-main--scroll').evaluate((node) => {

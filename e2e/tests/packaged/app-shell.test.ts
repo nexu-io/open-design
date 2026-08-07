@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises';
+
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -48,10 +50,8 @@ type FixtureNode = {
 };
 
 /**
- * Enough of `querySelector` for the four selectors the probe uses: class
- * selectors, `[attr="value"]` selectors, and comma-separated groups. Document
- * order is the fixture array order, which is what makes the "second
- * `.onboarding-cloud__secondary` is the BYOK link" reading testable.
+ * Enough of `querySelector` for the selectors the probe uses: class selectors,
+ * `[attr="value"]` selectors, and comma-separated groups.
  */
 function matchesSelector(element: FixtureElement, selector: string): boolean {
   return selector
@@ -99,15 +99,12 @@ const HOME_SHELL: readonly FixtureNode[] = [
 
 // The surface a fresh packaged install comes up on since the #4513 cloud
 // sign-in redesign: EntryShell's onboarding shell wrapping OnboardingView's
-// cloud landing (primary CTA + the Local CLI and BYOK secondary links). This is
-// the same DOM the [P0] onboarding smoke asserts against in win.spec.ts.
+// identity gate. Runtime selection intentionally follows Cloud sign-in.
 const CLOUD_SIGN_IN_LANDING: readonly FixtureNode[] = [
   { classes: ['entry-shell', 'entry-shell--no-header', 'entry-shell--onboarding'] },
   { classes: ['entry-onboarding-modal'] },
   { classes: ['onboarding-view', 'onboarding-view--cloud'] },
   { classes: ['onboarding-cloud__primary'] },
-  { classes: ['onboarding-cloud__secondary'] },
-  { classes: ['onboarding-cloud__secondary'] },
 ];
 
 describe('packaged app-shell probe', () => {
@@ -115,6 +112,20 @@ describe('packaged app-shell probe', () => {
     expect(packagedAppShellExpression).toContain('(document, HTMLElement)');
     expect(packagedAppShellExpression).toContain('[data-testid="entry-nav-home"]');
     expect(packagedAppShellExpression).toContain('.onboarding-cloud__primary');
+  });
+
+  it('tracks the identity gate rendered by the current onboarding shell', async () => {
+    const [entryShellSource, macSpecSource, winSpecSource] = await Promise.all([
+      readFile(new URL('../../../apps/web/src/components/EntryShell.tsx', import.meta.url), 'utf8'),
+      readFile(new URL('../../specs/mac.spec.ts', import.meta.url), 'utf8'),
+      readFile(new URL('../../specs/win.spec.ts', import.meta.url), 'utf8'),
+    ]);
+    const identityProbe = "querySelector('.onboarding-cloud__primary')";
+
+    expect(entryShellSource).toContain('className="onboarding-cloud__primary"');
+    expect(packagedAppShellExpression).toContain('.onboarding-cloud__primary');
+    expect(macSpecSource).toContain(identityProbe);
+    expect(winSpecSource).toContain(identityProbe);
   });
 
   it('reports home for the main shell', () => {
@@ -125,12 +136,10 @@ describe('packaged app-shell probe', () => {
     });
   });
 
-  it('reports the cloud sign-in landing with both runtime links', () => {
+  it('reports the cloud sign-in identity gate', () => {
     expect(probe(renderFixture(CLOUD_SIGN_IN_LANDING))).toMatchObject({
-      byokLinkVisible: true,
       cloudSignInVisible: true,
       homeVisible: false,
-      localLinkVisible: true,
       onboardingVisible: true,
     });
   });
@@ -208,20 +217,6 @@ describe('packaged app-shell terminal state', () => {
     expect(packagedAppShellFailureReason(snapshot, { acceptOnboardingLanding: true })).toContain(
       'cloud sign-in landing did not render',
     );
-  });
-
-  it('rejects a landing that lost one of its runtime links', () => {
-    const snapshot = probe(
-      renderFixture([
-        { classes: ['entry-shell', 'entry-shell--onboarding'] },
-        { classes: ['entry-onboarding-modal'] },
-        { classes: ['onboarding-cloud__primary'] },
-        { classes: ['onboarding-cloud__secondary'] },
-      ]),
-    );
-
-    expect(snapshot.byokLinkVisible).toBe(false);
-    expect(packagedAppShellSettled(snapshot, { acceptOnboardingLanding: true })).toBe(false);
   });
 
   it('rejects a snapshot the renderer could not produce', () => {

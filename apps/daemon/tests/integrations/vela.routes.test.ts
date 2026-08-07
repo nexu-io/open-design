@@ -2537,6 +2537,66 @@ describe('POST /api/integrations/vela/analytics-entry', () => {
     }
   });
 
+  it('forwards campaignId and conversionSource on the outbound AMR analytics body', async () => {
+    const requests: Array<{ events: Array<{ payload: Record<string, unknown> }> }> = [];
+    const captureServer = createServer((req, res) => {
+      let raw = '';
+      req.setEncoding('utf8');
+      req.on('data', (chunk) => {
+        raw += chunk;
+      });
+      req.on('end', () => {
+        requests.push(JSON.parse(raw));
+        res.writeHead(202, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ accepted: 1 }));
+      });
+    });
+    await new Promise<void>((resolve) => {
+      captureServer.listen(0, '127.0.0.1', () => resolve());
+    });
+    const address = captureServer.address() as AddressInfo;
+    process.env.OPEN_DESIGN_AMR_ANALYTICS_URL =
+      `http://127.0.0.1:${address.port}/api/v1/analytics/events`;
+    process.env.OPEN_DESIGN_AMR_ANALYTICS_ENV = 'test';
+
+    const payload = {
+      pageName: 'open_design',
+      sourcePageName: 'home',
+      area: 'amr_entry',
+      element: 'deepseek_workbench_badge',
+      action: 'click_amr_entry',
+      entryId: 'od-amr-entry-campaign',
+      sourceProduct: 'open_design',
+      sourceDetail: 'deepseek_workbench_badge',
+      entryOccurredAt: '2026-08-06T12:00:00.000Z',
+      campaignId: 'deepseek_v4_flash',
+      conversionSource: 'deepseek_workbench_badge',
+    };
+
+    try {
+      const { status, body } = await postJson<{ mirrored: boolean; status: number }>(
+        `${baseUrl}/api/integrations/vela/analytics-entry`,
+        { payload },
+        {
+          'x-od-analytics-device-id': 'od-device-campaign',
+          'x-od-analytics-session-id': 'od-session-campaign',
+        },
+      );
+
+      expect(status).toBe(202);
+      expect(body).toEqual({ mirrored: true, status: 202 });
+      expect(requests).toHaveLength(1);
+      expect(requests[0]?.events?.[0]?.payload).toMatchObject({
+        campaignId: 'deepseek_v4_flash',
+        conversionSource: 'deepseek_workbench_badge',
+      });
+    } finally {
+      await new Promise<void>((resolve) => {
+        captureServer.close(() => resolve());
+      });
+    }
+  });
+
   it('forwards optional onboarding profile (role/orgSize/useCase/source) to the AMR ingest body', async () => {
     const requests: Array<{ events: Array<{ payload: Record<string, unknown> }> }> = [];
     const captureServer = createServer((req, res) => {
@@ -3201,6 +3261,9 @@ describe('parseAmrEntryAnalyticsPayload — entry sources added in this PR', () 
     const cases: Array<[string, string]> = [
       ['settings_amr_upgrade', 'settings'],
       ['inline_amr_upgrade', 'chat_panel'],
+      ['deepseek_unpaid_modal', 'home'],
+      ['deepseek_workbench_badge', 'home'],
+      ['deepseek_model_switcher_upgrade', 'chat_panel'],
       ['avatar_amr_upgrade', 'chat_panel'],
       ['avatar_amr_agent_card', 'chat_panel'],
       ['artifact_success_upgrade', 'artifact'],
@@ -3214,6 +3277,33 @@ describe('parseAmrEntryAnalyticsPayload — entry sources added in this PR', () 
   it('still rejects an unknown source', () => {
     expect(
       parseAmrEntryAnalyticsPayload(payloadFor('made_up_source', 'settings')),
+    ).toBeNull();
+  });
+
+  it('preserves campaignId and conversionSource on the mirrored payload', () => {
+    const parsed = parseAmrEntryAnalyticsPayload({
+      ...payloadFor('deepseek_workbench_badge', 'home'),
+      campaignId: 'deepseek_v4_flash',
+      conversionSource: 'deepseek_workbench_badge',
+    });
+    expect(parsed).toMatchObject({
+      campaignId: 'deepseek_v4_flash',
+      conversionSource: 'deepseek_workbench_badge',
+    });
+  });
+
+  it('rejects unknown campaign dimensions rather than silently dropping them', () => {
+    expect(
+      parseAmrEntryAnalyticsPayload({
+        ...payloadFor('deepseek_workbench_badge', 'home'),
+        campaignId: 'not_a_real_campaign',
+      }),
+    ).toBeNull();
+    expect(
+      parseAmrEntryAnalyticsPayload({
+        ...payloadFor('deepseek_workbench_badge', 'home'),
+        conversionSource: 'not_a_real_source',
+      }),
     ).toBeNull();
   });
 });

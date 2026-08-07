@@ -94,39 +94,6 @@ profile, derived-file parity, token contract, component fixture, source
 evidence, and preview coverage. Read
 [`_schema/AGENTS.md`](_schema/AGENTS.md) before editing those contracts.
 
-## Structured runtime contract
-
-A package may opt into machine-readable component selection by declaring a
-complete `runtime` block in `manifest.json`:
-
-```json
-{
-  "runtime": {
-    "components": "manifests/components.json",
-    "intents": "manifests/intent-map.json",
-    "lint": "rules/lint.json",
-    "fallback": "rules/fallback.json"
-  }
-}
-```
-
-The declared files form one graph:
-
-```text
-manifests/components.json       component id → component definition path
-manifests/intent-map.json       business intent → component/variant/properties/states
-components/<id>/component.json  reusable implementation and allowed choices
-rules/lint.json                 generation checks
-rules/fallback.json             no-match and multiple-match behavior
-```
-
-The daemon validates the graph before returning a structured intent selection.
-If `runtime` is absent, the package keeps the existing `DESIGN.md` prompt path.
-If `runtime` is present but invalid, it is reported as invalid rather than
-silently treated as a legacy package. The production schema versions and shared
-types live in
-[`packages/contracts/src/design-systems/runtime-schema.ts`](../packages/contracts/src/design-systems/runtime-schema.ts).
-
 ## Writing a package
 
 `DESIGN.md` does not use a fixed nine-section template. The package-quality

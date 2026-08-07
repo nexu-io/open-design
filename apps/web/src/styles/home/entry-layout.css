@@ -1051,6 +1051,67 @@
      scrollbar and shift the centered content sideways — that read as a jitter. */
   scrollbar-gutter: stable;
 }
+
+.entry-deepseek-campaign-badge {
+  position: fixed;
+  /* Portaled to document.body. Must clear .workspace-tabs-chrome (z-index: 120). */
+  z-index: 150;
+  top: 18px;
+  right: 22px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 32px;
+  padding: 7px 11px 7px 13px;
+  border: 1px solid color-mix(in srgb, var(--brand) 42%, var(--border));
+  border-radius: var(--radius-pill);
+  color: var(--brand-text);
+  background: color-mix(in srgb, var(--brand-soft) 82%, var(--bg-panel));
+  box-shadow: var(--shadow-xs);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  font-size: 12px;
+  font-weight: 700;
+  font-family: inherit;
+  line-height: 1;
+  text-decoration: none;
+  cursor: pointer;
+  pointer-events: auto;
+  -webkit-app-region: no-drag;
+  transition: border-color 140ms ease, background 140ms ease, transform 140ms ease;
+}
+
+.entry-deepseek-campaign-badge::before {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: var(--radius-circular);
+  background: var(--brand-text);
+  content: '';
+}
+
+.entry-deepseek-campaign-badge svg {
+  color: var(--brand-text);
+}
+
+.entry-deepseek-campaign-badge:hover {
+  border-color: color-mix(in srgb, var(--brand) 70%, var(--border));
+  background: var(--brand-soft);
+  transform: translateY(-1px);
+}
+
+.entry-deepseek-campaign-badge:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (max-width: 760px) {
+  .entry-deepseek-campaign-badge {
+    top: 12px;
+    right: 12px;
+    max-width: calc(100vw - 88px);
+  }
+}
 /* Frosted top edge: content scrolling up toward the (transparent) tab strip
    melts into a progressive blur instead of hard-clipping at the row
    boundary. The material token degrades it away under reduced transparency /
@@ -1901,6 +1962,38 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   text-align: left;
+}
+
+.inline-switcher__campaign-badge {
+  flex: 0 0 auto;
+  padding: 2px 6px;
+  border-radius: 999px;
+  color: #153406;
+  background: #68f22e;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.4;
+  cursor: help;
+  outline: none;
+}
+.inline-switcher__campaign-badge.is-restricted {
+  color: #5f645d;
+  background: #e4e7e2;
+}
+.inline-switcher__campaign-badge.is-unpaid {
+  color: #5f645d;
+  background: #eceeeb;
+}
+.inline-switcher__chip[data-campaign-highlight='true'] {
+  border-color: var(--accent);
+  animation: deepseek-campaign-chip-pulse 760ms cubic-bezier(0.23, 1, 0.32, 1) 2;
+}
+@keyframes deepseek-campaign-chip-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent); }
+  50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 22%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .inline-switcher__chip[data-campaign-highlight='true'] { animation: none; }
 }
 .inline-switcher__agent-status {
   display: inline-flex;

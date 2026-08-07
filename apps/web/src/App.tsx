@@ -128,6 +128,7 @@ import { seedHomeComposerPrompt } from './components/HomeView';
 import { goBack, navigate, useRoute, type Route } from './router';
 import {
   fetchDaemonConfig,
+  DEFAULT_CONFIG,
   DEFAULT_PET,
   fetchMediaProvidersFromDaemon,
   hasAnyConfiguredProvider,
@@ -348,6 +349,37 @@ function clearStaleAmrModelChoiceOnProfileChange(
   const nextAgentModels = { ...(next.agentModels ?? {}) };
   delete nextAgentModels[AMR_AGENT_ID];
   return { ...next, agentModels: nextAgentModels };
+}
+
+/**
+ * Active Cloud sign-out is an account boundary. Remove every saved execution
+ * choice that could leak account A's Hosted/Local/BYOK setup into account B,
+ * while preserving unrelated product preferences and authored content.
+ */
+export function resetExecutionConfigAfterSignOut(config: AppConfig): AppConfig {
+  return {
+    ...config,
+    onboardingCompleted: false,
+    mode: DEFAULT_CONFIG.mode,
+    agentId: null,
+    agentModels: {},
+    agentCliEnv: {},
+    agentCliEnvIntent: {},
+    apiProtocol: DEFAULT_CONFIG.apiProtocol,
+    apiKey: DEFAULT_CONFIG.apiKey,
+    apiVersion: DEFAULT_CONFIG.apiVersion,
+    baseUrl: DEFAULT_CONFIG.baseUrl,
+    model: DEFAULT_CONFIG.model,
+    byokImageModel: DEFAULT_CONFIG.byokImageModel,
+    byokVideoModel: DEFAULT_CONFIG.byokVideoModel,
+    byokSpeechModel: DEFAULT_CONFIG.byokSpeechModel,
+    byokSpeechVoice: DEFAULT_CONFIG.byokSpeechVoice,
+    byokProviderConfigDrafts: {},
+    byokPendingProviderKey: undefined,
+    maxTokens: DEFAULT_CONFIG.maxTokens,
+    apiProviderBaseUrl: DEFAULT_CONFIG.apiProviderBaseUrl,
+    apiProtocolConfigs: {},
+  };
 }
 
 type ProjectListRequest = {
@@ -4633,6 +4665,19 @@ function AppInner() {
     navigate({ kind: 'home', view: 'onboarding' });
   }, []);
 
+  const handleActiveCloudSignOut = useCallback(async () => {
+    const next = resetExecutionConfigAfterSignOut(latestPersistedConfigRef.current);
+    latestPersistedConfigRef.current = next;
+    saveConfig(next);
+    setConfig(next);
+    setProviderModelsCache({});
+    setSettingsOpen(false);
+    settingsDraftConfigRef.current = null;
+    setSettingsHighlight(null);
+    navigate({ kind: 'home', view: 'onboarding' });
+    await syncConfigToDaemon(next, { allowOnboardingReset: true });
+  }, []);
+
   const renderSettingsSurface = (presentation: 'modal' | 'page') => (
     <SettingsDialog
       presentation={presentation}
@@ -4656,6 +4701,7 @@ function AppInner() {
       onPersistComposioKey={handleConfigPersistComposioKey}
       onClose={handleCloseSettings}
       onResetOnboarding={handleResetOnboarding}
+      onAmrSignedOut={handleActiveCloudSignOut}
       onRefreshAgents={refreshAgents}
       onAmrLoginStatusChange={handleAmrLoginStatusChange}
       daemonMediaProviders={daemonMediaProviders}
@@ -4956,6 +5002,11 @@ function AppInner() {
         agents={agents}
         agentsLoading={agentsLoading}
         amrLoggedIn={amrLoginStatus?.loggedIn ?? null}
+        amrAccountPlan={
+          amrLoginStatus?.account?.plan?.trim()
+          || amrLoginStatus?.user?.plan?.trim()
+          || null
+        }
         config={config}
         providerModelsCache={providerModelsCache}
         onProviderModelsCacheChange={setProviderModelsCache}
@@ -5003,6 +5054,8 @@ function AppInner() {
         onPersistComposioKey={handleConfigPersistComposioKey}
         onOpenSettings={openSettings}
         onCompleteOnboarding={handleCompleteOnboarding}
+        onSignedOut={handleActiveCloudSignOut}
+        onAmrLoginStatusChange={handleAmrLoginStatusChange}
         artifactUpgradeSlot={
           amrArtifactUpgradeHomeOffer ? (
             <AmrArtifactUpgradeHomeCard

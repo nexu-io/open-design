@@ -17,7 +17,6 @@ import type { GuardContext } from "./core.ts";
 
 const fullMatrixNames = [
   "entry-settings",
-  "entry-automations",
   "project-workspace",
   "project-workspace-editor",
   "project-collab",
@@ -42,7 +41,7 @@ function sameValues(actual: readonly string[], expected: readonly string[]): boo
 export function uiP0ShadowContractErrors(): string[] {
   const errors: string[] = [];
   if (!sameValues(matrixNames(uiP0CiMatrix), fullMatrixNames)) {
-    errors.push("the applied UI P0 matrix is no longer the guarded full seven-domain matrix");
+    errors.push("the applied UI P0 matrix is no longer the guarded full six-domain matrix");
   }
 
   const sourceSample = `${DAEMON_RUNTIME_DEFINITION_PREFIXES[0]}example.ts`;

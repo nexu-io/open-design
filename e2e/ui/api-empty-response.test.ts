@@ -1,9 +1,9 @@
 import { expect, test } from '@/playwright/suite';
 import {
   fulfillAgentsRoute,
-  routeSignedOutVelaStatus,
   routeSuccessfulRuns,
 } from '@/playwright/mock-factory';
+import { mockAmrPersonalWorkspace } from '@/playwright/amr';
 import { openNewProjectModal as openNewProjectModalFromProjects } from '@/playwright/rail';
 import type { Page } from '@playwright/test';
 import { T } from '@/timeouts';
@@ -13,7 +13,17 @@ const STORAGE_KEY = 'open-design:config';
 test.describe.configure({ timeout: T.xlong });
 
 test.beforeEach(async ({ page }) => {
-  await routeSignedOutVelaStatus(page);
+  await page.route('**/api/integrations/vela/status*', async (route) => {
+    await route.fulfill({
+      json: {
+        loggedIn: true,
+        profile: 'local',
+        configPath: '/tmp/.amr/config.json',
+        user: { id: 'api-empty-response', email: 'api-empty-response@example.com' },
+      },
+    });
+  });
+  await mockAmrPersonalWorkspace(page);
   await page.addInitScript((key) => {
     window.localStorage.setItem(
       key,

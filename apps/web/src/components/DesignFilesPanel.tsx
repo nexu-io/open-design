@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAnalytics } from '../analytics/provider';
 import { trackFileManagerClick } from '../analytics/events';
 import { useT } from '../i18n';
@@ -138,6 +138,83 @@ const SECTION_ORDER: FileCategory[] = [
 
 const STYLESHEET_EXTENSIONS = new Set(['css', 'scss', 'sass', 'less']);
 const HTML_THUMBNAIL_INLINE_MAX_BYTES = 512 * 1024;
+
+// Incremental grid rendering: the page-card grid and the image masonry start
+// with this many entries and reveal the next batch when the invisible
+// end-of-grid sentinel nears the viewport. Root views intentionally list every
+// nested file (see dirsAtCurrentDir), so a web-clone project can put 4000+
+// HTML files in one section — rendering them all at once froze the client.
+const GRID_RENDER_BATCH = 48;
+
+// At most this many thumbnail content fetches run concurrently. Each visible
+// card fetches its HTML to build a srcDoc preview; without a cap, a large
+// section fires thousands of parallel fetches, exhausting local sockets
+// (net::ERR_INSUFFICIENT_RESOURCES) and starving the web<->daemon proxy.
+const MAX_CONCURRENT_HTML_THUMBNAIL_FETCHES = 6;
+
+let activeHtmlThumbnailFetches = 0;
+const queuedHtmlThumbnailFetches: Array<() => void> = [];
+
+// Start queued thumbnail fetches on a microtask, never synchronously from a
+// release. A synchronous pump would let one card's unmount cleanup start a
+// queued fetch for a sibling card that is being torn down in the same commit
+// (its own cleanup just hasn't run yet). Deferring to a microtask lets every
+// cleanup dequeue its task first; the pump then only starts live tasks.
+function pumpHtmlThumbnailFetchQueue(): void {
+  queueMicrotask(() => {
+    while (
+      activeHtmlThumbnailFetches < MAX_CONCURRENT_HTML_THUMBNAIL_FETCHES
+      && queuedHtmlThumbnailFetches.length > 0
+    ) {
+      queuedHtmlThumbnailFetches.shift()!();
+    }
+  });
+}
+
+/**
+ * FIFO concurrency gate for thumbnail content fetches. `start` runs once a
+ * slot is free (synchronously when one is available now) and receives the
+ * release function to call when the fetch settles. The returned function
+ * abandons the reservation, for effect cleanup:
+ * - abandoned before starting → the queued task is removed and never runs;
+ * - abandoned after starting → the slot stays held until the underlying
+ *   request settles and the settle path calls `release`. Cleanup must never
+ *   free a slot whose request is still on the network: releasing early would
+ *   let the queue pump start replacement fetches while the abandoned ones are
+ *   still in flight, pushing real connection concurrency above the cap during
+ *   directory/project navigation — the exact socket-exhaustion path this pool
+ *   exists to prevent.
+ */
+function acquireHtmlThumbnailFetchSlot(
+  start: (release: () => void) => void,
+): () => void {
+  let started = false;
+  let released = false;
+  const release = () => {
+    if (released) return;
+    released = true;
+    activeHtmlThumbnailFetches -= 1;
+    pumpHtmlThumbnailFetchQueue();
+  };
+  const run = () => {
+    started = true;
+    activeHtmlThumbnailFetches += 1;
+    start(release);
+  };
+  let abandoned = false;
+  const abandon = () => {
+    if (abandoned || started) return;
+    abandoned = true;
+    const index = queuedHtmlThumbnailFetches.indexOf(run);
+    if (index >= 0) queuedHtmlThumbnailFetches.splice(index, 1);
+  };
+  if (activeHtmlThumbnailFetches < MAX_CONCURRENT_HTML_THUMBNAIL_FETCHES) {
+    run();
+  } else {
+    queuedHtmlThumbnailFetches.push(run);
+  }
+  return abandon;
+}
 
 function fileCategory(file: ProjectFile): FileCategory {
   const dot = file.name.lastIndexOf('.');
@@ -564,6 +641,39 @@ export function DesignFilesPanel({
     const pages = availableTabs.find((tab) => tab.id === 'cat:html');
     return (pages ?? availableTabs[0])?.id ?? null;
   }, [activeTab, availableTabs]);
+
+  // Incremental grid rendering (see GRID_RENDER_BATCH). Only one card grid is
+  // on screen at a time (one active tab), so a single revealed-count state
+  // serves both the page-card grid and the image masonry. Environments
+  // without IntersectionObserver (jsdom) render every entry at once, matching
+  // the previous behavior.
+  const canLazyRenderGrids = typeof IntersectionObserver !== 'undefined';
+  const [gridRenderLimit, setGridRenderLimit] = useState(GRID_RENDER_BATCH);
+  const gridScopeKey = `${currentDir}\u0000${resolvedTab ?? ''}`;
+  const [gridScope, setGridScope] = useState(gridScopeKey);
+  if (gridScope !== gridScopeKey) {
+    // Adjust-during-render reset: navigating directories or switching tabs
+    // must drop the revealed count back to the initial batch BEFORE the new
+    // list paints, or one throwaway frame would render it at the old count.
+    setGridScope(gridScopeKey);
+    setGridRenderLimit(GRID_RENDER_BATCH);
+  }
+  const revealNextGridBatch = useCallback(() => {
+    setGridRenderLimit((limit) => limit + GRID_RENDER_BATCH);
+  }, []);
+  const limitGridEntries = (sectionFiles: ProjectFile[]): ProjectFile[] =>
+    canLazyRenderGrids ? sectionFiles.slice(0, gridRenderLimit) : sectionFiles;
+  const renderGridSentinel = (sectionFiles: ProjectFile[]) =>
+    canLazyRenderGrids && sectionFiles.length > gridRenderLimit ? (
+      <GridRenderSentinel
+        // Keyed by the revealed count so each batch re-observes from scratch:
+        // a fresh observation always reports the current intersection state,
+        // so a sentinel still inside the extended viewport after a batch
+        // keeps revealing until it leaves it or the list is exhausted.
+        key={`grid-sentinel:${gridRenderLimit}`}
+        onReveal={revealNextGridBatch}
+      />
+    ) : null;
 
   // Prune selections that no longer exist in the current file list
   // (e.g. after a refresh or delete within the same project).
@@ -1638,13 +1748,15 @@ export function DesignFilesPanel({
                       // Page cards are self-describing — a straight grid
                       // under the tab bar.
                       <div className="df-card-grid">
-                        {sectionFiles.map((f) => renderPageCard(f, category))}
+                        {limitGridEntries(sectionFiles).map((f) => renderPageCard(f, category))}
+                        {renderGridSentinel(sectionFiles)}
                       </div>
                     ) : category === 'image' ? (
                       // Images read as their own preview — a masonry waterfall
                       // of natural-aspect thumbnails instead of list rows.
                       <div className="df-image-masonry" data-testid="design-files-image-masonry">
-                        {sectionFiles.map((f) => renderImageCard(f, category))}
+                        {limitGridEntries(sectionFiles).map((f) => renderImageCard(f, category))}
+                        {renderGridSentinel(sectionFiles)}
                       </div>
                     ) : (
                       sectionFiles.map((f) => renderFileRow(f, category))
@@ -1744,6 +1856,55 @@ export function DesignFilesPanel({
   );
 }
 
+// Invisible end-of-grid marker that reveals the next render batch when it
+// nears the viewport. Deliberately renders no visible UI — no button, no
+// loading copy — so an incrementally rendered grid reads exactly like a fully
+// rendered one. The 1200px bottom rootMargin reveals the next batch well
+// before the user reaches the end of the rendered cards.
+function GridRenderSentinel({ onReveal }: { onReveal: () => void }) {
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const node = sentinelRef.current;
+    // The parent only renders the sentinel when IntersectionObserver exists
+    // (environments without it fall back to rendering the full grid), so this
+    // guard is for safety, not a jsdom fallback path.
+    if (!node || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            onReveal();
+            observer.disconnect();
+            break;
+          }
+        }
+      },
+      { rootMargin: '0px 0px 1200px 0px' },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [onReveal]);
+
+  return (
+    <div
+      ref={sentinelRef}
+      data-testid="design-files-grid-sentinel"
+      aria-hidden
+      // Spans the card grid's full row (gridColumn) and avoids splitting
+      // across masonry columns (breakInside) while staying visually absent.
+      style={{
+        gridColumn: '1 / -1',
+        breakInside: 'avoid',
+        blockSize: 1,
+        margin: 0,
+        padding: 0,
+        border: 0,
+      }}
+    />
+  );
+}
+
 // Pages are laid out at a desktop-ish width and scaled down to the card, so
 // the thumbnail reads as a zoomed-out page preview instead of the page's
 // narrow mobile layout cropped to the card's top-left corner.
@@ -1804,6 +1965,36 @@ function HtmlCardThumbnail({
   const hostRef = useRef<HTMLDivElement | null>(null);
   const [scale, setScale] = useState<number | null>(null);
 
+  // Content fetches wait until the card scrolls near the viewport; the 800px
+  // bottom rootMargin prefetches cards about to be scrolled into view, and a
+  // card that has intersected once stays "near" for good (same pattern as
+  // ExampleCard in ExamplesTab). Environments without IntersectionObserver
+  // (jsdom) fall back to treating every card as immediately visible.
+  const [nearViewport, setNearViewport] = useState(false);
+  useEffect(() => {
+    if (nearViewport) return;
+    const host = hostRef.current;
+    if (!host) return;
+    if (typeof IntersectionObserver === 'undefined') {
+      setNearViewport(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            setNearViewport(true);
+            observer.disconnect();
+            break;
+          }
+        }
+      },
+      { rootMargin: '0px 0px 800px 0px' },
+    );
+    observer.observe(host);
+    return () => observer.disconnect();
+  }, [nearViewport]);
+
   useEffect(() => {
     setSrcDoc(null);
     if (tooLargeForThumbnail || !thumbnailIdentity) return;
@@ -1819,30 +2010,44 @@ function HtmlCardThumbnail({
       setSrcDoc(buildSrcdoc(cachedSource, { baseHref }));
       return;
     }
+    // Only an actual network load waits for viewport proximity (cached
+    // sources above render immediately) and for a free fetch slot — the
+    // gate + pool that keep a huge grid from firing thousands of fetches.
+    if (!nearViewport) return;
     let cancelled = false;
-    void loadHtmlThumbnailSource(
-      thumbnailIdentity,
-      async () => {
-        const response = await fetch(
-          appendResourceQuery(url, `v=${Math.round(file.mtime)}`),
-          {},
-        );
-        return response?.ok ? response.text() : null;
-      },
-    ).then((html) => {
-        if (cancelled || html === null) return;
-        const nextSrcDoc = buildSrcdoc(html, { baseHref });
-        if (!cancelled) setSrcDoc(nextSrcDoc);
-      })
-      .catch((err) => {
-        if (!cancelled) setSrcDoc(null);
-      });
+    const abandonSlot = acquireHtmlThumbnailFetchSlot((release) => {
+      void loadHtmlThumbnailSource(
+        thumbnailIdentity,
+        async () => {
+          const response = await fetch(
+            appendResourceQuery(url, `v=${Math.round(file.mtime)}`),
+            {},
+          );
+          return response?.ok ? response.text() : null;
+        },
+      ).then((html) => {
+          if (cancelled || html === null) return;
+          const nextSrcDoc = buildSrcdoc(html, { baseHref });
+          if (!cancelled) setSrcDoc(nextSrcDoc);
+        })
+        .catch(() => {
+          if (!cancelled) setSrcDoc(null);
+        })
+        // Success and failure both pass through here exactly once per
+        // started fetch — the ONLY place a started fetch's slot is freed.
+        // Cleanup below abandons the reservation without freeing the slot,
+        // so a fetch abandoned mid-flight keeps its slot until the network
+        // actually settles it and real concurrency stays within the cap.
+        .finally(release);
+    });
     return () => {
       cancelled = true;
+      abandonSlot();
     };
   }, [
     authorizationScopeKey,
     baseHref,
+    nearViewport,
     refreshKey,
     tooLargeForThumbnail,
     url,

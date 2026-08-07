@@ -21,6 +21,7 @@ import { useRef, useState } from 'react';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mergeAgentModelChoice } from '../../src/App';
+import { DEEPSEEK_V4_FLASH_CAMPAIGN } from '../../src/campaigns/deepseek-v4-flash';
 import { InlineModelSwitcher } from '../../src/components/InlineModelSwitcher';
 import type { AgentInfo, AppConfig } from '../../src/types';
 
@@ -143,7 +144,14 @@ function isOffered(row: HTMLElement): boolean {
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
+
+/** Pins the clock inside/outside the real campaign window — the ONLY lever
+ *  left for campaign visibility now that the URL review parameters are gone. */
+function mockNow(at: string): void {
+  vi.spyOn(Date, 'now').mockReturnValue(Date.parse(at));
+}
 
 describe('compact home model list — a clicked model reaches the chip', () => {
   it('never offers a model whose click the chip will not honor', () => {
@@ -239,6 +247,38 @@ describe('compact home model list — a clicked model reaches the chip', () => {
 
     expect(chipText()).toContain('deepseek-v4-flash');
     expect(screen.queryByTestId('inline-model-switcher-popover')).toBeNull();
+  });
+
+  it('shows the unlimited badge only on DeepSeek V4 Flash and keeps it in the selected chip', () => {
+    // Campaign visibility is decided by the real window alone: pin the clock
+    // inside the window instead of the removed ?campaign= review parameters.
+    mockNow(DEEPSEEK_V4_FLASH_CAMPAIGN.window.startAt);
+    render(<StatefulSwitcher agents={[amrAgentAllEnabled]} />);
+
+    expect(chipText()).toContain('deepseek-v4-flash');
+    expect(within(screen.getByTestId('inline-model-switcher-chip')).getByText('Unlimited'))
+      .toBeInTheDocument();
+
+    const popover = openSwitcher();
+    expect(within(compactRow('deepseek-v4-flash')).getByText('Unlimited'))
+      .toBeInTheDocument();
+    expect(within(compactRow('deepseek-v4-pro')).queryByText('Unlimited'))
+      .toBeNull();
+    expect(within(popover).getAllByText('Unlimited')).toHaveLength(1);
+  });
+
+  it('hides the campaign badge entirely outside the real window', () => {
+    // The half-open window: at endAtExclusive the campaign is over, and no
+    // URL parameter can bring the badge back.
+    mockNow(DEEPSEEK_V4_FLASH_CAMPAIGN.window.endAtExclusive);
+    render(<StatefulSwitcher agents={[amrAgentAllEnabled]} />);
+
+    expect(chipText()).toContain('deepseek-v4-flash');
+    expect(within(screen.getByTestId('inline-model-switcher-chip')).queryByText('Unlimited'))
+      .toBeNull();
+
+    const popover = openSwitcher();
+    expect(within(popover).queryByText('Unlimited')).toBeNull();
   });
 
   it('still closes on a click genuinely outside the switcher', () => {

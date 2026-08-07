@@ -43,6 +43,7 @@ import type {
   PluginShareAction,
   PluginShareProjectOutcome,
 } from '../state/projects';
+import type { VelaLoginStatus } from '../providers/daemon';
 
 type EntryCreateProjectInput = Omit<CreateInput, 'metadata'> & {
   metadata?: CreateInput['metadata'];
@@ -78,6 +79,8 @@ interface Props {
   // detecting/skeleton state while the cold-start agent stream is in flight.
   agentsLoading?: boolean;
   amrLoggedIn?: boolean | null;
+  /** Forwarded to EntryShell for personal free campaign audience resolution. */
+  amrAccountPlan?: string | null;
   // Execution / model-switching context forwarded to the EntryShell so the
   // sticky top-bar can expose the active CLI/BYOK + model and persist
   // changes through the same channels as the project view.
@@ -145,6 +148,8 @@ interface Props {
   onPersistComposioKey: (composio: AppConfig['composio']) => Promise<void> | void;
   onOpenSettings: (section?: 'execution' | 'media' | 'composio' | 'orbit' | 'integrations' | 'mcpClient' | 'language' | 'appearance' | 'notifications' | 'pet' | 'projectLocations' | 'library' | 'about' | 'memory' | 'designSystems') => void;
   onCompleteOnboarding: () => void;
+  onSignedOut?: () => void | Promise<void>;
+  onAmrLoginStatusChange?: (status: VelaLoginStatus | null) => void;
   artifactUpgradeSlot?: ReactNode;
 }
 
@@ -253,6 +258,7 @@ export function EntryView({
   agents,
   agentsLoading,
   amrLoggedIn,
+  amrAccountPlan,
   config,
   providerModelsCache,
   onProviderModelsCacheChange,
@@ -293,6 +299,8 @@ export function EntryView({
   onPersistComposioKey,
   onOpenSettings,
   onCompleteOnboarding,
+  onSignedOut,
+  onAmrLoginStatusChange,
   artifactUpgradeSlot,
 }: Props) {
   const [connectors, setConnectors] = useState<ConnectorDetail[]>([]);
@@ -383,6 +391,7 @@ export function EntryView({
       agents={agents}
       {...(agentsLoading !== undefined ? { agentsLoading } : {})}
       {...(amrLoggedIn !== undefined ? { amrLoggedIn } : {})}
+      {...(amrAccountPlan !== undefined ? { amrAccountPlan } : {})}
       daemonLive={daemonLive}
       onModeChange={onModeChange}
       onAgentChange={onAgentChange}
@@ -414,6 +423,8 @@ export function EntryView({
       onPersistComposioKey={onPersistComposioKey}
       onOpenSettings={onOpenSettings}
       onCompleteOnboarding={onCompleteOnboarding}
+      onSignedOut={onSignedOut}
+      onAmrLoginStatusChange={onAmrLoginStatusChange}
       artifactUpgradeSlot={artifactUpgradeSlot}
     />
   );

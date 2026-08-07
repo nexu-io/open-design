@@ -88,39 +88,6 @@ Derived files are caches, not competing sources of truth:
   agree with `tokens.css`.
 - `tailwind-v4.css` is regenerated from `tokens.css`.
 
-### Structured runtime files
-
-Packages that need deterministic component selection may add a complete
-machine-readable runtime graph:
-
-```text
-manifests/components.json       component index
-manifests/intent-map.json       intent-to-component mappings
-components/<id>/component.json  implementation, variants, properties, and states
-rules/lint.json                 checks for generated output
-rules/fallback.json             no-match and multiple-match behavior
-```
-
-Declare all four entry paths together in `manifest.json`:
-
-```json
-{
-  "runtime": {
-    "components": "manifests/components.json",
-    "intents": "manifests/intent-map.json",
-    "lint": "rules/lint.json",
-    "fallback": "rules/fallback.json"
-  }
-}
-```
-
-`intent-map.json` references component ids and selects only declared variants,
-properties, and states; it does not repeat selectors or implementation details.
-The daemon resolves those references from the component definition and returns a
-structured selection. Omitting `runtime` preserves the legacy prompt-based path.
-Declaring only part of the graph, using unsafe paths, or leaving dangling
-references fails validation.
-
 ## 2. Catalog metadata precedence
 
 Packaged systems should put stable display metadata in `manifest.json`. The
@@ -275,7 +242,6 @@ localized-content coverage.
 - [ ] `DESIGN.md` has at least seven substantive H2 sections without relying on a fixed numbered template.
 - [ ] `tokens.css` satisfies the shared token schema and agrees with the prose.
 - [ ] Rich-package usage, component, preview, and source-evidence files are complete.
-- [ ] If `runtime` is declared, all runtime files parse and every intent reference resolves.
 - [ ] Derived component, Design Tokens, and Tailwind outputs are regenerated rather than hand-edited.
 - [ ] Component fixtures use declared semantic tokens and include keyboard, focus, contrast, and reduced-motion behavior.
 - [ ] All 17 direct non-English catalog maps are updated for bundled copy changes.

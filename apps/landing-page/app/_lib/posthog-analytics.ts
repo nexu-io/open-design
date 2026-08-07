@@ -38,6 +38,54 @@ function buildTrackerScript(pageName: string, downloadAttributionUrl: string): s
       try { if (window.posthog) window.posthog.capture(name, props || {}); } catch (e) {}
     };
 
+    // Cross-product campaign attribution is minted on the first click that
+    // enters a conversion path. Later Pricing clicks preserve that first-touch
+    // id/source and add a separate conversion source, allowing Vela's final
+    // payment event to report both entry and checkout placement.
+    window.__odRecordCampaignEntry = function (sourceDetail, campaignId) {
+      var inbound = null;
+      try { inbound = new URLSearchParams(window.location.search || ''); } catch (e) {}
+      var inboundEntryId = inbound && inbound.get('od_entry_id');
+      var inboundEntrySource = inbound && inbound.get('od_entry_source');
+      var inboundEntryAt = inbound && inbound.get('od_entry_at');
+      // Consent-gated device id survives desktop → Pricing → Cloud. Only the
+      // inbound query is a source of truth here; callers never mint a device id.
+      var inboundDeviceId = inbound && inbound.get('od_device_id');
+      var random = '';
+      try {
+        random = window.crypto && typeof window.crypto.randomUUID === 'function'
+          ? window.crypto.randomUUID()
+          : Math.random().toString(36).slice(2) + Date.now().toString(36);
+      } catch (e) { random = Math.random().toString(36).slice(2) + Date.now().toString(36); }
+      return {
+        entry_id: inboundEntryId || ('od-campaign-' + random),
+        source_product: 'open_design',
+        source_detail: inboundEntrySource || String(sourceDetail || 'unknown'),
+        entry_occurred_at: inboundEntryAt || new Date().toISOString(),
+        conversion_source: String(sourceDetail || 'unknown'),
+        // Explicit only: do not inherit a stale inbound od_campaign_id. Pricing
+        // passes undefined once the window closes so post-window CTAs stay clean.
+        campaign_id: campaignId || undefined,
+        device_id: inboundDeviceId || undefined,
+      };
+    };
+
+    window.__odAttributedUrl = function (href, attribution) {
+      try {
+        var target = new URL(href, window.location.href);
+        if (attribution) {
+          target.searchParams.set('od_origin', attribution.source_product || 'open_design');
+          target.searchParams.set('od_entry_id', attribution.entry_id || '');
+          target.searchParams.set('od_entry_source', attribution.source_detail || 'unknown');
+          target.searchParams.set('od_entry_at', attribution.entry_occurred_at || new Date().toISOString());
+          target.searchParams.set('od_conversion_source', attribution.conversion_source || attribution.source_detail || 'unknown');
+          if (attribution.campaign_id) target.searchParams.set('od_campaign_id', attribution.campaign_id);
+          if (attribution.device_id) target.searchParams.set('od_device_id', attribution.device_id);
+        }
+        return target.toString();
+      } catch (e) { return href; }
+    };
+
     var REPO = 'github.com/nexu-io/open-design';
     var PAGE = ${JSON.stringify(pageName)};
     var DOWNLOAD_ATTRIBUTION_URL = ${JSON.stringify(downloadAttributionUrl)};

@@ -411,15 +411,18 @@ describe('InlineModelSwitcher compact split chip (#6501)', () => {
     const popover = screen.getByTestId('inline-model-switcher-popover');
 
     // Seed list for openai includes gpt-4o; must not show the CLI agent catalog.
+    fireEvent.click(within(popover).getByTestId('inline-model-switcher-api-model'));
+    const modelPopover = screen.getByTestId(
+      'inline-model-switcher-api-model-popover',
+    );
     expect(
-      within(popover).getByTestId('inline-model-switcher-compact-api-model-gpt-4o'),
+      within(modelPopover).getByRole('option', { name: /^gpt-4o$/ }),
     ).toBeTruthy();
     expect(
-      within(popover).queryByTestId('inline-model-switcher-compact-model-claude-opus-4.6'),
+      within(modelPopover).queryByText('claude-opus-4.6'),
     ).toBeNull();
-
     fireEvent.click(
-      within(popover).getByTestId('inline-model-switcher-compact-api-model-gpt-4o'),
+      within(modelPopover).getByRole('option', { name: /^gpt-4o$/ }),
     );
     expect(onApiModelChange).toHaveBeenCalledWith('gpt-4o');
   });

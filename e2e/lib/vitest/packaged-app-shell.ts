@@ -20,12 +20,9 @@ const PACKAGED_APP_SHELL_PROBE = `
     const home = doc.querySelector('[data-testid="entry-nav-home"]');
     const onboardingShell = doc.querySelector('.entry-shell--onboarding, .entry-onboarding-modal');
     const cloudSignIn = doc.querySelector('.onboarding-cloud__primary');
-    const secondaryLinks = Array.from(doc.querySelectorAll('.onboarding-cloud__secondary'));
     return {
-      byokLinkVisible: secondaryLinks[1] instanceof ElementCtor,
       cloudSignInVisible: cloudSignIn instanceof ElementCtor,
       homeVisible: home instanceof ElementCtor && home.getClientRects().length > 0,
-      localLinkVisible: secondaryLinks[0] instanceof ElementCtor,
       onboardingVisible: onboardingShell instanceof ElementCtor,
       text: doc.body?.textContent?.trim().slice(0, 300) ?? '',
       title: doc.title,
@@ -36,10 +33,8 @@ const PACKAGED_APP_SHELL_PROBE = `
 export const packagedAppShellExpression = `(${PACKAGED_APP_SHELL_PROBE})(document, HTMLElement)`;
 
 export type PackagedAppShellSnapshot = {
-  byokLinkVisible: boolean;
   cloudSignInVisible: boolean;
   homeVisible: boolean;
-  localLinkVisible: boolean;
   onboardingVisible: boolean;
   text: string;
   title: string;
@@ -81,10 +76,8 @@ export function asPackagedAppShellSnapshot(value: unknown): PackagedAppShellSnap
   if (typeof value !== 'object' || value == null || Array.isArray(value)) return null;
   const candidate = value as Partial<PackagedAppShellSnapshot>;
   if (
-    typeof candidate.byokLinkVisible !== 'boolean' ||
     typeof candidate.cloudSignInVisible !== 'boolean' ||
     typeof candidate.homeVisible !== 'boolean' ||
-    typeof candidate.localLinkVisible !== 'boolean' ||
     typeof candidate.onboardingVisible !== 'boolean' ||
     typeof candidate.text !== 'string' ||
     typeof candidate.title !== 'string'
@@ -107,8 +100,8 @@ export type PackagedAppShellState = 'home' | 'onboarding-landing';
  * neither — a blank window, a crashed renderer, a boot still on the loader, or
  * a half-rendered onboarding shell all fall through to `null`.
  *
- * The landing is recognised positively, from the same three affordances the
- * `[P0]` onboarding smoke asserts: the sign-in CTA plus both runtime links. A
+ * The landing is recognised positively from the identity gate's sign-in CTA.
+ * Local and BYOK are intentionally unavailable until identity completes, so a
  * bare `onboardingVisible` would degrade this into "anything that is not home"
  * and stop failing on a renderer that mounted the shell and then died.
  */
@@ -116,12 +109,7 @@ export function packagedAppShellState(value: unknown): PackagedAppShellState | n
   const snapshot = asPackagedAppShellSnapshot(value);
   if (snapshot == null) return null;
   if (snapshot.homeVisible) return 'home';
-  if (
-    snapshot.onboardingVisible &&
-    snapshot.cloudSignInVisible &&
-    snapshot.localLinkVisible &&
-    snapshot.byokLinkVisible
-  ) {
+  if (snapshot.onboardingVisible && snapshot.cloudSignInVisible) {
     return 'onboarding-landing';
   }
   return null;

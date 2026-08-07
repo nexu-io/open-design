@@ -86,12 +86,21 @@ jobs:
       # existed only while prod's resource-hub storage was unconfigured.)
       amr_profile: ${{ inputs.amr_profile || 'prod' }}
       # Windows packaged smoke is a hard publish gate (publish needs build_win
-      # success) but currently flakes on release/v0.18.0 ("did not reach main app
-      # shell"), skip-blocking EVERY platform's publish + the Feishu card. TEMPORARY:
+      # success) but flaked on release/v0.18.0 ("did not reach main app shell"),
+      # skip-blocking EVERY platform's publish + the Feishu card. TEMPORARY:
       # skip it on release/v0.18.0 so the workspace-team prerelease can actually
       # ship its mac/win/linux packages + post its card. Manual dispatch overrides.
-      # Remove this branch default once the win smoke flake root cause is fixed.
-      win_x64_smoke_mode: ${{ inputs.win_x64_smoke_mode || (github.ref_name == 'release/v0.18.0' && 'skip') || '' }}
+      # The root cause is fixed on main (#6481); remove this branch default once
+      # release/v0.18.0 no longer builds.
+      #
+      # The final arm must name a real profile, NOT ''. A workflow_call
+      # `default:` applies only when an input is omitted, so forwarding an empty
+      # string defeats the callee's declared `core` default; the empty value
+      # then reaches the spec, reads as "not core", and selects the updater path
+      # — which demands a fixture only a genuine `full` request wires up, so the
+      # job dies before the smoke starts. That is how release/v0.18.1's first
+      # prerelease failed on its branch-cut commit.
+      win_x64_smoke_mode: ${{ inputs.win_x64_smoke_mode || (github.ref_name == 'release/v0.18.0' && 'skip') || 'core' }}
 
   notify:
     name: Notify Feishu (release)

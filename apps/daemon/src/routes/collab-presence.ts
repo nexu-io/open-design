@@ -12,6 +12,11 @@ import type {
 import type {
   VerifiedWorkspaceRequestContextResult,
 } from '../collab/request-workspace-context.js';
+import {
+  classifyCollabCloudError,
+  CollabCloudUpstreamBlockedError,
+  type ClassifiedCollabCloudError,
+} from '../collab/collab-cloud-error.js';
 
 type PresenceActivity = Exclude<PresenceMember['activity'], undefined>;
 
@@ -61,6 +66,14 @@ export interface RegisterCollabPresenceRoutesDeps {
    * requested workspace, so a separate remote team-project lookup is redundant.
    */
   cloudAuthorizesProjectPresence?: (projectId: string) => boolean;
+  /**
+   * Cooldown for the upstream negative cache: after repeated consecutive
+   * cloud-transport failures for one project, presence stops spawning the
+   * transport for this long and replays the classified failure instead.
+   */
+  presenceUpstreamCooldownMs?: number;
+  /** Virtual clock seam for deterministic negative-cache coverage. */
+  presenceUpstreamNow?: () => number;
 }
 
 export interface CollabPresenceRoutesControl {
@@ -380,9 +393,137 @@ function readPresenceSequence(
     : null;
 }
 
+/**
+ * Answer a classified cloud-transport failure. Authoritative upstream
+ * rejections keep their meaning (403/404) so the web client's existing
+ * forbidden-request handling applies; only genuine infrastructure failures
+ * stay 502/503. The response body is intentionally free of transport
+ * internals — the spawned command line and stderr stay in the daemon log
+ * (see {@link cloudError}).
+ */
+function sendClassifiedCloudError(
+  res: Response,
+  classified: ClassifiedCollabCloudError,
+) {
+  const upstreamSuffix =
+    classified.upstreamStatus == null
+      ? ''
+      : ` (upstream status ${classified.upstreamStatus})`;
+  const responseByKind = {
+    denied: {
+      error: 'collab_presence_denied',
+      message: `the collab cloud rejected this presence request${upstreamSuffix}`,
+    },
+    not_found: {
+      error: 'collab_presence_not_found',
+      message: `the collab cloud has no record of this project${upstreamSuffix}`,
+    },
+    timeout: {
+      error: 'collab_presence_unavailable',
+      message: 'the collab cloud transport timed out',
+    },
+    infrastructure: {
+      error: 'collab_presence_unavailable',
+      message: `the collab cloud transport failed${upstreamSuffix}`,
+    },
+  } as const;
+  return res.status(classified.status).json({
+    ...responseByKind[classified.kind],
+    ...(classified.retryable ? { retryable: true } : {}),
+  });
+}
+
 function cloudError(res: Response, error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
-  return res.status(502).json({ error: 'collab_presence_unavailable', message });
+  if (error instanceof CollabCloudUpstreamBlockedError) {
+    return sendClassifiedCloudError(res, error.classified);
+  }
+  const classified = classifyCollabCloudError(error);
+  // The full failure — command line, stderr — is diagnostic gold but must not
+  // reach the renderer; keep it daemon-side.
+  console.warn(
+    `[od] collab_presence_upstream_failure kind=${classified.kind} status=${classified.status} `
+      + `detail=${JSON.stringify(error instanceof Error ? error.message : String(error))}`,
+  );
+  return sendClassifiedCloudError(res, classified);
+}
+
+const DEFAULT_PRESENCE_UPSTREAM_COOLDOWN_MS = 20_000;
+/** Failures must be consecutive — one transient blip never opens the cache. */
+const PRESENCE_UPSTREAM_FAILURE_THRESHOLD = 2;
+const MAX_PRESENCE_UPSTREAM_FAILURE_ENTRIES = 256;
+
+interface PresenceUpstreamFailureState {
+  consecutiveFailures: number;
+  blockedUntil: number;
+  classified: ClassifiedCollabCloudError;
+}
+
+/**
+ * Negative cache for a persistently failing collab cloud upstream.
+ *
+ * Every presence heartbeat/list over the vela-cli transport spawns a child
+ * process. When the upstream keeps rejecting the same project (the packaged
+ * 502-storm incident: hours of one CLI spawn per 10s beat against a dead
+ * upstream), repeated consecutive failures open a cooldown during which the
+ * stored classification is replayed without spawning; the first attempt after
+ * the cooldown probes the upstream again. Any success closes the entry.
+ */
+function createPresenceUpstreamFailureCache(options: {
+  cooldownMs: number;
+  now: () => number;
+}) {
+  const states = new Map<string, PresenceUpstreamFailureState>();
+  const keyFor = (
+    projectId: string,
+    context: WorkspaceCollabContext | null,
+  ): string => `${context?.workspaceId?.trim() ?? ''}\0${projectId}`;
+  const touch = (key: string, state: PresenceUpstreamFailureState) => {
+    states.delete(key);
+    states.set(key, state);
+    while (states.size > MAX_PRESENCE_UPSTREAM_FAILURE_ENTRIES) {
+      const oldestKey = states.keys().next().value;
+      if (oldestKey === undefined) break;
+      states.delete(oldestKey);
+    }
+  };
+
+  return {
+    /** The classification to replay while the cooldown is active, else null. */
+    active(
+      projectId: string,
+      context: WorkspaceCollabContext | null,
+    ): ClassifiedCollabCloudError | null {
+      const state = states.get(keyFor(projectId, context));
+      if (!state) return null;
+      return options.now() < state.blockedUntil ? state.classified : null;
+    },
+
+    recordFailure(
+      projectId: string,
+      context: WorkspaceCollabContext | null,
+      classified: ClassifiedCollabCloudError,
+    ): void {
+      const key = keyFor(projectId, context);
+      const state = states.get(key) ?? {
+        consecutiveFailures: 0,
+        blockedUntil: 0,
+        classified,
+      };
+      state.consecutiveFailures += 1;
+      state.classified = classified;
+      if (state.consecutiveFailures >= PRESENCE_UPSTREAM_FAILURE_THRESHOLD) {
+        state.blockedUntil = options.now() + options.cooldownMs;
+      }
+      touch(key, state);
+    },
+
+    recordSuccess(
+      projectId: string,
+      context: WorkspaceCollabContext | null,
+    ): void {
+      states.delete(keyFor(projectId, context));
+    },
+  };
 }
 
 type PresenceWorkspaceVerification =
@@ -564,6 +705,13 @@ export function registerCollabPresenceRoutes(
     now: deps.presenceListCacheNow ?? Date.now,
   });
   const presenceSessions = createPresenceSessionFence();
+  const upstreamFailures = createPresenceUpstreamFailureCache({
+    cooldownMs: Math.max(
+      0,
+      deps.presenceUpstreamCooldownMs ?? DEFAULT_PRESENCE_UPSTREAM_COOLDOWN_MS,
+    ),
+    now: deps.presenceUpstreamNow ?? Date.now,
+  });
 
   async function projectIsShared(
     projectId: string,
@@ -640,7 +788,20 @@ export function registerCollabPresenceRoutes(
               ) {
                 return [];
               }
-              return cloud.listPresence(req.params.id, context);
+              const blocked = upstreamFailures.active(req.params.id, context);
+              if (blocked) throw new CollabCloudUpstreamBlockedError(blocked);
+              try {
+                const present = await cloud.listPresence(req.params.id, context);
+                upstreamFailures.recordSuccess(req.params.id, context);
+                return present;
+              } catch (error) {
+                upstreamFailures.recordFailure(
+                  req.params.id,
+                  context,
+                  classifyCollabCloudError(error),
+                );
+                throw error;
+              }
             },
             { waitForFresh: req.query.fresh === '1' },
           ),
@@ -698,6 +859,13 @@ export function registerCollabPresenceRoutes(
         return res.json({ present: [] });
       }
       if (cloud) {
+        // A project whose upstream keeps failing must not spawn another
+        // transport process on every 10s beat — replay the classified failure
+        // until the cooldown lets the next probe through.
+        const blocked = upstreamFailures.active(req.params.id, context);
+        if (blocked && !presenceSessions.isClosed(heartbeatFence)) {
+          return sendClassifiedCloudError(res, blocked);
+        }
         let present: CollabPresenceMember[] | null = null;
         let heartbeatError: unknown = null;
         try {
@@ -706,7 +874,13 @@ export function registerCollabPresenceRoutes(
             heartbeat,
             context,
           );
+          upstreamFailures.recordSuccess(req.params.id, context);
         } catch (error) {
+          upstreamFailures.recordFailure(
+            req.params.id,
+            context,
+            classifyCollabCloudError(error),
+          );
           heartbeatError = error;
         }
         if (presenceSessions.isClosed(heartbeatFence)) {
@@ -770,11 +944,14 @@ export function registerCollabPresenceRoutes(
     }
     if (cloud) {
       try {
+        // Leave is deliberately never gated by the upstream negative cache: a
+        // closing session must always try to release its remote lease.
         const present = await cloud.leavePresence(
           req.params.id,
           leave,
           context,
         );
+        upstreamFailures.recordSuccess(req.params.id, context);
         presenceLists.publish(req.params.id, context, present);
         return res.json({
           ok: true,
