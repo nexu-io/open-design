@@ -111,22 +111,52 @@ docker compose -f docker-compose.yml -f docker-compose.linux.yml up -d --no-buil
 
 Common install paths:
 
-| CLI | Default path |
-|-----|-------------|
+| CLI | Install / default path |
+|-----|------------------------|
 | Claude Code | `~/.local/bin/claude` (symlink) + `~/.local/share/claude` (binaries) |
 | opencode | `~/.opencode/bin/opencode` |
 | Codex | `~/.local/bin/codex` |
+| Vela / AMR | npm package `@powerformer/vela-cli`; [Open Design AMR](https://open-design.ai/amr) is the browser account/wallet page |
 
-The daemon auto-detects any CLI that is visible in `PATH` at startup — no extra
-configuration needed. For a CLI installed in a non-standard path, add a volume
-and prepend its directory to `PATH` in `docker-compose.linux.yml`, then restart:
+Vela is published as the `@powerformer/vela-cli` npm package. The Open Design
+AMR URL above is not a shell installer. For Linux Docker, install Vela under a
+dedicated prefix so its launcher and platform package can be mounted together:
+
+```bash
+VELA_PREFIX="$HOME/.local/share/vela"
+npm install --global --prefix "$VELA_PREFIX" @powerformer/vela-cli
+export PATH="$VELA_PREFIX/bin:$PATH"
+which vela
+vela --version
+```
+
+Mount that complete prefix into the container, then expose its `bin` directory
+through `PATH` (or set `VELA_BIN` to the container-visible launcher):
 
 ```yaml
 environment:
-  PATH: /mnt/host-mycli:/mnt/host-local-bin:/mnt/host-opencode:/usr/local/bin:/usr/bin:/bin
+  PATH: /mnt/host-vela/bin:/mnt/host-local-bin:/mnt/host-opencode:/usr/local/bin:/usr/bin:/bin
+  VELA_BIN: /mnt/host-vela/bin/vela
 volumes:
-  - /opt/mycli/bin:/mnt/host-mycli:ro
+  - ${HOME}/.local/share/vela:/mnt/host-vela:ro
 ```
+
+Once the container is running, inspect both `PATH` discovery and any explicit
+Vela override:
+
+```bash
+docker compose exec open-design sh -lc 'which vela; echo "$VELA_BIN"'
+```
+
+Use either a `vela` launcher discoverable on `PATH` or a `VELA_BIN` path that
+exists inside the container. `VELA_BIN` is optional when `vela` is discoverable
+on `PATH`.
+
+The daemon auto-detects any CLI that is visible in `PATH` at startup — no extra
+configuration needed. For another CLI installed in a non-standard path, mount
+its complete install prefix read-only and prepend its binary directory to
+`PATH` in `docker-compose.linux.yml`, then restart. When a launcher is a symlink,
+mounting only the directory that contains the symlink may omit its target.
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.linux.yml up -d --no-build
