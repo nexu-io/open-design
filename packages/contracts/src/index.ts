@@ -20,6 +20,7 @@ export * from './api/team-resources.js';
 export * from './api/connectionTest.js';
 export * from './api/export.js';
 export * from './api/files.js';
+export * from './api/fs-browser.js';
 export * from './api/figma.js';
 export * from './api/host-tools.js';
 export * from './api/finalize.js';

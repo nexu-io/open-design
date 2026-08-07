@@ -4,12 +4,14 @@ import type { RegisterAutomationRoutesDeps } from './routes/automation.js';
 import type { RegisterChatRoutesDeps } from './routes/chat.js';
 import type { RegisterDeployRoutesDeps, RegisterDeploymentCheckRoutesDeps } from './routes/deploy.js';
 import type { RegisterFinalizeRoutesDeps, RegisterImportRoutesDeps, RegisterProjectExportRoutesDeps } from './import-export-routes.js';
+import type { RegisterFsBrowserRoutesDeps } from './routes/fs-browser.js';
 import type { RegisterGenuiRoutesDeps } from './routes/genui.js';
 import type { RegisterHandoffRoutesDeps } from './routes/handoff.js';
 import type { RegisterHostToolsRoutesDeps } from './routes/host-tools.js';
 import type { RegisterLiveArtifactRoutesDeps } from './routes/live-artifact.js';
 import type { RegisterMcpRoutesDeps } from './mcp-routes.js';
 import type { RegisterMediaRoutesDeps } from './routes/media.js';
+import type { NativeFolderDialogRouteDeps } from './routes/native-folder-dialog.js';
 import type { RegisterMemoryRoutesDeps } from './routes/memory.js';
 import type { RegisterOpenDesignPublicMetadataRoutesDeps } from './routes/open-design-public-metadata.js';
 import type { RegisterProjectArtifactRoutesDeps, RegisterProjectFileRoutesDeps, RegisterProjectRoutesDeps, RegisterProjectUploadRoutesDeps } from './routes/project/index.js';
@@ -27,6 +29,7 @@ type AllRegisteredRouteDeps =
   & RegisterDeployRoutesDeps
   & RegisterDeploymentCheckRoutesDeps
   & RegisterFinalizeRoutesDeps
+  & RegisterFsBrowserRoutesDeps
   & RegisterGenuiRoutesDeps
   & RegisterHandoffRoutesDeps
   & RegisterHostToolsRoutesDeps
@@ -34,6 +37,7 @@ type AllRegisteredRouteDeps =
   & RegisterLiveArtifactRoutesDeps
   & RegisterMcpRoutesDeps
   & RegisterMediaRoutesDeps
+  & NativeFolderDialogRouteDeps
   & RegisterMemoryRoutesDeps
   & RegisterOpenDesignPublicMetadataRoutesDeps
   & RegisterProjectArtifactRoutesDeps

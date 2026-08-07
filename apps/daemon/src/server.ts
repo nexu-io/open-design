@@ -716,6 +716,8 @@ import { registerLiveArtifactRoutes } from './routes/live-artifact.js';
 import { registerDesignSystemToolRoutes } from './routes/design-system-tool.js';
 import { registerDeployRoutes, registerDeploymentCheckRoutes } from './routes/deploy.js';
 import { registerMediaRoutes } from './routes/media.js';
+import { registerFsBrowserRoutes } from './routes/fs-browser.js';
+import { registerNativeFolderDialogRoute } from './routes/native-folder-dialog.js';
 import { registerProjectRoutes, registerProjectArtifactRoutes, registerProjectFileRoutes, registerProjectUploadRoutes, createEnforceWorkspaceProjectMutation } from './routes/project/index.js';
 import { registerVelaRoutes } from './routes/vela.js';
 import { registerFinalizeRoutes, registerImportRoutes, registerProjectExportRoutes } from './import-export-routes.js';
@@ -7482,6 +7484,21 @@ export async function startServer({
     artifacts: artifactDeps,
     projectPreviewScopes,
     verifyWorkspaceRequestAuthority,
+  });
+
+  registerNativeFolderDialogRoute(app, {
+    http: httpDeps,
+    nativeDialogs: nativeDialogDeps,
+  });
+  registerFsBrowserRoutes(app, {
+    http: httpDeps,
+    getRoots: async () => {
+      const config = await readAppConfig(RUNTIME_DATA_DIR);
+      return [
+        ...(config.projectLocations ?? []).map((location) => location.path),
+        ...(config.recentLinkedDirs ?? []),
+      ];
+    },
   });
 
   registerMediaRoutes(app, {

@@ -10,6 +10,7 @@ await build({
     "./src/api/amrWallet.ts",
     "./src/api/orbit.ts",
     "./src/api/finalize.ts",
+    "./src/api/fs-browser.ts",
     "./src/api/handoff.ts",
     "./src/api/providerModels.ts",
     "./src/api/reasoningExecution.ts",

@@ -99,7 +99,7 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       ? ctx.appConfig.onAppConfigWritten
       : null;
   const { orbitService } = ctx.orbit;
-  const { openBrowser, openNativeFolderDialog } = ctx.nativeDialogs;
+  const { openBrowser } = ctx.nativeDialogs;
   const { getProject } = ctx.projectStore;
   const { insertConversation, upsertMessage } = ctx.conversations;
   const { searchResearch, ResearchError } = ctx.research;
@@ -666,21 +666,6 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       res
         .status(500)
         .json({ ok: false, error: String(err && err.message ? err.message : err) });
-    }
-  });
-
-  // Native OS folder picker dialog. Returns { path: string | null }.
-  app.post('/api/dialog/open-folder', async (req, res) => {
-    if (!isLocalSameOrigin(req, getResolvedPort())) {
-      return res.status(403).json({ error: 'cross-origin request rejected' });
-    }
-    try {
-      const selected = await openNativeFolderDialog();
-      res.json({ path: selected });
-    } catch (err: any) {
-      res
-        .status(500)
-        .json({ error: String(err && err.message ? err.message : err) });
     }
   });
 

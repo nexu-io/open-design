@@ -10,6 +10,7 @@ import {
 } from '../state/project-locations';
 import { useI18n } from '../i18n';
 import { Icon } from './Icon';
+import { ServerDirectoryPicker } from './ServerDirectoryPicker';
 
 interface Props {
   cfg: AppConfig;
@@ -46,6 +47,7 @@ export function ProjectLocationsSection({ cfg, setCfg, onProjectsRefresh }: Prop
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [serverFolderPickerOpen, setServerFolderPickerOpen] = useState(false);
   const draftsRef = useRef<DraftLocation[]>(drafts);
 
   useEffect(() => {
@@ -138,14 +140,9 @@ export function ProjectLocationsSection({ cfg, setCfg, onProjectsRefresh }: Prop
     return result;
   }
 
-  async function handleAddFolder() {
+  async function addFolderPath(selected: string) {
     setError(null);
     setStatus(null);
-    const selected = await openProjectLocationFolderDialog();
-    if (!selected) {
-      setStatus(t('settings.projectLocationsNoFolderSelected'));
-      return;
-    }
     if (draftsRef.current.some((draft) => draft.path === selected)) {
       setStatus(t('settings.projectLocationsDuplicate'));
       return;
@@ -156,6 +153,29 @@ export function ProjectLocationsSection({ cfg, setCfg, onProjectsRefresh }: Prop
     const saved = await save(next);
     if (!saved) setDrafts(previous);
     else await runScan();
+  }
+
+  async function handleAddFolder() {
+    setError(null);
+    setStatus(null);
+    const result = await openProjectLocationFolderDialog();
+    if (result.status === 'selected') {
+      await addFolderPath(result.path);
+      return;
+    }
+    if (result.status === 'fallback') {
+      setServerFolderPickerOpen(true);
+      return;
+    }
+    if (result.status === 'cancelled') {
+      setStatus(t('settings.projectLocationsNoFolderSelected'));
+      return;
+    }
+    setError(t(
+      result.reason === 'invalid-response'
+        ? 'settings.projectLocationsPickerInvalid'
+        : 'settings.projectLocationsPickerFailed',
+    ));
   }
 
   async function removeDraft(index: number) {
@@ -251,6 +271,14 @@ export function ProjectLocationsSection({ cfg, setCfg, onProjectsRefresh }: Prop
 
       {status ? <p className="settings-rescan-status">{status}</p> : null}
       {error ? <p className="settings-rescan-status error">{error}</p> : null}
+      <ServerDirectoryPicker
+        open={serverFolderPickerOpen}
+        onClose={() => setServerFolderPickerOpen(false)}
+        onSelect={(directory) => {
+          setServerFolderPickerOpen(false);
+          void addFolderPath(directory);
+        }}
+      />
     </section>
   );
 }
