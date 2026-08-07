@@ -317,6 +317,15 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
     incoming: Record<string, unknown>,
   ): Record<string, unknown> => {
     if (!stored || stored.role !== 'assistant' || !stored.runId) return incoming;
+    // A legitimate same-message retry reuses the failed assistant's id, and
+    // `pinAssistantMessageOnRunCreate` assigns a NEW run id while deliberately
+    // keeping the old terminal status/events/content/startedAt until the
+    // retry's final PUT. A snapshot carrying a different runId is that retry,
+    // not a stale copy of the old run, so let it flow through untouched —
+    // otherwise the retry stays stuck on the previous attempt's failure.
+    if (typeof incoming.runId === 'string' && incoming.runId !== stored.runId) {
+      return incoming;
+    }
     const incomingEvents = Array.isArray(incoming.events) ? incoming.events : [];
     const shrinksEvents =
       Boolean(stored.events) &&

@@ -529,6 +529,72 @@ describe('stale web message snapshot does not wipe daemon-owned run events', () 
     expect(stored?.runStatus).toBe('running');
   });
 
+  it('lets a same-message retry with a new runId replace the failed attempt', async () => {
+    // nettee review (#6418): side-chat retries reuse the failed assistant's
+    // id, and pinAssistantMessageOnRunCreate assigns a NEW run id while
+    // keeping the old terminal status/events/content until the retry's final
+    // PUT. The stale-write guard must not treat that snapshot as stale —
+    // otherwise the retry stays stuck on the previous attempt's failure.
+    delete process.env.POSTHOG_KEY;
+    delete process.env.POSTHOG_HOST;
+    delete process.env.LANGFUSE_PUBLIC_KEY;
+    delete process.env.LANGFUSE_SECRET_KEY;
+    delete process.env.LANGFUSE_BASE_URL;
+    delete process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL;
+
+    started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
+    await putConfig(started.url, {
+      agentId: 'claude',
+      telemetry: { metrics: true, content: false, artifactManifest: false },
+      privacyDecisionAt: Date.now(),
+    });
+
+    const { projectId, conversationId } = await createConversation(started.url);
+    const messageId = `retry_${randomUUID()}`;
+    const url = `${started.url}/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}`;
+
+    // The failed attempt persisted with run A.
+    const failed = await fetch(url, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: messageId,
+        role: 'assistant',
+        content: 'failed attempt',
+        runId: 'run-a',
+        runStatus: 'failed',
+        events: [{ kind: 'status', label: 'error', detail: 'boom' }],
+      }),
+    });
+    expect(failed.status).toBe(200);
+
+    // The retry pins run B; its final snapshot replaces the failed attempt.
+    const retried = await fetch(url, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: messageId,
+        role: 'assistant',
+        content: 'retry result',
+        runId: 'run-b',
+        runStatus: 'succeeded',
+        events: [{ kind: 'text', text: 'retry result' }],
+      }),
+    });
+    expect(retried.status).toBe(200);
+
+    const stored = await fetchAssistantMessage(
+      started.url,
+      projectId,
+      conversationId,
+      messageId,
+    );
+    expect(stored?.runId).toBe('run-b');
+    expect(stored?.runStatus).toBe('succeeded');
+    expect(stored?.content).toBe('retry result');
+    expect(stored?.events).toEqual([{ kind: 'text', text: 'retry result' }]);
+  });
+
   it('still lets the client write non-daemon-backed messages', async () => {
     delete process.env.POSTHOG_KEY;
     delete process.env.POSTHOG_HOST;
