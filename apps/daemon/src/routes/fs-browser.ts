@@ -99,6 +99,7 @@ async function resolveAllowedRoots(deps: RegisterFsBrowserRoutesDeps): Promise<A
       const stat = await fs.stat(realPath);
       if (!stat.isDirectory()) continue;
       if (path.dirname(realPath) === realPath) continue;
+      if (isSensitivePath(realPath)) continue;
       if (seen.has(realPath)) continue;
       seen.add(realPath);
       roots.push({
@@ -124,13 +125,16 @@ function findContainingRoot(target: string, roots: readonly AllowedRoot[]): Allo
   return roots.find((root) => isInsideRoot(target, root.realPath)) ?? null;
 }
 
-function isSensitiveDescendant(target: string, root: string): boolean {
-  const relative = path.relative(root, target);
-  if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) return false;
-  const segments = relative.split(path.sep).filter(Boolean);
-  return SENSITIVE_DESCENDANTS.some((sensitive) =>
-    sensitive.every((segment, index) => segments[index] === segment),
-  );
+function isSensitivePath(target: string): boolean {
+  const segments = path.resolve(target).split(path.sep).filter(Boolean).map((segment) => segment.toLowerCase());
+  return SENSITIVE_DESCENDANTS.some((sensitive) => {
+    for (let start = 0; start <= segments.length - sensitive.length; start += 1) {
+      if (sensitive.every((segment, index) => segments[start + index] === segment)) {
+        return true;
+      }
+    }
+    return false;
+  });
 }
 
 function ensureAllowedPath(target: string, roots: readonly AllowedRoot[]): AllowedRoot {
@@ -142,7 +146,7 @@ function ensureAllowedPath(target: string, roots: readonly AllowedRoot[]): Allow
       'path is outside the allowed filesystem roots',
     );
   }
-  if (isSensitiveDescendant(target, root.realPath)) {
+  if (isSensitivePath(target)) {
     throw new FsBrowserRouteError(
       403,
       'PATH_ACCESS_DENIED',
@@ -195,7 +199,7 @@ async function resolveEntry(
   if (!stat.isDirectory()) return null;
   const containingRoot = findContainingRoot(realPath, roots);
   if (!containingRoot) return null;
-  if (isSensitiveDescendant(realPath, containingRoot.realPath)) return null;
+  if (isSensitivePath(realPath)) return null;
 
   return {
     name,

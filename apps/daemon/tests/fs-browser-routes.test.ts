@@ -174,6 +174,122 @@ describe('fs browser routes', () => {
     expect(await jsonOf(response)).toMatchObject({ error: 'PATH_ACCESS_DENIED' });
   });
 
+  it('rejects a nested .ssh directory at every path boundary', async () => {
+    const root = makeTempDir('od-fs-browser-nested-ssh-root-');
+    const parent = path.join(root, 'users', 'alice');
+    const sshDir = path.join(parent, '.ssh');
+    const safeDir = path.join(parent, 'workspace');
+    await mkdir(sshDir, { recursive: true });
+    await mkdir(safeDir);
+    const app = await start({ roots: [root] });
+
+    const parentResponse = await fetch(
+      `${app.baseUrl}/api/fs-browser/list?path=${encodeURIComponent(parent)}`,
+      { headers: { Origin: app.baseUrl } },
+    );
+    const directResponse = await fetch(
+      `${app.baseUrl}/api/fs-browser/list?path=${encodeURIComponent(sshDir)}`,
+      { headers: { Origin: app.baseUrl } },
+    );
+
+    expect(parentResponse.status).toBe(200);
+    expect((await jsonOf<any>(parentResponse)).entries.map((entry: any) => entry.name)).toEqual([
+      'workspace',
+    ]);
+    expect(directResponse.status).toBe(403);
+    expect(await jsonOf(directResponse)).toMatchObject({ error: 'PATH_ACCESS_DENIED' });
+  });
+
+  it('rejects a nested .config/gh sequence without hiding safe .config children', async () => {
+    const root = makeTempDir('od-fs-browser-nested-config-root-');
+    const configDir = path.join(root, 'users', 'alice', '.config');
+    const ghDir = path.join(configDir, 'gh');
+    const safeDir = path.join(configDir, 'themes');
+    await mkdir(ghDir, { recursive: true });
+    await mkdir(safeDir);
+    const app = await start({ roots: [root] });
+
+    const configResponse = await fetch(
+      `${app.baseUrl}/api/fs-browser/list?path=${encodeURIComponent(configDir)}`,
+      { headers: { Origin: app.baseUrl } },
+    );
+    const directResponse = await fetch(
+      `${app.baseUrl}/api/fs-browser/list?path=${encodeURIComponent(ghDir)}`,
+      { headers: { Origin: app.baseUrl } },
+    );
+
+    expect(configResponse.status).toBe(200);
+    expect((await jsonOf<any>(configResponse)).entries.map((entry: any) => entry.name)).toEqual([
+      'themes',
+    ]);
+    expect(directResponse.status).toBe(403);
+    expect(await jsonOf(directResponse)).toMatchObject({ error: 'PATH_ACCESS_DENIED' });
+  });
+
+  it('rejects case variants of sensitive sequences and sensitive roots', async () => {
+    const root = makeTempDir('od-fs-browser-sensitive-case-root-');
+    const parent = path.join(root, 'users', 'alice');
+    const sshDir = path.join(parent, '.SSH');
+    const configDir = path.join(parent, '.CONFIG');
+    const ghDir = path.join(configDir, 'GH');
+    const safeDir = path.join(configDir, 'themes');
+    await mkdir(sshDir, { recursive: true });
+    await mkdir(ghDir, { recursive: true });
+    await mkdir(safeDir);
+    const app = await start({ roots: [root, sshDir] });
+
+    const rootsResponse = await fetch(`${app.baseUrl}/api/fs-browser/roots`, {
+      headers: { Origin: app.baseUrl },
+    });
+    const parentResponse = await fetch(
+      `${app.baseUrl}/api/fs-browser/list?path=${encodeURIComponent(parent)}`,
+      { headers: { Origin: app.baseUrl } },
+    );
+    const configResponse = await fetch(
+      `${app.baseUrl}/api/fs-browser/list?path=${encodeURIComponent(configDir)}`,
+      { headers: { Origin: app.baseUrl } },
+    );
+    const sshResponse = await fetch(
+      `${app.baseUrl}/api/fs-browser/list?path=${encodeURIComponent(sshDir)}`,
+      { headers: { Origin: app.baseUrl } },
+    );
+    const ghResponse = await fetch(
+      `${app.baseUrl}/api/fs-browser/list?path=${encodeURIComponent(ghDir)}`,
+      { headers: { Origin: app.baseUrl } },
+    );
+
+    expect((await jsonOf<any>(rootsResponse)).roots.map((entry: any) => entry.path)).toEqual([
+      realpathSync(root),
+    ]);
+    expect((await jsonOf<any>(parentResponse)).entries.map((entry: any) => entry.name)).toEqual([
+      '.CONFIG',
+    ]);
+    expect((await jsonOf<any>(configResponse)).entries.map((entry: any) => entry.name)).toEqual([
+      'themes',
+    ]);
+    expect(sshResponse.status).toBe(403);
+    expect(ghResponse.status).toBe(403);
+  });
+
+  it('never exposes an exact sensitive directory as an authorized root', async () => {
+    const parent = makeTempDir('od-fs-browser-sensitive-root-parent-');
+    const sshDir = path.join(parent, '.ssh');
+    await mkdir(sshDir);
+    const app = await start({ roots: [sshDir] });
+
+    const rootsResponse = await fetch(`${app.baseUrl}/api/fs-browser/roots`, {
+      headers: { Origin: app.baseUrl },
+    });
+    const listResponse = await fetch(
+      `${app.baseUrl}/api/fs-browser/list?path=${encodeURIComponent(sshDir)}`,
+      { headers: { Origin: app.baseUrl } },
+    );
+
+    expect(rootsResponse.status).toBe(200);
+    expect(await jsonOf(rootsResponse)).toEqual({ roots: [] });
+    expect(listResponse.status).toBe(403);
+  });
+
   it('lists only directories inside an allowed root', async () => {
     const root = makeTempDir('od-fs-browser-list-root-');
     const dir = path.join(root, 'workspace');
