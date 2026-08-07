@@ -266,4 +266,127 @@ describe('deck preview mounted while the browser tab is hidden (#6583)', () => {
     expect(retainedSrcDocFrame()).toBe(retainedFrame);
     expect(retainedFrame.isConnected).toBe(true);
   });
+
+  it('recovers on ACTIVATION when the visibility flip happened while the viewer was retained (missed event, latch pending)', async () => {
+    // Escape sequence past the listener: the latch arms during a hidden-tab
+    // load while the viewer is RETAINED (no listener — correct, see the case
+    // above), the browser returns to visible while still retained (the
+    // visibilitychange event fires with no listener armed), and only THEN
+    // does the user click the project tab. The event will not replay, so
+    // activation itself must run the pending-latch check.
+    const projectId = 'proj-deck-retained-hidden-load-activate';
+    installFetchMock(projectId);
+
+    const view = render(
+      <Wrap>
+        <FileViewer projectId={projectId} projectKind="prototype" file={deckFile()} isDeck />
+      </Wrap>,
+    );
+
+    await waitFor(() => {
+      expect(activeSrcDocFrame().getAttribute('srcdoc') ?? '').toContain('slide-one');
+    });
+
+    view.rerender(
+      <Wrap>
+        <FileViewer
+          projectId={projectId}
+          projectKind="prototype"
+          file={deckFile()}
+          isDeck
+          workspaceActive={false}
+        />
+      </Wrap>,
+    );
+
+    // Hidden-tab load while retained: the latch arms (0x0 layout, scale(0)).
+    setDocumentVisibility('hidden');
+    const retainedFrame = retainedSrcDocFrame();
+    fireEvent.load(retainedFrame);
+
+    // Browser becomes visible while STILL retained — no action (the case
+    // above), and no listener was armed to see this event.
+    setDocumentVisibility('visible');
+    dispatchVisibilityChange();
+    expect(retainedSrcDocFrame()).toBe(retainedFrame);
+
+    // User clicks the project tab: activation happens AFTER the visibility
+    // flip. The host must notice the dangling latch now and give the deck a
+    // fresh srcdoc parse — a NEW iframe DOM node still carrying the deck.
+    view.rerender(
+      <Wrap>
+        <FileViewer projectId={projectId} projectKind="prototype" file={deckFile()} isDeck />
+      </Wrap>,
+    );
+
+    await waitFor(() => {
+      const activated = activeSrcDocFrame();
+      expect(activated).not.toBe(retainedFrame);
+      expect(activated.getAttribute('srcdoc') ?? '').toContain('slide-one');
+    });
+    expect(retainedFrame.isConnected).toBe(false);
+
+    // Exactly once: the latch cleared with the remount, so a later visibility
+    // round-trip (healthy visible load) must not remount again.
+    const recoveredFrame = activeSrcDocFrame();
+    fireEvent.load(recoveredFrame);
+    setDocumentVisibility('hidden');
+    dispatchVisibilityChange();
+    setDocumentVisibility('visible');
+    dispatchVisibilityChange();
+    expect(activeSrcDocFrame()).toBe(recoveredFrame);
+    expect(recoveredFrame.isConnected).toBe(true);
+  });
+
+  it('does NOT remount on activation when the retained load completed while visible (no latch)', async () => {
+    // Guard against over-triggering: activation alone is not a recovery
+    // signal. If the retained document loaded with real layout (visible),
+    // clicking back into the project must be a pure visibility swap.
+    const projectId = 'proj-deck-retained-visible-load-activate';
+    installFetchMock(projectId);
+
+    const view = render(
+      <Wrap>
+        <FileViewer projectId={projectId} projectKind="prototype" file={deckFile()} isDeck />
+      </Wrap>,
+    );
+
+    await waitFor(() => {
+      expect(activeSrcDocFrame().getAttribute('srcdoc') ?? '').toContain('slide-one');
+    });
+
+    view.rerender(
+      <Wrap>
+        <FileViewer
+          projectId={projectId}
+          projectKind="prototype"
+          file={deckFile()}
+          isDeck
+          workspaceActive={false}
+        />
+      </Wrap>,
+    );
+
+    // Load completes while the document is VISIBLE: layout was real, no latch.
+    const retainedFrame = retainedSrcDocFrame();
+    fireEvent.load(retainedFrame);
+
+    // A background round-trip happens while retained (no load during hidden).
+    setDocumentVisibility('hidden');
+    dispatchVisibilityChange();
+    setDocumentVisibility('visible');
+    dispatchVisibilityChange();
+
+    // Activation must keep the same iframe DOM node.
+    view.rerender(
+      <Wrap>
+        <FileViewer projectId={projectId} projectKind="prototype" file={deckFile()} isDeck />
+      </Wrap>,
+    );
+
+    await waitFor(() => {
+      expect(activeSrcDocFrame()).toBe(retainedFrame);
+    });
+    expect(retainedFrame.isConnected).toBe(true);
+  });
 });

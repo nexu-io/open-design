@@ -10310,6 +10310,15 @@ function HtmlViewer({
       setSrcDocTransportResetKey((key) => key + 1);
     }
     document.addEventListener('visibilitychange', onVisibilityChange);
+    // Run one check immediately: this effect only listens while the viewer is
+    // ACTIVE, so when the hidden-tab load happened in a retained viewer and
+    // the browser returned to visible before the user clicked back into the
+    // project, the visibilitychange event fired with no listener armed and
+    // will not replay. The latch would dangle (0x0-parsed deck, permanently
+    // white) exactly on the "switch back to the project tab" flow. The
+    // handler's own guards (visible + latch + srcdoc active + deck) make this
+    // a one-shot no-op everywhere else.
+    onVisibilityChange();
     return () => document.removeEventListener('visibilitychange', onVisibilityChange);
   }, [workspaceActive, useUrlLoadPreview, effectiveDeck]);
 
