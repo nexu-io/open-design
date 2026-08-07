@@ -670,6 +670,50 @@ test('[P0] team owner completes a multi-row invite with explicit roles', async (
   await expect(dialog).toHaveCount(0, { timeout: 5_000 });
 });
 
+test('[P1] stale invite success timer does not close a reopened dialog', async ({ page }) => {
+  await page.addInitScript(
+    ({ workspaceId, workspaceMemberId }) => {
+      window.sessionStorage.setItem(
+        'od.workspaceSelection.v1',
+        JSON.stringify({ workspaceId, workspaceMemberId }),
+      );
+    },
+    {
+      workspaceId: TEAM_OWNER.workspaceId,
+      workspaceMemberId: TEAM_OWNER.workspaceMemberId,
+    },
+  );
+  await wireWorkspaceMocks(page, TEAM_OWNER, [PERSONAL, TEAM_OWNER]);
+  await gotoHome(page);
+  await ensureRailOpen(page);
+  await page.clock.install();
+  await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 60_000);
+
+  await page.getByTestId('workspace-switcher').click();
+  await page.getByRole('menu').getByRole('menuitem', { name: 'Invite colleague' }).click();
+
+  const dialog = page.getByRole('dialog', { name: 'Invite members' });
+  const emailInput = dialog.getByPlaceholder('Enter email address…').first();
+  await emailInput.fill('first@example.com');
+  await dialog.getByRole('button', { name: 'Confirm and invite' }).click();
+  await expect(dialog.getByRole('button', { name: 'Invitation sent' })).toBeVisible();
+
+  await dialog.getByRole('button', { name: 'Close' }).click();
+  await page.getByTestId('workspace-switcher').click();
+  await page.getByRole('menu').getByRole('menuitem', { name: 'Invite colleague' }).click();
+  await expect(dialog).toBeVisible();
+  await emailInput.fill('second@example.com');
+
+  await page.clock.fastForward(999);
+  await expect(dialog).toBeVisible();
+  await expect(emailInput).toHaveValue('second@example.com');
+
+  await page.clock.fastForward(1);
+
+  await expect(dialog).toBeVisible();
+  await expect(emailInput).toHaveValue('second@example.com');
+});
+
 test('[P0] full team routes every invite entry to Vela seat resolution without opening the local dialog', async ({
   page,
 }) => {
