@@ -1,6 +1,11 @@
 import { expect, test } from '@/playwright/suite';
 import { openNewProjectModal as openNewProjectModalFromProjects } from '@/playwright/rail';
-import { routeAgents, routeSuccessfulRuns, successfulRunEventBody } from '@/playwright/mock-factory';
+import {
+  applyStandardMocks,
+  routeAgents,
+  routeSuccessfulRuns,
+  successfulRunEventBody,
+} from '@/playwright/mock-factory';
 import { clickDeckNextSlide, clickDeckPreviousSlide, openAllProjectFiles } from '@/playwright/workspace';
 import type { Dialog, Locator, Page, Request, Response } from '@playwright/test';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -57,44 +62,7 @@ function stagedAttachmentName(page: Page, name: string): Locator {
 }
 
 test.beforeEach(async ({ page }) => {
-  await page.addInitScript((key) => {
-    window.localStorage.setItem(
-      key,
-      JSON.stringify({
-        mode: 'daemon',
-        apiKey: '',
-        baseUrl: 'https://api.anthropic.com',
-        model: 'claude-sonnet-4-5',
-        agentId: 'mock',
-        skillId: null,
-        designSystemId: null,
-        onboardingCompleted: true,
-        agentModels: {},
-        privacyDecisionAt: 1,
-        telemetry: { metrics: false, content: false, artifactManifest: false },
-      }),
-    );
-  }, STORAGE_KEY);
-
-  await page.route('**/api/app-config', async (route) => {
-    if (route.request().method() !== 'GET') {
-      await route.continue();
-      return;
-    }
-    await route.fulfill({
-      json: {
-        config: {
-          onboardingCompleted: true,
-          agentId: 'mock',
-          skillId: null,
-          designSystemId: null,
-          agentModels: {},
-          privacyDecisionAt: 1,
-          telemetry: { metrics: false, content: false, artifactManifest: false },
-        },
-      },
-    });
-  });
+  await applyStandardMocks(page);
 });
 
 for (const entry of automatedUiScenarios().filter(
@@ -590,18 +558,12 @@ async function seedHtmlArtifact(
 
 async function openDesignFile(page: Page, fileName: string) {
   await openAllProjectFiles(page);
-  const fileRow = page.locator('[data-testid^="design-file-row-"]', {
-    hasText: fileName,
-  });
+  const fileRow = page.locator(`[data-testid^="design-file-row-"][data-testid$="${fileName}"]`).first();
   await expect(fileRow).toBeVisible();
-  const mainButton = fileRow.getByRole('button').first();
-  await mainButton.click();
-  const openButton = page.getByTestId('design-file-preview').getByRole('button', { name: 'Open' });
-  if (await openButton.isVisible().catch(() => false)) {
-    await openButton.click();
-    return;
-  }
-  await mainButton.dblclick();
+  // #5517 removed the preview pane and its "Open" button: the row's primary
+  // target opens the file in a workspace tab on a single click.
+  await fileRow.getByRole('button').first().click();
+  await expect(tabBySuffix(page, fileName)).toHaveAttribute('aria-selected', 'true');
 }
 
 async function expectFileSource(
@@ -1362,18 +1324,27 @@ async function findProjectFileContaining(
   projectId: string,
   expected: string,
 ): Promise<string> {
-  const deadline = Date.now() + 15_000;
-  while (Date.now() < deadline) {
-    const files = await listProjectFilesFromApi(page, projectId);
-    for (const file of files) {
-      const response = await page.request.get(`/api/projects/${projectId}/files/${file.name}`);
-      if (!response.ok()) continue;
-      const source = await response.text();
-      if (source.includes(expected)) return file.name;
-    }
-    await page.waitForTimeout(250);
-  }
-  return '';
+  let matchedName = '';
+  await expect
+    .poll(async () => {
+      const listResponse = await page.request.get(`/api/projects/${projectId}/files`);
+      if (!listResponse.ok()) return '';
+      const { files } = (await listResponse.json()) as {
+        files: Array<{ name: string }>;
+      };
+      for (const file of files) {
+        const response = await page.request.get(`/api/projects/${projectId}/files/${file.name}`);
+        if (!response.ok()) continue;
+        const source = await response.text();
+        if (source.includes(expected)) {
+          matchedName = file.name;
+          return file.name;
+        }
+      }
+      return '';
+    }, { timeout: 15_000 })
+    .not.toBe('');
+  return matchedName;
 }
 
 async function expectArtifactVisible(
@@ -1538,7 +1509,6 @@ async function runFileUploadSendFlow(
   await expect((await uploadResponse).ok()).toBeTruthy();
 
   await expect(stagedAttachmentName(page, 'reference.txt')).toBeVisible();
-  await expect(page.getByText('reference.txt', { exact: true })).toBeVisible();
 
   await sendPrompt(page, entry.prompt);
   await expect(page.locator('.msg.user').getByText(entry.prompt, { exact: true })).toBeVisible();

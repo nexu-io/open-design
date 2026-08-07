@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-import { loadCraftSections } from '../src/craft.js';
+import { loadCraftSections, resolveCraftRequirements } from '../src/craft.js';
 
 let craftDir: string;
 
@@ -67,5 +67,68 @@ describe('loadCraftSections', () => {
       'typography',
     ]);
     expect(r.sections).toEqual(['typography']);
+  });
+});
+
+describe('resolveCraftRequirements', () => {
+  it('adds typography for a deck project even when no skill requested craft', () => {
+    expect(resolveCraftRequirements({
+      metadataKind: 'deck',
+      skillModes: [],
+      skillRequires: [],
+      designSystemApplies: [],
+      designSystemExemptions: [],
+    })).toEqual(['typography']);
+  });
+
+  it('adds typography for a freeform request whose user-authored text signals a deck', () => {
+    expect(resolveCraftRequirements({
+      metadataKind: 'other',
+      skillModes: [],
+      freeformDeckSignal: true,
+      skillRequires: [],
+      designSystemApplies: [],
+      designSystemExemptions: [],
+    })).toEqual(['typography']);
+  });
+
+  it('does not add deck craft to unrelated freeform requests', () => {
+    expect(resolveCraftRequirements({
+      metadataKind: 'other',
+      skillModes: [],
+      freeformDeckSignal: false,
+      skillRequires: ['color'],
+      designSystemApplies: [],
+      designSystemExemptions: [],
+    })).toEqual(['color']);
+  });
+
+  it('preserves declarations, dedupes them, and lets design systems exempt defaults', () => {
+    expect(resolveCraftRequirements({
+      metadataKind: 'deck',
+      skillModes: ['deck'],
+      skillRequires: ['color', 'typography'],
+      designSystemApplies: ['color', 'anti-ai-slop'],
+      designSystemExemptions: [],
+    })).toEqual(['color', 'typography', 'anti-ai-slop']);
+
+    expect(resolveCraftRequirements({
+      metadataKind: 'deck',
+      skillModes: [],
+      skillRequires: [],
+      designSystemApplies: [],
+      designSystemExemptions: ['typography'],
+    })).toEqual([]);
+  });
+
+  it('keeps web-clone runs craft-free for source fidelity', () => {
+    expect(resolveCraftRequirements({
+      isWebCloneRun: true,
+      metadataKind: 'deck',
+      skillModes: ['deck'],
+      skillRequires: ['typography'],
+      designSystemApplies: ['color'],
+      designSystemExemptions: [],
+    })).toEqual([]);
   });
 });

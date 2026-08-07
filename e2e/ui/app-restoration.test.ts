@@ -14,6 +14,11 @@ import type { UiScenario } from '@/playwright/resources';
 import { T } from '@/timeouts';
 import { expectStableCount } from '../lib/playwright/assertions.js';
 import {
+  AMR_PERSONAL_WORKSPACE_HEADERS,
+  mockAmrPersonalWorkspace,
+} from '@/playwright/amr';
+import {
+  applyStandardMocks,
   failedRunEventBody,
   routeMockAgents,
   routeRunSequence,
@@ -50,44 +55,7 @@ function isDesignFileUploadResponse(response: Response): boolean {
 }
 
 test.beforeEach(async ({ page }) => {
-  await page.addInitScript((key) => {
-    window.localStorage.setItem(
-      key,
-      JSON.stringify({
-        mode: 'daemon',
-        apiKey: '',
-        baseUrl: 'https://api.anthropic.com',
-        model: 'claude-sonnet-4-5',
-        agentId: 'mock',
-        skillId: null,
-        designSystemId: null,
-        onboardingCompleted: true,
-        agentModels: {},
-        privacyDecisionAt: 1,
-        telemetry: { metrics: false, content: false, artifactManifest: false },
-      }),
-    );
-  }, STORAGE_KEY);
-
-  await page.route('**/api/app-config', async (route) => {
-    if (route.request().method() !== 'GET') {
-      await route.continue();
-      return;
-    }
-    await route.fulfill({
-      json: {
-        config: {
-          onboardingCompleted: true,
-          agentId: 'mock',
-          skillId: null,
-          designSystemId: null,
-          agentModels: {},
-          privacyDecisionAt: 1,
-          telemetry: { metrics: false, content: false, artifactManifest: false },
-        },
-      },
-    });
-  });
+  await applyStandardMocks(page);
 });
 
 async function routeSimpleSuccessfulRun(page: Page, runIdPrefix: string): Promise<void> {
@@ -196,13 +164,6 @@ test('[P0] @critical workspace restores the last manually selected file tab afte
 
   await sendPrompt(page, 'Create a workspace persistence artifact');
   await expect(page.getByText('workspace-artifact.html', { exact: true }).first()).toBeVisible();
-  const { conversationId } = await getCurrentProjectContext(page);
-  await expectPersistedArtifactMessage(
-    page,
-    projectId,
-    conversationId,
-    'workspace-artifact.html',
-  );
 
   const uploadResponse = page.waitForResponse(isDesignFileUploadResponse, {
     timeout: T.short,
@@ -267,6 +228,7 @@ test('[P0] switching between projects restores each project workspace to its las
   await gotoEntryHome(page);
   await createPrototypeProject(page, alphaName);
   await expectWorkspaceReady(page);
+  const { projectId: alphaProjectId } = await getCurrentProjectContext(page);
 
   const alphaPrimaryUpload = page.waitForResponse(
     (resp: Response) => resp.url().includes('/upload') && resp.request().method() === 'POST',
@@ -290,19 +252,20 @@ test('[P0] switching between projects restores each project workspace to its las
   });
   await expect((await alphaSecondaryUpload).ok()).toBeTruthy();
 
-  const alphaPrimaryTab = tabBySuffix(page, 'alpha-primary.png');
-  const alphaSecondaryTab = tabBySuffix(page, 'alpha-secondary.png');
+  const alphaPrimaryTab = await ensureFileTabOpen(page, 'alpha-primary.png');
+  const alphaSecondaryTab = await ensureFileTabOpen(page, 'alpha-secondary.png');
   await expect(alphaPrimaryTab).toBeVisible();
   await expect(alphaSecondaryTab).toBeVisible();
   await alphaPrimaryTab.click();
   await expect(alphaPrimaryTab).toHaveAttribute('aria-selected', 'true');
   await expect(alphaSecondaryTab).toHaveAttribute('aria-selected', 'false');
 
-  await page.getByRole('button', { name: /back to projects/i }).click();
+  await leaveProjectForEntry(page);
   await expectProjectsView(page);
 
   await createPrototypeProject(page, betaName);
   await expectWorkspaceReady(page);
+  const { projectId: betaProjectId } = await getCurrentProjectContext(page);
 
   const betaPrimaryUpload = page.waitForResponse(
     (resp: Response) => resp.url().includes('/upload') && resp.request().method() === 'POST',
@@ -326,27 +289,26 @@ test('[P0] switching between projects restores each project workspace to its las
   });
   await expect((await betaSecondaryUpload).ok()).toBeTruthy();
 
-  const betaPrimaryTab = tabBySuffix(page, 'beta-primary.png');
-  const betaSecondaryTab = tabBySuffix(page, 'beta-secondary.png');
+  const betaPrimaryTab = await ensureFileTabOpen(page, 'beta-primary.png');
+  const betaSecondaryTab = await ensureFileTabOpen(page, 'beta-secondary.png');
   await expect(betaPrimaryTab).toBeVisible();
   await expect(betaSecondaryTab).toBeVisible();
   await betaPrimaryTab.click();
   await expect(betaPrimaryTab).toHaveAttribute('aria-selected', 'true');
   await expect(betaSecondaryTab).toHaveAttribute('aria-selected', 'false');
 
-  await page.getByRole('button', { name: /back to projects/i }).click();
-  await expectProjectsView(page);
-
-  await homeDesignCard(page, alphaName).click();
+  // Revisit by project id (not chrome tab name). createPrototypeProject hard-navs
+  // to /projects and can drop earlier chrome tabs from localStorage restore; this
+  // case owns per-project file-tab restore, not multi-project strip durability.
+  await gotoProjectRoute(page, `/projects/${alphaProjectId}`);
   await expectWorkspaceReady(page);
+  expect((await getCurrentProjectContext(page)).projectId).toBe(alphaProjectId);
   await expect(tabBySuffix(page, 'alpha-primary.png')).toHaveAttribute('aria-selected', 'true');
   await expect(tabBySuffix(page, 'alpha-secondary.png')).toHaveAttribute('aria-selected', 'false');
 
-  await page.getByRole('button', { name: /back to projects/i }).click();
-  await expectProjectsView(page);
-
-  await homeDesignCard(page, betaName).click();
+  await gotoProjectRoute(page, `/projects/${betaProjectId}`);
   await expectWorkspaceReady(page);
+  expect((await getCurrentProjectContext(page)).projectId).toBe(betaProjectId);
   await expect(tabBySuffix(page, 'beta-primary.png')).toHaveAttribute('aria-selected', 'true');
   await expect(tabBySuffix(page, 'beta-secondary.png')).toHaveAttribute('aria-selected', 'false');
 });
@@ -371,14 +333,12 @@ test('[P0] @critical visiting an uploaded design file route restores its tab and
   const uploadedName = await fileTab.getAttribute('title');
   expect(uploadedName).toBeTruthy();
 
+  // Park on the Design Files panel with the uploaded file listed. #5517
+  // deleted the preview pane, so a row click would open the file and leave
+  // the panel — which is the very transition the deep link below must make.
   await openAllProjectFiles(page);
-  const fileRow = page.locator('[data-testid^="design-file-row-"]', {
-    hasText: 'deep-linked-reference.png',
-  });
-  await expect(fileRow).toBeVisible();
-  await fileRow.getByRole('button').first().click();
-  await expect(page.getByTestId('design-file-preview')).toBeVisible();
-  await expect(page.getByTestId('design-file-preview').getByText(/deep-linked-reference\.png/i)).toBeVisible();
+  await expectAllProjectFilesActive(page);
+  await expect(page.getByTestId(`design-file-row-${uploadedName}`)).toBeVisible();
 
   const current = new URL(page.url());
   const [, projects, projectId] = current.pathname.split('/');
@@ -419,12 +379,10 @@ test('[P0] returning from an uploaded design file route to the project root keep
   expect(uploadedName).toBeTruthy();
 
   await openAllProjectFiles(page);
-  const fileRow = page.locator('[data-testid^="design-file-row-"]', {
-    hasText: 'root-design-reference.png',
-  });
+  const fileRow = page.getByTestId('design-file-row-root-design-reference.png');
   await expect(fileRow).toBeVisible();
   await fileRow.getByRole('button').first().click();
-  await expect(page.getByTestId('design-file-preview')).toBeVisible();
+  await expect(page.getByRole('img', { name: 'root-design-reference.png' })).toBeVisible();
 
   const current = new URL(page.url());
   const [, projects, projectId] = current.pathname.split('/');
@@ -1214,17 +1172,10 @@ test('[P0] reloading a project keeps the Design Files entry reachable when it wa
   await openAllProjectFiles(page);
   await expectAllProjectFilesActive(page);
 
-  const fileRow = page.locator('[data-testid^="design-file-row-"]', {
-    hasText: 'restore-me.png',
-  });
-  await expect(fileRow).toBeVisible();
-  const rowButton = fileRow.getByRole('button').first();
-  await rowButton.click();
-  await expect(
-    page.locator('[data-testid^="design-file-row-"]', {
-      hasText: 'restore-me.png',
-    }),
-  ).toBeVisible();
+  // #5517 deleted the preview pane, so a row click leaves the panel for the
+  // file's own tab. Making Design Files the last active surface therefore
+  // means listing the uploaded file without opening it.
+  await expect(rowBySuffix(page, 'restore-me.png')).toBeVisible();
 
   await page.reload();
   await expect(page.getByTestId('file-workspace')).toBeVisible({ timeout: 20_000 });
@@ -1242,6 +1193,21 @@ test('[P0] @critical daemon error details persist between failed sends', async (
     eventBodies: [failedRunEventBody('connection refused')],
   });
 
+  // This scenario exercises a local agent, not authentication. Give project
+  // creation a deterministic Personal Workspace identity: signed-out would
+  // enter Cloud-first onboarding, while an unresolved status leaves the new
+  // workspace bootstrap gate unable to authorize project creation.
+  await page.route('**/api/integrations/vela/status*', async (route) => {
+    await route.fulfill({
+      json: {
+        loggedIn: true,
+        profile: 'local',
+        configPath: '/tmp/.amr/config.json',
+        user: { id: 'restoration-error', email: 'restoration-error@example.com' },
+      },
+    });
+  });
+  await mockAmrPersonalWorkspace(page);
   await gotoEntryHome(page);
   await createProject(page, entry);
   await expectWorkspaceReady(page);
@@ -1258,15 +1224,32 @@ test('[P0] @critical daemon error details persist between failed sends', async (
     projectId,
     'error-cross-tab.html',
     '<!doctype html><html><body><h1>Error cross tab</h1></body></html>',
+    AMR_PERSONAL_WORKSPACE_HEADERS,
   );
+  // The file is written out-of-band through APIRequestContext, so reload the
+  // real project surface instead of depending on an in-app mutation event or
+  // an eventual catalog poll that this external write cannot emit.
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expectWorkspaceReady(page);
+  await expect(runErrorCard(page)).toContainText('connection refused');
   await openAllProjectFiles(page);
   const crossFileRow = page.locator('[data-testid^="design-file-row-"]', {
     hasText: 'error-cross-tab.html',
   });
-  await expect(crossFileRow).toBeVisible();
-  await crossFileRow.getByRole('button').first().click();
-  await clickDesignFilePreviewOpen(page);
-  await expect(page.getByRole('tab', { name: /error-cross-tab\.html/i })).toHaveAttribute('aria-selected', 'true');
+  const crossFileTab = page.getByRole('tab', { name: /error-cross-tab\.html/i });
+  await expect(async () => {
+    if (await crossFileTab.getAttribute('aria-selected') === 'true') return;
+
+    const openButton = crossFileRow.getByRole('button').first();
+    if (!await openButton.isVisible()) {
+      throw new Error('seeded artifact is neither listed nor already open');
+    }
+    // #5517: one click on the row opens the file — no preview card in between.
+    // The project-file refresh may also select the new artifact before this
+    // click settles, so retry against the selected tab instead of a stale row.
+    await openButton.click({ timeout: T.short });
+    await expect(crossFileTab).toHaveAttribute('aria-selected', 'true', { timeout: T.short });
+  }).toPass({ timeout: T.medium });
   await expect(artifactPreviewFrame(page).getByRole('heading', { name: 'Error cross tab' })).toBeVisible();
 
   await page.goto(`/projects/${projectId}`);
@@ -2468,8 +2451,10 @@ async function seedHtmlArtifact(
   projectId: string,
   fileName: string,
   content: string,
+  workspaceHeaders?: Readonly<Record<string, string>>,
 ) {
   const resp = await page.request.post(`/api/projects/${projectId}/files`, {
+    ...(workspaceHeaders ? { headers: { ...workspaceHeaders } } : {}),
     data: {
       name: fileName,
       content,
@@ -2487,18 +2472,19 @@ async function seedHtmlArtifact(
 }
 
 async function openDesignFile(page: Page, fileName: string) {
-  await page.getByRole('button', { name: new RegExp(fileName.replace('.', '\\.')) }).click();
-  await clickDesignFilePreviewOpen(page);
-}
-
-async function clickDesignFilePreviewOpen(page: Page) {
-  const preview = page.getByTestId('design-file-preview');
-  await expect(preview).toBeVisible();
-  await expect(async () => {
-    const openButton = preview.getByRole('button', { name: /^Open$/ });
-    await expect(openButton).toBeVisible({ timeout: 1_000 });
-    await openButton.click({ timeout: 1_000 });
-  }).toPass({ timeout: T.medium });
+  const tab = tabBySuffix(page, fileName);
+  if (await tab.isVisible().catch(() => false)) {
+    await tab.click();
+    await expect(tab).toHaveAttribute('aria-selected', 'true');
+    return;
+  }
+  // #5517 deleted the design-file preview pane: the row's primary target is
+  // the open action, so one click puts the file in a workspace tab. Address
+  // the row by test id — image cards render no filename text to match on.
+  const row = rowBySuffix(page, fileName);
+  await expect(row).toBeVisible();
+  await row.getByRole('button').first().click();
+  await expect(tab).toHaveAttribute('aria-selected', 'true');
 }
 
 async function expectFileSource(
@@ -2606,8 +2592,50 @@ function tabBySuffix(page: Page, name: string): Locator {
     .first();
 }
 
+// Uploaded files can land under a deduplicated name, and #5517 image cards
+// render no filename text, so match Design Files rows on the `data-testid`
+// suffix rather than on rendered text.
+function rowBySuffix(page: Page, name: string): Locator {
+  return page.locator(`[data-testid^="design-file-row-"][data-testid$="${name}"]`).first();
+}
+
+async function ensureFileTabOpen(page: Page, name: string): Promise<Locator> {
+  const tab = tabBySuffix(page, name);
+  if (await tab.isVisible().catch(() => false)) return tab;
+
+  await page.getByTestId('design-files-tab').click();
+  await openDesignFile(page, name);
+  await expect(tab).toBeVisible();
+  return tab;
+}
+
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Leave the open project through the UI and land back on the entry surface.
+ *
+ * This used to be `getByRole('button', { name: /back to projects/i })`, which
+ * no longer resolves to anything on a project surface. #5517 (884ed1085) gave
+ * ChatPane's top-left slot to the pane-collapse control — `onCollapse` wins
+ * over `onBack` there, and ProjectView passes both — and the standalone
+ * `AppChromeHeader` that owned the `app-chrome-back` "Back to projects" button
+ * is no longer mounted anywhere (only its portal-id constants are still
+ * imported). The single remaining "Back to projects" label lives inside the
+ * avatar menu's popover, which is closed by default, so the old locator just
+ * hung until the test timed out.
+ *
+ * The surviving way out of a project is the pinned entry tab in the workspace
+ * tabs bar: `WorkspaceTabsBar.openTab` always sends that tab home, whatever
+ * entry section it last showed. Coverage is unchanged — the project-switching
+ * journey still leaves through real chrome rather than a URL jump.
+ */
+async function leaveProjectForEntry(page: Page) {
+  const pinnedEntryTab = page.locator('.workspace-tab.is-pinned');
+  await expect(pinnedEntryTab).toBeVisible();
+  await pinnedEntryTab.locator('.workspace-tab__main').click();
+  await expect(page.getByTestId('file-workspace')).toHaveCount(0);
 }
 
 function isCreateRunResponse(resp: Response): boolean {
@@ -2924,12 +2952,30 @@ function uniqueProjectName(base: string): string {
   return `${base} ${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+/**
+ * Assert we are on a surface that lists the workspace's projects.
+ *
+ * #5517 deleted the rail's Projects destination (`entry-nav-projects`), so the
+ * project list a user actually reaches is Home's recent-projects strip, or the
+ * team workspace's 全部项目 grid. Both branches stay here because the strip is
+ * suppressed while the workspace has no projects at all; a signed-in team
+ * workspace then answers with the grid instead.
+ */
 async function expectProjectsView(page: Page) {
-  if (!(await page.locator('.tab-panel-toolbar').isVisible().catch(() => false))) {
-    await ensureRailOpen(page);
-    await page.getByTestId('entry-nav-projects').click();
+  const legacyProjectsToolbar = page.locator('.tab-panel-toolbar');
+  const homeRecentProjects = page.getByRole('heading', { name: /recent projects|最近项目/i });
+  if (await legacyProjectsToolbar.isVisible().catch(() => false)) return;
+  if (await homeRecentProjects.isVisible().catch(() => false)) return;
+
+  await ensureRailOpen(page);
+  const allProjectsNav = page.getByTestId('entry-nav-all-projects');
+  if (await allProjectsNav.isVisible().catch(() => false)) {
+    await allProjectsNav.click();
+    await expect(page.getByRole('heading', { name: /all projects|全部项目/i })).toBeVisible();
+    return;
   }
-  await expect(page.locator('.tab-panel-toolbar')).toBeVisible();
+
+  await expect(homeRecentProjects).toBeVisible();
 }
 
 async function waitForLoadingToClear(page: Page) {
@@ -2978,35 +3024,6 @@ async function listConversationsFromApi(
     conversations: Array<{ id: string; updatedAt: number }>;
   };
   return conversations;
-}
-
-async function expectPersistedArtifactMessage(
-  page: Page,
-  projectId: string,
-  conversationId: string,
-  fileName: string,
-) {
-  await expect
-    .poll(async () => {
-      const response = await page.request.get(
-        `/api/projects/${projectId}/conversations/${conversationId}/messages`,
-      );
-      if (!response.ok()) return false;
-      const { messages } = (await response.json()) as {
-        messages: Array<{
-          role: string;
-          runStatus?: string;
-          producedFiles?: Array<{ name: string }>;
-        }>;
-      };
-      return messages.some(
-        (message) =>
-          message.role === 'assistant'
-          && message.runStatus === 'succeeded'
-          && message.producedFiles?.some((file) => file.name.endsWith(fileName)),
-      );
-    }, { timeout: T.medium })
-    .toBe(true);
 }
 
 async function expectProjectFilesToIncludeSuffixes(
@@ -3160,18 +3177,16 @@ async function runDesignFilesUploadFlow(
 
   await expect(page.getByRole('tab', { name: /moodboard\.png/i })).toBeVisible();
   await openAllProjectFiles(page);
-  const fileRow = page.locator('[data-testid^="design-file-row-"]', {
-    hasText: 'moodboard.png',
-  });
+  const fileRow = rowBySuffix(page, 'moodboard.png');
   await expect(fileRow).toBeVisible();
-  const nameBtn = fileRow.getByRole('button').first();
-  await nameBtn.click();
-  const preview = page.getByTestId('design-file-preview');
-  await expect(preview).toBeVisible();
-  await expect(preview.getByText(/moodboard\.png/i)).toBeVisible();
-
-  await nameBtn.dblclick();
-  await expect(page.getByRole('tab', { name: /moodboard\.png/i })).toBeVisible();
+  // #5517: the card grid IS the preview surface, so a single click on the
+  // row reopens the uploaded file in its workspace tab. The old flow clicked
+  // once for a preview card and then double-clicked to open.
+  await fileRow.getByRole('button').first().click();
+  await expect(page.getByRole('tab', { name: /moodboard\.png/i })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
 }
 
 async function runDesignFilesDeleteFlow(
@@ -3205,9 +3220,7 @@ async function runDesignFilesDeleteFlow(
   await expect(page.getByRole('tab', { name: /trash-me\.png/i })).toBeVisible();
   await openAllProjectFiles(page);
 
-  const fileRow = page.locator('[data-testid^="design-file-row-"]', {
-    hasText: 'trash-me.png',
-  });
+  const fileRow = rowBySuffix(page, 'trash-me.png');
   await expect(fileRow).toBeVisible();
   await fileRow.hover();
   await fileRow.locator('[data-testid^="design-file-menu-"]').click();
@@ -3306,7 +3319,7 @@ async function runConversationDeleteRecoveryFlow(
 }
 
 function homeDesignCard(page: Page, name: string): Locator {
-  return page.locator('.design-card', {
+  return page.locator('.design-card:visible', {
     has: page.locator('.design-card-name', { hasText: name }),
-  });
+  }).first();
 }

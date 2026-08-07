@@ -14,7 +14,7 @@ const ko: OpenDesignPluginCopy = {
     chatgptLabel: 'ChatGPT 데스크톱 앱에 입력하세요',
     installAria: 'Codex/ChatGPT에 Open Design Cloud 설치',
     copy: '복사',
-    github: 'GitHub에서 소스 보기 ↗',
+    github: 'GitHub에서 설치 가이드 보기 ↗',
   },
   demo: {
     title: '한 번 설치하고, Codex/ChatGPT에서 바로 제작하세요.',
@@ -29,7 +29,7 @@ const ko: OpenDesignPluginCopy = {
     installPhase: '설치',
     installTitle: 'Codex에 설치를 요청하세요',
     installBody:
-      '이 안내 문구를 Codex 작업에 붙여 넣으세요. Codex가 저장소의 설치 절차를 읽고, 공개 마켓플레이스 등록 없이도 플러그인과 로컬 MCP 설정을 완료합니다.',
+      '이 안내 문구를 Codex 작업에 붙여 넣으세요. Codex는 정식 Git 마켓플레이스 소스를 추가하고, 플러그인이 없을 때만 설치하며, 공개 카탈로그 등록 없이 로컬 MCP 설정을 완료합니다.',
     installNote: 'Codex에 한 번만 붙여 넣으면 나머지 설치 과정은 자동으로 처리됩니다.',
     steps: [
       {

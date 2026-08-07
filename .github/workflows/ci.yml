@@ -31,7 +31,14 @@ concurrency:
 jobs:
   runners:
     name: Resolve runner profiles
-    runs-on: ubuntu-24.04
+    # Resolve on the Nexu ARC fleet for trusted branches, but preserve the
+    # hosted bootstrap path for external forks and explicit economic mode.
+    runs-on: >-
+      ${{ ((github.event_name == 'pull_request'
+        && github.event.pull_request.head.repo.full_name != github.repository)
+        || vars.OD_CI_RUNNER_MODE == 'economic')
+        && 'ubuntu-24.04'
+        || 'nexu-runners-small' }}
     outputs:
       runs_on: ${{ steps.runners.outputs.runs_on }}
       decision: ${{ steps.runners.outputs.decision }}
@@ -43,7 +50,13 @@ jobs:
       - name: Resolve runner profiles
         id: runners
         env:
-          OD_CI_RUNNER_MODE: ${{ vars.OD_CI_RUNNER_MODE }}
+          # Fork PRs cannot rely on repository variables, so keep their required
+          # validation on GitHub-hosted runners even when private pools are down.
+          OD_CI_RUNNER_MODE: >-
+            ${{ github.event_name == 'pull_request'
+              && github.event.pull_request.head.repo.full_name != github.repository
+              && 'economic'
+              || vars.OD_CI_RUNNER_MODE }}
         run: python3 .github/scripts/runners.py
 
   scopes:
@@ -353,11 +366,15 @@ jobs:
         run: pnpm --filter @open-design/tools-pack exec vitest run tests/launcher-payload.test.ts
 
   web_workspace_tests:
-    name: Web workspace tests
+    name: Web workspace tests (${{ matrix.shard }}/2)
     needs: [scopes, runners]
     if: ${{ needs.scopes.outputs.run_web_workspace_tests == 'true' }}
     runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).js_hot }}
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
 
     steps:
       - name: Checkout
@@ -375,7 +392,7 @@ jobs:
         run: pnpm --filter @open-design/web build:sidecar
 
       - name: Web workspace tests
-        run: pnpm --filter @open-design/web test
+        run: pnpm --filter @open-design/web exec vitest run -c vitest.config.ts --maxWorkers=2 --shard=${{ matrix.shard }}/2
 
   e2e_vitest:
     name: E2E Vitest
@@ -464,7 +481,7 @@ jobs:
     name: UI P0 (${{ matrix.name }})
     needs: [scopes, runners]
     if: ${{ needs.scopes.outputs.run_ui_p0 == 'true' }}
-    runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).ui_hot }}
+    runs-on: ${{ matrix.shard == 'project-collab' && fromJSON(needs.runners.outputs.runs_on).ui_p0_heavy || fromJSON(needs.runners.outputs.runs_on).ui_p0 }}
     timeout-minutes: 45
     strategy:
       fail-fast: false
@@ -481,14 +498,14 @@ jobs:
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace
         with:
-          runner-labels: ${{ toJSON(fromJSON(needs.runners.outputs.runs_on).ui_hot) }}
+          runner-labels: ${{ toJSON(matrix.shard == 'project-collab' && fromJSON(needs.runners.outputs.runs_on).ui_p0_heavy || fromJSON(needs.runners.outputs.runs_on).ui_p0) }}
 
       - name: Setup Playwright
         uses: ./.github/actions/setup-playwright
         with:
           package-json-path: e2e/package.json
           install-command: pnpm -C e2e exec playwright install --with-deps chromium
-          runner-labels: ${{ toJSON(fromJSON(needs.runners.outputs.runs_on).ui_hot) }}
+          runner-labels: ${{ toJSON(matrix.shard == 'project-collab' && fromJSON(needs.runners.outputs.runs_on).ui_p0_heavy || fromJSON(needs.runners.outputs.runs_on).ui_p0) }}
 
       - name: Prebuild workspace type declarations
         run: |
@@ -601,6 +618,7 @@ jobs:
           name: visual-pr-capture-${{ github.event.pull_request.number }}-${{ github.run_id }}-${{ matrix.name }}
           path: |
             e2e/ui/reports/visual-screenshots
+            e2e/ui/reports/visual-test-results
             e2e/ui/reports/visual-results.json
             e2e/ui/reports/visual-report/manifest.json
           if-no-files-found: ignore
@@ -613,6 +631,7 @@ jobs:
           name: visual-ci-${{ github.run_id }}-${{ matrix.name }}
           path: |
             e2e/ui/reports/visual-screenshots
+            e2e/ui/reports/visual-test-results
             e2e/ui/reports/visual-results.json
           if-no-files-found: ignore
           retention-days: 7
@@ -740,6 +759,8 @@ jobs:
               handoff_dir="$(python3 .github/scripts/handoff.py dir comment "$handoff_id" --root "$handoff_root")"
               mkdir -p "$handoff_dir"
               marker="<!-- merge-queue-needs-validation -->"
+              # Markdown code spans are intentionally literal in these single-quoted strings.
+              # shellcheck disable=SC2016
               {
                 printf '%s\n' "$marker"
                 # Markdown code spans are intentional literal text.

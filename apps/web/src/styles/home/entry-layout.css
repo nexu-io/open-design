@@ -10,22 +10,30 @@
    actions, so the entry view does not render `AppChromeHeader`. */
 .entry-shell--no-header {
   grid-template-rows: 1fr;
-  --entry-rail-width: 56px;
+  --entry-rail-width: 236px;
 }
 
+/* `.entry-shell` is always mounted inside `.workspace-shell__body`, which
+   reserves its own space above for the app's persistent tab-chrome header
+   (shell.css: `.workspace-shell` grid rows `44px minmax(0, 1fr)`) and already
+   sizes any direct `.entry-shell` child to `height: 100%` accordingly. A
+   `min-height: 100vh` here would force this element past that correctly
+   -computed height by the header's height, overflowing the bottom of
+   `.workspace-shell__body`'s `overflow: hidden` box — clipping this view's
+   own bottom content (e.g. the art panel's bottom padding) instead of
+   scrolling it. Rely on the inherited height instead of re-asserting 100vh. */
 .entry-shell--onboarding {
   position: relative;
   display: flex;
   align-items: stretch;
   justify-content: stretch;
-  min-height: 100vh;
   padding: 0;
   background: var(--bg);
 }
 
 .entry-onboarding-modal {
   width: 100%;
-  height: 100vh;
+  height: 100%;
   overflow: auto;
   border-radius: 0;
   background: var(--bg);
@@ -38,9 +46,17 @@
    to the right (it stays docked until the user collapses it again). */
 .entry-shell--no-header .entry {
   grid-template-columns: 0 minmax(0, 1fr);
-  transition: grid-template-columns 200ms cubic-bezier(0.23, 1, 0.32, 1);
+  /* Collapse: hold the horizontal squeeze until the rows have cascaded out
+     top-to-bottom (see the staggered rail-row fade below), otherwise the
+     0-width clip would swallow the lower rows before their turn. */
+  transition: grid-template-columns 200ms cubic-bezier(0.23, 1, 0.32, 1) 170ms;
+  /* Translucent over the app-wash pastel ground (app-wash.css): the frosted
+     rail and content cards float on the wash instead of a flat tone. */
+  background: var(--veil-page);
 }
 .entry-shell--no-header .entry.entry--rail-open {
+  /* Expand is immediate — no hold — so opening stays snappy. */
+  transition: grid-template-columns 200ms cubic-bezier(0.23, 1, 0.32, 1) 0ms;
   grid-template-columns: var(--entry-rail-width, 56px) minmax(0, 1fr);
 }
 
@@ -50,24 +66,111 @@
 .entry-nav-rail {
   /* Fill the grid track (0 collapsed → rail width expanded) rather than a
      fixed width, so a 0-wide track truly hides the rail instead of letting a
-     56px rail overflow it. The inner groups keep the icon column's width.
-     Border lives on the `::after` hairline below (from main), not on the box. */
+     56px rail overflow it. The rail box itself is a transparent container; the
+     visible surface is the floating `.entry-nav-rail__panel` inside it. */
   width: 100%;
   min-width: 0;
   border-right: 0;
-  background: var(--bg-panel);
-  padding: 8px 0 10px;
+  background: transparent;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  align-items: stretch;
   position: relative;
   z-index: 30;
   /* Visibility is driven purely by the grid track width (0 collapsed) plus
      the overflow clip below — no opacity fade, which previously crossed with
      the topbar toggle's fade-out and caused a flash on expand. */
   pointer-events: none;
+}
+/* The whole sidebar reads as one floating layer: the content sits in a panel
+   inset from the grid-track edges (margin) with rounded corners + elevation,
+   instead of a flush docked column separated by divider lines. */
+.entry-nav-rail__panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  /* No explicit width: as a stretch flex child it fills the rail minus its
+     horizontal margins (so margin insets it without overflowing the track). */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  /* Top margin 0: the tab bar already contributes a 10px gap below the tabs
+     (its bottom padding), so the single visible gap between the tabs and this
+     rail card stays 10px instead of doubling to 20 (tab 10 + rail 10). */
+  margin: 0 10px 10px;
+  /* Bottom padding trimmed 12 → 5 so the account row's gap to the panel's
+     bottom edge (trigger padding 4 + footer padding 6 + 5 + 1px stroke = 16px)
+     matches its 16px left/right inset. */
+  padding: 10px 0 5px;
+  position: relative;
+  /* Craft-style milky frost (material.css thin tier): soft white surface over
+     the wash/wallpaper with a saturated blur, instead of fully clear glass. */
+  /* White frost: pure-white base at 65% alpha, so the card reads white but
+     keeps the frosted-glass translucency (the panel's material-thin backdrop
+     blur below does the frosting). */
+  --rail-surface: rgba(255, 255, 255, 0.65);
+  background: var(--rail-surface);
+  -webkit-backdrop-filter: var(--material-thin-backdrop);
+  backdrop-filter: var(--material-thin-backdrop);
+  /* The stroke is the gradient ring painted by ::after below — the real
+     border stays transparent so the box metrics don't change. */
+  border: 1px solid transparent;
+  border-radius: var(--radius-lg);
+  /* Whisper elevation: the floating panel only needs a hairline lift — the
+     md shadow read as a wide gray halo on the light ground. */
+  box-shadow: var(--shadow-sm);
+}
+/* Gradient rim, Craft-style: a light edge that is brightest along the top
+   and fades down the sides (glass-refract ring tokens, so dark mode halves
+   it automatically). Painted as a masked overlay so only the 1px ring shows
+   and the frosted surface underneath stays untouched. */
+.entry-nav-rail__panel::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    var(--glass-refract-ring-top) 0%,
+    var(--glass-refract-ring-edge) 42%,
+    var(--glass-refract-ring-edge) 68%,
+    var(--glass-refract-ring-bottom) 100%
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+}
+/* Material spec fallbacks: drop the translucency to a solid per-theme surface
+   when the user reduces transparency or the browser lacks backdrop-filter. */
+@media (prefers-reduced-transparency: reduce) {
+  .entry-nav-rail__panel {
+    --rail-surface: var(--bg);
+    background: var(--rail-surface);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border-color: color-mix(in srgb, var(--border) 66%, transparent);
+  }
+  .entry-nav-rail__panel::after {
+    display: none;
+  }
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .entry-nav-rail__panel {
+    --rail-surface: var(--bg);
+    background: var(--rail-surface);
+    border-color: color-mix(in srgb, var(--border) 66%, transparent);
+  }
+  .entry-nav-rail__panel::after {
+    display: none;
+  }
 }
 .entry-nav-rail.is-open {
   pointer-events: auto;
@@ -85,70 +188,84 @@
   overflow: visible;
 }
 
-/* Brand slot — the logo, with a collapse button that fades in on hover so the
-   docked rail can be dismissed Manus-style without a separate chrome control. */
-.entry-nav-rail__brand {
-  position: relative;
-  width: 36px;
-  height: 36px;
-  flex-shrink: 0;
-}
-.entry-nav-rail .entry-nav-rail__collapse {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 30px;
-  height: 30px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg-panel);
-  color: var(--text);
-  cursor: pointer;
-  opacity: 0;
-  pointer-events: none;
+/* ── Collapse cascade ──────────────────────────────────────────────────────
+   Clicking collapse plays a top-to-bottom sequence: each rail row fades and
+   lifts a few px, staggered by its document order (search → nav items → team
+   items → footer), so the sidebar empties from the top down before the track
+   squeezes shut. Expanding is instant (no per-row delay) to stay snappy. */
+.entry-nav-rail__group > .entry-nav-rail__search,
+.entry-nav-rail__group > .entry-nav-rail__btn,
+.entry-nav-rail__group > .entry-nav-rail__team-wrap,
+.entry-nav-rail__section-divider,
+.entry-nav-rail__footer {
   transition:
-    opacity 140ms cubic-bezier(0.23, 1, 0.32, 1),
-    background 140ms cubic-bezier(0.23, 1, 0.32, 1),
-    color 140ms cubic-bezier(0.23, 1, 0.32, 1);
+    opacity 150ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 150ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.entry--rail-open .entry-nav-rail__brand:hover .entry-nav-rail__collapse,
-.entry--rail-open .entry-nav-rail__collapse:focus-visible {
-  opacity: 1;
-  pointer-events: auto;
-}
-/* Coarse-pointer / non-hover devices can't reveal the collapse button on
-   hover, and the topbar toggle is display:none once the rail docks — so the
-   rail would strand open. Keep the collapse control permanently visible and
-   tappable there so touch users can always fold the rail back. */
-@media (hover: none) {
-  .entry--rail-open .entry-nav-rail__collapse {
-    opacity: 1;
-    pointer-events: auto;
-  }
-}
-/* When the rail is collapsed the brand element still sits at the top-left
-   under the cursor; force the absolutely-positioned collapse button inert so
-   it can't swallow clicks meant for the topbar toggle stacked beneath it. */
-.entry:not(.entry--rail-open) .entry-nav-rail__collapse {
+.entry:not(.entry--rail-open) .entry-nav-rail__group > .entry-nav-rail__search,
+.entry:not(.entry--rail-open) .entry-nav-rail__group > .entry-nav-rail__btn,
+.entry:not(.entry--rail-open) .entry-nav-rail__group > .entry-nav-rail__team-wrap,
+.entry:not(.entry--rail-open) .entry-nav-rail__section-divider,
+.entry:not(.entry--rail-open) .entry-nav-rail__footer {
   opacity: 0;
-  pointer-events: none;
+  transform: translateY(-4px);
 }
-.entry-nav-rail__collapse:hover {
-  background: var(--bg-hover, rgba(0, 0, 0, 0.05));
-  color: var(--text-strong, #111);
+/* Per-row stagger — applied only while collapsing so the cascade runs
+   top→bottom. Our rail keeps every row (search → nav items → team switcher →
+   team items → divider …) as direct children of one __group, so a single
+   nth-child run covers the whole sequence (the designer branch split this
+   across a group + team-section pair). Child 1 is the brand slot, which does
+   not fade, so the sequence starts at child 2. */
+.entry:not(.entry--rail-open) .entry-nav-rail__group > *:nth-child(2) { transition-delay: 0ms; }
+.entry:not(.entry--rail-open) .entry-nav-rail__group > *:nth-child(3) { transition-delay: 15ms; }
+.entry:not(.entry--rail-open) .entry-nav-rail__group > *:nth-child(4) { transition-delay: 30ms; }
+.entry:not(.entry--rail-open) .entry-nav-rail__group > *:nth-child(5) { transition-delay: 45ms; }
+.entry:not(.entry--rail-open) .entry-nav-rail__group > *:nth-child(6) { transition-delay: 60ms; }
+.entry:not(.entry--rail-open) .entry-nav-rail__group > *:nth-child(7) { transition-delay: 75ms; }
+.entry:not(.entry--rail-open) .entry-nav-rail__group > *:nth-child(8) { transition-delay: 90ms; }
+.entry:not(.entry--rail-open) .entry-nav-rail__group > *:nth-child(9) { transition-delay: 105ms; }
+.entry:not(.entry--rail-open) .entry-nav-rail__group > *:nth-child(10) { transition-delay: 120ms; }
+.entry:not(.entry--rail-open) .entry-nav-rail__group > *:nth-child(11) { transition-delay: 135ms; }
+.entry:not(.entry--rail-open) .entry-nav-rail__group > *:nth-child(n + 12) { transition-delay: 150ms; }
+.entry:not(.entry--rail-open) .entry-nav-rail__footer { transition-delay: 165ms; }
+/* Footer finale: after the rows have cascaded out top-to-bottom, the account
+   底卡 does NOT fade up with them — it stays fully opaque and slides left as
+   the track squeezes shut, reading as the card retracting to the left. Same
+   selector as the shared collapse rule above, placed after it so it wins. */
+.entry:not(.entry--rail-open) .entry-nav-rail__footer {
+  opacity: 1;
+  transform: translateX(-36px);
 }
-.entry-nav-rail__collapse:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
+@media (prefers-reduced-motion: reduce) {
+  .entry-nav-rail__group > .entry-nav-rail__search,
+  .entry-nav-rail__group > .entry-nav-rail__btn,
+  .entry-nav-rail__group > .entry-nav-rail__team-wrap,
+  .entry-nav-rail__section-divider,
+  .entry-nav-rail__footer {
+    transition: none;
+    transform: none;
+  }
+  .entry:not(.entry--rail-open) .entry-nav-rail__group > * { transition-delay: 0ms; }
+  .entry:not(.entry--rail-open) .entry-nav-rail__footer { transition-delay: 0ms; }
+  .entry-shell--no-header .entry { transition-delay: 0ms; }
 }
 
+/* Narrow window: below the comfortable split width the docked rail
+   auto-collapses instead of squeezing into a broken sliver — the grid track
+   zeroes out and the floating panel is clipped and inert. The open state is
+   preserved, so widening the window restores the rail as it was. */
+@media (max-width: 1080px) {
+  .entry-shell--no-header .entry.entry--rail-open {
+    grid-template-columns: 0 minmax(0, 1fr);
+  }
+  .entry--rail-open .entry-nav-rail {
+    overflow: hidden;
+    pointer-events: none;
+  }
+}
 /* Topbar panel toggle — the single affordance left visible when the rail
    is collapsed. Sits at the left edge of the sticky topbar and is hidden
-   once the rail is docked (the rail's own collapse button takes over). */
+   once the rail is docked (the tabs bar's pinned Home toggle takes over). */
 .entry-rail-toggle {
   display: inline-flex;
   align-items: center;
@@ -168,8 +285,7 @@
 }
 /* The flex layout would otherwise shrink the icon's width to a sliver; pin
    the SVG so the panel glyph renders at its intended square size. */
-.entry-rail-toggle svg,
-.entry-nav-rail__collapse svg {
+.entry-rail-toggle svg {
   flex-shrink: 0;
 }
 .entry-rail-toggle:hover {
@@ -185,32 +301,27 @@
 .entry--rail-open .entry-rail-toggle {
   display: none;
 }
-.entry-nav-rail::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: 1px;
-  background: color-mix(in srgb, var(--border) 64%, transparent);
-  transform: scaleX(0.5);
-  transform-origin: right center;
-  pointer-events: none;
-}
+/* Right-edge hairline removed: the sidebar is a floating panel, not a docked
+   column, so it is separated from the main content by the panel's margin +
+   shadow instead of a seam. */
 .entry-nav-rail__group {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 5px;
+  align-items: stretch;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-height: 0;
   width: 100%;
+  padding: 0 10px;
 }
 .entry-nav-rail__footer {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 5px;
   width: 100%;
-  padding-bottom: 4px;
+  padding-bottom: 6px;
 }
 .entry-nav-rail__divider {
   display: none;
@@ -219,17 +330,245 @@
   display: none;
 }
 
+/* Bottom-left action cluster (GitHub star / Discord / help).
+   Compact toolbar: Star keeps the GitHub icon plus live count; secondary
+   actions collapse to icons. */
+.entry-rail-actions {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 4px;
+  width: 100%;
+  max-width: calc(100% - 18px);
+  padding: 0 0 4px;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+.entry-nav-rail__footer .entry-rail-actions {
+  order: 1;
+  /* Action row rides higher, clear of the credits + account stack. */
+  margin-bottom: 12px;
+}
+/* With no update in flight, the actions box has no children because the
+   updater host renders nothing. Collapse it AND the footer's own padding so
+   the rail doesn't end in a blank strip under the account row. */
+.entry-nav-rail__footer .entry-rail-actions:empty {
+  display: none;
+}
+.entry-nav-rail__footer:has(> .entry-rail-actions:empty) {
+  padding-bottom: 0;
+}
+.entry-nav-rail__footer .entry-nav-rail__account {
+  order: 2;
+  width: calc(100% - 18px);
+  margin: 0 auto;
+  padding-top: 0;
+}
+.entry-rail-actions > * {
+  align-self: center;
+}
+.entry-rail-actions .entry-star-badge,
+.entry-rail-actions .entry-discord-badge,
+.entry-rail-actions .entry-mail-badge,
+.entry-rail-actions .use-everywhere-chip {
+  justify-content: center;
+}
+.entry-rail-actions .entry-help-menu {
+  align-self: center;
+  display: block;
+  width: 30px;
+  flex: 0 0 30px;
+}
+.entry-local-mode-tip {
+  position: absolute;
+  left: var(--spacing-8, 8px);
+  right: var(--spacing-8, 8px);
+  /* Anchored to the footer (position: relative), whose bottom edge sits the
+     panel's 5px bottom padding + 1px ring above the panel's visible edge —
+     3 + 5 + 1 = 9px, matching the sides' 8 + 1px ring inset. */
+  bottom: 3px;
+  display: grid;
+  gap: 8px;
+  width: auto;
+  margin: 0;
+  padding: 8px;
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: left;
+  cursor: pointer;
+  z-index: 2;
+  /* A mousedown→mouseup gesture that selects the label text (any hair of
+     drag, e.g. a real click made while screen-recording) makes the browser
+     suppress the click event entirely — this card would then silently never
+     call begin(), with no spinner, no browser tab, and no visible error. */
+  user-select: none;
+  transition: border-color 120ms, background 120ms, transform 120ms;
+}
+.entry-local-mode-tip:hover,
+.entry-local-mode-tip:focus-visible {
+  border-color: var(--border-strong);
+  background: var(--bg-subtle);
+  outline: none;
+  transform: translateY(-1px);
+}
+.entry-local-mode-tip__head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  color: var(--text-strong);
+}
+.entry-local-mode-tip__login-badge {
+  display: inline-flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 30px;
+  overflow: hidden;
+  padding: 0 16px;
+  border-radius: var(--radius-pill, 999px);
+  background: var(--accent);
+  color: #00ff08;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.entry-local-mode-tip p {
+  margin: 0;
+}
+/* While the vela device-auth flow is pending the card stops being a button:
+   the body swaps to a progress line + cancel, so the hover lift would lie. */
+.entry-local-mode-tip.is-signing {
+  cursor: default;
+}
+.entry-local-mode-tip.is-signing:hover {
+  transform: none;
+  border-color: var(--border);
+  background: var(--bg-panel);
+}
+.entry-local-mode-tip__cancel {
+  justify-self: start;
+  margin-top: 2px;
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.4;
+  cursor: pointer;
+  transition: border-color 120ms, background 120ms, color 120ms;
+}
+.entry-local-mode-tip__cancel:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+
+/* ---------- Rail account skeleton (RailAccountSyncTip) ----------
+   Stand-in for the account row (`.entry-nav-rail__account-trigger` below)
+   while the just-signed-in `GET /api/workspace/context` re-read is still in
+   flight. Unlike `.entry-local-mode-tip` (absolutely positioned with a fixed
+   `bottom` so its card shape never collides with the rail-actions row below
+   it), this is a normal flex child of `.entry-nav-rail__footer` — the same
+   flow `.entry-rail-actions` already uses (`width: calc(100% - 18px); margin:
+   0 auto;`). That keeps it clear of the actions row through ordinary flex
+   stacking instead of a guessed pixel offset, AND lands its bottom edge
+   close to the panel's bottom padding the same way the real account-trigger
+   does once it mounts in `.entry-nav-rail__group` — so the loading→loaded
+   swap reads as one row filling in, not a card jumping to a different slot
+   (recvqgpXSYFNTq follow-up, 2026-07-24 product feedback). */
+.entry-rail-account-skeleton {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: calc(100% - 18px);
+  margin: 0 auto;
+  min-height: 34px;
+  padding: 4px 6px;
+  box-sizing: border-box;
+}
+.entry-rail-account-skeleton__avatar,
+.entry-rail-account-skeleton__name {
+  display: block;
+  /* House skeleton sweep (matches DesignSystemsTab's `.skeletonBlock`): a
+     soft highlight passing over a muted base, timed with the repo's default
+     UI ease-out (AGENTS.md "UI animation philosophy") rather than a linear
+     or ease-in-out sweep. */
+  background:
+    linear-gradient(
+      110deg,
+      transparent 28%,
+      color-mix(in srgb, #fff 34%, transparent) 50%,
+      transparent 72%
+    ) 0 0 / 200% 100%,
+    color-mix(in srgb, var(--bg-muted) 84%, var(--bg-panel));
+  animation: entry-rail-account-skeleton-sheen 1.55s cubic-bezier(0.23, 1, 0.32, 1) infinite;
+}
+[data-theme="dark"] .entry-rail-account-skeleton__avatar,
+[data-theme="dark"] .entry-rail-account-skeleton__name {
+  background:
+    linear-gradient(
+      110deg,
+      transparent 28%,
+      color-mix(in srgb, #fff 13%, transparent) 50%,
+      transparent 72%
+    ) 0 0 / 200% 100%,
+    color-mix(in srgb, var(--bg-elevated) 68%, var(--bg-muted));
+}
+.entry-rail-account-skeleton__avatar {
+  /* Mirrors `.entry-nav-rail__account-avatar`'s 24×25 box. That box's own
+     `clip-path: url(#od-avatar-squircle)` currently has no matching SVG
+     `<clipPath>` in the tree, so the real avatar renders as a plain square —
+     this placeholder stays a plain rounded square too rather than chasing a
+     squircle the live row does not actually show. */
+  width: 24px;
+  height: 25px;
+  flex: 0 0 24px;
+  border-radius: 6px;
+}
+.entry-rail-account-skeleton__name {
+  /* A representative name-length bar, sized to the real row's 13px/500 text
+     (`.entry-nav-rail__account-name`) rather than stretching full width —
+     the real row's name is short and left-aligned, not a full-width line. */
+  width: 62px;
+  height: 13px;
+  border-radius: 4px;
+}
+@keyframes entry-rail-account-skeleton-sheen {
+  to {
+    background-position: -200% 0, 0 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .entry-rail-account-skeleton__avatar,
+  .entry-rail-account-skeleton__name {
+    animation: none;
+  }
+}
+
 /* ---------- Right-side hover tooltip (rail items only) ----------
-   The rail is icon-only, so each button advertises its label via a
-   `data-tooltip` attribute. The label slides in from the right on
-   hover/focus-visible (matching the Lovart-style affordance the user
-   requested) and sits above siblings via z-index. We deliberately
-   block tooltips while the help popover is open so the floating
-   menu does not collide with the tooltip bubble. */
+   Only the rail's icon-only controls (updater, avatar, icon-only
+   sign-out) advertise a `data-tooltip`; labeled nav items render
+   their text inline and must not emit the attribute, or the bubble
+   would duplicate visible text. The label slides in from the right
+   on hover/focus-visible and sits above siblings via z-index. We
+   deliberately block tooltips while the help popover is open so the
+   floating menu does not collide with the tooltip bubble. */
 .entry-nav-rail [data-tooltip] {
   position: relative;
 }
-.entry-nav-rail [data-tooltip]::after {
+.entry-nav-rail [data-tooltip]:not(.od-tooltip)::after {
   content: attr(data-tooltip);
   position: absolute;
   left: calc(100% + 10px);
@@ -248,25 +587,25 @@
   transition: opacity 120ms var(--ease-out), transform 120ms var(--ease-out);
   z-index: 60;
 }
-.entry-nav-rail [data-tooltip]:hover::after,
-.entry-nav-rail [data-tooltip]:focus-visible::after {
+.entry-nav-rail [data-tooltip]:not(.od-tooltip):hover::after,
+.entry-nav-rail [data-tooltip]:not(.od-tooltip):focus-visible::after {
   opacity: 1;
   transform: translateY(-50%) translateX(0);
 }
-.entry-nav-rail [data-tooltip][aria-expanded='true']::after {
+.entry-nav-rail [data-tooltip]:not(.od-tooltip)[aria-expanded='true']::after {
   display: none;
 }
 /* RTL: the rail still lives on the left so the tooltip remains on
    the right of the button — but using `left: calc(100% + 10px)` in
    RTL would flip incorrectly via the parent's `dir="rtl"`. Pin the
    anchor explicitly so the bubble stays where the user expects. */
-[dir='rtl'] .entry-nav-rail [data-tooltip]::after {
+[dir='rtl'] .entry-nav-rail [data-tooltip]:not(.od-tooltip)::after {
   left: auto;
   right: calc(100% + 10px);
   transform: translateY(-50%) translateX(4px);
 }
-[dir='rtl'] .entry-nav-rail [data-tooltip]:hover::after,
-[dir='rtl'] .entry-nav-rail [data-tooltip]:focus-visible::after {
+[dir='rtl'] .entry-nav-rail [data-tooltip]:not(.od-tooltip):hover::after,
+[dir='rtl'] .entry-nav-rail [data-tooltip]:not(.od-tooltip):focus-visible::after {
   transform: translateY(-50%) translateX(0);
 }
 
@@ -278,6 +617,23 @@
   position: relative;
   display: inline-flex;
 }
+.entry-rail-actions .entry-help-menu__trigger {
+  width: 100%;
+  height: 29px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  box-shadow: none;
+  gap: 0;
+  justify-content: center;
+}
+.entry-rail-actions .entry-help-menu__trigger:hover {
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  border-color: transparent;
+  color: var(--text-strong);
+}
 .entry-help-popover {
   position: absolute;
   left: calc(100% + 12px);
@@ -285,8 +641,10 @@
   z-index: 70;
   min-width: 220px;
   padding: 6px;
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
+  background: var(--glass-regular);
+  -webkit-backdrop-filter: var(--glass-backdrop);
+  backdrop-filter: var(--glass-backdrop);
+  border: 1px solid var(--material-separator);
   border-radius: var(--radius);
   box-shadow: var(--shadow-lg, 0 14px 36px rgba(0, 0, 0, 0.14));
   display: flex;
@@ -298,7 +656,7 @@
   align-items: center;
   gap: 10px;
   padding: 8px 10px;
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--text);
   text-decoration: none;
   border-radius: var(--radius-sm);
@@ -308,6 +666,19 @@
 .entry-help-popover__item:hover {
   background: var(--bg-subtle);
   color: var(--text-strong);
+}
+.entry-help-popover__social-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(58px, auto);
+  gap: 4px;
+}
+.entry-help-popover__item--social {
+  min-width: 0;
+}
+.entry-help-popover__item--social span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .entry-help-popover__icon {
   width: 18px;
@@ -331,253 +702,12 @@
   text-align: right;
 }
 
+/* Positioning host for the update-ready indicator and its panel. The
+   indicator's own look lives in UpdaterPopup.module.css; `.updater-popup`
+   anchors against this box (see styles/workspace/mention-home.css). */
 .entry-updater-menu {
-  --updater-accent: var(--accent);
-  --updater-accent-strong: var(--accent-strong, var(--accent));
-  --updater-accent-ui: color-mix(in srgb, var(--updater-accent) 62%, var(--text-muted));
-  --updater-accent-line: color-mix(in srgb, var(--updater-accent-strong) 24%, var(--border));
-  --updater-accent-dot: color-mix(in srgb, var(--updater-accent) 76%, #ffffff);
-  --updater-accent-glow: color-mix(in srgb, var(--updater-accent) 9%, transparent);
   position: relative;
   display: inline-flex;
-}
-.entry-updater-menu .entry-updater-menu__button {
-  position: relative;
-  overflow: visible;
-  isolation: isolate;
-  color: var(--updater-accent-ui);
-  border-color: var(--updater-accent-line);
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--updater-accent) 6%, transparent),
-      color-mix(in srgb, var(--updater-accent) 2%, transparent)
-    ),
-    color-mix(in srgb, var(--bg-panel) 97%, var(--updater-accent));
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--updater-accent-strong) 9%, transparent),
-    0 1px 2px rgba(0, 0, 0, 0.12),
-    0 0 14px var(--updater-accent-glow);
-  transform: translateZ(0);
-}
-.entry-updater-menu .entry-updater-menu__button::before {
-  content: '';
-  position: absolute;
-  inset: 4px;
-  z-index: -1;
-  border-radius: calc(var(--radius) - 1px);
-  background:
-    radial-gradient(
-      circle at 50% 24%,
-      color-mix(in srgb, var(--updater-accent) 9%, transparent),
-      transparent 48%
-    ),
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--updater-accent) 5%, transparent),
-      color-mix(in srgb, var(--updater-accent) 2%, transparent)
-    );
-  opacity: 0.72;
-  transition: opacity 140ms cubic-bezier(0.23, 1, 0.32, 1), transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-.entry-updater-menu .entry-updater-menu__button.is-ready::after {
-  content: '';
-  position: absolute;
-  top: 2px;
-  right: 2px;
-  width: 7px;
-  height: 7px;
-  z-index: 3;
-  border-radius: var(--radius-pill);
-  background: var(--updater-accent-dot);
-  border: 2px solid var(--bg-panel);
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--updater-accent-strong) 30%, transparent),
-    0 0 8px color-mix(in srgb, var(--updater-accent) 28%, transparent);
-}
-.entry-updater-menu .entry-updater-menu__button:hover,
-.entry-updater-menu .entry-updater-menu__button.is-active {
-  color: color-mix(in srgb, var(--updater-accent) 72%, var(--text-strong));
-  border-color: color-mix(in srgb, var(--updater-accent-strong) 42%, var(--border-strong));
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--updater-accent) 10%, transparent),
-      color-mix(in srgb, var(--updater-accent) 4%, transparent)
-    ),
-    color-mix(in srgb, var(--bg-panel) 94%, var(--updater-accent));
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--updater-accent-strong) 18%, transparent),
-    0 4px 12px rgba(0, 0, 0, 0.16),
-    0 0 18px color-mix(in srgb, var(--updater-accent) 14%, transparent);
-}
-.entry-updater-menu .entry-updater-menu__button:hover::before,
-.entry-updater-menu .entry-updater-menu__button.is-active::before {
-  opacity: 1;
-  transform: scale(1.04);
-}
-.entry-updater-menu .entry-updater-menu__button.is-ready {
-  animation: updater-ready-arrive 520ms cubic-bezier(0.23, 1, 0.32, 1) 1;
-}
-.entry-updater-menu .entry-updater-menu__button.is-current {
-  color: color-mix(in srgb, var(--green) 72%, var(--text-muted));
-  border-color: color-mix(in srgb, var(--green) 22%, var(--border));
-  background: color-mix(in srgb, var(--green-bg) 45%, var(--bg-panel));
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--green) 8%, transparent);
-}
-.entry-updater-menu .entry-updater-menu__button.is-error {
-  color: var(--red);
-  border-color: color-mix(in srgb, var(--red) 42%, var(--border));
-  background: color-mix(in srgb, var(--red-bg) 62%, var(--bg-panel));
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--red) 14%, transparent),
-    0 4px 12px color-mix(in srgb, var(--red) 10%, transparent);
-}
-.entry-updater-menu .entry-updater-menu__button.is-disabled {
-  cursor: default;
-  color: color-mix(in srgb, var(--updater-accent) 42%, var(--text-faint));
-  border-color: color-mix(in srgb, var(--updater-accent-strong) 22%, transparent);
-}
-.entry-updater-menu .entry-updater-menu__button.is-disabled:hover {
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--updater-accent) 5%, transparent),
-      color-mix(in srgb, var(--updater-accent) 2%, transparent)
-    ),
-    color-mix(in srgb, var(--bg-panel) 97%, var(--updater-accent));
-  color: color-mix(in srgb, var(--updater-accent) 42%, var(--text-faint));
-}
-.entry-updater-menu__glyph {
-  position: relative;
-  z-index: 2;
-  width: 24px;
-  height: 24px;
-  display: grid;
-  place-items: center;
-  border-radius: var(--radius-pill);
-  color: currentColor;
-  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--updater-accent) 18%, transparent));
-  transform: translateY(-1px);
-}
-.entry-updater-menu__glyph::before {
-  content: '';
-  position: absolute;
-  inset: 2px;
-  z-index: -1;
-  border-radius: inherit;
-  background: radial-gradient(
-    circle,
-    color-mix(in srgb, var(--updater-accent) 8%, transparent),
-    transparent 68%
-  );
-}
-.entry-updater-menu__progress {
-  position: absolute;
-  left: 6px;
-  right: 6px;
-  bottom: 4px;
-  height: 3px;
-  overflow: hidden;
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--updater-accent-strong) 22%, transparent);
-  pointer-events: none;
-}
-.entry-updater-menu__progress::after {
-  content: '';
-  display: block;
-  width: var(--updater-progress, 100%);
-  height: 100%;
-  border-radius: inherit;
-  background: var(--updater-accent-strong);
-  transition: width 180ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-@keyframes updater-ready-arrive {
-  0% {
-    box-shadow:
-      0 0 0 1px color-mix(in srgb, var(--updater-accent-strong) 8%, transparent),
-      0 1px 2px rgba(0, 0, 0, 0.12),
-      0 0 0 color-mix(in srgb, var(--updater-accent) 0%, transparent);
-    transform: translateZ(0) scale(0.96);
-  }
-  100% {
-    box-shadow:
-      0 0 0 1px color-mix(in srgb, var(--updater-accent-strong) 9%, transparent),
-      0 1px 2px rgba(0, 0, 0, 0.12),
-      0 0 14px var(--updater-accent-glow);
-    transform: translateZ(0) scale(1);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .entry-updater-menu .entry-updater-menu__button.is-ready {
-    animation: none;
-  }
-}
-
-.entry-main__topbar .entry-updater-menu {
-  margin-left: 0;
-}
-.entry-main__topbar .entry-updater-menu .entry-updater-menu__button {
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-pill);
-  border-color: transparent;
-  background: transparent;
-  box-shadow: none;
-  color: color-mix(in srgb, var(--updater-accent) 66%, var(--text-muted));
-}
-.entry-main__topbar .entry-updater-menu .entry-updater-menu__button::before {
-  inset: 5px;
-  border-radius: inherit;
-  opacity: 0;
-}
-.entry-main__topbar .entry-updater-menu .entry-updater-menu__button.is-ready {
-  border-color: color-mix(in srgb, var(--updater-accent-strong) 18%, var(--border));
-  background: color-mix(in srgb, var(--updater-accent) 5%, transparent);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--updater-accent-strong) 5%, transparent);
-}
-.entry-main__topbar .entry-updater-menu .entry-updater-menu__button.is-current {
-  color: color-mix(in srgb, var(--green) 76%, var(--text-muted));
-  border-color: transparent;
-  background: transparent;
-  box-shadow: none;
-}
-.entry-main__topbar .entry-updater-menu .entry-updater-menu__button:hover,
-.entry-main__topbar .entry-updater-menu .entry-updater-menu__button.is-active {
-  color: color-mix(in srgb, var(--updater-accent) 72%, var(--text-strong));
-  border-color: color-mix(in srgb, var(--updater-accent-strong) 24%, var(--border));
-  background: color-mix(in srgb, var(--updater-accent) 7%, transparent);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--updater-accent-strong) 8%, transparent);
-}
-.entry-main__topbar .entry-updater-menu .entry-updater-menu__button:hover::before,
-.entry-main__topbar .entry-updater-menu .entry-updater-menu__button.is-active::before {
-  opacity: 0.72;
-  transform: none;
-}
-.entry-main__topbar .entry-updater-menu .entry-updater-menu__button.is-ready::after {
-  top: 3px;
-  right: 3px;
-  width: 6px;
-  height: 6px;
-  border-width: 1.5px;
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--updater-accent-strong) 24%, transparent),
-    0 0 6px color-mix(in srgb, var(--updater-accent) 20%, transparent);
-}
-.entry-main__topbar .entry-updater-menu__glyph {
-  width: 20px;
-  height: 20px;
-  filter: none;
-  transform: none;
-}
-.entry-main__topbar .entry-updater-menu__glyph::before {
-  opacity: 0;
-}
-.entry-main__topbar .entry-updater-menu__progress {
-  left: 7px;
-  right: 7px;
-  bottom: 4px;
-  height: 2px;
 }
 .entry-nav-rail__logo {
   appearance: none;
@@ -616,55 +746,261 @@
   background: transparent;
   border-color: transparent;
 }
-.entry-nav-rail__logo-img {
-  position: absolute;
-  inset: auto;
-  width: 30px;
-  height: 30px;
-  display: block;
-  pointer-events: none;
-}
 .entry-nav-rail__btn {
   appearance: none;
-  width: 38px;
-  height: 38px;
+  width: 100%;
+  height: 33px;
+  padding: 0 10px;
   border: 1px solid transparent;
-  border-radius: var(--radius);
+  border-radius: 8px;
   background: transparent;
-  color: var(--text-muted);
+  /* The workspace console entries (成员/数据大盘/Workspace 设置) render as
+     anchors; the UA underline breaks the uniform nav-item look (#5517 rail
+     items are plain). */
+  text-decoration: none;
+  /* Unselected: label matches the icon's muted tone (one uniform color); hover
+     steps up to --text-strong, selection goes near-black on light gray.
+     68% lands the blend on the --text-soft step (52% read too faint). */
+  color: color-mix(in srgb, var(--text) 68%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 9px;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition: background-color 120ms var(--ease-out), color 120ms var(--ease-out), border-color 120ms var(--ease-out);
+}
+.entry-nav-rail__btn-icon {
+  /* Anchor for the unread dot (message-center rail item). */
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  cursor: pointer;
-  transition: background-color 120ms var(--ease-out), color 120ms var(--ease-out), border-color 120ms var(--ease-out);
+  flex: 0 0 18px;
+  /* Tracks the unselected label tone above. */
+  color: color-mix(in srgb, var(--text) 68%, transparent);
 }
-.entry-nav-rail__btn > svg {
+/* Unread marker on a rail item's icon — same 6px red dot as the account
+   menu's `__menu-item-dot`, pinned to the glyph's top-right corner. */
+.entry-nav-rail__btn-dot {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--red);
+}
+.entry-nav-rail__btn-icon > svg {
   width: 18px;
   height: 18px;
-  flex: 0 0 18px;
+}
+/* Every glyph in remixicon.ttf has a zero left side bearing (ink hugs x=0), so
+   each icon renders ~0.8px left of its box centre — most obvious on asymmetric
+   marks (share / kanban / settings). Nudge the rail icons right to centre them. */
+.entry-nav-rail__btn-icon .od-icon {
+  transform: translateX(0.8px);
+}
+.entry-nav-rail__btn-label {
+  font-size: 13px;
+  font-weight: 400;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.entry-nav-rail__btn.is-active .entry-nav-rail__btn-icon {
+  color: var(--selected);
+}
+.entry-nav-rail__btn.is-active .entry-nav-rail__btn-label {
+  font-weight: 400;
+}
+
+/* Search box */
+.entry-nav-rail__search-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  /* No top margin: the search box's gap to the rail's top edge (panel
+     padding-top 10px + 1px stroke = 11px) then matches its 11px left/right
+     inset, instead of the extra 4px pushing it to 15px. */
+  margin: 0 0 10px;
+}
+.entry-nav-rail__search-row .entry-nav-rail__search {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+.entry-nav-rail__search {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  margin: 4px 0 10px;
+  padding: 0 10px;
+  /* White to match the rail surface; a border keeps the input visible on it. */
+  border: 1px solid var(--border);
+  border-radius: var(--radius-large, 8px);
+  background: var(--rail-surface, #fff);
+  color: var(--text-soft);
+  transition:
+    background-color var(--duration-ultra-fast) var(--curve-easy-ease),
+    border-color var(--duration-ultra-fast) var(--curve-easy-ease),
+    color var(--duration-ultra-fast) var(--curve-easy-ease);
+}
+/* The search box is now a <button> that opens the search palette. Keep the
+   input-box look, left-align its content, and give it a plain hover. */
+.entry-nav-rail__search {
+  justify-content: flex-start;
+  width: 100%;
+  cursor: pointer;
+  text-align: left;
+}
+.entry-nav-rail__search:hover {
+  border-color: var(--border-strong);
+}
+.entry-nav-rail__search:focus-visible {
+  outline: none;
+  border-color: var(--border-strong);
+}
+.entry-nav-rail__search-placeholder {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-faint);
+  font-size: 13px;
+}
+/* ⌘K shortcut hint pinned to the right of the search box. Taller (24px in the
+   34px box) so it hugs closer to the top/bottom edges instead of floating. */
+.entry-nav-rail__search-kbd {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0.02em;
+}
+.entry-nav-rail__search input {
+  appearance: none;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  width: 100%;
+  cursor: default;
+}
+.entry-nav-rail__search input:focus,
+.entry-nav-rail__search input:focus-visible {
+  border: 0;
+  outline: none;
+  background: transparent;
+  box-shadow: none;
+}
+.entry-nav-rail__search input::-webkit-search-cancel-button,
+.entry-nav-rail__search input::-webkit-search-decoration {
+  appearance: none;
+}
+.entry-nav-rail__search input::placeholder { color: var(--text-faint); }
+
+/* Team switcher row */
+/* Team block: separated from the personal nav above by a very soft divider. */
+.entry-nav-rail__team-section {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 42%, transparent);
+}
+.entry-nav-rail__team {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  margin: 2px 0 4px;
+  padding: 0 10px;
+  color: var(--text-strong);
+}
+.entry-nav-rail__team-avatar {
+  width: 19px;
+  height: 19px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-panel);
+  color: var(--text);
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 700;
+  flex: 0 0 19px;
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border) 78%, transparent);
+}
+.entry-nav-rail__team-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.entry-nav-rail__team-name {
+  font-size: 13px;
+  font-weight: 500;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.entry-nav-rail__team svg { color: var(--text-soft); }
+
+/* Section label (e.g. 更多) */
+.entry-nav-rail__section {
+  margin: 15px 0 5px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: color-mix(in srgb, var(--text-muted) 84%, transparent);
+}
+.entry-nav-rail__section-divider {
+  width: calc(100% - 20px);
+  height: 1px;
+  margin: 15px 10px 5px;
+  background: var(--border-soft, rgba(0, 0, 0, 0.08));
 }
 .entry-nav-rail__btn:not(.is-active):hover {
-  background: color-mix(in srgb, var(--accent) 12%, var(--bg-panel));
-  color: var(--accent);
-  border-color: color-mix(in srgb, var(--accent) 10%, var(--bg-panel));
-}
-.entry-nav-rail__btn:disabled {
-  cursor: default;
-  opacity: 0.55;
-}
-.entry-nav-rail__btn:disabled:hover {
-  background: transparent;
-  color: var(--text-muted);
+  /* Only the fill changes on hover — the label keeps its resting color so
+     text doesn't shift tone under the pointer. */
+  background: color-mix(in srgb, var(--text) 5%, transparent);
   border-color: transparent;
 }
 .entry-nav-rail__btn.is-active {
-  background: var(--accent-tint);
-  color: var(--accent);
-  border-color: color-mix(in srgb, var(--accent) 18%, transparent);
+  /* Selected = one step above the lightest surface gray (--bg-subtle #ededed)
+     under the spec's selection color (--selected #353535) for label + icon. */
+  background: var(--bg-subtle);
+  color: var(--selected);
+  border-color: transparent;
 }
 .entry-nav-rail__btn.is-active:hover {
-  background: color-mix(in srgb, var(--accent) 8%, var(--bg-panel));
-  border-color: color-mix(in srgb, var(--accent) 12%, var(--bg-panel));
+  background: var(--bg-subtle);
+  border-color: transparent;
 }
 .entry-nav-rail__btn:focus-visible {
   outline: 2px solid var(--accent);
@@ -710,7 +1046,109 @@
   min-width: 0;
   min-height: 0;
   overflow-y: auto;
-  background: var(--bg);
+  /* Always reserve the scrollbar's width so switching between views/tabs with
+     different content heights (e.g. Community categories) can't toggle the
+     scrollbar and shift the centered content sideways — that read as a jitter. */
+  scrollbar-gutter: stable;
+}
+
+.entry-deepseek-campaign-badge {
+  position: fixed;
+  /* Portaled to document.body. Must clear .workspace-tabs-chrome (z-index: 120). */
+  z-index: 150;
+  top: 18px;
+  right: 22px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 32px;
+  padding: 7px 11px 7px 13px;
+  border: 1px solid color-mix(in srgb, var(--brand) 42%, var(--border));
+  border-radius: var(--radius-pill);
+  color: var(--brand-text);
+  background: color-mix(in srgb, var(--brand-soft) 82%, var(--bg-panel));
+  box-shadow: var(--shadow-xs);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  font-size: 12px;
+  font-weight: 700;
+  font-family: inherit;
+  line-height: 1;
+  text-decoration: none;
+  cursor: pointer;
+  pointer-events: auto;
+  -webkit-app-region: no-drag;
+  transition: border-color 140ms ease, background 140ms ease, transform 140ms ease;
+}
+
+.entry-deepseek-campaign-badge::before {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: var(--radius-circular);
+  background: var(--brand-text);
+  content: '';
+}
+
+.entry-deepseek-campaign-badge svg {
+  color: var(--brand-text);
+}
+
+.entry-deepseek-campaign-badge:hover {
+  border-color: color-mix(in srgb, var(--brand) 70%, var(--border));
+  background: var(--brand-soft);
+  transform: translateY(-1px);
+}
+
+.entry-deepseek-campaign-badge:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (max-width: 760px) {
+  .entry-deepseek-campaign-badge {
+    top: 12px;
+    right: 12px;
+    max-width: calc(100vw - 88px);
+  }
+}
+/* Frosted top edge: content scrolling up toward the (transparent) tab strip
+   melts into a progressive blur instead of hard-clipping at the row
+   boundary. The material token degrades it away under reduced transparency /
+   no backdrop-filter.
+   Absolute, not a sticky band with a negative margin: that pulled the first
+   32px of content above the scroll port, which only looked right while the
+   entry topbar still sat above it. With the topbar gone (#5517) it clipped
+   every section's title and toolbar row. */
+.entry-main--scroll::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  display: block;
+  height: 32px;
+  pointer-events: none;
+  -webkit-mask-image: linear-gradient(to bottom, #000 30%, transparent);
+  mask-image: linear-gradient(to bottom, #000 30%, transparent);
+  /* Blur only while something is actually scrolled under the band. Resting
+     content starts at 12px, so an unconditional backdrop-filter smudged every
+     page's h2 into a dirty dark block (acceptance #28). `is-scrolled` comes
+     from EntryShell's scroll listener. */
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  transition: backdrop-filter 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.entry-main--scroll.is-scrolled::before {
+  -webkit-backdrop-filter: var(--material-ultrathin-backdrop, none);
+  backdrop-filter: var(--material-ultrathin-backdrop, none);
+}
+.entry-main--scroll {
+  /* Transparent: the UltraThin ground now lives on .workspace-shell
+     (shell.css) so the strip / rail gutter / content read as one continuous
+     surface with no gray frame around the scroll area. */
+  background: transparent;
   padding: 0;
   /* Used by descendants (e.g. the plugins-home Scenario row) to
      pin themselves directly below the sticky topbar. Mirrors the
@@ -719,12 +1157,21 @@
 }
 .entry-main__inner {
   width: 100%;
-  max-width: 1440px;
+  /* Wider cap + tighter side padding so the content hugs closer to the rail
+     instead of leaving a large centered left margin on wide screens. */
+  max-width: 1600px;
   margin: 0 auto;
-  padding: 40px 32px 64px;
+  /* Compact rhythm: tighter side inset toward the rail and smaller section
+     gaps so list views read denser. */
+  padding: 12px 16px 48px;
   display: flex;
   flex-direction: column;
-  gap: 32px;
+  gap: 20px;
+  /* `min-height`, not `height`: a view taller than the scroll port (most of
+     them) must still grow past this and scroll exactly as before. This only
+     matters for a view that's SHORTER than the port — see
+     `.entry-main__view-home` below for why it's needed at all. */
+  min-height: 100%;
 }
 /* Wider variant retained for the Projects / Design systems
    sub-views that historically opted into a wider canvas. The
@@ -732,16 +1179,48 @@
    gallery can fit 4-5 preview tiles per row on desktop displays
    while the hero card self-constrains to a readable column. */
 .entry-main__inner--wide {
-  max-width: 1440px;
+  max-width: 1600px;
+}
+/* Uniform left/right gutters across the home view AND the wide sub-views
+   (全部项目 / 草稿 / design-systems / …): the recent-projects grid and the
+   project lists all breathe away from the window edges by the same 35px, so
+   switching between 最近 and 全部项目 keeps the same side inset. Trimmed from
+   48px so the content sits ~13px closer to the rail (measured left spacing
+   ~73px → ~60px). */
+.entry-main__inner {
+  padding-left: 35px;
+  padding-right: 35px;
+}
+@media (max-width: 900px) {
+  .entry-main__inner {
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+}
+
+/* Bug: an empty workspace's Home never centered (recvqaROkePTP8) — the
+   composer stuck to the top of the scroll column instead. `.home-view
+   --centered`'s `min-height: 100%` (home-hero.css) needs an ancestor with a
+   REAL (non-auto) height to resolve against. `.entry-main__inner` now has
+   one (above), but this view's own wrapper div — a plain block child of that
+   flex column — was still sized to its own content, same as a `height: auto`
+   ancestor would be, breaking the chain one level lower. Make it an actual
+   flexed column that fills the available height instead. Scoped to the home
+   wrapper only: every other view is already taller than the scroll port in
+   practice, so this would only add harmless empty space below its content. */
+.entry-main__view-home {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 /* Sticky top-right control strip inside the main scroll area.
    Stays visually pinned regardless of scroll position so the
    avatar / settings menu and the chip cluster are always
-   reachable. The strip is fully opaque so any content scrolling
-   underneath (plugin tiles, project cards, hero card) stays
-   clipped behind it instead of bleeding through the chip
-   gutter. The strip's height is mirrored by --entry-topbar-h on
+   reachable. The strip frosts (glass material) any content scrolling
+   underneath — plugin tiles, project cards, hero card — so they blur
+   behind it instead of bleeding through the chip gutter. The strip's height is mirrored by --entry-topbar-h on
    .entry-main--scroll so descendants like the plugins-home
    Scenario row can pin themselves immediately below it. */
 .entry-main__topbar {
@@ -753,8 +1232,11 @@
   align-items: center;
   gap: 8px;
   padding: 12px 16px 0;
-  background: var(--bg);
+  background: transparent;
   isolation: isolate;
+}
+.entry-main__topbar--home-clean {
+  display: none;
 }
 /* The topbar is an isolated sticky stacking context at z-index 10, so a
    child popover's own z-index cannot escape it. While a topbar popover or
@@ -772,7 +1254,9 @@
   inset: -1px 0;
   z-index: -1;
   pointer-events: none;
-  background: var(--bg);
+  background: var(--glass-regular);
+  -webkit-backdrop-filter: var(--glass-backdrop);
+  backdrop-filter: var(--glass-backdrop);
 }
 /* Chip group — the GitHub star, inline model switcher, and Use
    everywhere chip live inside this wrapper so the responsive
@@ -898,7 +1382,7 @@
   padding: 0 4px;
   min-height: 20px;
   color: var(--text-muted);
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 600;
 }
 .entry-settings-menu__select {
@@ -915,10 +1399,10 @@
   gap: 8px;
   padding: 0 10px;
   border: 1px solid var(--border-soft);
-  border-radius: 9px;
+  border-radius: var(--radius-large, 8px);
   background: var(--bg-subtle);
   color: var(--text);
-  font-size: 12.5px;
+  font-size: 13px;
   cursor: pointer;
   transition: background-color 120ms ease, border-color 120ms ease,
     color 120ms ease;
@@ -975,7 +1459,7 @@
   background: transparent;
   color: var(--text);
   min-height: 30px;
-  border-radius: 7px;
+  border-radius: var(--radius-large, 8px);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1006,50 +1490,6 @@
   color: var(--accent-strong);
   font-weight: 600;
 }
-.entry-settings-menu__theme {
-  appearance: none;
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--text);
-  min-width: 0;
-  min-height: 30px;
-  border-radius: var(--radius);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 0 8px;
-  font-size: 12px;
-  cursor: pointer;
-  transition: background-color 120ms var(--ease-out), border-color 120ms var(--ease-out),
-    color 120ms var(--ease-out);
-}
-.entry-settings-menu__theme span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.entry-settings-menu__theme:hover {
-  background: var(--bg-panel);
-  border-color: var(--border);
-  color: var(--text-strong);
-}
-.entry-settings-menu__theme.is-active {
-  background: var(--bg-panel);
-  border-color: color-mix(in srgb, var(--accent) 26%, var(--border));
-  color: var(--accent-strong);
-  box-shadow: var(--shadow-xs);
-}
-.entry-settings-menu__theme-row {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 4px;
-  padding: 3px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius);
-  background: var(--bg-subtle);
-}
 .entry-settings-menu__divider {
   height: 1px;
   margin: 0 4px;
@@ -1067,7 +1507,7 @@
   align-items: center;
   gap: 10px;
   padding: 0 9px;
-  font-size: 12.5px;
+  font-size: 13px;
   text-align: left;
   text-decoration: none;
   cursor: pointer;
@@ -1104,7 +1544,7 @@
   margin-left: auto;
   flex: 0 0 auto;
   color: var(--text-muted);
-  font-size: 11.5px;
+  font-size: 12px;
 }
 .entry-settings-menu__item--primary {
   background: var(--bg-subtle);
@@ -1134,14 +1574,14 @@
 .avatar-item-stack__top {
   font-weight: 600;
   color: var(--text-strong);
-  font-size: 12.5px;
+  font-size: 13px;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .avatar-item-stack__sub {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-muted);
   max-width: 100%;
   overflow: hidden;
@@ -1214,6 +1654,19 @@
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
+  color: var(--text-strong);
+}
+.inline-switcher__chip-icon .agent-icon,
+.inline-switcher__agent .agent-icon {
+  display: block;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  object-fit: contain;
+}
+.inline-switcher__chip-icon .agent-icon-mono,
+.inline-switcher__agent .agent-icon-mono {
+  display: inline-block;
 }
 .inline-switcher__byok-glyph {
   display: inline-flex;
@@ -1244,6 +1697,17 @@
 }
 .inline-switcher__chip-sep {
   color: var(--text-faint);
+}
+/* Hairline splitting the agent (logo + status dot) from the model name, so the
+   compact chip reads as two groups rather than one run. Same treatment as
+   `.home-hero__workdir-divider` in the composer row beside it; the chip's own
+   gap does the spacing. */
+.inline-switcher__chip-divider {
+  flex: 0 0 auto;
+  width: 1px;
+  height: 16px;
+  background: var(--border);
+  opacity: 0.7;
 }
 .inline-switcher__chip-primary {
   min-width: 0;
@@ -1291,15 +1755,28 @@
   right: 0;
   width: 320px;
   max-width: calc(100vw - 24px);
+  /* Fallback cap for contexts without the measured clamp; the component's
+     inline style overrides this with the real available space (#99). */
+  max-height: min(560px, calc(100vh - 96px));
+  overflow-y: auto;
   padding: 12px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--material-separator);
   border-radius: var(--radius);
-  background: var(--bg-panel);
+  /* Solid, not material: the translucent glass read as content bleeding
+     straight through the popover, so text-dense agent rows sit on an opaque
+     elevated surface instead. */
+  background: var(--bg-elevated);
   box-shadow: var(--shadow-md, 0 10px 30px rgba(0, 0, 0, 0.08));
   display: flex;
   flex-direction: column;
   gap: 12px;
   z-index: 20;
+}
+/* Measured flip (#99): when the anchor sits low on screen, the popover
+   opens upward instead of running past the viewport bottom. */
+.inline-switcher__popover--up {
+  top: auto;
+  bottom: calc(100% + 8px);
 }
 .inline-switcher__row {
   display: flex;
@@ -1307,10 +1784,17 @@
   gap: 6px;
 }
 .inline-switcher__label {
-  font-size: 11px;
+  font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--text-muted);
+}
+/* Left-align the label with the option text beneath it. Each
+   `.inline-switcher__agent` insets its name by 1px border + 8px padding, so a
+   flush label hangs 9px to the left of the list. Scoped to rows that actually
+   hold a list — a label above the model-select trigger has a different inset. */
+.inline-switcher__row:has(.inline-switcher__agent-grid) .inline-switcher__label {
+  padding-left: 9px;
 }
 .inline-switcher__hint {
   font-size: 12px;
@@ -1357,9 +1841,6 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
-  /* Open Design renders as `.inline-switcher__account`; keep the third-party
-     CLI grid after that account row even though their source order differs. */
-  order: 1;
 }
 .inline-switcher__agent-row {
   display: flex;
@@ -1382,13 +1863,93 @@
   width: 100%;
   min-width: 0;
 }
-.inline-switcher__agent:hover {
+/* Hover reads from the background alone — same reasoning as `.is-active`
+   below. Without the `:not(:disabled)` here, the global `button:hover` repaint
+   in primitives.css (specificity 0,2,1) out-specifies this rule and darkens
+   the border to --border-strong, popping a visible outline on hover. */
+.inline-switcher__agent:hover:not(:disabled) {
   background: var(--bg-subtle);
+  border-color: transparent;
 }
 .inline-switcher__agent.is-active {
-  border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
+  /* Selected state reads from the tinted background alone — no dark accent
+     border, which showed as a heavy near-black outline on the active row. */
   background: var(--accent-tint);
   color: var(--text-strong);
+}
+/* Compact model list (home composer popover): a plain borderless list —
+   no card outlines around each row, tighter single-column rows, and a neutral
+   gray selection instead of the accent tint. */
+.inline-switcher--compact .inline-switcher__agent-grid {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1px;
+  /* Cap the visible model list at six rows (6 × 36px row + 5 × 2px gap);
+     longer catalogs scroll inside so the settings footer stays on screen.
+     Same cap as the project popover's .avatar-model-list. */
+  max-height: 226px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.inline-switcher--compact .inline-switcher__agent {
+  border: none;
+  background: transparent;
+  padding: 6px 10px;
+  /* Logo + name read as one left-aligned run instead of centering. */
+  justify-content: flex-start;
+}
+/* Provider brand mark leading each compact model row. */
+.inline-switcher__agent-logo {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+}
+.inline-switcher__agent-logo img,
+.inline-switcher__agent-logo svg {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  display: block;
+}
+.inline-switcher--compact .inline-switcher__agent:hover:not(:disabled) {
+  border: none;
+  background: var(--bg-subtle);
+}
+.inline-switcher--compact .inline-switcher__agent.is-active {
+  background: var(--bg-subtle);
+  color: var(--text-strong);
+}
+/* A model above the caller's plan. It stays listed (so the catalog still reads
+   as complete) but must LOOK unavailable: rendering it as a normal row was the
+   whole bug — the click was accepted and then silently reverted. Matches the
+   project composer's `.avatar-model-option.is-locked`. */
+.inline-switcher--compact .inline-switcher__agent.is-locked {
+  color: var(--text-muted);
+  opacity: 0.6;
+}
+.inline-switcher__agent-lock {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-muted);
+}
+/* Each row now leads with the provider logo, so the old leading selection dot
+   is dropped — the active row reads from its tinted background alone. */
+/* Hovering an unselected model slides its label forward as a "reach". */
+.inline-switcher--compact .inline-switcher__agent-name {
+  transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.inline-switcher--compact
+  .inline-switcher__agent:not(.is-active):not(.is-locked):hover
+  .inline-switcher__agent-name {
+  transform: translateX(6px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .inline-switcher--compact .inline-switcher__agent-name {
+    transition: none;
+  }
 }
 .inline-switcher__amr-reminder-dot--agent {
   top: 6px;
@@ -1401,6 +1962,38 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   text-align: left;
+}
+
+.inline-switcher__campaign-badge {
+  flex: 0 0 auto;
+  padding: 2px 6px;
+  border-radius: 999px;
+  color: #153406;
+  background: #68f22e;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.4;
+  cursor: help;
+  outline: none;
+}
+.inline-switcher__campaign-badge.is-restricted {
+  color: #5f645d;
+  background: #e4e7e2;
+}
+.inline-switcher__campaign-badge.is-unpaid {
+  color: #5f645d;
+  background: #eceeeb;
+}
+.inline-switcher__chip[data-campaign-highlight='true'] {
+  border-color: var(--accent);
+  animation: deepseek-campaign-chip-pulse 760ms cubic-bezier(0.23, 1, 0.32, 1) 2;
+}
+@keyframes deepseek-campaign-chip-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent); }
+  50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 22%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .inline-switcher__chip[data-campaign-highlight='true'] { animation: none; }
 }
 .inline-switcher__agent-status {
   display: inline-flex;
@@ -1477,190 +2070,6 @@
   transform: translateY(0);
 }
 
-/* Account row: Open Design login/plan, lifted out of the agent card so the
-   agent name is never truncated. */
-.inline-switcher__account {
-  order: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 7px 10px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius);
-  background: var(--bg-subtle);
-  transition: background-color 120ms var(--ease-out),
-    border-color 120ms var(--ease-out);
-}
-/* The Open Design entry is also the agent selector now: hovering the clickable
-   area previews selectability, and the active agent gets the same accent
-   highlight the grid rows use. */
-.inline-switcher__account:has(.inline-switcher__account-select:hover):not(.is-active) {
-  background: var(--bg-panel);
-  border-color: var(--border);
-}
-.inline-switcher__account.is-active {
-  border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
-  background: color-mix(in srgb, var(--bg-subtle) 82%, var(--accent-tint));
-}
-.inline-switcher__account.is-active:has(.inline-switcher__account-select:hover) {
-  border-color: color-mix(in srgb, var(--accent) 34%, var(--border));
-  background: color-mix(in srgb, var(--bg-panel) 74%, var(--accent-tint));
-}
-.inline-switcher__account-id {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-strong);
-}
-/* The icon+name+plan+balance block is the radio control that selects Open
-   Design; the upgrade / sign-in buttons stay siblings so they never nest in
-   this button. */
-.inline-switcher__account-select {
-  flex: 1 1 auto;
-  appearance: none;
-  border: none;
-  background: none;
-  padding: 0;
-  margin: 0;
-  text-align: left;
-  cursor: pointer;
-}
-.inline-switcher__account-id-icon {
-  position: relative;
-  flex: 0 0 auto;
-  display: inline-flex;
-}
-.inline-switcher__amr-reminder-dot--account {
-  top: -1px;
-  right: -1px;
-}
-.inline-switcher__account-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.inline-switcher__account-text {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-.inline-switcher__account-name-row {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  min-width: 0;
-}
-/* Balance shown as a muted subtitle line under the Open Design name. Each
-   stat is "label value"; the gap (not a literal separator) keeps them apart. */
-.inline-switcher__account-subtitle {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 2px 14px;
-  min-width: 0;
-}
-.inline-switcher__account-stat {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 4px;
-}
-.inline-switcher__account-stat-label {
-  flex: 0 0 auto;
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--text-muted);
-}
-.inline-switcher__account-stat-value {
-  flex: 0 0 auto;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-strong);
-  font-variant-numeric: tabular-nums;
-  text-transform: capitalize;
-}
-.inline-switcher__account-upgrade {
-  flex: 0 0 auto;
-  appearance: none;
-  display: inline-flex;
-  align-items: center;
-  height: 22px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: 999px;
-  background: var(--accent);
-  color: #fff;
-  font-size: 11px;
-  font-weight: 650;
-  letter-spacing: 0.02em;
-  cursor: pointer;
-  box-shadow:
-    0 1px 2px color-mix(in srgb, var(--accent) 45%, transparent),
-    inset 0 1px 0 color-mix(in srgb, #fff 20%, transparent);
-  transition:
-    transform 150ms cubic-bezier(0.23, 1, 0.32, 1),
-    background-color 150ms ease,
-    box-shadow 150ms ease;
-}
-@media (hover: hover) and (pointer: fine) {
-  .inline-switcher__account-upgrade:hover:not(:disabled) {
-    background: var(--accent-hover);
-    color: #fff;
-    box-shadow:
-      0 2px 8px color-mix(in srgb, var(--accent) 42%, transparent),
-      inset 0 1px 0 color-mix(in srgb, #fff 22%, transparent);
-  }
-}
-.inline-switcher__account-upgrade:active {
-  transform: scale(0.96);
-}
-.inline-switcher__account-upgrade:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
-  outline-offset: 2px;
-}
-@media (prefers-reduced-motion: reduce) {
-  .inline-switcher__account-upgrade {
-    transition: background-color 150ms ease;
-  }
-  .inline-switcher__account-upgrade:active {
-    transform: none;
-  }
-}
-.inline-switcher__account-status.is-error {
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 12px;
-  color: var(--danger);
-}
-.inline-switcher__account-action {
-  appearance: none;
-  border: 0;
-  background: transparent;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  flex: 0 0 auto;
-  padding: 2px 6px;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--accent-strong);
-  cursor: pointer;
-  border-radius: var(--radius);
-}
-.inline-switcher__account-action:hover {
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
-}
-.inline-switcher__account-action svg {
-  animation: spin 0.8s linear infinite;
-}
-
 /* Provider chips (BYOK mode) */
 .inline-switcher__chips {
   display: flex;
@@ -1673,7 +2082,7 @@
   background: var(--bg-panel);
   border-radius: var(--radius-pill);
   padding: 4px 10px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-muted);
   cursor: pointer;
   transition: background-color 120ms var(--ease-out), color 120ms var(--ease-out),
@@ -1704,7 +2113,14 @@
   top: calc(100% + 6px);
   left: 0;
   right: 0;
-  z-index: 1401;
+  /* Above every modal layer: the popover portals to <body>, and the settings
+     dialog backdrop sits at 1700 (app-modal at 10000) — at the old 1401 the
+     dropdown OPENED but rendered underneath the dialog, reading as "click
+     does nothing". */
+  z-index: 10500;
+  /* Constant breathing room above/below the scrolling list — padding inside
+     the scroller scrolls away with the content and reads as flush rows. */
+  padding-block: 8px;
   background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
@@ -1712,7 +2128,9 @@
   overflow: hidden;
 }
 .model-select-searchable__search-row {
-  padding: 0;
+  /* Breathing room around the search input so the row's border-bottom reads
+     as a real divider instead of hugging the input's own border. */
+  padding: 12px 14px;
   border-bottom: 1px solid var(--border);
 }
 .model-select-searchable__input {
@@ -1725,14 +2143,21 @@
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  padding: 6px;
+  gap: 10px;
+  /* Vertical breathing room lives on the popover, outside the scroller. */
+  padding: 0 8px;
 }
 .model-select-searchable__option {
   appearance: none;
   border: 0;
   background: transparent;
   text-align: left;
-  padding: 8px 30px 8px 10px;
+  /* 8px above the title line and below the cost line (dogfood 2026-07-28).
+     height:auto releases the global button primitive's 36px clamp — a row
+     with a cost/meta line is two lines tall, and the clamp made the text
+     overflow the plate instead of sitting 8px inside it. */
+  height: auto;
+  padding: 8px 12px;
   border-radius: var(--radius);
   display: flex;
   flex-direction: column;
@@ -1755,16 +2180,6 @@
   background: var(--accent-tint);
   color: var(--accent-strong);
 }
-.model-select-searchable__option[data-selected='true']::after {
-  content: '✓';
-  position: absolute;
-  right: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-  font-size: 12px;
-  font-weight: 700;
-  color: currentColor;
-}
 .model-select-searchable__value,
 .model-select-searchable__option-content {
   display: flex;
@@ -1784,11 +2199,25 @@
   flex-direction: column;
   gap: 2px;
 }
+/* Vendor brand mark leading the option row. 1px top nudge centers the 16px
+   mark against the 13px/1.35 first label line despite the row's
+   flex-start alignment (multi-line label + meta rows). */
+.model-select-searchable__option-logo {
+  flex: 0 0 auto;
+  display: inline-flex;
+  margin-top: 1px;
+}
+.model-select-searchable__option-logo img {
+  display: block;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+}
 .model-select-searchable__value-label,
 .model-select-searchable__option-label {
   display: inline-flex;
   align-items: center;
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.35;
   min-width: 0;
   overflow: hidden;
@@ -1837,7 +2266,7 @@
   flex: 0 0 auto;
 }
 .model-select-searchable__option-meta {
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.3;
   color: var(--text-muted);
   min-width: 0;
@@ -1906,9 +2335,7 @@
   padding: 0 28px 0 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: var(--bg-panel)
-    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2374716b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>")
-    no-repeat right 10px center;
+  background: var(--bg-panel);
   font-size: 12px;
   color: var(--text);
   text-align: left;
@@ -1935,12 +2362,22 @@
 .inline-switcher__more {
   appearance: none;
   border: 0;
-  background: transparent;
+  /* Pinned to the bottom of the popover's scroll port: the model list can be
+     long (29 models on AMR), and this entry used to scroll away with it — the
+     one link out to where agent switching now lives. Opaque so rows scrolling
+     underneath do not show through. */
+  position: sticky;
+  bottom: -12px;
+  z-index: 1;
+  background: var(--bg-elevated);
   border-top: 1px solid var(--border-soft);
   margin-top: 2px;
   padding: 8px 4px;
   display: inline-flex;
   align-items: center;
+  /* Left-align the icon + label (the button primitive centers content). */
+  justify-content: flex-start;
+  text-align: left;
   gap: 6px;
   color: var(--text-muted);
   font-size: 12px;
@@ -1966,6 +2403,59 @@
   flex-direction: column;
   gap: 16px;
 }
+
+/* ── Brand-new user empty state (草稿 / 全部项目) ── */
+.entry-blank {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 12px;
+  min-height: 56vh;
+  padding: 48px 24px;
+  margin-top: 8px;
+  /* No card surface — content sits directly on the page. */
+  background: transparent;
+}
+.entry-blank__mark {
+  width: 168px;
+  height: auto;
+  display: block;
+  object-fit: contain;
+}
+.entry-blank__desc {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.entry-blank__cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 8px;
+  padding: 10px 22px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--text-strong);
+  color: var(--brand, #87ea5c);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background-color 140ms var(--ease-out),
+    transform 140ms var(--ease-out);
+}
+/* brightness(1.05) on a near-black fill was imperceptible — and the doubled
+   selector also outranks the global button:hover primitive so the ink fill
+   can't get swapped to gray. Same ink-toward-green hover as the community
+   pills, plus a 1px lift. */
+.entry-blank__cta:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text-strong) 84%, var(--brand, #87ea5c));
+  transform: translateY(-1px);
+}
 .entry-section__head {
   display: flex;
   align-items: baseline;
@@ -1975,7 +2465,7 @@
 .entry-section__title {
   margin: 0;
   font-family: var(--serif);
-  font-size: 22px;
+  font-size: var(--font-size-20, 20px);
   font-weight: 600;
   color: var(--text-strong);
   letter-spacing: -0.01em;
@@ -2002,43 +2492,112 @@
   justify-items: center;
 }
 
-/* Connect step, cloud sign-in landing. Replaces the grid layout with a
-   centered single column: a top-left language/theme bar, the centered CTA
-   block, and a footer pinned to the bottom. */
-.onboarding-view--cloud {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
+/* Connect step, cloud sign-in landing. Split layout: a left pane (top-left
+   language/theme bar, the left-aligned CTA block, and a footer pinned to the
+   pane's bottom) and a full-bleed art panel filling the right half.
+   Double-class selector: `.onboarding-view` alone (base rule above, plus its
+   several width/padding media queries further down this file) would
+   otherwise win ties by source order against a single-class `--cloud`
+   override at some breakpoints, re-introducing the base padding/width and —
+   critically — its `align-content: start`, which stops the grid row at its
+   content height instead of stretching it, leaving the art panel short with
+   a blank gap. The extra specificity makes every override here unconditional. */
+.onboarding-view.onboarding-view--cloud {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: stretch;
+  align-content: stretch;
   position: relative;
   width: 100%;
   max-width: none;
-  min-height: 100%;
+  /* `height` (not `min-height`) so the value is a definite length the grid
+     row — and in turn the `__art` column's `height: 100%` image — can
+     actually stretch to fill. A `min-height` floor only widens this box's
+     own rendered height; it does not make an "auto" row track definite, so
+     the row still sizes to content and the art panel stops short with a
+     blank gap below it. */
+  height: 100%;
   margin: 0;
-  padding: 72px 24px 64px;
+  padding: 0;
   gap: 0;
 }
 
-.onboarding-cloud__topbar {
-  position: absolute;
-  top: 18px;
-  right: 22px;
+.onboarding-cloud__pane {
+  position: relative;
   display: flex;
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  min-height: 0;
+  padding: 72px 64px 64px;
 }
 
-/* Brand mark above the title; the glyph itself comes from the shared
-   .od-brand-glyph primitive. */
-.onboarding-cloud__logo {
+/* `min-height: 0` (alongside `min-width: 0`) opts this grid item out of its
+   automatic content-based minimum size. Without it, the `<img>`'s intrinsic
+   aspect ratio still counts as this column's minimum block size even though
+   the img itself is `height: 100%` — `align-content: stretch` can grow a
+   track but never shrink it below that minimum, so the column (and the
+   image) end up as tall as the image's natural aspect ratio at this column's
+   width, overflowing past the section's actual height instead of matching it. */
+.onboarding-cloud__art {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  padding: 8px 8px 8px 0;
+}
+
+.onboarding-cloud__art img {
   display: block;
-  width: 52px;
-  height: 52px;
-  margin-bottom: 22px;
+  width: 100%;
+  height: 100%;
+  border-radius: var(--radius-md, 8px);
+  object-fit: cover;
 }
 
-/* Compact, icon-only language switcher used in the cloud landing top bar —
-   matches the round theme toggle next to it instead of the labelled foot-pill. */
+/* Below this width, the two-column grid can no longer give the text pane its
+   full designed width (.onboarding-cloud__center's 440px) alongside the art
+   panel — half the viewport minus the pane's 64px side padding drops under
+   440px once the viewport is narrower than 2 * (440 + 64 + 64) = 1136px.
+   Stack to a single column and hide the art before the text pane gets
+   cramped, rather than waiting until it visibly wraps. */
+@media (max-width: 1136px) {
+  .onboarding-view.onboarding-view--cloud {
+    grid-template-columns: 1fr;
+  }
+
+  .onboarding-cloud__art {
+    display: none;
+  }
+
+  .onboarding-cloud__pane {
+    align-items: center;
+    padding: 72px 24px 64px;
+  }
+
+  .onboarding-cloud__center {
+    align-items: center;
+    text-align: center;
+  }
+
+  .onboarding-cloud__body,
+  .onboarding-cloud__alts,
+  .onboarding-cloud__error {
+    text-align: center;
+  }
+
+  .onboarding-cloud__alts {
+    justify-content: center;
+  }
+
+  .onboarding-cloud__footer {
+    left: 24px;
+    justify-content: center;
+    text-align: center;
+  }
+}
+
+/* Compact, icon-only language switcher used next to the footer copyright
+   line. */
 .lang-pill--compact {
   width: 36px;
   height: 36px;
@@ -2054,29 +2613,6 @@
   color: var(--text-strong);
 }
 
-.onboarding-cloud__theme {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  padding: 0;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-  background: var(--bg-panel);
-  color: var(--text);
-  cursor: pointer;
-  transition:
-    color 160ms cubic-bezier(0.23, 1, 0.32, 1),
-    border-color 160ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-
-.onboarding-cloud__theme:hover:not(:disabled) {
-  background: var(--bg-panel);
-  border-color: var(--text-muted);
-  color: var(--text-strong);
-}
-
 .onboarding-cloud__center {
   display: flex;
   flex-direction: column;
@@ -2088,7 +2624,7 @@
 .onboarding-cloud__title {
   margin: 0;
   color: var(--text-strong);
-  font-size: 30px;
+  font-size: 32px;
   font-weight: 700;
   line-height: 1.15;
   letter-spacing: -0.01em;
@@ -2098,7 +2634,7 @@
   margin: 14px 0 0;
   max-width: 42ch;
   color: var(--text-muted);
-  font-size: 15px;
+  font-size: 16px;
   line-height: 1.6;
 }
 
@@ -2115,7 +2651,7 @@
   border-radius: 14px;
   background: var(--text-strong);
   color: var(--bg);
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
   cursor: pointer;
   transition:
@@ -2146,7 +2682,6 @@
   outline-offset: 2px;
 }
 
-.onboarding-cloud__secondary,
 .onboarding-cloud__cancel {
   margin-top: 22px;
   border: 0;
@@ -2158,22 +2693,73 @@
   transition: color 160ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
-.onboarding-cloud__secondary:hover,
 .onboarding-cloud__cancel:hover {
   color: var(--text-strong);
 }
 
-/* Two secondary links ("local CLI" or "your own key") on one row. */
+/* Capsule treatment for the activation-retry card on THIS view only — the
+ * base `.amr-login-activation` rule (artifacts.css) stays untouched so
+ * Settings/AmrLoginPill and CloudSignInTip keep their compact inline card.
+ * Compound selector (not cascade order) guarantees this wins over the base
+ * padding/radius regardless of stylesheet import order. */
+.amr-login-activation.onboarding-cloud__activation {
+  padding: 16px;
+  border-radius: 28px;
+}
+
+/* Keep the retry controls centered in the activation card. They deliberately
+ * retain their intrinsic width instead of stretching from the left edge — the
+ * primary "Open sign-in page" action should read as the card's focal CTA. */
+.onboarding-cloud__activation .amr-login-activation__actions {
+  width: 100%;
+  justify-content: center;
+  gap: 8px;
+}
+
+.onboarding-cloud__activation .amr-login-activation__open {
+  flex: 0 0 auto;
+  justify-content: center;
+}
+
+.onboarding-cloud__activation-dismiss {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color 120ms, background 120ms, color 120ms;
+}
+
+.onboarding-cloud__activation-dismiss:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+
+/* Two runtime-choice buttons ("local CLI" or "your own key") on one row,
+   centered as a unit under the full-width primary CTA above. */
 .onboarding-cloud__alts {
   display: flex;
   align-items: center;
   justify-content: center;
+  align-self: stretch;
   gap: 10px;
   margin-top: 22px;
 }
 
-.onboarding-cloud__alts .onboarding-cloud__secondary {
-  margin-top: 0;
+/* Double-class selector to out-specificity the shared Button module's
+   `.button`/`.subtle` rules (same 0-1-0 specificity) without `!important`. */
+.onboarding-cloud__alts .onboarding-cloud__alt-btn {
+  border-radius: var(--radius-pill);
+  color: var(--text-muted);
+  font-size: 14px;
 }
 
 .onboarding-cloud__alts-or {
@@ -2190,21 +2776,70 @@
 
 .onboarding-cloud__footer {
   position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 22px;
-  text-align: center;
+  left: 64px;
+  right: 24px;
+  /* An absolutely positioned child's containing block is the ancestor's
+     padding box, so this offset is NOT added on top of .onboarding-cloud__pane's
+     own 64px bottom padding — it replaces it. Match that 64px directly so the
+     footer's bottom edge lines up with the padding boundary the rest of the
+     pane's content already respects, instead of sitting almost flush with
+     the true edge. */
+  bottom: 64px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  text-align: left;
   color: var(--text-muted);
   font-size: 12px;
+}
+
+/* Dim the copyright line only — NOT the whole footer, since the language
+   switcher's popover is a DOM descendant here (position: absolute doesn't
+   exempt it from an ancestor's opacity). A blanket opacity on
+   .onboarding-cloud__footer would wash the open dropdown out to match, so
+   the copyright text and the closed pill get their own opacity instead. */
+.onboarding-cloud__footer > span {
   opacity: 0.8;
 }
 
-/* Back link from the expanded runtime chooser to the cloud landing. */
+/* Language switcher pill in the cloud landing footer — mirrors the entry
+   sidebar's `.entry-side-foot .foot-pill` look, scoped locally since this
+   footer sits outside that sidebar. Non-compact: shows the current
+   language label, not just the icon. */
+.onboarding-cloud__footer .foot-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  min-height: 26px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  opacity: 0.8;
+}
+
+.onboarding-cloud__footer .foot-pill:hover {
+  background: var(--bg-panel);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+/* Back link from the expanded runtime chooser to the cloud landing.
+   `justify-self: start` is load-bearing: the onboarding panel is a grid whose
+   items stretch by default, and the global button primitive centers button
+   content — a stretched back link therefore floats its label mid-column
+   instead of sitting at the content column's left edge, above the panel
+   title (issue #138). */
 .onboarding-view__back-to-cloud {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   align-self: start;
+  justify-self: start;
   padding: 0;
   border: 0;
   background: transparent;
@@ -2244,7 +2879,7 @@
 }
 
 .onboarding-view__kicker {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0;
   text-transform: uppercase;
@@ -2263,7 +2898,7 @@
   margin: 0;
   max-width: 62ch;
   color: var(--text-muted);
-  font-size: 15px;
+  font-size: 16px;
   line-height: 1.6;
 }
 
@@ -2418,7 +3053,7 @@
 
 .onboarding-view__ds-points span {
   color: var(--text-muted);
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.45;
 }
 
@@ -2441,7 +3076,7 @@
   margin: 0;
   max-width: 68ch;
   color: var(--text-muted);
-  font-size: 13.5px;
+  font-size: 13px;
   line-height: 1.55;
 }
 
@@ -2475,7 +3110,7 @@
 
 .onboarding-view__handoff-status small {
   color: var(--text-muted);
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.45;
 }
 
@@ -2509,7 +3144,7 @@
   min-height: 38px;
   padding: 0 14px;
   border-radius: var(--radius);
-  font-weight: 650;
+  font-weight: 600;
   font-size: 13px;
   cursor: pointer;
   transition: background-color 160ms cubic-bezier(0.23, 1, 0.32, 1), border-color 160ms cubic-bezier(0.23, 1, 0.32, 1), color 160ms cubic-bezier(0.23, 1, 0.32, 1), transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
@@ -2622,13 +3257,13 @@
 }
 
 .onboarding-view__alternatives .onboarding-view__card small {
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 1.4;
 }
 
 .onboarding-view__alternatives .onboarding-view__card-action {
   margin-top: 2px;
-  font-size: 11.5px;
+  font-size: 12px;
 }
 
 .onboarding-view__setup-panel {
@@ -2690,7 +3325,7 @@
   background: var(--bg-panel);
   font: inherit;
   font-size: 12px;
-  font-weight: 650;
+  font-weight: 600;
   cursor: pointer;
   box-shadow: var(--shadow-xs);
 }
@@ -2757,13 +3392,13 @@
 
 .onboarding-view__agent-chip strong {
   color: var(--text-strong);
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.2;
 }
 
 .onboarding-view__agent-chip small {
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .onboarding-view__empty-slice {
@@ -2821,7 +3456,7 @@
   min-width: 0;
   color: var(--text-muted);
   font-size: 12px;
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .onboarding-view__inline-field input {
@@ -3032,8 +3667,8 @@
   min-height: 22px;
   padding: 0 8px;
   border-radius: var(--radius-pill);
-  font-size: 11px;
-  font-weight: 650;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .onboarding-view__badge {
@@ -3088,14 +3723,14 @@
 }
 
 .onboarding-view__card--featured strong {
-  font-size: 22px;
+  font-size: 20px;
 }
 
 .onboarding-view__card-meta {
   display: block;
   color: var(--text-muted);
   font-size: 13px;
-  font-weight: 620;
+  font-weight: 600;
   line-height: 1.2;
 }
 
@@ -3103,7 +3738,7 @@
   display: block;
   margin-top: 0;
   color: var(--text-muted);
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.45;
   white-space: pre-line;
 }
@@ -3267,7 +3902,7 @@
     inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent),
     0 6px 16px color-mix(in srgb, var(--accent) 7%, transparent);
   font-size: 13px;
-  font-weight: 760;
+  font-weight: 700;
 }
 
 .onboarding-view__benefit {
@@ -3279,8 +3914,8 @@
   border: 1px solid color-mix(in srgb, var(--accent) 14%, transparent);
   color: color-mix(in srgb, var(--accent-strong) 92%, var(--text));
   background: color-mix(in srgb, var(--accent) 5%, transparent);
-  font-size: 11px;
-  font-weight: 680;
+  font-size: 12px;
+  font-weight: 600;
   line-height: 1;
   white-space: nowrap;
 }
@@ -3322,8 +3957,8 @@
   align-items: center;
   min-height: 18px;
   color: color-mix(in srgb, var(--text-muted) 74%, var(--text));
-  font-size: 10.5px;
-  font-weight: 650;
+  font-size: 12px;
+  font-weight: 600;
   line-height: 1;
   white-space: nowrap;
 }
@@ -3373,8 +4008,8 @@
   background: color-mix(in srgb, var(--bg-panel) 90%, var(--accent) 10%);
   box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 8%, transparent);
   color: currentColor;
-  font-size: 11px;
-  font-weight: 650;
+  font-size: 12px;
+  font-weight: 600;
   line-height: 1;
 }
 
@@ -3567,7 +4202,7 @@
   justify-content: center;
   width: 32px;
   height: 32px;
-  border-radius: 10px;
+  border-radius: var(--radius-large, 8px);
   background: color-mix(in oklab, var(--accent) 14%, var(--bg-panel));
   color: var(--accent);
   box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent) 22%, transparent);
@@ -3579,12 +4214,12 @@
 }
 .onboarding-view__memory-callout-body strong {
   font-size: 14px;
-  font-weight: 650;
+  font-weight: 600;
   color: var(--text-strong);
 }
 .onboarding-view__memory-callout-body p {
   margin: 0;
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.5;
   color: var(--text-muted);
 }
@@ -3600,7 +4235,7 @@
   grid-template-columns: auto minmax(0, 1fr);
   gap: 8px;
   align-items: center;
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.4;
   color: var(--text);
 }
@@ -3682,7 +4317,6 @@
 .onboarding-view__brand-url-input:focus-visible {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 18%, transparent);
 }
 
 .onboarding-view__select-field {
@@ -3934,7 +4568,7 @@
   color: var(--text);
   background: transparent;
   font: inherit;
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.25;
   text-align: left;
   cursor: pointer;
@@ -3957,7 +4591,7 @@
 .onboarding-view__select-option.is-selected {
   color: var(--accent-strong);
   background: color-mix(in srgb, var(--accent) 8%, var(--bg-panel));
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .onboarding-view__select-option svg {
@@ -4013,7 +4647,7 @@
 .onboarding-view__build-head h2 {
   margin: 0;
   color: var(--text-strong);
-  font-size: 42px;
+  font-size: 48px;
   line-height: 1.03;
   letter-spacing: 0;
 }
@@ -4022,7 +4656,7 @@
   margin: 0;
   max-width: 62ch;
   color: var(--text-muted);
-  font-size: 15px;
+  font-size: 16px;
   line-height: 1.6;
 }
 
@@ -4058,7 +4692,7 @@
 .onboarding-view__build-benefits span {
   min-width: 0;
   color: var(--text-muted);
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.45;
 }
 
@@ -4098,7 +4732,7 @@
 .onboarding-view__build-preview-head strong {
   margin-left: 4px;
   color: var(--text);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .onboarding-view__build-preview-body {
@@ -4109,7 +4743,7 @@
 
 .onboarding-view__build-preview-body small {
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -4123,7 +4757,7 @@
 
 .onboarding-view__build-preview-swatches i {
   height: 44px;
-  border-radius: 10px;
+  border-radius: var(--radius-large, 8px);
   background: var(--accent);
 }
 
@@ -4148,13 +4782,13 @@
 
 .onboarding-view__build-preview-type strong {
   font-family: Georgia, "Times New Roman", serif;
-  font-size: 44px;
+  font-size: 48px;
   line-height: 1;
 }
 
 .onboarding-view__build-preview-type span {
-  font-size: 26px;
-  font-weight: 760;
+  font-size: 28px;
+  font-weight: 700;
 }
 
 .onboarding-view__build-preview-type em {
@@ -4202,7 +4836,7 @@
   color: var(--text);
   background: var(--bg-panel);
   font-size: 12px;
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .onboarding-view__build-actions {
@@ -4248,6 +4882,59 @@
   transition: background-color 120ms var(--ease-out), border-color 120ms var(--ease-out),
     color 120ms var(--ease-out), transform 120ms var(--ease-out);
   white-space: nowrap;
+}
+.entry-rail-actions .entry-star-badge,
+.entry-rail-actions .entry-discord-badge,
+.entry-rail-actions .entry-x-badge,
+.entry-rail-actions .entry-mail-badge,
+.entry-rail-actions .use-everywhere-chip {
+  height: 29px;
+  border-color: transparent;
+  border-radius: 8px;
+  background: transparent;
+  box-shadow: none;
+}
+.entry-rail-actions .entry-star-badge {
+  flex: 1 1 0;
+  min-width: 0;
+  justify-content: flex-start;
+  padding: 0 9px;
+}
+.entry-rail-actions .entry-discord-badge,
+.entry-rail-actions .entry-x-badge,
+.entry-rail-actions .entry-mail-badge {
+  flex: 0 0 26px;
+  width: 26px;
+  padding: 0;
+}
+.entry-rail-actions .entry-discord-badge__label,
+.entry-rail-actions .entry-discord-badge__sep,
+.entry-rail-actions .entry-discord-badge__online,
+.entry-rail-actions .entry-x-badge__label,
+.entry-rail-actions .entry-mail-badge__label,
+.entry-rail-actions .entry-star-badge__label,
+.entry-rail-actions .entry-star-badge__sep,
+.entry-rail-actions .entry-help-menu__label {
+  display: none;
+}
+.entry-rail-actions .entry-discord-badge__icon,
+.entry-rail-actions .entry-x-badge__icon,
+.entry-rail-actions .entry-mail-badge__icon {
+  margin: 0;
+}
+.entry-rail-actions .entry-star-badge:hover,
+.entry-rail-actions .entry-discord-badge:hover,
+.entry-rail-actions .entry-x-badge:hover,
+.entry-rail-actions .entry-mail-badge:hover,
+.entry-rail-actions .use-everywhere-chip:hover {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+}
+
+.entry-rail-actions .entry-star-badge__label,
+.entry-rail-actions .entry-star-badge__count {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .entry-star-badge:hover {
   background: var(--bg-subtle);
@@ -4337,13 +5024,10 @@
   white-space: nowrap;
 }
 
-/* Workspace / team-edition entry. Neutral white-panel chip matching the
-   GitHub-star / Discord pills next to it; keeps its label visible (unlike the
-   icon-only discord/use-everywhere chips) because guiding the click is the
-   whole point. Tokens resolve in both light and dark themes. */
-.entry-workspace-chip {
+.entry-x-badge {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   height: 32px;
   padding: 0 12px;
@@ -4361,34 +5045,65 @@
     color 120ms var(--ease-out), transform 120ms var(--ease-out);
   white-space: nowrap;
 }
-.entry-workspace-chip:hover {
+.entry-x-badge:hover {
   background: var(--bg-subtle);
   border-color: var(--border-strong);
   color: var(--text-strong);
 }
-.entry-workspace-chip:active {
+.entry-x-badge:active {
   transform: scale(0.98);
 }
-.entry-workspace-chip:focus-visible {
+.entry-x-badge:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
-.entry-workspace-chip__icon {
-  color: var(--text-strong);
+.entry-x-badge__icon {
   flex: 0 0 auto;
-}
-.entry-workspace-chip__label {
   color: var(--text-strong);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.entry-mail-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--bg-panel);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  text-decoration: none;
+  cursor: pointer;
+  box-shadow: var(--shadow-xs);
+  transition: background-color 120ms var(--ease-out), border-color 120ms var(--ease-out),
+    color 120ms var(--ease-out), transform 120ms var(--ease-out);
   white-space: nowrap;
+}
+.entry-mail-badge:hover {
+  background: var(--bg-subtle);
+  border-color: var(--border-strong);
+  color: var(--text-strong);
+}
+.entry-mail-badge:active {
+  transform: scale(0.98);
+}
+.entry-mail-badge:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.entry-mail-badge__icon {
+  flex: 0 0 auto;
+  color: var(--text-strong);
 }
 
 @media (max-width: 700px) {
-  .entry-workspace-chip__label {
-    display: none;
-  }
-  .entry-workspace-chip {
-    padding: 0 9px;
-  }
   .entry-star-badge__label {
     display: none;
   }
@@ -4407,9 +5122,9 @@
 }
 
 @media (max-width: 900px) {
-  .entry-nav-rail {
-    width: 56px;
-  }
+  /* No fixed rail width here: the rail fills its grid track (entry-layout
+     top-of-file), and below 1080px the track is 0 — the rail is hidden, not
+     squeezed to a 56px icon sliver. */
   .entry-main__inner {
     padding: 24px 16px 56px;
   }
@@ -4438,7 +5153,7 @@
   }
 
   .onboarding-view__hero h1 {
-    font-size: 42px;
+    font-size: 48px;
   }
 
   .onboarding-view__alternatives,
@@ -4453,7 +5168,7 @@
   }
 
   .entry-onboarding-modal {
-    height: 100vh;
+    height: 100%;
     border-radius: 0;
   }
 
@@ -4518,7 +5233,7 @@
   }
 
   .entry-onboarding-modal {
-    height: 100vh;
+    height: 100%;
     border-radius: 0;
   }
 
@@ -4789,7 +5504,7 @@
 
 @media (max-width: 560px) {
   .onboarding-view__build-head h2 {
-    font-size: 30px;
+    font-size: 32px;
   }
 
   .onboarding-view__build-actions {
@@ -4805,4 +5520,2882 @@
   .onboarding-view__build-actions .onboarding-view__primary {
     flex: 1 1 180px;
   }
+}
+
+/* ---- Account switcher (top of rail) ---- */
+.entry-nav-rail__account {
+  position: relative;
+  display: flex;
+  /* Credits chip stacks above the avatar row (chip is order: -1 below). */
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  order: 99;
+  margin: auto 0 0;
+  padding-top: var(--spacing-10);
+}
+/* Update-ready strip: its own line directly above the identity row, with the
+   rocket pushed to the right edge (`flex-end` rather than a hardcoded side, so
+   RTL follows the writing direction). The rocket used to sit BELOW the account
+   row, in `.entry-nav-rail__footer` (#5517 fallout).
+
+   This stays a global selector next to the rest of the account block rather
+   than a CSS Module: its only child is `.entry-updater-menu`, itself a global
+   positioning contract, so a module would need a `:global()` escape to reach
+   it.
+
+   `:empty` is load-bearing, not tidiness. The strip is mounted unconditionally
+   so it remains the trigger's immediately-preceding sibling, and the updater
+   host renders nothing until an installer is downloaded and unopened — so
+   without this rule an idle rail would reserve a row of height plus the
+   container's 6px `gap` above the account, shifting the whole account area for
+   a control that is not there. `display: none` (not `height: 0`) is what drops
+   it out of flex layout so the `gap` collapses with it. */
+.entry-nav-rail__account-updater {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+}
+.entry-nav-rail__account-updater:empty {
+  display: none;
+}
+/* Unread-messages red dot riding the account avatar's top-right corner. */
+.entry-nav-rail__account-avatar-dot {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--red);
+  /* Panel-colored ring separates the dot from the avatar artwork. */
+  box-shadow: 0 0 0 2px var(--bg-panel);
+}
+/* Matching dot on the account menu's 消息中心 row, pushed to the far edge. */
+.entry-nav-rail__menu-item-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--red);
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+.entry-nav-rail__account-trigger {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  min-height: 34px;
+  padding: 4px 6px;
+  border-radius: 8px;
+  font: inherit;
+  color: var(--text-strong);
+}
+.entry-nav-rail__account-trigger:hover { background: color-mix(in srgb, var(--text) 5%, transparent); }
+/* The menu opens on hover, so the global blue focus ring reads as a stray
+   "selected" state after any click on the row. Keep focus feedback as the
+   same quiet tint instead. */
+.entry-nav-rail__account-trigger:focus,
+.entry-nav-rail__account-trigger:focus-visible {
+  outline: none;
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+}
+.entry-nav-rail__account-avatar {
+  position: relative;
+  width: 25px;
+  height: 25px;
+  /* Rounded square (8px), replacing the squircle clip-path — a clip-path
+     would also swallow the unread dot that overflows the top-right corner. */
+  border-radius: 8px;
+  background: linear-gradient(135deg, #87ea5c, #0d5400);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 700;
+  flex: 0 0 24px;
+}
+.entry-nav-rail__account-name {
+  font-size: 13px;
+  font-weight: 500;
+  flex: 0 1 auto;
+  margin-right: auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.entry-nav-rail__account-trigger svg { color: var(--text-soft); }
+/* The membership wordmark reads as a solid black mark, not a muted glyph. */
+.entry-nav-rail__account-trigger .plan-badge { color: var(--text-strong); }
+
+/* ── Credits chip (✨ N) — separate region from the account dropdown ── */
+.entry-nav-rail__credits-chip {
+  flex: 0 0 auto;
+  /* Sits above the avatar row, aligned with the trigger's inner padding. */
+  order: -1;
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-4);
+  min-height: 28px;
+  padding: var(--spacing-2) var(--spacing-8);
+  margin-left: 0;
+  border-radius: var(--radius-pill);
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: var(--font-size-12);
+  font-weight: 500;
+  line-height: 125%;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition:
+    background-color var(--duration-faster) var(--curve-easy-ease),
+    box-shadow var(--duration-faster) var(--curve-easy-ease);
+}
+.entry-nav-rail__credits-chip:hover,
+.entry-nav-rail__credits-chip[aria-expanded='true'] {
+  background: var(--bg-subtle);
+}
+.entry-nav-rail__credits-chip:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 var(--stroke-thick) var(--border);
+}
+.entry-nav-rail__credits-chip .od-icon { color: var(--brand-text); }
+.entry-nav-rail__credits-tier { font-weight: 600; }
+.entry-nav-rail__credits-sep { color: var(--text-faint); }
+
+/* ── Credits popover ── */
+.credits-panel {
+  position: absolute;
+  top: auto;
+  bottom: calc(100% + var(--spacing-8));
+  left: 0;
+  right: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  padding: var(--spacing-16);
+  border-radius: var(--radius-xlarge);
+  /* Solid, not material: the nav-rail panel's own backdrop-filter makes it
+     a backdrop root, so descendants' blur cannot sample through it in
+     Chromium — any translucency here reads as sharp bleed-through of the
+     nav items behind the popover. */
+  background: var(--bg-elevated);
+  border: var(--stroke-thin) solid var(--border);
+  box-shadow: var(--shadow-sm);
+  animation: entry-invite-in var(--duration-fast) var(--curve-decelerate-mid);
+}
+.credits-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-12);
+  margin-bottom: var(--spacing-12);
+}
+.credits-panel__plan {
+  font-size: var(--font-size-18);
+  line-height: 125%;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.credits-panel__upgrade {
+  padding: var(--spacing-6) var(--spacing-18);
+  border: var(--stroke-thin) solid var(--text-strong);
+  border-radius: var(--radius-large);
+  background: var(--text-strong);
+  color: var(--bg);
+  font-size: var(--font-size-13);
+  line-height: 125%;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background-color var(--duration-faster) var(--curve-easy-ease),
+    border-color var(--duration-faster) var(--curve-easy-ease);
+}
+.credits-panel__upgrade:hover {
+  background: var(--text);
+  border-color: var(--text);
+}
+.credits-panel__divider {
+  height: 0;
+  border-top: var(--stroke-thin) solid var(--border);
+  margin: 0 0 var(--spacing-12);
+}
+.credits-panel__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-12);
+}
+.credits-panel__row--refresh { margin-top: var(--spacing-16); }
+.credits-panel__row-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-8);
+  font-size: var(--font-size-16);
+  line-height: 125%;
+  font-weight: 500;
+  color: var(--text-strong);
+}
+.credits-panel__row-label > .od-icon {
+  color: var(--brand-text);
+}
+.credits-panel__row-value {
+  font-family: var(--mono);
+  font-size: var(--font-size-20);
+  line-height: 125%;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-strong);
+}
+.credits-panel__help {
+  display: inline-flex;
+  color: var(--text-faint);
+  cursor: help;
+}
+.credits-panel__sub {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-12);
+  margin-top: var(--spacing-6);
+  font-size: var(--font-size-13);
+  line-height: 125%;
+  color: var(--text-muted);
+}
+.credits-panel__sub--muted { color: var(--text-faint); }
+.credits-panel__sub span { display: inline-flex; align-items: center; gap: var(--spacing-4); }
+.credits-panel__usage {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-4);
+  align-self: flex-start;
+  margin-top: var(--spacing-16);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-strong);
+  font-size: var(--font-size-14);
+  line-height: 125%;
+  font-weight: 500;
+  cursor: pointer;
+}
+.credits-panel__usage:hover { color: var(--text-strong); }
+.credits-panel__member-notice {
+  display: grid;
+  gap: var(--spacing-8);
+  margin-top: var(--spacing-16);
+  padding: var(--spacing-12);
+  border: var(--stroke-thin) solid var(--border);
+  border-radius: var(--radius-xlarge);
+  background: var(--bg-subtle);
+}
+.credits-panel__member-notice strong {
+  color: var(--text-strong);
+  font-size: var(--font-size-13);
+  line-height: 125%;
+}
+.credits-panel__member-notice p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--font-size-12);
+  line-height: 125%;
+}
+.credits-panel__member-notice button {
+  justify-self: flex-start;
+  height: 30px;
+  padding: 0 var(--spacing-12);
+  border: var(--stroke-thin) solid var(--border-strong);
+  border-radius: var(--radius-large);
+  background: var(--text-strong);
+  color: var(--bg);
+  font: inherit;
+  font-size: var(--font-size-12);
+  line-height: 125%;
+  font-weight: 700;
+}
+.credits-panel__console {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-4);
+  align-self: flex-start;
+  margin-top: var(--spacing-10);
+  padding: 0;
+  color: var(--text-muted);
+  font-size: var(--font-size-13);
+  line-height: 125%;
+  font-weight: 600;
+  text-decoration: none;
+  transition: color var(--duration-faster) var(--curve-easy-ease);
+}
+.credits-panel__console:hover {
+  color: var(--text-strong);
+}
+.entry-nav-rail__account-bell {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  flex: 0 0 28px;
+}
+.entry-nav-rail__account-bell:hover { background: var(--bg-subtle); color: var(--text); }
+
+/* ---- Dropdown menus (account + team) ---- */
+.entry-nav-rail__menu-backdrop { position: fixed; inset: 0; z-index: 40; }
+.entry-nav-rail__account-menu,
+.entry-nav-rail__team-menu {
+  position: absolute;
+  z-index: 41;
+  top: calc(100% + 4px);
+  padding: 6px;
+  /* Solid, not material: the nav-rail panel's own backdrop-filter makes it
+     a backdrop root, so descendants' blur cannot sample through it in
+     Chromium — any translucency here reads as sharp bleed-through of the
+     nav items behind the popover. */
+  background: var(--bg-elevated);
+  border: 1px solid var(--material-separator);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+}
+.entry-nav-rail__account-menu {
+  left: 0;
+}
+.entry-nav-rail__account .entry-nav-rail__account-menu {
+  top: auto;
+  bottom: calc(100% + 4px);
+}
+.entry-nav-rail__team-menu {
+  left: 0;
+  right: 0;
+  width: auto;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  max-height: min(306px, 45vh);
+  overflow: hidden;
+}
+.entry-nav-rail__account-menu {
+  padding: 6px;
+  border-radius: var(--radius-lg);
+}
+/* Sequential top-to-bottom entrance: each row fades + rises in with a small
+   stagger, so the menu content "loads in" instead of appearing all at once.
+   The menu mounts on open, so this replays every time it opens. */
+@keyframes entry-account-row-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.entry-nav-rail__account-menu > * {
+  animation: entry-account-row-in 150ms var(--ease-out) both;
+}
+.entry-nav-rail__account-menu > *:nth-child(1) { animation-delay: 0ms; }
+.entry-nav-rail__account-menu > *:nth-child(2) { animation-delay: 15ms; }
+.entry-nav-rail__account-menu > *:nth-child(3) { animation-delay: 30ms; }
+.entry-nav-rail__account-menu > *:nth-child(4) { animation-delay: 45ms; }
+.entry-nav-rail__account-menu > *:nth-child(5) { animation-delay: 60ms; }
+.entry-nav-rail__account-menu > *:nth-child(6) { animation-delay: 75ms; }
+.entry-nav-rail__account-menu > *:nth-child(7) { animation-delay: 90ms; }
+.entry-nav-rail__account-menu > *:nth-child(8) { animation-delay: 105ms; }
+.entry-nav-rail__account-menu > *:nth-child(n+9) { animation-delay: 120ms; }
+@media (prefers-reduced-motion: reduce) {
+  .entry-nav-rail__account-menu > * { animation: none; }
+}
+/* Same width as the avatar trigger row: span the account container. */
+.entry-nav-rail__account .entry-nav-rail__account-menu {
+  left: 0;
+  right: 0;
+  width: auto;
+  min-width: 0;
+  box-sizing: border-box;
+}
+/* Invisible hover bridge over the 4px float gap, so moving the pointer from
+   the avatar row up into the menu never leaves the hover region. */
+.entry-nav-rail__account .entry-nav-rail__account-menu::before {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  height: 8px;
+}
+.entry-nav-rail__team-menu { min-width: 0; }
+.entry-nav-rail__workspace-list {
+  min-height: 0;
+  max-height: 170px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+.entry-nav-rail__workspace-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  flex: 0 0 auto;
+  background: var(--bg-elevated);
+}
+/* Left-aligned identity header (small avatar beside the name/email stack),
+   closed off by a dashed rule — mirrors the reference account menu. */
+.entry-nav-rail__account-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 9px;
+  row-gap: 2px;
+  align-items: center;
+  justify-items: start;
+  padding: 6px 6px 10px;
+  border-bottom: 1px dashed var(--material-separator);
+  margin-bottom: 6px;
+}
+.entry-nav-rail__account-head-avatar {
+  grid-row: 1 / span 2;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #87ea5c, #0d5400);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-size: 14px;
+  font-weight: 700;
+}
+.entry-nav-rail__account-head-name { font-size: 14px; font-weight: 600; color: var(--text-strong); }
+.entry-nav-rail__account-head-email {
+  font-size: 12px;
+  color: var(--text-muted);
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.entry-nav-rail__account-menu .entry-nav-rail__menu-item {
+  height: 34px;
+  gap: 9px;
+  padding: 0 8px;
+  /* 13px + nowrap: the longest item (GitHub help) must hold one line at the
+     trigger-row width the menu now matches. */
+  font-size: 13px;
+  white-space: nowrap;
+  border-radius: var(--radius-md);
+}
+.entry-nav-rail__menu-meta {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  /* Long values (e.g. "Bahasa Indonesia") must not push the row past the
+     menu edge — shrink and ellipsize instead. */
+  min-width: 0;
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Text glyph standing in for the X (Twitter) icon; sized like the 19px icon
+   slot so the label column stays aligned with icon rows. */
+.entry-nav-rail__menu-x {
+  flex: 0 0 19px;
+  text-align: center;
+  font-weight: 700;
+  color: var(--text-soft);
+}
+/* Icon-only social row (Discord / X) below the GitHub Star row: the labels
+   are dropped and the two links sit side by side as compact icon buttons.
+   Zero side padding keeps the first icon centered on the same column as the
+   19px icon slot of the full rows above. */
+.entry-nav-rail__menu-social {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.entry-nav-rail__menu-social-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 30px;
+  border-radius: var(--radius-md);
+  color: var(--text-soft);
+  text-decoration: none;
+}
+.entry-nav-rail__menu-social-btn:hover {
+  background: var(--vibrancy-fill-secondary);
+  color: var(--text);
+}
+.entry-nav-rail__menu-social-btn svg,
+.entry-nav-rail__menu-social-btn .od-icon { color: inherit; }
+/* GitHub 按钮附带实时 star 数时放开固定宽度，图标 + 数字并排 */
+.entry-nav-rail__menu-social-btn:has(.entry-nav-rail__menu-social-count) {
+  width: auto;
+  padding: 0 9px;
+  gap: 5px;
+}
+.entry-nav-rail__menu-social-count {
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  color: inherit;
+  font-variant-numeric: tabular-nums;
+}
+.entry-nav-rail__menu-social-btn .entry-nav-rail__menu-x {
+  flex: 0 0 auto;
+  color: inherit;
+}
+/* Plan + credits block under the identity header (upgrade CTA on the plan
+   row, then remaining/bonus credit rows), mirroring the reference card. */
+.entry-nav-rail__menu-credits {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  /* Inverted card: ink-black ground, white-tier text (颜色规范 #202020 /
+     #fafafa 反白文字). */
+  background: #202020;
+  margin-bottom: 6px;
+}
+.entry-nav-rail__menu-credits-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 0 6px;
+}
+.entry-nav-rail__menu-credits-plan {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #fafafa;
+}
+.entry-nav-rail__menu-credits-upgrade {
+  appearance: none;
+  border: 0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 10px;
+  border-radius: var(--radius-pill);
+  /* Light pill on the inverted black card (浅底深字 per 按钮规范). */
+  background: #fafafa;
+  color: #202020;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+}
+/* :not(:disabled) lifts specificity above the global button:hover reset. */
+.entry-nav-rail__menu-credits-upgrade:hover:not(:disabled),
+.entry-nav-rail__menu-credits-upgrade:focus-visible {
+  background: #fff;
+  color: #202020;
+}
+.entry-nav-rail__menu-credits-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 26px;
+  font-size: 13px;
+  color: #fafafa;
+}
+/* The 积分 row is a button (opens the credits panel) — reset the primitives
+   button chrome so it reads as the same flat row as the static bonus line
+   (#5517), not an inset pill. */
+button.entry-nav-rail__menu-credits-row {
+  width: 100%;
+  border: 0;
+  background: none;
+  padding: 0;
+  border-radius: 6px;
+  font: inherit;
+  box-shadow: none;
+  cursor: pointer;
+}
+button.entry-nav-rail__menu-credits-row:hover:not(:disabled) {
+  background: color-mix(in srgb, #fafafa 8%, transparent);
+  border-color: transparent;
+}
+button.entry-nav-rail__menu-credits-row:active:not(:disabled) {
+  transform: none;
+}
+.entry-nav-rail__menu-credits-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.entry-nav-rail__menu-credits-label .od-icon { color: rgba(250, 250, 250, 0.72); }
+.entry-nav-rail__menu-credits-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-variant-numeric: tabular-nums;
+}
+.entry-nav-rail__menu-credits-value .od-icon { color: rgba(250, 250, 250, 0.72); }
+.entry-nav-rail__menu-item {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 9px;
+  width: 100%;
+  height: 34px;
+  padding: 0 9px;
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  text-align: left;
+  text-decoration: none;
+  /* Ease the hover fill in/out so it doesn't snap on/off. */
+  transition: background-color 150ms var(--ease-out), color 150ms var(--ease-out);
+}
+.entry-nav-rail__menu-item:hover { background: var(--vibrancy-fill-secondary); }
+.entry-nav-rail__menu-item svg,
+.entry-nav-rail__menu-item .od-icon { color: var(--text-soft); flex: 0 0 auto; }
+.entry-nav-rail__menu-item > svg:first-child,
+.entry-nav-rail__menu-item > .od-icon:first-child { flex-basis: 19px; }
+.entry-nav-rail__menu-section {
+  padding: 8px 9px 2px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-faint);
+  letter-spacing: 0.03em;
+}
+.entry-nav-rail__menu-divider { height: 1px; background: var(--material-separator); margin: 5px 4px; }
+
+/* ---- Team switcher button + menu ---- */
+.entry-nav-rail__team-wrap { position: relative; }
+.entry-nav-rail__team {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+}
+.entry-nav-rail__team:hover { background: var(--bg-subtle); border-radius: var(--radius); }
+.entry-nav-rail__team-avatar--alt { background: #6c3aa6; }
+.entry-nav-rail__team-plan {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-faint);
+}
+.entry-nav-rail__menu-item.is-current { font-weight: 600; }
+.entry-nav-rail__menu-item.is-current svg,
+.entry-nav-rail__menu-item.is-current .od-icon { color: var(--accent); margin-left: auto; }
+
+/* Design-systems scope tabs lifted into the title area (你的 / 团队 / 官方). */
+.ds-top-scopes {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  /* No bottom margin — the parent `.entry-section` already provides a 16px
+     flex-gap to the content below. An extra margin here stacked on top of that
+     gap (16 + 18 = 34px); dropping it leaves a clean 16px scopes→content gap. */
+  margin: 0;
+}
+/* Search moved out of the page header into this row, sitting right after the
+   last scope tab (官方预设). A small left inset separates it from the tabs. */
+.ds-top-scopes__search {
+  margin-left: 4px;
+  flex: 0 0 auto;
+}
+.ds-top-scope-chip {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 120ms var(--ease-out), color 120ms var(--ease-out);
+}
+.ds-top-scope-chip:hover { color: var(--text); background: var(--bg-subtle); }
+/* Selected = solid white pill: --accent-tint was near-invisible against the
+   grayish page wash, so selected and unselected read the same. */
+.ds-top-scope-chip.is-active { background: var(--bg); color: var(--accent); }
+.ds-top-scope-count { font-size: 12px; color: var(--text-faint); font-weight: 600; }
+.ds-top-scope-chip.is-active .ds-top-scope-count { color: var(--accent); }
+
+/* ── Design-systems layout fallback ──────────────────────────────────
+   The DesignSystemsTab styling lives in a CSS Module. Next.js dev Fast
+   Refresh can occasionally desync that module's hashed class names after
+   an HMR cycle, dropping the two-column grid and the row logo size cap
+   (the logo then renders at its full intrinsic size). These rules key off
+   stable data-testid hooks — not hashed class names — so the layout stays
+   sane even when the module briefly fails to apply. They mirror the module
+   defaults, so they are harmless no-ops when the module is healthy. */
+[data-testid="design-systems-tab"] {
+  display: grid;
+  grid-template-columns: 304px minmax(0, 1fr);
+  align-items: start;
+  gap: 20px;
+  width: 100%;
+}
+
+[data-testid="design-systems-page-header"] {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+[data-testid="design-systems-page-header"] > div:first-child {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  min-width: 0;
+}
+
+[data-testid="design-systems-page-header"] h1 {
+  margin: 0;
+  color: var(--text-strong);
+  font-family: var(--serif);
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+}
+
+[data-testid="design-systems-header-tools"] {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  min-width: 0;
+}
+
+[data-testid="design-systems-header-search"] {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 36px;
+  transition: width var(--duration-normal) var(--curve-easy-ease);
+}
+
+[data-testid="design-systems-header-search"]:focus-within {
+  width: min(320px, 32vw);
+}
+
+[data-testid="design-systems-header-search"] > svg {
+  position: absolute;
+  left: 11px;
+  z-index: 1;
+  color: var(--text-faint);
+  pointer-events: none;
+}
+
+[data-testid="design-systems-header-search"] > button {
+  position: relative;
+  z-index: 2;
+  display: inline-flex;
+  flex: 0 0 36px;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-circular);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+}
+
+[data-testid="design-systems-search"] {
+  appearance: none;
+  width: 100%;
+  min-height: 36px;
+  margin-left: -36px;
+  padding: 0 12px 0 42px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--bg);
+  box-shadow: none;
+  color: var(--text);
+  font-size: 13px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+[data-testid="design-systems-search"]:focus,
+[data-testid="design-systems-search"]:focus-visible {
+  outline: none;
+  border-color: var(--border);
+  background: var(--bg);
+  box-shadow: none;
+}
+
+[data-testid="design-systems-header-search"]:focus-within [data-testid="design-systems-search"],
+[data-testid="design-systems-search"]:not(:placeholder-shown) {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+[data-testid="design-systems-create"] {
+  min-width: 104px;
+  min-height: 36px;
+  justify-content: center;
+  padding-inline: 18px;
+}
+
+[data-testid="design-systems-tab"] > aside {
+  position: sticky;
+  top: var(--entry-topbar-h, 44px);
+  display: flex;
+  flex-direction: column;
+  height: calc(100dvh - 184px - var(--spacing-16));
+  max-height: calc(100dvh - 184px - var(--spacing-16));
+  min-height: 0;
+  gap: 12px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+[data-testid="design-systems-preview"] {
+  min-width: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+[data-testid^="design-system-detail-"] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-12);
+  padding: 0 0 28px;
+}
+
+[data-testid^="design-system-detail-"] [data-testid^="design-kit-view-"] {
+  max-width: none;
+  margin-right: 0;
+  margin-left: 0;
+  gap: var(--spacing-12);
+  padding: 0 0 48px;
+}
+
+[data-testid^="design-system-card-"] {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-12);
+  width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+}
+
+[data-testid^="design-system-card-"]:hover,
+[data-testid^="design-system-card-"]:active,
+[data-testid^="design-system-card-"]:focus,
+[data-testid^="design-system-card-"]:focus-visible,
+[data-testid^="design-system-card-"][aria-pressed="true"] {
+  outline: none;
+  background: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+
+[data-testid="design-systems-tab"] > aside div:has(> [data-testid^="design-system-card-"]) {
+  padding: var(--spacing-8) var(--spacing-6);
+  border: var(--stroke-thin) solid transparent;
+  border-radius: var(--radius);
+}
+
+[data-testid="design-systems-tab"] > aside div:has(> [data-testid^="design-system-card-"][aria-pressed="true"]) {
+  border-color: #dbdbdb;
+  background: #ffffff;
+}
+
+[data-testid="design-systems-tab"] > aside div:has(> [data-testid^="design-system-card-"]):hover > [data-testid^="design-system-card-"],
+[data-testid="design-systems-tab"] > aside div:has(> [data-testid^="design-system-card-"][aria-pressed="true"]) > [data-testid^="design-system-card-"] {
+  background: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+
+[data-testid^="design-system-card-"] > span:first-child {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+}
+
+[data-testid^="design-system-card-"] > span:nth-child(2) {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+}
+
+[data-testid^="design-system-card-"] > span:nth-child(2) span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-testid^="design-system-card-"] > span:last-child[aria-label] {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--green, #3d7a4f);
+}
+
+[data-testid="entry-view-drafts"][data-active="true"],
+[data-testid="entry-view-all-projects"][data-active="true"],
+[data-testid="entry-view-design-systems"][data-active="true"],
+[data-testid="entry-view-plugins"][data-active="true"],
+[data-testid="entry-view-members"][data-active="true"],
+[data-testid="entry-view-dashboard"][data-active="true"],
+[data-testid="entry-view-workspace-settings"][data-active="true"] {
+  padding-top: var(--spacing-32);
+}
+
+[data-testid^="design-kit-view-"][data-variant="panel"] {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+[data-testid^="design-kit-view-"][data-variant="panel"] > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px 20px;
+  flex-wrap: wrap;
+}
+
+[data-testid^="design-kit-view-"][data-variant="panel"] > header > div:first-child {
+  display: flex;
+  flex: 1 1 280px;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+}
+
+[data-testid^="design-kit-view-"][data-variant="panel"] > header h2 {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.18;
+}
+
+[data-testid^="design-kit-view-"][data-variant="panel"] > header a {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  width: fit-content;
+  color: var(--text-muted);
+  font-size: 13px;
+  text-decoration: none;
+}
+
+[data-testid^="design-kit-view-"][data-variant="panel"] > header > div:last-child {
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-left: auto;
+}
+
+[data-testid^="design-kit-view-"][data-variant="panel"] [aria-pressed][type="button"] {
+  flex-shrink: 0;
+}
+
+[data-testid="design-kit-more-actions"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+}
+
+[data-testid^="design-kit-view-"][data-variant="panel"] div:has(> [data-testid="design-kit-more-actions"]) {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+[data-testid^="design-kit-view-"][data-variant="panel"] [role="menu"] {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  min-width: 224px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  box-shadow: 0 16px 40px color-mix(in srgb, var(--text-strong) 14%, transparent);
+}
+
+[data-testid^="design-kit-view-"][data-variant="panel"] [role="menuitem"],
+[data-testid^="design-kit-view-"][data-variant="panel"] [role="menuitemcheckbox"] {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.2;
+  text-align: left;
+}
+
+[data-testid^="design-kit-view-"][data-variant="panel"] > section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px;
+  /* No fill — the module card reads purely through its standard outline. */
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: transparent;
+}
+
+[data-testid^="design-system-detail-"] [data-testid^="design-kit-view-"][data-variant="panel"] > section {
+  border: 0;
+  gap: var(--spacing-8);
+  padding: var(--spacing-12);
+}
+
+[data-testid^="design-kit-view-"][data-variant="panel"] > section h3 {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+[data-testid^="design-kit-view-"][data-variant="panel"] > section p {
+  margin: 0;
+}
+
+[data-kit-logo-stage] {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 158px;
+  padding: 28px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+
+[data-kit-logo-stage] img {
+  max-width: 100%;
+  max-height: 96px;
+  object-fit: contain;
+}
+
+[data-kit-logo-stage] + div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+[data-kit-logo-stage] + div button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  padding: 7px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+}
+
+[data-kit-logo-stage] + div button[aria-pressed="true"] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+[data-kit-logo-stage] + div img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+[data-testid^="design-kit-view-"][data-variant="panel"] [aria-pressed] > img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+[data-testid="design-system-collab-demo"] {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--border));
+  border-radius: var(--radius-lg);
+  background: var(--bg-panel);
+}
+
+[data-testid="design-system-collab-demo"] > div:first-child {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+[data-testid="design-system-collab-demo"] > div:nth-child(2) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.92fr);
+  gap: 14px;
+}
+
+[data-collab-card] {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-panel);
+}
+
+[data-collab-card] h4,
+[data-collab-card] p {
+  margin: 0;
+}
+
+[data-collab-card] h4 {
+  color: var(--text-strong);
+  font-size: 14px;
+}
+
+[data-collab-card] p,
+[data-collab-card] small {
+  color: var(--text-muted);
+}
+
+[data-collab-canvas] {
+  position: relative;
+  min-height: 190px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--bg-subtle);
+}
+
+[data-collab-card] button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+[data-collab-card="queue"] ol,
+[data-collab-card="realtime"] ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+[data-collab-card="queue"] li {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+@media (max-width: 900px) {
+  [data-testid="design-system-collab-demo"] > div:nth-child(2) {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  [data-testid="design-systems-page-header"] {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 14px;
+  }
+  [data-testid="design-systems-header-tools"],
+  [data-testid="design-systems-header-search"] {
+    width: 100%;
+  }
+  [data-testid="design-systems-tab"] {
+    grid-template-columns: 1fr;
+  }
+  [data-testid="design-systems-tab"] > aside {
+    position: static;
+    height: auto;
+    max-height: none;
+  }
+}
+/* Cap the sidebar row logos; never touches the preview pane's large logo. */
+[data-testid="design-systems-list"] img {
+  max-width: 40px;
+  max-height: 40px;
+  object-fit: contain;
+}
+
+/* ============================================================
+   Invite-colleagues dialog (team space). Opened from the team
+   switcher's "邀请同事" item. Demo-only: email + role + share link
+   + current member list. Centered modal over a dimmed backdrop.
+   ============================================================ */
+.entry-invite {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: grid;
+  place-items: center;
+  padding: var(--spacing-24);
+}
+.entry-invite__backdrop {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--text-strong) 34%, transparent);
+  -webkit-backdrop-filter: var(--scrim-backdrop);
+  backdrop-filter: var(--scrim-backdrop);
+}
+.entry-invite__panel {
+  position: relative;
+  width: 100%;
+  max-width: 460px;
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-16);
+  padding: var(--spacing-24);
+  border-radius: var(--radius-xlarge);
+  background: var(--bg-panel);
+  border: var(--stroke-thin) solid var(--border);
+  box-shadow: var(--shadow-lg);
+  animation: entry-invite-in var(--duration-normal) var(--curve-decelerate-mid);
+}
+@keyframes entry-invite-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.entry-invite__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.entry-invite__team-avatar {
+  flex: 0 0 38px;
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-large, 8px);
+  background: #1f1f1f;
+  color: #fff;
+  font-weight: 700;
+  font-size: 16px;
+}
+.entry-invite__head-text { min-width: 0; }
+.entry-invite__title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.entry-invite__subtitle {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+.entry-invite__label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: -6px;
+}
+.entry-invite__row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+.entry-invite__input {
+  flex: 1;
+  min-width: 0;
+  resize: none;
+  padding: 9px 11px;
+  font: inherit;
+  font-size: 13px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 8px);
+  background: var(--bg);
+  color: var(--text);
+}
+.entry-invite__input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.entry-invite__role {
+  flex: 0 0 96px;
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-8);
+  padding: var(--spacing-10) var(--spacing-12);
+  font: inherit;
+  font-size: var(--font-size-14);
+  line-height: 1.25;
+  border: var(--stroke-thin) solid var(--border);
+  border-radius: var(--radius-medium);
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+  transition:
+    background-color var(--duration-faster) var(--curve-easy-ease),
+    border-color var(--duration-faster) var(--curve-easy-ease),
+    box-shadow var(--duration-faster) var(--curve-easy-ease);
+}
+.entry-invite__role:hover {
+  background: var(--bg-subtle);
+  border-color: var(--border-strong);
+}
+.entry-invite__role:focus-visible,
+.entry-invite__role[aria-expanded='true'] {
+  outline: none;
+  border-color: var(--text);
+  box-shadow: 0 0 0 var(--stroke-thick) color-mix(in srgb, var(--text-strong) 16%, transparent);
+}
+.entry-invite__role:disabled {
+  cursor: default;
+  color: var(--text-faint);
+  background: var(--bg-subtle);
+}
+.entry-invite__role > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.entry-invite__role svg {
+  flex: 0 0 auto;
+}
+.entry-invite__link-block {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm, 8px);
+  background: var(--bg-subtle);
+}
+.entry-invite__link-icon { color: var(--text-muted); flex: 0 0 auto; }
+.entry-invite__link-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.entry-invite__link-text strong { font-size: 13px; color: var(--text-strong); }
+.entry-invite__link-text span {
+  font-size: 12px;
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.entry-invite__copy {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 10px;
+  font-size: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--bg-panel);
+  color: var(--text);
+  cursor: pointer;
+}
+.entry-invite__copy:hover { border-color: var(--border-strong); }
+.entry-invite__members {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-top: 1px solid var(--border-soft);
+  padding-top: 12px;
+}
+.entry-invite__members-title {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-bottom: 4px;
+}
+.entry-invite__member {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 0;
+}
+.entry-invite__member-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex: 0 0 26px;
+}
+.entry-invite__member-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.entry-invite__member-role {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.entry-invite__foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 2px;
+}
+.entry-invite__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 8px);
+  background: var(--bg-panel);
+  color: var(--text);
+  cursor: pointer;
+}
+.entry-invite__btn:hover { border-color: var(--border-strong); }
+.entry-invite__btn.is-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+/* Re-assert the accent fill + white label on hover — the global
+   `button:hover` rule in primitives.css otherwise repaints the background to
+   --bg-subtle, washing the white text away. */
+.entry-invite__btn.is-primary:hover:not(:disabled) {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  filter: brightness(1.05);
+}
+
+/* ── Split invite dialog ── */
+.entry-invite__panel--split {
+  max-width: 880px;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+}
+.entry-invite__close {
+  position: absolute;
+  top: var(--spacing-16);
+  right: var(--spacing-16);
+  z-index: 3;
+  width: var(--spacing-32);
+  height: var(--spacing-32);
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border-radius: var(--radius-circular);
+  border: var(--stroke-thin) solid var(--border);
+  background: var(--bg-panel);
+  color: var(--text);
+  cursor: pointer;
+  transition:
+    background-color var(--duration-faster) var(--curve-easy-ease),
+    border-color var(--duration-faster) var(--curve-easy-ease),
+    color var(--duration-faster) var(--curve-easy-ease);
+}
+.entry-invite__close:hover {
+  background: var(--bg-subtle);
+  border-color: var(--border-strong);
+  color: var(--text-strong);
+}
+.entry-invite__form {
+  flex: 1 1 0;
+  min-width: 0;
+  /* min-height:0 lets the form shrink inside the height-capped panel so its
+     inner scroll regions take over instead of the dialog growing unbounded. */
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-18);
+  padding: var(--spacing-36) var(--spacing-42);
+}
+.entry-invite__teamsize {
+  margin: -8px 0 0;
+  font-size: 14px;
+  color: var(--text);
+}
+.entry-invite__teamsize-link {
+  color: var(--accent);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.entry-invite__divider {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  color: var(--text-faint);
+  font-size: 13px;
+}
+.entry-invite__divider::before,
+.entry-invite__divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border-soft);
+}
+.entry-invite__divider span { padding: 0 12px; }
+.entry-invite__fields {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.entry-invite__field {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.entry-invite__field--role { flex: 0 0 150px; }
+.entry-invite__field-labels {
+  display: flex;
+  gap: 12px;
+  margin-bottom: -4px;
+}
+.entry-invite__field-labels .entry-invite__label { flex: 1 1 0; }
+.entry-invite__field-labels .entry-invite__label--role { flex: 0 0 150px; }
+.entry-invite__fields .entry-invite__input { flex: 1 1 0; }
+.entry-invite__fields .entry-invite__role-picker { flex: 0 0 150px; }
+.entry-invite__role-picker {
+  position: relative;
+  min-width: 0;
+}
+.entry-invite__role-picker .entry-invite__role {
+  width: 100%;
+  flex: none;
+}
+.entry-invite__role-menu {
+  /* Portaled to <body> and anchored to its trigger with inline left/top/width
+     (InviteDialog.tsx): the invite rows list is an overflow-y:auto scroll
+     container, so a menu positioned inside it is clipped invisible. Fixed
+     positioning in the viewport layer escapes that clip; z-index must clear
+     the dialog itself (.entry-invite is z-index 200). */
+  position: fixed;
+  z-index: 210;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+  padding: var(--spacing-6);
+  border: var(--stroke-thin) solid var(--border);
+  border-radius: var(--radius-xlarge);
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-lg);
+  transform-origin: top center;
+  animation: entryInviteRoleMenuIn var(--duration-fast) var(--curve-decelerate-mid);
+}
+.entry-invite__role-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-8);
+  width: 100%;
+  min-height: var(--spacing-36);
+  padding: var(--spacing-8) var(--spacing-10);
+  border: 0;
+  border-radius: var(--radius-medium);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--font-size-14);
+  font-weight: 500;
+  line-height: 1.25;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color var(--duration-faster) var(--curve-easy-ease),
+    color var(--duration-faster) var(--curve-easy-ease);
+}
+.entry-invite__role-option:hover,
+.entry-invite__role-option:focus-visible {
+  outline: none;
+  background: var(--bg-subtle);
+  color: var(--text-strong);
+}
+.entry-invite__role-option.is-selected {
+  background: color-mix(in srgb, var(--text-strong) 8%, var(--bg-panel));
+  color: var(--text-strong);
+}
+.entry-invite__role-option svg {
+  flex: 0 0 auto;
+  color: var(--brand-text);
+}
+@keyframes entryInviteRoleMenuIn {
+  from {
+    opacity: 0;
+    transform: translateY(calc(-1 * var(--spacing-4))) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.entry-invite__row-remove {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: var(--radius-sm, 8px);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 120ms, color 120ms;
+}
+.entry-invite__row-remove:hover { background: var(--bg-subtle); color: var(--text); }
+.entry-invite__add-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  padding: 8px 14px;
+  /* Ghost button: dashed accent border makes "add member" stand out as the
+     clear next action instead of reading as plain link text. */
+  border: 1px dashed color-mix(in srgb, var(--accent) 50%, var(--border));
+  background: transparent;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: var(--radius-sm, 8px);
+  transition: background 120ms var(--ease-out), border-color 120ms var(--ease-out);
+}
+.entry-invite__add-row:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border-color: var(--accent);
+}
+.entry-invite__panel--split .entry-invite__label { margin-bottom: 0; }
+.entry-invite__panel--split .entry-invite__input {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 11px 13px;
+}
+/* Same-row email + role layout (our merged dialog): the role select keeps a
+   fixed column so the email input owns the remaining width. #5517's variant
+   stacked the role full-width on its own row — its 100%-width rule squashed
+   the email input to min-content when both landed in one flex row. */
+.entry-invite__panel--split .entry-invite__role {
+  flex: 0 0 150px;
+  width: auto;
+  padding: 11px 34px 11px 13px;
+}
+.entry-invite__collapse {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.entry-invite__collapse-body {
+  margin: -8px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+.entry-invite__submit {
+  width: 100%;
+  padding: 13px;
+  border: 0;
+  border-radius: var(--radius-sm, 8px);
+  background: var(--accent);
+  color: var(--accent-contrast, #fff);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter 120ms, background 120ms, color 120ms;
+}
+.entry-invite__submit:hover:not(:disabled) {
+  /* Hold the accent fill — the global button:hover rule would repaint it to
+     --bg-subtle and hide the white label. */
+  background: var(--accent);
+  color: var(--accent-contrast, #fff);
+  filter: brightness(1.05);
+}
+.entry-invite__submit:disabled {
+  background: var(--bg-subtle);
+  color: var(--text-faint);
+  cursor: default;
+}
+/* Right column: a cluster of overlapping teammate avatars ending in a
+   dashed "+" — reads as "bring people together" instead of the previous
+   abstract blobs. */
+.entry-invite__art {
+  position: relative;
+  flex: 0 0 360px;
+  overflow: hidden;
+  /* grid + place-items keeps the avatar cluster centered in the art column
+     (it drifted top-left as display:block). */
+  display: grid;
+  place-items: center;
+  background: var(--bg-subtle);
+  border-left: var(--stroke-thin) solid var(--border);
+}
+.entry-invite__art-glow {
+  position: absolute;
+  width: 300px;
+  height: 300px;
+  border-radius: 50%;
+}
+.entry-invite__art-blob--a {
+  width: 220px;
+  height: 220px;
+  right: -56px;
+  bottom: -64px;
+  background: color-mix(in srgb, var(--text-soft) 22%, transparent);
+}
+.entry-invite__art-blob--b {
+  width: 120px;
+  height: 120px;
+  right: var(--spacing-36);
+  bottom: var(--spacing-32);
+  background: color-mix(in srgb, var(--brand) 24%, transparent);
+}
+.entry-invite__art-card {
+  position: absolute;
+  border-radius: var(--radius-large);
+  background: var(--bg-panel);
+  border: var(--stroke-thin) solid var(--border);
+  box-shadow: var(--shadow-sm);
+}
+.entry-invite__art-card--1 {
+  width: 120px;
+  height: 150px;
+  left: var(--spacing-36);
+  top: var(--spacing-68);
+  background: var(--bg-panel);
+}
+.entry-invite__art-card--2 {
+  width: 150px;
+  height: 200px;
+  left: calc(var(--spacing-68) + var(--spacing-48));
+  top: calc(var(--spacing-68) + var(--spacing-38));
+  background: var(--text-strong);
+  border-color: var(--text-strong);
+}
+.entry-invite__art-card--3 {
+  width: 86px;
+  height: 130px;
+  right: var(--spacing-52);
+  bottom: calc(var(--spacing-52) + var(--spacing-38));
+  background: var(--bg-panel);
+}
+@media (max-width: 720px) {
+  .entry-invite__panel--split { flex-direction: column; max-width: 460px; }
+  .entry-invite__art { display: none; }
+}
+
+/* ── Create-team dialog ── */
+.create-team__logo {
+  position: relative;
+  flex: 0 0 56px;
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  border: 0;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  overflow: hidden;
+  color: #fff;
+}
+.create-team__logo-initial {
+  font-size: 24px;
+  font-weight: 700;
+}
+.create-team__logo-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.create-team__logo-edit {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+}
+.create-team__colors {
+  display: flex;
+  gap: 10px;
+}
+.create-team__color {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  /* Reset the global `button` padding (0 16px) — otherwise the 32px of
+     horizontal padding overflows the 28px border-box and stretches the swatch
+     into an ellipse under border-radius: 50%. */
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: transform 120ms;
+}
+.create-team__color:hover { transform: scale(1.1); }
+.create-team__color.is-active {
+  border-color: var(--text-strong);
+  box-shadow: 0 0 0 2px var(--bg-panel) inset;
+}
+
+/* ── Insufficient-credits upgrade dialog ── */
+.credit-upgrade {
+  position: relative;
+  width: 100%;
+  max-width: 500px;
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  padding: 28px 28px 24px;
+  border-radius: var(--radius-lg, 16px);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  box-shadow: 0 22px 58px rgba(0, 0, 0, 0.2);
+  animation: entry-invite-in 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.credit-upgrade__badge {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border));
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-panel));
+  color: var(--accent-strong);
+}
+.credit-upgrade__title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.credit-upgrade__subtitle {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+.credit-upgrade__options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 4px 0;
+}
+.credit-upgrade__auto {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin: 8px 0 2px;
+}
+.credit-upgrade__payment,
+.credit-upgrade__auto-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 12px);
+  background: var(--bg-subtle);
+}
+.credit-upgrade__payment {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 13px 14px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+.credit-upgrade__payment-button {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 8px);
+  background: var(--bg-panel);
+  color: var(--text-strong);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 120ms, background 120ms, transform 120ms;
+}
+.credit-upgrade__payment-button:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-subtle);
+  transform: translateY(-1px);
+}
+.credit-upgrade__auto-card {
+  padding: 14px;
+}
+.credit-upgrade__section-title {
+  margin: 0 0 14px;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-strong);
+}
+.credit-upgrade__limit-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+.credit-upgrade__limit {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 9px);
+  background: var(--bg-panel);
+  color: var(--text-strong);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color 120ms, background 120ms, color 120ms, box-shadow 120ms;
+}
+.credit-upgrade__limit:hover {
+  border-color: var(--border-strong);
+}
+.credit-upgrade__limit.is-active {
+  border-color: var(--text-strong);
+  background: var(--text-strong);
+  color: #fff;
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--text-strong) 14%, transparent);
+}
+.credit-upgrade__limit--wide {
+  grid-column: span 3;
+}
+.credit-upgrade__cycle {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-subtle);
+  align-self: center;
+}
+.credit-upgrade__cycle-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 16px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 120ms, color 120ms;
+}
+.credit-upgrade__cycle-tab.is-active {
+  background: var(--bg-panel);
+  color: var(--text-strong);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+.credit-upgrade__cycle-save {
+  font-size: 12px;
+  font-weight: 700;
+  color: #10b981;
+}
+.credit-upgrade__option-unit {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  margin-left: 1px;
+}
+.credit-upgrade__option {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 8px);
+  background: var(--bg-panel);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 120ms, background 120ms;
+}
+.credit-upgrade__option:hover { border-color: var(--border-strong); }
+.credit-upgrade__option.is-active {
+  border-color: var(--accent);
+  background: var(--accent-tint, color-mix(in srgb, var(--accent) 8%, transparent));
+}
+.credit-upgrade__option-radio {
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--border-strong);
+  transition: border-color 120ms, box-shadow 120ms;
+}
+.credit-upgrade__option.is-active .credit-upgrade__option-radio {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 3px var(--accent);
+}
+.credit-upgrade__option-text {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.credit-upgrade__option-label { font-size: 14px; font-weight: 600; color: var(--text-strong); }
+.credit-upgrade__option-desc { font-size: 12px; color: var(--text-muted); }
+.credit-upgrade__option-price { font-size: 14px; font-weight: 700; color: var(--text-strong); }
+.credit-upgrade__prorate {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.credit-upgrade__foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+/* ── Demo celebration toast (plan upgrade / credit pack) ── */
+.demo-celebrate-toast {
+  position: fixed;
+  bottom: 88px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  padding: 11px 20px;
+  border-radius: var(--radius-pill);
+  background: #10b981;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  box-shadow: 0 8px 28px rgba(16, 185, 129, 0.4);
+  animation: members-toast-in 220ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+/* ── Confetti burst (plan upgrade celebration) ── */
+.confetti {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  overflow: hidden;
+}
+.confetti__piece {
+  position: absolute;
+  top: -16px;
+  border-radius: 1px;
+  opacity: 0;
+  animation-name: confetti-fall;
+  animation-timing-function: cubic-bezier(0.4, 0.1, 0.5, 1);
+  animation-iteration-count: 1;
+  animation-fill-mode: forwards;
+}
+@keyframes confetti-fall {
+  0% { opacity: 0; transform: translateY(0) rotate(0deg); }
+  10% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(105vh) rotate(720deg); }
+}
+
+/* ── Upgrade-to-team dialog ── */
+.upgrade-team {
+  position: relative;
+  width: 100%;
+  max-width: 620px;
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 32px 32px 26px;
+  border-radius: var(--radius-lg, 16px);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.22);
+  animation: entry-invite-in 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.upgrade-team__head {
+  padding-right: 28px;
+}
+.upgrade-team__badge {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: linear-gradient(150deg, #848484 0%, #202020 100%);
+  color: #fff;
+}
+.upgrade-team__title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.upgrade-team__subtitle {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+.upgrade-team__pricing-rule {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, #8b5cf6 16%, var(--border));
+  border-radius: var(--radius-sm, 8px);
+  background: color-mix(in srgb, #8b5cf6 4%, var(--bg-subtle));
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.upgrade-team__pricing-rule strong {
+  color: var(--text-strong);
+  font-size: 13px;
+  font-weight: 680;
+}
+.upgrade-team__seat-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm, 8px);
+  background: var(--bg-subtle);
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.upgrade-team__seat-summary strong {
+  color: var(--text-strong);
+  font-size: 14px;
+}
+.upgrade-team__seat-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 5px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--bg-panel);
+}
+.upgrade-team__seat-stepper button {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--bg-subtle);
+  color: var(--text);
+  font: inherit;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+.upgrade-team__seat-stepper button:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+.upgrade-team__seat-stepper strong {
+  min-width: 52px;
+  text-align: center;
+}
+.upgrade-team__seat-summary em {
+  margin-left: auto;
+  font-style: normal;
+}
+.upgrade-team__plans {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.upgrade-team__plan {
+  appearance: none;
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  min-height: 150px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+  color: var(--text-strong);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: var(--shadow-xs);
+}
+.upgrade-team__plan:hover,
+.upgrade-team__plan.is-selected {
+  border-color: color-mix(in srgb, #848484 42%, var(--border));
+  background: color-mix(in srgb, #848484 5%, var(--bg));
+}
+.upgrade-team__plan.is-selected {
+  box-shadow: 0 0 0 2px color-mix(in srgb, #848484 16%, transparent);
+}
+.upgrade-team__plan-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.upgrade-team__plan-top strong {
+  font-size: 14px;
+}
+.upgrade-team__plan-top small {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, #848484 14%, transparent);
+  color: #353535;
+  font-size: 12px;
+  font-weight: 600;
+}
+.upgrade-team__plan-token {
+  color: var(--text-strong);
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1;
+}
+.upgrade-team__plan-token small {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+.upgrade-team__plan-total,
+.upgrade-team__plan-composition,
+.upgrade-team__plan-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.upgrade-team__plan-total {
+  color: var(--text);
+  font-weight: 600;
+}
+.upgrade-team__plan-composition {
+  min-height: 28px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-soft);
+  line-height: 1.35;
+}
+/* Shared across all three tiers, so this is secondary context — keep it
+   compact and muted so it doesn't compete with the tier cards above. */
+.upgrade-team__benefits {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.upgrade-team__benefits li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm, 8px);
+  background: var(--bg-subtle);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.35;
+}
+.upgrade-team__benefits svg {
+  flex: 0 0 auto;
+  color: #353535;
+}
+.upgrade-team__foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+@media (max-width: 760px) {
+  .upgrade-team {
+    max-width: calc(100vw - 24px);
+    padding: 28px 22px 22px;
+  }
+  .upgrade-team__plans {
+    grid-template-columns: 1fr;
+  }
+  .upgrade-team__seat-summary {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 14px;
+  }
+  .upgrade-team__seat-summary em {
+    margin-left: 0;
+  }
+  .upgrade-team__benefits {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+/* ---- Restored: branch-local styles clobbered by the #5517 whole-file
+   entry-layout.css replacement (2567c3e6f) — language submenu, menu chevron,
+   workspace menu meta, InviteDialog art, InlineModelSwitcher account block.
+   Sourced verbatim from pre-integration 37f7510f4. ---- */
+
+/* Account row: Open Design login/plan, lifted out of the agent card so the
+   agent name is never truncated. */
+.inline-switcher__account {
+  order: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background: var(--bg-subtle);
+  transition: background-color 120ms var(--ease-out),
+    border-color 120ms var(--ease-out);
+}
+
+/* The Open Design entry is also the agent selector now: hovering the clickable
+   area previews selectability, and the active agent gets the same accent
+   highlight the grid rows use. */
+.inline-switcher__account:has(.inline-switcher__account-select:hover):not(.is-active) {
+  background: var(--bg-panel);
+  border-color: var(--border);
+}
+
+.inline-switcher__account.is-active {
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
+  background: color-mix(in srgb, var(--bg-subtle) 82%, var(--accent-tint));
+}
+
+.inline-switcher__account.is-active:has(.inline-switcher__account-select:hover) {
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--border));
+  background: color-mix(in srgb, var(--bg-panel) 74%, var(--accent-tint));
+}
+
+.inline-switcher__account-id {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-strong);
+}
+
+/* The icon+name+plan+balance block is the radio control that selects Open
+   Design; the upgrade / sign-in buttons stay siblings so they never nest in
+   this button. */
+.inline-switcher__account-select {
+  flex: 1 1 auto;
+  appearance: none;
+  border: none;
+  background: none;
+  padding: 0;
+  margin: 0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.inline-switcher__account-id-icon {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-flex;
+}
+
+.inline-switcher__amr-reminder-dot--account {
+  top: -1px;
+  right: -1px;
+}
+
+.inline-switcher__account-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inline-switcher__account-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.inline-switcher__account-name-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+/* Balance shown as a muted subtitle line under the Open Design name. Each
+   stat is "label value"; the gap (not a literal separator) keeps them apart. */
+.inline-switcher__account-subtitle {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+  min-width: 0;
+}
+
+.inline-switcher__account-stat {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.inline-switcher__account-stat-label {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.inline-switcher__account-stat-value {
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
+  text-transform: capitalize;
+}
+
+.inline-switcher__account-upgrade {
+  flex: 0 0 auto;
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  box-shadow:
+    0 1px 2px color-mix(in srgb, var(--accent) 45%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #fff 20%, transparent);
+  transition:
+    transform 150ms cubic-bezier(0.23, 1, 0.32, 1),
+    background-color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.inline-switcher__account-upgrade:active {
+  transform: scale(0.96);
+}
+
+.inline-switcher__account-upgrade:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 2px;
+}
+
+.inline-switcher__account-status.is-error {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--danger);
+}
+
+.inline-switcher__account-action {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  padding: 2px 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--accent-strong);
+  cursor: pointer;
+  border-radius: var(--radius);
+}
+
+.inline-switcher__account-action:hover {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.inline-switcher__account-action svg {
+  animation: spin 0.8s linear infinite;
+}
+
+.entry-nav-rail__menu-chevron { margin-left: auto; display: inline-flex; }
+
+.entry-nav-rail__language-wrap { position: relative; }
+
+.entry-nav-rail__language-menu {
+  position: absolute;
+  z-index: 42;
+  left: calc(100% + 8px);
+  /* The account menu hugs the bottom of the rail, so a top-anchored submenu
+     grows past the screen bottom and the tail locales become unreachable.
+     Anchor the submenu's bottom to the row instead — it grows UPWARD, and
+     the max-height keeps it inside the viewport. */
+  top: auto;
+  bottom: 0;
+  width: 224px;
+  margin: 0;
+  padding: 4px;
+  max-height: min(360px, calc(100vh - 180px));
+  overflow: auto;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-lg);
+}
+
+.entry-nav-rail__language-wrap::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 100%;
+  width: 8px;
+  height: 100%;
+}
+
+.entry-nav-rail__language-option {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 30px;
+  padding: 0 7px;
+  border-radius: var(--radius-xs);
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--text);
+  text-align: left;
+}
+
+.entry-nav-rail__language-option:hover,
+.entry-nav-rail__language-option.is-active {
+  background: var(--bg-subtle);
+}
+
+.entry-nav-rail__language-option.is-active {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.entry-nav-rail__language-code {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.entry-nav-rail__language-option svg {
+  color: var(--accent);
+}
+
+.entry-nav-rail__workspace-menu-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+
+/* The invite rows scroll within a capped region so adding many members can't
+   grow the dialog past the viewport; the header labels and submit stay put. */
+.entry-invite__rows {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: min(42vh, 320px);
+  overflow-y: auto;
+  /* Negative margin + padding give the input focus ring room so overflow
+     clipping doesn't shave it. Extra right padding keeps the overlay
+     scrollbar clear of each row's remove (×) button. */
+  margin: 0 -4px;
+  padding: 2px 16px 2px 4px;
+}
+
+.entry-invite__art-cluster {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.entry-invite__art-avatar {
+  width: 72px;
+  height: 72px;
+  margin-left: -20px;
+  border-radius: 50%;
+  border: 3px solid #fff;
+  background: #fff;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 10px 24px rgba(76, 29, 149, 0.16);
+}
+
+.entry-invite__art-avatar:first-child { margin-left: 0; }
+
+.entry-invite__art-avatar:nth-child(odd) { transform: translateY(-12px); }
+
+.entry-invite__art-avatar:nth-child(even) { transform: translateY(12px); }
+
+.entry-invite__art-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.entry-invite__art-avatar--invite {
+  border: 2px dashed color-mix(in srgb, var(--accent) 60%, #fff);
+  background: color-mix(in srgb, var(--accent) 12%, #fff);
+  color: var(--accent);
+  box-shadow: none;
+}
+
+/* ── Project search palette ─────────────────────────────────────────────────
+   Opened from the rail's search box (ProjectSearchModal). A gaussian-blurred
+   full-screen scrim over a centered card with a live-filtered project list. */
+.project-search-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  display: flex;
+  /* Centered card (no blur) — a light dim keeps the palette legible over the
+     page without hazing it. */
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: color-mix(in srgb, #000 12%, transparent);
+  animation: project-search-fade 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+@keyframes project-search-fade {
+  from { opacity: 0; }
+}
+.project-search-modal {
+  display: flex;
+  flex-direction: column;
+  width: min(520px, 100%);
+  max-height: 52vh;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--bg-panel);
+  box-shadow:
+    0 1px 2px color-mix(in srgb, #000 6%, transparent),
+    0 24px 60px -20px color-mix(in srgb, #000 34%, transparent);
+  animation: project-search-pop 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+@keyframes project-search-pop {
+  from { opacity: 0; transform: translateY(-6px) scale(0.985); }
+}
+.project-search-input-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border-soft, var(--border));
+  color: var(--text-muted);
+}
+.project-search-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 15px;
+  line-height: 1.3;
+}
+.project-search-input::placeholder { color: var(--text-faint); }
+.project-search-results {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 6px;
+  scrollbar-width: none;
+}
+.project-search-results::-webkit-scrollbar { display: none; }
+.project-search-empty {
+  padding: 28px 12px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.project-search-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  /* height:auto overrides the global button height:36px so the padding below
+     actually sets the row height. */
+  height: auto;
+  min-height: 0;
+  padding: 11px 10px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 120ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.project-search-item:hover,
+.project-search-item:focus-visible,
+/* Keyboard highlight (↑/↓): focus stays in the search input so the row can
+   only advertise itself through this class. */
+.project-search-item.is-active {
+  outline: none;
+  background: var(--bg-subtle);
+}
+/* Cover thumbnail — same list-row structure as the All Projects list view. */
+.project-search-item-thumb {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 36px;
+  overflow: hidden;
+  border-radius: 7px;
+  background: var(--bg-subtle);
+}
+.project-search-item-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.project-search-item-glyph {
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+.project-search-item-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 500;
+}
+.project-search-item-tag {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+}
+.project-search-item-meta {
+  flex: 0 0 auto;
+  min-width: 52px;
+  text-align: right;
+  color: var(--text-faint);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
 }

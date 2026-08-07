@@ -14,7 +14,7 @@ const copy: OpenDesignPluginCopy = {
     chatgptLabel: 'app desktop ChatGPT',
     installAria: 'Installa Open Design Cloud in Codex/ChatGPT',
     copy: 'Copia',
-    github: 'Visualizza il codice sorgente su GitHub ↗',
+    github: 'Apri la guida all’installazione su GitHub ↗',
   },
   demo: {
     title: 'Installa una volta. Crea da Codex/ChatGPT.',
@@ -29,7 +29,7 @@ const copy: OpenDesignPluginCopy = {
     installPhase: 'Installazione',
     installTitle: 'Chiedi a Codex di installarlo',
     installBody:
-      'Incolla questa istruzione in un’attività di Codex. Codex legge la procedura di installazione del repository e completa la configurazione del plugin e dell’MCP locale senza dipendere da una pubblicazione nel marketplace.',
+      'Incolla questa istruzione in un’attività di Codex. Codex aggiunge la sorgente Git canonica del marketplace, installa il plugin solo se non è già presente e completa la configurazione dell’MCP locale senza richiedere che sia elencato in un catalogo pubblico.',
     installNote:
       'Incollala una sola volta in Codex: i dettagli dell’installazione verranno gestiti automaticamente.',
     steps: [

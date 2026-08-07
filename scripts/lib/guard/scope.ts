@@ -18,12 +18,15 @@ import type { GuardContext } from "./core.ts";
 const fullMatrixNames = [
   "entry-settings",
   "project-workspace",
+  "project-workspace-editor",
+  "project-collab",
   "project-runtime",
   "workspace-restoration",
 ] as const;
 const candidateMatrixNames = [
   "entry-settings",
   "project-workspace",
+  "project-collab",
   "project-runtime",
 ] as const;
 
@@ -38,7 +41,7 @@ function sameValues(actual: readonly string[], expected: readonly string[]): boo
 export function uiP0ShadowContractErrors(): string[] {
   const errors: string[] = [];
   if (!sameValues(matrixNames(uiP0CiMatrix), fullMatrixNames)) {
-    errors.push("the applied UI P0 matrix is no longer the guarded full four-domain matrix");
+    errors.push("the applied UI P0 matrix is no longer the guarded full six-domain matrix");
   }
 
   const sourceSample = `${DAEMON_RUNTIME_DEFINITION_PREFIXES[0]}example.ts`;
@@ -49,7 +52,7 @@ export function uiP0ShadowContractErrors(): string[] {
     candidate.capability !== "daemon-runtime-definition" ||
     !sameValues(matrixNames(candidate.matrix), candidateMatrixNames)
   ) {
-    errors.push("the runtime-definition shadow no longer resolves to the guarded three-domain candidate");
+    errors.push("the runtime-definition shadow no longer resolves to the guarded four-domain candidate");
   }
 
   for (const outsideFile of [

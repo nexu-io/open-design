@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { CHAT_TOOL_ENDPOINTS, CHAT_TOOL_OPERATIONS, ToolTokenRegistry } from '../src/tool-tokens.js';
+import {
+  CHAT_TOOL_ENDPOINTS,
+  CHAT_TOOL_OPERATIONS,
+  MEDIA_TASK_WAIT_TOOL_ENDPOINT,
+  ToolTokenRegistry,
+} from '../src/tool-tokens.js';
 
 afterEach(() => {
   vi.useRealTimers();
@@ -83,6 +88,8 @@ describe('run-scoped tool tokens', () => {
     const grant = registry.mint({ runId: 'run-defaults', projectId: 'project-a', nowMs: 1_000 });
 
     expect(grant.allowedEndpoints).toEqual([...CHAT_TOOL_ENDPOINTS]);
+    expect(MEDIA_TASK_WAIT_TOOL_ENDPOINT).toBe('/api/media/tasks/:id/wait');
+    expect(grant.allowedEndpoints).toContain(MEDIA_TASK_WAIT_TOOL_ENDPOINT);
     expect(grant.allowedOperations).toEqual([...CHAT_TOOL_OPERATIONS]);
     registry.clear();
   });

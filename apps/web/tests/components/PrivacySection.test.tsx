@@ -75,7 +75,10 @@ describe('PrivacySection', () => {
     expect((screen.getByLabelText('Anonymous ID') as HTMLInputElement).value).toBe('inst-new');
   });
 
-  it('shows the share choice and telemetry toggles as on when sharing is enabled', () => {
+  // The consent card asks the question; the toggles are the answer. Once a
+  // decision exists only the toggles render — showing both put two competing
+  // controls for one setting on screen (#5517 renders one or the other).
+  it('shows only the telemetry toggles, on, once sharing has been accepted', () => {
     render(
       <Harness
         initial={{
@@ -87,15 +90,31 @@ describe('PrivacySection', () => {
       />,
     );
 
-    expect(screen.getByRole('button', { name: 'Share' }).getAttribute('aria-pressed'))
-      .toBe('true');
-    expect(screen.getByRole('button', { name: "Don't share" }).getAttribute('aria-pressed'))
-      .toBe('false');
+    expect(screen.queryByRole('button', { name: 'Share' })).toBeNull();
+    expect(screen.queryByRole('button', { name: "Don't share" })).toBeNull();
+    expect(screen.queryByText(/Sharing usage data helps us understand/i)).toBeNull();
     expect(screen.getByRole('button', { name: /Anonymous metrics/ }).getAttribute('aria-pressed'))
       .toBe('true');
     expect(screen.getByRole('button', { name: /Conversation and tool content/ }).getAttribute('aria-pressed'))
       .toBe('true');
+  });
+
+  it('asks with the consent card while no decision has been made', () => {
+    render(
+      <Harness
+        initial={{
+          ...baseConfig,
+          installationId: null,
+          privacyDecisionAt: undefined,
+          telemetry: { metrics: false, content: false },
+        }}
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: 'Share' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: "Don't share" })).toBeTruthy();
     expect(screen.getByText(/Sharing usage data helps us understand/i)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Anonymous metrics/ })).toBeNull();
   });
 
   it('preserves an existing installation id when the settings share choice is clicked', () => {
@@ -107,7 +126,6 @@ describe('PrivacySection', () => {
         initial={{
           ...baseConfig,
           installationId: 'inst-existing',
-          privacyDecisionAt: 1778244000000,
           telemetry: { metrics: true, content: true },
         }}
       />,
@@ -130,7 +148,6 @@ describe('PrivacySection', () => {
         initial={{
           ...baseConfig,
           installationId: null,
-          privacyDecisionAt: 1778244000000,
           telemetry: { metrics: false, content: false, artifactManifest: true },
         }}
         onConfig={(config) => {
@@ -148,7 +165,7 @@ describe('PrivacySection', () => {
     });
   });
 
-  it('shows the decline choice and telemetry toggles as off when sharing is disabled', () => {
+  it('shows only the telemetry toggles, off, once sharing has been declined', () => {
     render(
       <Harness
         initial={{
@@ -160,10 +177,8 @@ describe('PrivacySection', () => {
       />,
     );
 
-    expect(screen.getByRole('button', { name: "Don't share" }).getAttribute('aria-pressed'))
-      .toBe('true');
-    expect(screen.getByRole('button', { name: 'Share' }).getAttribute('aria-pressed'))
-      .toBe('false');
+    expect(screen.queryByRole('button', { name: "Don't share" })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Share' })).toBeNull();
     expect(screen.getByRole('button', { name: /Anonymous metrics/ }).getAttribute('aria-pressed'))
       .toBe('false');
     expect(screen.getByRole('button', { name: /Conversation and tool content/ }).getAttribute('aria-pressed'))
@@ -177,7 +192,6 @@ describe('PrivacySection', () => {
         initial={{
           ...baseConfig,
           installationId: 'inst-existing',
-          privacyDecisionAt: 1778244000000,
           telemetry: { metrics: true, content: true },
         }}
       />,
@@ -185,8 +199,8 @@ describe('PrivacySection', () => {
 
     fireEvent.click(screen.getByRole('button', { name: "Don't share" }));
 
-    expect(screen.getByRole('button', { name: "Don't share" }).getAttribute('aria-pressed'))
-      .toBe('true');
+    // Answering swaps the card out for the toggles it just set.
+    expect(screen.queryByRole('button', { name: "Don't share" })).toBeNull();
     expect(screen.getByRole('button', { name: /Anonymous metrics/ }).getAttribute('aria-pressed'))
       .toBe('false');
     expect(screen.getByRole('button', { name: /Conversation and tool content/ }).getAttribute('aria-pressed'))
@@ -202,7 +216,6 @@ describe('PrivacySection', () => {
         initial={{
           ...baseConfig,
           installationId: 'inst-existing',
-          privacyDecisionAt: 1778244000000,
           telemetry: { metrics: true, content: true, artifactManifest: true },
         }}
         onConfig={(config) => {
@@ -233,7 +246,6 @@ describe('PrivacySection', () => {
         initial={{
           ...baseConfig,
           installationId: null,
-          privacyDecisionAt: 1778244000000,
           telemetry: { metrics: false, content: false },
         }}
       />,
@@ -241,8 +253,8 @@ describe('PrivacySection', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Share' }));
 
-    expect(screen.getByRole('button', { name: 'Share' }).getAttribute('aria-pressed'))
-      .toBe('true');
+    // Answering swaps the card out for the toggles it just set.
+    expect(screen.queryByRole('button', { name: 'Share' })).toBeNull();
     expect(screen.getByRole('button', { name: /Anonymous metrics/ }).getAttribute('aria-pressed'))
       .toBe('true');
     expect(screen.getByRole('button', { name: /Conversation and tool content/ }).getAttribute('aria-pressed'))

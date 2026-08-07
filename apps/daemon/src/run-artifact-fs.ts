@@ -27,7 +27,32 @@ import {
 // (`DESIGN.md`). Preview modules (`preview/*.html`) are already covered by the
 // artifact-extension check; they are classified at diff time.
 function isTrackedRunFile(name: string): boolean {
-  return isArtifactPath(name) || isDesignSystemFile(name);
+  return isArtifactPath(name) || isDesignSystemFile(name) || isRenderDependencyPath(name);
+}
+
+const RENDER_DEPENDENCY_EXTENSIONS = new Set([
+  '.css',
+  '.js',
+  '.jsx',
+  '.ts',
+  '.tsx',
+]);
+
+const SUPPORTING_MEDIA_EXTENSIONS = new Set([
+  '.png', '.jpg', '.jpeg', '.gif', '.webp', '.avif', '.svg',
+  '.mp4', '.mov', '.webm', '.mp3', '.wav', '.m4a',
+]);
+
+function extensionOf(filePath: string): string {
+  return path.extname(filePath).toLowerCase();
+}
+
+function isRenderDependencyPath(filePath: string): boolean {
+  return RENDER_DEPENDENCY_EXTENSIONS.has(extensionOf(filePath));
+}
+
+function isSupportingMediaPath(filePath: string): boolean {
+  return SUPPORTING_MEDIA_EXTENSIONS.has(extensionOf(filePath));
 }
 
 export interface ArtifactFingerprint {
@@ -134,6 +159,19 @@ export interface RunArtifactDiff {
   // that need per-file side effects, such as HTML version snapshots, can filter
   // this list without re-walking the project tree.
   touchedPaths: string[];
+  // Content-only v4 counters. For hashable files, a timestamp-only rewrite is
+  // excluded; the legacy counters above intentionally keep their old mtime
+  // semantics during the compatibility window.
+  contentCreated: number;
+  contentModified: number;
+  contentTouched: number;
+  contentTouchedPaths: string[];
+  // HTML rendering dependencies are not legacy artifacts, but changing them
+  // can visibly modify the primary preview and must inform
+  // primary_artifact_change.
+  renderDependencyTouched: number;
+  renderDependencyTouchedPaths: string[];
+  supportingMediaTouched: number;
 }
 
 // Classify created vs modified tracked files between two snapshots into the
@@ -149,6 +187,12 @@ export function diffRunArtifacts(
   let previewModuleCount = 0;
   let designSystemCreated = false;
   const touchedPaths: string[] = [];
+  let contentCreated = 0;
+  let contentModified = 0;
+  let renderDependencyTouched = 0;
+  let supportingMediaTouched = 0;
+  const contentTouchedPaths: string[] = [];
+  const renderDependencyTouchedPaths: string[] = [];
   for (const [filePath, fingerprint] of after) {
     const prior = before.get(filePath);
     const isNew = !prior;
@@ -158,6 +202,11 @@ export function diffRunArtifacts(
         prior.mtimeMs !== fingerprint.mtimeMs ||
         prior.hash !== fingerprint.hash);
     if (!isNew && !isChanged) continue;
+    const contentChanged = isNew || (!!prior && (
+      prior.hash !== null && fingerprint.hash !== null
+        ? prior.hash !== fingerprint.hash
+        : prior.size !== fingerprint.size || prior.mtimeMs !== fingerprint.mtimeMs
+    ));
     // Snapshot keys are native paths (`path.join` → backslashes on Windows),
     // but `isPreviewModulePath` / `isDesignSystemFile` match forward slashes
     // only. Normalize separators so the design-system / preview signals work on
@@ -167,6 +216,16 @@ export function diffRunArtifacts(
       if (isNew) created += 1;
       else modified += 1;
       touchedPaths.push(filePath);
+      if (contentChanged) {
+        if (isNew) contentCreated += 1;
+        else contentModified += 1;
+        contentTouchedPaths.push(filePath);
+        if (isSupportingMediaPath(classifyPath)) supportingMediaTouched += 1;
+      }
+    }
+    if (contentChanged && isRenderDependencyPath(classifyPath)) {
+      renderDependencyTouched += 1;
+      renderDependencyTouchedPaths.push(filePath);
     }
     if (isPreviewModulePath(classifyPath)) previewModuleCount += 1;
     if (isDesignSystemFile(classifyPath)) designSystemCreated = true;
@@ -178,7 +237,69 @@ export function diffRunArtifacts(
     designSystemCreated,
     previewModuleCount,
     touchedPaths,
+    contentCreated,
+    contentModified,
+    contentTouched: contentCreated + contentModified,
+    contentTouchedPaths,
+    renderDependencyTouched,
+    renderDependencyTouchedPaths,
+    supportingMediaTouched,
   };
+}
+
+export type PrimaryArtifactChange = 'none' | 'created' | 'modified';
+
+export function primaryArtifactChangeForRun(input: {
+  diff: RunArtifactDiff;
+  projectKind: string | null;
+  hadExistingArtifacts: boolean;
+  interactionMode?: string;
+  clarificationRequested: boolean;
+}): PrimaryArtifactChange | undefined {
+  if (
+    input.projectKind === 'design_system'
+    || input.interactionMode === 'ask'
+    || input.interactionMode === 'plan'
+    || input.clarificationRequested
+  ) {
+    return undefined;
+  }
+
+  const changed = (() => {
+    switch (input.projectKind) {
+      case 'prototype':
+      case 'live_artifact':
+      case 'slide_deck':
+      case 'template':
+        return input.diff.contentTouchedPaths.some((filePath) => /\.html?$/i.test(filePath))
+          || input.diff.renderDependencyTouched > 0;
+      case 'image':
+        return input.diff.contentTouchedPaths.some((filePath) =>
+          /\.(?:png|jpe?g|gif|webp|avif|svg)$/i.test(filePath));
+      case 'video':
+        return input.diff.contentTouchedPaths.some((filePath) =>
+          /\.(?:mp4|mov|webm)$/i.test(filePath));
+      case 'audio':
+        return input.diff.contentTouchedPaths.some((filePath) =>
+          /\.(?:mp3|wav|m4a)$/i.test(filePath));
+      default:
+        return input.diff.contentTouched > 0 || input.diff.renderDependencyTouched > 0;
+    }
+  })();
+  if (!changed) return 'none';
+  return input.hadExistingArtifacts ? 'modified' : 'created';
+}
+
+export function supportingAssetFilesChangedForRun(
+  diff: RunArtifactDiff,
+  projectKind: string | null,
+): number | undefined {
+  return projectKind === 'prototype'
+    || projectKind === 'live_artifact'
+    || projectKind === 'slide_deck'
+    || projectKind === 'template'
+    ? diff.supportingMediaTouched
+    : undefined;
 }
 
 export interface RunArtifactBaseline {

@@ -394,6 +394,14 @@ describe('API proxy routes', () => {
       'https://token-plan-cn.xiaomimimo.com/anthropic',
       'https://token-plan-cn.xiaomimimo.com/anthropic/v1/messages',
     ],
+    [
+      'https://proxy.example.test/v1/',
+      'https://proxy.example.test/v1/messages',
+    ],
+    [
+      'https://proxy.example.test/custom/anthropic/v1/',
+      'https://proxy.example.test/custom/anthropic/v1/messages',
+    ],
   ])('routes Anthropic baseUrl %s to %s', async (input, expected) => {
     const fetchMock = vi.fn((req: FetchInput, init?: FetchInit) => {
       const url = String(req);
@@ -1759,6 +1767,13 @@ describe('API proxy routes', () => {
   it('writes the generated image into the project folder and serves it via /api/projects/:id/files/*', async () => {
     const pngBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x42, 0x59]);
     let capturedUrl: string | undefined;
+
+    const createResponse = await realFetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: 'test-project', name: 'Proxy route fixture' }),
+    });
+    expect(createResponse.status).toBe(200);
 
     const fetchMock = vi.fn(async (input: FetchInput, init?: FetchInit) => {
       const url = String(input);

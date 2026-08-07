@@ -19,7 +19,7 @@ import type {
   ChatCommentAttachment,
   ChatMessage,
 } from '../../types';
-import type { ChatSessionMode } from '@open-design/contracts';
+import type { ChatSessionMode, WorkspaceCollabContext } from '@open-design/contracts';
 
 // ---------------------------------------------------------------------------
 // useConversationChat — drives a secondary ChatPane bound to a single
@@ -54,6 +54,15 @@ export interface ConversationChatContext {
   /** UI locale forwarded to the daemon so prompts compose in-language. */
   locale: string;
   sessionMode: ChatSessionMode;
+  /**
+   * The caller's current workspace identity, forwarded to `streamViaDaemon`
+   * so POST /api/runs carries the same `x-od-workspace-*` headers the
+   * primary ProjectView chat loop sends. Without this a side-chat send
+   * against a team-bound project would 401 against the daemon's workspace
+   * mutation gate even for a fully authorized member. Null/omitted for
+   * signed-out / personal usage.
+   */
+  workspaceContext?: WorkspaceCollabContext | null;
 }
 
 export interface UseConversationChatResult {
@@ -103,7 +112,11 @@ export function useConversationChat(
     setMessages([]);
     setError(null);
     void (async () => {
-      const list = await listMessages(projectId, conversationId);
+      const list = await listMessages(
+        projectId,
+        conversationId,
+        ctx.workspaceContext,
+      );
       if (cancelled) return;
       setMessages(list);
       setLoading(false);
@@ -111,7 +124,7 @@ export function useConversationChat(
     return () => {
       cancelled = true;
     };
-  }, [projectId, conversationId]);
+  }, [projectId, conversationId, ctx.workspaceContext]);
 
   // Tear down the live subscription when the tab unmounts. The daemon run
   // keeps going; we only stop the browser-side SSE.
@@ -127,7 +140,9 @@ export function useConversationChat(
 
   const persist = useCallback(
     (message: ChatMessage) => {
-      void saveMessage(projectId, conversationId, message);
+      void saveMessage(projectId, conversationId, message, {
+        workspaceContext: ctxRef.current.workspaceContext,
+      });
     },
     [projectId, conversationId],
   );
@@ -151,6 +166,7 @@ export function useConversationChat(
         agentsById: agents,
         locale: loc,
         sessionMode,
+        workspaceContext,
       } = ctxRef.current;
       if (cfg.mode !== 'daemon') {
         setError('Side Chat needs a local agent. Pick one in the top bar.');
@@ -287,11 +303,13 @@ export function useConversationChat(
         handlers,
         projectId,
         conversationId,
+        userMessageId: userMsg.id,
         assistantMessageId: assistantId,
         clientRequestId: randomUUID(),
         skillId: null,
         skillIds: [],
         designSystemId: cfg.designSystemId ?? null,
+        workspaceContext,
         attachments: (userMsg.attachments ?? []).map((a) => a.path),
         commentAttachments: userMsg.commentAttachments ?? [],
         model: choice?.model ?? null,

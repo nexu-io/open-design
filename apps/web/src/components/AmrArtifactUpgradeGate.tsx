@@ -10,10 +10,16 @@ import {
   type AmrArtifactUpgradeHomeOffer,
   type AmrArtifactUpgradeRequestDetail,
 } from '../runtime/amr-artifact-upgrade';
-import { isFreeAmrPlan } from '../runtime/amr-low-balance-plan';
+import { isFreePlanTier } from '../collab/team-plan';
 import { AmrArtifactUpgradeDialog } from './AmrArtifactUpgradeDialog';
 
 interface Props {
+  /**
+   * The resolved raw plan id (see `resolvePlanTier`), NOT vela's account-scoped
+   * `account.plan` — a team member reads `free` there while their team holds a
+   * paid plan. `isFreePlanTier` re-asserts that here so a team-namespaced id can
+   * never open this free-user upsell even if a caller feeds the raw projection.
+   */
   plan: string | null;
   planResolved: boolean;
   profile: string | null;
@@ -155,7 +161,7 @@ export function AmrArtifactUpgradeGate({
         || detail.source !== 'chat_send'
         || !eligibleSessionsRef.current.has(sessionKey)
         || !planResolved
-        || !isFreeAmrPlan(plan)
+        || !isFreePlanTier(plan)
       ) {
         return;
       }
@@ -184,7 +190,7 @@ export function AmrArtifactUpgradeGate({
 
     // Billing status can be unavailable while the Vela account remains
     // logged in. An unknown plan must never leave an intercepted Send hanging.
-    if (!planResolved || !isFreeAmrPlan(plan)) {
+    if (!planResolved || !isFreePlanTier(plan)) {
       pendingSendRef.current = null;
       pending.settle('proceed');
       return;
@@ -227,7 +233,7 @@ export function AmrArtifactUpgradeGate({
 
   useEffect(() => {
     if (!pendingHomeOffer || !planResolved) return;
-    if (isFreeAmrPlan(plan) && !hasOpenModal()) {
+    if (isFreePlanTier(plan) && !hasOpenModal()) {
       pendingHomeMilestoneSessionsRef.current.delete(pendingHomeOffer.sessionKey);
       homeOfferedSessionsRef.current.add(pendingHomeOffer.sessionKey);
       promptedSessionsRef.current.add(pendingHomeOffer.sessionKey);
@@ -237,7 +243,7 @@ export function AmrArtifactUpgradeGate({
   }, [onHomeOfferChange, pendingHomeOffer, plan, planResolved]);
 
   useEffect(() => {
-    if (!planResolved || isFreeAmrPlan(plan)) return;
+    if (!planResolved || isFreePlanTier(plan)) return;
     onHomeOfferChange?.(null);
     if (!dialogSessionKey) return;
     const pending = pendingSendRef.current;

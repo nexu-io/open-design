@@ -12,19 +12,69 @@
   width: 100%;
 }
 
+.pageHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.pageTitleBlock {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  min-width: 0;
+}
+
+.pageTitle {
+  margin: 0;
+  color: var(--text-strong);
+  font-family: var(--serif);
+  font-size: var(--font-size-20, 20px) !important;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.pageDescription {
+  margin: 0 0 2px;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.headerTools {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  min-width: 0;
+}
+
+.headerSearch {
+  width: 36px;
+  transition: width var(--duration-normal) var(--curve-easy-ease);
+}
+
+.headerSearchOpen,
+.headerSearch:focus-within {
+  width: min(320px, 32vw);
+}
+
 /* ── Left sidebar ─────────────────────────────────────────────────── */
 .sidebar {
   position: sticky;
   top: var(--entry-topbar-h, 44px);
   display: flex;
   flex-direction: column;
-  max-height: calc(100dvh - var(--entry-topbar-h, 44px) - 48px);
+  height: calc(100dvh - 184px - var(--spacing-16));
+  max-height: calc(100dvh - 184px - var(--spacing-16));
   min-height: 0;
   gap: 12px;
-  padding: 14px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: var(--bg-panel);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .newBtn {
@@ -33,11 +83,50 @@
   min-height: 36px;
 }
 
+.headerCreate {
+  width: auto;
+  min-width: 104px;
+  padding-inline: 18px;
+}
+
 /* Search */
 .searchWrap {
   position: relative;
   display: flex;
   align-items: center;
+}
+
+.searchToggle {
+  appearance: none;
+  position: relative;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-circular);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background-color var(--duration-ultra-fast) var(--curve-easy-ease),
+    border-color var(--duration-ultra-fast) var(--curve-easy-ease),
+    color var(--duration-ultra-fast) var(--curve-easy-ease);
+}
+
+.searchToggle:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-subtle);
+  color: var(--text-strong);
+}
+
+.searchToggle:focus-visible {
+  outline: none;
+  border-color: var(--border);
+  outline-offset: 2px;
 }
 
 .searchIcon {
@@ -48,16 +137,37 @@
 }
 
 .search {
+  appearance: none;
   width: 100%;
   min-height: 36px;
-  padding: 0 12px 0 32px;
+  margin-left: -36px;
+  padding: 0 12px 0 42px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg-subtle);
+  border-radius: var(--radius-pill);
+  background: var(--bg);
+  box-shadow: none;
   color: var(--text);
   font-size: 13px;
+  opacity: 0;
+  pointer-events: none;
   transition: border-color var(--dur-quick) var(--ease-out),
-    box-shadow var(--dur-quick) var(--ease-out);
+    box-shadow var(--dur-quick) var(--ease-out),
+    opacity var(--duration-ultra-fast) var(--curve-easy-ease);
+}
+
+.headerSearchOpen .search,
+.headerSearch:focus-within .search {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Once expanded, the magnifier sits inside the input pill, so drop the toggle's
+   own circular border + panel fill — otherwise it reads as a ring around the
+   icon on top of the input. */
+.headerSearchOpen .searchToggle,
+.headerSearch:focus-within .searchToggle {
+  border-color: transparent;
+  background: transparent;
 }
 
 .search::placeholder {
@@ -66,8 +176,9 @@
 
 .search:focus-visible {
   outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-soft);
+  border-color: var(--border);
+  background: var(--bg);
+  box-shadow: none;
 }
 
 /* Scope chips — Your systems / Official presets / Enterprise */
@@ -84,12 +195,12 @@
   gap: 7px;
   min-height: 32px;
   padding: 5px 9px 5px 11px;
-  border: 1px solid var(--border);
+  border: 1px solid transparent;
   border-radius: var(--radius-pill);
   background: var(--bg-subtle);
   color: var(--text-muted);
   font-size: 12px;
-  font-weight: 550;
+  font-weight: 500;
   font-family: inherit;
   cursor: pointer;
   transition: border-color var(--dur-quick) var(--ease-out),
@@ -98,20 +209,21 @@
 }
 
 .scopeChip:hover {
-  border-color: var(--accent);
+  border-color: transparent;
+  background: var(--bg-subtle);
   color: var(--text);
 }
 
 .scopeChipActive,
 .scopeChipActive:hover {
-  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
-  background: var(--accent-tint);
-  color: var(--accent);
+  border-color: var(--border-selected);
+  background: var(--bg-subtle);
+  color: var(--text-strong);
 }
 
 .scopeChip:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
+  outline: var(--stroke-thin) solid var(--blue);
+  outline-offset: 2px;
 }
 
 .scopeCount,
@@ -125,15 +237,15 @@
   border-radius: var(--radius-pill);
   background: var(--bg-panel);
   color: var(--text-faint);
-  font-size: 10.5px;
-  font-weight: 650;
+  font-size: 12px;
+  font-weight: 600;
   line-height: 1;
   font-variant-numeric: tabular-nums;
 }
 
 .scopeChipActive .scopeCount {
-  background: color-mix(in srgb, var(--accent) 12%, var(--bg-panel));
-  color: var(--accent);
+  background: var(--bg-panel);
+  color: var(--text-muted);
 }
 
 .scopeComingSoon {
@@ -159,75 +271,169 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 3px 9px;
-  border: 1px solid var(--border);
+  /* +1px over the old bordered padding: the border is gone entirely (width 0)
+     so the global button:hover border-color primitive has nothing to paint. */
+  padding: 4px 10px;
+  border: 0;
   border-radius: var(--radius-pill);
-  background: var(--bg-panel);
+  /* Colorless at rest: gray on hover, solid white when selected — anything
+     else muddles the three states against the grayish page wash. */
+  background: transparent;
   color: var(--text-muted);
-  font-size: 11.5px;
-  font-weight: 550;
+  font-size: 12px;
+  font-weight: 500;
   font-family: inherit;
   cursor: pointer;
-  transition: border-color var(--dur-quick) var(--ease-out),
-    background-color var(--dur-quick) var(--ease-out),
+  transition: background-color var(--dur-quick) var(--ease-out),
     color var(--dur-quick) var(--ease-out);
 }
 
 .surfacePill:hover {
-  border-color: var(--accent);
+  background: var(--bg-subtle);
   color: var(--text);
 }
 
 .surfacePillActive,
 .surfacePillActive:hover {
-  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
-  background: var(--accent-tint);
-  color: var(--accent);
+  background: var(--bg);
+  color: var(--text-strong);
 }
 
 .surfacePill:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
+  outline: var(--stroke-thin) solid var(--blue);
+  outline-offset: 2px;
 }
 
 .surfaceCount {
   font-variant-numeric: tabular-nums;
-  font-size: 10.5px;
+  font-size: 12px;
   color: var(--text-faint);
 }
 
 .surfacePillActive .surfaceCount {
-  color: var(--accent);
+  color: var(--text-muted);
+}
+
+.categoryMenuWrap {
+  position: relative;
+  width: 100%;
 }
 
 .categorySelect {
   appearance: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   width: 100%;
   min-height: 32px;
-  padding: 0 28px 0 10px;
+  padding: 0 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: var(--bg-subtle)
-    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2374716b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>")
-    no-repeat right 10px center;
+  background: transparent;
   color: var(--text);
   font-size: 12px;
   font-family: inherit;
+  text-align: left;
   cursor: pointer;
-  transition: border-color var(--dur-quick) var(--ease-out);
+  transition: border-color var(--dur-quick) var(--ease-out),
+    background-color var(--dur-quick) var(--ease-out);
+}
+
+.categorySelect:hover,
+.categorySelect[aria-expanded='true'] {
+  border-color: var(--border);
+  background: transparent;
 }
 
 .categorySelect:focus-visible {
   outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-soft);
+  border-color: var(--border);
+}
+
+.categoryChevron {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  transition: transform var(--dur-quick) var(--ease-out);
+}
+
+.categorySelect[aria-expanded='true'] .categoryChevron {
+  transform: rotate(180deg);
+}
+
+.categoryMenu {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 4px);
+  right: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+  max-height: min(360px, calc(100dvh - 252px));
+  padding: var(--spacing-6) var(--spacing-8);
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-md, 0 12px 30px rgba(0, 0, 0, 0.12));
+}
+
+.categoryMenu::-webkit-scrollbar {
+  width: 8px;
+}
+
+.categoryMenu::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.categoryMenu::-webkit-scrollbar-thumb {
+  border: 2px solid var(--bg-panel);
+  border-radius: var(--radius-pill);
+  background: var(--border-strong);
+}
+
+.categoryOption {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 32px;
+  padding: 0 var(--spacing-10);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+
+.categoryOption:hover,
+.categoryOption:focus-visible {
+  outline: none;
+  background: var(--bg-subtle);
+  color: var(--text-strong);
+}
+
+.categoryOptionActive,
+.categoryOptionActive:hover,
+.categoryOptionActive:focus-visible {
+  background: var(--bg-subtle);
+  color: var(--text-strong);
+  font-weight: 600;
 }
 
 /* List */
 .listLabel {
   margin: 2px 4px 0;
-  font-size: 10.5px;
-  font-weight: 660;
+  font-size: 12px;
+  font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--text-faint);
@@ -236,11 +442,12 @@
 .list {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: var(--spacing-8);
   min-height: 0;
   margin: 0 -6px -6px;
   padding: 2px 6px 6px;
   overflow-y: auto;
+  background: transparent;
   scrollbar-width: thin;
 }
 
@@ -270,7 +477,7 @@
 }
 
 .skeletonCreateButton {
-  width: 100%;
+  width: 104px;
   height: 36px;
   border-radius: var(--radius-sm);
 }
@@ -332,14 +539,16 @@
 }
 
 .item {
+  appearance: none;
   display: flex;
   align-items: center;
-  gap: 11px;
+  gap: var(--spacing-12);
   width: 100%;
-  padding: 8px 10px;
-  border: 1px solid transparent;
-  border-radius: var(--radius);
+  padding: 0;
+  border: 0;
+  border-radius: calc(var(--radius) - 1px);
   background: transparent;
+  box-shadow: none;
   color: var(--text);
   cursor: pointer;
   text-align: left;
@@ -348,41 +557,33 @@
     border-color var(--dur-quick) var(--ease-out);
 }
 
-.item:hover {
-  background: var(--bg-subtle);
+.item:hover,
+.item:active,
+.item:focus,
+.item:focus-visible,
+.itemActive,
+.itemActive:hover,
+.itemActive:active,
+.itemActive:focus,
+.itemActive:focus-visible {
+  border: 0;
+  background: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
 }
 
 .item:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-
-.itemActive,
-.itemActive:hover {
-  background: var(--accent-tint);
-  border-color: color-mix(in srgb, var(--accent) 24%, transparent);
+  outline: none;
 }
 
 .itemThumb {
-  --logo-display-surface:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(246, 242, 232, 0.96)),
-    conic-gradient(
-      from 45deg,
-      rgba(25, 23, 19, 0.07) 0 25%,
-      rgba(255, 255, 255, 0.42) 0 50%,
-      rgba(25, 23, 19, 0.07) 0 75%,
-      rgba(255, 255, 255, 0.42) 0
-    )
-      0 0 / 16px 16px;
   display: flex;
-  align-items: center;
-  justify-content: center;
   flex: 0 0 auto;
   width: 40px;
   height: 40px;
-  border: 1px solid color-mix(in srgb, var(--border) 72%, #fff 28%);
+  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: var(--logo-display-surface);
+  background: var(--bg);
   overflow: hidden;
 }
 
@@ -405,8 +606,8 @@
   height: 100%;
   background: var(--bg-muted);
   color: var(--text-soft);
-  font-size: 15px;
-  font-weight: 650;
+  font-size: 16px;
+  font-weight: 600;
 }
 
 .itemLogo {
@@ -414,9 +615,6 @@
   height: 100%;
   object-fit: contain;
   padding: 6px;
-  filter:
-    drop-shadow(0 1px 1px rgba(0, 0, 0, 0.18))
-    drop-shadow(0 0 1px rgba(255, 255, 255, 0.45));
 }
 
 .itemMeta {
@@ -438,7 +636,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text-strong);
 }
@@ -447,7 +645,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--text-muted);
 }
 
@@ -458,10 +656,114 @@
   border-radius: var(--radius-pill);
   background: var(--accent-tint);
   color: var(--accent);
-  font-size: 10px;
-  font-weight: 660;
+  font-size: 12px;
+  font-weight: 600;
   letter-spacing: 0.02em;
   text-transform: uppercase;
+}
+
+/* Row wrapper holds the main button + the hover-revealed 私有/共享 toggle. */
+.itemRow {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: var(--spacing-8) var(--spacing-6);
+  border: var(--stroke-thin) solid transparent;
+  border-radius: var(--radius);
+  transition: background-color var(--dur-quick) var(--ease-out),
+    border-color var(--dur-quick) var(--ease-out);
+}
+
+.itemRow:hover {
+  background: color-mix(in srgb, var(--bg-subtle) 50%, var(--bg-panel));
+}
+
+.itemRowActive,
+.itemRowActive:hover {
+  border-color: #dbdbdb;
+  background: #ffffff;
+}
+
+.itemRow:hover > .item,
+.itemRowActive > .item,
+.itemRowActive:hover > .item {
+  background: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+
+.itemSubRow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+/* 私有/共享 capsule — small rounded pill mirroring the project-card角标. */
+.visibilityBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex: 0 0 auto;
+  height: 17px;
+  padding: 0 6px 0 5px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.01em;
+}
+
+.visibilityBadgeShared {
+  border-color: color-mix(in srgb, var(--accent) 34%, transparent);
+  background: var(--accent-tint);
+  color: var(--accent);
+}
+
+.visibilityBadgePrivate {
+  border-color: var(--border);
+  background: var(--bg-subtle);
+  color: var(--text-faint);
+}
+
+/* Hover-revealed inline toggle under the row (共享给团队 / 设为私有). */
+.visibilityToggle {
+  appearance: none;
+  display: none;
+  align-items: center;
+  gap: 6px;
+  margin: 1px 6px 5px 57px;
+  padding: 4px 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color var(--dur-quick) var(--ease-out),
+    color var(--dur-quick) var(--ease-out),
+    background-color var(--dur-quick) var(--ease-out);
+}
+
+.itemRow:hover .visibilityToggle,
+.itemRow:focus-within .visibilityToggle {
+  display: inline-flex;
+}
+
+.visibilityToggle:hover {
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  background: var(--accent-tint);
+  color: var(--accent);
+}
+
+.visibilityToggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 .statusDot {
@@ -492,7 +794,7 @@
 
 .sidebarEmptyText {
   margin: 0;
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.5;
   color: var(--text-muted);
 }
@@ -500,17 +802,458 @@
 /* ── Right preview pane ───────────────────────────────────────────── */
 .preview {
   min-width: 0;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: var(--bg-panel);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .detail {
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  padding: 22px 24px 28px;
+  gap: var(--spacing-12);
+  /* No top padding: the DesignKitView title must top-align with the left
+     sidebar card. Both columns sit in the `.root` grid (align-items: start),
+     so the sidebar card's top edge is at the grid top; dropping this wrapper's
+     top padding (and the kit inner's top padding below) lands the title there
+     too. Horizontal + bottom padding are unchanged. */
+  padding: 0 0 28px;
   animation: detailIn 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+/* Second half of the top-align: the DesignKitView root (.previewInner, shared
+   with the preview modal) carries its own 28px top padding. Zero it out only
+   inside this tab's detail so the title reaches the grid top, without touching
+   the modal's spacing. */
+.detail :global([data-testid^='design-kit-view-']) {
+  max-width: none;
+  margin-right: 0;
+  margin-left: 0;
+  gap: var(--spacing-12);
+  padding: 0 0 48px;
+}
+
+.detail :global([data-testid^='design-kit-view-'] > section) {
+  border: 0;
+  gap: var(--spacing-8);
+  padding: var(--spacing-12);
+}
+
+.collabDemo {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--border));
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(circle at 12% 6%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 30%),
+    linear-gradient(180deg, color-mix(in srgb, var(--bg-panel) 94%, var(--accent)), var(--bg-panel));
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--text-strong) 5%, transparent),
+    0 18px 42px color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.collabDemoHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.collabDemoKicker {
+  margin: 0 0 4px;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.collabDemoTitle {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 18px;
+  letter-spacing: -0.02em;
+}
+
+.collabLivePill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 10px;
+  border: 1px solid color-mix(in srgb, var(--green, #3d7a4f) 28%, transparent);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--green, #3d7a4f) 8%, transparent);
+  color: var(--green, #3d7a4f);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.collabLivePill > span {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 0 0 0 4px color-mix(in srgb, currentColor 13%, transparent);
+}
+
+.collabDemoGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.92fr);
+  gap: 14px;
+}
+
+.collabRealtimeCard,
+.collabQueueCard {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--bg-panel) 96%, white);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text-strong) 4%, transparent);
+}
+
+.collabCardHeader {
+  display: flex;
+  gap: 11px;
+  align-items: flex-start;
+}
+
+.collabCardHeader h4 {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 14px;
+  letter-spacing: -0.01em;
+}
+
+.collabCardHeader p {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.collabIconWrap {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  border-radius: 11px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.collabCanvas {
+  position: relative;
+  min-height: 190px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border) 88%, var(--accent));
+  border-radius: 18px;
+  background:
+    linear-gradient(color-mix(in srgb, var(--border) 34%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--border) 34%, transparent) 1px, transparent 1px),
+    radial-gradient(circle at 30% 20%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 34%),
+    var(--bg-subtle);
+  background-size: 26px 26px, 26px 26px, auto, auto;
+}
+
+.collabCanvasNodePrimary,
+.collabCanvasNodeSecondary {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--text-strong) 11%, var(--border));
+  border-radius: 16px;
+  color: var(--text-strong);
+  background: var(--bg-panel);
+  box-shadow: 0 10px 26px color-mix(in srgb, var(--text-strong) 8%, transparent);
+  font-weight: 700;
+}
+
+.collabCanvasNodePrimary {
+  left: 15%;
+  top: 24%;
+  width: 112px;
+  height: 74px;
+}
+
+.collabCanvasNodeSecondary {
+  right: 12%;
+  bottom: 20%;
+  width: 152px;
+  height: 58px;
+  color: var(--accent);
+}
+
+.collabSelectionBox {
+  position: absolute;
+  right: 9%;
+  bottom: 16%;
+  width: 168px;
+  height: 74px;
+  border: 1.5px solid #d0653f;
+  border-radius: 18px;
+  box-shadow: 0 0 0 4px color-mix(in srgb, #d0653f 10%, transparent);
+}
+
+.collabCursor {
+  --collab-color: var(--accent);
+  position: absolute;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--collab-color);
+  font-size: 12px;
+  font-weight: 700;
+  transform: translate(-2px, -2px);
+  transition:
+    transform 200ms cubic-bezier(0.23, 1, 0.32, 1),
+    filter 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.collabCursorActive {
+  transform: translate(-2px, -2px) scale(1.06);
+  filter: drop-shadow(0 8px 14px color-mix(in srgb, var(--collab-color) 26%, transparent));
+}
+
+.collabCursorPointer {
+  width: 0;
+  height: 0;
+  border-top: 13px solid currentColor;
+  border-right: 9px solid transparent;
+  filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.18));
+}
+
+.collabCursorName {
+  padding: 3px 7px;
+  border-radius: var(--radius-pill);
+  background: currentColor;
+  color: #fff;
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--collab-color) 24%, transparent);
+}
+
+.collabMemberRow,
+.collabTriggerRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.collabMemberChip,
+.collabTriggerRow button,
+.collabOperationBar button,
+.collabQueueComplete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    border-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    background 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.collabMemberChip {
+  padding: 5px 10px 5px 5px;
+}
+
+.collabMemberChip:hover,
+.collabTriggerRow button:hover,
+.collabOperationBar button:hover,
+.collabQueueComplete:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--border));
+  color: var(--text-strong);
+}
+
+.collabMemberChip > span {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.collabMemberChipActive {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  color: var(--text-strong);
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-panel));
+}
+
+.collabOperationBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.collabOperationBar button,
+.collabQueueComplete {
+  padding: 8px 12px;
+}
+
+.collabOperationBar p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.collabLogList,
+.collabQueueList {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.collabLogList li {
+  padding: 8px 10px;
+  border: 1px dashed color-mix(in srgb, var(--accent) 18%, var(--border));
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--accent) 4%, transparent);
+  font-size: 12px;
+}
+
+.collabQueueSummary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 92px;
+  gap: 10px;
+}
+
+.collabQueueSummary > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-subtle);
+}
+
+.collabQueueSummary span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.collabQueueSummary strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-strong);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.collabTriggerRow button {
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+}
+
+.collabQueueItemRunning,
+.collabQueueItemPending,
+.collabQueueItemDone {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+}
+
+.collabQueueItemRunning {
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
+  background: color-mix(in srgb, var(--accent) 7%, var(--bg-panel));
+}
+
+.collabQueueItemDone {
+  opacity: 0.72;
+}
+
+.collabQueueIndex {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.collabQueueItemRunning .collabQueueIndex {
+  background: var(--accent);
+  color: var(--accent-contrast, #fff);
+}
+
+.collabQueueBody {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.collabQueueBody strong,
+.collabQueueBody small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.collabQueueBody strong {
+  color: var(--text-strong);
+  font-size: 13px;
+}
+
+.collabQueueBody small {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.collabQueueStatus {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.collabQueueItemRunning .collabQueueStatus {
+  color: var(--accent);
+}
+
+.collabQueueComplete {
+  justify-self: start;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--accent-contrast, #fff);
+}
+
+.collabQueueComplete:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+@media (max-width: 980px) {
+  .collabDemoGrid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @keyframes detailIn {
@@ -750,7 +1493,7 @@
 .title {
   margin: 0;
   font-family: var(--serif);
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 600;
   letter-spacing: -0.01em;
   color: var(--text-strong);
@@ -760,7 +1503,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--text-muted);
 }
 
@@ -775,7 +1518,7 @@
   padding: 2px 9px;
   border-radius: var(--radius-pill);
   border: 1px solid var(--border);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--text-muted);
   background: var(--bg-subtle);
@@ -790,7 +1533,7 @@
 /* Summary text */
 .summary {
   margin: 0;
-  font-size: 13.5px;
+  font-size: 13px;
   line-height: 1.55;
   color: var(--text-muted);
 }
@@ -820,7 +1563,7 @@
 }
 
 .swatchHex {
-  font-size: 11px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
   text-transform: uppercase;
   color: var(--text-muted);
@@ -845,7 +1588,19 @@
   padding: 6px 12px;
   border-radius: var(--radius-sm);
   font-size: 13px;
-  font-weight: 560;
+  font-weight: 500;
+}
+
+.teamActionButton {
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--border));
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-panel));
+  color: var(--accent);
+}
+
+.teamActionButton:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 44%, var(--border-strong));
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-panel));
+  color: var(--accent);
 }
 
 .actionButton[aria-busy='true'] svg,
@@ -859,8 +1614,8 @@
   min-height: 34px;
   padding: 5px 10px;
   border-radius: var(--radius-sm);
-  font-size: 12.5px;
-  font-weight: 520;
+  font-size: 13px;
+  font-weight: 500;
   color: var(--text-muted);
 }
 
@@ -892,8 +1647,8 @@
   border-radius: var(--radius-pill);
   background: var(--bg-subtle);
   color: var(--text-muted);
-  font-size: 12.5px;
-  font-weight: 550;
+  font-size: 13px;
+  font-weight: 500;
   font-family: inherit;
   cursor: pointer;
   transition: border-color var(--dur-quick) var(--ease-out),
@@ -938,13 +1693,13 @@
 }
 
 .statusToggleOn {
-  border-color: color-mix(in srgb, var(--green, #3d7a4f) 30%, transparent);
-  color: var(--green, #3d7a4f);
-  background: color-mix(in srgb, var(--green, #3d7a4f) 8%, transparent);
+  border-color: var(--border-selected);
+  color: var(--text);
+  background: var(--bg-subtle);
 }
 
 .statusToggleOn .statusToggleTrack {
-  background: var(--green, #3d7a4f);
+  background: var(--border-selected);
 }
 
 .statusToggleOn .statusToggleTrack::after {
@@ -1002,7 +1757,7 @@
 .previewEmptyText {
   margin: 0;
   max-width: 42ch;
-  font-size: 13.5px;
+  font-size: 13px;
   line-height: 1.55;
   color: var(--text-muted);
 }
@@ -1015,7 +1770,7 @@
   border: 1px solid var(--border);
   background: var(--bg-subtle);
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.02em;
   text-transform: uppercase;
@@ -1036,11 +1791,24 @@
 
 /* ── Responsive: stack panes on narrow viewports ──────────────────── */
 @media (max-width: 900px) {
+  .pageHeader {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .headerTools,
+  .headerSearch {
+    width: 100%;
+  }
+  .headerCreate {
+    flex: 0 0 auto;
+  }
   .root {
     grid-template-columns: 1fr;
   }
   .sidebar {
     position: static;
+    height: auto;
     max-height: none;
   }
   .list {

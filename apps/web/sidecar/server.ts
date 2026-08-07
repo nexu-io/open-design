@@ -1,12 +1,13 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import {
+  Agent as HttpAgent,
   createServer as createHttpServer,
   request as createHttpRequest,
   type IncomingMessage,
   type Server as HttpServer,
   type ServerResponse,
 } from "node:http";
-import { request as createHttpsRequest } from "node:https";
+import { Agent as HttpsAgent, request as createHttpsRequest } from "node:https";
 import { existsSync, readFileSync } from "node:fs";
 import { readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
@@ -400,13 +401,115 @@ function isSameBrowserHostOrigin(options: {
   return isLoopbackOrPrivateLanHost(originHost) || isAllowedDevHost(originHost, allowedDevHosts);
 }
 
+/**
+ * Explicit keep-alive pool for proxied upstream requests.
+ *
+ * Invariant: a pooled idle socket must be destroyed strictly before either
+ * upstream's server-side keep-alive window can close it — the daemon holds
+ * kept-alive sockets for 120s (`apps/daemon/src/server.ts`) and a standalone
+ * Next.js backend uses Node's 5s default — so the proxy should not pick up an
+ * idle socket its upstream is concurrently closing. On a keep-alive Agent the
+ * `timeout` option destroys pooled sockets after that idle period; sockets
+ * with an in-flight request only emit an (unobserved) `timeout` event, so
+ * long-lived streams such as SSE are unaffected.
+ */
+const PROXY_FREE_SOCKET_IDLE_MS = 3_000;
+const proxyHttpAgent = new HttpAgent({
+  keepAlive: true,
+  scheduling: "lifo",
+  timeout: PROXY_FREE_SOCKET_IDLE_MS,
+});
+const proxyHttpsAgent = new HttpsAgent({
+  keepAlive: true,
+  scheduling: "lifo",
+  timeout: PROXY_FREE_SOCKET_IDLE_MS,
+});
+
+/**
+ * Requests whose body is fully buffered under this cap AND whose method is
+ * idempotent may be replayed once after a reused-socket connection reset.
+ * Larger bodies and non-idempotent methods keep the streaming pass-through
+ * path and are never replayed.
+ */
+const PROXY_REPLAY_BODY_LIMIT_BYTES = 512 * 1024;
+const IDEMPOTENT_PROXY_METHODS = new Set(["GET", "HEAD", "PUT", "DELETE", "OPTIONS"]);
+
+type ProxyRequestBody =
+  | { replayable: true; body: Buffer }
+  | { replayable: false; prefix: Buffer[]; stream: IncomingMessage };
+
+function captureProxyRequestBody(request: IncomingMessage): Promise<ProxyRequestBody> {
+  const method = (request.method ?? "GET").toUpperCase();
+  if (!IDEMPOTENT_PROXY_METHODS.has(method)) {
+    return Promise.resolve({ replayable: false, prefix: [], stream: request });
+  }
+  return new Promise((resolveBody) => {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    let settled = false;
+    const settle = (body: ProxyRequestBody) => {
+      if (settled) return;
+      settled = true;
+      request.off("data", onData);
+      request.off("end", onEnd);
+      request.off("error", onError);
+      request.off("close", onError);
+      resolveBody(body);
+    };
+    const onData = (chunk: Buffer) => {
+      chunks.push(chunk);
+      size += chunk.length;
+      if (size > PROXY_REPLAY_BODY_LIMIT_BYTES) {
+        request.pause();
+        settle({ replayable: false, prefix: [...chunks], stream: request });
+      }
+    };
+    const onEnd = () => settle({ replayable: true, body: Buffer.concat(chunks) });
+    // A client that aborts mid-body gets the same truncated-stream behavior
+    // as the previous pipe-through implementation (and is never replayed).
+    const onError = () => settle({ replayable: false, prefix: [...chunks], stream: request });
+    request.on("data", onData);
+    request.on("end", onEnd);
+    request.on("error", onError);
+    // A disconnect can surface as a bare "close" with neither "end" nor
+    // "error"; "end" always fires first on complete bodies, so this only
+    // catches genuinely truncated requests.
+    request.on("close", onError);
+  });
+}
+
+/**
+ * The daemon can close a kept-alive socket at the same moment the proxy
+ * reuses it (keep-alive window expiry, restart) — the write then fails with a
+ * connection reset and, before this guard, surfaced to the browser as a 502
+ * the daemon never sent. Replaying is safe exactly when the request is
+ * idempotent with a fully buffered body, no response bytes have arrived, and
+ * the failed attempt ran on a REUSED pooled socket; the retry takes a fresh
+ * connection so it cannot hit another stale pool entry.
+ */
+function shouldReplayProxyRequest(input: {
+  attempt: number;
+  body: ProxyRequestBody;
+  error: unknown;
+  reusedSocket: boolean;
+  response: ServerResponse;
+}): boolean {
+  if (input.attempt > 0 || !input.body.replayable) return false;
+  if (input.response.headersSent || !input.reusedSocket) return false;
+  const code = input.error instanceof Error
+    ? (input.error as NodeJS.ErrnoException).code
+    : undefined;
+  return code === "ECONNRESET" || code === "EPIPE";
+}
+
 async function proxyHttpRequest(
   target: URL,
   request: IncomingMessage,
   response: ServerResponse,
   options: { daemonWebPort?: number } = {},
 ): Promise<void> {
-  const proxyRequestFactory = target.protocol === "https:" ? createHttpsRequest : createHttpRequest;
+  const secure = target.protocol === "https:";
+  const proxyRequestFactory = secure ? createHttpsRequest : createHttpRequest;
   const headers = { ...request.headers, host: target.host };
   if (options.daemonWebPort != null) {
     const origin = normalizeDaemonProxyOriginHeader({
@@ -422,30 +525,55 @@ async function proxyHttpRequest(
     }
   }
 
+  const body = await captureProxyRequestBody(request);
+
   await new Promise<void>((resolveProxy) => {
-    const proxyRequest = proxyRequestFactory(
-      target,
-      {
-        headers,
-        method: request.method,
-      },
-      (proxyResponse) => {
-        response.writeHead(proxyResponse.statusCode ?? 502, proxyResponse.headers);
-        proxyResponse.pipe(response);
-        proxyResponse.on("end", resolveProxy);
-      },
-    );
+    const sendAttempt = (attempt: number): void => {
+      const proxyRequest = proxyRequestFactory(
+        target,
+        {
+          headers,
+          method: request.method,
+          // The replay must prove the failure was a stale pooled socket, so
+          // it bypasses the pool and dials a fresh connection.
+          agent: attempt === 0 ? (secure ? proxyHttpsAgent : proxyHttpAgent) : false,
+        },
+        (proxyResponse) => {
+          response.writeHead(proxyResponse.statusCode ?? 502, proxyResponse.headers);
+          proxyResponse.pipe(response);
+          proxyResponse.on("end", resolveProxy);
+        },
+      );
 
-    proxyRequest.on("error", (error) => {
-      if (!response.headersSent) {
-        response.statusCode = 502;
-        response.setHeader("content-type", "text/plain; charset=utf-8");
+      proxyRequest.on("error", (error) => {
+        if (
+          shouldReplayProxyRequest({
+            attempt,
+            body,
+            error,
+            reusedSocket: proxyRequest.reusedSocket === true,
+            response,
+          })
+        ) {
+          sendAttempt(attempt + 1);
+          return;
+        }
+        if (!response.headersSent) {
+          response.statusCode = 502;
+          response.setHeader("content-type", "text/plain; charset=utf-8");
+        }
+        response.end(error instanceof Error ? error.message : String(error));
+        resolveProxy();
+      });
+
+      if (body.replayable) {
+        proxyRequest.end(body.body);
+      } else {
+        for (const chunk of body.prefix) proxyRequest.write(chunk);
+        body.stream.pipe(proxyRequest);
       }
-      response.end(error instanceof Error ? error.message : String(error));
-      resolveProxy();
-    });
-
-    request.pipe(proxyRequest);
+    };
+    sendAttempt(0);
   });
 }
 
@@ -876,7 +1004,7 @@ async function createWebSidecarHandle(
   };
 }
 
-function createDaemonProxyHandler(
+export function createDaemonProxyHandler(
   daemonOrigin: string | null,
   fallback: (request: IncomingMessage, response: ServerResponse) => Promise<void>,
 ): (request: IncomingMessage, response: ServerResponse) => void {

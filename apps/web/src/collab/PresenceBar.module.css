@@ -1,0 +1,225 @@
+.container {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  isolation: isolate;
+}
+
+.bar {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  margin: 0;
+  padding: 2px 8px 2px 10px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+
+.bar:hover,
+.bar[aria-expanded='true'] {
+  background: color-mix(in srgb, var(--accent, #c85f3d) 10%, transparent);
+}
+
+.bar:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent, #c85f3d) 62%, transparent);
+  outline-offset: 2px;
+}
+
+.avatar,
+.overflow {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin-left: -7px;
+  border-radius: 50%;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0;
+  color: #fff;
+  background: var(--color-accent, #4f46e5);
+  box-shadow: 0 0 0 2px var(--bg-app, var(--color-surface, #fff));
+  user-select: none;
+}
+
+.avatar:first-child {
+  margin-left: 0;
+}
+
+.avatar[data-role='owner'] {
+  background: #b45309;
+}
+
+.avatar[data-role='admin'] {
+  background: #0f766e;
+}
+
+.avatar[data-self='true']::after {
+  content: '';
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 7px;
+  height: 7px;
+  border: 2px solid var(--bg-app, var(--color-surface, #fff));
+  border-radius: 50%;
+  background: #22c55e;
+}
+
+.overflow {
+  background: var(--color-muted, #6b7280);
+  font-size: 9px;
+}
+
+.popover {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 2000;
+  width: min(300px, calc(100vw - 32px));
+  padding: 10px;
+  border: 1px solid var(--border, #d8dbe2);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--bg-panel, #fff) 96%, transparent);
+  box-shadow:
+    0 18px 50px color-mix(in srgb, #000 18%, transparent),
+    0 0 0 1px color-mix(in srgb, #fff 32%, transparent) inset;
+  color: var(--text, #111827);
+}
+
+.popover::before {
+  content: '';
+  position: absolute;
+  top: -6px;
+  right: 26px;
+  width: 10px;
+  height: 10px;
+  border-top: 1px solid var(--border, #d8dbe2);
+  border-left: 1px solid var(--border, #d8dbe2);
+  background: color-mix(in srgb, var(--bg-panel, #fff) 96%, transparent);
+  transform: rotate(45deg);
+}
+
+.popoverHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 2px 2px 9px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border, #d8dbe2) 70%, transparent);
+}
+
+.popoverHeader strong {
+  font-size: 13px;
+  font-weight: 780;
+}
+
+.popoverHeader span {
+  color: var(--text-muted, #64748b);
+  font-size: 11px;
+}
+
+.memberList {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 8px 0 0;
+  list-style: none;
+}
+
+.memberRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 8px;
+  border-radius: 10px;
+}
+
+.memberRow:hover {
+  background: color-mix(in srgb, var(--accent, #c85f3d) 7%, transparent);
+}
+
+.rowAvatar {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  color: #fff;
+  background: var(--color-accent, #4f46e5);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+  outline: 1.5px solid color-mix(in srgb, currentColor 16%, transparent);
+  outline-offset: -1.5px;
+}
+
+.rowAvatar[data-role='owner'] {
+  background: #b45309;
+}
+
+.rowAvatar[data-role='admin'] {
+  background: #0f766e;
+}
+
+.onlineDot {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 0 2px var(--bg-panel, #fff);
+}
+
+.memberText {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.memberName {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text, #111827);
+  font-size: 13px;
+  font-weight: 740;
+}
+
+.memberName:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.selfBadge {
+  flex: 0 0 auto;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent, #c85f3d) 12%, transparent);
+  color: var(--text-muted, #64748b);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.memberMeta {
+  overflow: hidden;
+  color: var(--text-muted, #64748b);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

@@ -3,10 +3,13 @@ import { join } from 'node:path';
 
 import { expect, test as base } from '@playwright/test';
 
+import { seedCampaignDismissals } from './campaign-dismissals.ts';
 import {
   PLAYWRIGHT_TOOLS_DEV_FIXTURE_TIMEOUT_MS,
+  warmPlaywrightDaemonRuntime,
   warmPlaywrightWebRuntime,
 } from './runtime-lifecycle.ts';
+import { routeUnavailableVelaStatus } from './mock-factory.ts';
 import { resolvePlaywrightSlotNamespace } from './runtime-identity.ts';
 import { createToolsDevSuite, e2eWorkspaceRoot } from '../tools-dev/runtime.ts';
 import type { ToolsDevSuite } from '../tools-dev/types.ts';
@@ -16,6 +19,7 @@ type PlaywrightToolsDevSuite = ToolsDevSuite & {
 };
 
 type TestFixtures = {
+  _defaultCloudStatus: void;
   _toolsDevFailureTracker: void;
 };
 
@@ -24,6 +28,11 @@ type WorkerFixtures = {
 };
 
 export const test = base.extend<TestFixtures, WorkerFixtures>({
+  context: async ({ context }, use) => {
+    await seedCampaignDismissals(context);
+    await use(context);
+  },
+
   toolsDev: [
     async ({}, use, workerInfo) => {
       const suite = await createPlaywrightToolsDevSuite(
@@ -42,6 +51,7 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
       try {
         await toolsDev.startWeb();
         await warmPlaywrightWebRuntime(toolsDev.url.web('/'));
+        await warmPlaywrightDaemonRuntime(toolsDev.url.daemon('/api/health'));
         await use(toolsDev);
       } catch (error) {
         useError = error;
@@ -69,6 +79,18 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
     await use(toolsDev.url.web());
   },
 
+  // Most UI specs exercise Home or Workspace behavior, not authentication.
+  // Model a transient Cloud-status outage so the Cloud-first entry gate cannot
+  // redirect them and no fake account changes local APIs to Workspace scope.
+  // Auth/onboarding specs register a later route with their intended state.
+  _defaultCloudStatus: [
+    async ({ page }, use) => {
+      await routeUnavailableVelaStatus(page);
+      await use();
+    },
+    { auto: true },
+  ],
+
   _toolsDevFailureTracker: [
     async ({ toolsDev }, use, testInfo) => {
       await use();
@@ -91,6 +113,19 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
     },
     { auto: true },
   ],
+});
+
+/**
+ * Playwright lifecycle for specs that allocate and release their own isolated
+ * tools-dev runtimes. Keeping this entrypoint in the suite module preserves
+ * the UI-test ownership boundary without booting an unused worker runtime in
+ * addition to the runtimes owned by the spec.
+ */
+export const clusterTest = base.extend({
+  context: async ({ context }, use) => {
+    await seedCampaignDismissals(context);
+    await use(context);
+  },
 });
 
 export { expect };

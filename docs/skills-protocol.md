@@ -272,14 +272,23 @@ od skills list
 
 od skills show <id>
 # → the daemon's JSON representation of one skill
+
+od skill install github:owner/repo
+od skill install https://example.com/my-skill.tar.gz
+# → installs one public skill bundle through POST /api/skills/install
 ```
 
-The current `od skills` surface is read-only; it does not ship `add` or
-`remove` subcommands. Installable marketplace bundles use `od plugin`, while
-repository-owned functional skills and rendering templates live under
-`skills/` and `design-templates/` respectively. Do not document a concrete
-daemon-managed install path here; the root `AGENTS.md` **Daemon data directory
-contract** is the only path authority.
+Remote skill import accepts the same source grammar as Plugin URL import:
+`github:owner/repo` or a public HTTPS `.tar.gz` / `.tgz` archive containing one
+top-level `SKILL.md`. Downloads are size-capped and reject private-network
+targets, path traversal, symbolic/hard links, malformed manifests, and
+duplicate skill ids. An intentional replacement is explicit: uninstall the
+existing user skill first, then install the new bundle. `od skills` remains the
+compatibility alias for list/show/install/uninstall. Repository-owned
+functional skills and rendering templates still live under `skills/` and
+`design-templates/` respectively. Do not document a concrete daemon-managed
+install path here; the root `AGENTS.md` **Daemon data directory contract** is
+the only path authority.
 
 ## 7. Worked example — running the bundled guizang deck template
 
@@ -354,9 +363,10 @@ changed. Plugin bundles have their own validation and doctor surfaces.
 
 ## 10. Open questions
 
-- **Skill provenance.** Functional skills do not currently have a standalone
-  install command. External distribution should use the plugin trust and
-  provenance model rather than inventing an unverified `od skills add` flow.
+- **Skill provenance.** URL-imported functional skills do not yet persist their
+  source after installation; richer provenance, integrity pinning, and trust
+  UI should reuse the plugin model instead of growing a second incompatible
+  one.
 - **Skill composition.** Can a prototype-mode instruction bundle invoke a
   deck-mode bundle for a sub-artifact? The current registries treat them as
   leaf-level inputs; composition requires an explicit orchestration contract.

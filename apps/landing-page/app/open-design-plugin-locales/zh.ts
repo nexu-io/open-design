@@ -14,7 +14,7 @@ const zh: OpenDesignPluginCopy = {
     chatgptLabel: 'ChatGPT 桌面应用中的任意任务',
     installAria: '在 Codex/ChatGPT 中安装 Open Design Cloud',
     copy: '复制',
-    github: '在 GitHub 上查看源码 ↗',
+    github: '在 GitHub 查看安装指南 ↗',
   },
   demo: {
     title: '安装一次，随时从 Codex/ChatGPT 开始创作。',
@@ -29,7 +29,7 @@ const zh: OpenDesignPluginCopy = {
     installPhase: '安装',
     installTitle: '让 Codex 帮你完成安装',
     installBody:
-      '将这条指令粘贴到 Codex 任务中。Codex 会读取仓库里的安装流程，完成插件与本地 MCP 配置，无需依赖公开的插件市场页面。',
+      '将这条指令粘贴到 Codex 任务中。Codex 会添加官方指定的 Git marketplace 源，仅在插件尚未安装时进行安装，并完成本地 MCP 配置，无需插件已在公开目录中上架。',
     installNote: '只需在 Codex 中粘贴一次，具体安装步骤会自动完成。',
     steps: [
       {

@@ -22,15 +22,17 @@
  *      `~/.amr/config.json` resolution path.
  */
 
-import { mkdir, writeFile, chmod } from 'node:fs/promises';
+import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
+import { createServer } from 'node:http';
 import { join } from 'node:path';
 
 import { describe, expect, test } from 'vitest';
 
+import { AMR_TEST_WORKSPACE_HEADERS } from '@/vitest/amr';
 import { requestJson } from '@/vitest/http';
 import { listMessages } from '@/vitest/messages';
-import { startRun, waitForRunStatus } from '@/vitest/runs';
+import { readRunEvents, startRun, waitForRunStatus } from '@/vitest/runs';
 import { createSmokeSuite } from '@/vitest/suite';
 
 type ProjectResponse = {
@@ -53,7 +55,7 @@ type ProjectResponse = {
 // because cross-app private fixtures must not be reused — see
 // e2e/AGENTS.md "tests must not borrow another app's private source".
 const FAKE_VELA_SCRIPT = `#!/usr/bin/env node
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { argv, stdin, stdout, env, exit } from 'node:process';
@@ -63,6 +65,22 @@ const SESSION_ID = 'fake-amr-session-1';
 const LIVE_MODEL_ID = 'glm-5';
 const PRESET_MODELS_JSON = JSON.stringify({ source: 'preset', data: [{ id: LIVE_MODEL_ID }] });
 const REMOTE_MODELS_JSON = JSON.stringify({ source: 'remote', data: [{ id: LIVE_MODEL_ID }] });
+
+function readBalanceState() {
+  if (!env.FAKE_VELA_BALANCE_FILE) {
+    return { accountBalanceUsd: '0.00', teamBalanceUsd: '0.00', walletRevision: 1 };
+  }
+  return JSON.parse(readFileSync(env.FAKE_VELA_BALANCE_FILE, 'utf8'));
+}
+
+if (env.FAKE_VELA_SPAWN_ENV_LOG) {
+  appendFileSync(env.FAKE_VELA_SPAWN_ENV_LOG, JSON.stringify({
+    argv: argv.slice(2),
+    workspaceId: env.OPEN_DESIGN_WORKSPACE_ID ?? null,
+    runId: env.OPEN_DESIGN_RUN_ID ?? null,
+    sessionId: env.OPEN_DESIGN_SESSION_ID ?? null,
+  }) + '\\n', 'utf8');
+}
 
 function writeMessage(obj) {
   stdout.write(JSON.stringify(obj) + '\\n');
@@ -104,6 +122,44 @@ if (argv[2] === 'model' && argv[3] === 'preset' && argv[4] === '--format' && arg
 
 if (argv[2] === 'model' && argv[3] === 'list' && argv[4] === '--format' && argv[5] === 'json') {
   stdout.write(REMOTE_MODELS_JSON + '\\n');
+  exit(0);
+}
+
+if (argv[2] === 'billing' && argv[3] === 'summary') {
+  const balance = readBalanceState();
+  stdout.write(JSON.stringify({
+    membershipTier: 'free',
+    balanceUsd: balance.accountBalanceUsd,
+    subscriptionStatus: 'inactive',
+    balances: {
+      totalAvailableCredits: 0,
+      subscriptionCredits: 0,
+      rechargeCredits: 0,
+    },
+    availableActions: [],
+  }) + '\\n');
+  exit(0);
+}
+
+if (argv[2] === 'billing' && argv[3] === 'workspace-snapshot') {
+  const balance = readBalanceState();
+  const workspaceId = argv[argv.indexOf('--workspace-id') + 1];
+  stdout.write(JSON.stringify({
+    schemaVersion: 1,
+    workspaceId,
+    workspaceMemberId: env.FAKE_VELA_WORKSPACE_MEMBER_ID,
+    billingScopeVersion: 2,
+    billing: { billingState: 'active', planId: 'team_plus' },
+    wallet: {
+      balanceUsd: balance.teamBalanceUsd,
+      expiresAt: null,
+      updatedAt: new Date().toISOString(),
+    },
+    revisions: {
+      billing: 'billing-1',
+      wallet: 'wallet-' + balance.walletRevision,
+    },
+  }) + '\\n');
   exit(0);
 }
 
@@ -155,6 +211,14 @@ function handle(msg) {
   }
   if (method === 'session/prompt') {
     const sid = (params && params.sessionId) || SESSION_ID;
+    if (env.FAKE_VELA_BALANCE_FILE) {
+      const balance = readBalanceState();
+      writeFileSync(env.FAKE_VELA_BALANCE_FILE, JSON.stringify({
+        ...balance,
+        teamBalanceUsd: env.FAKE_VELA_SETTLED_TEAM_BALANCE_USD || '17.50',
+        walletRevision: Number(balance.walletRevision || 0) + 1,
+      }), 'utf8');
+    }
     writeNotification('session/update', {
       sessionId: sid,
       update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: ASSISTANT_TEXT } },
@@ -247,6 +311,7 @@ describe('AMR chat-run end-to-end', () => {
           pendingPrompt: null,
           skillId: null,
         },
+        headers: { ...AMR_TEST_WORKSPACE_HEADERS },
       });
       const projectId = project.project.id;
       const conversationId = project.conversationId;
@@ -270,7 +335,7 @@ describe('AMR chat-run end-to-end', () => {
         projectId,
         reasoning: 'default',
         skillId: null,
-      });
+      }, { ...AMR_TEST_WORKSPACE_HEADERS });
       expect(run.runId).toMatch(/[a-z0-9-]/i);
 
       // Override the per-process FAKE_VELA_TEXT so the assertion below is
@@ -284,11 +349,28 @@ describe('AMR chat-run end-to-end', () => {
       void ASSISTANT_TEXT;
 
       const finalStatus = await waitForRunStatus(webUrl, run.runId, 'succeeded', {
+        headers: { ...AMR_TEST_WORKSPACE_HEADERS },
         timeoutMs: 30_000,
       });
       expect(finalStatus.status).toBe('succeeded');
 
-      const messages = await listMessages(webUrl, projectId, conversationId);
+      const runEvents = await readRunEvents(webUrl, run.runId, {
+        headers: { ...AMR_TEST_WORKSPACE_HEADERS },
+      });
+      expect(runEvents).toContain('"type":"usage"');
+      expect(runEvents).toContain('input_tokens');
+      expect(runEvents).toContain('output_tokens');
+      // This suite opts out of content telemetry. The ACP transport still
+      // persists the assistant transcript for the product, but the run event
+      // stream must not leak the user's raw prompt to telemetry consumers.
+      expect(runEvents).not.toContain(PROMPT);
+
+      const messages = await listMessages(
+        webUrl,
+        projectId,
+        conversationId,
+        { ...AMR_TEST_WORKSPACE_HEADERS },
+      );
       const assistantMessage = messages.find((m) => m.id === assistantMessageId);
       if (assistantMessage) {
         expect(assistantMessage.content).toContain('Hello from the e2e fake vela');
@@ -302,5 +384,233 @@ describe('AMR chat-run end-to-end', () => {
         expect(anyAssistant).toBeTruthy();
       }
     });
+  }, 180_000);
+
+  test('the Team run keeps its project scope and settles only that workspace wallet', async () => {
+    const suite = await createSmokeSuite('amr-team-workspace-spawn');
+    const workspace = {
+      workspaceId: 'ws-amr-team-e2e',
+      workspaceName: 'AMR Billing Team',
+      workspaceType: 'team',
+      workspaceMemberId: 'wm-amr-team-e2e',
+      role: 'owner',
+      memberStatus: 'active',
+      lifecycleState: 'active',
+    };
+    const personalWorkspace = {
+      workspaceId: 'personal-amr-team-e2e',
+      workspaceName: 'Workspace Runner workspace',
+      workspaceType: 'personal',
+      workspaceMemberId: 'wm-amr-personal-e2e',
+      role: 'owner',
+      memberStatus: 'active',
+      lifecycleState: 'active',
+    };
+    const authority = createServer((req, res) => {
+      if (
+        req.method === 'GET' &&
+        (req.url === '/api/v1/workspaces' || req.url === '/api/v1/workspaces/current')
+      ) {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify(
+          req.url.endsWith('/current')
+            ? {
+                ...workspace,
+                billingState: 'active',
+                planId: 'team_plus',
+                providerMode: 'platform_credits',
+                seatSummary: { seatLimit: 5, usedSeats: 2 },
+              }
+            : { items: [personalWorkspace, workspace] },
+        ));
+        return;
+      }
+      res.writeHead(404, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: 'not found' }));
+    });
+    await new Promise<void>((resolve) => authority.listen(0, '127.0.0.1', resolve));
+    const address = authority.address();
+    if (!address || typeof address === 'string') {
+      throw new Error('AMR workspace authority did not bind a port');
+    }
+    const authorityUrl = `http://127.0.0.1:${address.port}`;
+    const velaBin = await writeFakeVelaBin(
+      join(suite.scratchDir, 'fake-vela-team-workspace'),
+    );
+    const spawnEnvLog = join(suite.scratchDir, 'vela-spawn-env.jsonl');
+    const balanceStateFile = join(suite.scratchDir, 'vela-balance-state.json');
+    await writeFile(balanceStateFile, JSON.stringify({
+      accountBalanceUsd: '50.00',
+      teamBalanceUsd: '20.00',
+      walletRevision: 1,
+    }));
+
+    try {
+      await suite.with.toolsDev(
+        async ({ webUrl }) => {
+          const velaConfigDir = join(suite.scratchDir, 'home', '.amr');
+          await mkdir(velaConfigDir, { recursive: true });
+          await writeFile(
+            join(velaConfigDir, 'config.json'),
+            JSON.stringify({
+              profiles: {
+                local: {
+                  runtimeKey: 'fake-runtime-key',
+                  controlKey: 'fake-control-key',
+                  apiUrl: suite.amr.apiUrl,
+                  linkUrl: suite.amr.linkUrl,
+                  user: {
+                    id: 'fake-user-id',
+                    email: 'workspace-runner@example.com',
+                    plan: 'team_plus',
+                  },
+                },
+              },
+            }),
+          );
+          await requestJson(webUrl, '/api/app-config', {
+            method: 'PUT',
+            body: {
+              agentCliEnv: {
+                amr: {
+                  FAKE_VELA_API_URL: suite.amr.apiUrl,
+                  FAKE_VELA_LINK_URL: suite.amr.linkUrl,
+                  VELA_BIN: velaBin,
+                  ...suite.amr.runtimeEnv(),
+                },
+              },
+              agentId: 'amr',
+              agentModels: { amr: { model: 'default', reasoning: 'default' } },
+              designSystemId: null,
+              onboardingCompleted: true,
+              skillId: null,
+              telemetry: { artifactManifest: true, content: false, metrics: false },
+            },
+          });
+
+          const headers = {
+            'x-od-workspace-id': workspace.workspaceId,
+            'x-od-workspace-type': workspace.workspaceType,
+            'x-od-workspace-member-id': workspace.workspaceMemberId,
+            'x-od-workspace-role': workspace.role,
+            'x-od-workspace-member-status': workspace.memberStatus,
+            'x-od-workspace-lifecycle-state': workspace.lifecycleState,
+            'x-od-workspace-can-share-projects': 'true',
+            'x-od-workspace-can-write-synced-files': 'true',
+          };
+          const project = await requestJson<ProjectResponse>(webUrl, '/api/projects', {
+            method: 'POST',
+            headers,
+            body: {
+              designSystemId: null,
+              id: randomUUID(),
+              metadata: { kind: 'prototype' },
+              name: 'Workspace-billed AMR run',
+              pendingPrompt: null,
+              skillId: null,
+            },
+          });
+          const initialTeamBilling = await requestJson<{
+            workspaceBalance: { balanceUsd: string } | null;
+            workspaceSnapshot: { revisions: { wallet: string } } | null;
+          }>(
+            webUrl,
+            `/api/workspace/billing?scope=workspace&workspaceId=${workspace.workspaceId}`,
+            { headers },
+          );
+          expect(initialTeamBilling.workspaceBalance?.balanceUsd).toBe('20.00');
+          expect(initialTeamBilling.workspaceSnapshot?.revisions.wallet).toBe('wallet-1');
+          const initialAccountBilling = await requestJson<{
+            summary: { balanceUsd: string } | null;
+          }>(webUrl, '/api/workspace/billing?scope=account');
+          expect(initialAccountBilling.summary?.balanceUsd).toBe('50.00');
+
+          // Re-aim the account-level selection after the Team project has
+          // already been pinned. The spawned AMR process must still use the
+          // project's Team billing address, never this ambient Personal one.
+          await requestJson(webUrl, '/api/workspace/active', {
+            method: 'PUT',
+            body: {
+              workspaceId: personalWorkspace.workspaceId,
+              workspaceMemberId: personalWorkspace.workspaceMemberId,
+            },
+          });
+          const t0 = Date.now();
+          const run = await requestJson<{ runId: string }>(webUrl, '/api/runs', {
+            method: 'POST',
+            headers,
+            body: {
+              agentId: 'amr',
+              assistantMessageId: `assistant-${t0}`,
+              clientRequestId: `request-${t0}`,
+              conversationId: project.conversationId,
+              designSystemId: null,
+              message: 'Prove the spawned workspace scope',
+              model: 'default',
+              projectId: project.project.id,
+              reasoning: 'default',
+              skillId: null,
+            },
+          });
+          await waitForRunStatus(webUrl, run.runId, 'succeeded', {
+            headers,
+            timeoutMs: 30_000,
+          });
+
+          // The fake ACP runtime settles this Team run by advancing the exact
+          // workspace wallet revision. An authoritative billing read must see
+          // the debit while the Personal/account wallet remains unchanged.
+          const settledTeamBilling = await requestJson<{
+            workspaceBalance: { balanceUsd: string } | null;
+            workspaceSnapshot: { revisions: { wallet: string } } | null;
+          }>(
+            webUrl,
+            `/api/workspace/billing?scope=workspace&workspaceId=${workspace.workspaceId}&freshness=authoritative`,
+            { headers },
+          );
+          expect(settledTeamBilling.workspaceBalance?.balanceUsd).toBe('17.50');
+          expect(settledTeamBilling.workspaceSnapshot?.revisions.wallet).toBe('wallet-2');
+          const settledAccountBilling = await requestJson<{
+            summary: { balanceUsd: string } | null;
+          }>(webUrl, '/api/workspace/billing?scope=account');
+          expect(settledAccountBilling.summary?.balanceUsd).toBe('50.00');
+
+          const childInvocations = (await readFile(spawnEnvLog, 'utf8'))
+            .trim()
+            .split('\n')
+            .filter(Boolean)
+            .map((line) => JSON.parse(line) as {
+              argv: string[];
+              workspaceId: string | null;
+              runId: string | null;
+              sessionId: string | null;
+            });
+          const childEnv = childInvocations.find((entry) => entry.runId === run.runId) as {
+            workspaceId: string | null;
+            runId: string | null;
+            sessionId: string | null;
+          } | undefined;
+          expect(childEnv, `fake vela invocations: ${JSON.stringify(childInvocations)}`).toBeDefined();
+          expect(childEnv).toMatchObject({
+            workspaceId: workspace.workspaceId,
+            runId: run.runId,
+            sessionId: project.conversationId,
+          });
+        },
+        {
+          env: {
+            FAKE_VELA_SPAWN_ENV_LOG: spawnEnvLog,
+            FAKE_VELA_BALANCE_FILE: balanceStateFile,
+            FAKE_VELA_SETTLED_TEAM_BALANCE_USD: '17.50',
+            FAKE_VELA_WORKSPACE_MEMBER_ID: workspace.workspaceMemberId,
+            OD_WORKSPACE_CONTEXT_SOURCE: 'vela',
+            VELA_API_URL: authorityUrl,
+            VELA_CONTROL_KEY: 'e2e-amr-workspace-control-key',
+          },
+        },
+      );
+    } finally {
+      await new Promise<void>((resolve) => authority.close(() => resolve()));
+    }
   }, 180_000);
 });

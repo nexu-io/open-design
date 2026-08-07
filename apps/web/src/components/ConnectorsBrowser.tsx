@@ -873,7 +873,7 @@ export function ConnectorsBrowser({
           </div>
           <div className="toolbar-search connectors-search">
             <span className="search-icon" aria-hidden>
-              <Icon name="search" size={13} />
+              <Icon name="search" size={14} />
             </span>
             <input
               ref={searchInputRef}
@@ -908,7 +908,7 @@ export function ConnectorsBrowser({
                 }}
                 data-testid="connectors-search-clear"
               >
-                <Icon name="close" size={12} />
+                <Icon name="close" size={14} />
               </button>
             ) : null}
           </div>
@@ -934,7 +934,7 @@ export function ConnectorsBrowser({
                 title={t('connectors.openDetailsAria', { name: alert.connectorName })}
                 onClick={() => openConnectorDetails(alert.connectorId)}
               >
-                <Icon name="external-link" size={12} />
+                <Icon name="external-link" size={14} />
               </button>
             </div>
           ))}
@@ -1018,7 +1018,7 @@ export function ConnectorsBrowser({
                 <p className="connector-gate-body">{t('connectors.gateBody')}</p>
                 <span className="connector-gate-cta">
                   {t('settings.connectorsGetApiKey')}
-                  <Icon name="external-link" size={12} />
+                  <Icon name="external-link" size={14} />
                 </span>
               </a>
             </div>
@@ -1199,7 +1199,7 @@ function ConnectorCard({
                 onDisconnect(connector.id);
               }}
             >
-              <Icon name={isDisconnecting ? 'spinner' : 'close'} size={12} />
+              <Icon name={isDisconnecting ? 'spinner' : 'close'} size={14} />
             </button>
           ) : (
             <button
@@ -1217,7 +1217,7 @@ function ConnectorCard({
                 onConnect(connector.id);
               }}
             >
-              <Icon name={isConnecting || isAuthorizationPending ? 'spinner' : 'plus'} size={12} />
+              <Icon name={isConnecting || isAuthorizationPending ? 'spinner' : 'plus'} size={14} />
             </button>
           )}
           {isAuthorizationPending ? (
@@ -1233,7 +1233,7 @@ function ConnectorCard({
                 onCancelAuthorization(connector.id);
               }}
             >
-              <Icon name="close" size={12} />
+              <Icon name="close" size={14} />
             </button>
           ) : null}
           {connector.status === 'error' || connector.status === 'disabled' ? (
@@ -1457,7 +1457,7 @@ function ConnectorDetailDrawer({
                   aria-busy={isDisconnecting || undefined}
                   onClick={() => onDisconnect(connector.id)}
                 >
-                  {isDisconnecting ? <Icon name="spinner" size={12} /> : null}
+                  {isDisconnecting ? <Icon name="spinner" size={14} /> : null}
                   <span>{t('connectors.disconnect')}</span>
                 </button>
               ) : null}
@@ -1495,7 +1495,7 @@ function ConnectorDetailDrawer({
               {t('connectors.toolsSection')} <span className="connector-drawer-count">{toolCount}</span>
             </h3>
             {isLoadingTools ? (
-              <p className="connector-drawer-empty"><Icon name="spinner" size={12} /> {t('connectors.toolsLoading')}</p>
+              <p className="connector-drawer-empty"><Icon name="spinner" size={14} /> {t('connectors.toolsLoading')}</p>
             ) : toolDetailsUnavailable ? (
               <p className="connector-drawer-empty">{t('connectors.toolDetailsUnavailable', { n: toolCount })}</p>
             ) : actualToolCount === 0 ? (
@@ -1528,7 +1528,7 @@ function ConnectorDetailDrawer({
                     disabled={toolsPreviewLoading}
                     onClick={() => onLoadMoreTools(connector.id, connector.toolsNextCursor!)}
                   >
-                    {toolsPreviewLoading ? <Icon name="spinner" size={12} /> : null}
+                    {toolsPreviewLoading ? <Icon name="spinner" size={14} /> : null}
                     <span>{t('connectors.loadMoreTools')}</span>
                   </button>
                 ) : null}
@@ -1546,7 +1546,7 @@ function ConnectorDetailDrawer({
               aria-busy={isConnecting || isAuthorizationPending || undefined}
               onClick={() => onConnect(connector.id)}
             >
-              {isConnecting || isAuthorizationPending ? <Icon name="spinner" size={12} /> : null}
+              {isConnecting || isAuthorizationPending ? <Icon name="spinner" size={14} /> : null}
               <span>{isAuthorizationPending ? t('connectors.authorizationPending') : t('connectors.connect')}</span>
             </button>
             {isAuthorizationPending ? (

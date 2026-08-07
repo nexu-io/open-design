@@ -14,7 +14,10 @@
 // tabs collapse and the modal renders the spec sidebar by default.
 
 import { useCallback, useEffect, useState } from 'react';
-import type { InstalledPluginRecord } from '@open-design/contracts';
+import type {
+  InstalledPluginRecord,
+  WorkspaceCollabContext,
+} from '@open-design/contracts';
 import { useI18n } from '../../i18n';
 import { localizePluginChrome } from '../../i18n/plugin-content';
 import { localizePluginDescription, localizePluginTitle } from '../plugins-home/localization';
@@ -41,6 +44,7 @@ interface Props {
   onDuplicate?: (record: InstalledPluginRecord) => void;
   isApplying?: boolean;
   hideUseAction?: boolean;
+  workspaceContext?: WorkspaceCollabContext | null;
   // Analytics — forwarded to PreviewModal's share popover.
   onSharePopoverItemClick?: (item: PreviewSharePopoverItem) => void;
 }
@@ -77,6 +81,7 @@ export function PluginDesignSystemDetail({
   onDuplicate,
   isApplying,
   hideUseAction,
+  workspaceContext = null,
   onSharePopoverItemClick,
 }: Props) {
   const { t, locale } = useI18n();
@@ -102,25 +107,25 @@ export function PluginDesignSystemDetail({
       if (!dsRef) return;
       if (viewId === 'showcase' && showcaseHtml === undefined) {
         setShowcaseHtml(null);
-        void fetchDesignSystemShowcase(dsRef).then((html) => setShowcaseHtml(html));
+        void fetchDesignSystemShowcase(dsRef, workspaceContext).then((html) => setShowcaseHtml(html));
       }
       if (viewId === 'tokens' && tokensHtml === undefined) {
         setTokensHtml(null);
-        void fetchDesignSystemPreview(dsRef).then((html) => setTokensHtml(html));
+        void fetchDesignSystemPreview(dsRef, workspaceContext).then((html) => setTokensHtml(html));
       }
     },
-    [dsRef, showcaseHtml, tokensHtml],
+    [dsRef, showcaseHtml, tokensHtml, workspaceContext],
   );
 
   const handleSidebarToggle = useCallback(
     (open: boolean) => {
       if (!open || specBody !== undefined) return;
       setSpecBody(null);
-      void fetchPluginAssetText(record.id, assetPath).then((body) =>
+      void fetchPluginAssetText(record.id, assetPath, workspaceContext).then((body) =>
         setSpecBody(body),
       );
     },
-    [record.id, assetPath, specBody],
+    [record.id, assetPath, specBody, workspaceContext],
   );
 
   // When no upstream design system is referenced we still need a view

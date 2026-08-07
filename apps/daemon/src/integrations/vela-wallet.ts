@@ -37,6 +37,10 @@ interface VelaWalletBalanceResponse {
   updatedAt?: unknown;
 }
 
+function isValidUsdBalance(value: unknown): value is string {
+  return typeof value === 'string' && /^\d+(?:\.\d+)?$/.test(value);
+}
+
 function publicUser(user: VelaUser | null): AmrWalletSnapshot['user'] {
   if (!user) return null;
   return {
@@ -164,16 +168,26 @@ export function createVelaWalletSnapshotReader(options: VelaWalletReaderOptions 
         });
       }
       const body = (await response.json()) as VelaWalletBalanceResponse;
-      const balanceUsd = typeof body.balanceUsd === 'string' ? body.balanceUsd : null;
-      if (balanceUsd === null) {
+      if (!isValidUsdBalance(body.balanceUsd)) {
+        const cached = cache.get(key);
+        if (cached) {
+          return {
+            ...withCacheSource(cached.snapshot, true),
+            error: {
+              code: 'upstream',
+              message: 'AMR wallet balance response contained an invalid balanceUsd.',
+            },
+          };
+        }
         return unavailableSnapshot({
           code: 'upstream',
           fetchedAt,
-          message: 'AMR wallet balance response was missing balanceUsd.',
+          message: 'AMR wallet balance response contained an invalid balanceUsd.',
           profile: input.profile,
           user: input.user,
         });
       }
+      const balanceUsd = body.balanceUsd;
       const snapshot: AmrWalletSnapshot = {
         status: 'available',
         profile: input.profile,
