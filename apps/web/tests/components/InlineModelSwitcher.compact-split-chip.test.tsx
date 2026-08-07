@@ -426,4 +426,73 @@ describe('InlineModelSwitcher compact split chip (#6501)', () => {
     );
     expect(onApiModelChange).toHaveBeenCalledWith('gpt-4o');
   });
+
+  it('shows the missing-key warning on the compact BYOK model menu', () => {
+    // The full popover warns when BYOK is active without an API key. The
+    // compact home model list is the other BYOK surface and must warn too —
+    // otherwise a keyless user can pick a suggested model that the next run
+    // cannot actually use, with no indication why.
+    render(
+      <InlineModelSwitcher
+        config={{
+          ...baseConfig,
+          mode: 'api',
+          apiProtocol: 'anthropic',
+          apiKey: '',
+          model: 'claude-sonnet-4-5',
+        }}
+        agents={[amrAgent, codexAgent]}
+        providerModelsCache={{}}
+        compact
+        daemonLive
+        onModeChange={vi.fn()}
+        onAgentChange={vi.fn()}
+        onAgentModelChange={vi.fn()}
+        onApiProtocolChange={vi.fn()}
+        onApiModelChange={vi.fn()}
+        onOpenSettings={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('inline-model-switcher-chip-model'));
+    const popover = screen.getByTestId('inline-model-switcher-popover');
+
+    expect(
+      within(popover).getByText(/API key not set/i),
+    ).toBeTruthy();
+  });
+
+  it('keeps the model menu closed when the saved custom id is rejected by the adapter', () => {
+    // Adapters with `supportsCustomModel: false` cannot honor a free-form
+    // model id, so the compact list has no row for it. The panel must open
+    // the catalog instead of closing on an id the CLI will not accept.
+    const noCustomCodex: AgentInfo = { ...codexAgent, supportsCustomModel: false };
+    render(
+      <InlineModelSwitcher
+        config={{
+          ...baseConfig,
+          agentId: 'codex',
+          agentModels: { codex: { model: 'custom-codex-model' } },
+        }}
+        agents={[amrAgent, noCustomCodex]}
+        providerModelsCache={{}}
+        compact
+        daemonLive
+        onModeChange={vi.fn()}
+        onAgentChange={vi.fn()}
+        onAgentModelChange={vi.fn()}
+        onApiProtocolChange={vi.fn()}
+        onApiModelChange={vi.fn()}
+        onOpenSettings={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('inline-model-switcher-chip-agent'));
+    fireEvent.click(screen.getByTestId('inline-model-switcher-agent-codex'));
+
+    const popover = screen.getByTestId('inline-model-switcher-popover');
+    expect(
+      within(popover).getByTestId('inline-model-switcher-compact-model-gpt-5'),
+    ).toBeTruthy();
+  });
 });

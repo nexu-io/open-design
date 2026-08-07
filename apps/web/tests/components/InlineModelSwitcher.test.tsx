@@ -7,6 +7,7 @@ import type { WorkspaceCollabContext } from '@open-design/contracts';
 import { InlineModelSwitcher } from '../../src/components/InlineModelSwitcher';
 import {
   AMR_LOGIN_POLL_INTERVAL_MS,
+  AMR_LOGIN_STATUS_EVENT,
   AMR_LOGIN_TIMEOUT_MS,
 } from '../../src/components/amrLoginPolling';
 import { fetchProviderModels } from '../../src/providers/provider-models';
@@ -1778,5 +1779,154 @@ describe('InlineModelSwitcher AMR row', () => {
       expect(loginStarted).toBe(true);
       expect(screen.queryByTestId('inline-model-switcher-popover')).toBeNull();
     });
+  });
+
+  it('opens the compact model list when the saved AMR model id is stale', async () => {
+    // Regression (review thread): `hasRecordedAgentModel` treated any non-empty
+    // id as a saved choice. An AMR id the live catalog no longer contains is
+    // normalized back to the CLI default, so the compact list has no row for it
+    // — but the old helper still closed the panel and ran on Default.
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === '/api/integrations/vela/status') {
+        return new Response(
+          JSON.stringify({
+            loggedIn: true,
+            profile: 'default',
+            user: { id: 'user-1', email: 'amr@example.local' },
+            configPath: '/Users/test/.amr/config.json',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url === '/api/integrations/vela/wallet') {
+        return new Response(JSON.stringify({}), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    function StatefulCompact() {
+      const [config, setConfig] = useState<AppConfig>({
+        ...baseConfig,
+        agentId: 'codex',
+        agentModels: { amr: { model: 'gpt-5.4-mini' } },
+      });
+      return (
+        <InlineModelSwitcher
+          config={config}
+          agents={[amrAgent, codexAgent]}
+          providerModelsCache={{}}
+          compact
+          daemonLive
+          onModeChange={(mode) => setConfig((c) => ({ ...c, mode }))}
+          onAgentChange={(id) =>
+            setConfig((c) => ({ ...c, agentId: id, mode: 'daemon' }))
+          }
+          onAgentModelChange={vi.fn()}
+          onApiProtocolChange={vi.fn()}
+          onApiModelChange={vi.fn()}
+          onOpenSettings={vi.fn()}
+        />
+      );
+    }
+
+    render(<StatefulCompact />);
+    fireEvent.click(screen.getByTestId('inline-model-switcher-chip-agent'));
+    fireEvent.click(screen.getByTestId('inline-model-switcher-agent-amr'));
+
+    await waitFor(() => {
+      expect(
+        within(screen.getByTestId('inline-model-switcher-popover')).getByTestId(
+          'inline-model-switcher-compact-model-amr-cloud-latest',
+        ),
+      ).toBeTruthy();
+    });
+  });
+
+  it('polls after a login-started broadcast whose startup status is neither signed-in nor in-flight', async () => {
+    // Regression (review thread): the `login-started` broadcast started a poll
+    // only when the follow-up status reported `loginInFlight: true`. The AMR
+    // contract explicitly allows `loginInFlight: false` during the startup
+    // settle window — if the surface that started the login unmounted, this
+    // mounted switcher would never observe the eventual signed-in state. The
+    // event path must start an idempotent poll when none is running and the
+    // login is still being awaited.
+    let loginStarted = false;
+    let statusCalls = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === '/api/integrations/vela/status') {
+        statusCalls += 1;
+        return new Response(
+          JSON.stringify({
+            loggedIn: loginStarted,
+            loginInFlight: false,
+            profile: 'default',
+            user: loginStarted
+              ? { id: 'user-1', email: 'amr@example.local' }
+              : null,
+            configPath: '/Users/test/.amr/config.json',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url === '/api/integrations/vela/login' && init?.method === 'POST') {
+        loginStarted = true;
+        return new Response(JSON.stringify({ pid: 4242 }), {
+          status: 202,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === '/api/integrations/vela/wallet') {
+        return new Response(JSON.stringify({}), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderSwitcher();
+
+    // A separate surface starts login and broadcasts it (Settings closing is
+    // the reviewer's example). The switcher sees `login-started`, its follow-up
+    // status refresh reports startup-false, and it must start its own poll.
+    vi.useFakeTimers();
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent(AMR_LOGIN_STATUS_EVENT, { detail: { reason: 'login-started' } }),
+      );
+    });
+    // Flush the event handler's follow-up status refresh. The status is
+    // startup-false and a poll must have started (the poll tick below then
+    // performs an additional status refresh).
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(loginStarted).toBe(false);
+    expect(statusCalls).toBe(1);
+
+    // The status flips to signed-in; the poll tick must observe it.
+    loginStarted = true;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AMR_LOGIN_POLL_INTERVAL_MS);
+    });
+    expect(statusCalls).toBeGreaterThanOrEqual(2);
+
+    // Back to real timers so the wait helpers can poll the DOM, then confirm
+    // the observed signed-in state actually reached the rendered account row.
+    vi.useRealTimers();
+    fireEvent.click(screen.getByTestId('inline-model-switcher-chip'));
+    const popover = screen.getByTestId('inline-model-switcher-popover');
+    expect(
+      await within(popover).findByRole('radio', {
+        name: /^Open Design\s+Signed in$/i,
+      }),
+    ).toBeTruthy();
   });
 });

@@ -208,17 +208,32 @@ function displayAgentChipName(agent: Pick<AgentInfo, 'id' | 'name'>): string {
   return agent.id === 'amr' ? 'Open Design' : displayAgentName(agent);
 }
 
-/** True when the user previously saved an explicit model for this CLI
- *  (`agentModels`). `default` only means the CLI's own default, so it must
- *  still prompt the user instead of suppressing the model list. */
-function hasRecordedAgentModel(
+/**
+ * True when the user previously saved a model for this CLI that the compact
+ * list can actually represent and honor. `default` only means the CLI's own
+ * default, so it must still prompt the user instead of suppressing the list.
+ * The same validity rule the model sink enforces applies here: a stale AMR id
+ * (coerced back to the live default by `normalizeAgentModelChoice`) or a
+ * custom id an adapter rejects (`supportsCustomModel: false`) would leave no
+ * selectable row in `compactModelRows`, so it is treated as no saved choice
+ * and the compact pick still opens the model list.
+ */
+function hasUsableSavedAgentModel(
   agentModels: AppConfig['agentModels'] | undefined,
-  agentId: string,
+  agent: AgentInfo | null,
 ): boolean {
-  const model = agentModels?.[agentId]?.model;
+  if (!agent) return false;
+  const model = agentModels?.[agent.id]?.model;
   if (typeof model !== 'string') return false;
   const trimmed = model.trim();
-  return trimmed.length > 0 && trimmed !== 'default';
+  if (trimmed.length === 0 || trimmed === 'default') return false;
+  if (!agentModelIsSelectable(agent, trimmed)) return false;
+  // A custom id outside the catalog is only a real saved choice when this
+  // adapter accepts custom ids — otherwise the compact list has no row for it.
+  if (agent.id !== 'amr' && !(agent.models ?? []).some((m) => m.id === trimmed)) {
+    return agent.supportsCustomModel !== false;
+  }
+  return true;
 }
 
 export function InlineModelSwitcher({
@@ -361,15 +376,18 @@ export function InlineModelSwitcher({
 
   /**
    * Compact home: after picking a CLI, reuse `agentModels[agentId]` when the
-   * user already chose a model for that agent; otherwise open the model list
-   * so they do not silently run on the catalog default.
+   * user already chose a model the compact list can represent; otherwise open
+   * the model list so they do not silently run on the catalog default.
    */
   const finishCompactAgentPick = useCallback(
     (agentId: string) => {
       if (!compact) return;
-      setPanel(hasRecordedAgentModel(config.agentModels, agentId) ? null : 'model');
+      const agent = agents.find((a) => a.id === agentId) ?? null;
+      setPanel(
+        hasUsableSavedAgentModel(config.agentModels, agent) ? null : 'model',
+      );
     },
-    [compact, config.agentModels],
+    [agents, compact, config.agentModels],
   );
 
   const clearPendingCompactAmrPick = useCallback(() => {
@@ -685,9 +703,9 @@ export function InlineModelSwitcher({
       // pick-time saved-model decision so an unset agentModels[amr] still opens
       // the model list.
       if (compact) {
-        pendingCompactAmrPickRef.current = hasRecordedAgentModel(
+        pendingCompactAmrPickRef.current = hasUsableSavedAgentModel(
           config.agentModels,
-          agentId,
+          agents.find((a) => a.id === agentId) ?? null,
         )
           ? 'close'
           : 'model';
@@ -698,7 +716,9 @@ export function InlineModelSwitcher({
     [
       amrLoginPending,
       analytics.track,
+      agents,
       compact,
+      config.agentModels,
       config.mode,
       config.telemetry?.metrics,
       finishCompactAgentPick,
@@ -707,7 +727,6 @@ export function InlineModelSwitcher({
       onAgentChange,
       onModeChange,
       refreshAmrStatus,
-      config.agentModels,
     ],
   );
 
@@ -801,9 +820,10 @@ export function InlineModelSwitcher({
         amrLoginStartedAtRef.current = startedAt;
         setAmrLoginError(null);
         setAmrLoginPending(true);
-        // Polling is started below only when status still reports in-flight,
-        // or by handleAmrSignIn itself — starting here left a live interval
-        // that raced an immediate signed-in refresh.
+        // A poll is started below when the follow-up status reports in-flight,
+        // or by handleAmrSignIn's own startAmrPolling; the idempotent fallback
+        // covers the startup-settle window where status is neither in-flight
+        // nor signed-in yet.
       } else if (reason === 'login-canceled') {
         amrLoginStartedAtRef.current = null;
         stopAmrPolling();
@@ -827,6 +847,27 @@ export function InlineModelSwitcher({
         if (next?.loginInFlight) {
           startAmrPolling(
             amrLoginStartedAtRef.current ?? Date.now(),
+            next.authAttemptId ?? null,
+          );
+          return;
+        }
+        // A `login-started` broadcast whose follow-up status is neither
+        // signed-in nor in-flight (the AMR contract explicitly allows
+        // `loginInFlight: false` during the startup settle window) must not
+        // strand this mounted switcher without a poll — the surface that
+        // started the login may have unmounted, so nothing else would ever
+        // observe the eventual signed-in state. Start one idempotently:
+        // `amrPollRef` is already non-null on the direct `handleAmrSignIn`
+        // path (it starts its own poll synchronously), and a cancel or
+        // settle-window expiry clears `amrLoginStartedAtRef`, so this can
+        // neither duplicate nor resurrect a login that is no longer pending.
+        if (
+          next &&
+          amrPollRef.current === null &&
+          amrLoginStartedAtRef.current !== null
+        ) {
+          startAmrPolling(
+            amrLoginStartedAtRef.current,
             next.authAttemptId ?? null,
           );
         }
@@ -1513,10 +1554,11 @@ export function InlineModelSwitcher({
           ) : null}
 
           {compact && panel === 'model' ? (
-            // Compact home — right segment: models for the ACTIVE mode.
-            // Daemon → current CLI agent catalog; BYOK → configured API
-            // provider catalog (not leftover CLI rows).
-            <div className="inline-switcher__row">
+            <>
+              {/* Compact home — right segment: models for the ACTIVE mode.
+                  Daemon → current CLI agent catalog; BYOK → configured API
+                  provider catalog (not leftover CLI rows). */}
+              <div className="inline-switcher__row">
               {config.mode === 'api' ? (
                 apiModelOptions.length > 0 ? (
                   <SearchableModelSelect
@@ -1656,6 +1698,12 @@ export function InlineModelSwitcher({
                 </span>
               )}
             </div>
+            {config.mode === 'api' && !config.apiKey ? (
+              <div className="inline-switcher__warn" role="status">
+                {t('inlineSwitcher.missingApiKey')}
+              </div>
+            ) : null}
+            </>
           ) : (!compact && config.mode === 'daemon') ||
             (compact && panel === 'agent') ? (
             <>
