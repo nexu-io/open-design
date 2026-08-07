@@ -126,6 +126,7 @@ import {
 } from '../runtime/chat-events';
 import type { RunFailureClassificationFields } from '../runtime/chat-events';
 import {
+  designDeliveryReconciliationStale,
   designDeliveryVerificationPending,
   isRetryableAssistantTerminalFailure,
   resolveDesignDeliveryOutcome,
@@ -11367,7 +11368,14 @@ export function shouldReplayTerminalRunMessage(message: ChatMessage): boolean {
   // A daemon can persist terminal success before the browser finishes its
   // project-file refresh. Reattach once even when prose already exists so the
   // delivery invariant can confirm a file or downgrade the turn after reload.
-  if (designDeliveryVerificationPending(message)) return true;
+  if (designDeliveryVerificationPending(message)) {
+    // #6505: a historical succeeded Design row whose delivery metadata never
+    // materialized must not be replayed/reattached on every reload. Bound
+    // reconciliation to a short window after the run's terminal time; past it,
+    // the row renders as a terminal outcome instead of looping through replay.
+    if (designDeliveryReconciliationStale(message)) return false;
+    return true;
+  }
   if (message.content.trim().length > 0) return false;
   if (
     message.startedAt == null

@@ -677,6 +677,26 @@ describe('ProjectView daemon cleanup', () => {
     ).toBe(false);
   });
 
+  it('does not auto-replay a historical succeeded Design message whose delivery never materialized', () => {
+    // #6505: a Design-mode success persisted days ago with delivery metadata
+    // absent must not be replayed/reattached on every reload — only a freshly
+    // completed run gets the one bounded reconciliation. Without an age bound,
+    // `designDeliveryVerificationPending` stays true forever and ProjectView
+    // re-enters the replay path on each recovery tick.
+    expect(
+      shouldReplayTerminalRunMessage({
+        id: 'msg-historical-delivery',
+        role: 'assistant',
+        content: 'I finished the design.',
+        runId: 'run-historical-delivery',
+        runStatus: 'succeeded',
+        sessionMode: 'design',
+        startedAt: 1,
+        endedAt: Date.now() - 24 * 60 * 60 * 1000,
+      }),
+    ).toBe(false);
+  });
+
   // Regression: a phantom 'running' row in DB (no runId, no matching active
   // daemon run) used to stick the UI on "Waiting for first output —
   // Working 24m+" forever. The reattach loop now self-heals by marking
