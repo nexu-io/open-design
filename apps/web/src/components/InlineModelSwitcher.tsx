@@ -4,6 +4,8 @@
 // provider + model). Compact (home hero, #6501): a split chip — left icon
 // opens local CLI agent switching only (BYOK provider UI deferred to
 // Settings / maintainer follow-up), right status+model opens the model list.
+// At ≤900px the chip collapses to a logo-only circle that opens the model
+// list; CLI switching stays in Settings on that breakpoint.
 // All persistence is delegated upward through the same callbacks `AvatarMenu`
 // already uses, so the switcher inherits autosave + daemon sync without
 // re-implementing it.
@@ -15,6 +17,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type Dispatch,
   type SetStateAction,
 } from 'react';
@@ -136,9 +139,37 @@ let amrReminderSeenFallback = false;
 
 /** Which popover surface is open. Compact home uses a split chip: left opens
  *  local CLI agents only (BYOK / provider UI stays in Settings for now —
- *  #6501), right opens the model list. Non-compact keeps a single `full`
- *  panel. */
+ *  #6501), right opens the model list. ≤900px collapses to a logo circle that
+ *  opens the model list. Non-compact keeps a single `full` panel. */
 type SwitcherPanel = 'full' | 'agent' | 'model';
+
+/** Must stay aligned with `@media (max-width: 900px)` in home-hero.css. */
+export const HOME_COMPACT_ICON_ONLY_QUERY = '(max-width: 900px)';
+
+function subscribeMediaQuery(query: string, onStoreChange: () => void): () => void {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+    return () => {};
+  }
+  const mql = window.matchMedia(query);
+  const listener = () => onStoreChange();
+  mql.addEventListener('change', listener);
+  return () => mql.removeEventListener('change', listener);
+}
+
+function getMediaQuerySnapshot(query: string): boolean {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+    return false;
+  }
+  return window.matchMedia(query).matches;
+}
+
+function useMediaQuery(query: string): boolean {
+  return useSyncExternalStore(
+    (onStoreChange) => subscribeMediaQuery(query, onStoreChange),
+    () => getMediaQuerySnapshot(query),
+    () => false,
+  );
+}
 
 function readAmrReminderSeen(): boolean {
   if (typeof window === 'undefined') return true;
@@ -172,13 +203,17 @@ function displayAgentChipName(agent: Pick<AgentInfo, 'id' | 'name'>): string {
   return agent.id === 'amr' ? 'Open Design' : displayAgentName(agent);
 }
 
-/** True when the user previously saved a model for this CLI (`agentModels`). */
+/** True when the user previously saved an explicit model for this CLI
+ *  (`agentModels`). `default` only means the CLI's own default, so it must
+ *  still prompt the user instead of suppressing the model list. */
 function hasRecordedAgentModel(
   agentModels: AppConfig['agentModels'] | undefined,
   agentId: string,
 ): boolean {
   const model = agentModels?.[agentId]?.model;
-  return typeof model === 'string' && model.trim().length > 0;
+  if (typeof model !== 'string') return false;
+  const trimmed = model.trim();
+  return trimmed.length > 0 && trimmed !== 'default';
 }
 
 export function InlineModelSwitcher({
@@ -197,6 +232,8 @@ export function InlineModelSwitcher({
 }: Props) {
   const t = useT();
   const analytics = useAnalytics();
+  const iconOnlyNarrow = useMediaQuery(HOME_COMPACT_ICON_ONLY_QUERY);
+  const compactIconOnly = compact && iconOnlyNarrow;
   // recvqfYKutwWlQ: gate the AMR upgrade entry on billing permission below,
   // not just plan tier — a team member without `canManageBilling` (owner-only)
   // can't act on an upgrade even when the tier itself is upgradeable.
@@ -259,6 +296,9 @@ export function InlineModelSwitcher({
   const amrLoginStartPendingRef = useRef(false);
   const amrLoginCancelRequestedRef = useRef(false);
   const amrAuthAttemptIdRef = useRef<string | null>(null);
+  /** Compact home: resume after AMR sign-in. `'model'` opens the list;
+   *  `'close'` keeps the chip closed (saved model already on file). */
+  const pendingCompactAmrPickRef = useRef<'model' | 'close' | null>(null);
 
   const getModelPopoverBoundary = useCallback(() => {
     const scrollContainer = wrapRef.current?.closest<HTMLElement>(
@@ -288,6 +328,35 @@ export function InlineModelSwitcher({
       amrPollRef.current = null;
     }
   }, []);
+
+  /**
+   * Compact home: after picking a CLI, reuse `agentModels[agentId]` when the
+   * user already chose a model for that agent; otherwise open the model list
+   * so they do not silently run on the catalog default.
+   */
+  const finishCompactAgentPick = useCallback(
+    (agentId: string) => {
+      if (!compact) return;
+      setPanel(hasRecordedAgentModel(config.agentModels, agentId) ? null : 'model');
+    },
+    [compact, config.agentModels],
+  );
+
+  const clearPendingCompactAmrPick = useCallback(() => {
+    pendingCompactAmrPickRef.current = null;
+  }, []);
+
+  const resumePendingCompactAmrPick = useCallback(() => {
+    const pending = pendingCompactAmrPickRef.current;
+    if (!pending) return;
+    pendingCompactAmrPickRef.current = null;
+    if (!compact) return;
+    // Decision was captured at pick time so a default written during login
+    // cannot swallow the no-saved-model prompt.
+    setPanel(pending === 'model' ? 'model' : null);
+  }, [compact]);
+  const resumePendingCompactAmrPickRef = useRef(resumePendingCompactAmrPick);
+  resumePendingCompactAmrPickRef.current = resumePendingCompactAmrPick;
 
   const refreshAmrStatus = useCallback(async () => {
     const next = await fetchVelaLoginStatus();
@@ -337,10 +406,12 @@ export function InlineModelSwitcher({
         stopAmrPolling();
         amrLoginStartedAtRef.current = null;
         setAmrLoginPending(false);
+        resumePendingCompactAmrPick();
         return;
       }
       if (outcome === 'stopped' || outcome === 'timed-out') {
         stopAmrPolling();
+        clearPendingCompactAmrPick();
         if (outcome === 'timed-out') {
           if (authAttemptId) {
             resolveAmrAuthTracking(analytics.track, 'timeout', 'login_timeout', {
@@ -369,7 +440,14 @@ export function InlineModelSwitcher({
     amrPollRef.current = window.setInterval(() => {
       void tick();
     }, AMR_LOGIN_POLL_INTERVAL_MS);
-  }, [analytics.track, refreshAmrStatus, stopAmrPolling, t]);
+  }, [
+    analytics.track,
+    clearPendingCompactAmrPick,
+    refreshAmrStatus,
+    resumePendingCompactAmrPick,
+    stopAmrPolling,
+    t,
+  ]);
 
   const handleAmrSignIn = useCallback(async (
     attribution?: AmrEntryAttribution | null,
@@ -416,6 +494,7 @@ export function InlineModelSwitcher({
           amrLoginCancelRequestedRef.current = false;
           amrLoginStartedAtRef.current = null;
           setAmrLoginPending(false);
+          clearPendingCompactAmrPick();
           setAmrLoginError(t('settings.amrLoginErrorCompact'));
           return;
         }
@@ -427,6 +506,8 @@ export function InlineModelSwitcher({
               startedAt,
               next.authAttemptId ?? authAttemptId,
             );
+          } else {
+            clearPendingCompactAmrPick();
           }
           return;
         }
@@ -436,6 +517,7 @@ export function InlineModelSwitcher({
         amrLoginCancelRequestedRef.current = false;
         amrLoginStartedAtRef.current = null;
         setAmrLoginPending(false);
+        clearPendingCompactAmrPick();
         setAmrStatus((current) => (
           current
             ? { ...current, loggedIn: false, loginInFlight: false, user: null }
@@ -450,6 +532,7 @@ export function InlineModelSwitcher({
       amrLoginCancelRequestedRef.current = false;
       amrLoginStartedAtRef.current = null;
       setAmrLoginPending(false);
+      clearPendingCompactAmrPick();
       return;
     }
     if (!result.ok && !result.alreadyRunning) {
@@ -459,17 +542,29 @@ export function InlineModelSwitcher({
       console.error('[amr-login] startVelaLogin failed', result);
       amrLoginStartedAtRef.current = null;
       setAmrLoginPending(false);
+      clearPendingCompactAmrPick();
       setAmrLoginError(result.error || t('settings.amrLoginErrorCompact'));
       return;
     }
     notifyAmrLoginStatusChanged('login-started');
     startAmrPolling(startedAt, authAttemptId);
+    // Compact home may already be signed-in by the time the login spawn
+    // returns (or a follow-up status refresh races ahead of the poll tick).
+    // Finish the pending pick immediately so we do not wait on the interval.
+    const signedIn = await refreshAmrStatus();
+    if (signedIn?.loggedIn) {
+      stopAmrPolling();
+      setAmrLoginPending(false);
+      resumePendingCompactAmrPickRef.current();
+    }
   }, [
     analytics.track,
+    clearPendingCompactAmrPick,
     config.installationId,
     config.telemetry?.metrics,
     refreshAmrStatus,
     startAmrPolling,
+    stopAmrPolling,
     t,
   ]);
 
@@ -477,6 +572,7 @@ export function InlineModelSwitcher({
     const loginStartPending = amrLoginStartPendingRef.current;
     const authAttemptId = amrAuthAttemptIdRef.current;
     stopAmrPolling();
+    clearPendingCompactAmrPick();
     setAmrLoginError(null);
     const result = authAttemptId
       ? await cancelVelaLogin(authAttemptId)
@@ -516,24 +612,12 @@ export function InlineModelSwitcher({
     notifyAmrLoginStatusChanged('login-canceled');
   }, [
     analytics.track,
+    clearPendingCompactAmrPick,
     refreshAmrStatus,
     startAmrPolling,
     stopAmrPolling,
     t,
   ]);
-
-  /**
-   * Compact home: after picking a CLI, reuse `agentModels[agentId]` when the
-   * user already chose a model for that agent; otherwise open the model list
-   * so they do not silently run on the catalog default.
-   */
-  const finishCompactAgentPick = useCallback(
-    (agentId: string) => {
-      if (!compact) return;
-      setPanel(hasRecordedAgentModel(config.agentModels, agentId) ? null : 'model');
-    },
-    [compact, config.agentModels],
-  );
 
   const handleAgentButtonClick = useCallback(
     async (agentId: string) => {
@@ -567,8 +651,18 @@ export function InlineModelSwitcher({
         finishCompactAgentPick(agentId);
         return;
       }
-      // Login required — do not open the model list until AMR is ready.
-      if (compact) setPanel(null);
+      // Login required — close the agent panel; resume after sign-in using the
+      // pick-time saved-model decision so an unset agentModels[amr] still opens
+      // the model list.
+      if (compact) {
+        pendingCompactAmrPickRef.current = hasRecordedAgentModel(
+          config.agentModels,
+          agentId,
+        )
+          ? 'close'
+          : 'model';
+        setPanel(null);
+      }
       await handleAmrSignIn(attribution);
     },
     [
@@ -583,6 +677,7 @@ export function InlineModelSwitcher({
       onAgentChange,
       onModeChange,
       refreshAmrStatus,
+      config.agentModels,
     ],
   );
 
@@ -676,10 +771,13 @@ export function InlineModelSwitcher({
         amrLoginStartedAtRef.current = startedAt;
         setAmrLoginError(null);
         setAmrLoginPending(true);
-        startAmrPolling(startedAt);
+        // Polling is started below only when status still reports in-flight,
+        // or by handleAmrSignIn itself — starting here left a live interval
+        // that raced an immediate signed-in refresh.
       } else if (reason === 'login-canceled') {
         amrLoginStartedAtRef.current = null;
         stopAmrPolling();
+        clearPendingCompactAmrPick();
         setAmrLoginPending(false);
       }
       void refreshAmrStatus().then((next) => {
@@ -689,6 +787,11 @@ export function InlineModelSwitcher({
         if (next?.loggedIn) {
           amrLoginStartedAtRef.current = null;
           stopAmrPolling();
+          setAmrLoginPending(false);
+          // Compact home may have closed the agent panel before login; finish
+          // the pending pick here too — the poll tick is not the only path that
+          // observes signed-in (login-started's follow-up refresh can win the race).
+          resumePendingCompactAmrPick();
           return;
         }
         if (next?.loginInFlight) {
@@ -703,7 +806,13 @@ export function InlineModelSwitcher({
     return () => {
       window.removeEventListener(AMR_LOGIN_STATUS_EVENT, onStatusChange);
     };
-  }, [refreshAmrStatus, startAmrPolling, stopAmrPolling]);
+  }, [
+    clearPendingCompactAmrPick,
+    refreshAmrStatus,
+    resumePendingCompactAmrPick,
+    startAmrPolling,
+    stopAmrPolling,
+  ]);
 
   const installedAgents = useMemo(
     () =>
@@ -743,6 +852,16 @@ export function InlineModelSwitcher({
       : configuredModelId ?? defaultAgentModelId(currentAgent);
   const currentModelOption =
     currentAgent?.models?.find((m) => m.id === currentModelId) ?? null;
+  const isSupportedCustomModel =
+    currentAgent?.id !== 'amr' &&
+    currentAgent?.supportsCustomModel !== false &&
+    !!currentModelId &&
+    currentModelId !== 'default' &&
+    !currentAgent?.models?.some((m) => m.id === currentModelId);
+
+  const currentModelLabel =
+    currentModelOption?.label ??
+    (isSupportedCustomModel ? currentModelId : null);
 
   useEffect(() => {
     if (!currentAgentId || !normalizedCurrentModelId) return;
@@ -766,8 +885,6 @@ export function InlineModelSwitcher({
     onAgentModelChange,
   ]);
 
-  const currentModelLabel =
-    currentModelOption?.label ?? null;
   const inlineAgentModelOptions = useMemo(() => {
     const models = currentAgent?.models ?? [];
     if (currentAgent?.id !== 'amr') return models;
@@ -799,12 +916,24 @@ export function InlineModelSwitcher({
    * reverts (issue: clicking a model in the home list did nothing).
    */
   const compactModelRows = useMemo(
-    () =>
-      inlineAgentModelOptions.map((model) => ({
+    () => {
+      const rows = inlineAgentModelOptions.map((model) => ({
         model,
         selectable: agentModelIsSelectable(currentAgent, model.id),
-      })),
-    [currentAgent, inlineAgentModelOptions],
+      }));
+      if (isSupportedCustomModel && currentModelId) {
+        rows.push({
+          model: {
+            id: currentModelId,
+            label: `${currentModelId} ${t('inlineSwitcher.customSuffix')}`,
+            enabled: true,
+          },
+          selectable: true,
+        });
+      }
+      return rows;
+    },
+    [currentAgent, currentModelId, inlineAgentModelOptions, isSupportedCustomModel, t],
   );
 
   /** Where a refused model pick sends the user instead — the same plans
@@ -1064,7 +1193,8 @@ export function InlineModelSwitcher({
     setPanel(nextOpen ? 'full' : null);
   }, [panel, showAmrReminder]);
 
-  /** Compact home split chip: left opens local CLI agents, right opens models. */
+  /** Compact home split chip: left opens local CLI agents, right opens models.
+   *  Icon-only (≤900px) routes the remaining logo circle to the model list. */
   const handleCompactSegmentClick = useCallback(
     (next: 'agent' | 'model') => {
       const closing = panel === next;
@@ -1079,6 +1209,10 @@ export function InlineModelSwitcher({
     },
     [panel, showAmrReminder],
   );
+
+  const handleCompactAgentSegmentClick = useCallback(() => {
+    handleCompactSegmentClick(compactIconOnly ? 'model' : 'agent');
+  }, [compactIconOnly, handleCompactSegmentClick]);
 
   useEffect(() => {
     if (!open || config.mode !== 'daemon' || config.agentId === 'amr') {
@@ -1114,14 +1248,22 @@ export function InlineModelSwitcher({
             type="button"
             className={
               'inline-switcher__chip-seg inline-switcher__chip-seg--agent od-tooltip' +
-              (panel === 'agent' ? ' is-expanded' : '')
+              ((compactIconOnly ? panel === 'model' : panel === 'agent')
+                ? ' is-expanded'
+                : '')
             }
             data-testid="inline-model-switcher-chip-agent"
-            onClick={() => handleCompactSegmentClick('agent')}
+            onClick={handleCompactAgentSegmentClick}
             aria-haspopup="menu"
-            aria-expanded={panel === 'agent'}
-            aria-label={t('inlineSwitcher.agentLabel')}
-            data-tooltip={chipAgentLabel}
+            aria-expanded={compactIconOnly ? panel === 'model' : panel === 'agent'}
+            aria-label={
+              compactIconOnly
+                ? `${t('inlineSwitcher.modelLabel')}: ${chipModel}`
+                : t('inlineSwitcher.agentLabel')
+            }
+            data-tooltip={
+              compactIconOnly ? `${chipAgentLabel} · ${chipModel}` : chipAgentLabel
+            }
             data-tooltip-placement="bottom"
           >
             <span className="inline-switcher__chip-icon" aria-hidden="true">

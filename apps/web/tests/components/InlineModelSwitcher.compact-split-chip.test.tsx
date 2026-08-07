@@ -3,6 +3,8 @@
 // Home compact chip is a split control (#6501):
 // - left (CLI icon) opens local CLI agent switching only
 // - right (status + model name) opens the model list
+// - ≤900px icon-only collapse: the remaining circle opens the model list;
+//   CLI switching goes through Settings
 // BYOK / provider switching stays in Settings until maintainers decide
 // how it should appear on home.
 //
@@ -90,9 +92,28 @@ function renderCompact(onAgentChange?: (id: string) => void) {
   return render(<StatefulCompact onAgentChange={onAgentChange} />);
 }
 
+/** Mirrors `HOME_COMPACT_ICON_ONLY_QUERY` in InlineModelSwitcher (≤900px). */
+function stubCompactIconOnlyMedia(matches: boolean) {
+  vi.stubGlobal(
+    'matchMedia',
+    (query: string) =>
+      ({
+        matches: query.includes('max-width: 900px') ? matches : false,
+        media: query,
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      }) as MediaQueryList,
+  );
+}
+
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 describe('InlineModelSwitcher compact split chip (#6501)', () => {
@@ -196,6 +217,21 @@ describe('InlineModelSwitcher compact split chip (#6501)', () => {
     expect(within(popover).queryByTestId('inline-model-switcher-agent-codex')).toBeNull();
   });
 
+  it('opens the model list from the icon-only circle at ≤900px', () => {
+    // Narrow home hides the model segment in CSS; the remaining logo circle
+    // must still open models (CLI switching falls back to Settings).
+    stubCompactIconOnlyMedia(true);
+    renderCompact();
+
+    fireEvent.click(screen.getByTestId('inline-model-switcher-chip-agent'));
+    const popover = screen.getByTestId('inline-model-switcher-popover');
+
+    expect(
+      within(popover).getByTestId('inline-model-switcher-compact-model-claude-opus-4.6'),
+    ).toBeTruthy();
+    expect(within(popover).queryByTestId('inline-model-switcher-agent-codex')).toBeNull();
+  });
+
   it('switches agents from the left panel without opening Settings', () => {
     const onAgentChange = vi.fn();
     renderCompact(onAgentChange);
@@ -217,6 +253,87 @@ describe('InlineModelSwitcher compact split chip (#6501)', () => {
       within(popover).getByTestId('inline-model-switcher-compact-model-gpt-5'),
     ).toBeTruthy();
     expect(within(popover).queryByTestId('inline-model-switcher-agent-codex')).toBeNull();
+  });
+
+  it('opens the model list when the saved model is only the CLI default', () => {
+    render(
+      <StatefulCompact
+        initialConfig={{
+          ...baseConfig,
+          agentModels: { codex: { model: 'default' } },
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('inline-model-switcher-chip-agent'));
+    fireEvent.click(screen.getByTestId('inline-model-switcher-agent-codex'));
+
+    const popover = screen.getByTestId('inline-model-switcher-popover');
+    expect(
+      within(popover).getByTestId('inline-model-switcher-compact-model-gpt-5'),
+    ).toBeTruthy();
+    expect(within(popover).queryByTestId('inline-model-switcher-agent-codex')).toBeNull();
+  });
+
+  it('shows a saved non-catalog CLI model on the chip and in the compact list', () => {
+    render(
+      <StatefulCompact
+        initialConfig={{
+          ...baseConfig,
+          agentModels: { codex: { model: 'custom-codex-model' } },
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('inline-model-switcher-chip-agent'));
+    fireEvent.click(screen.getByTestId('inline-model-switcher-agent-codex'));
+
+    expect(screen.queryByTestId('inline-model-switcher-popover')).toBeNull();
+    expect(screen.getByTestId('inline-model-switcher-chip').textContent).toContain(
+      'custom-codex-model',
+    );
+
+    fireEvent.click(screen.getByTestId('inline-model-switcher-chip-model'));
+    expect(
+      within(screen.getByTestId('inline-model-switcher-popover')).getByTestId(
+        'inline-model-switcher-compact-model-custom-codex-model',
+      ),
+    ).toBeTruthy();
+  });
+
+  it('does not offer a saved custom model for adapters that reject custom ids', () => {
+    const noCustomCodex: AgentInfo = { ...codexAgent, supportsCustomModel: false };
+    render(
+      <InlineModelSwitcher
+        config={{
+          ...baseConfig,
+          agentId: 'codex',
+          agentModels: { codex: { model: 'custom-codex-model' } },
+        }}
+        agents={[amrAgent, noCustomCodex]}
+        providerModelsCache={{}}
+        compact
+        daemonLive
+        onModeChange={vi.fn()}
+        onAgentChange={vi.fn()}
+        onAgentModelChange={vi.fn()}
+        onApiProtocolChange={vi.fn()}
+        onApiModelChange={vi.fn()}
+        onOpenSettings={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('inline-model-switcher-chip-model'));
+    const popover = screen.getByTestId('inline-model-switcher-popover');
+
+    expect(
+      within(popover).queryByTestId(
+        'inline-model-switcher-compact-model-custom-codex-model',
+      ),
+    ).toBeNull();
+    expect(
+      within(popover).getByTestId('inline-model-switcher-compact-model-gpt-5'),
+    ).toBeTruthy();
   });
 
   it('keeps the recorded model and closes when the CLI already has a saved choice', () => {

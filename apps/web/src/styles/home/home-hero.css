@@ -1166,7 +1166,8 @@
   /* Sizes to the chip below, which now carries a status dot + the model name.
      Left at the old 36px icon square, this wrapper capped the chip before its
      own max-width applied and squeezed the model name to zero width. The
-     ≤900px block collapses both back to an icon. */
+     ≤900px block collapses to a true icon-only control (logo visible; divider,
+     status dot, and model name hidden). */
   width: auto;
   max-width: 220px;
 }
@@ -3017,12 +3018,22 @@
   .home-hero__execution-switcher {
     flex-basis: auto;
   }
+  /* Icon-only collapse: keep the 36px hit target. Hiding only via width left
+     children in the flex row (clipped half-logo / half-name). Center the
+     logo and hide the split chip's divider + model segment. The remaining
+     logo circle opens the model list (CLI switching → Settings). */
   .home-hero__execution-switcher .inline-switcher,
   .home-hero__execution-switcher .inline-switcher__chip {
     width: 36px;
     max-width: 36px;
   }
-  /* Split chip (#6501): on narrow screens keep only the CLI icon target. */
+  .home-hero__execution-switcher .inline-switcher__chip {
+    padding: 0;
+    gap: 0;
+    justify-content: center;
+    overflow: hidden;
+  }
+  /* Split chip (#6501): hide model chrome; JS routes the logo to models. */
   .home-hero__execution-switcher .inline-switcher__chip--split .inline-switcher__chip-divider,
   .home-hero__execution-switcher .inline-switcher__chip--split .inline-switcher__chip-seg--model {
     display: none;
