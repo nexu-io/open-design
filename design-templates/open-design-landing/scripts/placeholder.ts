@@ -4,14 +4,15 @@
  *
  * When `imagery.strategy === 'placeholder'`, this script writes one
  * paper-textured SVG file per slot in `assets/image-manifest.json`.
- * The generated files live alongside the schema-named PNGs that the
- * composer references (`hero.png`, `about.png`, `lab-1.png`, …) so
- * the layout renders fully without any image budget.
+ * The files are named with the `.svg` extension matching the slot id
+ * (`hero.svg`, `about.svg`, `lab-1.svg`, …) so the content type
+ * matches the file extension. The composer references these `.svg`
+ * files directly.
  *
  * Each placeholder shows: slot id · ratio · pixel dimensions · the
- * `prompt_section` hint copied from the manifest. Drop the real PNG
- * with the same filename to swap in production imagery; no markup
- * change required.
+ * `prompt_section` hint copied from the manifest. Drop a real image
+ * with the same slug (PNG or SVG) to swap in production imagery; no
+ * markup change required.
  *
  * Usage:
  *   npx tsx scripts/placeholder.ts <out-dir>
@@ -124,19 +125,11 @@ async function loadManifest(): Promise<Manifest> {
 }
 
 /**
- * Write `<out>/<slot.file>` for every slot. The composer references
- * slots by .png filename; we honor that by writing `<basename>.svg`
- * AND a `<basename>.png.svg` symlink-style fallback. Most static
- * hosts serve SVG to <img> just fine, so the practical convention
- * is: if you want placeholders, point your `imagery.assets_path` at
- * a directory of `.svg` files OR rename the SVGs to `.png` (some
- * browsers honor extensionless content-sniffing).
- *
- * For the most reliable result, write BOTH:
- *   - `<id>.svg`   — clean, editable
- *   - `<file>`     — same SVG content under the .png filename so the
- *                    composer's `<img src='./assets/<id>.png'>` works
- *                    without changing markup.
+ * Write `<out>/<slot.id>.svg` for every slot. The composer references
+ * slots by `.svg` filename, so we write exactly one file per slot with
+ * the matching extension. Because the content is SVG, the extension is
+ * `.svg` — never `.png` with SVG content (which would render as a
+ * broken image when the server serves it as `image/png`).
  */
 export async function writePlaceholders(outDir: string): Promise<string[]> {
   const manifest = await loadManifest();
@@ -144,11 +137,11 @@ export async function writePlaceholders(outDir: string): Promise<string[]> {
   const written: string[] = [];
   for (const slot of manifest.slots) {
     const svg = placeholderSvg(slot);
+    // Composer references `<id>.svg`; placeholder content is SVG, so
+    // the filename extension must match the content type.
     const svgPath = resolve(outDir, `${slot.id}.svg`);
-    const pngPath = resolve(outDir, slot.file);
     await writeFile(svgPath, svg, 'utf8');
-    await writeFile(pngPath, svg, 'utf8');
-    written.push(svgPath, pngPath);
+    written.push(svgPath);
   }
   return written;
 }
@@ -159,9 +152,7 @@ async function main(): Promise<void> {
     ? outArg!
     : resolve(process.cwd(), outArg ?? './assets/');
   const written = await writePlaceholders(out);
-  const pngs = written.filter((p) => p.endsWith('.png')).length;
-  const svgs = written.filter((p) => p.endsWith('.svg')).length;
-  console.log(`✓ wrote ${pngs} png-named placeholders + ${svgs} svg files into ${out}`);
+  console.log(`✓ wrote ${written.length} svg placeholders into ${out}`);
   console.log(`  (${written.map((p) => basename(p)).join(', ')})`);
 }
 

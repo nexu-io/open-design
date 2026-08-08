@@ -234,7 +234,7 @@ function renderHero(i: EditorialCollageInputs): string {
       <span class='annot annot-tr'>${i.hero.annotations.tr}</span>
       <span class='annot annot-bl coord'>${i.hero.annotations.bl}</span>
       <span class='annot annot-br'>${i.hero.annotations.br}</span>
-      <img src='${assets}hero.png' alt='' />
+      <img src='${assets}hero.svg' alt='' />
       <div class='index'>
       ${index}
       </div>
@@ -269,7 +269,7 @@ function renderAbout(i: EditorialCollageInputs): string {
         </div>
       </div>
       <div class='about-art' data-reveal='right'>
-        <img src='${assets}about.png' alt='' />
+        <img src='${assets}about.svg' alt='' />
         <div class='about-side-note'>
           <b></b>
           ${i.about.side_note}
@@ -309,7 +309,7 @@ function renderCapabilities(i: EditorialCollageInputs): string {
       <div class='capabilities-art' data-reveal='left'>
         <span class='corner tl'></span>
         <span class='corner br'></span>
-        <img src='${assets}capabilities.png' alt='' />
+        <img src='${assets}capabilities.svg' alt='' />
         <div class='ribbon'>${i.capabilities.ribbon}</div>
       </div>
       <div class='capabilities-copy' data-reveal>
@@ -331,7 +331,7 @@ function renderLabPill(p: LabPill): string {
 
 function renderLabCard(c: LabCard, n: number, assets: string): string {
   return `<div class='lab' data-reveal>
-    <div class='lab-img'><span class='badge'>${c.badge}</span><img src='${assets}lab-${n}.png' alt='' /></div>
+    <div class='lab-img'><span class='badge'>${c.badge}</span><img src='${assets}lab-${n}.svg' alt='' /></div>
     <div class='num-row'><span>${c.num}</span><span>${c.year}</span></div>
     <h4>${c.title}</h4>
     <p>${c.body}</p>
@@ -386,7 +386,7 @@ function renderMethodStep(s: MethodStep, last: boolean, n: number, assets: strin
     <div class='num'>${s.num}</div>
     <h4>${s.title}${last ? '' : ` <span class='arrow-r'>→</span>`}</h4>
     <p>${s.body}</p>
-    <div class='img'><img src='${assets}method-${n}.png' alt='' /></div>
+    <div class='img'><img src='${assets}method-${n}.svg' alt='' /></div>
   </div>`;
 }
 
@@ -431,7 +431,7 @@ function renderWorkCard(c: WorkCard, idx: number, assets: string, href: string):
     </div>
     <h3>${c.title}</h3>
     <p>${c.body}</p>
-    <div class='img'><img src='${assets}work-${idx + 1}.png' alt='' /></div>
+    <div class='img'><img src='${assets}work-${idx + 1}.svg' alt='' /></div>
     <div class='meta-row'>
       <span class='year'>${c.year}</span>
       <span>${c.tag}</span>
@@ -516,7 +516,7 @@ function renderTestimonial(i: EditorialCollageInputs): string {
         <a class='read-more' href='${i.testimonial.read_more_href}'${ext(i.testimonial.read_more_href)}>${i.testimonial.read_more_label}</a>
       </div>
       <div class='testimonial-art' data-reveal='right'>
-        <img src='${assets}testimonial.png' alt='' />
+        <img src='${assets}testimonial.svg' alt='' />
       </div>
     </div>
   </div>
@@ -551,7 +551,7 @@ function renderCTA(i: EditorialCollageInputs): string {
         </div>
       </div>
       <div class='cta-art' data-reveal='right'>
-        <img src='${assets}cta.png' alt='' />
+        <img src='${assets}cta.svg' alt='' />
         <div class='index'>Nº 08</div>
         <div class='ribbon'>${i.cta.ribbon}</div>
       </div>

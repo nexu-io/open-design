@@ -286,7 +286,7 @@ async function main(): Promise<void> {
   }
 
   for (const slot of targets) {
-    const target = resolve(outDir, slot.file);
+    const target = resolve(outDir, `${slot.id}.png`);
     if (!force && (await fileExists(target))) {
       console.log(`· ${slot.id} — skip (exists)`);
       continue;
@@ -294,7 +294,7 @@ async function main(): Promise<void> {
 
     const prompt = promptForSlot(slot, inputs);
     if (dryRun) {
-      console.log(`\n=== ${slot.id} (${slot.width}×${slot.height}) → ${slot.file} ===`);
+      console.log(`\n=== ${slot.id} (${slot.width}×${slot.height}) → ${slot.id}.png ===`);
       console.log(prompt);
       console.log(`=== end ${slot.id} ===\n`);
       continue;

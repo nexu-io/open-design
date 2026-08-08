@@ -6,37 +6,37 @@
   "slots": [
     {
       "id": "hero",
-      "file": "hero.png",
+      "file": "hero.svg",
       "width": 1024,
       "height": 1024,
       "ratio": "1:1",
-      "prompt_section": "hero.png — 1:1",
+      "prompt_section": "hero.png \u2014 1:1",
       "required": true,
       "rekey_on_brand_change": true
     },
     {
       "id": "about",
-      "file": "about.png",
+      "file": "about.svg",
       "width": 1024,
       "height": 1024,
       "ratio": "1:1",
-      "prompt_section": "about.png — 1:1",
+      "prompt_section": "about.png \u2014 1:1",
       "required": true,
       "rekey_on_brand_change": true
     },
     {
       "id": "capabilities",
-      "file": "capabilities.png",
+      "file": "capabilities.svg",
       "width": 1024,
       "height": 1024,
       "ratio": "1:1",
-      "prompt_section": "capabilities.png — 1:1",
+      "prompt_section": "capabilities.png \u2014 1:1",
       "required": true,
       "rekey_on_brand_change": true
     },
     {
       "id": "method-1",
-      "file": "method-1.png",
+      "file": "method-1.svg",
       "width": 816,
       "height": 816,
       "ratio": "1:1",
@@ -46,7 +46,7 @@
     },
     {
       "id": "method-2",
-      "file": "method-2.png",
+      "file": "method-2.svg",
       "width": 816,
       "height": 816,
       "ratio": "1:1",
@@ -56,7 +56,7 @@
     },
     {
       "id": "method-3",
-      "file": "method-3.png",
+      "file": "method-3.svg",
       "width": 816,
       "height": 816,
       "ratio": "1:1",
@@ -66,7 +66,7 @@
     },
     {
       "id": "method-4",
-      "file": "method-4.png",
+      "file": "method-4.svg",
       "width": 816,
       "height": 816,
       "ratio": "1:1",
@@ -76,7 +76,7 @@
     },
     {
       "id": "lab-1",
-      "file": "lab-1.png",
+      "file": "lab-1.svg",
       "width": 768,
       "height": 1024,
       "ratio": "3:4",
@@ -86,7 +86,7 @@
     },
     {
       "id": "lab-2",
-      "file": "lab-2.png",
+      "file": "lab-2.svg",
       "width": 768,
       "height": 1024,
       "ratio": "3:4",
@@ -96,7 +96,7 @@
     },
     {
       "id": "lab-3",
-      "file": "lab-3.png",
+      "file": "lab-3.svg",
       "width": 768,
       "height": 1024,
       "ratio": "3:4",
@@ -106,7 +106,7 @@
     },
     {
       "id": "lab-4",
-      "file": "lab-4.png",
+      "file": "lab-4.svg",
       "width": 768,
       "height": 1024,
       "ratio": "3:4",
@@ -116,7 +116,7 @@
     },
     {
       "id": "lab-5",
-      "file": "lab-5.png",
+      "file": "lab-5.svg",
       "width": 768,
       "height": 1024,
       "ratio": "3:4",
@@ -126,7 +126,7 @@
     },
     {
       "id": "work-1",
-      "file": "work-1.png",
+      "file": "work-1.svg",
       "width": 768,
       "height": 1024,
       "ratio": "3:4",
@@ -136,7 +136,7 @@
     },
     {
       "id": "work-2",
-      "file": "work-2.png",
+      "file": "work-2.svg",
       "width": 768,
       "height": 1024,
       "ratio": "3:4",
@@ -146,21 +146,21 @@
     },
     {
       "id": "testimonial",
-      "file": "testimonial.png",
+      "file": "testimonial.svg",
       "width": 1024,
       "height": 1024,
       "ratio": "1:1",
-      "prompt_section": "testimonial.png — 1:1",
+      "prompt_section": "testimonial.png \u2014 1:1",
       "required": true,
       "rekey_on_brand_change": true
     },
     {
       "id": "cta",
-      "file": "cta.png",
+      "file": "cta.svg",
       "width": 1024,
       "height": 1024,
       "ratio": "1:1",
-      "prompt_section": "cta.png — 1:1",
+      "prompt_section": "cta.png \u2014 1:1",
       "required": true,
       "rekey_on_brand_change": true
     }
