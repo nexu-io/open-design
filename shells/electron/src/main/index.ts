@@ -24,6 +24,7 @@ import {
   type SidecarStamp,
   type WebStatusSnapshot,
 } from "@open-design/sidecar-proto";
+import type { StandaloneRuntimeStatus } from "@open-design/standalone-proto";
 import { dirname, join } from "node:path";
 
 import {
@@ -182,6 +183,8 @@ export type DesktopMainOptions = {
   preloadPath?: string;
   /** Generation-bound Shell-to-Standalone desktop-auth registration. */
   registerDesktopAuth?: (secret: Buffer) => Promise<boolean>;
+  /** Protocol-owned runtime status projection; sidecar internals stay private. */
+  readStandaloneStatus?: () => Promise<StandaloneRuntimeStatus>;
   windowTitle?: string;
   onDesktopReady?: (controls: {
     dispatchInviteDeeplink(url: string | null): void;
@@ -701,14 +704,13 @@ export async function runDesktopMain(
   // app.whenReady, so a setTypeOfService EINVAL thrown by undici during
   // the renderer's first fetch is intercepted rather than surfacing as
   // Electron's "JavaScript error in main process" dialog (issue #647).
-  // The packaged entry has the parallel filter wired in
-  // apps/packaged/src/logging.ts; both must stay in sync until the
-  // helper is promoted to a shared workspace package.
+  // The packaged entry also wires its file-backed process logger before
+  // delegating here; this console fallback keeps source-built launches safe.
   attachDesktopProcessErrorFilter();
 
   // dev (tools-dev) enters here without a prior `whenReady` — so this
   // is where the `--lang` switch actually lands. In packaged builds
-  // `apps/packaged/src/index.ts` has already applied the switch before
+  // `shells/electron/src/index.ts` has already applied the switch before
   // its own `whenReady`; this call is then a no-op for the switch and
   // only recovers the locale string for the BrowserWindow below.
   const osLocale = applyOsLocaleSwitch(app);
@@ -836,8 +838,37 @@ export async function runDesktopMain(
     }
   }
 
+  async function snapshotStandaloneForStatus(): Promise<{
+    standalone?: StandaloneRuntimeStatus;
+    standaloneStatusError?: string;
+  }> {
+    if (options.readStandaloneStatus == null) return {};
+    const timeoutMs = 250;
+    let timeout: NodeJS.Timeout | null = null;
+    try {
+      const standalone = await Promise.race([
+        options.readStandaloneStatus(),
+        new Promise<never>((_, reject) => {
+          timeout = setTimeout(() => {
+            reject(new Error(`standalone status timed out after ${timeoutMs}ms`));
+          }, timeoutMs);
+        }),
+      ]);
+      return { standalone };
+    } catch (error) {
+      return {
+        standaloneStatusError: error instanceof Error ? error.message : String(error),
+      };
+    } finally {
+      if (timeout != null) clearTimeout(timeout);
+    }
+  }
+
   async function desktopStatusSnapshot(activeDesktop: DesktopRuntime | null): Promise<DesktopStatusSnapshot> {
-    const update = await snapshotUpdateForStatus();
+    const [update, standalone] = await Promise.all([
+      snapshotUpdateForStatus(),
+      snapshotStandaloneForStatus(),
+    ]);
     if (activeDesktop == null) {
       return {
         pid: process.pid,
@@ -846,9 +877,10 @@ export async function runDesktopMain(
         url: null,
         windowVisible: false,
         ...update,
+        ...standalone,
       };
     }
-    return { ...activeDesktop.status(), ...update };
+    return { ...activeDesktop.status(), ...update, ...standalone };
   }
 
   async function shutdown(): Promise<void> {

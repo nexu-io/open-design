@@ -96,7 +96,7 @@ if (releaseNoteManifestPath.length === 0) {
   }
 }
 
-for (const target of ["mac_arm64", "win_x64", "mac_x64", "linux_x64"]) {
+for (const target of ["mac_arm64", "win_x64", "mac_x64"]) {
   if (process.env[`ENABLE_${target.toUpperCase()}`] !== "true") continue;
   const targetMetadata = metadata.releaseTargets?.[target];
   const status = targetMetadata?.status;

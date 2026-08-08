@@ -4,7 +4,7 @@ name: finalize-release
 #      release takes no more backports, so the label only invites mistakes.
 #   2. Opens a PR bumping main's synchronized workspace versions to X.Y.(Z+1),
 #      keeping main strictly ahead of the just-shipped stable tag (the build
-#      guard requires apps/packaged version > the latest open-design-v* tag),
+#      guard requires shells/electron version > the latest open-design-v* tag),
 #      arms it for the merge queue (gh pr merge --auto enqueues on green), and
 #      requests a @nexu-io/core-maintainers review.
 #
@@ -24,7 +24,7 @@ name: finalize-release
 #
 # Why the bump PR still needs ONE human approval (unlike the other automerge
 # bots, which merge hands-free): main enforces require_code_owner_review, and the
-# bump touches CODEOWNERS-owned release manifests (apps/packaged, apps/desktop,
+# bump touches CODEOWNERS-owned release manifests (shells/electron,
 # packages/platform, packages/sidecar*, tools/pack, tools/dev). A bot approval
 # can't satisfy the code-owner gate, so a core-maintainer must approve. Once they
 # do, the armed merge queue squashes it in automatically — no manual file editing,
@@ -186,7 +186,7 @@ jobs:
           body=$(printf '%s\n' \
             "Automated by \`finalize-release\` after publishing \`open-design-v$VERSION\`." \
             "" \
-            "Keeps \`main\` strictly ahead of the shipped stable tag — the build guard requires \`apps/packaged\` version to be greater than the latest \`open-design-v*\` tag. Bumps only the synchronized workspace manifests (those already sharing the monorepo version); independently-versioned packages are left untouched." \
+            "Keeps \`main\` strictly ahead of the shipped stable tag — the build guard requires \`shells/electron\` version to be greater than the latest \`open-design-v*\` tag. Bumps only the synchronized workspace manifests (those already sharing the monorepo version); independently-versioned packages are left untouched." \
             "" \
             "The \`backport release/v$VERSION\` label was already deleted by this same run." \
             "" \

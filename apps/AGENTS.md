@@ -6,9 +6,7 @@ Follow the root `AGENTS.md` first. This file only records module-level boundarie
 
 - `apps/web`: Next.js 16 App Router + React 18 web runtime. Entrypoints live in `apps/web/app/`; the main client shell is `apps/web/src/App.tsx`. During local `tools-dev` web runs, `apps/web/next.config.ts` rewrites `/api/*`, `/artifacts/*`, and `/frames/*` to `OD_PORT`.
 - `apps/daemon`: Express + SQLite local daemon and `od` bin. It owns REST/SSE APIs, agent CLI spawning, skills, design systems, artifact persistence, static serving, and daemon-managed data. Before describing or changing daemon data paths, read the root `AGENTS.md` section **Daemon data directory contract**; it is mandatory and must not be restated here.
-- `apps/desktop`: Legacy Electron native-host source retained during the `shells/electron` replacement window. New Shell ownership belongs under `shells/electron`.
 - `apps/standalone`: Shell-neutral product composition for the Web + daemon Standalone Closure. It exposes the fixed `bootloader.mjs` handoff-once entry, composes `packages/standalone-runtime` over `packages/sidecar`, and owns no Desktop IPC, windows, shell update UI, or artifact selection.
-- `apps/packaged`: Legacy combined packaged entry retained during the `shells/electron` replacement window. Do not extend it with new launcher or update ownership.
 - `apps/landing-page`: Standalone static Astro marketing and public catalog site. It reads canonical repository content at build time, deploys independently, and must not import product-runtime internals from the other apps.
 
 ## Daemon layout
@@ -54,13 +52,9 @@ pnpm --filter @open-design/web test
 pnpm --filter @open-design/daemon typecheck
 pnpm --filter @open-design/daemon test
 pnpm --filter @open-design/daemon build
-pnpm --filter @open-design/desktop typecheck
-pnpm --filter @open-design/desktop build
 pnpm --filter @open-design/standalone typecheck
 pnpm --filter @open-design/standalone test
 pnpm --filter @open-design/standalone build
-pnpm --filter @open-design/packaged typecheck
-pnpm --filter @open-design/packaged build
 pnpm --filter @open-design/landing-page typecheck
 pnpm --filter @open-design/landing-page build:static
 ```

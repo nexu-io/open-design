@@ -17,7 +17,7 @@ The npm package declares `puppeteer` + `@puppeteer/browsers` as dependencies
 (used only by its Node/CLI `./node` entry), whose postinstall downloads a full
 Chromium (~150 MB+). We never use that path — we inject this self-contained
 browser bundle into our **existing** Electron Chromium render window
-(`apps/desktop/src/main/deck-capture.ts`). Keeping the gzip source in git and
+(`shells/electron/src/main/deck-capture.ts`). Keeping the gzip source in git and
 materializing the runtime file during `pnpm bootstrap` (or `postinstall`) preserves the "no second
 rendering engine / no install-time Chromium download" property without adding a
 multi-megabyte JavaScript blob to the PR.

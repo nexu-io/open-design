@@ -2,8 +2,8 @@
  * Defensive uncaught-exception filter for the dev / source-built desktop
  * Electron main process.
  *
- * The packaged Electron entry (`apps/packaged/src/logging.ts`) already
- * carries the same filter, where it was added for issue #895 (the
+ * The packaged Electron entry's file-backed logger carries the same narrow
+ * policy, originally added for issue #895 (the
  * `setTypeOfService EINVAL` crash from undici socket internals on certain
  * macOS / VPN configurations). The same crash reproduces on the dev
  * entry when users switch settings tabs because the renderer fires a
@@ -12,14 +12,9 @@
  * default handler and surfaces as the "JavaScript error in main process"
  * dialog reported in issue #647.
  *
- * Why this file isn't a direct import from `apps/packaged`: AGENTS.md
- * forbids one app package from importing another app's private `src/`.
- * The honest fix is to promote the helper to a shared workspace package
- * (e.g. `@open-design/platform`); doing that as part of this bug-fix
- * sprint would balloon the PR. Until that promotion lands, this module
- * is the source of truth for the desktop entry's filter and the two
- * copies should stay in sync. Any change to the matching rules here
- * should land in `apps/packaged/src/logging.ts` in the same PR.
+ * This module remains the console-backed source-launch fallback; packaged
+ * launches install file-backed logging before delegating into the same main
+ * entry. Keep the two narrow match policies behaviorally aligned.
  *
  * Behaviour contract (mirrors the packaged version):
  *

@@ -20,7 +20,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
   },
   "dependencies": {
-    "@open-design/release": "workspace:*"
+    "@open-design/release": "workspace:*",
+    "@open-design/standalone-proto": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "24.12.2",

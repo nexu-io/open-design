@@ -105,9 +105,6 @@ on:
       win_url:
         description: "Windows x64 installer download URL."
         value: ${{ jobs.publish.outputs.win_url }}
-      linux_url:
-        description: "Linux x64 AppImage download URL (empty if linux disabled)."
-        value: ${{ jobs.publish.outputs.linux_url }}
 
 permissions:
   actions: write
@@ -121,7 +118,7 @@ concurrency:
 env:
   # Workspace Team's four vela transports are gated in the packaged runtime on
   # BOTH a known AMR profile and a non-empty vela web origin
-  # (workspaceTeamTransportEnv in apps/packaged/src/workspace-team.ts). Neither
+  # (workspaceTeamTransportEnv in shells/electron/src/workspace-team.ts). Neither
   # has a default in tools-pack, so a lane that omits them ships a client whose
   # team features are silently dormant: the build succeeds, the app starts, and
   # the gap only shows up in a user's hands.
@@ -183,7 +180,6 @@ jobs:
       dry_run: ${{ steps.stable.outputs.dry_run }}
       dry_run_mode: ${{ steps.stable.outputs.dry_run_mode }}
       github_release_enabled: ${{ steps.stable.outputs.github_release_enabled }}
-      linux_namespace: ${{ steps.stable.outputs.linux_namespace }}
       mac_intel_namespace: ${{ steps.stable.outputs.mac_intel_namespace }}
       namespace: ${{ steps.stable.outputs.namespace }}
       publish_side_effects_enabled: ${{ steps.stable.outputs.publish_side_effects_enabled }}
@@ -289,17 +285,17 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       # `scripts/postinstall.mjs` auto-builds `packages/*` and `tools/*`, but
-      # `apps/daemon` and `apps/desktop` are not in that list. On a fresh clone
+      # `apps/daemon` and `shells/electron` are not in that list. On a fresh clone
       # (every CI run), workspace typecheck fails because:
       #   - packaged/runtime consumers resolve the daemon package export through
       #     generated `apps/daemon/dist/*.d.ts`
-      #   - `apps/packaged/src/index.ts` dynamic-imports `@open-design/desktop/main`
-      #     which resolves to `apps/desktop/dist/main/index.d.ts`
+      #   - `shells/electron/src/index.ts` dynamic-imports `@open-design/shell-electron/main`
+      #     which resolves to `shells/electron/dist/main/index.d.ts`
       # Build them explicitly here. Keeps the root `typecheck` script untouched.
       - name: Build daemon and desktop (typecheck dependencies)
         run: |
           pnpm --filter @open-design/daemon build
-          pnpm --filter @open-design/desktop build
+          pnpm --filter @open-design/shell-electron build
 
       - name: Typecheck workspaces
         run: pnpm -r --workspace-concurrency=4 --if-present run typecheck
@@ -346,7 +342,7 @@ jobs:
       - name: Inspect mac Electron framework symlinks
         run: |
           set -euo pipefail
-          electron_dist="$(node -e 'const path = require("node:path"); const { createRequire } = require("node:module"); const requireFromDesktop = createRequire(path.join(process.cwd(), "apps/desktop/package.json")); const electron = requireFromDesktop.resolve("electron"); process.stdout.write(path.join(path.dirname(electron), "dist"));')"
+          electron_dist="$(node -e 'const path = require("node:path"); const { createRequire } = require("node:module"); const requireFromDesktop = createRequire(path.join(process.cwd(), "shells/electron/package.json")); const electron = requireFromDesktop.resolve("electron"); process.stdout.write(path.join(path.dirname(electron), "dist"));')"
           framework="$electron_dist/Electron.app/Contents/Frameworks/Electron Framework.framework"
           missing_links=0
           for link in \
@@ -421,7 +417,7 @@ jobs:
           set -euo pipefail
           output="$RUNNER_TEMP/mac-framework-diagnostics.txt"
           source_resolve_log="$RUNNER_TEMP/mac-framework-source-resolve.err"
-          source_framework="$(node -e 'const path = require("node:path"); const { createRequire } = require("node:module"); const requireFromDesktop = createRequire(path.join(process.cwd(), "apps/desktop/package.json")); const electron = requireFromDesktop.resolve("electron"); process.stdout.write(path.join(path.dirname(electron), "dist", "Electron.app", "Contents", "Frameworks", "Electron Framework.framework"));' 2>"$source_resolve_log" || true)"
+          source_framework="$(node -e 'const path = require("node:path"); const { createRequire } = require("node:module"); const requireFromDesktop = createRequire(path.join(process.cwd(), "shells/electron/package.json")); const electron = requireFromDesktop.resolve("electron"); process.stdout.write(path.join(path.dirname(electron), "dist", "Electron.app", "Contents", "Frameworks", "Electron Framework.framework"));' 2>"$source_resolve_log" || true)"
           app_name="Open Design.app"
           if [ "${{ needs.metadata.outputs.channel }}" = "prerelease" ]; then
             app_name="Open Design Prerelease.app"
@@ -717,7 +713,7 @@ jobs:
         id: win_tools_pack_cache_key
         shell: pwsh
         env:
-          WIN_TOOLS_PACK_ORIGIN_KEY: ${{ hashFiles('package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'apps/daemon/**', 'apps/web/**', 'apps/desktop/**', 'apps/packaged/**', 'packages/agui-adapter/**', 'packages/contracts/**', 'packages/plugin-runtime/**', 'packages/sidecar-proto/**', 'packages/sidecar/**', 'packages/platform/**', 'tools/pack/bin/**', 'tools/pack/package.json', 'tools/pack/resources/**', 'tools/pack/src/**', 'tools/pack/tsconfig.json', 'assets/community-pets/**', 'assets/frames/**', 'craft/**', 'design-systems/**', 'design-templates/**', 'plugins/_official/**', 'plugins/registry/**', 'prompt-templates/**', 'skills/**', '.github/workflows/release-stable.yml', '.github/scripts/release/cache/win.ps1') }}
+          WIN_TOOLS_PACK_ORIGIN_KEY: ${{ hashFiles('package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'apps/daemon/**', 'apps/web/**', 'shells/electron/**', 'packages/agui-adapter/**', 'packages/contracts/**', 'packages/plugin-runtime/**', 'packages/sidecar-proto/**', 'packages/sidecar/**', 'packages/platform/**', 'tools/pack/bin/**', 'tools/pack/package.json', 'tools/pack/resources/**', 'tools/pack/src/**', 'tools/pack/tsconfig.json', 'assets/community-pets/**', 'assets/frames/**', 'craft/**', 'design-systems/**', 'design-templates/**', 'plugins/_official/**', 'plugins/registry/**', 'prompt-templates/**', 'skills/**', '.github/workflows/release-stable.yml', '.github/scripts/release/cache/win.ps1') }}
         run: |
           if ([string]::IsNullOrWhiteSpace($env:WIN_TOOLS_PACK_ORIGIN_KEY)) {
             throw "Windows tools-pack cache origin key is empty"
@@ -940,156 +936,6 @@ jobs:
           path: ${{ runner.temp }}/release-assets
           retention-days: 1
 
-  build_linux:
-    name: Build release linux x64
-    needs: [metadata, verify]
-    # Linux AppImage packaging is temporarily excluded from stable releases.
-    # Keep the job definition in place so the Linux lane can be re-enabled once
-    # the containerized pnpm bootstrap is fixed and reviewed.
-    if: ${{ needs.metadata.outputs.run_prepublish_jobs == 'true' && vars.ENABLE_STABLE_LINUX == 'true' }}
-    runs-on: ubuntu-latest
-    env:
-      GH_TOKEN: ${{ github.token }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6.0.2
-        with:
-          ref: ${{ inputs.ref }}
-          fetch-depth: 0
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v5
-        with:
-          version: 10.33.2
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      # `--containerized` builds the AppImage inside the electronuserland/builder
-      # Docker image (glibc 2.27 baseline) so the resulting binary runs on older
-      # distros than ubuntu-latest's glibc 2.39. Docker is preinstalled on the
-      # GitHub-hosted ubuntu-latest runner, so no extra setup is required.
-      - name: Build release linux artifacts
-        run: |
-          set -euo pipefail
-          tools_pack_dir="$RUNNER_TEMP/tools-pack"
-          report_dir="$RUNNER_TEMP/release-report/linux"
-          build_json_path="$report_dir/tools-pack.json"
-          build_log_path="$report_dir/tools-pack.log"
-          rm -rf "$tools_pack_dir"
-          mkdir -p "$report_dir"
-          : > "$build_log_path"
-          build_args=(
-            exec tools-pack linux build
-            --dir "$tools_pack_dir"
-            --namespace "${{ needs.metadata.outputs.linux_namespace }}"
-            --portable
-            --app-version "${{ needs.metadata.outputs.release_version }}"
-            --to appimage
-            --containerized
-            --json
-          )
-          if build_output="$(pnpm "${build_args[@]}" 2> >(tee -a "$build_log_path" >&2))"; then
-            printf '%s\n' "$build_output" | tee "$build_json_path"
-            node -e 'const fs = require("node:fs"); JSON.parse(fs.readFileSync(process.argv[1], "utf8"));' "$build_json_path"
-          else
-            build_status=$?
-            printf '%s\n' "$build_output" | tee "$build_json_path"
-            exit "$build_status"
-          fi
-
-      - name: Smoke release linux AppImage runtime
-        working-directory: e2e
-        env:
-          OD_PACKAGED_E2E_LINUX_APPIMAGE: "1"
-          OD_PACKAGED_E2E_NAMESPACE: ${{ needs.metadata.outputs.linux_namespace }}
-          OD_PACKAGED_E2E_SCREENSHOT_PATH: ${{ runner.temp }}/release-report/linux/screenshots/open-design-linux-smoke.png
-          OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
-        run: |
-          set -euo pipefail
-          report_dir="$RUNNER_TEMP/release-report/linux"
-          mkdir -p "$report_dir/screenshots"
-          cat > "$report_dir/manifest.json" <<EOF
-          {
-            "channel": "${{ needs.metadata.outputs.channel }}",
-            "platform": "linux",
-            "releaseVersion": "${{ needs.metadata.outputs.release_version }}",
-            "spec": "specs/linux.spec.ts",
-            "namespace": "${{ needs.metadata.outputs.linux_namespace }}",
-            "screenshot": "screenshots/open-design-linux-smoke.png",
-            "githubRunId": "$GITHUB_RUN_ID",
-            "githubRunAttempt": "$GITHUB_RUN_ATTEMPT",
-            "commit": "$GITHUB_SHA"
-          }
-          EOF
-          sudo apt-get update 2>&1 | tee "$report_dir/apt-get-update.log"
-          sudo apt-get install -y xvfb 2>&1 | tee "$report_dir/apt-get-install-xvfb.log"
-          xvfb-run -a pnpm test specs/linux.spec.ts 2>&1 | tee "$report_dir/vitest.log"
-
-      - name: Upload linux e2e spec report
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: open-design-release-linux-e2e-report
-          path: ${{ runner.temp }}/release-report/linux
-          if-no-files-found: warn
-
-      - name: Prepare linux release assets
-        env:
-          RELEASE_ASSET_SUFFIX: ""
-          RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets
-          RELEASE_BRANCH: ${{ needs.metadata.outputs.branch }}
-          RELEASE_CHANNEL: ${{ needs.metadata.outputs.channel }}
-          RELEASE_NAMESPACE: ${{ needs.metadata.outputs.linux_namespace }}
-          RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
-          RELEASE_TARGET: linux_x64
-          RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
-          TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
-        run: bash tools/release/scripts/prepare-platform-assets.sh
-
-      - name: Publish linux platform
-        env:
-          RELEASE_ASSET_SUFFIX: ""
-          RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets
-          RELEASE_BRANCH: ${{ needs.metadata.outputs.branch }}
-          RELEASE_CHANNEL: ${{ needs.metadata.outputs.channel }}
-          RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
-          RELEASE_DRY_RUN_MODE: ${{ needs.metadata.outputs.dry_run_mode }}
-          RELEASE_PUBLISH_SIDE_EFFECTS: ${{ needs.metadata.outputs.publish_side_effects_enabled }}
-          RELEASE_MANIFEST_DIR: ${{ runner.temp }}/release-platform-manifests
-          RELEASE_OUTPUTS_PATH: ${{ runner.temp }}/release-platform-outputs/linux_x64.json
-          RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
-          RELEASE_REPORT_DIR: ${{ runner.temp }}/release-report/linux
-          RELEASE_SIGNED: "false"
-          RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
-          RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
-          RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
-          RELEASE_STORAGE_REGION: auto
-          RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
-          RELEASE_TARGET: linux_x64
-          RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
-        run: pnpm exec tools-release publish-platform
-
-      - name: Upload linux publish manifest
-        uses: actions/upload-artifact@v7
-        with:
-          name: open-design-release-linux-x64-publish-manifest
-          path: ${{ runner.temp }}/release-platform-manifests/linux_x64.json
-          if-no-files-found: error
-          retention-days: 1
-
-      - name: Upload linux release bundle
-        uses: actions/upload-artifact@v7
-        with:
-          name: open-design-release-linux-release-assets
-          path: ${{ runner.temp }}/release-assets
-          retention-days: 1
-
   publish_docker_image:
     name: Publish stable Docker image
     needs:
@@ -1123,7 +969,6 @@ jobs:
       - build_mac
       - build_mac_intel
       - build_win
-      - build_linux
     if: >-
       ${{
         always() &&
@@ -1133,8 +978,7 @@ jobs:
         needs.verify.result == 'success' &&
         needs.build_mac.result == 'success' &&
         needs.build_mac_intel.result == 'success' &&
-        needs.build_win.result == 'success' &&
-        (needs.build_linux.result == 'success' || needs.build_linux.result == 'skipped')
+        needs.build_win.result == 'success'
       }}
     runs-on: ubuntu-latest
     outputs:
@@ -1142,7 +986,6 @@ jobs:
       mac_arm64_url: ${{ steps.outputs.outputs.mac_arm64_dmg_url }}
       mac_intel_url: ${{ steps.outputs.outputs.mac_x64_dmg_url }}
       win_url: ${{ steps.outputs.outputs.win_x64_installer_url }}
-      linux_url: ${{ steps.outputs.outputs.linux_x64_appImage_url }}
     env:
       GH_TOKEN: ${{ github.token }}
       # Record the real built commit in metadata.json. Under workflow_call the
@@ -1151,7 +994,6 @@ jobs:
       GITHUB_SHA: ${{ needs.metadata.outputs.commit }}
       BASE_VERSION: ${{ needs.metadata.outputs.base_version }}
       BRANCH_NAME: ${{ needs.metadata.outputs.branch }}
-      ENABLE_LINUX: ${{ needs.build_linux.result == 'success' }}
       ENABLE_MAC: "true"
       ENABLE_MAC_INTEL: "true"
       ENABLE_WIN: "true"
@@ -1203,13 +1045,6 @@ jobs:
           name: open-design-release-win-x64-publish-manifest
           path: ${{ runner.temp }}/release-platform-manifests
 
-      - name: Download linux publish manifest
-        if: ${{ needs.build_linux.result == 'success' }}
-        uses: actions/download-artifact@v8
-        with:
-          name: open-design-release-linux-x64-publish-manifest
-          path: ${{ runner.temp }}/release-platform-manifests
-
       - name: Pre-flight tag/release check
         if: ${{ needs.metadata.outputs.github_release_enabled == 'true' }}
         run: |
@@ -1241,20 +1076,6 @@ jobs:
           name: open-design-release-win-release-assets
           path: ${{ runner.temp }}/release-assets/win
 
-      - name: Download linux release bundle
-        if: ${{ needs.build_linux.result == 'success' }}
-        uses: actions/download-artifact@v8
-        with:
-          name: open-design-release-linux-release-assets
-          path: ${{ runner.temp }}/release-assets/linux
-
-      - name: Download linux e2e spec report
-        if: ${{ needs.build_linux.result == 'success' }}
-        uses: actions/download-artifact@v8
-        with:
-          name: open-design-release-linux-e2e-report
-          path: ${{ runner.temp }}/release-report/linux
-
       - name: Download mac e2e spec report
         uses: actions/download-artifact@v8
         with:
@@ -1266,8 +1087,7 @@ jobs:
       # artifact at all. Downloading it unconditionally then fails finalize —
       # after all three platforms have already built, signed and notarized —
       # which makes `win_x64_smoke_mode: skip` unusable on the stable lane even
-      # though the input offers it. Guard it the way the linux report is guarded
-      # by its own build result.
+      # though the input offers it. Guard it by the requested smoke mode.
       - name: Download windows e2e spec report
         if: ${{ inputs.win_x64_smoke_mode != 'skip' }}
         uses: actions/download-artifact@v8
@@ -1277,7 +1097,6 @@ jobs:
 
       - name: Prepare stable GitHub Release asset plan
         env:
-          ENABLE_LINUX_X64: ${{ needs.build_linux.result == 'success' }}
           RELEASE_CHANNEL: ${{ needs.metadata.outputs.channel }}
           RELEASE_GITHUB_ASSETS_DIR: ${{ runner.temp }}/github-release-assets
           RELEASE_GITHUB_ASSETS_SOURCE_DIR: ${{ runner.temp }}/release-assets
@@ -1336,11 +1155,9 @@ jobs:
       - name: Prepare release metadata
         env:
           BASE_VERSION: ${{ needs.metadata.outputs.base_version }}
-          ENABLE_LINUX_X64: ${{ needs.build_linux.result == 'success' }}
           ENABLE_MAC_ARM64: "true"
           ENABLE_MAC_X64: "true"
           ENABLE_WIN_X64: "true"
-          LINUX_X64_RESULT: ${{ needs.build_linux.result }}
           MAC_ARM64_RESULT: ${{ needs.build_mac.result }}
           MAC_X64_RESULT: ${{ needs.build_mac_intel.result }}
           RELEASE_ASSET_SUFFIX: ""
@@ -1384,11 +1201,9 @@ jobs:
 
       - name: Verify release metadata
         env:
-          ENABLE_LINUX_X64: ${{ needs.build_linux.result == 'success' }}
           ENABLE_MAC_ARM64: "true"
           ENABLE_MAC_X64: "true"
           ENABLE_WIN_X64: "true"
-          LINUX_X64_RESULT: ${{ needs.build_linux.result }}
           MAC_ARM64_RESULT: ${{ needs.build_mac.result }}
           MAC_X64_RESULT: ${{ needs.build_mac_intel.result }}
           RELEASE_DRY_RUN_MODE: ${{ needs.metadata.outputs.dry_run_mode }}
@@ -1440,7 +1255,6 @@ jobs:
       - build_mac
       - build_mac_intel
       - build_win
-      - build_linux
       - publish
     if: ${{ always() && needs.metadata.outputs.dry_run != 'true' && needs.publish.result != 'success' }}
     runs-on: ubuntu-latest

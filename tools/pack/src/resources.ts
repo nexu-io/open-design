@@ -52,11 +52,6 @@ export const winResources = {
   webStandaloneAfterPackHook: join(resourcesRoot, "web-standalone-after-pack.cjs"),
 } as const;
 
-export const linuxResources = {
-  icon: join(resourcesRoot, "linux", "icon.png"),
-  desktopTemplate: join(resourcesRoot, "linux", "open-design.desktop.template"),
-} as const;
-
 const BUNDLED_RESOURCE_TREES = [
   { from: "skills", to: "skills" },
   // After the skills/design-templates split (specs/current/skills-and-design-templates.md)

@@ -18,11 +18,6 @@ on:
         required: true
         type: boolean
         default: false
-      enable_linux_x64:
-        description: "Build and publish Linux x64 AppImage beta artifacts."
-        required: true
-        type: boolean
-        default: false
       publish:
         description: "Publish beta assets and metadata."
         required: true
@@ -157,15 +152,6 @@ on:
         required: false
         type: string
         default: ""
-      linux_x64_smoke_mode:
-        description: "Linux x64 smoke coverage."
-        required: true
-        type: choice
-        options:
-          - skip
-          - core
-          - full
-        default: core
   workflow_call:
     inputs:
       enable_mac_arm64:
@@ -177,10 +163,6 @@ on:
         type: boolean
         default: true
       enable_mac_x64:
-        required: false
-        type: boolean
-        default: false
-      enable_linux_x64:
         required: false
         type: boolean
         default: false
@@ -273,10 +255,6 @@ on:
         required: false
         type: string
         default: ""
-      linux_x64_smoke_mode:
-        required: false
-        type: string
-        default: core
     outputs:
       beta_version:
         description: "The beta version that was built."
@@ -320,9 +298,6 @@ on:
       mac_x64_url:
         description: "macOS x64 dmg download URL."
         value: ${{ jobs.publish.outputs.mac_x64_url }}
-      linux_x64_url:
-        description: "Linux x64 AppImage download URL."
-        value: ${{ jobs.publish.outputs.linux_x64_url }}
 
 permissions:
   actions: write
@@ -444,7 +419,7 @@ jobs:
             echo "release-beta supports release_origin=cloudflare-r2 only" >&2
             exit 1
           fi
-          if [ "${{ inputs.enable_mac_arm64 }}" != "true" ] && [ "${{ inputs.enable_win_x64 }}" != "true" ] && [ "${{ inputs.enable_mac_x64 }}" != "true" ] && [ "${{ inputs.enable_linux_x64 }}" != "true" ]; then
+          if [ "${{ inputs.enable_mac_arm64 }}" != "true" ] && [ "${{ inputs.enable_win_x64 }}" != "true" ] && [ "${{ inputs.enable_mac_x64 }}" != "true" ]; then
             echo "release-beta requires at least one target to be enabled" >&2
             exit 1
           fi
@@ -504,7 +479,7 @@ jobs:
       - name: Compute mac_arm64 tools-pack cache key
         id: mac_arm64_tools_pack_cache_key
         env:
-          MAC_TOOLS_PACK_ORIGIN_KEY: ${{ hashFiles('package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'apps/daemon/**', 'apps/web/**', 'apps/desktop/**', 'apps/packaged/**', 'packages/agui-adapter/**', 'packages/contracts/**', 'packages/plugin-runtime/**', 'packages/sidecar-proto/**', 'packages/sidecar/**', 'packages/platform/**', 'tools/pack/bin/**', 'tools/pack/package.json', 'tools/pack/resources/**', 'tools/pack/src/**', 'tools/pack/tsconfig.json', 'assets/community-pets/**', 'assets/frames/**', 'craft/**', 'design-systems/**', 'design-templates/**', 'plugins/_official/**', 'plugins/registry/**', 'prompt-templates/**', 'skills/**', '.github/workflows/release-beta.yml', '.github/scripts/release/cache/mac.sh') }}
+          MAC_TOOLS_PACK_ORIGIN_KEY: ${{ hashFiles('package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'apps/daemon/**', 'apps/web/**', 'shells/electron/**', 'packages/agui-adapter/**', 'packages/contracts/**', 'packages/plugin-runtime/**', 'packages/sidecar-proto/**', 'packages/sidecar/**', 'packages/platform/**', 'tools/pack/bin/**', 'tools/pack/package.json', 'tools/pack/resources/**', 'tools/pack/src/**', 'tools/pack/tsconfig.json', 'assets/community-pets/**', 'assets/frames/**', 'craft/**', 'design-systems/**', 'design-templates/**', 'plugins/_official/**', 'plugins/registry/**', 'prompt-templates/**', 'skills/**', '.github/workflows/release-beta.yml', '.github/scripts/release/cache/mac.sh') }}
         run: |
           set -euo pipefail
           if [ -z "$MAC_TOOLS_PACK_ORIGIN_KEY" ]; then
@@ -910,7 +885,7 @@ jobs:
       - name: Compute mac_x64 tools-pack cache key
         id: mac_x64_tools_pack_cache_key
         env:
-          MAC_TOOLS_PACK_ORIGIN_KEY: ${{ hashFiles('package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'apps/daemon/**', 'apps/web/**', 'apps/desktop/**', 'apps/packaged/**', 'packages/agui-adapter/**', 'packages/contracts/**', 'packages/plugin-runtime/**', 'packages/sidecar-proto/**', 'packages/sidecar/**', 'packages/platform/**', 'tools/pack/bin/**', 'tools/pack/package.json', 'tools/pack/resources/**', 'tools/pack/src/**', 'tools/pack/tsconfig.json', 'assets/community-pets/**', 'assets/frames/**', 'craft/**', 'design-systems/**', 'design-templates/**', 'plugins/_official/**', 'plugins/registry/**', 'prompt-templates/**', 'skills/**', '.github/workflows/release-beta.yml', '.github/scripts/release/cache/mac.sh') }}
+          MAC_TOOLS_PACK_ORIGIN_KEY: ${{ hashFiles('package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'apps/daemon/**', 'apps/web/**', 'shells/electron/**', 'packages/agui-adapter/**', 'packages/contracts/**', 'packages/plugin-runtime/**', 'packages/sidecar-proto/**', 'packages/sidecar/**', 'packages/platform/**', 'tools/pack/bin/**', 'tools/pack/package.json', 'tools/pack/resources/**', 'tools/pack/src/**', 'tools/pack/tsconfig.json', 'assets/community-pets/**', 'assets/frames/**', 'craft/**', 'design-systems/**', 'design-templates/**', 'plugins/_official/**', 'plugins/registry/**', 'prompt-templates/**', 'skills/**', '.github/workflows/release-beta.yml', '.github/scripts/release/cache/mac.sh') }}
         run: |
           set -euo pipefail
           if [ -z "$MAC_TOOLS_PACK_ORIGIN_KEY" ]; then
@@ -1184,7 +1159,7 @@ jobs:
         id: win_tools_pack_cache_key
         shell: pwsh
         env:
-          WIN_TOOLS_PACK_ORIGIN_KEY: ${{ hashFiles('package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'apps/daemon/**', 'apps/web/**', 'apps/desktop/**', 'apps/packaged/**', 'packages/agui-adapter/**', 'packages/contracts/**', 'packages/plugin-runtime/**', 'packages/sidecar-proto/**', 'packages/sidecar/**', 'packages/platform/**', 'tools/pack/bin/**', 'tools/pack/package.json', 'tools/pack/resources/**', 'tools/pack/src/**', 'tools/pack/tsconfig.json', 'assets/community-pets/**', 'assets/frames/**', 'craft/**', 'design-systems/**', 'design-templates/**', 'plugins/_official/**', 'plugins/registry/**', 'prompt-templates/**', 'skills/**', '.github/workflows/release-beta.yml', '.github/scripts/release/cache/win.ps1') }}
+          WIN_TOOLS_PACK_ORIGIN_KEY: ${{ hashFiles('package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'apps/daemon/**', 'apps/web/**', 'shells/electron/**', 'packages/agui-adapter/**', 'packages/contracts/**', 'packages/plugin-runtime/**', 'packages/sidecar-proto/**', 'packages/sidecar/**', 'packages/platform/**', 'tools/pack/bin/**', 'tools/pack/package.json', 'tools/pack/resources/**', 'tools/pack/src/**', 'tools/pack/tsconfig.json', 'assets/community-pets/**', 'assets/frames/**', 'craft/**', 'design-systems/**', 'design-templates/**', 'plugins/_official/**', 'plugins/registry/**', 'prompt-templates/**', 'skills/**', '.github/workflows/release-beta.yml', '.github/scripts/release/cache/win.ps1') }}
         run: |
           if ([string]::IsNullOrWhiteSpace($env:WIN_TOOLS_PACK_ORIGIN_KEY)) {
             throw "Windows tools-pack cache origin key is empty"
@@ -1505,119 +1480,6 @@ jobs:
           path: ${{ runner.temp }}\release-platform-manifests\win_x64.json
           if-no-files-found: error
 
-  build_linux_x64:
-    name: Build beta linux_x64
-    needs: metadata
-    if: ${{ inputs.enable_linux_x64 }}
-    runs-on: ubuntu-latest
-    env:
-      RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6.0.2
-        with:
-          ref: ${{ needs.metadata.outputs.commit }}
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v5
-        with:
-          version: 10.33.2
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Install Linux smoke dependencies
-        if: ${{ inputs.linux_x64_smoke_mode != 'skip' }}
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y xvfb
-
-      - name: Build beta linux_x64
-        env:
-          BUILD_JSON_PATH: ${{ runner.temp }}/release-build/linux_x64/build.json
-          BUILD_LOG_PATH: ${{ runner.temp }}/release-build/linux_x64/build.log
-          RELEASE_BUILD_TARGET: appimage
-          RELEASE_NAMESPACE: release-beta-linux
-          RELEASE_OUTPUTS_PATH: ${{ runner.temp }}/release-build/linux_x64/outputs.json
-          RELEASE_REPORT_DIR: ${{ runner.temp }}/release-report/linux_x64
-          RELEASE_SMOKE_MODE: ${{ inputs.linux_x64_smoke_mode }}
-          RELEASE_TARGET: linux_x64
-          RELEASE_VERSION: ${{ needs.metadata.outputs.beta_version }}
-          RELEASE_WORK_DIR: ${{ runner.temp }}/release-work/linux_x64
-          TOOLS_PACK_CACHE_DIR: ${{ runner.temp }}/tools-pack-cache
-          TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
-        run: bash tools/release/scripts/build-platform.sh
-
-      - name: Write linux_x64 release report
-        if: ${{ always() }}
-        env:
-          BUILD_JSON_PATH: ${{ runner.temp }}/release-build/linux_x64/build.json
-          BUILD_LOG_PATH: ${{ runner.temp }}/release-build/linux_x64/build.log
-          RELEASE_BUILD_TARGET: appimage
-          RELEASE_CHANNEL: beta
-          RELEASE_NAMESPACE: release-beta-linux
-          RELEASE_REPORT_DIR: ${{ runner.temp }}/release-report/linux_x64
-          RELEASE_REPORT_JSON_PATH: ${{ runner.temp }}/release-report/linux_x64/report.json
-          RELEASE_REPORT_SUMMARY_PATH: ${{ runner.temp }}/release-report/linux_x64/summary.md
-          RELEASE_SMOKE_MODE: ${{ inputs.linux_x64_smoke_mode }}
-          RELEASE_TARGET: linux_x64
-          RELEASE_VERSION: ${{ needs.metadata.outputs.beta_version }}
-          REPORT_TITLE: linux_x64 beta build
-        run: pnpm exec tools-release write-report
-
-      - name: Publish linux_x64 report summary
-        if: ${{ always() }}
-        run: cat "${{ runner.temp }}/release-report/linux_x64/summary.md" >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Prepare linux_x64 assets
-        if: ${{ inputs.publish }}
-        env:
-          RELEASE_ASSET_SUFFIX: .unsigned
-          RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets/linux_x64
-          RELEASE_CHANNEL: beta
-          RELEASE_NAMESPACE: release-beta-linux
-          RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
-          RELEASE_TARGET: linux_x64
-          RELEASE_VERSION: ${{ needs.metadata.outputs.beta_version }}
-          TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
-        run: bash tools/release/scripts/prepare-platform-assets.sh
-
-      - name: Publish linux_x64 platform
-        if: ${{ inputs.publish }}
-        env:
-          RELEASE_ASSET_SUFFIX: .unsigned
-          RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets/linux_x64
-          RELEASE_CHANNEL: beta
-          RELEASE_MANIFEST_DIR: ${{ runner.temp }}/release-platform-manifests
-          RELEASE_OUTPUTS_PATH: ${{ runner.temp }}/release-platform-outputs/linux_x64.json
-          RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
-          RELEASE_REPORT_DIR: ${{ runner.temp }}/release-report/linux_x64
-          RELEASE_REPORT_ZIP_PATH: ${{ runner.temp }}/release-report/linux_x64-report.zip
-          RELEASE_SIGNED: "false"
-          RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
-          RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
-          RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
-          RELEASE_STORAGE_REGION: auto
-          RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
-          RELEASE_TARGET: linux_x64
-          RELEASE_VERSION: ${{ needs.metadata.outputs.beta_version }}
-        run: pnpm exec tools-release publish-platform
-
-      - name: Upload linux_x64 publish manifest
-        if: ${{ inputs.publish }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: open-design-beta-linux-x64-publish-manifest
-          path: ${{ runner.temp }}/release-platform-manifests/linux_x64.json
-          if-no-files-found: error
-
   publish:
     name: Publish beta metadata
     needs:
@@ -1625,7 +1487,6 @@ jobs:
       - build_mac_arm64
       - build_mac_x64
       - build_win_x64
-      - build_linux_x64
     if: >-
       ${{
         always() &&
@@ -1633,11 +1494,10 @@ jobs:
         inputs.publish &&
         inputs.promote &&
         needs.metadata.result == 'success' &&
-        (inputs.enable_mac_arm64 || inputs.enable_win_x64 || inputs.enable_mac_x64 || inputs.enable_linux_x64) &&
+        (inputs.enable_mac_arm64 || inputs.enable_win_x64 || inputs.enable_mac_x64) &&
         (!inputs.enable_mac_arm64 || needs.build_mac_arm64.result == 'success') &&
         (!inputs.enable_win_x64 || needs.build_win_x64.result == 'success') &&
-        (!inputs.enable_mac_x64 || needs.build_mac_x64.result == 'success') &&
-        (!inputs.enable_linux_x64 || needs.build_linux_x64.result == 'success')
+        (!inputs.enable_mac_x64 || needs.build_mac_x64.result == 'success')
       }}
     runs-on: ubuntu-latest
     outputs:
@@ -1648,7 +1508,6 @@ jobs:
       win_x64_url: ${{ steps.outputs.outputs.win_x64_installer_url }}
       win_x64_closure_url: ${{ steps.outputs.outputs.win_x64_closure_archive_url }}
       mac_x64_url: ${{ steps.outputs.outputs.mac_x64_dmg_url }}
-      linux_x64_url: ${{ steps.outputs.outputs.linux_x64_appImage_url }}
     env:
       GITHUB_SHA: ${{ needs.metadata.outputs.commit }}
       RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
@@ -1677,13 +1536,6 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: open-design-beta-win-x64-publish-manifest
-          path: ${{ runner.temp }}/release-platform-manifests
-
-      - name: Download linux_x64 publish manifest
-        if: ${{ inputs.enable_linux_x64 && needs.build_linux_x64.result == 'success' }}
-        uses: actions/download-artifact@v8
-        with:
-          name: open-design-beta-linux-x64-publish-manifest
           path: ${{ runner.temp }}/release-platform-manifests
 
       - name: Setup pnpm
@@ -1719,11 +1571,9 @@ jobs:
       - name: Publish beta metadata
         env:
           BASE_VERSION: ${{ needs.metadata.outputs.base_version }}
-          ENABLE_LINUX_X64: ${{ inputs.enable_linux_x64 }}
           ENABLE_MAC_ARM64: ${{ inputs.enable_mac_arm64 }}
           ENABLE_MAC_X64: ${{ inputs.enable_mac_x64 }}
           ENABLE_WIN_X64: ${{ inputs.enable_win_x64 }}
-          LINUX_X64_RESULT: ${{ needs.build_linux_x64.result }}
           MAC_ARM64_RESULT: ${{ needs.build_mac_arm64.result }}
           MAC_X64_RESULT: ${{ needs.build_mac_x64.result }}
           RELEASE_ASSET_SUFFIX: ${{ needs.metadata.outputs.asset_version_suffix }}
@@ -1760,11 +1610,9 @@ jobs:
 
       - name: Verify beta metadata
         env:
-          ENABLE_LINUX_X64: ${{ inputs.enable_linux_x64 }}
           ENABLE_MAC_ARM64: ${{ inputs.enable_mac_arm64 }}
           ENABLE_MAC_X64: ${{ inputs.enable_mac_x64 }}
           ENABLE_WIN_X64: ${{ inputs.enable_win_x64 }}
-          LINUX_X64_RESULT: ${{ needs.build_linux_x64.result }}
           MAC_ARM64_RESULT: ${{ needs.build_mac_arm64.result }}
           MAC_X64_RESULT: ${{ needs.build_mac_x64.result }}
           RELEASE_CHANNEL: beta

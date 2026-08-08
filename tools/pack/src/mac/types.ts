@@ -86,8 +86,24 @@ export type MacInspectResult = {
   launcher: ToolPackLauncherRuntimeSnapshot;
   screenshot?: DesktopScreenshotResult;
   status: DesktopStatusSnapshot | null;
+  statusError?: string;
+  statusPoll?: MacInspectStatusPollResult;
   updateCache: ToolPackUpdateCacheLifecycleSnapshot;
   update?: DesktopUpdateResult;
+};
+
+export type MacInspectStatusPollSample = {
+  attempt: number;
+  durationMs: number;
+  startedAt: string;
+  status: DesktopStatusSnapshot | null;
+  statusError?: string;
+};
+
+export type MacInspectStatusPollResult = {
+  count: number;
+  intervalMs: number;
+  samples: MacInspectStatusPollSample[];
 };
 
 export type DesktopRootIdentityMarker = {

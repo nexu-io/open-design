@@ -28,7 +28,6 @@ const execFileAsync = promisify(execFile);
 function makeConfig(root: string, platform: ToolPackPlatform, namespace: string, appVersion: string): ToolPackConfig {
   return {
     appVersion,
-    containerized: false,
     electronBuilderCliPath: "/x/electron-builder/cli.js",
     electronDistPath: "/x/electron/dist",
     electronVersion: "41.3.0",

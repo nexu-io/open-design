@@ -485,7 +485,10 @@ export async function resolvePackagedLauncherRuntime(
     runtime: descriptor,
   });
   const persistedInstall = await readLauncherInstallDescriptor(launcherPaths, channel, config.namespace).catch(() => null);
-  const currentPackageLaunchPath = stableAppLaunchPathFromExecutable(process.execPath);
+  // Track the stable launch path of the current launcher executable so a
+  // Shell update that moves the executable cannot leave install.json pointing
+  // at the retired outer (issue #6494).
+  const currentPackageLaunchPath = stableAppLaunchPathFromExecutable(currentExecutablePath);
 
   if (selection.selected) {
     const versionPaths = resolveLauncherVersionPaths({
@@ -522,12 +525,22 @@ export async function resolvePackagedLauncherRuntime(
           version: selection.pointer.version,
         } satisfies LauncherAttemptDescriptor);
       }
+      const installedLaunchPath = !payloadDesktopProcess
+        && (persistedInstall == null
+          || !sameExecutablePath(persistedInstall.launchPath, currentPackageLaunchPath))
+        ? (await writeLauncherInstallDescriptor(
+          launcherPaths,
+          channel,
+          config.namespace,
+          currentPackageLaunchPath,
+        )).launchPath
+        : (persistedInstall?.launchPath ?? currentPackageLaunchPath);
       return {
         config: payloadConfig.config,
         desktopExecutablePath: payloadConfig.desktopExecutablePath,
         descriptor,
         electronNodeCommand: payloadConfig.electronNodeCommand,
-        installedLaunchPath: persistedInstall?.launchPath ?? currentPackageLaunchPath,
+        installedLaunchPath,
         launcherPaths,
         paths: { ...paths, resourceRoot: payloadConfig.config.resourceRoot },
         payloadDesktopProcess,

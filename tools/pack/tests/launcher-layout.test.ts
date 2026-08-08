@@ -18,7 +18,6 @@ const TEST_WORKSPACE_ROOT = resolve("/work");
 function makeConfig(root: string, platform: ToolPackPlatform, namespace: string, appVersion?: string): ToolPackConfig {
   return {
     ...(appVersion == null ? {} : { appVersion }),
-    containerized: false,
     electronBuilderCliPath: "/x/electron-builder/cli.js",
     electronDistPath: "/x/electron/dist",
     electronVersion: "41.3.0",
@@ -109,7 +108,6 @@ describe("tools-pack launcher layout", () => {
   it("uses zip payload archives for mac and 7z payload archives for Windows", () => {
     expect(payloadArchiveExtension("mac")).toBe("zip");
     expect(payloadArchiveExtension("win")).toBe("7z");
-    expect(payloadArchiveExtension("linux")).toBe("zip");
   });
 
   it("builds the initial runtime descriptor for the first launcher-capable version", () => {

@@ -357,6 +357,9 @@ async function main(): Promise<void> {
       handoff: status.handoff,
       handle: standalone,
     }),
+    async readStandaloneStatus() {
+      return await standalone.readStatus();
+    },
     update: {
       currentVersion: shellVersion,
       downloadRoot: paths.updateRoot,

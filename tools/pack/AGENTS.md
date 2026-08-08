@@ -12,9 +12,6 @@ Read `tools/pack/CACHE.md` before changing any build-cache node key, adding a ca
 - Windows NSIS build/install/start/stop/logs/uninstall/cleanup/list/reset smoke commands.
 - Windows registry observation/cleanup must go through `reg.exe` and stay scoped to entries matching the namespace install/uninstaller paths.
 - Windows lifecycle logs must expose NSIS automation logs/markers/timings in addition to app runtime logs.
-- Linux AppImage build/install/start/stop/logs/uninstall/cleanup smoke commands.
-- Linux standalone (no-Electron) install/start/stop via `--standalone` flag on `install`, `start`, and `stop`.
-- Linux containerized builds via `electronuserland/builder` Docker image for distro-agnostic glibc compat.
 - Consuming sidecar/process/path primitives from `@open-design/sidecar-proto`, `@open-design/sidecar`, and `@open-design/platform`.
 
 ## Does not own
@@ -46,7 +43,7 @@ Read this section before changing packaged auto-update behavior. The updater cro
 
 - `shells/electron/src/main/updater.ts` owns updater state, release metadata parsing, artifact selection, checksum verification, download-store ownership, progress events, and opening the downloaded installer. It is pure main-process logic and is tested under `shells/electron/tests/main/updater.test.ts`.
 - `shells/electron/src/main/runtime.ts` exposes updater IPC to the renderer through `od:update:status|check|download|install|quit` and emits `od:update:status-changed`. Keep installer launch separate from process shutdown; quit is an explicit post-installer action.
-- `shells/electron/src/main/index.ts` wires the scheduler and the packaged macOS app-menu update item. The native item mirrors updater state and opens the renderer-owned update dialog; it must not create a second updater or a native result dialog. Windows and Linux menus do not expose update actions.
+- `shells/electron/src/main/index.ts` wires the scheduler and the packaged macOS app-menu update item. The native item mirrors updater state and opens the renderer-owned update dialog; it must not create a second updater or a native result dialog. Windows menus do not expose update actions.
 - `apps/web/src/lib/updater.ts` normalizes host updater snapshots into UI-ready state.
 - `apps/web/src/components/UpdaterPopup.tsx` remains the ready-update surface in the left rail. `apps/web/src/components/UpdateDialog.tsx` owns the explicit macOS app-menu check flow. All visible copy and native menu labels must go through `apps/web/src/i18n`.
 - `packages/launcher-proto` owns launcher pointer, attempt, and desktop-handoff journal shapes plus payload selection. `runtime.json` together with `attempt.json` is the only payload-version state machine.

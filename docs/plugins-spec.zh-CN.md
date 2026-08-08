@@ -1601,7 +1601,7 @@ open slides.html      # or however the user wants to view the file
 | --- | --- | --- |
 | Headless agent CLI | `cursor-agent`（驱动 agent loop） | `od run start --agent claude --follow` + `od plugin run` |
 | Local services / db | Cursor 的 background indexing / state | OD daemon-managed state。存储路径只受 root `AGENTS.md` → **Daemon data directory contract** 约束。 |
-| GUI productivity layer | Cursor IDE | OD desktop / web UI（`apps/web` + `apps/desktop`） |
+| GUI productivity layer | Cursor IDE | OD Electron Shell / web UI（`apps/web` + `shells/electron`） |
 | Plugin / skill format | `.cursor/rules/`、MCP servers | `SKILL.md` + `open-design.json` + atoms |
 
 两者以相同方式解耦：terminal flow 已经足够；IDE/desktop 是生产力倍增器。**插件作者不需要做选择**：他们写一个 SKILL.md 加可选 sidecar，就能覆盖三种消费模式。

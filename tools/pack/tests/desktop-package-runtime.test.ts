@@ -5,19 +5,19 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
-const desktopPackageRoot = join(repoRoot, "apps", "desktop");
-const packagedSourcePath = join(repoRoot, "apps", "packaged", "src", "index.ts");
+const shellPackageRoot = join(repoRoot, "shells", "electron");
+const shellSourcePath = join(shellPackageRoot, "src", "index.ts");
 
-function readDesktopPackageJson(): {
+function readShellPackageJson(): {
   exports?: Record<string, { default?: string; types?: string }>;
   files?: string[];
 } {
-  return JSON.parse(readFileSync(join(desktopPackageRoot, "package.json"), "utf8"));
+  return JSON.parse(readFileSync(join(shellPackageRoot, "package.json"), "utf8"));
 }
 
-describe("desktop package runtime shape", () => {
-  it("keeps exported desktop types inside the published dist allowlist", () => {
-    const pkg = readDesktopPackageJson();
+describe("Electron Shell package runtime shape", () => {
+  it("keeps exported shell types inside the published dist allowlist", () => {
+    const pkg = readShellPackageJson();
 
     expect(pkg.files).toEqual(["dist"]);
     expect(pkg.exports?.["./main"]?.default).toBe("./dist/main/index.js");
@@ -25,8 +25,8 @@ describe("desktop package runtime shape", () => {
   });
 
   it("places the sandbox preload next to packaged app entrypoints", () => {
-    const packagedSource = readFileSync(packagedSourcePath, "utf8");
-    expect(packagedSource).toContain('preloadPath: join(app.getAppPath(), "preload.cjs")');
+    const shellSource = readFileSync(shellSourcePath, "utf8");
+    expect(shellSource).toContain('preloadPath: join(app.getAppPath(), "preload.cjs")');
 
     for (const relativePath of [
       "tools/pack/src/mac/app.ts",
@@ -36,7 +36,5 @@ describe("desktop package runtime shape", () => {
       expect(source).toContain('"shells", "electron", "dist", "main", "preload.cjs"');
       expect(source).toContain('join(paths.assembledAppRoot, "preload.cjs")');
     }
-    const linuxSource = readFileSync(join(repoRoot, "tools/pack/src/linux.ts"), "utf8");
-    expect(linuxSource).toContain('"apps", "desktop", "dist", "main", "preload.cjs"');
   });
 });

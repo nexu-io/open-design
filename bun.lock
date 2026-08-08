@@ -59,26 +59,6 @@
         "vitest": "4.1.6",
       },
     },
-    "apps/desktop": {
-      "name": "@open-design/desktop",
-      "version": "0.15.1",
-      "dependencies": {
-        "@open-design/diagnostics": "workspace:*",
-        "@open-design/download": "workspace:*",
-        "@open-design/host": "workspace:*",
-        "@open-design/launcher-proto": "workspace:*",
-        "@open-design/platform": "workspace:*",
-        "@open-design/release": "workspace:*",
-        "@open-design/sidecar": "workspace:*",
-        "@open-design/sidecar-proto": "workspace:*",
-      },
-      "devDependencies": {
-        "@types/node": "24.12.2",
-        "electron": "41.3.0",
-        "typescript": "6.0.3",
-        "vitest": "4.1.6",
-      },
-    },
     "apps/landing-page": {
       "name": "@open-design/landing-page",
       "version": "0.15.1",
@@ -104,28 +84,6 @@
         "playwright": "1.60.0",
         "tsx": "4.22.3",
         "typescript": "5.9.3",
-      },
-    },
-    "apps/packaged": {
-      "name": "@open-design/packaged",
-      "version": "0.15.1",
-      "dependencies": {
-        "@open-design/contracts": "workspace:*",
-        "@open-design/daemon": "workspace:*",
-        "@open-design/desktop": "workspace:*",
-        "@open-design/launcher-proto": "workspace:*",
-        "@open-design/platform": "workspace:*",
-        "@open-design/release": "workspace:*",
-        "@open-design/sidecar": "workspace:*",
-        "@open-design/sidecar-proto": "workspace:*",
-        "@open-design/web": "workspace:*",
-      },
-      "devDependencies": {
-        "@types/node": "24.12.2",
-        "electron": "41.3.0",
-        "esbuild": "0.28.0",
-        "typescript": "6.0.3",
-        "vitest": "4.1.6",
       },
     },
     "apps/web": {
@@ -226,6 +184,7 @@
       "version": "0.15.1",
       "dependencies": {
         "@open-design/release": "workspace:*",
+        "@open-design/standalone-proto": "workspace:*",
         "zod": "3.25.76",
       },
       "devDependencies": {
@@ -362,6 +321,7 @@
       "version": "0.15.1",
       "dependencies": {
         "@open-design/release": "workspace:*",
+        "@open-design/standalone-proto": "workspace:*",
       },
       "devDependencies": {
         "@types/node": "24.12.2",
@@ -403,6 +363,7 @@
         "@open-design/release": "workspace:*",
         "@open-design/sidecar": "workspace:*",
         "@open-design/sidecar-proto": "workspace:*",
+        "@open-design/standalone-proto": "workspace:*",
         "cac": "6.7.14",
         "electron-builder": "26.8.1",
         "resedit": "1.7.2",
@@ -879,8 +840,6 @@
 
     "@open-design/daemon": ["@open-design/daemon@workspace:apps/daemon"],
 
-    "@open-design/desktop": ["@open-design/desktop@workspace:apps/desktop"],
-
     "@open-design/diagnostics": ["@open-design/diagnostics@workspace:packages/diagnostics"],
 
     "@open-design/download": ["@open-design/download@workspace:packages/download"],
@@ -894,8 +853,6 @@
     "@open-design/launcher-proto": ["@open-design/launcher-proto@workspace:packages/launcher-proto"],
 
     "@open-design/metatool": ["@open-design/metatool@workspace:packages/metatool"],
-
-    "@open-design/packaged": ["@open-design/packaged@workspace:apps/packaged"],
 
     "@open-design/platform": ["@open-design/platform@workspace:packages/platform"],
 
@@ -3021,10 +2978,6 @@
 
     "@modelcontextprotocol/sdk/zod": ["zod@4.4.2", "", {}, "sha512-IynmDyxsEsb9RKzO3J9+4SxXnl2FTFSzNBaKKaMV6tsSk0rw9gYw9gs+JFCq/qk2LCZ78KDwyj+Z289TijSkUw=="],
 
-    "@open-design/desktop/@types/node": ["@types/node@24.12.2", "", { "dependencies": { "undici-types": "7.16.0" } }, "sha512-A1sre26ke7HDIuY/M23nd9gfB+nrmhtYyMINbjI1zHJxYteKR6qSMX56FsmjMcDb3SMcjJg5BiRRgOCC/yBD0g=="],
-
-    "@open-design/desktop/typescript": ["typescript@6.0.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw=="],
-
     "@open-design/download/@types/node": ["@types/node@24.12.2", "", { "dependencies": { "undici-types": "7.16.0" } }, "sha512-A1sre26ke7HDIuY/M23nd9gfB+nrmhtYyMINbjI1zHJxYteKR6qSMX56FsmjMcDb3SMcjJg5BiRRgOCC/yBD0g=="],
 
     "@open-design/download/typescript": ["typescript@6.0.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw=="],
@@ -3040,10 +2993,6 @@
     "@open-design/metatool/@types/node": ["@types/node@24.12.2", "", { "dependencies": { "undici-types": "7.16.0" } }, "sha512-A1sre26ke7HDIuY/M23nd9gfB+nrmhtYyMINbjI1zHJxYteKR6qSMX56FsmjMcDb3SMcjJg5BiRRgOCC/yBD0g=="],
 
     "@open-design/metatool/typescript": ["typescript@6.0.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw=="],
-
-    "@open-design/packaged/@types/node": ["@types/node@24.12.2", "", { "dependencies": { "undici-types": "7.16.0" } }, "sha512-A1sre26ke7HDIuY/M23nd9gfB+nrmhtYyMINbjI1zHJxYteKR6qSMX56FsmjMcDb3SMcjJg5BiRRgOCC/yBD0g=="],
-
-    "@open-design/packaged/typescript": ["typescript@6.0.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw=="],
 
     "@open-design/platform/@types/node": ["@types/node@24.12.2", "", { "dependencies": { "undici-types": "7.16.0" } }, "sha512-A1sre26ke7HDIuY/M23nd9gfB+nrmhtYyMINbjI1zHJxYteKR6qSMX56FsmjMcDb3SMcjJg5BiRRgOCC/yBD0g=="],
 
@@ -3359,8 +3308,6 @@
 
     "@electron/get/fs-extra/universalify": ["universalify@0.1.2", "", {}, "sha512-rBJeI5CXAlmy1pV+617WB9J63U6XcazHHF2f2dbJix4XzpUF0RS3Zbj0FGIOCAva5P/d/GBOYaACQ1w+0azUkg=="],
 
-    "@open-design/desktop/@types/node/undici-types": ["undici-types@7.16.0", "", {}, "sha512-Zz+aZWSj8LE6zoxD+xrjh4VfkIG8Ya6LvYkZqtUQGJPZjYl53ypCaUwWqo7eI0x66KBGeRo+mlBEkMSeSZ38Nw=="],
-
     "@open-design/download/@types/node/undici-types": ["undici-types@7.16.0", "", {}, "sha512-Zz+aZWSj8LE6zoxD+xrjh4VfkIG8Ya6LvYkZqtUQGJPZjYl53ypCaUwWqo7eI0x66KBGeRo+mlBEkMSeSZ38Nw=="],
 
     "@open-design/host/@types/node/undici-types": ["undici-types@7.16.0", "", {}, "sha512-Zz+aZWSj8LE6zoxD+xrjh4VfkIG8Ya6LvYkZqtUQGJPZjYl53ypCaUwWqo7eI0x66KBGeRo+mlBEkMSeSZ38Nw=="],
@@ -3368,8 +3315,6 @@
     "@open-design/launcher-proto/@types/node/undici-types": ["undici-types@7.16.0", "", {}, "sha512-Zz+aZWSj8LE6zoxD+xrjh4VfkIG8Ya6LvYkZqtUQGJPZjYl53ypCaUwWqo7eI0x66KBGeRo+mlBEkMSeSZ38Nw=="],
 
     "@open-design/metatool/@types/node/undici-types": ["undici-types@7.16.0", "", {}, "sha512-Zz+aZWSj8LE6zoxD+xrjh4VfkIG8Ya6LvYkZqtUQGJPZjYl53ypCaUwWqo7eI0x66KBGeRo+mlBEkMSeSZ38Nw=="],
-
-    "@open-design/packaged/@types/node/undici-types": ["undici-types@7.16.0", "", {}, "sha512-Zz+aZWSj8LE6zoxD+xrjh4VfkIG8Ya6LvYkZqtUQGJPZjYl53ypCaUwWqo7eI0x66KBGeRo+mlBEkMSeSZ38Nw=="],
 
     "@open-design/platform/@types/node/undici-types": ["undici-types@7.16.0", "", {}, "sha512-Zz+aZWSj8LE6zoxD+xrjh4VfkIG8Ya6LvYkZqtUQGJPZjYl53ypCaUwWqo7eI0x66KBGeRo+mlBEkMSeSZ38Nw=="],
 

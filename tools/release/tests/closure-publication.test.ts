@@ -134,7 +134,6 @@ describe("Standalone Closure release publication", () => {
       env: {
         ...process.env,
         BASE_VERSION: "0.18.0",
-        ENABLE_LINUX_X64: "false",
         ENABLE_MAC_ARM64: "true",
         ENABLE_MAC_X64: "false",
         ENABLE_WIN_X64: "false",
@@ -180,7 +179,6 @@ describe("Standalone Closure release publication", () => {
       env: {
         ...process.env,
         BASE_VERSION: "0.18.0",
-        ENABLE_LINUX_X64: "false",
         ENABLE_MAC_ARM64: "true",
         ENABLE_MAC_X64: "false",
         ENABLE_WIN_X64: "false",
@@ -233,7 +231,6 @@ describe("Standalone Closure release publication", () => {
       env: {
         ...process.env,
         BASE_VERSION: "0.18.0",
-        ENABLE_LINUX_X64: "false",
         ENABLE_MAC_ARM64: "true",
         ENABLE_MAC_X64: "false",
         ENABLE_WIN_X64: "false",

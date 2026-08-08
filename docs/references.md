@@ -30,7 +30,7 @@ Every external project this spec leans on. Three questions per entry: what is it
   - Sandboxed iframe preview (`<iframe sandbox="allow-scripts">` with vendored React 18 + Babel standalone for JSX).
   - Export pipeline shape (HTML/PDF/PPTX/ZIP/MD).
 - **What we don't:**
-  - **Electron as the product runtime** — our product UI remains the shared Next.js web app; `apps/desktop` and `apps/packaged` provide a thin Electron host around the same daemon/web sidecars.
+  - **Electron as the product runtime** — our product UI remains the shared Next.js web app inside `apps/standalone`; `shells/electron` is only the native launcher and host.
   - **Bundled agent on `pi-ai`** — we delegate to the user's existing CLI.
   - **Proprietary skill format** (TypeScript modules compiled into the app) — we use Claude Code's `SKILL.md` so third-party skills drop in.
   - **SQLite blobs for artifact bytes** — generated files remain on disk while daemon SQLite owns project and metadata state.

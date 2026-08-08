@@ -14,7 +14,7 @@ const require = createRequire(import.meta.url);
 const testDir = dirname(fileURLToPath(import.meta.url));
 const workspaceRoot = resolve(testDir, "..", "..", "..");
 const tsxCliPath = require.resolve("tsx/cli");
-const packagedPackageJsonPath = join(workspaceRoot, "apps", "packaged", "package.json");
+const shellPackageJsonPath = join(workspaceRoot, "shells", "electron", "package.json");
 
 type MetadataServer = {
   close: () => Promise<void>;
@@ -164,9 +164,9 @@ async function createHermeticTagRepoEnv(stableTags: string[]): Promise<Record<st
 }
 
 async function readPackagedVersion(): Promise<string> {
-  const packageJson = JSON.parse(await readFile(packagedPackageJsonPath, "utf8")) as { version?: unknown };
+  const packageJson = JSON.parse(await readFile(shellPackageJsonPath, "utf8")) as { version?: unknown };
   if (typeof packageJson.version !== "string" || packageJson.version.length === 0) {
-    throw new Error("apps/packaged/package.json must define a version");
+    throw new Error("shells/electron/package.json must define a version");
   }
   return packageJson.version;
 }

@@ -73,7 +73,7 @@ measure_step() {
 
 inspect_electron_framework_symlinks() {
   local electron_dist framework missing_links
-  electron_dist="$(node -e 'const path = require("node:path"); const { createRequire } = require("node:module"); const requireFromDesktop = createRequire(path.join(process.cwd(), "apps/desktop/package.json")); const electron = requireFromDesktop.resolve("electron"); process.stdout.write(path.join(path.dirname(electron), "dist"));')"
+  electron_dist="$(node -e 'const path = require("node:path"); const { createRequire } = require("node:module"); const requireFromDesktop = createRequire(path.join(process.cwd(), "shells/electron/package.json")); const electron = requireFromDesktop.resolve("electron"); process.stdout.write(path.join(path.dirname(electron), "dist"));')"
   framework="$electron_dist/Electron.app/Contents/Frameworks/Electron Framework.framework"
   missing_links=0
   for link in \
@@ -170,7 +170,7 @@ capture_framework_diagnostics() {
   local output="${MAC_FRAMEWORK_DIAGNOSTICS_PATH:-$RUNNER_TEMP/mac-framework-diagnostics.txt}"
   local source_resolve_log="$RUNNER_TEMP/mac-framework-source-resolve.err"
   local source_framework built_framework
-  source_framework="$(node -e 'const path = require("node:path"); const { createRequire } = require("node:module"); const requireFromDesktop = createRequire(path.join(process.cwd(), "apps/desktop/package.json")); const electron = requireFromDesktop.resolve("electron"); process.stdout.write(path.join(path.dirname(electron), "dist", "Electron.app", "Contents", "Frameworks", "Electron Framework.framework"));' 2>"$source_resolve_log" || true)"
+  source_framework="$(node -e 'const path = require("node:path"); const { createRequire } = require("node:module"); const requireFromDesktop = createRequire(path.join(process.cwd(), "shells/electron/package.json")); const electron = requireFromDesktop.resolve("electron"); process.stdout.write(path.join(path.dirname(electron), "dist", "Electron.app", "Contents", "Frameworks", "Electron Framework.framework"));' 2>"$source_resolve_log" || true)"
   built_framework="$tools_pack_dir/out/mac/namespaces/$namespace/builder/mac-arm64/Open Design Beta.app/Contents/Frameworks/Electron Framework.framework"
 
   dump_framework() {

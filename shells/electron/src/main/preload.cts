@@ -28,7 +28,7 @@ const APP_CONFIG_CHANGED_EVENT = 'open-design:app-config-changed';
 
 // Mirror of the argv prefix used by main's `applyOsLocaleSwitch` and
 // runtime's `additionalArguments`. Duplicated literal on purpose: the
-// preload bundle must not pull in `@open-design/desktop/main` (it
+// preload bundle must not pull in `@open-design/shell-electron/main` (it
 // transitively requires non-electron node modules that the sandboxed
 // preload can't load).
 const OS_LOCALE_ARG_PREFIX = '--od-os-locale=';

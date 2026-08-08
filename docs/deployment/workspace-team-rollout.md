@@ -46,9 +46,9 @@ git diff --name-status origin/main...origin/feat/workspace-team -- db/schema db/
 
 当前 Open Design 代码只允许 `feature-test` 和 `test` profile 启用 Workspace Team transport；`prod` 即使拿到 Vela Web URL 也会保持关闭。证据在：
 
-- `apps/packaged/src/sidecars.ts` 的 `WORKSPACE_TEAM_AMR_PROFILES`
+- `shells/electron/src/sidecars.ts` 的 `WORKSPACE_TEAM_AMR_PROFILES`
 - `.github/workflows/release-beta.yml` 的 `amr_profile` 和 `OD_VELA_WEB_URL`
-- `apps/packaged/tests/sidecars.test.ts` 的 prod fail-closed 用例
+- `shells/electron/tests/sidecars.test.ts` 的 prod fail-closed 用例
 
 因此，以下事项完成前，production 为 **NO-GO**：
 

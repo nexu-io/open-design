@@ -65,7 +65,6 @@ function Get-ContentType([string]$Name) {
   if ($Name.EndsWith(".dmg", [System.StringComparison]::OrdinalIgnoreCase)) { return "application/x-apple-diskimage" }
   if ($Name.EndsWith(".zip", [System.StringComparison]::OrdinalIgnoreCase)) { return "application/zip" }
   if ($Name.EndsWith(".exe", [System.StringComparison]::OrdinalIgnoreCase)) { return "application/vnd.microsoft.portable-executable" }
-  if ($Name.EndsWith(".AppImage", [System.StringComparison]::OrdinalIgnoreCase)) { return "application/octet-stream" }
   if ($Name.EndsWith(".sha256", [System.StringComparison]::OrdinalIgnoreCase)) { return "text/plain; charset=utf-8" }
   if ($Name.EndsWith(".yml", [System.StringComparison]::OrdinalIgnoreCase) -or $Name.EndsWith(".yaml", [System.StringComparison]::OrdinalIgnoreCase)) { return "application/x-yaml; charset=utf-8" }
   if ($Name.EndsWith(".json", [System.StringComparison]::OrdinalIgnoreCase)) { return "application/json; charset=utf-8" }

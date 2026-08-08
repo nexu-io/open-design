@@ -50,7 +50,6 @@ type StablePrereleaseValidation = {
 };
 
 type ReleaseNamespaces = {
-  linux: string;
   mac: string;
   macIntel: string;
   win: string;
@@ -145,7 +144,6 @@ function resolveStableBaseVersion(branch: string): ParsedStableVersion {
 
 function releaseNamespaces(channel: ReleaseChannel): ReleaseNamespaces {
   return {
-    linux: releaseNamespace(channel, "linux"),
     mac: releaseNamespace(channel, "mac"),
     macIntel: releaseNamespace(channel, "macIntel"),
     win: releaseNamespace(channel, "win"),
@@ -441,8 +439,8 @@ async function validateStablePrereleaseMetadata(options: {
   };
 }
 
-async function readPackagedVersion(): Promise<string> {
-  const packageJsonPath = join(process.cwd(), "apps", "packaged", "package.json");
+async function readShellVersion(): Promise<string> {
+  const packageJsonPath = join(process.cwd(), "shells", "electron", "package.json");
   const packageJson = JSON.parse(await readFile(packageJsonPath, "utf8")) as { version?: unknown };
 
   if (typeof packageJson.version !== "string") {
@@ -450,7 +448,7 @@ async function readPackagedVersion(): Promise<string> {
   }
 
   if (parseReleaseBaseVersion(packageJson.version) == null) {
-    fail(`apps/packaged/package.json version must be a stable x.y.z base version; got ${packageJson.version}`);
+    fail(`shells/electron/package.json version must be a stable x.y.z base version; got ${packageJson.version}`);
   }
 
   return packageJson.version;
@@ -551,7 +549,7 @@ const dryRun = stableDryRunMode.length > 0;
 const runPrepublishJobs = channel !== "stable" || stableDryRunMode === "prepublish" || stableDryRunMode === "";
 const publishSideEffectsEnabled = channel !== "stable" || stableDryRunMode === "";
 const namespaces = releaseNamespaces(channel);
-const packagedVersion = await readPackagedVersion();
+const packagedVersion = await readShellVersion();
 const commit = process.env.GITHUB_SHA ?? "";
 const branch = process.env.GITHUB_REF_NAME ?? "";
 const stableBaseVersion =
@@ -561,7 +559,7 @@ const stableBaseVersion =
 const packagedParsed = stableBaseVersion.parsed;
 if (stableBaseVersion.value !== packagedVersion) {
   fail(
-    `${stableBaseVersion.source ?? "release base"} version ${stableBaseVersion.value} must match apps/packaged/package.json version ${packagedVersion}`,
+    `${stableBaseVersion.source ?? "release base"} version ${stableBaseVersion.value} must match shells/electron/package.json version ${packagedVersion}`,
   );
 }
 
@@ -576,7 +574,7 @@ for (const release of releases) {
   if (parsedRelease == null) continue;
 
   if (release.tag_name === versionTag) {
-    fail(`stable release ${versionTag} already exists; bump apps/packaged/package.json before publishing`);
+    fail(`stable release ${versionTag} already exists; bump shells/electron/package.json before publishing`);
   }
 
   if (latestStable == null || compareReleaseBaseVersions(parsedRelease.parsed, latestStable.parsed) > 0) {
@@ -664,7 +662,6 @@ setOutput("commit", commit);
 setOutput("dry_run", dryRun ? "true" : "false");
 setOutput("dry_run_mode", stableDryRunMode);
 setOutput("github_release_enabled", channel === "stable" && publishSideEffectsEnabled ? "true" : "false");
-setOutput("linux_namespace", namespaces.linux);
 setOutput("mac_intel_namespace", namespaces.macIntel);
 setOutput("namespace", namespaces.mac);
 setOutput("publish_side_effects_enabled", publishSideEffectsEnabled ? "true" : "false");

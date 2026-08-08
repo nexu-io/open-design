@@ -498,8 +498,8 @@ async function spawnWebRuntime(config: ToolDevConfig, options: CliOptions): Prom
 }
 
 async function buildDesktop(config: ToolDevConfig, logHandle: FileHandle): Promise<void> {
-  await logHandle.write(`\n[tools-dev] building @open-design/desktop at ${new Date().toISOString()}\n`);
-  const invocation = createPackageManagerInvocation(["--filter", "@open-design/desktop", "build"], process.env);
+  await logHandle.write(`\n[tools-dev] building @open-design/shell-electron at ${new Date().toISOString()}\n`);
+  const invocation = createPackageManagerInvocation(["--filter", "@open-design/shell-electron", "build"], process.env);
   await runLoggedCommand({
     args: invocation.args,
     command: invocation.command,
@@ -636,7 +636,7 @@ async function spawnDesktopRuntime(config: ToolDevConfig, options: CliOptions): 
     //
     // Scope is tools-dev only. The packaged runtime intentionally sets
     // ELECTRON_RUN_AS_NODE on its own daemon/web sidecars (see
-    // apps/packaged/src/sidecars.ts) to reuse the bundled Node binary;
+    // shells/electron/src/sidecars.ts) to reuse the bundled Node binary;
     // that flow is independent and untouched here.
     for (const key of Object.keys(spawnEnv)) {
       if (key.toUpperCase() === "ELECTRON_RUN_AS_NODE") {

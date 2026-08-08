@@ -113,8 +113,8 @@ describe("tools-pack Closure archive", () => {
     expect(names).toContain("@open-design/standalone-proto");
     expect(names).toContain("@open-design/sidecar");
     expect(names).not.toContain("@open-design/daemon");
-    expect(names).not.toContain("@open-design/desktop");
-    expect(names).not.toContain("@open-design/packaged");
+    expect(names).not.toContain("@open-design/shell-electron");
+    expect(names).not.toContain("@open-design/shell-electron");
   });
 
   it("keys Closure builds independently from shell-only sources", async () => {
@@ -150,8 +150,8 @@ describe("tools-pack Closure archive", () => {
 
     await writeFile(join(root, "apps", "standalone", "source.txt"), "standalone changed\n");
     expect(await createClosureBuildCacheKey(options)).not.toBe(initial);
-    expect(CLOSURE_BUILD_SOURCE_PATHS).not.toContain("apps/desktop");
-    expect(CLOSURE_BUILD_SOURCE_PATHS).not.toContain("apps/packaged");
+    expect(CLOSURE_BUILD_SOURCE_PATHS).not.toContain("shells/electron");
+    expect(CLOSURE_BUILD_SOURCE_PATHS).not.toContain("shells/electron");
   });
 
   it("takes external runtime versions from the daemon dependency contract", async () => {

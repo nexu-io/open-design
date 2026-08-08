@@ -22,7 +22,6 @@ async function writeWorkspace(root: string): Promise<void> {
 
 function createConfig(root: string, webOutputMode: ToolPackConfig["webOutputMode"]): ToolPackConfig {
   return {
-    containerized: false,
     electronBuilderCliPath: "electron-builder",
     electronDistPath: "electron-dist",
     electronVersion: "41.3.0",

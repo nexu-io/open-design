@@ -9,7 +9,6 @@ import { createWinRemovalPlan } from "../src/win/paths.js";
 
 function createConfig(root: string, removeCache: boolean): ToolPackConfig {
   return {
-    containerized: false,
     electronBuilderCliPath: "electron-builder",
     electronDistPath: "electron-dist",
     electronVersion: "41.3.0",

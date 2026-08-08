@@ -50,7 +50,7 @@ function resolvePackageManagerInvocation() {
 const packageManager = resolvePackageManagerInvocation();
 
 function materializeDomToPptxBundle() {
-  const vendorDir = resolve(repoRoot, "apps", "desktop", "vendor", "dom-to-pptx");
+  const vendorDir = resolve(repoRoot, "shells", "electron", "vendor", "dom-to-pptx");
   const compressedBundle = resolve(vendorDir, "dom-to-pptx.bundle.js.gz");
   const bundle = resolve(vendorDir, "dom-to-pptx.bundle.js");
 

@@ -72,7 +72,7 @@ Tightly coupled with:
 
 - Must remain a static Astro output.
 - Must not import from `@open-design/web`, `@open-design/daemon`,
-  `@open-design/desktop`, `@open-design/sidecar*`, or
+  `@open-design/shell-electron`, `@open-design/sidecar*`, or
   `@open-design/contracts`. Those are product runtime concerns.
 - Must not introduce a `src/` shell — keep all source under `app/`.
   Component bundles live in `app/_components/<name>.{tsx,astro}`.

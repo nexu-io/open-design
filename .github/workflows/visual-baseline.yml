@@ -40,7 +40,7 @@ jobs:
       - name: Prebuild workspace type declarations
         run: |
           pnpm --filter @open-design/daemon build
-          pnpm --filter @open-design/desktop build
+          pnpm --filter @open-design/shell-electron build
           pnpm --filter @open-design/web build:sidecar
 
       - name: Capture baseline screenshots

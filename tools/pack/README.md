@@ -32,7 +32,7 @@ Packaged runtime state is namespace-scoped under `.tmp/tools-pack/runtime/mac/na
 - `user-data/` is the Electron/Chromium `userData` root, with `user-data/session/` used for `sessionData`.
 
 Finder/manual launches cannot carry argv stamps on the root desktop process. To keep process fallback safe,
-`apps/packaged` writes `runtime/desktop-root.json` with the desktop stamp, PID, executable path, app path, and log path.
+`shells/electron` writes `runtime/desktop-root.json` with the desktop stamp, PID, executable path, app path, and log path.
 `tools-pack mac stop` trusts that marker only when namespace/stamp/PID/command validation passes; otherwise it reports the
 unmanaged/not-owned reason instead of killing unknown processes.
 
@@ -90,95 +90,11 @@ Packaged runtime state is namespace-scoped under `.tmp/tools-pack/runtime/win/na
 `--to dir` may point `built-app.json` at an immutable cached `win-unpacked` executable while keeping
 namespace-local config and runtime paths outside that cache entry.
 
+`--to dmg` is manual-install DMG output only. Any builder-generated updater metadata such as `latest-mac.yml` or
+`.blockmap` files is treated as scratch and cleaned from the builder directory; release workflows generate the authoritative
+feed during release asset preparation, pointing at the update ZIP.
+
 ## Linux
 
-Local lifecycle commands:
-
-- `tools-pack linux build --to all` (default; produces AppImage)
-- `tools-pack linux build --to appimage` (explicit AppImage)
-- `tools-pack linux build --to dir` (unpacked output for fast iteration)
-- `tools-pack linux build --containerized` (run electron-builder inside `electronuserland/builder:base` Docker for a wider glibc compatibility target — requires Docker)
-- `tools-pack linux build --to all --portable` (release artifacts that must not bake local tools-pack runtime paths)
-- `tools-pack linux install`
-- `tools-pack linux install --standalone` (install the standalone launcher script instead of the AppImage)
-- `tools-pack linux start`
-- `tools-pack linux start --standalone` (start the standalone entry — daemon + web, no Electron)
-- `tools-pack linux stop`
-- `tools-pack linux stop --standalone` (stop a running standalone process)
-- `tools-pack linux inspect` (desktop status, eval, and screenshot for AppImage mode)
-- `tools-pack linux inspect --standalone` (status only)
-- `tools-pack linux logs`
-- `tools-pack linux uninstall`
-- `tools-pack linux uninstall --standalone`
-- `tools-pack linux cleanup`
-- `tools-pack linux cleanup --standalone`
-
-Build artifacts are namespace-scoped under `.tmp/tools-pack/out/linux/namespaces/<namespace>/`. Packaged logs, sidecar runtime, cache, and Electron user-data are namespace-scoped under the tools-pack runtime root. Daemon storage follows only the root `AGENTS.md` **Daemon data directory contract**. Containerized build cache lives under `.tmp/tools-pack/.docker-cache/{electron,electron-builder}/`.
-
-Local installs use XDG paths:
-
-- AppImage: `~/.local/bin/Open-Design.<namespace>.AppImage`
-- Menu entry: `~/.local/share/applications/open-design-<namespace>.desktop`
-- Icon: `~/.local/share/icons/hicolor/512x512/apps/open-design-<namespace>.png`
-
-The `<namespace>` suffix is unconditional so multiple developer namespaces can coexist on the same desktop. The `.desktop` file registers the `od://` scheme via `MimeType=x-scheme-handler/od;` and pre-sets `OD_PACKAGED_NAMESPACE` on the `Exec=` line so menu launches identify the correct namespace.
-
-### Standalone mode (`--standalone`)
-
-Standalone mode targets environments without a display (WSL2, standalone servers, CI) where Electron can't run. If you have a desktop, use the AppImage; if you're SSH'd into a machine or in WSL, use standalone.
-
-`--standalone` makes `install`, `start`, `stop`, `uninstall`, and `cleanup` operate on the shell-side launcher (`@open-design/packaged/dist/standalone-launcher.mjs`) instead of the AppImage. The launcher starts the Standalone product body (daemon + web) without Electron.
-
-- `install --standalone` writes a shell launcher at `~/.local/bin/open-design-standalone-<namespace>` that bakes in the namespace and resource paths. The launcher is self-contained, but the assembled app directory at those paths must remain in place — don't move it after install.
-- `start --standalone` spawns the standalone process directly, redirects stdout/stderr to `logs/desktop/latest.log`, and waits up to 95s (35s for identity marker + 60s for web URL) before returning.
-- `stop --standalone` reads `runtime/standalone-root.json` (separate from the AppImage path's `runtime/desktop-root.json`), validates the marker's packaged desktop stamp and namespace root, sends a graceful SHUTDOWN over IPC, then terminates the process tree. The separate marker prevents standalone stop/cleanup from claiming a menu-launched AppImage; unlike AppImage stop, it does not perform the AppImage-specific process-command check.
-- `inspect --standalone` returns status only. Eval and screenshot require AppImage mode because there is no Electron renderer in standalone mode.
-- `uninstall --standalone` removes the standalone launcher after a safe stop.
-- `cleanup --standalone` stops the standalone process before removing namespace output/runtime roots.
-
-`logs` always reads `logs/desktop/latest.log` regardless of mode, so standalone output is visible via `tools-pack linux logs`.
-
-### AppImage launch mode (FUSE caveat)
-
-`tools-pack linux start` always spawns the AppImage with `--appimage-extract-and-run`. Smoke testing on Ubuntu 24.04 and Arch Linux showed that direct FUSE-mounted AppImage launches make Node module loads (Express, better-sqlite3, etc.) slow enough that the daemon sidecar consistently failed to clear `apps/packaged`'s 35-second startup timeout. Extract-and-run unpacks the AppImage into `/tmp/appimage_extracted_<hex>/` and exec's the inner Electron from there, bypassing FUSE and getting daemon boot in under 5 seconds — roughly an order-of-magnitude improvement.
-
-**Implication for end-users:** if launching the installed AppImage manually (not via `tools-pack linux start`), pass `--appimage-extract-and-run` yourself, or rely on a desktop launcher / `appimage-launcher` daemon that handles extract-and-run automatically.
-
-### Optional system tools
-
-`tools-pack linux install` and `tools-pack linux uninstall` invoke `update-desktop-database` and `gtk-update-icon-cache` as best-effort post-hooks. Either tool being absent (`iconCache: "missing"` in the output) is harmless — the icon and menu entry still work, the cache just isn't refreshed. Install via your distro:
-
-- Arch / CachyOS: `sudo pacman -S desktop-file-utils gtk-update-icon-cache`
-- Debian / Ubuntu: `sudo apt install desktop-file-utils gtk-update-icon-cache`
-- Fedora: `sudo dnf install desktop-file-utils gtk-update-icon-cache`
-
-`libfuse2` is needed for FUSE-mounted AppImage launch (the default mode when running an AppImage directly without `--appimage-extract-and-run`). `tools-pack linux start` always uses extract-and-run and bypasses FUSE entirely, so it does not need `libfuse2`. Most modern distros ship `libfuse2` by default; older Ubuntu LTS hosts may need `sudo apt install libfuse2t64` (or `libfuse2` on pre-24.04).
-
-### Sandbox / chrome-sandbox
-
-Electron 41 on Linux requires `kernel.unprivileged_userns_clone=1` (default on Arch, Ubuntu 24+, Debian 12+) or AppImage's `--no-sandbox` fallback. Most modern distros need no extra setup.
-
-### Distro compatibility target
-
-AppImages built natively on a rolling distro (e.g., Arch / CachyOS) link against recent glibc and may not run on stable distros (Ubuntu 22.04, Debian 12). Use `--containerized` to build against the `electronuserland/builder:base` baseline (Ubuntu 18.04 / glibc 2.27), which is the compatibility target for release AppImages rather than a guarantee for every Linux distribution.
-
-Verified smoke coverage in this repository currently includes:
-
-- Main PR CI: packaged Linux smoke is intentionally outside the main CI gate.
-- Release lane: Ubuntu GitHub-hosted runner, containerized AppImage build plus Xvfb AppImage runtime smoke when the Linux release lane is enabled.
-- Manual AppImage behavior used to choose `--appimage-extract-and-run`: Ubuntu 24.04 and Arch Linux.
-
-### Format choice: why AppImage first
-
-Linux desktop apps in this space split across formats: VS Code ships `.deb` + `.rpm` + Snap; Discord ships AppImage + `.deb`; Slack ships `.deb` + `.rpm`; Cursor and Obsidian ship AppImage. We start with AppImage because one artifact can cover the widest glibc-compatible target without distro repositories, store packaging, signing infrastructure, or per-format install scripts, and it integrates cleanly with the namespace-scoped install layout. `.deb` / `.rpm` / Snap / Flatpak can land incrementally when user demand justifies the extra release ownership.
-
-### Out of scope (later phases)
-
-- AppImage signing (`--signed`) — deferred pending a GPG key infrastructure decision and a user-facing verification flow design (no ETA).
-- AppImage auto-update feed (`latest-linux.yml`) — the linux electron-builder config has no `publish` block wired, so a generated feed would point users at a feed that never updates. Tracked alongside signing.
-- Additional package formats: `.deb`, `.rpm`, Snap, Flatpak — deferred until there is demand and an owner for per-distro metadata, signing/store/repository plumbing, install/remove hooks, and release validation.
-- Full Linux AppImage and standalone packaged smoke remain outside the main PR gate; run the applicable tools-pack validation manually or through a release lane when Linux packaging changes.
-
-`--to dmg` is manual-install DMG output only. Any builder-generated updater metadata such as `latest-mac.yml` or
-`.blockmap` files is treated as scratch and cleaned from the builder directory; release-beta generates the authoritative
-`latest-mac.yml` feed during release asset preparation, pointing at the update ZIP.
+Linux has no packaged-delivery promise in this release architecture. Expert users may build the source workspace directly,
+but `tools-pack`, installers, release metadata, and CI delivery gates cover only macOS and Windows.

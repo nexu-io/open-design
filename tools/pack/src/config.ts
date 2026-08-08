@@ -20,8 +20,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export const WORKSPACE_ROOT = resolve(__dirname, "../../..");
 
-export type ToolPackPlatform = "mac" | "win" | "linux";
-export type ToolPackBuildOutput = "all" | "app" | "appimage" | "dir" | "dmg" | "nsis" | "zip";
+export type ToolPackPlatform = "mac" | "win";
+export type ToolPackBuildOutput = "all" | "app" | "dir" | "dmg" | "nsis" | "zip";
 export type ToolPackMacCompression = "store" | "normal" | "maximum";
 export type ToolPackWebOutputMode = "server" | "standalone";
 export type ToolPackAmrProfile = "prod" | "test" | "feature-test" | "local";
@@ -31,12 +31,10 @@ export type ToolPackCliOptions = {
   artifactUrl?: string;
   cacheDir?: string;
   channel?: string;
-  containerized?: boolean;
   dir?: string;
   diagnoseAttempts?: string | number;
   expectedVersion?: string;
   expr?: string;
-  standalone?: boolean;
   json?: boolean;
   macCompression?: string;
   minShellVersion?: string;
@@ -80,7 +78,6 @@ export type ToolPackRoots = {
 
 export type ToolPackConfig = {
   appVersion?: string;
-  containerized: boolean;
   electronBuilderCliPath: string;
   electronDistPath: string;
   electronVersion: string;
@@ -163,7 +160,6 @@ function resolveToolPackBuildOutput(platform: ToolPackPlatform, value: string | 
   if (value == null || value.length === 0) return platform === "win" ? "nsis" : "all";
   if (platform === "mac" && (value === "all" || value === "app" || value === "dmg" || value === "zip")) return value;
   if (platform === "win" && (value === "all" || value === "dir" || value === "nsis" || value === "zip")) return value;
-  if (platform === "linux" && (value === "all" || value === "appimage" || value === "dir")) return value;
   throw new Error(`unsupported ${platform} --to target: ${value}`);
 }
 
@@ -189,9 +185,6 @@ function defaultNamespaceForAppVersion(platform: ToolPackPlatform, appVersion: s
 }
 
 function resolveToolPackWebOutputMode(platform: ToolPackPlatform, value: string | undefined): ToolPackWebOutputMode {
-  // Standalone web output is wired for desktop packaged platforms; Linux stays on
-  // the existing server output until its AppImage resource path is optimized.
-  if (platform === "linux") return "server";
   if (value == null || value.length === 0) return "standalone";
   if (value === "server" || value === "standalone") return value;
   throw new Error(`unsupported OD_WEB_OUTPUT_MODE value: ${value}`);
@@ -377,7 +370,6 @@ export function resolveToolPackConfig(
 
   return {
     appVersion,
-    containerized: options.containerized === true,
     electronBuilderCliPath: resolveElectronBuilderCliPath(),
     electronDistPath: resolveElectronDistPath(WORKSPACE_ROOT, shell),
     electronVersion: resolveElectronVersion(WORKSPACE_ROOT, shell),

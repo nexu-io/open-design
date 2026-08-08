@@ -19,10 +19,8 @@ This file is the single source of truth for agents entering this repository. Rea
 - Top-level content directories: `skills/` (functional skills the agent invokes mid-task — utilities, briefs, packagers; see `skills/AGENTS.md`), `design-templates/` (rendering catalogue: decks, prototypes, image/video/audio templates; see `design-templates/AGENTS.md` and `specs/current/skills-and-design-templates.md`), `design-systems/` (brand `DESIGN.md` files), `craft/` (universal brand-agnostic craft rules a skill can opt into via `od.craft.requires`), `mocks/` (replay-based mock CLIs for `opencode`/`claude`/`codex`/`gemini`/`cursor-agent`/`deepseek`/`qwen`/`grok`, the ACP family `devin`/`hermes`/`kilo`/`kimi`/`kiro`/`vibe`, and the AMR `vela` CLI (login + models + ACP), built from anonymized Langfuse traces — PATH-overlay drop-in for tests and self-validation; see `mocks/README.md`).
 - `apps/web` is the Next.js 16 App Router + React 18 web runtime; do not restore `apps/nextjs`.
 - `apps/daemon` is the local privileged daemon and `od` bin. It owns `/api/*`, agent spawning, skills, design systems, artifacts, and static serving.
-- `shells/electron` is the target Electron Shell: native host plus launcher/Store/update policy around the independently built Standalone closure.
-- `apps/desktop` is the legacy Electron native-host source retained only until `shells/electron` passes the replacement gates; do not add new ownership here.
+- `shells/electron` is the Electron Shell: native host plus launcher/Store/update policy around the independently built Standalone closure.
 - `apps/standalone` owns the shell-neutral Web + daemon product composition, the fixed `bootloader.mjs` handoff-once entry, and composition over the normalized sidecar control plane. It does not own Desktop IPC, windows, artifact selection, or update UI.
-- `apps/packaged` is the legacy combined packaged entry retained only until `shells/electron` and tools-pack replacement gates pass; do not add new ownership here.
 - `apps/landing-page` is the standalone static Astro marketing and public catalog site. It reads repository content at build time and is not part of the daemon/web product runtime.
 - `packages/contracts` is the pure TypeScript web/daemon app contract layer.
 - `packages/standalone-proto` owns the minimal Shell↔Standalone handoff: exact generation identity, resolved roots, Shell identity/capability exchange, runtime status, min-version comparison, and the fixed `bootloader.mjs` name.
@@ -108,7 +106,7 @@ Development propagation:
 
 Packaged propagation:
 
-- `tools-pack` / `apps/packaged` own packaged channel and namespace layout.
+- `tools-pack` / `shells/electron` own packaged channel and namespace layout.
 - Packaged code resolves the final namespace-scoped daemon data root before
   spawning the daemon.
 - The packaged daemon receives that final data root as `OD_DATA_DIR`; daemon
@@ -334,7 +332,7 @@ pnpm --filter @open-design/web test
 pnpm --filter @open-design/web build
 pnpm --filter @open-design/daemon test
 pnpm --filter @open-design/daemon build
-pnpm --filter @open-design/desktop build
+pnpm --filter @open-design/shell-electron build
 pnpm --filter @open-design/tools-dev build
 pnpm --filter @open-design/tools-pack build
 pnpm --filter @open-design/tools-serve build
@@ -347,9 +345,6 @@ pnpm tools-pack mac cleanup
 pnpm tools-pack win build --to nsis
 pnpm tools-pack win install
 pnpm tools-pack win cleanup
-pnpm tools-pack linux build --to appimage
-pnpm tools-pack linux install
-pnpm tools-pack linux build --containerized
 ```
 
 # FAQ

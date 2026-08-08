@@ -77,6 +77,8 @@ describe("desktop updater host boundary", () => {
   it("keeps desktop STATUS responsive when updater status is slow", () => {
     const main = source("src/main/index.ts");
     expect(main).toContain("async function snapshotUpdateForStatus()");
+    expect(main).toContain("async function snapshotStandaloneForStatus()");
+    expect(main).toContain("options.readStandaloneStatus()");
     expect(main).toContain("desktop updater status timed out after ${timeoutMs}ms");
     expect(main).toContain("update: updater.snapshot()");
     expect(main).toContain("return await desktopStatusSnapshot(activeDesktop)");

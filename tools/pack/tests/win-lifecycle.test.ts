@@ -68,7 +68,6 @@ const { resolveWinPaths } = await import("../src/win/paths.js");
 function createConfig(root: string): ToolPackConfig {
   return {
     appVersion: "0.10.0-beta.1",
-    containerized: false,
     electronBuilderCliPath: "electron-builder",
     electronDistPath: "electron-dist",
     electronVersion: "41.3.0",

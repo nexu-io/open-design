@@ -125,16 +125,6 @@ releaseNotes: "$release_notes"
 EOF
     prepare_closure_assets
     ;;
-  linux_x64)
-    source_appimage="$TOOLS_PACK_DIR/out/linux/namespaces/$RELEASE_NAMESPACE/builder/Open Design-$RELEASE_NAMESPACE.AppImage"
-    versioned_appimage="open-design-$RELEASE_VERSION$RELEASE_ASSET_SUFFIX-linux-x64.AppImage"
-    if [ ! -f "$source_appimage" ]; then
-      echo "expected AppImage not found at $source_appimage" >&2
-      exit 1
-    fi
-    cp "$source_appimage" "$RELEASE_ASSETS_DIR/$versioned_appimage"
-    sha256_file "$RELEASE_ASSETS_DIR/$versioned_appimage"
-    ;;
   *)
     echo "unsupported RELEASE_TARGET for POSIX assets: $RELEASE_TARGET" >&2
     exit 1

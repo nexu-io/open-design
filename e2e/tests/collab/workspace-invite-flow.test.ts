@@ -202,7 +202,7 @@ describe('workspace invite create and acceptance handoff', () => {
           await inviteeSuite.with.toolsDev(
             async ({ webUrl: inviteeWebUrl }) => {
               // Desktop's deeplink parser/dispatcher owns the thin URL ->
-              // nonce POST bridge and is pinned in apps/desktop tests. This
+              // nonce POST bridge and is pinned in shells/electron tests. This
               // cross-process witness starts at that public daemon boundary so
               // E2E stays outside the guarded packaged-leaf implementation.
               const accepted = await requestJson<{

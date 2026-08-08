@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import type { StorageConfig } from "./s3-upload.ts";
 
-export type ReleaseTarget = "mac_arm64" | "mac_x64" | "win_x64" | "linux_x64";
+export type ReleaseTarget = "mac_arm64" | "mac_x64" | "win_x64";
 
 export function required(name: string): string {
   const value = process.env[name];
@@ -23,8 +23,8 @@ export function bool(name: string): boolean {
 
 export function requiredTarget(name = "RELEASE_TARGET"): ReleaseTarget {
   const value = required(name);
-  if (value !== "mac_arm64" && value !== "mac_x64" && value !== "win_x64" && value !== "linux_x64") {
-    throw new Error(`${name} must be mac_arm64, mac_x64, win_x64, or linux_x64; got ${value}`);
+  if (value !== "mac_arm64" && value !== "mac_x64" && value !== "win_x64") {
+    throw new Error(`${name} must be mac_arm64, mac_x64, or win_x64; got ${value}`);
   }
   return value;
 }
@@ -58,7 +58,6 @@ export function contentType(name: string): string {
   if (name.endsWith(".dmg")) return "application/x-apple-diskimage";
   if (name.endsWith(".zip")) return "application/zip";
   if (name.endsWith(".exe")) return "application/vnd.microsoft.portable-executable";
-  if (name.endsWith(".AppImage")) return "application/octet-stream";
   if (name.endsWith(".sha256")) return "text/plain; charset=utf-8";
   if (name.endsWith(".yml") || name.endsWith(".yaml")) return "application/x-yaml; charset=utf-8";
   if (name.endsWith(".json")) return "application/json; charset=utf-8";

@@ -1,9 +1,9 @@
 /**
  * Coverage for the path-validation primitives that the new
- * shell.openPath IPC handler in `apps/desktop/src/main/runtime.ts`
+ * shell.openPath IPC handler in `shells/electron/src/main/runtime.ts`
  * relies on, and for the HMAC token mint helper introduced in PR #974
  * to bind `POST /api/import/folder` to the desktop main process. The
- * packaged workspace hosts the test because `apps/desktop` itself has
+ * packaged workspace hosts the test because `shells/electron` itself has
  * no vitest setup yet — same reasoning as the existing
  * `desktop-url-allowlist.test.ts` next to this file.
  *

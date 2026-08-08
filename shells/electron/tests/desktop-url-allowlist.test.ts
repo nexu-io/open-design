@@ -1,10 +1,8 @@
 /**
  * Regression coverage for the URL-policy helpers re-exported from
- * `@open-design/desktop/main`. The helpers are part of the security
+ * `@open-design/shell-electron/main`. The helpers are part of the security
  * boundary for child-window navigation (see `setWindowOpenHandler`
- * in `apps/desktop/src/main/runtime.ts`); the packaged workspace
- * hosts the test because `apps/desktop` itself has no vitest setup
- * yet — adding one is more scope than #911 needs.
+ * in `shells/electron/src/main/runtime.ts`).
  *
  * @see https://github.com/nexu-io/open-design/issues/911
  */

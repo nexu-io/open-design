@@ -27,21 +27,6 @@ import {
   uninstallPackedWinApp,
   validateWinLauncherPayloadArchive,
 } from "./win/index.js";
-import {
-  cleanupPackedLinuxNamespace,
-  installPackedLinuxApp,
-  installPackedLinuxStandalone,
-  inspectPackedLinuxApp,
-  packLinux,
-  readPackedLinuxLogs,
-  resolveLinuxLifecycleMode,
-  startPackedLinuxApp,
-  startPackedLinuxStandalone,
-  stopPackedLinuxApp,
-  stopPackedLinuxStandalone,
-  uninstallPackedLinuxApp,
-  uninstallPackedLinuxStandalone,
-} from "./linux.js";
 
 type CliOptions = ToolPackCliOptions;
 
@@ -73,7 +58,7 @@ function addSharedOptions(command: CacCommand) {
     .option("--expr <expression>", "desktop inspect eval expression")
     .option("--path <path>", "desktop inspect screenshot path")
     .option("--shell <shell>", "launcher shell (default: electron)")
-    .option("--status-poll-count <count>", "inspect: poll desktop/daemon/web STATUS this many times")
+    .option("--status-poll-count <count>", "inspect: poll the shell-owned runtime status projection this many times")
     .option("--status-poll-interval-ms <ms>", "inspect: delay between STATUS poll samples")
     .option("--update-action <action>", "desktop update action: status|check|clear-cache|download|install");
 }
@@ -82,7 +67,6 @@ function addSharedOptions(command: CacCommand) {
 // config.ts. Keep these in sync: the resolver throws on any value not listed
 // here for the given platform.
 const TO_HELP_BY_PLATFORM: Record<ToolPackPlatform, string> = {
-  linux: "build target: all|appimage|dir (default: all)",
   mac: "build target: all|app|dmg|zip (default: all)",
   win: "build target: all|dir|nsis|zip (default: nsis). `zip` produces a portable zip from the unpacked build; `all` produces dir+nsis+zip.",
 };
@@ -251,53 +235,6 @@ addWinLifecycleOptions(
       throw new Error(`unsupported win action: ${action}`);
   }
 });
-
-addBuildOptions(addSharedOptions(cli.command("linux <action>", "Linux packaging commands: build|install|start|stop|logs|uninstall|cleanup|inspect")), "linux")
-  .option("--containerized", "build inside electronuserland/builder Docker for wider glibc compatibility")
-  .option("--standalone", "install/start/stop/uninstall/cleanup the standalone entry; inspect returns status only")
-  .action(async (action: string, options: CliOptions) => {
-    const config = resolveToolPackConfig("linux", options);
-    switch (action) {
-      case "build":
-        printJson(await packLinux(config));
-        return;
-      case "install": {
-        const mode = resolveLinuxLifecycleMode(options, "install");
-        printJson(await (mode === "standalone" ? installPackedLinuxStandalone(config) : installPackedLinuxApp(config)));
-        return;
-      }
-      case "start": {
-        const mode = resolveLinuxLifecycleMode(options, "start");
-        printJson(await (mode === "standalone" ? startPackedLinuxStandalone(config) : startPackedLinuxApp(config)));
-        return;
-      }
-      case "stop": {
-        const mode = resolveLinuxLifecycleMode(options, "stop");
-        printJson(await (mode === "standalone" ? stopPackedLinuxStandalone(config) : stopPackedLinuxApp(config)));
-        return;
-      }
-      case "logs":
-        printLogs(await readPackedLinuxLogs(config), options);
-        return;
-      case "inspect":
-        printJson(await inspectPackedLinuxApp(config, {
-          expr: options.expr,
-          standalone: options.standalone === true,
-          path: options.path,
-        }));
-        return;
-      case "uninstall": {
-        const mode = resolveLinuxLifecycleMode(options, "uninstall");
-        printJson(await (mode === "standalone" ? uninstallPackedLinuxStandalone(config) : uninstallPackedLinuxApp(config)));
-        return;
-      }
-      case "cleanup":
-        printJson(await cleanupPackedLinuxNamespace(config, options));
-        return;
-      default:
-        throw new Error(`unsupported linux action: ${action}`);
-    }
-  });
 
 cli.help();
 cli.parse();

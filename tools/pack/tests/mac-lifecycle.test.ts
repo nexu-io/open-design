@@ -6,12 +6,16 @@ import type { ChildProcess } from "node:child_process";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DesktopStatusSnapshot } from "@open-design/sidecar-proto";
+import {
+  createStandaloneHandoffEnvelope,
+  type StandaloneRuntimeStatus,
+} from "@open-design/standalone-proto";
 
 import type { ToolPackConfig } from "../src/config.js";
 import { resolveMacPaths } from "../src/mac/paths.js";
 
-const requestJsonIpc = vi.fn(async (): Promise<DesktopStatusSnapshot> => ({ state: "running" }));
-const resolveAppIpcPath = vi.fn(() => "/tmp/open-design/ipc/test/desktop.sock");
+const requestJsonIpc = vi.fn(async (_ipc?: string, _payload?: unknown): Promise<DesktopStatusSnapshot> => ({ state: "running" }));
+const resolveAppIpcPath = vi.fn(({ app }: { app: string }) => `/tmp/open-design/ipc/test/${app}.sock`);
 const createSidecarLaunchEnv = vi.fn(({ extraEnv }: { extraEnv: NodeJS.ProcessEnv }) => extraEnv);
 const collectProcessTreePids = vi.fn(
   (_processes: unknown[], rootPids: Array<number | null>) =>
@@ -45,11 +49,10 @@ vi.mock("@open-design/platform", () => ({
   stopProcesses,
 }));
 
-const { startPackedMacApp, stopPackedMacApp } = await import("../src/mac/lifecycle.js");
+const { inspectPackedMacApp, startPackedMacApp, stopPackedMacApp } = await import("../src/mac/lifecycle.js");
 
 function makeConfig(root: string, overrides: Partial<ToolPackConfig> = {}): ToolPackConfig {
   return {
-    containerized: false,
     electronBuilderCliPath: "/x/electron-builder/cli.js",
     electronDistPath: "/x/electron/dist",
     electronVersion: "41.3.0",
@@ -262,6 +265,55 @@ describe("startPackedMacApp", () => {
       expect(result.source).toBe("installed");
       expect(result.executablePath).toBe(executablePath);
       expect(result.status?.state).toBe("running");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+});
+
+describe("inspectPackedMacApp", () => {
+  it("reports and polls the shell-owned Standalone status projection", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-mac-inspect-"));
+    try {
+      const digest = `sha256:${"a".repeat(64)}` as const;
+      const standalone = {
+        daemonUrl: "http://127.0.0.1:4100",
+        handoff: createStandaloneHandoffEnvelope({
+          descriptor: {
+            release: { version: "0.16.2" },
+            shell: { digest, type: "electron", version: "0.16.2" },
+            standalone: { digest, protocolVersion: 1, version: "0.16.2" },
+          },
+          scope: { channel: "stable", generation: 0, namespace: "local-test" },
+        }),
+        pid: 101,
+        schemaVersion: 1,
+        state: "running",
+        webUrl: "http://127.0.0.1:4200",
+      } satisfies StandaloneRuntimeStatus;
+      requestJsonIpc.mockImplementation(async (ipc?: string, payload?: unknown) => {
+        const messageType = typeof payload === "object" && payload != null && "type" in payload
+          ? String((payload as { type?: unknown }).type)
+          : undefined;
+        if (messageType !== "status") throw new Error(`unexpected IPC message: ${String(messageType)}`);
+        if (ipc?.endsWith("/desktop.sock")) return { pid: 101, standalone, state: "running", url: "od://app/" };
+        throw new Error(`unexpected IPC path: ${ipc}`);
+      });
+
+      const result = await inspectPackedMacApp(makeConfig(root), {
+        statusPollCount: 2,
+        statusPollIntervalMs: 1,
+      });
+
+      expect(result.status).toMatchObject({ pid: 101, state: "running" });
+      expect(result.status?.standalone).toMatchObject({
+        daemonUrl: "http://127.0.0.1:4100",
+        state: "running",
+        webUrl: "http://127.0.0.1:4200",
+      });
+      expect(result.statusPoll).toMatchObject({ count: 2, intervalMs: 1 });
+      expect(result.statusPoll?.samples.map((sample) => sample.attempt)).toEqual([1, 2]);
+      expect(result.statusPoll?.samples.every((sample) => sample.status?.standalone?.state === "running")).toBe(true);
     } finally {
       await rm(root, { force: true, recursive: true });
     }

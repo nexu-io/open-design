@@ -617,19 +617,19 @@ test("isDeniedChangedPath blocks common tool config files under allowlisted sour
   assert.equal(isDeniedChangedPath("apps/web/tsconfig.sidecar.json"), true);
   assert.equal(isDeniedChangedPath("apps/daemon/tsconfig.tests.json"), true);
   assert.equal(isDeniedChangedPath("packages/contracts/tsconfig.tests.json"), true);
-  assert.equal(isDeniedChangedPath("apps/packaged/tsconfig.json"), true);
-  assert.equal(isDeniedChangedPath("apps/packaged/vitest.config.ts"), true);
+  assert.equal(isDeniedChangedPath("shells/electron/tsconfig.json"), true);
+  assert.equal(isDeniedChangedPath("shells/electron/vitest.config.ts"), true);
   assert.equal(isDeniedChangedPath("apps/web/src/app/page.tsx"), false);
 });
 
 test("isAllowedChangedPath allows ordinary app and package source/test paths while keeping denied surfaces blocked", () => {
-  assert.equal(isAllowedChangedPath("apps/packaged/src/main.ts"), true);
-  assert.equal(isAllowedChangedPath("apps/packaged/tests/main.test.ts"), true);
-  assert.equal(isAllowedChangedPath("apps/desktop/src/main.ts"), true);
+  assert.equal(isAllowedChangedPath("shells/electron/src/main.ts"), true);
+  assert.equal(isAllowedChangedPath("shells/electron/tests/main.test.ts"), true);
+  assert.equal(isAllowedChangedPath("apps/standalone/src/index.ts"), true);
   assert.equal(isAllowedChangedPath("packages/sidecar/src/index.ts"), true);
   assert.equal(isAllowedChangedPath("tools/pack/src/index.ts"), false);
-  assert.equal(isAllowedChangedPath("apps/packaged/tsconfig.json"), false);
-  assert.equal(isAllowedChangedPath("apps/packaged/vitest.config.ts"), false);
+  assert.equal(isAllowedChangedPath("shells/electron/tsconfig.json"), false);
+  assert.equal(isAllowedChangedPath("shells/electron/vitest.config.ts"), false);
 });
 
 test("waitForPendingApprovalRuns retries until action_required runs appear and keeps polling through the retry window", async () => {

@@ -28,11 +28,6 @@ function loadInternalPackageNames(modulePath: string): string[] {
 
 const PACK_LANES = [
   {
-    roots: ["apps/desktop", "apps/web", "apps/packaged", "apps/daemon"],
-    lane: "linux",
-    file: "tools/pack/src/linux.ts",
-  },
-  {
     roots: ["shells/electron", "apps/web", "apps/daemon"],
     lane: "mac",
     file: "tools/pack/src/mac/constants.ts",

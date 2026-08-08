@@ -1029,7 +1029,7 @@ export type PackagedStartupFailureKind =
   | 'unknown';
 
 // Event-specific props for `packaged_runtime_failed`. Emitted by the packaged
-// MAIN process (apps/packaged/src/startup-telemetry.ts) over a direct PostHog
+// MAIN process (shells/electron/src/startup-telemetry.ts) over a direct PostHog
 // capture when daemon/web sidecars die before reporting status — the pre-daemon
 // crash class that otherwise produces no telemetry (issue #4638). The shared
 // safety-event envelope (event_schema_version / env / device_id / client_type /

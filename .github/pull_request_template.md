@@ -29,7 +29,7 @@ Fixes #
 
 <!-- Check every box that applies. Reviewers use this to scope the review. -->
 
-- [ ] **UI** — new page / dialog / panel / menu item / setting / empty state in `apps/web` or `apps/desktop` (including Electron menu bar)
+- [ ] **UI** — new page / dialog / panel / menu item / setting / empty state in `apps/web` or `shells/electron` (including Electron menu bar)
 - [ ] **Keyboard shortcut** — new or changed
 - [ ] **CLI / env var** — new `od` subcommand or flag, new `tools-dev` / `tools-pack` flag, or new `OD_*` env var
 - [ ] **API / contract** — new `/api/*` endpoint, new SSE event, or changed shape in `packages/contracts`

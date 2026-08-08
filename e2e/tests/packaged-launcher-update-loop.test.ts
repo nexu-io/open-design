@@ -112,15 +112,15 @@ type PlatformCase = {
 };
 
 async function loadDesktopUpdaterModule(): Promise<DesktopUpdaterModule> {
-  return await import(new URL("../../apps/desktop/src/main/updater.ts", import.meta.url).href) as DesktopUpdaterModule;
+  return await import(new URL("../../shells/electron/src/main/updater.ts", import.meta.url).href) as DesktopUpdaterModule;
 }
 
 async function loadPackagedPathsModule(): Promise<PackagedPathsModule> {
-  return await import(new URL("../../apps/packaged/src/paths.ts", import.meta.url).href) as PackagedPathsModule;
+  return await import(new URL("../../shells/electron/src/paths.ts", import.meta.url).href) as PackagedPathsModule;
 }
 
 async function loadPackagedLauncherRuntimeModule(): Promise<PackagedLauncherRuntimeModule> {
-  return await import(new URL("../../apps/packaged/src/launcher-runtime.ts", import.meta.url).href) as PackagedLauncherRuntimeModule;
+  return await import(new URL("../../shells/electron/src/launcher-runtime.ts", import.meta.url).href) as PackagedLauncherRuntimeModule;
 }
 
 function fakePackagedConfig(root: string, testCase: PlatformCase): PackagedConfigLike {
@@ -497,7 +497,7 @@ describe("packaged launcher payload update loop", () => {
  *
  * The two version axes these specs drive are deliberately distinct, and the
  * distinction IS the mechanism (see `resolveInstalledOuterVersion` in
- * `apps/desktop/src/main/updater/feed.ts`):
+ * `shells/electron/src/main/updater/feed.ts`):
  *
  *  - the RUNNING version (`config.currentVersion`) advances with every payload
  *    update, so after one payload update it no longer describes the shell;
@@ -509,7 +509,7 @@ describe("packaged launcher payload update loop", () => {
  * the floor against the running version cannot pass.
  *
  * That floor crosses three owners — `tools/release` resolves and validates the
- * channel policy, the release feed carries it, and `apps/desktop`'s updater
+ * channel policy, the release feed carries it, and `shells/electron`'s updater
  * enforces it. Each side has unit coverage; nothing joined them. These specs
  * drive the REAL release-side resolver into a REAL feed and then into a REAL
  * packaged update check, so a break anywhere in that chain is observable here

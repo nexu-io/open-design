@@ -1345,7 +1345,7 @@ function AppInner() {
   // callbacks. Stacked live streams are what deadlocked the packaged app —
   // each navigation/focus refresh opened another slow cold-probe stream,
   // and once they pinned every upstream connection slot the whole od://
-  // proxy starved (see apps/packaged/src/index.ts ignore-connections-limit
+  // proxy starved (see shells/electron/src/index.ts ignore-connections-limit
   // note for the other half of that fix).
   const beginAgentStreamRequest = useCallback(() => {
     agentStreamAbortRef.current?.abort();

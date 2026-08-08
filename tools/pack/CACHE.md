@@ -58,7 +58,8 @@ The build-graph cache is almost entirely Windows-specific.
 | `win.launcher-payload-base` | win |
 | `win.launcher-payload` | win |
 
-`mac` and `linux` have `<platform>.workspace-build` only.
+`mac` has `mac.workspace-build` only. Linux has no prebuilt delivery/cache lane;
+expert users may build the source workspace directly.
 
 The workspace-build key includes the selected shell and hashes that shell's
 registered source directory. For the macOS and Windows delivery lanes the

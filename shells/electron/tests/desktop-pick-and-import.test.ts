@@ -18,7 +18,7 @@
  *      NOT invoke `registerDesktopAuth` (no unnecessary IPC). Renderer
  *      sees ok:true.
  *
- * The packaged workspace hosts these because `apps/desktop` itself has
+ * The packaged workspace hosts these because `shells/electron` itself has
  * no vitest setup yet — same reasoning as the existing
  * `desktop-project-root-gate.test.ts` next to this file.
  *

@@ -30,6 +30,6 @@ cat > "$notes_file" <<EOF
 
 See [CHANGELOG.md](https://github.com/${GITHUB_REPOSITORY}/blob/$VERSION_TAG/CHANGELOG.md) for the full release notes.
 
-This stable release ships mac arm64/x64 DMG and ZIP assets, Windows x64 NSIS installer assets, checksums, updater feed files, and a zipped packaged e2e spec report. Linux AppImage packaging remains optional through the stable Linux lane.
+This stable release ships mac arm64/x64 DMG and ZIP assets, Windows x64 NSIS installer assets, checksums, updater feed files, and a zipped packaged e2e spec report. Linux is source-build only and has no packaged release lane.
 EOF
 echo "notes_file=$notes_file" >> "$GITHUB_OUTPUT"

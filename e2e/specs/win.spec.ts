@@ -2175,7 +2175,7 @@ async function fetchPackagedHealth(daemonUrl: string): Promise<HealthEvalValue> 
  * writes `<runtimeNamespaceRoot>/data/app-config.json`, and on a
  * `tools-pack win start` the daemon resolves the same path — `tools-pack`
  * rewrites the launch config's `namespaceBaseRoot` to the tools-pack runtime
- * root (tools/pack/src/win/lifecycle.ts) and `apps/packaged/src/paths.ts`
+ * root (tools/pack/src/win/lifecycle.ts) and `shells/electron/src/paths.ts`
  * derives `join(namespaceBaseRoot, namespace, 'data')` from it. So a healthy
  * seeded start MUST report true, and anything else is a real data-root
  * regression rather than a test-fixture detail.

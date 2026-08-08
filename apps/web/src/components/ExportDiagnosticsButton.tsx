@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useT } from '../i18n';
 import { Icon } from './Icon';
 
-// Mirrors what apps/desktop preload exposes via contextBridge. Kept inline
+// Mirrors what shells/electron preload exposes via contextBridge. Kept inline
 // so the web bundle does not import the desktop package.
 type DesktopExportResult =
   | { ok: true; path: string }

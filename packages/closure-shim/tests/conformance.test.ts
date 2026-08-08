@@ -209,6 +209,7 @@ async function candidateFixture(input: {
     },
     manifest,
     releaseTarget: "mac_arm64",
+    releaseVersion: input.version,
   };
   const signature: ClosureCandidateSignature = {
     algorithm: CLOSURE_SIGNATURE_ALGORITHM,

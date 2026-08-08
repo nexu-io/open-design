@@ -39,7 +39,7 @@ let secondInstanceHandlerRegistered = false;
  * listening this early is what makes the cold-start hand-off work at all.
  *
  * Importing this module must nevertheless stay side-effect-safe outside
- * Electron: `apps/desktop/src/main/index.ts` re-exports pure helpers that unit
+ * Electron: `shells/electron/src/main/index.ts` re-exports pure helpers that unit
  * tests import directly, and in a plain Node process the `electron` entry
  * resolves to the binary-path shim that has no `app`. Attaching unconditionally
  * would turn every such import into a TypeError at module load.

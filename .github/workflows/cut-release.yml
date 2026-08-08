@@ -1,7 +1,7 @@
 name: cut-release
 # Every Tuesday 09:00 Asia/Shanghai, cut the next minor release branch from main:
 #   1. Compute version (highest release/vX.Y.Z -> bump minor -> X.(Y+1).0; e.g. 0.11.0 -> 0.12.0)
-#   2. Create release/vX.Y.Z from main, bump apps/packaged/package.json, push
+#   2. Create release/vX.Y.Z, bump shells/electron/package.json, push
 #   3. Create the "backport release/vX.Y.Z" label
 # The independent main prerelease Windows canary remains an advisory signal: its
 # smoke result is notified separately and never blocks a branch cut or package.
@@ -122,7 +122,7 @@ jobs:
           git config user.name  'open-design-release-bot[bot]'
           git config user.email 'open-design-release-bot[bot]@users.noreply.github.com'
           git switch -c "$BRANCH"
-          ( cd apps/packaged && npm pkg set version="$VERSION" )
+          ( cd shells/electron && npm pkg set version="$VERSION" )
           git commit -am "chore(release): v$VERSION"
           git push origin "$BRANCH"   # App token push -> triggers notify-release-feishu (nightly + Feishu)
 

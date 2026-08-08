@@ -30,13 +30,14 @@ receives the selected daemon port and rewrites `/api/*`, `/artifacts/*`, and
 `/frames/*` to the sibling Express process. Ports are transport details; they
 do not define process identity, namespaces, or daemon data roots.
 
-### Packaged desktop and packaged headless
+### Electron Shell and Standalone Closure
 
-`apps/packaged` starts the packaged daemon and web sidecars. The Electron entry
-also starts the desktop shell; the headless entry omits desktop. Packaged code
-resolves channel/namespace-scoped runtime and data identities before spawning
-the daemon, and the desktop discovers the web URL through sidecar IPC rather
-than assuming a port.
+`apps/standalone` is the shell-neutral Web + daemon product closure. Its fixed
+`bootloader.mjs` entry starts the body through the normalized sidecar control
+plane. `shells/electron` owns native windows, installer/update policy, closure
+selection, and the at-most-once handoff into that entry. Both sides resolve the
+same channel/namespace-scoped generation identity; the Shell discovers the Web
+URL through the handoff result rather than assuming a port.
 
 Read `tools/pack/AGENTS.md` before changing packaged launch, update, installer,
 or channel identity behavior.
@@ -270,7 +271,8 @@ Shared DTOs live in `packages/contracts`.
 | Shared web/daemon DTOs and prompt contracts | `packages/contracts/src/` |
 | Runtime definitions and engine | `apps/daemon/src/runtimes/` |
 | Functional-skill loader | `apps/daemon/src/skills.ts` |
-| Packaged launch | `apps/packaged/`, `tools/pack/` |
+| Standalone composition and fossil entry | `apps/standalone/` |
+| Electron launch and packaging | `shells/electron/`, `tools/pack/` |
 | Development lifecycle | `tools/dev/` |
 | User-level validation | `e2e/` |
 

@@ -52,8 +52,7 @@ export const CLOSURE_INTERNAL_PACKAGES = [
 export const CLOSURE_DAEMON_EXTERNALS = ["better-sqlite3", "blake3-wasm", "node-pty"] as const;
 export const CLOSURE_ELECTRON_NATIVE_MODULES = ["better-sqlite3"] as const;
 const CLOSURE_FORBIDDEN_BUNDLE_INPUTS = [
-  "/apps/desktop/",
-  "/apps/packaged/",
+  "/shells/electron/",
   "/payload-desktop-handoff.",
 ] as const;
 const CLOSURE_ESBUILD_BANNER =

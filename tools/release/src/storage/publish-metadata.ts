@@ -65,9 +65,9 @@ type PlatformManifest = {
 type TargetDef = {
   enableEnv: string;
   label: string;
-  legacyKey: "mac" | "macIntel" | "win" | "linux";
+  legacyKey: "mac" | "macIntel" | "win";
   resultEnv: string;
-  target: "mac_arm64" | "mac_x64" | "win_x64" | "linux_x64";
+  target: "mac_arm64" | "mac_x64" | "win_x64";
 };
 
 const releaseChannel = releaseChannelDescriptor(required("RELEASE_CHANNEL")).channel;
@@ -152,7 +152,6 @@ const targetDefs: TargetDef[] = [
   { enableEnv: "ENABLE_MAC_ARM64", label: "macOS arm64", legacyKey: "mac", resultEnv: "MAC_ARM64_RESULT", target: "mac_arm64" },
   { enableEnv: "ENABLE_WIN_X64", label: "Windows x64", legacyKey: "win", resultEnv: "WIN_X64_RESULT", target: "win_x64" },
   { enableEnv: "ENABLE_MAC_X64", label: "macOS x64", legacyKey: "macIntel", resultEnv: "MAC_X64_RESULT", target: "mac_x64" },
-  { enableEnv: "ENABLE_LINUX_X64", label: "Linux x64", legacyKey: "linux", resultEnv: "LINUX_X64_RESULT", target: "linux_x64" },
 ];
 
 function releaseMetadataFields(): Record<string, unknown> {

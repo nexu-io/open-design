@@ -348,9 +348,9 @@ const GOLDEN_CASES: readonly GoldenCase[] = [
     }),
   },
   {
-    name: "pull_request desktop change maps to tools-pack tests without ui lanes",
+    name: "pull_request Electron Shell change maps to tools-pack tests without ui lanes",
     context: PR,
-    files: ["apps/desktop/src/main/index.ts"],
+    files: ["shells/electron/src/main/index.ts"],
     expected: expectedPlan({
       ciMode: "hot",
       scopes: ["tools_dev_tests_required", "tools_pack_tests_required", "workspace_validation_required"],
@@ -504,9 +504,9 @@ const GOLDEN_CASES: readonly GoldenCase[] = [
     name: "merge_group packaged-leaf core uses the guarded narrow plan",
     context: { eventName: "merge_group" },
     files: [
-      "apps/desktop/src/main/index.ts",
-      "apps/packaged/tests/launcher.test.ts",
-      "tools/pack/resources/linux/open-design.desktop.template",
+      "shells/electron/src/main/index.ts",
+      "shells/electron/tests/launcher-runtime.test.ts",
+      "tools/pack/resources/win/icon.ico",
     ],
     expected: expectedPlan({
       ciMode: "full",
@@ -542,7 +542,7 @@ const GOLDEN_CASES: readonly GoldenCase[] = [
   {
     name: "merge_group packaged configuration outside the certain core stays full",
     context: { eventName: "merge_group" },
-    files: ["apps/desktop/package.json", "tools/pack/bin/tools-pack.mjs"],
+    files: ["shells/electron/package.json", "tools/pack/bin/tools-pack.mjs"],
     expected: FULL_PLAN,
   },
   {
@@ -692,9 +692,9 @@ test("merge-queue threshold trusts the certain-exempt core without escalation", 
 test("packaged-leaf core matches only its certain rule with the guarded effects", async () => {
   const { evaluateScopeOutputs, matchesRuleMatch, scopeRules } = await import("../../../scripts/scopes.ts");
   const files = [
-    "apps/desktop/src/main.ts",
-    "apps/packaged/tests/main.test.ts",
-    "tools/pack/resources/linux/open-design.desktop.template",
+    "shells/electron/src/index.ts",
+    "shells/electron/tests/launcher-runtime.test.ts",
+    "tools/pack/resources/win/icon.ico",
   ];
   for (const file of files) {
     const matched = scopeRules.filter((rule) => matchesRuleMatch(file, rule.match)).map((rule) => rule.id);
@@ -760,8 +760,8 @@ test("packaged-leaf consumption collector resolves imports, packages, and static
   const violations = collectPackagedLeafConsumptionFromSource(
     "packages/example/src/index.ts",
     [
-      `import "@open-design/desktop/main";`,
-      `await import("../../../apps/packaged/src/index.ts");`,
+      `import "@open-design/shell-electron/main";`,
+      `await import("../../../shells/electron/src/index.ts");`,
       `const source = path.join(repoRoot, "tools", "pack", "src", "index.ts");`,
       `const prose = "desktop behavior is packaged elsewhere";`,
     ].join("\n"),
@@ -876,7 +876,7 @@ test("the rule table classifies every file: no path escapes both fallbacks", asy
     "README.md",
     "docs/architecture.md",
     "apps/web/src/x.ts",
-    "apps/desktop/src/main.ts",
+    "shells/electron/src/index.ts",
     "tools/pack/src/build.ts",
     "mystery.xyz",
     "some/deeply/nested/unknown.bin",
@@ -902,7 +902,7 @@ test("fallback matching honors excludeWhen semantics", async () => {
   assert.equal(matchesRuleMatch("tools/pack/bin/tools-pack.mjs", workspaceFallback.match), true);
 
   assert.equal(matchesRuleMatch("tools/pack/src/build.ts", uiCriticalFallback.match), false);
-  assert.equal(matchesRuleMatch("apps/desktop/src/main.ts", uiCriticalFallback.match), false);
+  assert.equal(matchesRuleMatch("shells/electron/src/index.ts", uiCriticalFallback.match), false);
   assert.equal(matchesRuleMatch("mystery.xyz", uiCriticalFallback.match), true);
 });
 

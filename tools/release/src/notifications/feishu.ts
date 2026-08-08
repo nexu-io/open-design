@@ -22,7 +22,6 @@
 //   MAC_ARM64_URL         macOS arm64 download URL (optional)
 //   MAC_INTEL_URL         macOS x64 (Intel) download URL (optional)
 //   WIN_URL               Windows x64 download URL (optional)
-//   LINUX_URL             Linux x64 download URL (optional)
 
 import { createHmac } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -75,7 +74,6 @@ const DOWNLOADS = [
   { label: "macOS (Apple Silicon)", url: optional("MAC_ARM64_URL") },
   { label: "macOS (Intel)", url: optional("MAC_INTEL_URL") },
   { label: "Windows", url: optional("WIN_URL") },
-  { label: "Linux", url: optional("LINUX_URL") },
 ];
 
 function downloadButtons(): FeishuElement[] {

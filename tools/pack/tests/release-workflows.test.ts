@@ -38,7 +38,7 @@ describe("release workflows", () => {
   });
 
   it("requires Vela CLI for every beta desktop packaging target", async () => {
-    const [beta, betaSelfHosted, preview, prerelease, stable, stablePrepare, buildMac, buildWin, prepareMac, prepareWin, publishPlatform, winLifecycle, desktopUpdater, macBuild, macFs, installUnsafeDmg, winApp, macWorkspace, linuxPack] = await Promise.all([
+    const [beta, betaSelfHosted, preview, prerelease, stable, stablePrepare, buildMac, buildWin, prepareMac, prepareWin, publishPlatform, winLifecycle, desktopUpdater, macBuild, macFs, installUnsafeDmg, winApp, macWorkspace] = await Promise.all([
       readFile(new URL("../../../.github/workflows/release-beta.yml", import.meta.url), "utf8"),
       readFile(new URL("../../../.github/workflows/release-beta-s.yml", import.meta.url), "utf8"),
       readFile(new URL("../../../.github/workflows/release-preview.yml", import.meta.url), "utf8"),
@@ -51,30 +51,28 @@ describe("release workflows", () => {
       readFile(new URL("../../../tools/release/scripts/prepare-platform-assets.ps1", import.meta.url), "utf8"),
       readFile(new URL("../../../tools/release/src/storage/publish-platform.ts", import.meta.url), "utf8"),
       readFile(new URL("../src/win/lifecycle.ts", import.meta.url), "utf8"),
-      readFile(new URL("../../../apps/desktop/src/main/updater/payload.ts", import.meta.url), "utf8"),
+      readFile(new URL("../../../shells/electron/src/main/updater/payload.ts", import.meta.url), "utf8"),
       readFile(new URL("../src/mac/build.ts", import.meta.url), "utf8"),
       readFile(new URL("../src/mac/fs.ts", import.meta.url), "utf8"),
       readFile(new URL("../../../scripts/install-unsafe-dmg.sh", import.meta.url), "utf8"),
       readFile(new URL("../src/win/app.ts", import.meta.url), "utf8"),
       readFile(new URL("../src/mac/workspace.ts", import.meta.url), "utf8"),
-      readFile(new URL("../src/linux.ts", import.meta.url), "utf8"),
     ]);
     const mac = sectionBetween(beta, "  build_mac_arm64:", "  build_mac_x64:");
     const macX64 = sectionBetween(beta, "  build_mac_x64:", "  build_win_x64:");
-    const win = sectionBetween(beta, "  build_win_x64:", "  build_linux_x64:");
-    const linux = sectionBetween(beta, "  build_linux_x64:", "  publish:");
+    const win = sectionBetween(beta, "  build_win_x64:", "  publish:");
     const betaMetadata = sectionBetween(beta, "  metadata:", "  build_mac_arm64:");
     const betaPublish = sectionAfter(beta, "  publish:");
     const previewMetadata = sectionBetween(preview, "  metadata:", "  verify:");
     const previewPublish = sectionBetween(preview, "  publish:", "  cleanup_partial_release_assets:");
     const previewMac = sectionBetween(preview, "  build_mac:", "  build_mac_intel:");
     const previewMacX64 = sectionBetween(preview, "  build_mac_intel:", "  build_win:");
-    const previewWin = sectionBetween(preview, "  build_win:", "  build_linux:");
+    const previewWin = sectionBetween(preview, "  build_win:", "  publish:");
     const prereleaseMetadata = sectionBetween(prerelease, "  metadata:", "  verify:");
     const prereleasePublish = sectionBetween(prerelease, "  publish:", "  cleanup_partial_release_assets:");
     const prereleaseMac = sectionBetween(prerelease, "  build_mac:", "  build_mac_intel:");
     const prereleaseMacX64 = sectionBetween(prerelease, "  build_mac_intel:", "  build_win:");
-    const prereleaseWin = sectionBetween(prerelease, "  build_win:", "  build_linux:");
+    const prereleaseWin = sectionBetween(prerelease, "  build_win:", "  publish:");
     const stableMetadata = sectionBetween(stable, "  metadata:", "  verify:");
     const stablePublish = sectionBetween(stable, "  publish:", "  cleanup_partial_release_assets:");
     const selfHostedMac = sectionBetween(betaSelfHosted, "  build_mac_arm64:", "  build_win_x64:");
@@ -115,7 +113,6 @@ describe("release workflows", () => {
     expect(buildMac).toContain('OD_PACKAGED_E2E_MAC_UPDATE_BUILD_JSON_PATH="$update_build_json_path"');
     expect(buildMac).toContain('OD_PACKAGED_E2E_MAC_UPDATE_VERSION="${OD_PACKAGED_E2E_MAC_UPDATE_VERSION:-$update_version}"');
     expect(buildMac).not.toContain("::warning::Expected Electron framework symlink");
-    expect(linux).not.toContain("--require-vela-cli");
     expect(beta).not.toContain("REQUIRE_VELA_CLI: \"true\"");
     expect(beta).toContain("release-beta publish requires win_x64_target=nsis or all");
     expect(betaSelfHosted).toContain("release-beta-s publish requires win_x64_target=nsis or all");
@@ -225,19 +222,6 @@ describe("release workflows", () => {
       expect(workspaceBuild).not.toContain('"@open-design/daemon", "build"');
       expect(workspaceBuild).not.toContain('"@open-design/web", "build"');
     }
-    {
-      const workspaceBuild = linuxPack;
-      const sidecarProtoBuild = 'await runPnpm(config, ["--filter", "@open-design/sidecar-proto", "build"])';
-      const launcherProtoBuild = 'await runPnpm(config, ["--filter", "@open-design/launcher-proto", "build"])';
-      const sidecarBuild = 'await runPnpm(config, ["--filter", "@open-design/sidecar", "build"])';
-      const dshRuntimeBuild = 'await runPnpm(config, ["--filter", "@open-design/dsh-runtime", "build"])';
-      const daemonBuild = 'await runPnpm(config, ["--filter", "@open-design/daemon", "build"])';
-      expect(workspaceBuild).toContain(launcherProtoBuild);
-      expect(workspaceBuild).toContain(dshRuntimeBuild);
-      expect(workspaceBuild.indexOf(sidecarProtoBuild)).toBeLessThan(workspaceBuild.indexOf(launcherProtoBuild));
-      expect(workspaceBuild.indexOf(launcherProtoBuild)).toBeLessThan(workspaceBuild.indexOf(sidecarBuild));
-      expect(workspaceBuild.indexOf(dshRuntimeBuild)).toBeLessThan(workspaceBuild.indexOf(daemonBuild));
-    }
     expect(preview).not.toContain(".github/scripts/release/assets/mac.sh");
     expect(preview).not.toContain(".github/scripts/release/assets/mac-intel.sh");
     expect(preview).not.toContain(".github/scripts/release/assets/win.ps1");
@@ -245,9 +229,9 @@ describe("release workflows", () => {
     expect(preview).not.toContain(".github/scripts/release/r2/publish.sh");
     expect(preview).not.toContain(".github/scripts/release/r2/verify.sh");
     expect(preview).not.toContain(".github/scripts/release/r2/summary.sh");
-    expect(countOccurrences(preview, "tools/release/scripts/prepare-platform-assets.sh")).toBeGreaterThanOrEqual(3);
+    expect(countOccurrences(preview, "tools/release/scripts/prepare-platform-assets.sh")).toBeGreaterThanOrEqual(2);
     expect(preview).toContain("tools\\release\\scripts\\prepare-platform-assets.ps1");
-    expect(countOccurrences(preview, "tools-release publish-platform")).toBeGreaterThanOrEqual(4);
+    expect(countOccurrences(preview, "tools-release publish-platform")).toBeGreaterThanOrEqual(3);
     expect(preview).toContain("tools-release publish-metadata");
     expect(preview).toContain("tools-release verify-metadata");
     expect(preview).toContain("tools-release summary-metadata");
@@ -362,18 +346,18 @@ describe("release workflows", () => {
     expect(stable).not.toContain(".github/scripts/release/r2/publish.sh");
     expect(stable).not.toContain(".github/scripts/release/r2/verify.sh");
     expect(stable).not.toContain(".github/scripts/release/r2/summary.sh");
-    expect(countOccurrences(stable, "tools/release/scripts/prepare-platform-assets.sh")).toBeGreaterThanOrEqual(3);
+    expect(countOccurrences(stable, "tools/release/scripts/prepare-platform-assets.sh")).toBeGreaterThanOrEqual(2);
     expect(stable).toContain("tools\\release\\scripts\\prepare-platform-assets.ps1");
-    expect(countOccurrences(stable, "tools-release publish-platform")).toBeGreaterThanOrEqual(4);
+    expect(countOccurrences(stable, "tools-release publish-platform")).toBeGreaterThanOrEqual(3);
     expect(stable).toContain("tools-release publish-metadata");
     // The stable promotion gate validates prerelease metadata.github fields; the
     // publish steps must therefore pass the resolved release attribution through.
     expect(stable).toContain("RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}");
     expect(stable).toContain("RELEASE_REPOSITORY: ${{ github.repository }}");
     expect(stable).toContain("RELEASE_WORKFLOW: ${{ github.workflow }}");
-    expect(countOccurrences(stable, "RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}")).toBeGreaterThanOrEqual(5);
+    expect(countOccurrences(stable, "RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}")).toBeGreaterThanOrEqual(4);
     expect(stable).toContain("RELEASE_RUN_ID: ${{ github.run_id }}");
-    expect(countOccurrences(stable, "RELEASE_BRANCH: ${{ needs.metadata.outputs.branch }}")).toBeGreaterThanOrEqual(5);
+    expect(countOccurrences(stable, "RELEASE_BRANCH: ${{ needs.metadata.outputs.branch }}")).toBeGreaterThanOrEqual(4);
     expect(stable).not.toContain("RELEASE_BRANCH: ${{ github.ref_name }}");
     expect(stable).toContain("tools-release verify-metadata");
     expect(stable).toContain("tools-release summary-metadata");
@@ -436,7 +420,7 @@ describe("release workflows", () => {
       readFile(new URL("../../../.github/workflows/release-stable.yml", import.meta.url), "utf8"),
     ]);
 
-    // workspaceTeamTransportEnv (apps/packaged/src/workspace-team.ts) enables the
+    // workspaceTeamTransportEnv (shells/electron/src/workspace-team.ts) enables the
     // four vela transports only when a known AMR profile AND a non-empty vela web
     // origin are both baked in. A lane that bakes neither still builds, still
     // installs, and still starts — the gap only surfaces as "Workspace Team does

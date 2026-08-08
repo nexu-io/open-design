@@ -1,6 +1,6 @@
 /**
  * Coverage for the packaged main-process startup-failure telemetry
- * (apps/packaged/src/startup-telemetry.ts).
+ * (shells/electron/src/startup-telemetry.ts).
  *
  * Background: when the daemon dies before reporting status (issue #4638:
  * `better-sqlite3` vanished from the bundle → ERR_MODULE_NOT_FOUND), the
@@ -12,7 +12,7 @@
  *   3. it can NEVER block the exit (timeout wins over a hung fetch) and is a
  *      no-op without a PostHog key.
  *
- * @see apps/packaged/src/startup-telemetry.ts
+ * @see shells/electron/src/startup-telemetry.ts
  */
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';

@@ -23,8 +23,6 @@ const skippedDirectories = new Set([
   "vendor",
 ]);
 const leafPackages = [
-  "@open-design/desktop",
-  "@open-design/packaged",
   "@open-design/shell-electron",
   "@open-design/tools-pack",
 ] as const;
@@ -37,10 +35,6 @@ const allowedConsumerPrefixes = new Map([
 ]);
 
 const allowedConsumers = new Map([
-  [
-    "apps/packaged/esbuild.config.mjs",
-    "the packaged build owns these entrypoints; the config itself remains medium-tier",
-  ],
   [
     "shells/electron/esbuild.config.mjs",
     "the Electron Shell build owns these entrypoints; the config itself remains medium-tier",
@@ -81,9 +75,6 @@ const requiredWorkspaceUnitBlock = `if [ "\${{ needs.scopes.outputs.tools_dev_te
           if [ "\${{ needs.scopes.outputs.tools_pack_tests_required }}" = "true" ]; then
             pnpm --filter @open-design/shell-electron build
             pnpm --filter @open-design/shell-electron test
-            pnpm --filter @open-design/desktop build
-            pnpm --filter @open-design/desktop test
-            pnpm --filter @open-design/packaged test
             pnpm --filter @open-design/tools-pack test
             if [ "\${{ needs.scopes.outputs.run_e2e_vitest }}" != "true" ]; then
               pnpm --filter @open-design/e2e test tests/packaged-launcher-update-loop.test.ts
@@ -222,13 +213,11 @@ function scopeBoundaryErrors(): string[] {
   const errors: string[] = [];
 
   for (const filePath of [
-    "apps/desktop/src/main/index.ts",
-    "apps/desktop/tests/main/runtime.test.ts",
-    "apps/packaged/src/index.ts",
-    "apps/packaged/tests/index.test.ts",
+    "shells/electron/src/index.ts",
+    "shells/electron/tests/main/updater.test.ts",
     "tools/pack/src/index.ts",
     "tools/pack/tests/index.test.ts",
-    "tools/pack/resources/linux/open-design.desktop.template",
+    "tools/pack/resources/mac/entitlements.mac.plist",
   ]) {
     const evaluation = evaluateScopeOutputs([filePath], "certain", {
       deriveWorkspaceValidationFromTestScopes: true,

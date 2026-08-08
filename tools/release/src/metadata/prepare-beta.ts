@@ -148,8 +148,8 @@ function parseStableMetadataJson(value: string): ParsedStableVersion {
   return { parsed: parsedStable, value: stableVersion };
 }
 
-async function readPackagedVersion(): Promise<string> {
-  const packageJsonPath = join(process.cwd(), "apps", "packaged", "package.json");
+async function readShellVersion(): Promise<string> {
+  const packageJsonPath = join(process.cwd(), "shells", "electron", "package.json");
   const packageJson = JSON.parse(await readFile(packageJsonPath, "utf8")) as { version?: unknown };
 
   if (typeof packageJson.version !== "string") {
@@ -157,7 +157,7 @@ async function readPackagedVersion(): Promise<string> {
   }
 
   if (parseReleaseBaseVersion(packageJson.version) == null) {
-    fail(`apps/packaged/package.json version must be a stable x.y.z base version; got ${packageJson.version}`);
+    fail(`shells/electron/package.json version must be a stable x.y.z base version; got ${packageJson.version}`);
   }
 
   return packageJson.version;
@@ -274,7 +274,7 @@ function readBooleanEnv(name: string): boolean {
   return value === "1" || value === "true" || value === "yes";
 }
 
-const packagedVersion = await readPackagedVersion();
+const packagedVersion = await readShellVersion();
 const packagedParsed = parseReleaseBaseVersion(packagedVersion) ?? fail(`invalid packaged version: ${packagedVersion}`);
 const force = readBooleanEnv("OPEN_DESIGN_RELEASE_FORCE") || readBooleanEnv("RELEASE_FORCE");
 

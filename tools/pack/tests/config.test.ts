@@ -121,9 +121,8 @@ describe("resolveToolPackConfig namespace defaults", () => {
     expect(resolveToolPackConfig("mac", { appVersion: "0.8.0-prerelease.4" }).namespace).toBe("release-prerelease");
   });
 
-  it("defaults prerelease non-mac builds to platform-specific release channel namespaces", () => {
+  it("defaults prerelease Windows builds to platform-specific release channel namespaces", () => {
     expect(resolveToolPackConfig("win", { appVersion: "0.8.0-beta.4" }).namespace).toBe("release-beta-win");
-    expect(resolveToolPackConfig("linux", { appVersion: "0.8.0-preview.4" }).namespace).toBe("release-preview-linux");
     expect(resolveToolPackConfig("win", { appVersion: "0.8.0-prerelease.4" }).namespace).toBe("release-prerelease-win");
   });
 

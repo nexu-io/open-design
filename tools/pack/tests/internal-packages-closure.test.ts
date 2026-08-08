@@ -5,7 +5,6 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { CLOSURE_INTERNAL_PACKAGES } from "../src/closure.js";
-import { INTERNAL_PACKAGES as LINUX_INTERNAL_PACKAGES } from "../src/linux.js";
 import { INTERNAL_PACKAGES as MAC_INTERNAL_PACKAGES } from "../src/mac/constants.js";
 import { shouldInstallInternalPackageForMacPrebundle } from "../src/mac-prebundle.js";
 import { INTERNAL_PACKAGES as WIN_INTERNAL_PACKAGES } from "../src/win/constants.js";
@@ -34,11 +33,7 @@ function runtimeWorkspaceDeps(directory: string): string[] {
 // The invariant: the set a lane actually installs must be closed under its
 // runtime `@open-design/*` dependencies.
 //
-// The lanes diverge by web output mode:
-//   - linux ships "server" mode and tarball-installs every INTERNAL_PACKAGES
-//     entry, including @open-design/desktop and @open-design/web — so it must
-//     also install their runtime deps (@open-design/download, @open-design/host).
-//   - mac/win default to "standalone", where desktop/web/packaged/daemon are
+// mac/win default to "standalone", where shell/web/daemon are
 //     prebundled with esbuild and excluded from the tarball install. The
 //     packages they do install have no download/host dependency, so those
 //     lanes correctly omit them. Adding download/host there would be dead
@@ -47,11 +42,6 @@ const LANES: { name: string; packages: readonly PackageEntry[]; isInstalled: (pk
   {
     name: "closure",
     packages: CLOSURE_INTERNAL_PACKAGES,
-    isInstalled: () => true,
-  },
-  {
-    name: "linux",
-    packages: LINUX_INTERNAL_PACKAGES,
     isInstalled: () => true,
   },
   {

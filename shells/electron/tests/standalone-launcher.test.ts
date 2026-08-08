@@ -5,6 +5,7 @@ import {
   parsePackagedStandaloneRequest,
   resolvePackagedMcpBootstrapLaunch,
 } from "../src/standalone-launcher.js";
+import type { PackagedStandaloneStartupDependencies } from "../src/standalone-launcher.js";
 
 describe("parsePackagedStandaloneRequest", () => {
   it("accepts a standalone Codex MCP install request", () => {
@@ -66,11 +67,13 @@ describe("acquirePackagedStandaloneStartup", () => {
       closed,
       dependencies: {
         confirmRuntime: vi.fn(async () => undefined),
-        createIpcServer: vi.fn(async () => ({
+        createIpcServer: vi.fn(async (
+          _options: Parameters<PackagedStandaloneStartupDependencies["createIpcServer"]>[0],
+        ) => ({
           close: async () => {
             closed.push("ipc");
           },
-        })),
+        }) as never),
         exit,
         installMcp: vi.fn(async () => {
           if (failAt === "mcp") throw new Error("MCP install failed");
@@ -125,5 +128,11 @@ describe("acquirePackagedStandaloneStartup", () => {
 
     expect(closed).toEqual(["ipc", "standalone", "identity"]);
     expect(exit).not.toHaveBeenCalled();
+    const ipcOptions = dependencies.createIpcServer.mock.calls[0]?.[0];
+    await expect(ipcOptions?.readStandaloneStatus()).resolves.toMatchObject({
+      daemonUrl: "http://127.0.0.1:7457",
+      state: "running",
+      webUrl: "http://127.0.0.1:7456",
+    });
   });
 });

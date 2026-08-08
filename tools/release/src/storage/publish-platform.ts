@@ -36,8 +36,8 @@ type TargetConfig = {
   artifacts: Record<string, AssetEntry>;
   feed: { latestUrl: string; name: string; url: string } | null;
   label: string;
-  legacyPlatformKey: "mac" | "macIntel" | "win" | "linux";
-  platform: "mac" | "win" | "linux";
+  legacyPlatformKey: "mac" | "macIntel" | "win";
+  platform: "mac" | "win";
   reportDirectory: string | null;
   signed: boolean;
 };
@@ -356,18 +356,7 @@ function targetConfig(): TargetConfig {
     };
   }
 
-  const appImage = `open-design-${releaseVersion}${assetSuffix}-linux-x64.AppImage`;
-  return {
-    arch: "x64",
-    assetNames: [appImage, `${appImage}.sha256`],
-    artifacts: { appImage: assetEntry(appImage) },
-    feed: null,
-    label: "Linux x64",
-    legacyPlatformKey: "linux",
-    platform: "linux",
-    reportDirectory: target,
-    signed: false,
-  };
+  throw new Error(`unsupported release target: ${target}`);
 }
 
 const config = targetConfig();

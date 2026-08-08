@@ -140,7 +140,7 @@ export async function runElectronBuilder(
     // writes it into Info.plist CFBundleURLTypes; a runtime
     // setAsDefaultProtocolClient alone is unreliable on macOS). The scheme string
     // must match INVITE_DEEPLINK_SCHEME in
-    // apps/desktop/src/main/invite-deeplink-core.ts.
+    // shells/electron/src/main/invite-deeplink-core.ts.
     protocols: [
       {
         name: `${PRODUCT_NAME} Invite`,

@@ -1,9 +1,8 @@
 /**
  * Regression coverage for the desktop main entry's harmless-socket-option
  * filter, added to fix issue #647. The packaged entry has the parallel
- * filter pinned in `apps/packaged/tests/logging.test.ts`; this suite
- * mirrors it so the two copies of the matcher stay in lockstep until the
- * helper is promoted to a shared workspace package.
+ * filter pinned in `shells/electron/tests/logging.test.ts`; this suite
+ * mirrors the source-launch fallback behavior.
  *
  * Match strategy is intentionally narrow — name the syscall AND verify
  * the EINVAL code — so a future regression that broadens the filter to

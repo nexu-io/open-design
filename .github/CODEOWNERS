@@ -4,8 +4,8 @@
 /tools/pack/ @nexu-io/core-maintainers
 /tools/dev/ @nexu-io/core-maintainers
 /tools/serve/ @nexu-io/core-maintainers
-/apps/packaged/ @nexu-io/core-maintainers
-/apps/desktop/ @nexu-io/core-maintainers
+/shells/electron/ @nexu-io/core-maintainers
+/apps/standalone/ @nexu-io/core-maintainers
 /packages/platform/ @nexu-io/core-maintainers
 /packages/sidecar/ @nexu-io/core-maintainers
 /packages/sidecar-proto/ @nexu-io/core-maintainers

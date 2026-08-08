@@ -264,24 +264,6 @@ case "$RELEASE_TARGET" in
       build_args+=(--signed)
     fi
     ;;
-  linux_x64)
-    if [ "$RELEASE_BUILD_TARGET" != "appimage" ]; then
-      echo "unsupported linux_x64 RELEASE_BUILD_TARGET: $RELEASE_BUILD_TARGET" >&2
-      exit 1
-    fi
-    rm -rf "$TOOLS_PACK_DIR"
-    build_args=(
-      exec tools-pack linux build
-      --dir "$TOOLS_PACK_DIR"
-      --cache-dir "$TOOLS_PACK_CACHE_DIR"
-      --namespace "$RELEASE_NAMESPACE"
-      --portable
-      --app-version "$RELEASE_VERSION"
-      --to appimage
-      --containerized
-      --json
-    )
-    ;;
   *)
     echo "unsupported RELEASE_TARGET for build-platform.sh: $RELEASE_TARGET" >&2
     exit 1
@@ -315,14 +297,6 @@ fi
 
 if [ "$RELEASE_SMOKE_MODE" = "skip" ]; then
   echo "Skipping $RELEASE_TARGET packaged runtime smoke: smoke mode skip"
-elif [ "$RELEASE_TARGET" = "linux_x64" ]; then
-  required RELEASE_REPORT_DIR
-  mkdir -p "$RELEASE_REPORT_DIR/screenshots"
-  OD_PACKAGED_E2E_LINUX_APPIMAGE=1 \
-  OD_PACKAGED_E2E_NAMESPACE="$RELEASE_NAMESPACE" \
-  OD_PACKAGED_E2E_SCREENSHOT_PATH="$RELEASE_REPORT_DIR/screenshots/open-design-linux-smoke.png" \
-  OD_PACKAGED_E2E_TOOLS_PACK_DIR="$TOOLS_PACK_DIR" \
-  pnpm --dir e2e test specs/linux.spec.ts 2>&1 | tee "$RELEASE_REPORT_DIR/vitest.log"
 else
   required RELEASE_REPORT_DIR
   update_build_json_path=""

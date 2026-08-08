@@ -120,8 +120,8 @@ export function resolveNamespaceRoot<TStamp extends SidecarStampShape>({
  *   namespace root is `base/<namespace>` — exactly what `resolveNamespaceRoot`
  *   computes.
  * - **packaged (runtime mode):** the orchestrator launches every child with
- *   `base = <namespaceRoot>/runtime` (see `apps/packaged/src/paths.ts` →
- *   `runtimeRoot`, wired in `apps/packaged/src/sidecars.ts`), while the actual
+ *   `base = <namespaceRoot>/runtime` (see `shells/electron/src/paths.ts` →
+ *   `runtimeRoot`, wired in `shells/electron/src/sidecars.ts`), while the actual
  *   logs live as a sibling at `<namespaceRoot>/logs`. Re-appending the
  *   namespace via `resolveNamespaceRoot` would yield
  *   `<namespaceRoot>/runtime/<namespace>`, so every daemon/web log file

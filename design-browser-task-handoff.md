@@ -118,11 +118,11 @@ Files changed so far:
 - `apps/web/src/components/Icon.tsx`
 - `apps/web/src/styles/workspace/design-files.css`
 - `apps/web/src/styles/workspace/drawer.css`
-- `apps/desktop/src/main/index.ts`
-- `apps/desktop/src/main/preload.cts`
-- `apps/desktop/src/main/runtime.ts`
-- `apps/desktop/tests/main/preload-host-boundary.test.ts`
-- `apps/packaged/tests/desktop-url-allowlist.test.ts`
+- `shells/electron/src/main/index.ts`
+- `shells/electron/src/main/preload.cts`
+- `shells/electron/src/main/runtime.ts`
+- `shells/electron/tests/main/preload-host-boundary.test.ts`
+- `shells/electron/tests/desktop-url-allowlist.test.ts`
 - `packages/host/src/index.ts`
 - `packages/host/src/testing.ts`
 - `packages/host/tests/index.test.ts`
@@ -141,10 +141,10 @@ Implemented behavior:
 Passed:
 
 - `pnpm --filter @open-design/web typecheck`
-- `pnpm --filter @open-design/desktop typecheck`
+- `pnpm --filter @open-design/shell-electron typecheck`
 - `pnpm --filter @open-design/host typecheck`
 - `pnpm --filter @open-design/host test`
-- `pnpm --filter @open-design/packaged test -- desktop-url-allowlist`
+- `pnpm --filter @open-design/shell-electron test -- desktop-url-allowlist`
 - Direct targeted web tests from `apps/web`:
   - `pnpm exec vitest run -c vitest.config.ts tests/components/FileWorkspace.test.tsx tests/components/FileWorkspace.design-system.test.tsx`
   - Result: 2 files passed, 38 tests passed.

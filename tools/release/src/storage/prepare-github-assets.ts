@@ -9,7 +9,6 @@ const sourceDir = required("RELEASE_GITHUB_ASSETS_SOURCE_DIR");
 const outputDir = required("RELEASE_GITHUB_ASSETS_DIR");
 const outputsPath = optional("RELEASE_OUTPUTS_PATH", join(dirname(outputDir), "github-assets-outputs.json"));
 const summaryPath = optional("RELEASE_SUMMARY_PATH", join(dirname(outputDir), "github-assets-summary.md"));
-const enableLinux = optional("ENABLE_LINUX_X64") === "true";
 
 if (releaseChannel !== "stable") {
   throw new Error(`prepare-github-assets only supports stable releases; got ${releaseChannel}`);
@@ -52,12 +51,6 @@ const allowedNames = [
   `open-design-${releaseVersion}-mac-x64.dmg.sha256`,
   `open-design-${releaseVersion}-win-x64-setup.exe`,
   `open-design-${releaseVersion}-win-x64-setup.exe.sha256`,
-  ...(enableLinux
-    ? [
-        `open-design-${releaseVersion}-linux-x64.AppImage`,
-        `open-design-${releaseVersion}-linux-x64.AppImage.sha256`,
-      ]
-    : []),
 ];
 
 const sourceFiles = listFiles(sourceDir);

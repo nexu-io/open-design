@@ -54,7 +54,7 @@ describe('packaged Workspace Team transaction', () => {
         includePersonalWorkspace: true,
       });
       const velaBin = await hub.writeVelaBin(join(externalRoot, 'fake-vela'));
-      // apps/packaged/tests/workspace-team.test.ts pins the feature gate that
+      // shells/electron/tests/workspace-team.test.ts pins the feature gate that
       // emits this exact set. E2E consumes the public process environment,
       // keeping the guarded packaged leaf out of the broad test runtime.
       const packagedEnv = {

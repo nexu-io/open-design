@@ -1,6 +1,6 @@
 /**
  * Regression coverage for the `od://` protocol proxy in
- * apps/packaged/src/protocol.ts.
+ * shells/electron/src/protocol.ts.
  *
  * The packaged Electron entry registers `od://` as the loader for the
  * web runtime and forwards every renderer request to the local web
@@ -16,7 +16,7 @@
  */
 
 // `protocol.handle` from the `electron` module is invoked at import
-// time inside `apps/packaged/src/protocol.ts`. Stub the module before
+// time inside `shells/electron/src/protocol.ts`. Stub the module before
 // importing so the test environment doesn't need a real Electron
 // runtime.
 import { vi } from 'vitest';

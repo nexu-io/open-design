@@ -262,17 +262,16 @@ jobs:
       # Fresh CI typecheck/test still need these specific generated declarations:
       #   - `apps/daemon/dist/*.d.ts` for packaged/runtime consumers of the daemon
       #     package export
-      #   - `apps/desktop/dist/main/index.d.ts` for `apps/packaged` imports of
-      #     `@open-design/desktop/main`
-      #   - `apps/web/dist/sidecar/index.d.ts` for `apps/packaged` imports of
-      #     `@open-design/web/sidecar`
+      #   - `shells/electron/dist/main/index.d.ts` for shell consumers in
+      #     tools-pack and e2e
+      #   - `apps/web/dist/sidecar/index.d.ts` for Standalone build consumers
       # If postinstall grows a targeted app type-generation phase covering these
       # three exports without broad app builds, this CI prebuild can be removed.
       - name: Prebuild workspace type declarations
         if: ${{ needs.scopes.outputs.run_preflight_typecheck == 'true' }}
         run: |
           pnpm --filter @open-design/daemon build
-          pnpm --filter @open-design/desktop build
+          pnpm --filter @open-design/shell-electron build
           pnpm --filter @open-design/web build:sidecar
 
       - name: Typecheck workspaces
@@ -319,9 +318,6 @@ jobs:
           if [ "${{ needs.scopes.outputs.tools_pack_tests_required }}" = "true" ]; then
             pnpm --filter @open-design/shell-electron build
             pnpm --filter @open-design/shell-electron test
-            pnpm --filter @open-design/desktop build
-            pnpm --filter @open-design/desktop test
-            pnpm --filter @open-design/packaged test
             pnpm --filter @open-design/tools-pack test
             if [ "${{ needs.scopes.outputs.run_e2e_vitest }}" != "true" ]; then
               pnpm --filter @open-design/e2e test tests/packaged-launcher-update-loop.test.ts
@@ -434,7 +430,7 @@ jobs:
       - name: Prebuild workspace type declarations
         run: |
           pnpm --filter @open-design/daemon build
-          pnpm --filter @open-design/desktop build
+          pnpm --filter @open-design/shell-electron build
           pnpm --filter @open-design/web build:sidecar
 
       - name: E2E Vitest
@@ -477,7 +473,7 @@ jobs:
       - name: Prebuild workspace type declarations
         run: |
           pnpm --filter @open-design/daemon build
-          pnpm --filter @open-design/desktop build
+          pnpm --filter @open-design/shell-electron build
           pnpm --filter @open-design/web build:sidecar
 
       - name: Clean Playwright state
@@ -521,7 +517,7 @@ jobs:
       - name: Prebuild workspace type declarations
         run: |
           pnpm --filter @open-design/daemon build
-          pnpm --filter @open-design/desktop build
+          pnpm --filter @open-design/shell-electron build
           pnpm --filter @open-design/web build:sidecar
 
       - name: Clean Playwright state
@@ -593,7 +589,7 @@ jobs:
       - name: Prebuild workspace type declarations
         run: |
           pnpm --filter @open-design/daemon build
-          pnpm --filter @open-design/desktop build
+          pnpm --filter @open-design/shell-electron build
           pnpm --filter @open-design/web build:sidecar
 
       - name: Run strict visual Playwright suite

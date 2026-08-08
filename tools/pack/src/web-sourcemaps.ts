@@ -10,7 +10,7 @@
 //      stack frames (otherwise users see `fO / fz / s4` instead of real
 //      function names + file:line).
 //   2. Make sure no `.map` ever ends up inside a shipped installer (`.dmg`,
-//      `.nsis`, `.AppImage`). Sourcemaps publish the original TypeScript
+//      `.nsis`). Sourcemaps publish the original TypeScript
 //      source to anyone who can read the bundle, which is a security &
 //      competitive-disclosure problem.
 //
@@ -31,7 +31,7 @@
 //
 // Scope
 // -----
-// Only the packaged (mac/win/linux Electron) path is covered here. The OSS
+// Only the packaged mac/win Electron path is covered here. The OSS
 // `od` CLI distribution path serves `apps/web/out/_next/static/chunks/`
 // directly and is not currently used by any release artifact; it can be
 // added later if the OSS audience reports symbolication needs.
@@ -65,8 +65,8 @@ interface SourcemapCliEnv {
 }
 
 function resolveBrowserChunksDir(workspaceRoot: string): string {
-  // Both `output: 'standalone'` (mac/win) and the implicit server output
-  // (linux) write browser chunks to `.next/static`. Static-export mode
+  // Packaged `output: 'standalone'` writes browser chunks to `.next/static`.
+  // Static-export mode
   // (`apps/web/out/_next/static`) is not used by any release artifact.
   return join(workspaceRoot, "apps", "web", ".next", "static");
 }
@@ -128,9 +128,8 @@ async function runPnpm(
   extraEnv: NodeJS.ProcessEnv = {},
 ): Promise<void> {
   // `createPackageManagerInvocation` is the same primitive every platform's
-  // local `runPnpm` helper goes through, so the linux containerized build
-  // (which sets `OD_TOOLS_PACK_PNPM_BIN` to the standalone pnpm binary it
-  // bootstrapped) picks up the right command here too.
+  // local `runPnpm` helper goes through, so packaging inherits the selected
+  // package-manager command consistently.
   const invocation = createPackageManagerInvocation(args, process.env);
   await execFileAsync(invocation.command, invocation.args, {
     cwd: config.workspaceRoot,

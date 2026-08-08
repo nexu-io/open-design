@@ -1559,10 +1559,9 @@ async function applyWindowChromeCss(window: BrowserWindow): Promise<void> {
   await window.webContents.insertCSS(MAC_WINDOW_CHROME_CSS, { cssOrigin: "user" });
 }
 
-// Exported for unit tests in `apps/packaged/tests/desktop-url-allowlist.test.ts`
-// — these are pure URL-policy helpers and `apps/desktop` itself has no
-// vitest setup, so the packaged workspace hosts the coverage. Keep them
-// pure and side-effect-free.
+// Exported for focused unit coverage in
+// `shells/electron/tests/desktop-url-allowlist.test.ts`. Keep these helpers pure
+// and side-effect-free.
 export function isHttpUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
@@ -1577,7 +1576,7 @@ export function isAllowedChildWindowUrl(url: string): boolean {
     const parsed = new URL(url);
     // `blob:` covers in-renderer generated downloads / object URLs.
     // `od:` is the packaged Electron entry's privileged scheme
-    // registered by `apps/packaged/src/protocol.ts` and proxied to the
+    // registered by `shells/electron/src/protocol.ts` and proxied to the
     // local web sidecar. Without this branch, any in-app
     // `<a target="_blank" href="/api/...">` resolves to `od://app/...`
     // in packaged builds, falls through `setWindowOpenHandler` to

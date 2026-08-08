@@ -55,7 +55,7 @@ export const STARTUP_FAILURE_EVENT = "packaged_runtime_failed";
 //
 // EVENT_SCHEMA_VERSION must stay in lockstep with
 // packages/contracts/src/analytics/public-params.ts. It is replicated (not
-// imported) because apps/packaged does not depend on @open-design/contracts and
+// imported) because shells/electron does not depend on @open-design/contracts and
 // a single integer isn't worth a new cross-package dependency that also
 // complicates the daemon-chunk externalization.
 const EVENT_SCHEMA_VERSION = 2;
@@ -68,7 +68,7 @@ const CAPTURE_SOURCE = "packaged/startup";
 // `production` — but the packaged MAIN process's own NODE_ENV is unset, so the
 // old `development` default mislabeled every packaged_runtime_failed as dev
 // (100% 'development' in prod), hiding real startup crashes from the
-// env=production dashboards. apps/packaged only ever runs as a packaged build,
+// env=production dashboards. shells/electron only ever runs as a packaged build,
 // so an unset NODE_ENV here means packaged production, not dev; treat anything
 // that isn't an explicit development marker as production so the two sides
 // match. Explicit overrides (OD_TELEMETRY_ENV / OPEN_DESIGN_ENV / POSTHOG_ENV /
@@ -106,14 +106,14 @@ export interface StartupFailureClassification {
   logPath: string | null;
 }
 
-// `waitForStatus` (apps/packaged/src/sidecars.ts:206-208) throws:
+// `waitForStatus` (shells/electron/src/sidecars.ts:206-208) throws:
 //   "daemon exited before reporting status (code=1, signal=none); see <logPath> for details"
 // The literal word is always "daemon" even for the web sidecar, so we
 // distinguish daemon-vs-web by the LOG PATH segment, not the message text.
 const EXIT_RE =
   /exited before reporting status \(code=(.*?), signal=(.*?)\); see (.*?) for details/;
 
-// `waitForStatus` (apps/packaged/src/sidecars.ts) throws this when the wait
+// `waitForStatus` (shells/electron/src/sidecars.ts) throws this when the wait
 // budget expires with the child still ALIVE — the daemon/web pipe never bound in
 // time (the win32 first-launch AV-scan case), as opposed to EXIT_RE's dead
 // child. There is no daemon log path in this message, so no log tail is read.

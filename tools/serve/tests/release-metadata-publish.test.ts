@@ -114,7 +114,6 @@ describe("shared release metadata publisher", () => {
         const env = {
           ...process.env,
           BASE_VERSION: "1.2.3",
-          ENABLE_LINUX_X64: "false",
           ENABLE_MAC_ARM64: "true",
           ENABLE_MAC_X64: "false",
           ENABLE_WIN_X64: "true",
@@ -300,7 +299,6 @@ describe("shared release metadata publisher", () => {
     const env = {
       ...process.env,
       BASE_VERSION: version,
-      ENABLE_LINUX_X64: "false",
       ENABLE_MAC_ARM64: "true",
       ENABLE_MAC_X64: "false",
       ENABLE_WIN_X64: "false",

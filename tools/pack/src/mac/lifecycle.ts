@@ -36,7 +36,7 @@ import { DESKTOP_LOG_ECHO_ENV } from "./constants.js";
 import { pathExists, scrubMacExtendedAttributes } from "./fs.js";
 import { resolveMacInstallIdentity } from "./identity.js";
 import { desktopIdentityPath, desktopLogPath, macAppExecutablePath, resolveMacPaths } from "./paths.js";
-import type { DesktopRootIdentityFallback, DesktopRootIdentityMarker, MacCleanupResult, MacInspectResult, MacInstallResult, MacStartResult, MacStartSource, MacStopResult, MacUninstallResult } from "./types.js";
+import type { DesktopRootIdentityFallback, DesktopRootIdentityMarker, MacCleanupResult, MacInspectResult, MacInspectStatusPollResult, MacInspectStatusPollSample, MacInstallResult, MacStartResult, MacStartSource, MacStopResult, MacUninstallResult } from "./types.js";
 
 const execFileAsync = promisify(execFile);
 const UPDATE_ACTION_TIMEOUT_MS = 10 * 60 * 1000;
@@ -702,14 +702,56 @@ function resolveUpdateAction(value: string | undefined): DesktopUpdateAction | n
   throw new Error("--update-action must be status, check, clear-cache, download, or install");
 }
 
-export async function inspectPackedMacApp(config: ToolPackConfig, options: { expr?: string; path?: string; updateAction?: string }): Promise<MacInspectResult> {
+async function requestStatusSnapshot<T>(ipc: string): Promise<{ error?: string; status: T | null }> {
+  try {
+    return { status: await requestJsonIpc<T>(ipc, { type: SIDECAR_MESSAGES.STATUS }, { timeoutMs: 2000 }) };
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : String(error),
+      status: null,
+    };
+  }
+}
+
+function resolveOptionalPositiveInteger(value: string | number | undefined, label: string): number | null {
+  if (value == null) return null;
+  const parsed = typeof value === "number" ? value : Number.parseInt(value, 10);
+  if (!Number.isInteger(parsed) || parsed < 1) throw new Error(`${label} must be a positive integer`);
+  return parsed;
+}
+
+async function delay(ms: number): Promise<void> {
+  await new Promise((resolveDelay) => setTimeout(resolveDelay, ms));
+}
+
+async function pollMacInspectStatus(config: ToolPackConfig, count: number, intervalMs: number): Promise<MacInspectStatusPollResult> {
+  const samples: MacInspectStatusPollSample[] = [];
+  const desktopIpc = desktopStamp(config).ipc;
+  for (let attempt = 1; attempt <= count; attempt += 1) {
+    const startedAtMs = Date.now();
+    const startedAt = new Date(startedAtMs).toISOString();
+    const desktopSnapshot = await requestStatusSnapshot<DesktopStatusSnapshot>(desktopIpc);
+    samples.push({
+      attempt,
+      durationMs: Date.now() - startedAtMs,
+      startedAt,
+      status: desktopSnapshot.status,
+      ...(desktopSnapshot.error == null ? {} : { statusError: desktopSnapshot.error }),
+    });
+    if (attempt < count) await delay(intervalMs);
+  }
+  return { count, intervalMs, samples };
+}
+
+export async function inspectPackedMacApp(
+  config: ToolPackConfig,
+  options: { expr?: string; path?: string; statusPollCount?: string | number; statusPollIntervalMs?: string | number; updateAction?: string },
+): Promise<MacInspectResult> {
   const stamp = desktopStamp(config);
-  const status = await requestJsonIpc<DesktopStatusSnapshot>(
-    stamp.ipc,
-    { type: SIDECAR_MESSAGES.STATUS },
-    { timeoutMs: 2000 },
-  ).catch(() => null);
+  const desktopSnapshot = await requestStatusSnapshot<DesktopStatusSnapshot>(stamp.ipc);
   const updateAction = resolveUpdateAction(options.updateAction);
+  const statusPollCount = resolveOptionalPositiveInteger(options.statusPollCount, "--status-poll-count");
+  const statusPollIntervalMs = resolveOptionalPositiveInteger(options.statusPollIntervalMs, "--status-poll-interval-ms") ?? 500;
 
   return {
     ...(options.expr == null ? {} : {
@@ -735,7 +777,11 @@ export async function inspectPackedMacApp(config: ToolPackConfig, options: { exp
         { timeoutMs: UPDATE_ACTION_TIMEOUT_MS },
       ),
     }),
-    status,
+    status: desktopSnapshot.status,
+    ...(desktopSnapshot.error == null ? {} : { statusError: desktopSnapshot.error }),
+    ...(statusPollCount == null ? {} : {
+      statusPoll: await pollMacInspectStatus(config, statusPollCount, statusPollIntervalMs),
+    }),
   };
 }
 

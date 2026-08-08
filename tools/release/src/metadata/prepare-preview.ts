@@ -82,7 +82,7 @@ function resolvePreviewBaseVersion(branch: string, inputValue: string | undefine
   if (inputVersion != null) return inputVersion;
 
   const packagedParsed = parseReleaseBaseVersion(packagedVersion) ?? fail(`invalid packaged version: ${packagedVersion}`);
-  return { parsed: packagedParsed, source: "apps/packaged/package.json", value: packagedVersion };
+  return { parsed: packagedParsed, source: "shells/electron/package.json", value: packagedVersion };
 }
 
 function parsePreviewParts(baseVersion: string, previewNumber: string): ParsedPreviewVersion {
@@ -160,8 +160,8 @@ function parsePreviewMetadataJson(value: string): ParsedPreviewMetadata {
   return { ...parsePreviewParts(baseVersion, String(previewNumber)), source: "metadata-json" };
 }
 
-async function readPackagedVersion(): Promise<string> {
-  const packageJsonPath = join(process.cwd(), "apps", "packaged", "package.json");
+async function readShellVersion(): Promise<string> {
+  const packageJsonPath = join(process.cwd(), "shells", "electron", "package.json");
   const packageJson = JSON.parse(await readFile(packageJsonPath, "utf8")) as { version?: unknown };
 
   if (typeof packageJson.version !== "string") {
@@ -169,7 +169,7 @@ async function readPackagedVersion(): Promise<string> {
   }
 
   if (parseReleaseBaseVersion(packageJson.version) == null) {
-    fail(`apps/packaged/package.json version must be a stable x.y.z base version; got ${packageJson.version}`);
+    fail(`shells/electron/package.json version must be a stable x.y.z base version; got ${packageJson.version}`);
   }
 
   return packageJson.version;
@@ -260,13 +260,13 @@ function setOutput(name: string, value: string): void {
   appendFileSync(outputPath, `${name}=${value}\n`);
 }
 
-const packagedVersion = await readPackagedVersion();
+const packagedVersion = await readShellVersion();
 const branch = process.env.GITHUB_REF_NAME ?? "";
 const previewBaseVersion = resolvePreviewBaseVersion(branch, process.env.OPEN_DESIGN_PREVIEW_VERSION, packagedVersion);
 const packagedParsed = previewBaseVersion.parsed;
 if (previewBaseVersion.value !== packagedVersion) {
   fail(
-    `${previewBaseVersion.source ?? "preview base"} version ${previewBaseVersion.value} must match apps/packaged/package.json version ${packagedVersion}`,
+    `${previewBaseVersion.source ?? "preview base"} version ${previewBaseVersion.value} must match shells/electron/package.json version ${packagedVersion}`,
   );
 }
 

@@ -1343,7 +1343,7 @@ export async function exportAsPdf(
   // Desktop native PDF bridge — the main process runs a direct
   // Save-as-PDF flow: a native Save dialog, then Electron's
   // webContents.printToPDF() straight to the chosen file (issue #1774;
-  // see apps/desktop/src/main/pdf-export.ts). The sandboxed wrapper
+  // see shells/electron/src/main/pdf-export.ts). The sandboxed wrapper
   // omits allow-modals here because the native flow never calls
   // window.print(); granting it would let untrusted artifact code call
   // alert()/confirm() and stall the hidden Electron window indefinitely.
@@ -1420,7 +1420,7 @@ export async function exportAsPdf(
 
 /**
  * A reported print size is only usable when both dimensions are positive,
- * finite numbers. The desktop bridge (apps/desktop/src/main/pdf-export.ts
+ * finite numbers. The desktop bridge (shells/electron/src/main/pdf-export.ts
  * inferPageSize) sizes the PDF page to this; a zero/invalid size makes it
  * fall back to measuring the wrapper viewport, which — per that function's
  * own docs — blanks artifacts whose visible content sits below the fold.
@@ -1510,7 +1510,7 @@ function injectPrintReadyHandshake(doc: string, nonce: string): string {
   // desktop bridge size the PDF page to the real content instead of the
   // wrapper's viewport, which otherwise clips — or blanks — taller artifacts
   // (issue #4067). The parent caches it via injectParentPrintReadyCache and
-  // inferPageSize() in apps/desktop/src/main/pdf-export.ts consumes it.
+  // inferPageSize() in shells/electron/src/main/pdf-export.ts consumes it.
   //
   // The nonce is a per-export random UUID that verifies the readiness signal
   // came from our injected handshake, not a spoofed message from untrusted
@@ -1524,7 +1524,7 @@ function injectPrintReadyHandshake(doc: string, nonce: string): string {
 function injectParentPrintReadyCache(doc: string, nonce: string): string {
   // Cache the readiness flag and the content size the artifact reports through
   // the handshake. window.__odPrintSize is read by inferPageSize() in
-  // apps/desktop/src/main/pdf-export.ts to size the PDF page to the real
+  // shells/electron/src/main/pdf-export.ts to size the PDF page to the real
   // artifact rather than the wrapper viewport (issue #4067). Width/height are
   // validated as positive finite numbers so a malformed message cannot poison
   // the page size; the nonce + source check keep untrusted frames from spoofing

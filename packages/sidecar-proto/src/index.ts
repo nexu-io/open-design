@@ -1,4 +1,5 @@
 import { RELEASE_CHANNELS, type ReleaseChannel } from "@open-design/release";
+import type { StandaloneRuntimeStatus } from "@open-design/standalone-proto";
 
 export const APP_KEYS = Object.freeze({
   DAEMON: "daemon",
@@ -188,6 +189,8 @@ export type DesktopRuntimeState = "idle" | "running" | "unknown";
 
 export type DesktopStatusSnapshot = {
   pid?: number | null;
+  standalone?: StandaloneRuntimeStatus;
+  standaloneStatusError?: string;
   state: DesktopRuntimeState;
   title?: string | null;
   update?: DesktopUpdateStatusSnapshot;

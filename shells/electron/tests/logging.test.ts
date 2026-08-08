@@ -274,7 +274,7 @@ describe('createFatalUncaughtExceptionHandler (issue #906)', () => {
 // listener logged non-harmless rejections and returned, which silently
 // kept the main process alive after any rejected promise. Siri-Ray
 // and the codex P2 thread on PR #1298 flagged the same gap on the
-// parallel apps/desktop filter, so the two copies stay in lockstep.
+// parallel source-launch filter, so their behavior stays aligned.
 describe('createFatalUnhandledRejectionHandler (issue #647 review follow-up)', () => {
   it('logs harmless socket option rejections at warn level and returns silently', () => {
     const logger = stubLogger();

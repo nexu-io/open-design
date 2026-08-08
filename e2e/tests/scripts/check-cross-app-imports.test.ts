@@ -184,11 +184,11 @@ test("cross-app import check ignores relatives that escape apps/ without hitting
   assert.deepEqual(violations, []);
 });
 
-test("cross-app import check allows allowlisted packaged -> desktop main export", () => {
+test("cross-app import check ignores imports outside the apps layer", () => {
   const violations = collectCrossAppImportViolationsFromSource(
-    "apps/packaged/src/index.ts",
-    "import { applyOsLocaleSwitch, createSplashWindow } from '@open-design/desktop/main';",
-    { packageNameByDirectory: new Map([["packaged", "@open-design/packaged"], ["desktop", "@open-design/desktop"]]) },
+    "shells/electron/src/index.ts",
+    "import { applyOsLocaleSwitch, createSplashWindow } from '@open-design/shell-electron/main';",
+    { packageNameByDirectory: new Map([["packaged", "@open-design/shell-electron"], ["desktop", "@open-design/shell-electron"]]) },
   );
 
   assert.deepEqual(violations, []);

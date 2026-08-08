@@ -9,10 +9,10 @@ import type { DesktopRenderSlidesInput, DesktopRenderSlidesResult } from "@open-
 
 import { waitForPrintableContent } from "./pdf-export.js";
 
-// Vendored dom-to-pptx browser UMD (apps/desktop/vendor/dom-to-pptx). Loaded
+// Vendored dom-to-pptx browser UMD (shells/electron/vendor/dom-to-pptx). Loaded
 // once and injected into the render window for editable PPTX export. The packaged
 // app ships it via electron-builder `extraResources` next to the app under
-// Resources/ (`process.resourcesPath`); dev resolves it from apps/desktop/vendor.
+// Resources/ (`process.resourcesPath`); dev resolves it from shells/electron/vendor.
 let cachedDomToPptxBundle: string | null = null;
 const gunzipAsync = promisify(gunzip);
 

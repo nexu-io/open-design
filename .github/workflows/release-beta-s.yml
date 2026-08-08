@@ -18,11 +18,6 @@ on:
         required: true
         type: boolean
         default: false
-      enable_linux_x64:
-        description: "Run the self-hosted Linux x64 betas lane."
-        required: true
-        type: boolean
-        default: false
       publish:
         description: "Publish betas assets and metadata to the selected S3-compatible origin."
         required: true
@@ -147,15 +142,6 @@ on:
           - zip
           - dir
         default: all
-      linux_x64_smoke_mode:
-        description: "Linux x64 smoke coverage."
-        required: true
-        type: choice
-        options:
-          - skip
-          - core
-          - full
-        default: core
       win_x64_update_metadata_url:
         description: "Optional external updater metadata URL for full Windows smoke."
         required: false
@@ -177,10 +163,6 @@ on:
         type: boolean
         default: true
       enable_mac_x64:
-        required: false
-        type: boolean
-        default: false
-      enable_linux_x64:
         required: false
         type: boolean
         default: false
@@ -252,10 +234,6 @@ on:
         required: false
         type: string
         default: all
-      linux_x64_smoke_mode:
-        required: false
-        type: string
-        default: core
       win_x64_update_metadata_url:
         required: false
         type: string
@@ -292,9 +270,6 @@ on:
       mac_x64_url:
         description: "macOS x64 dmg download URL."
         value: ${{ jobs.publish.outputs.mac_x64_url }}
-      linux_x64_url:
-        description: "Linux x64 AppImage download URL."
-        value: ${{ jobs.publish.outputs.linux_x64_url }}
 
 permissions:
   contents: read
@@ -316,7 +291,7 @@ env:
 jobs:
   metadata:
     name: Prepare betas metadata
-    if: ${{ inputs.enable_mac_arm64 || inputs.enable_win_x64 || inputs.enable_mac_x64 || inputs.enable_linux_x64 }}
+    if: ${{ inputs.enable_mac_arm64 || inputs.enable_win_x64 || inputs.enable_mac_x64 }}
     runs-on: [self-hosted, macOS, ARM64, nexu-mac, release-beta]
     env:
       OPEN_DESIGN_BETAS_METADATA_URL: ${{ inputs.release_public_origin }}/betas/latest/metadata.json
@@ -434,7 +409,7 @@ jobs:
             echo "release_public_origin is required" >&2
             exit 1
           fi
-          if [ "${{ inputs.enable_mac_arm64 }}" != "true" ] && [ "${{ inputs.enable_win_x64 }}" != "true" ] && [ "${{ inputs.enable_mac_x64 }}" != "true" ] && [ "${{ inputs.enable_linux_x64 }}" != "true" ]; then
+          if [ "${{ inputs.enable_mac_arm64 }}" != "true" ] && [ "${{ inputs.enable_win_x64 }}" != "true" ] && [ "${{ inputs.enable_mac_x64 }}" != "true" ]; then
             echo "release-beta-s requires at least one target to be enabled" >&2
             exit 1
           fi
@@ -516,15 +491,6 @@ jobs:
     steps:
       - run: |
           echo "release-beta-s does not have a self-hosted mac_x64 runner lane yet" >&2
-          exit 1
-
-  unsupported_linux_x64:
-    name: Reject unsupported self-hosted linux_x64
-    if: ${{ inputs.enable_linux_x64 }}
-    runs-on: [self-hosted, macOS, ARM64, nexu-mac, release-beta]
-    steps:
-      - run: |
-          echo "release-beta-s does not have a self-hosted linux_x64 runner lane yet" >&2
           exit 1
 
   build_mac_arm64:
@@ -833,7 +799,6 @@ jobs:
     needs:
       - metadata
       - unsupported_mac_x64
-      - unsupported_linux_x64
       - build_mac_arm64
       - build_win_x64
     if: >-
@@ -844,7 +809,6 @@ jobs:
         needs.metadata.result == 'success' &&
         (inputs.enable_mac_arm64 || inputs.enable_win_x64) &&
         !inputs.enable_mac_x64 &&
-        !inputs.enable_linux_x64 &&
         (!inputs.enable_mac_arm64 || needs.build_mac_arm64.result == 'success') &&
         (!inputs.enable_win_x64 || needs.build_win_x64.result == 'success')
       }}
@@ -859,7 +823,6 @@ jobs:
       mac_arm64_url: ${{ steps.outputs.outputs.mac_arm64_dmg_url }}
       win_x64_url: ${{ steps.outputs.outputs.win_x64_installer_url }}
       mac_x64_url: ${{ steps.outputs.outputs.mac_x64_dmg_url }}
-      linux_x64_url: ${{ steps.outputs.outputs.linux_x64_appImage_url }}
     steps:
       - name: Checkout release scripts
         uses: actions/checkout@v6.0.2
@@ -970,7 +933,6 @@ jobs:
       - name: Publish betas metadata
         env:
           BASE_VERSION: ${{ needs.metadata.outputs.base_version }}
-          ENABLE_LINUX_X64: "false"
           ENABLE_MAC_ARM64: ${{ inputs.enable_mac_arm64 }}
           ENABLE_MAC_X64: "false"
           ENABLE_WIN_X64: ${{ inputs.enable_win_x64 }}

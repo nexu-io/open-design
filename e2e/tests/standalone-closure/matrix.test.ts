@@ -161,7 +161,7 @@ describe("Standalone Closure delivery matrix", () => {
       "utf8",
     )) as { name: string };
     const packagedPackage = JSON.parse(await readFile(
-      absoluteWorkspacePath("apps/packaged/package.json"),
+      absoluteWorkspacePath("shells/electron/package.json"),
       "utf8",
     )) as { exports: Record<string, { default: string }> };
 
@@ -234,7 +234,7 @@ describe("Standalone Closure delivery matrix", () => {
       .filter((entry) => entry.role === "legacy-product-reference");
     expect(legacyReferences.length).toBeGreaterThan(0);
     expect(legacyReferences.every((entry) => (
-      entry.path.startsWith("apps/packaged/") || entry.path.startsWith("e2e/specs/")
+      entry.path.startsWith("shells/electron/") || entry.path.startsWith("e2e/specs/")
     ))).toBe(true);
 
     const syntheticWitness = "packages/closure-shim/tests/conformance.test.ts";

@@ -21,6 +21,7 @@
     "@open-design/release": "workspace:*",
     "@open-design/sidecar": "workspace:*",
     "@open-design/sidecar-proto": "workspace:*",
+    "@open-design/standalone-proto": "workspace:*",
     "cac": "6.7.14",
     "electron-builder": "26.8.1",
     "resedit": "1.7.2"

@@ -1606,7 +1606,7 @@ The mental model:
 | --------------------- | -------------------------------------------- | ---------------------------------------------------- |
 | Headless agent CLI    | `cursor-agent` (drives the agent loop)       | `od run start --agent claude --follow` + `od plugin run` |
 | Local services / db   | Cursor's background indexing / state         | OD daemon-managed state. Storage paths are governed only by root `AGENTS.md` → **Daemon data directory contract**. |
-| GUI productivity layer| Cursor IDE                                   | OD desktop / web UI (`apps/web` + `apps/desktop`)    |
+| GUI productivity layer| Cursor IDE                                   | OD Electron Shell / web UI (`apps/web` + `shells/electron`)    |
 | Plugin / skill format | `.cursor/rules/`, MCP servers                | `SKILL.md` + `open-design.json` + atoms              |
 
 Both products are decoupled the same way: the terminal flow is sufficient; the IDE/desktop is the productivity multiplier. **Plugin authors never have to choose** — they write one SKILL.md plus optional sidecar, and reach all three consumption modes.

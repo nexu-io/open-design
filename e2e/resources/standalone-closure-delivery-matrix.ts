@@ -269,7 +269,7 @@ export const standaloneClosureDeliveryMatrix = {
       "id": "windows-installer",
       "owners": [
         "tools/pack",
-        "apps/packaged",
+        "shells/electron",
         "e2e"
       ],
       "coordinates": [
@@ -334,7 +334,7 @@ export const standaloneClosureDeliveryMatrix = {
         "update-lifecycle"
       ],
       "ownerPaths": [
-        "apps/packaged",
+        "shells/electron",
         "packages/closure-update"
       ]
     },
@@ -351,7 +351,7 @@ export const standaloneClosureDeliveryMatrix = {
         "shell-shim"
       ],
       "ownerPaths": [
-        "apps/packaged"
+        "shells/electron"
       ]
     },
     {
@@ -436,7 +436,7 @@ export const standaloneClosureDeliveryMatrix = {
       ],
       "ownerPaths": [
         "tools/pack",
-        "apps/packaged"
+        "shells/electron"
       ]
     },
     {
@@ -488,7 +488,7 @@ export const standaloneClosureDeliveryMatrix = {
         "update-lifecycle"
       ],
       "ownerPaths": [
-        "apps/packaged"
+        "shells/electron"
       ]
     }
   ]

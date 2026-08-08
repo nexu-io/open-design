@@ -129,8 +129,7 @@ Current evidence and exceptions:
 
 Rule `certain-packaged-leaf-sources` covers only:
 
-- `apps/desktop/{src,tests}/`
-- `apps/packaged/{src,tests}/`
+- `shells/electron/{src,tests}/`
 - `tools/pack/{src,tests,resources}/`
 
 It claims `tools_dev_tests_required`, `tools_pack_tests_required`, and

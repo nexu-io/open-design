@@ -13,6 +13,7 @@ import { createJsonIpcServer, resolveAppIpcPath, type JsonIpcServerHandle } from
 import type {
   StandaloneHandle,
   StandaloneRuntimeRunningStatus,
+  StandaloneRuntimeStatus,
 } from "@open-design/standalone-proto";
 
 import type { PackagedConfig } from "./config.js";
@@ -75,6 +76,7 @@ export interface RunPackagedStandaloneOptions {
 export interface PackagedStandaloneStartupDependencies {
   confirmRuntime(): Promise<void>;
   createIpcServer(options: {
+    readStandaloneStatus(): Promise<StandaloneRuntimeStatus>;
     shutdown(): Promise<void>;
     webUrl: string;
   }): Promise<JsonIpcServerHandle>;
@@ -123,7 +125,12 @@ export async function acquirePackagedStandaloneStartup(
     }
     identity = await dependencies.writeIdentity(status);
     await dependencies.installMcp(status.daemonUrl);
-    ipcServer = await dependencies.createIpcServer({ shutdown, webUrl: status.webUrl });
+    const activeStandalone = standalone;
+    ipcServer = await dependencies.createIpcServer({
+      readStandaloneStatus: async () => await activeStandalone.readStatus(),
+      shutdown,
+      webUrl: status.webUrl,
+    });
     await dependencies.writeWebIdentity(status.webUrl);
     await dependencies.confirmRuntime();
     void standalone.waitForTerminal().then(async (terminal) => {
@@ -201,7 +208,7 @@ export async function runPackagedStandalone(
       await confirmPackagedLauncherRuntime(launcherRuntime);
       await confirmElectronStandaloneBinding(selection);
     },
-    createIpcServer: async ({ shutdown: stop, webUrl: activeWebUrl }) =>
+    createIpcServer: async ({ readStandaloneStatus, shutdown: stop, webUrl: activeWebUrl }) =>
       await createJsonIpcServer({
         socketPath: stamp.ipc,
         handler: async (message: unknown) => {
@@ -210,6 +217,7 @@ export async function runPackagedStandalone(
             case SIDECAR_MESSAGES.STATUS:
               return {
                 pid: process.pid,
+                standalone: await readStandaloneStatus(),
                 state: "running",
                 updatedAt: new Date().toISOString(),
                 url: activeWebUrl,

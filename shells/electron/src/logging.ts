@@ -127,7 +127,7 @@ export function createFatalUncaughtExceptionHandler(
  * real main-process bugs from Node/Electron's default fail-fast path
  * (the exact regression Siri-Ray and the codex P2 thread flagged on
  * the parallel desktop filter in PR #1298). The same matcher feeds
- * both factories, so the apps/desktop sibling stays in lockstep.
+ * both fatal-handler factories.
  */
 export function createFatalUnhandledRejectionHandler(
   logger: PackagedDesktopLogger,
