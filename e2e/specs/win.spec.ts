@@ -576,6 +576,7 @@ winDescribe('packaged windows runtime smoke', () => {
       expect(JSON.stringify(install.registryEntries)).toContain(installIdentity.displayName);
       expect(JSON.stringify(install.registryEntries)).toContain(`Open Design-${installIdentity.namespaceToken}`);
       await assertWindowsInviteProtocolRegistration(install.installDir);
+      await seedConfiguredPackagedClosure();
       expect(install.installPayload.fileCount).toBeGreaterThan(0);
       expect(install.installPayload.totalBytes).toBeGreaterThan(0);
       expect(install.installPayload.topLevel.length).toBeGreaterThan(0);
@@ -1075,6 +1076,7 @@ winDescribe('packaged windows runtime smoke', () => {
       await runToolsPackJson<WinInstallResult>('install');
       cleanupInstalled = true;
       await seedPackagedOnboardingComplete();
+      await seedConfiguredPackagedClosure();
 
       payloadFixtureLocal = await startToolsServeUpdaterFixture({
         artifactPath: localUpdate.installerPath,
@@ -1164,6 +1166,7 @@ winDescribe('packaged windows runtime smoke', () => {
       const install = await runToolsPackJson<WinInstallResult>('install');
       cleanupInstalled = true;
       await seedPackagedOnboardingComplete();
+      await seedConfiguredPackagedClosure();
 
       const sevenZipExe = join(install.installDir, 'resources', 'open-design', 'bin', '7z.exe');
       expect((await stat(sevenZipExe)).isFile()).toBe(true);
@@ -1386,6 +1389,7 @@ winOnboardingDescribe('packaged windows onboarding AMR smoke', () => {
       expectPathInside(install.installDir, join(runtimeNamespaceRoot, 'install'));
       installedNamespaceRoot = runtimeNamespaceRoot;
       await resetPackagedRuntimeDataRoot();
+      await seedConfiguredPackagedClosure();
 
       const start = await measureSmokeStep(timings, 'start fresh onboarding', async () => runToolsPackJson<WinStartResult>('start'));
       started = true;
@@ -2805,6 +2809,24 @@ async function seedPackagedOnboardingComplete(): Promise<void> {
   const configPath = join(runtimeNamespaceRoot, 'data', 'app-config.json');
   await mkdir(dirname(configPath), { recursive: true });
   await writeFile(configPath, `${JSON.stringify({ onboardingCompleted: true }, null, 2)}\n`, 'utf8');
+}
+
+/**
+ * `publish=false` release acceptance cannot discover the Closure it has just
+ * built through remote channel metadata. Commit those exact workflow bytes to
+ * the local Store before the first Shell boot; every later restart/update in
+ * the scenario must reuse the committed binding without further test help.
+ */
+async function seedConfiguredPackagedClosure(): Promise<void> {
+  if (closureBuildJsonPath == null) return;
+  await seedPackagedClosureFixture({
+    buildJsonPath: closureBuildJsonPath,
+    channel: updateScenario.channel,
+    expectedPlatform: 'win32-x64',
+    installationRoot: join(toolsPackDir, 'runtime', 'win'),
+    namespace,
+    workspaceRoot,
+  });
 }
 
 function isPathInside(filePath: string, expectedRoot: string): boolean {

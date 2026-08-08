@@ -400,6 +400,7 @@ macDescribe('packaged mac runtime smoke', () => {
       await assertMacInviteProtocolRegistration(install.installedAppPath);
 
       await seedPackagedOnboardingComplete();
+      await seedConfiguredPackagedClosure();
 
       let expectedPayloadUpdateVersion: string | null = updateVersion;
       if (!verifyCoreOnly) {
@@ -798,6 +799,7 @@ macDescribe('packaged mac runtime smoke', () => {
       await runToolsPackJson<MacInstallResult>('install');
       cleanupInstalled = true;
       await seedPackagedOnboardingComplete();
+      await seedConfiguredPackagedClosure();
 
       payloadFixtureLocal = await startToolsServeUpdaterFixture({
         channel: updateScenario.channel,
@@ -898,6 +900,7 @@ macDescribe('packaged mac runtime smoke', () => {
       const install = await runToolsPackJson<MacInstallResult>('install');
       cleanupInstalled = true;
       await seedPackagedOnboardingComplete();
+      await seedConfiguredPackagedClosure();
 
       corruptFixture = await startToolsServeUpdaterFixture({
         channel: updateScenario.channel,
@@ -1120,6 +1123,7 @@ macOnboardingDescribe('packaged mac onboarding AMR smoke', () => {
       installedAppPath = install.installedAppPath;
       expect(install.namespace).toBe(namespace);
       expect(install.detached).toBe(true);
+      await seedConfiguredPackagedClosure();
 
       const start = await runToolsPackJson<MacStartResult>('start');
       started = true;
@@ -2731,6 +2735,24 @@ async function seedPackagedOnboardingComplete(): Promise<void> {
   const configPath = join(runtimeNamespaceRoot, 'data', 'app-config.json');
   await mkdir(dirname(configPath), { recursive: true });
   await writeFile(configPath, `${JSON.stringify({ onboardingCompleted: true }, null, 2)}\n`, 'utf8');
+}
+
+/**
+ * `publish=false` release acceptance cannot discover the Closure it has just
+ * built through remote channel metadata. Commit those exact workflow bytes to
+ * the local Store before the first Shell boot; every later restart/update in
+ * the scenario must reuse the committed binding without further test help.
+ */
+async function seedConfiguredPackagedClosure(): Promise<void> {
+  if (closureBuildJsonPath == null) return;
+  await seedPackagedClosureFixture({
+    buildJsonPath: closureBuildJsonPath,
+    channel: updateScenario.channel,
+    expectedPlatform: 'darwin-arm64',
+    installationRoot: join(toolsPackDir, 'runtime', 'mac'),
+    namespace,
+    workspaceRoot,
+  });
 }
 
 async function resetPackagedMacRuntimeData(): Promise<void> {
