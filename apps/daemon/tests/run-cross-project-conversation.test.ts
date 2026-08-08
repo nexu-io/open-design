@@ -142,6 +142,112 @@ describe('run cross-project conversation ownership', () => {
     }
     expect(landedConversationId).not.toBe(convB);
   });
+
+  it('rejects an assistantMessageId that belongs to another conversation', async () => {
+    // nettee P1 on #6418: the run's assistantMessageId must reference an
+    // assistant message in THIS conversation, or pin/append/finalize would
+    // mutate another conversation's row via the id-only writers.
+    started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
+    const url = started.url;
+
+    const projectA = `xown_a_${randomUUID()}`;
+    const projectB = `xown_b_${randomUUID()}`;
+    await createProject(url, projectA, 'Ownership A');
+    await createProject(url, projectB, 'Ownership B');
+
+    const convA = await firstConversationId(url, projectA);
+    const convB = await firstConversationId(url, projectB);
+    expect(convA).toBeTruthy();
+    expect(convB).toBeTruthy();
+
+    // Seed an assistant message in conv A.
+    const assistantId = `assistant_own_${randomUUID()}`;
+    const seed = await fetch(
+      `${url}/api/projects/${projectA}/conversations/${convA}/messages/${assistantId}`,
+      {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          id: assistantId,
+          role: 'assistant',
+          content: 'x',
+          runId: 'run-a',
+          runStatus: 'running',
+          events: [],
+        }),
+      },
+    );
+    expect(seed.status).toBe(200);
+
+    // A run for conv B must not use conv A's assistant message.
+    const resp = await fetch(`${url}/api/runs`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        projectId: projectB,
+        conversationId: convB,
+        assistantMessageId: assistantId,
+        clientRequestId: `cr_own_${randomUUID()}`,
+        agentId: 'claude',
+        message: 'M',
+        currentPrompt: 'M',
+      }),
+    });
+    expect(resp.status).toBe(409);
+    expect(await resp.json()).toMatchObject({
+      error: { code: 'IDEMPOTENCY_CONFLICT' },
+    });
+  });
+
+  it('rejects an assistantMessageId that references a user message', async () => {
+    // nettee P1 on #6418: a user row in the same conversation must never be
+    // rebound as the run's assistant message (the generation reset would wipe
+    // the user's row).
+    started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
+    const url = started.url;
+
+    const projectA = `xown_user_${randomUUID()}`;
+    await createProject(url, projectA, 'Ownership user A');
+
+    const convA = await firstConversationId(url, projectA);
+    expect(convA).toBeTruthy();
+
+    // Seed a USER message in conv A.
+    const userId = `user_own_${randomUUID()}`;
+    const seed = await fetch(
+      `${url}/api/projects/${projectA}/conversations/${convA}/messages/${userId}`,
+      {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          id: userId,
+          role: 'user',
+          content: 'hello',
+          events: [],
+        }),
+      },
+    );
+    expect(seed.status).toBe(200);
+
+    // A run in conv A must not use a user message as assistantMessageId.
+    const resp = await fetch(`${url}/api/runs`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        projectId: projectA,
+        conversationId: convA,
+        assistantMessageId: userId,
+        clientRequestId: `cr_user_${randomUUID()}`,
+        agentId: 'claude',
+        message: 'M',
+        currentPrompt: 'M',
+      }),
+    });
+    expect(resp.status).toBe(409);
+    expect(await resp.json()).toMatchObject({
+      error: { code: 'INVALID_ASSISTANT_MESSAGE' },
+    });
+  });
 });
 
 async function createProject(url: string, id: string, name: string): Promise<void> {

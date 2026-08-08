@@ -306,23 +306,31 @@ function liveArtifactRefreshPhase(value: unknown): 'started' | 'succeeded' | 'fa
 
 export function pinAssistantMessageOnRunCreate(db: SqliteDb, run: ChatRunMessageState): void {
   if (!run.conversationId || !run.assistantMessageId) return;
-  // Scope the lookup to the run's own conversation: a run request for
-  // conversation B must never rebind (and potentially wipe) an assistant
-  // message that belongs to conversation A (nettee P1 on #6418).
+  // Scope the lookup to the run's own conversation AND to assistant rows: a
+  // run request for conversation B must never rebind (and potentially wipe) an
+  // assistant message that belongs to conversation A, and a user/other-role row
+  // in the same conversation must never be generation-reset (nettee P1 on
+  // #6418). The route also rejects mis-scoped ids, this is defense in depth.
   const existing = db
-    .prepare(`SELECT id, run_id AS runId FROM messages WHERE id = ? AND conversation_id = ?`)
+    .prepare(
+      `SELECT id, run_id AS runId FROM messages
+        WHERE id = ? AND conversation_id = ? AND role = 'assistant'`,
+    )
     .get(run.assistantMessageId, run.conversationId) as
     | { id: string; runId: string | null }
     | undefined;
   if (existing) {
     if (existing.runId === run.id) {
-      // Same run re-pinned (AMR recharge-resume): refresh status/context only —
-      // the partial persisted transcript must survive (mrcfps P2 on #6418).
+      // Same run re-pinned (AMR recharge-resume): refresh status/context and
+      // clear the prior failure's ended_at so the resumed completion records a
+      // fresh terminal timestamp; the partial persisted transcript must survive
+      // (mrcfps P2 + nettee P2 on #6418).
       db.prepare(
         `UPDATE messages
             SET run_status = ?,
                 session_mode = ?,
-                run_context_json = ?
+                run_context_json = ?,
+                ended_at = NULL
           WHERE id = ? AND conversation_id = ?`,
       ).run(
         run.status,

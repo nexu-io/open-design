@@ -1582,6 +1582,43 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         );
       }
     }
+    // The run's assistantMessageId must reference an assistant message in THIS
+    // conversation, or the run would pin/append/finalize a row it does not own
+    // (a user row in the same conversation, or an assistant row in another
+    // conversation). Without this check, `pinAssistantMessageOnRunCreate` only
+    // skips the pin and the run still mutates the foreign row via the id-only
+    // writers (#6418 review).
+    const clientAssistantMessageId =
+      typeof meta.assistantMessageId === 'string' && meta.assistantMessageId
+        ? meta.assistantMessageId
+        : null;
+    if (clientAssistantMessageId && !isSafeId(clientAssistantMessageId)) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'assistantMessageId is invalid');
+    }
+    if (clientAssistantMessageId && typeof meta.conversationId === 'string') {
+      const existingAssistantPin = db
+        .prepare(`SELECT role, conversation_id AS conversationId FROM messages WHERE id = ?`)
+        .get(clientAssistantMessageId) as { role?: unknown; conversationId?: unknown } | undefined;
+      if (existingAssistantPin && existingAssistantPin.role !== 'assistant') {
+        return sendApiError(
+          res,
+          409,
+          'INVALID_ASSISTANT_MESSAGE',
+          'assistantMessageId must reference an assistant message',
+        );
+      }
+      if (
+        existingAssistantPin
+        && existingAssistantPin.conversationId !== meta.conversationId
+      ) {
+        return sendApiError(
+          res,
+          409,
+          'IDEMPOTENCY_CONFLICT',
+          'assistantMessageId belongs to a different conversation',
+        );
+      }
+    }
     let runUserSeed: {
       id: string;
       conversationId: string;
@@ -2996,6 +3033,37 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       toolBundle: toolBundle.bundle,
       ...(chatProject?.metadata ? { projectMetadata: chatProject.metadata } : {}),
     };
+    // Mirror the POST /api/runs ownership check: the assistantMessageId must
+    // reference an assistant message in THIS conversation, or the run mutates a
+    // row it does not own via the id-only writers (#6418 review).
+    const chatAssistantMessageId =
+      typeof meta.assistantMessageId === 'string' && meta.assistantMessageId
+        ? meta.assistantMessageId
+        : null;
+    if (chatAssistantMessageId && typeof meta.conversationId === 'string') {
+      const existingAssistantPin = db
+        .prepare(`SELECT role, conversation_id AS conversationId FROM messages WHERE id = ?`)
+        .get(chatAssistantMessageId) as { role?: unknown; conversationId?: unknown } | undefined;
+      if (existingAssistantPin && existingAssistantPin.role !== 'assistant') {
+        return sendApiError(
+          res,
+          409,
+          'INVALID_ASSISTANT_MESSAGE',
+          'assistantMessageId must reference an assistant message',
+        );
+      }
+      if (
+        existingAssistantPin
+        && existingAssistantPin.conversationId !== meta.conversationId
+      ) {
+        return sendApiError(
+          res,
+          409,
+          'IDEMPOTENCY_CONFLICT',
+          'assistantMessageId belongs to a different conversation',
+        );
+      }
+    }
     if (typeof meta.projectId === 'string' && meta.projectId) {
       const preparedWorkspaceScope =
         await prepareRunWorkspaceScope(

@@ -118,6 +118,7 @@ describe('pinAssistantMessageOnRunCreate generation boundary (#6418)', () => {
       runStatus: 'running',
       lastRunEventId: 'evt-5',
       startedAt: 100,
+      endedAt: 200,
     });
 
     pinAssistantMessageOnRunCreate(db, {
@@ -135,6 +136,9 @@ describe('pinAssistantMessageOnRunCreate generation boundary (#6418)', () => {
     expect(m.content).toBe('partial');
     expect(m.lastRunEventId).toBe('evt-5');
     expect(m.startedAt).toBe(100);
+    // The prior failure's end timestamp must be cleared so the resumed
+    // completion records a fresh terminal time (nettee P2 on #6418).
+    expect(m.endedAt).toBeNull();
   });
 
   it('does not touch a message in another conversation', () => {

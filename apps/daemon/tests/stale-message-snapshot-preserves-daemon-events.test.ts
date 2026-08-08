@@ -664,6 +664,70 @@ describe('stale web message snapshot does not wipe daemon-owned run events', () 
     expect(stored?.events).toEqual([{ kind: 'text', text: 'run-b result' }]);
   });
 
+  it('does not let a stale terminal snapshot relatch a resumed run', async () => {
+    // nettee P3 on #6418: after a same-run recharge resume the stored row is
+    // non-terminal (queued), so a terminal `failed` snapshot from before the
+    // resume must not write the old failure back onto the resumed run.
+    delete process.env.POSTHOG_KEY;
+    delete process.env.POSTHOG_HOST;
+    delete process.env.LANGFUSE_PUBLIC_KEY;
+    delete process.env.LANGFUSE_SECRET_KEY;
+    delete process.env.LANGFUSE_BASE_URL;
+    delete process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL;
+
+    started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
+    await putConfig(started.url, {
+      agentId: 'claude',
+      telemetry: { metrics: true, content: false, artifactManifest: false },
+      privacyDecisionAt: Date.now(),
+    });
+
+    const { projectId, conversationId } = await createConversation(started.url);
+    const messageId = `resumed_${randomUUID()}`;
+    const url = `${started.url}/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}`;
+
+    // The same-run resume pin wrote a non-terminal queued status.
+    const pinned = await fetch(url, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: messageId,
+        role: 'assistant',
+        content: '',
+        runId: 'run-b',
+        runStatus: 'queued',
+        events: [],
+      }),
+    });
+    expect(pinned.status).toBe(200);
+
+    // A stale failed snapshot from before the resume lands afterwards.
+    const stale = await fetch(url, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: messageId,
+        role: 'assistant',
+        content: 'old failure',
+        runId: 'run-b',
+        runStatus: 'failed',
+        events: [{ kind: 'status', label: 'error', detail: 'old' }],
+      }),
+    });
+    expect(stale.status).toBe(200);
+
+    const stored = await fetchAssistantMessage(
+      started.url,
+      projectId,
+      conversationId,
+      messageId,
+    );
+    // Must stay queued — the stale failure is discarded, not relatched.
+    expect(stored?.runStatus).toBe('queued');
+    expect(stored?.content).toBe('');
+    expect(stored?.events).toEqual([]);
+  });
+
   it('still lets the client write non-daemon-backed messages', async () => {
     delete process.env.POSTHOG_KEY;
     delete process.env.POSTHOG_HOST;
