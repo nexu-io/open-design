@@ -84,6 +84,30 @@ export interface StandaloneShellCapabilityPort {
   invoke(request: StandaloneShellCapabilityRequest): Promise<StandaloneShellCapabilityResult>;
 }
 
+type StandaloneRuntimeCommandExchange = Readonly<{
+  handoff: StandaloneHandoffEnvelope;
+  requestId: string;
+  schemaVersion: typeof STANDALONE_HANDOFF_SCHEMA_VERSION;
+}>;
+
+export type StandaloneRuntimeCommandRequest = StandaloneRuntimeCommandExchange & Readonly<{
+  command: string;
+  input: StandaloneProtocolJsonValue;
+}>;
+
+export type StandaloneRuntimeCommandResult =
+  | (StandaloneRuntimeCommandExchange & Readonly<{
+      outcome: "completed";
+      output: StandaloneProtocolJsonValue;
+    }>)
+  | (StandaloneRuntimeCommandExchange & Readonly<{
+      outcome: "unsupported";
+    }>)
+  | (StandaloneRuntimeCommandExchange & Readonly<{
+      error: Readonly<{ code: string }>;
+      outcome: "failed";
+    }>);
+
 export type StandaloneHandoffRequest = Readonly<{
   capabilities: StandaloneShellCapabilityPort;
   handoff: StandaloneHandoffEnvelope;
@@ -121,6 +145,7 @@ export type StandaloneRuntimeStatus =
 
 export interface StandaloneHandle {
   close(): Promise<StandaloneRuntimeTerminalStatus>;
+  invoke(request: StandaloneRuntimeCommandRequest): Promise<StandaloneRuntimeCommandResult>;
   readStatus(): Promise<StandaloneRuntimeStatus>;
   waitForTerminal(): Promise<StandaloneRuntimeTerminalStatus>;
 }
@@ -407,6 +432,21 @@ function validateCapabilityExchange(
   return { handoff, requestId, schemaVersion: STANDALONE_HANDOFF_SCHEMA_VERSION };
 }
 
+function validateRuntimeCommandExchange(
+  value: Record<string, unknown>,
+  expected?: { handoff?: StandaloneHandoffEnvelope; requestId?: string },
+): StandaloneRuntimeCommandExchange {
+  if (value.schemaVersion !== STANDALONE_HANDOFF_SCHEMA_VERSION) {
+    throw new StandaloneProtocolError("unsupported standalone runtime command schema version");
+  }
+  const handoff = validateStandaloneHandoffEnvelope(value.handoff, expected?.handoff);
+  const requestId = normalizeToken(value.requestId, "standalone runtime command requestId");
+  if (expected?.requestId != null && requestId !== expected.requestId) {
+    throw new StandaloneProtocolError("standalone runtime command requestId does not match");
+  }
+  return { handoff, requestId, schemaVersion: STANDALONE_HANDOFF_SCHEMA_VERSION };
+}
+
 export function validateStandaloneShellCapabilityRequest(
   value: unknown,
   expected?: { handoff?: StandaloneHandoffEnvelope },
@@ -443,6 +483,45 @@ export function validateStandaloneShellCapabilityResult(
   }
   throw new StandaloneProtocolError(
     `unsupported standalone shell capability outcome: ${String(result.outcome)}`,
+  );
+}
+
+export function validateStandaloneRuntimeCommandRequest(
+  value: unknown,
+  expected?: { handoff?: StandaloneHandoffEnvelope },
+): StandaloneRuntimeCommandRequest {
+  const request = requireRecord(value, "standalone runtime command request");
+  return {
+    ...validateRuntimeCommandExchange(request, expected),
+    command: normalizeToken(request.command, "standalone runtime command"),
+    input: normalizeJsonValue(request.input, "standalone runtime command input"),
+  };
+}
+
+export function validateStandaloneRuntimeCommandResult(
+  value: unknown,
+  expected?: { handoff?: StandaloneHandoffEnvelope; requestId?: string },
+): StandaloneRuntimeCommandResult {
+  const result = requireRecord(value, "standalone runtime command result");
+  const exchange = validateRuntimeCommandExchange(result, expected);
+  if (result.outcome === "completed") {
+    return {
+      ...exchange,
+      outcome: "completed",
+      output: normalizeJsonValue(result.output, "standalone runtime command output"),
+    };
+  }
+  if (result.outcome === "unsupported") return { ...exchange, outcome: "unsupported" };
+  if (result.outcome === "failed") {
+    const error = requireRecord(result.error, "standalone runtime command error");
+    return {
+      ...exchange,
+      error: { code: normalizeToken(error.code, "standalone runtime command error code") },
+      outcome: "failed",
+    };
+  }
+  throw new StandaloneProtocolError(
+    `unsupported standalone runtime command outcome: ${String(result.outcome)}`,
   );
 }
 

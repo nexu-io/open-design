@@ -53,7 +53,11 @@ export const MAC_PREBUNDLE_POLICIES = {
   packagedMain: {
     externals: ["electron"],
     forbiddenInputs: [
+      "/apps/daemon/",
+      "/apps/standalone/",
       "/apps/web/",
+      "/node_modules/@open-design/daemon/",
+      "/node_modules/@open-design/standalone/",
       "/node_modules/@open-design/web/",
       "/node_modules/next/",
       "/node_modules/openai/",

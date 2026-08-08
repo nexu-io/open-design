@@ -99,6 +99,7 @@ describe("tools-pack Closure archive", () => {
     expect(body).toContain("resolveOpenDesignClosureLayout");
     expect(body).toContain("daemonStandaloneSidecarEntry");
     expect(body).toContain("webStandaloneSidecarEntry");
+    expect(body).toContain("OD_DAEMON_CLI_PATH");
     for (const source of [root, inner, body]) {
       expect(source).not.toContain("payload-desktop-handoff");
       expect(source).not.toContain("ELECTRON_RUN_AS_NODE");

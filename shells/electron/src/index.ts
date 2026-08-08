@@ -1,3 +1,7 @@
+import { join } from "node:path";
+
+import { app, dialog } from "electron";
+
 import {
   APP_KEYS,
   OPEN_DESIGN_SIDECAR_CONTRACT,
@@ -15,40 +19,28 @@ import {
   createSidecarLaunchEnv,
   resolveAppIpcPath,
 } from "@open-design/sidecar";
-import {
-  applyLoopbackConnectionLimitSwitch,
-  applyOsLocaleSwitch,
-  createSplashWindow,
-  setSplashStage,
-} from "./main/index.js";
 import { readProcessStamp } from "@open-design/platform";
-import { join } from "node:path";
-import { app, dialog } from "electron";
 
 import { readPackagedConfig } from "./config.js";
-import {
-  confirmPackagedClosureRuntime,
-  createPackagedRuntimeIdentity,
-  resolvePackagedClosureRuntime,
-  startPackagedClosureRuntime,
-} from "./closure-runtime.js";
 import { checkForPackagedClosureUpdate } from "./closure-update.js";
 import {
   claimPackagedDownloadAttribution,
   discoverPackagedDownloadAttribution,
 } from "./download-attribution.js";
-import { writePackagedDesktopIdentity } from "./identity.js";
-import {
-  parsePackagedStandaloneRequest,
-  resolvePackagedMcpBootstrapLaunch,
-} from "./standalone-launcher.js";
 import { PackagedPathAccessError } from "./errors.js";
+import {
+  createElectronStandaloneRuntimeIdentity,
+  writePackagedDesktopIdentity,
+} from "./identity.js";
 import {
   exitPackagedLauncherForExistingDesktop,
   inspectExistingDesktopForLauncher,
   waitForLauncherAfterQuit,
 } from "./launcher-after-quit.js";
-import { confirmPackagedLauncherRuntime, resolvePackagedLauncherRuntime } from "./launcher-runtime.js";
+import {
+  confirmPackagedLauncherRuntime,
+  resolvePackagedLauncherRuntime,
+} from "./launcher-runtime.js";
 import {
   applyPackagedElectronPathOverrides,
   claimPackagedSingleInstanceLock,
@@ -61,36 +53,45 @@ import {
   createPackagedDesktopLogger,
   type PackagedDesktopLogger,
 } from "./logging.js";
-import { resolvePackagedNamespacePaths } from "./paths.js";
+import { resolvePackagedMcpBootstrapLaunch } from "./mcp-bootstrap.js";
+import {
+  applyLoopbackConnectionLimitSwitch,
+  applyOsLocaleSwitch,
+  createSplashWindow,
+  setSplashStage,
+} from "./main/index.js";
 import { createObsoleteInstalledOuterRetirement } from "./obsolete-installed-outer.js";
+import { resolvePackagedNamespacePaths } from "./paths.js";
 import { findPackagedDeeplinkArg, launchPackagedPayloadDesktop } from "./payload-desktop-launch.js";
 import { packagedEntryUrl, registerOdProtocol } from "./protocol.js";
-import { startPackagedSidecars } from "./sidecars.js";
 import { reportStartupFailure, resolveStartupDistinctId } from "./startup-telemetry.js";
+import {
+  confirmElectronStandaloneBinding,
+  digestElectronShellEntry,
+  resolveElectronStandaloneBinding,
+} from "./standalone-binding.js";
+import { createElectronStandaloneLauncher } from "./standalone-handoff.js";
+import { createStandaloneDesktopAuthRegistration } from "./standalone-commands.js";
+import { applyStandaloneBootstrapEnvironment } from "./standalone-environment.js";
 import { resolvePackagedWindowTitle } from "./window-title.js";
 import { syncWindowsUninstallDisplayVersion } from "./windows-lifecycle.js";
 
 let packagedLogger: PackagedDesktopLogger | null = null;
 const secondInstanceHandoff = createPackagedSecondInstanceHandoff();
 
-// Telemetry context for the fatal-exit path. Populated once config + launcher
-// runtime are resolved so the `main().catch` below can report a startup failure
-// even though the daemon (the PostHog host) never came up. Null until then —
-// failures earlier than config resolution simply skip telemetry. See
-// `startup-telemetry.ts` for the zero-startup-side-effect contract.
 let startupTelemetryContext:
   | {
-      posthogKey: string | null;
-      posthogHost: string | null;
       appVersion: string | null;
-      namespace: string;
-      source: string;
       installationRoot: string;
+      namespace: string;
       nativeModulePath: string | null;
+      posthogHost: string | null;
+      posthogKey: string | null;
+      source: string;
     }
   | null = null;
 
-function createPackagedDesktopStamp(namespace: string): SidecarStamp {
+function createElectronDesktopStamp(namespace: string): SidecarStamp {
   return {
     app: APP_KEYS.DESKTOP,
     ipc: resolveAppIpcPath({
@@ -110,236 +111,189 @@ function applyLaunchEnv(base: string, stamp: SidecarStamp): void {
     contract: OPEN_DESIGN_SIDECAR_CONTRACT,
     stamp,
   });
-
   for (const [key, value] of Object.entries(env)) {
     if (value != null) process.env[key] = value;
   }
 }
 
-function applyPackagedUpdaterEnv(updateMetadataUrl: string | null): void {
+function applyShellUpdateEnv(updateMetadataUrl: string | null): void {
   if (updateMetadataUrl == null) return;
-  if (process.env.OD_UPDATE_METADATA_URL != null && process.env.OD_UPDATE_METADATA_URL.length > 0) return;
+  if (process.env.OD_UPDATE_METADATA_URL?.trim()) return;
   process.env.OD_UPDATE_METADATA_URL = updateMetadataUrl;
 }
 
 async function main(): Promise<void> {
-  const config = await readPackagedConfig();
-  const standaloneRequest = parsePackagedStandaloneRequest(process.argv.slice(1));
-  if (standaloneRequest.standalone) {
-    const { runPackagedStandalone } = await import("./standalone-launcher.js");
-    await runPackagedStandalone(config, standaloneRequest);
-    return;
-  }
+  const packageConfig = await readPackagedConfig();
 
-  // Must run BEFORE `app.whenReady()` below, because Chromium consumes
-  // `--lang` at session bootstrap. Doing it here lets the packaged
-  // renderer's `navigator.language` follow the OS instead of Chromium's
-  // en-US default. runDesktopMain (called later) calls the same helper
-  // again to recover the resolved locale string for the BrowserWindow.
   applyOsLocaleSwitch(app);
-  // Must also land before whenReady — see the helper's docblock for the
-  // connection-pool deadlock it prevents (electron/electron#47097).
   applyLoopbackConnectionLimitSwitch(app);
-  // Belt-and-braces duplicate of the helper above: the packaged outer
-  // shell can outlive auto-updates that only refresh inner resources, so
-  // the deadlock fix must not depend on which desktop build the shell
-  // happens to bundle. appendSwitch is idempotent for the same key.
   app.commandLine.appendSwitch("ignore-connections-limit", "127.0.0.1,localhost");
 
   const afterQuit = parseLauncherAfterQuitArgs(process.argv.slice(1));
   const handoffResume = parseLauncherHandoffResumeArgs(process.argv.slice(1));
   const delegated = parseLauncherDelegatedArgs(process.argv.slice(1));
   const argvStamp = readProcessStamp(process.argv.slice(1), OPEN_DESIGN_SIDECAR_CONTRACT);
-  const namespace = argvStamp?.namespace ?? config.namespace;
-  const namespaceConfig = namespace === config.namespace ? config : { ...config, namespace };
+  const namespace = argvStamp?.namespace ?? packageConfig.namespace;
+  const namespaceConfig = namespace === packageConfig.namespace
+    ? packageConfig
+    : { ...packageConfig, namespace };
   const initialPaths = resolvePackagedNamespacePaths(namespaceConfig, namespace, process.env);
   if (!await waitForLauncherAfterQuit(afterQuit, initialPaths)) {
     app.exit(1);
     return;
   }
+
   const existingDesktop = await inspectExistingDesktopForLauncher(namespace, {
     deeplinkUrl: findPackagedDeeplinkArg(process.argv),
     incomingVersion: namespaceConfig.appVersion,
     logger: console,
     paths: initialPaths,
   });
-  if (exitPackagedLauncherForExistingDesktop(existingDesktop, (code) => app.exit(code))) {
-    return;
-  }
-  const stamp = argvStamp ?? createPackagedDesktopStamp(namespace);
-  const launcherRuntime = await resolvePackagedLauncherRuntime(namespaceConfig, initialPaths, {
+  if (exitPackagedLauncherForExistingDesktop(existingDesktop, (code) => app.exit(code))) return;
+
+  const stamp = argvStamp ?? createElectronDesktopStamp(namespace);
+  const shellRuntime = await resolvePackagedLauncherRuntime(namespaceConfig, initialPaths, {
     delegated,
     resume: handoffResume,
   });
-  if (await launchPackagedPayloadDesktop(launcherRuntime, stamp)) {
+  if (await launchPackagedPayloadDesktop(shellRuntime, stamp)) {
     app.exit(0);
     return;
   }
-  const shellConfig = launcherRuntime.config;
-  const paths = launcherRuntime.paths;
+
+  const shellConfig = shellRuntime.config;
+  const paths = shellRuntime.paths;
+  const shellVersion = shellConfig.appVersion;
+  if (shellVersion == null) throw new Error("Electron Shell version is unavailable");
   const mcpBootstrap = resolvePackagedMcpBootstrapLaunch({
-    installedLaunchPath: launcherRuntime.installedLaunchPath,
+    installedLaunchPath: shellRuntime.installedLaunchPath,
   });
 
-  // Arm fatal-exit telemetry now that we know the channel key/version. The
-  // startPackagedSidecars call below is THE failure this covers (daemon/web
-  // dying before reporting status, e.g. issue #4638's missing better-sqlite3).
   startupTelemetryContext = {
-    posthogKey: shellConfig.posthogKey,
-    posthogHost: shellConfig.posthogHost,
-    appVersion: shellConfig.appVersion,
-    namespace,
-    source: SIDECAR_SOURCES.PACKAGED,
-    // Pass installationRoot explicitly: OD_INSTALLATION_DIR is only set in the
-    // daemon child env, not this parent process (see startup-telemetry.ts).
+    appVersion: shellVersion,
     installationRoot: paths.installationRoot,
-    // Absolute path where the daemon's better-sqlite3 binding ships in the
-    // packaged bundle (`Contents/Resources/app/node_modules/...` — layout
-    // verified against the shipped 0.13.0 DMG). The fatal-exit report probes
-    // this to record whether the .node actually exists on the crashing machine.
-    nativeModulePath: join(
-      app.getAppPath(),
-      "node_modules",
-      "better-sqlite3",
-      "build",
-      "Release",
-      "better_sqlite3.node",
-    ),
+    namespace,
+    nativeModulePath: null,
+    posthogHost: shellConfig.posthogHost,
+    posthogKey: shellConfig.posthogKey,
+    source: SIDECAR_SOURCES.PACKAGED,
   };
 
   await ensurePackagedNamespacePaths(paths);
   stabilizePackagedWorkingDirectory(paths);
-  const downloadAttribution = await discoverPackagedDownloadAttribution(paths, console).catch((error: unknown) => {
-    console.warn("[attribution] failed to discover packaged download attribution", error);
-    return null;
-  });
+  const downloadAttribution = await discoverPackagedDownloadAttribution(paths, console).catch(
+    (error: unknown) => {
+      console.warn("[attribution] failed to discover packaged download attribution", error);
+      return null;
+    },
+  );
   packagedLogger = createPackagedDesktopLogger(paths);
   attachPackagedDesktopProcessLogging({ logger: packagedLogger, paths, stamp });
   const retireObsoleteInstalledOuter = createObsoleteInstalledOuterRetirement({
     currentExecutablePath: process.execPath,
     currentPid: process.pid,
-    installedLaunchPath: launcherRuntime.installedLaunchPath,
+    installedLaunchPath: shellRuntime.installedLaunchPath,
     logger: packagedLogger,
-    payloadDesktopProcess: launcherRuntime.payloadDesktopProcess,
-    payloadExecutablePath: launcherRuntime.desktopExecutablePath,
+    payloadDesktopProcess: shellRuntime.payloadDesktopProcess,
+    payloadExecutablePath: shellRuntime.desktopExecutablePath,
     platform: process.platform,
   });
   applyPackagedElectronPathOverrides(paths);
-  applyPackagedUpdaterEnv(shellConfig.updateMetadataUrl);
+  applyShellUpdateEnv(shellConfig.updateMetadataUrl);
   if (!claimPackagedSingleInstanceLock(app, (argv) => {
     secondInstanceHandoff.handle(findPackagedDeeplinkArg(argv));
-  })) {
-    return;
-  }
+  })) return;
   await app.whenReady();
 
-  // Show the brand splash IMMEDIATELY, before we await the daemon/web sidecars
-  // below. Cold boot otherwise leaves the user staring at no window at all for
-  // the few seconds the sidecars take to come up; putting the animation on
-  // screen in parallel masks that gap, and the runtime keeps it up until the
-  // real app has mounted (see createDesktopRuntime). The handle carries the
-  // creation timestamp so the runtime's minimum-hold timer counts from here —
-  // BEFORE the sidecar boot below — rather than re-adding the delay afterwards.
   const splash = createSplashWindow();
+  setSplashStage(splash.window, "engine");
 
-  let closureRuntime = await resolvePackagedClosureRuntime({
-    channel: launcherRuntime.launcherPaths.channel,
-    installationRoot: launcherRuntime.launcherPaths.root,
-    legacyConfig: shellConfig,
+  const metadataUrl = process.env.OD_UPDATE_METADATA_URL?.trim()
+    || shellConfig.updateMetadataUrl;
+  const update = await checkForPackagedClosureUpdate({
+    channel: shellRuntime.launcherPaths.channel,
+    installationRoot: shellRuntime.launcherPaths.root,
+    metadataUrl,
     namespace,
-    shellVersion: shellConfig.appVersion,
+    shellVersion,
+  }).catch((error: unknown) => {
+    packagedLogger?.warn("Standalone cold-update discovery failed; checking committed Store", { error });
+    return null;
   });
-  const identity = await writePackagedDesktopIdentity({
+  if (update != null) {
+    packagedLogger?.info("Standalone cold-update check completed", {
+      reason: update.reason,
+      state: update.state,
+    });
+  }
+
+  const selection = await resolveElectronStandaloneBinding({
+    channel: shellRuntime.launcherPaths.channel,
+    namespace,
     paths,
-    runtimeIdentity: createPackagedRuntimeIdentity({
-      closure: closureRuntime,
-      shellSource: launcherRuntime.source,
-      shellVersion: shellConfig.appVersion,
-    }),
-    stamp,
+    releaseVersion: shellVersion,
+    shellDigest: await digestElectronShellEntry(import.meta.url),
+    shellVersion,
   });
-
+  applyStandaloneBootstrapEnvironment({
+    appVersion: selection.pointer.version,
+    config: shellConfig,
+    mcpBootstrap,
+  });
   applyLaunchEnv(paths.runtimeRoot, stamp);
-
-  const runtime = bootstrapSidecarRuntime(stamp, process.env, {
+  const desktopControl = bootstrapSidecarRuntime(stamp, process.env, {
     app: APP_KEYS.DESKTOP,
     base: paths.runtimeRoot,
     contract: OPEN_DESIGN_SIDECAR_CONTRACT,
   });
 
-  const started = await startPackagedClosureRuntime(
-    closureRuntime,
-    async (runtimeConfig) => await startPackagedSidecars(
-      runtime,
-      { ...paths, resourceRoot: runtimeConfig.resourceRoot },
-      {
-        appVersion: runtimeConfig.appVersion,
-        amrProfile: runtimeConfig.amrProfile,
-        daemonCliEntry: runtimeConfig.daemonCliEntry,
-        daemonSidecarEntry: runtimeConfig.daemonSidecarEntry,
-        electronNodeCommand: launcherRuntime.electronNodeCommand,
-        mcpBootstrapArgs: mcpBootstrap.args,
-        mcpBootstrapCommand: mcpBootstrap.command,
-        nodeCommand: runtimeConfig.nodeCommand,
-        telemetryRelayUrl: runtimeConfig.telemetryRelayUrl,
-        posthogKey: runtimeConfig.posthogKey,
-        posthogHost: runtimeConfig.posthogHost,
-        velaWebUrl: runtimeConfig.velaWebUrl,
-        // PR #974 round-5 (lefarcen P2): the Electron entry runs desktop
-        // main alongside the daemon, so the import-folder gate must be
-        // pinned ON from request 0. See `apps/packaged/src/standalone-launcher.ts`
-        // for the windowless counterpart that passes `false`.
-        requireDesktopAuth: true,
-        webSidecarEntry: runtimeConfig.webSidecarEntry,
-        webStandaloneRoot: runtimeConfig.webStandaloneRoot,
-        webOutputMode: runtimeConfig.webOutputMode,
-        // Surface each sidecar boot phase on the splash status line so a slow
-        // cold start (Defender scans, native module loads) never reads as a hang.
-        // Both the "spawning" and "ready" edges are mapped so the step counter
-        // advances the instant each long native wait clears.
-        onPhase(phase) {
-          const stage =
-            phase === "daemon-spawning"
-              ? "engine"
-              : phase === "daemon-ready"
-                ? "engineReady"
-                : phase === "web-spawning"
-                  ? "interface"
-                  : "interfaceReady";
-          setSplashStage(splash.window, stage);
-        },
+  const standalone = await createElectronStandaloneLauncher().launch(
+    selection.binding,
+    {
+      async invoke(request) {
+        return {
+          handoff: request.handoff,
+          outcome: "unsupported",
+          requestId: request.requestId,
+          schemaVersion: request.schemaVersion,
+        };
       },
-    ),
+    },
   );
-  closureRuntime = started.runtime;
-  const sidecars = started.value;
-  await identity.updateRuntimeIdentity(createPackagedRuntimeIdentity({
-    closure: closureRuntime,
-    shellSource: launcherRuntime.source,
-    shellVersion: shellConfig.appVersion,
-  }));
-  if (startupTelemetryContext != null) {
-    startupTelemetryContext.appVersion = closureRuntime.runtimeConfig.appVersion;
+  const status = await standalone.readStatus();
+  if (status.state !== "running") {
+    throw new Error(`Standalone entered terminal state before Desktop startup: ${status.state}`);
   }
-  if (sidecars.daemon.url) {
+  void standalone.waitForTerminal().then((terminal) => {
+    if (terminal.state !== "failed") return;
+    packagedLogger?.error("Standalone exited while the Electron Shell was running", {
+      code: terminal.error.code,
+    });
+    app.quit();
+  }).catch((error: unknown) => {
+    packagedLogger?.error("Standalone terminal lifecycle observation failed", { error });
+    app.quit();
+  });
+  startupTelemetryContext.appVersion = selection.pointer.version;
+  const identity = await writePackagedDesktopIdentity({
+    paths,
+    runtimeIdentity: createElectronStandaloneRuntimeIdentity(status.handoff, status),
+    stamp,
+  });
+
+  if (status.daemonUrl) {
     void claimPackagedDownloadAttribution({
       attribution: downloadAttribution,
-      daemonUrl: sidecars.daemon.url,
+      daemonUrl: status.daemonUrl,
       installerObservationRoot: paths.installerObservationRoot,
       logger: packagedLogger,
     });
   }
-  // Sidecars are up; the remaining wait is the hidden main window loading and
-  // mounting the web bundle (the runtime re-asserts this stage at its reveal
-  // gate, which is a no-op when the label is already current).
   setSplashStage(splash.window, "workspace");
-  // Resolve the web sidecar address per request instead of freezing it here.
-  // The restart supervisor may bind a fresh ephemeral port, while a temporary
-  // lack of a target should surface as the protocol layer's structured 503.
-  registerOdProtocol(() => sidecars.currentWebUrl());
+  registerOdProtocol(() => status.webUrl);
 
   const { runDesktopMain } = await import("./main/index.js");
-  await runDesktopMain(runtime, {
+  await runDesktopMain(desktopControl, {
     splashWindow: splash.window,
     splashStartedAt: splash.startedAt,
     async beforeShutdown() {
@@ -347,54 +301,34 @@ async function main(): Promise<void> {
         await retireObsoleteInstalledOuter();
       } finally {
         try {
-          await sidecars.close();
+          await standalone.close();
         } finally {
           await identity.close();
         }
       }
     },
+    async discoverDaemonUrl() {
+      return status.daemonUrl;
+    },
     async discoverWebUrl() {
       return packagedEntryUrl();
     },
-    // Round-7 (lefarcen P2 @ runtime.ts:336): packaged main-process
-    // fetch targets the daemon sidecar's real http URL — never the
-    // od://app/ renderer URL, which Node/undici cannot resolve through
-    // Electron's protocol handler.
-    async discoverDaemonUrl() {
-      return sidecars.daemon.url;
-    },
-    windowTitle: resolvePackagedWindowTitle(shellConfig),
-    inviteProtocolClientPath:
-      process.platform === "win32" ? launcherRuntime.installedLaunchPath : null,
+    inviteProtocolClientPath: process.platform === "win32"
+      ? shellRuntime.installedLaunchPath
+      : null,
     async onExternalShow() {
       await retireObsoleteInstalledOuter();
     },
     onDesktopReady(controls) {
-      void confirmPackagedLauncherRuntime(launcherRuntime).catch((error: unknown) => {
-        packagedLogger?.warn("failed to confirm packaged launcher runtime", { error });
+      void confirmPackagedLauncherRuntime(shellRuntime).catch((error: unknown) => {
+        packagedLogger?.warn("failed to confirm Electron Shell runtime", { error });
       });
-      void (async () => {
-        await confirmPackagedClosureRuntime(closureRuntime);
-        const update = await checkForPackagedClosureUpdate({
-          channel: launcherRuntime.launcherPaths.channel,
-          installationRoot: launcherRuntime.launcherPaths.root,
-          metadataUrl: process.env.OD_UPDATE_METADATA_URL?.trim() || shellConfig.updateMetadataUrl,
-          namespace,
-          shellVersion: shellConfig.appVersion,
-        });
-        packagedLogger?.info("packaged Closure update check completed", {
-          reason: update.reason,
-          state: update.state,
-          ...(update.state === "skipped"
-            ? {}
-            : { candidateVersion: update.candidate.manifest.identity.version }),
-        });
-      })().catch((error: unknown) => {
-        packagedLogger?.warn("failed to confirm or update packaged Closure runtime", { error });
+      void confirmElectronStandaloneBinding(selection).catch((error: unknown) => {
+        packagedLogger?.warn("failed to confirm Standalone runtime", { error });
       });
       void syncWindowsUninstallDisplayVersion({
         namespace,
-        version: launcherRuntime.config.appVersion,
+        version: selection.binding.descriptor.release.version,
       }).catch((error: unknown) => {
         packagedLogger?.warn("failed to sync Windows uninstall registry version", { error });
       });
@@ -404,48 +338,49 @@ async function main(): Promise<void> {
       });
     },
     preloadPath: join(app.getAppPath(), "preload.cjs"),
+    registerDesktopAuth: createStandaloneDesktopAuthRegistration({
+      handoff: status.handoff,
+      handle: standalone,
+    }),
     update: {
-      currentVersion: shellConfig.appVersion,
+      currentVersion: shellVersion,
       downloadRoot: paths.updateRoot,
       installerObservationRoot: paths.installerObservationRoot,
-      launcherLaunchPath: launcherRuntime.installedLaunchPath,
-      launcherRoot: launcherRuntime.launcherPaths.root,
-      launcherPayloadExtractorPath: shellConfig.resourceRoot == null ? null : join(shellConfig.resourceRoot, "bin", "7z.exe"),
-      launcherRuntimePath: launcherRuntime.launcherPaths.runtimePath,
+      launcherLaunchPath: shellRuntime.installedLaunchPath,
+      launcherRoot: shellRuntime.launcherPaths.root,
+      launcherPayloadExtractorPath: shellConfig.resourceRoot == null
+        ? null
+        : join(shellConfig.resourceRoot, "bin", "7z.exe"),
+      launcherRuntimePath: shellRuntime.launcherPaths.runtimePath,
     },
+    windowTitle: resolvePackagedWindowTitle(shellConfig),
   });
 }
 
 void main().catch(async (error: unknown) => {
-  const isPathAccess = error instanceof PackagedPathAccessError;
-  if (isPathAccess) {
+  if (error instanceof PackagedPathAccessError) {
     try {
       dialog.showErrorBox(error.title, error.message);
     } catch {
-      // Fall through to console logging + process exit.
+      // Fall through to logging and exit.
     }
   }
-  packagedLogger?.error("packaged runtime failed", { error });
-  console.error("packaged runtime failed", error);
-  // Best-effort crash telemetry on the way out. This is the ONLY new behavior
-  // on the failure path; the happy path never reaches here. reportStartupFailure
-  // self-caps its runtime (Promise.race timeout) and swallows all errors, so it
-  // can neither block nor crash the exit. No-op when telemetry isn't armed yet
-  // or the build has no PostHog key.
-  if (startupTelemetryContext) {
+  packagedLogger?.error("Electron Shell failed", { error });
+  console.error("Electron Shell failed", error);
+  if (startupTelemetryContext != null) {
     await reportStartupFailure({
-      error,
-      isPathAccess,
-      posthogKey: startupTelemetryContext.posthogKey,
-      posthogHost: startupTelemetryContext.posthogHost,
+      appVersion: startupTelemetryContext.appVersion,
       distinctId: resolveStartupDistinctId(
         startupTelemetryContext.namespace,
         startupTelemetryContext.installationRoot,
       ),
-      appVersion: startupTelemetryContext.appVersion,
+      error,
+      isPathAccess: error instanceof PackagedPathAccessError,
       namespace: startupTelemetryContext.namespace,
-      source: startupTelemetryContext.source,
       nativeModulePath: startupTelemetryContext.nativeModulePath,
+      posthogHost: startupTelemetryContext.posthogHost,
+      posthogKey: startupTelemetryContext.posthogKey,
+      source: startupTelemetryContext.source,
     });
   }
   process.exit(1);

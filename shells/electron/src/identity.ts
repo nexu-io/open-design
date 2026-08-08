@@ -2,9 +2,29 @@ import { dirname } from "node:path";
 
 import { removeFile, writeJsonFile } from "@open-design/sidecar";
 import type { SidecarStamp } from "@open-design/sidecar-proto";
+import type {
+  StandaloneHandoffEnvelope,
+  StandaloneRuntimeRunningStatus,
+} from "@open-design/standalone-proto";
 
 import type { PackagedNamespacePaths } from "./paths.js";
 import type { PackagedRuntimeIdentity } from "./closure-runtime.js";
+
+type ElectronObservedRuntimeIdentity =
+  | ElectronStandaloneRuntimeIdentity
+  | PackagedRuntimeIdentity;
+
+export type ElectronStandaloneRuntimeIdentity = Readonly<{
+  descriptor: StandaloneHandoffEnvelope["descriptor"];
+  descriptorDigest: StandaloneHandoffEnvelope["descriptorDigest"];
+  endpoints: Readonly<{
+    daemonUrl: string;
+    webUrl: string;
+  }>;
+  generation: number;
+  scope: StandaloneHandoffEnvelope["scope"];
+  standalonePid: number;
+}>;
 
 export type PackagedDesktopRootIdentity = {
   appPath: string;
@@ -13,7 +33,7 @@ export type PackagedDesktopRootIdentity = {
   namespaceRoot: string;
   pid: number;
   ppid: number;
-  runtime?: PackagedRuntimeIdentity;
+  runtime?: ElectronObservedRuntimeIdentity;
   stamp: SidecarStamp;
   startedAt: string;
   updatedAt: string;
@@ -31,7 +51,7 @@ export type PackagedWebRootIdentity = {
 export type PackagedDesktopIdentityHandle = {
   close(): Promise<void>;
   identity: PackagedDesktopRootIdentity;
-  updateRuntimeIdentity(runtime: PackagedRuntimeIdentity): Promise<void>;
+  updateRuntimeIdentity(runtime: ElectronObservedRuntimeIdentity): Promise<void>;
 };
 
 function resolveCurrentMacAppPath(executablePath: string): string {
@@ -40,7 +60,7 @@ function resolveCurrentMacAppPath(executablePath: string): string {
 
 function createPackagedDesktopRootIdentity(options: {
   paths: PackagedNamespacePaths;
-  runtimeIdentity?: PackagedRuntimeIdentity;
+  runtimeIdentity?: ElectronObservedRuntimeIdentity;
   stamp: SidecarStamp;
 }): PackagedDesktopRootIdentity {
   const now = new Date().toISOString();
@@ -64,7 +84,7 @@ function createPackagedDesktopRootIdentity(options: {
 export async function writePackagedDesktopIdentity(options: {
   identityPath?: string;
   paths: PackagedNamespacePaths;
-  runtimeIdentity?: PackagedRuntimeIdentity;
+  runtimeIdentity?: ElectronObservedRuntimeIdentity;
   stamp: SidecarStamp;
 }): Promise<PackagedDesktopIdentityHandle> {
   const identity = createPackagedDesktopRootIdentity(options);
@@ -92,6 +112,23 @@ export async function writePackagedDesktopIdentity(options: {
       await writeIdentity();
     },
   };
+}
+
+export function createElectronStandaloneRuntimeIdentity(
+  handoff: StandaloneHandoffEnvelope,
+  status: StandaloneRuntimeRunningStatus,
+): ElectronStandaloneRuntimeIdentity {
+  return Object.freeze({
+    descriptor: handoff.descriptor,
+    descriptorDigest: handoff.descriptorDigest,
+    endpoints: Object.freeze({
+      daemonUrl: status.daemonUrl,
+      webUrl: status.webUrl,
+    }),
+    generation: handoff.scope.generation,
+    scope: handoff.scope,
+    standalonePid: status.pid,
+  });
 }
 
 export async function writePackagedWebIdentity(options: {

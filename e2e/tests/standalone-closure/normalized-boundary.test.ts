@@ -54,4 +54,17 @@ describe("normalized Standalone boundary", () => {
     expect(shell).not.toMatch(/apps\/standalone|@open-design\/standalone["']/u);
     expect(body).not.toMatch(/shells\/electron|@open-design\/shell-electron/u);
   });
+
+  it("makes the Electron product entry cross bootloader.mjs instead of starting body sidecars", async () => {
+    const entry = await readFile(
+      join(workspaceRoot, "shells", "electron", "src", "index.ts"),
+      "utf8",
+    );
+    expect(entry).toContain("createElectronStandaloneLauncher");
+    expect(entry).toContain("resolveElectronStandaloneBinding");
+    expect(entry).not.toContain("startPackagedSidecars");
+    expect(entry).not.toContain("resolvePackagedClosureRuntime");
+    expect(entry).not.toContain('from "./sidecars.js"');
+    expect(entry).not.toContain('from "./closure-runtime.js"');
+  });
 });

@@ -52,6 +52,9 @@ async function main(): Promise<void> {
         const stopped = stoppedLatch();
         let running = true;
         return {
+          async registerDesktopAuth(secret: string) {
+            await writeFile(join(context.roots.dataRoot, "desktop-auth-secret.txt"), secret, "utf8");
+          },
           async registerWebUrl(url: string) {
             await writeFile(join(context.roots.dataRoot, "registered-web-url.txt"), url, "utf8");
           },

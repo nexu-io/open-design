@@ -26,6 +26,14 @@ import { confirmPackagedLauncherRuntime, resolvePackagedLauncherRuntime } from "
 import { resolvePackagedNamespacePaths } from "./paths.js";
 import type { PackagedSidecarHandle } from "./sidecars.js";
 import { startPackagedSidecars } from "./sidecars.js";
+export {
+  resolvePackagedMcpBootstrapLaunch,
+  type PackagedMcpBootstrapLaunch,
+} from "./mcp-bootstrap.js";
+import {
+  resolvePackagedMcpBootstrapLaunch,
+  type PackagedMcpBootstrapLaunch,
+} from "./mcp-bootstrap.js";
 
 function createStandaloneStamp(namespace: string): SidecarStamp {
   return {
@@ -44,11 +52,6 @@ function createStandaloneStamp(namespace: string): SidecarStamp {
 function colorize(text: string): string {
   if (process.stdout.isTTY !== true || process.env.NO_COLOR != null) return text;
   return `\x1b[36m\x1b[4m${text}\x1b[0m`;
-}
-
-export interface PackagedMcpBootstrapLaunch {
-  args: string[];
-  command: string;
 }
 
 export interface PackagedStandaloneRequest {
@@ -134,35 +137,6 @@ export function parsePackagedStandaloneRequest(
     );
   }
   return { standalone: true, mcpInstallAgent: agent };
-}
-
-export function resolvePackagedMcpBootstrapLaunch(options: {
-  currentExecutablePath?: string;
-  installedLaunchPath: string | null;
-  platform?: NodeJS.Platform;
-}): PackagedMcpBootstrapLaunch {
-  const platform = options.platform ?? process.platform;
-  const currentExecutablePath =
-    options.currentExecutablePath ?? process.execPath;
-  if (
-    platform === "darwin"
-    && options.installedLaunchPath?.endsWith(".app")
-  ) {
-    return {
-      command: "/usr/bin/open",
-      args: [
-        "-g",
-        "-j",
-        options.installedLaunchPath,
-        "--args",
-        "--standalone",
-      ],
-    };
-  }
-  return {
-    command: options.installedLaunchPath ?? currentExecutablePath,
-    args: ["--standalone"],
-  };
 }
 
 export async function runPackagedStandalone(

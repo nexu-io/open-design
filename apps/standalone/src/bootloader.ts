@@ -2,6 +2,8 @@ import {
   compareStandaloneVersions,
   sameStandaloneHandoffEnvelope,
   validateStandaloneHandoffRequest,
+  validateStandaloneRuntimeCommandRequest,
+  validateStandaloneRuntimeCommandResult,
   validateStandaloneRuntimeStatus,
   validateStandaloneShellCapabilityRequest,
   validateStandaloneShellCapabilityResult,
@@ -9,6 +11,7 @@ import {
   type StandaloneHandoff,
   type StandaloneHandoffRequest,
   type StandaloneRuntimeTerminalStatus,
+  type StandaloneRuntimeCommandRequest,
   type StandaloneShellCapabilityRequest,
   type StandaloneShellCapabilityPort,
 } from "@open-design/standalone-proto";
@@ -77,6 +80,15 @@ function bindHandle(
   return Object.freeze({
     async close() {
       return await terminal(await handle.close());
+    },
+    async invoke(value: StandaloneRuntimeCommandRequest) {
+      const command = validateStandaloneRuntimeCommandRequest(value, {
+        handoff: request.handoff,
+      });
+      return validateStandaloneRuntimeCommandResult(await handle.invoke(command), {
+        handoff: request.handoff,
+        requestId: command.requestId,
+      });
     },
     async readStatus() {
       return validateStandaloneRuntimeStatus(await handle.readStatus(), {

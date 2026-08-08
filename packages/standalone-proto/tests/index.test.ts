@@ -9,6 +9,8 @@ import {
   validateStandaloneHandoffRequest,
   validateStandaloneHandoffEnvelope,
   validateStandaloneRuntimeStatus,
+  validateStandaloneRuntimeCommandRequest,
+  validateStandaloneRuntimeCommandResult,
   validateStandaloneShellCapabilityResult,
   type StandaloneHandoffRequest,
 } from "../src/index.js";
@@ -152,5 +154,30 @@ describe("Standalone bootloader protocol", () => {
       schemaVersion: STANDALONE_HANDOFF_SCHEMA_VERSION,
       state: "stopped",
     }, { handoff })).toThrow(/committed generation/);
+  });
+
+  it("fences Shell-to-Standalone commands to the committed generation", () => {
+    const handoff = request().handoff;
+    const command = validateStandaloneRuntimeCommandRequest({
+      command: "open-design.register-desktop-auth.v1",
+      handoff,
+      input: { secret: "dGVzdA==" },
+      requestId: "desktop-auth-1",
+      schemaVersion: STANDALONE_HANDOFF_SCHEMA_VERSION,
+    }, { handoff });
+    expect(validateStandaloneRuntimeCommandResult({
+      handoff,
+      outcome: "completed",
+      output: { accepted: true },
+      requestId: command.requestId,
+      schemaVersion: STANDALONE_HANDOFF_SCHEMA_VERSION,
+    }, { handoff, requestId: command.requestId })).toMatchObject({ outcome: "completed" });
+
+    expect(() => validateStandaloneRuntimeCommandResult({
+      handoff,
+      outcome: "unsupported",
+      requestId: "other-request",
+      schemaVersion: STANDALONE_HANDOFF_SCHEMA_VERSION,
+    }, { handoff, requestId: command.requestId })).toThrow(/requestId/);
   });
 });

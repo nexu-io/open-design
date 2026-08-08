@@ -11,6 +11,7 @@ import {
   type StandaloneHandoffRequest,
 } from "@open-design/standalone-proto";
 import { startSidecarStandalone } from "../../../apps/standalone/src/sidecars.js";
+import { OPEN_DESIGN_REGISTER_DESKTOP_AUTH_COMMAND } from "../../../apps/standalone/src/sidecars.js";
 
 const cleanups: Array<() => Promise<void>> = [];
 
@@ -95,6 +96,19 @@ describe("Standalone normalized product sidecars", () => {
     });
     await expect(readFile(join(root, "data", "registered-web-url.txt"), "utf8"))
       .resolves.toBe("http://127.0.0.1:43234");
+
+    await expect(handle.invoke({
+      command: OPEN_DESIGN_REGISTER_DESKTOP_AUTH_COMMAND,
+      handoff,
+      input: { secret: "dGVzdC1kZXNrdG9wLWF1dGg=" },
+      requestId: "desktop-auth-1",
+      schemaVersion: STANDALONE_HANDOFF_SCHEMA_VERSION,
+    })).resolves.toMatchObject({
+      outcome: "completed",
+      requestId: "desktop-auth-1",
+    });
+    await expect(readFile(join(root, "data", "desktop-auth-secret.txt"), "utf8"))
+      .resolves.toBe("dGVzdC1kZXNrdG9wLWF1dGg=");
 
     await expect(handle.close()).resolves.toMatchObject({ handoff, state: "stopped" });
     await expect(handle.waitForTerminal()).resolves.toMatchObject({ state: "stopped" });

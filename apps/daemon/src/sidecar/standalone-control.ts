@@ -6,6 +6,7 @@ import {
 } from "@open-design/sidecar/control";
 
 import { startDaemonRuntime } from "../daemon-startup.js";
+import { setDesktopAuthSecret } from "../desktop-auth.js";
 
 export type DaemonStandaloneStatus = Readonly<{
   pid: number;
@@ -14,11 +15,13 @@ export type DaemonStandaloneStatus = Readonly<{
 }>;
 
 type DaemonStandaloneMethods = {
+  registerDesktopAuth: SidecarMethod<Readonly<{ secret: string }>, Readonly<{ accepted: true }>>;
   registerWebUrl: SidecarMethod<Readonly<{ url: string }>, Readonly<{ accepted: true }>>;
   status: SidecarMethod<Record<string, never>, DaemonStandaloneStatus>;
 };
 
 export interface DaemonStandaloneRuntime {
+  registerDesktopAuth?(secret: string): Promise<void> | void;
   registerWebUrl?(url: string): Promise<void> | void;
   status(): Promise<DaemonStandaloneStatus>;
   stop(): Promise<void>;
@@ -46,6 +49,9 @@ async function startDefaultRuntime(
     resolveStopped = resolve;
   });
   return {
+    registerDesktopAuth(secret) {
+      setDesktopAuthSecret(Buffer.from(secret, "base64"));
+    },
     async status() {
       return {
         pid: process.pid,
@@ -75,6 +81,10 @@ export async function attachDaemonStandaloneSidecar(options: {
   };
   const control = await attachSidecar<DaemonStandaloneMethods>({
     handlers: {
+      async registerDesktopAuth({ secret }) {
+        await state.runtime?.registerDesktopAuth?.(secret);
+        return { accepted: true };
+      },
       async registerWebUrl({ url }) {
         const parsed = new URL(url);
         const port = parsed.port || (parsed.protocol === "https:" ? "443" : "80");

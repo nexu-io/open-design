@@ -64,6 +64,14 @@ function runningHandle(request: StandaloneHandoffRequest): StandaloneHandle {
     async close() {
       return stopped;
     },
+    async invoke(value) {
+      return {
+        handoff: request.handoff,
+        outcome: "unsupported",
+        requestId: value.requestId,
+        schemaVersion: STANDALONE_HANDOFF_SCHEMA_VERSION,
+      };
+    },
     async readStatus() {
       return {
         daemonUrl: "http://127.0.0.1:4100",

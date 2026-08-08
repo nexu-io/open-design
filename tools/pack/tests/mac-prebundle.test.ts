@@ -211,6 +211,23 @@ describe("assertMacPrebundleMetafile", () => {
     }
   });
 
+  it("rejects a packaged main metafile that pulled in Standalone product code", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-mac-prebundle-"));
+    const metafilePath = join(root, "unsafe-standalone.json");
+    try {
+      await writeFile(
+        metafilePath,
+        JSON.stringify({ inputs: { "/repo/apps/standalone/src/sidecars.ts": {} } }),
+        "utf8",
+      );
+      await expect(
+        assertMacPrebundleMetafile({ metafilePath, policyName: "packagedMain" }),
+      ).rejects.toThrow(/packaged main prebundle included forbidden inputs/);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
   it("rejects a daemon metafile that bundled wasm-backed runtime dependencies", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-mac-prebundle-"));
     const metafilePath = join(root, "unsafe-daemon.json");

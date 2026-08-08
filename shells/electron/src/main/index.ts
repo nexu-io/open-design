@@ -180,6 +180,8 @@ export type DesktopMainOptions = {
   /** Stable installed launcher used for Windows opendesign:// registration. */
   inviteProtocolClientPath?: string | null;
   preloadPath?: string;
+  /** Generation-bound Shell-to-Standalone desktop-auth registration. */
+  registerDesktopAuth?: (secret: Buffer) => Promise<boolean>;
   windowTitle?: string;
   onDesktopReady?: (controls: {
     dispatchInviteDeeplink(url: string | null): void;
@@ -735,7 +737,9 @@ export async function runDesktopMain(
   // once with a fresh token. A persistent failure surfaces in the
   // renderer toast rather than silently dropping forever.
   const desktopAuthSecret = randomBytes(32);
-  const registered = await registerDesktopAuthWithDaemon(runtime, desktopAuthSecret);
+  const registerDesktopAuth = options.registerDesktopAuth
+    ?? (async (secret: Buffer) => await registerDesktopAuthWithDaemon(runtime, secret));
+  const registered = await registerDesktopAuth(desktopAuthSecret);
   if (!registered) {
     console.warn(
       "[open-design desktop] initial import-token handshake with daemon did not complete; " +
@@ -957,7 +961,7 @@ export async function runDesktopMain(
     // (after a daemon restart, or after a missed startup window). The
     // runtime then mints a FRESH token (new nonce + new exp — replay
     // protection still works) and POSTs once more.
-    registerDesktopAuthWithDaemon: () => registerDesktopAuthWithDaemon(runtime, desktopAuthSecret),
+    registerDesktopAuthWithDaemon: () => registerDesktopAuth(desktopAuthSecret),
     rendererLogPath,
     // Mark "reached running" only when the window is ACTUALLY revealed (web app
     // mounted + shown), not when createDesktopRuntime returns — it starts async

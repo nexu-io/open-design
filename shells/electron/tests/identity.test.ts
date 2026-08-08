@@ -11,7 +11,15 @@ import {
 import { resolveAppIpcPath } from "@open-design/sidecar";
 import { describe, expect, it } from "vitest";
 
-import { writePackagedDesktopIdentity } from "../src/identity.js";
+import {
+  createElectronStandaloneRuntimeIdentity,
+  writePackagedDesktopIdentity,
+} from "../src/identity.js";
+import {
+  STANDALONE_HANDOFF_SCHEMA_VERSION,
+  STANDALONE_PROTOCOL_VERSION,
+  createStandaloneHandoffEnvelope,
+} from "@open-design/standalone-proto";
 import type { PackagedNamespacePaths } from "../src/paths.js";
 
 async function pathExists(path: string): Promise<boolean> {
@@ -70,18 +78,43 @@ describe("packaged identity markers", () => {
       expect(await pathExists(paths.standaloneIdentityPath)).toBe(true);
       expect(await pathExists(paths.desktopIdentityPath)).toBe(false);
 
-      await handle.updateRuntimeIdentity({
-        closure: {
-          reason: "no-active-closure",
-          source: "legacy-combined",
-          version: "0.18.0-beta.4",
+      const handoff = createStandaloneHandoffEnvelope({
+        descriptor: {
+          release: { version: "0.18.0-beta.4" },
+          shell: {
+            digest: `sha256:${"a".repeat(64)}`,
+            type: "electron",
+            version: "0.18.0-beta.4",
+          },
+          standalone: {
+            digest: `sha256:${"b".repeat(64)}`,
+            protocolVersion: STANDALONE_PROTOCOL_VERSION,
+            version: "0.18.0-beta.4",
+          },
         },
-        shell: { source: "current-package", version: "0.18.0-beta.4" },
+        scope: { channel: "beta", generation: 2, namespace: "release-beta" },
       });
+      await handle.updateRuntimeIdentity(createElectronStandaloneRuntimeIdentity(handoff, {
+        daemonUrl: "http://127.0.0.1:4100",
+        handoff,
+        pid: 42,
+        schemaVersion: STANDALONE_HANDOFF_SCHEMA_VERSION,
+        state: "running",
+        webUrl: "http://127.0.0.1:4200",
+      }));
       expect(JSON.parse(await readFile(paths.standaloneIdentityPath, "utf8"))).toMatchObject({
         runtime: {
-          closure: { source: "legacy-combined", version: "0.18.0-beta.4" },
-          shell: { source: "current-package", version: "0.18.0-beta.4" },
+          descriptor: {
+            release: { version: "0.18.0-beta.4" },
+            shell: { type: "electron", version: "0.18.0-beta.4" },
+            standalone: { version: "0.18.0-beta.4" },
+          },
+          endpoints: {
+            daemonUrl: "http://127.0.0.1:4100",
+            webUrl: "http://127.0.0.1:4200",
+          },
+          generation: 2,
+          standalonePid: 42,
         },
       });
 

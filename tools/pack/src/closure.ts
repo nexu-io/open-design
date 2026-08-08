@@ -472,7 +472,11 @@ export function resolveOpenDesignClosureLayout() {
 
 export async function startStandaloneBody(request) {
   const layout = resolveOpenDesignClosureLayout();
-  const childEnv = { ...process.env };
+  const childEnv = {
+    ...process.env,
+    OD_DAEMON_CLI_PATH: layout.daemonCliEntry,
+    OD_NODE_BIN: process.execPath,
+  };
   return await startSidecarStandalone(request, {
     daemon: {
       args: [layout.daemonStandaloneSidecarEntry],

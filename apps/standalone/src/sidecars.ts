@@ -9,9 +9,12 @@ import {
 import {
   STANDALONE_HANDOFF_SCHEMA_VERSION,
   validateStandaloneHandoffRequest,
+  validateStandaloneRuntimeCommandRequest,
   type StandaloneHandle,
   type StandaloneHandoffRequest,
   type StandaloneRuntimeFailedStatus,
+  type StandaloneRuntimeCommandRequest,
+  type StandaloneRuntimeCommandResult,
   type StandaloneRuntimeStatus,
   type StandaloneRuntimeTerminalStatus,
 } from "@open-design/standalone-proto";
@@ -31,8 +34,12 @@ type StatusMethods = {
 };
 
 type DaemonMethods = StatusMethods & {
+  registerDesktopAuth: SidecarMethod<Readonly<{ secret: string }>, Readonly<{ accepted: true }>>;
   registerWebUrl: SidecarMethod<Readonly<{ url: string }>, Readonly<{ accepted: true }>>;
 };
+
+export const OPEN_DESIGN_REGISTER_DESKTOP_AUTH_COMMAND =
+  "open-design.register-desktop-auth.v1" as const;
 
 export type StandaloneSidecarLaunchSpec = Readonly<{
   args?: readonly string[];
@@ -224,6 +231,52 @@ export async function startSidecarStandalone(
         }
       })();
       return await closeTask;
+    },
+    async invoke(value: StandaloneRuntimeCommandRequest): Promise<StandaloneRuntimeCommandResult> {
+      const command = validateStandaloneRuntimeCommandRequest(value, {
+        handoff: request.handoff,
+      });
+      if (command.command !== OPEN_DESIGN_REGISTER_DESKTOP_AUTH_COMMAND) {
+        return {
+          handoff: request.handoff,
+          outcome: "unsupported",
+          requestId: command.requestId,
+          schemaVersion: STANDALONE_HANDOFF_SCHEMA_VERSION,
+        };
+      }
+      const input = command.input;
+      if (
+        input == null
+        || typeof input !== "object"
+        || Array.isArray(input)
+        || typeof input.secret !== "string"
+        || !/^[A-Za-z0-9+/]+={0,2}$/u.test(input.secret)
+      ) {
+        return {
+          error: { code: "invalid-desktop-auth-secret" },
+          handoff: request.handoff,
+          outcome: "failed",
+          requestId: command.requestId,
+          schemaVersion: STANDALONE_HANDOFF_SCHEMA_VERSION,
+        };
+      }
+      if (launches.daemon == null) {
+        return {
+          error: { code: "daemon-unavailable" },
+          handoff: request.handoff,
+          outcome: "failed",
+          requestId: command.requestId,
+          schemaVersion: STANDALONE_HANDOFF_SCHEMA_VERSION,
+        };
+      }
+      await launches.daemon.client.call("registerDesktopAuth", { secret: input.secret });
+      return {
+        handoff: request.handoff,
+        outcome: "completed",
+        output: { accepted: true },
+        requestId: command.requestId,
+        schemaVersion: STANDALONE_HANDOFF_SCHEMA_VERSION,
+      };
     },
     async readStatus() {
       return status;
