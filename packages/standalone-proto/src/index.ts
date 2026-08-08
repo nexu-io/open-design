@@ -97,6 +97,7 @@ type StandaloneRuntimeStatusBase = Readonly<{
 }>;
 
 export type StandaloneRuntimeRunningStatus = StandaloneRuntimeStatusBase & Readonly<{
+  daemonUrl: string;
   state: "running";
   webUrl: string;
 }>;
@@ -472,10 +473,13 @@ export function validateStandaloneRuntimeStatus(
     schemaVersion: STANDALONE_HANDOFF_SCHEMA_VERSION,
   } as const;
   if (status.state === "running") {
+    if (typeof status.daemonUrl !== "string" || !/^https?:\/\//u.test(status.daemonUrl)) {
+      throw new StandaloneProtocolError("running standalone status must contain an http(s) daemonUrl");
+    }
     if (typeof status.webUrl !== "string" || !/^https?:\/\//u.test(status.webUrl)) {
       throw new StandaloneProtocolError("running standalone status must contain an http(s) webUrl");
     }
-    return { ...base, state: "running", webUrl: status.webUrl };
+    return { ...base, daemonUrl: status.daemonUrl, state: "running", webUrl: status.webUrl };
   }
   if (status.state === "stopped") return { ...base, state: "stopped" };
   if (status.state === "failed") {

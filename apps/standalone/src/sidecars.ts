@@ -163,6 +163,7 @@ export async function startSidecarStandalone(
   });
 
   let status: StandaloneRuntimeStatus = {
+    daemonUrl: product.daemonUrl,
     handoff: request.handoff,
     pid: process.pid,
     schemaVersion: STANDALONE_HANDOFF_SCHEMA_VERSION,

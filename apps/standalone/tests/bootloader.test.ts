@@ -74,6 +74,7 @@ function runningHandle(input: StandaloneHandoffRequest): StandaloneHandle {
     },
     async readStatus() {
       return {
+        daemonUrl: "http://127.0.0.1:4100",
         handoff: input.handoff,
         pid: 42,
         schemaVersion: STANDALONE_HANDOFF_SCHEMA_VERSION,

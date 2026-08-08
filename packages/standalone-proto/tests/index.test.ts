@@ -128,11 +128,16 @@ describe("Standalone bootloader protocol", () => {
 
     expect(validateStandaloneRuntimeStatus({
       handoff,
+      daemonUrl: "http://127.0.0.1:4100",
       pid: 42,
       schemaVersion: STANDALONE_HANDOFF_SCHEMA_VERSION,
       state: "running",
       webUrl: "http://127.0.0.1:4200",
-    }, { handoff, state: "running" })).toMatchObject({ state: "running" });
+    }, { handoff, state: "running" })).toMatchObject({
+      daemonUrl: "http://127.0.0.1:4100",
+      state: "running",
+      webUrl: "http://127.0.0.1:4200",
+    });
 
     const wrongHandoff = createStandaloneHandoffEnvelope({
       descriptor: handoff.descriptor,

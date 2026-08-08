@@ -88,6 +88,7 @@ describe("Standalone normalized product sidecars", () => {
     });
 
     await expect(handle.readStatus()).resolves.toMatchObject({
+      daemonUrl: "http://127.0.0.1:43123",
       handoff,
       state: "running",
       webUrl: "http://127.0.0.1:43234",

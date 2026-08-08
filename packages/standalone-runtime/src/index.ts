@@ -102,6 +102,7 @@ export interface StandaloneHandle<
   TWebStatus extends StandaloneRuntimeStatus = StandaloneRuntimeStatus,
 > {
   close(): Promise<void>;
+  readonly daemonUrl: string;
   diagnostic(): StandaloneDiagnostic;
   health(): Promise<StandaloneHealth<TDaemonStatus, TWebStatus>>;
   readonly namespace: string;
@@ -211,7 +212,8 @@ export async function acquireStandalone<
   const activeDaemon = daemon;
   const activeWeb = web;
   const activeWebUrl = webUrl;
-  if (activeDaemon == null || activeWeb == null || activeWebUrl == null) {
+  const activeDaemonUrl = daemonUrl;
+  if (activeDaemon == null || activeDaemonUrl == null || activeWeb == null || activeWebUrl == null) {
     throw new Error("standalone reached an impossible incomplete state");
   }
 
@@ -269,6 +271,7 @@ export async function acquireStandalone<
         web: webStatus,
       };
     },
+    daemonUrl: activeDaemonUrl,
     namespace,
     paths,
     webUrl: activeWebUrl,
