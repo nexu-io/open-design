@@ -654,11 +654,24 @@ jobs:
           set -euo pipefail
           app_path="$(jq -er '.appPath' "$RUNNER_TEMP/release-build/mac_arm64/build.json")"
           dmg_path="$(jq -er '.dmgPath' "$RUNNER_TEMP/release-build/mac_arm64/build.json")"
-          /usr/bin/codesign --verify --deep --strict --verbose=2 "$app_path"
-          /usr/bin/xcrun stapler validate "$app_path"
-          /usr/sbin/spctl --assess --type execute --verbose=4 "$app_path"
-          /usr/bin/xcrun stapler validate "$dmg_path"
-          /usr/sbin/spctl --assess --type open --context context:primary-signature --verbose=4 "$dmg_path"
+          app_name="$(basename "$app_path")"
+          mount_point="$(mktemp -d "$RUNNER_TEMP/release-beta-mac-arm64.XXXXXX")"
+          cleanup() {
+            /usr/bin/hdiutil detach "$mount_point" >/dev/null 2>&1 || true
+            rmdir "$mount_point" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          /usr/bin/hdiutil verify "$dmg_path"
+          /usr/bin/hdiutil attach "$dmg_path" -nobrowse -readonly -mountpoint "$mount_point"
+          candidate_app="$mount_point/$app_name"
+          if [ ! -d "$candidate_app" ]; then
+            echo "signed app not found in mac_arm64 DMG: $candidate_app" >&2
+            exit 1
+          fi
+          /usr/bin/codesign --verify --deep --strict --verbose=2 "$candidate_app"
+          /usr/bin/xcrun stapler validate "$candidate_app"
+          /usr/sbin/spctl --assess --type execute --verbose=4 "$candidate_app"
 
       - name: Upload mac_arm64 Standalone Closure dogfood build to release storage
         if: ${{ !cancelled() && !inputs.publish }}
@@ -1047,11 +1060,24 @@ jobs:
           set -euo pipefail
           app_path="$(jq -er '.appPath' "$RUNNER_TEMP/release-build/mac_x64/build.json")"
           dmg_path="$(jq -er '.dmgPath' "$RUNNER_TEMP/release-build/mac_x64/build.json")"
-          /usr/bin/codesign --verify --deep --strict --verbose=2 "$app_path"
-          /usr/bin/xcrun stapler validate "$app_path"
-          /usr/sbin/spctl --assess --type execute --verbose=4 "$app_path"
-          /usr/bin/xcrun stapler validate "$dmg_path"
-          /usr/sbin/spctl --assess --type open --context context:primary-signature --verbose=4 "$dmg_path"
+          app_name="$(basename "$app_path")"
+          mount_point="$(mktemp -d "$RUNNER_TEMP/release-beta-mac-x64.XXXXXX")"
+          cleanup() {
+            /usr/bin/hdiutil detach "$mount_point" >/dev/null 2>&1 || true
+            rmdir "$mount_point" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          /usr/bin/hdiutil verify "$dmg_path"
+          /usr/bin/hdiutil attach "$dmg_path" -nobrowse -readonly -mountpoint "$mount_point"
+          candidate_app="$mount_point/$app_name"
+          if [ ! -d "$candidate_app" ]; then
+            echo "signed app not found in mac_x64 DMG: $candidate_app" >&2
+            exit 1
+          fi
+          /usr/bin/codesign --verify --deep --strict --verbose=2 "$candidate_app"
+          /usr/bin/xcrun stapler validate "$candidate_app"
+          /usr/sbin/spctl --assess --type execute --verbose=4 "$candidate_app"
 
       - name: Delete failed mac_x64 tools-pack cache
         if: ${{ steps.mac_x64_tools_pack_build.outcome == 'failure' && steps.mac_x64_tools_pack_cache_restore.outputs.cache-matched-key != '' }}

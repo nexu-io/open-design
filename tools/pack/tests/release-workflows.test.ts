@@ -120,6 +120,13 @@ describe("release workflows", () => {
     expect(betaSelfHosted).toContain("metadata checkout is missing packages/");
     expect(beta).toContain("mac_arm64_update_metadata_url:");
     expect(beta).toContain("win_x64_update_metadata_url:");
+    expect(beta).toContain("Verify mac_arm64 signed and notarized artifacts");
+    expect(beta).toContain("Verify mac_x64 signed and notarized artifacts");
+    expect(countOccurrences(beta, '/usr/bin/hdiutil verify "$dmg_path"')).toBe(2);
+    expect(countOccurrences(beta, '/usr/bin/hdiutil attach "$dmg_path" -nobrowse -readonly -mountpoint "$mount_point"')).toBe(2);
+    expect(countOccurrences(beta, '/usr/bin/xcrun stapler validate "$candidate_app"')).toBe(2);
+    expect(countOccurrences(beta, '/usr/sbin/spctl --assess --type execute --verbose=4 "$candidate_app"')).toBe(2);
+    expect(beta).not.toContain('/usr/bin/xcrun stapler validate "$dmg_path"');
     expect(beta).toContain("OD_PACKAGED_E2E_MAC_UPDATE_METADATA_URL: ${{ inputs.mac_arm64_update_metadata_url }}");
     expect(beta).toContain("OD_PACKAGED_E2E_WIN_UPDATE_METADATA_URL: ${{ inputs.win_x64_update_metadata_url }}");
     expect(beta).toContain("POSTHOG_KEY: ${{ inputs.publish && secrets.POSTHOG_KEY || '' }}");
