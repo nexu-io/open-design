@@ -67,7 +67,7 @@ export async function resolveElectronStandaloneBinding(input: Readonly<{
   channel: string;
   namespace: string;
   paths: PackagedNamespacePaths;
-  releaseVersion: string;
+  releaseVersion: string | null;
   shellDigest: `sha256:${string}`;
   shellVersion: string;
 }>, options: Readonly<{
@@ -135,7 +135,7 @@ export async function resolveElectronStandaloneBinding(input: Readonly<{
         verification.manifest.artifact.entryPath,
       ),
       descriptor: Object.freeze({
-        release: Object.freeze({ version: input.releaseVersion }),
+        release: Object.freeze({ version: input.releaseVersion ?? pointer.version }),
         shell: Object.freeze({
           digest: input.shellDigest,
           type: "electron",

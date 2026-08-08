@@ -161,6 +161,26 @@ describe("Electron Standalone Store binding", () => {
     expect(await readClosureAttemptDescriptor(candidate.storePaths)).toBeNull();
   });
 
+  it("keeps the active Standalone version as release truth when no update was accepted", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-electron-standalone-release-fallback-"));
+    roots.push(root);
+    await materialize(root, "0.18.0-beta.6");
+
+    const selected = await resolveElectronStandaloneBinding({
+      ...input(root),
+      releaseVersion: null,
+    }, {
+      arch: "arm64",
+      platform: "darwin",
+    });
+
+    expect(selected.binding.descriptor).toMatchObject({
+      release: { version: "0.18.0-beta.6" },
+      shell: { version: "0.18.0-beta.4" },
+      standalone: { version: "0.18.0-beta.6" },
+    });
+  });
+
   it("maps the min shell floor to installer-required before importing bootloader.mjs", async () => {
     const root = await mkdtemp(join(tmpdir(), "od-electron-standalone-floor-"));
     roots.push(root);

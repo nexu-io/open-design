@@ -190,7 +190,7 @@ export async function runPackagedStandalone(
     channel: launcherRuntime.launcherPaths.channel,
     namespace: config.namespace,
     paths,
-    releaseVersion: resolvePackagedClosureReleaseVersion(update, shellVersion),
+    releaseVersion: resolvePackagedClosureReleaseVersion(update, null),
     shellDigest: await digestElectronShellEntry(options.shellEntryUrl),
     shellVersion,
   });

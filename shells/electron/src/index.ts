@@ -245,7 +245,7 @@ async function main(): Promise<void> {
     channel: shellRuntime.launcherPaths.channel,
     namespace,
     paths,
-    releaseVersion: resolvePackagedClosureReleaseVersion(update, shellVersion),
+    releaseVersion: resolvePackagedClosureReleaseVersion(update, null),
     shellDigest: await digestElectronShellEntry(import.meta.url),
     shellVersion,
   });

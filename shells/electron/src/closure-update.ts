@@ -38,8 +38,8 @@ export function resolvePackagedClosureReleaseTarget(
 /** Project the release truth only after this Store has accepted that release. */
 export function resolvePackagedClosureReleaseVersion(
   result: PackagedClosureUpdateResult | null,
-  fallback: string,
-): string {
+  fallback: string | null,
+): string | null {
   if (result == null || !("candidate" in result)) return fallback;
   if (result.state === "activated") return result.candidate.releaseVersion;
   if (result.state === "retained" && result.reason === "already-active") {

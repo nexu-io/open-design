@@ -107,5 +107,10 @@ describe("packaged Closure update adapter", () => {
       state: "retained",
     }, "0.18.0-beta.4")).toBe("0.18.0-beta.4");
     expect(resolvePackagedClosureReleaseVersion(null, "0.18.0-beta.4")).toBe("0.18.0-beta.4");
+    expect(resolvePackagedClosureReleaseVersion({
+      candidate,
+      reason: "shell-incompatible",
+      state: "retained",
+    }, null)).toBeNull();
   });
 });
