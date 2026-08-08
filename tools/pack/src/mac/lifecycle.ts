@@ -456,10 +456,13 @@ async function resolvePackedMacStartTarget(config: ToolPackConfig): Promise<{
   const paths = resolveMacPaths(config);
   const identity = resolveMacInstallIdentity(config);
   const candidates: Array<{ appPath: string; source: MacStartSource }> = [
+    // `tools-pack ... start` is a local delivery validator. When the current
+    // build exists it must win over an unrelated app already installed on the
+    // machine; installed locations remain useful fallbacks for install tests.
+    { appPath: paths.appPath, source: "built" },
     { appPath: paths.installedAppPath, source: "installed" },
     { appPath: paths.userApplicationsAppPath, source: "user-applications" },
     { appPath: paths.systemApplicationsAppPath, source: "system-applications" },
-    { appPath: paths.appPath, source: "built" },
   ];
 
   for (const candidate of candidates) {

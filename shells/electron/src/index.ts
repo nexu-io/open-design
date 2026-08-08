@@ -72,7 +72,7 @@ import {
 } from "./standalone-binding.js";
 import { createElectronStandaloneLauncher } from "./standalone-handoff.js";
 import { createStandaloneDesktopAuthRegistration } from "./standalone-commands.js";
-import { applyStandaloneBootstrapEnvironment } from "./standalone-environment.js";
+import { withStandaloneBootstrapEnvironment } from "./standalone-environment.js";
 import {
   parsePackagedStandaloneRequest,
   runPackagedStandalone,
@@ -246,11 +246,6 @@ async function main(): Promise<void> {
     shellDigest: await digestElectronShellEntry(import.meta.url),
     shellVersion,
   });
-  applyStandaloneBootstrapEnvironment({
-    appVersion: selection.pointer.version,
-    config: shellConfig,
-    mcpBootstrap,
-  });
   applyLaunchEnv(paths.runtimeRoot, stamp);
   const desktopControl = bootstrapSidecarRuntime(stamp, process.env, {
     app: APP_KEYS.DESKTOP,
@@ -258,7 +253,11 @@ async function main(): Promise<void> {
     contract: OPEN_DESIGN_SIDECAR_CONTRACT,
   });
 
-  const standalone = await createElectronStandaloneLauncher().launch(
+  const standalone = await withStandaloneBootstrapEnvironment({
+    appVersion: selection.pointer.version,
+    config: shellConfig,
+    mcpBootstrap,
+  }, async () => await createElectronStandaloneLauncher().launch(
     selection.binding,
     {
       async invoke(request) {
@@ -270,7 +269,7 @@ async function main(): Promise<void> {
         };
       },
     },
-  );
+  ));
   const status = await standalone.readStatus();
   if (status.state !== "running") {
     throw new Error(`Standalone entered terminal state before Desktop startup: ${status.state}`);

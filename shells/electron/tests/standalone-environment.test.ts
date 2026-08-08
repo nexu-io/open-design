@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { createStandaloneBootstrapEnvironment } from "../src/standalone-environment.js";
+import {
+  createStandaloneBootstrapEnvironment,
+  withStandaloneBootstrapEnvironment,
+} from "../src/standalone-environment.js";
 
 describe("Electron Standalone environment projection", () => {
   it("projects product config without exposing body layout to the shell", () => {
@@ -48,5 +51,35 @@ describe("Electron Standalone environment projection", () => {
       ELECTRON_RUN_AS_NODE: "1",
       OD_REQUIRE_DESKTOP_AUTH: "0",
     });
+  });
+
+  it("restores Electron-sensitive environment after the handoff resolves", async () => {
+    const previousRunAsNode = process.env.ELECTRON_RUN_AS_NODE;
+    const previousAppVersion = process.env.OD_APP_VERSION;
+    delete process.env.ELECTRON_RUN_AS_NODE;
+    process.env.OD_APP_VERSION = "outer-version";
+    try {
+      await withStandaloneBootstrapEnvironment({
+        appVersion: "0.18.0-beta.4",
+        config: {
+          amrProfile: null,
+          posthogHost: null,
+          posthogKey: null,
+          telemetryRelayUrl: null,
+          velaWebUrl: null,
+        },
+        mcpBootstrap: { args: [], command: null },
+      }, async () => {
+        expect(process.env.ELECTRON_RUN_AS_NODE).toBe("1");
+        expect(process.env.OD_APP_VERSION).toBe("0.18.0-beta.4");
+      });
+      expect(process.env.ELECTRON_RUN_AS_NODE).toBeUndefined();
+      expect(process.env.OD_APP_VERSION).toBe("outer-version");
+    } finally {
+      if (previousRunAsNode == null) delete process.env.ELECTRON_RUN_AS_NODE;
+      else process.env.ELECTRON_RUN_AS_NODE = previousRunAsNode;
+      if (previousAppVersion == null) delete process.env.OD_APP_VERSION;
+      else process.env.OD_APP_VERSION = previousAppVersion;
+    }
   });
 });

@@ -9,7 +9,7 @@ export const WIN_PREBUNDLED_WEB_SIDECAR_RELATIVE_PATH = "app/prebundled/web-side
 export const WIN_PREBUNDLED_DAEMON_CLI_RELATIVE_PATH = "app/prebundled/daemon/daemon-cli.mjs";
 export const WIN_PREBUNDLED_DAEMON_SIDECAR_RELATIVE_PATH = "app/prebundled/daemon/daemon-sidecar.mjs";
 export const WIN_PREBUNDLE_ESBUILD_TARGET = "node24";
-export const WIN_DAEMON_PREBUNDLE_ESM_REQUIRE_BANNER =
+export const WIN_PREBUNDLE_ESM_REQUIRE_BANNER =
   'import { createRequire as __odCreateRequire } from "node:module"; const require = __odCreateRequire(import.meta.url);';
 export const WIN_PREBUNDLE_ENTRYPOINTS_DIR_NAME = "prebundle-entrypoints";
 

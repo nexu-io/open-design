@@ -44,9 +44,28 @@ export function createStandaloneBootstrapEnvironment(
   };
 }
 
-export function applyStandaloneBootstrapEnvironment(input: StandaloneBootstrapEnvironmentInput): void {
-  const projected = createStandaloneBootstrapEnvironment(input);
+/**
+ * Project Shell-owned launch context only while entering Standalone. Electron
+ * renderer processes must never inherit ELECTRON_RUN_AS_NODE; the body has
+ * already snapshotted this environment into its sidecar launch specs before
+ * the first handoff resolves.
+ */
+export async function withStandaloneBootstrapEnvironment<T>(
+  input: StandaloneBootstrapEnvironmentInput,
+  task: () => Promise<T>,
+): Promise<T> {
+  const projected = createStandaloneBootstrapEnvironment(input, {});
+  const previous = new Map<string, string | undefined>();
   for (const [key, value] of Object.entries(projected)) {
+    previous.set(key, process.env[key]);
     if (value != null) process.env[key] = value;
+  }
+  try {
+    return await task();
+  } finally {
+    for (const [key, value] of previous) {
+      if (value == null) delete process.env[key];
+      else process.env[key] = value;
+    }
   }
 }

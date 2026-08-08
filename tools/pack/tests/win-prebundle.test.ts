@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
-  WIN_DAEMON_PREBUNDLE_ESM_REQUIRE_BANNER,
+  WIN_PREBUNDLE_ESM_REQUIRE_BANNER,
   WIN_PREBUNDLE_ESBUILD_TARGET,
   WIN_PREBUNDLE_POLICIES,
   WIN_PREBUNDLE_RUNTIME_DEPENDENCIES,
@@ -83,7 +83,7 @@ describe("win standalone prebundle policy", () => {
       "node-pty",
     ]);
     expect(WIN_PREBUNDLE_POLICIES.webSidecar.externals).toEqual([]);
-    expect(WIN_DAEMON_PREBUNDLE_ESM_REQUIRE_BANNER).toContain("createRequire");
+    expect(WIN_PREBUNDLE_ESM_REQUIRE_BANNER).toContain("createRequire");
     // Must match apps/daemon/package.json / the pnpm lockfile, or
     // electron-builder's collector drops the module from the shipped app and
     // the daemon dies at boot with ERR_MODULE_NOT_FOUND (issue #4638).

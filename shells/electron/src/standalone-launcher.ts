@@ -31,7 +31,7 @@ import {
   digestElectronShellEntry,
   resolveElectronStandaloneBinding,
 } from "./standalone-binding.js";
-import { applyStandaloneBootstrapEnvironment } from "./standalone-environment.js";
+import { withStandaloneBootstrapEnvironment } from "./standalone-environment.js";
 import { createElectronStandaloneLauncher } from "./standalone-handoff.js";
 
 export {
@@ -191,13 +191,6 @@ export async function runPackagedStandalone(
     shellDigest: await digestElectronShellEntry(options.shellEntryUrl),
     shellVersion,
   });
-  applyStandaloneBootstrapEnvironment({
-    appVersion: selection.pointer.version,
-    config: shellConfig,
-    mcpBootstrap,
-    requireDesktopAuth: false,
-  });
-
   const { shutdown, webUrl } = await acquirePackagedStandaloneStartup({
     confirmRuntime: async () => {
       await confirmPackagedLauncherRuntime(launcherRuntime);
@@ -227,7 +220,12 @@ export async function runPackagedStandalone(
     installMcp: async (daemonUrl) => {
       if (request.mcpInstallAgent === "codex") await installCodexMcp(daemonUrl);
     },
-    startStandalone: async () => await createElectronStandaloneLauncher().launch(
+    startStandalone: async () => await withStandaloneBootstrapEnvironment({
+      appVersion: selection.pointer.version,
+      config: shellConfig,
+      mcpBootstrap,
+      requireDesktopAuth: false,
+    }, async () => await createElectronStandaloneLauncher().launch(
       selection.binding,
       {
         async invoke(command) {
@@ -239,7 +237,7 @@ export async function runPackagedStandalone(
           };
         },
       },
-    ),
+    )),
     writeIdentity: async (status) => await writePackagedDesktopIdentity({
       identityPath: paths.standaloneIdentityPath,
       paths,

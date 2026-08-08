@@ -7,7 +7,7 @@ import { build } from "esbuild";
 import { describe, expect, it } from "vitest";
 
 import {
-  MAC_DAEMON_PREBUNDLE_ESM_REQUIRE_BANNER,
+  MAC_PREBUNDLE_ESM_REQUIRE_BANNER,
   MAC_PREBUNDLE_COPIED_RUNTIME_DEPENDENCIES,
   MAC_PREBUNDLE_ESBUILD_TARGET,
   MAC_PREBUNDLE_POLICIES,
@@ -88,7 +88,7 @@ describe("mac standalone prebundle policy", () => {
       "node-pty",
     ]);
     expect(MAC_PREBUNDLE_POLICIES.webSidecar.externals).toEqual([]);
-    expect(MAC_DAEMON_PREBUNDLE_ESM_REQUIRE_BANNER).toContain("createRequire");
+    expect(MAC_PREBUNDLE_ESM_REQUIRE_BANNER).toContain("createRequire");
     // Must match apps/daemon/package.json / the pnpm lockfile, or
     // electron-builder's collector drops the module from the shipped app and
     // the daemon dies at boot with ERR_MODULE_NOT_FOUND (issue #4638).
@@ -108,7 +108,7 @@ describe("mac standalone prebundle policy", () => {
     async () => {
       const workspaceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
       const result = await build({
-        banner: { js: MAC_DAEMON_PREBUNDLE_ESM_REQUIRE_BANNER },
+        banner: { js: MAC_PREBUNDLE_ESM_REQUIRE_BANNER },
         bundle: true,
         external: [...MAC_PREBUNDLE_POLICIES.daemonSidecar.externals],
         format: "esm",
@@ -135,7 +135,7 @@ describe("mac standalone prebundle policy", () => {
     async () => {
       const workspaceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
       const result = await build({
-        banner: { js: MAC_DAEMON_PREBUNDLE_ESM_REQUIRE_BANNER },
+        banner: { js: MAC_PREBUNDLE_ESM_REQUIRE_BANNER },
         bundle: true,
         external: [...MAC_PREBUNDLE_POLICIES.daemonSidecar.externals],
         format: "esm",
