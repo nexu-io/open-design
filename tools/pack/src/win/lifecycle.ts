@@ -13,7 +13,6 @@ import {
   type DesktopScreenshotResult,
   type DesktopStatusSnapshot,
   type DesktopUpdateAction,
-  type DesktopUpdateResult,
   type SidecarStamp,
   type WebStatusSnapshot,
 } from "@open-design/sidecar-proto";
@@ -32,6 +31,7 @@ import type { ToolPackConfig } from "../config.js";
 import { resolveToolPackLauncherLayout } from "../launcher-layout.js";
 import { readToolPackLauncherRuntimeSnapshot } from "../launcher-runtime-snapshot.js";
 import { readToolPackUpdateCacheLifecycleSnapshot } from "../update-cache-lifecycle-snapshot.js";
+import { requestDesktopUpdateAction } from "../update-action.js";
 import { DESKTOP_LOG_ECHO_ENV } from "./constants.js";
 import { listDirectories, pathExists, removeTree } from "./fs.js";
 import { readBuiltAppManifest } from "./manifest.js";
@@ -63,7 +63,6 @@ import type {
 } from "./types.js";
 
 const PACKAGED_CONFIG_PATH_ENV = "OD_PACKAGED_CONFIG_PATH";
-const UPDATE_ACTION_TIMEOUT_MS = 10 * 60 * 1000;
 
 function desktopStamp(config: ToolPackConfig): SidecarStamp {
   return {
@@ -626,11 +625,7 @@ export async function inspectPackedWinApp(
       ),
     }),
     ...(updateAction == null ? {} : {
-      update: await requestJsonIpc<DesktopUpdateResult>(
-        stamp.ipc,
-        { input: { action: updateAction }, type: SIDECAR_MESSAGES.UPDATE },
-        { timeoutMs: UPDATE_ACTION_TIMEOUT_MS },
-      ),
+      update: await requestDesktopUpdateAction(stamp, updateAction),
     }),
     status: desktopSnapshot.status,
     ...(desktopSnapshot.error == null ? {} : { statusError: desktopSnapshot.error }),

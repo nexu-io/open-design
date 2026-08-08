@@ -14,7 +14,6 @@ import {
   type DesktopScreenshotResult,
   type DesktopStatusSnapshot,
   type DesktopUpdateAction,
-  type DesktopUpdateResult,
   type SidecarStamp,
 } from "@open-design/sidecar-proto";
 import { createSidecarLaunchEnv, requestJsonIpc, resolveAppIpcPath } from "@open-design/sidecar";
@@ -31,6 +30,7 @@ import {
 import type { ToolPackConfig } from "../config.js";
 import { readToolPackLauncherRuntimeSnapshot } from "../launcher-runtime-snapshot.js";
 import { readToolPackUpdateCacheLifecycleSnapshot } from "../update-cache-lifecycle-snapshot.js";
+import { requestDesktopUpdateAction } from "../update-action.js";
 import { PACKAGED_CONFIG_PATH_ENV, writeLaunchPackagedConfig } from "./app-config.js";
 import { DESKTOP_LOG_ECHO_ENV } from "./constants.js";
 import { pathExists, scrubMacExtendedAttributes } from "./fs.js";
@@ -39,7 +39,6 @@ import { desktopIdentityPath, desktopLogPath, macAppExecutablePath, resolveMacPa
 import type { DesktopRootIdentityFallback, DesktopRootIdentityMarker, MacCleanupResult, MacInspectResult, MacInspectStatusPollResult, MacInspectStatusPollSample, MacInstallResult, MacStartResult, MacStartSource, MacStopResult, MacUninstallResult } from "./types.js";
 
 const execFileAsync = promisify(execFile);
-const UPDATE_ACTION_TIMEOUT_MS = 10 * 60 * 1000;
 
 function desktopStamp(config: ToolPackConfig): SidecarStamp {
   return {
@@ -782,11 +781,7 @@ export async function inspectPackedMacApp(
       ),
     }),
     ...(updateAction == null ? {} : {
-      update: await requestJsonIpc<DesktopUpdateResult>(
-        stamp.ipc,
-        { input: { action: updateAction }, type: SIDECAR_MESSAGES.UPDATE },
-        { timeoutMs: UPDATE_ACTION_TIMEOUT_MS },
-      ),
+      update: await requestDesktopUpdateAction(stamp, updateAction),
     }),
     status: desktopSnapshot.status,
     ...(desktopSnapshot.error == null ? {} : { statusError: desktopSnapshot.error }),
