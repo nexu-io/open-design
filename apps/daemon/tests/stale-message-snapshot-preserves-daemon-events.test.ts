@@ -600,6 +600,70 @@ describe('stale web message snapshot does not wipe daemon-owned run events', () 
     expect(stored?.events).toEqual([{ kind: 'text', text: 'retry result' }]);
   });
 
+  it('discards a delayed PUT from a superseded run generation', async () => {
+    // nettee P2 on #6418: after a retry pins run B, a delayed snapshot from the
+    // old run A must not repopulate run B's data — the guard keeps the current
+    // generation's run fields while letting metadata land.
+    delete process.env.POSTHOG_KEY;
+    delete process.env.POSTHOG_HOST;
+    delete process.env.LANGFUSE_PUBLIC_KEY;
+    delete process.env.LANGFUSE_SECRET_KEY;
+    delete process.env.LANGFUSE_BASE_URL;
+    delete process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL;
+
+    started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
+    await putConfig(started.url, {
+      agentId: 'claude',
+      telemetry: { metrics: true, content: false, artifactManifest: false },
+      privacyDecisionAt: Date.now(),
+    });
+
+    const { projectId, conversationId } = await createConversation(started.url);
+    const messageId = `generation_${randomUUID()}`;
+    const url = `${started.url}/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}`;
+
+    // Current generation run B is pinned with its terminal result.
+    const pinned = await fetch(url, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: messageId,
+        role: 'assistant',
+        content: 'run-b result',
+        runId: 'run-b',
+        runStatus: 'succeeded',
+        events: [{ kind: 'text', text: 'run-b result' }],
+      }),
+    });
+    expect(pinned.status).toBe(200);
+
+    // A delayed snapshot from the superseded run A lands afterwards.
+    const delayed = await fetch(url, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: messageId,
+        role: 'assistant',
+        content: 'run-a old attempt',
+        runId: 'run-a',
+        runStatus: 'succeeded',
+        events: [{ kind: 'text', text: 'run-a old attempt' }],
+      }),
+    });
+    expect(delayed.status).toBe(200);
+
+    const stored = await fetchAssistantMessage(
+      started.url,
+      projectId,
+      conversationId,
+      messageId,
+    );
+    expect(stored?.runId).toBe('run-b');
+    expect(stored?.runStatus).toBe('succeeded');
+    expect(stored?.content).toBe('run-b result');
+    expect(stored?.events).toEqual([{ kind: 'text', text: 'run-b result' }]);
+  });
+
   it('still lets the client write non-daemon-backed messages', async () => {
     delete process.env.POSTHOG_KEY;
     delete process.env.POSTHOG_HOST;

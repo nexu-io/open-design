@@ -306,17 +306,40 @@ function liveArtifactRefreshPhase(value: unknown): 'started' | 'succeeded' | 'fa
 
 export function pinAssistantMessageOnRunCreate(db: SqliteDb, run: ChatRunMessageState): void {
   if (!run.conversationId || !run.assistantMessageId) return;
+  // Scope the lookup to the run's own conversation: a run request for
+  // conversation B must never rebind (and potentially wipe) an assistant
+  // message that belongs to conversation A (nettee P1 on #6418).
   const existing = db
-    .prepare(`SELECT id FROM messages WHERE id = ?`)
-    .get(run.assistantMessageId);
+    .prepare(`SELECT id, run_id AS runId FROM messages WHERE id = ? AND conversation_id = ?`)
+    .get(run.assistantMessageId, run.conversationId) as
+    | { id: string; runId: string | null }
+    | undefined;
   if (existing) {
-    // This is the generation boundary: a run creation that rebinds a message
-    // to a NEW run id (e.g. a same-message retry reusing the failed
-    // assistant's id) must reset the run-owned fields to this run's start —
-    // the old attempt's terminal status, events, content, and timestamps must
-    // not survive into the new generation, or the retry's final web PUT gets
-    // misclassified as a stale regression and stays stuck on the old failure
-    // (#6418 review).
+    if (existing.runId === run.id) {
+      // Same run re-pinned (AMR recharge-resume): refresh status/context only —
+      // the partial persisted transcript must survive (mrcfps P2 on #6418).
+      db.prepare(
+        `UPDATE messages
+            SET run_status = ?,
+                session_mode = ?,
+                run_context_json = ?
+          WHERE id = ? AND conversation_id = ?`,
+      ).run(
+        run.status,
+        run.sessionMode ?? null,
+        run.context ? JSON.stringify(run.context) : null,
+        run.assistantMessageId,
+        run.conversationId,
+      );
+      return;
+    }
+    // Generation boundary: rebinding an existing assistant message to a NEW
+    // run id (first pin, or a same-message retry reusing the failed
+    // assistant's id) resets the run-owned fields to this run's start — the
+    // old attempt's terminal status, events, content, timestamps, and event
+    // cursor must not survive into the new generation (mrcfps P1 on #6418),
+    // otherwise the retry's final web PUT stays stuck on the old failure and a
+    // reattach resumes from the superseded run's last-run-event cursor.
     db.prepare(
       `UPDATE messages
           SET run_id = ?,
@@ -326,8 +349,9 @@ export function pinAssistantMessageOnRunCreate(db: SqliteDb, run: ChatRunMessage
               events_json = NULL,
               content = '',
               ended_at = NULL,
+              last_run_event_id = NULL,
               started_at = ?
-        WHERE id = ?`,
+        WHERE id = ? AND conversation_id = ?`,
     ).run(
       run.id,
       run.status,
@@ -335,9 +359,18 @@ export function pinAssistantMessageOnRunCreate(db: SqliteDb, run: ChatRunMessage
       run.context ? JSON.stringify(run.context) : null,
       run.createdAt,
       run.assistantMessageId,
+      run.conversationId,
     );
     return;
   }
+  // No row in this run's conversation. If the id already exists in ANOTHER
+  // conversation, the run's assistantMessageId is mis-scoped — `upsertMessage`
+  // keys by id only, so writing here would rebind/wipe the other
+  // conversation's message. Never touch it (nettee P1 on #6418).
+  const elsewhere = db
+    .prepare(`SELECT id FROM messages WHERE id = ?`)
+    .get(run.assistantMessageId);
+  if (elsewhere) return;
   upsertMessage(db, run.conversationId, {
     id: run.assistantMessageId,
     role: 'assistant',

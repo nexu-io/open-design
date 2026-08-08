@@ -317,6 +317,24 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
     incoming: Record<string, unknown>,
   ): Record<string, unknown> => {
     if (!stored || stored.role !== 'assistant' || !stored.runId) return incoming;
+    // A delayed PUT from a superseded run generation (incoming.runId differs
+    // from the stored, current run — e.g. an old attempt's snapshot landing
+    // after a retry pinned run B) must not repopulate the current run's data.
+    // Keep the stored run fields; metadata/feedback from the incoming snapshot
+    // still land (nettee P2 on #6418).
+    if (typeof incoming.runId === 'string' && incoming.runId !== stored.runId) {
+      return {
+        ...incoming,
+        role: stored.role,
+        runId: stored.runId,
+        runStatus: stored.runStatus,
+        events: stored.events ?? [],
+        content: stored.content ?? '',
+        lastRunEventId: stored.lastRunEventId,
+        startedAt: stored.startedAt,
+        endedAt: stored.endedAt,
+      };
+    }
     const incomingEvents = Array.isArray(incoming.events) ? incoming.events : [];
     const shrinksEvents =
       Boolean(stored.events) &&
