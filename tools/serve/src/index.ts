@@ -11,6 +11,7 @@ import { startUpdaterFixtureServer } from "./updater-fixture.js";
 type CliOptions = {
   artifactPath?: string;
   channel?: ReleaseChannel;
+  closureManifestPath?: string;
   controlLauncherVersionMin?: string;
   controlLauncherVersionUrl?: string;
   host?: string;
@@ -92,6 +93,7 @@ async function start(service: string, options: CliOptions): Promise<void> {
   const server = await startUpdaterFixtureServer({
     artifactPath: options.artifactPath,
     channel: options.channel,
+    closureManifestPath: options.closureManifestPath,
     controlLauncherVersionMin: options.controlLauncherVersionMin,
     controlLauncherVersionUrl: options.controlLauncherVersionUrl,
     host: options.host,
@@ -129,6 +131,7 @@ cli
   .command("start <service>", "Start a local fixture service")
   .option("--artifact-path <path>", "Serve a local update artifact file")
   .option("--channel <channel>", "Updater channel: stable|beta|betas|prerelease|preview", { default: "stable" })
+  .option("--closure-manifest-path <path>", "Serve a real Standalone Closure build beside updater metadata")
   .option("--control-launcher-version-min <version>", "Publish control.launcher.version.min in fixture metadata")
   .option("--control-launcher-version-url <url>", "Publish control.launcher.version.url in fixture metadata")
   .option("--host <host>", "Host to bind", { default: "127.0.0.1" })

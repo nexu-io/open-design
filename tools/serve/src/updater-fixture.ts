@@ -1,9 +1,14 @@
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { stat } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { basename } from "node:path";
+import { basename, dirname, join } from "node:path";
+
+import {
+  validateClosureCandidateManifest,
+  type ClosureCandidateManifest,
+} from "@open-design/closure-proto";
 
 import {
   isReleaseChannel,
@@ -13,10 +18,24 @@ import {
 
 type UpdaterFixtureChannel = ReleaseChannel;
 
+type ClosureFixtureFile = {
+  contentType: string;
+  path: string;
+  size: number;
+};
+
+type ClosureFixtureFiles = {
+  archive: ClosureFixtureFile;
+  inventory: ClosureFixtureFile;
+  manifest: ClosureFixtureFile;
+  provenance: ClosureFixtureFile;
+};
+
 export type UpdaterFixtureOptions = {
   artifactBody?: Buffer | string;
   artifactPath?: string;
   channel?: UpdaterFixtureChannel;
+  closureManifestPath?: string;
   controlLauncherVersionMin?: string;
   controlLauncherVersionUrl?: string;
   host?: string;
@@ -34,6 +53,8 @@ export type UpdaterFixtureInfo = {
   artifactUrl: string;
   channel: UpdaterFixtureChannel;
   checksumUrl: string;
+  closureArchiveUrl: string | null;
+  closureManifestPath: string | null;
   metadataUrl: string;
   origin: string;
   payloadChecksumUrl: string | null;
@@ -207,6 +228,22 @@ function channelMetadata(channel: UpdaterFixtureChannel, version: string): Recor
   return releaseMetadataVersionFields(channel, version);
 }
 
+function closureReleaseMetadata(
+  manifest: ClosureCandidateManifest,
+  files: ClosureFixtureFiles,
+): Record<string, unknown> {
+  const baseUrl = manifest.artifact.url.slice(0, -"closure.zip".length);
+  return {
+    assets: {
+      archive: { size: files.archive.size, url: manifest.artifact.url },
+      inventory: { size: files.inventory.size, url: `${baseUrl}inventory.json` },
+      manifest: { size: files.manifest.size, url: `${baseUrl}manifest.json` },
+      provenance: { size: files.provenance.size, url: `${baseUrl}provenance.json` },
+    },
+    manifest,
+  };
+}
+
 export async function startUpdaterFixtureServer(options: UpdaterFixtureOptions = {}): Promise<UpdaterFixtureServer> {
   const channel = normalizeChannel(options.channel);
   const host = options.host ?? "127.0.0.1";
@@ -253,6 +290,40 @@ export async function startUpdaterFixtureServer(options: UpdaterFixtureOptions =
   const payloadSha256 = options.payloadPath == null
     ? createHash("sha256").update(payloadBody).digest("hex")
     : await sha256File(options.payloadPath);
+  const closureRoot = options.closureManifestPath == null ? null : dirname(options.closureManifestPath);
+  const closureManifest = options.closureManifestPath == null
+    ? null
+    : validateClosureCandidateManifest(JSON.parse(await readFile(options.closureManifestPath, "utf8")) as unknown);
+  const closureFilePaths = closureRoot == null
+    ? null
+    : {
+        archive: join(closureRoot, "closure.zip"),
+        inventory: join(closureRoot, "inventory.json"),
+        manifest: join(closureRoot, "manifest.json"),
+        provenance: join(closureRoot, "provenance.json"),
+      };
+  let closureFiles: ClosureFixtureFiles | null = null;
+  if (closureManifest != null && closureFilePaths != null) {
+    const expectedPlatform = platform === "mac" ? "darwin-arm64" : "win32-x64";
+    if (closureManifest.identity.channel !== channel) {
+      throw new Error(`Closure channel ${closureManifest.identity.channel} does not match updater channel ${channel}`);
+    }
+    if (closureManifest.identity.platform !== expectedPlatform) {
+      throw new Error(`Closure platform ${closureManifest.identity.platform} does not match updater platform ${platform}`);
+    }
+    const fileEntries = await Promise.all(Object.entries(closureFilePaths).map(async ([label, filePath]) => {
+      const metadata = await stat(filePath).catch(() => null);
+      if (metadata == null || !metadata.isFile() || metadata.size <= 0) {
+        throw new Error(`Closure ${label} fixture must be a non-empty file: ${filePath}`);
+      }
+      return [label, {
+        contentType: label === "archive" ? "application/zip" : "application/json",
+        path: filePath,
+        size: metadata.size,
+      }] as const;
+    }));
+    closureFiles = Object.fromEntries(fileEntries) as ClosureFixtureFiles;
+  }
 
   let info: UpdaterFixtureInfo | null = null;
   const server = createServer((request, response) => {
@@ -268,6 +339,18 @@ export async function startUpdaterFixtureServer(options: UpdaterFixtureOptions =
         channel,
         generatedAt: new Date().toISOString(),
         ...channelMetadata(channel, version),
+        ...(closureManifest == null
+          ? {}
+          : {
+              releaseState: "complete",
+              releaseTargets: {
+                [platform === "mac" ? "mac_arm64" : "win_x64"]: {
+                  closure: closureReleaseMetadata(closureManifest, closureFiles!),
+                  enabled: true,
+                  status: "published",
+                },
+              },
+            }),
         ...(options.launcherSchema != null ? { launcher: { schema: options.launcherSchema } } : {}),
         ...(options.controlLauncherVersionMin != null || options.controlLauncherVersionUrl != null
           ? {
@@ -317,6 +400,20 @@ export async function startUpdaterFixtureServer(options: UpdaterFixtureOptions =
       }));
       return;
     }
+    if (closureFiles != null && info.closureArchiveUrl != null) {
+      const closureBaseUrl = info.closureArchiveUrl.slice(0, -"closure.zip".length);
+      const closureAssets = [
+        { ...closureFiles.archive, url: info.closureArchiveUrl },
+        { ...closureFiles.inventory, url: `${closureBaseUrl}inventory.json` },
+        { ...closureFiles.manifest, url: `${closureBaseUrl}manifest.json` },
+        { ...closureFiles.provenance, url: `${closureBaseUrl}provenance.json` },
+      ];
+      const asset = closureAssets.find((candidate) => new URL(candidate.url).pathname === path);
+      if (asset != null) {
+        sendFileArtifact(request, response, asset.path, asset.size, asset.contentType);
+        return;
+      }
+    }
     if (path === `/${channel}/versions/${version}/${artifactPathSegment}`) {
       if (options.artifactPath != null && artifactFileStat != null) {
         sendFileArtifact(request, response, options.artifactPath, artifactFileStat.size, contentType);
@@ -349,6 +446,13 @@ export async function startUpdaterFixtureServer(options: UpdaterFixtureOptions =
 
   await listen(server, port, host);
   const origin = serverOrigin(server);
+  const closureArchiveUrl = closureManifest?.artifact.url ?? null;
+  if (closureArchiveUrl != null && new URL(closureArchiveUrl).origin !== origin) {
+    await close(server);
+    throw new Error(
+      `Closure artifact URL origin ${new URL(closureArchiveUrl).origin} does not match fixture origin ${origin}`,
+    );
+  }
   const artifactUrl = `${origin}/${channel}/versions/${version}/${artifactPathSegment}`;
   const payloadUrl = includePayload ? `${origin}/${channel}/versions/${version}/${payloadPathSegment}` : null;
   info = {
@@ -356,6 +460,8 @@ export async function startUpdaterFixtureServer(options: UpdaterFixtureOptions =
     artifactUrl,
     channel,
     checksumUrl: `${artifactUrl}.sha256`,
+    closureArchiveUrl,
+    closureManifestPath: options.closureManifestPath ?? null,
     metadataUrl: `${origin}/${channel}/latest/metadata.json`,
     origin,
     payloadChecksumUrl: payloadUrl == null ? null : `${payloadUrl}.sha256`,

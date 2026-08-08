@@ -1,10 +1,23 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { createServer as createNetServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
 import { startUpdaterFixtureServer } from "../src/updater-fixture.js";
+
+async function reserveLoopbackPort(): Promise<number> {
+  const server = createNetServer();
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => resolve());
+  });
+  const address = server.address();
+  if (address == null || typeof address === "string") throw new Error("failed to reserve fixture port");
+  await new Promise<void>((resolve, reject) => server.close((error) => error == null ? resolve() : reject(error)));
+  return address.port;
+}
 
 describe("updater fixture server", () => {
   it("serves metadata, artifact bytes, and checksum for the updater flow", async () => {
@@ -59,6 +72,73 @@ describe("updater fixture server", () => {
       expect(metadata.control?.launcher?.version?.url).toBe("https://example.com/reinstall-help");
     } finally {
       await server.close();
+    }
+  });
+
+  it("publishes and serves a real Standalone Closure beside shell updater metadata", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-closure-fixture-"));
+    const port = await reserveLoopbackPort();
+    const version = "2.0.0-beta.3";
+    const archiveUrl = `http://127.0.0.1:${port}/beta/closure/darwin-arm64/versions/${version}/closure.zip`;
+    const digest = `sha256:${"a".repeat(64)}`;
+    const manifest = {
+      artifact: {
+        digest,
+        entryPath: "bootloader.mjs",
+        inventoryDigest: `sha256:${"b".repeat(64)}`,
+        mediaType: "application/vnd.open-design.closure.zip-v1",
+        size: 13,
+        url: archiveUrl,
+      },
+      compatibility: { shell: { minVersion: version } },
+      identity: {
+        channel: "beta",
+        digest,
+        platform: "darwin-arm64",
+        protocolVersion: 1,
+        version,
+      },
+      schemaVersion: 1,
+    };
+    await Promise.all([
+      writeFile(join(root, "closure.zip"), "closure body"),
+      writeFile(join(root, "inventory.json"), "{\"schemaVersion\":1,\"files\":[]}"),
+      writeFile(join(root, "manifest.json"), `${JSON.stringify(manifest)}\n`),
+      writeFile(join(root, "provenance.json"), "{\"schemaVersion\":1}"),
+    ]);
+    const server = await startUpdaterFixtureServer({
+      channel: "beta",
+      closureManifestPath: join(root, "manifest.json"),
+      platform: "mac",
+      port,
+      version,
+    });
+    try {
+      const metadata = await (await fetch(server.info.metadataUrl)).json() as {
+        releaseState?: string;
+        releaseTargets?: {
+          mac_arm64?: {
+            closure?: {
+              assets?: { archive?: { url?: string }; inventory?: { url?: string } };
+              manifest?: typeof manifest;
+            };
+            enabled?: boolean;
+            status?: string;
+          };
+        };
+      };
+      const target = metadata.releaseTargets?.mac_arm64;
+      expect(metadata.releaseState).toBe("complete");
+      expect(target?.enabled).toBe(true);
+      expect(target?.status).toBe("published");
+      expect(target?.closure?.manifest).toEqual(manifest);
+      expect(target?.closure?.assets?.archive?.url).toBe(archiveUrl);
+      expect(target?.closure?.assets?.inventory?.url).toBe(archiveUrl.replace("closure.zip", "inventory.json"));
+      expect(await (await fetch(archiveUrl)).text()).toBe("closure body");
+      expect(await (await fetch(archiveUrl.replace("closure.zip", "manifest.json"))).json()).toEqual(manifest);
+    } finally {
+      await server.close();
+      await rm(root, { force: true, recursive: true });
     }
   });
 
