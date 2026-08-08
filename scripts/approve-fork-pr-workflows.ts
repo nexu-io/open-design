@@ -100,7 +100,7 @@ function getPrNumber(): number {
 }
 
 function isAllowedSourceOrTestPath(path: string): boolean {
-  return /^(apps|packages)\/[^/]+\/(src|tests)\//.test(path);
+  return /^(apps|packages|shells)\/[^/]+\/(src|tests)\//.test(path);
 }
 
 export function isAllowedChangedPath(path: string): boolean {
