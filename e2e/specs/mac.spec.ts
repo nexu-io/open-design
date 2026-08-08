@@ -112,38 +112,6 @@ function existingProjectPptxExportExpression(projectId: string): string {
   })()
   `;
 }
-const updaterPopupExpression = `
-  (() => {
-    const popup = document.querySelector('[data-testid="updater-popup"]');
-    const button = document.querySelector('[data-testid="updater-install-button"]');
-    const reinstallLink = document.querySelector('[data-testid="updater-reinstall-learn-more"]');
-    return {
-      installButtonVisible: button instanceof HTMLButtonElement && !button.disabled,
-      reinstallLinkVisible: reinstallLink instanceof HTMLElement,
-      text: popup?.textContent?.trim() ?? null,
-      title: popup?.querySelector('h2')?.textContent?.trim() ?? null,
-      visible: popup instanceof HTMLElement,
-    };
-  })()
-`;
-const clickUpdaterInstallExpression = `
-  (() => {
-    const button = document.querySelector('[data-testid="updater-install-button"]');
-    if (!(button instanceof HTMLButtonElement)) return { clicked: false, reason: 'missing-install-button' };
-    if (button.disabled) return { clicked: false, reason: 'install-button-disabled' };
-    button.click();
-    return { clicked: true };
-  })()
-`;
-const clickUpdaterRailExpression = `
-  (() => {
-    const button = document.querySelector('[data-testid="entry-nav-updater"]');
-    if (!(button instanceof HTMLButtonElement)) return { clicked: false, reason: 'missing-updater-rail' };
-    if (button.getAttribute('aria-disabled') === 'true') return { clicked: false, reason: 'updater-rail-disabled' };
-    button.click();
-    return { clicked: true };
-  })()
-`;
 const packagedOnboardingExpression = `
   (() => {
     const onboardingShell = document.querySelector('.entry-shell--onboarding');
@@ -330,24 +298,10 @@ type PayloadRuntimeAcceptance = {
   pptx: PptxExportEvalValue;
 };
 
-type UpdaterPopupEvalValue = {
-  installButtonVisible: boolean;
-  reinstallLinkVisible: boolean;
-  text: string | null;
-  title: string | null;
-  visible: boolean;
-};
-
-type UpdaterClickEvalValue = {
-  clicked: boolean;
-  reason?: string;
-};
-
 type UpdaterRecoverySummary = {
   cleared: NonNullable<MacInspectResult['update']>;
   downloadedBeforeClear: NonNullable<MacInspectResult['update']>;
   dryRunInstall: MacInspectResult['update'] | null;
-  popup: UpdaterPopupEvalValue;
   recovered: NonNullable<MacInspectResult['update']>;
 };
 
@@ -381,7 +335,7 @@ macDescribe('packaged mac runtime smoke', () => {
     let recoveryFixture: ToolsServeUpdaterFixture | null = null;
     let recoveryPayloadPath: string | null = null;
     let logs: LogsResult | { skipped: true } = { skipped: true };
-    let popup: UpdaterPopupEvalValue | { skipped: true } = { skipped: true };
+    let installControl: NonNullable<MacInspectResult['update']> | { skipped: true } = { skipped: true };
     let updateInstall: NonNullable<MacInspectResult['update']> | { skipped: true } = { skipped: true };
     let updateStatus: NonNullable<MacInspectResult['update']> | { skipped: true } = { skipped: true };
     let payloadRuntime: PayloadRuntimeAcceptance | { skipped: true } = { skipped: true };
@@ -509,14 +463,6 @@ macDescribe('packaged mac runtime smoke', () => {
         expect(readyUpdate.update?.downloadPath).toEqual(expect.any(String));
         expectPathInside(readyUpdate.update?.downloadPath ?? '', join(runtimeNamespaceRoot, 'updates'));
 
-        popup = await openReadyUpdaterPrompt(updaterVersion);
-        expect(popup.visible).toBe(true);
-        expect(popup.title).toEqual(expect.any(String));
-        expect(popup.title?.trim().length).toBeGreaterThan(0);
-        expect(popup.installButtonVisible).toBe(true);
-        expect(popup.text ?? '').toContain(updaterVersion);
-        expect(popup.text ?? '').not.toMatch(/installer|安装器/i);
-
         const updateInspect = await runToolsPackJson<MacInspectResult>('inspect', ['--update-action', 'status']);
         expect(updateInspect.update?.state).toBe('downloaded');
         expect(updateInspect.update?.artifact?.type).toBe('payload');
@@ -527,15 +473,24 @@ macDescribe('packaged mac runtime smoke', () => {
         if (updateInspect.update == null) throw new Error('mac update status is missing');
         updateStatus = updateInspect.update;
 
-        const clickInstall = await runToolsPackJson<MacInspectResult>('inspect', ['--expr', clickUpdaterInstallExpression]);
-        const clickValue = assertUpdaterClickEvalValue(clickInstall.eval?.value);
-        expect(clickValue.clicked).toBe(true);
-        const postUpdateInspect = await waitForHealthyDesktopVersion(updaterVersion, start.pid);
+        // Shell update acceptance is anchored to the Shell-owned IPC control
+        // plane. Closure pages may project this state, but their route/layout
+        // must never be a prerequisite for applying a launcher payload.
+        const installInspect = await runToolsPackJson<MacInspectResult>('inspect', ['--update-action', 'install']);
+        if (installInspect.update == null) throw new Error('mac update install control result is missing');
+        expect(installInspect.update.state).toBe('downloaded');
+        expect(installInspect.update.installResult?.dryRun).toBe(false);
+        installControl = installInspect.update;
+        const postUpdateInspect = await waitForHealthyDesktopShellVersion(
+          updaterVersion,
+          updateScenario.expectedCurrentVersion,
+          start.pid,
+        );
         started = true;
         const postUpdateHealth = assertHealthEvalValue(postUpdateInspect.eval?.value);
         expect(postUpdateHealth.status).toBe(200);
         expect(postUpdateHealth.health.ok).toBe(true);
-        expect(postUpdateHealth.health.version).toBe(updaterVersion);
+        expect(postUpdateHealth.health.version).toBe(updateScenario.expectedCurrentVersion);
         const confirmedGeneration = settledLauncherGeneration(postUpdateInspect.launcher, updaterVersion);
         if (confirmedGeneration == null) throw new Error('post-update launcher did not settle on the target version');
         assertLauncherPointer(
@@ -558,7 +513,12 @@ macDescribe('packaged mac runtime smoke', () => {
         updateInstall = terminalUpdate.update;
 
         const identity = await readDesktopIdentityMarker();
-        assertPayloadDesktopIdentity(identity, postUpdateInspect.launcher, updaterVersion);
+        assertPayloadDesktopIdentity(
+          identity,
+          postUpdateInspect.launcher,
+          updaterVersion,
+          updateScenario.expectedCurrentVersion,
+        );
         expect(postUpdateInspect.launcher.attempt).toBeNull();
         assertSettledDesktopHandoff(postUpdateInspect.launcher.handoff);
 
@@ -576,11 +536,15 @@ macDescribe('packaged mac runtime smoke', () => {
         started = true;
         expect(coldStart.source).toBe('installed');
         expect(coldStart.appPath).toBe(install.installedAppPath);
-        const coldInspect = await waitForHealthyDesktopVersion(updaterVersion, identity.pid);
+        const coldInspect = await waitForHealthyDesktopShellVersion(
+          updaterVersion,
+          updateScenario.expectedCurrentVersion,
+          identity.pid,
+        );
         const coldHealth = assertHealthEvalValue(coldInspect.eval?.value);
         expect(coldHealth.status).toBe(200);
         expect(coldHealth.health.ok).toBe(true);
-        expect(coldHealth.health.version).toBe(updaterVersion);
+        expect(coldHealth.health.version).toBe(updateScenario.expectedCurrentVersion);
         const coldGeneration = settledLauncherGeneration(coldInspect.launcher, updaterVersion);
         if (coldGeneration == null) throw new Error('cold-start launcher did not settle on the target version');
         expect(coldGeneration).toBeGreaterThanOrEqual(confirmedGeneration);
@@ -594,7 +558,12 @@ macDescribe('packaged mac runtime smoke', () => {
         expect(coldInspect.launcher.attempt).toBeNull();
         assertSettledDesktopHandoff(coldInspect.launcher.handoff);
         const coldIdentity = await readDesktopIdentityMarker();
-        assertPayloadDesktopIdentity(coldIdentity, coldInspect.launcher, updaterVersion);
+        assertPayloadDesktopIdentity(
+          coldIdentity,
+          coldInspect.launcher,
+          updaterVersion,
+          updateScenario.expectedCurrentVersion,
+        );
         expect(coldIdentity.pid).not.toBe(identity.pid);
         const coldPptxInspect = await runToolsPackJson<MacInspectResult>('inspect', ['--expr', persistedPptxExpression]);
         const coldPptx = assertPptxExportEvalValue(coldPptxInspect.eval?.value);
@@ -640,7 +609,11 @@ macDescribe('packaged mac runtime smoke', () => {
           const recoveryStart = await runToolsPackJson<MacStartResult>('start');
           started = true;
           expect(recoveryStart.source).toBe('installed');
-          await waitForHealthyDesktopVersion(updaterVersion, coldIdentity.pid);
+          await waitForHealthyDesktopShellVersion(
+            updaterVersion,
+            updateScenario.expectedCurrentVersion,
+            coldIdentity.pid,
+          );
 
           const reinstallReady = await waitForUpdaterStatus(
             (inspect) =>
@@ -657,11 +630,6 @@ macDescribe('packaged mac runtime smoke', () => {
             reason: 'outer-below-min',
             url: 'https://example.test/updater-recovery',
           });
-
-          const reinstallPopup = await openReadyUpdaterPrompt(updaterVersion);
-          expect(reinstallPopup.visible).toBe(true);
-          expect(reinstallPopup.installButtonVisible).toBe(true);
-          expect(reinstallPopup.reinstallLinkVisible).toBe(true);
 
           const clearedInspect = await runToolsPackJson<MacInspectResult>('inspect', ['--update-action', 'clear-cache']);
           if (clearedInspect.update == null) throw new Error('clear-cache did not return updater status');
@@ -696,7 +664,6 @@ macDescribe('packaged mac runtime smoke', () => {
             cleared: clearedInspect.update,
             downloadedBeforeClear: reinstallReady.update,
             dryRunInstall: dryRunInstall.update ?? null,
-            popup: reinstallPopup,
             recovered: recovered.update,
           };
         }
@@ -749,7 +716,7 @@ macDescribe('packaged mac runtime smoke', () => {
         stop,
         uninstall,
         update: {
-          popup,
+          control: installControl,
           status: updateStatus,
           install: updateInstall,
         },
@@ -846,9 +813,13 @@ macDescribe('packaged mac runtime smoke', () => {
       const coldStart = await runToolsPackJson<MacStartResult>('start');
       cleanupStarted = true;
       expect(coldStart.source).toBe('installed');
-      const silent = await waitForHealthyDesktopVersion(targetVersion, start.pid);
+      const silent = await waitForHealthyDesktopShellVersion(
+        targetVersion,
+        updateScenario.expectedCurrentVersion,
+        start.pid,
+      );
       const silentHealth = assertHealthEvalValue(silent.eval?.value);
-      expect(silentHealth.health.version).toBe(targetVersion);
+      expect(silentHealth.health.version).toBe(updateScenario.expectedCurrentVersion);
       const silentGeneration = settledLauncherGeneration(silent.launcher, targetVersion);
       expect(silentGeneration).not.toBeNull();
       expect(silent.launcher.active?.version).toBe(targetVersion);
@@ -925,10 +896,8 @@ macDescribe('packaged mac runtime smoke', () => {
       const launcherRuntimePath = readyUpdate.launcher.runtimePath;
       const launcherAttemptsPath = readyUpdate.launcher.attemptsPath;
 
-      const popup = await openReadyUpdaterPrompt(targetVersion);
-      expect(popup.installButtonVisible).toBe(true);
-      const clickInstall = await runToolsPackJson<MacInspectResult>('inspect', ['--expr', clickUpdaterInstallExpression]);
-      expect(assertUpdaterClickEvalValue(clickInstall.eval?.value).clicked).toBe(true);
+      const installCorrupt = await runToolsPackJson<MacInspectResult>('inspect', ['--update-action', 'install']);
+      expect(installCorrupt.update?.state).toBe('downloaded');
 
       // The app quits for the relaunch; the corrupted payload stub then exits
       // before any launcher bookkeeping. Wait for the desktop to disappear.
@@ -954,7 +923,12 @@ macDescribe('packaged mac runtime smoke', () => {
       const rollbackStart = await runToolsPackJson<MacStartResult>('start');
       cleanupStarted = true;
       expect(rollbackStart.source).toBe('installed');
-      const rolledBack = await waitForHealthyDesktopVersion(updateScenario.expectedCurrentVersion, start.pid, false);
+      const rolledBack = await waitForHealthyDesktopShellVersion(
+        updateScenario.expectedCurrentVersion,
+        updateScenario.expectedCurrentVersion,
+        start.pid,
+        false,
+      );
       const rolledBackHealth = assertHealthEvalValue(rolledBack.eval?.value);
       expect(rolledBackHealth.health.version).toBe(updateScenario.expectedCurrentVersion);
       expect(rolledBack.launcher.lastSuccessful?.version).toBe(updateScenario.expectedCurrentVersion);
@@ -995,12 +969,15 @@ macDescribe('packaged mac runtime smoke', () => {
           status.update.artifact?.type === 'payload',
         'healthy payload downloaded after rollback',
       );
-      await openReadyUpdaterPrompt(healedVersion);
-      const healClick = await runToolsPackJson<MacInspectResult>('inspect', ['--expr', clickUpdaterInstallExpression]);
-      expect(assertUpdaterClickEvalValue(healClick.eval?.value).clicked).toBe(true);
-      const healed = await waitForHealthyDesktopVersion(healedVersion, rollbackStart.pid);
+      const installHealed = await runToolsPackJson<MacInspectResult>('inspect', ['--update-action', 'install']);
+      expect(installHealed.update?.state).toBe('downloaded');
+      const healed = await waitForHealthyDesktopShellVersion(
+        healedVersion,
+        updateScenario.expectedCurrentVersion,
+        rollbackStart.pid,
+      );
       const healedHealth = assertHealthEvalValue(healed.eval?.value);
-      expect(healedHealth.health.version).toBe(healedVersion);
+      expect(healedHealth.health.version).toBe(updateScenario.expectedCurrentVersion);
       const healedGeneration = settledLauncherGeneration(healed.launcher, healedVersion);
       expect(healedGeneration).not.toBeNull();
       expect(healed.launcher.active?.version).toBe(healedVersion);
@@ -2227,7 +2204,12 @@ async function waitForHealthyDesktop(): Promise<MacInspectResult> {
 
   while (Date.now() - startedAt < timeoutMs) {
     try {
-      const inspect = await runToolsPackJson<MacInspectResult>('inspect', ['--expr', healthExpression]);
+      const inspect = await runToolsPackJson<MacInspectResult>('inspect', [
+        '--expr',
+        healthExpression,
+        '--update-action',
+        'status',
+      ]);
       lastResult = inspect;
       if (inspect.status?.state === 'running' && inspect.eval?.ok === true) {
         const value = asHealthEvalValue(inspect.eval.value);
@@ -2244,8 +2226,9 @@ async function waitForHealthyDesktop(): Promise<MacInspectResult> {
   throw new Error(`packaged mac runtime did not become healthy: ${formatUnknown(lastResult)}`);
 }
 
-async function waitForHealthyDesktopVersion(
-  expectedVersion: string,
+async function waitForHealthyDesktopShellVersion(
+  expectedShellVersion: string,
+  expectedStandaloneVersion: string,
   previousPid: number | null | undefined,
   // The rollback degraded steady state deliberately keeps the broken pointer
   // active (with its attempt as evidence), so callers waiting on a rolled-back
@@ -2258,16 +2241,22 @@ async function waitForHealthyDesktopVersion(
 
   while (Date.now() - startedAt < timeoutMs) {
     try {
-      const inspect = await runToolsPackJson<MacInspectResult>('inspect', ['--expr', healthExpression]);
+      const inspect = await runToolsPackJson<MacInspectResult>('inspect', [
+        '--expr',
+        healthExpression,
+        '--update-action',
+        'status',
+      ]);
       lastResult = inspect;
       if (inspect.status?.state === 'running' && inspect.eval?.ok === true) {
         const value = asHealthEvalValue(inspect.eval.value);
         if (
           value?.status === 200 &&
           value.health.ok === true &&
-          value.health.version === expectedVersion &&
+          value.health.version === expectedStandaloneVersion &&
+          inspect.update?.currentVersion === expectedShellVersion &&
           (previousPid == null || inspect.status.pid !== previousPid) &&
-          (!requireSettledLauncher || settledLauncherGeneration(inspect.launcher, expectedVersion) != null)
+          (!requireSettledLauncher || settledLauncherGeneration(inspect.launcher, expectedShellVersion) != null)
         ) {
           return inspect;
         }
@@ -2278,7 +2267,9 @@ async function waitForHealthyDesktopVersion(
     await delay(1000);
   }
 
-  throw new Error(`packaged mac runtime did not relaunch healthy on ${expectedVersion}: ${formatUnknown(lastResult)}`);
+  throw new Error(
+    `packaged mac Shell ${expectedShellVersion} did not relaunch with Standalone ${expectedStandaloneVersion}: ${formatUnknown(lastResult)}`,
+  );
 }
 
 async function waitForPackagedOnboarding(
@@ -2434,56 +2425,6 @@ async function waitForDesktopGone(label: string, timeoutMs = 120_000): Promise<v
   throw new Error(`${label}: desktop still running: ${formatUnknown(lastResult)}`);
 }
 
-async function openReadyUpdaterPrompt(version: string): Promise<UpdaterPopupEvalValue> {
-  await clickUpdaterRailButton('open ready updater prompt');
-  return await waitForUpdaterPopupMatching(
-    (popup) => popup.visible && popup.installButtonVisible && (popup.text ?? '').includes(version),
-    'ready updater prompt',
-  );
-}
-
-async function clickUpdaterRailButton(label: string, timeoutMs = 90_000): Promise<void> {
-  const startedAt = Date.now();
-  let lastResult: unknown = null;
-  while (Date.now() - startedAt < timeoutMs) {
-    try {
-      const click = await runToolsPackJson<MacInspectResult>('inspect', ['--expr', clickUpdaterRailExpression]);
-      const value = assertUpdaterClickEvalValue(click.eval?.value);
-      lastResult = value;
-      if (value.clicked) return;
-    } catch (error) {
-      lastResult = error;
-    }
-    await delay(750);
-  }
-  throw new Error(`${label}: updater rail did not become clickable: ${formatUnknown(lastResult)}`);
-}
-
-async function waitForUpdaterPopupMatching(
-  predicate: (value: UpdaterPopupEvalValue) => boolean,
-  label: string,
-  timeoutMs = 90_000,
-): Promise<UpdaterPopupEvalValue> {
-  const startedAt = Date.now();
-  let lastResult: unknown = null;
-
-  while (Date.now() - startedAt < timeoutMs) {
-    try {
-      const inspect = await runToolsPackJson<MacInspectResult>('inspect', ['--expr', updaterPopupExpression]);
-      lastResult = inspect;
-      if (inspect.status?.state === 'running' && inspect.eval?.ok === true) {
-        const value = asUpdaterPopupEvalValue(inspect.eval.value);
-        if (value != null && predicate(value)) return value;
-      }
-    } catch (error) {
-      lastResult = error;
-    }
-    await delay(1000);
-  }
-
-  throw new Error(`${label}: updater popup timed out: ${formatUnknown(lastResult)}`);
-}
-
 async function readDesktopIdentityMarker(): Promise<DesktopIdentityMarker> {
   const markerPath = join(runtimeNamespaceRoot, 'runtime', 'desktop-root.json');
   const value = JSON.parse(await readFile(markerPath, 'utf8')) as unknown;
@@ -2519,12 +2460,18 @@ function assertClosureDesktopIdentity(identity: DesktopIdentityMarker, version: 
 function assertPayloadDesktopIdentity(
   identity: DesktopIdentityMarker,
   launcher: LauncherSnapshot,
-  version: string,
+  shellVersion: string,
+  standaloneVersion: string,
 ): void {
-  const payloadRoot = join(launcher.versionsRoot, version, 'payload');
+  const payloadRoot = join(launcher.versionsRoot, shellVersion, 'payload');
   expect(identity.pid).toBeGreaterThan(0);
   expectPathInside(identity.appPath, payloadRoot);
   expectPathInside(identity.executablePath, payloadRoot);
+  expect(identity.runtime?.descriptor).toMatchObject({
+    release: { version: standaloneVersion },
+    shell: { type: 'electron', version: shellVersion },
+    standalone: { protocolVersion: 1, version: standaloneVersion },
+  });
 }
 
 function assertPptxExportEvalValue(value: unknown): PptxExportEvalValue {
@@ -2645,14 +2592,6 @@ function assertHealthEvalValue(value: unknown): HealthEvalValue {
   return normalized;
 }
 
-function assertUpdaterClickEvalValue(value: unknown): UpdaterClickEvalValue {
-  const normalized = asUpdaterClickEvalValue(value);
-  if (normalized == null) {
-    throw new Error(`unexpected updater click eval value: ${formatUnknown(value)}`);
-  }
-  return normalized;
-}
-
 function asHealthEvalValue(value: unknown): HealthEvalValue | null {
   if (!isRecord(value)) return null;
   if (typeof value.href !== 'string' || typeof value.status !== 'number' || typeof value.title !== 'string') return null;
@@ -2668,23 +2607,6 @@ function asPackagedOnboardingEvalValue(value: unknown): PackagedOnboardingEvalVa
   if (value.text != null && typeof value.text !== 'string') return null;
   if (typeof value.title !== 'string') return null;
   return value as PackagedOnboardingEvalValue;
-}
-
-function asUpdaterPopupEvalValue(value: unknown): UpdaterPopupEvalValue | null {
-  if (!isRecord(value)) return null;
-  if (typeof value.visible !== 'boolean') return null;
-  if (typeof value.installButtonVisible !== 'boolean') return null;
-  if (typeof value.reinstallLinkVisible !== 'boolean') return null;
-  if (value.title != null && typeof value.title !== 'string') return null;
-  if (value.text != null && typeof value.text !== 'string') return null;
-  return value as UpdaterPopupEvalValue;
-}
-
-function asUpdaterClickEvalValue(value: unknown): UpdaterClickEvalValue | null {
-  if (!isRecord(value)) return null;
-  if (typeof value.clicked !== 'boolean') return null;
-  if (value.reason != null && typeof value.reason !== 'string') return null;
-  return value as UpdaterClickEvalValue;
 }
 
 function expectPathInside(filePath: string, expectedRoot: string): void {
