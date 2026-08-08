@@ -141,6 +141,42 @@ describe('pinAssistantMessageOnRunCreate generation boundary (#6418)', () => {
     expect(m.endedAt).toBeNull();
   });
 
+  it('does not generation-reset a row owned by a still-active run', () => {
+    // nettee on #6418: a second concurrent run sharing the same
+    // assistantMessageId must not clear the first run's in-flight events —
+    // rebinding a row whose current run is still active would corrupt the
+    // transcript (the route rejects it; this is the defense-in-depth skip).
+    const db = createDb();
+    db.prepare(`INSERT INTO conversations (id) VALUES ('conv-a')`).run();
+    seedMessage(db, {
+      id: 'msg-1',
+      conversationId: 'conv-a',
+      content: 'in-flight',
+      events: [{ kind: 'text', text: 'in-flight' }],
+      runId: 'run-a',
+      runStatus: 'running',
+      lastRunEventId: 'evt-3',
+      startedAt: 100,
+    });
+
+    pinAssistantMessageOnRunCreate(db, {
+      id: 'run-b',
+      conversationId: 'conv-a',
+      assistantMessageId: 'msg-1',
+      status: 'queued',
+      createdAt: 300,
+    });
+
+    const m = readMessage(db, 'msg-1');
+    // Untouched: still owned by run-a with its in-flight transcript.
+    expect(m.runId).toBe('run-a');
+    expect(m.runStatus).toBe('running');
+    expect(m.content).toBe('in-flight');
+    expect(m.eventsJson).not.toBeNull();
+    expect(m.lastRunEventId).toBe('evt-3');
+    expect(m.startedAt).toBe(100);
+  });
+
   it('does not touch a message in another conversation', () => {
     const db = createDb();
     db.prepare(`INSERT INTO conversations (id) VALUES ('conv-a'), ('conv-b')`).run();

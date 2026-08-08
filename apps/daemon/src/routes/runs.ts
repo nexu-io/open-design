@@ -118,6 +118,7 @@ import {
   BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE,
 } from '../runtimes/byok-opencode.js';
 import { resolveChatRunInactivityTimeoutMs } from '../runtimes/chat-run-lifecycle.js';
+import { TERMINAL_RUN_STATUSES } from '../runtimes/runs.js';
 import {
   deriveActivationMilestones,
   runAskedUserQuestion,
@@ -1595,10 +1596,20 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     if (clientAssistantMessageId && !isSafeId(clientAssistantMessageId)) {
       return sendApiError(res, 400, 'BAD_REQUEST', 'assistantMessageId is invalid');
     }
-    if (clientAssistantMessageId && typeof meta.conversationId === 'string') {
+    if (clientAssistantMessageId) {
+      // Without a resolvable conversation there is nothing to validate the
+      // assistantMessageId against — the run would mutate a row it does not
+      // own via the id-only writers. Reject rather than guess (nettee).
+      if (typeof meta.conversationId !== 'string' || !meta.conversationId) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'assistantMessageId requires a conversation');
+      }
       const existingAssistantPin = db
-        .prepare(`SELECT role, conversation_id AS conversationId FROM messages WHERE id = ?`)
-        .get(clientAssistantMessageId) as { role?: unknown; conversationId?: unknown } | undefined;
+        .prepare(
+          `SELECT role, conversation_id AS conversationId, run_status AS runStatus FROM messages WHERE id = ?`,
+        )
+        .get(clientAssistantMessageId) as
+        | { role?: unknown; conversationId?: unknown; runStatus?: unknown }
+        | undefined;
       if (existingAssistantPin && existingAssistantPin.role !== 'assistant') {
         return sendApiError(
           res,
@@ -1616,6 +1627,21 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           409,
           'IDEMPOTENCY_CONFLICT',
           'assistantMessageId belongs to a different conversation',
+        );
+      }
+      // An existing row owned by a still-active run must not be rebound — two
+      // concurrent runs sharing the assistantMessageId would reset each
+      // other's generation and corrupt the transcript (nettee).
+      if (
+        existingAssistantPin
+        && typeof existingAssistantPin.runStatus === 'string'
+        && !TERMINAL_RUN_STATUSES.has(existingAssistantPin.runStatus)
+      ) {
+        return sendApiError(
+          res,
+          409,
+          'RUN_IN_PROGRESS',
+          'assistantMessageId is already bound to an active run',
         );
       }
     }
@@ -3040,10 +3066,20 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       typeof meta.assistantMessageId === 'string' && meta.assistantMessageId
         ? meta.assistantMessageId
         : null;
-    if (chatAssistantMessageId && typeof meta.conversationId === 'string') {
+    if (chatAssistantMessageId) {
+      // Without a resolvable conversation there is nothing to validate the
+      // assistantMessageId against — the run would mutate a row it does not
+      // own via the id-only writers (nettee on #6418).
+      if (typeof meta.conversationId !== 'string' || !meta.conversationId) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'assistantMessageId requires a conversation');
+      }
       const existingAssistantPin = db
-        .prepare(`SELECT role, conversation_id AS conversationId FROM messages WHERE id = ?`)
-        .get(chatAssistantMessageId) as { role?: unknown; conversationId?: unknown } | undefined;
+        .prepare(
+          `SELECT role, conversation_id AS conversationId, run_status AS runStatus FROM messages WHERE id = ?`,
+        )
+        .get(chatAssistantMessageId) as
+        | { role?: unknown; conversationId?: unknown; runStatus?: unknown }
+        | undefined;
       if (existingAssistantPin && existingAssistantPin.role !== 'assistant') {
         return sendApiError(
           res,
@@ -3061,6 +3097,21 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           409,
           'IDEMPOTENCY_CONFLICT',
           'assistantMessageId belongs to a different conversation',
+        );
+      }
+      // An existing row owned by a still-active run must not be rebound — two
+      // concurrent runs sharing the assistantMessageId would reset each
+      // other's generation and corrupt the transcript (nettee).
+      if (
+        existingAssistantPin
+        && typeof existingAssistantPin.runStatus === 'string'
+        && !TERMINAL_RUN_STATUSES.has(existingAssistantPin.runStatus)
+      ) {
+        return sendApiError(
+          res,
+          409,
+          'RUN_IN_PROGRESS',
+          'assistantMessageId is already bound to an active run',
         );
       }
     }

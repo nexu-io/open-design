@@ -313,11 +313,11 @@ export function pinAssistantMessageOnRunCreate(db: SqliteDb, run: ChatRunMessage
   // #6418). The route also rejects mis-scoped ids, this is defense in depth.
   const existing = db
     .prepare(
-      `SELECT id, run_id AS runId FROM messages
+      `SELECT id, run_id AS runId, run_status AS runStatus FROM messages
         WHERE id = ? AND conversation_id = ? AND role = 'assistant'`,
     )
     .get(run.assistantMessageId, run.conversationId) as
-    | { id: string; runId: string | null }
+    | { id: string; runId: string | null; runStatus: string | null }
     | undefined;
   if (existing) {
     if (existing.runId === run.id) {
@@ -339,6 +339,14 @@ export function pinAssistantMessageOnRunCreate(db: SqliteDb, run: ChatRunMessage
         run.assistantMessageId,
         run.conversationId,
       );
+      return;
+    }
+    // Defense in depth: never generation-reset a row owned by a STILL-ACTIVE
+    // run — two concurrent runs sharing the assistantMessageId would otherwise
+    // clear each other's in-flight events/content and corrupt the transcript.
+    // The route rejects this case; this skip keeps the destructive reset from
+    // firing on a race that slips past it (nettee on #6418).
+    if (existing.runStatus === 'queued' || existing.runStatus === 'running') {
       return;
     }
     // Generation boundary: rebinding an existing assistant message to a NEW

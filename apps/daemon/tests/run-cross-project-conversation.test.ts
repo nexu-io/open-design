@@ -248,6 +248,87 @@ describe('run cross-project conversation ownership', () => {
       error: { code: 'INVALID_ASSISTANT_MESSAGE' },
     });
   });
+
+  it('rejects a supplied assistantMessageId when no conversation is bound', async () => {
+    // nettee on #6418: /api/chat is a valid no-conversation route, but a
+    // supplied assistantMessageId with no resolvable conversation cannot be
+    // validated and would mutate a foreign row via the id-only writers.
+    started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
+    const url = started.url;
+
+    const projectA = `xown_noconv_${randomUUID()}`;
+    await createProject(url, projectA, 'No-conv A');
+
+    const assistantId = `assistant_noconv_${randomUUID()}`;
+    const resp = await fetch(`${url}/api/chat`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        projectId: projectA,
+        assistantMessageId: assistantId,
+        clientRequestId: `cr_noconv_${randomUUID()}`,
+        agentId: 'claude',
+        message: 'M',
+        currentPrompt: 'M',
+      }),
+    });
+    expect(resp.status).toBe(400);
+    expect(await resp.json()).toMatchObject({
+      error: { code: 'BAD_REQUEST' },
+    });
+  });
+
+  it('rejects rebinding an assistantMessageId owned by a still-active run', async () => {
+    // nettee on #6418: two concurrent runs sharing the assistantMessageId must
+    // not reset each other's generation — a row owned by a running run is not
+    // rebindable.
+    started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
+    const url = started.url;
+
+    const projectA = `xown_active_${randomUUID()}`;
+    await createProject(url, projectA, 'Active A');
+
+    const convA = await firstConversationId(url, projectA);
+    expect(convA).toBeTruthy();
+
+    // Seed an assistant message owned by a running run.
+    const assistantId = `assistant_active_${randomUUID()}`;
+    const seed = await fetch(
+      `${url}/api/projects/${projectA}/conversations/${convA}/messages/${assistantId}`,
+      {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          id: assistantId,
+          role: 'assistant',
+          content: 'in-flight',
+          runId: 'run-active',
+          runStatus: 'running',
+          events: [{ kind: 'text', text: 'in-flight' }],
+        }),
+      },
+    );
+    expect(seed.status).toBe(200);
+
+    // A second run must not rebind that active row.
+    const resp = await fetch(`${url}/api/runs`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        projectId: projectA,
+        conversationId: convA,
+        assistantMessageId: assistantId,
+        clientRequestId: `cr_active_${randomUUID()}`,
+        agentId: 'claude',
+        message: 'M',
+        currentPrompt: 'M',
+      }),
+    });
+    expect(resp.status).toBe(409);
+    expect(await resp.json()).toMatchObject({
+      error: { code: 'RUN_IN_PROGRESS' },
+    });
+  });
 });
 
 async function createProject(url: string, id: string, name: string): Promise<void> {
