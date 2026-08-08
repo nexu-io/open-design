@@ -14,6 +14,18 @@ vi.mock('../../src/components/home-hero/PlaceholderCarousel', () => ({
   PlaceholderCarousel: () => null,
 }));
 
+vi.mock('../../src/collab/useWorkspaceContext', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/collab/useWorkspaceContext')>();
+  return {
+    ...actual,
+    useWorkspaceContext: () => ({
+      context: null,
+      loading: false,
+      failure: 'unsupported' as const,
+    }),
+  };
+});
+
 import { HomeView } from '../../src/components/HomeView';
 import { homeHeroPromptText, setHomeHeroPrompt } from '../helpers/home-hero-lexical';
 
@@ -111,6 +123,15 @@ afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
 });
+
+// #5517 removed the inline template rail from Home; scenario templates are
+// picked from the composer footer's radial Template picker instead.
+async function pickHomeTemplate(id: string) {
+  const trigger = await screen.findByTestId('home-hero-template-trigger');
+  await waitFor(() => expect((trigger as HTMLButtonElement).disabled).toBe(false));
+  fireEvent.click(trigger);
+  fireEvent.click(await screen.findByTestId(`home-hero-template-wedge-${id}`));
+}
 
 describe('HomeView context picker', () => {
   it('stages pasted files on Home and submits them as first-turn context', async () => {
@@ -335,9 +356,9 @@ describe('HomeView context picker', () => {
       />,
     );
 
-    fireEvent.click(await screen.findByTestId('home-hero-rail-prototype'));
+    await pickHomeTemplate('prototype');
     await waitFor(() => {
-      expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Prototype');
+      expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('UI Mockup');
     });
 
     screen.getByTestId('home-hero-input');
@@ -347,7 +368,10 @@ describe('HomeView context picker', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('home-hero-active-skill')).toBeTruthy();
-      expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('None');
+      // Round-4 skin: the cleared template pill shows the gray creation-type
+      // kicker instead of a "None" placeholder label.
+      expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Creation type');
+      expect(screen.getByTestId('home-hero-template-trigger').textContent).not.toContain('Slide deck');
     });
 
     fireEvent.click(screen.getByTestId('home-hero-submit'));
@@ -415,9 +439,9 @@ describe('HomeView context picker', () => {
       expect(screen.getByTestId('home-hero-active-skill')).toBeTruthy();
     });
 
-    fireEvent.click(await screen.findByTestId('home-hero-rail-prototype'));
+    await pickHomeTemplate('prototype');
     await waitFor(() => {
-      expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Prototype');
+      expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('UI Mockup');
       expect(screen.queryByTestId('home-hero-active-skill')).toBeNull();
     });
 

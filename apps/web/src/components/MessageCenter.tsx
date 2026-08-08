@@ -1,5 +1,5 @@
 import { Button } from '@open-design/components';
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 
 import { useI18n, type Locale } from '../i18n';
@@ -36,16 +36,44 @@ function formatPublishedDate(value: string, locale: Locale): string | null {
 
 interface Props {
   onOpenNotificationSettings?: () => void;
+  /** Hide the built-in bell trigger — the host renders its own entry point
+   *  (e.g. an account-menu row) and drives the panel via `open`/`onOpenChange`. */
+  hideTrigger?: boolean;
+  /** The still-mounted host control focus returns to when the panel closes.
+   *  Required alongside `hideTrigger`: the built-in bell is what focus would
+   *  otherwise return to, and a host that hides it owns that duty instead. */
+  returnFocusRef?: RefObject<HTMLElement | null>;
+  /** Controlled open state; pair with `onOpenChange` when `hideTrigger` is set. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  /** Streams the unread count so hosts can render their own badge (e.g. the
+   *  rail avatar's red dot). */
+  onUnreadCountChange?: (count: number) => void;
 }
 
 type SyncState = 'loading' | 'ready' | 'error';
 
-export function MessageCenter({ onOpenNotificationSettings }: Props) {
+export function MessageCenter({
+  onOpenNotificationSettings,
+  hideTrigger = false,
+  returnFocusRef,
+  open: controlledOpen,
+  onOpenChange,
+  onUnreadCountChange,
+}: Props) {
   const { locale, t } = useI18n();
   const titleId = useId();
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const panelRef = useRef<HTMLElement | null>(null);
-  const [open, setOpen] = useState(false);
+  const [openInternal, setOpenInternal] = useState(false);
+  const open = controlledOpen ?? openInternal;
+  const setOpen = useCallback(
+    (next: boolean) => {
+      setOpenInternal(next);
+      onOpenChange?.(next);
+    },
+    [onOpenChange],
+  );
   const [filter, setFilter] = useState<MessageCenterFilter>('all');
   const [messages, setMessages] = useState<MessageCenterMessage[]>([]);
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
@@ -142,14 +170,26 @@ export function MessageCenter({ onOpenNotificationSettings }: Props) {
   }, [open, retrySync]);
 
   const unreadCount = messages.filter((message) => !message.readAt).length;
+
+  useEffect(() => {
+    onUnreadCountChange?.(unreadCount);
+  }, [unreadCount, onUnreadCountChange]);
   const visibleMessages = useMemo(
     () => messages.filter((message) => filter === 'all' || (filter === 'read' ? Boolean(message.readAt) : !message.readAt)),
     [filter, messages],
   );
 
+  /** The control keyboard focus must land on after the panel closes. Opening
+   *  focuses the portaled dialog, so closing always unmounts the focused node —
+   *  without a target here focus falls to the document and the user loses their
+   *  place in the rail. The built-in bell owns it by default; under
+   *  `hideTrigger` that button does not exist and the host's opener does. */
+  const returnFocusTarget = (): HTMLElement | null =>
+    triggerRef.current ?? returnFocusRef?.current ?? null;
+
   const closePanel = () => {
     setOpen(false);
-    triggerRef.current?.focus();
+    returnFocusTarget()?.focus();
   };
 
   useEffect(() => {
@@ -204,11 +244,11 @@ export function MessageCenter({ onOpenNotificationSettings }: Props) {
   const emptyTitle = filter === 'unread' ? t('messageCenter.emptyUnreadTitle') : filter === 'read' ? t('messageCenter.emptyReadTitle') : t('messageCenter.emptyAllTitle');
 
   return <div className={styles.root}>
-    <button ref={triggerRef} type="button" className={`settings-icon-btn od-tooltip ${styles.trigger}`} onClick={() => setOpen((value) => !value)} title={t('messageCenter.openAria')} data-tooltip={t('messageCenter.openAria')} data-tooltip-placement="bottom" aria-label={openLabel} aria-haspopup="dialog" aria-expanded={open} data-testid="message-center-trigger">
+    {hideTrigger ? null : <button ref={triggerRef} type="button" className={`settings-icon-btn od-tooltip ${styles.trigger}`} onClick={() => setOpen(!open)} title={t('messageCenter.openAria')} data-tooltip={t('messageCenter.openAria')} data-tooltip-placement="bottom" aria-label={openLabel} aria-haspopup="dialog" aria-expanded={open} data-testid="message-center-trigger">
       <Icon name="bell" size={17} />{unreadCount > 0 ? <span className={styles.badge} aria-hidden>{unreadBadgeLabel(unreadCount)}</span> : null}
-    </button>
+    </button>}
     {open ? createPortal(<div className={styles.backdrop} data-testid="message-center-backdrop"><aside ref={panelRef} className={styles.panel} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} data-testid="message-center-dialog">
-      <header className={styles.header}><div className={styles.headerCopy}><h2 id={titleId}>{t('messageCenter.title')}</h2><p>{t('messageCenter.subtitle')}</p></div><button type="button" className={styles.close} onClick={closePanel} aria-label={t('messageCenter.close')}><Icon name="close" size={18} strokeWidth={2}/></button></header>
+      <header className={styles.header}><div className={styles.headerCopy}><h2 id={titleId}>{t('messageCenter.title')}</h2><p>{t('messageCenter.subtitle')}</p></div></header>
       <div className={styles.controls}><div className={styles.filters} role="group" aria-label={t('messageCenter.title')}>{FILTERS.map((item) => <button key={item.id} type="button" className={`${styles.filter}${filter === item.id ? ` ${styles.filterActive}` : ''}`} aria-pressed={filter === item.id} onClick={() => setFilter(item.id)}>{t(item.label)}{item.id === 'unread' && unreadCount > 0 ? <span className={styles.filterBadge} aria-hidden>{unreadBadgeLabel(unreadCount)}</span> : null}</button>)}</div><button type="button" className={styles.markAll} onClick={() => void markAllRead().catch(() => setSyncState('error'))} disabled={unreadCount === 0}>{t('messageCenter.markAllRead')}</button></div>
       <div className={styles.list} aria-live="polite">
         {syncState === 'error' && messages.length > 0 ? (
@@ -252,10 +292,12 @@ function MessageItem({
   onRead: (id: string) => Promise<void>;
   onError: () => void;
 }) {
+  const { t } = useI18n();
   const [expanded, setExpanded] = useState(false);
   const formatted = formatPublishedDate(message.publishedAt, locale);
   const ctaUrl = safeExternalUrl(message.ctaUrl);
-  return <article className={`${styles.item}${message.readAt ? '' : ` ${styles.itemUnread}`}${expanded ? ` ${styles.itemExpanded}` : ''}`}>
+  return <article className={`${styles.item}${message.readAt ? '' : ` ${styles.itemUnread}`}`}>
+    <span className={styles.itemViewHint} aria-hidden>{t('settings.memoryToastClickHint')}<Icon name="arrow-right" size={14} /></span>
     <button type="button" className={styles.itemSummary} aria-expanded={expanded} onClick={() => { setExpanded((value) => !value); void onRead(message.id).catch(onError); }}><span className={styles.itemMeta}><span>{message.typeName}</span>{formatted ? <time dateTime={message.publishedAt}>{formatted}</time> : null}</span><strong>{message.title}</strong><span className={styles.bodyPreview}>{message.body}</span></button>
     {expanded && message.ctaLabel && ctaUrl ? <div className={styles.itemActions}><button type="button" className={styles.primaryAction} onClick={() => window.open(ctaUrl, '_blank', 'noopener,noreferrer')}>{message.ctaLabel}</button></div> : null}
   </article>;

@@ -7,13 +7,16 @@
 //           the low-balance warning line. The user is warned once per send and
 //           may proceed anyway, top up first, or opt out of future warnings.
 //
-// Fail-open contract: only DEFINITIVE answers gate. An unavailable endpoint or
-// unparseable balance never blocks — those states already have their own
-// recovery paths (run-time failure cards), and a flaky wallet must never lock
-// users out of starting tasks. The signed-out answer comes from the local
-// config read, so it is reliable enough to hard-gate on.
+// Account-scoped reads fail open when unavailable. An explicitly team-scoped
+// project fails closed when its exact workspace/member epoch cannot be proven:
+// falling back to the account wallet would make the preflight disagree with
+// the final daemon spawn authority.
 
-import type { AmrWalletSnapshot } from '@open-design/contracts';
+import type {
+  AmrWalletSnapshot,
+  WorkspaceCollabContext,
+  WorkspaceBillingResponse,
+} from '@open-design/contracts';
 import { fetchAmrWalletSnapshot } from '../providers/daemon';
 
 /**
@@ -35,9 +38,64 @@ const LOW_BALANCE_WARN_OPTOUT_KEY = 'open-design:amr-low-balance-warn-optout:v1'
 
 export type AmrBalanceGateResult =
   | { kind: 'allow' }
+  | { kind: 'unavailable' }
   | { kind: 'hard'; reason: 'insufficient'; snapshot: AmrWalletSnapshot }
   | { kind: 'hard'; reason: 'signed_out'; snapshot: AmrWalletSnapshot }
   | { kind: 'soft'; snapshot: AmrWalletSnapshot };
+
+export interface AmrBalanceGateScope {
+  workspaceType: 'personal' | 'team';
+  workspaceId: string;
+  workspaceMemberId: string;
+}
+
+export function isAmrBalanceGateScope(value: unknown): value is AmrBalanceGateScope {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    (candidate.workspaceType === 'personal' || candidate.workspaceType === 'team') &&
+    typeof candidate.workspaceId === 'string' &&
+    candidate.workspaceId.trim().length > 0 &&
+    typeof candidate.workspaceMemberId === 'string' &&
+    candidate.workspaceMemberId.trim().length > 0
+  );
+}
+
+/**
+ * Capture the exact workspace/member authority that an AMR preflight checked.
+ * A successful preflight may only be reused while this witness still matches.
+ */
+export function amrBalanceGateScopeForWorkspaceContext(
+  context:
+    | Pick<
+        WorkspaceCollabContext,
+        'workspaceType' | 'workspaceId' | 'workspaceMemberId'
+      >
+    | null
+    | undefined,
+): AmrBalanceGateScope | undefined {
+  if (!context) return undefined;
+  const workspaceId = context.workspaceId.trim();
+  const workspaceMemberId = context.workspaceMemberId.trim();
+  if (!workspaceId || !workspaceMemberId) return undefined;
+  return {
+    workspaceType: context.workspaceType,
+    workspaceId,
+    workspaceMemberId,
+  };
+}
+
+export function amrBalanceGateScopesMatch(
+  checked: AmrBalanceGateScope | undefined,
+  current: AmrBalanceGateScope | undefined,
+): boolean {
+  if (!checked || !current) return false;
+  return (
+    checked.workspaceType === current.workspaceType &&
+    checked.workspaceId === current.workspaceId &&
+    checked.workspaceMemberId === current.workspaceMemberId
+  );
+}
 
 /** Parse a definitive balance from a snapshot; null when the answer is
  * indefinite (missing/unavailable/unparseable — those must fail open). */
@@ -91,8 +149,107 @@ export function setAmrLowBalanceWarnOptedOut(): void {
  * soft tier trusts the cache (its cost is one dismissible reminder, and the
  * daemon cache is at most a few seconds old).
  */
-export async function checkAmrBalanceGate(): Promise<AmrBalanceGateResult> {
+async function fetchTeamWorkspaceWalletSnapshot(
+  scope: AmrBalanceGateScope,
+  accountSnapshot: AmrWalletSnapshot | null,
+): Promise<AmrWalletSnapshot | null> {
+  const workspaceId = scope.workspaceId.trim();
+  const workspaceMemberId = scope.workspaceMemberId.trim();
+  if (!workspaceId || !workspaceMemberId) return null;
+  const response = await fetch(
+    `/api/workspace/billing?scope=workspace&workspaceId=${encodeURIComponent(workspaceId)}&freshness=authoritative`,
+    { cache: 'no-store' },
+  );
+  if (!response.ok) return null;
+  const body = (await response.json()) as WorkspaceBillingResponse;
+  const runtime = body.workspaceRuntime;
+  const authoritativeRead = body.authoritativeWorkspaceRead;
+  const hardExpiresAt = runtime?.hardExpiresAt
+    ? Date.parse(runtime.hardExpiresAt)
+    : Number.NaN;
+  if (
+    (
+      !runtime ||
+      !authoritativeRead ||
+      runtime.workspaceId !== workspaceId ||
+      runtime.workspaceMemberId !== workspaceMemberId ||
+      runtime.status !== 'fresh' ||
+      !runtime.observedAt ||
+      !Number.isFinite(hardExpiresAt) ||
+      hardExpiresAt <= Date.now() ||
+      authoritativeRead.workspaceId !== workspaceId ||
+      authoritativeRead.workspaceMemberId !== workspaceMemberId ||
+      authoritativeRead.observedAt !== runtime.observedAt
+    )
+  ) {
+    return null;
+  }
+  const workspaceBalance = body.workspaceBalance;
+  if (
+    !workspaceBalance ||
+    workspaceBalance.billingScopeVersion !== 2 ||
+    workspaceBalance.workspaceId !== workspaceId ||
+    workspaceBalance.workspaceMemberId !== workspaceMemberId
+  ) {
+    return null;
+  }
+  return {
+    status: 'available',
+    profile: accountSnapshot?.profile ?? 'default',
+    user: accountSnapshot?.user ?? null,
+    balanceUsd: workspaceBalance.balanceUsd,
+    updatedAt: workspaceBalance.updatedAt,
+    fetchedAt: new Date().toISOString(),
+    stale: false,
+    source: 'vela_api',
+  };
+}
+
+async function checkTeamWorkspaceBalanceGate(
+  scope: AmrBalanceGateScope,
+): Promise<AmrBalanceGateResult> {
+  let accountSnapshot = await fetchAmrWalletSnapshot().catch(() => null);
+  if (accountSnapshot?.status === 'signed_out') {
+    const freshAccount = await fetchAmrWalletSnapshot({ refresh: true }).catch(() => null);
+    if (freshAccount?.status === 'signed_out') {
+      return {
+        kind: 'hard',
+        reason: 'signed_out',
+        snapshot: freshAccount,
+      };
+    }
+    accountSnapshot = freshAccount;
+  }
+
+  // The URL carries the selected workspace identity. The daemon authorizes
+  // that exact directory membership and returns a v2 identity-stamped wallet.
+  // No account number participates in this decision.
+  const workspaceSnapshot = await fetchTeamWorkspaceWalletSnapshot(
+    scope,
+    accountSnapshot,
+  ).catch(() => null);
+  const balance = amrWalletBalanceUsd(workspaceSnapshot);
+  if (balance == null) return { kind: 'unavailable' };
+  if (balance <= AMR_HARD_BLOCK_BALANCE_USD) {
+    return {
+      kind: 'hard',
+      reason: 'insufficient',
+      snapshot: workspaceSnapshot!,
+    };
+  }
+  if (balance <= AMR_LOW_BALANCE_WARN_USD && !isAmrLowBalanceWarnOptedOut()) {
+    return { kind: 'soft', snapshot: workspaceSnapshot! };
+  }
+  return { kind: 'allow' };
+}
+
+export async function checkAmrBalanceGate(
+  scope?: AmrBalanceGateScope,
+): Promise<AmrBalanceGateResult> {
   try {
+    if (scope?.workspaceType === 'team') {
+      return await checkTeamWorkspaceBalanceGate(scope);
+    }
     const cached = await fetchAmrWalletSnapshot().catch(() => null);
     const cachedBalance = amrWalletBalanceUsd(cached);
     const cachedHardCandidate =
@@ -131,7 +288,10 @@ export async function checkAmrBalanceGate(): Promise<AmrBalanceGateResult> {
     }
     return { kind: 'allow' };
   } catch {
-    // Fail open: an unexpected wallet-path error must never block task starts.
-    return { kind: 'allow' };
+    // Account checks retain the legacy fail-open behavior. Team projects must
+    // prove the exact member-scoped wallet before proceeding.
+    return scope?.workspaceType === 'team'
+      ? { kind: 'unavailable' }
+      : { kind: 'allow' };
   }
 }

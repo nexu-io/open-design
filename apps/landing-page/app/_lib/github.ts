@@ -2,12 +2,14 @@ import { RELEASE_METADATA_UPSTREAM_URL, formatStableReleaseVersion } from './rel
 
 export interface GithubRepoMeta {
   starsLabel: string;
+  contributorsCount: number;
   versionLabel: string;
 }
 
 const REPO_API = 'https://api.github.com/repos/nexu-io/open-design';
 const FALLBACK_META: GithubRepoMeta = {
-  starsLabel: '40K+',
+  starsLabel: '83.3K+',
+  contributorsCount: 387,
   // Build-time fallback when the GitHub releases API is unavailable / rate
   // limited. Keep in step with the latest published release.
   versionLabel: 'v0.9.0',
@@ -18,7 +20,23 @@ let repoMetaPromise: Promise<GithubRepoMeta> | null = null;
 function formatStars(count: unknown): string | null {
   if (typeof count !== 'number' || !Number.isFinite(count) || count <= 0) return null;
   if (count < 1000) return String(count);
-  return `${(count / 1000).toFixed(1).replace(/\.0$/, '')}K`;
+  return `${(count / 1000).toFixed(1).replace(/\.0$/, '')}K+`;
+}
+
+async function fetchContributorCount(): Promise<number> {
+  const response = await fetch(`${REPO_API}/contributors?per_page=1`, {
+    headers: { Accept: 'application/vnd.github+json' },
+  });
+  if (!response.ok) {
+    throw new Error(`Request returned ${response.status}: ${response.url}`);
+  }
+
+  const link = response.headers.get('link') ?? '';
+  const lastPage = link.match(/[?&]page=(\d+)>;\s*rel="last"/);
+  if (lastPage?.[1]) return Number.parseInt(lastPage[1], 10);
+
+  const contributors = (await response.json()) as unknown;
+  return Array.isArray(contributors) ? contributors.length : 0;
 }
 
 // Parse a display version (e.g. "v0.9.0") from a GitHub /releases/latest object.
@@ -51,18 +69,24 @@ async function fetchJson(url: string, headers?: Record<string, string>): Promise
 
 export function getGithubRepoMeta(): Promise<GithubRepoMeta> {
   repoMetaPromise ??= (async () => {
-    const [repoResult, releaseMetadataResult] = await Promise.allSettled([
+    const [repoResult, contributorsResult, releaseMetadataResult] = await Promise.allSettled([
       fetchJson(REPO_API, { Accept: 'application/vnd.github+json' }),
+      fetchContributorCount(),
       fetchJson(RELEASE_METADATA_UPSTREAM_URL, { Accept: 'application/json' }),
     ]);
 
     const repo = repoResult.status === 'fulfilled' ? repoResult.value : null;
+    const contributorsCount =
+      contributorsResult.status === 'fulfilled' && contributorsResult.value > 0
+        ? contributorsResult.value
+        : null;
     const releaseMetadata = releaseMetadataResult.status === 'fulfilled' ? releaseMetadataResult.value : null;
     const starsLabel = formatStars((repo as { stargazers_count?: unknown } | null)?.stargazers_count);
     const versionLabel = formatStableReleaseVersion(releaseMetadata);
 
     return {
       starsLabel: starsLabel ?? FALLBACK_META.starsLabel,
+      contributorsCount: contributorsCount ?? FALLBACK_META.contributorsCount,
       versionLabel: versionLabel ?? FALLBACK_META.versionLabel,
     };
   })();
@@ -131,6 +155,150 @@ const EMPTY_MATRIX: ReleaseMatrix = {
   linux: null,
 };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object';
+}
+
+function stableArtifact(value: unknown): ReleaseAsset | null {
+  if (!isRecord(value) || typeof value.name !== 'string' || typeof value.url !== 'string') {
+    return null;
+  }
+
+  return {
+    name: value.name,
+    url: value.url,
+    size: typeof value.size === 'number' && Number.isFinite(value.size) ? value.size : 0,
+    sha256Url: typeof value.sha256Url === 'string' ? value.sha256Url : null,
+  };
+}
+
+function stablePlatformArtifact(
+  metadata: unknown,
+  platformKey: string,
+  artifactKey: string,
+): ReleaseAsset | null {
+  if (!isRecord(metadata) || !isRecord(metadata.platforms)) return null;
+  const platform = metadata.platforms[platformKey];
+  if (!isRecord(platform) || !isRecord(platform.artifacts)) return null;
+  return stableArtifact(platform.artifacts[artifactKey]);
+}
+
+/**
+ * Parse the canonical stable-release manifest served from releases.open-design.ai.
+ * Unlike the unauthenticated GitHub API, this endpoint is not constrained by the
+ * shared 60-request rate limit, so high-intent download links stay direct even
+ * when GitHub metadata cannot be resolved during a build.
+ */
+export function buildMatrixFromStableMetadata(metadata: unknown): ReleaseMatrix {
+  return {
+    macArm64Dmg: stablePlatformArtifact(metadata, 'mac', 'dmg'),
+    macArm64Zip: stablePlatformArtifact(metadata, 'mac', 'zip'),
+    macX64Dmg: stablePlatformArtifact(metadata, 'macIntel', 'dmg'),
+    macX64Zip: stablePlatformArtifact(metadata, 'macIntel', 'zip'),
+    winSetup: stablePlatformArtifact(metadata, 'win', 'installer'),
+    winPortable: stablePlatformArtifact(metadata, 'win', 'portableZip'),
+    linux:
+      stablePlatformArtifact(metadata, 'linux', 'appImage') ??
+      stablePlatformArtifact(metadata, 'linux', 'appimage'),
+  };
+}
+
+type ReleaseMetadataFetch = (
+  input: string | URL | Request,
+  init?: RequestInit,
+) => Promise<Response>;
+
+/**
+ * Resolve the canonical public stable release from one complete R2 manifest.
+ * Download-page version labels and artifacts must never be assembled from
+ * independent GitHub and R2 snapshots.
+ */
+export async function fetchLatestStableRelease(
+  fetchImpl: ReleaseMetadataFetch = fetch,
+): Promise<LatestRelease> {
+  const response = await fetchImpl(RELEASE_METADATA_UPSTREAM_URL, {
+    headers: { Accept: 'application/json' },
+  });
+  if (!response.ok) {
+    throw new Error(`Request returned ${response.status}: ${RELEASE_METADATA_UPSTREAM_URL}`);
+  }
+
+  const metadata: unknown = await response.json();
+  if (!isRecord(metadata) || metadata.channel !== 'stable' || metadata.releaseState !== 'complete') {
+    throw new Error('Stable release metadata is not complete');
+  }
+
+  const versionLabel = formatStableReleaseVersion(metadata);
+  if (!versionLabel) throw new Error('Stable release metadata has no valid version');
+
+  const matrix = buildMatrixFromStableMetadata(metadata);
+  if (!matrix.macArm64Dmg || !matrix.macX64Dmg || !matrix.winSetup) {
+    throw new Error('Stable release metadata is missing required desktop installers');
+  }
+  const releaseVersion = cleanVersion(versionLabel);
+  const versionPrefix = `/stable/versions/${releaseVersion}`;
+  const mismatchedArtifact = Object.values(matrix).find((asset) => {
+    if (!asset) return false;
+    try {
+      const url = new URL(asset.url);
+      return (
+        url.origin !== 'https://releases.open-design.ai' ||
+        (url.pathname !== versionPrefix &&
+          !url.pathname.startsWith(`${versionPrefix}/`) &&
+          !url.pathname.startsWith(`${versionPrefix}.`))
+      );
+    } catch {
+      return true;
+    }
+  });
+  if (mismatchedArtifact) {
+    throw new Error(
+      `Stable release artifact ${mismatchedArtifact.name} does not match release version ${releaseVersion}`,
+    );
+  }
+  const expectedTagName = `open-design-v${releaseVersion}`;
+  if (metadata.versionTag !== expectedTagName) {
+    throw new Error(`Stable release tag does not match version ${releaseVersion}`);
+  }
+  const tagName = expectedTagName;
+
+  return {
+    version: releaseVersion,
+    versionLabel,
+    tagName,
+    publishedAt:
+      typeof metadata.publishedAt === 'string'
+        ? metadata.publishedAt
+        : typeof metadata.generatedAt === 'string'
+          ? metadata.generatedAt
+          : null,
+    releaseUrl: tagName
+      ? `${REPO_RELEASES}/tag/${encodeURIComponent(tagName)}`
+      : REPO_RELEASES,
+    matrix,
+    resolved: Object.values(matrix).some((asset) => asset !== null),
+  };
+}
+
+let latestStableReleasePromise: Promise<LatestRelease> | null = null;
+
+export function getLatestStableRelease(): Promise<LatestRelease> {
+  latestStableReleasePromise ??= fetchLatestStableRelease();
+  return latestStableReleasePromise;
+}
+
+function mergeMatrices(preferred: ReleaseMatrix, fallback: ReleaseMatrix): ReleaseMatrix {
+  return {
+    macArm64Dmg: preferred.macArm64Dmg ?? fallback.macArm64Dmg,
+    macArm64Zip: preferred.macArm64Zip ?? fallback.macArm64Zip,
+    macX64Dmg: preferred.macX64Dmg ?? fallback.macX64Dmg,
+    macX64Zip: preferred.macX64Zip ?? fallback.macX64Zip,
+    winSetup: preferred.winSetup ?? fallback.winSetup,
+    winPortable: preferred.winPortable ?? fallback.winPortable,
+    linux: preferred.linux ?? fallback.linux,
+  };
+}
+
 function cleanVersion(versionLabel: string): string {
   return versionLabel.replace(/^v/, '');
 }
@@ -172,12 +340,13 @@ let latestReleasePromise: Promise<LatestRelease> | null = null;
 
 export function getLatestRelease(): Promise<LatestRelease> {
   latestReleasePromise ??= (async () => {
-    let release: unknown = null;
-    try {
-      release = await fetchJson(`${REPO_API}/releases/latest`);
-    } catch {
-      release = null;
-    }
+    const [releaseResult, stableMetadataResult] = await Promise.allSettled([
+      fetchJson(`${REPO_API}/releases/latest`, { Accept: 'application/vnd.github+json' }),
+      fetchJson(RELEASE_METADATA_UPSTREAM_URL, { Accept: 'application/json' }),
+    ]);
+    const release = releaseResult.status === 'fulfilled' ? releaseResult.value : null;
+    const stableMetadata =
+      stableMetadataResult.status === 'fulfilled' ? stableMetadataResult.value : null;
 
     const rec = (release && typeof release === 'object' ? release : {}) as {
       tag_name?: unknown;
@@ -186,17 +355,39 @@ export function getLatestRelease(): Promise<LatestRelease> {
       assets?: unknown;
     };
 
-    const versionLabel = formatVersion(release) ?? FALLBACK_META.versionLabel;
+    const stableRec = isRecord(stableMetadata) ? stableMetadata : {};
+    const versionLabel =
+      formatVersion(release) ??
+      formatStableReleaseVersion(stableMetadata) ??
+      FALLBACK_META.versionLabel;
     const rawAssets = Array.isArray(rec.assets) ? (rec.assets as RawAsset[]) : [];
-    const matrix = release ? buildMatrix(rawAssets) : EMPTY_MATRIX;
-    const resolved = Boolean(release) && Object.values(matrix).some((a) => a !== null);
+    const githubMatrix = release ? buildMatrix(rawAssets) : EMPTY_MATRIX;
+    const stableMatrix = buildMatrixFromStableMetadata(stableMetadata);
+    const matrix = mergeMatrices(stableMatrix, githubMatrix);
+    const resolved = Object.values(matrix).some((asset) => asset !== null);
+    const tagName =
+      typeof rec.tag_name === 'string'
+        ? rec.tag_name
+        : typeof stableRec.versionTag === 'string'
+          ? stableRec.versionTag
+          : null;
 
     return {
       version: cleanVersion(versionLabel),
       versionLabel,
-      tagName: typeof rec.tag_name === 'string' ? rec.tag_name : null,
-      publishedAt: typeof rec.published_at === 'string' ? rec.published_at : null,
-      releaseUrl: typeof rec.html_url === 'string' ? rec.html_url : REPO_RELEASES,
+      tagName,
+      publishedAt:
+        typeof rec.published_at === 'string'
+          ? rec.published_at
+          : typeof stableRec.generatedAt === 'string'
+            ? stableRec.generatedAt
+            : null,
+      releaseUrl:
+        typeof rec.html_url === 'string'
+          ? rec.html_url
+          : tagName
+            ? `${REPO_RELEASES}/tag/${encodeURIComponent(tagName)}`
+            : REPO_RELEASES,
       matrix,
       resolved,
     };

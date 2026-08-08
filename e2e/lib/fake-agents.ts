@@ -156,6 +156,14 @@ async function emitRun(promptText) {
     emitServiceFailure(503);
     return;
   }
+  if (promptText.includes('Return a daemon model-not-found failure')) {
+    emitModelUnavailableFailure();
+    return;
+  }
+  if (promptText.includes('Return a daemon timeout failure')) {
+    emitTimeoutFailure();
+    return;
+  }
   if (promptText.includes('Return a daemon socket-drop failure')) {
     emitSocketDropFailure();
     return;
@@ -690,6 +698,24 @@ function emitServiceFailure(statusCode) {
       process.exitCode = 1;
       exitSoon(1);
   }
+}
+
+function emitModelUnavailableFailure() {
+  const message = 'The selected model is not available for this account: model not found.';
+  writeJson({ type: 'thread.started' });
+  writeJson({ type: 'turn.started' });
+  writeJson({ type: 'turn.failed', error: { message } });
+  process.exitCode = 0;
+  exitSoon(0);
+}
+
+function emitTimeoutFailure() {
+  const message = 'The upstream model request timed out while waiting for a response.';
+  writeJson({ type: 'thread.started' });
+  writeJson({ type: 'turn.started' });
+  writeJson({ type: 'turn.failed', error: { message } });
+  process.exitCode = 0;
+  exitSoon(0);
 }
 
 // Reproduces a connection that dropped mid-response. This shape is NOT guessed:

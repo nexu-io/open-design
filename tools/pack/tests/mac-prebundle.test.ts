@@ -143,7 +143,7 @@ describe("mac standalone prebundle policy", () => {
         logLevel: "silent",
         metafile: true,
         platform: "node",
-        entryPoints: [join(workspaceRoot, "apps", "daemon", "src", "byok", "credential-service.ts")],
+        entryPoints: [join(workspaceRoot, "apps", "daemon", "src", "terminals.ts")],
         target: MAC_PREBUNDLE_ESBUILD_TARGET,
         write: false,
       });

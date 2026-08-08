@@ -92,7 +92,12 @@ function markdownLinks(body: string): Array<{ text: string; href: string }> {
 // env var the build reads so the two stay in lock-step.
 const STAGING_NOINDEX_BUILD = process.env.OD_LANDING_NOINDEX === '1';
 
-function checkRendered(slug: string, renderedOut: string, file: string): Finding[] {
+function checkRendered(
+  slug: string,
+  renderedOut: string,
+  file: string,
+  sourceNoindex: boolean,
+): Finding[] {
   const htmlPath = path.join(REPO_ROOT, renderedOut, 'blog', slug, 'index.html');
   if (!existsSync(htmlPath)) return [];
   const html = readFileSync(htmlPath, 'utf8');
@@ -106,8 +111,12 @@ function checkRendered(slug: string, renderedOut: string, file: string): Finding
   if (!/<meta\b[^>]*property=["']og:image["'][^>]*content=["'][^"']+["']/i.test(html)) {
     findings.push({ file, level: 'error', message: 'rendered page has no og:image' });
   }
+  // A post whose source frontmatter sets top-level `noindex: true` renders
+  // `noindex, follow` on purpose (see the docblock in content.config.ts) —
+  // that is intent, not an indexability defect.
   if (
     !STAGING_NOINDEX_BUILD &&
+    !sourceNoindex &&
     /<meta\b[^>]*name=["']robots["'][^>]*content=["'][^"']*\bnoindex\b/i.test(html)
   ) {
     findings.push({ file, level: 'error', message: 'rendered page is noindex' });
@@ -168,7 +177,8 @@ function lintFile(file: string, renderedOut?: string): Finding[] {
     });
   }
   if (renderedOut) {
-    findings.push(...checkRendered(fileToSlug(file), renderedOut, file));
+    const sourceNoindex = /^noindex:\s*true\b/m.test(raw);
+    findings.push(...checkRendered(fileToSlug(file), renderedOut, file, sourceNoindex));
   }
   return findings;
 }

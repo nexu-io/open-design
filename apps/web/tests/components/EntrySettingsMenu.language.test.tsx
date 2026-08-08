@@ -41,7 +41,6 @@ function renderMenu() {
     <I18nProvider initial="en">
       <EntrySettingsMenu
         config={baseConfig()}
-        onThemeChange={vi.fn()}
         onOpenSettings={vi.fn()}
       />
     </I18nProvider>,

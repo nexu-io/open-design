@@ -96,4 +96,13 @@ describe('AmrGuidance', () => {
     });
     expect(onActivate).toHaveBeenCalledTimes(1);
   });
+
+  // Long CTA must live in the footer row so a narrow ChatPane does not
+  // squeeze the Chinese title into a vertical one-character stack.
+  it('places the switch CTA in the footer rather than the head actions column', () => {
+    const { container } = renderGuidance();
+    const cta = screen.getByRole('button', { name: 'Switch to Open Design Cloud & retry' });
+    const footer = container.querySelector('[data-user-action-footer="true"]');
+    expect(footer?.contains(cta)).toBe(true);
+  });
 });

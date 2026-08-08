@@ -1,9 +1,4 @@
-import type {
-  AppConfigPrefs,
-  ByokCredentialProfile,
-  ByokCredentialProfilesResponse,
-  UpsertByokCredentialProfileRequest,
-} from '@open-design/contracts';
+import type { AppConfigPrefs } from '@open-design/contracts';
 import { MEDIA_PROVIDERS } from '../media/models';
 import { isOpenAICompatible } from '../providers/openai-compatible';
 import type {
@@ -18,7 +13,9 @@ import type {
 import { resolveFixedOriginBaseUrl } from './apiProtocols';
 import {
   DEFAULT_ACCENT_COLOR,
+  FORCED_APP_THEME,
   normalizeAccentColor,
+  resolveAppTheme,
 } from './appearance';
 import {
   DEFAULT_FAILURE_SOUND_ID,
@@ -27,7 +24,20 @@ import {
 import { randomUUID } from '../utils/uuid';
 
 const STORAGE_KEY = 'open-design:config';
-const CONFIG_MIGRATION_VERSION = 2;
+const CONFIG_MIGRATION_VERSION = 3;
+// Accent values that were the SHIPPED DEFAULT in an earlier build and were
+// persisted verbatim into every install's config. None of them is offered in
+// ACCENT_SWATCHES anymore, so a config still carrying one is a leftover
+// default rather than a deliberate choice — the migration resets it to the
+// current default. (v2 covered the green era; v3 adds the older brick one,
+// which kept long-lived installs off the #5517 accent.) Keep this list in
+// sync with the pre-hydration script in app/layout.tsx.
+const LEGACY_DEFAULT_ACCENT_COLORS = ['#87ea5c', '#c96442'];
+const RETIRED_SECURE_BYOK_KEYS = [
+  'byokProfileId',
+  'byokCredentialConfigured',
+  'byokCredentialTail',
+] as const;
 
 // Hatched out of the box, but tucked away — the user has to go through
 // either the entry-view "adopt a pet" callout or Settings → Pets to
@@ -49,7 +59,7 @@ export const DEFAULT_PET: PetConfig = {
   custom: {
     name: 'Buddy',
     glyph: '🦄',
-    accent: '#c96442',
+    accent: '#353535',
     greeting: 'Hi! I am here whenever you need me.',
   },
 };
@@ -81,7 +91,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   skillId: null,
   designSystemId: null,
   onboardingCompleted: false,
-  theme: 'system',
+  theme: FORCED_APP_THEME,
   accentColor: DEFAULT_ACCENT_COLOR,
   mediaProviders: {},
   composio: {},
@@ -625,18 +635,6 @@ function inferApiProtocol(model: string, baseUrl: string): ApiProtocol {
   }
 }
 
-function hasLegacyByokSecret(config: AppConfig): boolean {
-  return Boolean(
-    config.apiKey?.trim()
-    || Object.values(config.apiProtocolConfigs ?? {}).some(
-      (entry) => Boolean(entry?.apiKey?.trim()),
-    )
-    || Object.values(config.byokProviderConfigDrafts ?? {}).some(
-      (draft) => Boolean(draft?.apiConfig.apiKey?.trim()),
-    ),
-  );
-}
-
 function migrateRetiredKnownProviderModel(
   protocol: ApiProtocol,
   config: Pick<
@@ -677,6 +675,9 @@ export function loadConfig(): AppConfig {
     for (const key of DAEMON_OWNED_KEYS) {
       delete (parsed as Record<string, unknown>)[key];
     }
+    for (const key of RETIRED_SECURE_BYOK_KEYS) {
+      delete (parsed as Record<string, unknown>)[key];
+    }
     const parsedHasApiProtocol = Object.prototype.hasOwnProperty.call(
       parsed,
       'apiProtocol',
@@ -691,46 +692,17 @@ export function loadConfig(): AppConfig {
       agentCliEnv: { ...(parsed.agentCliEnv ?? {}) },
       agentCliEnvIntent: { ...(parsed.agentCliEnvIntent ?? {}) },
       accentColor: normalizeAccentColor(parsed.accentColor) ?? DEFAULT_CONFIG.accentColor,
+      // Coerce on read, not just on default: the theme setting is gone, but
+      // 'dark' / 'system' is still on disk in every install that ever used it.
+      theme: resolveAppTheme(parsed.theme),
       pet: normalizePet(parsed.pet),
       notifications: normalizeNotifications(parsed.notifications),
       orbit: normalizeOrbit(parsed.orbit),
     };
-    // Browser storage is allowed to remember which non-secret profile the
-    // user selected, but never to assert that the credential still exists.
-    // Startup hydration re-enables it only after the daemon confirms the
-    // secure-store entry.
-    if (merged.byokProfileId) {
-      merged.byokCredentialConfigured = false;
-      merged.byokCredentialTail = undefined;
-    }
-
-    let migratedConfig = false;
-    // Older builds stored BYOK credentials in browser storage. Keep those
-    // values intact until migrateLegacyByokCredentialsToDaemon has confirmed
-    // every secure-profile write; deleting them synchronously here would lose
-    // the user's only credential when the daemon or OS store is unavailable.
-    const hadLegacyByokSecret = hasLegacyByokSecret(merged);
-    if (hadLegacyByokSecret) {
-      // Keep the browser record untouched until the async secure-store
-      // migration succeeds, but do not hydrate plaintext credentials into the
-      // long-lived application state.
-      merged.apiKey = '';
-      merged.apiProtocolConfigs = Object.fromEntries(
-        Object.entries(merged.apiProtocolConfigs ?? {}).map(([protocol, entry]) => [
-          protocol,
-          entry ? { ...entry, apiKey: '' } : entry,
-        ]),
-      ) as AppConfig['apiProtocolConfigs'];
-      merged.byokProviderConfigDrafts = Object.fromEntries(
-        Object.entries(merged.byokProviderConfigDrafts ?? {}).map(([key, draft]) => [
-          key,
-          {
-            ...draft,
-            apiConfig: { ...draft.apiConfig, apiKey: '' },
-          },
-        ]),
-      );
-    }
+    // A stored `dark` / `system` theme is dead data now that the app ships
+    // light-only. Flag it so the coerced value is written back once and the old
+    // preference stops existing on disk, instead of being re-coerced forever.
+    let migratedConfig = parsed.theme != null && parsed.theme !== FORCED_APP_THEME;
     const parsedMigrationVersion =
       typeof parsed.configMigrationVersion === 'number'
         ? parsed.configMigrationVersion
@@ -790,6 +762,10 @@ export function loadConfig(): AppConfig {
           ) || migratedConfig;
         }
       }
+      const persistedAccent = normalizeAccentColor(parsed.accentColor);
+      if (persistedAccent != null && LEGACY_DEFAULT_ACCENT_COLORS.includes(persistedAccent)) {
+        merged.accentColor = DEFAULT_CONFIG.accentColor;
+      }
       merged.configMigrationVersion = CONFIG_MIGRATION_VERSION;
     }
 
@@ -805,10 +781,7 @@ export function loadConfig(): AppConfig {
       merged.baseUrl = resolveFixedOriginBaseUrl(merged.apiProtocol, merged.baseUrl);
     }
 
-    if (
-      !hadLegacyByokSecret
-      && (migratedConfig || downgradedUnsupportedChatProtocol)
-    ) {
+    if (migratedConfig || downgradedUnsupportedChatProtocol) {
       // Best-effort re-persist of the migrated / downgraded config. A localStorage
       // write failure here (quota exceeded, private-mode storage disabled) must not
       // fall through to the outer catch and discard the valid config we just
@@ -834,422 +807,6 @@ export function loadConfig(): AppConfig {
 interface PublicComposioConfigResponse {
   configured?: boolean;
   apiKeyTail?: string;
-}
-
-export async function fetchByokCredentialProfilesFromDaemon(): Promise<
-  ByokCredentialProfilesResponse | null
-> {
-  try {
-    const response = await fetch('/api/byok/profiles');
-    if (!response.ok) return null;
-    return await response.json() as ByokCredentialProfilesResponse;
-  } catch {
-    return null;
-  }
-}
-
-export class ByokCredentialProfileHttpError extends Error {
-  readonly status: number;
-  readonly code?: string;
-
-  constructor(status: number, message: string, code?: string) {
-    super(message);
-    this.name = 'ByokCredentialProfileHttpError';
-    this.status = status;
-    this.code = code;
-  }
-}
-
-export class ByokCredentialProfileNetworkError extends Error {
-  constructor(message: string, cause: unknown) {
-    super(message, { cause });
-    this.name = 'ByokCredentialProfileNetworkError';
-  }
-}
-
-export function classifyByokCredentialProfileFailure(error: unknown): {
-  errorCode: string;
-  errorKind: string;
-} {
-  if (error instanceof ByokCredentialProfileHttpError) {
-    return {
-      errorCode: error.code || `HTTP_${error.status}`,
-      errorKind: 'unknown',
-    };
-  }
-  if (error instanceof ByokCredentialProfileNetworkError) {
-    return {
-      errorCode: 'DAEMON_UNREACHABLE',
-      errorKind: 'unknown',
-    };
-  }
-  const fallback = error instanceof Error ? error.name : 'UNKNOWN';
-  return { errorCode: fallback, errorKind: fallback };
-}
-
-export function legacyByokMigrationErrorPresentation(
-  error: Error,
-  daemonUnavailableMessage: string,
-): { message: string; details?: string } {
-  if (error instanceof ByokCredentialProfileNetworkError) {
-    return {
-      message: daemonUnavailableMessage,
-      details: error.message,
-    };
-  }
-  return { message: error.message };
-}
-
-async function byokCredentialProfileHttpError(
-  response: Response,
-): Promise<ByokCredentialProfileHttpError> {
-  const fallback = `Failed to save BYOK credential (${response.status})`;
-  try {
-    const payload = await response.json() as unknown;
-    if (
-      payload
-      && typeof payload === 'object'
-      && 'error' in payload
-      && payload.error
-      && typeof payload.error === 'object'
-    ) {
-      const message = 'message' in payload.error
-        && typeof payload.error.message === 'string'
-        ? payload.error.message.trim()
-        : '';
-      const code = 'code' in payload.error
-        && typeof payload.error.code === 'string'
-        ? payload.error.code.trim()
-        : '';
-      if (message) {
-        return new ByokCredentialProfileHttpError(
-          response.status,
-          message,
-          code || undefined,
-        );
-      }
-    }
-  } catch {
-    // Keep the status-bearing fallback when the daemon/proxy body is invalid.
-  }
-  return new ByokCredentialProfileHttpError(response.status, fallback);
-}
-
-export async function persistByokCredentialProfileToDaemon(
-  input: UpsertByokCredentialProfileRequest,
-): Promise<ByokCredentialProfile> {
-  let response: Response;
-  try {
-    response = await fetch('/api/byok/profiles', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(input),
-    });
-  } catch (error) {
-    const message = error instanceof Error && error.message.trim()
-      ? error.message
-      : 'Failed to reach the local daemon while saving the BYOK credential.';
-    throw new ByokCredentialProfileNetworkError(message, error);
-  }
-  if (!response.ok) {
-    throw await byokCredentialProfileHttpError(response);
-  }
-  const payload = await response.json() as { profile?: ByokCredentialProfile };
-  if (!payload.profile?.id || !payload.profile.configured) {
-    throw new Error('Daemon did not confirm the BYOK credential profile');
-  }
-  return payload.profile;
-}
-
-export type LegacyByokCredentialMigrationResult =
-  | { status: 'not-needed'; config: AppConfig }
-  | { status: 'migrated'; config: AppConfig }
-  | { status: 'failed'; config: AppConfig; error: Error };
-
-interface LegacyByokCredentialCandidate {
-  input: UpsertByokCredentialProfileRequest & { id: string };
-  signature: string;
-}
-
-const BYOK_PROTOCOLS = new Set<ApiProtocol>([
-  'anthropic',
-  'openai',
-  'azure',
-  'google',
-  'ollama',
-  'senseaudio',
-  'aihubmix',
-]);
-
-function legacyByokProfileId(source: string): string {
-  let hash = 0x811c9dc5;
-  for (let index = 0; index < source.length; index += 1) {
-    hash ^= source.charCodeAt(index);
-    hash = Math.imul(hash, 0x01000193);
-  }
-  return `byok-legacy-${(hash >>> 0).toString(36)}`;
-}
-
-function legacyByokCandidate(
-  source: string,
-  protocol: ApiProtocol | undefined,
-  apiConfig: Pick<ApiProtocolConfig, 'apiKey' | 'apiVersion' | 'baseUrl' | 'model'>,
-): LegacyByokCredentialCandidate | null {
-  const apiKey = apiConfig.apiKey?.trim();
-  if (!apiKey || !protocol || !BYOK_PROTOCOLS.has(protocol)) return null;
-  const knownProvider = KNOWN_PROVIDERS.find(
-    (candidate) =>
-      candidate.protocol === protocol
-      && candidate.baseUrl === apiConfig.baseUrl,
-  );
-  const signature = [
-    protocol,
-    apiConfig.baseUrl,
-    apiConfig.model,
-    apiConfig.apiVersion ?? '',
-    apiKey,
-  ].join('\u0000');
-  return {
-    signature,
-    input: {
-      id: legacyByokProfileId(source),
-      label: knownProvider?.label ?? `Imported ${protocol} profile`,
-      protocol: protocol as UpsertByokCredentialProfileRequest['protocol'],
-      baseUrl: apiConfig.baseUrl,
-      model: apiConfig.model,
-      apiKey,
-      ...(apiConfig.apiVersion
-        ? { apiVersion: apiConfig.apiVersion }
-        : {}),
-    },
-  };
-}
-
-function legacyByokCredentialCandidates(
-  config: AppConfig,
-): LegacyByokCredentialCandidate[] {
-  const activeProtocol = isBedrockRuntimeBaseUrl(config.baseUrl)
-    ? 'bedrock'
-    : config.apiProtocol ?? inferApiProtocol(config.model, config.baseUrl);
-  const candidates: Array<LegacyByokCredentialCandidate | null> = [
-    legacyByokCandidate('active', activeProtocol, config),
-    ...Object.entries(config.apiProtocolConfigs ?? {}).map(
-      ([protocol, apiConfig]) =>
-        apiConfig
-          ? legacyByokCandidate(
-              `protocol:${protocol}`,
-              protocol as ApiProtocol,
-              apiConfig,
-            )
-          : null,
-    ),
-    ...Object.entries(config.byokProviderConfigDrafts ?? {}).map(
-      ([draftKey, draft]) => {
-        const separator = draftKey.indexOf(':');
-        const protocol = (
-          separator > 0 ? draftKey.slice(0, separator) : activeProtocol
-        ) as ApiProtocol;
-        return legacyByokCandidate(
-          `draft:${draftKey}`,
-          protocol,
-          draft.apiConfig,
-        );
-      },
-    ),
-  ];
-  const unique = new Map<string, LegacyByokCredentialCandidate>();
-  for (const candidate of candidates) {
-    if (candidate && !unique.has(candidate.signature)) {
-      unique.set(candidate.signature, candidate);
-    }
-  }
-  return [...unique.values()];
-}
-
-function hasUnsupportedLegacyByokSecret(config: AppConfig): boolean {
-  const activeProtocol = isBedrockRuntimeBaseUrl(config.baseUrl)
-    ? 'bedrock'
-    : config.apiProtocol ?? inferApiProtocol(config.model, config.baseUrl);
-  if (
-    config.apiKey?.trim()
-    && !BYOK_PROTOCOLS.has(activeProtocol)
-  ) {
-    return true;
-  }
-  if (
-    Object.entries(config.apiProtocolConfigs ?? {}).some(
-      ([protocol, entry]) =>
-        Boolean(entry?.apiKey?.trim())
-        && !BYOK_PROTOCOLS.has(protocol as ApiProtocol),
-    )
-  ) {
-    return true;
-  }
-  return Object.entries(config.byokProviderConfigDrafts ?? {}).some(
-    ([draftKey, draft]) => {
-      if (!draft.apiConfig.apiKey?.trim()) return false;
-      const separator = draftKey.indexOf(':');
-      const protocol = (
-        separator > 0 ? draftKey.slice(0, separator) : activeProtocol
-      ) as ApiProtocol;
-      return !BYOK_PROTOCOLS.has(protocol);
-    },
-  );
-}
-
-function legacyByokMigrationSource(config: AppConfig): AppConfig {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return config;
-    const parsed = JSON.parse(raw) as Partial<AppConfig>;
-    return {
-      ...config,
-      ...parsed,
-      apiProtocol: parsed.apiProtocol ?? config.apiProtocol,
-      apiProtocolConfigs: {
-        ...(config.apiProtocolConfigs ?? {}),
-        ...(parsed.apiProtocolConfigs ?? {}),
-      },
-      byokProviderConfigDrafts: {
-        ...(config.byokProviderConfigDrafts ?? {}),
-        ...(parsed.byokProviderConfigDrafts ?? {}),
-      },
-    };
-  } catch {
-    return config;
-  }
-}
-
-export function applySavedByokCredentialProfile(
-  config: AppConfig,
-  selectedProfile: ByokCredentialProfile,
-): AppConfig {
-  return {
-    ...config,
-    apiKey: '',
-    byokProfileId: selectedProfile.id,
-    byokCredentialConfigured: selectedProfile.configured,
-    byokCredentialTail: selectedProfile.keyTail,
-    apiProtocolConfigs: Object.fromEntries(
-      Object.entries(config.apiProtocolConfigs ?? {}).map(([protocol, entry]) => [
-        protocol,
-        entry ? { ...entry, apiKey: '' } : entry,
-      ]),
-    ) as AppConfig['apiProtocolConfigs'],
-    byokProviderConfigDrafts: Object.fromEntries(
-      Object.entries(config.byokProviderConfigDrafts ?? {}).map(
-        ([key, draft]) => [
-          key,
-          {
-            ...draft,
-            apiConfig: { ...draft.apiConfig, apiKey: '' },
-          },
-        ],
-      ),
-    ),
-  };
-}
-
-export async function migrateLegacyByokCredentialsToDaemon(
-  config: AppConfig,
-  persistProfile: (
-    input: UpsertByokCredentialProfileRequest,
-  ) => Promise<ByokCredentialProfile> =
-    persistByokCredentialProfileToDaemon,
-): Promise<LegacyByokCredentialMigrationResult> {
-  const migrationSource = legacyByokMigrationSource(config);
-  const hasLegacySecret = hasLegacyByokSecret(migrationSource);
-  if (!hasLegacySecret) return { status: 'not-needed', config };
-
-  if (hasUnsupportedLegacyByokSecret(migrationSource)) {
-    return {
-      status: 'failed',
-      config,
-      error: new Error(
-        'The saved BYOK credential uses an unsupported legacy provider. Re-enter it in Settings.',
-      ),
-    };
-  }
-  const candidates = legacyByokCredentialCandidates(migrationSource);
-  if (candidates.length === 0) {
-    return {
-      status: 'failed',
-      config,
-      error: new Error(
-        'The saved BYOK credential uses an unsupported legacy provider. Re-enter it in Settings.',
-      ),
-    };
-  }
-
-  try {
-    const profiles: ByokCredentialProfile[] = [];
-    for (const candidate of candidates) {
-      profiles.push(await persistProfile(candidate.input));
-    }
-    const selectedProfile = profiles[0];
-    if (!selectedProfile?.configured) {
-      throw new Error('Secure credential migration did not produce a usable profile.');
-    }
-    const migrated = applySavedByokCredentialProfile(config, selectedProfile);
-    saveConfig(migrated);
-    return { status: 'migrated', config: migrated };
-  } catch (error) {
-    return {
-      status: 'failed',
-      config,
-      error: error instanceof Error ? error : new Error(String(error)),
-    };
-  }
-}
-
-/**
- * Reconciles a locally selected non-secret profile reference with the daemon.
- * No automatic "first profile" selection is made: changing execution
- * credentials must remain an explicit user choice.
- */
-export function mergeByokCredentialProfiles(
-  config: AppConfig,
-  response: ByokCredentialProfilesResponse | null,
-): AppConfig {
-  if (!config.byokProfileId || !response) return config;
-  const profile = response.profiles.find((candidate) => candidate.id === config.byokProfileId);
-  if (!response.available || !profile?.configured) {
-    return {
-      ...config,
-      byokProfileId: undefined,
-      byokCredentialConfigured: false,
-      byokCredentialTail: undefined,
-    };
-  }
-  const protocol = profile.protocol as ApiProtocol;
-  const knownProvider = KNOWN_PROVIDERS.find(
-    (candidate) =>
-      candidate.protocol === protocol
-      && candidate.baseUrl === profile.baseUrl,
-  );
-  const previousProtocolConfig = config.apiProtocolConfigs?.[protocol];
-  return {
-    ...config,
-    apiKey: '',
-    apiProtocol: protocol,
-    apiProviderBaseUrl: knownProvider?.baseUrl ?? null,
-    apiProtocolConfigs: {
-      ...(config.apiProtocolConfigs ?? {}),
-      [protocol]: {
-        ...(previousProtocolConfig ?? {}),
-        apiKey: '',
-        apiProviderBaseUrl: knownProvider?.baseUrl ?? null,
-        apiVersion: profile.apiVersion ?? '',
-        baseUrl: profile.baseUrl,
-        model: profile.model,
-      },
-    },
-    apiVersion: profile.apiVersion ?? '',
-    baseUrl: profile.baseUrl,
-    byokCredentialConfigured: true,
-    byokCredentialTail: profile.keyTail,
-    model: profile.model,
-  };
 }
 
 interface PublicMediaProviderConfigEntry {
@@ -1463,92 +1020,48 @@ function sanitizeAgentCliEnv(agentCliEnv: AppConfig['agentCliEnv']): AppConfig['
   return sanitized;
 }
 
-function preserveLegacyByokSecrets(
-  config: AppConfig,
-  stored: AppConfig,
-): AppConfig {
-  const apiProtocolConfigs = {
-    ...(config.apiProtocolConfigs ?? {}),
-  };
-  for (const [protocol, storedEntry] of Object.entries(stored.apiProtocolConfigs ?? {})) {
-    if (!storedEntry?.apiKey?.trim()) continue;
-    apiProtocolConfigs[protocol as ApiProtocol] = {
-      ...storedEntry,
-      ...(apiProtocolConfigs[protocol as ApiProtocol] ?? {}),
-      apiKey: storedEntry.apiKey,
-    };
-  }
-
-  const byokProviderConfigDrafts = {
-    ...(config.byokProviderConfigDrafts ?? {}),
-  };
-  for (const [key, storedDraft] of Object.entries(stored.byokProviderConfigDrafts ?? {})) {
-    if (!storedDraft.apiConfig.apiKey?.trim()) continue;
-    const currentDraft = byokProviderConfigDrafts[key];
-    byokProviderConfigDrafts[key] = {
-      ...storedDraft,
-      ...currentDraft,
-      apiConfig: {
-        ...storedDraft.apiConfig,
-        ...(currentDraft?.apiConfig ?? {}),
-        apiKey: storedDraft.apiConfig.apiKey,
-      },
-    };
-  }
-
-  return {
-    ...config,
-    ...(stored.apiKey?.trim() ? { apiKey: stored.apiKey } : {}),
-    apiProtocolConfigs,
-    byokProviderConfigDrafts,
-  };
-}
-
 export function saveConfig(config: AppConfig): void {
-  let storedConfig: AppConfig | null = null;
-  try {
-    storedConfig = JSON.parse(
-      localStorage.getItem(STORAGE_KEY) ?? '{}',
-    ) as AppConfig;
-  } catch {
-    // A malformed old record cannot be preserved as a usable credential.
-  }
-  const apiProtocolConfigs = config.apiProtocolConfigs
-    ? Object.fromEntries(Object.entries(config.apiProtocolConfigs).map(([protocol, entry]) => [
-        protocol,
-        entry ? { ...entry, apiKey: '' } : entry,
-      ])) as AppConfig['apiProtocolConfigs']
-    : config.apiProtocolConfigs;
-  const byokProviderConfigDrafts = config.byokProviderConfigDrafts
-    ? Object.fromEntries(Object.entries(config.byokProviderConfigDrafts).map(([key, draft]) => [
-        key,
-        {
-          ...draft,
-          apiConfig: { ...draft.apiConfig, apiKey: '' },
-        },
-      ]))
-    : config.byokProviderConfigDrafts;
-  let sanitized: AppConfig = {
+  const sanitized: AppConfig = {
     ...config,
-    apiKey: '',
-    apiProtocolConfigs,
-    byokProviderConfigDrafts,
     agentCliEnv: sanitizeAgentCliEnv(config.agentCliEnv),
   };
   for (const key of DAEMON_OWNED_KEYS) {
     delete (sanitized as unknown as Record<string, unknown>)[key];
   }
-  if (
-    storedConfig
-    && hasLegacyByokSecret(storedConfig)
-    && !(config.byokProfileId && config.byokCredentialConfigured)
-  ) {
-    // A legacy plaintext key may be the user's only credential. Keep only
-    // those secret projections until secure migration succeeds, while still
-    // allowing unrelated settings (mode, model, theme, etc.) to persist.
-    sanitized = preserveLegacyByokSecrets(sanitized, storedConfig);
+  for (const key of RETIRED_SECURE_BYOK_KEYS) {
+    delete (sanitized as unknown as Record<string, unknown>)[key];
   }
   localStorage.setItem(STORAGE_KEY, JSON.stringify(sanitized));
+}
+
+/**
+ * Onboarding completion is a one-way ratchet: once either side of the
+ * local/daemon pair has recorded it, the merge keeps it.
+ *
+ * `onboardingCompleted` is written from two places that settle at different
+ * times — localStorage flips the instant the user finishes the flow, while the
+ * daemon copy arrives through an asynchronous `PUT /api/app-config` that can
+ * lose a race or fail outright. So a daemon read may legitimately still say
+ * `false` for a user who is already done, and the reverse (daemon `true`,
+ * fresh/cleared localStorage) is equally normal.
+ *
+ * Letting the daemon's copy win unconditionally is not a cosmetic glitch: the
+ * merged config is written straight back to BOTH stores, so a single stale read
+ * permanently re-arms the first-run flow and the user meets onboarding on every
+ * launch from then on.
+ *
+ * The one legitimate way back to `false` is the explicit reset (Settings → run
+ * setup again), which writes `false` to both stores in the same gesture — so by
+ * the time the next merge runs neither side claims completion and the ratchet
+ * has nothing to hold. `buildPersistedConfig` applies the same rule on the
+ * save path; this is its read-path counterpart.
+ */
+function ratchetOnboardingCompleted(
+  local: AppConfig['onboardingCompleted'],
+  daemon: AppConfigPrefs['onboardingCompleted'],
+): AppConfig['onboardingCompleted'] {
+  if (local === true || daemon === true) return true;
+  return daemon != null ? daemon : local;
 }
 
 export function mergeDaemonConfig(
@@ -1558,9 +1071,10 @@ export function mergeDaemonConfig(
   const next = { ...localConfig };
   if (!daemonConfig) return next;
 
-  if (daemonConfig.onboardingCompleted != null) {
-    next.onboardingCompleted = daemonConfig.onboardingCompleted;
-  }
+  next.onboardingCompleted = ratchetOnboardingCompleted(
+    localConfig.onboardingCompleted,
+    daemonConfig.onboardingCompleted,
+  );
   if (daemonConfig.agentId !== undefined) {
     next.agentId = daemonConfig.agentId;
   }
@@ -1741,10 +1255,17 @@ export async function fetchDaemonConfig(): Promise<AppConfigPrefs | null> {
 
 export async function syncConfigToDaemon(
   config: AppConfig,
-  options?: { throwOnError?: boolean },
+  options?: {
+    throwOnError?: boolean;
+    allowOnboardingReset?: boolean;
+  },
 ): Promise<void> {
   const prefs: AppConfigPrefs = {
-    onboardingCompleted: config.onboardingCompleted,
+    ...(config.onboardingCompleted === true
+      ? { onboardingCompleted: true }
+      : options?.allowOnboardingReset
+        ? { onboardingCompleted: false }
+        : {}),
     agentId: config.agentId,
     agentModels: config.agentModels,
     agentCliEnv: config.agentCliEnv,
@@ -1765,7 +1286,15 @@ export async function syncConfigToDaemon(
   try {
     const response = await fetch('/api/app-config', {
       method: 'PUT',
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        'content-type': 'application/json',
+        ...(prefs.orbit?.workspaceScope
+          ? {
+              'x-od-workspace-id': prefs.orbit.workspaceScope.workspaceId,
+              'x-od-workspace-member-id': prefs.orbit.workspaceScope.workspaceMemberId,
+            }
+          : {}),
+      },
       body: JSON.stringify(prefs),
     });
     if (!response.ok) throw new Error(`Failed to sync app config (${response.status})`);

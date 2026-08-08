@@ -1,5 +1,6 @@
 import { expect, test } from '@/playwright/suite';
 import { applyStandardMocks } from '@/playwright/mock-factory';
+import { ensureRailOpen } from '@/playwright/rail';
 import { T } from '@/timeouts';
 
 // Recent-project fixtures give the home page enough height to scroll the
@@ -116,6 +117,9 @@ test('[P1] update ready prompt paints above the composer and its agent picker', 
     )
     .toBeLessThan(80);
 
+  // The updater host moved into the nav rail footer with the entry topbar's
+  // removal (#5517); the collapsed rail is inert, so expand it first.
+  await ensureRailOpen(page);
   await page.getByTestId('entry-nav-updater').click();
   const popup = page.getByTestId('updater-popup');
   await expect(popup).toBeVisible();

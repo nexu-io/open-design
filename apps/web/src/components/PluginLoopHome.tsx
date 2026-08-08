@@ -12,6 +12,7 @@ import {
   duplicatePluginAsProject,
   listPlugins,
   renderPluginBriefTemplate,
+  resolvedWorkspaceContextForWrite,
   resolvePluginQueryFallback,
 } from '../state/projects';
 import { useI18n } from '../i18n';
@@ -24,6 +25,7 @@ import { authorInitials, derivePluginSourceLinks } from '../runtime/plugin-sourc
 import { useAnalytics } from '../analytics/provider';
 import { trackPluginLoopClick } from '../analytics/events';
 import { navigate } from '../router';
+import { useWorkspaceContext } from '../collab/useWorkspaceContext';
 
 export interface PluginLoopSubmit {
   prompt: string;
@@ -89,6 +91,7 @@ interface ActivePlugin {
 export function PluginLoopHome({ onSubmit }: Props) {
   const { locale, t } = useI18n();
   const analytics = useAnalytics();
+  const workspaceContextState = useWorkspaceContext();
   const [plugins, setPlugins] = useState<InstalledPluginRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [pendingApplyId, setPendingApplyId] = useState<string | null>(null);
@@ -129,7 +132,10 @@ export function PluginLoopHome({ onSubmit }: Props) {
   ) {
     setPendingApplyId(record.id);
     setError(null);
-    const result = await applyPlugin(record.id, { locale });
+    const result = await applyPlugin(record.id, {
+      locale,
+      workspaceContext: resolvedWorkspaceContextForWrite(workspaceContextState),
+    });
     setPendingApplyId(null);
     if (!result) {
       setError(`Failed to apply ${record.title}. Make sure the daemon is reachable.`);
@@ -153,7 +159,7 @@ export function PluginLoopHome({ onSubmit }: Props) {
     try {
       const result = await duplicatePluginAsProject(record.id, {
         name: localizePluginTitle(locale, record),
-      });
+      }, resolvedWorkspaceContextForWrite(workspaceContextState));
       setDetailsRecord(null);
       navigate({
         kind: 'project',
@@ -385,6 +391,7 @@ export function PluginLoopHome({ onSubmit }: Props) {
       {detailsRecord ? (
         <PluginDetailsModal
           record={detailsRecord}
+          workspaceContext={workspaceContextState.context}
           onClose={closeDetails}
           onUse={(record, action) => void usePlugin(record, action)}
           onDuplicate={(record) => void duplicatePlugin(record)}

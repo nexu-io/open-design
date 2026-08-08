@@ -6,13 +6,7 @@ import { blockingByokDraftIssues, validateByokDraft } from './validation';
 
 type ByokPreflightConfig = Pick<
   AppConfig,
-  | 'apiKey'
-  | 'apiProtocol'
-  | 'apiProviderBaseUrl'
-  | 'baseUrl'
-  | 'model'
-  | 'byokProfileId'
-  | 'byokCredentialConfigured'
+  'apiKey' | 'apiProtocol' | 'apiProviderBaseUrl' | 'baseUrl' | 'model'
 >;
 
 export function byokPreflightBlockReason(
@@ -37,9 +31,6 @@ export function byokPreflightBlockReason(
         protocol,
         selectedProvider,
         config.baseUrl,
-      ),
-      credentialConfigured: Boolean(
-        config.byokProfileId && config.byokCredentialConfigured,
       ),
     },
   );

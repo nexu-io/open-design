@@ -93,6 +93,13 @@ beforeAll(async () => {
   );
   await symlink(outsideDir, path.join(installedSurfacesDir, 'linked-outside'), 'dir');
   await symlink(installedInternalDir, path.join(installedSurfacesDir, 'linked-internal'), 'dir');
+  const installedRoot = path.join(defaultRegistryRoots().userPluginsRoot, 'asset-plugin');
+  await writeFile(
+    path.join(installedRoot, 'SKILL.md'),
+    '---\nname: asset-plugin\ndescription: Fixture skill description.\n---\n\n# Asset plugin\n',
+  );
+  await writeFile(path.join(installedRoot, 'notes.markdown'), '# notes\n');
+  await writeFile(path.join(installedRoot, 'payload.bin'), 'not a text asset');
   void migratePlugins;
   void upsertInstalledPlugin;
   void Database;
@@ -151,5 +158,35 @@ describe('GET /api/plugins/:id/asset/*', () => {
     const resp = await fetch(`${baseUrl}/api/plugins/asset-plugin/asset/surfaces/linked-internal/nested-internal.txt`);
     expect(resp.status).toBe(404);
     expect(await resp.text()).not.toContain('nested internal secret');
+  });
+});
+
+// The plugin detail page reads a suite's "Knowledge skills" descriptions by
+// fetching each `SKILL.md` through this route and parsing its frontmatter.
+// That client only parses bodies whose media type is in its markdown
+// allowlist (`apps/web/src/runtime/plugin-skill-descriptions.ts`); any other
+// type has the response body cancelled unread, which silently blanks the
+// description line under the skill title. Serving markdown with a markdown
+// media type is therefore a contract of this route, not a cosmetic detail.
+describe('GET /api/plugins/:id/asset/* markdown media type', () => {
+  it('serves SKILL.md as text/markdown so the client parses it', async () => {
+    const resp = await fetch(`${baseUrl}/api/plugins/asset-plugin/asset/SKILL.md`);
+    expect(resp.status).toBe(200);
+    expect(resp.headers.get('content-type')).toBe('text/markdown; charset=utf-8');
+    expect(await resp.text()).toContain('Fixture skill description.');
+  });
+
+  it('serves a .markdown asset with the same media type', async () => {
+    const resp = await fetch(`${baseUrl}/api/plugins/asset-plugin/asset/notes.markdown`);
+    expect(resp.status).toBe(200);
+    expect(resp.headers.get('content-type')).toBe('text/markdown; charset=utf-8');
+  });
+
+  // Guards the safe default: only known-safe types are named, everything else
+  // must stay a non-renderable download rather than become inlineable.
+  it('still falls back to application/octet-stream for unknown extensions', async () => {
+    const resp = await fetch(`${baseUrl}/api/plugins/asset-plugin/asset/payload.bin`);
+    expect(resp.status).toBe(200);
+    expect(resp.headers.get('content-type')).toBe('application/octet-stream');
   });
 });

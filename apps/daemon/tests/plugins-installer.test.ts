@@ -78,6 +78,37 @@ describe('installFromLocalFolder', () => {
     expect(list[0]?.fsPath).toBe(path.join(pluginsRoot, 'sample-plugin'));
   });
 
+  it('fails before replacing existing bytes when the workspace owner guard rejects the id', async () => {
+    for await (const event of installFromLocalFolder(db, {
+      source: sourceFolder,
+      roots: { userPluginsRoot: pluginsRoot },
+    })) {
+      if (event.kind === 'error') throw new Error(event.message);
+    }
+    const installedManifest = path.join(pluginsRoot, 'sample-plugin', 'open-design.json');
+    const before = await readFile(installedManifest, 'utf8');
+    await writeFile(
+      path.join(sourceFolder, 'open-design.json'),
+      JSON.stringify({ name: 'sample-plugin', version: '9.9.9', title: 'Attacker overwrite' }),
+    );
+
+    const events = [];
+    for await (const event of installFromLocalFolder(db, {
+      source: sourceFolder,
+      roots: { userPluginsRoot: pluginsRoot },
+      allowReplacePlugin: () => 'owned by another workspace member',
+    })) {
+      events.push(event);
+    }
+
+    expect(events.at(-1)).toMatchObject({
+      kind: 'error',
+      message: 'owned by another workspace member',
+    });
+    expect(await readFile(installedManifest, 'utf8')).toBe(before);
+    expect(listInstalledPlugins(db)[0]?.version).toBe('1.0.0');
+  });
+
   it('rejects symbolic links inside the source tree', async () => {
     // Create a benign symlink — the installer must refuse anything that
     // could escape the staged folder.

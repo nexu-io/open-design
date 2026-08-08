@@ -357,7 +357,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     tutorialsBlurb: '视频上手、演示与社区评测。',
     solution: '解决方案',
     useCases: '使用场景',
-    useCaseItems: ['原型', '看板', '幻灯片', '图片', '视频', '设计系统'],
+    useCaseItems: ['原型', '数据看板', '幻灯片', '图片', '视频', '设计系统'],
     roles: '角色',
     roleItems: ['独立开发者', '设计师', '工程', '产品经理', '市场'],
     tools: '工具',
@@ -2447,7 +2447,7 @@ const HOME_SEO_COPY: Record<LandingLocaleCode, HomeSeoCopy> = {
   zh: {
     title: 'Open Design —— 最佳 Claude Design 开源替代',
     description:
-      'Open Design 是开源的 vibe design workspace，也是 Claude Design 的开源替代——用你自己的 coding agent 做原型、落地页、仪表盘、Slides 和 HTML 视频。',
+      'Open Design 是开源的 vibe design workspace，也是 Claude Design 的开源替代——用你自己的 coding agent 做原型、落地页、数据看板、Slides 和 HTML 视频。',
   },
   'zh-tw': {
     title: 'Open Design —— 最佳 Claude Design 開源替代',
@@ -4868,7 +4868,7 @@ const LANDING_UI_COPY_OVERRIDES: Partial<
       skills: {
         title: (count) => `Skill — ${count} 个可组合设计能力 | Open Design`,
         description:
-          '浏览完整的 Open Design Skill 目录：100+ 个基于 SKILL.md 的文件夹，覆盖演示文稿、原型、仪表盘、移动流程、视频与实时 Artifact。每个 Skill 都是一个可放入 daemon 的文件夹。',
+          '浏览完整的 Open Design Skill 目录：100+ 个基于 SKILL.md 的文件夹，覆盖演示文稿、原型、数据看板、移动流程、视频与实时 Artifact。每个 Skill 都是一个可放入 daemon 的文件夹。',
         label: '目录 · Nº 01',
         heading: (count) => `Skill — ${count} 个可组合设计能力。`,
         lead:
@@ -4936,7 +4936,7 @@ const LANDING_UI_COPY_OVERRIDES: Partial<
       templates: {
         title: (count) => `模板 — ${count} 个可 fork 的 Artifact 模板 | Open Design`,
         description:
-          '可直接 fork 的 Artifact 模板：可刷新的 Live Artifact（类似 Notion 的团队仪表盘、运营简报）以及演示文稿和原型起点。每个模板都带有示例数据，适合复制改造。',
+          '可直接 fork 的 Artifact 模板：可刷新的 Live Artifact（类似 Notion 的团队数据看板、运营简报）以及演示文稿和原型起点。每个模板都带有示例数据，适合复制改造。',
         label: '目录 · Nº 04',
         heading: (count) => `模板 — ${count} 个可 fork 的 Artifact。`,
         lead:

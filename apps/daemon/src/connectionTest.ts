@@ -2182,6 +2182,31 @@ async function testAgentConnectionInternal(
   let timer: ReturnType<typeof setTimeout> | null = null;
   let abortHandler: (() => void) | null = null;
   const sink = createAgentSink();
+  let providerConnectivitySettled = false;
+  let resolveProviderConnectivity!: (value: {
+    kind: 'providerConnectivity';
+    detail: string;
+  }) => void;
+  const providerConnectivity = new Promise<{
+    kind: 'providerConnectivity';
+    detail: string;
+  }>((resolve) => {
+    resolveProviderConnectivity = resolve;
+  });
+  const sendAgentEvent = (event: string, payload: unknown) => {
+    sink.send(event, payload);
+    if (
+      providerConnectivitySettled ||
+      input.agentId !== 'opencode' ||
+      event !== 'stderr'
+    ) {
+      return;
+    }
+    const detail = openCodeProviderConnectivityDetail(sink.getStderrTail());
+    if (!detail) return;
+    providerConnectivitySettled = true;
+    resolveProviderConnectivity({ kind: 'providerConnectivity', detail });
+  };
 
   // Phase tracker for structured diagnostics (#2248). The order matches
   // the lifecycle: binary_resolution → spawn → connection_smoke_test →
@@ -2310,27 +2335,37 @@ async function testAgentConnectionInternal(
     };
   };
 
+  const resultFromProviderConnectivity = (
+    providerDetail: string,
+    exit?: { code: number | null; signal: NodeJS.Signals | null },
+  ): ConnectionTestResponse => {
+    const detail = redactSecrets(providerDetail);
+    console.warn(`[test:agent] ${def.name} → upstream_unavailable: ${detail}`);
+    return {
+      ok: false,
+      kind: 'upstream_unavailable',
+      latencyMs: Date.now() - start,
+      model,
+      agentName: def.name,
+      detail,
+      diagnostics: buildDiagnostics({
+        phase: 'connection_smoke_test',
+        ...(exit ? { exitCode: exit.code, signal: exit.signal } : {}),
+      }),
+    };
+  };
+
   const resultFromCancellation = (
     kind: 'timeout' | 'aborted',
   ): ConnectionTestResponse => {
-    const latencyMs = Date.now() - start;
     if (kind === 'timeout' && input.agentId === 'opencode') {
       const rawDetail = `${sink.getStderrTail()}\n${sink.getRawStdoutTail()}`;
       const providerDetail = openCodeProviderConnectivityDetail(rawDetail);
       if (providerDetail) {
-        const detail = redactSecrets(providerDetail);
-        console.warn(`[test:agent] ${def.name} → upstream_unavailable: ${detail}`);
-        return {
-          ok: false,
-          kind: 'upstream_unavailable',
-          latencyMs,
-          model,
-          agentName: def.name,
-          detail,
-          diagnostics: buildDiagnostics({ phase: 'connection_smoke_test' }),
-        };
+        return resultFromProviderConnectivity(providerDetail);
       }
     }
+    const latencyMs = Date.now() - start;
     console.warn(`[test:agent] ${def.name} → ${kind} in ${(latencyMs / 1000).toFixed(1)}s`);
     return {
       ok: false,
@@ -2486,7 +2521,7 @@ async function testAgentConnectionInternal(
       model,
       env,
       liveModelScope,
-      sink.send,
+      sendAgentEvent,
       sink.appendRawStdout,
     );
 
@@ -2525,6 +2560,17 @@ async function testAgentConnectionInternal(
       // close event before all stdout chunks have reached the parser.
       await delay(AGENT_STDOUT_DRAIN_MS);
       const latencyMs = Date.now() - start;
+      if (input.agentId === 'opencode') {
+        const providerDetail = openCodeProviderConnectivityDetail(
+          `${sink.getStderrTail()}\n${sink.getRawStdoutTail()}`,
+        );
+        if (providerDetail) {
+          return resultFromProviderConnectivity(providerDetail, {
+            code: winner.code,
+            signal: winner.signal,
+          });
+        }
+      }
       const buffered = sink.getText().trim();
       const claudeResult = input.agentId === 'claude'
         ? parseClaudeResultFrame(sink.getRawStdout())
@@ -2799,6 +2845,7 @@ async function testAgentConnectionInternal(
       sink.result,
       childExit,
       cancellationPromise,
+      providerConnectivity,
     ]);
 
     if (winner.kind === 'text') {
@@ -2806,9 +2853,13 @@ async function testAgentConnectionInternal(
         streamError,
         childExit,
         cancellationPromise,
+        providerConnectivity,
       ]);
       if (completion.kind === 'streamError') {
         return resultFromStreamError(completion.error);
+      }
+      if (completion.kind === 'providerConnectivity') {
+        return resultFromProviderConnectivity(completion.detail);
       }
       if (completion.kind === 'timeout' || completion.kind === 'aborted') {
         return resultFromCancellation(completion.kind);
@@ -2817,6 +2868,9 @@ async function testAgentConnectionInternal(
     }
     if (winner.kind === 'streamError') {
       return resultFromStreamError(winner.error);
+    }
+    if (winner.kind === 'providerConnectivity') {
+      return resultFromProviderConnectivity(winner.detail);
     }
     if (winner.kind === 'timeout' || winner.kind === 'aborted') {
       return resultFromCancellation(winner.kind);

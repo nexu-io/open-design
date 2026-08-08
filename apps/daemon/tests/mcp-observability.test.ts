@@ -447,6 +447,35 @@ describe('local MCP plugin observability contract', () => {
       ),
     ).toBe(false);
 
+    const invalidRequest = await handleMcpToolCall(
+      'http://127.0.0.1:17456',
+      'start_run',
+      {
+        project: 'Demo',
+        prompt: 'Create a launch page',
+        requestId: 'od-mscwn4y2-tlnx02dig7',
+        pluginWorkflowId: '018f6f2e-4444-7444-8444-444444444444',
+      },
+      {
+        pluginAttribution: {
+          pluginWorkflowId: '018f6f2e-4444-7444-8444-444444444444',
+          context: pluginContext,
+        },
+      },
+    );
+    expect(invalidRequest).toMatchObject({ isError: true });
+    expect(invalidRequest.content[0]?.text).toContain(
+      'requestId must be a canonical UUID or ULID',
+    );
+    expect(invalidRequest.content[0]?.text).not.toContain(
+      'pluginWorkflowId must be a canonical UUID or ULID',
+    );
+    expect(
+      fetchMock.mock.calls.some(
+        ([url]) => String(url).endsWith('/api/runs'),
+      ),
+    ).toBe(false);
+
     const requestId = '018f6f2e-5555-7555-8555-555555555555';
     const result = await handleMcpToolCall(
       'http://127.0.0.1:17456',

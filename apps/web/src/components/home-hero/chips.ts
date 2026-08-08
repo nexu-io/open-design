@@ -104,7 +104,7 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
   {
     id: 'prototype',
     label: 'Prototype',
-    icon: 'palette',
+    icon: 'artboard',
     group: 'create',
     description: 'Interactive app mockups',
     // Prototype now binds to the bundled `example-web-prototype` plugin,
@@ -273,7 +273,7 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
   {
     id: 'live-artifact',
     label: 'Live artifact',
-    icon: 'refresh',
+    icon: 'bar-chart-box',
     group: 'create',
     description: 'Data-backed live dashboards',
     hint: 'Build a refreshable artifact backed by connector or local data.',
@@ -309,7 +309,7 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
   {
     id: 'video',
     label: 'Video',
-    icon: 'play',
+    icon: 'video-ai',
     group: 'create',
     description: 'Clips, reels & promos',
     action: {
@@ -432,6 +432,11 @@ export function orderedCreateChips(): HomeHeroChip[] {
   const rest = create.filter((c) => !listedIds.has(c.id));
   return [...listed, ...rest];
 }
+
+// Cross-surface handoff: the workspace tabs-bar "+" fan picks a template
+// outside the hero; HomeHero listens for this window event and applies the
+// chip exactly as if its own template picker had been clicked.
+export const HOME_APPLY_TEMPLATE_EVENT = 'open-design:home-apply-template';
 
 // Helper used by tests + the rail component to pull the chip metadata
 // off a click target without round-tripping through React state.

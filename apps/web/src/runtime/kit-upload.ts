@@ -7,7 +7,7 @@
 // daemon endpoint is required.
 
 import { useCallback, useState } from 'react';
-import type { Brand } from '@open-design/contracts';
+import type { Brand, WorkspaceCollabContext } from '@open-design/contracts';
 import {
   fetchProjectFileText,
   uploadProjectFile,
@@ -24,12 +24,13 @@ export interface KitModuleUpload {
 export function useKitModuleUpload(opts: {
   projectId?: string;
   title?: string;
+  workspaceContext?: WorkspaceCollabContext | null;
   onUploaded?: (module: KitUploadModule) => void;
   /** Called when the upload or the brand.json write fails, so the host can
    *  surface a visible error instead of the action silently no-op'ing. */
   onError?: (module: KitUploadModule, message: string) => void;
 }): KitModuleUpload {
-  const { projectId, title, onUploaded, onError } = opts;
+  const { projectId, title, workspaceContext, onUploaded, onError } = opts;
   const [uploading, setUploading] = useState<KitUploadModule | null>(null);
 
   const uploadModule = useCallback(
@@ -41,7 +42,7 @@ export function useKitModuleUpload(opts: {
         const safe =
           file.name.replace(/[^\w.\-]+/g, '-').replace(/^-+|-+$/g, '') || `${module}-asset`;
         const path = `${dir}/${safe}`;
-        const uploaded = await uploadProjectFile(projectId, file, path);
+        const uploaded = await uploadProjectFile(projectId, file, path, workspaceContext);
         if (!uploaded) {
           onError?.(module, 'upload-failed');
           return;
@@ -53,7 +54,14 @@ export function useKitModuleUpload(opts: {
         const storedPath = uploaded.name || path;
         const storedBase = storedPath.split('/').pop() || safe;
 
-        const raw = await fetchProjectFileText(projectId, 'brand.json', { cache: 'no-store' });
+        const raw = await fetchProjectFileText(projectId, 'brand.json', {
+          cache: 'no-store',
+          workspaceContext,
+        });
+        if (raw === null) {
+          onError?.(module, 'brand-read-failed');
+          return;
+        }
         const brand = brandFromRaw(raw, title);
         if (module === 'logo') {
           const prev = brand.logo.primary;
@@ -70,13 +78,22 @@ export function useKitModuleUpload(opts: {
           brand.typography.display = spec;
           brand.typography.body = spec;
         }
-        const wrote = await writeProjectTextFile(projectId, 'brand.json', JSON.stringify(brand, null, 2));
+        const wrote = await writeProjectTextFile(
+          projectId,
+          'brand.json',
+          JSON.stringify(brand, null, 2),
+          undefined,
+          workspaceContext,
+        );
         if (!wrote) {
           onError?.(module, 'write-failed');
           return;
         }
         if (module === 'font') {
-          const manifestRaw = await fetchProjectFileText(projectId, 'fonts/manifest.json', { cache: 'no-store' });
+          const manifestRaw = await fetchProjectFileText(projectId, 'fonts/manifest.json', {
+            cache: 'no-store',
+            workspaceContext,
+          });
           const manifest = parseFontManifest(manifestRaw);
           const family = fontFamilyFromFilename(storedBase);
           manifest.files = manifest.files.filter((entry) => entry.file !== storedBase);
@@ -87,7 +104,13 @@ export function useKitModuleUpload(opts: {
             file: storedBase,
             format: fontFormat(storedBase),
           });
-          await writeProjectTextFile(projectId, 'fonts/manifest.json', JSON.stringify(manifest, null, 2));
+          await writeProjectTextFile(
+            projectId,
+            'fonts/manifest.json',
+            JSON.stringify(manifest, null, 2),
+            undefined,
+            workspaceContext,
+          );
         }
         onUploaded?.(module);
       } catch {
@@ -96,7 +119,7 @@ export function useKitModuleUpload(opts: {
         setUploading(null);
       }
     },
-    [projectId, title, uploading, onUploaded, onError],
+    [projectId, title, workspaceContext, uploading, onUploaded, onError],
   );
 
   return { uploading, uploadModule };

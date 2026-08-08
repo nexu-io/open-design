@@ -9,11 +9,36 @@ vi.mock("electron", () => ({
 }));
 
 import { PackagedPathAccessError } from "../src/errors.js";
+import { inspectExistingDesktopForLauncher } from "../src/launcher-after-quit.js";
 import {
   claimPackagedSingleInstanceLock,
+  createPackagedSecondInstanceHandoff,
   stabilizePackagedWorkingDirectory,
   verifyPackagedDataRootWritable,
 } from "../src/launch.js";
+import type { PackagedNamespacePaths } from "../src/paths.js";
+import { findPackagedDeeplinkArg } from "../src/payload-desktop-launch.js";
+
+function fakePaths(root: string): PackagedNamespacePaths {
+  return {
+    cacheRoot: join(root, "cache"),
+    dataRoot: join(root, "data"),
+    desktopIdentityPath: join(root, "runtime", "desktop-root.json"),
+    desktopLogPath: join(root, "logs", "desktop", "latest.log"),
+    desktopLogsRoot: join(root, "logs", "desktop"),
+    electronSessionDataRoot: join(root, "user-data", "session"),
+    electronUserDataRoot: join(root, "user-data"),
+    headlessIdentityPath: join(root, "runtime", "headless-root.json"),
+    installationRoot: root,
+    installerObservationRoot: join(root, "data", "observations", "installer"),
+    logsRoot: join(root, "logs"),
+    namespaceRoot: root,
+    resourceRoot: join(root, "resources", "open-design"),
+    runtimeRoot: join(root, "runtime"),
+    updateRoot: join(root, "updates"),
+    webIdentityPath: join(root, "runtime", "web-root.json"),
+  };
+}
 
 describe("stabilizePackagedWorkingDirectory", () => {
   it("switches to the namespace runtime root without reading the inherited cwd", () => {
@@ -73,9 +98,9 @@ describe("verifyPackagedDataRootWritable", () => {
 
 describe("claimPackagedSingleInstanceLock", () => {
   it("registers a second-instance focus callback when the lock is acquired", () => {
-    const listeners = new Map<string, () => void>();
+    const listeners = new Map<string, (event: unknown, argv: string[]) => void>();
     const app = {
-      on: vi.fn((event: string, listener: () => void) => {
+      on: vi.fn((event: string, listener: (event: unknown, argv: string[]) => void) => {
         listeners.set(event, listener);
         return app;
       }),
@@ -85,12 +110,57 @@ describe("claimPackagedSingleInstanceLock", () => {
     const focusExisting = vi.fn();
 
     expect(claimPackagedSingleInstanceLock(app, focusExisting)).toBe(true);
-    listeners.get("second-instance")?.();
+    listeners.get("second-instance")?.({}, ["Open Design.exe", "--from-protocol"]);
 
     expect(app.requestSingleInstanceLock).toHaveBeenCalledTimes(1);
     expect(app.on).toHaveBeenCalledWith("second-instance", expect.any(Function));
     expect(app.quit).not.toHaveBeenCalled();
-    expect(focusExisting).toHaveBeenCalledTimes(1);
+    expect(focusExisting).toHaveBeenCalledExactlyOnceWith([
+      "Open Design.exe",
+      "--from-protocol",
+    ]);
+  });
+
+  it("queues a deeplink from the lock fallback while desktop IPC is unavailable", async () => {
+    const root = mkdtempSync(join(tmpdir(), "od-packaged-lock-deeplink-"));
+    const listeners = new Map<string, (event: unknown, argv: string[]) => void>();
+    const deeplinkUrl = "opendesign://workspace/invite/continue?nonce=cold-race";
+    const handoff = createPackagedSecondInstanceHandoff();
+    const app = {
+      on: vi.fn((event: string, listener: (event: unknown, argv: string[]) => void) => {
+        listeners.set(event, listener);
+        return app;
+      }),
+      quit: vi.fn(),
+      requestSingleInstanceLock: vi.fn(() => true),
+    };
+    const dispatchDeeplink = vi.fn();
+    const show = vi.fn();
+
+    try {
+      await expect(inspectExistingDesktopForLauncher("release-beta-win", {
+        deeplinkUrl,
+        paths: fakePaths(root),
+        requestIpc: vi.fn(async () => {
+          throw new Error("desktop IPC is not ready");
+        }),
+      })).resolves.toEqual({ action: "continue", reason: "inspect-failed" });
+
+      expect(claimPackagedSingleInstanceLock(app, (argv) => {
+        handoff.handle(findPackagedDeeplinkArg(argv));
+      })).toBe(true);
+      listeners.get("second-instance")?.({}, ["Open Design.exe", deeplinkUrl]);
+
+      expect(show).not.toHaveBeenCalled();
+      expect(dispatchDeeplink).not.toHaveBeenCalled();
+
+      handoff.attach({ dispatchDeeplink, show });
+
+      expect(show).toHaveBeenCalledTimes(1);
+      expect(dispatchDeeplink).toHaveBeenCalledExactlyOnceWith(deeplinkUrl);
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
   });
 
   it("quits the duplicate process before packaged sidecars start when the lock is held", () => {

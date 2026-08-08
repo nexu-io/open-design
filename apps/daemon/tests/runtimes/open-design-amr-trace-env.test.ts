@@ -66,6 +66,68 @@ test('openDesignAmrTraceEnv fails fast on invalid AMR trace inputs', () => {
   );
 });
 
+// Vela's workspace-credit isolation (spec: workspace-scoped wallet and
+// credit isolation) attributes an AMR spend by the OPEN_DESIGN_WORKSPACE_ID
+// env the daemon forwards to the vela CLI, which the CLI turns into
+// `X-Open-Design-Workspace-Id` + `x-vela-workspace-id` request headers.
+test('openDesignAmrTraceEnv forwards an exact persisted workspace id for AMR runs', () => {
+  const env = openDesignAmrTraceEnv({
+    agentId: 'amr',
+    runId: 'run_trace_team',
+    runAttempt: 0,
+    workspaceId: ' workspace_team_123 ',
+  });
+
+  assert.equal(env.OPEN_DESIGN_WORKSPACE_ID, 'workspace_team_123');
+});
+
+test('openDesignAmrTraceEnv forwards a persisted Personal workspace id too', () => {
+  const env = openDesignAmrTraceEnv({
+    agentId: 'amr',
+    runId: 'run_trace_personal',
+    runAttempt: 0,
+    workspaceId: ' workspace_personal_123 ',
+  });
+  assert.equal(env.OPEN_DESIGN_WORKSPACE_ID, 'workspace_personal_123');
+});
+
+// Null/undefined/blank means the caller found no persisted binding at all.
+// Only that genuinely unbound historical-project case omits the env var.
+test('openDesignAmrTraceEnv omits OPEN_DESIGN_WORKSPACE_ID only without a persisted binding', () => {
+  const withNull = openDesignAmrTraceEnv({
+    agentId: 'amr',
+    runId: 'run_trace_unbound',
+    runAttempt: 0,
+    workspaceId: null,
+  });
+  assert.equal('OPEN_DESIGN_WORKSPACE_ID' in withNull, false);
+
+  const withUndefined = openDesignAmrTraceEnv({
+    agentId: 'amr',
+    runId: 'run_trace_unbound_2',
+    runAttempt: 0,
+  });
+  assert.equal('OPEN_DESIGN_WORKSPACE_ID' in withUndefined, false);
+
+  const withBlank = openDesignAmrTraceEnv({
+    agentId: 'amr',
+    runId: 'run_trace_unbound_3',
+    runAttempt: 0,
+    workspaceId: '   ',
+  });
+  assert.equal('OPEN_DESIGN_WORKSPACE_ID' in withBlank, false);
+});
+
+test('openDesignAmrTraceEnv never forwards workspaceId for non-AMR agents', () => {
+  const env = openDesignAmrTraceEnv({
+    agentId: 'claude',
+    runId: 'run_trace_123',
+    runAttempt: 0,
+    workspaceId: 'workspace_team_123',
+  });
+  assert.deepEqual(env, {});
+});
+
 test('openDesignAmrTraceEnv forwards only bounded plugin correlation to Vela', () => {
   const env = openDesignAmrTraceEnv({
     agentId: 'amr',

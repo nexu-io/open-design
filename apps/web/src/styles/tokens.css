@@ -2,50 +2,64 @@
    Open Design — neutral product workspace
    ============================================================ */
 :root {
-  /* Surface palette — neutral app chrome that does not bias generated artifacts.
-     Keep warm/brand colors out of preview backgrounds; generated product UI
-     must choose its own palette through the active skill/design brief. */
-  --bg: #faf9f7;
-  --bg-app: #faf9f7;
-  --bg-panel: #fdfcfa;
-  --bg-subtle: #f4f5f7;
-  --bg-muted: #eef1f5;
+  /* OpenDesign system palette. Neutrals carry the interface; brand green is
+     reserved for sparse feedback, selected assists, and brand emphasis. */
+  --bg: #fff;
+  --bg-app: #fff;
+  --bg-panel: #fafafa;
+  --bg-subtle: #ededed;
+  --bg-muted: #dbdbdb;
   --bg-fill-tertiary: rgba(0, 0, 0, 0.03);
   --bg-fill-secondary: rgba(0, 0, 0, 0.06);
   --bg-fill: rgba(0, 0, 0, 0.12);
-  --bg-elevated: #fffefc;
-  --border: #e1e5eb;
-  --border-strong: #c9d0da;
-  --border-soft: #edf0f4;
+  --bg-elevated: #fafafa;
+  /* Liquid Glass — frosted "regular" material for floating functional layers
+     (nav rail, toolbars, popovers) per the material spec. Translucent surface
+     + backdrop blur; falls back to a solid --bg-panel where unsupported. */
+  --glass-regular: rgba(250, 250, 250, 0.66);
+  --glass-regular-blur: 28px;
+  /* Bright top-edge sheen that reads as glass thickness on a frosted pane. */
+  --glass-edge-highlight: color-mix(in srgb, #fff 65%, transparent);
+  /* Entry ground shares the app surface — the nav rail is a solid panel now,
+     so the page behind it no longer needs a tinted ground to float on. */
+  --entry-ground: var(--bg);
+  --border: #dbdbdb;
+  --border-strong: #bdbdbd;
+  --border-selected: #a3a3a3;
+  --border-soft: #ededed;
 
-  --text: #1a1916;
-  --text-strong: #0d0c0a;
-  --text-muted: #74716b;
-  --text-soft: #989590;
-  --text-faint: #b3b0a8;
+  --text: #494949;
+  --text-strong: #202020;
+  --text-muted: #5c5c5c;
+  --text-soft: #848484;
+  --text-faint: #bdbdbd;
 
-  /* Accent — Open Design action color for app chrome only. */
-  --accent: #c96442;
-  --accent-strong: #b45a3b;
-  --accent-soft: #f5d8cb;
-  --accent-tint: #fbeee5;
-  --accent-hover: #b45a3b;
+  --accent: #353535;
+  --accent-contrast: #fafafa;
+  --accent-strong: #202020;
+  --accent-soft: #ededed;
+  --accent-tint: #f7f7f7;
+  --accent-hover: #202020;
+  --brand: #87ea5c;
+  --brand-weak: #d0ffb5;
+  --brand-soft: #ebffde;
+  --brand-text: #0d5400;
 
   /* Semantic accent tints used by tool / status pills. */
-  --green: #1f7a3a;
-  --green-bg: #e8f7ee;
-  --green-border: #c6ead2;
-  --blue: #2348b8;
-  --blue-bg: #e8efff;
-  --blue-border: #c8d6ff;
-  --purple: #6c3aa6;
-  --purple-bg: #f3ecf9;
-  --purple-border: #e4d4f1;
-  --red: #9c2a25;
-  --red-bg: #fdecea;
-  --red-border: #f5c6c2;
-  --amber: #b26200;
-  --amber-bg: #fff3e0;
+  --green: #00AA54;
+  --green-bg: #f5ffee;
+  --green-border: #adf788;
+  --blue: #1A74FF;
+  --blue-bg: color-mix(in srgb, #1A74FF 10%, #fafafa);
+  --blue-border: color-mix(in srgb, #1A74FF 24%, #dbdbdb);
+  --purple: #353535;
+  --purple-bg: #ededed;
+  --purple-border: #dbdbdb;
+  --red: #F04142;
+  --red-bg: color-mix(in srgb, #F04142 10%, #fafafa);
+  --red-border: color-mix(in srgb, #F04142 24%, #dbdbdb);
+  --amber: #FF7528;
+  --amber-bg: color-mix(in srgb, #FFBA12 18%, #fafafa);
 
   --shadow-xs: 0 1px 0 rgba(28, 27, 26, 0.04);
   --shadow-sm: 0 1px 2px rgba(28, 27, 26, 0.05), 0 1px 3px rgba(28, 27, 26, 0.04);
@@ -57,22 +71,39 @@
      base for cards/menus, md for medium containers, lg for large surfaces,
      pill for fully-rounded interactive. Off-scale values (7px, 9px, 10px
      literals) are drift; collapse them to the nearest token. */
-  --radius-xs: 4px;
-  --radius-sm: 6px;
-  --radius: 8px;
-  --radius-md: 10px;
-  --radius-lg: 12px;
+  --radius-none: 0px;
+  --radius-small: 2px;
+  --radius-medium: 4px;
+  --radius-large: 8px;
+  --radius-xlarge: 12px;
+  --radius-circular: 50%;
+  --stroke-thin: 1px;
+  --stroke-thick: 2px;
+  --stroke-thicker: 3px;
+  --stroke-thickest: 4px;
+  --radius-xs: var(--radius-small);
+  --radius-sm: var(--radius-medium);
+  --radius: var(--radius-large);
+  --radius-md: var(--radius-large);
+  --radius-lg: var(--radius-xlarge);
   --radius-pill: 999px;
 
-  /* Motion — codifies the UI animation philosophy (see AGENTS.md). The
-     built-in `ease` curve is too weak and `ease-in` is banned for UI;
-     --ease-out is the single canonical curve for product transitions.
-     Enter reads gentle, exit reads decisive (asymmetric durations);
-     --dur-quick is for hover / focus micro-feedback. */
-  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
-  --dur-quick: 120ms;
-  --dur-enter: 200ms;
-  --dur-exit: 140ms;
+  --duration-ultra-fast: 50ms;
+  --duration-faster: 100ms;
+  --duration-fast: 150ms;
+  --duration-normal: 200ms;
+  --duration-gentle: 250ms;
+  --duration-slow: 300ms;
+  --duration-slower: 400ms;
+  --duration-ultra-slow: 500ms;
+  --curve-linear: cubic-bezier(0, 0, 1, 1);
+  --curve-accelerate-mid: cubic-bezier(1, 0, 1, 1);
+  --curve-decelerate-mid: cubic-bezier(0, 0, 0, 1);
+  --curve-easy-ease: cubic-bezier(0.33, 0, 0.67, 1);
+  --ease-out: var(--curve-decelerate-mid);
+  --dur-quick: var(--duration-faster);
+  --dur-enter: var(--duration-normal);
+  --dur-exit: var(--duration-fast);
 
   /* "Active option" indicator color, intentionally separate from --accent
      (brand orange used by primary CTAs like Create / Save). Use --selected
@@ -80,17 +111,19 @@
      fidelity card, focused input ring, active filter pill — so a primary
      CTA and a selected state can coexist on the same screen without
      competing. --selected-soft is the 16% tint for outer rings / fills. */
-  --selected: #2563eb;
-  --selected-soft: rgba(37, 99, 235, 0.16);
+  --selected: #353535;
+  --selected-soft: color-mix(in srgb, #353535 12%, transparent);
 
-  --serif: 'Source Serif Pro', 'Source Serif 4', 'Iowan Old Style', 'Apple Garamond', Georgia, 'Times New Roman', serif;
-  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei UI', 'Noto Sans', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  --mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
+  --serif: "Albert Sans", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --sans: "Albert Sans", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --mono: "JiduMono Pro", ui-monospace, "SFMono-Regular", monospace;
 
-  --prose-font-size: 15px;
-  --prose-line-height: 1.75;
-  --code-header-bg: #f4f5f7;
-  --code-body-bg: #f9fafb;
+  /* Chat prose scale: body 13, headings 14, top-level emphasis 16 — the
+     whole message module stays inside the 12–16px band. */
+  --prose-font-size: 13px;
+  --prose-line-height: 1.7;
+  --code-header-bg: #ededed;
+  --code-body-bg: #fafafa;
   --code-font-size: 13px;
   --code-line-height: 1.65;
 }
@@ -99,45 +132,53 @@
    OS-level prefers-color-scheme media query (system mode = no data-theme attr). */
 [data-theme="dark"] {
   color-scheme: dark;
-  --bg: #1a1917;
-  --bg-app: #1a1917;
-  --bg-panel: #222120;
-  --bg-subtle: #252321;
-  --bg-muted: #2e2c29;
+  --bg: #202020;
+  --bg-app: #202020;
+  --bg-panel: #353535;
+  --bg-subtle: #494949;
+  --bg-muted: #5c5c5c;
   --bg-fill-tertiary: rgba(255, 255, 255, 0.06);
   --bg-fill-secondary: rgba(255, 255, 255, 0.10);
   --bg-fill: rgba(255, 255, 255, 0.16);
-  --bg-elevated: #2a2825;
-  --border: #333128;
-  --border-strong: #46433c;
-  --border-soft: #2a2825;
+  --bg-elevated: #353535;
+  --glass-regular: rgba(53, 53, 53, 0.66);
+  --glass-edge-highlight: color-mix(in srgb, #fff 14%, transparent);
+  --border: #5c5c5c;
+  --border-strong: #848484;
+  --border-selected: #a3a3a3;
+  --border-soft: #494949;
 
-  --text: #e8e4dc;
-  --text-strong: #f2ede4;
-  --text-muted: #9a9690;
-  --text-soft: #6e6b65;
-  --text-faint: #4e4b46;
+  --text: #ededed;
+  --text-strong: #fafafa;
+  --text-muted: #bdbdbd;
+  --text-soft: #848484;
+  --text-faint: #5c5c5c;
 
-  --accent: #d97a56;
-  --accent-strong: #e8896a;
-  --accent-soft: #3d2318;
-  --accent-tint: #2e1a12;
-  --accent-hover: #e8896a;
+  --accent: #ededed;
+  --accent-contrast: #202020;
+  --accent-strong: #fafafa;
+  --accent-soft: #494949;
+  --accent-tint: #353535;
+  --accent-hover: #fafafa;
+  --brand: #87ea5c;
+  --brand-weak: #2f781d;
+  --brand-soft: #164111;
+  --brand-text: #adf788;
 
-  --green: #4caf72;
-  --green-bg: #0f2a18;
-  --green-border: #1a4028;
-  --blue: #6b8fe8;
-  --blue-bg: #0f1a38;
-  --blue-border: #1a2c58;
-  --purple: #a87dd4;
-  --purple-bg: #1e1030;
-  --purple-border: #321a50;
-  --red: #e06b65;
-  --red-bg: #2a0e0c;
-  --red-border: #451714;
-  --amber: #e09a40;
-  --amber-bg: #2a1a04;
+  --green: #3BBF7D;
+  --green-bg: #164111;
+  --green-border: #2f781d;
+  --blue: #3AA5F0;
+  --blue-bg: color-mix(in srgb, #1A74FF 22%, #202020);
+  --blue-border: color-mix(in srgb, #3AA5F0 34%, #5c5c5c);
+  --purple: #ededed;
+  --purple-bg: #494949;
+  --purple-border: #5c5c5c;
+  --red: #FF5E5E;
+  --red-bg: color-mix(in srgb, #F04142 24%, #202020);
+  --red-border: color-mix(in srgb, #FF5E5E 34%, #5c5c5c);
+  --amber: #FFC740;
+  --amber-bg: color-mix(in srgb, #FFBA12 22%, #202020);
 
   --shadow-xs: 0 1px 0 rgba(0, 0, 0, 0.2);
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.2);
@@ -152,45 +193,53 @@
 @media (prefers-color-scheme: dark) {
   html:not([data-theme]) {
     color-scheme: dark;
-    --bg: #1a1917;
-    --bg-app: #1a1917;
-    --bg-panel: #222120;
-    --bg-subtle: #252321;
-    --bg-muted: #2e2c29;
+    --bg: #202020;
+    --bg-app: #202020;
+    --bg-panel: #353535;
+    --bg-subtle: #494949;
+    --bg-muted: #5c5c5c;
     --bg-fill-tertiary: rgba(255, 255, 255, 0.06);
     --bg-fill-secondary: rgba(255, 255, 255, 0.10);
     --bg-fill: rgba(255, 255, 255, 0.16);
-    --bg-elevated: #2a2825;
-    --border: #333128;
-    --border-strong: #46433c;
-    --border-soft: #2a2825;
+    --bg-elevated: #353535;
+    --glass-regular: rgba(53, 53, 53, 0.66);
+    --glass-edge-highlight: color-mix(in srgb, #fff 14%, transparent);
+    --border: #5c5c5c;
+    --border-strong: #848484;
+    --border-selected: #a3a3a3;
+    --border-soft: #494949;
 
-    --text: #e8e4dc;
-    --text-strong: #f2ede4;
-    --text-muted: #9a9690;
-    --text-soft: #6e6b65;
-    --text-faint: #4e4b46;
+    --text: #ededed;
+    --text-strong: #fafafa;
+    --text-muted: #bdbdbd;
+    --text-soft: #848484;
+    --text-faint: #5c5c5c;
 
-    --accent: #d97a56;
-    --accent-strong: #e8896a;
-    --accent-soft: #3d2318;
-    --accent-tint: #2e1a12;
-    --accent-hover: #e8896a;
+    --accent: #ededed;
+    --accent-contrast: #202020;
+    --accent-strong: #fafafa;
+    --accent-soft: #494949;
+    --accent-tint: #353535;
+    --accent-hover: #fafafa;
+    --brand: #87ea5c;
+    --brand-weak: #2f781d;
+    --brand-soft: #164111;
+    --brand-text: #adf788;
 
-    --green: #4caf72;
-    --green-bg: #0f2a18;
-    --green-border: #1a4028;
-    --blue: #6b8fe8;
-    --blue-bg: #0f1a38;
-    --blue-border: #1a2c58;
-    --purple: #a87dd4;
-    --purple-bg: #1e1030;
-    --purple-border: #321a50;
-    --red: #e06b65;
-    --red-bg: #2a0e0c;
-    --red-border: #451714;
-    --amber: #e09a40;
-    --amber-bg: #2a1a04;
+    --green: #3BBF7D;
+    --green-bg: #164111;
+    --green-border: #2f781d;
+    --blue: #3AA5F0;
+    --blue-bg: color-mix(in srgb, #1A74FF 22%, #202020);
+    --blue-border: color-mix(in srgb, #3AA5F0 34%, #5c5c5c);
+    --purple: #ededed;
+    --purple-bg: #494949;
+    --purple-border: #5c5c5c;
+    --red: #FF5E5E;
+    --red-bg: color-mix(in srgb, #F04142 24%, #202020);
+    --red-border: color-mix(in srgb, #FF5E5E 34%, #5c5c5c);
+    --amber: #FFC740;
+    --amber-bg: color-mix(in srgb, #FFBA12 22%, #202020);
 
     --shadow-xs: 0 1px 0 rgba(0, 0, 0, 0.2);
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.2);

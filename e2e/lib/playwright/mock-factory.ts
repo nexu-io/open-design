@@ -62,7 +62,51 @@ export async function applyStandardMocks(page: Page): Promise<void> {
   await applyStorageConfig(page);
   await routeMockAgents(page);
   await routeAppConfig(page);
+  // Keep this explicit even though the shared suite fixture also installs the
+  // route: callers use applyStandardMocks for extra pages/contexts that are
+  // created outside the built-in Playwright `page` fixture.
+  await routeUnavailableVelaStatus(page);
   await suppressWhatsNew(page);
+}
+
+/**
+ * Keep non-authentication UI specs independent from Cloud account state.
+ *
+ * Cloud-first onboarding makes a completed local app config and the Cloud
+ * session two separate boot gates. A fake signed-in account changes project
+ * and conversation APIs to Workspace-scoped behavior, so unrelated local UI
+ * specs instead model a valid transient status outage: the app keeps the
+ * account state unresolved and does not redirect. Authentication specs route
+ * this endpoint themselves with explicit signed-in/signed-out responses.
+ */
+export async function routeUnavailableVelaStatus(page: Page): Promise<void> {
+  await page.route('**/api/integrations/vela/status*', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.fallback();
+      return;
+    }
+    await route.fulfill({
+      status: 503,
+      json: { error: 'Vela status unavailable in this spec' },
+    });
+  });
+}
+
+/**
+ * Keep local-agent scenarios independent from a developer machine's Vela
+ * session. Workspace-aware project creation treats a signed-in account as
+ * requiring an exact Workspace authority, so leaking the host login here can
+ * reject a mocked local-agent create before POST /api/projects is dispatched.
+ * AMR scenarios register their own status route after this standard fallback.
+ */
+export async function routeSignedOutVelaStatus(page: Page): Promise<void> {
+  await page.route('**/api/integrations/vela/status*', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.fallback();
+      return;
+    }
+    await route.fulfill({ json: { loggedIn: false } });
+  });
 }
 
 /** Keep unrelated release announcements from covering the surface under test. */

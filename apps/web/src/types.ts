@@ -67,6 +67,7 @@ import type {
   PreviewAnnotationStyle,
   PreviewCommentSelectionKind,
   PreviewComment,
+  PreviewCommentAnchorState,
   PreviewCommentAttachment,
   PreviewCommentStatus,
   PreviewCommentTarget,
@@ -87,6 +88,7 @@ import type {
   SkillDetail,
   SkillSummary,
   InstallInput,
+  InstallSkillRequest,
   InstallSkillResponse,
   InstallDesignSystemResponse,
   UninstallResponse,
@@ -361,6 +363,10 @@ export interface OrbitConfig {
   time: string;
   /** Optional skill id from the examples gallery where scenario === "orbit". */
   templateSkillId?: string | null;
+  workspaceScope?: {
+    workspaceId: string;
+    workspaceMemberId: string;
+  } | null;
 }
 
 export interface PetConfig {
@@ -381,10 +387,6 @@ export interface PetConfig {
 export interface AppConfig {
   mode: ExecMode;
   apiKey: string;
-  /** Non-secret daemon-owned credential profile selected for BYOK runs. */
-  byokProfileId?: string;
-  byokCredentialConfigured?: boolean;
-  byokCredentialTail?: string;
   baseUrl: string;
   model: string;
   apiProtocol?: ApiProtocol;
@@ -620,6 +622,7 @@ export type {
   Project,
   ProjectPlatform,
   PreviewComment,
+  PreviewCommentAnchorState,
   PreviewCommentAttachment,
   PreviewCommentStatus,
   PreviewCommentTarget,
@@ -644,6 +647,7 @@ export type {
   SkillDetail,
   SkillSummary,
   InstallInput,
+  InstallSkillRequest,
   InstallSkillResponse,
   InstallDesignSystemResponse,
   UninstallResponse,

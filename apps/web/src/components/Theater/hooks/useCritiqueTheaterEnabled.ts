@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import type { WorkspaceCollabContext } from '@open-design/contracts';
+import { workspaceProjectHeaders } from '../../../collab/workspace-identity';
 
 const STORAGE_KEY = 'open-design:config';
 const TOGGLE_EVENT = 'open-design:critique-theater-toggle';
@@ -119,6 +121,11 @@ export function useCritiqueTheaterEnabled(): boolean {
 export interface SetCritiqueTheaterEnabledOptions {
   /** Project id to round-trip the override through the daemon. */
   projectId?: string;
+  /**
+   * Persisted project Workspace authority. `null` is the explicit unbound
+   * compatibility lane; a bound project must provide its exact context.
+   */
+  workspaceContext?: WorkspaceCollabContext | null;
   /** Test seam: swap the PATCH transport. */
   fetchProjectSettings?: (url: string, init: RequestInit) => Promise<Response>;
 }
@@ -180,10 +187,18 @@ export function setCritiqueTheaterEnabled(
     const fetcher = options.fetchProjectSettings
       ?? ((url: string, init: RequestInit) => fetch(url, init));
     const projectUrl = `/api/projects/${encodeURIComponent(projectId)}`;
+    const projectHeaders = new Headers(
+      options.workspaceContext
+        ? workspaceProjectHeaders(options.workspaceContext)
+        : undefined,
+    );
     (async () => {
       let existingMetadata: Record<string, unknown> = {};
       try {
-        const getRes = await fetcher(projectUrl, { method: 'GET' });
+        const getRes = await fetcher(projectUrl, {
+          method: 'GET',
+          ...(options.workspaceContext ? { headers: projectHeaders } : {}),
+        });
         if (!getRes.ok) {
           throw new Error(`prefetch returned status ${getRes.status}`);
         }
@@ -208,9 +223,11 @@ export function setCritiqueTheaterEnabled(
         return;
       }
       try {
+        const patchHeaders = new Headers(projectHeaders);
+        patchHeaders.set('content-type', 'application/json');
         await fetcher(projectUrl, {
           method: 'PATCH',
-          headers: { 'content-type': 'application/json' },
+          headers: patchHeaders,
           body: JSON.stringify({
             metadata: { ...existingMetadata, critiqueTheaterEnabled: next },
           }),

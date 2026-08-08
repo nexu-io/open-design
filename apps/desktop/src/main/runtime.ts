@@ -6,7 +6,7 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
-import { BrowserWindow, app, dialog, ipcMain, nativeImage, screen, session, shell } from "electron";
+import { BrowserWindow, app, dialog, ipcMain, nativeImage, nativeTheme, screen, session, shell } from "electron";
 import {
   DESKTOP_UPDATE_CHANNELS,
   DESKTOP_UPDATE_MODES,
@@ -22,12 +22,14 @@ import {
 import type {
   OpenDesignHostActionResult,
   OpenDesignHostCaptureResult,
+  OpenDesignHostProjectImportInit,
   OpenDesignHostUpdaterActionOptions,
   OpenDesignHostUpdaterMenuLabels,
   OpenDesignHostUpdaterOpenDialogRequest,
 } from "@open-design/host";
 
 import { renderDeckSlides } from "./deck-capture.js";
+import { openFirstPartyMailto } from "./mailto-open.js";
 import { openValidatedDirectory } from "./open-path.js";
 import { exportArtifact as exportArtifactFromHtml } from "./artifact-export.js";
 import { createElectronPdfTarget, exportPdfFromHtml, savePrintReadyDocumentAsPdf } from "./pdf-export.js";
@@ -443,7 +445,7 @@ export type DesktopRuntimeOptions = {
   onUpdateMenuLabels?: (labels: OpenDesignHostUpdaterMenuLabels) => void;
 };
 
-const DESKTOP_IMPORT_TOKEN_HEADER = "X-OD-Desktop-Import-Token";
+const DESKTOP_IMPORT_TOKEN_HEADER = "x-od-desktop-import-token";
 const DESKTOP_IMPORT_TOKEN_TTL_MS = 60_000;
 
 export function mintImportToken(secret: Buffer, baseDir: string): string {
@@ -485,7 +487,7 @@ export type PickAndImportFolderDeps = {
   baseDir: string;
   desktopAuthSecret: Buffer;
   fetchImpl?: typeof globalThis.fetch;
-  init?: { name?: string; skillId?: string | null; designSystemId?: string | null };
+  init?: OpenDesignHostProjectImportInit;
   /** Round-5: lazy re-registration hook. Called once on 503. */
   registerDesktopAuth?: () => Promise<boolean>;
   /** Injected for tests; defaults to the production HMAC mint. */
@@ -517,6 +519,22 @@ export async function pickAndImportFolder(
         headers: {
           "Content-Type": "application/json",
           [DESKTOP_IMPORT_TOKEN_HEADER]: headerValue,
+          ...(deps.init?.workspaceContext
+            ? {
+                "x-od-workspace-id": deps.init.workspaceContext.workspaceId,
+                "x-od-workspace-type": deps.init.workspaceContext.workspaceType,
+                "x-od-workspace-member-id": deps.init.workspaceContext.workspaceMemberId,
+                "x-od-workspace-role": deps.init.workspaceContext.role,
+                "x-od-workspace-lifecycle-state": deps.init.workspaceContext.lifecycleState,
+                "x-od-workspace-member-status": deps.init.workspaceContext.memberStatus,
+                "x-od-workspace-can-share-projects": String(
+                  deps.init.workspaceContext.permissions.canShareProjects,
+                ),
+                "x-od-workspace-can-write-synced-files": String(
+                  deps.init.workspaceContext.permissions.canWriteSyncedFiles,
+                ),
+              }
+            : {}),
         },
         method: "POST",
       });
@@ -728,19 +746,48 @@ const MAC_WINDOW_CHROME =
   process.platform === "darwin"
     ? ({
         titleBarStyle: "hiddenInset" as const,
-        trafficLightPosition: { x: 12, y: 10 },
+        // y centers the 12px traffic-light circles on the tab strip's midline.
+        // The base `.workspace-tabs-chrome.app-chrome-header` rule in apps/web
+        // shell.css says 44px, but every real window wraps the tab bar in
+        // `.workspace-shell` (see App.tsx), and `.workspace-shell
+        // .workspace-tabs-chrome.app-chrome-header` in viewer/routines.css
+        // overrides it to 52px (10px above the tab + 32px tab + 10px below) —
+        // confirmed via getBoundingClientRect() against a live desktop window,
+        // not by reading the CSS alone, since that 44px rule reads as "the"
+        // rule until you check what actually wins. Midline is 52 / 2 = 26, so
+        // the circles' top edge is 26 - 6 = 20. A prior pass "corrected" this
+        // to y: 16 off the un-overridden 44px rule, which is what actually
+        // reintroduced the misalignment — don't repeat that without first
+        // measuring the live header height.
+        trafficLightPosition: { x: 12, y: 20 },
+        // Frosted-glass window: the desktop wallpaper blurs through the whole
+        // window (NSVisualEffectView). The web shell keeps html/body
+        // transparent in desktop mode (see apps/web app-wash.css) so the
+        // vibrancy is actually visible; 'active' keeps the blur when the
+        // window loses focus instead of flattening to gray.
+        vibrancy: "under-window" as const,
+        visualEffectState: "active" as const,
+        backgroundColor: "#00000000",
       })
     : {};
 
 const MAC_WINDOW_CHROME_CSS = `
   .app-chrome-header {
-    --app-chrome-traffic-space: 96px !important;
-    --app-chrome-traffic-margin: 12px !important;
+    /* Windowed: the home pill sits 4px after the traffic lights (lights span
+       x:12 + 52px = 64px). Fullscreen (class synced from main below): the
+       lights are hidden, so the pill left-aligns with the nav-rail card's
+       10px inset instead. */
+    --app-chrome-traffic-space: 64px !important;
+    --app-chrome-traffic-margin: 4px !important;
     -webkit-app-region: drag;
   }
+  html.is-window-fullscreen .app-chrome-header {
+    --app-chrome-traffic-space: 10px !important;
+    --app-chrome-traffic-margin: 0px !important;
+  }
   .app-chrome-traffic-space {
-    flex: 0 0 96px !important;
-    width: 96px !important;
+    flex: 0 0 var(--app-chrome-traffic-space) !important;
+    width: var(--app-chrome-traffic-space) !important;
   }
   .app-chrome-header button,
   .app-chrome-header a,
@@ -1015,6 +1062,11 @@ interface RendererCrashScreenContext {
 
 const CRASH_REPORT_ISSUES_URL = "https://github.com/nexu-io/open-design/issues/new";
 const SUPPORT_EMAIL = "support@open-design.ai";
+// Every address the app is allowed to hand to the OS mail client. Keep this in
+// sync with the renderer's own contact affordances (`CONTACT_EMAIL_URL` in
+// `apps/web/src/components/EntryNavRail.tsx`); an address that is not listed
+// here silently does nothing when clicked in the packaged shell.
+const FIRST_PARTY_EMAILS = new Set([SUPPORT_EMAIL, "contact@open.design"]);
 
 // Narrow allowlist for the crash screen's "Email us" action: only a mailto
 // addressed to our own support address, carrying nothing but the crash-screen's
@@ -1026,10 +1078,24 @@ const SUPPORT_EMAIL = "support@open-design.ai";
 // renderer could otherwise launch the mail client with arbitrary recipients, so
 // reject any `to`/`cc`/`bcc`/unknown query key.
 export function isSupportMailtoUrl(url: string): boolean {
+  return isMailtoUrlAddressedTo(url, (address) => address === SUPPORT_EMAIL);
+}
+
+// Same allowlist discipline as `isSupportMailtoUrl`, widened to every address
+// this app owns. A `mailto:` the user clicks in the UI never reaches the OS on
+// its own: Electron raises `will-navigate` for it, and a handler that only
+// recognises http(s) leaves the navigation to be dropped, so the click reads as
+// dead. Routing first-party mailtos through `shell.openExternal` is what
+// actually opens the mail client.
+export function isFirstPartyMailtoUrl(url: string): boolean {
+  return isMailtoUrlAddressedTo(url, (address) => FIRST_PARTY_EMAILS.has(address));
+}
+
+function isMailtoUrlAddressedTo(url: string, allow: (address: string) => boolean): boolean {
   try {
     const parsed = new URL(url);
     if (parsed.protocol !== "mailto:") return false;
-    if (parsed.pathname.toLowerCase() !== SUPPORT_EMAIL) return false;
+    if (!allow(parsed.pathname.toLowerCase())) return false;
     for (const [key, value] of parsed.searchParams) {
       if (key !== "subject" && key !== "body") return false;
       // Reject a decoded CR/LF in the value: `subject=ok%0D%0ABcc:attacker@…`
@@ -1403,6 +1469,22 @@ export type SplashWindowHandle = {
 };
 
 /**
+ * Pin Electron's native appearance to light.
+ *
+ * The app has one theme now, so `themeSource` is not a preference to sync — it
+ * is a constant. Leaving it at Electron's `system` default lets a dark-mode OS
+ * colour everything the web layer does not own: the macOS vibrancy glass
+ * (`vibrancy: "under-window"`), native menus and dialogs, and the renderer's
+ * own `prefers-color-scheme` before `data-theme` is stamped.
+ *
+ * Idempotent, so both the splash path and the `od:appearance:set-theme` handler
+ * can call it.
+ */
+export function pinNativeAppearanceToLight(): void {
+  nativeTheme.themeSource = "light";
+}
+
+/**
  * Create and immediately show the light brand-splash window. The packaged entry
  * calls this BEFORE awaiting the daemon/web sidecars so the animation masks the
  * whole cold boot (no black no-window gap); the desktop runtime then adopts it
@@ -1411,6 +1493,12 @@ export type SplashWindowHandle = {
  * + matching size so the reveal swap reads as a single window, never a flash.
  */
 export function createSplashWindow(): SplashWindowHandle {
+  // Open Design ships light-only (the theme setting was removed), so pin the
+  // native appearance before the first window exists. Electron defaults
+  // `themeSource` to `system`, which paints the macOS vibrancy glass and the
+  // native chrome dark on a dark-mode Mac — visible on the splash and again in
+  // the gap before the renderer's `od:appearance:set-theme` lands.
+  pinNativeAppearanceToLight();
   // Stamp creation time at the instant the window appears (see SplashWindowHandle).
   const startedAt = Date.now();
   const splash = new BrowserWindow({
@@ -1544,7 +1632,25 @@ function installWindowChromeCssHook(window: BrowserWindow): void {
     void applyWindowChromeCss(window).catch((error: unknown) => {
       console.error("desktop window chrome CSS injection failed", error);
     });
+    void syncWindowFullscreenClass(window);
   });
+  window.on("enter-full-screen", () => void syncWindowFullscreenClass(window));
+  window.on("leave-full-screen", () => void syncWindowFullscreenClass(window));
+}
+
+/** Mirrors the macOS fullscreen state onto <html> so the injected window
+ *  chrome CSS can reposition the tab-strip home pill (the traffic lights
+ *  disappear in fullscreen). */
+async function syncWindowFullscreenClass(window: BrowserWindow): Promise<void> {
+  if (process.platform !== "darwin" || window.isDestroyed()) return;
+  const flag = window.isFullScreen();
+  try {
+    await window.webContents.executeJavaScript(
+      `document.documentElement.classList.toggle('is-window-fullscreen', ${flag ? "true" : "false"});`,
+    );
+  } catch (error: unknown) {
+    console.error("desktop fullscreen class sync failed", error);
+  }
 }
 
 function desktopPetUrl(baseUrl: string): string {
@@ -1623,8 +1729,10 @@ function showWindowButtons(window: BrowserWindow): void {
 // window minimized or hidden even when constructed with show:true,
 // leaving users unable to locate the window. Cross-platform safe: only
 // acts when the window is actually minimized or hidden, preserving any
-// user-adjusted window state.
-function ensureWindowVisible(window: BrowserWindow): void {
+// user-adjusted window state. Also the revealed path of `DesktopRuntime.show()`
+// (deeplink hand-off / external show): restore-before-focus is what brings a
+// minimized client back, so exported for regression coverage.
+export function ensureWindowVisible(window: BrowserWindow): void {
   if (window.isDestroyed()) return;
   if (window.isMinimized()) window.restore();
   if (!window.isVisible()) window.show();
@@ -1911,7 +2019,8 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   ipcMain.handle("shell:open-external", async (_event, url: string) => {
     // http(s) as before, plus a mailto strictly to our support address (the
     // crash screen's "Email us"); no other scheme opens.
-    if (!isHttpUrl(url) && !isSupportMailtoUrl(url)) return false;
+    if (isSupportMailtoUrl(url)) return openFirstPartyMailto(url);
+    if (!isHttpUrl(url)) return false;
     try {
       await shell.openExternal(url);
       return true;
@@ -1935,7 +2044,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   // import boundary while leaving web-only deployments untouched.
   ipcMain.handle(
     "dialog:pick-and-import",
-    async (event, init?: { name?: string; skillId?: string | null; designSystemId?: string | null }) => {
+    async (event, init?: OpenDesignHostProjectImportInit) => {
       // Defensive failsafe for non-production runtimes (test harnesses
       // that construct createDesktopRuntime without a secret). Round-5
       // production wiring in runDesktopMain ALWAYS passes the per-process
@@ -2429,6 +2538,20 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     else petWindow.hide();
   });
 
+  ipcMain.removeAllListeners("od:appearance:set-theme");
+  ipcMain.on("od:appearance:set-theme", (event, theme: unknown) => {
+    if (window.isDestroyed() || event.sender !== window.webContents) return;
+    if (theme !== "light" && theme !== "dark" && theme !== "system") return;
+    // Pin the native appearance to the app theme. The macOS frosted window
+    // (vibrancy: under-window) draws its glass in the SYSTEM appearance by
+    // default, so a light app over a dark OS sat on dark glass and read as a
+    // muddy gray (#94); forcing the native theme keeps the glass material in
+    // step with the app's tokens. The host protocol still carries all three
+    // values as generic infrastructure, but the app ships light-only, so this
+    // is the same value `pinNativeAppearanceToLight` already set at startup.
+    nativeTheme.themeSource = theme;
+  });
+
   ipcMain.removeHandler('od:print-pdf');
   ipcMain.handle('od:print-pdf', async (_event, html: unknown, nonce: unknown, options: unknown): Promise<void> => {
     if (typeof html !== 'string') {
@@ -2477,10 +2600,22 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   window.webContents.setWindowOpenHandler(({ url }) => {
     if (isAllowedChildWindowUrl(url)) return { action: "allow" };
     if (isHttpUrl(url)) void shell.openExternal(url);
+    else if (isFirstPartyMailtoUrl(url)) void openFirstPartyMailto(url);
     return { action: "deny" };
   });
 
   window.webContents.on("will-navigate", (event, url) => {
+    // A `mailto:` never belongs in this window. Hand it to the local mail
+    // client and cancel the navigation, otherwise Electron drops it and the
+    // user sees the page sit there unchanged. `openFirstPartyMailto` also
+    // covers the machine whose OS-level mailto handler is a web browser —
+    // recvpZzUroEPUT: `shell.openExternal(mailto:)` there just focuses the
+    // browser on its current page and no compose window ever opens.
+    if (isFirstPartyMailtoUrl(url)) {
+      event.preventDefault();
+      void openFirstPartyMailto(url);
+      return;
+    }
     if (!isHttpUrl(url) || url === currentUrl) return;
     const currentOrigin = currentUrl ? new URL(currentUrl).origin : null;
     const nextOrigin = new URL(url).origin;
@@ -2803,6 +2938,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       }
       unsubscribeUpdater();
       ipcMain.removeAllListeners("desktop-pet:set-visible");
+      ipcMain.removeAllListeners("od:appearance:set-theme");
       for (const channel of UPDATER_IPC_CHANNELS) {
         ipcMain.removeHandler(channel);
       }
@@ -2883,8 +3019,10 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
         }
         return;
       }
-      window.show();
-      window.focus();
+      // A minimized window must be restored before focus — `focus()` alone
+      // leaves it in the Dock, silently breaking the deeplink hand-off whose
+      // entire payload is this bring-to-front.
+      ensureWindowVisible(window);
     },
     status() {
       return {

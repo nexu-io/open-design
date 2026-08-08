@@ -9,6 +9,7 @@ import SiteAnalytics from '../_components/site-analytics.astro';
 import ResourceHints from '../_components/resource-hints.astro';
 import LocaleSwitcherScript from '../_components/locale-switcher-script.astro';
 import PreciseLazyload from '../_components/precise-lazyload.astro';
+import DownloadEngagementPrompt from '../_components/download-engagement-prompt.astro';
 import {
   heroBgImage,
   heroBgSrcset,
@@ -29,6 +30,7 @@ import {
 import { getCatalogCounts } from '../_lib/catalog';
 import { getGithubRepoMeta } from '../_lib/github';
 import { clampDescription } from '../_lib/clamp-description';
+import { DEEPSEEK_V4_FLASH_CAMPAIGN } from '../_lib/deepseek-v4-flash-campaign';
 
 const locale: LandingLocaleCode = localeFromPath(Astro.url.pathname);
 const localeDef = getLocaleDefinition(locale);
@@ -116,6 +118,22 @@ const homepageGraph = {
   '@graph': [websiteSchema, organizationSchema, softwareSchema],
 };
 const faq = getHomeFaq(locale, { origin, repo: REPO_URL });
+const campaignPricingHref = localePath(locale, '/pricing/');
+const campaignCopy = locale.startsWith('zh')
+  ? {
+      badge: '活动倒计时',
+      title: '这次，别省着用。DeepSeek V4 Flash 无限用。',
+      detail: '8 月 6 日—8 月 13 日，一周免费用',
+      linkLabel: '查看活动权益',
+      closeLabel: '关闭活动横幅',
+    }
+  : {
+      badge: 'Campaign countdown',
+      title: 'Stop rationing. Use DeepSeek V4 Flash without limits.',
+      detail: 'Aug 6—Aug 13 · FREE all week',
+      linkLabel: 'View campaign benefits',
+      closeLabel: 'Dismiss campaign banner',
+    };
 const pageHtml = renderToStaticMarkup(
   Page({ counts, github, locale, faq }) as ReturnType<typeof createElement>,
 );
@@ -213,7 +231,193 @@ const cobeEnhancerUrl = `/enhancers/cobe.js?v=${
     <script is:inline type="application/ld+json" set:html={JSON.stringify(homepageGraph)} />
   </head>
   <body>
+    <div class="home-campaign-banner" data-home-campaign-banner data-campaign-locale={locale.startsWith('zh') ? 'zh' : 'en'} data-campaign-start-at={DEEPSEEK_V4_FLASH_CAMPAIGN.startAt} data-campaign-end-at={DEEPSEEK_V4_FLASH_CAMPAIGN.endAtExclusive} hidden>
+      <a class="home-campaign-banner__link" href={campaignPricingHref} aria-label={`${campaignCopy.title} · ${campaignCopy.linkLabel}`}>
+        <span class="home-campaign-banner__badge" data-home-campaign-countdown>{campaignCopy.badge}</span>
+        <span class="home-campaign-banner__divider" aria-hidden="true">|</span>
+        <strong>{campaignCopy.title}</strong>
+        <span class="home-campaign-banner__divider" aria-hidden="true">|</span>
+        <span class="home-campaign-banner__detail">{campaignCopy.detail}</span>
+        <span class="home-campaign-banner__cta" aria-hidden="true">→</span>
+      </a>
+      <button class="home-campaign-banner__close" type="button" aria-label={campaignCopy.closeLabel} data-home-campaign-close>×</button>
+    </div>
     <Fragment set:html={pageHtml} />
+    <DownloadEngagementPrompt locale={locale} />
+    <style is:global>
+      :root { --home-campaign-banner-height: 0px; }
+      html.home-campaign-banner-active { --home-campaign-banner-height: 44px; }
+      .home-campaign-banner {
+        position: fixed;
+        z-index: 70;
+        top: 0;
+        left: 0;
+        right: 0;
+        min-height: var(--home-campaign-banner-height);
+        border-bottom: 1px solid color-mix(in srgb, var(--coral) 36%, var(--line));
+        color: var(--ink);
+        background: color-mix(in srgb, var(--coral) 11%, #fff);
+        font-family: var(--sans);
+        font-size: 13px;
+        line-height: 1.25;
+        text-decoration: none;
+        box-shadow: 0 6px 24px rgb(38 38 38 / 6%);
+      }
+      .home-campaign-banner__link {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        min-height: var(--home-campaign-banner-height);
+        padding: 8px 64px 8px 24px;
+        color: inherit;
+        text-decoration: none;
+      }
+      .home-campaign-banner__badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 4px 9px;
+        border-radius: 999px;
+        color: #102b05;
+        background: #68f22e;
+        font-size: 11px;
+        font-weight: 800;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+      }
+      .home-campaign-banner__divider { color: color-mix(in srgb, var(--ink) 26%, transparent); }
+      .home-campaign-banner__detail { color: var(--ink-mute); }
+      .home-campaign-banner__cta {
+        flex: 0 0 auto;
+        padding: 5px 10px;
+        border-radius: 999px;
+        color: #f7f7f3;
+        background: var(--ink);
+        font-weight: 750;
+        white-space: nowrap;
+      }
+      .home-campaign-banner__link:hover .home-campaign-banner__cta { transform: translateX(1px); }
+      .home-campaign-banner__close {
+        position: absolute;
+        top: 50%;
+        right: 14px;
+        z-index: 1;
+        display: grid;
+        place-items: center;
+        width: 28px;
+        height: 28px;
+        padding: 0;
+        border: 0;
+        border-radius: 50%;
+        color: var(--ink);
+        background: transparent;
+        font: 19px/1 var(--sans);
+        opacity: .72;
+        cursor: pointer;
+        transform: translateY(-50%);
+      }
+      .home-campaign-banner__close:hover { background: rgb(38 38 38 / 7%); opacity: 1; }
+      .home-campaign-banner__close:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; opacity: 1; }
+      html.home-campaign-banner-dismissed { --home-campaign-banner-height: 0px; }
+      html.home-campaign-banner-dismissed .home-campaign-banner { display: none; }
+      .site-chrome { top: var(--home-campaign-banner-height); }
+      @media (max-width: 680px) {
+        html.home-campaign-banner-active { --home-campaign-banner-height: 52px; }
+        .home-campaign-banner__link {
+          justify-content: flex-start;
+          gap: 8px;
+          padding: 8px 48px 8px 14px;
+          font-size: 12px;
+        }
+        .home-campaign-banner__divider,
+        .home-campaign-banner__detail { display: none; }
+        .home-campaign-banner__cta { margin-left: auto; }
+        .home-campaign-banner__close { right: 10px; }
+        .hero { padding-top: calc(92px + var(--home-campaign-banner-height)); }
+      }
+    </style>
+    <script is:inline>
+      (() => {
+        const dismissKey = 'open-design:home-campaign-banner-dismissed:deepseek-v4-flash-fixed-window-countdown-v2';
+        const banner = document.querySelector('[data-home-campaign-banner]');
+        const campaignLink = banner?.querySelector('.home-campaign-banner__link');
+        const countdown = document.querySelector('[data-home-campaign-countdown]');
+        const close = document.querySelector('[data-home-campaign-close]');
+        const isZh = banner?.getAttribute('data-campaign-locale') === 'zh';
+        const startAt = Date.parse(banner?.getAttribute('data-campaign-start-at') || '');
+        const endAt = Date.parse(banner?.getAttribute('data-campaign-end-at') || '');
+
+        const formatRemaining = (remainingMs) => {
+          const totalSeconds = Math.max(0, Math.ceil(remainingMs / 1000));
+          const days = Math.floor(totalSeconds / 86400);
+          const hours = Math.floor((totalSeconds % 86400) / 3600);
+          const minutes = Math.floor((totalSeconds % 3600) / 60);
+          const seconds = totalSeconds % 60;
+          const time = `${days}${isZh ? '天' : 'd'} ${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+          return time;
+        };
+
+        let dismissed = false;
+        try {
+          if (window.localStorage.getItem(dismissKey) === '1') {
+            dismissed = true;
+            document.documentElement.classList.add('home-campaign-banner-dismissed');
+          }
+        } catch {}
+        let impressionTracked = false;
+        const updateCampaignVisibility = () => {
+          const now = Date.now();
+          const active = now >= startAt && now < endAt;
+          const visible = active && !dismissed;
+          if (banner) banner.hidden = !visible;
+          document.documentElement.classList.toggle('home-campaign-banner-active', visible);
+          if (!active || !countdown) return active;
+          const remainingMs = endAt - now;
+          countdown.textContent = `${isZh ? '活动剩余' : 'Ends in'} ${formatRemaining(remainingMs)}`;
+          if (visible && !impressionTracked && typeof window.__odTrack === 'function') {
+            impressionTracked = true;
+            window.__odTrack('surface_view', {
+              page_name: 'landing_home', area: 'campaign_banner',
+              element: 'deepseek_v4_flash', campaign_id: 'deepseek_v4_flash',
+              user_state: 'unknown',
+            });
+          }
+          return active;
+        };
+        updateCampaignVisibility();
+        const campaignTimer = window.setInterval(updateCampaignVisibility, 1000);
+        window.addEventListener('pagehide', () => window.clearInterval(campaignTimer), { once: true });
+        campaignLink?.addEventListener('click', (event) => {
+          const attribution = window.__odRecordCampaignEntry?.('landing_home_banner', 'deepseek_v4_flash');
+          window.__odTrack?.('ui_click', {
+            page_name: 'landing_home',
+            area: 'campaign_banner',
+            element: 'open_pricing',
+            campaign_id: 'deepseek_v4_flash',
+            user_state: 'unknown',
+            ...(attribution || {}),
+          });
+          if (attribution && window.__odAttributedUrl) {
+            event.preventDefault();
+            window.location.href = window.__odAttributedUrl(campaignLink.href, attribution);
+          }
+        });
+        close?.addEventListener('click', () => {
+          window.__odTrack?.('ui_click', {
+            page_name: 'landing_home',
+            area: 'campaign_banner',
+            element: 'close',
+            campaign_id: 'deepseek_v4_flash',
+            user_state: 'unknown',
+          });
+          document.documentElement.classList.add('home-campaign-banner-dismissed');
+          document.documentElement.classList.remove('home-campaign-banner-active');
+          if (banner) banner.hidden = true;
+          dismissed = true;
+          try { window.localStorage.setItem(dismissKey, '1'); } catch {}
+        });
+      })();
+    </script>
     {/*
      * Tighter than the catalog default (1500px): the homepage's heavy
      * below-the-fold art — full-bleed section backdrops, product shots — must
@@ -277,7 +481,7 @@ const cobeEnhancerUrl = `/enhancers/cobe.js?v=${
         const formatStars = (count) => {
           if (!Number.isFinite(count) || count <= 0) return '0';
           if (count < 1000) return String(count);
-          return `${(count / 1000).toFixed(1).replace(/\.0$/, '')}K`;
+          return `${(count / 1000).toFixed(1).replace(/\.0$/, '')}K+`;
         };
 
         // Pull a clean 'v0.3.0'-style label from a GitHub release record.
@@ -982,6 +1186,16 @@ const cobeEnhancerUrl = `/enhancers/cobe.js?v=${
           );
           if (buttons.length === 0) return;
           const ua = navigator.userAgent || '';
+          const platform = (
+            navigator.userAgentData?.platform ||
+            navigator.platform ||
+            ''
+          ).toLowerCase();
+          // The engagement prompt runs before this legacy homepage enhancer.
+          // Desktop-mode iPadOS reports a Macintosh UA/platform, so stop here
+          // before a later pass can undo the prompt's neutral download fallback.
+          const isIpadOS = navigator.maxTouchPoints > 1 && /mac/.test(platform);
+          if (isIpadOS || /iPhone|iPad|iPod/i.test(ua)) return;
           const isWin = /Windows|Win32|Win64|WOW64/i.test(ua);
           const isMac = /Macintosh|Mac OS X/i.test(ua) && !/iPhone|iPad|iPod/i.test(ua);
 

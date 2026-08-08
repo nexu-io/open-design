@@ -49,7 +49,7 @@ describe('AmrArtifactUpgradeDialog', () => {
     fireEvent.click(plansCta);
 
     expect(open).toHaveBeenCalledWith(
-      expect.stringContaining('view=plans'),
+      expect.stringContaining('billing=plan'),
       '_blank',
       'noopener,noreferrer',
     );
