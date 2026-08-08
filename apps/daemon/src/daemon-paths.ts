@@ -9,6 +9,7 @@ const require = createRequire(import.meta.url);
 
 export const DAEMON_CLI_PATH_ENV = 'OD_DAEMON_CLI_PATH';
 export const RESOURCE_ROOT_ENV = 'OD_RESOURCE_ROOT';
+export const RESOURCE_TRUST_ROOT_ENV = 'OD_RESOURCE_TRUST_ROOT';
 
 function cleanOptionalPath(value: string | undefined): string | null {
   return typeof value === 'string' && value.trim().length > 0

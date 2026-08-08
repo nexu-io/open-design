@@ -24,10 +24,25 @@ import { parseReleaseVersion, releaseChannelDescriptor } from "@open-design/rele
 
 type AssetEntry = {
   contentType: string;
+  digest: `sha256:${string}`;
   name: string;
   sha256Url?: string;
   size: number;
   url: string;
+};
+
+type ShellBuildArtifact = {
+  digest: `sha256:${string}`;
+  size: number;
+};
+
+type ShellBuildReport = {
+  artifacts: Record<string, ShellBuildArtifact | null>;
+  shell: {
+    sourceDigest: `sha256:${string}`;
+    type: string;
+    version: string;
+  };
 };
 
 type TargetConfig = {
@@ -64,6 +79,8 @@ const assetSuffix = optional("RELEASE_ASSET_SUFFIX");
 const dryRunMode = optional("RELEASE_DRY_RUN_MODE");
 const publishSideEffectsEnabled = optional("RELEASE_PUBLISH_SIDE_EFFECTS", "true") !== "false";
 const versionPrefix = optional("RELEASE_VERSION_PREFIX", `${releaseChannel}/versions/${releaseVersion}${assetSuffix}`);
+const shellEnabled = bool("RELEASE_SHELL_ENABLED");
+const shellBuildJsonPath = optional("RELEASE_SHELL_BUILD_JSON_PATH");
 const latestPrefix = `${releaseChannel}/latest`;
 const reportRoot = optional("RELEASE_REPORT_DIR");
 const reportZipPath = optional("RELEASE_REPORT_ZIP_PATH");
@@ -76,6 +93,40 @@ const versionLockKey = optional(
 );
 const storage = publishSideEffectsEnabled || versionLockRequired ? storageConfigFromEnv() : null;
 
+function shellPlatformTarget(): string {
+  if (target === "mac_arm64") return "darwin-arm64";
+  if (target === "mac_x64") return "darwin-x64";
+  if (target === "win_x64") return "win32-x64";
+  throw new Error(`Shell publication is not supported for ${target}`);
+}
+
+function readShellBuildReport(): ShellBuildReport | null {
+  if (!shellEnabled) return null;
+  if (shellBuildJsonPath.length === 0 || !existsSync(shellBuildJsonPath)) {
+    throw new Error("RELEASE_SHELL_ENABLED requires RELEASE_SHELL_BUILD_JSON_PATH");
+  }
+  const report = JSON.parse(readFileSync(shellBuildJsonPath, "utf8")) as Partial<ShellBuildReport>;
+  const shell = report.shell;
+  if (shell == null || shell.type !== "electron") throw new Error("Shell build report must describe electron");
+  parseReleaseVersion(String(shell.version), releaseChannel);
+  if (!/^sha256:[0-9a-f]{64}$/.test(String(shell.sourceDigest))) {
+    throw new Error("Shell build report sourceDigest must be a lowercase sha256 digest");
+  }
+  if (report.artifacts == null || typeof report.artifacts !== "object") {
+    throw new Error("Shell build report must contain artifact descriptors");
+  }
+  return report as ShellBuildReport;
+}
+
+const shellBuild = readShellBuildReport();
+const shellVersionPrefix = shellBuild == null
+  ? null
+  : optional(
+      "RELEASE_SHELL_VERSION_PREFIX",
+      `${releaseChannel}/shells/${shellBuild.shell.type}/${shellPlatformTarget()}/versions/${shellBuild.shell.version}`,
+    );
+const artifactPrefix = shellVersionPrefix ?? versionPrefix;
+
 if (versionLockRequired) {
   if (countedReleaseChannel == null) {
     throw new Error("stable releases do not use counted version reservations");
@@ -85,13 +136,14 @@ if (versionLockRequired) {
   console.log(`verified ${countedReleaseChannel} version reservation ${versionLockKey}`);
 }
 
-function assetEntry(name: string, prefix = versionPrefix): AssetEntry {
+function assetEntry(name: string, prefix = artifactPrefix): AssetEntry {
   const path = join(releaseAssetsDir, name);
   if (!existsSync(path) || !statSync(path).isFile()) {
     throw new Error(`expected release asset not found: ${path}`);
   }
   const entry: AssetEntry = {
     contentType: contentType(name),
+    digest: sha256Digest(path),
     name,
     size: statSync(path).size,
     url: publicUrl(publicOrigin, prefix, name),
@@ -102,7 +154,7 @@ function assetEntry(name: string, prefix = versionPrefix): AssetEntry {
   return entry;
 }
 
-function sha256Digest(path: string): string {
+function sha256Digest(path: string): `sha256:${string}` {
   return `sha256:${createHash("sha256").update(readFileSync(path)).digest("hex")}`;
 }
 
@@ -313,7 +365,7 @@ function targetConfig(): TargetConfig {
       feed = {
         latestUrl: publicUrl(publicOrigin, latestPrefix, "latest-mac.yml"),
         name: "latest-mac.yml",
-        url: publicUrl(publicOrigin, versionPrefix, "latest-mac.yml"),
+        url: publicUrl(publicOrigin, artifactPrefix, "latest-mac.yml"),
       };
     }
     return {
@@ -346,7 +398,7 @@ function targetConfig(): TargetConfig {
       feed: {
         latestUrl: publicUrl(publicOrigin, latestPrefix, "latest.yml"),
         name: "latest.yml",
-        url: publicUrl(publicOrigin, versionPrefix, "latest.yml"),
+        url: publicUrl(publicOrigin, artifactPrefix, "latest.yml"),
       },
       label: "Windows x64",
       legacyPlatformKey: "win",
@@ -361,8 +413,17 @@ function targetConfig(): TargetConfig {
 
 const config = targetConfig();
 const closure = closurePublication();
+if (shellBuild != null) {
+  for (const [name, artifact] of Object.entries(config.artifacts)) {
+    const built = shellBuild.artifacts[name];
+    if (built == null) throw new Error(`Shell build report is missing ${name}`);
+    if (built.digest !== artifact.digest || built.size !== artifact.size) {
+      throw new Error(`Shell build report ${name} does not match prepared release asset`);
+    }
+  }
+}
 for (const name of config.assetNames) {
-  await upload(join(releaseAssetsDir, name), `${versionPrefix}/${name}`, "public, max-age=31536000, immutable");
+  await upload(join(releaseAssetsDir, name), `${artifactPrefix}/${name}`, "public, max-age=31536000, immutable");
 }
 if (closure != null) {
   for (const name of closure.assetNames) {
@@ -395,6 +456,7 @@ const manifest = {
   releaseTarget: target,
   report,
   r2: {
+    artifactPrefix,
     latestManifestUrl,
     latestPrefix,
     publicOrigin,
@@ -402,6 +464,14 @@ const manifest = {
     versionPrefix,
   },
   releaseVersion,
+  ...(shellBuild == null ? {} : {
+    shell: {
+      artifacts: config.artifacts,
+      sourceDigest: shellBuild.shell.sourceDigest,
+      type: shellBuild.shell.type,
+      version: shellBuild.shell.version,
+    },
+  }),
   signed: config.signed,
   status: "published",
   version: 1,
@@ -427,6 +497,11 @@ if (closure != null) {
   }
   outputs.closure_version = closureVersion;
   outputs.closure_version_prefix = closure.versionPrefix;
+}
+if (shellBuild != null && shellVersionPrefix != null) {
+  outputs.shell_source_digest = shellBuild.shell.sourceDigest;
+  outputs.shell_version = shellBuild.shell.version;
+  outputs.shell_version_prefix = shellVersionPrefix;
 }
 if (config.feed != null) outputs.feed_url = config.feed.latestUrl;
 if (report != null && typeof report.url === "string") outputs.report_url = report.url;

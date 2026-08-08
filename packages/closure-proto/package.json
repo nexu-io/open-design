@@ -1,6 +1,6 @@
 {
   "name": "@open-design/closure-proto",
-  "version": "0.16.2",
+  "version": "0.19.0",
   "private": true,
   "type": "module",
   "description": "Shell-neutral Open Design standalone closure identity and candidate protocol.",

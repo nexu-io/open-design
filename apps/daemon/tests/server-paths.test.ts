@@ -88,6 +88,13 @@ describe('resolveDaemonResourceRoot', () => {
     expect(resolveDaemonResourceRoot({ configured, safeBases: [installationRoot] })).toBe(configured);
   });
 
+  it('allows Standalone Closure resources under an explicit trust root', () => {
+    const trustRoot = path.resolve(import.meta.dirname, '..', 'fixtures', 'closure');
+    const configured = path.join(trustRoot, 'resources', 'open-design');
+
+    expect(resolveDaemonResourceRoot({ configured, safeBases: [trustRoot] })).toBe(configured);
+  });
+
   it('rejects resource roots outside the safe bases', () => {
     const safeBase = path.resolve(import.meta.dirname, '..', 'fixtures', 'resources');
     const configured = path.resolve(import.meta.dirname, '..', 'fixtures-other', 'resources');

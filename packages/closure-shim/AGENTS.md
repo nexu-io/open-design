@@ -2,34 +2,32 @@
 
 Follow the root `AGENTS.md` and `packages/AGENTS.md` first.
 
-This package is the Closure-owned, shell-carried `ensure + handoff` entry. It
-coordinates existing Closure protocol, Store, update, and body-entry
-primitives without becoming another product identity or state machine.
+This package is an exploratory compatibility substrate retained while the
+target `apps/standalone` + `standalone-proto` seam is proven. New product entry
+behavior belongs in that target seam, not here.
 
 ## Owns
 
 - Validation of one shell request against channel, namespace, platform, and
   minimum shell version.
-- Verification of the minimal pinned-key candidate signature.
-- Selection, attempt arming, body handoff, health confirmation, and rollback
-  through the existing Closure Store.
-- The opaque dynamic body-entry contract and stable handoff result.
-- Generation fencing for runtime status and Closure-to-Shell capability calls.
+- Reading and immutable verification of exactly one already-committed Store
+  binding.
+- One body handoff and generation-bound status/capability validation.
 
 ## Does not own
 
-- Shell update UX, installer launch, permissions, windows, menus, or retries.
-- Release publication, key rotation, body component selection, or live swap.
-- Store layout, candidate download mechanics, Web/daemon internals, sidecar
-  transport, a general message bus, or a general multi-shell lease.
+- Candidate discovery, signature policy, download, materialization, commit,
+  history, rollback, retry, or update selection.
+- Shell update UX, installer launch, permissions, windows, or menus.
+- Web/daemon internals, body layout discovery, sidecar transport, or a general
+  message bus.
 
 ## Rules
 
+- Absence or invalidity of the committed binding is a visible terminal error.
+- Enter at most one body and never fall back to another generation.
 - The shell may supply resolved roots and timing, but must not receive body
   layout or mutate Closure Store truth.
-- Bind every readiness result to the exact namespace and generation before
-  confirming it.
-- At most one unhealthy active candidate may be rolled back and retried with
-  `lastSuccessful`; do not add an unbounded recovery ladder.
-- Tests belong in `tests/`; keep generated demo bodies in temporary test roots,
-  not as checked-in JavaScript artifacts.
+- Bind every readiness result and Shell capability exchange to the exact
+  namespace and generation.
+- Tests belong in `tests/`; keep generated demo bodies in temporary test roots.

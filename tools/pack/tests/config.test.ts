@@ -110,24 +110,39 @@ describe("resolveToolPackConfig cache root", () => {
 });
 
 describe("resolveToolPackConfig namespace defaults", () => {
+  it("keeps release and Shell compatibility versions independently observable", () => {
+    const config = resolveToolPackConfig("mac", {
+      releaseVersion: "0.19.0-beta.2",
+      shellVersion: "0.19.0-beta.1",
+    });
+    expect(config.releaseVersion).toBe("0.19.0-beta.2");
+    expect(config.shellVersion).toBe("0.19.0-beta.1");
+    expect(config.namespace).toBe("release-beta");
+  });
+
+  it("assigns a new Shell the release version when no reusable Shell is selected", () => {
+    const config = resolveToolPackConfig("mac", { releaseVersion: "0.19.0-beta.1" });
+    expect(config.shellVersion).toBe("0.19.0-beta.1");
+  });
+
   it("keeps ordinary local builds on the default namespace", () => {
     expect(resolveToolPackConfig("mac").namespace).toBe("default");
-    expect(resolveToolPackConfig("win", { appVersion: "0.8.0" }).namespace).toBe("default");
+    expect(resolveToolPackConfig("win", { releaseVersion: "0.8.0" }).namespace).toBe("default");
   });
 
   it("defaults prerelease mac builds to their release channel namespace", () => {
-    expect(resolveToolPackConfig("mac", { appVersion: "0.8.0-beta.4" }).namespace).toBe("release-beta");
-    expect(resolveToolPackConfig("mac", { appVersion: "0.8.0-preview.4" }).namespace).toBe("release-preview");
-    expect(resolveToolPackConfig("mac", { appVersion: "0.8.0-prerelease.4" }).namespace).toBe("release-prerelease");
+    expect(resolveToolPackConfig("mac", { releaseVersion: "0.8.0-beta.4" }).namespace).toBe("release-beta");
+    expect(resolveToolPackConfig("mac", { releaseVersion: "0.8.0-preview.4" }).namespace).toBe("release-preview");
+    expect(resolveToolPackConfig("mac", { releaseVersion: "0.8.0-prerelease.4" }).namespace).toBe("release-prerelease");
   });
 
   it("defaults prerelease Windows builds to platform-specific release channel namespaces", () => {
-    expect(resolveToolPackConfig("win", { appVersion: "0.8.0-beta.4" }).namespace).toBe("release-beta-win");
-    expect(resolveToolPackConfig("win", { appVersion: "0.8.0-prerelease.4" }).namespace).toBe("release-prerelease-win");
+    expect(resolveToolPackConfig("win", { releaseVersion: "0.8.0-beta.4" }).namespace).toBe("release-beta-win");
+    expect(resolveToolPackConfig("win", { releaseVersion: "0.8.0-prerelease.4" }).namespace).toBe("release-prerelease-win");
   });
 
   it("keeps an explicit namespace ahead of the prerelease channel default", () => {
-    expect(resolveToolPackConfig("mac", { appVersion: "0.8.0-beta.4", namespace: "custom-beta" }).namespace).toBe(
+    expect(resolveToolPackConfig("mac", { releaseVersion: "0.8.0-beta.4", namespace: "custom-beta" }).namespace).toBe(
       "custom-beta",
     );
   });

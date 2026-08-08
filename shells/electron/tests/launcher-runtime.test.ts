@@ -20,7 +20,7 @@ import { resolvePackagedNamespacePaths } from "../src/paths.js";
 function fakeConfig(root: string, appVersion = "1.2.3-beta.4"): PackagedConfig {
   return {
     amrProfile: null,
-    appVersion,
+    shellVersion: appVersion,
     daemonCliEntry: null,
     daemonSidecarEntry: null,
     namespace: "release-beta",
@@ -102,7 +102,7 @@ describe("resolvePackagedLauncherRuntime", () => {
       await writeFile(
         join(resourcesPath, "open-design-config.json"),
         `${JSON.stringify({
-          appVersion: "1.2.3-beta.5",
+          shellVersion: "1.2.3-beta.5",
           daemonSidecarEntryRelative: "prebundled/daemon/daemon-sidecar.mjs",
           nodeCommandRelative: "open-design/bin/node",
           webOutputMode: "standalone",
@@ -154,7 +154,7 @@ describe("resolvePackagedLauncherRuntime", () => {
       expect(runtime.electronNodeCommand).toBeNull();
       expect(runtime.installedLaunchPath).toBe("/Applications/Open Design Beta.app");
       expect(runtime.targetVersion).toBe("1.2.3-beta.5");
-      expect(runtime.config.appVersion).toBe("1.2.3-beta.5");
+      expect(runtime.config.shellVersion).toBe("1.2.3-beta.5");
       expect(runtime.config.resourceRoot).toBe(join(resourcesPath, "open-design"));
       expect(runtime.config.daemonSidecarEntry).toBe(join(resourcesPath, "prebundled", "daemon", "daemon-sidecar.mjs"));
       expect(runtime.config.webSidecarEntry).toBe(join(resourcesPath, "prebundled", "web", "web-sidecar.mjs"));
@@ -433,7 +433,7 @@ describe("resolvePackagedLauncherRuntime", () => {
       await writeFile(
         join(resourcesPath, "open-design-config.json"),
         `${JSON.stringify({
-          appVersion: "1.2.3-beta.5",
+          shellVersion: "1.2.3-beta.5",
           daemonSidecarEntryRelative: "prebundled/daemon/daemon-sidecar.mjs",
           webOutputMode: "standalone",
           webSidecarEntryRelative: "prebundled/web/web-sidecar.mjs",
@@ -523,7 +523,7 @@ describe("resolvePackagedLauncherRuntime", () => {
         selected: true,
       });
       expect(runtime.source).toBe("current-package");
-      expect(runtime.config.appVersion).toBe("1.2.3-beta.4");
+      expect(runtime.config.shellVersion).toBe("1.2.3-beta.4");
     } finally {
       await rm(root, { force: true, recursive: true });
     }
@@ -560,7 +560,7 @@ describe("resolvePackagedLauncherRuntime", () => {
       const runtime = await resolvePackagedLauncherRuntime(config, paths);
 
       expect(runtime.source).toBe("current-package");
-      expect(runtime.config.appVersion).toBe("1.2.3-beta.6");
+      expect(runtime.config.shellVersion).toBe("1.2.3-beta.6");
       expect(JSON.parse(await readFile(runtime.launcherPaths.runtimePath, "utf8"))).toMatchObject({
         active: { generation: 0, version: "1.2.3-beta.6" },
         lastSuccessful: { generation: 0, version: "1.2.3-beta.6" },

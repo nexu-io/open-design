@@ -25,7 +25,7 @@ import {
 } from "../node-pty-runtime.js";
 import { copyBundledResourceTrees } from "../resources.js";
 import { copyOptionalVelaCliBinary } from "../vela-cli.js";
-import { electronBuilderVersionForAppVersion } from "../versions.js";
+import { electronBuilderVersionForShellVersion } from "../versions.js";
 import { runEsbuild, runNpmInstall, runPnpm } from "./commands.js";
 import {
   ELECTRON_BUILDER_BUILD_DEPENDENCIES_FROM_SOURCE,
@@ -77,15 +77,15 @@ export async function copyResourceTree(config: ToolPackConfig, paths: MacPaths):
 }
 
 export function renderMacPackagedConfig(options: {
-  appVersion: string;
   config: ToolPackConfig;
+  shellVersion: string;
   usePrebundledStandaloneWeb: boolean;
 }): string {
   return `${JSON.stringify(
     {
       ...(options.config.amrProfile == null ? {} : { amrProfile: options.config.amrProfile }),
-      appVersion: options.appVersion,
       namespace: options.config.namespace,
+      shellVersion: options.shellVersion,
       ...(options.config.telemetryRelayUrl == null ? {} : { telemetryRelayUrl: options.config.telemetryRelayUrl }),
       ...(options.config.updateMetadataUrl == null ? {} : { updateMetadataUrl: options.config.updateMetadataUrl }),
       ...(options.config.posthogKey == null ? {} : { posthogKey: options.config.posthogKey }),
@@ -226,7 +226,7 @@ export async function writeAssembledApp(
   packedTarballs: PackedTarballInfo[],
 ): Promise<void> {
   const packagedVersion = await readPackagedVersion(config);
-  const packageVersion = electronBuilderVersionForAppVersion(packagedVersion);
+  const packageVersion = electronBuilderVersionForShellVersion(packagedVersion);
   const identity = resolveMacInstallIdentity(config);
   await rm(join(config.roots.output.namespaceRoot, "assembled"), { force: true, recursive: true });
   await mkdir(paths.assembledAppRoot, { recursive: true });
@@ -280,8 +280,8 @@ export async function writeAssembledApp(
   await writeFile(
     paths.packagedConfigPath,
     renderMacPackagedConfig({
-      appVersion: packagedVersion,
       config,
+      shellVersion: packagedVersion,
       usePrebundledStandaloneWeb,
     }),
     "utf8",

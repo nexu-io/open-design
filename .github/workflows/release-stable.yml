@@ -394,7 +394,7 @@ jobs:
             --dir "$tools_pack_dir"
             --namespace "${{ needs.metadata.outputs.namespace }}"
             --portable
-            --app-version "${{ needs.metadata.outputs.release_version }}"
+            --release-version "${{ needs.metadata.outputs.release_version }}"
             --mac-compression normal
             --to all
             --require-vela-cli
@@ -622,7 +622,7 @@ jobs:
             --dir "$RUNNER_TEMP/tools-pack" \
             --namespace "${{ needs.metadata.outputs.mac_intel_namespace }}" \
             --portable \
-            --app-version "${{ needs.metadata.outputs.release_version }}" \
+            --release-version "${{ needs.metadata.outputs.release_version }}" \
             --mac-compression normal \
             --to all \
             --require-vela-cli \
@@ -759,7 +759,7 @@ jobs:
             "--cache-dir", $cacheDir,
             "--namespace", "${{ needs.metadata.outputs.win_namespace }}",
             "--portable",
-            "--app-version", "${{ needs.metadata.outputs.release_version }}",
+            "--release-version", "${{ needs.metadata.outputs.release_version }}",
             "--to", "all",
             "--require-vela-cli",
             "--json"
@@ -780,7 +780,7 @@ jobs:
               --cache-dir $cacheDir `
               --namespace "${{ needs.metadata.outputs.win_namespace }}" `
               --portable `
-              --app-version "${{ needs.metadata.outputs.release_version }}" `
+              --release-version "${{ needs.metadata.outputs.release_version }}" `
               --to all `
               --require-vela-cli `
               --json
@@ -815,7 +815,7 @@ jobs:
           $match = [regex]::Match("${{ needs.metadata.outputs.release_version }}", "^(?<major>\d+)\.(?<minor>\d+)\.(?<patch>\d+)$")
           if (-not $match.Success) { throw "full Windows stable smoke requires stable version x.y.z; got ${{ needs.metadata.outputs.release_version }}" }
           $updateVersion = "{0}.{1}.{2}" -f $match.Groups["major"].Value, $match.Groups["minor"].Value, ([int]$match.Groups["patch"].Value + 1)
-          $buildArgs = @("exec", "tools-pack", "win", "build", "--dir", "${{ runner.temp }}\release-work\win_x64\tools-pack-update-fixture", "--cache-dir", "${{ runner.temp }}\tools-pack-cache", "--namespace", "${{ needs.metadata.outputs.win_namespace }}", "--app-version", $updateVersion, "--to", "nsis", "--require-vela-cli", "--json")
+          $buildArgs = @("exec", "tools-pack", "win", "build", "--dir", "${{ runner.temp }}\release-work\win_x64\tools-pack-update-fixture", "--cache-dir", "${{ runner.temp }}\tools-pack-cache", "--namespace", "${{ needs.metadata.outputs.win_namespace }}", "--release-version", $updateVersion, "--to", "nsis", "--require-vela-cli", "--json")
           $updateOutput = pnpm.cmd @buildArgs
           if ($LASTEXITCODE -ne 0) { throw "tools-pack win update fixture failed with exit code $LASTEXITCODE" }
           $updateOutput | Set-Content -Path "${{ runner.temp }}\windows-tools-pack-update-build.json" -Encoding utf8

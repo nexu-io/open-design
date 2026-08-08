@@ -13,10 +13,7 @@ import {
   type ClosureCandidateManifest,
 } from "@open-design/closure-proto";
 import {
-  activateStoredClosureCandidate,
-  armClosureRuntimeAttempt,
-  confirmClosureRuntime,
-  readClosureAttemptDescriptor,
+  commitStoredClosureCandidate,
   resolveClosureStorePaths,
   resolveClosureStoreVersionPaths,
 } from "@open-design/closure-store";
@@ -24,7 +21,6 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import type { PackagedNamespacePaths } from "../src/paths.js";
 import {
-  confirmElectronStandaloneBinding,
   resolveElectronStandaloneBinding,
 } from "../src/standalone-binding.js";
 
@@ -61,8 +57,8 @@ function namespacePaths(root: string): PackagedNamespacePaths {
 }
 
 async function materialize(root: string, version: string, options: {
-  confirm?: boolean;
   minShellVersion?: string;
+  releaseVersion?: string;
 } = {}) {
   const storePaths = resolveClosureStorePaths({
     channel: "beta",
@@ -113,12 +109,12 @@ async function materialize(root: string, version: string, options: {
     await mkdir(dirname(target), { recursive: true });
     await writeFile(target, contents);
   }
-  const activated = await activateStoredClosureCandidate(storePaths, binding);
-  if (options.confirm === true) {
-    await armClosureRuntimeAttempt(storePaths, activated.pointer);
-    await confirmClosureRuntime(storePaths, activated.pointer);
-  }
-  return { activated, storePaths, versionPaths };
+  const committed = await commitStoredClosureCandidate(
+    storePaths,
+    binding,
+    options.releaseVersion ?? version,
+  );
+  return { committed, storePaths, versionPaths };
 }
 
 function input(root: string) {
@@ -127,7 +123,6 @@ function input(root: string) {
     installerRequiredVersion: null,
     namespace: "release-beta",
     paths: namespacePaths(root),
-    releaseVersion: "0.18.0-beta.4",
     shellDigest: `sha256:${"a".repeat(64)}` as const,
     shellVersion: "0.18.0-beta.4",
   };
@@ -149,7 +144,7 @@ describe("Electron Standalone Store binding", () => {
       descriptor: {
         release: { version: "0.18.0-beta.4" },
         shell: { type: "electron", version: "0.18.0-beta.4" },
-        standalone: { digest: candidate.activated.pointer.digest, version: "0.18.0-beta.4" },
+        standalone: { digest: candidate.committed.committed.standalone.digest, version: "0.18.0-beta.4" },
       },
       paths: {
         installationRoot: candidate.versionPaths.payloadRoot,
@@ -157,26 +152,23 @@ describe("Electron Standalone Store binding", () => {
       },
       scope: { channel: "beta", generation: 0, namespace: "release-beta" },
     });
-    expect(await readClosureAttemptDescriptor(candidate.storePaths)).toMatchObject(candidate.activated.pointer);
-    await confirmElectronStandaloneBinding(selected);
-    expect(await readClosureAttemptDescriptor(candidate.storePaths)).toBeNull();
+    expect(selected.pointer).toEqual(candidate.committed.committed.standalone);
   });
 
   it("keeps the active Standalone version as release truth when no update was accepted", async () => {
     const root = await mkdtemp(join(tmpdir(), "od-electron-standalone-release-fallback-"));
     roots.push(root);
-    await materialize(root, "0.18.0-beta.6");
+    await materialize(root, "0.18.0-beta.6", { releaseVersion: "0.19.0-beta.1" });
 
     const selected = await resolveElectronStandaloneBinding({
       ...input(root),
-      releaseVersion: null,
     }, {
       arch: "arm64",
       platform: "darwin",
     });
 
     expect(selected.binding.descriptor).toMatchObject({
-      release: { version: "0.18.0-beta.6" },
+      release: { version: "0.19.0-beta.1" },
       shell: { version: "0.18.0-beta.4" },
       standalone: { version: "0.18.0-beta.6" },
     });
@@ -209,19 +201,16 @@ describe("Electron Standalone Store binding", () => {
     });
   });
 
-  it("rolls an invalid active generation back once before creating the handoff", async () => {
+  it("fails visibly when the single committed generation is invalid", async () => {
     const root = await mkdtemp(join(tmpdir(), "od-electron-standalone-rollback-"));
     roots.push(root);
-    const previous = await materialize(root, "0.18.0-beta.3", { confirm: true });
+    await materialize(root, "0.18.0-beta.3");
     const broken = await materialize(root, "0.18.0-beta.4");
     await writeFile(join(broken.versionPaths.payloadRoot, "bootloader.mjs"), "tampered\n");
 
-    const selected = await resolveElectronStandaloneBinding(input(root), {
+    await expect(resolveElectronStandaloneBinding(input(root), {
       arch: "arm64",
       platform: "darwin",
-    });
-
-    expect(selected.pointer).toEqual(previous.activated.pointer);
-    expect(selected.binding.scope.generation).toBe(previous.activated.pointer.generation);
+    })).rejects.toMatchObject({ code: "standalone-invalid" });
   });
 });

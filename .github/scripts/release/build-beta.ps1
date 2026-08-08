@@ -712,7 +712,7 @@ try {
     "--cache-dir", $cacheDir,
     "--namespace", $Namespace,
     "--portable",
-    "--app-version", $ReleaseVersion,
+    "--release-version", $ReleaseVersion,
     "--to", $Target,
     "--json"
   )
@@ -746,7 +746,7 @@ try {
       "--dir", $updateFixtureToolsPackDir,
       "--cache-dir", $cacheDir,
       "--namespace", $Namespace,
-      "--app-version", $updateFixtureVersion,
+      "--release-version", $updateFixtureVersion,
       "--to", "nsis",
       "--json"
     )

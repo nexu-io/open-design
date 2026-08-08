@@ -29,7 +29,7 @@ import {
 } from "../release-note/publication.ts";
 
 type PlatformManifest = {
-  artifacts?: Record<string, { url?: string }>;
+  artifacts?: Record<string, { digest?: string; url?: string }>;
   channel?: string;
   closure?: {
     assets?: Record<string, { url?: string }>;
@@ -54,11 +54,17 @@ type PlatformManifest = {
   };
   legacyPlatformKey?: string;
   platformKey?: string;
-  r2?: { versionPrefix?: string };
+  r2?: { artifactPrefix?: string; versionPrefix?: string };
   reason?: string | null;
   releaseTarget?: string;
   releaseVersion?: string;
   signed?: boolean;
+  shell?: {
+    artifacts?: Record<string, { digest?: string; url?: string }>;
+    sourceDigest?: string;
+    type?: string;
+    version?: string;
+  };
   status?: string;
 };
 
@@ -91,6 +97,7 @@ const versionLockKey = optional(
 );
 const latestCasRequired = process.env.RELEASE_LATEST_CAS_REQUIRED === "true";
 const closureRequired = process.env.RELEASE_CLOSURE_REQUIRED === "true";
+const shellRequired = process.env.RELEASE_SHELL_REQUIRED === "true";
 const storage = publishSideEffectsEnabled || versionLockRequired ? storageConfigFromEnv() : null;
 
 // Operator-supplied installer-reinstall floor: one repo-vars pair per channel,
@@ -270,7 +277,7 @@ async function publishLatestPlatformObjects(manifests: Record<string, PlatformMa
     const feedName = manifest.feed?.name;
     if (feedName == null || feedName.length === 0) continue;
 
-    const feedVersionPrefix = manifest.r2?.versionPrefix;
+    const feedVersionPrefix = manifest.r2?.artifactPrefix ?? manifest.r2?.versionPrefix;
     if (feedVersionPrefix == null || feedVersionPrefix.length === 0) {
       throw new Error(`published ${target} platform manifest is missing r2.versionPrefix for ${feedName}`);
     }
@@ -308,6 +315,27 @@ function validateManifest(target: string, manifest: PlatformManifest): string | 
   }
   if (closureRequired && (target === "mac_arm64" || target === "win_x64") && manifest.closure == null) {
     return "closure=missing";
+  }
+  if (shellRequired && manifest.shell == null) return "shell=missing";
+  if (manifest.shell != null) {
+    const expectedPlatform = target === "mac_arm64" ? "darwin-arm64" : target === "mac_x64" ? "darwin-x64" : "win32-x64";
+    if (manifest.shell.type !== "electron") return `shell.type=${String(manifest.shell.type)}`;
+    try {
+      parseReleaseVersion(String(manifest.shell.version), releaseChannel);
+    } catch {
+      return `shell.version=${String(manifest.shell.version)}`;
+    }
+    if (!/^sha256:[0-9a-f]{64}$/.test(String(manifest.shell.sourceDigest))) {
+      return `shell.sourceDigest=${String(manifest.shell.sourceDigest)}`;
+    }
+    const shellPrefix = `${publicOrigin}/${releaseChannel}/shells/electron/${expectedPlatform}/versions/${manifest.shell.version}/`;
+    for (const [name, artifact] of Object.entries(manifest.artifacts ?? {})) {
+      if (artifact.url == null || !artifact.url.startsWith(shellPrefix)) return `shell.artifacts.${name}.url=${String(artifact.url)}`;
+      if (!/^sha256:[0-9a-f]{64}$/.test(String(artifact.digest))) return `shell.artifacts.${name}.digest=${String(artifact.digest)}`;
+      if (manifest.shell.artifacts?.[name]?.url !== artifact.url || manifest.shell.artifacts?.[name]?.digest !== artifact.digest) {
+        return `shell.artifacts.${name}=mismatch`;
+      }
+    }
   }
   if (manifest.closure != null) {
     if (target !== "mac_arm64" && target !== "win_x64") return "closure=unsupported-target";

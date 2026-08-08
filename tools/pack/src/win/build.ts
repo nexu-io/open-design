@@ -3,6 +3,7 @@ import { readFile, rm, stat, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 
 import { ToolPackCache } from "../cache.js";
+import { describeToolPackArtifact } from "../artifacts.js";
 import type { ToolPackConfig } from "../config.js";
 import {
   collectWorkspaceTarballs,
@@ -143,18 +144,29 @@ export async function packWin(config: ToolPackConfig): Promise<WinPackResult> {
     });
   }
   const sizeReport = await runPhase("size-report", async () => collectWinSizeReport(config, paths, builtApp));
+  const shellVersion = await readPackagedVersion(config);
+  const installerPath = hasNsisTarget && await pathExists(paths.setupPath) ? paths.setupPath : null;
+  const payloadPath = (await pathExists(paths.launcherPayloadPath)) ? paths.launcherPayloadPath : null;
+  const portableZipPath = hasZipTarget && await pathExists(paths.setupZipPath) ? paths.setupZipPath : null;
   return {
+    artifacts: {
+      installer: await describeToolPackArtifact(installerPath),
+      payload: await describeToolPackArtifact(payloadPath),
+      portableZip: await describeToolPackArtifact(portableZipPath),
+    },
     blockmapPath: (await pathExists(paths.blockmapPath)) ? paths.blockmapPath : null,
-    installerPath: hasNsisTarget && await pathExists(paths.setupPath) ? paths.setupPath : null,
+    installerPath,
     latestYmlPath: hasNsisTarget && await pathExists(paths.latestYmlPath) ? paths.latestYmlPath : null,
     outputRoot: config.roots.output.namespaceRoot,
-    payloadPath: (await pathExists(paths.launcherPayloadPath)) ? paths.launcherPayloadPath : null,
-    portableZipPath: hasZipTarget && await pathExists(paths.setupZipPath) ? paths.setupZipPath : null,
+    payloadPath,
+    portableZipPath,
     resourceRoot: builtApp == null ? paths.resourceRoot : join(builtApp.unpackedRoot, "resources", "open-design"),
+    releaseVersion: config.releaseVersion ?? null,
     runtimeNamespaceRoot: config.roots.runtime.namespaceRoot,
     cacheReport: cache.report(),
     segments,
     sizeReport,
+    shell: { sourceDigest: workspaceBuildKey as `sha256:${string}`, type: config.shell, version: shellVersion },
     timings,
     to: config.to,
     unpackedPath: builtApp?.unpackedRoot ?? ((await pathExists(paths.unpackedRoot)) ? paths.unpackedRoot : null),

@@ -51,7 +51,7 @@ function resolveStandaloneConfig(): PackagedConfig {
 
   return {
     amrProfile: resolveStandaloneAmrProfile(),
-    appVersion: null,
+    shellVersion: null,
     daemonCliEntry: null,
     daemonSidecarEntry: null,
     namespace,

@@ -15,14 +15,10 @@ import {
   validateClosureFileInventory,
   type ClosureCandidateManifest,
 } from "@open-design/closure-proto";
-import type {
-  ClosureAttemptDescriptor,
-  ClosureRuntimeDescriptor,
-} from "@open-design/closure-store";
+import type { ClosureBindingDescriptor } from "@open-design/closure-store";
 import {
-  activateStoredClosureCandidate,
-  readClosureAttemptDescriptor,
-  readClosureRuntimeDescriptor,
+  commitStoredClosureCandidate,
+  readClosureBindingDescriptor,
   resolveClosureStoreVersionPaths,
   verifyMaterializedClosureCandidate,
   verifyStoredClosureCandidate,
@@ -53,19 +49,18 @@ export type ClosureReleaseCandidate = {
   releaseVersion: string;
 };
 
-export type ClosureUpdateActivationReason = "newer-closure" | "no-active-closure";
+export type ClosureUpdateCommitReason = "newer-release-binding" | "no-committed-closure";
 
 export type ClosureUpdateRetainReason =
-  | "already-active"
+  | "already-committed"
   | "candidate-not-newer"
-  | "runtime-attempt-pending"
   | "shell-incompatible";
 
 export type ClosureUpdateDecision =
   | {
-      action: "activate";
+      action: "commit";
       candidate: ClosureReleaseCandidate;
-      reason: ClosureUpdateActivationReason;
+      reason: ClosureUpdateCommitReason;
     }
   | {
       action: "retain";
@@ -84,8 +79,8 @@ export type ApplyClosureUpdateResult =
   | {
       candidate: ClosureReleaseCandidate;
       pointer: ClosureRuntimePointer;
-      reason: ClosureUpdateActivationReason;
-      state: "activated";
+      reason: ClosureUpdateCommitReason;
+      state: "committed";
     }
   | {
       candidate: ClosureReleaseCandidate;
@@ -265,17 +260,13 @@ export function compareClosureShellVersions(left: string, right: string): number
 }
 
 export function decideClosureUpdate(input: {
-  attempt: ClosureAttemptDescriptor | null;
   candidate: ClosureReleaseCandidate;
-  runtime: ClosureRuntimeDescriptor;
+  descriptor: ClosureBindingDescriptor;
   shellVersion: string;
 }): ClosureUpdateDecision {
   const { candidate } = input;
-  if (candidate.manifest.identity.channel !== input.runtime.channel) {
+  if (candidate.manifest.identity.channel !== input.descriptor.channel) {
     throw new ClosureUpdateError("Closure candidate channel does not match the local Store");
-  }
-  if (input.attempt != null) {
-    return { action: "retain", candidate, reason: "runtime-attempt-pending" };
   }
   if (
     compareClosureShellVersions(
@@ -285,25 +276,27 @@ export function decideClosureUpdate(input: {
   ) {
     return { action: "retain", candidate, reason: "shell-incompatible" };
   }
-  const active = input.runtime.active;
-  if (active == null) {
-    return { action: "activate", candidate, reason: "no-active-closure" };
+  const committed = input.descriptor.committed;
+  if (committed == null) {
+    return { action: "commit", candidate, reason: "no-committed-closure" };
   }
+  const active = committed.standalone;
   if (
     active.version === candidate.manifest.identity.version
     && active.digest === candidate.manifest.identity.digest
+    && committed.releaseVersion === candidate.releaseVersion
   ) {
-    return { action: "retain", candidate, reason: "already-active" };
+    return { action: "retain", candidate, reason: "already-committed" };
   }
   const channel = candidate.manifest.identity.channel as ReleaseChannel;
-  const comparison = compareReleaseVersions(candidate.manifest.identity.version, active.version, channel);
+  const comparison = compareReleaseVersions(candidate.releaseVersion, committed.releaseVersion, channel);
   if (comparison === 0) {
     throw new ClosureUpdateError(
-      `Closure version ${active.version} has conflicting immutable digests`,
+      `Closure release ${committed.releaseVersion} has conflicting immutable bindings`,
     );
   }
   return comparison > 0
-    ? { action: "activate", candidate, reason: "newer-closure" }
+    ? { action: "commit", candidate, reason: "newer-release-binding" }
     : { action: "retain", candidate, reason: "candidate-not-newer" };
 }
 
@@ -458,18 +451,18 @@ function stagedVersionPaths(
 }
 
 function candidateIsReferenced(
-  runtime: ClosureRuntimeDescriptor,
+  descriptor: ClosureBindingDescriptor,
   binding: ReturnType<typeof bindClosureCandidateIdentity>,
 ): boolean {
-  return (runtime.active != null && sameCandidate(runtime.active, binding))
-    || (runtime.lastSuccessful != null && sameCandidate(runtime.lastSuccessful, binding));
+  return descriptor.committed != null
+    && sameCandidate(descriptor.committed.standalone, binding);
 }
 
 async function ensureCandidateMaterialized(input: {
   candidate: ClosureReleaseCandidate;
+  descriptor: ClosureBindingDescriptor;
   fetchImpl: typeof globalThis.fetch;
   paths: ClosureStorePaths;
-  runtime: ClosureRuntimeDescriptor;
 }): Promise<ReturnType<typeof bindClosureCandidateIdentity>> {
   const binding = bindClosureCandidateIdentity(input.candidate.manifest.identity, input.paths.namespace);
   const finalPaths = resolveClosureStoreVersionPaths(input.paths, binding);
@@ -479,7 +472,7 @@ async function ensureCandidateMaterialized(input: {
       await verifyStoredClosureCandidate(input.paths, binding);
       return binding;
     } catch (error) {
-      if (candidateIsReferenced(input.runtime, binding)) throw error;
+      if (candidateIsReferenced(input.descriptor, binding)) throw error;
       await rm(finalPaths.versionRoot, { force: true, recursive: true });
     }
   }
@@ -537,12 +530,10 @@ export async function applyClosureUpdate(input: {
     return { candidate: input.candidate, reason: "another-updater-active", state: "busy" };
   }
   try {
-    const runtime = await readClosureRuntimeDescriptor(input.paths);
-    const attempt = await readClosureAttemptDescriptor(input.paths);
+    const descriptor = await readClosureBindingDescriptor(input.paths);
     const decision = decideClosureUpdate({
-      attempt,
       candidate: input.candidate,
-      runtime,
+      descriptor,
       shellVersion: input.shellVersion,
     });
     if (decision.action === "retain") {
@@ -550,28 +541,30 @@ export async function applyClosureUpdate(input: {
     }
     const binding = await ensureCandidateMaterialized({
       candidate: input.candidate,
+      descriptor,
       fetchImpl: input.fetch ?? globalThis.fetch,
       paths: input.paths,
-      runtime,
     });
 
-    const currentRuntime = await readClosureRuntimeDescriptor(input.paths);
-    const currentAttempt = await readClosureAttemptDescriptor(input.paths);
+    const currentDescriptor = await readClosureBindingDescriptor(input.paths);
     const currentDecision = decideClosureUpdate({
-      attempt: currentAttempt,
       candidate: input.candidate,
-      runtime: currentRuntime,
+      descriptor: currentDescriptor,
       shellVersion: input.shellVersion,
     });
     if (currentDecision.action === "retain") {
       return { candidate: input.candidate, reason: currentDecision.reason, state: "retained" };
     }
-    const activated = await activateStoredClosureCandidate(input.paths, binding);
+    const committed = await commitStoredClosureCandidate(
+      input.paths,
+      binding,
+      input.candidate.releaseVersion,
+    );
     return {
       candidate: input.candidate,
-      pointer: activated.pointer,
+      pointer: committed.committed.standalone,
       reason: currentDecision.reason,
-      state: "activated",
+      state: "committed",
     };
   } finally {
     await releaseUpdateLock(lock);

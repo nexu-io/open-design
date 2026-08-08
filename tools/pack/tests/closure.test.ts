@@ -100,6 +100,8 @@ describe("tools-pack Closure archive", () => {
     expect(body).toContain("daemonStandaloneSidecarEntry");
     expect(body).toContain("webStandaloneSidecarEntry");
     expect(body).toContain("OD_DAEMON_CLI_PATH");
+    expect(body).toContain("OD_RESOURCE_TRUST_ROOT: request.paths.installationRoot");
+    expect(body.match(/output: "inherit"/gu)).toHaveLength(2);
     for (const source of [root, inner, body]) {
       expect(source).not.toContain("payload-desktop-handoff");
       expect(source).not.toContain("ELECTRON_RUN_AS_NODE");

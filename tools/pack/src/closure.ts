@@ -475,12 +475,14 @@ export async function startStandaloneBody(request) {
     ...process.env,
     OD_DAEMON_CLI_PATH: layout.daemonCliEntry,
     OD_NODE_BIN: process.execPath,
+    OD_RESOURCE_TRUST_ROOT: request.paths.installationRoot,
   };
   return await startSidecarStandalone(request, {
     daemon: {
       args: [layout.daemonStandaloneSidecarEntry],
       env: childEnv,
       executable: process.execPath,
+      output: "inherit",
     },
     web: {
       args: [layout.webStandaloneSidecarEntry],
@@ -490,6 +492,7 @@ export async function startStandaloneBody(request) {
         OD_WEB_STANDALONE_ROOT: layout.webStandaloneRoot,
       },
       executable: process.execPath,
+      output: "inherit",
     },
   });
 }

@@ -8,8 +8,8 @@ product body.
 
 - Electron process, windows, menus, protocol registration, preload and native
   host capabilities.
-- Launcher/Store policy, Standalone lazy loading, committed binding and Shell
-  self-update or installer-required decisions.
+- Standalone absence-only lazy materialization, committed binding consumption,
+  and Shell self-update or installer-required decisions.
 - Projection of the launcher-owned release descriptor into the Standalone
   handoff and sidecar control plane.
 - macOS and Windows Shell entrypoints consumed by `tools-pack`.
@@ -25,8 +25,9 @@ product body.
 
 - Consume `@open-design/standalone-proto`; never invent a second Shell-to-
   Standalone handoff shape.
-- The launcher selects and persists the committed descriptor. Sidecar only
-  projects that descriptor and must not select or update it.
+- The Shell consumes one committed Closure descriptor. Cold start may
+  materialize an initial Closure only when no descriptor exists; once committed,
+  it must not discover, select, retry, or roll back Closure generations.
 - The root `bootloader.mjs` entry is best-effort handoff-once. Once an inner
   bootloader is selected, success or failure is terminal and no fallback body
   may start.

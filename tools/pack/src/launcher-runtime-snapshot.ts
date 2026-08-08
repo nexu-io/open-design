@@ -31,7 +31,7 @@ export type ToolPackLauncherRuntimeSnapshot = {
 };
 
 export async function readToolPackLauncherRuntimeSnapshot(
-  config: Pick<ToolPackConfig, "appVersion" | "namespace" | "roots">,
+  config: Pick<ToolPackConfig, "releaseVersion" | "namespace" | "roots">,
 ): Promise<ToolPackLauncherRuntimeSnapshot> {
   const launcher = resolveToolPackLauncherLayout(config);
   const paths = launcher.paths;

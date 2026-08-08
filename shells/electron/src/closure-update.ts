@@ -1,19 +1,26 @@
-import { resolveClosureStorePaths } from "@open-design/closure-store";
+import {
+  readClosureBindingDescriptor,
+  resolveClosureStorePaths,
+} from "@open-design/closure-store";
 import {
   updateClosureFromRelease,
   type ApplyClosureUpdateResult,
 } from "@open-design/closure-update";
 import type { LauncherChannel } from "@open-design/launcher-proto";
 
-export type PackagedClosureUpdateSkipReason =
+export type PackagedClosureEnsureSkipReason =
   | "metadata-unconfigured"
   | "shell-version-unavailable"
   | "unsupported-platform";
 
-export type PackagedClosureUpdateResult =
+export type PackagedClosureEnsureResult =
   | ApplyClosureUpdateResult
   | {
-      reason: PackagedClosureUpdateSkipReason;
+      reason: "already-committed";
+      state: "available";
+    }
+  | {
+      reason: PackagedClosureEnsureSkipReason;
       state: "skipped";
     };
 
@@ -35,22 +42,9 @@ export function resolvePackagedClosureReleaseTarget(
   return null;
 }
 
-/** Project the release truth only after this Store has accepted that release. */
-export function resolvePackagedClosureReleaseVersion(
-  result: PackagedClosureUpdateResult | null,
-  fallback: string | null,
-): string | null {
-  if (result == null || !("candidate" in result)) return fallback;
-  if (result.state === "activated") return result.candidate.releaseVersion;
-  if (result.state === "retained" && result.reason === "already-active") {
-    return result.candidate.releaseVersion;
-  }
-  return fallback;
-}
-
 /** Preserve the discovered installer floor when no compatible Store generation can be selected. */
 export function resolvePackagedClosureInstallerRequiredVersion(
-  result: PackagedClosureUpdateResult | null,
+  result: PackagedClosureEnsureResult | null,
 ): string | null {
   if (
     result?.state !== "retained"
@@ -60,7 +54,12 @@ export function resolvePackagedClosureInstallerRequiredVersion(
   return result.candidate.manifest.compatibility.shell.minVersion;
 }
 
-export async function checkForPackagedClosureUpdate(input: {
+/**
+ * Materialize the first committed Closure only when this namespace has none.
+ * Once a binding exists, cold start is offline and never discovers or selects
+ * a successor. Rich update policy belongs behind the Standalone handoff.
+ */
+export async function ensurePackagedClosureAvailable(input: {
   channel: LauncherChannel;
   installationRoot: string;
   metadataUrl: string | null;
@@ -70,7 +69,16 @@ export async function checkForPackagedClosureUpdate(input: {
   arch?: string;
   fetch?: typeof globalThis.fetch;
   platform?: NodeJS.Platform;
-} = {}): Promise<PackagedClosureUpdateResult> {
+} = {}): Promise<PackagedClosureEnsureResult> {
+  const paths = resolveClosureStorePaths({
+    channel: input.channel,
+    namespace: input.namespace,
+    root: input.installationRoot,
+  });
+  const descriptor = await readClosureBindingDescriptor(paths);
+  if (descriptor.committed != null) {
+    return { reason: "already-committed", state: "available" };
+  }
   if (input.metadataUrl == null) {
     return { reason: "metadata-unconfigured", state: "skipped" };
   }
@@ -81,11 +89,6 @@ export async function checkForPackagedClosureUpdate(input: {
   if (target == null) {
     return { reason: "unsupported-platform", state: "skipped" };
   }
-  const paths = resolveClosureStorePaths({
-    channel: input.channel,
-    namespace: input.namespace,
-    root: input.installationRoot,
-  });
   return await updateClosureFromRelease({
     channel: input.channel,
     ...(options.fetch == null ? {} : { fetch: options.fetch }),

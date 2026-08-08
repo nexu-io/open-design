@@ -4,8 +4,9 @@ import { join } from "node:path";
 import type { ToolPackConfig } from "./config.js";
 import { toolPackShellDefinition } from "./shells.js";
 
-export async function readRuntimeAppVersion(config: ToolPackConfig): Promise<string> {
-  if (config.appVersion != null) return config.appVersion;
+export async function readRuntimeShellVersion(config: ToolPackConfig): Promise<string> {
+  if (config.shellVersion != null) return config.shellVersion;
+  if (config.releaseVersion != null) return config.releaseVersion;
   const shellDirectory = toolPackShellDefinition(config.shell).directory;
   const packageJsonPath = join(config.workspaceRoot, shellDirectory, "package.json");
   const packageJson = JSON.parse(await readFile(packageJsonPath, "utf8")) as { version?: unknown };
@@ -15,16 +16,16 @@ export async function readRuntimeAppVersion(config: ToolPackConfig): Promise<str
   return packageJson.version;
 }
 
-export function versionCoreForAppVersion(appVersion: string): string {
-  const match = /^(\d+\.\d+\.\d+)(?:[-.].*)?$/.exec(appVersion);
-  return match?.[1] ?? appVersion;
+export function versionCoreForShellVersion(shellVersion: string): string {
+  const match = /^(\d+\.\d+\.\d+)(?:[-.].*)?$/.exec(shellVersion);
+  return match?.[1] ?? shellVersion;
 }
 
-export function versionFamilyForAppVersion(appVersion: string): string | null {
-  const match = /^(\d+\.\d+)\.\d+(?:[-.].*)?$/.exec(appVersion);
+export function versionFamilyForShellVersion(shellVersion: string): string | null {
+  const match = /^(\d+\.\d+)\.\d+(?:[-.].*)?$/.exec(shellVersion);
   return match?.[1] ?? null;
 }
 
-export function electronBuilderVersionForAppVersion(appVersion: string): string {
-  return appVersion;
+export function electronBuilderVersionForShellVersion(shellVersion: string): string {
+  return shellVersion;
 }

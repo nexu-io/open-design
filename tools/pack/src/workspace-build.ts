@@ -5,7 +5,7 @@ import { dirname, join, relative } from "node:path";
 import { hashJson, hashPath, ToolPackCache } from "./cache.js";
 import type { ToolPackConfig } from "./config.js";
 import { hashPackageSourcePath } from "./package-source-hash.js";
-import { readRuntimeAppVersion, versionFamilyForAppVersion } from "./versions.js";
+import { readRuntimeShellVersion, versionFamilyForShellVersion } from "./versions.js";
 
 /** The dependency closure selected by `pnpm --filter @open-design/shell-electron...`. */
 const SHELL_BUILD_PACKAGES = [
@@ -41,8 +41,8 @@ type WorkspaceBuildArtifact = {
 
 async function resolveWorkspaceBuildVersionFamily(config: ToolPackConfig): Promise<string | null> {
   if (config.platform !== "win") return null;
-  const appVersion = await readRuntimeAppVersion(config).catch(() => null);
-  return appVersion == null ? null : versionFamilyForAppVersion(appVersion);
+  const releaseVersion = await readRuntimeShellVersion(config).catch(() => null);
+  return releaseVersion == null ? null : versionFamilyForShellVersion(releaseVersion);
 }
 
 async function pathExists(path: string): Promise<boolean> {
@@ -65,12 +65,12 @@ async function readPackageManager(workspaceRoot: string): Promise<unknown> {
   return rootPackageJson.packageManager;
 }
 
-async function createWorkspaceBuildCacheKey(config: ToolPackConfig): Promise<string> {
+export async function resolveShellSourceDigest(config: ToolPackConfig): Promise<`sha256:${string}`> {
   const packageHashes: Record<string, string> = {};
   for (const packageInfo of SHELL_BUILD_PACKAGES) {
     packageHashes[packageInfo.name] = await hashPackageSourcePath(join(config.workspaceRoot, packageInfo.directory));
   }
-  return hashJson({
+  return `sha256:${hashJson({
     buildCommand: SHELL_BUILD_COMMAND,
     node: `${config.platform}.workspace-build`,
     nodeVersion: process.version,
@@ -80,7 +80,7 @@ async function createWorkspaceBuildCacheKey(config: ToolPackConfig): Promise<str
     pnpmLock: await hashPath(join(config.workspaceRoot, "pnpm-lock.yaml")),
     schemaVersion: 11,
     shell: config.shell,
-  });
+  })}`;
 }
 
 function workspaceBuildOutputFiles(): string[] {
@@ -132,8 +132,8 @@ export async function ensureWorkspaceBuildArtifacts(
   config: ToolPackConfig,
   cache: ToolPackCache,
   build: () => Promise<void>,
-): Promise<string> {
-  const key = await createWorkspaceBuildCacheKey(config);
+): Promise<`sha256:${string}`> {
+  const key = await resolveShellSourceDigest(config);
   const nodeId = `${config.platform}.workspace-build`;
   const artifacts = workspaceBuildArtifacts();
   const versionFamily = await resolveWorkspaceBuildVersionFamily(config);

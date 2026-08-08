@@ -472,17 +472,15 @@ type DesktopIdentityMarker = {
   executablePath: string;
   pid: number;
   runtime?: {
-    closure?: {
-      digest?: string;
-      generation?: number;
-      reason?: string;
-      source?: string;
-      version?: string | null;
+    descriptor?: {
+      release?: { version?: string };
+      shell?: { digest?: string; type?: string; version?: string };
+      standalone?: { digest?: string; protocolVersion?: number; version?: string };
     };
-    shell?: {
-      source?: string;
-      version?: string | null;
-    };
+    descriptorDigest?: string;
+    generation?: number;
+    scope?: { channel?: string; generation?: number; namespace?: string };
+    standalonePid?: number;
   };
   version: number;
 };
@@ -1331,21 +1329,28 @@ winClosureDescribe('packaged Windows Standalone Closure release acceptance', () 
       const faultStop = await runToolsPackJson<WinStopResult>('stop');
       started = false;
       expect(faultStop.remainingPids).toEqual([]);
-      await activateBrokenClosureSuccessor(fixture);
-      await runToolsPackJson<WinStartResult>('start');
-      started = true;
-      await waitForHealthyDesktop();
-      assertLegacyDesktopIdentity(await readDesktopIdentityMarker(), 'candidate-invalid');
-      expect((await readPackagedClosureFixtureRuntime(fixture)).active).toEqual(fixture.pointer);
+      const broken = await activateBrokenClosureSuccessor(fixture);
+      await expect(runToolsPackJson<WinStartResult>('start')).rejects.toThrow(/Standalone|standalone/u);
+      expect((await readPackagedClosureFixtureRuntime(fixture)).committed?.standalone).toEqual(broken.pointer);
 
-      const recoveryStop = await runToolsPackJson<WinStopResult>('stop');
-      started = false;
-      expect(recoveryStop.remainingPids).toEqual([]);
+      await resetPackagedClosureFixture({
+        channel: updateScenario.channel,
+        installationRoot,
+        namespace,
+      });
+      const recovered = await seedPackagedClosureFixture({
+        buildJsonPath: closureBuildJsonPath!,
+        channel: updateScenario.channel,
+        expectedPlatform: 'win32-x64',
+        installationRoot,
+        namespace,
+        workspaceRoot,
+      });
       await runToolsPackJson<WinStartResult>('start');
       started = true;
       await waitForHealthyDesktop();
-      assertClosureDesktopIdentity(await readDesktopIdentityMarker(), fixture.manifest.identity.version);
-      expect((await readPackagedClosureFixtureRuntime(fixture)).lastSuccessful).toEqual(fixture.pointer);
+      assertClosureDesktopIdentity(await readDesktopIdentityMarker(), recovered.manifest.identity.version);
+      expect((await readPackagedClosureFixtureRuntime(recovered)).committed?.standalone).toEqual(recovered.pointer);
     } finally {
       if (started) await runToolsPackJson<WinStopResult>('stop').catch(() => undefined);
       if (installed) {
@@ -1605,8 +1610,8 @@ async function runSameVersionUpdaterRecoveryAcceptance(options: {
   });
   const installedConfig = JSON.parse(
     await readFile(join(options.installDir, 'resources', 'open-design-config.json'), 'utf8'),
-  ) as { appVersion?: unknown };
-  expect(installedConfig.appVersion).toBe(options.targetVersion);
+  ) as { shellVersion?: unknown };
+  expect(installedConfig.shellVersion).toBe(options.targetVersion);
 
   const terminalInspect = await waitForTerminalUpdateState(options.targetVersion);
   if (terminalInspect.update == null) throw new Error('reinstalled outer did not return terminal updater status');
@@ -2352,8 +2357,8 @@ async function buildVersionBumpedWinPayloadFixture(
     }
     // <payload dir>/<binary>.exe → <payload dir>/resources/open-design-config.json
     const configPath = join(extractRoot, dirname(executableRelPath), 'resources', 'open-design-config.json');
-    const config = JSON.parse(await readFile(configPath, 'utf8')) as { appVersion?: string };
-    config.appVersion = bumpedVersion;
+    const config = JSON.parse(await readFile(configPath, 'utf8')) as { shellVersion?: string };
+    config.shellVersion = bumpedVersion;
     await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
   });
 }
@@ -2529,23 +2534,20 @@ async function readDesktopIdentityMarker(): Promise<DesktopIdentityMarker> {
 }
 
 function assertClosureDesktopIdentity(identity: DesktopIdentityMarker, version: string): void {
-  if (identity.runtime?.closure?.source !== 'closure') {
+  if (identity.runtime?.descriptor?.standalone?.version !== version) {
     throw new Error(`packaged Windows did not attach the seeded Closure: ${formatUnknown(identity.runtime)}`);
   }
-  expect(identity.runtime?.closure).toMatchObject({
-    source: 'closure',
-    version,
+  expect(identity.runtime.descriptor).toMatchObject({
+    release: { version },
+    shell: { type: 'electron' },
+    standalone: { protocolVersion: 1, version },
   });
-  expect(identity.runtime?.closure?.digest).toMatch(/^sha256:[a-f0-9]{64}$/);
-  expect(identity.runtime?.closure?.generation).toBeGreaterThanOrEqual(0);
-  expect(identity.runtime?.shell?.source).toMatch(/^(current-package|payload)$/);
-}
-
-function assertLegacyDesktopIdentity(identity: DesktopIdentityMarker, reason: string): void {
-  expect(identity.runtime?.closure).toMatchObject({
-    reason,
-    source: 'legacy-combined',
-  });
+  expect(identity.runtime.descriptor.shell?.digest).toMatch(/^sha256:[a-f0-9]{64}$/);
+  expect(identity.runtime.descriptor.standalone?.digest).toMatch(/^sha256:[a-f0-9]{64}$/);
+  expect(identity.runtime.descriptorDigest).toMatch(/^sha256:[a-f0-9]{64}$/);
+  expect(identity.runtime.generation).toBeGreaterThanOrEqual(0);
+  expect(identity.runtime.scope?.generation).toBe(identity.runtime.generation);
+  expect(identity.runtime.standalonePid).toBeGreaterThan(0);
 }
 
 async function assertPayloadDesktopIdentity(

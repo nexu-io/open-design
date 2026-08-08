@@ -12,7 +12,7 @@ import {
   validateNodePtyRuntime,
 } from "../node-pty-runtime.js";
 import { winResources } from "../resources.js";
-import { electronBuilderVersionForAppVersion, versionCoreForAppVersion } from "../versions.js";
+import { electronBuilderVersionForShellVersion, versionCoreForShellVersion } from "../versions.js";
 import {
   WIN_PREBUNDLED_DAEMON_CLI_RELATIVE_PATH,
   WIN_PREBUNDLED_DAEMON_SIDECAR_RELATIVE_PATH,
@@ -164,7 +164,7 @@ async function runElectronBuilderRaw(
   const packagedVersion = await runSegment("electron-builder-raw:read-packaged-version", async () =>
     readPackagedVersion(config)
   );
-  const packageVersion = electronBuilderVersionForAppVersion(packagedVersion);
+  const packageVersion = electronBuilderVersionForShellVersion(packagedVersion);
   const webStandaloneHookConfigPath = null;
   const builderConfig = {
     appId: "io.open-design.desktop",
@@ -364,7 +364,7 @@ async function rewriteUnpackedAppPackageVersion(unpackedRoot: string, packagedVe
   const packageJsonPath = join(unpackedRoot, "resources", "app", "package.json");
   if (!(await pathExists(packageJsonPath))) return;
   const packageJson = JSON.parse(await readFile(packageJsonPath, "utf8")) as Record<string, unknown>;
-  packageJson.version = electronBuilderVersionForAppVersion(packagedVersion);
+  packageJson.version = electronBuilderVersionForShellVersion(packagedVersion);
   await writeFile(packageJsonPath, `${JSON.stringify(packageJson, null, 2)}\n`, "utf8");
 }
 
@@ -374,7 +374,7 @@ async function assertMaterializedUnpackedVersionConsistency(
 ): Promise<void> {
   const packageJsonPath = join(unpackedRoot, "resources", "app", "package.json");
   const packageJson = JSON.parse(await readFile(packageJsonPath, "utf8")) as { version?: unknown };
-  const expectedPackageVersion = electronBuilderVersionForAppVersion(packagedVersion);
+  const expectedPackageVersion = electronBuilderVersionForShellVersion(packagedVersion);
   if (packageJson.version !== expectedPackageVersion) {
     throw new Error(
       `expected packaged app version ${JSON.stringify(expectedPackageVersion)} in ${packageJsonPath}, received ${JSON.stringify(packageJson.version)}`,
@@ -382,10 +382,10 @@ async function assertMaterializedUnpackedVersionConsistency(
   }
 
   const packagedConfigPath = join(unpackedRoot, "resources", "open-design-config.json");
-  const packagedConfig = JSON.parse(await readFile(packagedConfigPath, "utf8")) as { appVersion?: unknown };
-  if (packagedConfig.appVersion !== packagedVersion) {
+  const packagedConfig = JSON.parse(await readFile(packagedConfigPath, "utf8")) as { shellVersion?: unknown };
+  if (packagedConfig.shellVersion !== packagedVersion) {
     throw new Error(
-      `expected packaged config version ${JSON.stringify(packagedVersion)} in ${packagedConfigPath}, received ${JSON.stringify(packagedConfig.appVersion)}`,
+      `expected packaged Shell version ${JSON.stringify(packagedVersion)} in ${packagedConfigPath}, received ${JSON.stringify(packagedConfig.shellVersion)}`,
     );
   }
 
@@ -498,7 +498,7 @@ export async function runElectronBuilder(
     }
   };
   const packagedVersion = await readPackagedVersion(config);
-  const versionCore = versionCoreForAppVersion(packagedVersion);
+  const versionCore = versionCoreForShellVersion(packagedVersion);
   const usePrebundle = shouldUseWinStandalonePrebundle(config.webOutputMode);
   const packagedConfigEntrypoints = {};
   const afterPackHook = null;

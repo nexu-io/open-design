@@ -12,8 +12,7 @@ import {
   type ClosureCandidateManifest,
 } from "@open-design/closure-proto";
 import {
-  readClosureAttemptDescriptor,
-  readClosureRuntimeDescriptor,
+  readClosureBindingDescriptor,
   resolveClosureStorePaths,
   verifyStoredClosureCandidate,
   type ClosureStorePaths,
@@ -22,8 +21,7 @@ import JSZip from "jszip";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type {
-  ClosureAttemptDescriptor,
-  ClosureRuntimeDescriptor,
+  ClosureBindingDescriptor,
   ClosureRuntimePointer,
 } from "@open-design/closure-store";
 
@@ -120,13 +118,15 @@ function pointer(version: string, digest = DIGEST): ClosureRuntimePointer {
   };
 }
 
-function runtime(active: ClosureRuntimePointer | null): ClosureRuntimeDescriptor {
+function descriptor(
+  standalone: ClosureRuntimePointer | null,
+  releaseVersion = standalone?.version ?? "0.18.0-beta.0",
+): ClosureBindingDescriptor {
   return {
-    active,
     channel: "beta",
-    lastSuccessful: active,
+    committed: standalone == null ? null : { releaseVersion, standalone },
     namespace: "release-beta",
-    nextGeneration: active == null ? 0 : 1,
+    nextGeneration: standalone == null ? 0 : 1,
     schemaVersion: 1,
     updatedAt: new Date(0).toISOString(),
   };
@@ -250,57 +250,39 @@ describe("Closure release update selection", () => {
     })).toThrow(/does not match win32-x64/u);
   });
 
-  it("uses shell compatibility and the independent active Closure identity", () => {
+  it("uses shell compatibility and the independent committed release binding", () => {
     const candidate = select();
 
     expect(decideClosureUpdate({
-      attempt: null,
       candidate,
-      runtime: runtime(null),
+      descriptor: descriptor(null),
       shellVersion: "0.16.2",
-    })).toMatchObject({ action: "activate", reason: "no-active-closure" });
+    })).toMatchObject({ action: "commit", reason: "no-committed-closure" });
     expect(decideClosureUpdate({
-      attempt: null,
       candidate,
-      runtime: runtime(pointer("0.18.0-beta.3", OTHER_DIGEST)),
+      descriptor: descriptor(pointer("0.18.0-beta.3", OTHER_DIGEST)),
       shellVersion: "0.18.0-beta.4",
-    })).toMatchObject({ action: "activate", reason: "newer-closure" });
+    })).toMatchObject({ action: "commit", reason: "newer-release-binding" });
     expect(decideClosureUpdate({
-      attempt: null,
       candidate,
-      runtime: runtime(pointer("0.18.0-beta.5", OTHER_DIGEST)),
+      descriptor: descriptor(pointer("0.18.0-beta.5", OTHER_DIGEST)),
       shellVersion: "0.18.0-beta.4",
     })).toMatchObject({ action: "retain", reason: "candidate-not-newer" });
     expect(decideClosureUpdate({
-      attempt: null,
       candidate,
-      runtime: runtime(null),
+      descriptor: descriptor(null),
       shellVersion: "0.16.1",
     })).toMatchObject({ action: "retain", reason: "shell-incompatible" });
   });
 
-  it("does not replace a running attempt and rejects same-version equivocation", () => {
+  it("rejects equivocation within one release binding", () => {
     const candidate = select();
-    const active = pointer("0.18.0-beta.3", OTHER_DIGEST);
-    const attempt: ClosureAttemptDescriptor = {
-      ...active,
-      schemaVersion: 1,
-      startedAt: new Date(0).toISOString(),
-    };
-    expect(decideClosureUpdate({
-      attempt,
-      candidate,
-      runtime: runtime(active),
-      shellVersion: "0.18.0-beta.4",
-    })).toMatchObject({ action: "retain", reason: "runtime-attempt-pending" });
-
     expect(() => decideClosureUpdate({
-      attempt: null,
       candidate,
-      runtime: runtime(pointer("0.18.0-beta.4", OTHER_DIGEST)),
+      descriptor: descriptor(pointer("0.18.0-beta.4", OTHER_DIGEST)),
       shellVersion: "0.18.0-beta.4",
     })).toThrowError(new ClosureUpdateError(
-      "Closure version 0.18.0-beta.4 has conflicting immutable digests",
+      "Closure release 0.18.0-beta.4 has conflicting immutable bindings",
     ));
   });
 
@@ -314,7 +296,7 @@ describe("Closure release update selection", () => {
 });
 
 describe("Closure release update application", () => {
-  it("downloads, verifies, and atomically activates a candidate", async () => {
+  it("downloads, verifies, and atomically commits a candidate", async () => {
     const paths = await createStore();
     const fixture = await downloadableCandidate();
 
@@ -325,10 +307,12 @@ describe("Closure release update application", () => {
       shellVersion: "0.16.2",
     });
 
-    expect(result).toMatchObject({ reason: "no-active-closure", state: "activated" });
-    const descriptor = await readClosureRuntimeDescriptor(paths);
-    expect(descriptor.active).toMatchObject(fixture.candidate.manifest.identity);
-    expect(await readClosureAttemptDescriptor(paths)).toBeNull();
+    expect(result).toMatchObject({ reason: "no-committed-closure", state: "committed" });
+    const binding = await readClosureBindingDescriptor(paths);
+    expect(binding.committed).toMatchObject({
+      releaseVersion: fixture.candidate.releaseVersion,
+      standalone: fixture.candidate.manifest.identity,
+    });
     const verified = await verifyStoredClosureCandidate(paths, {
       ...fixture.candidate.manifest.identity,
       namespace: paths.namespace,
@@ -342,7 +326,7 @@ describe("Closure release update application", () => {
       paths,
       shellVersion: "0.16.2",
     });
-    expect(retained).toMatchObject({ reason: "already-active", state: "retained" });
+    expect(retained).toMatchObject({ reason: "already-committed", state: "retained" });
     expect(vi.mocked(fixture.fetch).mock.calls).toHaveLength(fetchCount);
   });
 
@@ -367,8 +351,7 @@ describe("Closure release update application", () => {
       shellVersion: "0.16.2",
     })).rejects.toThrow(/checksum/u);
 
-    expect((await readClosureRuntimeDescriptor(paths)).active).toBeNull();
-    expect(await readClosureAttemptDescriptor(paths)).toBeNull();
+    expect((await readClosureBindingDescriptor(paths)).committed).toBeNull();
   });
 
   it("leaves an active updater lock untouched", async () => {

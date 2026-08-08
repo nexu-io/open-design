@@ -252,7 +252,7 @@ case "$RELEASE_TARGET" in
       --cache-dir "$TOOLS_PACK_CACHE_DIR"
       --namespace "$RELEASE_NAMESPACE"
       --portable
-      --app-version "$RELEASE_VERSION"
+      --release-version "$RELEASE_VERSION"
       --mac-compression "${MAC_COMPRESSION:-normal}"
       --to "$RELEASE_BUILD_TARGET"
       --json
@@ -315,7 +315,7 @@ else
       --cache-dir "$TOOLS_PACK_CACHE_DIR"
       --namespace "$RELEASE_NAMESPACE"
       --portable
-      --app-version "$update_version"
+      --release-version "$update_version"
       --mac-compression "${MAC_COMPRESSION:-normal}"
       --to dmg
       --json

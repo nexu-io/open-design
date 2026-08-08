@@ -1,9 +1,5 @@
-import {
-  createHash,
-  generateKeyPairSync,
-  sign as signPayload,
-} from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -15,21 +11,19 @@ import {
   CLOSURE_PROTOCOL_VERSION,
   CLOSURE_SCHEMA_VERSION,
   CLOSURE_SHIM_SCHEMA_VERSION,
-  CLOSURE_SIGNATURE_ALGORITHM,
-  CLOSURE_SIGNATURE_SCHEMA_VERSION,
-  serializeClosureCandidateManifestForSigning,
   type ClosureCandidateManifest,
-  type ClosureCandidateSignature,
   type ClosureShellCapabilityPort,
   type ClosureShellCapabilityRequest,
   type ClosureShimRequest,
 } from "@open-design/closure-proto";
 import {
-  readClosureAttemptDescriptor,
-  readClosureRuntimeDescriptor,
+  readClosureBindingDescriptor,
   resolveClosureStorePaths,
 } from "@open-design/closure-store";
-import type { ClosureReleaseCandidate } from "@open-design/closure-update";
+import {
+  applyClosureUpdate,
+  type ClosureReleaseCandidate,
+} from "@open-design/closure-update";
 import type { StandalonePaths } from "@open-design/standalone-runtime";
 import JSZip from "jszip";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -38,7 +32,6 @@ import {
   ensureAndHandoffClosure,
   type ClosureShimOutcome,
   type ClosureShimTraceEvent,
-  type SignedClosureReleaseCandidate,
 } from "../src/index.js";
 import {
   createFakeStandalone,
@@ -47,8 +40,6 @@ import {
 } from "../src/testing.js";
 
 const roots: string[] = [];
-const { privateKey, publicKey } = generateKeyPairSync("ed25519");
-const trustedPublicKey = publicKey.export({ format: "pem", type: "spki" }).toString();
 
 afterEach(async () => {
   vi.restoreAllMocks();
@@ -143,8 +134,9 @@ process.on("SIGTERM", () => {
 setInterval(() => undefined, 1000);
 `;
 
-type CandidateFixture = SignedClosureReleaseCandidate & {
+type CandidateFixture = {
   archive: Buffer;
+  candidate: ClosureReleaseCandidate;
   fetch: typeof globalThis.fetch;
   inventory: {
     files: Array<{ digest: `sha256:${string}`; path: string; size: number }>;
@@ -211,16 +203,6 @@ async function candidateFixture(input: {
     releaseTarget: "mac_arm64",
     releaseVersion: input.version,
   };
-  const signature: ClosureCandidateSignature = {
-    algorithm: CLOSURE_SIGNATURE_ALGORITHM,
-    keyId: "demo-root-2026",
-    schemaVersion: CLOSURE_SIGNATURE_SCHEMA_VERSION,
-    value: signPayload(
-      null,
-      Buffer.from(serializeClosureCandidateManifestForSigning(manifest), "utf8"),
-      privateKey,
-    ).toString("base64url"),
-  };
   const fetch = vi.fn(async (resource: string | URL | Request) => {
     const url = resource instanceof Request ? resource.url : String(resource);
     if (url === candidate.assets.archive) {
@@ -237,7 +219,7 @@ async function candidateFixture(input: {
     }
     return new Response("not found", { status: 404 });
   }) as typeof globalThis.fetch;
-  return { archive, candidate, fetch, inventory, signature };
+  return { archive, candidate, fetch, inventory };
 }
 
 async function demoContext(): Promise<{
@@ -252,6 +234,27 @@ async function demoContext(): Promise<{
     request: createFakeClosureShimRequest(),
     traces: [],
   };
+}
+
+function storePaths(context: Awaited<ReturnType<typeof demoContext>>) {
+  return resolveClosureStorePaths({
+    channel: context.request.channel,
+    namespace: context.request.namespace,
+    root: context.paths.installationRoot,
+  });
+}
+
+async function commit(
+  context: Awaited<ReturnType<typeof demoContext>>,
+  fixture: CandidateFixture,
+): Promise<void> {
+  const result = await applyClosureUpdate({
+    candidate: fixture.candidate,
+    fetch: fixture.fetch,
+    paths: storePaths(context),
+    shellVersion: context.request.shell.version,
+  });
+  expect(result.state).toBe("committed");
 }
 
 function expectReady(outcome: ClosureShimOutcome): asserts outcome is Extract<ClosureShimOutcome, { handle: object }> {
@@ -277,48 +280,37 @@ function fakeShellCapabilities(
 
 async function launch(
   context: Awaited<ReturnType<typeof demoContext>>,
-  fixture?: CandidateFixture,
   shellCapabilities: ClosureShellCapabilityPort = fakeShellCapabilities(),
 ): Promise<ClosureShimOutcome> {
   return await ensureAndHandoffClosure({
-    ...(fixture == null ? {} : { candidate: fixture, fetch: fixture.fetch }),
     onTrace: (event) => context.traces.push(event),
     paths: context.paths,
     request: context.request,
     shellCapabilities,
-    trustedKeys: { "demo-root-2026": trustedPublicKey },
   });
 }
 
-describe("Closure shim conformance demo", () => {
-  it("acquires a trusted body and performs a real process handoff", async () => {
+describe("Closure shim committed-binding conformance", () => {
+  it("enters one already-committed body through a real process handoff", async () => {
     const context = await demoContext();
     const fixture = await candidateFixture({ version: "0.19.0-beta.1" });
+    await commit(context, fixture);
+    const descriptorBefore = await readClosureBindingDescriptor(storePaths(context));
 
-    const outcome = await launch(context, fixture);
+    const outcome = await launch(context);
     expectReady(outcome);
     const status = await outcome.handle.readStatus();
 
     expect(status.pid).not.toBe(process.pid);
     expect(status.handoff).toEqual(outcome.result.handoff);
+    expect(outcome.result).toMatchObject({ reused: true, rolledBack: false });
     expect(context.traces).toEqual([
       "request:validated",
-      "candidate:trusted",
-      "candidate:activated",
-      "handoff:armed",
+      "binding:resolved",
+      "handoff:entered",
       "body:ready",
-      "runtime:confirmed",
     ]);
-    const storePaths = resolveClosureStorePaths({
-      channel: "beta",
-      namespace: "release-beta",
-      root: context.paths.installationRoot,
-    });
-    await expect(readClosureRuntimeDescriptor(storePaths)).resolves.toMatchObject({
-      active: outcome.result.handoff.identity,
-      lastSuccessful: outcome.result.handoff.identity,
-    });
-    await expect(readClosureAttemptDescriptor(storePaths)).resolves.toBeNull();
+    await expect(readClosureBindingDescriptor(storePaths(context))).resolves.toEqual(descriptorBefore);
     await expect(outcome.close()).resolves.toMatchObject({
       handoff: outcome.result.handoff,
       schemaVersion: CLOSURE_HANDOFF_SCHEMA_VERSION,
@@ -326,89 +318,30 @@ describe("Closure shim conformance demo", () => {
     });
   });
 
-  it("reuses the verified active body on the second launch", async () => {
+  it("fails visibly when no committed binding exists", async () => {
     const context = await demoContext();
-    const fixture = await candidateFixture({ version: "0.19.0-beta.1" });
-    const first = await launch(context, fixture);
-    expectReady(first);
-    await first.close();
-    const fetchCalls = vi.mocked(fixture.fetch).mock.calls.length;
-    context.traces.length = 0;
 
-    const second = await launch(context, fixture);
-    expectReady(second);
-
-    expect(second.result.reused).toBe(true);
-    expect(vi.mocked(fixture.fetch).mock.calls).toHaveLength(fetchCalls);
-    expect(context.traces).toEqual([
-      "request:validated",
-      "candidate:trusted",
-      "candidate:reused",
-      "handoff:armed",
-      "body:ready",
-      "runtime:confirmed",
-    ]);
-    await second.close();
-  });
-
-  it("rejects untrusted or corrupted candidates without changing current", async () => {
-    const context = await demoContext();
-    const stable = await candidateFixture({ version: "0.19.0-beta.1" });
-    const first = await launch(context, stable);
-    expectReady(first);
-    await first.close();
-    const storePaths = resolveClosureStorePaths({
-      channel: "beta",
-      namespace: "release-beta",
-      root: context.paths.installationRoot,
-    });
-    const before = await readClosureRuntimeDescriptor(storePaths);
-
-    const untrusted = await candidateFixture({ version: "0.19.0-beta.2" });
-    untrusted.signature = {
-      ...untrusted.signature,
-      value: Buffer.alloc(64).toString("base64url"),
-    };
-    await expect(launch(context, untrusted)).rejects.toMatchObject({
-      code: "trust-rejected",
+    await expect(launch(context)).rejects.toMatchObject({
+      code: "body-unavailable",
       name: "ClosureShimError",
     });
-    await expect(readClosureRuntimeDescriptor(storePaths)).resolves.toEqual(before);
-
-    const corrupt = await candidateFixture({ version: "0.19.0-beta.2" });
-    corrupt.fetch = vi.fn(async (resource: string | URL | Request) => {
-      const url = resource instanceof Request ? resource.url : String(resource);
-      if (url === corrupt.candidate.assets.archive) {
-        return new Response("corrupt", {
-          headers: { "content-length": "7" },
-          status: 200,
-        });
-      }
-      if (url === corrupt.candidate.assets.inventory) {
-        return new Response(JSON.stringify(corrupt.inventory), { status: 200 });
-      }
-      if (url === corrupt.candidate.assets.manifest) {
-        return new Response(JSON.stringify(corrupt.candidate.manifest), { status: 200 });
-      }
-      return new Response("not found", { status: 404 });
-    }) as typeof globalThis.fetch;
-    await expect(launch(context, corrupt)).rejects.toMatchObject({
-      code: "candidate-rejected",
-      name: "ClosureShimError",
-    });
-    await expect(readClosureRuntimeDescriptor(storePaths)).resolves.toEqual(before);
+    expect(context.traces).toEqual(["request:validated"]);
   });
 
-  it("returns installer-reinstall before downloading an incompatible body", async () => {
+  it("returns installer-reinstall for an incompatible committed body", async () => {
     const context = await demoContext();
     const fixture = await candidateFixture({
       minShellVersion: "0.20.0-beta.1",
       version: "0.20.0-beta.1",
     });
+    await applyClosureUpdate({
+      candidate: fixture.candidate,
+      fetch: fixture.fetch,
+      paths: storePaths(context),
+      shellVersion: "0.20.0-beta.1",
+    });
 
-    const outcome = await launch(context, fixture);
-
-    expect(outcome).toEqual({
+    await expect(launch(context)).resolves.toEqual({
       handle: null,
       result: {
         minShellVersion: "0.20.0-beta.1",
@@ -416,68 +349,67 @@ describe("Closure shim conformance demo", () => {
         schemaVersion: CLOSURE_SHIM_SCHEMA_VERSION,
       },
     });
-    expect(vi.mocked(fixture.fetch)).not.toHaveBeenCalled();
     expect(context.traces).toEqual([
       "request:validated",
-      "candidate:trusted",
+      "binding:resolved",
       "installer:reinstall",
     ]);
   });
 
-  it("rolls an unhealthy candidate back to last-successful exactly once", async () => {
+  it("fails a broken committed body without selecting an older generation", async () => {
     const context = await demoContext();
     const stable = await candidateFixture({ version: "0.19.0-beta.1" });
-    const first = await launch(context, stable);
-    expectReady(first);
-    await first.close();
-    context.traces.length = 0;
-    const unhealthy = await candidateFixture({
-      mode: "unhealthy",
-      version: "0.19.0-beta.2",
-    });
+    await commit(context, stable);
+    const broken = await candidateFixture({ mode: "unhealthy", version: "0.19.0-beta.2" });
+    await commit(context, broken);
+    const descriptorBefore = await readClosureBindingDescriptor(storePaths(context));
 
-    const recovered = await launch(context, unhealthy);
-    expectReady(recovered);
-
-    expect(recovered.result).toMatchObject({
-      outcome: "ready",
-      reused: true,
-      rolledBack: true,
+    await expect(launch(context)).rejects.toMatchObject({
+      code: "handoff-failed",
+      name: "ClosureShimError",
     });
-    expect(recovered.result.handoff.identity.version).toBe("0.19.0-beta.1");
+    await expect(readClosureBindingDescriptor(storePaths(context))).resolves.toEqual(descriptorBefore);
+    expect(descriptorBefore.committed?.standalone.version).toBe("0.19.0-beta.2");
     expect(context.traces).toEqual([
       "request:validated",
-      "candidate:trusted",
-      "candidate:activated",
-      "handoff:armed",
+      "binding:resolved",
+      "handoff:entered",
       "body:failed",
-      "runtime:rolled-back",
-      "handoff:armed",
-      "body:ready",
-      "runtime:confirmed",
     ]);
-    const storePaths = resolveClosureStorePaths({
-      channel: "beta",
-      namespace: "release-beta",
-      root: context.paths.installationRoot,
-    });
-    const descriptor = await readClosureRuntimeDescriptor(storePaths);
-    expect(descriptor.active?.version).toBe("0.19.0-beta.1");
-    expect(descriptor.lastSuccessful?.version).toBe("0.19.0-beta.1");
-    await expect(readClosureAttemptDescriptor(storePaths)).resolves.toBeNull();
-    await recovered.close();
   });
 
-  it("reports an unexpected real child exit as a generation-bound terminal failure", async () => {
+  it("fails immutable verification without repairing or replacing the binding", async () => {
+    const context = await demoContext();
+    const fixture = await candidateFixture({ version: "0.19.0-beta.1" });
+    await commit(context, fixture);
+    const descriptorBefore = await readClosureBindingDescriptor(storePaths(context));
+    const digestValue = descriptorBefore.committed?.standalone.digest.slice("sha256:".length);
+    expect(digestValue).toBeTruthy();
+    await writeFile(join(
+      storePaths(context).versionsRoot,
+      "0.19.0-beta.1",
+      digestValue!,
+      "payload",
+      CLOSURE_ARCHIVE_ENTRY_PATH,
+    ), "tampered\n");
+
+    await expect(launch(context)).rejects.toMatchObject({
+      code: "body-unavailable",
+      name: "ClosureShimError",
+    });
+    await expect(readClosureBindingDescriptor(storePaths(context))).resolves.toEqual(descriptorBefore);
+  });
+
+  it("reports an unexpected child exit as a generation-bound terminal failure", async () => {
     const context = await demoContext();
     const fixture = await candidateFixture({
       mode: "unexpected-exit",
       version: "0.19.0-beta.1",
     });
+    await commit(context, fixture);
 
-    const outcome = await launch(context, fixture);
+    const outcome = await launch(context);
     expectReady(outcome);
-
     await expect(outcome.waitForTerminal()).resolves.toMatchObject({
       error: { code: "process-exited" },
       handoff: outcome.result.handoff,
@@ -486,9 +418,10 @@ describe("Closure shim conformance demo", () => {
     });
   });
 
-  it("binds a Closure-to-Shell capability exchange to the active generation", async () => {
+  it("binds Closure-to-Shell capabilities to the committed generation", async () => {
     const context = await demoContext();
     const fixture = await candidateFixture({ version: "0.19.0-beta.1" });
+    await commit(context, fixture);
     const invocations: ClosureShellCapabilityRequest[] = [];
     const shellCapabilities: ClosureShellCapabilityPort = {
       invoke: async (request) => {
@@ -504,14 +437,13 @@ describe("Closure shim conformance demo", () => {
     };
     const body = createFakeStandalone({
       onHandoff: async ({ handoff, shell }) => {
-        const result = await shell.invoke({
+        await expect(shell.invoke({
           capability: "select-file",
           handoff,
           input: { accept: ["image/png"] },
           requestId: "select-file-1",
           schemaVersion: CLOSURE_HANDOFF_SCHEMA_VERSION,
-        });
-        expect(result).toMatchObject({
+        })).resolves.toMatchObject({
           outcome: "completed",
           output: { paths: ["selected.png"] },
         });
@@ -519,16 +451,12 @@ describe("Closure shim conformance demo", () => {
     });
 
     const outcome = await ensureAndHandoffClosure({
-      candidate: fixture,
-      fetch: fixture.fetch,
       importStandalone: async () => body.module,
       paths: context.paths,
       request: context.request,
       shellCapabilities,
-      trustedKeys: { "demo-root-2026": trustedPublicKey },
     });
     expectReady(outcome);
-
     expect(invocations).toHaveLength(1);
     expect(invocations[0]).toMatchObject({
       capability: "select-file",
@@ -538,48 +466,10 @@ describe("Closure shim conformance demo", () => {
     await outcome.close();
   });
 
-  it("rejects a stale capability result before the body can become ready", async () => {
+  it("rejects stale readiness and closes the entered body", async () => {
     const context = await demoContext();
     const fixture = await candidateFixture({ version: "0.19.0-beta.1" });
-    const body = createFakeStandalone({
-      onHandoff: async ({ handoff, shell }) => {
-        await shell.invoke({
-          capability: "select-file",
-          handoff,
-          input: null,
-          requestId: "select-file-1",
-          schemaVersion: CLOSURE_HANDOFF_SCHEMA_VERSION,
-        });
-      },
-    });
-
-    await expect(ensureAndHandoffClosure({
-      candidate: fixture,
-      fetch: fixture.fetch,
-      importStandalone: async () => body.module,
-      paths: context.paths,
-      request: context.request,
-      shellCapabilities: {
-        invoke: async (request) => ({
-          handoff: {
-            ...request.handoff,
-            identity: {
-              ...request.handoff.identity,
-              generation: request.handoff.identity.generation + 1,
-            },
-          },
-          outcome: "unsupported",
-          requestId: request.requestId,
-          schemaVersion: CLOSURE_HANDOFF_SCHEMA_VERSION,
-        }),
-      },
-      trustedKeys: { "demo-root-2026": trustedPublicKey },
-    })).rejects.toThrow(/no last-successful/u);
-  });
-
-  it("rejects stale body readiness without confirming the attempt", async () => {
-    const context = await demoContext();
-    const fixture = await candidateFixture({ version: "0.19.0-beta.1" });
+    await commit(context, fixture);
     const body = createFakeStandalone({
       transformHandoff: (handoff) => ({
         ...handoff,
@@ -588,22 +478,14 @@ describe("Closure shim conformance demo", () => {
     });
 
     await expect(ensureAndHandoffClosure({
-      candidate: fixture,
-      fetch: fixture.fetch,
       importStandalone: async () => body.module,
       paths: context.paths,
       request: context.request,
       shellCapabilities: fakeShellCapabilities(),
-      trustedKeys: { "demo-root-2026": trustedPublicKey },
-    })).rejects.toThrow(/no last-successful/u);
-
-    const storePaths = resolveClosureStorePaths({
-      channel: "beta",
-      namespace: "release-beta",
-      root: context.paths.installationRoot,
+    })).rejects.toMatchObject({
+      code: "handoff-failed",
+      name: "ClosureShimError",
     });
-    expect((await readClosureRuntimeDescriptor(storePaths)).active).toBeNull();
-    await expect(readClosureAttemptDescriptor(storePaths)).resolves.toBeNull();
     expect(body.closed).toBe(1);
   });
 });

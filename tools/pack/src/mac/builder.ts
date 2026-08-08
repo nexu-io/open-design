@@ -8,7 +8,7 @@ import {
   resolveNodePtyRuntimeArch,
 } from "../node-pty-runtime.js";
 import { macResources } from "../resources.js";
-import { electronBuilderVersionForAppVersion } from "../versions.js";
+import { electronBuilderVersionForShellVersion } from "../versions.js";
 import { execFileAsync } from "./commands.js";
 import {
   ELECTRON_BUILDER_ASAR,
@@ -89,7 +89,7 @@ export async function runElectronBuilder(
   const namespaceToken = sanitizeNamespace(config.namespace);
   const identity = resolveMacInstallIdentity(config);
   const packagedVersion = await readPackagedVersion(config);
-  const packageVersion = electronBuilderVersionForAppVersion(packagedVersion);
+  const packageVersion = electronBuilderVersionForShellVersion(packagedVersion);
   const webStandaloneHookConfigPath = null;
   const builderConfig = {
     appId: identity.appId,

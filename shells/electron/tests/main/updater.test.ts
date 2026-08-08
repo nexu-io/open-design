@@ -931,7 +931,7 @@ describe("desktop updater", () => {
       await mkdir(join(root, "installed", "resources"), { recursive: true });
       await writeFile(
         join(root, "installed", "resources", "open-design-config.json"),
-        `${JSON.stringify({ appVersion: installedOuterVersion })}\n`,
+        `${JSON.stringify({ shellVersion: installedOuterVersion })}\n`,
       );
     }
     await mkdir(join(root, "launcher"), { recursive: true });

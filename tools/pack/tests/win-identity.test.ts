@@ -65,7 +65,7 @@ describe("resolveWinInstallIdentity", () => {
 
   it("uses first-class prerelease display identity for prerelease release versions and namespaces", () => {
     expect(resolveWinInstallIdentity({
-      appVersion: "0.8.0-prerelease.2",
+      releaseVersion: "0.8.0-prerelease.2",
       namespace: "release-stable-win",
     })).toMatchObject({
       appPathsKey: "Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\Open Design Prerelease.exe",

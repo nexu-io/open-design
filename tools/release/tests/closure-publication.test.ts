@@ -24,10 +24,12 @@ async function writeFixture(root: string, options: { closureVersion?: string } =
   closureVersion: string;
   manifestRoot: string;
   metadataRoot: string;
+  shellBuildJsonPath: string;
 }> {
   const assetsRoot = join(root, "assets");
   const manifestRoot = join(root, "manifests");
   const metadataRoot = join(root, "metadata");
+  const shellBuildJsonPath = join(root, "shell-build.json");
   await mkdir(assetsRoot, { recursive: true });
 
   const version = "0.18.0-beta.4";
@@ -83,7 +85,21 @@ async function writeFixture(root: string, options: { closureVersion?: string } =
     }, null, 2)}\n`),
   ]);
 
-  return { assetsRoot, closureVersion, manifestRoot, metadataRoot };
+  await writeFile(shellBuildJsonPath, `${JSON.stringify({
+    artifacts: {
+      dmg: { digest: digest("dmg"), path: "/fixture/Open Design.dmg", size: Buffer.byteLength("dmg") },
+      payload: { digest: digest("legacy payload"), path: "/fixture/payload.zip", size: Buffer.byteLength("legacy payload") },
+      zip: null,
+    },
+    releaseVersion: version,
+    shell: {
+      sourceDigest: digest("electron shell source"),
+      type: "electron",
+      version: "0.18.0-beta.3",
+    },
+  }, null, 2)}\n`);
+
+  return { assetsRoot, closureVersion, manifestRoot, metadataRoot, shellBuildJsonPath };
 }
 
 function platformEnv(
@@ -111,6 +127,58 @@ afterEach(async () => {
 });
 
 describe("Standalone Closure release publication", () => {
+  it("binds an independently versioned Shell artifact and its two digests to the release", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-shell-release-independent-"));
+    temporaryRoots.push(root);
+    const fixture = await writeFixture(root);
+
+    await execFileAsync(process.execPath, ["--experimental-strip-types", publishPlatformPath], {
+      cwd: workspaceRoot,
+      env: {
+        ...platformEnv(fixture),
+        RELEASE_SHELL_BUILD_JSON_PATH: fixture.shellBuildJsonPath,
+        RELEASE_SHELL_ENABLED: "true",
+      },
+    });
+    const platform = JSON.parse(await readFile(join(fixture.manifestRoot, "mac_arm64.json"), "utf8"));
+    expect(platform.releaseVersion).toBe("0.18.0-beta.4");
+    expect(platform.shell).toMatchObject({
+      sourceDigest: digest("electron shell source"),
+      type: "electron",
+      version: "0.18.0-beta.3",
+    });
+    expect(platform.artifacts.dmg.digest).toBe(digest("dmg"));
+    expect(platform.artifacts.dmg.url).toContain(
+      "/beta/shells/electron/darwin-arm64/versions/0.18.0-beta.3/",
+    );
+    expect(platform.shell.artifacts).toEqual(platform.artifacts);
+
+    await execFileAsync(process.execPath, ["--experimental-strip-types", publishMetadataPath], {
+      cwd: workspaceRoot,
+      env: {
+        ...process.env,
+        BASE_VERSION: "0.18.0",
+        ENABLE_MAC_ARM64: "true",
+        ENABLE_MAC_X64: "false",
+        ENABLE_WIN_X64: "false",
+        MAC_ARM64_RESULT: "success",
+        RELEASE_CHANNEL: "beta",
+        RELEASE_CLOSURE_REQUIRED: "true",
+        RELEASE_MANIFEST_DIR: fixture.manifestRoot,
+        RELEASE_METADATA_DIR: fixture.metadataRoot,
+        RELEASE_OUTPUTS_PATH: join(fixture.metadataRoot, "outputs.json"),
+        RELEASE_PUBLIC_ORIGIN: "https://releases.open-design.test",
+        RELEASE_PUBLISH_SIDE_EFFECTS: "false",
+        RELEASE_SHELL_REQUIRED: "true",
+        RELEASE_SIGNED: "false",
+        RELEASE_VERSION: "0.18.0-beta.4",
+        STATE_SOURCE: "test",
+      },
+    });
+    const metadata = JSON.parse(await readFile(join(fixture.metadataRoot, "metadata.json"), "utf8"));
+    expect(metadata.releaseTargets.mac_arm64.shell).toEqual(platform.shell);
+  });
+
   it("publishes Closure and legacy payload identities on the same platform metadata surface", async () => {
     const root = await mkdtemp(join(tmpdir(), "od-closure-release-"));
     temporaryRoots.push(root);

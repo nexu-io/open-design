@@ -86,6 +86,11 @@ function bootloaderHandoff(module: BootloaderModule): StandaloneHandoff {
   return handoff as StandaloneHandoff;
 }
 
+function errorDetail(error: unknown): string {
+  if (error instanceof Error && error.message.length > 0) return error.message;
+  return String(error);
+}
+
 /**
  * Lazy-load one committed Standalone binding. Repeated identical launches
  * share the task; any different binding fails closed. The Shell never imports
@@ -137,7 +142,7 @@ export function createElectronStandaloneLauncher(
           if (error instanceof ElectronStandaloneLaunchError) throw error;
           throw new ElectronStandaloneLaunchError(
             "standalone-start-failed",
-            "Electron Shell could not enter the committed Standalone",
+            `Electron Shell could not enter the committed Standalone: ${errorDetail(error)}`,
             { cause: error },
           );
         }

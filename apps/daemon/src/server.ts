@@ -43,6 +43,7 @@ import { runHadFailedDesignSystemWrapper } from './runtimes/run-artifacts.js';
 import { resolveProjectRoot } from './project-root.js';
 import { OPEN_DESIGN_PLUGIN_ID } from './mcp-observability.js';
 import {
+  RESOURCE_TRUST_ROOT_ENV,
   resolveDaemonCliPath,
   resolveDaemonPluginPreviewsDir,
   resolveDaemonResourceDir,
@@ -1048,6 +1049,7 @@ const DAEMON_RESOURCE_ROOT = resolveDaemonResourceRoot({
     PROJECT_ROOT,
     resolveProcessResourcesPath(),
     process.env.OD_INSTALLATION_DIR,
+    process.env[RESOURCE_TRUST_ROOT_ENV],
   ],
 });
 // Built web app lives in `out/` — that's where Next.js writes the static

@@ -1,4 +1,5 @@
 import { ToolPackCache } from "../cache.js";
+import { describeToolPackArtifact } from "../artifacts.js";
 import type { ToolPackConfig } from "../config.js";
 import { collectWorkspaceTarballs, copyResourceTree, writeAssembledApp } from "./app.js";
 import { seedPackagedAppConfig } from "./app-config.js";
@@ -10,6 +11,7 @@ import { resolveMacPaths } from "./paths.js";
 import { collectMacSizeReport } from "./report.js";
 import type { MacBuildOutput, MacPackResult, MacPackTiming } from "./types.js";
 import { ensureMacWorkspaceBuild } from "./workspace.js";
+import { readPackagedVersion } from "./manifest.js";
 
 function logMacBuildProgress(message: string, fields: Record<string, unknown> = {}): void {
   const suffix = Object.entries(fields)
@@ -42,9 +44,8 @@ export async function packMac(config: ToolPackConfig): Promise<MacPackResult> {
     }
   };
 
-  await runPhase("workspace-build", async () => {
-    await ensureMacWorkspaceBuild(config, cache);
-  });
+  const shellSourceDigest = await runPhase("workspace-build", async () =>
+    await ensureMacWorkspaceBuild(config, cache));
   await runPhase("seed-app-config", async () => {
     await seedPackagedAppConfig(config);
   });
@@ -64,9 +65,15 @@ export async function packMac(config: ToolPackConfig): Promise<MacPackResult> {
   const payloadPath = await runPhase("payload-artifact", async () => createMacLauncherPayloadArchive(config, paths));
   const artifacts = await runPhase("artifacts", async () => finalizeMacArtifacts(config, paths));
   const sizeReport = await runPhase("size-report", async () => collectMacSizeReport(config, paths, artifacts, targets));
+  const shellVersion = await readPackagedVersion(config);
 
   return {
     appPath: paths.appPath,
+    artifacts: {
+      dmg: await describeToolPackArtifact(artifacts.dmgPath),
+      payload: await describeToolPackArtifact(payloadPath),
+      zip: await describeToolPackArtifact(artifacts.zipPath),
+    },
     cacheReport: cache.report(),
     dmgPath: artifacts.dmgPath,
     latestMacYmlPath: artifacts.latestMacYmlPath,
@@ -74,6 +81,8 @@ export async function packMac(config: ToolPackConfig): Promise<MacPackResult> {
     payloadPath,
     resourceRoot: paths.resourceRoot,
     runtimeNamespaceRoot: config.roots.runtime.namespaceRoot,
+    releaseVersion: config.releaseVersion ?? null,
+    shell: { sourceDigest: shellSourceDigest, type: config.shell, version: shellVersion },
     sizeReport,
     timings,
     to: config.to,

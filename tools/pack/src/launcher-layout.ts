@@ -32,9 +32,9 @@ export type ToolPackLauncherPayloadLayout = {
 };
 
 export function resolveToolPackLauncherChannel(
-  config: Pick<ToolPackConfig, "appVersion" | "namespace">,
+  config: Pick<ToolPackConfig, "namespace" | "releaseVersion">,
 ): LauncherChannel {
-  return releaseChannelFromVersion(config.appVersion)
+  return releaseChannelFromVersion(config.releaseVersion)
     ?? releaseChannelFromNamespace(config.namespace, SIDECAR_DEFAULTS.namespace)
     ?? "stable";
 }
@@ -46,7 +46,7 @@ export function resolveToolPackLauncherRoot(
 }
 
 export function resolveToolPackLauncherLayout(
-  config: Pick<ToolPackConfig, "appVersion" | "namespace" | "roots">,
+  config: Pick<ToolPackConfig, "namespace" | "releaseVersion" | "roots">,
 ): ToolPackLauncherLayout {
   const root = resolveToolPackLauncherRoot(config);
   const channel = resolveToolPackLauncherChannel(config);
@@ -66,7 +66,7 @@ export function payloadArchiveExtension(platform: ToolPackPlatform): "7z" | "zip
 }
 
 export function resolveToolPackLauncherPayloadLayout(
-  config: Pick<ToolPackConfig, "appVersion" | "namespace" | "platform" | "roots">,
+  config: Pick<ToolPackConfig, "namespace" | "platform" | "releaseVersion" | "roots">,
   version: string,
 ): ToolPackLauncherPayloadLayout {
   const launcher = resolveToolPackLauncherLayout(config);
@@ -96,7 +96,7 @@ export function resolveToolPackLauncherPayloadLayout(
 }
 
 export function buildInitialLauncherRuntimeDescriptor(
-  config: Pick<ToolPackConfig, "appVersion" | "namespace" | "roots">,
+  config: Pick<ToolPackConfig, "namespace" | "releaseVersion" | "roots">,
   version: string,
 ): LauncherRuntimeDescriptor {
   const launcher = resolveToolPackLauncherLayout(config);

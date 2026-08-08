@@ -13,7 +13,7 @@ import {
   validateNodePtyRuntime,
 } from "../node-pty-runtime.js";
 import { hashPackageSourcePath } from "../package-source-hash.js";
-import { electronBuilderVersionForAppVersion } from "../versions.js";
+import { electronBuilderVersionForShellVersion } from "../versions.js";
 import {
   WIN_PREBUNDLE_ESM_REQUIRE_BANNER,
   WIN_PREBUNDLE_ESBUILD_TARGET,
@@ -131,7 +131,7 @@ async function buildWorkspaceArtifacts(config: ToolPackConfig): Promise<void> {
   await runPnpm(config, ["--filter", "@open-design/shell-electron...", "build"]);
 }
 
-export async function ensureWinWorkspaceBuild(config: ToolPackConfig, cache: ToolPackCache): Promise<string> {
+export async function ensureWinWorkspaceBuild(config: ToolPackConfig, cache: ToolPackCache): Promise<`sha256:${string}`> {
   return ensureWorkspaceBuildArtifacts(config, cache, async () => {
     await buildWorkspaceArtifacts(config);
   });
@@ -235,7 +235,7 @@ async function writeAssembledAppEntrypoints(
   packagedVersion: string,
   options: { dependencies?: Record<string, string>; usePrebundle?: boolean } = {},
 ): Promise<void> {
-  const packageVersion = electronBuilderVersionForAppVersion(packagedVersion);
+  const packageVersion = electronBuilderVersionForShellVersion(packagedVersion);
   await mkdir(paths.assembledAppRoot, { recursive: true });
   await cp(
     join(config.workspaceRoot, "shells", "electron", "dist", "main", "preload.cjs"),

@@ -334,7 +334,7 @@ export async function resolveInstalledOuterVersion(config: DesktopUpdaterConfig)
   try {
     const raw: unknown = JSON.parse(await readFile(outerConfigPath, "utf8"));
     if (!isRecord(raw)) return null;
-    return stringField(raw, "appVersion");
+    return stringField(raw, "shellVersion");
   } catch {
     return null;
   }

@@ -14,8 +14,8 @@ import {
   type ClosureCandidateManifest,
 } from '@open-design/closure-proto';
 import {
-  activateStoredClosureCandidate,
-  readClosureRuntimeDescriptor,
+  commitStoredClosureCandidate,
+  readClosureBindingDescriptor,
   resolveClosureStorePaths,
   resolveClosureStoreVersionPaths,
   type ClosureRuntimePointer,
@@ -52,11 +52,11 @@ export async function resetPackagedClosureFixture(input: {
 }
 
 /**
- * Release-only bridge for PR7 mixed-generation acceptance.
+ * Release-only bridge for committed-binding acceptance.
  *
  * The release lane has already built and validated the immutable Closure. This
- * helper materializes those exact bytes into the one product Store and marks
- * them active so a real installed shell can prove attach/recovery behavior.
+ * helper materializes those exact bytes into the one product Store and commits
+ * the binding so a real installed shell can prove attach/fail-closed behavior.
  * It deliberately does not discover or download remote metadata; that update
  * policy belongs to PR8.
  */
@@ -97,19 +97,23 @@ export async function seedPackagedClosureFixture(input: {
     copyFile(manifestPath, versionPaths.manifestPath),
   ]);
   await extractZip(versionPaths.archivePath, { dir: versionPaths.payloadRoot });
-  const activated = await activateStoredClosureCandidate(storePaths, binding);
+  const committed = await commitStoredClosureCandidate(
+    storePaths,
+    binding,
+    manifest.identity.version,
+  );
   return {
     manifest,
-    pointer: activated.pointer,
+    pointer: committed.committed.standalone,
     storePaths,
     versionPaths,
   };
 }
 
 /**
- * Adds a newer candidate with the same immutable bytes and then damages only
- * its entrypoint. The next shell boot must reject it, restore the confirmed
- * predecessor pointer, and use legacy combined bytes for that one boot.
+ * Adds a newer committed candidate with the same immutable bytes and then
+ * damages only its entrypoint. The next shell boot must fail visibly without
+ * selecting or restoring another generation.
  */
 export async function activateBrokenClosureSuccessor(
   fixture: PackagedClosureFixture,
@@ -140,7 +144,11 @@ export async function activateBrokenClosureSuccessor(
     force: false,
     recursive: true,
   });
-  const activated = await activateStoredClosureCandidate(fixture.storePaths, binding);
+  const committed = await commitStoredClosureCandidate(
+    fixture.storePaths,
+    binding,
+    version,
+  );
   await writeFile(
     join(versionPaths.payloadRoot, manifest.artifact.entryPath),
     'throw new Error("release smoke damaged Closure successor");\n',
@@ -148,7 +156,7 @@ export async function activateBrokenClosureSuccessor(
   );
   return {
     manifest,
-    pointer: activated.pointer,
+    pointer: committed.committed.standalone,
     storePaths: fixture.storePaths,
     versionPaths,
   };
@@ -157,7 +165,7 @@ export async function activateBrokenClosureSuccessor(
 export async function readPackagedClosureFixtureRuntime(
   fixture: Pick<PackagedClosureFixture, 'storePaths'>,
 ) {
-  return await readClosureRuntimeDescriptor(fixture.storePaths);
+  return await readClosureBindingDescriptor(fixture.storePaths);
 }
 
 function requireReportPath(value: unknown, label: string, workspaceRoot: string): string {

@@ -12,7 +12,7 @@ import {
 import { hashJson, hashPath, type ToolPackCache } from "../cache.js";
 import type { ToolPackConfig } from "../config.js";
 import { winResources } from "../resources.js";
-import { electronBuilderVersionForAppVersion } from "../versions.js";
+import { electronBuilderVersionForShellVersion } from "../versions.js";
 import {
   resolveToolPackLauncherChannel,
   resolveToolPackLauncherRoot,
@@ -133,7 +133,7 @@ export async function buildWinLauncherPayloadArchive(
     const packageJsonPath = join(builtApp.unpackedRoot, "resources", "app", "package.json");
     try {
       const packageJson = JSON.parse(await readFile(packageJsonPath, "utf8")) as Record<string, unknown>;
-      packageJson.version = electronBuilderVersionForAppVersion(packagedVersion);
+      packageJson.version = electronBuilderVersionForShellVersion(packagedVersion);
       await mkdir(join(overlayRoot, "payload", "resources", "app"), { recursive: true });
       await writeFile(
         join(overlayRoot, "payload", "resources", "app", "package.json"),
@@ -318,7 +318,7 @@ export async function validateWinLauncherPayloadArchive(input: {
     });
     const manifest = JSON.parse(await readFile(join(extractRoot, "manifest.json"), "utf8")) as WinLauncherPayloadManifest;
     const expectedChannel = resolveToolPackLauncherChannel({
-      appVersion: input.expectedVersion,
+      releaseVersion: input.expectedVersion,
       namespace: input.namespace,
     });
     requirePayloadManifestValue(manifest.schemaVersion, "schemaVersion", LAUNCHER_SCHEMA_VERSION);

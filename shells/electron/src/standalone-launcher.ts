@@ -18,9 +18,8 @@ import type {
 
 import type { PackagedConfig } from "./config.js";
 import {
-  checkForPackagedClosureUpdate,
+  ensurePackagedClosureAvailable,
   resolvePackagedClosureInstallerRequiredVersion,
-  resolvePackagedClosureReleaseVersion,
 } from "./closure-update.js";
 import {
   createElectronStandaloneRuntimeIdentity,
@@ -32,7 +31,6 @@ import { confirmPackagedLauncherRuntime, resolvePackagedLauncherRuntime } from "
 import { resolvePackagedMcpBootstrapLaunch, type PackagedMcpBootstrapLaunch } from "./mcp-bootstrap.js";
 import { resolvePackagedNamespacePaths } from "./paths.js";
 import {
-  confirmElectronStandaloneBinding,
   digestElectronShellEntry,
   resolveElectronStandaloneBinding,
 } from "./standalone-binding.js";
@@ -174,7 +172,7 @@ export async function runPackagedStandalone(
   const initialPaths = resolvePackagedNamespacePaths(config, config.namespace, process.env);
   const launcherRuntime = await resolvePackagedLauncherRuntime(config, initialPaths);
   const shellConfig = launcherRuntime.config;
-  const shellVersion = shellConfig.appVersion;
+  const shellVersion = shellConfig.shellVersion;
   if (shellVersion == null) throw new Error("Electron Shell version is unavailable");
   const paths = launcherRuntime.paths;
   const stamp = createStandaloneStamp(config.namespace);
@@ -184,30 +182,26 @@ export async function runPackagedStandalone(
     });
 
   await mkdir(paths.runtimeRoot, { recursive: true });
-  const update = await checkForPackagedClosureUpdate({
+  const availability = await ensurePackagedClosureAvailable({
     channel: launcherRuntime.launcherPaths.channel,
     installationRoot: launcherRuntime.launcherPaths.root,
     metadataUrl: shellConfig.updateMetadataUrl,
     namespace: config.namespace,
     shellVersion,
   }).catch((error: unknown) => {
-    console.warn("[open-design standalone] cold-update discovery failed; checking committed Store", error);
+    console.warn("[open-design standalone] initial Closure materialization failed", error);
     return null;
   });
   const selection = await resolveElectronStandaloneBinding({
     channel: launcherRuntime.launcherPaths.channel,
-    installerRequiredVersion: resolvePackagedClosureInstallerRequiredVersion(update),
+    installerRequiredVersion: resolvePackagedClosureInstallerRequiredVersion(availability),
     namespace: config.namespace,
     paths,
-    releaseVersion: resolvePackagedClosureReleaseVersion(update, null),
     shellDigest: await digestElectronShellEntry(options.shellEntryUrl),
     shellVersion,
   });
   const { shutdown, webUrl } = await acquirePackagedStandaloneStartup({
-    confirmRuntime: async () => {
-      await confirmPackagedLauncherRuntime(launcherRuntime);
-      await confirmElectronStandaloneBinding(selection);
-    },
+    confirmRuntime: async () => await confirmPackagedLauncherRuntime(launcherRuntime),
     createIpcServer: async ({ readStandaloneStatus, shutdown: stop, webUrl: activeWebUrl }) =>
       await createJsonIpcServer({
         socketPath: stamp.ipc,

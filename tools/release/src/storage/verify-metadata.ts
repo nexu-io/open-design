@@ -30,7 +30,7 @@ const metadata = (metadataPath.length > 0
   control?: { launcher?: { version?: { min?: string; url?: string } } };
   releaseState?: string;
   releaseTargets?: Record<string, {
-    artifacts?: Record<string, { url?: string }>;
+    artifacts?: Record<string, { digest?: string; url?: string }>;
     closure?: {
       assets?: Record<string, { url?: string }>;
       manifest?: {
@@ -38,12 +38,19 @@ const metadata = (metadataPath.length > 0
         identity?: { channel?: string; platform?: string; version?: string };
       };
     };
+    shell?: {
+      artifacts?: Record<string, { digest?: string; url?: string }>;
+      sourceDigest?: string;
+      type?: string;
+      version?: string;
+    };
     status?: string;
   }>;
   [key: string]: unknown;
 };
 
 const closureRequired = process.env.RELEASE_CLOSURE_REQUIRED === "true";
+const shellRequired = process.env.RELEASE_SHELL_REQUIRED === "true";
 
 if (metadata.channel !== releaseChannel) {
   throw new Error(`metadata channel mismatch: expected ${releaseChannel}, got ${String(metadata.channel)}`);
@@ -110,6 +117,31 @@ for (const target of ["mac_arm64", "win_x64", "mac_x64"]) {
   }
   if (closureRequired && (target === "mac_arm64" || target === "win_x64") && targetMetadata.closure == null) {
     throw new Error(`metadata target ${target} is missing Closure publication`);
+  }
+  if (shellRequired && targetMetadata.shell == null) {
+    throw new Error(`metadata target ${target} is missing Shell publication`);
+  }
+  if (targetMetadata.shell != null) {
+    const shell = targetMetadata.shell;
+    const expectedPlatform = target === "mac_arm64" ? "darwin-arm64" : target === "mac_x64" ? "darwin-x64" : "win32-x64";
+    if (shell.type !== "electron" || !/^sha256:[0-9a-f]{64}$/.test(String(shell.sourceDigest))) {
+      throw new Error(`metadata target ${target} has an invalid Shell identity`);
+    }
+    try {
+      parseReleaseVersion(String(shell.version), releaseChannel);
+    } catch {
+      throw new Error(`metadata target ${target} has an invalid Shell version`);
+    }
+    const shellPrefix = `${releaseDescriptor.storagePrefix}/shells/electron/${expectedPlatform}/versions/${shell.version}/`;
+    for (const [name, artifact] of Object.entries(targetMetadata.artifacts ?? {})) {
+      const artifactUrl = new URL(String(artifact.url));
+      if (!artifactUrl.pathname.includes(`/${shellPrefix}`) || !/^sha256:[0-9a-f]{64}$/.test(String(artifact.digest))) {
+        throw new Error(`metadata target ${target} Shell ${name} artifact is invalid`);
+      }
+      if (shell.artifacts?.[name]?.url !== artifact.url || shell.artifacts?.[name]?.digest !== artifact.digest) {
+        throw new Error(`metadata target ${target} Shell ${name} artifact does not match its publication`);
+      }
+    }
   }
   if (targetMetadata.closure != null) {
     if (target !== "mac_arm64" && target !== "win_x64") {

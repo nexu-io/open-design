@@ -105,12 +105,14 @@ parameter-agnostic and is specialized on the way out.
 
 Current materialization-time parameters:
 
-- **App version.** `win.packaged-app` omits it. It is applied through
+- **Shell compatibility version.** `win.packaged-app` omits it. It is applied through
   electron-builder `extraMetadata.version`, then rewritten on materialization
   by `rewriteUnpackedAppPackageVersion` and `rewriteWinExecutableVersion`, then
   verified by `assertMaterializedUnpackedVersionConsistency` — a fail-closed
   check over the app `package.json` version, the `open-design-config.json`
-  `appVersion`, and the Windows executable fixed file version.
+  `shellVersion`, and the Windows executable fixed file version. `releaseVersion`
+  is deliberately absent from reusable Shell bytes; it belongs to the release
+  binding and build report.
 - **Namespace / channel and runtime endpoints.**
   `win.electron-builder-dir` omits them. `open-design-config.json` — which
   carries `namespace`, `amrProfile`, `telemetryRelayUrl`, `updateMetadataUrl`,
@@ -138,7 +140,7 @@ both hold:
 
 Adding a materialization-time parameter without (2) is not permitted.
 
-> Known asymmetry: app version satisfies (2). The other regenerated config
+> Known asymmetry: Shell version satisfies (2). The other regenerated config
 > fields — `namespace`, `amrProfile`, `telemetryRelayUrl`,
 > `updateMetadataUrl`, `posthogKey`, `posthogHost`, `webOutputMode`,
 > `namespaceBaseRoot`, and the packaged entrypoint fields — currently satisfy

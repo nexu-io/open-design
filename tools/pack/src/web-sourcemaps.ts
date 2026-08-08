@@ -51,7 +51,7 @@ const RELEASE_NAME = "open-design-web";
 export interface WebSourcemapOptions {
   /**
    * Optional release version to associate with the uploaded chunks. Falls
-   * back to `config.appVersion` when omitted; if neither is set the CLI
+   * back to `config.releaseVersion` when omitted; if neither is set the CLI
    * derives one from git, which is fine but less precise than passing a
    * real semver/prerelease identifier from the release workflow.
    */
@@ -156,7 +156,7 @@ export async function processWebSourcemaps(
   log(`found ${initialMaps.length} .map file(s) under ${chunksDir}`);
 
   const uploadEnv = readUploadEnv(config);
-  const releaseVersion = options.releaseVersion ?? config.appVersion;
+  const releaseVersion = options.releaseVersion ?? config.releaseVersion;
 
   if (uploadEnv != null) {
     const cliEnv: NodeJS.ProcessEnv = {

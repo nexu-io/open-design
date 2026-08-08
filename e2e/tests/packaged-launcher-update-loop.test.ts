@@ -12,7 +12,7 @@ const UPDATE_DOWNLOADED = "downloaded";
 
 type PackagedConfigLike = {
   amrProfile: null;
-  appVersion: string;
+  shellVersion: string;
   daemonCliEntry: null;
   daemonSidecarEntry: null;
   namespace: string;
@@ -59,7 +59,7 @@ type PackagedPathsModule = {
 
 type PackagedLauncherRuntime = {
   config: {
-    appVersion: string | null;
+    shellVersion: string | null;
     resourceRoot: string;
   };
   installedLaunchPath: string | null;
@@ -126,7 +126,7 @@ async function loadPackagedLauncherRuntimeModule(): Promise<PackagedLauncherRunt
 function fakePackagedConfig(root: string, testCase: PlatformCase): PackagedConfigLike {
   return {
     amrProfile: null,
-    appVersion: testCase.currentVersion,
+    shellVersion: testCase.currentVersion,
     daemonCliEntry: null,
     daemonSidecarEntry: null,
     namespace: testCase.namespace,
@@ -229,7 +229,7 @@ async function writeExtractedWindowsPayload(destinationRoot: string, testCase: P
   await writeFile(
     join(destinationRoot, "payload", "resources", "open-design-config.json"),
     `${JSON.stringify({
-      appVersion: testCase.promotedVersion,
+      shellVersion: testCase.promotedVersion,
       daemonSidecarEntryRelative: "prebundled/daemon/daemon-sidecar.mjs",
       nodeCommandRelative: "open-design/bin/node.exe",
       webOutputMode: "standalone",
@@ -264,7 +264,7 @@ async function writeExtractedMacPayload(destinationRoot: string, testCase: Platf
   await writeFile(
     join(resourcesRoot, "open-design-config.json"),
     `${JSON.stringify({
-      appVersion: testCase.promotedVersion,
+      shellVersion: testCase.promotedVersion,
       daemonSidecarEntryRelative: "prebundled/daemon/daemon-sidecar.mjs",
       nodeCommandRelative: "open-design/bin/node",
       webOutputMode: "standalone",
@@ -433,7 +433,7 @@ describe("packaged launcher payload update loop", () => {
       });
       expect(promoted.source).toBe("payload");
       expect(promoted.targetVersion).toBe(testCase.promotedVersion);
-      expect(promoted.config.appVersion).toBe(testCase.promotedVersion);
+      expect(promoted.config.shellVersion).toBe(testCase.promotedVersion);
       expect(promoted.config.resourceRoot).toBe(testCase.expectedResourceRoot(paths.installationRoot, config.namespace));
       expect(JSON.parse(await readFile(promoted.launcherPaths.attemptsPath, "utf8"))).toMatchObject({
         generation: 1,
@@ -722,7 +722,7 @@ async function writeExtractedFloorMacPayload(destinationRoot: string): Promise<v
   await writeFile(
     join(resourcesRoot, "open-design-config.json"),
     `${JSON.stringify({
-      appVersion: RELEASE_VERSION,
+      shellVersion: RELEASE_VERSION,
       daemonSidecarEntryRelative: "prebundled/daemon/daemon-sidecar.mjs",
       nodeCommandRelative: "open-design/bin/node",
       webOutputMode: "standalone",
@@ -761,7 +761,7 @@ async function writeExtractedFloorWindowsPayload(destinationRoot: string): Promi
   await writeFile(
     join(resourcesRoot, "open-design-config.json"),
     `${JSON.stringify({
-      appVersion: RELEASE_VERSION,
+      shellVersion: RELEASE_VERSION,
       daemonSidecarEntryRelative: "prebundled/daemon/daemon-sidecar.mjs",
       nodeCommandRelative: "open-design/bin/node.exe",
       webOutputMode: "standalone",
@@ -821,7 +821,7 @@ const floorPlatformTargets = {
 async function writeInstalledOuterPackage(
   installedRoot: string,
   target: FloorPlatformTarget,
-  appVersion: string | null,
+  shellVersion: string | null,
 ): Promise<string> {
   const launchPath = target.installedLaunchPath(installedRoot);
   if (target.installedLaunchPathIsDirectory) {
@@ -830,10 +830,10 @@ async function writeInstalledOuterPackage(
     await mkdir(dirname(launchPath), { recursive: true });
     await writeFile(launchPath, "");
   }
-  if (appVersion != null) {
+  if (shellVersion != null) {
     const configPath = target.installedOuterConfigPath(launchPath);
     await mkdir(dirname(configPath), { recursive: true });
-    await writeFile(configPath, `${JSON.stringify({ appVersion })}\n`);
+    await writeFile(configPath, `${JSON.stringify({ shellVersion })}\n`);
   }
   return launchPath;
 }
@@ -880,7 +880,7 @@ async function checkPackagedUpdate(scenario: FloorScenario): Promise<{
   try {
     const config: PackagedConfigLike = {
       amrProfile: null,
-      appVersion: runningVersion,
+      shellVersion: runningVersion,
       daemonCliEntry: null,
       daemonSidecarEntry: null,
       namespace: "default",

@@ -124,7 +124,7 @@ describe("writePackagedConfigFile", () => {
       await writePackagedConfigFile(filePath, makeConfig({ portable: true }), "1.2.3");
       const written = JSON.parse(await readFile(filePath, "utf8"));
       expect(written.namespace).toBe("test-namespace");
-      expect(written.appVersion).toBe("1.2.3");
+      expect(written.shellVersion).toBe("1.2.3");
       expect(written).not.toHaveProperty("namespaceBaseRoot");
     } finally {
       await rm(root, { force: true, recursive: true });

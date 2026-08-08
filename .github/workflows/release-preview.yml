@@ -344,7 +344,7 @@ jobs:
             --cache-dir "$RUNNER_TEMP/tools-pack-cache"
             --namespace release-preview
             --portable
-            --app-version "${{ needs.metadata.outputs.release_version }}"
+            --release-version "${{ needs.metadata.outputs.release_version }}"
             --mac-compression normal
             --to all
             --json
@@ -372,7 +372,7 @@ jobs:
             --cache-dir "$RUNNER_TEMP/tools-pack-cache"
             --namespace release-preview
             --portable
-            --app-version "${{ needs.metadata.outputs.release_version }}"
+            --release-version "${{ needs.metadata.outputs.release_version }}"
             --mac-compression normal
             --to all
             --json
@@ -683,7 +683,7 @@ jobs:
             --cache-dir "$RUNNER_TEMP/tools-pack-cache"
             --namespace release-preview-intel
             --portable
-            --app-version "${{ needs.metadata.outputs.release_version }}"
+            --release-version "${{ needs.metadata.outputs.release_version }}"
             --mac-compression normal
             --to all
             --json
@@ -711,7 +711,7 @@ jobs:
             --cache-dir "$RUNNER_TEMP/tools-pack-cache"
             --namespace release-preview-intel
             --portable
-            --app-version "${{ needs.metadata.outputs.release_version }}"
+            --release-version "${{ needs.metadata.outputs.release_version }}"
             --mac-compression normal
             --to all
             --json
@@ -913,7 +913,7 @@ jobs:
             "--cache-dir", $cacheDir,
             "--namespace", "release-preview-win",
             "--portable",
-            "--app-version", "${{ needs.metadata.outputs.release_version }}",
+            "--release-version", "${{ needs.metadata.outputs.release_version }}",
             "--to", "all",
             "--json"
           )
@@ -933,7 +933,7 @@ jobs:
               --cache-dir $cacheDir `
               --namespace release-preview-win `
               --portable `
-              --app-version "${{ needs.metadata.outputs.release_version }}" `
+              --release-version "${{ needs.metadata.outputs.release_version }}" `
               --to all `
               --json
             if ($LASTEXITCODE -ne 0) {
@@ -967,7 +967,7 @@ jobs:
           $match = [regex]::Match("${{ needs.metadata.outputs.release_version }}", "^(?<base>\d+\.\d+\.\d+)-preview\.(?<number>\d+)$")
           if (-not $match.Success) { throw "full Windows smoke requires a counted preview version; got ${{ needs.metadata.outputs.release_version }}" }
           $updateVersion = "{0}-preview.{1}" -f $match.Groups["base"].Value, ([int]$match.Groups["number"].Value + 1)
-          $buildArgs = @("exec", "tools-pack", "win", "build", "--dir", "${{ runner.temp }}\release-work\win_x64\tools-pack-update-fixture", "--cache-dir", "${{ runner.temp }}\tools-pack-cache", "--namespace", "release-preview-win", "--app-version", $updateVersion, "--to", "nsis", "--json")
+          $buildArgs = @("exec", "tools-pack", "win", "build", "--dir", "${{ runner.temp }}\release-work\win_x64\tools-pack-update-fixture", "--cache-dir", "${{ runner.temp }}\tools-pack-cache", "--namespace", "release-preview-win", "--release-version", $updateVersion, "--to", "nsis", "--json")
           $updateOutput = pnpm.cmd @buildArgs
           if ($LASTEXITCODE -ne 0) { throw "tools-pack win update fixture failed with exit code $LASTEXITCODE" }
           $updateOutput | Set-Content -Path "${{ runner.temp }}\release-build\win_x64\windows-tools-pack-update-build.json" -Encoding utf8

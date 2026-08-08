@@ -2638,7 +2638,9 @@ process.stdin.on("end", () => {
     expect(publishStart).toBeGreaterThan(0);
     const publishJob = workflow.slice(publishStart);
 
-    expect(workflow).toContain("CLOSURE_MIN_SHELL_VERSION: 0.16.2");
+    expect(workflow).toContain("CLOSURE_MIN_SHELL_VERSION: 0.19.0-beta.1");
+    expect(workflow).toContain("shell_version:");
+    expect(workflow).toContain("shell_version: ${{ inputs.shell_version != ''");
     expect(workflow).toContain("closure_version:");
     expect(workflow).toContain("closure_version: ${{ inputs.closure_version != ''");
     expect(macJob).toContain("Build beta mac_arm64 Standalone Closure");
@@ -2653,6 +2655,8 @@ process.stdin.on("end", () => {
     expect(macJob).toContain("OD_PACKAGED_E2E_CLOSURE_BUILD_JSON_PATH:");
     expect(macJob).toContain("RELEASE_CLOSURE_DIR:");
     expect(macJob).toContain('RELEASE_CLOSURE_ENABLED: "true"');
+    expect(macJob).toContain('RELEASE_SHELL_ENABLED: "true"');
+    expect(macJob).toContain("RELEASE_SHELL_BUILD_JSON_PATH:");
     expect(macJob).toContain("DOGFOOD_BUILD_JSON_KEYS: archivePath,inventoryPath,manifestPath,provenancePath");
     expect(winJob).toContain("Build beta win_x64 Standalone Closure");
     expect(winJob).toContain("tools-pack closure build");
@@ -2666,7 +2670,10 @@ process.stdin.on("end", () => {
     expect(winJob).toContain("OD_PACKAGED_E2E_CLOSURE_BUILD_JSON_PATH:");
     expect(winJob).toContain("-ClosureDir");
     expect(winJob).toContain('RELEASE_CLOSURE_ENABLED: "true"');
+    expect(winJob).toContain('RELEASE_SHELL_ENABLED: "true"');
+    expect(winJob).toContain("RELEASE_SHELL_BUILD_JSON_PATH:");
     expect(publishJob).toContain('RELEASE_CLOSURE_REQUIRED: "true"');
+    expect(publishJob).toContain('RELEASE_SHELL_REQUIRED: "true"');
     expect(publishJob).toContain("mac_arm64_closure_url:");
     expect(publishJob).toContain("win_x64_closure_url:");
   });
@@ -2810,7 +2817,7 @@ process.stdin.on("end", () => {
     expect(publishMetadataScript).toContain("manifest.r2.versionPrefix.includes(`/versions/${releaseVersion}`)");
     expect(publishMetadataScript).toContain('if (assetVersionSuffix === "auto")');
     expect(publishMetadataScript).toContain('assetVersionSuffix = allReadyTargetsSigned ? ".signed" : ".unsigned";');
-    expect(publishMetadataScript).toContain("const feedVersionPrefix = manifest.r2?.versionPrefix;");
+    expect(publishMetadataScript).toContain("const feedVersionPrefix = manifest.r2?.artifactPrefix ?? manifest.r2?.versionPrefix;");
     expect(publishMetadataScript).toContain("refusing stale ${def.target} platform manifest");
     expect(publishMetadataScript).toContain("publishLatestPlatformObjects");
     expect(platformPublishScript).not.toContain("await upload(join(releaseAssetsDir, name), `${latestPrefix}/${name}`");

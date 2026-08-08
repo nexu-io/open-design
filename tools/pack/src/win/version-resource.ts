@@ -2,7 +2,7 @@ import { readFile, writeFile } from "node:fs/promises";
 
 import { NtExecutable, NtExecutableResource, Resource } from "resedit";
 
-import { electronBuilderVersionForAppVersion, versionCoreForAppVersion } from "../versions.js";
+import { electronBuilderVersionForShellVersion, versionCoreForShellVersion } from "../versions.js";
 
 type VersionTranslation = {
   codepage: number;
@@ -27,13 +27,13 @@ type WinExecutableVersionTargets = {
 const DEFAULT_VERSION_TRANSLATION: VersionTranslation = { codepage: 1200, lang: 1033 };
 
 export function resolveWinExecutableVersionTargets(packagedVersion: string): WinExecutableVersionTargets {
-  const versionCore = versionCoreForAppVersion(packagedVersion);
+  const versionCore = versionCoreForShellVersion(packagedVersion);
   const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(versionCore);
   if (match == null) {
     throw new Error(`expected Windows packaged version core to be X.Y.Z, received ${JSON.stringify(packagedVersion)}`);
   }
   return {
-    fileVersion: electronBuilderVersionForAppVersion(packagedVersion),
+    fileVersion: electronBuilderVersionForShellVersion(packagedVersion),
     numericVersion: `${match[1]}.${match[2]}.${match[3]}.0`,
     productVersion: `${match[1]}.${match[2]}.${match[3]}.0`,
   };

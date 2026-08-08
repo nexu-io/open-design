@@ -7,7 +7,22 @@ function normalizeRelativePath(path: string): string {
 }
 
 async function readNormalizedFile(filePath: string): Promise<Buffer | string> {
-  return await readFile(filePath);
+  const body = await readFile(filePath);
+  if (filePath.endsWith("/package.json") || filePath.endsWith("\\package.json")) {
+    try {
+      const manifest = JSON.parse(body.toString("utf8")) as Record<string, unknown>;
+      // Workspace release versions move in lockstep, but they are not Shell
+      // source. A reused Shell keeps the compatibility version assigned when
+      // this source digest first appeared, so version-only bumps must not force
+      // a rebuild/sign/notarize cycle.
+      delete manifest.version;
+      return `${JSON.stringify(manifest)}\n`;
+    } catch {
+      // Test fixtures and malformed manifests still participate byte-for-byte;
+      // packaging itself will reject them at the normal manifest boundary.
+    }
+  }
+  return body;
 }
 
 export async function hashPackageSourcePath(path: string): Promise<string> {

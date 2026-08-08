@@ -85,7 +85,7 @@ describe("resolveMacInstallIdentity", () => {
   it("uses first-class prerelease app identity for prerelease release versions and namespaces", () => {
     const prereleaseVersionConfig = {
       ...makeConfig("/work", "release-stable"),
-      appVersion: "0.8.0-prerelease.2",
+      releaseVersion: "0.8.0-prerelease.2",
     };
     const prereleaseNamespaceConfig = makeConfig("/work", "release-prerelease");
 

@@ -33,6 +33,11 @@ on:
         required: false
         type: string
         default: ""
+      shell_version:
+        description: "Optional Electron Shell compatibility version. Empty assigns this release version to new Shell source."
+        required: false
+        type: string
+        default: ""
       closure_version:
         description: "Optional Standalone Closure beta version. Empty uses the shell release version."
         required: false
@@ -183,6 +188,10 @@ on:
         required: false
         type: string
         default: ""
+      shell_version:
+        required: false
+        type: string
+        default: ""
       closure_version:
         required: false
         type: string
@@ -259,6 +268,9 @@ on:
       beta_version:
         description: "The beta version that was built."
         value: ${{ jobs.metadata.outputs.beta_version }}
+      shell_version:
+        description: "The Electron Shell compatibility version that was built or reused."
+        value: ${{ jobs.metadata.outputs.shell_version }}
       closure_version:
         description: "The Standalone Closure version that was built or reused."
         value: ${{ jobs.metadata.outputs.closure_version }}
@@ -308,10 +320,10 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  # G2 compatibility floor: the first packaged shell that can attach an
-  # independently published Standalone Closure. Raise only after mixed-generation
-  # upgrade evidence proves the older shell can be retired.
-  CLOSURE_MIN_SHELL_VERSION: 0.16.2
+  # The 0.19 epoch deliberately drops the historical combined package. A beta
+  # Closure requires the first beta Shell from the same compatibility epoch;
+  # stable 0.19.0 would incorrectly reject 0.19.0-beta.1.
+  CLOSURE_MIN_SHELL_VERSION: 0.19.0-beta.1
   OPEN_DESIGN_TELEMETRY_RELAY_URL: ${{ vars.OPEN_DESIGN_TELEMETRY_RELAY_URL }}
   POSTHOG_KEY: ${{ inputs.publish && secrets.POSTHOG_KEY || '' }}
   POSTHOG_HOST: ${{ inputs.publish && vars.POSTHOG_HOST || '' }}
@@ -345,10 +357,12 @@ jobs:
     env:
       RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
       OPEN_DESIGN_BETA_METADATA_URL: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}/beta/latest/metadata.json
+      OPEN_DESIGN_STABLE_METADATA_URL: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}/stable/latest/metadata.json
     outputs:
       asset_version_suffix: ${{ steps.beta.outputs.asset_version_suffix }}
       base_version: ${{ steps.beta.outputs.base_version }}
       beta_version: ${{ inputs.release_version != '' && inputs.release_version || steps.beta.outputs.beta_version }}
+      shell_version: ${{ inputs.shell_version != '' && inputs.shell_version || inputs.release_version != '' && inputs.release_version || steps.beta.outputs.beta_version }}
       closure_version: ${{ inputs.closure_version != '' && inputs.closure_version || inputs.release_version != '' && inputs.release_version || steps.beta.outputs.beta_version }}
       branch: ${{ steps.identity.outputs.branch }}
       commit: ${{ steps.identity.outputs.commit }}
@@ -425,6 +439,14 @@ jobs:
           fi
           if [ "${{ inputs.publish }}" = "true" ] && [ "${{ inputs.enable_win_x64 }}" = "true" ] && [ "${{ inputs.win_x64_target }}" != "nsis" ] && [ "${{ inputs.win_x64_target }}" != "all" ]; then
             echo "release-beta publish requires win_x64_target=nsis or all so the installer and updater feed are produced" >&2
+            exit 1
+          fi
+          if [ "${{ inputs.publish }}" = "true" ] && [ "${{ inputs.enable_mac_arm64 }}" = "true" ] && [ "${{ inputs.mac_arm64_sign_mode }}" != "notarize" ]; then
+            echo "release-beta publish requires mac_arm64_sign_mode=notarize" >&2
+            exit 1
+          fi
+          if [ "${{ inputs.publish }}" = "true" ] && [ "${{ inputs.enable_mac_x64 }}" = "true" ] && [ "${{ inputs.mac_x64_sign_mode }}" != "notarize" ]; then
+            echo "release-beta publish requires mac_x64_sign_mode=notarize" >&2
             exit 1
           fi
 
@@ -547,7 +569,8 @@ jobs:
             --cache-dir "$RUNNER_TEMP/tools-pack-cache"
             --namespace release-beta
             --portable
-            --app-version "${{ needs.metadata.outputs.beta_version }}"
+            --release-version "${{ needs.metadata.outputs.beta_version }}"
+            --shell-version "${{ needs.metadata.outputs.shell_version }}"
             --mac-compression normal
             --to "${{ inputs.mac_arm64_target }}"
             --json
@@ -586,7 +609,8 @@ jobs:
             --cache-dir "$RUNNER_TEMP/tools-pack-cache"
             --namespace release-beta
             --portable
-            --app-version "${{ needs.metadata.outputs.beta_version }}"
+            --release-version "${{ needs.metadata.outputs.beta_version }}"
+            --shell-version "${{ needs.metadata.outputs.shell_version }}"
             --mac-compression normal
             --to "${{ inputs.mac_arm64_target }}"
             --json
@@ -623,6 +647,18 @@ jobs:
             --platform darwin-arm64 \
             --version "$version" \
             --json > "$RUNNER_TEMP/release-build/mac_arm64/closure.json"
+
+      - name: Verify mac_arm64 signed and notarized artifacts
+        if: ${{ inputs.mac_arm64_sign_mode == 'notarize' }}
+        run: |
+          set -euo pipefail
+          app_path="$(jq -er '.appPath' "$RUNNER_TEMP/release-build/mac_arm64/build.json")"
+          dmg_path="$(jq -er '.dmgPath' "$RUNNER_TEMP/release-build/mac_arm64/build.json")"
+          /usr/bin/codesign --verify --deep --strict --verbose=2 "$app_path"
+          /usr/bin/xcrun stapler validate "$app_path"
+          /usr/sbin/spctl --assess --type execute --verbose=4 "$app_path"
+          /usr/bin/xcrun stapler validate "$dmg_path"
+          /usr/sbin/spctl --assess --type open --context context:primary-signature --verbose=4 "$dmg_path"
 
       - name: Upload mac_arm64 Standalone Closure dogfood build to release storage
         if: ${{ !cancelled() && !inputs.publish }}
@@ -714,7 +750,8 @@ jobs:
             --cache-dir "$RUNNER_TEMP/tools-pack-cache" \
             --namespace release-beta \
             --portable \
-            --app-version "$update_version" \
+            --release-version "$update_version" \
+            --shell-version "$update_version" \
             --mac-compression normal \
             --to dmg \
             --require-vela-cli \
@@ -831,6 +868,8 @@ jobs:
           RELEASE_REPORT_DIR: ${{ runner.temp }}/release-report/mac_arm64
           RELEASE_REPORT_ZIP_PATH: ${{ runner.temp }}/release-report/mac_arm64-report.zip
           RELEASE_SIGNED: "true"
+          RELEASE_SHELL_BUILD_JSON_PATH: ${{ runner.temp }}/release-build/mac_arm64/build.json
+          RELEASE_SHELL_ENABLED: "true"
           RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
           RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
           RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
@@ -946,7 +985,8 @@ jobs:
             --cache-dir "$RUNNER_TEMP/tools-pack-cache"
             --namespace release-beta-x64
             --portable
-            --app-version "${{ needs.metadata.outputs.beta_version }}"
+            --release-version "${{ needs.metadata.outputs.beta_version }}"
+            --shell-version "${{ needs.metadata.outputs.shell_version }}"
             --mac-compression normal
             --to "${{ inputs.mac_x64_target }}"
             --json
@@ -980,7 +1020,8 @@ jobs:
             --cache-dir "$RUNNER_TEMP/tools-pack-cache"
             --namespace release-beta-x64
             --portable
-            --app-version "${{ needs.metadata.outputs.beta_version }}"
+            --release-version "${{ needs.metadata.outputs.beta_version }}"
+            --shell-version "${{ needs.metadata.outputs.shell_version }}"
             --mac-compression normal
             --to "${{ inputs.mac_x64_target }}"
             --json
@@ -999,6 +1040,18 @@ jobs:
             printf '%s\n' "$build_output"
             exit "$build_status"
           fi
+
+      - name: Verify mac_x64 signed and notarized artifacts
+        if: ${{ inputs.mac_x64_sign_mode == 'notarize' }}
+        run: |
+          set -euo pipefail
+          app_path="$(jq -er '.appPath' "$RUNNER_TEMP/release-build/mac_x64/build.json")"
+          dmg_path="$(jq -er '.dmgPath' "$RUNNER_TEMP/release-build/mac_x64/build.json")"
+          /usr/bin/codesign --verify --deep --strict --verbose=2 "$app_path"
+          /usr/bin/xcrun stapler validate "$app_path"
+          /usr/sbin/spctl --assess --type execute --verbose=4 "$app_path"
+          /usr/bin/xcrun stapler validate "$dmg_path"
+          /usr/sbin/spctl --assess --type open --context context:primary-signature --verbose=4 "$dmg_path"
 
       - name: Delete failed mac_x64 tools-pack cache
         if: ${{ steps.mac_x64_tools_pack_build.outcome == 'failure' && steps.mac_x64_tools_pack_cache_restore.outputs.cache-matched-key != '' }}
@@ -1110,6 +1163,8 @@ jobs:
           RELEASE_OUTPUTS_PATH: ${{ runner.temp }}/release-platform-outputs/mac_x64.json
           RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
           RELEASE_SIGNED: ${{ inputs.mac_x64_sign_mode != 'no' && 'true' || 'false' }}
+          RELEASE_SHELL_BUILD_JSON_PATH: ${{ runner.temp }}/release-build/mac_x64/build.json
+          RELEASE_SHELL_ENABLED: "true"
           RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
           RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
           RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
@@ -1223,7 +1278,7 @@ jobs:
           $ErrorActionPreference = "Stop"
           New-Item -ItemType Directory -Force -Path "${{ runner.temp }}\release-build\win_x64" | Out-Null
           pnpm.cmd exec tools-pack win cleanup --dir "${{ runner.temp }}\tools-pack" --namespace release-beta-win --json
-          $buildArgs = @("exec", "tools-pack", "win", "build", "--dir", "${{ runner.temp }}\tools-pack", "--cache-dir", "${{ runner.temp }}\tools-pack-cache", "--namespace", "release-beta-win", "--portable", "--app-version", "${{ needs.metadata.outputs.beta_version }}", "--to", "${{ inputs.win_x64_target }}", "--require-vela-cli", "--json")
+          $buildArgs = @("exec", "tools-pack", "win", "build", "--dir", "${{ runner.temp }}\tools-pack", "--cache-dir", "${{ runner.temp }}\tools-pack-cache", "--namespace", "release-beta-win", "--portable", "--release-version", "${{ needs.metadata.outputs.beta_version }}", "--shell-version", "${{ needs.metadata.outputs.shell_version }}", "--to", "${{ inputs.win_x64_target }}", "--require-vela-cli", "--json")
           if ("${{ inputs.win_x64_sign_mode }}" -eq "on") { $buildArgs += "--signed" }
           $buildOutput = pnpm.cmd @buildArgs
           if ($LASTEXITCODE -ne 0) { throw "tools-pack win build failed with exit code $LASTEXITCODE" }
@@ -1242,7 +1297,7 @@ jobs:
           Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "${{ runner.temp }}\tools-pack-cache"
           New-Item -ItemType Directory -Force -Path "${{ runner.temp }}\release-build\win_x64" | Out-Null
           pnpm.cmd exec tools-pack win cleanup --dir "${{ runner.temp }}\tools-pack" --namespace release-beta-win --json
-          $buildArgs = @("exec", "tools-pack", "win", "build", "--dir", "${{ runner.temp }}\tools-pack", "--cache-dir", "${{ runner.temp }}\tools-pack-cache", "--namespace", "release-beta-win", "--portable", "--app-version", "${{ needs.metadata.outputs.beta_version }}", "--to", "${{ inputs.win_x64_target }}", "--require-vela-cli", "--json")
+          $buildArgs = @("exec", "tools-pack", "win", "build", "--dir", "${{ runner.temp }}\tools-pack", "--cache-dir", "${{ runner.temp }}\tools-pack-cache", "--namespace", "release-beta-win", "--portable", "--release-version", "${{ needs.metadata.outputs.beta_version }}", "--shell-version", "${{ needs.metadata.outputs.shell_version }}", "--to", "${{ inputs.win_x64_target }}", "--require-vela-cli", "--json")
           if ("${{ inputs.win_x64_sign_mode }}" -eq "on") { $buildArgs += "--signed" }
           $buildOutput = pnpm.cmd @buildArgs
           if ($LASTEXITCODE -ne 0) { throw "tools-pack win fallback build failed with exit code $LASTEXITCODE" }
@@ -1346,7 +1401,7 @@ jobs:
           $match = [regex]::Match("${{ needs.metadata.outputs.beta_version }}", "^(?<base>\d+\.\d+\.\d+)-beta\.(?<number>\d+)$")
           if (-not $match.Success) { throw "full Windows smoke requires a counted beta version; got ${{ needs.metadata.outputs.beta_version }}" }
           $updateVersion = "{0}-beta.{1}" -f $match.Groups["base"].Value, ([int]$match.Groups["number"].Value + 1)
-          $buildArgs = @("exec", "tools-pack", "win", "build", "--dir", "${{ runner.temp }}\release-work\win_x64\tools-pack-update-fixture", "--cache-dir", "${{ runner.temp }}\tools-pack-cache", "--namespace", "release-beta-win", "--app-version", $updateVersion, "--to", "nsis", "--require-vela-cli", "--json")
+          $buildArgs = @("exec", "tools-pack", "win", "build", "--dir", "${{ runner.temp }}\release-work\win_x64\tools-pack-update-fixture", "--cache-dir", "${{ runner.temp }}\tools-pack-cache", "--namespace", "release-beta-win", "--release-version", $updateVersion, "--shell-version", $updateVersion, "--to", "nsis", "--require-vela-cli", "--json")
           if ("${{ inputs.win_x64_sign_mode }}" -eq "on") { $buildArgs += "--signed" }
           $updateOutput = pnpm.cmd @buildArgs
           if ($LASTEXITCODE -ne 0) { throw "tools-pack win update fixture failed with exit code $LASTEXITCODE" }
@@ -1451,6 +1506,8 @@ jobs:
           RELEASE_OUTPUTS_PATH: ${{ runner.temp }}\release-platform-outputs\win_x64.json
           RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
           RELEASE_REPORT_DIR: ${{ runner.temp }}\release-report\win_x64
+          RELEASE_SHELL_BUILD_JSON_PATH: ${{ runner.temp }}\release-build\win_x64\build.json
+          RELEASE_SHELL_ENABLED: "true"
           WIN_INCLUDE_ZIP: ${{ inputs.win_x64_target == 'all' || inputs.win_x64_target == 'zip' }}
           RELEASE_SIGNED: "false"
           RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
@@ -1579,6 +1636,7 @@ jobs:
           RELEASE_ASSET_SUFFIX: ${{ needs.metadata.outputs.asset_version_suffix }}
           RELEASE_CHANNEL: beta
           RELEASE_CLOSURE_REQUIRED: "true"
+          RELEASE_SHELL_REQUIRED: "true"
           RELEASE_LAUNCHER_VERSION_MIN_BETA: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_BETA }}
           RELEASE_LAUNCHER_VERSION_MIN_STABLE: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_STABLE }}
           RELEASE_LAUNCHER_VERSION_MIN_URL_BETA: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_URL_BETA }}
@@ -1617,6 +1675,7 @@ jobs:
           MAC_X64_RESULT: ${{ needs.build_mac_x64.result }}
           RELEASE_CHANNEL: beta
           RELEASE_CLOSURE_REQUIRED: "true"
+          RELEASE_SHELL_REQUIRED: "true"
           RELEASE_LAUNCHER_VERSION_MIN_BETA: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_BETA }}
           RELEASE_LAUNCHER_VERSION_MIN_STABLE: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_STABLE }}
           RELEASE_LAUNCHER_VERSION_MIN_URL_BETA: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_URL_BETA }}

@@ -1,5 +1,6 @@
 import type { DesktopEvalResult, DesktopScreenshotResult, DesktopStatusSnapshot, DesktopUpdateResult, SidecarStamp } from "@open-design/sidecar-proto";
 import type { CacheReport } from "../cache.js";
+import type { ToolPackArtifactDescriptor } from "../artifacts.js";
 import type { ToolPackBuildOutput, ToolPackConfig } from "../config.js";
 import type { ToolPackLauncherRuntimeSnapshot } from "../launcher-runtime-snapshot.js";
 import type { ToolPackUpdateCacheLifecycleSnapshot } from "../update-cache-lifecycle-snapshot.js";
@@ -51,6 +52,11 @@ export type SeededAppConfigPaths = {
 
 export type MacPackResult = {
   appPath: string;
+  artifacts: {
+    dmg: ToolPackArtifactDescriptor | null;
+    payload: ToolPackArtifactDescriptor | null;
+    zip: ToolPackArtifactDescriptor | null;
+  };
   cacheReport: CacheReport;
   dmgPath: string | null;
   latestMacYmlPath: string | null;
@@ -58,6 +64,12 @@ export type MacPackResult = {
   payloadPath: string | null;
   resourceRoot: string;
   runtimeNamespaceRoot: string;
+  releaseVersion: string | null;
+  shell: {
+    sourceDigest: `sha256:${string}`;
+    type: ToolPackConfig["shell"];
+    version: string;
+  };
   sizeReport: MacSizeReport;
   timings: MacPackTiming[];
   to: ToolPackBuildOutput;

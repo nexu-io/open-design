@@ -15,9 +15,9 @@ import { resolveWinPaths } from "../src/win/paths.js";
 
 const TEST_WORKSPACE_ROOT = resolve("/work");
 
-function makeConfig(root: string, platform: ToolPackPlatform, namespace: string, appVersion?: string): ToolPackConfig {
+function makeConfig(root: string, platform: ToolPackPlatform, namespace: string, releaseVersion?: string): ToolPackConfig {
   return {
-    ...(appVersion == null ? {} : { appVersion }),
+    ...(releaseVersion == null ? {} : { releaseVersion }),
     electronBuilderCliPath: "/x/electron-builder/cli.js",
     electronDistPath: "/x/electron/dist",
     electronVersion: "41.3.0",
@@ -54,7 +54,7 @@ function makeConfig(root: string, platform: ToolPackPlatform, namespace: string,
 }
 
 describe("tools-pack launcher layout", () => {
-  it("derives the update channel from app version before namespace", () => {
+  it("derives the update channel from release version before namespace", () => {
     expect(resolveToolPackLauncherChannel(makeConfig(TEST_WORKSPACE_ROOT, "mac", "release-beta", "0.8.1-preview.1"))).toBe("preview");
     expect(resolveToolPackLauncherChannel(makeConfig(TEST_WORKSPACE_ROOT, "win", "release-beta-win", "0.8.1-beta.2"))).toBe("beta");
     expect(resolveToolPackLauncherChannel(makeConfig(TEST_WORKSPACE_ROOT, "mac", "default", "0.8.1"))).toBe("stable");

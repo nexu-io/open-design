@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { hashPackageSourcePath } from "../src/package-source-hash.js";
 
 describe("hashPackageSourcePath", () => {
-  it("includes package versions in the source hash", async () => {
+  it("ignores release-only package versions but includes source changes", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-package-source-hash-"));
     const packageRoot = join(root, "apps", "packaged");
     try {
@@ -19,7 +19,10 @@ describe("hashPackageSourcePath", () => {
       await writeFile(join(packageRoot, "package.json"), `${JSON.stringify({ name: "@open-design/shell-electron", version: "1.0.1" }, null, 2)}\n`, "utf8");
       const secondHash = await hashPackageSourcePath(packageRoot);
 
-      expect(secondHash).not.toBe(firstHash);
+      expect(secondHash).toBe(firstHash);
+
+      await writeFile(join(packageRoot, "src", "index.ts"), "export const value = 2;\n", "utf8");
+      await expect(hashPackageSourcePath(packageRoot)).resolves.not.toBe(firstHash);
     } finally {
       await rm(root, { force: true, recursive: true });
     }

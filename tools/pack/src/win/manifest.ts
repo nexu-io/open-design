@@ -2,12 +2,12 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 import type { ToolPackConfig } from "../config.js";
-import { readRuntimeAppVersion } from "../versions.js";
+import { readRuntimeShellVersion } from "../versions.js";
 import { pathExists } from "./fs.js";
 import type { WinBuiltAppManifest, WinPaths } from "./types.js";
 
 export async function readPackagedVersion(config: ToolPackConfig): Promise<string> {
-  return readRuntimeAppVersion(config);
+  return readRuntimeShellVersion(config);
 }
 
 type PackagedConfigEntrypoints = {
@@ -23,9 +23,9 @@ function createPackagedConfig(
 ): Record<string, unknown> {
   return {
     ...(config.amrProfile == null ? {} : { amrProfile: config.amrProfile }),
-    appVersion: packagedVersion,
     ...entrypoints,
     namespace: config.namespace,
+    shellVersion: packagedVersion,
     ...(config.telemetryRelayUrl == null ? {} : { telemetryRelayUrl: config.telemetryRelayUrl }),
     ...(config.updateMetadataUrl == null ? {} : { updateMetadataUrl: config.updateMetadataUrl }),
     ...(config.posthogKey == null ? {} : { posthogKey: config.posthogKey }),

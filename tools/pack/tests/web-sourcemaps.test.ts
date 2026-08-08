@@ -55,7 +55,7 @@ afterEach(async () => {
 
 function fakeConfig(workspaceRoot: string): ToolPackConfig {
   return {
-    appVersion: "0.0.0-test",
+    releaseVersion: "0.0.0-test",
     electronBuilderCliPath: "/dev/null",
     electronDistPath: "/dev/null",
     electronVersion: "0.0.0",

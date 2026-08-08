@@ -108,7 +108,7 @@ describe("materializeCachedUnpackedForInstaller", () => {
       await mkdir(join(paths.packagedConfigPath, ".."), { recursive: true });
       await writeFile(
         paths.packagedConfigPath,
-        `${JSON.stringify({ appVersion: "0.5.0-beta.2", namespace: "second", version: 1 })}\n`,
+        `${JSON.stringify({ namespace: "second", shellVersion: "0.5.0-beta.2", version: 1 })}\n`,
         "utf8",
       );
 
@@ -123,7 +123,7 @@ describe("materializeCachedUnpackedForInstaller", () => {
         '"version": "0.5.0-beta.2"',
       );
       await expect(readFile(join(paths.unpackedRoot, "resources", "open-design-config.json"), "utf8")).resolves.toContain(
-        '"appVersion":"0.5.0-beta.2"',
+        '"shellVersion":"0.5.0-beta.2"',
       );
       await expect(readWinExecutableVersionSnapshot(join(paths.unpackedRoot, "Open Design.exe"))).resolves.toMatchObject({
         fixedFileVersion: "0.5.0.0",

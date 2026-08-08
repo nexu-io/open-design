@@ -291,7 +291,7 @@ build_args=(
   --cache-dir "$cache_dir"
   --namespace "$namespace"
   --portable
-  --app-version "$RELEASE_VERSION"
+  --release-version "$RELEASE_VERSION"
   --mac-compression "$compression"
   --to "$target"
   --json

@@ -34,7 +34,7 @@ afterEach(async () => {
 });
 
 describe('packaged Closure release fixture', () => {
-  it('materializes the release report and rolls a damaged successor back to its confirmed predecessor', async () => {
+  it('materializes one committed binding and never retains launch history', async () => {
     const root = await mkdtemp(join(tmpdir(), 'od-e2e-closure-fixture-'));
     roots.push(root);
     const buildRoot = join(root, 'build');
@@ -93,18 +93,24 @@ describe('packaged Closure release fixture', () => {
       namespace: 'release-beta',
       workspaceRoot: root,
     });
-    expect((await readPackagedClosureFixtureRuntime(fixture)).active).toEqual(fixture.pointer);
+    expect((await readPackagedClosureFixtureRuntime(fixture)).committed).toEqual({
+      releaseVersion: fixture.manifest.identity.version,
+      standalone: fixture.pointer,
+    });
     expect(await readFile(join(fixture.versionPaths.payloadRoot, CLOSURE_ARCHIVE_ENTRY_PATH), 'utf8'))
       .toBe(entryContents);
 
     const successor = await activateBrokenClosureSuccessor(fixture);
     expect(successor.manifest.identity.version).toBe('0.18.0-beta.5');
-    expect((await readPackagedClosureFixtureRuntime(fixture)).active).toEqual(successor.pointer);
+    expect((await readPackagedClosureFixtureRuntime(fixture)).committed).toEqual({
+      releaseVersion: successor.manifest.identity.version,
+      standalone: successor.pointer,
+    });
     expect(await readFile(join(successor.versionPaths.payloadRoot, CLOSURE_ARCHIVE_ENTRY_PATH), 'utf8'))
       .toContain('damaged Closure successor');
 
     await resetPackagedClosureFixture({ channel: 'beta', installationRoot, namespace: 'release-beta' });
-    expect((await readPackagedClosureFixtureRuntime(fixture)).active).toBeNull();
+    expect((await readPackagedClosureFixtureRuntime(fixture)).committed).toBeNull();
   });
 });
 

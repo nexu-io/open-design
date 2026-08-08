@@ -7,8 +7,8 @@ async function buildWorkspaceArtifacts(config: ToolPackConfig): Promise<void> {
   await runPnpm(config, ["--filter", "@open-design/shell-electron...", "build"]);
 }
 
-export async function ensureMacWorkspaceBuild(config: ToolPackConfig, cache: ToolPackCache): Promise<void> {
-  await ensureWorkspaceBuildArtifacts(config, cache, async () => {
+export async function ensureMacWorkspaceBuild(config: ToolPackConfig, cache: ToolPackCache): Promise<`sha256:${string}`> {
+  return await ensureWorkspaceBuildArtifacts(config, cache, async () => {
     await buildWorkspaceArtifacts(config);
   });
 }

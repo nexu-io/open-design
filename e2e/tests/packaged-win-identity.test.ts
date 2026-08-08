@@ -11,7 +11,7 @@ describe("packaged windows smoke identity", () => {
       displayName: "Open Design Prerelease",
       namespaceToken: "release-stable-win",
     });
-    expect(releaseAppVersionArgs("0.8.0-prerelease.2")).toEqual(["--app-version", "0.8.0-prerelease.2"]);
+    expect(releaseAppVersionArgs("0.8.0-prerelease.2")).toEqual(["--release-version", "0.8.0-prerelease.2"]);
   });
 
   it("[P2] keeps stable release namespaces on the canonical display identity", () => {

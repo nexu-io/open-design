@@ -16,12 +16,8 @@ import {
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
-  activateStoredClosureCandidate,
-  armClosureRuntimeAttempt,
-  confirmClosureRuntime,
-  readClosureAttemptDescriptor,
-  readClosureRuntimeDescriptor,
-  recoverClosureRuntime,
+  commitStoredClosureCandidate,
+  readClosureBindingDescriptor,
   resolveClosureStorePaths,
   resolveClosureStoreVersionPaths,
   verifyMaterializedClosureCandidate,
@@ -154,11 +150,11 @@ describe("stored Closure verification", () => {
     const versionPaths = resolveClosureStoreVersionPaths(paths, binding);
 
     await writeFile(versionPaths.archivePath, "corrupt");
-    await expect(activateStoredClosureCandidate(paths, binding)).rejects.toThrow(/archive does not match/u);
+    await expect(commitStoredClosureCandidate(paths, binding, "0.18.0-beta.1")).rejects.toThrow(/archive does not match/u);
 
     await writeFile(versionPaths.archivePath, "archive:0.18.0-beta.1");
     await writeFile(join(versionPaths.payloadRoot, CLOSURE_ARCHIVE_ENTRY_PATH), "mutated");
-    await expect(activateStoredClosureCandidate(paths, binding)).rejects.toThrow(/payload does not match/u);
+    await expect(commitStoredClosureCandidate(paths, binding, "0.18.0-beta.1")).rejects.toThrow(/payload does not match/u);
   });
 
   it("refuses a self-consistent replacement inventory not bound by the manifest", async () => {
@@ -177,125 +173,46 @@ describe("stored Closure verification", () => {
     entry.size = Buffer.byteLength(replacement);
     await writeFile(versionPaths.inventoryPath, `${JSON.stringify(inventory, null, 2)}\n`);
 
-    await expect(activateStoredClosureCandidate(paths, binding)).rejects.toThrow(/inventory does not match/u);
+    await expect(commitStoredClosureCandidate(paths, binding, "0.18.0-beta.1")).rejects.toThrow(/inventory does not match/u);
   });
 });
 
-describe("Closure activation lifecycle", () => {
-  it("atomically activates, arms, and confirms the first candidate", async () => {
+describe("Closure committed binding", () => {
+  it("atomically commits one release-to-Standalone binding", async () => {
     const paths = await createStore();
     const { binding } = await materializeCandidate(paths, "0.18.0-beta.1");
 
-    const activated = await activateStoredClosureCandidate(paths, binding);
-    expect(activated.pointer.generation).toBe(0);
-    expect(activated.descriptor.lastSuccessful).toBeNull();
+    const result = await commitStoredClosureCandidate(paths, binding, "0.19.0-beta.1");
 
-    await armClosureRuntimeAttempt(paths, activated.pointer);
-    expect(await readClosureAttemptDescriptor(paths)).toMatchObject(activated.pointer);
-
-    const confirmed = await confirmClosureRuntime(paths, activated.pointer);
-    expect(confirmed.active).toEqual(activated.pointer);
-    expect(confirmed.lastSuccessful).toEqual(activated.pointer);
-    expect(await readClosureAttemptDescriptor(paths)).toBeNull();
+    expect(result.committed).toEqual({
+      releaseVersion: "0.19.0-beta.1",
+      standalone: { ...binding, generation: 0 },
+    });
+    expect(await readClosureBindingDescriptor(paths)).toEqual(result.descriptor);
+    expect(paths.bindingPath).toMatch(/binding\.json$/u);
   });
 
-  it("rolls a failed new generation back to the last successful candidate", async () => {
+  it("replaces the committed binding without retaining launch history", async () => {
     const paths = await createStore();
     const first = await materializeCandidate(paths, "0.18.0-beta.1");
-    const firstActivation = await activateStoredClosureCandidate(paths, first.binding);
-    await armClosureRuntimeAttempt(paths, firstActivation.pointer);
-    await confirmClosureRuntime(paths, firstActivation.pointer);
-
-    const second = await materializeCandidate(paths, "0.18.0-beta.2");
-    const secondActivation = await activateStoredClosureCandidate(paths, second.binding);
-    await armClosureRuntimeAttempt(paths, secondActivation.pointer);
-
-    const recovered = await recoverClosureRuntime(paths);
-    expect(recovered.recovered).toBe(true);
-    expect(recovered.selection).toEqual({
-      pointer: firstActivation.pointer,
-      reason: "last-successful",
-      selected: true,
-    });
-    expect(recovered.descriptor.active).toEqual(firstActivation.pointer);
-    expect(await readClosureAttemptDescriptor(paths)).toBeNull();
-  });
-
-  it("refuses to replace an unresolved runtime attempt", async () => {
-    const paths = await createStore();
-    const first = await materializeCandidate(paths, "0.18.0-beta.1");
-    const firstActivation = await activateStoredClosureCandidate(paths, first.binding);
-    await armClosureRuntimeAttempt(paths, firstActivation.pointer);
     const second = await materializeCandidate(paths, "0.18.0-beta.2");
 
-    await expect(activateStoredClosureCandidate(paths, second.binding)).rejects.toThrow(/attempt is unresolved/u);
-    expect((await readClosureRuntimeDescriptor(paths)).active).toEqual(firstActivation.pointer);
-    expect(await readClosureAttemptDescriptor(paths)).toMatchObject(firstActivation.pointer);
-  });
+    const firstCommit = await commitStoredClosureCandidate(paths, first.binding, "0.19.0-beta.1");
+    const secondCommit = await commitStoredClosureCandidate(paths, second.binding, "0.19.0-beta.2");
 
-  it("settles a confirm that crashed after persisting success", async () => {
-    const paths = await createStore();
-    const candidate = await materializeCandidate(paths, "0.18.0-beta.1");
-    const activated = await activateStoredClosureCandidate(paths, candidate.binding);
-    const attempt = await armClosureRuntimeAttempt(paths, activated.pointer);
-    await writeFile(paths.runtimePath, `${JSON.stringify({
-      ...activated.descriptor,
-      lastSuccessful: activated.pointer,
-      updatedAt: new Date().toISOString(),
-    })}\n`);
-
-    const recovered = await recoverClosureRuntime(paths);
-    expect(recovered.selection).toEqual({
-      pointer: activated.pointer,
-      reason: "last-successful",
-      selected: true,
-    });
-    expect(recovered.descriptor.lastSuccessful).toEqual(activated.pointer);
-    expect(await readClosureAttemptDescriptor(paths)).toBeNull();
-    expect(attempt).toMatchObject(activated.pointer);
-  });
-
-  it("clears a failed first generation so a shell can use its legacy fallback", async () => {
-    const paths = await createStore();
-    const candidate = await materializeCandidate(paths, "0.18.0-beta.1");
-    const activated = await activateStoredClosureCandidate(paths, candidate.binding);
-    await armClosureRuntimeAttempt(paths, activated.pointer);
-
-    const recovered = await recoverClosureRuntime(paths);
-    expect(recovered.selection).toEqual({ reason: "no-runtime-target", selected: false });
-    expect(recovered.descriptor.active).toBeNull();
-    expect(recovered.descriptor.lastSuccessful).toBeNull();
-  });
-
-  it("removes a stale attempt without rolling back a different active generation", async () => {
-    const paths = await createStore();
-    const first = await materializeCandidate(paths, "0.18.0-beta.1");
-    const firstActivation = await activateStoredClosureCandidate(paths, first.binding);
-
-    const second = await materializeCandidate(paths, "0.18.0-beta.2");
-    const secondActivation = await activateStoredClosureCandidate(paths, second.binding);
-    await writeFile(paths.attemptsPath, `${JSON.stringify({
-      ...firstActivation.pointer,
-      schemaVersion: 1,
-      startedAt: new Date().toISOString(),
-    })}\n`);
-
-    const recovered = await recoverClosureRuntime(paths);
-    expect(recovered.selection).toEqual({
-      pointer: secondActivation.pointer,
-      reason: "active",
-      selected: true,
-    });
-    expect(await readClosureAttemptDescriptor(paths)).toBeNull();
+    expect(firstCommit.committed.standalone.generation).toBe(0);
+    expect(secondCommit.committed.standalone.generation).toBe(1);
+    expect(secondCommit.descriptor).not.toHaveProperty("active");
+    expect(secondCommit.descriptor).not.toHaveProperty("attempt");
+    expect(secondCommit.descriptor).not.toHaveProperty("lastSuccessful");
   });
 
   it("fails closed on transport fields or corrupt persisted state", async () => {
     const paths = await createStore();
     await mkdir(paths.stateRoot, { recursive: true });
-    await writeFile(paths.runtimePath, `${JSON.stringify({
-      active: null,
+    await writeFile(paths.bindingPath, `${JSON.stringify({
       channel: paths.channel,
-      lastSuccessful: null,
+      committed: null,
       namespace: paths.namespace,
       nextGeneration: 0,
       port: 7456,
@@ -303,10 +220,10 @@ describe("Closure activation lifecycle", () => {
       updatedAt: new Date().toISOString(),
     })}\n`);
 
-    await expect(readClosureRuntimeDescriptor(paths)).rejects.toThrow(/unsupported fields: port/u);
+    await expect(readClosureBindingDescriptor(paths)).rejects.toThrow(/unsupported fields: port/u);
 
-    await writeFile(paths.runtimePath, "{not-json");
-    await expect(readClosureRuntimeDescriptor(paths)).rejects.toThrow(/unreadable/u);
+    await writeFile(paths.bindingPath, "{not-json");
+    await expect(readClosureBindingDescriptor(paths)).rejects.toThrow(/unreadable/u);
   });
 
   it("keeps namespaces independent under one product root", async () => {
@@ -317,30 +234,11 @@ describe("Closure activation lifecycle", () => {
     const leftCandidate = await materializeCandidate(left, "0.18.0-beta.1");
     const rightCandidate = await materializeCandidate(right, "0.18.0-beta.2");
 
-    await activateStoredClosureCandidate(left, leftCandidate.binding);
-    await activateStoredClosureCandidate(right, rightCandidate.binding);
+    await commitStoredClosureCandidate(left, leftCandidate.binding, "0.19.0-beta.1");
+    await commitStoredClosureCandidate(right, rightCandidate.binding, "0.19.0-beta.2");
 
-    expect((await readClosureRuntimeDescriptor(left)).active?.version).toBe("0.18.0-beta.1");
-    expect((await readClosureRuntimeDescriptor(right)).active?.version).toBe("0.18.0-beta.2");
-    expect(await readFile(left.runtimePath, "utf8")).not.toContain("team-b");
-  });
-
-  it("does not reuse a failed generation after rollback", async () => {
-    const paths = await createStore();
-    const first = await materializeCandidate(paths, "0.18.0-beta.1");
-    const firstActivation = await activateStoredClosureCandidate(paths, first.binding);
-    await armClosureRuntimeAttempt(paths, firstActivation.pointer);
-    await confirmClosureRuntime(paths, firstActivation.pointer);
-
-    const second = await materializeCandidate(paths, "0.18.0-beta.2");
-    const secondActivation = await activateStoredClosureCandidate(paths, second.binding);
-    await armClosureRuntimeAttempt(paths, secondActivation.pointer);
-    await recoverClosureRuntime(paths);
-
-    const third = await materializeCandidate(paths, "0.18.0-beta.3");
-    const thirdActivation = await activateStoredClosureCandidate(paths, third.binding);
-    expect(firstActivation.pointer.generation).toBe(0);
-    expect(secondActivation.pointer.generation).toBe(1);
-    expect(thirdActivation.pointer.generation).toBe(2);
+    expect((await readClosureBindingDescriptor(left)).committed?.standalone.version).toBe("0.18.0-beta.1");
+    expect((await readClosureBindingDescriptor(right)).committed?.standalone.version).toBe("0.18.0-beta.2");
+    expect(await readFile(left.bindingPath, "utf8")).not.toContain("team-b");
   });
 });

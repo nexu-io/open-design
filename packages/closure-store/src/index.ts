@@ -14,10 +14,10 @@ import {
   type ClosureFileInventory,
 } from "@open-design/closure-proto";
 import { isReleaseChannel, type ReleaseChannel } from "@open-design/release";
-import { removeFile, writeJsonFile } from "@open-design/sidecar";
+import { writeJsonFile } from "@open-design/sidecar";
 import { normalizeNamespace } from "@open-design/sidecar-proto";
 
-export const CLOSURE_STORE_SCHEMA_VERSION = 1 as const;
+export const CLOSURE_BINDING_SCHEMA_VERSION = 1 as const;
 
 export type ClosureStoreRequest = {
   channel: string;
@@ -26,14 +26,13 @@ export type ClosureStoreRequest = {
 };
 
 export type ClosureStorePaths = {
-  attemptsPath: string;
+  bindingPath: string;
   channel: ReleaseChannel;
   channelRoot: string;
   closureRoot: string;
   namespace: string;
   namespaceRoot: string;
   root: string;
-  runtimePath: string;
   stagingRoot: string;
   stateRoot: string;
   versionsRoot: string;
@@ -53,29 +52,18 @@ export type ClosureRuntimePointer = ClosureBindingIdentity & {
   generation: number;
 };
 
-export type ClosureRuntimeDescriptor = {
-  active: ClosureRuntimePointer | null;
+export type CommittedClosureBinding = {
+  releaseVersion: string;
+  standalone: ClosureRuntimePointer;
+};
+
+export type ClosureBindingDescriptor = {
   channel: ReleaseChannel;
-  lastSuccessful: ClosureRuntimePointer | null;
+  committed: CommittedClosureBinding | null;
   namespace: string;
   nextGeneration: number;
-  schemaVersion: typeof CLOSURE_STORE_SCHEMA_VERSION;
+  schemaVersion: typeof CLOSURE_BINDING_SCHEMA_VERSION;
   updatedAt: string;
-};
-
-export type ClosureAttemptDescriptor = ClosureRuntimePointer & {
-  schemaVersion: typeof CLOSURE_STORE_SCHEMA_VERSION;
-  startedAt: string;
-};
-
-export type ClosureRuntimeSelection =
-  | { pointer: ClosureRuntimePointer; reason: "active" | "last-successful"; selected: true }
-  | { reason: "no-runtime-target"; selected: false };
-
-export type ClosureRecoveryResult = {
-  descriptor: ClosureRuntimeDescriptor;
-  recovered: boolean;
-  selection: ClosureRuntimeSelection;
 };
 
 export type StoredClosureVerification = {
@@ -130,14 +118,13 @@ export function resolveClosureStorePaths(request: ClosureStoreRequest): ClosureS
   const namespaceRoot = assertUnderRoot(root, join(channelRoot, "namespaces", namespace));
   const stateRoot = assertUnderRoot(root, join(namespaceRoot, "state"));
   return {
-    attemptsPath: assertUnderRoot(root, join(stateRoot, "attempt.json")),
+    bindingPath: assertUnderRoot(root, join(stateRoot, "binding.json")),
     channel,
     channelRoot,
     closureRoot,
     namespace,
     namespaceRoot,
     root,
-    runtimePath: assertUnderRoot(root, join(stateRoot, "runtime.json")),
     stagingRoot: assertUnderRoot(root, join(namespaceRoot, "staging")),
     stateRoot,
     versionsRoot: assertUnderRoot(root, join(namespaceRoot, "versions")),
@@ -151,10 +138,6 @@ function sameBinding(left: ClosureBindingIdentity, right: ClosureBindingIdentity
     && left.protocolVersion === right.protocolVersion
     && left.version === right.version
     && left.digest === right.digest;
-}
-
-function samePointer(left: ClosureRuntimePointer, right: ClosureRuntimePointer): boolean {
-  return left.generation === right.generation && sameBinding(left, right);
 }
 
 function normalizeGeneration(value: unknown): number {
@@ -183,6 +166,13 @@ function normalizeIsoString(value: unknown, label: string): string {
   return value;
 }
 
+function normalizeReleaseVersion(value: unknown): string {
+  if (typeof value !== "string" || value.length === 0 || value !== value.trim()) {
+    throw new ClosureStoreError("Closure release version must be a non-empty trimmed string");
+  }
+  return value;
+}
+
 function normalizePointer(
   value: unknown,
   expected: Pick<ClosureStorePaths, "channel" | "namespace">,
@@ -203,82 +193,53 @@ function normalizePointer(
   };
 }
 
-export function validateClosureRuntimeDescriptor(
+function normalizeCommittedBinding(
   value: unknown,
   expected: Pick<ClosureStorePaths, "channel" | "namespace">,
-): ClosureRuntimeDescriptor {
-  const runtime = requireRecord(value, "Closure runtime descriptor");
-  assertExactKeys(runtime, [
-    "active",
+): CommittedClosureBinding {
+  const committed = requireRecord(value, "Committed Closure binding");
+  assertExactKeys(committed, ["releaseVersion", "standalone"], "Committed Closure binding");
+  return {
+    releaseVersion: normalizeReleaseVersion(committed.releaseVersion),
+    standalone: normalizePointer(committed.standalone, expected),
+  };
+}
+
+export function validateClosureBindingDescriptor(
+  value: unknown,
+  expected: Pick<ClosureStorePaths, "channel" | "namespace">,
+): ClosureBindingDescriptor {
+  const descriptor = requireRecord(value, "Closure binding descriptor");
+  assertExactKeys(descriptor, [
     "channel",
-    "lastSuccessful",
+    "committed",
     "namespace",
     "nextGeneration",
     "schemaVersion",
     "updatedAt",
-  ], "Closure runtime descriptor");
-  if (runtime.schemaVersion !== CLOSURE_STORE_SCHEMA_VERSION) {
-    throw new ClosureStoreError(`unsupported Closure store schema: ${String(runtime.schemaVersion)}`);
+  ], "Closure binding descriptor");
+  if (descriptor.schemaVersion !== CLOSURE_BINDING_SCHEMA_VERSION) {
+    throw new ClosureStoreError(`unsupported Closure binding schema: ${String(descriptor.schemaVersion)}`);
   }
-  const channel = normalizeChannel(String(runtime.channel));
-  const namespace = normalizeStoreNamespace(String(runtime.namespace));
+  const channel = normalizeChannel(String(descriptor.channel));
+  const namespace = normalizeStoreNamespace(String(descriptor.namespace));
   if (channel !== expected.channel || namespace !== expected.namespace) {
-    throw new ClosureStoreError("Closure runtime descriptor does not match its channel/namespace store");
+    throw new ClosureStoreError("Closure binding descriptor does not match its channel/namespace store");
   }
-  const active = runtime.active == null ? null : normalizePointer(runtime.active, expected);
-  const lastSuccessful = runtime.lastSuccessful == null
+  const committed = descriptor.committed == null
     ? null
-    : normalizePointer(runtime.lastSuccessful, expected);
-  const nextGeneration = normalizeGeneration(runtime.nextGeneration);
-  if (
-    (active != null && active.generation >= nextGeneration)
-    || (lastSuccessful != null && lastSuccessful.generation >= nextGeneration)
-  ) {
-    throw new ClosureStoreError("Closure nextGeneration must be greater than every retained pointer generation");
+    : normalizeCommittedBinding(descriptor.committed, expected);
+  const nextGeneration = normalizeGeneration(descriptor.nextGeneration);
+  if (committed != null && committed.standalone.generation >= nextGeneration) {
+    throw new ClosureStoreError("Closure nextGeneration must be greater than the committed generation");
   }
   return {
-    active,
     channel,
-    lastSuccessful,
+    committed,
     namespace,
     nextGeneration,
-    schemaVersion: CLOSURE_STORE_SCHEMA_VERSION,
-    updatedAt: normalizeIsoString(runtime.updatedAt, "Closure runtime updatedAt"),
-  };
-}
-
-export function validateClosureAttemptDescriptor(
-  value: unknown,
-  expected: Pick<ClosureStorePaths, "channel" | "namespace">,
-): ClosureAttemptDescriptor {
-  const attempt = requireRecord(value, "Closure attempt descriptor");
-  assertExactKeys(attempt, [
-    "channel",
-    "digest",
-    "generation",
-    "namespace",
-    "platform",
-    "protocolVersion",
-    "schemaVersion",
-    "startedAt",
-    "version",
-  ], "Closure attempt descriptor");
-  if (attempt.schemaVersion !== CLOSURE_STORE_SCHEMA_VERSION) {
-    throw new ClosureStoreError(`unsupported Closure attempt schema: ${String(attempt.schemaVersion)}`);
-  }
-  const pointer = {
-    channel: attempt.channel,
-    digest: attempt.digest,
-    generation: attempt.generation,
-    namespace: attempt.namespace,
-    platform: attempt.platform,
-    protocolVersion: attempt.protocolVersion,
-    version: attempt.version,
-  };
-  return {
-    ...normalizePointer(pointer, expected),
-    schemaVersion: CLOSURE_STORE_SCHEMA_VERSION,
-    startedAt: normalizeIsoString(attempt.startedAt, "Closure attempt startedAt"),
+    schemaVersion: CLOSURE_BINDING_SCHEMA_VERSION,
+    updatedAt: normalizeIsoString(descriptor.updatedAt, "Closure binding updatedAt"),
   };
 }
 
@@ -432,127 +393,47 @@ export async function verifyMaterializedClosureCandidate(
   };
 }
 
-function emptyRuntime(paths: ClosureStorePaths, now: string): ClosureRuntimeDescriptor {
+function emptyBinding(paths: ClosureStorePaths, now: string): ClosureBindingDescriptor {
   return {
-    active: null,
     channel: paths.channel,
-    lastSuccessful: null,
+    committed: null,
     namespace: paths.namespace,
     nextGeneration: 0,
-    schemaVersion: CLOSURE_STORE_SCHEMA_VERSION,
+    schemaVersion: CLOSURE_BINDING_SCHEMA_VERSION,
     updatedAt: now,
   };
 }
 
-export async function readClosureRuntimeDescriptor(paths: ClosureStorePaths): Promise<ClosureRuntimeDescriptor> {
-  const raw = await readOptionalJson(paths.runtimePath, "Closure runtime descriptor");
+export async function readClosureBindingDescriptor(paths: ClosureStorePaths): Promise<ClosureBindingDescriptor> {
+  const raw = await readOptionalJson(paths.bindingPath, "Closure binding descriptor");
   return raw == null
-    ? emptyRuntime(paths, new Date(0).toISOString())
-    : validateClosureRuntimeDescriptor(raw, paths);
+    ? emptyBinding(paths, new Date(0).toISOString())
+    : validateClosureBindingDescriptor(raw, paths);
 }
 
-export async function readClosureAttemptDescriptor(paths: ClosureStorePaths): Promise<ClosureAttemptDescriptor | null> {
-  const raw = await readOptionalJson(paths.attemptsPath, "Closure attempt descriptor");
-  return raw == null ? null : validateClosureAttemptDescriptor(raw, paths);
-}
-
-function selectRuntime(runtime: ClosureRuntimeDescriptor): ClosureRuntimeSelection {
-  return runtime.active == null
-    ? { reason: "no-runtime-target", selected: false }
-    : { pointer: runtime.active, reason: "active", selected: true };
-}
-
-export async function activateStoredClosureCandidate(
+export async function commitStoredClosureCandidate(
   paths: ClosureStorePaths,
   binding: ClosureBindingIdentity,
-): Promise<{ descriptor: ClosureRuntimeDescriptor; pointer: ClosureRuntimePointer; verification: StoredClosureVerification }> {
-  const attempt = await readClosureAttemptDescriptor(paths);
-  if (attempt != null) {
-    throw new ClosureStoreError("cannot activate a Closure candidate while a runtime attempt is unresolved");
-  }
+  releaseVersion: string,
+): Promise<{
+  committed: CommittedClosureBinding;
+  descriptor: ClosureBindingDescriptor;
+  verification: StoredClosureVerification;
+}> {
   const verification = await verifyStoredClosureCandidate(paths, binding);
-  const current = await readClosureRuntimeDescriptor(paths);
+  const current = await readClosureBindingDescriptor(paths);
   const generation = current.nextGeneration;
   const pointer: ClosureRuntimePointer = { ...verification.binding, generation };
-  const descriptor: ClosureRuntimeDescriptor = {
+  const committed: CommittedClosureBinding = {
+    releaseVersion: normalizeReleaseVersion(releaseVersion),
+    standalone: pointer,
+  };
+  const descriptor: ClosureBindingDescriptor = {
     ...current,
-    active: pointer,
+    committed,
     nextGeneration: generation + 1,
     updatedAt: new Date().toISOString(),
   };
-  await writeJsonFile(paths.runtimePath, descriptor);
-  return { descriptor, pointer, verification };
-}
-
-export async function armClosureRuntimeAttempt(
-  paths: ClosureStorePaths,
-  pointer: ClosureRuntimePointer,
-): Promise<ClosureAttemptDescriptor> {
-  const runtime = await readClosureRuntimeDescriptor(paths);
-  const normalized = normalizePointer(pointer, paths);
-  if (runtime.active == null || !samePointer(runtime.active, normalized)) {
-    throw new ClosureStoreError("cannot arm a Closure attempt for a non-active pointer");
-  }
-  const attempt: ClosureAttemptDescriptor = {
-    ...normalized,
-    schemaVersion: CLOSURE_STORE_SCHEMA_VERSION,
-    startedAt: new Date().toISOString(),
-  };
-  await writeJsonFile(paths.attemptsPath, attempt);
-  return attempt;
-}
-
-export async function confirmClosureRuntime(
-  paths: ClosureStorePaths,
-  pointer: ClosureRuntimePointer,
-): Promise<ClosureRuntimeDescriptor> {
-  const runtime = await readClosureRuntimeDescriptor(paths);
-  const attempt = await readClosureAttemptDescriptor(paths);
-  const normalized = normalizePointer(pointer, paths);
-  if (runtime.active == null || !samePointer(runtime.active, normalized)) {
-    throw new ClosureStoreError("cannot confirm a non-active Closure pointer");
-  }
-  if (attempt == null || !samePointer(attempt, normalized)) {
-    throw new ClosureStoreError("cannot confirm a Closure pointer without its armed attempt");
-  }
-  const descriptor: ClosureRuntimeDescriptor = {
-    ...runtime,
-    lastSuccessful: normalized,
-    updatedAt: new Date().toISOString(),
-  };
-  await writeJsonFile(paths.runtimePath, descriptor);
-  await removeFile(paths.attemptsPath);
-  return descriptor;
-}
-
-export async function recoverClosureRuntime(paths: ClosureStorePaths): Promise<ClosureRecoveryResult> {
-  const runtime = await readClosureRuntimeDescriptor(paths);
-  const attempt = await readClosureAttemptDescriptor(paths);
-  if (attempt == null) return { descriptor: runtime, recovered: false, selection: selectRuntime(runtime) };
-  if (runtime.active == null || !samePointer(runtime.active, attempt)) {
-    await removeFile(paths.attemptsPath);
-    return { descriptor: runtime, recovered: true, selection: selectRuntime(runtime) };
-  }
-  if (runtime.lastSuccessful != null && samePointer(runtime.active, runtime.lastSuccessful)) {
-    await removeFile(paths.attemptsPath);
-    return {
-      descriptor: runtime,
-      recovered: true,
-      selection: { pointer: runtime.lastSuccessful, reason: "last-successful", selected: true },
-    };
-  }
-  const descriptor: ClosureRuntimeDescriptor = {
-    ...runtime,
-    active: runtime.lastSuccessful,
-    updatedAt: new Date().toISOString(),
-  };
-  await writeJsonFile(paths.runtimePath, descriptor);
-  await removeFile(paths.attemptsPath);
-  return {
-    descriptor,
-    recovered: true,
-    selection: descriptor.active == null
-      ? { reason: "no-runtime-target", selected: false }
-      : { pointer: descriptor.active, reason: "last-successful", selected: true },
-  };
+  await writeJsonFile(paths.bindingPath, descriptor);
+  return { committed, descriptor, verification };
 }

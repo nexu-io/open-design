@@ -23,9 +23,8 @@ import { readProcessStamp } from "@open-design/platform";
 
 import { readPackagedConfig } from "./config.js";
 import {
-  checkForPackagedClosureUpdate,
+  ensurePackagedClosureAvailable,
   resolvePackagedClosureInstallerRequiredVersion,
-  resolvePackagedClosureReleaseVersion,
 } from "./closure-update.js";
 import {
   claimPackagedDownloadAttribution,
@@ -70,7 +69,6 @@ import { findPackagedDeeplinkArg, launchPackagedPayloadDesktop } from "./payload
 import { packagedEntryUrl, registerOdProtocol } from "./protocol.js";
 import { reportStartupFailure, resolveStartupDistinctId } from "./startup-telemetry.js";
 import {
-  confirmElectronStandaloneBinding,
   digestElectronShellEntry,
   resolveElectronStandaloneBinding,
 } from "./standalone-binding.js";
@@ -160,7 +158,7 @@ async function main(): Promise<void> {
 
   const existingDesktop = await inspectExistingDesktopForLauncher(namespace, {
     deeplinkUrl: findPackagedDeeplinkArg(process.argv),
-    incomingVersion: namespaceConfig.appVersion,
+    incomingVersion: namespaceConfig.shellVersion,
     logger: console,
     paths: initialPaths,
   });
@@ -178,7 +176,7 @@ async function main(): Promise<void> {
 
   const shellConfig = shellRuntime.config;
   const paths = shellRuntime.paths;
-  const shellVersion = shellConfig.appVersion;
+  const shellVersion = shellConfig.shellVersion;
   if (shellVersion == null) throw new Error("Electron Shell version is unavailable");
   const mcpBootstrap = resolvePackagedMcpBootstrapLaunch({
     installedLaunchPath: shellRuntime.installedLaunchPath,
@@ -225,29 +223,28 @@ async function main(): Promise<void> {
 
   const metadataUrl = process.env.OD_UPDATE_METADATA_URL?.trim()
     || shellConfig.updateMetadataUrl;
-  const update = await checkForPackagedClosureUpdate({
+  const availability = await ensurePackagedClosureAvailable({
     channel: shellRuntime.launcherPaths.channel,
     installationRoot: shellRuntime.launcherPaths.root,
     metadataUrl,
     namespace,
     shellVersion,
   }).catch((error: unknown) => {
-    packagedLogger?.warn("Standalone cold-update discovery failed; checking committed Store", { error });
+    packagedLogger?.warn("Initial Standalone Closure materialization failed", { error });
     return null;
   });
-  if (update != null) {
-    packagedLogger?.info("Standalone cold-update check completed", {
-      reason: update.reason,
-      state: update.state,
+  if (availability != null) {
+    packagedLogger?.info("Standalone availability check completed", {
+      reason: availability.reason,
+      state: availability.state,
     });
   }
 
   const selection = await resolveElectronStandaloneBinding({
     channel: shellRuntime.launcherPaths.channel,
-    installerRequiredVersion: resolvePackagedClosureInstallerRequiredVersion(update),
+    installerRequiredVersion: resolvePackagedClosureInstallerRequiredVersion(availability),
     namespace,
     paths,
-    releaseVersion: resolvePackagedClosureReleaseVersion(update, null),
     shellDigest: await digestElectronShellEntry(import.meta.url),
     shellVersion,
   });
@@ -289,7 +286,7 @@ async function main(): Promise<void> {
     packagedLogger?.error("Standalone terminal lifecycle observation failed", { error });
     app.quit();
   });
-  startupTelemetryContext.appVersion = selection.pointer.version;
+  startupTelemetryContext.appVersion = selection.binding.descriptor.release.version;
   const identity = await writePackagedDesktopIdentity({
     paths,
     runtimeIdentity: createElectronStandaloneRuntimeIdentity(status.handoff, status),
@@ -337,9 +334,6 @@ async function main(): Promise<void> {
     onDesktopReady(controls) {
       void confirmPackagedLauncherRuntime(shellRuntime).catch((error: unknown) => {
         packagedLogger?.warn("failed to confirm Electron Shell runtime", { error });
-      });
-      void confirmElectronStandaloneBinding(selection).catch((error: unknown) => {
-        packagedLogger?.warn("failed to confirm Standalone runtime", { error });
       });
       void syncWindowsUninstallDisplayVersion({
         namespace,

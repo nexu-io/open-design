@@ -55,7 +55,7 @@ describe("launcher runtime snapshot", () => {
       })}\n`);
 
       const snapshot = await readToolPackLauncherRuntimeSnapshot({
-        appVersion: "1.2.3-beta.5",
+        releaseVersion: "1.2.3-beta.5",
         namespace,
         roots: {
           runtime: {

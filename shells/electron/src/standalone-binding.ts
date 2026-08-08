@@ -5,9 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import { compareStandaloneVersions, STANDALONE_PROTOCOL_VERSION } from "@open-design/standalone-proto";
 import {
-  armClosureRuntimeAttempt,
-  confirmClosureRuntime,
-  recoverClosureRuntime,
+  readClosureBindingDescriptor,
   resolveClosureStorePaths,
   verifyStoredClosureCandidate,
   type ClosureRuntimePointer,
@@ -50,14 +48,6 @@ function hostStandalonePlatform(
   return null;
 }
 
-async function rollBackRejectedPointer(
-  storePaths: ClosureStorePaths,
-  pointer: ClosureRuntimePointer,
-): Promise<void> {
-  await armClosureRuntimeAttempt(storePaths, pointer);
-  await recoverClosureRuntime(storePaths);
-}
-
 /**
  * Resolve one already-committed Standalone generation into the protocol-only
  * Electron handoff. This adapter verifies Store truth and paths, but never
@@ -68,13 +58,11 @@ export async function resolveElectronStandaloneBinding(input: Readonly<{
   installerRequiredVersion: string | null;
   namespace: string;
   paths: PackagedNamespacePaths;
-  releaseVersion: string | null;
   shellDigest: `sha256:${string}`;
   shellVersion: string;
 }>, options: Readonly<{
   arch?: string;
   platform?: NodeJS.Platform;
-  retryAfterRollback?: boolean;
 }> = {}): Promise<ElectronStandaloneSelection> {
   const platform = hostStandalonePlatform(options.platform, options.arch);
   if (platform == null) {
@@ -88,8 +76,8 @@ export async function resolveElectronStandaloneBinding(input: Readonly<{
     namespace: input.namespace,
     root: input.paths.installationRoot,
   });
-  const recovered = await recoverClosureRuntime(storePaths);
-  if (!recovered.selection.selected) {
+  const descriptor = await readClosureBindingDescriptor(storePaths);
+  if (descriptor.committed == null) {
     if (
       input.installerRequiredVersion != null
       && compareStandaloneVersions(input.shellVersion, input.installerRequiredVersion) < 0
@@ -104,7 +92,7 @@ export async function resolveElectronStandaloneBinding(input: Readonly<{
       `No committed Standalone exists for ${storePaths.channel}/${storePaths.namespace}`,
     );
   }
-  const pointer = recovered.selection.pointer;
+  const { releaseVersion, standalone: pointer } = descriptor.committed;
   if (pointer.platform !== platform) {
     throw new ElectronStandaloneBindingError(
       "standalone-invalid",
@@ -116,13 +104,6 @@ export async function resolveElectronStandaloneBinding(input: Readonly<{
   try {
     verification = await verifyStoredClosureCandidate(storePaths, pointer);
   } catch (error) {
-    if (options.retryAfterRollback !== false) {
-      await rollBackRejectedPointer(storePaths, pointer);
-      return await resolveElectronStandaloneBinding(input, {
-        ...options,
-        retryAfterRollback: false,
-      });
-    }
     throw new ElectronStandaloneBindingError(
       "standalone-invalid",
       "Committed Standalone failed immutable Store verification",
@@ -137,7 +118,6 @@ export async function resolveElectronStandaloneBinding(input: Readonly<{
     );
   }
 
-  await armClosureRuntimeAttempt(storePaths, pointer);
   return Object.freeze({
     binding: Object.freeze({
       bootloaderPath: join(
@@ -145,7 +125,7 @@ export async function resolveElectronStandaloneBinding(input: Readonly<{
         verification.manifest.artifact.entryPath,
       ),
       descriptor: Object.freeze({
-        release: Object.freeze({ version: input.releaseVersion ?? pointer.version }),
+        release: Object.freeze({ version: releaseVersion }),
         shell: Object.freeze({
           digest: input.shellDigest,
           type: "electron",
@@ -175,12 +155,6 @@ export async function resolveElectronStandaloneBinding(input: Readonly<{
     storePaths,
     verification,
   });
-}
-
-export async function confirmElectronStandaloneBinding(
-  selection: ElectronStandaloneSelection,
-): Promise<void> {
-  await confirmClosureRuntime(selection.storePaths, selection.pointer);
 }
 
 /** Digest the actual bundled Electron entry, not mutable presentation metadata. */

@@ -305,17 +305,15 @@ type DesktopIdentityMarker = {
   executablePath: string;
   pid: number;
   runtime?: {
-    closure?: {
-      digest?: string;
-      generation?: number;
-      reason?: string;
-      source?: string;
-      version?: string | null;
+    descriptor?: {
+      release?: { version?: string };
+      shell?: { digest?: string; type?: string; version?: string };
+      standalone?: { digest?: string; protocolVersion?: number; version?: string };
     };
-    shell?: {
-      source?: string;
-      version?: string | null;
-    };
+    descriptorDigest?: string;
+    generation?: number;
+    scope?: { channel?: string; generation?: number; namespace?: string };
+    standalonePid?: number;
   };
   version: number;
 };
@@ -1029,7 +1027,7 @@ macDescribe('packaged mac runtime smoke', () => {
 });
 
 macClosureDescribe('packaged mac Standalone Closure release acceptance', () => {
-  test('[P0] attaches a release Closure across cold start and reinstall, then rolls a damaged successor back', async () => {
+  test('[P0] attaches a release Closure across cold start and reinstall, then fails a damaged successor closed', async () => {
     const installationRoot = join(toolsPackDir, 'runtime', 'mac');
     let installed = false;
     let started = false;
@@ -1071,21 +1069,28 @@ macClosureDescribe('packaged mac Standalone Closure release acceptance', () => {
       const faultStop = await runToolsPackJson<MacStopResult>('stop');
       started = false;
       expect(faultStop.remainingPids).toEqual([]);
-      await activateBrokenClosureSuccessor(fixture);
-      await runToolsPackJson<MacStartResult>('start');
-      started = true;
-      await waitForHealthyDesktop();
-      assertLegacyDesktopIdentity(await readDesktopIdentityMarker(), 'candidate-invalid');
-      expect((await readPackagedClosureFixtureRuntime(fixture)).active).toEqual(fixture.pointer);
+      const broken = await activateBrokenClosureSuccessor(fixture);
+      await expect(runToolsPackJson<MacStartResult>('start')).rejects.toThrow(/Standalone|standalone/u);
+      expect((await readPackagedClosureFixtureRuntime(fixture)).committed?.standalone).toEqual(broken.pointer);
 
-      const recoveryStop = await runToolsPackJson<MacStopResult>('stop');
-      started = false;
-      expect(recoveryStop.remainingPids).toEqual([]);
+      await resetPackagedClosureFixture({
+        channel: updateScenario.channel,
+        installationRoot,
+        namespace,
+      });
+      const recovered = await seedPackagedClosureFixture({
+        buildJsonPath: closureBuildJsonPath!,
+        channel: updateScenario.channel,
+        expectedPlatform: 'darwin-arm64',
+        installationRoot,
+        namespace,
+        workspaceRoot,
+      });
       await runToolsPackJson<MacStartResult>('start');
       started = true;
       await waitForHealthyDesktop();
-      assertClosureDesktopIdentity(await readDesktopIdentityMarker(), fixture.manifest.identity.version);
-      expect((await readPackagedClosureFixtureRuntime(fixture)).lastSuccessful).toEqual(fixture.pointer);
+      assertClosureDesktopIdentity(await readDesktopIdentityMarker(), recovered.manifest.identity.version);
+      expect((await readPackagedClosureFixtureRuntime(recovered)).committed?.standalone).toEqual(recovered.pointer);
     } finally {
       if (started) await runToolsPackJson<MacStopResult>('stop').catch(() => undefined);
       if (installed) await runToolsPackJson<MacUninstallResult>('uninstall').catch(() => undefined);
@@ -2376,8 +2381,8 @@ async function buildVersionBumpedMacPayloadFixture(
     }
     // <bundle>.app/Contents/MacOS/<binary> → <bundle>.app/Contents/Resources
     const configPath = join(extractRoot, dirname(dirname(executableRelPath)), 'Resources', 'open-design-config.json');
-    const config = JSON.parse(await readFile(configPath, 'utf8')) as { appVersion?: string };
-    config.appVersion = bumpedVersion;
+    const config = JSON.parse(await readFile(configPath, 'utf8')) as { shellVersion?: string };
+    config.shellVersion = bumpedVersion;
     await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
   });
 }
@@ -2489,23 +2494,20 @@ async function readDesktopIdentityMarker(): Promise<DesktopIdentityMarker> {
 }
 
 function assertClosureDesktopIdentity(identity: DesktopIdentityMarker, version: string): void {
-  if (identity.runtime?.closure?.source !== 'closure') {
+  if (identity.runtime?.descriptor?.standalone?.version !== version) {
     throw new Error(`packaged mac did not attach the seeded Closure: ${formatUnknown(identity.runtime)}`);
   }
-  expect(identity.runtime?.closure).toMatchObject({
-    source: 'closure',
-    version,
+  expect(identity.runtime.descriptor).toMatchObject({
+    release: { version },
+    shell: { type: 'electron' },
+    standalone: { protocolVersion: 1, version },
   });
-  expect(identity.runtime?.closure?.digest).toMatch(/^sha256:[a-f0-9]{64}$/);
-  expect(identity.runtime?.closure?.generation).toBeGreaterThanOrEqual(0);
-  expect(identity.runtime?.shell?.source).toMatch(/^(current-package|payload)$/);
-}
-
-function assertLegacyDesktopIdentity(identity: DesktopIdentityMarker, reason: string): void {
-  expect(identity.runtime?.closure).toMatchObject({
-    reason,
-    source: 'legacy-combined',
-  });
+  expect(identity.runtime.descriptor.shell?.digest).toMatch(/^sha256:[a-f0-9]{64}$/);
+  expect(identity.runtime.descriptor.standalone?.digest).toMatch(/^sha256:[a-f0-9]{64}$/);
+  expect(identity.runtime.descriptorDigest).toMatch(/^sha256:[a-f0-9]{64}$/);
+  expect(identity.runtime.generation).toBeGreaterThanOrEqual(0);
+  expect(identity.runtime.scope?.generation).toBe(identity.runtime.generation);
+  expect(identity.runtime.standalonePid).toBeGreaterThan(0);
 }
 
 function assertPayloadDesktopIdentity(

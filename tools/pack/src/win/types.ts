@@ -9,6 +9,7 @@ import type {
 import type { ToolPackLauncherRuntimeSnapshot } from "../launcher-runtime-snapshot.js";
 import type { ToolPackUpdateCacheLifecycleSnapshot } from "../update-cache-lifecycle-snapshot.js";
 import type { CacheReport } from "../cache.js";
+import type { ToolPackArtifactDescriptor } from "../artifacts.js";
 import type { ToolPackConfig } from "../config.js";
 import type { INTERNAL_PACKAGES } from "./constants.js";
 
@@ -104,6 +105,11 @@ export type WinPaths = {
 };
 
 export type WinPackResult = {
+  artifacts: {
+    installer: ToolPackArtifactDescriptor | null;
+    payload: ToolPackArtifactDescriptor | null;
+    portableZip: ToolPackArtifactDescriptor | null;
+  };
   blockmapPath: string | null;
   installerPath: string | null;
   latestYmlPath: string | null;
@@ -111,10 +117,16 @@ export type WinPackResult = {
   payloadPath: string | null;
   portableZipPath: string | null;
   resourceRoot: string;
+  releaseVersion: string | null;
   runtimeNamespaceRoot: string;
   cacheReport: CacheReport;
   segments: WinPackTiming[];
   sizeReport: WinSizeReport;
+  shell: {
+    sourceDigest: `sha256:${string}`;
+    type: ToolPackConfig["shell"];
+    version: string;
+  };
   timings: WinPackTiming[];
   to: ToolPackConfig["to"];
   unpackedPath: string | null;

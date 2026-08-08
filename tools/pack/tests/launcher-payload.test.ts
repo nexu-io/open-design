@@ -25,9 +25,9 @@ import type { WinBuiltAppManifest, WinPaths } from "../src/win/types.js";
 
 const execFileAsync = promisify(execFile);
 
-function makeConfig(root: string, platform: ToolPackPlatform, namespace: string, appVersion: string): ToolPackConfig {
+function makeConfig(root: string, platform: ToolPackPlatform, namespace: string, releaseVersion: string): ToolPackConfig {
   return {
-    appVersion,
+    releaseVersion,
     electronBuilderCliPath: "/x/electron-builder/cli.js",
     electronDistPath: "/x/electron/dist",
     electronVersion: "41.3.0",
@@ -85,7 +85,7 @@ async function writeFakeMacApp(config: ToolPackConfig): Promise<ReturnType<typeo
   await writeFile(
     join(resourcesRoot, "open-design-config.json"),
     `${JSON.stringify({
-      appVersion: config.appVersion,
+      shellVersion: config.releaseVersion,
       daemonSidecarEntryRelative: "open-design/prebundled/daemon/daemon-sidecar.mjs",
       namespace: config.namespace,
       nodeCommandRelative: "open-design/bin/node",
@@ -159,7 +159,7 @@ async function writeFakeWinUnpackedApp(root: string, namespace: string, version:
   await writeFile(
     join(paths.unpackedRoot, "resources", "open-design-config.json"),
     `${JSON.stringify({
-      appVersion: version,
+      shellVersion: version,
       daemonSidecarEntryRelative: "open-design/prebundled/daemon/daemon-sidecar.mjs",
       namespace,
       nodeCommandRelative: "open-design/bin/node",
@@ -178,7 +178,7 @@ async function writeFakeWinUnpackedApp(root: string, namespace: string, version:
   await writeFile(
     paths.packagedConfigPath,
     `${JSON.stringify({
-      appVersion: version,
+      shellVersion: version,
       daemonSidecarEntryRelative: "open-design/prebundled/daemon/daemon-sidecar.mjs",
       namespace,
       nodeCommandRelative: "open-design/bin/node",
@@ -204,7 +204,7 @@ async function writeFakeWinUnpackedApp(root: string, namespace: string, version:
 
 describe("tools-pack launcher payload archives", () => {
   it("builds channel and namespace scoped payload manifests for both desktop platforms", () => {
-    const macIdentity = resolveMacInstallIdentity({ appVersion: "0.9.0-beta.2", namespace: "release-beta" });
+    const macIdentity = resolveMacInstallIdentity({ releaseVersion: "0.9.0-beta.2", namespace: "release-beta" });
 
     expect(buildMacLauncherPayloadManifest({
       channel: "beta",
@@ -351,7 +351,7 @@ describe("tools-pack launcher payload archives", () => {
         await writeFile(
           paths.packagedConfigPath,
           `${JSON.stringify({
-            appVersion: version,
+            shellVersion: version,
             daemonSidecarEntryRelative: "open-design/prebundled/daemon/daemon-sidecar.mjs",
             namespace,
             nodeCommandRelative: "open-design/bin/node",
@@ -378,12 +378,12 @@ describe("tools-pack launcher payload archives", () => {
       const manifest = JSON.parse(await readFile(join(extractRoot, "manifest.json"), "utf8")) as { version: string };
       const config = JSON.parse(
         await readFile(join(extractRoot, "payload", "resources", "open-design-config.json"), "utf8"),
-      ) as { appVersion: string };
+      ) as { shellVersion: string };
       const packageJson = JSON.parse(
         await readFile(join(extractRoot, "payload", "resources", "app", "package.json"), "utf8"),
       ) as { version: string };
       expect(manifest.version).toBe("0.9.0-beta.2");
-      expect(config.appVersion).toBe("0.9.0-beta.2");
+      expect(config.shellVersion).toBe("0.9.0-beta.2");
       expect(packageJson.version).toBe("0.9.0-beta.2");
     } finally {
       await rm(root, { force: true, recursive: true });
@@ -419,9 +419,9 @@ describe("tools-pack launcher payload archives", () => {
       const manifest = JSON.parse(await readFile(join(extractRoot, "manifest.json"), "utf8")) as { version: string };
       const configJson = JSON.parse(
         await readFile(join(extractRoot, "payload", "resources", "open-design-config.json"), "utf8"),
-      ) as { appVersion: string };
+      ) as { shellVersion: string };
       expect(manifest.version).toBe(version);
-      expect(configJson.appVersion).toBe(version);
+      expect(configJson.shellVersion).toBe(version);
       await expectPathExists(join(extractRoot, "payload", "Open Design.exe"));
       await expectPathExists(join(extractRoot, "payload", "resources"));
     } finally {

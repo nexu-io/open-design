@@ -73,7 +73,8 @@ const TO_HELP_BY_PLATFORM: Record<ToolPackPlatform, string> = {
 
 function addBuildOptions(command: CacCommand, platform: ToolPackPlatform) {
   return command
-    .option("--app-version <version>", "override packaged app version for release artifacts")
+    .option("--release-version <version>", "product release bound to this build; never baked into reusable Shell bytes")
+    .option("--shell-version <version>", "Shell compatibility version; defaults to release-version for a new Shell")
     .option("--portable", "do not bake local tools-pack runtime roots into the packaged config")
     .option("--require-vela-cli", "fail packaging when the bundled Vela CLI cannot be resolved")
     .option("--signed", "build a signed mac artifact")

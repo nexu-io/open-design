@@ -225,7 +225,7 @@ describe("startPackedMacApp", () => {
       await writeFile(
         bundledConfigPath,
         `${JSON.stringify({
-          appVersion: "1.2.3",
+          shellVersion: "1.2.3",
           daemonCliEntryRelative: "open-design/bin/od",
           namespace: config.namespace,
           nodeCommandRelative: "open-design/bin/node",
@@ -243,7 +243,7 @@ describe("startPackedMacApp", () => {
       await expect(readFile(launchConfigPath, "utf8")).resolves.toContain(
         `"namespaceBaseRoot": ${JSON.stringify(config.roots.runtime.namespaceBaseRoot)}`,
       );
-      await expect(readFile(launchConfigPath, "utf8")).resolves.toContain('"appVersion": "1.2.3"');
+      await expect(readFile(launchConfigPath, "utf8")).resolves.toContain('"shellVersion": "1.2.3"');
     } finally {
       await rm(root, { force: true, recursive: true });
     }

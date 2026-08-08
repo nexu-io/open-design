@@ -1,9 +1,9 @@
 {
   "name": "@open-design/closure-store",
-  "version": "0.16.2",
+  "version": "0.19.0",
   "private": true,
   "type": "module",
-  "description": "Shell-neutral local store and rollback state for Open Design Standalone Closure.",
+  "description": "Shell-neutral immutable store and committed binding for Open Design Standalone Closure.",
   "main": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
   "files": [

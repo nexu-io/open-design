@@ -50,7 +50,7 @@ async function writeOutputs(root: string, value: string): Promise<void> {
 
 function createConfig(root: string, cacheRoot: string, platform: "mac" | "win" = "win"): ToolPackConfig {
   return {
-    appVersion: "0.18.0-beta.4",
+    releaseVersion: "0.18.0-beta.4",
     electronBuilderCliPath: "electron-builder",
     electronDistPath: "electron-dist",
     electronVersion: "41.3.0",

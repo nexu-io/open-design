@@ -24,13 +24,13 @@ export type PackagedAmrProfile = "prod" | "test" | "feature-test" | "local";
 
 export type RawPackagedConfig = {
   amrProfile?: string;
-  appVersion?: string;
   daemonCliEntryRelative?: string;
   daemonSidecarEntryRelative?: string;
   namespace?: string;
   namespaceBaseRoot?: string;
   nodeCommandRelative?: string;
   resourceRoot?: string;
+  shellVersion?: string;
   // Baked by tools/pack from OPEN_DESIGN_TELEMETRY_RELAY_URL and forwarded to
   // the daemon at runtime; Langfuse credentials never ship in packaged config.
   telemetryRelayUrl?: string;
@@ -57,13 +57,13 @@ export type RawPackagedConfig = {
 
 export type PackagedConfig = {
   amrProfile: PackagedAmrProfile | null;
-  appVersion: string | null;
   daemonCliEntry: string | null;
   daemonSidecarEntry: string | null;
   namespace: string;
   namespaceBaseRoot: string;
   nodeCommand: string | null;
   resourceRoot: string;
+  shellVersion: string | null;
   telemetryRelayUrl: string | null;
   updateMetadataUrl: string | null;
   posthogKey: string | null;
@@ -204,13 +204,13 @@ export async function readPackagedConfig(): Promise<PackagedConfig> {
 
   return {
     amrProfile: resolvePackagedAmrProfile(raw.amrProfile),
-    appVersion: cleanOptionalString(raw.appVersion),
     daemonCliEntry,
     daemonSidecarEntry,
     namespace,
     namespaceBaseRoot,
     nodeCommand,
     resourceRoot,
+    shellVersion: cleanOptionalString(raw.shellVersion),
     telemetryRelayUrl: cleanOptionalString(raw.telemetryRelayUrl),
     updateMetadataUrl: cleanOptionalString(raw.updateMetadataUrl),
     posthogKey: cleanOptionalString(raw.posthogKey),

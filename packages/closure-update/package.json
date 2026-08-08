@@ -1,6 +1,6 @@
 {
   "name": "@open-design/closure-update",
-  "version": "0.16.2",
+  "version": "0.19.0",
   "private": true,
   "type": "module",
   "description": "Shell-neutral release selection and update orchestration for Open Design Standalone Closure.",

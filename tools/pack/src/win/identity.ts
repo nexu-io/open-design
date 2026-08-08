@@ -21,9 +21,9 @@ export type WinInstallIdentity = {
   uninstallerName: string;
 };
 
-export function resolveWinInstallIdentity(config: Pick<ToolPackConfig, "namespace" | "appVersion">): WinInstallIdentity {
+export function resolveWinInstallIdentity(config: Pick<ToolPackConfig, "namespace" | "releaseVersion">): WinInstallIdentity {
   const namespaceToken = resolveWindowsReleaseNamespaceToken(config.namespace);
-  const channel = releaseChannelFromVersion(config.appVersion)
+  const channel = releaseChannelFromVersion(config.releaseVersion)
     ?? releaseChannelFromNamespace(config.namespace, SIDECAR_DEFAULTS.namespace);
   const displayName = channel == null ? `${PRODUCT_NAME} ${namespaceToken}` : releaseInstallIdentity(channel).productName;
 

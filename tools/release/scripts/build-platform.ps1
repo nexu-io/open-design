@@ -244,7 +244,7 @@ try {
     "--cache-dir", $CacheDir,
     "--namespace", $ReleaseNamespace,
     "--portable",
-    "--app-version", $ReleaseVersion,
+    "--release-version", $ReleaseVersion,
     "--to", $BuildTarget,
     "--json"
   )
@@ -287,7 +287,7 @@ try {
       "--dir", $fixtureDir,
       "--cache-dir", $CacheDir,
       "--namespace", $ReleaseNamespace,
-      "--app-version", $localUpdateVersion,
+      "--release-version", $localUpdateVersion,
       "--to", "nsis",
       "--json"
     )

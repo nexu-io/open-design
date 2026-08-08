@@ -105,8 +105,8 @@ async function pathExists(path: string): Promise<boolean> {
   }
 }
 
-function inferLauncherChannel(config: Pick<PackagedConfig, "appVersion" | "namespace">): LauncherChannel {
-  return releaseChannelFromVersion(config.appVersion)
+function inferLauncherChannel(config: Pick<PackagedConfig, "namespace" | "shellVersion">): LauncherChannel {
+  return releaseChannelFromVersion(config.shellVersion)
     ?? releaseChannelFromNamespace(config.namespace, "default")
     ?? "stable";
 }
@@ -326,7 +326,7 @@ async function resolvePayloadConfig(
   return {
     config: {
       ...config,
-      appVersion: raw.appVersion?.trim() || manifest.version,
+      shellVersion: raw.shellVersion?.trim() || manifest.version,
       daemonSidecarEntry: await resolveOptionalPayloadEntry(resourcesPath, raw.daemonSidecarEntryRelative),
       nodeCommand,
       resourceRoot,
@@ -340,9 +340,9 @@ async function resolvePayloadConfig(
 }
 
 function initialRuntimeDescriptor(config: PackagedConfig, channel: LauncherChannel): LauncherRuntimeDescriptor {
-  const current = config.appVersion == null
+  const current = config.shellVersion == null
     ? null
-    : { generation: 0, version: normalizeLauncherVersion(config.appVersion) };
+    : { generation: 0, version: normalizeLauncherVersion(config.shellVersion) };
   return {
     active: current,
     channel,
@@ -413,7 +413,7 @@ async function reconcileRuntimeWithBoundPackage(
   launcherPaths: LauncherPaths,
   channel: LauncherChannel,
 ): Promise<LauncherRuntimeDescriptor> {
-  const boundVersion = config.appVersion == null ? null : normalizeLauncherVersion(config.appVersion);
+  const boundVersion = config.shellVersion == null ? null : normalizeLauncherVersion(config.shellVersion);
   if (boundVersion == null) return descriptor;
   const maxPersistedVersion = maxRuntimePointer(descriptor);
   if (maxPersistedVersion != null && compareLauncherVersions(boundVersion, maxPersistedVersion) <= 0) return descriptor;
