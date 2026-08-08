@@ -3886,6 +3886,23 @@ export function ProjectView({
     },
   }, projectRunWorkspaceContext);
 
+  // Auto-refresh file list when the tab becomes visible (e.g., after
+  // editing a file externally). This provides a fallback for environments
+  // where the chokidar file watcher cannot detect external changes (Docker,
+  // certain filesystem mounts). The coalesced callback already debounces
+  // rapid visibility toggles. Fixes #6630.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        coalescedFileChangedRefresh();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [coalescedFileChangedRefresh]);
+
   const activePromptContextSignature = useMemo(() => {
     const skill = project.skillId
       ? (skills.find((s) => s.id === project.skillId) ??
