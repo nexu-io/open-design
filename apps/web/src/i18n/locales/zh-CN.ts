@@ -310,10 +310,10 @@ export const zhCN: Dict = {
     "留下邮箱，接收产品更新、新模板、设计系统资源和社区活动。",
   "settings.onboardingConnectTitle": "选择运行方式",
   "settings.onboardingConnectBody": "",
-  "settings.onboardingCloudTitle": "登录 Open Design",
+  "settings.onboardingCloudTitle": "登录 xDesign",
   "settings.onboardingCloudBody":
     "登录后可直接用云端 AI 开始设计，无需任何复杂配置。",
-  "settings.onboardingCloudSignIn": "登录 Open Design",
+  "settings.onboardingCloudSignIn": "登录 xDesign",
   "settings.onboardingCloudContinue": "继续（已登录）",
   "settings.onboardingCloudAlternative": "使用本地 CLI 或自己的 API Key",
   "settings.onboardingCloudRights": "保留所有权利。",

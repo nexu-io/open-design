@@ -76,6 +76,54 @@ anywhere.)
 node --experimental-strip-types xdesign/scripts/generate-placeholder-icon.ts
 ```
 
+## Local verification gotchas
+
+Two caches bite when you re-verify a brand change locally — if the running app
+still shows the old name after a rebuild, clear these and rebuild:
+
+1. **Next.js standalone cache.** `next build` writes the brand into
+   `apps/web/.next` (full output) but `.next/standalone` (the part packaged into
+   the `.app`) can retain a stale locale on an incremental rebuild. If a freshly
+   built app still shows the old brand, remove `apps/web/.next` **and** the
+   tools-pack workspace-build cache entry, then rebuild:
+   ```bash
+   rm -rf apps/web/.next
+   rm -rf .tmp/tools-pack/cache/entries/mac.workspace-build
+   node --experimental-strip-types xdesign/scripts/pack.ts mac build --to dmg --namespace xdesign-verify
+   ```
+2. **Electron renderer cache.** The first launch (on a stale bundle) caches the
+   old entry page under `~/Library/Application Support/<ProductName>` and the
+   namespace `user-data`. Clear both before restarting, or the renderer serves
+   the cached page:
+   ```bash
+   rm -rf "$HOME/Library/Application Support/xDesign"
+   rm -rf .tmp/tools-pack/runtime/mac/namespaces/xdesign-verify/user-data
+   ```
+
+Then `mac install` + `mac start` (through the wrapper) and the nav-rail brand
+should read the fork name.
+
+3. **`mac install` can serve a stale app.** After a rebuild, `mac install`
+   copies the `.app` out of the namespace DMG, but a prior install (or a stale
+   mounted DMG) can leave the install dir holding an older build — `mac start`
+   then runs the old app and the brand looks unchanged even though `mac build`
+   produced a fresh one. If a rebuilt app still shows the old brand, force a
+   clean install, or copy the freshly built app directly:
+   ```bash
+   node --experimental-strip-types xdesign/scripts/pack.ts mac uninstall --namespace xdesign-verify
+   node --experimental-strip-types xdesign/scripts/pack.ts mac install   --namespace xdesign-verify
+   # or, bypassing the DMG install entirely:
+   rm -rf .tmp/tools-pack/out/mac/namespaces/xdesign-verify/install/Applications/xDesign.app
+   cp -R  .tmp/tools-pack/out/mac/namespaces/xdesign-verify/builder/mac-arm64/xDesign.app \
+          .tmp/tools-pack/out/mac/namespaces/xdesign-verify/install/Applications/xDesign.app
+   ```
+   The definitive check is the locale inside the *installed* app, not the
+   builder output:
+   ```bash
+   rg -o '"app\.brand":"[^"]*"' \
+     .tmp/tools-pack/out/mac/namespaces/xdesign-verify/install/Applications/xDesign.app/Contents/Resources/open-design-web-standalone/apps/web/.next/static
+   ```
+
 ## Layout
 
 ```
