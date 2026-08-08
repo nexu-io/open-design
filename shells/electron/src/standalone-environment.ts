@@ -14,6 +14,7 @@ export type StandaloneBootstrapEnvironmentInput = Readonly<{
     args: readonly string[];
     command: string | null;
   }>;
+  requireDesktopAuth?: boolean;
   runElectronAsNode?: boolean;
 }>;
 
@@ -25,7 +26,7 @@ export function createStandaloneBootstrapEnvironment(
   return {
     ...base,
     OD_APP_VERSION: input.appVersion,
-    OD_REQUIRE_DESKTOP_AUTH: "1",
+    OD_REQUIRE_DESKTOP_AUTH: input.requireDesktopAuth === false ? "0" : "1",
     ...(input.runElectronAsNode === false ? {} : { ELECTRON_RUN_AS_NODE: "1" }),
     ...(input.config.amrProfile == null ? {} : {
       OPEN_DESIGN_AMR_PROFILE: input.config.amrProfile,

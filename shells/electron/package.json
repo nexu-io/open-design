@@ -31,7 +31,6 @@
     "@open-design/closure-store": "workspace:*",
     "@open-design/closure-update": "workspace:*",
     "@open-design/contracts": "workspace:*",
-    "@open-design/daemon": "workspace:*",
     "@open-design/diagnostics": "workspace:*",
     "@open-design/download": "workspace:*",
     "@open-design/host": "workspace:*",
@@ -41,8 +40,7 @@
     "@open-design/release": "workspace:*",
     "@open-design/sidecar": "workspace:*",
     "@open-design/sidecar-proto": "workspace:*",
-    "@open-design/standalone-proto": "workspace:*",
-    "@open-design/web": "workspace:*"
+    "@open-design/standalone-proto": "workspace:*"
   },
   "devDependencies": {
     "@open-design/closure-proto": "workspace:*",

@@ -75,17 +75,18 @@ describe("acquirePackagedStandaloneStartup", () => {
         installMcp: vi.fn(async () => {
           if (failAt === "mcp") throw new Error("MCP install failed");
         }),
-        startSidecars: vi.fn(async () => ({
+        startStandalone: vi.fn(async () => ({
           close: async () => {
-            closed.push("sidecars");
+            closed.push("standalone");
+            return { state: "stopped" } as never;
           },
-          currentWebUrl: () => "http://127.0.0.1:7456",
-          daemon: {
-            desktopAuthGateActive: false,
-            state: "running" as const,
-            url: "http://127.0.0.1:7457",
-          },
-          web: { state: "running" as const, url: "http://127.0.0.1:7456" },
+          invoke: vi.fn(),
+          readStatus: async () => ({
+            daemonUrl: "http://127.0.0.1:7457",
+            state: "running",
+            webUrl: "http://127.0.0.1:7456",
+          } as never),
+          waitForTerminal: async () => await new Promise<never>(() => undefined),
         })),
         writeIdentity: vi.fn(async () => ({
           close: async () => {
@@ -111,7 +112,7 @@ describe("acquirePackagedStandaloneStartup", () => {
       "MCP install failed",
     );
 
-    expect(closed).toEqual(["sidecars", "identity"]);
+    expect(closed).toEqual(["standalone", "identity"]);
     expect(exit).not.toHaveBeenCalled();
   });
 
@@ -122,7 +123,7 @@ describe("acquirePackagedStandaloneStartup", () => {
       "web identity write failed",
     );
 
-    expect(closed).toEqual(["ipc", "sidecars", "identity"]);
+    expect(closed).toEqual(["ipc", "standalone", "identity"]);
     expect(exit).not.toHaveBeenCalled();
   });
 });

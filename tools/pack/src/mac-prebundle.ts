@@ -117,17 +117,16 @@ function toPosixPath(value: string): string {
 }
 
 export function shouldUseMacStandalonePrebundle(webOutputMode: ToolPackConfig["webOutputMode"]): boolean {
-  return webOutputMode === "standalone";
+  void webOutputMode;
+  return true;
 }
 
 export function shouldInstallInternalPackageForMacPrebundle(options: {
   packageName: string;
   webOutputMode: ToolPackConfig["webOutputMode"];
 }): boolean {
-  if (!shouldUseMacStandalonePrebundle(options.webOutputMode)) return true;
-  return !MAC_STANDALONE_PREBUNDLE_EXCLUDED_INTERNAL_PACKAGES.includes(
-    options.packageName as (typeof MAC_STANDALONE_PREBUNDLE_EXCLUDED_INTERNAL_PACKAGES)[number],
-  );
+  void options;
+  return false;
 }
 
 export function findForbiddenMacPrebundleInputs(options: {

@@ -23,7 +23,7 @@ import {
   prepareNodePtyRuntime,
   resolveNodePtyRuntimeArch,
 } from "../node-pty-runtime.js";
-import { copyBundledResourceTrees, packBundledDshRuntime } from "../resources.js";
+import { copyBundledResourceTrees } from "../resources.js";
 import { copyOptionalVelaCliBinary } from "../vela-cli.js";
 import { electronBuilderVersionForAppVersion } from "../versions.js";
 import { runEsbuild, runNpmInstall, runPnpm } from "./commands.js";
@@ -53,7 +53,7 @@ async function buildPrebundledStandaloneRuntime(
   await mkdir(paths.assembledPrebundledRoot, { recursive: true });
   await mkdir(dirname(paths.packagedMainPrebundleMetaPath), { recursive: true });
   await runEsbuild(config, [
-    join(config.workspaceRoot, "apps", "packaged", "dist", "index.mjs"),
+    join(config.workspaceRoot, "shells", "electron", "dist", "index.mjs"),
     "--bundle",
     "--platform=node",
     "--format=esm",
@@ -66,93 +66,13 @@ async function buildPrebundledStandaloneRuntime(
     metafilePath: paths.packagedMainPrebundleMetaPath,
     policyName: "packagedMain",
   });
-
-  await runEsbuild(config, [
-    join(config.workspaceRoot, "apps", "web", "dist", "sidecar", "index.js"),
-    "--bundle",
-    "--platform=node",
-    "--format=esm",
-    `--target=${MAC_PREBUNDLE_ESBUILD_TARGET}`,
-    ...MAC_PREBUNDLE_POLICIES.webSidecar.externals.map((dependency) => `--external:${dependency}`),
-    `--outfile=${paths.webSidecarPrebundlePath}`,
-    `--metafile=${paths.webSidecarPrebundleMetaPath}`,
-  ]);
-  await assertMacPrebundleMetafile({
-    metafilePath: paths.webSidecarPrebundleMetaPath,
-    policyName: "webSidecar",
-  });
-
-  await mkdir(dirname(paths.daemonSidecarPrebundleEntrypointPath), { recursive: true });
-  await writeFile(
-    paths.daemonSidecarPrebundleEntrypointPath,
-    `import ${JSON.stringify(
-      toRelativeImportSpecifier(
-        dirname(paths.daemonSidecarPrebundleEntrypointPath),
-        join(config.workspaceRoot, "apps", "daemon", "dist", "sidecar", "index.js"),
-      ),
-    )};\n`,
-    "utf8",
-  );
-  await writeFile(
-    paths.daemonCliPrebundleEntrypointPath,
-    [
-      'import { fileURLToPath } from "node:url";',
-      "const selfPath = fileURLToPath(import.meta.url);",
-      "process.env.OD_BIN ??= selfPath;",
-      "process.env.OD_DAEMON_CLI_PATH ??= selfPath;",
-      `await import(${JSON.stringify(
-        toRelativeImportSpecifier(
-          dirname(paths.daemonCliPrebundleEntrypointPath),
-          join(config.workspaceRoot, "apps", "daemon", "dist", "cli.js"),
-        ),
-      )});`,
-      "",
-    ].join("\n"),
-    "utf8",
-  );
-  await runEsbuild(config, [
-    paths.daemonSidecarPrebundleEntrypointPath,
-    paths.daemonCliPrebundleEntrypointPath,
-    "--bundle",
-    "--splitting",
-    "--platform=node",
-    "--format=esm",
-    `--target=${MAC_PREBUNDLE_ESBUILD_TARGET}`,
-    `--banner:js=${MAC_DAEMON_PREBUNDLE_ESM_REQUIRE_BANNER}`,
-    ...MAC_PREBUNDLE_POLICIES.daemonSidecar.externals.map((dependency) => `--external:${dependency}`),
-    `--outdir=${paths.daemonPrebundleRoot}`,
-    "--entry-names=[name]",
-    "--chunk-names=chunks/[name]-[hash]",
-    "--out-extension:.js=.mjs",
-    `--metafile=${paths.daemonPrebundleMetaPath}`,
-  ]);
-  await assertMacPrebundleMetafile({
-    metafilePath: paths.daemonPrebundleMetaPath,
-    policyName: "daemonSidecar",
-  });
-  await assertMacPrebundleMetafile({
-    metafilePath: paths.daemonPrebundleMetaPath,
-    policyName: "daemonCli",
-  });
 }
 
 export async function copyResourceTree(config: ToolPackConfig, paths: MacPaths): Promise<void> {
   await rm(paths.resourceRoot, { force: true, recursive: true });
   await mkdir(paths.resourceRoot, { recursive: true });
 
-  await copyBundledResourceTrees({
-    workspaceRoot: config.workspaceRoot,
-    resourceRoot: paths.resourceRoot,
-  });
-  await packBundledDshRuntime({
-    workspaceRoot: config.workspaceRoot,
-    resourceRoot: paths.resourceRoot,
-  });
-  await copyOptionalVelaCliBinary({
-    platform: "mac",
-    requireBundled: config.requireVelaCli,
-    resourceRoot: paths.resourceRoot,
-  });
+  void config;
 }
 
 export function renderMacPackagedConfig(options: {
@@ -164,17 +84,12 @@ export function renderMacPackagedConfig(options: {
     {
       ...(options.config.amrProfile == null ? {} : { amrProfile: options.config.amrProfile }),
       appVersion: options.appVersion,
-      ...(options.usePrebundledStandaloneWeb ? { daemonCliEntryRelative: MAC_PREBUNDLED_DAEMON_CLI_RELATIVE_PATH } : {}),
-      ...(options.usePrebundledStandaloneWeb
-        ? { daemonSidecarEntryRelative: MAC_PREBUNDLED_DAEMON_SIDECAR_RELATIVE_PATH }
-        : {}),
       namespace: options.config.namespace,
       ...(options.config.telemetryRelayUrl == null ? {} : { telemetryRelayUrl: options.config.telemetryRelayUrl }),
       ...(options.config.updateMetadataUrl == null ? {} : { updateMetadataUrl: options.config.updateMetadataUrl }),
       ...(options.config.posthogKey == null ? {} : { posthogKey: options.config.posthogKey }),
       ...(options.config.posthogHost == null ? {} : { posthogHost: options.config.posthogHost }),
       ...(options.config.velaWebUrl == null ? {} : { velaWebUrl: options.config.velaWebUrl }),
-      ...(options.usePrebundledStandaloneWeb ? { webSidecarEntryRelative: MAC_PREBUNDLED_WEB_SIDECAR_RELATIVE_PATH } : {}),
       webOutputMode: options.config.webOutputMode,
       ...(options.config.portable ? {} : { namespaceBaseRoot: options.config.roots.runtime.namespaceBaseRoot }),
     },
@@ -315,7 +230,7 @@ export async function writeAssembledApp(
   await rm(join(config.roots.output.namespaceRoot, "assembled"), { force: true, recursive: true });
   await mkdir(paths.assembledAppRoot, { recursive: true });
   await cp(
-    join(config.workspaceRoot, "apps", "desktop", "dist", "main", "preload.cjs"),
+    join(config.workspaceRoot, "shells", "electron", "dist", "main", "preload.cjs"),
     join(paths.assembledAppRoot, "preload.cjs"),
   );
   const tarballByPackage = Object.fromEntries(
@@ -334,13 +249,7 @@ export async function writeAssembledApp(
       return [packageInfo.name, `file:${relative(paths.assembledAppRoot, join(paths.tarballsRoot, tarball))}`];
     }),
   );
-  const dependencies = {
-    ...internalDependencies,
-    ...(usePrebundledStandaloneWeb ? MAC_PREBUNDLE_RUNTIME_DEPENDENCIES : {}),
-  };
-  const optionalDependencies = usePrebundledStandaloneWeb
-    ? MAC_PREBUNDLE_COPIED_RUNTIME_DEPENDENCIES
-    : undefined;
+  const dependencies = internalDependencies;
 
   await writeFile(
     paths.assembledPackageJsonPath,
@@ -350,7 +259,6 @@ export async function writeAssembledApp(
         description: "Open Design packaged runtime",
         main: "./main.cjs",
         name: "open-design-packaged-app",
-        ...(optionalDependencies == null ? {} : { optionalDependencies }),
         private: true,
         productName: identity.productName,
         version: packageVersion,
@@ -378,13 +286,4 @@ export async function writeAssembledApp(
     "utf8",
   );
   await runNpmInstall(paths.assembledAppRoot);
-  if (usePrebundledStandaloneWeb) {
-    await copyMacPrebundleRuntimeDependencies(config, paths.assembledAppRoot);
-  }
-  await prepareNodePtyRuntime({
-    appRoot: paths.assembledAppRoot,
-    arch: resolveNodePtyRuntimeArch(process.arch),
-    platform: "darwin",
-  });
-  await runMacElectronRebuild(config, paths.assembledAppRoot);
 }

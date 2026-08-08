@@ -8,12 +8,6 @@ import type {
 } from "@open-design/standalone-proto";
 
 import type { PackagedNamespacePaths } from "./paths.js";
-import type { PackagedRuntimeIdentity } from "./closure-runtime.js";
-
-type ElectronObservedRuntimeIdentity =
-  | ElectronStandaloneRuntimeIdentity
-  | PackagedRuntimeIdentity;
-
 export type ElectronStandaloneRuntimeIdentity = Readonly<{
   descriptor: StandaloneHandoffEnvelope["descriptor"];
   descriptorDigest: StandaloneHandoffEnvelope["descriptorDigest"];
@@ -33,7 +27,7 @@ export type PackagedDesktopRootIdentity = {
   namespaceRoot: string;
   pid: number;
   ppid: number;
-  runtime?: ElectronObservedRuntimeIdentity;
+  runtime?: ElectronStandaloneRuntimeIdentity;
   stamp: SidecarStamp;
   startedAt: string;
   updatedAt: string;
@@ -51,7 +45,7 @@ export type PackagedWebRootIdentity = {
 export type PackagedDesktopIdentityHandle = {
   close(): Promise<void>;
   identity: PackagedDesktopRootIdentity;
-  updateRuntimeIdentity(runtime: ElectronObservedRuntimeIdentity): Promise<void>;
+  updateRuntimeIdentity(runtime: ElectronStandaloneRuntimeIdentity): Promise<void>;
 };
 
 function resolveCurrentMacAppPath(executablePath: string): string {
@@ -60,7 +54,7 @@ function resolveCurrentMacAppPath(executablePath: string): string {
 
 function createPackagedDesktopRootIdentity(options: {
   paths: PackagedNamespacePaths;
-  runtimeIdentity?: ElectronObservedRuntimeIdentity;
+  runtimeIdentity?: ElectronStandaloneRuntimeIdentity;
   stamp: SidecarStamp;
 }): PackagedDesktopRootIdentity {
   const now = new Date().toISOString();
@@ -84,7 +78,7 @@ function createPackagedDesktopRootIdentity(options: {
 export async function writePackagedDesktopIdentity(options: {
   identityPath?: string;
   paths: PackagedNamespacePaths;
-  runtimeIdentity?: ElectronObservedRuntimeIdentity;
+  runtimeIdentity?: ElectronStandaloneRuntimeIdentity;
   stamp: SidecarStamp;
 }): Promise<PackagedDesktopIdentityHandle> {
   const identity = createPackagedDesktopRootIdentity(options);

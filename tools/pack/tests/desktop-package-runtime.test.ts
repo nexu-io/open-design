@@ -31,11 +31,12 @@ describe("desktop package runtime shape", () => {
     for (const relativePath of [
       "tools/pack/src/mac/app.ts",
       "tools/pack/src/win/app.ts",
-      "tools/pack/src/linux.ts",
     ]) {
       const source = readFileSync(join(repoRoot, relativePath), "utf8");
-      expect(source).toContain('"apps", "desktop", "dist", "main", "preload.cjs"');
+      expect(source).toContain('"shells", "electron", "dist", "main", "preload.cjs"');
       expect(source).toContain('join(paths.assembledAppRoot, "preload.cjs")');
     }
+    const linuxSource = readFileSync(join(repoRoot, "tools/pack/src/linux.ts"), "utf8");
+    expect(linuxSource).toContain('"apps", "desktop", "dist", "main", "preload.cjs"');
   });
 });

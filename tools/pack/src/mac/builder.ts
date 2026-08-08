@@ -90,9 +90,7 @@ export async function runElectronBuilder(
   const identity = resolveMacInstallIdentity(config);
   const packagedVersion = await readPackagedVersion(config);
   const packageVersion = electronBuilderVersionForAppVersion(packagedVersion);
-  const webStandaloneHookConfigPath = config.webOutputMode === "standalone"
-    ? await writeWebStandaloneHookConfig(config, paths)
-    : null;
+  const webStandaloneHookConfigPath = null;
   const builderConfig = {
     appId: identity.appId,
     artifactName: `${PRODUCT_NAME}-${namespaceToken}.\${ext}`,
@@ -180,10 +178,5 @@ export async function runElectronBuilder(
       ...(config.signed ? {} : { CSC_IDENTITY_AUTO_DISCOVERY: "false" }),
       ...(webStandaloneHookConfigPath == null ? {} : { [WEB_STANDALONE_HOOK_CONFIG_ENV]: webStandaloneHookConfigPath }),
     },
-  });
-  await assertNodePtyRuntime({
-    appRoot: join(paths.appPath, "Contents", "Resources", "app"),
-    arch: resolveNodePtyRuntimeArch(process.arch),
-    platform: "darwin",
   });
 }

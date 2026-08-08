@@ -9,28 +9,32 @@ import {
   normalizeDesktopSidecarMessage,
   type SidecarStamp,
 } from "@open-design/sidecar-proto";
-import { bootstrapSidecarRuntime, createJsonIpcServer, resolveAppIpcPath } from "@open-design/sidecar";
-import type { JsonIpcServerHandle } from "@open-design/sidecar";
+import { createJsonIpcServer, resolveAppIpcPath, type JsonIpcServerHandle } from "@open-design/sidecar";
+import type {
+  StandaloneHandle,
+  StandaloneRuntimeRunningStatus,
+} from "@open-design/standalone-proto";
 
 import type { PackagedConfig } from "./config.js";
 import { checkForPackagedClosureUpdate } from "./closure-update.js";
 import {
-  confirmPackagedClosureRuntime,
-  createPackagedRuntimeIdentity,
-  resolvePackagedClosureRuntime,
-  startPackagedClosureRuntime,
-} from "./closure-runtime.js";
-import type { PackagedDesktopIdentityHandle } from "./identity.js";
-import { writePackagedDesktopIdentity, writePackagedWebIdentity } from "./identity.js";
+  createElectronStandaloneRuntimeIdentity,
+  writePackagedDesktopIdentity,
+  writePackagedWebIdentity,
+  type PackagedDesktopIdentityHandle,
+} from "./identity.js";
 import { confirmPackagedLauncherRuntime, resolvePackagedLauncherRuntime } from "./launcher-runtime.js";
+import { resolvePackagedMcpBootstrapLaunch, type PackagedMcpBootstrapLaunch } from "./mcp-bootstrap.js";
 import { resolvePackagedNamespacePaths } from "./paths.js";
-import type { PackagedSidecarHandle } from "./sidecars.js";
-import { startPackagedSidecars } from "./sidecars.js";
-export {
-  resolvePackagedMcpBootstrapLaunch,
-  type PackagedMcpBootstrapLaunch,
-} from "./mcp-bootstrap.js";
 import {
+  confirmElectronStandaloneBinding,
+  digestElectronShellEntry,
+  resolveElectronStandaloneBinding,
+} from "./standalone-binding.js";
+import { applyStandaloneBootstrapEnvironment } from "./standalone-environment.js";
+import { createElectronStandaloneLauncher } from "./standalone-handoff.js";
+
+export {
   resolvePackagedMcpBootstrapLaunch,
   type PackagedMcpBootstrapLaunch,
 } from "./mcp-bootstrap.js";
@@ -61,6 +65,7 @@ export interface PackagedStandaloneRequest {
 
 export interface RunPackagedStandaloneOptions {
   mcpBootstrapLaunch?: PackagedMcpBootstrapLaunch;
+  shellEntryUrl?: string;
 }
 
 export interface PackagedStandaloneStartupDependencies {
@@ -70,9 +75,9 @@ export interface PackagedStandaloneStartupDependencies {
     webUrl: string;
   }): Promise<JsonIpcServerHandle>;
   exit(code: number): void;
-  installMcp(daemonUrl: string | null): Promise<void>;
-  startSidecars(): Promise<PackagedSidecarHandle>;
-  writeIdentity(): Promise<PackagedDesktopIdentityHandle>;
+  installMcp(daemonUrl: string): Promise<void>;
+  startStandalone(): Promise<StandaloneHandle>;
+  writeIdentity(status: StandaloneRuntimeRunningStatus): Promise<PackagedDesktopIdentityHandle>;
   writeWebIdentity(webUrl: string): Promise<void>;
 }
 
@@ -81,11 +86,16 @@ export interface PackagedStandaloneStartupHandle {
   webUrl: string;
 }
 
+/**
+ * Acquire the compatibility control surface around one protocol-owned
+ * Standalone. The Shell does not know Web/daemon process shape; it only
+ * publishes the running endpoints and forwards shutdown to the handle.
+ */
 export async function acquirePackagedStandaloneStartup(
   dependencies: PackagedStandaloneStartupDependencies,
 ): Promise<PackagedStandaloneStartupHandle> {
   let identity: PackagedDesktopIdentityHandle | null = null;
-  let sidecars: PackagedSidecarHandle | null = null;
+  let standalone: StandaloneHandle | null = null;
   let ipcServer: JsonIpcServerHandle | null = null;
   let closed = false;
 
@@ -93,7 +103,7 @@ export async function acquirePackagedStandaloneStartup(
     if (closed) return;
     closed = true;
     await ipcServer?.close().catch(() => undefined);
-    await sidecars?.close().catch(() => undefined);
+    await standalone?.close().catch(() => undefined);
     await identity?.close().catch(() => undefined);
   };
   const shutdown = async (): Promise<void> => {
@@ -102,19 +112,26 @@ export async function acquirePackagedStandaloneStartup(
   };
 
   try {
-    identity = await dependencies.writeIdentity();
-    sidecars = await dependencies.startSidecars();
-    const webUrl = sidecars.web.url;
-    if (!webUrl) {
-      throw new Error(
-        "web sidecar failed to produce URL — check logs/desktop/latest.log",
-      );
+    standalone = await dependencies.startStandalone();
+    const status = await standalone.readStatus();
+    if (status.state !== "running") {
+      throw new Error(`Standalone entered terminal state during startup: ${status.state}`);
     }
-    await dependencies.installMcp(sidecars.daemon.url);
-    ipcServer = await dependencies.createIpcServer({ shutdown, webUrl });
-    await dependencies.writeWebIdentity(webUrl);
+    identity = await dependencies.writeIdentity(status);
+    await dependencies.installMcp(status.daemonUrl);
+    ipcServer = await dependencies.createIpcServer({ shutdown, webUrl: status.webUrl });
+    await dependencies.writeWebIdentity(status.webUrl);
     await dependencies.confirmRuntime();
-    return { shutdown, webUrl };
+    void standalone.waitForTerminal().then(async (terminal) => {
+      if (closed) return;
+      await close();
+      dependencies.exit(terminal.state === "failed" ? 1 : 0);
+    }).catch(async () => {
+      if (closed) return;
+      await close();
+      dependencies.exit(1);
+    });
+    return { shutdown, webUrl: status.webUrl };
   } catch (error) {
     await close();
     throw error;
@@ -127,14 +144,10 @@ export function parsePackagedStandaloneRequest(
   const standalone = argv.includes("--standalone");
   const installIndex = argv.indexOf("--mcp-install");
   if (installIndex === -1) return { standalone, mcpInstallAgent: null };
-  if (!standalone) {
-    throw new Error("--mcp-install requires --standalone");
-  }
+  if (!standalone) throw new Error("--mcp-install requires --standalone");
   const agent = argv[installIndex + 1];
   if (agent !== "codex") {
-    throw new Error(
-      "Packaged standalone MCP installation currently only supports codex.",
-    );
+    throw new Error("Packaged standalone MCP installation currently only supports codex.");
   }
   return { standalone: true, mcpInstallAgent: agent };
 }
@@ -147,58 +160,48 @@ export async function runPackagedStandalone(
   },
   options: RunPackagedStandaloneOptions = {},
 ): Promise<void> {
-  const initialPaths = resolvePackagedNamespacePaths(
-    config,
-    config.namespace,
-    process.env,
-  );
+  const initialPaths = resolvePackagedNamespacePaths(config, config.namespace, process.env);
   const launcherRuntime = await resolvePackagedLauncherRuntime(config, initialPaths);
   const shellConfig = launcherRuntime.config;
+  const shellVersion = shellConfig.appVersion;
+  if (shellVersion == null) throw new Error("Electron Shell version is unavailable");
   const paths = launcherRuntime.paths;
-  let closureRuntime = await resolvePackagedClosureRuntime({
-    channel: launcherRuntime.launcherPaths.channel,
-    installationRoot: launcherRuntime.launcherPaths.root,
-    legacyConfig: shellConfig,
-    namespace: config.namespace,
-    shellVersion: shellConfig.appVersion,
-  });
-  let identityHandle: PackagedDesktopIdentityHandle | null = null;
   const stamp = createStandaloneStamp(config.namespace);
-  const mcpBootstrap =
-    options.mcpBootstrapLaunch
+  const mcpBootstrap = options.mcpBootstrapLaunch
     ?? resolvePackagedMcpBootstrapLaunch({
       installedLaunchPath: launcherRuntime.installedLaunchPath,
     });
 
   await mkdir(paths.runtimeRoot, { recursive: true });
-
-  const runtime = bootstrapSidecarRuntime(stamp, process.env, {
-    app: APP_KEYS.DESKTOP,
-    base: paths.runtimeRoot,
-    contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+  await checkForPackagedClosureUpdate({
+    channel: launcherRuntime.launcherPaths.channel,
+    installationRoot: launcherRuntime.launcherPaths.root,
+    metadataUrl: shellConfig.updateMetadataUrl,
+    namespace: config.namespace,
+    shellVersion,
+  }).catch((error: unknown) => {
+    console.warn("[open-design standalone] cold-update discovery failed; checking committed Store", error);
+    return null;
+  });
+  const selection = await resolveElectronStandaloneBinding({
+    channel: launcherRuntime.launcherPaths.channel,
+    namespace: config.namespace,
+    paths,
+    releaseVersion: shellVersion,
+    shellDigest: await digestElectronShellEntry(options.shellEntryUrl),
+    shellVersion,
+  });
+  applyStandaloneBootstrapEnvironment({
+    appVersion: selection.pointer.version,
+    config: shellConfig,
+    mcpBootstrap,
+    requireDesktopAuth: false,
   });
 
   const { shutdown, webUrl } = await acquirePackagedStandaloneStartup({
     confirmRuntime: async () => {
       await confirmPackagedLauncherRuntime(launcherRuntime);
-      await confirmPackagedClosureRuntime(closureRuntime);
-      void checkForPackagedClosureUpdate({
-        channel: launcherRuntime.launcherPaths.channel,
-        installationRoot: launcherRuntime.launcherPaths.root,
-        metadataUrl: shellConfig.updateMetadataUrl,
-        namespace: config.namespace,
-        shellVersion: shellConfig.appVersion,
-      }).then((update) => {
-        console.info("[open-design standalone] Closure update check completed", {
-          reason: update.reason,
-          state: update.state,
-          ...(update.state === "skipped"
-            ? {}
-            : { candidateVersion: update.candidate.manifest.identity.version }),
-        });
-      }).catch((error: unknown) => {
-        console.warn("[open-design standalone] Closure update check failed", error);
-      });
+      await confirmElectronStandaloneBinding(selection);
     },
     createIpcServer: async ({ shutdown: stop, webUrl: activeWebUrl }) =>
       await createJsonIpcServer({
@@ -215,88 +218,44 @@ export async function runPackagedStandalone(
                 windowVisible: false,
               };
             case SIDECAR_MESSAGES.SHUTDOWN:
-              setImmediate(() => {
-                void stop();
-              });
+              setImmediate(() => void stop());
               return { accepted: true };
           }
         },
       }),
     exit: (code) => process.exit(code),
     installMcp: async (daemonUrl) => {
-      if (request.mcpInstallAgent === "codex") {
-        await installCodexMcp(daemonUrl);
-      }
+      if (request.mcpInstallAgent === "codex") await installCodexMcp(daemonUrl);
     },
-    startSidecars: async () => {
-      const started = await startPackagedClosureRuntime(
-        closureRuntime,
-        async (runtimeConfig) => await startPackagedSidecars(
-          runtime,
-          { ...paths, resourceRoot: runtimeConfig.resourceRoot },
-          {
-            appVersion: runtimeConfig.appVersion,
-            amrProfile: runtimeConfig.amrProfile,
-            daemonCliEntry: runtimeConfig.daemonCliEntry,
-            daemonSidecarEntry: runtimeConfig.daemonSidecarEntry,
-            electronNodeCommand: launcherRuntime.electronNodeCommand,
-            mcpBootstrapArgs: mcpBootstrap.args,
-            mcpBootstrapCommand: mcpBootstrap.command,
-            nodeCommand: runtimeConfig.nodeCommand,
-            telemetryRelayUrl: runtimeConfig.telemetryRelayUrl,
-            posthogKey: runtimeConfig.posthogKey,
-            posthogHost: runtimeConfig.posthogHost,
-            velaWebUrl: runtimeConfig.velaWebUrl,
-            // PR #974 round-5 (lefarcen P2): standalone packaged mode uses the signed
-            // Electron entry as a lifecycle owner, but creates no BrowserWindow and
-            // exposes no privileged shell.openPath surface.
-            // Pinning OD_REQUIRE_DESKTOP_AUTH here would arm a gate no client
-            // can ever satisfy (no desktop window/main bridge to register a secret),
-            // so folder import would permanently return DESKTOP_AUTH_PENDING.
-            // The Electron entry counterpart in `apps/packaged/src/index.ts`
-            // passes `true` because it does start that desktop bridge.
-            requireDesktopAuth: false,
-            webSidecarEntry: runtimeConfig.webSidecarEntry,
-            webStandaloneRoot: runtimeConfig.webStandaloneRoot,
-            webOutputMode: runtimeConfig.webOutputMode,
-          },
-        ),
-      );
-      closureRuntime = started.runtime;
-      await identityHandle?.updateRuntimeIdentity(createPackagedRuntimeIdentity({
-        closure: closureRuntime,
-        shellSource: launcherRuntime.source,
-        shellVersion: shellConfig.appVersion,
-      }));
-      return started.value;
-    },
-    // Write a standalone-specific identity marker so `tools-pack linux stop
-    // --standalone` can find this process without confusing it for a
-    // menu-launched AppImage that owns desktop-root.json in the same namespace.
-    writeIdentity: async () => {
-      identityHandle = await writePackagedDesktopIdentity({
-        identityPath: paths.standaloneIdentityPath,
-        paths,
-        runtimeIdentity: createPackagedRuntimeIdentity({
-          closure: closureRuntime,
-          shellSource: launcherRuntime.source,
-          shellVersion: shellConfig.appVersion,
-        }),
-        stamp,
-      });
-      return identityHandle;
-    },
-    writeWebIdentity: async (activeWebUrl) =>
-      await writePackagedWebIdentity({
-        paths,
-        pid: process.pid,
-        url: activeWebUrl,
-      }),
+    startStandalone: async () => await createElectronStandaloneLauncher().launch(
+      selection.binding,
+      {
+        async invoke(command) {
+          return {
+            handoff: command.handoff,
+            outcome: "unsupported",
+            requestId: command.requestId,
+            schemaVersion: command.schemaVersion,
+          };
+        },
+      },
+    ),
+    writeIdentity: async (status) => await writePackagedDesktopIdentity({
+      identityPath: paths.standaloneIdentityPath,
+      paths,
+      runtimeIdentity: createElectronStandaloneRuntimeIdentity(status.handoff, status),
+      stamp,
+    }),
+    writeWebIdentity: async (activeWebUrl) => await writePackagedWebIdentity({
+      paths,
+      pid: process.pid,
+      url: activeWebUrl,
+    }),
   });
 
-  process.stdout.write(`\n Open Design is running\n\n`);
+  process.stdout.write("\n Open Design is running\n\n");
   process.stdout.write(` ➜ ${colorize(webUrl)}\n\n`);
-  process.stdout.write(` Press Ctrl+C to stop\n\n`);
+  process.stdout.write(" Press Ctrl+C to stop\n\n");
 
   process.on("SIGINT", () => {
     process.stdout.write("\n Shutting down Open Design...\n");
@@ -308,17 +267,12 @@ export async function runPackagedStandalone(
   });
 }
 
-async function installCodexMcp(daemonUrl: string | null): Promise<void> {
-  if (daemonUrl == null || daemonUrl.length === 0) {
-    throw new Error("daemon sidecar failed to produce a URL for MCP install");
-  }
+async function installCodexMcp(daemonUrl: string): Promise<void> {
   const url = `${daemonUrl.replace(/\/$/u, "")}/api/mcp/install/codex`;
   const response = await fetch(url, { method: "POST" });
   if (!response.ok) {
     const detail = await response.text().catch(() => response.statusText);
-    throw new Error(
-      `Codex MCP install failed (${response.status}): ${detail}`,
-    );
+    throw new Error(`Codex MCP install failed (${response.status}): ${detail}`);
   }
   process.stdout.write(" Open Design MCP installed for Codex\n");
 }

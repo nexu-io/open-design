@@ -128,37 +128,7 @@ async function validateWinPackagedAppRuntime(appRoot: string): Promise<string | 
 }
 
 async function buildWorkspaceArtifacts(config: ToolPackConfig): Promise<void> {
-  const webNextEnvPath = join(config.workspaceRoot, "apps", "web", "next-env.d.ts");
-  const previousWebNextEnv = await readFile(webNextEnvPath, "utf8").catch(() => null);
-
-  await runPnpm(config, ["--filter", "@open-design/release", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/contracts", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/registry-protocol", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/sidecar-proto", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/launcher-proto", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/sidecar", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/platform", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/agui-adapter", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/plugin-runtime", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/download", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/host", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/diagnostics", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/dsh-runtime", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/standalone-proto", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/components", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/daemon", "build"]);
-  try {
-    await runPnpm(config, ["--filter", "@open-design/web", "build"], { OD_WEB_OUTPUT_MODE: config.webOutputMode });
-    await runPnpm(config, ["--filter", "@open-design/web", "build:sidecar"]);
-    // Inject chunk IDs + upload browser sourcemaps to PostHog, then strip
-    // .map files before any packaging step copies the web output into the
-    // Electron resources. See `tools/pack/src/web-sourcemaps.ts`.
-    await processWebSourcemaps(config);
-  } finally {
-    if (previousWebNextEnv == null) await rm(webNextEnvPath, { force: true });
-    else await writeFile(webNextEnvPath, previousWebNextEnv, "utf8");
-  }
-  await runPnpm(config, ["--filter", "@open-design/shell-electron", "build"]);
+  await runPnpm(config, ["--filter", "@open-design/shell-electron...", "build"]);
 }
 
 export async function ensureWinWorkspaceBuild(config: ToolPackConfig, cache: ToolPackCache): Promise<string> {
@@ -255,7 +225,6 @@ function createAssembledAppDependencies(
   );
   return {
     ...internalDependencies,
-    ...(shouldUseWinStandalonePrebundle(config.webOutputMode) ? WIN_PREBUNDLE_RUNTIME_DEPENDENCIES : {}),
   };
 }
 
@@ -269,7 +238,7 @@ async function writeAssembledAppEntrypoints(
   const packageVersion = electronBuilderVersionForAppVersion(packagedVersion);
   await mkdir(paths.assembledAppRoot, { recursive: true });
   await cp(
-    join(config.workspaceRoot, "apps", "desktop", "dist", "main", "preload.cjs"),
+    join(config.workspaceRoot, "shells", "electron", "dist", "main", "preload.cjs"),
     join(paths.assembledAppRoot, "preload.cjs"),
   );
   await writeFile(
@@ -332,7 +301,7 @@ async function buildPrebundledStandaloneRuntime(
   await mkdir(paths.assembledPrebundledRoot, { recursive: true });
   await mkdir(dirname(paths.packagedMainPrebundleMetaPath), { recursive: true });
   await runEsbuild(config, [
-    join(config.workspaceRoot, "apps", "packaged", "dist", "index.mjs"),
+    join(config.workspaceRoot, "shells", "electron", "dist", "index.mjs"),
     "--bundle",
     "--platform=node",
     "--format=esm",
@@ -344,74 +313,6 @@ async function buildPrebundledStandaloneRuntime(
   await assertWinPrebundleMetafile({
     metafilePath: paths.packagedMainPrebundleMetaPath,
     policyName: "packagedMain",
-  });
-
-  await runEsbuild(config, [
-    join(config.workspaceRoot, "apps", "web", "dist", "sidecar", "index.js"),
-    "--bundle",
-    "--platform=node",
-    "--format=esm",
-    `--target=${WIN_PREBUNDLE_ESBUILD_TARGET}`,
-    ...WIN_PREBUNDLE_POLICIES.webSidecar.externals.map((dependency) => `--external:${dependency}`),
-    `--outfile=${paths.webSidecarPrebundlePath}`,
-    `--metafile=${paths.webSidecarPrebundleMetaPath}`,
-  ]);
-  await assertWinPrebundleMetafile({
-    metafilePath: paths.webSidecarPrebundleMetaPath,
-    policyName: "webSidecar",
-  });
-
-  await mkdir(dirname(paths.daemonSidecarPrebundleEntrypointPath), { recursive: true });
-  await writeFile(
-    paths.daemonSidecarPrebundleEntrypointPath,
-    `import ${JSON.stringify(
-      toRelativeImportSpecifier(
-        dirname(paths.daemonSidecarPrebundleEntrypointPath),
-        join(config.workspaceRoot, "apps", "daemon", "dist", "sidecar", "index.js"),
-      ),
-    )};\n`,
-    "utf8",
-  );
-  await writeFile(
-    paths.daemonCliPrebundleEntrypointPath,
-    [
-      'import { fileURLToPath } from "node:url";',
-      "const selfPath = fileURLToPath(import.meta.url);",
-      "process.env.OD_BIN ??= selfPath;",
-      "process.env.OD_DAEMON_CLI_PATH ??= selfPath;",
-      `await import(${JSON.stringify(
-        toRelativeImportSpecifier(
-          dirname(paths.daemonCliPrebundleEntrypointPath),
-          join(config.workspaceRoot, "apps", "daemon", "dist", "cli.js"),
-        ),
-      )});`,
-      "",
-    ].join("\n"),
-    "utf8",
-  );
-  await runEsbuild(config, [
-    paths.daemonSidecarPrebundleEntrypointPath,
-    paths.daemonCliPrebundleEntrypointPath,
-    "--bundle",
-    "--splitting",
-    "--platform=node",
-    "--format=esm",
-    `--target=${WIN_PREBUNDLE_ESBUILD_TARGET}`,
-    `--banner:js=${WIN_DAEMON_PREBUNDLE_ESM_REQUIRE_BANNER}`,
-    ...WIN_PREBUNDLE_POLICIES.daemonSidecar.externals.map((dependency) => `--external:${dependency}`),
-    `--outdir=${paths.daemonPrebundleRoot}`,
-    "--entry-names=[name]",
-    "--chunk-names=chunks/[name]-[hash]",
-    "--out-extension:.js=.mjs",
-    `--metafile=${paths.daemonPrebundleMetaPath}`,
-  ]);
-  await assertWinPrebundleMetafile({
-    metafilePath: paths.daemonPrebundleMetaPath,
-    policyName: "daemonSidecar",
-  });
-  await assertWinPrebundleMetafile({
-    metafilePath: paths.daemonPrebundleMetaPath,
-    policyName: "daemonCli",
   });
 }
 
@@ -449,10 +350,7 @@ export async function prepareWinPackagedApp(
     id: "win.packaged-app",
     key,
     outputs: ["app"],
-    invalidate: async ({ entryRoot }: { entryRoot: string }) => {
-      const nativeValidationError = await validateWinPackagedAppRuntime(join(entryRoot, "app"));
-      return nativeValidationError == null ? null : { reason: nativeValidationError };
-    },
+    invalidate: async () => null,
     build: async ({ entryRoot }: { entryRoot: string }): Promise<PackagedAppCacheMetadata> => {
       const appRoot = join(entryRoot, "app");
       const appPaths = createAppLocalPrebundlePaths(paths, appRoot, entryRoot);
@@ -467,14 +365,6 @@ export async function prepareWinPackagedApp(
         await buildPrebundledStandaloneRuntime(config, appPaths);
       }
       await runNpmInstall(appRoot);
-      await prepareNodePtyRuntime({
-        appRoot,
-        arch: "x64",
-        platform: "win32",
-      });
-      await runElectronRebuild(config, appRoot);
-      const nativeValidationError = await validateWinPackagedAppRuntime(appRoot);
-      if (nativeValidationError != null) throw new Error(nativeValidationError);
       return { packagedVersion };
     },
   };
@@ -498,13 +388,7 @@ export async function prepareWinPackagedApp(
     config,
     paths,
     packagedVersion,
-    usePrebundle
-      ? {
-          daemonCliEntryRelative: WIN_PREBUNDLED_DAEMON_CLI_RELATIVE_PATH,
-          daemonSidecarEntryRelative: WIN_PREBUNDLED_DAEMON_SIDECAR_RELATIVE_PATH,
-          webSidecarEntryRelative: WIN_PREBUNDLED_WEB_SIDECAR_RELATIVE_PATH,
-        }
-      : {},
+    {},
   );
   return { appRoot: join(manifest.entryPath, "app"), key, packagedVersion };
 }

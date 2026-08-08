@@ -106,17 +106,16 @@ function toPosixPath(value: string): string {
 }
 
 export function shouldUseWinStandalonePrebundle(webOutputMode: ToolPackConfig["webOutputMode"]): boolean {
-  return webOutputMode === "standalone";
+  void webOutputMode;
+  return true;
 }
 
 export function shouldInstallInternalPackageForWinPrebundle(options: {
   packageName: string;
   webOutputMode: ToolPackConfig["webOutputMode"];
 }): boolean {
-  if (!shouldUseWinStandalonePrebundle(options.webOutputMode)) return true;
-  return !WIN_STANDALONE_PREBUNDLE_EXCLUDED_INTERNAL_PACKAGES.includes(
-    options.packageName as (typeof WIN_STANDALONE_PREBUNDLE_EXCLUDED_INTERNAL_PACKAGES)[number],
-  );
+  void options;
+  return false;
 }
 
 export function findForbiddenWinPrebundleInputs(options: {

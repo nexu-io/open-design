@@ -20,27 +20,27 @@ import {
 } from "../src/win-prebundle.js";
 
 describe("win standalone prebundle policy", () => {
-  it("is enabled only for standalone web output", () => {
+  it("prebundles the Electron Shell independently of Web output mode", () => {
     expect(shouldUseWinStandalonePrebundle("standalone")).toBe(true);
-    expect(shouldUseWinStandalonePrebundle("server")).toBe(false);
+    expect(shouldUseWinStandalonePrebundle("server")).toBe(true);
   });
 
-  it("keeps server-mode package topology unchanged", () => {
+  it("does not install workspace packages beside the bundled Shell", () => {
     expect(
       shouldInstallInternalPackageForWinPrebundle({
         packageName: "@open-design/web",
         webOutputMode: "server",
       }),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       shouldInstallInternalPackageForWinPrebundle({
         packageName: "@open-design/shell-electron",
         webOutputMode: "server",
       }),
-    ).toBe(true);
+    ).toBe(false);
   });
 
-  it("excludes internal packages replaced by win standalone prebundles", () => {
+  it("keeps every body and shared package out of the assembled Shell app", () => {
     for (const packageName of [
       "@open-design/daemon",
       "@open-design/shell-electron",
@@ -60,13 +60,13 @@ describe("win standalone prebundle policy", () => {
       packageName: "@open-design/contracts",
       webOutputMode: "standalone",
     }),
-  ).toBe(true);
+  ).toBe(false);
   expect(
     shouldInstallInternalPackageForWinPrebundle({
       packageName: "@open-design/platform",
       webOutputMode: "standalone",
     }),
-  ).toBe(true);
+  ).toBe(false);
   });
 
   it("documents the explicit code-level bundle boundaries", () => {

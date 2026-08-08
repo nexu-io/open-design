@@ -31,4 +31,22 @@ describe("Electron Standalone environment projection", () => {
       POSTHOG_KEY: "phc_test",
     });
   });
+
+  it("lets a windowless shell disable the Desktop auth gate", () => {
+    expect(createStandaloneBootstrapEnvironment({
+      appVersion: "0.18.0-beta.4",
+      config: {
+        amrProfile: null,
+        posthogHost: null,
+        posthogKey: null,
+        telemetryRelayUrl: null,
+        velaWebUrl: null,
+      },
+      mcpBootstrap: { args: [], command: null },
+      requireDesktopAuth: false,
+    }, {})).toMatchObject({
+      ELECTRON_RUN_AS_NODE: "1",
+      OD_REQUIRE_DESKTOP_AUTH: "0",
+    });
+  });
 });

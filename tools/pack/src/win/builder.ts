@@ -165,11 +165,7 @@ async function runElectronBuilderRaw(
     readPackagedVersion(config)
   );
   const packageVersion = electronBuilderVersionForAppVersion(packagedVersion);
-  const webStandaloneHookConfigPath = config.webOutputMode === "standalone"
-    ? await runSegment("electron-builder-raw:write-web-standalone-hook-config", async () =>
-      writeWebStandaloneHookConfig(config, paths)
-    )
-    : null;
+  const webStandaloneHookConfigPath = null;
   const builderConfig = {
     appId: "io.open-design.desktop",
     afterPack: webStandaloneHookConfigPath == null ? undefined : winResources.webStandaloneAfterPackHook,
@@ -420,26 +416,6 @@ async function assertMaterializedUnpackedVersionConsistency(
   }
 }
 
-function winUnpackedAppRoot(unpackedRoot: string): string {
-  return join(unpackedRoot, "resources", "app");
-}
-
-async function validateWinUnpackedNodePtyRuntime(unpackedRoot: string): Promise<string | null> {
-  return validateNodePtyRuntime({
-    appRoot: winUnpackedAppRoot(unpackedRoot),
-    arch: "x64",
-    platform: "win32",
-  });
-}
-
-async function assertWinUnpackedNodePtyRuntime(unpackedRoot: string): Promise<void> {
-  await assertNodePtyRuntime({
-    appRoot: winUnpackedAppRoot(unpackedRoot),
-    arch: "x64",
-    platform: "win32",
-  });
-}
-
 export async function materializeCachedUnpackedForInstaller(
   sourceUnpackedRoot: string,
   paths: WinPaths,
@@ -478,7 +454,6 @@ export async function materializeCachedUnpackedForInstaller(
     await rewriteWinExecutableVersion(paths.unpackedExePath, packagedVersion);
     await assertMaterializedUnpackedVersionConsistency(paths.unpackedRoot, packagedVersion);
   }
-  await assertWinUnpackedNodePtyRuntime(paths.unpackedRoot);
   return {
     appBuilderOutputRoot: paths.appBuilderOutputRoot,
     cacheEntryPath: null,
@@ -525,14 +500,8 @@ export async function runElectronBuilder(
   const packagedVersion = await readPackagedVersion(config);
   const versionCore = versionCoreForAppVersion(packagedVersion);
   const usePrebundle = shouldUseWinStandalonePrebundle(config.webOutputMode);
-  const packagedConfigEntrypoints = usePrebundle
-    ? {
-        daemonCliEntryRelative: WIN_PREBUNDLED_DAEMON_CLI_RELATIVE_PATH,
-        daemonSidecarEntryRelative: WIN_PREBUNDLED_DAEMON_SIDECAR_RELATIVE_PATH,
-        webSidecarEntryRelative: WIN_PREBUNDLED_WEB_SIDECAR_RELATIVE_PATH,
-      }
-    : {};
-  const afterPackHook = config.webOutputMode === "standalone" ? await hashPath(winResources.webStandaloneAfterPackHook) : null;
+  const packagedConfigEntrypoints = {};
+  const afterPackHook = null;
   const domToPptxBundle = await hashPath(domToPptxBundleResource(config).from);
   const winIcon = await hashPath(winResources.icon);
   const electronBuilderKeyInput = {
@@ -565,17 +534,11 @@ export async function runElectronBuilder(
     node: "win.electron-builder-dir-base",
     packagedVersion: versionCore,
   });
-  const auditOutput = "web-standalone-after-pack-audit.json";
   const node = {
     id: "win.electron-builder-dir",
     key,
-    outputs: ["builder", ...(config.webOutputMode === "standalone" ? [auditOutput] : [])],
-    invalidate: async ({ entryRoot }: { entryRoot: string }) => {
-      const validationError = await validateWinUnpackedNodePtyRuntime(
-        join(entryRoot, "builder", "win-unpacked"),
-      );
-      return validationError == null ? null : { reason: validationError };
-    },
+    outputs: ["builder"],
+    invalidate: async () => null,
     build: async ({ entryRoot }: { entryRoot: string }): Promise<ElectronBuilderDirCacheMetadata> => {
       const packagedAppRoot = await getPackagedAppRoot();
       await runElectronBuilderRaw(
@@ -583,7 +546,6 @@ export async function runElectronBuilder(
         { ...createCacheLocalWinPaths(paths, entryRoot), resourceRoot: resourceTree.resourceRoot },
         packagedAppRoot,
       );
-      await assertWinUnpackedNodePtyRuntime(join(entryRoot, "builder", "win-unpacked"));
       return { packagedAppKey, packagedVersion };
     },
   };
@@ -608,7 +570,6 @@ export async function runElectronBuilder(
                 packagedAppRoot,
               );
               segments.push(...rawSegments);
-              await assertWinUnpackedNodePtyRuntime(join(entryRoot, "builder", "win-unpacked"));
             });
             return { packagedAppKey, packagedVersion };
           },
@@ -620,9 +581,6 @@ export async function runElectronBuilder(
   const cachedBuilderRoot = join(manifest.entryPath, "builder");
   const cachedUnpackedRoot = join(cachedBuilderRoot, "win-unpacked");
   const cachedExecutablePath = join(cachedUnpackedRoot, `${PRODUCT_NAME}.exe`);
-  await runSegment("electron-builder-dir:validate-node-pty-runtime", async () => {
-    await assertWinUnpackedNodePtyRuntime(cachedUnpackedRoot);
-  });
   await runSegment("electron-builder-dir:prepare-namespace", async () => {
     if (shouldBuildWinNsisInstaller(config.to) || shouldBuildWinPortableZip(config.to)) {
       await mkdir(paths.appBuilderOutputRoot, { recursive: true });

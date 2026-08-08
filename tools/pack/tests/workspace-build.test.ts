@@ -8,111 +8,56 @@ import { ToolPackCache } from "../src/cache.js";
 import type { ToolPackConfig } from "../src/config.js";
 import { ensureWorkspaceBuildArtifacts } from "../src/workspace-build.js";
 
-const PACKAGE_DIRS = [
+const SHELL_PACKAGE_DIRS = [
   "packages/release",
-  "packages/components",
   "packages/contracts",
-  "packages/registry-protocol",
   "packages/sidecar-proto",
   "packages/launcher-proto",
   "packages/sidecar",
   "packages/platform",
   "packages/download",
   "packages/host",
-  "packages/agui-adapter",
-  "packages/plugin-runtime",
   "packages/diagnostics",
-  "packages/dsh-runtime",
   "packages/standalone-runtime",
   "packages/standalone-proto",
-  "apps/daemon",
-  "apps/standalone",
-  "apps/web",
+  "packages/closure-proto",
+  "packages/closure-store",
+  "packages/closure-update",
   "shells/electron",
 ] as const;
 
-const OUTPUT_FILES = [
-  "packages/release/dist/index.mjs",
-  "packages/release/dist/index.d.ts",
-  "packages/components/dist/index.mjs",
-  "packages/components/dist/index.d.ts",
-  "packages/contracts/dist/index.mjs",
-  "packages/contracts/dist/index.d.ts",
-  "packages/registry-protocol/dist/index.mjs",
-  "packages/registry-protocol/dist/index.d.ts",
-  "packages/sidecar-proto/dist/index.mjs",
-  "packages/sidecar-proto/dist/index.d.ts",
-  "packages/launcher-proto/dist/index.mjs",
-  "packages/launcher-proto/dist/index.d.ts",
-  "packages/sidecar/dist/index.mjs",
-  "packages/sidecar/dist/index.d.ts",
-  "packages/platform/dist/index.mjs",
-  "packages/platform/dist/index.d.ts",
-  "packages/download/dist/index.mjs",
-  "packages/download/dist/index.d.ts",
-  "packages/host/dist/index.mjs",
-  "packages/host/dist/index.d.ts",
-  "packages/agui-adapter/dist/index.mjs",
-  "packages/agui-adapter/dist/index.d.ts",
-  "packages/plugin-runtime/dist/index.mjs",
-  "packages/plugin-runtime/dist/index.d.ts",
-  "packages/diagnostics/dist/index.mjs",
-  "packages/diagnostics/dist/index.d.ts",
-  "packages/dsh-runtime/dist/index.js",
-  "packages/dsh-runtime/dist/types/index.d.ts",
-  "packages/standalone-runtime/dist/index.mjs",
-  "packages/standalone-runtime/dist/index.d.ts",
-  "packages/standalone-proto/dist/index.mjs",
-  "packages/standalone-proto/dist/index.d.ts",
-  "apps/daemon/dist/cli.js",
-  "apps/daemon/dist/cli.d.ts",
-  "apps/daemon/dist/sidecar/index.js",
-  "apps/web/dist/sidecar/index.js",
-  "apps/web/dist/sidecar/index.d.ts",
-  "apps/web/.next/standalone/apps/web/server.js",
-  "apps/web/.next/static/chunk.js",
-  "shells/electron/dist/main/index.js",
-  "shells/electron/dist/main/index.d.ts",
-  "shells/electron/dist/index.mjs",
-  "shells/electron/dist/index.d.ts",
-] as const;
+const BODY_PACKAGE_DIRS = ["apps/daemon", "apps/standalone", "apps/web"] as const;
 
 async function writeWorkspace(root: string): Promise<void> {
-  await writeFile(join(root, "package.json"), `${JSON.stringify({ packageManager: "pnpm@10.33.2" }, null, 2)}\n`, "utf8");
-  await writeFile(join(root, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\n", "utf8");
-  for (const directory of PACKAGE_DIRS) {
+  await writeFile(join(root, "package.json"), `${JSON.stringify({ packageManager: "pnpm@10.33.2" })}\n`);
+  await writeFile(join(root, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\n");
+  for (const directory of [...SHELL_PACKAGE_DIRS, ...BODY_PACKAGE_DIRS]) {
     await mkdir(join(root, directory, "src"), { recursive: true });
-    await writeFile(join(root, directory, "package.json"), `${JSON.stringify({ name: directory }, null, 2)}\n`, "utf8");
-    await writeFile(join(root, directory, "src", "index.ts"), "export const value = 1;\n", "utf8");
+    await writeFile(join(root, directory, "package.json"), `${JSON.stringify({ name: directory })}\n`);
+    await writeFile(join(root, directory, "src", "index.ts"), "export const value = 1;\n");
   }
 }
 
 async function writeOutputs(root: string, value: string): Promise<void> {
-  for (const file of OUTPUT_FILES) {
-    await mkdir(join(root, file, ".."), { recursive: true });
-    await writeFile(join(root, file), `${value}\n`, "utf8");
+  for (const directory of SHELL_PACKAGE_DIRS) {
+    await mkdir(join(root, directory, "dist"), { recursive: true });
+    await writeFile(join(root, directory, "dist", "index.mjs"), `${value}\n`);
+    await writeFile(join(root, directory, "dist", "index.d.ts"), `${value}\n`);
   }
+  await mkdir(join(root, "shells/electron/dist/main"), { recursive: true });
+  await writeFile(join(root, "shells/electron/dist/main/preload.cjs"), `${value}\n`);
 }
 
-async function writeStandalonePeerDeps(root: string): Promise<void> {
-  const pnpmRoot = join(root, "apps/web/.next/standalone/node_modules/.pnpm");
-  for (const directory of ["react@18.3.1", "react-dom@18.3.1_react@18.3.1", "styled-jsx@5.1.6_react@18.3.1"]) {
-    const packageName = directory.split("@")[0]!;
-    const packageRoot = join(pnpmRoot, directory, "node_modules", packageName);
-    await mkdir(packageRoot, { recursive: true });
-    await writeFile(join(packageRoot, "package.json"), `${JSON.stringify({ name: packageName }, null, 2)}\n`, "utf8");
-  }
-}
-
-function createConfig(root: string, cacheRoot: string): ToolPackConfig {
+function createConfig(root: string, cacheRoot: string, platform: "mac" | "win" = "win"): ToolPackConfig {
   return {
+    appVersion: "0.18.0-beta.4",
     containerized: false,
     electronBuilderCliPath: "electron-builder",
     electronDistPath: "electron-dist",
     electronVersion: "41.3.0",
     macCompression: "normal",
-    namespace: "test",
-    platform: "win",
+    namespace: "release-beta",
+    platform,
     portable: false,
     removeData: false,
     removeLogs: false,
@@ -123,13 +68,13 @@ function createConfig(root: string, cacheRoot: string): ToolPackConfig {
       cacheRoot,
       output: {
         appBuilderRoot: join(root, ".tmp", "builder"),
-        namespaceRoot: join(root, ".tmp", "out", "win", "namespaces", "test"),
-        platformRoot: join(root, ".tmp", "out", "win"),
+        namespaceRoot: join(root, ".tmp", "out", platform, "namespaces", "release-beta"),
+        platformRoot: join(root, ".tmp", "out", platform),
         root: join(root, ".tmp", "out"),
       },
       runtime: {
-        namespaceBaseRoot: join(root, ".tmp", "runtime", "win", "namespaces"),
-        namespaceRoot: join(root, ".tmp", "runtime", "win", "namespaces", "test"),
+        namespaceBaseRoot: join(root, ".tmp", "runtime", platform, "namespaces"),
+        namespaceRoot: join(root, ".tmp", "runtime", platform, "namespaces", "release-beta"),
       },
       toolPackRoot: join(root, ".tmp", "tools-pack"),
     },
@@ -142,55 +87,41 @@ function createConfig(root: string, cacheRoot: string): ToolPackConfig {
   };
 }
 
-describe("ensureWorkspaceBuildArtifacts", () => {
-  it("builds once and skips when the key and outputs are still valid", async () => {
-    const root = await mkdtemp(join(tmpdir(), "open-design-workspace-build-"));
+describe("Electron Shell workspace build cache", () => {
+  it("builds and materializes the shell dependency closure once", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-shell-build-"));
     const cache = new ToolPackCache(join(root, ".cache"));
-    const config = createConfig(root, cache.root);
     let builds = 0;
-
     try {
       await writeWorkspace(root);
-      await ensureWorkspaceBuildArtifacts(config, cache, async () => {
-        builds += 1;
-        await writeOutputs(root, `build-${builds}`);
-      });
-      await ensureWorkspaceBuildArtifacts(config, cache, async () => {
-        builds += 1;
-        await writeOutputs(root, `build-${builds}`);
-      });
+      const build = async () => writeOutputs(root, `build-${++builds}`);
+      await ensureWorkspaceBuildArtifacts(createConfig(root, cache.root), cache, build);
+      await rm(join(root, "shells/electron/dist/index.mjs"));
+      await ensureWorkspaceBuildArtifacts(createConfig(root, cache.root), cache, build);
 
       expect(builds).toBe(1);
-      expect(cache.report().entries.map((entry) => entry.status)).toEqual(["miss", "hit"]);
-      expect(cache.report().entries.map((entry) => entry.nodeId)).toEqual([
-        "win.workspace-build",
-        "win.workspace-build",
-      ]);
       expect(await readFile(join(root, "shells/electron/dist/index.mjs"), "utf8")).toBe("build-1\n");
+      expect(cache.report().entries.map((entry) => entry.status)).toEqual(["miss", "hit"]);
     } finally {
       await rm(root, { force: true, recursive: true });
     }
   });
 
-  it("does not invalidate the shell build for a Closure-only entrypoint change", async () => {
-    const root = await mkdtemp(join(tmpdir(), "open-design-workspace-build-boundary-"));
+  it("ignores Standalone body changes but invalidates Shell dependency changes", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-shell-boundary-"));
     const cache = new ToolPackCache(join(root, ".cache"));
-    const config = createConfig(root, cache.root);
     let builds = 0;
-
     try {
       await writeWorkspace(root);
-      const build = async () => {
-        builds += 1;
-        await writeOutputs(root, `build-${builds}`);
-      };
+      const config = createConfig(root, cache.root);
+      const build = async () => writeOutputs(root, `build-${++builds}`);
       await ensureWorkspaceBuildArtifacts(config, cache, build);
-      await writeFile(join(root, "apps/standalone/src/index.ts"), "export const value = 2;\n", "utf8");
+      await writeFile(join(root, "apps/standalone/src/index.ts"), "export const value = 2;\n");
+      await writeFile(join(root, "apps/web/src/index.ts"), "export const value = 2;\n");
       await ensureWorkspaceBuildArtifacts(config, cache, build);
-      expect(builds).toBe(1);
+      await writeFile(join(root, "packages/standalone-proto/src/index.ts"), "export const value = 2;\n");
+      await ensureWorkspaceBuildArtifacts(config, cache, build);
 
-      await writeFile(join(root, "shells/electron/src/index.ts"), "export const value = 2;\n", "utf8");
-      await ensureWorkspaceBuildArtifacts(config, cache, build);
       expect(builds).toBe(2);
       expect(cache.report().entries.map((entry) => entry.status)).toEqual(["miss", "hit", "miss"]);
     } finally {
@@ -198,198 +129,31 @@ describe("ensureWorkspaceBuildArtifacts", () => {
     }
   });
 
-  it("writes a Windows version-family alias after a successful build", async () => {
-    const root = await mkdtemp(join(tmpdir(), "open-design-workspace-build-alias-"));
+  it("does not key the Shell build by Standalone Web output mode", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-shell-mode-"));
     const cache = new ToolPackCache(join(root, ".cache"));
-    const config: ToolPackConfig = { ...createConfig(root, cache.root), appVersion: "0.9.1-beta.1" };
-
+    let builds = 0;
     try {
       await writeWorkspace(root);
-      await ensureWorkspaceBuildArtifacts(config, cache, async () => {
-        await writeOutputs(root, "build");
-      });
-
-      const aliasesRoot = join(cache.root, "aliases", "win.workspace-build");
-      const aliasBuckets = await readdir(aliasesRoot);
-      expect(aliasBuckets).toHaveLength(1);
-      expect(await readFile(join(aliasesRoot, aliasBuckets[0]!, "alias.json"), "utf8")).toContain("win.workspace-build");
+      const config = createConfig(root, cache.root);
+      const build = async () => writeOutputs(root, `build-${++builds}`);
+      await ensureWorkspaceBuildArtifacts(config, cache, build);
+      await ensureWorkspaceBuildArtifacts({ ...config, webOutputMode: "server" }, cache, build);
+      expect(builds).toBe(1);
     } finally {
       await rm(root, { force: true, recursive: true });
     }
   });
 
-  it("hoists standalone web peer deps with Windows-compatible directory links", async () => {
-    const root = await mkdtemp(join(tmpdir(), "open-design-workspace-build-peer-deps-"));
+  it("keeps Windows version-family aliases while macOS stays content-addressed", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-shell-alias-"));
     const cache = new ToolPackCache(join(root, ".cache"));
-    const config = createConfig(root, cache.root);
-
     try {
       await writeWorkspace(root);
-      await ensureWorkspaceBuildArtifacts(config, cache, async () => {
-        await writeOutputs(root, "build");
-        await writeStandalonePeerDeps(root);
-      });
-
-      expect(await readFile(join(root, "apps/web/.next/standalone/apps/web/node_modules/react/package.json"), "utf8"))
-        .toContain('"name": "react"');
-      expect(await readFile(join(root, "apps/web/.next/standalone/apps/web/node_modules/react-dom/package.json"), "utf8"))
-        .toContain('"name": "react-dom"');
-      expect(await readFile(join(root, "apps/web/.next/standalone/apps/web/node_modules/styled-jsx/package.json"), "utf8"))
-        .toContain('"name": "styled-jsx"');
-    } finally {
-      await rm(root, { force: true, recursive: true });
-    }
-  });
-
-  it("does not write a version-family alias for mac workspace builds", async () => {
-    const root = await mkdtemp(join(tmpdir(), "open-design-workspace-build-mac-alias-"));
-    const cache = new ToolPackCache(join(root, ".cache"));
-    const config: ToolPackConfig = { ...createConfig(root, cache.root), appVersion: "0.9.1-beta.1", platform: "mac" };
-
-    try {
-      await writeWorkspace(root);
-      await ensureWorkspaceBuildArtifacts(config, cache, async () => {
-        await writeOutputs(root, "build");
-      });
-
+      await ensureWorkspaceBuildArtifacts(createConfig(root, cache.root), cache, async () => writeOutputs(root, "win"));
+      expect(await readdir(join(cache.root, "aliases", "win.workspace-build"))).toHaveLength(1);
+      await ensureWorkspaceBuildArtifacts(createConfig(root, cache.root, "mac"), cache, async () => writeOutputs(root, "mac"));
       await expect(readdir(join(cache.root, "aliases", "mac.workspace-build"))).rejects.toThrow();
-    } finally {
-      await rm(root, { force: true, recursive: true });
-    }
-  });
-
-  it("materializes cached outputs when an expected workspace output is missing", async () => {
-    const root = await mkdtemp(join(tmpdir(), "open-design-workspace-build-stale-"));
-    const cache = new ToolPackCache(join(root, ".cache"));
-    const config = createConfig(root, cache.root);
-    let builds = 0;
-
-    try {
-      await writeWorkspace(root);
-      await ensureWorkspaceBuildArtifacts(config, cache, async () => {
-        builds += 1;
-        await writeOutputs(root, `build-${builds}`);
-      });
-      await rm(join(root, "apps/web/dist/sidecar/index.js"), { force: true });
-      await ensureWorkspaceBuildArtifacts(config, cache, async () => {
-        builds += 1;
-        await writeOutputs(root, `build-${builds}`);
-      });
-
-      expect(builds).toBe(1);
-      expect(cache.report().entries.map((entry) => entry.status)).toEqual(["miss", "hit"]);
-      expect(await readFile(join(root, "apps/web/dist/sidecar/index.js"), "utf8")).toBe("build-1\n");
-    } finally {
-      await rm(root, { force: true, recursive: true });
-    }
-  });
-
-  it("materializes cached internal package outputs for pack tarballs", async () => {
-    const root = await mkdtemp(join(tmpdir(), "open-design-workspace-build-package-cache-"));
-    const cache = new ToolPackCache(join(root, ".cache"));
-    const config = createConfig(root, cache.root);
-    let builds = 0;
-
-    try {
-      await writeWorkspace(root);
-      await ensureWorkspaceBuildArtifacts(config, cache, async () => {
-        builds += 1;
-        await writeOutputs(root, `build-${builds}`);
-      });
-      await rm(join(root, "packages/host/dist/index.mjs"), { force: true });
-      await ensureWorkspaceBuildArtifacts(config, cache, async () => {
-        builds += 1;
-        await writeOutputs(root, `build-${builds}`);
-      });
-
-      expect(builds).toBe(1);
-      expect(cache.report().entries.map((entry) => entry.status)).toEqual(["miss", "hit"]);
-      expect(await readFile(join(root, "packages/host/dist/index.mjs"), "utf8")).toBe("build-1\n");
-    } finally {
-      await rm(root, { force: true, recursive: true });
-    }
-  });
-
-  it("keys and materializes the standalone runtime build output", async () => {
-    const root = await mkdtemp(join(tmpdir(), "open-design-workspace-build-standalone-runtime-"));
-    const cache = new ToolPackCache(join(root, ".cache"));
-    const config = createConfig(root, cache.root);
-    let builds = 0;
-
-    try {
-      await writeWorkspace(root);
-      await ensureWorkspaceBuildArtifacts(config, cache, async () => {
-        builds += 1;
-        await writeOutputs(root, `build-${builds}`);
-      });
-
-      await writeFile(
-        join(root, "packages/standalone-runtime/src/index.ts"),
-        "export const value = 2;\n",
-        "utf8",
-      );
-      await ensureWorkspaceBuildArtifacts(config, cache, async () => {
-        builds += 1;
-        await writeOutputs(root, `build-${builds}`);
-      });
-      expect(builds).toBe(2);
-
-      await writeFile(join(root, "packages/standalone-runtime/dist/index.mjs"), "non-input\n", "utf8");
-      await ensureWorkspaceBuildArtifacts(config, cache, async () => {
-        builds += 1;
-        await writeOutputs(root, `build-${builds}`);
-      });
-      expect(builds).toBe(2);
-
-      await rm(join(root, "packages/standalone-runtime/dist/index.mjs"), { force: true });
-      await ensureWorkspaceBuildArtifacts(config, cache, async () => {
-        builds += 1;
-        await writeOutputs(root, `build-${builds}`);
-      });
-      expect(builds).toBe(2);
-      expect(await readFile(join(root, "packages/standalone-runtime/dist/index.mjs"), "utf8")).toBe("build-2\n");
-      expect(cache.report().entries.map((entry) => entry.status)).toEqual(["miss", "miss", "hit", "hit"]);
-    } finally {
-      await rm(root, { force: true, recursive: true });
-    }
-  });
-
-  it("keeps platform-specific workspace build cache nodes separate", async () => {
-    const root = await mkdtemp(join(tmpdir(), "open-design-workspace-build-platform-"));
-    const cache = new ToolPackCache(join(root, ".cache"));
-    const winConfig = createConfig(root, cache.root);
-    const macConfig: ToolPackConfig = {
-      ...winConfig,
-      platform: "mac",
-      roots: {
-        ...winConfig.roots,
-        output: {
-          ...winConfig.roots.output,
-          namespaceRoot: join(root, ".tmp", "out", "mac", "namespaces", "test"),
-          platformRoot: join(root, ".tmp", "out", "mac"),
-        },
-        runtime: {
-          namespaceBaseRoot: join(root, ".tmp", "runtime", "mac", "namespaces"),
-          namespaceRoot: join(root, ".tmp", "runtime", "mac", "namespaces", "test"),
-        },
-      },
-    };
-
-    try {
-      await writeWorkspace(root);
-      await ensureWorkspaceBuildArtifacts(winConfig, cache, async () => {
-        await writeOutputs(root, "win-build");
-      });
-      await ensureWorkspaceBuildArtifacts(macConfig, cache, async () => {
-        await writeOutputs(root, "mac-build");
-      });
-
-      expect(cache.report().entries.map((entry) => entry.nodeId)).toEqual([
-        "win.workspace-build",
-        "mac.workspace-build",
-      ]);
-      expect(cache.report().entries.map((entry) => entry.status)).toEqual(["miss", "miss"]);
-      expect(await readFile(join(root, "shells/electron/dist/index.mjs"), "utf8")).toBe("mac-build\n");
     } finally {
       await rm(root, { force: true, recursive: true });
     }

@@ -73,6 +73,10 @@ import {
 import { createElectronStandaloneLauncher } from "./standalone-handoff.js";
 import { createStandaloneDesktopAuthRegistration } from "./standalone-commands.js";
 import { applyStandaloneBootstrapEnvironment } from "./standalone-environment.js";
+import {
+  parsePackagedStandaloneRequest,
+  runPackagedStandalone,
+} from "./standalone-launcher.js";
 import { resolvePackagedWindowTitle } from "./window-title.js";
 import { syncWindowsUninstallDisplayVersion } from "./windows-lifecycle.js";
 
@@ -124,6 +128,13 @@ function applyShellUpdateEnv(updateMetadataUrl: string | null): void {
 
 async function main(): Promise<void> {
   const packageConfig = await readPackagedConfig();
+  const standaloneRequest = parsePackagedStandaloneRequest(process.argv.slice(1));
+  if (standaloneRequest.standalone) {
+    await runPackagedStandalone(packageConfig, standaloneRequest, {
+      shellEntryUrl: import.meta.url,
+    });
+    return;
+  }
 
   applyOsLocaleSwitch(app);
   applyLoopbackConnectionLimitSwitch(app);
