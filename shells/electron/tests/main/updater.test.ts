@@ -299,7 +299,7 @@ async function writeReleaseFixture(root: string, key: string, channel: FixtureCh
 }
 
 async function writeLauncherPayloadFixture(destinationRoot: string, version: string): Promise<void> {
-  await mkdir(join(destinationRoot, "payload", "resources", "open-design"), { recursive: true });
+  await mkdir(join(destinationRoot, "payload", "resources"), { recursive: true });
   await writeFile(join(destinationRoot, "payload", "Open Design.exe"), "");
   await writeFile(join(destinationRoot, "payload", "resources", "open-design-config.json"), "{}\n");
   await writeFile(join(destinationRoot, "manifest.json"), `${JSON.stringify({
@@ -578,7 +578,7 @@ describe("desktop updater", () => {
       }, {
         extractLauncherPayloadArchive: async ({ destinationRoot }) => {
           extractCount += 1;
-          await mkdir(join(destinationRoot, "payload", "resources", "open-design"), { recursive: true });
+          await mkdir(join(destinationRoot, "payload", "resources"), { recursive: true });
           await writeFile(join(destinationRoot, "payload", "Open Design.exe"), "");
           await writeFile(
             join(destinationRoot, "manifest.json"),
@@ -963,7 +963,7 @@ describe("desktop updater", () => {
     } as const;
     const updaterDeps: NonNullable<Parameters<typeof createDesktopUpdater>[1]> = {
       extractLauncherPayloadArchive: async ({ destinationRoot }) => {
-        await mkdir(join(destinationRoot, "payload", "resources", "open-design"), { recursive: true });
+        await mkdir(join(destinationRoot, "payload", "resources"), { recursive: true });
         await writeFile(join(destinationRoot, "payload", "Open Design.exe"), "");
         await writeFile(
           join(destinationRoot, "manifest.json"),
@@ -1522,7 +1522,7 @@ describe("desktop updater", () => {
       }, {
         extractLauncherPayloadArchive: async ({ destinationRoot }) => {
           extractCount += 1;
-          await mkdir(join(destinationRoot, "payload", "resources", "open-design"), { recursive: true });
+          await mkdir(join(destinationRoot, "payload", "resources"), { recursive: true });
           await writeFile(join(destinationRoot, "payload", "Open Design.exe"), "");
           await writeFile(
             join(destinationRoot, "manifest.json"),
@@ -1753,7 +1753,7 @@ describe("desktop updater", () => {
       }, {
         extractLauncherPayloadArchive: async ({ destinationRoot }) => {
           await mkdir(join(destinationRoot, "payload", "Open Design Beta.app", "Contents", "MacOS"), { recursive: true });
-          await mkdir(join(destinationRoot, "payload", "Open Design Beta.app", "Contents", "Resources", "open-design"), { recursive: true });
+          await mkdir(join(destinationRoot, "payload", "Open Design Beta.app", "Contents", "Resources"), { recursive: true });
           await writeFile(join(destinationRoot, "payload", "Open Design Beta.app", "Contents", "MacOS", "Open Design Beta"), "");
           await writeFile(join(destinationRoot, "payload", "Open Design Beta.app", "Contents", "Resources", "open-design-config.json"), "{}\n");
           await writeFile(
@@ -1880,7 +1880,7 @@ describe("desktop updater", () => {
       }, {
         extractLauncherPayloadArchive: async ({ destinationRoot }) => {
           await mkdir(join(destinationRoot, "payload", "Open Design Prerelease.app", "Contents", "MacOS"), { recursive: true });
-          await mkdir(join(destinationRoot, "payload", "Open Design Prerelease.app", "Contents", "Resources", "open-design"), { recursive: true });
+          await mkdir(join(destinationRoot, "payload", "Open Design Prerelease.app", "Contents", "Resources"), { recursive: true });
           await writeFile(join(destinationRoot, "payload", "Open Design Prerelease.app", "Contents", "MacOS", "Open Design Prerelease"), "");
           await writeFile(join(destinationRoot, "payload", "Open Design Prerelease.app", "Contents", "Resources", "open-design-config.json"), "{}\n");
           await writeFile(
@@ -2000,7 +2000,7 @@ describe("desktop updater", () => {
         source: SIDECAR_SOURCES.PACKAGED,
       }, {
         extractLauncherPayloadArchive: async ({ destinationRoot }) => {
-          await mkdir(join(destinationRoot, "payload", "resources", "open-design"), { recursive: true });
+          await mkdir(join(destinationRoot, "payload", "resources"), { recursive: true });
           await writeFile(join(destinationRoot, "payload", "Open Design.exe"), "");
           await writeFile(join(destinationRoot, "payload", "resources", "open-design-config.json"), "{}\n");
           await writeFile(
@@ -2111,7 +2111,7 @@ describe("desktop updater", () => {
         source: SIDECAR_SOURCES.PACKAGED,
       }, {
         extractLauncherPayloadArchive: async ({ destinationRoot }) => {
-          await mkdir(join(destinationRoot, "payload", "resources", "open-design"), { recursive: true });
+          await mkdir(join(destinationRoot, "payload", "resources"), { recursive: true });
           await writeFile(join(destinationRoot, "payload", "Open Design.exe"), "");
           await writeFile(join(destinationRoot, "payload", "resources", "open-design-config.json"), "{}\n");
           await writeFile(
@@ -2227,7 +2227,7 @@ describe("desktop updater", () => {
         source: SIDECAR_SOURCES.PACKAGED,
       }, {
         extractLauncherPayloadArchive: async ({ destinationRoot }) => {
-          await mkdir(join(destinationRoot, "payload", "resources", "open-design"), { recursive: true });
+          await mkdir(join(destinationRoot, "payload", "resources"), { recursive: true });
           await writeFile(join(destinationRoot, "payload", "Open Design.exe"), "");
           await writeFile(join(destinationRoot, "payload", "resources", "open-design-config.json"), "{}\n");
           await writeFile(
@@ -2351,7 +2351,7 @@ describe("desktop updater", () => {
         source: SIDECAR_SOURCES.PACKAGED,
       }, {
         extractLauncherPayloadArchive: async ({ destinationRoot }) => {
-          await mkdir(join(destinationRoot, "payload", "resources", "open-design"), { recursive: true });
+          await mkdir(join(destinationRoot, "payload", "resources"), { recursive: true });
           await writeFile(join(destinationRoot, "payload", "Open Design.exe"), "");
           await writeFile(join(destinationRoot, "payload", "resources", "open-design-config.json"), "{}\n");
           await writeFile(

@@ -127,13 +127,9 @@ export async function assertLauncherPayloadBootConfig(input: {
   }
   const rawConfig = await readJsonStrict<unknown>(packagedConfigPath);
   if (!isRecord(rawConfig)) throw new Error("launcher payload config must be a JSON object");
-  const resourceRoot = typeof rawConfig.resourceRoot === "string" && rawConfig.resourceRoot.length > 0
-    ? rawConfig.resourceRoot
-    : join(resourcesPath, "open-design");
-  const resourceRootEntry = await lstat(resourceRoot);
-  if (!resourceRootEntry.isDirectory() || resourceRootEntry.isSymbolicLink()) {
-    throw new Error("launcher payload resource root must be a plain directory");
-  }
+  // The launcher payload owns only the Shell entry and its boot metadata.
+  // Standalone Closure resources are resolved from the committed binding at
+  // boot and are intentionally absent from a bodyless Shell update.
 }
 
 export async function defaultExtractLauncherPayloadArchive(input: LauncherPayloadExtractInput): Promise<void> {
