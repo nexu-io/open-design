@@ -11,9 +11,8 @@ import {
   WIN_PREBUNDLED_PACKAGED_MAIN_RELATIVE_PATH,
   WIN_PREBUNDLED_WEB_SIDECAR_RELATIVE_PATH,
 } from "../win-prebundle.js";
-import { PRODUCT_NAME } from "./constants.js";
 import { pathExists } from "./fs.js";
-import { resolveWinInstallIdentity } from "./identity.js";
+import { resolveWinInstallIdentity, winArtifactProductName } from "./identity.js";
 import type { WinPaths, WinRemovalTarget } from "./types.js";
 
 export function sanitizeNamespace(value: string): string {
@@ -23,7 +22,8 @@ export function sanitizeNamespace(value: string): string {
 export function resolveWinPaths(config: ToolPackConfig): WinPaths {
   const namespaceToken = sanitizeNamespace(config.namespace);
   const namespaceRoot = config.roots.output.namespaceRoot;
-  const installDir = join(config.roots.runtime.namespaceRoot, "install", PRODUCT_NAME);
+  const artifactProductName = winArtifactProductName(config);
+  const installDir = join(config.roots.runtime.namespaceRoot, "install", artifactProductName);
   const identity = resolveWinInstallIdentity(config);
   return {
     appBuilderConfigPath: join(namespaceRoot, "builder-config.json"),
@@ -32,7 +32,7 @@ export function resolveWinPaths(config: ToolPackConfig): WinPaths {
     assembledMainEntryPath: join(namespaceRoot, "assembled", "app", "main.cjs"),
     assembledPackageJsonPath: join(namespaceRoot, "assembled", "app", "package.json"),
     assembledPrebundledRoot: join(namespaceRoot, "assembled", "app", WIN_PREBUNDLED_APP_DIR_NAME),
-    blockmapPath: join(namespaceRoot, "builder", `${PRODUCT_NAME}-${namespaceToken}-setup.exe.blockmap`),
+    blockmapPath: join(namespaceRoot, "builder", `${artifactProductName}-${namespaceToken}-setup.exe.blockmap`),
     builtManifestPath: join(namespaceRoot, "built-app.json"),
     daemonCliPrebundleEntrypointPath: join(namespaceRoot, WIN_PREBUNDLE_ENTRYPOINTS_DIR_NAME, "daemon-cli.js"),
     daemonCliPrebundlePath: join(namespaceRoot, "assembled", WIN_PREBUNDLED_DAEMON_CLI_RELATIVE_PATH),
@@ -40,13 +40,13 @@ export function resolveWinPaths(config: ToolPackConfig): WinPaths {
     daemonPrebundleRoot: join(namespaceRoot, "assembled", "app", WIN_PREBUNDLED_APP_DIR_NAME, "daemon"),
     daemonSidecarPrebundleEntrypointPath: join(namespaceRoot, WIN_PREBUNDLE_ENTRYPOINTS_DIR_NAME, "daemon-sidecar.js"),
     daemonSidecarPrebundlePath: join(namespaceRoot, "assembled", WIN_PREBUNDLED_DAEMON_SIDECAR_RELATIVE_PATH),
-    exePath: join(namespaceRoot, "builder", `${PRODUCT_NAME}-${namespaceToken}.exe`),
+    exePath: join(namespaceRoot, "builder", `${artifactProductName}-${namespaceToken}.exe`),
     installDir,
-    installedExePath: join(installDir, `${PRODUCT_NAME}.exe`),
+    installedExePath: join(installDir, identity.exeName),
     installerBasePayloadPath: join(namespaceRoot, "installer", "payload-base.7z"),
     installerOverlayPayloadPath: join(namespaceRoot, "installer", "payload-overlay.7z"),
     installerScriptPath: join(namespaceRoot, "installer", "installer.nsi"),
-    launcherPayloadPath: join(namespaceRoot, "payload", `${PRODUCT_NAME}-${namespaceToken}-payload.7z`),
+    launcherPayloadPath: join(namespaceRoot, "payload", `${artifactProductName}-${namespaceToken}-payload.7z`),
     publicDesktopShortcutPath: join(process.env.PUBLIC ?? join(dirname(homedir()), "Public"), "Desktop", identity.shortcutName),
     installMarkerPath: join(namespaceRoot, "logs", "install.marker.json"),
     installTimingPath: join(namespaceRoot, "logs", "install.timing.json"),
@@ -57,8 +57,8 @@ export function resolveWinPaths(config: ToolPackConfig): WinPaths {
     packagedMainPrebundleMetaPath: join(namespaceRoot, WIN_PREBUNDLE_META_DIR_NAME, "packaged-main.meta.json"),
     packagedMainPrebundlePath: join(namespaceRoot, "assembled", WIN_PREBUNDLED_PACKAGED_MAIN_RELATIVE_PATH),
     resourceRoot: join(namespaceRoot, "resources", "open-design"),
-    setupPath: join(namespaceRoot, "builder", `${PRODUCT_NAME}-${namespaceToken}-setup.exe`),
-    setupZipPath: join(namespaceRoot, "builder", `${PRODUCT_NAME}-${namespaceToken}-portable.zip`),
+    setupPath: join(namespaceRoot, "builder", `${artifactProductName}-${namespaceToken}-setup.exe`),
+    setupZipPath: join(namespaceRoot, "builder", `${artifactProductName}-${namespaceToken}-portable.zip`),
     startMenuShortcutPath: join(process.env.APPDATA ?? join(homedir(), "AppData", "Roaming"), "Microsoft", "Windows", "Start Menu", "Programs", identity.shortcutName),
     tarballsRoot: join(namespaceRoot, "tarballs"),
     userDesktopShortcutPath: join(homedir(), "Desktop", identity.shortcutName),
@@ -70,21 +70,27 @@ export function resolveWinPaths(config: ToolPackConfig): WinPaths {
     webSidecarPrebundleMetaPath: join(namespaceRoot, WIN_PREBUNDLE_META_DIR_NAME, "web-sidecar.meta.json"),
     webSidecarPrebundlePath: join(namespaceRoot, "assembled", WIN_PREBUNDLED_WEB_SIDECAR_RELATIVE_PATH),
     winIconPath: join(namespaceRoot, "resources", "win", "icon.ico"),
-    unpackedExePath: join(namespaceRoot, "builder", "win-unpacked", `${PRODUCT_NAME}.exe`),
+    unpackedExePath: join(namespaceRoot, "builder", "win-unpacked", identity.exeName),
     unpackedRoot: join(namespaceRoot, "builder", "win-unpacked"),
   };
 }
 
-export function resolveWinProductUserDataRoot(): string {
-  return join(process.env.APPDATA ?? join(homedir(), "AppData", "Roaming"), PRODUCT_NAME);
+/**
+ * The OS-level per-user data root for the installed app (`%APPDATA%\<product>`).
+ * A branded build uses its own product name so it cannot share state with an
+ * upstream Open Design install on the same machine — the same collision-avoidance
+ * rationale as the branded appId.
+ */
+export function resolveWinProductUserDataRoot(config: Pick<ToolPackConfig, "brand">): string {
+  return join(process.env.APPDATA ?? join(homedir(), "AppData", "Roaming"), winArtifactProductName(config));
 }
 
 export function resolveWinUninstallLocalDataRoot(config: ToolPackConfig): string {
-  return config.portable ? `$APPDATA\\${PRODUCT_NAME}` : config.roots.runtime.namespaceRoot;
+  return config.portable ? `$APPDATA\\${winArtifactProductName(config)}` : config.roots.runtime.namespaceRoot;
 }
 
 export function resolveWinProductNamespaceRoot(config: ToolPackConfig): string {
-  return join(resolveWinProductUserDataRoot(), "namespaces", config.namespace);
+  return join(resolveWinProductUserDataRoot(config), "namespaces", config.namespace);
 }
 
 export function resolveWinLocalDataRoot(config: ToolPackConfig): string {

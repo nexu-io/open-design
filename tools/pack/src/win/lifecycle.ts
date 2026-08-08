@@ -162,7 +162,7 @@ async function observeWinResidues(config: ToolPackConfig, paths = resolveWinPath
     installedExeExists: await pathExists(paths.installedExePath),
     managedProcessPids: await findManagedDesktopProcessTree(config),
     productNamespaceRootExists: await pathExists(resolveWinProductNamespaceRoot(config)),
-    productUserDataRootExists: await pathExists(resolveWinProductUserDataRoot()),
+    productUserDataRootExists: await pathExists(resolveWinProductUserDataRoot(config)),
     publicDesktopShortcutExists: await pathExists(paths.publicDesktopShortcutPath),
     registryResidues: (await queryWinRegistryEntries(paths, config)).map((entry) => entry.keyPath),
     runtimeNamespaceRootExists: await pathExists(config.roots.runtime.namespaceRoot),
@@ -428,7 +428,7 @@ export async function listPackedWinNamespaces(config: ToolPackConfig): Promise<W
   const registeredPaths = await resolveWinRegisteredPaths(config, paths);
   const registryEntries = await queryWinRegistryEntries(registeredPaths, config);
   const productNamespaceRoot = resolveWinProductNamespaceRoot(config);
-  const productUserDataRoot = resolveWinProductUserDataRoot();
+  const productUserDataRoot = resolveWinProductUserDataRoot(config);
   const builtManifest = await readBuiltAppManifest(paths, { requireExecutable: true });
   return {
     current: {

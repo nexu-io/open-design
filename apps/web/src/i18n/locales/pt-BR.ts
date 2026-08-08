@@ -291,7 +291,7 @@ export const ptBR: Dict = {
   'plugins.actions.openSource': 'Abrir fonte',
   'plugins.actions.openHomepage': 'Abrir homepage',
   'plugins.actions.openMarketplace': 'Abrir no marketplace',
-  'app.brand': 'Open Design',
+  'app.brand': 'xDesign',
   'app.brandPill': 'Prévia de pesquisa',
   'app.brandSubtitle': 'por Nexu Labs',
   'app.welcomeLoading': 'Carregando área de trabalho…',

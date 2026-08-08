@@ -1,15 +1,19 @@
 /**
- * Generates the stand-in xDesign macOS app icon at xdesign/brand/icon.icns.
+ * Generates the stand-in xDesign brand icons for all three packaging platforms:
+ *   - xdesign/brand/icon.icns  (macOS)
+ *   - xdesign/brand/icon.ico   (Windows, PNG-in-ICO)
+ *   - xdesign/brand/icon.png   (Linux, 512×512)
  *
- * This is a PLACEHOLDER — a flat indigo tile with a white "X" mark, clearly
+ * These are PLACEHOLDERS — a flat indigo tile with a white "X" mark, clearly
  * distinct from the upstream Open Design icon so the brand-injection mechanism
  * is visually verifiable end to end. When the real xDesign logo is available,
- * drop a replacement icon.icns at xdesign/brand/icon.icns directly and delete
- * this generator; nothing else needs to change.
+ * drop replacements at the same paths directly and delete this generator;
+ * nothing else needs to change.
  *
  *   node --experimental-strip-types xdesign/scripts/generate-placeholder-icon.ts
  *
- * Requires macOS `iconutil` (ships with the OS).
+ * The macOS .icns requires macOS `iconutil` (ships with the OS); the .ico and
+ * .png are pure Node and generate on any platform.
  */
 import { execFileSync } from "node:child_process";
 import { mkdir, rm, writeFile } from "node:fs/promises";
@@ -19,7 +23,9 @@ import { crc32, deflateSync } from "node:zlib";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, "..", "..");
-const outIcon = join(repoRoot, "xdesign", "brand", "icon.icns");
+const outIcns = join(repoRoot, "xdesign", "brand", "icon.icns");
+const outIco = join(repoRoot, "xdesign", "brand", "icon.ico");
+const outPng = join(repoRoot, "xdesign", "brand", "icon.png");
 const iconset = join(repoRoot, ".tmp", "xdesign-icon.iconset");
 
 const BG: readonly [number, number, number] = [99, 102, 241]; // indigo-500
@@ -97,6 +103,32 @@ for (const [name, size] of Object.entries(entries)) {
   await writeFile(join(iconset, `${name}.png`), encodeIcon(size));
 }
 
-await rm(outIcon, { force: true });
-execFileSync("iconutil", ["-c", "icns", iconset, "-o", outIcon]);
-console.log(`wrote ${outIcon}`);
+// Linux: a single 512×512 PNG is all the AppImage/desktop install needs.
+await rm(outPng, { force: true });
+await writeFile(outPng, encodeIcon(512));
+console.log(`wrote ${outPng}`);
+
+// Windows: a one-entry .ico wrapping a 256×256 PNG. Vista+ and electron-builder
+// both accept PNG-compressed ICO entries, so no BMP/DIB encoding is needed.
+// ICO layout: 6-byte header + 16-byte directory entry, then the PNG at offset 22.
+const icoPng = encodeIcon(256);
+const icoHeader = Buffer.alloc(6);
+icoHeader.writeUInt16LE(0, 0); // reserved
+icoHeader.writeUInt16LE(1, 2); // type = icon
+icoHeader.writeUInt16LE(1, 4); // 1 image
+const icoDir = Buffer.alloc(16);
+icoDir[0] = 0; // width 256 (0 == 256)
+icoDir[1] = 0; // height 256
+icoDir[2] = 0; // color count (0 for >8-bit)
+icoDir[3] = 0; // reserved
+icoDir.writeUInt16LE(1, 4); // color planes
+icoDir.writeUInt16LE(32, 6); // bits per pixel
+icoDir.writeUInt32LE(icoPng.length, 8); // image size
+icoDir.writeUInt32LE(22, 12); // image offset (6 + 16)
+await rm(outIco, { force: true });
+await writeFile(outIco, Buffer.concat([icoHeader, icoDir, icoPng]));
+console.log(`wrote ${outIco}`);
+
+await rm(outIcns, { force: true });
+execFileSync("iconutil", ["-c", "icns", iconset, "-o", outIcns]);
+console.log(`wrote ${outIcns}`);

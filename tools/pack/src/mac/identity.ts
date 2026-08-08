@@ -6,6 +6,7 @@ import {
 } from "@open-design/release";
 
 import type { ToolPackConfig } from "../config.js";
+import { requireBrandAppId } from "../brand.js";
 import { PRODUCT_NAME } from "./constants.js";
 
 export type MacInstallIdentity = {
@@ -51,14 +52,7 @@ export function resolveMacInstallIdentity(
   let channelIdentity: { appId: string; productName: string };
   let branded: boolean;
   if (brand != null) {
-    if (brand.appId == null) {
-      throw new Error(
-        "tools-pack: OD_PRODUCT_NAME is set but OD_APP_ID is missing. A branded "
-          + "build must declare its own reverse-DNS app id (e.g. io.xdesign.desktop) "
-          + "so it cannot collide with the upstream Open Design identity.",
-      );
-    }
-    channelIdentity = { appId: brand.appId, productName: brand.productName };
+    channelIdentity = { appId: requireBrandAppId(brand), productName: brand.productName };
     branded = true;
   } else if (channel == null) {
     channelIdentity = { appId: "io.open-design.desktop", productName: PRODUCT_NAME };

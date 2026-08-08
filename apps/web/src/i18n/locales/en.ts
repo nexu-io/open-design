@@ -291,7 +291,7 @@ export const en: Dict = {
   'plugins.actions.openSource': 'Open source',
   'plugins.actions.openHomepage': 'Open homepage',
   'plugins.actions.openMarketplace': 'Open in marketplace',
-  'app.brand': 'Open Design',
+  'app.brand': 'xDesign',
   'app.brandPill': 'Research Preview',
   'app.brandSubtitle': 'by Nexu Labs',
   'app.welcomeLoading': 'Loading workspace…',

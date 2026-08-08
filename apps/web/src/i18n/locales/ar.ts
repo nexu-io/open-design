@@ -291,7 +291,7 @@ export const ar: Dict = {
   'plugins.actions.openSource': 'فتح المصدر',
   'plugins.actions.openHomepage': 'فتح الصفحة الرئيسية',
   'plugins.actions.openMarketplace': 'فتح في السوق',
-  'app.brand': 'Open Design',
+  'app.brand': 'xDesign',
   'app.brandPill': 'معاينة البحث',
   'app.brandSubtitle': 'بواسطة Nexu Labs',
   'app.welcomeLoading': 'جاري تحميل مساحة العمل...',

@@ -24,28 +24,56 @@ export type ToolPackBrand = {
   /**
    * Reverse-DNS app id, e.g. "io.xdesign.desktop". Required at identity-resolution
    * time when productName is set — a branded build must not reuse the upstream
-   * Open Design appId (install collision); resolveMacInstallIdentity throws if it
+   * Open Design appId (install collision); {@link requireBrandAppId} throws if it
    * is absent.
    */
   appId?: string;
   /** Absolute or cwd-relative path to a macOS `.icns` icon. When omitted, the upstream mac icon is used. */
   macIcon?: string;
+  /** Absolute or cwd-relative path to a Windows `.ico` icon. When omitted, the upstream win icon is used. */
+  winIcon?: string;
+  /** Absolute or cwd-relative path to a Linux `.png` icon. When omitted, the upstream linux icon is used. */
+  linuxIcon?: string;
 };
+
+/**
+ * Fail-closed guard shared by every platform's install-identity resolver: a
+ * branded build (OD_PRODUCT_NAME set) MUST declare its own reverse-DNS app id,
+ * otherwise it would collide with an upstream Open Design install on the same
+ * machine (macOS LaunchServices overwrite / Windows registry + $APPDATA).
+ * Throws one canonical message so the mac/win/linux resolvers cannot drift,
+ * and returns the appId for the caller to use directly.
+ */
+export function requireBrandAppId(brand: ToolPackBrand): string {
+  if (brand.appId == null) {
+    throw new Error(
+      "tools-pack: OD_PRODUCT_NAME is set but OD_APP_ID is missing. A branded "
+        + "build must declare its own reverse-DNS app id (e.g. io.xdesign.desktop) "
+        + "so it cannot collide with the upstream Open Design identity.",
+    );
+  }
+  return brand.appId;
+}
 
 /**
  * Resolve a brand overlay from packaging-time env. `OD_PRODUCT_NAME` is the
  * activation key: when it is present and non-empty the build is branded, and
- * `OD_APP_ID` / `OD_MAC_ICON` optionally refine the app id and macOS icon.
- * Returns `undefined` for unbranded (upstream) builds.
+ * `OD_APP_ID` / `OD_MAC_ICON` / `OD_WIN_ICON` / `OD_LINUX_ICON` optionally
+ * refine the app id and the per-platform icon. Returns `undefined` for
+ * unbranded (upstream) builds.
  */
 export function resolveBrandFromEnv(env: NodeJS.ProcessEnv): ToolPackBrand | undefined {
   const productName = env.OD_PRODUCT_NAME?.trim();
   if (!productName) return undefined;
   const appId = env.OD_APP_ID?.trim();
   const macIcon = env.OD_MAC_ICON?.trim();
+  const winIcon = env.OD_WIN_ICON?.trim();
+  const linuxIcon = env.OD_LINUX_ICON?.trim();
   return {
     productName,
     ...(appId ? { appId } : {}),
     ...(macIcon ? { macIcon } : {}),
+    ...(winIcon ? { winIcon } : {}),
+    ...(linuxIcon ? { linuxIcon } : {}),
   };
 }

@@ -906,7 +906,7 @@ function createPendingHtml(): string {
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>Open Design</title>
+    <title>xDesign</title>
     <style>
       html,
       body {
@@ -1172,7 +1172,7 @@ function createRendererCrashHtml(ctx: RendererCrashScreenContext): string {
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>Open Design</title>
+    <title>xDesign</title>
     <style>
       /* Palette mirrors the app's neutral design tokens (apps/web tokens.css):
          warm off-white + near-black, no accent color — matching the black/white
@@ -1508,7 +1508,7 @@ export function createSplashWindow(): SplashWindowHandle {
     height: 900,
     resizable: false,
     show: true,
-    title: "Open Design",
+    title: "xDesign",
     width: 1280,
     webPreferences: {
       contextIsolation: true,
@@ -2225,7 +2225,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
 
   const consoleEntries: DesktopConsoleEntry[] = [];
   const petWindow = createDesktopPetWindow(preloadPath, options.osLocale);
-  const windowTitle = options.windowTitle ?? "Open Design";
+  const windowTitle = options.windowTitle ?? "xDesign";
   const window = new BrowserWindow({
     height: 900,
     icon: resolveDesktopIconPath(),

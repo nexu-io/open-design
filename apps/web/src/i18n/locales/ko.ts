@@ -291,7 +291,7 @@ export const ko: Dict = {
   'plugins.actions.openSource': '소스 열기',
   'plugins.actions.openHomepage': '홈페이지 열기',
   'plugins.actions.openMarketplace': '마켓플레이스에서 열기',
-  'app.brand': 'Open Design',
+  'app.brand': 'xDesign',
   'app.brandPill': '리서치 프리뷰',
   'app.brandSubtitle': 'by Nexu Labs',
   'app.welcomeLoading': '워크스페이스를 불러오는 중…',

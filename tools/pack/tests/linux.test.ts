@@ -31,6 +31,7 @@ import {
   cleanupPackedLinuxNamespace,
   createLinuxDesktopLaunchEnv,
   inspectPackedLinuxApp,
+  linuxArtifactProductName,
   LINUX_APPIMAGE_EXECUTABLE_ARGS,
   matchesAppImageProcess,
   renderDesktopTemplate,
@@ -1006,5 +1007,81 @@ describe("matchesAppImageProcess", () => {
       installPath,
     );
     expect(ok).toBe(false);
+  });
+});
+
+describe("linux brand overlay", () => {
+  it("linuxArtifactProductName returns the brand name branded, upstream name unbranded", () => {
+    expect(linuxArtifactProductName({ brand: { productName: "xDesign", appId: "io.xdesign.desktop" } })).toBe("xDesign");
+    expect(linuxArtifactProductName({})).toBe("Open Design");
+  });
+
+  it("renderLinuxAppImageAppRun launches the branded binary, not the upstream one", () => {
+    expect(renderLinuxAppImageAppRun("xDesign")).toContain('BIN="$APPDIR/xDesign"');
+    // Default (unbranded) keeps the upstream binary name byte-for-byte.
+    expect(renderLinuxAppImageAppRun()).toContain('BIN="$APPDIR/Open Design"');
+  });
+
+  it("matchesAppImageProcess matches the branded binary name", () => {
+    const ok = matchesAppImageProcess(
+      {
+        pid: 1234,
+        executable: "/tmp/appimage_extracted_fe548e54/xDesign",
+        env: { APPIMAGE: "/home/u/.local/bin/xDesign.ns.AppImage" },
+      },
+      "/home/u/.local/bin/xDesign.ns.AppImage",
+      "xDesign",
+    );
+    expect(ok).toBe(true);
+    // The same process is NOT matched under the upstream product name.
+    expect(
+      matchesAppImageProcess(
+        { pid: 1234, executable: "/tmp/appimage_extracted_fe548e54/xDesign", env: {} },
+        "/home/u/.local/bin/xDesign.ns.AppImage",
+      ),
+    ).toBe(false);
+  });
+
+  it("renderDesktopTemplate substitutes @@PRODUCT_NAME@@ (defaulting to the upstream name)", () => {
+    const branded = renderDesktopTemplate("Name=@@PRODUCT_NAME@@ (@@NAMESPACE@@)", {
+      namespace: "ns",
+      execPath: "/x",
+      iconName: "open-design-ns",
+      productName: "xDesign",
+    });
+    expect(branded).toBe("Name=xDesign (ns)");
+    const unbranded = renderDesktopTemplate("Name=@@PRODUCT_NAME@@", {
+      namespace: "ns",
+      execPath: "/x",
+      iconName: "open-design-ns",
+    });
+    expect(unbranded).toBe("Name=Open Design");
+  });
+
+  it("buildDockerArgs forwards the brand env into a containerized build", () => {
+    const args = buildDockerArgs(
+      {
+        ...makeConfig(),
+        brand: { productName: "xDesign", appId: "io.xdesign.desktop" },
+      },
+      { uid: 1000, gid: 1000 },
+    );
+    expect(args).toContain("OD_PRODUCT_NAME=xDesign");
+    expect(args).toContain("OD_APP_ID=io.xdesign.desktop");
+  });
+
+  it("buildDockerArgs bind-mounts the linux brand icon as an absolute path and forwards OD_LINUX_ICON", () => {
+    const args = buildDockerArgs(
+      {
+        ...makeConfig(),
+        brand: { productName: "xDesign", appId: "io.xdesign.desktop", linuxIcon: "/abs/icon.png" },
+      },
+      { uid: 1000, gid: 1000 },
+    );
+    expect(args).toContain("OD_LINUX_ICON=/opt/brand-icon.png");
+    // Docker requires an absolute mount source, so the host icon path must be
+    // bind-mounted verbatim (no cwd-relative value leaking into -v).
+    expect(args).toContain("-v");
+    expect(args).toContain("/abs/icon.png:/opt/brand-icon.png:ro");
   });
 });

@@ -291,7 +291,7 @@ export const fa: Dict = {
   'plugins.actions.openSource': 'باز کردن منبع',
   'plugins.actions.openHomepage': 'باز کردن صفحهٔ اصلی',
   'plugins.actions.openMarketplace': 'باز کردن در بازارچه',
-  'app.brand': 'Open Design',
+  'app.brand': 'xDesign',
   'app.brandPill': 'پیش‌نمایش تحقیقاتی',
   'app.brandSubtitle': 'توسط Nexu Labs',
   'app.welcomeLoading': 'در حال بارگذاری فضای کاری…',

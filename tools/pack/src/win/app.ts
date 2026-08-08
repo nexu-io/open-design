@@ -38,8 +38,8 @@ import {
   ELECTRON_REBUILD_MODE,
   ELECTRON_REBUILD_NATIVE_MODULES,
   INTERNAL_PACKAGES,
-  PRODUCT_NAME,
 } from "./constants.js";
+import { winArtifactProductName } from "./identity.js";
 import { readPackagedVersion, writePackagedConfig } from "./manifest.js";
 import { pathExists, removeTree } from "./fs.js";
 import type {
@@ -280,7 +280,7 @@ async function writeAssembledAppEntrypoints(
         main: "./main.cjs",
         name: "open-design-packaged-app",
         private: true,
-        productName: PRODUCT_NAME,
+        productName: winArtifactProductName(config),
         version: packageVersion,
       },
       null,

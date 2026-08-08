@@ -7,7 +7,7 @@ import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 
 import { createLauncherRuntimeSyncPowerShellScript } from "../src/win/custom-installer.js";
-import { resolveWinInstallIdentity } from "../src/win/identity.js";
+import { resolveWinInstallIdentity, winArtifactProductName } from "../src/win/identity.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -215,5 +215,50 @@ describe("resolveWinInstallIdentity", () => {
     const source = await readFile(new URL("../src/win/custom-installer.ts", import.meta.url), "utf8");
     expect(source).toContain('Push "existing installation found; silent install will overwrite it"');
     expect(source).not.toContain('Push "$(ExistingInstallSilentOverwrite)"');
+  });
+});
+
+describe("resolveWinInstallIdentity brand overlay", () => {
+  it("uses branded displayName/appId/exeName and a brand-scoped registry key", () => {
+    expect(resolveWinInstallIdentity({
+      namespace: "xdesign-local",
+      brand: { productName: "xDesign", appId: "io.xdesign.desktop", winIcon: "/x/icon.ico" },
+    })).toEqual({
+      appId: "io.xdesign.desktop",
+      appPathsKey: "Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\xDesign.exe",
+      displayName: "xDesign",
+      exeName: "xDesign.exe",
+      productName: "xDesign",
+      registryKey: "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\xDesign-xdesign-local",
+      shortcutName: "xDesign.lnk",
+      uninstallerName: "Uninstall xDesign.exe",
+    });
+  });
+
+  it("throws when a brand omits appId (would collide with the upstream identity)", () => {
+    expect(() => resolveWinInstallIdentity({
+      namespace: "xdesign-local",
+      brand: { productName: "xDesign" },
+    })).toThrow(/OD_APP_ID/);
+  });
+
+  it("brand wins over a derived release channel for displayName", () => {
+    // A branded build carrying a beta-ish version still ships under the brand
+    // name — brand is a fork identity, not a channel.
+    expect(resolveWinInstallIdentity({
+      appVersion: "0.8.0-beta.1",
+      namespace: "release-beta-win",
+      brand: { productName: "xDesign", appId: "io.xdesign.desktop" },
+    }).displayName).toBe("xDesign");
+  });
+});
+
+describe("winArtifactProductName", () => {
+  it("returns the brand product name for a branded build", () => {
+    expect(winArtifactProductName({ brand: { productName: "xDesign", appId: "io.xdesign.desktop" } })).toBe("xDesign");
+  });
+
+  it("returns the upstream PRODUCT name when unbranded (byte-for-byte upstream)", () => {
+    expect(winArtifactProductName({})).toBe("Open Design");
   });
 });

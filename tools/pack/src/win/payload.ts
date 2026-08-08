@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { tmpdir } from "node:os";
 import { access, cp, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { promisify } from "node:util";
 
 import {
@@ -124,7 +124,13 @@ export async function buildWinLauncherPayloadArchive(
     await mkdir(join(overlayRoot, "payload", "resources"), { recursive: true });
     await writeFile(join(overlayRoot, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
     if (input.includeExecutable) {
-      await cp(join(builtApp.unpackedRoot, "Open Design.exe"), join(overlayRoot, "payload", "Open Design.exe"));
+      // The unpacked executable is named after the product (executableName),
+      // which a branded build overrides (xDesign.exe), so resolve the source
+      // name from the built app. The destination stays the launcher-proto
+      // contract path payload/Open Design.exe — the launcher always execs that
+      // fixed path regardless of brand.
+      const unpackedExeName = basename(builtApp.executablePath);
+      await cp(join(builtApp.unpackedRoot, unpackedExeName), join(overlayRoot, "payload", "Open Design.exe"));
     }
     await writeFile(
       join(overlayRoot, "payload", "resources", "open-design-config.json"),
@@ -162,7 +168,7 @@ export async function buildWinLauncherPayloadArchive(
     await mkdir(dirname(outputPath), { recursive: true });
     await cp(paths.installerBasePayloadPath, outputPath);
 
-    const overlayTopLevel = new Set(resolveWinNsisOverlayRequiredPaths().map((entry) => entry[0]).filter((entry) => entry != null));
+    const overlayTopLevel = new Set(resolveWinNsisOverlayRequiredPaths(builtApp).map((entry) => entry[0]).filter((entry) => entry != null));
     const entries = await readdir(builtApp.unpackedRoot, { withFileTypes: true });
     const renameArgs = entries
       .map((entry) => entry.name)

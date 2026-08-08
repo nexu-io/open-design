@@ -291,7 +291,7 @@ export const ja: Dict = {
   'plugins.actions.openSource': 'ソースを開く',
   'plugins.actions.openHomepage': 'ホームページを開く',
   'plugins.actions.openMarketplace': 'マーケットプレイスで開く',
-  'app.brand': 'Open Design',
+  'app.brand': 'xDesign',
   'app.brandPill': 'リサーチプレビュー',
   'app.brandSubtitle': 'by Nexu Labs',
   'app.welcomeLoading': 'ワークスペースを読み込み中…',

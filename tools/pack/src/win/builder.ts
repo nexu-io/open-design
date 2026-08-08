@@ -33,11 +33,11 @@ import {
   ELECTRON_BUILDER_NODE_GYP_REBUILD,
   ELECTRON_BUILDER_NPM_REBUILD,
   NSIS_INSTALLER_LANGUAGE_BY_WEB_LOCALE,
-  PRODUCT_NAME,
   WEB_STANDALONE_HOOK_CONFIG_ENV,
   WEB_STANDALONE_RESOURCE_NAME,
 } from "./constants.js";
 import { pathExists, removeTree } from "./fs.js";
+import { resolveWinInstallIdentity, winArtifactProductName } from "./identity.js";
 import {
   readPackagedVersion,
   writeBuiltAppManifest,
@@ -161,6 +161,13 @@ async function runElectronBuilderRaw(
   };
 
   const namespaceToken = sanitizeNamespace(config.namespace);
+  const identity = resolveWinInstallIdentity(config);
+  const artifactProductName = winArtifactProductName(config);
+  // Brand overlay: a fork build (OD_PRODUCT_NAME set) ships under its own icon
+  // and uses its product name for artifact filenames. When unbranded, both
+  // fall back to the upstream win icon / PRODUCT_NAME so upstream artifact
+  // naming is byte-for-byte unchanged.
+  const winIcon = config.brand?.winIcon ?? paths.winIconPath;
   const packagedVersion = await runSegment("electron-builder-raw:read-packaged-version", async () =>
     readPackagedVersion(config)
   );
@@ -171,7 +178,7 @@ async function runElectronBuilderRaw(
     )
     : null;
   const builderConfig = {
-    appId: "io.open-design.desktop",
+    appId: identity.appId,
     afterPack: webStandaloneHookConfigPath == null ? undefined : winResources.webStandaloneAfterPackHook,
     asar: ELECTRON_BUILDER_ASAR,
     buildDependenciesFromSource: ELECTRON_BUILDER_BUILD_DEPENDENCIES_FROM_SOURCE,
@@ -180,15 +187,15 @@ async function runElectronBuilderRaw(
     // Let electron-builder download the win32 Electron itself instead of
     // pointing at node_modules' dist. pnpm does not reliably materialize the
     // Electron dist on CI runners (electron.exe can be missing), which made
-    // the rename to `${PRODUCT_NAME}.exe` fail with ENOENT. The mac builder
+    // the rename to the product-name exe fail with ENOENT. The mac builder
     // already relies on electron-builder's own download and is the only
     // platform that stayed green through this regression.
     electronVersion: config.electronVersion,
-    executableName: PRODUCT_NAME,
+    executableName: identity.productName,
     extraMetadata: {
       main: "./main.cjs",
       name: "open-design-packaged-app",
-      productName: PRODUCT_NAME,
+      productName: identity.productName,
       version: packageVersion,
     },
     extraResources: [
@@ -200,13 +207,13 @@ async function runElectronBuilderRaw(
     ],
     files: [...ELECTRON_BUILDER_FILE_PATTERNS],
     forceCodeSigning: false,
-    icon: paths.winIconPath,
+    icon: winIcon,
     nodeGypRebuild: ELECTRON_BUILDER_NODE_GYP_REBUILD,
     npmRebuild: ELECTRON_BUILDER_NPM_REBUILD,
     nsis: {
       allowElevation: false,
       allowToChangeInstallationDirectory: true,
-      artifactName: `${PRODUCT_NAME}-${namespaceToken}-setup.\${ext}`,
+      artifactName: `${artifactProductName}-${namespaceToken}-setup.\${ext}`,
       createDesktopShortcut: true,
       createStartMenuShortcut: true,
       deleteAppDataOnUninstall: false,
@@ -217,14 +224,14 @@ async function runElectronBuilderRaw(
       multiLanguageInstaller: true,
       oneClick: false,
       perMachine: false,
-      shortcutName: PRODUCT_NAME,
+      shortcutName: identity.productName,
       warningsAsErrors: false,
     },
-    productName: PRODUCT_NAME,
+    productName: identity.productName,
     publish: [{ provider: "generic", url: "https://updates.invalid/open-design" }],
     win: {
-      artifactName: `${PRODUCT_NAME}-${namespaceToken}.\${ext}`,
-      icon: paths.winIconPath,
+      artifactName: `${artifactProductName}-${namespaceToken}.\${ext}`,
+      icon: winIcon,
       target: resolveElectronBuilderWinTargets(config.to).map((target) => ({ arch: ["x64"], target })),
     },
   };
@@ -326,7 +333,7 @@ async function resolveCachedNsisBasePayloadInputHash(
     ? await hashWinNsisBasePayloadInputs(builtApp)
     : hashJson({
       cacheEntryPath: builtApp.cacheEntryPath,
-      excludedOverlayPaths: resolveWinNsisOverlayRequiredPaths(),
+      excludedOverlayPaths: resolveWinNsisOverlayRequiredPaths(builtApp),
       version: WIN_NSIS_BASE_PAYLOAD_INPUT_HASH_CACHE_VERSION,
     });
   await writeFile(
@@ -374,6 +381,7 @@ async function rewriteUnpackedAppPackageVersion(unpackedRoot: string, packagedVe
 
 async function assertMaterializedUnpackedVersionConsistency(
   unpackedRoot: string,
+  executablePath: string,
   packagedVersion: string,
 ): Promise<void> {
   const packageJsonPath = join(unpackedRoot, "resources", "app", "package.json");
@@ -393,7 +401,6 @@ async function assertMaterializedUnpackedVersionConsistency(
     );
   }
 
-  const executablePath = join(unpackedRoot, `${PRODUCT_NAME}.exe`);
   const executableVersionTargets = resolveWinExecutableVersionTargets(packagedVersion);
   const executableVersion = await readWinExecutableVersionSnapshot(executablePath);
   if (executableVersion.fixedFileVersion !== executableVersionTargets.numericVersion) {
@@ -476,7 +483,7 @@ export async function materializeCachedUnpackedForInstaller(
   if (packagedVersion != null) {
     await rewriteUnpackedAppPackageVersion(paths.unpackedRoot, packagedVersion);
     await rewriteWinExecutableVersion(paths.unpackedExePath, packagedVersion);
-    await assertMaterializedUnpackedVersionConsistency(paths.unpackedRoot, packagedVersion);
+    await assertMaterializedUnpackedVersionConsistency(paths.unpackedRoot, paths.unpackedExePath, packagedVersion);
   }
   await assertWinUnpackedNodePtyRuntime(paths.unpackedRoot);
   return {
@@ -534,9 +541,18 @@ export async function runElectronBuilder(
     : {};
   const afterPackHook = config.webOutputMode === "standalone" ? await hashPath(winResources.webStandaloneAfterPackHook) : null;
   const domToPptxBundle = await hashPath(domToPptxBundleResource(config).from);
-  const winIcon = await hashPath(winResources.icon);
+  // Hash the icon the build actually uses: a branded build's icon comes from
+  // OD_WIN_ICON, not the upstream winResources.icon. Combined with `brand`
+  // below, this keeps a branded and an unbranded build from sharing one cache
+  // entry (their unpacked exe name, appId, and icon all differ).
+  const winIconSource = config.brand?.winIcon ?? winResources.icon;
+  const winIcon = await hashPath(winIconSource);
   const electronBuilderKeyInput = {
     afterPackHook,
+    // Brand identity is part of the cache key: a branded build produces a
+    // different unpacked app (distinct productName/executableName/appId/icon)
+    // than an unbranded one, so the two must never resolve to the same entry.
+    brand: config.brand ? { appId: config.brand.appId, productName: config.brand.productName } : null,
     cacheVersion: WIN_ELECTRON_BUILDER_DIR_CACHE_VERSION,
     domToPptxBundle,
     asar: ELECTRON_BUILDER_ASAR,
@@ -619,7 +635,7 @@ export async function runElectronBuilder(
 
   const cachedBuilderRoot = join(manifest.entryPath, "builder");
   const cachedUnpackedRoot = join(cachedBuilderRoot, "win-unpacked");
-  const cachedExecutablePath = join(cachedUnpackedRoot, `${PRODUCT_NAME}.exe`);
+  const cachedExecutablePath = join(cachedUnpackedRoot, `${winArtifactProductName(config)}.exe`);
   await runSegment("electron-builder-dir:validate-node-pty-runtime", async () => {
     await assertWinUnpackedNodePtyRuntime(cachedUnpackedRoot);
   });
@@ -826,7 +842,7 @@ export async function runElectronBuilder(
           from: "builder/win-unpacked",
           reuse: true,
           reuseRequiredPaths: [
-            ...resolveWinNsisOverlayRequiredPaths(),
+            ...resolveWinNsisOverlayRequiredPaths({ executablePath: paths.unpackedExePath }),
             [
               "resources/open-design-web-standalone/apps/web/server.js",
               "resources/open-design-web-standalone/server.js",

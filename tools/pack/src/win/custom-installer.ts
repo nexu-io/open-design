@@ -7,7 +7,6 @@ import { promisify } from "node:util";
 import type { ToolPackConfig } from "../config.js";
 import { resolveToolPackLauncherLayout } from "../launcher-layout.js";
 import { winResources } from "../resources.js";
-import { PRODUCT_NAME } from "./constants.js";
 import { pathExists } from "./fs.js";
 import { resolveWinInstallIdentity } from "./identity.js";
 import { readPackagedVersion } from "./manifest.js";
@@ -27,8 +26,13 @@ const NSIS_LANGUAGES = [
   { macro: "LANG_PERSIAN", name: "Persian" },
 ] as const;
 
-const WIN_NSIS_OVERLAY_RELATIVE_PATHS = [
-  `${PRODUCT_NAME}.exe`,
+// The NSIS overlay carries the files that differ per-namespace: the
+// version-stamped executable, the assembled-app package.json, and the packaged
+// config. The executable filename follows `executableName`, which a branded
+// build overrides (xDesign.exe vs Open Design.exe), so it is resolved from the
+// built app rather than a constant — otherwise a branded build would stage and
+// exclude the wrong file and the overlay payload would miss the real exe.
+const WIN_NSIS_OVERLAY_FIXED_RELATIVE_PATHS = [
   "resources/app/package.json",
   "resources/open-design-config.json",
 ] as const;
@@ -40,16 +44,26 @@ function escapeNsisString(value: string): string {
   return value.replace(/\$/g, "$$").replace(/"/g, '$\\"').replace(/\r?\n/g, "$\\r$\\n");
 }
 
+function builtAppExecutableName(executablePath: string): string {
+  return executablePath.split(/[\\/]/).pop() ?? "";
+}
+
+function winNsisOverlayRelativePaths(builtApp: Pick<WinBuiltAppManifest, "executablePath">): string[] {
+  return [builtAppExecutableName(builtApp.executablePath), ...WIN_NSIS_OVERLAY_FIXED_RELATIVE_PATHS];
+}
+
 function normalizeArchivePath(relativePath: string): string {
   return relativePath.split("/").join("\\");
 }
 
-export function resolveWinNsisOverlayRequiredPaths(): string[][] {
-  return WIN_NSIS_OVERLAY_RELATIVE_PATHS.map((relativePath) => [relativePath]);
+export function resolveWinNsisOverlayRequiredPaths(
+  builtApp: Pick<WinBuiltAppManifest, "executablePath">,
+): string[][] {
+  return winNsisOverlayRelativePaths(builtApp).map((relativePath) => [relativePath]);
 }
 
 export async function hashWinNsisBasePayloadInputs(builtApp: WinBuiltAppManifest): Promise<string> {
-  const excluded = new Set(WIN_NSIS_OVERLAY_RELATIVE_PATHS.map((entry) => entry.split("/").join("\\")));
+  const excluded = new Set(winNsisOverlayRelativePaths(builtApp).map((entry) => entry.split("/").join("\\")));
   const hash = createHash("sha256");
 
   async function visit(current: string): Promise<void> {
@@ -418,7 +432,7 @@ async function writeInstallerScript(config: ToolPackConfig, paths: WinPaths, pac
   const appPathsKey = escapeNsisString(identity.appPathsKey);
   const inviteProtocolKey = "Software\\Classes\\opendesign";
   const namespace = escapeNsisString(config.namespace);
-  const localDataRoot = `$APPDATA\\${escapeNsisString(PRODUCT_NAME)}\\namespaces\\${escapeNsisString(sanitizeNamespace(config.namespace))}`;
+  const localDataRoot = `$APPDATA\\${escapeNsisString(identity.productName)}\\namespaces\\${escapeNsisString(sanitizeNamespace(config.namespace))}`;
   const localCacheRoot = `${localDataRoot}\\cache`;
   const localUpdateDownloadsRoot = `${localDataRoot}\\updates\\downloads`;
   const localUpdateReleasesRoot = `${localDataRoot}\\updates\\releases`;
@@ -1152,7 +1166,7 @@ async function buildWinNsisPayloadArchive(
 async function stageWinNsisOverlayPayload(builtApp: WinBuiltAppManifest, stageRoot: string): Promise<void> {
   await rm(stageRoot, { force: true, recursive: true });
   await mkdir(stageRoot, { recursive: true });
-  for (const relativePath of WIN_NSIS_OVERLAY_RELATIVE_PATHS) {
+  for (const relativePath of winNsisOverlayRelativePaths(builtApp)) {
     const sourcePath = join(builtApp.unpackedRoot, ...relativePath.split("/"));
     const targetPath = join(stageRoot, ...relativePath.split("/"));
     await mkdir(dirname(targetPath), { recursive: true });
@@ -1173,7 +1187,7 @@ export async function buildWinNsisBasePayload(
       ...WIN_PAYLOAD_SEVEN_Z_CREATE_ARGS,
       paths.installerBasePayloadPath,
       ".\\*",
-      ...WIN_NSIS_OVERLAY_RELATIVE_PATHS.map((relativePath) => `-x!${normalizeArchivePath(relativePath)}`),
+      ...winNsisOverlayRelativePaths(builtApp).map((relativePath) => `-x!${normalizeArchivePath(relativePath)}`),
     ],
   );
 }

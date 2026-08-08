@@ -89,7 +89,9 @@ export async function prepareResourceTree(
   };
 }
 
-export async function copyWinIcon(paths: WinPaths): Promise<void> {
+export async function copyWinIcon(config: Pick<ToolPackConfig, "brand">, paths: WinPaths): Promise<void> {
   await mkdir(dirname(paths.winIconPath), { recursive: true });
-  await cp(winResources.icon, paths.winIconPath);
+  // A branded build ships under its own icon (OD_WIN_ICON); unbranded falls
+  // back to the upstream win icon so the build is byte-for-byte unchanged.
+  await cp(config.brand?.winIcon ?? winResources.icon, paths.winIconPath);
 }

@@ -263,7 +263,7 @@ export const zhTW: Dict = {
   "plugins.actions.openSource": "開啟原始碼",
   "plugins.actions.openHomepage": "開啟專案首頁",
   "plugins.actions.openMarketplace": "在外掛市場開啟",
-  "app.brand": "Open Design",
+  "app.brand": "xDesign",
   "app.brandPill": "研究預覽版",
   "app.brandSubtitle": "由 Nexu Labs 出品",
   "app.welcomeLoading": "正在載入工作區…",

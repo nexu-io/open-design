@@ -36,9 +36,29 @@ describe("resolveBrandFromEnv", () => {
     });
   });
 
-  it("omits appId and macIcon when they are blank", () => {
+  it("includes winIcon and linuxIcon when provided", () => {
     expect(
-      resolveBrandFromEnv({ OD_PRODUCT_NAME: "xDesign", OD_APP_ID: "   ", OD_MAC_ICON: "" }),
+      resolveBrandFromEnv({
+        OD_PRODUCT_NAME: "xDesign",
+        OD_WIN_ICON: "/abs/path/icon.ico",
+        OD_LINUX_ICON: "/abs/path/icon.png",
+      }),
+    ).toEqual({
+      productName: "xDesign",
+      winIcon: "/abs/path/icon.ico",
+      linuxIcon: "/abs/path/icon.png",
+    });
+  });
+
+  it("omits appId and the platform icons when they are blank", () => {
+    expect(
+      resolveBrandFromEnv({
+        OD_PRODUCT_NAME: "xDesign",
+        OD_APP_ID: "   ",
+        OD_MAC_ICON: "",
+        OD_WIN_ICON: "  ",
+        OD_LINUX_ICON: "",
+      }),
     ).toEqual({ productName: "xDesign" });
   });
 });

@@ -291,7 +291,7 @@ export const id: Dict = {
   'plugins.actions.openSource': 'Buka sumber',
   'plugins.actions.openHomepage': 'Buka beranda',
   'plugins.actions.openMarketplace': 'Buka di marketplace',
-  'app.brand': 'Open Design',
+  'app.brand': 'xDesign',
   'app.brandPill': 'Pratinjau Riset',
   'app.brandSubtitle': 'oleh Nexu Labs',
   'app.welcomeLoading': 'Memuat workspace...',

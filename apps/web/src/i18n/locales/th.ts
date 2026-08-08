@@ -291,7 +291,7 @@ export const th: Dict = {
   'plugins.actions.openSource': 'เปิดซอร์ส',
   'plugins.actions.openHomepage': 'เปิดหน้าโฮมเพจ',
   'plugins.actions.openMarketplace': 'เปิดใน marketplace',
-  'app.brand': 'Open Design',
+  'app.brand': 'xDesign',
   'app.brandPill': 'ตัวอย่างเพื่อการวิจัย',
   'app.brandSubtitle': 'โดย Nexu Labs',
   'app.welcomeLoading': 'กำลังโหลดพื้นที่ทำงาน…',
