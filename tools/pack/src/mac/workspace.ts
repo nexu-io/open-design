@@ -23,6 +23,7 @@ async function buildWorkspaceArtifacts(config: ToolPackConfig): Promise<void> {
   await runPnpm(config, ["--filter", "@open-design/host", "build"]);
   await runPnpm(config, ["--filter", "@open-design/diagnostics", "build"]);
   await runPnpm(config, ["--filter", "@open-design/dsh-runtime", "build"]);
+  await runPnpm(config, ["--filter", "@open-design/standalone-proto", "build"]);
   await runPnpm(config, ["--filter", "@open-design/components", "build"]);
   await runPnpm(config, ["--filter", "@open-design/daemon", "build"]);
   try {
@@ -41,8 +42,7 @@ async function buildWorkspaceArtifacts(config: ToolPackConfig): Promise<void> {
       await writeFile(webNextEnvPath, previousWebNextEnv, "utf8");
     }
   }
-  await runPnpm(config, ["--filter", "@open-design/desktop", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/packaged", "build"]);
+  await runPnpm(config, ["--filter", "@open-design/shell-electron", "build"]);
 }
 
 export async function ensureMacWorkspaceBuild(config: ToolPackConfig, cache: ToolPackCache): Promise<void> {

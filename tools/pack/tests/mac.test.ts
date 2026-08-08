@@ -57,6 +57,7 @@ function makeConfig(root: string, overrides: Partial<ToolPackConfig> = {}): Tool
     },
     silent: true,
     signed: false,
+    shell: "electron",
     to: "app",
     webOutputMode: "standalone",
     workspaceRoot: root,

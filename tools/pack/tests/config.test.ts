@@ -76,6 +76,16 @@ describe("resolveToolPackConfig win build target", () => {
   });
 });
 
+describe("resolveToolPackConfig shell", () => {
+  it("defaults to the Electron shell and rejects unregistered shells", () => {
+    expect(resolveToolPackConfig("mac").shell).toBe("electron");
+    expect(resolveToolPackConfig("win", { shell: "electron" }).shell).toBe("electron");
+    expect(() => resolveToolPackConfig("mac", { shell: "desktop" })).toThrow(
+      /unsupported --shell value: desktop/,
+    );
+  });
+});
+
 describe("resolveToolPackConfig cache root", () => {
   it("keeps the default cache outside custom tools-pack roots", () => {
     const config = resolveToolPackConfig("win", {

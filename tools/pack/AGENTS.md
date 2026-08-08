@@ -44,13 +44,13 @@ Read this section before changing packaged auto-update behavior. The updater cro
 
 ### Architecture map
 
-- `apps/desktop/src/main/updater.ts` owns updater state, release metadata parsing, artifact selection, checksum verification, download-store ownership, progress events, and opening the downloaded installer. It is pure main-process logic and is tested under `apps/desktop/tests/main/updater.test.ts`.
-- `apps/desktop/src/main/runtime.ts` exposes updater IPC to the renderer through `od:update:status|check|download|install|quit` and emits `od:update:status-changed`. Keep installer launch separate from process shutdown; quit is an explicit post-installer action.
-- `apps/desktop/src/main/index.ts` wires the scheduler and the packaged macOS app-menu update item. The native item mirrors updater state and opens the renderer-owned update dialog; it must not create a second updater or a native result dialog. Windows and Linux menus do not expose update actions.
+- `shells/electron/src/main/updater.ts` owns updater state, release metadata parsing, artifact selection, checksum verification, download-store ownership, progress events, and opening the downloaded installer. It is pure main-process logic and is tested under `shells/electron/tests/main/updater.test.ts`.
+- `shells/electron/src/main/runtime.ts` exposes updater IPC to the renderer through `od:update:status|check|download|install|quit` and emits `od:update:status-changed`. Keep installer launch separate from process shutdown; quit is an explicit post-installer action.
+- `shells/electron/src/main/index.ts` wires the scheduler and the packaged macOS app-menu update item. The native item mirrors updater state and opens the renderer-owned update dialog; it must not create a second updater or a native result dialog. Windows and Linux menus do not expose update actions.
 - `apps/web/src/lib/updater.ts` normalizes host updater snapshots into UI-ready state.
 - `apps/web/src/components/UpdaterPopup.tsx` remains the ready-update surface in the left rail. `apps/web/src/components/UpdateDialog.tsx` owns the explicit macOS app-menu check flow. All visible copy and native menu labels must go through `apps/web/src/i18n`.
 - `packages/launcher-proto` owns launcher pointer, attempt, and desktop-handoff journal shapes plus payload selection. `runtime.json` together with `attempt.json` is the only payload-version state machine.
-- `apps/packaged/src/index.ts` delegates to the selected payload desktop before initializing the outer Electron runtime, then passes packaged `appVersion` and namespace-scoped `updateRoot` into desktop main only when the outer itself must run.
+- `shells/electron/src/index.ts` owns the Electron launcher entry. During the migration it preserves the selected-payload compatibility path, but new standalone attachment must cross the protocol-fixed `bootloader.mjs` handoff rather than importing Web or daemon bodies into the shell contract.
 - `apps/daemon/src/sidecar/payload-desktop-handoff.ts` is the isolated compatibility bridge for historical outers that cannot delegate. It rearms the selected payload with the real previous pointer, launches that payload's desktop after the old outer exits, and persists a small desktop-binding journal for later shortcut cold starts. The journal is not a second version selector.
 - `install.json` continues to identify the physically installed outer executable for recovery. Payload activation or handoff must not rewrite it to a versioned payload executable.
 - `tools/serve` owns deterministic local updater fixtures only. It must not contain product updater runtime logic.
@@ -172,11 +172,11 @@ pnpm tools-pack win cleanup --dir C:\odtp-beta-release-fixed --namespace release
 `docs/testing/updater-lifecycle.md` is the full lifecycle-to-test coverage map (including deliberate manual-only nodes); consult it to find the owning tests for the node you touched, then run the narrow tests plus the repo checks:
 
 ```bash
-pnpm --filter @open-design/desktop test -- tests/main/updater.test.ts tests/main/updater-host-boundary.test.ts tests/main/preload-host-boundary.test.ts
+pnpm --filter @open-design/shell-electron test -- tests/main/updater.test.ts tests/main/updater-host-boundary.test.ts tests/main/preload-host-boundary.test.ts
 pnpm --filter @open-design/web test -- tests/components/UpdaterPopup.test.tsx tests/lib/updater.test.ts
 pnpm --filter @open-design/tools-serve test
 pnpm --filter @open-design/tools-pack test -- tests/win-identity.test.ts tests/win-app.test.ts tests/win-builder.test.ts
-pnpm --filter @open-design/desktop typecheck
+pnpm --filter @open-design/shell-electron typecheck
 pnpm --filter @open-design/web typecheck
 pnpm --filter @open-design/tools-pack typecheck
 pnpm --filter @open-design/tools-serve typecheck

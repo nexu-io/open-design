@@ -33,9 +33,8 @@ export const WIN_STANDALONE_PREBUNDLE_EXCLUDED_INTERNAL_PACKAGES = [
   "@open-design/closure-store",
   "@open-design/closure-update",
   "@open-design/daemon",
-  "@open-design/desktop",
+  "@open-design/shell-electron",
   "@open-design/launcher-proto",
-  "@open-design/packaged",
   "@open-design/sidecar",
   "@open-design/sidecar-proto",
   "@open-design/web",
@@ -143,5 +142,5 @@ export async function assertWinPrebundleMetafile(options: {
 export function renderWinPackagedMainEntry(usePrebundle: boolean): string {
   return usePrebundle
     ? 'import("./prebundled/packaged-main.mjs").catch((error) => {\n  console.error("packaged entry failed", error);\n  process.exit(1);\n});\n'
-    : 'import("@open-design/packaged").catch((error) => {\n  console.error("packaged entry failed", error);\n  process.exit(1);\n});\n';
+    : 'import("@open-design/shell-electron").catch((error) => {\n  console.error("Electron Shell entry failed", error);\n  process.exit(1);\n});\n';
 }

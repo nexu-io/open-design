@@ -38,6 +38,7 @@ function makeConfig(namespaceRoot: string): ToolPackConfig {
       toolPackRoot: "/unused/tools-pack",
     },
     signed: false,
+    shell: "electron",
     silent: true,
     to: "nsis",
     webOutputMode: "standalone",

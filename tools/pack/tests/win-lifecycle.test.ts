@@ -96,6 +96,7 @@ function createConfig(root: string): ToolPackConfig {
       toolPackRoot: join(root, "tools-pack"),
     },
     signed: false,
+    shell: "electron",
     silent: true,
     to: "dir",
     webOutputMode: "standalone",

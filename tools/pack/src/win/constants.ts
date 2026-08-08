@@ -47,8 +47,8 @@ export const INTERNAL_PACKAGES = [
   { directory: "packages/plugin-runtime", name: "@open-design/plugin-runtime" },
   { directory: "packages/diagnostics", name: "@open-design/diagnostics" },
   { directory: "packages/standalone-runtime", name: "@open-design/standalone-runtime" },
+  { directory: "packages/standalone-proto", name: "@open-design/standalone-proto" },
   { directory: "apps/daemon", name: "@open-design/daemon" },
   { directory: "apps/web", name: "@open-design/web" },
-  { directory: "apps/desktop", name: "@open-design/desktop" },
-  { directory: "apps/packaged", name: "@open-design/packaged" },
+  { directory: "shells/electron", name: "@open-design/shell-electron" },
 ] as const;

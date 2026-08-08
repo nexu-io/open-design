@@ -24,11 +24,11 @@ const PACKAGE_DIRS = [
   "packages/diagnostics",
   "packages/dsh-runtime",
   "packages/standalone-runtime",
+  "packages/standalone-proto",
   "apps/daemon",
   "apps/standalone",
   "apps/web",
-  "apps/desktop",
-  "apps/packaged",
+  "shells/electron",
 ] as const;
 
 const OUTPUT_FILES = [
@@ -62,6 +62,8 @@ const OUTPUT_FILES = [
   "packages/dsh-runtime/dist/types/index.d.ts",
   "packages/standalone-runtime/dist/index.mjs",
   "packages/standalone-runtime/dist/index.d.ts",
+  "packages/standalone-proto/dist/index.mjs",
+  "packages/standalone-proto/dist/index.d.ts",
   "apps/daemon/dist/cli.js",
   "apps/daemon/dist/cli.d.ts",
   "apps/daemon/dist/sidecar/index.js",
@@ -69,10 +71,10 @@ const OUTPUT_FILES = [
   "apps/web/dist/sidecar/index.d.ts",
   "apps/web/.next/standalone/apps/web/server.js",
   "apps/web/.next/static/chunk.js",
-  "apps/desktop/dist/main/index.js",
-  "apps/desktop/dist/main/index.d.ts",
-  "apps/packaged/dist/index.mjs",
-  "apps/packaged/dist/index.d.ts",
+  "shells/electron/dist/main/index.js",
+  "shells/electron/dist/main/index.d.ts",
+  "shells/electron/dist/index.mjs",
+  "shells/electron/dist/index.d.ts",
 ] as const;
 
 async function writeWorkspace(root: string): Promise<void> {
@@ -132,6 +134,7 @@ function createConfig(root: string, cacheRoot: string): ToolPackConfig {
       toolPackRoot: join(root, ".tmp", "tools-pack"),
     },
     signed: false,
+    shell: "electron",
     silent: true,
     to: "dir",
     webOutputMode: "standalone",
@@ -163,7 +166,7 @@ describe("ensureWorkspaceBuildArtifacts", () => {
         "win.workspace-build",
         "win.workspace-build",
       ]);
-      expect(await readFile(join(root, "apps/packaged/dist/index.mjs"), "utf8")).toBe("build-1\n");
+      expect(await readFile(join(root, "shells/electron/dist/index.mjs"), "utf8")).toBe("build-1\n");
     } finally {
       await rm(root, { force: true, recursive: true });
     }
@@ -186,7 +189,7 @@ describe("ensureWorkspaceBuildArtifacts", () => {
       await ensureWorkspaceBuildArtifacts(config, cache, build);
       expect(builds).toBe(1);
 
-      await writeFile(join(root, "apps/desktop/src/index.ts"), "export const value = 2;\n", "utf8");
+      await writeFile(join(root, "shells/electron/src/index.ts"), "export const value = 2;\n", "utf8");
       await ensureWorkspaceBuildArtifacts(config, cache, build);
       expect(builds).toBe(2);
       expect(cache.report().entries.map((entry) => entry.status)).toEqual(["miss", "hit", "miss"]);
@@ -386,7 +389,7 @@ describe("ensureWorkspaceBuildArtifacts", () => {
         "mac.workspace-build",
       ]);
       expect(cache.report().entries.map((entry) => entry.status)).toEqual(["miss", "miss"]);
-      expect(await readFile(join(root, "apps/packaged/dist/index.mjs"), "utf8")).toBe("mac-build\n");
+      expect(await readFile(join(root, "shells/electron/dist/index.mjs"), "utf8")).toBe("mac-build\n");
     } finally {
       await rm(root, { force: true, recursive: true });
     }

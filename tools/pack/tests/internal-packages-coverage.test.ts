@@ -26,23 +26,33 @@ function loadInternalPackageNames(modulePath: string): string[] {
   return [...matches].map((m) => m[1]!);
 }
 
-const PACKAGED_APPS = ["apps/desktop", "apps/web", "apps/packaged", "apps/daemon"];
 const PACK_LANES = [
-  { lane: "linux", file: "tools/pack/src/linux.ts" },
-  { lane: "mac", file: "tools/pack/src/mac/constants.ts" },
-  { lane: "win", file: "tools/pack/src/win/constants.ts" },
+  {
+    roots: ["apps/desktop", "apps/web", "apps/packaged", "apps/daemon"],
+    lane: "linux",
+    file: "tools/pack/src/linux.ts",
+  },
+  {
+    roots: ["shells/electron", "apps/web", "apps/daemon"],
+    lane: "mac",
+    file: "tools/pack/src/mac/constants.ts",
+  },
+  {
+    roots: ["shells/electron", "apps/web", "apps/daemon"],
+    lane: "win",
+    file: "tools/pack/src/win/constants.ts",
+  },
 ];
 
 describe("INTERNAL_PACKAGES covers all workspace runtime deps", () => {
-  const requiredPackages = new Set<string>();
-  for (const app of PACKAGED_APPS) {
-    for (const dep of collectWorkspaceRuntimeDeps(app)) {
-      requiredPackages.add(dep);
-    }
-  }
-
-  for (const { lane, file } of PACK_LANES) {
+  for (const { lane, file, roots } of PACK_LANES) {
     it(`${lane} lane includes all required workspace packages`, () => {
+      const requiredPackages = new Set<string>();
+      for (const root of roots) {
+        for (const dep of collectWorkspaceRuntimeDeps(root)) {
+          requiredPackages.add(dep);
+        }
+      }
       const declared = new Set(loadInternalPackageNames(file));
       const missing = [...requiredPackages].filter((pkg) => !declared.has(pkg));
       expect(missing, `${lane} INTERNAL_PACKAGES is missing: ${missing.join(", ")}`).toEqual([]);

@@ -36,6 +36,7 @@ function makeConfig(root: string, namespace: string): ToolPackConfig {
       toolPackRoot: join(root, ".tmp", "tools-pack"),
     },
     signed: false,
+    shell: "electron",
     silent: true,
     to: "dmg",
     webOutputMode: "standalone",

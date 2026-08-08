@@ -75,7 +75,7 @@ async function runNpmInstall(appRoot: string): Promise<void> {
 }
 
 async function runEsbuild(config: ToolPackConfig, args: string[]): Promise<void> {
-  await runPnpm(config, ["--filter", "@open-design/packaged", "exec", "esbuild", ...args]);
+  await runPnpm(config, ["--filter", "@open-design/shell-electron", "exec", "esbuild", ...args]);
 }
 
 async function runElectronRebuild(config: ToolPackConfig, appRoot: string): Promise<void> {
@@ -144,6 +144,7 @@ async function buildWorkspaceArtifacts(config: ToolPackConfig): Promise<void> {
   await runPnpm(config, ["--filter", "@open-design/host", "build"]);
   await runPnpm(config, ["--filter", "@open-design/diagnostics", "build"]);
   await runPnpm(config, ["--filter", "@open-design/dsh-runtime", "build"]);
+  await runPnpm(config, ["--filter", "@open-design/standalone-proto", "build"]);
   await runPnpm(config, ["--filter", "@open-design/components", "build"]);
   await runPnpm(config, ["--filter", "@open-design/daemon", "build"]);
   try {
@@ -157,8 +158,7 @@ async function buildWorkspaceArtifacts(config: ToolPackConfig): Promise<void> {
     if (previousWebNextEnv == null) await rm(webNextEnvPath, { force: true });
     else await writeFile(webNextEnvPath, previousWebNextEnv, "utf8");
   }
-  await runPnpm(config, ["--filter", "@open-design/desktop", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/packaged", "build"]);
+  await runPnpm(config, ["--filter", "@open-design/shell-electron", "build"]);
 }
 
 export async function ensureWinWorkspaceBuild(config: ToolPackConfig, cache: ToolPackCache): Promise<string> {

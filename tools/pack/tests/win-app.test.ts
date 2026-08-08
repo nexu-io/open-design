@@ -50,6 +50,7 @@ function createConfig(root: string, webOutputMode: ToolPackConfig["webOutputMode
       toolPackRoot: join(root, ".tmp", "tools-pack"),
     },
     signed: false,
+    shell: "electron",
     silent: true,
     to: "dir",
     webOutputMode,

@@ -10,6 +10,12 @@ import {
 import { resolveNamespace } from "@open-design/sidecar";
 import { releaseChannelFromVersion, releaseNamespace } from "@open-design/release";
 
+import {
+  resolveToolPackShell,
+  toolPackShellDefinition,
+  type ToolPackShell,
+} from "./shells.js";
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export const WORKSPACE_ROOT = resolve(__dirname, "../../..");
@@ -47,6 +53,7 @@ export type ToolPackCliOptions = {
   removeSidecars?: boolean;
   requireVelaCli?: boolean;
   signed?: boolean;
+  shell?: string;
   skipWorkspaceBuild?: boolean;
   silent?: boolean;
   statusPollCount?: string | number;
@@ -91,6 +98,7 @@ export type ToolPackConfig = {
   roots: ToolPackRoots;
   silent: boolean;
   signed: boolean;
+  shell: ToolPackShell;
   amrProfile?: ToolPackAmrProfile;
   telemetryRelayUrl?: string;
   /**
@@ -323,20 +331,22 @@ function resolveToolPackUpdateMetadataUrl(value: string | undefined): string | u
   return normalized;
 }
 
-export function resolveElectronVersion(workspaceRoot: string): string {
-  const require = createRequire(join(workspaceRoot, "apps/desktop/package.json"));
-  const desktopPackage = require(join(workspaceRoot, "apps/desktop/package.json")) as {
+export function resolveElectronVersion(workspaceRoot: string, shell: ToolPackShell = "electron"): string {
+  const shellDirectory = toolPackShellDefinition(shell).directory;
+  const packageJsonPath = join(workspaceRoot, shellDirectory, "package.json");
+  const require = createRequire(packageJsonPath);
+  const shellPackage = require(packageJsonPath) as {
     devDependencies?: Record<string, string>;
   };
-  const version = desktopPackage.devDependencies?.electron;
+  const version = shellPackage.devDependencies?.electron;
   if (version == null || version.length === 0) {
-    throw new Error("apps/desktop/package.json must declare electron");
+    throw new Error(`${shellDirectory}/package.json must declare electron`);
   }
   return version;
 }
 
-function resolveElectronDistPath(workspaceRoot: string): string {
-  const require = createRequire(join(workspaceRoot, "apps/desktop/package.json"));
+function resolveElectronDistPath(workspaceRoot: string, shell: ToolPackShell): string {
+  const require = createRequire(join(workspaceRoot, toolPackShellDefinition(shell).directory, "package.json"));
   const electronEntry = require.resolve("electron");
   return join(path.dirname(electronEntry), "dist");
 }
@@ -351,6 +361,7 @@ export function resolveToolPackConfig(
   options: ToolPackCliOptions = {},
 ): ToolPackConfig {
   const appVersion = resolveToolPackAppVersion(options.appVersion);
+  const shell = resolveToolPackShell(options.shell);
   const namespace = resolveNamespace({
     contract: OPEN_DESIGN_SIDECAR_CONTRACT,
     env: process.env,
@@ -368,8 +379,8 @@ export function resolveToolPackConfig(
     appVersion,
     containerized: options.containerized === true,
     electronBuilderCliPath: resolveElectronBuilderCliPath(),
-    electronDistPath: resolveElectronDistPath(WORKSPACE_ROOT),
-    electronVersion: resolveElectronVersion(WORKSPACE_ROOT),
+    electronDistPath: resolveElectronDistPath(WORKSPACE_ROOT, shell),
+    electronVersion: resolveElectronVersion(WORKSPACE_ROOT, shell),
     macCompression: resolveToolPackMacCompression(options.macCompression),
     macNotarize: options.notarize === true,
     namespace,
@@ -397,6 +408,7 @@ export function resolveToolPackConfig(
     requireVelaCli: options.requireVelaCli === true,
     silent: options.silent !== false,
     signed: options.signed === true,
+    shell,
     amrProfile: resolveToolPackAmrProfile(process.env.OPEN_DESIGN_AMR_PROFILE),
     telemetryRelayUrl: resolveToolPackTelemetryRelayUrl(process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL),
     updateMetadataUrl: resolveToolPackUpdateMetadataUrl(process.env.OD_UPDATE_METADATA_URL),

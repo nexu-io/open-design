@@ -73,5 +73,5 @@ export async function runNpmInstall(appRoot: string): Promise<void> {
 }
 
 export async function runEsbuild(config: ToolPackConfig, args: string[]): Promise<void> {
-  await runPnpm(config, ["--filter", "@open-design/packaged", "exec", "esbuild", ...args]);
+  await runPnpm(config, ["--filter", "@open-design/shell-electron", "exec", "esbuild", ...args]);
 }

@@ -84,6 +84,7 @@ function makeConfig(): ToolPackConfig {
     },
     silent: true,
     signed: false,
+    shell: "electron",
     to: "all",
     webOutputMode: "server",
     workspaceRoot: "/work",

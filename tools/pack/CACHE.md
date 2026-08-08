@@ -60,6 +60,12 @@ The build-graph cache is almost entirely Windows-specific.
 
 `mac` and `linux` have `<platform>.workspace-build` only.
 
+The workspace-build key includes the selected shell and hashes that shell's
+registered source directory. For the macOS and Windows delivery lanes the
+registered shell is currently `electron`, rooted at `shells/electron`; changing
+shell source invalidates the node, while changes confined to `apps/standalone`
+do not because Standalone Closure is built and distributed independently.
+
 ## Determinant rules
 
 **R1 — A node key must cover every input that determines the node's output.**

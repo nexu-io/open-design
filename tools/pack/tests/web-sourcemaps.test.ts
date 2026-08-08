@@ -84,6 +84,7 @@ function fakeConfig(workspaceRoot: string): ToolPackConfig {
       toolPackRoot: join(workspaceRoot, "tools-pack"),
     },
     signed: false,
+    shell: "electron",
     silent: true,
     to: "all",
     webOutputMode: "standalone",

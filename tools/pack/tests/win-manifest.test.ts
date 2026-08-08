@@ -43,6 +43,7 @@ function makeConfig(overrides: Partial<ToolPackConfig> = {}): ToolPackConfig {
       toolPackRoot: "/unused/tools-pack",
     },
     signed: false,
+    shell: "electron",
     silent: true,
     to: "nsis",
     webOutputMode: "standalone",

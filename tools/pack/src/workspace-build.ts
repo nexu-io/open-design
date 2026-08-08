@@ -23,10 +23,10 @@ const WORKSPACE_BUILD_PACKAGES = [
   { directory: "packages/diagnostics", name: "@open-design/diagnostics" },
   { directory: "packages/dsh-runtime", name: "@open-design/dsh-runtime" },
   { directory: "packages/standalone-runtime", name: "@open-design/standalone-runtime" },
+  { directory: "packages/standalone-proto", name: "@open-design/standalone-proto" },
   { directory: "apps/daemon", name: "@open-design/daemon" },
   { directory: "apps/web", name: "@open-design/web" },
-  { directory: "apps/desktop", name: "@open-design/desktop" },
-  { directory: "apps/packaged", name: "@open-design/packaged" },
+  { directory: "shells/electron", name: "@open-design/shell-electron" },
 ] as const;
 
 const BUILD_COMMANDS = [
@@ -44,11 +44,11 @@ const BUILD_COMMANDS = [
   { args: ["--filter", "@open-design/plugin-runtime", "build"] },
   { args: ["--filter", "@open-design/diagnostics", "build"] },
   { args: ["--filter", "@open-design/dsh-runtime", "build"] },
+  { args: ["--filter", "@open-design/standalone-proto", "build"] },
   { args: ["--filter", "@open-design/daemon", "build"] },
   { args: ["--filter", "@open-design/web", "build"], env: ["OD_WEB_OUTPUT_MODE"] },
   { args: ["--filter", "@open-design/web", "build:sidecar"] },
-  { args: ["--filter", "@open-design/desktop", "build"] },
-  { args: ["--filter", "@open-design/packaged", "build"] },
+  { args: ["--filter", "@open-design/shell-electron", "build"] },
 ] as const;
 
 type WorkspaceBuildMetadata = {
@@ -103,7 +103,8 @@ async function createWorkspaceBuildCacheKey(config: ToolPackConfig): Promise<str
     packageManager: await readPackageManager(config.workspaceRoot),
     platform: config.platform,
     pnpmLock: await hashPath(join(config.workspaceRoot, "pnpm-lock.yaml")),
-    schemaVersion: 9,
+    schemaVersion: 10,
+    shell: config.shell,
     webOutputMode: config.webOutputMode,
   });
 }
@@ -144,16 +145,18 @@ function workspaceBuildOutputFiles(config: ToolPackConfig): string[] {
     "packages/dsh-runtime/dist/types/index.d.ts",
     "packages/standalone-runtime/dist/index.mjs",
     "packages/standalone-runtime/dist/index.d.ts",
+    "packages/standalone-proto/dist/index.mjs",
+    "packages/standalone-proto/dist/index.d.ts",
     "apps/daemon/dist/cli.js",
     "apps/daemon/dist/cli.d.ts",
     "apps/daemon/dist/sidecar/index.js",
     "apps/web/dist/sidecar/index.js",
     "apps/web/dist/sidecar/index.d.ts",
     ...(config.webOutputMode === "standalone" ? [webStandaloneServerCandidates.join("|")] : ["apps/web/.next/BUILD_ID"]),
-    "apps/desktop/dist/main/index.js",
-    "apps/desktop/dist/main/index.d.ts",
-    "apps/packaged/dist/index.mjs",
-    "apps/packaged/dist/index.d.ts",
+    "shells/electron/dist/main/index.js",
+    "shells/electron/dist/main/index.d.ts",
+    "shells/electron/dist/index.mjs",
+    "shells/electron/dist/index.d.ts",
   ];
 }
 
@@ -174,10 +177,10 @@ function workspaceBuildArtifacts(config: ToolPackConfig): WorkspaceBuildArtifact
     "packages/diagnostics/dist",
     "packages/dsh-runtime/dist",
     "packages/standalone-runtime/dist",
+    "packages/standalone-proto/dist",
     "apps/daemon/dist",
     "apps/web/dist",
-    "apps/desktop/dist",
-    "apps/packaged/dist",
+    "shells/electron/dist",
   ];
   if (config.webOutputMode === "standalone") {
     artifacts.push("apps/web/.next/standalone", "apps/web/.next/static");
