@@ -16,7 +16,10 @@ import type {
 } from "@open-design/standalone-proto";
 
 import type { PackagedConfig } from "./config.js";
-import { checkForPackagedClosureUpdate } from "./closure-update.js";
+import {
+  checkForPackagedClosureUpdate,
+  resolvePackagedClosureReleaseVersion,
+} from "./closure-update.js";
 import {
   createElectronStandaloneRuntimeIdentity,
   writePackagedDesktopIdentity,
@@ -173,7 +176,7 @@ export async function runPackagedStandalone(
     });
 
   await mkdir(paths.runtimeRoot, { recursive: true });
-  await checkForPackagedClosureUpdate({
+  const update = await checkForPackagedClosureUpdate({
     channel: launcherRuntime.launcherPaths.channel,
     installationRoot: launcherRuntime.launcherPaths.root,
     metadataUrl: shellConfig.updateMetadataUrl,
@@ -187,7 +190,7 @@ export async function runPackagedStandalone(
     channel: launcherRuntime.launcherPaths.channel,
     namespace: config.namespace,
     paths,
-    releaseVersion: shellVersion,
+    releaseVersion: resolvePackagedClosureReleaseVersion(update, shellVersion),
     shellDigest: await digestElectronShellEntry(options.shellEntryUrl),
     shellVersion,
   });

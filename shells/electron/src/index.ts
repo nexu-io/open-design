@@ -22,7 +22,10 @@ import {
 import { readProcessStamp } from "@open-design/platform";
 
 import { readPackagedConfig } from "./config.js";
-import { checkForPackagedClosureUpdate } from "./closure-update.js";
+import {
+  checkForPackagedClosureUpdate,
+  resolvePackagedClosureReleaseVersion,
+} from "./closure-update.js";
 import {
   claimPackagedDownloadAttribution,
   discoverPackagedDownloadAttribution,
@@ -242,7 +245,7 @@ async function main(): Promise<void> {
     channel: shellRuntime.launcherPaths.channel,
     namespace,
     paths,
-    releaseVersion: shellVersion,
+    releaseVersion: resolvePackagedClosureReleaseVersion(update, shellVersion),
     shellDigest: await digestElectronShellEntry(import.meta.url),
     shellVersion,
   });

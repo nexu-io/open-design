@@ -50,6 +50,7 @@ export type ClosureReleaseCandidate = {
   assets: ClosureReleaseAssetUrls;
   manifest: ClosureCandidateManifest;
   releaseTarget: string;
+  releaseVersion: string;
 };
 
 export type ClosureUpdateActivationReason = "newer-closure" | "no-active-closure";
@@ -149,7 +150,7 @@ export function selectClosureReleaseCandidate(
   if (root.releaseState !== "complete") {
     throw new ClosureUpdateError(`release metadata is not complete: ${String(root.releaseState)}`);
   }
-  requireString(root.releaseVersion, "release metadata version");
+  const releaseVersion = requireString(root.releaseVersion, "release metadata version");
   const targets = requireRecord(root.releaseTargets, "release metadata targets");
   const target = requireRecord(targets[input.releaseTarget], `release target ${input.releaseTarget}`);
   if (target.status !== "published" || target.enabled !== true) {
@@ -188,6 +189,7 @@ export function selectClosureReleaseCandidate(
     },
     manifest,
     releaseTarget: input.releaseTarget,
+    releaseVersion,
   };
 }
 

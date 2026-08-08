@@ -180,6 +180,7 @@ async function downloadableCandidate(): Promise<{
     },
     manifest,
     releaseTarget: "mac_arm64",
+    releaseVersion: version,
   };
   const fetch = vi.fn(async (input: string | URL | Request) => {
     const url = input instanceof Request ? input.url : String(input);
@@ -205,6 +206,7 @@ describe("Closure release update selection", () => {
     const candidate = select();
 
     expect(candidate.releaseTarget).toBe("mac_arm64");
+    expect(candidate.releaseVersion).toBe("0.18.0-beta.4");
     expect(candidate.manifest.identity).toMatchObject({
       channel: "beta",
       platform: "darwin-arm64",
@@ -217,6 +219,7 @@ describe("Closure release update selection", () => {
     const candidate = select(metadata({ releaseVersion: "0.18.0-beta.3" }));
 
     expect(candidate.manifest.identity.version).toBe("0.18.0-beta.4");
+    expect(candidate.releaseVersion).toBe("0.18.0-beta.3");
   });
 
   it("discovers the Closure from the combined release metadata endpoint", async () => {

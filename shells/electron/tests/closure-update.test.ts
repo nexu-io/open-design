@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   checkForPackagedClosureUpdate,
   resolvePackagedClosureReleaseTarget,
+  resolvePackagedClosureReleaseVersion,
 } from "../src/closure-update.js";
 
 vi.mock("@open-design/closure-update", () => ({
@@ -85,5 +86,26 @@ describe("packaged Closure update adapter", () => {
       state: "skipped",
     });
     expect(updateClosureFromRelease).not.toHaveBeenCalled();
+  });
+
+  it("projects release truth only for an activated or already-active candidate", () => {
+    const candidate = { releaseVersion: "0.18.0-beta.5" } as never;
+    expect(resolvePackagedClosureReleaseVersion({
+      candidate,
+      pointer: {} as never,
+      reason: "newer-closure",
+      state: "activated",
+    }, "0.18.0-beta.4")).toBe("0.18.0-beta.5");
+    expect(resolvePackagedClosureReleaseVersion({
+      candidate,
+      reason: "already-active",
+      state: "retained",
+    }, "0.18.0-beta.4")).toBe("0.18.0-beta.5");
+    expect(resolvePackagedClosureReleaseVersion({
+      candidate,
+      reason: "shell-incompatible",
+      state: "retained",
+    }, "0.18.0-beta.4")).toBe("0.18.0-beta.4");
+    expect(resolvePackagedClosureReleaseVersion(null, "0.18.0-beta.4")).toBe("0.18.0-beta.4");
   });
 });

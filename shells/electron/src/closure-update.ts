@@ -35,6 +35,19 @@ export function resolvePackagedClosureReleaseTarget(
   return null;
 }
 
+/** Project the release truth only after this Store has accepted that release. */
+export function resolvePackagedClosureReleaseVersion(
+  result: PackagedClosureUpdateResult | null,
+  fallback: string,
+): string {
+  if (result == null || !("candidate" in result)) return fallback;
+  if (result.state === "activated") return result.candidate.releaseVersion;
+  if (result.state === "retained" && result.reason === "already-active") {
+    return result.candidate.releaseVersion;
+  }
+  return fallback;
+}
+
 export async function checkForPackagedClosureUpdate(input: {
   channel: LauncherChannel;
   installationRoot: string;
