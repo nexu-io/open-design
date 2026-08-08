@@ -18,6 +18,7 @@ const buildTargets = [
   "packages/registry-protocol",
   "packages/agui-adapter",
   "packages/plugin-runtime",
+  "packages/standalone-proto",
   "packages/sidecar-proto",
   "packages/closure-proto",
   "packages/launcher-proto",
