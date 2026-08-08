@@ -87,12 +87,14 @@ const residualAllowedExactPaths = new Set([
   // Checked-in bin shim so pnpm can link `od` before daemon dist output exists.
   "apps/daemon/bin/od.mjs",
   "apps/packaged/esbuild.config.mjs",
+  "shells/electron/esbuild.config.mjs",
   // Browser service workers must be served as JavaScript files.
   "apps/web/public/od-notifications-sw.js",
   // Vendored dom-to-pptx browser bundle used by the packaged desktop renderer
   // for editable PPTX export. It is loaded into the off-screen Chromium page as
   // an upstream browser asset, not compiled as project-owned TypeScript.
   "apps/desktop/vendor/dom-to-pptx/dom-to-pptx.bundle.js",
+  "shells/electron/vendor/dom-to-pptx/dom-to-pptx.bundle.js",
   // Shared nav enhancer for the landing-page static `/community/` pages,
   // which are verbatim HTML served straight from `public/` (not Astro-
   // compiled). It must ship as a browser-loadable `.js` asset, same as the
@@ -265,7 +267,7 @@ async function checkResidualJavaScript(): Promise<boolean> {
 }
 
 const sourcePackageManifestRootPaths = ["package.json", "e2e/package.json"];
-const sourcePackageManifestScopedDirectories = ["apps", "packages", "tools"];
+const sourcePackageManifestScopedDirectories = ["apps", "packages", "shells", "tools"];
 const packageDependencySections = [
   "dependencies",
   "devDependencies",
@@ -455,7 +457,7 @@ async function checkPackageDependencySpecs(): Promise<boolean> {
   return true;
 }
 
-const testLayoutScopedDirectories = ["apps", "packages", "tools"];
+const testLayoutScopedDirectories = ["apps", "packages", "shells", "tools"];
 const testLayoutSkippedDirectories = new Set([".next", ".od-data", "dist", "node_modules", "out", "reports", "test-results"]);
 
 function isTestFile(fileName: string): boolean {
@@ -543,7 +545,7 @@ async function checkTestLayout(): Promise<boolean> {
     return false;
   }
 
-  console.log("Test layout check passed: apps/packages/tools tests live in sibling tests directories.");
+  console.log("Test layout check passed: apps/packages/shells/tools tests live in sibling tests directories.");
   return true;
 }
 

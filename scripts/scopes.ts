@@ -157,6 +157,8 @@ const CERTAIN_EXEMPT_SURFACE: RuleMatch = {
 };
 
 export const CERTAIN_PACKAGED_LEAF_PREFIXES = [
+  "shells/electron/src/",
+  "shells/electron/tests/",
   "apps/desktop/src/",
   "apps/desktop/tests/",
   "apps/packaged/src/",
@@ -342,6 +344,7 @@ export const scopeRules: readonly ScopeRule[] = [
     match: {
       prefixes: [
         "tools/pack/",
+        "shells/electron/",
         "apps/packaged/",
         "apps/desktop/",
         "packages/release/",
@@ -360,7 +363,12 @@ export const scopeRules: readonly ScopeRule[] = [
     id: "workspace-manifests-and-ci",
     match: {
       exact: ["package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", ".github/workflows/ci.yml", "e2e/package.json"],
-      regexes: [/^apps\/[^/]+\/package\.json$/, /^packages\/[^/]+\/package\.json$/, /^tools\/[^/]+\/package\.json$/],
+      regexes: [
+        /^apps\/[^/]+\/package\.json$/,
+        /^packages\/[^/]+\/package\.json$/,
+        /^shells\/[^/]+\/package\.json$/,
+        /^tools\/[^/]+\/package\.json$/,
+      ],
     },
     effects: ["daemon_tests_required", "web_tests_required", "tools_dev_tests_required", "tools_pack_tests_required"],
     confidence: "medium",
@@ -457,6 +465,7 @@ export const scopeRules: readonly ScopeRule[] = [
           ...CERTAIN_DAEMON_CORE_PREFIXES,
           "apps/desktop/",
           "apps/packaged/",
+          "shells/electron/",
           "tools/pack/",
         ],
         exact: [...CERTAIN_EXEMPT_EXACT, ...MEDIUM_EXEMPT_EXACT],

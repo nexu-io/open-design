@@ -415,11 +415,40 @@ async function pruneForeignNodePtyPrebuilds(
 export function standaloneBootloaderSource(options: { minShellVersion: string }): string {
   return `import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { createStandaloneBootloader, startSidecarStandalone } from "@open-design/standalone";
+import { createStandaloneBootloader } from "@open-design/standalone";
+import { startStandaloneBody } from "./standalone/body.mjs";
 
 const root = dirname(fileURLToPath(import.meta.url));
+const innerPath = join(root, "standalone", "bootloader.mjs");
+let registeredBootloader = null;
+if (existsSync(innerPath)) {
+  const inner = await import(pathToFileURL(innerPath).href);
+  if (typeof inner.handoff !== "function") {
+    throw new Error("registered Standalone bootloader must export handoff()");
+  }
+  registeredBootloader = inner.handoff;
+}
+
+export const handoff = createStandaloneBootloader({
+  minShellVersion: ${JSON.stringify(options.minShellVersion)},
+  resolveRegisteredBootloader: () => registeredBootloader,
+  start: startStandaloneBody,
+});
+
+export default handoff;
+`;
+}
+
+export function standaloneBodySource(): string {
+  return `import { existsSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { startSidecarStandalone } from "@open-design/standalone";
+
+const root = dirname(dirname(fileURLToPath(import.meta.url)));
 
 export function resolveOpenDesignClosureLayout() {
   const standaloneRoot = join(root, "web", "standalone");
@@ -441,31 +470,39 @@ export function resolveOpenDesignClosureLayout() {
   });
 }
 
-export const handoffOpenDesignStandalone = createStandaloneBootloader({
+export async function startStandaloneBody(request) {
+  const layout = resolveOpenDesignClosureLayout();
+  const childEnv = { ...process.env };
+  return await startSidecarStandalone(request, {
+    daemon: {
+      args: [layout.daemonStandaloneSidecarEntry],
+      env: childEnv,
+      executable: process.execPath,
+    },
+    web: {
+      args: [layout.webStandaloneSidecarEntry],
+      env: {
+        ...childEnv,
+        OD_WEB_OUTPUT_MODE: "standalone",
+        OD_WEB_STANDALONE_ROOT: layout.webStandaloneRoot,
+      },
+      executable: process.execPath,
+    },
+  });
+}
+`;
+}
+
+export function standaloneInnerBootloaderSource(options: { minShellVersion: string }): string {
+  return `import { createStandaloneBootloader } from "@open-design/standalone";
+import { startStandaloneBody } from "./body.mjs";
+
+export const handoff = createStandaloneBootloader({
   minShellVersion: ${JSON.stringify(options.minShellVersion)},
-  async start(request) {
-    const layout = resolveOpenDesignClosureLayout();
-    const childEnv = { ...process.env };
-    return await startSidecarStandalone(request, {
-      daemon: {
-        args: [layout.daemonStandaloneSidecarEntry],
-        env: childEnv,
-        executable: process.execPath,
-      },
-      web: {
-        args: [layout.webStandaloneSidecarEntry],
-        env: {
-          ...childEnv,
-          OD_WEB_OUTPUT_MODE: "standalone",
-          OD_WEB_STANDALONE_ROOT: layout.webStandaloneRoot,
-        },
-        executable: process.execPath,
-      },
-    });
-  },
+  start: startStandaloneBody,
 });
 
-export default handoffOpenDesignStandalone;
+export default handoff;
 `;
 }
 
@@ -772,6 +809,18 @@ async function buildClosureArchiveUncached(options: ClosureBuildOptions): Promis
     resourceRoot: join(appRoot, "resources", "open-design"),
     workspaceRoot,
   });
+  const internalRoot = join(appRoot, "standalone");
+  await mkdir(internalRoot, { recursive: true });
+  await writeFile(
+    join(internalRoot, "body.mjs"),
+    standaloneBodySource(),
+    { encoding: "utf8", mode: 0o700 },
+  );
+  await writeFile(
+    join(internalRoot, CLOSURE_ARCHIVE_ENTRY_PATH),
+    standaloneInnerBootloaderSource({ minShellVersion: options.minShellVersion }),
+    { encoding: "utf8", mode: 0o700 },
+  );
   const entryPath = join(appRoot, CLOSURE_ARCHIVE_ENTRY_PATH);
   await writeFile(entryPath, standaloneBootloaderSource({
     minShellVersion: options.minShellVersion,

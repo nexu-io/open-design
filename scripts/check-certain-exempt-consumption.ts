@@ -35,7 +35,7 @@ import {
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 
-const checkedRoots = ["apps", "packages", "tools", "e2e"] as const;
+const checkedRoots = ["apps", "packages", "shells", "tools", "e2e"] as const;
 
 const skippedDirectoryNames = new Set([
   ".astro",

@@ -10,7 +10,9 @@ import {
   CLOSURE_ELECTRON_NATIVE_MODULES,
   CLOSURE_INTERNAL_PACKAGES,
   CLOSURE_PLATFORM_TARGETS,
+  standaloneBodySource,
   standaloneBootloaderSource,
+  standaloneInnerBootloaderSource,
   createClosureBuildCacheKey,
   createClosureElectronRebuildOptions,
   materializeClosureWebPublicHoist,
@@ -77,22 +79,31 @@ describe("tools-pack Closure archive", () => {
     });
   });
 
-  it("publishes one shell-neutral entry with explicit Web and daemon layout", () => {
-    const source = standaloneBootloaderSource({ minShellVersion: "0.18.0-beta.1" });
-    expect(source).toContain("createStandaloneBootloader");
-    expect(source).toContain("handoffOpenDesignStandalone");
-    expect(source).toContain('minShellVersion: "0.18.0-beta.1"');
-    expect(source).toContain("resolveOpenDesignClosureLayout");
-    expect(source).toContain("daemonCliEntry");
-    expect(source).toContain("daemonSidecarEntry");
-    expect(source).toContain("daemonStandaloneSidecarEntry");
-    expect(source).toContain("webServerEntry");
-    expect(source).toContain("webSidecarEntry");
-    expect(source).toContain("webStandaloneSidecarEntry");
-    expect(source).not.toContain("payload-desktop-handoff");
-    expect(source).not.toContain("desktop");
-    expect(source).not.toContain("ELECTRON_RUN_AS_NODE");
-    expect(source).not.toContain("release-beta");
+  it("publishes a fossil root, registered inner bootloader and separate body", () => {
+    const root = standaloneBootloaderSource({ minShellVersion: "0.18.0-beta.1" });
+    const inner = standaloneInnerBootloaderSource({ minShellVersion: "0.18.0-beta.1" });
+    const body = standaloneBodySource();
+
+    expect(root).toContain("createStandaloneBootloader");
+    expect(root).toContain("resolveRegisteredBootloader");
+    expect(root).toContain('join(root, "standalone", "bootloader.mjs")');
+    expect(root).toContain("export const handoff");
+    expect(root).toContain('minShellVersion: "0.18.0-beta.1"');
+    expect(root).not.toContain("resolveOpenDesignClosureLayout");
+
+    expect(inner).toContain("createStandaloneBootloader");
+    expect(inner).toContain("startStandaloneBody");
+    expect(inner).toContain("export const handoff");
+    expect(inner).not.toContain("resolveRegisteredBootloader");
+
+    expect(body).toContain("resolveOpenDesignClosureLayout");
+    expect(body).toContain("daemonStandaloneSidecarEntry");
+    expect(body).toContain("webStandaloneSidecarEntry");
+    for (const source of [root, inner, body]) {
+      expect(source).not.toContain("payload-desktop-handoff");
+      expect(source).not.toContain("ELECTRON_RUN_AS_NODE");
+      expect(source).not.toContain("release-beta");
+    }
   });
 
   it("keeps shell applications outside the Closure install set", () => {

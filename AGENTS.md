@@ -9,19 +9,20 @@ This file is the single source of truth for agents entering this repository. Rea
 - Architecture and protocols: `docs/architecture.md`, `docs/skills-protocol.md`, `docs/agent-adapters.md`, `docs/modes.md`.
 - Historical product baseline: `docs/spec.md`, `docs/roadmap.md` (both explicitly archived; do not treat their dated decisions as current behavior).
 - References and current plans: `docs/references.md`, `docs/code-review-guidelines.md`, `specs/current/maintainability-roadmap.md`, `specs/current/ci.md` (CI scope confidence methodology — required before changing confidence or guard fields in `scripts/scopes.ts`).
-- Directory-level agent guidance: `.github/AGENTS.md`, `apps/AGENTS.md`, `packages/AGENTS.md`, `tools/AGENTS.md`, `e2e/AGENTS.md`.
+- Directory-level agent guidance: `.github/AGENTS.md`, `apps/AGENTS.md`, `packages/AGENTS.md`, `shells/AGENTS.md`, `tools/AGENTS.md`, `e2e/AGENTS.md`.
 - Packaged auto-update architecture and high-confidence local harness: read `tools/pack/AGENTS.md` section "Packaged auto-update architecture and harness" before touching packaged updater code, release-channel identity, installer behavior, or updater UI.
 - Packaged build cache contract: `tools/pack/CACHE.md` (determinant rules, materialization-time parameters, confidence grading — required before changing any build-cache node key).
 
 ## Workspace directories
 
-- Workspace packages come from `pnpm-workspace.yaml`: `apps/*`, `packages/*`, `tools/*`, and `e2e`.
+- Workspace packages come from `pnpm-workspace.yaml`: `apps/*`, `packages/*`, `shells/*`, `tools/*`, and `e2e`.
 - Top-level content directories: `skills/` (functional skills the agent invokes mid-task — utilities, briefs, packagers; see `skills/AGENTS.md`), `design-templates/` (rendering catalogue: decks, prototypes, image/video/audio templates; see `design-templates/AGENTS.md` and `specs/current/skills-and-design-templates.md`), `design-systems/` (brand `DESIGN.md` files), `craft/` (universal brand-agnostic craft rules a skill can opt into via `od.craft.requires`), `mocks/` (replay-based mock CLIs for `opencode`/`claude`/`codex`/`gemini`/`cursor-agent`/`deepseek`/`qwen`/`grok`, the ACP family `devin`/`hermes`/`kilo`/`kimi`/`kiro`/`vibe`, and the AMR `vela` CLI (login + models + ACP), built from anonymized Langfuse traces — PATH-overlay drop-in for tests and self-validation; see `mocks/README.md`).
 - `apps/web` is the Next.js 16 App Router + React 18 web runtime; do not restore `apps/nextjs`.
 - `apps/daemon` is the local privileged daemon and `od` bin. It owns `/api/*`, agent spawning, skills, design systems, artifacts, and static serving.
-- `apps/desktop` is the Electron shell; it discovers the web URL through sidecar IPC.
+- `shells/electron` is the target Electron Shell: native host plus launcher/Store/update policy around the independently built Standalone closure.
+- `apps/desktop` is the legacy Electron native-host source retained only until `shells/electron` passes the replacement gates; do not add new ownership here.
 - `apps/standalone` owns the shell-neutral Web + daemon product composition, the fixed `bootloader.mjs` handoff-once entry, and composition over the normalized sidecar control plane. It does not own Desktop IPC, windows, artifact selection, or update UI.
-- `apps/packaged` is the thin packaged Electron runtime entry; it adapts packaged paths/processes to the Standalone lifecycle and owns the `od://` entry glue only.
+- `apps/packaged` is the legacy combined packaged entry retained only until `shells/electron` and tools-pack replacement gates pass; do not add new ownership here.
 - `apps/landing-page` is the standalone static Astro marketing and public catalog site. It reads repository content at build time and is not part of the daemon/web product runtime.
 - `packages/contracts` is the pure TypeScript web/daemon app contract layer.
 - `packages/standalone-proto` owns the minimal Shell↔Standalone handoff: exact generation identity, resolved roots, Shell identity/capability exchange, runtime status, min-version comparison, and the fixed `bootloader.mjs` name.
@@ -168,7 +169,7 @@ Do not add a new business-named follow-on workflow such as `foo.comment.atom.yml
 
 ## Boundary constraints
 
-- Tests under `apps/`, `packages/`, and `tools/` live in a package/app/tool-level `tests/` directory sibling to `src/`; keep `src/` source-only and do not add new `*.test.ts` or `*.test.tsx` files under `src/`. Playwright UI automation belongs to `e2e/ui/`, not app packages.
+- Tests under `apps/`, `packages/`, `shells/`, and `tools/` live in a package/app/shell/tool-level `tests/` directory sibling to `src/`; keep `src/` source-only and do not add new `*.test.ts` or `*.test.tsx` files under `src/`. Playwright UI automation belongs to `e2e/ui/`, not app packages.
 - App packages must not import another app's private `src/` or `tests/` implementation as a shared helper. In particular, `apps/web/**` must not import `apps/daemon/src/**`; web/daemon integration belongs behind HTTP APIs, `packages/contracts`, and app-local provider boundaries.
 - Cross-app, cross-runtime, or repository-resource consistency checks belong in `e2e/tests/` when they need to observe more than one app/package boundary; promote reusable logic to a pure package instead of borrowing another app's private source.
 - Keep shared API DTOs, SSE event unions, error shapes, task shapes, and example payloads in `packages/contracts`; update contracts before wiring divergent web/daemon request or response shapes.

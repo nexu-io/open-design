@@ -38,4 +38,20 @@ describe("normalized Standalone boundary", () => {
     );
     expect(source).toContain("handoff-conflict");
   });
+
+  it("keeps both sides on standalone-proto without private cross-app imports", async () => {
+    const shell = await readFile(
+      join(workspaceRoot, "shells", "electron", "src", "standalone-handoff.ts"),
+      "utf8",
+    );
+    const body = await readFile(
+      join(workspaceRoot, "apps", "standalone", "src", "bootloader.ts"),
+      "utf8",
+    );
+
+    expect(shell).toContain('from "@open-design/standalone-proto"');
+    expect(body).toContain('from "@open-design/standalone-proto"');
+    expect(shell).not.toMatch(/apps\/standalone|@open-design\/standalone["']/u);
+    expect(body).not.toMatch(/shells\/electron|@open-design\/shell-electron/u);
+  });
 });

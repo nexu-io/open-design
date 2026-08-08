@@ -9,7 +9,7 @@ import {
 } from "./scopes.ts";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
-const checkedRoots = ["apps", "packages", "tools", "e2e"] as const;
+const checkedRoots = ["apps", "packages", "shells", "tools", "e2e"] as const;
 const checkedExtensions = new Set([".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"]);
 const skippedDirectories = new Set([
   ".astro",
@@ -22,7 +22,12 @@ const skippedDirectories = new Set([
   "test-results",
   "vendor",
 ]);
-const leafPackages = ["@open-design/desktop", "@open-design/packaged", "@open-design/tools-pack"] as const;
+const leafPackages = [
+  "@open-design/desktop",
+  "@open-design/packaged",
+  "@open-design/shell-electron",
+  "@open-design/tools-pack",
+] as const;
 
 const allowedConsumerPrefixes = new Map([
   [
@@ -35,6 +40,10 @@ const allowedConsumers = new Map([
   [
     "apps/packaged/esbuild.config.mjs",
     "the packaged build owns these entrypoints; the config itself remains medium-tier",
+  ],
+  [
+    "shells/electron/esbuild.config.mjs",
+    "the Electron Shell build owns these entrypoints; the config itself remains medium-tier",
   ],
   [
     "tools/pack/esbuild.config.mjs",
@@ -70,6 +79,8 @@ const requiredWorkspaceUnitBlock = `if [ "\${{ needs.scopes.outputs.tools_dev_te
             pnpm --filter @open-design/tools-dev test
           fi
           if [ "\${{ needs.scopes.outputs.tools_pack_tests_required }}" = "true" ]; then
+            pnpm --filter @open-design/shell-electron build
+            pnpm --filter @open-design/shell-electron test
             pnpm --filter @open-design/desktop build
             pnpm --filter @open-design/desktop test
             pnpm --filter @open-design/packaged test

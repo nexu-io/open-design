@@ -6,6 +6,7 @@ import { isReleaseChannel, type ReleaseChannel } from "@open-design/release";
 export const STANDALONE_PROTOCOL_VERSION = 1 as const;
 export const STANDALONE_HANDOFF_SCHEMA_VERSION = 1 as const;
 export const STANDALONE_BOOTLOADER_ENTRY_PATH = "bootloader.mjs" as const;
+export const STANDALONE_BOOTLOADER_EXPORT_NAME = "handoff" as const;
 
 export type StandaloneDigest = `sha256:${string}`;
 

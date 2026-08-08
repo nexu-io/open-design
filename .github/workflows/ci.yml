@@ -317,6 +317,8 @@ jobs:
             pnpm --filter @open-design/tools-dev test
           fi
           if [ "${{ needs.scopes.outputs.tools_pack_tests_required }}" = "true" ]; then
+            pnpm --filter @open-design/shell-electron build
+            pnpm --filter @open-design/shell-electron test
             pnpm --filter @open-design/desktop build
             pnpm --filter @open-design/desktop test
             pnpm --filter @open-design/packaged test
