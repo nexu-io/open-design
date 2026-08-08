@@ -127,6 +127,31 @@ describe("startPackedMacApp", () => {
     }
   });
 
+  it("starts the DMG-installed app when installed source is explicitly required", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-mac-lifecycle-"));
+    try {
+      const config = makeConfig(root);
+      const paths = resolveMacPaths(config);
+      const executableName = "Open Design";
+      const builtExecutablePath = join(paths.appPath, "Contents", "MacOS", executableName);
+      const installedExecutablePath = join(paths.installedAppPath, "Contents", "MacOS", executableName);
+
+      await mkdir(join(paths.appPath, "Contents", "MacOS"), { recursive: true });
+      await mkdir(join(paths.installedAppPath, "Contents", "MacOS"), { recursive: true });
+      await writeFile(builtExecutablePath, "#!/bin/sh\nexit 0\n", "utf8");
+      await writeFile(installedExecutablePath, "#!/bin/sh\nexit 0\n", "utf8");
+      await chmod(builtExecutablePath, 0o755);
+      await chmod(installedExecutablePath, 0o755);
+
+      const result = await startPackedMacApp(config, { source: "installed" });
+
+      expect(result.source).toBe("installed");
+      expect(result.executablePath).toBe(installedExecutablePath);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
   it("accepts a clean launcher exit when the delegated desktop becomes healthy", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-mac-lifecycle-"));
     try {

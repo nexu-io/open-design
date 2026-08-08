@@ -84,7 +84,8 @@ function addBuildOptions(command: CacCommand, platform: ToolPackPlatform) {
 
 function addMacBuildOptions(command: CacCommand) {
   return addBuildOptions(command, "mac")
-    .option("--mac-compression <mode>", "mac artifact compression: normal|maximum|store (default: normal)");
+    .option("--mac-compression <mode>", "mac artifact compression: normal|maximum|store (default: normal)")
+    .option("--start-source <source>", "start: select built|installed app explicitly (default: built-first auto discovery)");
 }
 
 function addWinLifecycleOptions(command: CacCommand) {
@@ -148,7 +149,7 @@ addMacBuildOptions(addSharedOptions(cli.command("mac <action>", "Mac packaging c
         printJson(await installPackedMacDmg(config));
         return;
       case "start":
-        printJson(await startPackedMacApp(config));
+        printJson(await startPackedMacApp(config, { source: options.startSource }));
         return;
       case "stop":
         printJson(await stopPackedMacApp(config));

@@ -55,6 +55,7 @@ export type ToolPackCliOptions = {
   shellVersion?: string;
   skipWorkspaceBuild?: boolean;
   silent?: boolean;
+  startSource?: string;
   statusPollCount?: string | number;
   statusPollIntervalMs?: string | number;
   to?: string;

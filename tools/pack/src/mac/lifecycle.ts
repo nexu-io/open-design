@@ -448,14 +448,14 @@ async function createLaunchFailureMessage(
   ].join("\n");
 }
 
-async function resolvePackedMacStartTarget(config: ToolPackConfig): Promise<{
+async function resolvePackedMacStartTarget(config: ToolPackConfig, requestedSource?: string): Promise<{
   appPath: string;
   executablePath: string;
   source: MacStartSource;
 }> {
   const paths = resolveMacPaths(config);
   const identity = resolveMacInstallIdentity(config);
-  const candidates: Array<{ appPath: string; source: MacStartSource }> = [
+  const discoveredCandidates: Array<{ appPath: string; source: MacStartSource }> = [
     // `tools-pack ... start` is a local delivery validator. When the current
     // build exists it must win over an unrelated app already installed on the
     // machine; installed locations remain useful fallbacks for install tests.
@@ -464,6 +464,12 @@ async function resolvePackedMacStartTarget(config: ToolPackConfig): Promise<{
     { appPath: paths.userApplicationsAppPath, source: "user-applications" },
     { appPath: paths.systemApplicationsAppPath, source: "system-applications" },
   ];
+  if (requestedSource != null && requestedSource !== "built" && requestedSource !== "installed") {
+    throw new Error(`unsupported mac --start-source: ${requestedSource}; expected built or installed`);
+  }
+  const candidates = requestedSource == null
+    ? discoveredCandidates
+    : discoveredCandidates.filter((candidate) => candidate.source === requestedSource);
 
   for (const candidate of candidates) {
     const executablePath = macAppExecutablePath(candidate.appPath, identity.executableName);
@@ -473,7 +479,9 @@ async function resolvePackedMacStartTarget(config: ToolPackConfig): Promise<{
   }
 
   throw new Error(
-    `no mac .app executable found for namespace=${config.namespace}; run tools-pack mac build --to all and tools-pack mac install first`,
+    requestedSource == null
+      ? `no mac .app executable found for namespace=${config.namespace}; run tools-pack mac build --to all and tools-pack mac install first`
+      : `no mac ${requestedSource} .app executable found for namespace=${config.namespace}`,
   );
 }
 
@@ -528,8 +536,11 @@ export async function installPackedMacDmg(config: ToolPackConfig): Promise<MacIn
   };
 }
 
-export async function startPackedMacApp(config: ToolPackConfig): Promise<MacStartResult> {
-  const target = await resolvePackedMacStartTarget(config);
+export async function startPackedMacApp(
+  config: ToolPackConfig,
+  options: { source?: string } = {},
+): Promise<MacStartResult> {
+  const target = await resolvePackedMacStartTarget(config, options.source);
   const stamp = desktopStamp(config);
   const logPath = desktopLogPath(config);
   const launchConfigPath = await writeLaunchPackagedConfig(config, target.appPath);
