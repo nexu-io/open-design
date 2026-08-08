@@ -1,9 +1,9 @@
-// Route-level coverage for POST /api/projects/:id/open-in (#3871).
+// Route-level coverage for POST /api/projects/:id/open-in (#3871, #6610).
 //
 // The helper-level tests in host-tools-routes.test.ts pin launchHostTool's
 // contract, but not the route's translation of a refused launch into an HTTP
-// response — if the route regressed back to swallowing `!launch.ok` (or mapped
-// it to `200 { ok: true }`), those tests would stay green. Here the spawn is
+// response — if the route regressed back to swallowing !launch.ok (or mapped
+// it to 200 { ok: true }), those tests would stay green. Here the spawn is
 // mocked at the node:child_process boundary so the full route path runs, and
 // the assertions lock the observable behavior: HTTP status + error code/body.
 
@@ -19,10 +19,14 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { registerHostToolsRoutes } from '../src/routes/host-tools.js';
 import type { RegisterHostToolsRoutesDeps } from '../src/routes/host-tools.js';
 
-const spawnState = vi.hoisted(() => ({ fail: false, error: 'spawn cursor ENOENT' }));
+const spawnState = vi.hoisted(() => ({
+  mode: 'spawn' as 'error' | 'exit-failure' | 'exit-success' | 'spawn',
+  error: 'spawn cursor ENOENT',
+}));
 
-// Deterministic spawn: emits `error` or `spawn` on the next tick depending on
-// spawnState, so both launch outcomes are reachable on any CI platform.
+// Deterministic spawn: emits an OS refusal, a successful spawn followed by an
+// exit, or a long-running spawn on the next tick. This makes each launch
+// outcome reachable on any CI platform.
 vi.mock('node:child_process', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:child_process')>();
   return {
@@ -31,8 +35,14 @@ vi.mock('node:child_process', async (importOriginal) => {
       const child = new EventEmitter() as EventEmitter & { unref: () => void };
       child.unref = () => {};
       setImmediate(() => {
-        if (spawnState.fail) child.emit('error', new Error(spawnState.error));
-        else child.emit('spawn');
+        if (spawnState.mode === 'error') {
+          child.emit('error', new Error(spawnState.error));
+          return;
+        }
+
+        child.emit('spawn');
+        if (spawnState.mode === 'exit-failure') child.emit('exit', 1, null);
+        if (spawnState.mode === 'exit-success') child.emit('exit', 0, null);
       });
       return child;
     }),
@@ -88,9 +98,9 @@ function postOpenIn(projectId: string) {
   });
 }
 
-describe('POST /api/projects/:id/open-in launch reporting (#3871)', () => {
+describe('POST /api/projects/:id/open-in launch reporting (#3871, #6610)', () => {
   it('returns 500 EDITOR_LAUNCH_FAILED when the OS refuses the launch', async () => {
-    spawnState.fail = true;
+    spawnState.mode = 'error';
 
     const resp = await postOpenIn('p1');
 
@@ -101,8 +111,29 @@ describe('POST /api/projects/:id/open-in launch reporting (#3871)', () => {
     expect(body.error.message).toContain('spawn cursor ENOENT');
   });
 
-  it('returns 200 ok:true once the OS confirms the launch', async () => {
-    spawnState.fail = false;
+  it('returns 500 EDITOR_LAUNCH_FAILED when the launcher exits non-zero after spawning', async () => {
+    spawnState.mode = 'exit-failure';
+
+    const resp = await postOpenIn('p1');
+
+    expect(resp.status).toBe(500);
+    const body = (await resp.json()) as { error: { code: string; message: string } };
+    expect(body.error.code).toBe('EDITOR_LAUNCH_FAILED');
+    expect(body.error.message).toContain('Failed to launch Cursor');
+    expect(body.error.message).toContain('exited with code 1');
+  });
+
+  it('returns 200 ok:true when the launcher exits successfully after spawning', async () => {
+    spawnState.mode = 'exit-success';
+
+    const resp = await postOpenIn('p1');
+
+    expect(resp.status).toBe(200);
+    expect(await resp.json()).toEqual({ ok: true, editorId: 'cursor', path: PROJECT_DIR });
+  });
+
+  it('returns 200 ok:true when the editor keeps running past the grace period', async () => {
+    spawnState.mode = 'spawn';
 
     const resp = await postOpenIn('p1');
 
