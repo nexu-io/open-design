@@ -873,6 +873,8 @@ export interface CatalogCounts {
   systems: number;
   templates: number;
   craft: number;
+  /** User-facing bundled plugins shown in the public plugin library. */
+  plugins: number;
   /** SKILL.md `od.mode` → count. Lowercase keys (e.g. `deck`, `prototype`). */
   byMode: Readonly<Record<string, number>>;
   /** SKILL.md `od.platform` → count. Lowercase keys (e.g. `mobile`, `desktop`). */
@@ -941,6 +943,7 @@ export async function getCatalogCounts(
       systems: systems.length,
       templates: templates.length,
       craft: craft.length,
+      plugins: getBundledPlugins().length,
       byMode: tallyKey(skills.map((s) => s.mode)),
       byPlatform: tallyKey(skills.map((s) => s.platform)),
       templateCategories: computeTemplateCategories(),
@@ -964,6 +967,7 @@ export async function getCatalogCounts(
       systems: systems.length,
       templates: templates.length,
       craft: craft.length,
+      plugins: getBundledPlugins().length,
       byMode: tallyKey(skills.map((s) => s.mode)),
       byPlatform: tallyKey(skills.map((s) => s.platform)),
       templateCategories: computeTemplateCategories(),

@@ -29,6 +29,10 @@ import {
   saveHistory,
 } from '../../src/components/DesignBrowserPanel';
 import {
+  designBrowserHistoryStorageKey,
+  designBrowserViewportStorageKey,
+} from '../../src/components/design-browser-storage';
+import {
   browserCommentFilePath,
   isProjectHtmlBrowserUrl,
   projectRelativePathFromBrowserUrl,
@@ -409,7 +413,7 @@ describe('loadHistory / saveHistory round-trip', () => {
 
   it('drops malformed entries on load', () => {
     window.localStorage.setItem(
-      `od:design-browser:${projectId}:history:v1`,
+      designBrowserHistoryStorageKey(projectId),
       JSON.stringify([
         { url: 'https://ok.com', title: 'OK', lastVisitedAt: 1, visitCount: 1 },
         { url: 123, title: 'bad', lastVisitedAt: 1, visitCount: 1 },
@@ -421,7 +425,7 @@ describe('loadHistory / saveHistory round-trip', () => {
   });
 
   it('returns an empty array for corrupt or non-array JSON', () => {
-    const key = `od:design-browser:${projectId}:history:v1`;
+    const key = designBrowserHistoryStorageKey(projectId);
     window.localStorage.setItem(key, 'not json');
     expect(loadHistory(projectId)).toEqual([]);
     window.localStorage.setItem(key, JSON.stringify({ not: 'an array' }));
@@ -457,12 +461,12 @@ describe('loadBrowserViewport / saveBrowserViewport round-trip', () => {
 
   it('round-trips the selected browser viewport', () => {
     saveBrowserViewport(projectId, 'mobile');
-    expect(window.localStorage.getItem(`od:design-browser:${projectId}:viewport:v1`)).toBe('mobile');
+    expect(window.localStorage.getItem(designBrowserViewportStorageKey(projectId))).toBe('mobile');
     expect(loadBrowserViewport(projectId)).toBe('mobile');
   });
 
   it('ignores malformed stored browser viewport values', () => {
-    window.localStorage.setItem(`od:design-browser:${projectId}:viewport:v1`, 'watch');
+    window.localStorage.setItem(designBrowserViewportStorageKey(projectId), 'watch');
     expect(loadBrowserViewport(projectId)).toBe('desktop');
   });
 });

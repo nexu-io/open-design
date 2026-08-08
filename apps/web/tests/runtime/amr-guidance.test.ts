@@ -1,20 +1,119 @@
-import { describe, expect, it } from 'vitest';
-import { amrRechargeUrlForProfile, resolveRunFailureUi } from '../../src/runtime/amr-guidance';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { afterEach, describe, expect, it } from 'vitest';
+import {
+  DEFAULT_AMR_RECHARGE_URL,
+  amrConsoleUrlForWorkspace,
+  amrPlansUrlForWorkspace,
+  amrProfileBadgeLabel,
+  amrRechargeUrlForProfile,
+  resolveRunFailureUi,
+  setRuntimeAmrConsoleOrigin,
+} from '../../src/runtime/amr-guidance';
+
+// Stand-in for an internal deployment's console origin. The real hostnames are
+// injected into packaged builds at build time and reach the web runtime through
+// the daemon, so they must never appear in this public source tree.
+const RUNTIME_CONSOLE_ORIGIN = 'https://vela.example.invalid';
+
+afterEach(() => {
+  setRuntimeAmrConsoleOrigin(null);
+});
 
 describe('amrRechargeUrlForProfile', () => {
-  it('matches the selected AMR profile wallet origin', () => {
-    expect(amrRechargeUrlForProfile('prod')).toBe(
-      'https://open-design.ai/amr/wallet?source=open_design',
+  // Product decision: there is no wallet page in the console's information
+  // architecture any more — balance, top-up and the auto-recharge policy all
+  // report on the dashboard (vela #1055 rehomed them there). Every console
+  // entry this module builds therefore targets `/dashboard`, not `/wallet`.
+  it('targets the console dashboard on every AMR profile', () => {
+    expect(DEFAULT_AMR_RECHARGE_URL).toBe(
+      'https://open-design.ai/amr/dashboard?source=open_design',
     );
+    expect(amrRechargeUrlForProfile('prod')).toBe(DEFAULT_AMR_RECHARGE_URL);
     expect(amrRechargeUrlForProfile('test')).toBe(
-      'https://vela.powerformer.net/wallet?source=open_design',
+      'https://vela.powerformer.net/dashboard?source=open_design',
     );
     expect(amrRechargeUrlForProfile('local')).toBe(
-      'http://localhost:5173/wallet?source=open_design',
+      'http://localhost:5173/dashboard?source=open_design',
     );
-    expect(amrRechargeUrlForProfile(' unknown ')).toBe(
-      'https://open-design.ai/amr/wallet?source=open_design',
+    expect(amrRechargeUrlForProfile(' unknown ')).toBe(DEFAULT_AMR_RECHARGE_URL);
+    expect(amrRechargeUrlForProfile(null)).toBe(DEFAULT_AMR_RECHARGE_URL);
+  });
+
+  it('labels the feature-test profile distinctly', () => {
+    expect(amrProfileBadgeLabel('feature-test')).toBe('FEATURE TEST');
+  });
+
+  // An internal (non-public) environment has no origin in this bundle at all:
+  // the daemon reports the one its build was given, and until it does the
+  // client shows the public console rather than a guessed internal hostname.
+  it('falls back to the public console for a profile with no runtime origin', () => {
+    expect(amrRechargeUrlForProfile('feature-test')).toBe(DEFAULT_AMR_RECHARGE_URL);
+  });
+
+  it('uses the runtime console origin the daemon reported for a non-prod profile', () => {
+    setRuntimeAmrConsoleOrigin(RUNTIME_CONSOLE_ORIGIN);
+    expect(amrRechargeUrlForProfile('feature-test')).toBe(
+      `${RUNTIME_CONSOLE_ORIGIN}/dashboard?source=open_design`,
     );
+  });
+
+  it('tolerates a trailing slash and blank runtime origins', () => {
+    setRuntimeAmrConsoleOrigin(`${RUNTIME_CONSOLE_ORIGIN}/`);
+    expect(amrRechargeUrlForProfile('feature-test')).toBe(
+      `${RUNTIME_CONSOLE_ORIGIN}/dashboard?source=open_design`,
+    );
+    setRuntimeAmrConsoleOrigin('   ');
+    expect(amrRechargeUrlForProfile('feature-test')).toBe(DEFAULT_AMR_RECHARGE_URL);
+  });
+
+  // prod's console is the public product URL. A runtime origin must never be
+  // able to redirect a production user's console/upgrade links elsewhere.
+  it('never lets a runtime origin override the prod console', () => {
+    setRuntimeAmrConsoleOrigin(RUNTIME_CONSOLE_ORIGIN);
+    expect(amrRechargeUrlForProfile('prod')).toBe(DEFAULT_AMR_RECHARGE_URL);
+    expect(amrRechargeUrlForProfile(null)).toBe(DEFAULT_AMR_RECHARGE_URL);
+    expect(amrRechargeUrlForProfile(' unknown ')).toBe(DEFAULT_AMR_RECHARGE_URL);
+  });
+});
+
+// The web bundle ships publicly, so an environment hostname that is not itself
+// public must not be a literal in it. New environments arrive through the
+// daemon's runtime console origin (OD_VELA_WEB_URL, baked at packaging time
+// from a CI secret) — not by adding a row to the static profile table.
+describe('amr-guidance origin literals', () => {
+  it('bakes no additional environment origin into the web bundle', () => {
+    const source = readFileSync(
+      join(__dirname, '..', '..', 'src', 'runtime', 'amr-guidance.ts'),
+      'utf8',
+    );
+    const origins = [...source.matchAll(/https?:\/\/[^'"`\s)]+/g)].map((match) => match[0]);
+    // Exactly three: the public prod console, the local dev server, and the one
+    // grandfathered internal entry that predates this rule. A fourth means
+    // someone hardcoded an environment hostname instead of injecting it.
+    expect(origins).toHaveLength(3);
+  });
+});
+
+describe('workspace-scoped AMR URLs', () => {
+  // `billing=plan` is the console's own state-aware upgrade intent: its
+  // dashboard resolves it against the workspace's real subscription state
+  // (personal → the personal plan modal, team → checkout or change-plan), so
+  // this client does not have to guess which dialog to ask for.
+  it('pins console and plans links to the exact workspace', () => {
+    setRuntimeAmrConsoleOrigin(RUNTIME_CONSOLE_ORIGIN);
+    expect(amrConsoleUrlForWorkspace('feature-test', ' workspace-a ')).toBe(
+      `${RUNTIME_CONSOLE_ORIGIN}/dashboard?source=open_design&workspaceId=workspace-a`,
+    );
+    expect(amrPlansUrlForWorkspace('feature-test', ' workspace-a ')).toBe(
+      `${RUNTIME_CONSOLE_ORIGIN}/dashboard?source=open_design&workspaceId=workspace-a&billing=plan`,
+    );
+  });
+
+  it('fails closed when the workspace identity is absent', () => {
+    expect(amrConsoleUrlForWorkspace('feature-test', null)).toBeNull();
+    expect(amrConsoleUrlForWorkspace('feature-test', '   ')).toBeNull();
+    expect(amrPlansUrlForWorkspace('feature-test', undefined)).toBeNull();
   });
 });
 

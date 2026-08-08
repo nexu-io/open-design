@@ -17,7 +17,9 @@ Every changed file is classified by the additive rule table in
 `scripts/scopes.ts`: effects union across matched rules, confidence is the
 minimum across matched rules. Each evaluation context brings a trust threshold:
 PR and manual-hot runs believe `medium`, the merge queue believes only
-`certain`, manual-full runs believe nothing. A file below threshold — or
+`certain`, manual-full runs believe nothing. Renames contribute both the
+current and previous filename so moving a file cannot discard the source
+path's validation effects. A file below threshold — or
 matching no rule — escalates fail-closed to the full radius.
 
 The policy floor never moves: `run_preflight` is true in every plan, and its

@@ -118,6 +118,7 @@ export const PREMIUM_MODELS: readonly PricingModel[] = [
   { name: 'Claude-Fable-5' },
   { name: 'Claude-Opus-4.8' },
   { name: 'Claude-Opus-4.7' },
+  { name: 'GPT-5.6 (Sol/Terra/Luna)' },
   { name: 'GPT-5.5-Pro' },
   { name: 'GPT-5.5' },
   { name: 'Gemini-3.1-Pro' },
@@ -134,9 +135,10 @@ export const STANDARD_MODELS = [
 ] as const;
 
 /**
- * Limited-time credit bonus over the base grant, surfaced as a badge next to
- * the credit amount to pull users up (Pro +20%, Max +50%). `null` = no bonus.
- * The displayed credit is `grantUsd × (1 + pct/100)` — e.g. Pro $100 → $120.
+ * Limited-time credit bonus represented by the current grant itself and
+ * surfaced as a badge next to the amount (Pro $120 / +20%, Max $300 / +50%).
+ * `grantUsd` is already the final advertised grant, so consumers must not
+ * apply this percentage to it a second time. `null` = no bonus badge.
  */
 export const CREDIT_BONUS_PCT: Record<PlanTierId, number | null> = {
   plus: null,

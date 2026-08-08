@@ -1,4 +1,5 @@
 const DEFAULT_CHAT_RUN_INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000;
+const DEFAULT_CHAT_RUN_FIRST_OUTPUT_TIMEOUT_MS = 0;
 const MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_CHAT_RUN_ARTIFACT_QUIET_PERIOD_MS = 60 * 1000;
 
@@ -7,6 +8,16 @@ export function assertValidRuntimeDefInactivityTimeoutMs(agentDefault?: number):
   if (!Number.isFinite(agentDefault) || agentDefault < 0 || !Number.isInteger(agentDefault)) {
     throw new RangeError(
       `RuntimeAgentDef.inactivityTimeoutMs must be a non-negative integer, got ${String(agentDefault)}. ` +
+        'Fix the runtime def — invalid values used to silently disable the watchdog.',
+    );
+  }
+}
+
+export function assertValidRuntimeDefFirstOutputTimeoutMs(agentDefault?: number): void {
+  if (agentDefault === undefined) return;
+  if (!Number.isFinite(agentDefault) || agentDefault < 0 || !Number.isInteger(agentDefault)) {
+    throw new RangeError(
+      `RuntimeAgentDef.firstOutputTimeoutMs must be a non-negative integer, got ${String(agentDefault)}. ` +
         'Fix the runtime def — invalid values used to silently disable the watchdog.',
     );
   }
@@ -22,6 +33,18 @@ export function resolveChatRunInactivityTimeoutMs(agentDefault?: number) {
     return Math.min(MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS, agentDefault);
   }
   return DEFAULT_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
+}
+
+export function resolveChatRunFirstOutputTimeoutMs(agentDefault?: number): number {
+  assertValidRuntimeDefFirstOutputTimeoutMs(agentDefault);
+  const env = Number(process.env.OD_CHAT_RUN_FIRST_OUTPUT_TIMEOUT_MS);
+  if (Number.isFinite(env)) {
+    return Math.min(MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS, Math.max(0, Math.floor(env)));
+  }
+  if (agentDefault !== undefined) {
+    return Math.min(MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS, agentDefault);
+  }
+  return DEFAULT_CHAT_RUN_FIRST_OUTPUT_TIMEOUT_MS;
 }
 
 export function resolveChatRunArtifactQuietPeriodMs() {

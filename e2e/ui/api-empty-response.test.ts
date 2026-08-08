@@ -1,5 +1,9 @@
 import { expect, test } from '@/playwright/suite';
-import { fulfillAgentsRoute, routeSuccessfulRuns } from '@/playwright/mock-factory';
+import {
+  fulfillAgentsRoute,
+  routeSuccessfulRuns,
+} from '@/playwright/mock-factory';
+import { mockAmrPersonalWorkspace } from '@/playwright/amr';
 import { openNewProjectModal as openNewProjectModalFromProjects } from '@/playwright/rail';
 import type { Page } from '@playwright/test';
 import { T } from '@/timeouts';
@@ -9,18 +13,26 @@ const STORAGE_KEY = 'open-design:config';
 test.describe.configure({ timeout: T.xlong });
 
 test.beforeEach(async ({ page }) => {
+  await page.route('**/api/integrations/vela/status*', async (route) => {
+    await route.fulfill({
+      json: {
+        loggedIn: true,
+        profile: 'local',
+        configPath: '/tmp/.amr/config.json',
+        user: { id: 'api-empty-response', email: 'api-empty-response@example.com' },
+      },
+    });
+  });
+  await mockAmrPersonalWorkspace(page);
   await page.addInitScript((key) => {
     window.localStorage.setItem(
       key,
       JSON.stringify({
         mode: 'api',
         apiProtocol: 'openai',
-        apiKey: '',
+        apiKey: 'test-byok-key',
         baseUrl: 'https://api.deepseek.com',
         model: 'deepseek-v4-flash',
-        byokProfileId: 'byok-api-empty-response',
-        byokCredentialConfigured: true,
-        byokCredentialTail: 'test',
         agentId: null,
         skillId: null,
         designSystemId: null,
@@ -62,26 +74,6 @@ test.beforeEach(async ({ page }) => {
         models: [{ id: 'default', label: 'Default' }],
       },
     ]);
-  });
-  await page.route('**/api/byok/profiles', async (route) => {
-    await route.fulfill({
-      json: {
-        available: true,
-        backend: 'test',
-        profiles: [{
-          id: 'byok-api-empty-response',
-          label: 'DeepSeek',
-          protocol: 'openai',
-          baseUrl: 'https://api.deepseek.com',
-          model: 'deepseek-v4-flash',
-          requiresApiKey: true,
-          configured: true,
-          keyTail: 'test',
-          createdAt: 1,
-          updatedAt: 1,
-        }],
-      },
-    });
   });
 });
 

@@ -3,7 +3,7 @@
 // The composer's bottom row mixes five controls authored in five different
 // components — the + icon (.icon-btn), the working-dir pill
 // (.working-dir-pill-trigger), the agent avatar (.avatar-agent-trigger), the
-// session-mode "Design"/CLI toggle (.session-mode-toggle__trigger) and Send
+// composer mode picker (.composer-mode__trigger) and Send
 // (.composer-send). The composer mounts under `.chat-composer-fixed-layer` (a
 // body-level portal), so the `.app`-scoped "one control system" normalization
 // in chat.css never reached it and the controls drifted to 28/30/32px. Even
@@ -85,7 +85,7 @@ test('[P1] composer footer controls share one height and baseline', async ({ pag
       '.icon-btn',
       '.working-dir-pill-trigger',
       '.avatar-agent-trigger',
-      '.session-mode-toggle__trigger',
+      '.composer-mode__trigger',
       '.composer-send',
     ];
     const controls: Array<{ sel: string; height: number; center: number }> = [];

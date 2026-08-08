@@ -2,6 +2,22 @@ import { randomUUID } from 'node:crypto';
 
 import { requestJson } from './http.ts';
 
+/**
+ * Exact Personal Workspace selected by AMR E2E callers. The daemon must never
+ * infer this scope from mutable current/default state, so both project creation
+ * and run creation send the same explicit identity.
+ */
+export const AMR_TEST_WORKSPACE_HEADERS: Readonly<Record<string, string>> = {
+  'x-od-workspace-id': 'ws-amr-e2e-personal',
+  'x-od-workspace-type': 'personal',
+  'x-od-workspace-member-id': 'mem-amr-e2e-personal',
+  'x-od-workspace-role': 'owner',
+  'x-od-workspace-lifecycle-state': 'active',
+  'x-od-workspace-member-status': 'active',
+  'x-od-workspace-can-share-projects': 'true',
+  'x-od-workspace-can-write-synced-files': 'true',
+};
+
 export async function putAmrAppConfig(
   webUrl: string,
   config: {
@@ -38,6 +54,7 @@ export async function createAmrProject(webUrl: string, name: string) {
       pendingPrompt: null,
       skillId: null,
     },
+    headers: { ...AMR_TEST_WORKSPACE_HEADERS },
     method: 'POST',
   });
 }

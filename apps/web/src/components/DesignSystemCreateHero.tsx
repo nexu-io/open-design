@@ -23,7 +23,7 @@ export function DesignSystemCreateHero({ stacked = false }: { stacked?: boolean 
     <section className={`${styles.hero}${stacked ? ` ${styles.heroStacked}` : ''}`}>
       <div className={styles.copy}>
         <span className={styles.eyebrow}>
-          <Icon name="sparkles" size={13} />
+          <Icon name="sparkles" size={14} />
           Design system
         </span>
         <h1 className={styles.title}>Design a system, in minutes</h1>

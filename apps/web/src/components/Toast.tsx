@@ -13,6 +13,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { Icon } from './Icon';
+import { useT } from '../i18n';
 
 export interface ToastProps {
   message: string;
@@ -72,6 +73,7 @@ export function Toast({
   tone = 'default',
   placement = 'bottom',
 }: ToastProps) {
+  const t = useT();
   // When code is present the toast is a manual-action surface; never
   // auto-dismiss it out from under the user mid-copy.
   const effectiveTtl = code ? 0 : ttlMs;
@@ -153,7 +155,7 @@ export function Toast({
           type="button"
           className="od-toast-close"
           onClick={onDismiss}
-          aria-label="Dismiss"
+          aria-label={t('common.dismiss')}
         >
           <Icon name="close" size={13} />
         </button>
@@ -163,9 +165,9 @@ export function Toast({
           type="button"
           className="od-toast-dismiss"
           onClick={onDismiss}
-          aria-label="Dismiss"
+          aria-label={t('common.dismiss')}
         >
-          Dismiss
+          {t('common.dismiss')}
         </button>
       ) : null}
     </div>

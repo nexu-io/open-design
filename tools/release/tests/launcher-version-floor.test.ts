@@ -89,3 +89,81 @@ describe("launcher version floor channel policy", () => {
     ).not.toThrow();
   });
 });
+
+/**
+ * The floor's operational shape, pinned against the real channel version
+ * formats rather than illustrative ones.
+ *
+ * Setting a floor is a rare, deliberate act — it is how a release whose Electron
+ * outer shell changed reaches installs that can only take payload updates. The
+ * two rules below interact in a way that is invisible until publish time, and
+ * publish time is a release outage:
+ *
+ *  - a non-stable channel with no pair of its own inherits STABLE's pair, and
+ *  - a floor above the release version hard-fails publication.
+ *
+ * A bare stable floor (`0.17.0`) sorts ABOVE every same-base prerelease version
+ * (`0.17.0-beta.N`), so inheriting it into the daily beta/preview/prerelease
+ * lanes fails them all. These specs name that trap and pin the configuration
+ * that avoids it: one explicit pair per active lane, each in its own lane's
+ * version format.
+ */
+describe("launcher version floor operational configuration", () => {
+  const STABLE_RELEASE = "0.17.0";
+  const HELP_URL = "https://example.test/download";
+
+  const stableOnly: NodeJS.ProcessEnv = {
+    RELEASE_LAUNCHER_VERSION_MIN_STABLE: STABLE_RELEASE,
+    RELEASE_LAUNCHER_VERSION_MIN_URL_STABLE: HELP_URL,
+  };
+
+  function publish(channel: Parameters<typeof resolveLauncherVersionFloor>[0], env: NodeJS.ProcessEnv, releaseVersion: string): void {
+    const floor = resolveLauncherVersionFloor(channel, env);
+    if (floor != null) assertLauncherVersionFloorSatisfiable(floor, releaseVersion);
+  }
+
+  it("lets a bare stable floor publish its own lane", () => {
+    expect(() => publish("stable", stableOnly, STABLE_RELEASE)).not.toThrow();
+    // And keeps working for later stable patches without being re-bumped.
+    expect(() => publish("stable", stableOnly, "0.17.1")).not.toThrow();
+  });
+
+  it("breaks same-base non-stable lanes that inherit a bare stable floor", () => {
+    // The trap. Each of these is a real lane that publishes on its own cadence,
+    // and `0.17.0` > `0.17.0-<channel>.N` by semver.
+    for (const [channel, releaseVersion] of [
+      ["beta", "0.17.0-beta.3"],
+      ["preview", "0.17.0-preview.1"],
+      ["prerelease", "0.17.0-prerelease.1"],
+    ] as const) {
+      expect(() => publish(channel, stableOnly, releaseVersion)).toThrow(/exceeds release version/);
+    }
+  });
+
+  it("stops breaking them once the base version moves past the floor", () => {
+    // Why the trap is intermittent rather than permanent: it only bites while a
+    // lane is still publishing the same base version the stable floor names.
+    expect(() => publish("beta", stableOnly, "0.18.0-beta.1")).not.toThrow();
+  });
+
+  it("publishes every lane when each carries its own explicit pair", () => {
+    const perChannel: NodeJS.ProcessEnv = {
+      ...stableOnly,
+      RELEASE_LAUNCHER_VERSION_MIN_BETA: "0.17.0-beta.1",
+      RELEASE_LAUNCHER_VERSION_MIN_URL_BETA: HELP_URL,
+      RELEASE_LAUNCHER_VERSION_MIN_PREVIEW: "0.17.0-preview.1",
+      RELEASE_LAUNCHER_VERSION_MIN_URL_PREVIEW: HELP_URL,
+      RELEASE_LAUNCHER_VERSION_MIN_PRERELEASE: "0.17.0-prerelease.1",
+      RELEASE_LAUNCHER_VERSION_MIN_URL_PRERELEASE: HELP_URL,
+    };
+    for (const [channel, releaseVersion] of [
+      ["stable", STABLE_RELEASE],
+      ["beta", "0.17.0-beta.1"],
+      ["beta", "0.17.0-beta.9"],
+      ["preview", "0.17.0-preview.1"],
+      ["prerelease", "0.17.0-prerelease.1"],
+    ] as const) {
+      expect(() => publish(channel, perChannel, releaseVersion)).not.toThrow();
+    }
+  });
+});

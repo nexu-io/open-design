@@ -260,7 +260,7 @@ export function resolveExclusiveSurface(args: {
 // means the agent hand-rolls deck scaffolding — so every borderline term
 // stays in.
 const DECK_INTENT_SIGNAL =
-  /\b(slides?|deck|keynote|presentation|pitch\s?deck|ppt(x)?|slideshow|carousel)\b|幻灯|简报|讲稿|演示|路演|汇报|宣讲|课件|讲解|演讲|提案/i;
+  /\b(slides?|deck|keynote|presentation|pitch\s?deck|(?:seed|pre[-\s]?seed|investor|fundraising|startup)\s+pitch|ppt(x)?|slideshow|carousel)\b|幻灯|简报|讲稿|演示|路演|汇报|宣讲|课件|讲解|演讲|提案/i;
 
 /**
  * Whether the outgoing user request reads as a slide-deck brief. Gates the

@@ -26,11 +26,14 @@ import { x as tarExtract } from 'tar';
 import {
   defaultRegistryRoots,
   deleteInstalledPlugin,
+  getInstalledPlugin,
   resolvePluginFolder,
   upsertInstalledPlugin,
   type ResolveOptions,
   type RegistryRoots,
 } from './registry.js';
+import { deleteWorkspaceResourceByResourceId } from '../db.js';
+import { resolveGithubRepositoryUrl } from '../github-install-source.js';
 import type {
   InstalledPluginRecord,
   MarketplaceTrust,
@@ -92,6 +95,10 @@ export interface InstallOptions {
   // Optional runtime-data lockfile path. Daemon routes pass
   // `<OD_DATA_DIR>/od-plugin-lock.json`; tests can point at temp dirs.
   lockfilePath?: string;
+  // Called after manifest identity is known but before existing bytes or the
+  // installed_plugins row can be replaced. Workspace-aware callers use this
+  // to fail closed when the global install slot belongs to another member.
+  allowReplacePlugin?: (pluginId: string) => boolean | string;
 }
 
 export type ArchiveFetcher = (url: string) => Promise<{
@@ -138,15 +145,23 @@ export async function* installPlugin(
   db: SqliteDb,
   opts: InstallOptions,
 ): AsyncGenerator<InstallEvent, void, void> {
-  if (opts.source.startsWith('github:')) {
-    yield* installFromGithub(db, opts);
+  const browserGithub = resolveGithubRepositoryUrl(opts.source);
+  if (browserGithub.kind === 'invalid') {
+    yield { kind: 'error', message: browserGithub.error, warnings: [] };
     return;
   }
-  if (HTTPS_SOURCE_RE.test(opts.source)) {
-    yield* installFromHttpsArchive(db, opts);
+  const normalizedOpts = browserGithub.kind === 'repository'
+    ? { ...opts, source: browserGithub.source }
+    : opts;
+  if (normalizedOpts.source.startsWith('github:')) {
+    yield* installFromGithub(db, normalizedOpts);
     return;
   }
-  yield* installFromLocalFolder(db, opts);
+  if (HTTPS_SOURCE_RE.test(normalizedOpts.source)) {
+    yield* installFromHttpsArchive(db, normalizedOpts);
+    return;
+  }
+  yield* installFromLocalFolder(db, normalizedOpts);
 }
 
 // `github:owner/repo[@ref][/subpath]` → codeload tarball.
@@ -705,6 +720,20 @@ export async function* installFromLocalFolder(
   }
   const destFolder = path.join(roots.userPluginsRoot, pluginId);
 
+  if (fs.existsSync(destFolder) || getInstalledPlugin(db, pluginId)) {
+    const replacement = opts.allowReplacePlugin?.(pluginId);
+    if (typeof replacement === 'string' || replacement === false) {
+      yield {
+        kind: 'error',
+        message: typeof replacement === 'string'
+          ? replacement
+          : `Plugin "${pluginId}" cannot be replaced from this workspace`,
+        warnings,
+      };
+      return;
+    }
+  }
+
   // Block overwriting a foreign plugin id. The destination folder may
   // contain a previous version of the same id, in which case we replace it.
   if (fs.existsSync(destFolder) && (opts.overwriteExisting ?? true) === false) {
@@ -798,6 +827,24 @@ export async function uninstallPlugin(
     return { ok: false, warning: `Plugin id '${id}' is not a safe folder name` };
   }
   const removed = deleteInstalledPlugin(db, id);
+  // Clean up the workspace_resources binding row too — this table has no
+  // FOREIGN KEY ... ON DELETE CASCADE (a resource_id can point at any of
+  // several tables depending on resource_type, so SQLite cannot enforce a
+  // polymorphic FK), so skipping this would leave an orphan binding that
+  // reinstalling the same plugin id would find and silently reuse (stale
+  // workspace/visibility). A DELETE against a row that never existed is a
+  // no-op, so this is safe to call unconditionally in production (every real
+  // daemon db goes through db.ts's full `migrate()`, which always creates
+  // `workspace_resources`). Guarded here only for narrow-schema test
+  // doubles that run `migratePlugins(db)` in isolation (e.g.
+  // tests/plugins-installer.test.ts) without the rest of db.ts's schema —
+  // mirrors the same "table may not exist yet" tolerance server.ts's
+  // `collectBundledScenarios` already uses for `installed_plugins`.
+  try {
+    deleteWorkspaceResourceByResourceId(db, 'plugin', id);
+  } catch {
+    // Table not present in this db — nothing to clean up.
+  }
   const folder = path.join(roots.userPluginsRoot, id);
   // Defence in depth: even a SAFE_BASENAME-passing id must resolve to a direct
   // child of the registry root. If normalization lands anywhere else, refuse.

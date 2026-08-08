@@ -156,7 +156,7 @@ export function PromptTemplatePreviewModal({ summary, onClose }: Props) {
                 aria-label={fullscreenLabel}
                 title={fullscreenLabel}
               >
-                <Icon name="eye" size={12} />
+                <Icon name="eye" size={14} />
                 <span>{fullscreenLabel}</span>
               </button>
             </div>
@@ -172,7 +172,7 @@ export function PromptTemplatePreviewModal({ summary, onClose }: Props) {
                 onClick={handleCopy}
                 disabled={!detail}
               >
-                <Icon name="copy" size={12} />
+                <Icon name="copy" size={14} />
                 {copied
                   ? t('promptTemplates.copyDone')
                   : t('promptTemplates.copyPrompt')}

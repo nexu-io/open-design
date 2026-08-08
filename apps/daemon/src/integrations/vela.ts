@@ -12,6 +12,8 @@ import type {
   AmrAuthStageResult,
   AmrEntryAttribution,
   TrackingAmrEntrySource,
+  TrackingCampaignConversionSource,
+  TrackingCampaignId,
   TrackingPageName,
 } from '@open-design/contracts/analytics';
 
@@ -28,6 +30,7 @@ const AMR_ENTRY_SOURCES: ReadonlySet<TrackingAmrEntrySource> = new Set([
   'inline_model_switcher_amr_row',
   'settings_amr_agent_card',
   'settings_amr_authorize',
+  'settings_cloud_callout',
   'settings_amr_console',
   'settings_amr_install',
   'avatar_amr_console',
@@ -47,6 +50,9 @@ const AMR_ENTRY_SOURCES: ReadonlySet<TrackingAmrEntrySource> = new Set([
   'generation_preview_switch_retry_card',
   'settings_amr_upgrade',
   'inline_amr_upgrade',
+  'deepseek_unpaid_modal',
+  'deepseek_workbench_badge',
+  'deepseek_model_switcher_upgrade',
   'avatar_amr_upgrade',
   'avatar_amr_agent_card',
   'artifact_success_upgrade',
@@ -77,6 +83,20 @@ const AMR_ENTRY_SOURCE_PAGES: ReadonlySet<AmrEntrySourcePageName> = new Set([
   'home',
 ]);
 
+const AMR_ENTRY_CAMPAIGN_IDS: ReadonlySet<TrackingCampaignId> = new Set([
+  'deepseek_v4_flash',
+]);
+
+const AMR_ENTRY_CAMPAIGN_CONVERSION_SOURCES: ReadonlySet<TrackingCampaignConversionSource> =
+  new Set([
+    'deepseek_unpaid_modal',
+    'deepseek_workbench_badge',
+    'deepseek_model_switcher_upgrade',
+    'landing_home_banner',
+    'landing_pricing_personal_plan',
+    'landing_pricing_team_plan',
+  ]);
+
 const AMR_ENTRY_SOURCE_PAGE_BY_SOURCE: Record<
   TrackingAmrEntrySource,
   AmrEntrySourcePageName
@@ -86,6 +106,7 @@ const AMR_ENTRY_SOURCE_PAGE_BY_SOURCE: Record<
   inline_model_switcher_amr_row: 'chat_panel',
   settings_amr_agent_card: 'settings',
   settings_amr_authorize: 'settings',
+  settings_cloud_callout: 'settings',
   settings_amr_console: 'settings',
   settings_amr_install: 'settings',
   avatar_amr_console: 'chat_panel',
@@ -105,6 +126,9 @@ const AMR_ENTRY_SOURCE_PAGE_BY_SOURCE: Record<
   generation_preview_switch_retry_card: 'file_manager',
   settings_amr_upgrade: 'settings',
   inline_amr_upgrade: 'chat_panel',
+  deepseek_unpaid_modal: 'home',
+  deepseek_workbench_badge: 'home',
+  deepseek_model_switcher_upgrade: 'chat_panel',
   avatar_amr_upgrade: 'chat_panel',
   avatar_amr_agent_card: 'chat_panel',
   artifact_success_upgrade: 'artifact',
@@ -135,6 +159,10 @@ export interface AmrEntryAnalyticsPayload {
   sourceProduct: 'open_design';
   sourceDetail: TrackingAmrEntrySource;
   entryOccurredAt: string;
+  // Campaign dimensions mirrored from the web consent-gated channel so the
+  // AMR ingest body matches the local PostHog + redirect URL envelope.
+  campaignId?: TrackingCampaignId;
+  conversionSource?: TrackingCampaignConversionSource;
   // Optional self-reported onboarding profile, forwarded to AMR for paid-
   // conversion segmentation. Open strings (not a union) so a new onboarding
   // option never forces a contract bump on either side. useCase is multi-select.
@@ -235,10 +263,34 @@ export interface VelaLoginStatus {
   userCode?: string;
   /** True when vela warned it could not open the browser automatically. */
   browserOpenFailed?: boolean;
+  /**
+   * Origin of the vela web console this runtime talks to, when it was given
+   * one. See {@link resolveVelaConsoleOrigin} — the client needs it to build
+   * wallet / plans / upgrade links for a non-public AMR environment.
+   */
+  consoleOrigin?: string;
   authAttemptId?: string;
   authStages?: VelaLoginAuthStage[];
   authRoute?: AmrAuthNetworkPath;
   fallbackUsed?: boolean;
+}
+
+/**
+ * The vela web console origin this runtime was configured with, normalized
+ * without a trailing slash, or undefined when it was given none.
+ *
+ * Non-prod AMR environments are internal deployments, so their hostnames are
+ * not literals in this public repository: packaging injects the origin from a
+ * CI secret and the packaged runtime forwards it as `OD_VELA_WEB_URL`. Reporting
+ * it on the login status is how the web client learns which console to link to
+ * without needing a hostname table of its own. Undefined for prod and fork
+ * builds, where the client falls back to the public product console.
+ */
+export function resolveVelaConsoleOrigin(
+  env: NodeJS.ProcessEnv = process.env,
+): string | undefined {
+  const origin = env.OD_VELA_WEB_URL?.trim().replace(/\/+$/, '') ?? '';
+  return origin.length > 0 ? origin : undefined;
 }
 
 export interface VelaLoginAuthStage {
@@ -352,6 +404,10 @@ export function mergeVelaEnv(
 }
 
 function configDir(): string {
+  const amrHome = process.env.AMR_HOME?.trim();
+  if (amrHome === '~') return homedir();
+  if (amrHome?.startsWith('~/')) return path.join(homedir(), amrHome.slice(2));
+  if (amrHome) return amrHome;
   return path.join(homedir(), '.amr');
 }
 
@@ -680,6 +736,11 @@ interface VelaLoginAttemptState extends VelaLoginAttemptRef {
 
 let loginGeneration = 0;
 let latestLoginAttempt: VelaLoginAttemptState | null = null;
+// Children registered for supervision until their `close`/`error` terminal
+// handler runs. Distinct from `isVelaLoginInFlight()`: status can drop the
+// public idle projection between `exit` and `close` once `exitCode` is set
+// (especially after cancel, which suppresses the fallbackPending bridge).
+let pendingVelaLoginTerminals = 0;
 const LOGIN_STARTUP_GRACE_MS = 250;
 const LOGIN_ACTIVATION_GRACE_MS = 10_000;
 const LOGIN_CANCEL_KILL_GRACE_MS = 2000;
@@ -836,6 +897,19 @@ function hasRunningVelaLoginChild(): boolean {
 export function isVelaLoginInFlight(): boolean {
   return hasRunningVelaLoginChild()
     || Boolean(latestLoginAttempt?.fallbackPending && !latestLoginAttempt.canceled);
+}
+
+/**
+ * True once every supervised login child has finished its `close`/`error`
+ * terminal handler and no late proxy fallback is still pending.
+ *
+ * Stronger than `isVelaLoginInFlight()` for tests that must observe the
+ * close-deferred late-fallback decision: the public idle projection can
+ * flip true between `exit` and `close` when the attempt was canceled.
+ */
+export function isVelaLoginSupervisorSettled(): boolean {
+  return pendingVelaLoginTerminals === 0
+    && !Boolean(latestLoginAttempt?.fallbackPending && !latestLoginAttempt.canceled);
 }
 
 export interface CancelVelaLoginResult {
@@ -1157,6 +1231,7 @@ async function spawnVelaLoginAttempt(
     throw new Error('failed to spawn vela login');
   }
   activeLoginProcs.set(child.pid, child);
+  pendingVelaLoginTerminals += 1;
   attemptState.currentPid = child.pid;
   recordVelaAuthStage(
     deps.attempt,
@@ -1175,6 +1250,7 @@ async function spawnVelaLoginAttempt(
   ) => {
     if (terminalHandled) return;
     terminalHandled = true;
+    pendingVelaLoginTerminals = Math.max(0, pendingVelaLoginTerminals - 1);
     if (typeof child.pid === 'number') activeLoginProcs.delete(child.pid);
     const current = currentVelaLoginAttempt(deps.attempt);
     if (!current || current.currentPid !== child.pid) return;
@@ -1404,6 +1480,10 @@ export function parseAmrEntryAnalyticsPayload(
   const sourceProduct = raw.sourceProduct;
   const sourceDetail = raw.sourceDetail;
   const entryOccurredAt = raw.entryOccurredAt;
+  const campaignId = raw.campaignId;
+  const conversionSource = raw.conversionSource;
+  const hasCampaignId = campaignId !== undefined;
+  const hasConversionSource = conversionSource !== undefined;
   const odRole = sanitizeOptionalProfileValue(raw.odRole);
   const odOrgSize = sanitizeOptionalProfileValue(raw.odOrgSize);
   const odSource = sanitizeOptionalProfileValue(raw.odSource);
@@ -1426,6 +1506,14 @@ export function parseAmrEntryAnalyticsPayload(
       !== AMR_ENTRY_SOURCE_PAGE_BY_SOURCE[sourceDetail as TrackingAmrEntrySource]
     || typeof entryOccurredAt !== 'string'
     || !Number.isFinite(Date.parse(entryOccurredAt))
+    || (hasCampaignId
+      && (typeof campaignId !== 'string'
+        || !AMR_ENTRY_CAMPAIGN_IDS.has(campaignId as TrackingCampaignId)))
+    || (hasConversionSource
+      && (typeof conversionSource !== 'string'
+        || !AMR_ENTRY_CAMPAIGN_CONVERSION_SOURCES.has(
+          conversionSource as TrackingCampaignConversionSource,
+        )))
     || odRole === INVALID_PROFILE_VALUE
     || odOrgSize === INVALID_PROFILE_VALUE
     || odSource === INVALID_PROFILE_VALUE
@@ -1443,6 +1531,10 @@ export function parseAmrEntryAnalyticsPayload(
     sourceProduct,
     sourceDetail: sourceDetail as TrackingAmrEntrySource,
     entryOccurredAt,
+    ...(hasCampaignId ? { campaignId: campaignId as TrackingCampaignId } : {}),
+    ...(hasConversionSource
+      ? { conversionSource: conversionSource as TrackingCampaignConversionSource }
+      : {}),
     ...(odRole ? { odRole } : {}),
     ...(odOrgSize ? { odOrgSize } : {}),
     ...(odUseCase ? { odUseCase } : {}),

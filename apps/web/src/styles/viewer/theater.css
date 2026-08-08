@@ -49,7 +49,7 @@
   justify-content: space-between;
   gap: 8px;
   padding: 4px 0;
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--text-muted);
   border-bottom: 1px dashed var(--border);
 }
@@ -94,7 +94,7 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--text-muted);
 }
 .theater-score-value {
@@ -103,7 +103,7 @@
   font-variant-numeric: tabular-nums;
   color: var(--text-strong);
 }
-.theater-score-threshold-label { font-size: 10.5px; }
+.theater-score-threshold-label { font-size: 12px; }
 
 .theater-lane {
   display: flex;
@@ -134,7 +134,7 @@
   color: var(--text-strong);
 }
 .theater-lane-mustfix {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--amber);
   font-variant-numeric: tabular-nums;
 }
@@ -151,7 +151,7 @@
   gap: 4px;
   padding: 2px 6px;
   border-radius: var(--radius-sm);
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--text-muted);
   background: var(--bg-subtle);
   font-variant-numeric: tabular-nums;
@@ -185,7 +185,7 @@
   border-radius: var(--radius-sm);
   color: var(--text);
   font: inherit;
-  font-size: 11.5px;
+  font-size: 12px;
   cursor: pointer;
 }
 .theater-interrupt:hover { background: var(--bg-subtle); }
@@ -207,11 +207,11 @@
 }
 .theater-degraded-heading {
   margin: 0;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text-strong);
 }
-.theater-degraded-reason { margin: 0; font-size: 11.5px; color: var(--text-muted); }
+.theater-degraded-reason { margin: 0; font-size: 12px; color: var(--text-muted); }
 
 .theater-collapsed {
   display: inline-flex;
@@ -222,7 +222,7 @@
   background: var(--bg-subtle);
   border: 1px solid var(--border);
   border-radius: var(--radius-pill);
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--text-muted);
 }
 .theater-collapsed[data-phase="shipped"][data-ship-status="shipped"] {
@@ -258,7 +258,7 @@
   gap: 8px;
 }
 .theater-transcript-readonly {
-  font-size: 10.5px;
+  font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--text-muted);
@@ -267,7 +267,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-muted);
 }
 .theater-transcript-speed {
@@ -276,7 +276,7 @@
   border-radius: var(--radius-sm);
   background: var(--bg-subtle);
   font: inherit;
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--text);
 }
 .theater-transcript-loading,
@@ -341,8 +341,8 @@
   overflow: visible;
 }
 .assistant-copy-button:hover {
-  background: color-mix(in srgb, var(--text-muted) 10%, transparent);
-  border-color: transparent;
+  background: var(--bg-subtle);
+  border-color: var(--border);
   color: var(--text-strong);
 }
 .assistant-copy-button:disabled {
@@ -379,8 +379,8 @@
   overflow: visible;
 }
 .assistant-feedback-button:hover {
-  background: color-mix(in srgb, var(--text-muted) 10%, transparent);
-  border-color: transparent;
+  background: var(--bg-subtle);
+  border-color: var(--border);
   color: var(--text-strong);
 }
 .assistant-feedback-button[data-selected="true"] {
@@ -405,7 +405,7 @@
   box-shadow: var(--shadow-sm);
   color: var(--text-strong);
   content: attr(data-tooltip);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   line-height: 1.2;
   opacity: 0;
@@ -494,8 +494,8 @@
   align-items: center;
   gap: 5px;
   margin-bottom: 7px;
-  font-size: 11px;
-  font-weight: 650;
+  font-size: 12px;
+  font-weight: 600;
   color: var(--text-muted);
 }
 .assistant-feedback-reason-emoji {
@@ -517,7 +517,7 @@
   border-radius: var(--radius-pill);
   background: var(--bg-subtle);
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.2;
   cursor: pointer;
   user-select: none;
@@ -546,7 +546,7 @@
   background: var(--bg-subtle);
   color: var(--text);
   font: inherit;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.4;
   resize: vertical;
 }
@@ -565,8 +565,8 @@
   border-radius: var(--radius-pill);
   background: var(--accent);
   color: #fff;
-  font-size: 11px;
-  font-weight: 650;
+  font-size: 12px;
+  font-weight: 600;
   cursor: pointer;
 }
 .assistant-feedback-submit:hover:not(:disabled) {
@@ -584,12 +584,12 @@
 .assistant-feedback-discord-note {
   margin: 7px 0 0;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.35;
 }
 .assistant-feedback-discord-note a {
   color: #5865f2;
-  font-weight: 650;
+  font-weight: 600;
   text-decoration: underline;
   text-decoration-thickness: 1px;
   text-underline-offset: 2px;
@@ -598,6 +598,55 @@
   color: color-mix(in srgb, #5865f2 78%, var(--text-strong));
 }
 
+.unfinished-todos {
+  margin-top: 10px;
+  width: min(520px, 100%);
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--amber) 35%, var(--border));
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--amber) 8%, var(--bg-panel));
+  color: var(--text);
+}
+.unfinished-todos-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.unfinished-todos-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-strong);
+}
+.unfinished-todos-continue {
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, var(--amber) 45%, var(--border-strong));
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  color: var(--text-strong);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 9px;
+  cursor: pointer;
+}
+.unfinished-todos-continue:hover {
+  background: var(--bg-subtle);
+}
+.unfinished-todos-list {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.unfinished-todos-list li + li {
+  margin-top: 3px;
+}
+.unfinished-todos-more {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
 /* ============================================================
    Coming-soon disabled affordance for viewer toolbar buttons
    ============================================================ */
@@ -616,7 +665,7 @@
   transform: translateX(-50%);
   background: rgba(17, 24, 39, 0.95);
   color: white;
-  font-size: 10.5px;
+  font-size: 12px;
   padding: 4px 8px;
   border-radius: var(--radius-sm);
   white-space: nowrap;
@@ -644,7 +693,7 @@
   transform: translateX(-50%);
   background: rgba(17, 24, 39, 0.95);
   color: white;
-  font-size: 10.5px;
+  font-size: 12px;
   padding: 4px 8px;
   border-radius: var(--radius-sm);
   white-space: nowrap;
@@ -659,16 +708,30 @@
 .viewer-toggle[data-coming-soon='true']:hover::after { opacity: 1; }
 
 /* Polished toolbar button states — coordinate with the global system.
-   Hover: subtle bg + soft border so groups look intentional. */
+   Hover: subtle gray fill only, no stroke (the --bg-subtle background from
+   core.css is the feedback). The 1px transparent border is kept purely to
+   reserve space so nothing shifts. */
 .viewer-action,
 .viewer-tab,
 .viewer-toggle {
   border: 1px solid transparent;
   transition: background 120ms var(--ease-out), border-color 120ms var(--ease-out), color 120ms var(--ease-out);
 }
-.viewer-action:hover:not(:disabled):not([data-coming-soon='true']),
-.viewer-tab:hover { border-color: var(--border); }
-.viewer-tab.active { border-color: var(--border); }
+/* The global `button:hover` rule (primitives.css) paints a --border-strong
+   stroke on EVERY button hover, and its specificity (0,2,1) outranks the
+   viewer's own (0,2,0) :hover rules — so it was the real source of the hover
+   stroke on tabs, toolbar actions and viewport menu rows. Override it back to
+   transparent here (hover feedback is the gray fill only). `:not(:disabled)`
+   lifts each selector to (0,3,0) so it beats the global rule. */
+.viewer-action:hover:not(:disabled),
+.viewer-tab:hover:not(:disabled):not(.active),
+.viewer-viewport-menu-item:hover:not(:disabled) {
+  border-color: transparent;
+}
+/* Selected tab = the segmented switch thumb: keep its thin border (the
+   global button:hover override above must not strip it). */
+.viewer-tab.active,
+.viewer-tab.active:hover:not(:disabled) { border-color: var(--border); }
 
 /* ============================================================
    Composer — settings/upload icons consistent sizing + spacing
@@ -832,6 +895,12 @@
   align-items: start;
   gap: 9px;
   width: 100%;
+  /* The frame's aspect-ratio is resolved after the auto grid row's intrinsic
+     contribution, so without an explicit row floor Chromium sizes the row
+     from the 11px page number and lets the 16:9 frame overlap the next item.
+     82px is the rounded 16:9 height of the 145px frame in the fixed 194px rail
+     (194 - 24px list padding - 16px number - 9px gap). */
+  min-height: 82px;
   padding: 0;
   border: 0;
   background: transparent;
@@ -1290,6 +1359,7 @@
   height: 100%;
   object-fit: cover;
   display: block;
+  transition: transform 320ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 .prompt-template-thumb-fallback {
   color: var(--text-faint);
@@ -1300,7 +1370,7 @@
   bottom: 8px;
   background: rgba(0, 0, 0, 0.55);
   color: #fff;
-  font-size: 10px;
+  font-size: 12px;
   width: 22px;
   height: 22px;
   border-radius: 50%;
@@ -1315,13 +1385,13 @@
   top: 8px;
   background: rgba(0, 0, 0, 0.62);
   color: #fff;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
   padding: 3px 7px;
   border-radius: var(--radius-pill);
   letter-spacing: 0.02em;
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(var(--material-thin-blur));
+  backdrop-filter: blur(var(--material-thin-blur));
   max-width: calc(100% - 16px);
   white-space: nowrap;
   overflow: hidden;
@@ -1359,7 +1429,7 @@
   margin-top: 4px;
 }
 .prompt-template-category {
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
   padding: 2px 6px;
   border-radius: var(--radius-xs);
@@ -1370,7 +1440,7 @@
 }
 .prompt-template-tag,
 .prompt-template-model {
-  font-size: 10px;
+  font-size: 12px;
   padding: 2px 6px;
   border-radius: var(--radius-xs);
   background: var(--bg-subtle);
@@ -1380,12 +1450,12 @@
   font-weight: 500;
 }
 .prompt-template-source {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--text-faint);
   margin-top: 6px;
 }
 .prompt-templates-footer {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-faint);
   padding-top: 12px;
   border-top: 1px dashed var(--border);
@@ -1439,7 +1509,7 @@
   pointer-events: auto;
 }
 .prompt-template-modal-titles h2 {
-  font-size: 17px;
+  font-size: 18px;
   margin: 0 0 6px 0;
   color: var(--text);
 }
@@ -1511,12 +1581,12 @@
   border-radius: var(--radius-pill);
   background: rgba(0, 0, 0, 0.55);
   color: #fff;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.01em;
   cursor: pointer;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(var(--material-thin-blur));
+  backdrop-filter: blur(var(--material-thin-blur));
   opacity: 0.78;
   transition: opacity 120ms var(--ease-out), background 120ms var(--ease-out);
 }
@@ -1567,8 +1637,8 @@
   background: rgba(255, 255, 255, 0.14);
   color: #fff;
   cursor: pointer;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(var(--material-thin-blur));
+  backdrop-filter: blur(var(--material-thin-blur));
   transition: background 120ms var(--ease-out), transform 120ms var(--ease-out);
 }
 .prompt-template-lightbox-close:hover,
@@ -1595,7 +1665,7 @@
   border-bottom: 1px solid var(--border);
 }
 .prompt-template-modal-prompt-label {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -1620,7 +1690,7 @@
   gap: 12px;
   padding: 12px 18px;
   border-top: 1px solid var(--border);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-faint);
 }
 .prompt-template-license {
@@ -1661,13 +1731,13 @@
   gap: 2px;
 }
 .prompt-template-edit-label {
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--text);
   letter-spacing: 0.01em;
 }
 .prompt-template-edit-hint {
-  font-size: 10.5px;
+  font-size: 12px;
   color: var(--text-muted);
   line-height: 1.4;
 }
@@ -1687,11 +1757,10 @@
 .prompt-template-edit-textarea:focus {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent);
 }
 .prompt-template-edit-empty {
   margin-top: 6px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-muted);
   font-style: italic;
 }
@@ -1715,7 +1784,7 @@
 }
 .prompt-template-error-retry {
   flex: none;
-  font-size: 11.5px !important;
+  font-size: 12px !important;
   padding: 4px 10px !important;
 }
 
@@ -1738,6 +1807,11 @@
   --pet-accent: var(--accent);
 }
 .pet-overlay > * { pointer-events: auto; }
+/* Docked to the tab-bar line (top-anchored): the sprite perches on the line
+   and its speech bubble grows downward below it instead of upward. */
+.pet-overlay--docked {
+  flex-direction: column-reverse;
+}
 
 .pet-sprite {
   position: relative;
@@ -1798,7 +1872,7 @@
   background: var(--pet-accent);
   color: white;
   border: 2px solid var(--bg);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   line-height: 1;
   box-shadow: var(--shadow-sm);
@@ -1839,7 +1913,7 @@
   border-radius: var(--radius-lg);
   padding: 10px 12px 8px;
   box-shadow: var(--shadow-md);
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.4;
   position: relative;
   animation: pet-bubble-in 200ms ease-out;
@@ -1873,12 +1947,12 @@
 .pet-idle-quote blockquote {
   margin: 0;
   color: var(--text);
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.45;
 }
 .pet-idle-quote figcaption {
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: 12px;
   text-align: right;
 }
 .pet-idle-quote figcaption::before {
@@ -1895,7 +1969,7 @@
 }
 .pet-task-group-title {
   color: var(--text-faint);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -1957,7 +2031,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 600;
 }
 .pet-task-count {
@@ -1971,7 +2045,7 @@
   background: var(--bg);
   color: var(--text-muted);
   border: 1px solid var(--border);
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 700;
 }
 .pet-bubble-actions {
@@ -1984,7 +2058,7 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 11px;
+  font-size: 12px;
   padding: 3px 8px;
   border-radius: var(--radius-pill);
   background: var(--bg-subtle);

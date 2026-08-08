@@ -166,6 +166,11 @@ export interface LexicalComposerInputProps {
   // Optional combobox a11y. When set, the ContentEditable announces the active
   // mention row (id lives in the portaled listbox) without moving DOM focus.
   comboboxAria?: { activeId: string | null; expanded: boolean };
+  // Read-only mode (team-shared project viewer). Makes the Lexical editor
+  // non-editable so the caret/typing is blocked, applies a muted read-only
+  // visual state, and hard-stops Enter from firing a send (belt-and-suspenders
+  // on top of the host's own send gating).
+  inputDisabled?: boolean;
   title?: string;
   // Test hook for the contenteditable host. Defaults to the project
   // composer's id; HomeHero overrides it so its own tests/selectors keep
@@ -351,10 +356,12 @@ function KeyboardPlugin({
   popoverOpen,
   onEnterSend,
   onPopoverKey,
+  inputDisabled,
 }: {
   popoverOpen: boolean;
   onEnterSend: () => void;
   onPopoverKey: LexicalComposerInputProps['onPopoverKey'];
+  inputDisabled: boolean;
 }) {
   const [editor] = useLexicalComposerContext();
   // Keep the latest callbacks/flag in refs so the command registrations are
@@ -365,11 +372,19 @@ function KeyboardPlugin({
   onEnterSendRef.current = onEnterSend;
   const onPopoverKeyRef = useRef(onPopoverKey);
   onPopoverKeyRef.current = onPopoverKey;
+  const inputDisabledRef = useRef(inputDisabled);
+  inputDisabledRef.current = inputDisabled;
   useEffect(() => {
     return mergeRegister(
       editor.registerCommand(
         KEY_ENTER_COMMAND,
         (e: KeyboardEvent | null) => {
+          // Read-only mode: swallow Enter so it never fires a send (double
+          // insurance — the host also gates send).
+          if (inputDisabledRef.current) {
+            e?.preventDefault();
+            return true;
+          }
           // IME confirm Enter — let Lexical commit the composition.
           if (editor.isComposing()) return false;
           if (e?.shiftKey) {
@@ -642,6 +657,18 @@ function SeedingPlugin({
   return null;
 }
 
+// Reactively mirror the host `inputDisabled` flag onto the editor's editable
+// state. `initialConfig.editable` only seeds the first paint, so a later
+// viewerOnly flip (or an initially read-only mount) is applied here via
+// `editor.setEditable`.
+function EditablePlugin({ editable }: { editable: boolean }) {
+  const [editor] = useLexicalComposerContext();
+  useEffect(() => {
+    editor.setEditable(editable);
+  }, [editor, editable]);
+  return null;
+}
+
 export const LexicalComposerInput = forwardRef<
   LexicalComposerInputHandle,
   LexicalComposerInputProps & { draft: string }
@@ -656,6 +683,7 @@ export const LexicalComposerInput = forwardRef<
     popoverOpen,
     onPopoverKey,
     comboboxAria,
+    inputDisabled = false,
     draft,
     title,
     testId = 'chat-composer-input',
@@ -669,7 +697,7 @@ export const LexicalComposerInput = forwardRef<
 
   const initialConfig: InitialConfigType = {
     namespace: 'chat-composer',
-    editable: true,
+    editable: !inputDisabled,
     nodes: [MentionNode],
     theme: EDITOR_THEME,
     onError(err) {
@@ -767,7 +795,14 @@ export const LexicalComposerInput = forwardRef<
 
   return (
     <LexicalComposer initialConfig={initialConfig}>
-      <div className="composer-input-editor">
+      <div
+        className={
+          inputDisabled
+            ? 'composer-input-editor composer-input--readonly'
+            : 'composer-input-editor'
+        }
+        aria-disabled={inputDisabled || undefined}
+      >
         <PlainTextPlugin
           contentEditable={
             <ContentEditable
@@ -801,9 +836,11 @@ export const LexicalComposerInput = forwardRef<
         popoverOpen={popoverOpen}
         onEnterSend={onEnterSend}
         onPopoverKey={onPopoverKey}
+        inputDisabled={inputDisabled}
       />
       <PastePlugin onPasteFiles={onPasteFiles} />
       <SeedingPlugin draft={draft} entities={knownEntities} />
+      <EditablePlugin editable={!inputDisabled} />
     </LexicalComposer>
   );
 });

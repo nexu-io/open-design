@@ -108,3 +108,7 @@ deploy/agent-bins/
 # Local agent worktrees (must stay git-ignored so pnpm guard does not scan them)
 .slim/worktrees/
 .slim/worktrees.json
+
+# Python bytecode from workflow helper self-checks / local compile.
+__pycache__/
+*.py[cod]

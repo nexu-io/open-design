@@ -10,6 +10,16 @@
 import type { LandingLocaleCode } from './i18n';
 
 export interface HomeExtra {
+  /** Canonical product category; intentionally unchanged across locales. */
+  heroPositionTitle?: string;
+  /** Exact substring in `heroSub` that receives the inline value-promise emphasis. */
+  heroSubHighlight?: string;
+  /** Task-first H1 shown below the Open Design brand name. */
+  heroTaskTitle?: string;
+  /** Deliberate desktop line breaks for the localized hero promise. */
+  heroTaskLines?: readonly [string, string];
+  /** Localized "one design system" phrase receiving the hero's marker emphasis. */
+  heroTaskEmphasis?: string;
   heroLead: string;
   heroTitleSub: string;
   heroSub: string; // 2 lines (\n)
@@ -58,9 +68,18 @@ export interface HomeExtra {
 }
 
 const en: HomeExtra = {
+  heroPositionTitle: 'Vibe Design Workspace',
+  heroSubHighlight: 'turns the coding agents you already run into a design engine',
+  heroTaskTitle:
+    'One design system. Every website, slide, prototype, dashboard, image, and video stays on-brand.',
+  heroTaskLines: [
+    'One design system. Every website, slide, prototype,',
+    'dashboard, image, and video stays on-brand.',
+  ],
+  heroTaskEmphasis: 'One design system.',
   heroLead:
     'From idea to prototype, web, slides, and HTML video — the entire product-design flow, finished on your own machine.',
-  heroTitleSub: 'Open Source Claude Design Alternative',
+  heroTitleSub: 'Best open-source Claude Design alternative',
   heroSub:
     'Open Design is the open-source, local vibe design workspace — it turns the coding agents you already run into a design engine that carries you from idea to prototype, web, slides, and HTML video, all finished on your own machine. Agent-native, with 21 coding agents, {systems} design systems, and an Apache-2.0 license.',
   aboutKicker: 'Why Open Design?',
@@ -107,33 +126,41 @@ const en: HomeExtra = {
 };
 
 const zh: HomeExtra = {
-  heroLead: '从想法到原型、网页、Slides、HTML 视频——产品设计全流程，在你自己的设备上完成。',
+  heroPositionTitle: 'Vibe Design Workspace',
+  heroSubHighlight: '把你已有的 Coding Agent 变成设计引擎',
+  heroTaskTitle: '一套设计系统，让网页、PPT、原型、数据看板、图像与视频保持品牌一致',
+  heroTaskLines: [
+    '一套设计系统，让网页、PPT、原型、',
+    '数据看板、图像与视频保持品牌一致',
+  ],
+  heroTaskEmphasis: '一套设计系统',
+  heroLead: '从想法到原型、网页、演示文稿和 HTML 视频——产品设计全流程，在你自己的设备上完成。',
   heroTitleSub: 'Claude Design最佳开源平替',
   heroSub:
-    'Open Design 是开源、本地的 vibe design workspace——把你已经在用的 coding agent 变成设计引擎，从想法到原型、网页、Slides、HTML 视频，全流程在你自己的设备上完成。\nAgent-native，接入 21 个 Coding Agent、{systems} 个 Design System，Apache-2.0。',
+    'Open Design 是开源、本地运行的设计工作台——把你已有的 Coding Agent 变成设计引擎，从想法到原型、网页、演示文稿和 HTML 视频，全流程在你自己的设备上完成。\n支持 21 款编程助手、{systems} 套设计系统，采用 Apache-2.0 许可证。',
   aboutKicker: '为什么选择 Open Design？',
   aboutStatement:
-    'Open Design 是开源、agentic 的 vibe design workspace——把你已经在用的 coding agent 变成一台产出完全归你的设计引擎。当 LLM 第一次证明它能真正做设计——是真的设计稿，不是写文案——这份能力却是闭源、托管、锁模型的。Open Design 把它打开：本地、BYOK、Apache-2.0。',
+    'Open Design 是开源、本地运行的智能设计工作台——把你已经在用的编程助手变成设计引擎，成果文件完全归你。当大语言模型第一次证明它能真正完成设计，而不只是撰写文案时，这项能力却被封装在闭源、云端托管且绑定模型的产品里。Open Design 将它开放出来：本地运行、可自由选择模型，并采用 Apache-2.0 许可证。',
   aboutTab1: '桌面端原生',
-  aboutTab2: '不造 Agent，接入 Agent',
+  aboutTab2: '不另造助手，接入你已有的工具',
   aboutTab3: '越用越懂你',
-  aboutCap1: '设计在桌面端发生。\n本地文件、Figma 导出、代码仓库直接可读，Agent 拥有终端执行全部能力',
+  aboutCap1: '设计在桌面端发生。\n本地文件、Figma 导出和代码仓库都能直接读取，编程助手也能完整使用终端能力',
   aboutCap2: '你电脑上的 Claude Code / Codex / Cursor 已经够强。\nOpen Design 做的是把它们接进完整设计工作流',
-  aboutCap3: '每次选择都沉淀为 Design System、偏好和记忆，下次生成更接近你要的结果',
+  aboutCap3: '每次选择都会沉淀为设计系统、偏好和记忆，让下一次生成更接近你想要的结果',
   stepTitle1: '选择起点',
   stepTitle2: '确定视觉方向',
-  stepTitle3: '生成 Artifact',
+  stepTitle3: '生成可用成果',
   stepTitle4: '交付或制作视频',
-  stepDesc1: '一句话描述目标，或从模板 / Plugin 直接选起点',
+  stepDesc1: '用一句话描述目标，或直接从模板和插件开始',
   stepDesc2: '选定方向后，色板、字体、间距自动带入生成流程',
-  stepDesc3: 'Agent 读取所有 context，产出真实可运行的文件，沙盒内即时预览和修改',
+  stepDesc3: '编程助手读取项目资料，产出真正可运行的文件，并在沙盒中即时预览和修改',
   stepDesc4: '导出给工程继续开发，或用 HyperFrames 直接转为营销视频',
-  capTitle: '从想法到原型、网页、Slides、HTML 视频',
+  capTitle: '从想法到原型、网页、演示文稿和 HTML 视频',
   labsPre: '用 ',
   labsPost: ' 能产出什么？',
   labsLead:
-    '原型、落地页、Slides、仪表盘、品牌与设计系统——甚至 HTML 视频。Open Design 把每一样都变成可运行的真实文件，由你自己的 coding agent 驱动，随时交付或交接给工程。',
-  methodTitle: '接入 21+ Coding Agent，零配置',
+    '原型、落地页、演示文稿、数据看板、品牌与设计系统，甚至 HTML 视频。Open Design 会把它们变成真正可运行的文件，由你自己的编程助手驱动，随时可以交付或交接给工程团队。',
+  methodTitle: '连接 21+ 款编程助手，开箱即用',
   ctaTitle: '让最前沿的 AI 设计能力回到每一个创作者的桌上',
   testiPre: '来自全球，',
   testiMid: ' 贡献者',
@@ -192,14 +219,22 @@ const zhTw: HomeExtra = {
 };
 
 const ja: HomeExtra = {
+  heroPositionTitle: 'Vibe Design Workspace',
+  heroSubHighlight: 'すでに使っているコーディングエージェントを設計エンジンに変え',
+  heroTaskTitle: 'ひとつのデザインシステムで、Web、スライド、プロトタイプ、ダッシュボード、画像、動画までブランドを統一',
+  heroTaskLines: [
+    'ひとつのデザインシステムで、Web、スライド、プロトタイプ、',
+    'ダッシュボード、画像、動画までブランドを統一',
+  ],
+  heroTaskEmphasis: 'ひとつのデザインシステム',
   heroLead:
     'アイデアからプロトタイプ、Web、スライド、HTML 動画まで——プロダクトデザインの全工程を、あなたの手元のマシンで完結。',
-  heroTitleSub: 'Claude Design の最良のオープンソース代替',
+  heroTitleSub: 'Claude Design の最高のオープンソース代替ツール',
   heroSub:
-    'Open Design はオープンソースでローカルな vibe design workspace——すでに使っているコーディングエージェントを設計エンジンに変え、アイデアからプロトタイプ、Web、スライド、HTML 動画まで、すべて自分のマシン上で完結します。\nエージェントネイティブ、21 のコーディングエージェント、{systems} のデザインシステム、Apache-2.0。',
+    'Open Design は、オープンソースでローカル動作するデザインワークスペースです。すでに使っているコーディングエージェントを設計エンジンに変え、アイデアからプロトタイプ、Webサイト、スライド、HTML 動画まで、すべて自分のマシン上で完結します。\n21 種類のコーディングエージェントと {systems} 種類のデザインシステムに対応し、Apache-2.0 で公開しています。',
   aboutKicker: 'なぜ Open Design なのか？',
   aboutStatement:
-    'Open Design はオープンソースで agentic な vibe design workspace です。すでに使っているコーディングエージェントを、成果物が完全に自分のものになる設計エンジンに変えます。LLM が初めて本当に設計できる——コピーではなく本物の設計——と証明したとき、その能力はクローズドでホスト型、モデル固定でした。Open Design はそれを開きます：ローカル、BYOK、Apache-2.0。',
+    'Open Design は、オープンソースでローカル動作するエージェント型のデザインワークスペースです。すでに使っているコーディングエージェントを、成果物が完全に自分のものになる設計エンジンへ変えます。大規模言語モデルが文章だけでなく本物のデザインも作れると証明された一方、その力はクローズドでクラウド依存、特定モデルに固定されていました。Open Design はそれを開放します。ローカルで動き、モデルを自由に選べ、Apache-2.0 で公開されています。',
   aboutTab1: 'デスクトップネイティブ',
   aboutTab2: 'エージェントは作らず、つなぐ',
   aboutTab3: '使うほどあなたを理解する',
@@ -210,7 +245,7 @@ const ja: HomeExtra = {
   aboutCap3: 'すべての選択がデザインシステム・好み・記憶として蓄積され、次の生成があなたの望みに近づく。',
   stepTitle1: '起点を選ぶ',
   stepTitle2: 'ビジュアルの方向を決める',
-  stepTitle3: 'Artifact を生成',
+  stepTitle3: '使える成果物を生成',
   stepTitle4: '納品、または動画化',
   stepDesc1: '目標を一言で説明するか、テンプレート / プラグインから起点を選ぶ。',
   stepDesc2: '方向が決まれば、カラーパレット・フォント・余白が自動で生成フローに反映される。',
@@ -220,7 +255,7 @@ const ja: HomeExtra = {
   labsPre: '',
   labsPost: ' で何が作れる？',
   labsLead:
-    'プロトタイプ、ランディングページ、スライド、ダッシュボード、ブランド／デザインシステム、さらに HTML 動画まで。Open Design はそれぞれを実際に動くファイルに変換し、自分の coding agent で駆動、そのまま納品や開発への引き継ぎができます。',
+    'プロトタイプ、ランディングページ、スライド、ダッシュボード、ブランド／デザインシステム、さらに HTML 動画まで。Open Design はそれぞれを実際に動くファイルに変換し、自分のコーディングエージェントで制作して、そのまま納品や開発への引き継ぎができます。',
   methodTitle: '21+ のコーディングエージェントを設定ゼロで接続',
   ctaTitle: '最先端の AI デザイン能力を、すべての作り手の手元へ',
   testiPre: '世界中から、',
@@ -239,9 +274,17 @@ const ja: HomeExtra = {
 };
 
 const ko: HomeExtra = {
+  heroPositionTitle: 'Vibe Design Workspace',
+  heroSubHighlight: '이미 사용 중인 코딩 에이전트를 디자인 엔진으로 바꿔',
+  heroTaskTitle: '하나의 디자인 시스템으로 웹, 슬라이드, 프로토타입, 대시보드, 이미지, 영상까지 브랜드 일관성 유지',
+  heroTaskLines: [
+    '하나의 디자인 시스템으로 웹, 슬라이드, 프로토타입,',
+    '대시보드, 이미지, 영상까지 브랜드 일관성 유지',
+  ],
+  heroTaskEmphasis: '하나의 디자인 시스템',
   heroLead:
     '아이디어에서 프로토타입, 웹, 슬라이드, HTML 영상까지 — 제품 디자인 전 과정을 내 컴퓨터에서 완성합니다.',
-  heroTitleSub: 'Claude Design의 최고의 오픈소스 대안',
+  heroTitleSub: 'Claude Design을 대체하는 최고의 오픈소스 솔루션',
   heroSub:
     'Open Design는 오픈소스이자 로컬로 동작하는 vibe design workspace입니다——이미 사용 중인 코딩 에이전트를 디자인 엔진으로 바꿔, 아이디어에서 프로토타입, 웹, 슬라이드, HTML 비디오까지 전 과정을 내 컴퓨터에서 끝냅니다.\n에이전트 네이티브, 21개 코딩 에이전트, {systems}개 디자인 시스템, Apache-2.0.',
   aboutKicker: '왜 Open Design인가?',
@@ -286,6 +329,14 @@ const ko: HomeExtra = {
 };
 
 const de: HomeExtra = {
+  heroPositionTitle: 'Vibe Design Workspace',
+  heroSubHighlight: 'verwandelt die Coding-Agents, die du bereits nutzt, in eine Design-Engine',
+  heroTaskTitle: 'Ein Designsystem für markenkonsistente Websites, Slides, Prototypen, Dashboards, Bilder und Videos',
+  heroTaskLines: [
+    'Ein Designsystem für markenkonsistente Websites,',
+    'Slides, Prototypen, Dashboards, Bilder und Videos',
+  ],
+  heroTaskEmphasis: 'Ein Designsystem',
   heroLead:
     'Von der Idee zu Prototyp, Web, Slides und HTML-Video — der gesamte Produktdesign-Flow, fertig auf deinem eigenen Rechner.',
   heroTitleSub: 'Die beste Open-Source-Alternative zu Claude Design',
@@ -333,9 +384,17 @@ const de: HomeExtra = {
 };
 
 const fr: HomeExtra = {
+  heroPositionTitle: 'Vibe Design Workspace',
+  heroSubHighlight: 'transforme les agents de code que vous utilisez déjà en moteur de design',
+  heroTaskTitle: 'Un seul design system pour des sites, slides, prototypes, dashboards, images et vidéos cohérents avec votre marque',
+  heroTaskLines: [
+    'Un seul design system pour des sites, slides, prototypes,',
+    'dashboards, images et vidéos cohérents avec votre marque',
+  ],
+  heroTaskEmphasis: 'Un seul design system',
   heroLead:
     'De l’idée au prototype, au web, aux slides et à la vidéo HTML — tout le flux de design produit, réalisé sur votre propre machine.',
-  heroTitleSub: "La meilleure alternative open source à Claude Design",
+  heroTitleSub: 'La meilleure alternative open source à Claude Design',
   heroSub:
     'Open Design est le vibe design workspace open source et local — il transforme les agents de code que vous utilisez déjà en moteur de design, de l’idée au prototype, au web, aux slides et à la vidéo HTML, le tout sur votre propre machine.\nAgent-native, avec 21 agents de code, {systems} design systems et une licence Apache-2.0.',
   aboutKicker: 'Pourquoi Open Design ?',
@@ -380,9 +439,17 @@ const fr: HomeExtra = {
 };
 
 const ru: HomeExtra = {
+  heroPositionTitle: 'Vibe Design Workspace',
+  heroSubHighlight: 'превращает кодинг-агентов, которыми вы уже пользуетесь, в движок дизайна',
+  heroTaskTitle: 'Одна дизайн-система — единый стиль бренда для сайтов, слайдов, прототипов, дашбордов, изображений и видео',
+  heroTaskLines: [
+    'Одна дизайн-система — единый стиль бренда для сайтов,',
+    'слайдов, прототипов, дашбордов, изображений и видео',
+  ],
+  heroTaskEmphasis: 'Одна дизайн-система',
   heroLead:
     'От идеи до прототипа, веба, слайдов и HTML-видео — весь процесс продуктового дизайна, завершённый на вашей машине.',
-  heroTitleSub: 'Лучшая open-source альтернатива Claude Design',
+  heroTitleSub: 'Лучшая альтернатива Claude Design с открытым исходным кодом',
   heroSub:
     'Open Design — это открытый локальный vibe design workspace: он превращает кодинг-агентов, которыми вы уже пользуетесь, в движок дизайна, ведущий от идеи к прототипу, вебу, слайдам и HTML-видео — всё на вашей машине.\nAgent-native, 21 кодинг-агент, {systems} дизайн-систем, лицензия Apache-2.0.',
   aboutKicker: 'Почему Open Design?',
@@ -427,6 +494,14 @@ const ru: HomeExtra = {
 };
 
 const es: HomeExtra = {
+  heroPositionTitle: 'Vibe Design Workspace',
+  heroSubHighlight: 'convierte los agentes de código que ya usas en un motor de diseño',
+  heroTaskTitle: 'Un sistema de diseño para sitios, presentaciones, prototipos, dashboards, imágenes y vídeos fieles a tu marca',
+  heroTaskLines: [
+    'Un sistema de diseño para sitios, presentaciones, prototipos,',
+    'dashboards, imágenes y vídeos fieles a tu marca',
+  ],
+  heroTaskEmphasis: 'Un sistema de diseño',
   heroLead:
     'De la idea al prototipo, web, slides y vídeo HTML — todo el flujo de diseño de producto, terminado en tu propia máquina.',
   heroTitleSub: 'La mejor alternativa open source a Claude Design',
@@ -474,6 +549,14 @@ const es: HomeExtra = {
 };
 
 const ptBr: HomeExtra = {
+  heroPositionTitle: 'Vibe Design Workspace',
+  heroSubHighlight: 'transforma os agentes de código que você já usa em um motor de design',
+  heroTaskTitle: 'Um design system para sites, apresentações, protótipos, dashboards, imagens e vídeos consistentes com a sua marca',
+  heroTaskLines: [
+    'Um design system para sites, apresentações, protótipos,',
+    'dashboards, imagens e vídeos consistentes com a sua marca',
+  ],
+  heroTaskEmphasis: 'Um design system',
   heroLead:
     'Da ideia ao protótipo, web, slides e vídeo HTML — todo o fluxo de design de produto, finalizado na sua própria máquina.',
   heroTitleSub: 'A melhor alternativa open source ao Claude Design',
@@ -521,9 +604,17 @@ const ptBr: HomeExtra = {
 };
 
 const it: HomeExtra = {
+  heroPositionTitle: 'Vibe Design Workspace',
+  heroSubHighlight: 'trasforma i coding agent che già usi in un motore di design',
+  heroTaskTitle: 'Un unico design system per siti, presentazioni, prototipi, dashboard, immagini e video coerenti con il brand',
+  heroTaskLines: [
+    'Un unico design system per siti, presentazioni, prototipi,',
+    'dashboard, immagini e video coerenti con il brand',
+  ],
+  heroTaskEmphasis: 'Un unico design system',
   heroLead:
     'Dall’idea al prototipo, web, slide e video HTML — l’intero flusso di product design, completato sulla tua macchina.',
-  heroTitleSub: "La migliore alternativa open source a Claude Design",
+  heroTitleSub: 'La migliore alternativa open source a Claude Design',
   heroSub:
     'Open Design è il vibe design workspace open source e locale: trasforma i coding agent che già usi in un motore di design che ti porta dall’idea al prototipo, al web, alle slide e al video HTML, tutto sulla tua macchina.\nAgent-native, con 21 coding agent, {systems} design system e licenza Apache-2.0.',
   aboutKicker: 'Perché Open Design?',
@@ -793,9 +884,17 @@ const ar: HomeExtra = {
 };
 
 const tr: HomeExtra = {
+  heroPositionTitle: 'Vibe Design Workspace',
+  heroSubHighlight: 'bir tasarım motoruna dönüştürür',
+  heroTaskTitle: 'Tek bir tasarım sistemiyle web, sunum, prototip, pano, görsel ve videolarda tutarlı marka deneyimi',
+  heroTaskLines: [
+    'Tek bir tasarım sistemiyle web, sunum, prototip,',
+    'pano, görsel ve videolarda tutarlı marka deneyimi',
+  ],
+  heroTaskEmphasis: 'Tek bir tasarım sistemiyle',
   heroLead:
     'Fikirden prototipe, web’e, slaytlara ve HTML videoya — tüm ürün tasarım akışı, kendi makinende tamamlanır.',
-  heroTitleSub: "Claude Design'ın en iyi açık kaynak alternatifi",
+  heroTitleSub: "Claude Design'e en iyi açık kaynak alternatifi",
   heroSub:
     'Open Design, açık kaynaklı ve yerel çalışan vibe design workspace’tir — hâlihazırda kullandığın kodlama ajanlarını, fikirden prototipe, web’e, slaytlara ve HTML videoya kadar her şeyi kendi makinende tamamlayan bir tasarım motoruna dönüştürür.\nAgent-native; 21 kodlama ajanı, {systems} tasarım sistemi ve Apache-2.0 lisansı.',
   aboutKicker: 'Neden Open Design?',
@@ -937,7 +1036,7 @@ const HOME_CTA: Partial<Record<LandingLocaleCode, HomeCta>> = {
     systems: 'Explore design systems',
     learnMore: 'Learn more →',
     statsTitle: 'The open-source vibe design workspace, by the numbers',
-    downloadProof: '74K+ stars · Apache-2.0 · Free',
+    downloadProof: '{stars} stars · Apache-2.0 · Free',
   },
   zh: {
     solutions: '浏览全部解决方案',
@@ -947,7 +1046,7 @@ const HOME_CTA: Partial<Record<LandingLocaleCode, HomeCta>> = {
     systems: '浏览设计系统',
     learnMore: '了解更多 →',
     statsTitle: '开源 vibe design workspace，用数据说话',
-    downloadProof: '74K+ Star · Apache-2.0 · 免费',
+    downloadProof: '{stars} Star · Apache-2.0 · 免费',
   },
   ja: {
     solutions: 'すべてのソリューションを見る',
@@ -957,7 +1056,7 @@ const HOME_CTA: Partial<Record<LandingLocaleCode, HomeCta>> = {
     systems: 'デザインシステムを見る',
     learnMore: '詳しく見る →',
     statsTitle: 'オープンソースの vibe design workspace を数字で',
-    downloadProof: '74K+ スター · Apache-2.0 · 無料',
+    downloadProof: '{stars} スター · Apache-2.0 · 無料',
   },
   ko: {
     solutions: '모든 솔루션 둘러보기',
@@ -967,7 +1066,7 @@ const HOME_CTA: Partial<Record<LandingLocaleCode, HomeCta>> = {
     systems: '디자인 시스템 둘러보기',
     learnMore: '자세히 보기 →',
     statsTitle: '오픈소스 vibe design workspace, 숫자로 보기',
-    downloadProof: '74K+ 스타 · Apache-2.0 · 무료',
+    downloadProof: '{stars} 스타 · Apache-2.0 · 무료',
   },
   de: {
     solutions: 'Alle Lösungen ansehen',
@@ -977,7 +1076,7 @@ const HOME_CTA: Partial<Record<LandingLocaleCode, HomeCta>> = {
     systems: 'Design-Systeme ansehen',
     learnMore: 'Mehr erfahren →',
     statsTitle: 'Der quelloffene Vibe Design Workspace in Zahlen',
-    downloadProof: '74K+ Sterne · Apache-2.0 · Kostenlos',
+    downloadProof: '{stars} Sterne · Apache-2.0 · Kostenlos',
   },
   fr: {
     solutions: 'Voir toutes les solutions',
@@ -987,7 +1086,7 @@ const HOME_CTA: Partial<Record<LandingLocaleCode, HomeCta>> = {
     systems: 'Voir les design systems',
     learnMore: 'En savoir plus →',
     statsTitle: 'Le vibe design workspace open source en chiffres',
-    downloadProof: '74K+ étoiles · Apache-2.0 · Gratuit',
+    downloadProof: '{stars} étoiles · Apache-2.0 · Gratuit',
   },
   ru: {
     solutions: 'Все решения',
@@ -997,7 +1096,7 @@ const HOME_CTA: Partial<Record<LandingLocaleCode, HomeCta>> = {
     systems: 'Дизайн-системы',
     learnMore: 'Подробнее →',
     statsTitle: 'Открытый vibe design workspace в цифрах',
-    downloadProof: '74K+ звёзд · Apache-2.0 · Бесплатно',
+    downloadProof: '{stars} звёзд · Apache-2.0 · Бесплатно',
   },
   es: {
     solutions: 'Ver todas las soluciones',
@@ -1007,7 +1106,7 @@ const HOME_CTA: Partial<Record<LandingLocaleCode, HomeCta>> = {
     systems: 'Ver los design systems',
     learnMore: 'Más información →',
     statsTitle: 'El vibe design workspace open source en cifras',
-    downloadProof: '74K+ estrellas · Apache-2.0 · Gratis',
+    downloadProof: '{stars} estrellas · Apache-2.0 · Gratis',
   },
   'pt-br': {
     solutions: 'Ver todas as soluções',
@@ -1017,7 +1116,7 @@ const HOME_CTA: Partial<Record<LandingLocaleCode, HomeCta>> = {
     systems: 'Ver os design systems',
     learnMore: 'Saiba mais →',
     statsTitle: 'O vibe design workspace open source em números',
-    downloadProof: '74K+ estrelas · Apache-2.0 · Grátis',
+    downloadProof: '{stars} estrelas · Apache-2.0 · Grátis',
   },
   it: {
     solutions: 'Esplora tutte le soluzioni',
@@ -1027,7 +1126,7 @@ const HOME_CTA: Partial<Record<LandingLocaleCode, HomeCta>> = {
     systems: 'Esplora i design system',
     learnMore: 'Scopri di più →',
     statsTitle: 'Il vibe design workspace open source in numeri',
-    downloadProof: '74K+ stelle · Apache-2.0 · Gratis',
+    downloadProof: '{stars} stelle · Apache-2.0 · Gratis',
   },
   tr: {
     solutions: 'Tüm çözümleri gör',
@@ -1037,7 +1136,7 @@ const HOME_CTA: Partial<Record<LandingLocaleCode, HomeCta>> = {
     systems: 'Tasarım sistemlerini keşfet',
     learnMore: 'Daha fazla bilgi →',
     statsTitle: 'Sayılarla açık kaynaklı vibe design workspace',
-    downloadProof: '74K+ yıldız · Apache-2.0 · Ücretsiz',
+    downloadProof: '{stars} yıldız · Apache-2.0 · Ücretsiz',
   },
 };
 

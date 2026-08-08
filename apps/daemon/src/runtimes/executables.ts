@@ -180,7 +180,7 @@ function configuredExecutableOverride(
 ): string | null {
   const envKey = AGENT_BIN_ENV_KEYS.get(def?.id);
   if (!envKey) return null;
-  return executableFilePath(configuredEnv?.[envKey]);
+  return executableFilePath(configuredEnv?.[envKey] ?? process.env[envKey]);
 }
 
 export function resolveAmrOpenCodeExecutable(
@@ -188,6 +188,23 @@ export function resolveAmrOpenCodeExecutable(
 ): string | null {
   const configured = executableFilePath(env.VELA_OPENCODE_BIN);
   if (configured) return configured;
+  // A selected Vela release is a two-part runtime: the CLI binary and the
+  // exact OpenCode companion shipped beside it. Prefer that companion before
+  // looking at the host PATH. Otherwise a Settings/VELA_BIN override can run
+  // against an unrelated wrapper or incompatible global OpenCode even though
+  // the selected Vela package already contains its known-good runtime.
+  const selectedVela = executableFilePath(env.VELA_BIN);
+  if (selectedVela) {
+    const selectedCompanion = executableFilePath(
+      path.join(
+        path.dirname(selectedVela),
+        'libexec',
+        'opencode',
+        process.platform === 'win32' ? 'opencode.exe' : 'opencode',
+      ),
+    );
+    if (selectedCompanion) return selectedCompanion;
+  }
   // In packaged builds prefer the bundled companion under
   // `OD_RESOURCE_ROOT/bin/libexec/opencode/opencode` so a stale global
   // `opencode` on the user's PATH can't override the known-good build that

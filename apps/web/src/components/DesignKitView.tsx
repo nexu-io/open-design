@@ -27,9 +27,18 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { Button, Textarea } from '@open-design/components';
+import type { WorkspaceCollabContext } from '@open-design/contracts';
 import type { DesignSystemEditClickProps } from '@open-design/contracts/analytics';
 import { useT } from '../i18n';
-import { openExternalUrl, projectRawUrl } from '../providers/registry';
+import {
+  fetchProjectFileText,
+  openExternalUrl,
+  projectRawUrl,
+} from '../providers/registry';
+import {
+  workspaceIdentityCacheKey,
+  workspaceResourceUrl,
+} from '../collab/workspace-identity';
 import { buildSrcdoc } from '../runtime/srcdoc';
 import {
   fontStack,
@@ -79,6 +88,8 @@ interface KitLogoProps {
   faviconSize: number;
   className?: string;
   fallbackClassName?: string;
+  workspaceContext?: WorkspaceCollabContext | null;
+  readGeneration?: string;
 }
 
 export function BrandLogo({
@@ -90,17 +101,20 @@ export function BrandLogo({
   faviconSize,
   className,
   fallbackClassName,
+  workspaceContext,
+  readGeneration,
 }: KitLogoProps) {
   const bid = brandId ?? id;
   const first: LogoStage = bid ? 'brand' : logoSrc ? 'custom' : host ? 'favicon' : 'letter';
+  const workspaceIdentity = workspaceIdentityCacheKey(workspaceContext);
   const [stage, setStage] = useState<LogoStage>(first);
   useEffect(() => {
     setStage(first);
-  }, [first, bid, logoSrc, host]);
+  }, [first, bid, logoSrc, host, workspaceIdentity, readGeneration]);
 
   const src =
     stage === 'brand' && bid
-      ? `/api/brands/${encodeURIComponent(bid)}/logo`
+      ? workspaceResourceUrl(`/api/brands/${encodeURIComponent(bid)}/logo`, workspaceContext)
       : stage === 'custom' && logoSrc
         ? logoSrc
         : stage === 'favicon' && host
@@ -145,6 +159,8 @@ interface BrandFontManifestFile {
 export function useBrandFonts(
   projectId: string | undefined,
   fonts: { googleFontsUrl?: string }[],
+  workspaceContext: WorkspaceCollabContext | null = null,
+  workspaceReadGeneration?: string,
 ): void {
   const googleUrls = useMemo(() => {
     const urls = fonts
@@ -172,16 +188,18 @@ export function useBrandFonts(
     let styleEl: HTMLStyleElement | null = null;
     void (async () => {
       try {
-        const resp = await fetch(projectRawUrl(projectId, 'fonts/manifest.json'), {
-          cache: 'no-store',
-        });
-        if (!resp.ok) return;
-        const data = (await resp.json()) as { files?: BrandFontManifestFile[] };
+        const manifest = await fetchProjectFileText(
+          projectId,
+          'fonts/manifest.json',
+          { cache: 'no-store', workspaceContext },
+        );
+        if (!manifest) return;
+        const data = JSON.parse(manifest) as { files?: BrandFontManifestFile[] };
         const files = Array.isArray(data?.files) ? data.files : [];
         if (cancelled || files.length === 0) return;
         const css = files
           .map((f) => {
-            const url = projectRawUrl(projectId, `fonts/${f.file}`);
+            const url = projectRawUrl(projectId, `fonts/${f.file}`, workspaceContext);
             return [
               '@font-face {',
               `  font-family: '${f.family.replace(/'/g, '')}';`,
@@ -205,7 +223,7 @@ export function useBrandFonts(
       cancelled = true;
       if (styleEl) styleEl.remove();
     };
-  }, [projectId]);
+  }, [projectId, workspaceContext, workspaceReadGeneration]);
 }
 
 interface BrandTokenSubset {
@@ -241,6 +259,8 @@ export type DesignKitActionFeedbackTone = 'success' | 'error' | 'loading';
 
 export interface DesignKitViewProps {
   kit: DesignKit;
+  workspaceContext?: WorkspaceCollabContext | null;
+  workspaceReadGeneration?: string;
   variant?: 'panel' | 'compact';
   /** Rendered next to the title (status badges). */
   badgeSlot?: ReactNode;
@@ -292,6 +312,8 @@ export interface DesignKitViewProps {
 
 function DesignKitViewInner({
   kit,
+  workspaceContext = null,
+  workspaceReadGeneration,
   variant = 'panel',
   badgeSlot,
   actionsSlot,
@@ -358,7 +380,7 @@ function DesignKitViewInner({
   const stickyHeaderRef = useRef<HTMLElement | null>(null);
   const logoSectionRef = useRef<HTMLElement | null>(null);
 
-  useBrandFonts(kit.projectId, kit.fonts);
+  useBrandFonts(kit.projectId, kit.fonts, workspaceContext, workspaceReadGeneration);
 
   const logoCandidates = useMemo(
     () =>
@@ -371,6 +393,7 @@ function DesignKitViewInner({
 
   useEffect(() => {
     setActiveLogo(0);
+    setBrokenSrc(new Set());
     setImagesExpanded(false);
     setLightboxIndex(null);
     setLogoLightbox(null);
@@ -378,7 +401,7 @@ function DesignKitViewInner({
     setCoverPreviewOpen(false);
     setColorEditor(null);
     setColorError(null);
-  }, [kit.designSystemId, kit.brandId]);
+  }, [kit.designSystemId, kit.brandId, workspaceReadGeneration]);
 
   useEffect(() => {
     setColorOverrides({});
@@ -874,7 +897,7 @@ function DesignKitViewInner({
         title={label}
         aria-label={label}
       >
-        <Icon name={loading ? 'spinner' : icon} size={13} />
+        <Icon name={loading ? 'spinner' : icon} size={14} />
         <span>{label}</span>
       </button>
     );
@@ -1092,6 +1115,8 @@ function DesignKitViewInner({
               faviconSize={128}
               className={styles.coverLogo}
               fallbackClassName={styles.coverLogoFallback}
+              workspaceContext={workspaceContext}
+              readGeneration={workspaceReadGeneration}
             />
           </button>
         ) : (
@@ -1103,6 +1128,8 @@ function DesignKitViewInner({
             faviconSize={128}
             className={styles.coverLogo}
             fallbackClassName={styles.coverLogoFallback}
+            workspaceContext={workspaceContext}
+            readGeneration={workspaceReadGeneration}
           />
         )}
       </div>
@@ -1127,6 +1154,8 @@ function DesignKitViewInner({
                 faviconSize={40}
                 className={styles.previewHeadLogoImage}
                 fallbackClassName={styles.previewHeadLogoFallback}
+                workspaceContext={workspaceContext}
+                readGeneration={workspaceReadGeneration}
               />
             </span>
           ) : null}
@@ -1343,7 +1372,7 @@ function DesignKitViewInner({
                           title={t('ds.editColor', { name: c.name || c.role || t('ds.colorLabel') })}
                           onClick={() => openColorEditor(i)}
                         >
-                          <Icon name="edit" size={13} />
+                          <Icon name="edit" size={14} />
                         </button>
                       ) : null}
                       <span
@@ -1508,7 +1537,7 @@ function DesignKitViewInner({
                             aria-label={t('ds.deleteImage', { caption: cap })}
                             title={t('ds.deleteImage', { caption: cap })}
                           >
-                            <Icon name={actionBusy === `delete-image:${sampleIndex}` ? 'spinner' : 'trash'} size={13} />
+                            <Icon name={actionBusy === `delete-image:${sampleIndex}` ? 'spinner' : 'trash'} size={14} />
                           </button>
                         ) : null}
                         {s.caption || s.kind ? (
@@ -1745,7 +1774,7 @@ function DesignKitViewInner({
                           className={styles.moduleAction}
                           onClick={() => openUrlInNewTab(assetPreview.url)}
                         >
-                          <Icon name="external-link" size={13} />
+                          <Icon name="external-link" size={14} />
                           <span>{t('preview.openInNewTab')}</span>
                         </button>
                         <button
@@ -1920,7 +1949,7 @@ function DesignKitViewInner({
                         disabled={colorSaving || !onColorReset}
                         onClick={() => void resetColorDraft()}
                       >
-                        <Icon name={colorSaving ? 'spinner' : 'reload'} size={13} />
+                        <Icon name={colorSaving ? 'spinner' : 'reload'} size={14} />
                         <span>{colorSaving ? t('ds.saving') : t('ds.reset')}</span>
                       </button>
                       <Button variant="primary" disabled={colorSaving} onClick={() => void saveColorDraft()}>

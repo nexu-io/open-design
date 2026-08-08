@@ -1406,7 +1406,7 @@ a.nav-mega-col-head.is-active {
   /* Centered hero — every first-screen module (eyebrow, manifesto, actions,
      stats, foot) stacks on the page's horizontal center. */
   align-items: center;
-  width: min(820px, 100%);
+  width: min(1080px, 100%);
   margin: 0 auto;
   position: relative;
   text-align: center;
@@ -1442,6 +1442,17 @@ a.nav-mega-col-head.is-active {
   font-weight: 400;
   color: var(--ink-mute);
   text-align: center;
+}
+.hero-sub-highlight {
+  padding: 0 0.08em 0.04em;
+  color: var(--ink);
+  font-weight: 700;
+  background: linear-gradient(
+    transparent 56%,
+    color-mix(in srgb, var(--coral) 34%, transparent) 0
+  );
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
 }
 /* First-screen product window. Centered, can sit wider than the 820px copy
    column; capped to 92vw on narrow screens. Border uses the skill's neutral
@@ -1557,19 +1568,74 @@ a.nav-mega-col-head.is-active {
   line-height: 1;
   letter-spacing: -0.01em;
   color: var(--ink);
+  background: none;
+  box-shadow: none;
+  text-decoration: none;
+}
+.hero-title-position {
+  /* Canonical product category. It stays visible in every locale, but is a
+     supporting layer so the concrete task line remains the strongest claim. */
+  font-family: var(--sans);
+  font-weight: 700;
+  font-size: clamp(18px, 2.8vw, 27px);
+  line-height: 1.08;
+  letter-spacing: -0.015em;
+  color: var(--ink-soft);
+  margin-top: 0.12em;
+  text-wrap: balance;
+  background: none;
+  box-shadow: none;
+  text-decoration: none;
 }
 .hero-title-main {
-  /* Category positioning line ("The Vibe Design Workspace") — the product's
-     own umbrella term and the primary on-page positioning. Sits between the
-     brand slab above and the SEO entry-word sub-line below in the visual
-     hierarchy: sans display face, prominent but a step down from the brand. */
+  /* Localized task positioning: each active locale supplies two deliberate
+     desktop lines, so long translations keep the same editorial rhythm. */
+  display: block;
   font-family: var(--sans);
   font-weight: 800;
-  font-size: clamp(22px, 4.8vw, 40px);
-  line-height: 1.06;
+  font-size: clamp(24px, 2vw, 34px);
+  line-height: 1.12;
   letter-spacing: -0.02em;
   color: var(--ink);
   margin-top: 0.14em;
+  max-width: none;
+  background: none;
+  box-shadow: none;
+  text-decoration: none;
+}
+.hero-title-main-line {
+  display: block;
+  width: fit-content;
+  margin-inline: auto;
+  white-space: nowrap;
+  padding-inline: 0.08em;
+  background: none;
+  box-shadow: none;
+  text-decoration: none;
+}
+.hero-title-main-line:last-child {
+  padding-bottom: 0.06em;
+}
+.hero-task-emphasis {
+  display: inline-block;
+  padding: 0 0.08em 0.04em;
+  background: linear-gradient(
+    transparent 56%,
+    color-mix(in srgb, var(--coral) 34%, transparent) 0
+  );
+  box-shadow: none;
+  text-decoration: none;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+@media (max-width: 720px) {
+  .hero-title-main {
+    font-size: clamp(20px, 6.4vw, 28px);
+  }
+  .hero-title-main-line {
+    width: auto;
+    white-space: normal;
+  }
 }
 .hero-title-sub {
   font-family: var(--sans);
@@ -1632,6 +1698,7 @@ a.nav-mega-col-head.is-active {
     transform: none;
     animation: none;
   }
+  .hero-download-attention::after { animation: none; }
 }
 .hero-actions {
   display: inline-flex;
@@ -1640,6 +1707,26 @@ a.nav-mega-col-head.is-active {
   gap: 14px;
   margin-top: 42px; /* skill --spacing-42 (was 90px) */
   margin-bottom: 0;
+}
+.hero-download-attention {
+  position: relative;
+}
+.hero-download-attention::after {
+  content: '';
+  position: absolute;
+  top: 1px;
+  right: 3px;
+  width: 8px;
+  height: 8px;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  background: #ff3b30;
+  transform: translate(45%, -45%);
+  animation: downloadAttentionPulse 1.8s cubic-bezier(0.23, 1, 0.32, 1) infinite;
+}
+@keyframes downloadAttentionPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.38); }
+  55% { box-shadow: 0 0 0 6px rgba(255, 59, 48, 0); }
 }
 .hero-stats {
   display: flex;
@@ -5736,6 +5823,10 @@ footer .container {
 @media (max-width: 640px) {
   .topbar-inner { gap: 14px; }
   .topbar-inner .right { gap: 12px; }
+  /* Keep the emphasized agent promise together on common phone widths so the
+     last CJK character does not orphan onto its own line. Narrower devices
+     still fall back to normal wrapping below 360px. */
+  .hero-sub-highlight { font-size: 0.95em; }
   .hero-actions .btn { padding: 12px 18px; font-size: 13px; }
   .work-card h3 { font-size: clamp(24px, 6vw, 30px); }
   .foot-mega .word { font-size: clamp(54px, 18vw, 120px); }
@@ -5746,6 +5837,9 @@ footer .container {
   .cta .container { padding: 0 14px; }
   .cta-dance-inner .display { font-size: clamp(22px, 6vw, 30px); }
   .cta-dance-inner .lead { font-size: 15px; }
+}
+@media (min-width: 360px) and (max-width: 640px) {
+  .hero-sub-highlight { white-space: nowrap; }
 }
 @media (max-width: 560px) {
   .container { padding: 0 16px; }

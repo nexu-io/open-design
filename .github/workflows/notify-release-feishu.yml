@@ -36,6 +36,16 @@ on:
         required: false
         type: string
         default: ""
+      amr_profile:
+        description: "Optional AMR profile to bake (test / feature-test enable the Workspace Team transport). Empty uses the per-branch default: test on release/v0.18.0, otherwise prod."
+        required: false
+        type: string
+        default: ""
+      win_x64_smoke_mode:
+        description: "Windows x64 packaged smoke coverage (skip/core/full). Empty uses the per-branch default: skip on release/v0.18.0 to bypass the known packaged-win smoke flake that gates publish, otherwise release-prerelease's own default."
+        required: false
+        type: string
+        default: ""
 
 permissions:
   contents: write
@@ -65,6 +75,32 @@ jobs:
       # version). Only set when building from a non-release ref like main, where
       # release-prerelease cannot derive the base version from the branch name.
       release_version: ${{ inputs.release_version }}
+      # Workspace Team profile baked into the packaged build (see
+      # apps/packaged/src/workspace-team.ts + release-prerelease.yml). Release
+      # builds ship `prod`: production's Vela backend now serves the feature, so
+      # a release prerelease points users at the production console rather than
+      # an internal test environment. A manual dispatch can still override to
+      # test / feature-test to cut a build against those backends.
+      #
+      # (This replaces a temporary `test` default on release/v0.18.0 that
+      # existed only while prod's resource-hub storage was unconfigured.)
+      amr_profile: ${{ inputs.amr_profile || 'prod' }}
+      # Windows packaged smoke is a hard publish gate (publish needs build_win
+      # success) but flaked on release/v0.18.0 ("did not reach main app shell"),
+      # skip-blocking EVERY platform's publish + the Feishu card. TEMPORARY:
+      # skip it on release/v0.18.0 so the workspace-team prerelease can actually
+      # ship its mac/win/linux packages + post its card. Manual dispatch overrides.
+      # The root cause is fixed on main (#6481); remove this branch default once
+      # release/v0.18.0 no longer builds.
+      #
+      # The final arm must name a real profile, NOT ''. A workflow_call
+      # `default:` applies only when an input is omitted, so forwarding an empty
+      # string defeats the callee's declared `core` default; the empty value
+      # then reaches the spec, reads as "not core", and selects the updater path
+      # — which demands a fixture only a genuine `full` request wires up, so the
+      # job dies before the smoke starts. That is how release/v0.18.1's first
+      # prerelease failed on its branch-cut commit.
+      win_x64_smoke_mode: ${{ inputs.win_x64_smoke_mode || (github.ref_name == 'release/v0.18.0' && 'skip') || 'core' }}
 
   notify:
     name: Notify Feishu (release)

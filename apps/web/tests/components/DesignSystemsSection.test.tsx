@@ -89,7 +89,7 @@ describe('DesignSystemsSection rename (issue #2811)', () => {
     await waitFor(() => {
       expect(vi.mocked(updateDesignSystemDraft)).toHaveBeenCalledWith('user:acme', {
         title: 'Acme v2',
-      });
+      }, null);
     });
   });
 

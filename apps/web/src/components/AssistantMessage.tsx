@@ -12,6 +12,8 @@ import {
 } from "../runtime/in-project-link";
 import { navigate } from "../router";
 import { deleteProjectFile, projectFileUrl, uploadProjectFiles } from "../providers/registry";
+import { useProjectCollabContext } from "../collab/collab-context";
+import { workspaceProjectHeaders } from "../collab/workspace-identity";
 import { useAnalytics } from "../analytics/provider";
 import {
   trackAssistantFeedbackButtonClick,
@@ -112,6 +114,7 @@ export type QuestionFormSubmitHandler = (
   text: string,
   attachments?: ChatAttachment[],
   context?: RunContextSelection,
+  sourceAssistantMessageId?: string,
 ) => boolean | void | Promise<boolean | void>;
 
 const DISCORD_INVITE_URL = "https://discord.gg/mHAjSMV6gz";
@@ -208,6 +211,7 @@ function SkillPluginCandidateCard({
   onRequestOpenFile?: (name: string) => void;
 }) {
   const t = useT();
+  const { workspaceContext } = useProjectCollabContext();
   const [busy, setBusy] = useState<null | "draft" | "contribute">(null);
   const [notice, setNotice] = useState<ActionNotice | null>(null);
   const disabled = !projectId || busy !== null;
@@ -220,7 +224,10 @@ function SkillPluginCandidateCard({
   async function post(path: string, body: Record<string, unknown> = {}) {
     const resp = await fetch(path, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(workspaceContext ? workspaceProjectHeaders(workspaceContext) : {}),
+      },
       body: JSON.stringify(body),
     });
     const data = await resp.json().catch(() => null);
@@ -626,6 +633,14 @@ function AssistantMessageImpl({
     () => turnFileOps.filter((entry) => entry.ops.includes('write') || entry.ops.includes('edit')),
     [turnFileOps],
   );
+  // Same artifacts-not-inputs rule, applied to the #5517 summary source. The
+  // summary row is fed by `fileOps` (produced files stay their own flat block
+  // below), so it needs its own read-only filter rather than reusing
+  // `turnArtifactOps`, which is derived from the produced-file merge.
+  const summaryArtifactOps = useMemo(
+    () => fileOps.filter((entry) => entry.ops.includes('write') || entry.ops.includes('edit')),
+    [fileOps],
+  );
   // The single artifact the "next step" affordance anchors to: prefer the HTML
   // produced by THIS turn; if the final turn emitted none (a summary / continue
   // message) fall back to the most recently modified HTML in the project so
@@ -982,14 +997,31 @@ function AssistantMessageImpl({
             ].join(":")}
           />
         ) : null}
-        {turnArtifactOps.length > 0 ? (
+        {/* #5517 shape: the collapsible tool-op summary lists only the ops the
+            turn actually emitted, and the produced-files list stays its own
+            flat block below it (name / size / Open / Download). Folding the
+            produced files into the summary would hide Download behind a
+            disclosure, so `fileOps` — not `turnFileOps` — feeds this row.
+            Read-only entries are filtered out (they stay in the execution
+            record); the summary lists artifacts, not inspected inputs. */}
+        {summaryArtifactOps.length > 0 ? (
           <FileOpsSummary
-            entries={turnArtifactOps}
+            entries={summaryArtifactOps}
             projectFileNames={projectFileNames}
             onRequestOpenFile={onRequestOpenFile}
           />
         ) : null}
-        {!streaming && turnArtifactOps.length === 0 && displayedProduced.length > 0 && projectId ? (
+        {/* Exactly one "files from this turn" panel per message. When the
+            turn tracked explicit write/edit tool calls, FileOpsSummary above
+            already covers it; ProducedFiles is the fallback surface (with
+            Download) for turns that produced/recovered files without any
+            tracked tool call. Rendering both at once — which happened when a
+            message had real tool ops AND additional recovered files from its
+            prose — showed two panels with the identical "Files from this
+            turn" header and different file counts, reported as a P0 (Feishu
+            recvqaerXd82bE). See AssistantMessage.test.tsx "never shows the
+            tool-op summary and the produced-files block at once". */}
+        {summaryArtifactOps.length === 0 && !streaming && displayedProduced.length > 0 && projectId ? (
           <ProducedFiles
             files={displayedProduced}
             projectId={projectId}
@@ -2127,6 +2159,7 @@ function ProducedFiles({
   onRequestOpenFile?: (name: string) => void;
 }) {
   const t = useT();
+  const { workspaceContext } = useProjectCollabContext();
   return (
     <div className="produced-files">
       <div className="produced-files-label">{t("assistant.producedFiles")}</div>
@@ -2152,7 +2185,7 @@ function ProducedFiles({
               ) : null}
               <a
                 className="ghost-link"
-                href={projectFileUrl(projectId, f.name)}
+                href={projectFileUrl(projectId, f.name, workspaceContext)}
                 download={f.name}
               >
                 {t("assistant.downloadFile")}
@@ -2611,6 +2644,7 @@ function FormBlock({
 }) {
   const t = useT();
   const analytics = useAnalytics();
+  const { workspaceContext } = useProjectCollabContext();
   const formKey =
     projectId && conversationId
       ? `${projectId}:${conversationId}:${assistantMessageId}:${form.id}`
@@ -2780,11 +2814,13 @@ function FormBlock({
     if (pending.length === 0) return true;
     if (!projectId) return false;
     const deleted = await Promise.all(
-      pending.map((attachment) => deleteProjectFile(projectId, attachment.path)),
+      pending.map((attachment) =>
+        deleteProjectFile(projectId, attachment.path, workspaceContext),
+      ),
     );
     pendingUploadCleanupRef.current = pending.filter((_, index) => !deleted[index]);
     return pendingUploadCleanupRef.current.length === 0;
-  }, [projectId]);
+  }, [projectId, workspaceContext]);
 
   const handleSubmit = useCallback(
     async (
@@ -2827,6 +2863,8 @@ function FormBlock({
         const result = await uploadProjectFiles(
           projectId,
           flatFiles.map((entry) => entry.file),
+          undefined,
+          workspaceContext,
         ).catch((error) => ({
           uploaded: [],
           failed: flatFiles.map((entry) => ({
@@ -3233,12 +3271,13 @@ function StatusPill({
 }) {
   const variant =
     label === "error" ? "error" : label === "warning" ? "warning" : undefined;
+  const displayLabel = label === "context_compaction" ? "compacting context" : label;
   return (
     <div
       className={`status-pill${variant ? ` is-${variant}` : ""}`}
       data-status={label}
     >
-      <span className="status-label">{label}</span>
+      <span className="status-label">{displayLabel}</span>
       {detail ? <span className="status-detail">{renderStatusDetail(detail)}</span> : null}
     </div>
   );
@@ -3646,6 +3685,7 @@ function TaskActivityCard({
             entry={currentEntry}
             projectFileNames={projectFileNames}
             onRequestOpenFile={onRequestOpenFile}
+            onThinkingLinkClick={onThinkingLinkClick}
           />
         </div>
       </div>
@@ -3717,20 +3757,26 @@ function CurrentTaskActivityRow({
   entry,
   projectFileNames,
   onRequestOpenFile,
+  onThinkingLinkClick,
 }: {
   entry: TaskActivityEntry;
   projectFileNames?: Set<string>;
   onRequestOpenFile?: (name: string) => void;
+  onThinkingLinkClick?: MarkdownLinkClickHandler;
 }) {
-  const t = useT();
   if (entry.kind === "thinking") {
+    // The compact running view keeps one current row (#5667), but thinking
+    // must stay expandable mid-run: a user parked on a long "Thinking…" (or a
+    // hung provider, incident recvqgLmAkUM6G) needs to open the streamed
+    // reasoning to judge progress. ThinkingBlock is the same disclosure the
+    // settled card uses, so the affordance matches before and after the run
+    // completes.
     return (
-      <div className="task-activity-current-thinking">
-        <span className="op-status op-status-category" aria-hidden>
-          <Icon name="sparkles" size={14} />
-        </span>
-        <span className="op-title shimmer-text">{t("assistant.thinking")}</span>
-      </div>
+      <ThinkingBlock
+        text={entry.text}
+        streaming
+        onLinkClick={onThinkingLinkClick}
+      />
     );
   }
   if (entry.kind === "live-tool") {

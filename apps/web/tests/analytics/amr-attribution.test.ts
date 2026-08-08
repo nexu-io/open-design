@@ -334,14 +334,14 @@ describe('AMR attribution helper', () => {
 
   it('adds Open Design attribution params to AMR wallet URLs', () => {
     expect(
-      attributedAmrUrl('https://open-design.ai/amr/wallet?tab=recharge', {
+      attributedAmrUrl('https://open-design.ai/amr/dashboard?tab=recharge', {
         entryId: 'od-amr-entry-123',
         sourceProduct: 'open_design',
         sourceDetail: 'generation_preview_recharge',
         occurredAt: '2026-06-03T12:00:00.000Z',
       }),
     ).toBe(
-      'https://open-design.ai/amr/wallet?tab=recharge&od_origin=open_design&od_entry_id=od-amr-entry-123&od_entry_source=generation_preview_recharge&od_entry_at=2026-06-03T12%3A00%3A00.000Z',
+      'https://open-design.ai/amr/dashboard?tab=recharge&od_origin=open_design&od_entry_id=od-amr-entry-123&od_entry_source=generation_preview_recharge&od_entry_at=2026-06-03T12%3A00%3A00.000Z',
     );
   });
 
@@ -354,12 +354,43 @@ describe('AMR attribution helper', () => {
     };
     // With a device id (user opted into metrics): od_device_id is present.
     expect(
-      attributedAmrUrl('https://open-design.ai/amr/wallet', attribution, 'od-install-abc'),
+      attributedAmrUrl('https://open-design.ai/amr/dashboard', attribution, 'od-install-abc'),
     ).toContain('od_device_id=od-install-abc');
     // Without one (consent off): no od_device_id param leaks into the URL.
     expect(
-      attributedAmrUrl('https://open-design.ai/amr/wallet', attribution, null),
+      attributedAmrUrl('https://open-design.ai/amr/dashboard', attribution, null),
     ).not.toContain('od_device_id');
+  });
+
+  it('forwards campaign and conversion attribution for final payment joins', () => {
+    const track = vi.fn();
+    const attribution = recordAmrEntry(
+      track,
+      'deepseek_workbench_badge',
+      new Date('2026-08-05T12:00:00.000Z'),
+      {
+        campaignId: 'deepseek_v4_flash',
+        conversionSource: 'deepseek_workbench_badge',
+      },
+    );
+
+    expect(track).toHaveBeenCalledWith(
+      'ui_click',
+      expect.objectContaining({
+        entry_id: attribution.entryId,
+        source_detail: 'deepseek_workbench_badge',
+        campaign_id: 'deepseek_v4_flash',
+        conversion_source: 'deepseek_workbench_badge',
+      }),
+      undefined,
+    );
+    const url = new URL(
+      attributedAmrUrl('https://open-design.ai/zh/pricing/', attribution),
+    );
+    expect(url.searchParams.get('od_entry_id')).toBe(attribution.entryId);
+    expect(url.searchParams.get('od_entry_source')).toBe('deepseek_workbench_badge');
+    expect(url.searchParams.get('od_conversion_source')).toBe('deepseek_workbench_badge');
+    expect(url.searchParams.get('od_campaign_id')).toBe('deepseek_v4_flash');
   });
 
   it('resolves the AMR handoff device id to the canonical id, gated on consent', () => {

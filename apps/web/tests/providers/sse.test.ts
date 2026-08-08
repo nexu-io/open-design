@@ -53,6 +53,7 @@ describe('streamViaDaemon', () => {
 
     await streamViaDaemon({
       agentId: 'mock',
+      userMessageId: '3',
       history: [
         { id: '1', role: 'user', content: 'pre-consent brief' },
         { id: '2', role: 'assistant', content: 'draft response' },
@@ -68,9 +69,10 @@ describe('streamViaDaemon', () => {
     expect(body.message).toContain('pre-consent brief');
     expect(body.message).toContain('post-consent revision');
     expect(body.currentPrompt).toBe('post-consent revision');
+    expect(body.userMessageId).toBe('3');
   });
 
-  it('sends BYOK profile references without a raw provider payload', async () => {
+  it('sends the selected Local BYOK provider only to the local run endpoint', async () => {
     const handlers = createDaemonHandlers();
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
@@ -84,7 +86,12 @@ describe('streamViaDaemon', () => {
 
     await streamViaDaemon({
       agentId: 'byok-opencode',
-      byokProfileId: 'byok-openrouter',
+      byokProvider: {
+        protocol: 'openai',
+        apiKey: 'local-test-key',
+        baseUrl: 'https://api.openai.com/v1',
+        model: 'gpt-5.4-mini',
+      },
       handlers,
       history: [{ id: '1', role: 'user', content: 'Create a site' }],
       signal: new AbortController().signal,
@@ -95,8 +102,13 @@ describe('streamViaDaemon', () => {
       RequestInit,
     ];
     const body = JSON.parse(String(createRunInit.body));
-    expect(body.byokProfileId).toBe('byok-openrouter');
-    expect(body).not.toHaveProperty('byokProvider');
+    expect(body).not.toHaveProperty('byokProfileId');
+    expect(body.byokProvider).toEqual({
+      protocol: 'openai',
+      apiKey: 'local-test-key',
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-5.4-mini',
+    });
   });
 
   it('publishes an authoritative successful run with an artifact to the app gate', async () => {
@@ -1048,7 +1060,7 @@ describe('streamViaDaemon', () => {
           sseResponse(
             [
               'event: error',
-              'data: {"message":"AMR balance unavailable","error":{"code":"AMR_INSUFFICIENT_BALANCE","message":"AMR balance unavailable","details":{"kind":"amr_account","action":"recharge","actionUrl":"https://open-design.ai/amr/wallet"}}}',
+              'data: {"message":"AMR balance unavailable","error":{"code":"AMR_INSUFFICIENT_BALANCE","message":"AMR balance unavailable","details":{"kind":"amr_account","action":"recharge","actionUrl":"https://open-design.ai/amr/dashboard"}}}',
               '',
               '',
             ].join('\n'),
@@ -1071,7 +1083,7 @@ describe('streamViaDaemon', () => {
         details: {
           kind: 'amr_account',
           action: 'recharge',
-          actionUrl: 'https://open-design.ai/amr/wallet',
+          actionUrl: 'https://open-design.ai/amr/dashboard',
         },
       }),
     );

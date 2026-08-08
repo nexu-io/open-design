@@ -68,18 +68,25 @@ describe('settings polish CSS', () => {
     expect(ruleValue(checkbox, 'margin')).toBe('2px 0 0');
   });
 
-  it('keeps updater popup checkbox and actions on one footer row for long en labels', () => {
+  it('stacks the updater popup checkbox above an evenly split action row', () => {
     const footer = cssBlock(mentionHomeCss, '.updater-popup__footer');
     const preference = cssBlock(mentionHomeCss, '.updater-popup__preference');
     const label = cssBlock(mentionHomeCss, '.updater-popup__checkbox span');
     const actions = cssBlock(mentionHomeCss, '.updater-popup__actions');
 
+    // The popup adopted the update-reminder dialog layout: the silent-update
+    // checkbox gets the full panel width on its own row, and the two action
+    // pills split the row below 50/50. The single-row predecessor squeezed the
+    // checkbox label into a skinny always-wrapping column once the pill
+    // buttons widened.
     expect(ruleValue(footer, 'display')).toBe('flex');
-    expect(ruleValue(footer, 'flex-wrap')).toBe('nowrap');
-    expect(ruleValue(preference, 'flex')).toBe('1 1 0');
+    expect(ruleValue(footer, 'flex-direction')).toBe('column');
+    expect(ruleValue(footer, 'align-items')).toBe('stretch');
+    // Long en labels still have to wrap inside the checkbox column rather than
+    // overflow the panel.
     expect(ruleValue(preference, 'min-width')).toBe('0');
     expect(ruleValue(label, 'white-space')).toBe('normal');
-    expect(ruleValue(actions, 'flex')).toBe('0 0 auto');
-    expect(ruleValue(actions, 'flex-wrap')).toBe('nowrap');
+    expect(ruleValue(actions, 'display')).toBe('grid');
+    expect(ruleValue(actions, 'grid-template-columns')).toBe('1fr 1fr');
   });
 });

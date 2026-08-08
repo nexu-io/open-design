@@ -83,6 +83,30 @@ describe("resolveWinInstallIdentity", () => {
     expect(source).not.toContain('"DisplayName" "${productName} \\${APP_VERSION}"');
   });
 
+  it("registers the invite protocol and removes it on uninstall only while this install owns it", async () => {
+    const source = await readFile(new URL("../src/win/custom-installer.ts", import.meta.url), "utf8");
+    expect(source).toContain('const inviteProtocolKey = "Software\\\\Classes\\\\opendesign"');
+    expect(source).toContain('WriteRegStr HKCU "${inviteProtocolKey}" "URL Protocol" ""');
+    expect(source).toContain(
+      'WriteRegStr HKCU "${inviteProtocolKey}\\\\shell\\\\open\\\\command" ""',
+    );
+    expect(source).toContain('$INSTDIR\\\\${exeName}');
+    expect(source).toContain(
+      'ReadRegStr $0 HKCU "${inviteProtocolKey}\\\\shell\\\\open\\\\command" ""',
+    );
+    expect(source).toContain(
+      "StrCmp $0 '$\\\"$INSTDIR\\\\${exeName}$\\\" $\\\"%1$\\\"' 0 preserve_invite_protocol",
+    );
+    expect(source).toContain('DeleteRegKey HKCU "${inviteProtocolKey}"');
+    expect(source).toContain("preserve_invite_protocol:");
+    expect(source.indexOf("StrCmp $0")).toBeLessThan(
+      source.indexOf('DeleteRegKey HKCU "${inviteProtocolKey}"'),
+    );
+    expect(source.indexOf('DeleteRegKey HKCU "${inviteProtocolKey}"')).toBeLessThan(
+      source.indexOf("preserve_invite_protocol:"),
+    );
+  });
+
   it("checks the silent install target directory for running instances before overwriting files", async () => {
     const source = await readFile(new URL("../src/win/custom-installer.ts", import.meta.url), "utf8");
     const silentCheck = source.slice(source.indexOf("silent_check:"), source.indexOf("IfFileExists \"$INSTDIR\\\\${exeName}\" existing_install"));

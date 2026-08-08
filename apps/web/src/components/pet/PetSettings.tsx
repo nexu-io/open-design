@@ -41,7 +41,7 @@ interface Props {
 // Curated palette so the customize swatch row stays compact and on-brand
 // without forcing a full color picker. The first entry mirrors --accent.
 const ACCENT_SWATCHES = [
-  '#c96442',
+  '#87ea5c',
   '#2348b8',
   '#1f7a3a',
   '#6c3aa6',
@@ -510,9 +510,6 @@ export function PetSettings({ cfg, setCfg }: Props) {
               </span>
             ) : null}
           </span>
-          {p.description ? (
-            <span className="pet-codex-description">{p.description}</span>
-          ) : null}
         </div>
         <button
           type="button"
@@ -522,7 +519,7 @@ export function PetSettings({ cfg, setCfg }: Props) {
           aria-pressed={isActive}
           aria-label={isActive ? t('pet.adoptedBadge') : t('pet.codexAdopt')}
         >
-          <Icon name={adopting ? 'spinner' : 'check'} size={12} />
+          <Icon name={adopting ? 'spinner' : 'check'} size={14} />
           {!isActive ? (
             <span>{adopting ? t('pet.codexAdopting') : t('pet.codexAdopt')}</span>
           ) : null}
@@ -535,7 +532,7 @@ export function PetSettings({ cfg, setCfg }: Props) {
     <section className="settings-section">
       {petActionStatus ? (
         <p className="pet-action-status" role="status">
-          <Icon name="check" size={12} />
+          <Icon name="check" size={14} />
           <span>
             {petActionStatus.kind === 'adopted'
               ? `${t('pet.adoptedBadge')}: ${petActionStatus.name ?? ''}`
@@ -645,13 +642,6 @@ export function PetSettings({ cfg, setCfg }: Props) {
             </button>
           </div>
         </div>
-        <p className="hint pet-tabs-hint">
-          {activeTab === 'builtIn'
-            ? t('pet.tabBuiltInHint')
-            : activeTab === 'custom'
-              ? t('pet.tabCustomHint')
-              : t('pet.tabCommunityHint')}
-        </p>
       </div>
 
       {activeTab === 'builtIn' ? (
@@ -703,7 +693,7 @@ export function PetSettings({ cfg, setCfg }: Props) {
           >
             <Icon
               name={pet.adopted && pet.petId === CUSTOM_PET_ID ? 'check' : 'sparkles'}
-              size={12}
+              size={14}
             />
             <span>
               {pet.adopted && pet.petId === CUSTOM_PET_ID
@@ -754,7 +744,7 @@ export function PetSettings({ cfg, setCfg }: Props) {
               onClick={() => fileInputRef.current?.click()}
               disabled={uploading}
             >
-              <Icon name={uploading ? 'spinner' : 'upload'} size={12} />
+              <Icon name={uploading ? 'spinner' : 'upload'} size={14} />
               <span>
                 {pet.custom.imageUrl
                   ? t('pet.imageReplace')
@@ -768,7 +758,7 @@ export function PetSettings({ cfg, setCfg }: Props) {
               disabled={atlasBusy}
               title={t('pet.atlasImportTitle')}
             >
-              <Icon name={atlasBusy ? 'spinner' : 'sparkles'} size={12} />
+              <Icon name={atlasBusy ? 'spinner' : 'sparkles'} size={14} />
               <span>{t('pet.atlasImport')}</span>
             </button>
             {pet.custom.imageUrl ? (
@@ -777,7 +767,7 @@ export function PetSettings({ cfg, setCfg }: Props) {
                 className="seg-btn small ghost"
                 onClick={clearImage}
               >
-                <Icon name="close" size={12} />
+                <Icon name="close" size={14} />
                 <span>{t('pet.imageRemove')}</span>
               </button>
             ) : null}
@@ -844,7 +834,7 @@ export function PetSettings({ cfg, setCfg }: Props) {
                 onClick={() => setAtlasPreview(null)}
                 disabled={atlasBusy}
               >
-                <Icon name="close" size={12} />
+                <Icon name="close" size={14} />
                 <span>{t('pet.atlasCancel')}</span>
               </button>
             </div>
@@ -888,7 +878,7 @@ export function PetSettings({ cfg, setCfg }: Props) {
                 disabled={atlasBusy}
                 title={t('pet.atlasAdoptFullTitle')}
               >
-                <Icon name={atlasBusy ? 'spinner' : 'sparkles'} size={12} />
+                <Icon name={atlasBusy ? 'spinner' : 'sparkles'} size={14} />
                 <span>{t('pet.atlasAdoptFull')}</span>
               </button>
               <button
@@ -898,7 +888,7 @@ export function PetSettings({ cfg, setCfg }: Props) {
                 disabled={atlasBusy}
                 title={t('pet.atlasAdoptRowTitle')}
               >
-                <Icon name={atlasBusy ? 'spinner' : 'check'} size={12} />
+                <Icon name={atlasBusy ? 'spinner' : 'check'} size={14} />
                 <span>{t('pet.atlasAdopt')}</span>
               </button>
             </div>
@@ -1001,7 +991,7 @@ export function PetSettings({ cfg, setCfg }: Props) {
                 >
                   <Icon
                     name={communitySyncing ? 'spinner' : 'download'}
-                    size={12}
+                    size={14}
                   />
                   <span>
                     {communitySyncing
@@ -1018,7 +1008,7 @@ export function PetSettings({ cfg, setCfg }: Props) {
                 >
                   <Icon
                     name={codexPetsLoading ? 'spinner' : 'refresh'}
-                    size={12}
+                    size={14}
                   />
                   <span>{t('pet.codexRefresh')}</span>
                 </button>
@@ -1078,7 +1068,7 @@ export function PetSettings({ cfg, setCfg }: Props) {
                 className="seg-btn small"
                 onClick={() => void copyHatchPrompt()}
               >
-                <Icon name={hatchCopied ? 'check' : 'copy'} size={12} />
+                <Icon name={hatchCopied ? 'check' : 'copy'} size={14} />
                 <span>{hatchCopied ? t('pet.hatchCopied') : t('pet.hatchCopy')}</span>
               </button>
             </div>

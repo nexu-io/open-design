@@ -36,10 +36,53 @@ function clickAgentTool(testId: string) {
   fireEvent.click(screen.getByTestId(testId));
 }
 
-// Pins the inspector to a target. Selection rides the explicit click path
-// (od-edit-select); since v2.1 the inspector panel is opt-in, so the helper
-// mirrors the real two-step flow — select, then open the panel through the
-// action bar's params button.
+async function enterManualEditMode() {
+  const initialFrame = await waitFor(() => {
+    const node = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    if (!node.contentWindow) throw new Error('Preview frame not ready');
+    return node;
+  });
+  const postMessageSpy = vi.spyOn(initialFrame.contentWindow!, 'postMessage');
+
+  clickManualTool('manual-edit-mode-toggle');
+
+  const captureRequest = postMessageSpy.mock.calls
+    .map(([value]) => value)
+    .find((value) => (
+      typeof value === 'object' &&
+      value !== null &&
+      (value as { type?: unknown }).type === 'od:preview-runtime-state-capture'
+    )) as { type: string; id: string } | undefined;
+  if (captureRequest) {
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        data: {
+          type: 'od:preview-runtime-state-captured',
+          id: captureRequest.id,
+          state: {
+            version: 1,
+            hash: '',
+            htmlAttrs: {},
+            bodyAttrs: {},
+            entries: [],
+          },
+        },
+        source: initialFrame.contentWindow,
+      }));
+    });
+  }
+
+  await waitFor(() => {
+    expect(screen.getByTestId('manual-edit-mode-toggle').getAttribute('aria-pressed')).toBe('true');
+    const activeFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    expect(activeFrame.getAttribute('data-od-active')).toBe('true');
+    expect(activeFrame.getAttribute('data-od-render-mode')).toBe('srcdoc');
+  });
+}
+
+// Pins the inspector to a target. Hover no longer auto-selects, so selection
+// rides the explicit click path (od-edit-select), matching the bridge sending
+// it when the user clicks the hover affordance or a container/image body.
 async function selectManualEditTarget(target = heroTarget()) {
   const frame = await waitFor(() => {
     const node = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
@@ -51,9 +94,6 @@ async function selectManualEditTarget(target = heroTarget()) {
       data: { type: 'od-edit-select', target },
       source: frame.contentWindow,
     }));
-  });
-  await waitFor(() => {
-    fireEvent.click(screen.getByTestId('manual-edit-open-inspector'));
   });
   await waitFor(() => expect(panelState.props).not.toBeNull());
 }
@@ -99,7 +139,7 @@ describe('FileViewer manual edit history regressions', () => {
       />,
     );
 
-    clickManualTool('manual-edit-mode-toggle');
+    await enterManualEditMode();
     await selectManualEditTarget();
 
     act(() => {
@@ -137,7 +177,7 @@ describe('FileViewer manual edit history regressions', () => {
       />,
     );
 
-    clickManualTool('manual-edit-mode-toggle');
+    await enterManualEditMode();
     await selectManualEditTarget();
 
     const editFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
@@ -191,7 +231,7 @@ describe('FileViewer manual edit history regressions', () => {
       />,
     );
 
-    clickManualTool('manual-edit-mode-toggle');
+    await enterManualEditMode();
     await selectManualEditTarget();
 
     act(() => {
@@ -253,7 +293,7 @@ describe('FileViewer manual edit history regressions', () => {
       />,
     );
 
-    fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
+    await enterManualEditMode();
     await selectManualEditTarget();
     const getActivePreviewFrame = () => screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
 
@@ -300,7 +340,7 @@ describe('FileViewer manual edit history regressions', () => {
       />,
     );
 
-    fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
+    await enterManualEditMode();
     await selectManualEditTarget();
 
     expect(panelState.props?.resetAvailable).toBe(false);
@@ -354,7 +394,7 @@ describe('FileViewer manual edit history regressions', () => {
       />,
     );
 
-    fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
+    await enterManualEditMode();
     await selectManualEditTarget();
     const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
     const postMessageSpy = vi.spyOn(frame.contentWindow!, 'postMessage');

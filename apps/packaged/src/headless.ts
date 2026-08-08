@@ -9,6 +9,7 @@ import {
 
 import {
   PACKAGED_NAMESPACE_ENV,
+  resolvePackagedAmrProfile,
   type PackagedConfig,
 } from "./config.js";
 import {
@@ -32,10 +33,7 @@ function resolveHeadlessNamespaceBaseRoot(): string {
 }
 
 function resolveHeadlessAmrProfile(): PackagedConfig["amrProfile"] {
-  const value = process.env.OPEN_DESIGN_AMR_PROFILE?.trim();
-  if (value == null || value.length === 0) return null;
-  if (value === "prod" || value === "test" || value === "local") return value;
-  throw new Error(`unsupported packaged AMR profile: ${value}`);
+  return resolvePackagedAmrProfile(process.env.OPEN_DESIGN_AMR_PROFILE);
 }
 
 function resolveHeadlessConfig(): PackagedConfig {
@@ -65,6 +63,7 @@ function resolveHeadlessConfig(): PackagedConfig {
     updateMetadataUrl: process.env.OD_UPDATE_METADATA_URL?.trim() || null,
     posthogKey: process.env.POSTHOG_KEY?.trim() || null,
     posthogHost: process.env.POSTHOG_HOST?.trim() || null,
+    velaWebUrl: process.env.OD_VELA_WEB_URL?.trim() || null,
     webSidecarEntry: null,
     webStandaloneRoot: null,
     webOutputMode: "server",

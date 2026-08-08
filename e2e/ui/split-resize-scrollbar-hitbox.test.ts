@@ -159,18 +159,17 @@ async function readChatPanelWidth(handle: Locator): Promise<number> {
 }
 
 // Switch the app language to Arabic from inside the project view: avatar
-// menu → full settings → Language section → the tile whose code is "ar".
-// All selectors are class/testid based so they survive the locale change.
+// menu → full settings → General → the language select. #5517 folded Language
+// into General and replaced the locale tile grid with one compact <select>, so
+// this drives the select. All selectors are class/testid based so they survive
+// the locale change.
 async function switchLocaleToArabic(page: Page) {
   await page.locator('.avatar-agent-trigger').click();
   await page.locator('.avatar-item--execution-settings').click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
-  await dialog.locator('.settings-nav-item', { hasText: 'Language' }).click();
-  await dialog
-    .locator('.settings-language-tile')
-    .filter({ has: page.locator('.settings-language-tile-code:text-is("ar")') })
-    .click();
+  await dialog.locator('.settings-nav-item', { hasText: 'General' }).click();
+  await dialog.locator('.settings-general-select select').selectOption('ar');
   await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
   await page.keyboard.press('Escape');
   await expect(dialog).toBeHidden();
