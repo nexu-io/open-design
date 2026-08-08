@@ -208,8 +208,6 @@ interface Props {
   onInvite?: () => void;
   /** Start the cloud sign-in / team flow from the local-state callout. */
   onSignInCloud?: () => void;
-  /** Clear app-owned model-source state after the daemon confirms sign-out. */
-  onSignedOut?: () => void | Promise<void>;
   /**
    * The update-ready host (`UpdaterPopup`), which renders nothing until the
    * updater reports a downloaded, unopened installer.
@@ -566,7 +564,6 @@ export function EntryNavRail({
   billing,
   balanceUsd,
   onOpenSettings,
-  onSignedOut,
   updaterSlot,
   footerNotice,
 }: Props) {
@@ -1278,9 +1275,7 @@ export function EntryNavRail({
                   // daemon, then nudge every workspace surface to re-read
                   // (the context read now resolves to null → the shell
                   // falls back to the signed-out local form).
-                  void velaLogout().then(async (result) => {
-                    if (!result.ok) return;
-                    await onSignedOut?.();
+                  void velaLogout().then(() => {
                     // recvqbkcLqIFH7: a stale "dismissed" flag on the
                     // footer's CloudSignInTip must not survive a real
                     // sign-out, or the rail's only sign-in entry point

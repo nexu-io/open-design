@@ -977,6 +977,7 @@ test("runtime-definition shadow fails closed for mixed, unknown, empty, and unre
       decision.matrix.map((entry) => entry.name),
       [
         "entry-settings",
+        "entry-automations",
         "project-workspace",
         "project-workspace-editor",
         "project-collab",

@@ -57,7 +57,6 @@ interface AmrLoginPillProps {
   iconOnlySignOut?: boolean;
   onSignInStarted?: () => void;
   onStatusChange?: (status: VelaLoginStatus | null) => void;
-  onSignedOut?: () => void | Promise<void>;
 }
 
 const AMR_LOGIN_REUSE_ENTRY_SOURCES: readonly TrackingAmrEntrySource[] = [
@@ -297,7 +296,6 @@ export function AmrLoginPill({
   iconOnlySignOut = false,
   onSignInStarted,
   onStatusChange,
-  onSignedOut,
 }: AmrLoginPillProps) {
   const { t } = useI18n();
   const analytics = useAnalytics();
@@ -742,8 +740,7 @@ export function AmrLoginPill({
     }
     await refresh();
     notifyAmrLoginStatusChanged('status-changed');
-    await onSignedOut?.();
-  }, [onSignedOut, refresh, t]);
+  }, [refresh, t]);
 
   const handleConsoleClick = useCallback(
     (event: MouseEvent<HTMLAnchorElement>) => {

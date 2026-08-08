@@ -1131,7 +1131,6 @@ describe('AmrLoginPill', () => {
 
   it('logout POSTs /logout only after confirming, then flips the pill back to Sign-in', async () => {
     let loggedIn = true;
-    const onSignedOut = vi.fn();
     const fetchMock = vi.fn(async (input, init) => {
       const url = typeof input === 'string' ? input : (input as URL).toString();
       if (url.endsWith('/api/integrations/vela/status')) {
@@ -1157,7 +1156,7 @@ describe('AmrLoginPill', () => {
     });
     globalThis.fetch = fetchMock as typeof fetch;
 
-    renderPill({ onSignedOut });
+    renderPill();
     const logoutBtn = await screen.findByRole('button', { name: 'Sign out' });
     fireEvent.click(logoutBtn);
     fireEvent.click(screen.getByTestId('sign-out-confirm-accept'));
@@ -1165,7 +1164,6 @@ describe('AmrLoginPill', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Sign in' })).toBeTruthy();
     });
-    expect(onSignedOut).toHaveBeenCalledTimes(1);
     expect(screen.queryByTestId('sign-out-confirm-dialog')).toBeNull();
   });
 

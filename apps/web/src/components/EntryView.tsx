@@ -43,7 +43,6 @@ import type {
   PluginShareAction,
   PluginShareProjectOutcome,
 } from '../state/projects';
-import type { VelaLoginStatus } from '../providers/daemon';
 
 type EntryCreateProjectInput = Omit<CreateInput, 'metadata'> & {
   metadata?: CreateInput['metadata'];
@@ -148,8 +147,6 @@ interface Props {
   onPersistComposioKey: (composio: AppConfig['composio']) => Promise<void> | void;
   onOpenSettings: (section?: 'execution' | 'media' | 'composio' | 'orbit' | 'integrations' | 'mcpClient' | 'language' | 'appearance' | 'notifications' | 'pet' | 'projectLocations' | 'library' | 'about' | 'memory' | 'designSystems') => void;
   onCompleteOnboarding: () => void;
-  onSignedOut?: () => void | Promise<void>;
-  onAmrLoginStatusChange?: (status: VelaLoginStatus | null) => void;
   artifactUpgradeSlot?: ReactNode;
 }
 
@@ -299,8 +296,6 @@ export function EntryView({
   onPersistComposioKey,
   onOpenSettings,
   onCompleteOnboarding,
-  onSignedOut,
-  onAmrLoginStatusChange,
   artifactUpgradeSlot,
 }: Props) {
   const [connectors, setConnectors] = useState<ConnectorDetail[]>([]);
@@ -423,8 +418,6 @@ export function EntryView({
       onPersistComposioKey={onPersistComposioKey}
       onOpenSettings={onOpenSettings}
       onCompleteOnboarding={onCompleteOnboarding}
-      onSignedOut={onSignedOut}
-      onAmrLoginStatusChange={onAmrLoginStatusChange}
       artifactUpgradeSlot={artifactUpgradeSlot}
     />
   );
