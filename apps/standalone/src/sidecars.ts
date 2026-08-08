@@ -98,17 +98,21 @@ export async function startSidecarStandalone(
   options: StartSidecarStandaloneOptions,
 ): Promise<StandaloneHandle> {
   const request = validateStandaloneHandoffRequest(input);
-  const identity = request.handoff.identity;
+  const scope = request.handoff.scope;
   const control = bootstrapControlPlane({
+    projection: {
+      digest: request.handoff.descriptorDigest,
+      value: request.handoff.descriptor,
+    },
     roots: {
       dataRoot: request.paths.dataRoot,
       resourceRoot: request.paths.resourceRoot,
       runtimeRoot: request.paths.runtimeRoot,
     },
     scope: {
-      channel: identity.channel,
-      generation: identity.generation,
-      namespace: identity.namespace,
+      channel: scope.channel,
+      generation: scope.generation,
+      namespace: scope.namespace,
     },
   });
   const launches: {
@@ -154,7 +158,7 @@ export async function startSidecarStandalone(
         );
       },
     },
-    namespace: identity.namespace,
+    namespace: scope.namespace,
     paths: request.paths,
   });
 

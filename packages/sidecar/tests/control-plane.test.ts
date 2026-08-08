@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -11,7 +12,11 @@ import {
   sendPrivateRequestForTest,
 } from "../src/control/private-testing.js";
 import { attachDemoBody } from "./fixtures/control-body.js";
-import { createDemoController, type DemoMethods } from "./fixtures/control-controller.js";
+import {
+  createDemoController,
+  demoProjection,
+  type DemoMethods,
+} from "./fixtures/control-controller.js";
 
 const cleanups: Array<() => void | Promise<void>> = [];
 
@@ -71,7 +76,12 @@ describe("sidecar control identity", () => {
 describe("independent sidecar controller and body", () => {
   it("initializes the body from validated roots before publishing readiness", async () => {
     const { roots, scope } = await createFixture();
-    const launch = createPrivateLaunchForTest({ roots, scope, service: "web" });
+    const launch = createPrivateLaunchForTest({
+      projection: demoProjection,
+      roots,
+      scope,
+      service: "web",
+    });
     const restoreLaunch = installPrivateLaunchForTest(launch);
     cleanups.push(restoreLaunch);
     let initialized = false;
@@ -89,6 +99,7 @@ describe("independent sidecar controller and body", () => {
       initialize(context) {
         expect(context).toEqual({
           identity: { ...scope, service: "web" },
+          projection: demoProjection,
           roots,
         });
         initialized = true;
@@ -104,7 +115,12 @@ describe("independent sidecar controller and body", () => {
 
   it("cleans up body startup when initialization fails", async () => {
     const { roots, scope } = await createFixture();
-    const launch = createPrivateLaunchForTest({ roots, scope, service: "web" });
+    const launch = createPrivateLaunchForTest({
+      projection: demoProjection,
+      roots,
+      scope,
+      service: "web",
+    });
     const restoreLaunch = installPrivateLaunchForTest(launch);
     cleanups.push(restoreLaunch);
     let stopped = false;
@@ -151,6 +167,7 @@ describe("independent sidecar controller and body", () => {
     });
     await expect(launch.client.call("context", {})).resolves.toEqual({
       identity: { ...scope, service: "daemon" },
+      projection: demoProjection,
       roots,
     });
     await expect(launch.stop()).resolves.toMatchObject({ code: 0, signal: null });
@@ -174,7 +191,12 @@ describe("independent sidecar controller and body", () => {
     await expect(launch.stop()).resolves.toMatchObject({ code: null });
     await expect(controller.connect("daemon")).rejects.toThrow(/unavailable/);
     const privateState = await privateLaunchStateForTest(
-      createPrivateLaunchForTest({ roots, scope, service: "daemon" }),
+      createPrivateLaunchForTest({
+        projection: demoProjection,
+        roots,
+        scope,
+        service: "daemon",
+      }),
     );
     expect(privateState).toEqual({ descriptorExists: false, endpointExists: false });
   });
@@ -207,7 +229,12 @@ describe("independent sidecar controller and body", () => {
 
   it("agree on normalized identity, roots and caller-owned methods", async () => {
     const { roots, scope } = await createFixture();
-    const launch = createPrivateLaunchForTest({ roots, scope, service: "daemon" });
+    const launch = createPrivateLaunchForTest({
+      projection: demoProjection,
+      roots,
+      scope,
+      service: "daemon",
+    });
     const restoreLaunch = installPrivateLaunchForTest(launch);
     cleanups.push(restoreLaunch);
     let observedContext: unknown = null;
@@ -221,12 +248,14 @@ describe("independent sidecar controller and body", () => {
 
     await expect(client.probe()).resolves.toEqual({
       identity: { ...scope, service: "daemon" },
+      projection: demoProjection,
     });
     await expect(client.call("echo", { value: "江湖" })).resolves.toEqual({
       value: "江湖",
     });
     expect(observedContext).toEqual({
       identity: { ...scope, service: "daemon" },
+      projection: demoProjection,
       roots,
     });
   });
@@ -235,14 +264,24 @@ describe("independent sidecar controller and body", () => {
     const { roots, scope } = await createFixture();
     const controller = createDemoController(scope, roots);
 
-    const firstLaunch = createPrivateLaunchForTest({ roots, scope, service: "web" });
+    const firstLaunch = createPrivateLaunchForTest({
+      projection: demoProjection,
+      roots,
+      scope,
+      service: "web",
+    });
     const restoreFirst = installPrivateLaunchForTest(firstLaunch);
     const firstBody = await attachDemoBody(() => undefined);
     const staleClient = await controller.connect<DemoMethods>("web");
     await firstBody.close();
     restoreFirst();
 
-    const secondLaunch = createPrivateLaunchForTest({ roots, scope, service: "web" });
+    const secondLaunch = createPrivateLaunchForTest({
+      projection: demoProjection,
+      roots,
+      scope,
+      service: "web",
+    });
     expect(secondLaunch.identity).toEqual(firstLaunch.identity);
     expect(secondLaunch.incarnation).not.toBe(firstLaunch.incarnation);
     const restoreSecond = installPrivateLaunchForTest(secondLaunch);
@@ -262,7 +301,12 @@ describe("independent sidecar controller and body", () => {
 
   it("does not let a wrong scope satisfy or stop the requested peer", async () => {
     const { roots, scope } = await createFixture();
-    const launch = createPrivateLaunchForTest({ roots, scope, service: "daemon" });
+    const launch = createPrivateLaunchForTest({
+      projection: demoProjection,
+      roots,
+      scope,
+      service: "daemon",
+    });
     const restoreLaunch = installPrivateLaunchForTest(launch);
     cleanups.push(restoreLaunch);
     const body = await attachDemoBody(() => undefined);
@@ -296,5 +340,33 @@ describe("independent sidecar controller and body", () => {
     await expect(currentClient.call("echo", { value: "still-running" })).resolves.toEqual({
       value: "still-running",
     });
+  });
+
+  it("does not attach a controller with a different caller-owned projection", async () => {
+    const { roots, scope } = await createFixture();
+    const launch = createPrivateLaunchForTest({
+      projection: demoProjection,
+      roots,
+      scope,
+      service: "daemon",
+    });
+    const restoreLaunch = installPrivateLaunchForTest(launch);
+    cleanups.push(restoreLaunch);
+    const body = await attachDemoBody(() => undefined);
+    cleanups.push(() => body.close());
+
+    const value = { releaseVersion: "0.18.0-beta.5" } as const;
+    const wrongProjection = {
+      digest: `sha256:${createHash("sha256").update(JSON.stringify(value)).digest("hex")}` as const,
+      value,
+    };
+    const wrongController = publicControl.bootstrapControlPlane({
+      projection: wrongProjection,
+      roots,
+      scope,
+    });
+
+    await expect(wrongController.connect("daemon")).rejects.toThrow(/unavailable/);
+    await expect(createDemoController(scope, roots).connect("daemon")).resolves.toBeDefined();
   });
 });

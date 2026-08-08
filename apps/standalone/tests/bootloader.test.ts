@@ -12,19 +12,31 @@ import {
 import { createStandaloneBootloader } from "../src/bootloader.js";
 
 const digest = `sha256:${"b".repeat(64)}` as const;
+const shellDigest = `sha256:${"c".repeat(64)}` as const;
 
 function request(overrides: {
   generation?: number;
   shellVersion?: string;
 } = {}): StandaloneHandoffRequest {
   const handoff = createStandaloneHandoffEnvelope({
-    channel: "beta",
-    digest,
-    generation: overrides.generation ?? 3,
-    namespace: "release-beta",
-    platform: "darwin-arm64",
-    protocolVersion: STANDALONE_PROTOCOL_VERSION,
-    version: "0.18.0-beta.4",
+    descriptor: {
+      release: { version: "0.18.0-beta.4" },
+      shell: {
+        digest: shellDigest,
+        type: "electron",
+        version: overrides.shellVersion ?? "0.18.0-beta.4",
+      },
+      standalone: {
+        digest,
+        protocolVersion: STANDALONE_PROTOCOL_VERSION,
+        version: "0.18.0-beta.4",
+      },
+    },
+    scope: {
+      channel: "beta",
+      generation: overrides.generation ?? 3,
+      namespace: "release-beta",
+    },
   });
   return {
     capabilities: {
@@ -45,10 +57,6 @@ function request(overrides: {
       logsRoot: "/open-design/logs",
       resourceRoot: "/open-design/resources",
       runtimeRoot: "/open-design/runtime",
-    },
-    shell: {
-      type: "standalone-launcher",
-      version: overrides.shellVersion ?? "0.18.0-beta.4",
     },
   };
 }
@@ -128,8 +136,11 @@ describe("bootloader.mjs handoff-once", () => {
   it("fences shell capability results to the same request and generation", async () => {
     const input = request();
     const wrongHandoff = createStandaloneHandoffEnvelope({
-      ...input.handoff.identity,
-      generation: input.handoff.identity.generation + 1,
+      descriptor: input.handoff.descriptor,
+      scope: {
+        ...input.handoff.scope,
+        generation: input.handoff.scope.generation + 1,
+      },
     });
     input.capabilities.invoke = async (value) => ({
       handoff: wrongHandoff,
@@ -156,7 +167,7 @@ describe("bootloader.mjs handoff-once", () => {
 
   it("rejects body readiness from another handoff", async () => {
     const start = vi.fn(async (input: StandaloneHandoffRequest) => {
-      const wrong = request({ generation: input.handoff.identity.generation + 1 });
+      const wrong = request({ generation: input.handoff.scope.generation + 1 });
       return runningHandle(wrong);
     });
     const handoff = createStandaloneBootloader({
@@ -165,5 +176,40 @@ describe("bootloader.mjs handoff-once", () => {
     });
 
     await expect(handoff(request())).rejects.toMatchObject({ code: "body-invalid" });
+  });
+
+  it("hands off once to a registered inner bootloader", async () => {
+    const start = vi.fn(async (input: StandaloneHandoffRequest) => runningHandle(input));
+    const inner = vi.fn(async (input: StandaloneHandoffRequest) => runningHandle(input));
+    const resolveRegisteredBootloader = vi.fn(() => inner);
+    const handoff = createStandaloneBootloader({
+      minShellVersion: "0.18.0-beta.1",
+      resolveRegisteredBootloader,
+      start,
+    });
+    const input = request();
+
+    const [first, second] = await Promise.all([handoff(input), handoff(input)]);
+
+    expect(resolveRegisteredBootloader).toHaveBeenCalledTimes(1);
+    expect(inner).toHaveBeenCalledTimes(1);
+    expect(start).not.toHaveBeenCalled();
+    expect(first).toBe(second);
+  });
+
+  it("treats an inner bootloader failure as terminal without body fallback", async () => {
+    const start = vi.fn(async (input: StandaloneHandoffRequest) => runningHandle(input));
+    const innerFailure = new Error("inner bootloader failed");
+    const inner = vi.fn(async () => await Promise.reject(innerFailure));
+    const handoff = createStandaloneBootloader({
+      minShellVersion: "0.18.0-beta.1",
+      resolveRegisteredBootloader: () => inner,
+      start,
+    });
+
+    await expect(handoff(request())).rejects.toBe(innerFailure);
+    await expect(handoff(request())).rejects.toBe(innerFailure);
+    expect(inner).toHaveBeenCalledTimes(1);
+    expect(start).not.toHaveBeenCalled();
   });
 });

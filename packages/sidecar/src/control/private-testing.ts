@@ -13,11 +13,13 @@ import {
 import { requestJsonIpc } from "../json-ipc.js";
 import type {
   SidecarControlIdentity,
+  SidecarControlProjection,
   SidecarControlRoots,
   SidecarControlScope,
 } from "./public-types.js";
 
 export function createPrivateLaunchForTest(input: {
+  projection: SidecarControlProjection;
   roots: SidecarControlRoots;
   scope: SidecarControlScope;
   service: string;

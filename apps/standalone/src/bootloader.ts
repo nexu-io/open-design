@@ -1,6 +1,6 @@
 import {
   compareStandaloneVersions,
-  sameStandaloneIdentity,
+  sameStandaloneHandoffEnvelope,
   validateStandaloneHandoffRequest,
   validateStandaloneRuntimeStatus,
   validateStandaloneShellCapabilityRequest,
@@ -31,13 +31,14 @@ export class StandaloneBootloaderError extends Error {
 export type CreateStandaloneBootloaderOptions = Readonly<{
   minShellVersion: string;
   start: StandaloneHandoff;
+  resolveRegisteredBootloader?: () => StandaloneHandoff | null;
 }>;
 
 function requestKey(request: StandaloneHandoffRequest): string {
   return JSON.stringify({
-    identity: request.handoff.identity,
+    descriptorDigest: request.handoff.descriptorDigest,
     paths: request.paths,
-    shell: request.shell,
+    scope: request.handoff.scope,
   });
 }
 
@@ -108,7 +109,12 @@ export function createStandaloneBootloader(
 
   return async (value) => {
     const request = validateStandaloneHandoffRequest(value);
-    if (compareStandaloneVersions(request.shell.version, options.minShellVersion) < 0) {
+    if (
+      compareStandaloneVersions(
+        request.handoff.descriptor.shell.version,
+        options.minShellVersion,
+      ) < 0
+    ) {
       throw new StandaloneBootloaderError(
         "shell-incompatible",
         `Standalone requires Shell ${options.minShellVersion} or newer`,
@@ -118,10 +124,7 @@ export function createStandaloneBootloader(
     if (entered != null) {
       if (
         entered.key !== key
-        || !sameStandaloneIdentity(
-          entered.request.handoff.identity,
-          request.handoff.identity,
-        )
+        || !sameStandaloneHandoffEnvelope(entered.request.handoff, request.handoff)
       ) {
         throw new StandaloneBootloaderError(
           "handoff-conflict",
@@ -136,7 +139,11 @@ export function createStandaloneBootloader(
       capabilities: bindCapabilities(request.capabilities, request),
     });
     const task = (async (): Promise<StandaloneHandle> => {
-      const rawHandle = await options.start(boundRequest);
+      // Resolve at most one registered inner bootloader. Once selected, an
+      // inner failure is terminal: the fossil entry never falls back into a
+      // second body and never performs a recursive handoff.
+      const registered = options.resolveRegisteredBootloader?.() ?? null;
+      const rawHandle = await (registered ?? options.start)(boundRequest);
       const handle = bindHandle(rawHandle, request);
       try {
         await handle.readStatus().then((status) => validateStandaloneRuntimeStatus(status, {

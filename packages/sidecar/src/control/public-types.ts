@@ -15,8 +15,26 @@ export type SidecarControlRoots = Readonly<{
   runtimeRoot: string;
 }>;
 
+export type SidecarControlJsonValue =
+  | boolean
+  | null
+  | number
+  | string
+  | readonly SidecarControlJsonValue[]
+  | Readonly<{ [key: string]: SidecarControlJsonValue }>;
+
+/**
+ * Caller-owned, immutable truth projected through the control plane. Sidecar
+ * validates and fences the digest but never interprets the value.
+ */
+export type SidecarControlProjection = Readonly<{
+  digest: `sha256:${string}`;
+  value: SidecarControlJsonValue;
+}>;
+
 export type SidecarControlContext = Readonly<{
   identity: SidecarControlIdentity;
+  projection: SidecarControlProjection;
   roots: SidecarControlRoots;
 }>;
 
@@ -48,6 +66,7 @@ export type SidecarMethodHandlers<TMethods> = {
 
 export type SidecarProbeResult = Readonly<{
   identity: SidecarControlIdentity;
+  projection: SidecarControlProjection;
 }>;
 
 export type SidecarStopResult = Readonly<{
@@ -65,6 +84,7 @@ export type SidecarControlClient<TMethods> = Readonly<{
 }>;
 
 export type SidecarControlPlane = Readonly<{
+  projection: SidecarControlProjection;
   roots: SidecarControlRoots;
   scope: SidecarControlScope;
   connect<TMethods>(service: string): Promise<SidecarControlClient<TMethods>>;
@@ -113,6 +133,7 @@ export type AttachedSidecar = Readonly<{
 }>;
 
 export type BootstrapControlPlaneOptions = Readonly<{
+  projection: SidecarControlProjection;
   roots: SidecarControlRoots;
   scope: SidecarControlScope;
 }>;

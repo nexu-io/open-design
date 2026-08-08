@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { isAbsolute, posix, win32 } from "node:path";
 
 import { isReleaseChannel, type ReleaseChannel } from "@open-design/release";
@@ -8,19 +9,33 @@ export const STANDALONE_BOOTLOADER_ENTRY_PATH = "bootloader.mjs" as const;
 
 export type StandaloneDigest = `sha256:${string}`;
 
-export type StandaloneIdentity = Readonly<{
+export type StandaloneHandoffScope = Readonly<{
   channel: ReleaseChannel;
-  digest: StandaloneDigest;
   generation: number;
   namespace: string;
-  platform: string;
-  protocolVersion: typeof STANDALONE_PROTOCOL_VERSION;
-  version: string;
+}>;
+
+export type StandaloneRuntimeDescriptor = Readonly<{
+  release: Readonly<{
+    version: string;
+  }>;
+  shell: Readonly<{
+    digest: StandaloneDigest;
+    type: string;
+    version: string;
+  }>;
+  standalone: Readonly<{
+    digest: StandaloneDigest;
+    protocolVersion: typeof STANDALONE_PROTOCOL_VERSION;
+    version: string;
+  }>;
 }>;
 
 export type StandaloneHandoffEnvelope = Readonly<{
-  identity: StandaloneIdentity;
+  descriptor: StandaloneRuntimeDescriptor;
+  descriptorDigest: StandaloneDigest;
   schemaVersion: typeof STANDALONE_HANDOFF_SCHEMA_VERSION;
+  scope: StandaloneHandoffScope;
 }>;
 
 export type StandalonePaths = Readonly<{
@@ -30,11 +45,6 @@ export type StandalonePaths = Readonly<{
   logsRoot: string;
   resourceRoot: string;
   runtimeRoot: string;
-}>;
-
-export type StandaloneShellIdentity = Readonly<{
-  type: string;
-  version: string;
 }>;
 
 export type StandaloneProtocolJsonValue =
@@ -77,7 +87,6 @@ export type StandaloneHandoffRequest = Readonly<{
   capabilities: StandaloneShellCapabilityPort;
   handoff: StandaloneHandoffEnvelope;
   paths: StandalonePaths;
-  shell: StandaloneShellIdentity;
 }>;
 
 type StandaloneRuntimeStatusBase = Readonly<{
@@ -216,55 +225,107 @@ function normalizeJsonValue(
   }
 }
 
-export function validateStandaloneIdentity(value: unknown): StandaloneIdentity {
-  const identity = requireRecord(value, "standalone identity");
-  if (!isReleaseChannel(identity.channel)) {
-    throw new StandaloneProtocolError(`unsupported standalone channel: ${String(identity.channel)}`);
+export function validateStandaloneHandoffScope(value: unknown): StandaloneHandoffScope {
+  const scope = requireRecord(value, "standalone handoff scope");
+  if (!isReleaseChannel(scope.channel)) {
+    throw new StandaloneProtocolError(`unsupported standalone channel: ${String(scope.channel)}`);
   }
   if (
-    typeof identity.generation !== "number"
-    || !Number.isSafeInteger(identity.generation)
-    || identity.generation < 0
+    typeof scope.generation !== "number"
+    || !Number.isSafeInteger(scope.generation)
+    || scope.generation < 0
   ) {
     throw new StandaloneProtocolError("standalone generation must be a non-negative safe integer");
   }
-  if (identity.protocolVersion !== STANDALONE_PROTOCOL_VERSION) {
-    throw new StandaloneProtocolError(
-      `unsupported standalone protocol version: ${String(identity.protocolVersion)}`,
-    );
-  }
   return {
-    channel: identity.channel,
-    digest: normalizeDigest(identity.digest),
-    generation: identity.generation,
-    namespace: normalizeNamespace(identity.namespace),
-    platform: normalizeToken(identity.platform, "standalone platform"),
-    protocolVersion: STANDALONE_PROTOCOL_VERSION,
-    version: normalizeVersion(identity.version, "standalone version"),
+    channel: scope.channel,
+    generation: scope.generation,
+    namespace: normalizeNamespace(scope.namespace),
   };
 }
 
-export function sameStandaloneIdentity(
-  left: StandaloneIdentity,
-  right: StandaloneIdentity,
+export function validateStandaloneRuntimeDescriptor(value: unknown): StandaloneRuntimeDescriptor {
+  const descriptor = requireRecord(value, "standalone runtime descriptor");
+  const release = requireRecord(descriptor.release, "standalone release descriptor");
+  const shell = requireRecord(descriptor.shell, "standalone shell descriptor");
+  const standalone = requireRecord(descriptor.standalone, "standalone body descriptor");
+  if (standalone.protocolVersion !== STANDALONE_PROTOCOL_VERSION) {
+    throw new StandaloneProtocolError(
+      `unsupported standalone protocol version: ${String(standalone.protocolVersion)}`,
+    );
+  }
+  return {
+    release: {
+      version: normalizeVersion(release.version, "standalone release version"),
+    },
+    shell: {
+      digest: normalizeDigest(shell.digest),
+      type: normalizeToken(shell.type, "standalone shell type"),
+      version: normalizeVersion(shell.version, "standalone shell version"),
+    },
+    standalone: {
+      digest: normalizeDigest(standalone.digest),
+      protocolVersion: STANDALONE_PROTOCOL_VERSION,
+      version: normalizeVersion(standalone.version, "standalone body version"),
+    },
+  };
+}
+
+function descriptorJson(descriptor: StandaloneRuntimeDescriptor): string {
+  return JSON.stringify({
+    release: { version: descriptor.release.version },
+    shell: {
+      digest: descriptor.shell.digest,
+      type: descriptor.shell.type,
+      version: descriptor.shell.version,
+    },
+    standalone: {
+      digest: descriptor.standalone.digest,
+      protocolVersion: descriptor.standalone.protocolVersion,
+      version: descriptor.standalone.version,
+    },
+  });
+}
+
+export function digestStandaloneRuntimeDescriptor(value: unknown): StandaloneDigest {
+  const descriptor = validateStandaloneRuntimeDescriptor(value);
+  return `sha256:${createHash("sha256").update(descriptorJson(descriptor)).digest("hex")}`;
+}
+
+export function sameStandaloneHandoffScope(
+  left: StandaloneHandoffScope,
+  right: StandaloneHandoffScope,
 ): boolean {
   return (
     left.channel === right.channel
-    && left.digest === right.digest
     && left.generation === right.generation
     && left.namespace === right.namespace
-    && left.platform === right.platform
-    && left.protocolVersion === right.protocolVersion
-    && left.version === right.version
+  );
+}
+
+export function sameStandaloneHandoffEnvelope(
+  left: StandaloneHandoffEnvelope,
+  right: StandaloneHandoffEnvelope,
+): boolean {
+  return (
+    left.schemaVersion === right.schemaVersion
+    && left.descriptorDigest === right.descriptorDigest
+    && sameStandaloneHandoffScope(left.scope, right.scope)
   );
 }
 
 export function createStandaloneHandoffEnvelope(
-  identity: StandaloneIdentity,
+  input: Readonly<{
+    descriptor: StandaloneRuntimeDescriptor;
+    scope: StandaloneHandoffScope;
+  }>,
 ): StandaloneHandoffEnvelope {
+  const descriptor = validateStandaloneRuntimeDescriptor(input.descriptor);
   return validateStandaloneHandoffEnvelope({
-    identity,
+    descriptor,
+    descriptorDigest: digestStandaloneRuntimeDescriptor(descriptor),
     schemaVersion: STANDALONE_HANDOFF_SCHEMA_VERSION,
+    scope: input.scope,
   });
 }
 
@@ -278,12 +339,28 @@ export function validateStandaloneHandoffEnvelope(
       `unsupported standalone handoff schema version: ${String(envelope.schemaVersion)}`,
     );
   }
+  const descriptor = validateStandaloneRuntimeDescriptor(envelope.descriptor);
+  const descriptorDigest = normalizeDigest(envelope.descriptorDigest);
+  if (descriptorDigest !== digestStandaloneRuntimeDescriptor(descriptor)) {
+    throw new StandaloneProtocolError(
+      "standalone descriptorDigest does not match the runtime descriptor",
+    );
+  }
   const normalized = {
-    identity: validateStandaloneIdentity(envelope.identity),
+    descriptor,
+    descriptorDigest,
     schemaVersion: STANDALONE_HANDOFF_SCHEMA_VERSION,
+    scope: validateStandaloneHandoffScope(envelope.scope),
   } as const;
-  if (expected != null && !sameStandaloneIdentity(normalized.identity, expected.identity)) {
-    throw new StandaloneProtocolError("standalone handoff identity does not match the committed generation");
+  if (
+    expected != null
+    && (
+      !sameStandaloneHandoffEnvelope(normalized, expected)
+    )
+  ) {
+    throw new StandaloneProtocolError(
+      "standalone handoff does not match the committed generation and descriptor",
+    );
   }
   return normalized;
 }
@@ -300,14 +377,6 @@ export function validateStandalonePaths(value: unknown): StandalonePaths {
   };
 }
 
-export function validateStandaloneShellIdentity(value: unknown): StandaloneShellIdentity {
-  const shell = requireRecord(value, "standalone shell identity");
-  return {
-    type: normalizeToken(shell.type, "standalone shell type"),
-    version: normalizeVersion(shell.version, "standalone shell version"),
-  };
-}
-
 export function validateStandaloneHandoffRequest(value: unknown): StandaloneHandoffRequest {
   const request = requireRecord(value, "standalone handoff request");
   const capabilities = requireRecord(request.capabilities, "standalone shell capability port");
@@ -318,7 +387,6 @@ export function validateStandaloneHandoffRequest(value: unknown): StandaloneHand
     capabilities: request.capabilities as StandaloneShellCapabilityPort,
     handoff: validateStandaloneHandoffEnvelope(request.handoff),
     paths: validateStandalonePaths(request.paths),
-    shell: validateStandaloneShellIdentity(request.shell),
   };
 }
 

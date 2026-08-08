@@ -15,9 +15,11 @@ import {
   normalizeControlIdentity,
   normalizeControlRoots,
   normalizeControlScope,
+  normalizeControlProjection,
   normalizePrivateReadyDescriptor,
   privateControlPaths,
   sameControlIdentity,
+  sameControlProjection,
   sameControlRoots,
   type PrivateControlResponse,
   type PrivateLaunchMetadata,
@@ -45,6 +47,7 @@ function peerUnavailable(identity: SidecarControlIdentity): SidecarControlError 
 async function readCurrentDescriptor(
   identity: SidecarControlIdentity,
   roots: BootstrapControlPlaneOptions["roots"],
+  projection: BootstrapControlPlaneOptions["projection"],
 ): Promise<PrivateReadyDescriptor> {
   const { descriptorPath } = privateControlPaths(identity, roots);
   const raw = await readJsonFile(descriptorPath);
@@ -57,7 +60,11 @@ async function readCurrentDescriptor(
       cause: error,
     });
   }
-  if (!sameControlIdentity(descriptor.identity, identity) || !sameControlRoots(descriptor.roots, roots)) {
+  if (
+    !sameControlIdentity(descriptor.identity, identity)
+    || !sameControlRoots(descriptor.roots, roots)
+    || !sameControlProjection(descriptor.projection, projection)
+  ) {
     throw peerUnavailable(identity);
   }
   return descriptor;
@@ -140,6 +147,7 @@ async function waitForLaunchedClient<TMethods>(input: {
         const descriptor = await readCurrentDescriptor(
           input.descriptor.identity,
           input.descriptor.roots,
+          input.descriptor.projection,
         );
         if (descriptor.incarnation !== input.descriptor.incarnation) return;
         const client = createClient<TMethods>(descriptor);
@@ -203,14 +211,16 @@ async function awaitExitOrTerminate(input: {
 }
 
 export function bootstrapControlPlane({
+  projection: projectionInput,
   roots: rootsInput,
   scope: scopeInput,
 }: BootstrapControlPlaneOptions): SidecarControlPlane {
   const roots = normalizeControlRoots(rootsInput);
+  const projection = normalizeControlProjection(projectionInput);
   const scope = normalizeControlScope(scopeInput);
   const connect = async <TMethods>(service: string): Promise<SidecarControlClient<TMethods>> => {
     const identity = normalizeControlIdentity({ ...scope, service });
-    const client = createClient<TMethods>(await readCurrentDescriptor(identity, roots));
+    const client = createClient<TMethods>(await readCurrentDescriptor(identity, roots, projection));
     await client.probe();
     return client;
   };
@@ -220,7 +230,12 @@ export function bootstrapControlPlane({
     }
     const readyTimeoutMs = normalizeTimeout(options.readyTimeoutMs, 5_000, "readyTimeoutMs");
     const stopTimeoutMs = normalizeTimeout(options.stopTimeoutMs, 1_500, "stopTimeoutMs");
-    const descriptor = createPrivateLaunchMetadata({ roots, scope, service: options.service });
+    const descriptor = createPrivateLaunchMetadata({
+      projection,
+      roots,
+      scope,
+      service: options.service,
+    });
     const child = spawn(options.executable, [...(options.args ?? [])], {
       cwd: options.cwd,
       env: createPrivateLaunchEnv(descriptor, options.env),
@@ -257,6 +272,7 @@ export function bootstrapControlPlane({
   return Object.freeze({
     connect,
     launch,
+    projection,
     roots,
     scope,
     async probe(service) {

@@ -7,12 +7,14 @@ import {
   compareStandaloneVersions,
   createStandaloneHandoffEnvelope,
   validateStandaloneHandoffRequest,
+  validateStandaloneHandoffEnvelope,
   validateStandaloneRuntimeStatus,
   validateStandaloneShellCapabilityResult,
   type StandaloneHandoffRequest,
 } from "../src/index.js";
 
 const digest = `sha256:${"a".repeat(64)}` as const;
+const shellDigest = `sha256:${"b".repeat(64)}` as const;
 
 function request(): StandaloneHandoffRequest {
   return {
@@ -27,13 +29,24 @@ function request(): StandaloneHandoffRequest {
       },
     },
     handoff: createStandaloneHandoffEnvelope({
-      channel: "beta",
-      digest,
-      generation: 7,
-      namespace: "release-beta",
-      platform: "darwin-arm64",
-      protocolVersion: STANDALONE_PROTOCOL_VERSION,
-      version: "0.18.0-beta.4",
+      descriptor: {
+        release: { version: "0.18.0-beta.4" },
+        shell: {
+          digest: shellDigest,
+          type: "electron",
+          version: "0.18.0-beta.1",
+        },
+        standalone: {
+          digest,
+          protocolVersion: STANDALONE_PROTOCOL_VERSION,
+          version: "0.18.0-beta.4",
+        },
+      },
+      scope: {
+        channel: "beta",
+        generation: 7,
+        namespace: "release-beta",
+      },
     }),
     paths: {
       cacheRoot: "/open-design/cache",
@@ -43,7 +56,6 @@ function request(): StandaloneHandoffRequest {
       resourceRoot: "/open-design/resources",
       runtimeRoot: "/open-design/runtime",
     },
-    shell: { type: "standalone-launcher", version: "0.18.0-beta.4" },
   };
 }
 
@@ -52,20 +64,24 @@ describe("Standalone bootloader protocol", () => {
     expect(STANDALONE_BOOTLOADER_ENTRY_PATH).toBe("bootloader.mjs");
     expect(validateStandaloneHandoffRequest(request())).toMatchObject({
       handoff: {
-        identity: {
+        descriptor: {
+          release: { version: "0.18.0-beta.4" },
+          shell: { type: "electron", version: "0.18.0-beta.1" },
+          standalone: { version: "0.18.0-beta.4" },
+        },
+        scope: {
           channel: "beta",
           namespace: "release-beta",
           generation: 7,
         },
       },
-      shell: { type: "standalone-launcher" },
     });
 
     expect(() => validateStandaloneHandoffRequest({
       ...request(),
       handoff: {
         ...request().handoff,
-        identity: { ...request().handoff.identity, namespace: "Beta Namespace" },
+        scope: { ...request().handoff.scope, namespace: "Beta Namespace" },
       },
     })).toThrow(/namespace/);
   });
@@ -74,6 +90,30 @@ describe("Standalone bootloader protocol", () => {
     expect(compareStandaloneVersions("0.18.0-beta.4", "0.18.0-beta.3")).toBe(1);
     expect(compareStandaloneVersions("0.18.0-beta.4", "0.18.0")).toBe(-1);
     expect(compareStandaloneVersions("0.18.0", "0.18.0-beta.4")).toBe(1);
+  });
+
+  it("separates release presentation from Shell and Standalone compatibility truth", () => {
+    const handoff = request().handoff;
+    expect(handoff.descriptor).toEqual({
+      release: { version: "0.18.0-beta.4" },
+      shell: {
+        digest: shellDigest,
+        type: "electron",
+        version: "0.18.0-beta.1",
+      },
+      standalone: {
+        digest,
+        protocolVersion: STANDALONE_PROTOCOL_VERSION,
+        version: "0.18.0-beta.4",
+      },
+    });
+    expect(() => validateStandaloneHandoffEnvelope({
+      ...handoff,
+      descriptor: {
+        ...handoff.descriptor,
+        release: { version: "0.18.0-beta.5" },
+      },
+    })).toThrow(/descriptorDigest/);
   });
 
   it("fences capability results and runtime status to the exact handoff", () => {
@@ -95,8 +135,11 @@ describe("Standalone bootloader protocol", () => {
     }, { handoff, state: "running" })).toMatchObject({ state: "running" });
 
     const wrongHandoff = createStandaloneHandoffEnvelope({
-      ...handoff.identity,
-      generation: handoff.identity.generation + 1,
+      descriptor: handoff.descriptor,
+      scope: {
+        ...handoff.scope,
+        generation: handoff.scope.generation + 1,
+      },
     });
     expect(() => validateStandaloneRuntimeStatus({
       handoff: wrongHandoff,

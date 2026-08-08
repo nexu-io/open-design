@@ -23,13 +23,24 @@ describe("Standalone normalized product sidecars", () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-standalone-sidecars-"));
     cleanups.push(async () => await rm(root, { force: true, recursive: true }));
     const handoff = createStandaloneHandoffEnvelope({
-      channel: "beta",
-      digest: `sha256:${"c".repeat(64)}`,
-      generation: 9,
-      namespace: "release-beta",
-      platform: "darwin-arm64",
-      protocolVersion: STANDALONE_PROTOCOL_VERSION,
-      version: "0.18.0-beta.4",
+      descriptor: {
+        release: { version: "0.18.0-beta.4" },
+        shell: {
+          digest: `sha256:${"d".repeat(64)}`,
+          type: "electron",
+          version: "0.18.0-beta.1",
+        },
+        standalone: {
+          digest: `sha256:${"c".repeat(64)}`,
+          protocolVersion: STANDALONE_PROTOCOL_VERSION,
+          version: "0.18.0-beta.4",
+        },
+      },
+      scope: {
+        channel: "beta",
+        generation: 9,
+        namespace: "release-beta",
+      },
     });
     const request: StandaloneHandoffRequest = {
       capabilities: {
@@ -51,7 +62,6 @@ describe("Standalone normalized product sidecars", () => {
         resourceRoot: join(root, "resources"),
         runtimeRoot: join(root, "runtime"),
       },
-      shell: { type: "standalone-launcher", version: "0.18.0-beta.4" },
     };
     const childEntry = join(
       import.meta.dirname,

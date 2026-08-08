@@ -5,6 +5,8 @@ import { isAbsolute, join, resolve } from "node:path";
 import { SidecarControlError, type SidecarControlErrorCode } from "./error.js";
 import type {
   SidecarControlIdentity,
+  SidecarControlJsonValue,
+  SidecarControlProjection,
   SidecarControlRoots,
   SidecarControlScope,
 } from "./public-types.js";
@@ -17,6 +19,7 @@ export type PrivateLaunchMetadata = Readonly<{
   endpointPath: string;
   identity: SidecarControlIdentity;
   incarnation: string;
+  projection: SidecarControlProjection;
   roots: SidecarControlRoots;
   schemaVersion: typeof CONTROL_SCHEMA_VERSION;
 }>;
@@ -91,6 +94,57 @@ export function normalizeControlRoots(value: SidecarControlRoots): SidecarContro
   });
 }
 
+function normalizeJsonValue(value: unknown, label: string, seen = new Set<object>()): SidecarControlJsonValue {
+  if (value === null || typeof value === "boolean" || typeof value === "string") return value;
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) invalid(label, "must contain only finite JSON numbers");
+    return value;
+  }
+  if (typeof value !== "object") invalid(label, "must contain only JSON values");
+  if (seen.has(value)) invalid(label, "must not contain cycles");
+  seen.add(value);
+  try {
+    if (Array.isArray(value)) {
+      return Object.freeze(value.map((entry, index) =>
+        normalizeJsonValue(entry, `${label}[${index}]`, seen),
+      ));
+    }
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) {
+      invalid(label, "objects must be plain JSON records");
+    }
+    return Object.freeze(Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, entry]) => [key, normalizeJsonValue(entry, `${label}.${key}`, seen)]),
+    ));
+  } finally {
+    seen.delete(value);
+  }
+}
+
+function canonicalJson(value: SidecarControlJsonValue): string {
+  return JSON.stringify(value);
+}
+
+export function normalizeControlProjection(value: SidecarControlProjection): SidecarControlProjection {
+  if (typeof value !== "object" || value == null) invalid("sidecar projection", "must be present");
+  const normalizedValue = normalizeJsonValue(value.value, "sidecar projection value");
+  if (typeof value.digest !== "string" || !/^sha256:[0-9a-f]{64}$/u.test(value.digest)) {
+    invalid("sidecar projection digest", "must be a lowercase sha256 digest");
+  }
+  const digest = `sha256:${createHash("sha256").update(canonicalJson(normalizedValue)).digest("hex")}` as const;
+  if (value.digest !== digest) invalid("sidecar projection digest", "does not match its value");
+  return Object.freeze({ digest, value: normalizedValue });
+}
+
+export function sameControlProjection(
+  left: SidecarControlProjection,
+  right: SidecarControlProjection,
+): boolean {
+  return left.digest === right.digest;
+}
+
 export function sameControlIdentity(
   left: SidecarControlIdentity,
   right: SidecarControlIdentity,
@@ -142,6 +196,7 @@ export function privateControlPaths(
 }
 
 export function createPrivateLaunchMetadata(input: {
+  projection: SidecarControlProjection;
   roots: SidecarControlRoots;
   scope: SidecarControlScope;
   service: string;
@@ -155,6 +210,7 @@ export function createPrivateLaunchMetadata(input: {
     endpointPath: privateControlPaths(identity, roots).endpointPath,
     identity,
     incarnation: randomUUID(),
+    projection: normalizeControlProjection(input.projection),
     roots,
     schemaVersion: CONTROL_SCHEMA_VERSION,
   });
@@ -183,10 +239,14 @@ export function decodePrivateLaunchMetadata(value: unknown): PrivateLaunchMetada
   if (typeof parsed.roots !== "object" || parsed.roots == null) {
     invalid("sidecar launch roots", "must be present");
   }
+  if (typeof parsed.projection !== "object" || parsed.projection == null) {
+    invalid("sidecar launch projection", "must be present");
+  }
   if (typeof parsed.incarnation !== "string" || parsed.incarnation.length === 0) {
     invalid("sidecar launch incarnation", "must be present");
   }
   const identity = normalizeControlIdentity(parsed.identity as SidecarControlIdentity);
+  const projection = normalizeControlProjection(parsed.projection as SidecarControlProjection);
   const roots = normalizeControlRoots(parsed.roots as SidecarControlRoots);
   const expectedEndpoint = privateControlPaths(identity, roots).endpointPath;
   if (parsed.endpointPath !== expectedEndpoint) {
@@ -196,6 +256,7 @@ export function decodePrivateLaunchMetadata(value: unknown): PrivateLaunchMetada
     endpointPath: expectedEndpoint,
     identity,
     incarnation: parsed.incarnation,
+    projection,
     roots,
     schemaVersion: CONTROL_SCHEMA_VERSION,
   });

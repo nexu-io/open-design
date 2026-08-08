@@ -52,6 +52,7 @@ export async function attachSidecar<TMethods>({
   const metadata = readPrivateLaunchMetadata();
   const context: SidecarControlContext = Object.freeze({
     identity: metadata.identity,
+    projection: metadata.projection,
     roots: metadata.roots,
   });
   let closing: Promise<void> | null = null;
@@ -86,7 +87,10 @@ export async function attachSidecar<TMethods>({
 
       if (request.operation.kind === "probe") {
         return privateResponse(request, metadata, {
-          result: { identity: metadata.identity } satisfies SidecarProbeResult,
+          result: {
+            identity: metadata.identity,
+            projection: metadata.projection,
+          } satisfies SidecarProbeResult,
           status: "ok",
         });
       }
