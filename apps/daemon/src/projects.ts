@@ -170,7 +170,6 @@ async function collectFolders(dir, relDir, out, shouldSkipDir?: (name: string) =
   }
   for (const e of entries) {
     if (!e.isDirectory()) continue;
-    if (e.name.startsWith('.')) continue;
     if (shouldSkipDir?.(e.name)) continue;
     const rel = relDir ? `${relDir}/${e.name}` : e.name;
     const full = path.join(dir, e.name);
@@ -271,7 +270,6 @@ async function collectFiles(dir, relDir, out, shouldSkipDir?: (name: string) => 
     throw err;
   }
   for (const e of entries) {
-    if (e.name.startsWith('.')) continue;
     const rel = relDir ? `${relDir}/${e.name}` : e.name;
     const full = path.join(dir, e.name);
     if (e.isDirectory()) {
@@ -496,7 +494,6 @@ async function collectArchiveEntries(dir, relDir, out) {
     throw err;
   }
   for (const e of entries) {
-    if (e.name.startsWith('.')) continue;
     if (!e.isDirectory() && !e.isFile()) continue;
     const rel = relDir ? `${relDir}/${e.name}` : e.name;
     const full = path.join(dir, e.name);
@@ -1191,10 +1188,10 @@ async function collectArtifactManifestFiles(dir, relDir, out) {
     throw err;
   }
   for (const entry of entries) {
-    if (entry.name.startsWith('.')) continue;
     const relPath = relDir ? `${relDir}/${entry.name}` : entry.name;
     const fullPath = path.join(dir, entry.name);
     if (entry.isDirectory()) {
+      if (isIgnoredProjectDirName(entry.name)) continue;
       await collectArtifactManifestFiles(fullPath, relPath, out);
       continue;
     }
