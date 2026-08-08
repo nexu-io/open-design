@@ -3,6 +3,7 @@ import type { ProjectDesignTokenSuggestion, ProjectDesignTokenSuggestionProp } f
 import { useT } from '../i18n';
 import { emptyManualEditStyles, type ManualEditHistoryEntry, type ManualEditPatch, type ManualEditStyles, type ManualEditTarget } from '../edit-mode/types';
 import { Icon } from './Icon';
+import { isMacPlatform } from '../utils/platform';
 
 export interface ManualEditDraft {
   text: string;
@@ -49,6 +50,8 @@ export function ManualEditPanel({
   onFloatingPositionChange,
   locked = false,
   onToggleLock,
+  canUndo,
+  canRedo,
 }: {
   targets: ManualEditTarget[];
   selectedTarget: ManualEditTarget | null;
@@ -99,6 +102,24 @@ export function ManualEditPanel({
   useEffect(() => {
     selectedTargetRef.current = selectedTarget;
   }, [selectedTarget]);
+
+  // Keyboard shortcut: Ctrl+Z / Cmd+Z for undo, Ctrl+Shift+Z / Cmd+Shift+Z for redo
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const primary = (e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey;
+      const primaryShift = (e.metaKey || e.ctrlKey) && e.shiftKey && !e.altKey;
+      if (e.isComposing) return;
+      if (primary && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        onUndo();
+      } else if (primaryShift && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        onRedo();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown, { capture: true });
+    return () => window.removeEventListener('keydown', onKeyDown, { capture: true });
+  }, [onUndo, onRedo]);
 
   const changeTargetStyle = (key: keyof ManualEditStyles, value: string) => {
     const nextStyles = { ...draft.styles, [key]: value };
@@ -303,6 +324,26 @@ export function ManualEditPanel({
         <div className="manual-edit-footer">
           <div className="manual-edit-footer-actions">
             <div className="manual-edit-footer-left">
+              <button
+                type="button"
+                className="manual-edit-delete-btn"
+                aria-label={t('manualEdit.undo')}
+                title={`${t('manualEdit.undo')} (${isMacPlatform() ? '⌘Z' : 'Ctrl+Z'})`}
+                disabled={busy || !canUndo}
+                onClick={onUndo}
+              >
+                <Icon name="undo" size={15} />
+              </button>
+              <button
+                type="button"
+                className="manual-edit-delete-btn"
+                aria-label={t('manualEdit.redo')}
+                title={`${t('manualEdit.redo')} (${isMacPlatform() ? '⇧⌘Z' : 'Ctrl+Shift+Z'})`}
+                disabled={busy || !canRedo}
+                onClick={onRedo}
+              >
+                <Icon name="redo" size={15} />
+              </button>
               {targetForInspector ? (
                 <button
                   type="button"
