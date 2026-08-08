@@ -124,6 +124,7 @@ async function materialize(root: string, version: string, options: {
 function input(root: string) {
   return {
     channel: "beta",
+    installerRequiredVersion: null,
     namespace: "release-beta",
     paths: namespacePaths(root),
     releaseVersion: "0.18.0-beta.4",
@@ -190,6 +191,22 @@ describe("Electron Standalone Store binding", () => {
       arch: "arm64",
       platform: "darwin",
     })).rejects.toMatchObject({ code: "installer-required" });
+  });
+
+  it("maps a discovered installer floor before an empty Store can degrade to no-standalone", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-electron-standalone-empty-floor-"));
+    roots.push(root);
+
+    await expect(resolveElectronStandaloneBinding({
+      ...input(root),
+      installerRequiredVersion: "0.18.0-beta.7",
+    }, {
+      arch: "arm64",
+      platform: "darwin",
+    })).rejects.toMatchObject({
+      code: "installer-required",
+      message: "Standalone requires Electron Shell 0.18.0-beta.7 or newer",
+    });
   });
 
   it("rolls an invalid active generation back once before creating the handoff", async () => {

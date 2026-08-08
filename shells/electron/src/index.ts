@@ -24,6 +24,7 @@ import { readProcessStamp } from "@open-design/platform";
 import { readPackagedConfig } from "./config.js";
 import {
   checkForPackagedClosureUpdate,
+  resolvePackagedClosureInstallerRequiredVersion,
   resolvePackagedClosureReleaseVersion,
 } from "./closure-update.js";
 import {
@@ -243,6 +244,7 @@ async function main(): Promise<void> {
 
   const selection = await resolveElectronStandaloneBinding({
     channel: shellRuntime.launcherPaths.channel,
+    installerRequiredVersion: resolvePackagedClosureInstallerRequiredVersion(update),
     namespace,
     paths,
     releaseVersion: resolvePackagedClosureReleaseVersion(update, null),

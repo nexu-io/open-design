@@ -65,6 +65,7 @@ async function rollBackRejectedPointer(
  */
 export async function resolveElectronStandaloneBinding(input: Readonly<{
   channel: string;
+  installerRequiredVersion: string | null;
   namespace: string;
   paths: PackagedNamespacePaths;
   releaseVersion: string | null;
@@ -89,6 +90,15 @@ export async function resolveElectronStandaloneBinding(input: Readonly<{
   });
   const recovered = await recoverClosureRuntime(storePaths);
   if (!recovered.selection.selected) {
+    if (
+      input.installerRequiredVersion != null
+      && compareStandaloneVersions(input.shellVersion, input.installerRequiredVersion) < 0
+    ) {
+      throw new ElectronStandaloneBindingError(
+        "installer-required",
+        `Standalone requires Electron Shell ${input.installerRequiredVersion} or newer`,
+      );
+    }
     throw new ElectronStandaloneBindingError(
       "no-standalone",
       `No committed Standalone exists for ${storePaths.channel}/${storePaths.namespace}`,

@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   checkForPackagedClosureUpdate,
+  resolvePackagedClosureInstallerRequiredVersion,
   resolvePackagedClosureReleaseTarget,
   resolvePackagedClosureReleaseVersion,
 } from "../src/closure-update.js";
@@ -89,7 +90,10 @@ describe("packaged Closure update adapter", () => {
   });
 
   it("projects release truth only for an activated or already-active candidate", () => {
-    const candidate = { releaseVersion: "0.18.0-beta.5" } as never;
+    const candidate = {
+      manifest: { compatibility: { shell: { minVersion: "0.18.0-beta.5" } } },
+      releaseVersion: "0.18.0-beta.5",
+    } as never;
     expect(resolvePackagedClosureReleaseVersion({
       candidate,
       pointer: {} as never,
@@ -112,5 +116,15 @@ describe("packaged Closure update adapter", () => {
       reason: "shell-incompatible",
       state: "retained",
     }, null)).toBeNull();
+    expect(resolvePackagedClosureInstallerRequiredVersion({
+      candidate,
+      reason: "shell-incompatible",
+      state: "retained",
+    })).toBe("0.18.0-beta.5");
+    expect(resolvePackagedClosureInstallerRequiredVersion({
+      candidate,
+      reason: "already-active",
+      state: "retained",
+    })).toBeNull();
   });
 });

@@ -18,6 +18,7 @@ import type {
 import type { PackagedConfig } from "./config.js";
 import {
   checkForPackagedClosureUpdate,
+  resolvePackagedClosureInstallerRequiredVersion,
   resolvePackagedClosureReleaseVersion,
 } from "./closure-update.js";
 import {
@@ -188,6 +189,7 @@ export async function runPackagedStandalone(
   });
   const selection = await resolveElectronStandaloneBinding({
     channel: launcherRuntime.launcherPaths.channel,
+    installerRequiredVersion: resolvePackagedClosureInstallerRequiredVersion(update),
     namespace: config.namespace,
     paths,
     releaseVersion: resolvePackagedClosureReleaseVersion(update, null),

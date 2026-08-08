@@ -48,6 +48,18 @@ export function resolvePackagedClosureReleaseVersion(
   return fallback;
 }
 
+/** Preserve the discovered installer floor when no compatible Store generation can be selected. */
+export function resolvePackagedClosureInstallerRequiredVersion(
+  result: PackagedClosureUpdateResult | null,
+): string | null {
+  if (
+    result?.state !== "retained"
+    || result.reason !== "shell-incompatible"
+    || !("candidate" in result)
+  ) return null;
+  return result.candidate.manifest.compatibility.shell.minVersion;
+}
+
 export async function checkForPackagedClosureUpdate(input: {
   channel: LauncherChannel;
   installationRoot: string;
