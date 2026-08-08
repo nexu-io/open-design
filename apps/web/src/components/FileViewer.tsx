@@ -9825,6 +9825,14 @@ function HtmlViewer({
         // base state epoch-free so React does not emit duplicate query keys.
         setPreviewSrcUrl(appendResourceQuery(refreshBasePreviewSrcUrl, `fr=${filesRefreshKey}`));
       }
+      // When the srcDoc transport is active (not URL-load), the iframe renders
+      // the lazy shell and the real artifact is injected via postMessage. A
+      // file change rebuilds `srcDoc` with fresh HTML, but the shell never
+      // re-activates unless we push it — otherwise the preview stays on the
+      // stale shell (about:srcdoc). Re-activate so the new HTML lands.
+      if (!useUrlLoadPreview) {
+        activateSrcDocTransport();
+      }
     }, 180);
     return () => window.clearTimeout(timeout);
   }, [
