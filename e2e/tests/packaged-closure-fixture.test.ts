@@ -21,7 +21,7 @@ import {
 
 vi.mock('extract-zip', () => ({
   default: async (_archivePath: string, options: { dir: string }) => {
-    const entryPath = join(options.dir, 'runtime.mjs');
+    const entryPath = join(options.dir, CLOSURE_ARCHIVE_ENTRY_PATH);
     await mkdir(dirname(entryPath), { recursive: true });
     await writeFile(entryPath, 'export const fixture = true;\n', 'utf8');
   },

@@ -209,8 +209,8 @@ export function resolveStandaloneServerEntry(
   return candidates.find((candidate) => existsSync(candidate)) ?? null;
 }
 
-function shouldUseStandaloneOutput(runtime: SidecarRuntimeContext<SidecarStamp>): boolean {
-  return runtime.mode !== "dev" && process.env[WEB_OUTPUT_MODE_ENV] === "standalone";
+function shouldUseStandaloneOutput(mode: "dev" | "runtime"): boolean {
+  return mode !== "dev" && process.env[WEB_OUTPUT_MODE_ENV] === "standalone";
 }
 
 function resolveDaemonOrigin(): string | null {
@@ -929,11 +929,11 @@ function attachParentMonitor(stop: () => Promise<void>): void {
   timer.unref();
 }
 
-async function createWebSidecarHandle(
-  runtime: SidecarRuntimeContext<SidecarStamp>,
+async function createWebRuntimeHandle(
   httpServer: HttpServer,
   closeRuntime: () => Promise<void> | void,
   isRuntimeRunning?: () => boolean,
+  legacyIpcPath?: string,
 ): Promise<WebSidecarHandle> {
   const port = await listen(httpServer, parsePort(process.env[WEB_PORT_ENV]));
   const state: WebStatusSnapshot = {
@@ -969,22 +969,24 @@ async function createWebSidecarHandle(
 
   attachParentMonitor(stop);
 
-  ipcServer = await createJsonIpcServer({
-    socketPath: runtime.ipc,
-    handler: async (message: unknown) => {
-      const request = normalizeWebSidecarMessage(message);
-      switch (request.type) {
-        case SIDECAR_MESSAGES.STATUS:
-          refreshRuntimeState();
-          return { ...state };
-        case SIDECAR_MESSAGES.SHUTDOWN:
-          setImmediate(() => {
-            stopThenExit(stop);
-          });
-          return { accepted: true };
-      }
-    },
-  });
+  if (legacyIpcPath != null) {
+    ipcServer = await createJsonIpcServer({
+      socketPath: legacyIpcPath,
+      handler: async (message: unknown) => {
+        const request = normalizeWebSidecarMessage(message);
+        switch (request.type) {
+          case SIDECAR_MESSAGES.STATUS:
+            refreshRuntimeState();
+            return { ...state };
+          case SIDECAR_MESSAGES.SHUTDOWN:
+            setImmediate(() => {
+              stopThenExit(stop);
+            });
+            return { accepted: true };
+        }
+      },
+    });
+  }
 
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.on(signal, () => {
@@ -1029,10 +1031,11 @@ export function createDaemonProxyHandler(
 }
 
 async function startRegularNextSidecar(
-  runtime: SidecarRuntimeContext<SidecarStamp>,
+  mode: "dev" | "runtime",
   webRoot: string,
+  legacyIpcPath?: string,
 ): Promise<WebSidecarHandle> {
-  const dev = process.env.OD_WEB_PROD !== "1" && runtime.mode === "dev";
+  const dev = process.env.OD_WEB_PROD !== "1" && mode === "dev";
   const app = createNextApp({ dev, dir: webRoot, ...resolveNextBundlerOptions(dev) });
   await prepareNextApp(app, webRoot);
 
@@ -1040,14 +1043,14 @@ async function startRegularNextSidecar(
   const handleRequest = app.getRequestHandler();
   const httpServer = createHttpServer(createDaemonProxyHandler(daemonOrigin, handleRequest));
 
-  return await createWebSidecarHandle(runtime, httpServer, async () => {
+  return await createWebRuntimeHandle(httpServer, async () => {
     await app.close?.();
-  });
+  }, undefined, legacyIpcPath);
 }
 
 async function startStandaloneNextSidecar(
-  runtime: SidecarRuntimeContext<SidecarStamp>,
   webRoot: string | null,
+  legacyIpcPath?: string,
 ): Promise<WebSidecarHandle> {
   const daemonOrigin = resolveDaemonOrigin();
   const backend = await startStandaloneBackend(webRoot);
@@ -1067,19 +1070,32 @@ async function startStandaloneNextSidecar(
   }));
 
   try {
-    return await createWebSidecarHandle(runtime, httpServer, backend.stop, backend.isRunning);
+    return await createWebRuntimeHandle(
+      httpServer,
+      backend.stop,
+      backend.isRunning,
+      legacyIpcPath,
+    );
   } catch (error) {
     await backend.stop().catch(() => undefined);
     throw error;
   }
 }
 
-export async function startWebSidecar(runtime: SidecarRuntimeContext<SidecarStamp>): Promise<WebSidecarHandle> {
-  if (shouldUseStandaloneOutput(runtime)) {
+export async function startWebRuntime(options: Readonly<{
+  legacyIpcPath?: string;
+  mode: "dev" | "runtime";
+}>): Promise<WebSidecarHandle> {
+  if (shouldUseStandaloneOutput(options.mode)) {
     const webRoot = resolveConfiguredStandaloneRoot() == null ? resolveWebRoot() : null;
-    return await startStandaloneNextSidecar(runtime, webRoot);
+    return await startStandaloneNextSidecar(webRoot, options.legacyIpcPath);
   }
 
   const webRoot = resolveWebRoot();
-  return await startRegularNextSidecar(runtime, webRoot);
+  return await startRegularNextSidecar(options.mode, webRoot, options.legacyIpcPath);
+}
+
+/** Legacy stamp/IPC adapter retained while callers migrate to packages/sidecar. */
+export async function startWebSidecar(runtime: SidecarRuntimeContext<SidecarStamp>): Promise<WebSidecarHandle> {
+  return await startWebRuntime({ legacyIpcPath: runtime.ipc, mode: runtime.mode });
 }

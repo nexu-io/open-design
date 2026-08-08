@@ -8,7 +8,7 @@ export const CLOSURE_HANDOFF_SCHEMA_VERSION = 1 as const;
 export const CLOSURE_SHIM_SCHEMA_VERSION = 1 as const;
 export const CLOSURE_SIGNATURE_SCHEMA_VERSION = 1 as const;
 export const CLOSURE_ARCHIVE_MEDIA_TYPE = "application/vnd.open-design.closure.zip-v1" as const;
-export const CLOSURE_ARCHIVE_ENTRY_PATH = "runtime.mjs" as const;
+export const CLOSURE_ARCHIVE_ENTRY_PATH = "bootloader.mjs" as const;
 export const CLOSURE_SIGNATURE_ALGORITHM = "ed25519" as const;
 
 export type ClosureDigest = `sha256:${string}`;

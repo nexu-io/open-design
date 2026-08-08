@@ -2,8 +2,8 @@ export const standaloneClosureDeliveryMatrix = {
   "schemaVersion": 1,
   "role": "test-only-acceptance-map",
   "architecture": {
-    "activation": "next-launch",
-    "artifact": "closure",
+    "activation": "launcher-committed-generation",
+    "artifact": "standalone-closure",
     "body": "standalone(web+daemon)",
     "coordinates": [
       "channel",
@@ -11,8 +11,13 @@ export const standaloneClosureDeliveryMatrix = {
       "generation"
     ],
     "launcher": "standalone-launcher",
-    "persistentTruthOwner": "closure",
-    "shellBoundary": "ensure+handoff"
+    "persistentTruthOwner": "standalone-launcher",
+    "shellBoundary": "bootloader.mjs+handoff-once",
+    "sidecarControl": "normalized-caller-owned",
+    "sidecars": [
+      "daemon",
+      "web"
+    ]
   },
   "acceptanceLevels": [
     "contract",
@@ -24,8 +29,8 @@ export const standaloneClosureDeliveryMatrix = {
     {
       "id": "shell-shim",
       "owners": [
-        "packages/closure-proto",
-        "packages/closure-shim"
+        "packages/standalone-proto",
+        "apps/standalone"
       ],
       "coordinates": [
         "channel",
@@ -33,7 +38,7 @@ export const standaloneClosureDeliveryMatrix = {
         "generation"
       ],
       "requiredOutcomes": [
-        "ready-or-installer-reinstall",
+        "min-version-or-handoff-once",
         "generation-bound-capability-result",
         "generation-bound-terminal-status",
         "no-store-or-body-layout-read-by-shell"
@@ -42,7 +47,7 @@ export const standaloneClosureDeliveryMatrix = {
         {
           "level": "contract",
           "state": "proven",
-          "witness": "packages/closure-shim/tests/shell-conformance.test.ts"
+          "witness": "apps/standalone/tests/bootloader.test.ts"
         },
         {
           "level": "platform-product",
@@ -52,11 +57,11 @@ export const standaloneClosureDeliveryMatrix = {
       "evidence": [
         {
           "role": "boundary-proof",
-          "path": "packages/closure-shim/tests/conformance.test.ts"
+          "path": "packages/standalone-proto/tests/index.test.ts"
         },
         {
           "role": "boundary-proof",
-          "path": "packages/closure-proto/fixtures/shell-capability-request-v1.json"
+          "path": "apps/standalone/src/bootloader.ts"
         }
       ]
     },
@@ -102,7 +107,8 @@ export const standaloneClosureDeliveryMatrix = {
       "id": "process-lifecycle",
       "owners": [
         "packages/standalone-runtime",
-        "packages/closure-shim"
+        "packages/sidecar",
+        "apps/standalone"
       ],
       "coordinates": [
         "namespace",
@@ -121,6 +127,11 @@ export const standaloneClosureDeliveryMatrix = {
           "witness": "packages/standalone-runtime/tests/lifecycle.test.ts"
         },
         {
+          "level": "local-real",
+          "state": "proven",
+          "witness": "e2e/tests/standalone-closure/normalized-sidecars.test.ts"
+        },
+        {
           "level": "platform-product",
           "state": "planned"
         }
@@ -128,11 +139,11 @@ export const standaloneClosureDeliveryMatrix = {
       "evidence": [
         {
           "role": "boundary-proof",
-          "path": "packages/closure-proto/fixtures/runtime-running-v1.json"
+          "path": "apps/standalone/tests/bootloader.test.ts"
         },
         {
           "role": "boundary-proof",
-          "path": "packages/closure-proto/fixtures/runtime-failed-v1.json"
+          "path": "e2e/tests/standalone-closure/normalized-boundary.test.ts"
         }
       ]
     },
@@ -303,7 +314,7 @@ export const standaloneClosureDeliveryMatrix = {
       "id": "SC-01",
       "delivery": "next-release",
       "track": "closure",
-      "outcome": "The archived body exports the handoff entry and owns Web plus daemon startup, health, and shutdown.",
+      "outcome": "The archive exposes bootloader.mjs, enters one committed generation once, and owns Web plus daemon startup, health, and shutdown through normalized sidecars.",
       "dependsOn": [],
       "lanes": [
         "process-lifecycle"
@@ -316,14 +327,14 @@ export const standaloneClosureDeliveryMatrix = {
     {
       "id": "SC-02",
       "delivery": "next-release",
-      "track": "closure",
-      "outcome": "The product supplies release source and trust roots; the shim discovers one detached-signature candidate and owns Store selection, activation, confirmation, rollback, and the stable error envelope.",
+      "track": "launcher",
+      "outcome": "The launcher owns release source, trust, lazy materialization, committed-generation activation, and minVersion escalation without moving update policy into bootloader.mjs.",
       "dependsOn": [],
       "lanes": [
         "update-lifecycle"
       ],
       "ownerPaths": [
-        "packages/closure-shim",
+        "apps/packaged",
         "packages/closure-update"
       ]
     },
@@ -331,7 +342,7 @@ export const standaloneClosureDeliveryMatrix = {
       "id": "SC-03",
       "delivery": "next-release",
       "track": "shell",
-      "outcome": "The packaged shell invokes only ensure plus handoff and maps capability, terminal, and installer-reinstall results to shell UX.",
+      "outcome": "The packaged shell resolves one committed bootloader.mjs, invokes handoff once, and maps generation-bound capability and terminal results to shell UX.",
       "dependsOn": [
         "SC-01",
         "SC-02"

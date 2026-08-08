@@ -10,7 +10,7 @@ import {
   CLOSURE_ELECTRON_NATIVE_MODULES,
   CLOSURE_INTERNAL_PACKAGES,
   CLOSURE_PLATFORM_TARGETS,
-  closureRuntimeSource,
+  standaloneBootloaderSource,
   createClosureBuildCacheKey,
   createClosureElectronRebuildOptions,
   materializeClosureWebPublicHoist,
@@ -78,21 +78,28 @@ describe("tools-pack Closure archive", () => {
   });
 
   it("publishes one shell-neutral entry with explicit Web and daemon layout", () => {
-    const source = closureRuntimeSource();
-    expect(source).toContain('export * from "@open-design/standalone"');
+    const source = standaloneBootloaderSource({ minShellVersion: "0.18.0-beta.1" });
+    expect(source).toContain("createStandaloneBootloader");
+    expect(source).toContain("handoffOpenDesignStandalone");
+    expect(source).toContain('minShellVersion: "0.18.0-beta.1"');
     expect(source).toContain("resolveOpenDesignClosureLayout");
     expect(source).toContain("daemonCliEntry");
     expect(source).toContain("daemonSidecarEntry");
+    expect(source).toContain("daemonStandaloneSidecarEntry");
     expect(source).toContain("webServerEntry");
     expect(source).toContain("webSidecarEntry");
+    expect(source).toContain("webStandaloneSidecarEntry");
     expect(source).not.toContain("payload-desktop-handoff");
     expect(source).not.toContain("desktop");
-    expect(source).not.toContain("namespace");
+    expect(source).not.toContain("ELECTRON_RUN_AS_NODE");
+    expect(source).not.toContain("release-beta");
   });
 
   it("keeps shell applications outside the Closure install set", () => {
     const names = CLOSURE_INTERNAL_PACKAGES.map((entry) => entry.name);
     expect(names).toContain("@open-design/standalone");
+    expect(names).toContain("@open-design/standalone-proto");
+    expect(names).toContain("@open-design/sidecar");
     expect(names).not.toContain("@open-design/daemon");
     expect(names).not.toContain("@open-design/desktop");
     expect(names).not.toContain("@open-design/packaged");

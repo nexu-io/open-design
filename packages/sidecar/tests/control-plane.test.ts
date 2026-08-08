@@ -69,6 +69,69 @@ describe("sidecar control identity", () => {
 });
 
 describe("independent sidecar controller and body", () => {
+  it("initializes the body from validated roots before publishing readiness", async () => {
+    const { roots, scope } = await createFixture();
+    const launch = createPrivateLaunchForTest({ roots, scope, service: "web" });
+    const restoreLaunch = installPrivateLaunchForTest(launch);
+    cleanups.push(restoreLaunch);
+    let initialized = false;
+    const body = await publicControl.attachSidecar<DemoMethods>({
+      handlers: {
+        context(_input, context) {
+          expect(initialized).toBe(true);
+          return context;
+        },
+        echo(input) {
+          expect(initialized).toBe(true);
+          return { value: input.value };
+        },
+      },
+      initialize(context) {
+        expect(context).toEqual({
+          identity: { ...scope, service: "web" },
+          roots,
+        });
+        initialized = true;
+      },
+    });
+    cleanups.push(() => body.close());
+
+    const client = await createDemoController(scope, roots).connect<DemoMethods>("web");
+    await expect(client.call("echo", { value: "ready-after-body" })).resolves.toEqual({
+      value: "ready-after-body",
+    });
+  });
+
+  it("cleans up body startup when initialization fails", async () => {
+    const { roots, scope } = await createFixture();
+    const launch = createPrivateLaunchForTest({ roots, scope, service: "web" });
+    const restoreLaunch = installPrivateLaunchForTest(launch);
+    cleanups.push(restoreLaunch);
+    let stopped = false;
+
+    await expect(publicControl.attachSidecar<DemoMethods>({
+      handlers: {
+        context(_input, context) {
+          return context;
+        },
+        echo(input) {
+          return { value: input.value };
+        },
+      },
+      initialize() {
+        throw new Error("body startup failed");
+      },
+      onStopRequested() {
+        stopped = true;
+      },
+    })).rejects.toThrow("body startup failed");
+
+    expect(stopped).toBe(true);
+    await expect(createDemoController(scope, roots).connect("web")).rejects.toThrow(
+      /unavailable/,
+    );
+  });
+
   it("launches and stops a real body without exposing launch metadata to it", async () => {
     const { roots, scope } = await createFixture();
     const controller = createDemoController(scope, roots);

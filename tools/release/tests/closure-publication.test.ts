@@ -6,6 +6,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
+import { CLOSURE_ARCHIVE_ENTRY_PATH } from "@open-design/closure-proto";
 import { afterEach, describe, expect, it } from "vitest";
 
 const execFileAsync = promisify(execFile);
@@ -37,7 +38,7 @@ async function writeFixture(root: string, options: { closureVersion?: string } =
   const archiveDigest = digest(archive);
   const files = [{
     digest: digest("runtime fixture"),
-    path: "runtime.mjs",
+    path: CLOSURE_ARCHIVE_ENTRY_PATH,
     size: Buffer.byteLength("runtime fixture"),
   }];
   const inventoryDigest = digest(JSON.stringify(files));
@@ -54,7 +55,7 @@ async function writeFixture(root: string, options: { closureVersion?: string } =
     writeFile(join(assetsRoot, `${closureBase}-manifest.json`), `${JSON.stringify({
       artifact: {
         digest: archiveDigest,
-        entryPath: "runtime.mjs",
+        entryPath: CLOSURE_ARCHIVE_ENTRY_PATH,
         inventoryDigest,
         mediaType: "application/vnd.open-design.closure.zip-v1",
         size: archive.byteLength,

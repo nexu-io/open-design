@@ -46,6 +46,7 @@ function normalizeIncomingRequest(value: unknown): PrivateControlRequest | null 
 
 export async function attachSidecar<TMethods>({
   handlers,
+  initialize,
   onStopRequested,
 }: AttachSidecarOptions<TMethods>): Promise<AttachedSidecar> {
   const metadata = readPrivateLaunchMetadata();
@@ -56,6 +57,13 @@ export async function attachSidecar<TMethods>({
   let closing: Promise<void> | null = null;
   let stopRequested = false;
   let closeServerAndDescriptor: () => Promise<void> = async () => undefined;
+
+  try {
+    await initialize?.(context);
+  } catch (error) {
+    await Promise.resolve().then(() => onStopRequested?.()).catch(() => undefined);
+    throw error;
+  }
 
   const server = await createJsonIpcServer({
     socketPath: metadata.endpointPath,
@@ -89,6 +97,7 @@ export async function attachSidecar<TMethods>({
           queueMicrotask(() => {
             void Promise.resolve()
               .then(() => onStopRequested?.())
+              .catch(() => undefined)
               .finally(() => closeServerAndDescriptor());
           });
         }
@@ -120,6 +129,9 @@ export async function attachSidecar<TMethods>({
         );
       }
     },
+  }).catch(async (error: unknown) => {
+    await Promise.resolve().then(() => onStopRequested?.()).catch(() => undefined);
+    throw error;
   });
 
   const { descriptorPath } = privateControlPaths(metadata.identity, metadata.roots);
@@ -136,6 +148,7 @@ export async function attachSidecar<TMethods>({
     await writeJsonFile(descriptorPath, metadata);
   } catch (error) {
     await server.close();
+    await Promise.resolve().then(() => onStopRequested?.()).catch(() => undefined);
     throw error;
   }
 

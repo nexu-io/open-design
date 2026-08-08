@@ -24,6 +24,8 @@
     "@open-design/closure-store": "workspace:*",
     "@open-design/contracts": "workspace:*",
     "@open-design/release": "workspace:*",
+    "@open-design/standalone": "workspace:*",
+    "@open-design/standalone-proto": "workspace:*",
     "@playwright/test": "1.60.0",
     "@types/node": "20.19.39",
     "@types/pngjs": "6.0.5",

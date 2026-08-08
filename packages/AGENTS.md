@@ -7,10 +7,11 @@ Follow the root `AGENTS.md` first. This file only records module-level boundarie
 - `packages/agui-adapter`: pure TypeScript adapter between persisted Open Design agent/GenUI/plugin-pipeline events and the AG-UI event protocol. Keep transport and filesystem concerns out; daemon producers and web/CopilotKit consumers share this conversion boundary.
 - `packages/contracts`: web/daemon app contract layer. Keep it pure TypeScript; it must not depend on Next.js, Express, Node filesystem/process APIs, browser APIs, SQLite, daemon internals, or the sidecar control-plane protocol.
 - `packages/components`: shared React UI primitives and primitive CSS. It may depend on React types/runtime only; keep product workflows and app-specific layout/styling in the apps.
-- `packages/closure-proto`: pure TypeScript standalone-closure protocol. It owns namespace-neutral candidate identity, local product-namespace binding, artifact integrity, shell compatibility, generation-bound runtime status, and Shell capability envelopes; it must not own physical transport, process orchestration, filesystem state, downloads, or Desktop launcher behavior.
-- `packages/closure-shim`: fossil Shell-to-Closure entry. It validates one committed locator/bootstrap and enters it once; it must not own network, candidate selection, Store/history, update, rollback, body layout, or health-based fallback.
-- `packages/closure-store`: Closure-internal immutable materialization and commit primitives. Shells and the fossil shim must not inspect its candidate history or use it as a fallback selector.
-- `packages/closure-update`: Closure-internal release selection and update orchestration. It may compose Closure storage and managed downloads, but must not update a shell or create a second committed-locator authority.
+- `packages/standalone-proto`: pure TypeScript live Shell-to-Standalone protocol. It owns exact `<channel, namespace, generation>` identity, resolved path and Shell identity inputs, generation-bound capability/status exchanges, min-version comparison, and the fixed `bootloader.mjs` entry name. It owns no transport, persistence, candidate selection, process orchestration, or update policy.
+- `packages/closure-proto`: pure TypeScript Standalone release protocol. It owns namespace-neutral candidate identity, artifact integrity/inventory/signature, and shell compatibility metadata; it must not become a second live handoff protocol.
+- `packages/closure-shim`: exploratory compatibility substrate retained while the target seam is proven. Do not extend it with new entry behavior; the target fossil handoff lives in `apps/standalone` over `standalone-proto`.
+- `packages/closure-store`: launcher-side immutable Standalone Closure materialization and commit primitives. `bootloader.mjs` and the body must not inspect its candidate history or use it as a fallback selector.
+- `packages/closure-update`: launcher-side Standalone Closure release selection and update orchestration. It may compose Closure storage and managed downloads, but must not update the launcher itself or create a second committed-generation authority.
 - `packages/diagnostics`: shared diagnostics export primitives for log collection, redaction, manifests, crash-report discovery, and zip packaging used by daemon and desktop.
 - `packages/download`: managed-download runtime. Owns resumable and checksum-verified transfers, concurrent-request deduplication, target locking, inspection/removal, copy-and-clear, and pruning; callers supply the download identity and storage base.
 - `packages/host`: web/desktop host bridge contract. It models renderer-facing host capabilities and helpers while keeping `window.__od__` access out of app UI code.
@@ -28,7 +29,7 @@ Follow the root `AGENTS.md` first. This file only records module-level boundarie
 
 - `packages/shared` has been removed; do not restore it.
 - For new shared types, choose the boundary first: web/daemon product DTOs go in `contracts`; Desktop host/updater DTOs go in `host`; Shell/Closure semantics go in `closure-proto`; business-neutral sidecar mechanics go in `sidecar`; generic OS primitives go in `platform`.
-- Closure candidate/binding identity belongs in `closure-proto`; Desktop payload and installed-outer state remains in `launcher-proto`.
+- Standalone release candidate identity belongs in `closure-proto`; live Shell↔Standalone identity belongs in `standalone-proto`; Desktop payload and installed-outer state remains in `launcher-proto`.
 
 ## Boundary checklist
 

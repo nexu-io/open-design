@@ -42,6 +42,9 @@ export type ClosurePlatformTarget =
   (typeof CLOSURE_PLATFORM_TARGETS)[keyof typeof CLOSURE_PLATFORM_TARGETS];
 
 export const CLOSURE_INTERNAL_PACKAGES = [
+  { directory: "packages/release", name: "@open-design/release" },
+  { directory: "packages/sidecar", name: "@open-design/sidecar" },
+  { directory: "packages/standalone-proto", name: "@open-design/standalone-proto" },
   { directory: "packages/standalone-runtime", name: "@open-design/standalone-runtime" },
   { directory: "apps/standalone", name: "@open-design/standalone" },
 ] as const;
@@ -81,6 +84,7 @@ export const CLOSURE_BUILD_SOURCE_PATHS = [
   "packages/components",
   "packages/contracts",
   "packages/diagnostics",
+  "packages/standalone-proto",
   "packages/standalone-runtime",
   "packages/host",
   "packages/launcher-proto",
@@ -408,12 +412,12 @@ async function pruneForeignNodePtyPrebuilds(
   }
 }
 
-export function closureRuntimeSource(): string {
+export function standaloneBootloaderSource(options: { minShellVersion: string }): string {
   return `import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export * from "@open-design/standalone";
+import { createStandaloneBootloader, startSidecarStandalone } from "@open-design/standalone";
 
 const root = dirname(fileURLToPath(import.meta.url));
 
@@ -428,12 +432,40 @@ export function resolveOpenDesignClosureLayout() {
   return Object.freeze({
     daemonCliEntry: join(root, "daemon", "daemon-cli.mjs"),
     daemonSidecarEntry: join(root, "daemon", "daemon-sidecar.mjs"),
+    daemonStandaloneSidecarEntry: join(root, "daemon", "daemon-standalone-sidecar.mjs"),
     resourceRoot: join(root, "resources", "open-design"),
     webServerEntry,
     webSidecarEntry: join(root, "web", "web-sidecar.mjs"),
+    webStandaloneSidecarEntry: join(root, "web", "web-standalone-sidecar.mjs"),
     webStandaloneRoot: standaloneRoot,
   });
 }
+
+export const handoffOpenDesignStandalone = createStandaloneBootloader({
+  minShellVersion: ${JSON.stringify(options.minShellVersion)},
+  async start(request) {
+    const layout = resolveOpenDesignClosureLayout();
+    const childEnv = { ...process.env };
+    return await startSidecarStandalone(request, {
+      daemon: {
+        args: [layout.daemonStandaloneSidecarEntry],
+        env: childEnv,
+        executable: process.execPath,
+      },
+      web: {
+        args: [layout.webStandaloneSidecarEntry],
+        env: {
+          ...childEnv,
+          OD_WEB_OUTPUT_MODE: "standalone",
+          OD_WEB_STANDALONE_ROOT: layout.webStandaloneRoot,
+        },
+        executable: process.execPath,
+      },
+    });
+  },
+});
+
+export default handoffOpenDesignStandalone;
 `;
 }
 
@@ -468,10 +500,20 @@ async function buildClosurePrebundles(
     "sidecar",
     "daemon-sidecar.ts",
   );
+  const daemonStandaloneSidecarEntry = join(
+    workspaceRoot,
+    "apps",
+    "daemon",
+    "src",
+    "sidecar",
+    "daemon-standalone-sidecar.ts",
+  );
   const daemonOutputRoot = join(appRoot, "daemon");
   const daemonMetafile = join(metadataRoot, "daemon.json");
   const webOutput = join(appRoot, "web", "web-sidecar.mjs");
+  const webStandaloneOutput = join(appRoot, "web", "web-standalone-sidecar.mjs");
   const webMetafile = join(metadataRoot, "web.json");
+  const webStandaloneMetafile = join(metadataRoot, "web-standalone.json");
   await mkdir(entryRoot, { recursive: true });
   await mkdir(metadataRoot, { recursive: true });
   await writeFile(
@@ -489,6 +531,7 @@ async function buildClosurePrebundles(
   await runEsbuild(workspaceRoot, [
     daemonEntry,
     daemonSidecarEntry,
+    daemonStandaloneSidecarEntry,
     "--bundle",
     "--splitting",
     "--platform=node",
@@ -514,8 +557,18 @@ async function buildClosurePrebundles(
     `--outfile=${webOutput}`,
     `--metafile=${webMetafile}`,
   ]);
+  await runEsbuild(workspaceRoot, [
+    join(workspaceRoot, "apps", "web", "sidecar", "web-standalone-sidecar.ts"),
+    "--bundle",
+    "--platform=node",
+    "--format=esm",
+    "--target=node24",
+    `--outfile=${webStandaloneOutput}`,
+    `--metafile=${webStandaloneMetafile}`,
+  ]);
   await assertClosureBundleMetafile(daemonMetafile);
   await assertClosureBundleMetafile(webMetafile);
+  await assertClosureBundleMetafile(webStandaloneMetafile);
 }
 
 async function copyWebRuntime(workspaceRoot: string, appRoot: string): Promise<void> {
@@ -720,7 +773,9 @@ async function buildClosureArchiveUncached(options: ClosureBuildOptions): Promis
     workspaceRoot,
   });
   const entryPath = join(appRoot, CLOSURE_ARCHIVE_ENTRY_PATH);
-  await writeFile(entryPath, closureRuntimeSource(), { encoding: "utf8", mode: 0o700 });
+  await writeFile(entryPath, standaloneBootloaderSource({
+    minShellVersion: options.minShellVersion,
+  }), { encoding: "utf8", mode: 0o700 });
   await chmod(entryPath, 0o700);
 
   const files = (await collectFileInventory(appRoot)).sort((left, right) => (

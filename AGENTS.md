@@ -20,14 +20,15 @@ This file is the single source of truth for agents entering this repository. Rea
 - `apps/web` is the Next.js 16 App Router + React 18 web runtime; do not restore `apps/nextjs`.
 - `apps/daemon` is the local privileged daemon and `od` bin. It owns `/api/*`, agent spawning, skills, design systems, artifacts, and static serving.
 - `apps/desktop` is the Electron shell; it discovers the web URL through sidecar IPC.
-- `apps/standalone` owns the shell-neutral Web + daemon product composition and does not own Desktop IPC, windows, or update UI.
+- `apps/standalone` owns the shell-neutral Web + daemon product composition, the fixed `bootloader.mjs` handoff-once entry, and composition over the normalized sidecar control plane. It does not own Desktop IPC, windows, artifact selection, or update UI.
 - `apps/packaged` is the thin packaged Electron runtime entry; it adapts packaged paths/processes to the Standalone lifecycle and owns the `od://` entry glue only.
 - `apps/landing-page` is the standalone static Astro marketing and public catalog site. It reads repository content at build time and is not part of the daemon/web product runtime.
 - `packages/contracts` is the pure TypeScript web/daemon app contract layer.
-- `packages/closure-proto` owns shell-neutral standalone-closure identity, integrity, compatibility, generation-bound lifecycle status, and Shell capability envelopes.
-- `packages/closure-shim` owns only the fossil entry that validates one committed locator/bootstrap and enters it once; it must not select candidates, read Closure history, update, or roll back.
-- `packages/closure-store` and `packages/closure-update` are Closure-internal materialization/update primitives; shells and the fossil shim must not consume their history or policy APIs.
-- `packages/standalone-runtime` owns reusable Standalone Web + daemon lifecycle primitives shared by host adapters.
+- `packages/standalone-proto` owns the minimal Shell↔Standalone handoff: exact generation identity, resolved roots, Shell identity/capability exchange, runtime status, min-version comparison, and the fixed `bootloader.mjs` name.
+- `packages/closure-proto` owns namespace-neutral release candidate, artifact integrity, inventory, signature, and Shell compatibility metadata. Do not add a second live handoff protocol here.
+- `packages/closure-shim` is retained exploratory compatibility substrate, not the target fossil entry. New entry behavior belongs to `apps/standalone` over `standalone-proto`.
+- `packages/closure-store` and `packages/closure-update` are launcher-side Standalone Closure materialization/update substrate. The launcher owns selection and committed-generation truth; `bootloader.mjs` and the body must not consume their history or policy APIs.
+- `packages/standalone-runtime` owns reusable Standalone Web + daemon lifecycle primitives shared by host adapters; it stays independent from the Shell handoff protocol.
 - `packages/sidecar` is the sole target public sidecar control plane: it owns canonical control identity, hidden launch/connect/stop mechanics, fencing, transport, and process convergence while callers retain executable and product policy. `packages/sidecar-proto` is transitional and must disappear after business DTO migration; `packages/platform` retains only generic OS primitives.
 - `tools/dev` is the local development lifecycle control plane.
 - `tools/pack` is the local packaged build/start/stop/logs control plane, packaged updater harness, installer identity/registry validation surface, and mac beta release artifact preparation surface.

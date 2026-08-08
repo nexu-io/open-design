@@ -35,7 +35,7 @@ const requiredOutcomes = {
     "requested-stop-versus-unexpected-failure",
   ],
   "shell-shim": [
-    "ready-or-installer-reinstall",
+    "min-version-or-handoff-once",
     "generation-bound-capability-result",
     "generation-bound-terminal-status",
     "no-store-or-body-layout-read-by-shell",
@@ -99,6 +99,8 @@ type Matrix = {
     launcher: string;
     persistentTruthOwner: string;
     shellBoundary: string;
+    sidecarControl: string;
+    sidecars: string[];
   };
   lanes: Lane[];
   role: string;
@@ -178,13 +180,15 @@ describe("Standalone Closure delivery matrix", () => {
       schemaVersion: 1,
     });
     expect(matrix.architecture).toEqual({
-      activation: "next-launch",
-      artifact: "closure",
+      activation: "launcher-committed-generation",
+      artifact: "standalone-closure",
       body: "standalone(web+daemon)",
       coordinates: ["channel", "namespace", "generation"],
       launcher: "standalone-launcher",
-      persistentTruthOwner: "closure",
-      shellBoundary: "ensure+handoff",
+      persistentTruthOwner: "standalone-launcher",
+      shellBoundary: "bootloader.mjs+handoff-once",
+      sidecarControl: "normalized-caller-owned",
+      sidecars: ["daemon", "web"],
     });
     expect(matrix.acceptanceLevels).toEqual(acceptanceLevels);
   });

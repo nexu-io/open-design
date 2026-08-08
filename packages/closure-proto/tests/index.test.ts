@@ -169,7 +169,7 @@ describe("closure candidate manifest", () => {
 describe("closure file inventory", () => {
   const inventory = {
     files: [
-      { digest, path: "runtime.mjs", size: 12 },
+      { digest, path: "bootloader.mjs", size: 12 },
       { digest, path: "web/server.js", size: 0 },
     ],
     schemaVersion: CLOSURE_INVENTORY_SCHEMA_VERSION,
@@ -180,8 +180,8 @@ describe("closure file inventory", () => {
   });
 
   it.each([
-    ["absolute", "/runtime.mjs"],
-    ["parent", "../runtime.mjs"],
+    ["absolute", "/bootloader.mjs"],
+    ["parent", "../bootloader.mjs"],
     ["windows", "web\\server.js"],
   ])("rejects an unsafe %s path", (_label, path) => {
     expect(() => validateClosureFileInventory({

@@ -74,7 +74,7 @@ function metadata(overrides: Record<string, unknown> = {}): Record<string, unkno
           manifest: {
             artifact: {
               digest: DIGEST,
-              entryPath: "runtime.mjs",
+              entryPath: CLOSURE_ARCHIVE_ENTRY_PATH,
               inventoryDigest: OTHER_DIGEST,
               mediaType: "application/vnd.open-design.closure.zip-v1",
               size: 123,

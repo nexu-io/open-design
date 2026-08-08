@@ -98,6 +98,12 @@ export type SidecarLaunch<TMethods> = Readonly<{
 
 export type AttachSidecarOptions<TMethods> = Readonly<{
   handlers: SidecarMethodHandlers<TMethods>;
+  /**
+   * Complete body-owned startup after the package has decoded and validated
+   * caller identity/roots, but before the ready descriptor becomes visible.
+   * This is the only bootstrap seam a real Web/daemon body needs.
+   */
+  initialize?: (context: SidecarControlContext) => void | Promise<void>;
   onStopRequested?: () => void | Promise<void>;
 }>;
 
