@@ -1,9 +1,23 @@
 import {
   attachSidecar,
+  bootstrapControlPlane,
   type AttachedSidecar,
   type SidecarControlContext,
   type SidecarMethod,
 } from "@open-design/sidecar/control";
+import {
+  STANDALONE_SHELL_CAPABILITIES,
+  type StandaloneProtocolJsonValue,
+  type StandaloneShellCapabilityResult,
+} from "@open-design/standalone-proto";
+import type {
+  DesktopExportArtifactInput,
+  DesktopExportArtifactResult,
+  DesktopExportPdfInput,
+  DesktopExportPdfResult,
+  DesktopRenderSlidesInput,
+  DesktopRenderSlidesResult,
+} from "@open-design/sidecar-proto";
 
 import { startDaemonRuntime } from "../daemon-startup.js";
 import { setDesktopAuthSecret } from "../desktop-auth.js";
@@ -19,6 +33,15 @@ type DaemonStandaloneMethods = {
   registerWebUrl: SidecarMethod<Readonly<{ url: string }>, Readonly<{ accepted: true }>>;
   status: SidecarMethod<Record<string, never>, DaemonStandaloneStatus>;
 };
+
+type ShellCapabilityBridgeMethods = {
+  invoke: SidecarMethod<
+    Readonly<{ capability: string; input: StandaloneProtocolJsonValue }>,
+    StandaloneShellCapabilityResult
+  >;
+};
+
+const STANDALONE_SHELL_CAPABILITY_SERVICE = "shell";
 
 export interface DaemonStandaloneRuntime {
   registerDesktopAuth?(secret: string): Promise<void> | void;
@@ -39,7 +62,42 @@ async function startDefaultRuntime(
 ): Promise<DaemonStandaloneRuntime> {
   process.env.OD_DATA_DIR = context.roots.dataRoot;
   process.env.OD_RESOURCE_ROOT = context.roots.resourceRoot;
+  const shellCapabilities = await bootstrapControlPlane({
+    projection: context.projection,
+    roots: context.roots,
+    scope: {
+      channel: context.identity.channel,
+      generation: context.identity.generation,
+      namespace: context.identity.namespace,
+    },
+  }).connect<ShellCapabilityBridgeMethods>(STANDALONE_SHELL_CAPABILITY_SERVICE);
+  const invokeShell = async <TOutput>(
+    capability: string,
+    input: StandaloneProtocolJsonValue,
+  ): Promise<TOutput> => {
+    const result = await shellCapabilities.call("invoke", { capability, input });
+    if (result.outcome === "completed") return result.output as TOutput;
+    if (result.outcome === "unsupported") {
+      throw new Error(`Electron Shell capability is unsupported: ${capability}`);
+    }
+    throw new Error(`Electron Shell capability failed: ${capability} (${result.error.code})`);
+  };
   const started = await startDaemonRuntime({
+    desktopArtifactExporter: async (input: DesktopExportArtifactInput) =>
+      await invokeShell<DesktopExportArtifactResult>(
+        STANDALONE_SHELL_CAPABILITIES.EXPORT_ARTIFACT,
+        input as unknown as StandaloneProtocolJsonValue,
+      ),
+    desktopPdfExporter: async (input: DesktopExportPdfInput) =>
+      await invokeShell<DesktopExportPdfResult>(
+        STANDALONE_SHELL_CAPABILITIES.EXPORT_PDF,
+        input as unknown as StandaloneProtocolJsonValue,
+      ),
+    desktopSlideRenderer: async (input: DesktopRenderSlidesInput) =>
+      await invokeShell<DesktopRenderSlidesResult>(
+        STANDALONE_SHELL_CAPABILITIES.RENDER_SLIDES,
+        input as unknown as StandaloneProtocolJsonValue,
+      ),
     host: "127.0.0.1",
     port: Number(process.env.OD_PORT) || 0,
   });

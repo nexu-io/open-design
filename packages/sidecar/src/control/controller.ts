@@ -7,6 +7,7 @@ import { readJsonFile, removeFile } from "../json-file.js";
 import { isWindowsNamedPipePath } from "../ipc-path.js";
 import { requestJsonIpc } from "../json-ipc.js";
 import { SidecarControlError } from "./error.js";
+import { attachSidecarWithMetadata } from "./body.js";
 import {
   assertPrivateResponse,
   createPrivateLaunchEnv,
@@ -31,6 +32,7 @@ import type {
   SidecarControlIdentity,
   SidecarControlPlane,
   SidecarExit,
+  SidecarExposeOptions,
   SidecarLaunch,
   SidecarLaunchOptions,
   SidecarProbeResult,
@@ -271,6 +273,15 @@ export function bootstrapControlPlane({
 
   return Object.freeze({
     connect,
+    async expose<TMethods>(options: SidecarExposeOptions<TMethods>) {
+      const metadata = createPrivateLaunchMetadata({
+        projection,
+        roots,
+        scope,
+        service: options.service,
+      });
+      return await attachSidecarWithMetadata(metadata, options);
+    },
     launch,
     projection,
     roots,

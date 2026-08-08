@@ -46,6 +46,7 @@
     "@open-design/release": "workspace:*",
     "@open-design/sidecar": "workspace:*",
     "@open-design/sidecar-proto": "workspace:*",
+    "@open-design/standalone-proto": "workspace:*",
     "@opentelemetry/api": "1.9.1",
     "better-sqlite3": "12.10.0",
     "blake3-wasm": "2.1.5",

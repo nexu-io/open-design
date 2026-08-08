@@ -88,9 +88,14 @@ export type SidecarControlPlane = Readonly<{
   roots: SidecarControlRoots;
   scope: SidecarControlScope;
   connect<TMethods>(service: string): Promise<SidecarControlClient<TMethods>>;
+  expose<TMethods>(options: SidecarExposeOptions<TMethods>): Promise<AttachedSidecar>;
   launch<TMethods>(options: SidecarLaunchOptions): Promise<SidecarLaunch<TMethods>>;
   probe(service: string): Promise<SidecarProbeResult>;
   requestStop(service: string): Promise<SidecarStopResult>;
+}>;
+
+export type SidecarExposeOptions<TMethods> = AttachSidecarOptions<TMethods> & Readonly<{
+  service: string;
 }>;
 
 export type SidecarLaunchOptions = Readonly<{

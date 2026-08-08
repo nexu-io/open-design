@@ -14,6 +14,7 @@ export type {
   SidecarControlRoots,
   SidecarControlScope,
   SidecarExit,
+  SidecarExposeOptions,
   SidecarLaunch,
   SidecarLaunchOptions,
   SidecarMethod,

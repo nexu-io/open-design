@@ -45,11 +45,20 @@ function normalizeIncomingRequest(value: unknown): PrivateControlRequest | null 
 }
 
 export async function attachSidecar<TMethods>({
-  handlers,
-  initialize,
-  onStopRequested,
+  ...options
 }: AttachSidecarOptions<TMethods>): Promise<AttachedSidecar> {
-  const metadata = readPrivateLaunchMetadata();
+  return await attachSidecarWithMetadata(readPrivateLaunchMetadata(), options);
+}
+
+/** @internal Attach a caller-hosted semantic service to validated control metadata. */
+export async function attachSidecarWithMetadata<TMethods>(
+  metadata: PrivateLaunchMetadata,
+  {
+    handlers,
+    initialize,
+    onStopRequested,
+  }: AttachSidecarOptions<TMethods>,
+): Promise<AttachedSidecar> {
   const context: SidecarControlContext = Object.freeze({
     identity: metadata.identity,
     projection: metadata.projection,

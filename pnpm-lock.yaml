@@ -89,6 +89,9 @@ importers:
       '@open-design/sidecar-proto':
         specifier: workspace:*
         version: link:../../packages/sidecar-proto
+      '@open-design/standalone-proto':
+        specifier: workspace:*
+        version: link:../../packages/standalone-proto
       '@opentelemetry/api':
         specifier: 1.9.1
         version: 1.9.1

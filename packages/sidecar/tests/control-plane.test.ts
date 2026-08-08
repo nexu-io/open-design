@@ -74,6 +74,36 @@ describe("sidecar control identity", () => {
 });
 
 describe("independent sidecar controller and body", () => {
+  it("exposes a caller-hosted semantic service through the same fenced control plane", async () => {
+    const { roots, scope } = await createFixture();
+    const controller = createDemoController(scope, roots);
+    const hosted = await controller.expose<DemoMethods>({
+      handlers: {
+        context(_input, context) {
+          return context;
+        },
+        echo(input) {
+          return { value: `hosted:${input.value}` };
+        },
+      },
+      service: "shell",
+    });
+    cleanups.push(() => hosted.close());
+
+    const client = await controller.connect<DemoMethods>("shell");
+    await expect(client.call("echo", { value: "capability" })).resolves.toEqual({
+      value: "hosted:capability",
+    });
+    await expect(client.call("context", {})).resolves.toEqual({
+      identity: { ...scope, service: "shell" },
+      projection: demoProjection,
+      roots,
+    });
+
+    await hosted.close();
+    await expect(controller.connect("shell")).rejects.toThrow(/unavailable/);
+  });
+
   it("initializes the body from validated roots before publishing readiness", async () => {
     const { roots, scope } = await createFixture();
     const launch = createPrivateLaunchForTest({

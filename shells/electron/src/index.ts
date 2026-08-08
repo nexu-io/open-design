@@ -68,6 +68,7 @@ import { resolvePackagedNamespacePaths } from "./paths.js";
 import { findPackagedDeeplinkArg, launchPackagedPayloadDesktop } from "./payload-desktop-launch.js";
 import { packagedEntryUrl, registerOdProtocol } from "./protocol.js";
 import { reportStartupFailure, resolveStartupDistinctId } from "./startup-telemetry.js";
+import { createElectronShellCapabilityPort } from "./shell-capabilities.js";
 import {
   digestElectronShellEntry,
   resolveElectronStandaloneBinding,
@@ -261,16 +262,7 @@ async function main(): Promise<void> {
     mcpBootstrap,
   }, async () => await createElectronStandaloneLauncher().launch(
     selection.binding,
-    {
-      async invoke(request) {
-        return {
-          handoff: request.handoff,
-          outcome: "unsupported",
-          requestId: request.requestId,
-          schemaVersion: request.schemaVersion,
-        };
-      },
-    },
+    createElectronShellCapabilityPort({ desktopIpc: stamp.ipc }),
   ));
   const status = await standalone.readStatus();
   if (status.state !== "running") {

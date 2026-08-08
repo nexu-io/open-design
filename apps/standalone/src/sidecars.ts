@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 
 import {
@@ -15,7 +16,9 @@ import {
   type StandaloneRuntimeFailedStatus,
   type StandaloneRuntimeCommandRequest,
   type StandaloneRuntimeCommandResult,
+  type StandaloneProtocolJsonValue,
   type StandaloneRuntimeStatus,
+  type StandaloneShellCapabilityResult,
   type StandaloneRuntimeTerminalStatus,
 } from "@open-design/standalone-proto";
 import {
@@ -37,6 +40,15 @@ type DaemonMethods = StatusMethods & {
   registerDesktopAuth: SidecarMethod<Readonly<{ secret: string }>, Readonly<{ accepted: true }>>;
   registerWebUrl: SidecarMethod<Readonly<{ url: string }>, Readonly<{ accepted: true }>>;
 };
+
+type ShellCapabilityBridgeMethods = {
+  invoke: SidecarMethod<
+    Readonly<{ capability: string; input: StandaloneProtocolJsonValue }>,
+    StandaloneShellCapabilityResult
+  >;
+};
+
+export const STANDALONE_SHELL_CAPABILITY_SERVICE = "shell" as const;
 
 export const OPEN_DESIGN_REGISTER_DESKTOP_AUTH_COMMAND =
   "open-design.register-desktop-auth.v1" as const;
@@ -127,6 +139,21 @@ export async function startSidecarStandalone(
     web?: SidecarLaunch<StatusMethods>;
   } = {};
 
+  const shellCapabilities = await control.expose<ShellCapabilityBridgeMethods>({
+    handlers: {
+      async invoke({ capability, input: capabilityInput }) {
+        return await request.capabilities.invoke({
+          capability,
+          handoff: request.handoff,
+          input: capabilityInput,
+          requestId: randomUUID(),
+          schemaVersion: STANDALONE_HANDOFF_SCHEMA_VERSION,
+        });
+      },
+    },
+    service: STANDALONE_SHELL_CAPABILITY_SERVICE,
+  });
+
   const product = await acquireStandalone<SidecarStatus, SidecarStatus>({
     dependencies: {
       async preparePaths(paths) {
@@ -167,7 +194,25 @@ export async function startSidecarStandalone(
     },
     namespace: scope.namespace,
     paths: request.paths,
+  }).catch(async (error: unknown) => {
+    await shellCapabilities.close().catch(() => undefined);
+    throw error;
   });
+
+  const closeProduct = async (): Promise<void> => {
+    let failure: unknown = null;
+    try {
+      await product.close();
+    } catch (error) {
+      failure = error;
+    }
+    try {
+      await shellCapabilities.close();
+    } catch (error) {
+      failure ??= error;
+    }
+    if (failure != null) throw failure;
+  };
 
   let status: StandaloneRuntimeStatus = {
     daemonUrl: product.daemonUrl,
@@ -195,7 +240,7 @@ export async function startSidecarStandalone(
       state: "failed",
     };
     status = failed;
-    void product.close().catch(() => undefined).finally(() => resolveTerminal(failed));
+    void closeProduct().catch(() => undefined).finally(() => resolveTerminal(failed));
   };
   void launches.daemon?.exited.then(() => failFromExit("daemon"));
   void launches.web?.exited.then(() => failFromExit("web"));
@@ -207,7 +252,7 @@ export async function startSidecarStandalone(
       closing = true;
       closeTask = (async () => {
         try {
-          await product.close();
+          await closeProduct();
           const stopped = {
             handoff: request.handoff,
             pid: process.pid,

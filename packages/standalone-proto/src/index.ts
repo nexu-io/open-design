@@ -84,6 +84,15 @@ export interface StandaloneShellCapabilityPort {
   invoke(request: StandaloneShellCapabilityRequest): Promise<StandaloneShellCapabilityResult>;
 }
 
+export const STANDALONE_SHELL_CAPABILITIES = Object.freeze({
+  EXPORT_ARTIFACT: "open-design.export-artifact.v1",
+  EXPORT_PDF: "open-design.export-pdf.v1",
+  RENDER_SLIDES: "open-design.render-slides.v1",
+} as const);
+
+export type StandaloneShellCapability =
+  (typeof STANDALONE_SHELL_CAPABILITIES)[keyof typeof STANDALONE_SHELL_CAPABILITIES];
+
 type StandaloneRuntimeCommandExchange = Readonly<{
   handoff: StandaloneHandoffEnvelope;
   requestId: string;
