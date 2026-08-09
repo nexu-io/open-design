@@ -51,10 +51,10 @@ describe("immutable Shell build storage", () => {
         dmg: {
           contentType: "application/x-apple-diskimage",
           digest: `sha256:${"b".repeat(64)}`,
-          name: "open-design.dmg",
-          objectKey: "beta/shells/electron/versions/0.19.0-beta.1/darwin-arm64/open-design.dmg",
+          name: "Open Design.dmg",
+          objectKey: "beta/shells/electron/versions/0.19.0-beta.1/darwin-arm64/Open Design.dmg",
           size: 42,
-          url: "https://releases.example/beta/shells/electron/versions/0.19.0-beta.1/darwin-arm64/open-design.dmg",
+          url: "https://releases.example/beta/shells/electron/versions/0.19.0-beta.1/darwin-arm64/Open Design.dmg",
         },
       },
       channel: "beta",
@@ -66,6 +66,7 @@ describe("immutable Shell build storage", () => {
       target: "darwin-arm64",
     }, validatedPlan, "beta");
     expect(record.shell.version).toBe("0.19.0-beta.1");
+    expect(record.artifacts.dmg.url).toContain("Open%20Design.dmg");
   });
 
   it("fails closed for a mismatched target or source identity", () => {
@@ -159,7 +160,7 @@ describe("immutable Shell build storage", () => {
         const registered = JSON.parse(await readFile(buildPath, "utf8"));
         expect(registered.resolution.state).toBe("registered");
         expect(registered.resolution.artifacts.dmg.url).toBe(
-          "https://releases.example/beta/shells/electron/versions/0.19.0-beta.2/darwin-arm64/Open Design-release-beta.dmg",
+          "https://releases.example/beta/shells/electron/versions/0.19.0-beta.2/darwin-arm64/Open%20Design-release-beta.dmg",
         );
         const reusedDmgPath = join(outputRoot, "Open Design-release-beta.dmg");
         const reusedPayloadPath = join(outputRoot, "Open Design-release-beta-payload.zip");
@@ -175,6 +176,9 @@ describe("immutable Shell build storage", () => {
         expect(reused.releaseVersion).toBe("0.19.0-beta.3");
         expect(reused.shell.version).toBe("0.19.0-beta.2");
         expect(reused.resolution.artifacts).toEqual(registered.resolution.artifacts);
+        expect(reused.timings).toHaveLength(1);
+        expect(reused.timings[0].phase).toBe("remote-shell-materialize");
+        expect(reused.timings[0].durationMs).toBeGreaterThan(0);
         expect(await readFile(reusedDmgPath, "utf8")).toBe("signed-notarized-dmg");
         expect(await readFile(reusedPayloadPath, "utf8")).toBe("signed-launcher-payload");
       } finally {

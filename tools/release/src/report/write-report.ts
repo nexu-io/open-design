@@ -1,6 +1,8 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
+import { resolveReportTimings } from "./timings.ts";
+
 type JsonRecord = Record<string, unknown>;
 
 function required(name: string): string {
@@ -116,13 +118,13 @@ const manifest = readJsonFile(join(reportRoot, "manifest.json"));
 const build = buildJsonPath.length > 0 ? readJsonFile(resolvePath(buildJsonPath)) : null;
 const index = indexPath.length > 0 ? readJsonFile(resolvePath(indexPath)) : null;
 const sourceStatus = optional("REPORT_STATUS", String(index?.status ?? suiteResult?.status ?? "unknown"));
-const buildTimings = arrayOrEmpty(build?.timings);
-const releaseScriptTimings = arrayOrEmpty(build?.releaseScriptTimings ?? index?.timings);
-const smokeTimings = arrayOrEmpty(smokeSummary?.timings);
+const reportTimings = resolveReportTimings({ build, index, smokeSummary, suiteResult });
+const buildTimings = reportTimings.build;
+const releaseScriptTimings = reportTimings.releaseScript;
+const smokeTimings = reportTimings.smoke;
 const cacheReport = objectOrNull(build?.cacheReport);
 const cacheEntries = arrayOrEmpty(cacheReport?.entries ?? index?.cache);
 const buildSegments = arrayOrEmpty(build?.segments ?? index?.buildSegments);
-const totalDurationMs = numberOrNull(index?.durationMs) ?? numberOrNull(suiteResult?.durationMs) ?? null;
 
 const report = {
   version: 1,
@@ -152,7 +154,8 @@ const report = {
     ...(indexPath.length === 0 ? {} : { indexPath: resolvePath(indexPath) }),
   },
   timings: {
-    totalDurationMs,
+    totalDurationMs: reportTimings.totalDurationMs,
+    totalDurationSource: reportTimings.totalDurationSource,
     releaseScript: releaseScriptTimings,
     build: buildTimings,
     smoke: smokeTimings,
@@ -182,6 +185,9 @@ const lines = [
   `- target: ${code(releaseTarget)}`,
   `- version: ${code(report.releaseVersion)}`,
 ];
+if (reportTimings.totalDurationMs != null) {
+  lines.push(`- measured duration: ${code(seconds(reportTimings.totalDurationMs))} (${code(reportTimings.totalDurationSource)})`);
+}
 if (releaseScriptTimings.length > 0) {
   lines.push("", "| Release script step | Status | Duration |", "| --- | --- | ---: |");
   for (const timing of releaseScriptTimings.map((entry) => objectOrNull(entry)).filter((entry): entry is JsonRecord => entry != null)) {
@@ -192,6 +198,12 @@ if (buildTimings.length > 0) {
   lines.push("", "| Build phase | Duration |", "| --- | ---: |");
   for (const timing of buildTimings.map((entry) => objectOrNull(entry)).filter((entry): entry is JsonRecord => entry != null)) {
     lines.push(`| ${code(timing.phase)} | ${seconds(timing.durationMs)} |`);
+  }
+}
+if (smokeTimings.length > 0) {
+  lines.push("", "| Smoke step | Status | Duration |", "| --- | --- | ---: |");
+  for (const timing of smokeTimings.map((entry) => objectOrNull(entry)).filter((entry): entry is JsonRecord => entry != null)) {
+    lines.push(`| ${code(timing.step)} | ${code(timing.status)} | ${seconds(timing.durationMs)} |`);
   }
 }
 if (cacheEntries.length > 0) {

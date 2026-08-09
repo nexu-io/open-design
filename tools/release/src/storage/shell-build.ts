@@ -4,7 +4,7 @@ import { basename, dirname } from "node:path";
 
 import { parseReleaseVersion, releaseChannelDescriptor, type ReleaseChannel } from "@open-design/release";
 
-import { contentType, githubInfo, optional, publicUrl, required, storageConfigFromEnv, writeJson } from "./common.ts";
+import { contentType, githubInfo, normalizePublicUrl, optional, publicUrl, required, storageConfigFromEnv, writeJson } from "./common.ts";
 import { getStorageObject, putStorageObjectWithStatus, type StorageConfig } from "./s3-upload.ts";
 
 type Digest = `sha256:${string}`;
@@ -123,7 +123,7 @@ export function validateShellBuildRecord(value: unknown, expected: Pick<ShellBui
       || raw.size <= 0
       || typeof raw.url !== "string"
     ) throw new Error(`invalid Shell build record artifact ${kind}`);
-    artifacts[kind] = raw as ShellBuildArtifactRecord;
+    artifacts[kind] = { ...(raw as ShellBuildArtifactRecord), url: normalizePublicUrl(raw.url) };
   }
   return { ...(value as ShellBuildRecord), artifacts };
 }
@@ -145,7 +145,7 @@ function writeGithubOutput(name: string, value: string): void {
   if (path.length > 0) appendFileSync(path, `${name}=${value}\n`, "utf8");
 }
 
-function createReusedBuildReport(plan: ShellBuildPlan, record: ShellBuildRecord): Record<string, unknown> {
+function createReusedBuildReport(plan: ShellBuildPlan, record: ShellBuildRecord, durationMs: number): Record<string, unknown> {
   const local = (kind: string): string | null => plan.artifacts[kind] ?? null;
   const artifact = (kind: string): BuildArtifact | null => {
     const path = local(kind);
@@ -179,12 +179,16 @@ function createReusedBuildReport(plan: ShellBuildPlan, record: ShellBuildRecord)
     releaseVersion: plan.releaseVersion,
     resolution: {
       artifacts: record.artifacts,
-      recordUrl: `${required("RELEASE_PUBLIC_ORIGIN").replace(/\/+$/, "")}/${shellBuildIndexObjectKey(record.channel, record.shell.type, record.shell.sourceDigest, record.target)}`,
+      recordUrl: publicUrl(
+        required("RELEASE_PUBLIC_ORIGIN"),
+        "",
+        shellBuildIndexObjectKey(record.channel, record.shell.type, record.shell.sourceDigest, record.target),
+      ),
       state: "reused",
     },
     runtimeNamespaceRoot: plan.runtimeNamespaceRoot,
     shell: record.shell,
-    timings: [{ durationMs: 0, phase: "remote-shell-materialize" }],
+    timings: [{ durationMs, phase: "remote-shell-materialize" }],
     to: plan.to,
   };
 }
@@ -207,6 +211,7 @@ async function putImmutable(storage: StorageConfig, input: { body?: Buffer; body
 }
 
 export async function resolveShellBuild(): Promise<void> {
+  const startedAt = performance.now();
   const channel = releaseChannelDescriptor(required("RELEASE_CHANNEL")).channel;
   const planPath = required("RELEASE_SHELL_PLAN_JSON_PATH");
   const outputPath = required("RELEASE_SHELL_BUILD_JSON_PATH");
@@ -233,7 +238,7 @@ export async function resolveShellBuild(): Promise<void> {
     mkdirSync(dirname(targetPath), { recursive: true });
     writeFileSync(targetPath, remote.bytes);
   }
-  writeJson(outputPath, createReusedBuildReport(plan, record));
+  writeJson(outputPath, createReusedBuildReport(plan, record, Math.max(1, Math.round(performance.now() - startedAt))));
   writeGithubOutput("state", "hit");
   writeGithubOutput("shell_version", record.shell.version);
   console.log(`Shell build hit: ${indexKey} (${record.shell.version})`);
@@ -302,7 +307,7 @@ export async function registerShellBuild(): Promise<void> {
     ...build,
     resolution: {
       artifacts: committedRecord.artifacts,
-      recordUrl: `${publicOrigin.replace(/\/+$/, "")}/${indexKey}`,
+      recordUrl: publicUrl(publicOrigin, "", indexKey),
       state: "registered",
     },
   });

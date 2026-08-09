@@ -2685,6 +2685,11 @@ process.stdin.on("end", () => {
     expect(winJob).toContain("RELEASE_SHELL_BUILD_JSON_PATH:");
     expect(publishJob).toContain('RELEASE_CLOSURE_REQUIRED: "true"');
     expect(publishJob).toContain('RELEASE_SHELL_REQUIRED: "true"');
+    expect(workflow).toContain("Validate checkout ref shape");
+    expect(workflow).toContain("full 40-character commit SHA; abbreviated SHA");
+    expect(publishJob).toContain("Observe published beta public feed");
+    expect(publishJob).toContain("continue-on-error: true");
+    expect(publishJob).toContain("tools-release observe-public-feed");
     expect(publishJob).toContain("mac_arm64_closure_url:");
     expect(publishJob).toContain("win_x64_closure_url:");
   });

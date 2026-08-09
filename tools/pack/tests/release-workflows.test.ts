@@ -145,6 +145,11 @@ describe("release workflows", () => {
     expect(beta).not.toContain("summary-beta.ts");
     expect(beta).toContain("tools-release publish-metadata");
     expect(beta).toContain("tools-release verify-metadata");
+    expect(beta).toContain("Validate checkout ref shape");
+    expect(beta).toContain("full 40-character commit SHA; abbreviated SHA");
+    expect(betaPublish).toContain("Observe published beta public feed");
+    expect(betaPublish).toContain("continue-on-error: true");
+    expect(betaPublish).toContain("tools-release observe-public-feed");
     expect(beta).toContain("tools-release summary-metadata");
     for (const workflow of [beta, betaSelfHosted, preview, prerelease, stable]) {
       expect(workflow).not.toContain(".github/scripts/release/r2/");

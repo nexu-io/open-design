@@ -113,6 +113,12 @@ cli
   });
 
 cli
+  .command("observe-public-feed", "Observe a published release feed without changing publication state")
+  .action(async () => {
+    await import("./storage/observe-public-feed.ts");
+  });
+
+cli
   .command("summary-metadata", "Write a release metadata summary")
   .action(async () => {
     await import("./storage/summary-metadata.ts");

@@ -49,7 +49,7 @@ on:
         type: string
         default: ""
       ref:
-        description: "Optional git ref to build. Empty builds the dispatched ref."
+        description: "Optional branch, tag, or full 40-character commit SHA to build. Abbreviated SHAs are rejected."
         required: false
         type: string
         default: ""
@@ -377,6 +377,16 @@ jobs:
       release_name: ${{ steps.beta.outputs.release_name }}
       state_source: ${{ steps.beta.outputs.state_source }}
     steps:
+      - name: Validate checkout ref shape
+        env:
+          REQUESTED_REF: ${{ inputs.ref }}
+        run: |
+          set -euo pipefail
+          if [[ "$REQUESTED_REF" =~ ^[0-9a-fA-F]{7,39}$ ]]; then
+            echo "release-beta ref must be a branch, tag, or full 40-character commit SHA; abbreviated SHA '$REQUESTED_REF' is ambiguous" >&2
+            exit 1
+          fi
+
       - name: Checkout
         uses: actions/checkout@v6.0.2
         with:
@@ -1787,6 +1797,16 @@ jobs:
           RELEASE_VERSION: ${{ needs.metadata.outputs.beta_version }}
           WIN_X64_RESULT: ${{ needs.build_win_x64.result }}
         run: pnpm exec tools-release verify-metadata
+
+      - name: Observe published beta public feed
+        continue-on-error: true
+        env:
+          RELEASE_LATEST_METADATA_URL: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}/beta/latest/metadata.json
+          RELEASE_METADATA_URL: ${{ steps.outputs.outputs.version_metadata_url }}
+          RELEASE_PUBLIC_FEED_REPORT_PATH: ${{ runner.temp }}/release-metadata/public-feed-observation.json
+          RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          RELEASE_VERSION: ${{ needs.metadata.outputs.beta_version }}
+        run: pnpm exec tools-release observe-public-feed
 
       - name: Write beta metadata summary
         env:

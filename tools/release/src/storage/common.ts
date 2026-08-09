@@ -69,8 +69,19 @@ export function contentType(name: string): string {
   return "application/octet-stream";
 }
 
+export function normalizePublicUrl(value: string): string {
+  const url = new URL(value);
+  if (url.protocol !== "https:" && url.protocol !== "http:") {
+    throw new Error(`public URL must use http or https: ${value}`);
+  }
+  return url.toString();
+}
+
 export function publicUrl(publicOrigin: string, prefix: string, name: string): string {
-  return `${publicOrigin.replace(/\/+$/, "")}/${prefix.replace(/^\/+|\/+$/g, "")}/${name}`;
+  const path = [prefix.replace(/^\/+|\/+$/g, ""), name.replace(/^\/+/, "")]
+    .filter((part) => part.length > 0)
+    .join("/");
+  return normalizePublicUrl(`${publicOrigin.replace(/\/+$/, "")}/${path}`);
 }
 
 export function githubInfo(): Record<string, unknown> {
