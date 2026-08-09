@@ -361,6 +361,11 @@ export function pinAssistantMessageOnRunCreate(db: SqliteDb, run: ChatRunMessage
     // cursor must not survive into the new generation (mrcfps P1 on #6418),
     // otherwise the retry's final web PUT stays stuck on the old failure and a
     // reattach resumes from the superseded run's last-run-event cursor.
+    //
+    // startedAt: a retry rebinding an OLD-run row resets to the new run's
+    // createdAt; a runId-less web placeholder (the normal pre-run flow, where
+    // the UI already persisted the turn's own startedAt) keeps that
+    // web-persisted start time.
     db.prepare(
       `UPDATE messages
           SET run_id = ?,
@@ -371,13 +376,18 @@ export function pinAssistantMessageOnRunCreate(db: SqliteDb, run: ChatRunMessage
               content = '',
               ended_at = NULL,
               last_run_event_id = NULL,
-              started_at = ?
+              started_at = CASE
+                WHEN ? THEN ?
+                ELSE COALESCE(started_at, ?)
+              END
         WHERE id = ? AND conversation_id = ?`,
     ).run(
       run.id,
       run.status,
       run.sessionMode ?? null,
       run.context ? JSON.stringify(run.context) : null,
+      existing.runId ? 1 : 0,
+      run.createdAt,
       run.createdAt,
       run.assistantMessageId,
       run.conversationId,
