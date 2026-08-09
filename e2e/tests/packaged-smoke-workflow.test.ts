@@ -2643,6 +2643,7 @@ process.stdin.on("end", () => {
     const publishJob = workflow.slice(publishStart);
 
     expect(workflow).toContain("CLOSURE_MIN_SHELL_VERSION: 0.19.0-beta.4");
+    expect(workflow).toContain("OPEN_DESIGN_POSTINSTALL_CONCURRENCY: 2");
     expect(macJob).toContain("Materialize legacy mac_arm64 migration fixture");
     expect(workflow).toContain("LEGACY_MAC_ARM64_VERSION: 0.16.2-beta.155");
     expect(workflow).toContain('RELEASE_LAUNCHER_VERSION_MIN_BETA: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_BETA }}');

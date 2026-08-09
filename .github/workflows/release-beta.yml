@@ -320,6 +320,11 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  # Release runners repeatedly install the same workspace before metadata and
+  # platform work. Reuse the repository's dependency-aware postinstall scheduler
+  # at a deliberately conservative, cross-platform fixed width; this keeps the
+  # release hot path simple while avoiding the serial workspace rebuild default.
+  OPEN_DESIGN_POSTINSTALL_CONCURRENCY: 2
   # The 0.19 epoch deliberately drops the historical combined package. A beta
   # Closure requires the first canonical Shell proven across an independent
   # release binding. Earlier 0.19 beta Shells were never published and do not
