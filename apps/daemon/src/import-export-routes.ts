@@ -5,7 +5,13 @@ import os from 'node:os';
 import { readFile, rm } from 'node:fs/promises';
 import { isBlocked as isBlockedSystemDir } from './linked-dirs.js';
 import type { RouteDeps } from './server-context.js';
-import type { AuthorizeProjectRequest } from './collab/project-request-authority.js';
+import type {
+  AuthorizedProjectToolRequest,
+  AuthorizeProjectRequest,
+  AuthorizeProjectToolRequest,
+} from './collab/project-request-authority.js';
+import { workspaceResourceContextFromRequest } from './collab/workspace-resource-mutation.js';
+import { PROJECT_EXPORT_TOOL_ENDPOINT } from './tool-tokens.js';
 import {
   InlineAssetsLimitError,
   MAX_INLINE_OWNER_BYTES,
@@ -519,8 +525,36 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
 
 }
 
-export interface RegisterProjectExportRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'node' | 'ids' | 'projectStore' | 'exports' | 'projectFiles' | 'validation'> {
+const DESKTOP_RENDERER_IPC_TIMEOUT_MS = 600_000;
+const RENDERER_PREVIEW_SCOPE_SETUP_MARGIN_MS = 10_000;
+const SCREENSHOT_RENDER_PREVIEW_SCOPE_TTL_MS =
+  DESKTOP_RENDERER_IPC_TIMEOUT_MS + RENDERER_PREVIEW_SCOPE_SETUP_MARGIN_MS;
+
+type AuthorizedExportRead = {
+  readonly previewWorkspace: AuthorizedProjectToolRequest['workspace'];
+};
+
+type ScreenshotExportBody = {
+  readonly deck?: unknown;
+  readonly editable?: unknown;
+  readonly fileName?: unknown;
+  readonly height?: unknown;
+  readonly imageFormat?: unknown;
+  readonly index?: unknown;
+  readonly title?: unknown;
+  readonly versionId?: unknown;
+  readonly width?: unknown;
+};
+
+type ScreenshotExportRequest = {
+  readonly authority: AuthorizedExportRead;
+  readonly body: ScreenshotExportBody | null | undefined;
+};
+
+export interface RegisterProjectExportRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'node' | 'ids' | 'projectStore' | 'exports' | 'projectFiles' | 'validation' | 'auth' | 'projectPreviewScopes'> {
   authorizeProjectRequest: AuthorizeProjectRequest;
+  authorizeProjectToolRequest: AuthorizeProjectToolRequest;
+  isApiTokenAuthorization: (authorization: string | undefined) => boolean;
 }
 
 export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectExportRoutesDeps) {
@@ -546,9 +580,32 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
   async function authorizeExportRead(
     req: any,
     res: any,
-    options: { allowNavigationQuery?: boolean } = {},
-  ): Promise<boolean> {
-    return ctx.authorizeProjectRequest(
+    options: { allowNavigationQuery?: boolean; toolEndpoint?: string } = {},
+  ): Promise<AuthorizedExportRead | null> {
+    const authorization = req.get('authorization');
+    if (
+      typeof authorization === 'string'
+      && !ctx.isApiTokenAuthorization(authorization)
+    ) {
+      const grant = ctx.auth.authorizeToolRequest(
+        req,
+        res,
+        'project:export',
+        { endpoint: options.toolEndpoint ?? req.path },
+      );
+      if (!grant) return null;
+      if (ctx.auth.requestProjectOverride(req.params.id, grant.projectId)) {
+        sendApiError(res, 403, 'FORBIDDEN', 'tool token belongs to a different project');
+        return null;
+      }
+      const authority = await ctx.authorizeProjectToolRequest(
+        res,
+        grant.projectId,
+        { mode: 'read' },
+      );
+      return authority ? { previewWorkspace: authority.workspace } : null;
+    }
+    const authorized = await ctx.authorizeProjectRequest(
       req,
       res,
       req.params.id,
@@ -556,10 +613,32 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
         ? { mode: 'read', allowNavigationQuery: true }
         : { mode: 'read' },
     );
+    if (!authorized) return null;
+    const requestWorkspace = workspaceResourceContextFromRequest(req);
+    return {
+      previewWorkspace: requestWorkspace === null || requestWorkspace === 'missing'
+        ? null
+        : {
+            workspaceId: requestWorkspace.workspaceId,
+            workspaceMemberId: requestWorkspace.workspaceMemberId,
+          },
+    };
   }
 
   function isNoSlideDeckRenderError(rendered: { ok: boolean; error?: string }): boolean {
     return !rendered.ok && typeof rendered.error === 'string' && /no slide surfaces found/i.test(rendered.error);
+  }
+
+  function scopedProjectPreviewBaseHref(
+    projectId: string,
+    fileName: string,
+    scope: string,
+  ): string {
+    const previewDir = nodePath.posix.dirname(fileName.replace(/^\/+/, ''));
+    const previewRoot = `${daemonUrlRef.current.replace(/\/+$/, '')}/api/projects/${encodeURIComponent(projectId)}/preview/${encodeURIComponent(scope)}/`;
+    return !previewDir || previewDir === '.'
+      ? previewRoot
+      : `${previewRoot}${previewDir.split('/').filter(Boolean).map(encodeURIComponent).join('/')}/`;
   }
 
   function normalizeExportVersionId(raw: unknown): string | undefined {
@@ -620,9 +699,11 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
     res: Response,
     format: 'pptx' | 'pdf' | 'image',
     projectId: string,
-    body: any,
+    request: ScreenshotExportRequest,
   ) {
+    const { authority, body } = request;
     let renderOutputDir: string | null = null;
+    let renderPreviewScope: string | null = null;
     try {
       const { fileName, title, index, imageFormat, width, height } = body || {};
       if (typeof fileName !== 'string' || fileName.length === 0) {
@@ -643,7 +724,13 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
       }
       if (typeof desktopSlideRenderer !== 'function') {
         if (format === 'image' && typeof desktopArtifactExporter === 'function') {
+          renderPreviewScope = ctx.projectPreviewScopes.mint(
+            projectId,
+            authority.previewWorkspace,
+            { ttlMs: SCREENSHOT_RENDER_PREVIEW_SCOPE_TTL_MS },
+          );
           const input = await buildDesktopArtifactExportInput({
+            baseHref: scopedProjectPreviewBaseHref(projectId, fileName, renderPreviewScope),
             daemonUrl: daemonUrlRef.current,
             fileName,
             format,
@@ -667,6 +754,11 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
               'UPSTREAM_UNAVAILABLE',
               `desktop renderer unavailable: ${err?.message || String(err)}`,
             );
+          } finally {
+            if (renderPreviewScope) {
+              ctx.projectPreviewScopes.revoke(renderPreviewScope);
+              renderPreviewScope = null;
+            }
           }
           if (!result.ok || typeof result.path !== 'string') {
             return sendApiError(
@@ -722,6 +814,16 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
         projectId,
         projectsRoot: PROJECTS_DIR,
       };
+      renderPreviewScope = ctx.projectPreviewScopes.mint(
+        projectId,
+        authority.previewWorkspace,
+        { ttlMs: SCREENSHOT_RENDER_PREVIEW_SCOPE_TTL_MS },
+      );
+      renderOptions.baseHref = scopedProjectPreviewBaseHref(
+        projectId,
+        fileName,
+        renderPreviewScope,
+      );
       if (sourceHtml !== undefined) renderOptions.sourceHtml = sourceHtml;
       if (typeof title === 'string') renderOptions.title = title;
       if (typeof width === 'number') renderOptions.width = width;
@@ -773,6 +875,11 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
           'UPSTREAM_UNAVAILABLE',
           `desktop renderer unavailable: ${err?.message || String(err)}`,
         );
+      } finally {
+        if (renderPreviewScope) {
+          ctx.projectPreviewScopes.revoke(renderPreviewScope);
+          renderPreviewScope = null;
+        }
       }
       const tRendered = Date.now();
 
@@ -947,6 +1054,10 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
         String(err?.message || err),
       );
     } finally {
+      if (renderPreviewScope) {
+        ctx.projectPreviewScopes.revoke(renderPreviewScope);
+        renderPreviewScope = null;
+      }
       // Remove the scratch render dir regardless of success — these files are
       // pure transient handoff, never served or persisted.
       if (renderOutputDir) {
@@ -954,6 +1065,7 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
       }
     }
   }
+
   // Streams a ZIP of the project's on-disk tree so the "Download as .zip"
   // share menu can hand the user the actual files they uploaded — e.g. the
   // imported `ui-design/` folder — instead of a one-file snapshot of the
@@ -1109,16 +1221,18 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
   // PNG and assemble a one-image-per-slide .pptx. Replaces the old "send a prompt
   // to the agent and hope it runs python-pptx" path with a deterministic export.
   app.post('/api/projects/:id/export/pptx', async (req, res) => {
-    if (!await authorizeExportRead(req, res)) return;
-    await handleScreenshotExport(res, 'pptx', req.params.id, req.body);
+    const authority = await authorizeExportRead(req, res, { toolEndpoint: PROJECT_EXPORT_TOOL_ENDPOINT });
+    if (!authority) return;
+    await handleScreenshotExport(res, 'pptx', req.params.id, { authority, body: req.body });
   });
 
   // Programmatic screenshot-based (raster) PDF: one pixel-perfect page per slide.
   // The print-ready vector PDF stays on POST /export/pdf; this is the "exactly
   // what you see" counterpart that shares the slide renderer with PPTX.
   app.post('/api/projects/:id/export/pdf-image', async (req, res) => {
-    if (!await authorizeExportRead(req, res)) return;
-    await handleScreenshotExport(res, 'pdf', req.params.id, req.body);
+    const authority = await authorizeExportRead(req, res, { toolEndpoint: PROJECT_EXPORT_TOOL_ENDPOINT });
+    if (!authority) return;
+    await handleScreenshotExport(res, 'pdf', req.params.id, { authority, body: req.body });
   });
 
   // Programmatic image export: a single pixel-perfect PNG. For a deck it renders
@@ -1126,8 +1240,9 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
   // the whole document at natural size. Viewport-independent — unlike the
   // host-compositor snapshot, the size never depends on the preview pane.
   app.post('/api/projects/:id/export/image', async (req, res) => {
-    if (!await authorizeExportRead(req, res)) return;
-    await handleScreenshotExport(res, 'image', req.params.id, req.body);
+    const authority = await authorizeExportRead(req, res, { toolEndpoint: PROJECT_EXPORT_TOOL_ENDPOINT });
+    if (!authority) return;
+    await handleScreenshotExport(res, 'image', req.params.id, { authority, body: req.body });
   });
 
   // Generic programmatic export (PDF / image / PPTX) for the `od export` CLI and
@@ -1147,18 +1262,22 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
     if (!isExportFormat(format)) {
       return sendApiError(res, 400, 'BAD_REQUEST', 'invalid export format');
     }
-    if (!await authorizeExportRead(req, res)) return;
+    const authority = await authorizeExportRead(req, res, { toolEndpoint: PROJECT_EXPORT_TOOL_ENDPOINT });
+    if (!authority) return;
     await handleScreenshotExport(res, format, req.params.id, {
-      fileName,
-      // pptx is deck-only (handleScreenshotExport forces it); pdf/image honor the
-      // caller's deck flag when one is supplied. Omitted stays omitted so the
-      // renderer can auto-detect deck artifacts.
-      ...(typeof deck === 'boolean' ? { deck } : {}),
-      ...(typeof imageFormat === 'string' ? { imageFormat } : {}),
-      ...(width != null ? { width } : {}),
-      ...(height != null ? { height } : {}),
-      ...(typeof title === 'string' ? { title } : {}),
-      ...(typeof versionId === 'string' ? { versionId } : {}),
+      authority,
+      body: {
+        fileName,
+        // pptx is deck-only (handleScreenshotExport forces it); pdf/image honor the
+        // caller's deck flag when one is supplied. Omitted stays omitted so the
+        // renderer can auto-detect deck artifacts.
+        ...(typeof deck === 'boolean' ? { deck } : {}),
+        ...(typeof imageFormat === 'string' ? { imageFormat } : {}),
+        ...(width != null ? { width } : {}),
+        ...(height != null ? { height } : {}),
+        ...(typeof title === 'string' ? { title } : {}),
+        ...(typeof versionId === 'string' ? { versionId } : {}),
+      },
     });
   });
 

@@ -940,7 +940,7 @@ import {
   seedLibraryExtensionOrigins,
 } from './library-tokens.js';
 import { listLibraryTokenOrigins } from './library-store.js';
-import { apiTokenFromEnv, isApiAuthDisabled, isApiTokenMiddlewareEnabled } from './api-token-auth.js';
+import { apiTokenFromEnv, isApiAuthDisabled } from './api-token-auth.js';
 import { createOpenDesignPublicMetadataService } from './services/open-design-public-metadata.js';
 import { createWhatsNewService } from './services/whats-new.js';
 import { execCommandViaLoginShell } from './services/login-shell.js';
@@ -1969,15 +1969,18 @@ function createProjectPreviewScopeRegistry() {
   }
 
   return {
-    mint(projectId, workspace = null) {
+    mint(projectId, workspace = null, options = {}) {
       pruneExpired();
       const scope = randomUUID();
       scopes.set(scope, {
         projectId: String(projectId),
         workspace,
-        expiresAt: Date.now() + PROJECT_PREVIEW_SCOPE_TTL_MS,
+        expiresAt: Date.now() + (options.ttlMs ?? PROJECT_PREVIEW_SCOPE_TTL_MS),
       });
       return scope;
+    },
+    revoke(scope) {
+      scopes.delete(String(scope || ''));
     },
     validate(projectId, scope) {
       const key = String(scope || '');
@@ -2406,6 +2409,12 @@ export async function startServer({
   // are exempted so the desktop UI keeps working).
   const apiToken = apiTokenFromEnv();
   const apiAuthDisabled = isApiAuthDisabled();
+  const apiTokenAuthEnabled = apiToken.length > 0 && !apiAuthDisabled;
+  const isApiTokenAuthorization = (authorization: string | undefined): boolean => {
+    if (!apiTokenAuthEnabled) return false;
+    const match = /^Bearer\s+(\S+)\s*$/i.exec(authorization ?? '');
+    return match?.[1] === apiToken;
+  };
   if (!isLoopbackHostname(host) && apiToken.length === 0 && !apiAuthDisabled) {
     throw new Error(
       `OD_BIND_HOST=${host} requires OD_API_TOKEN to be set. ` +
@@ -2445,7 +2454,7 @@ export async function startServer({
   // browser iframes can load HTML/CSS/JS without privileged headers.
   // Rich daemon status stays authenticated because it includes local
   // runtime paths.
-  if (isApiTokenMiddlewareEnabled()) {
+  if (apiTokenAuthEnabled) {
     const openProbePaths = new Set([
       '/health',
       '/api/health',
@@ -2470,9 +2479,7 @@ export async function startServer({
       // bearer; the loopback bypass exists for the localhost desktop
       // UI which has no proxy in the path.
       if (isLoopbackPeerAddress(req.socket?.remoteAddress)) return next();
-      const auth = req.get('authorization') ?? '';
-      const match = /^Bearer\s+(\S+)\s*$/i.exec(auth);
-      if (!match || match[1] !== apiToken) {
+      if (!isApiTokenAuthorization(req.get('authorization'))) {
         return res.status(401).json({
           error: { code: 'API_TOKEN_REQUIRED', message: 'Authorization: Bearer <OD_API_TOKEN> required' },
         });
@@ -6674,7 +6681,7 @@ export async function startServer({
     options,
   ) => {
     const binding = getWorkspaceProjectByProjectId(db, projectId);
-    if (!binding?.workspaceId) return true;
+    if (!binding?.workspaceId) return { workspace: null };
 
     let authority;
     if (process.env.OD_WORKSPACE_CONTEXT_SOURCE?.trim() === 'vela') {
@@ -6689,7 +6696,7 @@ export async function startServer({
           'workspace membership authority is temporarily unavailable',
           { retryable: true },
         );
-        return false;
+        return null;
       }
       const item = directory.items.find(
         (candidate) => candidate.workspaceId === binding.workspaceId,
@@ -6701,7 +6708,7 @@ export async function startServer({
           'WORKSPACE_PROJECT_PERMISSION_DENIED',
           'workspace project access is not allowed',
         );
-        return false;
+        return null;
       }
       authority = workspaceContextFromDirectoryItem(item);
     } else {
@@ -6739,7 +6746,13 @@ export async function startServer({
         return undefined;
       },
     };
-    return scopedAuthorize(request, res, projectId, options);
+    if (!await scopedAuthorize(request, res, projectId, options)) return null;
+    return {
+      workspace: {
+        workspaceId: authority.workspaceId,
+        workspaceMemberId: authority.workspaceMemberId,
+      },
+    };
   };
   const projectFileDeps = {
     ensureProject,
@@ -7513,7 +7526,11 @@ export async function startServer({
     exports: projectExportDeps,
     projectFiles: projectFileDeps,
     validation: validationDeps,
+    auth: authDeps,
     authorizeProjectRequest,
+    authorizeProjectToolRequest,
+    isApiTokenAuthorization,
+    projectPreviewScopes,
   });
   registerProjectFileRoutes(app, {
     db,
@@ -13847,6 +13864,7 @@ export async function startServer({
     projectStore: projectStoreDeps,
     authorizeProjectRequest,
     authorizeProjectToolRequest,
+    isApiTokenAuthorization,
     projectFiles: projectFileDeps,
     conversations: conversationDeps,
     templates: templateDeps,

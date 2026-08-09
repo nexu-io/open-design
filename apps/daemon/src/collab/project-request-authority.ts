@@ -25,11 +25,18 @@ export type AuthorizeProjectRequest = (
   options: AuthorizeProjectRequestOptions,
 ) => Promise<boolean>;
 
+export type AuthorizedProjectToolRequest = {
+  readonly workspace: {
+    readonly workspaceId: string;
+    readonly workspaceMemberId: string;
+  } | null;
+};
+
 export type AuthorizeProjectToolRequest = (
   res: Response,
   projectId: string,
   options: AuthorizeProjectRequestOptions,
-) => Promise<boolean>;
+) => Promise<AuthorizedProjectToolRequest | null>;
 
 /**
  * Build the one project data-plane authority gate used by route modules.

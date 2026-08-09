@@ -5,6 +5,7 @@ export const DEFAULT_TOOL_TOKEN_TTL_MS = 15 * 60 * 1000;
 // Capability key for the parameterized media wait route. Token grants cannot
 // enumerate a task id that is created after the grant is minted.
 export const MEDIA_TASK_WAIT_TOOL_ENDPOINT = '/api/media/tasks/:id/wait';
+export const PROJECT_EXPORT_TOOL_ENDPOINT = '/api/projects/:id/export/:format';
 
 export const CHAT_TOOL_ENDPOINTS = [
   '/api/tools/live-artifacts/create',
@@ -16,6 +17,7 @@ export const CHAT_TOOL_ENDPOINTS = [
   '/api/tools/design-systems/read',
   '/api/tools/media/generate',
   MEDIA_TASK_WAIT_TOOL_ENDPOINT,
+  PROJECT_EXPORT_TOOL_ENDPOINT,
   '/api/tools/library/search',
   '/api/tools/library/apply',
 ] as const;
@@ -29,6 +31,7 @@ export const CHAT_TOOL_OPERATIONS = [
   'connectors:execute',
   'design-systems:read',
   'media:generate',
+  'project:export',
   'library:search',
   'library:apply',
 ] as const;
