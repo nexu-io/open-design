@@ -1,7 +1,7 @@
 // @vitest-environment node
 
 import { execFile } from 'node:child_process';
-import { access, chmod, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { access, chmod, copyFile, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
@@ -37,7 +37,6 @@ const releaseChannel = process.env.OD_PACKAGED_E2E_RELEASE_CHANNEL;
 const releaseVersion = process.env.OD_PACKAGED_E2E_RELEASE_VERSION;
 const shellVersion = process.env.OD_PACKAGED_E2E_SHELL_VERSION;
 const updateScenario = resolvePackagedUpdateScenario({ releaseChannel, releaseVersion, shellVersion });
-const toolsPackReleaseVersionArgs = releaseAppVersionArgs(releaseVersion);
 const pnpmCommand = process.env.OD_E2E_PNPM_COMMAND ?? 'pnpm';
 const screenshotPath = join(toolsPackDir, 'screenshots', `${namespace}.png`);
 const smokeProfile = process.env.OD_PACKAGED_E2E_MAC_SMOKE_PROFILE ?? 'core';
@@ -47,6 +46,9 @@ const updateVersion = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_MAC_UPDAT
 const updateBuildJsonPath = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_MAC_UPDATE_BUILD_JSON_PATH);
 const updateFixture = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_MAC_UPDATE_FIXTURE);
 const closureBuildJsonPath = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_CLOSURE_BUILD_JSON_PATH);
+const legacyDmgPath = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_MAC_LEGACY_DMG_PATH);
+const legacyVersion = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_MAC_LEGACY_VERSION);
+const minimumShellVersion = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_MAC_MIN_SHELL_VERSION);
 const packagedInviteDeeplink =
   'opendesign://workspace/invite/continue?workspace_id=packaged-smoke-workspace&member_id=packaged-smoke-member&invite_id=packaged-smoke-invite&nonce=packaged-smoke-nonce';
 
@@ -317,6 +319,9 @@ type PackagedOnboardingEvalValue = {
 const shouldRunPackagedMacSmoke = process.platform === 'darwin' && process.env.OD_PACKAGED_E2E_MAC === '1';
 const macDescribe = shouldRunPackagedMacSmoke ? describe : describe.skip;
 const macClosureDescribe = shouldRunPackagedMacSmoke && closureBuildJsonPath != null
+  ? describe
+  : describe.skip;
+const macLegacyMigrationDescribe = shouldRunPackagedMacSmoke && !verifyCoreOnly
   ? describe
   : describe.skip;
 const shouldRunPackagedMacOnboardingSmoke =
@@ -1084,6 +1089,154 @@ macClosureDescribe('packaged mac Standalone Closure release acceptance', () => {
   }, 360_000);
 });
 
+macLegacyMigrationDescribe('packaged mac historical outer migration acceptance', () => {
+  test('[P0] routes the last packaged beta through the installer and preserves product data in the new architecture', async () => {
+    const report = await createPackagedSmokeReport('mac');
+    const updateEnv = captureUpdateEnv();
+    const legacyFixturePath = requireMigrationInput('OD_PACKAGED_E2E_MAC_LEGACY_DMG_PATH', legacyDmgPath);
+    const legacyFixtureVersion = requireMigrationInput('OD_PACKAGED_E2E_MAC_LEGACY_VERSION', legacyVersion);
+    const requiredShellVersion = requireMigrationInput('OD_PACKAGED_E2E_MAC_MIN_SHELL_VERSION', minimumShellVersion);
+    const targetReleaseVersion = requireMigrationInput('OD_PACKAGED_E2E_RELEASE_VERSION', releaseVersion);
+    if (closureBuildJsonPath == null) {
+      throw new Error('full historical migration acceptance requires OD_PACKAGED_E2E_CLOSURE_BUILD_JSON_PATH');
+    }
+
+    let installed = false;
+    let started = false;
+    let migrationFixture: ToolsServeUpdaterFixture | null = null;
+    try {
+      await resetPackagedRuntimeState();
+      const currentDmgPath = await resolveMainBuildDmgPath();
+      const legacyInstall = await installLegacyMacDmg({
+        currentDmgPath,
+        legacyDmgPath: legacyFixturePath,
+        legacyVersion: legacyFixtureVersion,
+      });
+      installed = true;
+      expect(legacyInstall.detached).toBe(true);
+      expectPathInside(legacyInstall.installedAppPath, join(outputNamespaceRoot, 'install', 'Applications'));
+      await assertMacInviteProtocolRegistration(legacyInstall.installedAppPath);
+      await seedPackagedOnboardingComplete();
+
+      migrationFixture = await startToolsServeUpdaterFixture({
+        artifactPath: currentDmgPath,
+        channel: updateScenario.channel,
+        controlLauncherVersionMin: requiredShellVersion,
+        controlLauncherVersionUrl: 'https://open-design.ai/download',
+        platform: 'mac',
+        version: targetReleaseVersion,
+        workspaceRoot,
+      });
+      applyPackagedUpdateEnv(
+        process.env,
+        resolvePackagedUpdateScenario({
+          releaseChannel: updateScenario.channel,
+          releaseVersion: legacyFixtureVersion,
+          shellVersion: legacyFixtureVersion,
+        }),
+        migrationFixture.info.metadataUrl,
+      );
+
+      const legacyStart = await runToolsPackJson<MacStartResult>('start', [], legacyFixtureVersion);
+      started = true;
+      expect(legacyStart.source).toBe('installed');
+      const legacyInspect = await waitForHealthyDesktop(legacyFixtureVersion);
+      const legacyHealth = assertHealthEvalValue(legacyInspect.eval?.value);
+      expect(legacyHealth.health.version).toBe(legacyFixtureVersion);
+      const seededInspect = await runToolsPackJson<MacInspectResult>(
+        'inspect',
+        ['--expr', upgradePersistenceSeedExpression],
+        legacyFixtureVersion,
+      );
+      const seeded = assertUpgradePersistenceSeed(seededInspect.eval?.value);
+
+      const installerRequired = await waitForUpdaterStatus(
+        (inspect) => inspect.update?.state === 'downloaded'
+          && inspect.update.artifact?.type === 'dmg'
+          && inspect.update.availableVersion === targetReleaseVersion
+          && inspect.update.reinstall?.reason === 'outer-below-min',
+        'legacy packaged beta installer-required migration',
+        180_000,
+        legacyFixtureVersion,
+      );
+      expect(installerRequired.update?.currentVersion).toBe(legacyFixtureVersion);
+      expect(installerRequired.update?.reinstall).toEqual({
+        installedVersion: legacyFixtureVersion,
+        minVersion: requiredShellVersion,
+        reason: 'outer-below-min',
+        url: 'https://open-design.ai/download',
+      });
+      const installerOpen = await runToolsPackJson<MacInspectResult>(
+        'inspect',
+        ['--update-action', 'install'],
+        legacyFixtureVersion,
+      );
+      expect(installerOpen.update?.installResult?.dryRun).toBe(true);
+
+      const legacyStop = await runToolsPackJson<MacStopResult>('stop', [], legacyFixtureVersion);
+      started = false;
+      expect(legacyStop.status).not.toBe('partial');
+      expect(legacyStop.remainingPids).toEqual([]);
+      await migrationFixture.close();
+      migrationFixture = null;
+      restoreUpdateEnv(updateEnv);
+
+      await seedConfiguredPackagedClosure();
+      const currentInstall = await runToolsPackJson<MacInstallResult>('install');
+      expect(currentInstall.installedAppPath).toBe(legacyInstall.installedAppPath);
+      const currentStart = await runToolsPackJson<MacStartResult>('start');
+      started = true;
+      expect(currentStart.pid).not.toBe(legacyStart.pid);
+      const currentInspect = await waitForHealthyDesktop();
+      const currentHealth = assertHealthEvalValue(currentInspect.eval?.value);
+      expect(currentHealth.health.version).toBe(targetReleaseVersion);
+      expect(currentInspect.update?.currentVersion).toBe(requiredShellVersion);
+      assertClosureDesktopIdentity(await readDesktopIdentityMarker(), targetReleaseVersion);
+      const migratedPptx = assertPptxExportEvalValue((await runToolsPackJson<MacInspectResult>('inspect', [
+        '--expr',
+        existingProjectPptxExportExpression(seeded.projectId),
+      ])).eval?.value);
+      expect(migratedPptx.projectId).toBe(seeded.projectId);
+
+      const currentStop = await runToolsPackJson<MacStopResult>('stop');
+      started = false;
+      expect(currentStop.status).not.toBe('partial');
+      expect(currentStop.remainingPids).toEqual([]);
+      await runToolsPackJson<MacStartResult>('start');
+      started = true;
+      const coldInspect = await waitForHealthyDesktop();
+      expect(assertHealthEvalValue(coldInspect.eval?.value).health.version).toBe(targetReleaseVersion);
+      const coldPptx = assertPptxExportEvalValue((await runToolsPackJson<MacInspectResult>('inspect', [
+        '--expr',
+        existingProjectPptxExportExpression(seeded.projectId),
+      ])).eval?.value);
+      expect(coldPptx.projectId).toBe(seeded.projectId);
+
+      await report.report.json('historical-outer-migration.json', {
+        coldPptx,
+        currentHealth,
+        installerOpen: installerOpen.update,
+        installerRequired: installerRequired.update,
+        legacyHealth,
+        migratedPptx,
+        versions: {
+          legacy: legacyFixtureVersion,
+          minimumShell: requiredShellVersion,
+          release: targetReleaseVersion,
+        },
+      });
+    } finally {
+      restoreUpdateEnv(updateEnv);
+      await migrationFixture?.close().catch(() => undefined);
+      if (started) {
+        await runToolsPackJson<MacStopResult>('stop').catch(() => undefined);
+        await runToolsPackJson<MacStopResult>('stop', [], legacyFixtureVersion).catch(() => undefined);
+      }
+      if (installed) await runToolsPackJson<MacUninstallResult>('uninstall').catch(() => undefined);
+    }
+  }, 600_000);
+});
+
 macOnboardingDescribe('packaged mac onboarding AMR smoke', () => {
   let installedAppPath: string | null = null;
   let started = false;
@@ -1694,7 +1847,11 @@ desktopMacDescribe('mac desktop settings smoke', () => {
   }, 45_000);
 });
 
-async function runToolsPackJson<T>(action: string, extraArgs: string[] = []): Promise<T> {
+async function runToolsPackJson<T>(
+  action: string,
+  extraArgs: string[] = [],
+  releaseVersionOverride: string | null | undefined = releaseVersion,
+): Promise<T> {
   const startSourceArgs = action === 'start' ? ['--start-source', 'installed'] : [];
   const args = [
     'exec',
@@ -1705,7 +1862,7 @@ async function runToolsPackJson<T>(action: string, extraArgs: string[] = []): Pr
     toolsPackDir,
     '--namespace',
     namespace,
-    ...toolsPackReleaseVersionArgs,
+    ...releaseAppVersionArgs(releaseVersionOverride),
     '--json',
     ...startSourceArgs,
     ...extraArgs,
@@ -2198,7 +2355,9 @@ async function readDesktopLocalCliSnapshot(
   `);
 }
 
-async function waitForHealthyDesktop(): Promise<MacInspectResult> {
+async function waitForHealthyDesktop(
+  releaseVersionOverride: string | null | undefined = releaseVersion,
+): Promise<MacInspectResult> {
   const timeoutMs = 90_000;
   const startedAt = Date.now();
   let lastResult: unknown = null;
@@ -2210,7 +2369,7 @@ async function waitForHealthyDesktop(): Promise<MacInspectResult> {
         healthExpression,
         '--update-action',
         'status',
-      ]);
+      ], releaseVersionOverride);
       lastResult = inspect;
       if (inspect.status?.state === 'running' && inspect.eval?.ok === true) {
         const value = asHealthEvalValue(inspect.eval.value);
@@ -2302,12 +2461,17 @@ async function waitForUpdaterStatus(
   predicate: (inspect: MacInspectResult) => boolean,
   label: string,
   timeoutMs = 120_000,
+  releaseVersionOverride: string | null | undefined = releaseVersion,
 ): Promise<MacInspectResult> {
   const startedAt = Date.now();
   let lastResult: unknown = null;
   while (Date.now() - startedAt < timeoutMs) {
     try {
-      const inspect = await runToolsPackJson<MacInspectResult>('inspect', ['--update-action', 'status']);
+      const inspect = await runToolsPackJson<MacInspectResult>(
+        'inspect',
+        ['--update-action', 'status'],
+        releaseVersionOverride,
+      );
       lastResult = inspect;
       if (predicate(inspect)) return inspect;
     } catch (error) {
@@ -2407,6 +2571,44 @@ async function resetPackagedRuntimeState(): Promise<void> {
     join(toolsPackDir, 'runtime', 'mac', 'launcher', 'channels', updateScenario.channel, 'namespaces', namespace),
     { force: true, recursive: true },
   ).catch(() => undefined);
+}
+
+async function resolveMainBuildDmgPath(): Promise<string> {
+  const buildJsonPath = requireMigrationInput(
+    'OD_PACKAGED_E2E_BUILD_JSON_PATH',
+    normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_BUILD_JSON_PATH),
+  );
+  const build = JSON.parse(stripUtf8Bom(await readFile(resolveFromWorkspace(buildJsonPath), 'utf8'))) as {
+    dmgPath?: unknown;
+  };
+  if (typeof build.dmgPath !== 'string' || build.dmgPath.length === 0) {
+    throw new Error(`packaged build metadata is missing dmgPath: ${buildJsonPath}`);
+  }
+  return resolveFromWorkspace(build.dmgPath);
+}
+
+async function installLegacyMacDmg(input: {
+  currentDmgPath: string;
+  legacyDmgPath: string;
+  legacyVersion: string;
+}): Promise<MacInstallResult> {
+  const backupPath = `${input.currentDmgPath}.current-${process.pid}`;
+  if (await pathExists(backupPath)) {
+    throw new Error(`refusing to overwrite an existing current DMG backup: ${backupPath}`);
+  }
+  await rename(input.currentDmgPath, backupPath);
+  try {
+    await copyFile(resolveFromWorkspace(input.legacyDmgPath), input.currentDmgPath);
+    return await runToolsPackJson<MacInstallResult>('install', [], input.legacyVersion);
+  } finally {
+    await rm(input.currentDmgPath, { force: true });
+    await rename(backupPath, input.currentDmgPath);
+  }
+}
+
+function requireMigrationInput(name: string, value: string | null | undefined): string {
+  if (value != null && value.length > 0) return value;
+  throw new Error(`full historical migration acceptance requires ${name}`);
 }
 
 async function waitForDesktopGone(label: string, timeoutMs = 120_000): Promise<void> {

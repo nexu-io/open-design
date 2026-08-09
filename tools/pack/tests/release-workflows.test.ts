@@ -96,6 +96,13 @@ describe("release workflows", () => {
     expect(mac).toContain("exec tools-pack mac build");
     expect(mac).toContain("build_args+=(--signed --notarize)");
     expect(mac).toContain("Build beta mac_arm64 update fixture");
+    expect(beta).toContain("CLOSURE_MIN_SHELL_VERSION: 0.19.0-beta.4");
+    expect(mac).toContain("Materialize legacy mac_arm64 migration fixture");
+    expect(beta).toContain("LEGACY_MAC_ARM64_VERSION: 0.16.2-beta.155");
+    expect(betaMetadata).toContain('RELEASE_LAUNCHER_VERSION_MIN_BETA: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_BETA }}');
+    expect(betaMetadata).toContain('RELEASE_LAUNCHER_VERSION_MIN_BETA" != "$CLOSURE_MIN_SHELL_VERSION');
+    expect(mac).toContain("OD_PACKAGED_E2E_MAC_LEGACY_DMG_PATH: ${{ steps.mac_arm64_legacy_fixture.outputs.dmg_path }}");
+    expect(mac).toContain("OD_PACKAGED_E2E_MAC_MIN_SHELL_VERSION: ${{ env.CLOSURE_MIN_SHELL_VERSION }}");
     expect(mac).toContain("OD_PACKAGED_E2E_MAC_UPDATE_BUILD_JSON_PATH: ${{ steps.mac_arm64_update_fixture.outputs.update_build_json_path }}");
     expect(mac).toContain("OD_PACKAGED_E2E_MAC_UPDATE_FIXTURE: ${{ inputs.mac_arm64_smoke_mode == 'full' && inputs.mac_arm64_update_metadata_url == '' && inputs.mac_arm64_update_target_version == '' && 'tools-serve' || '' }}");
     expect(mac).toContain("pnpm exec tsx scripts/release-smoke.ts mac specs/mac.spec.ts");

@@ -53,7 +53,7 @@ spec (`e2e/specs/mac.spec.ts` / `win.spec.ts` via `release-smoke.ts`),
 | Stale relaunch freeze scrub after rollback (installResult.activeVersion > running) | U, P | desktop unit stale-freeze spec; exercised by the spec's self-heal phase |
 | Exact desktop identity, cold-start reconvergence | P, F | specs; real-feed loop |
 | Historical-outer handoff bridge (prepared→armed→confirmed) | U, partial P | daemon handoff unit; win spec legacy-executable path |
-| Full historical-outer migration with a real legacy binary | M | needs a genuinely old installed generation |
+| Full historical-outer migration with a real legacy binary | P | release-beta mac full spec pins `0.16.2-beta.155` from the public immutable feed, proves installer-required against the candidate metadata, replaces the DMG, and reopens persisted product data |
 | Obsolete outer retirement (mac/win) | U | packaged `obsolete-installed-outer.test.ts` |
 | Reinstalled newer outer resets runtime (bound > active) | U | packaged `launcher-runtime.test.ts` supersede case |
 | Reinstalled older outer delegates (bound < active) | P | spec recovery segment precondition |
@@ -88,7 +88,7 @@ spec (`e2e/specs/mac.spec.ts` / `win.spec.ts` via `release-smoke.ts`),
 ## Known deliberate gaps
 
 - Interactive installer UIs (mac drag, NSIS wizard) stay human-verified.
-- Full historical-outer migration needs a genuinely old installed build; the
-  daemon bridge is unit-tested and the win spec covers the legacy-executable
-  identity variant.
+- Windows full historical-outer migration remains a dedicated Windows-machine
+  acceptance item; the daemon bridge is unit-tested and the win spec covers
+  the legacy-executable identity variant.
 - Linux ships no packaged auto-update (AppImage manual) by design.

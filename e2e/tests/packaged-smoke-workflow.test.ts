@@ -2635,7 +2635,13 @@ process.stdin.on("end", () => {
     expect(publishStart).toBeGreaterThan(0);
     const publishJob = workflow.slice(publishStart);
 
-    expect(workflow).toContain("CLOSURE_MIN_SHELL_VERSION: 0.19.0-beta.1");
+    expect(workflow).toContain("CLOSURE_MIN_SHELL_VERSION: 0.19.0-beta.4");
+    expect(macJob).toContain("Materialize legacy mac_arm64 migration fixture");
+    expect(workflow).toContain("LEGACY_MAC_ARM64_VERSION: 0.16.2-beta.155");
+    expect(workflow).toContain('RELEASE_LAUNCHER_VERSION_MIN_BETA: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_BETA }}');
+    expect(workflow).toContain('RELEASE_LAUNCHER_VERSION_MIN_BETA" != "$CLOSURE_MIN_SHELL_VERSION');
+    expect(macJob).toContain("OD_PACKAGED_E2E_MAC_LEGACY_DMG_PATH:");
+    expect(macJob).toContain("OD_PACKAGED_E2E_MAC_MIN_SHELL_VERSION: ${{ env.CLOSURE_MIN_SHELL_VERSION }}");
     expect(workflow).toContain("POSTHOG_KEY: ${{ secrets.POSTHOG_KEY }}");
     expect(workflow).not.toContain("POSTHOG_KEY: ${{ inputs.publish");
     expect(workflow).toContain("shell_version:");

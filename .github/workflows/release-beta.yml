@@ -321,9 +321,12 @@ concurrency:
 
 env:
   # The 0.19 epoch deliberately drops the historical combined package. A beta
-  # Closure requires the first beta Shell from the same compatibility epoch;
-  # stable 0.19.0 would incorrectly reject 0.19.0-beta.1.
-  CLOSURE_MIN_SHELL_VERSION: 0.19.0-beta.1
+  # Closure requires the first canonical Shell proven across an independent
+  # release binding. Earlier 0.19 beta Shells were never published and do not
+  # satisfy the final releaseVersion/Shell-version projection contract.
+  CLOSURE_MIN_SHELL_VERSION: 0.19.0-beta.4
+  LEGACY_MAC_ARM64_DIGEST: sha256:6d9c2fea2106fc0207acd4ee78bc8d08f9563f967121dbffd399b8d510d0c37f
+  LEGACY_MAC_ARM64_VERSION: 0.16.2-beta.155
   OPEN_DESIGN_TELEMETRY_RELAY_URL: ${{ vars.OPEN_DESIGN_TELEMETRY_RELAY_URL }}
   # `publish` governs distribution metadata only. Build inputs must remain
   # identical between publish=false QA and the final publish=true lane so the
@@ -430,8 +433,14 @@ jobs:
           echo "previous_commit=$prev" >> "$GITHUB_OUTPUT"
 
       - name: Validate beta inputs
+        env:
+          RELEASE_LAUNCHER_VERSION_MIN_BETA: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_BETA }}
         run: |
           set -euo pipefail
+          if [ "$RELEASE_LAUNCHER_VERSION_MIN_BETA" != "$CLOSURE_MIN_SHELL_VERSION" ]; then
+            echo "release-beta requires legacy launcher floor and Closure Shell floor to match: expected $CLOSURE_MIN_SHELL_VERSION, got ${RELEASE_LAUNCHER_VERSION_MIN_BETA:-<unset>}" >&2
+            exit 1
+          fi
           if [ -n "${{ inputs.release_origin }}" ] && [ "${{ inputs.release_origin }}" != "cloudflare-r2" ]; then
             echo "release-beta supports release_origin=cloudflare-r2 only" >&2
             exit 1
@@ -817,6 +826,44 @@ jobs:
             echo "update_version=$update_version"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Materialize legacy mac_arm64 migration fixture
+        id: mac_arm64_legacy_fixture
+        if: ${{ inputs.mac_arm64_smoke_mode == 'full' }}
+        env:
+          RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+        run: |
+          set -euo pipefail
+          fixture_dir="$RUNNER_TEMP/release-work/mac_arm64/legacy-migration"
+          metadata_path="$fixture_dir/metadata.json"
+          dmg_path="$fixture_dir/open-design-$LEGACY_MAC_ARM64_VERSION-mac-arm64.dmg"
+          mkdir -p "$fixture_dir"
+          curl --fail --location --retry 3 --silent --show-error \
+            "$RELEASE_PUBLIC_ORIGIN/beta/versions/$LEGACY_MAC_ARM64_VERSION/metadata.json" \
+            --output "$metadata_path"
+          metadata_version="$(jq -er '.releaseVersion' "$metadata_path")"
+          if [ "$metadata_version" != "$LEGACY_MAC_ARM64_VERSION" ]; then
+            echo "legacy metadata version mismatch: expected $LEGACY_MAC_ARM64_VERSION, got $metadata_version" >&2
+            exit 1
+          fi
+          dmg_url="$(jq -er '.releaseTargets.mac_arm64.artifacts.dmg.url' "$metadata_path")"
+          sha256_url="$(jq -er '.releaseTargets.mac_arm64.artifacts.dmg.sha256Url' "$metadata_path")"
+          expected_digest="${LEGACY_MAC_ARM64_DIGEST#sha256:}"
+          published_digest="$(curl --fail --location --retry 3 --silent --show-error "$sha256_url" | awk '{print $1}')"
+          if [ "$published_digest" != "$expected_digest" ]; then
+            echo "legacy published digest mismatch: expected $expected_digest, got $published_digest" >&2
+            exit 1
+          fi
+          curl --fail --location --retry 3 --silent --show-error "$dmg_url" --output "$dmg_path"
+          actual_digest="$(shasum -a 256 "$dmg_path" | awk '{print $1}')"
+          if [ "$actual_digest" != "$expected_digest" ]; then
+            echo "legacy DMG digest mismatch: expected $expected_digest, got $actual_digest" >&2
+            exit 1
+          fi
+          {
+            echo "dmg_path=$dmg_path"
+            echo "version=$LEGACY_MAC_ARM64_VERSION"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Smoke beta mac_arm64 packaged runtime
         id: mac_arm64_smoke
         if: ${{ inputs.mac_arm64_smoke_mode != 'skip' }}
@@ -831,6 +878,9 @@ jobs:
           OD_PACKAGED_E2E_MAC_UPDATE_FIXTURE: ${{ inputs.mac_arm64_smoke_mode == 'full' && inputs.mac_arm64_update_metadata_url == '' && inputs.mac_arm64_update_target_version == '' && 'tools-serve' || '' }}
           OD_PACKAGED_E2E_MAC_UPDATE_METADATA_URL: ${{ inputs.mac_arm64_update_metadata_url }}
           OD_PACKAGED_E2E_MAC_UPDATE_VERSION: ${{ inputs.mac_arm64_update_target_version != '' && inputs.mac_arm64_update_target_version || steps.mac_arm64_update_fixture.outputs.update_version }}
+          OD_PACKAGED_E2E_MAC_LEGACY_DMG_PATH: ${{ steps.mac_arm64_legacy_fixture.outputs.dmg_path }}
+          OD_PACKAGED_E2E_MAC_LEGACY_VERSION: ${{ steps.mac_arm64_legacy_fixture.outputs.version }}
+          OD_PACKAGED_E2E_MAC_MIN_SHELL_VERSION: ${{ env.CLOSURE_MIN_SHELL_VERSION }}
           OD_PACKAGED_E2E_MAC_SMOKE_PROFILE: ${{ inputs.mac_arm64_smoke_mode }}
           OD_PACKAGED_E2E_NAMESPACE: release-beta
           OD_PACKAGED_E2E_RELEASE_CHANNEL: beta
