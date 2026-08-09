@@ -1,0 +1,63 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "od-higgsfield-media",
+  "title": "Higgsfield media",
+  "title_i18n": {
+    "en": "Higgsfield media",
+    "zh-CN": "Higgsfield 媒体生成",
+    "zh-TW": "Higgsfield 媒體生成",
+    "ja": "Higgsfield メディア",
+    "ko": "Higgsfield 미디어"
+  },
+  "version": "0.1.0",
+  "publishedAt": "2026-08-09T05:00:00Z",
+  "description": "Prefer the Higgsfield MCP OAuth connection for image/video generation, then wrap the result as a live artifact. Falls back to media-* atoms when MCP is unavailable.",
+  "description_i18n": {
+    "en": "Prefer the Higgsfield MCP OAuth connection for image/video generation, then wrap the result as a live artifact. Falls back to media-* atoms when MCP is unavailable.",
+    "zh-CN": "优先用已 OAuth 连接的 Higgsfield MCP 生成图像/视频，再包成 live artifact；MCP 不可用时回退到 media-* atom。"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/scenarios/od-higgsfield-media",
+  "tags": ["scenario", "first-party", "higgsfield", "media", "mcp"],
+  "compat": {
+    "agentSkills": [{ "path": "./SKILL.md" }]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "scenario": "higgsfield-media",
+    "mode": "scenario",
+    "context": {
+      "skills": [{ "path": "./SKILL.md" }]
+    },
+    "pipeline": {
+      "stages": [
+        { "id": "discovery", "atoms": ["discovery-question-form"] },
+        { "id": "plan", "atoms": ["todo-write"] },
+        {
+          "id": "generate",
+          "atoms": ["media-image", "media-video", "live-artifact"]
+        }
+      ]
+    },
+    "capabilities": ["prompt:inject", "fs:read", "fs:write"],
+    "inputs": [
+      {
+        "name": "prompt",
+        "type": "text",
+        "required": true
+      }
+    ],
+    "useCase": {
+      "query": {
+        "en": "Generate media for: {{prompt}}. Prefer the connected Higgsfield MCP tools; if they are unavailable, use the project media atoms. Save the file and wrap it with a live artifact.",
+        "zh-CN": "为以下需求生成媒体：{{prompt}}。优先用已连接的 Higgsfield MCP；不可用则用项目 media atom。保存文件并用 live artifact 包起来。"
+      }
+    }
+  }
+}

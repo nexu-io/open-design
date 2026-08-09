@@ -5012,6 +5012,8 @@ export interface Dict {
   'mcp.categoryImageGenerationHint': string;
   'mcp.categoryPublishing': string;
   'mcp.categoryPublishingHint': string;
+  'mcp.category3d': string;
+  'mcp.category3dHint': string;
   'mcp.categoryUiComponents': string;
   'mcp.categoryUiComponentsHint': string;
   'mcp.categoryUtilities': string;

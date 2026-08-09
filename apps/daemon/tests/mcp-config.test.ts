@@ -838,6 +838,7 @@ describe('MCP_TEMPLATES', () => {
       'ui-components',
       'data-viz',
       'publishing',
+      '3d',
       'utilities',
     ]);
     for (const t of MCP_TEMPLATES) {
@@ -861,7 +862,15 @@ describe('MCP_TEMPLATES', () => {
       'fal-ai',
       'runway',
       'luma-acedata',
+      'midjourney-acedata',
+      'kling-acedata',
+      'comfyui',
     ]);
+  });
+
+  it('groups 3d templates in declaration order', () => {
+    const ids = MCP_TEMPLATES.filter((t) => t.category === '3d').map((t) => t.id);
+    expect(ids).toEqual(['blender-ageless', 'blender-dcc-http']);
   });
 
   it('groups design-systems templates in declaration order', () => {
@@ -1196,7 +1205,7 @@ describe('MCP_TEMPLATES', () => {
   it('includes the Blender ageless stdio template (uvx)', () => {
     const tpl = MCP_TEMPLATES.find((t) => t.id === 'blender-ageless');
     expect(tpl).toBeDefined();
-    expect(tpl?.category).toBe('utilities');
+    expect(tpl?.category).toBe('3d');
     expect(tpl?.transport).toBe('stdio');
     expect(tpl?.command).toBe('uvx');
     expect(tpl?.args).toEqual(['ageless-blender-mcp']);
@@ -1207,7 +1216,7 @@ describe('MCP_TEMPLATES', () => {
   it('includes the Blender DCC embedded HTTP template', () => {
     const tpl = MCP_TEMPLATES.find((t) => t.id === 'blender-dcc-http');
     expect(tpl).toBeDefined();
-    expect(tpl?.category).toBe('utilities');
+    expect(tpl?.category).toBe('3d');
     expect(tpl?.transport).toBe('http');
     expect(tpl?.authMode).toBe('none');
     expect(tpl?.url).toBe('http://127.0.0.1:9765/mcp');
@@ -1234,5 +1243,31 @@ describe('MCP_TEMPLATES', () => {
     expect(tpl?.homepage).toBe('https://github.com/AceDataCloud/mcp-luma');
     expect(tpl?.headerFields?.[0]?.key).toBe('Authorization');
     expect(tpl?.headerFields?.[0]?.required).toBe(true);
+  });
+
+  it('includes the Midjourney AceDataCloud HTTP template', () => {
+    const tpl = MCP_TEMPLATES.find((t) => t.id === 'midjourney-acedata');
+    expect(tpl).toBeDefined();
+    expect(tpl?.category).toBe('image-generation');
+    expect(tpl?.transport).toBe('http');
+    expect(tpl?.url).toBe('https://midjourney.mcp.acedata.cloud/mcp');
+  });
+
+  it('includes the Kling AceDataCloud HTTP template', () => {
+    const tpl = MCP_TEMPLATES.find((t) => t.id === 'kling-acedata');
+    expect(tpl).toBeDefined();
+    expect(tpl?.category).toBe('image-generation');
+    expect(tpl?.transport).toBe('http');
+    expect(tpl?.url).toBe('https://kling.mcp.acedata.cloud/mcp');
+  });
+
+  it('includes the ComfyUI local stdio template', () => {
+    const tpl = MCP_TEMPLATES.find((t) => t.id === 'comfyui');
+    expect(tpl).toBeDefined();
+    expect(tpl?.category).toBe('image-generation');
+    expect(tpl?.transport).toBe('stdio');
+    expect(tpl?.command).toBe('npx');
+    expect(tpl?.args).toEqual(['-y', 'comfyui-mcp']);
+    expect(tpl?.homepage).toBe('https://github.com/artokun/comfyui-mcp');
   });
 });

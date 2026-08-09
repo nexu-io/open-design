@@ -493,6 +493,44 @@ const CATALOGUE: CuratedSkill[] = [
     category: 'video-generation',
     upstream: 'https://github.com/fal-ai-community/skills',
     attribution: 'Curated from the fal.ai community team.',
+    catalogueOnlyNote:
+      'Prefer the built-in Kling (AceDataCloud) MCP template in Settings → Integrations for direct Kling tools, or fal.ai MCP / this fal-kling-o3 skill when you already use FAL_KEY.',
+  },
+  {
+    id: 'midjourney-gen',
+    description:
+      'Midjourney image and video generation via third-party MCP/API proxies (imagine, blend, edit, describe). Complements Higgsfield/Runway when you specifically want Midjourney aesthetics.',
+    triggers: [
+      'midjourney',
+      'mj imagine',
+      'midjourney blend',
+      'midjourney video',
+      'midjourney describe',
+    ],
+    mode: 'image',
+    category: 'image-generation',
+    upstream: 'https://github.com/AceDataCloud/MidjourneyMCP',
+    attribution: 'Curated against the AceDataCloud Midjourney MCP surface (unofficial Midjourney proxy).',
+    catalogueOnlyNote:
+      'Prefer the built-in Midjourney (AceDataCloud) MCP template in Settings → Integrations (Bearer token from platform.acedata.cloud). Midjourney has no official public MCP.',
+  },
+  {
+    id: 'adobe-firefly',
+    description:
+      'Adobe Firefly generative image workflows for commercially safer brand assets — text-to-image, generative fill, and Firefly-powered creative production.',
+    triggers: [
+      'adobe firefly',
+      'firefly',
+      'firefly image',
+      'adobe generative',
+      'commercially safe image',
+    ],
+    mode: 'image',
+    category: 'image-generation',
+    upstream: 'https://developer.adobe.com/firefly-services/',
+    attribution: 'Catalogue stub pointing at Adobe Firefly Services docs.',
+    catalogueOnlyNote:
+      'No first-party Firefly MCP template yet. Use Adobe Firefly Services / Creative Cloud APIs with your Adobe credentials, or generate via fal / Runway / Higgsfield MCP and apply Firefly brand rules manually.',
   },
   {
     id: 'venice-video',

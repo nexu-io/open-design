@@ -5297,6 +5297,8 @@ export const zhTW: Dict = {
   'mcp.categoryImageGenerationHint': '產生點陣圖、向量圖或影片素材的模型。',
   'mcp.categoryPublishing': '發布',
   'mcp.categoryPublishingHint': '將產生的產物推送到公開 URL。',
+  'mcp.category3d': '3D',
+  'mcp.category3dHint': '本機 DCC 工具（如 Blender）用於場景搭建、算繪與匯出。',
   'mcp.categoryUiComponents': 'UI 元件',
   'mcp.categoryUiComponentsHint': '設計師等級的元件、區塊和到達頁素材。',
   'mcp.categoryUtilities': '實用工具',

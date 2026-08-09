@@ -67,6 +67,7 @@ export type McpTemplateCategory =
   | 'ui-components'
   | 'data-viz'
   | 'publishing'
+  | '3d'
   | 'utilities';
 
 export interface McpTemplate {
@@ -782,6 +783,82 @@ export const MCP_TEMPLATES: McpTemplate[] = [
       },
     ],
   },
+  {
+    id: 'midjourney-acedata',
+    label: 'Midjourney (AceDataCloud)',
+    description:
+      'Hosted streamable-HTTP MCP for Midjourney via AceDataCloud — imagine, blend, edit, describe, and Midjourney video. No local install; paste your AceDataCloud platform API token as the Authorization header (platform.acedata.cloud). Unofficial proxy of Midjourney — not an Adobe/Midjourney first-party endpoint.',
+    transport: 'http',
+    authMode: 'none',
+    category: 'image-generation',
+    homepage: 'https://github.com/AceDataCloud/MidjourneyMCP',
+    example:
+      'Imagine a wide editorial still of a chrome espresso machine on wet terrazzo, soft window light, Midjourney --stylize 150.',
+    url: 'https://midjourney.mcp.acedata.cloud/mcp',
+    headerFields: [
+      {
+        key: 'Authorization',
+        label: 'Authorization (Bearer <AceDataCloud token>)',
+        required: true,
+        placeholder: 'Bearer <acedatacloud-api-token>',
+        secret: true,
+      },
+    ],
+  },
+  {
+    id: 'kling-acedata',
+    label: 'Kling (AceDataCloud)',
+    description:
+      'Hosted streamable-HTTP MCP for Kuaishou Kling via AceDataCloud — text-to-video, image-to-video, extend, and motion transfer across current Kling model families. Paste your AceDataCloud platform API token as the Authorization header. Prefer this when you want Kling specifically; fal.ai also exposes Kling models if you already use FAL_KEY.',
+    transport: 'http',
+    authMode: 'none',
+    category: 'image-generation',
+    homepage: 'https://github.com/AceDataCloud/mcp-kling',
+    example:
+      'Generate a 5-second 16:9 Kling clip of a courier bike cutting through neon rain, then extend it by two seconds.',
+    url: 'https://kling.mcp.acedata.cloud/mcp',
+    headerFields: [
+      {
+        key: 'Authorization',
+        label: 'Authorization (Bearer <AceDataCloud token>)',
+        required: true,
+        placeholder: 'Bearer <acedatacloud-api-token>',
+        secret: true,
+      },
+    ],
+  },
+  {
+    id: 'comfyui',
+    label: 'ComfyUI',
+    description:
+      'Local-first ComfyUI control plane via `comfyui-mcp` (stdio). Auto-detects a running ComfyUI on :8188, or set COMFYUI_URL / COMFYUI_API_KEY for remote / Comfy Cloud. Lets the agent author and run workflows, manage models, and generate stills/video/audio through your local graph stack — the Stable Diffusion / custom-node hole next to fal.ai.',
+    transport: 'stdio',
+    category: 'image-generation',
+    homepage: 'https://github.com/artokun/comfyui-mcp',
+    example:
+      'List installed checkpoints, then run a simple text-to-image workflow of a ceramic mug on oak at f/2.8 and save the PNG under the project media folder.',
+    command: 'npx',
+    args: ['-y', 'comfyui-mcp'],
+    envFields: [
+      {
+        key: 'COMFYUI_URL',
+        label: 'ComfyUI URL (optional)',
+        placeholder: 'http://127.0.0.1:8188',
+      },
+      {
+        key: 'COMFYUI_API_KEY',
+        label: 'Comfy Cloud API key (optional)',
+        placeholder: '<comfy-cloud-key>',
+        secret: true,
+      },
+      {
+        key: 'CIVITAI_API_TOKEN',
+        label: 'CivitAI token (optional)',
+        placeholder: '<civitai-token>',
+        secret: true,
+      },
+    ],
+  },
 
   // ── image-editing ───────────────────────────────────────────────────
   {
@@ -1289,7 +1366,7 @@ export const MCP_TEMPLATES: McpTemplate[] = [
     description:
       'Drive a local Blender 4.2+ session via the ageless-blender-mcp stdio server (perception, nodes, materials, modifiers, render, import/export). Requires the companion Blender addon installed and "Start Server" clicked in Blender, plus the `uvx` Python launcher. Open Design does not ship Blender — install Blender separately first.',
     transport: 'stdio',
-    category: 'utilities',
+    category: '3d',
     homepage: 'https://github.com/ageless-h/blender-mcp',
     example:
       'List objects in the open Blender scene, create a 2m cube named HeroCube, and capture a solid viewport PNG.',
@@ -1303,7 +1380,7 @@ export const MCP_TEMPLATES: McpTemplate[] = [
       'Connect to dcc-mcp-blender\'s embedded streamable HTTP MCP server inside a running Blender instance (default http://127.0.0.1:9765/mcp). Enable the DCC MCP Blender addon and start the in-app server first — no external gateway process. Local-only; leave authMode none.',
     transport: 'http',
     authMode: 'none',
-    category: 'utilities',
+    category: '3d',
     homepage: 'https://github.com/dcc-mcp/dcc-mcp-blender',
     example:
       'Ask Blender for the current scene summary, then create a camera looking at the origin and render a preview still.',

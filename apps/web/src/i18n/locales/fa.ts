@@ -4836,6 +4836,8 @@ export const fa: Dict = {
   'mcp.categoryImageGenerationHint': 'Models that produce raster, vector or video assets.',
   'mcp.categoryPublishing': 'Publishing',
   'mcp.categoryPublishingHint': 'Push generated artifacts to a public URL.',
+  'mcp.category3d': '3D',
+  'mcp.category3dHint': 'Local DCC tools like Blender for scene build, render, and export.',
   'mcp.categoryUiComponents': 'UI components',
   'mcp.categoryUiComponentsHint': 'Designer-grade components, blocks and landing-page material.',
   'mcp.categoryUtilities': 'Utilities',

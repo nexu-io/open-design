@@ -5290,6 +5290,8 @@ export const zhCN: Dict = {
   'mcp.categoryImageGenerationHint': '生成位图、矢量图或视频素材的模型。',
   'mcp.categoryPublishing': '发布',
   'mcp.categoryPublishingHint': '将生成的产物推送到公开 URL。',
+  'mcp.category3d': '3D',
+  'mcp.category3dHint': '本机 DCC 工具（如 Blender）用于场景搭建、渲染与导出。',
   'mcp.categoryUiComponents': 'UI 组件',
   'mcp.categoryUiComponentsHint': '设计师级别的组件、区块和落地页素材。',
   'mcp.categoryUtilities': '实用工具',
