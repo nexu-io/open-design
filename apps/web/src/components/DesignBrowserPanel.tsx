@@ -66,19 +66,31 @@ import {
   isProjectHtmlBrowserUrl,
   projectRelativePathFromBrowserUrl,
 } from './design-browser-tools';
+import {
+  DESIGN_BROWSER_HISTORY_LIMIT,
+  loadBrowserViewport,
+  loadHistory,
+  saveBrowserViewport,
+  saveHistory,
+  type BrowserHistoryEntry,
+} from './design-browser-storage';
 import { Icon } from './Icon';
 import { BoardComposerPopover } from './BoardComposerPopover';
 import { PreviewDrawOverlay } from './PreviewDrawOverlay';
 import { RemixIcon } from './RemixIcon';
 import { useProjectCollabContext } from '../collab/collab-context';
 
-type BrowserHistoryEntry = {
-  iconUrl?: string;
-  title: string;
-  url: string;
-  lastVisitedAt: number;
-  visitCount: number;
-};
+export {
+  removeDesignBrowserProjectCache,
+  designBrowserHistoryStorageKey,
+  designBrowserViewportStorageKey,
+  isHistoryEntry,
+  loadBrowserViewport,
+  loadHistory,
+  saveBrowserViewport,
+  saveHistory,
+  type BrowserHistoryEntry,
+} from './design-browser-storage';
 
 type BrowserNavigationEntry = {
   title: string;
@@ -288,7 +300,7 @@ export interface BrowserPageInfo {
 
 const EMPTY_URL = 'about:blank';
 const DESIGN_BROWSER_PARTITION = 'persist:open-design-design-browser';
-const HISTORY_LIMIT = 80;
+const HISTORY_LIMIT = DESIGN_BROWSER_HISTORY_LIMIT;
 const HISTORY_SUGGESTION_LIMIT = 20;
 const EMPTY_PREVIEW_COMMENTS: PreviewComment[] = [];
 // Cap the resource-hint (`dns-prefetch`/`preconnect`) links we leave in <head>.
@@ -3470,73 +3482,6 @@ function BrowserSiteIcon({
         <Icon name={fallback} size={13} />
       )}
     </span>
-  );
-}
-
-export function loadHistory(projectId: string): BrowserHistoryEntry[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const raw = window.localStorage.getItem(historyStorageKey(projectId));
-    const parsed = raw ? JSON.parse(raw) : [];
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter(isHistoryEntry)
-      .sort((left, right) => right.lastVisitedAt - left.lastVisitedAt)
-      .slice(0, HISTORY_LIMIT);
-  } catch {
-    return [];
-  }
-}
-
-export function saveHistory(projectId: string, history: BrowserHistoryEntry[]) {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(historyStorageKey(projectId), JSON.stringify(history.slice(0, HISTORY_LIMIT)));
-  } catch {
-    // Ignore storage quota and private-mode failures.
-  }
-}
-
-function historyStorageKey(projectId: string): string {
-  return `od:design-browser:${projectId}:history:v1`;
-}
-
-function viewportStorageKey(projectId: string): string {
-  return `od:design-browser:${projectId}:viewport:v1`;
-}
-
-function isBrowserViewportId(value: unknown): value is BrowserViewportId {
-  return value === 'desktop' || value === 'tablet' || value === 'mobile';
-}
-
-export function loadBrowserViewport(projectId: string): BrowserViewportId {
-  if (typeof window === 'undefined') return 'desktop';
-  try {
-    const stored = window.localStorage.getItem(viewportStorageKey(projectId));
-    return isBrowserViewportId(stored) ? stored : 'desktop';
-  } catch {
-    return 'desktop';
-  }
-}
-
-export function saveBrowserViewport(projectId: string, viewport: BrowserViewportId) {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(viewportStorageKey(projectId), viewport);
-  } catch {
-    // Ignore storage quota and private-mode failures.
-  }
-}
-
-export function isHistoryEntry(value: unknown): value is BrowserHistoryEntry {
-  if (typeof value !== 'object' || value == null || Array.isArray(value)) return false;
-  const record = value as Record<string, unknown>;
-  return (
-    typeof record.url === 'string' &&
-    typeof record.title === 'string' &&
-    typeof record.lastVisitedAt === 'number' &&
-    typeof record.visitCount === 'number' &&
-    (record.iconUrl === undefined || typeof record.iconUrl === 'string')
   );
 }
 

@@ -795,6 +795,13 @@ import {
   createProactiveContentPull,
   type ProactiveContentPullTarget,
 } from './collab/proactive-content-pull.js';
+import {
+  backgroundPullMaxEntriesFromEnv,
+  createBackgroundPullSizeGuard,
+} from './collab/background-pull-size-guard.js';
+import {
+  inspectAuthorizedTeamProjectPull,
+} from './collab/authorized-team-project-pull.js';
 import { createProjectContentTransferStateStore } from './collab/project-content-transfer-state.js';
 import {
   emitSharedProjectPullTiming,
@@ -4339,7 +4346,42 @@ export async function startServer({
     );
     return version == null ? null : String(version);
   };
+  // Background pull size guard (issue #6518, incident #6512): before any
+  // background lane downloads a published version, an authorize-only Vela
+  // probe reads the manifest entry count; oversized versions are deferred to
+  // the foreground open-project pull. Fail-closed here means PULL AS BEFORE —
+  // an old CLI, a countless output, or a probe failure keeps today's
+  // behavior. See collab/background-pull-size-guard.ts.
+  const backgroundPullSizeGuard = createBackgroundPullSizeGuard({
+    maxEntries: backgroundPullMaxEntriesFromEnv(),
+    inspect: (scope, version) =>
+      inspectAuthorizedTeamProjectPull({
+        projectId: scope.projectId,
+        scope: {
+          workspaceId: scope.workspaceId,
+          resourceTeamId: scope.resourceTeamId,
+          viewerMemberId: scope.viewerMemberId,
+          ownerMemberId: scope.ownerMemberId,
+        },
+        expectedVersion: version,
+      }),
+    onDeferred: (info) => {
+      console.info(
+        '[od] background shared-project pull deferred (oversized): ' +
+          `projectId=${info.projectId} workspaceId=${info.workspaceId} ` +
+          `version=${info.version} entries=${info.entryCount} ` +
+          `maxEntries=${info.maxEntries}; opening the project pulls it on demand`,
+      );
+    },
+    onError: (error) =>
+      console.warn(
+        '[od] background pull size probe failed open (pulling as before):',
+        String(error),
+      ),
+  });
   const proactiveContentPull = createProactiveContentPull({
+    assessBackgroundContentPull: (target, version) =>
+      backgroundPullSizeGuard.assess(target, version),
     getLocalBinding: (projectId) => {
       const row = getWorkspaceProjectByProjectId(db, projectId) as
         | { workspaceId: string; visibility: 'personal' | 'team' }
@@ -7290,6 +7332,11 @@ export async function startServer({
       // and `syncSharedTeamDesignSystem` kept re-stamping `markTeamSynced()`
       // onto every teammate forever.
       unshareTeamDesignSystemIfShared: async (id, req) => {
+        const requestContext = workspaceResourceContextFromRequest(req);
+        const hasWorkspaceContextHeaders = Object.keys(req.headers ?? {}).some(
+          (name) => name.startsWith('x-od-workspace-') || name === 'x-od-app-user-id',
+        );
+        if (requestContext === null && !hasWorkspaceContextHeaders) return false;
         const verified = await verifyExplicitWorkspaceRequestContext({
           req,
           requireTeam: false,

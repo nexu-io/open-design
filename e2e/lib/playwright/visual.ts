@@ -497,22 +497,6 @@ export async function configureVisualPage(page: Page, options: VisualPageOptions
     });
   });
 
-  await page.route('**/api/routines', async (route) => {
-    await fulfillGet(route, { routines: [] });
-  });
-
-  await page.route('**/api/automation-templates', async (route) => {
-    await fulfillGet(route, { templates: [] });
-  });
-
-  await page.route('**/api/automation-proposals?status=pending-review', async (route) => {
-    await fulfillGet(route, { proposals: [] });
-  });
-
-  await page.route('**/api/automation-source-packets?limit=3', async (route) => {
-    await fulfillGet(route, { packets: [] });
-  });
-
   await page.route('**/api/plugins', async (route) => {
     await fulfillGet(route, { plugins: VISUAL_PLUGINS });
   });

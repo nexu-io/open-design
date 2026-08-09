@@ -1,11 +1,87 @@
 import { describe, expect, it, vi } from 'vitest';
+
+const { runVelaCommandMock } = vi.hoisted(() => ({
+  runVelaCommandMock: vi.fn(),
+}));
+
+vi.mock('../src/integrations/vela-command.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../src/integrations/vela-command.js')>()),
+  runVelaCommand: runVelaCommandMock,
+}));
+
 import {
   contextHasTeamIdentity,
   createVelaCliResourceAdapter,
+  runVelaResourceCommand,
   shouldUseVelaCliResourceTransport,
 } from '../src/collab/vela-cli-resource-adapter.js';
 import { createCollabRuntime } from '../src/collab/runtime.js';
 import type { ResourceHubPrincipal } from '../src/collab/resource-principal.js';
+
+// Spelled out literally — NOT imported from the source module — so that an
+// accidental deletion of any entry from the source lists turns this file red.
+// Order: the secret-bearing member-mirror entries first, then the
+// generated/installed trees the project UI already hides from the owner.
+const EXPECTED_PUSH_EXCLUDED_ENTRIES = [
+  // Secret-bearing entries that must never reach a member mirror.
+  '.file-versions',
+  '.live-artifacts',
+  '.od-skills',
+  '.git',
+  'node_modules',
+  '.npmrc',
+  '.yarnrc',
+  '.yarnrc.yml',
+  '.aws',
+  '.ssh',
+  '.azure',
+  '.docker',
+  '.gnupg',
+  '.kube',
+  '.pulumi',
+  '.terraform',
+  '.git-credentials',
+  '.netrc',
+  '.pypirc',
+  'terraform.tfstate',
+  'terraform.tfstate.backup',
+  // Generated/installed trees (IGNORED_PROJECT_DIR_NAMES, minus the
+  // duplicates above). Trailing slash = directory-only: the owner hides these
+  // as directories, so a bare name would also swallow a regular file of the
+  // same name (a project file literally called `target` or `out`).
+  'vendor/',
+  '.od/',
+  'debug/',
+  'dist/',
+  'build/',
+  '.build/',
+  'deriveddata/',
+  'target/',
+  '.next/',
+  '.nuxt/',
+  '.turbo/',
+  '.cache/',
+  '.output/',
+  'out/',
+  'coverage/',
+  '.gradle/',
+  '.swiftpm/',
+  '.tmp/',
+  '.venv/',
+  'venv/',
+  '__pycache__/',
+  '.mypy_cache/',
+  '.pytest_cache/',
+  '.tox/',
+  '.ruff_cache/',
+];
+const EXPECTED_PUSH_EXCLUDE_ARGS = EXPECTED_PUSH_EXCLUDED_ENTRIES
+  .flatMap((name) => ['--exclude', name]);
+
+/** The names passed via `--exclude` in one recorded spawn's argument list. */
+function excludedNamesIn(args: readonly string[]): string[] {
+  return args.flatMap((arg, index) => (arg === '--exclude' ? [args[index + 1]!] : []));
+}
 
 function recordingRun(outputs: Record<string, string>) {
   const calls: string[][] = [];
@@ -53,51 +129,69 @@ describe('createVelaCliResourceAdapter', () => {
       '--ref',
       'published',
       '--json',
-      '--exclude',
-      '.file-versions',
-      '--exclude',
-      '.live-artifacts',
-      '--exclude',
-      '.od-skills',
-      '--exclude',
-      '.git',
-      '--exclude',
-      'node_modules',
-      '--exclude',
-      '.npmrc',
-      '--exclude',
-      '.yarnrc',
-      '--exclude',
-      '.yarnrc.yml',
-      '--exclude',
-      '.aws',
-      '--exclude',
-      '.ssh',
-      '--exclude',
-      '.azure',
-      '--exclude',
-      '.docker',
-      '--exclude',
-      '.gnupg',
-      '--exclude',
-      '.kube',
-      '--exclude',
-      '.pulumi',
-      '--exclude',
-      '.terraform',
-      '--exclude',
-      '.git-credentials',
-      '--exclude',
-      '.netrc',
-      '--exclude',
-      '.pypirc',
-      '--exclude',
-      'terraform.tfstate',
-      '--exclude',
-      'terraform.tfstate.backup',
+      ...EXPECTED_PUSH_EXCLUDE_ARGS,
       '--exclude-prefix',
       '.env',
+      '--exclude-prefix',
+      'deriveddata-/',
     ]);
+  });
+
+  it('excludes the generated trees the owner UI already hides, alongside every secret-bearing entry', async () => {
+    const { run, calls } = recordingRun({ push: JSON.stringify({ version: 1 }) });
+    const adapter = createVelaCliResourceAdapter({ ...OPTS, run });
+    await adapter.publish({ projectId: 'p1', reason: 'edit' });
+
+    const excluded = excludedNamesIn(calls[0]!);
+    // Build/venv/cache output the project list and watcher never show the
+    // owner must not fan out to member mirrors either.
+    for (const name of ['dist/', 'build/', '.next/', '.venv/', 'coverage/', '.tmp/', '__pycache__/', 'node_modules']) {
+      expect(excluded).toContain(name);
+    }
+    // The pre-existing secret exclusions must survive the merge untouched.
+    for (const name of ['.git', '.ssh', '.aws', '.netrc', '.git-credentials', 'terraform.tfstate']) {
+      expect(excluded).toContain(name);
+    }
+    const prefixAt = calls[0]!.indexOf('--exclude-prefix');
+    expect(prefixAt).toBeGreaterThan(-1);
+    expect(calls[0]![prefixAt + 1]).toBe('.env');
+  });
+
+  it('carries the owner-side deriveddata- prefix rule, directory-scoped', async () => {
+    const { run, calls } = recordingRun({ push: JSON.stringify({ version: 1 }) });
+    const adapter = createVelaCliResourceAdapter({ ...OPTS, run });
+    await adapter.publish({ projectId: 'p1', reason: 'edit' });
+
+    const prefixes = calls[0]!.flatMap((arg, i) =>
+      arg === '--exclude-prefix' ? [calls[0]![i + 1]!] : []);
+    // The owner hides any `deriveddata-*` DIRECTORY; a regular file starting
+    // with that prefix is ordinary content and must still reach members.
+    expect(prefixes).toContain('deriveddata-/');
+    expect(prefixes).not.toContain('deriveddata-');
+    // `.env` stays bare: a secret is unwelcome as a file or a directory.
+    expect(prefixes).toContain('.env');
+  });
+
+  it('scopes generated-tree exclusions to directories so same-named files still sync', async () => {
+    const { run, calls } = recordingRun({ push: JSON.stringify({ version: 1 }) });
+    const adapter = createVelaCliResourceAdapter({ ...OPTS, run });
+    await adapter.publish({ projectId: 'p1', reason: 'edit' });
+
+    const excluded = excludedNamesIn(calls[0]!);
+    // `--exclude target` matches by entry name regardless of type, so the bare
+    // form would also drop a regular project file named `target` — content the
+    // owner still sees, silently missing from every member mirror. The owner
+    // side hides these as directories only, and the slash form says so.
+    for (const bare of ['target', 'out', 'dist', 'build', 'debug', 'coverage', 'vendor']) {
+      expect(excluded).not.toContain(bare);
+      expect(excluded).toContain(`${bare}/`);
+    }
+    // Secret-bearing entries keep the bare form on purpose: those must never
+    // leave the machine as a file OR a directory.
+    for (const bare of ['.git', '.ssh', '.aws', 'node_modules', 'terraform.tfstate']) {
+      expect(excluded).toContain(bare);
+      expect(excluded).not.toContain(`${bare}/`);
+    }
   });
 
   it('passes project metadata to the resource index when available', async () => {
@@ -116,50 +210,11 @@ describe('createVelaCliResourceAdapter', () => {
       '--ref',
       'published',
       '--json',
-      '--exclude',
-      '.file-versions',
-      '--exclude',
-      '.live-artifacts',
-      '--exclude',
-      '.od-skills',
-      '--exclude',
-      '.git',
-      '--exclude',
-      'node_modules',
-      '--exclude',
-      '.npmrc',
-      '--exclude',
-      '.yarnrc',
-      '--exclude',
-      '.yarnrc.yml',
-      '--exclude',
-      '.aws',
-      '--exclude',
-      '.ssh',
-      '--exclude',
-      '.azure',
-      '--exclude',
-      '.docker',
-      '--exclude',
-      '.gnupg',
-      '--exclude',
-      '.kube',
-      '--exclude',
-      '.pulumi',
-      '--exclude',
-      '.terraform',
-      '--exclude',
-      '.git-credentials',
-      '--exclude',
-      '.netrc',
-      '--exclude',
-      '.pypirc',
-      '--exclude',
-      'terraform.tfstate',
-      '--exclude',
-      'terraform.tfstate.backup',
+      ...EXPECTED_PUSH_EXCLUDE_ARGS,
       '--exclude-prefix',
       '.env',
+      '--exclude-prefix',
+      'deriveddata-/',
       '--metadata-json',
       JSON.stringify({ name: 'Launch Deck', metadata: { kind: 'deck' } }),
     ]);
@@ -494,5 +549,40 @@ describe('unpublish retraction idempotency (dangling team-catalog heal)', () => 
     } finally {
       runtime.dispose();
     }
+  });
+});
+
+// Red spec for the resource-transport spawn budgets. Before these existed,
+// only `pull` carried a timeout: a wedged `vela resource push` (hung network,
+// stalled auth refresh) held the scheduler's in-flight publish forever — no
+// error ever reached the failure path, so the project sat "publishing" until
+// daemon restart. head/shared/remove are pure metadata round-trips and get a
+// tight budget; push uploads whole project snapshots over arbitrary uplinks
+// and gets a deliberately huge one that only reaps truly-stuck children.
+describe('vela resource transport budgets', () => {
+  it('bounds every publish/metadata subcommand and keeps the pull budget', async () => {
+    runVelaCommandMock.mockReset();
+    runVelaCommandMock.mockResolvedValue('{}');
+
+    await runVelaResourceCommand(['push', 'project', 'r1', '/projects/p1', '--ref', 'published', '--json'], 'w1');
+    await runVelaResourceCommand(['head', 'r1', '--ref', 'published', '--json'], 'w1');
+    await runVelaResourceCommand(['shared', '--json'], 'w1');
+    await runVelaResourceCommand(['remove', 'r1', '--json'], 'w1');
+    await runVelaResourceCommand(['pull', 'project', 'r1', '/copies/p1', '--ref', 'published', '--json'], 'w1');
+
+    expect(runVelaCommandMock).toHaveBeenCalledTimes(5);
+    for (const [args] of runVelaCommandMock.mock.calls) {
+      expect(args[0]).toBe('resource');
+    }
+    const timeoutBySubcommand = Object.fromEntries(
+      runVelaCommandMock.mock.calls.map(([args, options]) => [args[1], options?.timeoutMs]),
+    );
+    expect(timeoutBySubcommand).toEqual({
+      push: 600_000,
+      head: 60_000,
+      shared: 60_000,
+      remove: 60_000,
+      pull: 30_000,
+    });
   });
 });

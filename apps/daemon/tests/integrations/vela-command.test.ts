@@ -330,7 +330,7 @@ describe('runVelaCommand', () => {
     });
   });
 
-  it('bounds production resource pulls at 30s but leaves head commands unbounded', async () => {
+  it('bounds pulls at 30s, metadata commands at 60s, and pushes at 10 minutes', async () => {
     vi.useFakeTimers();
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.stubEnv('VELA_BIN', process.execPath);
@@ -348,6 +348,7 @@ describe('runVelaCommand', () => {
       },
     );
 
+    // A head that answers within its metadata budget resolves normally…
     const head = runVelaResourceCommand([
       'head',
       'resource-1',
@@ -355,11 +356,51 @@ describe('runVelaCommand', () => {
       'published',
       '--json',
     ], 'workspace-1');
-    await vi.advanceTimersByTimeAsync(60_000);
+    await vi.advanceTimersByTimeAsync(59_999);
     expect(stopProcessesMock).not.toHaveBeenCalled();
     callback(null, '{"version":1}\n');
     await expect(head).resolves.toBe('{"version":1}\n');
 
+    // …while a wedged head is reaped right at the 60s budget.
+    const wedgedHead = runVelaResourceCommand([
+      'head',
+      'resource-1',
+      '--ref',
+      'published',
+      '--json',
+    ], 'workspace-1');
+    const wedgedHeadRejection = expect(wedgedHead).rejects.toMatchObject({
+      code: 'ETIMEDOUT',
+      name: 'TimeoutError',
+    });
+    await vi.advanceTimersByTimeAsync(59_999);
+    expect(stopProcessesMock).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(stopProcessesMock).toHaveBeenCalledTimes(1);
+    await wedgedHeadRejection;
+
+    // A wedged push gets the slow-uplink budget: reaped at 10 minutes, so a
+    // hung CLI can no longer pin the scheduler's in-flight publish forever.
+    const push = runVelaResourceCommand([
+      'push',
+      'project',
+      'resource-1',
+      '/tmp/project-1',
+      '--ref',
+      'published',
+      '--json',
+    ], 'workspace-1');
+    const pushRejection = expect(push).rejects.toMatchObject({
+      code: 'ETIMEDOUT',
+      name: 'TimeoutError',
+    });
+    await vi.advanceTimersByTimeAsync(599_999);
+    expect(stopProcessesMock).toHaveBeenCalledTimes(1); // still only the wedged head
+    await vi.advanceTimersByTimeAsync(1);
+    expect(stopProcessesMock).toHaveBeenCalledTimes(2);
+    await pushRejection;
+
+    // Pull keeps its original 30s materialization budget.
     const pull = runVelaResourceCommand([
       'pull',
       'project',
@@ -374,11 +415,13 @@ describe('runVelaCommand', () => {
       name: 'TimeoutError',
     });
     await vi.advanceTimersByTimeAsync(29_999);
-    expect(stopProcessesMock).not.toHaveBeenCalled();
+    expect(stopProcessesMock).toHaveBeenCalledTimes(2);
     await vi.advanceTimersByTimeAsync(1);
-    expect(stopProcessesMock).toHaveBeenCalledTimes(1);
+    expect(stopProcessesMock).toHaveBeenCalledTimes(3);
     await pullRejection;
 
+    // The budgets ride the daemon's confirmed-kill deadline timer, never
+    // execFile's own timeout/signal plumbing.
     const options = execFileMock.mock.calls[0]?.[2] as {
       timeout?: number;
       signal?: AbortSignal;

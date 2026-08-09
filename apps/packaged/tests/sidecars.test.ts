@@ -16,7 +16,7 @@
  * @see https://github.com/nexu-io/open-design/issues/710
  */
 import { EventEmitter } from 'node:events';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, join, posix } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
@@ -29,6 +29,7 @@ import {
   createPackagedSidecarSpawnOptions,
   createRestartPolicy,
   createWebSidecarSupervisor,
+  openLog,
   registerPackagedWebUrl,
   resolveDaemonStatusTimeoutMs,
   resolvePackagedChildBaseEnv,
@@ -1031,5 +1032,86 @@ describe('createWebSidecarSupervisor', () => {
     expect(closed).toEqual(['initial', 'late-replacement']);
     expect(lateReplacement.exitListeners).toHaveLength(1);
     expect(supervisor.currentUrl()).toBe('http://127.0.0.1:62001');
+  });
+});
+
+/**
+ * Every packaged launch opens each sidecar's latest.log with mode "w",
+ * which used to DESTROY the prior session's log. That is exactly the log
+ * that matters after an incident-triggered relaunch: the support bundle
+ * contained only the ~70 lines written since the restart while the
+ * incident-time daemon log was gone. openLog must rotate the prior file
+ * aside as previous.log (exactly one prior session, no unbounded growth)
+ * before truncating.
+ */
+describe('packaged sidecar log rotation', () => {
+  it('rotates the prior latest.log aside as previous.log before truncating', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'od-log-rotate-'));
+    const logDir = join(root, 'logs', 'daemon');
+    const logPath = join(logDir, 'latest.log');
+    const previousPath = join(logDir, 'previous.log');
+    try {
+      // Session 1: nothing to rotate, log dir gets created.
+      const first = await openLog(logPath);
+      await first.write('session-1 incident line\n');
+      await first.close();
+
+      // Session 2 (the relaunch after the incident): session 1's content must
+      // survive as previous.log while latest.log starts fresh.
+      const second = await openLog(logPath);
+      expect(readFileSync(previousPath, 'utf8')).toContain('session-1 incident line');
+      expect(readFileSync(logPath, 'utf8')).toBe('');
+      await second.write('session-2 line\n');
+      await second.close();
+
+      // Session 3: previous.log holds exactly the MOST RECENT prior session,
+      // not an accumulation of every session ever.
+      const third = await openLog(logPath);
+      await third.close();
+      const previousContent = readFileSync(previousPath, 'utf8');
+      expect(previousContent).toContain('session-2 line');
+      expect(previousContent).not.toContain('session-1 incident line');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  /**
+   * Rotation is best-effort, but "best-effort" must never degrade INTO the data
+   * loss it exists to prevent. If the rename fails for anything other than the
+   * first-launch ENOENT — a Windows share-lock on previous.log, a read-only or
+   * exotic filesystem — truncating latest.log destroys the only copy of the
+   * incident-time log while previous.log stays unavailable to diagnostics.
+   *
+   * The rejection is injected with a real filesystem condition rather than a
+   * module mock: renaming a file onto an existing DIRECTORY fails (EISDIR on
+   * POSIX, EPERM/EACCES on Windows), which is a non-ENOENT failure on every
+   * platform this ships to.
+   */
+  it('keeps the prior log instead of truncating it when rotation fails', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'od-log-rotate-fail-'));
+    const logDir = join(root, 'logs', 'daemon');
+    const logPath = join(logDir, 'latest.log');
+    try {
+      mkdirSync(logDir, { recursive: true });
+      writeFileSync(logPath, 'incident line that must survive\n');
+      // previous.log is a directory, so rename(latest.log -> previous.log) fails
+      // with a non-ENOENT error.
+      mkdirSync(join(logDir, 'previous.log'), { recursive: true });
+
+      const handle = await openLog(logPath);
+      // The prior session survives in place; rotation failing is not a licence
+      // to erase it.
+      expect(readFileSync(logPath, 'utf8')).toContain('incident line that must survive');
+      // ...and the returned handle still works, appending after the kept bytes.
+      await handle.write('post-rotation-failure line\n');
+      await handle.close();
+
+      const merged = readFileSync(logPath, 'utf8');
+      expect(merged).toContain('incident line that must survive');
+      expect(merged).toContain('post-rotation-failure line');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });

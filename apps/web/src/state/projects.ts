@@ -6,6 +6,7 @@
 // the UI can stay rendered when the daemon is briefly unreachable.
 
 import { coalescedGet, evictCoalescedGet } from '../lib/coalesced-get';
+import { BackoffController, type BackoffOptions } from '../lib/backoff';
 import { markProjectCreatedByViewer } from '../collab/useProjectCollab';
 import { API_ERROR_CODES, type ApiErrorCode } from '@open-design/contracts';
 import type {
@@ -38,7 +39,11 @@ import {
   workspaceProjectHeaders,
   workspaceResourceUrl,
 } from '../collab/workspace-identity';
-import { currentWorkspaceAccountGeneration } from '../collab/useWorkspaceContext';
+import {
+  currentWorkspaceAccountGeneration,
+  currentWorkspaceContextRequestToken,
+} from '../collab/useWorkspaceContext';
+import type { WorkspaceResourceReadIdentity } from '../collab/workspace-identity';
 import type {
   ChatMessage,
   Conversation,
@@ -47,6 +52,7 @@ import type {
   ProjectMetadata,
   ProjectTemplate,
 } from '../types';
+import { removeDesignBrowserProjectCache } from '../components/design-browser-storage';
 
 export type { PluginInstallOutcome } from '@open-design/contracts';
 export type { PluginShareAction } from '@open-design/contracts';
@@ -87,7 +93,34 @@ export type WorkspaceContextForWrite = {
   loading: boolean;
   identityChangePending?: boolean;
   failure?: 'unsupported' | 'unavailable';
+  /**
+   * The directory-verified identity the retained `context` was resolved under,
+   * carrying the generation token it belongs to. Present on production state
+   * (`useWorkspaceContext`) whenever a last-good context is held. Used by
+   * {@link resolvedWorkspaceContextForWrite} to decide whether that retained
+   * context still belongs to the CURRENT identity generation.
+   */
+  resourceReadIdentity?: WorkspaceResourceReadIdentity | null;
 };
+
+/**
+ * Whether the retained `context` still belongs to the current identity
+ * generation — the signal that lets a write proceed on a last-good context
+ * during a transient outage without ever letting one account's cached context
+ * authorize a write after the identity changed.
+ *
+ * True only when the state carries a directory-verified `resourceReadIdentity`
+ * whose generation matches the LIVE request token AND whose context is the same
+ * identity as `state.context`. A snapshot from a retired generation (an account
+ * switch bumped the token) fails this check even if `identityChangePending` in
+ * the snapshot has not caught up.
+ */
+function writeContextBelongsToCurrentGeneration(state: WorkspaceContextForWrite): boolean {
+  const identity = state.resourceReadIdentity;
+  if (!identity || state.context === null) return false;
+  if (identity.generation !== currentWorkspaceContextRequestToken()) return false;
+  return workspaceIdentityCacheKey(identity.context) === workspaceIdentityCacheKey(state.context);
+}
 
 export type WorkspaceContextWriteResolutionOptions = {
   /**
@@ -101,6 +134,17 @@ export type WorkspaceContextWriteResolutionOptions = {
 /**
  * Preserve headerless old-daemon/anonymous compatibility, but never collapse
  * an unresolved or unavailable modern workspace authority into "anonymous".
+ *
+ * When the read is momentarily blocked (loading, a pending identity change, or
+ * a transient `unavailable` outage) but the shell still holds a directory-
+ * verified last-good context that belongs to the CURRENT identity generation,
+ * that context is honored instead of throwing. The daemon re-verifies the
+ * claimed identity on the write (`authorizeCreatedProjectWorkspace`: valid →
+ * allow, cross-workspace → 403, authority down → 503 retryable), so a
+ * client-side fail-closed here is a redundant second lock that, under a flaky
+ * network, only turns a create the server would have honored into a dead
+ * button + retry storm. A context from a RETIRED generation (an account switch
+ * bumped the token) still fails closed — that is the cross-account guard.
  */
 export function resolvedWorkspaceContextForWrite(
   state: WorkspaceContextForWrite,
@@ -111,6 +155,7 @@ export function resolvedWorkspaceContextForWrite(
     || state.identityChangePending === true
     || state.failure === 'unavailable'
   ) {
+    if (writeContextBelongsToCurrentGeneration(state)) return state.context;
     if (options.unavailablePolicy === 'unscoped') return null;
     throw new Error('Workspace context is unavailable. Try again when workspace sync finishes.');
   }
@@ -474,22 +519,87 @@ export async function getProjectDetail(
   }
 }
 
-export async function createProject(input: {
-  name: string;
-  projectLocationId?: string;
-  skillId: string | null;
-  designSystemId: string | null;
-  pendingPrompt?: string;
-  metadata?: ProjectMetadata;
-  conversationMode?: ChatSessionMode;
-  // Plan §3.A1 / spec §11.5 — POST /api/projects accepts a pluginId
-  // (or pre-applied snapshot id) to resolve and pin a plugin to the new
-  // project. Used by the PluginLoopHome flow on Home.
-  pluginId?: string;
-  appliedPluginSnapshotId?: string;
-  pluginInputs?: Record<string, unknown>;
-  workspaceContext?: WorkspaceCollabContext | null;
-}): Promise<{ project: Project; conversationId: string; appliedPluginSnapshotId?: string }> {
+/**
+ * Bounded-retry knobs for {@link createProject}. Production callers omit this
+ * and get the default 1s→…-jittered backoff; tests inject a no-op `sleep` (and
+ * usually a small `maxRetries`) so the schedule is instant and deterministic.
+ */
+export interface CreateProjectRetryOptions {
+  /** Additional attempts after the first. Default 3 (so up to 4 requests). */
+  maxRetries?: number;
+  /** Backoff shape between retries. Defaults to 500ms→4s ×2 jittered. */
+  backoff?: BackoffOptions;
+  /** Test seam for the inter-retry wait. Defaults to a real `setTimeout` sleep. */
+  sleep?: (ms: number) => Promise<void>;
+}
+
+const DEFAULT_CREATE_PROJECT_RETRY_BACKOFF: BackoffOptions = {
+  initialMs: 500,
+  maxMs: 4_000,
+  factor: 2,
+  jitter: true,
+};
+
+function defaultRetrySleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Parse a create/write error body into a UI message + the retryable flag. */
+async function readWorkspaceWriteError(
+  resp: Response,
+  fallbackMessage: string,
+): Promise<{ message: string; retryable: boolean }> {
+  let message = fallbackMessage;
+  let retryable = false;
+  try {
+    const body = (await resp.json()) as { error?: unknown };
+    if (body.error && typeof body.error === 'object') {
+      const error = body.error as { message?: unknown; retryable?: unknown };
+      if (typeof error.message === 'string' && error.message.trim()) {
+        message = error.message;
+      }
+      if (error.retryable === true) retryable = true;
+    }
+  } catch {
+    // Keep the generic fallback when the error body is absent or invalid.
+  }
+  return { message, retryable };
+}
+
+/**
+ * Whether a failed workspace-scoped write should be retried. The daemon marks
+ * `WORKSPACE_AUTHORITY_UNAVAILABLE` (vela membership authority momentarily down)
+ * as a 503 `retryable: true`; a cross-workspace 403 or a validation 4xx is
+ * permanent and must surface immediately.
+ */
+function isRetryableWorkspaceWriteFailure(status: number, retryable: boolean): boolean {
+  return status === 503 && retryable;
+}
+
+export async function createProject(
+  input: {
+    name: string;
+    projectLocationId?: string;
+    skillId: string | null;
+    designSystemId: string | null;
+    pendingPrompt?: string;
+    metadata?: ProjectMetadata;
+    conversationMode?: ChatSessionMode;
+    // Plan §3.A1 / spec §11.5 — POST /api/projects accepts a pluginId
+    // (or pre-applied snapshot id) to resolve and pin a plugin to the new
+    // project. Used by the PluginLoopHome flow on Home.
+    pluginId?: string;
+    appliedPluginSnapshotId?: string;
+    pluginInputs?: Record<string, unknown>;
+    workspaceContext?: WorkspaceCollabContext | null;
+  },
+  retryOptions: CreateProjectRetryOptions = {},
+): Promise<{ project: Project; conversationId: string; appliedPluginSnapshotId?: string }> {
+  const maxRetries = retryOptions.maxRetries ?? 3;
+  const sleep = retryOptions.sleep ?? defaultRetrySleep;
+  const backoff = new BackoffController(
+    retryOptions.backoff ?? DEFAULT_CREATE_PROJECT_RETRY_BACKOFF,
+  );
   try {
     // `randomUUID` falls back to `crypto.getRandomValues` / `Math.random`
     // when `crypto.randomUUID` is unavailable. Open Design served over
@@ -497,44 +607,43 @@ export async function createProject(input: {
     // non-secure context, where `crypto.randomUUID` is undefined and
     // calling it directly throws — the surrounding try/catch then turns
     // the Create button into a silent no-op (issue #849).
+    //
+    // The id is minted ONCE and reused across retries: a retryable 503 fails
+    // vela's authority check before any row is inserted, so replaying the same
+    // client-provided id is idempotent, never a duplicate project.
     const id = randomUUID();
-    const resp = await fetch('/api/projects', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(input.workspaceContext ? workspaceProjectHeaders(input.workspaceContext) : {}),
-      },
-      body: JSON.stringify({ id, ...omitWorkspaceContext(input) }),
-    });
-    if (!resp.ok) {
-      let message = 'Could not create project';
-      try {
-        const body = await resp.json() as { error?: unknown };
-        if (
-          body.error &&
-          typeof body.error === 'object' &&
-          'message' in body.error &&
-          typeof body.error.message === 'string' &&
-          body.error.message.trim()
-        ) {
-          message = body.error.message;
-        }
-      } catch {
-        // Keep the generic fallback when the error body is absent or invalid.
+    for (let attempt = 0; ; attempt += 1) {
+      const resp = await fetch('/api/projects', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(input.workspaceContext ? workspaceProjectHeaders(input.workspaceContext) : {}),
+        },
+        body: JSON.stringify({ id, ...omitWorkspaceContext(input) }),
+      });
+      if (resp.ok) {
+        const created = (await resp.json()) as {
+          project: Project;
+          conversationId: string;
+          appliedPluginSnapshotId?: string;
+        };
+        // Preserve the exact Workspace authority used by this create request.
+        // `useProjectCollab` may use this only to skip the initial status-unknown
+        // read-only window; another Workspace with the same project id must not
+        // inherit the signal.
+        markProjectCreatedByViewer(created.project.id, input.workspaceContext ?? null);
+        return created;
+      }
+      const { message, retryable } = await readWorkspaceWriteError(
+        resp,
+        'Could not create project',
+      );
+      if (isRetryableWorkspaceWriteFailure(resp.status, retryable) && attempt < maxRetries) {
+        await sleep(backoff.nextDelay());
+        continue;
       }
       throw new Error(message);
     }
-    const created = (await resp.json()) as {
-      project: Project;
-      conversationId: string;
-      appliedPluginSnapshotId?: string;
-    };
-    // Preserve the exact Workspace authority used by this create request.
-    // `useProjectCollab` may use this only to skip the initial status-unknown
-    // read-only window; another Workspace with the same project id must not
-    // inherit the signal.
-    markProjectCreatedByViewer(created.project.id, input.workspaceContext ?? null);
-    return created;
   } catch (err) {
     throw err instanceof Error ? err : new Error('Could not create project');
   }
@@ -820,10 +929,12 @@ export async function deleteProject(
       method: 'DELETE',
       ...(workspaceContext ? { headers: workspaceProjectHeaders(workspaceContext) } : {}),
     });
-    // Drop the project's local tab-state cache once it is gone server-side, so
-    // the `open-design:project-tabs:*` keys don't accumulate in localStorage
-    // for the lifetime of the browser profile as projects are deleted.
-    if (resp.ok) removeCachedTabs(id, workspaceContext);
+    // Drop per-project browser caches once the project is gone server-side so
+    // they do not accumulate in localStorage for the lifetime of the profile.
+    if (resp.ok) {
+      removeCachedTabs(id, workspaceContext);
+      removeDesignBrowserProjectCache(id);
+    }
     return resp.ok;
   } catch {
     return false;

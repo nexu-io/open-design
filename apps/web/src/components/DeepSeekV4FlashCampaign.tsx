@@ -22,6 +22,7 @@ import {
   trackDeepSeekCampaignModalClick,
   trackDeepSeekCampaignModalSurfaceView,
 } from '../analytics/events';
+import { useT } from '../i18n';
 import { Icon } from './Icon';
 import styles from './DeepSeekV4FlashCampaign.module.css';
 
@@ -102,6 +103,7 @@ export function DeepSeekV4FlashCampaign({
   metricsConsent = false,
   installationId = null,
 }: Props) {
+  const t = useT();
   const analytics = useAnalytics();
   const { context: workspaceContext } = useWorkspaceContext();
   const [modalOpen, setModalOpen] = useState(false);
@@ -161,7 +163,17 @@ export function DeepSeekV4FlashCampaign({
   };
 
   const paid = audience === 'paid';
-  const presentation = paid ? campaign.paid : campaign.unpaid;
+  const presentation = paid
+    ? {
+        eyebrow: t('campaign.deepseekV4Flash.paid.eyebrow'),
+        status: t('campaign.deepseekV4Flash.paid.status'),
+        cta: t('campaign.deepseekV4Flash.paid.cta'),
+      }
+    : {
+        eyebrow: t('campaign.deepseekV4Flash.unpaid.eyebrow'),
+        status: t('campaign.deepseekV4Flash.unpaid.status'),
+        cta: t('campaign.deepseekV4Flash.unpaid.cta'),
+      };
   const trackModalClick = (element: 'close' | 'later' | 'use_now' | 'upgrade') => {
     trackDeepSeekCampaignModalClick(analytics.track, {
       page_name: 'home',
@@ -233,40 +245,44 @@ export function DeepSeekV4FlashCampaign({
         variant="ghost"
         size="icon"
         className={styles.close}
-        aria-label="关闭"
+        aria-label={t('campaign.deepseekV4Flash.closeAria')}
         onClick={closeModal}
       >
         <Icon name="close" size={17} strokeWidth={1.8} />
       </Button>
 
       <p className={styles.eyebrow}>{presentation.eyebrow}</p>
-      <h2 id={titleId} className={styles.title}>{campaign.headline}</h2>
-      <p id={descriptionId} className={styles.lead}>{campaign.description}</p>
+      <h2 id={titleId} className={styles.title}>{t('campaign.deepseekV4Flash.headline')}</h2>
+      <p id={descriptionId} className={styles.lead}>{t('campaign.deepseekV4Flash.description')}</p>
 
       <div className={styles.modelCard}>
         <span className={styles.modelMark} aria-hidden="true">DS</span>
         <span className={styles.modelCopy}>
-          <strong>{campaign.benefit}</strong>
+          <strong>{t('campaign.deepseekV4Flash.benefit')}</strong>
           <small>{presentation.status}</small>
         </span>
         <span className={paid ? styles.available : styles.locked}>
-          {paid ? '已解锁' : '待解锁'}
+          {paid ? t('campaign.deepseekV4Flash.unlocked') : t('campaign.deepseekV4Flash.locked')}
         </span>
       </div>
 
-      <div className={styles.countdown} aria-label="活动倒计时">
-        <span className={styles.countdownLabel}>活动倒计时</span>
+      <div className={styles.countdown} aria-label={t('campaign.deepseekV4Flash.countdownLabel')}>
+        <span className={styles.countdownLabel}>{t('campaign.deepseekV4Flash.countdownLabel')}</span>
         <strong data-testid="deepseek-v4-flash-campaign-countdown">
-          {formatDeepSeekV4FlashCampaignCountdown(countdownNow)}
+          {formatDeepSeekV4FlashCampaignCountdown(countdownNow, t)}
         </strong>
-        <small>{campaign.window.label} · 一周免费用</small>
+        <small>
+          {t('campaign.deepseekV4Flash.windowLabel')}
+          {' · '}
+          {t('campaign.deepseekV4Flash.weekFreeSuffix')}
+        </small>
       </div>
 
-      <p className={styles.boundary}>{campaign.boundary}</p>
+      <p className={styles.boundary}>{t('campaign.deepseekV4Flash.boundary')}</p>
       <div className={styles.actions}>
         {paid ? (
           <Button variant="ghost" className={styles.laterAction} onClick={postponeModal}>
-            稍后再说
+            {t('campaign.deepseekV4Flash.later')}
           </Button>
         ) : null}
         <Button className={styles.primaryAction} onClick={takeAction}>

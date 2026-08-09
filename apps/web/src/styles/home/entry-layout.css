@@ -1054,7 +1054,8 @@
 
 .entry-deepseek-campaign-badge {
   position: fixed;
-  z-index: 34;
+  /* Portaled to document.body. Must clear .workspace-tabs-chrome (z-index: 120). */
+  z-index: 150;
   top: 18px;
   right: 22px;
   display: inline-flex;
@@ -1075,6 +1076,8 @@
   line-height: 1;
   text-decoration: none;
   cursor: pointer;
+  pointer-events: auto;
+  -webkit-app-region: no-drag;
   transition: border-color 140ms ease, background 140ms ease, transform 140ms ease;
 }
 

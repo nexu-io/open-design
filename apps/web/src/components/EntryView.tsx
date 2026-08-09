@@ -80,6 +80,8 @@ interface Props {
   // detecting/skeleton state while the cold-start agent stream is in flight.
   agentsLoading?: boolean;
   amrLoggedIn?: boolean | null;
+  /** Forwarded to EntryShell for personal free campaign audience resolution. */
+  amrAccountPlan?: string | null;
   // Execution / model-switching context forwarded to the EntryShell so the
   // sticky top-bar can expose the active CLI/BYOK + model and persist
   // changes through the same channels as the project view.
@@ -258,6 +260,7 @@ export function EntryView({
   agents,
   agentsLoading,
   amrLoggedIn,
+  amrAccountPlan,
   config,
   deploymentProviderConfig,
   providerModelsCache,
@@ -392,6 +395,7 @@ export function EntryView({
       agents={agents}
       {...(agentsLoading !== undefined ? { agentsLoading } : {})}
       {...(amrLoggedIn !== undefined ? { amrLoggedIn } : {})}
+      {...(amrAccountPlan !== undefined ? { amrAccountPlan } : {})}
       daemonLive={daemonLive}
       onModeChange={onModeChange}
       onAgentChange={onAgentChange}

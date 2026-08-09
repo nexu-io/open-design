@@ -30,18 +30,17 @@ describe('DeepSeek V4 Flash campaign', () => {
     expect(isDeepSeekV4FlashCampaignModel('deepseek-v4')).toBe(false);
   });
 
-  it('uses the approved cross-surface campaign explanation', () => {
-    expect(DEEPSEEK_V4_FLASH_CAMPAIGN.description).toBe(
-      '落地页、网站、幻灯片、图片，无限做，做到满意',
-    );
+  it('wires campaign copy through i18n keys in the dialog', () => {
+    expect(campaignDialogSource).toContain("t('campaign.deepseekV4Flash.headline')");
+    expect(campaignDialogSource).toContain("t('campaign.deepseekV4Flash.description')");
+    expect(campaignDialogSource).toContain("t('campaign.deepseekV4Flash.benefit')");
   });
 
   it('keeps the fixed window out of the primary headline and badge', () => {
-    expect(DEEPSEEK_V4_FLASH_CAMPAIGN.headline).not.toContain('限时');
-    expect(DEEPSEEK_V4_FLASH_CAMPAIGN.badge).toBe('无限使用');
-    expect(DEEPSEEK_V4_FLASH_CAMPAIGN.timing).toContain('8 月 6 日至 8 月 13 日');
-    expect(DEEPSEEK_V4_FLASH_CAMPAIGN.timing).not.toContain('权益生效后');
-    expect(DEEPSEEK_V4_FLASH_CAMPAIGN.ruleSummary).not.toContain('20:00');
+    expect(DEEPSEEK_V4_FLASH_CAMPAIGN.id).toBe('deepseek-v4-flash-unlimited-2026');
+    expect(DEEPSEEK_V4_FLASH_CAMPAIGN.modelId).toBe('deepseek-v4-flash');
+    expect(DEEPSEEK_V4_FLASH_CAMPAIGN.window.startAt).toContain('2026-08-06');
+    expect(DEEPSEEK_V4_FLASH_CAMPAIGN.window.endAtExclusive).toContain('2026-08-13T20:00:00');
   });
 
   it('uses a neutral gray restricted badge for anti-abuse fallback', () => {
@@ -56,22 +55,7 @@ describe('DeepSeek V4 Flash campaign', () => {
 
   it('keeps the campaign promise stable while routing actions by entitlement', () => {
     const activeAt = Date.parse(DEEPSEEK_V4_FLASH_CAMPAIGN.window.startAt);
-    expect(DEEPSEEK_V4_FLASH_CAMPAIGN.paid.cta).toBe('立即使用');
-    expect(DEEPSEEK_V4_FLASH_CAMPAIGN.unpaid.cta).toContain('升级套餐');
-    expect(DEEPSEEK_V4_FLASH_CAMPAIGN.paid.modelBadge).toBe('无限使用');
-    expect(DEEPSEEK_V4_FLASH_CAMPAIGN.unpaid.modelBadge).toBe('升级可用');
-    expect(DEEPSEEK_V4_FLASH_CAMPAIGN.unpaid.tooltip).toContain('8 月 13 日');
-    expect(DEEPSEEK_V4_FLASH_CAMPAIGN.restricted.modelBadge).toBe('已暂停');
-    expect(DEEPSEEK_V4_FLASH_CAMPAIGN.restricted.tooltip).toContain('异常的大规模使用');
-    expect(DEEPSEEK_V4_FLASH_CAMPAIGN.boundary).toBe(
-      '套餐内的无限制模型额度与免费生成次数，仅可通过Open Design使用；无法在MCP/CLI/API及其他场景使用。解释权归官方所有。',
-    );
-    expect(DEEPSEEK_V4_FLASH_CAMPAIGN.audienceDefinition.paid).toContain(
-      '当前存在有效个人或团队订阅',
-    );
-    expect(DEEPSEEK_V4_FLASH_CAMPAIGN.audienceDefinition.unpaid).toContain(
-      '曾经充值但没有订阅',
-    );
+    // Copy lives in i18n; keep product CTA keys wired in the dialog source.
 
     expect(resolveDeepSeekV4FlashCampaignAudience({
       plan: 'plus',
@@ -100,14 +84,14 @@ describe('DeepSeek V4 Flash campaign', () => {
 
   it('keeps the paid modal actions on the final approved interaction', () => {
     expect(campaignDialogSource).toContain('{presentation.cta}');
-    expect(campaignDialogSource).toContain('稍后再说');
+    expect(campaignDialogSource).toContain("t('campaign.deepseekV4Flash.later')");
     expect(campaignDialogSource).toContain('styles.modelCard');
     expect(campaignDialogSource).toContain('styles.boundary');
     expect(campaignDialogSource).toContain('styles.laterAction');
     expect(campaignDialogSource).toContain('<Icon name="close"');
     expect(campaignDialogSource).not.toContain('deepseek-v4-flash-free-week-poster-v5.png');
     expect(campaignDialogSource).toMatch(/onClick=\{closeModal\}/);
-    expect(campaignDialogSource.indexOf('稍后再说')).toBeLessThan(
+    expect(campaignDialogSource.indexOf("t('campaign.deepseekV4Flash.later')")).toBeLessThan(
       campaignDialogSource.indexOf('{presentation.cta}'),
     );
     expect(campaignDialogStyles).toMatch(
@@ -121,21 +105,23 @@ describe('DeepSeek V4 Flash campaign', () => {
   it('shows a shared live countdown in both paid and unpaid campaign modals', () => {
     const start = Date.parse(DEEPSEEK_V4_FLASH_CAMPAIGN.window.startAt);
     const end = Date.parse(DEEPSEEK_V4_FLASH_CAMPAIGN.window.endAtExclusive);
+    const t = (key: string, vars?: Record<string, string | number>) => {
+      if (key === 'campaign.deepseekV4Flash.countdownEnded') return 'Campaign ended';
+      if (key === 'campaign.deepseekV4Flash.countdownRemaining') {
+        return `${vars?.days}d ${vars?.hms}`;
+      }
+      return key;
+    };
 
-    expect(formatDeepSeekV4FlashCampaignCountdown(start - 1_000)).toBe('0天 00:00:01');
-    expect(formatDeepSeekV4FlashCampaignCountdown(start - 1_000)).not.toContain('距开始');
-    // At startAt the countdown equals the full window length. Derived from the
-    // constants (not a literal) so a temporary start-time override for
-    // pre-launch acceptance cannot silently break this suite.
+    expect(formatDeepSeekV4FlashCampaignCountdown(start - 1_000, t)).toBe('0d 00:00:01');
+    expect(formatDeepSeekV4FlashCampaignCountdown(start - 1_000, t)).not.toContain('until start');
     const windowSeconds = Math.floor((end - start) / 1000);
-    const windowLabel = `${Math.floor(windowSeconds / 86400)}天 ${String(Math.floor((windowSeconds % 86400) / 3600)).padStart(2, '0')}:${String(Math.floor((windowSeconds % 3600) / 60)).padStart(2, '0')}:${String(windowSeconds % 60).padStart(2, '0')}`;
-    expect(formatDeepSeekV4FlashCampaignCountdown(start)).toBe(windowLabel);
-    expect(formatDeepSeekV4FlashCampaignCountdown(end)).toBe('活动已结束');
+    const windowLabel = `${Math.floor(windowSeconds / 86400)}d ${String(Math.floor((windowSeconds % 86400) / 3600)).padStart(2, '0')}:${String(Math.floor((windowSeconds % 3600) / 60)).padStart(2, '0')}:${String(windowSeconds % 60).padStart(2, '0')}`;
+    expect(formatDeepSeekV4FlashCampaignCountdown(start, t)).toBe(windowLabel);
+    expect(formatDeepSeekV4FlashCampaignCountdown(end, t)).toBe('Campaign ended');
     expect(campaignDialogSource).toContain('deepseek-v4-flash-campaign-countdown');
-    expect(campaignDialogSource).toContain('一周免费用');
-    // The dialog counts down against the real window boundary only — there is
-    // no synthetic per-open countdown left in the component.
-    expect(campaignDialogSource).toContain('formatDeepSeekV4FlashCampaignCountdown(countdownNow)');
+    expect(campaignDialogSource).toContain("t('campaign.deepseekV4Flash.weekFreeSuffix')");
+    expect(campaignDialogSource).toContain('formatDeepSeekV4FlashCampaignCountdown(countdownNow, t)');
     expect(campaignDialogSource.indexOf('styles.countdown')).toBeLessThan(
       campaignDialogSource.indexOf('styles.actions'),
     );
@@ -144,13 +130,11 @@ describe('DeepSeek V4 Flash campaign', () => {
   });
 
   it('keeps the unpaid action on the upgrade flow without showing the paid secondary action', () => {
-    expect(DEEPSEEK_V4_FLASH_CAMPAIGN.unpaid.cta).toBe('升级套餐，立即使用');
+    expect(campaignDialogSource).toContain("t('campaign.deepseekV4Flash.unpaid.cta')");
     expect(campaignDialogSource).toContain("'deepseek_unpaid_modal'");
-    // The upgrade URL carries the consent-gated device id like the other two
-    // campaign touchpoints (workbench badge, model-switcher upgrade).
     expect(campaignDialogSource).toContain('attributedAmrUrl(plansUrl, attribution, deviceId)');
     expect(campaignDialogSource).toContain('metricsConsent,');
-    expect(campaignDialogSource).toMatch(/\{paid \? \([\s\S]*稍后再说[\s\S]*\) : null\}/);
+    expect(campaignDialogSource).toMatch(/\{paid \? \([\s\S]*campaign\.deepseekV4Flash\.later[\s\S]*\) : null\}/);
   });
 
   it('keeps campaign visibility free of every URL review backdoor (product decision)', () => {

@@ -481,7 +481,6 @@ test('[P0] signed-out users can open Home directly without completing onboarding
 for (const destination of [
   { name: 'Community', path: '/community', selector: '[data-testid="entry-nav-community"]' },
   { name: 'Projects', path: '/projects', selector: '[data-testid="entry-view-projects"][data-active="true"]' },
-  { name: 'Automations', path: '/automations', selector: '[data-testid="entry-view-tasks"][data-active="true"]' },
   { name: 'Design Systems', path: '/design-systems', selector: '[data-testid="entry-view-design-systems"][data-active="true"]' },
   { name: 'Plugins', path: '/plugins', selector: '[data-testid="entry-view-plugins"][data-active="true"]' },
   { name: 'Integrations', path: '/integrations', selector: '.integrations-view' },

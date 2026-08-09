@@ -7,6 +7,7 @@ import {
   velaWorkspaceCommandOptions,
 } from '../integrations/vela-command.js';
 import { projectResourceIdFor } from '../integrations/vela-team-projects.js';
+import { IGNORED_PROJECT_DIR_NAMES } from '../project-ignored-dirs.js';
 import type { ResourcePublishAdapter } from './publish-scheduler.js';
 import {
   emitVelaResourcePullProfile,
@@ -30,6 +31,25 @@ const PROJECT_KIND = 'project';
 // Give the transport a generous 6x envelope for large snapshots, but never
 // let a wedged Vela child hold the per-project materialization lock forever.
 const RESOURCE_PULL_TIMEOUT_MS = 30_000;
+// A push uploads the author's full member-mirror snapshot; on a slow uplink a
+// large project can legitimately take minutes, so this budget exists only to
+// reap a truly wedged child — it must stay far above any honest upload time.
+const RESOURCE_PUSH_TIMEOUT_MS = 600_000;
+// head/shared/remove are metadata round-trips with no bulk transfer.
+const RESOURCE_METADATA_TIMEOUT_MS = 60_000;
+// Wall-clock budget per `vela resource` subcommand. A child that outlives its
+// budget is terminated (confirmed-kill, see `runVelaCommand`) and the command
+// rejects, so a hung CLI surfaces as an ordinary command failure instead of
+// pinning the scheduler's in-flight publish or the per-project
+// materialization lock forever. Subcommands not listed here (snapshot /
+// snapshot-redact) keep their historical unbounded behavior.
+const RESOURCE_COMMAND_TIMEOUTS_MS: Readonly<Record<string, number>> = {
+  pull: RESOURCE_PULL_TIMEOUT_MS,
+  push: RESOURCE_PUSH_TIMEOUT_MS,
+  head: RESOURCE_METADATA_TIMEOUT_MS,
+  shared: RESOURCE_METADATA_TIMEOUT_MS,
+  remove: RESOURCE_METADATA_TIMEOUT_MS,
+};
 const MEMBER_MIRROR_EXCLUDED_ENTRIES = [
   '.file-versions',
   '.live-artifacts',
@@ -53,7 +73,58 @@ const MEMBER_MIRROR_EXCLUDED_ENTRIES = [
   'terraform.tfstate',
   'terraform.tfstate.backup',
 ] as const;
-const MEMBER_MIRROR_EXCLUDED_PREFIXES = ['.env'] as const;
+/**
+ * Name prefixes a snapshot skips.
+ *
+ * `.env` is secret-bearing, so it is bare and matches any entry type — a
+ * `.env.local` file and a stray `.envrc` directory are equally unwelcome in a
+ * member mirror.
+ *
+ * `deriveddata-` mirrors the owner-side rule (`isIgnoredProjectDirName` treats
+ * any `deriveddata-*` name as hidden) and is directory-scoped for the same
+ * reason the generated-tree names are: a regular file starting with that
+ * prefix is ordinary project content. See
+ * {@link MEMBER_MIRROR_PUSH_EXCLUDED_ENTRIES} for the trailing-slash contract
+ * and why it degrades safely on a Vela that predates it.
+ */
+const MEMBER_MIRROR_EXCLUDED_PREFIXES = ['.env', 'deriveddata-/'] as const;
+
+/**
+ * Every entry name a `vela resource push` snapshot skips.
+ *
+ * Two families with DIFFERENT matching semantics, which is why they are not
+ * one flat list:
+ *
+ * - {@link MEMBER_MIRROR_EXCLUDED_ENTRIES} — secret-bearing entries
+ *   (credentials, tool state, Open Design private bookkeeping). These must
+ *   never leave the author's machine whether they are a file, a directory, or
+ *   a symlink, so they are sent bare and match any entry of that name.
+ * - {@link IGNORED_PROJECT_DIR_NAMES} — generated/installed/cache trees the
+ *   owner's own file list already hides. The owner hides them as DIRECTORIES
+ *   only (`collectFiles` consults `shouldSkipDir` inside its `isDirectory()`
+ *   branch), so a bare name here would over-match: a project holding a regular
+ *   file called `target` or `out` would have it silently dropped from every
+ *   member mirror while the owner still sees it. These are therefore sent with
+ *   a trailing slash, the directory-only form.
+ *
+ * The trailing slash is also the compatibility seam. A Vela build that does
+ * not yet understand it compares `"dist/"` against entry names that never
+ * contain a slash, so the rule matches nothing and the tree is published in
+ * full — the pre-optimization payload, never a missing file. Once the CLI
+ * understands the form, the same push starts skipping those directories with
+ * no further Open Design change. A new `--exclude-dir` flag could NOT degrade
+ * this way: older CLIs reject unknown flags, which would fail every publish.
+ */
+export const MEMBER_MIRROR_PUSH_EXCLUDED_ENTRIES: readonly string[] = (() => {
+  const secretBearing = new Set<string>(MEMBER_MIRROR_EXCLUDED_ENTRIES);
+  // `.git` and `node_modules` appear in both families. The bare rule already
+  // covers them for every entry type, so adding the directory-only form would
+  // be dead weight on the command line.
+  const directoryOnly = [...IGNORED_PROJECT_DIR_NAMES]
+    .filter((name) => !secretBearing.has(name))
+    .map((name) => `${name}/`);
+  return [...secretBearing, ...directoryOnly];
+})();
 
 /** Run `vela resource <args>` and resolve its stdout. */
 export type RunVelaResource = (
@@ -127,7 +198,7 @@ export function createVelaCliResourceAdapter(
       return gated(principal, async () => {
         const dir = await options.resolveProjectDir(projectId);
         const args = ['push', kind, resourceIdFor(projectId, principal), dir, '--ref', PUBLISHED_REF, '--json'];
-        for (const name of MEMBER_MIRROR_EXCLUDED_ENTRIES) {
+        for (const name of MEMBER_MIRROR_PUSH_EXCLUDED_ENTRIES) {
           args.push('--exclude', name);
         }
         for (const prefix of MEMBER_MIRROR_EXCLUDED_PREFIXES) {
@@ -281,6 +352,7 @@ export const runVelaResourceCommand: RunVelaResource = (args, workspaceId) => {
   const workspaceOptions = velaWorkspaceCommandOptions(workspaceId);
   const profilePull =
     args[0] === 'pull' && sharedProjectPullProfileEnabled(process.env);
+  const timeoutMs = RESOURCE_COMMAND_TIMEOUTS_MS[args[0] ?? ''];
   return runVelaCommand(
     ['resource', ...args],
     {
@@ -289,7 +361,7 @@ export const runVelaResourceCommand: RunVelaResource = (args, workspaceId) => {
         ...workspaceOptions.configuredEnv,
         ...(profilePull ? { VELA_RESOURCE_PULL_PROFILE: '1' } : {}),
       },
-      ...(args[0] === 'pull' ? { timeoutMs: RESOURCE_PULL_TIMEOUT_MS } : {}),
+      ...(timeoutMs !== undefined ? { timeoutMs } : {}),
       ...(profilePull
         ? {
             onStderr: (stderr: string) =>

@@ -16,6 +16,7 @@ import {
   buildWorkspaceSeatSummary,
 } from '@open-design/contracts';
 import { coalescedGet, forceCoalescedGet } from '../lib/coalesced-get';
+import { BackoffController, type BackoffOptions } from '../lib/backoff';
 import {
   markProjectDisplaySnapshotsDirty,
   patchProjectDisplaySnapshots,
@@ -229,6 +230,18 @@ function advanceWorkspaceContextRequestToken(sharedToken?: string | null): void 
  *  by the identity generation above. */
 function workspaceContextCoalesceKey(): string {
   return `workspace-context:${workspaceContextRequestToken}`;
+}
+
+/**
+ * The LIVE identity generation token. A cached workspace context is stamped
+ * with the token it was resolved under (see `resourceReadIdentity.generation`);
+ * a write path compares that stamp against this live value to decide whether a
+ * retained (last-good) context still belongs to the current identity, rather
+ * than trusting a possibly-stale `identityChangePending` snapshot. See
+ * `resolvedWorkspaceContextForWrite` in `state/projects.ts`.
+ */
+export function currentWorkspaceContextRequestToken(): string {
+  return workspaceContextRequestToken;
 }
 
 async function fetchWorkspaceDirectory(): Promise<WorkspaceDirectoryResponse> {
@@ -476,6 +489,7 @@ export function resetWorkspaceContextCache(): void {
   workspaceContextIdentityChangePending = false;
   workspaceAccountGeneration = 0;
   workspaceAccountGenerationStamp = 'initial';
+  resetWorkspaceContextRetrySchedules();
   writeWorkspaceSelection(null);
 }
 
@@ -701,6 +715,9 @@ export function useWorkspaceContext(): WorkspaceContextState {
       cachedWorkspaceContext = nextContext;
       cachedWorkspaceContextGeneration = requestGeneration;
       workspaceContextIdentityChangePending = false;
+      // A successful read is the only thing that rewinds the failure-retry
+      // backoff for this generation.
+      clearWorkspaceContextRetryFailures(requestGeneration);
       setState({
         context: cachedWorkspaceContext,
         resourceReadIdentity: cachedWorkspaceContext
@@ -719,6 +736,7 @@ export function useWorkspaceContext(): WorkspaceContextState {
       // last-known context instead of flashing the signed-out state. A never-
       // signed-in / personal user has a null cache, so this still shows the local
       // state for them.
+      const unsupported = (error as { status?: unknown })?.status === 404;
       setState({
         context: cachedWorkspaceContext,
         resourceReadIdentity:
@@ -730,11 +748,13 @@ export function useWorkspaceContext(): WorkspaceContextState {
             : null,
         loading: false,
         identityChangePending: workspaceContextIdentityChangePending,
-        failure:
-          (error as { status?: unknown })?.status === 404
-            ? 'unsupported'
-            : 'unavailable',
+        failure: unsupported ? 'unsupported' : 'unavailable',
       });
+      // An `unsupported` daemon has no workspace endpoint — retrying is
+      // pointless. A transient `unavailable` outage arms the shared jittered
+      // backoff so the shell recovers on its own without waiting for the 30s
+      // poll or a focus event.
+      if (!unsupported) scheduleWorkspaceContextRetry(requestGeneration);
     }
   }, []);
 
@@ -815,15 +835,26 @@ export function useWorkspaceContext(): WorkspaceContextState {
       advanceWorkspaceAccountGeneration(event.newValue ?? 'storage');
       refreshAfterIdentityChange();
     };
+    // A scheduled failure-retry (see `scheduleWorkspaceContextRetry`) fires this
+    // event for a specific identity generation. Re-read only when it still names
+    // the current generation — a retry armed for an identity the user has since
+    // left must not spend a request.
+    const onContextRetry = (event: Event) => {
+      const detail = (event as CustomEvent<{ requestKey?: string }>).detail;
+      if (detail?.requestKey !== workspaceContextRequestToken) return;
+      void loadContext();
+    };
     window.addEventListener('focus', refresh);
     window.addEventListener('pageshow', refresh);
     window.addEventListener(WORKSPACE_CONTEXT_REFRESH_EVENT, refreshAfterIdentityChange);
+    window.addEventListener(WORKSPACE_CONTEXT_RETRY_EVENT, onContextRetry);
     window.addEventListener('storage', onStorage);
     document.addEventListener('visibilitychange', onVisibilityChange);
     return () => {
       window.removeEventListener('focus', refresh);
       window.removeEventListener('pageshow', refresh);
       window.removeEventListener(WORKSPACE_CONTEXT_REFRESH_EVENT, refreshAfterIdentityChange);
+      window.removeEventListener(WORKSPACE_CONTEXT_RETRY_EVENT, onContextRetry);
       window.removeEventListener('storage', onStorage);
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
@@ -1607,7 +1638,7 @@ const WORKSPACE_BILLING_RETRY_EVENT = 'od:workspace-billing-retry';
  * within the share window costs zero network requests).
  */
 type WorkspaceBillingRetrySchedule = {
-  consecutiveFailures: number;
+  backoff: BackoffController;
   timer: ReturnType<typeof setTimeout> | null;
 };
 const workspaceBillingRetrySchedules = new Map<string, WorkspaceBillingRetrySchedule>();
@@ -1616,15 +1647,23 @@ function scheduleWorkspaceBillingRetry(requestKey: string): void {
   if (typeof window === 'undefined') return;
   let schedule = workspaceBillingRetrySchedules.get(requestKey);
   if (!schedule) {
-    schedule = { consecutiveFailures: 0, timer: null };
+    schedule = {
+      backoff: new BackoffController({
+        initialMs: WORKSPACE_BILLING_RETRY_BASE_MS,
+        maxMs: WORKSPACE_BILLING_RETRY_MAX_MS,
+        factor: 2,
+        // Jitter stays OFF for billing: its exponential schedule predates this
+        // change and is pinned by an exact-cadence regression test (the od://
+        // 502-storm). Only the arithmetic moves onto the shared controller;
+        // the observable 5s→10s→20s→40s→60s timing is unchanged.
+        jitter: false,
+      }),
+      timer: null,
+    };
     workspaceBillingRetrySchedules.set(requestKey, schedule);
   }
   if (schedule.timer != null) return;
-  const delay = Math.min(
-    WORKSPACE_BILLING_RETRY_BASE_MS * 2 ** schedule.consecutiveFailures,
-    WORKSPACE_BILLING_RETRY_MAX_MS,
-  );
-  schedule.consecutiveFailures += 1;
+  const delay = schedule.backoff.nextDelay();
   schedule.timer = setTimeout(() => {
     schedule.timer = null;
     // Dispatch unconditionally: listeners filter on their own active
@@ -1636,8 +1675,7 @@ function scheduleWorkspaceBillingRetry(requestKey: string): void {
 }
 
 function clearWorkspaceBillingRetryFailures(requestKey: string): void {
-  const schedule = workspaceBillingRetrySchedules.get(requestKey);
-  if (schedule) schedule.consecutiveFailures = 0;
+  workspaceBillingRetrySchedules.get(requestKey)?.backoff.reset();
 }
 
 function resetWorkspaceBillingRetrySchedules(): void {
@@ -1646,6 +1684,82 @@ function resetWorkspaceBillingRetrySchedules(): void {
   }
   workspaceBillingRetrySchedules.clear();
 }
+
+// ---------- workspace context failure retry ----------
+//
+// `GET /api/workspace/context` (and its directory prerequisite) previously had
+// NO failure retry: a read that failed just sat on the last-good context until
+// the next 30s poll or a focus event. During a multi-hour vela authority outage
+// that left the shell stale far longer than necessary and, combined with the
+// old fail-closed write gate, drove the create-retry storm this PR fixes.
+//
+// The failure path now arms a jittered exponential-backoff retry (1s → 30s),
+// module-level and keyed by identity generation — one timer shared by every
+// mounted consumer, exactly like the billing schedule above (a per-hook timer
+// would arm a dozen for the dozen-plus mounted `useWorkspaceContext`s). Success
+// resets the depth; an ambient trigger (SSE `workspace-context-changed`, focus,
+// the poll floor) fetches immediately WITHOUT rewinding the depth, so unrelated
+// foreground activity cannot keep kicking a flaky transport back to a 1s cadence.
+const WORKSPACE_CONTEXT_RETRY_BASE_MS = 1_000;
+const WORKSPACE_CONTEXT_RETRY_MAX_MS = 30_000;
+const WORKSPACE_CONTEXT_RETRY_EVENT = 'od:workspace-context-retry';
+
+function defaultWorkspaceContextRetryBackoff(): BackoffOptions {
+  return {
+    initialMs: WORKSPACE_CONTEXT_RETRY_BASE_MS,
+    maxMs: WORKSPACE_CONTEXT_RETRY_MAX_MS,
+    factor: 2,
+    jitter: true,
+  };
+}
+
+// Test seam: production uses jittered backoff; a test pins the schedule to a
+// deterministic sequence (jitter off) to assert the exact 1s→2s→4s…→30s growth.
+let workspaceContextRetryBackoffOptions: BackoffOptions = defaultWorkspaceContextRetryBackoff();
+
+export function __setWorkspaceContextRetryBackoffForTests(
+  options: BackoffOptions | null,
+): void {
+  workspaceContextRetryBackoffOptions = options ?? defaultWorkspaceContextRetryBackoff();
+}
+
+type WorkspaceContextRetrySchedule = {
+  backoff: BackoffController;
+  timer: ReturnType<typeof setTimeout> | null;
+};
+const workspaceContextRetrySchedules = new Map<string, WorkspaceContextRetrySchedule>();
+
+function scheduleWorkspaceContextRetry(requestKey: string): void {
+  if (typeof window === 'undefined') return;
+  let schedule = workspaceContextRetrySchedules.get(requestKey);
+  if (!schedule) {
+    schedule = {
+      backoff: new BackoffController(workspaceContextRetryBackoffOptions),
+      timer: null,
+    };
+    workspaceContextRetrySchedules.set(requestKey, schedule);
+  }
+  if (schedule.timer != null) return;
+  const delay = schedule.backoff.nextDelay();
+  schedule.timer = setTimeout(() => {
+    schedule.timer = null;
+    window.dispatchEvent(
+      new CustomEvent(WORKSPACE_CONTEXT_RETRY_EVENT, { detail: { requestKey } }),
+    );
+  }, delay);
+}
+
+function clearWorkspaceContextRetryFailures(requestKey: string): void {
+  workspaceContextRetrySchedules.get(requestKey)?.backoff.reset();
+}
+
+function resetWorkspaceContextRetrySchedules(): void {
+  for (const schedule of workspaceContextRetrySchedules.values()) {
+    if (schedule.timer != null) clearTimeout(schedule.timer);
+  }
+  workspaceContextRetrySchedules.clear();
+}
+
 export const WORKSPACE_BILLING_REFRESH_EVENT = 'od:workspace-billing-refresh';
 const WORKSPACE_BILLING_REFRESH_STORAGE_KEY = 'od.workspaceBilling.refreshAt';
 

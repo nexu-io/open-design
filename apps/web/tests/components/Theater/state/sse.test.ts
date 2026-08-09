@@ -241,6 +241,8 @@ describe('critique SSE connection manager (Phase 7.2)', () => {
       EventSourceCtor: StubEventSource as unknown as typeof EventSource,
       initialBackoffMs: 1000,
       maxBackoffMs: 30_000,
+      // Pin jitter to its high edge (multiplier 1.0) so the base sequence shows.
+      randomFn: () => 1,
       setTimeoutFn,
     });
     expect(StubEventSource.instances).toHaveLength(1);
@@ -262,6 +264,28 @@ describe('critique SSE connection manager (Phase 7.2)', () => {
     StubEventSource.instances[1]!.fireError();
     expect(queue).toHaveLength(1);
     expect(queue[0]!.at - now).toBe(1000);
+  });
+
+  it('jitters each reconnect delay within [0.5, 1.0) of the base', () => {
+    const delays: number[] = [];
+    const setTimeoutFn = ((_fn: () => void, delay: number) => {
+      delays.push(delay);
+      // Do not fire: observe the scheduled delay per error only.
+      return delays.length as unknown as ReturnType<typeof setTimeout>;
+    }) as typeof setTimeout;
+
+    createCritiqueEventsConnection('proj-1', () => undefined, {
+      EventSourceCtor: StubEventSource as unknown as typeof EventSource,
+      initialBackoffMs: 1000,
+      maxBackoffMs: 30_000,
+      // random() = 0 → multiplier 0.5 (the low edge of the jitter window).
+      randomFn: () => 0,
+      setTimeoutFn,
+    });
+    const es = StubEventSource.instances[0]!;
+    for (let i = 0; i < 4; i += 1) es.fireError();
+    // Base 1000, 2000, 4000, 8000 → all halved by the low-edge jitter.
+    expect(delays).toEqual([500, 1000, 2000, 4000]);
   });
 
   it('close() cancels pending reconnects and stops the live source', () => {

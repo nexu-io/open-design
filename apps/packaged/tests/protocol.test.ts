@@ -500,6 +500,160 @@ describe('od:// proxy client-cancellation is not an upstream failure', () => {
 });
 
 /**
+ * Local resource exhaustion must FAIL FAST — the proxy's two resilience
+ * layers (undici fallback after a net.fetch rejection, linear-backoff
+ * transient retry) both amplify load, and when the failure IS "this machine
+ * is out of sockets/file descriptors", amplification is exactly wrong:
+ * during the incident that motivated this, the undici fallback doubled every
+ * failing request (7890 fallback fetches measured) and the retry loop added
+ * another 1334 attempts on top, each consuming precisely the resource the
+ * machine had run out of.
+ *
+ * Electron's net.fetch surfaces these as plain Errors whose MESSAGE carries
+ * the `net::ERR_...` token while `code` stays unset; Node/undici surfaces
+ * them as ErrnoExceptions with a `code`. Both shapes must be recognized.
+ *
+ * Errors outside the explicit exhaustion whitelist must keep today's
+ * behavior: ECONNREFUSED still buys the full retry budget (it covers the
+ * daemon startup race) and generic net.fetch rejections still fall back to
+ * undici (that fallback rescues real Electron transport regressions such as
+ * CSS-mask GETs).
+ */
+describe('od:// proxy fails fast on local resource exhaustion', () => {
+  beforeEach(() => {
+    vi.mocked(protocol.handle).mockClear();
+    vi.mocked(net.fetch).mockReset();
+  });
+
+  const registeredHandler = (): ((request: Request) => Promise<Response>) => {
+    const calls = vi.mocked(protocol.handle).mock.calls;
+    expect(calls.length).toBeGreaterThan(0);
+    return calls.at(-1)![1] as (request: Request) => Promise<Response>;
+  };
+
+  /** Electron net.fetch shape: token in the message, `code` unset. */
+  const exhaustionByMessage = (): Error => new Error('net::ERR_INSUFFICIENT_RESOURCES');
+
+  /** Node/undici shape: token in `code`. */
+  const exhaustionByCode = (code: string): Error => {
+    const error = new Error(`connect ${code} 127.0.0.1:17579`) as NodeJS.ErrnoException;
+    error.code = code;
+    return error;
+  };
+
+  it('does not double a net::ERR_INSUFFICIENT_RESOURCES failure through the undici fallback', async () => {
+    vi.mocked(net.fetch).mockRejectedValue(exhaustionByMessage());
+    const undiciFetch = vi.fn(async (_input: Request | string | URL) =>
+      new Response('ok', { status: 200 }));
+    vi.stubGlobal('fetch', undiciFetch);
+
+    registerOdProtocol(() => 'http://127.0.0.1:61424/');
+    const handler = registeredHandler();
+    const response = await handler(new Request('od://app/agent-icons/opencode.svg'));
+
+    // Exhaustion must cost exactly one upstream attempt: no undici double,
+    // no retry amplification, an honest 502 to the renderer.
+    expect(undiciFetch).not.toHaveBeenCalled();
+    expect(vi.mocked(net.fetch)).toHaveBeenCalledTimes(1);
+    expect(response.status).toBe(502);
+    const body = (await response.json()) as { error: string; message: string };
+    expect(body.error).toBe('OD_PROTOCOL_PROXY_FAILED');
+    expect(body.message).toContain('ERR_INSUFFICIENT_RESOURCES');
+  });
+
+  it('does not burn the retry budget when only the message carries net::ERR_INSUFFICIENT_RESOURCES', async () => {
+    let calls = 0;
+    const waits: number[] = [];
+    const fetchImpl: typeof fetch = async () => {
+      calls += 1;
+      throw exhaustionByMessage();
+    };
+
+    const response = await handleOdRequest(
+      new Request('od://app/'),
+      'http://127.0.0.1:17579/',
+      fetchImpl,
+      {
+        delay: async (ms: number) => {
+          waits.push(ms);
+        },
+      },
+    );
+
+    expect(calls).toBe(1);
+    expect(waits).toEqual([]);
+    expect(response.status).toBe(502);
+  });
+
+  it.each(['EMFILE', 'ENFILE', 'EADDRNOTAVAIL', 'ENOBUFS'])(
+    'does not burn the retry budget on %s',
+    async (code) => {
+      let calls = 0;
+      const waits: number[] = [];
+      const fetchImpl: typeof fetch = async () => {
+        calls += 1;
+        throw exhaustionByCode(code);
+      };
+
+      const response = await handleOdRequest(
+        new Request('od://app/'),
+        'http://127.0.0.1:17579/',
+        fetchImpl,
+        {
+          delay: async (ms: number) => {
+            waits.push(ms);
+          },
+        },
+      );
+
+      expect(calls).toBe(1);
+      expect(waits).toEqual([]);
+      expect(response.status).toBe(502);
+      const body = (await response.json()) as { code?: string };
+      expect(body.code).toBe(code);
+    },
+  );
+
+  // Guard: ECONNREFUSED is NOT exhaustion — it is the daemon/web sidecar not
+  // being up yet, and the retry budget is exactly what bridges that startup
+  // race. Fast-failing it would regress packaged first-launch.
+  it('still spends the full retry budget on ECONNREFUSED', async () => {
+    let calls = 0;
+    const fetchImpl: typeof fetch = async () => {
+      calls += 1;
+      throw exhaustionByCode('ECONNREFUSED');
+    };
+
+    const response = await handleOdRequest(
+      new Request('od://app/'),
+      'http://127.0.0.1:17579/',
+      fetchImpl,
+      { delay: async () => {} },
+    );
+
+    expect(calls).toBe(3);
+    expect(response.status).toBe(502);
+  });
+
+  // Guard: a generic net.fetch rejection still gets the undici fallback —
+  // that fallback exists because Electron can reject specific renderer-owned
+  // subresource requests (CSS-mask GETs) that undici serves fine.
+  it('still falls back to undici on a generic net::ERR_FAILED', async () => {
+    vi.mocked(net.fetch).mockRejectedValue(new Error('net::ERR_FAILED'));
+    const undiciFetch = vi.fn(async (_input: Request | string | URL) =>
+      new Response('ok', { status: 200 }));
+    vi.stubGlobal('fetch', undiciFetch);
+
+    registerOdProtocol(() => 'http://127.0.0.1:61424/');
+    const handler = registeredHandler();
+    const response = await handler(new Request('od://app/agent-icons/opencode.svg'));
+
+    expect(response.status).toBe(200);
+    expect(undiciFetch).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
  * The od:// proxy target must be RESOLVED PER REQUEST, never captured as a
  * constant at registration time.
  *

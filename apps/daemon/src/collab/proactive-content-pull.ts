@@ -257,6 +257,29 @@ export interface ProactiveContentPullDeps {
   /** Durable last materialized version, shared with other team-resource
    *  reconcilers. Seeds the in-memory event cursor after daemon restart. */
   materializedVersion?: (target: ProactiveContentPullTarget) => string | null;
+  /**
+   * Background content-size policy (issue #6518, incident #6512), consulted
+   * immediately before this module executes a content pull. EVERY pull this
+   * module drives is background work — the live hub push lane and the broad
+   * or targeted catch-up sweeps all converge here — while the foreground
+   * open-project lane (`POST /api/projects/:id/collab/pull` in
+   * routes/collab-sync.ts) never flows through this module and therefore
+   * never consults this policy. 'defer' skips the download and settles the
+   * work item; the version stays unmaterialized until the user opens the
+   * project and the foreground pull lands it (its durable cursor then
+   * satisfies later background rounds before this policy is reached again).
+   *
+   * Fail-closed direction is deliberately INVERTED relative to this module's
+   * other guards: for the size policy, "closed" means PULL AS BEFORE (the
+   * pre-guard status quo). Skipping is the new behavior, so any uncertainty —
+   * the policy throwing, an unknown entry count, an old CLI without the
+   * probe, or a versionless event — must degrade to the existing pull and
+   * may never leave a project permanently unmaterialized.
+   */
+  assessBackgroundContentPull?: (
+    target: ProactiveContentPullTarget,
+    version: number,
+  ) => Promise<'pull' | 'defer'>;
   /** Called after a successful, versioned pull has materialized bytes. Used
    *  to invalidate list-level cover reads that do not subscribe to the
    *  project's own SSE stream. */
@@ -435,7 +458,11 @@ type PullAttempt =
   | { kind: 'revoked' }
   | { kind: 'failed'; staleGuard?: boolean }
   | { kind: 'retry-now' }
-  | { kind: 'merged'; intent: PullIntent };
+  | { kind: 'merged'; intent: PullIntent }
+  /** The background size policy declined this version. Terminal for the
+   *  background lane: settle without retrying, and without advancing the
+   *  cursor so the foreground lane (or a newer head) still materializes. */
+  | { kind: 'deferred' };
 
 type PullDecision =
   | { kind: 'target'; target: ProactiveContentPullTarget }
@@ -1116,6 +1143,28 @@ export function createProactiveContentPull(
       ) {
         return { kind: 'satisfied' };
       }
+      // Background size decision, inserted after every existing guard and
+      // immediately before content-pull execution. Only an exact-version
+      // decision is possible (the probe authorizes one exact version), so a
+      // versionless event keeps the pre-guard behavior. The policy failing
+      // fails OPEN into the pull — see `assessBackgroundContentPull`'s doc
+      // for why the closed direction is the status quo here.
+      if (
+        deps.assessBackgroundContentPull &&
+        intent.desiredVersion != null
+      ) {
+        let assessment: 'pull' | 'defer' = 'pull';
+        try {
+          assessment = await deps.assessBackgroundContentPull(
+            target,
+            intent.desiredVersion,
+          );
+        } catch (error) {
+          deps.onError?.(error);
+          assessment = 'pull';
+        }
+        if (assessment === 'defer') return { kind: 'deferred' };
+      }
       const running = projectPulls.get(projectId);
       if (running) {
         const completion = await running;
@@ -1211,6 +1260,16 @@ export function createProactiveContentPull(
         intent.revision !== revision
       ) {
         continue;
+      }
+      // A size-deferred version settles like a satisfied one — no retry
+      // timer, no broad-head cooldown — except the cursor stays behind so a
+      // foreground pull or a newer head still materializes content. A newer
+      // event that merged in while the policy probe was in flight re-loops
+      // and gets its own fresh decision.
+      if (result.kind === 'deferred') {
+        if (intent.revision !== revision) continue;
+        clearIntent(intent);
+        return true;
       }
       if (result.kind === 'satisfied' || result.kind === 'stopped') {
         suppressedBroadHeads.delete(intent.expectedScopeKey ?? intent.key);

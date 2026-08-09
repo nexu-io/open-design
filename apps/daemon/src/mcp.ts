@@ -34,10 +34,12 @@ import {
   ANALYTICS_HEADER_SESSION_ID,
   buildProjectRawFileUrl,
   type McpAnalyticsContextResponse,
+  type WorkspaceProjectsResponse,
 } from '@open-design/contracts';
 import { randomUUID } from 'node:crypto';
 
 import { postCreateArtifactRequest } from './artifacts/create.js';
+import { resolveMcpWorkspaceContext } from './mcp-workspace-context.js';
 import {
   createLocalMcpBriefStore as createBriefStore,
   localMcpBriefResponseCopy,
@@ -88,7 +90,7 @@ interface ProjectPayload { project?: ProjectSummary; id?: string; name?: string;
 interface ActiveContext { active?: boolean; projectId?: string; projectName?: string | null; fileName?: string | null; ageMs?: number | null }
 type ResolvedProject = { id: string; name: string; source: 'uuid' | 'id' | 'exact' | 'slug' | 'substring' };
 interface ProjectListCache { baseUrl: string; t: number; list: ProjectSummary[] }
-interface McpArgs extends JsonObject { project?: unknown; entry?: unknown; include?: unknown; maxBytes?: unknown; path?: unknown; offset?: unknown; limit?: unknown; since?: unknown; query?: unknown; pattern?: unknown; max?: unknown; name?: unknown; content?: unknown; encoding?: unknown; artifactManifest?: unknown; confirm?: unknown; prompt?: unknown; plugin?: unknown; inputs?: unknown; agent?: unknown; model?: unknown; serviceTier?: unknown; apiKey?: unknown; requestId?: unknown; resume?: unknown; runId?: unknown; id?: unknown; designSystem?: unknown; skill?: unknown; includeUnavailable?: unknown; artifactType?: unknown; projectTitle?: unknown; locale?: unknown; knownAnswers?: unknown; skip?: unknown; briefDraftId?: unknown; nonce?: unknown; answers?: unknown; externalPluginContext?: unknown; pluginWorkflowId?: unknown }
+interface McpArgs extends JsonObject { project?: unknown; entry?: unknown; include?: unknown; maxBytes?: unknown; path?: unknown; offset?: unknown; limit?: unknown; since?: unknown; query?: unknown; pattern?: unknown; max?: unknown; name?: unknown; content?: unknown; encoding?: unknown; artifactManifest?: unknown; confirm?: unknown; prompt?: unknown; plugin?: unknown; inputs?: unknown; agent?: unknown; model?: unknown; serviceTier?: unknown; apiKey?: unknown; requestId?: unknown; resume?: unknown; runId?: unknown; id?: unknown; designSystem?: unknown; skill?: unknown; skills?: string[]; includeUnavailable?: unknown; artifactType?: unknown; projectTitle?: unknown; locale?: unknown; knownAnswers?: unknown; skip?: unknown; briefDraftId?: unknown; nonce?: unknown; answers?: unknown; externalPluginContext?: unknown; pluginWorkflowId?: unknown }
 interface ProjectFileBundleEntry { name: string; mime: string; size: number | null; content: string | null; binary: boolean }
 interface BundleInput { project: ProjectPayload | ProjectSummary; entry: string; files: ProjectFileBundleEntry[]; truncated: boolean; skippedFileCount?: number; active: ActiveContext | null; resolved?: ResolvedProject | null }
 interface ErrorWithCode { message?: string; code?: string; cause?: { code?: string } }
@@ -748,6 +750,11 @@ export const TOOL_DEFS = [
         skill: {
           type: 'string',
           description: 'Skill id from list_skills to drive the run. Optional.',
+        },
+        skills: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Additional skill ids from list_skills to compose into the run alongside skill. Optional; deduped against the primary skill id server-side.',
         },
         plugin: {
           type: 'string',
@@ -1983,6 +1990,27 @@ function publicVelaLoginStatus(status: unknown): unknown {
   return publicStatus;
 }
 
+// Tools that address projects or runs are workspace-scoped after 0.18.0:
+// bound projects are invisible to a headerless caller and bound-project reads
+// 400 with WORKSPACE_CONTEXT_REQUIRED (#6569). These resolve the signed-in
+// workspace and send x-od-workspace-* headers on every daemon call.
+const PROJECT_OR_RUN_TOOLS = new Set([
+  'list_projects',
+  'get_project',
+  'get_file',
+  'list_files',
+  'search_files',
+  'get_artifact',
+  'write_file',
+  'delete_file',
+  'delete_project',
+  'create_project',
+  'create_artifact',
+  'start_run',
+  'get_run',
+  'cancel_run',
+]);
+
 async function handleMcpToolCall(
   baseUrl: string,
   name: unknown,
@@ -1990,6 +2018,11 @@ async function handleMcpToolCall(
   options: HandleMcpToolCallOptions = {},
 ): Promise<McpToolCallResult> {
   try {
+    const workspaceContext = PROJECT_OR_RUN_TOOLS.has(String(name))
+      ? await resolveMcpWorkspaceContext(baseUrl)
+      : null;
+    const headers = workspaceContext?.headers;
+    const workspaceId = workspaceContext?.workspaceId;
     switch (name) {
       case 'collect_brief': {
         const collected = (options.briefStore ?? createLocalMcpBriefStore())
@@ -2030,6 +2063,20 @@ async function handleMcpToolCall(
         };
       }
       case 'list_projects':
+        if (workspaceId && headers) {
+          const data = await getJson<WorkspaceProjectsResponse>(
+            `${baseUrl}/api/workspaces/${encodeURIComponent(workspaceId)}/projects`,
+            headers,
+          );
+          return ok({
+            projects: (data?.projects ?? []).map((p) => ({
+              id: p.id,
+              name: p.name,
+              ...(p.metadata ? { metadata: p.metadata as unknown as JsonObject } : {}),
+              workspaceId: p.workspaceId,
+            })),
+          });
+        }
         return ok(await getJson<ProjectsPayload>(`${baseUrl}/api/projects`));
       case 'get_active_context': {
         const data = await getJson<ActiveContext>(`${baseUrl}/api/active`);
@@ -2042,18 +2089,21 @@ async function handleMcpToolCall(
         return ok(data);
       }
       case 'get_project': {
-        const { id, resolved, active } = await resolveProjectArg(baseUrl, args.project);
-        const data = await getJson<ProjectPayload>(`${baseUrl}/api/projects/${encodeURIComponent(id)}`);
+        const { id, resolved, active } = await resolveProjectArg(baseUrl, args.project, headers);
+        const data = await getJson<ProjectPayload>(
+          `${baseUrl}/api/projects/${encodeURIComponent(id)}`,
+          headers,
+        );
         const project = data?.project ?? data;
         const resolvedDir = typeof data?.resolvedDir === 'string' ? data.resolvedDir : null;
         const declaredEntry = project?.metadata?.entryFile ?? null;
-        const entryFile = await resolveProjectEntry(baseUrl, id, declaredEntry);
+        const entryFile = await resolveProjectEntry(baseUrl, id, declaredEntry, headers);
         const previewUrl = rawPreviewUrl(baseUrl, id, entryFile);
         // Build the studio deep link too — needs the project's
         // default conversation, which we look up once. Cheap to skip
         // when the daemon has no webBaseUrl configured.
         const webBase = await getWebBaseUrl(baseUrl);
-        const conversationId = webBase ? await getDefaultConversationId(baseUrl, id) : null;
+        const conversationId = webBase ? await getDefaultConversationId(baseUrl, id, headers) : null;
         const studioUrl = buildStudioUrl(webBase, id, conversationId, entryFile);
         return ok(
           withActiveEcho(
@@ -2088,15 +2138,15 @@ async function handleMcpToolCall(
         );
       }
       case 'list_files': {
-        const { id, resolved, active } = await resolveProjectArg(baseUrl, args.project);
+        const { id, resolved, active } = await resolveProjectArg(baseUrl, args.project, headers);
         const params = new URLSearchParams();
         if (typeof args.since === 'number' && Number.isFinite(args.since)) params.set('since', String(args.since));
         const qs = params.toString();
         const url = `${baseUrl}/api/projects/${encodeURIComponent(id)}/files${qs ? `?${qs}` : ''}`;
-        return ok(withActiveEcho(await getJson(url), active, resolved));
+        return ok(withActiveEcho(await getJson(url, headers), active, resolved));
       }
       case 'get_file': {
-        const { id, resolved, active } = await resolveProjectArg(baseUrl, args.project);
+        const { id, resolved, active } = await resolveProjectArg(baseUrl, args.project, headers);
         let path = typeof args.path === 'string' ? args.path : '';
         if (!path && active && active.fileName) {
           path = active.fileName;
@@ -2104,7 +2154,7 @@ async function handleMcpToolCall(
         requireString(path, 'path');
         const offset = typeof args.offset === 'number' && Number.isFinite(args.offset) ? Math.max(0, Math.floor(args.offset)) : 0;
         const limit = typeof args.limit === 'number' && Number.isFinite(args.limit) ? Math.max(1, Math.floor(args.limit)) : 2000;
-        return await getFile(baseUrl, id, path, active, resolved, offset, limit);
+        return await getFile(baseUrl, id, path, active, resolved, offset, limit, headers);
       }
       case 'get_artifact':
         return await getArtifact(
@@ -2113,9 +2163,10 @@ async function handleMcpToolCall(
           args.entry,
           args.include,
           args.maxBytes,
+          headers,
         );
       case 'search_files': {
-        const { id, resolved, active } = await resolveProjectArg(baseUrl, args.project);
+        const { id, resolved, active } = await resolveProjectArg(baseUrl, args.project, headers);
         requireString(args.query, 'query');
         const params = new URLSearchParams({ q: String(args.query) });
         if (args.pattern) params.set('pattern', String(args.pattern));
@@ -2124,6 +2175,7 @@ async function handleMcpToolCall(
           withActiveEcho(
             await getJson(
               `${baseUrl}/api/projects/${encodeURIComponent(id)}/search?${params.toString()}`,
+              headers,
             ),
             active,
             resolved,
@@ -2131,15 +2183,15 @@ async function handleMcpToolCall(
         );
       }
       case 'create_artifact':
-        return await createArtifact(baseUrl, args);
+        return await createArtifact(baseUrl, args, headers);
       case 'write_file':
-        return await writeFile(baseUrl, args);
+        return await writeFile(baseUrl, args, headers);
       case 'delete_file':
-        return await deleteFile(baseUrl, args);
+        return await deleteFile(baseUrl, args, headers);
       case 'delete_project':
-        return await deleteProject(baseUrl, args);
+        return await deleteProject(baseUrl, args, headers);
       case 'create_project':
-        return await createProject(baseUrl, args);
+        return await createProject(baseUrl, args, headers);
       case 'list_skills':
         return ok(await getJson<SkillsPayload>(`${baseUrl}/api/skills`));
       case 'list_plugins':
@@ -2166,15 +2218,16 @@ async function handleMcpToolCall(
           ),
         );
       case 'start_run':
-        return await startRun(baseUrl, args, options);
+        return await startRun(baseUrl, args, options, headers);
       case 'get_run':
-        return await getRun(baseUrl, args);
+        return await getRun(baseUrl, args, headers);
       case 'cancel_run': {
         requireString(args.runId, 'runId');
         return ok(
           await postJson<JsonObject>(
             `${baseUrl}/api/runs/${encodeURIComponent(args.runId)}/cancel`,
             {},
+            headers ?? {},
           ),
         );
       }
@@ -2186,8 +2239,12 @@ async function handleMcpToolCall(
   }
 }
 
-async function writeFile(baseUrl: string, args: McpArgs) {
-  const { id, resolved, active } = await resolveProjectArg(baseUrl, args.project);
+async function writeFile(
+  baseUrl: string,
+  args: McpArgs,
+  headers?: Record<string, string>,
+) {
+  const { id, resolved, active } = await resolveProjectArg(baseUrl, args.project, headers);
   // The daemon route requires its argv field to be called `name`; the
   // MCP-facing surface uses `path` to match the rest of the file tools.
   requireString(args.path, 'path');
@@ -2199,7 +2256,7 @@ async function writeFile(baseUrl: string, args: McpArgs) {
   const url = `${baseUrl}/api/projects/${encodeURIComponent(id)}/files`;
   const resp = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...headers },
     body: JSON.stringify({ name: args.path, content: args.content, encoding }),
   });
   if (!resp.ok) {
@@ -2209,8 +2266,12 @@ async function writeFile(baseUrl: string, args: McpArgs) {
   return ok(withActiveEcho(json, active, resolved));
 }
 
-async function deleteFile(baseUrl: string, args: McpArgs) {
-  const { id, resolved, active } = await resolveProjectArg(baseUrl, args.project);
+async function deleteFile(
+  baseUrl: string,
+  args: McpArgs,
+  headers?: Record<string, string>,
+) {
+  const { id, resolved, active } = await resolveProjectArg(baseUrl, args.project, headers);
   requireString(args.path, 'path');
   // /api/projects/:id/raw/* accepts nested paths; /api/projects/:id/files/:name
   // does not. Mirror the create_artifact surface, which already lets agents
@@ -2220,7 +2281,7 @@ async function deleteFile(baseUrl: string, args: McpArgs) {
     .filter((s) => s.length > 0)
     .map(encodeURIComponent);
   const url = `${baseUrl}/api/projects/${encodeURIComponent(id)}/raw/${segments.join('/')}`;
-  const resp = await fetch(url, { method: 'DELETE' });
+  const resp = await fetch(url, headers ? { method: 'DELETE', headers } : { method: 'DELETE' });
   if (!resp.ok) {
     return errorResult(await formatDaemonError(resp, url));
   }
@@ -2228,7 +2289,11 @@ async function deleteFile(baseUrl: string, args: McpArgs) {
   return ok(withActiveEcho(json, active, resolved));
 }
 
-async function deleteProject(baseUrl: string, args: McpArgs) {
+async function deleteProject(
+  baseUrl: string,
+  args: McpArgs,
+  headers?: Record<string, string>,
+) {
   // Active-context fallback is intentionally disabled: the daemon's
   // DELETE /api/projects/:id is irreversible (purges the row and the
   // on-disk project directory), so we never want it to fire against the
@@ -2240,9 +2305,9 @@ async function deleteProject(baseUrl: string, args: McpArgs) {
   if (args.confirm !== true) {
     return errorResult('confirm:true is required to delete a project (this cannot be undone).');
   }
-  const { id, resolved } = await resolveProjectArg(baseUrl, args.project);
+  const { id, resolved } = await resolveProjectArg(baseUrl, args.project, headers);
   const url = `${baseUrl}/api/projects/${encodeURIComponent(id)}`;
-  const resp = await fetch(url, { method: 'DELETE' });
+  const resp = await fetch(url, headers ? { method: 'DELETE', headers } : { method: 'DELETE' });
   if (!resp.ok) {
     return errorResult(await formatDaemonError(resp, url));
   }
@@ -2295,7 +2360,11 @@ async function postJson<T>(
 // <question-form> output ends up dropped from the MCP response because
 // no project file is produced. Better to let the outer agent gather
 // requirements directly and pass a precise prompt to start_run.
-async function createProject(baseUrl: string, args: McpArgs) {
+async function createProject(
+  baseUrl: string,
+  args: McpArgs,
+  headers?: Record<string, string>,
+) {
   requireString(args.name, 'name');
   const id =
     typeof args.id === 'string' && args.id.length > 0
@@ -2308,7 +2377,17 @@ async function createProject(baseUrl: string, args: McpArgs) {
   if (typeof args.skill === 'string' && args.skill.length > 0) {
     body.skillId = args.skill;
   }
-  return ok(await postJson<JsonObject>(`${baseUrl}/api/projects`, body));
+  // Send the workspace pair so the daemon binds the project to the
+  // workspace immediately. If workspace authority fails (e.g. the cached
+  // membership went stale between refreshes), retry headerless once — a
+  // headerless create is always legal and the project is lazy-adopted on
+  // the next workspace list.
+  try {
+    return ok(await postJson<JsonObject>(`${baseUrl}/api/projects`, body, headers ?? {}));
+  } catch (err) {
+    if (!headers || !String(err).includes('WORKSPACE_')) throw err;
+    return ok(await postJson<JsonObject>(`${baseUrl}/api/projects`, body));
+  }
 }
 
 // Flatten daemon's plugin record into the few fields an external agent
@@ -2387,6 +2466,7 @@ async function startRun(
   baseUrl: string,
   args: McpArgs,
   options: HandleMcpToolCallOptions = {},
+  headers?: Record<string, string>,
 ) {
   if (
     Object.prototype.hasOwnProperty.call(args, 'apiKey')
@@ -2397,7 +2477,7 @@ async function startRun(
       'raw API keys are not accepted by Open Design MCP. Configure Local BYOK in the Open Design UI and start that run from the local product instead.',
     );
   }
-  const { id, resolved, active } = await resolveProjectArg(baseUrl, args.project);
+  const { id, resolved, active } = await resolveProjectArg(baseUrl, args.project, headers);
   if (args.requestId !== undefined) requireString(args.requestId, 'requestId');
   if (
     options.pluginAttribution
@@ -2444,6 +2524,7 @@ async function startRun(
     body.currentPrompt = args.prompt;
   }
   if (typeof args.skill === 'string' && args.skill.length > 0) body.skillId = args.skill;
+  if (Array.isArray(args.skills) && args.skills.length > 0) body.skillIds = args.skills;
   if (typeof args.plugin === 'string' && args.plugin.length > 0) body.pluginId = args.plugin;
   if (typeof args.agent === 'string' && args.agent.length > 0) body.agentId = args.agent;
   if (typeof args.model === 'string' && args.model.length > 0) body.model = args.model;
@@ -2459,7 +2540,7 @@ async function startRun(
   const created = await postJson<JsonObject>(
     `${baseUrl}/api/runs`,
     body,
-    options.analyticsHeaders,
+    { ...options.analyticsHeaders, ...headers },
   );
   // Build studioUrl (conversation-level — no entry file yet) so the
   // outer agent has a URL to give the user right away. The daemon
@@ -2502,10 +2583,15 @@ async function startRun(
 //     relay it to the user (without this, the run looks like a
 //     "succeeded with empty output" mystery), and
 // (3) a hint that tells the outer agent how to surface both.
-async function getRun(baseUrl: string, args: McpArgs) {
+async function getRun(
+  baseUrl: string,
+  args: McpArgs,
+  headers?: Record<string, string>,
+) {
   requireString(args.runId, 'runId');
   const status = await getJson<JsonObject>(
     `${baseUrl}/api/runs/${encodeURIComponent(args.runId)}`,
+    headers,
   );
   if (status.status !== 'succeeded' || typeof status.projectId !== 'string' || !status.projectId) {
     // Non-terminal (or terminal-but-failed) status. Surface
@@ -2547,10 +2633,11 @@ async function getRun(baseUrl: string, args: McpArgs) {
     entryFile = await resolveLegacyRunEntry(
       baseUrl,
       status.projectId,
+      headers,
     );
   }
   const [agentMessage, webBase] = await Promise.all([
-    fetchRunAgentMessage(baseUrl, String(status.id ?? args.runId)),
+    fetchRunAgentMessage(baseUrl, String(status.id ?? args.runId), headers),
     getWebBaseUrl(baseUrl),
   ]);
   const previewUrl = entryFile
@@ -2580,9 +2667,15 @@ async function getRun(baseUrl: string, args: McpArgs) {
 // for terminal runs and closes), parse out text_delta deltas, and
 // concatenate. Best-effort: any HTTP / parse error returns null so the
 // caller just omits the field.
-async function fetchRunAgentMessage(baseUrl: string, runId: string): Promise<string | null> {
+async function fetchRunAgentMessage(
+  baseUrl: string,
+  runId: string,
+  headers?: Record<string, string>,
+): Promise<string | null> {
   try {
-    const resp = await fetch(`${baseUrl}/api/runs/${encodeURIComponent(runId)}/events`);
+    const resp = await fetch(`${baseUrl}/api/runs/${encodeURIComponent(runId)}/events`, {
+      ...(headers ? { headers } : {}),
+    });
     if (!resp.ok) return null;
     const body = await resp.text();
     const parts: string[] = [];
@@ -2662,10 +2755,15 @@ function buildStudioUrl(
 // create_project seeds a default conversation per project; this just
 // reads the same one back. Returns null on any lookup failure — caller
 // omits studioUrl.
-async function getDefaultConversationId(baseUrl: string, projectId: string): Promise<string | null> {
+async function getDefaultConversationId(
+  baseUrl: string,
+  projectId: string,
+  headers?: Record<string, string>,
+): Promise<string | null> {
   try {
     const data = await getJson<{ conversations?: Array<{ id?: string }> }>(
       `${baseUrl}/api/projects/${encodeURIComponent(projectId)}/conversations`,
+      headers,
     );
     const first = Array.isArray(data?.conversations) ? data.conversations[0] : null;
     return typeof first?.id === 'string' && first.id.length > 0 ? first.id : null;
@@ -2681,11 +2779,17 @@ async function getDefaultConversationId(baseUrl: string, projectId: string): Pro
 // index.html exists at the project root — without the fallback,
 // get_project/get_run would silently omit previewUrl and force the
 // outer agent to guess a file:// path.
-async function resolveProjectEntry(baseUrl: string, projectId: string, declared: unknown): Promise<string | null> {
+async function resolveProjectEntry(
+  baseUrl: string,
+  projectId: string,
+  declared: unknown,
+  headers?: Record<string, string>,
+): Promise<string | null> {
   if (typeof declared === 'string' && declared.length > 0) return declared;
   try {
     const data = await getJson<{ files?: Array<{ path?: string; name?: string; kind?: string }> }>(
       `${baseUrl}/api/projects/${encodeURIComponent(projectId)}/files`,
+      headers,
     );
     const files = data?.files ?? [];
     // index.html wins at any level — the conventional entry signal.
@@ -2717,22 +2821,28 @@ function rawPreviewUrl(baseUrl: string, projectId: string, entry: unknown): stri
 async function resolveLegacyRunEntry(
   baseUrl: string,
   projectId: string,
+  headers?: Record<string, string>,
 ): Promise<string | null> {
   try {
     const data = await getJson<ProjectPayload>(
       `${baseUrl}/api/projects/${encodeURIComponent(projectId)}`,
+      headers,
     );
     const project = data?.project ?? data;
     const declared = (project as { metadata?: JsonObject } | undefined)
       ?.metadata?.entryFile;
-    return resolveProjectEntry(baseUrl, projectId, declared);
+    return resolveProjectEntry(baseUrl, projectId, declared, headers);
   } catch {
     return null;
   }
 }
 
-async function createArtifact(baseUrl: string, args: McpArgs) {
-  const { id, resolved, active } = await resolveProjectArg(baseUrl, args.project);
+async function createArtifact(
+  baseUrl: string,
+  args: McpArgs,
+  headers?: Record<string, string>,
+) {
+  const { id, resolved, active } = await resolveProjectArg(baseUrl, args.project, headers);
   requireString(args.name, 'name');
   requireString(args.content, 'content');
   if (
@@ -2750,6 +2860,7 @@ async function createArtifact(baseUrl: string, args: McpArgs) {
   const payload = await postCreateArtifactRequest({
     baseUrl,
     projectId: id,
+    ...(headers ? { headers } : {}),
     input: {
       name: args.name,
       content: args.content,
@@ -2780,18 +2891,37 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const PROJECT_LIST_TTL_MS = 5000;
 let projectListCache: ProjectListCache | null = null;
 
-async function fetchProjectList(baseUrl: string): Promise<ProjectSummary[]> {
+async function fetchProjectList(
+  baseUrl: string,
+  headers?: Record<string, string>,
+): Promise<ProjectSummary[]> {
+  const workspaceId = headers?.['x-od-workspace-id'] ?? '';
+  // Cache key includes the workspace so a scoped and an unbound list never mix.
+  const cacheKey = workspaceId ? `${baseUrl}|${workspaceId}` : baseUrl;
   const now = Date.now();
   if (
     projectListCache &&
-    projectListCache.baseUrl === baseUrl &&
+    projectListCache.baseUrl === cacheKey &&
     now - projectListCache.t < PROJECT_LIST_TTL_MS
   ) {
     return projectListCache.list;
   }
-  const data = await getJson<ProjectsPayload>(`${baseUrl}/api/projects`);
-  const list = Array.isArray(data?.projects) ? data.projects : [];
-  projectListCache = { baseUrl, t: now, list };
+  let list: ProjectSummary[];
+  if (workspaceId && headers) {
+    const data = await getJson<WorkspaceProjectsResponse>(
+      `${baseUrl}/api/workspaces/${encodeURIComponent(workspaceId)}/projects`,
+      headers,
+    );
+    list = (data?.projects ?? []).map((p) => ({
+      id: p.id,
+      name: p.name,
+      ...(p.metadata ? { metadata: p.metadata as unknown as JsonObject } : {}),
+    }));
+  } else {
+    const data = await getJson<ProjectsPayload>(`${baseUrl}/api/projects`);
+    list = Array.isArray(data?.projects) ? data.projects : [];
+  }
+  projectListCache = { baseUrl: cacheKey, t: now, list };
   return list;
 }
 
@@ -2800,9 +2930,13 @@ async function fetchProjectList(baseUrl: string): Promise<ProjectSummary[]> {
 // caller, the active-context payload that was used. Throws a clear
 // error when neither is available so the agent can prompt the user
 // rather than guessing.
-async function resolveProjectArg(baseUrl: string, arg: unknown): Promise<{ id: string; resolved: ResolvedProject | null; active: ActiveContext | null }> {
+async function resolveProjectArg(
+  baseUrl: string,
+  arg: unknown,
+  headers?: Record<string, string>,
+): Promise<{ id: string; resolved: ResolvedProject | null; active: ActiveContext | null }> {
   if (typeof arg === 'string' && arg.length > 0) {
-    const resolved = await resolveProjectId(baseUrl, arg);
+    const resolved = await resolveProjectId(baseUrl, arg, headers);
     return { id: resolved.id, resolved, active: null };
   }
   let active: ActiveContext;
@@ -2821,13 +2955,17 @@ async function resolveProjectArg(baseUrl: string, arg: unknown): Promise<{ id: s
   return { id: active.projectId, resolved: null, active };
 }
 
-async function resolveProjectId(baseUrl: string, arg: unknown): Promise<ResolvedProject> {
+async function resolveProjectId(
+  baseUrl: string,
+  arg: unknown,
+  headers?: Record<string, string>,
+): Promise<ResolvedProject> {
   if (typeof arg !== 'string' || !arg) {
     throw new Error('project is required (string).');
   }
   if (UUID_RE.test(arg)) return { id: arg, name: arg, source: 'uuid' as const };
 
-  const list = await fetchProjectList(baseUrl);
+  const list = await fetchProjectList(baseUrl, headers);
   if (list.length === 0) {
     throw new Error('no projects on this daemon');
   }
@@ -2862,8 +3000,8 @@ async function resolveProjectId(baseUrl: string, arg: unknown): Promise<Resolved
   throw new Error(`no project matches "${arg}"`);
 }
 
-async function getJson<T>(url: string): Promise<T> {
-  const resp = await fetch(url);
+async function getJson<T>(url: string, headers?: Record<string, string>): Promise<T> {
+  const resp = await fetch(url, headers ? { headers } : undefined);
   if (!resp.ok) {
     const body = await safeText(resp);
     throw new Error(`daemon ${resp.status} on ${url}: ${body || resp.statusText}`);
@@ -2871,13 +3009,22 @@ async function getJson<T>(url: string): Promise<T> {
   return (await resp.json()) as T;
 }
 
-async function getFile(baseUrl: string, project: string, relPath: string, active: ActiveContext | null, resolved?: ResolvedProject | null, offset = 0, limit = 2000) {
+async function getFile(
+  baseUrl: string,
+  project: string,
+  relPath: string,
+  active: ActiveContext | null,
+  resolved?: ResolvedProject | null,
+  offset = 0,
+  limit = 2000,
+  headers?: Record<string, string>,
+) {
   const segments = String(relPath)
     .split('/')
     .filter((s) => s.length > 0)
     .map(encodeURIComponent);
   const url = `${baseUrl}/api/projects/${encodeURIComponent(project)}/raw/${segments.join('/')}`;
-  const resp = await fetch(url);
+  const resp = await fetch(url, headers ? { headers } : undefined);
   if (!resp.ok) {
     const body = await safeText(resp);
     return errorResult(
@@ -2964,7 +3111,14 @@ function totalTextBytes(files: ProjectFileBundleEntry[]): number {
   return n;
 }
 
-async function getArtifact(baseUrl: string, projectArg: unknown, entryArg: unknown, includeMode: unknown, maxBytesArg: unknown) {
+async function getArtifact(
+  baseUrl: string,
+  projectArg: unknown,
+  entryArg: unknown,
+  includeMode: unknown,
+  maxBytesArg: unknown,
+  headers?: Record<string, string>,
+) {
   const include = includeMode == null || includeMode === '' ? 'auto' : includeMode;
   if (typeof include !== 'string' || !VALID_INCLUDE_MODES.has(include)) {
     return errorResult(
@@ -2974,8 +3128,11 @@ async function getArtifact(baseUrl: string, projectArg: unknown, entryArg: unkno
   const maxBytes =
     typeof maxBytesArg === 'number' && Number.isFinite(maxBytesArg) && maxBytesArg > 0 ? maxBytesArg : DEFAULT_MAX_BYTES;
 
-  const { id, active, resolved } = await resolveProjectArg(baseUrl, projectArg);
-  const data = await getJson<ProjectPayload>(`${baseUrl}/api/projects/${encodeURIComponent(id)}`);
+  const { id, active, resolved } = await resolveProjectArg(baseUrl, projectArg, headers);
+  const data = await getJson<ProjectPayload>(
+    `${baseUrl}/api/projects/${encodeURIComponent(id)}`,
+    headers,
+  );
   const project = (data.project ?? data) as ProjectSummary;
   // Active-file beats project default entry when project also came
   // from active context - if the user is on landing.html and asks
@@ -2995,7 +3152,7 @@ async function getArtifact(baseUrl: string, projectArg: unknown, entryArg: unkno
   if (include === 'shallow') {
     let file;
     try {
-      file = await fetchProjectFile(baseUrl, id, entry);
+      file = await fetchProjectFile(baseUrl, id, entry, undefined, headers);
     } catch (err) {
       return errorResult(errorMessage(err));
     }
@@ -3003,7 +3160,10 @@ async function getArtifact(baseUrl: string, projectArg: unknown, entryArg: unkno
   }
 
   if (include === 'all') {
-    const meta = await getJson<{ files?: Array<{ name: string }> }>(`${baseUrl}/api/projects/${encodeURIComponent(id)}/files`);
+    const meta = await getJson<{ files?: Array<{ name: string }> }>(
+      `${baseUrl}/api/projects/${encodeURIComponent(id)}/files`,
+      headers,
+    );
     const allFiles = Array.isArray(meta?.files) ? meta.files : [];
     const fetched: ProjectFileBundleEntry[] = [];
     let truncated = false;
@@ -3015,7 +3175,7 @@ async function getArtifact(baseUrl: string, projectArg: unknown, entryArg: unkno
       }
       try {
         const remaining = maxBytes - totalTextBytes(fetched);
-        fetched.push(await fetchProjectFile(baseUrl, id, f.name, remaining));
+        fetched.push(await fetchProjectFile(baseUrl, id, f.name, remaining, headers));
       } catch (err) {
         if (err instanceof BudgetExceededError) truncated = true;
         else skippedFileCount += 1;
@@ -3030,7 +3190,7 @@ async function getArtifact(baseUrl: string, projectArg: unknown, entryArg: unkno
   // returning an empty bundle would hide that.
   let entryFile;
   try {
-    entryFile = await fetchProjectFile(baseUrl, id, entry);
+    entryFile = await fetchProjectFile(baseUrl, id, entry, undefined, headers);
   } catch (err) {
     return errorResult(errorMessage(err));
   }
@@ -3057,7 +3217,7 @@ async function getArtifact(baseUrl: string, projectArg: unknown, entryArg: unkno
       let file;
       try {
         const remaining = maxBytes - totalTextBytes(fetched);
-        file = await fetchProjectFile(baseUrl, id, refPath, remaining);
+        file = await fetchProjectFile(baseUrl, id, refPath, remaining, headers);
       } catch (err) {
         if (err instanceof BudgetExceededError) truncated = true;
         else skippedFileCount += 1;
@@ -3081,13 +3241,19 @@ async function getArtifact(baseUrl: string, projectArg: unknown, entryArg: unkno
 // failure of the whole bundle.
 class BudgetExceededError extends Error {}
 
-async function fetchProjectFile(baseUrl: string, projectId: string, relPath: string, remainingBytes = Infinity): Promise<ProjectFileBundleEntry> {
+async function fetchProjectFile(
+  baseUrl: string,
+  projectId: string,
+  relPath: string,
+  remainingBytes = Infinity,
+  headers?: Record<string, string>,
+): Promise<ProjectFileBundleEntry> {
   const segments = String(relPath)
     .split('/')
     .filter((s) => s.length > 0)
     .map(encodeURIComponent);
   const url = `${baseUrl}/api/projects/${encodeURIComponent(projectId)}/raw/${segments.join('/')}`;
-  const resp = await fetch(url);
+  const resp = await fetch(url, headers ? { headers } : undefined);
   if (!resp.ok) {
     const body = await safeText(resp);
     throw new Error(`daemon ${resp.status} on ${url}: ${body || resp.statusText}`);

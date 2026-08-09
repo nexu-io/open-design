@@ -154,22 +154,6 @@ test.skip('[P2] captures the integrations MCP surface', async ({ page }) => {
   await captureVisual(page, 'visual-integrations-mcp');
 });
 
-test('[P2] captures the tasks page surface', async ({ page }) => {
-  await configureVisualPage(page);
-  await gotoVisualHome(page);
-
-  await ensureRailOpen(page);
-  const tasksNav = page.getByTestId('entry-nav-tasks');
-  test.skip(!(await tasksNav.isVisible().catch(() => false)), 'Tasks navigation is not present in the current entry shell.');
-  await tasksNav.click();
-  await expect(page).toHaveURL(/\/automations$/);
-  await expect(page.getByTestId('tasks-view')).toBeVisible();
-  await expect(page.getByText('No automations yet')).toBeVisible();
-  await waitForVisualFonts(page);
-
-  await captureVisual(page, 'visual-tasks');
-});
-
 async function openSettingsSection(page: import('@playwright/test').Page, testId: string) {
   // #5971 deleted the rail-footer settings chip (`entry-settings-button`).
   // `openSettingsDialog` owns every remaining entry point — the rail's

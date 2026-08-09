@@ -76,9 +76,21 @@ interface ProjectState {
   /** A change arrived while a publish was in flight → re-publish after it settles. */
   dirty: boolean;
   dirtyReason: string;
+  /** Pending automatic retry of a failed publish (see {@link PUBLISH_RETRY_BACKOFF_MS}). */
+  retryTimer: ReturnType<typeof setTimeout> | null;
+  /** Consecutive failed publish attempts with no success or newer change in between. */
+  consecutiveFailures: number;
 }
 
 const DEFAULT_DEBOUNCE_MS = 400;
+// A publish that fails with no newer change pending retries automatically on
+// this bounded backoff schedule. Without it a transient hub/network error
+// leaves the project stuck in its failed sync state until the author happens
+// to edit again. The budget is deliberately finite: a persistently failing
+// hub gets three spaced attempts, then the scheduler goes quiet so a broken
+// deploy cannot drive an endless vela child-process drumbeat. A successful
+// publish or a fresh author change restores the full budget.
+export const PUBLISH_RETRY_BACKOFF_MS: readonly number[] = [5_000, 15_000, 45_000];
 
 export class CollabPublishScheduler {
   private readonly adapter: ResourcePublishAdapter;
@@ -98,6 +110,10 @@ export class CollabPublishScheduler {
   notifyChanged(projectId: string, reason = 'change'): void {
     const state = this.ensure(projectId);
     state.reason = reason;
+    // A fresh author change supersedes any in-progress failure recovery: it
+    // publishes on its own debounce window with the full retry budget.
+    state.consecutiveFailures = 0;
+    this.clearRetryTimer(state);
     if (state.publishing) {
       // Don't interrupt an in-flight publish — mark dirty so a fresh one runs
       // after it settles (last-write-wins; the change is never lost).
@@ -134,6 +150,7 @@ export class CollabPublishScheduler {
   dispose(): void {
     for (const state of this.projects.values()) {
       if (state.timer) clearTimeout(state.timer);
+      this.clearRetryTimer(state);
     }
     this.projects.clear();
   }
@@ -142,10 +159,13 @@ export class CollabPublishScheduler {
     const state = this.projects.get(projectId);
     if (!state || state.publishing) return;
     state.timer = null;
+    this.clearRetryTimer(state);
     state.publishing = true;
     const reason = state.reason;
+    let failed = false;
     try {
       const result = await this.adapter.publish({ projectId, reason });
+      state.consecutiveFailures = 0;
       if (result) {
         this.onPublished?.({
           projectId,
@@ -155,21 +175,58 @@ export class CollabPublishScheduler {
         });
       }
     } catch (error) {
+      failed = true;
       this.onError?.({ projectId, error });
     } finally {
       state.publishing = false;
       if (state.dirty) {
         state.dirty = false;
-        // A change landed during the publish — schedule a fresh one.
+        // A change landed during the publish — schedule a fresh one. That
+        // newer content supersedes failure recovery, so no retry stacks on
+        // top of the re-publish (notifyChanged restores the retry budget).
         this.notifyChanged(projectId, state.dirtyReason || 'change');
+      } else if (failed) {
+        this.scheduleRetry(projectId, state);
       }
+    }
+  }
+
+  /**
+   * Recovery for a publish that failed with nothing newer pending: re-run the
+   * same publish (same reason) after a bounded backoff. Exhausting the budget
+   * leaves the project in its failed sync state until the next author change —
+   * deliberately, so a persistently failing hub is retried a handful of times
+   * rather than forever.
+   */
+  private scheduleRetry(projectId: string, state: ProjectState): void {
+    const delayMs = PUBLISH_RETRY_BACKOFF_MS[state.consecutiveFailures];
+    state.consecutiveFailures += 1;
+    if (delayMs === undefined) return; // retry budget exhausted
+    state.retryTimer = setTimeout(() => {
+      state.retryTimer = null;
+      void this.flush(projectId);
+    }, delayMs);
+  }
+
+  private clearRetryTimer(state: ProjectState): void {
+    if (state.retryTimer) {
+      clearTimeout(state.retryTimer);
+      state.retryTimer = null;
     }
   }
 
   private ensure(projectId: string): ProjectState {
     let state = this.projects.get(projectId);
     if (!state) {
-      state = { timer: null, reason: 'change', publishing: false, dirty: false, dirtyReason: 'change' };
+      state = {
+        timer: null,
+        reason: 'change',
+        publishing: false,
+        dirty: false,
+        dirtyReason: 'change',
+        retryTimer: null,
+        consecutiveFailures: 0,
+      };
       this.projects.set(projectId, state);
     }
     return state;

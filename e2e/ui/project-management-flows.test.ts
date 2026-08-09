@@ -323,9 +323,11 @@ test('[P0] projects empty state create action opens the new project flow', async
 });
 
 test('[P0] UI-created Personal project recovers preview and write authority after reload', async ({ page }) => {
+  // Create + upload + gated reload needs more than the suite default once the
+  // post-reload waits use the long boot/route budgets under CI contention.
+  test.setTimeout(T.xlong);
   await mockWritablePersonalProjectScope(page);
   await stubCatalogsEmpty(page);
-
   await page.goto('/');
   await openNewProjectModal(page);
   await page.getByTestId('new-project-tab-prototype').click();
@@ -345,11 +347,11 @@ test('[P0] UI-created Personal project recovers preview and write authority afte
     name: 'Reloaded Personal preview',
   })).toBeVisible();
 
-  let releaseScope!: () => void;
+  let releaseScope = () => {};
   const scopeGate = new Promise<void>((resolve) => {
     releaseScope = resolve;
   });
-  let releaseStatus!: () => void;
+  let releaseStatus = () => {};
   const statusGate = new Promise<void>((resolve) => {
     releaseStatus = resolve;
   });
@@ -380,22 +382,57 @@ test('[P0] UI-created Personal project recovers preview and write authority afte
     });
   });
 
-  // A hard reload drops the module-local same-session creation witness. Keep
-  // both authority reads unresolved long enough to observe the fail-closed
-  // state, then release them independently. The persisted Personal binding —
-  // not that ephemeral witness — must reconnect the already-ready artifact.
-  await page.reload({ waitUntil: 'domcontentloaded' });
-  await expect(page.getByTestId('file-workspace')).toBeVisible();
-  await expect(page.locator('.viewer-loading')).toBeVisible();
+  const scopeRequested = page.waitForRequest(
+    (request) => new URL(request.url()).pathname.endsWith('/workspace-scope'),
+    { timeout: T.long },
+  );
+  const statusRequested = page.waitForRequest(
+    (request) => new URL(request.url()).pathname.endsWith('/collab/status'),
+    { timeout: T.long },
+  );
 
-  releaseScope();
-  await expect(artifactPreviewFrame(page).getByRole('heading', {
-    name: 'Reloaded Personal preview',
-  })).toBeVisible();
+  try {
+    // A hard reload drops the module-local same-session creation witness. Keep
+    // both authority reads unresolved long enough to observe the fail-closed
+    // state, then release them independently. The persisted Personal binding —
+    // not that ephemeral witness — must reconnect the already-ready artifact.
+    //
+    // Reload only reaches `domcontentloaded` while the dynamic App boot shell
+    // (`Loading Open Design…`) and the project-route workspace-context gate
+    // (`Loading workspace…`) may still own the page. Wait those out with the
+    // suite's long budget before asserting the fail-closed workspace chrome —
+    // the default expect timeout is 10s and is too short under CI contention.
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page
+      .getByText('Loading Open Design…')
+      .waitFor({ state: 'hidden', timeout: T.long })
+      .catch(() => {});
+    await expect(page.getByText('Loading workspace…')).toHaveCount(0, { timeout: T.long });
+    await expect(page.getByTestId('file-workspace')).toBeVisible({ timeout: T.long });
+    await scopeRequested;
+    // The content-loading skeleton is intentionally transient: a restored
+    // iframe can become ready before this assertion runs. The authority gate is
+    // the durable user-visible contract while the scope request is unresolved.
+    await expect(page.getByTestId('chat-composer-input')).toHaveAttribute('aria-readonly', 'true');
+    await expect(page.getByRole('button', { name: /^Share$/i })).toBeDisabled();
 
-  releaseStatus();
-  await expect(page.getByTestId('chat-composer-input')).not.toHaveAttribute('aria-readonly', 'true');
-  await expect(page.getByRole('button', { name: /^Share$/i })).toBeVisible();
+    releaseScope();
+    // Prevent a second release from the finally if the remaining asserts fail.
+    releaseScope = () => {};
+    await statusRequested;
+    await expect(artifactPreviewFrame(page).getByRole('heading', {
+      name: 'Reloaded Personal preview',
+    })).toBeVisible({ timeout: T.long });
+    await expect(page.getByTestId('chat-composer-input')).toHaveAttribute('aria-readonly', 'true');
+
+    releaseStatus();
+    releaseStatus = () => {};
+    await expect(page.getByTestId('chat-composer-input')).not.toHaveAttribute('aria-readonly', 'true');
+    await expect(page.getByRole('button', { name: /^Share$/i })).toBeEnabled();
+  } finally {
+    releaseScope();
+    releaseStatus();
+  }
 });
 
 test('[P1] design system multi-select stores primary and inspiration metadata', async ({ page }) => {
@@ -1521,7 +1558,7 @@ async function createBoundTeamProject(
   page: Page,
   projectName: string,
 ): Promise<{ projectId: string; conversationId: string }> {
-  const response = await retryProjectCreate(page, projectName);
+  const response = await createProjectViaApi(page, projectName);
   const created = (await response.json()) as {
     project: Record<string, unknown> & { id: string };
     conversationId: string;
@@ -3635,7 +3672,7 @@ async function createProject(
   projectName: string,
   options: { headers?: Readonly<Record<string, string>> } = {},
 ) {
-  const response = await retryProjectCreate(page, projectName, options);
+  const response = await createProjectViaApi(page, projectName, options);
   const body = (await response.json()) as {
     project: { id: string };
     conversationId: string;
@@ -3643,40 +3680,33 @@ async function createProject(
   await page.goto(`/projects/${body.project.id}/conversations/${body.conversationId}`);
 }
 
-async function retryProjectCreate(
+async function createProjectViaApi(
   page: Page,
   projectName: string,
   options: { headers?: Readonly<Record<string, string>> } = {},
 ) {
-  let lastError = '';
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
-    try {
-      const response = await page.request.post('/api/projects', {
-        timeout: 15_000,
-        ...(options.headers ? { headers: { ...options.headers } } : {}),
-        data: {
-          id: `project-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-          name: projectName,
-          skillId: null,
-          designSystemId: null,
-          metadata: {
-            kind: 'prototype',
-            nameSource: 'user',
-          },
-        },
-      });
-      if (response.ok()) return response;
-      lastError = await response.text();
-    } catch (error) {
-      lastError = error instanceof Error ? error.message : String(error);
-    }
-
-    if (attempt < 3) {
-      await page.waitForTimeout(500 * attempt);
-    }
-  }
-
-  throw new Error(`create project "${projectName}" failed after retries: ${lastError}`);
+  // The Playwright suite fixture waits on daemon `/api/health` before handing
+  // out a worker. Project create is therefore a single-shot completion signal
+  // (the HTTP response), not a call-site retry loop over an unknown race.
+  const response = await page.request.post('/api/projects', {
+    timeout: 15_000,
+    ...(options.headers ? { headers: { ...options.headers } } : {}),
+    data: {
+      id: `project-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      name: projectName,
+      skillId: null,
+      designSystemId: null,
+      metadata: {
+        kind: 'prototype',
+        nameSource: 'user',
+      },
+    },
+  });
+  expect(
+    response.ok(),
+    `create project "${projectName}": ${await response.text()}`,
+  ).toBeTruthy();
+  return response;
 }
 
 async function seedProjectWithAssistantCompletion(

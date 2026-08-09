@@ -5,8 +5,19 @@ import { dirname, join } from "node:path";
 export const VELA_CLI_BIN_ENV = "OPEN_DESIGN_VELA_CLI_BIN";
 const OPEN_CODE_COMPANION_RELATIVE_PATH = ["libexec", "opencode"] as const;
 const AUTHORIZED_PULL_HELP_ARGS = ["team-projects", "pull", "--help"] as const;
+// The daemon always invokes `pull <projectId> <stageDir> --live-dir …`
+// (`stageAuthorizedTeamProjectPull`), so the staging-directory positional is
+// part of the capability, not decoration: a CLI whose usage dropped it would
+// pass a laxer gate here and then reject the shipped invocation at runtime.
+//
+// What is NOT part of the capability is whether that positional reads as
+// required or optional. Vela made it optional when it added `--authorize-only`
+// (a size probe that stages nothing), turning `<stageDir>` into `[stageDir]`
+// without removing anything the daemon relies on. Accept both spellings and
+// nothing else, so the gate stays fail-closed on a genuinely missing argument.
+const AUTHORIZED_PULL_USAGE_PATTERN =
+  /pull <projectId> (?:<stageDir>|\[stageDir\])/u;
 const AUTHORIZED_PULL_HELP_MARKERS = [
-  "pull <projectId> <stageDir>",
   "--expected-version",
   "--live-dir",
   "--ref",
@@ -118,6 +129,11 @@ async function validateBundledVelaCliBinary(
     );
   }
   const help = `${helpResult.stdout}\n${helpResult.stderr}`;
+  if (!AUTHORIZED_PULL_USAGE_PATTERN.test(help)) {
+    throw strictResolutionError(
+      "bundled Vela CLI lacks the authorized staged pull capability markers: pull <projectId> <stageDir>",
+    );
+  }
   const missingMarkers = AUTHORIZED_PULL_HELP_MARKERS.filter(
     (marker) => !help.includes(marker),
   );

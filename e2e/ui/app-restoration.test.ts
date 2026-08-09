@@ -228,6 +228,7 @@ test('[P0] switching between projects restores each project workspace to its las
   await gotoEntryHome(page);
   await createPrototypeProject(page, alphaName);
   await expectWorkspaceReady(page);
+  const { projectId: alphaProjectId } = await getCurrentProjectContext(page);
 
   const alphaPrimaryUpload = page.waitForResponse(
     (resp: Response) => resp.url().includes('/upload') && resp.request().method() === 'POST',
@@ -264,6 +265,7 @@ test('[P0] switching between projects restores each project workspace to its las
 
   await createPrototypeProject(page, betaName);
   await expectWorkspaceReady(page);
+  const { projectId: betaProjectId } = await getCurrentProjectContext(page);
 
   const betaPrimaryUpload = page.waitForResponse(
     (resp: Response) => resp.url().includes('/upload') && resp.request().method() === 'POST',
@@ -295,13 +297,18 @@ test('[P0] switching between projects restores each project workspace to its las
   await expect(betaPrimaryTab).toHaveAttribute('aria-selected', 'true');
   await expect(betaSecondaryTab).toHaveAttribute('aria-selected', 'false');
 
-  await openWorkspaceTab(page, alphaName);
+  // Revisit by project id (not chrome tab name). createPrototypeProject hard-navs
+  // to /projects and can drop earlier chrome tabs from localStorage restore; this
+  // case owns per-project file-tab restore, not multi-project strip durability.
+  await gotoProjectRoute(page, `/projects/${alphaProjectId}`);
   await expectWorkspaceReady(page);
+  expect((await getCurrentProjectContext(page)).projectId).toBe(alphaProjectId);
   await expect(tabBySuffix(page, 'alpha-primary.png')).toHaveAttribute('aria-selected', 'true');
   await expect(tabBySuffix(page, 'alpha-secondary.png')).toHaveAttribute('aria-selected', 'false');
 
-  await openWorkspaceTab(page, betaName);
+  await gotoProjectRoute(page, `/projects/${betaProjectId}`);
   await expectWorkspaceReady(page);
+  expect((await getCurrentProjectContext(page)).projectId).toBe(betaProjectId);
   await expect(tabBySuffix(page, 'beta-primary.png')).toHaveAttribute('aria-selected', 'true');
   await expect(tabBySuffix(page, 'beta-secondary.png')).toHaveAttribute('aria-selected', 'false');
 });
@@ -2600,13 +2607,6 @@ async function ensureFileTabOpen(page: Page, name: string): Promise<Locator> {
   await openDesignFile(page, name);
   await expect(tab).toBeVisible();
   return tab;
-}
-
-async function openWorkspaceTab(page: Page, name: string): Promise<void> {
-  const tab = page.getByRole('tab', { name: new RegExp(escapeRegExp(name)) }).first();
-  await expect(tab).toBeVisible();
-  await tab.click();
-  await expect(tab).toHaveAttribute('aria-selected', 'true');
 }
 
 function escapeRegExp(value: string): string {

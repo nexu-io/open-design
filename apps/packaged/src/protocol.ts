@@ -64,6 +64,47 @@ function toWebRuntimeUrl(webRuntimeUrl: OdProtocolTarget, requestUrl: string): s
 }
 
 const OD_PROXY_RETRYABLE_METHODS = new Set(["GET", "HEAD"]);
+
+/**
+ * Error tokens that mean the LOCAL machine is out of network resources —
+ * sockets, file descriptors, ephemeral ports, kernel buffers. Kept as an
+ * explicit whitelist: everything not listed here retains the proxy's normal
+ * resilience behavior (undici fallback, transient retry).
+ */
+const OD_RESOURCE_EXHAUSTION_ERROR_TOKENS: readonly string[] = [
+  "ERR_INSUFFICIENT_RESOURCES",
+  "EMFILE",
+  "ENFILE",
+  "EADDRNOTAVAIL",
+  "ENOBUFS",
+];
+
+/**
+ * Is this failure the local machine running out of network resources?
+ *
+ * INVARIANT: a request that fails because this machine is out of
+ * sockets/file descriptors must cost exactly ONE upstream attempt. Both of
+ * the proxy's resilience layers amplify load, and when the failure is
+ * exhaustion, amplification is precisely the wrong medicine: in the incident
+ * that motivated this classifier, the undici fallback re-issued every failed
+ * net.fetch (7890 doubled requests measured) and the linear-backoff transient
+ * retry stacked another 1334 attempts on top — each new attempt consuming
+ * exactly the resource the machine had already run out of, and prolonging the
+ * outage it was trying to ride through.
+ *
+ * Matching looks at BOTH `Error.code` and the message because the two fetch
+ * transports report differently: Electron's net.fetch surfaces Chromium
+ * network-stack failures as plain Errors whose message carries the
+ * `net::ERR_...` token while `code` stays unset, whereas Node/undici throws
+ * ErrnoExceptions that carry the token in `code`.
+ */
+function isLocalResourceExhaustionError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const code = (error as NodeJS.ErrnoException).code;
+  return OD_RESOURCE_EXHAUSTION_ERROR_TOKENS.some(
+    (token) => code === token || error.message.includes(token),
+  );
+}
 const OD_PROXY_RETRY_ATTEMPTS = 3;
 const OD_PROXY_RETRY_BACKOFF_MS = 150; // 150ms, 300ms — throw path only, ~450ms worst-case added
 
@@ -285,6 +326,11 @@ async function fetchOdTargetWithTransientRetry(
       // Retrying a request the client abandoned can only fail again, and each
       // extra attempt is a misleading "proxy fetch failed" line in the log.
       if (isClientCancelled(request)) break;
+      // Resource exhaustion fails fast: every extra attempt consumes exactly
+      // the resource the machine has run out of. ECONNREFUSED is deliberately
+      // NOT in that whitelist — this retry budget is what bridges the daemon
+      // startup race. See isLocalResourceExhaustionError.
+      if (isLocalResourceExhaustionError(error)) break;
       if (attempt === attempts) break;
       const waitMs = backoffMs * attempt;
       // Main-process console output lands in the packaged desktop logs, so
@@ -405,6 +451,12 @@ function resolveOdProxyFetch(): OdProtocolFetch {
       if (!OD_PROXY_RETRYABLE_METHODS.has(request.method) || isClientCancelled(request)) {
         throw error;
       }
+      // The fallback exists to rescue Electron-specific transport rejections
+      // (net::ERR_FAILED on CSS-mask GETs) that undici serves fine. Local
+      // resource exhaustion is not that: undici draws on the same exhausted
+      // machine, so replaying there only doubles the failing load. Rethrow and
+      // let the handler answer 502 at once. See isLocalResourceExhaustionError.
+      if (isLocalResourceExhaustionError(error)) throw error;
       console.warn("[open-design packaged] net.fetch failed; falling back to undici", {
         message: error instanceof Error ? error.message : String(error),
         method: request.method,

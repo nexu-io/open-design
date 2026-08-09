@@ -194,6 +194,9 @@ test('[P0] workspace switcher changes identity, returns Home, and exposes team n
 test('[P1] New team deep-links Vela creation and exposes the created workspace on return', async ({
   page,
 }) => {
+  // Directory reads share a 1s TTL (`coalescedGet`). Install the clock before
+  // navigation so we can expire that product window without a real sleep.
+  await page.clock.install();
   const directory = [PERSONAL];
   const mocks = await wireWorkspaceMocks(page, PERSONAL, directory);
   await gotoHome(page);
@@ -211,9 +214,9 @@ test('[P1] New team deep-links Vela creation and exposes the created workspace o
   await page.locator('.entry-nav-rail__menu-backdrop').click({ position: { x: 2, y: 2 } });
   directory.push(TEAM_SECOND);
   // Directory reads are deliberately coalesced for one second. A real console
-  // roundtrip exceeds that window; advance past it so this assertion exercises
+  // roundtrip exceeds that window; jump past it so this assertion exercises
   // the return revalidation instead of the warm response from the first open.
-  await page.waitForTimeout(1_050);
+  await page.clock.fastForward(1_000);
   await page.evaluate(() => {
     window.dispatchEvent(new Event('focus'));
   });
@@ -667,6 +670,50 @@ test('[P0] team owner completes a multi-row invite with explicit roles', async (
   await expect(dialog).toHaveCount(0, { timeout: 5_000 });
 });
 
+test('[P1] stale invite success timer does not close a reopened dialog', async ({ page }) => {
+  await page.addInitScript(
+    ({ workspaceId, workspaceMemberId }) => {
+      window.sessionStorage.setItem(
+        'od.workspaceSelection.v1',
+        JSON.stringify({ workspaceId, workspaceMemberId }),
+      );
+    },
+    {
+      workspaceId: TEAM_OWNER.workspaceId,
+      workspaceMemberId: TEAM_OWNER.workspaceMemberId,
+    },
+  );
+  await wireWorkspaceMocks(page, TEAM_OWNER, [PERSONAL, TEAM_OWNER]);
+  await gotoHome(page);
+  await ensureRailOpen(page);
+  await page.clock.install();
+  await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 60_000);
+
+  await page.getByTestId('workspace-switcher').click();
+  await page.getByRole('menu').getByRole('menuitem', { name: 'Invite colleague' }).click();
+
+  const dialog = page.getByRole('dialog', { name: 'Invite members' });
+  const emailInput = dialog.getByPlaceholder('Enter email address…').first();
+  await emailInput.fill('first@example.com');
+  await dialog.getByRole('button', { name: 'Confirm and invite' }).click();
+  await expect(dialog.getByRole('button', { name: 'Invitation sent' })).toBeVisible();
+
+  await dialog.getByRole('button', { name: 'Close' }).click();
+  await page.getByTestId('workspace-switcher').click();
+  await page.getByRole('menu').getByRole('menuitem', { name: 'Invite colleague' }).click();
+  await expect(dialog).toBeVisible();
+  await emailInput.fill('second@example.com');
+
+  await page.clock.fastForward(999);
+  await expect(dialog).toBeVisible();
+  await expect(emailInput).toHaveValue('second@example.com');
+
+  await page.clock.fastForward(1);
+
+  await expect(dialog).toBeVisible();
+  await expect(emailInput).toHaveValue('second@example.com');
+});
+
 test('[P0] full team routes every invite entry to Vela seat resolution without opening the local dialog', async ({
   page,
 }) => {
@@ -710,10 +757,11 @@ test('[P0] full team routes every invite entry to Vela seat resolution without o
 test('[P1] an already-open full team restores the local invite flow when a seat is released', async ({
   page,
 }) => {
+  // Context reads share a 1s TTL (`coalescedGet`). Install before navigation
+  // so the product window can expire under a virtual clock.
+  await page.clock.install();
   await page.addInitScript(() => {
-    const target = window as Window & typeof globalThis & {
-      __workspaceInviteUrls?: string[];
-    };
+    const target = window as Window & { __workspaceInviteUrls?: string[] };
     target.__workspaceInviteUrls = [];
     window.open = ((url?: string | URL) => {
       target.__workspaceInviteUrls!.push(String(url ?? ''));
@@ -742,9 +790,9 @@ test('[P1] an already-open full team restores the local invite flow when a seat 
     },
   });
   // Context reads are coalesced for one second. The real member-management
-  // roundtrip is slower than that; crossing the window here prevents focus
-  // from legitimately reusing the pre-removal full-seat snapshot.
-  await page.waitForTimeout(1_050);
+  // roundtrip is slower than that; jump past the window so focus cannot
+  // legitimately reuse the pre-removal full-seat snapshot.
+  await page.clock.fastForward(1_000);
   await page.evaluate(() => {
     window.dispatchEvent(new Event('focus'));
   });

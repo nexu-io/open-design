@@ -11,7 +11,11 @@ import { describe, expect, it } from "vitest";
 
 import { T } from "@/timeouts";
 
-import { uiP0CiMatrix, uiP0Groups } from "../lib/playwright/suites.ts";
+import {
+  uiP0CiMatrix,
+  uiP0Groups,
+  validatePlaywrightSuiteTopology,
+} from "../lib/playwright/suites.ts";
 
 const execFileAsync = promisify(execFile);
 const e2eRoot = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -1214,7 +1218,11 @@ process.stdin.on("end", () => {
     expect(preflight).toContain("fromJSON(needs.runners.outputs.runs_on).general_medium");
     expect(preflight).toContain("toJSON(fromJSON(needs.runners.outputs.runs_on).general_medium)");
     expect(uiP0).toContain("fromJSON(needs.runners.outputs.runs_on).ui_p0");
-    expect(uiP0).toContain("toJSON(fromJSON(needs.runners.outputs.runs_on).ui_p0)");
+    expect(uiP0).toContain("fromJSON(needs.runners.outputs.runs_on).ui_p0_heavy");
+    expect(uiP0).toContain("matrix.shard == 'project-collab'");
+    expect(uiP0).toContain(
+      "toJSON(matrix.shard == 'project-collab' && fromJSON(needs.runners.outputs.runs_on).ui_p0_heavy || fromJSON(needs.runners.outputs.runs_on).ui_p0)",
+    );
     expect(uiP0).toContain("include: ${{ fromJSON(needs.scopes.outputs.ui_p0_matrix) }}");
     expect(uiP0CiMatrix.map((entry) => entry.name)).toEqual([
       "entry-settings",
@@ -1321,6 +1329,11 @@ process.stdin.on("end", () => {
   it("[P2] keeps visual ownership and generic full UI sharding explicit", async () => {
     const playwrightConfig = await readFile(playwrightConfigPath, "utf8");
     const benchmarkWorkflow = await readFile(uiExtendedMainWorkflowPath, "utf8");
+    const extendedP0 = sectionBetween(benchmarkWorkflow, "  ui_p0:", "  ui_extended:");
+    const extendedP0Matrix = sectionBetween(extendedP0, "        include:", "\n    steps:");
+    const extendedP0Names = [...extendedP0Matrix.matchAll(/^\s+- name: (.+)$/gm)].map(
+      ([, name]) => name,
+    );
     const fullUi = benchmarkWorkflow.slice(benchmarkWorkflow.indexOf("  ui_full:"));
     const fullUiFiles = [...fullUi.matchAll(/ui\/[a-z0-9-]+\.test\.ts/g)]
       .map(([file]) => file)
@@ -1332,7 +1345,7 @@ process.stdin.on("end", () => {
     expect(benchmarkWorkflow).toContain("run-ui-group critical-extras");
     expect(benchmarkWorkflow).toContain("Preserve project-runtime domain artifact");
     expect(benchmarkWorkflow).toContain("--grep-invert '@merge-extra'");
-    expect(benchmarkWorkflow).toContain("name: project-workspace");
+    expect(extendedP0Names).toEqual(uiP0CiMatrix.map((entry) => entry.name));
     expect(benchmarkWorkflow).toContain("fromJSON(needs.p0_runners.outputs.runs_on).ui_p0");
     expect(fullUi).toContain("fromJSON(needs.p0_runners.outputs.runs_on).ui_hot");
     expect(fullUi).toContain("shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]");
@@ -1346,6 +1359,18 @@ process.stdin.on("end", () => {
     expect(fullUiFiles).toEqual([]);
   });
 
+  it("[P2] rejects duplicate file assignments across UI P0 shards", () => {
+    const files = uiP0Groups["workspace-restoration"].files as unknown as string[];
+    files.push("ui/app.test.ts");
+    try {
+      expect(validatePlaywrightSuiteTopology()).toContain(
+        "UI P0 CI matrix covers ui/app.test.ts more than once",
+      );
+    } finally {
+      files.pop();
+    }
+  });
+
   it("[P2] resolves CI runner profiles by mode", async () => {
     const defaultProfiles = await runRunners();
     const defaultRunsOn = runnerRunsOn(defaultProfiles);
@@ -1356,6 +1381,7 @@ process.stdin.on("end", () => {
       "js_hot",
       "ui_hot",
       "ui_p0",
+      "ui_p0_heavy",
       "visual_hot",
       "windows_tools",
       "workspace_unit",
@@ -1366,7 +1392,8 @@ process.stdin.on("end", () => {
     expect(defaultRunsOn.windows_tools).toEqual(["windows-latest"]);
     expect(defaultRunsOn.js_hot).toEqual(["nexu-runners-medium"]);
     expect(defaultRunsOn.ui_hot).toEqual(["nexu-runners-large"]);
-    expect(defaultRunsOn.ui_p0).toEqual(["nexu-runners-xlarge"]);
+    expect(defaultRunsOn.ui_p0).toEqual(["nexu-runners-medium"]);
+    expect(defaultRunsOn.ui_p0_heavy).toEqual(["nexu-runners-xlarge"]);
     expect(defaultRunsOn.visual_hot).toEqual(["nexu-runners-large"]);
     expect(defaultProfiles).not.toHaveProperty("contabo_control");
     expect(defaultProfiles).not.toHaveProperty("hosted_or_blacksmith");
@@ -1381,7 +1408,8 @@ process.stdin.on("end", () => {
     expect(performanceRunsOn.windows_tools).toEqual(["windows-latest"]);
     expect(performanceRunsOn.js_hot).toEqual(["nexu-runners-medium"]);
     expect(performanceRunsOn.ui_hot).toEqual(["nexu-runners-large"]);
-    expect(performanceRunsOn.ui_p0).toEqual(["nexu-runners-xlarge"]);
+    expect(performanceRunsOn.ui_p0).toEqual(["nexu-runners-medium"]);
+    expect(performanceRunsOn.ui_p0_heavy).toEqual(["nexu-runners-xlarge"]);
     expect(performanceRunsOn.visual_hot).toEqual(["nexu-runners-large"]);
 
     const blacksmithProfiles = await runRunners("blacksmith");
@@ -1394,6 +1422,7 @@ process.stdin.on("end", () => {
     expect(blacksmithRunsOn.js_hot).toEqual(["blacksmith-4vcpu-ubuntu-2404"]);
     expect(blacksmithRunsOn.ui_hot).toEqual(["blacksmith-8vcpu-ubuntu-2404"]);
     expect(blacksmithRunsOn.ui_p0).toEqual(["blacksmith-8vcpu-ubuntu-2404"]);
+    expect(blacksmithRunsOn.ui_p0_heavy).toEqual(["blacksmith-8vcpu-ubuntu-2404"]);
     expect(blacksmithRunsOn.visual_hot).toEqual(["blacksmith-8vcpu-ubuntu-2404"]);
 
     const economicProfiles = await runRunners("economic");
@@ -1406,6 +1435,7 @@ process.stdin.on("end", () => {
     expect(economicRunsOn.js_hot).toEqual(["ubuntu-24.04"]);
     expect(economicRunsOn.ui_hot).toEqual(["ubuntu-24.04"]);
     expect(economicRunsOn.ui_p0).toEqual(["ubuntu-24.04"]);
+    expect(economicRunsOn.ui_p0_heavy).toEqual(["ubuntu-24.04"]);
     expect(economicRunsOn.visual_hot).toEqual(["ubuntu-24.04"]);
 
     for (const invalidMode of ["Economic", " economic "]) {

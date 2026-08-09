@@ -34,10 +34,15 @@ import { T } from '@/timeouts';
 import { openSettingsDialog as openEntrySettingsDialog } from '../lib/playwright/amr.js';
 import { routeAgents } from '../lib/playwright/mock-factory.js';
 
-test.describe.configure({ timeout: 45_000 });
+test.describe.configure({ timeout: T.xlong });
 
 async function waitForLoadingToClear(page: Page) {
-  await expect(page.getByText('Loading Open Design…')).toHaveCount(0, { timeout: 15_000 });
+  // `apps/web` mounts through `dynamic(..., { ssr: false })`, so
+  // `domcontentloaded` resolves while the boot shell still owns the page.
+  await page
+    .getByText('Loading Open Design…')
+    .waitFor({ state: 'hidden', timeout: T.long })
+    .catch(() => {});
 }
 
 async function gotoEntryHome(page: Page) {
@@ -47,7 +52,7 @@ async function gotoEntryHome(page: Page) {
   if (await privacyDialog.isVisible().catch(() => false)) {
     await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
   }
-  await expect(page.getByTestId('home-hero')).toBeVisible();
+  await expect(page.getByTestId('home-hero')).toBeVisible({ timeout: T.long });
 }
 
 interface VelaMockState {
@@ -59,6 +64,33 @@ interface VelaMockState {
    *  but no client code observes that until a `/status` read reports it. */
   firstLoggedInStatusAt: number | null;
 }
+
+const MOCK_PERSONAL_WORKSPACE = {
+  workspaceId: 'ws-refresh-personal',
+  workspaceName: 'Refresh Personal',
+  workspaceType: 'personal' as const,
+  workspaceMemberId: 'wm-refresh-personal',
+  role: 'owner' as const,
+  memberStatus: 'active' as const,
+  lifecycleState: 'active' as const,
+  billingState: 'free' as const,
+  planId: null,
+  seatSummary: {
+    seatLimit: 1,
+    usedSeats: 1,
+    availableSeats: 0,
+    isSeatFull: true,
+  },
+  permissions: {
+    canInviteMembers: false,
+    canManageBilling: true,
+    canViewWorkspaceSettings: true,
+    canManageSharedResources: true,
+    canShareProjects: true,
+    canWriteSyncedFiles: true,
+  },
+  workspaceSettingsUrl: 'https://console.example.test/settings',
+};
 
 async function wireVelaMocks(page: Page, state: VelaMockState) {
   await page.route('**/api/health', async (route) => {
@@ -100,6 +132,58 @@ async function wireVelaMocks(page: Page, state: VelaMockState) {
     state.loggedIn = true;
     await route.fulfill({ status: 202, json: { pid: 4242, startedAt: new Date().toISOString(), profile: 'local' } });
   });
+
+  // Browser-only vela login never gives the daemon a real control-key session,
+  // so the live `/api/workspace/*` routes short-circuit with empty directory /
+  // no selected workspace and never emit the network traffic this test
+  // measures. Serve the three refresh targets from page.route so client-side
+  // `forceCoalescedGet` still produces observable request events while the
+  // payload stays a stable signed-in personal workspace.
+  await page.route('**/api/workspace/directory', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.fallback();
+      return;
+    }
+    await route.fulfill({
+      json: {
+        items: state.loggedIn ? [MOCK_PERSONAL_WORKSPACE] : [],
+        activeWorkspaceId: state.loggedIn ? MOCK_PERSONAL_WORKSPACE.workspaceId : null,
+      },
+    });
+  });
+  await page.route('**/api/workspace/context', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.fallback();
+      return;
+    }
+    await route.fulfill({
+      json: { context: state.loggedIn ? MOCK_PERSONAL_WORKSPACE : null },
+    });
+  });
+  // Exact pathname only (query params allowed). Nested routes such as
+  // /api/workspace/billing/checkout must fall through, not get the summary mock.
+  await page.route('**/api/workspace/billing**', async (route) => {
+    const pathname = new URL(route.request().url()).pathname;
+    if (pathname !== '/api/workspace/billing' || route.request().method() !== 'GET') {
+      await route.fallback();
+      return;
+    }
+    await route.fulfill({
+      json: state.loggedIn
+        ? {
+            summary: { membershipTier: 'free', balanceUsd: '0.00' },
+            workspaceBalance: null,
+          }
+        : { summary: null, workspaceBalance: null },
+    });
+  });
+  await page.route('**/api/workspace/projects/team', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.fallback();
+      return;
+    }
+    await route.fulfill({ json: { projects: [] } });
+  });
 }
 
 function baseStorageConfig() {
@@ -136,6 +220,38 @@ function watchWorkspaceRequests(page: Page): { log: WorkspaceRequestLog; stop: (
   };
   page.on('request', handler);
   return { log, stop: () => page.off('request', handler) };
+}
+
+/**
+ * Wait until the three workspace refresh endpoints stop growing for
+ * `quietMs`. This is a quiescence / negative-window signal: ambient mount
+ * traffic (or a post-sign-in remount burst) has finished adding requests.
+ */
+async function waitForWorkspaceRequestQuiescence(
+  log: WorkspaceRequestLog,
+  options: { quietMs?: number; timeout?: number } = {},
+): Promise<void> {
+  const quietMs = options.quietMs ?? 250;
+  const timeout = options.timeout ?? T.medium;
+  let lastFingerprint = `${log.context.length}|${log.billing.length}|${log.team.length}`;
+  let quietSince = Date.now();
+
+  await expect
+    .poll(() => {
+      const current = `${log.context.length}|${log.billing.length}|${log.team.length}`;
+      const now = Date.now();
+      if (current !== lastFingerprint) {
+        lastFingerprint = current;
+        quietSince = now;
+        return `changed:${current}`;
+      }
+      return now - quietSince >= quietMs ? `quiet:${current}` : `observing:${current}`;
+    }, {
+      timeout,
+      intervals: [50],
+      message: `workspace refresh traffic did not quiet within ${quietMs}ms`,
+    })
+    .toMatch(/^quiet:/);
 }
 
 // The multi-caller burst (two AmrLoginPill instances + however many
@@ -178,8 +294,9 @@ test('[P1] AMR sign-in immediately refreshes workspace context/billing/team-proj
 
     // Settle the page's normal initial-mount reads before measuring the
     // sign-in-triggered delta, so an ambient poll from mount doesn't get
-    // mistaken for a sign-in-triggered request.
-    await page.waitForTimeout(500);
+    // mistaken for a sign-in-triggered request. Quiescence (counts stop
+    // changing) is the completion signal — not a fixed 500ms sleep.
+    await waitForWorkspaceRequestQuiescence(log, { quietMs: 250, timeout: T.medium });
     const baseline = {
       context: log.context.length,
       billing: log.billing.length,
@@ -189,33 +306,38 @@ test('[P1] AMR sign-in immediately refreshes workspace context/billing/team-proj
     await signInBtn.click();
     await expect.poll(() => state.loginRequests).toBe(1);
 
-    // A successful sign-in is also a tab-scope identity change
-    // (deriveTabIdentityScope / WorkspaceTabsBar), which — independently of
-    // this fix, and unconditionally — closes every open tab (including
-    // Settings) back to a single fresh Home tab. That IS the "later
-    // from-scratch remount" this fix's dedup story is about, so let it
-    // happen naturally instead of forcing it: wait for Home to reappear.
-    await expect(page.getByTestId('home-hero')).toBeVisible({ timeout: 10_000 });
-
     // Reference point for "immediate": the first `/status` read that
-    // actually reported loggedIn=true (loggedIn itself flips synchronously
-    // in the mock on the /login POST above, but no client code observes the
-    // transition until a /status read reports it — this is what the pills'
-    // polls, and/or App.tsx's own independent status sync, actually saw).
-    await expect.poll(() => state.firstLoggedInStatusAt).not.toBeNull();
+    // actually reported loggedIn=true. The pill notifiers fire only after
+    // this observation (poll outcome `signed-in`).
+    await expect.poll(() => state.firstLoggedInStatusAt, { timeout: T.long }).not.toBeNull();
     const signedInAt = state.firstLoggedInStatusAt!;
 
-    // Wait for the context/billing refresh to actually land (real network
-    // round trip against the per-worker daemon) instead of a blind sleep.
-    // T.medium (not T.short) absorbs a loaded machine's real scheduling
-    // jitter without weakening what's actually asserted below.
+    // Wait for the context/billing refresh the Settings-mounted consumers
+    // fire immediately on sign-in. Team-projects is different: Settings does
+    // not mount `useTeamProjects()`, so that endpoint only joins once Home
+    // is back. Close Settings explicitly — tab-scope identity reset no longer
+    // unconditionally remounts Home on every sign-in.
     await expect.poll(() => log.context.length, { timeout: T.medium }).toBeGreaterThan(baseline.context);
     await expect.poll(() => log.billing.length, { timeout: T.medium }).toBeGreaterThan(baseline.billing);
+
+    const backHome = page.getByRole('button', { name: /Back to home/i });
+    if (await backHome.isVisible().catch(() => false)) {
+      await backHome.click();
+    } else {
+      await page.goto('/', { waitUntil: 'domcontentloaded' });
+      await waitForLoadingToClear(page);
+    }
+    await expect(page.getByTestId('home-hero')).toBeVisible({ timeout: T.long });
     await expect.poll(() => log.team.length, { timeout: T.medium }).toBeGreaterThan(baseline.team);
-    // Give the Home remount (and any ambient revalidation, e.g. the
-    // workspace-invalidation SSE's onConnect resync) time to land before the
-    // final count.
-    await page.waitForTimeout(1_000);
+
+    // Negative observation window for the Home remount / ambient revalidation
+    // after the forced sign-in burst. Quiescence replaces a fixed 1s sleep:
+    // once counts stop growing for BURST_WINDOW_MS, the burst under test is
+    // complete and requirement ② can count hits.
+    await waitForWorkspaceRequestQuiescence(log, {
+      quietMs: BURST_WINDOW_MS,
+      timeout: T.medium,
+    });
 
     const newContext = log.context.slice(baseline.context);
     const newBilling = log.billing.slice(baseline.billing);

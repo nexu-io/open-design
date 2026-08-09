@@ -228,6 +228,7 @@ import {
   liveSnapshotForComment,
   overlayBoundsFromSnapshot,
   planLostAnchorWriteBacks,
+  provisionalNextPinNumber,
   resolveCommentAnchor,
   selectionKindLabel,
   targetFromSnapshot,
@@ -5668,6 +5669,7 @@ function anchorStateLabel(state: PreviewCommentAnchorState): string {
 
 function CommentPreviewOverlays({
   comments,
+  provisionalPinNumber,
   liveTargets,
   hoveredTarget,
   hoveredPodMemberId,
@@ -5686,6 +5688,10 @@ function CommentPreviewOverlays({
   onOpenComment,
 }: {
   comments: PreviewComment[];
+  /** Next pin number for a brand-new comment. Computed by the caller over the
+   *  file's comments across ALL statuses (see `provisionalNextPinNumber`) —
+   *  wider than `comments`, which carries only the open ones the canvas pins. */
+  provisionalPinNumber: number;
   liveTargets: Map<string, PreviewCommentSnapshot>;
   hoveredTarget: PreviewCommentSnapshot | null;
   hoveredPodMemberId: string | null;
@@ -5822,10 +5828,12 @@ function CommentPreviewOverlays({
   const activeSavedComment = activeSavedIndex >= 0 ? comments[activeSavedIndex] : undefined;
   const activePinNumber = activeSavedComment
     ? (typeof activeSavedComment.pinSeq === 'number' ? activeSavedComment.pinSeq : activeSavedIndex + 1)
-    // A brand-new, not-yet-saved comment: `comments.length + 1` is a
-    // provisional guess at what the daemon will assign — matches the
-    // "provisional local pin_seq" the server itself computes on create.
-    : comments.length + 1;
+    // A brand-new, not-yet-saved comment: provisional guess at what the
+    // daemon will assign on create — `MAX(pin_seq)+1` across ALL of the
+    // file's comments regardless of status, never open-count+1 (pin
+    // numbers are permanent; deletion or resolution retires them, so a
+    // count-based guess would collide with or resurrect a taken number).
+    : provisionalPinNumber;
   const targetOverlay = activeTarget ?? hoveredTarget;
   return (
     <div className="comment-overlay-layer" aria-hidden={false}>
@@ -7070,6 +7078,26 @@ export function fileViewerSourceAuthorizationScopeKey(
   return null;
 }
 
+/**
+ * A srcdoc document whose `load` completed while the browser tab was hidden
+ * has never experienced a real layout pass: Chrome keeps the hidden iframe's
+ * child viewport at 0x0, so a fixed-canvas deck's one-shot fit resolves to
+ * `transform: scale(0)`, and the in-frame recovery loop (`chaseFirstLayout`
+ * in runtime/srcdoc.ts) is exhausted by background-timer throttling before
+ * the user returns — leaving the main stage permanently white (issue #6583).
+ * Such a document must be given a fresh srcdoc parse on the first return to
+ * a visible document. Scoped to decks, which always render through the
+ * srcdoc transport and carry the one-shot fit; other srcdoc artifacts
+ * re-layout on their own.
+ */
+function srcDocLoadRequiresFreshParseOnReturnToVisible(state: {
+  loadedWhileDocumentHidden: boolean;
+  srcDocIsActiveTransport: boolean;
+  isDeck: boolean;
+}): boolean {
+  return state.loadedWhileDocumentHidden && state.srcDocIsActiveTransport && state.isDeck;
+}
+
 function HtmlViewer({
   projectId,
   projectKind,
@@ -8069,6 +8097,10 @@ function HtmlViewer({
   const previewFileIdentityRef = useRef(`${projectId}\u0000${file.name}`);
   previewFileIdentityRef.current = `${projectId}\u0000${file.name}`;
   const activatedSrcDocTransportHtmlRef = useRef<string | null>(null);
+  // Latched by the srcDoc onLoad handler when a load completes in a hidden
+  // browser tab; consumed (one-shot) by the visibilitychange recovery effect.
+  // See srcDocLoadRequiresFreshParseOnReturnToVisible.
+  const srcDocLoadedWhileDocumentHiddenRef = useRef(false);
   // Tracks the iframe DOM node whose dedupe ref was last reset by the
   // srcDoc onLoad handler. We reset the dedupe exactly once per freshly
   // mounted iframe (the first load is the shell HTML), and skip every
@@ -9406,18 +9438,29 @@ function HtmlViewer({
     // while a file-watch token accumulated during inactivity changes
     // filesRefreshKey and therefore still runs this effect on activation.
     if (!workspaceActiveRef.current) return;
-    let cancelled = false;
+    // This viewer's pending file-list read must die with the viewer. Without
+    // an AbortSignal, `fetchProjectFiles` PINS the shared single-flight entry
+    // (`sharedCancellableGet`): a read that stalls (a request queued behind
+    // saturated connections neither resolves nor rejects — every failure path
+    // resolves `[]`) then survives unmount forever, and every later viewer
+    // mount for the same project + workspace identity silently rejoins the
+    // same dead promise. For a workspace-scoped deck that hold keeps
+    // `previewSource` at null, i.e. a bare white stage on every return to the
+    // project. Aborting on cleanup lets a fresh mount issue a fresh read.
+    const controller = new AbortController();
     setProjectFilePathSet(null);
-    void fetchProjectFiles(projectId, { workspaceContext })
+    void fetchProjectFiles(projectId, { workspaceContext, signal: controller.signal })
       .then((files) => {
-        if (!cancelled) setProjectFilePathSet(new Set(files.map((entry) => entry.name)));
+        if (!controller.signal.aborted) {
+          setProjectFilePathSet(new Set(files.map((entry) => entry.name)));
+        }
       })
       .catch(() => {
         // Keep the conservative `null` state: a failed read is not proof that
         // the project has no root-relative assets.
       });
     return () => {
-      cancelled = true;
+      controller.abort();
     };
   }, [projectId, file.mtime, filesRefreshKey, reloadKey, workspaceContext]);
   const projectRootAssetRefs = useMemo(
@@ -10255,7 +10298,38 @@ function HtmlViewer({
     wasUrlLoadPreviewRef.current = false;
     activateSrcDocTransport();
   }, [activateSrcDocTransport, useUrlLoadPreview, useLazySrcDocTransport]);
-  
+  // Recovery for a deck that parsed into the srcdoc iframe while the browser
+  // tab was hidden: on the first return to a visible document, remount the
+  // iframe for a fresh srcdoc parse (the mechanism Comment re-activation
+  // already relies on) and clear the latch so visibility round-trips after a
+  // healthy load never remount. Only the active viewer owns recovery —
+  // retained viewers keep their #6519 activation contract untouched.
+  useEffect(() => {
+    if (!workspaceActive || typeof document === 'undefined') return;
+    function onVisibilityChange() {
+      if (document.visibilityState !== 'visible') return;
+      if (!srcDocLoadRequiresFreshParseOnReturnToVisible({
+        loadedWhileDocumentHidden: srcDocLoadedWhileDocumentHiddenRef.current,
+        srcDocIsActiveTransport: !useUrlLoadPreview,
+        isDeck: effectiveDeck,
+      })) return;
+      srcDocLoadedWhileDocumentHiddenRef.current = false;
+      activatedSrcDocTransportHtmlRef.current = null;
+      setSrcDocTransportResetKey((key) => key + 1);
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    // Run one check immediately: this effect only listens while the viewer is
+    // ACTIVE, so when the hidden-tab load happened in a retained viewer and
+    // the browser returned to visible before the user clicked back into the
+    // project, the visibilitychange event fired with no listener armed and
+    // will not replay. The latch would dangle (0x0-parsed deck, permanently
+    // white) exactly on the "switch back to the project tab" flow. The
+    // handler's own guards (visible + latch + srcdoc active + deck) make this
+    // a one-shot no-op everywhere else.
+    onVisibilityChange();
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+  }, [workspaceActive, useUrlLoadPreview, effectiveDeck]);
+
   useEffect(() => {
     if (!workspaceActive) return;
     restorePreviewScrollPosition();
@@ -13569,6 +13643,18 @@ function HtmlViewer({
       .sort((a, b) => commentCreatedAt(a) - commentCreatedAt(b)),
     [file.name, previewComments],
   );
+  // Provisional number for the next (not-yet-saved) pin. Computed over the
+  // file's comments across ALL statuses — a resolved/attached/failed comment
+  // keeps its pin_seq row in the daemon DB, so its number stays retired even
+  // though the canvas renders no marker for it (see provisionalNextPinNumber).
+  const nextProvisionalPinNumber = useMemo(
+    () => provisionalNextPinNumber(
+      previewComments
+        .filter((comment) => comment.filePath === file.name)
+        .sort((a, b) => commentCreatedAt(a) - commentCreatedAt(b)),
+    ),
+    [file.name, previewComments],
+  );
   // Sidebar display order: descending by `sortKey` (a fresh comment gets the
   // largest sortKey, so it shows first by default — "newest at the front").
   // A legacy/un-migrated row without a sortKey falls back to its createdAt,
@@ -15405,6 +15491,13 @@ function HtmlViewer({
                         srcDoc={srcDocTransportContent}
                         onLoad={() => {
                           const frame = srcDocPreviewIframeRef.current;
+                          // Record whether this load ever saw a real layout
+                          // pass — a load completing in a hidden browser tab
+                          // did not, and decks then need a fresh parse on
+                          // return to visible (#6583). See
+                          // srcDocLoadRequiresFreshParseOnReturnToVisible.
+                          srcDocLoadedWhileDocumentHiddenRef.current =
+                            document.visibilityState === 'hidden';
                           if (!useUrlLoadPreview) iframeRef.current = frame;
                           if (frame) {
                             frame.dataset.odLoadedPreviewEpoch =
@@ -15478,6 +15571,29 @@ function HtmlViewer({
                           <CenteredLoader label={t('fileViewer.loading')} />
                         </div>
                       ) : null}
+                      {!useUrlLoadPreview && !srcDocTransportContent && previewSource === null ? (
+                        // srcDoc-path twin of the cover above: while the
+                        // preview content is still PENDING — the scoped-asset
+                        // rewrite waiting on the project file list (deck on a
+                        // workspace-scoped project), or a Reload's synchronous
+                        // clear before its re-fetch lands — the active iframe
+                        // is a blank document and the pane reads as a dead
+                        // white screen without this cover. Both hold states
+                        // are exactly `previewSource === null`; a loaded
+                        // zero-byte file is `previewSource === ''` (empty
+                        // srcDoc with nothing in flight), so keying on srcDoc
+                        // emptiness alone would pin this loader forever over
+                        // a legitimately empty document.
+                        <div
+                          className="artifact-preview-first-load"
+                          role="status"
+                          aria-busy="true"
+                          aria-label={t('fileViewer.loading')}
+                          data-testid="artifact-preview-first-load"
+                        >
+                          <CenteredLoader label={t('fileViewer.loading')} />
+                        </div>
+                      ) : null}
                     </div>
                   </PreviewDrawOverlay>
                   {previewAssetWarning ? (
@@ -15493,6 +15609,7 @@ function HtmlViewer({
               {boardMode ? (
                 <CommentPreviewOverlays
                   comments={commentCreateMode ? creationSortedSideComments : []}
+                  provisionalPinNumber={nextProvisionalPinNumber}
                   driftLadder={collab.enabled}
                   currentVersion={collab.publishedVersion ?? undefined}
                   {...(collab.onLostAnchors ? { onLostAnchors: collab.onLostAnchors } : {})}

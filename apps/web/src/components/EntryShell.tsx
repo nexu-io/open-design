@@ -21,6 +21,7 @@ import {
   type ReactNode,
   type SetStateAction,
 } from 'react';
+import { createPortal } from 'react-dom';
 import {
   defaultScenarioPluginIdForProjectMetadata,
   type AmrWalletSnapshot,
@@ -421,6 +422,12 @@ interface Props {
   // During a transient Cloud outage it prevents the rail from presenting a
   // still-signed-in user as signed out.
   amrLoggedIn?: boolean | null;
+  /**
+   * vela login-status account/user plan (ACCOUNT-scoped). Used for personal
+   * workspaces so a confirmed free account is not stuck as campaign audience
+   * `unknown` while billing summary leaves `membershipTier` empty.
+   */
+  amrAccountPlan?: string | null;
   daemonLive: boolean;
   onModeChange: (mode: ExecMode) => void;
   onAgentChange: (id: string) => void;
@@ -548,6 +555,7 @@ export function EntryShell({
   agents,
   agentsLoading = false,
   amrLoggedIn = null,
+  amrAccountPlan = null,
   daemonLive,
   onModeChange,
   onAgentChange,
@@ -622,11 +630,20 @@ export function EntryShell({
     workspaceContext,
   );
   const deepSeekCampaignVisibility = useDeepSeekV4FlashCampaignVisibility();
+  // Same personal-vs-team accountPlan rule as App's `resolvedAmrPlan`.
+  const deepSeekCampaignPlan = resolvePlanLabelTier({
+    billing: workspaceBilling,
+    context: workspaceContext,
+    accountPlan:
+      workspaceLoading || workspaceContext?.workspaceType === 'team'
+        ? null
+        : amrAccountPlan?.trim() || null,
+  });
   const deepSeekV4FlashCampaignAudience = resolveDeepSeekV4FlashCampaignAudience({
     // Subscription is the only campaign segmentation axis. In particular,
     // `resolvePlanLabelTier` turns the backend-confirmed unsubscribed state into
     // `free`; wallet balance / historical recharge never upgrades this audience.
-    plan: resolvePlanLabelTier({ billing: workspaceBilling, context: workspaceContext }),
+    plan: deepSeekCampaignPlan,
     loggedIn: amrLoggedIn,
     now: deepSeekCampaignVisibility.now,
   });
@@ -1549,18 +1566,23 @@ export function EntryShell({
               lives in the rail footer, and everything below is fixed-position
               or portalled so it occupies no layout space here. */}
           <WhatsNewPopup active={view === 'home'} />
-          {view === 'home' && deepSeekV4FlashCampaignAudience !== 'unknown' ? (
-            <button
-              type="button"
-              className="entry-deepseek-campaign-badge"
-              onClick={openDeepSeekCampaignPricing}
-              aria-label="DeepSeek V4 无限免费用，查看官网 Pricing"
-              data-testid="deepseek-campaign-pricing-badge"
-            >
-              <span>DeepSeek V4无限免费用</span>
-              <Icon name="arrow-right" size={13} />
-            </button>
-          ) : null}
+          {view === 'home'
+            && deepSeekV4FlashCampaignAudience !== 'unknown'
+            && typeof document !== 'undefined'
+            ? createPortal(
+              <button
+                type="button"
+                className="entry-deepseek-campaign-badge"
+                onClick={openDeepSeekCampaignPricing}
+                aria-label={t('campaign.deepseekV4Flash.workbenchBadgeAria')}
+                data-testid="deepseek-campaign-pricing-badge"
+              >
+                <span>{t('campaign.deepseekV4Flash.workbenchBadge')}</span>
+                <Icon name="arrow-right" size={13} />
+              </button>,
+              document.body,
+            )
+            : null}
           {amrBalanceGateBlock ? (
             <AmrBalanceDialog
               reason={amrBalanceGateBlock.reason}

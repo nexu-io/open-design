@@ -481,7 +481,7 @@ jobs:
     name: UI P0 (${{ matrix.name }})
     needs: [scopes, runners]
     if: ${{ needs.scopes.outputs.run_ui_p0 == 'true' }}
-    runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).ui_p0 }}
+    runs-on: ${{ matrix.shard == 'project-collab' && fromJSON(needs.runners.outputs.runs_on).ui_p0_heavy || fromJSON(needs.runners.outputs.runs_on).ui_p0 }}
     timeout-minutes: 45
     strategy:
       fail-fast: false
@@ -498,14 +498,14 @@ jobs:
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace
         with:
-          runner-labels: ${{ toJSON(fromJSON(needs.runners.outputs.runs_on).ui_p0) }}
+          runner-labels: ${{ toJSON(matrix.shard == 'project-collab' && fromJSON(needs.runners.outputs.runs_on).ui_p0_heavy || fromJSON(needs.runners.outputs.runs_on).ui_p0) }}
 
       - name: Setup Playwright
         uses: ./.github/actions/setup-playwright
         with:
           package-json-path: e2e/package.json
           install-command: pnpm -C e2e exec playwright install --with-deps chromium
-          runner-labels: ${{ toJSON(fromJSON(needs.runners.outputs.runs_on).ui_p0) }}
+          runner-labels: ${{ toJSON(matrix.shard == 'project-collab' && fromJSON(needs.runners.outputs.runs_on).ui_p0_heavy || fromJSON(needs.runners.outputs.runs_on).ui_p0) }}
 
       - name: Prebuild workspace type declarations
         run: |

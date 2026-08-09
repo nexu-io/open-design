@@ -6,6 +6,7 @@ import { expect, test as base } from '@playwright/test';
 import { seedCampaignDismissals } from './campaign-dismissals.ts';
 import {
   PLAYWRIGHT_TOOLS_DEV_FIXTURE_TIMEOUT_MS,
+  warmPlaywrightDaemonRuntime,
   warmPlaywrightWebRuntime,
 } from './runtime-lifecycle.ts';
 import { routeUnavailableVelaStatus } from './mock-factory.ts';
@@ -50,6 +51,7 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
       try {
         await toolsDev.startWeb();
         await warmPlaywrightWebRuntime(toolsDev.url.web('/'));
+        await warmPlaywrightDaemonRuntime(toolsDev.url.daemon('/api/health'));
         await use(toolsDev);
       } catch (error) {
         useError = error;

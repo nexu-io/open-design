@@ -255,15 +255,15 @@ describe('compact home model list — a clicked model reaches the chip', () => {
     render(<StatefulSwitcher agents={[amrAgentAllEnabled]} />);
 
     expect(chipText()).toContain('deepseek-v4-flash');
-    expect(within(screen.getByTestId('inline-model-switcher-chip')).getByText('无限使用'))
+    expect(within(screen.getByTestId('inline-model-switcher-chip')).getByText('Unlimited'))
       .toBeInTheDocument();
 
     const popover = openSwitcher();
-    expect(within(compactRow('deepseek-v4-flash')).getByText('无限使用'))
+    expect(within(compactRow('deepseek-v4-flash')).getByText('Unlimited'))
       .toBeInTheDocument();
-    expect(within(compactRow('deepseek-v4-pro')).queryByText('无限使用'))
+    expect(within(compactRow('deepseek-v4-pro')).queryByText('Unlimited'))
       .toBeNull();
-    expect(within(popover).getAllByText('无限使用')).toHaveLength(1);
+    expect(within(popover).getAllByText('Unlimited')).toHaveLength(1);
   });
 
   it('hides the campaign badge entirely outside the real window', () => {
@@ -273,11 +273,11 @@ describe('compact home model list — a clicked model reaches the chip', () => {
     render(<StatefulSwitcher agents={[amrAgentAllEnabled]} />);
 
     expect(chipText()).toContain('deepseek-v4-flash');
-    expect(within(screen.getByTestId('inline-model-switcher-chip')).queryByText('无限使用'))
+    expect(within(screen.getByTestId('inline-model-switcher-chip')).queryByText('Unlimited'))
       .toBeNull();
 
     const popover = openSwitcher();
-    expect(within(popover).queryByText('无限使用')).toBeNull();
+    expect(within(popover).queryByText('Unlimited')).toBeNull();
   });
 
   it('still closes on a click genuinely outside the switcher', () => {

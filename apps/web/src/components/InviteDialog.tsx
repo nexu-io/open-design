@@ -111,6 +111,7 @@ export function InviteDialog({
   const rowsRef = useRef<HTMLDivElement | null>(null);
   const roleTriggerRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const roleMenuRef = useRef<HTMLDivElement | null>(null);
+  const autoCloseTimerRef = useRef<number | null>(null);
   const [roleMenuPos, setRoleMenuPos] = useState<CSSProperties | null>(null);
   const roleListboxId = useId();
 
@@ -161,6 +162,12 @@ export function InviteDialog({
 
   useEffect(() => {
     if (!open) setOpenRoleIndex(null);
+  }, [open]);
+
+  useEffect(() => () => {
+    if (autoCloseTimerRef.current === null) return;
+    window.clearTimeout(autoCloseTimerRef.current);
+    autoCloseTimerRef.current = null;
   }, [open]);
 
   // Reset the submit lifecycle each time the dialog opens so a prior error /
@@ -337,7 +344,8 @@ export function InviteDialog({
       }, { requestId });
       setSuccess(true);
       onSubmit?.(valid);
-      window.setTimeout(() => {
+      autoCloseTimerRef.current = window.setTimeout(() => {
+        autoCloseTimerRef.current = null;
         onClose();
         setRows([{ email: '', role: DEFAULT_ROLE }]);
         setSuccess(false);

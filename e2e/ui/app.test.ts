@@ -1324,18 +1324,27 @@ async function findProjectFileContaining(
   projectId: string,
   expected: string,
 ): Promise<string> {
-  const deadline = Date.now() + 15_000;
-  while (Date.now() < deadline) {
-    const files = await listProjectFilesFromApi(page, projectId);
-    for (const file of files) {
-      const response = await page.request.get(`/api/projects/${projectId}/files/${file.name}`);
-      if (!response.ok()) continue;
-      const source = await response.text();
-      if (source.includes(expected)) return file.name;
-    }
-    await page.waitForTimeout(250);
-  }
-  return '';
+  let matchedName = '';
+  await expect
+    .poll(async () => {
+      const listResponse = await page.request.get(`/api/projects/${projectId}/files`);
+      if (!listResponse.ok()) return '';
+      const { files } = (await listResponse.json()) as {
+        files: Array<{ name: string }>;
+      };
+      for (const file of files) {
+        const response = await page.request.get(`/api/projects/${projectId}/files/${file.name}`);
+        if (!response.ok()) continue;
+        const source = await response.text();
+        if (source.includes(expected)) {
+          matchedName = file.name;
+          return file.name;
+        }
+      }
+      return '';
+    }, { timeout: 15_000 })
+    .not.toBe('');
+  return matchedName;
 }
 
 async function expectArtifactVisible(

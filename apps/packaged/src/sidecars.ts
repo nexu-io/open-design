@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { access, appendFile, mkdir, open, type FileHandle } from "node:fs/promises";
+import { access, appendFile, mkdir, open, rename, type FileHandle } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { delimiter, dirname, join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -182,9 +182,51 @@ export async function resolvePackagedElectronNodeCommand(
   return (await pathExists(helperPath)) ? helperPath : execPath;
 }
 
-async function openLog(path: string): Promise<FileHandle> {
+/**
+ * Open a sidecar's latest.log for a fresh session, preserving the prior
+ * session's log as previous.log.
+ *
+ * INVARIANT: starting a new session must not destroy the previous session's
+ * log. latest.log is opened with mode "w" (each session's log starts clean),
+ * which used to erase the one log that matters after an incident-triggered
+ * relaunch — support bundles then held only the ~70 lines written since the
+ * restart while the incident-time daemon log was gone. Rotating the prior
+ * file aside keeps exactly ONE previous session (rename overwrites the older
+ * previous.log), so retention stays bounded while the diagnostics export
+ * (apps/daemon/src/diagnostics-export.ts) can bundle the pre-restart window.
+ *
+ * Rotation is best-effort: ENOENT on first launch is the normal case, and an
+ * exotic filesystem refusal must never block sidecar startup. Best-effort must
+ * not degrade INTO the data loss it prevents, though, so a failed rotation
+ * falls back to appending: a merged two-session log is recoverable, an erased
+ * one is not. Persistent rotation failure therefore trades bounded growth for
+ * retention, and the diagnostics export reads a bounded tail either way.
+ *
+ * Exported for tests; production callers go through the spawn path.
+ */
+export async function openLog(path: string): Promise<FileHandle> {
   await mkdir(dirname(path), { recursive: true });
-  return await open(path, "w");
+  const priorLogIsSafeToDiscard = await rotatePriorLogAside(path);
+  return await open(path, priorLogIsSafeToDiscard ? "w" : "a");
+}
+
+/**
+ * Move a prior session's log aside, reporting whether the caller may safely
+ * truncate the path.
+ *
+ * Truncating is only safe once the prior session's bytes live somewhere else:
+ * moved to previous.log, or never written at all (ENOENT on first launch). Any
+ * other rename failure — a Windows share-lock on previous.log, a read-only or
+ * exotic filesystem — leaves the prior log at `path`, where "w" would destroy
+ * exactly the incident-time log this rotation exists to preserve.
+ */
+async function rotatePriorLogAside(path: string): Promise<boolean> {
+  try {
+    await rename(path, join(dirname(path), "previous.log"));
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException | null)?.code === "ENOENT";
+  }
 }
 
 const DAEMON_STATUS_TIMEOUT_MS = 35_000;

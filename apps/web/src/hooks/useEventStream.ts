@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { BackoffController } from '../lib/backoff';
 
 // Collab realtime hop-2 — the reusable daemon→web SSE client.
 //
@@ -77,7 +78,14 @@ class EventStreamManager {
   private readonly subscribers = new Set<InternalSubscriber>();
   private source: EventSource | null = null;
   private connected = false;
-  private backoff = INITIAL_BACKOFF_MS;
+  // Jittered exponential reconnect backoff (1s → 30s), shared with every other
+  // SSE surface via the common controller.
+  private readonly backoff = new BackoffController({
+    initialMs: INITIAL_BACKOFF_MS,
+    maxMs: MAX_BACKOFF_MS,
+    factor: 2,
+    jitter: true,
+  });
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private hiddenTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly attachedNames = new Set<string>();
@@ -137,7 +145,7 @@ class EventStreamManager {
     this.source = es;
     this.attachedNames.clear();
     es.onopen = () => {
-      this.backoff = INITIAL_BACKOFF_MS;
+      this.backoff.reset();
       this.setConnected(true);
       // Snapshot catch-up on (re)connect — the thin-event model relies on this
       // instead of replaying buffered events.
@@ -154,7 +162,7 @@ class EventStreamManager {
     // too (covers transports where `onopen` is unreliable).
     this.listen('ready', () => {
       if (!this.connected) {
-        this.backoff = INITIAL_BACKOFF_MS;
+        this.backoff.reset();
         this.setConnected(true);
         for (const sub of Array.from(this.subscribers)) sub.onActive?.();
       }
@@ -192,13 +200,10 @@ class EventStreamManager {
 
   private scheduleReconnect(): void {
     if (this.reconnectTimer || this.subscribers.size === 0) return;
-    const jitter = Math.floor(Math.random() * 500);
-    const delay = this.backoff + jitter;
-    this.backoff = Math.min(this.backoff * 2, MAX_BACKOFF_MS);
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       this.ensureOpen();
-    }, delay);
+    }, this.backoff.nextDelay());
   }
 
   private closeSource(): void {
