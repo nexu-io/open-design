@@ -231,15 +231,17 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
   {
     id: 'runway',
     label: 'Runway',
-    hint: 'Gen-4.5 / Seedance / image (planned adapter)',
-    integrated: false,
+    hint: 'Gen-4.5 video + gen4_image stills',
+    integrated: true,
+    defaultBaseUrl: 'https://api.dev.runwayml.com',
     docsUrl: 'https://docs.dev.runwayml.com',
   },
   {
     id: 'luma',
     label: 'Luma Dream Machine',
-    hint: 'Ray / Dream Machine video (planned adapter)',
-    integrated: false,
+    hint: 'Ray-2 video via Dream Machine API',
+    integrated: true,
+    defaultBaseUrl: 'https://api.lumalabs.ai/dream-machine/v1',
     docsUrl: 'https://docs.lumalabs.ai',
   },
   {
@@ -551,8 +553,8 @@ export const IMAGE_MODELS: MediaModel[] = [
   // Midjourney via community proxies.
   { id: 'midjourney-v7', label: 'midjourney-v7', hint: 'Midjourney · via proxy', provider: 'midjourney', caps: ['t2i'] },
 
-  // Runway / Luma — planned Settings Media adapters (use MCP Connect today).
-  { id: 'runway-gen-image', label: 'runway-gen-image', hint: 'Runway · planned stills adapter', provider: 'runway', caps: ['t2i', 'i2i'] },
+  // Runway / Luma — Settings Media BYOK (MCP Connect remains an alternate path).
+  { id: 'runway-gen-image', label: 'runway-gen-image', hint: 'Runway · gen4_image stills', provider: 'runway', caps: ['t2i', 'i2i'] },
 ];
 
 /**
@@ -657,9 +659,9 @@ export const VIDEO_MODELS: MediaModel[] = [
   { id: 'sora-2', label: 'sora-2', hint: 'Fal · OpenAI Sora 2', provider: 'fal', caps: ['t2v'] },
   { id: 'sora-2-pro', label: 'sora-2-pro', hint: 'Fal · OpenAI Sora 2 Pro', provider: 'fal', caps: ['t2v'] },
 
-  // Runway / Luma — planned Settings Media adapters (use MCP Connect today).
-  { id: 'runway-gen-4.5', label: 'runway-gen-4.5', hint: 'Runway · planned video adapter', provider: 'runway', caps: ['t2v', 'i2v'] },
-  { id: 'luma-ray-2', label: 'luma-ray-2', hint: 'Luma · planned Dream Machine adapter', provider: 'luma', caps: ['t2v', 'i2v'] },
+  // Runway / Luma — Settings Media BYOK (MCP Connect remains an alternate path).
+  { id: 'runway-gen-4.5', label: 'runway-gen-4.5', hint: 'Runway · Gen-4.5 video', provider: 'runway', caps: ['t2v', 'i2v'] },
+  { id: 'luma-ray-2', label: 'luma-ray-2', hint: 'Luma · Ray-2 Dream Machine', provider: 'luma', caps: ['t2v', 'i2v'] },
 
   // MiniMax video.
   { id: 'minimax-video-01', label: 'video-01', hint: 'MiniMax · Hailuo', provider: 'minimax', caps: ['t2v', 'i2v'] },

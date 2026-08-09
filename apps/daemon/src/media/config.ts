@@ -99,6 +99,8 @@ const ENV_KEYS: Record<string, string[]> = {
   google: ['OD_GOOGLE_API_KEY', 'GOOGLE_API_KEY', 'GEMINI_API_KEY'],
   kling: ['OD_KLING_API_KEY', 'KLING_API_KEY'],
   midjourney: ['OD_MIDJOURNEY_API_KEY'],
+  runway: ['OD_RUNWAY_API_KEY', 'RUNWAYML_API_SECRET', 'RUNWAY_API_SECRET'],
+  luma: ['OD_LUMA_API_KEY', 'LUMAAI_API_KEY', 'LUMA_API_KEY'],
   minimax: ['OD_MINIMAX_API_KEY', 'MINIMAX_API_KEY'],
   suno: ['OD_SUNO_API_KEY'],
   udio: ['OD_UDIO_API_KEY'],

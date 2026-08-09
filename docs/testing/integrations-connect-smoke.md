@@ -33,7 +33,7 @@ Smoke one of: **Runway** (OAuth), **Luma / Midjourney / Kling (AceDataCloud)** (
 
 Pass criteria: template appears in picker under the expected category, save succeeds, Connect or token field works, and one agent tool call returns without daemon crash.
 
-Settings → Media also lists **Runway** and **Luma Dream Machine** as planned (`integrated: false`) providers with catalogue model rows — they do not generate yet; use MCP Connect for live runs.
+Settings → Media lists **Runway** and **Luma Dream Machine** as integrated BYOK providers (`RUNWAYML_API_SECRET` / `LUMAAI_API_KEY`, or paste keys in Settings). MCP Connect remains an alternate agent tool path.
 
 ## Scenario plugins
 
