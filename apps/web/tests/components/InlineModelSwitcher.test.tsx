@@ -8,6 +8,7 @@ import { InlineModelSwitcher } from '../../src/components/InlineModelSwitcher';
 import {
   AMR_LOGIN_POLL_INTERVAL_MS,
   AMR_LOGIN_STATUS_EVENT,
+  AMR_LOGIN_STARTUP_SETTLE_MS,
   AMR_LOGIN_TIMEOUT_MS,
 } from '../../src/components/amrLoginPolling';
 import { fetchProviderModels } from '../../src/providers/provider-models';
@@ -2112,6 +2113,351 @@ describe('InlineModelSwitcher AMR row', () => {
       await within(popover).findByRole('radio', {
         name: /^Open Design\s+Signed in$/i,
       }),
+    ).toBeTruthy();
+  });
+
+  it('drops a stale AMR continuation when another CLI is picked before status resolves', async () => {
+    // Regression (review thread): `handleAgentButtonClick('amr')` awaits
+    // `refreshAmrStatus()` after `onAgentChange('amr')`. A faster pick of
+    // another CLI (Codex here) re-enters the handler, bumps the pick token,
+    // and the first continuation's post-await writes — `pendingCompactAmrPickRef`,
+    // `setPanel(null)`, and `handleAmrSignIn` — must NOT run for the agent
+    // the user has already moved on from. Without the token guard, AMR login
+    // could start for the now-unselected agent and overwrites the panel.
+    const authAttemptId = '44444444-4444-4444-8444-444444444444';
+    let loginStarted = false;
+    let releaseStatus!: (response: Response) => void;
+    const heldStatusResponse = new Promise<Response>((resolve) => {
+      releaseStatus = resolve;
+    });
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === '/api/integrations/vela/status') {
+        return heldStatusResponse;
+      }
+      if (url === '/api/integrations/vela/login' && init?.method === 'POST') {
+        loginStarted = true;
+        return new Response(JSON.stringify({ pid: 42, authAttemptId }), {
+          status: 202,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    function StatefulCompact() {
+      const [config, setConfig] = useState<AppConfig>({
+        ...baseConfig,
+        agentId: 'codex',
+        agentModels: {},
+      });
+      return (
+        <InlineModelSwitcher
+          config={config}
+          agents={[amrAgent, codexAgent]}
+          providerModelsCache={{}}
+          compact
+          daemonLive
+          onModeChange={(mode) => setConfig((c) => ({ ...c, mode }))}
+          onAgentChange={(id) =>
+            setConfig((c) => ({ ...c, agentId: id, mode: 'daemon' }))
+          }
+          onAgentModelChange={vi.fn()}
+          onApiProtocolChange={vi.fn()}
+          onApiModelChange={vi.fn()}
+          onOpenSettings={vi.fn()}
+        />
+      );
+    }
+
+    render(<StatefulCompact />);
+    fireEvent.click(screen.getByTestId('inline-model-switcher-chip-agent'));
+    fireEvent.click(screen.getByTestId('inline-model-switcher-agent-amr'));
+
+    // The handler is suspended on the held status response. While it's
+    // suspended the agent panel is still open (setPanel(null) only runs
+    // after the await resolves), so we can pick Codex directly.
+    fireEvent.click(screen.getByTestId('inline-model-switcher-agent-codex'));
+    expect(
+      screen.getByTestId('inline-model-switcher-compact-model-default'),
+    ).toBeTruthy();
+
+    // Release the held status with a logged-out AMR. The stale continuation
+    // wakes up, but its token is stale (Codex pick bumped the ref) — no AMR
+    // login must start, and the Codex model panel must stay open.
+    await act(async () => {
+      releaseStatus(new Response(
+        JSON.stringify({
+          loggedIn: false,
+          loginInFlight: false,
+          authAttemptId,
+          profile: 'default',
+          user: null,
+          configPath: '/Users/test/.amr/config.json',
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ));
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(loginStarted).toBe(false);
+    expect(
+      screen.getByTestId('inline-model-switcher-compact-model-default'),
+    ).toBeTruthy();
+  });
+
+  it('reopens the compact agent panel on a spawn failure so the error is visible', async () => {
+    // Regression (review thread): `handleAmrSignIn` failures (spawn, cancel,
+    // poll stop/timeout) set `amrLoginError`, but the error is rendered only
+    // inside the AMR account row of the agent panel — and `handleAgentButtonClick`
+    // closes that panel before login starts. Without an effect that reopens
+    // the panel on error, the user sees an empty chip with no error and no
+    // retry affordance.
+    const startupError = 'profile "prod" api URL: is not configured';
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === '/api/integrations/vela/status') {
+        return new Response(
+          JSON.stringify({
+            loggedIn: false,
+            loginInFlight: false,
+            profile: 'prod',
+            user: null,
+            configPath: '/Users/test/.amr/config.json',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url === '/api/integrations/vela/login' && init?.method === 'POST') {
+        return new Response(JSON.stringify({ error: startupError }), {
+          status: 500,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    function StatefulCompact() {
+      const [config, setConfig] = useState<AppConfig>({
+        ...baseConfig,
+        agentId: 'codex',
+      });
+      return (
+        <InlineModelSwitcher
+          config={config}
+          agents={[amrAgent, codexAgent]}
+          providerModelsCache={{}}
+          compact
+          daemonLive
+          onModeChange={(mode) => setConfig((c) => ({ ...c, mode }))}
+          onAgentChange={(id) =>
+            setConfig((c) => ({ ...c, agentId: id, mode: 'daemon' }))
+          }
+          onAgentModelChange={vi.fn()}
+          onApiProtocolChange={vi.fn()}
+          onApiModelChange={vi.fn()}
+          onOpenSettings={vi.fn()}
+        />
+      );
+    }
+
+    render(<StatefulCompact />);
+    fireEvent.click(screen.getByTestId('inline-model-switcher-chip-agent'));
+    fireEvent.click(screen.getByTestId('inline-model-switcher-agent-amr'));
+
+    // The panel must come back on the failure path so the error is visible.
+    await waitFor(() => {
+      const popover = screen.getByTestId('inline-model-switcher-popover');
+      expect(
+        popover.querySelector('.inline-switcher__account-status.is-error')
+          ?.textContent,
+      ).toMatch(/api URL: is not configured/i);
+    });
+  });
+
+  it('reopens the compact agent panel on a polling terminal failure so the error is visible', async () => {
+    // Regression (review thread): `handleAmrSignIn` failures set
+    // `amrLoginError`, but the error is rendered only inside the AMR
+    // account row of the agent panel — and `handleAgentButtonClick` closes
+    // that panel before login starts. Without an effect that reopens the
+    // panel on error, the user sees an empty chip with no error and no
+    // retry affordance. This exercises the polling-driven terminal
+    // failure path (distinct from the synchronous spawn failure path);
+    // `amrLoginPollOutcome` resolves it as `stopped` once elapsed time
+    // passes the startup settle window with `loginInFlight: false`.
+    const authAttemptId = '55555555-5555-4555-8555-555555555555';
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === '/api/integrations/vela/status') {
+        return new Response(
+          JSON.stringify({
+            loggedIn: false,
+            loginInFlight: false,
+            authAttemptId,
+            profile: 'default',
+            user: null,
+            configPath: '/Users/test/.amr/config.json',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url === '/api/integrations/vela/login' && init?.method === 'POST') {
+        return new Response(JSON.stringify({ pid: 1, authAttemptId }), {
+          status: 202,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === '/api/integrations/vela/login/cancel' && init?.method === 'POST') {
+        return new Response(JSON.stringify({ canceled: true, pids: [1] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    function StatefulCompact() {
+      const [config, setConfig] = useState<AppConfig>({
+        ...baseConfig,
+        agentId: 'codex',
+      });
+      return (
+        <InlineModelSwitcher
+          config={config}
+          agents={[amrAgent, codexAgent]}
+          providerModelsCache={{}}
+          compact
+          daemonLive
+          onModeChange={(mode) => setConfig((c) => ({ ...c, mode }))}
+          onAgentChange={(id) =>
+            setConfig((c) => ({ ...c, agentId: id, mode: 'daemon' }))
+          }
+          onAgentModelChange={vi.fn()}
+          onApiProtocolChange={vi.fn()}
+          onApiModelChange={vi.fn()}
+          onOpenSettings={vi.fn()}
+        />
+      );
+    }
+
+    // Mock Date.now to return a baseline; advance it past the settle
+    // window so the next poll tick observes `stopped`. Real `setInterval`
+    // is allowed to keep firing so the poll tick chain runs.
+    const baseline = Date.parse('2026-08-07T10:00:00Z');
+    vi.spyOn(Date, 'now').mockReturnValue(baseline);
+
+    render(<StatefulCompact />);
+    fireEvent.click(screen.getByTestId('inline-model-switcher-chip-agent'));
+    fireEvent.click(screen.getByTestId('inline-model-switcher-agent-amr'));
+
+    // Flush the click chain under the fake clock so `startedAt` lands on
+    // the mocked baseline; this guarantees any later mockReturnValue call
+    // returns "elapsed >= settle window".
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Advance the mocked clock past the startup settle window before the
+    // next poll tick fires.
+    vi.mocked(Date.now).mockReturnValue(
+      baseline + AMR_LOGIN_STARTUP_SETTLE_MS + 1000,
+    );
+
+    // Wait for a real-time poll tick to fire and observe the terminal
+    // outcome. The interval is 2s, so we use a slightly longer wait.
+    await waitFor(() => {
+      const popover = screen.getByTestId('inline-model-switcher-popover');
+      expect(
+        popover.querySelector('.inline-switcher__account-status.is-error'),
+      ).toBeTruthy();
+    }, { timeout: 5000 });
+  });
+
+  it('reopens the compact agent panel after cancel so the post-cancel state is visible', async () => {
+    const authAttemptId = '66666666-6666-4666-8666-666666666666';
+    let loginStarted = false;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === '/api/integrations/vela/status') {
+        return new Response(
+          JSON.stringify({
+            loggedIn: false,
+            loginInFlight: loginStarted,
+            authAttemptId,
+            profile: 'default',
+            user: null,
+            configPath: '/Users/test/.amr/config.json',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url === '/api/integrations/vela/login' && init?.method === 'POST') {
+        loginStarted = true;
+        return new Response(JSON.stringify({ pid: 1, authAttemptId }), {
+          status: 202,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === '/api/integrations/vela/login/cancel' && init?.method === 'POST') {
+        loginStarted = false;
+        return new Response(JSON.stringify({ canceled: true, pids: [1] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    function StatefulCompact() {
+      const [config, setConfig] = useState<AppConfig>({
+        ...baseConfig,
+        agentId: 'codex',
+      });
+      return (
+        <InlineModelSwitcher
+          config={config}
+          agents={[amrAgent, codexAgent]}
+          providerModelsCache={{}}
+          compact
+          daemonLive
+          onModeChange={(mode) => setConfig((c) => ({ ...c, mode }))}
+          onAgentChange={(id) =>
+            setConfig((c) => ({ ...c, agentId: id, mode: 'daemon' }))
+          }
+          onAgentModelChange={vi.fn()}
+          onApiProtocolChange={vi.fn()}
+          onApiModelChange={vi.fn()}
+          onOpenSettings={vi.fn()}
+        />
+      );
+    }
+
+    render(<StatefulCompact />);
+    fireEvent.click(screen.getByTestId('inline-model-switcher-chip-agent'));
+    fireEvent.click(screen.getByTestId('inline-model-switcher-agent-amr'));
+
+    await waitFor(() => {
+      expect(loginStarted).toBe(true);
+      expect(screen.queryByTestId('inline-model-switcher-popover')).toBeNull();
+    });
+
+    // Click AMR again — `amrLoginPending` is true, so the click routes to
+    // cancel. After cancel success, the panel must reopen.
+    fireEvent.click(screen.getByTestId('inline-model-switcher-chip-agent'));
+    fireEvent.click(screen.getByTestId('inline-model-switcher-agent-amr'));
+
+    const popover = await waitFor(() =>
+      screen.getByTestId('inline-model-switcher-popover'),
+    );
+    expect(
+      within(popover).getByRole('radio', { name: /^Open Design\s+Sign in$/i }),
     ).toBeTruthy();
   });
 });

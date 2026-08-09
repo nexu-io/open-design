@@ -346,6 +346,16 @@ export function InlineModelSwitcher({
    *  different CLI while AMR is signing in, the resume no-ops and the
    *  unrelated agent's panel state is left alone. */
   const pendingCompactAmrPickRef = useRef<{ agentId: 'amr'; mode: 'model' | 'close' } | null>(null);
+  /** Stale-continuation guard for `handleAgentButtonClick('amr')`. The path
+   *  awaits `refreshAmrStatus()` after `onAgentChange('amr')`, which means a
+   *  second pick (Codex, then back to AMR) can re-enter the handler while the
+   *  first pick's continuation is still suspended on the await. Without a
+   *  token, the first continuation wakes up, sees a stale "logged-out" status,
+   *  and forces `pendingCompactAmrPickRef` / `setPanel(null)` / `handleAmrSignIn`
+   *  for an agent the user has already moved on from. Each pick increments
+   *  the ref; the continuation compares the token and bails if it no longer
+   *  matches (any newer pick — even another AMR pick — has bumped it). */
+  const amrPickTokenRef = useRef(0);
 
   const getModelPopoverBoundary = useCallback(() => {
     const scrollContainer = wrapRef.current?.closest<HTMLElement>(
@@ -658,6 +668,11 @@ export function InlineModelSwitcher({
     }
     amrLoginStartedAtRef.current = null;
     setAmrLoginPending(false);
+    // Compact home closed the agent panel before login started; reopening
+    // here so the user sees the post-cancel AMR row (Sign-in affordance +
+    // any error), matching the visibility invariant that the
+    // `amrLoginError` effect enforces on the failure paths.
+    if (compact && config.agentId === 'amr') setPanel('agent');
     setAmrStatus((current) => (
       current
         ? { ...current, loggedIn: false, loginInFlight: false, user: null }
@@ -681,6 +696,14 @@ export function InlineModelSwitcher({
         element: 'agent_card',
         cli_provider_id: agentIdToTracking(agentId),
       });
+      // Stale-continuation guard: stamp this pick with a fresh token. The path
+      // below awaits `refreshAmrStatus()` after `onAgentChange(agentId)`, so
+      // a faster second pick (Codex, then back to AMR) can re-enter this
+      // handler and bump the ref while this continuation is still suspended.
+      // When this continuation wakes up, a mismatched token means the user
+      // has moved on; bail before touching `pendingCompactAmrPickRef`,
+      // `setPanel`, or `handleAmrSignIn`.
+      const pickToken = ++amrPickTokenRef.current;
       // Compact home lists CLI agents even when the active mode is BYOK
       // (BYOK provider UI is not on that surface yet). Picking an agent
       // must return execution to Local CLI.
@@ -701,6 +724,12 @@ export function InlineModelSwitcher({
         { metricsConsent: config.telemetry?.metrics === true },
       );
       const latest = await refreshAmrStatus();
+      // A faster pick has bumped the token; the user's choice has moved on.
+      // The defensive useEffect that clears `pendingCompactAmrPickRef` on
+      // `config.agentId` change is a belt-and-suspenders — the token is the
+      // actual invariant that prevents this continuation from writing any of
+      // the post-await side effects for a no-longer-active pick.
+      if (amrPickTokenRef.current !== pickToken) return;
       if (latest?.loggedIn) {
         finishCompactAgentPick(agentId);
         return;
@@ -819,8 +848,17 @@ export function InlineModelSwitcher({
     if (open && agents.some((agent) => agent.id === 'amr' && agent.available)) {
       void refreshAmrStatus();
     }
+  }, [agents, open, refreshAmrStatus]);
+
+  // Stop polling only on unmount. Polling has its own lifecycle (started by
+  // `startAmrPolling`, ended by terminal `signed-in` / `stopped` / `timed-out`
+  // outcomes) and must NOT be coupled to the panel opening or closing — in
+  // compact mode `handleAgentButtonClick('amr')` closes the agent panel
+  // before login starts, so this unmount-only cleanup is what keeps the
+  // background polling alive while the user waits for sign-in.
+  useEffect(() => {
     return () => stopAmrPolling();
-  }, [agents, open, refreshAmrStatus, stopAmrPolling]);
+  }, [stopAmrPolling]);
 
   useEffect(() => {
     const onStatusChange = (event: Event) => {
@@ -1108,6 +1146,25 @@ export function InlineModelSwitcher({
       pendingCompactAmrPickRef.current = null;
     }
   }, [config.agentId]);
+
+  // AMR terminal failures (spawn failure, cancel failure, poll stop/timeout)
+  // all set `amrLoginError`, but that string is rendered only inside the AMR
+  // account row of the agent panel — and `handleAgentButtonClick('amr')`
+  // closes that panel before login starts. Without this effect, the user sees
+  // an empty chip with no error and no retry affordance. When the error
+  // appears and the active agent is still AMR, surface the agent panel so the
+  // error becomes visible (and the existing Sign-in button becomes clickable
+  // for a retry).
+  useEffect(() => {
+    if (
+      amrLoginError
+      && compact
+      && config.agentId === 'amr'
+      && panel !== 'agent'
+    ) {
+      setPanel('agent');
+    }
+  }, [amrLoginError, compact, config.agentId, panel]);
 
   useEffect(() => {
     if (!amrLoggedIn || workspaceContext?.workspaceType === 'team') {
