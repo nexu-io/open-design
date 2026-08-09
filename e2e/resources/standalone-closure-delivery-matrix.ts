@@ -53,7 +53,7 @@ export const standaloneClosureDeliveryMatrix = {
         {
           "level": "platform-product",
           "state": "proven",
-          "credential": "https://github.com/nexu-io/open-design/actions/runs/31274866576",
+          "credential": "https://github.com/nexu-io/open-design/actions/runs/31299133459",
           "witness": "e2e/specs/mac.spec.ts"
         }
       ],
@@ -137,7 +137,7 @@ export const standaloneClosureDeliveryMatrix = {
         {
           "level": "platform-product",
           "state": "proven",
-          "credential": "https://github.com/nexu-io/open-design/actions/runs/31274866576",
+          "credential": "https://github.com/nexu-io/open-design/actions/runs/31299133459",
           "witness": "e2e/specs/mac.spec.ts"
         }
       ],
@@ -179,7 +179,7 @@ export const standaloneClosureDeliveryMatrix = {
         {
           "level": "platform-product",
           "state": "proven",
-          "credential": "https://github.com/nexu-io/open-design/actions/runs/31274866576",
+          "credential": "https://github.com/nexu-io/open-design/actions/runs/31299133459",
           "witness": "e2e/specs/mac.spec.ts"
         }
       ],
@@ -219,7 +219,7 @@ export const standaloneClosureDeliveryMatrix = {
         {
           "level": "platform-product",
           "state": "proven",
-          "credential": "https://github.com/nexu-io/open-design/actions/runs/31274866576",
+          "credential": "https://github.com/nexu-io/open-design/actions/runs/31299133459",
           "witness": ".github/workflows/release-beta.yml"
         }
       ],
@@ -258,7 +258,7 @@ export const standaloneClosureDeliveryMatrix = {
         {
           "level": "platform-product",
           "state": "proven",
-          "credential": "https://github.com/nexu-io/open-design/actions/runs/31274866576",
+          "credential": "https://github.com/nexu-io/open-design/actions/runs/31299133459",
           "witness": "e2e/specs/mac.spec.ts"
         }
       ],
