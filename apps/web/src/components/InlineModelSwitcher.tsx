@@ -312,7 +312,7 @@ export function InlineModelSwitcher({
       const below = viewportHeight - anchor.bottom - 16;
       const above = anchor.top - 16;
       const up = below < 280 && above > below;
-      setPopoverPlacement({
+      setPopoverPlacement({ 
         up,
         maxHeight: Math.max(160, Math.min(560, up ? above : below)),
       });
@@ -337,6 +337,12 @@ export function InlineModelSwitcher({
   const [showAmrReminderInPopover, setShowAmrReminderInPopover] =
     useState(false);
   const amrPollRef = useRef<number | null>(null);
+  // Bumped by `stopAmrPolling()` and `startAmrPolling()`. A poll `tick()`
+  // captures its generation before awaiting `refreshAmrStatus()` and bails
+  // after the await if the generation moved on — `stopAmrPolling()` cannot
+  // cancel an already-in-flight tick, so a stale tick must never act on
+  // terminal state that now belongs to a newer attempt.
+  const amrPollGenerationRef = useRef(0);
   const amrLoginStartedAtRef = useRef<number | null>(null);
   const amrLoginStartPendingRef = useRef(false);
   const amrLoginCancelRequestedRef = useRef(false);
@@ -380,6 +386,7 @@ export function InlineModelSwitcher({
   }, []);
 
   const stopAmrPolling = useCallback(() => {
+    amrPollGenerationRef.current += 1;
     if (amrPollRef.current !== null) {
       window.clearInterval(amrPollRef.current);
       amrPollRef.current = null;
@@ -406,27 +413,65 @@ export function InlineModelSwitcher({
     pendingCompactAmrPickRef.current = null;
   }, []);
 
-  const resumePendingCompactAmrPick = useCallback(() => {
-    const pending = pendingCompactAmrPickRef.current;
-    if (!pending) return;
-    pendingCompactAmrPickRef.current = null;
-    if (!compact) return;
-    // Scope to the originating pick: a non-AMR selection mid-login must NOT
-    // reopen or close the new agent's panel just because AMR finished. The
-    // clearing useEffect below also drops this ref when config.agentId
-    // leaves 'amr', so reaching here with a different agent means the
-    // effect already ran and the ref is empty — but gate defensively too.
-    if (config.agentId !== pending.agentId) return;
-    setPanel(pending.mode === 'model' ? 'model' : null);
-  }, [compact, config.agentId]);
-  const resumePendingCompactAmrPickRef = useRef(resumePendingCompactAmrPick);
-  resumePendingCompactAmrPickRef.current = resumePendingCompactAmrPick;
+  // The polling tick and `handleAmrSignin`'s post-await branch both need the
+  // latest `finishCompactAgentPick` closure (it reads `config.agentModels`),
+  // but neither callback lists `finishCompactAgentPick` in its deps so they
+  // would otherwise capture the first-render closure. The `useRef` +
+  // `ref.current =` indirection reaches the latest closure on every call.
+  const finishCompactAgentPickRef = useRef(finishCompactAgentPick);
+  finishCompactAgentPickRef.current = finishCompactAgentPick;
+
+  // Resume the pending compact AMR pick (if any). Three paths observe the
+  // signed-in transition — polling tick, handleAmrSignin post-await, and the
+  // login-status event useEffect — and each must re-evaluate the saved-model
+  // decision at sign-in time with the freshest `config.agentModels` (not the
+  // pick-time frozen value) and gate on `config.agentId === 'amr' && compact`
+  // so a mid-login agent switch drops the handoff. The ref indirection keeps
+  // every path on the latest `finishCompactAgentPick` closure regardless of
+  // each callback's deps.
+  const tryCompleteCompactAmrPick = useCallback(() => {
+    if (config.agentId === 'amr' && compact) {
+      finishCompactAgentPickRef.current('amr');
+    } else {
+      clearPendingCompactAmrPick();
+    }
+  }, [compact, config.agentId, finishCompactAgentPickRef]);
+
+  // Every path that observes the signed-in transition — the polling tick,
+  // `handleAmrSignIn`'s post-await refresh, and the login-status event —
+  // must end the login identically: resolve the auth analytics with success
+  // (with the observed user id), wake other AMR surfaces via the status
+  // event, stop polling, clear login state, and resume the pending compact
+  // pick. Without this shared finalizer, a login that completes before the
+  // next poll tick would skip `amr_auth_result` and leave App and other AMR
+  // surfaces stale until an unrelated refresh.
+  const finalizeAmrSignIn = useCallback(
+    (
+      authAttemptId: string | null,
+      signedInUserId: string | null | undefined,
+    ) => {
+      if (authAttemptId) {
+        resolveAmrAuthTracking(analytics.track, 'success', undefined, {
+          authAttemptId,
+          signedInUserId: signedInUserId ?? null,
+        });
+      }
+      notifyAmrLoginStatusChanged();
+      stopAmrPolling();
+      amrLoginStartedAtRef.current = null;
+      setAmrLoginPending(false);
+      tryCompleteCompactAmrPick();
+    },
+    [analytics.track, stopAmrPolling, tryCompleteCompactAmrPick],
+  );
 
   const refreshAmrStatus = useCallback(async () => {
     const next = await fetchVelaLoginStatus();
-    if (next?.authAttemptId) {
-      amrAuthAttemptIdRef.current = next.authAttemptId;
-    }
+    // Do NOT write `amrAuthAttemptIdRef` here: this callback runs on every
+    // status read, including stale ones from a superseded attempt, and would
+    // otherwise reassign the current-attempt identity used by the signed-in
+    // finalization guards. The ref is owned by the login flow
+    // (`handleAmrSignIn` and `startAmrPolling`).
     const authAttemptId = amrAuthAttemptIdRef.current;
     if (next && authAttemptId) {
       observeAmrAuthTracking(analytics.track, next, authAttemptId);
@@ -454,23 +499,21 @@ export function InlineModelSwitcher({
     authAttemptId = amrAuthAttemptIdRef.current,
   ) => {
     stopAmrPolling();
+    // This poll's generation. A tick from an earlier poll — one whose
+    // `refreshAmrStatus()` was still awaiting when the poll was restarted —
+    // compares its captured generation after the await and bails so it
+    // cannot act on state that now belongs to a newer attempt.
+    const generation = ++amrPollGenerationRef.current;
     amrLoginStartedAtRef.current = startedAt;
     if (authAttemptId) amrAuthAttemptIdRef.current = authAttemptId;
     const tick = async () => {
       const next = await refreshAmrStatus();
+      // Stale tick: a newer poll owns the terminal state now. Do not touch
+      // the pending handoff, the interval, or the login bookkeeping.
+      if (generation !== amrPollGenerationRef.current) return;
       const outcome = amrLoginPollOutcome(next, startedAt);
       if (outcome === 'signed-in') {
-        if (authAttemptId) {
-          resolveAmrAuthTracking(analytics.track, 'success', undefined, {
-            authAttemptId,
-            signedInUserId: next?.user?.id ?? null,
-          });
-        }
-        notifyAmrLoginStatusChanged();
-        stopAmrPolling();
-        amrLoginStartedAtRef.current = null;
-        setAmrLoginPending(false);
-        resumePendingCompactAmrPick();
+        finalizeAmrSignIn(authAttemptId, next?.user?.id ?? null);
         return;
       }
       if (outcome === 'stopped' || outcome === 'timed-out') {
@@ -507,8 +550,8 @@ export function InlineModelSwitcher({
   }, [
     analytics.track,
     clearPendingCompactAmrPick,
+    finalizeAmrSignIn,
     refreshAmrStatus,
-    resumePendingCompactAmrPick,
     stopAmrPolling,
     t,
   ]);
@@ -617,18 +660,28 @@ export function InlineModelSwitcher({
     // Finish the pending pick immediately so we do not wait on the interval.
     const signedIn = await refreshAmrStatus();
     if (signedIn?.loggedIn) {
-      stopAmrPolling();
-      setAmrLoginPending(false);
-      resumePendingCompactAmrPickRef.current();
+      // Only finalize a sign-in this switcher is still polling for and that is
+      // still the current attempt. The finalizer broadcasts `status-changed`
+      // (waking other AMR surfaces), which re-enters the login-status event
+      // handler — and `refreshAmrStatus()` clears `amrLoginStartedAtRef` on a
+      // signed-in read, so the poll ref is the reliable in-progress signal.
+      // The attempt check drops a continuation from a superseded attempt that
+      // resolves after a restart (e.g. cancel + re-login as a new attempt).
+      if (
+        amrPollRef.current !== null &&
+        authAttemptId === amrAuthAttemptIdRef.current
+      ) {
+        finalizeAmrSignIn(authAttemptId, signedIn?.user?.id ?? null);
+      }
     }
   }, [
     analytics.track,
     clearPendingCompactAmrPick,
     config.installationId,
     config.telemetry?.metrics,
+    finalizeAmrSignIn,
     refreshAmrStatus,
     startAmrPolling,
-    stopAmrPolling,
     t,
   ]);
 
@@ -879,17 +932,28 @@ export function InlineModelSwitcher({
         setAmrLoginPending(false);
       }
       void refreshAmrStatus().then((next) => {
-        if (next?.authAttemptId) {
-          amrAuthAttemptIdRef.current = next.authAttemptId;
-        }
         if (next?.loggedIn) {
-          amrLoginStartedAtRef.current = null;
-          stopAmrPolling();
-          setAmrLoginPending(false);
           // Compact home may have closed the agent panel before login; finish
           // the pending pick here too — the poll tick is not the only path that
           // observes signed-in (login-started's follow-up refresh can win the race).
-          resumePendingCompactAmrPick();
+          // Only finalize a sign-in this switcher is polling for AND that is
+          // still the current attempt: the finalizer broadcasts
+          // `status-changed`, which re-enters this handler, and
+          // `refreshAmrStatus()` clears `amrLoginStartedAtRef` on a signed-in
+          // read — so the poll ref is the reliable in-progress signal and
+          // `amrAuthAttemptIdRef` (maintained by startAmrPolling / handleAmrSignIn,
+          // not by this continuation) identifies the attempt. A continuation
+          // from a superseded attempt must not finalize the newer login.
+          if (
+            amrPollRef.current !== null &&
+            (next.authAttemptId ?? amrAuthAttemptIdRef.current) ===
+              amrAuthAttemptIdRef.current
+          ) {
+            finalizeAmrSignIn(
+              next.authAttemptId ?? amrAuthAttemptIdRef.current,
+              next?.user?.id ?? null,
+            );
+          }
           return;
         }
         if (next?.loginInFlight) {
@@ -930,8 +994,8 @@ export function InlineModelSwitcher({
     };
   }, [
     clearPendingCompactAmrPick,
+    finalizeAmrSignIn,
     refreshAmrStatus,
-    resumePendingCompactAmrPick,
     startAmrPolling,
     stopAmrPolling,
   ]);

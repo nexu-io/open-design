@@ -1709,6 +1709,129 @@ describe('InlineModelSwitcher AMR row', () => {
     });
   });
 
+  it('re-evaluates saved-model at AMR sign-in, not at pick time', async () => {
+    // Regression (review thread): the pick-time path used to freeze the
+    // saved-model decision in `pendingCompactAmrPickRef`. If
+    // `config.agentModels.amr` is mutated between pick and sign-in (e.g.
+    // another surface clears the saved model), the signed-in handler must
+    // re-evaluate at sign-in time with the freshest `config.agentModels` —
+    // not use the stale pick-time frozen value.
+    const authAttemptId = '77777777-7777-4777-8777-777777777777';
+    let loginStarted = false;
+    let signedInStatus = false;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url.startsWith('/api/integrations/vela/status')) {
+        return new Response(
+          JSON.stringify({
+            loggedIn: signedInStatus,
+            loginInFlight: loginStarted && !signedInStatus,
+            authAttemptId,
+            profile: 'default',
+            user: signedInStatus
+              ? { id: 'user-1', email: 'amr@example.local' }
+              : null,
+            configPath: '/Users/test/.amr/config.json',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url === '/api/integrations/vela/login' && init?.method === 'POST') {
+        loginStarted = true;
+        return new Response(JSON.stringify({ pid: 42, authAttemptId }), {
+          status: 202, headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (
+        url.startsWith('/api/integrations/vela/wallet') ||
+        url.startsWith('/api/workspace/')
+      ) {
+        return new Response(JSON.stringify({}), {
+          status: 200, headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    function StatefulCompact() {
+      const [config, setConfig] = useState<AppConfig>({
+        ...baseConfig,
+        agentId: 'codex',
+        // Pick-time decision: with this in place, the old frozen-mode path
+        // would close the panel after sign-in. The test asserts the new
+        // sign-in-time re-check opens it instead.
+        agentModels: { amr: { model: 'amr-cloud-latest' } },
+      });
+      return (
+        <>
+          <button
+            data-testid="clear-amr-model"
+            onClick={() => setConfig((c) => ({ ...c, agentModels: {} }))}
+          />
+          <InlineModelSwitcher
+            config={config}
+            agents={[amrAgent, codexAgent]}
+            providerModelsCache={{}}
+            compact
+            daemonLive
+            onModeChange={(mode) => setConfig((c) => ({ ...c, mode }))}
+            onAgentChange={(id) =>
+              setConfig((c) => ({ ...c, agentId: id, mode: 'daemon' }))
+            }
+            onAgentModelChange={vi.fn()}
+            onApiProtocolChange={vi.fn()}
+            onApiModelChange={vi.fn()}
+            onOpenSettings={vi.fn()}
+          />
+        </>
+      );
+    }
+
+    render(<StatefulCompact />);
+    // Pick AMR (signed out) — at pick time `agentModels.amr` is
+    // 'amr-cloud-latest', so the old frozen-decision path would freeze
+    // `mode: 'close'` here. The test then clears the saved model mid-login
+    // and asserts the sign-in handler re-evaluates with the cleared state.
+    fireEvent.click(screen.getByTestId('inline-model-switcher-chip-agent'));
+    fireEvent.click(screen.getByTestId('inline-model-switcher-agent-amr'));
+    await waitFor(() => {
+      expect(loginStarted).toBe(true);
+      expect(screen.queryByTestId('inline-model-switcher-popover')).toBeNull();
+    });
+
+    // Switch to fake timers so we can advance the poll cycle deterministically.
+    vi.useFakeTimers();
+    // Clear the saved AMR model BEFORE the next poll tick fires. This is
+    // the mutation the regression guards against — the new sign-in code
+    // must read the latest `config.agentModels`, not the frozen value.
+    fireEvent.click(screen.getByTestId('clear-amr-model'));
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    // Flip the status response to signed-in so the next poll tick takes
+    // the `'signed-in'` branch.
+    signedInStatus = true;
+
+    // Advance past the poll interval so the polling tick fires with the
+    // updated signed-in status and the cleared `agentModels`.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AMR_LOGIN_POLL_INTERVAL_MS);
+    });
+    vi.useRealTimers();
+
+    // The sign-in handler must evaluate the CURRENT (cleared)
+    // agentModels. With no saved model, the model panel opens.
+    await waitFor(() => {
+      expect(
+        within(screen.getByTestId('inline-model-switcher-popover')).getByTestId(
+          'inline-model-switcher-compact-model-amr-cloud-latest',
+        ),
+      ).toBeTruthy();
+    });
+  });
+
   it('keeps the compact panel closed after signed-out AMR login when a model is saved', async () => {
     let loginStarted = false;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -1780,6 +1903,107 @@ describe('InlineModelSwitcher AMR row', () => {
       expect(loginStarted).toBe(true);
       expect(screen.queryByTestId('inline-model-switcher-popover')).toBeNull();
     });
+  });
+
+  it('finalizes analytics and wakes AMR surfaces when sign-in completes before the first poll tick', async () => {
+    // Regression (review thread): the immediate post-login status refresh can
+    // observe signed-in (login faster than the 2s poll interval). That branch
+    // used to stop polling and clear UI state without resolving the auth
+    // analytics or broadcasting the status change — so `amr_auth_result` was
+    // never emitted and App/other AMR surfaces stayed stale.
+    const authAttemptId = '55555555-5555-4555-8555-555555555555';
+    let loginStarted = false;
+    const broadcastReasons: string[] = [];
+    const onBroadcast = (event: Event) => {
+      const reason = (event as CustomEvent).detail?.reason;
+      if (reason) broadcastReasons.push(reason);
+    };
+    window.addEventListener(AMR_LOGIN_STATUS_EVENT, onBroadcast);
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === '/api/integrations/vela/status') {
+        return new Response(
+          JSON.stringify({
+            // Signed-in from the first post-login read: the login already
+            // completed before any poll tick can fire.
+            loggedIn: loginStarted,
+            loginInFlight: false,
+            authAttemptId,
+            profile: 'default',
+            user: loginStarted
+              ? { id: 'user-1', email: 'amr@example.local' }
+              : null,
+            configPath: '/Users/test/.amr/config.json',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url === '/api/integrations/vela/login' && init?.method === 'POST') {
+        loginStarted = true;
+        return new Response(JSON.stringify({ pid: 42, authAttemptId }), {
+          status: 202,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (
+        url.startsWith('/api/integrations/vela/wallet') ||
+        url.startsWith('/api/workspace/')
+      ) {
+        return new Response(JSON.stringify({}), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    function StatefulCompact() {
+      const [config, setConfig] = useState<AppConfig>({
+        ...baseConfig,
+        agentId: 'codex',
+        agentModels: {},
+      });
+      return (
+        <InlineModelSwitcher
+          config={config}
+          agents={[amrAgent, codexAgent]}
+          providerModelsCache={{}}
+          compact
+          daemonLive
+          onModeChange={(mode) => setConfig((c) => ({ ...c, mode }))}
+          onAgentChange={(id) =>
+            setConfig((c) => ({ ...c, agentId: id, mode: 'daemon' }))
+          }
+          onAgentModelChange={vi.fn()}
+          onApiProtocolChange={vi.fn()}
+          onApiModelChange={vi.fn()}
+          onOpenSettings={vi.fn()}
+        />
+      );
+    }
+
+    render(<StatefulCompact />);
+    fireEvent.click(screen.getByTestId('inline-model-switcher-chip-agent'));
+    fireEvent.click(screen.getByTestId('inline-model-switcher-agent-amr'));
+    await waitFor(() => expect(loginStarted).toBe(true), { timeout: 2000 });
+    await waitFor(() => {
+      const resultCalls = analyticsMocks.track.mock.calls.filter(
+        ([event]) => event === 'amr_auth_result',
+      );
+      expect(resultCalls.length).toBeGreaterThan(0);
+      expect(resultCalls[0]?.[1]).toMatchObject({ result: 'success' });
+    });
+    expect(broadcastReasons).toContain('status-changed');
+    await waitFor(() => {
+      expect(
+        within(screen.getByTestId('inline-model-switcher-popover')).getByTestId(
+          'inline-model-switcher-compact-model-amr-cloud-latest',
+        ),
+      ).toBeTruthy();
+    });
+
+    window.removeEventListener(AMR_LOGIN_STATUS_EVENT, onBroadcast);
   });
 
   it('drops the pending AMR handoff when another CLI is picked mid-login', async () => {
@@ -2114,6 +2338,224 @@ describe('InlineModelSwitcher AMR row', () => {
         name: /^Open Design\s+Signed in$/i,
       }),
     ).toBeTruthy();
+  });
+
+  it('ignores a stale poll tick after the poll restarts for a newer AMR attempt', async () => {
+    // Regression (review thread): `stopAmrPolling()` clears the interval but
+    // cannot cancel a `tick()` whose `refreshAmrStatus()` is already awaiting.
+    // An older attempt A's in-flight tick could resolve as signed-in after a
+    // restart (attempt B), then stop B's interval, clear B's login
+    // bookkeeping, and resume B's compact handoff. The poll-generation guard
+    // must turn that stale tick into a no-op.
+    const authAttemptA = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const authAttemptB = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+    let statusCall = 0;
+    let releaseStaleTick!: (response: Response) => void;
+    const staleTickResponse = new Promise<Response>((resolve) => {
+      releaseStaleTick = resolve;
+    });
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === '/api/integrations/vela/status') {
+        statusCall += 1;
+        // Call 2 is attempt A's first poll tick; hold it in-flight while the
+        // poll is restarted for attempt B below.
+        if (statusCall === 2) {
+          return staleTickResponse;
+        }
+        return new Response(
+          JSON.stringify({
+            loggedIn: false,
+            loginInFlight: true,
+            authAttemptId: statusCall === 1 ? authAttemptA : authAttemptB,
+            profile: 'default',
+            user: null,
+            configPath: '/Users/test/.amr/config.json',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url === '/api/integrations/vela/wallet') {
+        return new Response(JSON.stringify({}), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderSwitcher({ agentId: 'amr' }, [amrAgent], {}, { compact: true });
+
+    vi.useFakeTimers();
+    // A separate surface starts an AMR login and broadcasts it; the follow-up
+    // status reports in-flight, so this switcher starts poll A.
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent(AMR_LOGIN_STATUS_EVENT, { detail: { reason: 'login-started' } }),
+      );
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    // Poll A's first tick fires and suspends on the held status response.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AMR_LOGIN_POLL_INTERVAL_MS);
+    });
+    expect(statusCall).toBe(2);
+
+    // Restart for attempt B: another login-started broadcast, another
+    // in-flight status, so poll B replaces poll A. The generation guard must
+    // invalidate poll A's suspended tick.
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent(AMR_LOGIN_STATUS_EVENT, { detail: { reason: 'login-started' } }),
+      );
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    // Poll A's stale tick now resolves as signed-in. With the guard it must
+    // act on nothing — no panel change, no interval kill, no finalization.
+    await act(async () => {
+      releaseStaleTick(new Response(
+        JSON.stringify({
+          loggedIn: true,
+          loginInFlight: false,
+          authAttemptId: authAttemptA,
+          profile: 'default',
+          user: { id: 'user-1', email: 'amr@example.local' },
+          configPath: '/Users/test/.amr/config.json',
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ));
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    // The stale tick must not consume the newer attempt's handoff: the
+    // compact panel stays closed (no saved model — a live resume would open
+    // the model list) and no success analytics are emitted.
+    expect(screen.queryByTestId('inline-model-switcher-popover')).toBeNull();
+    expect(
+      analyticsMocks.track.mock.calls.filter(
+        ([event]) => event === 'amr_auth_result',
+      ),
+    ).toHaveLength(0);
+
+    // Poll B must still be alive: advancing another interval fires its tick
+    // and issues another status request. A stale tick calling stopAmrPolling()
+    // would have killed B's interval.
+    const callsBeforeB = statusCall;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AMR_LOGIN_POLL_INTERVAL_MS);
+    });
+    expect(statusCall).toBeGreaterThan(callsBeforeB);
+
+    vi.useRealTimers();
+  });
+
+  it('ignores a stale login-status continuation for a superseded AMR attempt', async () => {
+    // Regression (review thread): the `login-started` broadcast's follow-up
+    // status continuation has the same exposure as a stale poll tick — it is
+    // not covered by the poll-generation guard. An older attempt A's
+    // continuation can resolve as signed-in after a restart (attempt B) and
+    // then finalize B's login: stopping B's poll, broadcasting a status
+    // change, and resuming the compact handoff for the wrong attempt.
+    const authAttemptA = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+    const authAttemptB = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+    let statusCall = 0;
+    let releaseStaleContinuation!: (response: Response) => void;
+    const staleContinuationResponse = new Promise<Response>((resolve) => {
+      releaseStaleContinuation = resolve;
+    });
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === '/api/integrations/vela/status') {
+        statusCall += 1;
+        // Call 1 is attempt A's follow-up continuation; hold it in-flight
+        // while the login is restarted for attempt B below.
+        if (statusCall === 1) {
+          return staleContinuationResponse;
+        }
+        return new Response(
+          JSON.stringify({
+            loggedIn: false,
+            loginInFlight: true,
+            authAttemptId: statusCall === 2 ? authAttemptB : authAttemptA,
+            profile: 'default',
+            user: null,
+            configPath: '/Users/test/.amr/config.json',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url === '/api/integrations/vela/wallet') {
+        return new Response(JSON.stringify({}), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderSwitcher({ agentId: 'amr' }, [amrAgent], {}, { compact: true });
+
+    vi.useFakeTimers();
+    // Attempt A starts on another surface and broadcasts; its follow-up
+    // status read suspends on the held response.
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent(AMR_LOGIN_STATUS_EVENT, { detail: { reason: 'login-started' } }),
+      );
+    });
+    // Restart for attempt B: another login-started broadcast. B's follow-up
+    // reports in-flight, so poll B replaces poll A.
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent(AMR_LOGIN_STATUS_EVENT, { detail: { reason: 'login-started' } }),
+      );
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    // A's stale continuation now resolves as signed-in. It must not finalize
+    // B's login: no panel change, no success analytics, no interval kill.
+    await act(async () => {
+      releaseStaleContinuation(new Response(
+        JSON.stringify({
+          loggedIn: true,
+          loginInFlight: false,
+          authAttemptId: authAttemptA,
+          profile: 'default',
+          user: { id: 'user-1', email: 'amr@example.local' },
+          configPath: '/Users/test/.amr/config.json',
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ));
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.queryByTestId('inline-model-switcher-popover')).toBeNull();
+    expect(
+      analyticsMocks.track.mock.calls.filter(
+        ([event]) => event === 'amr_auth_result',
+      ),
+    ).toHaveLength(0);
+
+    // Poll B must still be alive: advancing another interval fires its tick
+    // and issues another status request.
+    const callsBeforeB = statusCall;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AMR_LOGIN_POLL_INTERVAL_MS);
+    });
+    expect(statusCall).toBeGreaterThan(callsBeforeB);
+
+    vi.useRealTimers();
   });
 
   it('drops a stale AMR continuation when another CLI is picked before status resolves', async () => {
