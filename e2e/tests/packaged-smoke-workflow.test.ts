@@ -1735,7 +1735,14 @@ process.stdin.on("end", () => {
     expect(releaseBetaWorkflow).toContain("RELEASE_TARGET: mac_arm64");
     expect(releaseBetaWorkflow).toContain("RELEASE_TARGET: win_x64");
     expect(releaseBetaWorkflow).toContain("RELEASE_TARGET: mac_x64");
-    expect(releaseBetaWorkflow).toContain("OD_PACKAGED_E2E_MAC_UPDATE_FIXTURE: ${{ inputs.mac_arm64_smoke_mode == 'full' && inputs.mac_arm64_update_metadata_url == '' && inputs.mac_arm64_update_target_version == '' && 'tools-serve' || '' }}");
+    const betaMacArm64Job = sectionBetween(releaseBetaWorkflow, "  build_mac_arm64:", "  build_mac_x64:");
+    expect(betaMacArm64Job).toContain("RELEASE_SHELL_SMOKE_MATRIX: mac-full-v1");
+    expect(betaMacArm64Job).toContain("steps.mac_arm64_shell_resolution.outputs.smoke_proof != 'hit'");
+    expect(betaMacArm64Job).toContain("OD_PACKAGED_E2E_MAC_SMOKE_LANES: ${{ inputs.mac_arm64_smoke_mode == 'full' && steps.mac_arm64_shell_resolution.outputs.smoke_proof == 'hit' && 'standalone,migration' || '' }}");
+    expect(betaMacArm64Job).toContain("OD_PACKAGED_E2E_SHELL_SMOKE_PROOF: ${{ steps.mac_arm64_shell_resolution.outputs.smoke_proof }}");
+    expect(betaMacArm64Job).toContain("Register mac_arm64 Electron Shell full-smoke proof");
+    expect(betaMacArm64Job).toContain("run: pnpm exec tools-release register-shell-smoke");
+    expect(betaMacArm64Job).toContain("RELEASE_SHELL_SMOKE_SUMMARY_PATH: ${{ runner.temp }}/release-report/mac_arm64/summary.json");
     const betaWinJob = sectionBetween(releaseBetaWorkflow, "  build_win_x64:", "  publish:");
     expect(betaWinJob).not.toContain("tools\\release\\scripts\\build-platform.ps1");
     expect(betaWinJob).toContain("uses: actions/cache/restore@v5");

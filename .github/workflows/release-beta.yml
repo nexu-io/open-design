@@ -557,6 +557,7 @@ jobs:
           RELEASE_CHANNEL: beta
           RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
           RELEASE_SHELL_BUILD_JSON_PATH: ${{ runner.temp }}/release-build/mac_arm64/build.json
+          RELEASE_SHELL_SMOKE_MATRIX: mac-full-v1
           RELEASE_SHELL_PLAN_JSON_PATH: ${{ runner.temp }}/release-build/mac_arm64/shell-plan.json
           RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
           RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
@@ -807,7 +808,7 @@ jobs:
 
       - name: Build beta mac_arm64 update fixture
         id: mac_arm64_update_fixture
-        if: ${{ inputs.mac_arm64_smoke_mode == 'full' && inputs.mac_arm64_update_metadata_url == '' && inputs.mac_arm64_update_target_version == '' }}
+        if: ${{ inputs.mac_arm64_smoke_mode == 'full' && steps.mac_arm64_shell_resolution.outputs.smoke_proof != 'hit' && inputs.mac_arm64_update_metadata_url == '' && inputs.mac_arm64_update_target_version == '' }}
         run: |
           set -euo pipefail
           version="${{ needs.metadata.outputs.beta_version }}"
@@ -891,14 +892,32 @@ jobs:
           OD_PACKAGED_E2E_MAC_LEGACY_DMG_PATH: ${{ steps.mac_arm64_legacy_fixture.outputs.dmg_path }}
           OD_PACKAGED_E2E_MAC_LEGACY_VERSION: ${{ steps.mac_arm64_legacy_fixture.outputs.version }}
           OD_PACKAGED_E2E_MAC_MIN_SHELL_VERSION: ${{ env.CLOSURE_MIN_SHELL_VERSION }}
+          OD_PACKAGED_E2E_MAC_SMOKE_LANES: ${{ inputs.mac_arm64_smoke_mode == 'full' && steps.mac_arm64_shell_resolution.outputs.smoke_proof == 'hit' && 'standalone,migration' || '' }}
           OD_PACKAGED_E2E_MAC_SMOKE_PROFILE: ${{ inputs.mac_arm64_smoke_mode }}
           OD_PACKAGED_E2E_NAMESPACE: release-beta
           OD_PACKAGED_E2E_RELEASE_CHANNEL: beta
           OD_PACKAGED_E2E_RELEASE_VERSION: ${{ needs.metadata.outputs.beta_version }}
-          OD_PACKAGED_E2E_SHELL_VERSION: ${{ steps.mac_arm64_shell_resolution.outputs.shell_version }}
+          OD_PACKAGED_E2E_SHELL_SMOKE_PROOF: ${{ steps.mac_arm64_shell_resolution.outputs.smoke_proof }}
+          OD_PACKAGED_E2E_SHELL_VERSION: ${{ steps.mac_arm64_shell_resolution.outputs.shell_version != '' && steps.mac_arm64_shell_resolution.outputs.shell_version || needs.metadata.outputs.shell_version }}
           OD_PACKAGED_E2E_REPORT_DIR: ${{ runner.temp }}/release-report/mac_arm64
           OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
         run: pnpm exec tsx scripts/release-smoke.ts mac specs/mac.spec.ts
+
+      - name: Register mac_arm64 Electron Shell full-smoke proof
+        if: ${{ inputs.mac_arm64_smoke_mode == 'full' && steps.mac_arm64_shell_resolution.outputs.smoke_proof != 'hit' && inputs.mac_arm64_update_metadata_url == '' && inputs.mac_arm64_update_target_version == '' }}
+        env:
+          RELEASE_CHANNEL: beta
+          RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          RELEASE_SHELL_BUILD_JSON_PATH: ${{ runner.temp }}/release-build/mac_arm64/build.json
+          RELEASE_SHELL_PLAN_JSON_PATH: ${{ runner.temp }}/release-build/mac_arm64/shell-plan.json
+          RELEASE_SHELL_SMOKE_MATRIX: mac-full-v1
+          RELEASE_SHELL_SMOKE_SUMMARY_PATH: ${{ runner.temp }}/release-report/mac_arm64/summary.json
+          RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
+          RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
+          RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
+          RELEASE_STORAGE_REGION: auto
+          RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
+        run: pnpm exec tools-release register-shell-smoke
 
       - name: Write mac_arm64 release report
         if: ${{ always() }}

@@ -10,6 +10,12 @@ import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 
 import { createPackagedSmokeReport } from '@/vitest/packaged-report';
 import {
+  hasPackagedSmokeLane,
+  MAC_PACKAGED_SMOKE_SCENARIOS,
+  resolvePackagedSmokeLanes,
+} from '@/vitest/packaged-smoke-plan';
+import { resolvePackagedSmokeProfile } from '@/vitest/packaged-smoke-profile';
+import {
   assertPackagedPtySmokeResult,
   packagedPtySmokeExpression,
 } from '@/vitest/packaged-pty-smoke';
@@ -39,7 +45,11 @@ const shellVersion = process.env.OD_PACKAGED_E2E_SHELL_VERSION;
 const updateScenario = resolvePackagedUpdateScenario({ releaseChannel, releaseVersion, shellVersion });
 const pnpmCommand = process.env.OD_E2E_PNPM_COMMAND ?? 'pnpm';
 const screenshotPath = join(toolsPackDir, 'screenshots', `${namespace}.png`);
-const smokeProfile = process.env.OD_PACKAGED_E2E_MAC_SMOKE_PROFILE ?? 'core';
+const smokeProfile = resolvePackagedSmokeProfile(process.env.OD_PACKAGED_E2E_MAC_SMOKE_PROFILE);
+const smokeLanes = resolvePackagedSmokeLanes(
+  smokeProfile,
+  process.env.OD_PACKAGED_E2E_MAC_SMOKE_LANES,
+);
 const verifyCoreOnly = smokeProfile === 'core';
 const updateMetadataUrl = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_MAC_UPDATE_METADATA_URL);
 const updateVersion = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_MAC_UPDATE_VERSION);
@@ -317,11 +327,17 @@ type PackagedOnboardingEvalValue = {
 };
 
 const shouldRunPackagedMacSmoke = process.platform === 'darwin' && process.env.OD_PACKAGED_E2E_MAC === '1';
-const macDescribe = shouldRunPackagedMacSmoke ? describe : describe.skip;
-const macClosureDescribe = shouldRunPackagedMacSmoke && closureBuildJsonPath != null
+const macShellDescribe = shouldRunPackagedMacSmoke && hasPackagedSmokeLane(smokeLanes, 'shell')
   ? describe
   : describe.skip;
-const macLegacyMigrationDescribe = shouldRunPackagedMacSmoke && !verifyCoreOnly
+const macClosureDescribe = shouldRunPackagedMacSmoke
+  && hasPackagedSmokeLane(smokeLanes, 'standalone')
+  && closureBuildJsonPath != null
+  ? describe
+  : describe.skip;
+const macLegacyMigrationDescribe = shouldRunPackagedMacSmoke
+  && hasPackagedSmokeLane(smokeLanes, 'migration')
+  && !verifyCoreOnly
   ? describe
   : describe.skip;
 const shouldRunPackagedMacOnboardingSmoke =
@@ -330,11 +346,11 @@ const macOnboardingDescribe = shouldRunPackagedMacOnboardingSmoke ? describe : d
 const shouldRunDesktopMacSmoke = process.platform === 'darwin' && process.env.OD_DESKTOP_SMOKE === '1';
 const desktopMacDescribe = shouldRunDesktopMacSmoke ? describe : describe.skip;
 
-macDescribe('packaged mac runtime smoke', () => {
+macShellDescribe('packaged mac Shell runtime smoke', () => {
   let installedAppPath: string | null = null;
   let started = false;
 
-  test('installs, starts, inspects, stops, and uninstalls the DMG-installed mac artifact', async () => {
+  test(MAC_PACKAGED_SMOKE_SCENARIOS.shellLifecycle.title, async () => {
     const report = await createPackagedSmokeReport('mac');
     const updateEnv = captureUpdateEnv();
     let payloadFixture: ToolsServeUpdaterFixture | null = null;
@@ -759,7 +775,7 @@ macDescribe('packaged mac runtime smoke', () => {
   // the next cold start's first scheduler tick — install, quit, and relaunch —
   // without any user-facing updater action.
   const silentUpdateTest = !verifyCoreOnly && updateFixture === 'tools-serve' ? test : test.skip;
-  silentUpdateTest('applies a downloaded payload silently on the next cold start', async () => {
+  silentUpdateTest(MAC_PACKAGED_SMOKE_SCENARIOS.shellSilentUpdate.title, async () => {
     const updateEnv = captureUpdateEnv();
     let payloadFixtureLocal: ToolsServeUpdaterFixture | null = null;
     let cleanupStarted = false;
@@ -861,7 +877,7 @@ macDescribe('packaged mac runtime smoke', () => {
   // the broken payload forever. A follow-up update with a healthy payload
   // then self-heals to the target version.
   const rollbackTest = !verifyCoreOnly && updateFixture === 'tools-serve' ? test : test.skip;
-  rollbackTest('rolls back a crashing payload and self-heals on the next good update', async () => {
+  rollbackTest(MAC_PACKAGED_SMOKE_SCENARIOS.shellRollback.title, async () => {
     const updateEnv = captureUpdateEnv();
     let corruptFixture: ToolsServeUpdaterFixture | null = null;
     let goodFixture: ToolsServeUpdaterFixture | null = null;
@@ -1013,7 +1029,7 @@ macDescribe('packaged mac runtime smoke', () => {
 });
 
 macClosureDescribe('packaged mac Standalone Closure release acceptance', () => {
-  test('[P0] attaches a release Closure across cold start and reinstall, then fails a damaged successor closed', async () => {
+  test(MAC_PACKAGED_SMOKE_SCENARIOS.standaloneClosure.title, async () => {
     const installationRoot = join(toolsPackDir, 'runtime', 'mac');
     let installed = false;
     let started = false;
@@ -1090,7 +1106,7 @@ macClosureDescribe('packaged mac Standalone Closure release acceptance', () => {
 });
 
 macLegacyMigrationDescribe('packaged mac historical outer migration acceptance', () => {
-  test('[P0] routes the last packaged beta through the installer and preserves product data in the new architecture', async () => {
+  test(MAC_PACKAGED_SMOKE_SCENARIOS.legacyMigration.title, async () => {
     const report = await createPackagedSmokeReport('mac');
     const updateEnv = captureUpdateEnv();
     const legacyFixturePath = requireMigrationInput('OD_PACKAGED_E2E_MAC_LEGACY_DMG_PATH', legacyDmgPath);

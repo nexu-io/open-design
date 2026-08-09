@@ -59,6 +59,13 @@ cli
   });
 
 cli
+  .command("register-shell-smoke", "Register an immutable full-smoke proof for one Shell build")
+  .action(async () => {
+    const { registerShellSmokeProof } = await import("./storage/shell-build.ts");
+    await registerShellSmokeProof();
+  });
+
+cli
   .command("publish-dogfood", "Upload unpublished build artifacts to the dogfood prefix for manual distribution")
   .action(async () => {
     await import("./storage/publish-dogfood.ts");
