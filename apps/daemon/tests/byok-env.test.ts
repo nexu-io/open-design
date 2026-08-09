@@ -6,6 +6,7 @@ import {
   envByokDefaultForProtocol,
   readEnvByokDefault,
   resolveProxyProviderFields,
+  scopeEnvByokForAgent,
 } from '../src/byok-env.js';
 import { startServer } from '../src/server.js';
 
@@ -157,6 +158,71 @@ describe('resolveProxyProviderFields (the atomicity contract)', () => {
   });
 });
 
+describe('scopeEnvByokForAgent (the BYOK-only boundary)', () => {
+  const env = withEnv({
+    OD_BYOK_PROTOCOL: 'openai',
+    OD_BYOK_BASE_URL: 'https://host.example.com/v1',
+    OD_BYOK_API_KEY: 'sk-host-managed-secret',
+    OD_BYOK_MODEL: 'host-model',
+  });
+
+  it('applies the env default to a byok-opencode run with no browser provider', () => {
+    const out = scopeEnvByokForAgent({
+      agentId: 'byok-opencode',
+      byokProvider: null,
+      model: null,
+      env,
+    });
+    expect(out.provider).toMatchObject({
+      baseUrl: 'https://host.example.com/v1',
+      apiKey: 'sk-host-managed-secret',
+    });
+    expect(out.model).toBe('host-model');
+  });
+
+  it('never touches an ordinary agent: model and provider pass through untouched', () => {
+    // Given OD_BYOK_* configured on the host
+    // When an ordinary Claude run carries no model and no browser provider
+    const out = scopeEnvByokForAgent({
+      agentId: 'claude',
+      byokProvider: null,
+      model: null,
+      env,
+    });
+
+    // Then nothing is borrowed from the host default
+    expect(out.provider).toBeUndefined();
+    expect(out.model).toBeNull();
+  });
+
+  it('an ordinary agent keeps its own explicit model', () => {
+    const out = scopeEnvByokForAgent({
+      agentId: 'opencode',
+      byokProvider: null,
+      model: 'agent-default-model',
+      env,
+    });
+    expect(out.provider).toBeUndefined();
+    expect(out.model).toBe('agent-default-model');
+  });
+
+  it('the browser-sent provider always wins, even for byok-opencode', () => {
+    const browserProvider = {
+      protocol: 'openai' as const,
+      apiKey: 'sk-browser',
+      baseUrl: 'https://browser.example.com/v1',
+    };
+    const out = scopeEnvByokForAgent({
+      agentId: 'byok-opencode',
+      byokProvider: browserProvider,
+      model: 'browser-model',
+      env,
+    });
+    expect(out.provider).toBe(browserProvider);
+    expect(out.model).toBe('browser-model');
+  });
+});
+
 describe('proxy fallback (integration)', () => {
   let url: string;
   let server: http.Server;
@@ -203,6 +269,46 @@ describe('proxy fallback (integration)', () => {
       body: JSON.stringify({ messages: [{ role: 'user', content: 'hi' }] }),
     });
     expect(res.status).toBe(400);
+  });
+
+  it('an ordinary (non-BYOK) run with OD_BYOK_* set keeps its own path — the env never reroutes it', async () => {
+    // Given the host default is configured
+    process.env.OD_BYOK_PROTOCOL = 'openai';
+    process.env.OD_BYOK_BASE_URL = 'http://127.0.0.1:9';
+    process.env.OD_BYOK_API_KEY = 'sk-host-managed-secret';
+    process.env.OD_BYOK_MODEL = 'host-model';
+
+    // When an ordinary Claude run starts (no browser provider, explicit
+    // model) in the test environment that has no claude binary
+    const res = await fetch(`${url}/api/runs`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        agentId: 'claude',
+        message: 'hello',
+        model: 'claude-sonnet-4-5',
+      }),
+    });
+    expect([200, 202]).toContain(res.status);
+    const { runId } = (await res.json()) as { runId: string };
+
+    // Then the run fails because the BINARY is missing (the ordinary-agent
+    // path), never because of anything BYOK — the env default did not
+    // reroute or re-arm this run
+    let status = '';
+    let errorCode: string | null = null;
+    for (let i = 0; i < 40; i++) {
+      const run = (await (
+        await fetch(`${url}/api/runs/${runId}`)
+      ).json()) as { status: string; errorCode: string | null };
+      status = run.status;
+      errorCode = run.errorCode;
+      if (status === 'failed' || status === 'succeeded') break;
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    expect(status).toBe('failed');
+    expect(['AGENT_UNAVAILABLE', 'AGENT_AUTH_REQUIRED']).toContain(errorCode);
+    expect(errorCode).not.toBe('BYOK_PROVIDER_REQUIRED');
   });
 
   it('rejects a caller-controlled baseUrl paired with a missing key instead of forwarding the host key', async () => {
