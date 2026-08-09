@@ -33,6 +33,8 @@ Smoke one of: **Runway** (OAuth), **Luma / Midjourney / Kling (AceDataCloud)** (
 
 Pass criteria: template appears in picker under the expected category, save succeeds, Connect or token field works, and one agent tool call returns without daemon crash.
 
+Settings → Media also lists **Runway** and **Luma Dream Machine** as planned (`integrated: false`) providers with catalogue model rows — they do not generate yet; use MCP Connect for live runs.
+
 ## Scenario plugins
 
 Apply **Blender to artifact** (`od-blender-to-artifact`) or **Higgsfield media** (`od-higgsfield-media`) from the plugin catalogue and confirm the agent follows the SKILL (MCP-first, then live-artifact wrap).

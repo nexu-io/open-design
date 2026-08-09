@@ -48,6 +48,8 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
   { id: 'google', label: 'Google AI / Vertex', hint: 'Imagen 4 / Veo 3 / Lyria', integrated: false },
   { id: 'kling', label: 'Kuaishou Kling', hint: 'Kling 1.6 / 2.0 video', integrated: false },
   { id: 'midjourney', label: 'Midjourney (proxy)', hint: 'midjourney-v7', integrated: false },
+  { id: 'runway', label: 'Runway', hint: 'Gen-4.5 / Seedance / image (planned adapter)', integrated: false, docsUrl: 'https://docs.dev.runwayml.com' },
+  { id: 'luma', label: 'Luma Dream Machine', hint: 'Ray / Dream Machine video (planned adapter)', integrated: false, docsUrl: 'https://docs.lumalabs.ai' },
   { id: 'minimax', label: 'MiniMax', hint: 'TTS / image-01 / video-01', integrated: true, defaultBaseUrl: 'https://api.minimaxi.chat/v1' },
   { id: 'suno', label: 'Suno', hint: 'Music generation', integrated: false },
   { id: 'udio', label: 'Udio', hint: 'Music generation', integrated: false },
@@ -149,6 +151,8 @@ export const IMAGE_MODELS: MediaModel[] = [
   { id: 'leonardo-anime-pastel', label: 'Anime Pastel Dream', hint: 'Leonardo · anime', provider: 'leonardo', caps: ['t2i'] },
 
   { id: 'midjourney-v7', label: 'midjourney-v7', hint: 'Midjourney · via proxy', provider: 'midjourney', caps: ['t2i'] },
+
+  { id: 'runway-gen-image', label: 'runway-gen-image', hint: 'Runway · planned stills adapter', provider: 'runway', caps: ['t2i', 'i2i'] },
 ];
 
 export const VIDEO_MODELS: MediaModel[] = [
@@ -187,6 +191,9 @@ export const VIDEO_MODELS: MediaModel[] = [
   { id: 'kling-2.1-t2v-fal', label: 'kling-2.1 (fal)', hint: 'Fal · Kling 2.1 Pro text-to-video', provider: 'fal', caps: ['t2v'] },
   { id: 'sora-2', label: 'sora-2', hint: 'Fal · OpenAI Sora 2', provider: 'fal', caps: ['t2v'] },
   { id: 'sora-2-pro', label: 'sora-2-pro', hint: 'Fal · OpenAI Sora 2 Pro', provider: 'fal', caps: ['t2v'] },
+
+  { id: 'runway-gen-4.5', label: 'runway-gen-4.5', hint: 'Runway · planned video adapter', provider: 'runway', caps: ['t2v', 'i2v'] },
+  { id: 'luma-ray-2', label: 'luma-ray-2', hint: 'Luma · planned Dream Machine adapter', provider: 'luma', caps: ['t2v', 'i2v'] },
 
   { id: 'minimax-video-01', label: 'video-01', hint: 'MiniMax · Hailuo', provider: 'minimax', caps: ['t2v', 'i2v'] },
   { id: 'hyperframes-html', label: 'hyperframes-html', hint: 'HyperFrames · local HTML renderer', provider: 'hyperframes', caps: ['t2v'] },
