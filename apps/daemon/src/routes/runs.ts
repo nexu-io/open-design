@@ -1632,9 +1632,10 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       // An existing row bound to a run the daemon STILL has active must not be
       // rebound — two concurrent runs sharing the assistantMessageId would
       // reset each other's generation and corrupt the transcript (nettee). A
-      // runId-less web placeholder, or a run the daemon has already finished
-      // (normal retry), stays rebindable — the message row's own runStatus is
-      // not authoritative for concurrency.
+      // runId-less web placeholder, a run the daemon has already finished
+      // (normal retry), or a same-clientRequestId idempotent retry (the daemon
+      // reuses the original run) stays rebindable — the message row's own
+      // runStatus is not authoritative for concurrency.
       if (
         existingAssistantPin
         && typeof existingAssistantPin.runId === 'string'
@@ -1643,7 +1644,11 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         const daemonRun = design.runs.get(existingAssistantPin.runId);
         const daemonRunActive =
           daemonRun && !TERMINAL_RUN_STATUSES.has(daemonRun.status);
-        if (daemonRunActive) {
+        const idempotentRetry =
+          daemonRun
+          && typeof meta.clientRequestId === 'string'
+          && daemonRun.clientRequestId === meta.clientRequestId;
+        if (daemonRunActive && !idempotentRetry) {
           return sendApiError(
             res,
             409,
@@ -3110,8 +3115,8 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       // An existing row bound to a run the daemon STILL has active must not be
       // rebound — two concurrent runs sharing the assistantMessageId would
       // reset each other's generation and corrupt the transcript (nettee). A
-      // runId-less web placeholder, or a run the daemon has already finished
-      // (normal retry), stays rebindable.
+      // runId-less web placeholder, a finished run (retry), or a
+      // same-clientRequestId idempotent retry stays rebindable.
       if (
         existingAssistantPin
         && typeof existingAssistantPin.runId === 'string'
@@ -3120,7 +3125,11 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         const daemonRun = design.runs.get(existingAssistantPin.runId);
         const daemonRunActive =
           daemonRun && !TERMINAL_RUN_STATUSES.has(daemonRun.status);
-        if (daemonRunActive) {
+        const idempotentRetry =
+          daemonRun
+          && typeof meta.clientRequestId === 'string'
+          && daemonRun.clientRequestId === meta.clientRequestId;
+        if (daemonRunActive && !idempotentRetry) {
           return sendApiError(
             res,
             409,

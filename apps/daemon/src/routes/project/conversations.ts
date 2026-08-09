@@ -346,6 +346,32 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
       stored.runStatus !== undefined &&
       TERMINAL_RUN_STATUSES.has(stored.runStatus) &&
       incomingStatus !== stored.runStatus;
+    // After a same-run resume the stored row is non-terminal, so a terminal
+    // `failed` snapshot may be a stale copy from BEFORE the resume. Accept it
+    // only when the daemon confirms the run genuinely failed (it writes that
+    // via reconcileAssistantMessageOnRunEnd); otherwise discard it so the
+    // resumed run does not relatch the old failure (nettee on #6418).
+    if (
+      incomingStatus === 'failed' &&
+      stored.runStatus !== undefined &&
+      !TERMINAL_RUN_STATUSES.has(stored.runStatus)
+    ) {
+      const daemonRun = stored.runId ? design.runs.get(stored.runId) : null;
+      const daemonConfirmedFailure =
+        daemonRun !== null && daemonRun !== undefined && daemonRun.status === 'failed';
+      if (!daemonConfirmedFailure) {
+        return {
+          ...incoming,
+          runId: stored.runId,
+          runStatus: stored.runStatus,
+          events: stored.events ?? [],
+          content: stored.content ?? '',
+          lastRunEventId: stored.lastRunEventId,
+          startedAt: stored.startedAt,
+          endedAt: stored.endedAt,
+        };
+      }
+    }
     if (!shrinksEvents && !regressesTerminalStatus) {
       // A pinned-but-event-less daemon-backed row can still be hit by a stale
       // pre-run snapshot that omits `runId` (the web persisted the assistant
