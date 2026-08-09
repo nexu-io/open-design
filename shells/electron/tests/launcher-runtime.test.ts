@@ -17,10 +17,15 @@ import {
 } from "../src/launcher-runtime.js";
 import { resolvePackagedNamespacePaths } from "../src/paths.js";
 
-function fakeConfig(root: string, appVersion = "1.2.3-beta.4"): PackagedConfig {
+function fakeConfig(
+  root: string,
+  shellVersion = "1.2.3-beta.4",
+  releaseVersion = shellVersion,
+): PackagedConfig {
   return {
     amrProfile: null,
-    shellVersion: appVersion,
+    releaseVersion,
+    shellVersion,
     daemonCliEntry: null,
     daemonSidecarEntry: null,
     namespace: "release-beta",
@@ -66,6 +71,26 @@ describe("resolvePackagedLauncherRuntime", () => {
         lastSuccessful: { generation: 0, version: "1.2.3-beta.4" },
         namespace: "release-beta",
         schemaVersion: LAUNCHER_SCHEMA_VERSION,
+      });
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("binds launcher lifecycle to the release while preserving reusable Shell identity", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-packaged-launcher-release-binding-"));
+    try {
+      const config = fakeConfig(root, "1.2.3-beta.4", "1.2.3-beta.5");
+      const paths = resolvePackagedNamespacePaths(config);
+
+      const runtime = await resolvePackagedLauncherRuntime(config, paths);
+
+      expect(runtime.source).toBe("current-package");
+      expect(runtime.config.shellVersion).toBe("1.2.3-beta.4");
+      expect(runtime.config.releaseVersion).toBe("1.2.3-beta.5");
+      expect(JSON.parse(await readFile(runtime.launcherPaths.runtimePath, "utf8"))).toMatchObject({
+        active: { generation: 0, version: "1.2.3-beta.5" },
+        lastSuccessful: { generation: 0, version: "1.2.3-beta.5" },
       });
     } finally {
       await rm(root, { force: true, recursive: true });

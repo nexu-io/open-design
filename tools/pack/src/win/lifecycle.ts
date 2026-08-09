@@ -245,6 +245,9 @@ async function pinInstalledPackagedConfigNamespace(
     ...raw,
     namespace: config.namespace,
     namespaceBaseRoot: config.roots.runtime.namespaceBaseRoot,
+    releaseVersion: config.releaseVersion
+      ?? (typeof raw.releaseVersion === "string" ? raw.releaseVersion : undefined)
+      ?? (typeof raw.shellVersion === "string" ? raw.shellVersion : undefined),
   };
   const body = `${JSON.stringify(pinned, null, 2)}\n`;
   await writeFile(installedConfigPath, body, "utf8");

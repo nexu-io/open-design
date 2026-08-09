@@ -474,7 +474,12 @@ describe("writeLaunchPackagedConfig", () => {
   it("injects the tools-pack runtime namespace root without mutating the packaged app config", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-mac-"));
     try {
-      const config = makeConfig(root, { namespace: "release-beta", portable: true });
+      const config = makeConfig(root, {
+        namespace: "release-beta",
+        portable: true,
+        releaseVersion: "0.5.1-beta.3",
+        shellVersion: "0.5.1-beta.2",
+      });
       const appPath = join(root, "Open Design.app");
       const embeddedConfigPath = join(appPath, "Contents", "Resources", "open-design-config.json");
       await mkdir(dirname(embeddedConfigPath), { recursive: true });
@@ -499,6 +504,7 @@ describe("writeLaunchPackagedConfig", () => {
 
       expect(launchConfigPath).toBe(join(config.roots.runtime.namespaceRoot, "runtime", "open-design-config.json"));
       expect(launchConfig).toMatchObject({
+        releaseVersion: "0.5.1-beta.3",
         shellVersion: "0.5.1-beta.2",
         namespace: "release-beta",
         namespaceBaseRoot: config.roots.runtime.namespaceBaseRoot,
@@ -506,6 +512,7 @@ describe("writeLaunchPackagedConfig", () => {
         webOutputMode: "standalone",
       });
       expect(embeddedConfig).not.toHaveProperty("namespaceBaseRoot");
+      expect(embeddedConfig).not.toHaveProperty("releaseVersion");
       expect(embeddedConfig.namespace).toBe("packaged-default");
     } finally {
       await rm(root, { force: true, recursive: true });

@@ -238,7 +238,10 @@ describe("startPackedMacApp", () => {
   it("passes a launch override config path for portable mac starts", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-mac-lifecycle-"));
     try {
-      const config = makeConfig(root);
+      const config = makeConfig(root, {
+        releaseVersion: "1.2.4",
+        shellVersion: "1.2.3",
+      });
       const paths = resolveMacPaths(config);
       const executablePath = join(paths.installedAppPath, "Contents", "MacOS", "Open Design");
       const bundledConfigPath = join(paths.installedAppPath, "Contents", "Resources", "open-design-config.json");
@@ -269,6 +272,7 @@ describe("startPackedMacApp", () => {
         `"namespaceBaseRoot": ${JSON.stringify(config.roots.runtime.namespaceBaseRoot)}`,
       );
       await expect(readFile(launchConfigPath, "utf8")).resolves.toContain('"shellVersion": "1.2.3"');
+      await expect(readFile(launchConfigPath, "utf8")).resolves.toContain('"releaseVersion": "1.2.4"');
     } finally {
       await rm(root, { force: true, recursive: true });
     }

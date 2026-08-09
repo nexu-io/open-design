@@ -105,8 +105,9 @@ async function pathExists(path: string): Promise<boolean> {
   }
 }
 
-function inferLauncherChannel(config: Pick<PackagedConfig, "namespace" | "shellVersion">): LauncherChannel {
-  return releaseChannelFromVersion(config.shellVersion)
+function inferLauncherChannel(config: Pick<PackagedConfig, "namespace" | "releaseVersion" | "shellVersion">): LauncherChannel {
+  return releaseChannelFromVersion(config.releaseVersion)
+    ?? releaseChannelFromVersion(config.shellVersion)
     ?? releaseChannelFromNamespace(config.namespace, "default")
     ?? "stable";
 }
@@ -326,6 +327,7 @@ async function resolvePayloadConfig(
   return {
     config: {
       ...config,
+      releaseVersion: raw.releaseVersion?.trim() || manifest.version,
       shellVersion: raw.shellVersion?.trim() || manifest.version,
       daemonSidecarEntry: await resolveOptionalPayloadEntry(resourcesPath, raw.daemonSidecarEntryRelative),
       nodeCommand,
@@ -340,9 +342,10 @@ async function resolvePayloadConfig(
 }
 
 function initialRuntimeDescriptor(config: PackagedConfig, channel: LauncherChannel): LauncherRuntimeDescriptor {
-  const current = config.shellVersion == null
+  const boundVersion = config.releaseVersion ?? config.shellVersion;
+  const current = boundVersion == null
     ? null
-    : { generation: 0, version: normalizeLauncherVersion(config.shellVersion) };
+    : { generation: 0, version: normalizeLauncherVersion(boundVersion) };
   return {
     active: current,
     channel,
@@ -413,7 +416,8 @@ async function reconcileRuntimeWithBoundPackage(
   launcherPaths: LauncherPaths,
   channel: LauncherChannel,
 ): Promise<LauncherRuntimeDescriptor> {
-  const boundVersion = config.shellVersion == null ? null : normalizeLauncherVersion(config.shellVersion);
+  const configuredVersion = config.releaseVersion ?? config.shellVersion;
+  const boundVersion = configuredVersion == null ? null : normalizeLauncherVersion(configuredVersion);
   if (boundVersion == null) return descriptor;
   const maxPersistedVersion = maxRuntimePointer(descriptor);
   if (maxPersistedVersion != null && compareLauncherVersions(boundVersion, maxPersistedVersion) <= 0) return descriptor;

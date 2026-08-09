@@ -234,7 +234,9 @@ export function selectUpdateCandidate(
       error: createError("no-compatible-artifact", `release metadata does not include an enabled ${platformKey} artifact`),
     };
   }
-  const version = releaseVersionForChannel(metadata, config.channel);
+  const shell = objectField(platform, "shell");
+  const version = (shell == null ? null : stringField(shell, "version"))
+    ?? releaseVersionForChannel(metadata, config.channel);
   if (version == null) {
     return {
       ok: false,

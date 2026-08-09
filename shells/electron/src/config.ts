@@ -30,6 +30,8 @@ export type RawPackagedConfig = {
   namespaceBaseRoot?: string;
   nodeCommandRelative?: string;
   resourceRoot?: string;
+  /** Release binding selected by the launcher; independent from Shell bytes. */
+  releaseVersion?: string;
   shellVersion?: string;
   // Baked by tools/pack from OPEN_DESIGN_TELEMETRY_RELAY_URL and forwarded to
   // the daemon at runtime; Langfuse credentials never ship in packaged config.
@@ -63,6 +65,7 @@ export type PackagedConfig = {
   namespaceBaseRoot: string;
   nodeCommand: string | null;
   resourceRoot: string;
+  releaseVersion: string | null;
   shellVersion: string | null;
   telemetryRelayUrl: string | null;
   updateMetadataUrl: string | null;
@@ -210,6 +213,7 @@ export async function readPackagedConfig(): Promise<PackagedConfig> {
     namespaceBaseRoot,
     nodeCommand,
     resourceRoot,
+    releaseVersion: cleanOptionalString(raw.releaseVersion) ?? cleanOptionalString(raw.shellVersion),
     shellVersion: cleanOptionalString(raw.shellVersion),
     telemetryRelayUrl: cleanOptionalString(raw.telemetryRelayUrl),
     updateMetadataUrl: cleanOptionalString(raw.updateMetadataUrl),

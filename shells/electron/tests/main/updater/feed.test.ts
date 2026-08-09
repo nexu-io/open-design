@@ -7,7 +7,11 @@ import { SIDECAR_SOURCES } from "@open-design/sidecar-proto";
 import { describe, expect, it } from "vitest";
 
 import { resolveDesktopUpdaterConfig } from "../../../src/main/updater/config.js";
-import { compareVersions, resolveInstalledOuterVersion } from "../../../src/main/updater/feed.js";
+import {
+  compareVersions,
+  resolveInstalledOuterVersion,
+  selectUpdateCandidate,
+} from "../../../src/main/updater/feed.js";
 
 function makeRoot(): string {
   return mkdtempSync(join(tmpdir(), "od-updater-feed-test-"));
@@ -64,5 +68,36 @@ describe("desktop updater feed", () => {
     expect(compareVersions("1.0.0-prerelease.10", "1.0.0-prerelease.2")).toBe(1);
     expect(compareVersions("1.0.0", "1.0.0-beta.9")).toBe(1);
     expect(compareVersions("1.0.0-beta.1", "1.0.0")).toBe(-1);
+  });
+
+  it("selects the independently versioned Shell artifact instead of the release version", () => {
+    const config = resolveDesktopUpdaterConfig({
+      arch: "arm64",
+      currentVersion: "0.19.0-beta.4",
+      env: {},
+      platform: "darwin",
+      source: SIDECAR_SOURCES.PACKAGED,
+    });
+    const result = selectUpdateCandidate({
+      channel: "beta",
+      platforms: {
+        mac: {
+          arch: "arm64",
+          artifacts: {
+            payload: {
+              digest: `sha256:${"a".repeat(64)}`,
+              name: "electron-shell.zip",
+              url: "https://releases.open-design.test/electron-shell.zip",
+            },
+          },
+          enabled: true,
+          shell: { type: "electron", version: "0.19.0-beta.4" },
+        },
+      },
+      releaseVersion: "0.19.0-beta.6",
+    }, config, true);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.candidate.version).toBe("0.19.0-beta.4");
   });
 });
