@@ -74,6 +74,38 @@ export function envByokDefaultForProtocol(
 }
 
 /**
+ * Scope the env default to the BYOK runtime. The fallback exists so a
+ * server deployment can pre-wire BYOK OpenCode runs; it must NEVER touch
+ * an ordinary agent's wiring — a Claude/Codex/opencode run that omits
+ * `model` keeps its own configured/default model, and its memory
+ * extraction keeps describing the chat's real provider. Reads the env
+ * only when the run is byok-opencode AND the browser sent no provider.
+ */
+export function scopeEnvByokForAgent(params: {
+  agentId: string | null | undefined;
+  byokProvider: ByokChatProviderConfig | null | undefined;
+  model: unknown;
+  env?: NodeJS.ProcessEnv;
+}): {
+  provider: ByokChatProviderConfig | undefined;
+  model: unknown;
+} {
+  const envByok =
+    params.byokProvider || params.agentId !== 'byok-opencode'
+      ? null
+      : readEnvByokDefault(params.env);
+  return {
+    provider: params.byokProvider ?? envByok?.provider ?? undefined,
+    model:
+      params.byokProvider || !envByok
+        ? params.model
+        : typeof params.model === 'string' && params.model.trim()
+          ? params.model
+          : envByok.model,
+  };
+}
+
+/**
  * Resolve the proxy provider fields ATOMICALLY: the request's own tuple
  * wins when complete; the host-managed env tuple applies only when the
  * request carries NO provider fields at all; a partial request (e.g. a

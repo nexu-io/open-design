@@ -1031,7 +1031,7 @@ import {
 } from './http/local-daemon-request.js';
 import { renderOAuthResultPage } from './http/oauth-result-page.js';
 import { bearerTokenFromRequest, createToolRequestAuth } from './http/tool-request-auth.js';
-import { readEnvByokDefault } from './byok-env.js';
+import { scopeEnvByokForAgent } from './byok-env.js';
 
 /** @typedef {import('@open-design/contracts').ApiErrorCode} ApiErrorCode */
 /** @typedef {import('@open-design/contracts').ApiError} ApiError */
@@ -9694,19 +9694,7 @@ export async function startServer({
       byokMediaDefaults,
     } = chatBody;
     lifecycle.mark('prompt_build_start');
-    // Host-managed default provider (OD_BYOK_*): server deployments where
-    // the host holds the inference key fill it here when the browser sent
-    // none. The key never leaves the daemon (execution-only, below) and is
-    // NOT written into the persisted run body — a retry re-reads the env,
-    // so a host-side rotation reaches retries too.
-    const envByok = byokProvider ? null : readEnvByokDefault();
-    const effectiveByokProvider = byokProvider ?? envByok?.provider ?? undefined;
-    const effectiveByokModel =
-      byokProvider || !envByok
-        ? model
-        : typeof model === 'string' && model.trim()
-          ? model
-          : envByok.model;
+
     if (typeof projectId === 'string' && projectId) run.projectId = projectId;
     if (typeof conversationId === 'string' && conversationId)
       run.conversationId = conversationId;
@@ -9764,10 +9752,21 @@ export async function startServer({
       );
     if (!def.bin)
       return design.runs.fail(run, 'AGENT_UNAVAILABLE', 'agent has no binary');
+    // Host-managed default provider (OD_BYOK_*), scoped to the BYOK
+    // runtime: server deployments where the host holds the inference key.
+    // It engages ONLY for byok-opencode runs with no browser-sent provider
+    // — an ordinary agent's model/provider wiring is untouched, and the
+    // key never leaves the daemon (nor the persisted run body: a retry
+    // re-reads the env, so a host-side rotation reaches retries).
+    const byokScoped = scopeEnvByokForAgent({
+      agentId: def.id,
+      byokProvider: byokProvider as ByokChatProviderConfig | null | undefined,
+      model,
+    });
     const byokOpenCodeProvider = def.id === 'byok-opencode'
       ? buildOpenCodeByokProviderConfig(
-          effectiveByokProvider,
-          typeof effectiveByokModel === 'string' ? effectiveByokModel : null,
+          byokScoped.provider,
+          typeof byokScoped.model === 'string' ? byokScoped.model : null,
         )
       : null;
     if (def.id === 'byok-opencode' && !byokOpenCodeProvider) {
@@ -9779,7 +9778,7 @@ export async function startServer({
     }
     const requestedRuntimeModel = def.id === 'byok-opencode'
       ? byokOpenCodeProvider?.modelId ?? null
-      : effectiveByokModel;
+      : model;
     // Validate the checked-in runtime timeout hints immediately
     // after the runtime def is selected and before any side-effectful
     // setup (auto-memory extract, `.mcp.json` write/unlink,
@@ -12457,14 +12456,14 @@ export async function startServer({
         apiVersion?: string;
         model?: string;
         requiresApiKey?: boolean;
-      } | null = effectiveByokProvider
+      } | null = byokScoped.provider
         ? {
-            provider: effectiveByokProvider.protocol,
-            apiKey: effectiveByokProvider.apiKey,
-            baseUrl: effectiveByokProvider.baseUrl,
-            apiVersion: effectiveByokProvider.apiVersion,
+            provider: byokScoped.provider.protocol,
+            apiKey: byokScoped.provider.apiKey,
+            baseUrl: byokScoped.provider.baseUrl,
+            apiVersion: byokScoped.provider.apiVersion,
             model: typeof safeModel === 'string' ? safeModel : undefined,
-            requiresApiKey: effectiveByokProvider.requiresApiKey,
+            requiresApiKey: byokScoped.provider.requiresApiKey,
           }
         : null;
       const memoryOptions = {
