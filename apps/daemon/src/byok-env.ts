@@ -15,7 +15,7 @@ import type {
  * With OD_BYOK_BASE_URL + OD_BYOK_MODEL set (and OD_BYOK_API_KEY when the
  * endpoint needs one), the daemon fills the provider when a request carries
  * none. The key never leaves the daemon: run execution and the chat proxy
- * use it server-side; the web learns only a tail via GET /api/byok-defaults.
+ * use it server-side, and no endpoint exposes it.
  *
  * Browser-sent config always wins when present — this is a default, not an
  * override.
@@ -74,23 +74,39 @@ export function envByokDefaultForProtocol(
 }
 
 /**
- * What the web may learn about the host-managed provider — enough to badge
- * "managed by host environment" and pre-fill the model, never the key.
+ * Resolve the proxy provider fields ATOMICALLY: the request's own tuple
+ * wins when complete; the host-managed env tuple applies only when the
+ * request carries NO provider fields at all; a partial request (e.g. a
+ * caller-supplied baseUrl with no apiKey) resolves to null so the route
+ * rejects it. Per-field mixing would forward the host key to a
+ * request-controlled upstream — credential exfiltration.
  */
-export function envByokDefaultsView(env: NodeJS.ProcessEnv = process.env): {
-  configured: boolean;
-  protocol?: ByokChatProtocol | undefined;
-  baseUrl?: string | undefined;
-  model?: string | undefined;
-  apiKeyTail?: string | undefined;
-} {
-  const d = readEnvByokDefault(env);
-  if (!d) return { configured: false };
+export function resolveProxyProviderFields(
+  body: {
+    baseUrl?: unknown;
+    apiKey?: unknown;
+    model?: unknown;
+    [key: string]: unknown;
+  },
+  envDefault: EnvByokDefault | null,
+): { baseUrl: string; apiKey: string; model: string } | null {
+  const pick = (v: unknown): string =>
+    typeof v === 'string' && v.trim() ? v.trim() : '';
+  const bUrl = pick(body.baseUrl);
+  const bKey = pick(body.apiKey);
+  const bModel = pick(body.model);
+  const anyProvided = Boolean(bUrl || bKey || bModel);
+  if (anyProvided) {
+    return bUrl && bKey && bModel
+      ? { baseUrl: bUrl, apiKey: bKey, model: bModel }
+      : null;
+  }
+  if (!envDefault) return null;
+  const envBaseUrl = envDefault.provider.baseUrl;
+  if (!envBaseUrl) return null;
   return {
-    configured: true,
-    protocol: d.provider.protocol,
-    baseUrl: d.provider.baseUrl,
-    model: d.model,
-    ...(d.provider.apiKey ? { apiKeyTail: d.provider.apiKey.slice(-4) } : {}),
+    baseUrl: envBaseUrl,
+    apiKey: envDefault.provider.apiKey,
+    model: envDefault.model,
   };
 }
