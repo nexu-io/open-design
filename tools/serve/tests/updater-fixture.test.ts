@@ -90,7 +90,7 @@ describe("updater fixture server", () => {
         size: 13,
         url: archiveUrl,
       },
-      compatibility: { shell: { minVersion: version } },
+      compatibility: { shell: { electron: { version: { min: version } } } },
       identity: {
         channel: "beta",
         digest,

@@ -237,6 +237,7 @@ export async function runPackagedStandalone(
       {
         async invoke(command) {
           return {
+            attachmentId: command.attachmentId,
             handoff: command.handoff,
             outcome: "unsupported",
             requestId: command.requestId,

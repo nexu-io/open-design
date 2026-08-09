@@ -5,28 +5,8 @@ import { dirname, join, relative } from "node:path";
 import { hashJson, hashPath, ToolPackCache } from "./cache.js";
 import type { ToolPackConfig } from "./config.js";
 import { hashPackageSourcePath } from "./package-source-hash.js";
+import { toolPackShellDefinition } from "./shells.js";
 import { readRuntimeShellVersion, versionFamilyForShellVersion } from "./versions.js";
-
-/** The dependency closure selected by `pnpm --filter @open-design/shell-electron...`. */
-const SHELL_BUILD_PACKAGES = [
-  { directory: "packages/release", name: "@open-design/release" },
-  { directory: "packages/contracts", name: "@open-design/contracts" },
-  { directory: "packages/sidecar-proto", name: "@open-design/sidecar-proto" },
-  { directory: "packages/launcher-proto", name: "@open-design/launcher-proto" },
-  { directory: "packages/sidecar", name: "@open-design/sidecar" },
-  { directory: "packages/platform", name: "@open-design/platform" },
-  { directory: "packages/download", name: "@open-design/download" },
-  { directory: "packages/host", name: "@open-design/host" },
-  { directory: "packages/diagnostics", name: "@open-design/diagnostics" },
-  { directory: "packages/standalone-runtime", name: "@open-design/standalone-runtime" },
-  { directory: "packages/standalone-proto", name: "@open-design/standalone-proto" },
-  { directory: "packages/closure-proto", name: "@open-design/closure-proto" },
-  { directory: "packages/closure-store", name: "@open-design/closure-store" },
-  { directory: "packages/closure-update", name: "@open-design/closure-update" },
-  { directory: "shells/electron", name: "@open-design/shell-electron" },
-] as const;
-
-const SHELL_BUILD_COMMAND = ["--filter", "@open-design/shell-electron...", "build"] as const;
 
 type WorkspaceBuildMetadata = {
   builtAt: string;
@@ -66,25 +46,25 @@ async function readPackageManager(workspaceRoot: string): Promise<unknown> {
 }
 
 export async function resolveShellSourceDigest(config: ToolPackConfig): Promise<`sha256:${string}`> {
+  const definition = toolPackShellDefinition(config.shell);
   const packageHashes: Record<string, string> = {};
-  for (const packageInfo of SHELL_BUILD_PACKAGES) {
+  for (const packageInfo of definition.buildPackages) {
     packageHashes[packageInfo.name] = await hashPackageSourcePath(join(config.workspaceRoot, packageInfo.directory));
   }
+  packageHashes["@open-design/tools-pack"] = await hashPackageSourcePath(join(config.workspaceRoot, "tools/pack"));
   return `sha256:${hashJson({
-    buildCommand: SHELL_BUILD_COMMAND,
-    node: `${config.platform}.workspace-build`,
+    buildCommand: definition.buildCommand,
     nodeVersion: process.version,
     packageHashes,
     packageManager: await readPackageManager(config.workspaceRoot),
-    platform: config.platform,
     pnpmLock: await hashPath(join(config.workspaceRoot, "pnpm-lock.yaml")),
-    schemaVersion: 11,
+    schemaVersion: 12,
     shell: config.shell,
   })}`;
 }
 
 function workspaceBuildOutputFiles(): string[] {
-  return SHELL_BUILD_PACKAGES.flatMap((entry) => entry.directory === "shells/electron"
+  return toolPackShellDefinition("electron").buildPackages.flatMap((entry) => entry.directory === "shells/electron"
     ? [
         `${entry.directory}/dist/index.mjs`,
         `${entry.directory}/dist/index.d.ts`,
@@ -98,7 +78,7 @@ function workspaceBuildOutputFiles(): string[] {
 
 function workspaceBuildArtifacts(): WorkspaceBuildArtifact[] {
   const outputFiles = workspaceBuildOutputFiles();
-  return SHELL_BUILD_PACKAGES.map((entry) => {
+  return toolPackShellDefinition("electron").buildPackages.map((entry) => {
     const workspacePath = `${entry.directory}/dist`;
     return {
       cachePath: join("outputs", ...workspacePath.split("/")),

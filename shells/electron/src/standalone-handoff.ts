@@ -10,12 +10,14 @@ import {
   type StandaloneHandoff,
   type StandaloneHandoffRequest,
   type StandaloneHandoffScope,
+  type StandaloneAttachmentDescriptor,
   type StandalonePaths,
   type StandaloneRuntimeDescriptor,
   type StandaloneShellCapabilityPort,
 } from "@open-design/standalone-proto";
 
 export type ElectronStandaloneBinding = Readonly<{
+  attachment: StandaloneAttachmentDescriptor;
   bootloaderPath: string;
   descriptor: StandaloneRuntimeDescriptor;
   paths: StandalonePaths;
@@ -57,6 +59,7 @@ function requestFromBinding(
     );
   }
   return validateStandaloneHandoffRequest({
+    attachment: binding.attachment,
     capabilities,
     handoff: createStandaloneHandoffEnvelope({
       descriptor: binding.descriptor,
@@ -68,6 +71,7 @@ function requestFromBinding(
 
 function requestKey(bootloaderPath: string, request: StandaloneHandoffRequest): string {
   return JSON.stringify({
+    attachment: request.attachment,
     bootloaderPath,
     descriptorDigest: request.handoff.descriptorDigest,
     paths: request.paths,

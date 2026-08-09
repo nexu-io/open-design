@@ -81,11 +81,6 @@ describe("packaged identity markers", () => {
       const handoff = createStandaloneHandoffEnvelope({
         descriptor: {
           release: { version: "0.18.0-beta.4" },
-          shell: {
-            digest: `sha256:${"a".repeat(64)}`,
-            type: "electron",
-            version: "0.18.0-beta.4",
-          },
           standalone: {
             digest: `sha256:${"b".repeat(64)}`,
             protocolVersion: STANDALONE_PROTOCOL_VERSION,
@@ -106,7 +101,6 @@ describe("packaged identity markers", () => {
         runtime: {
           descriptor: {
             release: { version: "0.18.0-beta.4" },
-            shell: { type: "electron", version: "0.18.0-beta.4" },
             standalone: { version: "0.18.0-beta.4" },
           },
           endpoints: {

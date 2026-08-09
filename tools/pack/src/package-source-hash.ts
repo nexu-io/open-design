@@ -27,7 +27,18 @@ async function readNormalizedFile(filePath: string): Promise<Buffer | string> {
 
 export async function hashPackageSourcePath(path: string): Promise<string> {
   const hash = createHash("sha256");
-  const ignoredDirectoryNames = new Set([".next", ".od", "dist", "node_modules", "out"]);
+  const ignoredDirectoryNames = new Set([
+    ".next",
+    ".od",
+    ".tmp",
+    "__tests__",
+    "coverage",
+    "dist",
+    "node_modules",
+    "out",
+    "test",
+    "tests",
+  ]);
 
   async function visit(current: string, root: string): Promise<void> {
     const metadata = await lstat(current);

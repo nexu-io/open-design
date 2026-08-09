@@ -259,19 +259,33 @@ export function compareClosureShellVersions(left: string, right: string): number
   return 0;
 }
 
+export function resolveClosureShellMinimumVersion(
+  manifest: ClosureCandidateManifest,
+  shellType: string,
+): string | null {
+  return manifest.compatibility.shell[shellType]?.version.min ?? null;
+}
+
 export function decideClosureUpdate(input: {
   candidate: ClosureReleaseCandidate;
   descriptor: ClosureBindingDescriptor;
+  shellType: string;
   shellVersion: string;
 }): ClosureUpdateDecision {
   const { candidate } = input;
   if (candidate.manifest.identity.channel !== input.descriptor.channel) {
     throw new ClosureUpdateError("Closure candidate channel does not match the local Store");
   }
+  const minimumShellVersion = resolveClosureShellMinimumVersion(
+    candidate.manifest,
+    input.shellType,
+  );
   if (
+    minimumShellVersion == null
+    ||
     compareClosureShellVersions(
       input.shellVersion,
-      candidate.manifest.compatibility.shell.minVersion,
+      minimumShellVersion,
     ) < 0
   ) {
     return { action: "retain", candidate, reason: "shell-incompatible" };
@@ -523,6 +537,7 @@ export async function applyClosureUpdate(input: {
   candidate: ClosureReleaseCandidate;
   fetch?: typeof globalThis.fetch;
   paths: ClosureStorePaths;
+  shellType: string;
   shellVersion: string;
 }): Promise<ApplyClosureUpdateResult> {
   const lock = await acquireUpdateLock(input.paths);
@@ -534,6 +549,7 @@ export async function applyClosureUpdate(input: {
     const decision = decideClosureUpdate({
       candidate: input.candidate,
       descriptor,
+      shellType: input.shellType,
       shellVersion: input.shellVersion,
     });
     if (decision.action === "retain") {
@@ -550,6 +566,7 @@ export async function applyClosureUpdate(input: {
     const currentDecision = decideClosureUpdate({
       candidate: input.candidate,
       descriptor: currentDescriptor,
+      shellType: input.shellType,
       shellVersion: input.shellVersion,
     });
     if (currentDecision.action === "retain") {
@@ -578,6 +595,7 @@ export async function updateClosureFromRelease(input: {
   paths: ClosureStorePaths;
   platform: string;
   releaseTarget: string;
+  shellType: string;
   shellVersion: string;
 }): Promise<ApplyClosureUpdateResult> {
   const candidate = await discoverClosureReleaseCandidate(input);
@@ -585,6 +603,7 @@ export async function updateClosureFromRelease(input: {
     candidate,
     ...(input.fetch == null ? {} : { fetch: input.fetch }),
     paths: input.paths,
+    shellType: input.shellType,
     shellVersion: input.shellVersion,
   });
 }

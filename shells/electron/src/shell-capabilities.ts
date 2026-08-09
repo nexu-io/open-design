@@ -52,6 +52,7 @@ export function createElectronShellCapabilityPort(options: {
             break;
           default:
             return {
+              attachmentId: validatedRequest.attachmentId,
               handoff: validatedRequest.handoff,
               outcome: "unsupported",
               requestId: validatedRequest.requestId,
@@ -63,18 +64,21 @@ export function createElectronShellCapabilityPort(options: {
           output,
         );
         return validateStandaloneShellCapabilityResult({
+          attachmentId: validatedRequest.attachmentId,
           handoff: validatedRequest.handoff,
           outcome: "completed",
           output: validatedOutput,
           requestId: validatedRequest.requestId,
           schemaVersion: validatedRequest.schemaVersion,
         }, {
+          attachmentId: validatedRequest.attachmentId,
           capability: validatedRequest.capability,
           handoff: validatedRequest.handoff,
           requestId: validatedRequest.requestId,
         });
       } catch {
         return {
+          attachmentId: validatedRequest.attachmentId,
           error: { code: "shell-capability-failed" },
           handoff: validatedRequest.handoff,
           outcome: "failed",

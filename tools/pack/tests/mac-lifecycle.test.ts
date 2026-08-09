@@ -306,7 +306,6 @@ describe("inspectPackedMacApp", () => {
         handoff: createStandaloneHandoffEnvelope({
           descriptor: {
             release: { version: "0.16.2" },
-            shell: { digest, type: "electron", version: "0.16.2" },
             standalone: { digest, protocolVersion: 1, version: "0.16.2" },
           },
           scope: { channel: "stable", generation: 0, namespace: "local-test" },

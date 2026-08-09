@@ -343,6 +343,7 @@ async function main(): Promise<void> {
     },
     preloadPath: join(app.getAppPath(), "preload.cjs"),
     registerDesktopAuth: createStandaloneDesktopAuthRegistration({
+      attachmentId: selection.binding.attachment.id,
       handoff: status.handoff,
       handle: standalone,
     }),

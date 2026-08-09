@@ -17,6 +17,7 @@ import {
 const capabilityPort: StandaloneShellCapabilityPort = {
   async invoke(request) {
     return {
+      attachmentId: request.attachmentId,
       handoff: request.handoff,
       outcome: "unsupported",
       requestId: request.requestId,
@@ -27,14 +28,17 @@ const capabilityPort: StandaloneShellCapabilityPort = {
 
 function binding(generation = 3): ElectronStandaloneBinding {
   return {
-    bootloaderPath: "/open-design/standalone/bootloader.mjs",
-    descriptor: {
-      release: { version: "0.18.0-beta.4" },
+    attachment: {
+      id: "electron-a",
       shell: {
         digest: `sha256:${"a".repeat(64)}`,
         type: "electron",
         version: "0.18.0-beta.1",
       },
+    },
+    bootloaderPath: "/open-design/standalone/bootloader.mjs",
+    descriptor: {
+      release: { version: "0.18.0-beta.4" },
       standalone: {
         digest: `sha256:${"b".repeat(64)}`,
         protocolVersion: STANDALONE_PROTOCOL_VERSION,
@@ -66,6 +70,7 @@ function runningHandle(request: StandaloneHandoffRequest): StandaloneHandle {
     },
     async invoke(value) {
       return {
+        attachmentId: value.attachmentId,
         handoff: request.handoff,
         outcome: "unsupported",
         requestId: value.requestId,

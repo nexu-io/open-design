@@ -15,11 +15,6 @@ import {
 const handoff = createStandaloneHandoffEnvelope({
   descriptor: {
     release: { version: "0.18.0-beta.4" },
-    shell: {
-      digest: `sha256:${"a".repeat(64)}`,
-      type: "electron",
-      version: "0.18.0-beta.4",
-    },
     standalone: {
       digest: `sha256:${"b".repeat(64)}`,
       protocolVersion: STANDALONE_PROTOCOL_VERSION,
@@ -32,6 +27,7 @@ const handoff = createStandaloneHandoffEnvelope({
 describe("Electron Standalone commands", () => {
   it("registers desktop auth through the generation-bound runtime handle", async () => {
     const invoke = vi.fn<StandaloneHandle["invoke"]>(async (request) => ({
+      attachmentId: request.attachmentId,
       handoff,
       outcome: "completed",
       output: { accepted: true },
@@ -39,6 +35,7 @@ describe("Electron Standalone commands", () => {
       schemaVersion: STANDALONE_HANDOFF_SCHEMA_VERSION,
     }));
     const register = createStandaloneDesktopAuthRegistration({
+      attachmentId: "electron-a",
       handoff,
       handle: { invoke },
       requestId: () => "desktop-auth-1",
@@ -46,6 +43,7 @@ describe("Electron Standalone commands", () => {
 
     await expect(register(Buffer.from("secret"))).resolves.toBe(true);
     expect(invoke).toHaveBeenCalledWith({
+      attachmentId: "electron-a",
       command: OPEN_DESIGN_REGISTER_DESKTOP_AUTH_COMMAND,
       handoff,
       input: { secret: "c2VjcmV0" },
@@ -56,10 +54,12 @@ describe("Electron Standalone commands", () => {
 
   it("keeps unsupported runtime commands fail-closed", async () => {
     const register = createStandaloneDesktopAuthRegistration({
+      attachmentId: "electron-a",
       handoff,
       handle: {
         async invoke(request) {
           return {
+            attachmentId: request.attachmentId,
             handoff,
             outcome: "unsupported",
             requestId: request.requestId,

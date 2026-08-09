@@ -110,7 +110,13 @@ export async function resolveElectronStandaloneBinding(input: Readonly<{
       { cause: error },
     );
   }
-  const minShellVersion = verification.manifest.compatibility.shell.minVersion;
+  const minShellVersion = verification.manifest.compatibility.shell.electron?.version.min;
+  if (minShellVersion == null) {
+    throw new ElectronStandaloneBindingError(
+      "installer-required",
+      "Committed Standalone does not support the Electron Shell",
+    );
+  }
   if (compareStandaloneVersions(input.shellVersion, minShellVersion) < 0) {
     throw new ElectronStandaloneBindingError(
       "installer-required",
@@ -120,17 +126,20 @@ export async function resolveElectronStandaloneBinding(input: Readonly<{
 
   return Object.freeze({
     binding: Object.freeze({
+      attachment: Object.freeze({
+        id: `electron-${input.shellDigest.slice("sha256:".length, "sha256:".length + 16)}`,
+        shell: Object.freeze({
+          digest: input.shellDigest,
+          type: "electron",
+          version: input.shellVersion,
+        }),
+      }),
       bootloaderPath: join(
         verification.paths.payloadRoot,
         verification.manifest.artifact.entryPath,
       ),
       descriptor: Object.freeze({
         release: Object.freeze({ version: releaseVersion }),
-        shell: Object.freeze({
-          digest: input.shellDigest,
-          type: "electron",
-          version: input.shellVersion,
-        }),
         standalone: Object.freeze({
           digest: pointer.digest,
           protocolVersion: STANDALONE_PROTOCOL_VERSION,

@@ -62,7 +62,7 @@ describe('packaged Closure release fixture', () => {
         size: archive.byteLength,
         url: 'https://releases.open-design.test/beta/versions/0.18.0-beta.4/closure.zip',
       },
-      compatibility: { shell: { minVersion: '0.16.2' } },
+      compatibility: { shell: { electron: { version: { min: '0.16.2' } } } },
       identity: {
         channel: 'beta',
         digest: digest(archive),

@@ -325,10 +325,13 @@ env:
   # stable 0.19.0 would incorrectly reject 0.19.0-beta.1.
   CLOSURE_MIN_SHELL_VERSION: 0.19.0-beta.1
   OPEN_DESIGN_TELEMETRY_RELAY_URL: ${{ vars.OPEN_DESIGN_TELEMETRY_RELAY_URL }}
-  POSTHOG_KEY: ${{ inputs.publish && secrets.POSTHOG_KEY || '' }}
-  POSTHOG_HOST: ${{ inputs.publish && vars.POSTHOG_HOST || '' }}
-  POSTHOG_CLI_API_KEY: ${{ inputs.publish && secrets.POSTHOG_CLI_API_KEY || '' }}
-  POSTHOG_CLI_PROJECT_ID: ${{ inputs.publish && vars.POSTHOG_CLI_PROJECT_ID || '' }}
+  # `publish` governs distribution metadata only. Build inputs must remain
+  # identical between publish=false QA and the final publish=true lane so the
+  # verified immutable Shell bytes can be reused without a signing/notary pass.
+  POSTHOG_KEY: ${{ secrets.POSTHOG_KEY }}
+  POSTHOG_HOST: ${{ vars.POSTHOG_HOST }}
+  POSTHOG_CLI_API_KEY: ${{ secrets.POSTHOG_CLI_API_KEY }}
+  POSTHOG_CLI_PROJECT_ID: ${{ vars.POSTHOG_CLI_PROJECT_ID }}
   # Vela web console origin for the AMR profile this build targets. Held in a
   # per-profile repository secret instead of the source tree: the non-prod AMR
   # environments are internal deployments and this repository is public, so
@@ -528,8 +531,47 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Resolve immutable mac_arm64 Electron Shell
+        id: mac_arm64_shell_resolution
+        env:
+          OPEN_DESIGN_AMR_PROFILE: ${{ inputs.amr_profile }}
+          RELEASE_CHANNEL: beta
+          RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          RELEASE_SHELL_BUILD_JSON_PATH: ${{ runner.temp }}/release-build/mac_arm64/build.json
+          RELEASE_SHELL_PLAN_JSON_PATH: ${{ runner.temp }}/release-build/mac_arm64/shell-plan.json
+          RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
+          RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
+          RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
+          RELEASE_STORAGE_REGION: auto
+          RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/release-build/mac_arm64"
+          rm -rf "$RUNNER_TEMP/tools-pack"
+          identity_args=(
+            exec tools-pack mac identity
+            --dir "$RUNNER_TEMP/tools-pack"
+            --cache-dir "$RUNNER_TEMP/tools-pack-cache"
+            --namespace release-beta
+            --portable
+            --release-version "${{ needs.metadata.outputs.beta_version }}"
+            --shell-version "${{ needs.metadata.outputs.shell_version }}"
+            --mac-compression normal
+            --to "${{ inputs.mac_arm64_target }}"
+            --json
+          )
+          case "${{ inputs.mac_arm64_sign_mode }}" in
+            no) ;;
+            sign-only) identity_args+=(--signed) ;;
+            notarize) identity_args+=(--signed --notarize) ;;
+            *) echo "unsupported mac_arm64_sign_mode: ${{ inputs.mac_arm64_sign_mode }}" >&2; exit 1 ;;
+          esac
+          pnpm "${identity_args[@]}" > "$RELEASE_SHELL_PLAN_JSON_PATH"
+          : > "$RUNNER_TEMP/release-build/mac_arm64/build.log"
+          pnpm exec tools-release resolve-shell-build
+
       - name: Prepare mac_arm64 signing certificate
-        if: ${{ inputs.mac_arm64_sign_mode != 'no' }}
+        if: ${{ steps.mac_arm64_shell_resolution.outputs.state == 'miss' && inputs.mac_arm64_sign_mode != 'no' }}
         env:
           APPLE_SIGNING_CERTIFICATE_BASE64: ${{ secrets.APPLE_SIGNING_CERTIFICATE_BASE64 }}
           APPLE_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_SIGNING_CERTIFICATE_PASSWORD }}
@@ -546,6 +588,7 @@ jobs:
 
       - name: Build beta mac_arm64
         id: mac_arm64_tools_pack_build
+        if: ${{ steps.mac_arm64_shell_resolution.outputs.state == 'miss' }}
         continue-on-error: true
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
@@ -561,7 +604,6 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/release-build/mac_arm64"
-          rm -rf "$RUNNER_TEMP/tools-pack"
           : > "$RUNNER_TEMP/release-build/mac_arm64/build.log"
           build_args=(
             exec tools-pack mac build
@@ -591,7 +633,7 @@ jobs:
           fi
 
       - name: Retry beta mac_arm64 without restored cache
-        if: ${{ steps.mac_arm64_tools_pack_build.outcome == 'failure' }}
+        if: ${{ steps.mac_arm64_shell_resolution.outputs.state == 'miss' && steps.mac_arm64_tools_pack_build.outcome == 'failure' }}
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
@@ -673,6 +715,20 @@ jobs:
           /usr/bin/xcrun stapler validate "$candidate_app"
           /usr/sbin/spctl --assess --type execute --verbose=4 "$candidate_app"
 
+      - name: Register verified immutable mac_arm64 Electron Shell
+        if: ${{ steps.mac_arm64_shell_resolution.outputs.state == 'miss' }}
+        env:
+          RELEASE_CHANNEL: beta
+          RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          RELEASE_SHELL_BUILD_JSON_PATH: ${{ runner.temp }}/release-build/mac_arm64/build.json
+          RELEASE_SHELL_PLAN_JSON_PATH: ${{ runner.temp }}/release-build/mac_arm64/shell-plan.json
+          RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
+          RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
+          RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
+          RELEASE_STORAGE_REGION: auto
+          RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
+        run: pnpm exec tools-release register-shell-build
+
       - name: Upload mac_arm64 Standalone Closure dogfood build to release storage
         if: ${{ !cancelled() && !inputs.publish }}
         continue-on-error: true
@@ -690,23 +746,9 @@ jobs:
           RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
         run: pnpm exec tools-release publish-dogfood
 
-      - name: Upload mac_arm64 DMG for manual distribution
-        # Only when NOT publishing to the release feed: this is the downloadable
-        # artifact for a manual dispatch (e.g. a signed feature-test build handed
-        # to teammates). The normal publish=true release pipeline is unchanged.
-        if: ${{ !cancelled() && !inputs.publish }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: open-design-beta-mac-arm64-dmg
-          path: ${{ runner.temp }}/tools-pack/out/mac/namespaces/release-beta/**/*.dmg
-          if-no-files-found: warn
-          retention-days: 14
-
       - name: Upload mac_arm64 dogfood build to release storage
-        # Companion to the artifact step above, for publish=false only. A GitHub
-        # artifact needs a logged-in teammate and a zip round-trip; this puts the
-        # same DMG in R2 under dogfood/<version>/<build>/ so the link can be
-        # handed over directly. It writes no channel metadata and no latest
+        # publish=false QA stays on the release storage plane and does not
+        # round-trip through GitHub artifacts. It writes no channel metadata or latest
         # pointer (enforced by the guard in tools/release/src/storage/dogfood.ts),
         # so it cannot change what an installed client sees as an available
         # update. The publish=true pipeline is untouched.
@@ -1367,23 +1409,6 @@ jobs:
           RELEASE_STORAGE_REGION: auto
           RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
         run: pnpm.cmd exec tools-release publish-dogfood
-
-      - name: Upload win_x64 installer for manual distribution
-        # Only when NOT publishing to the release feed, mirroring the mac DMG
-        # step. Before this existed a publish=false dispatch left the Windows job
-        # with nothing retrievable at all, so a QA/dogfood build could not be
-        # handed to a teammate without also publishing to the public feed. The
-        # glob covers every win_x64_target: nsis produces the setup exe, zip the
-        # portable zip, all both. The normal publish=true pipeline is unchanged.
-        if: ${{ !cancelled() && !inputs.publish }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: open-design-beta-win-x64-installer
-          path: |
-            ${{ runner.temp }}\tools-pack\out\win\namespaces\release-beta-win\builder\*-setup.exe
-            ${{ runner.temp }}\tools-pack\out\win\namespaces\release-beta-win\builder\*-portable.zip
-          if-no-files-found: warn
-          retention-days: 14
 
       - name: Upload win_x64 dogfood build to release storage
         # publish=false only. Artifact paths come from the build's own --json

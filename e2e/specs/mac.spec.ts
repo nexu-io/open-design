@@ -2446,10 +2446,9 @@ function assertClosureDesktopIdentity(identity: DesktopIdentityMarker, version: 
   }
   expect(identity.runtime.descriptor).toMatchObject({
     release: { version },
-    shell: { type: 'electron' },
     standalone: { protocolVersion: 1, version },
   });
-  expect(identity.runtime.descriptor.shell?.digest).toMatch(/^sha256:[a-f0-9]{64}$/);
+  expect(identity.runtime.descriptor).not.toHaveProperty('shell');
   expect(identity.runtime.descriptor.standalone?.digest).toMatch(/^sha256:[a-f0-9]{64}$/);
   expect(identity.runtime.descriptorDigest).toMatch(/^sha256:[a-f0-9]{64}$/);
   expect(identity.runtime.generation).toBeGreaterThanOrEqual(0);
@@ -2469,9 +2468,9 @@ function assertPayloadDesktopIdentity(
   expectPathInside(identity.executablePath, payloadRoot);
   expect(identity.runtime?.descriptor).toMatchObject({
     release: { version: standaloneVersion },
-    shell: { type: 'electron', version: shellVersion },
     standalone: { protocolVersion: 1, version: standaloneVersion },
   });
+  expect(identity.runtime?.descriptor).not.toHaveProperty('shell');
 }
 
 function assertPptxExportEvalValue(value: unknown): PptxExportEvalValue {

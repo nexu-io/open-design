@@ -66,7 +66,7 @@ async function materializeCandidate(
       size: archive.byteLength,
       url: `https://releases.open-design.ai/beta/closure/darwin-arm64/versions/${version}/closure.zip`,
     },
-    compatibility: { shell: { minVersion: "0.16.2" } },
+    compatibility: { shell: { electron: { version: { min: "0.16.2" } } } },
     identity: {
       channel: "beta",
       digest: archiveDigest,

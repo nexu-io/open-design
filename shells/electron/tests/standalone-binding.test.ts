@@ -88,7 +88,11 @@ async function materialize(root: string, version: string, options: {
       size: archive.byteLength,
       url: `https://releases.open-design.test/beta/closure/darwin-arm64/versions/${version}/closure.zip`,
     },
-    compatibility: { shell: { minVersion: options.minShellVersion ?? "0.18.0-beta.1" } },
+    compatibility: {
+      shell: {
+        electron: { version: { min: options.minShellVersion ?? "0.18.0-beta.1" } },
+      },
+    },
     identity: {
       channel: "beta",
       digest: archiveDigest,
@@ -140,10 +144,12 @@ describe("Electron Standalone Store binding", () => {
     });
 
     expect(selected.binding).toMatchObject({
+      attachment: {
+        shell: { type: "electron", version: "0.18.0-beta.4" },
+      },
       bootloaderPath: join(candidate.versionPaths.payloadRoot, "bootloader.mjs"),
       descriptor: {
         release: { version: "0.18.0-beta.4" },
-        shell: { type: "electron", version: "0.18.0-beta.4" },
         standalone: { digest: candidate.committed.committed.standalone.digest, version: "0.18.0-beta.4" },
       },
       paths: {
@@ -169,9 +175,9 @@ describe("Electron Standalone Store binding", () => {
 
     expect(selected.binding.descriptor).toMatchObject({
       release: { version: "0.19.0-beta.1" },
-      shell: { version: "0.18.0-beta.4" },
       standalone: { version: "0.18.0-beta.6" },
     });
+    expect(selected.binding.attachment.shell.version).toBe("0.18.0-beta.4");
   });
 
   it("maps the min shell floor to installer-required before importing bootloader.mjs", async () => {

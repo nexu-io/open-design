@@ -23,7 +23,8 @@ vi.mock("@open-design/closure-store", async (importOriginal) => ({
   })),
 }));
 
-vi.mock("@open-design/closure-update", () => ({
+vi.mock("@open-design/closure-update", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@open-design/closure-update")>(),
   updateClosureFromRelease: vi.fn(async (input: unknown) => ({
     candidate: { releaseTarget: (input as { releaseTarget: string }).releaseTarget },
     reason: "already-committed",
@@ -71,6 +72,7 @@ describe("packaged Closure update adapter", () => {
       }),
       platform: "darwin-arm64",
       releaseTarget: "mac_arm64",
+      shellType: "electron",
       shellVersion: "0.18.0-beta.4",
     });
   });
@@ -139,7 +141,11 @@ describe("packaged Closure update adapter", () => {
 
   it("projects an incompatible initial candidate into the installer floor", () => {
     const candidate = {
-      manifest: { compatibility: { shell: { minVersion: "0.18.0-beta.5" } } },
+      manifest: {
+        compatibility: {
+          shell: { electron: { version: { min: "0.18.0-beta.5" } } },
+        },
+      },
       releaseVersion: "0.18.0-beta.5",
     } as never;
     expect(resolvePackagedClosureInstallerRequiredVersion({

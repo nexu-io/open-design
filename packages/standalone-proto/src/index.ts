@@ -20,16 +20,22 @@ export type StandaloneRuntimeDescriptor = Readonly<{
   release: Readonly<{
     version: string;
   }>;
-  shell: Readonly<{
-    digest: StandaloneDigest;
-    type: string;
-    version: string;
-  }>;
   standalone: Readonly<{
     digest: StandaloneDigest;
     protocolVersion: typeof STANDALONE_PROTOCOL_VERSION;
     version: string;
   }>;
+}>;
+
+export type StandaloneShellDescriptor = Readonly<{
+  digest: StandaloneDigest;
+  type: string;
+  version: string;
+}>;
+
+export type StandaloneAttachmentDescriptor = Readonly<{
+  id: string;
+  shell: StandaloneShellDescriptor;
 }>;
 
 export type StandaloneHandoffEnvelope = Readonly<{
@@ -57,6 +63,7 @@ export type StandaloneProtocolJsonValue =
   | { [key: string]: StandaloneProtocolJsonValue };
 
 type StandaloneShellCapabilityExchange = Readonly<{
+  attachmentId: string;
   handoff: StandaloneHandoffEnvelope;
   requestId: string;
   schemaVersion: typeof STANDALONE_HANDOFF_SCHEMA_VERSION;
@@ -188,6 +195,7 @@ export type StandaloneShellCapabilityOutput<TCapability extends StandaloneShellC
   StandaloneShellCapabilityContract[TCapability]["output"];
 
 type StandaloneRuntimeCommandExchange = Readonly<{
+  attachmentId: string;
   handoff: StandaloneHandoffEnvelope;
   requestId: string;
   schemaVersion: typeof STANDALONE_HANDOFF_SCHEMA_VERSION;
@@ -212,6 +220,7 @@ export type StandaloneRuntimeCommandResult =
     }>);
 
 export type StandaloneHandoffRequest = Readonly<{
+  attachment: StandaloneAttachmentDescriptor;
   capabilities: StandaloneShellCapabilityPort;
   handoff: StandaloneHandoffEnvelope;
   paths: StandalonePaths;
@@ -582,7 +591,6 @@ export function validateStandaloneHandoffScope(value: unknown): StandaloneHandof
 export function validateStandaloneRuntimeDescriptor(value: unknown): StandaloneRuntimeDescriptor {
   const descriptor = requireRecord(value, "standalone runtime descriptor");
   const release = requireRecord(descriptor.release, "standalone release descriptor");
-  const shell = requireRecord(descriptor.shell, "standalone shell descriptor");
   const standalone = requireRecord(descriptor.standalone, "standalone body descriptor");
   if (standalone.protocolVersion !== STANDALONE_PROTOCOL_VERSION) {
     throw new StandaloneProtocolError(
@@ -592,11 +600,6 @@ export function validateStandaloneRuntimeDescriptor(value: unknown): StandaloneR
   return {
     release: {
       version: normalizeVersion(release.version, "standalone release version"),
-    },
-    shell: {
-      digest: normalizeDigest(shell.digest),
-      type: normalizeToken(shell.type, "standalone shell type"),
-      version: normalizeVersion(shell.version, "standalone shell version"),
     },
     standalone: {
       digest: normalizeDigest(standalone.digest),
@@ -609,17 +612,27 @@ export function validateStandaloneRuntimeDescriptor(value: unknown): StandaloneR
 function descriptorJson(descriptor: StandaloneRuntimeDescriptor): string {
   return JSON.stringify({
     release: { version: descriptor.release.version },
-    shell: {
-      digest: descriptor.shell.digest,
-      type: descriptor.shell.type,
-      version: descriptor.shell.version,
-    },
     standalone: {
       digest: descriptor.standalone.digest,
       protocolVersion: descriptor.standalone.protocolVersion,
       version: descriptor.standalone.version,
     },
   });
+}
+
+export function validateStandaloneAttachmentDescriptor(
+  value: unknown,
+): StandaloneAttachmentDescriptor {
+  const attachment = requireRecord(value, "standalone attachment descriptor");
+  const shell = requireRecord(attachment.shell, "standalone attachment shell descriptor");
+  return {
+    id: normalizeToken(attachment.id, "standalone attachment id"),
+    shell: {
+      digest: normalizeDigest(shell.digest),
+      type: normalizeToken(shell.type, "standalone shell type"),
+      version: normalizeVersion(shell.version, "standalone shell version"),
+    },
+  };
 }
 
 export function digestStandaloneRuntimeDescriptor(value: unknown): StandaloneDigest {
@@ -719,6 +732,7 @@ export function validateStandaloneHandoffRequest(value: unknown): StandaloneHand
     throw new StandaloneProtocolError("standalone shell capability port must expose invoke()");
   }
   return {
+    attachment: validateStandaloneAttachmentDescriptor(request.attachment),
     capabilities: request.capabilities as StandaloneShellCapabilityPort,
     handoff: validateStandaloneHandoffEnvelope(request.handoff),
     paths: validateStandalonePaths(request.paths),
@@ -727,37 +741,45 @@ export function validateStandaloneHandoffRequest(value: unknown): StandaloneHand
 
 function validateCapabilityExchange(
   value: Record<string, unknown>,
-  expected?: { handoff?: StandaloneHandoffEnvelope; requestId?: string },
+  expected?: { attachmentId?: string; handoff?: StandaloneHandoffEnvelope; requestId?: string },
 ): StandaloneShellCapabilityExchange {
   if (value.schemaVersion !== STANDALONE_HANDOFF_SCHEMA_VERSION) {
     throw new StandaloneProtocolError("unsupported standalone capability schema version");
   }
   const handoff = validateStandaloneHandoffEnvelope(value.handoff, expected?.handoff);
+  const attachmentId = normalizeToken(value.attachmentId, "standalone capability attachmentId");
+  if (expected?.attachmentId != null && attachmentId !== expected.attachmentId) {
+    throw new StandaloneProtocolError("standalone capability attachmentId does not match");
+  }
   const requestId = normalizeToken(value.requestId, "standalone capability requestId");
   if (expected?.requestId != null && requestId !== expected.requestId) {
     throw new StandaloneProtocolError("standalone capability requestId does not match");
   }
-  return { handoff, requestId, schemaVersion: STANDALONE_HANDOFF_SCHEMA_VERSION };
+  return { attachmentId, handoff, requestId, schemaVersion: STANDALONE_HANDOFF_SCHEMA_VERSION };
 }
 
 function validateRuntimeCommandExchange(
   value: Record<string, unknown>,
-  expected?: { handoff?: StandaloneHandoffEnvelope; requestId?: string },
+  expected?: { attachmentId?: string; handoff?: StandaloneHandoffEnvelope; requestId?: string },
 ): StandaloneRuntimeCommandExchange {
   if (value.schemaVersion !== STANDALONE_HANDOFF_SCHEMA_VERSION) {
     throw new StandaloneProtocolError("unsupported standalone runtime command schema version");
   }
   const handoff = validateStandaloneHandoffEnvelope(value.handoff, expected?.handoff);
+  const attachmentId = normalizeToken(value.attachmentId, "standalone runtime command attachmentId");
+  if (expected?.attachmentId != null && attachmentId !== expected.attachmentId) {
+    throw new StandaloneProtocolError("standalone runtime command attachmentId does not match");
+  }
   const requestId = normalizeToken(value.requestId, "standalone runtime command requestId");
   if (expected?.requestId != null && requestId !== expected.requestId) {
     throw new StandaloneProtocolError("standalone runtime command requestId does not match");
   }
-  return { handoff, requestId, schemaVersion: STANDALONE_HANDOFF_SCHEMA_VERSION };
+  return { attachmentId, handoff, requestId, schemaVersion: STANDALONE_HANDOFF_SCHEMA_VERSION };
 }
 
 export function validateStandaloneShellCapabilityRequest(
   value: unknown,
-  expected?: { handoff?: StandaloneHandoffEnvelope },
+  expected?: { attachmentId?: string; handoff?: StandaloneHandoffEnvelope },
 ): StandaloneShellCapabilityRequest {
   const request = requireRecord(value, "standalone shell capability request");
   const capability = normalizeToken(request.capability, "standalone shell capability");
@@ -774,6 +796,7 @@ export function validateStandaloneShellCapabilityResult(
   value: unknown,
   expected?: {
     capability?: string;
+    attachmentId?: string;
     handoff?: StandaloneHandoffEnvelope;
     requestId?: string;
   },
@@ -805,7 +828,7 @@ export function validateStandaloneShellCapabilityResult(
 
 export function validateStandaloneRuntimeCommandRequest(
   value: unknown,
-  expected?: { handoff?: StandaloneHandoffEnvelope },
+  expected?: { attachmentId?: string; handoff?: StandaloneHandoffEnvelope },
 ): StandaloneRuntimeCommandRequest {
   const request = requireRecord(value, "standalone runtime command request");
   return {
@@ -817,7 +840,7 @@ export function validateStandaloneRuntimeCommandRequest(
 
 export function validateStandaloneRuntimeCommandResult(
   value: unknown,
-  expected?: { handoff?: StandaloneHandoffEnvelope; requestId?: string },
+  expected?: { attachmentId?: string; handoff?: StandaloneHandoffEnvelope; requestId?: string },
 ): StandaloneRuntimeCommandResult {
   const result = requireRecord(value, "standalone runtime command result");
   const exchange = validateRuntimeCommandExchange(result, expected);

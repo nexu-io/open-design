@@ -36,8 +36,17 @@ type ShellBuildArtifact = {
   size: number;
 };
 
+type ShellRemoteArtifact = AssetEntry & {
+  objectKey: string;
+};
+
 type ShellBuildReport = {
   artifacts: Record<string, ShellBuildArtifact | null>;
+  resolution?: {
+    artifacts: Record<string, ShellRemoteArtifact>;
+    recordUrl: string;
+    state: "registered" | "reused";
+  };
   shell: {
     sourceDigest: `sha256:${string}`;
     type: string;
@@ -115,6 +124,18 @@ function readShellBuildReport(): ShellBuildReport | null {
   if (report.artifacts == null || typeof report.artifacts !== "object") {
     throw new Error("Shell build report must contain artifact descriptors");
   }
+  if (report.resolution != null) {
+    if (
+      report.resolution.state !== "registered"
+      && report.resolution.state !== "reused"
+    ) throw new Error("Shell build report resolution state is invalid");
+    if (typeof report.resolution.recordUrl !== "string" || report.resolution.recordUrl.length === 0) {
+      throw new Error("Shell build report resolution recordUrl is required");
+    }
+    if (report.resolution.artifacts == null || typeof report.resolution.artifacts !== "object") {
+      throw new Error("Shell build report resolution artifacts are required");
+    }
+  }
   return report as ShellBuildReport;
 }
 
@@ -123,7 +144,7 @@ const shellVersionPrefix = shellBuild == null
   ? null
   : optional(
       "RELEASE_SHELL_VERSION_PREFIX",
-      `${releaseChannel}/shells/${shellBuild.shell.type}/${shellPlatformTarget()}/versions/${shellBuild.shell.version}`,
+      `${releaseChannel}/shells/${shellBuild.shell.type}/versions/${shellBuild.shell.version}/${shellPlatformTarget()}`,
     );
 const artifactPrefix = shellVersionPrefix ?? versionPrefix;
 
@@ -420,10 +441,35 @@ if (shellBuild != null) {
     if (built.digest !== artifact.digest || built.size !== artifact.size) {
       throw new Error(`Shell build report ${name} does not match prepared release asset`);
     }
+    const remote = shellBuild.resolution?.artifacts[name];
+    if (shellBuild.resolution != null && remote == null) {
+      throw new Error(`Shell build resolution is missing ${name}`);
+    }
+    if (remote != null) {
+      if (
+        remote.digest !== artifact.digest
+        || remote.size !== artifact.size
+        || typeof remote.contentType !== "string"
+        || typeof remote.name !== "string"
+        || typeof remote.objectKey !== "string"
+        || typeof remote.url !== "string"
+      ) throw new Error(`Shell build resolution ${name} does not match prepared release asset`);
+      config.artifacts[name] = {
+        contentType: remote.contentType,
+        digest: remote.digest,
+        name: remote.name,
+        size: remote.size,
+        url: remote.url,
+      };
+    }
   }
 }
-for (const name of config.assetNames) {
-  await upload(join(releaseAssetsDir, name), `${artifactPrefix}/${name}`, "public, max-age=31536000, immutable");
+if (shellBuild?.resolution == null) {
+  for (const name of config.assetNames) {
+    await upload(join(releaseAssetsDir, name), `${artifactPrefix}/${name}`, "public, max-age=31536000, immutable");
+  }
+} else if (config.feed != null) {
+  throw new Error("resolved immutable Shell publication does not yet support updater feed artifacts");
 }
 if (closure != null) {
   for (const name of closure.assetNames) {
@@ -467,6 +513,10 @@ const manifest = {
   ...(shellBuild == null ? {} : {
     shell: {
       artifacts: config.artifacts,
+      ...(shellBuild.resolution == null ? {} : {
+        buildRecordUrl: shellBuild.resolution.recordUrl,
+        resolution: shellBuild.resolution.state,
+      }),
       sourceDigest: shellBuild.shell.sourceDigest,
       type: shellBuild.shell.type,
       version: shellBuild.shell.version,

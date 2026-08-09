@@ -431,7 +431,9 @@ if (existsSync(innerPath)) {
 }
 
 export const handoff = createStandaloneBootloader({
-  minShellVersion: ${JSON.stringify(options.minShellVersion)},
+  shellCompatibility: {
+    electron: { version: { min: ${JSON.stringify(options.minShellVersion)} } },
+  },
   resolveRegisteredBootloader: () => registeredBootloader,
   start: startStandaloneBody,
 });
@@ -476,6 +478,7 @@ export async function startStandaloneBody(request) {
     OD_DAEMON_CLI_PATH: layout.daemonCliEntry,
     OD_NODE_BIN: process.execPath,
     OD_RESOURCE_TRUST_ROOT: request.paths.installationRoot,
+    OD_STANDALONE_ATTACHMENT_ID: request.attachment.id,
   };
   return await startSidecarStandalone(request, {
     daemon: {
@@ -504,7 +507,9 @@ export function standaloneInnerBootloaderSource(options: { minShellVersion: stri
 import { startStandaloneBody } from "./body.mjs";
 
 export const handoff = createStandaloneBootloader({
-  minShellVersion: ${JSON.stringify(options.minShellVersion)},
+  shellCompatibility: {
+    electron: { version: { min: ${JSON.stringify(options.minShellVersion)} } },
+  },
   start: startStandaloneBody,
 });
 
@@ -858,7 +863,11 @@ async function buildClosureArchiveUncached(options: ClosureBuildOptions): Promis
       size: archiveBytes.byteLength,
       url: options.artifactUrl,
     },
-    compatibility: { shell: { minVersion: options.minShellVersion } },
+    compatibility: {
+      shell: {
+        electron: { version: { min: options.minShellVersion } },
+      },
+    },
     identity: {
       channel,
       digest,
@@ -948,7 +957,7 @@ async function readClosureBuildReport(
     || manifest.identity.platform !== expected.platform
     || manifest.identity.version !== expected.version
     || manifest.artifact.url !== new URL(expected.artifactUrl).toString()
-    || manifest.compatibility.shell.minVersion !== expected.minShellVersion
+    || manifest.compatibility.shell.electron?.version.min !== expected.minShellVersion
     || manifest.artifact.digest !== archiveDigest
     || manifest.identity.digest !== archiveDigest
     || manifest.artifact.size !== archiveBytes.byteLength

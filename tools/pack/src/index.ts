@@ -3,6 +3,7 @@ import type { CAC } from "cac";
 
 import { buildClosureArchive } from "./closure.js";
 import { resolveToolPackConfig, type ToolPackCliOptions, type ToolPackPlatform } from "./config.js";
+import { resolveToolPackShellBuildPlan } from "./shell-build-plan.js";
 import {
   cleanupPackedMacNamespace,
   installPackedMacDmg,
@@ -145,6 +146,9 @@ addMacBuildOptions(addSharedOptions(cli.command("mac <action>", "Mac packaging c
       case "build":
         printJson(await packMac(config));
         return;
+      case "identity":
+        printJson(await resolveToolPackShellBuildPlan(config));
+        return;
       case "install":
         printJson(await installPackedMacDmg(config));
         return;
@@ -187,6 +191,9 @@ addWinLifecycleOptions(
   switch (action) {
     case "build":
       printJson(await packWin(config));
+      return;
+    case "identity":
+      printJson(await resolveToolPackShellBuildPlan(config));
       return;
     case "install":
       printJson(await installPackedWinApp(config));

@@ -78,7 +78,7 @@ function metadata(overrides: Record<string, unknown> = {}): Record<string, unkno
               size: 123,
               url: archiveUrl,
             },
-            compatibility: { shell: { minVersion: "0.16.2" } },
+            compatibility: { shell: { electron: { version: { min: "0.16.2" } } } },
             identity: {
               channel: "beta",
               digest: DIGEST,
@@ -161,7 +161,7 @@ async function downloadableCandidate(): Promise<{
       size: archive.byteLength,
       url: `${baseUrl}/closure.zip`,
     },
-    compatibility: { shell: { minVersion: "0.16.2" } },
+    compatibility: { shell: { electron: { version: { min: "0.16.2" } } } },
     identity: {
       channel: "beta",
       digest: archiveDigest,
@@ -256,21 +256,25 @@ describe("Closure release update selection", () => {
     expect(decideClosureUpdate({
       candidate,
       descriptor: descriptor(null),
+      shellType: "electron",
       shellVersion: "0.16.2",
     })).toMatchObject({ action: "commit", reason: "no-committed-closure" });
     expect(decideClosureUpdate({
       candidate,
       descriptor: descriptor(pointer("0.18.0-beta.3", OTHER_DIGEST)),
+      shellType: "electron",
       shellVersion: "0.18.0-beta.4",
     })).toMatchObject({ action: "commit", reason: "newer-release-binding" });
     expect(decideClosureUpdate({
       candidate,
       descriptor: descriptor(pointer("0.18.0-beta.5", OTHER_DIGEST)),
+      shellType: "electron",
       shellVersion: "0.18.0-beta.4",
     })).toMatchObject({ action: "retain", reason: "candidate-not-newer" });
     expect(decideClosureUpdate({
       candidate,
       descriptor: descriptor(null),
+      shellType: "electron",
       shellVersion: "0.16.1",
     })).toMatchObject({ action: "retain", reason: "shell-incompatible" });
   });
@@ -280,6 +284,7 @@ describe("Closure release update selection", () => {
     expect(() => decideClosureUpdate({
       candidate,
       descriptor: descriptor(pointer("0.18.0-beta.4", OTHER_DIGEST)),
+      shellType: "electron",
       shellVersion: "0.18.0-beta.4",
     })).toThrowError(new ClosureUpdateError(
       "Closure release 0.18.0-beta.4 has conflicting immutable bindings",
@@ -304,6 +309,7 @@ describe("Closure release update application", () => {
       candidate: fixture.candidate,
       fetch: fixture.fetch,
       paths,
+      shellType: "electron",
       shellVersion: "0.16.2",
     });
 
@@ -324,6 +330,7 @@ describe("Closure release update application", () => {
       candidate: fixture.candidate,
       fetch: fixture.fetch,
       paths,
+      shellType: "electron",
       shellVersion: "0.16.2",
     });
     expect(retained).toMatchObject({ reason: "already-committed", state: "retained" });
@@ -348,6 +355,7 @@ describe("Closure release update application", () => {
       candidate: fixture.candidate,
       fetch: corruptFetch,
       paths,
+      shellType: "electron",
       shellVersion: "0.16.2",
     })).rejects.toThrow(/checksum/u);
 
@@ -369,6 +377,7 @@ describe("Closure release update application", () => {
       candidate: fixture.candidate,
       fetch: fixture.fetch,
       paths,
+      shellType: "electron",
       shellVersion: "0.16.2",
     })).resolves.toMatchObject({ reason: "another-updater-active", state: "busy" });
     expect(await readFile(lockPath, "utf8")).toContain("live-updater");

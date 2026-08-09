@@ -33,7 +33,7 @@ type DaemonStandaloneMethods = {
 
 type ShellCapabilityBridgeMethods = {
   invoke: SidecarMethod<
-    Readonly<{ capability: string; input: StandaloneProtocolJsonValue }>,
+    Readonly<{ attachmentId: string; capability: string; input: StandaloneProtocolJsonValue }>,
     StandaloneShellCapabilityResult
   >;
 };
@@ -73,7 +73,12 @@ async function startDefaultRuntime(
     input: StandaloneShellCapabilityInput<TCapability>,
   ): Promise<StandaloneShellCapabilityOutput<TCapability>> => {
     const validatedInput = validateStandaloneShellCapabilityInput(capability, input);
+    const attachmentId = process.env.OD_STANDALONE_ATTACHMENT_ID;
+    if (attachmentId == null || attachmentId.length === 0) {
+      throw new Error("Standalone Shell attachment identity is unavailable");
+    }
     const result = await shellCapabilities.call("invoke", {
+      attachmentId,
       capability,
       input: validatedInput as StandaloneProtocolJsonValue,
     });

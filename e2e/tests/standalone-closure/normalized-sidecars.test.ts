@@ -26,11 +26,6 @@ describe("Standalone normalized product sidecars", () => {
     const handoff = createStandaloneHandoffEnvelope({
       descriptor: {
         release: { version: "0.18.0-beta.4" },
-        shell: {
-          digest: `sha256:${"d".repeat(64)}`,
-          type: "electron",
-          version: "0.18.0-beta.1",
-        },
         standalone: {
           digest: `sha256:${"c".repeat(64)}`,
           protocolVersion: STANDALONE_PROTOCOL_VERSION,
@@ -44,9 +39,18 @@ describe("Standalone normalized product sidecars", () => {
       },
     });
     const request: StandaloneHandoffRequest = {
+      attachment: {
+        id: "electron-e2e",
+        shell: {
+          digest: `sha256:${"d".repeat(64)}`,
+          type: "electron",
+          version: "0.18.0-beta.1",
+        },
+      },
       capabilities: {
         async invoke(value) {
           return {
+            attachmentId: value.attachmentId,
             handoff: value.handoff,
             outcome: "unsupported",
             requestId: value.requestId,
@@ -98,6 +102,7 @@ describe("Standalone normalized product sidecars", () => {
       .resolves.toBe("http://127.0.0.1:43234");
 
     await expect(handle.invoke({
+      attachmentId: "electron-e2e",
       command: OPEN_DESIGN_REGISTER_DESKTOP_AUTH_COMMAND,
       handoff,
       input: { secret: "dGVzdC1kZXNrdG9wLWF1dGg=" },

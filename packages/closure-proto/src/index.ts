@@ -32,9 +32,11 @@ export type ClosureArtifactDescriptor = {
   url: string;
 };
 
-export type ClosureShellCompatibility = {
-  minVersion: string;
-};
+export type ClosureShellCompatibility = Record<string, {
+  version: {
+    min: string;
+  };
+}>;
 
 export type ClosureCandidateManifest = {
   artifact: ClosureArtifactDescriptor;
@@ -108,6 +110,16 @@ function normalizeDigest(value: unknown): ClosureDigest {
 function normalizePlatform(value: unknown): string {
   if (typeof value !== "string" || !/^[a-z0-9]+(?:-[a-z0-9]+)+$/u.test(value)) {
     throw new ClosureProtocolError("closure platform must be a lowercase os-arch identifier");
+  }
+  return value;
+}
+
+function normalizeShellType(value: unknown): string {
+  if (
+    typeof value !== "string"
+    || !/^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$/u.test(value)
+  ) {
+    throw new ClosureProtocolError("closure shell type must be a lowercase protocol token");
   }
   return value;
 }
@@ -268,6 +280,29 @@ export function validateClosureCandidateManifest(value: unknown): ClosureCandida
   }
   const compatibility = requireRecord(manifest.compatibility, "closure compatibility");
   const shell = requireRecord(compatibility.shell, "closure shell compatibility");
+  const shellEntries = Object.entries(shell).sort(([left], [right]) => left.localeCompare(right));
+  if (shellEntries.length === 0) {
+    throw new ClosureProtocolError("closure shell compatibility must declare at least one shell");
+  }
+  const normalizedShell = Object.fromEntries(shellEntries.map(([shellType, value]) => {
+    const normalizedType = normalizeShellType(shellType);
+    const shellCompatibility = requireRecord(
+      value,
+      `closure ${normalizedType} shell compatibility`,
+    );
+    const version = requireRecord(
+      shellCompatibility.version,
+      `closure ${normalizedType} shell compatibility version`,
+    );
+    return [normalizedType, {
+      version: {
+        min: normalizeVersion(
+          version.min,
+          `closure ${normalizedType} minimum shell version`,
+        ),
+      },
+    }];
+  }));
   return {
     artifact: {
       digest,
@@ -278,9 +313,7 @@ export function validateClosureCandidateManifest(value: unknown): ClosureCandida
       url: normalizeHttpUrl(artifact.url),
     },
     compatibility: {
-      shell: {
-        minVersion: normalizeVersion(shell.minVersion, "closure minimum shell version"),
-      },
+      shell: normalizedShell,
     },
     identity,
     schemaVersion: CLOSURE_SCHEMA_VERSION,

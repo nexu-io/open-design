@@ -15,17 +15,14 @@ const digest = `sha256:${"b".repeat(64)}` as const;
 const shellDigest = `sha256:${"c".repeat(64)}` as const;
 
 function request(overrides: {
+  attachmentId?: string;
   generation?: number;
+  shellType?: string;
   shellVersion?: string;
 } = {}): StandaloneHandoffRequest {
   const handoff = createStandaloneHandoffEnvelope({
     descriptor: {
       release: { version: "0.18.0-beta.4" },
-      shell: {
-        digest: shellDigest,
-        type: "electron",
-        version: overrides.shellVersion ?? "0.18.0-beta.4",
-      },
       standalone: {
         digest,
         protocolVersion: STANDALONE_PROTOCOL_VERSION,
@@ -39,9 +36,18 @@ function request(overrides: {
     },
   });
   return {
+    attachment: {
+      id: overrides.attachmentId ?? "electron-a",
+      shell: {
+        digest: shellDigest,
+        type: overrides.shellType ?? "electron",
+        version: overrides.shellVersion ?? "0.18.0-beta.4",
+      },
+    },
     capabilities: {
       async invoke(value) {
         return {
+          attachmentId: value.attachmentId,
           handoff: value.handoff,
           outcome: "unsupported",
           requestId: value.requestId,
@@ -68,12 +74,18 @@ function runningHandle(input: StandaloneHandoffRequest): StandaloneHandle {
     schemaVersion: STANDALONE_HANDOFF_SCHEMA_VERSION,
     state: "stopped",
   };
+  let resolveTerminal!: (status: StandaloneRuntimeTerminalStatus) => void;
+  const terminal = new Promise<StandaloneRuntimeTerminalStatus>((resolve) => {
+    resolveTerminal = resolve;
+  });
   return {
     async close() {
+      resolveTerminal(stopped);
       return stopped;
     },
     async invoke(value) {
       return {
+        attachmentId: value.attachmentId,
         handoff: input.handoff,
         outcome: "unsupported",
         requestId: value.requestId,
@@ -91,8 +103,15 @@ function runningHandle(input: StandaloneHandoffRequest): StandaloneHandle {
       };
     },
     async waitForTerminal() {
-      return stopped;
+      return await terminal;
     },
+  };
+}
+
+function compatibility(min = "0.18.0-beta.1") {
+  return {
+    electron: { version: { min } },
+    "codex-plugin": { version: { min: "0.1.0" } },
   };
 }
 
@@ -100,7 +119,7 @@ describe("bootloader.mjs handoff-once", () => {
   it("starts one body for repeated identical handoffs", async () => {
     const start = vi.fn(async (input: StandaloneHandoffRequest) => runningHandle(input));
     const handoff = createStandaloneBootloader({
-      minShellVersion: "0.18.0-beta.1",
+      shellCompatibility: compatibility(),
       start,
     });
     const input = request();
@@ -118,7 +137,7 @@ describe("bootloader.mjs handoff-once", () => {
   it("fails closed for a different committed generation", async () => {
     const start = vi.fn(async (input: StandaloneHandoffRequest) => runningHandle(input));
     const handoff = createStandaloneBootloader({
-      minShellVersion: "0.18.0-beta.1",
+      shellCompatibility: compatibility(),
       start,
     });
 
@@ -132,13 +151,71 @@ describe("bootloader.mjs handoff-once", () => {
   it("enforces the shell floor before body startup", async () => {
     const start = vi.fn(async (input: StandaloneHandoffRequest) => runningHandle(input));
     const handoff = createStandaloneBootloader({
-      minShellVersion: "0.18.0-beta.3",
+      shellCompatibility: compatibility("0.18.0-beta.3"),
       start,
     });
 
     await expect(handoff(request({ shellVersion: "0.18.0-beta.2" }))).rejects.toMatchObject({
       code: "shell-incompatible",
     });
+    expect(start).not.toHaveBeenCalled();
+  });
+
+  it("routes capabilities by attachment and stops the body after the final release", async () => {
+    let bodyRequest: StandaloneHandoffRequest | null = null;
+    let rawHandle: StandaloneHandle | null = null;
+    const start = vi.fn(async (input: StandaloneHandoffRequest) => {
+      bodyRequest = input;
+      rawHandle = runningHandle(input);
+      rawHandle.close = vi.fn(rawHandle.close.bind(rawHandle));
+      return rawHandle;
+    });
+    const electron = request({ attachmentId: "electron-a" });
+    const plugin = request({
+      attachmentId: "codex-plugin-a",
+      shellType: "codex-plugin",
+      shellVersion: "0.1.0",
+    });
+    electron.capabilities.invoke = vi.fn(electron.capabilities.invoke);
+    plugin.capabilities.invoke = vi.fn(plugin.capabilities.invoke);
+    const handoff = createStandaloneBootloader({
+      shellCompatibility: compatibility(),
+      start,
+    });
+
+    const electronHandle = await handoff(electron);
+    const pluginHandle = await handoff(plugin);
+    expect(start).toHaveBeenCalledOnce();
+
+    await bodyRequest!.capabilities.invoke({
+      attachmentId: plugin.attachment.id,
+      capability: "open-design.fixture.v1",
+      handoff: plugin.handoff,
+      input: {},
+      requestId: "plugin-capability-1",
+      schemaVersion: STANDALONE_HANDOFF_SCHEMA_VERSION,
+    });
+    expect(plugin.capabilities.invoke).toHaveBeenCalledOnce();
+    expect(electron.capabilities.invoke).not.toHaveBeenCalled();
+
+    await expect(electronHandle.close()).resolves.toMatchObject({ state: "stopped" });
+    expect(rawHandle!.close).not.toHaveBeenCalled();
+    await expect(pluginHandle.readStatus()).resolves.toMatchObject({ state: "running" });
+    await expect(pluginHandle.close()).resolves.toMatchObject({ state: "stopped" });
+    expect(rawHandle!.close).toHaveBeenCalledOnce();
+  });
+
+  it("rejects an undeclared shell before it acquires a body reference", async () => {
+    const start = vi.fn(async (input: StandaloneHandoffRequest) => runningHandle(input));
+    const handoff = createStandaloneBootloader({
+      shellCompatibility: compatibility(),
+      start,
+    });
+
+    await expect(handoff(request({
+      attachmentId: "unknown-a",
+      shellType: "unknown-shell",
+    }))).rejects.toMatchObject({ code: "shell-incompatible" });
     expect(start).not.toHaveBeenCalled();
   });
 
@@ -152,15 +229,17 @@ describe("bootloader.mjs handoff-once", () => {
       },
     });
     input.capabilities.invoke = async (value) => ({
+      attachmentId: value.attachmentId,
       handoff: wrongHandoff,
       outcome: "unsupported",
       requestId: value.requestId,
       schemaVersion: STANDALONE_HANDOFF_SCHEMA_VERSION,
     });
     const handoff = createStandaloneBootloader({
-      minShellVersion: "0.18.0-beta.1",
+      shellCompatibility: compatibility(),
       async start(bound) {
         await bound.capabilities.invoke({
+          attachmentId: bound.attachment.id,
           capability: "open-external",
           handoff: bound.handoff,
           input: { url: "https://open-design.dev" },
@@ -180,7 +259,7 @@ describe("bootloader.mjs handoff-once", () => {
       return runningHandle(wrong);
     });
     const handoff = createStandaloneBootloader({
-      minShellVersion: "0.18.0-beta.1",
+      shellCompatibility: compatibility(),
       start,
     });
 
@@ -192,7 +271,7 @@ describe("bootloader.mjs handoff-once", () => {
     const inner = vi.fn(async (input: StandaloneHandoffRequest) => runningHandle(input));
     const resolveRegisteredBootloader = vi.fn(() => inner);
     const handoff = createStandaloneBootloader({
-      minShellVersion: "0.18.0-beta.1",
+      shellCompatibility: compatibility(),
       resolveRegisteredBootloader,
       start,
     });
@@ -211,7 +290,7 @@ describe("bootloader.mjs handoff-once", () => {
     const innerFailure = new Error("inner bootloader failed");
     const inner = vi.fn(async () => await Promise.reject(innerFailure));
     const handoff = createStandaloneBootloader({
-      minShellVersion: "0.18.0-beta.1",
+      shellCompatibility: compatibility(),
       resolveRegisteredBootloader: () => inner,
       start,
     });

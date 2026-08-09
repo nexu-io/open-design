@@ -11,6 +11,7 @@ export const OPEN_DESIGN_REGISTER_DESKTOP_AUTH_COMMAND =
 
 /** Shell-side adapter for the product command; transport stays behind StandaloneHandle. */
 export function createStandaloneDesktopAuthRegistration(input: Readonly<{
+  attachmentId: string;
   handoff: StandaloneHandoffEnvelope;
   handle: Pick<StandaloneHandle, "invoke">;
   requestId?: () => string;
@@ -18,6 +19,7 @@ export function createStandaloneDesktopAuthRegistration(input: Readonly<{
   const requestId = input.requestId ?? randomUUID;
   return async (secret) => {
     const result = await input.handle.invoke({
+      attachmentId: input.attachmentId,
       command: OPEN_DESIGN_REGISTER_DESKTOP_AUTH_COMMAND,
       handoff: input.handoff,
       input: { secret: secret.toString("base64") },

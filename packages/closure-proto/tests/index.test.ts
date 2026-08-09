@@ -41,7 +41,7 @@ const manifest: ClosureCandidateManifest = {
   },
   compatibility: {
     shell: {
-      minVersion: "0.18.1",
+      electron: { version: { min: "0.18.1" } },
     },
   },
   identity: candidate,
@@ -148,10 +148,38 @@ describe("closure candidate manifest", () => {
       ...manifest,
       compatibility: {
         shell: {
-          minVersion: "../0.18.1",
+          electron: { version: { min: "../0.18.1" } },
         },
       },
     })).toThrow(/minimum shell version/u);
+  });
+
+  it("normalizes compatibility independently for every shell type", () => {
+    expect(validateClosureCandidateManifest({
+      ...manifest,
+      compatibility: {
+        shell: {
+          electron: { version: { min: "0.19.0-beta.1" } },
+          "codex-plugin": { version: { min: "0.1.0" } },
+        },
+      },
+    }).compatibility.shell).toEqual({
+      "codex-plugin": { version: { min: "0.1.0" } },
+      electron: { version: { min: "0.19.0-beta.1" } },
+    });
+  });
+
+  it("rejects an empty or malformed shell compatibility map", () => {
+    expect(() => validateClosureCandidateManifest({
+      ...manifest,
+      compatibility: { shell: {} },
+    })).toThrow(/at least one shell/u);
+    expect(() => validateClosureCandidateManifest({
+      ...manifest,
+      compatibility: {
+        shell: { "Electron Shell": { version: { min: "0.19.0-beta.1" } } },
+      },
+    })).toThrow(/shell type/u);
   });
 });
 

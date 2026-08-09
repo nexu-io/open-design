@@ -43,7 +43,7 @@ type DaemonMethods = StatusMethods & {
 
 type ShellCapabilityBridgeMethods = {
   invoke: SidecarMethod<
-    Readonly<{ capability: string; input: StandaloneProtocolJsonValue }>,
+    Readonly<{ attachmentId: string; capability: string; input: StandaloneProtocolJsonValue }>,
     StandaloneShellCapabilityResult
   >;
 };
@@ -141,8 +141,9 @@ export async function startSidecarStandalone(
 
   const shellCapabilities = await control.expose<ShellCapabilityBridgeMethods>({
     handlers: {
-      async invoke({ capability, input: capabilityInput }) {
+      async invoke({ attachmentId, capability, input: capabilityInput }) {
         return await request.capabilities.invoke({
+          attachmentId,
           capability,
           handoff: request.handoff,
           input: capabilityInput,
@@ -283,6 +284,7 @@ export async function startSidecarStandalone(
       });
       if (command.command !== OPEN_DESIGN_REGISTER_DESKTOP_AUTH_COMMAND) {
         return {
+          attachmentId: command.attachmentId,
           handoff: request.handoff,
           outcome: "unsupported",
           requestId: command.requestId,
@@ -298,6 +300,7 @@ export async function startSidecarStandalone(
         || !/^[A-Za-z0-9+/]+={0,2}$/u.test(input.secret)
       ) {
         return {
+          attachmentId: command.attachmentId,
           error: { code: "invalid-desktop-auth-secret" },
           handoff: request.handoff,
           outcome: "failed",
@@ -307,6 +310,7 @@ export async function startSidecarStandalone(
       }
       if (launches.daemon == null) {
         return {
+          attachmentId: command.attachmentId,
           error: { code: "daemon-unavailable" },
           handoff: request.handoff,
           outcome: "failed",
@@ -316,6 +320,7 @@ export async function startSidecarStandalone(
       }
       await launches.daemon.client.call("registerDesktopAuth", { secret: input.secret });
       return {
+        attachmentId: command.attachmentId,
         handoff: request.handoff,
         outcome: "completed",
         output: { accepted: true },

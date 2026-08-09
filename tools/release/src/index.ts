@@ -45,6 +45,20 @@ cli
   });
 
 cli
+  .command("resolve-shell-build", "Resolve and materialize an immutable Shell build")
+  .action(async () => {
+    const { resolveShellBuild } = await import("./storage/shell-build.ts");
+    await resolveShellBuild();
+  });
+
+cli
+  .command("register-shell-build", "Register a verified immutable Shell build")
+  .action(async () => {
+    const { registerShellBuild } = await import("./storage/shell-build.ts");
+    await registerShellBuild();
+  });
+
+cli
   .command("publish-dogfood", "Upload unpublished build artifacts to the dogfood prefix for manual distribution")
   .action(async () => {
     await import("./storage/publish-dogfood.ts");

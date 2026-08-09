@@ -21,6 +21,10 @@ describe("hashPackageSourcePath", () => {
 
       expect(secondHash).toBe(firstHash);
 
+      await mkdir(join(packageRoot, "tests"), { recursive: true });
+      await writeFile(join(packageRoot, "tests", "index.test.ts"), "throw new Error('test only');\n", "utf8");
+      await expect(hashPackageSourcePath(packageRoot)).resolves.toBe(firstHash);
+
       await writeFile(join(packageRoot, "src", "index.ts"), "export const value = 2;\n", "utf8");
       await expect(hashPackageSourcePath(packageRoot)).resolves.not.toBe(firstHash);
     } finally {

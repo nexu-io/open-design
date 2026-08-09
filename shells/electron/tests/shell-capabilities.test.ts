@@ -14,11 +14,6 @@ import { createElectronShellCapabilityPort } from "../src/shell-capabilities.js"
 const handoff = createStandaloneHandoffEnvelope({
   descriptor: {
     release: { version: "0.19.0-beta.1" },
-    shell: {
-      digest: `sha256:${"1".repeat(64)}`,
-      type: "electron",
-      version: "0.19.0-beta.1",
-    },
     standalone: {
       digest: `sha256:${"2".repeat(64)}`,
       protocolVersion: 1,
@@ -33,6 +28,7 @@ function request(
   input: StandaloneProtocolJsonValue = { html: "<main>demo</main>" },
 ) {
   return {
+    attachmentId: "electron-a",
     capability,
     handoff,
     input,

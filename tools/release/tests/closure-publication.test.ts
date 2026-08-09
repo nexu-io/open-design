@@ -63,7 +63,7 @@ async function writeFixture(root: string, options: { closureVersion?: string } =
         size: archive.byteLength,
         url: archiveUrl,
       },
-      compatibility: { shell: { minVersion: "0.16.2" } },
+      compatibility: { shell: { electron: { version: { min: "0.16.2" } } } },
       identity: {
         channel: "beta",
         digest: archiveDigest,
@@ -92,6 +92,28 @@ async function writeFixture(root: string, options: { closureVersion?: string } =
       zip: null,
     },
     releaseVersion: version,
+    resolution: {
+      artifacts: {
+        dmg: {
+          contentType: "application/x-apple-diskimage",
+          digest: digest("dmg"),
+          name: "Open Design-release-beta.dmg",
+          objectKey: "beta/shells/electron/versions/0.18.0-beta.3/darwin-arm64/Open Design-release-beta.dmg",
+          size: Buffer.byteLength("dmg"),
+          url: "https://releases.open-design.test/beta/shells/electron/versions/0.18.0-beta.3/darwin-arm64/Open%20Design-release-beta.dmg",
+        },
+        payload: {
+          contentType: "application/zip",
+          digest: digest("legacy payload"),
+          name: "Open Design-release-beta-payload.zip",
+          objectKey: "beta/shells/electron/versions/0.18.0-beta.3/darwin-arm64/Open Design-release-beta-payload.zip",
+          size: Buffer.byteLength("legacy payload"),
+          url: "https://releases.open-design.test/beta/shells/electron/versions/0.18.0-beta.3/darwin-arm64/Open%20Design-release-beta-payload.zip",
+        },
+      },
+      recordUrl: "https://releases.open-design.test/beta/shells/electron/builds/source/artifacts/darwin-arm64.json",
+      state: "reused",
+    },
     shell: {
       sourceDigest: digest("electron shell source"),
       type: "electron",
@@ -132,7 +154,7 @@ describe("Standalone Closure release publication", () => {
     temporaryRoots.push(root);
     const fixture = await writeFixture(root);
 
-    await execFileAsync(process.execPath, ["--experimental-strip-types", publishPlatformPath], {
+    const publication = await execFileAsync(process.execPath, ["--experimental-strip-types", publishPlatformPath], {
       cwd: workspaceRoot,
       env: {
         ...platformEnv(fixture),
@@ -140,6 +162,7 @@ describe("Standalone Closure release publication", () => {
         RELEASE_SHELL_ENABLED: "true",
       },
     });
+    expect(publication.stdout).not.toContain("open-design-0.18.0-beta.4-mac-arm64.dmg");
     const platform = JSON.parse(await readFile(join(fixture.manifestRoot, "mac_arm64.json"), "utf8"));
     expect(platform.releaseVersion).toBe("0.18.0-beta.4");
     expect(platform.shell).toMatchObject({
@@ -149,9 +172,14 @@ describe("Standalone Closure release publication", () => {
     });
     expect(platform.artifacts.dmg.digest).toBe(digest("dmg"));
     expect(platform.artifacts.dmg.url).toContain(
-      "/beta/shells/electron/darwin-arm64/versions/0.18.0-beta.3/",
+      "/beta/shells/electron/versions/0.18.0-beta.3/darwin-arm64/",
     );
+    expect(platform.artifacts.dmg.name).toBe("Open Design-release-beta.dmg");
     expect(platform.shell.artifacts).toEqual(platform.artifacts);
+    expect(platform.shell).toMatchObject({
+      buildRecordUrl: "https://releases.open-design.test/beta/shells/electron/builds/source/artifacts/darwin-arm64.json",
+      resolution: "reused",
+    });
 
     await execFileAsync(process.execPath, ["--experimental-strip-types", publishMetadataPath], {
       cwd: workspaceRoot,

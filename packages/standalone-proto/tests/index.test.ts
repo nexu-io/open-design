@@ -23,9 +23,18 @@ const shellDigest = `sha256:${"b".repeat(64)}` as const;
 
 function request(): StandaloneHandoffRequest {
   return {
+    attachment: {
+      id: "electron-a",
+      shell: {
+        digest: shellDigest,
+        type: "electron",
+        version: "0.18.0-beta.1",
+      },
+    },
     capabilities: {
       async invoke(value) {
         return {
+          attachmentId: value.attachmentId,
           handoff: value.handoff,
           outcome: "unsupported",
           requestId: value.requestId,
@@ -36,11 +45,6 @@ function request(): StandaloneHandoffRequest {
     handoff: createStandaloneHandoffEnvelope({
       descriptor: {
         release: { version: "0.18.0-beta.4" },
-        shell: {
-          digest: shellDigest,
-          type: "electron",
-          version: "0.18.0-beta.1",
-        },
         standalone: {
           digest,
           protocolVersion: STANDALONE_PROTOCOL_VERSION,
@@ -68,10 +72,13 @@ describe("Standalone bootloader protocol", () => {
   it("fixes the fossil entry while keeping channel and namespace independent", () => {
     expect(STANDALONE_BOOTLOADER_ENTRY_PATH).toBe("bootloader.mjs");
     expect(validateStandaloneHandoffRequest(request())).toMatchObject({
+      attachment: {
+        id: "electron-a",
+        shell: { type: "electron", version: "0.18.0-beta.1" },
+      },
       handoff: {
         descriptor: {
           release: { version: "0.18.0-beta.4" },
-          shell: { type: "electron", version: "0.18.0-beta.1" },
           standalone: { version: "0.18.0-beta.4" },
         },
         scope: {
@@ -101,11 +108,6 @@ describe("Standalone bootloader protocol", () => {
     const handoff = request().handoff;
     expect(handoff.descriptor).toEqual({
       release: { version: "0.18.0-beta.4" },
-      shell: {
-        digest: shellDigest,
-        type: "electron",
-        version: "0.18.0-beta.1",
-      },
       standalone: {
         digest,
         protocolVersion: STANDALONE_PROTOCOL_VERSION,
@@ -124,12 +126,17 @@ describe("Standalone bootloader protocol", () => {
   it("fences capability results and runtime status to the exact handoff", () => {
     const handoff = request().handoff;
     expect(validateStandaloneShellCapabilityResult({
+      attachmentId: request().attachment.id,
       handoff,
       outcome: "completed",
       output: { path: "/tmp/export.pdf" },
       requestId: "export-1",
       schemaVersion: STANDALONE_HANDOFF_SCHEMA_VERSION,
-    }, { handoff, requestId: "export-1" })).toMatchObject({ outcome: "completed" });
+    }, {
+      attachmentId: request().attachment.id,
+      handoff,
+      requestId: "export-1",
+    })).toMatchObject({ outcome: "completed" });
 
     expect(validateStandaloneRuntimeStatus({
       handoff,
@@ -187,25 +194,36 @@ describe("Standalone bootloader protocol", () => {
   it("fences Shell-to-Standalone commands to the committed generation", () => {
     const handoff = request().handoff;
     const command = validateStandaloneRuntimeCommandRequest({
+      attachmentId: request().attachment.id,
       command: "open-design.register-desktop-auth.v1",
       handoff,
       input: { secret: "dGVzdA==" },
       requestId: "desktop-auth-1",
       schemaVersion: STANDALONE_HANDOFF_SCHEMA_VERSION,
-    }, { handoff });
+    }, { attachmentId: request().attachment.id, handoff });
     expect(validateStandaloneRuntimeCommandResult({
+      attachmentId: command.attachmentId,
       handoff,
       outcome: "completed",
       output: { accepted: true },
       requestId: command.requestId,
       schemaVersion: STANDALONE_HANDOFF_SCHEMA_VERSION,
-    }, { handoff, requestId: command.requestId })).toMatchObject({ outcome: "completed" });
+    }, {
+      attachmentId: command.attachmentId,
+      handoff,
+      requestId: command.requestId,
+    })).toMatchObject({ outcome: "completed" });
 
     expect(() => validateStandaloneRuntimeCommandResult({
+      attachmentId: command.attachmentId,
       handoff,
       outcome: "unsupported",
       requestId: "other-request",
       schemaVersion: STANDALONE_HANDOFF_SCHEMA_VERSION,
-    }, { handoff, requestId: command.requestId })).toThrow(/requestId/);
+    }, {
+      attachmentId: command.attachmentId,
+      handoff,
+      requestId: command.requestId,
+    })).toThrow(/requestId/);
   });
 });

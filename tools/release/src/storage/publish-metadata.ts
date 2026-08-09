@@ -328,7 +328,7 @@ function validateManifest(target: string, manifest: PlatformManifest): string | 
     if (!/^sha256:[0-9a-f]{64}$/.test(String(manifest.shell.sourceDigest))) {
       return `shell.sourceDigest=${String(manifest.shell.sourceDigest)}`;
     }
-    const shellPrefix = `${publicOrigin}/${releaseChannel}/shells/electron/${expectedPlatform}/versions/${manifest.shell.version}/`;
+    const shellPrefix = `${publicOrigin}/${releaseChannel}/shells/electron/versions/${manifest.shell.version}/${expectedPlatform}/`;
     for (const [name, artifact] of Object.entries(manifest.artifacts ?? {})) {
       if (artifact.url == null || !artifact.url.startsWith(shellPrefix)) return `shell.artifacts.${name}.url=${String(artifact.url)}`;
       if (!/^sha256:[0-9a-f]{64}$/.test(String(artifact.digest))) return `shell.artifacts.${name}.digest=${String(artifact.digest)}`;

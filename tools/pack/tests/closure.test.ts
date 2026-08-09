@@ -88,7 +88,7 @@ describe("tools-pack Closure archive", () => {
     expect(root).toContain("resolveRegisteredBootloader");
     expect(root).toContain('join(root, "standalone", "bootloader.mjs")');
     expect(root).toContain("export const handoff");
-    expect(root).toContain('minShellVersion: "0.18.0-beta.1"');
+    expect(root).toContain('electron: { version: { min: "0.18.0-beta.1" } }');
     expect(root).not.toContain("resolveOpenDesignClosureLayout");
 
     expect(inner).toContain("createStandaloneBootloader");

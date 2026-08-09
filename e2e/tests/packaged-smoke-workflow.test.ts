@@ -1819,9 +1819,9 @@ process.stdin.on("end", () => {
     // A publish=false dispatch is the standing shape for dogfood/QA builds: they
     // must never enter the public beta feed. mac already handed back a DMG, but
     // the Windows job produced nothing retrievable at all, so a Windows dogfood
-    // build was impossible without also publishing. Both shell artifacts emit
-    // a GitHub artifact plus an R2 upload; Closure stays on the direct-storage
-    // path and receives its own collision-free dogfood build id per platform.
+    // build was impossible without also publishing. Shell and Closure artifacts
+    // stay on direct release storage; GitHub artifacts are deliberately not a
+    // second distribution plane.
     const workflow = await readFile(releaseBetaWorkflowPath, "utf8");
     const macJob = sectionBetween(workflow, "  build_mac_arm64:", "  build_mac_x64:");
     const winJob = sectionBetween(workflow, "  build_win_x64:", "  publish:");
@@ -1836,18 +1836,15 @@ process.stdin.on("end", () => {
       expect(job, label).toContain("DOGFOOD_BUILD_JSON_KEYS:");
     }
 
-    // The Windows installer is retrievable as a GitHub artifact too, covering
-    // every win_x64_target (nsis -> setup exe, zip -> portable zip, all -> both).
-    expect(winJob).toContain("name: open-design-beta-win-x64-installer");
-    expect(winJob).toContain("builder\\*-setup.exe");
-    expect(winJob).toContain("builder\\*-portable.zip");
+    expect(workflow).not.toContain("open-design-beta-mac-arm64-dmg");
+    expect(workflow).not.toContain("open-design-beta-win-x64-installer");
 
     // Every publish=false distribution step is gated on !inputs.publish, so the
     // publish=true release pipeline runs exactly as it did before.
     const dogfoodSteps = workflow.split("\n      - name: ").filter((step) =>
       /publish-dogfood|for manual distribution/.test(step)
     );
-    expect(dogfoodSteps).toHaveLength(6);
+    expect(dogfoodSteps).toHaveLength(4);
     for (const step of dogfoodSteps) {
       expect(step, step.split("\n")[0]).toContain("if: ${{ !cancelled() && !inputs.publish }}");
     }
@@ -2639,11 +2636,19 @@ process.stdin.on("end", () => {
     const publishJob = workflow.slice(publishStart);
 
     expect(workflow).toContain("CLOSURE_MIN_SHELL_VERSION: 0.19.0-beta.1");
+    expect(workflow).toContain("POSTHOG_KEY: ${{ secrets.POSTHOG_KEY }}");
+    expect(workflow).not.toContain("POSTHOG_KEY: ${{ inputs.publish");
     expect(workflow).toContain("shell_version:");
     expect(workflow).toContain("shell_version: ${{ inputs.shell_version != ''");
     expect(workflow).toContain("closure_version:");
     expect(workflow).toContain("closure_version: ${{ inputs.closure_version != ''");
     expect(macJob).toContain("Build beta mac_arm64 Standalone Closure");
+    expect(macJob).toContain("Resolve immutable mac_arm64 Electron Shell");
+    expect(macJob).toContain("tools-pack mac identity");
+    expect(macJob).toContain("tools-release resolve-shell-build");
+    expect(macJob).toContain("steps.mac_arm64_shell_resolution.outputs.state == 'miss'");
+    expect(macJob).toContain("Register verified immutable mac_arm64 Electron Shell");
+    expect(macJob).toContain("tools-release register-shell-build");
     expect(macJob).toContain("tools-pack closure build");
     expect(macJob).toContain("--platform darwin-arm64");
     expect(macJob).toContain('--cache-dir "$RUNNER_TEMP/tools-pack-cache"');

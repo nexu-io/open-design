@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import { ToolPackCache } from "../src/cache.js";
 import type { ToolPackConfig } from "../src/config.js";
-import { ensureWorkspaceBuildArtifacts } from "../src/workspace-build.js";
+import { ensureWorkspaceBuildArtifacts, resolveShellSourceDigest } from "../src/workspace-build.js";
 
 const SHELL_PACKAGE_DIRS = [
   "packages/release",
@@ -36,6 +36,9 @@ async function writeWorkspace(root: string): Promise<void> {
     await writeFile(join(root, directory, "package.json"), `${JSON.stringify({ name: directory })}\n`);
     await writeFile(join(root, directory, "src", "index.ts"), "export const value = 1;\n");
   }
+  await mkdir(join(root, "tools/pack/src"), { recursive: true });
+  await writeFile(join(root, "tools/pack/package.json"), `${JSON.stringify({ name: "@open-design/tools-pack" })}\n`);
+  await writeFile(join(root, "tools/pack/src/index.ts"), "export const pack = 1;\n");
 }
 
 async function writeOutputs(root: string, value: string): Promise<void> {
@@ -139,6 +142,18 @@ describe("Electron Shell workspace build cache", () => {
       await ensureWorkspaceBuildArtifacts(config, cache, build);
       await ensureWorkspaceBuildArtifacts({ ...config, webOutputMode: "server" }, cache, build);
       expect(builds).toBe(1);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("keeps one Shell source identity across physical platform targets", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-shell-platform-"));
+    try {
+      await writeWorkspace(root);
+      const mac = createConfig(root, join(root, ".cache-mac"), "mac");
+      const win = createConfig(root, join(root, ".cache-win"), "win");
+      expect(await resolveShellSourceDigest(mac)).toBe(await resolveShellSourceDigest(win));
     } finally {
       await rm(root, { force: true, recursive: true });
     }

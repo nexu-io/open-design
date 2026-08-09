@@ -3,6 +3,7 @@ import {
   resolveClosureStorePaths,
 } from "@open-design/closure-store";
 import {
+  resolveClosureShellMinimumVersion,
   updateClosureFromRelease,
   type ApplyClosureUpdateResult,
 } from "@open-design/closure-update";
@@ -51,7 +52,7 @@ export function resolvePackagedClosureInstallerRequiredVersion(
     || result.reason !== "shell-incompatible"
     || !("candidate" in result)
   ) return null;
-  return result.candidate.manifest.compatibility.shell.minVersion;
+  return resolveClosureShellMinimumVersion(result.candidate.manifest, "electron");
 }
 
 /**
@@ -96,6 +97,7 @@ export async function ensurePackagedClosureAvailable(input: {
     paths,
     platform: target.platform,
     releaseTarget: target.releaseTarget,
+    shellType: "electron",
     shellVersion: input.shellVersion,
   });
 }
