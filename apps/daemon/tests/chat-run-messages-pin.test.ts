@@ -177,6 +177,34 @@ describe('pinAssistantMessageOnRunCreate generation boundary (#6418)', () => {
     expect(m.startedAt).toBe(100);
   });
 
+  it('binds a runId-less web placeholder (normal pre-run flow)', () => {
+    // The web persists an assistant placeholder with runStatus set but no run
+    // bound yet; the run creation must be able to rebind it (this is not a
+    // concurrent-run race — there is no real run owning the row).
+    const db = createDb();
+    db.prepare(`INSERT INTO conversations (id) VALUES ('conv-a')`).run();
+    seedMessage(db, {
+      id: 'msg-1',
+      conversationId: 'conv-a',
+      content: '',
+      runStatus: 'running',
+      startedAt: 100,
+    });
+
+    pinAssistantMessageOnRunCreate(db, {
+      id: 'run-b',
+      conversationId: 'conv-a',
+      assistantMessageId: 'msg-1',
+      status: 'queued',
+      createdAt: 300,
+    });
+
+    const m = readMessage(db, 'msg-1');
+    expect(m.runId).toBe('run-b');
+    expect(m.runStatus).toBe('queued');
+    expect(m.startedAt).toBe(300);
+  });
+
   it('does not touch a message in another conversation', () => {
     const db = createDb();
     db.prepare(`INSERT INTO conversations (id) VALUES ('conv-a'), ('conv-b')`).run();

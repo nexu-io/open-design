@@ -1605,10 +1605,10 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       }
       const existingAssistantPin = db
         .prepare(
-          `SELECT role, conversation_id AS conversationId, run_status AS runStatus FROM messages WHERE id = ?`,
+          `SELECT role, conversation_id AS conversationId, run_id AS runId, run_status AS runStatus FROM messages WHERE id = ?`,
         )
         .get(clientAssistantMessageId) as
-        | { role?: unknown; conversationId?: unknown; runStatus?: unknown }
+        | { role?: unknown; conversationId?: unknown; runId?: unknown; runStatus?: unknown }
         | undefined;
       if (existingAssistantPin && existingAssistantPin.role !== 'assistant') {
         return sendApiError(
@@ -1629,11 +1629,15 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           'assistantMessageId belongs to a different conversation',
         );
       }
-      // An existing row owned by a still-active run must not be rebound — two
-      // concurrent runs sharing the assistantMessageId would reset each
-      // other's generation and corrupt the transcript (nettee).
+      // An existing row bound to a REAL still-active run must not be rebound —
+      // two concurrent runs sharing the assistantMessageId would reset each
+      // other's generation and corrupt the transcript (nettee). A runId-less
+      // web placeholder (runStatus set, no run bound yet) is the normal flow
+      // and stays rebindable.
       if (
         existingAssistantPin
+        && typeof existingAssistantPin.runId === 'string'
+        && existingAssistantPin.runId.length > 0
         && typeof existingAssistantPin.runStatus === 'string'
         && !TERMINAL_RUN_STATUSES.has(existingAssistantPin.runStatus)
       ) {
@@ -3075,10 +3079,10 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       }
       const existingAssistantPin = db
         .prepare(
-          `SELECT role, conversation_id AS conversationId, run_status AS runStatus FROM messages WHERE id = ?`,
+          `SELECT role, conversation_id AS conversationId, run_id AS runId, run_status AS runStatus FROM messages WHERE id = ?`,
         )
         .get(chatAssistantMessageId) as
-        | { role?: unknown; conversationId?: unknown; runStatus?: unknown }
+        | { role?: unknown; conversationId?: unknown; runId?: unknown; runStatus?: unknown }
         | undefined;
       if (existingAssistantPin && existingAssistantPin.role !== 'assistant') {
         return sendApiError(
@@ -3099,11 +3103,15 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           'assistantMessageId belongs to a different conversation',
         );
       }
-      // An existing row owned by a still-active run must not be rebound — two
-      // concurrent runs sharing the assistantMessageId would reset each
-      // other's generation and corrupt the transcript (nettee).
+      // An existing row bound to a REAL still-active run must not be rebound —
+      // two concurrent runs sharing the assistantMessageId would reset each
+      // other's generation and corrupt the transcript (nettee). A runId-less
+      // web placeholder (runStatus set, no run bound yet) is the normal flow
+      // and stays rebindable.
       if (
         existingAssistantPin
+        && typeof existingAssistantPin.runId === 'string'
+        && existingAssistantPin.runId.length > 0
         && typeof existingAssistantPin.runStatus === 'string'
         && !TERMINAL_RUN_STATUSES.has(existingAssistantPin.runStatus)
       ) {

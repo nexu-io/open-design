@@ -345,8 +345,13 @@ export function pinAssistantMessageOnRunCreate(db: SqliteDb, run: ChatRunMessage
     // run — two concurrent runs sharing the assistantMessageId would otherwise
     // clear each other's in-flight events/content and corrupt the transcript.
     // The route rejects this case; this skip keeps the destructive reset from
-    // firing on a race that slips past it (nettee on #6418).
-    if (existing.runStatus === 'queued' || existing.runStatus === 'running') {
+    // firing on a race that slips past it. A runId-less web placeholder
+    // (runStatus set, no run bound yet) is the normal pre-run flow and stays
+    // rebindable (nettee on #6418).
+    if (
+      existing.runId &&
+      (existing.runStatus === 'queued' || existing.runStatus === 'running')
+    ) {
       return;
     }
     // Generation boundary: rebinding an existing assistant message to a NEW
