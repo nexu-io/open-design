@@ -132,7 +132,7 @@ for (const target of ["mac_arm64", "win_x64", "mac_x64"]) {
     } catch {
       throw new Error(`metadata target ${target} has an invalid Shell version`);
     }
-    const shellPrefix = `${releaseDescriptor.storagePrefix}/shells/electron/${expectedPlatform}/versions/${shell.version}/`;
+    const shellPrefix = `${releaseDescriptor.storagePrefix}/shells/electron/versions/${shell.version}/${expectedPlatform}/`;
     for (const [name, artifact] of Object.entries(targetMetadata.artifacts ?? {})) {
       const artifactUrl = new URL(String(artifact.url));
       if (!artifactUrl.pathname.includes(`/${shellPrefix}`) || !/^sha256:[0-9a-f]{64}$/.test(String(artifact.digest))) {

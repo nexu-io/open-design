@@ -13,6 +13,7 @@ const execFileAsync = promisify(execFile);
 const workspaceRoot = dirname(dirname(dirname(dirname(fileURLToPath(import.meta.url)))));
 const publishPlatformPath = join(workspaceRoot, "tools", "release", "src", "storage", "publish-platform.ts");
 const publishMetadataPath = join(workspaceRoot, "tools", "release", "src", "storage", "publish-metadata.ts");
+const verifyMetadataPath = join(workspaceRoot, "tools", "release", "src", "storage", "verify-metadata.ts");
 const temporaryRoots: string[] = [];
 
 function digest(bytes: string | Buffer): string {
@@ -205,6 +206,24 @@ describe("Standalone Closure release publication", () => {
     });
     const metadata = JSON.parse(await readFile(join(fixture.metadataRoot, "metadata.json"), "utf8"));
     expect(metadata.releaseTargets.mac_arm64.shell).toEqual(platform.shell);
+
+    await expect(execFileAsync(process.execPath, ["--experimental-strip-types", verifyMetadataPath], {
+      cwd: workspaceRoot,
+      env: {
+        ...process.env,
+        ENABLE_MAC_ARM64: "true",
+        ENABLE_MAC_X64: "false",
+        ENABLE_WIN_X64: "false",
+        MAC_ARM64_RESULT: "success",
+        RELEASE_CHANNEL: "beta",
+        RELEASE_CLOSURE_REQUIRED: "true",
+        RELEASE_METADATA_PATH: join(fixture.metadataRoot, "metadata.json"),
+        RELEASE_SHELL_REQUIRED: "true",
+        RELEASE_VERSION: "0.18.0-beta.4",
+      },
+    })).resolves.toMatchObject({
+      stdout: expect.stringContaining("verified beta metadata"),
+    });
   });
 
   it("publishes Closure and legacy payload identities on the same platform metadata surface", async () => {
