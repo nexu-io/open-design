@@ -26,7 +26,7 @@ import {
 } from '../byok-tools.js';
 import {
   envByokDefaultForProtocol,
-  envByokDefaultsView,
+  resolveProxyProviderFields,
 } from '../byok-env.js';
 import {
   AIHUBMIX_DEFAULT_BASE_URL,
@@ -991,12 +991,14 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     if (rejectProxyPluginContext(proxyBody, res)) return;
     const { systemPrompt, messages, maxTokens } = proxyBody;
     // Host-managed default (OD_BYOK_*): a server deployment's browser need
-    // not send the key at all — the daemon fills it here, server-side only.
+    // not send the key at all. The provider resolves ATOMICALLY — the env
+    // tuple applies only when the request carries NO provider fields at
+    // all; a partial body is rejected. Per-field mixing would let a caller
+    // send its own baseUrl and have the daemon forward the host key to a
+    // request-controlled upstream (credential exfiltration).
     const envDefault = envByokDefaultForProtocol('anthropic');
-    const baseUrl = proxyBody.baseUrl ?? envDefault?.provider.baseUrl;
-    const apiKey = proxyBody.apiKey ?? envDefault?.provider.apiKey;
-    const model = proxyBody.model ?? envDefault?.model;
-    if (!baseUrl || !apiKey || !model) {
+    const resolved = resolveProxyProviderFields(proxyBody, envDefault);
+    if (!resolved) {
       return sendApiError(
         res,
         400,
@@ -1004,6 +1006,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         'baseUrl, apiKey, and model are required',
       );
     }
+    const { baseUrl, apiKey, model } = resolved;
 
     const validated = await validateExternalApiBaseUrl(baseUrl);
     if (validated.error) {
@@ -1041,12 +1044,11 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     const proxyBody = req.body || {};
     if (rejectProxyPluginContext(proxyBody, res)) return;
     const { systemPrompt, messages, maxTokens } = proxyBody;
-    // Host-managed default (OD_BYOK_*), same as the anthropic route.
+    // Host-managed default (OD_BYOK_*), same atomic resolution as the
+    // anthropic route — env tuple only when the request carries nothing.
     const envDefault = envByokDefaultForProtocol('openai');
-    const baseUrl = proxyBody.baseUrl ?? envDefault?.provider.baseUrl;
-    const apiKey = proxyBody.apiKey ?? envDefault?.provider.apiKey;
-    const model = proxyBody.model ?? envDefault?.model;
-    if (!baseUrl || !apiKey || !model) {
+    const resolved = resolveProxyProviderFields(proxyBody, envDefault);
+    if (!resolved) {
       return sendApiError(
         res,
         400,
@@ -1054,6 +1056,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         'baseUrl, apiKey, and model are required',
       );
     }
+    const { baseUrl, apiKey, model } = resolved;
 
     const validated = await validateExternalApiBaseUrl(baseUrl);
     if (validated.error) {
@@ -2371,13 +2374,6 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     runSpeech: executeAIHubMixGenerateSpeech,
     runVideo: executeAIHubMixGenerateVideo,
     routeByModel: true,
-  });
-
-  // What the web may learn about a host-managed provider (OD_BYOK_*):
-  // enough to badge "managed by host environment" and pre-fill the model —
-  // never the key.
-  app.get('/api/byok-defaults', (_req, res) => {
-    res.json(envByokDefaultsView());
   });
 
   app.post('/api/proxy/:provider/stream', (req, res) => {
