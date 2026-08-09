@@ -9,7 +9,7 @@ triggers:
   - "explainer video"
   - "seed audio explainer"
 od:
-  mode: video
+  mode: utility
   category: video-generation
   upstream: "https://github.com/higgsfield-ai/skills"
 ---

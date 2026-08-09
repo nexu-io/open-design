@@ -645,8 +645,11 @@ export interface ComposeInput {
     | 'image'
     | 'video'
     | 'audio'
+    | 'utility'
     | undefined;
-  skillModes?: Array<'prototype' | 'deck' | 'template' | 'design-system' | 'image' | 'video' | 'audio'> | undefined;
+  skillModes?: Array<
+    'prototype' | 'deck' | 'template' | 'design-system' | 'image' | 'video' | 'audio' | 'utility'
+  > | undefined;
   designSystemBody?: string | undefined;
   designSystemTitle?: string | undefined;
   // Compiled (machine-readable) form of the active brand's design system,

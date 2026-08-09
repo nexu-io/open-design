@@ -9,7 +9,7 @@ triggers:
   - "gen4.5"
   - "rw-generate-video"
 od:
-  mode: video
+  mode: utility
   category: video-generation
   upstream: "https://github.com/runwayml/skills"
 ---

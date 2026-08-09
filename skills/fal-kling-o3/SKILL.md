@@ -8,7 +8,7 @@ triggers:
   - "kling video"
   - "kling image"
 od:
-  mode: video
+  mode: utility
   category: video-generation
   upstream: "https://github.com/fal-ai-community/skills"
 ---

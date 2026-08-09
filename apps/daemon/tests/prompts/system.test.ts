@@ -354,6 +354,13 @@ describe('composeSystemPrompt', () => {
     })).toBe('deck');
   });
 
+  it('does not treat utility as an exclusive media surface', () => {
+    expect(resolveExclusiveSurface({
+      skillMode: 'utility',
+      skillModes: ['utility'],
+    })).toBeNull();
+  });
+
   describe('artifact handoff no-emit clauses (#1143)', () => {
     it('drops the absolute "non-negotiable" framing in favor of conditional language', () => {
       const prompt = composeSystemPrompt({});

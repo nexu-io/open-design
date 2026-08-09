@@ -9,7 +9,7 @@ triggers:
   - "runway soundtrack"
   - "runway voice"
 od:
-  mode: audio
+  mode: utility
   category: audio-music
   upstream: "https://github.com/runwayml/skills"
 ---

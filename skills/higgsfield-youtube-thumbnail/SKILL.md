@@ -9,7 +9,7 @@ triggers:
   - "video cover"
   - "thumbnail variants"
 od:
-  mode: image
+  mode: utility
   category: image-generation
   upstream: "https://github.com/higgsfield-ai/skills"
 ---

@@ -9,7 +9,7 @@ triggers:
   - "runway text to image"
   - "gpt image runway"
 od:
-  mode: image
+  mode: utility
   category: image-generation
   upstream: "https://github.com/runwayml/skills"
 ---

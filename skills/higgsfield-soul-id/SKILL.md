@@ -9,7 +9,7 @@ triggers:
   - "face identity"
   - "character reference"
 od:
-  mode: image
+  mode: utility
   category: image-generation
   upstream: "https://github.com/higgsfield-ai/skills"
 ---

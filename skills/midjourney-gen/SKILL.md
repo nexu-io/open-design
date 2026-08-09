@@ -9,7 +9,7 @@ triggers:
   - "midjourney video"
   - "midjourney describe"
 od:
-  mode: image
+  mode: utility
   category: image-generation
   upstream: "https://github.com/AceDataCloud/MidjourneyMCP"
 ---

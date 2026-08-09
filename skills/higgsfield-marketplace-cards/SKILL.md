@@ -9,7 +9,7 @@ triggers:
   - "product listing images"
   - "ecommerce product cards"
 od:
-  mode: image
+  mode: utility
   category: image-generation
   upstream: "https://github.com/higgsfield-ai/skills"
 ---

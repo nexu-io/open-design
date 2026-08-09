@@ -9,7 +9,7 @@ triggers:
   - "game sprites"
   - "game assets generate"
 od:
-  mode: prototype
+  mode: utility
   category: web-artifacts
   upstream: "https://github.com/higgsfield-ai/skills"
 ---

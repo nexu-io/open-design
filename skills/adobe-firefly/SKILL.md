@@ -9,7 +9,7 @@ triggers:
   - "adobe generative"
   - "commercially safe image"
 od:
-  mode: image
+  mode: utility
   category: image-generation
   upstream: "https://developer.adobe.com/firefly-services/"
 ---

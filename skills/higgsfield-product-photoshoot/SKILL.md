@@ -9,7 +9,7 @@ triggers:
   - "lifestyle product"
   - "virtual model tryout"
 od:
-  mode: image
+  mode: utility
   category: image-generation
   upstream: "https://github.com/higgsfield-ai/skills"
 ---

@@ -9,7 +9,7 @@ triggers:
   - "logo system"
   - "brandbook"
 od:
-  mode: image
+  mode: utility
   category: design-systems
   upstream: "https://github.com/higgsfield-ai/skills"
 ---

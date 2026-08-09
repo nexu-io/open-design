@@ -10,7 +10,7 @@ triggers:
   - "marketing studio"
   - "virality predictor"
 od:
-  mode: image
+  mode: utility
   category: image-generation
   upstream: "https://github.com/higgsfield-ai/skills"
 ---

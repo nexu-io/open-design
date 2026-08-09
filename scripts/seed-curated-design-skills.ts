@@ -23,7 +23,15 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..');
 const SKILLS_ROOT = path.join(REPO_ROOT, 'skills');
 
-type Mode = 'image' | 'video' | 'audio' | 'deck' | 'design-system' | 'template' | 'prototype';
+type Mode =
+  | 'image'
+  | 'video'
+  | 'audio'
+  | 'deck'
+  | 'design-system'
+  | 'template'
+  | 'prototype'
+  | 'utility';
 
 interface CuratedSkill {
   // Folder + frontmatter `name`; must be a slug (a-z, 0-9, dash) so the
@@ -35,8 +43,9 @@ interface CuratedSkill {
   // Lowercase keywords / phrases the agent matches against. Aim for 3-6
   // distinct phrases per skill so triggers stay specific.
   triggers: string[];
-  // Maps to the existing `od.mode` filter. Pick the closest of the seven
-  // modes the daemon recognises; everything else falls back to "prototype".
+  // Maps to `od.mode`. Functional catalogue stubs should use `utility`
+  // so selecting them does not force an exclusive image/video/audio
+  // surface; rendering modes remain for true design-template entries.
   mode: Mode;
   // Free-form category slug that powers the new category filter row in
   // Settings → Skills. Keep the vocabulary tight so a few pills cover the
@@ -141,7 +150,7 @@ const CATALOGUE: CuratedSkill[] = [
       'marketing studio',
       'virality predictor',
     ],
-    mode: 'image',
+    mode: 'utility',
     category: 'image-generation',
     upstream: 'https://github.com/higgsfield-ai/skills',
     attribution: 'Curated from the official Higgsfield AI skills repository.',
@@ -153,7 +162,7 @@ const CATALOGUE: CuratedSkill[] = [
     description:
       'Train a Soul Character — a reusable, face-faithful identity model. Returns a reference_id consumable by Soul-aware Higgsfield generation.',
     triggers: ['higgsfield soul', 'soul id', 'train soul', 'face identity', 'character reference'],
-    mode: 'image',
+    mode: 'utility',
     category: 'image-generation',
     upstream: 'https://github.com/higgsfield-ai/skills',
     attribution: 'Curated from the official Higgsfield AI skills repository.',
@@ -169,7 +178,7 @@ const CATALOGUE: CuratedSkill[] = [
       'lifestyle product',
       'virtual model tryout',
     ],
-    mode: 'image',
+    mode: 'utility',
     category: 'image-generation',
     upstream: 'https://github.com/higgsfield-ai/skills',
     attribution: 'Curated from the official Higgsfield AI skills repository.',
@@ -185,7 +194,7 @@ const CATALOGUE: CuratedSkill[] = [
       'logo system',
       'brandbook',
     ],
-    mode: 'image',
+    mode: 'utility',
     category: 'design-systems',
     upstream: 'https://github.com/higgsfield-ai/skills',
     attribution: 'Curated from the official Higgsfield AI skills repository.',
@@ -201,7 +210,7 @@ const CATALOGUE: CuratedSkill[] = [
       'video cover',
       'thumbnail variants',
     ],
-    mode: 'image',
+    mode: 'utility',
     category: 'image-generation',
     upstream: 'https://github.com/higgsfield-ai/skills',
     attribution: 'Curated from the official Higgsfield AI skills repository.',
@@ -217,7 +226,7 @@ const CATALOGUE: CuratedSkill[] = [
       'product listing images',
       'ecommerce product cards',
     ],
-    mode: 'image',
+    mode: 'utility',
     category: 'image-generation',
     upstream: 'https://github.com/higgsfield-ai/skills',
     attribution: 'Curated from the official Higgsfield AI skills repository.',
@@ -367,7 +376,7 @@ const CATALOGUE: CuratedSkill[] = [
       'explainer video',
       'seed audio explainer',
     ],
-    mode: 'video',
+    mode: 'utility',
     category: 'video-generation',
     upstream: 'https://github.com/higgsfield-ai/skills',
     attribution: 'Curated from the official Higgsfield AI skills repository.',
@@ -383,7 +392,7 @@ const CATALOGUE: CuratedSkill[] = [
       'gen4.5',
       'rw-generate-video',
     ],
-    mode: 'video',
+    mode: 'utility',
     category: 'video-generation',
     upstream: 'https://github.com/runwayml/skills',
     attribution: 'Curated from the official Runway ML skills repository.',
@@ -401,7 +410,7 @@ const CATALOGUE: CuratedSkill[] = [
       'runway text to image',
       'gpt image runway',
     ],
-    mode: 'image',
+    mode: 'utility',
     category: 'image-generation',
     upstream: 'https://github.com/runwayml/skills',
     attribution: 'Curated from the official Runway ML skills repository.',
@@ -419,7 +428,7 @@ const CATALOGUE: CuratedSkill[] = [
       'runway soundtrack',
       'runway voice',
     ],
-    mode: 'audio',
+    mode: 'utility',
     category: 'audio-music',
     upstream: 'https://github.com/runwayml/skills',
     attribution: 'Curated from the official Runway ML skills repository.',
@@ -437,7 +446,7 @@ const CATALOGUE: CuratedSkill[] = [
       'luma dream machine',
       'ray-2',
     ],
-    mode: 'video',
+    mode: 'utility',
     category: 'video-generation',
     upstream: 'https://github.com/runapi-ai/luma',
     attribution: 'Curated from the RunAPI Luma skill (Dream Machine API).',
@@ -489,7 +498,7 @@ const CATALOGUE: CuratedSkill[] = [
     description:
       'Generate images and videos with Kling O3 — Kling\'s most powerful model family — via fal.ai.',
     triggers: ['fal kling', 'kling o3', 'kling video', 'kling image'],
-    mode: 'video',
+    mode: 'utility',
     category: 'video-generation',
     upstream: 'https://github.com/fal-ai-community/skills',
     attribution: 'Curated from the fal.ai community team.',
@@ -507,7 +516,7 @@ const CATALOGUE: CuratedSkill[] = [
       'midjourney video',
       'midjourney describe',
     ],
-    mode: 'image',
+    mode: 'utility',
     category: 'image-generation',
     upstream: 'https://github.com/AceDataCloud/MidjourneyMCP',
     attribution: 'Curated against the AceDataCloud Midjourney MCP surface (unofficial Midjourney proxy).',
@@ -525,7 +534,7 @@ const CATALOGUE: CuratedSkill[] = [
       'adobe generative',
       'commercially safe image',
     ],
-    mode: 'image',
+    mode: 'utility',
     category: 'image-generation',
     upstream: 'https://developer.adobe.com/firefly-services/',
     attribution: 'Catalogue stub pointing at Adobe Firefly Services docs.',
@@ -621,7 +630,7 @@ const CATALOGUE: CuratedSkill[] = [
       '3d scene blender',
       'render in blender',
     ],
-    mode: 'image',
+    mode: 'utility',
     category: '3d-shaders',
     upstream: 'https://github.com/ageless-h/blender-mcp',
     attribution: 'Curated from the ageless-h Blender MCP project (also see dcc-mcp/dcc-mcp-blender).',
@@ -1271,7 +1280,7 @@ const CATALOGUE: CuratedSkill[] = [
       'tanstack start site',
       'higgsfield web app',
     ],
-    mode: 'prototype',
+    mode: 'utility',
     category: 'web-artifacts',
     upstream: 'https://github.com/higgsfield-ai/skills',
     attribution: 'Curated from the official Higgsfield AI skills repository.',
@@ -1287,7 +1296,7 @@ const CATALOGUE: CuratedSkill[] = [
       'game sprites',
       'game assets generate',
     ],
-    mode: 'prototype',
+    mode: 'utility',
     category: 'web-artifacts',
     upstream: 'https://github.com/higgsfield-ai/skills',
     attribution: 'Curated from the official Higgsfield AI skills repository.',

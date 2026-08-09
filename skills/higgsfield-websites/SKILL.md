@@ -9,7 +9,7 @@ triggers:
   - "tanstack start site"
   - "higgsfield web app"
 od:
-  mode: prototype
+  mode: utility
   category: web-artifacts
   upstream: "https://github.com/higgsfield-ai/skills"
 ---

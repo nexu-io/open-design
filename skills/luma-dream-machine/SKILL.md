@@ -9,7 +9,7 @@ triggers:
   - "luma dream machine"
   - "ray-2"
 od:
-  mode: video
+  mode: utility
   category: video-generation
   upstream: "https://github.com/runapi-ai/luma"
 ---

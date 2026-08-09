@@ -9,7 +9,7 @@ triggers:
   - "3d scene blender"
   - "render in blender"
 od:
-  mode: image
+  mode: utility
   category: 3d-shaders
   upstream: "https://github.com/ageless-h/blender-mcp"
 ---
