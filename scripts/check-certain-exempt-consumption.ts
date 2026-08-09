@@ -54,6 +54,33 @@ const checkedExtensions = new Set([".ts", ".tsx"]);
 // visible to the guard.
 const sandboxFixtureWriterNames = new Set(["writeProjectFile"]);
 
+const certainExemptSourceMarkers = [
+  ".vscode",
+  ".idea",
+  "docs",
+  "landing-page",
+  "ISSUE_TEMPLATE",
+  "LICENSE",
+  "CODEOWNERS",
+] as const;
+
+// A prefilter may skip parsing only when escaped spellings cannot hide a
+// guarded path. Unicode, hex, and line-continuation escapes always fall back;
+// removing slashes covers identity escapes such as `\d\o\c\s`.
+function hasPotentiallyEscapedLiteral(source: string): boolean {
+  if (source.includes("\\u") || source.includes("\\x") || /\\\r?\n/.test(source)) return true;
+  if (!source.includes("\\")) return false;
+  const unescapedSource = source.replaceAll("\\", "");
+  return certainExemptSourceMarkers.some((marker) => unescapedSource.includes(marker));
+}
+
+export function sourceMayConsumeCertainExemptSurface(source: string): boolean {
+  return (
+    hasPotentiallyEscapedLiteral(source) ||
+    certainExemptSourceMarkers.some((marker) => source.includes(marker))
+  );
+}
+
 // File-level exceptions. Every entry must explain why the reference is not
 // gate-lane consumption of exempt-file *content*; revisit the entry if the
 // file's relationship to the exempt surface changes.
@@ -385,6 +412,7 @@ export async function checkCertainExemptConsumption(): Promise<boolean> {
     for (const repositoryPath of await collectCheckedFiles(path.join(repoRoot, root))) {
       if (allowedConsumers.has(repositoryPath) || conditionallyAllowed.has(repositoryPath)) continue;
       const source = await readFile(path.join(repoRoot, repositoryPath), "utf8");
+      if (!sourceMayConsumeCertainExemptSurface(source)) continue;
       violations.push(...collectCertainExemptConsumptionFromSource(repositoryPath, source));
     }
   }
