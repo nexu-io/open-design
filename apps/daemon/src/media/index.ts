@@ -100,7 +100,7 @@ const execFile = promisify(execFileCb);
 const DEFAULT_OPENROUTER_VIDEO_POLL_INTERVAL_MS = 8000;
 type ProviderConfig = { apiKey?: string; baseUrl?: string; model?: string };
 type ProgressFn = (message: string) => void;
-type ImageRef = { path: string; abs: string; mime: string; size: number; dataUrl: string };
+type ImageRef = { path: string; abs: string; mime: string; size: number; dataUrl: string; remoteUrl?: string };
 type MediaRequestInit = Pick<RequestInit, 'dispatcher'>;
 type MediaContext = {
   surface: MediaSurface;
@@ -210,11 +210,25 @@ function stubsAllowed() {
  * Security: refuses anything that escapes the project directory.
  * Without this guard, an agent (or a hallucinated arg) could ask the
  * daemon to upload `/etc/passwd` to a paid model.
+ *
+ * HTTPS URLs are accepted as-is for providers (e.g. Luma) that can only
+ * fetch publicly reachable frames — they never touch the local FS.
  */
 async function resolveProjectImage(rel: unknown, projectDir: string): Promise<ImageRef | null> {
   if (typeof rel !== 'string' || !rel.trim()) return null;
+  const trimmed = rel.trim();
+  if (/^https:\/\//i.test(trimmed)) {
+    return {
+      path: trimmed,
+      abs: trimmed,
+      mime: 'image/jpeg',
+      size: 0,
+      dataUrl: '',
+      remoteUrl: trimmed,
+    };
+  }
   const projectRootResolved = path.resolve(projectDir);
-  const abs = path.resolve(projectRootResolved, rel.trim());
+  const abs = path.resolve(projectRootResolved, trimmed);
   if (
     abs !== projectRootResolved &&
     !abs.startsWith(projectRootResolved + path.sep)
@@ -259,7 +273,7 @@ async function resolveProjectImage(rel: unknown, projectDir: string): Promise<Im
     );
   }
   return {
-    path: rel.trim(),
+    path: trimmed,
     abs,
     mime,
     size: bytes.length,
@@ -4389,9 +4403,9 @@ async function pollRunwayTask(
       }
       return { output };
     }
-    if (lastStatus === 'FAILED') {
+    if (lastStatus === 'FAILED' || lastStatus === 'CANCELLED') {
       const reason = pollData.failure || pollData.failureCode || lastStatus;
-      throw new Error(`runway task failed: ${typeof reason === 'string' ? reason : JSON.stringify(reason)}`);
+      throw new Error(`runway task ${lastStatus.toLowerCase()}: ${typeof reason === 'string' ? reason : JSON.stringify(reason)}`);
     }
   }
   const elapsedSec = Math.round((Date.now() - startedAt) / 1000);
@@ -4575,9 +4589,19 @@ async function renderLumaVideo(
     resolution: '720p',
     duration: `${durationSec}s`,
   };
-  if (ctx.imageRef?.dataUrl) {
+  if (ctx.imageRef) {
+    // Dream Machine only accepts publicly reachable HTTPS frame URLs —
+    // local project files resolve to data URIs which Luma cannot fetch.
+    const remoteUrl = ctx.imageRef.remoteUrl;
+    if (!remoteUrl) {
+      throw new Error(
+        'Luma image-to-video requires a publicly reachable HTTPS image URL '
+        + '(Dream Machine cannot fetch local project files or data URIs). '
+        + 'Host the start frame on a CDN and pass --image https://…, or omit --image for text-to-video.',
+      );
+    }
     body.keyframes = {
-      frame0: { type: 'image', url: ctx.imageRef.dataUrl },
+      frame0: { type: 'image', url: remoteUrl },
     };
   }
 
@@ -4646,7 +4670,12 @@ async function renderLumaVideo(
       onProgress(`luma generation ${generationId} state=${lastState || 'pending'} (elapsed ${elapsedSec}s)`);
     }
     if (lastState === 'completed') {
-      videoUrl = pollData?.assets?.video || null;
+      videoUrl = typeof pollData?.assets?.video === 'string' ? pollData.assets.video : null;
+      if (!videoUrl) {
+        throw new Error(
+          `luma generation ${generationId} completed with no assets.video URL`,
+        );
+      }
       break;
     }
     if (lastState === 'failed') {

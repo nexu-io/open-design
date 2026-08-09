@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -249,5 +249,159 @@ describe('runway + luma media BYOK', () => {
     const bytes = await readFile(path.join(projectsRoot, 'project-1', result.name));
     expect(bytes.equals(MP4_BYTES)).toBe(true);
     expect(result.providerNote).toContain('luma/ray-2');
+  });
+
+  it('fails Runway poll when task status is CANCELLED', async () => {
+    process.env.RUNWAYML_API_SECRET = 'runway-test-secret';
+    const fetchMock = vi.fn(async (input: unknown) => {
+      const url = String(input);
+      if (url === 'https://api.dev.runwayml.com/v1/text_to_image') {
+        return new Response(JSON.stringify({ id: 'task_cancel_1' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === 'https://api.dev.runwayml.com/v1/tasks/task_cancel_1') {
+        return new Response(JSON.stringify({
+          id: 'task_cancel_1',
+          status: 'CANCELLED',
+          failure: 'user cancelled',
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: TimerHandler) => {
+      if (typeof fn === 'function') fn();
+      return 0 as unknown as ReturnType<typeof setTimeout>;
+    }) as typeof setTimeout);
+
+    await expect(generateMedia({
+      projectRoot,
+      projectsRoot,
+      projectId: 'project-1',
+      surface: 'image',
+      model: 'runway-gen-image',
+      prompt: 'Should cancel',
+      output: 'cancel.png',
+    })).rejects.toThrow(/runway task cancelled/i);
+  });
+
+  it('fails Luma when completed response has no assets.video', async () => {
+    process.env.LUMAAI_API_KEY = 'luma-test-key';
+    const fetchMock = vi.fn(async (input: unknown) => {
+      const url = String(input);
+      if (url === 'https://api.lumalabs.ai/dream-machine/v1/generations') {
+        return new Response(JSON.stringify({ id: 'gen_empty', state: 'dreaming' }), {
+          status: 201,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === 'https://api.lumalabs.ai/dream-machine/v1/generations/gen_empty') {
+        return new Response(JSON.stringify({
+          id: 'gen_empty',
+          state: 'completed',
+          assets: {},
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: TimerHandler) => {
+      if (typeof fn === 'function') fn();
+      return 0 as unknown as ReturnType<typeof setTimeout>;
+    }) as typeof setTimeout);
+
+    await expect(generateMedia({
+      projectRoot,
+      projectsRoot,
+      projectId: 'project-1',
+      surface: 'video',
+      model: 'luma-ray-2',
+      prompt: 'Empty output',
+      output: 'empty.mp4',
+    })).rejects.toThrow(/completed with no assets\.video URL/);
+  });
+
+  it('rejects Luma i2v when --image is a local project file', async () => {
+    process.env.LUMAAI_API_KEY = 'luma-test-key';
+    const projectDir = path.join(projectsRoot, 'project-1');
+    await mkdir(projectDir, { recursive: true });
+    await writeFile(path.join(projectDir, 'frame.png'), PNG_BYTES);
+
+    await expect(generateMedia({
+      projectRoot,
+      projectsRoot,
+      projectId: 'project-1',
+      surface: 'video',
+      model: 'luma-ray-2',
+      prompt: 'Animate this frame',
+      image: 'frame.png',
+      output: 'i2v.mp4',
+    })).rejects.toThrow(/publicly reachable HTTPS image URL/i);
+  });
+
+  it('accepts Luma i2v when --image is an HTTPS URL', async () => {
+    process.env.LUMAAI_API_KEY = 'luma-test-key';
+    let pollCount = 0;
+    const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
+      const url = String(input);
+      if (url === 'https://api.lumalabs.ai/dream-machine/v1/generations') {
+        const body = JSON.parse(String(init?.body));
+        expect(body.keyframes).toEqual({
+          frame0: { type: 'image', url: 'https://cdn.example/start.png' },
+        });
+        return new Response(JSON.stringify({ id: 'gen_i2v', state: 'dreaming' }), {
+          status: 201,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === 'https://api.lumalabs.ai/dream-machine/v1/generations/gen_i2v') {
+        pollCount += 1;
+        if (pollCount === 1) {
+          return new Response(JSON.stringify({ id: 'gen_i2v', state: 'dreaming' }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        return new Response(JSON.stringify({
+          id: 'gen_i2v',
+          state: 'completed',
+          assets: { video: 'https://cdn.example/luma-i2v.mp4' },
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === 'https://cdn.example/luma-i2v.mp4') {
+        return new Response(MP4_BYTES, { status: 200 });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: TimerHandler) => {
+      if (typeof fn === 'function') fn();
+      return 0 as unknown as ReturnType<typeof setTimeout>;
+    }) as typeof setTimeout);
+
+    const result = await generateMedia({
+      projectRoot,
+      projectsRoot,
+      projectId: 'project-1',
+      surface: 'video',
+      model: 'luma-ray-2',
+      prompt: 'Animate this frame',
+      image: 'https://cdn.example/start.png',
+      output: 'luma-i2v.mp4',
+    });
+
+    expect(result.providerId).toBe('luma');
+    expect(result.name).toBe('luma-i2v.mp4');
   });
 });

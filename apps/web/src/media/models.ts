@@ -661,7 +661,7 @@ export const VIDEO_MODELS: MediaModel[] = [
 
   // Runway / Luma — Settings Media BYOK (MCP Connect remains an alternate path).
   { id: 'runway-gen-4.5', label: 'runway-gen-4.5', hint: 'Runway · Gen-4.5 video', provider: 'runway', caps: ['t2v', 'i2v'] },
-  { id: 'luma-ray-2', label: 'luma-ray-2', hint: 'Luma · Ray-2 Dream Machine', provider: 'luma', caps: ['t2v', 'i2v'] },
+  { id: 'luma-ray-2', label: 'luma-ray-2', hint: 'Luma · Ray-2 Dream Machine (i2v needs HTTPS URL)', provider: 'luma', caps: ['t2v', 'i2v'] },
 
   // MiniMax video.
   { id: 'minimax-video-01', label: 'video-01', hint: 'MiniMax · Hailuo', provider: 'minimax', caps: ['t2v', 'i2v'] },

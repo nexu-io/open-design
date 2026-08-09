@@ -193,7 +193,7 @@ export const VIDEO_MODELS: MediaModel[] = [
   { id: 'sora-2-pro', label: 'sora-2-pro', hint: 'Fal · OpenAI Sora 2 Pro', provider: 'fal', caps: ['t2v'] },
 
   { id: 'runway-gen-4.5', label: 'runway-gen-4.5', hint: 'Runway · Gen-4.5 video', provider: 'runway', caps: ['t2v', 'i2v'] },
-  { id: 'luma-ray-2', label: 'luma-ray-2', hint: 'Luma · Ray-2 Dream Machine', provider: 'luma', caps: ['t2v', 'i2v'] },
+  { id: 'luma-ray-2', label: 'luma-ray-2', hint: 'Luma · Ray-2 Dream Machine (i2v needs HTTPS URL)', provider: 'luma', caps: ['t2v', 'i2v'] },
 
   { id: 'minimax-video-01', label: 'video-01', hint: 'MiniMax · Hailuo', provider: 'minimax', caps: ['t2v', 'i2v'] },
   { id: 'hyperframes-html', label: 'hyperframes-html', hint: 'HyperFrames · local HTML renderer', provider: 'hyperframes', caps: ['t2v'] },
