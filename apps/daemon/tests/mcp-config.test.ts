@@ -737,11 +737,13 @@ describe('MCP_TEMPLATES', () => {
   it('includes the Higgsfield openclaw entry pointing at the streamable HTTP /mcp endpoint', () => {
     const tpl = MCP_TEMPLATES.find((t) => t.id === 'higgsfield-openclaw');
     expect(tpl).toBeDefined();
+    expect(tpl?.label).toBe('Higgsfield');
     // The actual MCP endpoint (verified live) is the /mcp path with
     // streamable HTTP transport. The bare host returns 404 on POST and the
     // /sse path returns 404 — only /mcp speaks the protocol.
     expect(tpl?.transport).toBe('http');
     expect(tpl?.url).toBe('https://mcp.higgsfield.ai/mcp');
+    expect(tpl?.homepage).toBe('https://higgsfield.ai/mcp');
     // Authorization header is optional — Claude Code attempts OAuth itself
     // when no Bearer token is supplied.
     expect(
@@ -1187,5 +1189,26 @@ describe('MCP_TEMPLATES', () => {
     // GitHub repo slug). Getting this wrong silently 404s on the registry.
     expect(tpl?.args).toEqual(['-y', 'a11y-mcp-server']);
     expect(tpl?.envFields ?? []).toEqual([]);
+  });
+
+  it('includes the Blender ageless stdio template (uvx)', () => {
+    const tpl = MCP_TEMPLATES.find((t) => t.id === 'blender-ageless');
+    expect(tpl).toBeDefined();
+    expect(tpl?.category).toBe('utilities');
+    expect(tpl?.transport).toBe('stdio');
+    expect(tpl?.command).toBe('uvx');
+    expect(tpl?.args).toEqual(['ageless-blender-mcp']);
+    expect(tpl?.homepage).toBe('https://github.com/ageless-h/blender-mcp');
+    expect(tpl?.envFields ?? []).toEqual([]);
+  });
+
+  it('includes the Blender DCC embedded HTTP template', () => {
+    const tpl = MCP_TEMPLATES.find((t) => t.id === 'blender-dcc-http');
+    expect(tpl).toBeDefined();
+    expect(tpl?.category).toBe('utilities');
+    expect(tpl?.transport).toBe('http');
+    expect(tpl?.authMode).toBe('none');
+    expect(tpl?.url).toBe('http://127.0.0.1:9765/mcp');
+    expect(tpl?.homepage).toBe('https://github.com/dcc-mcp/dcc-mcp-blender');
   });
 });

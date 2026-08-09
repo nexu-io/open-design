@@ -1362,7 +1362,7 @@ export const ptBR: Dict = {
   'mcpClient.subtitle': 'Ferramentas de terceiros para o seu agent de programação.',
   'mcpClient.addServer': 'Adicionar servidor',
   'mcpClient.emptyTitle': 'Nenhum servidor MCP configurado.',
-  'mcpClient.emptyBody': 'Clique em "Adicionar servidor" para começar — escolha um modelo (Higgsfield OpenClaw, Pollinations, Allyson, Imagician, EdgeOne Pages, GitHub, Filesystem…) ou configure um servidor stdio / HTTP personalizado.',
+  'mcpClient.emptyBody': 'Clique em "Adicionar servidor" para começar — escolha um modelo (Higgsfield, Pollinations, Allyson, Imagician, EdgeOne Pages, GitHub, Filesystem…) ou configure um servidor stdio / HTTP personalizado.',
   'mcpClient.saveChanges': 'Salvar alterações',
   'mcpClient.storedAt': 'Armazenado em',
   'mcpClient.daemonError': 'Não foi possível acessar o daemon local. Verifique se o Open Design está em execução e reabra este painel.',

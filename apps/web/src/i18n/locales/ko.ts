@@ -1362,7 +1362,7 @@ export const ko: Dict = {
   'mcpClient.subtitle': '코딩 Agent를 위한 서드파티 도구입니다.',
   'mcpClient.addServer': '서버 추가',
   'mcpClient.emptyTitle': '구성된 MCP 서버가 없습니다.',
-  'mcpClient.emptyBody': '"서버 추가"를 클릭해 시작하세요 — 템플릿(Higgsfield OpenClaw, Pollinations, Allyson, Imagician, EdgeOne Pages, GitHub, Filesystem…)을 선택하거나 사용자 지정 stdio / HTTP 서버를 설정하세요.',
+  'mcpClient.emptyBody': '"서버 추가"를 클릭해 시작하세요 — 템플릿(Higgsfield, Pollinations, Allyson, Imagician, EdgeOne Pages, GitHub, Filesystem…)을 선택하거나 사용자 지정 stdio / HTTP 서버를 설정하세요.',
   'mcpClient.saveChanges': '변경 사항 저장',
   'mcpClient.storedAt': '저장 위치',
   'mcpClient.daemonError': '로컬 데몬에 연결할 수 없습니다. Open Design이 실행 중인지 확인한 후 이 패널을 다시 여세요.',

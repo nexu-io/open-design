@@ -1389,7 +1389,7 @@ export const zhTW: Dict = {
   "mcpClient.addServer": "新增伺服器",
   "mcpClient.emptyTitle": "尚未設定 MCP 伺服器。",
   "mcpClient.emptyBody":
-    "點擊「新增伺服器」即可開始 — 選擇範本（Higgsfield OpenClaw、Pollinations、Allyson、Imagician、EdgeOne Pages、GitHub、Filesystem…），或設定自訂 stdio / HTTP 伺服器。",
+    "點擊「新增伺服器」即可開始 — 選擇範本（Higgsfield、Pollinations、Allyson、Imagician、EdgeOne Pages、GitHub、Filesystem…），或設定自訂 stdio / HTTP 伺服器。",
   "mcpClient.saveChanges": "儲存變更",
   "mcpClient.storedAt": "儲存於",
   "mcpClient.daemonError":

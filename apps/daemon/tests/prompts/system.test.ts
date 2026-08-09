@@ -488,12 +488,12 @@ describe('composeSystemPrompt', () => {
 
     it('lists each connected server and forbids the synthetic auth tools', () => {
       const directive = renderConnectedExternalMcpDirective([
-        { id: 'higgsfield-openclaw', label: 'Higgsfield (OpenClaw)' },
+        { id: 'higgsfield-openclaw', label: 'Higgsfield' },
         { id: 'github' },
       ]);
       expect(directive).toContain('## External MCP servers — already authenticated');
       expect(directive).toContain('`higgsfield-openclaw`');
-      expect(directive).toContain('Higgsfield (OpenClaw)');
+      expect(directive).toContain('Higgsfield');
       expect(directive).toContain('`github`');
       expect(directive).toContain(
         '**Do NOT call any tool whose name matches `mcp__<server>__authenticate` or `mcp__<server>__complete_authentication`',

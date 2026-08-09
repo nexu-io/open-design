@@ -1362,7 +1362,7 @@ export const esES: Dict = {
   'mcpClient.subtitle': 'Herramientas de terceros para tu agente de programación.',
   'mcpClient.addServer': 'Añadir servidor',
   'mcpClient.emptyTitle': 'No hay servidores MCP configurados.',
-  'mcpClient.emptyBody': 'Haz clic en «Añadir servidor» para empezar: elige una plantilla (Higgsfield OpenClaw, Pollinations, Allyson, Imagician, EdgeOne Pages, GitHub, Filesystem…) o configura un servidor stdio / HTTP personalizado.',
+  'mcpClient.emptyBody': 'Haz clic en «Añadir servidor» para empezar: elige una plantilla (Higgsfield, Pollinations, Allyson, Imagician, EdgeOne Pages, GitHub, Filesystem…) o configura un servidor stdio / HTTP personalizado.',
   'mcpClient.saveChanges': 'Guardar cambios',
   'mcpClient.storedAt': 'Almacenado en',
   'mcpClient.daemonError': 'No se pudo conectar con el daemon local. Asegúrate de que Open Design esté en ejecución y vuelve a abrir este panel.',

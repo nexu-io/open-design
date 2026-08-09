@@ -1362,7 +1362,7 @@ export const hu: Dict = {
   'mcpClient.subtitle': 'Külső felek eszközei a kódoló agentedhez.',
   'mcpClient.addServer': 'Szerver hozzáadása',
   'mcpClient.emptyTitle': 'Nincs MCP-szerver konfigurálva.',
-  'mcpClient.emptyBody': 'Kattints a „Szerver hozzáadása” gombra a kezdéshez — válassz egy sablont (Higgsfield OpenClaw, Pollinations, Allyson, Imagician, EdgeOne Pages, GitHub, Filesystem…), vagy állíts be egyéni stdio / HTTP szervert.',
+  'mcpClient.emptyBody': 'Kattints a „Szerver hozzáadása” gombra a kezdéshez — válassz egy sablont (Higgsfield, Pollinations, Allyson, Imagician, EdgeOne Pages, GitHub, Filesystem…), vagy állíts be egyéni stdio / HTTP szervert.',
   'mcpClient.saveChanges': 'Módosítások mentése',
   'mcpClient.storedAt': 'Tárolva itt:',
   'mcpClient.daemonError': 'Nem sikerült elérni a helyi daemont. Győződj meg róla, hogy az Open Design fut, majd nyisd meg újra ezt a panelt.',

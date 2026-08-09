@@ -568,13 +568,13 @@ export const MCP_TEMPLATES: McpTemplate[] = [
   // ── image-generation ────────────────────────────────────────────────
   {
     id: 'higgsfield-openclaw',
-    label: 'Higgsfield (OpenClaw)',
+    label: 'Higgsfield',
     description:
       'Image and video generation MCP from higgsfield.ai. Exposes Soul, Nano Banana, Flux, Kling, Veo, Seedance, and 25+ other models. Endpoint is streamable HTTP at /mcp; click "Connect" after saving — Open Design completes OAuth and stores the token server-side, so no terminal step is needed and the connection survives across chat turns and cloud deployments.',
     transport: 'http',
     authMode: 'oauth',
     category: 'image-generation',
-    homepage: 'https://higgsfield.ai/mcp?tab=openclaw',
+    homepage: 'https://higgsfield.ai/mcp',
     example:
       'Generate an image of a cat astronaut on Mars in retro pixel-art style.',
     url: 'https://mcp.higgsfield.ai/mcp',
@@ -1239,5 +1239,31 @@ export const MCP_TEMPLATES: McpTemplate[] = [
       'Test https://stripe.com against WCAG 2.1 AA at a 1280×800 viewport and list every violation grouped by impact.',
     command: 'npx',
     args: ['-y', 'a11y-mcp-server'],
+  },
+  {
+    id: 'blender-ageless',
+    label: 'Blender (ageless MCP)',
+    description:
+      'Drive a local Blender 4.2+ session via the ageless-blender-mcp stdio server (perception, nodes, materials, modifiers, render, import/export). Requires the companion Blender addon installed and "Start Server" clicked in Blender, plus the `uvx` Python launcher. Open Design does not ship Blender — install Blender separately first.',
+    transport: 'stdio',
+    category: 'utilities',
+    homepage: 'https://github.com/ageless-h/blender-mcp',
+    example:
+      'List objects in the open Blender scene, create a 2m cube named HeroCube, and capture a solid viewport PNG.',
+    command: 'uvx',
+    args: ['ageless-blender-mcp'],
+  },
+  {
+    id: 'blender-dcc-http',
+    label: 'Blender (DCC MCP HTTP)',
+    description:
+      'Connect to dcc-mcp-blender\'s embedded streamable HTTP MCP server inside a running Blender instance (default http://127.0.0.1:9765/mcp). Enable the DCC MCP Blender addon and start the in-app server first — no external gateway process. Local-only; leave authMode none.',
+    transport: 'http',
+    authMode: 'none',
+    category: 'utilities',
+    homepage: 'https://github.com/dcc-mcp/dcc-mcp-blender',
+    example:
+      'Ask Blender for the current scene summary, then create a camera looking at the origin and render a preview still.',
+    url: 'http://127.0.0.1:9765/mcp',
   },
 ];
