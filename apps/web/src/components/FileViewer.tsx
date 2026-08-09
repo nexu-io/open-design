@@ -143,6 +143,7 @@ import {
   imageDataUrlToBlob,
   isOpenDesignHostAvailable,
   openSandboxedPreviewInNewTab,
+  openSandboxedPreviewUrlInNewTab,
   prepareImageExportTarget,
   planDeckImageCapture,
   requestPreviewSnapshot,
@@ -12305,6 +12306,20 @@ function HtmlViewer({
 
   function openInNewTab() {
     if (!source) return;
+    // A multi-file artifact cannot survive being inlined into a srcdoc: its
+    // sibling assets are reachable only through workspace-scoped daemon URLs,
+    // and `<base href>` cannot carry the required query string (URL resolution
+    // discards it), so `./styles.css` 400s and the page renders unstyled.
+    // Load the daemon URL instead — it rewrites relative references as it
+    // serves. Decks keep the inlined path because they depend on slide-state
+    // options that only exist when the document is composed here.
+    if (!effectiveDeck && !manualEditFrozenSource) {
+      openSandboxedPreviewUrlInNewTab(
+        projectRawUrl(projectId, file.name, workspaceContext),
+        exportTitle,
+      );
+      return;
+    }
     openSandboxedPreviewInNewTab(source, exportTitle, {
       deck: effectiveDeck,
       baseHref: srcDocBaseHref,

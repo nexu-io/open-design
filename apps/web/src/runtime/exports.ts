@@ -1268,6 +1268,59 @@ export function buildSandboxedPreviewDocument(
 </html>`;
 }
 
+// Same sandbox contract as `buildSandboxedPreviewDocument`, but the child
+// loads a real daemon URL instead of inlined source.
+//
+// Inlining cannot preserve sibling assets. The only handle a srcdoc child has
+// on its origin is `<base href>`, and the daemon's raw URLs are workspace
+// scoped — `/api/projects/<id>/raw/?workspaceId=…&workspaceMemberId=…`. URL
+// resolution drops a base's query string, so `./styles.css` resolves without
+// those parameters and the endpoint answers 400. The artifact then renders as
+// unstyled markup, with any inline `<svg>` blown up to full size because
+// nothing is left to size it.
+//
+// Loading the raw URL directly avoids this: the daemon rewrites every relative
+// reference to a fully scoped URL as it serves the file. The child still has an
+// opaque origin, so untrusted artifact code cannot reach the daemon session.
+export function buildSandboxedPreviewUrlDocument(
+  src: string,
+  title: string,
+  opts?: { allowModals?: boolean },
+): string {
+  const safeTitle = escapeHtmlAttribute(title || 'Preview');
+  const sandbox = opts?.allowModals ? 'allow-scripts allow-modals' : 'allow-scripts';
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${safeTitle}</title>
+  <style>html,body,iframe{margin:0;width:100%;height:100%;border:0}body{overflow:hidden;background:#fff}</style>
+</head>
+<body>
+  <iframe title="${safeTitle}" sandbox="${sandbox}" src="${escapeHtmlAttribute(src)}"></iframe>
+</body>
+</html>`;
+}
+
+export function openSandboxedPreviewUrlInNewTab(src: string, title: string): void {
+  // The wrapper is served from a Blob URL, and a Blob URL is not hierarchical:
+  // a root-relative `/api/...` src has nothing to resolve against and the frame
+  // stays blank. Absolutise against the app origin before embedding.
+  const absolute = (() => {
+    try {
+      return new URL(src, window.location.origin).href;
+    } catch {
+      return src;
+    }
+  })();
+  const doc = buildSandboxedPreviewUrlDocument(absolute, title);
+  const blob = new Blob([doc], { type: 'text/html;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  window.open(url, '_blank', 'noopener,noreferrer');
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
 function currentOriginBaseHref(): string | undefined {
   if (typeof window !== 'undefined' && typeof window.location?.origin === 'string') {
     return `${window.location.origin.replace(/\/+$/, '')}/`;

@@ -7,6 +7,7 @@ import {
   buildDesignManifestContent,
   downloadImageDataUrl,
   buildSandboxedPreviewDocument,
+  buildSandboxedPreviewUrlDocument,
   downloadDesignSystemArchive,
   downloadProjectArchive,
   exportAsImage,
@@ -1174,6 +1175,25 @@ describe('sandboxed preview Blob exports', () => {
     });
 
     expect(wrapper).toContain('sandbox="allow-scripts allow-modals"');
+    expect(wrapper).not.toContain('allow-same-origin');
+  });
+
+  it('loads a URL wrapper by src so sibling assets keep their workspace query', () => {
+    // A workspace-scoped raw URL carries the query that authorises the
+    // request. Inlining the document and pointing `<base href>` at that URL
+    // loses it, because URL resolution drops a base's query string, so
+    // `./styles.css` requests an unauthorised path and 400s. Referencing the
+    // URL with `src` keeps the daemon's own link rewriting in play.
+    const wrapper = buildSandboxedPreviewUrlDocument(
+      '/api/projects/p1/raw/index.html?workspaceId=w1&workspaceMemberId=m1',
+      'Preview',
+    );
+
+    expect(wrapper).toContain(
+      'src="/api/projects/p1/raw/index.html?workspaceId=w1&amp;workspaceMemberId=m1"',
+    );
+    expect(wrapper).not.toContain('srcdoc=');
+    expect(wrapper).toContain('sandbox="allow-scripts"');
     expect(wrapper).not.toContain('allow-same-origin');
   });
 
