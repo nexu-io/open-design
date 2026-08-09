@@ -8,6 +8,7 @@ import {
   htmlNeedsRedirectGuard,
   htmlNeedsSandboxShim,
   parseForceInline,
+  presentUrlLoadDecision,
   shouldUrlLoadHtmlPreview,
 } from '../../src/components/file-viewer-render-mode';
 
@@ -94,6 +95,54 @@ describe('shouldUrlLoadHtmlPreview', () => {
     expect(shouldUrlLoadHtmlPreview({ ...base, tweaksBridge: true, forceInline: true })).toBe(false);
     expect(shouldUrlLoadHtmlPreview({ ...base, commentMode: true, urlModeBridge: true, inspectMode: true })).toBe(false);
     expect(shouldUrlLoadHtmlPreview({ ...base, drawMode: true, urlSnapshotBridge: true, inspectMode: true })).toBe(false);
+  });
+});
+
+describe('presentUrlLoadDecision', () => {
+  const base = { mode: 'preview' as const, isDeck: false, commentMode: false, forceInline: false };
+
+  it('URL-loads a plain artifact so its sibling assets resolve', () => {
+    expect(shouldUrlLoadHtmlPreview(presentUrlLoadDecision(base))).toBe(true);
+  });
+
+  it('ignores editor bridges the presented tab cannot reach', () => {
+    for (const mode of [
+      { commentMode: true },
+      { inspectMode: true },
+      { editMode: true },
+      { paletteActive: true },
+      { tweaksBridge: true },
+      { drawMode: true },
+    ]) {
+      expect(shouldUrlLoadHtmlPreview(presentUrlLoadDecision({ ...base, ...mode }))).toBe(true);
+    }
+  });
+
+  it('keeps srcDoc for a sandbox-shim artifact, which throws at an opaque origin', () => {
+    // e.g. localStorage / sessionStorage touched at mount — URL-loading it
+    // under sandbox="allow-scripts" raises SecurityError and blanks the tab.
+    expect(shouldUrlLoadHtmlPreview(presentUrlLoadDecision({ ...base, forceInline: true })))
+      .toBe(false);
+  });
+
+  it('keeps srcDoc for a self-redirecting artifact so the guard survives', () => {
+    expect(shouldUrlLoadHtmlPreview(presentUrlLoadDecision({ ...base, needsRedirectGuard: true })))
+      .toBe(false);
+  });
+
+  it('keeps srcDoc for focus-stealing and root-relative-asset artifacts', () => {
+    expect(shouldUrlLoadHtmlPreview(presentUrlLoadDecision({ ...base, needsFocusGuard: true })))
+      .toBe(false);
+    expect(shouldUrlLoadHtmlPreview(presentUrlLoadDecision({ ...base, projectRootAssetRefs: true })))
+      .toBe(false);
+  });
+
+  it('presents the rendered artifact even when the viewer is on the source tab', () => {
+    expect(shouldUrlLoadHtmlPreview(presentUrlLoadDecision({ ...base, mode: 'source' }))).toBe(true);
+  });
+
+  it('keeps srcDoc for a deck, which needs slide state composed host-side', () => {
+    expect(shouldUrlLoadHtmlPreview(presentUrlLoadDecision({ ...base, isDeck: true }))).toBe(false);
   });
 });
 

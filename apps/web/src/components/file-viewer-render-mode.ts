@@ -124,6 +124,31 @@ export function shouldUrlLoadHtmlPreview(d: UrlLoadDecision): boolean {
   return true;
 }
 
+/**
+ * Narrow a viewer decision to the one Present makes.
+ *
+ * Present renders the artifact and nothing else: no comment, inspect, edit,
+ * palette, tweaks, or draw affordance is reachable from a presented tab, so
+ * the bridges those modes need are irrelevant and must not drag Present onto
+ * the inline path. Everything else is inherited deliberately — in particular
+ * `forceInline` (sandbox shim), `needsFocusGuard`, `needsRedirectGuard`, and
+ * `projectRootAssetRefs`, which are render-safety signals rather than editor
+ * plumbing. Those documents are unsafe to serve raw whatever surface asks for
+ * them, so Present keeps the guarded srcDoc path for them too.
+ */
+export function presentUrlLoadDecision(d: UrlLoadDecision): UrlLoadDecision {
+  return {
+    ...d,
+    mode: 'preview',
+    commentMode: false,
+    inspectMode: false,
+    editMode: false,
+    paletteActive: false,
+    tweaksBridge: false,
+    drawMode: false,
+  };
+}
+
 export function hasUrlModeBridge(source: string | null | undefined): boolean {
   if (!source) return false;
   return /<script\b[^>]*\bsrc\s*=\s*["'][^"']*\bod-direct-edit\.js\b[^"']*["'][^>]*>/i.test(source);

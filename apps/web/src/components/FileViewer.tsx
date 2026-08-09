@@ -184,6 +184,7 @@ import {
   htmlNeedsRedirectGuard,
   htmlNeedsSandboxShim,
   parseForceInline,
+  presentUrlLoadDecision,
   shouldUrlLoadHtmlPreview,
   type UrlLoadDecision,
 } from './file-viewer-render-mode';
@@ -12311,9 +12312,20 @@ function HtmlViewer({
     // and `<base href>` cannot carry the required query string (URL resolution
     // discards it), so `./styles.css` 400s and the page renders unstyled.
     // Load the daemon URL instead — it rewrites relative references as it
-    // serves. Decks keep the inlined path because they depend on slide-state
-    // options that only exist when the document is composed here.
-    if (!effectiveDeck && !manualEditFrozenSource) {
+    // serves.
+    //
+    // Reuse the viewer's own URL-vs-srcDoc gate rather than a bespoke
+    // condition, so Present inherits every render-safety rule the inline
+    // preview already enforces: sandbox-shim artifacts that throw
+    // SecurityError at an opaque origin, self-redirecting documents that need
+    // buildSrcdoc's redirect guard (#710), and root-relative asset refs that
+    // only resolve after the srcDoc rewrite. A file with unsaved manual edits
+    // also stays inlined, since the daemon would serve the version on disk.
+    const presentViaUrl =
+      !manualEditFrozenSource
+      && !manualEditRequiresSrcDoc
+      && shouldUrlLoadHtmlPreview(presentUrlLoadDecision(urlLoadDecision));
+    if (presentViaUrl) {
       openSandboxedPreviewUrlInNewTab(
         projectRawUrl(projectId, file.name, workspaceContext),
         exportTitle,
