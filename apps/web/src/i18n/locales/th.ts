@@ -1362,7 +1362,7 @@ export const th: Dict = {
   'mcpClient.subtitle': 'เครื่องมือจากภายนอกสำหรับ Agent เขียนโค้ดของคุณ',
   'mcpClient.addServer': 'เพิ่มเซิร์ฟเวอร์',
   'mcpClient.emptyTitle': 'ยังไม่ได้กำหนดค่าเซิร์ฟเวอร์ MCP',
-  'mcpClient.emptyBody': 'คลิก "Add server" เพื่อเริ่มต้น — เลือกเทมเพลต (Higgsfield, Pollinations, Allyson, Imagician, EdgeOne Pages, GitHub, Filesystem…) หรือตั้งค่าเซิร์ฟเวอร์ stdio / HTTP แบบกำหนดเอง',
+  'mcpClient.emptyBody': 'คลิก "Add server" เพื่อเริ่มต้น — เลือกเทมเพลต (Higgsfield, Runway, Luma, Pollinations, Allyson, Imagician, EdgeOne Pages, GitHub, Filesystem…) หรือตั้งค่าเซิร์ฟเวอร์ stdio / HTTP แบบกำหนดเอง',
   'mcpClient.saveChanges': 'บันทึกการเปลี่ยนแปลง',
   'mcpClient.storedAt': 'จัดเก็บที่',
   'mcpClient.daemonError': 'ไม่สามารถเชื่อมต่อกับ daemon ภายในเครื่องได้ โปรดตรวจสอบว่า Open Design กำลังทำงานอยู่ จากนั้นเปิดแผงนี้อีกครั้ง',

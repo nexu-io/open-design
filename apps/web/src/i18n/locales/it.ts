@@ -1362,7 +1362,7 @@ export const it: Dict = {
   'mcpClient.subtitle': 'Strumenti di terze parti per il tuo agent di coding.',
   'mcpClient.addServer': 'Aggiungi server',
   'mcpClient.emptyTitle': 'Nessun server MCP configurato.',
-  'mcpClient.emptyBody': 'Fai clic su "Aggiungi server" per iniziare — scegli un modello (Higgsfield, Pollinations, Allyson, Imagician, EdgeOne Pages, GitHub, Filesystem…) oppure configura un server stdio / HTTP personalizzato.',
+  'mcpClient.emptyBody': 'Fai clic su "Aggiungi server" per iniziare — scegli un modello (Higgsfield, Runway, Luma, Pollinations, Allyson, Imagician, EdgeOne Pages, GitHub, Filesystem…) oppure configura un server stdio / HTTP personalizzato.',
   'mcpClient.saveChanges': 'Salva modifiche',
   'mcpClient.storedAt': 'Memorizzato in',
   'mcpClient.daemonError': 'Impossibile raggiungere il daemon locale. Assicurati che Open Design sia in esecuzione, quindi riapri questo pannello.',

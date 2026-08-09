@@ -1362,7 +1362,7 @@ export const ar: Dict = {
   'mcpClient.subtitle': 'أدوات الطرف الثالث الخاصة بـ Agent البرمجة لديك.',
   'mcpClient.addServer': 'إضافة خادم',
   'mcpClient.emptyTitle': 'لم يتم تكوين أي خوادم MCP.',
-  'mcpClient.emptyBody': 'انقر على "إضافة خادم" للبدء — اختر قالبًا (Higgsfield، Pollinations، Allyson، Imagician، EdgeOne Pages، GitHub، Filesystem…) أو قم بإعداد خادم stdio / HTTP مخصص.',
+  'mcpClient.emptyBody': 'انقر على "إضافة خادم" للبدء — اختر قالبًا (Higgsfield، Runway، Luma، Pollinations، Allyson، Imagician، EdgeOne Pages، GitHub، Filesystem…) أو قم بإعداد خادم stdio / HTTP مخصص.',
   'mcpClient.saveChanges': 'حفظ التغييرات',
   'mcpClient.storedAt': 'مخزَّن في',
   'mcpClient.daemonError': 'تعذّر الوصول إلى الخدمة المحلية. تأكّد من أن Open Design قيد التشغيل، ثم أعِد فتح هذه اللوحة.',

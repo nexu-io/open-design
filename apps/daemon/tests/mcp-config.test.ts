@@ -859,6 +859,8 @@ describe('MCP_TEMPLATES', () => {
       'nanobanana',
       'seedream',
       'fal-ai',
+      'runway',
+      'luma-acedata',
     ]);
   });
 
@@ -1210,5 +1212,27 @@ describe('MCP_TEMPLATES', () => {
     expect(tpl?.authMode).toBe('none');
     expect(tpl?.url).toBe('http://127.0.0.1:9765/mcp');
     expect(tpl?.homepage).toBe('https://github.com/dcc-mcp/dcc-mcp-blender');
+  });
+
+  it('includes the official Runway OAuth HTTP template', () => {
+    const tpl = MCP_TEMPLATES.find((t) => t.id === 'runway');
+    expect(tpl).toBeDefined();
+    expect(tpl?.category).toBe('image-generation');
+    expect(tpl?.transport).toBe('http');
+    expect(tpl?.authMode).toBe('oauth');
+    expect(tpl?.url).toBe('https://mcp.runwayml.com/mcp');
+    expect(tpl?.homepage).toBe('https://runwayml.com/mcp');
+  });
+
+  it('includes the Luma Dream Machine AceDataCloud HTTP template', () => {
+    const tpl = MCP_TEMPLATES.find((t) => t.id === 'luma-acedata');
+    expect(tpl).toBeDefined();
+    expect(tpl?.category).toBe('image-generation');
+    expect(tpl?.transport).toBe('http');
+    expect(tpl?.authMode).toBe('none');
+    expect(tpl?.url).toBe('https://luma.mcp.acedata.cloud/mcp');
+    expect(tpl?.homepage).toBe('https://github.com/AceDataCloud/mcp-luma');
+    expect(tpl?.headerFields?.[0]?.key).toBe('Authorization');
+    expect(tpl?.headerFields?.[0]?.required).toBe(true);
   });
 });

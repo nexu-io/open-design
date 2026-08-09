@@ -24,7 +24,7 @@ Generate videos, images, and audio via the official Runway API skills (text/imag
 
 ## Current Open Design scope
 
-Install with `npx skills add runwayml/skills` and set RUNWAYML_API_SECRET. For brand styling inside Open Design artifacts, use the bundled `runwayml` design system; this stub is for generation API workflows.
+Prefer the built-in Runway MCP template in Settings → Integrations (OAuth Connect) for agent tool calls. Install the full upstream skill pack with `npx skills add runwayml/skills` and set RUNWAYML_API_SECRET for CLI workflows. For brand styling inside Open Design artifacts, use the bundled `runwayml` design system.
 
 ## Source
 

@@ -1362,7 +1362,7 @@ export const fa: Dict = {
   'mcpClient.subtitle': 'ابزارهای شخص ثالث برای Agent کدنویسی شما.',
   'mcpClient.addServer': 'افزودن سرور',
   'mcpClient.emptyTitle': 'هیچ سرور MCP پیکربندی نشده است.',
-  'mcpClient.emptyBody': 'برای شروع روی «افزودن سرور» کلیک کنید — یک قالب انتخاب کنید (Higgsfield، Pollinations، Allyson، Imagician، EdgeOne Pages، GitHub، Filesystem…) یا یک سرور سفارشی stdio / HTTP راه‌اندازی کنید.',
+  'mcpClient.emptyBody': 'برای شروع روی «افزودن سرور» کلیک کنید — یک قالب انتخاب کنید (Higgsfield، Runway، Luma، Pollinations، Allyson، Imagician، EdgeOne Pages، GitHub، Filesystem…) یا یک سرور سفارشی stdio / HTTP راه‌اندازی کنید.',
   'mcpClient.saveChanges': 'ذخیره تغییرات',
   'mcpClient.storedAt': 'ذخیره‌شده در',
   'mcpClient.daemonError': 'دسترسی به daemon محلی ممکن نشد. مطمئن شوید Open Design در حال اجراست، سپس این پنل را دوباره باز کنید.',

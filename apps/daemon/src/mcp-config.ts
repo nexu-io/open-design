@@ -739,6 +739,49 @@ export const MCP_TEMPLATES: McpTemplate[] = [
       },
     ],
   },
+  {
+    id: 'runway',
+    label: 'Runway',
+    description:
+      'Official Runway MCP — generate images and videos (Gen-4.5, Seedance 2.0, Kling, Veo, GPT Image 2, Nano Banana Pro, and more) via streamable HTTP. Click "Connect" after saving to sign in with your Runway account; generations use your Runway plan credits. No API key required for the OAuth path.',
+    transport: 'http',
+    authMode: 'oauth',
+    category: 'image-generation',
+    homepage: 'https://runwayml.com/mcp',
+    example:
+      'Generate a 5-second cinematic product hero video of a matte-black wireless speaker rotating on a pedestal, then a matching still for the landing hero.',
+    url: 'https://mcp.runwayml.com/mcp',
+    headerFields: [
+      {
+        key: 'Authorization',
+        label: 'Authorization (override)',
+        placeholder: 'Bearer <token>  ← only set this if you want to pin a manual token',
+        secret: true,
+      },
+    ],
+  },
+  {
+    id: 'luma-acedata',
+    label: 'Luma Dream Machine (AceDataCloud)',
+    description:
+      'Hosted streamable-HTTP MCP for Luma Dream Machine via AceDataCloud — text-to-video, image-to-video, and video extend. No local install; paste your AceDataCloud platform API token as the Authorization header (platform.acedata.cloud). Complements Runway / Higgsfield when you specifically want Luma Ray models.',
+    transport: 'http',
+    authMode: 'none',
+    category: 'image-generation',
+    homepage: 'https://github.com/AceDataCloud/mcp-luma',
+    example:
+      'Generate a 5-second 16:9 clip of waves crashing on black volcanic rock at golden hour, then extend it by two more seconds.',
+    url: 'https://luma.mcp.acedata.cloud/mcp',
+    headerFields: [
+      {
+        key: 'Authorization',
+        label: 'Authorization (Bearer <AceDataCloud token>)',
+        required: true,
+        placeholder: 'Bearer <acedatacloud-api-token>',
+        secret: true,
+      },
+    ],
+  },
 
   // ── image-editing ───────────────────────────────────────────────────
   {

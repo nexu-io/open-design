@@ -388,7 +388,43 @@ const CATALOGUE: CuratedSkill[] = [
     upstream: 'https://github.com/runwayml/skills',
     attribution: 'Curated from the official Runway ML skills repository.',
     catalogueOnlyNote:
-      'Install with `npx skills add runwayml/skills` and set RUNWAYML_API_SECRET. For brand styling inside Open Design artifacts, use the bundled `runwayml` design system; this stub is for generation API workflows.',
+      'Prefer the built-in Runway MCP template in Settings → Integrations (OAuth Connect) for agent tool calls. Install the full upstream skill pack with `npx skills add runwayml/skills` and set RUNWAYML_API_SECRET for CLI workflows. For brand styling inside Open Design artifacts, use the bundled `runwayml` design system.',
+  },
+  {
+    id: 'rw-generate-image',
+    description:
+      'Generate still images via the official Runway API (GPT Image, Nano Banana Pro, and other Runway image models) — text-to-image and image reference workflows.',
+    triggers: [
+      'runway image',
+      'rw-generate-image',
+      'runway still',
+      'runway text to image',
+      'gpt image runway',
+    ],
+    mode: 'image',
+    category: 'image-generation',
+    upstream: 'https://github.com/runwayml/skills',
+    attribution: 'Curated from the official Runway ML skills repository.',
+    catalogueOnlyNote:
+      'Prefer the built-in Runway MCP template in Settings → Integrations (OAuth Connect). Install with `npx skills add runwayml/skills` when you need the CLI skill pack.',
+  },
+  {
+    id: 'rw-generate-audio',
+    description:
+      'Generate audio via the official Runway API skills — sound design, voice, and soundtrack clips that pair with Runway video generations.',
+    triggers: [
+      'runway audio',
+      'rw-generate-audio',
+      'runway sound',
+      'runway soundtrack',
+      'runway voice',
+    ],
+    mode: 'audio',
+    category: 'audio-music',
+    upstream: 'https://github.com/runwayml/skills',
+    attribution: 'Curated from the official Runway ML skills repository.',
+    catalogueOnlyNote:
+      'Prefer the built-in Runway MCP template in Settings → Integrations (OAuth Connect). Install with `npx skills add runwayml/skills` when you need the CLI skill pack.',
   },
   {
     id: 'luma-dream-machine',
@@ -406,7 +442,7 @@ const CATALOGUE: CuratedSkill[] = [
     upstream: 'https://github.com/runapi-ai/luma',
     attribution: 'Curated from the RunAPI Luma skill (Dream Machine API).',
     catalogueOnlyNote:
-      'Install with `npx skills add runapi-ai/luma -g` (or use Luma\'s native API docs at https://docs.lumalabs.ai). Open Design has no first-party Luma media adapter yet — drive generation through the upstream skill or a custom MCP.',
+      'Prefer the built-in "Luma Dream Machine (AceDataCloud)" MCP template in Settings → Integrations (Bearer token from platform.acedata.cloud). Install with `npx skills add runapi-ai/luma -g` for the CLI skill, or use Luma docs at https://docs.lumalabs.ai.',
   },
   {
     id: 'remotion',

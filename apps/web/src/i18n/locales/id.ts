@@ -1362,7 +1362,7 @@ export const id: Dict = {
   'mcpClient.subtitle': 'Alat pihak ketiga untuk coding agent Anda.',
   'mcpClient.addServer': 'Tambah server',
   'mcpClient.emptyTitle': 'Belum ada server MCP yang dikonfigurasi.',
-  'mcpClient.emptyBody': 'Klik "Add server" untuk memulai — pilih template (Higgsfield, Pollinations, Allyson, Imagician, EdgeOne Pages, GitHub, Filesystem…) atau siapkan server stdio / HTTP kustom.',
+  'mcpClient.emptyBody': 'Klik "Add server" untuk memulai — pilih template (Higgsfield, Runway, Luma, Pollinations, Allyson, Imagician, EdgeOne Pages, GitHub, Filesystem…) atau siapkan server stdio / HTTP kustom.',
   'mcpClient.saveChanges': 'Simpan perubahan',
   'mcpClient.storedAt': 'Disimpan di',
   'mcpClient.daemonError': 'Tidak dapat menjangkau daemon lokal. Pastikan Open Design berjalan, lalu buka kembali panel ini.',

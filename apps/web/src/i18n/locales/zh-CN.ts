@@ -1387,7 +1387,7 @@ export const zhCN: Dict = {
   "mcpClient.addServer": "添加服务器",
   "mcpClient.emptyTitle": "尚未配置 MCP 服务器。",
   "mcpClient.emptyBody":
-    "点击“添加服务器”开始 — 选择模板（Higgsfield、Pollinations、Allyson、Imagician、EdgeOne Pages、GitHub、Filesystem…），或配置自定义 stdio / HTTP 服务器。",
+    "点击“添加服务器”开始 — 选择模板（Higgsfield、Runway、Luma、Pollinations、Allyson、Imagician、EdgeOne Pages、GitHub、Filesystem…），或配置自定义 stdio / HTTP 服务器。",
   "mcpClient.saveChanges": "保存更改",
   "mcpClient.storedAt": "存储于",
   "mcpClient.daemonError":

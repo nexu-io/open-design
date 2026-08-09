@@ -24,7 +24,7 @@ Luma Dream Machine video generation and restyle — text-to-video, image-to-vide
 
 ## Current Open Design scope
 
-Install with `npx skills add runapi-ai/luma -g` (or use Luma's native API docs at https://docs.lumalabs.ai). Open Design has no first-party Luma media adapter yet — drive generation through the upstream skill or a custom MCP.
+Prefer the built-in "Luma Dream Machine (AceDataCloud)" MCP template in Settings → Integrations (Bearer token from platform.acedata.cloud). Install with `npx skills add runapi-ai/luma -g` for the CLI skill, or use Luma docs at https://docs.lumalabs.ai.
 
 ## Source
 

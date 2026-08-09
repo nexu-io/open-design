@@ -1362,7 +1362,7 @@ export const ru: Dict = {
   'mcpClient.subtitle': 'Сторонние инструменты для вашего агента-программиста.',
   'mcpClient.addServer': 'Добавить сервер',
   'mcpClient.emptyTitle': 'Серверы MCP не настроены.',
-  'mcpClient.emptyBody': 'Нажмите «Add server», чтобы начать — выберите шаблон (Higgsfield, Pollinations, Allyson, Imagician, EdgeOne Pages, GitHub, Filesystem…) или настройте собственный stdio / HTTP-сервер.',
+  'mcpClient.emptyBody': 'Нажмите «Add server», чтобы начать — выберите шаблон (Higgsfield, Runway, Luma, Pollinations, Allyson, Imagician, EdgeOne Pages, GitHub, Filesystem…) или настройте собственный stdio / HTTP-сервер.',
   'mcpClient.saveChanges': 'Сохранить изменения',
   'mcpClient.storedAt': 'Хранится в',
   'mcpClient.daemonError': 'Не удалось подключиться к локальному демону. Убедитесь, что Open Design запущен, затем снова откройте эту панель.',

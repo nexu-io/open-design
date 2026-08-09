@@ -1362,7 +1362,7 @@ export const ja: Dict = {
   'mcpClient.subtitle': 'コーディング Agent 向けのサードパーティツール。',
   'mcpClient.addServer': 'サーバーを追加',
   'mcpClient.emptyTitle': 'MCP サーバーが設定されていません。',
-  'mcpClient.emptyBody': '「サーバーを追加」をクリックして始めましょう — テンプレート（Higgsfield、Pollinations、Allyson、Imagician、EdgeOne Pages、GitHub、Filesystem…）を選ぶか、カスタムの stdio / HTTP サーバーを設定します。',
+  'mcpClient.emptyBody': '「サーバーを追加」をクリックして始めましょう — テンプレート（Higgsfield、Runway、Luma、Pollinations、Allyson、Imagician、EdgeOne Pages、GitHub、Filesystem…）を選ぶか、カスタムの stdio / HTTP サーバーを設定します。',
   'mcpClient.saveChanges': '変更を保存',
   'mcpClient.storedAt': '保存先',
   'mcpClient.daemonError': 'ローカルデーモンに接続できませんでした。Open Design が実行中であることを確認してから、このパネルを再度開いてください。',

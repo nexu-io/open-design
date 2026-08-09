@@ -1362,7 +1362,7 @@ export const tr: Dict = {
   'mcpClient.subtitle': 'Kodlama agent\'ınız için üçüncü taraf araçlar.',
   'mcpClient.addServer': 'Sunucu ekle',
   'mcpClient.emptyTitle': 'Yapılandırılmış MCP sunucusu yok.',
-  'mcpClient.emptyBody': 'Başlamak için "Sunucu ekle"ye tıklayın — bir şablon seçin (Higgsfield, Pollinations, Allyson, Imagician, EdgeOne Pages, GitHub, Filesystem…) ya da özel bir stdio / HTTP sunucusu kurun.',
+  'mcpClient.emptyBody': 'Başlamak için "Sunucu ekle"ye tıklayın — bir şablon seçin (Higgsfield, Runway, Luma, Pollinations, Allyson, Imagician, EdgeOne Pages, GitHub, Filesystem…) ya da özel bir stdio / HTTP sunucusu kurun.',
   'mcpClient.saveChanges': 'Değişiklikleri kaydet',
   'mcpClient.storedAt': 'Şurada saklanıyor:',
   'mcpClient.daemonError': 'Yerel daemon\'a ulaşılamadı. Open Design\'ın çalıştığından emin olun, ardından bu paneli yeniden açın.',

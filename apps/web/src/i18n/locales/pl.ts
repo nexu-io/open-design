@@ -1362,7 +1362,7 @@ export const pl: Dict = {
   'mcpClient.subtitle': 'Narzędzia innych firm dla Twojego Agenta kodującego.',
   'mcpClient.addServer': 'Dodaj serwer',
   'mcpClient.emptyTitle': 'Nie skonfigurowano żadnych serwerów MCP.',
-  'mcpClient.emptyBody': 'Kliknij „Dodaj serwer”, aby rozpocząć — wybierz szablon (Higgsfield, Pollinations, Allyson, Imagician, EdgeOne Pages, GitHub, Filesystem…) lub skonfiguruj własny serwer stdio / HTTP.',
+  'mcpClient.emptyBody': 'Kliknij „Dodaj serwer”, aby rozpocząć — wybierz szablon (Higgsfield, Runway, Luma, Pollinations, Allyson, Imagician, EdgeOne Pages, GitHub, Filesystem…) lub skonfiguruj własny serwer stdio / HTTP.',
   'mcpClient.saveChanges': 'Zapisz zmiany',
   'mcpClient.storedAt': 'Przechowywane w',
   'mcpClient.daemonError': 'Nie udało się połączyć z lokalnym demonem. Upewnij się, że Open Design jest uruchomione, a następnie otwórz ponownie ten panel.',
