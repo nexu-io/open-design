@@ -35,7 +35,8 @@ const toolsPackDir = resolveFromWorkspace(process.env.OD_PACKAGED_E2E_TOOLS_PACK
 const namespace = resolvePackagedSmokeNamespace('mac');
 const releaseChannel = process.env.OD_PACKAGED_E2E_RELEASE_CHANNEL;
 const releaseVersion = process.env.OD_PACKAGED_E2E_RELEASE_VERSION;
-const updateScenario = resolvePackagedUpdateScenario({ releaseChannel, releaseVersion });
+const shellVersion = process.env.OD_PACKAGED_E2E_SHELL_VERSION;
+const updateScenario = resolvePackagedUpdateScenario({ releaseChannel, releaseVersion, shellVersion });
 const toolsPackReleaseVersionArgs = releaseAppVersionArgs(releaseVersion);
 const pnpmCommand = process.env.OD_E2E_PNPM_COMMAND ?? 'pnpm';
 const screenshotPath = join(toolsPackDir, 'screenshots', `${namespace}.png`);
@@ -467,7 +468,7 @@ macDescribe('packaged mac runtime smoke', () => {
         expect(updateInspect.update?.state).toBe('downloaded');
         expect(updateInspect.update?.artifact?.type).toBe('payload');
         expect(updateInspect.update?.channel).toBe(updateScenario.channel);
-        expect(updateInspect.update?.currentVersion).toBe(updateScenario.expectedCurrentVersion);
+        expect(updateInspect.update?.currentVersion).toBe(updateScenario.expectedInstalledShellVersion);
         expect(updateInspect.update?.availableVersion).toBe(updaterVersion);
         expectPathInside(updateInspect.update?.downloadPath ?? '', join(runtimeNamespaceRoot, 'updates'));
         if (updateInspect.update == null) throw new Error('mac update status is missing');
@@ -625,7 +626,7 @@ macDescribe('packaged mac runtime smoke', () => {
           if (reinstallReady.update == null) throw new Error('same-version reinstall did not return updater status');
           expect(reinstallReady.update.currentVersion).toBe(updaterVersion);
           expect(reinstallReady.update.reinstall).toEqual({
-            installedVersion: updateScenario.expectedCurrentVersion,
+            installedVersion: updateScenario.expectedInstalledShellVersion,
             minVersion: updaterVersion,
             reason: 'outer-below-min',
             url: 'https://example.test/updater-recovery',
@@ -924,7 +925,7 @@ macDescribe('packaged mac runtime smoke', () => {
       cleanupStarted = true;
       expect(rollbackStart.source).toBe('installed');
       const rolledBack = await waitForHealthyDesktopShellVersion(
-        updateScenario.expectedCurrentVersion,
+        updateScenario.expectedInstalledShellVersion,
         updateScenario.expectedCurrentVersion,
         start.pid,
         false,

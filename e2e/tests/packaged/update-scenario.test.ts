@@ -11,6 +11,7 @@ describe('packaged updater release scenario', () => {
       channel: 'beta',
       currentVersionOverride: '99.0.0-beta.0',
       expectedCurrentVersion: '99.0.0-beta.0',
+      expectedInstalledShellVersion: '99.0.0-beta.0',
       fixtureVersion: '99.0.0-beta.1',
     });
   });
@@ -23,7 +24,20 @@ describe('packaged updater release scenario', () => {
       channel: 'prerelease',
       currentVersionOverride: null,
       expectedCurrentVersion: '0.8.0-prerelease.4',
+      expectedInstalledShellVersion: '0.8.0-prerelease.4',
       fixtureVersion: '0.8.0-prerelease.5',
+    });
+  });
+
+  test('keeps the immutable installed Shell version separate from the release binding', () => {
+    expect(resolvePackagedUpdateScenario({
+      releaseChannel: 'beta',
+      releaseVersion: '0.19.0-beta.5',
+      shellVersion: '0.19.0-beta.4',
+    })).toMatchObject({
+      expectedCurrentVersion: '0.19.0-beta.5',
+      expectedInstalledShellVersion: '0.19.0-beta.4',
+      fixtureVersion: '0.19.0-beta.6',
     });
   });
 

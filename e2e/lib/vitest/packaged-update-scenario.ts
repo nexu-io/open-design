@@ -11,12 +11,14 @@ export type PackagedUpdateScenario = {
   channel: PackagedUpdateChannel;
   currentVersionOverride: string | null;
   expectedCurrentVersion: string;
+  expectedInstalledShellVersion: string;
   fixtureVersion: string;
 };
 
 export function resolvePackagedUpdateScenario(input: {
   releaseChannel?: string | undefined;
   releaseVersion?: string | undefined;
+  shellVersion?: string | undefined;
 }): PackagedUpdateScenario {
   const releaseChannel = input.releaseChannel;
   const releaseVersion = input.releaseVersion;
@@ -26,6 +28,7 @@ export function resolvePackagedUpdateScenario(input: {
       channel: 'beta',
       currentVersionOverride: '99.0.0-beta.0',
       expectedCurrentVersion: '99.0.0-beta.0',
+      expectedInstalledShellVersion: '99.0.0-beta.0',
       fixtureVersion: '99.0.0-beta.1',
     };
   }
@@ -39,8 +42,14 @@ export function resolvePackagedUpdateScenario(input: {
     channel,
     currentVersionOverride: null,
     expectedCurrentVersion: releaseVersion,
+    expectedInstalledShellVersion: normalizeShellVersion(input.shellVersion) ?? releaseVersion,
     fixtureVersion: nextFixtureVersion(channel, releaseVersion),
   };
+}
+
+function normalizeShellVersion(value: string | undefined): string | null {
+  const normalized = value?.trim();
+  return normalized == null || normalized.length === 0 ? null : normalized;
 }
 
 export function applyPackagedUpdateEnv(
