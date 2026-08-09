@@ -29,6 +29,8 @@ export function registerStaticSpaFallback(app: Express, staticDir: string): void
   app.get('/*splat', (req, res, next) => {
     const indexPath = resolveStaticSpaFallbackPath(req, staticDir);
     if (indexPath == null) return next();
-    res.sendFile(indexPath);
+    // Serve the SPA shell relative to its root to avoid `send` treating dot
+    // segments in the absolute path as dotfiles (e.g. installs under ~/.hermes).
+    res.sendFile('index.html', { root: staticDir });
   });
 }
