@@ -4467,7 +4467,9 @@ async function renderRunwayImage(
     onProgress(`runway image task ${taskId} accepted; polling status…`);
   }
   const { output } = await pollRunwayTask(ctx, credentials, baseUrl, taskId, onProgress);
-  const dlResp = await fetch(output[0], withMediaRequestInit(ctx));
+  const imageUrl = output[0];
+  if (!imageUrl) throw new Error(`runway image task ${taskId} succeeded with empty output`);
+  const dlResp = await fetch(imageUrl, withMediaRequestInit(ctx));
   if (!dlResp.ok) throw new Error(`runway image fetch ${dlResp.status}`);
   const bytes = Buffer.from(await dlResp.arrayBuffer());
   return {
@@ -4533,7 +4535,9 @@ async function renderRunwayVideo(
     onProgress(`runway ${mode} task ${taskId} accepted; polling status…`);
   }
   const { output } = await pollRunwayTask(ctx, credentials, baseUrl, taskId, onProgress);
-  const dlResp = await fetch(output[0], withMediaRequestInit(ctx));
+  const videoUrl = output[0];
+  if (!videoUrl) throw new Error(`runway video task ${taskId} succeeded with empty output`);
+  const dlResp = await fetch(videoUrl, withMediaRequestInit(ctx));
   if (!dlResp.ok) throw new Error(`runway video fetch ${dlResp.status}`);
   const bytes = Buffer.from(await dlResp.arrayBuffer());
   return {

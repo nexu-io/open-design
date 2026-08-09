@@ -2,6 +2,22 @@
 
 Manual QA checklist for the Integrations MCP catalogue. Not automated — run on a GUI machine with `pnpm tools-dev`.
 
+## Automated catalogue gate (no OAuth)
+
+These checks confirm picker/catalogue wiring without Connect. Against a live daemon:
+
+```bash
+pnpm tools-dev run web --namespace intsmoke --daemon-port 17456 --web-port 17573
+# then:
+# GET /api/mcp/servers → templates include higgsfield-openclaw, blender-ageless,
+#   blender-dcc-http (category 3d), runway, luma-acedata, comfyui, midjourney-acedata, kling-acedata
+# GET /api/media/models → providers runway + luma with integrated:true
+# GET /api/skills → blender-mcp / higgsfield-* / runway-gen / luma-dream-machine mode:utility
+# GET /api/plugins → od-blender-to-artifact, od-higgsfield-media present
+```
+
+Focused unit coverage: `tests/mcp-config.test.ts` (Blender/Higgsfield/Runway/Luma/ComfyUI/3d).
+
 ## Higgsfield (OAuth HTTP)
 
 1. Open Settings → Integrations → MCP.
