@@ -278,10 +278,11 @@ describe('run cross-project conversation ownership', () => {
     });
   });
 
-  it('rejects rebinding an assistantMessageId owned by a still-active run', async () => {
-    // nettee on #6418: two concurrent runs sharing the assistantMessageId must
-    // not reset each other's generation — a row owned by a running run is not
-    // rebindable.
+  it('lets a retry rebind an assistantMessageId the daemon no longer owns', async () => {
+    // nettee on #6418: the concurrency guard must reject only when the daemon
+    // STILL has the referenced run active — a normal retry rebinding a finished
+    // run (or a runId-less placeholder) stays allowed. The message row's own
+    // runStatus is not authoritative for concurrency.
     started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
     const url = started.url;
 
@@ -291,7 +292,8 @@ describe('run cross-project conversation ownership', () => {
     const convA = await firstConversationId(url, projectA);
     expect(convA).toBeTruthy();
 
-    // Seed an assistant message owned by a running run.
+    // Seed an assistant message referencing a run the daemon does not know
+    // (already finished / forgotten) — a retry should be able to rebind it.
     const assistantId = `assistant_active_${randomUUID()}`;
     const seed = await fetch(
       `${url}/api/projects/${projectA}/conversations/${convA}/messages/${assistantId}`,
@@ -301,16 +303,17 @@ describe('run cross-project conversation ownership', () => {
         body: JSON.stringify({
           id: assistantId,
           role: 'assistant',
-          content: 'in-flight',
-          runId: 'run-active',
+          content: 'old attempt',
+          runId: 'run-finished',
           runStatus: 'running',
-          events: [{ kind: 'text', text: 'in-flight' }],
+          events: [{ kind: 'text', text: 'old attempt' }],
         }),
       },
     );
     expect(seed.status).toBe(200);
 
-    // A second run must not rebind that active row.
+    // A run submitted with this assistantMessageId must not be rejected as
+    // RUN_IN_PROGRESS — the daemon has no active run for `run-finished`.
     const resp = await fetch(`${url}/api/runs`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -324,10 +327,9 @@ describe('run cross-project conversation ownership', () => {
         currentPrompt: 'M',
       }),
     });
-    expect(resp.status).toBe(409);
-    expect(await resp.json()).toMatchObject({
-      error: { code: 'RUN_IN_PROGRESS' },
-    });
+    const body = (await resp.json()) as { error?: { code?: string } };
+    expect(resp.status).not.toBe(409);
+    expect(body.error?.code).not.toBe('RUN_IN_PROGRESS');
   });
 });
 

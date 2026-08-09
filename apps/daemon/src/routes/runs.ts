@@ -1629,24 +1629,28 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           'assistantMessageId belongs to a different conversation',
         );
       }
-      // An existing row bound to a REAL still-active run must not be rebound —
-      // two concurrent runs sharing the assistantMessageId would reset each
-      // other's generation and corrupt the transcript (nettee). A runId-less
-      // web placeholder (runStatus set, no run bound yet) is the normal flow
-      // and stays rebindable.
+      // An existing row bound to a run the daemon STILL has active must not be
+      // rebound — two concurrent runs sharing the assistantMessageId would
+      // reset each other's generation and corrupt the transcript (nettee). A
+      // runId-less web placeholder, or a run the daemon has already finished
+      // (normal retry), stays rebindable — the message row's own runStatus is
+      // not authoritative for concurrency.
       if (
         existingAssistantPin
         && typeof existingAssistantPin.runId === 'string'
         && existingAssistantPin.runId.length > 0
-        && typeof existingAssistantPin.runStatus === 'string'
-        && !TERMINAL_RUN_STATUSES.has(existingAssistantPin.runStatus)
       ) {
-        return sendApiError(
-          res,
-          409,
-          'RUN_IN_PROGRESS',
-          'assistantMessageId is already bound to an active run',
-        );
+        const daemonRun = design.runs.get(existingAssistantPin.runId);
+        const daemonRunActive =
+          daemonRun && !TERMINAL_RUN_STATUSES.has(daemonRun.status);
+        if (daemonRunActive) {
+          return sendApiError(
+            res,
+            409,
+            'RUN_IN_PROGRESS',
+            'assistantMessageId is already bound to an active run',
+          );
+        }
       }
     }
     let runUserSeed: {
@@ -3103,24 +3107,27 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           'assistantMessageId belongs to a different conversation',
         );
       }
-      // An existing row bound to a REAL still-active run must not be rebound —
-      // two concurrent runs sharing the assistantMessageId would reset each
-      // other's generation and corrupt the transcript (nettee). A runId-less
-      // web placeholder (runStatus set, no run bound yet) is the normal flow
-      // and stays rebindable.
+      // An existing row bound to a run the daemon STILL has active must not be
+      // rebound — two concurrent runs sharing the assistantMessageId would
+      // reset each other's generation and corrupt the transcript (nettee). A
+      // runId-less web placeholder, or a run the daemon has already finished
+      // (normal retry), stays rebindable.
       if (
         existingAssistantPin
         && typeof existingAssistantPin.runId === 'string'
         && existingAssistantPin.runId.length > 0
-        && typeof existingAssistantPin.runStatus === 'string'
-        && !TERMINAL_RUN_STATUSES.has(existingAssistantPin.runStatus)
       ) {
-        return sendApiError(
-          res,
-          409,
-          'RUN_IN_PROGRESS',
-          'assistantMessageId is already bound to an active run',
-        );
+        const daemonRun = design.runs.get(existingAssistantPin.runId);
+        const daemonRunActive =
+          daemonRun && !TERMINAL_RUN_STATUSES.has(daemonRun.status);
+        if (daemonRunActive) {
+          return sendApiError(
+            res,
+            409,
+            'RUN_IN_PROGRESS',
+            'assistantMessageId is already bound to an active run',
+          );
+        }
       }
     }
     if (typeof meta.projectId === 'string' && meta.projectId) {
