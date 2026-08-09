@@ -82,6 +82,98 @@ test('spawnEnvForAgent applies configured Codex env without mutating the base en
   assert.equal('CODEX_BIN' in base, false);
 });
 
+test('spawnEnvForAgent discovers the Hermes install-script home from the child HOME', () => {
+  const home = mkdtempSync(join(tmpdir(), 'od-hermes-home-'));
+  try {
+    const hermesHome = join(home, '.hermes', 'data');
+    mkdirSync(hermesHome, { recursive: true });
+    writeFileSync(join(hermesHome, 'config.yaml'), 'model: test\n');
+
+    const env = spawnEnvForAgent(
+      'hermes',
+      { HOME: home, PATH: '/usr/bin' },
+      {},
+      {},
+    );
+
+    assert.equal(env.HERMES_HOME, hermesHome);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('spawnEnvForAgent discovers the default Hermes home from USERPROFILE', () => {
+  const home = mkdtempSync(join(tmpdir(), 'od-hermes-userprofile-'));
+  try {
+    const hermesHome = join(home, '.hermes');
+    mkdirSync(hermesHome, { recursive: true });
+    writeFileSync(join(hermesHome, 'config.yaml'), 'model: test\n');
+
+    const env = spawnEnvForAgent(
+      'hermes',
+      { USERPROFILE: home, PATH: '/usr/bin' },
+      {},
+      {},
+    );
+
+    assert.equal(env.HERMES_HOME, hermesHome);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('spawnEnvForAgent preserves an explicit Hermes home over auto-detection', () => {
+  const home = mkdtempSync(join(tmpdir(), 'od-hermes-configured-home-'));
+  try {
+    const base = { HOME: home, PATH: '/usr/bin' };
+    const detectedHome = join(home, '.hermes', 'data');
+    mkdirSync(detectedHome, { recursive: true });
+    writeFileSync(join(detectedHome, 'config.yaml'), 'model: test\n');
+
+    const env = spawnEnvForAgent(
+      'hermes',
+      base,
+      { HERMES_HOME: '/configured/hermes' },
+      {},
+    );
+
+    assert.equal(env.HERMES_HOME, '/configured/hermes');
+    assert.equal('HERMES_HOME' in base, false);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('spawnEnvForAgent preserves an inherited Hermes home', () => {
+  const env = spawnEnvForAgent(
+    'hermes',
+    {
+      HERMES_HOME: '/inherited/hermes',
+      PATH: '/usr/bin',
+    },
+    {},
+    {},
+  );
+
+  assert.equal(env.HERMES_HOME, '/inherited/hermes');
+});
+
+test('spawnEnvForAgent leaves Hermes home unset when no config is found', () => {
+  const home = mkdtempSync(join(tmpdir(), 'od-hermes-empty-home-'));
+  try {
+    const env = spawnEnvForAgent(
+      'hermes',
+      { HOME: home, PATH: '/usr/bin' },
+      {},
+      {},
+    );
+
+    assert.equal('HERMES_HOME' in env, false);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
 test('spawnEnvForAgent backfills Windows cache directory env for Trae CLI launches', () => {
   const env = withPlatform('win32', () =>
     spawnEnvForAgent(
@@ -186,6 +278,22 @@ test('spawnEnvForAgent reapplies sandbox state roots after configured env overri
     assert.equal(
       amrEnv.OPENCODE_TEST_HOME,
       join(dataDir, 'sandbox', 'agent-home', '.opencode'),
+    );
+
+    const hermesEnv = spawnEnvForAgent(
+      'hermes',
+      {
+        OD_DATA_DIR: dataDir,
+        OD_SANDBOX_MODE: '1',
+        PATH: '/usr/bin',
+      },
+      {
+        HERMES_HOME: '/Users/test/.hermes-host',
+      },
+    );
+    assert.equal(
+      hermesEnv.HERMES_HOME,
+      join(dataDir, 'sandbox', 'agent-home', '.hermes'),
     );
   } finally {
     rmSync(dataDir, { recursive: true, force: true });
