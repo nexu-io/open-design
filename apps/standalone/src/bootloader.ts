@@ -56,6 +56,7 @@ function bindCapabilities(
       });
       const result = await port.invoke(capabilityRequest);
       return validateStandaloneShellCapabilityResult(result, {
+        capability: capabilityRequest.capability,
         handoff: request.handoff,
         requestId: capabilityRequest.requestId,
       });

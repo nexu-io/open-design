@@ -30,7 +30,8 @@ export const standaloneClosureDeliveryMatrix = {
       "id": "shell-shim",
       "owners": [
         "packages/standalone-proto",
-        "apps/standalone"
+        "apps/standalone",
+        "shells/electron"
       ],
       "coordinates": [
         "channel",
@@ -51,7 +52,9 @@ export const standaloneClosureDeliveryMatrix = {
         },
         {
           "level": "platform-product",
-          "state": "planned"
+          "state": "proven",
+          "credential": "https://github.com/nexu-io/open-design/actions/runs/31274866576",
+          "witness": "e2e/specs/mac.spec.ts"
         }
       ],
       "evidence": [
@@ -133,7 +136,9 @@ export const standaloneClosureDeliveryMatrix = {
         },
         {
           "level": "platform-product",
-          "state": "planned"
+          "state": "proven",
+          "credential": "https://github.com/nexu-io/open-design/actions/runs/31274866576",
+          "witness": "e2e/specs/mac.spec.ts"
         }
       ],
       "evidence": [
@@ -152,7 +157,7 @@ export const standaloneClosureDeliveryMatrix = {
       "owners": [
         "packages/closure-store",
         "packages/closure-update",
-        "packages/closure-shim"
+        "shells/electron"
       ],
       "coordinates": [
         "channel",
@@ -161,7 +166,7 @@ export const standaloneClosureDeliveryMatrix = {
       ],
       "requiredOutcomes": [
         "discover-trust-materialize-activate",
-        "confirm-or-bounded-rollback",
+        "single-commit-and-fail-closed",
         "no-live-swap",
         "shell-min-version-before-body-download"
       ],
@@ -173,7 +178,9 @@ export const standaloneClosureDeliveryMatrix = {
         },
         {
           "level": "platform-product",
-          "state": "planned"
+          "state": "proven",
+          "credential": "https://github.com/nexu-io/open-design/actions/runs/31274866576",
+          "witness": "e2e/specs/mac.spec.ts"
         }
       ],
       "evidence": [
@@ -206,11 +213,14 @@ export const standaloneClosureDeliveryMatrix = {
       "gates": [
         {
           "level": "component",
-          "state": "planned"
+          "state": "proven",
+          "witness": "tools/release/tests/closure-publication.test.ts"
         },
         {
           "level": "platform-product",
-          "state": "planned"
+          "state": "proven",
+          "credential": "https://github.com/nexu-io/open-design/actions/runs/31274866576",
+          "witness": ".github/workflows/release-beta.yml"
         }
       ],
       "evidence": [
@@ -247,7 +257,9 @@ export const standaloneClosureDeliveryMatrix = {
         },
         {
           "level": "platform-product",
-          "state": "planned"
+          "state": "proven",
+          "credential": "https://github.com/nexu-io/open-design/actions/runs/31274866576",
+          "witness": "e2e/specs/mac.spec.ts"
         }
       ],
       "evidence": [
@@ -473,22 +485,6 @@ export const standaloneClosureDeliveryMatrix = {
       "ownerPaths": [
         "tools/release",
         "e2e"
-      ]
-    },
-    {
-      "id": "SC-11",
-      "delivery": "later-retirement",
-      "track": "cleanup",
-      "outcome": "The historical combined-payload selector is removed after the compatibility observation window closes.",
-      "dependsOn": [
-        "SC-10"
-      ],
-      "lanes": [
-        "shell-shim",
-        "update-lifecycle"
-      ],
-      "ownerPaths": [
-        "shells/electron"
       ]
     }
   ]

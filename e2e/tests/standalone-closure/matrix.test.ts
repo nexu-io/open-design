@@ -42,7 +42,7 @@ const requiredOutcomes = {
   ],
   "update-lifecycle": [
     "discover-trust-materialize-activate",
-    "confirm-or-bounded-rollback",
+    "single-commit-and-fail-closed",
     "no-live-swap",
     "shell-min-version-before-body-download",
   ],
@@ -65,6 +65,7 @@ type AcceptanceLevel = (typeof acceptanceLevels)[number];
 type LaneId = keyof typeof requiredOutcomes;
 
 type Gate = {
+  credential?: string;
   level: AcceptanceLevel;
   state: "planned" | "proven";
   witness?: string;
@@ -224,8 +225,12 @@ describe("Standalone Closure delivery matrix", () => {
         if (gate.state === "proven") {
           expect(gate.witness).toBeTypeOf("string");
           await expectPath(gate.witness ?? "");
+          if (gate.level === "platform-product") {
+            expect(gate.credential).toMatch(/^https:\/\/github\.com\/nexu-io\/open-design\/actions\/runs\/\d+$/u);
+          }
         } else {
           expect(gate).not.toHaveProperty("witness");
+          expect(gate).not.toHaveProperty("credential");
         }
       }
     }
@@ -237,16 +242,9 @@ describe("Standalone Closure delivery matrix", () => {
       entry.path.startsWith("shells/electron/") || entry.path.startsWith("e2e/specs/")
     ))).toBe(true);
 
-    const syntheticWitness = "packages/closure-shim/tests/conformance.test.ts";
-    for (const id of ["process-lifecycle", "update-lifecycle"] as const) {
-      expect(lanes.get(id)?.gates).not.toContainEqual(expect.objectContaining({
-        level: "local-real",
-        state: "proven",
-        witness: syntheticWitness,
-      }));
-    }
+    expect(JSON.stringify(matrix)).not.toContain("closure-shim");
     expect(lanes.get("distribution")?.gates.some((gate) => gate.state === "proven"))
-      .toBe(false);
+      .toBe(true);
   });
 
   it("keeps the next-release delivery gates explicit, ordered, and honest about retirement", async () => {
@@ -266,12 +264,10 @@ describe("Standalone Closure delivery matrix", () => {
       "SC-08",
       "SC-09",
       "SC-10",
-      "SC-11",
     ]);
     expect(taskIdSet.size).toBe(matrix.tasks.length);
     expect(matrix.tasks.filter((task) => task.delivery === "next-release")).toHaveLength(10);
-    expect(matrix.tasks.filter((task) => task.delivery === "later-retirement").map((task) => task.id))
-      .toEqual(["SC-11"]);
+    expect(matrix.tasks.filter((task) => task.delivery === "later-retirement")).toHaveLength(0);
 
     for (const task of matrix.tasks) {
       expect(task.outcome.trim().split(/\n/u)).toHaveLength(1);
@@ -290,6 +286,5 @@ describe("Standalone Closure delivery matrix", () => {
     expect(matrix.tasks.find((task) => task.id === "SC-02")?.dependsOn).toEqual([]);
     expect(matrix.tasks.find((task) => task.id === "SC-03")?.dependsOn).toEqual(["SC-01", "SC-02"]);
     expect(matrix.tasks.find((task) => task.id === "SC-10")?.dependsOn).toEqual(["SC-07", "SC-09"]);
-    expect(matrix.tasks.find((task) => task.id === "SC-11")?.dependsOn).toEqual(["SC-10"]);
   });
 });

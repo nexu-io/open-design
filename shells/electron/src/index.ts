@@ -22,6 +22,7 @@ import {
 import { readProcessStamp } from "@open-design/platform";
 
 import { readPackagedConfig } from "./config.js";
+import { createDesktopCapabilityAdapter } from "./desktop-capability-adapter.js";
 import {
   ensurePackagedClosureAvailable,
   resolvePackagedClosureInstallerRequiredVersion,
@@ -262,7 +263,9 @@ async function main(): Promise<void> {
     mcpBootstrap,
   }, async () => await createElectronStandaloneLauncher().launch(
     selection.binding,
-    createElectronShellCapabilityPort({ desktopIpc: stamp.ipc }),
+    createElectronShellCapabilityPort({
+      handlers: createDesktopCapabilityAdapter(stamp.ipc),
+    }),
   ));
   const status = await standalone.readStatus();
   if (status.state !== "running") {

@@ -93,6 +93,100 @@ export const STANDALONE_SHELL_CAPABILITIES = Object.freeze({
 export type StandaloneShellCapability =
   (typeof STANDALONE_SHELL_CAPABILITIES)[keyof typeof STANDALONE_SHELL_CAPABILITIES];
 
+export function isStandaloneShellCapability(value: unknown): value is StandaloneShellCapability {
+  return Object.values(STANDALONE_SHELL_CAPABILITIES).includes(value as StandaloneShellCapability);
+}
+
+export type StandaloneExportPdfInput = Readonly<{
+  baseHref?: string;
+  deck: boolean;
+  defaultFilename: string;
+  html: string;
+  title: string;
+}>;
+
+export type StandaloneExportPdfResult = Readonly<{
+  canceled?: boolean;
+  error?: string;
+  ok: boolean;
+  path?: string;
+}>;
+
+export type StandaloneRenderSlidesInput = Readonly<{
+  baseHref?: string;
+  deck?: boolean;
+  editable?: boolean;
+  height?: number;
+  html: string;
+  index?: number;
+  outputDir?: string;
+  pageImageFormat?: "jpeg" | "png";
+  paginate?: boolean;
+  stitch?: boolean;
+  width?: number;
+}>;
+
+export type StandaloneRenderSlidesErrorCode =
+  | "NO_SLIDES"
+  | "PAGE_TOO_TALL"
+  | "RENDER_FAILED"
+  | "SLIDE_INDEX_OUT_OF_RANGE";
+
+export type StandaloneRenderSlidesResult = Readonly<{
+  error?: string;
+  errorCode?: StandaloneRenderSlidesErrorCode;
+  height?: number;
+  mode?: "deck" | "page";
+  ok: boolean;
+  pptxFile?: string;
+  slideFiles?: string[];
+  slides?: string[];
+  width?: number;
+}>;
+
+export type StandaloneExportArtifactFormat = "image" | "pdf";
+export type StandaloneExportArtifactImageFormat = "jpeg" | "png";
+
+export type StandaloneExportArtifactInput = Readonly<{
+  baseHref?: string;
+  deck: boolean;
+  format: StandaloneExportArtifactFormat;
+  height?: number;
+  html: string;
+  imageFormat?: StandaloneExportArtifactImageFormat;
+  title: string;
+  width?: number;
+}>;
+
+export type StandaloneExportArtifactResult = Readonly<{
+  bytes?: number;
+  error?: string;
+  mime?: string;
+  ok: boolean;
+  path?: string;
+}>;
+
+export type StandaloneShellCapabilityContract = Readonly<{
+  [STANDALONE_SHELL_CAPABILITIES.EXPORT_ARTIFACT]: Readonly<{
+    input: StandaloneExportArtifactInput;
+    output: StandaloneExportArtifactResult;
+  }>;
+  [STANDALONE_SHELL_CAPABILITIES.EXPORT_PDF]: Readonly<{
+    input: StandaloneExportPdfInput;
+    output: StandaloneExportPdfResult;
+  }>;
+  [STANDALONE_SHELL_CAPABILITIES.RENDER_SLIDES]: Readonly<{
+    input: StandaloneRenderSlidesInput;
+    output: StandaloneRenderSlidesResult;
+  }>;
+}>;
+
+export type StandaloneShellCapabilityInput<TCapability extends StandaloneShellCapability> =
+  StandaloneShellCapabilityContract[TCapability]["input"];
+
+export type StandaloneShellCapabilityOutput<TCapability extends StandaloneShellCapability> =
+  StandaloneShellCapabilityContract[TCapability]["output"];
+
 type StandaloneRuntimeCommandExchange = Readonly<{
   handoff: StandaloneHandoffEnvelope;
   requestId: string;
@@ -258,6 +352,211 @@ function normalizeJsonValue(
     ]));
   } finally {
     seen.delete(value);
+  }
+}
+
+function requireKnownKeys(
+  value: Record<string, unknown>,
+  keys: readonly string[],
+  label: string,
+): void {
+  const allowed = new Set(keys);
+  const extras = Object.keys(value).filter((key) => !allowed.has(key));
+  if (extras.length > 0) {
+    throw new StandaloneProtocolError(`${label} contains unsupported fields: ${extras.join(", ")}`);
+  }
+}
+
+function requireBoolean(value: unknown, label: string): boolean {
+  if (typeof value !== "boolean") throw new StandaloneProtocolError(`${label} must be a boolean`);
+  return value;
+}
+
+function optionalString(value: unknown, label: string): string | undefined {
+  if (value == null) return undefined;
+  if (typeof value !== "string") throw new StandaloneProtocolError(`${label} must be a string`);
+  return value;
+}
+
+function requiredString(value: unknown, label: string): string {
+  const normalized = optionalString(value, label);
+  if (normalized == null || normalized.length === 0) {
+    throw new StandaloneProtocolError(`${label} must be a non-empty string`);
+  }
+  return normalized;
+}
+
+function optionalBoolean(value: unknown, label: string): boolean | undefined {
+  if (value == null) return undefined;
+  return requireBoolean(value, label);
+}
+
+function optionalPositiveNumber(value: unknown, label: string): number | undefined {
+  if (value == null) return undefined;
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    throw new StandaloneProtocolError(`${label} must be a positive number`);
+  }
+  return value;
+}
+
+function optionalNonNegativeInteger(value: unknown, label: string): number | undefined {
+  if (value == null) return undefined;
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
+    throw new StandaloneProtocolError(`${label} must be a non-negative safe integer`);
+  }
+  return value;
+}
+
+function optionalStringArray(value: unknown, label: string): string[] | undefined {
+  if (value == null) return undefined;
+  if (!Array.isArray(value) || value.some((entry) => typeof entry !== "string")) {
+    throw new StandaloneProtocolError(`${label} must be an array of strings`);
+  }
+  return [...value] as string[];
+}
+
+function validateExportPdfInput(value: unknown): StandaloneExportPdfInput {
+  const input = requireRecord(value, "standalone PDF export input");
+  requireKnownKeys(input, ["baseHref", "deck", "defaultFilename", "html", "title"], "standalone PDF export input");
+  return {
+    ...(input.baseHref == null ? {} : { baseHref: requiredString(input.baseHref, "standalone PDF export baseHref") }),
+    deck: requireBoolean(input.deck, "standalone PDF export deck"),
+    defaultFilename: requiredString(input.defaultFilename, "standalone PDF export defaultFilename"),
+    html: requiredString(input.html, "standalone PDF export html"),
+    title: requiredString(input.title, "standalone PDF export title"),
+  };
+}
+
+function validateExportPdfResult(value: unknown): StandaloneExportPdfResult {
+  const result = requireRecord(value, "standalone PDF export result");
+  requireKnownKeys(result, ["canceled", "error", "ok", "path"], "standalone PDF export result");
+  return {
+    ...(result.canceled == null ? {} : { canceled: requireBoolean(result.canceled, "standalone PDF export canceled") }),
+    ...(result.error == null ? {} : { error: optionalString(result.error, "standalone PDF export error")! }),
+    ok: requireBoolean(result.ok, "standalone PDF export ok"),
+    ...(result.path == null ? {} : { path: optionalString(result.path, "standalone PDF export path")! }),
+  };
+}
+
+function validateRenderSlidesInput(value: unknown): StandaloneRenderSlidesInput {
+  const input = requireRecord(value, "standalone slide render input");
+  requireKnownKeys(input, [
+    "baseHref", "deck", "editable", "height", "html", "index", "outputDir",
+    "pageImageFormat", "paginate", "stitch", "width",
+  ], "standalone slide render input");
+  const outputDir = input.outputDir == null
+    ? undefined
+    : requiredString(input.outputDir, "standalone slide render outputDir");
+  if (outputDir != null && !isAbsolute(outputDir) && !posix.isAbsolute(outputDir) && !win32.isAbsolute(outputDir)) {
+    throw new StandaloneProtocolError("standalone slide render outputDir must be an absolute path");
+  }
+  if (input.pageImageFormat != null && input.pageImageFormat !== "jpeg" && input.pageImageFormat !== "png") {
+    throw new StandaloneProtocolError("standalone slide render pageImageFormat must be jpeg or png");
+  }
+  return {
+    ...(input.baseHref == null ? {} : { baseHref: requiredString(input.baseHref, "standalone slide render baseHref") }),
+    ...(input.deck == null ? {} : { deck: optionalBoolean(input.deck, "standalone slide render deck")! }),
+    ...(input.editable == null ? {} : { editable: optionalBoolean(input.editable, "standalone slide render editable")! }),
+    ...(input.height == null ? {} : { height: optionalPositiveNumber(input.height, "standalone slide render height")! }),
+    html: requiredString(input.html, "standalone slide render html"),
+    ...(input.index == null ? {} : { index: optionalNonNegativeInteger(input.index, "standalone slide render index")! }),
+    ...(outputDir == null ? {} : { outputDir }),
+    ...(input.pageImageFormat == null ? {} : { pageImageFormat: input.pageImageFormat }),
+    ...(input.paginate == null ? {} : { paginate: optionalBoolean(input.paginate, "standalone slide render paginate")! }),
+    ...(input.stitch == null ? {} : { stitch: optionalBoolean(input.stitch, "standalone slide render stitch")! }),
+    ...(input.width == null ? {} : { width: optionalPositiveNumber(input.width, "standalone slide render width")! }),
+  };
+}
+
+function validateRenderSlidesResult(value: unknown): StandaloneRenderSlidesResult {
+  const result = requireRecord(value, "standalone slide render result");
+  requireKnownKeys(result, [
+    "error", "errorCode", "height", "mode", "ok", "pptxFile", "slideFiles", "slides", "width",
+  ], "standalone slide render result");
+  const errorCodes: readonly StandaloneRenderSlidesErrorCode[] = [
+    "NO_SLIDES", "PAGE_TOO_TALL", "RENDER_FAILED", "SLIDE_INDEX_OUT_OF_RANGE",
+  ];
+  if (result.errorCode != null && !errorCodes.includes(result.errorCode as StandaloneRenderSlidesErrorCode)) {
+    throw new StandaloneProtocolError("standalone slide render errorCode is unsupported");
+  }
+  if (result.mode != null && result.mode !== "deck" && result.mode !== "page") {
+    throw new StandaloneProtocolError("standalone slide render mode must be deck or page");
+  }
+  return {
+    ...(result.error == null ? {} : { error: optionalString(result.error, "standalone slide render error")! }),
+    ...(result.errorCode == null ? {} : { errorCode: result.errorCode as StandaloneRenderSlidesErrorCode }),
+    ...(result.height == null ? {} : { height: optionalPositiveNumber(result.height, "standalone slide render height")! }),
+    ...(result.mode == null ? {} : { mode: result.mode }),
+    ok: requireBoolean(result.ok, "standalone slide render ok"),
+    ...(result.pptxFile == null ? {} : { pptxFile: optionalString(result.pptxFile, "standalone slide render pptxFile")! }),
+    ...(result.slideFiles == null ? {} : { slideFiles: optionalStringArray(result.slideFiles, "standalone slide render slideFiles")! }),
+    ...(result.slides == null ? {} : { slides: optionalStringArray(result.slides, "standalone slide render slides")! }),
+    ...(result.width == null ? {} : { width: optionalPositiveNumber(result.width, "standalone slide render width")! }),
+  };
+}
+
+function validateExportArtifactInput(value: unknown): StandaloneExportArtifactInput {
+  const input = requireRecord(value, "standalone artifact export input");
+  requireKnownKeys(input, ["baseHref", "deck", "format", "height", "html", "imageFormat", "title", "width"], "standalone artifact export input");
+  if (input.format !== "image" && input.format !== "pdf") {
+    throw new StandaloneProtocolError("standalone artifact export format must be image or pdf");
+  }
+  if (input.imageFormat != null && input.imageFormat !== "jpeg" && input.imageFormat !== "png") {
+    throw new StandaloneProtocolError("standalone artifact export imageFormat must be jpeg or png");
+  }
+  return {
+    ...(input.baseHref == null ? {} : { baseHref: requiredString(input.baseHref, "standalone artifact export baseHref") }),
+    deck: requireBoolean(input.deck, "standalone artifact export deck"),
+    format: input.format,
+    ...(input.height == null ? {} : { height: optionalPositiveNumber(input.height, "standalone artifact export height")! }),
+    html: requiredString(input.html, "standalone artifact export html"),
+    ...(input.imageFormat == null ? {} : { imageFormat: input.imageFormat }),
+    title: requiredString(input.title, "standalone artifact export title"),
+    ...(input.width == null ? {} : { width: optionalPositiveNumber(input.width, "standalone artifact export width")! }),
+  };
+}
+
+function validateExportArtifactResult(value: unknown): StandaloneExportArtifactResult {
+  const result = requireRecord(value, "standalone artifact export result");
+  requireKnownKeys(result, ["bytes", "error", "mime", "ok", "path"], "standalone artifact export result");
+  return {
+    ...(result.bytes == null ? {} : { bytes: optionalNonNegativeInteger(result.bytes, "standalone artifact export bytes")! }),
+    ...(result.error == null ? {} : { error: optionalString(result.error, "standalone artifact export error")! }),
+    ...(result.mime == null ? {} : { mime: optionalString(result.mime, "standalone artifact export mime")! }),
+    ok: requireBoolean(result.ok, "standalone artifact export ok"),
+    ...(result.path == null ? {} : { path: optionalString(result.path, "standalone artifact export path")! }),
+  };
+}
+
+export function validateStandaloneShellCapabilityInput<
+  TCapability extends StandaloneShellCapability,
+>(
+  capability: TCapability,
+  value: unknown,
+): StandaloneShellCapabilityInput<TCapability> {
+  switch (capability) {
+    case STANDALONE_SHELL_CAPABILITIES.EXPORT_ARTIFACT:
+      return validateExportArtifactInput(value) as StandaloneShellCapabilityInput<TCapability>;
+    case STANDALONE_SHELL_CAPABILITIES.EXPORT_PDF:
+      return validateExportPdfInput(value) as StandaloneShellCapabilityInput<TCapability>;
+    case STANDALONE_SHELL_CAPABILITIES.RENDER_SLIDES:
+      return validateRenderSlidesInput(value) as StandaloneShellCapabilityInput<TCapability>;
+  }
+}
+
+export function validateStandaloneShellCapabilityOutput<
+  TCapability extends StandaloneShellCapability,
+>(
+  capability: TCapability,
+  value: unknown,
+): StandaloneShellCapabilityOutput<TCapability> {
+  switch (capability) {
+    case STANDALONE_SHELL_CAPABILITIES.EXPORT_ARTIFACT:
+      return validateExportArtifactResult(value) as StandaloneShellCapabilityOutput<TCapability>;
+    case STANDALONE_SHELL_CAPABILITIES.EXPORT_PDF:
+      return validateExportPdfResult(value) as StandaloneShellCapabilityOutput<TCapability>;
+    case STANDALONE_SHELL_CAPABILITIES.RENDER_SLIDES:
+      return validateRenderSlidesResult(value) as StandaloneShellCapabilityOutput<TCapability>;
   }
 }
 
@@ -461,16 +760,23 @@ export function validateStandaloneShellCapabilityRequest(
   expected?: { handoff?: StandaloneHandoffEnvelope },
 ): StandaloneShellCapabilityRequest {
   const request = requireRecord(value, "standalone shell capability request");
+  const capability = normalizeToken(request.capability, "standalone shell capability");
   return {
     ...validateCapabilityExchange(request, expected),
-    capability: normalizeToken(request.capability, "standalone shell capability"),
-    input: normalizeJsonValue(request.input, "standalone shell capability input"),
+    capability,
+    input: isStandaloneShellCapability(capability)
+      ? validateStandaloneShellCapabilityInput(capability, request.input) as StandaloneProtocolJsonValue
+      : normalizeJsonValue(request.input, "standalone shell capability input"),
   };
 }
 
 export function validateStandaloneShellCapabilityResult(
   value: unknown,
-  expected?: { handoff?: StandaloneHandoffEnvelope; requestId?: string },
+  expected?: {
+    capability?: string;
+    handoff?: StandaloneHandoffEnvelope;
+    requestId?: string;
+  },
 ): StandaloneShellCapabilityResult {
   const result = requireRecord(value, "standalone shell capability result");
   const exchange = validateCapabilityExchange(result, expected);
@@ -478,7 +784,9 @@ export function validateStandaloneShellCapabilityResult(
     return {
       ...exchange,
       outcome: "completed",
-      output: normalizeJsonValue(result.output, "standalone shell capability output"),
+      output: expected?.capability != null && isStandaloneShellCapability(expected.capability)
+        ? validateStandaloneShellCapabilityOutput(expected.capability, result.output) as StandaloneProtocolJsonValue
+        : normalizeJsonValue(result.output, "standalone shell capability output"),
     };
   }
   if (result.outcome === "unsupported") return { ...exchange, outcome: "unsupported" };

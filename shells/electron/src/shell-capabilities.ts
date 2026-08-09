@@ -1,74 +1,85 @@
 import {
   STANDALONE_SHELL_CAPABILITIES,
-  type StandaloneProtocolJsonValue,
+  validateStandaloneShellCapabilityInput,
+  validateStandaloneShellCapabilityOutput,
+  validateStandaloneShellCapabilityRequest,
+  validateStandaloneShellCapabilityResult,
+  type StandaloneExportArtifactInput,
+  type StandaloneExportPdfInput,
+  type StandaloneRenderSlidesInput,
   type StandaloneShellCapabilityPort,
   type StandaloneShellCapabilityResult,
 } from "@open-design/standalone-proto";
-import {
-  SIDECAR_MESSAGES,
-  type DesktopExportArtifactInput,
-  type DesktopExportArtifactResult,
-  type DesktopExportPdfInput,
-  type DesktopExportPdfResult,
-  type DesktopRenderSlidesInput,
-  type DesktopRenderSlidesResult,
-} from "@open-design/sidecar-proto";
-import { requestJsonIpc } from "@open-design/sidecar";
 
-type RequestDesktop = (message: unknown) => Promise<unknown>;
+export type ElectronShellCapabilityHandlers = Readonly<{
+  exportArtifact(input: StandaloneExportArtifactInput): Promise<unknown>;
+  exportPdf(input: StandaloneExportPdfInput): Promise<unknown>;
+  renderSlides(input: StandaloneRenderSlidesInput): Promise<unknown>;
+}>;
 
 export function createElectronShellCapabilityPort(options: {
-  desktopIpc: string;
-  requestDesktop?: RequestDesktop;
+  handlers: ElectronShellCapabilityHandlers;
 }): StandaloneShellCapabilityPort {
-  const requestDesktop = options.requestDesktop ?? (async (message: unknown) =>
-    await requestJsonIpc<unknown>(options.desktopIpc, message, { timeoutMs: 600_000 }));
-
   const port: StandaloneShellCapabilityPort = {
     async invoke(request): Promise<StandaloneShellCapabilityResult> {
+      const validatedRequest = validateStandaloneShellCapabilityRequest(request);
       try {
-        let output: StandaloneProtocolJsonValue;
-        switch (request.capability) {
+        let output: unknown;
+        switch (validatedRequest.capability) {
           case STANDALONE_SHELL_CAPABILITIES.EXPORT_ARTIFACT:
-            output = await requestDesktop({
-              input: request.input as DesktopExportArtifactInput,
-              type: SIDECAR_MESSAGES.EXPORT_ARTIFACT,
-            }) as DesktopExportArtifactResult as unknown as StandaloneProtocolJsonValue;
+            output = await options.handlers.exportArtifact(
+              validateStandaloneShellCapabilityInput(
+                STANDALONE_SHELL_CAPABILITIES.EXPORT_ARTIFACT,
+                validatedRequest.input,
+              ),
+            );
             break;
           case STANDALONE_SHELL_CAPABILITIES.EXPORT_PDF:
-            output = await requestDesktop({
-              input: request.input as DesktopExportPdfInput,
-              type: SIDECAR_MESSAGES.EXPORT_PDF,
-            }) as DesktopExportPdfResult as unknown as StandaloneProtocolJsonValue;
+            output = await options.handlers.exportPdf(
+              validateStandaloneShellCapabilityInput(
+                STANDALONE_SHELL_CAPABILITIES.EXPORT_PDF,
+                validatedRequest.input,
+              ),
+            );
             break;
           case STANDALONE_SHELL_CAPABILITIES.RENDER_SLIDES:
-            output = await requestDesktop({
-              input: request.input as DesktopRenderSlidesInput,
-              type: SIDECAR_MESSAGES.RENDER_SLIDES,
-            }) as DesktopRenderSlidesResult as unknown as StandaloneProtocolJsonValue;
+            output = await options.handlers.renderSlides(
+              validateStandaloneShellCapabilityInput(
+                STANDALONE_SHELL_CAPABILITIES.RENDER_SLIDES,
+                validatedRequest.input,
+              ),
+            );
             break;
           default:
             return {
-              handoff: request.handoff,
+              handoff: validatedRequest.handoff,
               outcome: "unsupported",
-              requestId: request.requestId,
-              schemaVersion: request.schemaVersion,
+              requestId: validatedRequest.requestId,
+              schemaVersion: validatedRequest.schemaVersion,
             };
         }
-        return {
-          handoff: request.handoff,
-          outcome: "completed",
+        const validatedOutput = validateStandaloneShellCapabilityOutput(
+          validatedRequest.capability,
           output,
-          requestId: request.requestId,
-          schemaVersion: request.schemaVersion,
-        };
+        );
+        return validateStandaloneShellCapabilityResult({
+          handoff: validatedRequest.handoff,
+          outcome: "completed",
+          output: validatedOutput,
+          requestId: validatedRequest.requestId,
+          schemaVersion: validatedRequest.schemaVersion,
+        }, {
+          capability: validatedRequest.capability,
+          handoff: validatedRequest.handoff,
+          requestId: validatedRequest.requestId,
+        });
       } catch {
         return {
           error: { code: "shell-capability-failed" },
-          handoff: request.handoff,
+          handoff: validatedRequest.handoff,
           outcome: "failed",
-          requestId: request.requestId,
-          schemaVersion: request.schemaVersion,
+          requestId: validatedRequest.requestId,
+          schemaVersion: validatedRequest.schemaVersion,
         };
       }
     },

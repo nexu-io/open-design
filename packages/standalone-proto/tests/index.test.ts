@@ -4,6 +4,7 @@ import {
   STANDALONE_BOOTLOADER_ENTRY_PATH,
   STANDALONE_HANDOFF_SCHEMA_VERSION,
   STANDALONE_PROTOCOL_VERSION,
+  STANDALONE_SHELL_CAPABILITIES,
   compareStandaloneVersions,
   createStandaloneHandoffEnvelope,
   validateStandaloneHandoffRequest,
@@ -12,6 +13,8 @@ import {
   validateStandaloneRuntimeCommandRequest,
   validateStandaloneRuntimeCommandResult,
   validateStandaloneShellCapabilityResult,
+  validateStandaloneShellCapabilityInput,
+  validateStandaloneShellCapabilityOutput,
   type StandaloneHandoffRequest,
 } from "../src/index.js";
 
@@ -154,6 +157,31 @@ describe("Standalone bootloader protocol", () => {
       schemaVersion: STANDALONE_HANDOFF_SCHEMA_VERSION,
       state: "stopped",
     }, { handoff })).toThrow(/committed generation/);
+  });
+
+  it("owns the typed rendering capability payloads on both sides of the handoff", () => {
+    expect(validateStandaloneShellCapabilityInput(
+      STANDALONE_SHELL_CAPABILITIES.EXPORT_PDF,
+      {
+        deck: false,
+        defaultFilename: "artifact.pdf",
+        html: "<main>artifact</main>",
+        title: "Artifact",
+      },
+    )).toMatchObject({ deck: false, defaultFilename: "artifact.pdf" });
+    expect(() => validateStandaloneShellCapabilityInput(
+      STANDALONE_SHELL_CAPABILITIES.EXPORT_PDF,
+      { html: "<main>missing contract fields</main>" },
+    )).toThrow(/deck/);
+
+    expect(validateStandaloneShellCapabilityOutput(
+      STANDALONE_SHELL_CAPABILITIES.RENDER_SLIDES,
+      { ok: true, slides: ["data:image/png;base64,AA=="] },
+    )).toEqual({ ok: true, slides: ["data:image/png;base64,AA=="] });
+    expect(() => validateStandaloneShellCapabilityOutput(
+      STANDALONE_SHELL_CAPABILITIES.RENDER_SLIDES,
+      { ok: true, slides: [42] },
+    )).toThrow(/array of strings/);
   });
 
   it("fences Shell-to-Standalone commands to the committed generation", () => {

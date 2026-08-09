@@ -8,16 +8,13 @@ import {
 import {
   STANDALONE_SHELL_CAPABILITIES,
   type StandaloneProtocolJsonValue,
+  type StandaloneShellCapability,
+  type StandaloneShellCapabilityInput,
+  type StandaloneShellCapabilityOutput,
   type StandaloneShellCapabilityResult,
+  validateStandaloneShellCapabilityInput,
+  validateStandaloneShellCapabilityOutput,
 } from "@open-design/standalone-proto";
-import type {
-  DesktopExportArtifactInput,
-  DesktopExportArtifactResult,
-  DesktopExportPdfInput,
-  DesktopExportPdfResult,
-  DesktopRenderSlidesInput,
-  DesktopRenderSlidesResult,
-} from "@open-design/sidecar-proto";
 
 import { startDaemonRuntime } from "../daemon-startup.js";
 import { setDesktopAuthSecret } from "../desktop-auth.js";
@@ -71,32 +68,38 @@ async function startDefaultRuntime(
       namespace: context.identity.namespace,
     },
   }).connect<ShellCapabilityBridgeMethods>(STANDALONE_SHELL_CAPABILITY_SERVICE);
-  const invokeShell = async <TOutput>(
-    capability: string,
-    input: StandaloneProtocolJsonValue,
-  ): Promise<TOutput> => {
-    const result = await shellCapabilities.call("invoke", { capability, input });
-    if (result.outcome === "completed") return result.output as TOutput;
+  const invokeShell = async <TCapability extends StandaloneShellCapability>(
+    capability: TCapability,
+    input: StandaloneShellCapabilityInput<TCapability>,
+  ): Promise<StandaloneShellCapabilityOutput<TCapability>> => {
+    const validatedInput = validateStandaloneShellCapabilityInput(capability, input);
+    const result = await shellCapabilities.call("invoke", {
+      capability,
+      input: validatedInput as StandaloneProtocolJsonValue,
+    });
+    if (result.outcome === "completed") {
+      return validateStandaloneShellCapabilityOutput(capability, result.output);
+    }
     if (result.outcome === "unsupported") {
       throw new Error(`Electron Shell capability is unsupported: ${capability}`);
     }
     throw new Error(`Electron Shell capability failed: ${capability} (${result.error.code})`);
   };
   const started = await startDaemonRuntime({
-    desktopArtifactExporter: async (input: DesktopExportArtifactInput) =>
-      await invokeShell<DesktopExportArtifactResult>(
+    desktopArtifactExporter: async (input) =>
+      await invokeShell(
         STANDALONE_SHELL_CAPABILITIES.EXPORT_ARTIFACT,
-        input as unknown as StandaloneProtocolJsonValue,
+        input,
       ),
-    desktopPdfExporter: async (input: DesktopExportPdfInput) =>
-      await invokeShell<DesktopExportPdfResult>(
+    desktopPdfExporter: async (input) =>
+      await invokeShell(
         STANDALONE_SHELL_CAPABILITIES.EXPORT_PDF,
-        input as unknown as StandaloneProtocolJsonValue,
+        input,
       ),
-    desktopSlideRenderer: async (input: DesktopRenderSlidesInput) =>
-      await invokeShell<DesktopRenderSlidesResult>(
+    desktopSlideRenderer: async (input) =>
+      await invokeShell(
         STANDALONE_SHELL_CAPABILITIES.RENDER_SLIDES,
-        input as unknown as StandaloneProtocolJsonValue,
+        input,
       ),
     host: "127.0.0.1",
     port: Number(process.env.OD_PORT) || 0,
