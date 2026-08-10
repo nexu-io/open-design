@@ -382,6 +382,7 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
       ) {
         return {
           ...incoming,
+          role: stored.role,
           runId: stored.runId,
           runStatus: stored.runStatus,
           events: stored.events ?? [],
