@@ -45,8 +45,8 @@ export const MAC_PACKAGED_SMOKE_SCENARIOS = {
   },
 } as const satisfies Record<string, PackagedSmokeScenario>;
 
-export const MAC_SHELL_SMOKE_SCENARIO_IDS = Object.values(MAC_PACKAGED_SMOKE_SCENARIOS)
-  .filter((scenario) => scenario.lane === 'shell')
+export const MAC_SHELL_PROOF_SCENARIO_IDS = Object.values(MAC_PACKAGED_SMOKE_SCENARIOS)
+  .filter((scenario) => scenario.lane === 'shell' || scenario.lane === 'migration')
   .map((scenario) => scenario.id);
 
 export function resolvePackagedSmokeLanes(

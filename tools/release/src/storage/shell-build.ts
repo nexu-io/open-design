@@ -118,11 +118,27 @@ export function shellSmokeProofObjectKey(
   return `${channel}/shells/${shellType}/builds/${sourceDigest.slice("sha256:".length)}/acceptance/${target}/${matrix}/standalone-v${standaloneProtocolVersion}/${acceptanceDigest.slice("sha256:".length)}.json`;
 }
 
-function requiredShellSmokeScenarios(matrix: string): string[] {
+function requiredShellSmokeScenarioEntries(matrix: string): Array<{ lane: "migration" | "shell"; step: string }> {
   if (matrix === "mac-shell-v2") {
-    return ["mac-shell-lifecycle", "mac-shell-silent-update", "mac-shell-rollback"];
+    return [
+      { lane: "shell", step: "mac-shell-lifecycle" },
+      { lane: "shell", step: "mac-shell-silent-update" },
+      { lane: "shell", step: "mac-shell-rollback" },
+    ];
+  }
+  if (matrix === "mac-shell-v3") {
+    return [
+      { lane: "shell", step: "mac-shell-lifecycle" },
+      { lane: "shell", step: "mac-shell-silent-update" },
+      { lane: "shell", step: "mac-shell-rollback" },
+      { lane: "migration", step: "mac-legacy-migration" },
+    ];
   }
   throw new Error(`unsupported Shell smoke matrix: ${matrix}`);
+}
+
+function requiredShellSmokeScenarios(matrix: string): string[] {
+  return requiredShellSmokeScenarioEntries(matrix).map(({ step }) => step);
 }
 
 export function validateShellSmokeProofRecord(
@@ -423,20 +439,29 @@ export async function registerShellSmokeProof(): Promise<void> {
   const summary = JSON.parse(readFileSync(required("RELEASE_SHELL_SMOKE_SUMMARY_PATH"), "utf8")) as unknown;
   assertRecord(summary, "Shell smoke summary");
   assertRecord(summary.plan, "Shell smoke summary plan");
-  if (!Array.isArray(summary.plan.selectedLanes) || !summary.plan.selectedLanes.includes("shell")) {
-    throw new Error("Shell smoke summary did not select the Shell lane");
+  const scenarioEntries = requiredShellSmokeScenarioEntries(matrix);
+  const requiredLanes = [...new Set(scenarioEntries.map(({ lane }) => lane))];
+  const selectedLanes = summary.plan.selectedLanes;
+  if (
+    !Array.isArray(selectedLanes)
+    || requiredLanes.some((lane) => !selectedLanes.includes(lane))
+  ) {
+    throw new Error(`Shell smoke summary did not select required lanes: ${requiredLanes.join(", ")}`);
   }
   if (!Array.isArray(summary.timings)) throw new Error("Shell smoke summary timings are required");
+  const expectedLanes = new Map(scenarioEntries.map(({ lane, step }) => [step, lane]));
   const successful = new Set(
     summary.timings.flatMap((entry) => {
       if (entry == null || typeof entry !== "object" || Array.isArray(entry)) return [];
       const timing = entry as Record<string, unknown>;
-      return timing.lane === "shell" && timing.status === "success" && typeof timing.step === "string"
+      return typeof timing.step === "string"
+        && timing.lane === expectedLanes.get(timing.step)
+        && timing.status === "success"
         ? [timing.step]
         : [];
     }),
   );
-  const scenarios = requiredShellSmokeScenarios(matrix);
+  const scenarios = scenarioEntries.map(({ step }) => step);
   const missing = scenarios.filter((scenario) => !successful.has(scenario));
   if (missing.length > 0) throw new Error(`Shell smoke proof is missing successful scenarios: ${missing.join(", ")}`);
   const releaseVersion = String(build.releaseVersion ?? plan.releaseVersion ?? "");

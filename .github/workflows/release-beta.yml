@@ -562,8 +562,8 @@ jobs:
           RELEASE_CHANNEL: beta
           RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
           RELEASE_SHELL_BUILD_JSON_PATH: ${{ runner.temp }}/release-build/mac_arm64/build.json
-          RELEASE_SHELL_SMOKE_ACCEPTANCE_DIGEST: sha256:${{ hashFiles('e2e/specs/mac.spec.ts', 'e2e/scripts/release-smoke.ts', 'e2e/lib/vitest/packaged-smoke-plan.ts', 'e2e/lib/vitest/packaged-closure-fixture.ts', 'e2e/lib/vitest/tools-serve-updater-fixture.ts', 'tools/serve/src/index.ts', 'tools/serve/src/updater-fixture.ts') }}
-          RELEASE_SHELL_SMOKE_MATRIX: mac-shell-v2
+          RELEASE_SHELL_SMOKE_ACCEPTANCE_DIGEST: sha256:${{ hashFiles('.github/workflows/release-beta.yml', 'e2e/specs/mac.spec.ts', 'e2e/scripts/release-smoke.ts', 'e2e/lib/vitest/packaged-smoke-plan.ts', 'e2e/lib/vitest/packaged-closure-fixture.ts', 'e2e/lib/vitest/tools-serve-updater-fixture.ts', 'tools/serve/src/index.ts', 'tools/serve/src/updater-fixture.ts') }}
+          RELEASE_SHELL_SMOKE_MATRIX: mac-shell-v3
           RELEASE_SHELL_PLAN_JSON_PATH: ${{ runner.temp }}/release-build/mac_arm64/shell-plan.json
           RELEASE_STANDALONE_PROTOCOL_VERSION: "1"
           RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
@@ -846,7 +846,7 @@ jobs:
 
       - name: Materialize legacy mac_arm64 migration fixture
         id: mac_arm64_legacy_fixture
-        if: ${{ inputs.mac_arm64_smoke_mode == 'full' }}
+        if: ${{ inputs.mac_arm64_smoke_mode == 'full' && steps.mac_arm64_shell_resolution.outputs.smoke_proof != 'hit' }}
         env:
           RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
         run: |
@@ -899,7 +899,7 @@ jobs:
           OD_PACKAGED_E2E_MAC_LEGACY_DMG_PATH: ${{ steps.mac_arm64_legacy_fixture.outputs.dmg_path }}
           OD_PACKAGED_E2E_MAC_LEGACY_VERSION: ${{ steps.mac_arm64_legacy_fixture.outputs.version }}
           OD_PACKAGED_E2E_MAC_MIN_SHELL_VERSION: ${{ env.CLOSURE_MIN_SHELL_VERSION }}
-          OD_PACKAGED_E2E_MAC_SMOKE_LANES: ${{ inputs.mac_arm64_smoke_mode == 'full' && steps.mac_arm64_shell_resolution.outputs.smoke_proof == 'hit' && 'standalone,migration' || '' }}
+          OD_PACKAGED_E2E_MAC_SMOKE_LANES: ${{ inputs.mac_arm64_smoke_mode == 'full' && steps.mac_arm64_shell_resolution.outputs.smoke_proof == 'hit' && 'standalone' || '' }}
           OD_PACKAGED_E2E_MAC_SMOKE_PROFILE: ${{ inputs.mac_arm64_smoke_mode }}
           OD_PACKAGED_E2E_NAMESPACE: release-beta
           OD_PACKAGED_E2E_RELEASE_CHANNEL: beta
@@ -917,8 +917,8 @@ jobs:
           RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
           RELEASE_SHELL_BUILD_JSON_PATH: ${{ runner.temp }}/release-build/mac_arm64/build.json
           RELEASE_SHELL_PLAN_JSON_PATH: ${{ runner.temp }}/release-build/mac_arm64/shell-plan.json
-          RELEASE_SHELL_SMOKE_ACCEPTANCE_DIGEST: sha256:${{ hashFiles('e2e/specs/mac.spec.ts', 'e2e/scripts/release-smoke.ts', 'e2e/lib/vitest/packaged-smoke-plan.ts', 'e2e/lib/vitest/packaged-closure-fixture.ts', 'e2e/lib/vitest/tools-serve-updater-fixture.ts', 'tools/serve/src/index.ts', 'tools/serve/src/updater-fixture.ts') }}
-          RELEASE_SHELL_SMOKE_MATRIX: mac-shell-v2
+          RELEASE_SHELL_SMOKE_ACCEPTANCE_DIGEST: sha256:${{ hashFiles('.github/workflows/release-beta.yml', 'e2e/specs/mac.spec.ts', 'e2e/scripts/release-smoke.ts', 'e2e/lib/vitest/packaged-smoke-plan.ts', 'e2e/lib/vitest/packaged-closure-fixture.ts', 'e2e/lib/vitest/tools-serve-updater-fixture.ts', 'tools/serve/src/index.ts', 'tools/serve/src/updater-fixture.ts') }}
+          RELEASE_SHELL_SMOKE_MATRIX: mac-shell-v3
           RELEASE_SHELL_SMOKE_SUMMARY_PATH: ${{ runner.temp }}/release-report/mac_arm64/summary.json
           RELEASE_STANDALONE_PROTOCOL_VERSION: "1"
           RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}

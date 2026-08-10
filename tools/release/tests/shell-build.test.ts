@@ -51,11 +51,11 @@ describe("immutable Shell build storage", () => {
       "electron",
       sourceDigest,
       "darwin-arm64",
-      "mac-shell-v2",
+      "mac-shell-v3",
       acceptanceDigest,
       1,
     )).toBe(
-      `beta/shells/electron/builds/${"a".repeat(64)}/acceptance/darwin-arm64/mac-shell-v2/standalone-v1/${"e".repeat(64)}.json`,
+      `beta/shells/electron/builds/${"a".repeat(64)}/acceptance/darwin-arm64/mac-shell-v3/standalone-v1/${"e".repeat(64)}.json`,
     );
   });
 
@@ -165,7 +165,7 @@ describe("immutable Shell build storage", () => {
         RELEASE_PUBLIC_ORIGIN: "https://releases.example",
         RELEASE_SHELL_BUILD_JSON_PATH: buildPath,
         RELEASE_SHELL_SMOKE_ACCEPTANCE_DIGEST: acceptanceDigest,
-        RELEASE_SHELL_SMOKE_MATRIX: "mac-shell-v2",
+        RELEASE_SHELL_SMOKE_MATRIX: "mac-shell-v3",
         RELEASE_SHELL_SMOKE_SUMMARY_PATH: smokeSummaryPath,
         RELEASE_SHELL_PLAN_JSON_PATH: planPath,
         RELEASE_STANDALONE_PROTOCOL_VERSION: "1",
@@ -201,7 +201,7 @@ describe("immutable Shell build storage", () => {
         expect(reused.timings[0].durationMs).toBeGreaterThan(0);
         expect(reused.resolution.smokeProof).toEqual({
           acceptanceDigest,
-          matrix: "mac-shell-v2",
+          matrix: "mac-shell-v3",
           standaloneProtocolVersion: 1,
           state: "miss",
           url: null,
@@ -218,22 +218,34 @@ describe("immutable Shell build storage", () => {
             { lane: "shell", status: "success", step: "mac-shell-rollback" },
           ],
         })}\n`);
+        await expect(registerShellSmokeProof()).rejects.toThrow(/mac-legacy-migration/);
+
+        await writeFile(smokeSummaryPath, `${JSON.stringify({
+          plan: { profile: "full", selectedLanes: ["shell", "standalone", "migration"] },
+          schemaVersion: 1,
+          timings: [
+            { lane: "shell", status: "success", step: "mac-shell-lifecycle" },
+            { lane: "shell", status: "success", step: "mac-shell-silent-update" },
+            { lane: "shell", status: "success", step: "mac-shell-rollback" },
+            { lane: "migration", status: "success", step: "mac-legacy-migration" },
+          ],
+        })}\n`);
         await registerShellSmokeProof();
         await resolveShellBuild();
         const proven = JSON.parse(await readFile(buildPath, "utf8"));
         expect(proven.resolution.smokeProof).toEqual({
           acceptanceDigest,
-          matrix: "mac-shell-v2",
+          matrix: "mac-shell-v3",
           standaloneProtocolVersion: 1,
           state: "hit",
-          url: `https://releases.example/beta/shells/electron/builds/${"a".repeat(64)}/acceptance/darwin-arm64/mac-shell-v2/standalone-v1/${"e".repeat(64)}.json`,
+          url: `https://releases.example/beta/shells/electron/builds/${"a".repeat(64)}/acceptance/darwin-arm64/mac-shell-v3/standalone-v1/${"e".repeat(64)}.json`,
         });
         const proofKey = shellSmokeProofObjectKey(
           "beta",
           "electron",
           sourceDigest,
           "darwin-arm64",
-          "mac-shell-v2",
+          "mac-shell-v3",
           acceptanceDigest,
           1,
         );
@@ -241,13 +253,14 @@ describe("immutable Shell build storage", () => {
           JSON.parse(objects.get(proofKey)!.toString("utf8")),
           plan,
           "beta",
-          "mac-shell-v2",
+          "mac-shell-v3",
           acceptanceDigest,
           1,
         ).scenarios).toEqual([
           "mac-shell-lifecycle",
           "mac-shell-silent-update",
           "mac-shell-rollback",
+          "mac-legacy-migration",
         ]);
 
         process.env.RELEASE_SHELL_SMOKE_ACCEPTANCE_DIGEST = `sha256:${"f".repeat(64)}`;

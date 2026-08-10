@@ -1737,18 +1737,24 @@ process.stdin.on("end", () => {
     expect(releaseBetaWorkflow).toContain("RELEASE_TARGET: win_x64");
     expect(releaseBetaWorkflow).toContain("RELEASE_TARGET: mac_x64");
     const betaMacArm64Job = sectionBetween(releaseBetaWorkflow, "  build_mac_arm64:", "  build_mac_x64:");
-    expect(betaMacArm64Job).toContain("RELEASE_SHELL_SMOKE_MATRIX: mac-shell-v2");
+    expect(betaMacArm64Job).toContain("RELEASE_SHELL_SMOKE_MATRIX: mac-shell-v3");
     expect(betaMacArm64Job).toContain("RELEASE_SHELL_SMOKE_ACCEPTANCE_DIGEST: sha256:${{ hashFiles(");
+    expect(betaMacArm64Job.match(/hashFiles\('\.github\/workflows\/release-beta\.yml'/gu)).toHaveLength(2);
     expect(betaMacArm64Job).toContain(
       `RELEASE_STANDALONE_PROTOCOL_VERSION: "${STANDALONE_PROTOCOL_VERSION}"`,
     );
     expect(betaMacArm64Job).toContain("steps.mac_arm64_shell_resolution.outputs.smoke_proof != 'hit'");
     expect(sectionBetween(
       betaMacArm64Job,
+      "      - name: Materialize legacy mac_arm64 migration fixture",
+      "      - name: Smoke beta mac_arm64 packaged runtime",
+    )).toContain("steps.mac_arm64_shell_resolution.outputs.smoke_proof != 'hit'");
+    expect(sectionBetween(
+      betaMacArm64Job,
       "      - name: Build beta mac_arm64 update fixture",
       "      - name: Materialize legacy mac_arm64 migration fixture",
     )).toContain("--to app");
-    expect(betaMacArm64Job).toContain("OD_PACKAGED_E2E_MAC_SMOKE_LANES: ${{ inputs.mac_arm64_smoke_mode == 'full' && steps.mac_arm64_shell_resolution.outputs.smoke_proof == 'hit' && 'standalone,migration' || '' }}");
+    expect(betaMacArm64Job).toContain("OD_PACKAGED_E2E_MAC_SMOKE_LANES: ${{ inputs.mac_arm64_smoke_mode == 'full' && steps.mac_arm64_shell_resolution.outputs.smoke_proof == 'hit' && 'standalone' || '' }}");
     expect(betaMacArm64Job).toContain("OD_PACKAGED_E2E_SHELL_SMOKE_PROOF: ${{ steps.mac_arm64_shell_resolution.outputs.smoke_proof }}");
     expect(betaMacArm64Job).toContain("Register mac_arm64 Electron Shell full-smoke proof");
     expect(betaMacArm64Job).toContain("run: pnpm exec tools-release register-shell-smoke");
