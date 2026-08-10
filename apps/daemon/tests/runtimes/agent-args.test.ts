@@ -805,21 +805,18 @@ test('codex buildArgs preserves supported reasoning effort exactly', () => {
   }
 });
 
-test('codex buildArgs rejects unsupported effort instead of clamping it', () => {
-  assert.throws(() => codex.buildArgs(
+test('codex buildArgs preserves live-catalog effort without a stale adapter allowlist', () => {
+  const args = codex.buildArgs(
     '',
     [],
     [],
-    { model: 'gpt-5.1', reasoning: 'xhigh' },
+    { model: 'gpt-future', reasoning: 'simple' },
     { cwd: '/tmp/od-project' },
-  ), /does not support reasoning effort 'xhigh'/u);
-  assert.throws(() => codex.buildArgs(
-    '',
-    [],
-    [],
-    { model: 'gpt-5.5', reasoning: 'minimal' },
-    { cwd: '/tmp/od-project' },
-  ), /does not support reasoning effort 'minimal'/u);
+  );
+
+  assert.ok(args.includes('--model'));
+  assert.ok(args.includes('gpt-future'));
+  assert.ok(args.includes('model_reasoning_effort="simple"'));
 });
 
 test('codex buildArgs omits model_reasoning_effort when reasoning is "default"', () => {
