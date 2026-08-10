@@ -440,6 +440,7 @@ import {
   classifyAgentAuthFailure,
   classifyAgentServiceFailure,
   codexChatGptAuthGuidance,
+  codexChatGptConfigInspectionGuidance,
   cursorAuthGuidance,
   inspectCodexChatGptRoutePolicy,
   probeCodexChatGptAuthStatus,
@@ -2381,6 +2382,7 @@ export interface StartServerResult {
   url: string;
   server: import('node:http').Server;
   shutdown: () => Promise<void> | void;
+  agentDiscoveryReady: Promise<void>;
   routeInventory: import('./route-registration-guard.js').RouteRegistration[];
 }
 
@@ -2877,12 +2879,14 @@ export async function startServer({
   // Warm agent-capability probes (e.g. whether the installed Claude Code
   // build advertises --include-partial-messages) so the first /api/chat
   // hits a populated cache even if /api/agents hasn't been called yet.
-  void readAppConfig(RUNTIME_DATA_DIR)
+  const agentDiscoveryReady = readAppConfig(RUNTIME_DATA_DIR)
     .then((config) => {
       orbitService.configure(config.orbit);
-      return detectAgents(config.agentCliEnv ?? {});
+      return detectAgents(config.agentCliEnv ?? {}, { effectiveCwd: PROJECT_ROOT });
     })
-    .catch(() => detectAgents().catch(() => {}));
+    .catch(() => detectAgents({}, { effectiveCwd: PROJECT_ROOT }).catch(() => []))
+    .then(() => {});
+  void agentDiscoveryReady;
 
   await recoverStaleLiveArtifactRefreshes({ projectsRoot: PROJECTS_DIR }).catch((error) => {
     console.warn('[od] Failed to recover stale live artifact refreshes:', error);
@@ -9571,6 +9575,58 @@ export async function startServer({
     } catch {
       configuredAgentEnv = {};
     }
+    const agentLaunch = resolveAgentLaunch(def, configuredAgentEnv);
+    const resolvedBin = agentLaunch.selectedPath;
+    let codexProviderEnvKey: string | null = null;
+    let strictCodexProbeEnv: NodeJS.ProcessEnv | null = null;
+    if (
+      requiresChatGptCodexAuth
+      && resolvedBin
+      && agentLaunch.launchPath
+    ) {
+      const codexBaseEnv = spawnEnvForAgent(
+        def.id,
+        {
+          ...process.env,
+          ...(def.env || {}),
+        },
+        configuredAgentEnv,
+        undefined,
+        { resolvedBin: agentLaunch.selectedPath },
+      );
+      const chatgptPolicy = await inspectCodexChatGptRoutePolicy(
+        codexBaseEnv,
+        effectiveCwd,
+      );
+      codexProviderEnvKey = chatgptPolicy.providerEnvKey;
+      if (!chatgptPolicy.allowed) {
+        const inspectionFailed = chatgptPolicy.reason === 'config_inspection_failed';
+        run.failureCategory = 'auth';
+        run.failureDetail = chatgptPolicy.reason ?? 'custom_provider_not_allowed';
+        run.failureAction = inspectionFailed ? 'repair' : 'relogin';
+        return design.runs.fail(
+          run,
+          'AGENT_AUTH_REQUIRED',
+          inspectionFailed
+            ? codexChatGptConfigInspectionGuidance()
+            : codexChatGptAuthGuidance(),
+          { retryable: false },
+        );
+      }
+      strictCodexProbeEnv = applyAgentLaunchEnv(
+        spawnEnvForAgent(
+          def.id,
+          codexBaseEnv,
+          {},
+          {},
+          {
+            resolvedBin: agentLaunch.selectedPath,
+            codexAuthMode: 'chatgpt',
+          },
+        ),
+        agentLaunch,
+      );
+    }
     const requestedLiveModelScope = requiresChatGptCodexAuth
       ? CODEX_CHATGPT_MODEL_SCOPE
       : def.id === 'amr'
@@ -9716,54 +9772,17 @@ export async function startServer({
       reasoning: safeReasoning,
       serviceTier: safeServiceTier,
     };
-    const agentLaunch = resolveAgentLaunch(def, configuredAgentEnv);
-    const resolvedBin = agentLaunch.selectedPath;
-    let codexProviderEnvKey = null;
     if (
       requiresChatGptCodexAuth
       && resolvedBin
       && agentLaunch.launchPath
+      && strictCodexProbeEnv
     ) {
-      const codexBaseEnv = spawnEnvForAgent(
-        def.id,
-        {
-          ...process.env,
-          ...(def.env || {}),
-        },
-        configuredAgentEnv,
-        undefined,
-        { resolvedBin: agentLaunch.selectedPath },
-      );
-      const chatgptPolicy = await inspectCodexChatGptRoutePolicy(codexBaseEnv);
-      codexProviderEnvKey = chatgptPolicy.providerEnvKey;
-      if (!chatgptPolicy.allowed) {
-        run.failureCategory = 'auth';
-        run.failureDetail = 'custom_provider_not_allowed';
-        run.failureAction = 'relogin';
-        return design.runs.fail(
-          run,
-          'AGENT_AUTH_REQUIRED',
-          codexChatGptAuthGuidance(),
-          { retryable: false },
-        );
-      }
-      const strictProbeEnv = applyAgentLaunchEnv(
-        spawnEnvForAgent(
-          def.id,
-          codexBaseEnv,
-          {},
-          {},
-          {
-            resolvedBin: agentLaunch.selectedPath,
-            codexAuthMode: 'chatgpt',
-          },
-        ),
-        agentLaunch,
-      );
       const chatgptAuth = await probeCodexChatGptAuthStatus(
         def,
         agentLaunch.launchPath,
-        strictProbeEnv,
+        strictCodexProbeEnv,
+        effectiveCwd,
       );
       if (chatgptAuth?.status !== 'ok') {
         run.failureCategory = 'auth';
@@ -14171,6 +14190,7 @@ export async function startServer({
           url,
           server,
           shutdown: shutdownDaemonRuns,
+          agentDiscoveryReady,
           routeInventory: getRouteRegistrationInventory(app),
         } : url);
       });

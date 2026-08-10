@@ -223,15 +223,17 @@ async function pathState(filePath: string): Promise<'present' | 'missing' | 'unc
   }
 }
 
-async function projectConfigExists(projectCwd: string | null | undefined): Promise<boolean> {
-  if (!projectCwd) return false;
+export async function findCodexProjectConfigPaths(
+  projectCwd: string | null | undefined,
+): Promise<string[] | null> {
+  if (!projectCwd) return [];
   let start: string;
   try {
     // Node/Codex resolves the child cwd physically. Scan that same path so a
     // symlinked imported workspace cannot hide its real repository config.
     start = await realpath(path.resolve(projectCwd));
   } catch {
-    return true;
+    return null;
   }
   const ancestors: string[] = [];
   let current = start;
@@ -244,7 +246,7 @@ async function projectConfigExists(projectCwd: string | null | undefined): Promi
   while (true) {
     ancestors.push(current);
     const gitState = await pathState(path.join(current, '.git'));
-    if (gitState === 'uncertain') return true;
+    if (gitState === 'uncertain') return null;
     if (gitState === 'present') {
       gitRoot = current;
       break;
@@ -257,11 +259,19 @@ async function projectConfigExists(projectCwd: string | null | undefined): Promi
   const searchDirs = gitRoot
     ? ancestors.slice(0, ancestors.indexOf(gitRoot) + 1)
     : [start];
-  for (const dir of searchDirs) {
-    const configState = await pathState(path.join(dir, '.codex', 'config.toml'));
-    if (configState !== 'missing') return true;
+  const configPaths: string[] = [];
+  for (const dir of searchDirs.reverse()) {
+    const configPath = path.join(dir, '.codex', 'config.toml');
+    const configState = await pathState(configPath);
+    if (configState === 'uncertain') return null;
+    if (configState === 'present') configPaths.push(configPath);
   }
-  return false;
+  return configPaths;
+}
+
+async function projectConfigExists(projectCwd: string | null | undefined): Promise<boolean> {
+  const paths = await findCodexProjectConfigPaths(projectCwd);
+  return paths === null || paths.length > 0;
 }
 
 const AUTH_OR_ENDPOINT_ENV_KEYS = new Set([
@@ -296,10 +306,10 @@ function envValueCaseInsensitive(
   return matched?.trim() || null;
 }
 
-async function hasSystemConfigLayer(
+export function resolveCodexSystemConfigPath(
   env: NodeJS.ProcessEnv,
-): Promise<boolean> {
-  const configPath = process.platform === 'win32'
+): string {
+  return process.platform === 'win32'
     ? path.join(
         envValueCaseInsensitive(env, 'PROGRAMDATA') ?? 'C:\\ProgramData',
         'OpenAI',
@@ -307,10 +317,15 @@ async function hasSystemConfigLayer(
         'config.toml',
       )
     : '/etc/codex/config.toml';
-  return await pathState(configPath) !== 'missing';
 }
 
-async function hasMacManagedConfigPreference(
+async function hasSystemConfigLayer(
+  env: NodeJS.ProcessEnv,
+): Promise<boolean> {
+  return await pathState(resolveCodexSystemConfigPath(env)) !== 'missing';
+}
+
+export async function hasMacManagedConfigPreference(
   env: NodeJS.ProcessEnv,
 ): Promise<boolean> {
   if (process.platform !== 'darwin') return false;
@@ -363,19 +378,29 @@ async function hasMacManagedConfigPreference(
   return macManagedConfigProbe;
 }
 
-async function hasManagedConfigLayer(env: NodeJS.ProcessEnv): Promise<boolean> {
+export function resolveCodexManagedConfigPaths(env: NodeJS.ProcessEnv): {
+  readable: string[];
+  opaque: string[];
+} {
   const configDir = path.dirname(resolveCodexConfigPath(env));
-  const candidates = [
+  const readable = [
     path.join(configDir, 'managed_config.toml'),
+  ];
+  const opaque = [
     // Codex stores fetched enterprise config bundles here. We do not parse the
     // signed payload or assume it is current; presence alone means a non-user
     // layer may affect the effective provider or endpoint, so fail open.
     path.join(configDir, 'cloud-config-bundle-cache.json'),
   ];
   if (process.platform !== 'win32') {
-    candidates.push('/etc/codex/managed_config.toml');
+    readable.push('/etc/codex/managed_config.toml');
   }
-  for (const candidate of candidates) {
+  return { readable, opaque };
+}
+
+async function hasManagedConfigLayer(env: NodeJS.ProcessEnv): Promise<boolean> {
+  const paths = resolveCodexManagedConfigPaths(env);
+  for (const candidate of [...paths.readable, ...paths.opaque]) {
     const state = await pathState(candidate);
     if (state !== 'missing') return true;
   }

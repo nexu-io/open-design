@@ -16,6 +16,7 @@ type StartedServer = {
   url: string;
   server: Server;
   shutdown?: () => Promise<void> | void;
+  agentDiscoveryReady: Promise<void>;
 };
 
 type RunStatus = {
@@ -87,7 +88,7 @@ describe('Codex configured-model capability preflight', () => {
     // mixed-case inherited keys before starting the server.
     process.env.OpenAI_Api_Key = 'ambient-test-only';
     isolateExternalProcessEnv();
-    started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
+    started = await startTestServer();
     await putConfig(started.url, {
       agentId: 'codex',
       agentCliEnv: {
@@ -281,7 +282,7 @@ describe('Codex configured-model capability preflight', () => {
     });
     await mkdir(codexHome, { recursive: true });
     isolateExternalProcessEnv();
-    started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
+    started = await startTestServer();
     await putConfig(started.url, {
       agentId: 'codex',
       agentCliEnv: {
@@ -338,7 +339,7 @@ describe('Codex configured-model capability preflight', () => {
       'utf8',
     );
     isolateExternalProcessEnv();
-    started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
+    started = await startTestServer();
     await putConfig(started.url, {
       agentId: 'codex',
       agentCliEnv: { codex: codexTestEnv(fakeCodex, codexHome) },
@@ -364,9 +365,80 @@ describe('Codex configured-model capability preflight', () => {
     expect(failed).toMatchObject({
       status: 'failed',
       errorCode: 'AGENT_AUTH_REQUIRED',
+      failureCategory: 'auth',
       failureDetail: 'custom_provider_not_allowed',
+      failureAction: 'relogin',
     });
     await expect(pathExists(spawnMarker)).resolves.toBe(false);
+  });
+
+  it.each([
+    ['custom provider', 'model_provider = "local-gateway"\n'],
+    ['custom endpoint', 'openai_base_url = "https://example.invalid/v1"\n'],
+  ])('blocks a project %s from the effective Codex child cwd', async (_label, content) => {
+    const fixture = await startCodexFixture({ seedCatalog: false });
+    const { projectId, conversationId } = await createConversation(fixture.url);
+    if (!process.env.OD_DATA_DIR) throw new Error('OD_DATA_DIR is required');
+    const projectRoot = path.join(process.env.OD_DATA_DIR, 'projects', projectId);
+    await mkdir(path.join(projectRoot, '.codex'), { recursive: true });
+    await writeFile(path.join(projectRoot, '.codex', 'config.toml'), content, 'utf8');
+
+    const failed = await sendRunAndWait(fixture.url, projectId, conversationId, {
+      model: 'gpt-5.6-sol',
+      reasoning: 'xhigh',
+      codexAuthMode: 'chatgpt',
+    });
+
+    expect(failed).toMatchObject({
+      status: 'failed',
+      errorCode: 'AGENT_AUTH_REQUIRED',
+      failureCategory: 'auth',
+      failureDetail: 'custom_provider_not_allowed',
+      failureAction: 'relogin',
+    });
+    await expect(pathExists(fixture.spawnMarker)).resolves.toBe(false);
+  });
+
+  it('uses the same custom-provider failure contract for a managed endpoint overlay', async () => {
+    const fixture = await startCodexFixture({ seedCatalog: false });
+    await writeFile(
+      path.join(fixture.codexHome, 'managed_config.toml'),
+      'chatgpt_base_url = "https://managed.example.invalid/backend-api/codex"\n',
+      'utf8',
+    );
+    const { projectId, conversationId } = await createConversation(fixture.url);
+
+    const failed = await sendRunAndWait(fixture.url, projectId, conversationId, {
+      codexAuthMode: 'chatgpt',
+    });
+
+    expect(failed).toMatchObject({
+      status: 'failed',
+      errorCode: 'AGENT_AUTH_REQUIRED',
+      failureCategory: 'auth',
+      failureDetail: 'custom_provider_not_allowed',
+      failureAction: 'relogin',
+    });
+    await expect(pathExists(fixture.spawnMarker)).resolves.toBe(false);
+  });
+
+  it('fails deterministically when an effective Codex config layer is unreadable', async () => {
+    const fixture = await startCodexFixture({ seedCatalog: false });
+    await mkdir(path.join(fixture.codexHome, 'config.toml'), { recursive: true });
+    const { projectId, conversationId } = await createConversation(fixture.url);
+
+    const failed = await sendRunAndWait(fixture.url, projectId, conversationId, {
+      codexAuthMode: 'chatgpt',
+    });
+
+    expect(failed).toMatchObject({
+      status: 'failed',
+      errorCode: 'AGENT_AUTH_REQUIRED',
+      failureCategory: 'auth',
+      failureDetail: 'config_inspection_failed',
+      failureAction: 'repair',
+    });
+    await expect(pathExists(fixture.spawnMarker)).resolves.toBe(false);
   });
 
   it('continues to Codex exec at the known-compatible version without consulting a model catalog', async () => {
@@ -385,7 +457,7 @@ describe('Codex configured-model capability preflight', () => {
     );
 
     isolateExternalProcessEnv();
-    started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
+    started = await startTestServer();
     await putConfig(started.url, {
       agentId: 'codex',
       agentCliEnv: {
@@ -422,7 +494,7 @@ describe('Codex configured-model capability preflight', () => {
     );
 
     isolateExternalProcessEnv();
-    started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
+    started = await startTestServer();
     await putConfig(started.url, {
       agentId: 'codex',
       agentCliEnv: {
@@ -458,7 +530,7 @@ describe('Codex configured-model capability preflight', () => {
 
   async function startCodexFixture(
     options: { seedCatalog?: boolean } = {},
-  ): Promise<StartedServer & { spawnMarker: string }> {
+  ): Promise<StartedServer & { codexHome: string; spawnMarker: string }> {
     tempDir = await mkdtemp(path.join(os.tmpdir(), 'od-codex-selection-preflight-'));
     const codexHome = path.join(tempDir, 'codex-home');
     const spawnMarker = path.join(tempDir, 'codex-exec-spawned');
@@ -478,7 +550,7 @@ describe('Codex configured-model capability preflight', () => {
       privacyDecisionAt: Date.now(),
     };
     await writeAppConfig(process.env.OD_DATA_DIR, configPatch);
-    started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
+    started = await startTestServer();
     await putConfig(started.url, configPatch);
     if (options.seedCatalog !== false) rememberLiveModels('codex', [
       { id: 'default', label: 'Default (CLI config)' },
@@ -494,10 +566,19 @@ describe('Codex configured-model capability preflight', () => {
         supportedReasoningLevels: ['none', 'minimal', 'low', 'medium', 'high'],
       },
     ]);
-    else clearRememberedLiveModels('codex');
-    return { ...started, spawnMarker };
+    else {
+      clearRememberedLiveModels('codex');
+      clearRememberedLiveModels('codex', 'chatgpt');
+    }
+    return { ...started, codexHome, spawnMarker };
   }
 });
+
+async function startTestServer(): Promise<StartedServer> {
+  const server = (await startServer({ port: 0, returnServer: true })) as StartedServer;
+  await server.agentDiscoveryReady;
+  return server;
+}
 
 function snapshotEnv(): EnvSnapshot {
   return {

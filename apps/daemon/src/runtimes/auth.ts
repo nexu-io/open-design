@@ -1,10 +1,17 @@
 import { execAgentFile } from './invocation.js';
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import {
+  extractCodexProviderEnvKey,
   readCodexProviderEnvKey,
   resolveCodexConfigPath,
 } from '../codex-config-normalize.js';
-import { extractCodexRootModelConfig } from './codex-model-preflight.js';
+import {
+  extractCodexRootModelConfig,
+  findCodexProjectConfigPaths,
+  hasMacManagedConfigPreference,
+  resolveCodexManagedConfigPaths,
+  resolveCodexSystemConfigPath,
+} from './codex-model-preflight.js';
 import type { RuntimeAgentDef, RuntimeEnv } from './types.js';
 
 export type AgentAuthProbeResult = {
@@ -89,9 +96,14 @@ export function codexChatGptAuthGuidance(): string {
   return 'Local Codex through the official Open Design MCP route requires an existing ChatGPT/Codex login. Run `codex login`, confirm `codex login status` says `Logged in using ChatGPT`, then retry. API keys and custom providers are intentionally not accepted for this route.';
 }
 
+export function codexChatGptConfigInspectionGuidance(): string {
+  return 'Local Codex could not verify every effective Codex configuration layer. Repair permissions or remove the unreadable Codex configuration, then retry the official ChatGPT-backed route.';
+}
+
 export type CodexChatGptRoutePolicy = {
   allowed: boolean;
   providerEnvKey: string | null;
+  reason: 'custom_provider_not_allowed' | 'config_inspection_failed' | null;
 };
 
 /**
@@ -101,25 +113,54 @@ export type CodexChatGptRoutePolicy = {
  */
 export async function inspectCodexChatGptRoutePolicy(
   env: RuntimeEnv,
+  effectiveCwd?: string | null,
 ): Promise<CodexChatGptRoutePolicy> {
-  const providerEnvKey = await readCodexProviderEnvKey(env);
-  let hasUnverifiedProviderConfig = false;
-  try {
-    const config = await readFile(resolveCodexConfigPath(env), 'utf8');
+  const projectConfigPaths = await findCodexProjectConfigPaths(effectiveCwd);
+  if (projectConfigPaths === null) {
+    return { allowed: false, providerEnvKey: null, reason: 'config_inspection_failed' };
+  }
+  const managedPaths = resolveCodexManagedConfigPaths(env);
+  const configPaths = new Set([
+    resolveCodexConfigPath(env),
+    resolveCodexSystemConfigPath(env),
+    ...managedPaths.readable,
+    ...projectConfigPaths,
+  ]);
+  let providerEnvKey: string | null = null;
+  for (const configPath of configPaths) {
+    let config: string;
+    try {
+      config = await readFile(configPath, 'utf8');
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === 'ENOENT' || code === 'ENOTDIR') continue;
+      return { allowed: false, providerEnvKey, reason: 'config_inspection_failed' };
+    }
+    providerEnvKey ??= extractCodexProviderEnvKey(config);
     const configured = extractCodexRootModelConfig(config);
-    hasUnverifiedProviderConfig = Boolean(
+    if (
       (configured.modelProvider
         && configured.modelProvider.toLowerCase() !== 'openai')
-      || configured.hasCompatibilityOverlay,
-    );
-  } catch {
-    // Missing config is the normal ChatGPT-backed case. The login and live
-    // catalog probes remain authoritative for readiness.
+      || configured.hasCompatibilityOverlay
+    ) {
+      return { allowed: false, providerEnvKey, reason: 'custom_provider_not_allowed' };
+    }
   }
-  return {
-    allowed: !providerEnvKey && !hasUnverifiedProviderConfig,
-    providerEnvKey,
-  };
+  for (const configPath of managedPaths.opaque) {
+    try {
+      await stat(configPath);
+      return { allowed: false, providerEnvKey, reason: 'custom_provider_not_allowed' };
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== 'ENOENT' && code !== 'ENOTDIR') {
+        return { allowed: false, providerEnvKey, reason: 'config_inspection_failed' };
+      }
+    }
+  }
+  if (await hasMacManagedConfigPreference(env)) {
+    return { allowed: false, providerEnvKey, reason: 'custom_provider_not_allowed' };
+  }
+  return { allowed: true, providerEnvKey, reason: null };
 }
 
 export function isCursorAuthFailureText(text: string): boolean {
@@ -484,6 +525,7 @@ export async function probeCodexChatGptAuthStatus(
   def: Pick<RuntimeAgentDef, 'id' | 'name' | 'authProbe'>,
   resolvedBin: string,
   env: RuntimeEnv,
+  effectiveCwd?: string | null,
 ): Promise<AgentAuthProbeResult | null> {
   if (def.id !== 'codex' || !def.authProbe) return null;
   try {
@@ -492,6 +534,7 @@ export async function probeCodexChatGptAuthStatus(
       def.authProbe.args,
       {
         env,
+        ...(effectiveCwd ? { cwd: effectiveCwd } : {}),
         timeout: def.authProbe.timeoutMs ?? 5000,
         maxBuffer: 1024 * 1024,
       },

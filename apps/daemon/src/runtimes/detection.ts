@@ -12,6 +12,7 @@ import { applyAgentLaunchEnv, resolveAgentLaunch } from './launch.js';
 import { spawnEnvForAgent } from './env.js';
 import {
   codexChatGptAuthGuidance,
+  codexChatGptConfigInspectionGuidance,
   inspectCodexChatGptRoutePolicy,
   probeAgentAuthStatus,
   probeCodexChatGptAuthStatus,
@@ -86,6 +87,7 @@ async function fetchModels(
   def: RuntimeAgentDef,
   resolvedBin: string,
   env: NodeJS.ProcessEnv,
+  effectiveCwd?: string | null,
 ): Promise<FetchedRuntimeModels> {
   if (typeof def.fetchModels === 'function') {
     try {
@@ -107,6 +109,7 @@ async function fetchModels(
   try {
     const { stdout } = await execAgentFile(resolvedBin, def.listModels.args, {
       env,
+      ...(effectiveCwd ? { cwd: effectiveCwd } : {}),
       timeout: def.listModels.timeoutMs ?? 5000,
       // Models lists from popular CLIs (e.g. opencode) easily exceed the
       // default 1MB buffer once you include every openrouter model. Bump
@@ -251,6 +254,7 @@ async function probeCapabilities(
 async function probe(
   def: RuntimeAgentDef,
   configuredEnv: Record<string, string> = {},
+  effectiveCwd?: string | null,
 ): Promise<DetectedAgent> {
   detectedRuntimeVersions.delete(def.id);
   // Detection must probe the exact path the runtime will spawn, not just the
@@ -290,7 +294,7 @@ async function probe(
   // than the sum ≈ 15s. `--help` capabilities are cached on `agentCapabilities`
   // for buildArgs to consult.
   const chatgptPolicy = def.id === 'codex'
-    ? await inspectCodexChatGptRoutePolicy(probeEnv)
+    ? await inspectCodexChatGptRoutePolicy(probeEnv, effectiveCwd)
     : null;
   const chatgptProbeEnv = def.id === 'codex'
     ? applyAgentLaunchEnv(
@@ -316,10 +320,15 @@ async function probe(
     fetchModels(def, launch.launchPath, probeEnv),
     probeAgentAuthStatus(def, launch.launchPath, probeEnv),
     def.id === 'codex'
-      ? probeCodexChatGptAuthStatus(def, launch.launchPath, chatgptProbeEnv)
+      ? probeCodexChatGptAuthStatus(
+          def,
+          launch.launchPath,
+          chatgptProbeEnv,
+          effectiveCwd,
+        )
       : Promise.resolve(null),
     def.id === 'codex' && chatgptPolicy?.allowed
-      ? fetchModels(def, launch.launchPath, chatgptProbeEnv).then((result) =>
+      ? fetchModels(def, launch.launchPath, chatgptProbeEnv, effectiveCwd).then((result) =>
           result.source === 'live'
             ? { models: result.models, source: 'live' as const }
             : unavailableChatGptModels,
@@ -335,7 +344,9 @@ async function probe(
   const chatgptReadyMessage = def.id !== 'codex' || chatgptReady
     ? null
     : chatgptPolicy?.allowed !== true
-      ? codexChatGptAuthGuidance()
+      ? chatgptPolicy?.reason === 'config_inspection_failed'
+        ? codexChatGptConfigInspectionGuidance()
+        : codexChatGptAuthGuidance()
       : chatgptAuth?.status !== 'ok'
         ? chatgptAuth?.message ?? codexChatGptAuthGuidance()
         : 'The installed Codex CLI did not return a ChatGPT-only live model catalog. Refresh Local Codex agent discovery, then retry.';
@@ -425,9 +436,10 @@ function stripFns(
 async function safeProbe(
   def: RuntimeAgentDef,
   configuredEnv: Record<string, string> = {},
+  effectiveCwd?: string | null,
 ): Promise<DetectedAgent> {
   try {
-    return await probe(def, configuredEnv);
+    return await probe(def, configuredEnv, effectiveCwd);
   } catch {
     // Fault isolation (issue #2297): one adapter's probe blowing up
     // — e.g. a synchronous filesystem throw during PATH walking on a
@@ -472,9 +484,14 @@ function rememberDetectedLiveModels(
 
 export async function detectAgents(
   configuredEnvByAgent: Record<string, Record<string, string>> = {},
+  options: { effectiveCwd?: string | null } = {},
 ) {
   const results = await Promise.all(
-    AGENT_DEFS.map((def) => safeProbe(def, configuredEnvForAgent(configuredEnvByAgent, def.id))),
+    AGENT_DEFS.map((def) => safeProbe(
+      def,
+      configuredEnvForAgent(configuredEnvByAgent, def.id),
+      options.effectiveCwd,
+    )),
   );
   // Refresh the validation cache from whatever we just surfaced to the UI
   // so /api/chat can accept any model the user could have just picked,
@@ -495,9 +512,14 @@ export async function detectAgents(
 // that don't care about incremental delivery (cache warm, analytics, chat).
 export async function* detectAgentsStream(
   configuredEnvByAgent: Record<string, Record<string, string>> = {},
+  options: { effectiveCwd?: string | null } = {},
 ): AsyncGenerator<DetectedAgent> {
   const tagged = AGENT_DEFS.map((def, index) =>
-    safeProbe(def, configuredEnvForAgent(configuredEnvByAgent, def.id)).then((agent) => {
+    safeProbe(
+      def,
+      configuredEnvForAgent(configuredEnvByAgent, def.id),
+      options.effectiveCwd,
+    ).then((agent) => {
       rememberDetectedLiveModels(def, configuredEnvForAgent(configuredEnvByAgent, def.id), agent);
       return { index, agent };
     }),

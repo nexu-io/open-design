@@ -439,7 +439,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
 
     if (!wantsStream) {
       try {
-        const list = await detectAgents(agentCliEnv);
+        const list = await detectAgents(agentCliEnv, { effectiveCwd: PROJECT_ROOT });
         res.json({ agents: list });
       } catch (err: any) {
         res.status(500).json({ error: String(err) });
@@ -462,7 +462,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
       aborted = true;
     });
     try {
-      for await (const agent of detectAgentsStream(agentCliEnv)) {
+      for await (const agent of detectAgentsStream(agentCliEnv, { effectiveCwd: PROJECT_ROOT })) {
         if (aborted) break;
         res.write(`event: agent\ndata: ${JSON.stringify(agent)}\n\n`);
       }
