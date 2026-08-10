@@ -1121,12 +1121,22 @@ process.exit(0);
           });
           expect(createResponse.status).toBe(202);
           const { runId } = await createResponse.json() as { runId: string };
-          await waitForRunStatus(baseUrl, runId);
+          const status = await waitForRunStatus(baseUrl, runId) as {
+            status: string;
+            executionDiagnostics?: {
+              environment: {
+                requestedModel: { missingReason?: string };
+              };
+            };
+          };
 
           const args = JSON.parse(readFileSync(argsPath, 'utf8')) as string[];
           expect(args).toContain('--model');
           expect(args).toContain('gpt-5.5');
           expect(args).toContain('service_tier="fast"');
+          expect(status.executionDiagnostics?.environment.requestedModel).toMatchObject({
+            missingReason: 'requested_model_not_recorded',
+          });
         },
       );
     } finally {

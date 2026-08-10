@@ -9716,6 +9716,14 @@ export async function startServer({
       process.env,
       requestedLiveModelScope,
     );
+    if (def.id === 'codex') {
+      run.codexModelSelectionSource = typeof requestedRuntimeModel === 'string'
+        ? 'request'
+        : safeModel
+          ? 'open_design_config'
+          : 'cli_default';
+      design.runs.persistState(run);
+    }
     const hasDefaultModelEnvOverride = Boolean(
       def.defaultModelEnvVar &&
       typeof process.env[def.defaultModelEnvVar] === 'string' &&
