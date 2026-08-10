@@ -8,7 +8,12 @@ import { NtExecutable, NtExecutableResource, Resource } from "resedit";
 import { describe, expect, it } from "vitest";
 
 import { materializeCachedUnpackedForInstaller } from "../src/win/builder.js";
-import { createLauncherRuntimeSyncPowerShellScript } from "../src/win/custom-installer.js";
+import {
+  createLauncherRuntimeSyncNsisScript,
+  createLauncherRuntimeSyncPowerShellScript,
+  rebasePortableLauncherInstallerPath,
+  resolveWinInstallerLogPath,
+} from "../src/win/custom-installer.js";
 import type { WinPaths } from "../src/win/types.js";
 import { readWinExecutableVersionSnapshot } from "../src/win/version-resource.js";
 
@@ -199,6 +204,53 @@ describe("Windows pack artifact boundaries", () => {
 });
 
 describe("launcher runtime sync helper", () => {
+  it("writes portable installer logs outside build and removable product-data roots", () => {
+    const buildLogPath = "D:\\a\\_temp\\tools-pack\\out\\win\\namespaces\\release-beta-win\\logs\\nsis.log";
+
+    expect(resolveWinInstallerLogPath(true, "release beta/win", buildLogPath)).toBe(
+      "$TEMP\\Open Design\\installer-logs\\namespaces\\release-beta-win\\nsis.log",
+    );
+    expect(resolveWinInstallerLogPath(false, "release beta/win", buildLogPath)).toBe(buildLogPath);
+  });
+
+  it("rebases release installer launcher state into the end-user AppData root", () => {
+    const launcherRoot = "D:\\a\\_temp\\tools-pack\\runtime\\win";
+    const runtimePath = rebasePortableLauncherInstallerPath(
+      launcherRoot,
+      `${launcherRoot}\\launcher\\channels\\beta\\namespaces\\release-beta-win\\runtime.json`,
+    );
+    const attemptsPath = rebasePortableLauncherInstallerPath(
+      launcherRoot,
+      `${launcherRoot}\\launcher\\channels\\beta\\namespaces\\release-beta-win\\state\\attempt.json`,
+    );
+    const cleanupPath = rebasePortableLauncherInstallerPath(
+      launcherRoot,
+      `${launcherRoot}\\launcher\\channels\\beta\\namespaces\\release-beta-win\\state\\cleanup.json`,
+    );
+
+    expect(runtimePath).toBe("$APPDATA\\Open Design\\launcher\\channels\\beta\\namespaces\\release-beta-win\\runtime.json");
+    expect(attemptsPath).toBe("$APPDATA\\Open Design\\launcher\\channels\\beta\\namespaces\\release-beta-win\\state\\attempt.json");
+    expect(cleanupPath).toBe("$APPDATA\\Open Design\\launcher\\channels\\beta\\namespaces\\release-beta-win\\state\\cleanup.json");
+    const nsis = createLauncherRuntimeSyncNsisScript(
+      "beta",
+      "release-beta-win",
+      runtimePath,
+      attemptsPath,
+      cleanupPath,
+      "D:\\build\\sync-launcher-runtime.ps1",
+    );
+    expect(nsis).toContain('Push "launcher runtime sync exit=$0"');
+    expect(nsis).toContain('Push "event=launcher_runtime_after_write path=$APPDATA\\Open Design\\launcher');
+    expect(nsis).not.toContain(launcherRoot);
+  });
+
+  it("refuses to rebase a portable launcher path outside its build root", () => {
+    expect(() => rebasePortableLauncherInstallerPath(
+      "D:\\a\\_temp\\tools-pack\\runtime\\win",
+      "D:\\a\\_temp\\outside\\runtime.json",
+    )).toThrow(/escapes launcher root/);
+  });
+
   it.runIf(process.platform === "win32")("writes cleanup.json for superseded launcher runtime pointers", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-launcher-sync-"));
     const runtimePath = join(root, "runtime.json");

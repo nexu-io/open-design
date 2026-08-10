@@ -4,6 +4,7 @@ import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { copyFile, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
@@ -91,6 +92,14 @@ const installIdentity = resolvePackagedWinInstallIdentity({ namespace, releaseVe
 
 const outputNamespaceRoot = join(toolsPackDir, 'out', 'win', 'namespaces', namespace);
 const runtimeNamespaceRoot = join(toolsPackDir, 'runtime', 'win', 'namespaces', namespace);
+const portableNsisLogPath = join(
+  tmpdir(),
+  'Open Design',
+  'installer-logs',
+  'namespaces',
+  namespace.replace(/[^A-Za-z0-9._-]+/g, '-'),
+  'nsis.log',
+);
 const launcherNamespaceRoot = join(
   toolsPackDir,
   'runtime',
@@ -1491,6 +1500,7 @@ winLegacyMigrationDescribe('packaged Windows historical outer migration acceptan
         expectedVersion: targetReleaseVersion,
         fixture: migrationFixture,
         installDir,
+        nsisLogPath: portableNsisLogPath,
         persistedProjectId: seeded.projectId,
       });
       expect(migration.downloaded.reinstall).toEqual({
@@ -1964,6 +1974,7 @@ async function runInstallerFallbackAcceptance(options: {
   expectedVersion: string | null;
   fixture: ToolsServeUpdaterFixture | null;
   installDir: string;
+  nsisLogPath?: string;
   persistedProjectId: string | null;
 }): Promise<InstallerFallbackSummary> {
   if (options.fixture == null) throw new Error('installer fallback requires a tools-serve fixture');
@@ -1988,7 +1999,7 @@ async function runInstallerFallbackAcceptance(options: {
   const install = await runDirectInstaller(
     downloadPath,
     options.installDir,
-    join(fixtureNamespaceRoot, 'logs', 'nsis.log'),
+    options.nsisLogPath ?? join(fixtureNamespaceRoot, 'logs', 'nsis.log'),
   );
   expect(install.code).toBe(0);
   assertWorkingWinInstallerOverwriteLog(install.nsisLogTail);
