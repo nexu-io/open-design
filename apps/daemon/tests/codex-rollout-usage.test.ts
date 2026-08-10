@@ -4,6 +4,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import {
+  codexResolvedRunFinishedProperties,
   codexSessionIdFromRunEvents,
   extractCodexLastTurnFirstCallUsage,
   readCodexRolloutFirstCall,
@@ -195,5 +196,19 @@ describe('readCodexRolloutFirstCall', () => {
     await expect(
       readCodexRolloutFirstCall({ codexHome: '/nonexistent', sessionId: null }),
     ).resolves.toBeNull();
+  });
+});
+
+describe('Codex run-finished execution properties', () => {
+  it('maps authoritative turn-context settings into resolved analytics fields', () => {
+    expect(codexResolvedRunFinishedProperties({
+      resolved_model_id: 'gpt-5.6-sol',
+      resolved_reasoning_effort: 'xhigh',
+      resolved_service_tier: 'fast',
+    })).toEqual({
+      resolved_model_id: 'gpt-5.6-sol',
+      resolved_reasoning_effort: 'xhigh',
+      resolved_service_tier: 'fast',
+    });
   });
 });

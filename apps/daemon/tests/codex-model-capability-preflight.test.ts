@@ -124,6 +124,25 @@ describe('Codex configured-model capability preflight', () => {
     await expect(pathExists(fixture.spawnMarker)).resolves.toBe(false);
   });
 
+  it('rejects an unsupported persisted model when MCP omits the model field', async () => {
+    const fixture = await startCodexFixture();
+    await putConfig(fixture.url, {
+      agentModels: { codex: { model: 'persisted-unsupported-model' } },
+    });
+    const { projectId, conversationId } = await createConversation(fixture.url);
+    const failed = await sendRunAndWait(fixture.url, projectId, conversationId, {
+      codexAuthMode: 'chatgpt',
+      omitModel: true,
+    });
+
+    expect(failed).toMatchObject({
+      status: 'failed',
+      errorCode: 'MODEL_UNAVAILABLE',
+      failureCategory: 'model_unavailable',
+    });
+    await expect(pathExists(fixture.spawnMarker)).resolves.toBe(false);
+  });
+
   it('fails closed when live compatibility cannot prove explicit Codex settings', async () => {
     const fixture = await startCodexFixture({ seedCatalog: false });
     const { projectId, conversationId } = await createConversation(fixture.url);
@@ -754,7 +773,7 @@ async function sendRunAndWait(
   url: string,
   projectId: string,
   conversationId: string,
-  options: { model?: string; reasoning?: string; serviceTier?: string; codexAuthMode?: 'chatgpt' } = {},
+  options: { model?: string; reasoning?: string; serviceTier?: string; codexAuthMode?: 'chatgpt'; omitModel?: boolean } = {},
 ): Promise<RunStatus> {
   const runId = await startRun(url, projectId, conversationId, options);
   return await waitForRun(url, runId);
@@ -764,7 +783,7 @@ async function startRun(
   url: string,
   projectId: string,
   conversationId: string,
-  options: { model?: string; reasoning?: string; serviceTier?: string; codexAuthMode?: 'chatgpt' } = {},
+  options: { model?: string; reasoning?: string; serviceTier?: string; codexAuthMode?: 'chatgpt'; omitModel?: boolean } = {},
 ): Promise<string> {
   const response = await fetch(`${url}/api/runs`, {
     method: 'POST',
@@ -775,7 +794,7 @@ async function startRun(
       assistantMessageId: `assistant_codex_preflight_${randomUUID()}`,
       clientRequestId: `client_codex_preflight_${randomUUID()}`,
       agentId: 'codex',
-      model: options.model ?? 'default',
+      ...(!options.omitModel ? { model: options.model ?? 'default' } : {}),
       ...(options.reasoning ? { reasoning: options.reasoning } : {}),
       ...(options.serviceTier ? { serviceTier: options.serviceTier } : {}),
       ...(options.codexAuthMode ? { codexAuthMode: options.codexAuthMode } : {}),

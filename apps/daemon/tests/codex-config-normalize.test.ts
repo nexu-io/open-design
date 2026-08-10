@@ -392,6 +392,11 @@ describe('normalizeCodexConfigFile', () => {
     expect(normalize(p)).toBe(normalize('/custom/codex-home/config.toml'));
   });
 
+  it('resolves CODEX_HOME case-insensitively like a Windows child process', () => {
+    const p = resolveCodexConfigPath({ Codex_Home: '/custom/mixed-case-home' });
+    expect(normalize(p)).toBe(normalize('/custom/mixed-case-home/config.toml'));
+  });
+
   // -------------------------------------------------------------------------
   // BLOCKER 2 regression cases — atomic write and logged errors
   // -------------------------------------------------------------------------

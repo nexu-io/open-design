@@ -56,9 +56,19 @@ import { expandHomePath } from './runtimes/paths.js';
 export function resolveCodexConfigPath(
   env: NodeJS.ProcessEnv = process.env,
 ): string {
-  const raw = env.CODEX_HOME?.trim();
-  const home = raw ? expandHomePath(raw) : path.join(os.homedir(), '.codex');
-  return path.join(home, 'config.toml');
+  return path.join(resolveCodexHomePath(env), 'config.toml');
+}
+
+export function resolveCodexHomePath(
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  const raw = Object.entries(env).find(
+    ([key, value]) =>
+      key.toUpperCase() === 'CODEX_HOME'
+      && typeof value === 'string'
+      && value.trim().length > 0,
+  )?.[1]?.trim();
+  return raw ? expandHomePath(raw) : path.join(os.homedir(), '.codex');
 }
 
 /**

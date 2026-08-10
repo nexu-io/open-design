@@ -59,6 +59,25 @@ describe('strict ChatGPT Codex config policy', () => {
     });
   });
 
+  it('rejects a custom provider under a mixed-case Windows CODEX_HOME key', async () => {
+    const root = await makeTempDir();
+    const codexHome = path.join(root, 'codex-home');
+    await mkdir(codexHome, { recursive: true });
+    await writeFile(
+      path.join(codexHome, 'config.toml'),
+      'model_provider = "local-gateway"\n',
+      'utf8',
+    );
+
+    await expect(inspectPolicy({
+      Codex_Home: codexHome,
+      PROGRAMDATA: path.join(root, 'program-data'),
+    })).resolves.toMatchObject({
+      allowed: false,
+      reason: 'custom_provider_not_allowed',
+    });
+  });
+
   it('fails closed when an effective config layer cannot be read', async () => {
     const root = await makeTempDir();
     const codexHome = path.join(root, 'codex-home');

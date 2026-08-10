@@ -39,10 +39,12 @@ import {
   type WorkspaceResourceAccessInput,
 } from '../collab/workspace-resource-mutation.js';
 import {
+  codexResolvedRunFinishedProperties,
   codexSessionIdFromRunEvents,
   readCodexRolloutFirstCall,
   type CodexFirstCallUsage,
 } from '../codex-rollout-usage.js';
+import { resolveCodexHomePath } from '../codex-config-normalize.js';
 import type { ConnectorService } from '../connectors/service.js';
 import {
   conversationTurnIndexForRun,
@@ -917,14 +919,15 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     try {
       const sessionId = codexSessionIdFromRunEvents(run.events);
       const config = appConfig ?? await readAppConfig(RUNTIME_DATA_DIR);
-      const codexHome = spawnEnvForAgent(
+      const codexEnv = spawnEnvForAgent(
         'codex',
         { ...process.env, OD_DATA_DIR: RUNTIME_DATA_DIR },
         agentCliEnvForAgent(
           (config as { agentCliEnv?: AgentCliEnv }).agentCliEnv,
           'codex',
         ),
-      ).CODEX_HOME;
+      );
+      const codexHome = resolveCodexHomePath(codexEnv);
       return await readCodexRolloutFirstCall({ codexHome, sessionId });
     } catch {
       return null;
@@ -2484,6 +2487,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
                     typeof reqBody.reasoning === 'string' ? reqBody.reasoning : 'default',
                   requested_service_tier:
                     typeof reqBody.serviceTier === 'string' ? reqBody.serviceTier : 'default',
+                  ...codexResolvedRunFinishedProperties(firstCallUsage),
                 }
               : {}),
             artifact_count: artifactCount,

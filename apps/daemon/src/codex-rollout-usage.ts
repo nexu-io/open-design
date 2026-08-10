@@ -29,6 +29,22 @@ type CodexTurnContextEvidence = Pick<
   'resolved_model_id' | 'resolved_reasoning_effort' | 'resolved_service_tier'
 >;
 
+export function codexResolvedRunFinishedProperties(
+  evidence: Partial<CodexTurnContextEvidence> | null | undefined,
+): CodexTurnContextEvidence {
+  return {
+    ...(evidence?.resolved_model_id
+      ? { resolved_model_id: evidence.resolved_model_id }
+      : {}),
+    ...(evidence?.resolved_reasoning_effort
+      ? { resolved_reasoning_effort: evidence.resolved_reasoning_effort }
+      : {}),
+    ...(evidence?.resolved_service_tier
+      ? { resolved_service_tier: evidence.resolved_service_tier }
+      : {}),
+  };
+}
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)

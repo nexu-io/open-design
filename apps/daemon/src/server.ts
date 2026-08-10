@@ -9640,17 +9640,29 @@ export async function startServer({
       typeof appConfigForRun?.agentModels?.[def.id]?.model === 'string'
         ? appConfigForRun.agentModels[def.id].model
         : null;
-    const hasExplicitRequestedModel =
+    const explicitRequestedModel =
       typeof requestedRuntimeModel === 'string'
       && requestedRuntimeModel.trim().length > 0
-      && requestedRuntimeModel.trim().toLowerCase() !== 'default';
+      && requestedRuntimeModel.trim().toLowerCase() !== 'default'
+        ? requestedRuntimeModel.trim()
+        : null;
+    const explicitConfiguredModel =
+      typeof configuredModel === 'string'
+      && configuredModel.trim().length > 0
+      && configuredModel.trim().toLowerCase() !== 'default'
+        ? configuredModel.trim()
+        : null;
+    const effectiveCodexModel = explicitRequestedModel
+      ?? (typeof requestedRuntimeModel === 'string' ? null : explicitConfiguredModel);
+    const hasExplicitCodexModel =
+      effectiveCodexModel !== null;
     const hasExplicitReasoning =
       typeof reasoning === 'string' && reasoning.length > 0 && reasoning !== 'default';
     const hasExplicitServiceTier =
       typeof serviceTier === 'string' && serviceTier.length > 0 && serviceTier !== 'default';
     if (
       def.id === 'codex'
-      && (hasExplicitRequestedModel || hasExplicitReasoning || hasExplicitServiceTier)
+      && (hasExplicitCodexModel || hasExplicitReasoning || hasExplicitServiceTier)
       && !hasRememberedLiveModelCatalog(def.id, requestedLiveModelScope)
     ) {
       run.failureCategory = 'model_unavailable';
@@ -9671,8 +9683,8 @@ export async function startServer({
     }
     if (
       def.id === 'codex'
-      && hasExplicitRequestedModel
-      && !isKnownModel(def, requestedRuntimeModel, requestedLiveModelScope)
+      && hasExplicitCodexModel
+      && !isKnownModel(def, effectiveCodexModel, requestedLiveModelScope)
     ) {
       run.failureCategory = 'model_unavailable';
       run.failureDetail = 'model_not_found';
@@ -9680,7 +9692,7 @@ export async function startServer({
       return design.runs.fail(
         run,
         'MODEL_UNAVAILABLE',
-        `The Codex model is unavailable: '${requestedRuntimeModel}' is not in the current model catalog.`,
+        `The Codex model is unavailable: '${effectiveCodexModel}' is not in the current model catalog.`,
         {
           retryable: false,
           details: {
