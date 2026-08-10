@@ -552,7 +552,13 @@ function injectSrcdocTransportActivationBridge(doc: string, generation: string):
   });
   announceReady();
 })();</script>`;
-  return injectBeforeBodyEnd(doc, script);
+  // Install the activation witness before authored styles/scripts. A srcDoc
+  // navigation can otherwise be healthy but spend seconds in a blocking
+  // external script before reaching a body-end bridge, which makes the host's
+  // missing-ACK recovery indistinguishable from a genuinely aborted
+  // `about:srcdoc` navigation. Placing the bridge first also runs it before an
+  // authored meta CSP can disable later inline scripts.
+  return injectAfterHeadOpen(doc, script);
 }
 
 function injectSnapshotBridge(doc: string): string {
