@@ -2941,6 +2941,13 @@
   justify-content: center;
   min-width: 24px;
   width: 24px;
+  /* Matches `.handoff-trigger`. Without an explicit height the caret inherits the
+     global `button { height: 36px }` while the trigger is 30px, and
+     `.handoff-split`'s `align-items: stretch` then renders an uneven split —
+     visible wherever no host-scoped override sizes the pair (the viewer toolbar
+     mount; `.ws-tabs-actions` sizes both to 28px and was masking this). */
+  height: 30px;
+  min-height: 30px;
   padding: 0;
   border: 0;
   background: transparent;

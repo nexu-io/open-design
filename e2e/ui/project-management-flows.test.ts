@@ -3061,7 +3061,7 @@ test('[P0] project detail share menu copies the current share link for uploaded 
   });
   await openUploadedHtmlArtifactPreview(page, uploadedName);
 
-  await openShareExportTab(page);
+  await openShareMenu(page);
   await page.getByRole('menuitem', { name: /^Copy share link$/i }).click();
   await expect(page.getByRole('menuitem', { name: /^Copied!$/i })).toBeVisible();
 
@@ -3124,7 +3124,7 @@ test('[P0] project detail share menu opens the current share page for uploaded h
   });
   await openUploadedHtmlArtifactPreview(page, uploadedName);
 
-  await openShareExportTab(page);
+  await openShareMenu(page);
   await page.getByRole('menuitem', { name: /Open share page/i }).click();
 
   await expect
@@ -3168,7 +3168,7 @@ test('[P0] @critical project detail share menu publish action opens the deploy f
   });
   await openUploadedHtmlArtifactPreview(page, uploadedName);
 
-  await openShareExportTab(page);
+  await openShareMenu(page);
   await page.getByRole('menuitem', { name: /^Deploy to Vercel$/i }).click();
 
   const dialog = page.getByRole('dialog');
@@ -4501,12 +4501,15 @@ function getProjectIdFromApiPath(rawUrl: string) {
   return projectId;
 }
 
-async function openShareExportTab(page: Page) {
+// Share opens straight onto the link/asset-shaped rows — share link, share
+// page, deploy targets, save-as-template. These used to live under the old
+// popover's "Export" tab; the split moved them to Share and left Export as a
+// pure file-format menu, so the callers below take the Share door now. The
+// popover shell is still shared between the two, so the locator is unchanged.
+async function openShareMenu(page: Page) {
   await page.getByRole('button', { name: /^Share$/i }).click();
   const menu = page.locator('.share-menu-popover[role="menu"]');
   await expect(menu).toBeVisible();
-  await menu.getByRole('tab', { name: /^Export$/i }).click();
-  await expect(menu.getByRole('tab', { name: /^Export$/i })).toHaveAttribute('aria-selected', 'true');
   return menu;
 }
 
