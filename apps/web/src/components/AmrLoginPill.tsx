@@ -28,6 +28,7 @@ import {
   AMR_LOGIN_POLL_INTERVAL_MS,
   AMR_LOGIN_STARTUP_SETTLE_MS,
   amrLoginPollOutcome,
+  amrLoginStatusEventAuthAttemptId,
   amrLoginStatusEventReason,
   notifyAmrLoginStatusChanged,
 } from './amrLoginPolling';
@@ -393,7 +394,7 @@ export function AmrLoginPill({
         }
         // Wake the app-level status sync so configure_type flips to 'amr'
         // on the very next capture, not on an unrelated later refresh.
-        notifyAmrLoginStatusChanged();
+        notifyAmrLoginStatusChanged('status-changed', authAttemptIdRef.current);
         // This pill is a THIRD place AMR sign-in success is detected
         // (CloudSignInTip's finishSignedIn() and EntryShell's
         // pollAmrLoginCompletion() are the other two) and must fire the same
@@ -428,6 +429,7 @@ export function AmrLoginPill({
             void cancelVelaLogin(authAttemptId).then((result) =>
               notifyAmrLoginStatusChanged(
                 result.canceled === true ? 'login-canceled' : 'status-changed',
+                authAttemptIdRef.current,
               ),
             );
           }
@@ -461,26 +463,41 @@ export function AmrLoginPill({
         setPending('login');
         startPolling(startedAt);
       } else if (reason === 'login-canceled') {
-        loginStartedAtRef.current = null;
-        loginPendingRef.current = false;
-        stopPolling();
-        setPending(null);
-        // Skip the daemon refresh below. `cancelVelaLogin()` only sends
-        // SIGTERM (escalating to SIGKILL after 2s) and keeps the child
-        // in `activeLoginProcs` until it actually exits, so an
-        // immediate `/api/integrations/vela/status` read can legally
-        // still return `loginInFlight: true`. Falling through to the
-        // refresh + restart-polling branch below would bounce the pill
-        // back into 'Signing in…' and could surface the timeout/error
-        // path even though the user already canceled. Trust the cancel
-        // locally on every subscribed pill instance instead — the next
-        // explicit refresh (mount, user interaction, or a
-        // `status-changed` event) will pick up the daemon's confirmed
-        // state once the child has actually exited.
-        setStatus((current) => (
-          current ? { ...current, loginInFlight: false } : current
-        ));
-        return;
+        const broadcastAttemptId = amrLoginStatusEventAuthAttemptId(event);
+        // Only a broadcast that still owns the current attempt may
+        // synchronously reset this pill's local login state. A stale
+        // `login-canceled` from a superseded attempt (e.g. a delayed timeout
+        // cancel on another surface) must not kill a newer login's poll —
+        // these writes run before this handler's status read. Broadcasts
+        // without an attempt id keep the legacy behavior.
+        if (
+          broadcastAttemptId !== undefined &&
+          broadcastAttemptId !== authAttemptIdRef.current
+        ) {
+          // Stale broadcast: keep local state and fall through to the
+          // guarded refresh below, which re-reads the daemon truth.
+        } else {
+          loginStartedAtRef.current = null;
+          loginPendingRef.current = false;
+          stopPolling();
+          setPending(null);
+          // Skip the daemon refresh below. `cancelVelaLogin()` only sends
+          // SIGTERM (escalating to SIGKILL after 2s) and keeps the child
+          // in `activeLoginProcs` until it actually exits, so an
+          // immediate `/api/integrations/vela/status` read can legally
+          // still return `loginInFlight: true`. Falling through to the
+          // refresh + restart-polling branch below would bounce the pill
+          // back into 'Signing in…' and could surface the timeout/error
+          // path even though the user already canceled. Trust the cancel
+          // locally on every subscribed pill instance instead — the next
+          // explicit refresh (mount, user interaction, or a
+          // `status-changed` event) will pick up the daemon's confirmed
+          // state once the child has actually exited.
+          setStatus((current) => (
+            current ? { ...current, loginInFlight: false } : current
+          ));
+          return;
+        }
       }
       void refresh().then((next) => {
         if (!next) return;
@@ -559,6 +576,18 @@ export function AmrLoginPill({
         result.authAttemptId,
         { joinedExisting: result.alreadyRunning === true },
       );
+      // Spawn-continuation ownership (same rule as InlineModelSwitcher): if
+      // the login-started event path adopted a different attempt while this
+      // spawn was in flight, only take over when the daemon confirms we
+      // joined that same attempt; otherwise this continuation is stale and
+      // must not overwrite the ref, broadcast login-started, or steal the
+      // poll from the current owner.
+      if (
+        authAttemptIdRef.current !== provisionalAuthAttemptId &&
+        authAttemptId !== authAttemptIdRef.current
+      ) {
+        return;
+      }
       authAttemptIdRef.current = authAttemptId;
       if (result.ok || result.alreadyRunning) {
         confirmAmrAuthTracking(analytics.track, authAttemptId, {
@@ -605,7 +634,7 @@ export function AmrLoginPill({
           ));
           setPending(null);
           setCanceledVisible(true);
-          notifyAmrLoginStatusChanged('login-canceled');
+          notifyAmrLoginStatusChanged('login-canceled', authAttemptIdRef.current);
           return;
         }
         resolveAmrAuthTracking(analytics.track, 'cancelled', undefined, {
@@ -642,7 +671,7 @@ export function AmrLoginPill({
       // request per notifier, not just a redundant event. Every other
       // mounted pill instance already relies solely on this same broadcast
       // to start its own polling; the initiating instance must too.
-      notifyAmrLoginStatusChanged('login-started');
+      notifyAmrLoginStatusChanged('login-started', authAttemptIdRef.current);
     },
     [
       amrEntrySourceDetail,
@@ -713,7 +742,7 @@ export function AmrLoginPill({
       ));
       setPending(null);
       setCanceledVisible(true);
-      notifyAmrLoginStatusChanged('login-canceled');
+      notifyAmrLoginStatusChanged('login-canceled', authAttemptIdRef.current);
     },
     [analytics.track, refresh, startPolling, stopPolling, t],
   );
@@ -741,7 +770,7 @@ export function AmrLoginPill({
       return;
     }
     await refresh();
-    notifyAmrLoginStatusChanged('status-changed');
+    notifyAmrLoginStatusChanged('status-changed', authAttemptIdRef.current);
     await onSignedOut?.();
   }, [onSignedOut, refresh, t]);
 

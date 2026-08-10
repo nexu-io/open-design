@@ -858,6 +858,71 @@ describe('AmrLoginPill', () => {
     }
   });
 
+  it('keeps the local signing-in state when a login-canceled broadcast is for a different attempt', async () => {
+    // Regression (audit #7): AMR_LOGIN_STATUS_EVENT now carries the
+    // broadcaster's attempt id; the pill ignores a `login-canceled` whose id
+    // does not match the attempt it is polling. Without the gate, a stale
+    // cancel from a superseded attempt (e.g. a delayed timeout cancel on
+    // another surface) would synchronously stop this pill's poll and drop it
+    // back to Sign-in before any guarded status read could reject it.
+    const attemptA = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const attemptB = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+    globalThis.fetch = vi.fn(async () =>
+      jsonResponse({
+        body: {
+          loggedIn: false,
+          loginInFlight: true,
+          authAttemptId: attemptB,
+          profile: 'prod',
+          user: null,
+          configPath: '/x',
+        },
+      }),
+    ) as typeof fetch;
+
+    renderPill({
+      skipInitialRefresh: true,
+      initialStatus: {
+        loggedIn: false,
+        loginInFlight: false,
+        profile: 'prod',
+        user: null,
+        configPath: '/x',
+      },
+    });
+
+    // A login starts on another surface; the pill adopts attempt B and polls.
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent(AMR_LOGIN_STATUS_EVENT, {
+          detail: { reason: 'login-started' },
+        }),
+      );
+    });
+    expect(await screen.findByText('Signing in…')).toBeTruthy();
+
+    // A stale login-canceled for a DIFFERENT attempt must not reset the pill.
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent(AMR_LOGIN_STATUS_EVENT, {
+          detail: { reason: 'login-canceled', authAttemptId: attemptA },
+        }),
+      );
+    });
+    expect(screen.getByText('Signing in…')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Sign in' })).toBeNull();
+
+    // A login-canceled for the pill's own attempt still resets it.
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent(AMR_LOGIN_STATUS_EVENT, {
+          detail: { reason: 'login-canceled', authAttemptId: attemptB },
+        }),
+      );
+    });
+    expect(await screen.findByRole('button', { name: 'Sign in' })).toBeTruthy();
+  });
+
   it('cancels the canonical attempt when the pre-start status refresh is non-OK', async () => {
     const canonicalAuthAttemptId = '22222222-2222-4222-8222-222222222222';
     let releaseLogin!: (response: Response) => void;

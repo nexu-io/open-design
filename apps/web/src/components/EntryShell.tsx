@@ -2666,6 +2666,18 @@ function OnboardingView({
         loginResult.authAttemptId,
         { joinedExisting: loginResult.alreadyRunning === true },
       );
+      // Spawn-continuation ownership (same rule as InlineModelSwitcher /
+      // AmrLoginPill): if the login-started event path adopted a different
+      // attempt while this spawn was in flight, only take over when the
+      // daemon confirms we joined that same attempt; otherwise this
+      // continuation is stale and must not overwrite the ref, broadcast
+      // login-started, or steal the poll from the current owner.
+      if (
+        amrAuthAttemptIdRef.current !== provisionalAuthAttemptId &&
+        authAttemptId !== amrAuthAttemptIdRef.current
+      ) {
+        return;
+      }
       amrAuthAttemptIdRef.current = authAttemptId;
       if (loginResult.ok || loginResult.alreadyRunning) {
         confirmAmrAuthTracking(analytics.track, authAttemptId, {
@@ -2703,7 +2715,7 @@ function OnboardingView({
               authAttemptId,
             });
             closeAmrActivationWindowBestEffort();
-            notifyAmrLoginStatusChanged('login-canceled');
+            notifyAmrLoginStatusChanged('login-canceled', authAttemptId);
             amrLoginCancelRequestedRef.current = false;
             amrLoginPollCancelledRef.current = true;
             setAmrLoginCancelPending(false);
@@ -2799,7 +2811,7 @@ function OnboardingView({
         : current
     ));
     setAmrLoginPending(false);
-    notifyAmrLoginStatusChanged('login-canceled');
+    notifyAmrLoginStatusChanged('login-canceled', authAttemptId);
   }
 
   async function pollAmrLoginCompletion(): Promise<boolean> {
@@ -2826,7 +2838,7 @@ function OnboardingView({
             signedInUserId: nextStatus?.user?.id ?? null,
           });
         }
-        notifyAmrLoginStatusChanged();
+        notifyAmrLoginStatusChanged('status-changed', authAttemptId);
         // Onboarding may sit on this step for a while before finishOnboarding
         // fires refreshWorkspaceSurfacesAfterOnboarding() — without firing
         // these here too, Home's rail can render in its stale signed-out

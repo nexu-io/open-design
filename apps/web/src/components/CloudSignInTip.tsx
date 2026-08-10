@@ -153,7 +153,7 @@ export function CloudSignInTip() {
   }
 
   function finishSignedIn() {
-    notifyAmrLoginStatusChanged();
+    notifyAmrLoginStatusChanged('status-changed', status?.authAttemptId);
     notifyWorkspaceContextRefresh();
     notifyWorkspaceBillingRefresh();
     notifyTeamProjectsChanged();
@@ -162,10 +162,13 @@ export function CloudSignInTip() {
 
   async function cancel() {
     cancelledRef.current = true;
+    // Carry the attempt id this tip observed so a stale cancel broadcast
+    // from a superseded attempt cannot reset a newer login on receivers.
+    const authAttemptId = status?.authAttemptId;
     setState('idle');
     setStatus(null);
     await cancelVelaLogin();
-    notifyAmrLoginStatusChanged('login-canceled');
+    notifyAmrLoginStatusChanged('login-canceled', authAttemptId);
   }
 
   const signing = state === 'signing';

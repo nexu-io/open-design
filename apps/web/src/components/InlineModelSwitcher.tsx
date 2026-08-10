@@ -78,6 +78,7 @@ import {
   AMR_LOGIN_POLL_INTERVAL_MS,
   AMR_LOGIN_STARTUP_SETTLE_MS,
   amrLoginPollOutcome,
+  amrLoginStatusEventAuthAttemptId,
   amrLoginStatusEventReason,
   notifyAmrLoginStatusChanged,
 } from './amrLoginPolling';
@@ -483,7 +484,7 @@ export function InlineModelSwitcher({
           signedInUserId: signedInUserId ?? null,
         });
       }
-      notifyAmrLoginStatusChanged();
+      notifyAmrLoginStatusChanged('status-changed', authAttemptId);
       stopAmrPolling();
       amrLoginStartedAtRef.current = null;
       setAmrLoginPending(false);
@@ -588,11 +589,26 @@ export function InlineModelSwitcher({
             resolveAmrAuthTracking(analytics.track, 'timeout', 'login_timeout', {
               authAttemptId,
             });
-            void cancelVelaLogin(authAttemptId).then((result) =>
+            // `stopAmrPolling()` above already bumped the generation; capture
+            // it AFTER that bump. If a newer attempt restarts polling while
+            // this cancel is in flight, the broadcast must not fire — the
+            // event handler's `login-canceled` writes are synchronous and
+            // would kill the newer attempt's poll/pending before its guarded
+            // status read can reject anything.
+            const cancelGeneration = amrPollGenerationRef.current;
+            void cancelVelaLogin(authAttemptId).then((result) => {
+              if (
+                authAttemptId &&
+                authAttemptId !== amrAuthAttemptIdRef.current
+              ) {
+                return;
+              }
+              if (cancelGeneration !== amrPollGenerationRef.current) return;
               notifyAmrLoginStatusChanged(
                 result.canceled === true ? 'login-canceled' : 'status-changed',
-              ),
-            );
+                authAttemptId,
+              );
+            });
           }
           console.error('[amr-login] poll timed out waiting for a signed-in status');
         } else {
@@ -651,6 +667,20 @@ export function InlineModelSwitcher({
       result.authAttemptId,
       { joinedExisting: result.alreadyRunning === true },
     );
+    // Spawn-continuation ownership: while the spawn POST was in flight, the
+    // login-started event path may have adopted a different attempt (another
+    // surface's login). Only take over when the daemon confirms we joined
+    // that same attempt (`authAttemptId === amrAuthAttemptIdRef.current`); a
+    // confirmed-own response that conflicts with the adopted attempt means
+    // this continuation is stale — leave the current owner to settle it
+    // instead of overwriting its ref, broadcasting login-started, or
+    // stealing its poll.
+    if (
+      amrAuthAttemptIdRef.current !== provisionalAuthAttemptId &&
+      authAttemptId !== amrAuthAttemptIdRef.current
+    ) {
+      return;
+    }
     amrAuthAttemptIdRef.current = authAttemptId;
     if (result.ok || result.alreadyRunning) {
       confirmAmrAuthTracking(analytics.track, authAttemptId, {
@@ -700,7 +730,12 @@ export function InlineModelSwitcher({
             ? { ...current, loggedIn: false, loginInFlight: false, user: null }
             : current
         ));
-        notifyAmrLoginStatusChanged('login-canceled');
+        // Reopen the compact agent panel so the post-cancel AMR row is
+        // visible, mirroring `handleAmrCancelLogin`'s confirmed-cancel path
+        // (this path is reached when the cancel intent was preserved across
+        // the spawn — the panel was closed before login started).
+        setAmrCancelCompleted(true);
+        notifyAmrLoginStatusChanged('login-canceled', authAttemptId);
         return;
       }
       resolveAmrAuthTracking(analytics.track, 'cancelled', undefined, {
@@ -723,7 +758,7 @@ export function InlineModelSwitcher({
       setAmrLoginError(result.error || t('settings.amrLoginErrorCompact'));
       return;
     }
-    notifyAmrLoginStatusChanged('login-started');
+    notifyAmrLoginStatusChanged('login-started', authAttemptId);
     startAmrPolling(startedAt, authAttemptId);
     // Compact home may already be signed-in by the time the login spawn
     // returns (or a follow-up status refresh races ahead of the poll tick).
@@ -765,8 +800,14 @@ export function InlineModelSwitcher({
     const loginStartPending = amrLoginStartPendingRef.current;
     const authAttemptId = amrAuthAttemptIdRef.current;
     stopAmrPolling();
-    clearPendingCompactAmrPick();
     setAmrLoginError(null);
+    if (!loginStartPending) {
+      // Only drop the compact handoff once the cancel outcome is settled.
+      // For a cancel issued while `startVelaLogin` is still in flight, the
+      // handoff must survive until the start continuation resolves and
+      // honors the intent (its cancel-completion path clears it).
+      clearPendingCompactAmrPick();
+    }
     const result = authAttemptId
       ? await cancelVelaLogin(authAttemptId)
       : { ok: false, canceled: false };
@@ -776,6 +817,14 @@ export function InlineModelSwitcher({
     // the newer attempt's state, so bail before touching anything.
     if (authAttemptId && authAttemptId !== amrAuthAttemptIdRef.current) return;
     if (!result.ok) {
+      if (loginStartPending) {
+        // The spawn is still in flight and the daemon could not cancel the
+        // provisional attempt yet. Preserve the cancel intent so
+        // `handleAmrSignIn`'s post-await issues the canonical cancel for the
+        // resolved attempt instead of proceeding into login-started/polling.
+        amrLoginCancelRequestedRef.current = true;
+        return;
+      }
       amrLoginStartedAtRef.current = null;
       setAmrLoginPending(false);
       setAmrLoginError(t('settings.amrLoginErrorCompact'));
@@ -821,6 +870,14 @@ export function InlineModelSwitcher({
       }
       return;
     }
+    if (loginStartPending) {
+      // The spawn is still in flight; the provisional cancel confirmed, but
+      // the start continuation must not take ownership. Keep the intent so
+      // `handleAmrSignIn`'s post-await issues the canonical cancel for the
+      // resolved attempt and settles the terminal state.
+      amrLoginCancelRequestedRef.current = true;
+      return;
+    }
     if (authAttemptId) {
       resolveAmrAuthTracking(analytics.track, 'cancelled', undefined, {
         authAttemptId,
@@ -842,7 +899,7 @@ export function InlineModelSwitcher({
         ? { ...current, loggedIn: false, loginInFlight: false, user: null }
         : current
     ));
-    notifyAmrLoginStatusChanged('login-canceled');
+    notifyAmrLoginStatusChanged('login-canceled', authAttemptId);
   }, [
     analytics.track,
     clearPendingCompactAmrPick,
@@ -892,12 +949,18 @@ export function InlineModelSwitcher({
         generation: amrPollGenerationRef.current,
         authAttemptId: amrAuthAttemptIdRef.current ?? undefined,
       });
-      // A faster pick has bumped the token; the user's choice has moved on.
-      // The defensive useEffect that clears `pendingCompactAmrPickRef` on
-      // `config.agentId` change is a belt-and-suspenders — the token is the
-      // actual invariant that prevents this continuation from writing any of
-      // the post-await side effects for a no-longer-active pick.
-      if (amrPickTokenRef.current !== pickToken) return;
+      // A faster pick has bumped the token, or the active agent moved on via
+      // a prop-driven change (another surface) that no click touched — the
+      // token does not advance for prop changes, so the current-agent ref is
+      // the second half of this invariant. Either way the user's choice has
+      // moved on: this continuation must not write the pending handoff,
+      // close the panel, or start an AMR login for the no-longer-active pick.
+      if (
+        amrPickTokenRef.current !== pickToken ||
+        currentAgentIdRef.current !== agentId
+      ) {
+        return;
+      }
       if (latest?.loggedIn) {
         finishCompactAgentPick(agentId);
         return;
@@ -1014,15 +1077,27 @@ export function InlineModelSwitcher({
 
   useEffect(() => {
     if (open && agents.some((agent) => agent.id === 'amr' && agent.available)) {
-      // Passive observer read — deliberately NO guard. `observeAmrAuthTracking`
-      // self-validates the response attempt (amr-auth.ts), `setAmrStatus`
-      // commits the server's latest truth, and the login bookkeeping is
-      // protected by the `pendingStartup` settle window. A stale response here
-      // cannot finalize or clear a newer attempt's state, so guarding would add
-      // noise without closing a real window.
-      void refreshAmrStatus();
+      // Passive observer read, guarded like every other status read: a
+      // response that resolves after a newer attempt/poll took over must not
+      // commit `setAmrStatus` or login bookkeeping onto the newer state.
+      // Also adopt an in-flight server attempt nobody claimed yet (e.g. the
+      // panel was opened after another surface started login, or a previous
+      // follow-up read only saw a transient null): the compact cancel/retry
+      // UI needs a real attempt id and a poll to observe the outcome.
+      void refreshAmrStatus({
+        generation: amrPollGenerationRef.current,
+        authAttemptId: amrAuthAttemptIdRef.current ?? undefined,
+      }).then((next) => {
+        if (next?.loginInFlight && amrPollRef.current === null) {
+          amrLoginStartedAtRef.current ??= Date.now();
+          startAmrPolling(
+            amrLoginStartedAtRef.current,
+            next.authAttemptId ?? null,
+          );
+        }
+      });
     }
-  }, [agents, open, refreshAmrStatus]);
+  }, [agents, open, refreshAmrStatus, startAmrPolling]);
 
   // Stop polling only on unmount. Polling has its own lifecycle (started by
   // `startAmrPolling`, ended by terminal `signed-in` / `stopped` / `timed-out`
@@ -1043,6 +1118,15 @@ export function InlineModelSwitcher({
       const statusGeneration = amrPollGenerationRef.current;
       const statusAttemptId = amrAuthAttemptIdRef.current;
       if (reason === 'login-started') {
+        // Intentionally NOT gated on the broadcast attempt id, unlike
+        // `login-canceled` below: `login-started` is an ADOPT signal — it may
+        // arrive with an attempt id this component does not track yet (a
+        // login started on another surface), and the follow-up read below is
+        // what claims it. Gating here would break that adoption. Stale
+        // `login-started` broadcasts are instead prevented at the senders:
+        // every spawn continuation (InlineModelSwitcher, AmrLoginPill,
+        // EntryShell) validates it still owns the attempt before emitting,
+        // and the timeout-cancel continuation gates its own broadcast.
         const startedAt = Date.now();
         amrLoginStartedAtRef.current = startedAt;
         setAmrLoginError(null);
@@ -1052,10 +1136,22 @@ export function InlineModelSwitcher({
         // covers the startup-settle window where status is neither in-flight
         // nor signed-in yet.
       } else if (reason === 'login-canceled') {
-        amrLoginStartedAtRef.current = null;
-        stopAmrPolling();
-        clearPendingCompactAmrPick();
-        setAmrLoginPending(false);
+        const broadcastAttemptId = amrLoginStatusEventAuthAttemptId(event);
+        // Only a broadcast that still owns the current attempt may
+        // synchronously reset local login state. A stale `login-canceled`
+        // from a superseded attempt (e.g. a delayed timeout cancel on
+        // another surface) must not kill a newer login's poll/pending —
+        // these writes run before this handler's guarded status read.
+        // Broadcasts without an attempt id keep the legacy behavior.
+        if (
+          broadcastAttemptId === undefined ||
+          broadcastAttemptId === amrAuthAttemptIdRef.current
+        ) {
+          amrLoginStartedAtRef.current = null;
+          stopAmrPolling();
+          clearPendingCompactAmrPick();
+          setAmrLoginPending(false);
+        }
       }
       void refreshAmrStatus({
         generation: statusGeneration,
@@ -1106,6 +1202,15 @@ export function InlineModelSwitcher({
         // errors; that null is also a legitimate "neither signed-in nor
         // in-flight, but a login is still being awaited" signal and must
         // not strand the switcher in Signing in forever.
+        // Deliberate blind-observer fallback: when the follow-up read was a
+        // transient null there is no attempt id to carry, yet a login may
+        // still be pending — starting the poll with `null` keeps observing
+        // until the daemon reports a terminal state. Its finalize is safe
+        // without an attempt: `finalizeAmrSignIn` skips analytics when the
+        // attempt is null, and the status-changed broadcast + compact resume
+        // only reflect a genuinely-observed signed-in state. (This is the
+        // #8 edge documented in the review plan; tightening it would break
+        // the pinned transient-null observer test.)
         if (
           amrPollRef.current === null &&
           amrLoginStartedAtRef.current !== null

@@ -29,10 +29,32 @@ export function amrLoginPollOutcome(
 
 export function notifyAmrLoginStatusChanged(
   reason: AmrLoginStatusEventReason = 'status-changed',
+  authAttemptId?: string | null,
 ) {
   window.dispatchEvent(
-    new CustomEvent(AMR_LOGIN_STATUS_EVENT, { detail: { reason } }),
+    new CustomEvent(AMR_LOGIN_STATUS_EVENT, {
+      detail: { reason, authAttemptId },
+    }),
   );
+}
+
+/**
+ * The attempt id carried by a status broadcast, or `undefined` when the
+ * broadcaster did not attach one (legacy protocol, or no attempt exists).
+ * Receivers use it to ignore broadcasts that no longer own the current
+ * attempt — without it, a stale `login-canceled` from a superseded attempt
+ * (e.g. a delayed timeout cancel on another surface) would synchronously
+ * reset a newer login's local state before any guarded status read runs.
+ */
+export function amrLoginStatusEventAuthAttemptId(
+  event: Event,
+): string | undefined {
+  if (event instanceof CustomEvent) {
+    const id = (event.detail as { authAttemptId?: unknown } | null)
+      ?.authAttemptId;
+    return typeof id === 'string' ? id : undefined;
+  }
+  return undefined;
 }
 
 export function amrLoginStatusEventReason(
