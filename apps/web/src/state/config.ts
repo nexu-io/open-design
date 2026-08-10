@@ -376,6 +376,7 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     protocol: 'openai',
     baseUrl: 'https://api.moonshot.cn/v1',
     preferredModels: [
+      'kimi-k3',
       'kimi-k2.6',
       'kimi-k2.7-code',
       'kimi-k2.7-code-highspeed',
