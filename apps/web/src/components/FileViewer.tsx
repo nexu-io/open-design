@@ -12308,11 +12308,22 @@ function HtmlViewer({
   function openInNewTab() {
     if (!source) return;
     // A multi-file artifact cannot survive being inlined into a srcdoc: its
-    // sibling assets are reachable only through workspace-scoped daemon URLs,
-    // and `<base href>` cannot carry the required query string (URL resolution
-    // discards it), so `./styles.css` 400s and the page renders unstyled.
-    // Load the daemon URL instead — it rewrites relative references as it
-    // serves.
+    // siblings are reachable only through scoped daemon URLs, and `<base href>`
+    // cannot carry the query that scope lives in (URL resolution discards a
+    // base's query), so `./styles.css` 400s and the page renders unstyled.
+    //
+    // Ask the daemon for the same containment document the inline preview
+    // uses. Presence of `odPreviewBridge` makes it mint a preview scope and
+    // inject a path-scoped `<base href=".../preview/<token>/">` with no query
+    // to lose, so rewritten attributes AND a runtime `fetch('./data.json')`
+    // both resolve. An empty value asks for the base without any bridge
+    // scripts, which Present has no parent listener for.
+    //
+    // Two paths that look right and are not: serving `/raw/` plain fixes only
+    // attributes, because the daemon cannot rewrite a URL inside a script, so
+    // a data fetch silently falls back to whatever the artifact embeds; and
+    // navigating to the `/preview/<token>/` document directly is served with
+    // `connect-src 'none'`, which blocks every fetch outright.
     //
     // Reuse the viewer's own URL-vs-srcDoc gate rather than a bespoke
     // condition, so Present inherits every render-safety rule the inline
@@ -12327,7 +12338,10 @@ function HtmlViewer({
       && shouldUrlLoadHtmlPreview(presentUrlLoadDecision(urlLoadDecision));
     if (presentViaUrl) {
       openSandboxedPreviewUrlInNewTab(
-        projectRawUrl(projectId, file.name, workspaceContext),
+        appendResourceQuery(
+          projectRawUrl(projectId, file.name, workspaceContext),
+          'odPreviewBridge=',
+        ),
         exportTitle,
       );
       return;
