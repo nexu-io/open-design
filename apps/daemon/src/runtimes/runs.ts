@@ -469,12 +469,40 @@ function buildExecutionDiagnostics(run) {
       requestedModel: run.model
         ? availableDiagnostic(run.model, 'requested model configuration', true, 'agent-runtime')
         : missingDiagnostic('requested_model_not_recorded', 'agent-runtime'),
-      resolvedModel: run.resolvedModelId || assistantMessages.model
-        ? availableDiagnostic(run.resolvedModelId || assistantMessages.model, 'runtime-resolved model id', true, 'agent-runtime')
-        : missingDiagnostic('resolved_model_not_reported', 'agent-runtime'),
-      reasoning: run.reasoning
+      requestedReasoning: run.reasoning
         ? availableDiagnostic(run.reasoning, 'requested reasoning configuration', true, 'agent-runtime')
-        : missingDiagnostic('reasoning_configuration_not_recorded', 'agent-runtime'),
+        : missingDiagnostic('requested_reasoning_not_recorded', 'agent-runtime'),
+      requestedServiceTier: run.serviceTier
+        ? availableDiagnostic(run.serviceTier, 'requested service tier configuration', true, 'agent-runtime')
+        : missingDiagnostic('requested_service_tier_not_recorded', 'agent-runtime'),
+      resolvedModel: run.agentId === 'codex'
+        ? run.executedModelId
+          ? availableDiagnostic(run.executedModelId, 'model reported by Codex rollout turn_context', true, 'agent-runtime')
+          : missingDiagnostic('codex_rollout_model_unconfirmed', 'agent-runtime')
+        : run.resolvedModelId || assistantMessages.model
+          ? availableDiagnostic(run.resolvedModelId || assistantMessages.model, 'runtime-resolved model id', true, 'agent-runtime')
+          : missingDiagnostic('resolved_model_not_reported', 'agent-runtime'),
+      resolvedReasoning: run.agentId === 'codex'
+        ? run.executedReasoning
+          ? availableDiagnostic(run.executedReasoning, 'reasoning reported by Codex rollout turn_context', true, 'agent-runtime')
+          : missingDiagnostic('codex_rollout_reasoning_unconfirmed', 'agent-runtime')
+        : run.reasoning
+          ? availableDiagnostic(run.reasoning, 'runtime reasoning configuration', true, 'agent-runtime')
+          : missingDiagnostic('reasoning_configuration_not_recorded', 'agent-runtime'),
+      resolvedServiceTier: run.agentId === 'codex'
+        ? run.executedServiceTier
+          ? availableDiagnostic(run.executedServiceTier, 'service tier reported by Codex rollout turn_context', true, 'agent-runtime')
+          : missingDiagnostic('codex_rollout_service_tier_unconfirmed', 'agent-runtime')
+        : run.serviceTier
+          ? availableDiagnostic(run.serviceTier, 'runtime service tier configuration', true, 'agent-runtime')
+          : missingDiagnostic('service_tier_configuration_not_recorded', 'agent-runtime'),
+      reasoning: run.agentId === 'codex'
+        ? run.executedReasoning
+          ? availableDiagnostic(run.executedReasoning, 'reasoning reported by Codex rollout turn_context', true, 'agent-runtime')
+          : missingDiagnostic('codex_rollout_reasoning_unconfirmed', 'agent-runtime')
+        : run.reasoning
+          ? availableDiagnostic(run.reasoning, 'runtime reasoning configuration', true, 'agent-runtime')
+          : missingDiagnostic('reasoning_configuration_not_recorded', 'agent-runtime'),
       agentCliVersion: run.preflightAgentCliVersion
         ? availableDiagnostic(run.preflightAgentCliVersion, 'runtime CLI version observed during preflight', true, 'agent-runtime')
         : missingDiagnostic('agent_cli_version_not_recorded', 'agent-runtime'),
@@ -525,6 +553,13 @@ function durableRunState(run) {
       ? { preflightAgentCliVersion: run.preflightAgentCliVersion }
       : {}),
     ...(typeof run.reasoning === 'string' ? { reasoning: run.reasoning } : {}),
+    ...(typeof run.serviceTier === 'string' ? { serviceTier: run.serviceTier } : {}),
+    ...(typeof run.executedModelId === 'string' ? { executedModelId: run.executedModelId } : {}),
+    ...(typeof run.executedReasoning === 'string' ? { executedReasoning: run.executedReasoning } : {}),
+    ...(typeof run.executedServiceTier === 'string' ? { executedServiceTier: run.executedServiceTier } : {}),
+    ...(typeof run.executionEvidenceSource === 'string'
+      ? { executionEvidenceSource: run.executionEvidenceSource }
+      : {}),
     ...(typeof run.skillId === 'string' ? { skillId: run.skillId } : {}),
     ...(typeof run.designSystemId === 'string' ? { designSystemId: run.designSystemId } : {}),
     ...(typeof run.designSystemDigest === 'string' ? { designSystemDigest: run.designSystemDigest } : {}),
@@ -910,6 +945,15 @@ export function createChatRunService({
 
   const persistState = (run) => {
     if (run?.statePath) atomicWriteJson(run.statePath, durableRunState(run));
+  };
+
+  const setExecutionEvidence = (run, evidence) => {
+    if (!run || !evidence) return;
+    run.executedModelId = readString(evidence.model);
+    run.executedReasoning = readString(evidence.reasoning);
+    run.executedServiceTier = readString(evidence.serviceTier);
+    run.executionEvidenceSource = readString(evidence.source);
+    persistState(run);
   };
 
   const setAnalyticsRecovery = (run, recovery) => {
@@ -1540,6 +1584,7 @@ export function createChatRunService({
     wait,
     emit,
     persistState,
+    setExecutionEvidence,
     setAnalyticsRecovery,
     markAnalyticsCompleted,
     markLangfuseCompleted,

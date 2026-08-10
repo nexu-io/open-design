@@ -210,6 +210,8 @@ import {
 } from './agents.js';
 import {
   getRememberedLiveModels,
+  hasRememberedLiveModelCatalog,
+  isKnownReasoning,
   preferFreshLiveModels,
   rememberLiveModels,
   resolveDefaultModelFromOptions,
@@ -9573,6 +9575,56 @@ export async function startServer({
       typeof appConfigForRun?.agentModels?.[def.id]?.model === 'string'
         ? appConfigForRun.agentModels[def.id].model
         : null;
+    const hasExplicitRequestedModel =
+      typeof requestedRuntimeModel === 'string'
+      && requestedRuntimeModel.trim().length > 0
+      && requestedRuntimeModel.trim().toLowerCase() !== 'default';
+    const hasExplicitReasoning =
+      typeof reasoning === 'string' && reasoning.length > 0 && reasoning !== 'default';
+    const hasExplicitServiceTier =
+      typeof serviceTier === 'string' && serviceTier.length > 0 && serviceTier !== 'default';
+    if (
+      def.id === 'codex'
+      && (hasExplicitRequestedModel || hasExplicitReasoning || hasExplicitServiceTier)
+      && !hasRememberedLiveModelCatalog(def.id, requestedLiveModelScope)
+    ) {
+      run.failureCategory = 'model_unavailable';
+      run.failureDetail = 'model_not_supported';
+      run.failureAction = 'upgrade';
+      return design.runs.fail(
+        run,
+        'MODEL_UNAVAILABLE',
+        'The installed Codex CLI did not return a live model compatibility catalog. Upgrade or repair the managed Codex CLI, refresh Local Codex agent discovery, then retry the same settings.',
+        {
+          retryable: false,
+          details: {
+            failureCategory: 'model_unavailable',
+            failureDetail: 'model_not_supported',
+          },
+        },
+      );
+    }
+    if (
+      def.id === 'codex'
+      && hasExplicitRequestedModel
+      && !isKnownModel(def, requestedRuntimeModel, requestedLiveModelScope)
+    ) {
+      run.failureCategory = 'model_unavailable';
+      run.failureDetail = 'model_not_found';
+      run.failureAction = 'upgrade';
+      return design.runs.fail(
+        run,
+        'MODEL_UNAVAILABLE',
+        `The Codex model is unavailable: '${requestedRuntimeModel}' is not in the current model catalog.`,
+        {
+          retryable: false,
+          details: {
+            failureCategory: 'model_unavailable',
+            failureDetail: 'model_not_found',
+          },
+        },
+      );
+    }
     let safeModel = resolveModelForAgent(
       def,
       typeof requestedRuntimeModel === 'string'
@@ -9592,17 +9644,60 @@ export async function startServer({
       typeof reasoning === 'string' && Array.isArray(def.reasoningOptions)
         ? (def.reasoningOptions.find((r) => r.id === reasoning)?.id ?? null)
         : null;
-    safeModel = resolveModelForServiceTier(
-      def,
-      safeModel,
-      typeof serviceTier === 'string' ? serviceTier : null,
-      requestedLiveModelScope,
-    );
+    if (
+      def.id === 'codex'
+      && hasExplicitReasoning
+      && (
+        !safeReasoning
+        || !isKnownReasoning(def, safeModel, safeReasoning, requestedLiveModelScope)
+      )
+    ) {
+      run.failureCategory = 'model_unavailable';
+      run.failureDetail = 'model_not_supported';
+      run.failureAction = 'none';
+      return design.runs.fail(
+        run,
+        'MODEL_UNAVAILABLE',
+        `The Codex model is unsupported for this setting: '${safeModel ?? 'default'}' does not support reasoning level '${reasoning}'.`,
+        {
+          retryable: false,
+          details: {
+            failureCategory: 'model_unavailable',
+            failureDetail: 'model_not_supported',
+          },
+        },
+      );
+    }
+    if (def.id !== 'codex') {
+      safeModel = resolveModelForServiceTier(
+        def,
+        safeModel,
+        typeof serviceTier === 'string' ? serviceTier : null,
+        requestedLiveModelScope,
+      );
+    }
     const safeServiceTier =
       typeof serviceTier === 'string' &&
       isKnownServiceTier(def, safeModel, serviceTier, requestedLiveModelScope)
         ? serviceTier
         : null;
+    if (def.id === 'codex' && hasExplicitServiceTier && !safeServiceTier) {
+      run.failureCategory = 'model_unavailable';
+      run.failureDetail = 'model_not_supported';
+      run.failureAction = 'none';
+      return design.runs.fail(
+        run,
+        'MODEL_UNAVAILABLE',
+        `The Codex model is unsupported for this setting: '${safeModel ?? 'default'}' does not support service tier '${serviceTier}'.`,
+        {
+          retryable: false,
+          details: {
+            failureCategory: 'model_unavailable',
+            failureDetail: 'model_not_supported',
+          },
+        },
+      );
+    }
     const agentOptions = {
       model: safeModel,
       reasoning: safeReasoning,

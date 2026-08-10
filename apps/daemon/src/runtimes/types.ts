@@ -14,6 +14,7 @@ export type RuntimeModelOption = {
   outputPriceUsdPerMillion?: number;
   metadata?: ModelMetadata;
   additionalSpeedTiers?: string[];
+  supportedReasoningLevels?: string[];
   serviceTierOptions?: RuntimeModelOption[];
 };
 

@@ -2,6 +2,7 @@ import { execAgentFile } from './invocation.js';
 import { AGENT_DEFS } from './registry.js';
 import {
   DEFAULT_MODEL_OPTION,
+  clearRememberedLiveModels,
   getRememberedLiveModels,
   mergeFallbackModelMetadata,
   rememberLiveModels,
@@ -86,7 +87,10 @@ async function fetchModels(
       if (!parsed || parsed.length === 0) {
         return { models: def.fallbackModels, source: 'fallback' };
       }
-      return { models: mergeFallbackModelMetadata(def, parsed), source: 'live' };
+      return {
+        models: def.id === 'codex' ? parsed : mergeFallbackModelMetadata(def, parsed),
+        source: 'live',
+      };
     } catch {
       return { models: def.fallbackModels, source: 'fallback' };
     }
@@ -110,7 +114,10 @@ async function fetchModels(
     if (!parsed || parsed.length === 0) {
       return { models: def.fallbackModels, source: 'fallback' };
     }
-    return { models: mergeFallbackModelMetadata(def, parsed), source: 'live' };
+    return {
+      models: def.id === 'codex' ? parsed : mergeFallbackModelMetadata(def, parsed),
+      source: 'live',
+    };
   } catch {
     return { models: def.fallbackModels, source: 'fallback' };
   }
@@ -379,6 +386,10 @@ function rememberDetectedLiveModels(
         ...configuredEnv,
       })
     : null;
+  if (def.id === 'codex' && agent.modelsSource !== 'live') {
+    clearRememberedLiveModels(def.id, scope);
+    return;
+  }
   rememberLiveModels(agent.id, agent.models, scope);
 }
 

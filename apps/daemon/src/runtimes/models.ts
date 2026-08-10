@@ -12,6 +12,7 @@ export const DEFAULT_MODEL_OPTION: RuntimeModelOption = {
 // gets rejected so a stale or hostile value can't smuggle arbitrary flags.
 const liveModelOrder = new Map<string, RuntimeModelOption[]>();
 const liveModelCache = new Map<string, Map<string, RuntimeModelOption>>();
+const availableLiveModelCatalogs = new Set<string>();
 
 function liveModelCacheKey(agentId: string, scope?: string | null): string {
   const trimmedScope = typeof scope === 'string' ? scope.trim() : '';
@@ -25,11 +26,26 @@ export function rememberLiveModels(agentId: string, models: RuntimeModelOption[]
       model != null && typeof model.id === 'string',
   );
   const key = liveModelCacheKey(agentId, scope);
+  availableLiveModelCatalogs.add(key);
   liveModelCache.set(
     key,
     new Map(remembered.map((model) => [model.id, model])),
   );
   liveModelOrder.set(key, remembered);
+}
+
+export function clearRememberedLiveModels(agentId: string, scope?: string | null): void {
+  const key = liveModelCacheKey(agentId, scope);
+  availableLiveModelCatalogs.delete(key);
+  liveModelCache.delete(key);
+  liveModelOrder.delete(key);
+}
+
+export function hasRememberedLiveModelCatalog(
+  agentId: string,
+  scope?: string | null,
+): boolean {
+  return availableLiveModelCatalogs.has(liveModelCacheKey(agentId, scope));
 }
 
 export function resolveDefaultModelFromOptions(
@@ -73,6 +89,7 @@ function mergeMissingFallbackModelMetadata(
 ): RuntimeModelOption {
   if (!fallback) return model;
   const fallbackSpeedTiers = fallback.additionalSpeedTiers;
+  const fallbackReasoningLevels = fallback.supportedReasoningLevels;
   const fallbackServiceTiers = fallback.serviceTierOptions;
   const needsSpeedTiers =
     (!model.additionalSpeedTiers || model.additionalSpeedTiers.length === 0) &&
@@ -82,7 +99,11 @@ function mergeMissingFallbackModelMetadata(
     (!model.serviceTierOptions || model.serviceTierOptions.length === 0) &&
     Array.isArray(fallbackServiceTiers) &&
     fallbackServiceTiers.length > 0;
-  if (!needsSpeedTiers && !needsServiceTiers) return model;
+  const needsReasoningLevels =
+    (!model.supportedReasoningLevels || model.supportedReasoningLevels.length === 0) &&
+    Array.isArray(fallbackReasoningLevels) &&
+    fallbackReasoningLevels.length > 0;
+  if (!needsSpeedTiers && !needsReasoningLevels && !needsServiceTiers) return model;
   return {
     ...model,
     ...(needsSpeedTiers
@@ -90,6 +111,9 @@ function mergeMissingFallbackModelMetadata(
       : {}),
     ...(needsServiceTiers
       ? { serviceTierOptions: cloneModelOptions(fallbackServiceTiers) }
+      : {}),
+    ...(needsReasoningLevels
+      ? { supportedReasoningLevels: cloneStringOptions(fallbackReasoningLevels) }
       : {}),
   };
 }
@@ -115,6 +139,7 @@ export function findKnownModel(
   const live = liveModelCache.get(liveModelCacheKey(def.id, scope));
   const liveModel = live?.get(modelId);
   const fallbackModel = findFallbackModel(def, modelId);
+  if (def.id === 'codex' && live) return liveModel ?? null;
   if (liveModel) {
     return mergeMissingFallbackModelMetadata(liveModel, fallbackModel);
   }
@@ -140,6 +165,17 @@ export function isKnownServiceTier(
   return Boolean(
     model?.serviceTierOptions?.some((tier) => tier.id === serviceTier),
   );
+}
+
+export function isKnownReasoning(
+  def: RuntimeAgentDef,
+  modelId: string | null | undefined,
+  reasoning: string | null | undefined,
+  scope?: string | null,
+) {
+  if (!reasoning || reasoning === 'default') return true;
+  const model = findKnownModel(def, modelId, scope);
+  return Boolean(model?.supportedReasoningLevels?.includes(reasoning));
 }
 
 export function resolveModelForServiceTier(

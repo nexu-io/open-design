@@ -9,6 +9,41 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createChatRunService } from '../../src/runtimes/runs.js';
 
 describe('chat run service shutdown', () => {
+  it('keeps requested Codex settings separate from rollout-backed executed settings', () => {
+    const runs = createRuns();
+    const run = runs.create({
+      projectId: 'project-1',
+      conversationId: 'conv-1',
+      agentId: 'codex',
+    }) as any;
+    run.model = 'gpt-5.6-sol';
+    run.resolvedModelId = 'gpt-5.6-sol';
+    run.reasoning = 'xhigh';
+    run.serviceTier = 'fast';
+    runs.finish(run, 'succeeded', 0, null);
+
+    expect(runs.statusBody(run).executionDiagnostics?.environment).toMatchObject({
+      requestedModel: { state: 'available', value: 'gpt-5.6-sol' },
+      requestedReasoning: { state: 'available', value: 'xhigh' },
+      requestedServiceTier: { state: 'available', value: 'fast' },
+      resolvedModel: { state: 'not_collected', missingReason: 'codex_rollout_model_unconfirmed' },
+      resolvedReasoning: { state: 'not_collected', missingReason: 'codex_rollout_reasoning_unconfirmed' },
+      resolvedServiceTier: { state: 'not_collected', missingReason: 'codex_rollout_service_tier_unconfirmed' },
+    });
+
+    runs.setExecutionEvidence(run, {
+      model: 'gpt-5.6-sol',
+      reasoning: 'xhigh',
+      serviceTier: 'fast',
+      source: 'codex_rollout_turn_context',
+    });
+    expect(runs.statusBody(run).executionDiagnostics?.environment).toMatchObject({
+      resolvedModel: { state: 'available', value: 'gpt-5.6-sol' },
+      resolvedReasoning: { state: 'available', value: 'xhigh' },
+      resolvedServiceTier: { state: 'available', value: 'fast' },
+    });
+  });
+
   it('exports terminal diagnostics without confusing a measured zero with missing data', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-08-04T00:00:00.000Z'));
@@ -1044,6 +1079,32 @@ describe('run event log persistence', () => {
       runsLogDir: runsLogDir as unknown as null,
     });
   }
+
+  it('persists rollout-backed Codex execution evidence across daemon restart', () => {
+    const beforeRestart = createRunsWithLog(tmpDir);
+    const run = beforeRestart.create({ agentId: 'codex', model: 'gpt-5.6-sol' }) as any;
+    beforeRestart.setExecutionEvidence(run, {
+      model: 'gpt-5.6-sol',
+      reasoning: 'xhigh',
+      serviceTier: 'fast',
+      source: 'codex_rollout_turn_context',
+    });
+    beforeRestart.finish(run, 'succeeded', 0, null);
+
+    const afterRestart = createRunsWithLog(tmpDir);
+    const restored = afterRestart.get(run.id) as any;
+    expect(restored).toMatchObject({
+      executedModelId: 'gpt-5.6-sol',
+      executedReasoning: 'xhigh',
+      executedServiceTier: 'fast',
+      executionEvidenceSource: 'codex_rollout_turn_context',
+    });
+    expect(afterRestart.statusBody(restored).executionDiagnostics?.environment).toMatchObject({
+      resolvedModel: { state: 'available', value: 'gpt-5.6-sol' },
+      resolvedReasoning: { state: 'available', value: 'xhigh' },
+      resolvedServiceTier: { state: 'available', value: 'fast' },
+    });
+  });
 
   it('writes each emitted event as a JSONL line under runsLogDir/<runId>/events.jsonl', async () => {
     const runs = createRunsWithLog(tmpDir);

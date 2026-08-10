@@ -1,4 +1,4 @@
-import { DEFAULT_MODEL_OPTION, clampCodexReasoning } from './shared.js';
+import { DEFAULT_MODEL_OPTION } from './shared.js';
 import type { RuntimeModelOption } from '../types.js';
 import type { RuntimeAgentDef } from '../types.js';
 
@@ -8,6 +8,17 @@ function parseCodexStringList(raw: unknown): string[] | undefined {
     .map((value) => (typeof value === 'string' ? value.trim() : ''))
     .filter(Boolean);
   return values.length > 0 ? values : undefined;
+}
+
+function parseCodexReasoningLevels(raw: unknown): string[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const levels = raw.map((value) => {
+    if (typeof value === 'string') return value.trim();
+    if (!value || typeof value !== 'object') return '';
+    const effort = (value as { effort?: unknown }).effort;
+    return typeof effort === 'string' ? effort.trim() : '';
+  }).filter(Boolean);
+  return levels.length > 0 ? [...new Set(levels)] : undefined;
 }
 
 function parseCodexServiceTiers(raw: unknown): RuntimeModelOption[] | undefined {
@@ -36,7 +47,7 @@ function parseCodexServiceTiers(raw: unknown): RuntimeModelOption[] | undefined 
 }
 
 const CODEX_SPEED_TIER_SERVICE_TIER_OPTIONS: Record<string, RuntimeModelOption> = {
-  fast: { id: 'priority', label: 'Fast' },
+  fast: { id: 'fast', label: 'Fast' },
 };
 
 function parseCodexServiceTiersFromSpeedTiers(
@@ -79,6 +90,7 @@ export function parseCodexDebugModels(stdout: string): RuntimeModelOption[] | nu
       visibility?: unknown;
       additional_speed_tiers?: unknown;
       service_tiers?: unknown;
+      supported_reasoning_levels?: unknown;
     };
     if (entry.visibility === 'hidden') continue;
     const id =
@@ -100,6 +112,12 @@ export function parseCodexDebugModels(stdout: string): RuntimeModelOption[] | nu
       entry.additional_speed_tiers,
     );
     if (additionalSpeedTiers) model.additionalSpeedTiers = additionalSpeedTiers;
+    const supportedReasoningLevels = parseCodexReasoningLevels(
+      entry.supported_reasoning_levels,
+    );
+    if (supportedReasoningLevels) {
+      model.supportedReasoningLevels = supportedReasoningLevels;
+    }
     const serviceTierOptions =
       parseCodexServiceTiers(entry.service_tiers) ??
       parseCodexServiceTiersFromSpeedTiers(additionalSpeedTiers);
@@ -109,9 +127,42 @@ export function parseCodexDebugModels(stdout: string): RuntimeModelOption[] | nu
   return out.length > 1 ? out : null;
 }
 
-const GPT_5_5_SERVICE_TIER_OPTIONS: RuntimeModelOption[] = [
-  { id: 'priority', label: 'Fast' },
+const CODEX_FAST_SERVICE_TIER_OPTIONS: RuntimeModelOption[] = [
+  { id: 'fast', label: 'Fast' },
 ];
+const CODEX_CURRENT_REASONING_LEVELS = ['low', 'medium', 'high', 'xhigh'];
+const CODEX_5_6_REASONING_LEVELS = [
+  ...CODEX_CURRENT_REASONING_LEVELS,
+  'max',
+  'ultra',
+];
+
+function assertCodexReasoningCompatibility(
+  modelId: string | null | undefined,
+  effort: string,
+): void {
+  const raw = String(modelId ?? '').trim();
+  const id = (raw.includes('/') ? raw.split('/').pop() : raw)?.toLowerCase() ?? '';
+  let supported: readonly string[] | null = null;
+  if (id.startsWith('gpt-5.6-')) {
+    supported = CODEX_5_6_REASONING_LEVELS;
+  } else if (
+    id.startsWith('gpt-5.2')
+    || id.startsWith('gpt-5.3')
+    || id.startsWith('gpt-5.4')
+    || id.startsWith('gpt-5.5')
+    || id === 'codex-auto-review'
+  ) {
+    supported = CODEX_CURRENT_REASONING_LEVELS;
+  } else if (id === 'gpt-5.1-codex-mini') {
+    supported = ['medium', 'high'];
+  } else if (id === 'gpt-5.1') {
+    supported = ['none', 'minimal', 'low', 'medium', 'high'];
+  }
+  if (supported && !supported.includes(effort)) {
+    throw new Error(`Codex model '${raw}' does not support reasoning effort '${effort}'`);
+  }
+}
 
 export function codexNeedsDangerFullAccessSandbox(
   platform: NodeJS.Platform = process.platform,
@@ -146,10 +197,25 @@ export const codexAgentDef = {
     fallbackModels: [
       DEFAULT_MODEL_OPTION,
       {
+        id: 'gpt-5.6-sol',
+        label: 'gpt-5.6-sol',
+        additionalSpeedTiers: ['fast'],
+        supportedReasoningLevels: CODEX_5_6_REASONING_LEVELS,
+        serviceTierOptions: CODEX_FAST_SERVICE_TIER_OPTIONS,
+      },
+      {
+        id: 'gpt-5.6-terra',
+        label: 'gpt-5.6-terra',
+        additionalSpeedTiers: ['fast'],
+        supportedReasoningLevels: CODEX_5_6_REASONING_LEVELS,
+        serviceTierOptions: CODEX_FAST_SERVICE_TIER_OPTIONS,
+      },
+      {
         id: 'gpt-5.5',
         label: 'gpt-5.5',
         additionalSpeedTiers: ['fast'],
-        serviceTierOptions: GPT_5_5_SERVICE_TIER_OPTIONS,
+        supportedReasoningLevels: CODEX_CURRENT_REASONING_LEVELS,
+        serviceTierOptions: CODEX_FAST_SERVICE_TIER_OPTIONS,
       },
       { id: 'gpt-5.4', label: 'gpt-5.4' },
       { id: 'gpt-5.4-mini', label: 'gpt-5.4-mini' },
@@ -169,6 +235,8 @@ export const codexAgentDef = {
       { id: 'medium', label: 'Medium' },
       { id: 'high', label: 'High' },
       { id: 'xhigh', label: 'XHigh' },
+      { id: 'max', label: 'Max' },
+      { id: 'ultra', label: 'Ultra' },
     ],
     // Prompt is delivered via stdin pipe (gated by `promptViaStdin: true`
     // below) to avoid Windows `spawn ENAMETOOLONG` while keeping Codex on
@@ -257,10 +325,10 @@ export const codexAgentDef = {
         args.push('--model', options.model);
       }
       if (options.reasoning && options.reasoning !== 'default') {
-        const effort = clampCodexReasoning(options.model, options.reasoning);
+        assertCodexReasoningCompatibility(options.model, options.reasoning);
         // Codex accepts `-c key=value` config overrides; reasoning effort
         // is exposed as `model_reasoning_effort`.
-        args.push('-c', `model_reasoning_effort="${effort}"`);
+        args.push('-c', `model_reasoning_effort="${options.reasoning}"`);
       }
       if (options.serviceTier && options.serviceTier !== 'default') {
         args.push('-c', `service_tier="${options.serviceTier}"`);

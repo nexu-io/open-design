@@ -91,9 +91,10 @@ describe('public MCP discovery + generation tools', () => {
       prompt: 'A 5-slide seed pitch deck',
       plugin: 'pitch-deck',
       inputs: { tone: 'bold' },
-      agent: 'claude',
-      model: 'claude-opus-4-7',
-      serviceTier: 'priority',
+      agent: 'codex',
+      model: 'gpt-5.6-sol',
+      reasoning: 'xhigh',
+      serviceTier: 'fast',
       requestId: 'brief-42-cloud',
     });
 
@@ -105,13 +106,24 @@ describe('public MCP discovery + generation tools', () => {
       currentPrompt: 'A 5-slide seed pitch deck',
       pluginId: 'pitch-deck',
       pluginInputs: { tone: 'bold' },
-      agentId: 'claude',
-      model: 'claude-opus-4-7',
-      serviceTier: 'priority',
+      agentId: 'codex',
+      model: 'gpt-5.6-sol',
+      reasoning: 'xhigh',
+      serviceTier: 'fast',
     });
     expect(JSON.parse(firstText(result))).toMatchObject({
       runId: 'run-42',
       requestId: 'brief-42-cloud',
+    });
+  });
+
+  it('start_run exposes only supported reasoning values', () => {
+    const startRun = localMcpToolDefinitions().find((tool) => tool.name === 'start_run');
+
+    expect(startRun?.inputSchema.properties.reasoning).toEqual({
+      type: 'string',
+      enum: ['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
+      description: 'Reasoning effort override for the selected model. Optional.',
     });
   });
 

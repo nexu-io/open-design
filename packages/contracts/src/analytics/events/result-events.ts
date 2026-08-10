@@ -404,6 +404,13 @@ export interface RunCreatedProps extends RunTaskLineageProps {
 export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
   area: 'chat_panel' | 'design_system_generation';
   result: TrackingRunResult;
+  model_evidence_source?: 'codex_rollout_turn_context' | 'unconfirmed';
+  requested_model_id?: string;
+  requested_reasoning_effort?: string;
+  requested_service_tier?: string;
+  resolved_model_id?: string;
+  resolved_reasoning_effort?: string;
+  resolved_service_tier?: string;
   error_code?: string;
   failure_category?: TrackingRunFailureCategory;
   failure_detail?: TrackingRunFailureDetail;

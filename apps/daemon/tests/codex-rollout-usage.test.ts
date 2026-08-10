@@ -28,6 +28,16 @@ function tokenCount(input: number | null, cached: number | null): string {
     },
   });
 }
+function turnContext(model: string, effort: string, serviceTier?: string): string {
+  return JSON.stringify({
+    type: 'turn_context',
+    payload: {
+      model,
+      effort,
+      ...(serviceTier ? { service_tier: serviceTier } : {}),
+    },
+  });
+}
 
 describe('extractCodexLastTurnFirstCallUsage', () => {
   it('reports the first call of the LAST turn, not the whole-session aggregate', () => {
@@ -49,6 +59,26 @@ describe('extractCodexLastTurnFirstCallUsage', () => {
       first_call_input_tokens: 13342,
       first_call_cache_read_input_tokens: 12672,
       first_call_cache_hit_ratio: 12672 / 13342,
+    });
+  });
+
+  it('reports executed settings only from the LAST turn_context', () => {
+    const rollout = [
+      taskStarted(),
+      turnContext('gpt-5.5', 'high', 'flex'),
+      tokenCount(100, 25),
+      taskStarted(),
+      turnContext('gpt-5.6-sol', 'xhigh', 'fast'),
+      tokenCount(200, 100),
+    ].join('\n');
+
+    expect(extractCodexLastTurnFirstCallUsage(rollout)).toEqual({
+      first_call_input_tokens: 200,
+      first_call_cache_read_input_tokens: 100,
+      first_call_cache_hit_ratio: 0.5,
+      resolved_model_id: 'gpt-5.6-sol',
+      resolved_reasoning_effort: 'xhigh',
+      resolved_service_tier: 'fast',
     });
   });
 

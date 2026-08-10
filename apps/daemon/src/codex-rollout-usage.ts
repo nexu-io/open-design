@@ -15,11 +15,19 @@ import os from 'node:os';
 import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 
-interface CodexFirstCallUsage {
+export interface CodexFirstCallUsage {
   first_call_input_tokens: number;
   first_call_cache_read_input_tokens: number;
   first_call_cache_hit_ratio: number;
+  resolved_model_id?: string;
+  resolved_reasoning_effort?: string;
+  resolved_service_tier?: string;
 }
+
+type CodexTurnContextEvidence = Pick<
+  CodexFirstCallUsage,
+  'resolved_model_id' | 'resolved_reasoning_effort' | 'resolved_service_tier'
+>;
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -60,6 +68,8 @@ export function extractCodexLastTurnFirstCallUsage(
   rolloutJsonl: string,
 ): CodexFirstCallUsage | null {
   let firstCall: CodexFirstCallUsage | null = null;
+  let turnContext: CodexTurnContextEvidence | null = null;
+  let contextMayPrecedeTaskStart = false;
 
   for (const line of rolloutJsonl.split('\n')) {
     const trimmed = line.trim();
@@ -75,14 +85,33 @@ export function extractCodexLastTurnFirstCallUsage(
     const payload = asRecord(record.payload);
     const payloadType = payload?.type;
 
+    if (record.type === 'turn_context') {
+      firstCall = null;
+      const model = typeof payload?.model === 'string' ? payload.model.trim() : '';
+      const effort = typeof payload?.effort === 'string' ? payload.effort.trim() : '';
+      const serviceTier = typeof payload?.service_tier === 'string'
+        ? payload.service_tier.trim()
+        : '';
+      turnContext = {
+        ...(model ? { resolved_model_id: model } : {}),
+        ...(effort ? { resolved_reasoning_effort: effort } : {}),
+        ...(serviceTier ? { resolved_service_tier: serviceTier } : {}),
+      };
+      contextMayPrecedeTaskStart = true;
+      continue;
+    }
+
     if (payloadType === 'task_started') {
       // A new turn opens; reset so we capture THIS turn's opening call and let
       // the last turn in the file win.
       firstCall = null;
+      if (!contextMayPrecedeTaskStart) turnContext = null;
+      contextMayPrecedeTaskStart = false;
       continue;
     }
 
     if (payloadType !== 'token_count' || firstCall !== null) continue;
+    contextMayPrecedeTaskStart = false;
 
     const info = asRecord(payload?.info);
     const last = asRecord(info?.last_token_usage);
@@ -98,6 +127,7 @@ export function extractCodexLastTurnFirstCallUsage(
       first_call_input_tokens: input,
       first_call_cache_read_input_tokens: cached,
       first_call_cache_hit_ratio: cached / input,
+      ...(turnContext ?? {}),
     };
   }
 

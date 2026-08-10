@@ -90,7 +90,7 @@ interface ProjectPayload { project?: ProjectSummary; id?: string; name?: string;
 interface ActiveContext { active?: boolean; projectId?: string; projectName?: string | null; fileName?: string | null; ageMs?: number | null }
 type ResolvedProject = { id: string; name: string; source: 'uuid' | 'id' | 'exact' | 'slug' | 'substring' };
 interface ProjectListCache { baseUrl: string; t: number; list: ProjectSummary[] }
-interface McpArgs extends JsonObject { project?: unknown; entry?: unknown; include?: unknown; maxBytes?: unknown; path?: unknown; offset?: unknown; limit?: unknown; since?: unknown; query?: unknown; pattern?: unknown; max?: unknown; name?: unknown; content?: unknown; encoding?: unknown; artifactManifest?: unknown; confirm?: unknown; prompt?: unknown; plugin?: unknown; inputs?: unknown; agent?: unknown; model?: unknown; serviceTier?: unknown; apiKey?: unknown; requestId?: unknown; resume?: unknown; runId?: unknown; id?: unknown; designSystem?: unknown; skill?: unknown; skills?: string[]; includeUnavailable?: unknown; artifactType?: unknown; projectTitle?: unknown; locale?: unknown; knownAnswers?: unknown; skip?: unknown; briefDraftId?: unknown; nonce?: unknown; answers?: unknown; externalPluginContext?: unknown; pluginWorkflowId?: unknown }
+interface McpArgs extends JsonObject { project?: unknown; entry?: unknown; include?: unknown; maxBytes?: unknown; path?: unknown; offset?: unknown; limit?: unknown; since?: unknown; query?: unknown; pattern?: unknown; max?: unknown; name?: unknown; content?: unknown; encoding?: unknown; artifactManifest?: unknown; confirm?: unknown; prompt?: unknown; plugin?: unknown; inputs?: unknown; agent?: unknown; model?: unknown; reasoning?: unknown; serviceTier?: unknown; apiKey?: unknown; requestId?: unknown; resume?: unknown; runId?: unknown; id?: unknown; designSystem?: unknown; skill?: unknown; skills?: string[]; includeUnavailable?: unknown; artifactType?: unknown; projectTitle?: unknown; locale?: unknown; knownAnswers?: unknown; skip?: unknown; briefDraftId?: unknown; nonce?: unknown; answers?: unknown; externalPluginContext?: unknown; pluginWorkflowId?: unknown }
 interface ProjectFileBundleEntry { name: string; mime: string; size: number | null; content: string | null; binary: boolean }
 interface BundleInput { project: ProjectPayload | ProjectSummary; entry: string; files: ProjectFileBundleEntry[]; truncated: boolean; skippedFileCount?: number; active: ActiveContext | null; resolved?: ResolvedProject | null }
 interface ErrorWithCode { message?: string; code?: string; cause?: { code?: string } }
@@ -127,6 +127,17 @@ const SAFE_MCP_DAEMON_RETRY_CALLS = new Set([
   'read_resource',
   'search_files',
 ]);
+const MCP_REASONING_OPTIONS = [
+  'default',
+  'none',
+  'minimal',
+  'low',
+  'medium',
+  'high',
+  'xhigh',
+  'max',
+  'ultra',
+] as const;
 
 function normalizeDaemonUrl(value: string | URL): string {
   return String(value).replace(/\/$/, '');
@@ -774,9 +785,14 @@ export const TOOL_DEFS = [
           type: 'string',
           description: 'Model id override for the run. Optional.',
         },
+        reasoning: {
+          type: 'string',
+          enum: [...MCP_REASONING_OPTIONS],
+          description: 'Reasoning effort override for the selected model. Optional.',
+        },
         serviceTier: {
           type: 'string',
-          description: "Service tier override for the selected model, e.g. 'priority' for Codex Fast. Optional.",
+          description: "Service tier override for the selected model, e.g. 'fast' for Codex Fast. Optional.",
         },
         requestId: {
           type: 'string',
@@ -2528,6 +2544,17 @@ async function startRun(
   if (typeof args.plugin === 'string' && args.plugin.length > 0) body.pluginId = args.plugin;
   if (typeof args.agent === 'string' && args.agent.length > 0) body.agentId = args.agent;
   if (typeof args.model === 'string' && args.model.length > 0) body.model = args.model;
+  if (args.reasoning !== undefined) {
+    if (
+      typeof args.reasoning !== 'string'
+      || !MCP_REASONING_OPTIONS.includes(
+        args.reasoning as (typeof MCP_REASONING_OPTIONS)[number],
+      )
+    ) {
+      throw new Error('reasoning must be a supported reasoning effort');
+    }
+    body.reasoning = args.reasoning;
+  }
   if (typeof args.serviceTier === 'string' && args.serviceTier.length > 0) {
     body.serviceTier = args.serviceTier;
   }

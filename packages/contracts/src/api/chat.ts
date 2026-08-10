@@ -351,6 +351,7 @@ export interface McpRunCreateRequest {
   skillId?: string;
   pluginId?: string;
   model?: string;
+  reasoning?: string;
   serviceTier?: string;
   pluginInputs?: Record<string, unknown>;
   mediaExecution?: MediaExecutionPolicy;
@@ -602,7 +603,11 @@ export interface ChatRunExecutionDiagnostics {
     agentId: ChatRunDiagnosticValue<string>;
     provider: ChatRunDiagnosticValue<string>;
     requestedModel: ChatRunDiagnosticValue<string>;
+    requestedReasoning: ChatRunDiagnosticValue<string>;
+    requestedServiceTier: ChatRunDiagnosticValue<string>;
     resolvedModel: ChatRunDiagnosticValue<string>;
+    resolvedReasoning: ChatRunDiagnosticValue<string>;
+    resolvedServiceTier: ChatRunDiagnosticValue<string>;
     reasoning: ChatRunDiagnosticValue<string>;
     agentCliVersion: ChatRunDiagnosticValue<string>;
   };

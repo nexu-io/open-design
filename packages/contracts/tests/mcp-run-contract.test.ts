@@ -15,14 +15,16 @@ describe('McpRunCreateRequest contract', () => {
       projectId: 'proj-2',
       message: 'Build a pitch deck',
       agentId: 'claude',
-      model: 'gpt-5.5',
-      serviceTier: 'priority',
+      model: 'gpt-5.6-sol',
+      reasoning: 'xhigh',
+      serviceTier: 'fast',
     };
     expect(full.projectId).toBe('proj-2');
     expect(full.message).toBe('Build a pitch deck');
     expect(full.agentId).toBe('claude');
-    expect(full.model).toBe('gpt-5.5');
-    expect(full.serviceTier).toBe('priority');
+    expect(full.model).toBe('gpt-5.6-sol');
+    expect(full.reasoning).toBe('xhigh');
+    expect(full.serviceTier).toBe('fast');
   });
 
   it('accepts projectId + message with agentId omitted (daemon resolves default)', () => {

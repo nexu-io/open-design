@@ -6,6 +6,44 @@ import { codexNeedsDangerFullAccessSandbox } from '../../src/runtimes/defs/codex
 import { isKnownServiceTier } from '../../src/runtimes/models.js';
 import { readLocalAgentProfileDefs } from '../../src/runtimes/registry.js';
 
+interface CliFixtureResponse {
+  args: string[];
+  stdout?: string;
+  exitCode?: number;
+}
+
+function writeCliFixture(
+  dir: string,
+  name: string,
+  responses: CliFixtureResponse[],
+  defaultExitCode = 0,
+): string {
+  const scriptPath = join(dir, `${name}-fixture.cjs`);
+  writeFileSync(
+    scriptPath,
+    `const responses = ${JSON.stringify(responses)};\n`
+      + 'const args = process.argv.slice(2);\n'
+      + 'const response = responses.find((candidate) => candidate.args.length === args.length && candidate.args.every((value, index) => value === args[index]));\n'
+      + `if (!response) process.exit(${defaultExitCode});\n`
+      + "if (response.stdout) process.stdout.write(response.stdout.endsWith('\\n') ? response.stdout : `${response.stdout}\\n`);\n"
+      + 'process.exit(response.exitCode ?? 0);\n',
+  );
+  const launcherPath = join(dir, process.platform === 'win32' ? `${name}.cmd` : name);
+  if (process.platform === 'win32') {
+    writeFileSync(
+      launcherPath,
+      `@echo off\r\n"${process.execPath}" "${scriptPath}" %*\r\nexit /b %ERRORLEVEL%\r\n`,
+    );
+  } else {
+    writeFileSync(
+      launcherPath,
+      `#!/bin/sh\nexec "${process.execPath}" "${scriptPath}" "$@"\n`,
+    );
+    chmodSync(launcherPath, 0o755);
+  }
+  return launcherPath;
+}
+
 test('AGENT_DEFS ids are unique', () => {
   const ids = AGENT_DEFS.map((a) => a.id);
   const dupes = ids.filter((id, i) => ids.indexOf(id) !== i);
@@ -333,6 +371,8 @@ test('codex args keep plugins enabled when OD_CODEX_DISABLE_PLUGINS is not 1', (
 test('codex model picker includes current OpenAI choices in priority order', async () => {
   const expectedModels = [
     'default',
+    'gpt-5.6-sol',
+    'gpt-5.6-terra',
     'gpt-5.5',
     'gpt-5.4',
     'gpt-5.4-mini',
@@ -348,7 +388,7 @@ test('codex model picker includes current OpenAI choices in priority order', asy
   assert.deepEqual(codex.fallbackModels.map((m) => m.id), expectedModels);
   assert.deepEqual(
     codex.fallbackModels.find((m) => m.id === 'gpt-5.5')?.serviceTierOptions,
-    [{ id: 'priority', label: 'Fast' }],
+    [{ id: 'fast', label: 'Fast' }],
   );
   assert.ok(codex.reasoningOptions, 'codex must define reasoningOptions');
   assert.deepEqual(codex.reasoningOptions.map((o) => o.id), [
@@ -359,6 +399,8 @@ test('codex model picker includes current OpenAI choices in priority order', asy
     'medium',
     'high',
     'xhigh',
+    'max',
+    'ultra',
   ]);
 
   const args = codex.buildArgs(
@@ -376,23 +418,20 @@ test('codex model picker includes current OpenAI choices in priority order', asy
     '',
     [],
     [],
-    { model: 'gpt-5.5', serviceTier: 'priority' },
+    { model: 'gpt-5.5', serviceTier: 'fast' },
     { cwd: '/tmp/od-project' },
   );
-  assert.ok(fastArgs.includes('service_tier="priority"'));
+  assert.ok(fastArgs.includes('service_tier="fast"'));
 
   const dir = mkdtempSync(join(tmpdir(), 'od-agents-codex-models-'));
   try {
     await withEnvSnapshot(['PATH', 'OD_AGENT_HOME', 'CODEX_BIN'], async () => {
-      const codexBin = join(dir, 'codex');
-      writeFileSync(
-        codexBin,
-        '#!/bin/sh\nif [ "$1" = "--version" ]; then echo "codex 1.0.0"; exit 0; fi\nexit 0\n',
-      );
-      chmodSync(codexBin, 0o755);
+      const codexBin = writeCliFixture(dir, 'codex', [
+        { args: ['--version'], stdout: 'codex 1.0.0' },
+      ]);
       process.env.OD_AGENT_HOME = dir;
       process.env.PATH = dir;
-      delete process.env.CODEX_BIN;
+      process.env.CODEX_BIN = codexBin;
 
       const agents = await detectAgents();
       const detected = agents.find((agent) => agent.id === 'codex');
@@ -416,6 +455,10 @@ test('codex derives service tiers from live speed tiers when service_tiers is ab
         display_name: 'GPT 5.5',
         visibility: 'list',
         additional_speed_tiers: ['fast'],
+        supported_reasoning_levels: [
+          { effort: 'low' },
+          { effort: 'xhigh' },
+        ],
       },
     ],
   }));
@@ -426,7 +469,8 @@ test('codex derives service tiers from live speed tiers when service_tiers is ab
       id: 'gpt-5.5',
       label: 'GPT 5.5',
       additionalSpeedTiers: ['fast'],
-      serviceTierOptions: [{ id: 'priority', label: 'Fast' }],
+      serviceTierOptions: [{ id: 'fast', label: 'Fast' }],
+      supportedReasoningLevels: ['low', 'xhigh'],
     },
   ]);
 });
@@ -460,34 +504,28 @@ test('codex preserves explicit live service tiers from debug models JSON', () =>
   ]);
 });
 
-test('codex live model metadata falls back to static service tiers', async () => {
+test('codex live model metadata does not inherit an unreported static service tier', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'od-agents-codex-live-tier-'));
   try {
     await withEnvSnapshot(['PATH', 'OD_AGENT_HOME', 'CODEX_BIN'], async () => {
-      const codexBin = join(dir, 'codex');
-      writeFileSync(
-        codexBin,
-        `#!/bin/sh
-if [ "$1" = "--version" ]; then echo "codex-cli 9.9.9"; exit 0; fi
-if [ "$1" = "debug" ] && [ "$2" = "models" ]; then
-  printf '%s\\n' '{"models":[{"slug":"gpt-5.5","display_name":"GPT 5.5","visibility":"list"}]}'
-  exit 0
-fi
-if [ "$1" = "login" ] && [ "$2" = "status" ]; then echo "Logged in using ChatGPT"; exit 0; fi
-exit 2
-`,
-      );
-      chmodSync(codexBin, 0o755);
+      const codexBin = writeCliFixture(dir, 'codex', [
+        { args: ['--version'], stdout: 'codex-cli 9.9.9' },
+        {
+          args: ['debug', 'models'],
+          stdout: '{"models":[{"slug":"gpt-5.5","display_name":"GPT 5.5","visibility":"list"}]}',
+        },
+        { args: ['login', 'status'], stdout: 'Logged in using ChatGPT' },
+      ], 2);
       process.env.OD_AGENT_HOME = dir;
       process.env.PATH = dir;
-      delete process.env.CODEX_BIN;
+      process.env.CODEX_BIN = codexBin;
 
       const agents = await detectAgents();
       const detected = agents.find((agent) => agent.id === 'codex');
       const model = detected?.models.find((m: { id: string }) => m.id === 'gpt-5.5');
 
-      assert.deepEqual(model?.serviceTierOptions, [{ id: 'priority', label: 'Fast' }]);
-      assert.equal(isKnownServiceTier(codex, 'gpt-5.5', 'priority'), true);
+      assert.equal(model?.serviceTierOptions, undefined);
+      assert.equal(isKnownServiceTier(codex, 'gpt-5.5', 'fast'), false);
     });
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -503,20 +541,14 @@ test('claude probes auth status so rescans reflect CLI auth changes', async () =
   const dir = mkdtempSync(join(tmpdir(), 'od-agents-claude-auth-'));
   try {
     await withEnvSnapshot(['PATH', 'OD_AGENT_HOME', 'CLAUDE_BIN'], async () => {
-      const claudeBin = join(dir, 'claude');
-      writeFileSync(
-        claudeBin,
-        `#!/bin/sh
-if [ "$1" = "--version" ]; then echo "2.1.168 (Claude Code)"; exit 0; fi
-if [ "$1" = "-p" ] && [ "$2" = "--help" ]; then echo "--include-partial-messages --add-dir"; exit 0; fi
-if [ "$1" = "auth" ] && [ "$2" = "status" ]; then echo '{"authenticated":true,"source":"claude.ai"}'; exit 0; fi
-exit 0
-`,
-      );
-      chmodSync(claudeBin, 0o755);
+      const claudeBin = writeCliFixture(dir, 'claude', [
+        { args: ['--version'], stdout: '2.1.168 (Claude Code)' },
+        { args: ['-p', '--help'], stdout: '--include-partial-messages --add-dir' },
+        { args: ['auth', 'status'], stdout: '{"authenticated":true,"source":"claude.ai"}' },
+      ]);
       process.env.OD_AGENT_HOME = dir;
       process.env.PATH = dir;
-      delete process.env.CLAUDE_BIN;
+      process.env.CLAUDE_BIN = claudeBin;
 
       const agents = await detectAgents();
       const detected = agents.find((agent) => agent.id === 'claude');
@@ -534,21 +566,15 @@ test('claude API key env satisfies auth probe without requiring local login', as
   const dir = mkdtempSync(join(tmpdir(), 'od-agents-claude-api-key-auth-'));
   try {
     await withEnvSnapshot(['PATH', 'OD_AGENT_HOME', 'CLAUDE_BIN', 'ANTHROPIC_API_KEY'], async () => {
-      const claudeBin = join(dir, 'claude');
-      writeFileSync(
-        claudeBin,
-        `#!/bin/sh
-if [ "$1" = "--version" ]; then echo "2.1.168 (Claude Code)"; exit 0; fi
-if [ "$1" = "-p" ] && [ "$2" = "--help" ]; then echo "--include-partial-messages --add-dir"; exit 0; fi
-if [ "$1" = "auth" ] && [ "$2" = "status" ]; then echo '{"authenticated":false}'; exit 1; fi
-exit 0
-`,
-      );
-      chmodSync(claudeBin, 0o755);
+      const claudeBin = writeCliFixture(dir, 'claude', [
+        { args: ['--version'], stdout: '2.1.168 (Claude Code)' },
+        { args: ['-p', '--help'], stdout: '--include-partial-messages --add-dir' },
+        { args: ['auth', 'status'], stdout: '{"authenticated":false}', exitCode: 1 },
+      ]);
       process.env.OD_AGENT_HOME = dir;
       process.env.PATH = dir;
       process.env.ANTHROPIC_API_KEY = 'sk-anthropic';
-      delete process.env.CLAUDE_BIN;
+      process.env.CLAUDE_BIN = claudeBin;
 
       const agents = await detectAgents();
       const detected = agents.find((agent) => agent.id === 'claude');
@@ -571,19 +597,13 @@ test('codex probes login status so rescans reflect CLI auth changes', async () =
   const dir = mkdtempSync(join(tmpdir(), 'od-agents-codex-auth-'));
   try {
     await withEnvSnapshot(['PATH', 'OD_AGENT_HOME', 'CODEX_BIN'], async () => {
-      const codexBin = join(dir, 'codex');
-      writeFileSync(
-        codexBin,
-        `#!/bin/sh
-if [ "$1" = "--version" ]; then echo "codex-cli 9.9.9"; exit 0; fi
-if [ "$1" = "login" ] && [ "$2" = "status" ]; then echo "Logged in using ChatGPT"; exit 0; fi
-exit 0
-`,
-      );
-      chmodSync(codexBin, 0o755);
+      const codexBin = writeCliFixture(dir, 'codex', [
+        { args: ['--version'], stdout: 'codex-cli 9.9.9' },
+        { args: ['login', 'status'], stdout: 'Logged in using ChatGPT' },
+      ]);
       process.env.OD_AGENT_HOME = dir;
       process.env.PATH = dir;
-      delete process.env.CODEX_BIN;
+      process.env.CODEX_BIN = codexBin;
 
       const agents = await detectAgents();
       const detected = agents.find((agent) => agent.id === 'codex');
@@ -601,21 +621,15 @@ test('codex API key env satisfies auth probe without requiring local login', asy
   const dir = mkdtempSync(join(tmpdir(), 'od-agents-codex-api-key-auth-'));
   try {
     await withEnvSnapshot(['PATH', 'OD_AGENT_HOME', 'CODEX_BIN', 'CODEX_API_KEY'], async () => {
-      const codexBin = join(dir, 'codex');
-      writeFileSync(
-        codexBin,
-        `#!/bin/sh
-if [ "$1" = "--version" ]; then echo "codex-cli 9.9.9"; exit 0; fi
-if [ "$1" = "debug" ] && [ "$2" = "models" ]; then echo '{"models":[]}'; exit 0; fi
-if [ "$1" = "login" ] && [ "$2" = "status" ]; then echo "Not logged in"; exit 1; fi
-exit 0
-`,
-      );
-      chmodSync(codexBin, 0o755);
+      const codexBin = writeCliFixture(dir, 'codex', [
+        { args: ['--version'], stdout: 'codex-cli 9.9.9' },
+        { args: ['debug', 'models'], stdout: '{"models":[]}' },
+        { args: ['login', 'status'], stdout: 'Not logged in', exitCode: 1 },
+      ]);
       process.env.OD_AGENT_HOME = dir;
       process.env.PATH = dir;
       process.env.CODEX_API_KEY = 'sk-codex';
-      delete process.env.CODEX_BIN;
+      process.env.CODEX_BIN = codexBin;
 
       const agents = await detectAgents();
       const detected = agents.find((agent) => agent.id === 'codex');
@@ -677,7 +691,7 @@ test('codex derives service tiers from live speed tiers when service_tiers is ab
       id: 'gpt-5.5',
       label: 'GPT-5.5',
       additionalSpeedTiers: ['fast'],
-      serviceTierOptions: [{ id: 'priority', label: 'Fast' }],
+      serviceTierOptions: [{ id: 'fast', label: 'Fast' }],
     },
   ]);
 });
@@ -736,23 +750,17 @@ test('codex detection surfaces live debug models separately from fallback models
   const dir = mkdtempSync(join(tmpdir(), 'od-agents-codex-live-models-'));
   try {
     await withEnvSnapshot(['PATH', 'OD_AGENT_HOME', 'CODEX_BIN'], async () => {
-      const codexBin = join(dir, 'codex');
-      writeFileSync(
-        codexBin,
-        `#!/bin/sh
-if [ "$1" = "--version" ]; then echo "codex-cli 9.9.9"; exit 0; fi
-if [ "$1" = "debug" ] && [ "$2" = "models" ]; then
-  printf '%s\\n' '{"models":[{"slug":"gpt-6-codex","display_name":"GPT-6 Codex","visibility":"list"}]}'
-  exit 0
-fi
-if [ "$1" = "login" ] && [ "$2" = "status" ]; then echo "Logged in using ChatGPT"; exit 0; fi
-exit 2
-`,
-      );
-      chmodSync(codexBin, 0o755);
+      const codexBin = writeCliFixture(dir, 'codex', [
+        { args: ['--version'], stdout: 'codex-cli 9.9.9' },
+        {
+          args: ['debug', 'models'],
+          stdout: '{"models":[{"slug":"gpt-6-codex","display_name":"GPT-6 Codex","visibility":"list"}]}',
+        },
+        { args: ['login', 'status'], stdout: 'Logged in using ChatGPT' },
+      ], 2);
       process.env.OD_AGENT_HOME = dir;
       process.env.PATH = dir;
-      delete process.env.CODEX_BIN;
+      process.env.CODEX_BIN = codexBin;
 
       const agents = await detectAgents();
       const detected = agents.find((agent) => agent.id === 'codex');
@@ -770,26 +778,20 @@ exit 2
   }
 });
 
-test('codex detection enriches sparse live GPT-5.5 metadata from fallback tiers', async () => {
+test('codex detection does not invent missing live GPT-5.5 compatibility metadata', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'od-agents-codex-sparse-live-models-'));
   try {
     await withEnvSnapshot(['PATH', 'OD_AGENT_HOME', 'CODEX_BIN'], async () => {
-      const codexBin = join(dir, 'codex');
-      writeFileSync(
-        codexBin,
-        `#!/bin/sh
-if [ "$1" = "--version" ]; then echo "codex-cli 9.9.9"; exit 0; fi
-if [ "$1" = "debug" ] && [ "$2" = "models" ]; then
-  printf '%s\\n' '{"models":[{"slug":"gpt-5.5","display_name":"GPT-5.5","visibility":"list"}]}'
-  exit 0
-fi
-exit 2
-`,
-      );
-      chmodSync(codexBin, 0o755);
+      const codexBin = writeCliFixture(dir, 'codex', [
+        { args: ['--version'], stdout: 'codex-cli 9.9.9' },
+        {
+          args: ['debug', 'models'],
+          stdout: '{"models":[{"slug":"gpt-5.5","display_name":"GPT-5.5","visibility":"list"}]}',
+        },
+      ], 2);
       process.env.OD_AGENT_HOME = dir;
       process.env.PATH = dir;
-      delete process.env.CODEX_BIN;
+      process.env.CODEX_BIN = codexBin;
 
       const agents = await detectAgents();
       const detected = agents.find((agent) => agent.id === 'codex');
@@ -801,10 +803,8 @@ exit 2
       assert.deepEqual(gpt55, {
         id: 'gpt-5.5',
         label: 'GPT-5.5',
-        additionalSpeedTiers: ['fast'],
-        serviceTierOptions: [{ id: 'priority', label: 'Fast' }],
       });
-      assert.equal(isKnownServiceTier(codex, 'gpt-5.5', 'priority'), true);
+      assert.equal(isKnownServiceTier(codex, 'gpt-5.5', 'fast'), false);
     });
   } finally {
     rmSync(dir, { recursive: true, force: true });

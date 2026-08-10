@@ -1,11 +1,15 @@
 import type { Server } from 'node:http';
 import { randomUUID } from 'node:crypto';
-import { access, chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { access, chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { startServer } from '../src/server.js';
+import {
+  clearRememberedLiveModels,
+  rememberLiveModels,
+} from '../src/runtimes/models.js';
 
 type StartedServer = {
   url: string;
@@ -21,6 +25,7 @@ type RunStatus = {
   exitCode?: number | null;
   failureCategory?: string | null;
   failureDetail?: string | null;
+  failureAction?: string | null;
 };
 
 const CODEX_AUTH_OR_ENDPOINT_ENV_KEYS = [
@@ -60,6 +65,7 @@ describe('Codex configured-model capability preflight', () => {
       await rm(tempDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
     }
     tempDir = null;
+    clearRememberedLiveModels('codex');
     restoreEnv(originalEnv);
   });
 
@@ -98,6 +104,88 @@ describe('Codex configured-model capability preflight', () => {
     expect(failed.failureDetail).toBe('cli_version_incompatible');
     expect(failed.exitCode).toBeNull();
     await expect(pathExists(spawnMarker)).resolves.toBe(false);
+  });
+
+  it('rejects an explicit model outside the Codex catalog before spawning', async () => {
+    const fixture = await startCodexFixture();
+    const { projectId, conversationId } = await createConversation(fixture.url);
+    const failed = await sendRunAndWait(fixture.url, projectId, conversationId, {
+      model: 'gpt-unsupported-future',
+    });
+
+    expect(failed).toMatchObject({
+      status: 'failed',
+      errorCode: 'MODEL_UNAVAILABLE',
+      failureCategory: 'model_unavailable',
+    });
+    await expect(pathExists(fixture.spawnMarker)).resolves.toBe(false);
+  });
+
+  it('fails closed when live compatibility cannot prove explicit Codex settings', async () => {
+    const fixture = await startCodexFixture({ seedCatalog: false });
+    const { projectId, conversationId } = await createConversation(fixture.url);
+    const failed = await sendRunAndWait(fixture.url, projectId, conversationId, {
+      model: 'gpt-5.6-sol',
+      reasoning: 'xhigh',
+    });
+
+    expect(failed).toMatchObject({
+      status: 'failed',
+      errorCode: 'MODEL_UNAVAILABLE',
+      failureCategory: 'model_unavailable',
+      failureAction: 'upgrade',
+    });
+    await expect(pathExists(fixture.spawnMarker)).resolves.toBe(false);
+  });
+
+  it('rejects an unsupported explicit reasoning level before spawning', async () => {
+    const fixture = await startCodexFixture();
+    const { projectId, conversationId } = await createConversation(fixture.url);
+    const failed = await sendRunAndWait(fixture.url, projectId, conversationId, {
+      model: 'gpt-5.6-sol',
+      reasoning: 'minimal',
+    });
+
+    expect(failed).toMatchObject({
+      status: 'failed',
+      errorCode: 'MODEL_UNAVAILABLE',
+      failureCategory: 'model_unavailable',
+    });
+    await expect(pathExists(fixture.spawnMarker)).resolves.toBe(false);
+  });
+
+  it('rejects an unsupported tier without switching the explicit Codex model', async () => {
+    const fixture = await startCodexFixture();
+    const { projectId, conversationId } = await createConversation(fixture.url);
+    const failed = await sendRunAndWait(fixture.url, projectId, conversationId, {
+      model: 'gpt-5.1',
+      serviceTier: 'fast',
+    });
+
+    expect(failed).toMatchObject({
+      status: 'failed',
+      errorCode: 'MODEL_UNAVAILABLE',
+      failureCategory: 'model_unavailable',
+    });
+    expect(failed.error).toContain("'gpt-5.1'");
+    await expect(pathExists(fixture.spawnMarker)).resolves.toBe(false);
+  });
+
+  it('launches the exact live-catalog model, reasoning, and service tier unchanged', async () => {
+    const fixture = await startCodexFixture();
+    const { projectId, conversationId } = await createConversation(fixture.url);
+    const finished = await sendRunAndWait(fixture.url, projectId, conversationId, {
+      model: 'gpt-5.6-sol',
+      reasoning: 'xhigh',
+      serviceTier: 'fast',
+    });
+
+    expect(finished.status).toBe('succeeded');
+    const args = JSON.parse(await readFile(fixture.spawnMarker, 'utf8')) as string[];
+    expect(args).toContain('gpt-5.6-sol');
+    expect(args).toContain('model_reasoning_effort="xhigh"');
+    expect(args).toContain('service_tier="fast"');
+    expect(args).not.toContain('gpt-5.5');
   });
 
   it('continues to Codex exec at the known-compatible version without consulting a model catalog', async () => {
@@ -186,6 +274,43 @@ describe('Codex configured-model capability preflight', () => {
     expect(canceled.exitCode).toBeNull();
     await expect(pathExists(spawnMarker)).resolves.toBe(false);
   });
+
+  async function startCodexFixture(
+    options: { seedCatalog?: boolean } = {},
+  ): Promise<StartedServer & { spawnMarker: string }> {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), 'od-codex-selection-preflight-'));
+    const codexHome = path.join(tempDir, 'codex-home');
+    const spawnMarker = path.join(tempDir, 'codex-exec-spawned');
+    const fakeCodex = await writeFakeCodex(tempDir, spawnMarker, {
+      version: 'codex-cli 0.143.0',
+      spawnSucceeds: true,
+    });
+    await mkdir(codexHome, { recursive: true });
+    isolateExternalProcessEnv();
+    started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
+    await putConfig(started.url, {
+      agentId: 'codex',
+      agentCliEnv: { codex: codexTestEnv(fakeCodex, codexHome) },
+      telemetry: { metrics: false, content: false, artifactManifest: false },
+      privacyDecisionAt: Date.now(),
+    });
+    if (options.seedCatalog !== false) rememberLiveModels('codex', [
+      { id: 'default', label: 'Default (CLI config)' },
+      {
+        id: 'gpt-5.6-sol',
+        label: 'gpt-5.6-sol',
+        supportedReasoningLevels: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
+        serviceTierOptions: [{ id: 'fast', label: 'Fast' }],
+      },
+      {
+        id: 'gpt-5.1',
+        label: 'gpt-5.1',
+        supportedReasoningLevels: ['none', 'minimal', 'low', 'medium', 'high'],
+      },
+    ]);
+    else clearRememberedLiveModels('codex');
+    return { ...started, spawnMarker };
+  }
 });
 
 function snapshotEnv(): EnvSnapshot {
@@ -228,6 +353,7 @@ async function writeFakeCodex(
     versionProbeMarker?: string;
     loginProbeMarker?: string;
     spawnSucceeds?: boolean;
+    models?: Array<Record<string, unknown>>;
   } = {},
 ): Promise<string> {
   const script = path.join(dir, 'fake-codex.cjs');
@@ -244,6 +370,36 @@ if (args.includes('--version')) {
     console.log(${JSON.stringify(options.version ?? 'codex-cli 0.142.5')});
     process.exit(0);
   }, ${JSON.stringify(options.versionDelayMs ?? 0)});
+} else if (args[0] === 'debug' && args[1] === 'models') {
+  console.log(JSON.stringify({ models: ${JSON.stringify(options.models ?? [
+    {
+      slug: 'gpt-5.6-sol',
+      display_name: 'gpt-5.6-sol',
+      visibility: 'list',
+      supported_reasoning_levels: [
+        { effort: 'low' },
+        { effort: 'medium' },
+        { effort: 'high' },
+        { effort: 'xhigh' },
+        { effort: 'max' },
+        { effort: 'ultra' },
+      ],
+      additional_speed_tiers: ['fast'],
+    },
+    {
+      slug: 'gpt-5.1',
+      display_name: 'gpt-5.1',
+      visibility: 'list',
+      supported_reasoning_levels: [
+        { effort: 'none' },
+        { effort: 'minimal' },
+        { effort: 'low' },
+        { effort: 'medium' },
+        { effort: 'high' },
+      ],
+    },
+  ])} }));
+  process.exit(0);
 } else if (args[0] === 'login' && args[1] === 'status') {
   ${options.loginProbeMarker
     ? `fs.writeFileSync(${JSON.stringify(options.loginProbeMarker)}, '1');`
@@ -329,8 +485,9 @@ async function sendRunAndWait(
   url: string,
   projectId: string,
   conversationId: string,
+  options: { model?: string; reasoning?: string; serviceTier?: string } = {},
 ): Promise<RunStatus> {
-  const runId = await startRun(url, projectId, conversationId);
+  const runId = await startRun(url, projectId, conversationId, options);
   return await waitForRun(url, runId);
 }
 
@@ -338,6 +495,7 @@ async function startRun(
   url: string,
   projectId: string,
   conversationId: string,
+  options: { model?: string; reasoning?: string; serviceTier?: string } = {},
 ): Promise<string> {
   const response = await fetch(`${url}/api/runs`, {
     method: 'POST',
@@ -348,7 +506,9 @@ async function startRun(
       assistantMessageId: `assistant_codex_preflight_${randomUUID()}`,
       clientRequestId: `client_codex_preflight_${randomUUID()}`,
       agentId: 'codex',
-      model: 'default',
+      model: options.model ?? 'default',
+      ...(options.reasoning ? { reasoning: options.reasoning } : {}),
+      ...(options.serviceTier ? { serviceTier: options.serviceTier } : {}),
       message: 'Create a small text artifact.',
       currentPrompt: 'Create a small text artifact.',
     }),

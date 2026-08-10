@@ -790,52 +790,36 @@ test('kilo fetchModels falls back to fallbackModels when detection fails', async
   assert.equal(kilo.fallbackModels.length, 1);
 });
 
-// ---- reasoning-effort clamp ------------------------------------------------
-// Drives clampCodexReasoning through the public buildArgs surface so the
-// helper stays non-exported. The wire-level `-c model_reasoning_effort="..."`
-// flag is what the codex CLI (and ultimately OpenAI) actually sees.
+// ---- reasoning-effort compatibility ---------------------------------------
 
-test('codex buildArgs clamps reasoning effort per model', () => {
-  const cases: Array<[string | undefined, string, string]> = [
-    // [model, reasoning, expected wire-level effort]
-    // gpt-5.5 family (and unknown / 'default' which we treat as 5.5):
-    // minimal -> low, others pass through.
-    [undefined, 'minimal', 'low'],
-    ['default', 'minimal', 'low'],
-    ['gpt-5.2', 'minimal', 'low'],
-    ['gpt-5.3', 'minimal', 'low'],
-    ['gpt-5.4', 'minimal', 'low'],
-    ['gpt-5.5', 'minimal', 'low'],
-    ['gpt-5.5', 'low', 'low'],
-    ['gpt-5.5', 'medium', 'medium'],
-    ['gpt-5.5', 'high', 'high'],
-    ['vendor/gpt-5.5-foo', 'minimal', 'low'], // path-style id
-    // gpt-5.1: xhigh isn't supported, others pass through.
-    ['gpt-5.1', 'xhigh', 'high'],
-    ['gpt-5.1', 'high', 'high'],
-    // gpt-5.1-codex-mini: caps at medium / high only.
-    ['gpt-5.1-codex-mini', 'minimal', 'medium'],
-    ['gpt-5.1-codex-mini', 'low', 'medium'],
-    ['gpt-5.1-codex-mini', 'medium', 'medium'],
-    ['gpt-5.1-codex-mini', 'high', 'high'],
-    ['gpt-5.1-codex-mini', 'xhigh', 'high'],
-    // Unknown / future families: pass through; let the API surface its error
-    // as the signal a new rule belongs in clampCodexReasoning.
-    ['gpt-6', 'minimal', 'minimal'],
-  ];
-  for (const [model, reasoning, expected] of cases) {
+test('codex buildArgs preserves supported reasoning effort exactly', () => {
+  for (const reasoning of ['xhigh', 'max', 'ultra']) {
     const args = codex.buildArgs(
       '',
       [],
       [],
-      { ...(model === undefined ? {} : { model }), reasoning },
+      { model: 'gpt-5.6-sol', reasoning },
       { cwd: '/tmp/od-project' },
     );
-    assert.ok(
-      args.includes(`model_reasoning_effort="${expected}"`),
-      `(model=${model ?? '<none>'}, reasoning=${reasoning}) → expected ${expected}; args=${JSON.stringify(args)}`,
-    );
+    assert.ok(args.includes(`model_reasoning_effort="${reasoning}"`));
   }
+});
+
+test('codex buildArgs rejects unsupported effort instead of clamping it', () => {
+  assert.throws(() => codex.buildArgs(
+    '',
+    [],
+    [],
+    { model: 'gpt-5.1', reasoning: 'xhigh' },
+    { cwd: '/tmp/od-project' },
+  ), /does not support reasoning effort 'xhigh'/u);
+  assert.throws(() => codex.buildArgs(
+    '',
+    [],
+    [],
+    { model: 'gpt-5.5', reasoning: 'minimal' },
+    { cwd: '/tmp/od-project' },
+  ), /does not support reasoning effort 'minimal'/u);
 });
 
 test('codex buildArgs omits model_reasoning_effort when reasoning is "default"', () => {

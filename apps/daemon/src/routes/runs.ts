@@ -41,6 +41,7 @@ import {
 import {
   codexSessionIdFromRunEvents,
   readCodexRolloutFirstCall,
+  type CodexFirstCallUsage,
 } from '../codex-rollout-usage.js';
 import type { ConnectorService } from '../connectors/service.js';
 import {
@@ -327,6 +328,12 @@ interface ChatRun {
   deliverableArtifactKind?: ChatRunStatusResponse['deliverableArtifactKind'];
   analyticsTelemetry?: RunTelemetryTimestamps;
   resolvedModelId?: string | null;
+  executedModelId?: string | null;
+  executedReasoning?: string | null;
+  executedServiceTier?: string | null;
+  executionEvidenceSource?: string | null;
+  reasoning?: string | null;
+  serviceTier?: string | null;
   preflightAgentCliVersion?: string | null;
   // E-lite root-cause telemetry read at run_finished. `stdinBackpressure`: the
   // prompt write to child stdin was queued (pipe buffer full). `lastAgentActivityAt`:
@@ -408,6 +415,12 @@ interface ChatRunService {
     insertId: string;
   }): void;
   markAnalyticsCompleted?(run: ChatRun): void;
+  setExecutionEvidence?(run: ChatRun, evidence: {
+    model?: string;
+    reasoning?: string;
+    serviceTier?: string;
+    source: 'codex_rollout_turn_context';
+  }): void;
   setDeliverableValidation?(
     run: ChatRun,
     result: RunDeliverableValidationResult,
@@ -895,6 +908,48 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     pinAssistantMessageOnRunCreate,
     reconcileAssistantMessageOnRunEnd,
   } = ctx.messages;
+
+  async function readCodexExecutionEvidence(
+    run: ChatRun,
+    appConfig?: Record<string, unknown>,
+  ): Promise<CodexFirstCallUsage | null> {
+    if (run.agentId !== 'codex') return null;
+    try {
+      const sessionId = codexSessionIdFromRunEvents(run.events);
+      const config = appConfig ?? await readAppConfig(RUNTIME_DATA_DIR);
+      const codexHome = spawnEnvForAgent(
+        'codex',
+        { ...process.env, OD_DATA_DIR: RUNTIME_DATA_DIR },
+        agentCliEnvForAgent(
+          (config as { agentCliEnv?: AgentCliEnv }).agentCliEnv,
+          'codex',
+        ),
+      ).CODEX_HOME;
+      return await readCodexRolloutFirstCall({ codexHome, sessionId });
+    } catch {
+      return null;
+    }
+  }
+
+  function persistCodexExecutionEvidence(
+    run: ChatRun,
+    evidence: Pick<
+      CodexFirstCallUsage,
+      'resolved_model_id' | 'resolved_reasoning_effort' | 'resolved_service_tier'
+    > | null,
+  ): void {
+    if (!evidence) return;
+    design.runs.setExecutionEvidence?.(run, {
+      ...(evidence.resolved_model_id ? { model: evidence.resolved_model_id } : {}),
+      ...(evidence.resolved_reasoning_effort
+        ? { reasoning: evidence.resolved_reasoning_effort }
+        : {}),
+      ...(evidence.resolved_service_tier
+        ? { serviceTier: evidence.resolved_service_tier }
+        : {}),
+      source: 'codex_rollout_turn_context',
+    });
+  }
 
   /** Authorize every bound run mutation before plugin or snapshot resolution. */
   async function authorizeRunProjectBeforePluginResolution(
@@ -2223,22 +2278,19 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           first_call_cache_read_input_tokens?: number;
           first_call_cache_creation_input_tokens?: number;
           first_call_cache_hit_ratio?: number;
+          resolved_model_id?: string;
+          resolved_reasoning_effort?: string;
+          resolved_service_tier?: string;
         } | null> => {
           if (run.agentId === 'codex') {
             // Best-effort: a throw anywhere here (env resolution, rollout read)
             // must degrade to "no codex first-call fields", never bubble to the
             // outer run_finished .catch and drop the whole completion event.
             try {
-              const sessionId = codexSessionIdFromRunEvents(run.events);
-              const codexHome = spawnEnvForAgent(
-                'codex',
-                { ...process.env, OD_DATA_DIR: RUNTIME_DATA_DIR },
-                agentCliEnvForAgent(
-                  (appCfgAtFinish as { agentCliEnv?: AgentCliEnv }).agentCliEnv,
-                  'codex',
-                ),
-              ).CODEX_HOME;
-              const codexUsage = await readCodexRolloutFirstCall({ codexHome, sessionId });
+              const codexUsage = await readCodexExecutionEvidence(
+                run,
+                appCfgAtFinish as Record<string, unknown>,
+              );
               return codexUsage
                 ? {
                     ...codexUsage,
@@ -2276,6 +2328,9 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
               : {}),
           };
         })();
+        if (run.agentId === 'codex') {
+          persistCodexExecutionEvidence(run, firstCallUsage);
+        }
         const analyticsCapturedAt = Date.now();
         const timingAnalytics = summarizeRunTimingAnalytics({
           runCreatedAt: run.createdAt,
@@ -2365,11 +2420,13 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           firstTokenSeen: Boolean(run.analyticsTelemetry?.firstTokenAt),
           artifactWriteSeen: artifactCount > 0 || designSystemCreated || previewModuleCount > 0,
         });
-        const finishedModelId = hasExplicitRequestedModelForAnalytics(reqBody.model)
-          ? modelIdForTracking(reqBody.model)
-          : modelIdForTracking(
-              usageAnalytics.agent_reported_model ?? run.resolvedModelId,
-            );
+        const finishedModelId = run.agentId === 'codex'
+          ? firstCallUsage?.resolved_model_id ?? 'unconfirmed'
+          : hasExplicitRequestedModelForAnalytics(reqBody.model)
+            ? modelIdForTracking(reqBody.model)
+            : modelIdForTracking(
+                usageAnalytics.agent_reported_model ?? run.resolvedModelId,
+              );
         const runtimeVersions = getDetectedRuntimeVersions(run.agentId);
         const agentCliVersion =
           run.preflightAgentCliVersion ?? runtimeVersions?.agentCliVersion;
@@ -2415,6 +2472,20 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
             result,
             ...(activationMilestones ? { $set_once: activationMilestones } : {}),
             model_id: finishedModelId,
+            ...(run.agentId === 'codex'
+              ? {
+                  model_evidence_source: firstCallUsage?.resolved_model_id
+                    ? 'codex_rollout_turn_context'
+                    : 'unconfirmed',
+                  requested_model_id: modelIdForTracking(
+                    typeof reqBody.model === 'string' ? reqBody.model : null,
+                  ),
+                  requested_reasoning_effort:
+                    typeof reqBody.reasoning === 'string' ? reqBody.reasoning : 'default',
+                  requested_service_tier:
+                    typeof reqBody.serviceTier === 'string' ? reqBody.serviceTier : 'default',
+                }
+              : {}),
             artifact_count: artifactCount,
             ...(run.externalPluginAnalytics
               ? {
@@ -2791,6 +2862,9 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     const run = design.runs.get(runId);
     if (!run) return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
     if (!await authorizeRunProject(req, res, run, { mode: 'read' })) return;
+    if (design.runs.isTerminal(run.status) && run.agentId === 'codex') {
+      persistCodexExecutionEvidence(run, await readCodexExecutionEvidence(run));
+    }
     const status = design.runs.statusBody(run);
     if (!design.runs.isTerminal(run.status)) {
       res.json(status);
