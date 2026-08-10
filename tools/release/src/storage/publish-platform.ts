@@ -19,7 +19,7 @@ import {
   writeJson,
 } from "./common.ts";
 import { assertCurrentVersionReservation, versionLockObjectKey } from "./beta-version-reservation.ts";
-import { putStorageObject } from "./s3-upload.ts";
+import { getStorageObject, putStorageObject, putStorageObjectWithStatus } from "./s3-upload.ts";
 import { parseReleaseVersion, releaseChannelDescriptor } from "@open-design/release";
 
 type AssetEntry = {
@@ -44,6 +44,7 @@ type ShellBuildReport = {
   artifacts: Record<string, ShellBuildArtifact | null>;
   resolution?: {
     artifacts: Record<string, ShellRemoteArtifact>;
+    createdAt: string;
     recordUrl: string;
     state: "registered" | "reused";
   };
@@ -135,6 +136,10 @@ function readShellBuildReport(): ShellBuildReport | null {
     if (report.resolution.artifacts == null || typeof report.resolution.artifacts !== "object") {
       throw new Error("Shell build report resolution artifacts are required");
     }
+    if (
+      typeof report.resolution.createdAt !== "string"
+      || !Number.isFinite(Date.parse(report.resolution.createdAt))
+    ) throw new Error("Shell build report resolution createdAt is required");
   }
   return report as ShellBuildReport;
 }
@@ -324,6 +329,29 @@ async function upload(path: string, objectKey: string, cacheControl: string): Pr
   });
 }
 
+async function uploadImmutable(path: string, objectKey: string): Promise<void> {
+  if (!publishSideEffectsEnabled) {
+    console.log(`[dry-run:${dryRunMode || "plan"}] would upload immutable ${path} to ${objectKey}`);
+    return;
+  }
+  if (storage == null) throw new Error("storage config is required to upload immutable release assets");
+  const result = await putStorageObjectWithStatus({
+    ...storage,
+    bodyPath: path,
+    cacheControl: "public, max-age=31536000, immutable",
+    contentType: contentType(path),
+    headers: { "if-none-match": "*" },
+    objectKey,
+  });
+  if (result.ok) return;
+  if (result.status !== 412) throw new Error(`immutable release PUT failed with HTTP ${result.status}: ${result.body}`);
+  const existing = await getStorageObject({ ...storage, objectKey });
+  if (existing == null) throw new Error(`immutable release object disappeared after conflict: ${objectKey}`);
+  if (sha256Digest(path) !== `sha256:${createHash("sha256").update(existing.bytes).digest("hex")}`) {
+    throw new Error(`immutable release object conflicts: ${objectKey}`);
+  }
+}
+
 async function uploadReport(reportDirectory: string): Promise<Record<string, unknown> | null> {
   if (reportRoot.length === 0) return null;
   const files = listFiles(reportRoot);
@@ -434,6 +462,7 @@ function targetConfig(): TargetConfig {
 
 const config = targetConfig();
 const closure = closurePublication();
+const preparedShellArtifacts = { ...config.artifacts };
 if (shellBuild != null) {
   for (const [name, artifact] of Object.entries(config.artifacts)) {
     const built = shellBuild.artifacts[name];
@@ -464,12 +493,39 @@ if (shellBuild != null) {
     }
   }
 }
+
+function prepareResolvedShellFeed(): void {
+  if (shellBuild?.resolution == null || config.feed == null) return;
+  const kind = config.platform === "mac" ? "zip" : "installer";
+  const prepared = preparedShellArtifacts[kind];
+  const remote = config.artifacts[kind];
+  if (prepared == null || remote == null) throw new Error(`resolved Shell updater feed requires ${kind}`);
+  const path = join(releaseAssetsDir, prepared.name);
+  const sha512 = createHash("sha512").update(readFileSync(path)).digest("base64");
+  const quoted = (value: string): string => JSON.stringify(value);
+  writeFileSync(join(releaseAssetsDir, config.feed.name), [
+    `version: ${quoted(shellBuild.shell.version)}`,
+    "files:",
+    `  - url: ${quoted(remote.url)}`,
+    `    sha512: ${quoted(sha512)}`,
+    `    size: ${remote.size}`,
+    `path: ${quoted(remote.url)}`,
+    `sha512: ${quoted(sha512)}`,
+    `releaseDate: ${quoted(shellBuild.resolution.createdAt)}`,
+    `releaseNotes: ${quoted(`Open Design Shell ${shellBuild.shell.version}`)}`,
+  ].join("\n") + "\n", "utf8");
+}
+
+prepareResolvedShellFeed();
 if (shellBuild?.resolution == null) {
   for (const name of config.assetNames) {
     await upload(join(releaseAssetsDir, name), `${artifactPrefix}/${name}`, "public, max-age=31536000, immutable");
   }
 } else if (config.feed != null) {
-  throw new Error("resolved immutable Shell publication does not yet support updater feed artifacts");
+  await uploadImmutable(
+    join(releaseAssetsDir, config.feed.name),
+    `${artifactPrefix}/${config.feed.name}`,
+  );
 }
 if (closure != null) {
   for (const name of closure.assetNames) {

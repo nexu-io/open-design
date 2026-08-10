@@ -112,6 +112,7 @@ async function writeFixture(root: string, options: { closureVersion?: string } =
           url: "https://releases.open-design.test/beta/shells/electron/versions/0.18.0-beta.3/darwin-arm64/Open%20Design-release-beta-payload.zip",
         },
       },
+      createdAt: "2026-08-01T02:03:04.000Z",
       recordUrl: "https://releases.open-design.test/beta/shells/electron/builds/source/artifacts/darwin-arm64.json",
       state: "reused",
     },
@@ -145,11 +146,115 @@ function platformEnv(
   };
 }
 
+async function writeResolvedWindowsShellFixture(root: string): Promise<{
+  assetsRoot: string;
+  manifestRoot: string;
+  shellBuildJsonPath: string;
+}> {
+  const assetsRoot = join(root, "assets");
+  const manifestRoot = join(root, "manifests");
+  const shellBuildJsonPath = join(root, "shell-build.json");
+  const releaseVersion = "0.18.0-beta.4";
+  const shellVersion = "0.18.0-beta.3";
+  const suffix = ".unsigned";
+  const installerName = `open-design-${releaseVersion}${suffix}-win-x64-setup.exe`;
+  const payloadName = `open-design-${releaseVersion}${suffix}-win-x64-payload.7z`;
+  const portableZipName = `open-design-${releaseVersion}${suffix}-win-x64-portable.zip`;
+  const bytes = {
+    installer: Buffer.from("immutable installer"),
+    payload: Buffer.from("immutable payload"),
+    portableZip: Buffer.from("immutable portable zip"),
+  };
+  const prefix = `beta/shells/electron/versions/${shellVersion}/win32-x64`;
+  const remote = (kind: keyof typeof bytes, name: string, contentType: string) => ({
+    contentType,
+    digest: digest(bytes[kind]),
+    name,
+    objectKey: `${prefix}/${name}`,
+    size: bytes[kind].byteLength,
+    url: `https://releases.open-design.test/${prefix}/${name}`,
+  });
+  await mkdir(assetsRoot, { recursive: true });
+  await Promise.all([
+    writeFile(join(assetsRoot, installerName), bytes.installer),
+    writeFile(join(assetsRoot, `${installerName}.sha256`), "fixture\n"),
+    writeFile(join(assetsRoot, payloadName), bytes.payload),
+    writeFile(join(assetsRoot, `${payloadName}.sha256`), "fixture\n"),
+    writeFile(join(assetsRoot, portableZipName), bytes.portableZip),
+    writeFile(join(assetsRoot, `${portableZipName}.sha256`), "fixture\n"),
+    writeFile(join(assetsRoot, "latest.yml"), "stale release-scoped updater feed\n"),
+  ]);
+  await writeFile(shellBuildJsonPath, `${JSON.stringify({
+    artifacts: {
+      installer: { digest: digest(bytes.installer), path: "/fixture/setup.exe", size: bytes.installer.byteLength },
+      payload: { digest: digest(bytes.payload), path: "/fixture/payload.7z", size: bytes.payload.byteLength },
+      portableZip: { digest: digest(bytes.portableZip), path: "/fixture/portable.zip", size: bytes.portableZip.byteLength },
+    },
+    releaseVersion,
+    resolution: {
+      artifacts: {
+        installer: remote("installer", "Open Design-release-beta-win-setup.exe", "application/vnd.microsoft.portable-executable"),
+        payload: remote("payload", "Open Design-release-beta-win-payload.7z", "application/x-7z-compressed"),
+        portableZip: remote("portableZip", "Open Design-release-beta-win-portable.zip", "application/zip"),
+      },
+      createdAt: "2026-08-01T02:03:04.000Z",
+      recordUrl: "https://releases.open-design.test/beta/shells/electron/builds/source/artifacts/win32-x64.json",
+      state: "reused",
+    },
+    shell: { sourceDigest: digest("electron shell source"), type: "electron", version: shellVersion },
+  }, null, 2)}\n`);
+  return { assetsRoot, manifestRoot, shellBuildJsonPath };
+}
+
 afterEach(async () => {
   await Promise.all(temporaryRoots.splice(0).map(async (root) => await rm(root, { force: true, recursive: true })));
 });
 
 describe("Standalone Closure release publication", () => {
+  it("publishes a resolved Windows Shell feed against the immutable Shell identity", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-shell-feed-independent-"));
+    temporaryRoots.push(root);
+    const fixture = await writeResolvedWindowsShellFixture(root);
+
+    const publication = await execFileAsync(process.execPath, ["--experimental-strip-types", publishPlatformPath], {
+      cwd: workspaceRoot,
+      env: {
+        ...process.env,
+        RELEASE_ASSET_SUFFIX: ".unsigned",
+        RELEASE_ASSETS_DIR: fixture.assetsRoot,
+        RELEASE_CHANNEL: "beta",
+        RELEASE_CLOSURE_ENABLED: "false",
+        RELEASE_MANIFEST_DIR: fixture.manifestRoot,
+        RELEASE_OUTPUTS_PATH: join(fixture.manifestRoot, "outputs.json"),
+        RELEASE_PUBLIC_ORIGIN: "https://releases.open-design.test",
+        RELEASE_PUBLISH_SIDE_EFFECTS: "false",
+        RELEASE_SHELL_BUILD_JSON_PATH: fixture.shellBuildJsonPath,
+        RELEASE_SHELL_ENABLED: "true",
+        RELEASE_SIGNED: "false",
+        RELEASE_TARGET: "win_x64",
+        RELEASE_VERSION: "0.18.0-beta.4",
+        WIN_INCLUDE_ZIP: "true",
+      },
+    });
+
+    expect(publication.stdout).toContain("would upload immutable");
+    expect(publication.stdout).toContain("/latest.yml");
+    expect(publication.stdout).not.toContain("open-design-0.18.0-beta.4.unsigned-win-x64-setup.exe to");
+    const feed = await readFile(join(fixture.assetsRoot, "latest.yml"), "utf8");
+    expect(feed).toContain('version: "0.18.0-beta.3"');
+    expect(feed).toContain("/beta/shells/electron/versions/0.18.0-beta.3/win32-x64/Open Design-release-beta-win-setup.exe");
+    expect(feed).toContain('releaseDate: "2026-08-01T02:03:04.000Z"');
+    expect(feed).not.toContain("0.18.0-beta.4");
+
+    const platform = JSON.parse(await readFile(join(fixture.manifestRoot, "win_x64.json"), "utf8"));
+    expect(platform.releaseVersion).toBe("0.18.0-beta.4");
+    expect(platform.shell.version).toBe("0.18.0-beta.3");
+    expect(platform.artifacts.installer.url).toContain("/beta/shells/electron/versions/0.18.0-beta.3/");
+    expect(platform.feed.url).toBe(
+      "https://releases.open-design.test/beta/shells/electron/versions/0.18.0-beta.3/win32-x64/latest.yml",
+    );
+  });
+
   it("binds an independently versioned Shell artifact and its two digests to the release", async () => {
     const root = await mkdtemp(join(tmpdir(), "od-shell-release-independent-"));
     temporaryRoots.push(root);

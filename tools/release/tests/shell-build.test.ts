@@ -209,6 +209,7 @@ describe("immutable Shell build storage", () => {
         await registerShellBuild();
         const registered = JSON.parse(await readFile(buildPath, "utf8"));
         expect(registered.resolution.state).toBe("registered");
+        expect(Date.parse(registered.resolution.createdAt)).not.toBeNaN();
         expect(registered.resolution.artifacts.dmg.url).toBe(
           "https://releases.example/beta/shells/electron/versions/0.19.0-beta.2/darwin-arm64/Open%20Design-release-beta.dmg",
         );
@@ -226,6 +227,7 @@ describe("immutable Shell build storage", () => {
         expect(reused.releaseVersion).toBe("0.19.0-beta.3");
         expect(reused.shell.version).toBe("0.19.0-beta.2");
         expect(reused.resolution.artifacts).toEqual(registered.resolution.artifacts);
+        expect(reused.resolution.createdAt).toBe(registered.resolution.createdAt);
         expect(reused.timings).toHaveLength(1);
         expect(reused.timings[0].phase).toBe("remote-shell-materialize");
         expect(reused.timings[0].durationMs).toBeGreaterThan(0);

@@ -302,6 +302,7 @@ function createReusedBuildReport(
     releaseVersion: plan.releaseVersion,
     resolution: {
       artifacts: record.artifacts,
+      createdAt: record.createdAt,
       recordUrl: publicUrl(
         required("RELEASE_PUBLIC_ORIGIN"),
         "",
@@ -586,6 +587,7 @@ export async function registerShellBuild(): Promise<void> {
     ...build,
     resolution: {
       artifacts: committedRecord.artifacts,
+      createdAt: committedRecord.createdAt,
       recordUrl: publicUrl(publicOrigin, "", indexKey),
       state: "registered",
     },
