@@ -80,6 +80,10 @@ export function claudeAuthGuidance(): string {
   return CLAUDE_AUTH_GUIDANCE;
 }
 
+export function codexChatGptAuthGuidance(): string {
+  return 'Local Codex through the official Open Design MCP route requires an existing ChatGPT/Codex login. Run `codex login`, confirm `codex login status` says `Logged in using ChatGPT`, then retry. API keys and custom providers are intentionally not accepted for this route.';
+}
+
 export function isCursorAuthFailureText(text: string): boolean {
   const value = String(text || '');
   if (!value.trim()) return false;
@@ -426,6 +430,69 @@ export async function probeAgentAuthStatus(
         message: `${def.name || def.id} authentication status could not be verified with \`${def.id} ${probe.args.join(' ')}\`.`,
         exitCode: numericExit,
         signal: childSignal,
+      },
+      stdoutText,
+      stderrText,
+    );
+  }
+}
+
+/**
+ * Probe the subscription-backed account path without honoring the generic
+ * Codex API-key/custom-provider shortcuts above. A successful process exit is
+ * insufficient: only the CLI's explicit ChatGPT status is authoritative.
+ */
+export async function probeCodexChatGptAuthStatus(
+  def: Pick<RuntimeAgentDef, 'id' | 'name' | 'authProbe'>,
+  resolvedBin: string,
+  env: RuntimeEnv,
+): Promise<AgentAuthProbeResult | null> {
+  if (def.id !== 'codex' || !def.authProbe) return null;
+  try {
+    const { stdout, stderr } = await execAgentFile(
+      resolvedBin,
+      def.authProbe.args,
+      {
+        env,
+        timeout: def.authProbe.timeoutMs ?? 5000,
+        maxBuffer: 1024 * 1024,
+      },
+    );
+    const stdoutText = typeof stdout === 'string' ? stdout : '';
+    const stderrText = typeof stderr === 'string' ? stderr : '';
+    const output = `${stdoutText}\n${stderrText}`;
+    if (/\bLogged in using ChatGPT\b/i.test(output)) {
+      return withProbeTails(
+        { status: 'ok', exitCode: 0, signal: null },
+        stdoutText,
+        stderrText,
+      );
+    }
+    return withProbeTails(
+      {
+        status: 'missing',
+        message: codexChatGptAuthGuidance(),
+        exitCode: 0,
+        signal: null,
+      },
+      stdoutText,
+      stderrText,
+    );
+  } catch (error) {
+    const err = error as NodeJS.ErrnoException & {
+      stdout?: unknown;
+      stderr?: unknown;
+      code?: string | number;
+      signal?: string;
+    };
+    const stdoutText = typeof err.stdout === 'string' ? err.stdout : '';
+    const stderrText = typeof err.stderr === 'string' ? err.stderr : '';
+    return withProbeTails(
+      {
+        status: 'missing',
+        message: codexChatGptAuthGuidance(),
+        exitCode: typeof err.code === 'number' ? err.code : null,
+        signal: typeof err.signal === 'string' ? err.signal : null,
       },
       stdoutText,
       stderrText,

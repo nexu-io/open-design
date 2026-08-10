@@ -188,6 +188,120 @@ describe('Codex configured-model capability preflight', () => {
     expect(args).not.toContain('gpt-5.5');
   });
 
+  it('launches a future model and effort only when both are advertised by the live catalog', async () => {
+    const fixture = await startCodexFixture();
+    rememberLiveModels('codex', [
+      { id: 'default', label: 'Default (CLI config)' },
+      {
+        id: 'gpt-future',
+        label: 'GPT Future',
+        supportedReasoningLevels: ['future-deep'],
+      },
+    ]);
+    const { projectId, conversationId } = await createConversation(fixture.url);
+    const finished = await sendRunAndWait(fixture.url, projectId, conversationId, {
+      model: 'gpt-future',
+      reasoning: 'future-deep',
+    });
+
+    expect(finished.status).toBe('succeeded');
+    const args = JSON.parse(await readFile(fixture.spawnMarker, 'utf8')) as string[];
+    expect(args).toContain('gpt-future');
+    expect(args).toContain('model_reasoning_effort="future-deep"');
+  });
+
+  it('blocks ChatGPT-only Codex runs when an API key exists but ChatGPT login is absent', async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), 'od-codex-chatgpt-auth-'));
+    const codexHome = path.join(tempDir, 'codex-home');
+    const spawnMarker = path.join(tempDir, 'codex-exec-spawned');
+    const fakeCodex = await writeFakeCodex(tempDir, spawnMarker, {
+      version: 'codex-cli 0.143.0',
+      spawnSucceeds: true,
+      loginStatus: 'Not logged in',
+      loginExitCode: 1,
+    });
+    await mkdir(codexHome, { recursive: true });
+    isolateExternalProcessEnv();
+    started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
+    await putConfig(started.url, {
+      agentId: 'codex',
+      agentCliEnv: {
+        codex: {
+          ...codexTestEnv(fakeCodex, codexHome),
+          OPENAI_API_KEY: 'test-only-key',
+        },
+      },
+      telemetry: { metrics: false, content: false, artifactManifest: false },
+      privacyDecisionAt: Date.now(),
+    });
+    rememberLiveModels('codex', [
+      { id: 'default', label: 'Default (CLI config)' },
+      { id: 'gpt-5.6-sol', label: 'gpt-5.6-sol', supportedReasoningLevels: ['xhigh'] },
+    ]);
+
+    const { projectId, conversationId } = await createConversation(started.url);
+    const failed = await sendRunAndWait(started.url, projectId, conversationId, {
+      model: 'gpt-5.6-sol',
+      reasoning: 'xhigh',
+      codexAuthMode: 'chatgpt',
+    });
+
+    expect(failed).toMatchObject({
+      status: 'failed',
+      errorCode: 'AGENT_AUTH_REQUIRED',
+    });
+    await expect(pathExists(spawnMarker)).resolves.toBe(false);
+  });
+
+  it('blocks ChatGPT-only Codex runs when a custom provider is selected', async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), 'od-codex-chatgpt-provider-'));
+    const codexHome = path.join(tempDir, 'codex-home');
+    const spawnMarker = path.join(tempDir, 'codex-exec-spawned');
+    const fakeCodex = await writeFakeCodex(tempDir, spawnMarker, {
+      version: 'codex-cli 0.143.0',
+      spawnSucceeds: true,
+      loginStatus: 'Logged in using ChatGPT',
+    });
+    await mkdir(codexHome, { recursive: true });
+    await writeFile(
+      path.join(codexHome, 'config.toml'),
+      [
+        'model_provider = "local-gateway"',
+        '',
+        '[model_providers.local-gateway]',
+        'base_url = "https://example.invalid/v1"',
+        '',
+      ].join('\n'),
+      'utf8',
+    );
+    isolateExternalProcessEnv();
+    started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
+    await putConfig(started.url, {
+      agentId: 'codex',
+      agentCliEnv: { codex: codexTestEnv(fakeCodex, codexHome) },
+      telemetry: { metrics: false, content: false, artifactManifest: false },
+      privacyDecisionAt: Date.now(),
+    });
+    rememberLiveModels('codex', [
+      { id: 'default', label: 'Default (CLI config)' },
+      { id: 'gpt-5.6-sol', label: 'gpt-5.6-sol', supportedReasoningLevels: ['xhigh'] },
+    ]);
+
+    const { projectId, conversationId } = await createConversation(started.url);
+    const failed = await sendRunAndWait(started.url, projectId, conversationId, {
+      model: 'gpt-5.6-sol',
+      reasoning: 'xhigh',
+      codexAuthMode: 'chatgpt',
+    });
+
+    expect(failed).toMatchObject({
+      status: 'failed',
+      errorCode: 'AGENT_AUTH_REQUIRED',
+      failureDetail: 'custom_provider_not_allowed',
+    });
+    await expect(pathExists(spawnMarker)).resolves.toBe(false);
+  });
+
   it('continues to Codex exec at the known-compatible version without consulting a model catalog', async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), 'od-codex-model-compatible-'));
     const codexHome = path.join(tempDir, 'codex-home');
@@ -354,6 +468,8 @@ async function writeFakeCodex(
     loginProbeMarker?: string;
     spawnSucceeds?: boolean;
     models?: Array<Record<string, unknown>>;
+    loginStatus?: string;
+    loginExitCode?: number;
   } = {},
 ): Promise<string> {
   const script = path.join(dir, 'fake-codex.cjs');
@@ -404,8 +520,8 @@ if (args.includes('--version')) {
   ${options.loginProbeMarker
     ? `fs.writeFileSync(${JSON.stringify(options.loginProbeMarker)}, '1');`
     : ''}
-  console.log('Logged in using ChatGPT');
-  process.exit(0);
+  console.log(${JSON.stringify(options.loginStatus ?? 'Logged in using ChatGPT')});
+  process.exit(${JSON.stringify(options.loginExitCode ?? 0)});
 } else {
   fs.writeFileSync(${JSON.stringify(spawnMarker)}, JSON.stringify(args));
   if (${JSON.stringify(options.spawnSucceeds === true)}) {
@@ -485,7 +601,7 @@ async function sendRunAndWait(
   url: string,
   projectId: string,
   conversationId: string,
-  options: { model?: string; reasoning?: string; serviceTier?: string } = {},
+  options: { model?: string; reasoning?: string; serviceTier?: string; codexAuthMode?: 'chatgpt' } = {},
 ): Promise<RunStatus> {
   const runId = await startRun(url, projectId, conversationId, options);
   return await waitForRun(url, runId);
@@ -495,7 +611,7 @@ async function startRun(
   url: string,
   projectId: string,
   conversationId: string,
-  options: { model?: string; reasoning?: string; serviceTier?: string } = {},
+  options: { model?: string; reasoning?: string; serviceTier?: string; codexAuthMode?: 'chatgpt' } = {},
 ): Promise<string> {
   const response = await fetch(`${url}/api/runs`, {
     method: 'POST',
@@ -509,6 +625,7 @@ async function startRun(
       model: options.model ?? 'default',
       ...(options.reasoning ? { reasoning: options.reasoning } : {}),
       ...(options.serviceTier ? { serviceTier: options.serviceTier } : {}),
+      ...(options.codexAuthMode ? { codexAuthMode: options.codexAuthMode } : {}),
       message: 'Create a small text artifact.',
       currentPrompt: 'Create a small text artifact.',
     }),

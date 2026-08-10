@@ -137,33 +137,6 @@ const CODEX_5_6_REASONING_LEVELS = [
   'ultra',
 ];
 
-function assertCodexReasoningCompatibility(
-  modelId: string | null | undefined,
-  effort: string,
-): void {
-  const raw = String(modelId ?? '').trim();
-  const id = (raw.includes('/') ? raw.split('/').pop() : raw)?.toLowerCase() ?? '';
-  let supported: readonly string[] | null = null;
-  if (id.startsWith('gpt-5.6-')) {
-    supported = CODEX_5_6_REASONING_LEVELS;
-  } else if (
-    id.startsWith('gpt-5.2')
-    || id.startsWith('gpt-5.3')
-    || id.startsWith('gpt-5.4')
-    || id.startsWith('gpt-5.5')
-    || id === 'codex-auto-review'
-  ) {
-    supported = CODEX_CURRENT_REASONING_LEVELS;
-  } else if (id === 'gpt-5.1-codex-mini') {
-    supported = ['medium', 'high'];
-  } else if (id === 'gpt-5.1') {
-    supported = ['none', 'minimal', 'low', 'medium', 'high'];
-  }
-  if (supported && !supported.includes(effort)) {
-    throw new Error(`Codex model '${raw}' does not support reasoning effort '${effort}'`);
-  }
-}
-
 export function codexNeedsDangerFullAccessSandbox(
   platform: NodeJS.Platform = process.platform,
   env: NodeJS.ProcessEnv = process.env,
@@ -325,7 +298,6 @@ export const codexAgentDef = {
         args.push('--model', options.model);
       }
       if (options.reasoning && options.reasoning !== 'default') {
-        assertCodexReasoningCompatibility(options.model, options.reasoning);
         // Codex accepts `-c key=value` config overrides; reasoning effort
         // is exposed as `model_reasoning_effort`.
         args.push('-c', `model_reasoning_effort="${options.reasoning}"`);

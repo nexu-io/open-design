@@ -9,7 +9,10 @@ import {
 } from './models.js';
 import { applyAgentLaunchEnv, resolveAgentLaunch } from './launch.js';
 import { spawnEnvForAgent } from './env.js';
-import { probeAgentAuthStatus } from './auth.js';
+import {
+  probeAgentAuthStatus,
+  probeCodexChatGptAuthStatus,
+} from './auth.js';
 import { agentCapabilities } from './capabilities.js';
 import { installMetaForAgent } from './metadata.js';
 import { resolveAmrOpenCodeExecutable } from './executables.js';
@@ -283,10 +286,22 @@ async function probe(
   // so a single agent's detection wall is max(help, models, auth) ≈ 5s rather
   // than the sum ≈ 15s. `--help` capabilities are cached on `agentCapabilities`
   // for buildArgs to consult.
-  const [caps, modelResult, auth, amrOpenCodeVersion] = await Promise.all([
+  const chatgptProbeEnv = def.id === 'codex'
+    ? spawnEnvForAgent(
+        'codex',
+        probeEnv,
+        {},
+        {},
+        { codexAuthMode: 'chatgpt' },
+      )
+    : probeEnv;
+  const [caps, modelResult, auth, chatgptAuth, amrOpenCodeVersion] = await Promise.all([
     probeCapabilities(def, launch.launchPath, probeEnv),
     fetchModels(def, launch.launchPath, probeEnv),
     probeAgentAuthStatus(def, launch.launchPath, probeEnv),
+    def.id === 'codex'
+      ? probeCodexChatGptAuthStatus(def, launch.launchPath, chatgptProbeEnv)
+      : Promise.resolve(null),
     probeAmrOpenCodeVersion(def, probeEnv),
   ]);
   const surfacedModelResult = withRememberedAmrModels(def, probeEnv, modelResult);
@@ -317,6 +332,14 @@ async function probe(
       ? {
           authStatus: auth.status,
           ...(auth.message ? { authMessage: auth.message } : {}),
+        }
+      : {}),
+    ...(chatgptAuth
+      ? {
+          chatgptAuthStatus: chatgptAuth.status,
+          ...(chatgptAuth.message
+            ? { chatgptAuthMessage: chatgptAuth.message }
+            : {}),
         }
       : {}),
     ...(authDiagnostic ? { diagnostics: [authDiagnostic] } : {}),

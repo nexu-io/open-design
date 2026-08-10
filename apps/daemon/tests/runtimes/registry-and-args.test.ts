@@ -414,6 +414,16 @@ test('codex model picker includes current OpenAI choices in priority order', asy
   assert.ok(args.includes('gpt-5.5'));
   assert.ok(args.includes('model_reasoning_effort="xhigh"'));
 
+  const futureArgs = codex.buildArgs(
+    '',
+    [],
+    [],
+    { model: 'gpt-future', reasoning: 'future-deep' },
+    { cwd: '/tmp/od-project' },
+  );
+  assert.ok(futureArgs.includes('gpt-future'));
+  assert.ok(futureArgs.includes('model_reasoning_effort="future-deep"'));
+
   const fastArgs = codex.buildArgs(
     '',
     [],
@@ -611,6 +621,7 @@ test('codex probes login status so rescans reflect CLI auth changes', async () =
       assert.ok(detected);
       assert.equal(detected.available, true);
       assert.equal(detected.authStatus, 'ok');
+      assert.equal(detected.chatgptAuthStatus, 'ok');
     });
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -637,6 +648,7 @@ test('codex API key env satisfies auth probe without requiring local login', asy
       assert.ok(detected);
       assert.equal(detected.available, true);
       assert.equal(detected.authStatus, 'ok');
+      assert.equal(detected.chatgptAuthStatus, 'missing');
     });
   } finally {
     rmSync(dir, { recursive: true, force: true });

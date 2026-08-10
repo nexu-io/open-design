@@ -1388,6 +1388,35 @@ test('spawnEnvForAgent preserves configured Codex API keys', () => {
   assert.equal(env.PATH, '/usr/bin');
 });
 
+test('spawnEnvForAgent strips API credentials and custom endpoints for ChatGPT-only Codex runs', () => {
+  const env = spawnEnvForAgent(
+    'codex',
+    {
+      OPENAI_API_KEY: 'sk-inherited',
+      CODEX_API_KEY: 'sk-codex-inherited',
+      OPENAI_BASE_URL: 'https://proxy.example.test/v1',
+      AZURE_OPENAI_API_KEY: 'azure-inherited',
+      PATH: '/usr/bin',
+    },
+    {
+      OPENAI_API_KEY: 'sk-configured',
+      CODEX_API_KEY: 'sk-codex-configured',
+      OPENAI_BASE_URL: 'https://configured.example.test/v1',
+    },
+    {},
+    {
+      codexAuthMode: 'chatgpt',
+      codexProviderEnvKey: 'AZURE_OPENAI_API_KEY',
+    },
+  );
+
+  assert.equal(env.OPENAI_API_KEY, undefined);
+  assert.equal(env.CODEX_API_KEY, undefined);
+  assert.equal(env.OPENAI_BASE_URL, undefined);
+  assert.equal(env.AZURE_OPENAI_API_KEY, undefined);
+  assert.equal(env.PATH, '/usr/bin');
+});
+
 test('spawnEnvForAgent preserves Codex API keys for non-codex adapters', () => {
   for (const agentId of ['claude', 'opencode', 'devin']) {
     const env = spawnEnvForAgent(agentId, {

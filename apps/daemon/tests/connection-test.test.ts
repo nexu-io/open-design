@@ -2673,7 +2673,7 @@ setImmediate(() => process.exit(0));
     );
   });
 
-  it('keeps service tier overrides when connection tests omit model but settings has one', async () => {
+  it('keeps literal fast service tier when connection tests omit model but settings has an exact model', async () => {
     if (!process.env.OD_DATA_DIR) {
       throw new Error('OD_DATA_DIR is required for service tier settings tests');
     }
@@ -2689,7 +2689,7 @@ setImmediate(() => process.exit(0));
 const fs = require('node:fs');
 const args = process.argv.slice(2);
 if (args[0] === 'debug' && args[1] === 'models') {
-  console.log(JSON.stringify([{ id: 'gpt-5.5', name: 'gpt-5.5', service_tiers: [{ id: 'priority', label: 'Fast' }] }]));
+  console.log(JSON.stringify([{ id: 'gpt-5.5', name: 'gpt-5.5', additional_speed_tiers: ['fast'] }]));
   process.exit(0);
 }
 if (args[0] === 'login' && args[1] === 'status') {
@@ -2707,7 +2707,7 @@ setImmediate(() => process.exit(0));
             body: JSON.stringify({
               mode: 'agent',
               agentId: 'codex',
-              serviceTier: 'priority',
+              serviceTier: 'fast',
             }),
           });
           expect(res.status).toBe(200);
@@ -2721,7 +2721,7 @@ setImmediate(() => process.exit(0));
           const args = JSON.parse(await fsp.readFile(argvFile, 'utf8')) as string[];
           expect(args).toContain('--model');
           expect(args).toContain('gpt-5.5');
-          expect(args).toContain('service_tier="priority"');
+          expect(args).toContain('service_tier="fast"');
         },
       );
     } finally {
@@ -2732,7 +2732,7 @@ setImmediate(() => process.exit(0));
     }
   });
 
-  it('keeps service tier overrides when connection tests omit model and settings has none', async () => {
+  it('rejects a Codex connection-test tier before spawn when no exact compatible model is selected', async () => {
     if (!process.env.OD_DATA_DIR) {
       throw new Error('OD_DATA_DIR is required for service tier settings tests');
     }
@@ -2746,7 +2746,7 @@ setImmediate(() => process.exit(0));
 const fs = require('node:fs');
 const args = process.argv.slice(2);
 if (args[0] === 'debug' && args[1] === 'models') {
-  console.log(JSON.stringify([{ id: 'gpt-5.5', name: 'gpt-5.5', service_tiers: [{ id: 'priority', label: 'Fast' }] }]));
+  console.log(JSON.stringify([{ id: 'gpt-5.5', name: 'gpt-5.5', additional_speed_tiers: ['fast'] }]));
   process.exit(0);
 }
 if (args[0] === 'login' && args[1] === 'status') {
@@ -2765,21 +2765,18 @@ setImmediate(() => process.exit(0));
             body: JSON.stringify({
               mode: 'agent',
               agentId: 'codex',
-              serviceTier: 'priority',
+              serviceTier: 'fast',
             }),
           });
           expect(res.status).toBe(200);
           await expect(res.json()).resolves.toMatchObject({
-            ok: true,
-            kind: 'success',
+            ok: false,
+            kind: 'not_found_model',
             agentName: 'Codex CLI',
-            model: 'gpt-5.5',
+            model: 'default',
           });
-
-          const args = JSON.parse(await fsp.readFile(argvFile, 'utf8')) as string[];
-          expect(args).toContain('--model');
-          expect(args).toContain('gpt-5.5');
-          expect(args).toContain('service_tier="priority"');
+          const probeArgs = JSON.parse(await fsp.readFile(argvFile, 'utf8')) as string[];
+          expect(probeArgs).not.toContain('exec');
         },
       );
     } finally {
@@ -4262,7 +4259,7 @@ console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_messag
     }
   });
 
-  it('drops invalid agent reasoning options before spawning an agent', async () => {
+  it('rejects unknown Codex reasoning before spawning an agent', async () => {
     const markerDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-conn-test-argv-'));
     const argvFile = path.join(markerDir, 'argv.json');
     try {
@@ -4286,15 +4283,12 @@ console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_messag
           });
           expect(res.status).toBe(200);
           await expect(res.json()).resolves.toMatchObject({
-            ok: true,
-            kind: 'success',
+            ok: false,
+            kind: 'not_found_model',
             model: 'gpt-5',
           });
 
-          const args = JSON.parse(await fsp.readFile(argvFile, 'utf8')) as string[];
-          expect(args).toEqual(expect.arrayContaining(['--model', 'gpt-5']));
-          expect(args.some((arg) => arg.includes('model_reasoning_effort'))).toBe(false);
-          expect(args.some((arg) => arg.includes('totally-invalid-effort'))).toBe(false);
+          await expect(fsp.access(argvFile)).rejects.toThrow();
         },
       );
     } finally {

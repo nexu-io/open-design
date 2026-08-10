@@ -19,6 +19,8 @@ import {
 type RuntimeEnvMap = NodeJS.ProcessEnv | Record<string, string>;
 type SpawnEnvOptions = {
   resolvedBin?: string | null;
+  codexAuthMode?: 'chatgpt';
+  codexProviderEnvKey?: string | null;
 };
 
 const RUNTIME_MODULE_PROJECT_ROOT = resolveProjectRootFromNestedModule(
@@ -73,7 +75,7 @@ export function spawnEnvForAgent(
   baseEnv: RuntimeEnvMap,
   configuredEnv: unknown = {},
   systemProxyEnv: RuntimeEnvMap = resolveSystemProxyEnv(),
-  _options: SpawnEnvOptions = {},
+  options: SpawnEnvOptions = {},
 ): NodeJS.ProcessEnv {
   const sandboxRuntime = sandboxRuntimeConfigForBaseEnv(baseEnv);
   const expandedConfiguredEnv = expandConfiguredEnv(configuredEnv);
@@ -135,6 +137,16 @@ export function spawnEnvForAgent(
     return finalizeRuntimeEnv(env, sandboxRuntime);
   }
   if (agentId === 'codex') {
+    if (options.codexAuthMode === 'chatgpt') {
+      stripKeysCaseInsensitive(env, [
+        'OPENAI_API_KEY',
+        'CODEX_API_KEY',
+        'OPENAI_BASE_URL',
+        'OPENAI_API_BASE',
+        'CODEX_BASE_URL',
+        ...(options.codexProviderEnvKey ? [options.codexProviderEnvKey] : []),
+      ]);
+    }
     return finalizeRuntimeEnv(env, sandboxRuntime);
   }
   if (agentId === 'opencode' || agentId === 'byok-opencode') {

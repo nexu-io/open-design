@@ -33,7 +33,10 @@ import {
 import { isSafeId as isSafeProjectId } from '../projects.js';
 import { projectKindToTracking } from '@open-design/contracts/analytics';
 import { proxyDispatcherRequestInit, validateUserProviderBaseUrl } from '../connectionTest.js';
-import { resolveModelForServiceTier } from '../runtimes/models.js';
+import {
+  isKnownReasoning,
+  resolveModelForServiceTier,
+} from '../runtimes/models.js';
 import { googleStreamGenerateContentUrl } from '../integrations/google-models.js';
 import { createRoleMarkerGuard } from '../role-marker-guard.js';
 import { authorizeReasoningEgress, sendReasoningEgressDenial } from '../reasoning-egress.js';
@@ -371,11 +374,14 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
           }
           const safeReasoning =
             def &&
-            typeof body.reasoning === 'string' &&
-            Array.isArray(def.reasoningOptions)
-              ? (def.reasoningOptions.find((r: any) => r.id === body.reasoning)?.id ?? undefined)
+            typeof body.reasoning === 'string'
+              ? def.id === 'codex'
+                ? body.reasoning
+                : Array.isArray(def.reasoningOptions)
+                  ? (def.reasoningOptions.find((r: any) => r.id === body.reasoning)?.id ?? undefined)
+                  : undefined
               : undefined;
-          safeModel = def
+          safeModel = def && def.id !== 'codex'
             ? resolveModelForServiceTier(
                 def,
                 safeModel,
@@ -388,6 +394,31 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
             isKnownServiceTier(def, safeModel, body.serviceTier)
               ? body.serviceTier
               : undefined;
+          const explicitCodexReasoningUnsupported =
+            def?.id === 'codex'
+            && typeof body.reasoning === 'string'
+            && body.reasoning.length > 0
+            && body.reasoning !== 'default'
+            && !isKnownReasoning(def, safeModel, body.reasoning);
+          const explicitCodexTierUnsupported =
+            def?.id === 'codex'
+            && typeof body.serviceTier === 'string'
+            && body.serviceTier.length > 0
+            && body.serviceTier !== 'default'
+            && !safeServiceTier;
+          if (explicitCodexReasoningUnsupported || explicitCodexTierUnsupported) {
+            const setting = explicitCodexReasoningUnsupported
+              ? `reasoning effort '${body.reasoning}'`
+              : `service tier '${body.serviceTier}'`;
+            return res.json({
+              ok: false,
+              kind: 'not_found_model',
+              latencyMs: Date.now() - testStart,
+              model: safeModel ?? 'default',
+              agentName: def.name,
+              detail: `The exact Codex model '${safeModel ?? 'default'}' does not advertise ${setting}. Select an exact compatible model and retry.`,
+            });
+          }
           const result = await testAgentConnection({
             agentId: body.agentId,
             model: safeModel ?? undefined,

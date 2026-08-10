@@ -107,6 +107,7 @@ describe('public MCP discovery + generation tools', () => {
       pluginId: 'pitch-deck',
       pluginInputs: { tone: 'bold' },
       agentId: 'codex',
+      codexAuthMode: 'chatgpt',
       model: 'gpt-5.6-sol',
       reasoning: 'xhigh',
       serviceTier: 'fast',
@@ -117,14 +118,31 @@ describe('public MCP discovery + generation tools', () => {
     });
   });
 
-  it('start_run exposes only supported reasoning values', () => {
+  it('start_run accepts future live-catalog reasoning values for daemon validation', async () => {
     const startRun = localMcpToolDefinitions().find((tool) => tool.name === 'start_run');
 
     expect(startRun?.inputSchema.properties.reasoning).toEqual({
       type: 'string',
-      enum: ['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
-      description: 'Reasoning effort override for the selected model. Optional.',
+      description: 'Exact reasoning effort advertised by the selected model in the live agent catalog. Optional; the daemon validates it before spawn.',
     });
+
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.endsWith('/api/projects')) {
+        return new Response(JSON.stringify({ projects: [{ id: 'project-1', name: 'Demo' }] }), { status: 200 });
+      }
+      const body = JSON.parse(String(init?.body));
+      expect(body.reasoning).toBe('future/deep:v2');
+      return new Response(JSON.stringify({ runId: 'run-future' }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', withDirectory(fetchMock));
+
+    const result = await handleMcpToolCall('http://127.0.0.1:17456', 'start_run', {
+      project: 'Demo',
+      agent: 'codex',
+      model: 'gpt-future',
+      reasoning: 'future/deep:v2',
+    });
+    expect(result.isError).not.toBe(true);
   });
 
   it('start_run uses the active project when project is omitted', async () => {
@@ -935,17 +953,21 @@ describe('public MCP discovery + generation tools', () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({
       agents: [
         {
-          id: 'claude',
-          name: 'Claude Code',
-          bin: 'claude',
+          id: 'codex',
+          name: 'Codex CLI',
+          bin: 'codex',
           version: '2.1.153',
           available: true,
-          path: '/usr/local/bin/claude',
+          path: '/usr/local/bin/codex',
           installUrl: 'https://…',
           versionArgs: ['--version'],
           promptViaStdin: true,
-          promptInputFormat: 'stream-json',
-          streamFormat: 'claude-stream-json',
+          promptInputFormat: 'text',
+          streamFormat: 'codex-jsonl',
+          authStatus: 'ok',
+          chatgptAuthStatus: 'missing',
+          chatgptAuthMessage: 'Run codex login.',
+          modelsSource: 'live',
           models: [
             { id: 'default', label: 'Default' },
             { id: 'sonnet', label: 'Sonnet' },
@@ -970,9 +992,14 @@ describe('public MCP discovery + generation tools', () => {
     const parsed = JSON.parse(firstText(result));
     expect(parsed.agents).toHaveLength(1);
     expect(parsed.agents[0]).toEqual({
-      id: 'claude',
-      name: 'Claude Code',
+      id: 'codex',
+      name: 'Codex CLI',
       version: '2.1.153',
+      authStatus: 'missing',
+      authMessage: 'Run codex login.',
+      chatgptAuthStatus: 'missing',
+      chatgptAuthMessage: 'Run codex login.',
+      modelsSource: 'live',
       models: [
         { id: 'default', label: 'Default' },
         { id: 'sonnet', label: 'Sonnet' },
@@ -986,7 +1013,7 @@ describe('public MCP discovery + generation tools', () => {
     expect(parsed.agents[0]).not.toHaveProperty('streamFormat');
   });
 
-  it('list_agents truncates very long model lists but reports the real count', async () => {
+  it('list_agents returns the complete live compatibility catalog', async () => {
     const longModels = Array.from({ length: 165 }, (_, i) => ({ id: `m-${i}`, label: `M${i}` }));
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({
       agents: [{ id: 'opencode', name: 'OpenCode', available: true, models: longModels }],
@@ -995,7 +1022,8 @@ describe('public MCP discovery + generation tools', () => {
 
     const result = await handleMcpToolCall('http://127.0.0.1:17456', 'list_agents', {});
     const parsed = JSON.parse(firstText(result));
-    expect(parsed.agents[0].models).toHaveLength(10);
+    expect(parsed.agents[0].models).toHaveLength(165);
+    expect(parsed.agents[0].models[164]).toEqual({ id: 'm-164', label: 'M164' });
     expect(parsed.agents[0].modelsCount).toBe(165);
   });
 

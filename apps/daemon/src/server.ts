@@ -219,7 +219,14 @@ import {
   resolveModelForServiceTier,
 } from './runtimes/models.js';
 import { loadMmdRouteLaunchEnv } from './runtimes/mmd-routes.js';
-import { preflightCodexDefaultModel } from './runtimes/codex-model-preflight.js';
+import {
+  extractCodexRootModelConfig,
+  preflightCodexDefaultModel,
+} from './runtimes/codex-model-preflight.js';
+import {
+  readCodexProviderEnvKey,
+  resolveCodexConfigPath,
+} from './codex-config-normalize.js';
 import { preparePromptFileForAgent } from './runtimes/prompt-file.js';
 import { TerminalControlSequenceStripper } from './runtimes/terminal-control.js';
 import {
@@ -438,7 +445,9 @@ import {
   antigravityQuotaGuidance,
   classifyAgentAuthFailure,
   classifyAgentServiceFailure,
+  codexChatGptAuthGuidance,
   cursorAuthGuidance,
+  probeCodexChatGptAuthStatus,
 } from './runtimes/auth.js';
 import { readOpenCodeServiceFailure } from './runtimes/opencode-log.js';
 import { createAgentStderrVisibilityFilter } from './amr-stderr-filter.js';
@@ -8890,6 +8899,7 @@ export async function startServer({
       model,
       reasoning,
       serviceTier,
+      codexAuthMode,
       locale,
       research,
       context,
@@ -9641,8 +9651,12 @@ export async function startServer({
       process.env[def.defaultModelEnvVar]?.trim(),
     );
     const safeReasoning =
-      typeof reasoning === 'string' && Array.isArray(def.reasoningOptions)
-        ? (def.reasoningOptions.find((r) => r.id === reasoning)?.id ?? null)
+      typeof reasoning === 'string'
+        ? def.id === 'codex'
+          ? reasoning
+          : Array.isArray(def.reasoningOptions)
+            ? (def.reasoningOptions.find((r) => r.id === reasoning)?.id ?? null)
+            : null
         : null;
     if (
       def.id === 'codex'
@@ -9705,6 +9719,82 @@ export async function startServer({
     };
     const agentLaunch = resolveAgentLaunch(def, configuredAgentEnv);
     const resolvedBin = agentLaunch.selectedPath;
+    const requiresChatGptCodexAuth =
+      def.id === 'codex' && codexAuthMode === 'chatgpt';
+    let codexProviderEnvKey = null;
+    if (
+      requiresChatGptCodexAuth
+      && resolvedBin
+      && agentLaunch.launchPath
+    ) {
+      const codexBaseEnv = spawnEnvForAgent(
+        def.id,
+        {
+          ...process.env,
+          ...(def.env || {}),
+        },
+        configuredAgentEnv,
+        undefined,
+        { resolvedBin: agentLaunch.selectedPath },
+      );
+      codexProviderEnvKey = await readCodexProviderEnvKey(codexBaseEnv);
+      let hasUnverifiedCodexProviderConfig = false;
+      try {
+        const codexConfig = await fs.promises.readFile(
+          resolveCodexConfigPath(codexBaseEnv),
+          'utf8',
+        );
+        const configured = extractCodexRootModelConfig(codexConfig);
+        hasUnverifiedCodexProviderConfig = Boolean(
+          (configured.modelProvider
+            && configured.modelProvider.toLowerCase() !== 'openai')
+          || configured.hasCompatibilityOverlay,
+        );
+      } catch {
+        // A missing config is the normal ChatGPT-backed Codex case. The
+        // authoritative login probe below still decides whether it may run.
+      }
+      if (codexProviderEnvKey || hasUnverifiedCodexProviderConfig) {
+        run.failureCategory = 'auth';
+        run.failureDetail = 'custom_provider_not_allowed';
+        run.failureAction = 'relogin';
+        return design.runs.fail(
+          run,
+          'AGENT_AUTH_REQUIRED',
+          codexChatGptAuthGuidance(),
+          { retryable: false },
+        );
+      }
+      const strictProbeEnv = applyAgentLaunchEnv(
+        spawnEnvForAgent(
+          def.id,
+          codexBaseEnv,
+          {},
+          {},
+          {
+            resolvedBin: agentLaunch.selectedPath,
+            codexAuthMode: 'chatgpt',
+          },
+        ),
+        agentLaunch,
+      );
+      const chatgptAuth = await probeCodexChatGptAuthStatus(
+        def,
+        agentLaunch.launchPath,
+        strictProbeEnv,
+      );
+      if (chatgptAuth?.status !== 'ok') {
+        run.failureCategory = 'auth';
+        run.failureDetail = 'chatgpt_login_required';
+        run.failureAction = 'relogin';
+        return design.runs.fail(
+          run,
+          'AGENT_AUTH_REQUIRED',
+          chatgptAuth?.message ?? codexChatGptAuthGuidance(),
+          { retryable: false },
+        );
+      }
+    }
     if (def.id === 'amr' && resolvedBin && agentLaunch.launchPath) {
       // Concretize omitted/default AMR model requests to the live catalog
       // default before the resume guard. The AMR preflight below applies the
@@ -11399,7 +11489,15 @@ export async function startServer({
       },
       configuredAgentSpawnEnv,
       undefined,
-      { resolvedBin: agentLaunch.selectedPath },
+      {
+        resolvedBin: agentLaunch.selectedPath,
+        ...(requiresChatGptCodexAuth
+          ? {
+              codexAuthMode: 'chatgpt',
+              codexProviderEnvKey,
+            }
+          : {}),
+      },
     );
     if (def.id === 'amr') {
       const loginStatus = readVelaLoginStatus(agentSpawnEnv, configuredAgentSpawnEnv);

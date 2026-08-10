@@ -127,18 +127,6 @@ const SAFE_MCP_DAEMON_RETRY_CALLS = new Set([
   'read_resource',
   'search_files',
 ]);
-const MCP_REASONING_OPTIONS = [
-  'default',
-  'none',
-  'minimal',
-  'low',
-  'medium',
-  'high',
-  'xhigh',
-  'max',
-  'ultra',
-] as const;
-
 function normalizeDaemonUrl(value: string | URL): string {
   return String(value).replace(/\/$/, '');
 }
@@ -787,8 +775,7 @@ export const TOOL_DEFS = [
         },
         reasoning: {
           type: 'string',
-          enum: [...MCP_REASONING_OPTIONS],
-          description: 'Reasoning effort override for the selected model. Optional.',
+          description: 'Exact reasoning effort advertised by the selected model in the live agent catalog. Optional; the daemon validates it before spawn.',
         },
         serviceTier: {
           type: 'string',
@@ -841,7 +828,7 @@ export const TOOL_DEFS = [
   {
     name: 'list_agents',
     description:
-      'List the agent CLIs Open Design can run for start_run.agent. Returns only installed (available) agents by default — pass includeUnavailable:true to also see agents we know about but that are not on PATH (each carries an installUrl for the user). Each entry includes id, name, version, and up to 10 sample models (modelsCount carries the real total).',
+      'List the agent CLIs Open Design can run for start_run.agent. Returns only installed (available) agents by default — pass includeUnavailable:true to also see agents we know about but that are not on PATH (each carries an installUrl for the user). Each entry includes id, name, version, authoritative auth status when available, model-catalog source, and the complete compatibility catalog.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -2435,25 +2422,40 @@ async function listPlugins(baseUrl: string): Promise<JsonObject> {
 // `available: true` (only installed CLIs) so the outer agent doesn't
 // pick an agent it can't actually run — the failure mode that left us
 // with zombie "running" runs whose inner Claude binary never spawned.
-// Models are truncated to 10 with `modelsCount` carrying the full
-// total; that keeps the response token-economical even for agents
-// (e.g. opencode) that expose 100+ models.
+// Compatibility is intentionally complete. Truncating this surface made a
+// valid exact model indistinguishable from an unsupported one.
 async function listAgents(baseUrl: string, includeUnavailable: boolean): Promise<JsonObject> {
   const raw = await getJson<{ agents?: JsonObject[] }>(`${baseUrl}/api/agents`);
   const all = raw?.agents ?? [];
   const filtered = includeUnavailable
     ? all
     : all.filter((a) => a?.available === true);
-  const MAX_MODELS = 10;
   const agents = filtered.map((a) => {
     const models = Array.isArray(a?.models) ? (a.models as unknown[]) : [];
+    const usesAuthoritativeCodexAuth =
+      a?.id === 'codex' && typeof a?.chatgptAuthStatus === 'string';
+    const authStatus = usesAuthoritativeCodexAuth
+      ? a?.chatgptAuthStatus
+      : a?.authStatus;
+    const authMessage = usesAuthoritativeCodexAuth
+      ? a?.chatgptAuthMessage
+      : a?.authMessage;
     const out: JsonObject = {
       id: a?.id,
       name: a?.name,
-      models: models.slice(0, MAX_MODELS),
+      models,
       modelsCount: models.length,
     };
     if (typeof a?.version === 'string' && a.version.length > 0) out.version = a.version;
+    if (typeof authStatus === 'string') out.authStatus = authStatus;
+    if (typeof authMessage === 'string') out.authMessage = authMessage;
+    if (typeof a?.chatgptAuthStatus === 'string') {
+      out.chatgptAuthStatus = a.chatgptAuthStatus;
+    }
+    if (typeof a?.chatgptAuthMessage === 'string') {
+      out.chatgptAuthMessage = a.chatgptAuthMessage;
+    }
+    if (typeof a?.modelsSource === 'string') out.modelsSource = a.modelsSource;
     if (includeUnavailable) {
       out.available = Boolean(a?.available);
       if (typeof a?.installUrl === 'string') out.installUrl = a.installUrl;
@@ -2543,15 +2545,14 @@ async function startRun(
   if (Array.isArray(args.skills) && args.skills.length > 0) body.skillIds = args.skills;
   if (typeof args.plugin === 'string' && args.plugin.length > 0) body.pluginId = args.plugin;
   if (typeof args.agent === 'string' && args.agent.length > 0) body.agentId = args.agent;
+  // Every external-MCP Codex run is the official Local Codex route. The
+  // daemon enforces this only when the resolved runtime is Codex, so callers
+  // that omit agent and resolve to another local runtime remain unchanged.
+  body.codexAuthMode = 'chatgpt';
   if (typeof args.model === 'string' && args.model.length > 0) body.model = args.model;
   if (args.reasoning !== undefined) {
-    if (
-      typeof args.reasoning !== 'string'
-      || !MCP_REASONING_OPTIONS.includes(
-        args.reasoning as (typeof MCP_REASONING_OPTIONS)[number],
-      )
-    ) {
-      throw new Error('reasoning must be a supported reasoning effort');
+    if (typeof args.reasoning !== 'string') {
+      throw new Error('reasoning must be a string');
     }
     body.reasoning = args.reasoning;
   }

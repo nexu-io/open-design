@@ -100,6 +100,13 @@ export interface ChatRequest {
   reasoning?: string | null;
   serviceTier?: string | null;
   /**
+   * Opt-in Local Codex account-path policy. `chatgpt` requires an
+   * authoritative `codex login status` ChatGPT session and strips API-key or
+   * custom-endpoint credentials from the child. Omission preserves legacy
+   * Local CLI behavior for non-MCP callers.
+   */
+  codexAuthMode?: 'chatgpt';
+  /**
    * Run-scoped BYOK provider credentials for the daemon-backed OpenCode
    * adapter. The daemon must not persist this object; it is translated into
    * child env + OPENCODE_CONFIG_CONTENT for the current run only.
@@ -353,6 +360,7 @@ export interface McpRunCreateRequest {
   model?: string;
   reasoning?: string;
   serviceTier?: string;
+  codexAuthMode?: 'chatgpt';
   pluginInputs?: Record<string, unknown>;
   mediaExecution?: MediaExecutionPolicy;
   toolBundle?: RunScopedToolBundle;

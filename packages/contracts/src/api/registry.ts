@@ -105,6 +105,9 @@ export interface AgentInfo {
   available: boolean;
   authStatus?: 'ok' | 'missing' | 'unknown';
   authMessage?: string;
+  /** Authoritative `codex login status` result for the ChatGPT account path. */
+  chatgptAuthStatus?: 'ok' | 'missing' | 'unknown';
+  chatgptAuthMessage?: string;
   path?: string;
   version?: string | null;
   /**

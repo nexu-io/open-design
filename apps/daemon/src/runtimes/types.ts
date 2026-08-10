@@ -294,6 +294,8 @@ export type DetectedAgent = Omit<
   available: boolean;
   authStatus?: 'ok' | 'missing' | 'unknown';
   authMessage?: string;
+  chatgptAuthStatus?: 'ok' | 'missing' | 'unknown';
+  chatgptAuthMessage?: string;
   path?: string;
   version?: string | null;
   diagnostics?: AgentDiagnostic[];
