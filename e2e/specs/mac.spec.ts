@@ -511,7 +511,13 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
 
         await invokeMacInviteDeeplink(install.installedAppPath, { forceNewInstance: true });
         started = true;
-        const protocolColdInspect = await waitForHealthyDesktop();
+        const protocolColdInspect = await waitForHealthyDesktop(releaseVersion, async () => {
+          // LaunchServices can accept `open -n` while it is still retiring the
+          // just-stopped application record, without creating a new process.
+          // Retry the same OS-protocol launch; never fall back to starting the
+          // executable directly, so a healthy PID still proves cold routing.
+          await invokeMacInviteDeeplink(install.installedAppPath, { forceNewInstance: true });
+        });
         expect(protocolColdInspect.status?.state).toBe('running');
         expect(protocolColdInspect.status?.pid).not.toBe(protocolHotPid);
       }
@@ -2511,9 +2517,12 @@ async function readDesktopLocalCliSnapshot(
 
 async function waitForHealthyDesktop(
   releaseVersionOverride: string | null | undefined = releaseVersion,
+  retryUnavailableLaunch?: () => Promise<void>,
 ): Promise<MacInspectResult> {
   const timeoutMs = 90_000;
+  const launchRetryIntervalMs = 5_000;
   const startedAt = Date.now();
+  let lastLaunchRetryAt = startedAt;
   let lastResult: unknown = null;
 
   while (Date.now() - startedAt < timeoutMs) {
@@ -2533,6 +2542,17 @@ async function waitForHealthyDesktop(
       }
     } catch (error) {
       lastResult = error;
+    }
+    if (
+      retryUnavailableLaunch != null
+      && Date.now() - lastLaunchRetryAt >= launchRetryIntervalMs
+    ) {
+      try {
+        await retryUnavailableLaunch();
+      } catch (error) {
+        lastResult = error;
+      }
+      lastLaunchRetryAt = Date.now();
     }
     await delay(1000);
   }

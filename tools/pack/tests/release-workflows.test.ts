@@ -173,6 +173,9 @@ describe("release workflows", () => {
     expect(win).toContain("uses: actions/cache/restore@v5");
     expect(win).toContain("uses: actions/cache/save@v5");
     expect(win).toContain("tools-pack-win-v1-beta-$env:RUNNER_OS-");
+    expect(win).toContain(
+      "steps.win_x64_shell_resolution.outputs.state == 'miss' || (inputs.win_x64_smoke_mode == 'full' && steps.win_x64_shell_resolution.outputs.smoke_proof != 'hit' && inputs.win_x64_update_metadata_url == '' && inputs.win_x64_update_target_version == '')",
+    );
     expect(win).toContain('pnpm.cmd exec tools-pack win cleanup --dir "${{ runner.temp }}\\tools-pack" --namespace release-beta-win --json');
     expect(win).toContain('"tools-pack", "win", "build"');
     expect(buildWin).toContain('$buildArgs += "--require-vela-cli"');
