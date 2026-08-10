@@ -23,7 +23,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mergeAgentModelChoice } from '../../src/App';
 import { DEEPSEEK_V4_FLASH_CAMPAIGN } from '../../src/campaigns/deepseek-v4-flash';
 import { InlineModelSwitcher } from '../../src/components/InlineModelSwitcher';
-import type { AgentInfo, AppConfig } from '../../src/types';
+import type { AgentInfo, AgentModelChoice, AppConfig } from '../../src/types';
 
 vi.mock('../../src/providers/provider-models', () => ({
   fetchProviderModels: vi.fn(async () => ({ ok: false, models: [] })),
@@ -87,7 +87,11 @@ function StatefulSwitcher({
   agents: AgentInfo[];
   initialConfig?: Partial<AppConfig>;
   compact?: boolean;
-  onPersist?: (agentId: string, model: string | undefined) => void;
+  onPersist?: (
+    agentId: string,
+    model: string | undefined,
+    choice: AgentModelChoice,
+  ) => void;
 }) {
   const [config, setConfig] = useState<AppConfig>({ ...baseConfig, ...initialConfig });
   const persistedRef = useRef(config);
@@ -111,7 +115,7 @@ function StatefulSwitcher({
           agentModels: { ...(current.agentModels ?? {}), [agentId]: merged },
         };
         persistedRef.current = next;
-        onPersist?.(agentId, merged.model);
+        onPersist?.(agentId, merged.model, merged);
         setConfig(next);
       }}
       onApiProtocolChange={vi.fn()}
@@ -317,4 +321,48 @@ describe('compact home model list — a clicked model reaches the chip', () => {
       'deepseek-v4-pro',
     );
   });
+it('drops a stale service tier when switching to a model without tiers', () => {
+    // Regression (review thread): the compact row called `applyAgentModel(m.id)`
+    // without `{ serviceTier: undefined }`, so `mergeAgentModelChoice` preserved
+    // the previous model's `serviceTier` (it only deletes the own property when
+    // the key is present in the next choice). Switching from a tiered model to
+    // one without tiers left the stale tier in `agentModels`; the full picker
+    // already passes `serviceTier: undefined` and the compact row must match.
+    const tieredAmrAgent: AgentInfo = {
+      ...amrAgent,
+      models: (amrAgent.models ?? []).map((model) =>
+        model.id === 'deepseek-v4-pro'
+          ? {
+              ...model,
+              serviceTierOptions: [
+                { id: 'priority', label: 'Priority', enabled: true },
+                { id: 'standard', label: 'Standard', enabled: true },
+              ],
+            }
+          : model,
+      ),
+    };
+    const persisted = vi.fn();
+    render(
+      <StatefulSwitcher
+        agents={[tieredAmrAgent]}
+        initialConfig={{
+          agentModels: {
+            amr: { model: 'deepseek-v4-pro', serviceTier: 'priority' },
+          },
+        }}
+        onPersist={persisted}
+      />,
+    );
+    expect(chipText()).toContain('deepseek-v4-pro');
+
+    openSwitcher();
+    fireEvent.click(compactRow('deepseek-v4-flash'));
+
+    expect(chipText()).toContain('deepseek-v4-flash');
+    expect(persisted).toHaveBeenCalledTimes(1);
+    const choice = persisted.mock.calls[0]?.[2] as AgentModelChoice | undefined;
+    expect(choice?.serviceTier).toBeUndefined();
+  });
 });
+

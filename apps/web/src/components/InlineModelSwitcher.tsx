@@ -429,21 +429,40 @@ export function InlineModelSwitcher({
   const finishCompactAgentPickRef = useRef(finishCompactAgentPick);
   finishCompactAgentPickRef.current = finishCompactAgentPick;
 
-  // Resume the pending compact AMR pick (if any). Three paths observe the
-  // signed-in transition — polling tick, handleAmrSignin post-await, and the
-  // login-status event useEffect — and each must re-evaluate the saved-model
-  // decision at sign-in time with the freshest `config.agentModels` (not the
-  // pick-time frozen value) and gate on `config.agentId === 'amr' && compact`
-  // so a mid-login agent switch drops the handoff. The ref indirection keeps
-  // every path on the latest `finishCompactAgentPick` closure regardless of
-  // each callback's deps.
+  // Current-agent ref: `tryCompleteCompactAmrPick` runs from closures created
+  // before an agent switch (poll tick, immediate continuation, event effect).
+  // Reading the ref — not the captured `config.agentId` — keeps the resume
+  // gate on the CURRENT selection so a stale finalizer can never reopen or
+  // close an unrelated agent's panel.
+  const currentAgentIdRef = useRef(config.agentId);
+  currentAgentIdRef.current = config.agentId;
+
+  // Resume the pending compact AMR pick, if one exists. Three paths observe
+  // the signed-in transition — polling tick, handleAmrSignin post-await, and
+  // the login-status event useEffect — and each must re-evaluate the
+  // saved-model decision at sign-in time with the freshest
+  // `config.agentModels` (not the pick-time frozen value). The ref
+  // indirection keeps every path on the latest `finishCompactAgentPick`
+  // closure regardless of each callback's deps.
   const tryCompleteCompactAmrPick = useCallback(() => {
-    if (config.agentId === 'amr' && compact) {
-      finishCompactAgentPickRef.current('amr');
-    } else {
-      clearPendingCompactAmrPick();
-    }
-  }, [compact, config.agentId, finishCompactAgentPickRef]);
+    // Only a compact pick that closed the agent panel to start login may
+    // resume it. A sign-in started from the AMR account row (the agent panel
+    // stays open) never sets the pending handoff, so it must not jump the
+    // panel to the saved-model decision. Consume the handoff first: when the
+    // poll tick and the immediate/event continuations race to finalize the
+    // same sign-in, the second caller finds the ref empty and no-ops instead
+    // of re-opening the panel twice.
+    if (!pendingCompactAmrPickRef.current) return;
+    clearPendingCompactAmrPick();
+    // Gate on the CURRENT agent via the ref, not the closure's
+    // `config.agentId`: an old poll tick created while AMR was active keeps
+    // `config.agentId === 'amr'` even after the user selects Codex and would
+    // otherwise overwrite the new agent's panel. The agentId-change effect
+    // clears the pending ref on the common path; this ref check closes the
+    // render-to-effect window as defense in depth.
+    if (currentAgentIdRef.current !== 'amr' || !compact) return;
+    finishCompactAgentPickRef.current('amr');
+  }, [compact, finishCompactAgentPickRef]);
 
   // Every path that observes the signed-in transition — the polling tick,
   // `handleAmrSignIn`'s post-await refresh, and the login-status event —
@@ -473,8 +492,33 @@ export function InlineModelSwitcher({
     [analytics.track, stopAmrPolling, tryCompleteCompactAmrPick],
   );
 
-  const refreshAmrStatus = useCallback(async () => {
+  const refreshAmrStatus = useCallback(async (
+    guard?: { generation?: number; authAttemptId?: string | null },
+  ) => {
     const next = await fetchVelaLoginStatus();
+    // Reject a stale response BEFORE committing anything: a poll/event
+    // request from a superseded attempt that resolves after polling restarted
+    // for a newer attempt must not attribute its payload to the current
+    // attempt (analytics), overwrite the current status, or clear the newer
+    // attempt's login bookkeeping. The guard only checks continuity (did the
+    // world move on while we fetched?), never the response body's attempt id —
+    // `observeAmrAuthTracking` self-validates that. Callers that only observe
+    // (e.g. the open/agents effect) deliberately pass no guard.
+    if (guard) {
+      if (
+        guard.generation !== undefined &&
+        guard.generation !== amrPollGenerationRef.current
+      ) {
+        return null;
+      }
+      if (
+        guard.authAttemptId !== undefined &&
+        guard.authAttemptId !== null &&
+        guard.authAttemptId !== amrAuthAttemptIdRef.current
+      ) {
+        return null;
+      }
+    }
     // Do NOT write `amrAuthAttemptIdRef` here: this callback runs on every
     // status read, including stale ones from a superseded attempt, and would
     // otherwise reassign the current-attempt identity used by the signed-in
@@ -515,10 +559,22 @@ export function InlineModelSwitcher({
     amrLoginStartedAtRef.current = startedAt;
     if (authAttemptId) amrAuthAttemptIdRef.current = authAttemptId;
     const tick = async () => {
-      const next = await refreshAmrStatus();
+      const next = await refreshAmrStatus({
+        generation,
+        authAttemptId: authAttemptId ?? undefined,
+      });
       // Stale tick: a newer poll owns the terminal state now. Do not touch
-      // the pending handoff, the interval, or the login bookkeeping.
-      if (generation !== amrPollGenerationRef.current) return;
+      // the pending handoff, the interval, or the login bookkeeping. The
+      // attempt half of the guard is belt-and-suspenders — the generation and
+      // `amrAuthAttemptIdRef` change together — but it keeps a tick from a
+      // superseded attempt from acting even if a restart somehow left the
+      // generation untouched.
+      if (
+        generation !== amrPollGenerationRef.current ||
+        (authAttemptId !== null && authAttemptId !== amrAuthAttemptIdRef.current)
+      ) {
+        return;
+      }
       const outcome = amrLoginPollOutcome(next, startedAt);
       if (outcome === 'signed-in') {
         finalizeAmrSignIn(authAttemptId, next?.user?.id ?? null);
@@ -614,7 +670,13 @@ export function InlineModelSwitcher({
           return;
         }
         if (cancelResult.canceled !== true) {
-          const next = await refreshAmrStatus();
+          const next = await refreshAmrStatus({ authAttemptId });
+          // Stale continuation: this instance started a newer sign-in while
+          // the cancel + status read was in flight (`amrAuthAttemptIdRef` was
+          // reassigned below for the new attempt). Do not start a poll or
+          // clear the pending handoff for that newer attempt from this
+          // superseded context.
+          if (authAttemptId !== amrAuthAttemptIdRef.current) return;
           amrLoginCancelRequestedRef.current = false;
           if (next?.loginInFlight) {
             startAmrPolling(
@@ -666,7 +728,13 @@ export function InlineModelSwitcher({
     // Compact home may already be signed-in by the time the login spawn
     // returns (or a follow-up status refresh races ahead of the poll tick).
     // Finish the pending pick immediately so we do not wait on the interval.
-    const signedIn = await refreshAmrStatus();
+    // Guard with this poll's generation + attempt so a continuation that
+    // resolves after a cancel/re-login restart cannot commit stale status or
+    // finalize the newer login.
+    const signedIn = await refreshAmrStatus({
+      generation: amrPollGenerationRef.current,
+      authAttemptId,
+    });
     if (signedIn?.loggedIn) {
       // Only finalize a sign-in this switcher is still polling for and that is
       // still the current attempt. The finalizer broadcasts `status-changed`
@@ -714,7 +782,9 @@ export function InlineModelSwitcher({
       return;
     }
     if (result.canceled !== true) {
-      const next = await refreshAmrStatus();
+      const next = await refreshAmrStatus({
+        authAttemptId: authAttemptId ?? undefined,
+      });
       if (loginStartPending && next?.loginInFlight !== true) {
         amrLoginCancelRequestedRef.current = true;
         return;
@@ -793,7 +863,10 @@ export function InlineModelSwitcher({
         new Date(),
         { metricsConsent: config.telemetry?.metrics === true },
       );
-      const latest = await refreshAmrStatus();
+      const latest = await refreshAmrStatus({
+        generation: amrPollGenerationRef.current,
+        authAttemptId: amrAuthAttemptIdRef.current ?? undefined,
+      });
       // A faster pick has bumped the token; the user's choice has moved on.
       // The defensive useEffect that clears `pendingCompactAmrPickRef` on
       // `config.agentId` change is a belt-and-suspenders — the token is the
@@ -916,6 +989,12 @@ export function InlineModelSwitcher({
 
   useEffect(() => {
     if (open && agents.some((agent) => agent.id === 'amr' && agent.available)) {
+      // Passive observer read — deliberately NO guard. `observeAmrAuthTracking`
+      // self-validates the response attempt (amr-auth.ts), `setAmrStatus`
+      // commits the server's latest truth, and the login bookkeeping is
+      // protected by the `pendingStartup` settle window. A stale response here
+      // cannot finalize or clear a newer attempt's state, so guarding would add
+      // noise without closing a real window.
       void refreshAmrStatus();
     }
   }, [agents, open, refreshAmrStatus]);
@@ -933,6 +1012,11 @@ export function InlineModelSwitcher({
   useEffect(() => {
     const onStatusChange = (event: Event) => {
       const reason = amrLoginStatusEventReason(event);
+      // Continuity guard for the follow-up read below: captured before the
+      // fetch, so a response that resolves after a restart (new poll
+      // generation or a newer attempt) is rejected before committing status.
+      const statusGeneration = amrPollGenerationRef.current;
+      const statusAttemptId = amrAuthAttemptIdRef.current;
       if (reason === 'login-started') {
         const startedAt = Date.now();
         amrLoginStartedAtRef.current = startedAt;
@@ -948,7 +1032,10 @@ export function InlineModelSwitcher({
         clearPendingCompactAmrPick();
         setAmrLoginPending(false);
       }
-      void refreshAmrStatus().then((next) => {
+      void refreshAmrStatus({
+        generation: statusGeneration,
+        authAttemptId: statusAttemptId ?? undefined,
+      }).then((next) => {
         if (next?.loggedIn) {
           // Compact home may have closed the agent panel before login; finish
           // the pending pick here too — the poll tick is not the only path that
@@ -1808,7 +1895,12 @@ export function InlineModelSwitcher({
                             // a refused pick routes to the plans page (same as
                             // the settings picker's lock) instead of writing a
                             // choice the config would revert.
-                            if (!applyAgentModel(m.id)) {
+                            // `serviceTier: undefined` is load-bearing exactly
+                            // like the full picker: `mergeAgentModelChoice`
+                            // reads the own property to DROP a stale tier from
+                            // the previous model, so the key must survive the
+                            // hand-off when switching to a model without tiers.
+                            if (!applyAgentModel(m.id, { serviceTier: undefined })) {
                               if (amrCanUpgrade || campaignNeedsUpgrade) {
                                 openAmrModelUpgrade();
                               }
