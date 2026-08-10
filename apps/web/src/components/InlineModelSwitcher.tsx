@@ -785,15 +785,39 @@ export function InlineModelSwitcher({
       const next = await refreshAmrStatus({
         authAttemptId: authAttemptId ?? undefined,
       });
+      // Stale continuation: a newer AMR attempt took over while the status
+      // read was in flight — it owns polling/pending/error now.
+      if (authAttemptId && authAttemptId !== amrAuthAttemptIdRef.current) return;
       if (loginStartPending && next?.loginInFlight !== true) {
         amrLoginCancelRequestedRef.current = true;
         return;
       }
-      if (next?.loginInFlight) {
-        startAmrPolling(
-          amrLoginStartedAtRef.current ?? Date.now(),
-          next.authAttemptId ?? null,
+      if (next?.loggedIn) {
+        // The login completed while the cancel was being processed (the
+        // cancel raced with completion). Finalize it exactly like the poll
+        // tick would, so analytics, other AMR surfaces, and the compact
+        // handoff still settle.
+        finalizeAmrSignIn(
+          next.authAttemptId ?? authAttemptId,
+          next?.user?.id ?? null,
         );
+        return;
+      }
+      if (amrLoginStartedAtRef.current !== null) {
+        // The daemon did not confirm the cancel, and the follow-up status is
+        // either a transient null or `loginInFlight: false` inside the
+        // startup settle window. `stopAmrPolling()` already killed the only
+        // interval and `clearPendingCompactAmrPick()` already dropped the
+        // handoff at the top of this handler, so without restarting here a
+        // later signed-in/canceled status is never observed and the chip
+        // stays "Signing in" forever. Keep the attempt alive while it is
+        // still believed pending.
+        startAmrPolling(
+          amrLoginStartedAtRef.current,
+          next?.authAttemptId ?? authAttemptId,
+        );
+      } else {
+        clearPendingCompactAmrPick();
       }
       return;
     }
@@ -822,6 +846,7 @@ export function InlineModelSwitcher({
   }, [
     analytics.track,
     clearPendingCompactAmrPick,
+    finalizeAmrSignIn,
     refreshAmrStatus,
     startAmrPolling,
     stopAmrPolling,
@@ -1323,16 +1348,21 @@ export function InlineModelSwitcher({
   // appears and the active agent is still AMR, surface the agent panel so the
   // error becomes visible (and the existing Sign-in button becomes clickable
   // for a retry).
+  // Track the previous error so the reopen below fires only on the
+  // no-error → new-error transition. Keying the reopen on `panel` (as the
+  // original effect did) made the agent panel fight any navigation or
+  // dismissal while an error was showing: clicking the compact model segment,
+  // pressing Escape, or clicking outside re-asserted `setPanel('agent')`, so
+  // the model list was unreachable and the error could not be dismissed.
+  const previousAmrLoginErrorRef = useRef(amrLoginError);
   useEffect(() => {
-    if (
-      amrLoginError
-      && compact
-      && config.agentId === 'amr'
-      && panel !== 'agent'
-    ) {
+    const hasNewError =
+      amrLoginError !== null && previousAmrLoginErrorRef.current === null;
+    previousAmrLoginErrorRef.current = amrLoginError;
+    if (hasNewError && compact && config.agentId === 'amr') {
       setPanel('agent');
     }
-  }, [amrLoginError, compact, config.agentId, panel]);
+  }, [amrLoginError, compact, config.agentId]);
 
   // `handleAmrCancelLogin`'s post-await continuation must not reopen the
   // compact agent panel itself: by the time `cancelVelaLogin` resolves the

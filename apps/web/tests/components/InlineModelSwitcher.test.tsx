@@ -3167,6 +3167,241 @@ describe('InlineModelSwitcher AMR row', () => {
     vi.useRealTimers();
   });
 
+  it('keeps the AMR attempt alive when a cancel is not confirmed and the follow-up status is transient', async () => {
+    // Regression (review thread): `handleAmrCancelLogin` calls
+    // `stopAmrPolling()` up front, and its `canceled !== true` branch only
+    // restarted polling when the follow-up status read returned
+    // `loginInFlight: true`. A transient null (or a startup-window
+    // `loginInFlight: false`) left `amrLoginPending` active with no interval,
+    // so a later signed-in was never observed and the chip stayed "Signing
+    // in" forever. The attempt must stay alive until the daemon confirms it
+    // settled.
+    const authAttemptId = '88888888-8888-4888-8888-888888888888';
+    let loginStarted = false;
+    let statusMode: 'in-flight' | 'null' | 'signed-in' = 'in-flight';
+    let statusCall = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === '/api/integrations/vela/status') {
+        statusCall += 1;
+        if (statusMode === 'null') {
+          return new Response(null, { status: 503 });
+        }
+        return new Response(
+          JSON.stringify({
+            loggedIn: statusMode === 'signed-in',
+            loginInFlight: statusMode === 'in-flight',
+            authAttemptId,
+            profile: 'default',
+            user:
+              statusMode === 'signed-in'
+                ? { id: 'user-1', email: 'amr@example.local' }
+                : null,
+            configPath: '/Users/test/.amr/config.json',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url === '/api/integrations/vela/login' && init?.method === 'POST') {
+        loginStarted = true;
+        return new Response(JSON.stringify({ pid: 42, authAttemptId }), {
+          status: 202,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (
+        url === '/api/integrations/vela/login/cancel' &&
+        init?.method === 'POST'
+      ) {
+        // The daemon does not confirm the cancel (login already settled or
+        // not cancelable) — the branch under test.
+        return new Response(JSON.stringify({ canceled: false, pids: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (
+        url.startsWith('/api/integrations/vela/wallet') ||
+        url.startsWith('/api/workspace/')
+      ) {
+        return new Response(JSON.stringify({}), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    function StatefulCompact() {
+      const [config, setConfig] = useState<AppConfig>({
+        ...baseConfig,
+        agentId: 'amr',
+        agentModels: {},
+      });
+      return (
+        <InlineModelSwitcher
+          config={config}
+          agents={[amrAgent]}
+          providerModelsCache={{}}
+          compact
+          daemonLive
+          onModeChange={(mode) => setConfig((c) => ({ ...c, mode }))}
+          onAgentChange={(id) =>
+            setConfig((c) => ({ ...c, agentId: id, mode: 'daemon' }))
+          }
+          onAgentModelChange={vi.fn()}
+          onApiProtocolChange={vi.fn()}
+          onApiModelChange={vi.fn()}
+          onOpenSettings={vi.fn()}
+        />
+      );
+    }
+
+    render(<StatefulCompact />);
+
+    vi.useFakeTimers();
+    // Pick AMR (signed out, no saved model) — login starts, panel closes.
+    fireEvent.click(screen.getByTestId('inline-model-switcher-chip-agent'));
+    fireEvent.click(screen.getByTestId('inline-model-switcher-agent-amr'));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(loginStarted).toBe(true);
+    expect(screen.queryByTestId('inline-model-switcher-popover')).toBeNull();
+
+    // Cancel while pending: the daemon does not confirm (`canceled: false`)
+    // and the follow-up status read fails transiently (503 → null). The
+    // attempt must stay alive — polling restarts and keeps issuing reads.
+    fireEvent.click(screen.getByTestId('inline-model-switcher-chip-agent'));
+    fireEvent.click(screen.getByTestId('inline-model-switcher-agent-amr'));
+    statusMode = 'null';
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    const callsBeforeRestart = statusCall;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AMR_LOGIN_POLL_INTERVAL_MS);
+    });
+    // A restarted poll tick issued another status request (null stays
+    // pending). Without the restart the chip would be stuck "Signing in".
+    expect(statusCall).toBeGreaterThan(callsBeforeRestart);
+
+    // The transient failure clears and the login settles signed-in; the kept
+    // poll must observe it and finalize (success analytics + status change).
+    statusMode = 'signed-in';
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AMR_LOGIN_POLL_INTERVAL_MS);
+    });
+    const resultCalls = analyticsMocks.track.mock.calls.filter(
+      ([event]) => event === 'amr_auth_result',
+    );
+    expect(resultCalls.length).toBeGreaterThan(0);
+    expect(resultCalls[0]?.[1]).toMatchObject({ result: 'success' });
+
+    vi.useRealTimers();
+  });
+
+  it('keeps the compact model panel open and dismissable while an AMR error is showing', async () => {
+    // Regression (review thread): the `amrLoginError` effect depended on
+    // `panel` and re-asserted `setPanel('agent')` whenever the panel was
+    // anything else. With an error set, opening the model segment, pressing
+    // Escape, or clicking outside immediately reopened the agent panel, so
+    // the model list was unreachable and the error could not be dismissed.
+    // The reopen must fire only on the no-error → new-error transition.
+    const startupError = 'profile "prod" api URL: is not configured';
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === '/api/integrations/vela/status') {
+        return new Response(
+          JSON.stringify({
+            loggedIn: false,
+            loginInFlight: false,
+            profile: 'prod',
+            user: null,
+            configPath: '/Users/test/.amr/config.json',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url === '/api/integrations/vela/login' && init?.method === 'POST') {
+        return new Response(JSON.stringify({ error: startupError }), {
+          status: 500,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.startsWith('/api/integrations/vela/wallet')) {
+        return new Response(JSON.stringify({}), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    function StatefulCompact() {
+      const [config, setConfig] = useState<AppConfig>({
+        ...baseConfig,
+        agentId: 'amr',
+        agentModels: {},
+      });
+      return (
+        <InlineModelSwitcher
+          config={config}
+          agents={[amrAgent]}
+          providerModelsCache={{}}
+          compact
+          daemonLive
+          onModeChange={(mode) => setConfig((c) => ({ ...c, mode }))}
+          onAgentChange={(id) =>
+            setConfig((c) => ({ ...c, agentId: id, mode: 'daemon' }))
+          }
+          onAgentModelChange={vi.fn()}
+          onApiProtocolChange={vi.fn()}
+          onApiModelChange={vi.fn()}
+          onOpenSettings={vi.fn()}
+        />
+      );
+    }
+
+    render(<StatefulCompact />);
+    // Pick AMR — the spawn fails and the error effect reopens the agent panel.
+    fireEvent.click(screen.getByTestId('inline-model-switcher-chip-agent'));
+    fireEvent.click(screen.getByTestId('inline-model-switcher-agent-amr'));
+    await waitFor(() => {
+      expect(
+        screen.getByTestId('inline-model-switcher-popover').querySelector(
+          '.inline-switcher__account-status.is-error',
+        ),
+      ).toBeTruthy();
+    });
+
+    // With an error showing, the user can still open the compact model list —
+    // the error effect must not yank it back to the agent panel.
+    fireEvent.click(screen.getByTestId('inline-model-switcher-chip-model'));
+    expect(
+      within(screen.getByTestId('inline-model-switcher-popover')).getByTestId(
+        'inline-model-switcher-compact-model-amr-cloud-latest',
+      ),
+    ).toBeTruthy();
+    expect(
+      within(screen.getByTestId('inline-model-switcher-popover')).queryByTestId(
+        'inline-model-switcher-account-action',
+      ),
+    ).toBeNull();
+
+    // Escape closes the panel and the error effect leaves it closed.
+    fireEvent.keyDown(screen.getByTestId('inline-model-switcher'), {
+      key: 'Escape',
+    });
+    expect(screen.queryByTestId('inline-model-switcher-popover')).toBeNull();
+  });
+
   it('drops a stale AMR continuation when another CLI is picked before status resolves', async () => {
     // Regression (review thread): `handleAgentButtonClick('amr')` awaits
     // `refreshAmrStatus()` after `onAgentChange('amr')`. A faster pick of
