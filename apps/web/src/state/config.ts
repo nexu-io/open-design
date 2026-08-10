@@ -264,8 +264,8 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     baseUrl: 'https://api.novita.ai/openai',
     preferredModels: [
       'deepseek/deepseek-v4-pro',
-      'deepseek/deepseek-v3.2',
-      'qwen/qwen3.5-397b-a17b',
+      'minimax/minimax-m3',
+      'qwen/qwen3.8-max',
       'zai-org/glm-5.2',
       'moonshotai/kimi-k3',
       'openai/gpt-oss-120b',
