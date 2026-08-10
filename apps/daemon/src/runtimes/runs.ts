@@ -22,6 +22,9 @@ import {
 } from './run-restart-recovery.js';
 
 export const TERMINAL_RUN_STATUSES = new Set(['succeeded', 'failed', 'canceled']);
+export const DAEMON_SHUTDOWN_ERROR_CODE = 'DAEMON_SHUTDOWN';
+export const DAEMON_SHUTDOWN_ERROR_MESSAGE =
+  'Run interrupted because the Open Design daemon is shutting down.';
 
 const RUN_STATE_SCHEMA_VERSION = 1;
 
@@ -1453,7 +1456,11 @@ export function createChatRunService({
   const shutdownActive = async ({ graceMs = shutdownGraceMs } = {}) => {
     const activeRuns = Array.from(runs.values()).filter((run) => !TERMINAL_RUN_STATUSES.has(run.status));
     await Promise.all(activeRuns.map(async (run) => {
-      run.cancelRequested = true;
+      run.cancelRequested = false;
+      run.failureCategory = 'process_exit';
+      run.failureDetail = 'interrupted';
+      run.failureAction = 'retry';
+      run.resumable = true;
       run.updatedAt = Date.now();
       clearPendingRetryRestart(run);
       closeRunStdin(run);
@@ -1464,8 +1471,13 @@ export function createChatRunService({
           // Process signals below are the shutdown fallback.
         }
       }
+      emit(run, 'error', createSseErrorPayload(
+        DAEMON_SHUTDOWN_ERROR_CODE,
+        DAEMON_SHUTDOWN_ERROR_MESSAGE,
+        { retryable: true },
+      ));
+      finish(run, 'failed', 1, null);
       killChild(run, 'SIGTERM');
-      finish(run, 'canceled', null, 'SIGTERM');
       if (run.child && !(await waitForChildExit(run.child, graceMs))) {
         killChild(run, 'SIGKILL');
         await waitForChildExit(run.child, 500);
