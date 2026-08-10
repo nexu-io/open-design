@@ -53,6 +53,7 @@ import type {
   ProjectTemplate,
 } from '../types';
 import { removeDesignBrowserProjectCache } from '../components/design-browser-storage';
+import { boundedRequestErrorCode } from '../analytics/workspace';
 
 export type { PluginInstallOutcome } from '@open-design/contracts';
 export type { PluginShareAction } from '@open-design/contracts';
@@ -176,6 +177,18 @@ export class WorkspaceProjectMoveError extends Error {
     super(message);
     this.name = 'WorkspaceProjectMoveError';
     this.code = code;
+  }
+}
+
+/** A refused project delete with the daemon's stable status/code preserved. */
+export class ProjectDeleteError extends Error {
+  constructor(
+    message: string,
+    readonly status: number | undefined,
+    readonly code: string | undefined,
+  ) {
+    super(message);
+    this.name = 'ProjectDeleteError';
   }
 }
 
@@ -923,32 +936,74 @@ export async function patchProject(
 export async function deleteProject(
   id: string,
   workspaceContext?: WorkspaceCollabContext | null,
-): Promise<boolean> {
+): Promise<true> {
   try {
     const resp = await fetch(`/api/projects/${encodeURIComponent(id)}`, {
       method: 'DELETE',
       ...(workspaceContext ? { headers: workspaceProjectHeaders(workspaceContext) } : {}),
     });
+    if (!resp.ok) {
+      let message = `project delete failed with status ${resp.status}`;
+      let code: string | undefined;
+      try {
+        const payload = await resp.json() as {
+          error?: string | { code?: unknown; message?: unknown };
+          code?: unknown;
+          message?: unknown;
+        };
+        const envelope = payload.error && typeof payload.error === 'object'
+          ? payload.error
+          : null;
+        const rawCode = envelope?.code ?? payload.code;
+        const rawMessage = envelope?.message
+          ?? payload.message
+          ?? (typeof payload.error === 'string' ? payload.error : undefined);
+        code = boundedRequestErrorCode(rawCode);
+        if (typeof rawMessage === 'string' && rawMessage.trim()) {
+          message = rawMessage;
+        }
+      } catch {
+        // Keep the stable HTTP fallback when a legacy daemon returns no JSON.
+      }
+      throw new ProjectDeleteError(message, resp.status, code);
+    }
     // Drop per-project browser caches once the project is gone server-side so
     // they do not accumulate in localStorage for the lifetime of the profile.
-    if (resp.ok) {
-      removeCachedTabs(id, workspaceContext);
-      removeDesignBrowserProjectCache(id);
-    }
-    return resp.ok;
-  } catch {
-    return false;
+    removeCachedTabs(id, workspaceContext);
+    removeDesignBrowserProjectCache(id);
+    return true;
+  } catch (error) {
+    if (error instanceof ProjectDeleteError) throw error;
+    throw new ProjectDeleteError(
+      error instanceof Error ? error.message : 'Project delete request failed.',
+      undefined,
+      'network_error',
+    );
   }
 }
 
 // ---------- conversations ----------
 
 export class ProjectConversationsHttpError extends Error {
-  constructor(readonly status: number) {
-    super(`conversations ${status}`);
+  constructor(
+    readonly status: number,
+    message = `conversations ${status}`,
+  ) {
+    super(message);
     this.name = 'ProjectConversationsHttpError';
   }
 }
+
+type CreateConversationOptions = {
+  seedFromConversationId?: string | null;
+  forkAfterMessageId?: string | null;
+  sessionMode?: ChatSessionMode;
+  // The one in-memory fork point to retry with when it never reached the DB.
+  forkFallbackMessage?: ChatMessage;
+  forkFallbackPredecessorMessageId?: string | null;
+  workspaceContext?: WorkspaceCollabContext | null;
+  throwOnError?: boolean;
+};
 
 export async function listConversations(
   projectId: string,
@@ -998,17 +1053,7 @@ export async function createConversation(
   // Side Chat: seed the new conversation with another conversation's context
   // by copying its messages. `forkAfterMessageId` narrows that copy to a
   // specific point in the source history.
-  opts?: {
-    seedFromConversationId?: string | null;
-    forkAfterMessageId?: string | null;
-    sessionMode?: ChatSessionMode;
-    // Fork snapshot: the exact in-memory messages to copy (up to the fork
-    // point). Lets the daemon fork from what the user sees even when the fork
-    // point was never persisted (e.g. a run that errored before its assistant
-    // message reached the database).
-    seedMessages?: ChatMessage[];
-    workspaceContext?: WorkspaceCollabContext | null;
-  },
+  opts?: CreateConversationOptions,
 ): Promise<Conversation | null> {
   try {
     const body: CreateConversationRequest = { title };
@@ -1021,29 +1066,64 @@ export async function createConversation(
     if (opts?.forkAfterMessageId) {
       body.forkAfterMessageId = opts.forkAfterMessageId;
     }
-    if (opts?.seedMessages && opts.seedMessages.length > 0) {
-      body.seedMessages = opts.seedMessages;
+    let resp = await postConversation(projectId, body, opts?.workspaceContext);
+    if (!resp.ok) {
+      const message = await readErrorMessage(resp);
+      const fallbackMessage = compactForkFallbackMessage(opts);
+      if (resp.status === 404 && message === 'fork message not found' && fallbackMessage) {
+        resp = await postConversation(
+          projectId,
+          {
+            ...body,
+            forkFallbackMessage: fallbackMessage,
+            forkFallbackPredecessorMessageId: opts?.forkFallbackPredecessorMessageId,
+          },
+          opts?.workspaceContext,
+        );
+      } else {
+        throw new ProjectConversationsHttpError(resp.status, message);
+      }
     }
-    const resp = await fetch(
-      `/api/projects/${encodeURIComponent(projectId)}/conversations`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(opts?.workspaceContext
-            ? workspaceProjectHeaders(opts.workspaceContext)
-            : {}),
-        },
-        body: JSON.stringify(body),
-      },
-    );
-    if (!resp.ok) return null;
+    if (!resp.ok) {
+      throw new ProjectConversationsHttpError(resp.status, await readErrorMessage(resp));
+    }
     const json = (await resp.json()) as { conversation: Conversation };
     evictConversationsRead(projectId, opts?.workspaceContext);
     return json.conversation;
-  } catch {
+  } catch (error) {
+    if (opts?.throwOnError) throw error;
     return null;
   }
+}
+
+function postConversation(
+  projectId: string,
+  body: CreateConversationRequest,
+  workspaceContext?: WorkspaceCollabContext | null,
+): Promise<Response> {
+  return fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/conversations`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(workspaceContext ? workspaceProjectHeaders(workspaceContext) : {}),
+      },
+      body: JSON.stringify(body),
+    },
+  );
+}
+
+function compactForkFallbackMessage(
+  opts: CreateConversationOptions | undefined,
+): ChatMessage | null {
+  const forkMessage = opts?.forkFallbackMessage;
+  if (!forkMessage || opts?.forkFallbackPredecessorMessageId === undefined) return null;
+  return {
+    id: forkMessage.id,
+    role: forkMessage.role,
+    content: forkMessage.content,
+  };
 }
 
 export async function patchConversation(
@@ -1669,6 +1749,7 @@ interface PluginInstallEvent {
   kind?: 'progress' | 'success' | 'error';
   phase?: string;
   message?: string;
+  code?: string;
   plugin?: InstalledPluginRecord;
   warnings?: string[];
 }
@@ -1689,7 +1770,7 @@ export async function installPluginSource(
     });
     if (!resp.ok) {
       const message = await readErrorMessage(resp);
-      return { ok: false, warnings: [], message, log };
+      return { ok: false, warnings: [], message, status: resp.status, log };
     }
     if (!resp.body) {
       return {
@@ -1703,17 +1784,22 @@ export async function installPluginSource(
     let success: InstalledPluginRecord | undefined;
     let warnings: string[] = [];
     let errorMessage: string | undefined;
+    let errorCode: string | undefined;
     for await (const ev of readServerSentEvents(resp.body)) {
       if (ev.message) log.push(ev.message);
       if (ev.warnings) warnings = ev.warnings;
       if (ev.kind === 'success') success = ev.plugin;
-      if (ev.kind === 'error') errorMessage = ev.message ?? 'Install failed.';
+      if (ev.kind === 'error') {
+        errorMessage = ev.message ?? 'Install failed.';
+        errorCode = boundedRequestErrorCode(ev.code);
+      }
     }
     return {
       ok: Boolean(success) && !errorMessage,
       plugin: success,
       warnings,
       message: errorMessage ?? (success ? `Installed ${success.title}.` : 'Install finished.'),
+      ...(errorCode ? { errorCode } : {}),
       log,
     };
   } catch (err) {
@@ -1721,6 +1807,7 @@ export async function installPluginSource(
       ok: false,
       warnings: [],
       message: (err as Error).message,
+      errorCode: 'network_error',
       log,
     };
   }

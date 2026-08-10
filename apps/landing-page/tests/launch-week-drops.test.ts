@@ -21,7 +21,7 @@ const at = (iso: string) => Date.parse(iso);
 const ENDPOINT = 'https://open-design.ai/launch-week/drops';
 
 test('an unopened day is never served', async () => {
-  const { body } = await call(ENDPOINT, at('2026-08-09T23:59:00Z'));
+  const { body } = await call(ENDPOINT, at('2026-08-10T03:59:00Z'));
   assert.deepEqual(body.drops, [], 'nothing is public before the week opens');
 
   const midweek = await call(ENDPOINT, at('2026-08-12T09:00:00Z'));
@@ -35,11 +35,11 @@ test('an unopened day is never served', async () => {
   assert.equal(after.body.drops.length, 5, 'the whole week stays up once it has run');
 });
 
-test('a day opens at 08:00 UTC+8 exactly', async () => {
-  const before = await call(ENDPOINT, at('2026-08-10T00:00:00Z') - 1);
+test('a day opens at 12:00 UTC+8 exactly', async () => {
+  const before = await call(ENDPOINT, at('2026-08-10T04:00:00Z') - 1);
   assert.equal(before.body.drops.length, 0);
 
-  const on = await call(ENDPOINT, at('2026-08-10T00:00:00Z'));
+  const on = await call(ENDPOINT, at('2026-08-10T04:00:00Z'));
   assert.equal(on.body.drops.length, 1);
 });
 
@@ -58,15 +58,15 @@ test('preview needs the key, and is never cached', async () => {
 });
 
 test('the edge stops caching a day at its boundary', async () => {
-  const { response } = await call(ENDPOINT, at('2026-08-10T23:00:00Z'));
+  const { response } = await call(ENDPOINT, at('2026-08-11T03:00:00Z'));
   const maxAge = Number(/s-maxage=(\d+)/.exec(response.headers.get('Cache-Control') ?? '')?.[1]);
   assert.ok(maxAge <= 3600, 'day 2 cannot be held back by a stale day-1 response');
 });
 
 test('every locale serves its own drops, and an unknown one falls back', async () => {
-  const zh = await call(`${ENDPOINT}?locale=zh`, at('2026-08-14T00:00:00Z'));
-  const en = await call(`${ENDPOINT}?locale=en`, at('2026-08-14T00:00:00Z'));
-  const bogus = await call(`${ENDPOINT}?locale=xx`, at('2026-08-14T00:00:00Z'));
+  const zh = await call(`${ENDPOINT}?locale=zh`, at('2026-08-14T04:00:00Z'));
+  const en = await call(`${ENDPOINT}?locale=en`, at('2026-08-14T04:00:00Z'));
+  const bogus = await call(`${ENDPOINT}?locale=xx`, at('2026-08-14T04:00:00Z'));
 
   assert.equal(zh.body.drops.length, 5);
   assert.notDeepEqual(zh.body.drops, en.body.drops, 'zh is translated, not the English copy');

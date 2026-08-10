@@ -3,6 +3,7 @@ import {
   applyPlugin,
   cacheTabsLocally,
   contributeGeneratedPluginToOpenDesign,
+  createConversation,
   createDesignSystemProjectFromProject,
   createProject,
   createPluginShareProject,
@@ -15,6 +16,7 @@ import {
   importFolderProject,
   invalidateWorkspaceProjectLists,
   installGeneratedPluginFolder,
+  installPluginSource,
   listPlugins,
   listPluginsFresh,
   invalidatePluginCatalogCache,
@@ -78,6 +80,113 @@ function teamWorkspaceContext(
     ...overrides,
   };
 }
+
+describe('createConversation', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('keeps a persisted conversation fork request compact', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () => Response.json({
+      conversation: {
+        id: 'fork-1',
+        projectId: 'project-1',
+        title: 'Fork',
+        createdAt: 2,
+        updatedAt: 2,
+      },
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(createConversation('project-1', 'Fork', {
+      seedFromConversationId: 'source-1',
+      forkAfterMessageId: 'assistant-1',
+      forkFallbackMessage: {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: 'Done',
+        events: [{ kind: 'raw', line: 'large diagnostic payload' }],
+      },
+    })).resolves.toMatchObject({ id: 'fork-1' });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as Record<string, unknown>;
+    expect(body).toMatchObject({
+      seedFromConversationId: 'source-1',
+      forkAfterMessageId: 'assistant-1',
+    });
+    expect(body.seedMessages).toBeUndefined();
+    expect(body.forkFallbackMessage).toBeUndefined();
+  });
+
+  it('retries an unpersisted fork point with one compact fallback message', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (_input, init) => {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      if (fetchMock.mock.calls.length === 1) {
+        expect(body.seedMessages).toBeUndefined();
+        expect(body.forkFallbackMessage).toBeUndefined();
+        return Response.json({ error: 'fork message not found' }, { status: 404 });
+      }
+      return Response.json({
+        conversation: {
+          id: 'fork-recovered',
+          projectId: 'project-1',
+          title: 'Fork',
+          createdAt: 2,
+          updatedAt: 2,
+        },
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(createConversation('project-1', 'Fork', {
+      seedFromConversationId: 'source-1',
+      forkAfterMessageId: 'assistant-missing',
+      forkFallbackPredecessorMessageId: 'user-before-missing',
+      forkFallbackMessage: {
+        id: 'assistant-missing',
+        role: 'assistant',
+        content: 'Partial answer',
+        runId: 'failed-run',
+        runStatus: 'failed',
+        events: [{ kind: 'raw', line: 'large diagnostic payload' }],
+        producedFiles: [],
+      },
+    })).resolves.toMatchObject({ id: 'fork-recovered' });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const retryBody = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body)) as {
+      seedMessages?: unknown;
+      forkFallbackMessage?: Record<string, unknown>;
+      forkFallbackPredecessorMessageId?: string;
+    };
+    expect(retryBody.seedMessages).toBeUndefined();
+    expect(retryBody.forkFallbackMessage).toEqual({
+      id: 'assistant-missing',
+      role: 'assistant',
+      content: 'Partial answer',
+    });
+    expect(retryBody.forkFallbackPredecessorMessageId).toBe('user-before-missing');
+  });
+
+  it('surfaces the daemon error for an interactive conversation write', async () => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => Response.json({
+      error: {
+        code: 'WORKSPACE_PROJECT_PERMISSION_DENIED',
+        message: 'workspace project mutation is not allowed',
+      },
+    }, { status: 403 })));
+
+    await expect(createConversation('project-1', 'Fork', {
+      seedFromConversationId: 'source-1',
+      forkAfterMessageId: 'assistant-1',
+      throwOnError: true,
+    })).rejects.toMatchObject({
+      message: 'workspace project mutation is not allowed',
+      status: 403,
+    });
+  });
+});
 
 describe('project detail reads', () => {
   afterEach(() => {
@@ -768,7 +877,27 @@ describe('deleteProject', () => {
   it('reports failure when the daemon refuses the delete', async () => {
     vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => new Response(null, { status: 403 })));
 
-    await expect(deleteProject('someone-elses-project', personalWorkspaceContext())).resolves.toBe(false);
+    await expect(deleteProject('someone-elses-project', personalWorkspaceContext())).rejects.toMatchObject({
+      name: 'ProjectDeleteError',
+      status: 403,
+    });
+  });
+
+  it('preserves the daemon error code for analytics drill-down', async () => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => new Response(JSON.stringify({
+      error: {
+        code: 'WORKSPACE_AUTHORITY_UNAVAILABLE',
+        message: 'workspace authority is temporarily unavailable',
+        retryable: true,
+      },
+    }), { status: 503 })));
+
+    await expect(deleteProject('project-1', personalWorkspaceContext())).rejects.toMatchObject({
+      name: 'ProjectDeleteError',
+      status: 503,
+      code: 'WORKSPACE_AUTHORITY_UNAVAILABLE',
+      message: 'workspace authority is temporarily unavailable',
+    });
   });
 });
 
@@ -1269,6 +1398,31 @@ describe('installGeneratedPluginFolder', () => {
       warnings: ['Missing open-design.json'],
       message: 'Plugin validation failed.',
       log: ['Validating generated-plugin'],
+    });
+  });
+});
+
+describe('installPluginSource diagnostics', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('drops a syntactically valid but unknown SSE error code', async () => {
+    const event = JSON.stringify({
+      kind: 'error',
+      code: 'UPSTREAM_abc123',
+      message: 'Unknown upstream failure',
+    });
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(`data: ${event}\n\n`, {
+      status: 200,
+      headers: { 'content-type': 'text/event-stream' },
+    })));
+
+    await expect(installPluginSource('github:owner/repo')).resolves.toEqual({
+      ok: false,
+      warnings: [],
+      message: 'Unknown upstream failure',
+      log: ['Unknown upstream failure'],
     });
   });
 });
@@ -1888,7 +2042,10 @@ describe('deleteProject local caches', () => {
   it('keeps tabs and Design Browser caches when the delete fails', async () => {
     const store = stubWindowStore();
     vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => new Response(null, { status: 500 })));
-    await expect(deleteProject('p1')).resolves.toBe(false);
+    await expect(deleteProject('p1')).rejects.toMatchObject({
+      name: 'ProjectDeleteError',
+      status: 500,
+    });
     expect(store.has(tabsKey)).toBe(true);
     expect(store.has(historyKey)).toBe(true);
     expect(store.has(viewportKey)).toBe(true);

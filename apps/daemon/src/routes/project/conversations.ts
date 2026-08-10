@@ -104,17 +104,31 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
       typeof seedFromConversationId === 'string' && seedFromConversationId
         ? getRoutableConversation(req.params.id, seedFromConversationId)
         : null;
-    // Client-supplied fork snapshot. The chat "Fork" action sends the exact
-    // messages the user is looking at (up to the fork point). We prefer it over
-    // reading the source conversation from the DB so a fork point that was
-    // never persisted — e.g. an assistant turn whose run errored / had its
-    // connection reset before reaching the database — still forks instead of
-    // 404ing on `forkAfterMessageId`.
+    // Keep accepting full snapshots from older clients. Current clients copy
+    // persisted history first and retry with one compact fallback message only
+    // when an in-memory fork point never reached the database.
     const clientSeedMessages = Array.isArray(req.body?.seedMessages)
       ? (req.body.seedMessages as any[]).filter(
           (message) => message && typeof message.role === 'string',
         )
       : null;
+    const clientForkFallbackMessage =
+      req.body?.forkFallbackMessage
+      && typeof req.body.forkFallbackMessage.id === 'string'
+      && typeof req.body.forkFallbackMessage.role === 'string'
+      && typeof req.body.forkFallbackMessage.content === 'string'
+        ? req.body.forkFallbackMessage
+        : null;
+    const rawForkFallbackPredecessorMessageId = req.body?.forkFallbackPredecessorMessageId;
+    let clientForkFallbackPredecessorMessageId: string | null | undefined;
+    if (rawForkFallbackPredecessorMessageId === null) {
+      clientForkFallbackPredecessorMessageId = null;
+    } else if (
+      typeof rawForkFallbackPredecessorMessageId === 'string'
+      && rawForkFallbackPredecessorMessageId
+    ) {
+      clientForkFallbackPredecessorMessageId = rawForkFallbackPredecessorMessageId;
+    }
     let seedMessages: any[] = [];
     if (clientSeedMessages && clientSeedMessages.length > 0) {
       seedMessages = clientSeedMessages;
@@ -131,9 +145,27 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
       if (requestedForkMessageId) {
         const forkIndex = seedMessages.findIndex((message) => message.id === requestedForkMessageId);
         if (forkIndex < 0) {
-          return res.status(404).json({ error: 'fork message not found' });
+          if (clientForkFallbackMessage?.id !== requestedForkMessageId) {
+            return res.status(404).json({ error: 'fork message not found' });
+          }
+          if (clientForkFallbackPredecessorMessageId === undefined) {
+            return res.status(400).json({ error: 'fork fallback predecessor is required' });
+          }
+          if (clientForkFallbackPredecessorMessageId === null) {
+            seedMessages = [];
+          } else {
+            const predecessorIndex = seedMessages.findIndex(
+              (message) => message.id === clientForkFallbackPredecessorMessageId,
+            );
+            if (predecessorIndex < 0) {
+              return res.status(404).json({ error: 'fork fallback predecessor not found' });
+            }
+            seedMessages = seedMessages.slice(0, predecessorIndex + 1);
+          }
+          seedMessages.push(clientForkFallbackMessage);
+        } else {
+          seedMessages = seedMessages.slice(0, forkIndex + 1);
         }
-        seedMessages = seedMessages.slice(0, forkIndex + 1);
       }
     } else if (requestedForkMessageId) {
       return res.status(404).json({ error: 'fork source conversation not found' });

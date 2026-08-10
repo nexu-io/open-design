@@ -1321,4 +1321,36 @@ describe('recvqbh189zBY6 — single-card delete confirmation', () => {
     });
     expect(screen.queryByRole('alertdialog')).toBeNull();
   });
+
+  it('submits at most one delete while the request is pending', async () => {
+    let resolveDelete!: (value: true) => void;
+    const pendingDelete = new Promise<true>((resolve) => {
+      resolveDelete = resolve;
+    });
+    const onDelete = vi.fn(() => pendingDelete);
+    render(
+      <RecentProjectsStrip
+        projects={[project({ id: 'project-1', name: 'My project' })]}
+        onOpen={() => {}}
+        onDelete={onDelete}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'More actions' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete' }));
+
+    const dialog = await screen.findByRole('alertdialog');
+    const deleteButton = within(dialog).getByRole('button', { name: 'Delete' });
+    fireEvent.click(deleteButton);
+    fireEvent.click(deleteButton);
+
+    expect(onDelete).toHaveBeenCalledTimes(1);
+    expect((deleteButton as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(dialog.parentElement as HTMLElement);
+    expect(screen.getByRole('alertdialog')).toBe(dialog);
+    expect(within(dialog).getByText(/My project/)).toBeTruthy();
+
+    await act(async () => resolveDelete(true));
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+  });
 });

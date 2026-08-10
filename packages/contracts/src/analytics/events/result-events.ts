@@ -97,8 +97,10 @@ export interface SpeakerNotesSaveResultProps {
 
 // Outcome of an actual import attempt from the plugin import modal. Fires
 // once per executed import (after the install/upload promise settles), not
-// for clicks that no-op. `error_code` carries the backend failure message —
-// the install pipeline has no structured codes (see PluginInstallOutcome).
+// for clicks that no-op. `error_code` carries a bounded machine-readable
+// backend code when available, with a stable HTTP/network fallback. Never put
+// the free-form install message here: it can contain URLs, paths, or upstream
+// response text and would create unbounded analytics cardinality.
 export interface PluginImportResultProps {
   page_name: 'plugins';
   area: 'import_modal';

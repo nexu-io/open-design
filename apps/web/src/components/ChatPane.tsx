@@ -2712,7 +2712,7 @@ export function ChatPane({
                 nextStepSkills={skills}
                 toolboxSkillNames={featuredToolboxSkillNames}
                 nextStepVariant={nextStepVariant}
-                onForkFromMessage={onForkFromMessage}
+                onForkFromMessage={viewerOnly ? undefined : onForkFromMessage}
                 onAssistantFeedback={onAssistantFeedback}
                 forkingMessageId={forkingMessageId}
                 t={t}

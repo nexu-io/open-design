@@ -1,6 +1,6 @@
 {
   "name": "@open-design/contracts",
-  "version": "0.16.2",
+  "version": "0.18.2",
   "private": true,
   "type": "module",
   "description": "Shared pure TypeScript contracts for the Open Design web/daemon boundary.",
@@ -49,6 +49,10 @@
     "./runtime/deck-stage-fallback": {
       "types": "./dist/runtime/deck-stage-fallback.d.ts",
       "default": "./dist/runtime/deck-stage-fallback.mjs"
+    },
+    "./runtime/preview-observability": {
+      "types": "./dist/runtime/preview-observability.d.ts",
+      "default": "./dist/runtime/preview-observability.mjs"
     },
     "./design-systems/components-manifest": {
       "types": "./dist/design-systems/components-manifest.d.ts",

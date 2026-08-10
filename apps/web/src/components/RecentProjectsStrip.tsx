@@ -64,7 +64,11 @@ import {
   trackWorkspaceProjectActionResult,
   trackWorkspaceSharedProjectOpenResult,
 } from '../analytics/events';
-import { countBucket, workspaceAnalyticsDimensions } from '../analytics/workspace';
+import {
+  countBucket,
+  stableAnalyticsRequestErrorCode,
+  workspaceAnalyticsDimensions,
+} from '../analytics/workspace';
 import type { ProjectCollectionClickProps } from '@open-design/contracts/analytics';
 
 /** Which project space this strip renders. Drives the per-card 共享 badge
@@ -480,6 +484,7 @@ export function RecentProjectsStrip({
   // that anything went wrong. Track failure so the dialog can stay open and
   // say so instead of silently doing nothing.
   const [deleteFailed, setDeleteFailed] = useState(false);
+  const [deletePending, setDeletePending] = useState(false);
   // Project → team-space sharing (the project card entry). The daemon gates on
   // `canShareProjects` (403 off-team / no rights), so we only badge on success.
   const [sharingId, setSharingId] = useState<string | null>(null);
@@ -1130,10 +1135,11 @@ export function RecentProjectsStrip({
   }
 
   async function commitDelete() {
-    if (!confirmTarget || !onDelete) return;
+    if (!confirmTarget || !onDelete || deletePending) return;
     const target = confirmTarget;
     const startedAt = performance.now();
     setDeleteFailed(false);
+    setDeletePending(true);
     try {
       const result = await onDelete(target.id);
       // A falsy result (false, or void from a caller that never resolves the
@@ -1180,9 +1186,11 @@ export function RecentProjectsStrip({
         succeeded_count: 0,
         failed_count: 1,
         duration_ms: Math.round(performance.now() - startedAt),
-        error_code: 'request_failed',
+        error_code: stableAnalyticsRequestErrorCode(err),
         ...workspaceDimensions,
       });
+    } finally {
+      setDeletePending(false);
     }
   }
 
@@ -1993,9 +2001,11 @@ export function RecentProjectsStrip({
           className="modal-confirm"
           role="alertdialog"
           onClose={() => {
+            if (deletePending) return;
             setConfirmTarget(null);
             setDeleteFailed(false);
           }}
+          closeOnBackdrop={!deletePending}
           ariaLabelledBy={confirmTitleId}
         >
           <DialogTitle id={confirmTitleId}>{t('designs.deleteTitle')}</DialogTitle>
@@ -2010,6 +2020,7 @@ export function RecentProjectsStrip({
           <DialogFooter className="row">
             <button
               type="button"
+              disabled={deletePending}
               onClick={() => {
                 setConfirmTarget(null);
                 setDeleteFailed(false);
@@ -2017,7 +2028,12 @@ export function RecentProjectsStrip({
             >
               {t('designs.renameCancel')}
             </button>
-            <button type="button" className="primary danger" onClick={() => void commitDelete()}>
+            <button
+              type="button"
+              className="primary danger"
+              disabled={deletePending}
+              onClick={() => void commitDelete()}
+            >
               {t('designs.menuDelete')}
             </button>
           </DialogFooter>

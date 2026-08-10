@@ -7,8 +7,9 @@
  * days before each reveal. The sealed cards ship in the page; the revealed
  * markup lives here and is released on the hour, without needing a deploy.
  *
- * A day opens at 08:00 UTC+8, which is exactly 00:00 UTC. UTC+8 observes no
- * daylight saving, so a plain UTC timestamp is the whole calculation.
+ * A day opens at 12:00 UTC+8 — midday, a few hours ahead of when the day's
+ * posts go out, so the page is never the last thing to know. UTC+8 observes no
+ * daylight saving, so a plain UTC offset is the whole calculation.
  */
 import { LW_DROP_MARKUP } from '../../app/_partials/launch-week-drops';
 
@@ -19,13 +20,13 @@ type PagesFunctionContext<Env> = {
 
 type PagesFunction<Env> = (context: PagesFunctionContext<Env>) => Response | Promise<Response>;
 
-/** Day N opens at 2026-08-{09+N} 00:00 UTC. */
+/** Day N opens at 2026-08-{09+N} 04:00 UTC = 12:00 UTC+8. */
 const OPENS_AT = [
-  '2026-08-10T00:00:00Z',
-  '2026-08-11T00:00:00Z',
-  '2026-08-12T00:00:00Z',
-  '2026-08-13T00:00:00Z',
-  '2026-08-14T00:00:00Z',
+  '2026-08-10T04:00:00Z',
+  '2026-08-11T04:00:00Z',
+  '2026-08-12T04:00:00Z',
+  '2026-08-13T04:00:00Z',
+  '2026-08-14T04:00:00Z',
 ].map((iso) => Date.parse(iso));
 
 /**

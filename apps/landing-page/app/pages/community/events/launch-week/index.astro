@@ -11,8 +11,9 @@ const meta = LW_META[locale] ?? LW_META.en;
 const launchWeekMain = LW_BODY[locale] ?? LW_BODY.en;
 
 /**
- * Drop schedule. Each day flips at 08:00 UTC+8, which is exactly 00:00 UTC —
- * and UTC+8 has no daylight saving, so a plain UTC timestamp is the whole story.
+ * Drop schedule. Each day flips at 12:00 UTC+8 (= 04:00 UTC) — ahead of the
+ * day's posts, so a link from one never lands on a card that is still sealed.
+ * UTC+8 has no daylight saving, so a plain UTC offset is the whole story.
  * Rendered per build; the inline script below re-resolves it in the visitor's
  * browser so a cached page still shows the right state.
  */
@@ -40,7 +41,7 @@ const jsonLd = {
   '@type': 'Event',
   name: title,
   description,
-  startDate: '2026-08-10T08:00:00+08:00',
+  startDate: '2026-08-10T12:00:00+08:00',
   endDate: '2026-08-14T23:59:00+08:00',
   eventAttendanceMode: 'https://schema.org/OnlineEventAttendanceMode',
   eventStatus: 'https://schema.org/EventScheduled',
@@ -58,7 +59,7 @@ const jsonLd = {
     priceCurrency: 'USD',
     availability: 'https://schema.org/InStock',
     url: new URL(Astro.url.pathname, Astro.site ?? fallbackSite).toString(),
-    validFrom: '2026-08-10T08:00:00+08:00',
+    validFrom: '2026-08-10T12:00:00+08:00',
   },
 };
 ---
@@ -80,7 +81,7 @@ const jsonLd = {
   (() => {
     const now = Date.now();
     const stateFor = (iso) => {
-      const opens = Date.parse(iso + 'T00:00:00Z'); // 08:00 UTC+8
+      const opens = Date.parse(iso + 'T04:00:00Z'); // 12:00 UTC+8
       const closes = opens + 86400000;
       if (now < opens) return 'classified';
       return now < closes ? 'live' : 'released';
@@ -106,7 +107,7 @@ const jsonLd = {
       // Before the week opens, day 1 is the one we tease as next up.
       document.documentElement.dataset.launchWeek = Object.values(states).includes('live')
         ? 'running'
-        : now < Date.parse(DROPS[0].iso + 'T00:00:00Z')
+        : now < Date.parse(DROPS[0].iso + 'T04:00:00Z')
           ? 'before'
           : 'after';
     };
