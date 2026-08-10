@@ -214,6 +214,16 @@ export type TrackingExportFormat =
 
 export type TrackingResult = 'success' | 'failed';
 export type TrackingRunResult = 'success' | 'failed' | 'cancelled';
+export type TrackingRunCancelOrigin =
+  | 'user_stop'
+  | 'project_cleanup'
+  | 'daemon_shutdown'
+  | 'unknown';
+export type TrackingRunTerminalTrigger =
+  | TrackingRunCancelOrigin
+  | 'first_output_deadline'
+  | 'inactivity_watchdog'
+  | 'daemon_restart';
 export type TrackingExportResult = 'success' | 'failed' | 'cancelled';
 export type TrackingTestResult = 'success' | 'failed' | 'timeout';
 export type TrackingRunFailureCategory =

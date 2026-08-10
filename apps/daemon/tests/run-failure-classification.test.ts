@@ -115,6 +115,7 @@ describe('classifyRunFailure', () => {
       classifyRunFailure({
         result: 'cancelled',
         status: { status: 'canceled' },
+        cancelOrigin: 'user_stop',
       }),
     ).toEqual({
       failure_category: 'user_cancel',
@@ -122,9 +123,26 @@ describe('classifyRunFailure', () => {
       failure_stage: 'first_token_wait',
       retryable: false,
       user_action: 'none',
+      cancel_origin: 'user_stop',
+      terminal_trigger: 'user_stop',
     });
   });
 
+  it.each(['project_cleanup', 'daemon_shutdown'] as const)(
+    'keeps lifecycle cancellation origin %s out of the user-stop signal',
+    (cancelOrigin) => {
+      expect(
+        classifyRunFailure({
+          result: 'cancelled',
+          status: { status: 'canceled' },
+          cancelOrigin,
+        }),
+      ).toMatchObject({
+        cancel_origin: cancelOrigin,
+        terminal_trigger: cancelOrigin,
+      });
+    },
+  );
 
   it('prefers user cancellation over timeout-flavored status text when the run result is cancelled', () => {
     expect(
@@ -152,6 +170,8 @@ describe('classifyRunFailure', () => {
       failure_stage: 'first_token_wait',
       retryable: false,
       user_action: 'none',
+      cancel_origin: 'unknown',
+      terminal_trigger: 'unknown',
     });
   });
 
@@ -569,6 +589,85 @@ describe('classifyRunFailure', () => {
         },
         errorCode: 'AGENT_SIGNAL_SIGTERM',
         events: [],
+      }),
+    ).toMatchObject({
+      failure_category: 'timeout',
+      failure_detail: 'inactivity_timeout',
+      failure_stage: 'first_token_wait',
+      terminal_trigger: 'inactivity_watchdog',
+      retryable: true,
+      user_action: 'retry',
+    });
+  });
+
+  it('distinguishes the absolute first-output deadline from inactivity', () => {
+    const timeoutMessage = 'Agent stalled without emitting a first output for 120s.';
+
+    expect(
+      classifyRunFailure({
+        result: 'failed',
+        status: {
+          status: 'failed',
+          error: timeoutMessage,
+          signal: 'SIGTERM',
+          exitCode: null,
+          errorCode: 'AGENT_SIGNAL_SIGTERM',
+        },
+        errorCode: 'AGENT_SIGNAL_SIGTERM',
+        events: [errorEvent('AGENT_SIGNAL_SIGTERM', timeoutMessage, true)],
+      }),
+    ).toMatchObject({
+      failure_category: 'timeout',
+      failure_detail: 'inactivity_timeout',
+      terminal_trigger: 'first_output_deadline',
+    });
+  });
+
+  it('keeps an explicit watchdog trigger when a provider error supplies the failure bucket', () => {
+    expect(
+      classifyRunFailure({
+        result: 'failed',
+        status: {
+          status: 'failed',
+          error: 'HTTP 429: too many requests',
+          exitCode: 1,
+          signal: null,
+          errorCode: 'RATE_LIMITED',
+        },
+        errorCode: 'RATE_LIMITED',
+        terminalTrigger: 'inactivity_watchdog',
+        events: [errorEvent('RATE_LIMITED', 'HTTP 429: too many requests', true)],
+      }),
+    ).toMatchObject({
+      failure_category: 'rate_limit',
+      terminal_trigger: 'inactivity_watchdog',
+    });
+  });
+
+  it('classifies only the terminal attempt after an automatic retry', () => {
+    const timeoutMessage = 'Agent stalled without emitting any new output for 120s.';
+
+    expect(
+      classifyRunFailure({
+        result: 'failed',
+        status: {
+          status: 'failed',
+          error: timeoutMessage,
+          signal: 'SIGTERM',
+          exitCode: null,
+          errorCode: 'AGENT_SIGNAL_SIGTERM',
+        },
+        errorCode: 'AGENT_SIGNAL_SIGTERM',
+        agentId: 'claude',
+        events: [
+          { event: 'start', data: { attempt: 1 } },
+          { event: 'agent', data: { type: 'text_delta', delta: 'Working.' } },
+          { event: 'agent', data: { type: 'tool_use', id: 'tool-1', name: 'Read' } },
+          errorEvent('UPSTREAM_UNAVAILABLE', '503 upstream unavailable', true),
+          { event: 'run_retry_attempted', data: { attempt: 2 } },
+          { event: 'start', data: { attempt: 2 } },
+          errorEvent('AGENT_SIGNAL_SIGTERM', timeoutMessage, true),
+        ],
       }),
     ).toMatchObject({
       failure_category: 'timeout',

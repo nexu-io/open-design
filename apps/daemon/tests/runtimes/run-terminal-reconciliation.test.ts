@@ -106,6 +106,7 @@ describe('durable run terminal reconciliation', () => {
         failure_stage: 'finalize',
         retryable: true,
         user_action: 'retry',
+        terminal_trigger: 'daemon_restart',
         terminal_reconciled: true,
         terminal_recovery_reason: 'daemon_restart',
       }),

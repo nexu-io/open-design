@@ -10000,6 +10000,7 @@ export async function startServer({
         ...(failure?.failure_category ? { failure_category: failure.failure_category } : {}),
         ...(failure?.failure_detail ? { failure_detail: failure.failure_detail } : {}),
         ...(failure?.failure_stage ? { failure_stage: failure.failure_stage } : {}),
+        ...(failure?.terminal_trigger ? { terminal_trigger: failure.terminal_trigger } : {}),
         ...(errorCode ? { error_code: errorCode } : {}),
       };
     };
@@ -10073,6 +10074,7 @@ export async function startServer({
       // this reset, a clean-but-empty attempt 1 would vouch for a crashed
       // attempt 2, classifying the run 'succeeded' off a stale flag.
       run.turnCompletedCleanly = false;
+      run.terminalTrigger = null;
       lifecycle.resetForAttempt(run.retryAttemptCount ?? 0);
       run.analyticsTelemetry = {
         startRequestedAt: run.analyticsTelemetry?.startRequestedAt ?? run.createdAt,
@@ -10212,6 +10214,8 @@ export async function startServer({
         },
         ...(errorCode ? { errorCode } : {}),
         agentId: run.agentId,
+        cancelOrigin: run.cancelOrigin ?? null,
+        terminalTrigger: run.terminalTrigger ?? null,
         events: run.events,
       });
       if (
@@ -11185,6 +11189,9 @@ export async function startServer({
           'Retry the turn, pick a different model, or start a new conversation if the prior context is very large.';
         stallPayload = createSseErrorPayload('AGENT_EXECUTION_FAILED', message, { retryable: true });
       }
+      run.terminalTrigger = reason === 'first_output'
+        ? 'first_output_deadline'
+        : 'inactivity_watchdog';
       send('error', stallPayload);
       // A silent first-token hang is one of the safe transient failure shapes
       // this run is allowed to recover: classifyRunFailure maps the stall text
