@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import { mkdir } from "node:fs/promises";
 
 import {
@@ -90,6 +91,7 @@ export interface ExistingPackagedHeadlessOwner {
 
 export interface AcquireOrAdoptPackagedHeadlessOptions {
   inspectExistingOwner(): Promise<ExistingPackagedHeadlessOwner | null>;
+  repairAdoptedOwner?(webUrl: string): Promise<void>;
   sleep?: (milliseconds: number) => Promise<void>;
   timeoutMs?: number;
 }
@@ -147,9 +149,13 @@ export async function acquireOrAdoptPackagedHeadlessStartup(
   dependencies: PackagedHeadlessStartupDependencies,
   options: AcquireOrAdoptPackagedHeadlessOptions,
 ): Promise<PackagedHeadlessStartupHandle | AdoptedPackagedHeadlessStartupHandle> {
+  const adopt = async (webUrl: string): Promise<AdoptedPackagedHeadlessStartupHandle> => {
+    await options.repairAdoptedOwner?.(webUrl);
+    return { ownership: "adopted", webUrl };
+  };
   const existing = await options.inspectExistingOwner();
   if (existing?.state === "running" && existing.webUrl) {
-    return { ownership: "adopted", webUrl: existing.webUrl };
+    return await adopt(existing.webUrl);
   }
 
   try {
@@ -163,7 +169,7 @@ export async function acquireOrAdoptPackagedHeadlessStartup(
     while (Date.now() < deadline) {
       const owner = await options.inspectExistingOwner();
       if (owner?.state === "running" && owner.webUrl) {
-        return { ownership: "adopted", webUrl: owner.webUrl };
+        return await adopt(owner.webUrl);
       }
       await sleep(100);
     }
@@ -338,6 +344,18 @@ export async function runPackagedHeadless(
         return null;
       }
     },
+    ...(request.mcpInstallAgent === "codex"
+      ? {
+          repairAdoptedOwner: async (webUrl: string) => {
+            const codexBin = process.env.CODEX_BIN?.trim();
+            if (codexBin) {
+              await repairCodexMcpRegistrationViaLiveOwner(webUrl, codexBin);
+              return;
+            }
+            await installCodexMcp(webUrl);
+          },
+        }
+      : {}),
   });
 
   const { webUrl } = startup;
@@ -375,4 +393,130 @@ async function installCodexMcp(daemonUrl: string | null): Promise<void> {
     );
   }
   process.stdout.write(" Open Design MCP installed for Codex\n");
+}
+
+interface LiveOwnerMcpInstallPayload {
+  args: string[];
+  command: string;
+  env: Record<string, string>;
+}
+
+interface LiveOwnerCodexRunnerResult {
+  exitCode: number;
+  stderr: string;
+  stdout: string;
+}
+
+export interface RepairCodexMcpRegistrationOptions {
+  fetchImpl?: typeof fetch;
+  run?: (
+    command: string,
+    args: string[],
+  ) => Promise<LiveOwnerCodexRunnerResult>;
+}
+
+function isStringRecord(value: unknown): value is Record<string, string> {
+  return value != null
+    && typeof value === "object"
+    && !Array.isArray(value)
+    && Object.values(value).every((entry) => typeof entry === "string");
+}
+
+function parseLiveOwnerMcpInstallPayload(value: unknown): LiveOwnerMcpInstallPayload {
+  if (value == null || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("live Open Design owner returned invalid MCP install info");
+  }
+  const payload = value as Partial<LiveOwnerMcpInstallPayload>;
+  if (
+    typeof payload.command !== "string"
+    || payload.command.length === 0
+    || !Array.isArray(payload.args)
+    || !payload.args.every((entry) => typeof entry === "string")
+    || !isStringRecord(payload.env)
+  ) {
+    throw new Error("live Open Design owner returned incomplete MCP install info");
+  }
+  return {
+    args: payload.args,
+    command: payload.command,
+    env: payload.env,
+  };
+}
+
+async function runCodexMcpRepair(
+  command: string,
+  args: string[],
+): Promise<LiveOwnerCodexRunnerResult> {
+  return await new Promise<LiveOwnerCodexRunnerResult>((resolve, reject) => {
+    const child = spawn(command, args, {
+      env: process.env,
+      stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
+    });
+    let stdout = "";
+    let stderr = "";
+    let settled = false;
+    const finish = (
+      callback: () => void,
+    ): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      callback();
+    };
+    const timeout = setTimeout(() => {
+      child.kill("SIGKILL");
+      finish(() => reject(new Error("codex MCP registration timed out after 30s")));
+    }, 30_000);
+    child.stdout?.on("data", (chunk) => {
+      stdout += String(chunk);
+    });
+    child.stderr?.on("data", (chunk) => {
+      stderr += String(chunk);
+    });
+    child.once("error", (error) => {
+      finish(() => reject(error));
+    });
+    child.once("close", (code) => {
+      finish(() => resolve({ exitCode: code ?? -1, stderr, stdout }));
+    });
+  });
+}
+
+export async function repairCodexMcpRegistrationViaLiveOwner(
+  webUrl: string,
+  codexBin: string,
+  options: RepairCodexMcpRegistrationOptions = {},
+): Promise<void> {
+  const ownerUrl = new URL(webUrl);
+  if (
+    ownerUrl.protocol !== "http:"
+    || !["127.0.0.1", "localhost", "[::1]"].includes(ownerUrl.hostname)
+  ) {
+    throw new Error("live Open Design owner must use a loopback HTTP URL");
+  }
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const installInfoUrl = `${webUrl.replace(/\/$/u, "")}/api/mcp/install-info`;
+  const response = await fetchImpl(installInfoUrl);
+  if (!response.ok) {
+    const detail = await response.text().catch(() => response.statusText);
+    throw new Error(
+      `live Open Design MCP install info failed (${response.status}): ${detail}`,
+    );
+  }
+  const payload = parseLiveOwnerMcpInstallPayload(await response.json());
+  const registrationEnv = { ...payload.env, CODEX_BIN: codexBin };
+  const args = ["mcp", "add", "open-design"];
+  for (const [key, value] of Object.entries(registrationEnv)) {
+    args.push("--env", `${key}=${value}`);
+  }
+  args.push("--", payload.command, ...payload.args);
+  const result = await (options.run ?? runCodexMcpRepair)(codexBin, args);
+  if (result.exitCode !== 0) {
+    const detail = result.stderr.trim()
+      || result.stdout.trim()
+      || `exit ${result.exitCode}`;
+    throw new Error(`codex mcp add failed: ${detail}`);
+  }
+  process.stdout.write(" Open Design MCP repaired through the running owner\n");
 }

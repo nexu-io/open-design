@@ -4,6 +4,7 @@ import {
   acquireOrAdoptPackagedHeadlessStartup,
   acquirePackagedHeadlessStartup,
   parsePackagedHeadlessRequest,
+  repairCodexMcpRegistrationViaLiveOwner,
   resolvePackagedMcpBootstrapLaunch,
 } from "../src/headless-runtime.js";
 
@@ -191,5 +192,72 @@ describe("acquirePackagedHeadlessStartup", () => {
     expect(dependencies.startSidecars).toHaveBeenCalledTimes(1);
     expect(activeRunState).toBe('completed');
     expect(childSignals).toEqual([]);
+  });
+
+  it('repairs stale MCP registration through a healthy owner before adopting it', async () => {
+    const { dependencies } = createDependencies('web-identity');
+    const repairAdoptedOwner = vi.fn(async () => undefined);
+
+    const adopted = await acquireOrAdoptPackagedHeadlessStartup(dependencies, {
+      inspectExistingOwner: async () => ({
+        state: 'running',
+        webUrl: 'http://127.0.0.1:7456',
+      }),
+      repairAdoptedOwner,
+    });
+
+    expect(adopted).toEqual({
+      ownership: 'adopted',
+      webUrl: 'http://127.0.0.1:7456',
+    });
+    expect(repairAdoptedOwner).toHaveBeenCalledOnce();
+    expect(repairAdoptedOwner).toHaveBeenCalledWith('http://127.0.0.1:7456');
+    expect(dependencies.startSidecars).not.toHaveBeenCalled();
+  });
+});
+
+describe('repairCodexMcpRegistrationViaLiveOwner', () => {
+  it('rebuilds the live owner registration with the current exact CODEX_BIN', async () => {
+    const run = vi.fn(async (_command: string, _args: string[]) => ({
+      exitCode: 0,
+      stdout: '',
+      stderr: '',
+    }));
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+      command: 'C:\\Program Files\\Open Design\\Open Design.exe',
+      args: [
+        'C:\\Program Files\\Open Design\\resources\\app\\prebundled\\daemon\\daemon-cli.mjs',
+        'mcp',
+      ],
+      env: {
+        ELECTRON_RUN_AS_NODE: '1',
+        CODEX_BIN: 'C:\\stale\\codex.exe',
+        OD_DATA_DIR: 'C:\\OpenDesignData',
+        OD_SIDECAR_IPC_PATH: '\\\\.\\pipe\\open-design-daemon',
+      },
+    }), {
+      headers: { 'Content-Type': 'application/json' },
+      status: 200,
+    }));
+
+    await repairCodexMcpRegistrationViaLiveOwner(
+      'http://127.0.0.1:7456',
+      'C:\\RR-ESW\\bin\\codex.exe',
+      { fetchImpl, run },
+    );
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'http://127.0.0.1:7456/api/mcp/install-info',
+    );
+    expect(run).toHaveBeenCalledOnce();
+    const [command, args] = run.mock.calls[0] ?? [];
+    expect(command).toBe('C:\\RR-ESW\\bin\\codex.exe');
+    expect(args).toContain('CODEX_BIN=C:\\RR-ESW\\bin\\codex.exe');
+    expect(args).not.toContain('CODEX_BIN=C:\\stale\\codex.exe');
+    expect(args.slice(-3)).toEqual([
+      'C:\\Program Files\\Open Design\\Open Design.exe',
+      'C:\\Program Files\\Open Design\\resources\\app\\prebundled\\daemon\\daemon-cli.mjs',
+      'mcp',
+    ]);
   });
 });

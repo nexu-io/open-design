@@ -20,6 +20,7 @@
   ],
   "scripts": {
     "build": "node ./esbuild.config.mjs && tsc -p tsconfig.json --emitDeclarationOnly",
+    "pretest": "pnpm --filter @open-design/daemon build",
     "test": "vitest run -c vitest.config.ts",
     "typecheck": "pnpm --filter @open-design/desktop build && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
   },
