@@ -122,3 +122,36 @@ jobs:
           REPO: ${{ github.repository }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: node --experimental-strip-types tools/release/src/notifications/feishu.ts
+
+  notify_failure:
+    name: Notify Feishu when daily beta fails
+    needs:
+      - resolve
+      - build
+    if: ${{ always() && needs.build.result == 'failure' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout trusted notifier
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: main
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Post daily beta failure card
+        env:
+          FEISHU_WEBHOOK: ${{ secrets.FEISHU_RELEASE_WEBHOOK }}
+          FEISHU_SIGN_SECRET: ${{ secrets.FEISHU_RELEASE_SIGN_SECRET }}
+          NOTICE_TITLE: "🚨 每日 beta 构建失败"
+          NOTICE_TEMPLATE: "red"
+          NOTICE_BODY: |
+            main 的每日 beta 构建未完成。失败可能发生在版本 / release metadata 校验阶段，因此即使尚未生成 beta_version，也必须立即处理。
+
+            **构建 ref**: `${{ needs.resolve.outputs.ref }}`
+
+            独立的 prerelease Windows canary 不受该 metadata 门禁影响；请结合两个 workflow 判断是发布状态问题还是产品 smoke 问题。
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: node --experimental-strip-types tools/release/src/notifications/feishu-notice.ts

@@ -60,6 +60,12 @@ const releaseBetaWorkflowPath = join(workspaceRoot, ".github", "workflows", "rel
 const releaseBetaSelfHostedWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-beta-s.yml");
 const releasePreviewWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-preview.yml");
 const releasePrereleaseWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-prerelease.yml");
+const mainPrereleaseWinSmokeWorkflowPath = join(
+  workspaceRoot,
+  ".github",
+  "workflows",
+  "main-prerelease-win-smoke.yml",
+);
 const releaseStableWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-stable.yml");
 const releaseStableNotesScriptPath = join(workspaceRoot, ".github", "scripts", "release", "github", "stable-notes.sh");
 const releasePreviewScriptPath = join(workspaceRoot, "tools", "release", "src", "metadata", "prepare-preview.ts");
@@ -1873,6 +1879,59 @@ process.stdin.on("end", () => {
     // Default path: an empty input builds main, never a release branch.
     expect(resolveJob).toContain('echo "ref=main" >> "$GITHUB_OUTPUT"');
     expect(resolveJob).not.toContain("refs/heads/release/v*");
+
+    // Metadata failures happen before beta_version exists, so the normal
+    // download-card job is skipped. Keep a separate failure-only notice or a
+    // stale main version can fail silently every day without reaching smoke.
+    expect(workflow).toContain("  notify_failure:");
+    expect(workflow).toContain("if: ${{ always() && needs.build.result == 'failure' }}");
+    expect(workflow).toContain("tools/release/src/notifications/feishu-notice.ts");
+  });
+
+  it("[P1] runs a metadata-independent prerelease Windows smoke before release cuts", async () => {
+    const [canary, minorCut, patchCut] = await Promise.all([
+      readFile(mainPrereleaseWinSmokeWorkflowPath, "utf8"),
+      readFile(cutReleaseWorkflowPath, "utf8"),
+      readFile(cutPatchReleaseWorkflowPath, "utf8"),
+    ]);
+
+    const trigger = sectionBetween(canary, "on:", "\npermissions:");
+    expect(trigger).toContain("schedule:");
+    expect(trigger).toContain("workflow_dispatch:");
+    expect(trigger).toContain("workflow_call:");
+    expect(canary).toContain("ref: main");
+    expect(canary).not.toContain("inputs.ref");
+    expect(canary).toContain("runs-on: windows-latest");
+    expect(canary).toContain("OPEN_DESIGN_AMR_PROFILE: prod");
+    expect(canary).toContain("OD_VELA_WEB_URL: ${{ secrets.VELA_WEB_URL_PROD }}");
+    expect(canary).toContain("--namespace release-prerelease-canary-win");
+    expect(canary).toContain('OD_PACKAGED_E2E_RELEASE_CHANNEL: prerelease');
+    expect(canary).toContain('OD_PACKAGED_E2E_WIN_SMOKE_PROFILE: core');
+    expect(canary).toContain("pnpm exec tsx scripts/release-smoke.ts win specs/win.spec.ts");
+    expect(canary).toContain("tools-pack win validate-payload");
+    expect(canary).toContain("tools/release/src/notifications/feishu-notice.ts");
+
+    // This lane is a product canary, not a beta/prerelease publication. In
+    // particular, a stale main package version must not prevent Windows from
+    // reaching the packaged smoke as happened while main was 0.16.2 and stable
+    // had already advanced to 0.18.1.
+    expect(canary).not.toContain("tools-release prepare");
+    expect(canary).not.toContain("tools-release check-storage");
+    expect(canary).not.toContain("uses: ./.github/workflows/release-beta.yml");
+    expect(canary).not.toContain("uses: ./.github/workflows/release-prerelease.yml");
+
+    for (const [label, workflow] of [
+      ["cut-release", minorCut],
+      ["cut-patch-release", patchCut],
+    ] as const) {
+      const smokeJob = sectionBetween(workflow, "  prerelease_win_smoke:", "\n  cut:");
+      expect(smokeJob, label).toContain("uses: ./.github/workflows/main-prerelease-win-smoke.yml");
+      expect(smokeJob, label).not.toContain("with:");
+      expect(smokeJob, label).toContain("secrets: inherit");
+      expect(workflow, label).toContain("permissions:\n  actions: write\n  contents: read");
+      expect(workflow, label).toContain("needs: prerelease_win_smoke");
+      expect(workflow, label).toContain("ref: ${{ needs.prerelease_win_smoke.outputs.commit }}");
+    }
   });
 
   it("[P2] gates the Thursday patch cut on the Tuesday minor being published", async () => {
@@ -1881,7 +1940,7 @@ process.stdin.on("end", () => {
     //   1. It fires Thursday and bumps patch (not minor) from the highest release branch.
     //   2. It only cuts when this line's minor base X.Y.0 is a PUBLISHED stable
     //      GitHub Release (non-draft, non-prerelease) — otherwise it must NOT create
-    //      a branch or build; it posts a Feishu notice and stops.
+    //      a branch or launch the prerelease publication; it posts a notice and stops.
     //   3. The happy path still cuts from main and pushes with the App token, so the
     //      existing notify-release-feishu push trigger produces the prerelease + card.
     const [workflow, notice] = await Promise.all([
@@ -1921,8 +1980,9 @@ process.stdin.on("end", () => {
       expect(workflow).toContain(`- name: ${step}\n        if: steps.guard.outputs.published == 'true'`);
     }
 
-    // Happy path keeps cut-release's mechanics: cut from main, App-token push.
-    expect(workflow).toContain("ref: main");
+    // Happy path keeps cut-release's mechanics: cut the exact main commit that
+    // passed the prerelease Windows canary, then push with the App token.
+    expect(workflow).toContain("ref: ${{ needs.prerelease_win_smoke.outputs.commit }}");
     expect(workflow).toContain("token: ${{ steps.app.outputs.token }}");
     expect(workflow).toContain('git push origin "$BRANCH"');
     // The version bump is a no-op whenever main already leads stable by this exact
