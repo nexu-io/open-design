@@ -13,6 +13,9 @@
 // negative case that constructs the start call directly).
 
 import type http from 'node:http';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { isApiAuthDisabled, isApiTokenMiddlewareEnabled } from '../src/api-token-auth.js';
 import { startServer } from '../src/server.js';
@@ -24,12 +27,24 @@ const PREVIOUS_DISABLE_API_AUTH = process.env.OD_DISABLE_API_AUTH;
 let server: http.Server | undefined;
 let baseUrl = '';
 let shutdown: (() => Promise<void> | void) | undefined;
+let staticDir: string | undefined;
+
+function makeConnectionsAppearNonLoopback(target: http.Server): void {
+  target.prependListener('connection', (socket) => {
+    Object.defineProperty(socket, 'remoteAddress', {
+      configurable: true,
+      value: '172.18.0.1',
+    });
+  });
+}
 
 afterEach(async () => {
   if (shutdown) await Promise.resolve(shutdown());
   if (server) await new Promise<void>((resolve) => server!.close(() => resolve()));
   server = undefined;
   shutdown = undefined;
+  if (staticDir) rmSync(staticDir, { force: true, recursive: true });
+  staticDir = undefined;
   if (PREVIOUS_TOKEN === undefined) delete process.env.OD_API_TOKEN;
   else process.env.OD_API_TOKEN = PREVIOUS_TOKEN;
   if (PREVIOUS_HOST === undefined) delete process.env.OD_BIND_HOST;
@@ -113,5 +128,79 @@ describe('bearer middleware', () => {
         OD_DISABLE_API_AUTH: '1',
       }),
     ).toBe(true);
+  });
+});
+
+describe('browser authentication for non-loopback Docker peers', () => {
+  beforeEach(async () => {
+    process.env.OD_API_TOKEN = 'secret-test-token';
+    staticDir = mkdtempSync(path.join(os.tmpdir(), 'od-api-token-static-'));
+    writeFileSync(path.join(staticDir, 'index.html'), '<!doctype html><div>docker shell</div>');
+
+    const started = (await startServer({
+      port: 0,
+      host: '127.0.0.1',
+      returnServer: true,
+      staticDir,
+    })) as {
+      url: string;
+      server: http.Server;
+      shutdown?: () => Promise<void> | void;
+    };
+    baseUrl = started.url;
+    server = started.server;
+    shutdown = started.shutdown;
+    makeConnectionsAppearNonLoopback(server);
+  });
+
+  it('authenticates the browser without weakening API clients or probes', async () => {
+    const unauthenticatedShell = await fetch(`${baseUrl}/`);
+    expect(unauthenticatedShell.status).toBe(401);
+    expect(unauthenticatedShell.headers.get('www-authenticate')).toBe(
+      'Basic realm="Open Design", charset="UTF-8"',
+    );
+    expect(unauthenticatedShell.headers.get('set-cookie')).toBeNull();
+    expect(await unauthenticatedShell.text()).not.toContain('docker shell');
+
+    const credentials = Buffer.from('open-design:secret-test-token').toString('base64');
+    const basicApiResp = await fetch(`${baseUrl}/api/plugins`, {
+      headers: { authorization: `Basic ${credentials}` },
+    });
+    expect(basicApiResp.status).toBe(200);
+
+    const authenticatedShell = await fetch(`${baseUrl}/`, {
+      headers: { authorization: `Basic ${credentials}` },
+    });
+    expect(authenticatedShell.status).toBe(200);
+    expect(await authenticatedShell.text()).toContain('docker shell');
+
+    const bearerResp = await fetch(`${baseUrl}/api/plugins`, {
+      headers: { authorization: 'Bearer secret-test-token' },
+    });
+    expect(bearerResp.status).toBe(200);
+
+    for (const probePath of ['/api/health', '/api/ready', '/api/version']) {
+      const probeResp = await fetch(`${baseUrl}${probePath}`);
+      expect(probeResp.status).toBe(200);
+    }
+
+    const invalidCredentials = [
+      undefined,
+      `Basic ${Buffer.from('open-design:wrong-token').toString('base64')}`,
+      `Basic ${Buffer.from('admin:secret-test-token').toString('base64')}`,
+      'Basic not-base64!',
+      'Bearer wrong-token',
+    ];
+
+    for (const authorization of invalidCredentials) {
+      const resp = await fetch(`${baseUrl}/api/plugins`, {
+        ...(authorization ? { headers: { authorization } } : {}),
+      });
+
+      expect(resp.status).toBe(401);
+      expect(resp.headers.get('www-authenticate')).toBe(
+        'Basic realm="Open Design", charset="UTF-8"',
+      );
+    }
   });
 });

@@ -325,7 +325,7 @@ docker compose up -d
 # open http://localhost:7456
 ```
 
-> **ผู้ใช้ macOS:** ถ้า web UI แสดง `Authorization: Bearer <OD_API_TOKEN> required`, สาเหตุคือ bridge networking ของ Docker Desktop. ดูวิธีแก้ที่ [Docker Desktop on macOS](../../deploy/README.md#docker-desktop-on-macos).
+หากเบราว์เซอร์ขอข้อมูลเข้าสู่ระบบ ให้ใช้ `open-design` เป็นชื่อผู้ใช้ และใช้ค่า `OD_API_TOKEN` จาก `deploy/.env` เป็นรหัสผ่าน ทราฟฟิกผ่าน Docker bridge จะยังมีการยืนยันตัวตนโดยไม่ต้องเปิด host networking
 
 ### 🧑‍💻 รันจาก source
 

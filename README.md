@@ -344,7 +344,10 @@ docker compose up -d
 # open http://localhost:7456
 ```
 
-> **macOS users:** If the web UI shows `Authorization: Bearer <OD_API_TOKEN> required`, Docker Desktop bridge networking is the cause. See [Docker Desktop on macOS](deploy/README.md#docker-desktop-on-macos) for the fix.
+If the browser asks for credentials, use `open-design` as the username and the
+`OD_API_TOKEN` value from `deploy/.env` as the password. This keeps Docker bridge
+traffic authenticated without requiring host networking. API clients can keep
+using `Authorization: Bearer <OD_API_TOKEN>`.
 
 ### 🚀 Deploy on Sealos
 

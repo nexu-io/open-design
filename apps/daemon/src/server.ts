@@ -940,7 +940,13 @@ import {
   seedLibraryExtensionOrigins,
 } from './library-tokens.js';
 import { listLibraryTokenOrigins } from './library-store.js';
-import { apiTokenFromEnv, isApiAuthDisabled, isApiTokenMiddlewareEnabled } from './api-token-auth.js';
+import {
+  API_TOKEN_BASIC_CHALLENGE,
+  apiTokenAuthorizationMatches,
+  apiTokenFromEnv,
+  isApiAuthDisabled,
+  isApiTokenMiddlewareEnabled,
+} from './api-token-auth.js';
 import { createOpenDesignPublicMetadataService } from './services/open-design-public-metadata.js';
 import { createWhatsNewService } from './services/whats-new.js';
 import { execCommandViaLoginShell } from './services/login-shell.js';
@@ -2369,6 +2375,7 @@ export interface StartServerOptions {
   port?: number;
   returnServer?: boolean;
   runtime?: DaemonRuntimeContext | null;
+  staticDir?: string;
 }
 
 export interface StartServerResult {
@@ -2386,6 +2393,7 @@ export async function startServer({
   desktopSlideRenderer = null,
   desktopArtifactExporter = null,
   runtime = null,
+  staticDir = STATIC_DIR,
 }: StartServerOptions = {}) {
   host = normalizeDaemonBindHost(host);
   let resolvedPort = port;
@@ -2402,7 +2410,7 @@ export async function startServer({
   // Loopback hosts (127.0.0.1 / ::1 / localhost) are always allowed —
   // the desktop / dev flow remains unchanged. Setting OD_API_TOKEN is
   // purely additive: when present, every /api/* request must carry a
-  // matching `Authorization: Bearer <token>` header (loopback origins
+  // matching Bearer token or browser Basic credentials (loopback origins
   // are exempted so the desktop UI keeps working).
   const apiToken = apiTokenFromEnv();
   const apiAuthDisabled = isApiAuthDisabled();
@@ -2433,15 +2441,14 @@ export async function startServer({
   app.use(express.json({ limit: '4mb' }));
   const projectPreviewScopes = createProjectPreviewScopeRegistry();
 
-  // Plan §3.K1 — bearer-token middleware.
+  // Plan §3.K1 — API-token middleware.
   //
   // Active only when OD_API_TOKEN is set and API auth is not disabled.
-  // Loopback origins skip the
-  // check (the desktop UI / local CLI never carry a bearer); every
-  // other request must present `Authorization: Bearer <token>` with a
-  // value matching `OD_API_TOKEN`. Health / readiness / version remain
-  // open so monitoring probes don't need the token. Server-minted
-  // project preview asset scopes are also accepted for GETs so sandboxed
+  // Loopback origins skip the check (the desktop UI / local CLI never carry
+  // credentials); every other request must present a matching bearer token
+  // (CLI / proxy) or matching HTTP Basic credentials (browser UI). Health /
+  // readiness / version remain open so monitoring probes don't need the token.
+  // Server-minted project preview asset scopes are also accepted for GETs so sandboxed
   // browser iframes can load HTML/CSS/JS without privileged headers.
   // Rich daemon status stays authenticated because it includes local
   // runtime paths.
@@ -2467,17 +2474,36 @@ export async function startServer({
       }
       // Loopback short-circuit. We ignore the proxied X-Forwarded-For
       // header here because a reverse proxy MUST always forward the
-      // bearer; the loopback bypass exists for the localhost desktop
+      // credentials; the loopback bypass exists for the localhost desktop
       // UI which has no proxy in the path.
       if (isLoopbackPeerAddress(req.socket?.remoteAddress)) return next();
-      const auth = req.get('authorization') ?? '';
-      const match = /^Bearer\s+(\S+)\s*$/i.exec(auth);
-      if (!match || match[1] !== apiToken) {
+      if (!apiTokenAuthorizationMatches(req.get('authorization'), apiToken)) {
+        res.setHeader('WWW-Authenticate', API_TOKEN_BASIC_CHALLENGE);
         return res.status(401).json({
-          error: { code: 'API_TOKEN_REQUIRED', message: 'Authorization: Bearer <OD_API_TOKEN> required' },
+          error: {
+            code: 'API_TOKEN_REQUIRED',
+            message: 'Authorization: Bearer <OD_API_TOKEN> or browser Basic authentication required',
+          },
         });
       }
       return next();
+    });
+
+    // Docker Desktop forwards host-browser traffic across its bridge, so the
+    // daemon correctly sees a non-loopback peer. Challenge the SPA document
+    // navigation before serving any shell bytes; browsers then cache the Basic
+    // credentials for same-origin /api requests. Static assets do not need a
+    // separate challenge because the authenticated shell is the only entry
+    // point and API routes still enforce credentials independently.
+    app.use((req, res, next) => {
+      if (isLoopbackPeerAddress(req.socket?.remoteAddress)) return next();
+      if (resolveStaticSpaFallbackPath(req, staticDir) === null) return next();
+      if (apiTokenAuthorizationMatches(req.get('authorization'), apiToken)) return next();
+
+      res.setHeader('WWW-Authenticate', API_TOKEN_BASIC_CHALLENGE);
+      return res.status(401).type('text/plain').send(
+        'Open Design authentication required. Use username "open-design" and OD_API_TOKEN as the password.',
+      );
     });
   }
 
@@ -2882,8 +2908,8 @@ export async function startServer({
     console.warn('[od] Failed to recover stale live artifact refreshes:', error);
   });
 
-  if (fs.existsSync(STATIC_DIR)) {
-    app.use(express.static(STATIC_DIR));
+  if (fs.existsSync(staticDir)) {
+    app.use(express.static(staticDir));
   }
 
   // ---- Projects (DB-backed) -------------------------------------------------
@@ -13932,7 +13958,7 @@ export async function startServer({
     telemetry: { reportFinalizedMessage, reportFeedback },
   });
 
-  registerStaticSpaFallback(app, STATIC_DIR);
+  registerStaticSpaFallback(app, staticDir);
 
   // Wait for `listen` to bind so callers always see the resolved URL —
   // critical when port=0 (ephemeral port) and when the embedding sidecar
