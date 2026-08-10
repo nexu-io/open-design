@@ -12,6 +12,7 @@ import { describe, expect, test } from 'vitest';
 
 import {
   packagedAppShellExpression,
+  packagedAppRouteUrl,
   PackagedOnboardingConfigError,
   packagedOnboardingCompletedFromProbe,
   packagedOnboardingConfigExpression,
@@ -662,15 +663,30 @@ winDescribe('packaged windows runtime smoke', () => {
       const inspect = await measureSmokeStep(timings, 'wait healthy inspect eval', async () => waitForHealthyDesktop());
       expect(inspect.status?.state).toBe('running');
       if (inspect.desktopIpcUnavailable) expectWindowsFallbackWebUrl(inspect.status?.url);
-      else expectWindowsPackagedAppUrl(inspect.status?.url);
+      else expectWindowsPackagedRouteUrl(inspect.status?.url);
 
       const value = assertHealthEvalValue(inspect.eval?.value);
       if (inspect.desktopIpcUnavailable) expectWindowsDaemonUrl(value.href);
-      else expectWindowsPackagedAppUrl(value.href);
+      else expectWindowsPackagedRouteUrl(value.href);
       expect(value.status).toBe(200);
       expect(value.health.ok).toBe(true);
       if (releaseVersion != null && releaseVersion !== '') expect(value.health.version).toBe(releaseVersion);
       else expect(value.health.version).toEqual(expect.any(String));
+
+      // Establish the data-root postcondition before probing unrelated runtime
+      // capabilities. A healthy auth-first renderer may already be on
+      // od://app/onboarding, but it must still read the completed seed written
+      // into this tools-pack namespace.
+      if (!inspect.desktopIpcUnavailable) {
+        seededOnboardingCompleted = await measureSmokeStep(timings, 'verify seeded onboarding config', async () =>
+          packagedOnboardingCompletedFromProbe(await readPackagedOnboardingConfig()),
+        );
+        expect(
+          seededOnboardingCompleted,
+          'daemon did not read the seeded onboardingCompleted config; check that the packaged data root still resolves to the tools-pack runtime namespace root',
+        ).toBe(true);
+      }
+
       const ptyInspect = await measureSmokeStep(timings, 'packaged PTY capability', async () =>
         runToolsPackJson<WinInspectResult>('inspect', [
           '--expr',
@@ -688,23 +704,6 @@ winDescribe('packaged windows runtime smoke', () => {
       expect(pty.cleanup.projectStatus).toBe(200);
       assertLauncherPointer(inspect.launcher.active, updateScenario.expectedCurrentVersion, 0, 'initial active');
       assertLauncherPointer(inspect.launcher.lastSuccessful, updateScenario.expectedCurrentVersion, 0, 'initial lastSuccessful');
-
-      // The seed's postcondition, asserted where it must hold: this process was
-      // started by `tools-pack win start`, which points the packaged runtime at
-      // the same data root `seedPackagedOnboardingComplete` wrote. If the daemon
-      // does not see it here, the completed-onboarding boot path is broken —
-      // the #4389-era failure where the seed landed in the AppData fallback and
-      // the daemon never read it. Fail with that named cause instead of letting
-      // it surface later as an unexplained onboarding screen.
-      if (!inspect.desktopIpcUnavailable) {
-        seededOnboardingCompleted = await measureSmokeStep(timings, 'verify seeded onboarding config', async () =>
-          packagedOnboardingCompletedFromProbe(await readPackagedOnboardingConfig()),
-        );
-        expect(
-          seededOnboardingCompleted,
-          'daemon did not read the seeded onboardingCompleted config; check that the packaged data root still resolves to the tools-pack runtime namespace root',
-        ).toBe(true);
-      }
 
       // Runtime registration must preserve the stable installed outer path;
       // pointing at a versioned payload would break the scheme after cleanup.
@@ -753,8 +752,9 @@ winDescribe('packaged windows runtime smoke', () => {
         // environment — so it is a different daemon, and only it can say what
         // config the surface being asserted on is actually running under.
         // Phase 2 — the completed user. The seed must have been confirmed before
-        // this point; anything else means the run never established the fact
-        // this phase depends on.
+        // this point; the core auth-first profile may legitimately stop at the
+        // cloud sign-in landing, while the full updater profile still needs
+        // Home. Either way, a cold launch that lost the seed fails first.
         if (seededOnboardingCompleted !== true) {
           throw new Error('reached the completed-user app-shell check without a confirmed seeded onboarding state');
         }
@@ -769,7 +769,7 @@ winDescribe('packaged windows runtime smoke', () => {
         );
         onboardingCompleted = completedUser.onboardingCompleted;
         appShell = completedUser.appShell;
-        expect(appShell).toBe('home');
+        if (!verifyCoreOnly) expect(appShell).toBe('home');
 
         if (verifyUpgradePersistence) {
           const seedInspect = await measureSmokeStep(timings, 'seed pre-update persistence project', async () =>
@@ -2561,6 +2561,10 @@ function expectPathInside(filePath: string, expectedRoot: string): void {
 
 function expectWindowsPackagedAppUrl(value: string | null | undefined): void {
   expect(value).toEqual(expect.stringMatching(/^od:\/\/app\/$/));
+}
+
+function expectWindowsPackagedRouteUrl(value: string | null | undefined): void {
+  expect(packagedAppRouteUrl(value), `${String(value)} should be an od://app/* packaged renderer URL`).toBe(true);
 }
 
 function expectWindowsFallbackWebUrl(value: string | null | undefined): void {

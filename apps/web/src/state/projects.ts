@@ -965,6 +965,17 @@ export async function deleteProject(
       } catch {
         // Keep the stable HTTP fallback when a legacy daemon returns no JSON.
       }
+      // DELETE is idempotent for the web client. A second tab, a stale project
+      // list, or a retry whose first response was lost can legitimately reach
+      // the daemon after the project row is already gone. Only accept the
+      // daemon's structured PROJECT_NOT_FOUND response here — a generic 404
+      // can still mean the route itself is unavailable on an incompatible
+      // daemon and must remain visible as a failure.
+      if (resp.status === 404 && code === 'PROJECT_NOT_FOUND') {
+        removeCachedTabs(id, workspaceContext);
+        removeDesignBrowserProjectCache(id);
+        return true;
+      }
       throw new ProjectDeleteError(message, resp.status, code);
     }
     // Drop per-project browser caches once the project is gone server-side so
@@ -2163,7 +2174,7 @@ async function postPluginUpload(url: string, form: FormData): Promise<PluginInst
       body: form,
     });
     const json = (await resp.json()) as Partial<PluginInstallOutcome> & {
-      error?: string | { message?: string };
+      error?: string | { code?: unknown; message?: string };
     };
     if (resp.ok && json.ok) {
       return {
@@ -2178,10 +2189,15 @@ async function postPluginUpload(url: string, form: FormData): Promise<PluginInst
       json.message ??
       (typeof json.error === 'string' ? json.error : json.error?.message) ??
       resp.statusText;
+    const errorCode = boundedRequestErrorCode(
+      json.errorCode ?? (typeof json.error === 'object' ? json.error?.code : undefined),
+    );
     return {
       ok: false,
       warnings: json.warnings ?? [],
       message,
+      status: resp.status,
+      ...(errorCode ? { errorCode } : {}),
       log: json.log ?? [],
     };
   } catch (err) {
@@ -2189,6 +2205,7 @@ async function postPluginUpload(url: string, form: FormData): Promise<PluginInst
       ok: false,
       warnings: [],
       message: (err as Error).message,
+      errorCode: 'network_error',
       log: [],
     };
   }

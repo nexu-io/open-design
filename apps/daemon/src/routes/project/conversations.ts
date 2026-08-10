@@ -184,6 +184,12 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
       createdAt: now,
       updatedAt: now,
     });
+    // TODO(native-session-clone): Add a runtime-capability-gated adapter contract
+    // that forks the source agent session at this exact message and persists the
+    // clone's independent handle for `conv.id`. Never copy/reuse the source
+    // `agent_sessions.session_id`, because branch turns could then advance the
+    // original conversation. Unsupported runtimes, historical fork-point
+    // mismatches, and clone failures must keep today's transcript-reseed path.
     // Side Chat: inherit the source conversation's context by copying its
     // messages into the fresh conversation. Be defensive — a missing or
     // cross-project source id silently yields an empty conversation.

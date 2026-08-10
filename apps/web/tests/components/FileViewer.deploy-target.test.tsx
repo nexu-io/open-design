@@ -98,11 +98,9 @@ async function openCloudflareDeployModal(file: ProjectFile) {
     />,
   );
 
-  // The viewer chrome exposes one unified Share popover with Share / Export /
-  // Send tabs; "Publish online" (the deploy providers) lives on the Export
-  // tab, so reaching a provider takes trigger -> Export tab -> menu item.
-  fireEvent.click(screen.getByRole('button', { name: /share/i }));
-  fireEvent.click(await screen.findByRole('tab', { name: /export/i }));
+  // Deploy providers live on the Share panel ("publish online" is sharing),
+  // so reaching a provider takes Share button -> menu item.
+  fireEvent.click(screen.getByRole('button', { name: /^share$/i }));
   fireEvent.click(await screen.findByRole('menuitem', { name: /Deploy to Cloudflare Pages/i }));
 
   const providerSelect = await screen.findByRole('combobox', { name: /Provider/i });

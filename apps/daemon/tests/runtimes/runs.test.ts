@@ -275,6 +275,27 @@ describe('chat run service shutdown', () => {
     await expect(wait).resolves.toMatchObject({ status: 'succeeded', artifactCount: 2 });
   });
 
+  it('publishes authoritative project-relative artifact paths in status and terminal events', async () => {
+    const runs = createRuns();
+    const run = runs.create({ projectId: 'project-1', conversationId: 'conv-1' });
+
+    run.artifactCount = 2;
+    run.artifactPaths = ['existing.png', 'renders/new.png'];
+    const wait = runs.wait(run);
+    runs.finish(run, 'succeeded', 0, null);
+
+    expect(runs.statusBody(run)).toMatchObject({
+      artifactPaths: ['existing.png', 'renders/new.png'],
+    });
+    expect(run.events.at(-1)).toMatchObject({
+      event: 'end',
+      data: { artifactPaths: ['existing.png', 'renders/new.png'] },
+    });
+    await expect(wait).resolves.toMatchObject({
+      artifactPaths: ['existing.png', 'renders/new.png'],
+    });
+  });
+
   it('retains structured error details on failed run status bodies', async () => {
     const runs = createRuns();
     const run = runs.create({ projectId: 'project-1', conversationId: 'conv-1' });
@@ -437,10 +458,11 @@ describe('chat run service shutdown', () => {
     const run = runs.create({ projectId: 'project-1', conversationId: 'conv-queued' });
 
     const wait = runs.wait(run);
-    await runs.cancel(run);
+    await runs.cancel(run, 'user_stop');
 
     expect(run.status).toBe('canceled');
     expect(run.cancelRequested).toBe(true);
+    expect(runs.statusBody(run).cancelOrigin).toBe('user_stop');
     expect(run.signal).toBe('SIGTERM');
     expect(run.events.at(-1)).toMatchObject({
       event: 'end',
@@ -814,6 +836,7 @@ describe('chat run service shutdown', () => {
     expect(child.signals).toEqual(['SIGTERM']);
     expect(run.status).toBe('canceled');
     expect(run.cancelRequested).toBe(true);
+    expect(runs.statusBody(run).cancelOrigin).toBe('daemon_shutdown');
     expect(run.signal).toBe('SIGTERM');
     await expect(wait).resolves.toMatchObject({ status: 'canceled', signal: 'SIGTERM' });
     expect(run.events.at(-1)).toMatchObject({
@@ -1174,6 +1197,22 @@ describe('run event log persistence', () => {
     });
   });
 
+  it('retains the cancellation cause when hydrating durable status after restart', async () => {
+    const beforeRestart = createRunsWithLog(tmpDir);
+    const canceled = beforeRestart.create({ projectId: 'p1' });
+    await beforeRestart.cancel(canceled, 'user_stop');
+
+    const afterRestart = createRunsWithLog(tmpDir);
+    const hydrated = afterRestart.get(canceled.id);
+
+    expect(hydrated).not.toBeNull();
+    expect(afterRestart.statusBody(hydrated)).toMatchObject({
+      id: canceled.id,
+      status: 'canceled',
+      cancelOrigin: 'user_stop',
+    });
+  });
+
   it('reuses an interrupted durable request instead of starting it twice after restart', () => {
     const clientRequestId = '018f6f2e-6666-7666-8666-666666666666';
     const requestFingerprint = 'same-cloud-request';
@@ -1207,6 +1246,7 @@ describe('run event log persistence', () => {
       errorCode: 'DAEMON_RESTARTED',
       error: 'Run interrupted because the daemon restarted.',
     });
+    expect(afterRestart.statusBody(reused.run).terminalTrigger).toBe('daemon_restart');
     expect(reused.run.events.slice(-2)).toMatchObject([
       { event: 'error', data: { error: { code: 'DAEMON_RESTARTED' } } },
       { event: 'end', data: { status: 'failed' } },

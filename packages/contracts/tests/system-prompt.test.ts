@@ -64,6 +64,18 @@ describe('DISCOVERY_AND_PHILOSOPHY (contracts copy) — TodoWrite plan item coun
 });
 
 describe('DISCOVERY_AND_PHILOSOPHY (contracts copy) — prompt routing parity', () => {
+  it('keeps image result copy user-friendly without discarding tool diagnostics', () => {
+    const prompt = composeSystemPrompt({
+      locale: 'zh-CN',
+      metadata: { kind: 'image' } as any,
+    });
+
+    expect(prompt).toContain('reply exactly `图片已生成`');
+    expect(prompt).toContain('reply exactly `图片生成服务暂时不可用`');
+    expect(prompt).toContain('tool output and daemon logs');
+    expect(prompt).not.toContain('surface the actual stderr / exit status');
+  });
+
   it('keeps clarification on demand and leaves task-type routing to od-default', () => {
     expect(DISCOVERY_AND_PHILOSOPHY).toContain(
       'A first turn, a new project, a discovery stage, or an unfilled metadata field does not by itself require a form.',

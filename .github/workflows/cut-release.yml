@@ -1,8 +1,10 @@
 name: cut-release
-# Every Tuesday 09:00 Asia/Shanghai, cut the next minor release branch from main HEAD:
+# Every Tuesday 09:00 Asia/Shanghai, cut the next minor release branch from main:
 #   1. Compute version (highest release/vX.Y.Z -> bump minor -> X.(Y+1).0; e.g. 0.11.0 -> 0.12.0)
-#   2. Create release/vX.Y.Z, bump apps/packaged/package.json, push
+#   2. Create release/vX.Y.Z from main, bump apps/packaged/package.json, push
 #   3. Create the "backport release/vX.Y.Z" label
+# The independent main prerelease Windows canary remains an advisory signal: its
+# smoke result is notified separately and never blocks a branch cut or package.
 # The push uses the App token (not GITHUB_TOKEN), so it triggers notify-release-feishu
 # -> builds a nightly package and posts the Feishu card.
 
@@ -17,7 +19,7 @@ on:
         default: ''
 
 permissions:
-  contents: read               # actual writes go through the App token below
+  contents: read               # branch/label writes still go through the App token below
 
 jobs:
   cut:
@@ -32,7 +34,8 @@ jobs:
 
       - uses: actions/checkout@v4
         with:
-          ref: main            # always cut from main HEAD, even on a manual dispatch from another branch
+          # Smoke is advisory; release cuts always use the current main tip.
+          ref: main
           fetch-depth: 0
           token: ${{ steps.app.outputs.token }}
 

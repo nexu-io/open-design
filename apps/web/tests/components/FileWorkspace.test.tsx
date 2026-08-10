@@ -2480,6 +2480,26 @@ describe('FileWorkspace launcher tab creation', () => {
     });
   });
 
+  it('shows Design Files when the persisted active file no longer exists', () => {
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['missing.png'], active: 'missing.png' }}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId('design-files-tab')).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByTestId('design-files-empty')).toBeTruthy();
+    expect(screen.queryByText(/Open a file from/i)).toBeNull();
+    expect(renderedTabLabels()).toEqual(['Design Files']);
+  });
+
   it('hides terminal creation while keeping browser creation available', () => {
     render(
       <FileWorkspace

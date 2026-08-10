@@ -194,6 +194,48 @@ function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
+const HOST_PLATFORMS: ReadonlyArray<HostEditorsResponse['platform']> = [
+  'darwin',
+  'win32',
+  'linux',
+  'unknown',
+];
+
+// `fetchHostEditors` casts the raw `/api/editors` JSON to `HostEditorsResponse`
+// without checking it, and this button now mounts in the viewer chrome on every
+// artifact — so a host that answers off-contract must not be able to take the
+// viewer down with it. These two helpers state the invariant the render path
+// relies on: `editors` is always an array whose entries each have a non-empty
+// string `id` (React key, icon lookup, preference storage, open-in request body)
+// and `label` (rendered text) plus a boolean `available`; `platform` is always
+// one of the four values the fallback control branches on. Entries that cannot
+// satisfy that are dropped rather than rendered half-formed.
+function normalizeHostEditors(value: unknown): HostEditor[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const editors: HostEditor[] = [];
+  for (const entry of value) {
+    if (typeof entry !== 'object' || entry === null) continue;
+    const candidate = entry as Partial<HostEditor>;
+    if (typeof candidate.id !== 'string' || candidate.id.length === 0) continue;
+    if (typeof candidate.label !== 'string' || candidate.label.length === 0) continue;
+    // A duplicate id would collide as a React key and as a `data-testid`.
+    if (seen.has(candidate.id)) continue;
+    seen.add(candidate.id);
+    editors.push({
+      ...(candidate as HostEditor),
+      available: candidate.available === true,
+    });
+  }
+  return editors;
+}
+
+function normalizeHostPlatform(value: unknown): HostEditorsResponse['platform'] {
+  return HOST_PLATFORMS.includes(value as HostEditorsResponse['platform'])
+    ? (value as HostEditorsResponse['platform'])
+    : 'unknown';
+}
+
 type T = ReturnType<typeof useT>;
 
 interface CliHandoffLabels {
@@ -337,8 +379,13 @@ export function HandoffButton({
     fetchHostEditors()
       .then((resp) => {
         if (cancelled) return;
-        setEditors(resp.editors);
-        setPlatform(resp.platform);
+        // The daemon contract always carries `editors`, but the button now
+        // mounts in the viewer chrome on every artifact, so a malformed host
+        // response must degrade to "no editors" instead of crashing the viewer.
+        const body: Partial<HostEditorsResponse> | null =
+          typeof resp === 'object' && resp !== null ? resp : null;
+        setEditors(normalizeHostEditors(body?.editors));
+        setPlatform(normalizeHostPlatform(body?.platform));
         setLoaded(true);
       })
       .catch(() => {

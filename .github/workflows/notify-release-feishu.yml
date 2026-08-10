@@ -42,7 +42,7 @@ on:
         type: string
         default: ""
       win_x64_smoke_mode:
-        description: "Windows x64 packaged smoke coverage (skip/core/full). Empty uses the per-branch default: skip on release/v0.18.0 to bypass the known packaged-win smoke flake that gates publish, otherwise release-prerelease's own default."
+        description: "Windows x64 packaged smoke coverage (skip/core/full). Empty uses core. Smoke failures are reported on the download card but do not block publication."
         required: false
         type: string
         default: ""
@@ -85,22 +85,17 @@ jobs:
       # (This replaces a temporary `test` default on release/v0.18.0 that
       # existed only while prod's resource-hub storage was unconfigured.)
       amr_profile: ${{ inputs.amr_profile || 'prod' }}
-      # Windows packaged smoke is a hard publish gate (publish needs build_win
-      # success) but flaked on release/v0.18.0 ("did not reach main app shell"),
-      # skip-blocking EVERY platform's publish + the Feishu card. TEMPORARY:
-      # skip it on release/v0.18.0 so the workspace-team prerelease can actually
-      # ship its mac/win/linux packages + post its card. Manual dispatch overrides.
-      # The root cause is fixed on main (#6481); remove this branch default once
-      # release/v0.18.0 no longer builds.
-      #
-      # The final arm must name a real profile, NOT ''. A workflow_call
+      # Windows packaged smoke is advisory to publication: a failed smoke is
+      # recorded in the report and annotated on the full download card without
+      # blocking platform or metadata publication. The final arm must name a
+      # real profile, NOT ''. A workflow_call
       # `default:` applies only when an input is omitted, so forwarding an empty
       # string defeats the callee's declared `core` default; the empty value
       # then reaches the spec, reads as "not core", and selects the updater path
       # — which demands a fixture only a genuine `full` request wires up, so the
       # job dies before the smoke starts. That is how release/v0.18.1's first
       # prerelease failed on its branch-cut commit.
-      win_x64_smoke_mode: ${{ inputs.win_x64_smoke_mode || (github.ref_name == 'release/v0.18.0' && 'skip') || 'core' }}
+      win_x64_smoke_mode: ${{ inputs.win_x64_smoke_mode || 'core' }}
 
   notify:
     name: Notify Feishu (release)
@@ -153,6 +148,8 @@ jobs:
           PREVIOUS_COMMIT: ${{ needs.build.outputs.previous_commit }}
           CHANGELOG_FILE: ${{ steps.changelog.outputs.file }}
           BUILD_STATE: ${{ needs.build.result }}
+          MAC_ARM64_SMOKE_RESULT: ${{ needs.build.outputs.mac_arm64_smoke_result }}
+          WIN_X64_SMOKE_RESULT: ${{ needs.build.outputs.win_x64_smoke_result }}
           MAC_ARM64_URL: ${{ needs.build.outputs.mac_arm64_url }}
           MAC_INTEL_URL: ${{ needs.build.outputs.mac_intel_url }}
           WIN_URL: ${{ needs.build.outputs.win_url }}

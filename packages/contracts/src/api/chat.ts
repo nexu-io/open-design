@@ -22,9 +22,11 @@ import type {
   TrackingRuntimeType,
 } from '../analytics/public-params.js';
 import type {
+  TrackingRunCancelOrigin,
   TrackingRunFailureCategory,
   TrackingRunFailureDetail,
   TrackingRunRecoveryActionType,
+  TrackingRunTerminalTrigger,
 } from '../analytics/events.js';
 
 // The daemon's run-failure taxonomy, re-exported under product-facing names so
@@ -34,6 +36,8 @@ import type {
 // producer and consumer can't drift.
 export type RunFailureCategory = TrackingRunFailureCategory;
 export type RunFailureDetail = TrackingRunFailureDetail;
+export type RunCancelOrigin = TrackingRunCancelOrigin;
+export type RunTerminalTrigger = TrackingRunTerminalTrigger;
 export type RunFailureAction = 'relogin' | 'recharge' | 'upgrade' | 'retry' | 'none';
 
 export type ChatRole = 'user' | 'assistant';
@@ -650,6 +654,13 @@ export interface ChatRunStatusResponse {
   createdAt: number;
   updatedAt: number;
   cancelRequested?: boolean;
+  /**
+   * Actor or lifecycle path that requested cancellation. Only `user_stop`
+   * proves the user explicitly stopped this run; older daemons may omit it.
+   */
+  cancelOrigin?: RunCancelOrigin | null;
+  /** Structured lifecycle or watchdog mechanism that forced termination. */
+  terminalTrigger?: RunTerminalTrigger | null;
   childPid?: number | null;
   processGroupId?: number | null;
   childExited?: boolean;
@@ -688,6 +699,10 @@ export interface ChatRunStatusResponse {
   /** Authoritative artifact files created or modified by this run. Mirrors
    *  ChatSseEndPayload.artifactCount and run_finished.artifact_count. */
   artifactCount?: number;
+  /** Authoritative project-relative artifact files created or modified by
+   *  this run. Unlike a before/after browser snapshot, this includes edits to
+   *  existing files and excludes untouched reference inputs. */
+  artifactPaths?: string[];
   /** Filesystem-backed validation of the one canonical artifact entry this
    *  run can deliver. Present for terminal runs when the daemon can inspect
    *  the project; callers must not infer validity from artifactCount alone. */

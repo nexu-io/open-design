@@ -39,7 +39,10 @@ import {
 } from './core-slim.js';
 import { renderDirectionIndexBlock, renderDirectionSpecBlock } from './directions.js';
 import { DECK_FRAMEWORK_DIRECTIVE } from './deck-framework.js';
-import { renderMediaGenerationContract } from './media-contract.js';
+import {
+  MEDIA_USER_REPLY_CONTRACT,
+  renderMediaGenerationContract,
+} from './media-contract.js';
 import { IMAGE_MODELS } from '../media/models.js';
 import { renderPanelPrompt } from './panel.js';
 import { defaultCritiqueConfig, type CritiqueConfig } from '@open-design/contracts/critique';
@@ -457,6 +460,10 @@ const MEDIA_DISPATCH_HINT = `
 
 If the user asks you to generate an image, video, or audio file — regardless of which provider or model they mention (fal, Replicate, OpenAI, etc.) — use the daemon dispatcher via your **Bash tool**. Do NOT call provider REST APIs directly.
 
+Open Design Cloud models use the \`vela/*\` prefix. Never invoke the \`vela\`
+CLI directly for those models: the OD dispatcher owns trusted Workspace
+attribution, polling, downloads, and final project-file placement.
+
 The daemon injects these env vars into your shell (**POSIX bash — not PowerShell**):
 
 - \`OD_NODE_BIN\`   — absolute path to the Node runtime
@@ -499,6 +506,8 @@ printf '%s\\n' "\$last"
 
 The command exits \`0\` with one line of JSON: \`{"file":{...}}\` when done within ~25s, or \`{"taskId":"..."}\` as a SUCCESSFUL handoff for slow models. On a handoff, run the exact \`media wait\` command the CLI prints on stderr and repeat it until exit \`0\` (done) or exit \`5\` (failed); exit \`2\` means still running — not a failure. Parse JSON with \`python3\`, never \`jq\`.
 
+${MEDIA_USER_REPLY_CONTRACT}
+
 MODEL_SELECTION_GUIDANCE`;
 
 function renderByokMediaDefaultsHint(defaults?: ByokMediaDefaults): string {
@@ -538,12 +547,55 @@ function renderMediaDispatchModelGuidance(defaults?: ByokMediaDefaults): string 
   return `${imagePart} ${videoPart} Always pass \`--surface\` explicitly (\`image\`, \`video\`, or \`audio\`). Any \`fal-ai/*\` path (e.g. \`fal-ai/flux/schnell\`, \`fal-ai/wan-i2v\`) is also a valid \`--model\` value for image/video — pass it through as-is without substitution.`;
 }
 
-function renderMediaDispatchHint(defaults?: ByokMediaDefaults): string {
-  const imageModel = defaults?.imageModel?.trim() || 'flux-pro-ultra';
+function renderMediaDispatchHint(
+  defaults?: ByokMediaDefaults,
+  runtimeDefaults?: ByokMediaDefaults,
+): string {
+  const effectiveDefaults = runtimeDefaults ?? defaults;
+  const imageModel = effectiveDefaults?.imageModel?.trim() || 'flux-pro-ultra';
   const hint = MEDIA_DISPATCH_HINT
     .replace('IMAGE_MODEL_VALUE', shellDoubleQuote(imageModel))
-    .replace('MODEL_SELECTION_GUIDANCE', renderMediaDispatchModelGuidance(defaults));
-  return `${hint}${renderByokMediaDefaultsHint(defaults)}`;
+    .replace(
+      'MODEL_SELECTION_GUIDANCE',
+      renderMediaDispatchModelGuidance(effectiveDefaults),
+    );
+  return `${hint}${renderByokMediaDefaultsHint(defaults)}${renderRuntimeMediaDefaultsHint(runtimeDefaults, defaults)}`;
+}
+
+function mediaDefaultsForRuntime(
+  agentId: string | null | undefined,
+  defaults?: ByokMediaDefaults,
+): ByokMediaDefaults | undefined {
+  if (agentId !== 'amr') return defaults;
+  return {
+    ...defaults,
+    imageModel: defaults?.imageModel?.trim() || 'vela/gpt-image-2',
+    videoModel:
+      defaults?.videoModel?.trim()
+      || 'vela/doubao-seedance-2-0-260128',
+  };
+}
+
+function renderRuntimeMediaDefaultsHint(
+  runtimeDefaults: ByokMediaDefaults | undefined,
+  userDefaults: ByokMediaDefaults | undefined,
+): string {
+  if (!runtimeDefaults) return '';
+  const lines: string[] = [];
+  if (!userDefaults?.imageModel?.trim() && runtimeDefaults.imageModel?.trim()) {
+    lines.push(`- Image model: \`${runtimeDefaults.imageModel.trim()}\``);
+  }
+  if (!userDefaults?.videoModel?.trim() && runtimeDefaults.videoModel?.trim()) {
+    lines.push(`- Video model: \`${runtimeDefaults.videoModel.trim()}\``);
+  }
+  if (lines.length === 0) return '';
+  return `
+
+### Open Design Cloud media defaults
+
+This AMR run uses these managed media defaults when the user has not selected
+a different run-scoped model:
+${lines.join('\n')}`;
 }
 
 const FILESYSTEM_HANDOFF_OVERRIDE = `
@@ -834,6 +886,10 @@ export function composeSystemPrompt({
   // layered composition until the A/B comparison signs off.
   const isSlimCore = promptCoreVariant === 'slim';
   const isAskModeEarly = sessionMode === 'chat';
+  const runtimeMediaDefaults = mediaDefaultsForRuntime(
+    agentId,
+    byokMediaDefaults,
+  );
   // Media surfaces (image / video / audio) must be resolved BEFORE the head
   // is built: their generation contract, rather than the design charter's
   // HTML workflow, is the sole workflow authority on these runs.
@@ -1269,6 +1325,11 @@ export function composeSystemPrompt({
     // mode for anything that actually generates media.
   } else if (isMediaSurface) {
     parts.push(renderMediaGenerationContract(mediaExecution, byokMediaDefaults));
+    const runtimeDefaultsHint = renderRuntimeMediaDefaultsHint(
+      runtimeMediaDefaults,
+      byokMediaDefaults,
+    );
+    if (runtimeDefaultsHint) parts.push(runtimeDefaultsHint);
   } else if (mediaHintSignal ?? true) {
     // Non-media projects (prototype, deck, etc.): inject a lightweight hint
     // so the agent uses `od media generate` if the user asks for an image/video
@@ -1277,7 +1338,7 @@ export function composeSystemPrompt({
     // media, and the transcript-scanned signal flips the hint on for the
     // rest of the session as soon as one does.
     (isSlimCore ? slimTurnVariableParts : parts).push(
-      renderMediaDispatchHint(byokMediaDefaults),
+      renderMediaDispatchHint(byokMediaDefaults, runtimeMediaDefaults),
     );
   }
 
@@ -1578,21 +1639,21 @@ Copy or move the selected generated file into \`$OD_PROJECT_DIR\` with a short
 descriptive filename, then verify the exact destination file exists under
 \`$OD_PROJECT_DIR\` before claiming success. If reading the source path,
 creating the destination directory, copying/moving, or verifying the copied
-asset fails, report the exact source path, destination path, and access/copy
-error. Do not claim success, silently fall back, or ask about OpenAI/Azure
-fallback after a generated image exists but the project copy fails; stop after
-reporting the failure unless the user explicitly chooses fallback in a later
-turn, because fallback may create a different image.
+asset fails, retain the exact source path, destination path, and access/copy
+error in the tool trace, then use the generic visible image failure sentence.
+Do not claim success or silently fall back after a generated image exists but
+the project copy fails, because fallback may create a different image.
 
-After the file exists under \`$OD_PROJECT_DIR\`, reply with the project-local
-filename and a short summary of the prompt used. Do not emit an \`<artifact>\`
-block for media.
+After the file exists under \`$OD_PROJECT_DIR\`, follow the user-facing media
+completion contract: for a Simplified Chinese image request, reply exactly
+\`图片已生成\` and do not include the filename or prompt. Do not emit an
+\`<artifact>\` block for media.
 
 If Codex built-in imagegen is unavailable or generation fails before producing
-an image, surface the actual failure message and ask the user for one-time
-confirmation before falling back to the existing OpenAI/Azure API-key provider
-path via \`"$OD_NODE_BIN" "$OD_BIN" media generate --surface image --model ${imageModel}\`.
-Do not silently fall back.`;
+an image, retain the actual failure in the tool trace and do not silently fall
+back. For a Simplified Chinese request, reply exactly
+\`图片生成服务暂时不可用\`; do not expose provider, credential, CLI, or
+environment details.`;
 }
 
 // `style: 'facts'` (slim core) keeps the block a pure fact sheet: key-value

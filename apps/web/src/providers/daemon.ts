@@ -338,6 +338,8 @@ export interface DaemonStreamOptions {
   initialLastEventId?: string | null;
   onRunCreated?: (runId: string) => void;
   onRunStatus?: (status: ChatRunStatus) => void;
+  /** Authoritative project-relative artifacts created or modified by the run. */
+  onArtifactPaths?: (paths: string[]) => void;
   onRunEventId?: (eventId: string) => void;
   // v2 analytics context propagated to run_created / run_finished.
   // Optional; the daemon only consumes these to shape PostHog props
@@ -356,6 +358,7 @@ export interface DaemonReattachOptions {
   handlers: DaemonStreamHandlers;
   initialLastEventId?: string | null;
   onRunStatus?: (status: ChatRunStatus) => void;
+  onArtifactPaths?: (paths: string[]) => void;
   onRunEventId?: (eventId: string) => void;
   /** Publish a current-run success outcome to the app-level upgrade gate. */
   publishRunFinishedEvent?: boolean;
@@ -682,6 +685,7 @@ export async function streamViaDaemon({
   initialLastEventId,
   onRunCreated,
   onRunStatus,
+  onArtifactPaths,
   onRunEventId,
   analyticsHints,
 }: DaemonStreamOptions): Promise<void> {
@@ -774,6 +778,7 @@ export async function streamViaDaemon({
       handlers,
       initialLastEventId,
       onRunStatus: emitRunStatus,
+      onArtifactPaths,
       onRunEventId,
       projectId,
       conversationId,
@@ -1163,6 +1168,7 @@ async function consumeDaemonRun({
   handlers,
   initialLastEventId,
   onRunStatus,
+  onArtifactPaths,
   onRunEventId,
   projectId,
   conversationId,
@@ -1199,6 +1205,13 @@ async function consumeDaemonRun({
   const reportArtifactCount = (value: unknown) => {
     if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return;
     resolvedArtifactCount = value;
+  };
+  const reportArtifactPaths = (value: unknown) => {
+    if (!Array.isArray(value)) return;
+    const paths = value.filter(
+      (item): item is string => typeof item === 'string' && item.trim().length > 0,
+    );
+    onArtifactPaths?.([...new Set(paths)]);
   };
   let lastEventId: string | null = initialLastEventId ?? null;
   let canceled = false;
@@ -1351,6 +1364,7 @@ async function consumeDaemonRun({
             if (event.data.failureCategory) endFailureCategory = event.data.failureCategory;
             if (event.data.failureDetail) endFailureDetail = event.data.failureDetail;
             reportArtifactCount(event.data.artifactCount);
+            reportArtifactPaths(event.data.artifactPaths);
             // `serverDeclaredSuccess` records whether the server explicitly
             // set `status: 'succeeded'` in the end payload — the local
             // `'succeeded'` fallback below does not count and must keep
@@ -1378,6 +1392,7 @@ async function consumeDaemonRun({
           if (status.failureCategory) endFailureCategory = status.failureCategory;
           if (status.failureDetail) endFailureDetail = status.failureDetail;
           reportArtifactCount(status.artifactCount);
+          reportArtifactPaths(status.artifactPaths);
           onRunStatus?.(endStatus);
           break;
         }
@@ -1410,6 +1425,7 @@ async function consumeDaemonRun({
         if (status.failureCategory) endFailureCategory = status.failureCategory;
         if (status.failureDetail) endFailureDetail = status.failureDetail;
         reportArtifactCount(status.artifactCount);
+        reportArtifactPaths(status.artifactPaths);
         onRunStatus?.(endStatus);
       } else {
         onRunStatus?.('failed');

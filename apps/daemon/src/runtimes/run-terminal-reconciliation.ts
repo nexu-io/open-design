@@ -5,6 +5,8 @@ import { randomUUID } from 'node:crypto';
 import type Database from 'better-sqlite3';
 import {
   buildRunFinishedV4Aliases,
+  type TrackingRunCancelOrigin,
+  type TrackingRunTerminalTrigger,
   type RunTaskLineageProps,
 } from '@open-design/contracts/analytics';
 
@@ -36,6 +38,8 @@ interface DurableRunState extends RestartRecoverableDurableRunState {
   conversationId: string | null;
   assistantMessageId: string | null;
   agentId: string | null;
+  cancelOrigin?: TrackingRunCancelOrigin | null;
+  terminalTrigger?: TrackingRunTerminalTrigger | null;
   createdAt: number;
   artifactCount?: number;
   endedWithUnfinishedWork?: boolean;
@@ -263,12 +267,15 @@ export async function reconcileDurableRunTerminals(
               failure_stage: 'finalize' as const,
               retryable: true,
               user_action: 'retry' as const,
+              terminal_trigger: 'daemon_restart' as const,
             }
           : classifyRunFailure({
               result: runResult,
               status: state,
               ...(errorCode ? { errorCode } : {}),
               agentId: state.agentId,
+              cancelOrigin: state.cancelOrigin ?? null,
+              terminalTrigger: state.terminalTrigger ?? null,
               events,
             })
         : undefined;

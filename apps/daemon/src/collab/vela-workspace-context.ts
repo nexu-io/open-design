@@ -547,10 +547,13 @@ export function velaWorkspaceDirectoryIdentity(
 /**
  * One daemon-owned authority broker shared by idempotent reads and mutations.
  *
- * Successful authority reads seed a bounded display-read lease. Mutations
- * ignore that settled lease and always perform a fresh directory read, while
- * still sharing an already-unsettled request from the same Vela session. This
- * keeps the 5s status poll off the control plane without weakening mutation
+ * Successful authority reads seed a bounded display-read lease. General
+ * mutations ignore that settled lease and always perform a fresh directory
+ * read, while still sharing an already-unsettled request from the same Vela
+ * session. The cached-only accessor never starts I/O; its one production
+ * consumer may use a valid same-session lease for personal local-only project
+ * cleanup, then falls back to fresh authority on every miss. This keeps the 5s
+ * status poll off the control plane without weakening Team/hub mutation
  * freshness, and prevents a status/heartbeat boundary from launching duplicate
  * directory requests.
  */
@@ -560,6 +563,7 @@ export function createWorkspaceDirectoryAuthorityBroker(options: {
   ttlMs?: number;
   now?: () => number;
 } = {}): {
+  cached: () => Promise<WorkspaceDirectoryFetchResult>;
   read: () => Promise<WorkspaceDirectoryFetchResult>;
   fresh: () => Promise<WorkspaceDirectoryFetchResult>;
   refreshAfterMutation: () => Promise<WorkspaceDirectoryFetchResult>;
@@ -595,6 +599,15 @@ export function createWorkspaceDirectoryAuthorityBroker(options: {
   };
 
   return {
+    cached: () => {
+      const identity = identityKey();
+      const cachedEntry = cached.get(identity);
+      if (cachedEntry && now() < cachedEntry.expiresAt) {
+        return Promise.resolve(cachedEntry.result);
+      }
+      cached.delete(identity);
+      return Promise.resolve({ ok: false, items: [] });
+    },
     read: () => {
       const identity = identityKey();
       const cachedEntry = cached.get(identity);

@@ -3263,6 +3263,21 @@ export function FileWorkspace({
     return liveArtifactEntries.find((entry) => entry.tabId === activeTab) ?? null;
   }, [activeTab, liveArtifactEntries]);
 
+  const activeTabHasRenderableSurface =
+    (activeTab === DESIGN_SYSTEM_TAB && Boolean(designSystemProject))
+    || (isBrowserTabId(activeTab) && browserTabs.some((tab) => tab.id === activeTab))
+    || isTerminalTabId(activeTab)
+    || (isSideChatTabId(activeTab) && Boolean(chatConfig) && Boolean(chatAgentsById))
+    || activeLiveArtifact !== null
+    || activeFile !== null;
+  // A persisted file tab can outlive its file. The tab strip hides that stale
+  // entry, so keeping it as the visual active target would leave the fixed
+  // Design Files tab as the only visible tab while the body tells the user to
+  // open Design Files. Treat the root as the display fallback without erasing
+  // persisted state: an in-flight file refresh may still restore the target.
+  const designFilesTabActive =
+    activeTab === DESIGN_FILES_TAB || !activeTabHasRenderableSurface;
+
   // Identity-stable props for the memoized FileViewer. Without these, every
   // FileWorkspace state change (closing an adjacent tab, drag hover, launcher
   // toggles) would hand FileViewer fresh object/function identities and drag
@@ -3359,7 +3374,7 @@ export function FileWorkspace({
         tabId: activeTab,
       };
     }
-    if (activeTab === DESIGN_FILES_TAB) {
+    if (designFilesTabActive) {
       // Nothing to reference yet — don't auto-stage an empty "Design files" chip.
       if (designFilesTabIsEmpty) return null;
       const trimmedDir = uploadDir.trim();
@@ -3368,7 +3383,7 @@ export function FileWorkspace({
         id: trimmedDir ? `folder:${trimmedDir}` : 'workspace:design-files',
         kind: trimmedDir ? 'folder' : 'design-files',
         label,
-        tabId: activeTab,
+        tabId: DESIGN_FILES_TAB,
         ...(trimmedDir ? { path: trimmedDir } : {}),
         ...(resolvedDir ? { absolutePath: joinDisplayPath(resolvedDir, trimmedDir) } : {}),
       };
@@ -3434,6 +3449,7 @@ export function FileWorkspace({
     browserTabs,
     conversations,
     designFilesTabIsEmpty,
+    designFilesTabActive,
     designSystemProject,
     resolvedDir,
     t,
@@ -3912,9 +3928,9 @@ export function FileWorkspace({
           ) : null}
           <button
             type="button"
-            className={`ws-tab design-files-tab ${activeTab === DESIGN_FILES_TAB ? 'active' : ''}`}
+            className={`ws-tab design-files-tab ${designFilesTabActive ? 'active' : ''}`}
             role="tab"
-            aria-selected={activeTab === DESIGN_FILES_TAB}
+            aria-selected={designFilesTabActive}
             aria-label={designFilesTabTitle}
             tabIndex={0}
             data-testid="design-files-tab"
@@ -4196,7 +4212,7 @@ export function FileWorkspace({
             onConnectRepo={onConnectRepo}
             githubConnected={githubConnected}
           />
-        ) : activeTab === DESIGN_FILES_TAB ? (
+        ) : designFilesTabActive ? (
           <DesignFilesPanel
             key={projectId}
             projectId={projectId}

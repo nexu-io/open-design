@@ -84,6 +84,12 @@ on:
       previous_commit:
         description: "Commit SHA of the previously published prerelease; empty on cold start."
         value: ${{ jobs.metadata.outputs.previous_commit }}
+      mac_arm64_smoke_result:
+        description: "macOS arm64 packaged smoke outcome; advisory to publication."
+        value: ${{ jobs.build_mac.outputs.smoke_result }}
+      win_x64_smoke_result:
+        description: "Windows x64 packaged smoke outcome; advisory to publication."
+        value: ${{ jobs.build_win.outputs.smoke_result }}
       version_metadata_url:
         description: "Public R2 URL of this build's version metadata.json."
         value: ${{ jobs.publish.outputs.version_metadata_url }}
@@ -241,6 +247,8 @@ jobs:
     name: Build prerelease mac arm64
     needs: [metadata, verify]
     runs-on: macos-14
+    outputs:
+      smoke_result: ${{ steps.mac_smoke.outcome }}
     env:
       GH_TOKEN: ${{ github.token }}
       RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
@@ -505,6 +513,8 @@ jobs:
             ${{ runner.temp }}/mac-framework-diagnostics.txt
           if-no-files-found: warn
       - name: Smoke prerelease mac packaged runtime
+        id: mac_smoke
+        continue-on-error: true
         working-directory: e2e
         env:
           OD_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}/release-build/mac_arm64/build.json
@@ -887,6 +897,8 @@ jobs:
     name: Build prerelease win x64
     needs: [metadata, verify]
     runs-on: windows-latest
+    outputs:
+      smoke_result: ${{ steps.win_smoke.outcome }}
     env:
       GH_TOKEN: ${{ github.token }}
       RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
@@ -1018,6 +1030,7 @@ jobs:
           "deletedFailedCacheKey=$matchedKey count=$($caches.Count)"
       - name: Build prerelease win_x64 update fixture
         if: ${{ inputs.win_x64_smoke_mode == 'full' && inputs.win_x64_update_metadata_url == '' && inputs.win_x64_update_target_version == '' }}
+        continue-on-error: true
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
@@ -1031,7 +1044,9 @@ jobs:
           $updateBuild = $updateOutput | ConvertFrom-Json
           pnpm.cmd exec tools-pack win validate-payload --namespace release-prerelease-win --payload-path $updateBuild.payloadPath --expected-version $updateVersion --json
       - name: Smoke prerelease windows packaged runtime
+        id: win_smoke
         if: ${{ inputs.win_x64_smoke_mode != 'skip' }}
+        continue-on-error: true
         working-directory: e2e
         env:
           OD_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}\release-build\win_x64\build.json

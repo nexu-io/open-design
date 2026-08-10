@@ -25,6 +25,7 @@ const DELAYED_HEADING = 'Delayed Daemon Smoke';
 const SLOW_RELOAD_FILE = 'slow-reload-daemon-smoke.html';
 const SLOW_RELOAD_HEADING = 'Slow Reload Daemon Smoke';
 const FOLLOW_UP_FILE = 'follow-up-daemon-smoke.html';
+const MEDIA_ONLY_FILE = 'media-only.png';
 let fakeRuntimes: Awaited<ReturnType<typeof createFakeAgentRuntimes>>;
 
 function artifactPreview(page: Page) {
@@ -260,6 +261,34 @@ test('[P1] Plan mode daemon run creates, opens, and restores an editable markdow
   await expect(page.getByRole('textbox', { name: /markdown editor/i })).toHaveValue(/Deterministic Plan/);
   await expect(page.getByLabel(/markdown preview/i)).toContainText('Keep the plan editable');
   await expect(page.getByTestId('chat-composer')).toBeVisible();
+});
+
+test('[P1] media-only turn auto-opens the generated image file', async ({ page }) => {
+  await createProject(page, 'Media-only auto-open smoke');
+  await expectWorkspaceReady(page);
+
+  // Establish an already-active project file first. Otherwise the workspace's
+  // one-time initial-primary-file fallback can open the first project file and
+  // mask whether turn-end media selection actually works.
+  await sendPrompt(page, 'Create a deterministic plan document');
+  const workspace = page.getByTestId('file-workspace');
+  await expect(workspace.getByRole('tab', { name: /plan\.md/i })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+
+  await sendPrompt(page, 'Create a deterministic media-only artifact');
+
+  const mediaTab = workspace.getByRole('tab', { name: /media-only\.png/i });
+  await expect(mediaTab).toBeVisible({ timeout: T.medium });
+  await expect(mediaTab).toHaveAttribute('aria-selected', 'true');
+  await expect(workspace.getByRole('img', { name: MEDIA_ONLY_FILE })).toBeVisible();
+
+  const rawHref = await workspace.getByRole('link', { name: 'Open' }).getAttribute('href');
+  if (!rawHref) throw new Error('media preview did not expose its raw file URL');
+  const rawResponse = await page.request.get(rawHref);
+  expect(rawResponse.ok(), await rawResponse.text()).toBeTruthy();
+  expect(rawResponse.headers()['content-type']).toContain('image/png');
 });
 
 // Red spec for "Plan 模式生成 HTML 后没有自动打开生成的文件": after the user

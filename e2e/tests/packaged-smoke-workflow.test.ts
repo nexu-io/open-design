@@ -60,6 +60,12 @@ const releaseBetaWorkflowPath = join(workspaceRoot, ".github", "workflows", "rel
 const releaseBetaSelfHostedWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-beta-s.yml");
 const releasePreviewWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-preview.yml");
 const releasePrereleaseWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-prerelease.yml");
+const mainPrereleaseWinSmokeWorkflowPath = join(
+  workspaceRoot,
+  ".github",
+  "workflows",
+  "main-prerelease-win-smoke.yml",
+);
 const releaseStableWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-stable.yml");
 const releaseStableNotesScriptPath = join(workspaceRoot, ".github", "scripts", "release", "github", "stable-notes.sh");
 const releasePreviewScriptPath = join(workspaceRoot, "tools", "release", "src", "metadata", "prepare-preview.ts");
@@ -69,8 +75,10 @@ const packagedPackageJsonPath = join(workspaceRoot, "apps", "packaged", "package
 const scopesScriptPath = join(workspaceRoot, "scripts", "scopes.ts");
 const runnersScriptPath = join(workspaceRoot, ".github", "scripts", "runners.py");
 const notifyDailyFeishuWorkflowPath = join(workspaceRoot, ".github", "workflows", "notify-daily-feishu.yml");
+const notifyReleaseFeishuWorkflowPath = join(workspaceRoot, ".github", "workflows", "notify-release-feishu.yml");
 const cutReleaseWorkflowPath = join(workspaceRoot, ".github", "workflows", "cut-release.yml");
 const cutPatchReleaseWorkflowPath = join(workspaceRoot, ".github", "workflows", "cut-patch-release.yml");
+const feishuCardScriptPath = join(workspaceRoot, "tools", "release", "src", "notifications", "feishu.ts");
 const feishuNoticeScriptPath = join(workspaceRoot, "tools", "release", "src", "notifications", "feishu-notice.ts");
 const landingPageDailyFeishuWorkflowPath = join(workspaceRoot, ".github", "workflows", "landing-page-daily-feishu.yml");
 const landingPageCiWorkflowPath = join(workspaceRoot, ".github", "workflows", "landing-page-ci.yml");
@@ -315,6 +323,52 @@ process.exit(1);
   );
   await chmod(ghPath, 0o755);
   await writeFile(ghCmdPath, `@echo off\r\n"${process.execPath}" "%~dp0gh" %*\r\n`);
+}
+
+async function renderFeishuBuildCard(env: Record<string, string>): Promise<Record<string, unknown>> {
+  let payload: Record<string, unknown> | undefined;
+  const server = createServer((request, response) => {
+    void (async () => {
+      let raw = "";
+      for await (const chunk of request) raw += chunk.toString();
+      payload = JSON.parse(raw) as Record<string, unknown>;
+      response.setHeader("content-type", "application/json");
+      response.end(JSON.stringify({ code: 0 }));
+    })();
+  });
+
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      server.off("error", reject);
+      resolve();
+    });
+  });
+  const address = server.address();
+  if (address == null || typeof address === "string") {
+    throw new Error("Feishu card fixture did not bind to a TCP port");
+  }
+
+  try {
+    await execFileAsync(process.execPath, ["--experimental-strip-types", feishuCardScriptPath], {
+      cwd: workspaceRoot,
+      env: {
+        ...process.env,
+        BUILD_STATE: "success",
+        CHANNEL_LABEL: "Prerelease",
+        FEISHU_WEBHOOK: `http://127.0.0.1:${address.port}`,
+        VERSION: "0.19.0-prerelease.1",
+        ...env,
+      },
+    });
+  } finally {
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => (error == null ? resolve() : reject(error)));
+    });
+  }
+
+  if (payload == null) throw new Error("Feishu card fixture received no payload");
+  return payload;
 }
 
 describe("packaged smoke workflow", () => {
@@ -1873,6 +1927,144 @@ process.stdin.on("end", () => {
     // Default path: an empty input builds main, never a release branch.
     expect(resolveJob).toContain('echo "ref=main" >> "$GITHUB_OUTPUT"');
     expect(resolveJob).not.toContain("refs/heads/release/v*");
+
+    // Metadata failures happen before beta_version exists, so the normal
+    // download-card job is skipped. Keep a separate failure-only notice or a
+    // stale main version can fail silently every day without reaching smoke.
+    expect(workflow).toContain("  notify_failure:");
+    expect(workflow).toContain("if: ${{ always() && needs.build.result == 'failure' }}");
+    expect(workflow).toContain("tools/release/src/notifications/feishu-notice.ts");
+  });
+
+  it("[P1] keeps the metadata-independent prerelease Windows smoke advisory to release cuts", async () => {
+    const [canary, minorCut, patchCut] = await Promise.all([
+      readFile(mainPrereleaseWinSmokeWorkflowPath, "utf8"),
+      readFile(cutReleaseWorkflowPath, "utf8"),
+      readFile(cutPatchReleaseWorkflowPath, "utf8"),
+    ]);
+
+    const trigger = sectionBetween(canary, "on:", "\npermissions:");
+    expect(trigger).toContain("schedule:");
+    expect(trigger).toContain("workflow_dispatch:");
+    expect(trigger).toContain("workflow_call:");
+    expect(canary).toContain("ref: main");
+    expect(canary).not.toContain("inputs.ref");
+    expect(canary).toContain("runs-on: windows-latest");
+    expect(canary).toContain("OPEN_DESIGN_AMR_PROFILE: prod");
+    expect(canary).toContain("OD_VELA_WEB_URL: ${{ secrets.VELA_WEB_URL_PROD }}");
+    expect(canary).toContain("--namespace release-prerelease-canary-win");
+    expect(canary).toContain('OD_PACKAGED_E2E_RELEASE_CHANNEL: prerelease');
+    expect(canary).toContain('OD_PACKAGED_E2E_WIN_SMOKE_PROFILE: core');
+    expect(canary).toContain("pnpm exec tsx scripts/release-smoke.ts win specs/win.spec.ts");
+    expect(canary).toContain("tools-pack win validate-payload");
+    expect(canary).toContain("tools/release/src/notifications/feishu-notice.ts");
+
+    // This lane is a product canary, not a beta/prerelease publication. In
+    // particular, a stale main package version must not prevent Windows from
+    // reaching the packaged smoke as happened while main was 0.16.2 and stable
+    // had already advanced to 0.18.1.
+    expect(canary).not.toContain("tools-release prepare");
+    expect(canary).not.toContain("tools-release check-storage");
+    expect(canary).not.toContain("uses: ./.github/workflows/release-beta.yml");
+    expect(canary).not.toContain("uses: ./.github/workflows/release-prerelease.yml");
+
+    for (const [label, workflow] of [
+      ["cut-release", minorCut],
+      ["cut-patch-release", patchCut],
+    ] as const) {
+      const cutJob = workflow.slice(workflow.indexOf("  cut:"));
+      expect(workflow, label).not.toContain("prerelease_win_smoke");
+      expect(workflow, label).not.toContain("uses: ./.github/workflows/main-prerelease-win-smoke.yml");
+      expect(workflow, label).toContain("permissions:\n  contents: read");
+      expect(cutJob, label).not.toContain("needs:");
+      expect(cutJob, label).toContain("ref: main");
+    }
+
+    expect(canary).toContain("该 smoke 是独立质量信号，不阻塞 release cut 或 prerelease 打包 / 发布。");
+    expect(canary).not.toContain("release cut 会被阻止");
+  });
+
+  it("[P1] keeps prerelease smoke failures advisory and annotates the download card", async () => {
+    const [prerelease, notify, feishuCard] = await Promise.all([
+      readFile(releasePrereleaseWorkflowPath, "utf8"),
+      readFile(notifyReleaseFeishuWorkflowPath, "utf8"),
+      readFile(feishuCardScriptPath, "utf8"),
+    ]);
+
+    const workflowCall = sectionBetween(prerelease, "  workflow_call:", "permissions:");
+    expect(workflowCall).toContain("mac_arm64_smoke_result:");
+    expect(workflowCall).toContain("value: ${{ jobs.build_mac.outputs.smoke_result }}");
+    expect(workflowCall).toContain("win_x64_smoke_result:");
+    expect(workflowCall).toContain("value: ${{ jobs.build_win.outputs.smoke_result }}");
+
+    const macJob = sectionBetween(prerelease, "  build_mac:", "  build_mac_intel:");
+    const macSmoke = sectionBetween(
+      macJob,
+      "      - name: Smoke prerelease mac packaged runtime",
+      "      - name: Write mac_arm64 release report",
+    );
+    expect(macJob).toContain("outputs:\n      smoke_result: ${{ steps.mac_smoke.outcome }}");
+    expect(macSmoke).toContain("id: mac_smoke");
+    expect(macSmoke).toContain("continue-on-error: true");
+
+    const winJob = sectionBetween(prerelease, "  build_win:", "  build_linux:");
+    const winSmokeFixture = sectionBetween(
+      winJob,
+      "      - name: Build prerelease win_x64 update fixture",
+      "      - name: Smoke prerelease windows packaged runtime",
+    );
+    const winSmoke = sectionBetween(
+      winJob,
+      "      - name: Smoke prerelease windows packaged runtime",
+      "      - name: Write win_x64 release report",
+    );
+    expect(winJob).toContain("outputs:\n      smoke_result: ${{ steps.win_smoke.outcome }}");
+    expect(winSmokeFixture).toContain("continue-on-error: true");
+    expect(winSmoke).toContain("id: win_smoke");
+    expect(winSmoke).toContain("continue-on-error: true");
+    expect(winJob.indexOf("Smoke prerelease windows packaged runtime")).toBeLessThan(
+      winJob.indexOf("Publish windows prerelease platform"),
+    );
+
+    const notifyJob = notify.slice(notify.indexOf("  notify:"));
+    expect(notifyJob).toContain("MAC_ARM64_SMOKE_RESULT: ${{ needs.build.outputs.mac_arm64_smoke_result }}");
+    expect(notifyJob).toContain("WIN_X64_SMOKE_RESULT: ${{ needs.build.outputs.win_x64_smoke_result }}");
+    expect(notifyJob).toContain("MAC_ARM64_URL: ${{ needs.build.outputs.mac_arm64_url }}");
+    expect(notifyJob).toContain("WIN_URL: ${{ needs.build.outputs.win_url }}");
+    expect(notifyJob).toContain("tools/release/src/notifications/feishu.ts");
+    expect(notifyJob).not.toContain("tools/release/src/notifications/feishu-notice.ts");
+
+    expect(feishuCard).toContain('optional("MAC_ARM64_SMOKE_RESULT")');
+    expect(feishuCard).toContain('optional("WIN_X64_SMOKE_RESULT")');
+    expect(feishuCard).toContain("Windows x64 smoke 失败");
+    expect(feishuCard).toContain("macOS arm64 smoke 失败");
+    expect(feishuCard).toContain("产物已继续发布，可通过下方链接下载");
+    expect(feishuCard).toContain('template: smokeFailures.length > 0 ? "orange"');
+  });
+
+  it("[P1] keeps download actions on a prerelease card with a failed Windows smoke", async () => {
+    const payload = await renderFeishuBuildCard({
+      MAC_ARM64_SMOKE_RESULT: "success",
+      MAC_ARM64_URL: "https://releases.example/mac.dmg",
+      WIN_X64_SMOKE_RESULT: "failure",
+      WIN_URL: "https://releases.example/windows.exe",
+    });
+    const card = payload.card as {
+      elements: Array<{ actions?: Array<{ url?: string }>; text?: { content?: string } }>;
+      header: { template?: string; title?: { content?: string } };
+    };
+
+    expect(card.header).toMatchObject({
+      template: "orange",
+      title: { content: expect.stringContaining("Windows x64 smoke 失败") },
+    });
+    expect(card.elements.map((element) => element.text?.content).filter(Boolean)).toContain(
+      "**Smoke 告警**\n- Windows x64 smoke 失败\n\n产物已继续发布，可通过下方链接下载。",
+    );
+    expect(card.elements.flatMap((element) => element.actions ?? []).map((action) => action.url)).toEqual([
+      "https://releases.example/mac.dmg",
+      "https://releases.example/windows.exe",
+    ]);
   });
 
   it("[P2] gates the Thursday patch cut on the Tuesday minor being published", async () => {
@@ -1881,7 +2073,7 @@ process.stdin.on("end", () => {
     //   1. It fires Thursday and bumps patch (not minor) from the highest release branch.
     //   2. It only cuts when this line's minor base X.Y.0 is a PUBLISHED stable
     //      GitHub Release (non-draft, non-prerelease) — otherwise it must NOT create
-    //      a branch or build; it posts a Feishu notice and stops.
+    //      a branch or launch the prerelease publication; it posts a notice and stops.
     //   3. The happy path still cuts from main and pushes with the App token, so the
     //      existing notify-release-feishu push trigger produces the prerelease + card.
     const [workflow, notice] = await Promise.all([
@@ -1921,7 +2113,8 @@ process.stdin.on("end", () => {
       expect(workflow).toContain(`- name: ${step}\n        if: steps.guard.outputs.published == 'true'`);
     }
 
-    // Happy path keeps cut-release's mechanics: cut from main, App-token push.
+    // Happy path keeps cut-release's mechanics: cut current main independently
+    // from the advisory Windows canary, then push with the App token.
     expect(workflow).toContain("ref: main");
     expect(workflow).toContain("token: ${{ steps.app.outputs.token }}");
     expect(workflow).toContain('git push origin "$BRANCH"');

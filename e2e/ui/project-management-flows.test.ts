@@ -2867,6 +2867,90 @@ test('[P1] project detail assistant completion actions support copy, fork, and f
     .not.toBe(conversationId);
 });
 
+test('[P1] project detail fork emits correlated click and result analytics', async ({ page }) => {
+  const analyticsBodies: string[] = [];
+  await page.unroute('**/api/app-config').catch(() => {});
+  await page.addInitScript((key) => {
+    window.localStorage.setItem(
+      key,
+      JSON.stringify({
+        mode: 'daemon',
+        apiKey: '',
+        baseUrl: 'https://api.anthropic.com',
+        model: 'default',
+        agentId: 'codex',
+        skillId: null,
+        designSystemId: null,
+        onboardingCompleted: true,
+        privacyDecisionAt: 1,
+        telemetry: { metrics: true, content: false, artifactManifest: false },
+        agentModels: { codex: { model: 'default' } },
+      }),
+    );
+  }, STORAGE_KEY);
+  await page.route('**/api/app-config', async (route) => {
+    await route.fulfill({
+      json: {
+        config: {
+          onboardingCompleted: true,
+          privacyDecisionAt: 1,
+          telemetry: { metrics: true, content: false, artifactManifest: false },
+          mode: 'daemon',
+          agentId: 'codex',
+          skillId: null,
+          designSystemId: null,
+          agentModels: { codex: { model: 'default' } },
+          agentCliEnv: {},
+        },
+      },
+    });
+  });
+  await page.route('**/api/analytics/config', async (route) => {
+    await route.fulfill({
+      json: {
+        enabled: true,
+        env: 'e2e',
+        key: 'phc_e2e',
+        host: 'https://analytics.open-design.test',
+        installationId: 'e2e-installation',
+      },
+    });
+  });
+  await page.route('https://analytics.open-design.test/**', async (route) => {
+    analyticsBodies.push(route.request().postData() ?? '');
+    await route.fulfill({ status: 200, json: { status: 1 } });
+  });
+
+  const { projectId, conversationId } = await seedProjectWithAssistantCompletion(page);
+  await page.goto(`/projects/${projectId}/conversations/${conversationId}`);
+  await expectWorkspaceReady(page);
+
+  const forkResponsePromise = page.waitForResponse((response) => {
+    return response.request().method() === 'POST'
+      && response.url().endsWith(`/api/projects/${projectId}/conversations`);
+  });
+  await page.getByTestId('assistant-fork-button').click();
+  expect((await forkResponsePromise).ok()).toBe(true);
+
+  await expect
+    .poll(() => analyticsBodies.join('\n'), { timeout: T.medium })
+    .toContain('conversation_fork_result');
+  const raw = analyticsBodies.join('\n');
+  expect(raw).toContain('assistant_fork_button');
+  expect(raw).toContain('fork_conversation');
+  expect(raw).toContain('"result":"success"');
+  expect(raw).toContain('"fork_point":"latest"');
+  expect(raw).toContain(projectId);
+  expect(raw).toContain(conversationId);
+  const requestIdCounts = new Map<string, number>();
+  for (const match of raw.matchAll(/"request_id":"([^"]+)"/g)) {
+    const requestId = match[1];
+    if (!requestId) continue;
+    requestIdCounts.set(requestId, (requestIdCounts.get(requestId) ?? 0) + 1);
+  }
+  expect([...requestIdCounts.values()].some((count) => count >= 2)).toBe(true);
+});
+
 test('[P1] project detail forks histories larger than the daemon JSON body limit', async ({ page }) => {
   test.setTimeout(T.xlong);
   const { projectId, conversationId, expectedContents } =
@@ -2961,6 +3045,10 @@ test('[P1] read-only project viewers do not see conversation fork actions', asyn
     .getByText('Loading Open Design…')
     .waitFor({ state: 'hidden', timeout: T.long })
     .catch(() => {});
+  const showChat = page.getByTestId('workspace-focus-toggle');
+  if (await showChat.isVisible()) {
+    await showChat.click();
+  }
   const expandConversation = page.getByRole('button', { name: 'Expand the conversation pane' });
   if (await expandConversation.isVisible()) {
     await expandConversation.click();
@@ -3061,7 +3149,7 @@ test('[P0] project detail share menu copies the current share link for uploaded 
   });
   await openUploadedHtmlArtifactPreview(page, uploadedName);
 
-  await openShareExportTab(page);
+  await openShareMenu(page);
   await page.getByRole('menuitem', { name: /^Copy share link$/i }).click();
   await expect(page.getByRole('menuitem', { name: /^Copied!$/i })).toBeVisible();
 
@@ -3124,7 +3212,7 @@ test('[P0] project detail share menu opens the current share page for uploaded h
   });
   await openUploadedHtmlArtifactPreview(page, uploadedName);
 
-  await openShareExportTab(page);
+  await openShareMenu(page);
   await page.getByRole('menuitem', { name: /Open share page/i }).click();
 
   await expect
@@ -3168,7 +3256,7 @@ test('[P0] @critical project detail share menu publish action opens the deploy f
   });
   await openUploadedHtmlArtifactPreview(page, uploadedName);
 
-  await openShareExportTab(page);
+  await openShareMenu(page);
   await page.getByRole('menuitem', { name: /^Deploy to Vercel$/i }).click();
 
   const dialog = page.getByRole('dialog');
@@ -4501,12 +4589,15 @@ function getProjectIdFromApiPath(rawUrl: string) {
   return projectId;
 }
 
-async function openShareExportTab(page: Page) {
+// Share opens straight onto the link/asset-shaped rows — share link, share
+// page, deploy targets, save-as-template. These used to live under the old
+// popover's "Export" tab; the split moved them to Share and left Export as a
+// pure file-format menu, so the callers below take the Share door now. The
+// popover shell is still shared between the two, so the locator is unchanged.
+async function openShareMenu(page: Page) {
   await page.getByRole('button', { name: /^Share$/i }).click();
   const menu = page.locator('.share-menu-popover[role="menu"]');
   await expect(menu).toBeVisible();
-  await menu.getByRole('tab', { name: /^Export$/i }).click();
-  await expect(menu.getByRole('tab', { name: /^Export$/i })).toHaveAttribute('aria-selected', 'true');
   return menu;
 }
 

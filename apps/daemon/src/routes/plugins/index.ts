@@ -30,6 +30,24 @@ import type { WorkspaceDirectoryFetchResult } from '../../collab/vela-workspace-
 import type { PluginShareAction } from '../../services/plugin-share-tasks.js';
 import type { AuthorizeProjectRequest } from '../../collab/project-request-authority.js';
 import { workspaceTeamPluginBindingResourceId } from '../../plugins/registry.js';
+import {
+  classifyPluginInstallError,
+  type PluginInstallErrorCode,
+} from '../../plugins/installer.js';
+
+function pluginUploadFailure(
+  cause: unknown,
+  errorCode?: PluginInstallErrorCode,
+) {
+  const message = cause instanceof Error ? cause.message : String(cause);
+  return {
+    ok: false,
+    warnings: [],
+    message,
+    errorCode: errorCode ?? classifyPluginInstallError(message),
+    log: [],
+  };
+}
 
 export interface RegisterPluginEventRoutesDeps {
   http: {
@@ -119,8 +137,8 @@ interface PluginRouteHelpers {
     array(field: string, maxCount?: number): RequestHandler;
   };
   pluginInstallation: {
-    stageUploadedPluginZip(buffer: Buffer, source: string): Promise<unknown>;
-    stageUploadedPluginFolder(files: Array<{ buffer: Buffer; originalname: string }>, rawPaths: unknown): Promise<unknown>;
+    stageUploadedPluginZip(buffer: Buffer, source: string): Promise<{ ok?: boolean }>;
+    stageUploadedPluginFolder(files: Array<{ buffer: Buffer; originalname: string }>, rawPaths: unknown): Promise<{ ok?: boolean }>;
   };
   connectorService: unknown;
   resolvedPortRef: { current: number | null | undefined };
@@ -449,8 +467,44 @@ export function registerPluginRoutes(app: Express, deps: RegisterPluginRoutesDep
     return helpers.handlePluginStats(res, installed, visibleSnapshots);
   });
   app.get('/api/plugins/:id', async (req, res) => { try { const authority = await resolveWorkspaceAuthority(req, res); if (authority === undefined) return; const plugin = await resolveRequestPlugin(req.params.id, authority); if (!plugin) return res.status(404).json({ error: 'plugin not found' }); res.json(plugin); } catch (err) { res.status(500).json({ error: String(err) }); } });
-  app.post('/api/plugins/upload-zip', (req, res) => helpers.pluginUpload.single('file')(req, res, async (err: unknown) => { if (err) return helpers.sendMulterError(res, err); try { const file = req.file; if (!file?.buffer) return res.status(400).json({ error: 'file is required' }); const result = await helpers.pluginInstallation.stageUploadedPluginZip(file.buffer, `upload:zip:${helpers.decodeMultipartFilename(file.originalname || 'plugin.zip')}`); res.status((result as { ok?: boolean }).ok ? 200 : 400).json(result); } catch (uploadErr: unknown) { res.status(400).json({ ok: false, warnings: [], message: uploadErr instanceof Error ? uploadErr.message : String(uploadErr), log: [] }); } }));
-  app.post('/api/plugins/upload-folder', (req, res) => helpers.pluginUpload.array('files', 500)(req, res, async (err: unknown) => { if (err) return helpers.sendMulterError(res, err); try { const files = Array.isArray(req.files) ? req.files as Array<{ buffer: Buffer; originalname: string }> : []; if (files.length === 0) return res.status(400).json({ error: 'files are required' }); const result = await helpers.pluginInstallation.stageUploadedPluginFolder(files, req.body?.paths); res.status((result as { ok?: boolean } | null)?.ok ? 200 : 400).json(result); } catch (uploadErr: unknown) { res.status(400).json({ ok: false, warnings: [], message: uploadErr instanceof Error ? uploadErr.message : String(uploadErr), log: [] }); } }));
+  app.post('/api/plugins/upload-zip', (req, res) => {
+    helpers.pluginUpload.single('file')(req, res, async (err: unknown) => {
+      if (err) return helpers.sendMulterError(res, err);
+      try {
+        const file = req.file;
+        if (!file?.buffer) {
+          return res.status(400).json(pluginUploadFailure('file is required', 'BAD_REQUEST'));
+        }
+        const result = await helpers.pluginInstallation.stageUploadedPluginZip(
+          file.buffer,
+          `upload:zip:${helpers.decodeMultipartFilename(file.originalname || 'plugin.zip')}`,
+        );
+        return res.status(result.ok ? 200 : 400).json(result);
+      } catch (cause) {
+        return res.status(400).json(pluginUploadFailure(cause));
+      }
+    });
+  });
+  app.post('/api/plugins/upload-folder', (req, res) => {
+    helpers.pluginUpload.array('files', 500)(req, res, async (err: unknown) => {
+      if (err) return helpers.sendMulterError(res, err);
+      try {
+        const files = Array.isArray(req.files)
+          ? req.files as Array<{ buffer: Buffer; originalname: string }>
+          : [];
+        if (files.length === 0) {
+          return res.status(400).json(pluginUploadFailure('files are required', 'BAD_REQUEST'));
+        }
+        const result = await helpers.pluginInstallation.stageUploadedPluginFolder(
+          files,
+          req.body?.paths,
+        );
+        return res.status(result.ok ? 200 : 400).json(result);
+      } catch (cause) {
+        return res.status(400).json(pluginUploadFailure(cause));
+      }
+    });
+  });
   app.post('/api/plugins/install', async (req, res) => {
     const authority = await resolveWorkspaceAuthority(req, res);
     if (authority === undefined) return;

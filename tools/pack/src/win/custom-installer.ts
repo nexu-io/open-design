@@ -40,6 +40,12 @@ function escapeNsisString(value: string): string {
   return value.replace(/\$/g, "$$").replace(/"/g, '$\\"').replace(/\r?\n/g, "$\\r$\\n");
 }
 
+export function createNsisQuotedCommandLiteral(args: readonly string[]): string {
+  // NSIS accepts single-quoted string literals, so embedded command quotes do
+  // not need a second escape layer that JavaScript templates can consume.
+  return `'${args.map((arg) => `"${arg}"`).join(" ")}'`;
+}
+
 function normalizeArchivePath(relativePath: string): string {
   return relativePath.split("/").join("\\");
 }
@@ -417,6 +423,8 @@ async function writeInstallerScript(config: ToolPackConfig, paths: WinPaths, pac
   const registryKey = escapeNsisString(identity.registryKey);
   const appPathsKey = escapeNsisString(identity.appPathsKey);
   const inviteProtocolKey = "Software\\Classes\\opendesign";
+  const inviteProtocolCommand = createNsisQuotedCommandLiteral([`$INSTDIR\\${exeName}`, "%1"]);
+  const inviteProtocolExecutablePrefix = createNsisQuotedCommandLiteral([`$INSTDIR\\${exeName}`]);
   const namespace = escapeNsisString(config.namespace);
   const localDataRoot = `$APPDATA\\${escapeNsisString(PRODUCT_NAME)}\\namespaces\\${escapeNsisString(sanitizeNamespace(config.namespace))}`;
   const localCacheRoot = `${localDataRoot}\\cache`;
@@ -985,7 +993,7 @@ skip_silent_desktop_shortcut:
   WriteRegStr HKCU "${inviteProtocolKey}" "" "URL:Open Design Invite Protocol"
   WriteRegStr HKCU "${inviteProtocolKey}" "URL Protocol" ""
   WriteRegStr HKCU "${inviteProtocolKey}\\DefaultIcon" "" "$INSTDIR\\${exeName},0"
-  WriteRegStr HKCU "${inviteProtocolKey}\\shell\\open\\command" "" '$\"$INSTDIR\\${exeName}$\" $\"%1$\"'
+  WriteRegStr HKCU "${inviteProtocolKey}\\shell\\open\\command" "" ${inviteProtocolCommand}
   Push "event=registry_after_write key=${registryKey} appPathsKey=${appPathsKey}"
   Call LogInstallerEvent
   Call SyncLauncherRuntime
@@ -1012,7 +1020,13 @@ after_desktop_shortcut:
   DeleteRegKey HKCU "${registryKey}"
   DeleteRegKey HKCU "${appPathsKey}"
   ReadRegStr $0 HKCU "${inviteProtocolKey}\\shell\\open\\command" ""
-  StrCmp $0 '$\"$INSTDIR\\${exeName}$\" $\"%1$\"' 0 preserve_invite_protocol
+  ; Electron refreshes the protocol command when the app starts and may change
+  ; its trailing arguments. Compare only the exact quoted executable prefix so
+  ; this install can remove its registration without touching another owner.
+  StrCpy $1 ${inviteProtocolExecutablePrefix}
+  StrLen $2 $1
+  StrCpy $3 $0 $2
+  StrCmp $3 $1 0 preserve_invite_protocol
   DeleteRegKey HKCU "${inviteProtocolKey}"
 preserve_invite_protocol:
   Push "event=registry_after_delete key=${registryKey} appPathsKey=${appPathsKey}"

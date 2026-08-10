@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   buildLazySrcdocTransport,
+  buildSrcdoc,
   canActivateSrcDocTransport,
   type SrcDocActivationInputs,
 } from '../../src/runtime/srcdoc';
@@ -172,6 +173,20 @@ describe('buildLazySrcdocTransport (#2253)', () => {
     listener({ data: null });
     listener({ data: { type: 'unrelated' } });
     expect(writes).toEqual([]);
+  });
+});
+
+describe('srcDoc transport activation witness', () => {
+  it('runs before authored head scripts so slow boot code cannot cause a false recovery', () => {
+    const doc = buildSrcdoc(
+      '<html><head><script src="slow-app.js"></script></head><body>app</body></html>',
+      { transportActivationGeneration: 'generation-1' },
+    );
+
+    expect(doc.indexOf('data-od-srcdoc-transport-activation')).toBeGreaterThan(-1);
+    expect(doc.indexOf('data-od-srcdoc-transport-activation')).toBeLessThan(
+      doc.indexOf('src="slow-app.js"'),
+    );
   });
 });
 

@@ -1187,3 +1187,41 @@ html:has(main.lw) {
   .lw .join-heading { flex-direction: column; align-items: flex-start; gap: 14px; }
   .lw .join-deck { text-align: left; }
 }
+
+/* ── Community CTA: brand marks + the reason to click ────────────────
+   Joey read the two buttons as easy to skim past — they were set in the
+   same mono as everything else around them. The marks give each one a
+   shape the eye catches before it reads, and the line underneath answers
+   the question the buttons never did: why join at all.
+   Marks are laid out on the text baseline and sized to cap height so they
+   read as part of the label rather than as decoration beside it. */
+.lw .button .btn-mark {
+  height: 1.18em;
+  width: auto;
+  vertical-align: -0.2em;
+  margin-right: 0.5em;
+  /* Discord blurple and the Feishu bird both fight the acid fill at full
+     strength; a hair of desaturation settles them without going grey. */
+  filter: saturate(0.92);
+}
+
+.lw .hero-ctas .cta-note {
+  flex-basis: 100%;
+  margin: 0.85rem 0 0;
+  font-family: var(--utility);
+  font-size: 0.75rem;
+  letter-spacing: 0.01em;
+  color: color-mix(in srgb, var(--ink) 62%, transparent);
+}
+
+@media (max-width: 900px) {
+  /* The stack turns the row into a column, and a 100% basis there means full
+     HEIGHT — the note wraps into a second column beside the buttons and off
+     the screen. On a phone it is simply the next item down. */
+  .lw .hero-ctas .cta-note {
+    flex-basis: auto;
+    text-align: center;
+    font-size: 0.72rem;
+    margin-top: 0.7rem;
+  }
+}

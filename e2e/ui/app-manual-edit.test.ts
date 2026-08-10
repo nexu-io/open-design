@@ -324,19 +324,22 @@ test('[P0] @critical preview toolbar keeps share, download, comment, and zoom ac
   await expect(viewMode.getByRole('tab', { name: 'Preview', exact: true })).toHaveAttribute('aria-selected', 'true');
   await expect(viewMode.getByRole('tab', { name: 'Code', exact: true })).toBeVisible();
 
+  // The three intents are top-level header controls again — Share, Export, and
+  // the hand-off split button sit side by side, with no tab strip to cross.
+  await expect(page.getByRole('button', { name: /^Export$/ })).toBeVisible();
+  await expect(page.getByTestId('handoff-trigger')).toBeVisible();
+
   await page.getByRole('button', { name: /^Share$/ }).click();
   const shareMenu = page.locator('.share-menu-popover[role="menu"]');
   await expect(shareMenu).toBeVisible();
-  await expect(shareMenu.getByRole('tab', { name: /^Share$/ })).toHaveAttribute('aria-selected', 'true');
+  // Share opens straight onto the link/asset-shaped rows; file formats are
+  // Export's job now, so they must NOT be reachable from this panel.
+  await expect(shareMenu.getByRole('menuitem', { name: /Export as PDF/i })).toHaveCount(0);
   // This local Personal fixture deliberately has neither a Team identity nor
   // an authenticated public-publish capability. Keep this toolbar smoke about
   // the stable action surface instead of requiring a workspace-specific card.
   await expect(shareMenu.getByText(/Share project in workspace/i)).toHaveCount(0);
   await expect(shareMenu.getByText(/Publish this file/i)).toHaveCount(0);
-  await expect(shareMenu.getByRole('tab', { name: /^Export$/ })).toBeVisible();
-  await expect(shareMenu.getByRole('tab', { name: /^Send to\.\.\.$/ })).toBeVisible();
-  await shareMenu.getByRole('tab', { name: /^Export$/ }).click();
-  await expect(shareMenu.getByRole('menuitem', { name: /Export as PDF/i })).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(shareMenu).toHaveCount(0);
 
@@ -384,8 +387,8 @@ test('[P1] preview toolbar exports PDF and PPTX through the daemon contracts', a
   await page.goto(`/projects/${projectId}/files/export-page.html`);
   await openDesignFile(page, 'export-page.html');
 
-  await page.getByRole('button', { name: /^Share$/ }).click();
-  await page.locator('.share-menu-popover[role="menu"]').getByRole('menuitem', { name: /Export as PDF/ }).click();
+  const pdfMenu = await openShareExportMenu(page);
+  await pdfMenu.getByRole('menuitem', { name: /Export as PDF/ }).click();
 
   await expect
     .poll(() => pdfRequests.length, { timeout: 10_000 })
@@ -414,8 +417,8 @@ test('[P1] preview toolbar exports PDF and PPTX through the daemon contracts', a
   await openDesignFile(page, 'contract-deck.html');
   await expect(artifactPreviewFrame(page).getByRole('heading', { name: 'Intro' })).toBeVisible();
 
-  await page.getByRole('button', { name: /^Share$/ }).click();
-  await page.locator('.share-menu-popover[role="menu"]').getByRole('menuitem', { name: /Export as PPTX/ }).click();
+  const pptxMenu = await openShareExportMenu(page);
+  await pptxMenu.getByRole('menuitem', { name: /Export as PPTX/ }).click();
   const dialog = page.getByRole('dialog', { name: /Export as PPTX/ });
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole('radio', { name: /^Export as PPTX \(editable\)/i })).toBeChecked();
@@ -662,9 +665,7 @@ test('[P1] first-loop onboarding completes once after a successful artifact expo
   await page.goto(`/projects/${projectId}/files/first-loop-export.html`);
   await openDesignFile(page, 'first-loop-export.html');
 
-  await page.getByRole('button', { name: /^Share$/ }).click();
-  const shareMenu = page.locator('.share-menu-popover[role="menu"]');
-  await shareMenu.getByRole('tab', { name: 'Export' }).click();
+  const shareMenu = await openShareExportMenu(page);
   const [download] = await Promise.all([
     page.waitForEvent('download'),
     shareMenu.getByRole('menuitem', { name: /Export as standalone HTML/ }).click(),
@@ -680,8 +681,7 @@ test('[P1] first-loop onboarding completes once after a successful artifact expo
   expect(raw).toContain('artifact_viewed');
   expect(raw).toContain('delivered');
 
-  await page.getByRole('button', { name: /^Share$/ }).click();
-  await shareMenu.getByRole('tab', { name: 'Export' }).click();
+  await openShareExportMenu(page);
   await Promise.all([
     page.waitForEvent('download'),
     shareMenu.getByRole('menuitem', { name: /Export as standalone HTML/ }).click(),
@@ -840,12 +840,13 @@ async function createEmptyProject(page: Page, name: string): Promise<string> {
   return projectId;
 }
 
+// Export is its own header button now — no Share detour, no tab strip. The
+// popover shell is still shared with Share, so the locator is unchanged.
 async function openShareExportMenu(page: Page): Promise<ReturnType<Page['locator']>> {
-  await page.getByRole('button', { name: /^Share$/ }).click();
+  await page.getByRole('button', { name: /^Export$/ }).click();
   const menu = page.locator('.share-menu-popover[role="menu"]');
   await expect(menu).toBeVisible();
-  await menu.getByRole('tab', { name: /^Export$/ }).click();
-  await expect(menu.getByRole('tab', { name: /^Export$/ })).toHaveAttribute('aria-selected', 'true');
+  await expect(menu.getByRole('menuitem', { name: /^Export as/ }).first()).toBeVisible();
   return menu;
 }
 

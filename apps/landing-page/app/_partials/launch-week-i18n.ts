@@ -43,3 +43,108 @@ export const LW_STATUS: Record<string, { en: string } & Record<string, string | 
   LIVE: { en: "LIVE", "zh": "进行中", "ja": "公開中", "ko": "진행 중", "de": "LIVE", "ru": "В ЭФИРЕ", "fr": "EN DIRECT", "es": "EN VIVO", "pt-br": "AO VIVO", "it": "IN DIRETTA", "tr": "CANLI" },
   CLASSIFIED: { en: "CLASSIFIED", "zh": "保密中", "ja": "未公開", "ko": "비공개", "de": "GEHEIM", "ru": "ЗАСЕКРЕЧЕНО", "fr": "CLASSÉ", "es": "CLASIFICADO", "pt-br": "CONFIDENCIAL", "it": "RISERVATO", "tr": "GİZLİ" },
 };
+
+export interface LaunchWeekHomeFloatCopy {
+  date: string;
+  title: string;
+  summary: string;
+  cta: string;
+  regionLabel: string;
+  closeLabel: string;
+}
+
+/** Compact homepage reminder. The campaign name stays as the official lockup. */
+export const LW_HOME_FLOAT_COPY = {
+  en: {
+    date: 'AUG 10-14',
+    title: 'Launch Week Vol.01',
+    summary: 'Five days. Five design drops. One live each day.',
+    cta: "See today's drop",
+    regionLabel: 'Launch Week event reminder',
+    closeLabel: 'Dismiss Launch Week reminder',
+  },
+  zh: {
+    date: '8月10-14日',
+    title: 'Launch Week Vol.01',
+    summary: '五天。五项设计任务。每天一次发布。',
+    cta: '查看今天的发布',
+    regionLabel: 'Launch Week 活动提醒',
+    closeLabel: '关闭 Launch Week 提醒',
+  },
+  ja: {
+    date: '8月10日-14日',
+    title: 'Launch Week Vol.01',
+    summary: '5日間。5つのデザイン業務。毎日ひとつ公開。',
+    cta: '今日の発表を見る',
+    regionLabel: 'Launch Week イベントのお知らせ',
+    closeLabel: 'Launch Week のお知らせを閉じる',
+  },
+  ko: {
+    date: '8월 10-14일',
+    title: 'Launch Week Vol.01',
+    summary: '5일. 다섯 가지 디자인 작업. 매일 하나씩 공개.',
+    cta: '오늘의 공개 보기',
+    regionLabel: 'Launch Week 이벤트 알림',
+    closeLabel: 'Launch Week 알림 닫기',
+  },
+  de: {
+    date: '10.-14. AUG',
+    title: 'Launch Week Vol.01',
+    summary: 'Fünf Tage. Fünf Design-Aufgaben. Jeden Tag ein Launch.',
+    cta: 'Heutigen Launch ansehen',
+    regionLabel: 'Hinweis zur Launch Week',
+    closeLabel: 'Launch-Week-Hinweis schließen',
+  },
+  fr: {
+    date: '10-14 AOÛT',
+    title: 'Launch Week Vol.01',
+    summary: 'Cinq jours. Cinq métiers du design. Un lancement par jour.',
+    cta: 'Voir le lancement du jour',
+    regionLabel: 'Rappel de la Launch Week',
+    closeLabel: 'Fermer le rappel de la Launch Week',
+  },
+  ru: {
+    date: '10-14 АВГ',
+    title: 'Launch Week Vol.01',
+    summary: 'Пять дней. Пять дизайн-задач. Каждый день новый запуск.',
+    cta: 'Смотреть запуск дня',
+    regionLabel: 'Напоминание о Launch Week',
+    closeLabel: 'Закрыть напоминание о Launch Week',
+  },
+  es: {
+    date: '10-14 AGO',
+    title: 'Launch Week Vol.01',
+    summary: 'Cinco días. Cinco trabajos de diseño. Un lanzamiento al día.',
+    cta: 'Ver el lanzamiento de hoy',
+    regionLabel: 'Recordatorio de Launch Week',
+    closeLabel: 'Cerrar el recordatorio de Launch Week',
+  },
+  'pt-br': {
+    date: '10-14 AGO',
+    title: 'Launch Week Vol.01',
+    summary: 'Cinco dias. Cinco trabalhos de design. Um lançamento por dia.',
+    cta: 'Ver o lançamento de hoje',
+    regionLabel: 'Lembrete da Launch Week',
+    closeLabel: 'Fechar o lembrete da Launch Week',
+  },
+  it: {
+    date: '10-14 AGO',
+    title: 'Launch Week Vol.01',
+    summary: 'Cinque giorni. Cinque lavori di design. Un lancio al giorno.',
+    cta: 'Guarda il lancio di oggi',
+    regionLabel: 'Promemoria della Launch Week',
+    closeLabel: 'Chiudi il promemoria della Launch Week',
+  },
+  tr: {
+    date: '10-14 AĞU',
+    title: 'Launch Week Vol.01',
+    summary: 'Beş gün. Beş tasarım işi. Her gün yeni bir lansman.',
+    cta: 'Bugünkü lansmanı gör',
+    regionLabel: 'Launch Week etkinlik hatırlatıcısı',
+    closeLabel: 'Launch Week hatırlatıcısını kapat',
+  },
+} satisfies Record<string, LaunchWeekHomeFloatCopy>;
+
+export function getLaunchWeekHomeFloatCopy(locale: string): LaunchWeekHomeFloatCopy {
+  return LW_HOME_FLOAT_COPY[locale as keyof typeof LW_HOME_FLOAT_COPY] ?? LW_HOME_FLOAT_COPY.en;
+}

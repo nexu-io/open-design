@@ -245,6 +245,16 @@ describe('composeSystemPrompt', () => {
     expect(design).toContain('## Requirements Clarification Phase');
   });
 
+  it('pins Cloud nano-banana shorthand and forbids reading generated media bytes back into context', () => {
+    const prompt = composeSystemPrompt({
+      skillMode: 'image',
+      metadata: { kind: 'image', imageModel: 'vela/nano-banana-2' } as any,
+    });
+
+    expect(prompt).toContain('`nano-banana` and `nano-banana-2` mean');
+    expect(prompt).toContain('Do not call `Read` on the generated image');
+  });
+
   it('injects the html-in-canvas preflight for the hyperframes skill', () => {
     const prompt = composeSystemPrompt({
       skillName: 'hyperframes',
@@ -374,6 +384,51 @@ describe('composeSystemPrompt', () => {
       expect(prompt).toContain('This tool-call rule does not apply to Open Design UI markup');
       expect(prompt).toContain('emit the complete `<question-form>...</question-form>` block directly');
       expect(prompt).toContain('Do not output generated source code in a `<artifact type="text/html">...</artifact>` block.');
+    });
+
+    it('uses Vela media defaults only for AMR and forbids direct Vela calls', () => {
+      const amrPrompt = composeSystemPrompt({
+        agentId: 'amr',
+        metadata: { kind: 'image', imageModel: 'vela/gpt-image-2' } as any,
+      });
+      expect(amrPrompt).toContain('Image model: `vela/gpt-image-2`');
+      expect(amrPrompt).toContain(
+        'Video model: `vela/doubao-seedance-2-0-260128`',
+      );
+      expect(amrPrompt).toContain('### Open Design Cloud media defaults');
+      expect(amrPrompt).not.toContain('### Run-scoped BYOK media defaults');
+      expect(amrPrompt).toContain('Never invoke the `vela` CLI directly');
+      expect(amrPrompt).toContain('trusted Workspace attribution');
+
+      const claudePrompt = composeSystemPrompt({ agentId: 'claude' });
+      expect(claudePrompt).not.toContain('Image model: `vela/gpt-image-2`');
+      expect(claudePrompt).toContain('`--model flux-pro-ultra`');
+    });
+
+    it('keeps image completion copy generic while retaining internal diagnostics', () => {
+      const imagePrompt = composeSystemPrompt({
+        agentId: 'amr',
+        locale: 'zh-CN',
+        metadata: { kind: 'image', imageModel: 'vela/gpt-image-2' } as any,
+      });
+      expect(imagePrompt).toContain('reply exactly `图片已生成`');
+      expect(imagePrompt).toContain('reply exactly `图片生成服务暂时不可用`');
+      expect(imagePrompt).toContain('tool output and daemon logs');
+      expect(imagePrompt).not.toContain('the filename, the model used');
+      expect(imagePrompt).not.toContain('surface them verbatim to the user');
+      expect(imagePrompt).not.toContain('quote the real stderr / exit code');
+
+      const prototypePrompt = composeSystemPrompt({
+        agentId: 'amr',
+        locale: 'zh-CN',
+        metadata: { kind: 'prototype' } as any,
+      });
+      expect(prototypePrompt).toContain('reply exactly `图片已生成`');
+      expect(prototypePrompt).toContain('reply exactly `图片生成服务暂时不可用`');
+      expect(prototypePrompt).toContain('IMAGE_MODEL="vela/gpt-image-2"');
+      expect(prototypePrompt).not.toContain(
+        'For the best fal image model use `--model flux-pro-ultra`',
+      );
     });
 
     it('prioritizes question forms over native tool calls when clarifying', () => {

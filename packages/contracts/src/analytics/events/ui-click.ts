@@ -1431,6 +1431,32 @@ export interface AssistantFeedbackReasonSubmitClickProps {
   custom_reason?: string;
 }
 
+// CONVERSATION FORK funnel. The click and result events share this context so
+// analysts can compare historical-vs-latest forks without joining prompts or
+// other user-authored content into PostHog.
+export type TrackingConversationForkPoint = 'latest' | 'historical' | 'unknown';
+
+export interface ConversationForkAnalyticsContext {
+  page_name: 'chat_panel';
+  area: 'chat_panel';
+  element: 'assistant_fork_button';
+  action: 'fork_conversation';
+  project_id: string;
+  project_kind: TrackingProjectKind | null;
+  conversation_id: string;
+  assistant_message_id: string;
+  source_run_id: string | null;
+  source_agent_id: string;
+  agent_provider_id: string;
+  session_mode: TrackingSessionMode;
+  fork_point: TrackingConversationForkPoint;
+  seed_message_count: number | null;
+  conversation_message_count: number;
+  messages_after_fork_count: number | null;
+}
+
+export type ConversationForkClickProps = ConversationForkAnalyticsContext;
+
 // SETTINGS clicks
 export type TrackingSettingsArea =
   | 'configure_execution_mode'
@@ -1670,6 +1696,7 @@ export type UiClickProps =
   | DeckViewerClickProps
   | ShareOptionPopoverClickProps
   | FileVersionModalClickProps
+  | ConversationForkClickProps
   | AssistantFeedbackButtonClickProps
   | AssistantFeedbackReasonSubmitClickProps
   | SettingsSidebarClickProps

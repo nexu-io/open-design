@@ -115,6 +115,7 @@ describe('streamViaDaemon', () => {
     const handlers = createDaemonHandlers();
     const eventTarget = new EventTarget();
     const published: DaemonRunFinishedEventDetail[] = [];
+    const artifactPaths: string[][] = [];
     eventTarget.addEventListener(DAEMON_RUN_FINISHED_EVENT, (event) => {
       published.push((event as CustomEvent<DaemonRunFinishedEventDetail>).detail);
     });
@@ -124,7 +125,7 @@ describe('streamViaDaemon', () => {
       if (url === '/api/runs') return jsonResponse({ runId: 'run-artifact-success' });
       if (url === '/api/runs/run-artifact-success/events') {
         return sseResponse(
-          'event: end\ndata: {"code":0,"status":"succeeded","artifactCount":2}\n\n',
+          'event: end\ndata: {"code":0,"status":"succeeded","artifactCount":2,"artifactPaths":["existing.png","renders/new.png"]}\n\n',
         );
       }
       throw new Error(`unexpected fetch ${url}`);
@@ -138,6 +139,7 @@ describe('streamViaDaemon', () => {
       handlers,
       projectId: 'project-1',
       conversationId: 'conversation-1',
+      onArtifactPaths: (paths) => artifactPaths.push(paths),
     });
 
     expect(published).toEqual([{
@@ -147,6 +149,7 @@ describe('streamViaDaemon', () => {
       result: 'success',
       artifactCount: 2,
     }]);
+    expect(artifactPaths).toEqual([['existing.png', 'renders/new.png']]);
   });
 
   it.each([

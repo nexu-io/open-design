@@ -73,9 +73,12 @@ import {
   executionModeToTracking,
   projectKindFromMetadataToTracking,
   projectKindToTracking,
+  sessionModeToTracking,
 } from '@open-design/contracts/analytics';
 import type {
   TrackingArtifactKind,
+  TrackingConversationForkErrorCode,
+  TrackingConversationForkPoint,
   TrackingDesignSystemApplyTargetKind,
   TrackingDesignSystemOrigin,
   TrackingDesignSystemStatusValue,
@@ -85,6 +88,8 @@ import { useAnalytics } from '../analytics/provider';
 import {
   trackByokPreflightBlocked,
   trackComposerBarClick,
+  trackConversationForkClick,
+  trackConversationForkResult,
   trackDesignSystemApplyResult,
   trackDesignSystemEnrichClick,
   trackPageView,
@@ -387,6 +392,33 @@ export function mergeSavedPreviewComment(current: PreviewComment[], saved: Previ
 
 function wait(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+function conversationForkErrorCode(error: unknown): TrackingConversationForkErrorCode {
+  if (error instanceof ProjectConversationsHttpError) {
+    if (error.status === 400) return 'bad_request';
+    if (error.status === 401 || error.status === 403) return 'permission_denied';
+    if (error.status === 404) return 'fork_source_not_found';
+    if (error.status === 413) return 'payload_too_large';
+    if (error.status >= 500) return 'server_error';
+    return 'http_error';
+  }
+  if (error instanceof TypeError) return 'network_error';
+  return 'unknown_error';
+}
+
+function conversationForkPoint(
+  messages: ChatMessage[],
+  assistantMessageId: string,
+  forkIndex: number,
+): TrackingConversationForkPoint {
+  if (forkIndex < 0) return 'unknown';
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message?.role !== 'assistant') continue;
+    return message.id === assistantMessageId ? 'latest' : 'historical';
+  }
+  return 'unknown';
 }
 
 export async function listConversationsWithRetry(
@@ -5252,14 +5284,20 @@ export function ProjectView({
                 nextFiles = await refreshProjectFiles();
               }
             }
-            const diff = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
+            const diff = computeProducedFiles(
+              beforeFileNames,
+              nextFiles,
+              status.artifactPaths,
+              project.id,
+              projectDetail.resolvedDir,
+            ) ?? [];
             const produced = mergeRecoveredArtifact(diff, recoveredExistingArtifact);
             const touchedFilePaths = extractTouchedFilePathsFromEvents(message.events);
             const traceObjectFiles = mergeRecoveredTraceObjectFile(
               computeTraceObjectFiles(
                 beforeFileNames,
                 nextFiles,
-                touchedFilePaths,
+                [...touchedFilePaths, ...(status.artifactPaths ?? [])],
                 project.id,
                 projectDetail.resolvedDir,
               ) ?? [],
@@ -5270,7 +5308,7 @@ export function ProjectView({
               turnStartedAt: status.createdAt || message.startedAt || message.createdAt || null,
               turnEndedAt: message.endedAt || legacyReplayEndedAt || null,
               agentTouchedFileNames: resolveAgentTouchedFileNames(
-                touchedFilePaths,
+                [...touchedFilePaths, ...(status.artifactPaths ?? [])],
                 nextFiles,
                 project.id,
                 projectDetail.resolvedDir,
@@ -5376,6 +5414,7 @@ export function ProjectView({
         let replayedContent = needsFullReplay ? '' : message.content;
         let replayedEvents: AgentEvent[] = needsFullReplay ? [] : [...(message.events ?? [])];
         let latestReattachRunStatus: ChatMessage['runStatus'] = status.status;
+        let authoritativeReattachArtifactPaths = status.artifactPaths;
         const applyContentDelta = (delta: string) => {
           for (const ev of parser.feed(delta)) {
             if (ev.type === 'artifact:start') {
@@ -5444,6 +5483,9 @@ export function ProjectView({
           cancelSignal: cancelController.signal,
           initialLastEventId: needsFullReplay ? null : message.lastRunEventId ?? null,
           publishRunFinishedEvent: shouldPublishRunFinishedEvent,
+          onArtifactPaths: (paths) => {
+            authoritativeReattachArtifactPaths = paths;
+          },
           handlers: {
             onDelta: (delta) => {
               // First payload from the resumed stream is real recovery — the daemon is
@@ -5579,7 +5621,13 @@ export function ProjectView({
                     nextFiles = await refreshProjectFiles();
                   }
                 }
-                const diff = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
+                const diff = computeProducedFiles(
+                  beforeFileNames,
+                  nextFiles,
+                  authoritativeReattachArtifactPaths,
+                  project.id,
+                  projectDetail.resolvedDir,
+                ) ?? [];
                 const produced = mergeRecoveredArtifact(diff, recoveredExistingArtifact);
                 const touchedFilePaths = extractTouchedFilePathsFromEvents(
                   needsFullReplay ? replayedEvents : message.events,
@@ -5588,7 +5636,10 @@ export function ProjectView({
                   computeTraceObjectFiles(
                     beforeFileNames,
                     nextFiles,
-                    touchedFilePaths,
+                    [
+                      ...touchedFilePaths,
+                      ...(authoritativeReattachArtifactPaths ?? []),
+                    ],
                     project.id,
                     projectDetail.resolvedDir,
                   ) ?? [],
@@ -5599,7 +5650,10 @@ export function ProjectView({
                   turnStartedAt: status.createdAt || message.startedAt || message.createdAt || null,
                   turnEndedAt: endedAt ?? null,
                   agentTouchedFileNames: resolveAgentTouchedFileNames(
-                    touchedFilePaths,
+                    [
+                      ...touchedFilePaths,
+                      ...(authoritativeReattachArtifactPaths ?? []),
+                    ],
                     nextFiles,
                     project.id,
                     projectDetail.resolvedDir,
@@ -7005,6 +7059,7 @@ export function ProjectView({
 
       const controller = new AbortController();
       const cancelController = new AbortController();
+      let authoritativeArtifactPaths: string[] | undefined;
       abortRef.current = controller;
       cancelRef.current = cancelController;
       const handlers = {
@@ -7184,7 +7239,13 @@ export function ProjectView({
                   nextFiles = await refreshProjectFiles();
                 }
               }
-              const produced = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
+              const produced = computeProducedFiles(
+                beforeFileNames,
+                nextFiles,
+                authoritativeArtifactPaths,
+                project.id,
+                projectDetail.resolvedDir,
+              ) ?? [];
               // Completion half of the onboarding funnel: the first generation
               // in a recommendation-started project that actually produced a
               // previewable artifact. Gated on the same artifact-producing
@@ -7210,7 +7271,10 @@ export function ProjectView({
               const traceObjectFiles = computeTraceObjectFiles(
                 beforeFileNames,
                 nextFiles,
-                traceTouchedFilePaths,
+                [
+                  ...traceTouchedFilePaths,
+                  ...(authoritativeArtifactPaths ?? []),
+                ],
                 project.id,
                 projectDetail.resolvedDir,
               ) ?? [];
@@ -7219,7 +7283,10 @@ export function ProjectView({
                 turnStartedAt: startedAt,
                 turnEndedAt: endedAt ?? null,
                 agentTouchedFileNames: resolveAgentTouchedFileNames(
-                  traceTouchedFilePaths,
+                  [
+                    ...traceTouchedFilePaths,
+                    ...(authoritativeArtifactPaths ?? []),
+                  ],
                   nextFiles,
                   project.id,
                   projectDetail.resolvedDir,
@@ -7358,6 +7425,9 @@ export function ProjectView({
                   runIdForGenericDisconnect,
                   projectRunWorkspaceContext,
                 ).catch(() => null);
+                if (latestRunStatus?.artifactPaths) {
+                  authoritativeArtifactPaths = latestRunStatus.artifactPaths;
+                }
                 if (!latestRunStatus || isActiveRunStatus(latestRunStatus.status)) {
                 } else if (latestRunStatus.status === 'succeeded') {
                   if (typeof latestRunStatus.artifactCount === 'number') {
@@ -7464,7 +7534,34 @@ export function ProjectView({
           if (refreshConversationAfterError) {
             scheduleConversationMessageRefresh(runConversationId);
           }
-          void refreshProjectFiles().catch(() => {
+          const authoritativeTouchedPaths = [
+            ...traceTouchedFilePaths,
+            ...(authoritativeArtifactPaths ?? []),
+          ];
+          void (async () => {
+            const nextFiles = await refreshProjectFiles();
+            if (authoritativeArtifactPaths === undefined) return;
+            const produced = computeProducedFiles(
+              beforeFileNames,
+              nextFiles,
+              authoritativeArtifactPaths,
+              project.id,
+              projectDetail.resolvedDir,
+            ) ?? [];
+            const traceObjectFiles = computeTraceObjectFiles(
+              beforeFileNames,
+              nextFiles,
+              authoritativeTouchedPaths,
+              project.id,
+              projectDetail.resolvedDir,
+            ) ?? [];
+            updateMessageById(
+              assistantId,
+              (prev) => ({ ...prev, producedFiles: produced, traceObjectFiles }),
+              true,
+              { telemetryFinalized: true },
+            );
+          })().catch(() => {
             // Retain the last accepted file list while the daemon recovers.
           });
           clearTraceTouchedFilePaths();
@@ -7624,6 +7721,9 @@ export function ProjectView({
               runStatus: 'queued',
               taskAnalytics: resolvedTaskAnalytics,
             }));
+          },
+          onArtifactPaths: (paths) => {
+            authoritativeArtifactPaths = paths;
           },
           onRunStatus: (runStatus) => {
             const endedAt = isTerminalRunStatus(runStatus) ? Date.now() : undefined;
@@ -8933,14 +9033,36 @@ export function ProjectView({
   const handleForkFromMessage = useCallback(
     async (assistantMessage: ChatMessage) => {
       if (!activeConversationId || forkingMessageId || projectCollab.viewerOnly) return;
+      const requestId = analytics.newRequestId();
+      const startedAt = Date.now();
+      const forkIndex = messages.findIndex((message) => message.id === assistantMessage.id);
+      const forkContext = {
+        page_name: 'chat_panel' as const,
+        area: 'chat_panel' as const,
+        element: 'assistant_fork_button' as const,
+        action: 'fork_conversation' as const,
+        project_id: project.id,
+        project_kind: projectKindFromMetadataToTracking(project.metadata),
+        conversation_id: activeConversationId,
+        assistant_message_id: assistantMessage.id,
+        source_run_id: assistantMessage.runId ?? null,
+        source_agent_id: assistantMessage.agentId ?? 'unknown',
+        agent_provider_id: runAgentProviderId(assistantMessage.agentId ?? 'unknown'),
+        session_mode: sessionModeToTracking(activeSessionMode),
+        fork_point: conversationForkPoint(messages, assistantMessage.id, forkIndex),
+        seed_message_count: forkIndex < 0 ? null : forkIndex + 1,
+        conversation_message_count: messages.length,
+        messages_after_fork_count: forkIndex < 0 ? null : messages.length - forkIndex - 1,
+      };
+      trackConversationForkClick(analytics.track, forkContext, { requestId });
       setForkingMessageId(assistantMessage.id);
       setConversationLoadError(null);
+      let emptyResponse = false;
       try {
         const sourceTitle = activeConversation?.title?.trim();
         const forkTitle = sourceTitle
           ? t('chat.forkedConversationTitle', { title: sourceTitle })
           : undefined;
-        const forkIndex = messages.findIndex((message) => message.id === assistantMessage.id);
         const forkFallbackPredecessorMessageId = forkIndex < 0
           ? undefined
           : (messages[forkIndex - 1]?.id ?? null);
@@ -8954,7 +9076,20 @@ export function ProjectView({
           workspaceContext: projectRunWorkspaceContext,
           throwOnError: true,
         });
-        if (!fresh) throw new Error(t('chat.forkConversationFailed'));
+        if (!fresh) {
+          emptyResponse = true;
+          throw new Error(t('chat.forkConversationFailed'));
+        }
+        trackConversationForkResult(
+          analytics.track,
+          {
+            ...forkContext,
+            target_conversation_id: fresh.id,
+            result: 'success',
+            duration_ms: Math.max(0, Date.now() - startedAt),
+          },
+          { requestId },
+        );
         setMessages([]);
         commitPreviewComments([]);
         setAttachedComments([]);
@@ -8979,6 +9114,17 @@ export function ProjectView({
         onProjectsRefresh();
         setError(null);
       } catch (err) {
+        trackConversationForkResult(
+          analytics.track,
+          {
+            ...forkContext,
+            target_conversation_id: null,
+            result: 'failed',
+            error_code: emptyResponse ? 'empty_response' : conversationForkErrorCode(err),
+            duration_ms: Math.max(0, Date.now() - startedAt),
+          },
+          { requestId },
+        );
         const message = err instanceof Error ? err.message : t('chat.forkConversationFailed');
         setConversationLoadError(message);
         setError(message);
@@ -8990,6 +9136,7 @@ export function ProjectView({
       activeConversationId,
       activeConversation?.title,
       activeSessionMode,
+      analytics,
       commitPreviewComments,
       forkingMessageId,
       messages,
@@ -8997,6 +9144,7 @@ export function ProjectView({
       onProjectsRefresh,
       openTabsState.active,
       project.id,
+      project.metadata,
       projectCollab.viewerOnly,
       t,
     ],
@@ -11691,7 +11839,18 @@ function applyDesignDeliveryOutcome(
 export function computeProducedFiles(
   beforeNames: ReadonlySet<string> | readonly string[] | undefined,
   next: readonly ProjectFile[],
+  authoritativePaths?: readonly string[],
+  projectId?: string,
+  projectRoot?: string | null,
 ): ProjectFile[] | undefined {
+  if (authoritativePaths !== undefined) {
+    const byName = new Map<string, ProjectFile>();
+    for (const rawPath of authoritativePaths) {
+      const file = findTouchedProjectFile(rawPath, next, projectId, projectRoot);
+      if (file) byName.set(file.name, file);
+    }
+    return filterImplicitProducedFiles([...byName.values()]);
+  }
   if (!beforeNames) return undefined;
   const set = beforeNames instanceof Set ? beforeNames : new Set(beforeNames);
   return filterImplicitProducedFiles(next.filter((f) => !set.has(f.name)));

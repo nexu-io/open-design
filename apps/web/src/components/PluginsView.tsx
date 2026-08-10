@@ -1294,7 +1294,8 @@ export function ExtensionsMarketplace({
           setToast({ message: outcome.message || t('pluginsView.uploadFailed'), tone: 'error' });
           trackResourceResult({
             kind: 'expert_plugin', scope: 'personal', action: 'add', result: 'failed',
-            startedAt, errorCode: 'upload_failed',
+            startedAt,
+            errorCode: resourceActionAnalyticsErrorCode(outcome, 'upload_failed'),
           });
         }
         return;
@@ -3960,11 +3961,12 @@ function buildAvailablePlugins(
     return entries.flatMap((entry) => {
       const installedPlugin = installedByName.get(normalizePluginName(entry.name)) ?? null;
       if (installedPlugin && installedPlugin.sourceKind !== 'bundled') return [];
-      const installedRecord = installedPlugin && bundledPluginMatchesMarketplaceEntry(
-        installedPlugin,
-        marketplace,
-        entry,
-      )
+      // The daemon never permits a scoped install to replace a bundled plugin,
+      // regardless of which marketplace advertises the colliding entry. Treat
+      // the already-bundled record as installed whenever the normal lookup keys
+      // match, otherwise the UI offers an Install action that can only download,
+      // parse, and finally fail with "Bundled plugin cannot be replaced".
+      const installedRecord = installedPlugin?.sourceKind === 'bundled'
         ? installedPlugin
         : null;
       return [{
@@ -3975,16 +3977,6 @@ function buildAvailablePlugins(
       }];
     });
   });
-}
-
-function bundledPluginMatchesMarketplaceEntry(
-  plugin: InstalledPluginRecord,
-  marketplace: PluginMarketplace,
-  entry: PluginMarketplaceEntry,
-): boolean {
-  return plugin.sourceKind === 'bundled'
-    && plugin.sourceMarketplaceId === marketplace.id
-    && normalizePluginName(plugin.sourceMarketplaceEntryName ?? '') === normalizePluginName(entry.name);
 }
 
 function availablePluginTitle(entry: PluginMarketplaceEntry, locale?: string): string {
