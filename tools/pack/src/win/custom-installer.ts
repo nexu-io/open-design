@@ -339,7 +339,7 @@ async function resolveMakensisCommand(config: ToolPackConfig): Promise<string> {
   throw new Error("makensis is required to build the Windows installer; install NSIS or populate the electron-builder NSIS cache");
 }
 
-function createRunningInstancesScript(): string {
+export function createRunningInstancesScript(): string {
   return `param(
   [ValidateSet("detect", "close")]
   [string]$Action,
@@ -357,7 +357,27 @@ $roots = @($Install, $Registered) |
   } |
   Select-Object -Unique Exact, Prefix
 
-$matches = Get-CimInstance Win32_Process | Where-Object {
+$processes = try {
+  @(Get-CimInstance Win32_Process)
+} catch {
+  # Win32_Process depends on the CIM/WMI service, which can be disabled by
+  # enterprise policy. Fall back to the .NET process API so a healthy machine
+  # with no Open Design process is not reported as "still running" merely
+  # because CIM is unavailable. MainModule can be inaccessible for protected
+  # processes, so keep those entries with a null path and ignore them below.
+  @(Get-Process | ForEach-Object {
+    $exe = $null
+    try { $exe = $_.MainModule.FileName } catch {}
+    [pscustomobject]@{
+      ProcessId = $_.Id
+      Name = $_.ProcessName
+      ExecutablePath = $exe
+      CommandLine = $null
+    }
+  })
+}
+
+$matches = $processes | Where-Object {
   $matched = $false
   $exe = $_.ExecutablePath
   if ($null -ne $exe) {
@@ -431,7 +451,8 @@ async function writeInstallerScript(config: ToolPackConfig, paths: WinPaths, pac
   const localUpdateDownloadsRoot = `${localDataRoot}\\updates\\downloads`;
   const localUpdateReleasesRoot = `${localDataRoot}\\updates\\releases`;
   const localUpdateStagingRoot = `${localDataRoot}\\updates\\staging`;
-  const nsisLogPath = escapeNsisString(paths.nsisLogPath);
+  const nsisLogDir = `${localDataRoot}\\logs`;
+  const nsisLogPath = `${nsisLogDir}\\nsis.log`;
   const runningInstancesScriptPath = join(dirname(paths.installerScriptPath), "running-instances.ps1");
   const launcherRuntimeSyncScriptPath = join(dirname(paths.installerScriptPath), "sync-launcher-runtime.ps1");
 
@@ -513,7 +534,9 @@ ${createNsisLangString("RunningInstancesSubtitle", "Close it before continuing i
 ${createNsisLangString("RunningInstancesMessage", `${productName} must be closed before installation can continue.`, { LANG_SIMPCHINESE: `继续安装前需要关闭 ${productName}。` })}
 ${createNsisLangString("CloseAndContinue", "Close and continue", { LANG_SIMPCHINESE: "关闭并继续" })}
 ${createNsisLangString("RunningInstancesCloseFailed", `${productName} could not be closed. Close it manually, then try again.`, { LANG_SIMPCHINESE: `无法关闭 ${productName}。请手动关闭后重试。` })}
+${createNsisLangString("RunningInstancesDetectionFailed", `The installer could not check whether ${productName} is running. Retry, or cancel and see the installer log for details.`, { LANG_SIMPCHINESE: `安装程序无法检查 ${productName} 是否正在运行。请重试，或取消后查看安装日志。` })}
 ${createNsisLangString("RunningInstancesSilentAbort", `${productName} is still running. Close it before running the installer silently.`, { LANG_SIMPCHINESE: `${productName} 仍在运行。请先关闭它，再运行静默安装。` })}
+${createNsisLangString("RunningInstancesDetectionSilentAbort", `The installer could not check whether ${productName} is running. See the installer log for details.`, { LANG_SIMPCHINESE: `安装程序无法检查 ${productName} 是否正在运行。请查看安装日志了解详情。` })}
 ${createNsisLangString("ExistingInstallMessage", `${productName} is already installed in the selected folder. Choose OK to overwrite it, or Cancel to stop installation.`, { LANG_SIMPCHINESE: `所选文件夹中已经安装了 ${productName}。选择确定覆盖，或取消安装。` })}
 ${createNsisLangString("ExistingInstallSilentOverwrite", "Existing installation found; silent install will overwrite it.", { LANG_SIMPCHINESE: "发现已有安装；静默安装将覆盖它。" })}
 
@@ -524,6 +547,7 @@ Var RemoveDesktopShortcutState
 Var RemoveCacheDataState
 Var RemoveLocalDataState
 Var RunningInstancesOutput
+Var RunningInstancesDetectionFailed
 Var ExistingInstallLocation
 Var RunningInstancesInstallRoot
 Var LE
@@ -545,7 +569,7 @@ Var LX
 Function LogInstallerEvent
   Exch $0
   Push $1
-  CreateDirectory "${escapeNsisString(dirname(paths.nsisLogPath))}"
+  CreateDirectory "${nsisLogDir}"
   FileOpen $1 "${nsisLogPath}" a
   IfErrors done
   FileSeek $1 0 END
@@ -580,7 +604,7 @@ ${createLauncherRuntimeSyncScript(
 Function un.LogInstallerEvent
   Exch $0
   Push $1
-  CreateDirectory "${escapeNsisString(dirname(paths.nsisLogPath))}"
+  CreateDirectory "${nsisLogDir}"
   FileOpen $1 "${nsisLogPath}" a
   IfErrors done
   FileSeek $1 0 END
@@ -615,6 +639,8 @@ Function DetectRunningInstances
   Push $1
   Push $2
   InitPluginsDir
+  StrCpy $RunningInstancesDetectionFailed "0"
+  StrCpy $RunningInstancesOutput ""
   File "/oname=$PLUGINSDIR\\running-instances.ps1" "\${RUNNING_INSTANCES_PS1}"
 
   ; Try pwsh.exe first (PowerShell 7)
@@ -643,7 +669,7 @@ Function DetectRunningInstances
   \${EndIf}
 
   ; Both failed
-  StrCpy $RunningInstancesOutput "__detection_failed__"
+  StrCpy $RunningInstancesDetectionFailed "1"
   Push "running instance detection failed: both pwsh.exe and powershell.exe failed, last exit=$0 output=$1"
   Call LogInstallerEvent
 
@@ -716,11 +742,21 @@ silent_check:
   StrCpy $RunningInstancesInstallRoot "$INSTDIR"
 silent_detect_running_instances:
   Call DetectRunningInstances
+  \${If} $RunningInstancesDetectionFailed == "1"
+    Push "install aborted: running instance detection failed before silent install"
+    Call LogInstallerEvent
+    Abort "$(RunningInstancesDetectionSilentAbort)"
+  \${EndIf}
   \${If} $RunningInstancesOutput != ""
     Push "running instances detected before silent install: $RunningInstancesOutput"
     Call LogInstallerEvent
     Call CloseRunningInstances
     Call DetectRunningInstances
+    \${If} $RunningInstancesDetectionFailed == "1"
+      Push "install aborted: running instance detection failed after silent close"
+      Call LogInstallerEvent
+      Abort "$(RunningInstancesDetectionSilentAbort)"
+    \${EndIf}
     \${If} $RunningInstancesOutput != ""
       Push "install aborted: running instances still detected before silent install: $RunningInstancesOutput"
       Call LogInstallerEvent
@@ -746,7 +782,12 @@ FunctionEnd
 Function RunningInstancesPage
   IfSilent done
   StrCpy $RunningInstancesInstallRoot ""
+retry_detection:
   Call DetectRunningInstances
+  \${If} $RunningInstancesDetectionFailed == "1"
+    MessageBox MB_RETRYCANCEL|MB_ICONSTOP "$(RunningInstancesDetectionFailed)" IDRETRY retry_detection
+    Quit
+  \${EndIf}
   \${If} $RunningInstancesOutput == ""
     Abort
   \${EndIf}
@@ -776,6 +817,12 @@ Function RunningInstancesPageLeave
   StrCpy $RunningInstancesInstallRoot ""
   Call CloseRunningInstances
   Call DetectRunningInstances
+  \${If} $RunningInstancesDetectionFailed == "1"
+    Push "running instance detection failed after interactive close"
+    Call LogInstallerEvent
+    MessageBox MB_OK|MB_ICONSTOP "$(RunningInstancesDetectionFailed)"
+    Abort
+  \${EndIf}
   \${If} $RunningInstancesOutput != ""
     Push "running instances still detected after close: $RunningInstancesOutput"
     Call LogInstallerEvent
@@ -790,6 +837,11 @@ Function GuardRunningInstancesBeforeInstall
   StrCpy $RunningInstancesInstallRoot "$INSTDIR"
 detect_running_instances:
   Call DetectRunningInstances
+  \${If} $RunningInstancesDetectionFailed == "1"
+    Push "install aborted: running instance detection failed before file changes"
+    Call LogInstallerEvent
+    Abort "$(RunningInstancesDetectionFailed)"
+  \${EndIf}
   \${If} $RunningInstancesOutput == ""
     Return
   \${EndIf}
