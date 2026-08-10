@@ -119,7 +119,7 @@ export async function acquirePackagedHeadlessStartup(
 
   try {
     ipcServer = await dependencies.createIpcServer({
-      currentWebUrl: () => webUrl,
+      currentWebUrl: () => sidecars?.currentWebUrl() || webUrl,
       shutdown,
     });
     identity = await dependencies.writeIdentity();

@@ -4,6 +4,7 @@ import {
   acquireOrAdoptPackagedHeadlessStartup,
   acquirePackagedHeadlessStartup,
   parsePackagedHeadlessRequest,
+  type PackagedHeadlessStartupDependencies,
   repairCodexMcpRegistrationViaLiveOwner,
   resolvePackagedMcpBootstrapLaunch,
 } from "../src/headless-runtime.js";
@@ -61,34 +62,40 @@ describe("resolvePackagedMcpBootstrapLaunch", () => {
 });
 
 describe("acquirePackagedHeadlessStartup", () => {
-  function createDependencies(failAt: "mcp" | "web-identity") {
+  function createDependencies(failAt: "mcp" | "web-identity" | null) {
     const closed: string[] = [];
     const exit = vi.fn();
+    const createIpcServer = vi.fn<
+      PackagedHeadlessStartupDependencies["createIpcServer"]
+    >(async () => ({
+      close: async () => {
+        closed.push("ipc");
+      },
+    }));
+    const startSidecars = vi.fn<
+      PackagedHeadlessStartupDependencies["startSidecars"]
+    >(async () => ({
+      close: async () => {
+        closed.push("sidecars");
+      },
+      currentWebUrl: () => "http://127.0.0.1:7456",
+      daemon: {
+        desktopAuthGateActive: false,
+        state: "running" as const,
+        url: "http://127.0.0.1:7457",
+      },
+      web: { state: "running" as const, url: "http://127.0.0.1:7456" },
+    }));
     return {
       closed,
       dependencies: {
         confirmRuntime: vi.fn(async () => undefined),
-        createIpcServer: vi.fn(async () => ({
-          close: async () => {
-            closed.push("ipc");
-          },
-        })),
+        createIpcServer,
         exit,
         installMcp: vi.fn(async () => {
           if (failAt === "mcp") throw new Error("MCP install failed");
         }),
-        startSidecars: vi.fn(async () => ({
-          close: async () => {
-            closed.push("sidecars");
-          },
-          currentWebUrl: () => "http://127.0.0.1:7456",
-          daemon: {
-            desktopAuthGateActive: false,
-            state: "running" as const,
-            url: "http://127.0.0.1:7457",
-          },
-          web: { state: "running" as const, url: "http://127.0.0.1:7456" },
-        })),
+        startSidecars,
         writeIdentity: vi.fn(async () => ({
           close: async () => {
             closed.push("identity");
@@ -213,6 +220,39 @@ describe("acquirePackagedHeadlessStartup", () => {
     expect(repairAdoptedOwner).toHaveBeenCalledOnce();
     expect(repairAdoptedOwner).toHaveBeenCalledWith('http://127.0.0.1:7456');
     expect(dependencies.startSidecars).not.toHaveBeenCalled();
+  });
+
+  it('publishes a respawned web URL so adoption repairs through the live listener', async () => {
+    const { dependencies } = createDependencies(null);
+    let liveWebUrl = 'http://127.0.0.1:7456';
+    let publishedWebUrl: (() => string | null) | null = null;
+    dependencies.createIpcServer.mockImplementation(async ({ currentWebUrl }) => {
+      publishedWebUrl = currentWebUrl;
+      return { close: async () => undefined };
+    });
+    dependencies.startSidecars.mockImplementation(async () => ({
+      close: async () => undefined,
+      currentWebUrl: () => liveWebUrl,
+      daemon: {
+        desktopAuthGateActive: false,
+        state: 'running' as const,
+        url: 'http://127.0.0.1:7457',
+      },
+      web: { state: 'running' as const, url: liveWebUrl },
+    }));
+
+    await acquirePackagedHeadlessStartup(dependencies);
+    liveWebUrl = 'http://127.0.0.1:8465';
+    const repairAdoptedOwner = vi.fn(async () => undefined);
+    await acquireOrAdoptPackagedHeadlessStartup(dependencies, {
+      inspectExistingOwner: async () => ({
+        state: 'running',
+        webUrl: publishedWebUrl?.() ?? null,
+      }),
+      repairAdoptedOwner,
+    });
+
+    expect(repairAdoptedOwner).toHaveBeenCalledWith('http://127.0.0.1:8465');
   });
 });
 
