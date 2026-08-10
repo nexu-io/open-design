@@ -136,23 +136,15 @@ Playwright 资源场景现在支持显式 contract：
 - connector configuration persistence
 - quick-switcher 跨 reload / 跨项目边界行为
 
-## 已知且故意保留的缺口
+## 当前缺口
 
-当前仍有一个明确的产品级缺口，以 `fixme` 的形式保留在：
+此前记录为产品缺口的 active-run reload 场景已经恢复为可执行的 P1 用例：
 
 - [e2e/ui/real-daemon-run.test.ts](../../../e2e/ui/real-daemon-run.test.ts)
+  - `artifact persistence survives page reload during an active real daemon run`
+  - 断言原始 `runId`、assistant `runStatus`、`producedFiles`、项目文件和预览均在 reload 后收敛
 
-跳过的场景是：
-
-- 真实 daemon run 进行中刷新页面，然后期望 artifact persistence 正常完成
-
-当前产品实际行为：
-
-- reload 后 run 状态可以 reattach
-- assistant turn 看起来也可能正常结束
-- 但 artifact persistence 可能在 reattach 后丢失
-
-这条我们明确保留为已知产品缺口，而不是把测试弱化成假绿。
+当前没有对应的 `fixme`。如果该场景再次因产品回归失败，应保留失败信号并修复产品或测试前置条件，不要把它重新降级成跳过用例。
 
 ## 验证命令
 
@@ -188,4 +180,4 @@ pnpm --filter @open-design/e2e exec playwright test -c playwright.config.ts ui/a
 
 - 在 `extended` 里继续给 UI-only 断言补低成本 persisted-state 校验
 - 每补完一批，就做一次 grouped validation
-- 已知产品 bug 继续保留为 `fixme`，不要为了变绿而弱化套件
+- 只有有明确产品语义、且当前架构仍支持的场景才保留在 UI E2E；过时的 DOM/交互模型应删除或迁移到更合适的测试层

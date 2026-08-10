@@ -2,6 +2,8 @@
 
 Follow the root `AGENTS.md` and `tools/AGENTS.md` first. This tool owns the repo-external packaged build/start/stop/logs command surface.
 
+Read `tools/pack/CACHE.md` before changing any build-cache node key, adding a cache node, or changing what a cached node reads or writes. It is the source of truth for the build-graph cache under `--cache-dir`: determinant rules, materialization-time parameters, the signing boundary, and confidence grading.
+
 ## Owns
 
 - Local packaging orchestration for packaged Open Design artifacts.

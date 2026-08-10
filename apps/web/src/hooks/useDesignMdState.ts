@@ -11,8 +11,14 @@ import type {
   Conversation,
   ProjectFile,
   ProjectFilesResponse,
+  WorkspaceCollabContext,
 } from '@open-design/contracts';
 import { parseProvenance } from '../lib/parse-provenance';
+import { listConversations } from '../state/projects';
+import {
+  workspaceIdentityCacheKey,
+  workspaceProjectHeaders,
+} from '../collab/workspace-identity';
 
 const DESIGN_MD = 'DESIGN.md';
 
@@ -66,7 +72,11 @@ const INITIAL: Omit<DesignMdState, 'refresh'> = {
  *   conversation updatedAt as the user keeps working post-finalize.
  *   Defaults to 0 so call sites that don't need invalidation can omit it.
  */
-export function useDesignMdState(projectId: string, refreshKey: number = 0): DesignMdState {
+export function useDesignMdState(
+  projectId: string,
+  refreshKey: number = 0,
+  workspaceContext?: WorkspaceCollabContext | null,
+): DesignMdState {
   const [state, setState] = useState<Omit<DesignMdState, 'refresh'>>(INITIAL);
 
   const compute = useCallback(
@@ -74,7 +84,12 @@ export function useDesignMdState(projectId: string, refreshKey: number = 0): Des
       const projectIdEnc = encodeURIComponent(projectId);
       setState((prev) => ({ ...prev, loading: true, error: null }));
       try {
-        const filesResp = await fetch(`/api/projects/${projectIdEnc}/files`, { signal });
+        const filesResp = await fetch(`/api/projects/${projectIdEnc}/files`, {
+          signal,
+          ...(workspaceContext
+            ? { headers: workspaceProjectHeaders(workspaceContext) }
+            : {}),
+        });
         if (!filesResp.ok) {
           throw new Error(`GET files → HTTP ${filesResp.status}`);
         }
@@ -93,7 +108,12 @@ export function useDesignMdState(projectId: string, refreshKey: number = 0): Des
 
         const designResp = await fetch(
           `/api/projects/${projectIdEnc}/files/${encodeURIComponent(DESIGN_MD)}`,
-          { signal },
+          {
+            signal,
+            ...(workspaceContext
+              ? { headers: workspaceProjectHeaders(workspaceContext) }
+              : {}),
+          },
         );
         if (!designResp.ok) {
           throw new Error(`GET DESIGN.md → HTTP ${designResp.status}`);
@@ -102,13 +122,12 @@ export function useDesignMdState(projectId: string, refreshKey: number = 0): Des
         if (signal?.aborted) return;
         const provenance = parseProvenance(designText);
 
-        const convsResp = await fetch(`/api/projects/${projectIdEnc}/conversations`, {
-          signal,
+        // Shared single-flight conversations read (Batch A §4.3); the local
+        // abort only detaches this consumer.
+        const conversations = await listConversations(projectId, {
+          workspaceContext,
         });
-        let convsBody: ConversationsResponseShape = { conversations: [] };
-        if (convsResp.ok) {
-          convsBody = (await convsResp.json()) as ConversationsResponseShape;
-        }
+        const convsBody: ConversationsResponseShape = { conversations };
         if (signal?.aborted) return;
 
         const generatedMs =
@@ -146,7 +165,7 @@ export function useDesignMdState(projectId: string, refreshKey: number = 0): Des
     // (file-changed events, chat-turn completion) re-runs compute without
     // forcing the caller to drill `refresh()` through props. Round 7
     // (mrcfps @ useDesignMdState.ts:131).
-    [projectId, refreshKey],
+    [projectId, refreshKey, workspaceIdentityCacheKey(workspaceContext)],
   );
 
   useEffect(() => {

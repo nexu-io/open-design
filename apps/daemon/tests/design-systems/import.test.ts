@@ -256,6 +256,21 @@ describe('importLocalDesignSystemProject', () => {
     ]);
   });
 
+  it('atomically reserves distinct ids for concurrent imports with the same name', async () => {
+    const [first, second] = await Promise.all([
+      importLocalDesignSystemProject(sourceRoot, userDesignSystemsRoot),
+      importLocalDesignSystemProject(sourceRoot, userDesignSystemsRoot),
+    ]);
+
+    expect(new Set([first.id, second.id])).toEqual(new Set(['kami-app', 'kami-app-2']));
+    for (const result of [first, second]) {
+      const manifest = JSON.parse(
+        fs.readFileSync(path.join(result.dir, 'manifest.json'), 'utf8'),
+      ) as { id: string };
+      expect(manifest.id).toBe(result.id);
+    }
+  });
+
   it('allocates a new slug instead of colliding with existing systems', async () => {
     const first = await importLocalDesignSystemProject(sourceRoot, userDesignSystemsRoot, {
       reservedIds: ['kami-app'],

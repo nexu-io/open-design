@@ -37,6 +37,7 @@ import { resolveModelForServiceTier } from '../runtimes/models.js';
 import { googleStreamGenerateContentUrl } from '../integrations/google-models.js';
 import { createRoleMarkerGuard } from '../role-marker-guard.js';
 import { authorizeReasoningEgress, sendReasoningEgressDenial } from '../reasoning-egress.js';
+import type { AuthorizeProjectRequest } from '../collab/project-request-authority.js';
 
 // Allowlist for the `/feedback` route. Mirrors the
 // ChatMessageFeedbackReasonCode union in packages/contracts/src/api/chat.ts.
@@ -56,7 +57,9 @@ const FEEDBACK_REASON_ALLOWLIST: ReadonlySet<string> = new Set([
   'other',
 ]);
 
-export interface RegisterChatRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'chat' | 'agents' | 'critique' | 'validation' | 'lifecycle' | 'paths' | 'telemetry' | 'appConfig'> {}
+export interface RegisterChatRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'chat' | 'agents' | 'critique' | 'validation' | 'lifecycle' | 'paths' | 'telemetry' | 'appConfig'> {
+  authorizeProjectRequest: AuthorizeProjectRequest;
+}
 
 export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
   const { db, design } = ctx;
@@ -106,20 +109,40 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
   app.post('/api/runs/:id/feedback', async (req, res) => {
     const runId = req.params.id;
     const body = (req.body ?? {}) as Partial<{
-      projectId: string;
-      conversationId: string;
-      assistantMessageId: string;
       rating: 'positive' | 'negative';
       reasonCodes: string[];
       hasCustomReason: boolean;
       customReason: string;
-    }>;
+    }> & Record<string, unknown>;
     if (!runId) {
       return sendApiError(res, 400, 'INVALID_RUN_ID', 'runId missing');
+    }
+    const callerOwnedContextFields = [
+      'projectId',
+      'conversationId',
+      'assistantMessageId',
+    ].filter((field) => Object.prototype.hasOwnProperty.call(body, field));
+    if (callerOwnedContextFields.length > 0) {
+      return sendApiError(
+        res,
+        400,
+        'INVALID_FEEDBACK_CONTEXT',
+        'feedback project, conversation, and message identity are derived from the run',
+      );
     }
     if (body.rating !== 'positive' && body.rating !== 'negative') {
       return sendApiError(res, 400, 'INVALID_RATING', 'rating must be positive or negative');
     }
+    const run = design.runs.get(runId);
+    if (!run || typeof run.projectId !== 'string' || !run.projectId) {
+      return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
+    }
+    if (!await ctx.authorizeProjectRequest(
+      req,
+      res,
+      run.projectId,
+      { mode: 'write', capability: 'writeFiles' },
+    )) return;
     // Drop anything outside the contract-side reason allowlist and
     // deduplicate; otherwise a malformed or replayed client payload could
     // create unknown Langfuse categories or duplicate score ids in the
@@ -141,11 +164,13 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       return;
     }
     // Build score metadata bag that lands in the Langfuse score body.
-    // Mirrors the PostHog event so analysts can cross-reference.
+    // Mirrors the PostHog event so analysts can cross-reference. Every
+    // identity field comes from the daemon-owned run object; request bodies
+    // cannot retarget a score to another project/conversation/message.
     const scoreMetadata: Record<string, unknown> = {
-      projectId: body.projectId,
-      conversationId: body.conversationId,
-      assistantMessageId: body.assistantMessageId,
+      projectId: run.projectId,
+      conversationId: run.conversationId ?? null,
+      assistantMessageId: run.assistantMessageId ?? null,
       hasCustomReason: body.hasCustomReason === true,
       customReason,
     };
@@ -399,9 +424,19 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
 
   // POST /api/projects/:projectId/critique/:runId/interrupt
   // Cascades an AbortController to the in-flight orchestrator for the given run.
+  const critiqueInterruptHandler =
+    handleCritiqueInterrupt(db, critiqueRunRegistry);
   app.post(
     '/api/projects/:projectId/critique/:runId/interrupt',
-    handleCritiqueInterrupt(db, critiqueRunRegistry),
+    async (req, res) => {
+      if (!await ctx.authorizeProjectRequest(
+        req,
+        res,
+        req.params.projectId,
+        { mode: 'write', capability: 'writeFiles' },
+      )) return;
+      critiqueInterruptHandler(req, res);
+    },
   );
 
   // GET /api/projects/:projectId/critique/:runId/artifact
@@ -412,12 +447,21 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
   //
   // Response cap is threaded from cfg.parserMaxBlockBytes so a row that
   // the orchestrator + writer accepted is always retrievable.
+  const critiqueArtifactHandler = handleCritiqueArtifact(db, {
+    artifactsRoot: critiqueArtifactsRoot,
+    responseCapBytes: critiqueResponseCapBytes,
+  });
   app.get(
     '/api/projects/:projectId/critique/:runId/artifact',
-    handleCritiqueArtifact(db, {
-      artifactsRoot: critiqueArtifactsRoot,
-      responseCapBytes: critiqueResponseCapBytes,
-    }),
+    async (req, res) => {
+      if (!await ctx.authorizeProjectRequest(
+        req,
+        res,
+        req.params.projectId,
+        { mode: 'read', allowNavigationQuery: true },
+      )) return;
+      await critiqueArtifactHandler(req, res);
+    },
   );
 
   // ---- API Proxy (SSE) for API-compatible endpoints ------------------------
@@ -1513,6 +1557,21 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         'projectId is required and must be a safe identifier',
       );
     }
+    // The provider completion may immediately request a media tool that writes
+    // into this project. Authorize the whole loop before URL resolution,
+    // upstream egress, credential seeding, or tool execution so a read-only
+    // Team member cannot spend a BYOK key or mutate the creator's files.
+    //
+    // The shared gate preserves the signed-out/local compatibility contract:
+    // a project with no persisted Workspace binding is accepted without
+    // consulting cloud authority. Only a bound project must prove the exact
+    // creator-capable Workspace identity.
+    if (!await ctx.authorizeProjectRequest(
+      req,
+      res,
+      projectId,
+      { mode: 'write', capability: 'writeFiles' },
+    )) return;
 
     const effectiveBaseUrl = baseUrl || opts.defaultBaseUrl;
     const validated = await validateExternalApiBaseUrl(effectiveBaseUrl);

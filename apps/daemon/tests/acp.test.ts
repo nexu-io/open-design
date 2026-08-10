@@ -311,6 +311,36 @@ test('attachAcpSession keeps incremental ACP message chunks unchanged', () => {
   assert.deepEqual(textDeltas, ['Agent Haven', ' — managed AI agents']);
 });
 
+test('attachAcpSession forwards ACP status message details', () => {
+  const child = new FakeAcpChild();
+  const events: Array<{ event: string; payload: unknown }> = [];
+
+  attachAcpSession({
+    child: child as never,
+    prompt: 'describe the project',
+    cwd: '/tmp/od-project',
+    model: null,
+    mcpServers: [],
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  writeAcpResult(child, 1, {});
+  writeAcpResult(child, 2, { sessionId: 'session-1' });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'context_compaction',
+    status: 'in_progress',
+    message: 'Compacting conversation history after a context-length error',
+  });
+  writeAcpResult(child, 3, { usage: { inputTokens: 1, outputTokens: 2 } });
+
+  const status = events
+    .filter((entry) => entry.event === 'agent')
+    .map((entry) => entry.payload as { type?: string; label?: string; detail?: string })
+    .find((payload) => payload.type === 'status' && payload.label === 'context_compaction');
+
+  assert.equal(status?.detail, 'Compacting conversation history after a context-length error');
+});
+
 test('attachAcpSession suppresses split duplicate DSML artifact text and preserves trailing prose', () => {
   const child = new FakeAcpChild();
   const events: Array<{ event: string; payload: unknown }> = [];
@@ -518,6 +548,105 @@ test('attachAcpSession mirrors artifact-write tool calls into countable tool_use
   // Before the fix this returned 0 for every ACP run; the read-only grep call
   // must not inflate the count.
   assert.equal(countNewArtifacts(runEvents), 1);
+});
+
+test('attachAcpSession preserves AMR assistant and model-step lifecycle diagnostics', () => {
+  const child = new FakeAcpChild();
+  const events: Array<{ event: string; payload: unknown }> = [];
+
+  attachAcpSession({
+    child: child as never,
+    prompt: 'build a page',
+    cwd: '/tmp/od-project',
+    model: null,
+    mcpServers: [],
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  writeAcpResult(child, 1, {});
+  writeAcpResult(child, 2, { sessionId: 'session-1' });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'assistant_message_lifecycle',
+    phase: 'start',
+    status: 'running',
+    assistantMessageIndex: 1,
+    startedAtMs: 1_700_000_000_000,
+    timingEvidence: 'source_timestamp',
+    provider: 'amr',
+    model: 'qwen3.8-max',
+    errorClass: 'rate_limited',
+  });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'model_step_lifecycle',
+    phase: 'start',
+    status: 'running',
+    assistantMessageIndex: 1,
+    stepIndex: 1,
+    startedAtMs: 1_700_000_000_100,
+    timingEvidence: 'bridge_observed_step_boundary',
+  });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'model_step_lifecycle',
+    phase: 'end',
+    status: 'completed',
+    reason: 'tool-calls',
+    assistantMessageIndex: 1,
+    stepIndex: 1,
+    startedAtMs: 1_700_000_000_100,
+    endedAtMs: 1_700_000_001_600,
+    durationMs: 1_500,
+    timingEvidence: 'bridge_observed_step_boundary',
+    usage: { reasoningTokens: 7, inputTokens: 10, outputTokens: 3 },
+  });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'model_retry',
+    attempt: 1,
+  });
+  writeAcpResult(child, 3, { usage: { inputTokens: 10, outputTokens: 3 } });
+
+  const diagnostics = events
+    .filter((entry) => entry.event === 'agent')
+    .map((entry) => entry.payload as Record<string, unknown>)
+    .filter((payload) => payload.type === 'diagnostic');
+  assert.deepEqual(
+    diagnostics.map((payload) => payload.name),
+    [
+      'assistant_message_lifecycle',
+      'model_step_lifecycle',
+      'model_step_lifecycle',
+      'model_retry',
+    ],
+  );
+  assert.deepEqual(diagnostics[2], {
+    type: 'diagnostic',
+    name: 'model_step_lifecycle',
+    source: 'amr-opencode',
+    elapsedMs: diagnostics[2]?.elapsedMs,
+    phase: 'end',
+    status: 'completed',
+    reason: 'tool-calls',
+    timingEvidence: 'bridge_observed_step_boundary',
+    assistantMessageIndex: 1,
+    stepIndex: 1,
+    startedAtMs: 1_700_000_000_100,
+    endedAtMs: 1_700_000_001_600,
+    durationMs: 1_500,
+    usage: { inputTokens: 10, outputTokens: 3, reasoningTokens: 7 },
+  });
+  assert.deepEqual(diagnostics[0], {
+    type: 'diagnostic',
+    name: 'assistant_message_lifecycle',
+    source: 'amr-opencode',
+    elapsedMs: diagnostics[0]?.elapsedMs,
+    phase: 'start',
+    status: 'running',
+    provider: 'amr',
+    model: 'qwen3.8-max',
+    errorClass: 'rate_limited',
+    timingEvidence: 'source_timestamp',
+    assistantMessageIndex: 1,
+    startedAtMs: 1_700_000_000_000,
+  });
 });
 
 test('a truly PATHLESS ACP write is NOT coerced into an artifact (no false positive)', () => {
@@ -2059,6 +2188,37 @@ test('attachAcpSession does not double-kill a child that exits cleanly on stdin.
   }
 });
 
+test('attachAcpSession accepts an opted-in ACP turn_end update as prompt completion', () => {
+  const child = new FakeAcpChild();
+  const events: Array<{ event: string; payload: unknown }> = [];
+
+  const session = attachAcpSession({
+    child: child as never,
+    prompt: 'hello',
+    cwd: '/tmp/od-project',
+    model: null,
+    mcpServers: [],
+    completePromptOnTurnEnd: true,
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  writeAcpResult(child, 1, {});
+  writeAcpResult(child, 2, { sessionId: 'session-1' });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'agent_message_chunk',
+    content: { type: 'text', text: 'done' },
+  });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'turn_end',
+    usage: { inputTokens: 1, outputTokens: 1 },
+  });
+  child.emit('close', 0, null);
+
+  assert.equal(session.completedSuccessfully(), true);
+  assert.equal(session.hasFatalError(), false);
+  assert.equal(events.some((entry) => entry.event === 'error'), false);
+});
+
 test('attachAcpSession.completedSuccessfully reflects abort and fatal-error states', () => {
   const child = new FakeAcpChild();
 
@@ -2454,6 +2614,7 @@ test('successful session/prompt with open concrete tool flushes clean (not no-ou
 test('attachAcpSession still fails an AMR turn that produces no text and no tool calls', () => {
   const child = new FakeAcpChild();
   const events: Array<{ event: string; payload: unknown }> = [];
+  const onPromptComplete = vi.fn();
 
   attachAcpSession({
     child: child as never,
@@ -2462,6 +2623,7 @@ test('attachAcpSession still fails an AMR turn that produces no text and no tool
     model: null,
     mcpServers: [],
     modelUnavailableErrorCode: 'AMR_MODEL_UNAVAILABLE',
+    onPromptComplete,
     send: (event, payload) => events.push({ event, payload }),
   });
 
@@ -2475,6 +2637,38 @@ test('attachAcpSession still fails an AMR turn that produces no text and no tool
     (errorEvents[0]?.payload as { message?: string }).message ?? '',
     /without producing any assistant text/,
   );
+  assert.equal(onPromptComplete.mock.calls.length, 0);
+});
+
+test('attachAcpSession reports clean empty completion exactly once without usage', () => {
+  const child = new FakeAcpChild();
+  const events: Array<{ event: string; payload: unknown }> = [];
+  const onPromptComplete = vi.fn();
+
+  attachAcpSession({
+    child: child as never,
+    prompt: 'hello',
+    cwd: '/tmp/od-project',
+    model: null,
+    mcpServers: [],
+    onPromptComplete,
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  writeAcpResult(child, 1, {});
+  writeAcpResult(child, 2, { sessionId: 'session-1' });
+  writeAcpResult(child, 3, {});
+  writeAcpResult(child, 3, {});
+
+  assert.equal(onPromptComplete.mock.calls.length, 1);
+  assert.equal(
+    events.filter((entry) =>
+      entry.event === 'agent' &&
+      (entry.payload as { type?: string }).type === 'usage'
+    ).length,
+    0,
+  );
+  assert.deepEqual(events.filter((entry) => entry.event === 'error'), []);
 });
 
 test('attachAcpSession promotes allowlisted OpenCode role-marker ACP errors', () => {
@@ -2567,6 +2761,46 @@ test('attachAcpSession preserves structured OpenCode session error details from 
       details,
     },
   });
+});
+
+test('attachAcpSession marks OpenCode upstream idle session errors retryable', () => {
+  const child = new FakeAcpChild();
+  const events: Array<{ event: string; payload: unknown }> = [];
+
+  attachAcpSession({
+    child: child as never,
+    prompt: 'hello',
+    cwd: '/tmp/od-project',
+    model: null,
+    mcpServers: [],
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  const details = {
+    kind: 'opencode_prompt_error',
+    phase: 'event_stream',
+    runtime: 'opencode',
+    openCodeSessionId: 'ses_test',
+    lastEventType: 'tool_call_update',
+    lastToolKind: 'todowrite',
+  };
+
+  writeAcpResult(child, 1, {});
+  writeAcpResult(child, 2, { sessionId: 'session-1' });
+  writeAcpError(child, 3, {
+    code: -32600,
+    message:
+      'opencode event stream: {"type":"session.error","properties":{"error":{"data":{"message":"[code=upstream_error] stream idle timeout: no data received within configured window"}}}}',
+    data: details,
+  });
+
+  const errorEvents = events.filter((entry) => entry.event === 'error');
+  assert.equal(errorEvents.length, 1);
+  const payload = errorEvents[0]?.payload as {
+    error?: { retryable?: unknown; details?: unknown };
+  };
+  assert.equal(payload.error?.retryable, true);
+  assert.deepEqual(payload.error?.details, details);
 });
 
 test('attachAcpSession resumes via session/load when resumeSessionId is set', () => {

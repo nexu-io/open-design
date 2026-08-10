@@ -1441,35 +1441,42 @@
   line-height: 1.5;
 }
 
-/* Shimmer animation — running state text effect */
+/* Shimmer animation — a legible "light-sweep" (扫光) over in-progress labels
+   like "思考中". The text keeps a solid muted base so it's always readable;
+   a brighter band travels across it left→right to signal live work. */
 @keyframes shimmer {
   from { background-position: 100% center; }
   to { background-position: -100% center; }
 }
 .shimmer-text {
-  color: color-mix(in srgb, var(--text) 45%, transparent);
-  background: linear-gradient(120deg,
-    transparent 40%,
-    var(--text-muted) 50%,
-    transparent 60%
+  color: var(--text-muted);
+  background: linear-gradient(100deg,
+    var(--text-muted) 38%,
+    var(--text-strong) 50%,
+    var(--text-muted) 62%
   );
   background-size: 200% 100%;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-  animation: shimmer 6s linear infinite;
+  animation: shimmer 2.4s linear infinite;
 }
-/* The streaming "Preparing…" label keeps a solid muted-gray base that is
-   always legible; only a brighter highlight sweeps across it, and it flows
-   much slower than the thinking/tool shimmer so it reads as a calm wait. */
+/* The streaming "Preparing…" / "思考中" status label sweeps a touch slower so
+   it reads as a calm wait, but keeps the same bright, legible band. */
 .shimmer-text.shimmer-prepare {
-  background-image: linear-gradient(120deg,
+  background-image: linear-gradient(100deg,
     var(--text-muted) 38%,
-    var(--text) 50%,
+    var(--text-strong) 50%,
     var(--text-muted) 62%
   );
   background-size: 200% 100%;
-  animation-duration: 5s;
+  animation-duration: 2.8s;
+}
+@media (prefers-reduced-motion: reduce) {
+  .shimmer-text {
+    animation: none;
+    -webkit-text-fill-color: var(--text-muted);
+  }
 }
 
 /* Status pills */

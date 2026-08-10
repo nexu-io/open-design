@@ -219,6 +219,19 @@ export async function startDaemonSidecar(runtime: SidecarRuntimeContext<SidecarS
           return { accepted: true };
         case SIDECAR_MESSAGES.MINT_IMPORT_TOKEN:
           return mintImportTokenForCli(request.input.baseDir);
+        case SIDECAR_MESSAGES.REGISTER_WEB_URL: {
+          // Packaged startup binds the web sidecar only after the daemon is
+          // ready, so its dynamic port cannot be delivered in the daemon spawn
+          // environment. The namespace-scoped control plane registers the
+          // actual URL here as soon as web reports ready. Keep OD_WEB_PORT as
+          // the daemon-wide live source because origin validation and MCP
+          // install-info already resolve it per request.
+          const webPort = Number(new URL(request.input.url).port);
+          process.env[WEB_PORT_ENV] = String(webPort);
+          state.trustedWebOriginPort = webPort;
+          state.updatedAt = new Date().toISOString();
+          return { accepted: true };
+        }
       }
     },
   });

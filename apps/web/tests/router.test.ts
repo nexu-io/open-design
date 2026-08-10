@@ -111,4 +111,14 @@ describe('parseRoute / buildPath (issue #1505)', () => {
     expect(parseRoute('/something/else')).toEqual({ kind: 'home', view: 'home' });
     expect(parseRoute('/projects')).toEqual({ kind: 'home', view: 'projects' });
   });
+
+  it('parses the collab demo route with and without a project id', () => {
+    expect(parseRoute('/collab-demo')).toEqual({ kind: 'collab-demo', projectId: null });
+    expect(parseRoute('/collab-demo/p%201')).toEqual({ kind: 'collab-demo', projectId: 'p 1' });
+  });
+
+  it('round-trips the collab demo route', () => {
+    expect(roundTrip({ kind: 'collab-demo', projectId: null })).toEqual({ kind: 'collab-demo', projectId: null });
+    expect(roundTrip({ kind: 'collab-demo', projectId: 'p-9' })).toEqual({ kind: 'collab-demo', projectId: 'p-9' });
+  });
 });

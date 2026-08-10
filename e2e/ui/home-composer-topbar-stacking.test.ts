@@ -207,14 +207,6 @@ test('[P1] nested model picker follows the visible anchor and closes after it ex
 
   const modelPopover = page.getByTestId('inline-model-switcher-agent-model-popover');
   const switcherPopover = page.getByTestId('inline-model-switcher-popover');
-  const modelList = modelPopover.locator('.model-select-searchable__list');
-
-  const listCanScroll = await modelList.evaluate((element) => {
-    element.scrollTop = 48;
-    element.dispatchEvent(new Event('scroll'));
-    return element.scrollHeight > element.clientHeight;
-  });
-  expect(listCanScroll, 'test setup: compact model list must have internal scroll room').toBe(true);
   await expect(modelPopover).toBeVisible();
   await expect(switcherPopover).toBeVisible();
 

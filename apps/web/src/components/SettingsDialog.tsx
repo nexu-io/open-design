@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, Dispatch, SetStateAction } from 'react';
 import { Button, VisuallyHidden } from '@open-design/components';
-import type { AmrWalletSnapshot } from '@open-design/contracts';
+import type {
+  AmrWalletSnapshot,
+  WorkspaceCollabContext,
+} from '@open-design/contracts';
 import { validateBaseUrl } from '@open-design/contracts/api/connectionTest';
 import {
   agentIdToTracking,
@@ -19,7 +22,6 @@ import {
 } from '../analytics/amr-attribution';
 import { getResolvedDeviceId } from '../analytics/client';
 import {
-  trackSettingsAppearanceClick,
   trackByokPreflightBlocked,
   trackSettingsByokModelsFetchResult,
   trackSettingsByokTestResult,
@@ -49,16 +51,12 @@ import {
   amrLoginStatusEventReason,
 } from './amrLoginPolling';
 import {
-  canUpgradeVelaPlan,
   fetchAmrWalletSnapshot,
   fetchVelaLoginStatus,
   formatVelaBalanceUsd,
   type VelaLoginStatus,
 } from '../providers/daemon';
-import {
-  amrPlansUrlForProfile,
-  amrProfileBadgeLabel,
-} from '../runtime/amr-guidance';
+import { amrProfileBadgeLabel } from '../runtime/amr-guidance';
 import { isVisibleLocalCliAgent } from '../utils/visibleAgents';
 import { ExportDiagnosticsRow } from './ExportDiagnosticsButton';
 import { Icon } from './Icon';
@@ -78,7 +76,6 @@ import {
   KNOWN_PROVIDERS,
   hasAnyConfiguredProvider,
   mergeDaemonMediaProviders,
-  saveConfig,
   syncComposioConfigToDaemon,
   syncConfigToDaemon,
   syncMediaProvidersToDaemon,
@@ -113,7 +110,6 @@ import type {
   ApiProtocol,
   ApiProtocolConfig,
   AppConfig,
-  AppTheme,
   AppVersionInfo,
   ConnectionTestResponse,
   DesignSystemGenerationJob,
@@ -124,11 +120,15 @@ import type {
   ProviderModelsResponse,
   SkillSummary,
 } from '../types';
-import { testAgent, testApiProvider } from '../providers/connection-test';
+import {
+  testAgent,
+  testApiProvider,
+} from '../providers/connection-test';
 import { fetchProviderModels } from '../providers/provider-models';
 import {
   fetchConnectors,
   fetchDesignTemplates,
+  liveArtifactPreviewUrl,
   openExternalUrl,
 } from '../providers/registry';
 import { MEDIA_PROVIDERS } from '../media/models';
@@ -159,6 +159,17 @@ import { DesignSystemsSection } from './DesignSystemsSection';
 import { PrivacySection } from './PrivacySection';
 import { ProjectLocationsSection } from './ProjectLocationsSection';
 import { RoutinesSection } from './RoutinesSection';
+import { SettingsWorkspaceSection } from './SettingsWorkspaceSection';
+import {
+  useWorkspaceBillingResponse,
+  useWorkspaceContext,
+  workspaceBillingBalanceUsd,
+  workspaceBillingSummaryForContext,
+} from '../collab/useWorkspaceContext';
+import { canUpgradeFromPlanTier, resolvePlanTier } from '../collab/team-plan';
+import { planBadgeTierForWorkspace } from './PlanWordmark';
+import { workspaceUpgradeUrl } from './EntryNavRail';
+import { canShowWorkspaceSettings } from '../collab/settings-access';
 import { ConnectorsBrowser } from './ConnectorsBrowser';
 import { MemoryModelInline } from './MemoryModelInline';
 import { MemorySection } from './MemorySection';
@@ -183,10 +194,12 @@ import {
   useCritiqueTheaterEnabled,
 } from './Theater';
 import {
-  ACCENT_SWATCHES,
-  DEFAULT_ACCENT_COLOR,
+  projectWorkspaceContext,
+  projectWorkspaceScopeReady,
+  useProjectWorkspaceScope,
+} from '../collab/useProjectWorkspaceScope';
+import {
   applyAppearanceToDocument,
-  normalizeAccentColor,
   resolveAccentColor,
 } from '../state/appearance';
 import { isAutosaveDraftOnlyChange } from '../App';
@@ -200,7 +213,9 @@ import {
 } from '../utils/notifications';
 
 export type SettingsSection =
+  | 'general'
   | 'execution'
+  | 'workspace'
   | 'instructions'
   | 'media'
   | 'composio'
@@ -224,6 +239,36 @@ export type SettingsSection =
   // navigate() call so openSettings only owns dialog-bound sections.
   | 'library'
   | 'about';
+
+// Maps a requested section token onto the section that actually owns a nav
+// item. Only tokens whose content is *folded into* another section belong
+// here: language / appearance / notifications / pet / projectLocations /
+// critiqueTheater all render inside General, so a deep link to any of them
+// must land on General and highlight the General nav item. `pet` joined that
+// list when #5517's General page absorbed the pet picker — the composer's
+// "pet settings" entry point (App.openPetSettings) has no other destination,
+// so leaving it unmapped would deep-link into a section that renders nothing.
+//
+// Sections that keep their own render block but no longer have a nav item
+// (workspace, mcpClient, composio, designSystems) must NOT be listed: they
+// stay individually addressable through `initialSection`, and folding them
+// here would silently swallow a deep link into the wrong section.
+// `privacy` and `about` must not be listed either — they own nav items, and
+// mapping them to General used to send deep links to the wrong section with
+// the wrong nav item highlighted.
+function normalizeSettingsSection(section: SettingsSection): SettingsSection {
+  switch (section) {
+    case 'language':
+    case 'appearance':
+    case 'notifications':
+    case 'pet':
+    case 'projectLocations':
+    case 'critiqueTheater':
+      return 'general';
+    default:
+      return section;
+  }
+}
 
 interface ByokProviderPreset {
   id: string;
@@ -389,6 +434,13 @@ export function deriveAboutUpdateControl(
 }
 
 interface Props {
+  /**
+   * How the settings surface is hosted. `'modal'` (default) renders the
+   * classic dialog inside a backdrop; `'page'` renders the same surface as
+   * the full-page `/settings` route — no backdrop, no dialog chrome, with a
+   * back-to-home nav head above the section list.
+   */
+  presentation?: 'modal' | 'page';
   initial: AppConfig;
   agents: AgentInfo[];
   agentsLoading?: boolean;
@@ -397,6 +449,8 @@ interface Props {
   welcome?: boolean;
   initialSection?: SettingsSection;
   initialHighlight?: SettingsHighlight;
+  /** Workspace id persisted on the currently-open project, when any. */
+  persistedProjectWorkspaceId?: string | null;
   providerModelsCache?: ProviderModelsCache;
   /**
    * Persist the current draft. Invoked by the dialog's autosave loop on
@@ -431,10 +485,14 @@ interface Props {
    */
   composioConfigLoading?: boolean;
   onClose: () => void;
+  /** Hand the explicit onboarding reset back to App, the config state owner. */
+  onResetOnboarding?: (next: AppConfig) => void;
   onRefreshAgents: (
     options?: AgentRefreshOptions,
   ) => AgentInfo[] | Promise<AgentInfo[] | void> | void;
   onAmrLoginStatusChange?: (status: VelaLoginStatus | null) => void;
+  /** Clear app-owned execution state after a confirmed active Cloud sign-out. */
+  onAmrSignedOut?: () => void | Promise<void>;
   daemonMediaProviders?: AppConfig['mediaProviders'] | null;
   daemonMediaProvidersFetchState?: 'idle' | 'ok' | 'error';
   mediaProvidersNotice?: string | null;
@@ -1430,21 +1488,25 @@ export function switchApiProtocolConfig(
 }
 
 export function SettingsDialog({
+  presentation = 'modal',
   initial,
   agents,
   agentsLoading = false,
   daemonLive,
   appVersionInfo,
   welcome,
-  initialSection = 'execution',
+  initialSection = 'general',
   initialHighlight = null,
+  persistedProjectWorkspaceId = null,
   onPersist,
   onSilentUpdatePreferenceChange,
   onPersistComposioKey,
   composioConfigLoading = false,
   onClose,
+  onResetOnboarding,
   onRefreshAgents,
   onAmrLoginStatusChange,
+  onAmrSignedOut,
   daemonMediaProviders,
   daemonMediaProvidersFetchState = 'idle',
   mediaProvidersNotice,
@@ -1476,8 +1538,8 @@ export function SettingsDialog({
     ReadonlySet<string>
   >(() => new Set());
   const previousInitialRef = useRef(initial);
+  // Accent only — the theme is a constant now that the app ships light-only.
   const lastSavedAppearanceRef = useRef({
-    theme: initial.theme ?? 'system',
     accentColor: resolveAccentColor(initial.accentColor),
   });
 
@@ -1493,10 +1555,9 @@ export function SettingsDialog({
 
   useEffect(() => {
     lastSavedAppearanceRef.current = {
-      theme: initial.theme ?? 'system',
       accentColor: resolveAccentColor(initial.accentColor),
     };
-  }, [initial.theme, initial.accentColor]);
+  }, [initial.accentColor]);
 
   useEffect(() => {
     const previousInitial = previousInitialRef.current;
@@ -1564,9 +1625,51 @@ export function SettingsDialog({
       ? { [initial.apiProtocol ?? 'anthropic']: byokProviderKeyForConfig(initial) }
       : {},
   );
-  const [activeSection, setActiveSection] = useState<SettingsSection>(initialSection);
+  const [activeSection, setActiveSection] = useState<SettingsSection>(() => normalizeSettingsSection(initialSection));
+  // Workspace region gating (E-frontend, D4.3). One shared read of the workspace
+  // context; the Workspace section only renders for a team workspace whose
+  // viewer may see workspace settings. Gate on the folded permission bits,
+  // never a role re-derivation (see `../collab/settings-access`).
+  // The Workspace nav item was removed to match the agreed 8-item nav, so this
+  // gate now guards the deep-link (`initialSection='workspace'`) path — it must
+  // stay, otherwise a deep link would hand workspace settings to a viewer the
+  // permission bits exclude.
+  const {
+    context: workspaceContext,
+    loading: workspaceContextLoading,
+  } = useWorkspaceContext();
+  // recvpZPzGJL7o7: the local-CLI card's balance came ONLY from vela's
+  // account-scoped sources (`amrCardStatus.account.balanceUsd`, then the
+  // `/api/integrations/vela/wallet` snapshot) — the same account-scoped
+  // projection `resolvePlanTier` exists to correct for the plan-tier badge
+  // right next to it, via the SAME card's `amrCardResolvedPlan` below. A team
+  // member reads their PERSONAL wallet there even while the card's own badge
+  // correctly names the team's paid plan, because nothing fed the workspace's
+  // real balance into the number. `useWorkspaceBillingResponse` carries the
+  // explicit v2 workspace-wallet source independently from account metadata.
+  const workspaceBillingResponse = useWorkspaceBillingResponse();
+  // Same partition for the plan half: `response.summary` is an ACCOUNT read, so
+  // the AMR card's plan badge and both upgrade routes must consume it projected
+  // onto the selected workspace. See `workspaceBillingSummaryForContext`.
+  const workspaceBilling = workspaceBillingSummaryForContext(
+    workspaceBillingResponse,
+    workspaceContext,
+  );
+  const showWorkspaceSettings = canShowWorkspaceSettings(workspaceContext);
+  // The 「升级」 buttons on the AMR model card route through
+  // `workspaceUpgradeUrl` — the one decision point every upgrade affordance
+  // shares (see its docblock in `EntryNavRail.tsx`): personal workspace →
+  // B's personal plan modal (`billing=plan`, recvpYEiH019cD); team → the
+  // checkout vs change-plan dashboard dialog by subscription state
+  // (recvpSQKna0LwR). The profile fallback keeps the buttons alive after a
+  // signed-out/no-context read; while that read is still loading, hide them so
+  // an owner-only action cannot flash briefly for an admin/member.
+  const amrUpgradeUrl = (profile: string | null | undefined): string | null =>
+    workspaceContextLoading
+      ? null
+      : workspaceUpgradeUrl(workspaceContext, workspaceBilling, { fallbackProfile: profile });
   const [settingsSidebarCollapsed, setSettingsSidebarCollapsed] = useState(false);
-  const [settingsFullscreen, setSettingsFullscreen] = useState(false);
+  const [settingsFullscreen, setSettingsFullscreen] = useState(true);
   // Scroll the right-hand content pane back to the top whenever the user
   // picks a different settings section. Without this, switching from a
   // long section the user had scrolled (e.g. Library) into a short one
@@ -1602,18 +1705,6 @@ export function SettingsDialog({
   useEffect(() => {
     onAmrLoginStatusChange?.(amrCardStatus);
   }, [amrCardStatus, onAmrLoginStatusChange]);
-
-  const formatAmrWalletBalance = useCallback((balanceUsd: string | null | undefined) => {
-    if (!balanceUsd) return null;
-    const amount = Number(balanceUsd);
-    if (!Number.isFinite(amount)) return `$${balanceUsd}`;
-    return new Intl.NumberFormat(locale, {
-      currency: 'USD',
-      maximumFractionDigits: 2,
-      minimumFractionDigits: 2,
-      style: 'currency',
-    }).format(amount);
-  }, [locale]);
 
   const refreshAmrWalletSnapshot = useCallback(async (options: { refresh?: boolean } = {}) => {
     setAmrWalletReady(false);
@@ -1775,6 +1866,7 @@ export function SettingsDialog({
   const providerTestRevisionRef = useRef(0);
   const providerModelsRevisionRef = useRef(0);
   const providerTestFirstResetRef = useRef(true);
+  const providerTestSkipNextResetRef = useRef(false);
   const providerModelsFirstResetRef = useRef(true);
   const providerModelsSkipNextResetRef = useRef(false);
   const deferAfterKeyCleanRef = useRef(false);
@@ -1933,24 +2025,12 @@ export function SettingsDialog({
     })();
   }, [clearUpdaterCacheBusy, t]);
 
-  // Precise inverse of App.handleCompleteOnboarding: flip
-  // onboardingCompleted back to false, mirror it to localStorage and the
-  // daemon through the same config-persist path, then route the user into
-  // the first-run flow so they can replay setup (including brand extraction).
-  const handleResetOnboarding = useCallback(() => {
-    const next: AppConfig = { ...cfg, onboardingCompleted: false };
-    setCfg(next);
-    saveConfig(next);
-    void syncConfigToDaemon(next);
-    onClose();
-    navigateRoute({ kind: 'home', view: 'onboarding' });
-  }, [cfg, onClose]);
 
   // Imperative handle for the External MCP section. The dialog footer Save
   // routes through this when the MCP tab is active so the user can press the
   // single Save button at the bottom instead of hunting for the inner one.
   useEffect(() => {
-    setActiveSection(initialSection);
+    setActiveSection(normalizeSettingsSection(initialSection));
   }, [initialSection]);
 
   // settings_view — fires whenever the active section changes (and once on
@@ -2038,6 +2118,10 @@ export function SettingsDialog({
   useEffect(() => {
     if (providerTestFirstResetRef.current) {
       providerTestFirstResetRef.current = false;
+      return;
+    }
+    if (providerTestSkipNextResetRef.current) {
+      providerTestSkipNextResetRef.current = false;
       return;
     }
     providerTestRevisionRef.current += 1;
@@ -3061,6 +3145,7 @@ export function SettingsDialog({
   const autosaveSavedTimerRef = useRef<number | null>(null);
   const autosaveRetryTimerRef = useRef<number | null>(null);
   const autosavePendingFlushRef = useRef(false);
+  const explicitOnboardingResetRef = useRef(false);
   const byokPreflightTrackingRef = useRef<string | null>(null);
   const committedClearedByokProviderKeyRef = useRef<string | null>(null);
   const autosaveLatestRef = useRef<AppConfig>(cfg);
@@ -3076,6 +3161,27 @@ export function SettingsDialog({
   const [autosaveCommitTick, setAutosaveCommitTick] = useState(0);
   const [autosaveRetryTick, setAutosaveRetryTick] = useState(0);
   autosaveLatestRef.current = cfg;
+
+  // App owns the config transition and persistence. Settings only supplies
+  // its latest draft with the explicit reset intent. Cancel a queued autosave
+  // before handing off: the dialog unmounts immediately, and its normal
+  // pending-draft flush must not replay the pre-reset `true` snapshot.
+  const handleResetOnboarding = useCallback(() => {
+    if (!onResetOnboarding) return;
+    explicitOnboardingResetRef.current = true;
+    autosavePendingFlushRef.current = false;
+    if (autosaveTimerRef.current != null) {
+      window.clearTimeout(autosaveTimerRef.current);
+      autosaveTimerRef.current = null;
+    }
+    if (autosaveRetryTimerRef.current != null) {
+      window.clearTimeout(autosaveRetryTimerRef.current);
+      autosaveRetryTimerRef.current = null;
+    }
+    setAutosaveStatus('idle');
+    onResetOnboarding({ ...cfg, onboardingCompleted: false });
+  }, [cfg, onResetOnboarding]);
+
   useEffect(() => {
     if (autosaveSkipFirstRef.current) {
       autosaveSkipFirstRef.current = false;
@@ -3166,7 +3272,6 @@ export function SettingsDialog({
             committedClearedByokProviderKeyRef.current = null;
           }
           lastSavedAppearanceRef.current = {
-            theme: persistedSnapshot.theme ?? 'system',
             accentColor: resolveAccentColor(persistedSnapshot.accentColor),
           };
           // If a newer edit landed while the request was in flight,
@@ -3224,7 +3329,10 @@ export function SettingsDialog({
   // timer to avoid setState after unmount.
   useEffect(() => {
     return () => {
-      if (autosavePendingFlushRef.current) {
+      if (
+        autosavePendingFlushRef.current
+        && !explicitOnboardingResetRef.current
+      ) {
         const mediaProvidersVersion = mediaProvidersChangeVersionRef.current;
         // Best-effort flush; if it rejects, localStorage already has
         // the latest copy from the synchronous saveConfig call inside
@@ -3270,11 +3378,15 @@ export function SettingsDialog({
     [apiProtocol],
   );
   const selectedProviderIndex =
-    cfg.apiProviderBaseUrl == null
-      ? -1
-      : protocolProviders.findIndex(
-          (p) => p.baseUrl === cfg.apiProviderBaseUrl && p.baseUrl === cfg.baseUrl,
-        );
+    protocolProviders.findIndex((p) => {
+      if (cfg.apiProviderBaseUrl == null) {
+        return apiProtocol === 'azure' && p.baseUrl === '' && Boolean(cfg.baseUrl?.trim());
+      }
+      return (
+        p.baseUrl === cfg.apiProviderBaseUrl &&
+        (p.baseUrl === cfg.baseUrl || (apiProtocol === 'azure' && p.baseUrl === ''))
+      );
+    });
   const selectedProvider = selectedProviderIndex >= 0 ? protocolProviders[selectedProviderIndex] : undefined;
   const apiKeyConsoleLink =
     selectedProvider?.apiKeyConsoleLink ?? defaultApiKeyConsoleLink;
@@ -3305,7 +3417,12 @@ export function SettingsDialog({
           ? undefined
           : cfg.apiProtocolConfigs?.[provider.protocol]
       );
-    if (!entry || entry.baseUrl !== provider.baseUrl) return false;
+    if (!entry) return false;
+    if (provider.baseUrl) {
+      if (entry.baseUrl !== provider.baseUrl) return false;
+    } else if (provider.protocol !== 'azure' && entry.baseUrl !== provider.baseUrl) {
+      return false;
+    }
     const knownProvider = KNOWN_PROVIDERS.find((item) => item.baseUrl === provider.baseUrl);
     return canRunProviderConnectionTest(entry, {
       requiresApiKey: byokProviderRequiresApiKey(
@@ -3686,7 +3803,9 @@ export function SettingsDialog({
   // BYOK content so "Local CLI" only renders once (in the seg-control tab),
   // not twice (heading + tab).
   const sectionHeader: Record<SettingsSection, { title: string; subtitle: string }> = {
+    general: { title: t('settings.general'), subtitle: t('settings.generalHint') },
     execution: { title: t('settings.title'), subtitle: t('settings.subtitle') },
+    workspace: { title: t('settings.workspace'), subtitle: t('settings.workspaceHint') },
     instructions: {
       title: t('settings.instructionsTitle'),
       subtitle: t('settings.instructionsSubtitle'),
@@ -3701,7 +3820,11 @@ export function SettingsDialog({
     integrations: { title: t('settings.mcpServerTitle'), subtitle: t('settings.mcpServerHint') },
     mcpClient: { title: t('settings.externalMcpTitle'), subtitle: t('settings.externalMcpHint') },
     language: { title: t('settings.language'), subtitle: t('settings.languageHint') },
-    appearance: { title: t('settings.appearance'), subtitle: t('settings.appearanceHint') },
+    // The theme setting is gone (the app ships light-only), so `appearance` has
+    // no copy of its own. It survives only as a legacy deep-link token that
+    // `normalizeSettingsSection` folds into General, so this entry can never be
+    // the active header — it exists to keep the Record exhaustive.
+    appearance: { title: t('settings.general'), subtitle: t('settings.generalHint') },
     critiqueTheater: {
       title: t('critiqueTheater.settingsNav'),
       subtitle: t('critiqueTheater.settingsNavHint'),
@@ -3735,6 +3858,7 @@ export function SettingsDialog({
     fallback: string,
   ) => {
     if (!model) return fallback;
+    if (model.id === 'default') return t('settings.modelUsesCliDefault');
     const label = model.label?.trim();
     const id = model.id.trim();
     if (label && label !== id) {
@@ -3789,19 +3913,21 @@ export function SettingsDialog({
               </div>
             </div>
           </label>
-          <p className="hint agent-model-row-hint">
-            {t('settings.modelPickerLiveHint')}
-          </p>
         </div>
       );
     }
     if (!hasModels && !hasReasoning) return null;
     const choice = cfg.agentModels?.[selected.id] ?? {};
     const effectiveChoice = effectiveAgentModelChoice(selected, choice) ?? choice;
-    const modelsForSelect =
+    const modelsForSelect = (
       selected.id === 'amr' && selected.models
         ? orderModelOptionsByAvailability(selected.models)
-        : selected.models;
+        : selected.models
+    )?.map((model) =>
+      model.id === 'default'
+        ? { ...model, label: t('settings.modelUsesCliDefault') }
+        : model,
+    );
     const knownModelIds = selected.models?.map((m) => m.id) ?? [];
     // Adapters opt out via `supportsCustomModel: false` on their
     // RuntimeAgentDef when their CLI has no `--model` flag (Antigravity,
@@ -3850,14 +3976,6 @@ export function SettingsDialog({
       effectiveChoice.reasoning ??
       choice.reasoning ??
       selected.reasoningOptions?.[0]?.id ?? '';
-    const currentModelOption =
-      selected.models?.find((m) => m.id === modelValue) ?? null;
-    const serviceTierOptions = currentModelOption?.serviceTierOptions ?? [];
-    const hasServiceTiers = serviceTierOptions.length > 0;
-    const serviceTierValue =
-      serviceTierOptions.some((tier) => tier.id === choice.serviceTier)
-        ? choice.serviceTier!
-        : 'default';
     const customActive =
       allowCustomModel &&
       hasModels &&
@@ -3874,12 +3992,6 @@ export function SettingsDialog({
       modelSource === 'live'
         ? t('settings.modelSourceLive')
         : t('settings.modelSourceFallback');
-    const modelSourceHint =
-      modelSource === 'live'
-        ? selected.supportsCustomModel === false
-          ? t('settings.modelPickerLiveCatalogOnlyHint')
-          : t('settings.modelPickerLiveHint')
-        : t('settings.modelPickerFallbackHint');
     return (
       <div className="agent-card-config">
         {hasModels ? (
@@ -3897,6 +4009,7 @@ export function SettingsDialog({
               <div className="agent-model-select-wrap">
                 <SearchableModelSelect
                   className="inline-switcher__select settings-model-select"
+                  popoverClassName="settings-model-popover"
                   value={selectValue}
                   aria-label={t('settings.modelPicker')}
                   searchPlaceholder={t('designs.searchPlaceholder')}
@@ -3904,6 +4017,11 @@ export function SettingsDialog({
                   popoverTestId={`settings-agent-model-popover-${selected.id}`}
                   minSearchableOptions={5}
                   popoverMinWidth={340}
+                  // Only AMR's catalog genuinely spans multiple model
+                  // vendors — every other agent's model list is one
+                  // provider's own raw ids, which the company heuristic
+                  // would otherwise split into misleading fake "companies".
+                  groupByCompany={selected.id === 'amr'}
                   models={modelsForSelect!}
                   onChange={(nextValue) => {
                     if (nextValue === CUSTOM_MODEL_SENTINEL) {
@@ -3952,22 +4070,22 @@ export function SettingsDialog({
                       : undefined
                   }
                   onDisabledOptionUpgrade={
-                    selected.id === 'amr'
-                      ? () =>
+                    selected.id === 'amr' &&
+                    !workspaceContextLoading &&
+                    (!workspaceContext ||
+                      workspaceContext.permissions?.canManageBilling === true)
+                      ? () => {
+                          const upgradeUrl = amrUpgradeUrl(amrCardStatus?.profile);
+                          if (!upgradeUrl) return;
                           void openExternalUrl(
-                            attributedAmrSettingsUrl(
-                              amrPlansUrlForProfile(amrCardStatus?.profile),
-                              'settings_amr_upgrade',
-                            ),
-                          )
+                            attributedAmrSettingsUrl(upgradeUrl, 'settings_amr_upgrade'),
+                          );
+                        }
                       : undefined
                   }
                 />
               </div>
             </label>
-            <p className="hint agent-model-row-hint">
-              {modelSourceHint}
-            </p>
           </>
         ) : null}
         {customActive ? (
@@ -4011,36 +4129,6 @@ export function SettingsDialog({
             </div>
           </label>
         ) : null}
-        {hasServiceTiers ? (
-          <label className="field">
-            <span className="field-label">
-              {t('settings.serviceTierPicker')}
-            </span>
-            <div className="agent-model-select-wrap">
-              <select
-                value={serviceTierValue}
-                onChange={(e) =>
-                  setChoice({
-                    serviceTier:
-                      e.target.value === 'default' ? undefined : e.target.value,
-                  })
-                }
-              >
-                <option value="default">{t('common.default')}</option>
-                {serviceTierOptions.map((tier) => (
-                  <option key={tier.id} value={tier.id}>
-                    {tier.label}
-                  </option>
-                ))}
-              </select>
-              <Icon
-                name="chevron-down"
-                size={12}
-                className="agent-model-select-chevron"
-              />
-            </div>
-          </label>
-        ) : null}
       </div>
     );
   };
@@ -4051,19 +4139,20 @@ export function SettingsDialog({
   const settingsFullscreenLabel = settingsFullscreen
     ? t('common.exitFullscreen')
     : t('common.fullscreen');
+  const pageMode = presentation === 'page';
 
-  return (
-    <div className="modal-backdrop" onClick={onClose}>
+  const surface = (
       <div
         className={
           'modal modal-settings' +
+          (pageMode ? ' settings-page-surface' : '') +
           (settingsSidebarCollapsed ? ' settings-sidebar-collapsed' : '') +
-          (settingsFullscreen ? ' settings-fullscreen' : '')
+          (!pageMode && settingsFullscreen ? ' settings-fullscreen' : '')
         }
-        role="dialog"
-        aria-modal="true"
+        role={pageMode ? 'region' : 'dialog'}
+        aria-modal={pageMode ? undefined : true}
         aria-labelledby="settings-dialog-title"
-        onClick={(e) => e.stopPropagation()}
+        onClick={pageMode ? undefined : (e) => e.stopPropagation()}
       >
         {/* Top-right chrome strip — anchored to the modal corner so the
             autosave indicator and the close button float above the
@@ -4103,20 +4192,22 @@ export function SettingsDialog({
               </>
             ) : null}
           </div>
-          <button
-            type="button"
-            className="settings-chrome-btn settings-fullscreen-toggle"
-            onClick={() => setSettingsFullscreen((current) => !current)}
-            aria-label={settingsFullscreenLabel}
-            aria-pressed={settingsFullscreen}
-            title={settingsFullscreenLabel}
-          >
-            <Icon
-              name={settingsFullscreen ? 'minimize' : 'maximize'}
-              size={15}
-              strokeWidth={2}
-            />
-          </button>
+          {pageMode ? null : (
+            <button
+              type="button"
+              className="settings-chrome-btn settings-fullscreen-toggle"
+              onClick={() => setSettingsFullscreen((current) => !current)}
+              aria-label={settingsFullscreenLabel}
+              aria-pressed={settingsFullscreen}
+              title={settingsFullscreenLabel}
+            >
+              <Icon
+                name={settingsFullscreen ? 'minimize' : 'maximize'}
+                size={15}
+                strokeWidth={2}
+              />
+            </button>
+          )}
           <button
             type="button"
             className="settings-chrome-btn settings-close"
@@ -4167,15 +4258,39 @@ export function SettingsDialog({
             aria-label="Settings sections"
             aria-hidden={settingsSidebarCollapsed ? true : undefined}
           >
+            {pageMode ? (
+              <div className="settings-page-nav-head">
+                <button
+                  type="button"
+                  className="settings-page-back"
+                  onClick={onClose}
+                >
+                  <Icon name="arrow-left" size={15} />
+                  <span>{t('settings.pageBackToHome')}</span>
+                </button>
+              </div>
+            ) : null}
             <button
               type="button"
               className={`settings-nav-item${activeSection === 'execution' ? ' active' : ''}`}
               onClick={() => setActiveSection('execution')}
+              data-testid="settings-nav-execution"
             >
               <Icon name="sliders" size={18} />
               <span>
                 <strong>{t('settings.envConfigure')}</strong>
                 <small>{`${t('settings.localCli')} / ${t('settings.modeApiMeta')}`}</small>
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`settings-nav-item${activeSection === 'general' ? ' active' : ''}`}
+              onClick={() => setActiveSection('general')}
+            >
+              <Icon name="settings" size={18} />
+              <span>
+                <strong>{t('settings.general')}</strong>
+                <small>{t('settings.generalHint')}</small>
               </span>
             </button>
             <button
@@ -4194,7 +4309,7 @@ export function SettingsDialog({
               className={`settings-nav-item${activeSection === 'memory' ? ' active' : ''}`}
               onClick={() => setActiveSection('memory')}
             >
-              <Icon name="history" size={18} />
+              <Icon name="brain" size={18} />
               <span>
                 <strong>{t('settings.memory')}</strong>
                 <small>{t('settings.memoryHint')}</small>
@@ -4213,112 +4328,13 @@ export function SettingsDialog({
             </button>
             <button
               type="button"
-              className={`settings-nav-item${activeSection === 'mcpClient' ? ' active' : ''}`}
-              onClick={() => setActiveSection('mcpClient')}
-            >
-              <Icon name="sparkles" size={18} />
-              <span>
-                <strong>{t('settings.externalMcpTitle')}</strong>
-                <small>{t('settings.externalMcpHint')}</small>
-              </span>
-            </button>
-            <button
-              type="button"
-              className={`settings-nav-item${activeSection === 'composio' ? ' active' : ''}`}
-              onClick={() => setActiveSection('composio')}
-            >
-              <Icon name="sliders" size={18} />
-              <span>
-                <strong>{t('connectors.title')}</strong>
-                <small>{t('settings.connectorsNavHint')}</small>
-              </span>
-            </button>
-            <button
-              type="button"
               className={`settings-nav-item${activeSection === 'integrations' ? ' active' : ''}`}
               onClick={() => setActiveSection('integrations')}
             >
-              <Icon name="link" size={18} />
+              <Icon name="puzzle" size={18} />
               <span>
                 <strong>{t('settings.mcpServerTitle')}</strong>
                 <small>{t('settings.mcpServerHint')}</small>
-              </span>
-            </button>
-            <button
-              type="button"
-              className={`settings-nav-item${activeSection === 'language' ? ' active' : ''}`}
-              onClick={() => setActiveSection('language')}
-            >
-              <Icon name="languages" size={18} />
-              <span>
-                <strong>{t('settings.language')}</strong>
-                <small>{t('settings.languageHint')}</small>
-              </span>
-            </button>
-            <button
-              type="button"
-              className={`settings-nav-item${activeSection === 'appearance' ? ' active' : ''}`}
-              onClick={() => setActiveSection('appearance')}
-            >
-              <Icon name="sun-moon" size={18} />
-              <span>
-                <strong>{t('settings.appearance')}</strong>
-                <small>{t('settings.appearanceHint')}</small>
-              </span>
-            </button>
-            <button
-              type="button"
-              className={`settings-nav-item${activeSection === 'critiqueTheater' ? ' active' : ''}`}
-              onClick={() => setActiveSection('critiqueTheater')}
-            >
-              <Icon name="comment" size={18} />
-              <span>
-                <strong>{t('critiqueTheater.settingsNav')}</strong>
-                <small>{t('critiqueTheater.settingsNavHint')}</small>
-              </span>
-            </button>
-            <button
-              type="button"
-              className={`settings-nav-item${activeSection === 'notifications' ? ' active' : ''}`}
-              onClick={() => setActiveSection('notifications')}
-            >
-              <Icon name="bell" size={18} />
-              <span>
-                <strong>{t('settings.notifications')}</strong>
-                <small>{t('settings.notificationsHint')}</small>
-              </span>
-            </button>
-            <button
-              type="button"
-              className={`settings-nav-item${activeSection === 'pet' ? ' active' : ''}`}
-              onClick={() => setActiveSection('pet')}
-            >
-              <Icon name="sparkles" size={18} />
-              <span>
-                <strong>{t('pet.navTitle')}</strong>
-                <small>{t('pet.navHint')}</small>
-              </span>
-            </button>
-            <button
-              type="button"
-              className={`settings-nav-item${activeSection === 'designSystems' ? ' active' : ''}`}
-              onClick={() => setActiveSection('designSystems')}
-            >
-              <Icon name="draw" size={18} />
-              <span>
-                <strong>{t('settings.designSystems')}</strong>
-                <small>{t('settings.designSystemsHint')}</small>
-              </span>
-            </button>
-            <button
-              type="button"
-              className={`settings-nav-item${activeSection === 'projectLocations' ? ' active' : ''}`}
-              onClick={() => setActiveSection('projectLocations')}
-            >
-              <Icon name="folder" size={18} />
-              <span>
-                <strong>{t('settings.projectLocations')}</strong>
-                <small>{t('settings.projectLocationsHint')}</small>
               </span>
             </button>
             <button
@@ -4347,6 +4363,12 @@ export function SettingsDialog({
           <div className="settings-content" ref={settingsContentRef}>
           {activeSection === 'execution' ? (
             <>
+              {/* Sticky shell: the 本机 CLI / API 提供商 switch stays pinned
+                  while the agent list scrolls. The wrapper (not .seg-control
+                  itself) is sticky so it can paint an opaque full-width strip
+                  behind the pill — otherwise cards would show through around
+                  the pill's rounded corners mid-scroll. */}
+              <div className="settings-execution-sticky">
               <div
                 className="seg-control"
                 role="tablist"
@@ -4390,6 +4412,38 @@ export function SettingsDialog({
                   <span className="seg-meta">{t('settings.modeApi')}</span>
                 </button>
               </div>
+              </div>
+              {cfg.mode === 'daemon' && amrCardStatus?.loggedIn !== true ? (
+                // Only prompt to sign into Open Design Cloud when NOT already
+                // signed in — the AMR/vela session IS the cloud identity (one
+                // session drives both), so a logged-in user has nothing to do
+                // here and the callout was showing spuriously.
+                <div className="settings-cloud-signin-callout">
+                  <div>
+                    <strong>{t('settings.cloudCalloutTitle')}</strong>
+                    <p>{t('settings.cloudCalloutBody')}</p>
+                  </div>
+                  {/* Same device-auth flow as the 授权 button on the Open Design
+                      agent card below — the AMR/vela session IS the cloud
+                      identity, so signing in here is that one flow. This used to
+                      navigate to onboarding, which walked the user through the
+                      whole first-run tour to reach the same authorization. */}
+                  <AmrLoginPill
+                    className="settings-cloud-signin-callout__button"
+                    hideSignedOutStatus
+                    hideSignedInStatus
+                    initialStatus={amrCardStatus}
+                    skipInitialRefresh
+                    signInLabel={t('settings.cloudCalloutButton')}
+                    signInIcon="log-in"
+                    amrEntrySourceDetail="settings_cloud_callout"
+                    metricsConsent={cfg.telemetry?.metrics === true}
+                    installationId={cfg.installationId}
+                    onStatusChange={setAmrCardStatus}
+                    onSignedOut={onAmrSignedOut}
+                  />
+                </div>
+              ) : null}
               {cfg.mode === 'api' ? (
                 <div
                   className="protocol-chips protocol-chips--providers"
@@ -4574,19 +4628,86 @@ export function SettingsDialog({
                               : null;
                           const amrWalletBalance =
                             amrWalletVisible && amrWalletSnapshot?.status === 'available'
-                              ? formatAmrWalletBalance(amrWalletSnapshot.balanceUsd)
+                              ? formatVelaBalanceUsd(amrWalletSnapshot.balanceUsd)
+                              : null;
+                          // recvpZPzGJL7o7: `amrStatusBalance` and `amrWalletBalance`
+                          // are both vela ACCOUNT-scoped reads. A team balance
+                          // may only come from the nested v2 workspace wallet
+                          // response whose workspace identity Vela returned;
+                          // never display the account summary's balance as a
+                          // team fallback. Personal/local use keeps the account
+                          // summary and login-status fallbacks.
+                          //
+                          // recvqakgSc1Pwd: this must read `balanceUsd` — the
+                          // dollar figure vela already computed — not
+                          // `totalAvailableCredits`, a raw credits COUNT on a
+                          // completely different scale (vela reports
+                          // thousands of credits per dollar). Formatting the
+                          // credits count as a dollar amount is what put
+                          // "Balance $388307.00" on a workspace whose real
+                          // balance was under $39.
+                          const workspaceBalanceUsd = workspaceBillingBalanceUsd(
+                            workspaceBillingResponse,
+                            workspaceContext,
+                          );
+                          const amrWorkspaceBalance =
+                            amrWalletVisible && workspaceBalanceUsd
+                              ? formatVelaBalanceUsd(workspaceBalanceUsd)
                               : null;
                           const amrCardBalanceLabel =
                             isAmrAgent && active && amrCardStatus?.loggedIn
-                              ? amrStatusBalance ?? amrWalletBalance
+                              ? workspaceContext?.workspaceType === 'team'
+                                ? amrWorkspaceBalance
+                                : amrWorkspaceBalance ?? amrStatusBalance ?? amrWalletBalance
                               : null;
-                          const amrCardPlanLabel =
+                          // vela's `account.plan` is ACCOUNT-scoped, so a member
+                          // whose plan is held by the team workspace reads
+                          // `free` there — the workspace context wins.
+                          //
+                          // The badge names the plan FAMILY, so a TEAM workspace
+                          // reads `team` at every tier — free through max —
+                          // while the personal ladder keeps its tier word
+                          // (product ruling; 「设置中的这里应该一样的逻辑」, so
+                          // this goes through the SAME helper as the nav-rail
+                          // account row and cannot drift from it). An id outside
+                          // the badge set still renders verbatim.
+                          const amrCardResolvedPlan =
                             isAmrAgent && active && amrCardStatus?.loggedIn
-                              ? amrCardStatus.account?.plan?.trim() || null
+                              ? resolvePlanTier({
+                                  billing: workspaceBilling,
+                                  context: workspaceContext,
+                                  accountPlan: amrCardStatus.account?.plan,
+                                })
                               : null;
+                          const amrCardPlanLabel = amrCardResolvedPlan
+                            ? planBadgeTierForWorkspace({
+                                tier: amrCardResolvedPlan,
+                                workspaceType: workspaceContext?.workspaceType,
+                              }) ?? amrCardResolvedPlan
+                            : null;
+                          // recvqfYKutwWlQ: a team member without billing
+                          // permission (owner-only) can't act on an upgrade
+                          // even when the plan tier itself is upgradeable, so
+                          // the entry point must not render for them. Personal
+                          // workspaces always resolve `canManageBilling` true
+                          // (the user is their own owner), so this does not
+                          // affect the personal-workspace upgrade path.
+                          //
+                          // The TIER half asks `canUpgradeFromPlanTier` — the
+                          // one rule the account menu's billing card shares —
+                          // about `amrCardResolvedPlan`, the SAME resolved tier
+                          // the badge above renders. It used to ask a
+                          // personal-ladder question about
+                          // `account.plan` instead: that projection is
+                          // ACCOUNT-scoped and reports `free` for a user whose
+                          // entitlement is held by a team workspace, so a
+                          // 团队版 Max owner was measured as "free" and offered
+                          // an upgrade to the top tier they already hold, while
+                          // the badge beside it correctly read Max.
                           const amrCardCanUpgrade =
                             isAmrAgent && active && amrCardStatus?.loggedIn
-                              ? canUpgradeVelaPlan(amrCardStatus.account?.plan)
+                              ? canUpgradeFromPlanTier(amrCardResolvedPlan) &&
+                                Boolean(workspaceContext?.permissions?.canManageBilling)
                               : false;
                           const amrRevealPendingCancelAction =
                             isAmrAgent &&
@@ -4721,24 +4842,22 @@ export function SettingsDialog({
                                               {amrCardProfileBadge}
                                             </span>
                                           ) : null}
-                                        </div>
-                                      ) : null}
-                                      {amrWalletVisible ? (
-                                        <div className="agent-card-amr-meta-row">
-                                          <span className="agent-card-amr-balance">
-                                            <span className="agent-card-amr-balance-label">
-                                              {t('settings.amrBalance')}
+                                          {amrWalletVisible ? (
+                                            <span className="agent-card-amr-balance">
+                                              <span className="agent-card-amr-balance-label">
+                                                {t('settings.amrBalance')}
+                                              </span>
+                                              <span className="agent-card-amr-balance-value">
+                                                {amrWalletValueLabel({
+                                                  balance: amrCardBalanceLabel,
+                                                  loadingLabel: t('common.loading'),
+                                                  ready: amrWalletReady || Boolean(amrCardBalanceLabel),
+                                                  snapshot: amrWalletSnapshot,
+                                                  unavailableLabel: t('settings.amrWalletUnavailable'),
+                                                })}
+                                              </span>
                                             </span>
-                                            <span className="agent-card-amr-balance-value">
-                                              {amrWalletValueLabel({
-                                                balance: amrCardBalanceLabel,
-                                                loadingLabel: t('common.loading'),
-                                                ready: amrWalletReady || Boolean(amrCardBalanceLabel),
-                                                snapshot: amrWalletSnapshot,
-                                                unavailableLabel: t('settings.amrWalletUnavailable'),
-                                              })}
-                                            </span>
-                                          </span>
+                                          ) : null}
                                         </div>
                                       ) : null}
                                       {!active && modelSummary ? (
@@ -4782,17 +4901,29 @@ export function SettingsDialog({
                                           type="button"
                                           className="agent-card-amr-upgrade"
                                           data-testid="settings-agent-card-amr-upgrade"
-                                          onClick={() =>
+                                          onClick={() => {
+                                            const upgradeUrl = amrUpgradeUrl(
+                                              amrCardStatus?.profile,
+                                            );
+                                            if (!upgradeUrl) return;
                                             void openExternalUrl(
                                               attributedAmrSettingsUrl(
-                                                amrPlansUrlForProfile(
-                                                  amrCardStatus?.profile,
-                                                ),
+                                                upgradeUrl,
                                                 'settings_amr_upgrade',
                                               ),
-                                            )
-                                          }
+                                            );
+                                          }}
                                         >
+                                          <svg
+                                            xmlns="http://www.w3.org/2000/svg"
+                                            viewBox="0 0 24 24"
+                                            fill="currentColor"
+                                            width={14}
+                                            height={14}
+                                            aria-hidden
+                                          >
+                                            <path d="M10.6144 17.7956 11.492 15.7854C12.2731 13.9966 13.6789 12.5726 15.4325 11.7942L17.8482 10.7219C18.6162 10.381 18.6162 9.26368 17.8482 8.92277L15.5079 7.88394C13.7092 7.08552 12.2782 5.60881 11.5105 3.75894L10.6215 1.61673C10.2916.821765 9.19319.821767 8.8633 1.61673L7.97427 3.75892C7.20657 5.60881 5.77553 7.08552 3.97685 7.88394L1.63658 8.92277C.868537 9.26368.868536 10.381 1.63658 10.7219L4.0523 11.7942C5.80589 12.5726 7.21171 13.9966 7.99275 15.7854L8.8704 17.7956C9.20776 18.5682 10.277 18.5682 10.6144 17.7956ZM19.4014 22.6899 19.6482 22.1242C20.0882 21.1156 20.8807 20.3125 21.8695 19.8732L22.6299 19.5353C23.0412 19.3526 23.0412 18.7549 22.6299 18.5722L21.9121 18.2532C20.8978 17.8026 20.0911 16.9698 19.6586 15.9269L19.4052 15.3156C19.2285 14.8896 18.6395 14.8896 18.4628 15.3156L18.2094 15.9269C17.777 16.9698 16.9703 17.8026 15.956 18.2532L15.2381 18.5722C14.8269 18.7549 14.8269 19.3526 15.2381 19.5353L15.9985 19.8732C16.9874 20.3125 17.7798 21.1156 18.2198 22.1242L18.4667 22.6899C18.6473 23.104 19.2207 23.104 19.4014 22.6899Z" />
+                                          </svg>
                                           {t('settings.amrUpgrade')}
                                         </button>
                                       ) : null}
@@ -4810,6 +4941,7 @@ export function SettingsDialog({
                                         installationId={cfg.installationId}
                                         revealPendingCancelAction={amrRevealPendingCancelAction}
                                         onStatusChange={setAmrCardStatus}
+                                        onSignedOut={onAmrSignedOut}
                                       />
                                     </span>
                                   ) : (
@@ -4845,13 +4977,19 @@ export function SettingsDialog({
                                   </button>
                                 ) : null}
                               </div>
-                              {(a.diagnostics ?? []).map((diagnostic, i) => (
-                                <AgentDiagnosticRow
-                                  key={`${diagnostic.reason}-${i}`}
-                                  diagnostic={diagnostic}
-                                  handlers={diagnosticHandlers}
-                                />
-                              ))}
+                              {/* Diagnostics belong to the expanded card only:
+                                  collapsed cards all present the same compact
+                                  summary regardless of agent health. */}
+                              {active
+                                ? (a.diagnostics ?? []).map((diagnostic, i) => (
+                                    <AgentDiagnosticRow
+                                      key={`${diagnostic.reason}-${i}`}
+                                      diagnostic={diagnostic}
+                                      handlers={diagnosticHandlers}
+                                      className="agent-card-diagnostic"
+                                    />
+                                  ))
+                                : null}
                               {active ? renderAgentModelConfig(a) : null}
                             </div>
                           );
@@ -4968,7 +5106,6 @@ export function SettingsDialog({
                         {unavailableAgents.map((a) => {
                           const installUrl = sanitizeHttpsUrl(a.installUrl);
                           const docsUrl = sanitizeHttpsUrl(a.docsUrl);
-                          const hasLinks = Boolean(installUrl || docsUrl);
                           const description = AGENT_SHORT_DESCRIPTIONS[a.id];
                           const agentName = displayAgentName(a);
                           const diagnosticHandlers = diagnosticHandlersForAgent(a);
@@ -4992,56 +5129,67 @@ export function SettingsDialog({
                                     </div>
                                   ) : null}
                                 </div>
-                                {hasLinks ? (
-                                  <div className="agent-card-actions agent-card-actions--inline">
-                                    {docsUrl ? (
-                                      <a
-                                        href={docsUrl}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="agent-card-link agent-card-link--muted agent-card-link--icon"
-                                        onClick={markAgentInstallIntent}
-                                        title={t('settings.agentInstall.docs')}
-                                        aria-label={t('settings.agentInstall.docs')}
-                                      >
-                                        <Icon name="file" size={15} />
-                                      </a>
-                                    ) : null}
-                                    {installUrl ? (
-                                      <a
-                                        href={installUrl}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="agent-card-link agent-card-link--ghost"
-                                        onClick={(event) => {
-                                          markAgentInstallIntent();
-                                          if (a.id === 'amr') {
-                                            event.currentTarget.href = attributedAmrSettingsUrl(
-                                              installUrl,
-                                              'settings_amr_install',
-                                            );
-                                          }
-                                        }}
-                                      >
-                                        {t('settings.agentInstall.install')}
-                                      </a>
-                                    ) : null}
-                                  </div>
-                                ) : null}
                               </div>
                               {/* Why is it unavailable? not-on-path vs a broken
                                   shim vs a bad *_BIN override each get a
-                                  distinct, actionable line. It spans the full
-                                  card width on its own row below the
-                                  logo/name/links so it never crowds the inline
-                                  Docs/Install actions. */}
+                                  distinct, actionable line, full-width below the
+                                  logo/name. Rendered message-only: the fix
+                                  actions are hoisted into the shared footer bar
+                                  so every control lives on one row. */}
                               {(a.diagnostics ?? []).map((diagnostic, i) => (
                                 <AgentDiagnosticRow
                                   key={`${diagnostic.reason}-${i}`}
                                   diagnostic={diagnostic}
-                                  handlers={diagnosticHandlers}
                                 />
                               ))}
+                              {/* Every action for the card collapses into one
+                                  horizontal bar at the foot, fenced from the
+                                  content above by a hair divider: Docs + Rescan
+                                  as quiet icon buttons, Install as the primary
+                                  labelled CTA holding the right edge. */}
+                              <div className="agent-card-footer">
+                                {docsUrl ? (
+                                  <a
+                                    href={docsUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="agent-card-link agent-card-link--muted agent-card-link--icon"
+                                    onClick={markAgentInstallIntent}
+                                    title={t('settings.agentInstall.docs')}
+                                    aria-label={t('settings.agentInstall.docs')}
+                                  >
+                                    <Icon name="file" size={15} />
+                                  </a>
+                                ) : null}
+                                <button
+                                  type="button"
+                                  className="agent-card-link agent-card-link--muted agent-card-link--icon"
+                                  onClick={() => diagnosticHandlers.onRescan?.()}
+                                  title={t('settings.rescan')}
+                                  aria-label={t('settings.rescan')}
+                                >
+                                  <Icon name="reload" size={15} />
+                                </button>
+                                {installUrl ? (
+                                  <a
+                                    href={installUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="agent-card-link agent-card-link--ghost"
+                                    onClick={(event) => {
+                                      markAgentInstallIntent();
+                                      if (a.id === 'amr') {
+                                        event.currentTarget.href = attributedAmrSettingsUrl(
+                                          installUrl,
+                                          'settings_amr_install',
+                                        );
+                                      }
+                                    }}
+                                  >
+                                    {t('settings.agentInstall.install')}
+                                  </a>
+                                ) : null}
+                              </div>
                             </div>
                           );
                         })}
@@ -5371,7 +5519,12 @@ export function SettingsDialog({
                     azureHint: t('settings.azureBaseUrlHint'),
                   }}
                   onBlur={commitProviderModelsInputs}
-                  onChange={(value) => updateApiConfig({ baseUrl: value, apiProviderBaseUrl: null })}
+                  onChange={(value) =>
+                    updateApiConfig({
+                      baseUrl: value,
+                      apiProviderBaseUrl: apiProtocol === 'azure' ? '' : null,
+                    })
+                  }
                   onCustomize={() => {
                     updateApiConfig({ apiProviderBaseUrl: null });
                     window.setTimeout(() => baseUrlInputRef.current?.focus(), 0);
@@ -5413,7 +5566,7 @@ export function SettingsDialog({
                     ? t('settings.azureCustomDeploymentName')
                     : t('settings.modelCustomLabel'),
                   customModelPlaceholder: apiProtocol === 'azure'
-                    ? 'e.g. gpt-4o-production'
+                    ? t('settings.azureDeploymentModel')
                     : t('settings.modelCustomPlaceholder'),
                   fetchModelsUnsupported: t('settings.fetchModelsUnsupported'),
                   model: apiProtocol === 'azure'
@@ -5450,6 +5603,7 @@ export function SettingsDialog({
                     : null
                 }
                 providerModelsFailureMessage={providerModelsFailureMessage}
+                forceTextInput={apiProtocol === 'azure'}
                 showAzureModelFetchHint={apiProtocol === 'azure'}
                 showFetchModelsUnsupportedHint={
                   apiProtocol !== 'azure' &&
@@ -5485,13 +5639,6 @@ export function SettingsDialog({
                 <summary className="agent-cli-env-summary">
                   <span className="agent-cli-env-summary-title">
                     {t('settings.memoryModelInlineLabel')}
-                  </span>
-                  <span className="settings-memory-summary-value">
-                    {cfg.model.trim()
-                      ? t('settings.memoryModelInlineSameAsChatWithModel', {
-                          model: cfg.model.trim(),
-                        })
-                      : t('settings.memoryModelInlineSameAsChat')}
                   </span>
                 </summary>
                 <div className="agent-cli-env-body">
@@ -5663,6 +5810,7 @@ export function SettingsDialog({
               composioApiKeyConfigured={Boolean(cfg.composio?.apiKeyConfigured)}
               daemonMediaProviders={daemonMediaProviders}
               daemonMediaProvidersFetchState={daemonMediaProvidersFetchState}
+              workspaceContext={workspaceContext}
               onOpenComposioSection={() => setActiveSection('composio')}
               onLeaveForOrbitProject={(runConfig) => {
                 // Persist any in-flight Orbit edits (toggle / time) before
@@ -5677,60 +5825,74 @@ export function SettingsDialog({
             />
           ) : null}
 
-          {activeSection === 'language' ? (
-          <section className="settings-section">
-            <div className="settings-language-grid" role="radiogroup" aria-label={t('settings.language')}>
-              {LOCALES.map((code) => {
-                const active = locale === code;
-                return (
-                  <button
-                    key={code}
-                    type="button"
-                    role="radio"
-                    aria-checked={active}
-                    className={`settings-language-tile${active ? ' active' : ''}`}
-                    onClick={() => {
-                      // P1 ui_click area=language — record the locale id
-                      // that was picked, regardless of whether it differs
-                      // from the current one (user clicked = signal).
-                      trackSettingsLanguageClick(analytics.track, {
-                        page_name: 'settings',
-                        area: 'language',
-                        element: code,
-                      });
-                      setLocale(code as Locale);
-                    }}
-                  >
-                    <span className="settings-language-tile-text">
-                      <span className="settings-language-tile-title">
-                        {LOCALE_LABEL[code]}
-                      </span>
-                      <span className="settings-language-tile-code">
-                        {code}
-                      </span>
-                    </span>
-                    {active ? <Icon name="check" size={16} /> : null}
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-          ) : null}
+          {/* General is one scrollable page of `settings-general-block`
+              sections, per #5517. Every token that used to address a piece of
+              it (language / appearance / notifications / pet /
+              projectLocations / critiqueTheater) is folded into 'general' by
+              normalizeSettingsSection, so this single guard covers them all —
+              there is no longer a standalone render block for any of them. */}
+          {activeSection === 'general' ? (
+            <section className="settings-section settings-general-section">
+              <div className="settings-general-block">
+                <div className="settings-general-field">
+                  <span className="settings-general-label">{t('settings.language')}</span>
+                  <label className="settings-general-select">
+                    <select
+                      value={locale}
+                      aria-label={t('settings.language')}
+                      onChange={(event) => {
+                        const next = event.target.value as Locale;
+                        // P1 ui_click area=language — record the locale id
+                        // that was picked, regardless of whether it differs
+                        // from the current one (user clicked = signal).
+                        trackSettingsLanguageClick(analytics.track, {
+                          page_name: 'settings',
+                          area: 'language',
+                          element: next,
+                        });
+                        setLocale(next);
+                      }}
+                    >
+                      {LOCALES.map((code) => (
+                        <option key={code} value={code}>
+                          {LOCALE_LABEL[code]} · {code}
+                        </option>
+                      ))}
+                    </select>
+                    <Icon name="chevron-down" size={14} />
+                  </label>
+                </div>
+              </div>
 
-          {activeSection === 'appearance' ? (
-            <AppearanceSection cfg={cfg} setCfg={setCfg} />
-          ) : null}
+              <div className="settings-general-block">
+                <div className="settings-general-block-head">
+                  <h3>{t('settings.systemPrefsTitle')}</h3>
+                  <p className="hint">{t('settings.systemPrefsHint')}</p>
+                </div>
+                <NotificationsSection cfg={cfg} setCfg={setCfg} />
+              </div>
 
-          {activeSection === 'critiqueTheater' ? (
-            <CritiqueTheaterSection />
-          ) : null}
+              <div className="settings-general-block">
+                <div className="settings-general-block-head">
+                  <h3>{t('pet.navTitle')}</h3>
+                </div>
+                <PetSettings cfg={cfg} setCfg={setCfg} />
+              </div>
 
-          {activeSection === 'notifications' ? (
-            <NotificationsSection cfg={cfg} setCfg={setCfg} />
-          ) : null}
+              <div className="settings-general-block">
+                <div className="settings-general-block-head">
+                  <h3>{t('settings.projectLocations')}</h3>
+                </div>
+                <ProjectLocationsSection cfg={cfg} setCfg={setCfg} onProjectsRefresh={onProjectsRefresh} />
+              </div>
 
-          {activeSection === 'pet' ? (
-            <PetSettings cfg={cfg} setCfg={setCfg} />
+              <div className="settings-general-block">
+                <CritiqueTheaterSection
+                  callerWorkspaceContext={workspaceContext}
+                  persistedProjectWorkspaceId={persistedProjectWorkspaceId}
+                />
+              </div>
+            </section>
           ) : null}
 
           {activeSection === 'designSystems' ? (
@@ -5740,10 +5902,6 @@ export function SettingsDialog({
               onDesignSystemsChanged={onDesignSystemsChanged}
               onDesignSystemImportRebuildJob={onDesignSystemImportRebuildJob}
             />
-          ) : null}
-
-          {activeSection === 'projectLocations' ? (
-            <ProjectLocationsSection cfg={cfg} setCfg={setCfg} onProjectsRefresh={onProjectsRefresh} />
           ) : null}
 
           {activeSection === 'instructions' ? (
@@ -5982,6 +6140,10 @@ export function SettingsDialog({
               </div>
             </section>
           ) : null}
+
+          {activeSection === 'workspace' && showWorkspaceSettings ? (
+            <SettingsWorkspaceSection context={workspaceContext} />
+          ) : null}
           {aboutToast ? (
             <Toast
               message={aboutToast}
@@ -5991,6 +6153,19 @@ export function SettingsDialog({
           </div>
         </div>
       </div>
+  );
+
+  if (pageMode) {
+    return (
+      <div className="settings-page-shell">
+        {surface}
+      </div>
+    );
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      {surface}
     </div>
   );
 }
@@ -6484,6 +6659,14 @@ interface OrbitRunStartResponse {
   agentRunId: string;
 }
 
+export function orbitLiveArtifactHref(
+  projectId: string,
+  artifactId: string,
+  workspaceContext: WorkspaceCollabContext | null,
+): string {
+  return liveArtifactPreviewUrl(projectId, artifactId, 'rendered', workspaceContext);
+}
+
 export async function persistConfigAndRunOrbit(
   config: AppConfig,
   options?: {
@@ -6507,14 +6690,26 @@ export async function persistConfigAndRunOrbit(
   return await response.json() as OrbitRunStartResponse;
 }
 
-export function configForManualOrbitRun(config: AppConfig): AppConfig {
+export function configForManualOrbitRun(
+  config: AppConfig,
+  workspaceContext: WorkspaceCollabContext | null = null,
+): AppConfig {
   const effectiveTemplateSkillId = config.orbit?.templateSkillId || DEFAULT_ORBIT.templateSkillId || '';
-  if (!effectiveTemplateSkillId) return config;
   return {
     ...config,
     orbit: {
       ...(config.orbit ?? DEFAULT_ORBIT),
-      templateSkillId: effectiveTemplateSkillId,
+      ...(effectiveTemplateSkillId ? { templateSkillId: effectiveTemplateSkillId } : {}),
+      ...(workspaceContext
+        ? {
+            workspaceScope: {
+              workspaceId: workspaceContext.workspaceId,
+              workspaceMemberId: workspaceContext.workspaceMemberId,
+            },
+          }
+        : config.orbit?.workspaceScope
+          ? { workspaceScope: config.orbit.workspaceScope }
+          : {}),
     },
   };
 }
@@ -6546,6 +6741,7 @@ function OrbitSection({
   composioApiKeyConfigured,
   daemonMediaProviders,
   daemonMediaProvidersFetchState,
+  workspaceContext,
   onOpenComposioSection,
   onLeaveForOrbitProject,
 }: {
@@ -6558,6 +6754,7 @@ function OrbitSection({
   composioApiKeyConfigured: boolean;
   daemonMediaProviders?: AppConfig['mediaProviders'] | null;
   daemonMediaProvidersFetchState?: 'idle' | 'ok' | 'error';
+  workspaceContext: WorkspaceCollabContext | null;
   /** Switch the parent settings dialog to the Connectors (Composio) tab.
    *  Used by the Orbit gate's primary CTA so the user can fix the
    *  prerequisite without leaving the dialog. */
@@ -6607,7 +6804,20 @@ function OrbitSection({
   const updateOrbit = (patch: Partial<NonNullable<AppConfig['orbit']>>) => {
     setCfg((curr) => ({
       ...curr,
-      orbit: { ...(curr.orbit ?? DEFAULT_ORBIT), ...patch },
+      orbit: {
+        ...(curr.orbit ?? DEFAULT_ORBIT),
+        ...patch,
+        ...(workspaceContext
+          ? {
+              workspaceScope: {
+                workspaceId: workspaceContext.workspaceId,
+                workspaceMemberId: workspaceContext.workspaceMemberId,
+              },
+            }
+          : curr.orbit?.workspaceScope
+            ? { workspaceScope: curr.orbit.workspaceScope }
+            : {}),
+      },
     }));
   };
 
@@ -6717,7 +6927,7 @@ function OrbitSection({
 
     void (async () => {
       try {
-        const runConfig = configForManualOrbitRun(cfg);
+        const runConfig = configForManualOrbitRun(cfg, workspaceContext);
         const payload = await persistConfigAndRunOrbit(runConfig, {
           daemonProviders: daemonMediaProviders,
           syncMediaProviders: daemonMediaProvidersFetchState === 'ok',
@@ -6762,7 +6972,11 @@ function OrbitSection({
   const lastRunAbs = lastRun ? new Date(lastRun.completedAt).toLocaleString() : null;
   const lastRunRel = formatRelative(lastRun?.completedAt, t);
   const liveArtifactHref = lastRun?.artifactId && lastRun?.artifactProjectId
-    ? `/api/live-artifacts/${encodeURIComponent(lastRun.artifactId)}/preview?projectId=${encodeURIComponent(lastRun.artifactProjectId)}`
+    ? orbitLiveArtifactHref(
+        lastRun.artifactProjectId,
+        lastRun.artifactId,
+        workspaceContext,
+      )
     : null;
   const isBusy = running || Boolean(status?.running);
 
@@ -7466,6 +7680,49 @@ function MediaProvidersSection({
       return next;
     });
   };
+  // #5517 redesign: the section renders a pill selector (one pill per
+  // available provider, with a configured-state dot) plus ONE detail card
+  // for the selected provider, instead of a flat stack of rows.
+  //
+  // The initial selection is pinned eagerly (not left null): the pill order
+  // re-sorts live as entries become configured/cleared, so deriving the
+  // default from `availableProviders[0]` on every render would make the
+  // detail card jump to a different provider mid-edit (e.g. right after
+  // Clear). Pinning keeps the card stable; clicking a pill re-pins.
+  const [activeProviderId, setActiveProviderId] = useState<string | null>(
+    () => availableProviders[0]?.id ?? null,
+  );
+  const activeProvider = availableProviders.find((p) => p.id === activeProviderId)
+    ?? availableProviders[0]
+    ?? null;
+  // Capability chip copy is derived from the provider's marketing hint —
+  // deliberately English tags ("Image · Audio · Custom configuration"), matching
+  // the reference design.
+  const providerCapabilityLabel = (provider: MediaProvider) => {
+    const hint = provider.hint.toLowerCase();
+    const parts: string[] = [];
+    if (/image|imagen|flux|dall|banana|leonardo|gpt-image|seedream/.test(hint)) parts.push('Image');
+    if (/video|sora|veo|wan|seedance|grok-imagine/.test(hint)) parts.push('Video');
+    if (/voice|speech|audio|sfx|tts|clone/.test(hint) || provider.id === 'senseaudio') parts.push('Audio');
+    if (/research|search/.test(hint)) parts.push('Research');
+    if (provider.supportsCustomModel) parts.push('Custom configuration');
+    if (parts.length === 0) {
+      return provider.credentialsRequired === false
+        ? t('settings.mediaProviderNoKeyRequired')
+        : 'API key';
+    }
+    return parts.slice(0, 3).join(' · ');
+  };
+  const activeEntry = activeProvider
+    ? cfg.mediaProviders?.[activeProvider.id] ?? { apiKey: '', baseUrl: '', model: '' }
+    : null;
+  const activeHasPendingEdit = Boolean(activeEntry?.apiKey.trim());
+  const activeIsSavedState = Boolean(
+    activeEntry && (activeHasPendingEdit || activeEntry.apiKeyConfigured) && !activeHasPendingEdit,
+  );
+  const activeClearable = Boolean(activeEntry && isStoredMediaProviderEntryPresent(activeEntry));
+  const activeApiKeyVisible = activeProvider ? visibleApiKeys.has(activeProvider.id) : false;
+  const activeRequiresCredentials = activeProvider?.credentialsRequired !== false;
 
   return (
     <section className="settings-section">
@@ -7487,8 +7744,12 @@ function MediaProvidersSection({
           {reloadNotice.message}
         </VisuallyHidden>
       ) : null}
-      {onReloadMediaProviders ? (
-        <div className="media-provider-reload-row">
+      <div className="media-provider-page-head">
+        <div>
+          <h3>{t('settings.mediaProviders')}</h3>
+          <p>{t('settings.mediaProvidersHint')}</p>
+        </div>
+        {onReloadMediaProviders ? (
           <button
             type="button"
             className={`ghost media-provider-reload-btn${
@@ -7510,7 +7771,7 @@ function MediaProvidersSection({
             ) : reloadNotice?.kind === 'success' ? (
               <>
                 <Icon name="check" size={13} />
-                <span style={{ marginLeft: 4 }}>Reloaded</span>
+                <span style={{ marginLeft: 4 }}>{t('settings.mediaProviderReload')}</span>
               </>
             ) : (
               <>
@@ -7519,169 +7780,211 @@ function MediaProvidersSection({
               </>
             )}
           </button>
+        ) : null}
+      </div>
+      <div
+        className="protocol-chips protocol-chips--providers media-provider-tabs"
+        role="tablist"
+        aria-label={t('settings.mediaProviders')}
+      >
+        <div className="protocol-chip-group protocol-chip-group--providers">
+          <span className="protocol-chip-group-label">{t('settings.mediaProviderModelProviders')}</span>
+          <div className="protocol-chip-group-options">
+            {availableProviders.map((provider) => {
+              const active = activeProvider?.id === provider.id;
+              const entry = cfg.mediaProviders?.[provider.id];
+              const connected = provider.credentialsRequired === false
+                || isStoredMediaProviderEntryPresent(entry);
+              const statusLabel = connected
+                ? t('settings.mediaProviderConfigured')
+                : t('settings.mediaProviderUnset');
+              return (
+                <button
+                  key={provider.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  className={'protocol-chip' + (active ? ' active' : '')}
+                  title={`${provider.label} · ${statusLabel}`}
+                  onClick={() => setActiveProviderId(provider.id)}
+                >
+                  <span
+                    className={`media-provider-chip-status${connected ? ' is-connected' : ' is-disconnected'}`}
+                    aria-hidden
+                  />
+                  <span>{provider.label}</span>
+                  <VisuallyHidden>{statusLabel}</VisuallyHidden>
+                </button>
+              );
+            })}
+          </div>
         </div>
-      ) : null}
-      <div className="media-provider-list">
-        {availableProviders.map((provider) => {
-          const entry = cfg.mediaProviders?.[provider.id] ?? { apiKey: '', baseUrl: '', model: '' };
-          const hasPendingEdit = Boolean(entry.apiKey.trim());
-          const isSavedState = Boolean((hasPendingEdit || entry.apiKeyConfigured) && !hasPendingEdit);
-          const tail = entry.apiKeyTail?.trim();
-          // Every provider rendered in the main list is integrated by
-          // construction (see availableProviders filter), so the inputs
-          // are always editable here. Non-integrated entries live in
-          // the "Coming soon" <details> below.
-          const disabled = false;
-          const supportsCustomModel = provider.supportsCustomModel === true;
-          const requiresCredentials = provider.credentialsRequired !== false;
-          const clearable = isStoredMediaProviderEntryPresent(entry);
-          const apiKeyVisible = visibleApiKeys.has(provider.id);
-          return (
-            <div key={provider.id} className="media-provider-row">
-              <div className="media-provider-head">
-                <div className="media-provider-meta">
-                  {/*
-                    Provider name + "Saved" badge sit on a single row.
-                    The badge used to render below the name with a green
-                    success-pill treatment, which clashed with the green
-                    "Integrated" badge on the right of the same row and
-                    pushed the model hint two lines down. Inline + a
-                    neutral muted treatment keeps the row scannable: green
-                    means "we support this", blue means "you configured
-                    it", gray means "your key is persisted" — three
-                    distinct hues, three distinct meanings.
-                  */}
-                  <div className="media-provider-name-row">
-                    <span className="media-provider-name">{provider.label}</span>
-                    {isSavedState ? (
-                      <span
-                        className="field-status-badge field-status-badge--inline"
-                        title={t('settings.connectorsSavedTitle')}
-                      >
-                        {tail
-                          ? t('settings.connectorsSavedWithTail', { tail })
-                          : t('settings.connectorsSaved')}
-                      </span>
-                    ) : null}
-                  </div>
-                  <span className="media-provider-hint">{provider.hint}</span>
-                </div>
-                {/*
-                  Right-side badges deliberately omitted now: every row
-                  in this list is "Integrated" by definition and the
-                  "Configured" pill duplicated the inline "Saved" chip
-                  next to the provider name. Three pills per row read
-                  as warnings; one chip reads as status.
-                */}
+      </div>
+      {activeProvider && activeEntry ? (
+        <article className="media-provider-detail">
+          <div className="media-provider-detail-head">
+            <div className="media-provider-meta">
+              <div className="media-provider-name-row">
+                <h3>{activeProvider.label}</h3>
+                {activeIsSavedState ? (
+                  <span
+                    className="field-status-badge field-status-badge--inline"
+                    title={t('settings.mediaProviderConfigured')}
+                  >
+                    {t('settings.mediaProviderConfigured')}
+                  </span>
+                ) : null}
               </div>
-              {provider.id === 'grok' ? <XaiOAuthControl /> : null}
-              {requiresCredentials ? (
-                <div className="media-provider-body">
-                  <div className="media-provider-secret-field">
-                    <input
-                      type={apiKeyVisible ? 'text' : 'password'}
-                      value={entry.apiKey}
-                      placeholder={isSavedState ? t('settings.connectorsReplaceKeyPlaceholder') : t('settings.mediaProviderPlaceholder')}
-                      aria-label={`${provider.label} ${t('settings.mediaProviderApiKey')}`}
-                      disabled={disabled}
-                      onFocus={() => {
-                        trackSettingsMediaProvidersClick(analytics.track, {
-                          page_name: 'settings',
-                          area: 'media_providers',
-                          element: 'key_input',
-                          providers_id: provider.id,
-                          is_configured: clearable,
-                        });
-                      }}
-                      onChange={(e) => updateProvider(provider, { apiKey: e.target.value })}
-                    />
-                    <button
-                      type="button"
-                      className="secret-visibility-button"
-                      disabled={disabled}
-                      aria-label={
-                        apiKeyVisible
-                          ? `${provider.label} ${t('settings.hideKey')}`
-                          : `${provider.label} ${t('settings.showKey')}`
-                      }
-                      aria-pressed={apiKeyVisible}
-                      onClick={() => toggleApiKeyVisibility(provider.id)}
-                    >
-                        <Icon name={apiKeyVisible ? 'eye' : 'eye-off'} size={15} />
-                      </button>
-                    </div>
+              <p>{activeProvider.hint || providerCapabilityLabel(activeProvider)}</p>
+            </div>
+            <div className="media-provider-badges">
+              <span className="media-provider-badge integrated">
+                {providerCapabilityLabel(activeProvider)}
+              </span>
+              {activeProvider.credentialsRequired === false ? (
+                <span className="media-provider-badge on">
+                  {t('settings.mediaProviderNoKeyRequired')}
+                </span>
+              ) : null}
+            </div>
+          </div>
+          {activeProvider.id === 'grok' ? <XaiOAuthControl /> : null}
+          {activeRequiresCredentials ? (
+            <div className="media-provider-detail-grid">
+              <label className="media-provider-detail-field">
+                <span>{t('settings.mediaProviderApiKey')}</span>
+                <div className="media-provider-secret-field">
                   <input
-                    value={entry.baseUrl}
-                    placeholder={provider.defaultBaseUrl || t('settings.mediaProviderBaseUrlPlaceholder')}
-                    aria-label={`${provider.label} ${t('settings.mediaProviderBaseUrl')}`}
-                    disabled={disabled}
+                    type={activeApiKeyVisible ? 'text' : 'password'}
+                    value={activeEntry.apiKey}
+                    placeholder={activeIsSavedState ? t('settings.connectorsReplaceKeyPlaceholder') : t('settings.mediaProviderPlaceholder')}
+                    aria-label={`${activeProvider.label} ${t('settings.mediaProviderApiKey')}`}
                     onFocus={() => {
                       trackSettingsMediaProvidersClick(analytics.track, {
                         page_name: 'settings',
                         area: 'media_providers',
-                        element: 'url_input',
-                        providers_id: provider.id,
-                        is_configured: clearable,
+                        element: 'key_input',
+                        providers_id: activeProvider.id,
+                        is_configured: activeClearable,
                       });
                     }}
-                    onChange={(e) => updateProvider(provider, { baseUrl: e.target.value })}
+                    onChange={(e) => updateProvider(activeProvider, { apiKey: e.target.value })}
                   />
-                  {supportsCustomModel ? (
-                    <input
-                      value={entry.model ?? ''}
-                      placeholder="gemini-3.1-flash-image-preview"
-                      aria-label={`${provider.label} model`}
-                      disabled={disabled}
-                      onChange={(e) => updateProvider(provider, { model: e.target.value })}
-                    />
-                  ) : null}
                   <button
                     type="button"
-                    className="ghost"
-                    disabled={!clearable}
-                    onClick={() => {
-                      trackSettingsMediaProvidersClick(analytics.track, {
-                        page_name: 'settings',
-                        area: 'media_providers',
-                        element: 'clear',
-                        providers_id: provider.id,
-                        // The click reports the state at the moment the
-                        // user pressed Clear; the actual clear only lands
-                        // after they confirm the dialog below, but the
-                        // dashboard cares about the intent signal.
-                        is_configured: clearable,
-                      });
-                      // Match the existing window.confirm guard the rest of
-                      // the app uses for destructive actions (conversation
-                      // delete, design delete, file delete in FileWorkspace).
-                      // Without this a stray click on the row's Clear button
-                      // wipes the saved key with no recovery. Issue #737.
-                      if (
-                        !confirm(
-                          t('settings.mediaProviderClearConfirm', {
-                            name: provider.label,
-                          }),
-                        )
-                      ) {
-                        return;
-                      }
-                      updateProvider(provider, {
-                        apiKey: '',
-                        baseUrl: '',
-                        model: '',
-                        apiKeyConfigured: false,
-                        apiKeyTail: '',
-                      });
-                    }}
+                    className="secret-visibility-button"
+                    aria-label={
+                      activeApiKeyVisible
+                        ? `${activeProvider.label} ${t('settings.hideKey')}`
+                        : `${activeProvider.label} ${t('settings.showKey')}`
+                    }
+                    aria-pressed={activeApiKeyVisible}
+                    onClick={() => toggleApiKeyVisibility(activeProvider.id)}
                   >
-                    {t('settings.mediaProviderClear')}
+                    <Icon name={activeApiKeyVisible ? 'eye' : 'eye-off'} size={15} />
                   </button>
                 </div>
-              ) : null}
+              </label>
+              <label className="media-provider-detail-field">
+                <span>{t('settings.mediaProviderBaseUrl')}</span>
+                <input
+                  value={activeEntry.baseUrl}
+                  placeholder={activeProvider.defaultBaseUrl || t('settings.mediaProviderBaseUrlPlaceholder')}
+                  aria-label={`${activeProvider.label} ${t('settings.mediaProviderBaseUrl')}`}
+                  onFocus={() => {
+                    trackSettingsMediaProvidersClick(analytics.track, {
+                      page_name: 'settings',
+                      area: 'media_providers',
+                      element: 'url_input',
+                      providers_id: activeProvider.id,
+                      is_configured: activeClearable,
+                    });
+                  }}
+                  onChange={(e) => updateProvider(activeProvider, { baseUrl: e.target.value })}
+                />
+              </label>
+              <label className="media-provider-detail-field">
+                <span>{t('settings.mediaProviderModel')}</span>
+                <input
+                  value={activeEntry.model ?? ''}
+                  placeholder={activeProvider.customModelPlaceholder ?? t('settings.mediaProviderModelPlaceholder')}
+                  aria-label={`${activeProvider.label} ${t('settings.mediaProviderModel')}`}
+                  onChange={(e) => updateProvider(activeProvider, { model: e.target.value })}
+                />
+              </label>
             </div>
-          );
-        })}
-      </div>
+          ) : (
+            <div className="media-provider-no-key">
+              <Icon name="check" size={15} />
+              <div>
+                <strong>{t('settings.mediaProviderNoKeyRequired')}</strong>
+                <span>{t('settings.mediaProviderNoKeyHint')}</span>
+              </div>
+            </div>
+          )}
+          <div className="media-provider-docs-callout">
+            <div>
+              <strong>{t('settings.mediaProviderDocsTitle')}</strong>
+              <span>{t('settings.mediaProviderDocsHint')}</span>
+            </div>
+            {activeProvider.docsUrl ? (
+              <a
+                href={sanitizeHttpsUrl(activeProvider.docsUrl) ?? undefined}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ghost-link"
+              >
+                {t('settings.agentInstall.docs')}
+                <Icon name="external-link" size={14} />
+              </a>
+            ) : null}
+          </div>
+          <div className="media-provider-detail-actions">
+            <span className="hint">{t('settings.mediaProviderSaveHint')}</span>
+            <button
+              type="button"
+              className="ghost"
+              disabled={!activeClearable}
+              onClick={() => {
+                trackSettingsMediaProvidersClick(analytics.track, {
+                  page_name: 'settings',
+                  area: 'media_providers',
+                  element: 'clear',
+                  providers_id: activeProvider.id,
+                  // The click reports the state at the moment the
+                  // user pressed Clear; the actual clear only lands
+                  // after they confirm the dialog below, but the
+                  // dashboard cares about the intent signal.
+                  is_configured: activeClearable,
+                });
+                // Match the existing window.confirm guard the rest of
+                // the app uses for destructive actions (conversation
+                // delete, design delete, file delete in FileWorkspace).
+                // Without this a stray click on the Clear button wipes
+                // the saved key with no recovery. Issue #737.
+                if (
+                  !confirm(
+                    t('settings.mediaProviderClearConfirm', {
+                      name: activeProvider.label,
+                    }),
+                  )
+                ) {
+                  return;
+                }
+                updateProvider(activeProvider, {
+                  apiKey: '',
+                  baseUrl: '',
+                  model: '',
+                  apiKeyConfigured: false,
+                  apiKeyTail: '',
+                });
+              }}
+            >
+              {t('settings.mediaProviderClear')}
+            </button>
+          </div>
+        </article>
+      ) : null}
       {comingSoonProviders.length > 0 ? (
         // Roadmap drawer. We still want to advertise that we know
         // these providers exist (so users don't ask "where is Fal?"),
@@ -7696,7 +7999,7 @@ function MediaProvidersSection({
               {t('tasks.comingSoon')}
             </span>
             <span className="filter-pill-count">
-              {comingSoonProviders.length}
+              ({comingSoonProviders.length})
             </span>
           </summary>
           <p className="hint" style={{ marginTop: 4, marginBottom: 8 }}>
@@ -8172,6 +8475,10 @@ function IntegrationsSection() {
   return (
     <section className="settings-section">
       <div className="mcp-client-body">
+        <div className="mcp-page-head">
+          <h3>{t('settings.mcpTitle')}</h3>
+        </div>
+
         {infoError ? (
           <div
             className="empty-card"
@@ -8181,7 +8488,6 @@ function IntegrationsSection() {
           </div>
         ) : null}
 
-        {/* Group 1: what the MCP server does */}
         <div className="mcp-capabilities-card">
           <p className="mcp-capabilities-label">
             {t('settings.mcpCapabilitiesTitle')}
@@ -8193,7 +8499,7 @@ function IntegrationsSection() {
           </ul>
         </div>
 
-        {/* Group 2: setup flow */}
+        {/* Setup flow */}
         <div className="mcp-setup-card">
           <div
             className="ds-picker"
@@ -8255,7 +8561,7 @@ function IntegrationsSection() {
           ) : null}
         </div>
 
-        {info ? (
+        {info && client.id !== 'claude' ? (
           <p style={{ margin: 0 }}>{client.buildInstruction(info)}</p>
         ) : null}
 
@@ -8300,15 +8606,14 @@ function IntegrationsSection() {
             style={{
               background: 'var(--surface-2, #11141a)',
               color: 'var(--fg-1, #e6e6e6)',
-              // Reserve top clearance for the absolutely-positioned
-              // Copy button so the first line of the snippet does not
-              // sit underneath it, and reserve right clearance so a
-              // wrapped bash one-liner stops short of the button rather
-              // than scrolling behind it. The right padding is sized
-              // for the wider "Copied" post-click state (icon + text +
-              // button padding + the 8px right offset) with a few px
-              // of buffer for elevated font sizes / zoom. Issue #632.
-              padding: '40px 104px 12px 14px',
+              // Top-align the snippet (first line sits at the top, level with
+              // the Copy button) — the right padding already reserves the
+              // button's horizontal lane so the first line never runs under it.
+              // The right padding is sized for the wider "Copied" post-click
+              // state (icon + text + button padding + the 8px right offset)
+              // with a few px of buffer for elevated font sizes / zoom.
+              // Issue #632.
+              padding: '12px 104px 12px 14px',
               borderRadius: 8,
               overflowX: 'auto',
               fontFamily:
@@ -8334,9 +8639,11 @@ function IntegrationsSection() {
                 background: 'transparent',
                 padding: 0,
                 borderRadius: 0,
-                color: 'inherit',
                 fontFamily: 'inherit',
                 fontSize: 'inherit',
+                // Terminal-green text on the bare dark surface (#3BBF7D = the
+                // dark theme --green; the block stays dark in both themes).
+                color: '#3BBF7D',
               }}
             >
               {snippet ||
@@ -8356,11 +8663,12 @@ function IntegrationsSection() {
               right: 8,
               padding: '4px 10px',
               fontSize: 12,
+              borderRadius: 999,
             }}
             aria-label={t('settings.mcpCopyAria')}
           >
             <Icon name={copied ? 'check' : 'copy'} size={14} />
-            <span style={{ marginLeft: 6 }}>{copied ? t('settings.mcpCopied') : t('settings.mcpCopy')}</span>
+            <span style={{ marginLeft: 4 }}>{copied ? t('settings.mcpCopied') : t('settings.mcpCopy')}</span>
           </button>
         </div>
 
@@ -8383,130 +8691,10 @@ function IntegrationsSection() {
           </div>
         ) : null}
 
-        {/* Restart note is a "next step" after running the command,
-            not an error — keep it right after the code block. */}
-        <div
-          style={{
-            padding: '10px 12px',
-            background: 'var(--bg-subtle)',
-            border: '1px solid var(--border)',
-            borderLeft: '3px solid var(--border-strong)',
-            borderRadius: 6,
-            fontSize: 13,
-            lineHeight: 1.5,
-          }}
-        >
-          <strong>{t('settings.mcpRestartNote')}</strong>{' '}
-          <span style={{ color: 'var(--text-muted)' }}>
-            {t('settings.mcpRestartDetail')}
-          </span>
-        </div>
-
-          <p className="mcp-running-note">
-            {t('settings.mcpRunningNote')}
-          </p>
+        <p className="mcp-running-note">
+          {t('settings.mcpRunningNote')}
+        </p>
         </div>{/* end mcp-setup-card */}
-      </div>
-    </section>
-  );
-}
-
-const THEMES: Array<{ value: AppTheme; labelKey: 'settings.themeSystem' | 'settings.themeLight' | 'settings.themeDark'; icon?: 'sun' | 'moon' }> = [
-  { value: 'system', labelKey: 'settings.themeSystem' },
-  { value: 'light', labelKey: 'settings.themeLight', icon: 'sun' },
-  { value: 'dark', labelKey: 'settings.themeDark', icon: 'moon' },
-];
-
-function AppearanceSection({
-  cfg,
-  setCfg,
-}: {
-  cfg: AppConfig;
-  setCfg: Dispatch<SetStateAction<AppConfig>>;
-}) {
-  const { t } = useI18n();
-  const analytics = useAnalytics();
-  const current = cfg.theme ?? 'system';
-  const currentAccent = normalizeAccentColor(cfg.accentColor) ?? DEFAULT_ACCENT_COLOR;
-  const accentLabel = t('pet.fieldAccent');
-  const defaultAccentLabel = t('pet.fieldAccentDefault');
-  const customAccentLabel = t('pet.fieldAccentCustom');
-
-  // Apply the draft theme immediately so the user sees a live preview
-  // before hitting Save. SettingsDialog's cleanup reverts this on cancel.
-  useLayoutEffect(() => {
-    applyAppearanceToDocument({
-      theme: current,
-      accentColor: currentAccent,
-    });
-  }, [current, currentAccent]);
-
-  const setAccentColor = (color: string) => {
-    setCfg((c) => ({ ...c, accentColor: normalizeAccentColor(color) ?? c.accentColor ?? DEFAULT_ACCENT_COLOR }));
-  };
-
-  return (
-    <section className="settings-section">
-      <div className="seg-control" role="group" aria-label={t('settings.appearance')} style={{ '--seg-cols': THEMES.length } as React.CSSProperties}>
-        {THEMES.map(({ value, labelKey, icon }) => (
-          <button
-            key={value}
-            type="button"
-            className={'seg-btn' + (current === value ? ' active' : '')}
-            aria-pressed={current === value}
-            onClick={() => {
-              // P1 ui_click area=appearance — `system|light|dark` only
-              // emits from the segmented control; accent swatch picks
-              // use `accent_color` with the swatch hex below.
-              if (value === 'system' || value === 'light' || value === 'dark') {
-                trackSettingsAppearanceClick(analytics.track, {
-                  page_name: 'settings',
-                  area: 'appearance',
-                  element: value,
-                });
-              }
-              setCfg((c) => ({ ...c, theme: value }));
-            }}
-          >
-            {icon ? <Icon name={icon} size={14} aria-hidden="true" /> : null}
-            <span className="seg-title">{t(labelKey)}</span>
-          </button>
-        ))}
-      </div>
-      <div className="field">
-        <span className="field-label">{accentLabel}</span>
-        <div className="pet-swatches" role="radiogroup" aria-label={accentLabel}>
-          {ACCENT_SWATCHES.map((color) => {
-            const active = currentAccent === color;
-            return (
-              <button
-                key={color}
-                type="button"
-                className={`pet-swatch${active ? ' active' : ''}`}
-                style={{ background: color }}
-                aria-label={color === DEFAULT_ACCENT_COLOR ? defaultAccentLabel : color}
-                aria-checked={active}
-                role="radio"
-                onClick={() => {
-                  trackSettingsAppearanceClick(analytics.track, {
-                    page_name: 'settings',
-                    area: 'appearance',
-                    element: 'accent_color',
-                    color,
-                  });
-                  setAccentColor(color);
-                }}
-              />
-            );
-          })}
-          <input
-            type="color"
-            aria-label={customAccentLabel}
-            className="pet-swatch-picker"
-            value={currentAccent}
-            onChange={(e) => setAccentColor(e.target.value)}
-          />
-        </div>
       </div>
     </section>
   );
@@ -8539,12 +8727,88 @@ function AppearanceSection({
  * the user that per-project persistence requires opening a project
  * first. That matches the actual scope of the wire-up.
  */
-function CritiqueTheaterSection() {
+function CritiqueTheaterSection({
+  callerWorkspaceContext,
+  persistedProjectWorkspaceId,
+}: {
+  callerWorkspaceContext: WorkspaceCollabContext | null;
+  persistedProjectWorkspaceId: string | null;
+}) {
+  const route = useRoute();
+  const activeProjectId = route.kind === 'project' ? route.projectId : null;
+  return activeProjectId
+    ? (
+      <ProjectScopedCritiqueTheaterSection
+        projectId={activeProjectId}
+        callerWorkspaceContext={callerWorkspaceContext}
+        persistedProjectWorkspaceId={persistedProjectWorkspaceId}
+      />
+    )
+    : (
+      <CritiqueTheaterSectionContent
+        activeProjectId={null}
+        projectScopeReady
+        workspaceContext={null}
+      />
+    );
+}
+
+function ProjectScopedCritiqueTheaterSection({
+  projectId,
+  callerWorkspaceContext,
+  persistedProjectWorkspaceId,
+}: {
+  projectId: string;
+  callerWorkspaceContext: WorkspaceCollabContext | null;
+  persistedProjectWorkspaceId: string | null;
+}) {
+  const projectScope = useProjectWorkspaceScope(
+    projectId,
+    callerWorkspaceContext,
+    persistedProjectWorkspaceId,
+  );
+  return (
+    <CritiqueTheaterSectionContent
+      activeProjectId={projectId}
+      projectScopeReady={projectWorkspaceScopeReady(projectScope.scope)}
+      workspaceContext={projectWorkspaceContext(projectScope.scope)}
+    />
+  );
+}
+
+function CritiqueTheaterSectionContent({
+  activeProjectId,
+  projectScopeReady,
+  workspaceContext,
+}: {
+  activeProjectId: string | null;
+  projectScopeReady: boolean;
+  workspaceContext: WorkspaceCollabContext | null;
+}) {
   const { t } = useI18n();
   const analytics = useAnalytics();
   const enabled = useCritiqueTheaterEnabled();
-  const route = useRoute();
-  const activeProjectId = route.kind === 'project' ? route.projectId : null;
+
+  const handleToggle = () => {
+    const next = !enabled;
+    trackSettingsDesignReviewClick(analytics.track, {
+      page_name: 'settings',
+      area: 'design_review',
+      element: 'enable_toggle',
+      status_before: enabled ? 'on' : 'off',
+      status_after: next ? 'on' : 'off',
+      has_active_project: activeProjectId !== null,
+    });
+    if (activeProjectId !== null && projectScopeReady) {
+      void setCritiqueTheaterEnabled(next, {
+        projectId: activeProjectId,
+        workspaceContext,
+      });
+    } else {
+      void setCritiqueTheaterEnabled(next);
+    }
+  };
+
   return (
     <section className="settings-section">
       <div className="section-head">
@@ -8553,44 +8817,32 @@ function CritiqueTheaterSection() {
           <p className="hint">{t('critiqueTheater.settingsNavHint')}</p>
         </div>
       </div>
-      <label className="field">
-        <span className="field-label">
-          <input
-            type="checkbox"
-            checked={enabled}
-            onChange={(e) => {
-              const next = e.target.checked;
-              trackSettingsDesignReviewClick(analytics.track, {
-                page_name: 'settings',
-                area: 'design_review',
-                element: 'enable_toggle',
-                status_before: enabled ? 'on' : 'off',
-                status_after: next ? 'on' : 'off',
-                has_active_project: activeProjectId !== null,
-              });
-              if (activeProjectId !== null) {
-                void setCritiqueTheaterEnabled(next, { projectId: activeProjectId });
-              } else {
-                void setCritiqueTheaterEnabled(next);
-              }
-            }}
-          />
-          {' '}
-          {t('critiqueTheater.settingsEnabledLabel')}
+      {/* Renders as the same `toggle-row` switch the rest of General uses, per
+          #5517 — the bare checkbox this replaces floated free of the label
+          because `.settings-general-block` hides the section-head that used to
+          anchor it. The .critique-theater-toggle styles were already shipped. */}
+      <button
+        type="button"
+        className={`toggle-row critique-theater-toggle${enabled ? ' on' : ''}`}
+        role="switch"
+        aria-checked={enabled}
+        onClick={handleToggle}
+      >
+        <span className="toggle-row-text">
+          <span className="toggle-row-label">
+            {t('critiqueTheater.settingsEnabledLabel')}
+          </span>
+          <span className="toggle-row-hint">
+            {t('critiqueTheater.settingsEnabledDescription')}
+          </span>
+          <span className="toggle-row-hint">
+            {activeProjectId !== null
+              ? t('critiqueTheater.settingsEnabledProjectHint')
+              : t('critiqueTheater.settingsEnabledNoProjectHint')}
+          </span>
         </span>
-        <small className="hint">
-          {t('critiqueTheater.settingsEnabledDescription')}
-        </small>
-        {activeProjectId !== null ? (
-          <small className="hint">
-            {t('critiqueTheater.settingsEnabledProjectHint')}
-          </small>
-        ) : (
-          <small className="hint">
-            {t('critiqueTheater.settingsEnabledNoProjectHint')}
-          </small>
-        )}
-      </label>
+        <span className="toggle-row-switch" aria-hidden="true" />
+      </button>
     </section>
   );
 }
@@ -8720,19 +8972,26 @@ function NotificationsSection({
           <div className="settings-notify-card-header">
             <h4>{t('settings.notifyCompletionSound')}</h4>
             <div className="section-head-actions">
-              <div className="seg-control" role="group" aria-label={t('settings.notifyCompletionSound')} style={{ '--seg-cols': 1 } as React.CSSProperties}>
+              <div className="seg-control" role="group" aria-label={t('settings.notifyCompletionSound')} style={{ '--seg-cols': 2 } as React.CSSProperties}>
                 <button
                   type="button"
-                  className={'seg-btn' + (notif.soundEnabled ? ' active' : '')}
+                  className={'seg-btn seg-btn--on' + (notif.soundEnabled ? ' active' : '')}
                   aria-pressed={notif.soundEnabled}
-                  onClick={toggleSound}
+                  onClick={() => { if (!notif.soundEnabled) toggleSound(); }}
                 >
-                  <span className="seg-title">{notif.soundEnabled ? t('common.active') : t('common.offline')}</span>
+                  <span className="seg-title">{t('common.active')}</span>
+                </button>
+                <button
+                  type="button"
+                  className={'seg-btn' + (!notif.soundEnabled ? ' active' : '')}
+                  aria-pressed={!notif.soundEnabled}
+                  onClick={() => { if (notif.soundEnabled) toggleSound(); }}
+                >
+                  <span className="seg-title">{t('common.inactive')}</span>
                 </button>
               </div>
             </div>
           </div>
-          <p className="hint settings-notify-card-hint">{t('settings.notifyCompletionSoundHint')}</p>
         </div>
 
         {notif.soundEnabled ? (
@@ -8799,20 +9058,28 @@ function NotificationsSection({
           <div className="settings-notify-card-header">
             <h4>{t('settings.notifyDesktop')}</h4>
             <div className="section-head-actions">
-              <div className="seg-control" role="group" aria-label={t('settings.notifyDesktop')} style={{ '--seg-cols': 1 } as React.CSSProperties}>
+              <div className="seg-control" role="group" aria-label={t('settings.notifyDesktop')} style={{ '--seg-cols': 2 } as React.CSSProperties}>
                 <button
                   type="button"
-                  className={'seg-btn' + (notif.desktopEnabled ? ' active' : '')}
+                  className={'seg-btn seg-btn--on' + (notif.desktopEnabled ? ' active' : '')}
                   aria-pressed={notif.desktopEnabled}
                   disabled={permission === 'unsupported'}
-                  onClick={() => { void toggleDesktop(); }}
+                  onClick={() => { if (!notif.desktopEnabled) void toggleDesktop(); }}
                 >
-                  <span className="seg-title">{notif.desktopEnabled ? t('common.active') : t('common.offline')}</span>
+                  <span className="seg-title">{t('common.active')}</span>
+                </button>
+                <button
+                  type="button"
+                  className={'seg-btn' + (!notif.desktopEnabled ? ' active' : '')}
+                  aria-pressed={!notif.desktopEnabled}
+                  disabled={permission === 'unsupported'}
+                  onClick={() => { if (notif.desktopEnabled) void toggleDesktop(); }}
+                >
+                  <span className="seg-title">{t('common.inactive')}</span>
                 </button>
               </div>
             </div>
           </div>
-          <p className="hint settings-notify-card-hint">{t('settings.notifyDesktopHint')}</p>
         </div>
         {permission === 'unsupported' ? (
           <p className="hint">{t('settings.notifyDesktopUnsupported')}</p>

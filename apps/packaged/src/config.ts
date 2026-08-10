@@ -20,7 +20,7 @@ export const PACKAGED_WEB_STANDALONE_ROOT_ENV = "OD_WEB_STANDALONE_ROOT";
 export const PACKAGED_WEB_OUTPUT_MODE_ENV = "OD_WEB_OUTPUT_MODE";
 
 export type PackagedWebOutputMode = "server" | "standalone";
-export type PackagedAmrProfile = "prod" | "test" | "local";
+export type PackagedAmrProfile = "prod" | "test" | "feature-test" | "local";
 
 export type RawPackagedConfig = {
   amrProfile?: string;
@@ -43,6 +43,13 @@ export type RawPackagedConfig = {
   // either this is absent or the user has declined Privacy → metrics.
   posthogKey?: string;
   posthogHost?: string;
+  // Origin of the vela web console this build's AMR backend serves, baked by
+  // tools/pack from OD_VELA_WEB_URL at packaging time. Forwarded to the daemon
+  // spawn env as OD_VELA_WEB_URL, where it both gates the workspace-team
+  // transports and supplies the workspace console links. Injected rather than
+  // checked in because the non-prod AMR environments are internal deployments
+  // and this repository is public; absent for prod and fork builds.
+  velaWebUrl?: string;
   webSidecarEntryRelative?: string;
   webStandaloneRoot?: string;
   webOutputMode?: string;
@@ -61,6 +68,7 @@ export type PackagedConfig = {
   updateMetadataUrl: string | null;
   posthogKey: string | null;
   posthogHost: string | null;
+  velaWebUrl: string | null;
   webSidecarEntry: string | null;
   webStandaloneRoot: string | null;
   webOutputMode: PackagedWebOutputMode;
@@ -128,11 +136,13 @@ function resolvePackagedWebOutputMode(value: string | undefined): PackagedWebOut
   throw new Error(`unsupported packaged web output mode: ${value}`);
 }
 
-function resolvePackagedAmrProfile(value: string | undefined): PackagedAmrProfile | null {
+export function resolvePackagedAmrProfile(value: string | undefined): PackagedAmrProfile | null {
   const cleaned = cleanOptionalString(value);
   if (cleaned == null) return null;
-  if (cleaned === "prod" || cleaned === "test" || cleaned === "local") return cleaned;
-  throw new Error(`unsupported packaged AMR profile: ${value}`);
+  if (cleaned === "prod" || cleaned === "test" || cleaned === "feature-test" || cleaned === "local") {
+    return cleaned;
+  }
+  throw new Error(`unsupported packaged AMR profile; expected prod, test, feature-test, or local: ${value}`);
 }
 
 function isTruthyEnv(value: string | undefined): boolean {
@@ -205,6 +215,7 @@ export async function readPackagedConfig(): Promise<PackagedConfig> {
     updateMetadataUrl: cleanOptionalString(raw.updateMetadataUrl),
     posthogKey: cleanOptionalString(raw.posthogKey),
     posthogHost: cleanOptionalString(raw.posthogHost),
+    velaWebUrl: cleanOptionalString(raw.velaWebUrl),
     webSidecarEntry,
     webStandaloneRoot,
     webOutputMode,

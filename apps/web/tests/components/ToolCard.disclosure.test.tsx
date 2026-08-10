@@ -21,6 +21,30 @@ function renderTool(use: ToolUse, result?: ToolResult) {
 afterEach(() => cleanup());
 
 describe('ToolCard secondary result disclosures', () => {
+  it('shows model, aspect, and output while an od media generation command is running', () => {
+    const { container } = render(
+      <I18nProvider initial="en">
+        <ToolCard
+          use={{
+            kind: 'tool_use',
+            id: 'media-1',
+            name: 'Bash',
+            input: {
+              command: '"$OD_NODE_BIN" "$OD_BIN" media generate --surface image --model vela/nano-banana-2 --aspect 16:9 --output shoe.png',
+            },
+          }}
+          runStreaming
+          runSucceeded={false}
+        />
+      </I18nProvider>,
+    );
+
+    expect(container.querySelector('.op-title')?.textContent).toBe('media generate');
+    expect(container.querySelector('.op-meta')?.textContent).toBe(
+      'image · vela/nano-banana-2 · 16:9 · shoe.png',
+    );
+  });
+
   it('uses ten distinct semantic category icons and groups every search tool under Search', () => {
     const cases: Array<{
       name: string;

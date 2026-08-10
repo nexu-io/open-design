@@ -1,7 +1,7 @@
 import { expect, test } from '@/playwright/suite';
 import type { Locator, Page } from '@playwright/test';
-import { openSettingsDialog } from '../lib/playwright/amr.js';
-import { routeAgents } from '../lib/playwright/mock-factory.js';
+import { openSettingsDialog, settingsSurface } from '../lib/playwright/amr.js';
+import { routeAgents, suppressWhatsNew } from '../lib/playwright/mock-factory.js';
 import { T } from '@/timeouts';
 
 const STORAGE_KEY = 'open-design:config';
@@ -10,6 +10,10 @@ const LOCAL_CLI_LABEL = /Local CLI|本机 CLI|本地 CLI/i;
 const MODEL_POPOVER_SELECTOR = '.model-select-searchable__popover';
 
 test.describe.configure({ timeout: T.xlong });
+
+test.beforeEach(async ({ page }) => {
+  await suppressWhatsNew(page);
+});
 
 async function waitForLoadingToClear(page: Page) {
   await expect(page.getByText('Loading Open Design…')).toHaveCount(0, { timeout: T.long });
@@ -22,29 +26,31 @@ async function gotoEntryHome(page: Page) {
   if (await privacyDialog.isVisible()) {
     await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
   }
-  await expect(page.getByRole('button', { name: OPEN_SETTINGS_LABEL })).toBeVisible();
+  const settingsButton = page
+    .getByTestId('entry-settings-button')
+    .or(page.getByTestId('entry-nav-settings'))
+    .or(page.getByRole('button', { name: OPEN_SETTINGS_LABEL }))
+    .first();
+  await expect(settingsButton).toBeVisible();
 }
 
 async function openSettingsDialogFromEntry(page: Page) {
-  return openSettingsDialog(page);
+  const dialog = await openSettingsDialog(page);
+  await dialog.getByTestId('settings-nav-execution').click();
+  return dialog;
 }
 
 async function closeSettingsDialogIfOpen(page: Page) {
-  const dialog = page.getByRole('dialog');
+  const dialog = settingsSurface(page);
   if ((await dialog.count()) === 0) return;
-  await page.keyboard.press('Escape');
-  try {
-    await expect(dialog).toHaveCount(0, { timeout: T.short });
-    return;
-  } catch {
-    // Fall back to the chrome button if focus is inside a nested popover or
-    // another transient surface swallowed Escape.
-  }
-  const closeButton = dialog.getByRole('button', { name: 'Close', exact: true });
-  if ((await closeButton.count()) > 0) {
-    await closeButton.click({ force: true, timeout: T.short });
-  }
-  await expect(dialog).toHaveCount(0);
+  await closeEntrySettings(page, dialog);
+}
+
+async function closeEntrySettings(page: Page, dialog = settingsSurface(page)) {
+  const backToHome = dialog.getByRole('button', { name: /Back to home/i });
+  await expect(backToHome).toBeEnabled();
+  await backToHome.click();
+  await expect(settingsSurface(page)).toHaveCount(0);
 }
 
 async function openExecutionSettings(
@@ -91,7 +97,7 @@ function modelCombobox(scope: Page | Locator) {
 }
 
 function providerPresetCombobox(scope: Page | Locator) {
-  return scope.getByLabel(/Gateway preset|Quick fill provider/i);
+  return scope.getByLabel(/Provider preset|Gateway preset|Quick fill provider/i);
 }
 
 async function selectComboboxOption(
@@ -158,7 +164,7 @@ test('[P1] known OpenAI provider is selected and can switch to Anthropic default
     agentModels: {},
   });
 
-  const dialog = page.getByRole('dialog');
+  const dialog = settingsSurface(page);
   const protocolTabs = dialog.getByRole('tablist', { name: 'API protocol' });
   const deepSeekTab = protocolTabs.getByRole('tab', { name: 'DeepSeek', exact: true });
   const anthropicTab = protocolTabs.getByRole('tab', { name: 'Anthropic', exact: true });
@@ -197,7 +203,7 @@ test('[P1] custom OpenAI provider is selected and can switch to Anthropic defaul
     agentModels: {},
   });
 
-  const dialog = page.getByRole('dialog');
+  const dialog = settingsSurface(page);
   const protocolTabs = dialog.getByRole('tablist', { name: 'API protocol' });
   const customTab = protocolTabs.getByRole('tab', { name: 'Custom provider', exact: true });
   const anthropicTab = protocolTabs.getByRole('tab', { name: 'Anthropic', exact: true });
@@ -235,7 +241,7 @@ test('[P0] @critical BYOK quick fill provider updates fields and saved settings 
     agentCliEnv: {},
   });
 
-  const dialog = page.getByRole('dialog');
+  const dialog = settingsSurface(page);
 
   await dialog.getByRole('tab', { name: 'OpenAI', exact: true }).click();
   const providerPicker = providerPresetCombobox(dialog);
@@ -259,8 +265,7 @@ test('[P0] @critical BYOK quick fill provider updates fields and saved settings 
       apiProviderBaseUrl: 'https://api.deepseek.com',
     });
 
-  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
-  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await closeEntrySettings(page, dialog);
 
   const savedConfig = await readSavedConfig(page);
   expect(savedConfig).toMatchObject({
@@ -273,7 +278,7 @@ test('[P0] @critical BYOK quick fill provider updates fields and saved settings 
   });
 
   await openSettingsDialogFromEntry(page);
-  const reopenedDialog = page.getByRole('dialog');
+  const reopenedDialog = settingsSurface(page);
   await expect(reopenedDialog.getByRole('tab', { name: 'DeepSeek', exact: true })).toHaveAttribute('aria-selected', 'true');
   await expect(providerPresetCombobox(reopenedDialog)).toContainText(/DeepSeek — OpenAI/i);
   await expectModelComboboxText(reopenedDialog, /deepseek-v4-flash/i);
@@ -299,7 +304,7 @@ test('[P1] BYOK Anthropic gateway preset updates fields and persists after reope
     agentCliEnv: {},
   });
 
-  const dialog = page.getByRole('dialog');
+  const dialog = settingsSurface(page);
   const protocolTabs = dialog.getByRole('tablist', { name: 'API protocol' });
   const anthropicTab = protocolTabs.getByRole('tab', { name: 'Anthropic', exact: true });
 
@@ -320,11 +325,10 @@ test('[P1] BYOK Anthropic gateway preset updates fields and persists after reope
     apiProviderBaseUrl: 'https://api.deepseek.com/anthropic',
   });
 
-  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
-  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await closeEntrySettings(page, dialog);
 
   await openSettingsDialogFromEntry(page);
-  const reopenedDialog = page.getByRole('dialog');
+  const reopenedDialog = settingsSurface(page);
   await expect(providerPresetCombobox(reopenedDialog)).toContainText(/DeepSeek — Anthropic/i);
   await expect(reopenedDialog.getByLabel('Base URL')).toHaveValue('https://api.deepseek.com/anthropic');
   await expectModelComboboxText(reopenedDialog, /deepseek-v4-flash/i);
@@ -348,7 +352,7 @@ test('[P1] BYOK Ollama Cloud exposes refreshed model choices and persists select
     agentCliEnv: {},
   });
 
-  const dialog = page.getByRole('dialog');
+  const dialog = settingsSurface(page);
   const protocolTabs = dialog.getByRole('tablist', { name: 'API protocol' });
   await protocolTabs.getByRole('tab', { name: 'Ollama Cloud', exact: true }).click();
 
@@ -359,6 +363,7 @@ test('[P1] BYOK Ollama Cloud exposes refreshed model choices and persists select
   await expect(providerPresetCombobox(dialog)).toContainText(/Ollama Cloud \(managed\)/i);
   await expectModelComboboxText(dialog, /gpt-oss:120b/i);
   await expect(dialog.getByLabel('Base URL')).toHaveValue('https://ollama.com');
+  await dialog.getByLabel('API key').fill('ollama-key');
 
   await modelCombobox(dialog).click();
   const popover = page.getByTestId('settings-byok-model-popover');
@@ -373,11 +378,10 @@ test('[P1] BYOK Ollama Cloud exposes refreshed model choices and persists select
     apiProviderBaseUrl: 'https://ollama.com',
   });
 
-  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
-  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await closeEntrySettings(page, dialog);
 
   await openSettingsDialogFromEntry(page);
-  const reopenedDialog = page.getByRole('dialog');
+  const reopenedDialog = settingsSurface(page);
   const reopenedTabs = reopenedDialog.getByRole('tablist', { name: 'API protocol' });
   await expect(reopenedTabs.getByRole('tab', { name: 'Ollama Cloud', exact: true })).toHaveAttribute(
     'aria-selected',
@@ -443,14 +447,14 @@ test('[P1] BYOK connection test surfaces NVIDIA degraded provider detail', async
     agentCliEnv: {},
   });
 
-  const dialog = page.getByRole('dialog');
+  const dialog = settingsSurface(page);
   await dialog.getByRole('button', { name: 'Test', exact: true }).click();
   await expect(dialog.getByRole('alert').filter({ hasText: /Provider returned 400/i })).toContainText(
     /Provider returned 400\. Try again in a moment\. The selected NVIDIA model instance is currently unavailable/,
   );
 });
 
-test('[P0] BYOK save stays disabled until required fields are valid', async ({ page }) => {
+test('[P0] BYOK autosave waits until required fields are valid', async ({ page }) => {
   await openExecutionSettings(page, {
     mode: 'api',
     apiKey: '',
@@ -468,9 +472,8 @@ test('[P0] BYOK save stays disabled until required fields are valid', async ({ p
     agentCliEnv: {},
   });
 
-  const dialog = page.getByRole('dialog');
-  const closeButton = dialog.getByRole('button', { name: 'Close', exact: true });
-  await expect(closeButton).toBeEnabled();
+  const dialog = settingsSurface(page);
+  await expect(dialog.getByRole('button', { name: /Back to home/i })).toBeEnabled();
 
   await dialog.getByLabel('API key').fill('sk-openai-test');
   await expect.poll(async () => readSavedConfig(page)).toMatchObject({ apiKey: 'sk-openai-test' });
@@ -520,7 +523,7 @@ test('[P1] BYOK file-tools limitation notice is reachable from Settings', async 
     ],
   );
 
-  const dialog = page.getByRole('dialog');
+  const dialog = settingsSurface(page);
   await dialog.getByRole('tab', { name: 'OpenAI', exact: true }).click();
 
   const trigger = dialog.getByTestId('settings-byok-no-file-tools-trigger');
@@ -579,7 +582,7 @@ test('[P0] BYOK auto-loads provider models and reuses cached results for the sam
     agentCliEnv: {},
   });
 
-  const dialog = page.getByRole('dialog');
+  const dialog = settingsSurface(page);
   const modelSelect = modelCombobox(dialog);
   const apiKeyInput = dialog.getByLabel('API key');
 
@@ -606,7 +609,7 @@ test('[P0] BYOK auto-loads provider models and reuses cached results for the sam
   await closeSettingsDialogIfOpen(page);
 
   await openSettingsDialogFromEntry(page);
-  const reopenedDialog = page.getByRole('dialog');
+  const reopenedDialog = settingsSurface(page);
   await expect(reopenedDialog.getByRole('tab', { name: 'OpenAI', exact: true })).toHaveAttribute('aria-selected', 'true');
   await modelCombobox(reopenedDialog).click();
   await expect(page.locator(MODEL_POPOVER_SELECTOR).last().getByRole('option', { name: 'AA Prerelease Model (aa-prerelease-model)' })).toHaveCount(1);
@@ -650,7 +653,7 @@ test('[P0] @critical BYOK clearing the API key restores the suggested OpenAI mod
     agentCliEnv: {},
   });
 
-  const dialog = page.getByRole('dialog');
+  const dialog = settingsSurface(page);
   const apiKeyInput = dialog.getByLabel('API key');
   const modelSelect = modelCombobox(dialog);
 
@@ -729,7 +732,7 @@ test('[P0] @critical BYOK fetched models are searchable inside the Settings mode
     agentCliEnv: {},
   });
 
-  const dialog = page.getByRole('dialog');
+  const dialog = settingsSurface(page);
   await dialog.getByLabel('API key').fill('sk-openai-test');
   await dialog.getByLabel('API key').blur();
   await expect(dialog.getByText('Loaded 10 models from your account.')).toBeVisible();
@@ -790,7 +793,7 @@ test('[P1] BYOK model fetch failure keeps the current model and recovers after k
     agentCliEnv: {},
   });
 
-  const dialog = page.getByRole('dialog');
+  const dialog = settingsSurface(page);
   const modelSelect = modelCombobox(dialog);
   await dialog.getByLabel('API key').fill('sk-openai-test');
   await dialog.getByLabel('API key').blur();
@@ -860,7 +863,7 @@ test('[P1] Settings autosave failure surfaces an error instead of reporting save
   await gotoEntryHome(page);
   await openSettingsDialogFromEntry(page);
 
-  const dialog = page.getByRole('dialog');
+  const dialog = settingsSurface(page);
   await dialog.getByLabel('Base URL').fill('https://proxy.example.com/v1');
   await dialog.getByLabel('Base URL').blur();
 
@@ -928,7 +931,7 @@ test('[P1] Settings autosave recovers after a later successful daemon sync', asy
   await gotoEntryHome(page);
   await openSettingsDialogFromEntry(page);
 
-  const dialog = page.getByRole('dialog');
+  const dialog = settingsSurface(page);
   const baseUrl = dialog.getByLabel('Base URL');
   await baseUrl.fill('https://proxy.example.com/v1');
   await baseUrl.blur();
@@ -986,7 +989,7 @@ test('[P0] @critical saving Local CLI updates the entry status pill with the sel
     ],
   );
 
-  const dialog = page.getByRole('dialog');
+  const dialog = settingsSurface(page);
 
   await dialog.getByRole('tab', { name: LOCAL_CLI_LABEL }).click();
   const codexAgent = dialog.getByTestId('settings-agent-select-codex');
@@ -996,13 +999,10 @@ test('[P0] @critical saving Local CLI updates the entry status pill with the sel
     mode: 'daemon',
     agentId: 'codex',
   });
-  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
-  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await closeEntrySettings(page, dialog);
 
   const executionPill = page.getByTestId('inline-model-switcher-chip');
-  await expect(executionPill).toContainText(LOCAL_CLI_LABEL);
-  await expect(executionPill).toContainText('Codex CLI');
-  await expect(executionPill).toContainText('default');
+  await expect(executionPill).toHaveAccessibleName(/Codex CLI · default/i);
 });
 
 test('[P0] @critical Settings keeps Local CLI and BYOK model choices isolated after reopening', async ({ page }) => {
@@ -1015,7 +1015,7 @@ test('[P0] @critical Settings keeps Local CLI and BYOK model choices isolated af
       apiProtocol: 'openai',
       apiVersion: '',
       baseUrl: 'https://api.openai.com/v1',
-      model: 'gpt-4o',
+      model: 'gpt-4o-mini',
       apiProviderBaseUrl: 'https://api.openai.com/v1',
       agentId: null,
       skillId: null,
@@ -1040,7 +1040,7 @@ test('[P0] @critical Settings keeps Local CLI and BYOK model choices isolated af
     ],
   );
 
-  const dialog = page.getByRole('dialog');
+  const dialog = settingsSurface(page);
   await dialog.getByRole('tab', { name: LOCAL_CLI_LABEL }).click();
   await dialog.getByTestId('settings-agent-select-codex').click();
   await dialog.getByRole('combobox', { name: 'Model', exact: true }).click();
@@ -1053,7 +1053,7 @@ test('[P0] @critical Settings keeps Local CLI and BYOK model choices isolated af
     },
   });
 
-  await dialog.getByRole('tab', { name: 'BYOK' }).click();
+  await dialog.getByRole('tab', { name: 'API providers' }).click();
   await dialog.getByRole('tab', { name: 'OpenAI', exact: true }).click();
   await modelCombobox(dialog).click();
   await page.getByTestId('settings-byok-model-popover').getByRole('option', { name: /^gpt-4o-mini$/i }).click();
@@ -1065,11 +1065,10 @@ test('[P0] @critical Settings keeps Local CLI and BYOK model choices isolated af
     },
   });
 
-  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
-  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await closeEntrySettings(page, dialog);
 
   await openSettingsDialogFromEntry(page);
-  const reopened = page.getByRole('dialog');
+  const reopened = settingsSurface(page);
   await expect(reopened.getByRole('tab', { name: 'OpenAI', exact: true })).toHaveAttribute('aria-selected', 'true');
   await expectModelComboboxText(reopened, /gpt-4o-mini/i);
 

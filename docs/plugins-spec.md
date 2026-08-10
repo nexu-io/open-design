@@ -756,8 +756,8 @@ Promote what already exists in [`apps/daemon/src/prompts/system.ts`](../apps/dae
 
 | Atom id | Source today | What it does | taskKind fit |
 | --- | --- | --- | --- |
-| `discovery-question-form` | `DISCOVERY_AND_PHILOSOPHY` in `system.ts` | Turn-1 question form for ambiguous briefs | new-generation, tune-collab |
-| `direction-picker` | same | 3–5 direction picker before final | new-generation, tune-collab |
+| `discovery-question-form` | `DISCOVERY_AND_PHILOSOPHY` in `system.ts` | Structured clarification protocol for unresolved material requirements on any turn | new-generation, tune-collab |
+| `direction-picker` | same | Optional 3–5 direction comparison only when the user explicitly requests alternatives | new-generation, tune-collab |
 | `todo-write` | same | TodoWrite-driven plan | all |
 | `file-read` / `file-write` / `file-edit` | code-agent native | File ops | all |
 | `research-search` | `od research search` ([`apps/daemon/src/cli.ts`](../apps/daemon/src/cli.ts)) | Tavily web research | new-generation |

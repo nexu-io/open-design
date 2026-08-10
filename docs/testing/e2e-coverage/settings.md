@@ -74,6 +74,7 @@
 | SET-039 | MCP server 页面切换不同 client 后，会联动更新安装方式说明和 snippet 内容 | `SettingsDialog.execution.test.tsx` |
 | SET-040 | MCP server 页面支持复制当前 snippet 到剪贴板，并展示 `Copied` 反馈 | `SettingsDialog.execution.test.tsx` |
 | SET-041 | MCP server 页面在 daemon 无法返回 install info 时，会展示错误提示和降级 snippet 文案 | `SettingsDialog.execution.test.tsx` |
+| SET-091 | External MCP 的 managed OAuth 支持启动授权、打开 authorize URL、接收 callback postMessage 更新 Connected 状态，并可 Disconnect | `settings-mcp-snippet-chip.test.ts` |
 | SET-042 | 在 Settings 里保存 Connectors key 后，Entry 页 connectors gate 会立即解锁，且本地只保存尾号标记 | `entry-configuration-flows.test.ts` |
 | SET-043 | Language 页面展开下拉后，会渲染完整 locale 列表，并正确标记当前已选语言 | `SettingsDialog.execution.test.tsx` |
 | SET-044 | 在 Language 页面切换语言后，触发器文案会立即更新，同时把 locale 写入 `localStorage` 并同步 `html[lang]` | `SettingsDialog.execution.test.tsx` |
@@ -122,18 +123,17 @@
 | SET-087 | `Import from apps` 支持 connector OAuth 完成后的回流：pending app 会在授权回调后变成 connected，并可立即继续扫描生成 suggested memories | `settings-memory-routines.test.ts` |
 | SET-088 | `Import from apps` 在 mixed connector state 下保持稳定：已连接、刚完成 OAuth、仍未连接的 app 会正确更新 `connected / selected` 计数，且扫描只提交已选中的 connected apps | `settings-memory-routines.test.ts` |
 | SET-089 | `Import from apps` 会在 connected app 断连/重连后自动收敛已选集合：失联 app 被移出 selected，恢复连接后不会误自动重新选中，扫描 payload 只包含当前仍选中的 connected apps | `settings-memory-routines.test.ts` |
+| SET-092 | `theme=system` 时不写入显式 `html[data-theme]`，并在浏览器 OS color scheme 从 light 切到 dark 后实时更新页面 `--bg` token，同时保留 `system` 配置 | `settings-hover-contrast.test.ts` |
+| SET-093 | Pets 自定义精灵上传后显示帧数/FPS 控件；移除精灵后恢复 emoji 模式并清除动画控件 | `settings-memory-routines.test.ts` |
 
 ## 自动化候选
 
 | ID | 场景 | 原因 |
 | --- | --- | --- |
-| SET-C03 | Media providers 配置被下游视频/音频生成请求实际消费的端到端回归 | 图片生成请求链路已由 `settings-media-providers.test.ts` 覆盖；视频/音频仍可在对应生成入口稳定后补 |
 | SET-C05 | MCP server 的 Cursor deeplink / 多平台路径差异（macOS/Linux/Windows） | 适合自动化，但需要更细的环境 mock 或浏览器 scheme 行为校验，适合后续补 |
 | SET-C06 | Notifications 在 ProjectView 中收到真实任务完成事件后，是否按 success/failure 正确播放声音和发送桌面通知 | 适合自动化，但需要结合流式消息完成态和窗口焦点状态做更完整联动断言 |
-| SET-C07 | `theme=system` 时在系统亮/暗偏好切换下，页面是否通过 `matchMedia` 或宿主环境同步实时跟随 | 适合自动化，但要先确认当前实现是否真的监听系统主题变化 |
 | SET-C08 | Pets 页面上传 sprite、导入 Codex atlas、裁剪单行或保留 full atlas 的文件处理链路 | 适合自动化，但依赖文件输入、图片读取、canvas 裁剪和 atlas 预处理，维护成本更高 |
 | SET-C09 | Built-in / Community 宠物的一键领养路径：下载 spritesheet、准备 atlas、写入 custom slot 并在 overlay 中真实生效 | 适合自动化，但需要补齐 fetch/blob/image 级 mock 或浏览器级联动验证 |
-| SET-C10 | Skills / Design Systems 在 ProjectView / runtime 生成流中被真实消费：禁用项不会进入可用内容库或生成上下文 | Entry 创建入口已由 `settings-design-systems.test.ts` 覆盖；ProjectView / runtime 生成上下文仍可后续补 |
 | SET-C11 | Memory 的 `Import from apps` 真实多步授权回流：外部浏览器完成 OAuth 后通过宿主/弹窗回调返回，再次打开 Settings 时是否能正确恢复到最新 connected 状态 | 现在 E2E 已覆盖页面内 callback、mixed state、断连/重连收敛，但还没覆盖更接近真实宿主环境的跨窗口回流 |
 
 ## 手工保留

@@ -1,4 +1,4 @@
-import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -110,6 +110,40 @@ async function writeFakeUnpackedExe(config: ToolPackConfig): Promise<void> {
 }
 
 describe("installPackedWinApp", () => {
+  it("pins the installed portable config to the tools-pack namespace for bare protocol launches", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-win-lifecycle-"));
+    const config = { ...createConfig(root), portable: true };
+    const paths = resolveWinPaths(config);
+    const installedConfigPath = join(paths.installDir, "resources", "open-design-config.json");
+
+    try {
+      await mkdir(dirname(paths.setupPath), { recursive: true });
+      await writeFile(paths.setupPath, "", "utf8");
+      invokeNsis.mockReset();
+      invokeNsis.mockImplementation(async () => {
+        await mkdir(dirname(installedConfigPath), { recursive: true });
+        await writeFile(paths.installedExePath, "", "utf8");
+        await writeFile(
+          installedConfigPath,
+          `${JSON.stringify({ channel: "prerelease", namespace: "baked-default" }, null, 2)}\n`,
+          "utf8",
+        );
+      });
+
+      const result = await installPackedWinApp(config);
+      const installedConfig = JSON.parse(await readFile(installedConfigPath, "utf8")) as Record<string, unknown>;
+
+      expect(installedConfig).toMatchObject({
+        channel: "prerelease",
+        namespace: config.namespace,
+        namespaceBaseRoot: config.roots.runtime.namespaceBaseRoot,
+      });
+      expect(result.lifecycleTimings.map(({ step }) => step)).toContain("pin installed packaged namespace");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
   it("creates the exact fresh install directory before invoking transactional NSIS", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-win-lifecycle-"));
     const config = createConfig(root);
@@ -121,7 +155,10 @@ describe("installPackedWinApp", () => {
       invokeNsis.mockReset();
       invokeNsis.mockImplementation(async () => {
         await expect(access(paths.installDir)).resolves.toBeUndefined();
+        const installedConfigPath = join(paths.installDir, "resources", "open-design-config.json");
+        await mkdir(dirname(installedConfigPath), { recursive: true });
         await writeFile(paths.installedExePath, "", "utf8");
+        await writeFile(installedConfigPath, "{}\n", "utf8");
       });
 
       const result = await installPackedWinApp(config);

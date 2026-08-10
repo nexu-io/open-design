@@ -69,7 +69,14 @@ export function rootRelativeProjectAssetPath(
   decoded = decoded.replace(/^\/+/, '').replace(/\\/g, '/');
   if (!decoded || decoded.endsWith('/')) return null;
   if (decoded.split('/').some((part) => part.trim() === '..')) return null;
-  if (projectFilePaths === null) return decoded;
+  if (projectFilePaths === null) {
+    // The daemon may already have rewritten a relative asset to the app's
+    // scoped raw route before FileViewer receives the HTML. While the project
+    // file list is loading, do not mistake that app endpoint for a project
+    // path and wrap it in a second `/raw/` URL during asset preflight.
+    if (decoded === 'api' || decoded.startsWith('api/')) return null;
+    return decoded;
+  }
   return projectFilePaths.has(decoded) ? decoded : null;
 }
 
@@ -100,6 +107,30 @@ export function htmlHasRootRelativeProjectAssetRefs(
   let found = false;
   eachAssetRef(html, (ref) => {
     if (!found && rootRelativeProjectAssetPath(ref, projectFilePaths) !== null) found = true;
+  });
+  return found;
+}
+
+/**
+ * True when an HTML document contains a relative subresource reference that
+ * resolves inside the project. Unlike a plain `src|href` regex this covers
+ * inline CSS `url(...)`, `srcset`, lazy-load attributes, and stylesheet links
+ * while deliberately ignoring anchor navigation.
+ *
+ * With a null file set this is a conservative candidate check. Callers that
+ * need to put the resolved path on the wire must wait for the real file list
+ * and confirm membership before rewriting it.
+ */
+export function htmlHasRelativeProjectAssetRefs(
+  html: string,
+  ownerFilePath: string,
+  projectFilePaths: ReadonlySet<string> | null,
+): boolean {
+  let found = false;
+  eachAssetRef(html, (ref) => {
+    if (found) return;
+    const path = resolveRelativeAssetPath(ownerFilePath, ref);
+    if (path && (projectFilePaths === null || projectFilePaths.has(path))) found = true;
   });
   return found;
 }
@@ -205,6 +236,23 @@ function rewriteConfirmedRef(
   return `${toRewritten(projectPath)}${suffix}`;
 }
 
+function appendAssetRefSuffix(url: string, suffix: string): string {
+  if (!suffix) return url;
+  if (suffix.startsWith('#')) return `${url}${suffix}`;
+  if (!suffix.startsWith('?') || !url.includes('?')) return `${url}${suffix}`;
+  return `${url}&${suffix.slice(1)}`;
+}
+
+function confirmedProjectAssetPath(
+  ownerFilePath: string,
+  ref: string,
+  projectFilePaths: ReadonlySet<string>,
+): string | null {
+  const rootPath = rootRelativeProjectAssetPath(ref, projectFilePaths);
+  const relativePath = rootPath ?? resolveRelativeAssetPath(ownerFilePath, ref);
+  return relativePath && projectFilePaths.has(relativePath) ? relativePath : null;
+}
+
 /**
  * Normalize every confirmed root-relative project asset ref in an HTML
  * document to an owner-relative path. Run BEFORE `inlineRelativeAssets`: the
@@ -256,6 +304,54 @@ export function normalizeRootRelativeProjectAssetRefs(
   return next;
 }
 
+export function rewriteProjectAssetRefsToRawUrls(
+  html: string,
+  ownerFilePath: string,
+  projectFilePaths: ReadonlySet<string>,
+  toRawUrl: (projectPath: string) => string,
+): string {
+  const rewrite = (ref: string): string => {
+    const projectPath = confirmedProjectAssetPath(ownerFilePath, ref, projectFilePaths);
+    if (!projectPath) return ref;
+    const { suffix } = splitRefSuffix(ref.trim());
+    return appendAssetRefSuffix(toRawUrl(projectPath), suffix);
+  };
+
+  let next = html.replace(
+    ASSET_ATTR,
+    (match, space: string, name: string, eq: string, quote: string, value: string) => {
+      const rewritten = rewrite(value);
+      return rewritten === value ? match : `${space}${name}${eq}${quote}${rewritten}${quote}`;
+    },
+  );
+  next = next.replace(LINK_TAG, (tag) =>
+    tag.replace(LINK_HREF, (hrefMatch, prefix: string, quote: string, value: string) => {
+      const rewritten = rewrite(value);
+      return rewritten === value ? hrefMatch : `${prefix}${quote}${rewritten}${quote}`;
+    }),
+  );
+  next = next.replace(SRCSET_ATTR, (match, prefix: string, quote: string, value: string) => {
+    const rewritten = value
+      .split(',')
+      .map((candidate) => {
+        const body = candidate.trim();
+        if (!body) return candidate;
+        const [url = '', ...descriptors] = body.split(/\s+/);
+        const rewrittenUrl = rewrite(url);
+        if (rewrittenUrl === url) return candidate;
+        const leading = candidate.match(/^\s*/)?.[0] ?? '';
+        return `${leading}${[rewrittenUrl, ...descriptors].join(' ')}`;
+      })
+      .join(',');
+    return rewritten === value ? match : `${prefix}${quote}${rewritten}${quote}`;
+  });
+  next = next.replace(CSS_URL, (match, quote: string, value: string) => {
+    const rewritten = rewrite(value);
+    return rewritten === value ? match : `url(${quote}${rewritten}${quote})`;
+  });
+  return next;
+}
+
 /**
  * Rewrite `url(...)` refs inside a stylesheet that is about to be inlined
  * into the owner HTML document. Inlining moves the CSS out of its own
@@ -280,7 +376,7 @@ export function rewriteInlinedCssAssetRefs(
       projectFilePaths === null ? null : rootRelativeProjectAssetPath(trimmed, projectFilePaths);
     const projectPath = rootPath ?? resolveRelativeAssetPath(cssFilePath, trimmed);
     if (!projectPath) return match;
-    return `url(${quote}${toRawUrl(projectPath)}${suffix}${quote})`;
+    return `url(${quote}${appendAssetRefSuffix(toRawUrl(projectPath), suffix)}${quote})`;
   });
 }
 

@@ -9,9 +9,16 @@ import { PackagedPathAccessError } from "./errors.js";
 import type { PackagedNamespacePaths } from "./paths.js";
 
 export type PackagedSingleInstanceApp = {
-  on: (event: "second-instance", listener: () => void) => unknown;
+  on: (
+    event: "second-instance",
+    listener: (event: unknown, argv: string[]) => void,
+  ) => unknown;
   quit: () => void;
   requestSingleInstanceLock: () => boolean;
+};
+export type PackagedSecondInstanceControls = {
+  dispatchDeeplink: (url: string | null) => void;
+  show: () => void;
 };
 type PathDiagnostic = {
   exists: boolean;
@@ -125,14 +132,46 @@ export function applyPackagedElectronPathOverrides(
 
 export function claimPackagedSingleInstanceLock(
   electronApp: PackagedSingleInstanceApp,
-  onSecondInstance: () => void,
+  onSecondInstance: (argv: readonly string[]) => void,
 ): boolean {
   if (!electronApp.requestSingleInstanceLock()) {
     electronApp.quit();
     return false;
   }
-  electronApp.on("second-instance", () => {
-    onSecondInstance();
+  electronApp.on("second-instance", (_event, argv) => {
+    onSecondInstance(argv);
   });
   return true;
+}
+
+export function createPackagedSecondInstanceHandoff() {
+  let controls: PackagedSecondInstanceControls | null = null;
+  let pendingFocus = false;
+  const pendingDeeplinks: string[] = [];
+
+  return {
+    attach(nextControls: PackagedSecondInstanceControls): void {
+      controls = nextControls;
+      if (!pendingFocus) return;
+
+      pendingFocus = false;
+      controls.show();
+      for (const url of pendingDeeplinks.splice(0)) {
+        controls.dispatchDeeplink(url);
+      }
+    },
+    handle(deeplinkUrl: string | null): void {
+      if (controls != null) {
+        // Once desktop startup reaches onDesktopReady, its own second-instance
+        // listener is attached before Electron can deliver another event. Keep
+        // this listener responsible only for focus so the URL is dispatched
+        // exactly once by the desktop listener from that point onward.
+        controls.show();
+        return;
+      }
+
+      pendingFocus = true;
+      if (deeplinkUrl != null) pendingDeeplinks.push(deeplinkUrl);
+    },
+  };
 }

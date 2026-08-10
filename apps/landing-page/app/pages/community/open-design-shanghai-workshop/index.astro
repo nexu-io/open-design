@@ -1,0 +1,275 @@
+---
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import SiteAnalytics from '../../../_components/site-analytics.astro';
+import HeaderEnhancer from '../../../_components/header-enhancer.astro';
+import { Header, type HeaderProps } from '../../../_components/header';
+import LocaleSwitcherScript from '../../../_components/locale-switcher-script.astro';
+import SeoHead from '../../../_components/seo-head.astro';
+import SiteFooter from '../../../_components/site-footer.astro';
+import { getCatalogCounts } from '../../../_lib/catalog';
+import { getGithubRepoMeta } from '../../../_lib/github';
+import { getHeaderLocaleSwitcher, getLocaleDefinition, localeFromPath } from '../../../i18n';
+import '../../../globals.css';
+import '../../../sub-pages.css';
+import '../../../_partials/ikigai-one.css';
+
+const locale = localeFromPath(Astro.url.pathname);
+const localeDef = getLocaleDefinition(locale);
+const counts = await getCatalogCounts();
+const github = await getGithubRepoMeta();
+const title = 'Open Design Shanghai Workshop Recap';
+const description =
+  'A hands-on Open Design workshop in Shanghai where developers, designers, product managers, students, and creators turned their own ideas into editable artifacts.';
+const datePublished = new Date('2026-07-25');
+const fallbackSite = 'https://open-design.ai/';
+const ogImage = new URL('/stories/open-design-shanghai-workshop-cover.webp', Astro.site ?? fallbackSite).toString();
+
+const storyMain = `
+<main class="v4 meetup-v4">
+  <section class="v4band v4hero meetup-hero">
+    <div class="v4in">
+      <div class="v4herotop">
+        <div>
+          <p class="v4eye">Community story · Shanghai</p>
+          <h1 class="v4h1">Shanghai came to build, not just watch.</h1>
+          <p class="v4sub">On July 25, Open Design hosted a three-hour workshop near Fudan University built around one idea: bring a laptop, choose a real theme, and leave with something you made.</p>
+          <div class="v4cta-row">
+            <a class="v4btn-p" href="https://luma.com/yow2uaf1">View the event ↗</a>
+            <a class="v4btn-g" href="/community/ambassadors/">Host a local session ↗</a>
+          </div>
+        </div>
+        <div class="v4snap meetup-snap">
+          <div class="v4snap-head">
+            <img class="v4snap-logo" src="/stories/open-design-shanghai-workshop-cover.webp" alt="Open Design Shanghai workshop" />
+            <div>
+              <div class="v4snap-name">Shanghai Workshop</div>
+              <p class="v4snap-desc">A hands-on evening for personal sites, decks, product ideas, prototypes, and peer learning.</p>
+            </div>
+          </div>
+          <div class="v4snap-chips">
+            <span class="v4chip">Developers</span>
+            <span class="v4chip">Designers</span>
+            <span class="v4chip">Product managers</span>
+            <span class="v4chip">Students</span>
+            <span class="v4chip">Creators</span>
+          </div>
+          <div class="v4snap-uses"><span>Themes brought into the room</span>Personal websites, landing pages, presentations, product UI, and early prototypes.</div>
+        </div>
+      </div>
+      <div class="v4statline"></div>
+      <div class="v4statstrip">
+        <div><div class="n">July 25</div><div class="l">Time: a Saturday evening workshop from 19:00 to 22:00.</div></div>
+        <div><div class="n">Shanghai</div><div class="l">Location: a welcoming space near Fudan University.</div></div>
+        <div><div class="n">70</div><div class="l">Applications for the hands-on workshop.</div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="v4band alt v4promoband">
+    <div class="v4in v4promo-c">
+      <p class="v4promo-eye">The room</p>
+      <figure class="v4promo meetup-wide-photo">
+        <img src="/stories/open-design-shanghai-workshop-room.webp" alt="Participants working together during the Open Design Shanghai workshop." loading="eager" />
+        <figcaption>Short introductions quickly gave way to an evening of building, comparing, and helping one another.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="v4band">
+    <div class="v4in narrow">
+      <p class="v4eye">What happened</p>
+      <h2 class="v4h2">The demo was only the starting point.</h2>
+      <p>The workshop welcomed a room spanning engineering, design, product, education, legal, marketing, and entrepreneurship.</p>
+      <p>The format was intentionally direct: a short introduction, a step-by-step AI PPT tutorial, then a longer hands-on build around a theme each participant brought with them. The closing part of the evening was reserved for sharing work, a group photo, and open conversation.</p>
+      <p>That balance mattered. People had enough context to begin, but most of the session belonged to the participants—their questions, their ideas, and the artifacts taking shape on their screens.</p>
+    </div>
+  </section>
+
+  <section class="v4band ink v4quoteband">
+    <div class="v4in narrow">
+      <blockquote class="v4bigq">The room changed when the walkthrough ended, <span class="grn">laptops opened, and everyone began making something of their own.</span></blockquote>
+      <div class="v4by">Open Design Shanghai workshop · July 25</div>
+    </div>
+  </section>
+
+  <section class="v4band alt">
+    <div class="v4in">
+      <div class="v4feat">
+        <div class="v4feat-txt">
+          <p class="v4eye">Workshop · AI PPT</p>
+          <h2 class="v4h2">Everyone made the first slides together, step by step.</h2>
+          <p class="v4lede">The walkthrough was not a quick product demo. The Open Design team guided the room through an AI-powered PPT workflow one step at a time: choose a topic, find a visual direction, create an editable deck, inspect the result, and refine it.</p>
+          <div class="meetup-flow">
+            <span>Choose a topic</span>
+            <span>Style options</span>
+            <span>Visual direction</span>
+            <span>Editable deck</span>
+            <span>Refinement</span>
+            <span>Share</span>
+          </div>
+          <p class="v4feat-quote">Follow the same workflow in <a href="/tutorials/open-design-ai-ppt-tutorial/">How to Create an AI-Powered PPT with Open Design</a>.</p>
+        </div>
+        <figure class="v4feat-img">
+          <img src="/stories/open-design-shanghai-workshop-session.webp" alt="Participants following a step-by-step AI PPT tutorial during the Shanghai workshop." loading="lazy" />
+          <figcaption>The room followed the PPT workflow together before continuing with individual themes.</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <section class="v4band">
+    <div class="v4in">
+      <div class="v4in narrow meetup-case-intro">
+        <p class="v4eye">In the room · 01</p>
+        <h2 class="v4h2">Many disciplines, one shared build table.</h2>
+        <p class="v4lede">The applications showed just how broad the room was: developers and designers sat alongside product managers, students, founders, educators, marketers, and legal professionals.</p>
+        <p class="v4lede">Once the hands-on session began, those different perspectives became useful. People could compare how they framed problems, where they wanted more visual control, and what made an output feel ready to keep working on.</p>
+      </div>
+      <div class="meetup-pair">
+        <figure>
+          <img src="/stories/open-design-shanghai-workshop-hands-on.webp" alt="Participants building their own projects during the hands-on portion of the Shanghai workshop." loading="lazy" />
+          <figcaption>Each participant worked from a theme they brought into the room.</figcaption>
+        </figure>
+        <figure>
+          <img src="/stories/open-design-shanghai-workshop-build-together.webp" alt="Participants comparing work and helping one another at the Open Design Shanghai workshop." loading="lazy" />
+          <figcaption>The workshop made room for peer feedback as well as individual exploration.</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <section class="v4band alt">
+    <div class="v4in">
+      <div class="v4feat">
+        <div class="v4feat-txt">
+          <p class="v4eye">At the table</p>
+          <h2 class="v4h2">Good food, red wine, and room to create.</h2>
+          <p class="v4lede">Alongside the laptops were red wine, fresh fruit, and plenty of food to share. The workshop felt less like a formal class and more like an evening spent making things with friends.</p>
+          <p class="v4lede">That relaxed rhythm gave people space to pause, talk through an idea, help a neighbor, and return to their work. In the middle of good food and wine, creation became something to enjoy together.</p>
+        </div>
+        <figure class="v4feat-img meetup-community-photo">
+          <img src="/stories/open-design-shanghai-workshop-refreshments.webp" alt="Fresh fruit and food prepared for the Open Design Shanghai workshop." loading="lazy" />
+          <figcaption>Fresh fruit and shared food helped the creative evening feel warm and unhurried.</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <section class="v4band v4verdictband">
+    <div class="v4in narrow">
+      <p class="v4eye">What we learned</p>
+      <blockquote class="v4bigverdict">A practical workshop works best when people make the first slides together, then have generous time to explore.</blockquote>
+      <div class="v4feats3 meetup-lessons">
+        <div><h3>Start from a real theme.</h3><p>People move faster when the artifact connects to something they already care about.</p></div>
+        <div><h3>Keep the output editable.</h3><p>The first result is more useful when participants can inspect it, adjust it, and continue.</p></div>
+        <div><h3>Make creation enjoyable.</h3><p>A relaxed table, shared food, and informal conversation help ideas move naturally.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="v4band ink v4final meetup-final">
+    <div class="v4in">
+      <p class="v4eye">Next step</p>
+      <h2 class="v4final-h">Bring a hands-on Open Design session to your city.</h2>
+      <p class="v4final-p">Local workshops turn AI curiosity into shared practice: a real theme, an editable artifact, and a room of people learning by making.</p>
+      <div class="v4cta-row">
+        <a class="v4btn-coral" href="/community/ambassadors/">Apply to become an ambassador ↗</a>
+        <a class="v4btn-gd" href="/tutorials/open-design-ai-ppt-tutorial/">Read the PPT tutorial ↗</a>
+      </div>
+    </div>
+  </section>
+</main>
+`;
+
+const headerHtml = renderToStaticMarkup(
+  createElement<HeaderProps>(Header, {
+    counts,
+    github,
+    brandHref: '/',
+    active: 'community',
+    locale,
+    localeSwitcher: getHeaderLocaleSwitcher(locale, Astro.url.pathname, {
+      canonicalOnly: true,
+    }),
+  }),
+);
+---
+
+<!doctype html>
+<html lang={localeDef.htmlLang} dir={localeDef.dir} data-locale-canonical='true'>
+  <head>
+    <meta charset='utf-8' />
+    <meta name='viewport' content='width=device-width, initial-scale=1' />
+    <SeoHead kind='article' title={title} description={description} pathname={Astro.url.pathname} datePublished={datePublished} category='Community' image={ogImage} localeCanonicalOnly />
+    <SiteAnalytics />
+  </head>
+  <body>
+    <div class='shell'>
+      <div class='site-chrome' data-chrome-headroom>
+        <Fragment set:html={headerHtml} />
+      </div>
+      <Fragment set:html={storyMain} />
+      <SiteFooter counts={counts} locale={locale} />
+    </div>
+    <HeaderEnhancer />
+    <LocaleSwitcherScript />
+    <script is:inline>
+      (function () {
+        var r = document.querySelector('.meetup-v4');
+        if (!r || !('IntersectionObserver' in window)) return;
+        r.classList.add('anim');
+        var io = new IntersectionObserver(
+          function (es) {
+            es.forEach(function (e) {
+              if (e.isIntersecting) {
+                e.target.classList.add('inview');
+                io.unobserve(e.target);
+              }
+            });
+          },
+          { threshold: 0.12, rootMargin: '0px 0px -7% 0px' },
+        );
+        document.querySelectorAll('.meetup-v4 .v4band').forEach(function (b) {
+          io.observe(b);
+        });
+      })();
+    </script>
+    <style is:global>
+      .meetup-v4 { background: var(--paper); }
+      .meetup-v4 .meetup-hero::before {
+        background-image:
+          linear-gradient(180deg, rgba(250,250,250,.76), rgba(250,250,250,.95) 66%, var(--paper)),
+          url(/stories/open-design-shanghai-workshop-cover.webp);
+        background-position: center;
+      }
+      .meetup-v4 .v4hero { padding-top: 132px; }
+      .meetup-v4 .v4statstrip { grid-template-columns: repeat(3, 1fr); }
+      .meetup-v4 .meetup-snap .v4snap-logo { width: 58px; height: 58px; }
+      .meetup-v4 .v4promo img,
+      .meetup-v4 .v4feat-img img { border: 1px solid var(--line); background: #fff; }
+      .meetup-v4 .v4promo figcaption { margin-top: 14px; font-size: 13px; color: var(--ink-faint); font-family: var(--mono); letter-spacing: .02em; }
+      .meetup-v4 .meetup-wide-photo { max-width: 920px; }
+      .meetup-v4 .meetup-wide-photo img { aspect-ratio: 16 / 9; object-fit: cover; }
+      .meetup-v4 .meetup-flow { display: flex; flex-wrap: wrap; gap: 9px; margin: 22px 0 4px; }
+      .meetup-v4 .meetup-flow span { display: inline-flex; align-items: center; min-height: 34px; padding: 0 12px; border: 1px solid var(--line); border-radius: 999px; background: rgba(255,255,255,.58); color: var(--ink-soft); font-family: var(--mono); font-size: 12px; letter-spacing: .02em; }
+      .meetup-v4 .v4feat-quote a { color: var(--coral); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+      .meetup-v4 .meetup-case-intro { padding: 0; margin: 0 0 28px; }
+      .meetup-v4 .meetup-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: start; }
+      .meetup-v4 .meetup-pair figure { margin: 0; }
+      .meetup-v4 .meetup-pair img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border: 1px solid var(--line); border-radius: var(--spacing-8); background: #fff; box-shadow: 0 34px 70px -34px rgba(20,20,30,.55); }
+      .meetup-v4 .meetup-pair figcaption { margin-top: 12px; font-family: var(--mono); font-size: 12.5px; line-height: 1.45; color: var(--ink-faint); }
+      .meetup-v4 .meetup-community-photo img { aspect-ratio: 16 / 10; object-fit: cover; }
+      .meetup-v4 .meetup-lessons { margin-top: 34px; }
+      .meetup-v4 .meetup-final::before {
+        background-image:
+          linear-gradient(rgba(16,16,18,.84), rgba(16,16,18,.92)),
+          url(/stories/open-design-shanghai-workshop-cover.webp);
+      }
+      @media (max-width: 820px) {
+        .meetup-v4 .v4hero { padding-top: 108px; }
+        .meetup-v4 .meetup-pair { grid-template-columns: 1fr; }
+      }
+    </style>
+  </body>
+</html>

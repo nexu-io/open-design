@@ -344,6 +344,7 @@ export interface InfoPageCopy {
     label: string;
     heading: string;
     lead: string;
+    heroVisualAlt: string;
     mobileDesktopNotice: string;
     autoCtaPrefix: string; // "Download for" → "Download for macOS"
     autoCtaFallback: string; // shown before JS detects platform
@@ -363,7 +364,6 @@ export interface InfoPageCopy {
     portable: string;
     dmg: string;
     zip: string;
-    checksum: string;
     downloadVerb: string; // "Download"
     requirementsTitle: string;
     requirements: LinkText[];
@@ -3329,15 +3329,17 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
     download: {
       title: 'Download Open Design — Free Desktop App (macOS, Windows, Linux)',
       description:
-        'Download the latest Open Design desktop app — free and open-source (Apache-2.0). Install, pick a model with your own keys, and start designing. macOS (Apple Silicon & Intel), Windows, and Linux.',
+        'Download the latest Open Design desktop app — free and open-source (Apache-2.0). Install, sign in once, and start designing without configuring a model key. macOS (Apple Silicon & Intel), Windows, and Linux.',
       breadcrumb: 'Download',
       label: 'Download',
-      heading: 'Download Open Design.',
+      heading: 'Download Open Design for free. Design with your agent.',
       lead:
-        'Install and create — no API key, no setup. The desktop app ships with the official model router; sign in once and start designing.',
+        'Connect Codex, Claude Code, and other local agents with curated design systems to create prototypes, sites, slides, and HTML video.',
+      heroVisualAlt:
+        'Open Design desktop workspace creating a website with a local agent and a curated design system.',
       mobileDesktopNotice: 'Open Design is a desktop app. Please open this page on a computer to download.',
-      autoCtaPrefix: 'Download for',
-      autoCtaFallback: 'Download Open Design',
+      autoCtaPrefix: 'Download free for',
+      autoCtaFallback: 'Download Open Design free',
       recommended: 'Recommended',
       publishedPrefix: 'Released',
       releaseNotes: 'Release notes',
@@ -3354,7 +3356,6 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
       portable: 'Portable',
       dmg: 'DMG',
       zip: 'ZIP',
-      checksum: 'SHA-256',
       downloadVerb: 'Download',
       requirementsTitle: 'System requirements',
       requirements: [
@@ -3364,7 +3365,7 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
       ],
       allReleasesTitle: 'All releases',
       allReleasesBody:
-        'Every build, checksum, and past version lives on GitHub Releases and releases.open-design.ai.',
+        'Every build and past version lives on GitHub Releases and releases.open-design.ai.',
       ctaTitle: 'Prefer the terminal?',
       ctaBody:
         'Install from source in three commands, or drive Open Design headlessly from your existing coding agent.',
@@ -3375,7 +3376,7 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
 /*
  * Localized /download copy for the compact locales (everything outside the
  * full en/zh/zh-tw blocks above). Brand/technical tokens — mac/windows/linux,
- * DMG/ZIP, SHA-256, Apple Silicon, Intel — intentionally stay as the English
+ * DMG/ZIP, Apple Silicon, Intel — intentionally stay as the English
  * defaults via the spread, matching how the zh block keeps them. zh-CN is
  * hand-checked; the rest are machine-translated and welcome native review.
  */
@@ -3385,14 +3386,16 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
     ...INFO_PAGE_COPY.en!.download,
     title: 'Open Design をダウンロード — 無料のオープンソース デスクトップアプリ（macOS / Windows / Linux）',
     description:
-      '最新の Open Design デスクトップアプリをダウンロード——無料でオープンソース（Apache-2.0）。インストールして、自分のキーでモデルを選び、デザインを開始。macOS（Apple Silicon と Intel）、Windows、Linux に対応。',
+      '最新の Open Design デスクトップアプリをダウンロード——無料でオープンソース（Apache-2.0）。インストールして一度サインインすれば、モデルキーの設定なしで始められます。macOS（Apple Silicon と Intel）、Windows、Linux に対応。',
     breadcrumb: 'ダウンロード',
     label: 'ダウンロード',
-    heading: 'Open Design をダウンロード。',
+    heading: 'Open Design を無料でダウンロード。エージェントと一緒にデザインしよう。',
     lead:
-      '入れたらすぐ作れます——API キー不要、設定不要。デスクトップ版は公式モデルルーター内蔵。一度サインインすればデザインを始められます。',
-    autoCtaPrefix: 'ダウンロード:',
-    autoCtaFallback: 'Open Design をダウンロード',
+      'Codex、Claude Code などのローカルエージェントを厳選されたデザインシステムと連携し、プロトタイプ、Web サイト、スライド、HTML 動画を作成できます。',
+    heroVisualAlt:
+      'ローカルエージェントと厳選されたデザインシステムを使って Web サイトを作成する Open Design のデスクトップワークスペース。',
+    autoCtaPrefix: '無料ダウンロード:',
+    autoCtaFallback: 'Open Design を無料でダウンロード',
     recommended: 'おすすめ',
     publishedPrefix: '公開日',
     releaseNotes: 'リリースノート',
@@ -3409,9 +3412,9 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
       { label: 'Windows', body: '10 または 11（x64）— インストーラーまたはポータブル zip。' },
       { label: 'Linux', body: 'AppImage、または Docker / Podman Compose のワンクリック構築。' },
     ],
-    allReleasesTitle: 'すべてのリリースとチェックサム',
+    allReleasesTitle: 'すべてのリリース',
     allReleasesBody:
-      'すべてのビルド、チェックサム、過去のバージョンは GitHub Releases と releases.open-design.ai にあります。',
+      'すべてのビルドと過去のバージョンは GitHub Releases と releases.open-design.ai にあります。',
     ctaTitle: 'ターミナル派ですか？',
     ctaBody:
       '3 つのコマンドでソースからインストール、または既存のコーディングエージェントから Open Design をヘッドレスで動かせます。',
@@ -3420,14 +3423,16 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
     ...INFO_PAGE_COPY.en!.download,
     title: 'Open Design 다운로드 — 무료 오픈소스 데스크톱 앱 (macOS, Windows, Linux)',
     description:
-      '최신 Open Design 데스크톱 앱을 다운로드하세요 — 무료 오픈소스(Apache-2.0). 설치하고, 자신의 키로 모델을 고른 뒤 디자인을 시작하세요. macOS(Apple Silicon 및 Intel), Windows, Linux 지원.',
+      '최신 Open Design 데스크톱 앱을 다운로드하세요 — 무료 오픈소스(Apache-2.0). 설치 후 한 번 로그인하면 모델 키 설정 없이 바로 시작할 수 있습니다. macOS(Apple Silicon 및 Intel), Windows, Linux 지원.',
     breadcrumb: '다운로드',
     label: '다운로드',
-    heading: 'Open Design 다운로드.',
+    heading: 'Open Design을 무료로 다운로드하고 에이전트와 함께 디자인하세요.',
     lead:
-      '설치하면 바로 제작——API 키도, 설정도 필요 없습니다. 데스크톱 앱에는 공식 모델 라우터가 내장되어 있어 한 번 로그인하면 바로 디자인할 수 있습니다.',
-    autoCtaPrefix: '다운로드 대상:',
-    autoCtaFallback: 'Open Design 다운로드',
+      'Codex, Claude Code 등의 로컬 에이전트를 엄선된 디자인 시스템과 연결해 프로토타입, 웹사이트, 슬라이드, HTML 영상을 만드세요.',
+    heroVisualAlt:
+      '로컬 에이전트와 엄선된 디자인 시스템으로 웹사이트를 만드는 Open Design 데스크톱 워크스페이스.',
+    autoCtaPrefix: '무료 다운로드:',
+    autoCtaFallback: 'Open Design 무료 다운로드',
     recommended: '추천',
     publishedPrefix: '출시일',
     releaseNotes: '릴리스 노트',
@@ -3444,9 +3449,9 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
       { label: 'Windows', body: '10 또는 11(x64) — 설치 버전 또는 포터블 zip.' },
       { label: 'Linux', body: 'AppImage, 또는 Docker / Podman Compose 원클릭 설치.' },
     ],
-    allReleasesTitle: '모든 릴리스 및 체크섬',
+    allReleasesTitle: '모든 릴리스',
     allReleasesBody:
-      '모든 빌드, 체크섬, 이전 버전은 GitHub Releases와 releases.open-design.ai에 있습니다.',
+      '모든 빌드와 이전 버전은 GitHub Releases와 releases.open-design.ai에 있습니다.',
     ctaTitle: '터미널이 더 편하세요?',
     ctaBody:
       '세 개의 명령으로 소스에서 설치하거나, 기존 코딩 에이전트에서 Open Design을 헤드리스로 구동하세요.',
@@ -3455,14 +3460,16 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
     ...INFO_PAGE_COPY.en!.download,
     title: 'Open Design herunterladen — kostenlose Open-Source-Desktop-App (macOS, Windows, Linux)',
     description:
-      'Lade die neueste Open-Design-Desktop-App herunter — kostenlos und Open Source (Apache-2.0). Installieren, ein Modell mit deinen eigenen Schlüsseln wählen und loslegen. macOS (Apple Silicon & Intel), Windows und Linux.',
+      'Lade die neueste Open-Design-Desktop-App herunter — kostenlos und Open Source (Apache-2.0). Installieren, einmal anmelden und ohne Modellschlüssel loslegen. Für macOS (Apple Silicon & Intel), Windows und Linux.',
     breadcrumb: 'Download',
     label: 'Download',
-    heading: 'Open Design herunterladen.',
+    heading: 'Open Design kostenlos herunterladen. Mit deinem Agenten designen.',
     lead:
-      'Installieren und loslegen — kein API-Schlüssel, keine Einrichtung. Die Desktop-App bringt den offiziellen Model-Router mit; einmal anmelden und designen.',
-    autoCtaPrefix: 'Download für',
-    autoCtaFallback: 'Open Design herunterladen',
+      'Verbinde Codex, Claude Code und andere lokale Agenten mit kuratierten Design-Systemen, um Prototypen, Websites, Slides und HTML-Videos zu erstellen.',
+    heroVisualAlt:
+      'Der Open Design Desktop-Workspace erstellt mit einem lokalen Agenten und einem kuratierten Design-System eine Website.',
+    autoCtaPrefix: 'Kostenlos herunterladen für',
+    autoCtaFallback: 'Open Design kostenlos herunterladen',
     recommended: 'Empfohlen',
     publishedPrefix: 'Veröffentlicht',
     releaseNotes: 'Release Notes',
@@ -3479,9 +3486,9 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
       { label: 'Windows', body: '10 oder 11 (x64) — Installer oder portables ZIP.' },
       { label: 'Linux', body: 'AppImage oder Docker / Podman Compose mit Ein-Klick-Setup.' },
     ],
-    allReleasesTitle: 'Alle Releases & Prüfsummen',
+    allReleasesTitle: 'Alle Releases',
     allReleasesBody:
-      'Jeder Build, jede Prüfsumme und alle früheren Versionen liegen auf GitHub Releases und releases.open-design.ai.',
+      'Jeder Build und alle früheren Versionen liegen auf GitHub Releases und releases.open-design.ai.',
     ctaTitle: 'Lieber das Terminal?',
     ctaBody:
       'Installiere aus dem Quellcode mit drei Befehlen oder steuere Open Design headless aus deinem bestehenden Coding-Agent.',
@@ -3490,14 +3497,16 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
     ...INFO_PAGE_COPY.en!.download,
     title: 'Télécharger Open Design — application de bureau gratuite et open source (macOS, Windows, Linux)',
     description:
-      'Téléchargez la dernière application de bureau Open Design — gratuite et open source (Apache-2.0). Installez, choisissez un modèle avec vos propres clés et commencez à concevoir. macOS (Apple Silicon et Intel), Windows et Linux.',
+      'Téléchargez la dernière application de bureau Open Design — gratuite et open source (Apache-2.0). Installez-la, connectez-vous une fois et commencez sans configurer de clé de modèle. Pour macOS (Apple Silicon et Intel), Windows et Linux.',
     breadcrumb: 'Télécharger',
     label: 'Télécharger',
-    heading: 'Télécharger Open Design.',
+    heading: 'Téléchargez Open Design gratuitement. Concevez avec votre agent.',
     lead:
-      'Installez et créez — sans clé API, sans configuration. L’application de bureau intègre le routeur de modèles officiel ; connectez-vous une fois et commencez à concevoir.',
-    autoCtaPrefix: 'Télécharger pour',
-    autoCtaFallback: 'Télécharger Open Design',
+      'Connectez Codex, Claude Code et d’autres agents locaux à des systèmes de design sélectionnés pour créer des prototypes, des sites, des slides et des vidéos HTML.',
+    heroVisualAlt:
+      'L’espace de travail desktop Open Design crée un site avec un agent local et un système de design sélectionné.',
+    autoCtaPrefix: 'Télécharger gratuitement pour',
+    autoCtaFallback: 'Télécharger Open Design gratuitement',
     recommended: 'Recommandé',
     publishedPrefix: 'Publié le',
     releaseNotes: 'Notes de version',
@@ -3514,9 +3523,9 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
       { label: 'Windows', body: '10 ou 11 (x64) — installateur ou zip portable.' },
       { label: 'Linux', body: 'AppImage, ou installation en un clic via Docker / Podman Compose.' },
     ],
-    allReleasesTitle: 'Toutes les versions et sommes de contrôle',
+    allReleasesTitle: 'Toutes les versions',
     allReleasesBody:
-      'Chaque build, somme de contrôle et version passée se trouve sur GitHub Releases et releases.open-design.ai.',
+      'Chaque build et chaque version passée se trouvent sur GitHub Releases et releases.open-design.ai.',
     ctaTitle: 'Vous préférez le terminal ?',
     ctaBody:
       'Installez depuis les sources en trois commandes, ou pilotez Open Design en mode headless depuis votre agent de code existant.',
@@ -3525,14 +3534,16 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
     ...INFO_PAGE_COPY.en!.download,
     title: 'Скачать Open Design — бесплатное десктопное приложение с открытым исходным кодом (macOS, Windows, Linux)',
     description:
-      'Скачайте последнее десктопное приложение Open Design — бесплатное и с открытым исходным кодом (Apache-2.0). Установите, выберите модель со своими ключами и начните проектировать. macOS (Apple Silicon и Intel), Windows и Linux.',
+      'Скачайте последнее десктопное приложение Open Design — бесплатное и с открытым исходным кодом (Apache-2.0). Установите, войдите один раз и начните работу без настройки ключа модели. Для macOS (Apple Silicon и Intel), Windows и Linux.',
     breadcrumb: 'Скачать',
     label: 'Скачать',
-    heading: 'Скачать Open Design.',
+    heading: 'Скачайте Open Design бесплатно. Создавайте дизайн вместе со своим агентом.',
     lead:
-      'Установите и создавайте — без API-ключа и настройки. Десктопное приложение поставляется с официальным маршрутизатором моделей; войдите один раз и начинайте проектировать.',
-    autoCtaPrefix: 'Скачать для',
-    autoCtaFallback: 'Скачать Open Design',
+      'Подключите Codex, Claude Code и другие локальные агенты к тщательно отобранным дизайн-системам, чтобы создавать прототипы, сайты, слайды и HTML-видео.',
+    heroVisualAlt:
+      'Десктопное рабочее пространство Open Design создаёт сайт с помощью локального агента и тщательно отобранной дизайн-системы.',
+    autoCtaPrefix: 'Скачать бесплатно для',
+    autoCtaFallback: 'Скачать Open Design бесплатно',
     recommended: 'Рекомендуется',
     publishedPrefix: 'Выпущено',
     releaseNotes: 'Примечания к выпуску',
@@ -3549,9 +3560,9 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
       { label: 'Windows', body: '10 или 11 (x64) — установщик или портативный zip.' },
       { label: 'Linux', body: 'AppImage или установка в один клик через Docker / Podman Compose.' },
     ],
-    allReleasesTitle: 'Все релизы и контрольные суммы',
+    allReleasesTitle: 'Все релизы',
     allReleasesBody:
-      'Каждая сборка, контрольная сумма и прошлые версии — на GitHub Releases и releases.open-design.ai.',
+      'Все сборки и прошлые версии — на GitHub Releases и releases.open-design.ai.',
     ctaTitle: 'Предпочитаете терминал?',
     ctaBody:
       'Установите из исходников тремя командами или управляйте Open Design в headless-режиме из вашего существующего агента для кода.',
@@ -3560,14 +3571,16 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
     ...INFO_PAGE_COPY.en!.download,
     title: 'Descargar Open Design — app de escritorio gratuita y de código abierto (macOS, Windows, Linux)',
     description:
-      'Descarga la última app de escritorio de Open Design: gratis y de código abierto (Apache-2.0). Instala, elige un modelo con tus propias claves y empieza a diseñar. macOS (Apple Silicon e Intel), Windows y Linux.',
+      'Descarga la última app de escritorio de Open Design: gratis y de código abierto (Apache-2.0). Instálala, inicia sesión una vez y empieza sin configurar claves de modelo. Para macOS (Apple Silicon e Intel), Windows y Linux.',
     breadcrumb: 'Descargar',
     label: 'Descargar',
-    heading: 'Descargar Open Design.',
+    heading: 'Descarga Open Design gratis. Diseña con tu agente.',
     lead:
-      'Instala y crea: sin clave de API, sin configuración. La app de escritorio incluye el enrutador de modelos oficial; inicia sesión una vez y empieza a diseñar.',
-    autoCtaPrefix: 'Descargar para',
-    autoCtaFallback: 'Descargar Open Design',
+      'Conecta Codex, Claude Code y otros agentes locales con sistemas de diseño seleccionados para crear prototipos, sitios web, slides y vídeos HTML.',
+    heroVisualAlt:
+      'El espacio de trabajo de escritorio de Open Design crea un sitio web con un agente local y un sistema de diseño seleccionado.',
+    autoCtaPrefix: 'Descarga gratis para',
+    autoCtaFallback: 'Descarga Open Design gratis',
     recommended: 'Recomendado',
     publishedPrefix: 'Publicado',
     releaseNotes: 'Notas de la versión',
@@ -3584,9 +3597,9 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
       { label: 'Windows', body: '10 u 11 (x64) — instalador o zip portable.' },
       { label: 'Linux', body: 'AppImage, o instalación con un clic vía Docker / Podman Compose.' },
     ],
-    allReleasesTitle: 'Todas las versiones y sumas de verificación',
+    allReleasesTitle: 'Todas las versiones',
     allReleasesBody:
-      'Cada compilación, suma de verificación y versión anterior está en GitHub Releases y releases.open-design.ai.',
+      'Cada compilación y versión anterior está en GitHub Releases y releases.open-design.ai.',
     ctaTitle: '¿Prefieres la terminal?',
     ctaBody:
       'Instala desde el código fuente con tres comandos, o controla Open Design en modo headless desde tu agente de código actual.',
@@ -3595,14 +3608,16 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
     ...INFO_PAGE_COPY.en!.download,
     title: 'Baixar Open Design — app de desktop gratuito e open source (macOS, Windows, Linux)',
     description:
-      'Baixe o app de desktop mais recente do Open Design — gratuito e open source (Apache-2.0). Instale, escolha um modelo com suas próprias chaves e comece a projetar. macOS (Apple Silicon e Intel), Windows e Linux.',
+      'Baixe o app de desktop mais recente do Open Design — gratuito e open source (Apache-2.0). Instale, entre uma vez e comece sem configurar chaves de modelo. Para macOS (Apple Silicon e Intel), Windows e Linux.',
     breadcrumb: 'Baixar',
     label: 'Baixar',
-    heading: 'Baixar Open Design.',
+    heading: 'Baixe o Open Design grátis. Crie designs com seu agente.',
     lead:
-      'Instale e crie: sem chave de API, sem configuração. O app de desktop já vem com o roteador de modelos oficial; faça login uma vez e comece a projetar.',
-    autoCtaPrefix: 'Baixar para',
-    autoCtaFallback: 'Baixar Open Design',
+      'Conecte Codex, Claude Code e outros agentes locais a sistemas de design selecionados para criar protótipos, sites, slides e vídeos HTML.',
+    heroVisualAlt:
+      'O workspace para desktop do Open Design cria um site com um agente local e um sistema de design selecionado.',
+    autoCtaPrefix: 'Baixe grátis para',
+    autoCtaFallback: 'Baixe o Open Design grátis',
     recommended: 'Recomendado',
     publishedPrefix: 'Publicado em',
     releaseNotes: 'Notas da versão',
@@ -3619,9 +3634,9 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
       { label: 'Windows', body: '10 ou 11 (x64) — instalador ou zip portátil.' },
       { label: 'Linux', body: 'AppImage, ou instalação com um clique via Docker / Podman Compose.' },
     ],
-    allReleasesTitle: 'Todas as versões e somas de verificação',
+    allReleasesTitle: 'Todas as versões',
     allReleasesBody:
-      'Cada build, soma de verificação e versão anterior fica no GitHub Releases e em releases.open-design.ai.',
+      'Cada build e versão anterior fica no GitHub Releases e em releases.open-design.ai.',
     ctaTitle: 'Prefere o terminal?',
     ctaBody:
       'Instale a partir do código-fonte com três comandos, ou controle o Open Design em modo headless pelo seu agente de código atual.',
@@ -3630,14 +3645,16 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
     ...INFO_PAGE_COPY.en!.download,
     title: 'Scarica Open Design — app desktop gratuita e open source (macOS, Windows, Linux)',
     description:
-      'Scarica l’ultima app desktop di Open Design — gratuita e open source (Apache-2.0). Installa, scegli un modello con le tue chiavi e inizia a progettare. macOS (Apple Silicon e Intel), Windows e Linux.',
+      'Scarica l’ultima app desktop di Open Design — gratuita e open source (Apache-2.0). Installa, accedi una volta e inizia senza configurare chiavi del modello. Per macOS (Apple Silicon e Intel), Windows e Linux.',
     breadcrumb: 'Scarica',
     label: 'Scarica',
-    heading: 'Scarica Open Design.',
+    heading: 'Scarica Open Design gratis. Progetta con il tuo agente.',
     lead:
-      'Installa e crea: nessuna chiave API, nessuna configurazione. L’app desktop include il model router ufficiale; accedi una volta e inizia a progettare.',
-    autoCtaPrefix: 'Scarica per',
-    autoCtaFallback: 'Scarica Open Design',
+      'Collega Codex, Claude Code e altri agenti locali a design system selezionati per creare prototipi, siti, slide e video HTML.',
+    heroVisualAlt:
+      'Il workspace desktop di Open Design crea un sito con un agente locale e un design system selezionato.',
+    autoCtaPrefix: 'Scarica gratis per',
+    autoCtaFallback: 'Scarica Open Design gratis',
     recommended: 'Consigliato',
     publishedPrefix: 'Pubblicato il',
     releaseNotes: 'Note di rilascio',
@@ -3654,9 +3671,9 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
       { label: 'Windows', body: '10 o 11 (x64) — installer o zip portatile.' },
       { label: 'Linux', body: 'AppImage, o installazione con un clic tramite Docker / Podman Compose.' },
     ],
-    allReleasesTitle: 'Tutte le release e i checksum',
+    allReleasesTitle: 'Tutte le release',
     allReleasesBody:
-      'Ogni build, checksum e versione precedente si trova su GitHub Releases e releases.open-design.ai.',
+      'Ogni build e versione precedente si trova su GitHub Releases e releases.open-design.ai.',
     ctaTitle: 'Preferisci il terminale?',
     ctaBody:
       'Installa dai sorgenti con tre comandi, oppure pilota Open Design in modalità headless dal tuo agente di coding esistente.',
@@ -3689,9 +3706,9 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
       { label: 'Windows', body: '10 hoặc 11 (x64) — bản cài đặt hoặc zip di động.' },
       { label: 'Linux', body: 'AppImage, hoặc cài đặt một chạm qua Docker / Podman Compose.' },
     ],
-    allReleasesTitle: 'Tất cả bản phát hành và checksum',
+    allReleasesTitle: 'Tất cả bản phát hành',
     allReleasesBody:
-      'Mọi bản dựng, checksum và phiên bản trước đều có trên GitHub Releases và releases.open-design.ai.',
+      'Mọi bản dựng và phiên bản trước đều có trên GitHub Releases và releases.open-design.ai.',
     ctaTitle: 'Thích dùng terminal hơn?',
     ctaBody:
       'Cài đặt từ mã nguồn bằng ba lệnh, hoặc điều khiển Open Design ở chế độ headless từ agent lập trình hiện có của bạn.',
@@ -3724,9 +3741,9 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
       { label: 'Windows', body: '10 lub 11 (x64) — instalator albo przenośny zip.' },
       { label: 'Linux', body: 'AppImage lub instalacja jednym kliknięciem przez Docker / Podman Compose.' },
     ],
-    allReleasesTitle: 'Wszystkie wydania i sumy kontrolne',
+    allReleasesTitle: 'Wszystkie wydania',
     allReleasesBody:
-      'Każda kompilacja, suma kontrolna i poprzednia wersja są na GitHub Releases i releases.open-design.ai.',
+      'Każda kompilacja i poprzednia wersja są na GitHub Releases i releases.open-design.ai.',
     ctaTitle: 'Wolisz terminal?',
     ctaBody:
       'Zainstaluj ze źródeł trzema poleceniami albo steruj Open Design w trybie headless ze swojego agenta do kodowania.',
@@ -3759,9 +3776,9 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
       { label: 'Windows', body: '10 atau 11 (x64) — penginstal atau zip portabel.' },
       { label: 'Linux', body: 'AppImage, atau penyiapan satu klik via Docker / Podman Compose.' },
     ],
-    allReleasesTitle: 'Semua rilis & checksum',
+    allReleasesTitle: 'Semua rilis',
     allReleasesBody:
-      'Setiap build, checksum, dan versi lampau ada di GitHub Releases dan releases.open-design.ai.',
+      'Setiap build dan versi lampau ada di GitHub Releases dan releases.open-design.ai.',
     ctaTitle: 'Lebih suka terminal?',
     ctaBody:
       'Pasang dari sumber dengan tiga perintah, atau jalankan Open Design secara headless dari agen coding Anda yang sudah ada.',
@@ -3794,9 +3811,9 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
       { label: 'Windows', body: '10 of 11 (x64) — installatieprogramma of portable zip.' },
       { label: 'Linux', body: 'AppImage, of installatie met één klik via Docker / Podman Compose.' },
     ],
-    allReleasesTitle: 'Alle releases en checksums',
+    allReleasesTitle: 'Alle releases',
     allReleasesBody:
-      'Elke build, checksum en eerdere versie staat op GitHub Releases en releases.open-design.ai.',
+      'Elke build en eerdere versie staat op GitHub Releases en releases.open-design.ai.',
     ctaTitle: 'Liever de terminal?',
     ctaBody:
       'Installeer vanuit de broncode met drie commando’s, of stuur Open Design headless aan vanuit je bestaande coding-agent.',
@@ -3829,9 +3846,9 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
       { label: 'Windows', body: '10 أو 11 (x64) — برنامج تثبيت أو ملف zip محمول.' },
       { label: 'Linux', body: 'AppImage، أو إعداد بنقرة واحدة عبر Docker / Podman Compose.' },
     ],
-    allReleasesTitle: 'جميع الإصدارات وقيم التحقق',
+    allReleasesTitle: 'جميع الإصدارات',
     allReleasesBody:
-      'كل بناء وقيمة تحقق وإصدار سابق موجود على GitHub Releases وعلى releases.open-design.ai.',
+      'كل بناء وإصدار سابق موجود على GitHub Releases وعلى releases.open-design.ai.',
     ctaTitle: 'تفضّل الطرفية؟',
     ctaBody:
       'ثبّت من المصدر بثلاثة أوامر، أو شغّل Open Design بوضع headless من وكيل البرمجة الحالي لديك.',
@@ -3840,14 +3857,16 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
     ...INFO_PAGE_COPY.en!.download,
     title: 'Open Design’i indir — ücretsiz ve açık kaynak masaüstü uygulaması (macOS, Windows, Linux)',
     description:
-      'En son Open Design masaüstü uygulamasını indirin — ücretsiz ve açık kaynak (Apache-2.0). Kurun, kendi anahtarlarınızla bir model seçin ve tasarlamaya başlayın. macOS (Apple Silicon ve Intel), Windows ve Linux.',
+      'En son Open Design masaüstü uygulamasını indirin — ücretsiz ve açık kaynak (Apache-2.0). Kurun, bir kez giriş yapın ve model anahtarı yapılandırmadan başlayın. macOS (Apple Silicon ve Intel), Windows ve Linux için.',
     breadcrumb: 'İndir',
     label: 'İndir',
-    heading: 'Open Design’i indir.',
+    heading: 'Open Design uygulamasını ücretsiz indirin. Ajanınızla tasarlayın.',
     lead:
-      'Kurun ve üretin — API anahtarı yok, kurulum yok. Masaüstü uygulaması resmi model yönlendiriciyle gelir; bir kez giriş yapın ve tasarlamaya başlayın.',
-    autoCtaPrefix: 'Şunun için indir:',
-    autoCtaFallback: 'Open Design’i indir',
+      'Codex, Claude Code ve diğer yerel ajanları özenle seçilmiş tasarım sistemleriyle buluşturarak prototipler, web siteleri, slaytlar ve HTML videolar oluşturun.',
+    heroVisualAlt:
+      'Yerel bir ajan ve özenle seçilmiş bir tasarım sistemiyle web sitesi oluşturan Open Design masaüstü çalışma alanı.',
+    autoCtaPrefix: 'Ücretsiz indirin:',
+    autoCtaFallback: 'Open Design uygulamasını ücretsiz indirin',
     recommended: 'Önerilen',
     publishedPrefix: 'Yayınlandı',
     releaseNotes: 'Sürüm notları',
@@ -3864,9 +3883,9 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
       { label: 'Windows', body: '10 veya 11 (x64) — yükleyici veya taşınabilir zip.' },
       { label: 'Linux', body: 'AppImage veya Docker / Podman Compose ile tek tıkla kurulum.' },
     ],
-    allReleasesTitle: 'Tüm sürümler ve sağlama toplamları',
+    allReleasesTitle: 'Tüm sürümler',
     allReleasesBody:
-      'Her derleme, sağlama toplamı ve geçmiş sürüm GitHub Releases ve releases.open-design.ai üzerindedir.',
+      'Her derleme ve geçmiş sürüm GitHub Releases ve releases.open-design.ai üzerindedir.',
     ctaTitle: 'Terminali mi tercih edersiniz?',
     ctaBody:
       'Kaynaktan üç komutla kurun veya Open Design’i mevcut kodlama aracınızdan headless olarak çalıştırın.',
@@ -3899,9 +3918,9 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
       { label: 'Windows', body: '10 або 11 (x64) — інсталятор або портативний zip.' },
       { label: 'Linux', body: 'AppImage або встановлення в один клік через Docker / Podman Compose.' },
     ],
-    allReleasesTitle: 'Усі випуски та контрольні суми',
+    allReleasesTitle: 'Усі випуски',
     allReleasesBody:
-      'Кожна збірка, контрольна сума й попередня версія — на GitHub Releases і releases.open-design.ai.',
+      'Кожна збірка й попередня версія — на GitHub Releases і releases.open-design.ai.',
     ctaTitle: 'Надаєте перевагу терміналу?',
     ctaBody:
       'Встановіть із джерел трьома командами або керуйте Open Design у headless-режимі з наявного агента для кодування.',
@@ -4164,14 +4183,15 @@ INFO_PAGE_COPY.zh = {
     ...INFO_PAGE_COPY.en!.download,
     title: '下载 Open Design —— 免费开源桌面客户端（macOS / Windows / Linux）',
     description:
-      '下载最新版 Open Design 桌面客户端——免费、开源（Apache-2.0）。装上、用自己的密钥选个模型，就能开始设计。支持 macOS（Apple Silicon 与 Intel）、Windows、Linux。',
+      '下载最新版 Open Design 桌面客户端——免费、开源（Apache-2.0）。安装后登录一次即可开始设计，无需配置模型密钥。支持 macOS（Apple Silicon 与 Intel）、Windows、Linux。',
     breadcrumb: '下载',
     label: '下载',
-    heading: '下载 Open Design。',
-    lead: '装上就能创作——不需要 API key、零配置。桌面端内置官方 model router，登录一次即可开始设计。',
+    heading: '免费下载 Open Design，用你的 Agent 开始设计。',
+    lead: '连接本地 Codex、Claude Code 等编程助手，调用精选设计系统，生成原型、网页、演示文稿和 HTML 视频。',
+    heroVisualAlt: 'Open Design 桌面工作区使用本地 Agent 和精选设计系统创建网站。',
     mobileDesktopNotice: 'Open Design 是桌面客户端，请在电脑上下载。',
-    autoCtaPrefix: '下载适用于',
-    autoCtaFallback: '下载 Open Design',
+    autoCtaPrefix: '免费下载',
+    autoCtaFallback: '免费下载 Open Design',
     recommended: '推荐',
     publishedPrefix: '发布于',
     releaseNotes: '更新日志',
@@ -4183,7 +4203,6 @@ INFO_PAGE_COPY.zh = {
     linuxBody: 'AppImage 以及 Docker / Podman Compose 一键搭建，见 release 页面。',
     installer: '安装版',
     portable: '便携版',
-    checksum: 'SHA-256',
     downloadVerb: '下载',
     requirementsTitle: '系统要求',
     requirements: [
@@ -4192,7 +4211,7 @@ INFO_PAGE_COPY.zh = {
       { label: 'Linux', body: 'AppImage，或 Docker / Podman Compose 一键搭建。' },
     ],
     allReleasesTitle: '全部版本',
-    allReleasesBody: '每个构建、校验和与历史版本都在 GitHub Releases 与 releases.open-design.ai 上。',
+    allReleasesBody: '每个构建与历史版本都在 GitHub Releases 与 releases.open-design.ai 上。',
     ctaTitle: '更喜欢用终端？',
     ctaBody: '三条命令从源码安装，或用你现有的编码 agent 以 headless 方式驱动 Open Design。',
   },

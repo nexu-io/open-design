@@ -210,6 +210,25 @@ describe('computeProducedFiles', () => {
   it('returns undefined when no baseline is provided', () => {
     expect(computeProducedFiles(undefined, [] as never)).toBeUndefined();
   });
+
+  it('uses authoritative run paths so an edited existing artifact is produced but its input is not', () => {
+    const before = new Set(['input.png', 'existing.png']);
+    const next = [
+      { name: 'input.png', path: 'input.png', kind: 'image', size: 10 },
+      { name: 'existing.png', path: 'existing.png', kind: 'image', size: 20 },
+    ];
+
+    expect(
+      computeProducedFiles(
+        before,
+        next as never,
+        ['existing.png'],
+        'project-1',
+      ),
+    ).toEqual([
+      expect.objectContaining({ name: 'existing.png' }),
+    ]);
+  });
 });
 
 describe('computeTraceObjectFiles', () => {
@@ -1190,13 +1209,13 @@ describe('ProjectView daemon reattach restore', () => {
 
     reattachDaemonRun.mockImplementation(async (options: any) => {
       const error = new Error(
-        'AMR Cloud reported insufficient balance for this model. Recharge your AMR wallet at https://open-design.ai/amr/wallet, then retry this run.',
+        'AMR Cloud reported insufficient balance for this model. Top up your AMR balance at https://open-design.ai/amr/dashboard, then retry this run.',
       ) as Error & { code: string; details: unknown };
       error.code = 'AMR_INSUFFICIENT_BALANCE';
       error.details = {
         kind: 'amr_account',
         action: 'recharge',
-        actionUrl: 'https://open-design.ai/amr/wallet',
+        actionUrl: 'https://open-design.ai/amr/dashboard',
       };
       options.handlers.onError(error);
     });

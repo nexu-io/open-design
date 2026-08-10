@@ -464,6 +464,87 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
     });
   });
 
+  it('keeps canonical tool spans without projecting ACP tool snapshot statuses', async () => {
+    await writeAppCfg({
+      installationId: 'install-uuid-1',
+      telemetry: { metrics: true, content: true, artifactManifest: false },
+    });
+    const fetchSpy = vi
+      .fn()
+      .mockResolvedValue(new Response('{}', { status: 207 }));
+    process.env.LANGFUSE_PUBLIC_KEY = 'pk';
+    process.env.LANGFUSE_SECRET_KEY = 'sk';
+    try {
+      await reportRunCompletedFromDaemon({
+        db: makeDbWithListMessages({
+          'conv-1': [
+            {
+              id: 'msg-1',
+              role: 'assistant',
+              content: '',
+              producedFiles: [],
+            },
+          ],
+        }),
+        dataDir,
+        run: makeRun({
+          agentId: 'amr',
+          events: [
+            {
+              id: 1,
+              event: 'agent',
+              data: { type: 'status', label: 'initializing' },
+            },
+            {
+              id: 2,
+              event: 'agent',
+              data: { type: 'status', label: 'tool_call' },
+            },
+            {
+              id: 3,
+              event: 'agent',
+              data: {
+                type: 'tool_use',
+                id: 'call-1',
+                name: 'Bash',
+                input: { command: 'pwd' },
+              },
+            },
+            {
+              id: 4,
+              event: 'agent',
+              data: { type: 'status', label: 'tool_call_update' },
+            },
+            {
+              id: 5,
+              event: 'agent',
+              data: {
+                type: 'tool_result',
+                toolUseId: 'call-1',
+                content: '/tmp',
+                isError: false,
+              },
+            },
+          ] as any,
+        }) as any,
+        fetchImpl: fetchSpy as any,
+      });
+    } finally {
+      delete process.env.LANGFUSE_PUBLIC_KEY;
+      delete process.env.LANGFUSE_SECRET_KEY;
+    }
+
+    const init = fetchSpy.mock.calls[0]![1] as RequestInit;
+    const batch = JSON.parse(init.body as string).batch as any[];
+    expect(bodyOf(batch, 'span-create', 'tool:Bash')).toBeTruthy();
+    expect(bodyOf(batch, 'event-create', 'agent-status:initializing')).toBeTruthy();
+    const names = batch
+      .filter((item) => item.type === 'event-create')
+      .map((item) => item.body.name);
+    expect(names).not.toContain('agent-status:tool_call');
+    expect(names).not.toContain('agent-status:tool_call_update');
+  });
+
   it('marks trace-safe object manifests partial when object accounting is incomplete', async () => {
     await writeAppCfg({
       installationId: 'install-uuid-1',
@@ -2077,7 +2158,21 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
             {
               id: 1,
               event: 'error',
-              data: { error: { message: 'agent stream blew up' } },
+              data: {
+                error: {
+                  message: 'agent stream blew up',
+                  details: {
+                    kind: 'opencode_prompt_error',
+                    runtime: 'opencode',
+                    phase: 'timeout',
+                    openCodeSessionId: 'session-must-not-reach-langfuse',
+                    lastEventType: 'tool_call',
+                    lastToolCallId: 'call-must-not-reach-langfuse',
+                    lastToolStatus: 'in_progress',
+                    lastToolKind: 'write',
+                  },
+                },
+              },
             },
           ],
         }) as any,
@@ -2092,6 +2187,14 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
     expect(batch[0].body.metadata.status).toBe('failed');
     expect(batch[0].body.metadata.success).toBe(false);
     expect(batch[0].body.metadata.error).toBe('agent stream blew up');
+    expect(batch[0].body.metadata.diagnostics).toMatchObject({
+      amr_opencode_error_phase: 'timeout',
+      amr_opencode_last_event_type: 'tool_call',
+      amr_opencode_last_tool_status: 'in_progress',
+      amr_opencode_last_tool_kind: 'write',
+    });
+    expect(JSON.stringify(batch)).not.toContain('session-must-not-reach-langfuse');
+    expect(JSON.stringify(batch)).not.toContain('call-must-not-reach-langfuse');
     expect(bodyOf(batch, 'span-create', 'agent-run').level).toBe('ERROR');
     expect(bodyOf(batch, 'generation-create', 'llm').level).toBe('ERROR');
     expect(bodyOf(batch, 'generation-create', 'llm').statusMessage).toBe(

@@ -8,13 +8,15 @@
 
 ## When to use this document
 
-At the start of SKILL.md's `Step 1 · Clarify intent`: **first let the user pick one of these 5 directions**, then ask about theme color / duration / audience / outline. The flow is:
+Use these directions to infer the closest fit from the brief. Show the choices
+only when the user explicitly asks to see or compare visual directions. The
+flow is:
 
 ```
 1. The user says "I want to make a talk deck"
-2. You (the agent) introduce the 5 directions (copy the 1-line summary below)
-3. The user picks a direction (or says "I don't know, you recommend")
-4. By the chosen direction you have answered "theme color" and "slide count," then ask the remaining 4
+2. You infer the closest direction from the brief and known context
+3. If the user explicitly asks for options, show the 5 summaries in one direction-cards form
+4. Use the inferred or selected direction to resolve theme color and slide count
 ```
 
 **Hard rule**: the direction can only be picked from the 5 below, no mixing. Mixing = walking the failure path that huashu-design validated (brand asset protocol v1). If the user is unhappy with all 5, gently steer them to the closest one, then allow slight tone customization in `chrome` / `kicker`, **but never change the colors**.

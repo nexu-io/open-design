@@ -10,10 +10,477 @@ import {
 } from '../run-tool-bundle.js';
 import { createRunLifecycleTracer } from '../run-lifecycle-tracer.js';
 import { projectWorkspaceProvenance } from '../workspace-contract.js';
+import { OPEN_DESIGN_PLUGIN_ID } from '../mcp-observability.js';
+import {
+  scanRunEventsForUsageAnalytics,
+  summarizeRunTimingAnalytics,
+} from '../run-analytics-observability.js';
+import {
+  interruptDurableRunAfterDaemonRestart,
+  RESTART_ERROR_CODE,
+  RESTART_ERROR_MESSAGE,
+} from './run-restart-recovery.js';
 
 export const TERMINAL_RUN_STATUSES = new Set(['succeeded', 'failed', 'canceled']);
 
 const RUN_STATE_SCHEMA_VERSION = 1;
+
+const DIAGNOSTIC_SOURCE = 'open-design-daemon';
+
+function availableDiagnostic(value, definition, complete = true, source = DIAGNOSTIC_SOURCE) {
+  return {
+    state: 'available',
+    value,
+    evidence: 'computed',
+    source,
+    complete,
+    definition,
+  };
+}
+
+function missingDiagnostic(missingReason, source = DIAGNOSTIC_SOURCE, state = 'not_collected') {
+  return { state, source, missingReason };
+}
+
+function optionalDiagnostic(value, definition, complete = true, missingReason = 'upstream_did_not_emit_metric', source = DIAGNOSTIC_SOURCE) {
+  return value === undefined
+    ? missingDiagnostic(missingReason, source, 'upstream_unavailable')
+    : availableDiagnostic(value, definition, complete, source);
+}
+
+function summarizeToolEvents(events, complete) {
+  const calls = new Map();
+  const byName = {};
+  for (const record of events) {
+    if (record?.event !== 'agent' || !record.data || typeof record.data !== 'object') continue;
+    const data = record.data;
+    if (data.type === 'tool_use' && typeof data.id === 'string') {
+      const name = typeof data.name === 'string' && data.name.trim() ? data.name.trim() : 'unknown';
+      const startedAt = typeof data.startedAt === 'number' && Number.isFinite(data.startedAt)
+        ? data.startedAt
+        : record.timestamp;
+      calls.set(data.id, { name, startedAt, status: 'unknown' });
+      byName[name] = (byName[name] ?? 0) + 1;
+    } else if (data.type === 'tool_result' && typeof data.toolUseId === 'string') {
+      const call = calls.get(data.toolUseId);
+      if (!call) continue;
+      call.status = data.isError === true ? 'error' : 'ok';
+      if (
+        typeof record.timestamp === 'number' &&
+        typeof call.startedAt === 'number' &&
+        record.timestamp >= call.startedAt
+      ) {
+        call.durationMs = record.timestamp - call.startedAt;
+      }
+    }
+  }
+  let succeeded = 0;
+  let failed = 0;
+  let unknown = 0;
+  let durationMs = 0;
+  for (const call of calls.values()) {
+    if (call.status === 'ok') succeeded += 1;
+    else if (call.status === 'error') failed += 1;
+    else unknown += 1;
+    if (typeof call.durationMs === 'number') durationMs += call.durationMs;
+  }
+  return { total: calls.size, succeeded, failed, unknown, durationMs, byName, complete };
+}
+
+function percentileNearestRank(values, percentile) {
+  if (!Array.isArray(values) || values.length === 0) return undefined;
+  const sorted = [...values].sort((a, b) => a - b);
+  const index = Math.max(0, Math.ceil(percentile * sorted.length) - 1);
+  return sorted[index];
+}
+
+function summarizeModelStepEvents(events) {
+  const steps = new Map();
+  let lifecycleObserved = false;
+  let retryCount = 0;
+  let fallbackOrdinal = 0;
+  for (const record of events) {
+    if (record?.event !== 'agent' || !record.data || typeof record.data !== 'object') continue;
+    const data = record.data;
+    if (data.type !== 'diagnostic') continue;
+    if (data.name === 'model_retry') {
+      retryCount += 1;
+      continue;
+    }
+    if (data.name !== 'model_step_lifecycle') continue;
+    lifecycleObserved = true;
+    const messageIndex = Number.isFinite(data.assistantMessageIndex)
+      ? data.assistantMessageIndex
+      : 'unknown';
+    const stepIndex = Number.isFinite(data.stepIndex) ? data.stepIndex : undefined;
+    const key = stepIndex === undefined
+      ? `fallback-${fallbackOrdinal += 1}`
+      : `${messageIndex}:${stepIndex}`;
+    const current = steps.get(key) ?? {
+      status: 'incomplete',
+      startedAtMs: undefined,
+      endedAtMs: undefined,
+      durationMs: undefined,
+      reasoningTokens: undefined,
+    };
+    if (data.phase === 'start') {
+      if (Number.isFinite(data.startedAtMs)) current.startedAtMs = data.startedAtMs;
+    } else if (data.phase === 'end') {
+      if (Number.isFinite(data.startedAtMs)) current.startedAtMs = data.startedAtMs;
+      if (Number.isFinite(data.endedAtMs)) current.endedAtMs = data.endedAtMs;
+      const usage = data.usage && typeof data.usage === 'object' ? data.usage : undefined;
+      if (Number.isFinite(usage?.reasoningTokens) && usage.reasoningTokens >= 0) {
+        current.reasoningTokens = usage.reasoningTokens;
+      }
+      const preciseDurationBoundary = data.timingEvidence !== 'first_output_fallback';
+      if (preciseDurationBoundary && Number.isFinite(data.durationMs) && data.durationMs >= 0) {
+        current.durationMs = data.durationMs;
+      } else if (
+        preciseDurationBoundary &&
+        Number.isFinite(current.startedAtMs) &&
+        Number.isFinite(current.endedAtMs) &&
+        current.endedAtMs >= current.startedAtMs
+      ) {
+        current.durationMs = current.endedAtMs - current.startedAtMs;
+      }
+      current.status =
+        data.status === 'failed' || data.status === 'cancelled' || data.status === 'completed'
+          ? data.status
+          : 'incomplete';
+    }
+    steps.set(key, current);
+  }
+  const durations = [];
+  let completed = 0;
+  let failed = 0;
+  let cancelled = 0;
+  let incomplete = 0;
+  let reasoningTokens = 0;
+  let reasoningTokenSampleCount = 0;
+  for (const step of steps.values()) {
+    if (Number.isFinite(step.durationMs) && step.durationMs >= 0) durations.push(step.durationMs);
+    if (Number.isFinite(step.reasoningTokens) && step.reasoningTokens >= 0) {
+      reasoningTokens += step.reasoningTokens;
+      reasoningTokenSampleCount += 1;
+    }
+    if (step.status === 'completed') completed += 1;
+    else if (step.status === 'failed') failed += 1;
+    else if (step.status === 'cancelled') cancelled += 1;
+    else incomplete += 1;
+  }
+  const totalDurationMs = durations.reduce((sum, value) => sum + value, 0);
+  return {
+    lifecycleObserved,
+    count: steps.size,
+    durations,
+    durationSampleCount: durations.length,
+    durationComplete: steps.size > 0 && durations.length === steps.size,
+    totalDurationMs,
+    averageDurationMs: durations.length > 0 ? totalDurationMs / durations.length : undefined,
+    p50DurationMs: percentileNearestRank(durations, 0.5),
+    p90DurationMs: percentileNearestRank(durations, 0.9),
+    maxDurationMs: durations.length > 0 ? Math.max(...durations) : undefined,
+    over60sCount: durations.filter((duration) => duration > 60_000).length,
+    completed,
+    failed,
+    cancelled,
+    incomplete,
+    retryCount,
+    // AMR/OpenCode reports provider usage per model step. Summing the unique
+    // step records recovers the turn total without treating the values as
+    // cumulative snapshots or double-counting repeated lifecycle frames.
+    reasoningTokens: reasoningTokenSampleCount > 0 ? reasoningTokens : undefined,
+    reasoningTokensComplete: steps.size > 0 && reasoningTokenSampleCount === steps.size,
+  };
+}
+
+function summarizeAssistantMessageEvents(events) {
+  const messages = new Map();
+  let lifecycleObserved = false;
+  let retryCount = 0;
+  let rateLimitedCount = 0;
+  let timeoutCount = 0;
+  let upstreamErrorCount = 0;
+  let provider;
+  let model;
+  let fallbackOrdinal = 0;
+  const countErrorClass = (value) => {
+    if (value === 'rate_limited') rateLimitedCount += 1;
+    else if (value === 'timeout') timeoutCount += 1;
+    else if (value === 'upstream_error') upstreamErrorCount += 1;
+  };
+  for (const record of events) {
+    if (record?.event !== 'agent' || !record.data || typeof record.data !== 'object') continue;
+    const data = record.data;
+    if (data.type !== 'diagnostic') continue;
+    if (data.name === 'model_retry') {
+      retryCount += 1;
+      countErrorClass(data.errorClass);
+      continue;
+    }
+    if (data.name !== 'assistant_message_lifecycle') continue;
+    lifecycleObserved = true;
+    if (typeof data.provider === 'string' && data.provider.trim()) provider = data.provider.trim();
+    if (typeof data.model === 'string' && data.model.trim()) model = data.model.trim();
+    const messageIndex = Number.isFinite(data.assistantMessageIndex)
+      ? data.assistantMessageIndex
+      : `fallback-${fallbackOrdinal += 1}`;
+    const current = messages.get(messageIndex) ?? {
+      status: 'incomplete',
+      startedAtMs: undefined,
+      endedAtMs: undefined,
+      durationMs: undefined,
+    };
+    if (data.phase === 'start') {
+      if (Number.isFinite(data.startedAtMs)) current.startedAtMs = data.startedAtMs;
+    } else if (data.phase === 'end') {
+      if (Number.isFinite(data.startedAtMs)) current.startedAtMs = data.startedAtMs;
+      if (Number.isFinite(data.endedAtMs)) current.endedAtMs = data.endedAtMs;
+      if (Number.isFinite(data.durationMs) && data.durationMs >= 0) {
+        current.durationMs = data.durationMs;
+      } else if (
+        Number.isFinite(current.startedAtMs)
+        && Number.isFinite(current.endedAtMs)
+        && current.endedAtMs >= current.startedAtMs
+      ) {
+        current.durationMs = current.endedAtMs - current.startedAtMs;
+      }
+      current.status =
+        data.status === 'failed' || data.status === 'cancelled' || data.status === 'completed'
+          ? data.status
+          : 'incomplete';
+      countErrorClass(data.errorClass);
+    }
+    messages.set(messageIndex, current);
+  }
+  const durations = [];
+  let completed = 0;
+  let failed = 0;
+  let cancelled = 0;
+  let incomplete = 0;
+  for (const message of messages.values()) {
+    if (Number.isFinite(message.durationMs) && message.durationMs >= 0) durations.push(message.durationMs);
+    if (message.status === 'completed') completed += 1;
+    else if (message.status === 'failed') failed += 1;
+    else if (message.status === 'cancelled') cancelled += 1;
+    else incomplete += 1;
+  }
+  const totalDurationMs = durations.reduce((sum, value) => sum + value, 0);
+  return {
+    lifecycleObserved,
+    count: messages.size,
+    durationSampleCount: durations.length,
+    durationComplete: messages.size > 0 && durations.length === messages.size,
+    totalDurationMs,
+    averageDurationMs: durations.length > 0 ? totalDurationMs / durations.length : undefined,
+    maxDurationMs: durations.length > 0 ? Math.max(...durations) : undefined,
+    completed,
+    failed,
+    cancelled,
+    incomplete,
+    retryCount,
+    rateLimitedCount,
+    timeoutCount,
+    upstreamErrorCount,
+    provider,
+    model,
+  };
+}
+
+function classifyTerminalRunError(run) {
+  const value = `${run.errorCode ?? ''} ${run.error ?? ''}`.trim().toLowerCase();
+  if (!value) return undefined;
+  if (value.includes('429') || value.includes('rate limit') || value.includes('too many requests')) {
+    return 'rate_limited';
+  }
+  if (value.includes('timeout') || value.includes('timed out') || value.includes('deadline exceeded')) {
+    return 'timeout';
+  }
+  if (value.includes('upstream') || value.includes('service unavailable') || value.includes('bad gateway') || value.includes('gateway timeout')) {
+    return 'upstream_error';
+  }
+  return undefined;
+}
+
+function buildExecutionDiagnostics(run) {
+  if (!TERMINAL_RUN_STATUSES.has(run.status)) return undefined;
+  const eventStreamComplete = run.events.length === 0 || run.events[0]?.id === 1;
+  const timing = summarizeRunTimingAnalytics({
+    runCreatedAt: run.createdAt,
+    runUpdatedAt: run.updatedAt,
+    analyticsCapturedAt: run.updatedAt,
+    ...(run.analyticsTelemetry ? { telemetry: run.analyticsTelemetry } : {}),
+    events: run.events,
+  });
+  const usage = scanRunEventsForUsageAnalytics(run.events, run.model, 0);
+  const tools = summarizeToolEvents(run.events, eventStreamComplete);
+  const modelSteps = summarizeModelStepEvents(run.events);
+  const assistantMessages = summarizeAssistantMessageEvents(run.events);
+  const terminalErrorClass = classifyTerminalRunError(run);
+  const firstModelEventAt = run.analyticsTelemetry?.firstModelEventAt;
+  const agentExecutionDurationMs =
+    typeof firstModelEventAt === 'number' && run.updatedAt >= firstModelEventAt
+      ? Math.round(run.updatedAt - firstModelEventAt)
+      : undefined;
+  const eventCompletenessReason = eventStreamComplete
+    ? undefined
+    : 'run_event_ring_buffer_truncated';
+  const toolValue = (value, definition) =>
+    eventStreamComplete
+      ? availableDiagnostic(value, definition, true)
+      : missingDiagnostic(eventCompletenessReason);
+  const cacheSource = usage.cache_token_source === 'unavailable'
+    ? 'model-provider'
+    : 'agent-runtime';
+  const cacheMetric = (value, definition) => optionalDiagnostic(
+    value,
+    definition,
+    eventStreamComplete,
+    usage.cache_token_source === 'unavailable'
+      ? 'model_provider_did_not_return_cache_usage'
+      : eventCompletenessReason ?? 'upstream_did_not_emit_metric',
+    cacheSource,
+  );
+  const modelStepMetric = (value, definition, complete = modelSteps.durationComplete) => {
+    if (!eventStreamComplete) return missingDiagnostic(eventCompletenessReason, 'agent-runtime');
+    if (!modelSteps.lifecycleObserved) {
+      return missingDiagnostic('assistant_message_lifecycle_not_exposed_by_runtime', 'agent-runtime');
+    }
+    return value === undefined
+      ? missingDiagnostic('model_step_duration_boundary_incomplete', 'agent-runtime', 'upstream_unavailable')
+      : availableDiagnostic(value, definition, complete, 'agent-runtime');
+  };
+  const percentileMetric = (value, definition, minimumSamples) => {
+    if (!eventStreamComplete) return missingDiagnostic(eventCompletenessReason, 'agent-runtime');
+    if (!modelSteps.lifecycleObserved) {
+      return missingDiagnostic('assistant_message_lifecycle_not_exposed_by_runtime', 'agent-runtime');
+    }
+    if (modelSteps.durationSampleCount < minimumSamples) {
+      return missingDiagnostic(
+        `insufficient_model_step_samples_min_${minimumSamples}`,
+        'agent-runtime',
+        'upstream_unavailable',
+      );
+    }
+    return availableDiagnostic(value, definition, modelSteps.durationComplete, 'agent-runtime');
+  };
+  const assistantMetric = (value, definition, complete = assistantMessages.durationComplete) => {
+    if (!eventStreamComplete) return missingDiagnostic(eventCompletenessReason, 'agent-runtime');
+    if (!assistantMessages.lifecycleObserved) {
+      return missingDiagnostic('assistant_message_lifecycle_not_exposed_by_runtime', 'agent-runtime');
+    }
+    return value === undefined
+      ? missingDiagnostic('assistant_message_duration_boundary_incomplete', 'agent-runtime', 'upstream_unavailable')
+      : availableDiagnostic(value, definition, complete, 'agent-runtime');
+  };
+  const anomalyMetric = (value, definition) => eventStreamComplete
+    ? availableDiagnostic(value, definition, true, 'agent-runtime')
+    : missingDiagnostic(eventCompletenessReason, 'agent-runtime');
+  const reasoningTokens = usage.thought_tokens ?? modelSteps.reasoningTokens;
+  const reasoningTokensComplete = usage.thought_tokens !== undefined
+    ? eventStreamComplete
+    : eventStreamComplete && modelSteps.reasoningTokensComplete;
+
+  return {
+    schemaVersion: 1,
+    collectorVersion: 'open-design-execution-diagnostics-v2',
+    collectedAt: run.updatedAt,
+    eventStreamCompleteness: eventStreamComplete ? 'complete' : 'partial',
+    timing: {
+      queueDurationMs: optionalDiagnostic(timing.queue_duration_ms, 'run accepted to execution start'),
+      promptBuildDurationMs: optionalDiagnostic(timing.prompt_build_duration_ms, 'prompt build start to end'),
+      launchPreflightDurationMs: optionalDiagnostic(timing.launch_preflight_duration_ms, 'runtime preflight start to end'),
+      processSpawnDurationMs: optionalDiagnostic(timing.process_spawn_duration_ms, 'process spawn start to child ready'),
+      stdinWriteDurationMs: optionalDiagnostic(timing.stdin_write_duration_ms, 'prompt stdin write start to end'),
+      firstModelEventWaitMs: optionalDiagnostic(timing.time_to_first_model_event_ms, 'execution start to first model event'),
+      firstVisibleOutputWaitMs: optionalDiagnostic(timing.time_to_first_visible_output_ms, 'execution start to first visible assistant output'),
+      agentExecutionDurationMs: optionalDiagnostic(agentExecutionDurationMs, 'first model event to terminal run state'),
+      toolDurationMs: optionalDiagnostic(timing.tool_duration_ms, 'sum of paired tool_use to tool_result intervals', eventStreamComplete, eventCompletenessReason ?? 'no_paired_tool_duration'),
+      artifactWriteDurationMs: optionalDiagnostic(timing.artifact_write_duration_ms, 'first observed artifact-write tool interval'),
+      totalDurationMs: availableDiagnostic(timing.total_duration_ms, 'run accepted to terminal state'),
+      ...(timing.phase_timing_status ? { phaseTimingStatus: timing.phase_timing_status } : {}),
+      ...(timing.bottleneck_phase ? { bottleneckPhase: timing.bottleneck_phase } : {}),
+    },
+    modelSteps: {
+      count: modelStepMetric(modelSteps.count, 'unique observed model-step lifecycle records', true),
+      totalDurationMs: modelStepMetric(modelSteps.durationSampleCount > 0 ? modelSteps.totalDurationMs : undefined, 'sum of measured model-step durations'),
+      averageDurationMs: percentileMetric(modelSteps.averageDurationMs, 'average measured model-step duration; shown with at least 3 samples', 3),
+      p50DurationMs: percentileMetric(modelSteps.p50DurationMs, 'nearest-rank p50 measured model-step duration; shown with at least 3 samples', 3),
+      p90DurationMs: percentileMetric(modelSteps.p90DurationMs, 'nearest-rank p90 measured model-step duration; shown with at least 10 samples', 10),
+      maxDurationMs: modelStepMetric(modelSteps.maxDurationMs, 'maximum measured model-step duration'),
+      over60sCount: modelStepMetric(modelSteps.durationSampleCount > 0 ? modelSteps.over60sCount : undefined, 'measured model steps longer than 60 seconds'),
+      durationSampleCount: modelStepMetric(modelSteps.durationSampleCount, 'model steps with both start and end timing boundaries', true),
+      completed: modelStepMetric(modelSteps.completed, 'model steps ending completed', true),
+      failed: modelStepMetric(modelSteps.failed, 'model steps ending failed', true),
+      cancelled: modelStepMetric(modelSteps.cancelled, 'model steps ending cancelled', true),
+      incomplete: modelStepMetric(modelSteps.incomplete, 'model steps without a terminal lifecycle event', true),
+      retryCount: modelStepMetric(modelSteps.retryCount, 'runtime-observed model retry events; retries do not increment model-step count', true),
+      reasoningTokens: optionalDiagnostic(reasoningTokens, 'provider-reported reasoning token count summed across unique model steps when turn-level usage is absent', reasoningTokensComplete, 'model_provider_did_not_return_reasoning_tokens', 'model-provider'),
+      reasoningDurationMs: missingDiagnostic('reasoning_interval_boundaries_not_exposed_by_runtime', 'agent-runtime'),
+    },
+    assistantMessages: {
+      count: assistantMetric(assistantMessages.count, 'unique observed assistant-message lifecycle records', true),
+      totalDurationMs: assistantMetric(assistantMessages.durationSampleCount > 0 ? assistantMessages.totalDurationMs : undefined, 'sum of measured assistant-message durations'),
+      averageDurationMs: assistantMetric(assistantMessages.averageDurationMs, 'average measured assistant-message duration'),
+      maxDurationMs: assistantMetric(assistantMessages.maxDurationMs, 'maximum measured assistant-message duration'),
+      durationSampleCount: assistantMetric(assistantMessages.durationSampleCount, 'assistant messages with both timing boundaries', true),
+      completed: assistantMetric(assistantMessages.completed, 'assistant messages ending completed', true),
+      failed: assistantMetric(assistantMessages.failed, 'assistant messages ending failed', true),
+      cancelled: assistantMetric(assistantMessages.cancelled, 'assistant messages ending cancelled', true),
+      incomplete: assistantMetric(assistantMessages.incomplete, 'assistant messages without a terminal lifecycle event', true),
+    },
+    anomalies: {
+      retryCount: anomalyMetric(assistantMessages.retryCount, 'runtime-observed model retry events'),
+      rateLimitedCount: anomalyMetric(Math.max(assistantMessages.rateLimitedCount, terminalErrorClass === 'rate_limited' ? 1 : 0), 'runtime-observed 429 or rate-limit events'),
+      timeoutCount: anomalyMetric(Math.max(assistantMessages.timeoutCount, terminalErrorClass === 'timeout' ? 1 : 0), 'runtime-observed provider timeout events'),
+      upstreamErrorCount: anomalyMetric(Math.max(assistantMessages.upstreamErrorCount, terminalErrorClass === 'upstream_error' ? 1 : 0), 'runtime-observed upstream provider errors'),
+    },
+    tools: {
+      total: toolValue(tools.total, 'count of observed tool_use events'),
+      succeeded: toolValue(tools.succeeded, 'tool_result events without isError'),
+      failed: toolValue(tools.failed, 'tool_result events with isError'),
+      unknown: toolValue(tools.unknown, 'tool_use events without a matching terminal result'),
+      durationMs: toolValue(tools.durationMs, 'sum of paired tool_use to tool_result intervals'),
+      byName: toolValue(tools.byName, 'tool_use count grouped by redacted tool name'),
+    },
+    cache: {
+      inputTokensEffective: cacheMetric(usage.input_tokens_effective, 'normalized full prompt tokens'),
+      cacheReadInputTokens: cacheMetric(usage.cache_read_input_tokens, 'provider-reported cache-read input tokens'),
+      cacheCreationInputTokens: cacheMetric(usage.cache_creation_input_tokens, 'provider-reported cache-write input tokens'),
+      uncachedInputTokens: cacheMetric(usage.uncached_input_tokens, 'normalized uncached input tokens'),
+      cacheHitRatio: cacheMetric(usage.cache_hit_ratio, 'cache read tokens divided by effective input tokens'),
+      firstCallInputTokens: cacheMetric(usage.first_call_input_tokens, 'opening model call input tokens'),
+      firstCallCacheReadInputTokens: cacheMetric(usage.first_call_cache_read_input_tokens, 'opening model call cache-read tokens'),
+      firstCallCacheHitRatio: cacheMetric(usage.first_call_cache_hit_ratio, 'opening model call cache read divided by effective input'),
+      stablePromptCacheHit: run.promptCache
+        ? availableDiagnostic(Boolean(run.promptCache.hit), 'local stable-prompt hash matched the prior run')
+        : missingDiagnostic('stable_prompt_cache_not_enabled'),
+      stablePromptCacheMissReason: run.promptCache?.missReason
+        ? availableDiagnostic(run.promptCache.missReason, 'local stable-prompt cache miss classification')
+        : missingDiagnostic(run.promptCache?.hit ? 'stable_prompt_cache_hit' : 'stable_prompt_cache_not_enabled'),
+    },
+    environment: {
+      agentId: run.agentId
+        ? availableDiagnostic(run.agentId, 'requested agent runtime', true, 'agent-runtime')
+        : missingDiagnostic('agent_id_not_recorded', 'agent-runtime'),
+      provider: assistantMessages.provider
+        ? availableDiagnostic(assistantMessages.provider, 'provider id reported by the agent runtime', true, 'agent-runtime')
+        : missingDiagnostic('provider_not_reported_by_runtime', 'agent-runtime'),
+      requestedModel: run.model
+        ? availableDiagnostic(run.model, 'requested model configuration', true, 'agent-runtime')
+        : missingDiagnostic('requested_model_not_recorded', 'agent-runtime'),
+      resolvedModel: run.resolvedModelId || assistantMessages.model
+        ? availableDiagnostic(run.resolvedModelId || assistantMessages.model, 'runtime-resolved model id', true, 'agent-runtime')
+        : missingDiagnostic('resolved_model_not_reported', 'agent-runtime'),
+      reasoning: run.reasoning
+        ? availableDiagnostic(run.reasoning, 'requested reasoning configuration', true, 'agent-runtime')
+        : missingDiagnostic('reasoning_configuration_not_recorded', 'agent-runtime'),
+      agentCliVersion: run.preflightAgentCliVersion
+        ? availableDiagnostic(run.preflightAgentCliVersion, 'runtime CLI version observed during preflight', true, 'agent-runtime')
+        : missingDiagnostic('agent_cli_version_not_recorded', 'agent-runtime'),
+    },
+  };
+}
 
 function atomicWriteJson(filePath, value) {
   const tempPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
@@ -33,6 +500,8 @@ function durableRunState(run) {
     projectId: run.projectId,
     conversationId: run.conversationId,
     assistantMessageId: run.assistantMessageId,
+    clientRequestId: run.clientRequestId,
+    requestFingerprint: run.requestFingerprint,
     agentId: run.agentId,
     status: run.status,
     createdAt: run.createdAt,
@@ -41,7 +510,12 @@ function durableRunState(run) {
     signal: run.signal,
     error: run.error,
     errorCode: run.errorCode,
+    failureCategory: run.failureCategory ?? null,
+    failureDetail: run.failureDetail ?? null,
+    failureAction: run.failureAction ?? null,
+    resumable: run.resumable ?? false,
     artifactCount: Number.isFinite(run.artifactCount) ? run.artifactCount : 0,
+    ...(Array.isArray(run.artifactPaths) ? { artifactPaths: run.artifactPaths } : {}),
     endedWithUnfinishedWork: Boolean(run.endedWithUnfinishedWork),
     ...(typeof run.userPrompt === 'string' ? { userPrompt: run.userPrompt } : {}),
     ...(typeof run.model === 'string' ? { model: run.model } : {}),
@@ -59,10 +533,38 @@ function durableRunState(run) {
       ? { designSystemSelectionSource: run.designSystemSelectionSource }
       : {}),
     ...(typeof run.clientType === 'string' ? { clientType: run.clientType } : {}),
+    ...(run.workspaceScope !== undefined ? { workspaceScope: run.workspaceScope } : {}),
     ...(run.analyticsTelemetry ? { analyticsTelemetry: run.analyticsTelemetry } : {}),
     ...(run.promptTelemetry ? { promptTelemetry: run.promptTelemetry } : {}),
     ...(run.promptCache ? { promptCache: run.promptCache } : {}),
     ...(run.analyticsRecovery ? { analyticsRecovery: run.analyticsRecovery } : {}),
+    ...(run.externalPluginAnalytics
+      ? { externalPluginAnalytics: run.externalPluginAnalytics }
+      : {}),
+    ...(typeof run.manualResumeAttemptCount === 'number'
+      ? { manualResumeAttemptCount: run.manualResumeAttemptCount }
+      : {}),
+    ...(typeof run.rechargeWaitDurationMs === 'number'
+      ? { rechargeWaitDurationMs: run.rechargeWaitDurationMs }
+      : {}),
+    ...(typeof run.artifactOriginStatus === 'string'
+      ? { artifactOriginStatus: run.artifactOriginStatus }
+      : {}),
+    ...(typeof run.artifactVersionId === 'string'
+      ? { artifactVersionId: run.artifactVersionId }
+      : {}),
+    ...(typeof run.deliverableValid === 'boolean'
+      ? { deliverableValid: run.deliverableValid }
+      : {}),
+    ...(typeof run.deliverableValidation === 'string'
+      ? { deliverableValidation: run.deliverableValidation }
+      : {}),
+    ...(typeof run.deliverableEntryFile === 'string'
+      ? { deliverableEntryFile: run.deliverableEntryFile }
+      : {}),
+    ...(typeof run.deliverableArtifactKind === 'string'
+      ? { deliverableArtifactKind: run.deliverableArtifactKind }
+      : {}),
     ...(typeof run.langfuseCompletedAt === 'number'
       ? { langfuseCompletedAt: run.langfuseCompletedAt }
       : {}),
@@ -80,6 +582,40 @@ function extractErrorDetails(data) {
     error: readString(nested.message) ?? readString(payload.message),
     errorCode: readString(nested.code) ?? readString(payload.code),
   };
+}
+
+function readDurableRunState(statePath) {
+  try {
+    const value = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+    if (
+      !value
+      || typeof value !== 'object'
+      || value.schemaVersion !== RUN_STATE_SCHEMA_VERSION
+      || typeof value.id !== 'string'
+      || typeof value.status !== 'string'
+    ) {
+      return null;
+    }
+    return value;
+  } catch {
+    return null;
+  }
+}
+
+function readDurableRunEvents(eventsLogPath) {
+  try {
+    return fs.readFileSync(eventsLogPath, 'utf8')
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => JSON.parse(line))
+      .filter((record) =>
+        record
+        && typeof record === 'object'
+        && Number.isFinite(record.id)
+        && typeof record.event === 'string');
+  } catch {
+    return [];
+  }
 }
 
 export function createChatRunService({
@@ -103,6 +639,109 @@ export function createChatRunService({
   onEventEmitted = null,
 }) {
   const runs = new Map();
+  const runIdsByClientRequestId = new Map();
+  const runIdsByPluginWorkflowId = new Map();
+
+  if (runsLogDir) {
+    try {
+      for (const entry of fs.readdirSync(runsLogDir, { withFileTypes: true })) {
+        if (!entry.isDirectory()) continue;
+        const state = readDurableRunState(path.join(runsLogDir, entry.name, 'state.json'));
+        if (
+          typeof state?.clientRequestId === 'string'
+          && state.clientRequestId
+          && typeof state.id === 'string'
+        ) {
+          runIdsByClientRequestId.set(state.clientRequestId, state.id);
+        }
+        const pluginWorkflowId =
+          state?.externalPluginAnalytics?.externalPluginId
+            === OPEN_DESIGN_PLUGIN_ID
+          && typeof state.externalPluginAnalytics.pluginWorkflowId === 'string'
+            ? state.externalPluginAnalytics.pluginWorkflowId
+            : null;
+        if (pluginWorkflowId && typeof state.id === 'string') {
+          runIdsByPluginWorkflowId.set(pluginWorkflowId, state.id);
+        }
+      }
+    } catch {
+      // A fresh data root has no runs directory yet.
+    }
+  }
+
+  const hydrateDurableRun = (id) => {
+    if (!runsLogDir || typeof id !== 'string' || !id) return null;
+    const statePath = path.join(runsLogDir, id, 'state.json');
+    const state = readDurableRunState(statePath);
+    if (!state || state.id !== id) return null;
+    const interruptedAfterRestart =
+      interruptDurableRunAfterDaemonRestart(state);
+    if (interruptedAfterRestart) atomicWriteJson(statePath, state);
+    if (!TERMINAL_RUN_STATUSES.has(state.status)) return null;
+    const eventsLogPath = path.join(runsLogDir, id, 'events.jsonl');
+    const events = readDurableRunEvents(eventsLogPath);
+    if (interruptedAfterRestart) {
+      const timestamp = state.updatedAt;
+      const nextEventId =
+        events.reduce((max, record) => Math.max(max, record.id), 0) + 1;
+      events.push(
+        {
+          id: nextEventId,
+          event: 'error',
+          data: {
+            error: {
+              code: RESTART_ERROR_CODE,
+              message: RESTART_ERROR_MESSAGE,
+              retryable: true,
+            },
+          },
+          timestamp,
+        },
+        {
+          id: nextEventId + 1,
+          event: 'end',
+          data: {
+            code: 1,
+            signal: null,
+            status: 'failed',
+            resumable: false,
+            endedWithUnfinishedWork: Boolean(state.endedWithUnfinishedWork),
+          },
+          timestamp,
+        },
+      );
+    }
+    const run = {
+      ...state,
+      projectId: typeof state.projectId === 'string' ? state.projectId : null,
+      conversationId: typeof state.conversationId === 'string' ? state.conversationId : null,
+      assistantMessageId:
+        typeof state.assistantMessageId === 'string' ? state.assistantMessageId : null,
+      clientRequestId:
+        typeof state.clientRequestId === 'string' ? state.clientRequestId : null,
+      requestFingerprint:
+        typeof state.requestFingerprint === 'string' ? state.requestFingerprint : null,
+      agentId: typeof state.agentId === 'string' ? state.agentId : null,
+      projectMetadata: null,
+      events,
+      nextEventId: events.reduce((max, record) => Math.max(max, record.id), 0) + 1,
+      clients: new Set(),
+      waiters: new Set(),
+      child: null,
+      acpSession: null,
+      childPid: null,
+      processGroupId: null,
+      cancelRequested: false,
+      eventsLogPath,
+      statePath,
+      eventsLogStream: null,
+      eventsLogClosed: true,
+      mediaExecution: normalizeMediaExecutionPolicyForRun(null),
+      toolBundle: normalizeRunToolBundleForRun(null),
+    };
+    runs.set(id, run);
+    return run;
+  };
 
   const create = (meta = {}) => {
     const now = Date.now();
@@ -113,6 +752,10 @@ export function createChatRunService({
       conversationId: typeof meta.conversationId === 'string' && meta.conversationId ? meta.conversationId : null,
       assistantMessageId: typeof meta.assistantMessageId === 'string' && meta.assistantMessageId ? meta.assistantMessageId : null,
       clientRequestId: typeof meta.clientRequestId === 'string' && meta.clientRequestId ? meta.clientRequestId : null,
+      requestFingerprint:
+        typeof meta.requestFingerprint === 'string' && meta.requestFingerprint
+          ? meta.requestFingerprint
+          : null,
       agentId: typeof meta.agentId === 'string' && meta.agentId ? meta.agentId : null,
       projectMetadata:
         meta.projectMetadata && typeof meta.projectMetadata === 'object' && !Array.isArray(meta.projectMetadata)
@@ -141,6 +784,29 @@ export function createChatRunService({
         meta.context && typeof meta.context === 'object' && !Array.isArray(meta.context)
           ? meta.context
           : null,
+      externalPluginAnalytics:
+        meta.analyticsHints
+        && typeof meta.analyticsHints === 'object'
+        && !Array.isArray(meta.analyticsHints)
+        && meta.analyticsHints.externalPluginId === OPEN_DESIGN_PLUGIN_ID
+          ? {
+              entrySurface: meta.analyticsHints.entrySurface,
+              hostProduct: meta.analyticsHints.hostProduct,
+              externalPluginId: OPEN_DESIGN_PLUGIN_ID,
+              externalPluginVersion: meta.analyticsHints.externalPluginVersion,
+              distributionMechanism:
+                meta.analyticsHints.distributionMechanism,
+              publisherClass: meta.analyticsHints.publisherClass,
+              attributionQuality: meta.analyticsHints.attributionQuality,
+              pluginWorkflowId: meta.analyticsHints.pluginWorkflowId,
+              logicalRequestDigest: meta.analyticsHints.logicalRequestDigest,
+              logicalRequestDigestVersion:
+                meta.analyticsHints.logicalRequestDigestVersion,
+              briefState: meta.analyticsHints.briefState,
+              generationSloWindowMs:
+                meta.analyticsHints.generationSloWindowMs,
+            }
+          : null,
       status: 'queued',
       createdAt: now,
       updatedAt: now,
@@ -165,6 +831,10 @@ export function createChatRunService({
       // compact analytics snapshot on the shared run until terminal telemetry.
       retryOriginFailure: null,
       retryOriginErrorCode: null,
+      retryStrategy: null,
+      retryMaxAttempts: null,
+      nativeSessionContinueAttemptCount: 0,
+      nativeSessionContinuePending: null,
       stdinOpen: false,
       // E-lite root-cause telemetry. `stdinBackpressure` records whether the
       // prompt write to the child's stdin was queued (pipe buffer full — a
@@ -183,6 +853,7 @@ export function createChatRunService({
       truncatedMidTurn: false,
       endedWithUnfinishedWork: false,
       artifactCount: undefined as number | undefined,
+      artifactPaths: undefined as string[] | undefined,
       artifactOutcome: undefined,
       eventsLogPath: runsLogDir ? path.join(runsLogDir, id, 'events.jsonl') : null,
       statePath: runsLogDir ? path.join(runsLogDir, id, 'state.json') : null,
@@ -190,10 +861,53 @@ export function createChatRunService({
       // Set once finish() has closed the log stream, so a late post-finish emit
       // can't lazily re-open a stream nothing will ever close (FD leak).
       eventsLogClosed: false,
+      cleanupGeneration: 0,
+      manualResumeAttemptCount: 0,
+      rechargeWaitDurationMs: 0,
     };
+    if (Object.prototype.hasOwnProperty.call(meta, 'workspaceScope')) {
+      run.workspaceScope = meta.workspaceScope ?? null;
+    }
     runs.set(run.id, run);
+    if (run.clientRequestId) runIdsByClientRequestId.set(run.clientRequestId, run.id);
+    if (
+      run.externalPluginAnalytics?.externalPluginId === OPEN_DESIGN_PLUGIN_ID
+      && typeof run.externalPluginAnalytics.pluginWorkflowId === 'string'
+    ) {
+      runIdsByPluginWorkflowId.set(
+        run.externalPluginAnalytics.pluginWorkflowId,
+        run.id,
+      );
+    }
     if (run.statePath) atomicWriteJson(run.statePath, durableRunState(run));
     return run;
+  };
+
+  const createOrReuse = (meta = {}) => {
+    const clientRequestId =
+      typeof meta.clientRequestId === 'string' && meta.clientRequestId
+        ? meta.clientRequestId
+        : null;
+    if (clientRequestId) {
+      const existingId = runIdsByClientRequestId.get(clientRequestId);
+      const existing = existingId
+        ? runs.get(existingId) ?? hydrateDurableRun(existingId)
+        : null;
+      if (existing) {
+        const fingerprint =
+          typeof meta.requestFingerprint === 'string' ? meta.requestFingerprint : null;
+        if (
+          fingerprint
+          && typeof existing.requestFingerprint === 'string'
+          && existing.requestFingerprint
+          && fingerprint !== existing.requestFingerprint
+        ) {
+          return { kind: 'conflict', run: existing };
+        }
+        return { kind: 'reused', run: existing };
+      }
+    }
+    return { kind: 'created', run: create(meta) };
   };
 
   const persistState = (run) => {
@@ -222,12 +936,89 @@ export function createChatRunService({
     persistState(run);
   };
 
-  const get = (id) => runs.get(id) ?? null;
+  const setDeliverableValidation = (run, result) => {
+    if (!run || !result) return;
+    run.deliverableValid = result.valid === true;
+    run.deliverableValidation =
+      typeof result.validation === 'string' ? result.validation : 'entry_missing';
+    run.deliverableEntryFile =
+      typeof result.entryFile === 'string' ? result.entryFile : undefined;
+    run.deliverableArtifactKind =
+      typeof result.artifactKind === 'string' ? result.artifactKind : undefined;
+    persistState(run);
+  };
+
+  const get = (id) => runs.get(id) ?? hydrateDurableRun(id);
+  const findByPluginWorkflowId = (pluginWorkflowId) => {
+    if (typeof pluginWorkflowId !== 'string' || !pluginWorkflowId) return null;
+    const runId = runIdsByPluginWorkflowId.get(pluginWorkflowId);
+    return runId ? get(runId) : null;
+  };
 
   const scheduleCleanup = (run) => {
+    const generation = (run.cleanupGeneration ?? 0) + 1;
+    run.cleanupGeneration = generation;
     setTimeout(() => {
-      if (TERMINAL_RUN_STATUSES.has(run.status)) runs.delete(run.id);
+      if (
+        run.cleanupGeneration === generation
+        && TERMINAL_RUN_STATUSES.has(run.status)
+      ) {
+        runs.delete(run.id);
+      }
     }, ttlMs).unref?.();
+  };
+
+  const prepareRestart = (run) => {
+    if (!run || !TERMINAL_RUN_STATUSES.has(run.status)) return null;
+    const resumedAt = Date.now();
+    const rechargeWaitDurationMs = Math.max(0, resumedAt - run.updatedAt);
+    // Invalidate the cleanup timer scheduled for the prior terminal attempt.
+    run.cleanupGeneration = (run.cleanupGeneration ?? 0) + 1;
+    run.status = 'queued';
+    run.updatedAt = resumedAt;
+    run.exitCode = null;
+    run.signal = null;
+    run.error = null;
+    run.errorCode = null;
+    run.failureCategory = null;
+    run.failureDetail = null;
+    run.failureAction = null;
+    run.resumable = false;
+    run.cancelRequested = false;
+    run.runtimeFailureObservedBeforeCancellation = false;
+    run.retryRestartTimer = null;
+    run.retryAttemptCount = 0;
+    run.retryFinalResult = undefined;
+    run.retrySuppressedReason = undefined;
+    run.retryOriginFailure = null;
+    run.retryOriginErrorCode = null;
+    run.artifactCount = undefined;
+    run.artifactPaths = undefined;
+    run.artifactOutcome = undefined;
+    run.deliverableValid = undefined;
+    run.deliverableValidation = undefined;
+    run.deliverableEntryFile = undefined;
+    run.deliverableArtifactKind = undefined;
+    run.endedWithUnfinishedWork = false;
+    run.child = null;
+    run.acpSession = null;
+    run.childPid = null;
+    run.processGroupId = null;
+    run.childExitObservedAt = null;
+    run.stdinOpen = false;
+    run.eventsLogStream = null;
+    run.eventsLogClosed = false;
+    run.manualResumeAttemptCount = (run.manualResumeAttemptCount ?? 0) + 1;
+    run.rechargeWaitDurationMs =
+      (run.rechargeWaitDurationMs ?? 0) + rechargeWaitDurationMs;
+    persistState(run);
+    emit(run, 'run_resume_attempted', {
+      runId: run.id,
+      attempt: run.manualResumeAttemptCount,
+      reason: 'recharge',
+      rechargeWaitDurationMs: run.rechargeWaitDurationMs,
+    });
+    return run;
   };
 
   // Lazily open the per-run event log on first emit. The directory may
@@ -300,6 +1091,7 @@ export function createChatRunService({
     projectId: run.projectId,
     conversationId: run.conversationId,
     assistantMessageId: run.assistantMessageId,
+    clientRequestId: run.clientRequestId ?? null,
     agentId: run.agentId,
     designSystemId: run.designSystemId ?? null,
     designSystemRequestedId: run.designSystemRequestedId ?? null,
@@ -321,9 +1113,11 @@ export function createChatRunService({
     errorCode: run.errorCode ?? null,
     failureCategory: run.failureCategory ?? null,
     failureDetail: run.failureDetail ?? null,
+    failureAction: run.failureAction ?? null,
     resumable: run.resumable ?? false,
     endedWithUnfinishedWork: !!run.endedWithUnfinishedWork,
     ...(Number.isFinite(run.artifactCount) ? { artifactCount: run.artifactCount } : {}),
+    ...(Array.isArray(run.artifactPaths) ? { artifactPaths: run.artifactPaths } : {}),
     eventsLogPath: run.eventsLogPath ?? null,
     workspace: projectWorkspaceProvenance(run.projectMetadata),
     mediaExecution: run.mediaExecution ?? normalizeMediaExecutionPolicyForRun(null),
@@ -331,6 +1125,37 @@ export function createChatRunService({
     ...(run.promptCache ? { promptCache: run.promptCache } : {}),
     ...(run.nativeSessionRecovery ? { nativeSessionRecovery: run.nativeSessionRecovery } : {}),
     ...(run.browserUse ? { browserUse: run.browserUse } : {}),
+    ...(typeof run.clientType === 'string' ? { clientType: run.clientType } : {}),
+    ...(run.externalPluginAnalytics
+      ? { externalPluginAnalytics: run.externalPluginAnalytics }
+      : {}),
+    ...(typeof run.manualResumeAttemptCount === 'number'
+      ? { manualResumeAttemptCount: run.manualResumeAttemptCount }
+      : {}),
+    ...(typeof run.rechargeWaitDurationMs === 'number'
+      ? { rechargeWaitDurationMs: run.rechargeWaitDurationMs }
+      : {}),
+    ...(typeof run.artifactOriginStatus === 'string'
+      ? { artifactOriginStatus: run.artifactOriginStatus }
+      : {}),
+    ...(typeof run.artifactVersionId === 'string'
+      ? { artifactVersionId: run.artifactVersionId }
+      : {}),
+    ...(typeof run.deliverableValid === 'boolean'
+      ? { deliverableValid: run.deliverableValid }
+      : {}),
+    ...(typeof run.deliverableValidation === 'string'
+      ? { deliverableValidation: run.deliverableValidation }
+      : {}),
+    ...(typeof run.deliverableEntryFile === 'string'
+      ? { deliverableEntryFile: run.deliverableEntryFile }
+      : {}),
+    ...(typeof run.deliverableArtifactKind === 'string'
+      ? { deliverableArtifactKind: run.deliverableArtifactKind }
+      : {}),
+    ...(TERMINAL_RUN_STATUSES.has(run.status)
+      ? { executionDiagnostics: buildExecutionDiagnostics(run) }
+      : {}),
   });
 
   const finish = (run, status, code: number | null = null, signal: string | null = null) => {
@@ -364,6 +1189,7 @@ export function createChatRunService({
       resumable: run.resumable ?? false,
       endedWithUnfinishedWork: run.endedWithUnfinishedWork,
       ...(Number.isFinite(run.artifactCount) ? { artifactCount: run.artifactCount } : {}),
+      ...(Array.isArray(run.artifactPaths) ? { artifactPaths: run.artifactPaths } : {}),
       failureCategory: run.failureCategory ?? null,
       failureDetail: run.failureDetail ?? null,
     });
@@ -672,6 +1498,23 @@ export function createChatRunService({
       try { finalize(); } catch { /* best-effort */ }
     }
     runs.delete(run.id);
+    if (
+      run.clientRequestId
+      && runIdsByClientRequestId.get(run.clientRequestId) === run.id
+    ) {
+      runIdsByClientRequestId.delete(run.clientRequestId);
+    }
+    const pluginWorkflowId =
+      run.externalPluginAnalytics?.externalPluginId === OPEN_DESIGN_PLUGIN_ID
+      && typeof run.externalPluginAnalytics.pluginWorkflowId === 'string'
+        ? run.externalPluginAnalytics.pluginWorkflowId
+        : null;
+    if (
+      pluginWorkflowId
+      && runIdsByPluginWorkflowId.get(pluginWorkflowId) === run.id
+    ) {
+      runIdsByPluginWorkflowId.delete(pluginWorkflowId);
+    }
     if (run.statePath) {
       try { fs.unlinkSync(run.statePath); } catch { /* best-effort */ }
     }
@@ -690,8 +1533,11 @@ export function createChatRunService({
 
   return {
     create,
+    createOrReuse,
+    prepareRestart,
     start,
     get,
+    findByPluginWorkflowId,
     list,
     stream,
     cancel,
@@ -702,6 +1548,7 @@ export function createChatRunService({
     setAnalyticsRecovery,
     markAnalyticsCompleted,
     markLangfuseCompleted,
+    setDeliverableValidation,
     finish,
     fail,
     drop,

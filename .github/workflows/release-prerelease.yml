@@ -12,6 +12,11 @@ on:
         required: false
         type: string
         default: ""
+      amr_profile:
+        description: "Optional AMR profile baked into the build (test or feature-test point the packaged app at that profile's Vela backend and enable the workspace-team transport). Empty leaves the default (prod)."
+        required: false
+        type: string
+        default: ""
       win_x64_smoke_mode:
         description: "Windows x64 smoke coverage."
         required: true
@@ -40,6 +45,11 @@ on:
         default: ""
       release_version:
         description: "Base version (x.y.z). Required when ref is not release/vX.Y.Z."
+        required: false
+        type: string
+        default: ""
+      amr_profile:
+        description: "Optional AMR profile baked into the build (test or feature-test enable the workspace-team transport by pointing at that profile's Vela backend). Empty leaves the default (prod)."
         required: false
         type: string
         default: ""
@@ -74,6 +84,12 @@ on:
       previous_commit:
         description: "Commit SHA of the previously published prerelease; empty on cold start."
         value: ${{ jobs.metadata.outputs.previous_commit }}
+      mac_arm64_smoke_result:
+        description: "macOS arm64 packaged smoke outcome; advisory to publication."
+        value: ${{ jobs.build_mac.outputs.smoke_result }}
+      win_x64_smoke_result:
+        description: "Windows x64 packaged smoke outcome; advisory to publication."
+        value: ${{ jobs.build_win.outputs.smoke_result }}
       version_metadata_url:
         description: "Public R2 URL of this build's version metadata.json."
         value: ${{ jobs.publish.outputs.version_metadata_url }}
@@ -110,6 +126,24 @@ env:
   # and the helper still strips .map to keep source out of the installer.
   POSTHOG_CLI_API_KEY: ${{ secrets.POSTHOG_CLI_API_KEY }}
   POSTHOG_CLI_PROJECT_ID: ${{ vars.POSTHOG_CLI_PROJECT_ID }}
+  # Workspace Team gate for packaged prerelease builds. tools-pack reads
+  # OPEN_DESIGN_AMR_PROFILE and bakes OD_VELA_WEB_URL into open-design-config.json;
+  # both are required for the packaged daemon to enable the workspace-team
+  # transport (see apps/packaged/src/workspace-team.ts).
+  #
+  # Every profile now resolves an origin, production included: prod's Vela
+  # backend serves the feature (WORKSPACE_TEAM_ENABLED plus a configured
+  # resource-hub blob store), so a prod build ships the transports enabled.
+  # An empty amr_profile still yields no origin, which the packaged gate treats
+  # as dormant — a build that forgets the profile degrades to local-only rather
+  # than pointing at an unknown backend.
+  #
+  # Origins stay in repository secrets rather than literals: the non-prod AMR
+  # environments are internal deployments and this repository is public.
+  # Secrets read here: VELA_WEB_URL_FEATURE_TEST, VELA_WEB_URL_TEST,
+  # VELA_WEB_URL_PROD.
+  OPEN_DESIGN_AMR_PROFILE: ${{ inputs.amr_profile }}
+  OD_VELA_WEB_URL: ${{ inputs.amr_profile == 'feature-test' && secrets.VELA_WEB_URL_FEATURE_TEST || inputs.amr_profile == 'test' && secrets.VELA_WEB_URL_TEST || inputs.amr_profile == 'prod' && secrets.VELA_WEB_URL_PROD || '' }}
 jobs:
   metadata:
     name: Prepare prerelease metadata
@@ -213,6 +247,8 @@ jobs:
     name: Build prerelease mac arm64
     needs: [metadata, verify]
     runs-on: macos-14
+    outputs:
+      smoke_result: ${{ steps.mac_smoke.outcome }}
     env:
       GH_TOKEN: ${{ github.token }}
       RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
@@ -477,6 +513,8 @@ jobs:
             ${{ runner.temp }}/mac-framework-diagnostics.txt
           if-no-files-found: warn
       - name: Smoke prerelease mac packaged runtime
+        id: mac_smoke
+        continue-on-error: true
         working-directory: e2e
         env:
           OD_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}/release-build/mac_arm64/build.json
@@ -538,7 +576,7 @@ jobs:
         run: |
           set -euo pipefail
           prefix="${{ steps.mac_arm64_tools_pack_cache_key.outputs.prefix }}"
-          keep=3
+          keep=1
           cache_ids="$(gh cache list --key "$prefix" --sort created_at --order desc --limit 100 --json id,key,createdAt --jq ".[$keep:] | .[].id")"
           count=0
           while IFS= read -r cache_id; do
@@ -805,7 +843,7 @@ jobs:
         run: |
           set -euo pipefail
           prefix="${{ steps.mac_x64_tools_pack_cache_key.outputs.prefix }}"
-          keep=3
+          keep=1
           cache_ids="$(gh cache list --key "$prefix" --sort created_at --order desc --limit 100 --json id,key,createdAt --jq ".[$keep:] | .[].id")"
           count=0
           while IFS= read -r cache_id; do
@@ -859,6 +897,8 @@ jobs:
     name: Build prerelease win x64
     needs: [metadata, verify]
     runs-on: windows-latest
+    outputs:
+      smoke_result: ${{ steps.win_smoke.outcome }}
     env:
       GH_TOKEN: ${{ github.token }}
       RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
@@ -905,10 +945,29 @@ jobs:
       - name: Setup NSIS
         shell: pwsh
         run: |
-          if ((Get-Command makensis.exe -ErrorAction SilentlyContinue) -or (Test-Path "C:\Program Files (x86)\NSIS\makensis.exe")) {
-            exit 0
+          # windows-latest no longer guarantees a preinstalled NSIS, and the
+          # Chocolatey community feed flakes: prerelease.4 hit a silent
+          # "Unable to find package 'nsis'" fetch failure that left this step
+          # green (pwsh -command does not propagate choco's exit code) and let
+          # the build die on makensis half an hour later. Retry the install
+          # and hard-fail HERE, with a clear message, if makensis still cannot
+          # be found — a red Setup NSIS step is diagnosable; a mid-build
+          # makensis error is not.
+          function Test-Makensis {
+            [bool]((Get-Command makensis.exe -ErrorAction SilentlyContinue) -or (Test-Path "C:\Program Files (x86)\NSIS\makensis.exe"))
           }
-          choco install nsis -y --no-progress
+          if (Test-Makensis) { Write-Host "makensis already present"; exit 0 }
+          foreach ($attempt in 1..4) {
+            Write-Host "choco install nsis (attempt $attempt)"
+            choco install nsis -y --no-progress
+            if (Test-Makensis) { break }
+            Start-Sleep -Seconds (15 * $attempt)
+          }
+          if (-not (Test-Makensis)) {
+            Write-Error "NSIS install failed after 4 attempts: makensis absent from PATH and C:\Program Files (x86)\NSIS"
+            exit 1
+          }
+          Write-Host "NSIS ready"
       - name: Build prerelease windows artifacts
         id: win_tools_pack_build
         shell: pwsh
@@ -971,6 +1030,7 @@ jobs:
           "deletedFailedCacheKey=$matchedKey count=$($caches.Count)"
       - name: Build prerelease win_x64 update fixture
         if: ${{ inputs.win_x64_smoke_mode == 'full' && inputs.win_x64_update_metadata_url == '' && inputs.win_x64_update_target_version == '' }}
+        continue-on-error: true
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
@@ -984,7 +1044,9 @@ jobs:
           $updateBuild = $updateOutput | ConvertFrom-Json
           pnpm.cmd exec tools-pack win validate-payload --namespace release-prerelease-win --payload-path $updateBuild.payloadPath --expected-version $updateVersion --json
       - name: Smoke prerelease windows packaged runtime
+        id: win_smoke
         if: ${{ inputs.win_x64_smoke_mode != 'skip' }}
+        continue-on-error: true
         working-directory: e2e
         env:
           OD_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}\release-build\win_x64\build.json
@@ -1051,7 +1113,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $prefix = "${{ steps.win_tools_pack_cache_key.outputs.prefix }}"
-          $keep = 3
+          $keep = 1
           $caches = @(gh cache list --key $prefix --sort created_at --order desc --limit 100 --json id,key,createdAt | ConvertFrom-Json)
           $stale = @($caches | Select-Object -Skip $keep)
           foreach ($cache in $stale) {

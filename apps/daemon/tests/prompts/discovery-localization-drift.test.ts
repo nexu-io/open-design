@@ -27,29 +27,135 @@ describe('discovery prompt localization rules', () => {
   });
 });
 
-// The task-type router form ships in THREE copies: the two discovery prompt
-// mirrors above plus the od-default skill. All three must stay on the same
-// form contract — the top-level `"lang"` tag that keys the host's in-card
-// controls, and `allowCustom: false` on `taskType` (its own "Other" option IS
-// the route; the host's Other chip would duplicate it). Review: PR #5573.
-const taskTypeFormPaths = [
-  ...promptPaths,
-  'plugins/_official/scenarios/od-default/SKILL.md',
-] as const;
-
-describe('task-type form contract parity', () => {
-  it.each(taskTypeFormPaths)('%s carries lang and pins taskType allowCustom: false', (path) => {
+describe('task-type form ownership', () => {
+  it.each(promptPaths)('%s does not duplicate the od-default task-type form', (path) => {
     const source = readFileSync(resolve(repoRoot, path), 'utf8');
+    expect(source).not.toContain('<question-form id="task-type"');
+  });
+
+  it('keeps the single conditional task-type form in od-default', () => {
+    const source = readFileSync(
+      resolve(repoRoot, 'plugins/_official/scenarios/od-default/SKILL.md'),
+      'utf8',
+    );
     const formStart = source.indexOf('<question-form id="task-type"');
     expect(formStart).toBeGreaterThanOrEqual(0);
     const form = source.slice(formStart, source.indexOf('</question-form>', formStart));
-
     expect(form).toContain('"lang": "en"');
-    const taskTypeIdx = form.indexOf('"id": "taskType"');
-    expect(taskTypeIdx).toBeGreaterThanOrEqual(0);
-    // allowCustom must be pinned inside the taskType question object,
-    // before its options array closes the question.
-    const taskTypeSlice = form.slice(taskTypeIdx, form.indexOf('"id":', taskTypeIdx + 1));
-    expect(taskTypeSlice).toContain('"allowCustom": false');
+    expect(form).toContain('"id": "taskType"');
+    expect(form).toContain('"allowCustom": false');
+    expect(source).toContain('only when two or more routes remain materially plausible');
+    expect(source).toContain('does not by itself require a question form');
+  });
+});
+
+describe('active skill clarification policy', () => {
+  it.each([
+    {
+      path: 'plugins/_official/examples/html-ppt/SKILL.md',
+      required: 'ask only when blocked',
+      forbidden: ['ALWAYS ask or recommend', 'Only after those are clear'],
+    },
+    {
+      path: 'design-templates/html-ppt/SKILL.md',
+      required: 'ask only when blocked',
+      forbidden: ['ALWAYS ask or recommend', 'Only after those are clear'],
+    },
+    {
+      path: 'plugins/_official/examples/audio-jingle/SKILL.md',
+      required: 'Missing metadata is not\nan instruction to ask',
+      forbidden: ['(unknown — ask)'],
+    },
+    {
+      path: 'design-templates/audio-jingle/SKILL.md',
+      required: 'Missing metadata is not\nan instruction to ask',
+      forbidden: ['(unknown — ask)'],
+    },
+    {
+      path: 'design-templates/image-poster/SKILL.md',
+      required: 'Ask only when the choice would materially change',
+      forbidden: ['(unknown\n— ask)'],
+    },
+    {
+      path: 'plugins/_official/examples/image-poster/SKILL.md',
+      required: 'Ask only when the choice would materially change',
+      forbidden: ['(unknown\n— ask)'],
+    },
+    {
+      path: 'design-templates/contact-widget/SKILL.md',
+      required: 'Ask one\n   consolidated form only if a missing value would materially change',
+      forbidden: ['Ask the user for: primary color'],
+    },
+    {
+      path: 'design-templates/guizang-ppt/SKILL.md',
+      required: 'Infer a direction; ask only when comparison is requested',
+      forbidden: ['mandatory first step', 'first let the user pick', 'questions one by one'],
+    },
+    {
+      path: 'plugins/_official/examples/guizang-ppt/SKILL.md',
+      required: 'Infer a direction; ask only when comparison is requested',
+      forbidden: ['mandatory first step', 'first let the user pick', 'questions one by one'],
+    },
+    {
+      path: 'design-templates/guizang-ppt/references/styles.md',
+      required: 'Show the choices\nonly when the user explicitly asks',
+      forbidden: ['first let the user pick'],
+    },
+    {
+      path: 'plugins/_official/examples/guizang-ppt/references/styles.md',
+      required: 'Show the choices\nonly when the user explicitly asks',
+      forbidden: ['first let the user pick'],
+    },
+    {
+      path: 'plugins/_official/atoms/direction-picker/SKILL.md',
+      required: 'Do not\nemit direction cards proactively',
+      forbidden: ['lets the user choose before final generation'],
+    },
+    {
+      path: 'plugins/community/hallmark/SKILL.md',
+      required: 'Ask only when an unresolved choice\nwould materially change the result',
+      forbidden: [
+        'Hallmark **always** asks',
+        'Default is to ask',
+        'There is no "the brief looks complete" exception',
+      ],
+    },
+  ])('$path does not restore a fixed clarification gate', ({ path, required, forbidden }) => {
+    const source = readFileSync(resolve(repoRoot, path), 'utf8');
+    expect(source).toContain(required);
+    for (const phrase of forbidden) {
+      expect(source).not.toContain(phrase);
+    }
+  });
+});
+
+describe('product clarification copy', () => {
+  it.each([
+    {
+      path: 'design-templates/open-design-landing/inputs.example.json',
+      required: 'When unresolved choices would materially change the result',
+    },
+    {
+      path: 'design-templates/open-design-landing/example.html',
+      required: 'When unresolved choices would materially change the result',
+    },
+    {
+      path: 'plugins/_official/examples/open-design-landing/example.html',
+      required: 'When unresolved choices would materially change the result',
+    },
+    {
+      path: 'design-templates/open-design-landing-deck/inputs.example.json',
+      required: 'only when they materially affect the result',
+    },
+    {
+      path: 'design-templates/replit-deck/examples/README.md',
+      required: 'clarify material unknowns when needed',
+    },
+  ])('$path describes clarification as on demand', ({ path, required }) => {
+    const source = readFileSync(resolve(repoRoot, path), 'utf8');
+    expect(source).toContain(required);
+    expect(source).not.toContain('Turn 1 is a question form');
+    expect(source).not.toContain('pops before a single pixel');
+    expect(source).not.toContain('30s question form locks');
   });
 });

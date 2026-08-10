@@ -1006,6 +1006,44 @@ describe('buildTracePayload', () => {
     });
   });
 
+  it('keeps ACP usage on a failed run for post-run diagnostics', () => {
+    const batch = buildTracePayload(
+      makeCtx({
+        run: {
+          runId: 'run-failed-with-usage',
+          status: 'failed',
+          startedAt: 1_700_000_000_000,
+          endedAt: 1_700_000_004_500,
+          failure: {
+            failure_category: 'timeout',
+            failure_detail: 'timeout',
+            failure_stage: 'first_token_wait',
+            retryable: true,
+            user_action: 'retry',
+          },
+        },
+      }),
+    );
+    const trace = (batch[0] as any).body;
+    const generation = bodyOf(batch, 'generation-create', 'llm');
+
+    expect(trace.metadata.tokens).toMatchObject({
+      input: 1234,
+      output: 567,
+      total: 2051,
+      cacheReadInput: 200,
+      cacheCreationInput: 50,
+    });
+    expect(generation.usage).toMatchObject({
+      input: 1484,
+      output: 567,
+      total: 2051,
+      unit: 'TOKENS',
+    });
+    expect(trace.metadata.failure_category).toBe('timeout');
+    expect(trace.metadata.failure_detail).toBe('timeout');
+  });
+
   it('uses conversationId as sessionId when within length limit', () => {
     const batch = buildTracePayload(makeCtx());
     expect((batch[0] as any).body.sessionId).toBe(
@@ -2576,6 +2614,10 @@ describe('reportRunFeedback', () => {
   });
 
   it('posts feedback scores to Vela when completed-run telemetry uses Vela', async () => {
+    // tests/setup.ts defaults OPEN_DESIGN_VELA_TELEMETRY to 'off' so unit
+    // tests never route through a developer's real Vela profile; this test
+    // exercises exactly that sink, so opt back in explicitly.
+    vi.stubEnv('OPEN_DESIGN_VELA_TELEMETRY', 'on');
     vi.stubEnv('VELA_CONTROL_KEY', 'ck_secret');
     vi.stubEnv('VELA_API_URL', 'https://vela.example.test');
     vi.stubEnv(
@@ -2624,6 +2666,8 @@ describe('reportRunFeedback', () => {
   });
 
   it('does not fall back anonymously when Vela rejects feedback auth', async () => {
+    // Same opt-in as above: the setup default keeps the Vela sink off.
+    vi.stubEnv('OPEN_DESIGN_VELA_TELEMETRY', 'on');
     vi.stubEnv('VELA_CONTROL_KEY', 'ck_expired');
     vi.stubEnv('VELA_API_URL', 'https://vela.example.test');
     vi.stubEnv(

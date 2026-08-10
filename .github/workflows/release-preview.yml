@@ -100,6 +100,22 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  # Workspace Team's four vela transports are gated in the packaged runtime on
+  # BOTH a known AMR profile and a non-empty vela web origin
+  # (workspaceTeamTransportEnv in apps/packaged/src/workspace-team.ts). Neither
+  # has a default in tools-pack, so a lane that omits them ships a client whose
+  # team features are silently dormant: the build succeeds, the app starts, and
+  # the gap only shows up in a user's hands.
+  #
+  # Unlike beta/prerelease these are production channels, so the profile is
+  # pinned rather than taken from an input — there is no legitimate stable or
+  # preview build aimed at the test backend. Naming prod explicitly is a no-op
+  # for AMR itself (apps/daemon/src/integrations/vela-profile.ts already
+  # defaults to prod); it exists to satisfy the first half of the gate. A fork
+  # or PR build without the secret leaves the origin empty, which keeps the
+  # transports dormant rather than half-enabled.
+  OPEN_DESIGN_AMR_PROFILE: prod
+  OD_VELA_WEB_URL: ${{ secrets.VELA_WEB_URL_PROD }}
   OPEN_DESIGN_TELEMETRY_RELAY_URL: ${{ vars.OPEN_DESIGN_TELEMETRY_RELAY_URL }}
   # PostHog product-analytics ingest. Defined as repository secret + var
   # so official builds ship with analytics enabled; PR builds and forks
@@ -530,7 +546,7 @@ jobs:
         run: |
           set -euo pipefail
           prefix="${{ steps.mac_arm64_tools_pack_cache_key.outputs.prefix }}"
-          keep=3
+          keep=1
           cache_ids="$(gh cache list --key "$prefix" --sort created_at --order desc --limit 100 --json id,key,createdAt --jq ".[$keep:] | .[].id")"
           count=0
           while IFS= read -r cache_id; do
@@ -771,7 +787,7 @@ jobs:
         run: |
           set -euo pipefail
           prefix="${{ steps.mac_x64_tools_pack_cache_key.outputs.prefix }}"
-          keep=3
+          keep=1
           cache_ids="$(gh cache list --key "$prefix" --sort created_at --order desc --limit 100 --json id,key,createdAt --jq ".[$keep:] | .[].id")"
           count=0
           while IFS= read -r cache_id; do
@@ -1033,7 +1049,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $prefix = "${{ steps.win_tools_pack_cache_key.outputs.prefix }}"
-          $keep = 3
+          $keep = 1
           $caches = @(gh cache list --key $prefix --sort created_at --order desc --limit 100 --json id,key,createdAt | ConvertFrom-Json)
           $stale = @($caches | Select-Object -Skip $keep)
           foreach ($cache in $stale) {

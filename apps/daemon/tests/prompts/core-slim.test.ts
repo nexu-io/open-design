@@ -3,10 +3,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
+import { renderActiveStageBlock } from '@open-design/contracts';
 
 import {
   PLATFORM_CONTRACTS_BLOCK,
   renderSlimCoreCharter,
+  SLIM_V2_ROLE_BOUNDARY_GUARD,
 } from '../../src/prompts/core-slim.js';
 import { composeSystemPrompt } from '../../src/prompts/system.js';
 
@@ -14,11 +16,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '../../../..');
 
 /**
- * Guards for the rewritten slim core charter.
+ * Guards for the SP v2.0 slim core charter.
  *
- * 1. Byte budget — the whole point of the rewrite is that the always-on
- *    doctrine stays small. Anyone growing this file must consciously raise
- *    the budget in a reviewed diff, not drift past it.
+ * 1. Byte budget — the complete translated charter has an explicit ceiling.
  * 2. Protocol markers — a fixed set of strings are parsed by the web client
  *    or matched by later prompt rules. Frozen API; must survive copyedits.
  * 3. Ownership — content deliberately moved OUT of the charter (task-type
@@ -26,61 +26,9 @@ const repoRoot = path.resolve(__dirname, '../../../..');
  *    it moved to.
  */
 
-// 12KB budget. History: 8KB doctrine core, +1KB absorbed security section,
-// +0.7KB structure-review fixes, +0.5KB regression-audit restorations,
-// +0.45KB form-tailoring/first-message fixes. The final headroom is the
-// 2026-07-06 readability refactor (per-concern section split of the
-// overloaded turn-1 form section into "Turn 1 — the discovery form",
-// "Writing a <question-form>", and a "### Form contract" cross-cutting
-// subsection): the budget was consciously expanded for human
-// maintainability/readability at the maintainer's direction, since a
-// write-only prompt only one author can safely edit is its own kind of debt.
-// The 2026-07-06 second pass (heading-style consistency, self-check sub-list,
-// split run-on sentences, precedence domain-collapse) plus the multi-turn
-// adherence section ("## On an edit or tweak" — DS binding as a standing
-// per-turn invariant and session constraints persisting across edits, from
-// production feedback that both drift during multi-turn edits) fit inside
-// this budget without a further raise.
-// 13KB. The 2026-07-06 two-tier restructure (5 top-level H2 — 2 foundations
-// + Discovery / Delivery / Craft & contracts pillars — with the lifecycle and
-// form/reference content grouped under H3s) added pillar headings; budget
-// raised to keep readability headroom, per the maintainer's direction.
-// 14KB. Headroom for the edit-adherence strengthening (forceful
-// do-exactly-what-was-asked + verify) and the constraint-override
-// clarification (a later explicit user request overrides a conflicting
-// earlier constraint — the blue->yellow example), per the maintainer's
-// direction to prioritize followability over byte count here.
-// Bumped from 14_336 to restore load-bearing production-value craft guidance
-// (real imagery via the media tool, cohesive palette + interaction depth) whose
-// absence caused visible slim regressions on visual-first pages (P1 hero, P5 buttons).
-// Bumped from 15_360 to restore two quality instructions the tool-economy pass
-// dropped as collateral: the seed-copy rule ("Copy the seed and paste its
-// layouts") that keeps skills from writing CSS from scratch, and the
-// unconditional own-browser ban on preview (the softened "probes first"
-// wording let a run reach for Playwright after an export failure in the
-// 2026-07-13 slim-tool-economy eval, v1_001 turn 3).
-// Bumped from 15_616 for the form-prefill contract: every <question-form>
-// question ships a brief-inferred recommended `default` so the user can
-// submit the form unchanged (one bullet + `"default"` anchor in the example
-// form + updated description copy).
-// Bumped from 15_872 for the imagery fallback chain: when no image
-// generation is wired up (or the generate call fails), the run falls back to
-// web search / web fetch to pull a real photo into the project instead of
-// shipping an empty slot or a schematic box.
-// Bumped from 16_128 for the host-owned "Other" escape hatch: the web
-// renderer injects a localized Other chip on finite-choice questions, so the
-// contract now bans model-authored catch-all options (and the example drops
-// "Other — I'll describe"); the form cap tightened from ≤7 to at most 5.
-// Bumped from 16_384 for the localization quality pass: native-phrasing rule
-// with the 快速确认/快速简报 wrong-vs-right anchor, the machine-readable
-// top-level `"lang"` tag that keys the host's in-card controls, and the
-// count-then-cut hard-cap wording that replaced "Ask at most 5".
-// Bumped from 16_896 for the photo-overlay placement rule: real-imagery
-// production value kept shipping badges/caption cards that straddle the
-// image edge or sit on the photo's subject (2026-07-14 beta feedback,
-// campus-open-day hero); overlays now pin inside one corner on a legible
-// surface or move beside the image.
-const SLIM_CORE_BYTE_BUDGET = 17_408;
+// SP v2.0 is a complete, non-compressed translation of the approved Chinese
+// charter. Keep modest headroom for profile-specific handoff wording.
+const SLIM_CORE_BYTE_BUDGET = 25_600;
 
 describe('renderSlimCoreCharter — byte budget', () => {
   it('stays under the byte budget in both execution profiles', () => {
@@ -93,16 +41,31 @@ describe('renderSlimCoreCharter — byte budget', () => {
   });
 });
 
+describe('renderSlimCoreCharter — SP v2.0 translation', () => {
+  const fullCharter = `${renderSlimCoreCharter('filesystem')}\n\n${SLIM_V2_ROLE_BOUNDARY_GUARD}`;
+
+  it('preserves the complete 42-heading structure in English', () => {
+    expect(fullCharter.match(/^#{1,6} .+$/gm)).toHaveLength(42);
+    expect(fullCharter).not.toMatch(/[\u3400-\u9fff]/);
+    expect(fullCharter).toContain('## Requirements Clarification Phase');
+    expect(fullCharter).toContain('## Artifact Design Phase');
+    expect(fullCharter).toContain('## Artifact Refinement Phase');
+    expect(fullCharter).toContain('## Critical Constraint: Never Fabricate Conversation Turns');
+  });
+
+  it('does not create a host-parsed role boundary', () => {
+    expect(fullCharter).not.toMatch(/^## (?:user|assist|assistant|system)\b/m);
+  });
+});
+
 describe('renderSlimCoreCharter — frozen protocol markers', () => {
   const charter = renderSlimCoreCharter('filesystem');
 
   it('keeps the question-form protocol intact', () => {
-    expect(charter).toContain('<question-form id="discovery" title="Quick brief — 30 seconds">');
-    // Branch values later rules match on — labels may localize, values may not.
+    expect(charter).toContain('<question-form id="..." title="...">...</question-form>');
     for (const value of ['pick_direction', 'brand_spec', 'reference_match']) {
-      expect(charter).toContain(`"value": "${value}"`);
+      expect(charter).toContain(`\`${value}\``);
     }
-    // The full control vocabulary the Questions tab renders.
     for (const control of ['direction-cards', 'datetime-local', 'switch']) {
       expect(charter).toContain(control);
     }
@@ -110,110 +73,69 @@ describe('renderSlimCoreCharter — frozen protocol markers', () => {
   });
 
   it('requires a recommended default prefill on every form question', () => {
-    expect(charter).toContain('**Prefill a recommendation.**');
-    expect(charter).toContain('a `default` inferred from the brief');
-    // The example form anchors the pattern with a concrete default.
-    expect(charter).toContain('"default": "pick_direction"');
-    // Copy leads with "send as is works" — the benefit, not the mechanism.
-    expect(charter).toContain('Prefilled for you — send as is, or tweak anything first.');
+    expect(charter).toContain('provide a sensible default for each question');
+    expect(charter).toContain('Use `defaultValue` to preselect an answer');
+    expect(charter).toContain("`defaultValue` must match an option's `value`");
   });
 
-  it('localizes like a native and declares the form language', () => {
-    // Meaning-for-meaning translation (the 快速确认/快速简报 anchor keeps a
-    // concrete wrong-vs-right example in front of the model), plus a
-    // machine-readable `lang` tag so the host's own controls (Other chip,
-    // custom-answer field) render in the form's language, not the UI locale.
-    expect(charter).toContain('write what a native speaker would say, never word-for-word');
-    expect(charter).toContain('快速确认');
-    expect(charter).toContain('"lang": "en"');
-    expect(charter).toContain('Set top-level `"lang"`');
+  it('localizes user-visible form copy while preserving machine identifiers', () => {
+    expect(charter).toContain("Write all user-visible copy in the user's chat language");
+    expect(charter).toContain('Keep `id`, `type`, and option `value` fields in English');
   });
 
-  it('delegates the Other escape hatch to the host and caps forms at 5 questions', () => {
-    // The web renderer injects a localized "Other" chip (expanding into the
-    // type-in field) on every finite-choice question, so model-authored
-    // catch-all options would render as duplicates. And discovery forms stay
-    // short: a hard 5-question cap with an explicit count-then-cut step.
-    expect(charter).toContain('the host renders a localized "Other" escape hatch');
-    expect(charter).not.toContain("Other — I'll describe");
-    expect(charter).toContain('Hard cap: 5 questions');
-    // The default-shape recipe must fit inside the cap: 2 fixed slots + a
-    // pick-at-most-3 menu. The old prescriptive sequence ("Between `output`
-    // and `brand`, in this order … After `brand`: …") implied 7 questions and
-    // must not coexist with the hard cap (review: PR #5573).
-    expect(charter).toContain('fill AT MOST 3 more from this menu');
-    expect(charter).not.toContain('Between `output` and `brand`, in this order');
-    expect(charter).not.toContain('After `brand`:');
+  it('caps complex forms at 5 questions and keeps custom input available', () => {
+    expect(charter).toContain('Ask 1–3 questions in most cases, with a maximum of 5');
+    expect(charter).toContain('omit `allowCustom` or set it to `true`');
   });
 
-  it('keeps the imagery fallback chain intact', () => {
-    // Production-value imagery resolves in order: OD media tool → the
-    // runtime's native image generation → web search / web fetch pulling a
-    // real photo into the project. The fallback exists so a run without any
-    // image generation still ships real imagery instead of an empty slot,
-    // and it must keep the no-hot-link file rule.
+  it('keeps the imagery dispatch and local-file contract intact', () => {
     expect(charter).toContain('media generate --surface image');
-    expect(charter).toContain("your own runtime's native image generation");
-    expect(charter).toContain('fall back to your web search / web fetch tools');
-    expect(charter).toContain('reference it by relative path — never hot-link the remote URL');
+    expect(charter).toContain("runtime's native image-generation capability");
+    expect(charter).toContain('Do not hotlink user-uploaded images by URL');
   });
 
-  it('keeps the inspect/tweaks contracts intact', () => {
+  it('keeps the inspect and runtime-version contracts intact', () => {
     expect(charter).toContain('data-od-id="kebab-case-id"');
-    expect(charter).toContain('/*EDITMODE-BEGIN*/');
-    expect(charter).toContain('/*EDITMODE-END*/');
     expect(charter).toContain('react@18.3.1');
-    expect(charter).toContain('babel/standalone@7.29.0');
+    expect(charter).toContain('react-dom@18.3.1');
+    expect(charter).toContain('@babel/standalone@7.29.0');
+    expect(charter).toContain('framer-motion@11.11.13/dist/framer-motion.js');
   });
 
-  it('states the verification budget once and without a re-score loop', () => {
-    expect(charter.match(/One render is the whole budget/g)).toHaveLength(1);
-    expect(charter).not.toContain('Two passes is normal');
+  it('states the render and diagnostic budgets once', () => {
+    expect(charter.match(/Render at most once per task/g)).toHaveLength(1);
+    expect(charter).toContain('you may run at most one diagnostic');
   });
 
   it('makes the tool-economy budget operational', () => {
     for (const marker of [
-      'Use the DESIGN.md included here',
-      'read disk only if skill/project names an unincluded file',
-      'active-skill-required seed/reference fully once',
-      'Batch independent reads/searches into one call',
-      'keep dependencies separate',
-      'read minimal sufficient ranges',
-      'search the whole file once for a global request',
-      'Reuse returned results',
-      'Never repeat a read-only probe on unchanged state',
-      'after failure change the input, fix, or diagnostic before retry',
-      'one batched check of changed ranges',
-      'do not reopen unrelated ranges',
+      'Combine independent reads and searches into a single call',
+      'split them only when one depends on another',
+      'do not probe the environment with `pwd`',
+      'Do not repeat the same read-only probe',
+      'correct the input or identify the cause before retrying',
     ]) {
       expect(charter).toContain(marker);
     }
-    expect(charter).not.toContain('Re-read the current file');
-    expect(charter).not.toContain('Open the file you wrote');
   });
 
-  it('keeps the seed-copy rule the tool-economy rewrite must not drop', () => {
-    expect(charter).toContain("Copy the seed and paste its layouts — don't write CSS from scratch");
+  it('keeps the template reuse rule intact', () => {
+    expect(charter).toContain('Start from the existing template');
+    expect(charter).toContain('Do not rewrite CSS from scratch');
   });
 
   it('pins the photo-overlay placement discipline', () => {
-    // Real-imagery production value without this rule shipped badges that
-    // straddle the image edge or cover the photo's subject.
-    expect(charter).toContain('**Overlays on photos are placements, not decoration.**');
-    expect(charter).toContain('pins to ONE corner with a consistent inset');
-    expect(charter).toContain('never straddling the edge or floating half-off');
-    expect(charter).toContain("stays clear of faces and the photo's focal subject");
-    expect(charter).toContain('No safe corner → put the label beside the image, not on it');
+    expect(charter).toContain('anchor them to one corner with consistent inset spacing');
+    expect(charter).toContain('Keep the overlay entirely within the image bounds');
+    expect(charter).toContain("Avoid covering faces or the image's main subject");
+    expect(charter).toContain('place the text beside the image');
   });
 
   it('separates the optional preview budget from final delivery exports', () => {
-    expect(charter).toContain('ONE optional preview directly');
+    expect(charter).toContain('Render only when static code review cannot determine');
     expect(charter).toContain('`"$OD_NODE_BIN" "$OD_BIN" export <file>');
-    expect(charter).toContain('never your own browser (no Playwright/headless), even after a failure');
-    expect(charter).toContain('No help/env/path probes first');
-    expect(charter).toContain('after failure, run at most one diagnostic');
-    expect(charter).toContain('retry only after fixing the cause');
-    expect(charter).toContain('A user-requested final export is delivery, outside this preview budget');
+    expect(charter).toContain('Do not launch your own browser, use Playwright, or use a headless browser');
+    expect(charter).toContain('An export explicitly requested by the user is a delivery action');
   });
 
   it('switches the handoff rule by execution profile', () => {
@@ -236,8 +158,8 @@ describe('slim core — moved-out content stays out (ownership)', () => {
     );
     expect(routerSkill).toContain('<question-form id="task-type"');
     expect(routerSkill).toContain('"HyperFrames"');
-    // The charter still defers to skill-owned turn-1 forms generically.
-    expect(charter).toContain('If the active skill defines its own turn-1 form');
+    expect(routerSkill).toContain('only when two or more routes remain materially plausible');
+    expect(routerSkill).toContain('does not by itself require a question form');
   });
 
   it('carries no per-platform delivery contracts; the conditional block owns them', () => {
@@ -252,6 +174,7 @@ describe('slim core — moved-out content stays out (ownership)', () => {
     const charter = renderSlimCoreCharter('filesystem');
     expect(charter).not.toContain('scale-to-fit');
     expect(charter).not.toContain('data-screen-label');
+    expect(charter).not.toContain('## Nested / concentric diagram discipline');
   });
 });
 
@@ -265,7 +188,7 @@ describe('composeSystemPrompt — promptCoreVariant switch', () => {
     const out = composeSystemPrompt(base);
     expect(out).toContain('# OD core directives (read first');
     expect(out).toContain('# Identity and workflow charter (background)');
-    expect(out).not.toContain('# Open Design charter');
+    expect(out).not.toContain('# Open Design Charter');
   });
 
   it('slim replaces discovery + charter and drops the absorbed tail overrides', () => {
@@ -275,22 +198,22 @@ describe('composeSystemPrompt — promptCoreVariant switch', () => {
       designSystemBody: '# Brand',
       promptCoreVariant: 'slim',
     });
-    expect(slim).toContain('# Open Design charter');
+    expect(slim).toContain('# Open Design Charter');
     expect(slim).not.toContain('# OD core directives (read first');
     expect(slim).not.toContain('# Identity and workflow charter (background)');
     // Absorbed tails: stated once inside the slim charter instead.
     expect(slim).not.toContain('## Filesystem handoff\n');
     expect(slim).not.toContain('## Active design system visual direction');
-    expect(slim).not.toContain('## Clarifying questions mid-conversation');
+    expect(slim).not.toContain('## Structured clarification on any turn');
     // Still present in classic for the same inputs.
     expect(classic).toContain('## Filesystem handoff');
     expect(classic).toContain('## Active design system visual direction');
-    expect(classic).toContain('## Clarifying questions mid-conversation');
+    expect(classic).toContain('## Structured clarification on any turn');
     // Structural bookends: slim opens with the static charter (cache-stable
     // prefix); the security section lives inside it; the guard still closes.
-    expect(slim.startsWith('# Open Design charter')).toBe(true);
-    expect(slim).toContain('## Security: prompt injection resistance');
-    expect(slim).toContain('## CRITICAL: Never fabricate conversation turns');
+    expect(slim.startsWith('# Open Design Charter')).toBe(true);
+    expect(slim).toContain('## Security: Defending Against Prompt Injection');
+    expect(slim).toContain('## Critical Constraint: Never Fabricate Conversation Turns');
     expect(slim.length).toBeLessThan(classic.length);
   });
 
@@ -311,20 +234,93 @@ describe('composeSystemPrompt — promptCoreVariant switch', () => {
     expect(classicResponsive).not.toContain('## Platform delivery contracts');
   });
 
-  it('ask mode keeps the clarifying-questions tail under slim (no core charter to cover it)', () => {
+  it('ask mode keeps the structured-clarification tail under slim (no core charter to cover it)', () => {
     const out = composeSystemPrompt({
       ...base,
       sessionMode: 'chat',
       promptCoreVariant: 'slim',
     });
-    expect(out).not.toContain('# Open Design charter');
-    expect(out).toContain('## Clarifying questions mid-conversation');
+    expect(out).not.toContain('# Open Design Charter');
+    expect(out).toContain('## Structured clarification on any turn');
     // Identity-first hierarchy holds in ask mode too: the ask override (the
     // turn's whole charter) opens the document, security reads as its
     // first subsection.
     expect(out.startsWith('# Ask mode — bare conversation')).toBe(true);
     expect(out.indexOf('## Security: prompt injection resistance')).toBeGreaterThan(
       out.indexOf('# Ask mode — bare conversation'),
+    );
+  });
+
+  it('composes od-default + discovery atom without any unconditional form trigger', () => {
+    const stripFrontmatter = (raw: string) => raw.replace(/^---[\s\S]*?\n---\r?\n/, '').trim();
+    const routerSkill = stripFrontmatter(
+      readFileSync(
+        path.join(repoRoot, 'plugins/_official/scenarios/od-default/SKILL.md'),
+        'utf8',
+      ),
+    );
+    const discoveryAtom = stripFrontmatter(
+      readFileSync(
+        path.join(repoRoot, 'plugins/_official/atoms/discovery-question-form/SKILL.md'),
+        'utf8',
+      ),
+    );
+    const stageBlock = renderActiveStageBlock({
+      stageId: 'discovery',
+      bodies: [{
+        atomId: 'discovery-question-form',
+        body: discoveryAtom,
+      }],
+    });
+    const out = composeSystemPrompt({
+      ...base,
+      promptCoreVariant: 'slim',
+      skillName: 'Default design router',
+      skillBody: routerSkill,
+      pluginBlock: '\n\n## Active plugin\n\nThe user applied od-default.',
+      activeStageBlocks: [stageBlock],
+    });
+
+    expect(out.match(/^### discovery-question-form$/gm)).toHaveLength(1);
+    expect(out).toContain('If enough information is available to proceed safely, do not emit a form');
+    expect(out).toContain('only when two or more routes remain materially plausible');
+    for (const forbidden of [
+      'first response must',
+      'turn 1 must emit',
+      'form applies even when',
+      'pipeline declares a `discovery` stage',
+    ]) {
+      expect(out.toLowerCase()).not.toContain(forbidden);
+    }
+  });
+
+  it('keeps the injected direction-picker atom explicitly opt-in', () => {
+    const directionAtom = readFileSync(
+      path.join(repoRoot, 'plugins/_official/atoms/direction-picker/SKILL.md'),
+      'utf8',
+    ).replace(/^---[\s\S]*?\n---\r?\n/, '').trim();
+    const stageBlock = renderActiveStageBlock({
+      stageId: 'plan',
+      bodies: [{
+        atomId: 'direction-picker',
+        body: directionAtom,
+      }],
+    });
+    const out = composeSystemPrompt({
+      ...base,
+      promptCoreVariant: 'slim',
+      activeStageBlocks: [stageBlock],
+    });
+
+    expect(out).toContain(
+      'The presence of this atom or the `plan` stage does not trigger a picker',
+    );
+    expect(out).toContain('Do not\nemit direction cards proactively');
+    expect(out).toContain(
+      'When the user has not explicitly requested\noptions, infer a fitting direction',
+    );
+    expect(out).not.toContain(
+      'The direction-picker atom asks the agent to draft',
     );
   });
 
@@ -458,7 +454,9 @@ describe('slim core — direction library becomes a pull layer', () => {
     // No inline palette data under slim — that's the pull payload.
     expect(slim).not.toContain('**Palette (drop into `:root`):**');
     const classic = composeSystemPrompt(input);
-    expect(classic).toContain('## Direction library — bind into `:root`');
+    expect(classic).toContain('## Direction library — infer and bind by default');
+    expect(classic).toContain('Infer the best match from the brief and known context');
+    expect(classic).toContain('If the user explicitly requested direction comparison');
     expect(classic).toContain('**Palette (drop into `:root`):**');
     expect(classic).not.toContain('## Direction library — index');
     // An active design system suppresses both variants.
@@ -501,7 +499,7 @@ describe('slim core — regression-audit fixes vs classic', () => {
     // No tools on this profile: an index telling the model to run the `od`
     // CLI is a promise it cannot keep. Classic inlined the palettes; slim
     // must too on this profile.
-    expect(out).toContain('## Direction library — bind into `:root`');
+    expect(out).toContain('## Direction library — infer and bind by default');
     expect(out).toContain('**Palette (drop into `:root`):**');
     expect(out).not.toContain('## Direction library — index');
   });
@@ -514,7 +512,7 @@ describe('slim core — regression-audit fixes vs classic', () => {
     });
     expect(out.startsWith('# API mode — no tools available')).toBe(true);
     const overrideAt = out.indexOf('# API mode — no tools available');
-    const charterAt = out.indexOf('# Open Design charter');
+    const charterAt = out.indexOf('# Open Design Charter');
     expect(charterAt).toBeGreaterThan(overrideAt);
     // Composed exactly once — the head placement replaces the later push.
     expect(out.indexOf('# API mode — no tools available')).toBe(
@@ -569,8 +567,8 @@ describe('slim core — regression-audit fixes vs classic', () => {
     // generic wording and the anti-hallucination guard.
     const charter = renderSlimCoreCharter('filesystem');
     expect(charter).not.toContain('TodoWrite');
-    expect(charter).toContain('structured plan / todo / task-list tool');
-    expect(charter).toContain("never call a tool you don't have");
+    expect(charter).toContain('If the runtime supports task lists, use one');
+    expect(charter).toContain('Do not simulate tool calls that the current runtime does not support');
   });
 
   it('injects the concrete TodoWrite note only for Claude-family runs', () => {
@@ -591,23 +589,21 @@ describe('slim core — regression-audit fixes vs classic', () => {
     // constraints persist across later turns. Freeze both so a later
     // compression pass cannot silently drop them.
     const charter = renderSlimCoreCharter('filesystem');
-    expect(charter).toContain('### Editing an existing artifact');
-    expect(charter).toContain('The design system stays bound on every turn');
-    expect(charter).toContain('Locked constraints persist');
+    expect(charter).toContain('## Artifact Refinement Phase');
+    expect(charter).toContain('### 2. Keep the Design System Bound on Every Turn');
+    expect(charter).toContain('### 3. Preserve Locked Constraints');
     // An edit changes only what was named — the anti-drift core.
-    expect(charter).toContain('do exactly what was asked, in full');
-    expect(charter).toContain('Never report a change you did not make');
+    expect(charter).toContain('update A everywhere the request applies');
+    expect(charter).toContain('Never report a change that was not completed');
   });
 
-  it('keeps the restored classic product rules in the charter', () => {
+  it('keeps the load-bearing product rules in the charter', () => {
     const charter = renderSlimCoreCharter('filesystem');
-    // Never hot-link user-attached images (product constraint, not filler).
-    expect(charter).toContain('Never hot-link user-attached images');
+    expect(charter).toContain('Do not hotlink user-uploaded images by URL');
     // Skill/DS precedence is per-domain, not a strict total order.
-    expect(charter).toContain('each highest in its own domain');
-    // Expressive form controls + modern CSS encouragement survived.
-    expect(charter).toContain('most expressive control');
-    expect(charter).toContain('**Modern CSS welcome**');
+    expect(charter).toContain('Each has the highest authority within its own scope');
+    expect(charter).toContain('Mobile layouts must not scroll horizontally');
+    expect(charter).toContain('Every focusable element must have a clear `:focus-visible` focus ring');
   });
 });
 
@@ -646,9 +642,9 @@ describe('composeSystemPrompt — slim layered ordering (cache-stable prefix)', 
       return i;
     };
     // Static core opens the document.
-    expect(out.startsWith('# Open Design charter')).toBe(true);
-    const security = at('## Security: prompt injection resistance');
-    const conduct = at('### Conduct');
+    expect(out.startsWith('# Open Design Charter')).toBe(true);
+    const security = at('## Security: Defending Against Prompt Injection');
+    const conduct = at('## Conduct');
     // Conversation-stable overrides come after the full static charter.
     const mode = at('# Plan mode — editable document first');
     const localeAt = at('# UI locale override');
@@ -662,9 +658,12 @@ describe('composeSystemPrompt — slim layered ordering (cache-stable prefix)', 
     // Turn-variable blocks last, before the recency-pinned guard.
     const maybeDeck = at('## If this brief is a slide deck');
     const mediaHint = at('## Media generation (if asked)');
-    const guard = at('## CRITICAL: Never fabricate conversation turns');
+    const guard = at('## Critical Constraint: Never Fabricate Conversation Turns');
     expect(security).toBeLessThan(conduct);
     expect(conduct).toBeLessThan(mode);
+    expect(out).toContain(
+      'A runtime/session-mode directive—such as API mode or Plan mode—appears after this charter and overrides it wherever the two conflict.',
+    );
     expect(mode).toBeLessThan(localeAt);
     expect(localeAt).toBeLessThan(memory);
     expect(memory).toBeLessThan(ds);

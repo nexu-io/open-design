@@ -19,10 +19,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   closeDatabase,
+  countWorkspaceProjectRefs,
   deleteConversation,
   deleteProject as dbDeleteProject,
+  deleteWorkspaceProject,
+  ensureProjectCommentAnchorConversation,
+  ensureWorkspaceProject,
   getConversation,
   getProject,
+  getWorkspaceProject,
+  getWorkspaceProjectByProjectId,
+  listWorkspaceProjects,
+  rebindWorkspaceProject,
+  updateWorkspaceProject,
   insertConversation,
   insertProject,
   listConversations,
@@ -123,7 +132,20 @@ async function mountProjectApp(
       updateProject,
       dbDeleteProject,
       removeProjectDir: vi.fn(async () => {}),
+      stageProjectDirsForDelete: vi.fn(async () => {}),
       validateLinkedDirs: vi.fn(() => ({ dirs: [], error: null })),
+      // Real db-backed workspace-project lookups: the delete route's
+      // workspace mutation gate dereferences these, and a bare project with
+      // no workspace row must flow through the same legacy-allow path the
+      // production server takes.
+      ensureWorkspaceProject,
+      getWorkspaceProject,
+      getWorkspaceProjectByProjectId,
+      listWorkspaceProjects,
+      updateWorkspaceProject,
+      rebindWorkspaceProject,
+      deleteWorkspaceProject,
+      countWorkspaceProjectRefs,
     },
     projectFiles: {
       ensureProject: noop,
@@ -263,6 +285,49 @@ describe('DELETE conversation cancels its active runs (#5468)', () => {
     expect(doomed.status).toBe('canceled');
     expect(bystander.status).not.toBe('canceled');
     expect(runs.list({ conversationId: 'c2', status: 'active' })).toHaveLength(1);
+  });
+
+  it('keeps the internal comment anchor out of conversation lists and route operations', async () => {
+    const now = Date.now();
+    insertConversation(db, {
+      id: 'c1',
+      projectId: 'p1',
+      title: 'User chat',
+      sessionMode: 'design',
+      createdAt: now - 1,
+      updatedAt: now - 1,
+    });
+    const anchor = ensureProjectCommentAnchorConversation(db, 'p1', now);
+    expect(anchor?.conversationId).toMatch(/^comment-anchor-/);
+
+    const runs = makeRunService();
+    const app = await mountConversationApp(db, runs, tempDir);
+    try {
+      const listed = await fetch(`${app.base}/api/projects/p1/conversations`);
+      expect(listed.status).toBe(200);
+      await expect(listed.json()).resolves.toEqual({
+        conversations: [expect.objectContaining({ id: 'c1' })],
+      });
+
+      const anchorPath = `${app.base}/api/projects/p1/conversations/${anchor!.conversationId}`;
+      for (const request of [
+        fetch(anchorPath, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: '{}' }),
+        fetch(anchorPath, { method: 'DELETE' }),
+        fetch(`${anchorPath}/messages`),
+        fetch(`${anchorPath}/messages/m1`, {
+          method: 'PUT',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ role: 'user', content: 'must stay internal' }),
+        }),
+      ]) {
+        expect((await request).status).toBe(404);
+      }
+    } finally {
+      await app.close();
+    }
+
+    expect(getConversation(db, anchor!.conversationId)).not.toBeNull();
+    expect(listMessages(db, anchor!.conversationId)).toEqual([]);
   });
 });
 

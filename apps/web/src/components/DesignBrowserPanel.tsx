@@ -29,6 +29,11 @@ import {
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
 import {
+  commentSendCompleted,
+  commentSendSucceeded,
+  type CommentSendResult,
+} from './comment-send-result';
+import {
   registerBrandBrowser,
   type BrandBrowserHandle,
   type BrandBrowserPageSnapshotResult,
@@ -36,6 +41,7 @@ import {
 import { captureHostRegionSnapshot } from '../runtime/exports';
 import { buildBoardCommentAttachments, commentsToAttachments } from '../comments';
 import type {
+  ChatAttachment,
   ChatCommentAttachment,
   PreviewAnnotationStyle,
   PreviewComment,
@@ -47,10 +53,10 @@ import {
   BROWSER_PAGE_ARCHIVE_INDEX_FILE,
   BROWSER_PAGE_ARCHIVE_SCHEMA,
   BROWSER_SERIALIZE_HTML_SCRIPT,
-  BROWSER_VIEWPORT_PRESETS,
   type BrowserPageArchiveCapture,
   type BrowserPageArchiveManifest,
   type BrowserElementSnapshot,
+  type BrowserViewportId,
   browserApplyStyleScript,
   browserApplyTextScript,
   browserCommentFilePath,
@@ -59,31 +65,37 @@ import {
   browserSnapshotFromUnknown,
   isProjectHtmlBrowserUrl,
   projectRelativePathFromBrowserUrl,
-  type BrowserViewportId,
 } from './design-browser-tools';
+import {
+  DESIGN_BROWSER_HISTORY_LIMIT,
+  loadBrowserViewport,
+  loadHistory,
+  saveBrowserViewport,
+  saveHistory,
+  type BrowserHistoryEntry,
+} from './design-browser-storage';
 import { Icon } from './Icon';
 import { BoardComposerPopover } from './BoardComposerPopover';
 import { PreviewDrawOverlay } from './PreviewDrawOverlay';
 import { RemixIcon } from './RemixIcon';
+import { useProjectCollabContext } from '../collab/collab-context';
 
-type BrowserHistoryEntry = {
-  iconUrl?: string;
-  title: string;
-  url: string;
-  lastVisitedAt: number;
-  visitCount: number;
-};
+export {
+  removeDesignBrowserProjectCache,
+  designBrowserHistoryStorageKey,
+  designBrowserViewportStorageKey,
+  isHistoryEntry,
+  loadBrowserViewport,
+  loadHistory,
+  saveBrowserViewport,
+  saveHistory,
+  type BrowserHistoryEntry,
+} from './design-browser-storage';
 
 type BrowserNavigationEntry = {
   title: string;
   url: string;
 };
-
-function browserViewportIcon(viewport: BrowserViewportId): string {
-  if (viewport === 'tablet') return 'tablet-line';
-  if (viewport === 'mobile') return 'smartphone-line';
-  return 'computer-line';
-}
 
 type ReferenceSite = {
   label: string;
@@ -232,6 +244,10 @@ type WebviewFaviconEvent = Event & {
   favicons?: string[];
 };
 
+type WebviewConsoleMessageEvent = Event & {
+  message?: string;
+};
+
 function isPromiseLike<T = unknown>(value: unknown): value is PromiseLike<T> {
   return (
     typeof value === 'object'
@@ -263,9 +279,10 @@ interface DesignBrowserPanelProps {
   onRefreshFiles: () => Promise<void> | void;
   onPageInfoChange?: (info: BrowserPageInfo) => void;
   previewComments?: PreviewComment[];
-  onSavePreviewComment?: (target: PreviewCommentTarget, note: string, attachAfterSave: boolean, images?: File[]) => Promise<PreviewComment | null>;
-  onRemovePreviewComment?: (commentId: string) => Promise<void>;
-  onSendBoardCommentAttachments?: (attachments: ChatCommentAttachment[], images?: File[]) => Promise<boolean | void> | boolean | void;
+  onSavePreviewComment?: (target: PreviewCommentTarget, note: string, attachAfterSave: boolean, images?: File[], commentId?: string) => Promise<PreviewComment | null>;
+  onRemovePreviewComment?: (commentId: string) => Promise<boolean>;
+  onSendBoardCommentAttachments?: (attachments: ChatCommentAttachment[], images?: File[]) => Promise<CommentSendResult> | CommentSendResult;
+  onAddImageToChat?: (attachment: ChatAttachment) => void;
   onRequestBrowserUsePrompt?: (prompt: string) => void;
   onPageSnapshotToast?: (event: BrowserPageSnapshotToastEvent) => void;
   sendDisabled?: boolean;
@@ -283,7 +300,7 @@ export interface BrowserPageInfo {
 
 const EMPTY_URL = 'about:blank';
 const DESIGN_BROWSER_PARTITION = 'persist:open-design-design-browser';
-const HISTORY_LIMIT = 80;
+const HISTORY_LIMIT = DESIGN_BROWSER_HISTORY_LIMIT;
 const HISTORY_SUGGESTION_LIMIT = 20;
 const EMPTY_PREVIEW_COMMENTS: PreviewComment[] = [];
 // Cap the resource-hint (`dns-prefetch`/`preconnect`) links we leave in <head>.
@@ -315,24 +332,6 @@ function localizedReferenceSiteDetail(
   t?: (key: keyof Dict) => string,
 ): string {
   return t ? t(referenceSiteDetailKey(site)) : site.detail;
-}
-
-function browserViewportLabel(
-  t: (key: keyof Dict) => string,
-  viewport: BrowserViewportId,
-): string {
-  if (viewport === 'tablet') return t('fileViewer.viewportTablet');
-  if (viewport === 'mobile') return t('fileViewer.viewportMobile');
-  return t('fileViewer.viewportDesktop');
-}
-
-function browserViewportTitle(
-  t: (key: keyof Dict) => string,
-  viewport: BrowserViewportId,
-): string {
-  if (viewport === 'tablet') return t('fileViewer.viewportTabletTitle');
-  if (viewport === 'mobile') return t('fileViewer.viewportMobileTitle');
-  return t('fileViewer.viewportDesktopTitle');
 }
 
 function initialBrowserState(initialUrl?: string, initialTitle?: string): {
@@ -751,6 +750,126 @@ export function browserUsePrompt(action: BrowserUseAction, context: BrowserUsePr
   ].join('\n');
 }
 
+const ADD_IMAGE_TO_CHAT_MESSAGE = '__open_design_add_image_to_chat__:';
+const browserImageHoverScript = (addToChatLabel: string) => String.raw`(() => {
+  const rootId = '__open_design_image_hover_layer__';
+  window.__openDesignImageHoverCleanup?.();
+  document.getElementById(rootId)?.remove();
+  const controller = new AbortController();
+
+  const layer = document.createElement('div');
+  layer.id = rootId;
+  layer.setAttribute('aria-hidden', 'true');
+  Object.assign(layer.style, {
+    position: 'fixed',
+    zIndex: '2147483646',
+    display: 'none',
+    alignItems: 'flex-start',
+    justifyContent: 'flex-end',
+    padding: '10px',
+    // No dim/frost wash over the image — the layer is an invisible flex
+    // frame that pins the button to the hovered image's top-right corner.
+    background: 'transparent',
+    pointerEvents: 'none',
+    borderRadius: '6px',
+    boxSizing: 'border-box',
+  });
+
+  const button = document.createElement('button');
+  button.type = 'button';
+  const addToChatLabel = ${JSON.stringify(addToChatLabel)};
+  button.textContent = addToChatLabel;
+  button.setAttribute('aria-label', addToChatLabel);
+  Object.assign(button.style, {
+    height: '34px',
+    padding: '0 14px',
+    border: 'none',
+    borderRadius: '6px',
+    background: 'rgba(24,24,25,.92)',
+    color: '#00ff04',
+    boxShadow: '0 8px 24px rgba(0,0,0,.28)',
+    font: '600 13px/1 system-ui, -apple-system, BlinkMacSystemFont, sans-serif',
+    letterSpacing: '0',
+    cursor: 'pointer',
+    pointerEvents: 'auto',
+  });
+  layer.appendChild(button);
+  document.documentElement.appendChild(layer);
+
+  let activeImage = null;
+  const eligibleImage = (node) => {
+    const image = node instanceof Element ? node.closest('img') : null;
+    if (!(image instanceof HTMLImageElement)) return null;
+    const rect = image.getBoundingClientRect();
+    if (rect.width < 72 || rect.height < 56 || rect.bottom <= 0 || rect.right <= 0) return null;
+    return image;
+  };
+  const positionLayer = () => {
+    if (!activeImage || !activeImage.isConnected) {
+      activeImage = null;
+      layer.style.display = 'none';
+      return;
+    }
+    const rect = activeImage.getBoundingClientRect();
+    if (rect.width < 72 || rect.height < 56 || rect.bottom <= 0 || rect.top >= innerHeight) {
+      layer.style.display = 'none';
+      return;
+    }
+    Object.assign(layer.style, {
+      display: 'flex',
+      left: Math.max(0, rect.left) + 'px',
+      top: Math.max(0, rect.top) + 'px',
+      width: Math.max(0, Math.min(innerWidth, rect.right) - Math.max(0, rect.left)) + 'px',
+      height: Math.max(0, Math.min(innerHeight, rect.bottom) - Math.max(0, rect.top)) + 'px',
+    });
+  };
+  document.addEventListener('pointermove', (event) => {
+    if (button.contains(event.target)) return;
+    const image = eligibleImage(event.target);
+    if (image === activeImage) return;
+    activeImage = image;
+    positionLayer();
+  }, { capture: true, signal: controller.signal });
+  // No capture: pointerleave does not bubble, so this fires only when the
+  // pointer leaves the document itself. A capturing listener would also fire
+  // when the pointer crosses from the image onto the overlay button, hiding
+  // the layer and clearing activeImage before the button can be clicked.
+  document.addEventListener('pointerleave', () => {
+    activeImage = null;
+    layer.style.display = 'none';
+  }, { signal: controller.signal });
+  addEventListener('scroll', positionLayer, { capture: true, signal: controller.signal });
+  addEventListener('resize', positionLayer, { capture: true, signal: controller.signal });
+
+  button.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!activeImage) return;
+    const rect = activeImage.getBoundingClientRect();
+    const payload = {
+      x: Math.max(0, rect.left),
+      y: Math.max(0, rect.top),
+      width: Math.max(1, Math.min(innerWidth, rect.right) - Math.max(0, rect.left)),
+      height: Math.max(1, Math.min(innerHeight, rect.bottom) - Math.max(0, rect.top)),
+      alt: activeImage.alt || '',
+      src: activeImage.currentSrc || activeImage.src || '',
+    };
+    layer.style.display = 'none';
+    // Let the guest paint the hidden overlay before notifying the host;
+    // the host's own rAF wait cannot see guest frames, so capturing too
+    // early bakes the dimmed layer and button into the snapshot.
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      console.info('${ADD_IMAGE_TO_CHAT_MESSAGE}' + JSON.stringify(payload));
+    }));
+  }, { signal: controller.signal });
+  window.__openDesignImageHoverCleanup = () => {
+    controller.abort();
+    layer.remove();
+    delete window.__openDesignImageHoverCleanup;
+  };
+  return true;
+})()`;
+
 const PAGE_BRIEF_SCRIPT = `(() => {
   const clean = (value) => String(value || '').replace(/\\s+/g, ' ').trim();
   const attr = (selector, name) => document.querySelector(selector)?.getAttribute(name) || '';
@@ -806,12 +925,14 @@ export function DesignBrowserPanel({
   onSavePreviewComment,
   onRemovePreviewComment,
   onSendBoardCommentAttachments,
+  onAddImageToChat,
   onRequestBrowserUsePrompt,
   onPageSnapshotToast,
   sendDisabled = false,
   browserTabId,
 }: DesignBrowserPanelProps) {
   const t = useT();
+  const { workspaceContext } = useProjectCollabContext();
   const desktopHostAvailable = isOpenDesignHostAvailable();
   const initialState = initialBrowserState(initialUrl, initialTitle);
   // `loadUrl` is the navigation target bound to the <webview>/<iframe> `src`.
@@ -834,7 +955,11 @@ export function DesignBrowserPanel({
   const [isLoading, setIsLoading] = useState(false);
   const [webviewNode, setWebviewNode] = useState<WebviewElement | null>(null);
   const [drawOverlayOpen, setDrawOverlayOpen] = useState(false);
-  const [viewport, setViewport] = useState<BrowserViewportId>('desktop');
+  const [viewport, setViewportState] = useState<BrowserViewportId>(() => loadBrowserViewport(projectId));
+  const setViewport = useCallback((nextViewport: BrowserViewportId) => {
+    saveBrowserViewport(projectId, nextViewport);
+    setViewportState(nextViewport);
+  }, [projectId]);
   const [activeTool, setActiveTool] = useState<BrowserTool | null>(null);
   const [activeCommentTarget, setActiveCommentTarget] = useState<BrowserElementSnapshot | null>(null);
   const [activePreviewCommentId, setActivePreviewCommentId] = useState<string | null>(null);
@@ -924,6 +1049,7 @@ export function DesignBrowserPanel({
   }, []);
 
   useEffect(() => {
+    setViewportState(loadBrowserViewport(projectId));
     setHistory(loadHistory(projectId));
     const nextInitialState = initialBrowserState(initialUrl, initialTitle);
     setLoadUrl(nextInitialState.url);
@@ -1506,6 +1632,7 @@ export function DesignBrowserPanel({
         projectId,
         browserFileName('browser-capture', currentUrl, 'png'),
         base64,
+        workspaceContext,
       );
       if (!file) throw new Error(t('designBrowser.status.screenshotFailed'));
       await onRefreshFiles();
@@ -1579,6 +1706,134 @@ export function DesignBrowserPanel({
     }
   }
 
+  const addBrowserImageToChat = useCallback(async (payload: {
+    alt?: string;
+    height: number;
+    src?: string;
+    width: number;
+    x: number;
+    y: number;
+  }) => {
+    const node = webviewNode;
+    if (!node || !onAddImageToChat) return;
+    const frame = node.getBoundingClientRect();
+    const left = Math.max(frame.left, frame.left + payload.x);
+    const top = Math.max(frame.top, frame.top + payload.y);
+    const right = Math.min(frame.right, frame.left + payload.x + payload.width);
+    const bottom = Math.min(frame.bottom, frame.top + payload.y + payload.height);
+    if (right <= left || bottom <= top) return;
+
+    try {
+      await new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      );
+      let snapshot = await captureHostRegionSnapshot({
+        left,
+        top,
+        width: right - left,
+        height: bottom - top,
+      });
+      if (!snapshot) {
+        // Host compositor region grab unavailable (returns null on some
+        // setups even when the full-frame grab works). Fall back to the
+        // guest's own capturePage() and crop to the image's rect — the same
+        // guest fallback captureBrowserSnapshot() uses, so the "添加到对话"
+        // path is as robust as the full-frame capture.
+        try {
+          const guestUrl = (await node.capturePage()).toDataURL();
+          const dpr = window.devicePixelRatio || 1;
+          snapshot = await cropDataUrl(
+            guestUrl,
+            (left - frame.left) * dpr,
+            (top - frame.top) * dpr,
+            (right - left) * dpr,
+            (bottom - top) * dpr,
+          );
+        } catch {
+          snapshot = null;
+        }
+      }
+      if (!snapshot) throw new Error(t('designBrowser.status.screenshotFailed'));
+
+      animateImageIntoChat(snapshot.dataUrl, { left, top, width: right - left, height: bottom - top });
+      const base64 = snapshot.dataUrl.split(',', 2)[1] ?? '';
+      const file = await writeProjectBase64File(
+        projectId,
+        browserFileName('chat-image', currentUrl, 'png'),
+        base64,
+        workspaceContext,
+      );
+      if (!file) throw new Error(t('designBrowser.status.screenshotFailed'));
+      await onRefreshFiles();
+      onAddImageToChat({
+        path: file.path || file.name,
+        name: payload.alt?.trim() || file.name.split('/').pop() || file.name,
+        kind: 'image',
+        size: file.size,
+      });
+      setStatusMessage(t('designBrowser.status.imageAddedToChat'));
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : t('designBrowser.status.screenshotFailed'));
+    }
+  }, [currentUrl, onAddImageToChat, onRefreshFiles, projectId, t, webviewNode, workspaceContext]);
+
+  useEffect(() => {
+    const node = webviewNode;
+    if (!node || !onAddImageToChat || isBlank) return;
+
+    const injectHoverLayer = () => {
+      // executeJavaScript throws synchronously until the webview emits
+      // dom-ready; the dom-ready/did-stop-loading listeners re-inject then.
+      try {
+        void node.executeJavaScript(
+          browserImageHoverScript(t('designBrowser.addImageToChatButton')),
+          true,
+        ).catch(() => undefined);
+      } catch {
+        // Webview not attached/ready yet.
+      }
+    };
+    const onConsoleMessage = (event: Event) => {
+      const message = (event as WebviewConsoleMessageEvent).message ?? '';
+      if (!message.startsWith(ADD_IMAGE_TO_CHAT_MESSAGE)) return;
+      try {
+        const payload = JSON.parse(message.slice(ADD_IMAGE_TO_CHAT_MESSAGE.length)) as {
+          alt?: string;
+          height?: number;
+          src?: string;
+          width?: number;
+          x?: number;
+          y?: number;
+        };
+        if (
+          !Number.isFinite(payload.x) || !Number.isFinite(payload.y) ||
+          !Number.isFinite(payload.width) || !Number.isFinite(payload.height) ||
+          Number(payload.width) <= 0 || Number(payload.height) <= 0
+        ) return;
+        void addBrowserImageToChat({
+          alt: payload.alt,
+          height: Number(payload.height),
+          src: payload.src,
+          width: Number(payload.width),
+          x: Number(payload.x),
+          y: Number(payload.y),
+        });
+      } catch {
+        // Ignore unrelated or malformed guest console messages.
+      }
+    };
+
+    node.addEventListener('dom-ready', injectHoverLayer);
+    node.addEventListener('did-stop-loading', injectHoverLayer);
+    node.addEventListener('console-message', onConsoleMessage);
+    injectHoverLayer();
+    return () => {
+      node.removeEventListener('dom-ready', injectHoverLayer);
+      node.removeEventListener('did-stop-loading', injectHoverLayer);
+      node.removeEventListener('console-message', onConsoleMessage);
+    };
+  }, [addBrowserImageToChat, isBlank, onAddImageToChat, t, webviewNode]);
+
   async function savePageBrief() {
     if (!webviewNode || isBlank) {
       setStatusMessage(t('designBrowser.status.openBeforeBrief'));
@@ -1591,6 +1846,8 @@ export function DesignBrowserPanel({
         projectId,
         browserFileName('browser-brief', currentUrl, 'md'),
         pageBriefMarkdown(brief, currentUrl),
+        undefined,
+        workspaceContext,
       );
       if (!file) throw new Error(t('designBrowser.status.briefSaveFailed'));
       await onRefreshFiles();
@@ -1648,12 +1905,12 @@ export function DesignBrowserPanel({
       const cssFile = `${dir}/styles.css`;
       const manifestFile = `${dir}/manifest.json`;
       const htmlSaved = await abortablePageSnapshotPromise(
-        writeProjectTextFile(projectId, htmlFile, capture.html),
+        writeProjectTextFile(projectId, htmlFile, capture.html, undefined, workspaceContext),
         controller.signal,
       );
       if (!htmlSaved) throw new Error(t('designBrowser.status.pageSnapshotFailed'));
       const cssSaved = await abortablePageSnapshotPromise(
-        writeProjectTextFile(projectId, cssFile, capture.css ?? ''),
+        writeProjectTextFile(projectId, cssFile, capture.css ?? '', undefined, workspaceContext),
         controller.signal,
       );
       if (!cssSaved) throw new Error(t('designBrowser.status.pageSnapshotFailed'));
@@ -1678,11 +1935,11 @@ export function DesignBrowserPanel({
       };
       const manifestText = JSON.stringify(manifest, null, 2);
       const savedManifest = await abortablePageSnapshotPromise(
-        writeProjectTextFile(projectId, manifestFile, manifestText),
+        writeProjectTextFile(projectId, manifestFile, manifestText, undefined, workspaceContext),
         controller.signal,
       );
       const savedIndex = await abortablePageSnapshotPromise(
-        writeProjectTextFile(projectId, BROWSER_PAGE_ARCHIVE_INDEX_FILE, manifestText),
+        writeProjectTextFile(projectId, BROWSER_PAGE_ARCHIVE_INDEX_FILE, manifestText, undefined, workspaceContext),
         controller.signal,
       );
       if (!savedManifest || !savedIndex) throw new Error(t('designBrowser.status.pageSnapshotFailed'));
@@ -1982,7 +2239,7 @@ export function DesignBrowserPanel({
     setSavingDomEdit(true);
     try {
       const html = await webviewNode.executeJavaScript<string>(BROWSER_SERIALIZE_HTML_SCRIPT, true);
-      const file = await writeProjectTextFile(projectId, relativePath, html);
+      const file = await writeProjectTextFile(projectId, relativePath, html, undefined, workspaceContext);
       if (!file) throw new Error(t('designBrowser.status.htmlSaveFailed'));
       await onRefreshFiles();
       setStatusMessage(t('designBrowser.status.htmlSaved'));
@@ -2043,18 +2300,30 @@ export function DesignBrowserPanel({
       setStatusMessage(t('designBrowser.status.commentSendingUnavailable'));
       return;
     }
-    const notes = [...queuedCommentNotes];
-    if (commentDraft.trim()) notes.push(commentDraft.trim());
-    if (notes.length === 0 && browserImages.length === 0 && activeSavedComment) {
+    const sendingUnchangedSavedComment = Boolean(
+      activeSavedComment
+      && queuedCommentNotes.length === 0
+      && browserImages.length === 0
+      && commentDraft.trim() === activeSavedComment.note.trim(),
+    );
+    if (activeSavedComment && sendingUnchangedSavedComment) {
       setSendingComment(true);
       try {
-        await onSendBoardCommentAttachments(commentsToAttachments([activeSavedComment]));
+        const result = await onSendBoardCommentAttachments(
+          commentsToAttachments([activeSavedComment]),
+        );
+        if (!commentSendCompleted(result, activeSavedComment.id)) return;
+        if (!onRemovePreviewComment) return;
+        const removed = await onRemovePreviewComment(activeSavedComment.id);
+        if (!removed) return;
         clearBrowserTool();
       } finally {
         setSendingComment(false);
       }
       return;
     }
+    const notes = [...queuedCommentNotes];
+    if (commentDraft.trim()) notes.push(commentDraft.trim());
     if (notes.length === 0 && browserImages.length === 0) return;
     setSendingComment(true);
     try {
@@ -2069,25 +2338,28 @@ export function DesignBrowserPanel({
           ? { ...attachment, imageAttachments: existingAttachments }
           : attachment
       ));
-      const accepted = await onSendBoardCommentAttachments(
+      const result = await onSendBoardCommentAttachments(
         attachments,
         browserImages,
       );
-      if (accepted === false) return;
-      clearBrowserTool();
+      const completedIds = new Set(result.commentIds);
+      const pending = attachments.filter(
+        (attachment) => !completedIds.has(attachment.id),
+      );
+      if (pending.length === 0 && commentSendSucceeded(result)) {
+        clearBrowserTool();
+        return;
+      }
+      if (completedIds.size === 0) return;
+      setQueuedCommentNotes(pending.map((attachment) => attachment.comment));
+      setCommentDraft('');
+      setBrowserImages([]);
+      setBrowserPreviewIndex(null);
     } finally {
       setSendingComment(false);
     }
   }
 
-  const viewportPreset =
-    BROWSER_VIEWPORT_PRESETS.find((preset) => preset.id === viewport) ?? BROWSER_VIEWPORT_PRESETS[0]!;
-  const viewportStyle = viewportPreset.width
-    ? {
-        '--db-viewport-width': `${viewportPreset.width}px`,
-        '--db-viewport-height': `${viewportPreset.height}px`,
-      } as CSSProperties
-    : undefined;
   const browserPopoverBounds = (() => {
     const rect = webviewNode?.getBoundingClientRect();
     if (!rect || rect.width <= 0 || rect.height <= 0) return undefined;
@@ -2142,7 +2414,7 @@ export function DesignBrowserPanel({
       onDeleteComment={onRemovePreviewComment}
       images={browserImagePreviews}
       existingImages={(activeSavedComment?.attachments ?? []).map((attachment) => ({
-        url: projectRawUrl(projectId, attachment.path),
+        url: projectRawUrl(projectId, attachment.path, workspaceContext),
         name: attachment.name,
       }))}
       onAttachImages={addBrowserImages}
@@ -2195,11 +2467,6 @@ export function DesignBrowserPanel({
           >
             <Icon name={isLoading ? 'close' : 'reload'} size={isLoading ? 16 : 15} />
           </IconTooltipButton>
-          <BrowserViewportControls
-            viewport={viewport}
-            onViewport={setViewport}
-            disabled={isBlank}
-          />
         </div>
         <form className="db-address-form" onSubmit={handleAddressSubmit}>
           <BrowserSiteIcon
@@ -2405,7 +2672,7 @@ export function DesignBrowserPanel({
         </div>
       ) : null}
       {browserPreviewImageModal}
-      <div className={`db-content db-content-viewport-${isBlank ? 'desktop' : viewport}`}>
+      <div className="db-content">
         <PreviewDrawOverlay
           active={drawOverlayOpen}
           captureTarget={activeCommentTarget ? browserTargetFromSnapshot(activeCommentTarget) : null}
@@ -2418,10 +2685,7 @@ export function DesignBrowserPanel({
           sendDisabled={sendDisabled}
           sendDisabledReason={t('chat.annotationSendDisabledReason')}
         >
-          <div
-            className={`db-viewport-frame db-viewport-${isBlank ? 'desktop' : viewport}`}
-            style={isBlank ? undefined : viewportStyle}
-          >
+          <div className="db-viewport-frame">
             {isBlank ? (
               <DesignBrowserStart
                 onNavigate={navigateTo}
@@ -2573,80 +2837,6 @@ function BrowserUseMenu({
   );
 }
 
-function BrowserViewportControls({
-  disabled,
-  onViewport,
-  viewport,
-}: {
-  disabled?: boolean;
-  onViewport: (viewport: BrowserViewportId) => void;
-  viewport: BrowserViewportId;
-}) {
-  const t = useT();
-  const [open, setOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement | null>(null);
-  const activePreset =
-    BROWSER_VIEWPORT_PRESETS.find((preset) => preset.id === viewport) ?? BROWSER_VIEWPORT_PRESETS[0]!;
-
-  useEffect(() => {
-    if (!open) return;
-    const onPointerDown = (event: PointerEvent) => {
-      if (!menuRef.current?.contains(event.target as Node)) setOpen(false);
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false);
-    };
-    document.addEventListener('pointerdown', onPointerDown);
-    document.addEventListener('keydown', onKeyDown);
-    return () => {
-      document.removeEventListener('pointerdown', onPointerDown);
-      document.removeEventListener('keydown', onKeyDown);
-    };
-  }, [open]);
-
-  return (
-    <div className="db-viewport-switcher" ref={menuRef}>
-      <IconTooltipButton
-        label={browserViewportTitle(t, activePreset.id)}
-        disabled={disabled}
-        className={open ? 'is-active' : ''}
-        onClick={() => setOpen((value) => !value)}
-      >
-        <RemixIcon
-          name={browserViewportIcon(activePreset.id)}
-          size={14}
-          className="db-viewport-icon"
-        />
-        <span className="db-viewport-label">{browserViewportLabel(t, activePreset.id)}</span>
-        <RemixIcon name="arrow-down-s-line" size={13} />
-      </IconTooltipButton>
-      {open ? (
-        <div className="db-viewport-menu" role="listbox" aria-label={t('designBrowser.viewportAria')}>
-          {BROWSER_VIEWPORT_PRESETS.map((preset) => (
-            <button
-              key={preset.id}
-              type="button"
-              role="option"
-              aria-selected={preset.id === viewport}
-              className={preset.id === viewport ? 'active' : ''}
-              onClick={() => {
-                onViewport(preset.id);
-                setOpen(false);
-              }}
-            >
-              <span className="db-viewport-menu-label">
-                <RemixIcon name={browserViewportIcon(preset.id)} size={14} />
-                <span>{browserViewportLabel(t, preset.id)}</span>
-              </span>
-              {preset.id === viewport ? <Icon name="check" size={13} /> : null}
-            </button>
-          ))}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
 function BrowserCommentMarkers({
   activeCommentId,
   comments,
@@ -2738,7 +2928,7 @@ function BrowserCommentComposer({
   notes: string[];
   onAddDraft: () => void;
   onClose: () => void;
-  onDeleteComment?: (commentId: string) => Promise<void> | void;
+  onDeleteComment?: (commentId: string) => Promise<boolean | void> | void;
   onDraft: (value: string) => void;
   onRemoveQueuedNote: (index: number) => void;
   onSaveComment: () => void;
@@ -3295,46 +3485,6 @@ function BrowserSiteIcon({
   );
 }
 
-export function loadHistory(projectId: string): BrowserHistoryEntry[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const raw = window.localStorage.getItem(historyStorageKey(projectId));
-    const parsed = raw ? JSON.parse(raw) : [];
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter(isHistoryEntry)
-      .sort((left, right) => right.lastVisitedAt - left.lastVisitedAt)
-      .slice(0, HISTORY_LIMIT);
-  } catch {
-    return [];
-  }
-}
-
-export function saveHistory(projectId: string, history: BrowserHistoryEntry[]) {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(historyStorageKey(projectId), JSON.stringify(history.slice(0, HISTORY_LIMIT)));
-  } catch {
-    // Ignore storage quota and private-mode failures.
-  }
-}
-
-function historyStorageKey(projectId: string): string {
-  return `od:design-browser:${projectId}:history:v1`;
-}
-
-export function isHistoryEntry(value: unknown): value is BrowserHistoryEntry {
-  if (typeof value !== 'object' || value == null || Array.isArray(value)) return false;
-  const record = value as Record<string, unknown>;
-  return (
-    typeof record.url === 'string' &&
-    typeof record.title === 'string' &&
-    typeof record.lastVisitedAt === 'number' &&
-    typeof record.visitCount === 'number' &&
-    (record.iconUrl === undefined || typeof record.iconUrl === 'string')
-  );
-}
-
 export function normalizeBrowserAddress(rawAddress: string): string {
   const value = rawAddress.trim();
   if (!value) return EMPTY_URL;
@@ -3516,6 +3666,105 @@ function imageSizeFromDataUrl(dataUrl: string): Promise<{ w: number; h: number }
     img.onerror = () => resolve(null);
     img.src = dataUrl;
   });
+}
+
+function cropDataUrl(
+  dataUrl: string,
+  sx: number,
+  sy: number,
+  sw: number,
+  sh: number,
+): Promise<{ dataUrl: string; w: number; h: number } | null> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const naturalW = Math.max(1, img.naturalWidth || img.width);
+        const naturalH = Math.max(1, img.naturalHeight || img.height);
+        const cx = Math.max(0, Math.min(Math.round(sx), naturalW - 1));
+        const cy = Math.max(0, Math.min(Math.round(sy), naturalH - 1));
+        const cw = Math.max(1, Math.min(Math.round(sw), naturalW - cx));
+        const ch = Math.max(1, Math.min(Math.round(sh), naturalH - cy));
+        const canvas = document.createElement('canvas');
+        canvas.width = cw;
+        canvas.height = ch;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(null);
+          return;
+        }
+        ctx.drawImage(img, cx, cy, cw, ch, 0, 0, cw, ch);
+        resolve({ dataUrl: canvas.toDataURL('image/png'), w: cw, h: ch });
+      } catch {
+        resolve(null);
+      }
+    };
+    img.onerror = () => resolve(null);
+    img.src = dataUrl;
+  });
+}
+
+function animateImageIntoChat(
+  dataUrl: string,
+  source: { left: number; top: number; width: number; height: number },
+): void {
+  // The chat slot is hidden with the `split-chat-slot-hidden` class, not the
+  // `hidden` attribute this used to test for — so `:not([hidden])` matched
+  // every slot and could land the animation on the hidden composer.
+  const target = document.querySelector<HTMLElement>(
+    '.split-chat-slot:not(.split-chat-slot-hidden) [data-testid="chat-composer"] .composer-input-wrap',
+  ) ?? document.querySelector<HTMLElement>('[data-testid="chat-composer"]');
+  if (!target) return;
+  const destination = target.getBoundingClientRect();
+  const image = document.createElement('img');
+  image.src = dataUrl;
+  image.alt = '';
+  Object.assign(image.style, {
+    position: 'fixed',
+    zIndex: '2147483647',
+    left: `${source.left}px`,
+    top: `${source.top}px`,
+    width: `${source.width}px`,
+    height: `${source.height}px`,
+    borderRadius: '8px',
+    boxShadow: '0 18px 46px rgba(0,0,0,.28)',
+    objectFit: 'cover',
+    pointerEvents: 'none',
+    transformOrigin: 'center center',
+  });
+  document.body.appendChild(image);
+
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches || !image.animate) {
+    image.remove();
+    return;
+  }
+  const sourceCenterX = source.left + source.width / 2;
+  const sourceCenterY = source.top + source.height / 2;
+  const targetCenterX = destination.left + destination.width / 2;
+  const targetCenterY = destination.top + destination.height / 2;
+  const translateX = targetCenterX - sourceCenterX;
+  const translateY = targetCenterY - sourceCenterY;
+  const scale = Math.max(
+    0.06,
+    Math.min(0.22, 32 / Math.max(source.width, source.height)),
+  );
+  const animation = image.animate(
+    [
+      { opacity: 1, transform: 'translate3d(0, 0, 0) scale(1)' },
+      {
+        offset: 0.72,
+        opacity: 0.92,
+        transform: `translate3d(${translateX * 0.78}px, ${translateY * 0.78 - 18}px, 0) scale(${Math.max(scale * 1.45, 0.12)})`,
+      },
+      {
+        opacity: 0.12,
+        transform: `translate3d(${translateX}px, ${translateY}px, 0) scale(${scale})`,
+      },
+    ],
+    { duration: 640, easing: 'cubic-bezier(.2,.8,.2,1)', fill: 'forwards' },
+  );
+  animation.addEventListener('finish', () => image.remove(), { once: true });
+  animation.addEventListener('cancel', () => image.remove(), { once: true });
 }
 
 export function browserFileName(prefix: string, url: string, extension: 'md' | 'png'): string {

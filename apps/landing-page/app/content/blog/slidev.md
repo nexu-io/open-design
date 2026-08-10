@@ -5,6 +5,7 @@ category: "Tools & Skills"
 readingTime: 7
 summary: "Slidev is the open-source, developer-first presentation tool with 47.6k GitHub stars — you author slides in Markdown with embedded Vue components and present in the browser. Here's an honest guide: how themes and examples work, how PDF and PowerPoint export really behaves, how it compares to Marp and reveal.js, and where an agent-native design workspace fits."
 noindexLocaleVariants: true
+noindex: true
 ctaKind: download-app
 author: theo-lindqvist
 i18n:

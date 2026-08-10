@@ -84,7 +84,7 @@ test('[P1] message center shows anonymous platform messages and keeps read state
   await page.route('**/api/integrations/vela/status', async (route) => {
     await route.fulfill({ json: { loggedIn: false } });
   });
-  await page.route('**/api/integrations/vela/api-proxy/api/v1/message-center/messages**', async (route) => {
+  await page.route('**/api/integrations/vela/message-center-public/messages**', async (route) => {
     await route.fulfill({
       json: {
         messages: [
@@ -211,7 +211,7 @@ test('[P1] message center keeps the close affordance visible and dismisses the p
   await page.route('**/api/integrations/vela/status', async (route) => {
     await route.fulfill({ json: { loggedIn: false } });
   });
-  await page.route('**/api/integrations/vela/api-proxy/api/v1/message-center/messages**', async (route) => {
+  await page.route('**/api/integrations/vela/message-center-public/messages**', async (route) => {
     await route.fulfill({
       json: {
         messages: [
@@ -272,7 +272,7 @@ test('[P1] message center formats published dates with the selected zh-CN locale
   await page.route('**/api/integrations/vela/status', async (route) => {
     await route.fulfill({ json: { loggedIn: false } });
   });
-  await page.route('**/api/integrations/vela/api-proxy/api/v1/message-center/messages**', async (route) => {
+  await page.route('**/api/integrations/vela/message-center-public/messages**', async (route) => {
     await route.fulfill({
       json: {
         messages: [

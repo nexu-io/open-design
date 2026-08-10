@@ -45,7 +45,7 @@ describe('composeSystemPrompt — metadata.promptTemplate', () => {
     expect(overrideIdx).toBeGreaterThanOrEqual(0);
     expect(discoveryIdx).toBeGreaterThanOrEqual(0);
     expect(overrideIdx).toBeLessThan(discoveryIdx);
-    expect(out).toMatch(/do NOT emit `<question-form id="discovery">`/);
+    expect(out).toMatch(/do NOT emit a project-opening `<question-form id="discovery">`/);
   });
 
   it('pins Plan mode above default artifact discovery and suppresses artifact brief forms', () => {
@@ -99,14 +99,16 @@ describe('composeSystemPrompt — metadata.promptTemplate', () => {
     expect(out).toContain('license MIT');
   });
 
-  it('asks for image model and aspect ratio when they are unset (not silently defaulted)', () => {
+  it('marks unset image metadata as unresolved without forcing questions', () => {
     const out = composeSystemPrompt({
       metadata: { kind: 'image' },
     });
 
-    // The composer no longer seeds imageModel/imageAspect — the agent must ask.
-    expect(out).toContain('**imageModel**: (unknown — ask: which image model/provider to use)');
-    expect(out).toContain('**aspectRatio**: (unknown — ask: 1:1, 16:9 for landscape, 9:16 for portrait)');
+    expect(out).toContain('**imageModel**: (not provided)');
+    expect(out).toContain(
+      '**aspectRatio**: (not provided; common choices include 1:1, 16:9, or 9:16)',
+    );
+    expect(out).toContain('Missing fields are unresolved facts, not mandatory questions');
     expect(out).not.toContain('gpt-image-2 (default');
     expect(out).not.toContain('1:1 (default');
   });
@@ -285,17 +287,15 @@ describe('composeSystemPrompt — metadata.promptTemplate', () => {
     expect(out).toContain('Do not copy every generated variant');
     expect(out).toContain('verify the exact destination file exists under');
     expect(out).toMatch(
-      /report the exact source path, destination path, and access\/copy\s+error/,
+      /retain the exact source path, destination path, and access\/copy\s+error in the tool trace/,
     );
-    expect(out).toContain('Do not claim success, silently fall back, or ask about OpenAI/Azure');
-    expect(out).toMatch(
-      /unless the user explicitly chooses fallback in a later\s+turn/,
-    );
+    expect(out).toContain('then use the generic visible image failure sentence');
+    expect(out).toContain('Do not claim success or silently fall back');
     expect(out).toContain('$OD_PROJECT_DIR');
-    expect(out).toMatch(/ask the user for one-time\s+confirmation/);
-    expect(out).toContain('"$OD_NODE_BIN" "$OD_BIN"');
-    expect(out).toContain('media generate --surface image --model gpt-image-2');
-    expect(out).toContain('Do not silently fall');
+    expect(out).toContain('reply exactly\n`图片已生成`');
+    expect(out).toContain('reply exactly\n`图片生成服务暂时不可用`');
+    expect(out).not.toMatch(/ask the user for one-time\s+confirmation/);
+    expect(out).not.toContain('media generate --surface image --model gpt-image-2');
   });
 
   it('keeps non-Codex image projects on the daemon media dispatcher contract', () => {
@@ -544,7 +544,7 @@ describe('composeSystemPrompt — metadata.promptTemplate', () => {
       audioVoiceOptions: voiceOptions,
     });
 
-    expect(out).toContain('ElevenLabs voice options');
+    expect(out).toContain('ElevenLabs voice selection policy');
     expect(out).toContain('<question-form id="elevenlabs-voice" title="Choose an ElevenLabs voice">');
     expect(out).toContain('"type": "select"');
     expect(out).toContain('"allowCustom": false');
@@ -554,6 +554,13 @@ describe('composeSystemPrompt — metadata.promptTemplate', () => {
     expect(out).toContain('"label": "Voice 50 — mandarin"');
     expect(out).toContain('"value": "voice-50"');
     expect(out).not.toContain('showing the first 12');
+    expect(out).toContain('If the provider default can safely satisfy the brief');
+    expect(out).toContain(
+      'Only when voice selection would materially change the requested result',
+    );
+    expect(out).toContain(
+      'Conditional template — do not emit unless the voice-selection policy above requires clarification',
+    );
   });
 
   it('surfaces ElevenLabs voice lookup failures for project discovery', () => {

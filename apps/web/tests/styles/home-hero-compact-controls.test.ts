@@ -19,11 +19,14 @@ function cssDeclarations(selector: string): string {
   return blocks.join('\n');
 }
 
-function ruleValue(block: string, property: string): string {
+function ruleValues(block: string, property: string): string[] {
   const matches = [...block.matchAll(new RegExp(`(?:^|[;\\n])\\s*${property}:\\s*([^;]+);`, 'g'))];
-  const match = matches.at(-1);
-  if (!match) throw new Error(`Missing CSS property ${property}`);
-  return match[1]!.trim();
+  if (matches.length === 0) throw new Error(`Missing CSS property ${property}`);
+  return matches.map((match) => match[1]!.trim());
+}
+
+function ruleValue(block: string, property: string): string {
+  return ruleValues(block, property).at(-1)!;
 }
 
 describe('HomeHero compact composer controls', () => {
@@ -41,25 +44,25 @@ describe('HomeHero compact composer controls', () => {
     expect(ruleValue(results, 'overflow-y')).toBe('auto');
   });
 
-  it('keeps the execution button compact in the hero', () => {
+  it('sizes the execution chip to the status dot + model name (#5517 round 4)', () => {
     const switcherChip = cssDeclarations(
       '.home-hero__execution-switcher .inline-switcher__chip',
     );
 
-    // The execution switcher keeps a fixed icon+chevron footprint.
-    expect(ruleValue(switcherChip, 'height')).toBe('32px');
-    expect(ruleValue(switcherChip, 'max-width')).toBe('58px');
+    // Round 4 widened the old 36px icon square into a pill that carries a
+    // connection dot + the selected model name, capped so a long model id
+    // ellipsizes instead of stretching the composer foot.
+    // Base rule: the 220px name-pill cap. The ≤900px media block later
+    // re-collapses the chip to a 36px icon square — both ends are asserted.
+    expect(ruleValue(switcherChip, 'height')).toBe('36px');
+    expect(ruleValues(switcherChip, 'max-width')[0]).toBe('220px');
+    expect(ruleValues(switcherChip, 'max-width').at(-1)).toBe('36px');
   });
 
-  it('prevents the compact execution switcher from expanding on narrow screens', () => {
+  it('keeps the switcher from expanding beyond its content on narrow screens', () => {
     const switcher = cssDeclarations('.home-hero__execution-switcher');
-    const switcherChip = cssDeclarations(
-      '.home-hero__execution-switcher .inline-switcher__chip',
-    );
 
     expect(ruleValue(switcher, 'flex-basis')).toBe('auto');
-    expect(ruleValue(switcherChip, 'width')).toBe('58px');
-    expect(ruleValue(switcherChip, 'max-width')).toBe('58px');
   });
 
   it('keeps the template picker search field free of the global input focus halo', () => {

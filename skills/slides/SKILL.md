@@ -11,6 +11,9 @@ od:
   mode: deck
   category: slides
   upstream: "https://github.com/openai/skills"
+  craft:
+    requires:
+      - typography
 ---
 
 # slides

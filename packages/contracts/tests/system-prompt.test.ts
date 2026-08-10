@@ -64,25 +64,34 @@ describe('DISCOVERY_AND_PHILOSOPHY (contracts copy) — TodoWrite plan item coun
 });
 
 describe('DISCOVERY_AND_PHILOSOPHY (contracts copy) — prompt routing parity', () => {
-  it('uses the single-shot task-type form shape from the daemon prompt', () => {
-    expect(DISCOVERY_AND_PHILOSOPHY).toContain('<question-form id="task-type"');
-    for (const id of ['taskType', 'audience', 'brand', 'scale', 'constraints']) {
-      expect(DISCOVERY_AND_PHILOSOPHY).toContain(`"id": "${id}"`);
-    }
-    expect(DISCOVERY_AND_PHILOSOPHY).toContain(
-      'This form is intentionally a **single-shot brief**',
-    );
-    expect(DISCOVERY_AND_PHILOSOPHY).toMatch(
-      /do NOT emit a second `<question-form id="discovery">` \/ "Quick brief — 30 seconds" form/,
-    );
+  it('keeps image result copy user-friendly without discarding tool diagnostics', () => {
+    const prompt = composeSystemPrompt({
+      locale: 'zh-CN',
+      metadata: { kind: 'image' } as any,
+    });
+
+    expect(prompt).toContain('reply exactly `图片已生成`');
+    expect(prompt).toContain('reply exactly `图片生成服务暂时不可用`');
+    expect(prompt).toContain('tool output and daemon logs');
+    expect(prompt).not.toContain('surface the actual stderr / exit status');
   });
 
-  it('routes task-type form answers through the same RULE 2 / RULE 3 path as discovery answers', () => {
+  it('keeps clarification on demand and leaves task-type routing to od-default', () => {
+    expect(DISCOVERY_AND_PHILOSOPHY).toContain(
+      'A first turn, a new project, a discovery stage, or an unfilled metadata field does not by itself require a form.',
+    );
+    expect(DISCOVERY_AND_PHILOSOPHY).toContain(
+      'It owns the conditional `task-type` form',
+    );
+    expect(DISCOVERY_AND_PHILOSOPHY).not.toContain('<question-form id="task-type"');
+  });
+
+  it('keeps historical task-type answers compatible with the discovery path', () => {
     expect(DISCOVERY_AND_PHILOSOPHY).toMatch(
       /\[form answers — discovery\][^.]*\[form answers — task-type\]/,
     );
     expect(DISCOVERY_AND_PHILOSOPHY).toContain(
-      'Proceed directly to RULE 2 (treating the submitted `brand` value the same way as a `discovery` answer) and then RULE 3.',
+      'Historical `[form answers — task-type]` replies remain valid input to RULE 2.',
     );
   });
 
@@ -134,6 +143,15 @@ describe('DISCOVERY_AND_PHILOSOPHY (contracts copy) — prompt routing parity', 
     expect(prompt).toContain('themeVariables');
     expect(prompt).toContain('no dark-on-dark labels');
   });
+
+  it('injects nested-diagram discipline through every contracts deck path only', () => {
+    const heading = '## Nested / concentric diagram discipline';
+
+    expect(composeSystemPrompt({ skillMode: 'deck' })).toContain(heading);
+    expect(composeSystemPrompt({ metadata: { kind: 'deck' } as any })).toContain(heading);
+    expect(composeSystemPrompt({})).toContain(heading);
+    expect(composeSystemPrompt({ metadata: { kind: 'prototype' } as any })).not.toContain(heading);
+  });
 });
 
 describe('composeSystemPrompt', () => {
@@ -148,51 +166,21 @@ describe('composeSystemPrompt', () => {
     expect(prompt).toContain('Keep machine-readable ids and object option `value` fields exact and unlocalized');
   });
 
-  it('preserves canonical default task-type options under locale overrides', () => {
+  it('does not inject a task-type form through the zh-CN locale override', () => {
     const prompt = composeSystemPrompt({ locale: 'zh-CN' });
 
-    expect(prompt).toContain(
-      'keep the `taskType` option labels as the canonical routing choices',
-    );
-    for (const option of [
-      'Prototype',
-      'Live artifact',
-      'Slide deck',
-      'Image',
-      'Video',
-      'HyperFrames',
-      'Audio',
-      'Other',
-    ]) {
-      expect(prompt).toContain(`"${option}"`);
-    }
-    expect(prompt).not.toContain('option labels as `原型`');
-    expect(prompt).not.toContain('`实时作品`');
+    expect(prompt).not.toContain('<question-form id="task-type"');
+    expect(prompt).not.toContain('keep the `taskType` option labels');
   });
 
-  it('preserves canonical default task-type options for zh-TW locale overrides', () => {
+  it('does not inject a task-type form through the zh-TW locale override', () => {
     const prompt = composeSystemPrompt({ locale: 'zh-TW' });
 
     expect(prompt).toContain('# UI locale override');
     expect(prompt).toContain('`zh-TW` (Traditional Chinese)');
-    expect(prompt).toContain(
-      'keep the `taskType` option labels as the canonical routing choices',
-    );
-    for (const option of [
-      'Prototype',
-      'Live artifact',
-      'Slide deck',
-      'Image',
-      'Video',
-      'HyperFrames',
-      'Audio',
-      'Other',
-    ]) {
-      expect(prompt).toContain(`"${option}"`);
-    }
+    expect(prompt).not.toContain('<question-form id="task-type"');
+    expect(prompt).not.toContain('keep the `taskType` option labels');
     expect(prompt).not.toContain('快速简报 — 30 秒');
-    expect(prompt).not.toContain('option labels as `原型`');
-    expect(prompt).not.toContain('`实时作品`');
   });
 
   it('treats an active design system as the visual direction', () => {

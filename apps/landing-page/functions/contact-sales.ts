@@ -1,37 +1,41 @@
 /*
- * /contact-sales — Workspace-for-Teams lead intake.
+ * /contact-sales — canonical Workspace-for-Teams lead intake.
  *
- * The /enterprise/ page and the /pricing/ "Request team access" modal (both
- * rendering the shared lead form) POST a lead here; we validate it, fan it out to a
- * Feishu (Lark) custom-bot webhook so the team gets a real-time card, and keep
- * a KV backup so a Feishu outage never silently drops a lead. Mirrors the
- * shape and safety posture of `subscribe.ts` (CORS allowlist, no PII in
- * provider logs, idempotent KV key, delivery on `waitUntil`).
+ * The /enterprise and /pricing forms submit here from the same origin. Vela
+ * relays Team-plan leads server-to-server with an HMAC signature over the raw
+ * request body. After validation, this function performs exactly one write to
+ * CONTACT_LEADS using lead:<sha256(normalized email)>; a newer submission from
+ * the same email intentionally replaces the previous value. Downstream systems
+ * poll that KV namespace, so this boundary has no outbound notification or
+ * delivery-outbox responsibility.
  *
- * Config (Cloudflare Pages env):
- * - FEISHU_CONTACT_WEBHOOK  custom-bot incoming webhook URL (required to notify)
- * - FEISHU_CONTACT_SECRET   optional bot signing secret (set if the bot enforces
- *                           signature verification)
- * - CONTACT_LEADS           optional KV namespace for the durable backup
+ * Cloudflare Pages configuration:
+ * - CONTACT_LEADS is a required KV binding. Production and staging use the
+ *   distinct namespace IDs declared in their respective Wrangler files.
+ * - CONTACT_SALES_SERVICE_SECRET is an encrypted secret shared only with Vela.
+ *   Configure it independently on both Pages projects; never commit its value.
  */
 type KVNamespace = {
   put(key: string, value: string): Promise<void>;
-  get(key: string): Promise<string | null>;
 };
 
 type PagesFunctionContext<Env> = {
   request: Request & { cf?: Record<string, unknown> };
   env: Env;
-  waitUntil(promise: Promise<unknown>): void;
+  /** Test seam; Cloudflare does not provide this field. */
+  now?: () => number;
 };
 
-type PagesFunction<Env> = (context: PagesFunctionContext<Env>) => Response | Promise<Response>;
+type PagesFunction<Env> = (
+  context: PagesFunctionContext<Env>,
+) => Response | Promise<Response>;
 
 interface Env {
+  CONTACT_SALES_SERVICE_SECRET?: string;
   CONTACT_LEADS?: KVNamespace;
-  FEISHU_CONTACT_WEBHOOK?: string;
-  FEISHU_CONTACT_SECRET?: string;
 }
+
+type ContactSource = "enterprise" | "pricing_team" | "vela_team_plan";
 
 type ContactLead = {
   name: string;
@@ -45,27 +49,19 @@ type ContactLead = {
   role: string;
   /** User-entered country / region (distinct from the Cloudflare geo below). */
   location: string;
-  /** Expected seat count (free text, e.g. "20"). */
   seats: string;
   message: string;
-  source: string;
+  source: ContactSource;
   locale: string;
   pageUrl: string;
   submittedAt: string;
   referer: string | null;
+  /** Stable Vela event identifier, present only for server-relayed leads. */
+  eventId?: string;
+  billingInterval?: "monthly" | "yearly";
   country?: string;
   region?: string;
 };
-
-const ALLOWED_ORIGINS = [
-  "https://open-design.ai",
-  "https://www.open-design.ai",
-  "https://staging.open-design.ai",
-  "od://app",
-  "tauri://localhost",
-  "http://localhost",
-  "http://127.0.0.1",
-];
 
 // Strict shape, not the loose "no whitespace, one @, a dot" check: the 07-11
 // SQLi scan submitted payloads like `testing@example.com'||dbms_pipe...` that
@@ -79,13 +75,13 @@ const EMAIL_RE =
 const MAX_EMAIL_LENGTH = 254;
 const MAX_SHORT = 200;
 const MAX_MESSAGE = 4000;
-// `enterprise` = the /enterprise page and `pricing_team` = the /pricing
-// "Request team access" modal — both render the same shared lead form
-// (app/_components/enterprise-lead-form.astro) and submit the same strict
-// contract; only the source differs for attribution. `client` = in-app
-// (reserved; keeps the pre-industry contract with a required name).
-const ALLOWED_SOURCES = new Set(["enterprise", "pricing_team", "client"]);
-const SHARED_LEAD_FORM_SOURCES = new Set(["enterprise", "pricing_team"]);
+const VELA_TEAM_PLAN_SOURCE = "vela_team_plan";
+const ALLOWED_SOURCES = new Set<ContactSource>([
+  "enterprise",
+  "pricing_team",
+  VELA_TEAM_PLAN_SOURCE,
+]);
+const SERVICE_SIGNATURE_MAX_AGE_MS = 5 * 60 * 1000;
 const ALLOWED_TEAM_SIZES = new Set(["1-10", "11-50", "51-200", "200+"]);
 const ALLOWED_BUDGETS = new Set([
   "lt_50",
@@ -95,25 +91,6 @@ const ALLOWED_BUDGETS = new Set([
   "usd_5k_plus",
   "unsure",
 ]);
-// Both surfaces submit the same canonical budget enum codes; the card maps a
-// known code to a readable label and otherwise shows the raw value.
-const BUDGET_LABELS: Record<string, string> = {
-  lt_50: "每月 $50 以下",
-  usd_50_200: "每月 $50 – $200",
-  usd_200_1k: "每月 $200 – $1,000",
-  usd_1k_5k: "每月 $1,000 – $5,000",
-  usd_5k_plus: "每月 $5,000 以上",
-  unsure: "还不确定",
-};
-// Canonical team-size enum → readable label (shared by both surfaces).
-const TEAM_SIZE_LABELS: Record<string, string> = {
-  "1-10": "1–10 人",
-  "11-50": "11–50 人",
-  "51-200": "51–200 人",
-  "200+": "200 人以上",
-};
-// /enterprise submits expected seats as one of these range codes; the pricing
-// modal still sends free numeric text, so the card falls back to the raw value.
 const ALLOWED_SEATS = new Set([
   "1-5",
   "5-10",
@@ -124,16 +101,6 @@ const ALLOWED_SEATS = new Set([
   "200-500",
   "500+",
 ]);
-const SEAT_LABELS: Record<string, string> = {
-  "1-5": "1–5 个",
-  "5-10": "5–10 个",
-  "10-20": "10–20 个",
-  "20-50": "20–50 个",
-  "50-100": "50–100 个",
-  "100-200": "100–200 个",
-  "200-500": "200–500 个",
-  "500+": "500 个以上",
-};
 const ALLOWED_USE_CASES = new Set([
   "product_design",
   "design_system",
@@ -150,8 +117,7 @@ const ALLOWED_USE_CASES = new Set([
   "game_assets",
   "other",
 ]);
-// Canonical industry enum (required on the shared lead form) → readable card
-// label. Keep in lockstep with `industryOptions` in
+// Keep in lockstep with `industryOptions` in
 // app/_lib/enterprise-lead-copy.ts.
 const ALLOWED_INDUSTRIES = new Set([
   "internet_software",
@@ -166,58 +132,38 @@ const ALLOWED_INDUSTRIES = new Set([
   "government_nonprofit",
   "other",
 ]);
-const INDUSTRY_LABELS: Record<string, string> = {
-  internet_software: "互联网 / 软件",
-  ecommerce_retail: "电商 / 零售",
-  advertising_marketing: "广告 / 营销服务",
-  finance: "金融",
-  education: "教育培训",
-  gaming: "游戏",
-  media_entertainment: "文化传媒 / 娱乐",
-  manufacturing: "制造业 / 硬件",
-  healthcare: "医疗健康",
-  government_nonprofit: "政府 / 非营利",
-  other: "其他",
-};
-const USE_CASE_LABELS: Record<string, string> = {
-  product_design: "产品与应用设计",
-  design_system: "设计系统",
-  prototype: "原型 / 应用 UI",
-  marketing: "营销与落地页",
-  brand: "品牌视觉 / VI",
-  social_media: "社媒内容 / 电商素材",
-  poster_print: "海报 / 印刷物料",
-  deck: "演示文稿 / Deck",
-  video_motion: "视频 / 动效",
-  illustration: "插画 / 图像生成",
-  dashboards: "仪表盘 / 内部工具",
-  education: "教学 / 课件",
-  game_assets: "游戏素材",
-  other: "其他",
-};
 
-function corsHeaders(origin: string | null): Record<string, string> {
-  const allowed =
-    origin &&
-    ALLOWED_ORIGINS.some((o) => origin === o || origin.startsWith(`${o}:`))
-      ? origin
-      : ALLOWED_ORIGINS[0];
-  return {
-    "Access-Control-Allow-Origin": allowed,
+function requestIsSameOrigin(request: Request): boolean {
+  const origin = request.headers.get("origin");
+  if (!origin) return false;
+  try {
+    return new URL(origin).origin === new URL(request.url).origin;
+  } catch {
+    return false;
+  }
+}
+
+function corsHeaders(request: Request): Record<string, string> {
+  const headers: Record<string, string> = {
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
     "Access-Control-Max-Age": "86400",
     Vary: "Origin",
   };
+  if (requestIsSameOrigin(request)) {
+    headers["Access-Control-Allow-Origin"] =
+      request.headers.get("origin") as string;
+  }
+  return headers;
 }
 
-function json(body: unknown, status: number, origin: string | null): Response {
+function json(body: unknown, status: number, request: Request): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: {
       "Content-Type": "application/json; charset=utf-8",
       "Cache-Control": "no-store",
-      ...corsHeaders(origin),
+      ...corsHeaders(request),
     },
   });
 }
@@ -225,232 +171,244 @@ function json(body: unknown, status: number, origin: string | null): Response {
 async function sha256Hex(value: string): Promise<string> {
   const data = new TextEncoder().encode(value);
   const digest = await crypto.subtle.digest("SHA-256", data);
-  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
 }
 
-function bytesToBase64(bytes: Uint8Array): string {
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary);
+function base64UrlToBytes(value: string): Uint8Array | null {
+  if (!/^[A-Za-z0-9_-]+$/u.test(value)) return null;
+  const base64 = value.replace(/-/gu, "+").replace(/_/gu, "/");
+  const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
+  try {
+    return Uint8Array.from(atob(padded), (character) =>
+      character.charCodeAt(0),
+    );
+  } catch {
+    return null;
+  }
+}
+
+async function verifyServiceSignature(options: {
+  eventId: string;
+  nowMs: number;
+  rawBody: string;
+  request: Request;
+  secret: string;
+}): Promise<
+  | "service_auth_expired"
+  | "service_auth_invalid"
+  | "service_auth_required"
+  | null
+> {
+  const timestampValue = options.request.headers.get(
+    "x-od-service-timestamp",
+  );
+  const headerEventId = options.request.headers.get("x-od-service-event-id");
+  const signatureValue = options.request.headers.get("x-od-service-signature");
+  if (!timestampValue || !headerEventId || !signatureValue) {
+    return "service_auth_required";
+  }
+  if (
+    headerEventId !== options.eventId ||
+    !/^[A-Za-z0-9._:-]{1,200}$/u.test(headerEventId) ||
+    !/^\d{13}$/u.test(timestampValue)
+  ) {
+    return "service_auth_invalid";
+  }
+
+  const timestamp = Number(timestampValue);
+  if (
+    !Number.isSafeInteger(timestamp) ||
+    Math.abs(options.nowMs - timestamp) > SERVICE_SIGNATURE_MAX_AGE_MS
+  ) {
+    return "service_auth_expired";
+  }
+
+  const signature = base64UrlToBytes(signatureValue);
+  if (!signature) return "service_auth_invalid";
+  const bodyDigest = await sha256Hex(options.rawBody);
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(options.secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["verify"],
+  );
+  const valid = await crypto.subtle.verify(
+    "HMAC",
+    key,
+    new Uint8Array(signature).buffer,
+    new TextEncoder().encode(
+      `${timestampValue}\n${headerEventId}\n${bodyDigest}`,
+    ),
+  );
+  return valid ? null : "service_auth_invalid";
 }
 
 function readString(value: unknown, max: number): string {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
 }
 
-// Accept a multi-select use-case array; keep only known, de-duplicated values.
 function readUseCases(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
-  const out: string[] = [];
+  const result: string[] = [];
   for (const item of value) {
-    if (typeof item === "string" && ALLOWED_USE_CASES.has(item) && !out.includes(item)) {
-      out.push(item);
+    if (
+      typeof item === "string" &&
+      ALLOWED_USE_CASES.has(item) &&
+      !result.includes(item)
+    ) {
+      result.push(item);
     }
   }
-  return out;
+  return result;
 }
 
-// Feishu custom-bot signature: base64(HmacSHA256(key = `${timestamp}\n${secret}`, data = "")).
-async function feishuSignature(secret: string, timestamp: number): Promise<string> {
-  const keyBytes = new TextEncoder().encode(`${timestamp}\n${secret}`);
-  const cryptoKey = await crypto.subtle.importKey(
-    "raw",
-    keyBytes,
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  const sig = await crypto.subtle.sign("HMAC", cryptoKey, new Uint8Array(0));
-  return bytesToBase64(new Uint8Array(sig));
-}
+class ContactSalesPersistenceError extends Error {
+  readonly code: "lead_storage_failed" | "lead_storage_unavailable";
 
-function buildFeishuCard(lead: ContactLead): Record<string, unknown> {
-  const fieldRow = (label: string, value: string) => ({
-    is_short: true,
-    text: { tag: "lark_md", content: `**${label}**\n${value || "—"}` },
-  });
-  const geo = [lead.country, lead.region].filter(Boolean).join(" / ");
-  return {
-    config: { wide_screen_mode: true },
-    header: {
-      template: "green",
-      title: { tag: "plain_text", content: "🚀 新的「团队版」留资线索" },
-    },
-    elements: [
-      {
-        tag: "div",
-        fields: [
-          fieldRow("姓名", lead.name),
-          fieldRow("企业邮箱", lead.email),
-          fieldRow("公司", lead.company),
-          fieldRow("团队规模", TEAM_SIZE_LABELS[lead.teamSize] ?? lead.teamSize),
-          fieldRow("国家 / 地区", lead.location),
-          fieldRow("预计席位数", SEAT_LABELS[lead.seats] ?? lead.seats),
-          fieldRow("预算", BUDGET_LABELS[lead.budget] ?? lead.budget),
-          fieldRow("所属行业", INDUSTRY_LABELS[lead.industry] ?? lead.industry),
-          fieldRow("使用场景", lead.useCases.map((v) => USE_CASE_LABELS[v] ?? v).join("、")),
-          fieldRow("职位", lead.role),
-          fieldRow("语言", lead.locale),
-        ],
-      },
-      ...(lead.message
-        ? [
-            { tag: "hr" },
-            {
-              tag: "div",
-              text: { tag: "lark_md", content: `**留言**\n${lead.message}` },
-            },
-          ]
-        : []),
-      { tag: "hr" },
-      {
-        tag: "note",
-        elements: [
-          {
-            tag: "plain_text",
-            content: `来源：${lead.source}${geo ? ` · ${geo}` : ""} · ${lead.submittedAt}`,
-          },
-        ],
-      },
-    ],
-  };
-}
-
-async function notifyFeishu(env: Env, lead: ContactLead): Promise<void> {
-  const webhook = env.FEISHU_CONTACT_WEBHOOK?.trim();
-  if (!webhook) {
-    console.warn("contact_sales_feishu_unset: FEISHU_CONTACT_WEBHOOK missing; KV only");
-    return;
-  }
-
-  const body: Record<string, unknown> = {
-    msg_type: "interactive",
-    card: buildFeishuCard(lead),
-  };
-
-  const secret = env.FEISHU_CONTACT_SECRET?.trim();
-  if (secret) {
-    const timestamp = Math.floor(Date.now() / 1000);
-    body.timestamp = String(timestamp);
-    body.sign = await feishuSignature(secret, timestamp);
-  }
-
-  try {
-    const res = await fetch(webhook, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) {
-      console.warn("contact_sales_feishu_failed", JSON.stringify({ status: res.status }));
-      return;
-    }
-    // Feishu returns 200 with a JSON body even on logical failure (e.g. bad sign).
-    const data = (await res.json().catch(() => ({}))) as { code?: unknown };
-    if (typeof data.code === "number" && data.code !== 0) {
-      console.warn("contact_sales_feishu_rejected", JSON.stringify({ code: data.code }));
-    }
-  } catch {
-    console.warn("contact_sales_feishu_request_failed");
+  constructor(code: "lead_storage_failed" | "lead_storage_unavailable") {
+    super(code);
+    this.name = "ContactSalesPersistenceError";
+    this.code = code;
   }
 }
 
 async function persistLead(env: Env, lead: ContactLead): Promise<void> {
-  if (env.CONTACT_LEADS) {
-    // Latest submission per email wins; keeps the namespace from growing
-    // unbounded on repeat submits while preserving the freshest details.
-    const key = `lead:${await sha256Hex(lead.email)}`;
-    try {
-      await env.CONTACT_LEADS.put(key, JSON.stringify(lead));
-    } catch {
-      console.warn("contact_sales_kv_write_failed");
-    }
-  } else {
+  const kv = env.CONTACT_LEADS;
+  if (!kv) {
     console.warn(
       "contact_sales_kv_unbound: CONTACT_LEADS binding missing; lead not persisted",
-      JSON.stringify({ source: lead.source, country: lead.country }),
+      JSON.stringify({ source: lead.source }),
     );
+    throw new ContactSalesPersistenceError("lead_storage_unavailable");
   }
 
-  await notifyFeishu(env, lead);
+  try {
+    const leadKey = `lead:${await sha256Hex(lead.email)}`;
+    await kv.put(leadKey, JSON.stringify(lead));
+  } catch {
+    console.warn("contact_sales_kv_write_failed");
+    throw new ContactSalesPersistenceError("lead_storage_failed");
+  }
 }
 
 export const onRequest: PagesFunction<Env> = async (context) => {
   const request = context.request;
   const origin = request.headers.get("origin");
+  const nowMs = context.now?.() ?? Date.now();
 
   if (request.method === "OPTIONS") {
-    return new Response(null, { status: 204, headers: corsHeaders(origin) });
+    if (!requestIsSameOrigin(request)) {
+      return json({ ok: false, error: "origin_not_allowed" }, 403, request);
+    }
+    return new Response(null, { status: 204, headers: corsHeaders(request) });
   }
   if (request.method !== "POST") {
-    return json({ ok: false, error: "method_not_allowed" }, 405, origin);
+    return json({ ok: false, error: "method_not_allowed" }, 405, request);
   }
 
+  // Browser fetches always carry Origin. Requiring it to match the endpoint URL
+  // keeps the relative /contact-sales forms portable across production,
+  // staging, and preview domains without enabling a cross-origin write API.
+  // Trusted Vela server calls omit Origin and authenticate below instead.
+  if (origin && !requestIsSameOrigin(request)) {
+    return json({ ok: false, error: "origin_not_allowed" }, 403, request);
+  }
+
+  let rawBody: string;
   let payload: Record<string, unknown>;
   try {
-    payload = (await request.json()) as Record<string, unknown>;
+    rawBody = await request.text();
+    const parsed = JSON.parse(rawBody) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("invalid JSON object");
+    }
+    payload = parsed as Record<string, unknown>;
   } catch {
-    return json({ ok: false, error: "invalid_json" }, 400, origin);
+    return json({ ok: false, error: "invalid_json" }, 400, request);
   }
 
   const email = readString(payload.email, MAX_EMAIL_LENGTH).toLowerCase();
   if (!email || !EMAIL_RE.test(email)) {
-    return json({ ok: false, error: "invalid_email" }, 400, origin);
+    return json({ ok: false, error: "invalid_email" }, 400, request);
   }
 
-  // Reject unrecognized sources up front. This is a public write endpoint, so a
-  // typoed/unknown source must return 400 rather than silently falling through
-  // to the relaxed path and persisting arbitrary leads.
   const source =
-    typeof payload.source === "string" && ALLOWED_SOURCES.has(payload.source)
-      ? payload.source
+    typeof payload.source === "string" &&
+    ALLOWED_SOURCES.has(payload.source as ContactSource)
+      ? (payload.source as ContactSource)
       : null;
   if (!source) {
-    return json({ ok: false, error: "invalid_source" }, 400, origin);
+    return json({ ok: false, error: "invalid_source" }, 400, request);
   }
 
-  // The shared lead form (enterprise + pricing_team) no longer asks for a
-  // name (email is the contact handle); every other source still requires one.
-  const isSharedLeadForm = SHARED_LEAD_FORM_SOURCES.has(source);
-  const name = readString(payload.name, MAX_SHORT);
-  if (!name && !isSharedLeadForm) {
-    return json({ ok: false, error: "missing_fields" }, 400, origin);
+  let serviceEventId: string | null = null;
+  if (source === VELA_TEAM_PLAN_SOURCE) {
+    serviceEventId = readString(payload.eventId, MAX_SHORT);
+    const serviceSecret = context.env.CONTACT_SALES_SERVICE_SECRET?.trim();
+    if (!serviceSecret) {
+      console.warn(
+        "contact_sales_service_auth_unconfigured: CONTACT_SALES_SERVICE_SECRET missing",
+      );
+      return json(
+        { ok: false, error: "service_auth_unavailable" },
+        503,
+        request,
+      );
+    }
+    const authError = await verifyServiceSignature({
+      eventId: serviceEventId,
+      nowMs,
+      rawBody,
+      request,
+      secret: serviceSecret,
+    });
+    if (authError) {
+      return json({ ok: false, error: authError }, 401, request);
+    }
+  } else if (!origin) {
+    // Public form sources are browser-only. Server relays must use the signed
+    // Vela source instead of bypassing the same-origin browser boundary.
+    return json({ ok: false, error: "origin_required" }, 403, request);
   }
 
   const company = readString(payload.company, MAX_SHORT);
   const teamSize = readString(payload.teamSize, MAX_SHORT);
   const budget = readString(payload.budget, MAX_SHORT);
   const seats = readString(payload.seats, MAX_SHORT);
-  const location = readString(payload.location, MAX_SHORT);
-  const useCases = readUseCases(payload.useCases);
-  // Unknown industry codes are dropped rather than persisted; the shared lead
-  // form requires a known one below.
+  const location =
+    readString(payload.location, MAX_SHORT) ||
+    (source === VELA_TEAM_PLAN_SOURCE
+      ? readString(payload.country, MAX_SHORT)
+      : "");
+  const useCases =
+    source === VELA_TEAM_PLAN_SOURCE
+      ? readUseCases([payload.useCase])
+      : readUseCases(payload.useCases);
   const industryRaw = readString(payload.industry, MAX_SHORT);
   const industry = ALLOWED_INDUSTRIES.has(industryRaw) ? industryRaw : "";
 
-  // Every allowlisted source submits the full contact-form contract: known
-  // team-size/seat-range/budget enums + a use case (company is optional).
-  // Since the /pricing modal now renders the same shared form as /enterprise,
-  // its old relaxed name+email-only path is gone.
   if (
     !ALLOWED_TEAM_SIZES.has(teamSize) ||
     !ALLOWED_SEATS.has(seats) ||
     !ALLOWED_BUDGETS.has(budget) ||
-    (isSharedLeadForm && !location) ||
+    !location ||
+    !industry ||
     useCases.length === 0
   ) {
-    return json({ ok: false, error: "missing_fields" }, 400, origin);
-  }
-
-  // Industry is a required pick on the shared lead form; the reserved in-app
-  // `client` source predates the field and may omit it.
-  if (isSharedLeadForm && !industry) {
-    return json({ ok: false, error: "missing_fields" }, 400, origin);
+    return json({ ok: false, error: "missing_fields" }, 400, request);
   }
 
   const cf = request.cf || {};
+  const billingInterval =
+    payload.billingInterval === "monthly" ||
+    payload.billingInterval === "yearly"
+      ? payload.billingInterval
+      : undefined;
   const lead: ContactLead = {
-    name,
+    name: readString(payload.name, MAX_SHORT),
     email,
     company,
     teamSize,
@@ -464,19 +422,29 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     source,
     locale: readString(payload.locale, 16) || "en",
     pageUrl: readString(payload.pageUrl, 512),
-    submittedAt: new Date().toISOString(),
+    submittedAt: new Date(nowMs).toISOString(),
     referer: request.headers.get("referer"),
+    ...(serviceEventId ? { eventId: serviceEventId } : {}),
+    billingInterval,
     country: typeof cf.country === "string" ? cf.country : undefined,
     region: typeof cf.region === "string" ? cf.region : undefined,
   };
 
-  context.waitUntil(persistLead(context.env, lead));
+  try {
+    await persistLead(context.env, lead);
+  } catch (error) {
+    const code =
+      error instanceof ContactSalesPersistenceError
+        ? error.code
+        : "lead_storage_failed";
+    return json({ ok: false, error: code }, 503, request);
+  }
 
-  return json({ ok: true }, 200, origin);
+  return json({ ok: true }, 200, request);
 };
 
 export const __contactSalesTest = {
   corsHeaders,
-  buildFeishuCard,
-  feishuSignature,
+  requestIsSameOrigin,
+  verifyServiceSignature,
 };

@@ -10,7 +10,7 @@
 import { randomUUID } from 'node:crypto';
 import { expect, test } from '@/playwright/suite';
 import type { Page } from '@playwright/test';
-import { routeAgents } from '@/playwright/mock-factory';
+import { routeAgents, routeSuccessfulRuns } from '@/playwright/mock-factory';
 
 const STORAGE_KEY = 'open-design:config';
 
@@ -86,27 +86,9 @@ test('[P1] chat composer switches the project design system mid-chat', async ({ 
   // than stale in-memory state. The run + its SSE stream are stubbed so
   // the assertion does not depend on a live agent.
   const runRequestBodies: Array<Record<string, unknown>> = [];
-  await page.route('**/api/runs', async (route) => {
-    const raw = route.request().postData();
-    if (raw) {
-      try {
-        runRequestBodies.push(JSON.parse(raw) as Record<string, unknown>);
-      } catch {
-        // Non-JSON body — ignore; the assertion below will surface it.
-      }
-    }
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: '{"runId":"mock-run"}',
-    });
-  });
-  await page.route('**/api/runs/*/events', async (route) => {
-    await route.fulfill({
-      status: 200,
-      headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' },
-      body: ['event: end', 'data: {"code":0,"status":"succeeded"}', '', ''].join('\n'),
-    });
+  const runRequests = await routeSuccessfulRuns(page, {
+    bodies: runRequestBodies,
+    runIdPrefix: 'mock-run',
   });
 
   await page.goto('/');
@@ -136,6 +118,7 @@ test('[P1] chat composer switches the project design system mid-chat', async ({ 
   await expect
     .poll(async () => (await fetchCurrentProject(page)).designSystemId)
     .toBe('editorial');
+  await expect(page.getByTestId('project-ds-picker-trigger')).toContainText('Editorial');
 
   // The regression boundary: send a chat turn and assert the outbound
   // run carries the *switched* design system. If the composer kept
@@ -153,7 +136,7 @@ test('[P1] chat composer switches the project design system mid-chat', async ({ 
     sendButton.click(),
   ]);
 
-  expect(runRequestBodies.length).toBeGreaterThan(0);
+  await runRequests.expectCount(1);
   expect(runRequestBodies[0]?.designSystemId).toBe('editorial');
 });
 

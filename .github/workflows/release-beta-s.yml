@@ -754,7 +754,8 @@ jobs:
             -BuildJsonPath "C:\.tmp\runner\od-beta\win_x64\build\build.json" `
             -IndexPath "C:\.tmp\runner\od-beta\win_x64\build\index.json" `
             -ReportRoot "C:\.tmp\runner\od-beta\win_x64\release-report\win_x64" `
-            -OutputsPath "C:\.tmp\runner\od-beta\win_x64\build\outputs.json"
+            -OutputsPath "C:\.tmp\runner\od-beta\win_x64\build\outputs.json" `
+            -RequireVelaCli
 
       - name: Write win_x64 release report
         if: ${{ always() }}

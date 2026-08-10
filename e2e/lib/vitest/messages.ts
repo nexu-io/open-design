@@ -33,10 +33,12 @@ export async function listMessages(
   baseUrl: string,
   projectId: string,
   conversationId: string,
+  headers?: Record<string, string>,
 ): Promise<E2eChatMessage[]> {
   const response = await requestJson<{ messages: E2eChatMessage[] }>(
     baseUrl,
     `/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages`,
+    headers ? { headers } : {},
   );
   return response.messages;
 }

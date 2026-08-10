@@ -338,11 +338,11 @@
       "hash": "83423975315d0f6e"
     },
     "example-open-design-landing": {
-      "video": "example-open-design-landing/1df823e4209810f5/preview.mp4",
-      "poster": "example-open-design-landing/1df823e4209810f5/poster.jpg",
+      "video": "example-open-design-landing/79d27def5ae419b0/preview.mp4",
+      "poster": "example-open-design-landing/79d27def5ae419b0/poster.jpg",
       "durationMs": 10033,
       "holdMs": 2500,
-      "hash": "1df823e4209810f5"
+      "hash": "79d27def5ae419b0"
     },
     "example-orbit-general": {
       "video": "example-orbit-general/67c5ce52c8511639/preview.mp4",
@@ -1149,13 +1149,6 @@
       "holdMs": 1267,
       "hash": "3ce9cb480c840fda"
     },
-    "example-trading-analysis-dashboard-template": {
-      "video": "example-trading-analysis-dashboard-template/6cba4c1ae9e791d1/preview.mp4",
-      "poster": "example-trading-analysis-dashboard-template/6cba4c1ae9e791d1/poster.jpg",
-      "durationMs": 1267,
-      "holdMs": 1267,
-      "hash": "6cba4c1ae9e791d1"
-    },
     "od-tune-collab": {
       "video": "od-tune-collab/7943d5e1c0a6ea0f/preview.mp4",
       "poster": "od-tune-collab/7943d5e1c0a6ea0f/poster.jpg",
@@ -1232,6 +1225,13 @@
       "durationMs": 1267,
       "holdMs": 1267,
       "hash": "e2af92086b17c48f"
+    },
+    "example-trading-analysis-dashboard-template": {
+      "video": "example-trading-analysis-dashboard-template/57b66a7e00bcd97f/preview.mp4",
+      "poster": "example-trading-analysis-dashboard-template/57b66a7e00bcd97f/poster.jpg",
+      "durationMs": 5033,
+      "holdMs": 2500,
+      "hash": "57b66a7e00bcd97f"
     }
   }
 }

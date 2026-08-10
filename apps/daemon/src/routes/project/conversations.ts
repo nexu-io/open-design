@@ -3,10 +3,35 @@ import { type ChatSessionMode } from '@open-design/contracts';
 import { readAnalyticsContext } from '../../analytics.js';
 import { backfillBrandExtractionTranscriptForProject } from '../../brands/index.js';
 import type { RouteDeps } from '../../server-context.js';
+import type { BoundWorkspaceResourceMutationGate } from '../../collab/workspace-resource-mutation.js';
+import type { AuthorizeProjectRequest } from '../../collab/project-request-authority.js';
 import { registerProjectCommentRoutes } from './comments.js';
 import { cancelRunsOwnedBy } from './cancel-owned-runs.js';
+import {
+  deleteConversationAndRepairTeamCommentAnchor,
+  isProjectCommentAnchorConversationId,
+} from '../../db.js';
 
-export interface RegisterProjectConversationRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'paths' | 'projectStore' | 'conversations' | 'ids' | 'telemetry' | 'appConfig' | 'agents'> {}
+export interface RegisterProjectConversationRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'paths' | 'projectStore' | 'conversations' | 'ids' | 'telemetry' | 'appConfig' | 'agents'> {
+  /**
+   * Threaded straight through to `registerProjectCommentRoutes` — a comment
+   * has no workspace binding of its own, so it borrows its PARENT PROJECT's
+   * `enforceWorkspaceProjectMutation` gate (built once in
+   * `registerProjectRoutes`, complete with the last-known-membership
+   * cross-check) rather than re-deriving a weaker one here. See
+   * `RegisterProjectCommentRoutesDeps` in `./comments.js`.
+   */
+  enforceWorkspaceProjectMutation?: BoundWorkspaceResourceMutationGate;
+  authorizeProjectRequest?: AuthorizeProjectRequest;
+  /**
+   * Passed alongside `enforceWorkspaceProjectMutation` above — the gate calls
+   * this to write the 401/403 response body when it denies a mutation. Kept
+   * as its own field (rather than requiring the full `http` dep bag) so
+   * fixtures that only exercise comment CRUD semantics, not workspace
+   * isolation, are not forced to stub unrelated HTTP helpers.
+   */
+  sendApiError?: (res: any, status: number, code: string, message: string) => unknown;
+}
 
 function normalizeChatSessionMode(value: unknown): ChatSessionMode {
   return value === 'chat' || value === 'plan' ? value : 'design';
@@ -25,7 +50,6 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
     getConversation,
     listConversations,
     updateConversation,
-    deleteConversation,
     listMessages,
     upsertMessage,
   } = ctx.conversations;
@@ -33,20 +57,37 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
   const { BRANDS_DIR, PROJECTS_DIR } = ctx.paths;
   const { readAppConfig } = ctx.appConfig;
   const { getAgentDef } = ctx.agents;
+  // Production registration always injects the shared project authority gate.
+  // The fallback preserves narrow unit fixtures whose in-memory projects have
+  // no Workspace binding and do not construct the full server authority graph.
+  const authorizeProjectRequest: AuthorizeProjectRequest =
+    ctx.authorizeProjectRequest ?? (async () => true);
+  const getRoutableConversation = (projectId: string, conversationId: string) => {
+    if (isProjectCommentAnchorConversationId(conversationId)) return null;
+    const conversation = getConversation(db, conversationId);
+    return conversation?.projectId === projectId ? conversation : null;
+  };
 
   // ---- Conversations --------------------------------------------------------
 
-  app.get('/api/projects/:id/conversations', (req, res) => {
+  app.get('/api/projects/:id/conversations', async (req, res) => {
     if (!getProject(db, req.params.id)) {
       return res.status(404).json({ error: 'project not found' });
     }
+    if (!await authorizeProjectRequest(req, res, req.params.id, { mode: 'read' })) return;
     res.json({ conversations: listConversations(db, req.params.id) });
   });
 
-  app.post('/api/projects/:id/conversations', (req, res) => {
+  app.post('/api/projects/:id/conversations', async (req, res) => {
     if (!getProject(db, req.params.id)) {
       return res.status(404).json({ error: 'project not found' });
     }
+    if (!await authorizeProjectRequest(
+      req,
+      res,
+      req.params.id,
+      { mode: 'write', capability: 'writeFiles' },
+    )) return;
     const { title, seedFromConversationId, forkAfterMessageId } = req.body || {};
     const now = Date.now();
     const hasExplicitSessionMode = Boolean(
@@ -61,19 +102,33 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
         : null;
     const sourceConversation =
       typeof seedFromConversationId === 'string' && seedFromConversationId
-        ? getConversation(db, seedFromConversationId)
+        ? getRoutableConversation(req.params.id, seedFromConversationId)
         : null;
-    // Client-supplied fork snapshot. The chat "Fork" action sends the exact
-    // messages the user is looking at (up to the fork point). We prefer it over
-    // reading the source conversation from the DB so a fork point that was
-    // never persisted — e.g. an assistant turn whose run errored / had its
-    // connection reset before reaching the database — still forks instead of
-    // 404ing on `forkAfterMessageId`.
+    // Keep accepting full snapshots from older clients. Current clients copy
+    // persisted history first and retry with one compact fallback message only
+    // when an in-memory fork point never reached the database.
     const clientSeedMessages = Array.isArray(req.body?.seedMessages)
       ? (req.body.seedMessages as any[]).filter(
           (message) => message && typeof message.role === 'string',
         )
       : null;
+    const clientForkFallbackMessage =
+      req.body?.forkFallbackMessage
+      && typeof req.body.forkFallbackMessage.id === 'string'
+      && typeof req.body.forkFallbackMessage.role === 'string'
+      && typeof req.body.forkFallbackMessage.content === 'string'
+        ? req.body.forkFallbackMessage
+        : null;
+    const rawForkFallbackPredecessorMessageId = req.body?.forkFallbackPredecessorMessageId;
+    let clientForkFallbackPredecessorMessageId: string | null | undefined;
+    if (rawForkFallbackPredecessorMessageId === null) {
+      clientForkFallbackPredecessorMessageId = null;
+    } else if (
+      typeof rawForkFallbackPredecessorMessageId === 'string'
+      && rawForkFallbackPredecessorMessageId
+    ) {
+      clientForkFallbackPredecessorMessageId = rawForkFallbackPredecessorMessageId;
+    }
     let seedMessages: any[] = [];
     if (clientSeedMessages && clientSeedMessages.length > 0) {
       seedMessages = clientSeedMessages;
@@ -90,9 +145,27 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
       if (requestedForkMessageId) {
         const forkIndex = seedMessages.findIndex((message) => message.id === requestedForkMessageId);
         if (forkIndex < 0) {
-          return res.status(404).json({ error: 'fork message not found' });
+          if (clientForkFallbackMessage?.id !== requestedForkMessageId) {
+            return res.status(404).json({ error: 'fork message not found' });
+          }
+          if (clientForkFallbackPredecessorMessageId === undefined) {
+            return res.status(400).json({ error: 'fork fallback predecessor is required' });
+          }
+          if (clientForkFallbackPredecessorMessageId === null) {
+            seedMessages = [];
+          } else {
+            const predecessorIndex = seedMessages.findIndex(
+              (message) => message.id === clientForkFallbackPredecessorMessageId,
+            );
+            if (predecessorIndex < 0) {
+              return res.status(404).json({ error: 'fork fallback predecessor not found' });
+            }
+            seedMessages = seedMessages.slice(0, predecessorIndex + 1);
+          }
+          seedMessages.push(clientForkFallbackMessage);
+        } else {
+          seedMessages = seedMessages.slice(0, forkIndex + 1);
         }
-        seedMessages = seedMessages.slice(0, forkIndex + 1);
       }
     } else if (requestedForkMessageId) {
       return res.status(404).json({ error: 'fork source conversation not found' });
@@ -111,6 +184,12 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
       createdAt: now,
       updatedAt: now,
     });
+    // TODO(native-session-clone): Add a runtime-capability-gated adapter contract
+    // that forks the source agent session at this exact message and persists the
+    // clone's independent handle for `conv.id`. Never copy/reuse the source
+    // `agent_sessions.session_id`, because branch turns could then advance the
+    // original conversation. Unsupported runtimes, historical fork-point
+    // mismatches, and clone failures must keep today's transcript-reseed path.
     // Side Chat: inherit the source conversation's context by copying its
     // messages into the fresh conversation. Be defensive — a missing or
     // cross-project source id silently yields an empty conversation.
@@ -133,9 +212,15 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
     res.json({ conversation: conv });
   });
 
-  app.patch('/api/projects/:id/conversations/:cid', (req, res) => {
-    const conv = getConversation(db, req.params.cid);
-    if (!conv || conv.projectId !== req.params.id) {
+  app.patch('/api/projects/:id/conversations/:cid', async (req, res) => {
+    if (!await authorizeProjectRequest(
+      req,
+      res,
+      req.params.id,
+      { mode: 'write', capability: 'writeFiles' },
+    )) return;
+    const conv = getRoutableConversation(req.params.id, req.params.cid);
+    if (!conv) {
       return res.status(404).json({ error: 'not found' });
     }
     if (
@@ -150,22 +235,29 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
   });
 
   app.delete('/api/projects/:id/conversations/:cid', async (req, res) => {
-    const conv = getConversation(db, req.params.cid);
-    if (!conv || conv.projectId !== req.params.id) {
+    if (!await authorizeProjectRequest(
+      req,
+      res,
+      req.params.id,
+      { mode: 'write', capability: 'writeFiles' },
+    )) return;
+    const conv = getRoutableConversation(req.params.id, req.params.cid);
+    if (!conv) {
       return res.status(404).json({ error: 'not found' });
     }
     // Stop any live agent run for this conversation before the row is gone,
     // otherwise the CLI subprocess is orphaned and keeps billing (#5468).
     await cancelRunsOwnedBy(design.runs, { conversationId: req.params.cid });
-    deleteConversation(db, req.params.cid);
+    deleteConversationAndRepairTeamCommentAnchor(db, req.params.id, req.params.cid);
     res.json({ ok: true });
   });
 
   // ---- Messages -------------------------------------------------------------
 
   app.get('/api/projects/:id/conversations/:cid/messages', async (req, res) => {
-    const conv = getConversation(db, req.params.cid);
-    if (!conv || conv.projectId !== req.params.id) {
+    if (!await authorizeProjectRequest(req, res, req.params.id, { mode: 'read' })) return;
+    const conv = getRoutableConversation(req.params.id, req.params.cid);
+    if (!conv) {
       return res.status(404).json({ error: 'conversation not found' });
     }
     const project = getProject(db, req.params.id);
@@ -192,9 +284,15 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
     res.json({ messages: listMessages(db, req.params.cid) });
   });
 
-  app.put('/api/projects/:id/conversations/:cid/messages/:mid', (req, res) => {
-    const conv = getConversation(db, req.params.cid);
-    if (!conv || conv.projectId !== req.params.id) {
+  app.put('/api/projects/:id/conversations/:cid/messages/:mid', async (req, res) => {
+    if (!await authorizeProjectRequest(
+      req,
+      res,
+      req.params.id,
+      { mode: 'write', capability: 'writeFiles' },
+    )) return;
+    const conv = getRoutableConversation(req.params.id, req.params.cid);
+    if (!conv) {
       return res.status(404).json({ error: 'conversation not found' });
     }
     const m = req.body || {};

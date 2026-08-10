@@ -52,6 +52,19 @@ export type StopProcessesResult = {
   stoppedPids: number[];
 };
 
+export type StopProcessesOptions = {
+  /** Grace after SIGTERM before SIGKILL escalation. Defaults to 5 seconds. */
+  termGraceMs?: number;
+  /** Wait after SIGKILL before reporting any survivors. Defaults to 5 seconds. */
+  killGraceMs?: number;
+};
+
+function normalizedGraceMs(value: number | undefined): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0
+    ? Math.floor(value)
+    : undefined;
+}
+
 function normalizeExecutablePath(path: string, platform: NodeJS.Platform): string {
   const normalized = platform === "win32" ? win32.normalize(path) : posix.normalize(path);
   return platform === "win32" ? normalized.toLowerCase() : normalized;
@@ -433,7 +446,10 @@ async function waitForProcessesToExit(pids: number[], timeoutMs = 5000): Promise
  * @param pids - The PIDs to stop (non-numbers and the current PID are ignored).
  * @returns A result describing matched, stopped, force-killed, and remaining PIDs.
  */
-export async function stopProcesses(pids: Array<number | null | undefined>): Promise<StopProcessesResult> {
+export async function stopProcesses(
+  pids: Array<number | null | undefined>,
+  options: StopProcessesOptions = {},
+): Promise<StopProcessesResult> {
   const uniquePids = [...new Set(pids)]
     .filter((pid): pid is number => typeof pid === "number" && pid !== process.pid)
     .sort((left, right) => right - left);
@@ -441,12 +457,18 @@ export async function stopProcesses(pids: Array<number | null | undefined>): Pro
     return { alreadyStopped: true, forcedPids: [], matchedPids: [], remainingPids: [], stoppedPids: [] };
   }
   signalProcesses(uniquePids, "SIGTERM");
-  const remainingAfterTerm = await waitForProcessesToExit(uniquePids);
+  const remainingAfterTerm = await waitForProcessesToExit(
+    uniquePids,
+    normalizedGraceMs(options.termGraceMs),
+  );
   if (remainingAfterTerm.length === 0) {
     return { alreadyStopped: false, forcedPids: [], matchedPids: uniquePids, remainingPids: [], stoppedPids: uniquePids };
   }
   signalProcesses(remainingAfterTerm, "SIGKILL");
-  const remainingAfterKill = await waitForProcessesToExit(remainingAfterTerm);
+  const remainingAfterKill = await waitForProcessesToExit(
+    remainingAfterTerm,
+    normalizedGraceMs(options.killGraceMs),
+  );
   const stoppedPids = uniquePids.filter((pid) => !remainingAfterKill.includes(pid));
   return { alreadyStopped: false, forcedPids: remainingAfterTerm, matchedPids: uniquePids, remainingPids: remainingAfterKill, stoppedPids };
 }

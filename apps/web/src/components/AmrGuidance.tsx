@@ -75,7 +75,11 @@ export function AmrGuidance({
       tone="brand"
       title={t('chat.amrCard.switchTitle')}
       detailsLabel={t('brand.viewDetails')}
-      actions={
+      // Long localized CTA belongs in the footer row (same shell as run-
+      // recovery). Head `actions` share a 3-column grid with the title; a
+      // narrow ChatPane leaves the title a single CJK character wide and
+      // `overflow-wrap: anywhere` turns "模型调用失败…" into a vertical stack.
+      footerActions={
         <button
           type="button"
           className="amr-card__cta"
