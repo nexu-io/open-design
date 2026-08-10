@@ -6641,6 +6641,7 @@ export async function startServer({
   const uploadDeps = { upload, importUpload, handleProjectUpload };
   const projectStoreDeps = {
     getProject,
+    findTeamWorkspaceIdForProject,
     getWorkspaceProject,
     getWorkspaceProjectByProjectId,
     listWorkspaceProjectBindings,
@@ -9435,6 +9436,15 @@ export async function startServer({
             projectRoot: artifactBaseline.cwd,
             diff,
           };
+          run.artifactPaths = diff.touchedPaths
+            .map((filePath) => path.relative(artifactBaseline.cwd, filePath))
+            .map((filePath) => filePath.replaceAll('\\', '/'))
+            .filter((filePath) =>
+              filePath.length > 0 &&
+              filePath !== '..' &&
+              !filePath.startsWith('../') &&
+              !path.isAbsolute(filePath),
+            );
         } catch {
           outcome = fallbackOutcome();
         }

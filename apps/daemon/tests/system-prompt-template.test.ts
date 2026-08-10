@@ -287,17 +287,15 @@ describe('composeSystemPrompt — metadata.promptTemplate', () => {
     expect(out).toContain('Do not copy every generated variant');
     expect(out).toContain('verify the exact destination file exists under');
     expect(out).toMatch(
-      /report the exact source path, destination path, and access\/copy\s+error/,
+      /retain the exact source path, destination path, and access\/copy\s+error in the tool trace/,
     );
-    expect(out).toContain('Do not claim success, silently fall back, or ask about OpenAI/Azure');
-    expect(out).toMatch(
-      /unless the user explicitly chooses fallback in a later\s+turn/,
-    );
+    expect(out).toContain('then use the generic visible image failure sentence');
+    expect(out).toContain('Do not claim success or silently fall back');
     expect(out).toContain('$OD_PROJECT_DIR');
-    expect(out).toMatch(/ask the user for one-time\s+confirmation/);
-    expect(out).toContain('"$OD_NODE_BIN" "$OD_BIN"');
-    expect(out).toContain('media generate --surface image --model gpt-image-2');
-    expect(out).toContain('Do not silently fall');
+    expect(out).toContain('reply exactly\n`图片已生成`');
+    expect(out).toContain('reply exactly\n`图片生成服务暂时不可用`');
+    expect(out).not.toMatch(/ask the user for one-time\s+confirmation/);
+    expect(out).not.toContain('media generate --surface image --model gpt-image-2');
   });
 
   it('keeps non-Codex image projects on the daemon media dispatcher contract', () => {

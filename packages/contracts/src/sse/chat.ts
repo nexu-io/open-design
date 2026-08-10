@@ -86,6 +86,8 @@ export interface ChatSseEndPayload {
    *  Present when the daemon resolved the run's filesystem/tool-stream diff
    *  before publishing the terminal frame. */
   artifactCount?: number;
+  /** Project-relative artifact paths created or modified by this run. */
+  artifactPaths?: string[];
   /** True when a `failed` run can be recovered by resuming the agent's CLI
    *  session (transient upstream drop / inactivity on a session-resuming
    *  runtime). Lets the chat offer a Continue affordance without a separate

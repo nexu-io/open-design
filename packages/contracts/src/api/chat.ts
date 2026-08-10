@@ -668,6 +668,10 @@ export interface ChatRunStatusResponse {
   /** Authoritative artifact files created or modified by this run. Mirrors
    *  ChatSseEndPayload.artifactCount and run_finished.artifact_count. */
   artifactCount?: number;
+  /** Authoritative project-relative artifact files created or modified by
+   *  this run. Unlike a before/after browser snapshot, this includes edits to
+   *  existing files and excludes untouched reference inputs. */
+  artifactPaths?: string[];
   /** Filesystem-backed validation of the one canonical artifact entry this
    *  run can deliver. Present for terminal runs when the daemon can inspect
    *  the project; callers must not infer validity from artifactCount alone. */

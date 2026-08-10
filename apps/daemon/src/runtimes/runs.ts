@@ -515,6 +515,7 @@ function durableRunState(run) {
     failureAction: run.failureAction ?? null,
     resumable: run.resumable ?? false,
     artifactCount: Number.isFinite(run.artifactCount) ? run.artifactCount : 0,
+    ...(Array.isArray(run.artifactPaths) ? { artifactPaths: run.artifactPaths } : {}),
     endedWithUnfinishedWork: Boolean(run.endedWithUnfinishedWork),
     ...(typeof run.userPrompt === 'string' ? { userPrompt: run.userPrompt } : {}),
     ...(typeof run.model === 'string' ? { model: run.model } : {}),
@@ -852,6 +853,7 @@ export function createChatRunService({
       truncatedMidTurn: false,
       endedWithUnfinishedWork: false,
       artifactCount: undefined as number | undefined,
+      artifactPaths: undefined as string[] | undefined,
       artifactOutcome: undefined,
       eventsLogPath: runsLogDir ? path.join(runsLogDir, id, 'events.jsonl') : null,
       statePath: runsLogDir ? path.join(runsLogDir, id, 'state.json') : null,
@@ -991,6 +993,7 @@ export function createChatRunService({
     run.retryOriginFailure = null;
     run.retryOriginErrorCode = null;
     run.artifactCount = undefined;
+    run.artifactPaths = undefined;
     run.artifactOutcome = undefined;
     run.deliverableValid = undefined;
     run.deliverableValidation = undefined;
@@ -1114,6 +1117,7 @@ export function createChatRunService({
     resumable: run.resumable ?? false,
     endedWithUnfinishedWork: !!run.endedWithUnfinishedWork,
     ...(Number.isFinite(run.artifactCount) ? { artifactCount: run.artifactCount } : {}),
+    ...(Array.isArray(run.artifactPaths) ? { artifactPaths: run.artifactPaths } : {}),
     eventsLogPath: run.eventsLogPath ?? null,
     workspace: projectWorkspaceProvenance(run.projectMetadata),
     mediaExecution: run.mediaExecution ?? normalizeMediaExecutionPolicyForRun(null),
@@ -1185,6 +1189,7 @@ export function createChatRunService({
       resumable: run.resumable ?? false,
       endedWithUnfinishedWork: run.endedWithUnfinishedWork,
       ...(Number.isFinite(run.artifactCount) ? { artifactCount: run.artifactCount } : {}),
+      ...(Array.isArray(run.artifactPaths) ? { artifactPaths: run.artifactPaths } : {}),
       failureCategory: run.failureCategory ?? null,
       failureDetail: run.failureDetail ?? null,
     });

@@ -752,6 +752,11 @@ function imageLines(
     out.push(
       'This is an **image** project. Plan the prompt carefully, then dispatch via the **media generation contract** using `"$OD_NODE_BIN" "$OD_BIN" media generate --surface image --model <imageModel>`. Do NOT emit `<artifact>` HTML for media surfaces.',
     );
+    if (metadata.imageModel?.startsWith('vela/')) {
+      out.push(
+        'This Open Design Cloud `vela/*` model must go through the OD media dispatcher. Do not invoke the `vela` CLI or the remote media API directly; the daemon owns Workspace attribution, downloads, and final project-file placement.',
+      );
+    }
   }
   return out;
 }
@@ -777,6 +782,11 @@ function videoLines(
     out.push(
       'This is a **video** project. Plan the shotlist and motion, then dispatch via the **media generation contract** using `"$OD_NODE_BIN" "$OD_BIN" media generate --surface video --model <videoModel> --length <seconds> --aspect <ratio>`. Do NOT emit `<artifact>` HTML.',
     );
+    if (metadata.videoModel?.startsWith('vela/')) {
+      out.push(
+        'This Open Design Cloud `vela/*` model must go through the OD media dispatcher. Do not invoke the `vela` CLI or the remote media API directly; the daemon owns Workspace attribution, polling, downloads, and final project-file placement.',
+      );
+    }
     if (metadata.videoModel === 'hyperframes-html') {
       out.push(
         'Special case: `hyperframes-html` is a local HTML-to-MP4 renderer, not a photoreal text-to-video model. Treat it like a motion design renderer, ask at most one clarifying question, then dispatch immediately.',

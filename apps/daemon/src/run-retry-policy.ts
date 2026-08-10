@@ -121,6 +121,21 @@ export function decidePostToolResumeRecovery(
   const retryMaxAttempts = normalizeMaxAttempts(input.maxAttempts);
   const failure = input.failure;
   const sideEffects = input.sideEffects ?? {};
+  const isPostToolTransientFailure =
+    failure?.failure_stage === 'post_tool_resume' &&
+    failure.retryable === true &&
+    (
+      (failure.failure_category === 'timeout' &&
+        failure.failure_detail === 'inactivity_timeout') ||
+      (failure.failure_category === 'upstream_unavailable' &&
+        (
+          failure.failure_detail === 'stream_disconnected' ||
+          failure.failure_detail === 'upstream_5xx' ||
+          failure.failure_detail === 'provider_high_demand' ||
+          failure.failure_detail === 'provider_routing_error' ||
+          failure.failure_detail === 'network_error'
+        ))
+    );
   if (
     input.result !== 'failed' ||
     sideEffects.cancelRequested ||
@@ -128,10 +143,7 @@ export function decidePostToolResumeRecovery(
     !input.supportsNativeSessionContinue ||
     !input.hasNativeSession ||
     !sideEffects.toolCallSeen ||
-    failure?.failure_category !== 'timeout' ||
-    failure.failure_detail !== 'inactivity_timeout' ||
-    failure.failure_stage !== 'post_tool_resume' ||
-    failure.retryable !== true
+    !isPostToolTransientFailure
   ) {
     return null;
   }

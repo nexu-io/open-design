@@ -275,6 +275,27 @@ describe('chat run service shutdown', () => {
     await expect(wait).resolves.toMatchObject({ status: 'succeeded', artifactCount: 2 });
   });
 
+  it('publishes authoritative project-relative artifact paths in status and terminal events', async () => {
+    const runs = createRuns();
+    const run = runs.create({ projectId: 'project-1', conversationId: 'conv-1' });
+
+    run.artifactCount = 2;
+    run.artifactPaths = ['existing.png', 'renders/new.png'];
+    const wait = runs.wait(run);
+    runs.finish(run, 'succeeded', 0, null);
+
+    expect(runs.statusBody(run)).toMatchObject({
+      artifactPaths: ['existing.png', 'renders/new.png'],
+    });
+    expect(run.events.at(-1)).toMatchObject({
+      event: 'end',
+      data: { artifactPaths: ['existing.png', 'renders/new.png'] },
+    });
+    await expect(wait).resolves.toMatchObject({
+      artifactPaths: ['existing.png', 'renders/new.png'],
+    });
+  });
+
   it('retains structured error details on failed run status bodies', async () => {
     const runs = createRuns();
     const run = runs.create({ projectId: 'project-1', conversationId: 'conv-1' });

@@ -69,6 +69,8 @@ const MEDIA_GENERATE_STRING_FLAGS = new Set([
   'prompt-file',
   'output',
   'aspect',
+  'quality',
+  'resolution',
   'length',
   'duration',
   'prompt-influence',
@@ -1474,6 +1476,11 @@ async function runMediaGenerate(rawArgs) {
     console.error('--model required (see http://<daemon>/api/media/models)');
     process.exit(2);
   }
+  const images = repeatableFlagValues(rawArgs, 'image');
+  if (flags.model.startsWith('vela/') && images.length > 5) {
+    console.error(`Vela media accepts at most 5 --image values; received ${images.length}`);
+    process.exit(2);
+  }
 
   // Long-form media prompts (detailed image/video descriptions, program-
   // generated prompts) arrive via --prompt-file <path|-> (stdin) per the CLI
@@ -1487,10 +1494,13 @@ async function runMediaGenerate(rawArgs) {
     prompt,
     output: flags.output,
     aspect: flags.aspect,
+    quality: flags.quality,
+    resolution: flags.resolution,
     voice: flags.voice,
     audioKind: flags['audio-kind'],
     compositionDir: flags['composition-dir'],
-    image: flags.image,
+    image: images[0],
+    images,
     language: flags.language,
   };
   if (flags.length != null) body.length = Number(flags.length);
@@ -1821,6 +1831,13 @@ Common options:
   --prompt-file <path|->     Read the prompt from a file, or - for stdin (for long-form prompts).
   --output <filename>       File to write under the project. Auto-named if omitted.
   --aspect 1:1|16:9|9:16|4:3|3:4
+  --quality <tier>          Open Design Cloud images only: published quality tier
+                            (gpt-image-2 accepts low|medium|high). Omit to let the
+                            model's own default tier decide — tiers are priced
+                            differently, so this is a billing choice.
+  --resolution <res>        Open Design Cloud images only: published output resolution
+                            (e.g. 1K, 2K). Must name a resolution the model publishes
+                            for --aspect. Omit to use the model's default profile.
   --length <seconds>        Video length.
   --duration <seconds>      Audio duration.
   --prompt-influence <0-1>  ElevenLabs SFX prompt adherence. Higher values follow the prompt more closely.
@@ -1832,11 +1849,11 @@ Common options:
                             to the dir containing hyperframes.json /
                             meta.json / index.html. The daemon runs
                             \`npx hyperframes render\` against it.
-  --image <path>            Project-relative path to a reference image
-                            (image-to-video for Seedance i2v models, or
-                            future image-edit endpoints). Daemon reads
-                            the file from the project, base64-encodes
-                            it, and forwards it to the upstream API.
+  --image <path>            Project-relative reference image; repeat up to 5
+                            times for Vela image editing or video references.
+                            The first video image is the first frame; the rest
+                            are references. Existing providers still receive
+                            the first image through the legacy single-image field.
   --daemon-url <url>
 
 Output: a single line of JSON: {"file": { name, size, kind, mime, ... }}

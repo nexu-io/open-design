@@ -351,6 +351,7 @@ interface ChatRun {
     previewModuleCount: number;
     diff?: RunArtifactDiff;
   };
+  artifactPaths?: string[];
   designSystemId?: string | null;
   designSystemRequestedId?: string | null;
   designSystemSelectionSource?: string | null;
