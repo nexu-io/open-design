@@ -112,14 +112,21 @@ function isMarkdownPreviewFile(file: CandidateFile): boolean {
   return /\.(md|markdown)$/i.test(path);
 }
 
+// Image extensions alone are not sufficient here: the daemon intentionally
+// classifies SVG and sketch-prefixed raster files as `sketch`. Trust its kind
+// so user-authored sketches do not start stealing focus at turn end.
+function isImagePreviewFile(file: CandidateFile): boolean {
+  return file.kind === 'image';
+}
+
 // Auto-open priority for a turn's produced files. Higher wins. HTML is the
-// primary visual deliverable, so when a turn writes both an HTML page and a
-// markdown note (e.g. index.html + README.md) the page takes focus; markdown
-// is the next-best previewable artifact; everything else (decks, images, raw
-// text) has no in-place reshape preview worth stealing focus for and is left
-// for the user to open from the produced-files chips.
+// primary visual deliverable, so site assets cannot displace their page.
+// Generated images come next so a README/report written by the same media turn
+// cannot hide the primary result; markdown remains the final inline preview.
+// Everything else is left for the user to open from the produced-files chips.
 function autoOpenPreviewRank(file: CandidateFile): number {
-  if (isHtmlPreviewFile(file)) return 2;
+  if (isHtmlPreviewFile(file)) return 3;
+  if (isImagePreviewFile(file)) return 2;
   if (isMarkdownPreviewFile(file)) return 1;
   return 0;
 }
@@ -142,6 +149,9 @@ export interface SelectAutoOpenOptions {
   // (ties to newest mtime); turns that produce no index.html keep the
   // standard rank/mtime behavior.
   readonly preferSiteEntry?: boolean;
+  // Project file names that belong to user-provided turn inputs. They never
+  // become generated artifacts, even if the agent overwrites the same path.
+  readonly excludedFileNames?: ReadonlySet<string> | null;
 }
 
 export interface SelectAutoOpenTurnOptions extends SelectAutoOpenOptions {
@@ -228,10 +238,13 @@ export function selectAutoOpenProducedArtifact(
   producedFiles: ReadonlyArray<CandidateFile>,
   options: SelectAutoOpenOptions = {},
 ): string | null {
+  const candidates = options.excludedFileNames?.size
+    ? producedFiles.filter((file) => !options.excludedFileNames!.has(file.name))
+    : producedFiles;
   if (options.preferSiteEntry) {
     let entry: CandidateFile | null = null;
     let entryDepth = Number.POSITIVE_INFINITY;
-    for (const file of producedFiles) {
+    for (const file of candidates) {
       if (!isHtmlPreviewFile(file)) continue;
       const depth = siteEntryDepth(file);
       if (depth === null) continue;
@@ -250,7 +263,7 @@ export function selectAutoOpenProducedArtifact(
   }
   let selected: CandidateFile | null = null;
   let selectedRank = 0;
-  for (const file of producedFiles) {
+  for (const file of candidates) {
     const rank = autoOpenPreviewRank(file);
     if (rank === 0) continue;
     if (!selected || rank > selectedRank) {
