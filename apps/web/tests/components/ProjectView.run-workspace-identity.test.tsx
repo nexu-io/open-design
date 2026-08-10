@@ -852,8 +852,11 @@ describe('a Home auto-send identifies its caller before the project scope resolv
           workspaceId: undefined,
         },
       });
-      const send = await waitFor(() => view.getByTestId('normal-send'));
-      expect(send).not.toBeDisabled();
+      const send = await waitFor(() => {
+        const candidate = view.getByTestId('normal-send');
+        expect(candidate).not.toBeDisabled();
+        return candidate;
+      });
       fireEvent.click(send);
 
       await waitFor(() => expect(mockedStreamViaDaemon).toHaveBeenCalled());
