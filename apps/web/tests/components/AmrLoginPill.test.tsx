@@ -923,6 +923,222 @@ describe('AmrLoginPill', () => {
     expect(await screen.findByRole('button', { name: 'Sign in' })).toBeTruthy();
   });
 
+  it('does not let a timed-out attempt\'s delayed cancel kill a newer login', async () => {
+    // Regression (review thread): the timeout-cancel completion belonged to
+    // the timed-out attempt A, but broadcast with the mutable
+    // `authAttemptIdRef.current`. If A times out and `cancelVelaLogin(A)`
+    // resolves after the user starts attempt B, the ref is B — receivers
+    // treat the matching `login-canceled(B)` as synchronous ownership and
+    // clear B's poll/pending. The completion must be ignored unless A still
+    // owns the current flow, and must broadcast the captured A id.
+    const attemptA = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const attemptB = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+    let currentAttemptId = attemptA;
+    let statusCalls = 0;
+    let releaseCancel!: (response: Response) => void;
+    const cancelResponse = new Promise<Response>((resolve) => {
+      releaseCancel = resolve;
+    });
+    const fetchMock = vi.fn(async (input, init) => {
+      const url = typeof input === 'string' ? input : (input as URL).toString();
+      if (url.endsWith('/api/integrations/vela/status')) {
+        statusCalls += 1;
+        return jsonResponse({
+          body: {
+            loggedIn: false,
+            loginInFlight: true,
+            authAttemptId: currentAttemptId,
+            profile: 'prod',
+            user: null,
+            configPath: '/x',
+          },
+        });
+      }
+      if (
+        url.endsWith('/api/integrations/vela/login/cancel') &&
+        init?.method === 'POST'
+      ) {
+        return cancelResponse;
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    renderPill({
+      skipInitialRefresh: true,
+      initialStatus: {
+        loggedIn: false,
+        loginInFlight: false,
+        profile: 'prod',
+        user: null,
+        configPath: '/x',
+      },
+    });
+
+    vi.useFakeTimers();
+    // Attempt A starts on another surface; the pill adopts it and polls.
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent(AMR_LOGIN_STATUS_EVENT, { detail: { reason: 'login-started' } }),
+      );
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.getByText('Signing in…')).toBeTruthy();
+
+    // A times out; the pill issues the timeout cancel (held) and shows the
+    // terminal error.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(
+        AMR_LOGIN_TIMEOUT_MS + AMR_LOGIN_POLL_INTERVAL_MS,
+      );
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Attempt B starts while A's cancel is still in flight; the pill adopts
+    // B and resumes "Signing in…".
+    currentAttemptId = attemptB;
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent(AMR_LOGIN_STATUS_EVENT, { detail: { reason: 'login-started' } }),
+      );
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.getByText('Signing in…')).toBeTruthy();
+
+    // A's delayed cancel resolves confirmed; B's poll must survive.
+    await act(async () => {
+      releaseCancel(jsonResponse({ body: { canceled: true } }));
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    const callsAfter = statusCalls;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AMR_LOGIN_POLL_INTERVAL_MS);
+    });
+    expect(statusCalls).toBeGreaterThan(callsAfter);
+    expect(screen.getByText('Signing in…')).toBeTruthy();
+
+    vi.useRealTimers();
+  });
+
+  it('keeps a newer login alive when a user cancel for a superseded attempt resolves', async () => {
+    // Regression (same class as the timeout-cancel bug, user-cancel path):
+    // `handleCancelLogin` captured attempt A, but with no post-await
+    // ownership bail it cleared B's pending state and broadcast
+    // `login-canceled(B)` once B took over while the cancel was in flight.
+    const attemptA = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+    const attemptB = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+    let currentAttemptId = attemptA;
+    let statusCalls = 0;
+    let releaseCancel!: (response: Response) => void;
+    const cancelResponse = new Promise<Response>((resolve) => {
+      releaseCancel = resolve;
+    });
+    const fetchMock = vi.fn(async (input, init) => {
+      const url = typeof input === 'string' ? input : (input as URL).toString();
+      if (url.endsWith('/api/integrations/vela/status')) {
+        statusCalls += 1;
+        return jsonResponse({
+          body: {
+            loggedIn: false,
+            loginInFlight: true,
+            authAttemptId: currentAttemptId,
+            profile: 'prod',
+            user: null,
+            configPath: '/x',
+          },
+        });
+      }
+      if (url.endsWith('/api/integrations/vela/login') && init?.method === 'POST') {
+        return jsonResponse({
+          status: 202,
+          body: { pid: 4242, authAttemptId: attemptA },
+        });
+      }
+      if (
+        url.endsWith('/api/integrations/vela/login/cancel') &&
+        init?.method === 'POST'
+      ) {
+        return cancelResponse;
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    renderPill({
+      skipInitialRefresh: true,
+      revealPendingCancelAction: true,
+      initialStatus: {
+        loggedIn: false,
+        loginInFlight: false,
+        profile: 'prod',
+        user: null,
+        configPath: '/x',
+      },
+    });
+
+    const signIn = await screen.findByRole('button', { name: 'Sign in' });
+    vi.useFakeTimers();
+    fireEvent.click(signIn);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.getByText('Signing in…')).toBeTruthy();
+
+    // User clicks Cancel; the cancel is held in flight.
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Attempt B starts while the cancel is in flight; the pill adopts B.
+    currentAttemptId = attemptB;
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent(AMR_LOGIN_STATUS_EVENT, { detail: { reason: 'login-started' } }),
+      );
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.getByText('Signing in…')).toBeTruthy();
+
+    // The stale cancel resolves confirmed; B's poll must survive.
+    await act(async () => {
+      releaseCancel(jsonResponse({ body: { canceled: true } }));
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    const callsAfter = statusCalls;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AMR_LOGIN_POLL_INTERVAL_MS);
+    });
+    expect(statusCalls).toBeGreaterThan(callsAfter);
+    expect(screen.getByText('Signing in…')).toBeTruthy();
+
+    vi.useRealTimers();
+  });
+
   it('cancels the canonical attempt when the pre-start status refresh is non-OK', async () => {
     const canonicalAuthAttemptId = '22222222-2222-4222-8222-222222222222';
     let releaseLogin!: (response: Response) => void;

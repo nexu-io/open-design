@@ -2691,6 +2691,9 @@ function OnboardingView({
       ) {
         if (loginResult.ok || loginResult.alreadyRunning) {
           const cancelResult = await cancelVelaLogin(authAttemptId);
+          // Stale continuation: a newer attempt took over while the cancel
+          // was in flight — it owns polling/pending/error now.
+          if (authAttemptId !== amrAuthAttemptIdRef.current) return;
           if (!cancelResult.ok) {
             console.error('[amr-login] cancelVelaLogin failed', cancelResult);
             amrLoginCancelRequestedRef.current = false;
@@ -2773,6 +2776,9 @@ function OnboardingView({
       return;
     }
     const result = await cancelVelaLogin(authAttemptId);
+    // Stale continuation: a newer attempt took over while the cancel was in
+    // flight — it owns polling/pending/error now.
+    if (authAttemptId !== amrAuthAttemptIdRef.current) return;
     if (!result.ok) {
       setAmrLoginCancelPending(false);
       setAmrLoginPending(false);

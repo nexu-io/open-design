@@ -312,16 +312,46 @@ export function AmrLoginPill({
   const loginStartPendingRef = useRef(false);
   const loginCancelRequestedRef = useRef(false);
   const authAttemptIdRef = useRef<string | null>(null);
+  // Bumped by `stopPolling()` and `startPolling()` (mirroring
+  // InlineModelSwitcher's `amrPollGenerationRef`). A poll `tick()` captures
+  // its generation before awaiting `refresh()` and bails after the await if
+  // the generation moved on — `stopPolling()` cannot cancel an already
+  // in-flight tick, so a stale tick must never act on terminal state that
+  // now belongs to a newer poll/attempt.
+  const pollGenerationRef = useRef(0);
 
   const stopPolling = useCallback(() => {
+    pollGenerationRef.current += 1;
     if (pollRef.current !== null) {
       window.clearInterval(pollRef.current);
       pollRef.current = null;
     }
   }, []);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (
+    guard?: { generation?: number; authAttemptId?: string | null },
+  ) => {
     const next = await fetchVelaLoginStatus();
+    // Reject a stale response BEFORE committing anything (mirroring
+    // InlineModelSwitcher's `refreshAmrStatus`): a poll/event/cancel read
+    // that resolves after a newer poll or attempt took over must not commit
+    // status, repoint `authAttemptIdRef`, or observe analytics for the
+    // current flow.
+    if (guard) {
+      if (
+        guard.generation !== undefined &&
+        guard.generation !== pollGenerationRef.current
+      ) {
+        return null;
+      }
+      if (
+        guard.authAttemptId !== undefined &&
+        guard.authAttemptId !== null &&
+        guard.authAttemptId !== authAttemptIdRef.current
+      ) {
+        return null;
+      }
+    }
     if (next?.authAttemptId) authAttemptIdRef.current = next.authAttemptId;
     const authAttemptId = authAttemptIdRef.current;
     if (next && authAttemptId) {
@@ -335,7 +365,12 @@ export function AmrLoginPill({
   }, [analytics.track, onStatusChange]);
 
   useEffect(() => {
-    if (!skipInitialRefresh) void refresh();
+    if (!skipInitialRefresh) {
+      void refresh({
+        generation: pollGenerationRef.current,
+        authAttemptId: authAttemptIdRef.current ?? undefined,
+      });
+    }
     return () => {
       loginPendingRef.current = false;
       loginStartedAtRef.current = null;
@@ -380,10 +415,17 @@ export function AmrLoginPill({
     authAttemptId = authAttemptIdRef.current,
   ) => {
     stopPolling();
+    const generation = ++pollGenerationRef.current;
     loginStartedAtRef.current = startedAt;
     if (authAttemptId) authAttemptIdRef.current = authAttemptId;
     const tick = async () => {
-      const next = await refresh();
+      const next = await refresh({
+        generation,
+        authAttemptId: authAttemptId ?? undefined,
+      });
+      // Stale tick: a newer poll owns the terminal state now. Do not
+      // finalize, broadcast, or run the terminal cleanup.
+      if (generation !== pollGenerationRef.current) return;
       const outcome = amrLoginPollOutcome(next, startedAt);
       if (outcome === 'signed-in') {
         if (authAttemptId) {
@@ -394,7 +436,7 @@ export function AmrLoginPill({
         }
         // Wake the app-level status sync so configure_type flips to 'amr'
         // on the very next capture, not on an unrelated later refresh.
-        notifyAmrLoginStatusChanged('status-changed', authAttemptIdRef.current);
+        notifyAmrLoginStatusChanged('status-changed', authAttemptId);
         // This pill is a THIRD place AMR sign-in success is detected
         // (CloudSignInTip's finishSignedIn() and EntryShell's
         // pollAmrLoginCompletion() are the other two) and must fire the same
@@ -426,12 +468,26 @@ export function AmrLoginPill({
             resolveAmrAuthTracking(analytics.track, 'timeout', 'login_timeout', {
               authAttemptId,
             });
-            void cancelVelaLogin(authAttemptId).then((result) =>
+            // `stopPolling()` above already bumped the generation; capture it
+            // AFTER that bump. If a newer poll/attempt restarts while this
+            // cancel is in flight, the broadcast must not fire — receivers
+            // treat a matching `login-canceled` as synchronous ownership and
+            // would clear the newer login. Broadcast the CAPTURED attempt id,
+            // never the mutable `authAttemptIdRef`.
+            const cancelGeneration = pollGenerationRef.current;
+            void cancelVelaLogin(authAttemptId).then((result) => {
+              if (
+                authAttemptId &&
+                authAttemptId !== authAttemptIdRef.current
+              ) {
+                return;
+              }
+              if (cancelGeneration !== pollGenerationRef.current) return;
               notifyAmrLoginStatusChanged(
                 result.canceled === true ? 'login-canceled' : 'status-changed',
-                authAttemptIdRef.current,
-              ),
-            );
+                authAttemptId,
+              );
+            });
           }
         } else {
           if (authAttemptId) {
@@ -499,7 +555,17 @@ export function AmrLoginPill({
           return;
         }
       }
-      void refresh().then((next) => {
+      // Continuity guard for the follow-up read: captured AFTER the
+      // login-started/login-canceled branches (login-started bumps the poll
+      // generation via startPolling), so a response that resolves after a
+      // newer restart is rejected before committing status or repointing the
+      // attempt ref.
+      const statusGeneration = pollGenerationRef.current;
+      const statusAttemptId = authAttemptIdRef.current;
+      void refresh({
+        generation: statusGeneration,
+        authAttemptId: statusAttemptId ?? undefined,
+      }).then((next) => {
         if (!next) return;
         if (next.authAttemptId) authAttemptIdRef.current = next.authAttemptId;
         if (next.loggedIn) {
@@ -598,6 +664,9 @@ export function AmrLoginPill({
       if (loginCancelRequestedRef.current) {
         if (result.ok || result.alreadyRunning) {
           const cancelResult = await cancelVelaLogin(authAttemptId);
+          // Stale continuation: a newer attempt took over while the cancel
+          // was in flight — it owns polling/pending/error now.
+          if (authAttemptId !== authAttemptIdRef.current) return;
           if (!cancelResult.ok) {
             loginCancelRequestedRef.current = false;
             loginStartedAtRef.current = null;
@@ -607,7 +676,7 @@ export function AmrLoginPill({
             return;
           }
           if (cancelResult.canceled !== true) {
-            const next = await refresh();
+            const next = await refresh({ authAttemptId });
             loginCancelRequestedRef.current = false;
             if (next?.loginInFlight) {
               loginPendingRef.current = true;
@@ -634,7 +703,7 @@ export function AmrLoginPill({
           ));
           setPending(null);
           setCanceledVisible(true);
-          notifyAmrLoginStatusChanged('login-canceled', authAttemptIdRef.current);
+          notifyAmrLoginStatusChanged('login-canceled', authAttemptId);
           return;
         }
         resolveAmrAuthTracking(analytics.track, 'cancelled', undefined, {
@@ -671,7 +740,7 @@ export function AmrLoginPill({
       // request per notifier, not just a redundant event. Every other
       // mounted pill instance already relies solely on this same broadcast
       // to start its own polling; the initiating instance must too.
-      notifyAmrLoginStatusChanged('login-started', authAttemptIdRef.current);
+      notifyAmrLoginStatusChanged('login-started', authAttemptId);
     },
     [
       amrEntrySourceDetail,
@@ -694,6 +763,10 @@ export function AmrLoginPill({
       const result = authAttemptId
         ? await cancelVelaLogin(authAttemptId)
         : { ok: false, canceled: false };
+      // Stale continuation: a newer attempt took over while the cancel was
+      // in flight — it owns polling/pending/error now. Do not clear its
+      // state or broadcast a cancel it did not request.
+      if (authAttemptId && authAttemptId !== authAttemptIdRef.current) return;
       if (!result.ok) {
         console.error('[amr-login] cancelVelaLogin failed', result);
         loginStartedAtRef.current = null;
@@ -704,7 +777,9 @@ export function AmrLoginPill({
       }
       if (result.canceled !== true) {
         setPending(null);
-        const next = await refresh();
+        const next = await refresh({
+          authAttemptId: authAttemptId ?? undefined,
+        });
         if (loginStartPending && next?.loginInFlight !== true) {
           loginCancelRequestedRef.current = true;
           setPending('cancel');
@@ -742,7 +817,7 @@ export function AmrLoginPill({
       ));
       setPending(null);
       setCanceledVisible(true);
-      notifyAmrLoginStatusChanged('login-canceled', authAttemptIdRef.current);
+      notifyAmrLoginStatusChanged('login-canceled', authAttemptId);
     },
     [analytics.track, refresh, startPolling, stopPolling, t],
   );
@@ -769,7 +844,10 @@ export function AmrLoginPill({
       setErrorMessage(t('settings.amrLoginErrorCompact'));
       return;
     }
-    await refresh();
+    await refresh({
+      generation: pollGenerationRef.current,
+      authAttemptId: authAttemptIdRef.current ?? undefined,
+    });
     notifyAmrLoginStatusChanged('status-changed', authAttemptIdRef.current);
     await onSignedOut?.();
   }, [onSignedOut, refresh, t]);
