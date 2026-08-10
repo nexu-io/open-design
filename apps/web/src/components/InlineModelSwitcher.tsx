@@ -333,6 +333,14 @@ export function InlineModelSwitcher({
   const [amrWalletReady, setAmrWalletReady] = useState(false);
   const [amrLoginPending, setAmrLoginPending] = useState(false);
   const [amrLoginError, setAmrLoginError] = useState<string | null>(null);
+  // One-shot signal that a compact AMR cancel has completed. The agent panel
+  // was closed before login started, so a completed cancel must reopen it (to
+  // show the post-cancel AMR row). The reopen itself lives in an effect keyed
+  // on the CURRENT `compact` / `config.agentId` — writing it inline after
+  // `await cancelVelaLogin` would read stale closure values (the callback's
+  // dep list omits those props), reopening the agent panel over a different
+  // agent the user picked while the cancel was in flight.
+  const [amrCancelCompleted, setAmrCancelCompleted] = useState(false);
   const [amrReminderSeen, setAmrReminderSeen] = useState(readAmrReminderSeen);
   const [showAmrReminderInPopover, setShowAmrReminderInPopover] =
     useState(false);
@@ -694,6 +702,11 @@ export function InlineModelSwitcher({
     const result = authAttemptId
       ? await cancelVelaLogin(authAttemptId)
       : { ok: false, canceled: false };
+    // Stale continuation: a newer AMR attempt superseded this one while the
+    // cancel was in flight (e.g. another surface restarted login). Its
+    // post-await terminal writes (pending/error/status/reopen) would clobber
+    // the newer attempt's state, so bail before touching anything.
+    if (authAttemptId && authAttemptId !== amrAuthAttemptIdRef.current) return;
     if (!result.ok) {
       amrLoginStartedAtRef.current = null;
       setAmrLoginPending(false);
@@ -721,11 +734,15 @@ export function InlineModelSwitcher({
     }
     amrLoginStartedAtRef.current = null;
     setAmrLoginPending(false);
-    // Compact home closed the agent panel before login started; reopening
-    // here so the user sees the post-cancel AMR row (Sign-in affordance +
-    // any error), matching the visibility invariant that the
-    // `amrLoginError` effect enforces on the failure paths.
-    if (compact && config.agentId === 'amr') setPanel('agent');
+    // Compact home closed the agent panel before login started; the cancel
+    // completion effect below reopens it so the user sees the post-cancel AMR
+    // row (Sign-in affordance + any error), matching the visibility invariant
+    // that the `amrLoginError` effect enforces on the failure paths. The
+    // effect — not this post-await continuation — decides the reopen, because
+    // this callback's closure captures `compact` / `config.agentId` from its
+    // last creation and the user may have switched agents while the cancel
+    // was in flight.
+    setAmrCancelCompleted(true);
     setAmrStatus((current) => (
       current
         ? { ...current, loggedIn: false, loginInFlight: false, user: null }
@@ -1229,6 +1246,22 @@ export function InlineModelSwitcher({
       setPanel('agent');
     }
   }, [amrLoginError, compact, config.agentId, panel]);
+
+  // `handleAmrCancelLogin`'s post-await continuation must not reopen the
+  // compact agent panel itself: by the time `cancelVelaLogin` resolves the
+  // user may have switched agents, and the callback's closure holds stale
+  // `compact` / `config.agentId` (its dep list omits them). Record the
+  // completion in state and let this effect — keyed on the CURRENT props —
+  // decide, mirroring the `amrLoginError` effect above. The signal is
+  // consumed once so it cannot re-open the panel on a later unrelated
+  // panel/agent change.
+  useEffect(() => {
+    if (!amrCancelCompleted) return;
+    if (compact && config.agentId === 'amr') {
+      setPanel('agent');
+    }
+    setAmrCancelCompleted(false);
+  }, [amrCancelCompleted, compact, config.agentId]);
 
   useEffect(() => {
     if (!amrLoggedIn || workspaceContext?.workspaceType === 'team') {

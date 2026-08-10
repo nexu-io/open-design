@@ -2902,4 +2902,140 @@ describe('InlineModelSwitcher AMR row', () => {
       within(popover).getByRole('radio', { name: /^Open Design\s+Sign in$/i }),
     ).toBeTruthy();
   });
+
+  it('does not reopen the compact agent panel over a switched agent when the cancel resolves late', async () => {
+    // Regression (review thread): `handleAmrCancelLogin` reopened the compact
+    // agent panel with `compact` / `config.agentId` captured in its closure
+    // (the dep list omits both). A cancel that is still awaiting
+    // `cancelVelaLogin` when the user picks Codex resolves against the STALE
+    // `config.agentId === 'amr'` and calls `setPanel('agent')` on top of
+    // Codex's model picker. The reopen must be keyed on the CURRENT props so
+    // a mid-cancel agent switch drops it.
+    const authAttemptId = '77777777-7777-4777-8777-777777777777';
+    let loginStarted = false;
+    let cancelCalls = 0;
+    let releaseCancel!: (response: Response) => void;
+    const heldCancelResponse = new Promise<Response>((resolve) => {
+      releaseCancel = resolve;
+    });
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = input.toString();
+        if (url === '/api/integrations/vela/status') {
+          return new Response(
+            JSON.stringify({
+              loggedIn: false,
+              loginInFlight: loginStarted,
+              authAttemptId,
+              profile: 'default',
+              user: null,
+              configPath: '/Users/test/.amr/config.json',
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          );
+        }
+        if (url === '/api/integrations/vela/login' && init?.method === 'POST') {
+          loginStarted = true;
+          return new Response(JSON.stringify({ pid: 1, authAttemptId }), {
+            status: 202,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        if (
+          url === '/api/integrations/vela/login/cancel' &&
+          init?.method === 'POST'
+        ) {
+          cancelCalls += 1;
+          loginStarted = false;
+          return heldCancelResponse;
+        }
+        throw new Error(`Unexpected fetch: ${url}`);
+      },
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    function StatefulCompact() {
+      const [config, setConfig] = useState<AppConfig>({
+        ...baseConfig,
+        agentId: 'amr',
+        agentModels: {},
+      });
+      return (
+        <InlineModelSwitcher
+          config={config}
+          agents={[amrAgent, codexAgent]}
+          providerModelsCache={{}}
+          compact
+          daemonLive
+          onModeChange={(mode) => setConfig((c) => ({ ...c, mode }))}
+          onAgentChange={(id) =>
+            setConfig((c) => ({ ...c, agentId: id, mode: 'daemon' }))
+          }
+          onAgentModelChange={vi.fn()}
+          onApiProtocolChange={vi.fn()}
+          onApiModelChange={vi.fn()}
+          onOpenSettings={vi.fn()}
+        />
+      );
+    }
+
+    render(<StatefulCompact />);
+    // Start AMR login from the compact agent panel (agent panel closes).
+    fireEvent.click(screen.getByTestId('inline-model-switcher-chip-agent'));
+    fireEvent.click(screen.getByTestId('inline-model-switcher-agent-amr'));
+    await waitFor(() => {
+      expect(loginStarted).toBe(true);
+      expect(screen.queryByTestId('inline-model-switcher-popover')).toBeNull();
+    });
+
+    // Click AMR again — `amrLoginPending` is true, so the click routes to
+    // cancel. The cancel request is held in flight.
+    fireEvent.click(screen.getByTestId('inline-model-switcher-chip-agent'));
+    fireEvent.click(screen.getByTestId('inline-model-switcher-agent-amr'));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(cancelCalls).toBe(1);
+
+    // While the cancellation is in flight the user picks Codex. With no saved
+    // codex model, `finishCompactAgentPick('codex')` opens Codex's model
+    // panel. A stale cancel continuation must not replace it with the AMR
+    // agent panel.
+    fireEvent.click(screen.getByTestId('inline-model-switcher-agent-codex'));
+    const codexModelPanel = await waitFor(() =>
+      screen.getByTestId('inline-model-switcher-popover'),
+    );
+    expect(
+      within(codexModelPanel).getByTestId(
+        'inline-model-switcher-compact-model-default',
+      ),
+    ).toBeTruthy();
+
+    // Resolve the held cancel after the agent switch.
+    await act(async () => {
+      releaseCancel(
+        new Response(JSON.stringify({ canceled: true, pids: [1] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Codex's model panel must remain open; the AMR agent panel must not
+    // have been forced over it.
+    expect(
+      within(screen.getByTestId('inline-model-switcher-popover')).getByTestId(
+        'inline-model-switcher-compact-model-default',
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.queryByTestId('inline-model-switcher-agent-amr'),
+    ).toBeNull();
+  });
 });
