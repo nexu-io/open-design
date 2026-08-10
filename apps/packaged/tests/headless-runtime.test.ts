@@ -303,7 +303,7 @@ describe('repairCodexMcpRegistrationViaLiveOwner', () => {
               type: 'stdio',
               command: 'C:\\Old Open Design\\Open Design.exe',
               args: ['C:\\Old Open Design\\daemon-cli.mjs', 'mcp'],
-              env: { CODEX_BIN: 'C:\\stale\\codex.exe' },
+              env: null,
             },
           }),
           stderr: '',
@@ -366,7 +366,7 @@ describe('repairCodexMcpRegistrationViaLiveOwner', () => {
               type: 'stdio',
               command: oldCommand,
               args: oldArgs,
-              env: { CODEX_BIN: 'C:\\stale\\codex.exe' },
+              env: null,
             },
           }),
           stderr: '',
@@ -398,8 +398,14 @@ describe('repairCodexMcpRegistrationViaLiveOwner', () => {
     expect(run).toHaveBeenCalledTimes(5);
     expect(run.mock.calls[3]?.[1]).toEqual(['mcp', 'remove', 'open-design']);
     const restoreArgs = run.mock.calls[4]?.[1] ?? [];
-    expect(restoreArgs).toContain('CODEX_BIN=C:\\stale\\codex.exe');
-    expect(restoreArgs.slice(-3)).toEqual([oldCommand, ...oldArgs]);
+    expect(restoreArgs).toEqual([
+      'mcp',
+      'add',
+      'open-design',
+      '--',
+      oldCommand,
+      ...oldArgs,
+    ]);
   });
 
   it('fails closed when the existing registration cannot be inspected', async () => {

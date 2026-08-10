@@ -471,20 +471,21 @@ function parseExistingCodexMcpRegistration(
     args?: unknown;
     env?: unknown;
   };
+  const env = candidate.env == null ? {} : candidate.env;
   if (
     candidate.type !== "stdio"
     || typeof candidate.command !== "string"
     || candidate.command.length === 0
     || !Array.isArray(candidate.args)
     || !candidate.args.every((entry) => typeof entry === "string")
-    || !isStringRecord(candidate.env)
+    || !isStringRecord(env)
   ) {
     throw new Error("codex mcp get returned an unsupported open-design registration");
   }
   return {
     args: candidate.args,
     command: candidate.command,
-    env: candidate.env,
+    env,
   };
 }
 
