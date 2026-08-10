@@ -11,8 +11,8 @@ name: cut-patch-release
 #      — i.e. release-stable ran `gh release edit --draft=false --latest`). If it is
 #      not published yet, do NOT cut a branch or launch a prerelease publication;
 #      instead post a Feishu notice that the patch cut was skipped, and stop. The
-#      independent Windows canary still runs first so every release-cut attempt
-#      leaves a current product-smoke signal.
+#      independent scheduled Windows canary remains an advisory product-smoke
+#      signal and does not block this branch cut or its prerelease package.
 #   3. On the happy path it is otherwise identical to cut-release: create
 #      release/vX.Y.(Z+1), bump apps/packaged/package.json, push with the App token
 #      (which triggers notify-release-feishu -> prerelease build + Feishu card), and
@@ -41,7 +41,6 @@ on:
         default: false
 
 permissions:
-  actions: write
   contents: read               # branch/label writes still go through the App token below
 
 concurrency:
@@ -49,13 +48,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  prerelease_win_smoke:
-    if: github.repository == 'nexu-io/open-design'
-    uses: ./.github/workflows/main-prerelease-win-smoke.yml
-    secrets: inherit
-
   cut:
-    needs: prerelease_win_smoke
     if: github.repository == 'nexu-io/open-design'
     runs-on: ubuntu-latest
     steps:
@@ -67,8 +60,8 @@ jobs:
 
       - uses: actions/checkout@v4
         with:
-          # Cut the exact main commit that passed the Windows packaged smoke.
-          ref: ${{ needs.prerelease_win_smoke.outputs.commit }}
+          # Smoke is advisory; release cuts always use the current main tip.
+          ref: main
           fetch-depth: 0
           token: ${{ steps.app.outputs.token }}
 

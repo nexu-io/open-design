@@ -10,7 +10,7 @@ on:
   workflow_call:
     outputs:
       commit:
-        description: "The exact commit that passed the Windows packaged smoke."
+        description: "The exact commit that was exercised by the Windows packaged smoke."
         value: ${{ jobs.smoke.outputs.commit }}
 
 permissions:
@@ -256,6 +256,6 @@ jobs:
 
             **目标 ref**: `main`
 
-            release cut 会被阻止，直到同一条 smoke 通过。
+            该 smoke 是独立质量信号，不阻塞 release cut 或 prerelease 打包 / 发布。
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: node --experimental-strip-types tools/release/src/notifications/feishu-notice.ts
