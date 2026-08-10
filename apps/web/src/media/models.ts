@@ -37,6 +37,7 @@ export type MediaProviderId =
   | 'nanobanana'
   | 'imagerouter'
   | 'openrouter'
+  | 'orcarouter'
   | 'custom-image'
   | 'comfyui'
   | 'bfl'
@@ -162,6 +163,18 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
     settingsVisible: true,
     defaultBaseUrl: 'https://openrouter.ai/api/v1',
     docsUrl: 'https://openrouter.ai/settings/keys',
+  },
+  {
+    id: 'orcarouter',
+    label: 'OrcaRouter',
+    hint: 'OpenAI-compatible image gateway',
+    integrated: true,
+    credentialsRequired: true,
+    settingsVisible: true,
+    defaultBaseUrl: 'https://api.orcarouter.ai/v1',
+    docsUrl: 'https://www.orcarouter.ai',
+    supportsCustomModel: true,
+    customModelPlaceholder: 'openai/gpt-image-2 or google/gemini-2.5-flash-image',
   },
   {
     id: 'custom-image',
@@ -505,6 +518,12 @@ export const IMAGE_MODELS: MediaModel[] = [
   { id: 'openrouter/google/gemini-2.5-flash-image', label: 'gemini-flash-image (OR)', hint: 'OpenRouter · Gemini', provider: 'openrouter', caps: ['t2i'] },
   { id: 'openrouter/black-forest-labs/flux-1.1-pro', label: 'flux-1.1-pro (OR)', hint: 'OpenRouter · BFL', provider: 'openrouter', caps: ['t2i'] },
   { id: 'openrouter/recraft/recraft-v3', label: 'recraft-v3 (OR)', hint: 'OpenRouter · Recraft', provider: 'openrouter', caps: ['t2i'] },
+
+  // OrcaRouter image models — routed through the gateway's OpenAI-compatible
+  // /v1/images/generations endpoint (same contract as OpenAI / ImageRouter).
+  { id: 'orcarouter/openai/gpt-image-2', label: 'openai/gpt-image-2 (OrcaRouter)', hint: 'OrcaRouter · routed GPT Image', provider: 'orcarouter', caps: ['t2i'] },
+  { id: 'orcarouter/google/gemini-2.5-flash-image', label: 'gemini-2.5-flash-image (OrcaRouter)', hint: 'OrcaRouter · Gemini', provider: 'orcarouter', caps: ['t2i'] },
+  { id: 'orcarouter/grok/grok-imagine-image', label: 'grok-imagine-image (OrcaRouter)', hint: 'OrcaRouter · xAI', provider: 'orcarouter', caps: ['t2i'] },
 
   // Custom OpenAI-compatible image generation + edit endpoints.
   {

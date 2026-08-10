@@ -40,6 +40,7 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
   { id: 'nanobanana', label: 'Nano Banana', hint: 'Uses Google’s official API by default. You can also configure a custom gateway.', integrated: true, defaultBaseUrl: 'https://generativelanguage.googleapis.com', supportsCustomModel: true },
   { id: 'imagerouter', label: 'ImageRouter', hint: 'OpenAI-compatible image + video routing', integrated: true, defaultBaseUrl: 'https://api.imagerouter.io/v1/openai', docsUrl: 'https://docs.imagerouter.io/api-reference/image-generation/', supportsCustomModel: true, customModelPlaceholder: 'openai/gpt-image-2 or xAI/grok-imagine-video' },
   { id: 'openrouter', label: 'OpenRouter', hint: 'Unified gateway for image + video models', integrated: true, credentialsRequired: true, settingsVisible: true, defaultBaseUrl: 'https://openrouter.ai/api/v1', docsUrl: 'https://openrouter.ai/settings/keys' },
+  { id: 'orcarouter', label: 'OrcaRouter', hint: 'OpenAI-compatible image gateway', integrated: true, credentialsRequired: true, settingsVisible: true, defaultBaseUrl: 'https://api.orcarouter.ai/v1', docsUrl: 'https://www.orcarouter.ai', supportsCustomModel: true, customModelPlaceholder: 'openai/gpt-image-2 or google/gemini-2.5-flash-image' },
   { id: 'custom-image', label: 'Custom Image API', hint: 'OpenAI-compatible images/generations + images/edits (local or cloud)', integrated: true, docsUrl: 'https://platform.openai.com/docs/api-reference/images', supportsCustomModel: true, customModelPlaceholder: 'my-image-model' },
   { id: 'comfyui', label: 'ComfyUI', hint: 'Local JSON workflow server (planned adapter)', integrated: false, defaultBaseUrl: 'http://127.0.0.1:8188', docsUrl: 'https://docs.comfy.org/development/core-concepts/workflow' },
   { id: 'bfl', label: 'Black Forest Labs', hint: 'FLUX 1.1 Pro / FLUX Pro / Dev', integrated: false, defaultBaseUrl: 'https://api.bfl.ai' },
@@ -125,6 +126,10 @@ export const IMAGE_MODELS: MediaModel[] = [
   { id: 'openrouter/google/gemini-2.5-flash-image', label: 'gemini-flash-image (OR)', hint: 'OpenRouter · Gemini', provider: 'openrouter', caps: ['t2i'] },
   { id: 'openrouter/black-forest-labs/flux-1.1-pro', label: 'flux-1.1-pro (OR)', hint: 'OpenRouter · BFL', provider: 'openrouter', caps: ['t2i'] },
   { id: 'openrouter/recraft/recraft-v3', label: 'recraft-v3 (OR)', hint: 'OpenRouter · Recraft', provider: 'openrouter', caps: ['t2i'] },
+
+  { id: 'orcarouter/openai/gpt-image-2', label: 'openai/gpt-image-2 (OrcaRouter)', hint: 'OrcaRouter · routed GPT Image', provider: 'orcarouter', caps: ['t2i'] },
+  { id: 'orcarouter/google/gemini-2.5-flash-image', label: 'gemini-2.5-flash-image (OrcaRouter)', hint: 'OrcaRouter · Gemini', provider: 'orcarouter', caps: ['t2i'] },
+  { id: 'orcarouter/grok/grok-imagine-image', label: 'grok-imagine-image (OrcaRouter)', hint: 'OrcaRouter · xAI', provider: 'orcarouter', caps: ['t2i'] },
 
   { id: 'custom-image', label: 'custom-image', hint: 'Custom · OpenAI-compatible endpoint', provider: 'custom-image', caps: ['t2i', 'i2i'] },
 

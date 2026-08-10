@@ -13,6 +13,9 @@ describe('modelProviderIconSrc', () => {
     expect(modelProviderIconSrc('openrouter/anthropic/claude-sonnet-4-5')).toBe(
       '/model-icons/openrouter.svg',
     );
+    expect(modelProviderIconSrc('orcarouter/openai/gpt-image-2')).toBe(
+      '/model-icons/orcarouter.svg',
+    );
   });
 
   it('matches on provider-name substrings so aliased prefixes still resolve', () => {

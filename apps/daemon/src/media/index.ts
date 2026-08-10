@@ -179,6 +179,7 @@ const NANOBANANA_DEFAULT_BASE_URL = 'https://generativelanguage.googleapis.com';
 const NANOBANANA_DEFAULT_MODEL = 'gemini-3.1-flash-image-preview';
 const NANOBANANA_DEFAULT_IMAGE_SIZE = '1K';
 const IMAGEROUTER_DEFAULT_BASE_URL = 'https://api.imagerouter.io/v1/openai';
+const ORCAROUTER_DEFAULT_BASE_URL = 'https://api.orcarouter.ai/v1';
 const CUSTOM_IMAGE_MODEL_ID = 'custom-image';
 const CODEX_IMAGE_ORCHESTRATOR_MODEL = 'gpt-5.5';
 
@@ -711,6 +712,11 @@ export async function generateMedia(args: {
       suggestedExt = result.suggestedExt;
     } else if (def.provider === 'openrouter' && surface === 'video') {
       const result = await renderOpenRouterVideo(ctx, credentials, args.onProgress);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'orcarouter' && surface === 'image') {
+      const result = await renderOrcaRouterImage(ctx, credentials);
       bytes = result.bytes;
       providerNote = result.providerNote;
       suggestedExt = result.suggestedExt;
@@ -1258,6 +1264,47 @@ async function renderImageRouterVideo(ctx: MediaContext, credentials: ProviderCo
     bytes,
     providerNote: `imagerouter/${wireModel} · ${imageRouterSizeFor(ctx.aspect, 'video')} · ${seconds === 'auto' ? 'auto' : `${seconds}s`} · ${bytes.length} bytes`,
     suggestedExt: '.mp4',
+  };
+}
+
+async function renderOrcaRouterImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error(
+      'no OrcaRouter API key — configure it in Settings or set ORCAROUTER_API_KEY',
+    );
+  }
+  const baseUrl = (credentials.baseUrl || ORCAROUTER_DEFAULT_BASE_URL).trim();
+  // Strip the `orcarouter/` catalogue prefix so the wire model name matches
+  // OrcaRouter's canonical vendor slug (e.g. `openai/gpt-image-2`).
+  const resolved = (credentials.model || ctx.wireModel).trim();
+  const wireModel = resolved.startsWith('orcarouter/')
+    ? resolved.slice('orcarouter/'.length)
+    : resolved;
+  const url = buildOpenAIImageUrl(baseUrl, false);
+  // openaiSizeFor keys off the bare model name (`gpt-image-` / `dall-e-`),
+  // so drop the vendor segment before sizing.
+  const sizeModel = wireModel.includes('/') ? wireModel.split('/').pop() || wireModel : wireModel;
+  const body: Record<string, unknown> = {
+    prompt: ctx.prompt || 'A high-quality reference image.',
+    model: wireModel,
+    n: 1,
+    size: openaiSizeFor(sizeModel, ctx.aspect),
+  };
+
+  const resp = await fetch(url, withMediaRequestInit(ctx, {
+    method: 'POST',
+    headers: {
+      'authorization': `Bearer ${credentials.apiKey}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  }));
+  const data = await parseOpenAICompatibleJson(resp, 'orcarouter image');
+  const bytes = await bytesFromOpenAICompatibleData(data, 'orcarouter image', ctx.requestInit);
+  return {
+    bytes,
+    providerNote: `orcarouter/${wireModel} · ${body.size} · ${bytes.length} bytes`,
+    suggestedExt: sniffImageExt(bytes),
   };
 }
 

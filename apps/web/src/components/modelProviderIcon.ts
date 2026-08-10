@@ -41,5 +41,6 @@ export function modelProviderIconSrc(
   if (vendor.includes('doubao') || vendor.includes('bytedance'))
     return '/model-icons/bytedance.svg';
   if (vendor.includes('openrouter')) return '/model-icons/openrouter.svg';
+  if (vendor.includes('orcarouter')) return '/model-icons/orcarouter.svg';
   return null;
 }
