@@ -296,6 +296,31 @@ async function findFirstExistingPath(candidates: string[]): Promise<string | nul
   return null;
 }
 
+export async function findElectronBuilderMakensisInCacheRoot(cacheRoot: string): Promise<string | null> {
+  const legacy = await findFirstExistingPath([
+    join(cacheRoot, "nsis", "nsis-3.0.4.1-nsis-3.0.4.1", "makensis.exe"),
+    join(cacheRoot, "nsis", "nsis-3.0.4.1-nsis-3.0.4.1", "Bin", "makensis.exe"),
+  ]);
+  if (legacy != null) return legacy;
+
+  const currentRoot = join(cacheRoot, "nsis-3.0.4.1");
+  let entries;
+  try {
+    entries = await readdir(currentRoot, { withFileTypes: true });
+  } catch {
+    return null;
+  }
+  for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
+    if (!entry.isDirectory() || !entry.name.startsWith("nsis-3.0.4.1-")) continue;
+    const current = await findFirstExistingPath([
+      join(currentRoot, entry.name, "makensis.exe"),
+      join(currentRoot, entry.name, "Bin", "makensis.exe"),
+    ]);
+    if (current != null) return current;
+  }
+  return null;
+}
+
 async function findElectronBuilderMakensis(config: ToolPackConfig): Promise<string | null> {
   const cacheRoots = [
     process.env.ELECTRON_BUILDER_CACHE,
@@ -304,10 +329,7 @@ async function findElectronBuilderMakensis(config: ToolPackConfig): Promise<stri
     join(config.workspaceRoot, "node_modules", ".cache", "electron-builder"),
   ].filter((entry): entry is string => entry != null && entry.length > 0);
   for (const cacheRoot of cacheRoots) {
-    const direct = await findFirstExistingPath([
-      join(cacheRoot, "nsis", "nsis-3.0.4.1-nsis-3.0.4.1", "makensis.exe"),
-      join(cacheRoot, "nsis", "nsis-3.0.4.1-nsis-3.0.4.1", "Bin", "makensis.exe"),
-    ]);
+    const direct = await findElectronBuilderMakensisInCacheRoot(cacheRoot);
     if (direct != null) return direct;
   }
   return null;

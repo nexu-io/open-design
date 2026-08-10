@@ -222,6 +222,7 @@ async function runElectronBuilderRaw(
     },
     productName: PRODUCT_NAME,
     publish: [{ provider: "generic", url: "https://updates.invalid/open-design" }],
+    toolsets: { winCodeSign: "1.0.0" },
     win: {
       artifactName: `${PRODUCT_NAME}-${namespaceToken}.\${ext}`,
       icon: paths.winIconPath,

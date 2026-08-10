@@ -1,14 +1,17 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 
 import { NtExecutable, NtExecutableResource, Resource } from "resedit";
 import { describe, expect, it } from "vitest";
 
 import { materializeCachedUnpackedForInstaller } from "../src/win/builder.js";
-import { createLauncherRuntimeSyncPowerShellScript } from "../src/win/custom-installer.js";
+import {
+  createLauncherRuntimeSyncPowerShellScript,
+  findElectronBuilderMakensisInCacheRoot,
+} from "../src/win/custom-installer.js";
 import type { WinPaths } from "../src/win/types.js";
 import { readWinExecutableVersionSnapshot } from "../src/win/version-resource.js";
 
@@ -144,6 +147,30 @@ describe("materializeCachedUnpackedForInstaller", () => {
 });
 
 describe("Windows pack artifact boundaries", () => {
+  it("finds makensis in electron-builder's current content-addressed cache layout", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-nsis-cache-"));
+    const makensisPath = join(root, "nsis-3.0.4.1", "nsis-3.0.4.1-fixture", "Bin", "makensis.exe");
+
+    try {
+      await mkdir(dirname(makensisPath), { recursive: true });
+      await writeFile(makensisPath, "fixture");
+
+      await expect(findElectronBuilderMakensisInCacheRoot(root)).resolves.toBe(makensisPath);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("uses the per-platform winCodeSign toolset on Windows", async () => {
+    const source = await readFile(new URL("../src/win/builder.ts", import.meta.url), "utf8");
+    const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8")) as {
+      dependencies: Record<string, string>;
+    };
+
+    expect(packageJson.dependencies["electron-builder"]).toBe("26.11.1");
+    expect(source).toContain('toolsets: { winCodeSign: "1.0.0" }');
+  });
+
   it("does not build launcher payload artifacts for a pure dir target", async () => {
     const source = await readFile(new URL("../src/win/build.ts", import.meta.url), "utf8");
     expect(source).toContain("const hasLauncherPayloadTarget = hasNsisTarget || hasZipTarget");
