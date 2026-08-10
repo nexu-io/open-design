@@ -43,6 +43,7 @@ import { workspaceTeamTransportEnv } from "./workspace-team.js";
 
 const require = createRequire(import.meta.url);
 const PACKAGED_CHILD_ENV_ALLOWLIST = [
+  "CODEX_BIN",
   "CODEX_HOME",
   "HOME",
   "HTTP_PROXY",

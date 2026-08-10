@@ -12,6 +12,7 @@ import { resolveDaemonUrl as resolveDaemonUrlDefault } from "./daemon-url.js";
 
 const DEFAULT_BOOTSTRAP_TIMEOUT_MS = 60_000;
 const DEFAULT_BOOTSTRAP_POLL_MS = 250;
+const inFlightBootstraps = new Map<string, Promise<string>>();
 
 export type McpDaemonBootstrapPlan =
   | {
@@ -131,22 +132,41 @@ export async function ensureMcpDaemonUrl(
     );
   }
 
-  await spawnBootstrap(plan);
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    await sleep(DEFAULT_BOOTSTRAP_POLL_MS);
-    daemonUrl = registeredBootstrapTarget
-      ? await discoverTargetDaemonUrl(env, 300)
-      : await resolveDaemonUrl({
-          env,
-          flagUrl: null,
-          timeoutMs: 300,
-        });
-    if (daemonUrl != null && await probeDaemon(daemonUrl)) return daemonUrl;
+  const bootstrapKey = JSON.stringify([
+    plan.command,
+    plan.args,
+    env[SIDECAR_ENV.IPC_PATH] ?? null,
+    env.OD_DATA_DIR ?? null,
+  ]);
+  const existingBootstrap = inFlightBootstraps.get(bootstrapKey);
+  if (existingBootstrap) return await existingBootstrap;
+
+  const bootstrap = (async (): Promise<string> => {
+    await spawnBootstrap(plan);
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      await sleep(DEFAULT_BOOTSTRAP_POLL_MS);
+      daemonUrl = registeredBootstrapTarget
+        ? await discoverTargetDaemonUrl(env, 300)
+        : await resolveDaemonUrl({
+            env,
+            flagUrl: null,
+            timeoutMs: 300,
+          });
+      if (daemonUrl != null && await probeDaemon(daemonUrl)) return daemonUrl;
+    }
+    throw new Error(
+      `Open Design was launched headlessly but its daemon did not become ready within ${timeoutMs}ms.`,
+    );
+  })();
+  inFlightBootstraps.set(bootstrapKey, bootstrap);
+  try {
+    return await bootstrap;
+  } finally {
+    if (inFlightBootstraps.get(bootstrapKey) === bootstrap) {
+      inFlightBootstraps.delete(bootstrapKey);
+    }
   }
-  throw new Error(
-    `Open Design was launched headlessly but its daemon did not become ready within ${timeoutMs}ms.`,
-  );
 }
 
 async function discoverDaemonUrlFromRegisteredIpc(

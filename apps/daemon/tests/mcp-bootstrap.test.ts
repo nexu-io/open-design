@@ -82,6 +82,38 @@ describe("planMcpDaemonBootstrap", () => {
 });
 
 describe("ensureMcpDaemonUrl", () => {
+  it("single-flights concurrent MCP bootstrap calls and adopts the same daemon", async () => {
+    const spawnBootstrap = vi.fn(async () => undefined);
+    const resolveDaemonUrl = vi.fn(async () => {
+      return resolveDaemonUrl.mock.calls.length <= 2
+        ? "http://127.0.0.1:1"
+        : "http://127.0.0.1:61234";
+    });
+    const probeDaemon = vi.fn(async (url: string) => url.endsWith(":61234"));
+    const options = {
+      env: {
+        OD_MCP_BOOTSTRAP_COMMAND: "/usr/bin/open",
+        OD_MCP_BOOTSTRAP_ARGS:
+          '["-g","-j","/Applications/Open Design.app","--args","--headless"]',
+      },
+      probeDaemon,
+      resolveDaemonUrl,
+      sleep: async () => undefined,
+      spawnBootstrap,
+      timeoutMs: 1_000,
+    };
+
+    await expect(Promise.all([
+      ensureMcpDaemonUrl(options),
+      ensureMcpDaemonUrl(options),
+    ])).resolves.toEqual([
+      "http://127.0.0.1:61234",
+      "http://127.0.0.1:61234",
+    ]);
+
+    expect(spawnBootstrap).toHaveBeenCalledTimes(1);
+  });
+
   it("does not substitute an unrelated tools-dev daemon for the registered packaged IPC", async () => {
     const spawnBootstrap = vi.fn(async () => undefined);
     const discoverTargetDaemonUrl = vi

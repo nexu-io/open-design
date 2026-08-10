@@ -148,6 +148,17 @@ describe('packaged child Vite+ environment forwarding', () => {
     expect(env.RANDOM_INTERNAL_FLAG).toBeUndefined();
   });
 
+  it('forwards CODEX_BIN so a packaged headless daemon keeps the selected Codex executable', () => {
+    const env = resolvePackagedChildBaseEnv({
+      CODEX_BIN: '/opt/codex/bin/codex',
+      HOME: '/Users/tester',
+      RANDOM_INTERNAL_FLAG: 'drop-me',
+    });
+
+    expect(env.CODEX_BIN).toBe('/opt/codex/bin/codex');
+    expect(env.RANDOM_INTERNAL_FLAG).toBeUndefined();
+  });
+
   it('keeps VP_HOME in the packaged child base env without forwarding unrelated variables', () => {
     const env = resolvePackagedChildBaseEnv({
       HOME: '/Users/tester',

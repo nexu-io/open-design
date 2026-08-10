@@ -7,9 +7,15 @@ import {
   SIDECAR_MODES,
   SIDECAR_SOURCES,
   normalizeDesktopSidecarMessage,
+  type DesktopStatusSnapshot,
   type SidecarStamp,
 } from "@open-design/sidecar-proto";
-import { bootstrapSidecarRuntime, createJsonIpcServer, resolveAppIpcPath } from "@open-design/sidecar";
+import {
+  bootstrapSidecarRuntime,
+  createJsonIpcServer,
+  requestJsonIpc,
+  resolveAppIpcPath,
+} from "@open-design/sidecar";
 import type { JsonIpcServerHandle } from "@open-design/sidecar";
 
 import type { PackagedConfig } from "./config.js";
@@ -56,8 +62,8 @@ export interface RunPackagedHeadlessOptions {
 export interface PackagedHeadlessStartupDependencies {
   confirmRuntime(): Promise<void>;
   createIpcServer(options: {
+    currentWebUrl(): string | null;
     shutdown(): Promise<void>;
-    webUrl: string;
   }): Promise<JsonIpcServerHandle>;
   exit(code: number): void;
   installMcp(daemonUrl: string | null): Promise<void>;
@@ -67,8 +73,25 @@ export interface PackagedHeadlessStartupDependencies {
 }
 
 export interface PackagedHeadlessStartupHandle {
+  ownership: "owner";
   shutdown(): Promise<void>;
   webUrl: string;
+}
+
+export interface AdoptedPackagedHeadlessStartupHandle {
+  ownership: "adopted";
+  webUrl: string;
+}
+
+export interface ExistingPackagedHeadlessOwner {
+  state: "starting" | "running";
+  webUrl: string | null;
+}
+
+export interface AcquireOrAdoptPackagedHeadlessOptions {
+  inspectExistingOwner(): Promise<ExistingPackagedHeadlessOwner | null>;
+  sleep?: (milliseconds: number) => Promise<void>;
+  timeoutMs?: number;
 }
 
 export async function acquirePackagedHeadlessStartup(
@@ -77,6 +100,7 @@ export async function acquirePackagedHeadlessStartup(
   let identity: PackagedDesktopIdentityHandle | null = null;
   let sidecars: PackagedSidecarHandle | null = null;
   let ipcServer: JsonIpcServerHandle | null = null;
+  let webUrl: string | null = null;
   let closed = false;
 
   const close = async (): Promise<void> => {
@@ -92,21 +116,57 @@ export async function acquirePackagedHeadlessStartup(
   };
 
   try {
+    ipcServer = await dependencies.createIpcServer({
+      currentWebUrl: () => webUrl,
+      shutdown,
+    });
     identity = await dependencies.writeIdentity();
     sidecars = await dependencies.startSidecars();
-    const webUrl = sidecars.web.url;
+    webUrl = sidecars.web.url;
     if (!webUrl) {
       throw new Error(
         "web sidecar failed to produce URL — check logs/desktop/latest.log",
       );
     }
     await dependencies.installMcp(sidecars.daemon.url);
-    ipcServer = await dependencies.createIpcServer({ shutdown, webUrl });
     await dependencies.writeWebIdentity(webUrl);
     await dependencies.confirmRuntime();
-    return { shutdown, webUrl };
+    return { ownership: "owner", shutdown, webUrl };
   } catch (error) {
     await close();
+    throw error;
+  }
+}
+
+function isPackagedHeadlessOwnershipConflict(error: unknown): boolean {
+  const code = (error as NodeJS.ErrnoException | null)?.code;
+  return code === "EADDRINUSE" || code === "EACCES" || code === "EPERM";
+}
+
+export async function acquireOrAdoptPackagedHeadlessStartup(
+  dependencies: PackagedHeadlessStartupDependencies,
+  options: AcquireOrAdoptPackagedHeadlessOptions,
+): Promise<PackagedHeadlessStartupHandle | AdoptedPackagedHeadlessStartupHandle> {
+  const existing = await options.inspectExistingOwner();
+  if (existing?.state === "running" && existing.webUrl) {
+    return { ownership: "adopted", webUrl: existing.webUrl };
+  }
+
+  try {
+    return await acquirePackagedHeadlessStartup(dependencies);
+  } catch (error) {
+    if (!isPackagedHeadlessOwnershipConflict(error)) throw error;
+    const deadline = Date.now() + (options.timeoutMs ?? 60_000);
+    const sleep = options.sleep ?? (async (milliseconds: number) => {
+      await new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
+    });
+    while (Date.now() < deadline) {
+      const owner = await options.inspectExistingOwner();
+      if (owner?.state === "running" && owner.webUrl) {
+        return { ownership: "adopted", webUrl: owner.webUrl };
+      }
+      await sleep(100);
+    }
     throw error;
   }
 }
@@ -189,18 +249,19 @@ export async function runPackagedHeadless(
     contract: OPEN_DESIGN_SIDECAR_CONTRACT,
   });
 
-  const { shutdown, webUrl } = await acquirePackagedHeadlessStartup({
+  const startup = await acquireOrAdoptPackagedHeadlessStartup({
     confirmRuntime: async () => await confirmPackagedLauncherRuntime(launcherRuntime),
-    createIpcServer: async ({ shutdown: stop, webUrl: activeWebUrl }) =>
+    createIpcServer: async ({ currentWebUrl, shutdown: stop }) =>
       await createJsonIpcServer({
         socketPath: stamp.ipc,
         handler: async (message: unknown) => {
           const normalized = normalizeDesktopSidecarMessage(message);
           switch (normalized.type) {
             case SIDECAR_MESSAGES.STATUS:
+              const activeWebUrl = currentWebUrl();
               return {
                 pid: process.pid,
-                state: "running",
+                state: activeWebUrl ? "running" : "idle",
                 updatedAt: new Date().toISOString(),
                 url: activeWebUrl,
                 windowVisible: false,
@@ -261,7 +322,31 @@ export async function runPackagedHeadless(
         pid: process.pid,
         url: activeWebUrl,
       }),
+  }, {
+    inspectExistingOwner: async () => {
+      try {
+        const status = await requestJsonIpc<DesktopStatusSnapshot>(
+          stamp.ipc,
+          { type: SIDECAR_MESSAGES.STATUS },
+          { timeoutMs: 800 },
+        );
+        return {
+          state: status.state === "running" ? "running" : "starting",
+          webUrl: status.url ?? null,
+        };
+      } catch {
+        return null;
+      }
+    },
   });
+
+  const { webUrl } = startup;
+  if (startup.ownership === "adopted") {
+    process.stdout.write(`\n Open Design is already running\n\n`);
+    process.stdout.write(` ➜ ${colorize(webUrl)}\n\n`);
+    return;
+  }
+  const { shutdown } = startup;
 
   process.stdout.write(`\n Open Design is running\n\n`);
   process.stdout.write(` ➜ ${colorize(webUrl)}\n\n`);

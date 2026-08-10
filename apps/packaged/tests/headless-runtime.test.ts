@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  acquireOrAdoptPackagedHeadlessStartup,
   acquirePackagedHeadlessStartup,
   parsePackagedHeadlessRequest,
   resolvePackagedMcpBootstrapLaunch,
@@ -110,7 +111,7 @@ describe("acquirePackagedHeadlessStartup", () => {
       "MCP install failed",
     );
 
-    expect(closed).toEqual(["sidecars", "identity"]);
+    expect(closed).toEqual(["ipc", "sidecars", "identity"]);
     expect(exit).not.toHaveBeenCalled();
   });
 
@@ -123,5 +124,72 @@ describe("acquirePackagedHeadlessStartup", () => {
 
     expect(closed).toEqual(["ipc", "sidecars", "identity"]);
     expect(exit).not.toHaveBeenCalled();
+  });
+
+  it('claims desktop IPC before starting sidecars so concurrent bootstrap has one owner', async () => {
+    const { dependencies } = createDependencies('mcp');
+    const order: string[] = [];
+    dependencies.createIpcServer.mockImplementation(async () => {
+      order.push('ipc');
+      return { close: async () => undefined };
+    });
+    dependencies.startSidecars.mockImplementation(async () => {
+      order.push('sidecars');
+      throw new Error('stop after ownership order');
+    });
+
+    await expect(acquirePackagedHeadlessStartup(dependencies)).rejects.toThrow(
+      'stop after ownership order',
+    );
+
+    expect(order).toEqual(['ipc', 'sidecars']);
+  });
+
+  it('adopts a concurrent owner without restarting its active run', async () => {
+    const { dependencies } = createDependencies('web-identity');
+    let ipcClaimed = false;
+    let activeRunState: 'running' | 'completed' = 'running';
+    const childSignals: string[] = [];
+    dependencies.createIpcServer.mockImplementation(async () => {
+      if (ipcClaimed) {
+        const error = new Error('desktop IPC is already owned') as NodeJS.ErrnoException;
+        error.code = 'EADDRINUSE';
+        throw error;
+      }
+      ipcClaimed = true;
+      return {
+        close: async () => {
+          ipcClaimed = false;
+          childSignals.push('SIGTERM');
+        },
+      };
+    });
+    dependencies.writeWebIdentity.mockResolvedValue(undefined);
+    dependencies.startSidecars.mockImplementation(async () => ({
+      close: async () => {
+        childSignals.push('SIGTERM');
+      },
+      currentWebUrl: () => 'http://127.0.0.1:7456',
+      daemon: {
+        desktopAuthGateActive: false,
+        state: 'running' as const,
+        url: 'http://127.0.0.1:7457',
+      },
+      web: { state: 'running' as const, url: 'http://127.0.0.1:7456' },
+    }));
+    const inspectExistingOwner = vi.fn(async () => ipcClaimed
+      ? { state: 'running' as const, webUrl: 'http://127.0.0.1:7456' }
+      : null);
+
+    const [first, second] = await Promise.all([
+      acquireOrAdoptPackagedHeadlessStartup(dependencies, { inspectExistingOwner }),
+      acquireOrAdoptPackagedHeadlessStartup(dependencies, { inspectExistingOwner }),
+    ]);
+
+    activeRunState = 'completed';
+    expect([first.ownership, second.ownership].sort()).toEqual(['adopted', 'owner']);
+    expect(dependencies.startSidecars).toHaveBeenCalledTimes(1);
+    expect(activeRunState).toBe('completed');
+    expect(childSignals).toEqual([]);
   });
 });
