@@ -417,11 +417,9 @@ describe('Vela CLI team-project catalog adapter', () => {
   });
 
   it('keeps catalog upsert and remove on their explicit principal across capability awaits', async () => {
-    let activeWorkspaceId = 'team-a';
     const calls: Array<{ args: string[]; workspaceId: string | undefined }> = [];
     const catalog = createVelaCliTeamProjectCatalog({
       supportsTeamProjects: async () => {
-        activeWorkspaceId = 'team-b';
         return true;
       },
       run: async (args, workspaceId) => {
@@ -437,7 +435,6 @@ describe('Vela CLI team-project catalog adapter', () => {
     };
 
     await catalog.upsert({ projectId: 'project-a' }, principal);
-    activeWorkspaceId = 'team-a';
     await catalog.remove('project-a', principal);
 
     expect(calls).toEqual([

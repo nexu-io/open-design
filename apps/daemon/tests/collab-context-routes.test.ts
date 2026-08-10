@@ -36,10 +36,6 @@ const TEAM_CONTEXT = {
   displayName: 'Ma Shu',
 };
 
-const ADMIN_CONTEXT = {
-  ...TEAM_CONTEXT,
-  role: 'admin',
-};
 
 const TEAM_DIRECTORY_ITEM = {
   workspaceId: 'wm-1',

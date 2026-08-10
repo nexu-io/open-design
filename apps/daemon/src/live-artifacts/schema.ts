@@ -151,8 +151,6 @@ const MAX_TITLE_LENGTH = 200;
 const MAX_SLUG_LENGTH = 128;
 const MAX_PATH_LENGTH = 260;
 const MAX_SHORT_TEXT_LENGTH = 1_024;
-const MAX_LONG_TEXT_LENGTH = 16 * 1024;
-const MAX_PROVENANCE_SOURCES = 50;
 const MAX_MAPPING_PATHS = 100;
 const MAX_REFRESH_STEP_LENGTH = 128;
 const MAX_REFRESH_ERROR_CODE_LENGTH = 128;
@@ -216,16 +214,6 @@ const REFRESH_PERMISSIONS = new Set<LiveArtifactSource['refreshPermission']>([
   'manual_refresh_granted_for_read_only',
 ]);
 const OUTPUT_TRANSFORMS = new Set<LiveArtifactOutputTransform>(['identity', 'compact_table', 'metric_summary']);
-const PROVENANCE_GENERATORS = new Set<LiveArtifactProvenance['generatedBy']>([
-  'agent',
-  'refresh_runner',
-]);
-const PROVENANCE_SOURCE_TYPES = new Set<LiveArtifactProvenanceSource['type']>([
-  'connector',
-  'local_file',
-  'user_input',
-  'derived',
-]);
 const REFRESH_STEP_STATUSES = new Set<LiveArtifactRefreshStepStatus>([
   'running',
   'succeeded',
@@ -692,42 +680,6 @@ function validateRefreshErrorRecord(value: unknown, path: string, issues: LiveAr
   if (code !== undefined) record.code = code;
   if (errorPath !== undefined) record.path = errorPath;
   return record;
-}
-
-function validateProvenance(value: unknown, path: string, issues: LiveArtifactValidationIssue[]): LiveArtifactProvenance | undefined {
-  if (!isPlainObject(value)) {
-    issues.push({ path, message: `${path} must be an object` });
-    return undefined;
-  }
-  const generatedAt = validateIsoDate(value.generatedAt, `${path}.generatedAt`, issues);
-  const generatedBy = validateEnum(value.generatedBy, PROVENANCE_GENERATORS, `${path}.generatedBy`, issues);
-  const notes = asOptionalString(value.notes, `${path}.notes`, issues, MAX_LONG_TEXT_LENGTH);
-  let sources: LiveArtifactProvenanceSource[] | undefined;
-  if (!Array.isArray(value.sources) || value.sources.length > MAX_PROVENANCE_SOURCES) {
-    issues.push({ path: `${path}.sources`, message: `${path}.sources must be a bounded array` });
-  } else {
-    sources = [];
-    value.sources.forEach((source, index) => {
-      const sourcePath = `${path}.sources.${index}`;
-      if (!isPlainObject(source)) {
-        issues.push({ path: sourcePath, message: `${sourcePath} must be an object` });
-        return;
-      }
-      const label = asString(source.label, `${sourcePath}.label`, issues, MAX_SHORT_TEXT_LENGTH);
-      const type = validateEnum(source.type, PROVENANCE_SOURCE_TYPES, `${sourcePath}.type`, issues);
-      const ref = asOptionalString(source.ref, `${sourcePath}.ref`, issues, MAX_PATH_LENGTH);
-      if (ref !== undefined) validateRelativePath(ref, `${sourcePath}.ref`, issues);
-      if (label !== undefined && type !== undefined) {
-        const provenanceSource: LiveArtifactProvenanceSource = { label, type };
-        if (ref !== undefined) provenanceSource.ref = ref;
-        sources?.push(provenanceSource);
-      }
-    });
-  }
-  if (generatedAt === undefined || generatedBy === undefined || sources === undefined) return undefined;
-  const provenance: LiveArtifactProvenance = { generatedAt, generatedBy, sources };
-  if (notes !== undefined) provenance.notes = notes;
-  return provenance;
 }
 
 function validateOptionalInteger(value: unknown, path: string, issues: LiveArtifactValidationIssue[], min: number, max: number): number | undefined {

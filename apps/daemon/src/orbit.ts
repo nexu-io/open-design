@@ -202,10 +202,6 @@ function summaryFile(dataDir: string): string {
   return path.join(orbitDir(dataDir), SUMMARY_FILE);
 }
 
-async function readLastSummary(dataDir: string): Promise<OrbitActivitySummary | null> {
-  return (await readSummaryStore(dataDir)).lastRun;
-}
-
 function isOrbitRunSummary(value: unknown): value is OrbitActivitySummary {
   if (!value || typeof value !== 'object') return false;
   const obj = value as Partial<OrbitActivitySummary>;

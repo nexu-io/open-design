@@ -518,33 +518,6 @@ function isRetriableVelaModelsError(error: unknown): boolean {
   ].some((pattern) => message.includes(pattern));
 }
 
-async function fetchVelaModelsWithRetry(
-  resolvedBin: string,
-  env: NodeJS.ProcessEnv,
-): Promise<RuntimeModelOption[]> {
-  let lastError: unknown = null;
-  for (let attempt = 0; attempt <= AMR_MODELS_RETRY_DELAYS_MS.length; attempt += 1) {
-    try {
-      const { stdout } = await execAgentFile(resolvedBin, ['models'], {
-        env,
-        timeout: AMR_MODELS_TIMEOUT_MS,
-        maxBuffer: 1024 * 1024,
-      });
-      return parseVelaModels(String(stdout));
-    } catch (error) {
-      lastError = error;
-      if (
-        attempt === AMR_MODELS_RETRY_DELAYS_MS.length ||
-        !isRetriableVelaModelsError(error)
-      ) {
-        throw error;
-      }
-      await sleep(AMR_MODELS_RETRY_DELAYS_MS[attempt] ?? 0);
-    }
-  }
-  throw lastError instanceof Error ? lastError : new Error(velaModelsErrorMessage(lastError));
-}
-
 export async function fetchVelaPresetModels(
   resolvedBin: string,
   env: NodeJS.ProcessEnv,

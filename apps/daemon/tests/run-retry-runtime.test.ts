@@ -1128,6 +1128,3 @@ async function readAttemptPrompts(file: string): Promise<Map<number, string>> {
   return prompts;
 }
 
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}

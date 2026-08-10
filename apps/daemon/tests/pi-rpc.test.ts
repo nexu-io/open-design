@@ -786,7 +786,6 @@ test('pi RPC: auto_retry_end failure with missing finalError uses fallback', () 
 // ─── imagePaths forwarding in attachPiRpcSession ─────────────────────────────
 
 test('attachPiRpcSession sends prompt with images when imagePaths provided', async () => {
-  const { child } = createSession();
 
   // Create a small test image file.
   const tmpDir = await import('node:os').then((m) => m.tmpdir());

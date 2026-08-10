@@ -32,7 +32,7 @@ describe('public MCP create_artifact', () => {
   });
 
   it('resolves project names and posts a non-overwrite artifact request', async () => {
-    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+    const fetchMock = vi.fn(async (url: string, _init?: RequestInit) => {
       if (url.endsWith('/api/projects')) {
         return new Response(JSON.stringify({ projects: [{ id: 'project-1', name: 'Demo' }] }), { status: 200 });
       }

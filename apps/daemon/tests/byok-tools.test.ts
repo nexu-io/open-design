@@ -1726,7 +1726,7 @@ describe('executeAIHubMixGenerateImage', () => {
 
   it('gemini TTS: a non-gemini voice falls back to the default gemini voice', async () => {
     let submitBody: any = null;
-    const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
+    const fetchMock = vi.fn(async (_input: unknown, init?: RequestInit) => {
       submitBody = JSON.parse(String(init?.body));
       return new Response(
         JSON.stringify({

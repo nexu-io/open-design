@@ -7,7 +7,7 @@
 //   4. Attribution headers (HTTP-Referer, X-Title) on every request
 //   5. Progress callback invocation
 
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -61,11 +61,6 @@ describe('openrouter video generation', () => {
     await rm(root, { recursive: true, force: true });
   });
 
-  async function writeConfig(data: unknown) {
-    const file = path.join(projectRoot, '.od', 'media-config.json');
-    await mkdir(path.dirname(file), { recursive: true });
-    await writeFile(file, JSON.stringify(data), 'utf8');
-  }
 
   const COMMON_ARGS = {
     surface: 'video' as const,

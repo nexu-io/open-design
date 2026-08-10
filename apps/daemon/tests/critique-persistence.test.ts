@@ -9,7 +9,6 @@ import {
   deleteCritiqueRun,
   reconcileStaleRuns,
   CRITIQUE_RUN_STATUSES,
-  type CritiqueRunRow,
 } from '../src/critique/persistence.js';
 
 function freshDb(): Database.Database {

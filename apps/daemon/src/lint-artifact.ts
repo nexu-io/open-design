@@ -125,7 +125,6 @@ export function lintArtifact(rawHtml: unknown): LintFinding[] {
   // pedagogical examples ("paste a `<section class="slide">` here") that
   // would otherwise fire false positives for the section / slide checks.
   const html = rawHtml.replace(/<!--[\s\S]*?-->/g, '');
-  const lower = html.toLowerCase();
 
   // ── P0-1: purple gradient backgrounds ─────────────────────────────
   for (const hex of PURPLE_HEXES) {

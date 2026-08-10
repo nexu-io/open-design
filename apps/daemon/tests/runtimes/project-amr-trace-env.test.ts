@@ -49,7 +49,7 @@ function projectDb(input: {
 
 describe('openDesignAmrTraceEnvForRun', () => {
   it('does not resolve project scope for a non-AMR runtime', async () => {
-    const db = projectDb({
+    projectDb({
       projectId: 'project-a',
       workspaceId: 'workspace-a',
       memberId: 'member-a',
@@ -133,7 +133,7 @@ describe('openDesignAmrTraceEnvForRun', () => {
   });
 
   it('refuses AMR scratch execution without a Workspace-bound project', async () => {
-    const db = projectDb({ projectId: 'project-control' });
+    projectDb({ projectId: 'project-control' });
     await expect(openDesignAmrTraceEnvForRun({
       agentId: 'amr',
       runId: 'run-scratch',

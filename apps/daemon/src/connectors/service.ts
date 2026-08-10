@@ -12,7 +12,7 @@ import {
   type ConnectorToolSafety,
   type ConnectorStatus,
 } from './catalog.js';
-import { composioConnectorProvider, getStaticComposioCatalogDefinitions, type ComposioAuthConfigPrepareResult, type ComposioConnectionStart } from './composio.js';
+import { composioConnectorProvider, type ComposioAuthConfigPrepareResult, type ComposioConnectionStart } from './composio.js';
 
 export interface ConnectorExecuteRequest {
   connectorId: string;
@@ -607,7 +607,7 @@ export class ConnectorService {
     return this.statusService.getCredential(connectorId);
   }
 
-  async listConnectors(signal?: AbortSignal): Promise<ConnectorDetail[]> {
+  async listConnectors(_signal?: AbortSignal): Promise<ConnectorDetail[]> {
     return this.listFastDefinitions().map((definition) => this.toDetail(definition));
   }
 

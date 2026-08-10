@@ -19,7 +19,6 @@ import { type CheerioAPI, load } from 'cheerio';
 // daemon's declared dependency boundary, so we derive a generic "node
 // collection" type from the API surface we actually use.
 type CheerioCollection = ReturnType<CheerioAPI>;
-type CheerioNode = CheerioCollection extends ArrayLike<infer N> ? N : never;
 
 export interface CtaHierarchyIssue {
   /** Category of the finding; the UI may surface different copy per kind. */

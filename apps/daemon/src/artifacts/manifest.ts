@@ -2,7 +2,6 @@ import path from 'node:path';
 
 const MANIFEST_VERSION = 1;
 const MAX_TITLE_LENGTH = 200;
-const MAX_ENTRY_LENGTH = 260;
 const MAX_SOURCE_SKILL_ID_LENGTH = 128;
 const MAX_DESIGN_SYSTEM_ID_LENGTH = 128;
 const MAX_SUPPORTING_FILE_LENGTH = 260;

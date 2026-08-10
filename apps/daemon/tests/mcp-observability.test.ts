@@ -400,7 +400,7 @@ describe('local MCP plugin observability contract', () => {
   });
 
   it('requires a stable plugin request id and forwards bounded attribution to the run', async () => {
-    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+    const fetchMock = vi.fn(async (url: string, _init?: RequestInit) => {
       if (url.endsWith('/api/projects')) {
         return new Response(
           JSON.stringify({ projects: [{ id: 'project-1', name: 'Demo' }] }),

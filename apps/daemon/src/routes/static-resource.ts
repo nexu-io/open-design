@@ -14,7 +14,6 @@ import {
 import { detectAgents, detectAgentsStream } from '../agents.js';
 import {
   SkillImportError,
-  deleteUserSkill,
   findSkillById,
   importUserSkill,
   listSkills,
@@ -38,7 +37,6 @@ import {
 import { listCodexPets, readCodexPetSpritesheet } from '../codex-pets.js';
 import { syncCommunityPets } from '../community-pets-sync.js';
 import {
-  readDesignSystem,
   writeUserDesignSystemWorkspaceClaim,
 } from '../design-systems/index.js';
 import {
@@ -51,8 +49,6 @@ import {
 } from '../design-systems/import.js';
 import { importGitHubDesignSystemProject } from '../design-systems/github-import.js';
 import { importShadcnDesignSystemProject } from '../design-systems/shadcn-import.js';
-import { renderDesignSystemPreview } from '../design-systems/preview.js';
-import { renderDesignSystemShowcase } from '../design-systems/showcase.js';
 import { listPromptTemplates, readPromptTemplate } from '../media/prompt-templates.js';
 import { readAppConfig } from '../app-config.js';
 import {
@@ -117,8 +113,6 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
     PROJECT_ROOT,
     DESIGN_SYSTEMS_DIR,
     USER_DESIGN_SYSTEMS_DIR,
-    DESIGN_TEMPLATES_DIR,
-    USER_DESIGN_TEMPLATES_DIR,
     SKILLS_DIR,
     USER_SKILLS_DIR,
     PROMPT_TEMPLATES_DIR,

@@ -81,7 +81,6 @@ interface RunMcpOptions {
 }
 interface CatalogItem { id: string; name?: string; title?: string; description?: string; summary?: string }
 interface SkillsPayload { skills?: CatalogItem[] }
-interface PluginsPayload { plugins?: CatalogItem[] }
 interface DesignSystemsPayload { designSystems?: CatalogItem[] }
 interface ResourcePayload { skill?: { body?: string; content?: string }; designSystem?: { body?: string; content?: string }; body?: string; content?: string }
 interface ProjectSummary { id: string; name: string; metadata?: JsonObject }
