@@ -17,7 +17,7 @@ import {
 } from "@open-design/closure-proto";
 import type { ClosureBindingDescriptor } from "@open-design/closure-store";
 import {
-  commitStoredClosureCandidate,
+  commitVerifiedStoredClosureCandidate,
   readClosureBindingDescriptor,
   resolveClosureStoreVersionPaths,
   verifyMaterializedClosureCandidate,
@@ -25,6 +25,7 @@ import {
   type ClosureRuntimePointer,
   type ClosureStorePaths,
   type ClosureStoreVersionPaths,
+  type StoredClosureVerification,
 } from "@open-design/closure-store";
 import { downloadCopyAndClear } from "@open-design/download";
 import { isProcessAlive } from "@open-design/platform";
@@ -477,14 +478,13 @@ async function ensureCandidateMaterialized(input: {
   descriptor: ClosureBindingDescriptor;
   fetchImpl: typeof globalThis.fetch;
   paths: ClosureStorePaths;
-}): Promise<ReturnType<typeof bindClosureCandidateIdentity>> {
+}): Promise<StoredClosureVerification> {
   const binding = bindClosureCandidateIdentity(input.candidate.manifest.identity, input.paths.namespace);
   const finalPaths = resolveClosureStoreVersionPaths(input.paths, binding);
   const existing = await stat(finalPaths.versionRoot).catch(() => null);
   if (existing != null) {
     try {
-      await verifyStoredClosureCandidate(input.paths, binding);
-      return binding;
+      return await verifyStoredClosureCandidate(input.paths, binding);
     } catch (error) {
       if (candidateIsReferenced(input.descriptor, binding)) throw error;
       await rm(finalPaths.versionRoot, { force: true, recursive: true });
@@ -518,16 +518,15 @@ async function ensureCandidateMaterialized(input: {
       }),
     ]);
     await extractZip(stagePaths.archivePath, { dir: stagePaths.payloadRoot });
-    await verifyMaterializedClosureCandidate(input.paths, binding, stagePaths);
+    const stagedVerification = await verifyMaterializedClosureCandidate(input.paths, binding, stagePaths);
     await mkdir(dirname(finalPaths.versionRoot), { recursive: true });
     try {
       await rename(stageRoot, finalPaths.versionRoot);
     } catch (error) {
       if (errorCode(error) !== "EEXIST" && errorCode(error) !== "ENOTEMPTY") throw error;
-      await verifyStoredClosureCandidate(input.paths, binding);
+      return await verifyStoredClosureCandidate(input.paths, binding);
     }
-    await verifyStoredClosureCandidate(input.paths, binding);
-    return binding;
+    return { ...stagedVerification, paths: finalPaths };
   } finally {
     await rm(stageRoot, { force: true, recursive: true }).catch(() => undefined);
   }
@@ -555,7 +554,7 @@ export async function applyClosureUpdate(input: {
     if (decision.action === "retain") {
       return { candidate: input.candidate, reason: decision.reason, state: "retained" };
     }
-    const binding = await ensureCandidateMaterialized({
+    const verification = await ensureCandidateMaterialized({
       candidate: input.candidate,
       descriptor,
       fetchImpl: input.fetch ?? globalThis.fetch,
@@ -572,9 +571,9 @@ export async function applyClosureUpdate(input: {
     if (currentDecision.action === "retain") {
       return { candidate: input.candidate, reason: currentDecision.reason, state: "retained" };
     }
-    const committed = await commitStoredClosureCandidate(
+    const committed = await commitVerifiedStoredClosureCandidate(
       input.paths,
-      binding,
+      verification,
       input.candidate.releaseVersion,
     );
     return {

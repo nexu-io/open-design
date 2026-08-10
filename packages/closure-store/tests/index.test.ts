@@ -17,6 +17,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   commitStoredClosureCandidate,
+  commitVerifiedStoredClosureCandidate,
   readClosureBindingDescriptor,
   resolveClosureStorePaths,
   resolveClosureStoreVersionPaths,
@@ -190,6 +191,20 @@ describe("Closure committed binding", () => {
     });
     expect(await readClosureBindingDescriptor(paths)).toEqual(result.descriptor);
     expect(paths.bindingPath).toMatch(/binding\.json$/u);
+  });
+
+  it("commits an atomically promoted candidate from its existing verification proof", async () => {
+    const paths = await createStore();
+    const { binding } = await materializeCandidate(paths, "0.18.0-beta.1");
+    const verification = await verifyStoredClosureCandidate(paths, binding);
+
+    const result = await commitVerifiedStoredClosureCandidate(paths, verification, "0.19.0-beta.1");
+
+    expect(result.committed.standalone).toEqual({ ...binding, generation: 0 });
+    await expect(commitVerifiedStoredClosureCandidate(paths, {
+      ...verification,
+      paths: { ...verification.paths, versionRoot: join(paths.stagingRoot, "candidate") },
+    }, "0.19.0-beta.1")).rejects.toThrow(/verified Closure paths/u);
   });
 
   it("replaces the committed binding without retaining launch history", async () => {

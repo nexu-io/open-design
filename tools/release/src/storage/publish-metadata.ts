@@ -1,7 +1,6 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
-  contentType,
   githubInfo,
   optional,
   publicUrl,
@@ -10,18 +9,16 @@ import {
   writeJson,
 } from "./common.ts";
 import { assertCurrentVersionReservation, versionLockObjectKey } from "./beta-version-reservation.ts";
-import { getStorageObject, putStorageObject, putStorageObjectWithStatus } from "./s3-upload.ts";
+import { putStorageObject } from "./s3-upload.ts";
+import { publishLatestPlatformObjects, publishLatestRelease } from "./latest-publication.ts";
 import {
   assertLauncherVersionFloorSatisfiable,
   resolveLauncherVersionFloor,
 } from "./launcher-version-floor.ts";
 import {
-  parseCountedReleaseVersion,
-  parseReleaseBaseVersion,
   parseReleaseVersion,
   releaseChannelDescriptor,
   releaseMetadataVersionFields,
-  type CountedReleaseChannel,
 } from "@open-design/release";
 import {
   parseReleaseNotePublication,
@@ -96,6 +93,7 @@ const versionLockKey = optional(
   countedReleaseChannel == null ? "" : versionLockObjectKey(releaseVersion, countedReleaseChannel),
 );
 const latestCasRequired = process.env.RELEASE_LATEST_CAS_REQUIRED === "true";
+const latestActivationEnabled = optional("RELEASE_ACTIVATE_LATEST", "true") !== "false";
 const closureRequired = process.env.RELEASE_CLOSURE_REQUIRED === "true";
 const shellRequired = process.env.RELEASE_SHELL_REQUIRED === "true";
 const storage = publishSideEffectsEnabled || versionLockRequired ? storageConfigFromEnv() : null;
@@ -175,30 +173,6 @@ function releaseMetadataFields(): Record<string, unknown> {
   };
 }
 
-function parseCountedVersionForChannel(value: string, channel: CountedReleaseChannel): { base: [number, number, number]; releaseNumber: number } | null {
-  const parsed = parseCountedReleaseVersion(value, channel);
-  if (parsed == null) return null;
-  const base = parseReleaseBaseVersion(parsed.baseVersion);
-  if (base == null) return null;
-  return { base: [...base], releaseNumber: parsed.number };
-}
-
-function compareReleaseVersions(left: string, right: string): number {
-  if (releaseChannel === "stable") throw new Error("stable latest CAS does not compare counted release versions");
-  const parsedLeft = parseCountedVersionForChannel(left, releaseChannel);
-  const parsedRight = parseCountedVersionForChannel(right, releaseChannel);
-  if (parsedLeft == null || parsedRight == null) {
-    throw new Error(`invalid ${releaseChannel} version comparison: ${left} vs ${right}`);
-  }
-  for (let index = 0; index < parsedLeft.base.length; index += 1) {
-    if (parsedLeft.base[index] > parsedRight.base[index]) return 1;
-    if (parsedLeft.base[index] < parsedRight.base[index]) return -1;
-  }
-  if (parsedLeft.releaseNumber > parsedRight.releaseNumber) return 1;
-  if (parsedLeft.releaseNumber < parsedRight.releaseNumber) return -1;
-  return 0;
-}
-
 async function upload(path: string, objectKey: string, cacheControl: string, type = "application/json; charset=utf-8"): Promise<void> {
   if (!publishSideEffectsEnabled) {
     console.log(`[dry-run:${dryRunMode || "plan"}] would upload ${path} to ${objectKey}`);
@@ -212,84 +186,6 @@ async function upload(path: string, objectKey: string, cacheControl: string, typ
     contentType: type,
     objectKey,
   });
-}
-
-async function uploadLatestMetadataWithCas(path: string, objectKey: string): Promise<void> {
-  if (storage == null) throw new Error("storage config is required to publish latest metadata");
-  if (!latestCasRequired) {
-    await upload(path, objectKey, "public, max-age=60, must-revalidate");
-    return;
-  }
-
-  if (releaseChannel === "stable") {
-    throw new Error("latest metadata CAS is only supported for counted releases");
-  }
-  if (parseCountedVersionForChannel(releaseVersion, releaseChannel) == null) {
-    throw new Error(`invalid ${releaseChannel} version for latest CAS: ${releaseVersion}`);
-  }
-
-  for (let attempt = 1; attempt <= 5; attempt += 1) {
-    const latest = await getStorageObject({ ...storage, objectKey });
-    const headers: Record<string, string> = {};
-    if (latest == null) {
-      headers["if-none-match"] = "*";
-    } else {
-      let latestReleaseVersion = "";
-      try {
-        const parsed = JSON.parse(latest.text.replace(/^\uFEFF/u, "")) as { releaseVersion?: unknown };
-        latestReleaseVersion = typeof parsed.releaseVersion === "string" ? parsed.releaseVersion : "";
-      } catch (error) {
-        throw new Error(`latest metadata is invalid JSON: ${error instanceof Error ? error.message : String(error)}`);
-      }
-      if (latestReleaseVersion.length > 0 && compareReleaseVersions(latestReleaseVersion, releaseVersion) > 0) {
-        throw new Error(`refusing to move ${releaseChannel} latest backward from ${latestReleaseVersion} to ${releaseVersion}`);
-      }
-      if (latest.etag.length === 0) {
-        throw new Error("latest metadata GET did not return an ETag for CAS update");
-      }
-      headers["if-match"] = latest.etag;
-    }
-
-    const result = await putStorageObjectWithStatus({
-      ...storage,
-      bodyPath: path,
-      cacheControl: "public, max-age=60, must-revalidate",
-      contentType: "application/json; charset=utf-8",
-      headers,
-      objectKey,
-    });
-    if (result.ok) return;
-    if (result.status !== 412) {
-      throw new Error(`latest metadata CAS PUT ${objectKey} failed with HTTP ${result.status}${result.body.length > 0 ? `: ${result.body}` : ""}`);
-    }
-    console.log(`latest metadata CAS conflict on attempt ${attempt}; retrying`);
-  }
-
-  throw new Error(`failed to update latest metadata with CAS after 5 attempts: ${objectKey}`);
-}
-
-async function publishLatestPlatformObjects(manifests: Record<string, PlatformManifest>): Promise<void> {
-  if (storage == null) throw new Error("storage config is required to publish latest platform objects");
-  for (const [target, manifest] of Object.entries(manifests)) {
-    const manifestPath = join(manifestDir, `${target}.json`);
-    await upload(manifestPath, `${latestPrefix}/platforms/${target}.json`, "public, max-age=60, must-revalidate");
-
-    const feedName = manifest.feed?.name;
-    if (feedName == null || feedName.length === 0) continue;
-
-    const feedVersionPrefix = manifest.r2?.artifactPrefix ?? manifest.r2?.versionPrefix;
-    if (feedVersionPrefix == null || feedVersionPrefix.length === 0) {
-      throw new Error(`published ${target} platform manifest is missing r2.versionPrefix for ${feedName}`);
-    }
-    const versionFeed = await getStorageObject({ ...storage, objectKey: `${feedVersionPrefix}/${feedName}` });
-    if (versionFeed == null) {
-      throw new Error(`expected versioned feed object not found: ${feedVersionPrefix}/${feedName}`);
-    }
-    const feedPath = join(metadataDir, "latest-feeds", feedName);
-    mkdirSync(join(metadataDir, "latest-feeds"), { recursive: true });
-    writeFileSync(feedPath, versionFeed.text, "utf8");
-    await upload(feedPath, `${latestPrefix}/${feedName}`, "public, max-age=60, must-revalidate", contentType(feedName));
-  }
 }
 
 function enabled(name: string): boolean {
@@ -457,9 +353,32 @@ mkdirSync(metadataDir, { recursive: true });
 const metadataPath = join(metadataDir, "metadata.json");
 writeJson(metadataPath, metadata);
 await upload(metadataPath, `${versionPrefix}/metadata.json`, "public, max-age=31536000, immutable");
-if (latestMetadataUpdated && publishSideEffectsEnabled) {
-  await uploadLatestMetadataWithCas(metadataPath, `${latestPrefix}/metadata.json`);
-  await publishLatestPlatformObjects(releaseTargets);
+if (latestMetadataUpdated && latestActivationEnabled && publishSideEffectsEnabled) {
+  if (storage == null) throw new Error("storage config is required to publish latest metadata");
+  const latestPlatforms = Object.fromEntries(readyTargets.map((target) => [target, {
+    manifest: releaseTargets[target],
+    path: join(manifestDir, `${target}.json`),
+  }]));
+  if (releaseChannel === "stable" || !latestCasRequired) {
+    await publishLatestPlatformObjects({
+      channel: releaseChannel,
+      metadataDir,
+      platforms: latestPlatforms,
+      storage,
+    });
+    await upload(metadataPath, `${latestPrefix}/metadata.json`, "public, max-age=60, must-revalidate");
+  } else {
+    await publishLatestRelease({
+      channel: releaseChannel,
+      metadataDir,
+      metadataPath,
+      platforms: latestPlatforms,
+      releaseVersion,
+      storage,
+    });
+  }
+} else if (latestMetadataUpdated && !latestActivationEnabled) {
+  console.log(`staged ${metadata.r2.versionMetadataUrl}; left ${metadata.r2.latestMetadataUrl} unchanged pending public acceptance`);
 } else if (latestMetadataUpdated) {
   console.log(`[dry-run:${dryRunMode || "plan"}] left ${metadata.r2.latestMetadataUrl} unchanged`);
 } else {
@@ -468,6 +387,7 @@ if (latestMetadataUpdated && publishSideEffectsEnabled) {
 
 const outputs: Record<string, string> = {
   latest_metadata_updated: String(latestMetadataUpdated),
+  latest_metadata_activated: String(latestMetadataUpdated && latestActivationEnabled),
   metadata_url: metadata.r2.latestMetadataUrl,
   release_state: releaseState,
   report_url: metadata.r2.reportUrl,

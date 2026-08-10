@@ -185,6 +185,17 @@ describe("Windows pack artifact boundaries", () => {
     expect(source).toContain("nsisInstallerImplementation");
     expect(source.indexOf("nsisInstallerImplementation")).toBeLessThan(source.indexOf('target: "nsis-installer"'));
   });
+
+  it("invalidates the NSIS overlay and installer when packaged config changes", async () => {
+    const source = await readFile(new URL("../src/win/builder.ts", import.meta.url), "utf8");
+    expect(source).toContain("const packagedConfig = await hashPath(paths.packagedConfigPath)");
+    expect(source.indexOf("await writePackagedConfig(config, paths")).toBeLessThan(
+      source.indexOf("const packagedConfig = await hashPath(paths.packagedConfigPath)"),
+    );
+    const overlayNode = source.slice(source.indexOf("const createNsisOverlayPayloadNode"), source.indexOf("const nsisBasePayloadNode"));
+    expect(overlayNode).toContain("packagedConfig,");
+    expect(overlayNode.indexOf("packagedConfig,")).toBeLessThan(overlayNode.indexOf('target: "nsis-payload-overlay"'));
+  });
 });
 
 describe("launcher runtime sync helper", () => {

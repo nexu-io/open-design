@@ -171,6 +171,35 @@ async function observeWinResidues(config: ToolPackConfig, paths = resolveWinPath
   };
 }
 
+async function waitForNativeUninstallSettlement(
+  config: ToolPackConfig,
+  paths: WinPaths,
+  timeoutMs = 10_000,
+): Promise<void> {
+  const startedAt = Date.now();
+  let pending: string[] = [];
+  do {
+    const [publicDesktop, registryEntries, startMenu, userDesktop] = await Promise.all([
+      pathExists(paths.publicDesktopShortcutPath),
+      queryWinRegistryEntries(paths, config),
+      pathExists(paths.startMenuShortcutPath),
+      pathExists(paths.userDesktopShortcutPath),
+    ]);
+    pending = [
+      ...(publicDesktop ? [paths.publicDesktopShortcutPath] : []),
+      ...registryEntries.map((entry) => entry.keyPath),
+      ...(startMenu ? [paths.startMenuShortcutPath] : []),
+      ...(userDesktop ? [paths.userDesktopShortcutPath] : []),
+    ];
+    if (pending.length === 0) return;
+    await new Promise((resolveWait) => setTimeout(resolveWait, 100));
+  } while (Date.now() - startedAt < timeoutMs);
+
+  throw new Error(
+    `native Windows uninstaller returned before its lifecycle mutations settled: ${pending.join(", ")}`,
+  );
+}
+
 export async function installPackedWinApp(config: ToolPackConfig): Promise<WinInstallResult> {
   const lifecycleTimings: WinLifecycleTiming[] = [];
   const paths = resolveWinPaths(config);
@@ -387,6 +416,13 @@ export async function uninstallPackedWinApp(config: ToolPackConfig): Promise<Win
     await measureLifecycleStep(lifecycleTimings, "nsis uninstall", async () => runTimed(paths.uninstallTimingPath, "uninstall", async () => {
       await invokeNsis(paths, registeredPaths.uninstallerPath, config.silent ? ["/S"] : [], "uninstall");
     }));
+    // NSIS first launches a temporary self-copy. On Windows the original
+    // uninstaller process can return while that child is still deleting
+    // shortcuts and registry keys. Do not let callers observe that transient
+    // state as the result of a completed uninstall.
+    await measureLifecycleStep(lifecycleTimings, "wait for native uninstall settlement", async () => {
+      await waitForNativeUninstallSettlement(config, registeredPaths);
+    });
   }
   await measureLifecycleStep(lifecycleTimings, "remove install dir", async () => removeTree(registeredPaths.installDir));
   const registryResiduesRemoved = await measureLifecycleStep(lifecycleTimings, "cleanup registry residues", async () => cleanupWinRegistryResidues(registeredPaths, config));
@@ -526,7 +562,11 @@ async function requestDesktopEval(
     return await requestJsonIpc<DesktopEvalResult>(
       ipc,
       { input: { expression }, type: SIDECAR_MESSAGES.EVAL },
-      { timeoutMs: 5000 },
+      // Packaged acceptance uses eval for intentionally expensive first-use
+      // operations (project creation and PPTX export). The desktop capability
+      // contract already allows ten minutes; keep the CLI probe below that
+      // ceiling while avoiding a false sidecar failure on a cold Windows disk.
+      { timeoutMs: 120_000 },
     );
   } catch (error) {
     return {

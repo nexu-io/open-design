@@ -218,6 +218,12 @@ async function main(): Promise<void> {
   if (!claimPackagedSingleInstanceLock(app, (argv) => {
     secondInstanceHandoff.handle(findPackagedDeeplinkArg(argv));
   })) return;
+  // A normal tools-pack launch already carries this projection, but a real
+  // Windows protocol/shortcut cold start does not. Standalone sidecars inherit
+  // process.env while the bootloader handoff is running, so establish their
+  // namespace/base/stamp before entering Closure rather than only after it has
+  // somehow become healthy.
+  applyLaunchEnv(paths.runtimeRoot, stamp);
   await app.whenReady();
 
   const splash = createSplashWindow();
@@ -250,7 +256,6 @@ async function main(): Promise<void> {
     shellDigest: await digestElectronShellEntry(import.meta.url),
     shellVersion,
   });
-  applyLaunchEnv(paths.runtimeRoot, stamp);
   const desktopControl = bootstrapSidecarRuntime(stamp, process.env, {
     app: APP_KEYS.DESKTOP,
     base: paths.runtimeRoot,

@@ -295,29 +295,74 @@ function compareName(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
 }
 
-async function collectPayloadFiles(
-  root: string,
-  current = root,
-): Promise<ClosureFileInventory["files"]> {
-  const entries = await readdir(current, { withFileTypes: true }).catch((error) => {
-    throw new ClosureStoreError(`Closure payload is missing or unreadable at ${current}: ${
-      error instanceof Error ? error.message : String(error)
-    }`);
-  });
-  const files: ClosureFileInventory["files"] = [];
-  for (const entry of entries.sort((left, right) => compareName(left.name, right.name))) {
-    const absolutePath = join(current, entry.name);
-    const metadata = await lstat(absolutePath);
-    const archivePath = relative(root, absolutePath).split(sep).join("/");
-    if (metadata.isSymbolicLink()) throw new ClosureStoreError(`Closure payload contains a symlink: ${archivePath}`);
-    if (metadata.isDirectory()) {
-      files.push(...await collectPayloadFiles(root, absolutePath));
-      continue;
+const CLOSURE_VERIFY_IO_CONCURRENCY = 16;
+
+async function collectPayloadFiles(root: string): Promise<ClosureFileInventory["files"]> {
+  const directories = [root];
+  const discovered: Array<{ absolutePath: string; archivePath: string }> = [];
+
+  // Traverse in bounded batches: Windows Closure payloads contain thousands
+  // of directories, so serial readdir/lstat turns Defender latency into a
+  // multi-minute cold start. Dirent still rejects links and special files; the
+  // queue only changes I/O scheduling, not the verified inventory contract.
+  while (directories.length > 0) {
+    const batch = directories.splice(0, CLOSURE_VERIFY_IO_CONCURRENCY);
+    const batches = await Promise.all(batch.map(async (current) => {
+      const entries = await readdir(current, { withFileTypes: true }).catch((error) => {
+        throw new ClosureStoreError(`Closure payload is missing or unreadable at ${current}: ${
+          error instanceof Error ? error.message : String(error)
+        }`);
+      });
+      return { current, entries: entries.sort((left, right) => compareName(left.name, right.name)) };
+    }));
+    for (const { current, entries } of batches) {
+      for (const entry of entries) {
+        const absolutePath = join(current, entry.name);
+        const archivePath = relative(root, absolutePath).split(sep).join("/");
+        if (entry.isSymbolicLink()) {
+          throw new ClosureStoreError(`Closure payload contains a symlink: ${archivePath}`);
+        }
+        if (entry.isDirectory()) {
+          directories.push(absolutePath);
+          continue;
+        }
+        if (!entry.isFile()) {
+          const metadata = await lstat(absolutePath);
+          if (metadata.isSymbolicLink()) {
+            throw new ClosureStoreError(`Closure payload contains a symlink: ${archivePath}`);
+          }
+          if (metadata.isDirectory()) {
+            directories.push(absolutePath);
+            continue;
+          }
+          if (!metadata.isFile()) {
+            throw new ClosureStoreError(`Closure payload contains an unsupported entry: ${archivePath}`);
+          }
+        }
+        discovered.push({ absolutePath, archivePath });
+      }
     }
-    if (!metadata.isFile()) throw new ClosureStoreError(`Closure payload contains an unsupported entry: ${archivePath}`);
-    const identity = await digestFile(absolutePath);
-    files.push({ digest: identity.digest as `sha256:${string}`, path: archivePath, size: identity.size });
   }
+
+  discovered.sort((left, right) => compareName(left.archivePath, right.archivePath));
+  const files = new Array<ClosureFileInventory["files"][number]>(discovered.length);
+  let nextIndex = 0;
+  const workers = Array.from(
+    { length: Math.min(CLOSURE_VERIFY_IO_CONCURRENCY, discovered.length) },
+    async () => {
+      while (nextIndex < discovered.length) {
+        const index = nextIndex++;
+        const file = discovered[index]!;
+        const identity = await digestFile(file.absolutePath);
+        files[index] = {
+          digest: identity.digest as `sha256:${string}`,
+          path: file.archivePath,
+          size: identity.size,
+        };
+      }
+    },
+  );
+  await Promise.all(workers);
   return files;
 }
 
@@ -421,9 +466,40 @@ export async function commitStoredClosureCandidate(
   verification: StoredClosureVerification;
 }> {
   const verification = await verifyStoredClosureCandidate(paths, binding);
+  return await commitVerifiedStoredClosureCandidate(paths, verification, releaseVersion);
+}
+
+/**
+ * Commit a candidate whose exact materialized bytes were already verified.
+ *
+ * Fresh update staging verifies every inventory entry before an atomic rename
+ * into the Store. Carrying that proof across the rename avoids hashing a large
+ * Windows Closure two more times while preserving the one full byte-level
+ * verification before the binding becomes visible.
+ */
+export async function commitVerifiedStoredClosureCandidate(
+  paths: ClosureStorePaths,
+  verification: StoredClosureVerification,
+  releaseVersion: string,
+): Promise<{
+  committed: CommittedClosureBinding;
+  descriptor: ClosureBindingDescriptor;
+  verification: StoredClosureVerification;
+}> {
+  const binding = validateClosureBindingIdentity(verification.binding, paths);
+  const expectedPaths = resolveClosureStoreVersionPaths(paths, binding);
+  if (
+    verification.paths.versionRoot !== expectedPaths.versionRoot
+    || verification.paths.archivePath !== expectedPaths.archivePath
+    || verification.paths.inventoryPath !== expectedPaths.inventoryPath
+    || verification.paths.manifestPath !== expectedPaths.manifestPath
+    || verification.paths.payloadRoot !== expectedPaths.payloadRoot
+  ) {
+    throw new ClosureStoreError("verified Closure paths do not match the committed Store location");
+  }
   const current = await readClosureBindingDescriptor(paths);
   const generation = current.nextGeneration;
-  const pointer: ClosureRuntimePointer = { ...verification.binding, generation };
+  const pointer: ClosureRuntimePointer = { ...binding, generation };
   const committed: CommittedClosureBinding = {
     releaseVersion: normalizeReleaseVersion(releaseVersion),
     standalone: pointer,

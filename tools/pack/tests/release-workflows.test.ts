@@ -104,12 +104,12 @@ describe("release workflows", () => {
     expect(mac).toContain("OD_PACKAGED_E2E_MAC_LEGACY_DMG_PATH: ${{ steps.mac_arm64_legacy_fixture.outputs.dmg_path }}");
     expect(mac).toContain("OD_PACKAGED_E2E_MAC_MIN_SHELL_VERSION: ${{ env.CLOSURE_MIN_SHELL_VERSION }}");
     expect(mac).toContain("OD_PACKAGED_E2E_MAC_UPDATE_BUILD_JSON_PATH: ${{ steps.mac_arm64_update_fixture.outputs.update_build_json_path }}");
-    expect(mac).toContain("RELEASE_SHELL_SMOKE_MATRIX: mac-shell-v2");
+    expect(mac).toContain("RELEASE_SHELL_SMOKE_MATRIX: mac-shell-v3");
     expect(mac).toContain("RELEASE_SHELL_SMOKE_ACCEPTANCE_DIGEST: sha256:${{ hashFiles(");
     expect(mac).toContain('RELEASE_STANDALONE_PROTOCOL_VERSION: "1"');
     expect(mac).toMatch(/Build beta mac_arm64 update fixture[\s\S]*?--to app/);
     expect(mac).toContain("steps.mac_arm64_shell_resolution.outputs.smoke_proof != 'hit'");
-    expect(mac).toContain("OD_PACKAGED_E2E_MAC_SMOKE_LANES: ${{ inputs.mac_arm64_smoke_mode == 'full' && steps.mac_arm64_shell_resolution.outputs.smoke_proof == 'hit' && 'standalone,migration' || '' }}");
+    expect(mac).toContain("OD_PACKAGED_E2E_MAC_SMOKE_LANES: ${{ inputs.mac_arm64_smoke_mode == 'full' && steps.mac_arm64_shell_resolution.outputs.smoke_proof == 'hit' && 'standalone' || '' }}");
     expect(mac).toContain("OD_PACKAGED_E2E_SHELL_SMOKE_PROOF: ${{ steps.mac_arm64_shell_resolution.outputs.smoke_proof }}");
     expect(mac).toContain("Register mac_arm64 Electron Shell full-smoke proof");
     expect(mac).toContain("run: pnpm exec tools-release register-shell-smoke");
@@ -155,8 +155,11 @@ describe("release workflows", () => {
     expect(beta).toContain("tools-release verify-metadata");
     expect(beta).toContain("Validate checkout ref shape");
     expect(beta).toContain("full 40-character commit SHA; abbreviated SHA");
-    expect(betaPublish).toContain("Observe published beta public feed");
-    expect(betaPublish).toContain("continue-on-error: true");
+    expect(betaPublish).toContain("Observe directly activated beta public feed");
+    expect(betaPublish).toContain("Read back activated beta public feed");
+    expect(betaPublish).toContain("tools-release prepare-public-acceptance");
+    expect(betaPublish).toContain("tools-release issue-public-acceptance");
+    expect(betaPublish).toContain("tools-release activate-public-release");
     expect(betaPublish).toContain("tools-release observe-public-feed");
     expect(beta).toContain("tools-release summary-metadata");
     for (const workflow of [beta, betaSelfHosted, preview, prerelease, stable]) {

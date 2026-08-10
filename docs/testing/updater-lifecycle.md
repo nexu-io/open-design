@@ -53,7 +53,7 @@ spec (`e2e/specs/mac.spec.ts` / `win.spec.ts` via `release-smoke.ts`),
 | Stale relaunch freeze scrub after rollback (installResult.activeVersion > running) | U, P | desktop unit stale-freeze spec; exercised by the spec's self-heal phase |
 | Exact desktop identity, cold-start reconvergence | P, F | specs; real-feed loop |
 | Historical-outer handoff bridge (prepared→armed→confirmed) | U, partial P | daemon handoff unit; win spec legacy-executable path |
-| Full historical-outer migration with a real legacy binary | P | release-beta mac full spec pins `0.16.2-beta.155` from the public immutable feed, proves installer-required against the candidate metadata, replaces the DMG, and reopens persisted product data |
+| Full historical-outer migration with a real legacy binary | P | release-beta mac and win full specs pin `0.16.2-beta.155` from the public immutable feed, prove installer-required against candidate metadata, replace the outer, and reopen persisted product data |
 | Obsolete outer retirement (mac/win) | U | packaged `obsolete-installed-outer.test.ts` |
 | Reinstalled newer outer resets runtime (bound > active) | U | packaged `launcher-runtime.test.ts` supersede case |
 | Reinstalled older outer delegates (bound < active) | P | spec recovery segment precondition |
@@ -79,7 +79,8 @@ spec (`e2e/specs/mac.spec.ts` / `win.spec.ts` via `release-smoke.ts`),
 
 | Node | Coverage | Owning tests |
 | --- | --- | --- |
-| metadata.json composition + CAS latest publish | U | tools-serve `release-metadata-publish.test.ts` |
+| metadata.json composition + CAS latest publish | U, P, F | tools-release publication/public-acceptance tests; staged release-beta activation and blocking public readback |
+| Public immutable Windows installer + online Closure feedback | P, F | release-beta `public_win_x64_acceptance`; exact commit/release/artifact/Closure/smoke credential |
 | Launcher version floor channel policy (vars pairs, stable fallback, validation) | U | tools-release `launcher-version-floor.test.ts`; publish integration |
 | Workflow env passthrough (no YAML fallback) | U | tools-pack `release-workflows.test.ts` floor passthrough test |
 | verify-metadata / summary-metadata wiring | U | publish integration test |
@@ -89,6 +90,6 @@ spec (`e2e/specs/mac.spec.ts` / `win.spec.ts` via `release-smoke.ts`),
 
 - Interactive installer UIs (mac drag, NSIS wizard) stay human-verified.
 - Windows full historical-outer migration remains a dedicated Windows-machine
-  acceptance item; the daemon bridge is unit-tested and the win spec covers
-  the legacy-executable identity variant.
+  release lane and is required by the saturation matrix in
+  `windows-standalone-acceptance.md`.
 - Linux ships no packaged auto-update (AppImage manual) by design.

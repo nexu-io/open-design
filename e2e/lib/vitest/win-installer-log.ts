@@ -9,16 +9,8 @@ const WORKING_OVERWRITE_MARKERS: InstallerLogMarker[] = [
     pattern: /existing installation found; silent install will overwrite it/,
   },
   {
-    label: 'install directory exists before removal',
-    pattern: /event=install_dir_before_remove .* exists=1/,
-  },
-  {
-    label: 'install directory removal succeeds',
-    pattern: /install dir remove exit=0/,
-  },
-  {
-    label: 'install directory is absent after removal',
-    pattern: /event=install_dir_after_remove .* exists=0/,
+    label: 'existing shortcut state is captured',
+    pattern: /install transaction captured existing=1 desktopShortcut=[01]/,
   },
   {
     label: 'base payload extraction succeeds',
@@ -29,12 +21,20 @@ const WORKING_OVERWRITE_MARKERS: InstallerLogMarker[] = [
     pattern: /payload overlay extraction exit=0/,
   },
   {
-    label: 'install directory exists after extraction',
-    pattern: /event=install_dir_after_extract .* exists=1/,
+    label: 'staging directory exists after extraction',
+    pattern: /event=install_staging_after_extract .* exists=1/,
   },
   {
-    label: 'installed executable exists after extraction',
-    pattern: /event=installed_exe_after_extract .* exists=1/,
+    label: 'staged executable exists after extraction',
+    pattern: /event=staged_exe_after_extract .* exists=1/,
+  },
+  {
+    label: 'previous install is quarantined',
+    pattern: /event=install_dir_after_quarantine .* exists=1/,
+  },
+  {
+    label: 'staged install is committed',
+    pattern: /event=install_dir_after_commit .* exists=1/,
   },
   {
     label: 'launcher runtime sync succeeds',
@@ -43,6 +43,10 @@ const WORKING_OVERWRITE_MARKERS: InstallerLogMarker[] = [
   {
     label: 'launcher runtime pointer is written',
     pattern: /event=launcher_runtime_after_write path=\S+/,
+  },
+  {
+    label: 'install transaction commits',
+    pattern: /install transaction committed/,
   },
   {
     label: 'install section completes',

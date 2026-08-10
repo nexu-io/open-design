@@ -145,10 +145,49 @@ describe("resolveWinInstallIdentity", () => {
     expect(source).toContain("older-than-bound-package");
     expect(source).toContain("[System.IO.File]::WriteAllText($CleanupPath");
     expect(source).toContain('Push "event=launcher_runtime_after_write path=${escapedRuntimePath}"');
-    expect(source.indexOf('Push "event=registry_after_write key=${registryKey} appPathsKey=${appPathsKey}"')).toBeLessThan(
-      source.indexOf("Call SyncLauncherRuntime"),
+    expect(source.indexOf("Call CommitInstallTransaction")).toBeLessThan(source.indexOf("Call SyncLauncherRuntime"));
+    expect(source.indexOf("Call SyncLauncherRuntime")).toBeLessThan(
+      source.indexOf('Push "event=registry_after_write key=${registryKey} appPathsKey=${appPathsKey}"'),
     );
-    expect(source.indexOf("Call SyncLauncherRuntime")).toBeLessThan(source.indexOf('Push "install section done"'));
+    expect(source.indexOf('Push "event=registry_after_write key=${registryKey} appPathsKey=${appPathsKey}"')).toBeLessThan(
+      source.indexOf('Push "install section done"'),
+    );
+  });
+
+  it("stages and validates a replacement before atomically switching the install directory", async () => {
+    const source = await readFile(new URL("../src/win/custom-installer.ts", import.meta.url), "utf8");
+    expect(source).toContain('StrCpy $InstallStagingDir "$INSTDIR.__od_staging"');
+    expect(source).toContain('StrCpy $InstallBackupDir "$INSTDIR.__od_backup"');
+    expect(source).toContain('IfFileExists "$InstallStagingDir\\\\resources\\\\open-design-config.json" 0 invalid_staging');
+    expect(source).toContain('Rename "$INSTDIR" "$InstallBackupDir"');
+    expect(source).toContain('Rename "$InstallStagingDir" "$INSTDIR"');
+    expect(source).toContain("Function RemoveInstallTree");
+    expect(source).toContain('rmdir /s /q "\\\\\\\\?\\\\$2"');
+    expect(source).not.toContain('RMDir /r "$InstallBackupDir"');
+    expect(source).not.toContain('RMDir /r "$InstallStagingDir"');
+    expect(source).toContain("Call RollbackInstallTransaction");
+    expect(source.indexOf('Rename "$INSTDIR" "$InstallBackupDir"')).toBeLessThan(
+      source.indexOf('Rename "$InstallStagingDir" "$INSTDIR"'),
+    );
+  });
+
+  it("preserves desktop shortcut absence on silent repair while creating one for a fresh install", async () => {
+    const source = await readFile(new URL("../src/win/custom-installer.ts", import.meta.url), "utf8");
+    expect(source).toContain("StrCpy $ExistingInstallWasPresent 0");
+    expect(source).toContain("StrCpy $DesktopShortcutWasPresent 0");
+    expect(source).toContain("\${If} $ExistingInstallWasPresent == 0");
+    expect(source).toContain("\${ElseIf} $DesktopShortcutWasPresent == 1");
+  });
+
+  it("makes the generated uninstaller stop namespace processes before changing files", async () => {
+    const source = await readFile(new URL("../src/win/custom-installer.ts", import.meta.url), "utf8");
+    const uninstallSection = source.slice(source.indexOf('Section "Uninstall"'));
+    expect(source).toContain("Function un.GuardRunningInstancesBeforeUninstall");
+    expect(source).toContain("Call un.CloseRunningInstances");
+    expect(source).toContain("uninstall aborted: running instances still detected before file changes");
+    expect(uninstallSection.indexOf("Call un.GuardRunningInstancesBeforeUninstall")).toBeLessThan(
+      uninstallSection.indexOf('Delete "$DESKTOP'),
+    );
   });
 
   it.skipIf(process.platform !== "win32")("writes cleanup metadata when installer runtime sync supersedes an older runtime", async () => {

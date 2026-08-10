@@ -111,6 +111,14 @@ const releaseBetaPlatformPublishScriptPath = join(
   "storage",
   "publish-platform.ts",
 );
+const releaseLatestPublicationScriptPath = join(
+  workspaceRoot,
+  "tools",
+  "release",
+  "src",
+  "storage",
+  "latest-publication.ts",
+);
 
 function sectionBetween(content: string, start: string, end: string): string {
   const startIndex = content.indexOf(start);
@@ -1764,6 +1772,20 @@ process.stdin.on("end", () => {
     expect(betaWinJob).toContain("uses: actions/cache/restore@v5");
     expect(betaWinJob).toContain("uses: actions/cache/save@v5");
     expect(betaWinJob).toContain("tools-pack-win-v1-beta-$env:RUNNER_OS-");
+    expect(betaWinJob).toContain("OD_UPDATE_METADATA_URL: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}/beta/latest/metadata.json");
+    expect(betaWinJob).toContain("Resolve immutable win_x64 Electron Shell");
+    expect(betaWinJob).toContain("RELEASE_SHELL_SMOKE_MATRIX: win-shell-v1");
+    expect(betaWinJob.match(/hashFiles\('\.github\/workflows\/release-beta\.yml'/gu)).toHaveLength(2);
+    expect(betaWinJob).toContain(
+      `RELEASE_STANDALONE_PROTOCOL_VERSION: "${STANDALONE_PROTOCOL_VERSION}"`,
+    );
+    expect(betaWinJob).toContain("steps.win_x64_shell_resolution.outputs.state == 'miss'");
+    expect(betaWinJob).toContain("steps.win_x64_shell_resolution.outputs.smoke_proof != 'hit'");
+    expect(betaWinJob).toContain("OD_PACKAGED_E2E_WIN_SMOKE_LANES: ${{ inputs.win_x64_smoke_mode == 'full' && steps.win_x64_shell_resolution.outputs.smoke_proof == 'hit' && 'standalone' || '' }}");
+    expect(betaWinJob).toContain("OD_PACKAGED_E2E_SHELL_SMOKE_PROOF: ${{ steps.win_x64_shell_resolution.outputs.smoke_proof }}");
+    expect(betaWinJob).toContain("Materialize legacy win_x64 migration fixture");
+    expect(betaWinJob).toContain("Register win_x64 Electron Shell full-smoke proof");
+    expect(betaWinJob).toContain("RELEASE_SHELL_SMOKE_SUMMARY_PATH: ${{ runner.temp }}\\release-report\\win_x64\\summary.json");
     expect(betaWinJob).toContain('"tools-pack", "win", "build"');
     expect(betaWinJob).toContain("tools-pack win validate-payload");
     expect(betaWinJob).toContain("pnpm exec tsx scripts/release-smoke.ts win specs/win.spec.ts");
@@ -2654,9 +2676,13 @@ process.stdin.on("end", () => {
     const workflow = await readFile(releaseBetaWorkflowPath, "utf8");
     const macJob = sectionBetween(workflow, "  build_mac_arm64:", "  build_mac_x64:");
     const winJob = sectionBetween(workflow, "  build_win_x64:", "  publish:");
-    const publishStart = workflow.indexOf("\n  publish:");
-    expect(publishStart).toBeGreaterThan(0);
-    const publishJob = workflow.slice(publishStart);
+    const publishJob = sectionBetween(workflow, "  publish:", "  public_win_x64_acceptance:");
+    const publicAcceptanceJob = sectionBetween(
+      workflow,
+      "  public_win_x64_acceptance:",
+      "  activate:",
+    );
+    const activationJob = workflow.slice(workflow.indexOf("\n  activate:"));
 
     expect(workflow).toContain("CLOSURE_MIN_SHELL_VERSION: 0.19.0-beta.4");
     expect(workflow).toContain("OPEN_DESIGN_POSTINSTALL_CONCURRENCY: 2");
@@ -2694,6 +2720,11 @@ process.stdin.on("end", () => {
     expect(macJob).toContain("RELEASE_SHELL_BUILD_JSON_PATH:");
     expect(macJob).toContain("DOGFOOD_BUILD_JSON_KEYS: archivePath,inventoryPath,manifestPath,provenancePath");
     expect(winJob).toContain("Build beta win_x64 Standalone Closure");
+    expect(winJob).toContain("Resolve immutable win_x64 Electron Shell");
+    expect(winJob).toContain('"tools-pack", "win", "identity"');
+    expect(winJob).toContain("tools-release resolve-shell-build");
+    expect(winJob).toContain("Register verified immutable win_x64 Electron Shell");
+    expect(winJob).toContain("tools-release register-shell-build");
     expect(winJob).toContain("tools-pack closure build");
     expect(winJob).toContain("--platform win32-x64");
     expect(winJob).toContain('--cache-dir "${{ runner.temp }}\\tools-pack-cache"');
@@ -2711,11 +2742,33 @@ process.stdin.on("end", () => {
     expect(publishJob).toContain('RELEASE_SHELL_REQUIRED: "true"');
     expect(workflow).toContain("Validate checkout ref shape");
     expect(workflow).toContain("full 40-character commit SHA; abbreviated SHA");
-    expect(publishJob).toContain("Observe published beta public feed");
-    expect(publishJob).toContain("continue-on-error: true");
+    expect(publishJob).toContain("RELEASE_ACTIVATE_LATEST: ${{ inputs.enable_win_x64 && 'false' || 'true' }}");
+    expect(publishJob).toContain('RELEASE_LATEST_CAS_REQUIRED: "true"');
+    expect(publishJob).toContain("RELEASE_SIGNED: ${{ !inputs.enable_win_x64 && 'true' || 'false' }}");
+    expect(publishJob).toContain("Observe directly activated beta public feed");
+    expect(publishJob).toContain("if: ${{ !inputs.enable_win_x64 }}");
+    expect(sectionBetween(
+      publishJob,
+      "      - name: Observe directly activated beta public feed",
+      "      - name: Write beta metadata summary",
+    )).not.toContain("continue-on-error");
     expect(publishJob).toContain("tools-release observe-public-feed");
     expect(publishJob).toContain("mac_arm64_closure_url:");
     expect(publishJob).toContain("win_x64_closure_url:");
+    expect(publicAcceptanceJob).toContain("runs-on: windows-latest");
+    expect(publicAcceptanceJob).toContain("tools-release prepare-public-acceptance");
+    expect(publicAcceptanceJob).toContain("tools-release issue-public-acceptance");
+    expect(publicAcceptanceJob).toContain("OD_PACKAGED_E2E_WIN_SMOKE_PROFILE: core");
+    expect(publicAcceptanceJob).toContain("OD_PACKAGED_E2E_WIN_SMOKE_LANES: shell");
+    expect(publicAcceptanceJob).toContain("OD_UPDATE_METADATA_URL: ${{ needs.publish.outputs.version_metadata_url }}");
+    expect(publicAcceptanceJob).not.toContain("OD_PACKAGED_E2E_CLOSURE_BUILD_JSON_PATH");
+    expect(publicAcceptanceJob).not.toContain("RELEASE_STORAGE_SECRET_ACCESS_KEY");
+    expect(activationJob).toContain("needs.public_win_x64_acceptance.result == 'success'");
+    expect(activationJob).toContain("tools-release activate-public-release");
+    expect(activationJob).toContain("Activate accepted immutable beta metadata with CAS");
+    expect(activationJob).toContain("Read back activated beta public feed");
+    expect(activationJob).toContain("tools-release observe-public-feed");
+    expect(activationJob).not.toContain("continue-on-error");
   });
 
   it("publishes release-betas mac_x64 payloads while preserving the zip feed", async () => {
@@ -2730,12 +2783,13 @@ process.stdin.on("end", () => {
   });
 
   it("keeps the self-hosted beta lane metadata-driven with reusable platform publish scripts", async () => {
-    const [workflow, posixBuildScript, windowsBuildScript, platformPublishScript, publishMetadataScript] = await Promise.all([
+    const [workflow, posixBuildScript, windowsBuildScript, platformPublishScript, publishMetadataScript, latestPublicationScript] = await Promise.all([
       readFile(releaseBetaSelfHostedWorkflowPath, "utf8"),
       readFile(releaseBetaPosixBuildScriptPath, "utf8"),
       readFile(releaseBetaWindowsBuildScriptPath, "utf8"),
       readFile(releaseBetaPlatformPublishScriptPath, "utf8"),
       readFile(releasePublishMetadataScriptPath, "utf8"),
+      readFile(releaseLatestPublicationScriptPath, "utf8"),
     ]);
 
     expect(workflow).toContain("enable_win_x64:");
@@ -2857,7 +2911,7 @@ process.stdin.on("end", () => {
     expect(publishMetadataScript).toContain("manifest.r2.versionPrefix.includes(`/versions/${releaseVersion}`)");
     expect(publishMetadataScript).toContain('if (assetVersionSuffix === "auto")');
     expect(publishMetadataScript).toContain('assetVersionSuffix = allReadyTargetsSigned ? ".signed" : ".unsigned";');
-    expect(publishMetadataScript).toContain("const feedVersionPrefix = manifest.r2?.artifactPrefix ?? manifest.r2?.versionPrefix;");
+    expect(latestPublicationScript).toContain("const feedVersionPrefix = platform.manifest.r2?.artifactPrefix ?? platform.manifest.r2?.versionPrefix;");
     expect(publishMetadataScript).toContain("refusing stale ${def.target} platform manifest");
     expect(publishMetadataScript).toContain("publishLatestPlatformObjects");
     expect(platformPublishScript).not.toContain("await upload(join(releaseAssetsDir, name), `${latestPrefix}/${name}`");
@@ -3106,8 +3160,8 @@ process.stdin.on("end", () => {
 
       expect(fixture.uploadedObjectKeys()).toEqual([
         "beta/versions/1.2.3-beta.4/metadata.json",
-        "beta/latest/metadata.json",
         "beta/latest/platforms/mac_arm64.json",
+        "beta/latest/metadata.json",
       ]);
     } finally {
       await fixture.close();
@@ -3196,9 +3250,9 @@ process.stdin.on("end", () => {
       expect(metadata.releaseTargets.win_x64.r2.versionPrefix).toBe("beta/versions/1.2.3-beta.4.unsigned");
       expect(fixture.uploadedObjectKeys()).toEqual([
         "beta/versions/1.2.3-beta.4.unsigned/metadata.json",
-        "beta/latest/metadata.json",
         "beta/latest/platforms/win_x64.json",
         "beta/latest/latest.yml",
+        "beta/latest/metadata.json",
       ]);
     } finally {
       await fixture.close();
@@ -3341,10 +3395,10 @@ process.stdin.on("end", () => {
       expect(outputs.win_x64_payload_url).toBe(metadata.platforms.win.artifacts?.payload?.url);
       expect(fixture.uploadedObjectKeys()).toEqual([
         "beta/versions/1.2.3-beta.4.unsigned/metadata.json",
-        "beta/latest/metadata.json",
         "beta/latest/platforms/mac_arm64.json",
         "beta/latest/platforms/win_x64.json",
         "beta/latest/latest.yml",
+        "beta/latest/metadata.json",
       ]);
     } finally {
       await fixture.close();
@@ -3415,7 +3469,11 @@ function expectWindowsUpdaterSmokeContract(workflow: string, channel: "beta" | "
     expect(workflow).toContain(`Build ${channel} win_x64 update fixture`);
     expect(workflow).toContain(`full Windows smoke requires a counted ${channel} version`);
   }
-  expect(workflow).not.toContain("OD_PACKAGED_E2E_WIN_SMOKE_PROFILE: core");
+  if (channel === "beta") {
+    expect(workflow.match(/OD_PACKAGED_E2E_WIN_SMOKE_PROFILE: core/gu)).toHaveLength(1);
+  } else {
+    expect(workflow).not.toContain("OD_PACKAGED_E2E_WIN_SMOKE_PROFILE: core");
+  }
 }
 
 function expectCountedReleaseWorkflowCallContract(workflow: string, channel: "preview" | "prerelease"): void {

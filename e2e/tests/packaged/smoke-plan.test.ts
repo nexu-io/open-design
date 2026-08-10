@@ -5,6 +5,8 @@ import {
   MAC_SHELL_PROOF_SCENARIO_IDS,
   resolvePackagedSmokeLanes,
   type PackagedSmokeDomain,
+  WIN_PACKAGED_SMOKE_SCENARIOS,
+  WIN_SHELL_PROOF_SCENARIO_IDS,
 } from '@/vitest/packaged-smoke-plan';
 
 describe('packaged smoke plan', () => {
@@ -44,5 +46,20 @@ describe('packaged smoke plan', () => {
       (scenario.domains as readonly PackagedSmokeDomain[]).includes('standalone'))).toBe(true);
     expect(scenarios.some((scenario) =>
       (scenario.domains as readonly PackagedSmokeDomain[]).includes('distribution'))).toBe(true);
+  });
+
+  it('keeps Windows installer lifecycle and migration outside Closure-only reruns', () => {
+    const scenarios = Object.values(WIN_PACKAGED_SMOKE_SCENARIOS);
+    expect(WIN_SHELL_PROOF_SCENARIO_IDS).toEqual([
+      'win-shell-lifecycle',
+      'win-shell-silent-update',
+      'win-shell-rollback',
+      'win-legacy-migration',
+    ]);
+    expect(scenarios
+      .filter((scenario) => scenario.lane === 'shell' || scenario.lane === 'migration')
+      .map((scenario) => scenario.id))
+      .toEqual(WIN_SHELL_PROOF_SCENARIO_IDS);
+    expect(scenarios.find((scenario) => scenario.id === 'win-standalone-closure')?.lane).toBe('standalone');
   });
 });

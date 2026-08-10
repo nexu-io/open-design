@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -56,6 +56,18 @@ describe("stabilizePackagedWorkingDirectory", () => {
     } finally {
       cwd.mockRestore();
     }
+  });
+});
+
+describe("packaged startup ordering", () => {
+  it("projects the sidecar namespace before entering Standalone Closure", () => {
+    const source = readFileSync(join(__dirname, "..", "src", "index.ts"), "utf8");
+    const projectEnvironment = source.indexOf("applyLaunchEnv(paths.runtimeRoot, stamp);");
+    const enterStandalone = source.indexOf("withStandaloneBootstrapEnvironment({");
+
+    expect(projectEnvironment).toBeGreaterThanOrEqual(0);
+    expect(enterStandalone).toBeGreaterThan(projectEnvironment);
+    expect(source.match(/applyLaunchEnv\(paths\.runtimeRoot, stamp\);/gu)).toHaveLength(1);
   });
 });
 

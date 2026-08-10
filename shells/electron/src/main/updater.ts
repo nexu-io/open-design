@@ -23,10 +23,16 @@ import {
 import {
   LAUNCHER_SCHEMA_VERSION,
 } from "@open-design/launcher-proto";
+import { createProcessStampArgs } from "@open-design/platform";
+import { resolveAppIpcPath } from "@open-design/sidecar";
 import {
+  APP_KEYS,
   DESKTOP_UPDATE_ACTIONS,
   DESKTOP_UPDATE_MODES,
   DESKTOP_UPDATE_STATES,
+  OPEN_DESIGN_SIDECAR_CONTRACT,
+  SIDECAR_MODES,
+  SIDECAR_SOURCES,
   type DesktopUpdateAction,
   type DesktopUpdateCacheLifecycleSummary,
   type DesktopUpdateChecksumSnapshot,
@@ -1095,6 +1101,8 @@ export function createDesktopUpdater(
   ): Promise<DeferredLaunchResult & { launchPath?: string }> {
     if (config.openDryRun) return {};
     if (config.platform !== "darwin" && config.platform !== "win32") return {};
+    const namespace = config.namespace?.trim();
+    if (!namespace) return { error: "launcher payload relaunch requires a namespace" };
     try {
       await access(launchPath);
       const launcherTarget = await lstat(launchPath);
@@ -1109,6 +1117,17 @@ export function createDesktopUpdater(
       cwd: config.runtimeBase,
       ...(delegated == null ? {} : { delegated }),
       launchPath,
+      processStampArgs: createProcessStampArgs({
+        app: APP_KEYS.DESKTOP,
+        ipc: resolveAppIpcPath({
+          app: APP_KEYS.DESKTOP,
+          contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+          namespace,
+        }),
+        mode: SIDECAR_MODES.RUNTIME,
+        namespace,
+        source: SIDECAR_SOURCES.PACKAGED,
+      }, OPEN_DESIGN_SIDECAR_CONTRACT),
       root: updateRoot,
       timeoutMs: DEFERRED_INSTALLER_TIMEOUT_MS,
     });

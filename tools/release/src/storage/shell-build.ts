@@ -134,6 +134,14 @@ function requiredShellSmokeScenarioEntries(matrix: string): Array<{ lane: "migra
       { lane: "migration", step: "mac-legacy-migration" },
     ];
   }
+  if (matrix === "win-shell-v1") {
+    return [
+      { lane: "shell", step: "win-shell-lifecycle" },
+      { lane: "shell", step: "win-shell-silent-update" },
+      { lane: "shell", step: "win-shell-rollback" },
+      { lane: "migration", step: "win-legacy-migration" },
+    ];
+  }
   throw new Error(`unsupported Shell smoke matrix: ${matrix}`);
 }
 

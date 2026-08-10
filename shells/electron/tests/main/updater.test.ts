@@ -14,9 +14,13 @@ import {
   LAUNCHER_SCHEMA_VERSION,
   resolveLauncherPaths,
 } from "@open-design/launcher-proto";
+import { readProcessStamp } from "@open-design/platform";
 import {
+  APP_KEYS,
   DESKTOP_UPDATE_CHANNELS,
   DESKTOP_UPDATE_STATES,
+  OPEN_DESIGN_SIDECAR_CONTRACT,
+  SIDECAR_MODES,
   SIDECAR_SOURCES,
 } from "@open-design/sidecar-proto";
 import type { ReleaseChannel } from "@open-design/release";
@@ -2284,6 +2288,13 @@ describe("desktop updater", () => {
         LAUNCHER_AFTER_QUIT_TIMEOUT_MS_ARG,
         "600000",
       ]));
+      expect(readProcessStamp(args, OPEN_DESIGN_SIDECAR_CONTRACT)).toEqual({
+        app: APP_KEYS.DESKTOP,
+        ipc: "\\\\.\\pipe\\open-design-release-beta-win-desktop",
+        mode: SIDECAR_MODES.RUNTIME,
+        namespace: "release-beta-win",
+        source: SIDECAR_SOURCES.PACKAGED,
+      });
     } finally {
       await fixture.close();
       rmSync(root, { force: true, recursive: true });

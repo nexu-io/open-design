@@ -109,6 +109,7 @@ function createLauncherRuntimeSyncScript(
   if (config.portable) {
     return `
 Function SyncLauncherRuntime
+  StrCpy $LauncherRuntimeSyncExitCode "0"
 FunctionEnd
 `;
   }
@@ -122,18 +123,21 @@ FunctionEnd
   return `
 Function SyncLauncherRuntime
   Push $0
+  StrCpy $LauncherRuntimeSyncExitCode "1"
   InitPluginsDir
   File "/oname=$PLUGINSDIR\\${helperFileName}" "${escapeNsisString(helperScriptPath)}"
   nsExec::ExecToLog 'powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\\${helperFileName}" -RuntimePath "${escapedRuntimePath}" -AttemptsPath "${escapedAttemptsPath}" -CleanupPath "${escapedCleanupPath}" -Channel "${escapedChannel}" -Namespace "${escapedNamespace}" -Version "\${APP_VERSION}"'
   Pop $0
+  StrCpy $LauncherRuntimeSyncExitCode $0
   Push "launcher runtime sync exit=$0"
   Call LogInstallerEvent
   \${If} $0 != "0"
     DetailPrint "launcher runtime sync failed with exit code $0"
-    Abort
+    Goto done
   \${EndIf}
   Push "event=launcher_runtime_after_write path=${escapedRuntimePath}"
   Call LogInstallerEvent
+done:
   Pop $0
 FunctionEnd
 `;
@@ -531,6 +535,12 @@ Var RemoveLocalDataState
 Var RunningInstancesOutput
 Var ExistingInstallLocation
 Var RunningInstancesInstallRoot
+Var InstallStagingDir
+Var InstallBackupDir
+Var ExistingInstallWasPresent
+Var InstallBackupWasCreated
+Var DesktopShortcutWasPresent
+Var LauncherRuntimeSyncExitCode
 Var LE
 Var LT
 Var LX
@@ -574,6 +584,20 @@ write:
   Call LogInstallerEvent
 FunctionEnd
 
+Function RemoveInstallTree
+  Exch $2
+  Push $0
+  Push $1
+  nsExec::ExecToStack 'cmd.exe /d /s /c if exist "$2" rmdir /s /q "\\\\?\\$2"'
+  Pop $0
+  Pop $1
+  Push "install transaction remove tree exit=$0 target=$2 output=$1"
+  Call LogInstallerEvent
+  Pop $1
+  Pop $0
+  Pop $2
+FunctionEnd
+
 ${createLauncherRuntimeSyncScript(
   config,
   launcher.paths.runtimePath,
@@ -610,9 +634,12 @@ write:
 FunctionEnd
 
 Function un.onInit
+  SetShellVarContext current
   StrCpy $RemoveDesktopShortcutState "\${BST_CHECKED}"
   StrCpy $RemoveCacheDataState "\${BST_CHECKED}"
   StrCpy $RemoveLocalDataState 0
+  StrCpy $ExistingInstallLocation "$INSTDIR"
+  StrCpy $RunningInstancesInstallRoot "$INSTDIR"
 FunctionEnd
 
 Function DetectRunningInstances
@@ -700,6 +727,77 @@ done:
   Pop $2
   Pop $1
   Pop $0
+FunctionEnd
+
+Function un.DetectRunningInstances
+  Push $0
+  Push $1
+  InitPluginsDir
+  File "/oname=$PLUGINSDIR\\running-instances.ps1" "\${RUNNING_INSTANCES_PS1}"
+
+  nsExec::ExecToStack 'pwsh.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\\running-instances.ps1" detect "$RunningInstancesInstallRoot" "$ExistingInstallLocation"'
+  Pop $0
+  Pop $1
+  \${If} $0 == "0"
+    StrCpy $RunningInstancesOutput $1
+    Goto done
+  \${EndIf}
+
+  nsExec::ExecToStack 'powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\\running-instances.ps1" detect "$RunningInstancesInstallRoot" "$ExistingInstallLocation"'
+  Pop $0
+  Pop $1
+  \${If} $0 == "0"
+    StrCpy $RunningInstancesOutput $1
+    Goto done
+  \${EndIf}
+
+  StrCpy $RunningInstancesOutput "__detection_failed__"
+  Push "uninstall running instance detection failed: last exit=$0 output=$1"
+  Call un.LogInstallerEvent
+done:
+  Pop $1
+  Pop $0
+FunctionEnd
+
+Function un.CloseRunningInstances
+  Push $0
+  Push $1
+  InitPluginsDir
+  File "/oname=$PLUGINSDIR\\running-instances.ps1" "\${RUNNING_INSTANCES_PS1}"
+
+  nsExec::ExecToStack 'pwsh.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\\running-instances.ps1" close "$RunningInstancesInstallRoot" "$ExistingInstallLocation"'
+  Pop $0
+  Pop $1
+  \${If} $0 == "0"
+    Push "uninstall running instances close via pwsh.exe exit=$0 output=$1"
+    Call un.LogInstallerEvent
+    Goto done
+  \${EndIf}
+
+  nsExec::ExecToStack 'powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\\running-instances.ps1" close "$RunningInstancesInstallRoot" "$ExistingInstallLocation"'
+  Pop $0
+  Pop $1
+  Push "uninstall running instances close via powershell.exe exit=$0 output=$1"
+  Call un.LogInstallerEvent
+done:
+  Pop $1
+  Pop $0
+FunctionEnd
+
+Function un.GuardRunningInstancesBeforeUninstall
+  Call un.DetectRunningInstances
+  \${If} $RunningInstancesOutput == ""
+    Return
+  \${EndIf}
+  Push "running instances detected before uninstall: $RunningInstancesOutput"
+  Call un.LogInstallerEvent
+  Call un.CloseRunningInstances
+  Call un.DetectRunningInstances
+  \${If} $RunningInstancesOutput != ""
+    Push "uninstall aborted: running instances still detected before file changes: $RunningInstancesOutput"
+    Call un.LogInstallerEvent
+    Abort "$(RunningInstancesCloseFailed)"
+  \${EndIf}
 FunctionEnd
 
 Function .onInit
@@ -830,15 +928,97 @@ Function CreateDesktopShortcut
   !insertmacro LOG_PATH_STATE "desktop_shortcut_after_create" "$DESKTOP\\${shortcutName}"
 FunctionEnd
 
-Function RemoveInstallDir
-  !insertmacro LOG_PATH_STATE "install_dir_before_remove" "$INSTDIR"
-  Push $0
-  nsExec::ExecToLog 'cmd.exe /d /s /c if exist "$INSTDIR" rmdir /s /q "\\\\?\\$INSTDIR"'
-  Pop $0
-  Push "install dir remove exit=$0"
+Function InitializeInstallTransaction
+  StrCpy $InstallStagingDir "$INSTDIR.__od_staging"
+  StrCpy $InstallBackupDir "$INSTDIR.__od_backup"
+  StrCpy $InstallBackupWasCreated 0
+FunctionEnd
+
+Function RecoverInterruptedInstallTransaction
+  IfFileExists "$InstallBackupDir\\${exeName}" 0 clear_stale_backup
+  Push "install transaction recovery start backup=$InstallBackupDir"
   Call LogInstallerEvent
-  Pop $0
-  !insertmacro LOG_PATH_STATE "install_dir_after_remove" "$INSTDIR"
+  Push "$INSTDIR"
+  Call RemoveInstallTree
+  ClearErrors
+  Rename "$InstallBackupDir" "$INSTDIR"
+  IfErrors recovery_failed recovery_done
+recovery_failed:
+  Push "install transaction recovery failed backup=$InstallBackupDir"
+  Call LogInstallerEvent
+  Abort
+recovery_done:
+  Push "install transaction recovery restored previous install"
+  Call LogInstallerEvent
+  Goto clear_staging
+clear_stale_backup:
+  Push "$InstallBackupDir"
+  Call RemoveInstallTree
+clear_staging:
+  Push "$InstallStagingDir"
+  Call RemoveInstallTree
+FunctionEnd
+
+Function CaptureInstallState
+  StrCpy $ExistingInstallWasPresent 0
+  StrCpy $DesktopShortcutWasPresent 0
+  IfFileExists "$INSTDIR\\${exeName}" 0 capture_shortcut
+  StrCpy $ExistingInstallWasPresent 1
+capture_shortcut:
+  IfFileExists "$DESKTOP\\${shortcutName}" 0 done
+  StrCpy $DesktopShortcutWasPresent 1
+done:
+  Push "install transaction captured existing=$ExistingInstallWasPresent desktopShortcut=$DesktopShortcutWasPresent"
+  Call LogInstallerEvent
+FunctionEnd
+
+Function RollbackInstallTransaction
+  Push "install transaction rollback start"
+  Call LogInstallerEvent
+  Push "$INSTDIR"
+  Call RemoveInstallTree
+  \${If} $InstallBackupWasCreated == 1
+    ClearErrors
+    Rename "$InstallBackupDir" "$INSTDIR"
+    IfErrors rollback_failed rollback_done
+  \${EndIf}
+  Goto rollback_done
+rollback_failed:
+  Push "install transaction rollback failed backup=$InstallBackupDir"
+  Call LogInstallerEvent
+  Goto cleanup_staging
+rollback_done:
+  Push "install transaction rollback restored previous install"
+  Call LogInstallerEvent
+cleanup_staging:
+  Push "$InstallStagingDir"
+  Call RemoveInstallTree
+FunctionEnd
+
+Function CommitInstallTransaction
+  Push "$InstallBackupDir"
+  Call RemoveInstallTree
+  IfFileExists "$INSTDIR\*.*" 0 promote_staging
+  ClearErrors
+  Rename "$INSTDIR" "$InstallBackupDir"
+  IfErrors quarantine_failed 0
+  StrCpy $InstallBackupWasCreated 1
+  !insertmacro LOG_PATH_STATE "install_dir_after_quarantine" "$InstallBackupDir"
+promote_staging:
+  ClearErrors
+  Rename "$InstallStagingDir" "$INSTDIR"
+  IfErrors promote_failed 0
+  !insertmacro LOG_PATH_STATE "install_dir_after_commit" "$INSTDIR"
+  Return
+quarantine_failed:
+  Push "install transaction quarantine failed"
+  Call LogInstallerEvent
+  Abort
+promote_failed:
+  Push "install transaction promote failed"
+  Call LogInstallerEvent
+  Call RollbackInstallTransaction
+  Abort
 FunctionEnd
 
 Function un.UninstallOptionsPage
@@ -938,13 +1118,12 @@ Section "Install"
   Push "install section start"
   Call LogInstallerEvent
   Call GuardRunningInstancesBeforeInstall
+  Call InitializeInstallTransaction
+  Call RecoverInterruptedInstallTransaction
+  Call CaptureInstallState
   !insertmacro LOG_PATH_STATE "install_dir_before_install" "$INSTDIR"
   !insertmacro LOG_PATH_STATE "installed_exe_before_install" "$INSTDIR\\${exeName}"
 
-  IfFileExists "$INSTDIR\\${exeName}" 0 prepare_install_dir
-  Call RemoveInstallDir
-
-prepare_install_dir:
   InitPluginsDir
   SetOutPath "$PLUGINSDIR"
   File "/oname=$PLUGINSDIR\\payload-base.7z" "\${PAYLOAD_BASE_7Z}"
@@ -952,38 +1131,64 @@ prepare_install_dir:
   File "/oname=$PLUGINSDIR\\7z.exe" "\${SEVEN_Z_EXE}"
   File "/oname=$PLUGINSDIR\\7z.dll" "\${SEVEN_Z_DLL}"
 
-  CreateDirectory "$INSTDIR"
+  CreateDirectory "$InstallStagingDir"
   Push "payload base extraction start"
   Call LogInstallerEvent
-  nsExec::ExecToLog '"$PLUGINSDIR\\7z.exe" x -y "$PLUGINSDIR\\payload-base.7z" "-o$INSTDIR"'
+  nsExec::ExecToLog '"$PLUGINSDIR\\7z.exe" x -y "$PLUGINSDIR\\payload-base.7z" "-o$InstallStagingDir"'
   Pop $0
   Push "payload base extraction exit=$0"
   Call LogInstallerEvent
   \${If} $0 != "0"
     DetailPrint "base payload extraction failed with exit code $0"
+    Push "$InstallStagingDir"
+    Call RemoveInstallTree
     Abort
   \${EndIf}
 
   Push "payload overlay extraction start"
   Call LogInstallerEvent
-  nsExec::ExecToLog '"$PLUGINSDIR\\7z.exe" x -y "$PLUGINSDIR\\payload-overlay.7z" "-o$INSTDIR"'
+  nsExec::ExecToLog '"$PLUGINSDIR\\7z.exe" x -y "$PLUGINSDIR\\payload-overlay.7z" "-o$InstallStagingDir"'
   Pop $0
   Push "payload overlay extraction exit=$0"
   Call LogInstallerEvent
   \${If} $0 != "0"
     DetailPrint "overlay payload extraction failed with exit code $0"
+    Push "$InstallStagingDir"
+    Call RemoveInstallTree
     Abort
   \${EndIf}
 
-  !insertmacro LOG_PATH_STATE "install_dir_after_extract" "$INSTDIR"
-  !insertmacro LOG_PATH_STATE "installed_exe_after_extract" "$INSTDIR\\${exeName}"
-  WriteUninstaller "$INSTDIR\\${uninstallerName}"
-  !insertmacro LOG_PATH_STATE "uninstaller_after_write" "$INSTDIR\\${uninstallerName}"
+  !insertmacro LOG_PATH_STATE "install_staging_after_extract" "$InstallStagingDir"
+  !insertmacro LOG_PATH_STATE "staged_exe_after_extract" "$InstallStagingDir\\${exeName}"
+  IfFileExists "$InstallStagingDir\\${exeName}" 0 invalid_staging
+  IfFileExists "$InstallStagingDir\\resources\\app\\package.json" 0 invalid_staging
+  IfFileExists "$InstallStagingDir\\resources\\open-design-config.json" 0 invalid_staging
+  WriteUninstaller "$InstallStagingDir\\${uninstallerName}"
+  !insertmacro LOG_PATH_STATE "staged_uninstaller_after_write" "$InstallStagingDir\\${uninstallerName}"
+  Call CommitInstallTransaction
+  Call SyncLauncherRuntime
+  \${If} $LauncherRuntimeSyncExitCode != "0"
+    Call RollbackInstallTransaction
+    Abort
+  \${EndIf}
+  Push "$InstallBackupDir"
+  Call RemoveInstallTree
+  IfFileExists "$InstallBackupDir\\*.*" transaction_cleanup_failed transaction_cleanup_done
+transaction_cleanup_failed:
+  Push "install transaction cleanup failed backup=$InstallBackupDir"
+  Call LogInstallerEvent
+  Call RollbackInstallTransaction
+  Abort
+transaction_cleanup_done:
+  Push "install transaction committed"
+  Call LogInstallerEvent
   SetOutPath "$INSTDIR"
   IfSilent 0 skip_silent_desktop_shortcut
-  !insertmacro LOG_PATH_STATE "desktop_shortcut_before_create" "$DESKTOP\\${shortcutName}"
-  CreateShortCut "$DESKTOP\\${shortcutName}" "$INSTDIR\\${exeName}" "" "$INSTDIR\\${exeName}" 0
-  !insertmacro LOG_PATH_STATE "desktop_shortcut_after_create" "$DESKTOP\\${shortcutName}"
+  \${If} $ExistingInstallWasPresent == 0
+    Call CreateDesktopShortcut
+  \${ElseIf} $DesktopShortcutWasPresent == 1
+    Call CreateDesktopShortcut
+  \${EndIf}
 skip_silent_desktop_shortcut:
   !insertmacro LOG_PATH_STATE "start_menu_shortcut_before_create" "$SMPROGRAMS\\${shortcutName}"
   CreateShortCut "$SMPROGRAMS\\${shortcutName}" "$INSTDIR\\${exeName}" "" "$INSTDIR\\${exeName}" 0
@@ -1001,15 +1206,23 @@ skip_silent_desktop_shortcut:
   WriteRegStr HKCU "${inviteProtocolKey}\\shell\\open\\command" "" ${inviteProtocolCommand}
   Push "event=registry_after_write key=${registryKey} appPathsKey=${appPathsKey}"
   Call LogInstallerEvent
-  Call SyncLauncherRuntime
   Push "install section done"
   Call LogInstallerEvent
+  Goto install_done
+invalid_staging:
+  Push "install transaction staged payload validation failed"
+  Call LogInstallerEvent
+  Push "$InstallStagingDir"
+  Call RemoveInstallTree
+  Abort
+install_done:
 SectionEnd
 
 Section "Uninstall"
   SetShellVarContext current
   Push "uninstall section start"
   Call un.LogInstallerEvent
+  Call un.GuardRunningInstancesBeforeUninstall
   IfSilent delete_desktop_shortcut check_desktop_shortcut_state
 check_desktop_shortcut_state:
   \${If} $RemoveDesktopShortcutState == \${BST_CHECKED}

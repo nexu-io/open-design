@@ -200,20 +200,32 @@ export async function inspectExistingDesktopForLauncher(
     return { action: "continue", reason: "not-running" };
   }
 
-  const staleSidecars: AppKey[] = [];
-  for (const app of [APP_KEYS.DAEMON, APP_KEYS.WEB]) {
-    const sidecarIpcPath = resolveAppIpcPath({
-      app,
-      contract: OPEN_DESIGN_SIDECAR_CONTRACT,
-      namespace,
-    });
-    const sidecarStatus = await requestIpc<{ url?: unknown }>(
-      sidecarIpcPath,
-      { type: SIDECAR_MESSAGES.STATUS },
-      { timeoutMs: 350 },
-    ).catch(() => null);
-    if (typeof sidecarStatus?.url !== "string" || sidecarStatus.url.length === 0) {
-      staleSidecars.push(app);
+  const staleSidecars: Array<AppKey | "standalone"> = [];
+  if (status.standalone != null || status.standaloneStatusError != null) {
+    // The standalone Closure owns daemon/web behind generation-bound control
+    // endpoints. Their historical namespace pipes are deliberately absent, so
+    // probing those paths would classify every healthy standalone desktop as
+    // stale and kill it when a stable outer proxies an opendesign:// launch.
+    // The desktop's attached standalone handle is the authoritative aggregate
+    // readiness signal for this architecture.
+    if (status.standalone?.state !== "running") staleSidecars.push("standalone");
+  } else {
+    // Backward compatibility for historical embedded Shells that do not expose
+    // the standalone status field and still own fixed daemon/web sidecars.
+    for (const app of [APP_KEYS.DAEMON, APP_KEYS.WEB]) {
+      const sidecarIpcPath = resolveAppIpcPath({
+        app,
+        contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+        namespace,
+      });
+      const sidecarStatus = await requestIpc<{ url?: unknown }>(
+        sidecarIpcPath,
+        { type: SIDECAR_MESSAGES.STATUS },
+        { timeoutMs: 350 },
+      ).catch(() => null);
+      if (typeof sidecarStatus?.url !== "string" || sidecarStatus.url.length === 0) {
+        staleSidecars.push(app);
+      }
     }
   }
 

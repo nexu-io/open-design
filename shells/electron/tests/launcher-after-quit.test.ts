@@ -228,6 +228,82 @@ describe("inspectExistingDesktopForLauncher", () => {
     }
   });
 
+  it("focuses a healthy standalone desktop without probing retired daemon/web pipes", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-launcher-inspect-standalone-focus-"));
+    const requests: Array<{ ipcPath: string; message: unknown }> = [];
+    try {
+      const paths = fakePaths(root);
+
+      const result = await inspectExistingDesktopForLauncher("release-beta-win", {
+        deeplinkUrl: "opendesign://workspace/invite/continue?nonce=standalone-hot",
+        incomingVersion: "0.19.0-beta.4",
+        paths,
+        requestIpc: (async (ipcPath: string, message: unknown) => {
+          requests.push({ ipcPath, message });
+          if ((message as { type?: string }).type === SIDECAR_MESSAGES.STATUS) {
+            return {
+              pid: 1234,
+              standalone: { state: "running" },
+              state: "running",
+              update: { currentVersion: "0.19.0-beta.4" },
+              updatedAt: new Date().toISOString(),
+              windowVisible: true,
+            };
+          }
+          return { accepted: true };
+        }) as typeof import("@open-design/sidecar").requestJsonIpc,
+      });
+
+      expect(result).toEqual({ action: "exit", reason: "existing-focused" });
+      expect(requests).toHaveLength(2);
+      expect(requests.every(({ ipcPath }) => ipcPath.includes("desktop"))).toBe(true);
+      expect(requests.map(({ message }) => message)).toEqual([
+        { type: SIDECAR_MESSAGES.STATUS },
+        {
+          input: { deeplinkUrl: "opendesign://workspace/invite/continue?nonce=standalone-hot" },
+          type: SIDECAR_MESSAGES.SHOW,
+        },
+      ]);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("restarts a desktop whose attached standalone runtime is no longer running", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-launcher-inspect-standalone-stale-"));
+    const requests: unknown[] = [];
+    try {
+      const paths = fakePaths(root);
+
+      const result = await inspectExistingDesktopForLauncher("release-beta-win", {
+        paths,
+        requestIpc: (async (_ipcPath: string, message: unknown) => {
+          requests.push(message);
+          if ((message as { type?: string }).type === SIDECAR_MESSAGES.STATUS) {
+            return {
+              pid: 1234,
+              standalone: { state: "failed" },
+              state: "running",
+              updatedAt: new Date().toISOString(),
+            };
+          }
+          return { accepted: true };
+        }) as typeof import("@open-design/sidecar").requestJsonIpc,
+        waitForExit: (async (pid: number) => pid === 1234) as typeof import("@open-design/platform").waitForProcessExit,
+      });
+
+      expect(result).toEqual({ action: "continue", reason: "stale-sidecar" });
+      expect(requests).toEqual([
+        { type: SIDECAR_MESSAGES.STATUS },
+        { type: SIDECAR_MESSAGES.SHUTDOWN },
+      ]);
+      const log = await readFile(join(root, "logs", "launcher", "after-quit.log"), "utf8");
+      expect(log).toContain("action=restart reason=stale-sidecar apps=standalone pid=1234");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
   it("replaces a healthy standalone owner before opening the desktop window", async () => {
     const root = await mkdtemp(join(tmpdir(), "od-launcher-inspect-standalone-"));
     const requests: unknown[] = [];

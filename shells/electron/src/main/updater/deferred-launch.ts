@@ -46,6 +46,8 @@ export type DeferredAppLaunchInput = {
    */
   delegated?: { generation: number; version: string };
   launchPath: string;
+  /** Process-ownership stamp inherited by tools-pack/native lifecycle guards. */
+  processStampArgs: readonly string[];
   root: string;
   timeoutMs: number;
 };
@@ -275,6 +277,7 @@ export async function launchPayloadAppAfterQuit(
       [
         ...buildLauncherAfterQuitArgs({ targetPid: input.appPid, timeoutMs: input.timeoutMs }),
         ...(input.delegated == null ? [] : buildLauncherDelegatedArgs(input.delegated)),
+        ...input.processStampArgs,
       ],
       { cwd: input.cwd, detached: true, stdio: "ignore", windowsHide: true },
     );

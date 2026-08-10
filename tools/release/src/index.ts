@@ -126,6 +126,24 @@ cli
   });
 
 cli
+  .command("prepare-public-acceptance", "Download and bind public Windows release artifacts for smoke")
+  .action(async () => {
+    await import("./storage/prepare-public-acceptance.ts");
+  });
+
+cli
+  .command("issue-public-acceptance", "Issue a digest-bound credential for a successful public Windows smoke")
+  .action(async () => {
+    await import("./storage/issue-public-acceptance.ts");
+  });
+
+cli
+  .command("activate-public-release", "Activate an accepted public release with a latest metadata CAS")
+  .action(async () => {
+    await import("./storage/activate-public-release.ts");
+  });
+
+cli
   .command("summary-metadata", "Write a release metadata summary")
   .action(async () => {
     await import("./storage/summary-metadata.ts");

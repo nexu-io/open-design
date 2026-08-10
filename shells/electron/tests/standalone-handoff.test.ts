@@ -1,3 +1,5 @@
+import { pathToFileURL } from "node:url";
+
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -105,7 +107,7 @@ describe("Electron Shell Standalone handoff", () => {
     ]);
 
     expect(importBootloader).toHaveBeenCalledOnce();
-    expect(importBootloader).toHaveBeenCalledWith("file:///open-design/standalone/bootloader.mjs");
+    expect(importBootloader).toHaveBeenCalledWith(pathToFileURL(binding().bootloaderPath).href);
     expect(handoff).toHaveBeenCalledOnce();
     expect(first).toBe(second);
   });

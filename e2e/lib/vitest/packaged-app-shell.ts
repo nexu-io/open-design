@@ -90,8 +90,9 @@ export function asPackagedAppShellSnapshot(value: unknown): PackagedAppShellSnap
 /**
  * A surface the packaged app can legitimately come to rest on.
  *
- * `home` is the signed-in/seeded main shell. `onboarding-landing` is the cloud
- * sign-in landing a first run stops at.
+ * `home` is the signed-in main shell. `onboarding-landing` is the cloud
+ * identity gate shown both on a genuine first run and when a previously
+ * completed user is definitively signed out.
  */
 export type PackagedAppShellState = 'home' | 'onboarding-landing';
 
@@ -358,9 +359,9 @@ export type PackagedAppShellPolicyInput = {
  * gate, not evidence that onboarding state was lost. A genuine first run may
  * stop on the same surface after the daemon explicitly reports `false`.
  *
- * `coreProfile` still narrows it: the full profile goes on to drive the entry
- * rail, which `clickUpdaterRailExpression` refuses while onboarding is up, so
- * it needs home either way.
+ * `coreProfile` only narrows a genuinely fresh, unseeded launch. Full release
+ * acceptance controls the Shell updater through the Shell IPC plane, so it is
+ * intentionally independent of the Closure route and Cloud login state.
  */
 export function packagedAppShellPolicy(
   input: PackagedAppShellPolicyInput,

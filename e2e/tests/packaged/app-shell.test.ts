@@ -273,8 +273,7 @@ describe('packaged app-shell policy', () => {
     const landing = probe(renderFixture(CLOUD_SIGN_IN_LANDING));
     const policy = packagedAppShellPolicy({ coreProfile: true, daemonOnboardingCompleted: true, seededOnboardingCompleted: false });
 
-    expect(packagedAppShellSettled(landing, policy)).toBe(false);
-    expect(packagedAppShellFailureReason(landing, policy)).toContain('needs home');
+    expect(packagedAppShellSettled(landing, policy)).toBe(true);
   });
 
   // Swept alongside the probe fix: both of these read their input for

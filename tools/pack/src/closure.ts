@@ -444,6 +444,7 @@ export default handoff;
 
 export function standaloneBodySource(): string {
   return `import { existsSync } from "node:fs";
+import { mkdir, realpath, symlink, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -451,8 +452,42 @@ import { startSidecarStandalone } from "@open-design/standalone";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 
-export function resolveOpenDesignClosureLayout() {
-  const standaloneRoot = join(root, "web", "standalone");
+function sameWindowsPath(left, right) {
+  const normalize = (value) => value.replaceAll("/", "\\\\").replace(/[\\\\]+$/, "").toLowerCase();
+  return normalize(left) === normalize(right);
+}
+
+/**
+ * Node's Windows chdir still rejects paths beyond MAX_PATH even when file I/O
+ * and the Electron manifest are long-path aware. Enter the verified Closure
+ * through a generation-bound junction under the namespace runtime root so the
+ * Next standalone server and native module resolution stay below that limit.
+ */
+export async function resolveOpenDesignClosureRuntimeRoot(request) {
+  if (process.platform !== "win32") return root;
+  const scope = request.handoff.scope;
+  const digest = request.handoff.descriptor.standalone.digest.slice("sha256:".length, "sha256:".length + 16);
+  const aliasParent = join(request.paths.runtimeRoot, "closure-aliases");
+  const aliasRoot = join(aliasParent, [scope.channel, "g" + String(scope.generation), digest].join("-"));
+  await mkdir(aliasParent, { recursive: true });
+  const expectedRoot = await realpath(root);
+  const currentRoot = await realpath(aliasRoot).catch(() => null);
+  if (currentRoot != null && sameWindowsPath(currentRoot, expectedRoot)) return aliasRoot;
+  if (currentRoot != null) await unlink(aliasRoot);
+  await symlink(expectedRoot, aliasRoot, "junction").catch(async (error) => {
+    const racedRoot = await realpath(aliasRoot).catch(() => null);
+    if (racedRoot != null && sameWindowsPath(racedRoot, expectedRoot)) return;
+    throw error;
+  });
+  const linkedRoot = await realpath(aliasRoot);
+  if (!sameWindowsPath(linkedRoot, expectedRoot)) {
+    throw new Error("Closure runtime alias does not resolve to the selected generation");
+  }
+  return aliasRoot;
+}
+
+export function resolveOpenDesignClosureLayout(runtimeRoot = root) {
+  const standaloneRoot = join(runtimeRoot, "web", "standalone");
   const serverCandidates = [
     join(standaloneRoot, "apps", "web", "server.js"),
     join(standaloneRoot, "server.js"),
@@ -460,19 +495,24 @@ export function resolveOpenDesignClosureLayout() {
   const webServerEntry = serverCandidates.find((candidate) => existsSync(candidate));
   if (webServerEntry == null) throw new Error("Closure Web standalone entry is missing");
   return Object.freeze({
-    daemonCliEntry: join(root, "daemon", "daemon-cli.mjs"),
-    daemonSidecarEntry: join(root, "daemon", "daemon-sidecar.mjs"),
-    daemonStandaloneSidecarEntry: join(root, "daemon", "daemon-standalone-sidecar.mjs"),
-    resourceRoot: join(root, "resources", "open-design"),
+    daemonCliEntry: join(runtimeRoot, "daemon", "daemon-cli.mjs"),
+    daemonSidecarEntry: join(runtimeRoot, "daemon", "daemon-sidecar.mjs"),
+    daemonStandaloneSidecarEntry: join(runtimeRoot, "daemon", "daemon-standalone-sidecar.mjs"),
+    resourceRoot: join(runtimeRoot, "resources", "open-design"),
     webServerEntry,
-    webSidecarEntry: join(root, "web", "web-sidecar.mjs"),
-    webStandaloneSidecarEntry: join(root, "web", "web-standalone-sidecar.mjs"),
+    webSidecarEntry: join(runtimeRoot, "web", "web-sidecar.mjs"),
+    webStandaloneSidecarEntry: join(runtimeRoot, "web", "web-standalone-sidecar.mjs"),
     webStandaloneRoot: standaloneRoot,
   });
 }
 
 export async function startStandaloneBody(request) {
-  const layout = resolveOpenDesignClosureLayout();
+  const layout = resolveOpenDesignClosureLayout(await resolveOpenDesignClosureRuntimeRoot(request));
+  // Windows can spend more than the control plane's generic five-second
+  // default loading a freshly materialized Electron-as-Node sidecar while
+  // Defender scans its Closure tree. Keep readiness event-driven, but give the
+  // child a bounded platform allowance before declaring it unavailable.
+  const sidecarReadyTimeoutMs = process.platform === "win32" ? 120_000 : undefined;
   const childEnv = {
     ...process.env,
     OD_DAEMON_CLI_PATH: layout.daemonCliEntry,
@@ -486,6 +526,7 @@ export async function startStandaloneBody(request) {
       env: childEnv,
       executable: process.execPath,
       output: "inherit",
+      readyTimeoutMs: sidecarReadyTimeoutMs,
     },
     web: {
       args: [layout.webStandaloneSidecarEntry],
@@ -496,6 +537,7 @@ export async function startStandaloneBody(request) {
       },
       executable: process.execPath,
       output: "inherit",
+      readyTimeoutMs: sidecarReadyTimeoutMs,
     },
   });
 }

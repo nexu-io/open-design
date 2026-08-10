@@ -60,7 +60,7 @@ vi.mock("../src/win/registry.js", async () => {
   };
 });
 
-const { diagnosePackedWinIpc, inspectPackedWinApp, installPackedWinApp, stopPackedWinApp } = await import(
+const { diagnosePackedWinIpc, inspectPackedWinApp, installPackedWinApp, stopPackedWinApp, uninstallPackedWinApp } = await import(
   "../src/win/lifecycle.js"
 );
 const { resolveWinPaths } = await import("../src/win/paths.js");
@@ -165,6 +165,51 @@ describe("installPackedWinApp", () => {
 
       expect(result.installDir).toBe(paths.installDir);
       expect(result.lifecycleTimings.map(({ step }) => step)).toContain("ensure install directory");
+      expect(invokeNsis).toHaveBeenCalledOnce();
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+});
+
+describe("uninstallPackedWinApp", () => {
+  it("waits for the NSIS self-copy to finish deleting shortcuts", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-win-lifecycle-"));
+    const config = createConfig(root);
+    const paths = resolveWinPaths(config);
+
+    try {
+      await Promise.all([
+        mkdir(dirname(paths.uninstallerPath), { recursive: true }),
+        mkdir(dirname(paths.startMenuShortcutPath), { recursive: true }),
+        mkdir(dirname(paths.userDesktopShortcutPath), { recursive: true }),
+      ]);
+      await Promise.all([
+        writeFile(paths.uninstallerPath, "", "utf8"),
+        writeFile(paths.startMenuShortcutPath, "", "utf8"),
+        writeFile(paths.userDesktopShortcutPath, "", "utf8"),
+      ]);
+      requestJsonIpc.mockReset();
+      requestJsonIpc.mockRejectedValue(new Error("not running"));
+      listProcessSnapshots.mockReset();
+      listProcessSnapshots.mockResolvedValue([]);
+      queryWinRegistryEntries.mockReset();
+      queryWinRegistryEntries.mockResolvedValue([]);
+      invokeNsis.mockReset();
+      invokeNsis.mockImplementation(async () => {
+        setTimeout(() => {
+          void Promise.all([
+            rm(paths.startMenuShortcutPath, { force: true }),
+            rm(paths.userDesktopShortcutPath, { force: true }),
+          ]);
+        }, 25);
+      });
+
+      const result = await uninstallPackedWinApp(config);
+
+      expect(result.lifecycleTimings.map(({ step }) => step)).toContain("wait for native uninstall settlement");
+      expect(result.residueObservation.startMenuShortcutExists).toBe(false);
+      expect(result.residueObservation.userDesktopShortcutExists).toBe(false);
       expect(invokeNsis).toHaveBeenCalledOnce();
     } finally {
       await rm(root, { force: true, recursive: true });

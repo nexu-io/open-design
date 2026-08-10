@@ -603,6 +603,7 @@ export async function runElectronBuilder(
       webStandaloneHookAuditPath: (await pathExists(paths.webStandaloneHookAuditPath)) ? paths.webStandaloneHookAuditPath : null,
     });
   });
+  const packagedConfig = await hashPath(paths.packagedConfigPath);
   if (shouldBuildWinNsisInstaller(config.to) || shouldBuildWinPortableZip(config.to)) {
     const signingCacheKey = resolveWinSigningCacheKey(config);
     const nsisInstallerImplementation = shouldBuildWinNsisInstaller(config.to)
@@ -665,6 +666,7 @@ export async function runElectronBuilder(
         archiveCacheVersion: WIN_ARCHIVE_CACHE_VERSION,
         key,
         namespace: config.namespace,
+        packagedConfig,
         packagedVersion,
         signing: signingCacheKey,
         target: "nsis-payload-overlay",

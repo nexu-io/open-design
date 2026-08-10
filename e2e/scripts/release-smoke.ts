@@ -9,6 +9,7 @@ import {
   MAC_PACKAGED_SMOKE_SCENARIOS,
   resolvePackagedSmokeLanes,
   type PackagedSmokeScenario,
+  WIN_PACKAGED_SMOKE_SCENARIOS,
 } from '../lib/vitest/packaged-smoke-plan.ts';
 import { resolvePackagedSmokeProfile } from '../lib/vitest/packaged-smoke-profile.ts';
 
@@ -31,9 +32,12 @@ async function main(): Promise<void> {
       ? process.env.OD_PACKAGED_E2E_MAC_SMOKE_PROFILE
       : process.env.OD_PACKAGED_E2E_WIN_SMOKE_PROFILE,
   );
-  const selectedLanes = platform === 'mac'
-    ? resolvePackagedSmokeLanes(smokeProfile, process.env.OD_PACKAGED_E2E_MAC_SMOKE_LANES)
-    : [];
+  const selectedLanes = resolvePackagedSmokeLanes(
+    smokeProfile,
+    platform === 'mac'
+      ? process.env.OD_PACKAGED_E2E_MAC_SMOKE_LANES
+      : process.env.OD_PACKAGED_E2E_WIN_SMOKE_LANES,
+  );
 
   process.env.OD_PACKAGED_E2E_REPORT_DIR = report.root;
 
@@ -167,9 +171,11 @@ async function resolveSmokeSummary(input: {
   shellProof: string | null;
   vitestResultPath: string;
 }): Promise<Record<string, unknown>> {
-  const scenarios = input.platform === 'mac'
-    ? Object.values(MAC_PACKAGED_SMOKE_SCENARIOS)
-    : [];
+  const scenarios = Object.values(
+    input.platform === 'mac'
+      ? MAC_PACKAGED_SMOKE_SCENARIOS
+      : WIN_PACKAGED_SMOKE_SCENARIOS,
+  );
   const byTitle = new Map<string, PackagedSmokeScenario>(
     scenarios.map((scenario) => [scenario.title, scenario]),
   );
@@ -203,7 +209,7 @@ async function resolveSmokeSummary(input: {
       shellProof: input.shellProof,
     },
     schemaVersion: 1,
-    ...(input.platform === 'mac' ? { timings } : {}),
+    timings,
   };
 }
 

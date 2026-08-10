@@ -97,6 +97,36 @@ describe("immutable Shell build storage", () => {
     }, plan, "beta")).toThrow(/identity/);
   });
 
+  it("binds the Windows Shell proof to lifecycle, update, rollback, and migration", () => {
+    const windowsPlan = { ...plan, target: "win32-x64" as const };
+    const proof = validateShellSmokeProofRecord({
+      acceptanceDigest,
+      channel: "beta",
+      createdAt: "2026-08-10T00:00:00.000Z",
+      matrix: "win-shell-v1",
+      profileDigest: windowsPlan.profileDigest,
+      provenance: {},
+      releaseVersion: "0.19.0-beta.2",
+      scenarios: [
+        "win-shell-lifecycle",
+        "win-shell-silent-update",
+        "win-shell-rollback",
+        "win-legacy-migration",
+      ],
+      schemaVersion: 2,
+      shell: windowsPlan.shell,
+      standaloneProtocolVersion: 1,
+      target: "win32-x64",
+    }, windowsPlan, "beta", "win-shell-v1", acceptanceDigest, 1);
+
+    expect(proof.scenarios).toEqual([
+      "win-shell-lifecycle",
+      "win-shell-silent-update",
+      "win-shell-rollback",
+      "win-legacy-migration",
+    ]);
+  });
+
   it("registers once and materializes the same verified bytes for a later release", async () => {
     const root = await mkdtemp(join(tmpdir(), "od-shell-build-storage-"));
     temporaryRoots.push(root);

@@ -132,6 +132,8 @@ async function waitForLaunchedClient<TMethods>(input: {
 
   return await new Promise<SidecarControlClient<TMethods>>((resolveReady, rejectReady) => {
     let checking = false;
+    let checkAgain = false;
+    let poll: NodeJS.Timeout | null = null;
     let settled = false;
     let timeout: NodeJS.Timeout | null = null;
     let watcher: FSWatcher | null = null;
@@ -139,11 +141,16 @@ async function waitForLaunchedClient<TMethods>(input: {
       if (settled) return;
       settled = true;
       if (timeout != null) clearTimeout(timeout);
+      if (poll != null) clearInterval(poll);
       watcher?.close();
       callback();
     };
     const check = async () => {
-      if (settled || checking) return;
+      if (settled) return;
+      if (checking) {
+        checkAgain = true;
+        return;
+      }
       checking = true;
       try {
         const descriptor = await readCurrentDescriptor(
@@ -160,16 +167,26 @@ async function waitForLaunchedClient<TMethods>(input: {
         // filesystem event, child exit, or the deadline gives the next signal.
       } finally {
         checking = false;
+        if (checkAgain && !settled) {
+          checkAgain = false;
+          void check();
+        }
       }
     };
     watcher = watch(descriptorRoot, () => void check());
     watcher.once("error", (error) => settle(() => rejectReady(error)));
+    // fs.watch can coalesce or drop a Windows directory event while an async
+    // descriptor probe is already in flight. The coalesced retry above closes
+    // that window; this bounded poll is the backstop for an event the OS never
+    // delivers at all. Both paths still require an exact fenced descriptor and
+    // a successful peer probe before readiness resolves.
+    poll = setInterval(() => void check(), 100);
     timeout = setTimeout(() => {
       settle(() =>
         rejectReady(
           new SidecarControlError(
             "peer-unavailable",
-            `sidecar launch readiness timed out after ${input.timeoutMs}ms`,
+            `sidecar ${input.descriptor.identity.service} launch readiness timed out after ${input.timeoutMs}ms`,
           ),
         ),
       );

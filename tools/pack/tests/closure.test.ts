@@ -97,10 +97,16 @@ describe("tools-pack Closure archive", () => {
     expect(inner).not.toContain("resolveRegisteredBootloader");
 
     expect(body).toContain("resolveOpenDesignClosureLayout");
+    expect(body).toContain("resolveOpenDesignClosureRuntimeRoot");
+    expect(body).toContain('join(request.paths.runtimeRoot, "closure-aliases")');
+    expect(body).toContain('symlink(expectedRoot, aliasRoot, "junction")');
+    expect(body).toContain("Closure runtime alias does not resolve to the selected generation");
     expect(body).toContain("daemonStandaloneSidecarEntry");
     expect(body).toContain("webStandaloneSidecarEntry");
     expect(body).toContain("OD_DAEMON_CLI_PATH");
     expect(body).toContain("OD_RESOURCE_TRUST_ROOT: request.paths.installationRoot");
+    expect(body).toContain('process.platform === "win32" ? 120_000 : undefined');
+    expect(body.match(/readyTimeoutMs: sidecarReadyTimeoutMs/gu)).toHaveLength(2);
     expect(body.match(/output: "inherit"/gu)).toHaveLength(2);
     for (const source of [root, inner, body]) {
       expect(source).not.toContain("payload-desktop-handoff");

@@ -10,7 +10,7 @@ import {
 } from "../src/node-pty-runtime.js";
 
 describe("node-pty packaged runtime closure", () => {
-  it("repairs and validates the target macOS prebuild", async () => {
+  it.skipIf(process.platform === "win32")("repairs and validates the target macOS prebuild", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-node-pty-runtime-"));
     const prebuildRoot = join(root, "node_modules", "node-pty", "prebuilds", "darwin-arm64");
 
