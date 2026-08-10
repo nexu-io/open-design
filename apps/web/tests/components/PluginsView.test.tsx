@@ -286,7 +286,7 @@ describe('PluginsView', () => {
     expect(mockedInstallPluginSource).not.toHaveBeenCalled();
   });
 
-  it('installs restricted catalog entries that collide with bundled official plugin names', async () => {
+  it('uses bundled plugins instead of offering an install the daemon must reject', async () => {
     const onUsePlugin = vi.fn();
     mockedListMarketplaces.mockResolvedValue([
       {
@@ -316,16 +316,14 @@ describe('PluginsView', () => {
     expect(await screen.findByText('Team Official Plugin')).toBeTruthy();
 
     const install = screen.getByTestId('plugins-available-install-open-design/official-plugin');
-    expect(install.textContent).toBe('Install');
+    expect(install.textContent).toBe('Use');
     fireEvent.click(install);
 
-    await waitFor(() =>
-      expect(mockedInstallPluginSource).toHaveBeenCalledWith(
-        'open-design/official-plugin',
-        null,
-      ),
-    );
-    expect(onUsePlugin).not.toHaveBeenCalled();
+    expect(mockedInstallPluginSource).not.toHaveBeenCalled();
+    expect(onUsePlugin).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'official-plugin',
+      sourceKind: 'bundled',
+    }), 'use');
   });
 
   it('shows all installed plugins by default on the Plugins page', async () => {

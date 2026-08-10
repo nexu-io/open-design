@@ -2,6 +2,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import JSZip from 'jszip';
+import {
+  classifyPluginInstallError,
+  type PluginInstallErrorCode,
+} from '../plugins/installer.js';
+import type { RegistryRoots } from '../plugins/registry.js';
 
 export interface PluginInstallResult {
   ok: boolean;
@@ -9,12 +14,13 @@ export interface PluginInstallResult {
   warnings: unknown[];
   message: string;
   log: string[];
+  errorCode?: PluginInstallErrorCode;
 }
 
 export interface PluginInstallationHelpersDeps {
   db: PluginDbLike;
   installFromLocalFolder: (db: PluginDbLike, args: InstallFromLocalFolderArgs) => AsyncIterable<InstallFromLocalFolderEvent>;
-  PLUGIN_REGISTRY_ROOTS: string[];
+  PLUGIN_REGISTRY_ROOTS: RegistryRoots;
   PLUGIN_LOCKFILE_PATH: string;
   PLUGIN_UPLOAD_MAX_BYTES: number;
 }
@@ -34,7 +40,7 @@ interface InstalledPluginLike {
 
 interface InstallFromLocalFolderArgs {
   source: string;
-  roots: string[];
+  roots: RegistryRoots;
   _stagedFolder: string;
   _stagedSourceKind: string;
   lockfilePath: string;
@@ -45,6 +51,7 @@ interface InstallFromLocalFolderEvent {
   message?: string;
   warnings?: unknown[];
   plugin?: InstalledPluginLike;
+  code?: PluginInstallErrorCode;
 }
 
 export function normalizeProjectPluginFolderPath(input: unknown) {
@@ -128,11 +135,28 @@ export async function extractPluginZipToFolder(buffer: Buffer, stagedFolder: str
 }
 
 export function createPluginInstallationHelpers(deps: PluginInstallationHelpersDeps) {
+  function failedInstallResult(
+    cause: unknown,
+    warnings: unknown[] = [],
+    log: string[] = [],
+  ): PluginInstallResult {
+    const message = cause instanceof Error ? cause.message : String(cause);
+    return {
+      ok: false,
+      plugin: null,
+      warnings,
+      message,
+      log,
+      errorCode: classifyPluginInstallError(message),
+    };
+  }
+
   async function finishUploadedPluginInstall(stagedFolder: string, source: string): Promise<PluginInstallResult> {
     const warnings: unknown[] = [];
     const log: string[] = [];
     let plugin = null;
     let message = 'Install finished.';
+    let errorCode: PluginInstallErrorCode | undefined;
     try {
       const pluginRoot = await findUploadedPluginRoot(stagedFolder);
       for await (const ev of deps.installFromLocalFolder(deps.db, {
@@ -152,10 +176,21 @@ export function createPluginInstallationHelpers(deps: PluginInstallationHelpersD
         }
         if (ev.kind === 'error') {
           message = ev.message ?? 'Install failed.';
+          errorCode = ev.code ?? classifyPluginInstallError(message);
           break;
         }
       }
-      return { ok: Boolean(plugin), plugin, warnings, message, log };
+      const ok = Boolean(plugin);
+      return {
+        ok,
+        plugin,
+        warnings,
+        message,
+        log,
+        ...(!ok ? { errorCode: errorCode ?? classifyPluginInstallError(message) } : {}),
+      };
+    } catch (cause) {
+      return failedInstallResult(cause, warnings, log);
     } finally {
       await fs.promises.rm(stagedFolder, { recursive: true, force: true }).catch(() => undefined);
     }
@@ -163,14 +198,19 @@ export function createPluginInstallationHelpers(deps: PluginInstallationHelpersD
 
   async function stageUploadedPluginZip(buffer: Buffer, source: string) {
     const stagedFolder = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'od-plugin-zip-'));
-    await extractPluginZipToFolder(buffer, stagedFolder, deps.PLUGIN_UPLOAD_MAX_BYTES);
-    return finishUploadedPluginInstall(stagedFolder, source);
+    try {
+      await extractPluginZipToFolder(buffer, stagedFolder, deps.PLUGIN_UPLOAD_MAX_BYTES);
+      return await finishUploadedPluginInstall(stagedFolder, source);
+    } catch (cause) {
+      await fs.promises.rm(stagedFolder, { recursive: true, force: true }).catch(() => undefined);
+      return failedInstallResult(cause);
+    }
   }
 
   async function stageUploadedPluginFolder(files: Array<{ buffer: Buffer; originalname: string }>, rawPaths: unknown) {
     const stagedFolder = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'od-plugin-folder-'));
     try {
-      if (files.length === 0) return null;
+      if (files.length === 0) throw new Error('files are required');
       const paths = Array.isArray(rawPaths) ? rawPaths : rawPaths ? [rawPaths] : [];
       let totalBytes = 0;
       for (let i = 0; i < files.length; i += 1) {
@@ -183,9 +223,9 @@ export function createPluginInstallationHelpers(deps: PluginInstallationHelpersD
         await fs.promises.writeFile(dest, file.buffer);
       }
       return await finishUploadedPluginInstall(stagedFolder, 'upload:folder');
-    } catch (err) {
+    } catch (cause) {
       await fs.promises.rm(stagedFolder, { recursive: true, force: true }).catch(() => undefined);
-      throw err;
+      return failedInstallResult(cause);
     }
   }
 

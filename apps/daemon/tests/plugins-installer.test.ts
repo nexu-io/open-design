@@ -7,9 +7,15 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { Readable } from 'node:stream';
 import Database from 'better-sqlite3';
 import { migratePlugins } from '../src/plugins/persistence.js';
-import { installFromLocalFolder, installPlugin, uninstallPlugin } from '../src/plugins/installer.js';
+import {
+  classifyPluginInstallError,
+  installFromLocalFolder,
+  installPlugin,
+  uninstallPlugin,
+} from '../src/plugins/installer.js';
 import { listInstalledPlugins } from '../src/plugins/registry.js';
 import { addMarketplace, resolvePluginInMarketplaces } from '../src/plugins/marketplaces.js';
 import type { InstalledPluginRecord } from '@open-design/contracts';
@@ -265,5 +271,125 @@ describe('installFromLocalFolder', () => {
     const [row] = listInstalledPlugins(db);
     expect(row?.marketplaceTrust).toBe('restricted');
     expect(row?.trust).toBe('restricted');
+  });
+});
+
+describe('plugin install diagnostics', () => {
+  it.each([
+    ['Fetch failed: 404 Not Found for https://example.com/plugin.tgz', 'FETCH_FAILED'],
+    ['network boom', 'FETCH_FAILED'],
+    ['Archive extraction failed: invalid gzip data', 'INVALID_ARCHIVE'],
+    ['Plugin id is not a safe folder name', 'INVALID_MANIFEST'],
+    ['Bundled plugin "official" cannot be replaced', 'CONFLICT'],
+    ['Malformed github source', 'BAD_REQUEST'],
+    ['Only .tar.gz / .tgz archives are accepted from https sources (got https://example.com/plugin.zip)', 'BAD_REQUEST'],
+    ['folder upload exceeds 50 MiB', 'BAD_REQUEST'],
+    ['Plugin tree exceeds size cap of 1024 bytes', 'BAD_REQUEST'],
+    ['invalid upload path', 'BAD_REQUEST'],
+    ['unsafe upload path: ../outside', 'BAD_REQUEST'],
+    ['Downloaded GitHub contents exceed 52428800 bytes', 'BAD_REQUEST'],
+  ] as const)('classifies %s as %s', (message, code) => {
+    expect(classifyPluginInstallError(message)).toBe(code);
+  });
+
+  it('adds a stable code to top-level install errors', async () => {
+    const events = [];
+    for await (const event of installPlugin(db, {
+      source: 'https://github.com/owner/repo/issues',
+      roots: { userPluginsRoot: pluginsRoot },
+    })) {
+      events.push(event);
+    }
+
+    expect(events.at(-1)).toMatchObject({ kind: 'error', code: 'BAD_REQUEST' });
+  });
+
+  it('turns a throwing fetch backend into a coded error event', async () => {
+    const events = [];
+    for await (const event of installPlugin(db, {
+      source: 'https://example.com/plugin.tgz',
+      roots: { userPluginsRoot: pluginsRoot },
+      fetcher: async () => {
+        throw new Error('network boom');
+      },
+    })) {
+      events.push(event);
+    }
+
+    expect(events.at(-1)).toMatchObject({
+      kind: 'error',
+      message: 'network boom',
+      code: 'FETCH_FAILED',
+    });
+  });
+
+  it('keeps a wrapped archive download limit in the bad-request bucket', async () => {
+    const events = [];
+    for await (const event of installPlugin(db, {
+      source: 'https://example.com/plugin.tgz',
+      roots: { userPluginsRoot: pluginsRoot },
+      maxBytes: 4,
+      fetcher: async () => ({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        body: Readable.from(Buffer.from('too large')),
+      }),
+    })) {
+      events.push(event);
+    }
+
+    expect(events.at(-1)).toMatchObject({
+      kind: 'error',
+      message: 'Archive download failed: Downloaded archive exceeds 4 bytes',
+      code: 'BAD_REQUEST',
+    });
+  });
+
+  it('classifies a real README-only folder as an invalid manifest', async () => {
+    await rm(path.join(sourceFolder, 'open-design.json'));
+    await writeFile(path.join(sourceFolder, 'README.md'), '# Not a plugin\n');
+
+    const events = [];
+    for await (const event of installPlugin(db, {
+      source: sourceFolder,
+      roots: { userPluginsRoot: pluginsRoot },
+    })) {
+      events.push(event);
+    }
+
+    expect(events.at(-1)).toMatchObject({
+      kind: 'error',
+      code: 'INVALID_MANIFEST',
+    });
+  });
+
+  it.each([
+    ['malformed JSON', '{'],
+    ['a missing required name', JSON.stringify({ version: '1.0.0' })],
+    ['an invalid repeat stage', JSON.stringify({
+      name: 'sample-plugin',
+      version: '1.0.0',
+      od: {
+        pipeline: {
+          stages: [{ id: 'critique', atoms: ['critique-theater'], repeat: true }],
+        },
+      },
+    })],
+  ])('classifies open-design.json with %s as an invalid manifest', async (_label, manifest) => {
+    await writeFile(path.join(sourceFolder, 'open-design.json'), manifest);
+
+    const events = [];
+    for await (const event of installPlugin(db, {
+      source: sourceFolder,
+      roots: { userPluginsRoot: pluginsRoot },
+    })) {
+      events.push(event);
+    }
+
+    expect(events.at(-1)).toMatchObject({
+      kind: 'error',
+      code: 'INVALID_MANIFEST',
+    });
   });
 });

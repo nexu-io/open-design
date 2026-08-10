@@ -275,6 +275,46 @@ describe('createFreshWorkspaceDirectoryFetcher', () => {
 });
 
 describe('createWorkspaceDirectoryAuthorityBroker', () => {
+  it('exposes a cached-only lease that never starts I/O and is partitioned by account identity and expiry', async () => {
+    let identity = 'account-a:config-a';
+    let now = 0;
+    const accepted = {
+      ok: true as const,
+      items: [{
+        workspaceId: 'ws-team-1',
+        workspaceName: 'Team',
+        workspaceType: 'team' as const,
+        workspaceMemberId: 'wm-1',
+        role: 'member' as const,
+        memberStatus: 'active' as const,
+        lifecycleState: 'active' as const,
+      }],
+    };
+    const fetchDirectory = vi.fn(async () => accepted);
+    const authority = createWorkspaceDirectoryAuthorityBroker({
+      fetchDirectory,
+      identityKey: () => identity,
+      now: () => now,
+      ttlMs: 100,
+    });
+
+    await expect(authority.cached()).resolves.toEqual({ ok: false, items: [] });
+    expect(fetchDirectory).not.toHaveBeenCalled();
+
+    await authority.read();
+    await expect(authority.cached()).resolves.toEqual(accepted);
+    expect(fetchDirectory).toHaveBeenCalledTimes(1);
+
+    identity = 'account-b:config-b';
+    await expect(authority.cached()).resolves.toEqual({ ok: false, items: [] });
+    expect(fetchDirectory).toHaveBeenCalledTimes(1);
+
+    identity = 'account-a:config-a';
+    now = 100;
+    await expect(authority.cached()).resolves.toEqual({ ok: false, items: [] });
+    expect(fetchDirectory).toHaveBeenCalledTimes(1);
+  });
+
   it('single-flights shell and project bootstrap reads per account generation without caching failures', async () => {
     let identity = 'account-a:config-a';
     const fetchDirectory = vi.fn(async () => ({

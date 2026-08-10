@@ -3010,6 +3010,15 @@ export async function startServer({
     verifyExplicitWorkspaceRequestContext({ req }, { fresh: false });
   const verifyWorkspaceRequestAuthority = (req: unknown) =>
     verifyExplicitWorkspaceRequestContext({ req });
+  const verifyPersonalProjectDeleteLeaseAuthority =
+    process.env.OD_WORKSPACE_CONTEXT_SOURCE?.trim() === 'vela'
+      ? (req: unknown) => verifyWorkspaceRequestContext({
+          req,
+          // A miss is intentionally returned as unavailable. The project gate
+          // then falls through to the existing fresh authority verifier.
+          fetchWorkspaceDirectory: workspaceDirectoryAuthority.cached,
+        })
+      : undefined;
   const enforceAuthoritativeProjectMutation = createEnforceWorkspaceProjectMutation(
     verifyWorkspaceRequestAuthority,
   );
@@ -7024,6 +7033,7 @@ export async function startServer({
     // workspaceContext) — see the mutation-gate cross-check note above.
     verifyWorkspaceReadAuthority,
     verifyWorkspaceRequestAuthority,
+    verifyPersonalProjectDeleteLeaseAuthority,
     authorizeProjectRequest,
     isProjectRevoked: (projectId) =>
       revokedTeamProjectMirrors.has(projectId),
