@@ -9640,6 +9640,10 @@ export async function startServer({
       typeof appConfigForRun?.agentModels?.[def.id]?.model === 'string'
         ? appConfigForRun.agentModels[def.id].model
         : null;
+    const configuredModelForRun =
+      requiresChatGptCodexAuth && typeof requestedRuntimeModel !== 'string'
+        ? null
+        : configuredModel;
     const explicitRequestedModel =
       typeof requestedRuntimeModel === 'string'
       && requestedRuntimeModel.trim().length > 0
@@ -9647,10 +9651,10 @@ export async function startServer({
         ? requestedRuntimeModel.trim()
         : null;
     const explicitConfiguredModel =
-      typeof configuredModel === 'string'
-      && configuredModel.trim().length > 0
-      && configuredModel.trim().toLowerCase() !== 'default'
-        ? configuredModel.trim()
+      typeof configuredModelForRun === 'string'
+      && configuredModelForRun.trim().length > 0
+      && configuredModelForRun.trim().toLowerCase() !== 'default'
+        ? configuredModelForRun.trim()
         : null;
     const effectiveCodexModel = explicitRequestedModel
       ?? (typeof requestedRuntimeModel === 'string' ? null : explicitConfiguredModel);
@@ -9708,7 +9712,7 @@ export async function startServer({
         ? isKnownModel(def, requestedRuntimeModel, requestedLiveModelScope)
           ? requestedRuntimeModel
           : sanitizeCustomModel(requestedRuntimeModel)
-        : configuredModel,
+        : configuredModelForRun,
       process.env,
       requestedLiveModelScope,
     );

@@ -468,10 +468,16 @@ function buildExecutionDiagnostics(run) {
         : missingDiagnostic('provider_not_reported_by_runtime', 'agent-runtime'),
       requestedModel: run.model
         ? availableDiagnostic(run.model, 'requested model configuration', true, 'agent-runtime')
-        : missingDiagnostic('requested_model_not_recorded', 'agent-runtime'),
+        : missingDiagnostic(
+            run.agentId === 'codex' ? 'codex_cli_default_model' : 'requested_model_not_recorded',
+            'agent-runtime',
+          ),
       requestedReasoning: run.reasoning
         ? availableDiagnostic(run.reasoning, 'requested reasoning configuration', true, 'agent-runtime')
-        : missingDiagnostic('requested_reasoning_not_recorded', 'agent-runtime'),
+        : missingDiagnostic(
+            run.agentId === 'codex' ? 'codex_cli_default_reasoning' : 'requested_reasoning_not_recorded',
+            'agent-runtime',
+          ),
       requestedServiceTier: run.serviceTier
         ? availableDiagnostic(run.serviceTier, 'requested service tier configuration', true, 'agent-runtime')
         : missingDiagnostic('requested_service_tier_not_recorded', 'agent-runtime'),

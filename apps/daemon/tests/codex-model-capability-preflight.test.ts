@@ -28,6 +28,13 @@ type RunStatus = {
   failureCategory?: string | null;
   failureDetail?: string | null;
   failureAction?: string | null;
+  executionDiagnostics?: {
+    environment: {
+      requestedModel: { state: string; missingReason?: string };
+      requestedReasoning: { state: string; missingReason?: string };
+      resolvedModel: { state: string; missingReason?: string };
+    };
+  };
 };
 
 const CODEX_AUTH_OR_ENDPOINT_ENV_KEYS = [
@@ -124,23 +131,41 @@ describe('Codex configured-model capability preflight', () => {
     await expect(pathExists(fixture.spawnMarker)).resolves.toBe(false);
   });
 
-  it('rejects an unsupported persisted model when MCP omits the model field', async () => {
+  it('uses the standalone Codex CLI default when strict MCP omits the model field', async () => {
     const fixture = await startCodexFixture();
     await putConfig(fixture.url, {
       agentModels: { codex: { model: 'persisted-unsupported-model' } },
     });
     const { projectId, conversationId } = await createConversation(fixture.url);
-    const failed = await sendRunAndWait(fixture.url, projectId, conversationId, {
+    const succeeded = await sendRunAndWait(fixture.url, projectId, conversationId, {
       codexAuthMode: 'chatgpt',
       omitModel: true,
     });
 
-    expect(failed).toMatchObject({
-      status: 'failed',
-      errorCode: 'MODEL_UNAVAILABLE',
-      failureCategory: 'model_unavailable',
+    expect(succeeded).toMatchObject({
+      status: 'succeeded',
+      errorCode: null,
+      executionDiagnostics: {
+        environment: {
+          requestedModel: {
+            state: 'not_collected',
+            missingReason: 'codex_cli_default_model',
+          },
+          requestedReasoning: {
+            state: 'not_collected',
+            missingReason: 'codex_cli_default_reasoning',
+          },
+          resolvedModel: {
+            state: 'not_collected',
+            missingReason: 'codex_rollout_model_unconfirmed',
+          },
+        },
+      },
     });
-    await expect(pathExists(fixture.spawnMarker)).resolves.toBe(false);
+    const args = JSON.parse(await readFile(fixture.spawnMarker, 'utf8')) as string[];
+    expect(args).toContain('exec');
+    expect(args).not.toContain('--model');
+    expect(args).not.toContain('persisted-unsupported-model');
   });
 
   it('fails closed when live compatibility cannot prove explicit Codex settings', async () => {
