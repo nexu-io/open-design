@@ -720,6 +720,7 @@ describe('AMR ACP transport — end-to-end against fake vela stub', () => {
         model: 'deepseek-v3.2',
         // A stored durable handle drives session/load instead of session/new.
         resumeSessionId: 'oc-prev-handle',
+        allowUnadvertisedSessionLoad: true,
         mcpServers: [],
         send: () => {},
       });
@@ -744,6 +745,7 @@ describe('AMR ACP transport — end-to-end against fake vela stub', () => {
         cwd: process.cwd(),
         model: 'deepseek-v3.2',
         resumeSessionId: 'oc-gone',
+        allowUnadvertisedSessionLoad: true,
         mcpServers: [],
         send: (event, payload) => events.push({ event, payload }),
       });

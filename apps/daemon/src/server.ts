@@ -11367,6 +11367,8 @@ export async function startServer({
 
     let child;
     let acpSession = null;
+    const acpResumeFailed = () =>
+      typeof acpSession?.resumeFailed === 'function' && acpSession.resumeFailed();
     let writePromptToChildStdin = false;
     let spawnedAgentEnv = null;
     let agentStdoutTail = '';
@@ -12228,7 +12230,7 @@ export async function startServer({
             (def.resumesSessionViaCli === true || def.resumesSessionViaAcpLoad === true) &&
             agentResumeCtx.isResuming &&
             !run.resumeAutoReseeded &&
-            isAgentResumeFailure(def.id, agentStderrTail, agentStdoutTail)
+            (acpResumeFailed() || isAgentResumeFailure(def.id, agentStderrTail, agentStdoutTail))
           ) {
             design.runs.emit(run, 'diagnostic', {
               type: 'agent_resume_failed_suppressed',
@@ -12408,6 +12410,7 @@ export async function startServer({
         ...(def.resumesSessionViaAcpLoad === true && agentResumeCtx.isResuming && agentResumeCtx.resumeSessionId
           ? { resumeSessionId: agentResumeCtx.resumeSessionId }
           : {}),
+        ...(def.id === 'amr' ? { allowUnadvertisedSessionLoad: true } : {}),
         onCliReady: () => noteCliReadyAt(),
         onSessionInit: () => noteSessionInitDoneAt(),
         onPromptComplete: () => clearFirstOutputWatchdog(),
@@ -12467,7 +12470,7 @@ export async function startServer({
             agentResumeCtx.isResuming &&
             agentResumeCtx.resumeSessionId &&
             !run.resumeAutoReseeded &&
-            isAgentResumeFailure(def.id, agentStderrTail, agentStdoutTail)
+            (acpResumeFailed() || isAgentResumeFailure(def.id, agentStderrTail, agentStdoutTail))
           ) {
             design.runs.emit(run, 'diagnostic', {
               type: 'agent_resume_failed_suppressed',
@@ -12615,7 +12618,7 @@ export async function startServer({
         (def.resumesSessionViaCli === true || def.resumesSessionViaAcpLoad === true) &&
         agentResumeCtx.isResuming &&
         run.conversationId &&
-        isAgentResumeFailure(def.id, agentStderrTail, agentStdoutTail)
+        (acpResumeFailed() || isAgentResumeFailure(def.id, agentStderrTail, agentStdoutTail))
       ) {
         // The resumed upstream session is gone (expired / pruned). Clear the dead
         // handle and TRANSPARENTLY re-run this same turn with a fresh session +

@@ -18,6 +18,7 @@ export const traeCliAgentDef = {
     fallbackModels: [DEFAULT_MODEL_OPTION],
     buildArgs: () => ['acp', 'serve', '--yolo'],
     streamFormat: 'acp-json-rpc',
+    resumesSessionViaAcpLoad: true,
     mcpDiscovery: 'mature-acp',
     externalMcpInjection: 'acp-merge',
 } satisfies RuntimeAgentDef;

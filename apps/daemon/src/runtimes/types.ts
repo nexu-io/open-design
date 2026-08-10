@@ -204,10 +204,10 @@ export type RuntimeAgentDef = {
   // path and `agent-cli-session-resume.md`.
   capturesSessionIdFromStream?: boolean;
   // ACP-runtime analogue of capture-style resume: the agent talks `acp-json-rpc`
-  // (today only AMR/vela) and supports resuming via `session/load`. The daemon
-  // captures the durable upstream session handle from the ACP session
+  // and can advertise `loadSession` during initialize. The daemon captures the
+  // durable upstream session handle from the ACP session
   // (`getDurableSessionId()`) and persists THAT, drives `session/load` on a
-  // resume turn, and maps the agent's structured `resume_failed` error onto the
+  // resume turn, and maps a rejected/unsupported load onto the transparent
   // reseed path. Kept distinct from `resumesSessionViaCli` /
   // `capturesSessionIdFromStream` because the capture + resume transport is the
   // ACP result, not a `--session-id` flag or a stream `status` event.

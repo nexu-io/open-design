@@ -2816,7 +2816,9 @@ test('attachAcpSession resumes via session/load when resumeSessionId is set', ()
     send: () => {},
   });
 
-  writeAcpResult(child, 1, {}); // initialize ack -> drives the resume handshake
+  writeAcpResult(child, 1, {
+    agentCapabilities: { loadSession: true },
+  }); // initialize ack -> drives the resume handshake
 
   const requests = parseRpcWrites(writes);
   const loadReq = requests.find((entry) => entry.method === 'session/load');
@@ -2826,6 +2828,56 @@ test('attachAcpSession resumes via session/load when resumeSessionId is set', ()
     cwd: path.resolve('/tmp/od-project'),
   });
   assert.equal(requests.some((entry) => entry.method === 'session/new'), false);
+});
+
+test('attachAcpSession rejects resume when loadSession is not advertised so the caller can reseed', () => {
+  const child = new FakeAcpChild();
+  const writes: string[] = [];
+  const errors: unknown[] = [];
+  child.stdin.on('data', (chunk) => writes.push(String(chunk)));
+
+  const session = attachAcpSession({
+    child: child as never,
+    prompt: 'hello',
+    cwd: '/tmp/od-project',
+    resumeSessionId: 'stored-session',
+    send: (event, payload) => {
+      if (event === 'error') errors.push(payload);
+    },
+  });
+
+  writeAcpResult(child, 1, {
+    agentCapabilities: { loadSession: false },
+  });
+
+  const requests = parseRpcWrites(writes);
+  assert.equal(requests.some((entry) => entry.method === 'session/load'), false);
+  assert.equal(requests.some((entry) => entry.method === 'session/new'), false);
+  assert.equal(session.resumeFailed(), true);
+  assert.equal(session.hasFatalError(), true);
+  assert.equal(errors.length, 1);
+});
+
+test('attachAcpSession marks a rejected session/load for transparent reseeding', () => {
+  const child = new FakeAcpChild();
+  const session = attachAcpSession({
+    child: child as never,
+    prompt: 'hello',
+    cwd: '/tmp/od-project',
+    resumeSessionId: 'stored-session',
+    send: () => {},
+  });
+
+  writeAcpResult(child, 1, {
+    agentCapabilities: { loadSession: true },
+  });
+  writeAcpError(child, 2, {
+    code: -32000,
+    message: 'Session not found',
+  });
+
+  assert.equal(session.resumeFailed(), true);
+  assert.equal(session.hasFatalError(), true);
 });
 
 test('attachAcpSession captures the durable session handle from the result', () => {
@@ -2841,6 +2893,34 @@ test('attachAcpSession captures the durable session handle from the result', () 
   writeAcpResult(child, 2, { sessionId: 'vela-opencode-1', openCodeSessionId: 'oc-handle' });
 
   assert.equal(session.getDurableSessionId(), 'oc-handle');
+});
+
+test('attachAcpSession captures the standard ACP session id only when loadSession is supported', () => {
+  const supportedChild = new FakeAcpChild();
+  const supported = attachAcpSession({
+    child: supportedChild as never,
+    prompt: 'hello',
+    cwd: '/tmp/od-project',
+    send: () => {},
+  });
+  writeAcpResult(supportedChild, 1, {
+    agentCapabilities: { loadSession: true },
+  });
+  writeAcpResult(supportedChild, 2, { sessionId: 'standard-session' });
+  assert.equal(supported.getDurableSessionId(), 'standard-session');
+
+  const unsupportedChild = new FakeAcpChild();
+  const unsupported = attachAcpSession({
+    child: unsupportedChild as never,
+    prompt: 'hello',
+    cwd: '/tmp/od-project',
+    send: () => {},
+  });
+  writeAcpResult(unsupportedChild, 1, {
+    agentCapabilities: { loadSession: false },
+  });
+  writeAcpResult(unsupportedChild, 2, { sessionId: 'transient-session' });
+  assert.equal(unsupported.getDurableSessionId(), null);
 });
 
 test('createJsonLineStream replays absorbed complete frames when a value-position aggregate turns invalid', () => {

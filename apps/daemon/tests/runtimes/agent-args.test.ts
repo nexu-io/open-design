@@ -778,6 +778,18 @@ test('kimi args leave model selection to the ACP session', () => {
   assert.deepEqual(args, ['acp']);
 });
 
+test('all ACP runtime definitions opt into negotiated session/load reuse', () => {
+  const acpDefs = AGENT_DEFS.filter((def) => def.streamFormat === 'acp-json-rpc');
+  assert.ok(acpDefs.length > 1, 'expected multiple ACP adapters');
+  for (const def of acpDefs) {
+    assert.equal(
+      def.resumesSessionViaAcpLoad,
+      true,
+      `${def.id} must reuse sessions when the ACP agent advertises loadSession`,
+    );
+  }
+});
+
 test('kilo fetchModels falls back to fallbackModels when detection fails', async () => {
   assert.ok(kilo.fetchModels, 'kilo must define fetchModels');
   const result = await kilo.fetchModels('/nonexistent/kilo', {}).catch(() => null);

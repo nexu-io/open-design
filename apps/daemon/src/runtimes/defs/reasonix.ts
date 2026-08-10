@@ -59,6 +59,7 @@ export const reasonixAgentDef = {
       }),
     buildArgs: () => ['acp'],
     streamFormat: 'acp-json-rpc',
+    resumesSessionViaAcpLoad: true,
     mcpDiscovery: 'mature-acp',
     externalMcpInjection: 'acp-merge',
     acpMcpEnvFormat: 'map',

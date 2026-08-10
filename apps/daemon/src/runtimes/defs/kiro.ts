@@ -17,6 +17,7 @@ export const kiroAgentDef = {
     fallbackModels: [DEFAULT_MODEL_OPTION],
     buildArgs: () => ['acp'],
     streamFormat: 'acp-json-rpc',
+    resumesSessionViaAcpLoad: true,
     acpTurnEndCompletesPrompt: true,
     externalMcpInjection: 'acp-merge',
 } satisfies RuntimeAgentDef;

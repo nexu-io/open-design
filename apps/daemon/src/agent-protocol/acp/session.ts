@@ -89,6 +89,11 @@ export interface AttachAcpSessionOptions {
   // `session/new`. The agent verifies the session and, if it is gone, returns a
   // structured `resume_failed` error the caller maps to its reseed path.
   resumeSessionId?: string | null;
+  // AMR/vela shipped its durable `openCodeSessionId` + `session/load` extension
+  // before it advertised the standard ACP loadSession capability. Keep that
+  // established compatibility path explicit; every standard ACP adapter must
+  // negotiate load support during initialize.
+  allowUnadvertisedSessionLoad?: boolean;
   // Subsegment timing markers for spawn->first-token attribution (#3408 §4).
   // `onCliReady` fires once on the first well-formed ACP JSON-RPC message
   // (the CLI is up and speaking the protocol); `onSessionInit` fires once when
@@ -140,6 +145,7 @@ export function attachAcpSession({
   modelUnavailableErrorCode,
   completePromptOnTurnEnd = false,
   resumeSessionId,
+  allowUnadvertisedSessionLoad = false,
   onCliReady,
   onSessionInit,
   onPromptComplete,
@@ -156,10 +162,12 @@ export function attachAcpSession({
   let promptRequestId: JsonRpcId | null = null;
   let setModelRequestId: JsonRpcId | null = null;
   let sessionId: string | null = null;
+  let supportsSessionLoad = false;
+  let resumeFailed = false;
   // The durable upstream session handle reported by the agent on session/new or
-  // session/load (vela's `openCodeSessionId`). The caller stores it per
-  // conversation to resume next turn. Distinct from `sessionId`, which is the
-  // ACP wrapper id ("vela-opencode-1").
+  // session/load. Standard ACP agents reuse `sessionId`; AMR/vela reports its
+  // underlying OpenCode handle as `openCodeSessionId` while `sessionId` remains
+  // the wrapper id ("vela-opencode-1").
   let durableSessionId: string | null = null;
   let activeModel: string | null = null;
   let modelConfigId: string | null = null;
@@ -687,6 +695,13 @@ export function attachAcpSession({
         return;
       }
       const details = rpcErrorData(obj);
+      if (obj.id === expectedId && expectedId === 2 && resumeSessionId) {
+        // The outstanding id=2 request is session/load on a resume turn. Keep
+        // this protocol fact on the controller instead of trying to recognize
+        // every adapter's error prose in server.ts; the caller uses it to clear
+        // the stale handle and transparently re-seed the full transcript.
+        resumeFailed = true;
+      }
       const promotedPayload = promotedOpenCodeSessionErrorPayload(details, rpcErr);
       if (promotedPayload) {
         failWithPayload(promotedPayload);
@@ -912,7 +927,23 @@ export function attachAcpSession({
       return;
     }
     if (expectedId === 1) {
+      const initializeCapabilities =
+        asObject(result.agentCapabilities) ?? asObject(result.capabilities);
+      supportsSessionLoad = initializeCapabilities?.loadSession === true;
       expectedId = nextId;
+      const canLoadSession = supportsSessionLoad || allowUnadvertisedSessionLoad;
+      if (resumeSessionId && !canLoadSession) {
+        // Prompt composition already omitted the stored transcript because the
+        // daemon expected session/load to restore it. Opening session/new in
+        // this child would therefore lose history. Report a recoverable resume
+        // failure so the daemon restarts fresh and recomposes the full prompt.
+        resumeFailed = true;
+        fail('The ACP agent no longer advertises session/load support.', {
+          details: { kind: 'resume_failed', reason: 'load_session_unsupported' },
+          retryable: true,
+        });
+        return;
+      }
       if (resumeSessionId) {
         // Resume the prior upstream session instead of creating a fresh one.
         writeRpc(
@@ -936,10 +967,19 @@ export function attachAcpSession({
       return;
     }
     if (expectedId === 2) {
-      sessionId = typeof result.sessionId === 'string' ? result.sessionId : null;
+      sessionId =
+        typeof result.sessionId === 'string'
+          ? result.sessionId
+          : resumeSessionId
+            ? resumeSessionId
+            : null;
       // The durable handle for resuming this session on the next turn.
       durableSessionId =
-        typeof result.openCodeSessionId === 'string' ? result.openCodeSessionId : null;
+        typeof result.openCodeSessionId === 'string'
+          ? result.openCodeSessionId
+          : supportsSessionLoad
+            ? sessionId
+            : null;
       // session/new acknowledged with a session id = handshake done (#3408 §4).
       if (sessionId) onSessionInit?.();
       const modelConfig = findModelConfigOption(result.configOptions);
@@ -1045,6 +1085,10 @@ export function attachAcpSession({
     /** Returns `true` when the session ended with a fatal protocol or transport error, allowing the caller to surface the failure. */
     hasFatalError() {
       return fatal;
+    },
+    /** Returns `true` when a requested session/load could not be attempted or was rejected. */
+    resumeFailed() {
+      return resumeFailed;
     },
     // The durable upstream session handle to persist for resume, or null when
     // none was reported (older agents, or a handshake that never established a
