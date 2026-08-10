@@ -2903,7 +2903,10 @@ function expectPathInside(filePath: string, expectedRoot: string): void {
 }
 
 function expectWindowsPackagedAppUrl(value: string | null | undefined): void {
-  expect(value).toEqual(expect.stringMatching(/^od:\/\/app\/$/));
+  // The health probe races the SPA's first-run redirect. Both the app root and
+  // its dedicated onboarding route are Shell-owned `od://` surfaces; pinning
+  // only the pre-redirect root makes a healthy cold start nondeterministic.
+  expect(value).toEqual(expect.stringMatching(/^od:\/\/app\/(?:onboarding)?$/));
 }
 
 function expectWindowsPackagedRouteUrl(value: string | null | undefined): void {
