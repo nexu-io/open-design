@@ -1012,7 +1012,13 @@ after_desktop_shortcut:
   DeleteRegKey HKCU "${registryKey}"
   DeleteRegKey HKCU "${appPathsKey}"
   ReadRegStr $0 HKCU "${inviteProtocolKey}\\shell\\open\\command" ""
-  StrCmp $0 '$\"$INSTDIR\\${exeName}$\" $\"%1$\"' 0 preserve_invite_protocol
+  ; Electron refreshes the protocol command when the app starts and may change
+  ; its trailing arguments. Compare only the exact quoted executable prefix so
+  ; this install can remove its registration without touching another owner.
+  StrCpy $1 '$\"$INSTDIR\\${exeName}$\"'
+  StrLen $2 $1
+  StrCpy $3 $0 $2
+  StrCmp $3 $1 0 preserve_invite_protocol
   DeleteRegKey HKCU "${inviteProtocolKey}"
 preserve_invite_protocol:
   Push "event=registry_after_delete key=${registryKey} appPathsKey=${appPathsKey}"

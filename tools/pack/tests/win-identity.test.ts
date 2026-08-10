@@ -83,7 +83,7 @@ describe("resolveWinInstallIdentity", () => {
     expect(source).not.toContain('"DisplayName" "${productName} \\${APP_VERSION}"');
   });
 
-  it("registers the invite protocol and removes it on uninstall only while this install owns it", async () => {
+  it("removes an Electron-refreshed invite protocol while this install still owns it", async () => {
     const source = await readFile(new URL("../src/win/custom-installer.ts", import.meta.url), "utf8");
     expect(source).toContain('const inviteProtocolKey = "Software\\\\Classes\\\\opendesign"');
     expect(source).toContain('WriteRegStr HKCU "${inviteProtocolKey}" "URL Protocol" ""');
@@ -94,12 +94,16 @@ describe("resolveWinInstallIdentity", () => {
     expect(source).toContain(
       'ReadRegStr $0 HKCU "${inviteProtocolKey}\\\\shell\\\\open\\\\command" ""',
     );
-    expect(source).toContain(
+    expect(source).toContain("StrCpy $1 '$\\\"$INSTDIR\\\\${exeName}$\\\"'");
+    expect(source).toContain("StrLen $2 $1");
+    expect(source).toContain("StrCpy $3 $0 $2");
+    expect(source).toContain("StrCmp $3 $1 0 preserve_invite_protocol");
+    expect(source).not.toContain(
       "StrCmp $0 '$\\\"$INSTDIR\\\\${exeName}$\\\" $\\\"%1$\\\"' 0 preserve_invite_protocol",
     );
     expect(source).toContain('DeleteRegKey HKCU "${inviteProtocolKey}"');
     expect(source).toContain("preserve_invite_protocol:");
-    expect(source.indexOf("StrCmp $0")).toBeLessThan(
+    expect(source.indexOf("StrCmp $3 $1")).toBeLessThan(
       source.indexOf('DeleteRegKey HKCU "${inviteProtocolKey}"'),
     );
     expect(source.indexOf('DeleteRegKey HKCU "${inviteProtocolKey}"')).toBeLessThan(
