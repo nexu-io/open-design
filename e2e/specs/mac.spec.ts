@@ -461,6 +461,7 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
         assertClosureDesktopIdentity(
           await readDesktopIdentityMarker(),
           closureAcceptance.manifest.identity.version,
+          expectedPayloadUpdateVersion!,
         );
       }
       const ptyInspect = await runToolsPackJson<MacInspectResult>('inspect', [
@@ -493,6 +494,7 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
         assertClosureDesktopIdentity(
           await readDesktopIdentityMarker(),
           closureAcceptance.manifest.identity.version,
+          expectedPayloadUpdateVersion!,
         );
       }
 
@@ -591,6 +593,7 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
           postUpdateInspect.launcher,
           updaterVersion,
           updateScenario.expectedCurrentVersion,
+          updaterVersion,
         );
         expect(postUpdateInspect.launcher.attempt).toBeNull();
         assertSettledDesktopHandoff(postUpdateInspect.launcher.handoff);
@@ -636,6 +639,7 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
           coldInspect.launcher,
           updaterVersion,
           updateScenario.expectedCurrentVersion,
+          updaterVersion,
         );
         expect(coldIdentity.pid).not.toBe(identity.pid);
         const coldPptxInspect = await runToolsPackJson<MacInspectResult>('inspect', ['--expr', persistedPptxExpression]);
@@ -2814,13 +2818,17 @@ async function readDesktopIdentityMarker(): Promise<DesktopIdentityMarker> {
   return value as DesktopIdentityMarker;
 }
 
-function assertClosureDesktopIdentity(identity: DesktopIdentityMarker, version: string): void {
-  if (identity.runtime?.descriptor?.standalone?.version !== version) {
+function assertClosureDesktopIdentity(
+  identity: DesktopIdentityMarker,
+  standaloneVersion: string,
+  releaseVersion: string = standaloneVersion,
+): void {
+  if (identity.runtime?.descriptor?.standalone?.version !== standaloneVersion) {
     throw new Error(`packaged mac did not attach the seeded Closure: ${formatUnknown(identity.runtime)}`);
   }
   expect(identity.runtime.descriptor).toMatchObject({
-    release: { version },
-    standalone: { protocolVersion: 1, version },
+    release: { version: releaseVersion },
+    standalone: { protocolVersion: 1, version: standaloneVersion },
   });
   expect(identity.runtime.descriptor).not.toHaveProperty('shell');
   expect(identity.runtime.descriptor.standalone?.digest).toMatch(/^sha256:[a-f0-9]{64}$/);
@@ -2835,13 +2843,14 @@ function assertPayloadDesktopIdentity(
   launcher: LauncherSnapshot,
   shellVersion: string,
   standaloneVersion: string,
+  releaseVersion: string = standaloneVersion,
 ): void {
   const payloadRoot = join(launcher.versionsRoot, shellVersion, 'payload');
   expect(identity.pid).toBeGreaterThan(0);
   expectPathInside(identity.appPath, payloadRoot);
   expectPathInside(identity.executablePath, payloadRoot);
   expect(identity.runtime?.descriptor).toMatchObject({
-    release: { version: standaloneVersion },
+    release: { version: releaseVersion },
     standalone: { protocolVersion: 1, version: standaloneVersion },
   });
   expect(identity.runtime?.descriptor).not.toHaveProperty('shell');
