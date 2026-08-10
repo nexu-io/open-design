@@ -1,0 +1,40 @@
+{
+  "candidateId": "027cbd5e-e386-4dd0-99bc-145fb307b595",
+  "projectId": "brand-memo-ui-5d7350",
+  "runId": "d53e5f86-33ff-4cb0-bec4-fe23b8266d9c",
+  "conversationId": "f8ff23f3-f37e-4eaf-97bf-8e383ad24aa4",
+  "provenance": {
+    "summary": "Detected from README.md, SKILL.md, context/source-context.md, context/github/guillaume-flambard-memo-ui.md after a successful run.",
+    "detectedAt": 1786356917364
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "README.md",
+      "label": "README.md",
+      "size": 4748,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "SKILL.md",
+      "label": "SKILL.md",
+      "size": 5312,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "context/source-context.md",
+      "label": "context/source-context.md",
+      "size": 13351,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "context/github/guillaume-flambard-memo-ui.md",
+      "label": "context/github/guillaume-flambard-memo-ui.md",
+      "size": 41562,
+      "copied": true
+    }
+  ]
+}

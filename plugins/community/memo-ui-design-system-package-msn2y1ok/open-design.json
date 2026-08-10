@@ -1,0 +1,22 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "memo-ui-design-system-package-msn2y1ok",
+  "title": "Memo UI — Design System Package",
+  "version": "0.1.0",
+  "description": "Evidence-backed design system for the Memo UI brand (source: `guillaume-flambard/memo-ui`, Memo Labs portfolio / lab design language). Warm paper + encre ink, one terracotta accent used as punctuation, Oswald + Geist Mon",
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  }
+}
