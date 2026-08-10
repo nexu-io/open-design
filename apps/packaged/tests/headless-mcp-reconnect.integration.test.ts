@@ -1,26 +1,21 @@
-import { spawn, type ChildProcess, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdtemp, rm } from "node:fs/promises";
-import { createServer, type Server } from "node:http";
+import { chmod, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
 import {
   APP_KEYS,
   OPEN_DESIGN_SIDECAR_CONTRACT,
   SIDECAR_ENV,
   SIDECAR_MESSAGES,
+  type DaemonStatusSnapshot,
   type DesktopStatusSnapshot,
 } from "@open-design/sidecar-proto";
-import {
-  createJsonIpcServer,
-  requestJsonIpc,
-  resolveAppIpcPath,
-} from "@open-design/sidecar";
+import { requestJsonIpc, resolveAppIpcPath } from "@open-design/sidecar";
 import { afterEach, describe, expect, it } from "vitest";
-
-import { acquireOrAdoptPackagedHeadlessStartup } from "../src/headless-runtime.js";
 
 type JsonRpcResponse = {
   error?: { code: number; message: string };
@@ -80,7 +75,7 @@ class McpClient {
       capabilities: {},
       clientInfo: { name: "packaged-reconnect-test", version: "1" },
       protocolVersion: "2025-03-26",
-    });
+    }, 60_000);
     this.child.stdin.write(`${JSON.stringify({
       jsonrpc: "2.0",
       method: "notifications/initialized",
@@ -91,9 +86,10 @@ class McpClient {
     const result = await this.request("tools/call", {
       arguments: args,
       name,
-    }) as { content?: Array<{ text?: string }> };
+    }, 30_000) as { content?: Array<{ text?: string }>; isError?: boolean };
     const text = result.content?.find((entry) => typeof entry.text === "string")?.text;
     if (!text) throw new Error(`MCP ${name} returned no text payload`);
+    if (result.isError === true) throw new Error(`MCP ${name} failed: ${text}`);
     return JSON.parse(text) as Record<string, unknown>;
   }
 
@@ -107,10 +103,15 @@ class McpClient {
     if (this.child.exitCode === null) this.child.kill("SIGKILL");
   }
 
-  private async request(method: string, params: unknown): Promise<unknown> {
+  private async request(method: string, params: unknown, timeoutMs: number): Promise<unknown> {
     const id = this.nextId++;
+    let timeout: NodeJS.Timeout | undefined;
     const response = new Promise<unknown>((resolveResponse, rejectResponse) => {
       this.pending.set(id, { reject: rejectResponse, resolve: resolveResponse });
+      timeout = setTimeout(() => {
+        this.pending.delete(id);
+        rejectResponse(new Error(`MCP request ${method} timed out after ${timeoutMs}ms: ${this.stderr}`));
+      }, timeoutMs);
     });
     this.child.stdin.write(`${JSON.stringify({
       id,
@@ -118,18 +119,118 @@ class McpClient {
       method,
       params,
     })}\n`);
-    return await Promise.race([
-      response,
-      new Promise<never>((_resolve, rejectTimeout) => {
-        setTimeout(() => rejectTimeout(new Error(`MCP request ${method} timed out`)), 10_000);
-      }),
-    ]);
+    try {
+      return await response;
+    } finally {
+      if (timeout != null) clearTimeout(timeout);
+    }
   }
 }
 
-function sendJson(response: import("node:http").ServerResponse, body: unknown): void {
-  response.writeHead(200, { "Content-Type": "application/json" });
-  response.end(JSON.stringify(body));
+async function waitFor<T>(
+  inspect: () => Promise<T | null>,
+  description: string,
+  timeoutMs = 20_000,
+): Promise<T> {
+  const deadline = Date.now() + timeoutMs;
+  let lastError: unknown;
+  while (Date.now() < deadline) {
+    try {
+      const value = await inspect();
+      if (value != null) return value;
+    } catch (error) {
+      lastError = error;
+    }
+    await new Promise<void>((resolveDelay) => setTimeout(resolveDelay, 50));
+  }
+  throw new Error(
+    `timed out waiting for ${description}${
+      lastError instanceof Error ? `: ${lastError.message}` : ""
+    }`,
+  );
+}
+
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function writeFakeCodex(options: {
+  completeMarker: string;
+  invocationLog: string;
+  releaseMarker: string;
+  signalLog: string;
+  startMarker: string;
+  tempRoot: string;
+}): Promise<string> {
+  const script = join(options.tempRoot, "fake-codex.cjs");
+  await writeFile(script, `
+const fs = require("node:fs");
+const args = process.argv.slice(2);
+if (args.includes("--version")) {
+  console.log("codex-cli 0.142.5");
+  process.exit(0);
+}
+if (args[0] === "debug" && args[1] === "models") {
+  console.log(JSON.stringify({ models: [] }));
+  process.exit(0);
+}
+if (args[0] === "login" && args[1] === "status") {
+  console.log("Logged in using ChatGPT");
+  process.exit(0);
+}
+fs.appendFileSync(${JSON.stringify(options.invocationLog)}, JSON.stringify({ args, pid: process.pid }) + "\\n");
+fs.writeFileSync(${JSON.stringify(options.startMarker)}, String(process.pid));
+process.on("SIGTERM", () => {
+  fs.appendFileSync(${JSON.stringify(options.signalLog)}, "SIGTERM\\n");
+  process.exit(143);
+});
+console.log(JSON.stringify({ type: "thread.started", thread_id: "019f-packaged-reconnect" }));
+console.log(JSON.stringify({ type: "turn.started" }));
+const deadline = Date.now() + 15000;
+const timer = setInterval(() => {
+  if (fs.existsSync(${JSON.stringify(options.releaseMarker)})) {
+    clearInterval(timer);
+    console.log(JSON.stringify({
+      type: "item.completed",
+      item: { id: "item-1", type: "agent_message", text: "Reconnect completed." },
+    }));
+    console.log(JSON.stringify({
+      type: "turn.completed",
+      usage: { input_tokens: 5, cached_input_tokens: 0, output_tokens: 2 },
+    }));
+    fs.writeFileSync(${JSON.stringify(options.completeMarker)}, "complete");
+    setTimeout(() => process.exit(0), 20);
+    return;
+  }
+  if (Date.now() >= deadline) {
+    clearInterval(timer);
+    process.stderr.write("timed out waiting for reconnect release\\n");
+    process.exit(2);
+  }
+}, 25);
+`, "utf8");
+
+  const bin = join(options.tempRoot, process.platform === "win32" ? "fake-codex.cmd" : "fake-codex");
+  if (process.platform === "win32") {
+    await writeFile(
+      bin,
+      `@echo off\r\n"${process.execPath}" "${script}" %*\r\nexit /b %ERRORLEVEL%\r\n`,
+      "utf8",
+    );
+  } else {
+    await writeFile(
+      bin,
+      `#!/bin/sh\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(script)} "$@"\n`,
+      "utf8",
+    );
+    await chmod(bin, 0o755);
+  }
+  return bin;
 }
 
 describe("packaged headless MCP reconnect lifecycle", () => {
@@ -139,91 +240,56 @@ describe("packaged headless MCP reconnect lifecycle", () => {
     for (const close of cleanup.splice(0).reverse()) await close();
   });
 
-  it("keeps one owner and one real child alive across separate MCP clients", async () => {
+  it("keeps the daemon-owned run alive while a separate MCP client reconnects", async () => {
     const workspaceRoot = resolve(import.meta.dirname, "..", "..", "..");
     const daemonCli = join(workspaceRoot, "apps", "daemon", "dist", "cli.js");
+    const packagedHeadless = join(workspaceRoot, "apps", "packaged", "dist", "headless.mjs");
+    const webSidecar = join(workspaceRoot, "apps", "web", "dist", "sidecar", "index.js");
     expect(existsSync(daemonCli), "packaged pretest must build the daemon MCP entry").toBe(true);
+    expect(existsSync(packagedHeadless), "packaged pretest must build the headless entry").toBe(true);
+    expect(existsSync(webSidecar), "packaged pretest must build the web sidecar entry").toBe(true);
 
     const tempRoot = await mkdtemp(join(tmpdir(), "od-packaged-mcp-reconnect-"));
-    cleanup.push(async () => await rm(tempRoot, { force: true, recursive: true }));
-    const signalLog = join(tempRoot, "worker-signals.log");
-    const runId = "run-packaged-reconnect";
-    const projectId = "project-packaged-reconnect";
-    let runCreationCount = 0;
-    let runStatus: "running" | "succeeded" = "running";
-    let workerSignal: NodeJS.Signals | null = null;
-    let worker: ChildProcess | null = null;
-
-    const httpServer: Server = createServer((request, response) => {
-      const requestUrl = new URL(request.url ?? "/", "http://127.0.0.1");
-      if (requestUrl.pathname === "/api/health") {
-        sendJson(response, { ok: true });
-        return;
-      }
-      if (request.method === "GET" && requestUrl.pathname === "/api/projects") {
-        sendJson(response, { projects: [{ id: projectId, name: "Reconnect project" }] });
-        return;
-      }
-      if (request.method === "POST" && requestUrl.pathname === "/api/runs") {
-        runCreationCount++;
-        if (worker == null) {
-          const spawnedWorker = spawn(process.execPath, ["-e", [
-            "const fs=require('node:fs');",
-            `const log=${JSON.stringify(signalLog)};`,
-            "process.on('SIGTERM',()=>{fs.appendFileSync(log,'SIGTERM\\n');process.exit(143);});",
-            "setTimeout(()=>process.exit(0),700);",
-          ].join("")], {
-            stdio: ["ignore", "pipe", "pipe"],
-            windowsHide: true,
-          });
-          worker = spawnedWorker;
-          spawnedWorker.once("exit", (code, signal) => {
-            workerSignal = signal;
-            if (code === 0 && signal == null) runStatus = "succeeded";
-          });
-        }
-        sendJson(response, {
-          conversationId: "conversation-packaged-reconnect",
-          id: runId,
-          projectId,
-          runId,
-          status: runStatus,
-        });
-        return;
-      }
-      if (request.method === "GET" && requestUrl.pathname === `/api/runs/${runId}`) {
-        sendJson(response, {
-          artifactCount: 0,
-          cancelRequested: false,
-          conversationId: "conversation-packaged-reconnect",
-          deliverableEntryFile: null,
-          deliverableValid: false,
-          deliverableValidation: "none",
-          error: null,
-          exitCode: runStatus === "succeeded" ? 0 : null,
-          id: runId,
-          projectId,
-          signal: workerSignal,
-          status: runStatus,
-        });
-        return;
-      }
-      if (request.method === "GET" && requestUrl.pathname === `/api/runs/${runId}/events`) {
-        response.writeHead(200, { "Content-Type": "text/event-stream" });
-        response.end("event: agent\ndata: {\"type\":\"text_delta\",\"delta\":\"done\"}\n\n");
-        return;
-      }
-      if (request.method === "GET" && requestUrl.pathname === "/api/mcp/install-info") {
-        sendJson(response, { webBaseUrl: null });
-        return;
-      }
-      sendJson(response, {});
+    cleanup.push(async () => await rm(tempRoot, {
+      force: true,
+      maxRetries: 20,
+      recursive: true,
+      retryDelay: 100,
+    }));
+    const bootstrapLog = join(tempRoot, "bootstrap.log");
+    const completeMarker = join(tempRoot, "codex-complete");
+    const invocationLog = join(tempRoot, "codex-invocations.jsonl");
+    const releaseMarker = join(tempRoot, "release-codex");
+    const signalLog = join(tempRoot, "codex-signals.log");
+    const startMarker = join(tempRoot, "codex-started");
+    const webStartedMarker = join(tempRoot, "standalone-web-started");
+    const fakeCodex = await writeFakeCodex({
+      completeMarker,
+      invocationLog,
+      releaseMarker,
+      signalLog,
+      startMarker,
+      tempRoot,
     });
-    await new Promise<void>((resolveListen) => httpServer.listen(0, "127.0.0.1", resolveListen));
-    cleanup.push(async () => await new Promise<void>((resolveClose) => httpServer.close(() => resolveClose())));
-    const address = httpServer.address();
-    if (address == null || typeof address === "string") throw new Error("fake daemon did not bind TCP");
-    const daemonUrl = `http://127.0.0.1:${address.port}`;
+
+    const standaloneRoot = join(tempRoot, "web-standalone");
+    const standaloneWebRoot = join(standaloneRoot, "apps", "web");
+    await mkdir(standaloneWebRoot, { recursive: true });
+    await writeFile(join(standaloneWebRoot, "server.js"), `
+const fs = require("node:fs");
+const http = require("node:http");
+const server = http.createServer((_request, response) => response.end("ok"));
+server.listen(Number(process.env.PORT), process.env.HOSTNAME, () => {
+  fs.writeFileSync(${JSON.stringify(webStartedMarker)}, String(process.pid));
+});
+`, "utf8");
+
+    const bootstrapWrapper = join(tempRoot, "bootstrap-wrapper.mjs");
+    await writeFile(bootstrapWrapper, `
+import { appendFileSync } from "node:fs";
+appendFileSync(${JSON.stringify(bootstrapLog)}, String(process.pid) + "\\n");
+await import(${JSON.stringify(pathToFileURL(packagedHeadless).href)});
+`, "utf8");
 
     const namespace = `reconnect-${randomUUID()}`;
     const daemonIpc = resolveAppIpcPath({
@@ -236,114 +302,99 @@ describe("packaged headless MCP reconnect lifecycle", () => {
       contract: OPEN_DESIGN_SIDECAR_CONTRACT,
       namespace,
     });
-    const daemonIpcServer = await createJsonIpcServer({
-      socketPath: daemonIpc,
-      handler: async () => ({
-        desktopAuthGateActive: false,
-        pid: process.pid,
-        state: "running",
-        updatedAt: new Date().toISOString(),
-        url: daemonUrl,
-      }),
-    });
-    cleanup.push(async () => await daemonIpcServer.close());
-
-    let ownerStartCount = 0;
-    const dependencies = {
-      confirmRuntime: async () => undefined,
-      createIpcServer: async ({
-        currentWebUrl,
-        shutdown,
-      }: {
-        currentWebUrl(): string | null;
-        shutdown(): Promise<void>;
-      }) => await createJsonIpcServer({
-        socketPath: desktopIpc,
-        handler: async (message: unknown) => {
-          const type = (message as { type?: unknown })?.type;
-          if (type === SIDECAR_MESSAGES.SHUTDOWN) {
-            setImmediate(() => void shutdown());
-            return { accepted: true };
-          }
-          const url = currentWebUrl();
-          return {
-            pid: process.pid,
-            state: url ? "running" : "idle",
-            updatedAt: new Date().toISOString(),
-            url,
-            windowVisible: false,
-          } satisfies DesktopStatusSnapshot;
-        },
-      }),
-      exit: () => undefined,
-      installMcp: async () => undefined,
-      startSidecars: async () => {
-        ownerStartCount++;
-        return {
-          close: async () => undefined,
-          currentWebUrl: () => daemonUrl,
-          daemon: {
-            desktopAuthGateActive: false,
-            state: "running" as const,
-            url: daemonUrl,
-          },
-          web: { state: "running" as const, url: daemonUrl },
-        };
-      },
-      writeIdentity: async () => ({ close: async () => undefined, identity: {} as never }),
-      writeWebIdentity: async () => undefined,
-    };
-    const inspectExistingOwner = async () => {
-      try {
-        const status = await requestJsonIpc<DesktopStatusSnapshot>(
-          desktopIpc,
-          { type: SIDECAR_MESSAGES.STATUS },
-          { timeoutMs: 300 },
-        );
-        return {
-          state: status.state === "running" ? "running" as const : "starting" as const,
-          webUrl: status.url ?? null,
-        };
-      } catch {
-        return null;
+    let ownerPid: number | null = null;
+    cleanup.push(async () => {
+      await requestJsonIpc(
+        desktopIpc,
+        { type: SIDECAR_MESSAGES.SHUTDOWN },
+        { timeoutMs: 1_000 },
+      ).catch(() => undefined);
+      if (ownerPid != null) {
+        const closingPid = ownerPid;
+        await waitFor(
+          async () => isProcessAlive(closingPid) ? null : true,
+          "packaged owner process exit",
+          15_000,
+        ).catch(() => undefined);
       }
-    };
-    const owner = await acquireOrAdoptPackagedHeadlessStartup(dependencies, { inspectExistingOwner });
-    expect(owner.ownership).toBe("owner");
-    if (owner.ownership !== "owner") throw new Error("first packaged runtime did not own lifecycle");
-    cleanup.push(async () => await owner.shutdown());
+    });
 
     const clientEnv = {
       ...process.env,
       [SIDECAR_ENV.IPC_PATH]: daemonIpc,
+      CODEX_BIN: fakeCodex,
+      CODEX_HOME: join(tempRoot, "codex-home"),
       OD_DATA_DIR: tempRoot,
-    };
-    const firstClient = new McpClient(daemonCli, clientEnv);
-    await firstClient.initialize();
-    const started = await firstClient.callTool("start_run", {
-      project: projectId,
-      prompt: "complete after the initiating MCP client disconnects",
-      requestId: "request-packaged-reconnect",
-    });
-    expect(started.runId).toBe(runId);
-    expect(runStatus).toBe("running");
-    await firstClient.close();
+      OD_MCP_BOOTSTRAP_ARGS: JSON.stringify([bootstrapWrapper, "--headless"]),
+      OD_MCP_BOOTSTRAP_COMMAND: process.execPath,
+      OD_PACKAGED_NAMESPACE: namespace,
+      OD_RESOURCE_ROOT: workspaceRoot,
+      OD_WEB_OUTPUT_MODE: "standalone",
+      OD_WEB_STANDALONE_ROOT: standaloneRoot,
+    } satisfies NodeJS.ProcessEnv;
 
-    const adopted = await acquireOrAdoptPackagedHeadlessStartup(dependencies, { inspectExistingOwner });
-    expect(adopted).toEqual({ ownership: "adopted", webUrl: daemonUrl });
-    expect(ownerStartCount).toBe(1);
+    const firstClient = new McpClient(daemonCli, clientEnv);
+    cleanup.push(async () => await firstClient.close());
+    await firstClient.initialize();
+
+    const ownerBefore = await waitFor(async () => {
+      const status = await requestJsonIpc<DesktopStatusSnapshot>(
+        desktopIpc,
+        { type: SIDECAR_MESSAGES.STATUS },
+        { timeoutMs: 500 },
+      );
+      return status.state === "running" && status.url ? status : null;
+    }, "packaged headless owner");
+    if (typeof ownerBefore.pid !== "number") throw new Error("packaged owner status omitted pid");
+    ownerPid = ownerBefore.pid;
+    const daemonBefore = await requestJsonIpc<DaemonStatusSnapshot>(
+      daemonIpc,
+      { type: SIDECAR_MESSAGES.STATUS },
+      { timeoutMs: 500 },
+    );
+    expect(existsSync(webStartedMarker), "headless bootstrap must honor standalone web configuration").toBe(true);
+
+    const projectId = `reconnect-${randomUUID()}`;
+    const project = await firstClient.callTool("create_project", {
+      id: projectId,
+      name: "Packaged MCP reconnect lifecycle",
+    });
+    expect(project).toMatchObject({ project: { id: projectId } });
+    const started = await firstClient.callTool("start_run", {
+      agent: "codex",
+      project: projectId,
+      prompt: "Remain alive until the replacement MCP client reconnects.",
+      requestId: randomUUID(),
+    });
+    const runId = String(started.runId ?? started.id ?? "");
+    expect(runId).not.toBe("");
+    await waitFor(async () => existsSync(startMarker) ? true : null, "daemon-owned Codex child");
+    expect(existsSync(completeMarker)).toBe(false);
+
+    await firstClient.close();
+    const ownerAfterDisconnect = await requestJsonIpc<DesktopStatusSnapshot>(
+      desktopIpc,
+      { type: SIDECAR_MESSAGES.STATUS },
+      { timeoutMs: 500 },
+    );
+    expect(ownerAfterDisconnect.pid).toBe(ownerBefore.pid);
 
     const secondClient = new McpClient(daemonCli, clientEnv);
     cleanup.push(async () => await secondClient.close());
     await secondClient.initialize();
-    let terminal: Record<string, unknown> | null = null;
-    const deadline = Date.now() + 5_000;
-    while (Date.now() < deadline) {
-      terminal = await secondClient.callTool("get_run", { runId });
-      expect(terminal.id).toBe(runId);
-      if (terminal.status === "succeeded") break;
-      await new Promise<void>((resolveDelay) => setTimeout(resolveDelay, 40));
-    }
+    const daemonAfterReconnect = await requestJsonIpc<DaemonStatusSnapshot>(
+      daemonIpc,
+      { type: SIDECAR_MESSAGES.STATUS },
+      { timeoutMs: 500 },
+    );
+    expect(daemonAfterReconnect.pid).toBe(daemonBefore.pid);
+
+    await writeFile(releaseMarker, "release", "utf8");
+    const terminal = await waitFor(async () => {
+      const status = await secondClient.callTool("get_run", { runId });
+      expect(status.id).toBe(runId);
+      return status.status === "succeeded" ? status : null;
+    }, "same run to reach terminal success", 20_000);
 
     expect(terminal).toMatchObject({
       cancelRequested: false,
@@ -352,9 +403,16 @@ describe("packaged headless MCP reconnect lifecycle", () => {
       signal: null,
       status: "succeeded",
     });
-    expect(runCreationCount).toBe(1);
-    expect(ownerStartCount).toBe(1);
-    expect(workerSignal).toBeNull();
+    expect(existsSync(completeMarker)).toBe(true);
     expect(existsSync(signalLog)).toBe(false);
-  }, 30_000);
+    const invocations = (await readFile(invocationLog, "utf8"))
+      .trim()
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => JSON.parse(line) as { args: string[]; pid: number });
+    expect(invocations).toHaveLength(1);
+    expect(invocations[0]?.args).toContain("exec");
+    const bootstraps = (await readFile(bootstrapLog, "utf8")).trim().split("\n").filter(Boolean);
+    expect(bootstraps).toEqual([String(ownerBefore.pid)]);
+  }, 90_000);
 });

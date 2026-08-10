@@ -36,6 +36,18 @@ function resolveHeadlessAmrProfile(): PackagedConfig["amrProfile"] {
   return resolvePackagedAmrProfile(process.env.OPEN_DESIGN_AMR_PROFILE);
 }
 
+function resolveHeadlessWebOutputMode(): PackagedConfig["webOutputMode"] {
+  const configured = process.env.OD_WEB_OUTPUT_MODE?.trim();
+  if (configured == null || configured.length === 0) return "server";
+  if (configured === "server" || configured === "standalone") return configured;
+  throw new Error(`unsupported packaged web output mode: ${configured}`);
+}
+
+function resolveHeadlessWebStandaloneRoot(): string | null {
+  const configured = process.env.OD_WEB_STANDALONE_ROOT?.trim();
+  return configured ? resolve(configured) : null;
+}
+
 function resolveHeadlessConfig(): PackagedConfig {
   const namespace = OPEN_DESIGN_SIDECAR_CONTRACT.normalizeNamespace(
     process.env[PACKAGED_NAMESPACE_ENV] ?? SIDECAR_DEFAULTS.namespace,
@@ -65,8 +77,8 @@ function resolveHeadlessConfig(): PackagedConfig {
     posthogHost: process.env.POSTHOG_HOST?.trim() || null,
     velaWebUrl: process.env.OD_VELA_WEB_URL?.trim() || null,
     webSidecarEntry: null,
-    webStandaloneRoot: null,
-    webOutputMode: "server",
+    webStandaloneRoot: resolveHeadlessWebStandaloneRoot(),
+    webOutputMode: resolveHeadlessWebOutputMode(),
   };
 }
 
