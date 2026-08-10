@@ -902,7 +902,12 @@ import { assertServerContextSatisfiesRoutes } from './route-context-contract.js'
 import { configureConnectorCredentialStore, connectorService, FileConnectorCredentialStore } from './connectors/service.js';
 import { composioConnectorProvider } from './connectors/composio.js';
 import { configureComposioConfigStore } from './connectors/composio-config.js';
-import { CHAT_TOOL_ENDPOINTS, CHAT_TOOL_OPERATIONS, toolTokenRegistry } from './tool-tokens.js';
+import {
+  CHAT_TOOL_ENDPOINTS,
+  CHAT_TOOL_OPERATIONS,
+  PROJECT_EXPORT_TOOL_ENDPOINT,
+  toolTokenRegistry,
+} from './tool-tokens.js';
 import {
   buildDeployFileSet,
   checkDeploymentUrl,
@@ -969,7 +974,7 @@ import {
   requireLocalDaemonRequest,
 } from './http/local-daemon-request.js';
 import { renderOAuthResultPage } from './http/oauth-result-page.js';
-import { createToolRequestAuth } from './http/tool-request-auth.js';
+import { bearerTokenFromRequest, createToolRequestAuth } from './http/tool-request-auth.js';
 
 /** @typedef {import('@open-design/contracts').ApiErrorCode} ApiErrorCode */
 /** @typedef {import('@open-design/contracts').ApiError} ApiError */
@@ -1455,6 +1460,12 @@ export function createAgentRuntimeEnv(
     },
     SANDBOX_RUNTIME,
   );
+  // The daemon API token authorizes the whole non-loopback API surface. Agent
+  // children receive only their run-scoped tool capability, never that broad
+  // credential inherited from the daemon process (including Windows casing).
+  for (const key of Object.keys(env)) {
+    if (key.toUpperCase() === 'OD_API_TOKEN') delete env[key];
+  }
   const sidecarIpcPath = baseEnv[SIDECAR_ENV.IPC_PATH];
   if (typeof sidecarIpcPath === 'string' && sidecarIpcPath.length > 0) {
     env[SIDECAR_ENV.IPC_PATH] = sidecarIpcPath;
@@ -1958,6 +1969,8 @@ export function shouldReportRunCompletionTelemetryFallbackStatus(status: unknown
 
 const PROJECT_PREVIEW_SCOPE_TTL_MS = 60 * 60 * 1000;
 const PROJECT_PREVIEW_ASSET_PATH_RE = /^\/projects\/([^/]+)\/preview\/([^/]+)\/.+$/u;
+const PROJECT_RUN_SCOPED_EXPORT_PATH_RE =
+  /^\/projects\/[^/]+\/export(?:\/(?:pptx|pdf-image|image))?$/u;
 
 function createProjectPreviewScopeRegistry() {
   const scopes = new Map();
@@ -2448,8 +2461,9 @@ export async function startServer({
   // Loopback origins skip the
   // check (the desktop UI / local CLI never carry a bearer); every
   // other request must present `Authorization: Bearer <token>` with a
-  // value matching `OD_API_TOKEN`. Health / readiness / version remain
-  // open so monitoring probes don't need the token. Server-minted
+  // value matching `OD_API_TOKEN`. A currently valid run-scoped token may
+  // pass only an exact screenshot-export endpoint; its route rechecks the
+  // operation and project. Health / readiness / version remain open. Server-minted
   // project preview asset scopes are also accepted for GETs so sandboxed
   // browser iframes can load HTML/CSS/JS without privileged headers.
   // Rich daemon status stays authenticated because it includes local
@@ -2479,12 +2493,20 @@ export async function startServer({
       // bearer; the loopback bypass exists for the localhost desktop
       // UI which has no proxy in the path.
       if (isLoopbackPeerAddress(req.socket?.remoteAddress)) return next();
-      if (!isApiTokenAuthorization(req.get('authorization'))) {
-        return res.status(401).json({
-          error: { code: 'API_TOKEN_REQUIRED', message: 'Authorization: Bearer <OD_API_TOKEN> required' },
-        });
+      if (isApiTokenAuthorization(req.get('authorization'))) return next();
+      if (
+        req.method === 'POST'
+        && PROJECT_RUN_SCOPED_EXPORT_PATH_RE.test(req.path)
+        && toolTokenRegistry.validate(bearerTokenFromRequest(req), {
+          endpoint: PROJECT_EXPORT_TOOL_ENDPOINT,
+          operation: 'project:export',
+        }).ok
+      ) {
+        return next();
       }
-      return next();
+      return res.status(401).json({
+        error: { code: 'API_TOKEN_REQUIRED', message: 'Authorization: Bearer <OD_API_TOKEN> required' },
+      });
     });
   }
 
