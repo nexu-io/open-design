@@ -828,7 +828,7 @@ export const TOOL_DEFS = [
   {
     name: 'list_agents',
     description:
-      'List the agent CLIs Open Design can run for start_run.agent. Returns only installed (available) agents by default — pass includeUnavailable:true to also see agents we know about but that are not on PATH (each carries an installUrl for the user). Each entry includes id, name, version, authoritative auth status when available, model-catalog source, and the complete compatibility catalog.',
+      'List the agent CLIs Open Design can run for start_run.agent. Returns only installed (available) agents by default — pass includeUnavailable:true to also see agents we know about but that are not on PATH (each carries an installUrl for the user). Codex entries use the separate ChatGPT-only readiness and complete live compatibility catalog; other agents retain a bounded model sample with modelsCount reporting the full total.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -2422,18 +2422,30 @@ async function listPlugins(baseUrl: string): Promise<JsonObject> {
 // `available: true` (only installed CLIs) so the outer agent doesn't
 // pick an agent it can't actually run — the failure mode that left us
 // with zombie "running" runs whose inner Claude binary never spawned.
-// Compatibility is intentionally complete. Truncating this surface made a
-// valid exact model indistinguishable from an unsupported one.
+// Codex compatibility is intentionally complete because start_run validates
+// exact Local Codex settings against that same ChatGPT-only catalog. Other
+// adapters retain the historical bounded sample to control MCP payload size.
 async function listAgents(baseUrl: string, includeUnavailable: boolean): Promise<JsonObject> {
   const raw = await getJson<{ agents?: JsonObject[] }>(`${baseUrl}/api/agents`);
   const all = raw?.agents ?? [];
   const filtered = includeUnavailable
     ? all
     : all.filter((a) => a?.available === true);
+  const MAX_NON_CODEX_MODELS = 10;
   const agents = filtered.map((a) => {
-    const models = Array.isArray(a?.models) ? (a.models as unknown[]) : [];
+    const isCodex = a?.id === 'codex';
+    const completeModels = isCodex
+      ? Array.isArray(a?.chatgptModels)
+        ? (a.chatgptModels as unknown[])
+        : []
+      : Array.isArray(a?.models)
+        ? (a.models as unknown[])
+        : [];
+    const models = isCodex
+      ? completeModels
+      : completeModels.slice(0, MAX_NON_CODEX_MODELS);
     const usesAuthoritativeCodexAuth =
-      a?.id === 'codex' && typeof a?.chatgptAuthStatus === 'string';
+      isCodex && typeof a?.chatgptAuthStatus === 'string';
     const authStatus = usesAuthoritativeCodexAuth
       ? a?.chatgptAuthStatus
       : a?.authStatus;
@@ -2444,7 +2456,7 @@ async function listAgents(baseUrl: string, includeUnavailable: boolean): Promise
       id: a?.id,
       name: a?.name,
       models,
-      modelsCount: models.length,
+      modelsCount: completeModels.length,
     };
     if (typeof a?.version === 'string' && a.version.length > 0) out.version = a.version;
     if (typeof authStatus === 'string') out.authStatus = authStatus;
@@ -2455,7 +2467,20 @@ async function listAgents(baseUrl: string, includeUnavailable: boolean): Promise
     if (typeof a?.chatgptAuthMessage === 'string') {
       out.chatgptAuthMessage = a.chatgptAuthMessage;
     }
-    if (typeof a?.modelsSource === 'string') out.modelsSource = a.modelsSource;
+    const modelsSource = isCodex
+      ? typeof a?.chatgptModelsSource === 'string'
+        ? a.chatgptModelsSource
+        : 'unavailable'
+      : a?.modelsSource;
+    if (typeof modelsSource === 'string') out.modelsSource = modelsSource;
+    if (isCodex) {
+      out.ready = typeof a?.chatgptReady === 'boolean'
+        ? a.chatgptReady
+        : authStatus === 'ok' && modelsSource === 'live';
+      if (typeof a?.chatgptReadyMessage === 'string') {
+        out.readyMessage = a.chatgptReadyMessage;
+      }
+    }
     if (includeUnavailable) {
       out.available = Boolean(a?.available);
       if (typeof a?.installUrl === 'string') out.installUrl = a.installUrl;

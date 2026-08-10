@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { writeAppConfig } from '../src/app-config.js';
 import { startServer } from '../src/server.js';
 import {
   clearRememberedLiveModels,
@@ -66,6 +67,7 @@ describe('Codex configured-model capability preflight', () => {
     }
     tempDir = null;
     clearRememberedLiveModels('codex');
+    clearRememberedLiveModels('codex', 'chatgpt');
     restoreEnv(originalEnv);
   });
 
@@ -210,6 +212,63 @@ describe('Codex configured-model capability preflight', () => {
     expect(args).toContain('model_reasoning_effort="future-deep"');
   });
 
+  it('validates ChatGPT-only runs against the strict catalog instead of the generic provider catalog', async () => {
+    const fixture = await startCodexFixture();
+    rememberLiveModels('codex', [
+      { id: 'default', label: 'Default (CLI config)' },
+      { id: 'provider-only-model', label: 'Provider only' },
+    ]);
+    rememberLiveModels('codex', [
+      { id: 'default', label: 'Default (CLI config)' },
+      {
+        id: 'chatgpt-only-model',
+        label: 'ChatGPT only',
+        supportedReasoningLevels: ['future-deep'],
+      },
+    ], 'chatgpt');
+    const firstConversation = await createConversation(fixture.url);
+    const rejected = await sendRunAndWait(
+      fixture.url,
+      firstConversation.projectId,
+      firstConversation.conversationId,
+      {
+        model: 'provider-only-model',
+        codexAuthMode: 'chatgpt',
+      },
+    );
+
+    expect(rejected).toMatchObject({
+      status: 'failed',
+      errorCode: 'MODEL_UNAVAILABLE',
+    });
+    await expect(pathExists(fixture.spawnMarker)).resolves.toBe(false);
+
+    rememberLiveModels('codex', [
+      { id: 'default', label: 'Default (CLI config)' },
+      {
+        id: 'chatgpt-only-model',
+        label: 'ChatGPT only',
+        supportedReasoningLevels: ['future-deep'],
+      },
+    ], 'chatgpt');
+    const secondConversation = await createConversation(fixture.url);
+    const finished = await sendRunAndWait(
+      fixture.url,
+      secondConversation.projectId,
+      secondConversation.conversationId,
+      {
+        model: 'chatgpt-only-model',
+        reasoning: 'future-deep',
+        codexAuthMode: 'chatgpt',
+      },
+    );
+
+    expect(finished.status).toBe('succeeded');
+    const args = JSON.parse(await readFile(fixture.spawnMarker, 'utf8')) as string[];
+    expect(args).toContain('chatgpt-only-model');
+    expect(args).toContain('model_reasoning_effort="future-deep"');
+  });
+
   it('blocks ChatGPT-only Codex runs when an API key exists but ChatGPT login is absent', async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), 'od-codex-chatgpt-auth-'));
     const codexHome = path.join(tempDir, 'codex-home');
@@ -238,6 +297,10 @@ describe('Codex configured-model capability preflight', () => {
       { id: 'default', label: 'Default (CLI config)' },
       { id: 'gpt-5.6-sol', label: 'gpt-5.6-sol', supportedReasoningLevels: ['xhigh'] },
     ]);
+    rememberLiveModels('codex', [
+      { id: 'default', label: 'Default (CLI config)' },
+      { id: 'gpt-5.6-sol', label: 'gpt-5.6-sol', supportedReasoningLevels: ['xhigh'] },
+    ], 'chatgpt');
 
     const { projectId, conversationId } = await createConversation(started.url);
     const failed = await sendRunAndWait(started.url, projectId, conversationId, {
@@ -286,6 +349,10 @@ describe('Codex configured-model capability preflight', () => {
       { id: 'default', label: 'Default (CLI config)' },
       { id: 'gpt-5.6-sol', label: 'gpt-5.6-sol', supportedReasoningLevels: ['xhigh'] },
     ]);
+    rememberLiveModels('codex', [
+      { id: 'default', label: 'Default (CLI config)' },
+      { id: 'gpt-5.6-sol', label: 'gpt-5.6-sol', supportedReasoningLevels: ['xhigh'] },
+    ], 'chatgpt');
 
     const { projectId, conversationId } = await createConversation(started.url);
     const failed = await sendRunAndWait(started.url, projectId, conversationId, {
@@ -401,13 +468,18 @@ describe('Codex configured-model capability preflight', () => {
     });
     await mkdir(codexHome, { recursive: true });
     isolateExternalProcessEnv();
-    started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
-    await putConfig(started.url, {
+    if (!process.env.OD_DATA_DIR) {
+      throw new Error('OD_DATA_DIR is required for Codex preflight fixtures');
+    }
+    const configPatch = {
       agentId: 'codex',
       agentCliEnv: { codex: codexTestEnv(fakeCodex, codexHome) },
       telemetry: { metrics: false, content: false, artifactManifest: false },
       privacyDecisionAt: Date.now(),
-    });
+    };
+    await writeAppConfig(process.env.OD_DATA_DIR, configPatch);
+    started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
+    await putConfig(started.url, configPatch);
     if (options.seedCatalog !== false) rememberLiveModels('codex', [
       { id: 'default', label: 'Default (CLI config)' },
       {

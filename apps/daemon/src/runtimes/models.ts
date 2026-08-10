@@ -5,6 +5,9 @@ export const DEFAULT_MODEL_OPTION: RuntimeModelOption = {
   label: 'Default (CLI config)',
 };
 
+/** Isolated compatibility cache for the official ChatGPT-backed Codex route. */
+export const CODEX_CHATGPT_MODEL_SCOPE = 'chatgpt';
+
 // Daemon's /api/chat needs to validate the user's model pick against the
 // list we last surfaced to the UI. We keep a per-agent cache of the most
 // recent live list (refreshed every detectAgents() call) and additionally

@@ -1,5 +1,10 @@
 import { execAgentFile } from './invocation.js';
-import { readCodexProviderEnvKey } from '../codex-config-normalize.js';
+import { readFile } from 'node:fs/promises';
+import {
+  readCodexProviderEnvKey,
+  resolveCodexConfigPath,
+} from '../codex-config-normalize.js';
+import { extractCodexRootModelConfig } from './codex-model-preflight.js';
 import type { RuntimeAgentDef, RuntimeEnv } from './types.js';
 
 export type AgentAuthProbeResult = {
@@ -82,6 +87,39 @@ export function claudeAuthGuidance(): string {
 
 export function codexChatGptAuthGuidance(): string {
   return 'Local Codex through the official Open Design MCP route requires an existing ChatGPT/Codex login. Run `codex login`, confirm `codex login status` says `Logged in using ChatGPT`, then retry. API keys and custom providers are intentionally not accepted for this route.';
+}
+
+export type CodexChatGptRoutePolicy = {
+  allowed: boolean;
+  providerEnvKey: string | null;
+};
+
+/**
+ * Decide whether the current Codex config can be proven to use the official
+ * ChatGPT account path. Unknown provider/profile/endpoint overlays fail
+ * closed because the strict child cannot safely inherit them.
+ */
+export async function inspectCodexChatGptRoutePolicy(
+  env: RuntimeEnv,
+): Promise<CodexChatGptRoutePolicy> {
+  const providerEnvKey = await readCodexProviderEnvKey(env);
+  let hasUnverifiedProviderConfig = false;
+  try {
+    const config = await readFile(resolveCodexConfigPath(env), 'utf8');
+    const configured = extractCodexRootModelConfig(config);
+    hasUnverifiedProviderConfig = Boolean(
+      (configured.modelProvider
+        && configured.modelProvider.toLowerCase() !== 'openai')
+      || configured.hasCompatibilityOverlay,
+    );
+  } catch {
+    // Missing config is the normal ChatGPT-backed case. The login and live
+    // catalog probes remain authoritative for readiness.
+  }
+  return {
+    allowed: !providerEnvKey && !hasUnverifiedProviderConfig,
+    providerEnvKey,
+  };
 }
 
 export function isCursorAuthFailureText(text: string): boolean {

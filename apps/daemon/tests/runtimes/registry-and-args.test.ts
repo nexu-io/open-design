@@ -1,9 +1,14 @@
 import { test } from 'vitest';
 import {
-  AGENT_DEFS, amp, assert, chmodSync, claude, codex, cursorAgent, detectAgents, grokBuild, join, mkdtempSync, rmSync, tmpdir, withEnvSnapshot, withPlatform, writeFileSync,
+  AGENT_DEFS, amp, assert, chmodSync, claude, codex, cursorAgent, detectAgents, grokBuild, join, mkdirSync, mkdtempSync, rmSync, tmpdir, withEnvSnapshot, withPlatform, writeFileSync,
 } from './helpers/test-helpers.js';
 import { codexNeedsDangerFullAccessSandbox } from '../../src/runtimes/defs/codex.js';
-import { isKnownServiceTier } from '../../src/runtimes/models.js';
+import {
+  clearRememberedLiveModels,
+  getRememberedLiveModels,
+  isKnownServiceTier,
+  rememberLiveModels,
+} from '../../src/runtimes/models.js';
 import { readLocalAgentProfileDefs } from '../../src/runtimes/registry.js';
 
 interface CliFixtureResponse {
@@ -29,6 +34,41 @@ function writeCliFixture(
       + 'process.exit(response.exitCode ?? 0);\n',
   );
   const launcherPath = join(dir, process.platform === 'win32' ? `${name}.cmd` : name);
+  if (process.platform === 'win32') {
+    writeFileSync(
+      launcherPath,
+      `@echo off\r\n"${process.execPath}" "${scriptPath}" %*\r\nexit /b %ERRORLEVEL%\r\n`,
+    );
+  } else {
+    writeFileSync(
+      launcherPath,
+      `#!/bin/sh\nexec "${process.execPath}" "${scriptPath}" "$@"\n`,
+    );
+    chmodSync(launcherPath, 0o755);
+  }
+  return launcherPath;
+}
+
+function writeEnvSensitiveCodexFixture(
+  dir: string,
+  signalEnvKey: string,
+  genericModel: string,
+  strictModel: string,
+): string {
+  const scriptPath = join(dir, 'codex-env-catalog-fixture.cjs');
+  writeFileSync(
+    scriptPath,
+    `const args = process.argv.slice(2);\n`
+      + `if (args.includes('--version')) { console.log('codex-cli 9.9.9'); process.exit(0); }\n`
+      + `if (args[0] === 'login' && args[1] === 'status') { console.log('Logged in using ChatGPT'); process.exit(0); }\n`
+      + `if (args[0] === 'debug' && args[1] === 'models') {\n`
+      + `  const slug = process.env[${JSON.stringify(signalEnvKey)}] ? ${JSON.stringify(genericModel)} : ${JSON.stringify(strictModel)};\n`
+      + `  console.log(JSON.stringify({ models: [{ slug, display_name: slug, visibility: 'list', supported_reasoning_levels: [{ effort: 'future-deep' }] }] }));\n`
+      + `  process.exit(0);\n`
+      + `}\n`
+      + `process.exit(0);\n`,
+  );
+  const launcherPath = join(dir, process.platform === 'win32' ? 'codex.cmd' : 'codex');
   if (process.platform === 'win32') {
     writeFileSync(
       launcherPath,
@@ -628,7 +668,7 @@ test('codex probes login status so rescans reflect CLI auth changes', async () =
   }
 });
 
-test('codex API key env satisfies auth probe without requiring local login', async () => {
+test('codex API key env satisfies generic auth but not the official ChatGPT route', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'od-agents-codex-api-key-auth-'));
   try {
     await withEnvSnapshot(['PATH', 'OD_AGENT_HOME', 'CODEX_BIN', 'CODEX_API_KEY'], async () => {
@@ -649,8 +689,123 @@ test('codex API key env satisfies auth probe without requiring local login', asy
       assert.equal(detected.available, true);
       assert.equal(detected.authStatus, 'ok');
       assert.equal(detected.chatgptAuthStatus, 'missing');
+      assert.equal(detected.chatgptReady, false);
     });
   } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('codex detection keeps generic and ChatGPT-strict live catalogs isolated', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'od-agents-codex-scoped-models-'));
+  const codexHome = join(dir, 'codex-home');
+  try {
+    mkdirSync(codexHome, { recursive: true });
+    await withEnvSnapshot(['PATH', 'OD_AGENT_HOME', 'CODEX_BIN'], async () => {
+      const codexBin = writeEnvSensitiveCodexFixture(
+        dir,
+        'CODEX_API_KEY',
+        'provider-only-model',
+        'chatgpt-only-model',
+      );
+      process.env.OD_AGENT_HOME = dir;
+      process.env.PATH = dir;
+      process.env.CODEX_BIN = codexBin;
+      rememberLiveModels(
+        'codex',
+        [{ id: 'stale-chatgpt-model', label: 'Stale ChatGPT model' }],
+        'chatgpt',
+      );
+
+      const agents = await detectAgents({
+        codex: {
+          CODEX_HOME: codexHome,
+          CODEX_API_KEY: 'generic-provider-key',
+        },
+      });
+      const detected = agents.find((agent) => agent.id === 'codex') as any;
+
+      assert.deepEqual(detected.models.map((model: { id: string }) => model.id), [
+        'default',
+        'provider-only-model',
+      ]);
+      assert.deepEqual(
+        detected.chatgptModels.map((model: { id: string }) => model.id),
+        ['default', 'chatgpt-only-model'],
+      );
+      assert.equal(detected.chatgptModelsSource, 'live');
+      assert.equal(detected.chatgptReady, true);
+      assert.deepEqual(
+        getRememberedLiveModels('codex').map((model) => model.id),
+        ['default', 'provider-only-model'],
+      );
+      assert.deepEqual(
+        getRememberedLiveModels('codex', 'chatgpt').map((model) => model.id),
+        ['default', 'chatgpt-only-model'],
+      );
+    });
+  } finally {
+    clearRememberedLiveModels('codex');
+    clearRememberedLiveModels('codex', 'chatgpt');
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('codex detection does not mark a selected custom provider ready for ChatGPT runs', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'od-agents-codex-custom-provider-'));
+  const codexHome = join(dir, 'codex-home');
+  try {
+    mkdirSync(codexHome, { recursive: true });
+    writeFileSync(
+      join(codexHome, 'config.toml'),
+      [
+        'model_provider = "local-gateway"',
+        '',
+        '[model_providers.local-gateway]',
+        'base_url = "https://example.invalid/v1"',
+        'env_key = "LOCAL_PROVIDER_KEY"',
+        '',
+      ].join('\n'),
+    );
+    await withEnvSnapshot(['PATH', 'OD_AGENT_HOME', 'CODEX_BIN'], async () => {
+      const codexBin = writeEnvSensitiveCodexFixture(
+        dir,
+        'LOCAL_PROVIDER_KEY',
+        'provider-only-model',
+        'must-not-be-surfaced',
+      );
+      process.env.OD_AGENT_HOME = dir;
+      process.env.PATH = dir;
+      process.env.CODEX_BIN = codexBin;
+      rememberLiveModels(
+        'codex',
+        [{ id: 'stale-chatgpt-model', label: 'Stale ChatGPT model' }],
+        'chatgpt',
+      );
+
+      const agents = await detectAgents({
+        codex: {
+          CODEX_HOME: codexHome,
+          LOCAL_PROVIDER_KEY: 'generic-provider-key',
+        },
+      });
+      const detected = agents.find((agent) => agent.id === 'codex') as any;
+
+      assert.equal(detected.authStatus, 'ok');
+      assert.deepEqual(detected.models.map((model: { id: string }) => model.id), [
+        'default',
+        'provider-only-model',
+      ]);
+      assert.equal(detected.chatgptAuthStatus, 'ok');
+      assert.deepEqual(detected.chatgptModels, []);
+      assert.equal(detected.chatgptModelsSource, 'unavailable');
+      assert.equal(detected.chatgptReady, false);
+      assert.match(detected.chatgptReadyMessage, /custom providers/i);
+      assert.deepEqual(getRememberedLiveModels('codex', 'chatgpt'), []);
+    });
+  } finally {
+    clearRememberedLiveModels('codex');
+    clearRememberedLiveModels('codex', 'chatgpt');
     rmSync(dir, { recursive: true, force: true });
   }
 });

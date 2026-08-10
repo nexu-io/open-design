@@ -1,6 +1,7 @@
 import { execAgentFile } from './invocation.js';
 import { AGENT_DEFS } from './registry.js';
 import {
+  CODEX_CHATGPT_MODEL_SCOPE,
   DEFAULT_MODEL_OPTION,
   clearRememberedLiveModels,
   getRememberedLiveModels,
@@ -10,6 +11,8 @@ import {
 import { applyAgentLaunchEnv, resolveAgentLaunch } from './launch.js';
 import { spawnEnvForAgent } from './env.js';
 import {
+  codexChatGptAuthGuidance,
+  inspectCodexChatGptRoutePolicy,
   probeAgentAuthStatus,
   probeCodexChatGptAuthStatus,
 } from './auth.js';
@@ -286,25 +289,56 @@ async function probe(
   // so a single agent's detection wall is max(help, models, auth) ≈ 5s rather
   // than the sum ≈ 15s. `--help` capabilities are cached on `agentCapabilities`
   // for buildArgs to consult.
+  const chatgptPolicy = def.id === 'codex'
+    ? await inspectCodexChatGptRoutePolicy(probeEnv)
+    : null;
   const chatgptProbeEnv = def.id === 'codex'
-    ? spawnEnvForAgent(
-        'codex',
-        probeEnv,
-        {},
-        {},
-        { codexAuthMode: 'chatgpt' },
+    ? applyAgentLaunchEnv(
+        spawnEnvForAgent(
+          'codex',
+          probeEnv,
+          {},
+          {},
+          {
+            codexAuthMode: 'chatgpt',
+            codexProviderEnvKey: chatgptPolicy?.providerEnvKey ?? null,
+          },
+        ),
+        launch,
       )
     : probeEnv;
-  const [caps, modelResult, auth, chatgptAuth, amrOpenCodeVersion] = await Promise.all([
+  const unavailableChatGptModels = {
+    models: [] as RuntimeModelOption[],
+    source: 'unavailable' as const,
+  };
+  const [caps, modelResult, auth, chatgptAuth, chatgptModelResult, amrOpenCodeVersion] = await Promise.all([
     probeCapabilities(def, launch.launchPath, probeEnv),
     fetchModels(def, launch.launchPath, probeEnv),
     probeAgentAuthStatus(def, launch.launchPath, probeEnv),
     def.id === 'codex'
       ? probeCodexChatGptAuthStatus(def, launch.launchPath, chatgptProbeEnv)
       : Promise.resolve(null),
+    def.id === 'codex' && chatgptPolicy?.allowed
+      ? fetchModels(def, launch.launchPath, chatgptProbeEnv).then((result) =>
+          result.source === 'live'
+            ? { models: result.models, source: 'live' as const }
+            : unavailableChatGptModels,
+        )
+      : Promise.resolve(unavailableChatGptModels),
     probeAmrOpenCodeVersion(def, probeEnv),
   ]);
   const surfacedModelResult = withRememberedAmrModels(def, probeEnv, modelResult);
+  const chatgptReady = def.id === 'codex'
+    && chatgptPolicy?.allowed === true
+    && chatgptAuth?.status === 'ok'
+    && chatgptModelResult.source === 'live';
+  const chatgptReadyMessage = def.id !== 'codex' || chatgptReady
+    ? null
+    : chatgptPolicy?.allowed !== true
+      ? codexChatGptAuthGuidance()
+      : chatgptAuth?.status !== 'ok'
+        ? chatgptAuth?.message ?? codexChatGptAuthGuidance()
+        : 'The installed Codex CLI did not return a ChatGPT-only live model catalog. Refresh Local Codex agent discovery, then retry.';
   if (caps) {
     agentCapabilities.set(def.id, caps);
   }
@@ -339,6 +373,16 @@ async function probe(
           chatgptAuthStatus: chatgptAuth.status,
           ...(chatgptAuth.message
             ? { chatgptAuthMessage: chatgptAuth.message }
+            : {}),
+        }
+      : {}),
+    ...(def.id === 'codex'
+      ? {
+          chatgptModels: chatgptModelResult.models,
+          chatgptModelsSource: chatgptModelResult.source,
+          chatgptReady,
+          ...(chatgptReadyMessage
+            ? { chatgptReadyMessage }
             : {}),
         }
       : {}),
@@ -411,9 +455,19 @@ function rememberDetectedLiveModels(
     : null;
   if (def.id === 'codex' && agent.modelsSource !== 'live') {
     clearRememberedLiveModels(def.id, scope);
+  } else {
+    rememberLiveModels(agent.id, agent.models, scope);
+  }
+  if (def.id !== 'codex') return;
+  if (agent.chatgptModelsSource !== 'live') {
+    clearRememberedLiveModels(def.id, CODEX_CHATGPT_MODEL_SCOPE);
     return;
   }
-  rememberLiveModels(agent.id, agent.models, scope);
+  rememberLiveModels(
+    def.id,
+    agent.chatgptModels ?? [],
+    CODEX_CHATGPT_MODEL_SCOPE,
+  );
 }
 
 export async function detectAgents(

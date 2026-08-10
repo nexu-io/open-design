@@ -108,6 +108,12 @@ export interface AgentInfo {
   /** Authoritative `codex login status` result for the ChatGPT account path. */
   chatgptAuthStatus?: 'ok' | 'missing' | 'unknown';
   chatgptAuthMessage?: string;
+  /** Live catalog probed without API-key/custom-provider credentials. */
+  chatgptModels?: AgentModelOption[];
+  chatgptModelsSource?: 'live' | 'unavailable';
+  /** Whether auth, provider policy, and the strict live catalog are all ready. */
+  chatgptReady?: boolean;
+  chatgptReadyMessage?: string;
   path?: string;
   version?: string | null;
   /**

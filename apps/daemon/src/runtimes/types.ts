@@ -296,6 +296,10 @@ export type DetectedAgent = Omit<
   authMessage?: string;
   chatgptAuthStatus?: 'ok' | 'missing' | 'unknown';
   chatgptAuthMessage?: string;
+  chatgptModels?: RuntimeModelOption[];
+  chatgptModelsSource?: 'live' | 'unavailable';
+  chatgptReady?: boolean;
+  chatgptReadyMessage?: string;
   path?: string;
   version?: string | null;
   diagnostics?: AgentDiagnostic[];

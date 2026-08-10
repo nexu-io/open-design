@@ -965,9 +965,12 @@ describe('public MCP discovery + generation tools', () => {
           promptInputFormat: 'text',
           streamFormat: 'codex-jsonl',
           authStatus: 'ok',
-          chatgptAuthStatus: 'missing',
-          chatgptAuthMessage: 'Run codex login.',
+          chatgptAuthStatus: 'ok',
           modelsSource: 'live',
+          chatgptModelsSource: 'unavailable',
+          chatgptModels: [],
+          chatgptReady: false,
+          chatgptReadyMessage: 'API keys and custom providers are intentionally not accepted.',
           models: [
             { id: 'default', label: 'Default' },
             { id: 'sonnet', label: 'Sonnet' },
@@ -995,17 +998,13 @@ describe('public MCP discovery + generation tools', () => {
       id: 'codex',
       name: 'Codex CLI',
       version: '2.1.153',
-      authStatus: 'missing',
-      authMessage: 'Run codex login.',
-      chatgptAuthStatus: 'missing',
-      chatgptAuthMessage: 'Run codex login.',
-      modelsSource: 'live',
-      models: [
-        { id: 'default', label: 'Default' },
-        { id: 'sonnet', label: 'Sonnet' },
-        { id: 'opus', label: 'Opus' },
-      ],
-      modelsCount: 3,
+      authStatus: 'ok',
+      chatgptAuthStatus: 'ok',
+      modelsSource: 'unavailable',
+      models: [],
+      modelsCount: 0,
+      ready: false,
+      readyMessage: 'API keys and custom providers are intentionally not accepted.',
     });
     // Protocol fields we don't want the agent reasoning about:
     expect(parsed.agents[0]).not.toHaveProperty('bin');
@@ -1013,7 +1012,33 @@ describe('public MCP discovery + generation tools', () => {
     expect(parsed.agents[0]).not.toHaveProperty('streamFormat');
   });
 
-  it('list_agents returns the complete live compatibility catalog', async () => {
+  it('list_agents returns the complete ChatGPT-strict Codex compatibility catalog', async () => {
+    const longModels = Array.from({ length: 165 }, (_, i) => ({ id: `m-${i}`, label: `M${i}` }));
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      agents: [{
+        id: 'codex',
+        name: 'Codex CLI',
+        available: true,
+        authStatus: 'ok',
+        chatgptAuthStatus: 'ok',
+        modelsSource: 'live',
+        models: [{ id: 'provider-only', label: 'Provider only' }],
+        chatgptModelsSource: 'live',
+        chatgptModels: longModels,
+      }],
+    }), { status: 200 }));
+    vi.stubGlobal('fetch', withDirectory(fetchMock));
+
+    const result = await handleMcpToolCall('http://127.0.0.1:17456', 'list_agents', {});
+    const parsed = JSON.parse(firstText(result));
+    expect(parsed.agents[0].models).toHaveLength(165);
+    expect(parsed.agents[0].models[164]).toEqual({ id: 'm-164', label: 'M164' });
+    expect(parsed.agents[0].modelsCount).toBe(165);
+    expect(parsed.agents[0]).toMatchObject({ modelsSource: 'live', ready: true });
+    expect(parsed.agents[0].models).not.toContainEqual({ id: 'provider-only', label: 'Provider only' });
+  });
+
+  it('list_agents keeps non-Codex model lists bounded while reporting the full count', async () => {
     const longModels = Array.from({ length: 165 }, (_, i) => ({ id: `m-${i}`, label: `M${i}` }));
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({
       agents: [{ id: 'opencode', name: 'OpenCode', available: true, models: longModels }],
@@ -1022,8 +1047,7 @@ describe('public MCP discovery + generation tools', () => {
 
     const result = await handleMcpToolCall('http://127.0.0.1:17456', 'list_agents', {});
     const parsed = JSON.parse(firstText(result));
-    expect(parsed.agents[0].models).toHaveLength(165);
-    expect(parsed.agents[0].models[164]).toEqual({ id: 'm-164', label: 'M164' });
+    expect(parsed.agents[0].models).toHaveLength(10);
     expect(parsed.agents[0].modelsCount).toBe(165);
   });
 

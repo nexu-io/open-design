@@ -209,6 +209,7 @@ import {
   spawnEnvForAgent,
 } from './agents.js';
 import {
+  CODEX_CHATGPT_MODEL_SCOPE,
   getRememberedLiveModels,
   hasRememberedLiveModelCatalog,
   isKnownReasoning,
@@ -219,14 +220,7 @@ import {
   resolveModelForServiceTier,
 } from './runtimes/models.js';
 import { loadMmdRouteLaunchEnv } from './runtimes/mmd-routes.js';
-import {
-  extractCodexRootModelConfig,
-  preflightCodexDefaultModel,
-} from './runtimes/codex-model-preflight.js';
-import {
-  readCodexProviderEnvKey,
-  resolveCodexConfigPath,
-} from './codex-config-normalize.js';
+import { preflightCodexDefaultModel } from './runtimes/codex-model-preflight.js';
 import { preparePromptFileForAgent } from './runtimes/prompt-file.js';
 import { TerminalControlSequenceStripper } from './runtimes/terminal-control.js';
 import {
@@ -447,6 +441,7 @@ import {
   classifyAgentServiceFailure,
   codexChatGptAuthGuidance,
   cursorAuthGuidance,
+  inspectCodexChatGptRoutePolicy,
   probeCodexChatGptAuthStatus,
 } from './runtimes/auth.js';
 import { readOpenCodeServiceFailure } from './runtimes/opencode-log.js';
@@ -8959,6 +8954,8 @@ export async function startServer({
         'AGENT_UNAVAILABLE',
         `unknown agent: ${agentId}`,
       );
+    const requiresChatGptCodexAuth =
+      def.id === 'codex' && codexAuthMode === 'chatgpt';
     if (!def.bin)
       return design.runs.fail(run, 'AGENT_UNAVAILABLE', 'agent has no binary');
     const byokOpenCodeProvider = def.id === 'byok-opencode'
@@ -9574,13 +9571,15 @@ export async function startServer({
     } catch {
       configuredAgentEnv = {};
     }
-    const requestedLiveModelScope = def.id === 'amr'
-      ? resolveAmrProfile({
-          ...process.env,
-          ...(def.env || {}),
-          ...configuredAgentEnv,
-        })
-      : null;
+    const requestedLiveModelScope = requiresChatGptCodexAuth
+      ? CODEX_CHATGPT_MODEL_SCOPE
+      : def.id === 'amr'
+        ? resolveAmrProfile({
+            ...process.env,
+            ...(def.env || {}),
+            ...configuredAgentEnv,
+          })
+        : null;
     const configuredModel =
       typeof appConfigForRun?.agentModels?.[def.id]?.model === 'string'
         ? appConfigForRun.agentModels[def.id].model
@@ -9719,8 +9718,6 @@ export async function startServer({
     };
     const agentLaunch = resolveAgentLaunch(def, configuredAgentEnv);
     const resolvedBin = agentLaunch.selectedPath;
-    const requiresChatGptCodexAuth =
-      def.id === 'codex' && codexAuthMode === 'chatgpt';
     let codexProviderEnvKey = null;
     if (
       requiresChatGptCodexAuth
@@ -9737,24 +9734,9 @@ export async function startServer({
         undefined,
         { resolvedBin: agentLaunch.selectedPath },
       );
-      codexProviderEnvKey = await readCodexProviderEnvKey(codexBaseEnv);
-      let hasUnverifiedCodexProviderConfig = false;
-      try {
-        const codexConfig = await fs.promises.readFile(
-          resolveCodexConfigPath(codexBaseEnv),
-          'utf8',
-        );
-        const configured = extractCodexRootModelConfig(codexConfig);
-        hasUnverifiedCodexProviderConfig = Boolean(
-          (configured.modelProvider
-            && configured.modelProvider.toLowerCase() !== 'openai')
-          || configured.hasCompatibilityOverlay,
-        );
-      } catch {
-        // A missing config is the normal ChatGPT-backed Codex case. The
-        // authoritative login probe below still decides whether it may run.
-      }
-      if (codexProviderEnvKey || hasUnverifiedCodexProviderConfig) {
+      const chatgptPolicy = await inspectCodexChatGptRoutePolicy(codexBaseEnv);
+      codexProviderEnvKey = chatgptPolicy.providerEnvKey;
+      if (!chatgptPolicy.allowed) {
         run.failureCategory = 'auth';
         run.failureDetail = 'custom_provider_not_allowed';
         run.failureAction = 'relogin';
