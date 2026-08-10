@@ -3724,8 +3724,7 @@ function AppInner() {
     // visible, because this call sent no workspace headers at all).
     const mutationContext = workspaceContextRef.current;
     const mutationAccountGeneration = currentWorkspaceAccountGeneration();
-    const ok = await deleteProjectApi(id, mutationContext);
-    if (!ok) return false;
+    await deleteProjectApi(id, mutationContext);
     if (mutationContext) {
       removeProjectFromDisplaySnapshots({
         accountGeneration: mutationAccountGeneration,

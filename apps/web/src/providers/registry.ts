@@ -1,4 +1,5 @@
 import { workspaceContextHasTeamIdentity } from '@open-design/contracts';
+import { boundedRequestErrorCode } from '../analytics/workspace';
 import type {
   ConnectorAuthConfigPrepareResponse,
   ConnectorDetail,
@@ -363,6 +364,34 @@ export interface SkillImportInput {
 export interface SkillImportError {
   code?: string;
   message: string;
+  status?: number;
+}
+
+async function readSkillOperationError(resp: Response): Promise<SkillImportError> {
+  try {
+    const payload = await resp.json() as {
+      error?: string | { code?: unknown; message?: unknown };
+      code?: unknown;
+      message?: unknown;
+    };
+    const envelope = payload.error && typeof payload.error === 'object'
+      ? payload.error
+      : null;
+    const rawCode = envelope?.code ?? payload.code;
+    const boundedCode = boundedRequestErrorCode(rawCode);
+    const rawMessage = envelope?.message
+      ?? payload.message
+      ?? (typeof payload.error === 'string' ? payload.error : undefined);
+    return {
+      message: typeof rawMessage === 'string' && rawMessage.trim()
+        ? rawMessage
+        : `Request failed (${resp.status}).`,
+      ...(boundedCode ? { code: boundedCode } : {}),
+      status: resp.status,
+    };
+  } catch {
+    return { message: `Request failed (${resp.status}).`, status: resp.status };
+  }
 }
 
 // `workspaceContext`, when present, stamps the imported skill with the
@@ -384,20 +413,13 @@ export async function importSkill(
       body: JSON.stringify(input),
     });
     if (!resp.ok) {
-      const payload = (await resp.json().catch(() => null)) as
-        | { error?: SkillImportError }
-        | null;
-      return {
-        error: {
-          code: payload?.error?.code,
-          message: payload?.error?.message ?? `Import failed (${resp.status}).`,
-        },
-      };
+      return { error: await readSkillOperationError(resp) };
     }
     return (await resp.json()) as { skill: SkillSummary };
   } catch (err) {
     return {
       error: {
+        code: 'network_error',
         message: err instanceof Error ? err.message : 'Import request failed.',
       },
     };
@@ -3276,7 +3298,7 @@ function encodePluginAssetPath(relpath: string): string {
 export async function installSkill(
   input: InstallSkillRequest,
   workspaceContext?: WorkspaceCollabContext | null,
-): Promise<{ skill: SkillSummary } | { error: string }> {
+): Promise<{ skill: SkillSummary } | { error: SkillImportError }> {
   try {
     const resp = await fetch('/api/skills/install', {
       method: 'POST',
@@ -3286,11 +3308,11 @@ export async function installSkill(
       },
       body: JSON.stringify(input),
     });
+    if (!resp.ok) return { error: await readSkillOperationError(resp) };
     const json = await resp.json();
-    if (!resp.ok) return { error: json.error ?? 'Install failed' };
     return json as InstallSkillResponse;
   } catch {
-    return { error: 'Network error' };
+    return { error: { code: 'network_error', message: 'Network error' } };
   }
 }
 

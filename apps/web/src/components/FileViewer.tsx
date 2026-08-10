@@ -36,7 +36,11 @@ import {
 import { useAnalytics } from '../analytics/provider';
 import { exportErrorCode } from '../analytics/export-error-code';
 import { deployErrorCode } from '../analytics/deploy-error-code';
-import { trackIframeLoad } from '../observability/iframe-error';
+import {
+  reportPreviewIframeMessage,
+  subscribePreviewIframeMessages,
+  trackIframeLoad,
+} from '../observability/iframe-error';
 import {
   trackArtifactExportResult,
   trackArtifactDeployResult,
@@ -357,7 +361,7 @@ const POWERED_PREVIEW_SANDBOX =
   'allow-scripts allow-same-origin allow-downloads allow-popups allow-forms allow-modals allow-pointer-lock';
 const POWERED_PREVIEW_ALLOW =
   'accelerometer; autoplay; camera; cross-origin-isolated; fullscreen; gamepad; gyroscope; microphone; xr-spatial-tracking';
-const PREVIEW_BRIDGE_QUERY = 'odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot';
+const PREVIEW_BRIDGE_QUERY = 'odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot&odPreviewBridge=observability';
 // Generic runtime UI state carried across the URL-load -> srcDoc transport
 // switch. This preserves the current page of multi-page prototypes while
 // leaving artifact scripts and business state inside their sandboxed frames.
@@ -9695,6 +9699,27 @@ function HtmlViewer({
     setPreviewSrcUrl(effectiveBasePreviewSrcUrl);
     setUrlSelectionBridgeReady(false);
   }, [activeFilesRefreshPending, effectiveBasePreviewSrcUrl, previewSrcCarriesCurrentRefresh]);
+  const previewObservabilitySeenRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    previewObservabilitySeenRef.current = new Set();
+  }, [projectId, file.name, reloadKey]);
+  useEffect(() => {
+    if (mode !== 'preview') return undefined;
+    return subscribePreviewIframeMessages(({ source: messageSource, data }) => {
+      if (!workspaceActiveRef.current) return;
+      const activeFrame = useUrlLoadPreview
+        ? urlPreviewIframeRef.current
+        : srcDocPreviewIframeRef.current;
+      if (!activeFrame || messageSource !== activeFrame.contentWindow) return;
+      reportPreviewIframeMessage(data, {
+        surface: 'artifact_preview',
+        renderMode: useUrlLoadPreview ? 'url_load' : 'srcdoc',
+        artifactId: anonymizeArtifactId({ projectId, fileName: file.name }),
+        artifactKind: handoffArtifactKind ?? artifactKindToTracking({ fileKind: file.kind ?? null }),
+        projectId,
+      }, previewObservabilitySeenRef.current);
+    });
+  }, [file.kind, file.name, handoffArtifactKind, mode, projectId, useUrlLoadPreview]);
   useEffect(() => {
     const activeFrame = useUrlLoadPreview
       ? urlPreviewIframeRef.current
@@ -9913,6 +9938,7 @@ function HtmlViewer({
       editBridge: true,
       paletteBridge: false,
       previewFocusGuard: true,
+      previewObservability: true,
       // Embed the reload counter so the srcdoc string differs across reloads
       // even when the fetched HTML bytes are identical (issue #4650).
       reloadKey,

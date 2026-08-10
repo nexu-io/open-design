@@ -147,8 +147,10 @@ export function DesignsTab({
 		title: string;
 		message: string;
 		confirmLabel: string;
-		onConfirm: () => void;
+		onConfirm: () => Promise<boolean | void> | boolean | void;
 	} | null>(null);
+	const [confirmPending, setConfirmPending] = useState(false);
+	const [confirmError, setConfirmError] = useState<string | null>(null);
 	const [view, setView] = useState<ViewMode>(() => {
 		if (typeof window === "undefined") return "grid";
 		try {
@@ -418,6 +420,7 @@ export function DesignsTab({
 		setRenameInput("");
 	};
 	const handleDeleteProject = (project: Project) => {
+		setConfirmError(null);
 		setConfirmTarget({
 			title: t("designs.deleteTitle"),
 			message: t("designs.deleteConfirm", { name: project.name }),
@@ -439,6 +442,7 @@ export function DesignsTab({
 	const handleBatchDelete = () => {
 		const ids = Array.from(selected);
 		if (ids.length === 0) return;
+		setConfirmError(null);
 		setConfirmTarget({
 			title: t("designs.deleteTitle"),
 			message: t("designs.deleteSelectedConfirm", { n: ids.length }),
@@ -473,21 +477,42 @@ export function DesignsTab({
 		projectId: string,
 		artifact: LiveArtifactSummary,
 	) => {
+		setConfirmError(null);
 		setConfirmTarget({
 			title: t("common.delete"),
 			message: `${t("common.delete")} "${artifact.title}"?`,
 			confirmLabel: t("designs.menuDelete"),
 			onConfirm: async () => {
 				const ok = await deleteLiveArtifact(projectId, artifact.id, workspaceContext);
-				if (!ok) return;
+				if (!ok) return false;
 				setLiveArtifactsByProject((current) => ({
 					...current,
 					[projectId]: (current[projectId] ?? []).filter(
 						(candidate) => candidate.id !== artifact.id,
 					),
 				}));
+				return true;
 			},
 		});
+	};
+
+	const commitConfirmTarget = async () => {
+		if (!confirmTarget || confirmPending) return;
+		const target = confirmTarget;
+		setConfirmError(null);
+		setConfirmPending(true);
+		try {
+			const result = await target.onConfirm();
+			if (result === false) {
+				setConfirmError(t("ds.actionFailed"));
+				return;
+			}
+			setConfirmTarget((current) => current === target ? null : current);
+		} catch (error) {
+			setConfirmError(error instanceof Error ? error.message : t("ds.actionFailed"));
+		} finally {
+			setConfirmPending(false);
+		}
 	};
 
 	return (
@@ -1133,24 +1158,38 @@ export function DesignsTab({
 				<Dialog
 					className="modal-confirm"
 					role="alertdialog"
-					onClose={() => setConfirmTarget(null)}
+					onClose={() => {
+						if (confirmPending) return;
+						setConfirmTarget(null);
+						setConfirmError(null);
+					}}
+					closeOnBackdrop={!confirmPending}
 					ariaLabelledBy={confirmTitleId}
 				>
 					<DialogTitle id={confirmTitleId}>{confirmTarget.title}</DialogTitle>
 					<DialogDescription className="modal-confirm-message">{confirmTarget.message}</DialogDescription>
+					{confirmError ? (
+						<p className="modal-confirm-error" role="alert">
+							{confirmError}
+						</p>
+					) : null}
 					<DialogFooter className="row">
-						<button type="button" onClick={() => setConfirmTarget(null)}>
+						<button
+							type="button"
+							disabled={confirmPending}
+							onClick={() => {
+								setConfirmTarget(null);
+								setConfirmError(null);
+							}}
+						>
 							{t("designs.renameCancel")}
 						</button>
 						<button
 							type="button"
 							className="primary danger"
 							autoFocus
-							onClick={() => {
-								const run = confirmTarget.onConfirm;
-								setConfirmTarget(null);
-								run();
-							}}
+							disabled={confirmPending}
+							onClick={() => void commitConfirmTarget()}
 						>
 							{confirmTarget.confirmLabel}
 						</button>

@@ -3,6 +3,10 @@ import { rm } from 'node:fs/promises';
 import path from 'node:path';
 import type { Express, Request, Response } from 'express';
 import {
+  PREVIEW_OBSERVABILITY_BRIDGE_MARKER,
+  buildPreviewObservabilityBridge,
+} from '@open-design/contracts/runtime/preview-observability';
+import {
   defaultScenarioPluginIdForProjectMetadata,
   type ChatSessionMode,
   type PluginManifest,
@@ -1266,6 +1270,10 @@ function wantsUrlPreviewSnapshotBridge(value: unknown): boolean {
   return previewBridgeTokens(value).some((token) => token === 'snapshot' || token === 'image' || token === 'capture');
 }
 
+function wantsUrlPreviewObservabilityBridge(value: unknown): boolean {
+  return previewBridgeTokens(value).some((token) => token === 'observability' || token === 'errors' || token === 'diagnostics');
+}
+
 function injectBeforeBodyClose(html: string, marker: string, injection: string): string {
   if (html.includes(marker)) return html;
   const bodyCloseIndex = html.search(/<\/body\s*>/i);
@@ -1275,7 +1283,25 @@ function injectBeforeBodyClose(html: string, marker: string, injection: string):
   return `${html}${injection}`;
 }
 
-function injectUrlPreviewBridge(html: string, bridge: 'scroll' | 'selection' | 'snapshot'): string {
+function injectAfterHeadOpen(html: string, marker: string, injection: string): string {
+  if (html.includes(marker)) return html;
+  if (/<head[^>]*>/i.test(html)) {
+    return html.replace(/<head[^>]*>/i, (match) => `${match}${injection}`);
+  }
+  if (/<html[^>]*>/i.test(html)) {
+    return html.replace(/<html[^>]*>/i, (match) => `${match}<head>${injection}</head>`);
+  }
+  return `${injection}${html}`;
+}
+
+function injectUrlPreviewBridge(html: string, bridge: 'scroll' | 'selection' | 'snapshot' | 'observability'): string {
+  if (bridge === 'observability') {
+    return injectAfterHeadOpen(
+      html,
+      PREVIEW_OBSERVABILITY_BRIDGE_MARKER,
+      buildPreviewObservabilityBridge(),
+    );
+  }
   if (bridge === 'scroll') {
     return injectBeforeBodyClose(html, 'data-od-url-scroll-bridge', URL_PREVIEW_SCROLL_BRIDGE);
   }
@@ -1294,7 +1320,8 @@ function applyUrlPreviewBridgesToHtml(
     !(
       wantsUrlPreviewScrollBridge(requestedBridge) ||
       wantsUrlPreviewSelectionBridge(requestedBridge) ||
-      wantsUrlPreviewSnapshotBridge(requestedBridge)
+      wantsUrlPreviewSnapshotBridge(requestedBridge) ||
+      wantsUrlPreviewObservabilityBridge(requestedBridge)
     ) ||
     !/^text\/html(?:;|$)/i.test(mime)
   ) {
@@ -1306,6 +1333,9 @@ function applyUrlPreviewBridgesToHtml(
   // filename. URL-load iframes cannot rely on the host rewriting the document
   // title after load, and powered previews are intentionally cross-origin.
   html = daemonSanitizeTitleInDoc(html);
+  if (wantsUrlPreviewObservabilityBridge(requestedBridge)) {
+    html = injectUrlPreviewBridge(html, 'observability');
+  }
   if (wantsUrlPreviewScrollBridge(requestedBridge)) {
     html = injectUrlPreviewBridge(html, 'scroll');
   }
