@@ -20,6 +20,7 @@ type CliOptions = {
   port?: string;
   includePayload?: boolean;
   payloadPath?: string;
+  rebaseClosureUrl?: boolean;
   version?: string;
   token?: string;
 };
@@ -101,6 +102,7 @@ async function start(service: string, options: CliOptions): Promise<void> {
     includePayload: options.includePayload,
     payloadPath: options.payloadPath,
     port: parsePort(options.port),
+    rebaseClosureUrl: options.rebaseClosureUrl,
     version: options.version,
   });
   if (options.json === true) {
@@ -141,6 +143,7 @@ cli
   .option("--platform <platform>", "Updater platform: mac|win", { default: "mac" })
   .option("--token <token>", "collab-cloud: shared bearer token clients must present")
   .option("--port <port>", "Port to bind, 0 for dynamic", { default: "0" })
+  .option("--rebase-closure-url", "Re-envelope Closure metadata onto the fixture origin")
   .option("--version <version>", "Fixture update version", { default: "99.0.0" })
   .action((service: string, options: CliOptions) => {
     void start(service, options);

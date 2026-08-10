@@ -14,10 +14,10 @@ export type PackagedSmokeScenario = {
 
 export const MAC_PACKAGED_SMOKE_SCENARIOS = {
   shellLifecycle: {
-    domains: ['shell', 'contract', 'distribution'],
+    domains: ['shell', 'standalone', 'contract', 'distribution'],
     id: 'mac-shell-lifecycle',
     lane: 'shell',
-    title: 'installs, starts, inspects, stops, and uninstalls the DMG-installed mac artifact',
+    title: 'runs the installed mac current-delivery lifecycle across Shell and Standalone boundaries',
   },
   shellSilentUpdate: {
     domains: ['shell', 'contract'],

@@ -19,6 +19,7 @@ import {
 type UpdaterFixtureChannel = ReleaseChannel;
 
 type ClosureFixtureFile = {
+  body?: Buffer;
   contentType: string;
   path: string;
   size: number;
@@ -45,6 +46,7 @@ export type UpdaterFixtureOptions = {
   payloadBody?: Buffer | string;
   payloadPath?: string;
   port?: number;
+  rebaseClosureUrl?: boolean;
   version?: string;
 };
 
@@ -291,7 +293,7 @@ export async function startUpdaterFixtureServer(options: UpdaterFixtureOptions =
     ? createHash("sha256").update(payloadBody).digest("hex")
     : await sha256File(options.payloadPath);
   const closureRoot = options.closureManifestPath == null ? null : dirname(options.closureManifestPath);
-  const closureManifest = options.closureManifestPath == null
+  let closureManifest = options.closureManifestPath == null
     ? null
     : validateClosureCandidateManifest(JSON.parse(await readFile(options.closureManifestPath, "utf8")) as unknown);
   const closureFilePaths = closureRoot == null
@@ -410,7 +412,11 @@ export async function startUpdaterFixtureServer(options: UpdaterFixtureOptions =
       ];
       const asset = closureAssets.find((candidate) => new URL(candidate.url).pathname === path);
       if (asset != null) {
-        sendFileArtifact(request, response, asset.path, asset.size, asset.contentType);
+        if (asset.body == null) {
+          sendFileArtifact(request, response, asset.path, asset.size, asset.contentType);
+        } else {
+          sendArtifact(request, response, asset.body, asset.contentType);
+        }
         return;
       }
     }
@@ -446,6 +452,24 @@ export async function startUpdaterFixtureServer(options: UpdaterFixtureOptions =
 
   await listen(server, port, host);
   const origin = serverOrigin(server);
+  if (closureManifest != null && options.rebaseClosureUrl === true) {
+    const closureArchiveUrl = `${origin}/${channel}/closure/${closureManifest.identity.platform}/versions/${closureManifest.identity.version}/closure.zip`;
+    closureManifest = validateClosureCandidateManifest({
+      ...closureManifest,
+      artifact: {
+        ...closureManifest.artifact,
+        url: closureArchiveUrl,
+      },
+    });
+    const manifestBody = Buffer.from(`${JSON.stringify(closureManifest, null, 2)}\n`, "utf8");
+    if (closureFiles != null) {
+      closureFiles.manifest = {
+        ...closureFiles.manifest,
+        body: manifestBody,
+        size: manifestBody.byteLength,
+      };
+    }
+  }
   const closureArchiveUrl = closureManifest?.artifact.url ?? null;
   if (closureArchiveUrl != null && new URL(closureArchiveUrl).origin !== origin) {
     await close(server);

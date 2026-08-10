@@ -31,12 +31,82 @@ type ClosureBuildReport = {
   manifestPath?: unknown;
 };
 
+export type PackagedClosureBuildFixture = {
+  archivePath: string;
+  inventoryPath: string;
+  manifest: ClosureCandidateManifest;
+  manifestPath: string;
+};
+
 export type PackagedClosureFixture = {
   manifest: ClosureCandidateManifest;
   pointer: ClosureRuntimePointer;
   storePaths: ClosureStorePaths;
   versionPaths: ClosureStoreVersionPaths;
 };
+
+export async function readPackagedClosureBuildFixture(input: {
+  buildJsonPath: string;
+  channel: string;
+  expectedPlatform: string;
+  workspaceRoot: string;
+}): Promise<PackagedClosureBuildFixture> {
+  const buildJsonPath = resolveInputPath(input.workspaceRoot, input.buildJsonPath);
+  const report = JSON.parse(await readFile(buildJsonPath, 'utf8')) as ClosureBuildReport;
+  const manifestPath = requireReportPath(report.manifestPath, 'manifestPath', input.workspaceRoot);
+  const manifest = validateClosureCandidateManifest(
+    report.manifest ?? JSON.parse(await readFile(manifestPath, 'utf8')) as unknown,
+  );
+  if (manifest.identity.channel !== input.channel) {
+    throw new Error(`Closure channel mismatch: expected ${input.channel}, got ${manifest.identity.channel}`);
+  }
+  if (manifest.identity.platform !== input.expectedPlatform) {
+    throw new Error(`Closure platform mismatch: expected ${input.expectedPlatform}, got ${manifest.identity.platform}`);
+  }
+  return {
+    archivePath: requireReportPath(report.archivePath, 'archivePath', input.workspaceRoot),
+    inventoryPath: requireReportPath(report.inventoryPath, 'inventoryPath', input.workspaceRoot),
+    manifest,
+    manifestPath,
+  };
+}
+
+export async function readCommittedPackagedClosureFixture(input: {
+  buildJsonPath: string;
+  channel: string;
+  expectedPlatform: string;
+  installationRoot: string;
+  namespace: string;
+  workspaceRoot: string;
+}): Promise<PackagedClosureFixture> {
+  const source = await readPackagedClosureBuildFixture(input);
+  const storePaths = resolveClosureStorePaths({
+    channel: input.channel,
+    namespace: input.namespace,
+    root: input.installationRoot,
+  });
+  const binding = bindClosureCandidateIdentity(source.manifest.identity, input.namespace);
+  const versionPaths = resolveClosureStoreVersionPaths(storePaths, binding);
+  const descriptor = await readClosureBindingDescriptor(storePaths);
+  const pointer = descriptor.committed?.standalone;
+  if (
+    pointer == null
+    || pointer.channel !== binding.channel
+    || pointer.digest !== binding.digest
+    || pointer.namespace !== binding.namespace
+    || pointer.platform !== binding.platform
+    || pointer.protocolVersion !== binding.protocolVersion
+    || pointer.version !== binding.version
+  ) {
+    throw new Error('product did not commit the expected Standalone Closure binding');
+  }
+  return {
+    manifest: source.manifest,
+    pointer,
+    storePaths,
+    versionPaths,
+  };
+}
 
 export async function resetPackagedClosureFixture(input: {
   channel: string;
@@ -68,20 +138,8 @@ export async function seedPackagedClosureFixture(input: {
   namespace: string;
   workspaceRoot: string;
 }): Promise<PackagedClosureFixture> {
-  const buildJsonPath = resolveInputPath(input.workspaceRoot, input.buildJsonPath);
-  const report = JSON.parse(await readFile(buildJsonPath, 'utf8')) as ClosureBuildReport;
-  const manifestPath = requireReportPath(report.manifestPath, 'manifestPath', input.workspaceRoot);
-  const manifest = validateClosureCandidateManifest(
-    report.manifest ?? JSON.parse(await readFile(manifestPath, 'utf8')) as unknown,
-  );
-  if (manifest.identity.channel !== input.channel) {
-    throw new Error(`Closure channel mismatch: expected ${input.channel}, got ${manifest.identity.channel}`);
-  }
-  if (manifest.identity.platform !== input.expectedPlatform) {
-    throw new Error(`Closure platform mismatch: expected ${input.expectedPlatform}, got ${manifest.identity.platform}`);
-  }
-  const archivePath = requireReportPath(report.archivePath, 'archivePath', input.workspaceRoot);
-  const inventoryPath = requireReportPath(report.inventoryPath, 'inventoryPath', input.workspaceRoot);
+  const source = await readPackagedClosureBuildFixture(input);
+  const { archivePath, inventoryPath, manifest, manifestPath } = source;
   const storePaths = resolveClosureStorePaths({
     channel: input.channel,
     namespace: input.namespace,

@@ -10,6 +10,8 @@ export type ToolsServeUpdaterFixture = {
     artifactPath: string | null;
     artifactSha256: string;
     artifactUrl: string;
+    closureArchiveUrl: string | null;
+    closureManifestPath: string | null;
     metadataUrl: string;
     payloadPath: string | null;
     payloadSha256: string | null;
@@ -21,11 +23,13 @@ export type ToolsServeUpdaterFixture = {
 export async function startToolsServeUpdaterFixture(options: {
   artifactPath?: string;
   channel: ReleaseChannel;
+  closureManifestPath?: string;
   controlLauncherVersionMin?: string;
   controlLauncherVersionUrl?: string;
   payloadPath?: string;
   platform: 'mac' | 'win';
   port?: number;
+  rebaseClosureUrl?: boolean;
   version: string;
   workspaceRoot: string;
 }): Promise<ToolsServeUpdaterFixture> {
@@ -44,6 +48,7 @@ export async function startToolsServeUpdaterFixture(options: {
     options.platform,
   ];
   if (options.artifactPath != null) pnpmArgs.push('--artifact-path', options.artifactPath);
+  if (options.closureManifestPath != null) pnpmArgs.push('--closure-manifest-path', options.closureManifestPath);
   if (options.controlLauncherVersionMin != null) {
     pnpmArgs.push('--control-launcher-version-min', options.controlLauncherVersionMin);
   }
@@ -52,6 +57,7 @@ export async function startToolsServeUpdaterFixture(options: {
   }
   if (options.payloadPath != null) pnpmArgs.push('--include-payload', '--payload-path', options.payloadPath);
   if (options.port != null) pnpmArgs.push('--port', String(options.port));
+  if (options.rebaseClosureUrl === true) pnpmArgs.push('--rebase-closure-url');
   const command = process.platform === 'win32' ? (process.env.ComSpec ?? 'cmd.exe') : 'pnpm';
   const args = process.platform === 'win32' ? ['/d', '/s', '/c', 'pnpm.cmd', ...pnpmArgs] : pnpmArgs;
   const child = spawn(command, args, {
@@ -157,6 +163,8 @@ function parseInfo(line: string): ToolsServeUpdaterFixture['info'] {
     artifactPath: typeof parsed.artifactPath === 'string' ? parsed.artifactPath : null,
     artifactSha256: parsed.sha256,
     artifactUrl: parsed.artifactUrl,
+    closureArchiveUrl: typeof parsed.closureArchiveUrl === 'string' ? parsed.closureArchiveUrl : null,
+    closureManifestPath: typeof parsed.closureManifestPath === 'string' ? parsed.closureManifestPath : null,
     metadataUrl: parsed.metadataUrl,
     payloadPath: typeof parsed.payloadPath === 'string' ? parsed.payloadPath : null,
     payloadSha256: typeof parsed.payloadSha256 === 'string' ? parsed.payloadSha256 : null,

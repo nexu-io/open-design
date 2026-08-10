@@ -142,6 +142,60 @@ describe("updater fixture server", () => {
     }
   });
 
+  it("re-envelopes a release-built Closure onto a dynamic fixture origin without changing body identity", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-closure-rebase-fixture-"));
+    const version = "2.0.0-beta.4";
+    const digest = `sha256:${"c".repeat(64)}`;
+    const manifest = {
+      artifact: {
+        digest,
+        entryPath: "bootloader.mjs",
+        inventoryDigest: `sha256:${"d".repeat(64)}`,
+        mediaType: "application/vnd.open-design.closure.zip-v1",
+        size: 13,
+        url: `https://releases.example/beta/closure/darwin-arm64/versions/${version}/closure.zip`,
+      },
+      compatibility: { shell: { electron: { version: { min: version } } } },
+      identity: {
+        channel: "beta",
+        digest,
+        platform: "darwin-arm64",
+        protocolVersion: 1,
+        version,
+      },
+      schemaVersion: 1,
+    };
+    await Promise.all([
+      writeFile(join(root, "closure.zip"), "closure body"),
+      writeFile(join(root, "inventory.json"), "{\"schemaVersion\":1,\"files\":[]}"),
+      writeFile(join(root, "manifest.json"), `${JSON.stringify(manifest)}\n`),
+      writeFile(join(root, "provenance.json"), "{\"schemaVersion\":1}"),
+    ]);
+    const server = await startUpdaterFixtureServer({
+      channel: "beta",
+      closureManifestPath: join(root, "manifest.json"),
+      platform: "mac",
+      rebaseClosureUrl: true,
+      version,
+    });
+    try {
+      const metadata = await (await fetch(server.info.metadataUrl)).json() as {
+        releaseTargets?: { mac_arm64?: { closure?: { manifest?: typeof manifest } } };
+      };
+      const rebased = metadata.releaseTargets?.mac_arm64?.closure?.manifest;
+      expect(rebased?.artifact.url).toBe(server.info.closureArchiveUrl);
+      expect(rebased?.artifact.digest).toBe(manifest.artifact.digest);
+      expect(rebased?.artifact.inventoryDigest).toBe(manifest.artifact.inventoryDigest);
+      expect(rebased?.identity).toEqual(manifest.identity);
+      expect(await (await fetch(server.info.closureArchiveUrl ?? "")).text()).toBe("closure body");
+      expect(await (await fetch((server.info.closureArchiveUrl ?? "").replace("closure.zip", "manifest.json"))).json())
+        .toEqual(rebased);
+    } finally {
+      await server.close();
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
   it("omits the control block when no control knobs are set", async () => {
     const server = await startUpdaterFixtureServer({
       artifactBody: "fixture artifact",

@@ -50,6 +50,7 @@ export type ShellBuildRecord = {
 };
 
 export type ShellSmokeProofRecord = {
+  acceptanceDigest: Digest;
   channel: string;
   createdAt: string;
   matrix: string;
@@ -57,8 +58,9 @@ export type ShellSmokeProofRecord = {
   provenance: Record<string, unknown>;
   releaseVersion: string;
   scenarios: string[];
-  schemaVersion: 1;
+  schemaVersion: 2;
   shell: { sourceDigest: Digest; type: string; version: string };
+  standaloneProtocolVersion: number;
   target: ShellTarget;
 };
 
@@ -72,6 +74,18 @@ function assertRecord(value: unknown, label: string): asserts value is Record<st
 
 function validateDigest(value: unknown, label: string): asserts value is Digest {
   if (typeof value !== "string" || !digestPattern.test(value)) throw new Error(`${label} must be a lowercase sha256 digest`);
+}
+
+function requiredDigest(name: string): Digest {
+  const value = required(name);
+  validateDigest(value, name);
+  return value;
+}
+
+function requiredPositiveInteger(name: string): number {
+  const value = Number(required(name));
+  if (!Number.isSafeInteger(value) || value < 1) throw new Error(`${name} must be a positive integer`);
+  return value;
 }
 
 export function shellBuildIndexObjectKey(channel: string, shellType: string, sourceDigest: Digest, target: ShellTarget): string {
@@ -91,15 +105,21 @@ export function shellSmokeProofObjectKey(
   sourceDigest: Digest,
   target: ShellTarget,
   matrix: string,
+  acceptanceDigest: Digest,
+  standaloneProtocolVersion: number,
 ): string {
   validateDigest(sourceDigest, "Shell source digest");
+  validateDigest(acceptanceDigest, "Shell smoke acceptance digest");
   if (!tokenPattern.test(shellType)) throw new Error(`invalid Shell type: ${shellType}`);
   if (!tokenPattern.test(matrix)) throw new Error(`invalid Shell smoke matrix: ${matrix}`);
-  return `${channel}/shells/${shellType}/builds/${sourceDigest.slice("sha256:".length)}/acceptance/${target}/${matrix}.json`;
+  if (!Number.isSafeInteger(standaloneProtocolVersion) || standaloneProtocolVersion < 1) {
+    throw new Error("Shell smoke Standalone protocol version must be a positive integer");
+  }
+  return `${channel}/shells/${shellType}/builds/${sourceDigest.slice("sha256:".length)}/acceptance/${target}/${matrix}/standalone-v${standaloneProtocolVersion}/${acceptanceDigest.slice("sha256:".length)}.json`;
 }
 
 function requiredShellSmokeScenarios(matrix: string): string[] {
-  if (matrix === "mac-full-v1") {
+  if (matrix === "mac-shell-v2") {
     return ["mac-shell-lifecycle", "mac-shell-silent-update", "mac-shell-rollback"];
   }
   throw new Error(`unsupported Shell smoke matrix: ${matrix}`);
@@ -110,19 +130,24 @@ export function validateShellSmokeProofRecord(
   expected: Pick<ShellBuildPlan, "profileDigest" | "shell" | "target">,
   channel: ReleaseChannel,
   matrix: string,
+  acceptanceDigest: Digest,
+  standaloneProtocolVersion: number,
 ): ShellSmokeProofRecord {
   assertRecord(value, "Shell smoke proof");
   assertRecord(value.shell, "Shell smoke proof shell");
   if (
-    value.schemaVersion !== 1
+    value.schemaVersion !== 2
     || value.channel !== channel
     || value.matrix !== matrix
+    || value.acceptanceDigest !== acceptanceDigest
+    || value.standaloneProtocolVersion !== standaloneProtocolVersion
     || value.target !== expected.target
     || value.profileDigest !== expected.profileDigest
     || value.shell.type !== expected.shell.type
     || value.shell.sourceDigest !== expected.shell.sourceDigest
   ) throw new Error("Shell smoke proof identity does not match the requested build");
   validateDigest(value.profileDigest, "Shell smoke proof profileDigest");
+  validateDigest(value.acceptanceDigest, "Shell smoke proof acceptanceDigest");
   validateDigest(value.shell.sourceDigest, "Shell smoke proof sourceDigest");
   parseReleaseVersion(String(value.shell.version), channel);
   parseReleaseVersion(String(value.releaseVersion), channel);
@@ -212,7 +237,13 @@ function createReusedBuildReport(
   plan: ShellBuildPlan,
   record: ShellBuildRecord,
   durationMs: number,
-  smokeProof: { matrix: string; state: "hit" | "miss"; url: string | null } | null,
+  smokeProof: {
+    acceptanceDigest: Digest;
+    matrix: string;
+    standaloneProtocolVersion: number;
+    state: "hit" | "miss";
+    url: string | null;
+  } | null,
 ): Record<string, unknown> {
   const local = (kind: string): string | null => plan.artifacts[kind] ?? null;
   const artifact = (kind: string): BuildArtifact | null => {
@@ -285,6 +316,13 @@ export async function resolveShellBuild(): Promise<void> {
   const planPath = required("RELEASE_SHELL_PLAN_JSON_PATH");
   const outputPath = required("RELEASE_SHELL_BUILD_JSON_PATH");
   const plan = validateShellBuildPlan(JSON.parse(readFileSync(planPath, "utf8")) as unknown, channel);
+  const smokeMatrix = optional("RELEASE_SHELL_SMOKE_MATRIX");
+  const smokeAcceptanceDigest = smokeMatrix.length > 0
+    ? requiredDigest("RELEASE_SHELL_SMOKE_ACCEPTANCE_DIGEST")
+    : null;
+  const standaloneProtocolVersion = smokeMatrix.length > 0
+    ? requiredPositiveInteger("RELEASE_STANDALONE_PROTOCOL_VERSION")
+    : null;
   const storage = storageConfigFromEnv();
   const indexKey = shellBuildIndexObjectKey(channel, plan.shell.type, plan.shell.sourceDigest, plan.target);
   const object = await getStorageObject({ ...storage, objectKey: indexKey });
@@ -308,18 +346,52 @@ export async function resolveShellBuild(): Promise<void> {
     mkdirSync(dirname(targetPath), { recursive: true });
     writeFileSync(targetPath, remote.bytes);
   }
-  const smokeMatrix = optional("RELEASE_SHELL_SMOKE_MATRIX");
-  let smokeProof: { matrix: string; state: "hit" | "miss"; url: string | null } | null = null;
+  let smokeProof: {
+    acceptanceDigest: Digest;
+    matrix: string;
+    standaloneProtocolVersion: number;
+    state: "hit" | "miss";
+    url: string | null;
+  } | null = null;
   if (smokeMatrix.length > 0) {
-    const proofKey = shellSmokeProofObjectKey(channel, plan.shell.type, plan.shell.sourceDigest, plan.target, smokeMatrix);
+    const acceptanceDigest = smokeAcceptanceDigest!;
+    const protocolVersion = standaloneProtocolVersion!;
+    const proofKey = shellSmokeProofObjectKey(
+      channel,
+      plan.shell.type,
+      plan.shell.sourceDigest,
+      plan.target,
+      smokeMatrix,
+      acceptanceDigest,
+      protocolVersion,
+    );
     const proofObject = await getStorageObject({ ...storage, objectKey: proofKey });
     if (proofObject == null) {
-      smokeProof = { matrix: smokeMatrix, state: "miss", url: null };
+      smokeProof = {
+        acceptanceDigest,
+        matrix: smokeMatrix,
+        standaloneProtocolVersion: protocolVersion,
+        state: "miss",
+        url: null,
+      };
       writeGithubOutput("smoke_proof", "miss");
     } else {
-      validateShellSmokeProofRecord(JSON.parse(proofObject.text) as unknown, plan, channel, smokeMatrix);
+      validateShellSmokeProofRecord(
+        JSON.parse(proofObject.text) as unknown,
+        plan,
+        channel,
+        smokeMatrix,
+        acceptanceDigest,
+        protocolVersion,
+      );
       const proofUrl = publicUrl(required("RELEASE_PUBLIC_ORIGIN"), "", proofKey);
-      smokeProof = { matrix: smokeMatrix, state: "hit", url: proofUrl };
+      smokeProof = {
+        acceptanceDigest,
+        matrix: smokeMatrix,
+        standaloneProtocolVersion: protocolVersion,
+        state: "hit",
+        url: proofUrl,
+      };
       writeGithubOutput("smoke_proof", "hit");
       writeGithubOutput("smoke_proof_url", proofUrl);
     }
@@ -336,6 +408,8 @@ export async function resolveShellBuild(): Promise<void> {
 export async function registerShellSmokeProof(): Promise<void> {
   const channel = releaseChannelDescriptor(required("RELEASE_CHANNEL")).channel;
   const matrix = required("RELEASE_SHELL_SMOKE_MATRIX");
+  const acceptanceDigest = requiredDigest("RELEASE_SHELL_SMOKE_ACCEPTANCE_DIGEST");
+  const standaloneProtocolVersion = requiredPositiveInteger("RELEASE_STANDALONE_PROTOCOL_VERSION");
   const plan = validateShellBuildPlan(
     JSON.parse(readFileSync(required("RELEASE_SHELL_PLAN_JSON_PATH"), "utf8")) as unknown,
     channel,
@@ -368,6 +442,7 @@ export async function registerShellSmokeProof(): Promise<void> {
   const releaseVersion = String(build.releaseVersion ?? plan.releaseVersion ?? "");
   parseReleaseVersion(releaseVersion, channel);
   const record: ShellSmokeProofRecord = {
+    acceptanceDigest,
     channel,
     createdAt: new Date().toISOString(),
     matrix,
@@ -375,12 +450,21 @@ export async function registerShellSmokeProof(): Promise<void> {
     provenance: githubInfo(),
     releaseVersion,
     scenarios,
-    schemaVersion: 1,
+    schemaVersion: 2,
     shell: build.shell,
+    standaloneProtocolVersion,
     target: plan.target,
   };
   const storage = storageConfigFromEnv();
-  const objectKey = shellSmokeProofObjectKey(channel, build.shell.type, build.shell.sourceDigest, plan.target, matrix);
+  const objectKey = shellSmokeProofObjectKey(
+    channel,
+    build.shell.type,
+    build.shell.sourceDigest,
+    plan.target,
+    matrix,
+    acceptanceDigest,
+    standaloneProtocolVersion,
+  );
   const bytes = Buffer.from(`${JSON.stringify(record, null, 2)}\n`);
   const result = await putStorageObjectWithStatus({
     ...storage,
@@ -394,7 +478,14 @@ export async function registerShellSmokeProof(): Promise<void> {
     if (result.status !== 412) throw new Error(`Shell smoke proof PUT failed with HTTP ${result.status}: ${result.body}`);
     const existing = await getStorageObject({ ...storage, objectKey });
     if (existing == null) throw new Error(`Shell smoke proof disappeared after conflict: ${objectKey}`);
-    validateShellSmokeProofRecord(JSON.parse(existing.text) as unknown, plan, channel, matrix);
+    validateShellSmokeProofRecord(
+      JSON.parse(existing.text) as unknown,
+      plan,
+      channel,
+      matrix,
+      acceptanceDigest,
+      standaloneProtocolVersion,
+    );
   }
   console.log(`registered immutable Shell smoke proof: ${objectKey}`);
 }

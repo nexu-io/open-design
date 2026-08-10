@@ -26,9 +26,12 @@ import {
 } from '@/vitest/packaged-update-scenario';
 import {
   activateBrokenClosureSuccessor,
+  readCommittedPackagedClosureFixture,
+  readPackagedClosureBuildFixture,
   readPackagedClosureFixtureRuntime,
   resetPackagedClosureFixture,
   seedPackagedClosureFixture,
+  type PackagedClosureFixture,
 } from '@/vitest/packaged-closure-fixture';
 import { resolvePackagedSmokeNamespace } from '@/vitest/suite';
 import { startToolsServeUpdaterFixture, type ToolsServeUpdaterFixture } from '@/vitest/tools-serve-updater-fixture';
@@ -330,9 +333,15 @@ const shouldRunPackagedMacSmoke = process.platform === 'darwin' && process.env.O
 const macShellDescribe = shouldRunPackagedMacSmoke && hasPackagedSmokeLane(smokeLanes, 'shell')
   ? describe
   : describe.skip;
+const shellAbsorbsStandaloneAcceptance = hasPackagedSmokeLane(smokeLanes, 'shell')
+  && hasPackagedSmokeLane(smokeLanes, 'standalone')
+  && !verifyCoreOnly
+  && updateFixture === 'tools-serve'
+  && closureBuildJsonPath != null;
 const macClosureDescribe = shouldRunPackagedMacSmoke
   && hasPackagedSmokeLane(smokeLanes, 'standalone')
   && closureBuildJsonPath != null
+  && !shellAbsorbsStandaloneAcceptance
   ? describe
   : describe.skip;
 const macLegacyMigrationDescribe = shouldRunPackagedMacSmoke
@@ -363,6 +372,7 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
     let payloadRuntime: PayloadRuntimeAcceptance | { skipped: true } = { skipped: true };
     let updaterRecovery: UpdaterRecoverySummary | { skipped: true } = { skipped: true };
     let upgradePersistence: UpgradePersistenceSeed | { skipped: true } = { skipped: true };
+    let closureAcceptance: PackagedClosureFixture | null = null;
     let passed = false;
     try {
       await resetPackagedRuntimeState();
@@ -376,7 +386,7 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
       await assertMacInviteProtocolRegistration(install.installedAppPath);
 
       await seedPackagedOnboardingComplete();
-      await seedConfiguredPackagedClosure();
+      if (!shellAbsorbsStandaloneAcceptance) await seedConfiguredPackagedClosure();
 
       let expectedPayloadUpdateVersion: string | null = updateVersion;
       if (!verifyCoreOnly) {
@@ -388,10 +398,20 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
           const localPayload = await resolveLocalPayloadUpdateFixture();
           expectedPayloadUpdateVersion = localPayload.targetVersion;
           recoveryPayloadPath = localPayload.payloadPath;
+          const closureBuild = shellAbsorbsStandaloneAcceptance
+            ? await readPackagedClosureBuildFixture({
+                buildJsonPath: closureBuildJsonPath!,
+                channel: updateScenario.channel,
+                expectedPlatform: 'darwin-arm64',
+                workspaceRoot,
+              })
+            : null;
           payloadFixture = await startToolsServeUpdaterFixture({
             channel: updateScenario.channel,
+            ...(closureBuild == null ? {} : { closureManifestPath: closureBuild.manifestPath }),
             payloadPath: localPayload.payloadPath,
             platform: 'mac',
+            rebaseClosureUrl: closureBuild != null,
             version: localPayload.targetVersion,
             workspaceRoot,
           });
@@ -429,6 +449,20 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
       } else {
         expect(value.health.version).toEqual(expect.any(String));
       }
+      if (shellAbsorbsStandaloneAcceptance) {
+        closureAcceptance = await readCommittedPackagedClosureFixture({
+          buildJsonPath: closureBuildJsonPath!,
+          channel: updateScenario.channel,
+          expectedPlatform: 'darwin-arm64',
+          installationRoot: join(toolsPackDir, 'runtime', 'mac'),
+          namespace,
+          workspaceRoot,
+        });
+        assertClosureDesktopIdentity(
+          await readDesktopIdentityMarker(),
+          closureAcceptance.manifest.identity.version,
+        );
+      }
       const ptyInspect = await runToolsPackJson<MacInspectResult>('inspect', [
         '--expr',
         packagedPtySmokeExpression('darwin'),
@@ -445,7 +479,24 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
       assertLauncherPointer(inspect.launcher.active, updateScenario.expectedCurrentVersion, 0, 'initial active');
       assertLauncherPointer(inspect.launcher.lastSuccessful, updateScenario.expectedCurrentVersion, 0, 'initial lastSuccessful');
 
-      const protocolHotPid = inspect.status?.pid ?? start.pid;
+      let protocolBaseInspect = inspect;
+      if (closureAcceptance != null) {
+        const reinstallStop = await runToolsPackJson<MacStopResult>('stop');
+        started = false;
+        expect(reinstallStop.remainingPids).toEqual([]);
+        const reinstall = await runToolsPackJson<MacInstallResult>('install');
+        expect(reinstall.installedAppPath).toBe(install.installedAppPath);
+        const reinstallStart = await runToolsPackJson<MacStartResult>('start');
+        started = true;
+        expect(reinstallStart.pid).not.toBe(start.pid);
+        protocolBaseInspect = await waitForHealthyDesktop();
+        assertClosureDesktopIdentity(
+          await readDesktopIdentityMarker(),
+          closureAcceptance.manifest.identity.version,
+        );
+      }
+
+      const protocolHotPid = protocolBaseInspect.status?.pid ?? start.pid;
       await invokeMacInviteDeeplink(install.installedAppPath);
       const protocolHotInspect = await waitForHealthyDesktop();
       expect(protocolHotInspect.status?.pid).toBe(protocolHotPid);
@@ -702,6 +753,37 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
         assertLogPathsAndContent(logs);
       }
 
+      if (closureAcceptance != null) {
+        const closureFaultStop = await runToolsPackJson<MacStopResult>('stop');
+        started = false;
+        expect(closureFaultStop.remainingPids).toEqual([]);
+        const broken = await activateBrokenClosureSuccessor(closureAcceptance);
+        await expect(runToolsPackJson<MacStartResult>('start')).rejects.toThrow(/Standalone|standalone/u);
+        expect((await readPackagedClosureFixtureRuntime(closureAcceptance)).committed?.standalone)
+          .toEqual(broken.pointer);
+
+        await resetPackagedClosureFixture({
+          channel: updateScenario.channel,
+          installationRoot: join(toolsPackDir, 'runtime', 'mac'),
+          namespace,
+        });
+        closureAcceptance = await seedPackagedClosureFixture({
+          buildJsonPath: closureBuildJsonPath!,
+          channel: updateScenario.channel,
+          expectedPlatform: 'darwin-arm64',
+          installationRoot: join(toolsPackDir, 'runtime', 'mac'),
+          namespace,
+          workspaceRoot,
+        });
+        await runToolsPackJson<MacStartResult>('start');
+        started = true;
+        await waitForHealthyDesktop();
+        assertClosureDesktopIdentity(
+          await readDesktopIdentityMarker(),
+          closureAcceptance.manifest.identity.version,
+        );
+      }
+
       const stop = await runToolsPackJson<MacStopResult>('stop');
       started = false;
       expect(stop.namespace).toBe(namespace);
@@ -724,6 +806,13 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
         },
         logs: 'skipped' in logs ? logs : summarizeLogs(logs),
         namespace,
+        standalone: closureAcceptance == null
+          ? { absorbed: false }
+          : {
+              absorbed: true,
+              digest: closureAcceptance.manifest.identity.digest,
+              version: closureAcceptance.manifest.identity.version,
+            },
         payloadRuntime,
         pty,
         screenshot: report.screenshotRelpath,
@@ -1031,8 +1120,10 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
 macClosureDescribe('packaged mac Standalone Closure release acceptance', () => {
   test(MAC_PACKAGED_SMOKE_SCENARIOS.standaloneClosure.title, async () => {
     const installationRoot = join(toolsPackDir, 'runtime', 'mac');
+    const updateEnv = captureUpdateEnv();
     let installed = false;
     let started = false;
+    let closureFixture: ToolsServeUpdaterFixture | null = null;
     try {
       await resetPackagedRuntimeState();
       await resetPackagedClosureFixture({
@@ -1043,7 +1134,32 @@ macClosureDescribe('packaged mac Standalone Closure release acceptance', () => {
       await runToolsPackJson<MacInstallResult>('install');
       installed = true;
       await seedPackagedOnboardingComplete();
-      const fixture = await seedPackagedClosureFixture({
+      const closureBuild = await readPackagedClosureBuildFixture({
+        buildJsonPath: closureBuildJsonPath!,
+        channel: updateScenario.channel,
+        expectedPlatform: 'darwin-arm64',
+        workspaceRoot,
+      });
+      closureFixture = await startToolsServeUpdaterFixture({
+        channel: updateScenario.channel,
+        closureManifestPath: closureBuild.manifestPath,
+        platform: 'mac',
+        rebaseClosureUrl: true,
+        version: closureBuild.manifest.identity.version,
+        workspaceRoot,
+      });
+      applyPackagedUpdateEnv(
+        process.env,
+        updateScenario,
+        closureFixture.info.metadataUrl,
+        { openDryRun: false },
+      );
+
+      const firstStart = await runToolsPackJson<MacStartResult>('start');
+      started = true;
+      const firstInspect = await waitForHealthyDesktop();
+      expect(assertHealthEvalValue(firstInspect.eval?.value).health.ok).toBe(true);
+      const fixture = await readCommittedPackagedClosureFixture({
         buildJsonPath: closureBuildJsonPath!,
         channel: updateScenario.channel,
         expectedPlatform: 'darwin-arm64',
@@ -1051,12 +1167,10 @@ macClosureDescribe('packaged mac Standalone Closure release acceptance', () => {
         namespace,
         workspaceRoot,
       });
-
-      const firstStart = await runToolsPackJson<MacStartResult>('start');
-      started = true;
-      const firstInspect = await waitForHealthyDesktop();
-      expect(assertHealthEvalValue(firstInspect.eval?.value).health.ok).toBe(true);
       assertClosureDesktopIdentity(await readDesktopIdentityMarker(), fixture.manifest.identity.version);
+
+      await closureFixture.close();
+      closureFixture = null;
 
       const reinstallStop = await runToolsPackJson<MacStopResult>('stop');
       started = false;
@@ -1094,6 +1208,8 @@ macClosureDescribe('packaged mac Standalone Closure release acceptance', () => {
       assertClosureDesktopIdentity(await readDesktopIdentityMarker(), recovered.manifest.identity.version);
       expect((await readPackagedClosureFixtureRuntime(recovered)).committed?.standalone).toEqual(recovered.pointer);
     } finally {
+      restoreUpdateEnv(updateEnv);
+      await closureFixture?.close().catch(() => undefined);
       if (started) await runToolsPackJson<MacStopResult>('stop').catch(() => undefined);
       if (installed) await runToolsPackJson<MacUninstallResult>('uninstall').catch(() => undefined);
       await resetPackagedClosureFixture({
@@ -1137,9 +1253,16 @@ macLegacyMigrationDescribe('packaged mac historical outer migration acceptance',
       migrationFixture = await startToolsServeUpdaterFixture({
         artifactPath: currentDmgPath,
         channel: updateScenario.channel,
+        closureManifestPath: (await readPackagedClosureBuildFixture({
+          buildJsonPath: closureBuildJsonPath,
+          channel: updateScenario.channel,
+          expectedPlatform: 'darwin-arm64',
+          workspaceRoot,
+        })).manifestPath,
         controlLauncherVersionMin: requiredShellVersion,
         controlLauncherVersionUrl: 'https://open-design.ai/download',
         platform: 'mac',
+        rebaseClosureUrl: true,
         version: targetReleaseVersion,
         workspaceRoot,
       });
@@ -1193,11 +1316,7 @@ macLegacyMigrationDescribe('packaged mac historical outer migration acceptance',
       started = false;
       expect(legacyStop.status).not.toBe('partial');
       expect(legacyStop.remainingPids).toEqual([]);
-      await migrationFixture.close();
-      migrationFixture = null;
-      restoreUpdateEnv(updateEnv);
 
-      await seedConfiguredPackagedClosure();
       const currentInstall = await runToolsPackJson<MacInstallResult>('install');
       expect(currentInstall.installedAppPath).toBe(legacyInstall.installedAppPath);
       const currentStart = await runToolsPackJson<MacStartResult>('start');
@@ -1207,12 +1326,27 @@ macLegacyMigrationDescribe('packaged mac historical outer migration acceptance',
       const currentHealth = assertHealthEvalValue(currentInspect.eval?.value);
       expect(currentHealth.health.version).toBe(targetReleaseVersion);
       expect(currentInspect.update?.currentVersion).toBe(requiredShellVersion);
-      assertClosureDesktopIdentity(await readDesktopIdentityMarker(), targetReleaseVersion);
+      const committedClosure = await readCommittedPackagedClosureFixture({
+        buildJsonPath: closureBuildJsonPath,
+        channel: updateScenario.channel,
+        expectedPlatform: 'darwin-arm64',
+        installationRoot: join(toolsPackDir, 'runtime', 'mac'),
+        namespace,
+        workspaceRoot,
+      });
+      assertClosureDesktopIdentity(
+        await readDesktopIdentityMarker(),
+        committedClosure.manifest.identity.version,
+      );
       const migratedPptx = assertPptxExportEvalValue((await runToolsPackJson<MacInspectResult>('inspect', [
         '--expr',
         existingProjectPptxExportExpression(seeded.projectId),
       ])).eval?.value);
       expect(migratedPptx.projectId).toBe(seeded.projectId);
+
+      await migrationFixture.close();
+      migrationFixture = null;
+      restoreUpdateEnv(updateEnv);
 
       const currentStop = await runToolsPackJson<MacStopResult>('stop');
       started = false;
@@ -2580,13 +2714,34 @@ function bumpCountedVersion(version: string): string {
  * update store, or daemon preferences, so each test starts from zero.
  */
 async function resetPackagedRuntimeState(): Promise<void> {
-  await runToolsPackJson<MacStopResult>('stop').catch(() => undefined);
-  await runToolsPackJson<MacUninstallResult>('uninstall').catch(() => undefined);
-  await rm(runtimeNamespaceRoot, { force: true, recursive: true }).catch(() => undefined);
-  await rm(
-    join(toolsPackDir, 'runtime', 'mac', 'launcher', 'channels', updateScenario.channel, 'namespaces', namespace),
-    { force: true, recursive: true },
-  ).catch(() => undefined);
+  const stop = await runToolsPackJson<MacStopResult>('stop');
+  if (stop.status === 'partial' || stop.remainingPids.length > 0) {
+    throw new Error(`cannot establish pristine mac smoke state: ${formatUnknown(stop)}`);
+  }
+  const uninstall = await runToolsPackJson<MacUninstallResult>('uninstall');
+  if (await pathExists(uninstall.installedAppPath)) {
+    throw new Error(`cannot establish pristine mac smoke state: app remains at ${uninstall.installedAppPath}`);
+  }
+  const launcherNamespaceRoot = join(
+    toolsPackDir,
+    'runtime',
+    'mac',
+    'launcher',
+    'channels',
+    updateScenario.channel,
+    'namespaces',
+    namespace,
+  );
+  await rm(runtimeNamespaceRoot, { force: true, recursive: true });
+  await rm(launcherNamespaceRoot, { force: true, recursive: true });
+  await resetPackagedClosureFixture({
+    channel: updateScenario.channel,
+    installationRoot: join(toolsPackDir, 'runtime', 'mac'),
+    namespace,
+  });
+  if (await pathExists(runtimeNamespaceRoot) || await pathExists(launcherNamespaceRoot)) {
+    throw new Error('cannot establish pristine mac smoke state: runtime roots remain after reset');
+  }
 }
 
 async function resolveMainBuildDmgPath(): Promise<string> {

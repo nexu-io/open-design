@@ -19,6 +19,7 @@ import {
 } from "../src/storage/shell-build.js";
 
 const sourceDigest = `sha256:${"a".repeat(64)}` as const;
+const acceptanceDigest = `sha256:${"e".repeat(64)}` as const;
 const temporaryRoots: string[] = [];
 
 afterEach(async () => {
@@ -45,8 +46,16 @@ describe("immutable Shell build storage", () => {
     expect(shellBuildVersionPrefix("beta", "electron", "0.19.0-beta.2", "darwin-arm64")).toBe(
       "beta/shells/electron/versions/0.19.0-beta.2/darwin-arm64",
     );
-    expect(shellSmokeProofObjectKey("beta", "electron", sourceDigest, "darwin-arm64", "mac-full-v1")).toBe(
-      `beta/shells/electron/builds/${"a".repeat(64)}/acceptance/darwin-arm64/mac-full-v1.json`,
+    expect(shellSmokeProofObjectKey(
+      "beta",
+      "electron",
+      sourceDigest,
+      "darwin-arm64",
+      "mac-shell-v2",
+      acceptanceDigest,
+      1,
+    )).toBe(
+      `beta/shells/electron/builds/${"a".repeat(64)}/acceptance/darwin-arm64/mac-shell-v2/standalone-v1/${"e".repeat(64)}.json`,
     );
   });
 
@@ -155,9 +164,11 @@ describe("immutable Shell build storage", () => {
         RELEASE_CHANNEL: "beta",
         RELEASE_PUBLIC_ORIGIN: "https://releases.example",
         RELEASE_SHELL_BUILD_JSON_PATH: buildPath,
-        RELEASE_SHELL_SMOKE_MATRIX: "mac-full-v1",
+        RELEASE_SHELL_SMOKE_ACCEPTANCE_DIGEST: acceptanceDigest,
+        RELEASE_SHELL_SMOKE_MATRIX: "mac-shell-v2",
         RELEASE_SHELL_SMOKE_SUMMARY_PATH: smokeSummaryPath,
         RELEASE_SHELL_PLAN_JSON_PATH: planPath,
+        RELEASE_STANDALONE_PROTOCOL_VERSION: "1",
         RELEASE_STORAGE_ACCESS_KEY_ID: "test",
         RELEASE_STORAGE_BUCKET: "bucket",
         RELEASE_STORAGE_ENDPOINT: `http://127.0.0.1:${address.port}`,
@@ -188,7 +199,13 @@ describe("immutable Shell build storage", () => {
         expect(reused.timings).toHaveLength(1);
         expect(reused.timings[0].phase).toBe("remote-shell-materialize");
         expect(reused.timings[0].durationMs).toBeGreaterThan(0);
-        expect(reused.resolution.smokeProof).toEqual({ matrix: "mac-full-v1", state: "miss", url: null });
+        expect(reused.resolution.smokeProof).toEqual({
+          acceptanceDigest,
+          matrix: "mac-shell-v2",
+          standaloneProtocolVersion: 1,
+          state: "miss",
+          url: null,
+        });
         expect(await readFile(reusedDmgPath, "utf8")).toBe("signed-notarized-dmg");
         expect(await readFile(reusedPayloadPath, "utf8")).toBe("signed-launcher-payload");
 
@@ -205,21 +222,42 @@ describe("immutable Shell build storage", () => {
         await resolveShellBuild();
         const proven = JSON.parse(await readFile(buildPath, "utf8"));
         expect(proven.resolution.smokeProof).toEqual({
-          matrix: "mac-full-v1",
+          acceptanceDigest,
+          matrix: "mac-shell-v2",
+          standaloneProtocolVersion: 1,
           state: "hit",
-          url: `https://releases.example/beta/shells/electron/builds/${"a".repeat(64)}/acceptance/darwin-arm64/mac-full-v1.json`,
+          url: `https://releases.example/beta/shells/electron/builds/${"a".repeat(64)}/acceptance/darwin-arm64/mac-shell-v2/standalone-v1/${"e".repeat(64)}.json`,
         });
-        const proofKey = shellSmokeProofObjectKey("beta", "electron", sourceDigest, "darwin-arm64", "mac-full-v1");
+        const proofKey = shellSmokeProofObjectKey(
+          "beta",
+          "electron",
+          sourceDigest,
+          "darwin-arm64",
+          "mac-shell-v2",
+          acceptanceDigest,
+          1,
+        );
         expect(validateShellSmokeProofRecord(
           JSON.parse(objects.get(proofKey)!.toString("utf8")),
           plan,
           "beta",
-          "mac-full-v1",
+          "mac-shell-v2",
+          acceptanceDigest,
+          1,
         ).scenarios).toEqual([
           "mac-shell-lifecycle",
           "mac-shell-silent-update",
           "mac-shell-rollback",
         ]);
+
+        process.env.RELEASE_SHELL_SMOKE_ACCEPTANCE_DIGEST = `sha256:${"f".repeat(64)}`;
+        await resolveShellBuild();
+        expect(JSON.parse(await readFile(buildPath, "utf8")).resolution.smokeProof.state).toBe("miss");
+
+        process.env.RELEASE_SHELL_SMOKE_ACCEPTANCE_DIGEST = acceptanceDigest;
+        process.env.RELEASE_STANDALONE_PROTOCOL_VERSION = "2";
+        await resolveShellBuild();
+        expect(JSON.parse(await readFile(buildPath, "utf8")).resolution.smokeProof.state).toBe("miss");
       } finally {
         for (const key of Object.keys(process.env)) {
           if (!(key in previous)) delete process.env[key];

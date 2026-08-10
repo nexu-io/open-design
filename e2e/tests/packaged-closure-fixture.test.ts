@@ -14,6 +14,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   activateBrokenClosureSuccessor,
+  readCommittedPackagedClosureFixture,
+  readPackagedClosureBuildFixture,
   readPackagedClosureFixtureRuntime,
   resetPackagedClosureFixture,
   seedPackagedClosureFixture,
@@ -85,6 +87,13 @@ describe('packaged Closure release fixture', () => {
       }, null, 2)}\n`, 'utf8'),
     ]);
 
+    await expect(readPackagedClosureBuildFixture({
+      buildJsonPath,
+      channel: 'beta',
+      expectedPlatform: 'darwin-arm64',
+      workspaceRoot: root,
+    })).resolves.toMatchObject({ archivePath, inventoryPath, manifest, manifestPath });
+
     const fixture = await seedPackagedClosureFixture({
       buildJsonPath,
       channel: 'beta',
@@ -97,6 +106,14 @@ describe('packaged Closure release fixture', () => {
       releaseVersion: fixture.manifest.identity.version,
       standalone: fixture.pointer,
     });
+    await expect(readCommittedPackagedClosureFixture({
+      buildJsonPath,
+      channel: 'beta',
+      expectedPlatform: 'darwin-arm64',
+      installationRoot,
+      namespace: 'release-beta',
+      workspaceRoot: root,
+    })).resolves.toEqual(fixture);
     expect(await readFile(join(fixture.versionPaths.payloadRoot, CLOSURE_ARCHIVE_ENTRY_PATH), 'utf8'))
       .toBe(entryContents);
 
