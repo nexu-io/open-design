@@ -73,9 +73,12 @@ import {
   executionModeToTracking,
   projectKindFromMetadataToTracking,
   projectKindToTracking,
+  sessionModeToTracking,
 } from '@open-design/contracts/analytics';
 import type {
   TrackingArtifactKind,
+  TrackingConversationForkErrorCode,
+  TrackingConversationForkPoint,
   TrackingDesignSystemApplyTargetKind,
   TrackingDesignSystemOrigin,
   TrackingDesignSystemStatusValue,
@@ -85,6 +88,8 @@ import { useAnalytics } from '../analytics/provider';
 import {
   trackByokPreflightBlocked,
   trackComposerBarClick,
+  trackConversationForkClick,
+  trackConversationForkResult,
   trackDesignSystemApplyResult,
   trackDesignSystemEnrichClick,
   trackPageView,
@@ -387,6 +392,33 @@ export function mergeSavedPreviewComment(current: PreviewComment[], saved: Previ
 
 function wait(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+function conversationForkErrorCode(error: unknown): TrackingConversationForkErrorCode {
+  if (error instanceof ProjectConversationsHttpError) {
+    if (error.status === 400) return 'bad_request';
+    if (error.status === 401 || error.status === 403) return 'permission_denied';
+    if (error.status === 404) return 'fork_source_not_found';
+    if (error.status === 413) return 'payload_too_large';
+    if (error.status >= 500) return 'server_error';
+    return 'http_error';
+  }
+  if (error instanceof TypeError) return 'network_error';
+  return 'unknown_error';
+}
+
+function conversationForkPoint(
+  messages: ChatMessage[],
+  assistantMessageId: string,
+  forkIndex: number,
+): TrackingConversationForkPoint {
+  if (forkIndex < 0) return 'unknown';
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message?.role !== 'assistant') continue;
+    return message.id === assistantMessageId ? 'latest' : 'historical';
+  }
+  return 'unknown';
 }
 
 export async function listConversationsWithRetry(
@@ -8983,14 +9015,36 @@ export function ProjectView({
   const handleForkFromMessage = useCallback(
     async (assistantMessage: ChatMessage) => {
       if (!activeConversationId || forkingMessageId || projectCollab.viewerOnly) return;
+      const requestId = analytics.newRequestId();
+      const startedAt = Date.now();
+      const forkIndex = messages.findIndex((message) => message.id === assistantMessage.id);
+      const forkContext = {
+        page_name: 'chat_panel' as const,
+        area: 'chat_panel' as const,
+        element: 'assistant_fork_button' as const,
+        action: 'fork_conversation' as const,
+        project_id: project.id,
+        project_kind: projectKindFromMetadataToTracking(project.metadata),
+        conversation_id: activeConversationId,
+        assistant_message_id: assistantMessage.id,
+        source_run_id: assistantMessage.runId ?? null,
+        source_agent_id: assistantMessage.agentId ?? 'unknown',
+        agent_provider_id: runAgentProviderId(assistantMessage.agentId ?? 'unknown'),
+        session_mode: sessionModeToTracking(activeSessionMode),
+        fork_point: conversationForkPoint(messages, assistantMessage.id, forkIndex),
+        seed_message_count: forkIndex < 0 ? null : forkIndex + 1,
+        conversation_message_count: messages.length,
+        messages_after_fork_count: forkIndex < 0 ? null : messages.length - forkIndex - 1,
+      };
+      trackConversationForkClick(analytics.track, forkContext, { requestId });
       setForkingMessageId(assistantMessage.id);
       setConversationLoadError(null);
+      let emptyResponse = false;
       try {
         const sourceTitle = activeConversation?.title?.trim();
         const forkTitle = sourceTitle
           ? t('chat.forkedConversationTitle', { title: sourceTitle })
           : undefined;
-        const forkIndex = messages.findIndex((message) => message.id === assistantMessage.id);
         const forkFallbackPredecessorMessageId = forkIndex < 0
           ? undefined
           : (messages[forkIndex - 1]?.id ?? null);
@@ -9004,7 +9058,20 @@ export function ProjectView({
           workspaceContext: projectRunWorkspaceContext,
           throwOnError: true,
         });
-        if (!fresh) throw new Error(t('chat.forkConversationFailed'));
+        if (!fresh) {
+          emptyResponse = true;
+          throw new Error(t('chat.forkConversationFailed'));
+        }
+        trackConversationForkResult(
+          analytics.track,
+          {
+            ...forkContext,
+            target_conversation_id: fresh.id,
+            result: 'success',
+            duration_ms: Math.max(0, Date.now() - startedAt),
+          },
+          { requestId },
+        );
         setMessages([]);
         commitPreviewComments([]);
         setAttachedComments([]);
@@ -9029,6 +9096,17 @@ export function ProjectView({
         onProjectsRefresh();
         setError(null);
       } catch (err) {
+        trackConversationForkResult(
+          analytics.track,
+          {
+            ...forkContext,
+            target_conversation_id: null,
+            result: 'failed',
+            error_code: emptyResponse ? 'empty_response' : conversationForkErrorCode(err),
+            duration_ms: Math.max(0, Date.now() - startedAt),
+          },
+          { requestId },
+        );
         const message = err instanceof Error ? err.message : t('chat.forkConversationFailed');
         setConversationLoadError(message);
         setError(message);
@@ -9040,6 +9118,7 @@ export function ProjectView({
       activeConversationId,
       activeConversation?.title,
       activeSessionMode,
+      analytics,
       commitPreviewComments,
       forkingMessageId,
       messages,
@@ -9047,6 +9126,7 @@ export function ProjectView({
       onProjectsRefresh,
       openTabsState.active,
       project.id,
+      project.metadata,
       projectCollab.viewerOnly,
       t,
     ],

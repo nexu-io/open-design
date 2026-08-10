@@ -15,7 +15,7 @@ import type { ArtifactOriginEntrySurface, ArtifactOriginStatus } from '../../api
 import type { TrackingDesignSystemEditSurface, TrackingDesignSystemKind, TrackingDesignSystemLengthBucket, TrackingDesignSystemOrigin, TrackingDesignSystemRunEntryFrom } from './design-systems.js';
 import type { TrackingSettingsPage } from './event-names.js';
 import type { TrackingAmrOpenCodeErrorPhase, TrackingAmrOpenCodeLastEventType, TrackingAmrOpenCodeLastToolKind, TrackingAmrOpenCodeLastToolStatus, TrackingArtifactKind, TrackingArtifactWriteSource, TrackingArtifactWriteStatus, TrackingByokPreflightBlockReason, TrackingByokProviderId, TrackingCliProviderId, TrackingDesignSystemSource, TrackingExecutionMode, TrackingExportFormat, TrackingExportResult, TrackingFeedbackAction, TrackingFeedbackProviderId, TrackingFeedbackRating, TrackingFeedbackRatingWithNone, TrackingFeedbackReasonCode, TrackingFidelity, TrackingFileSizeBucket, TrackingFileType, TrackingFirstModelEventType, TrackingLangfuseDeliveryStatus, TrackingLangfuseDropReason, TrackingLangfuseReportResult, TrackingLangfuseReportSkipReason, TrackingProjectKind, TrackingProjectSource, TrackingResult, TrackingRunCloseReason, TrackingRunDiagnosticSource, TrackingRunFailureCategory, TrackingRunFailureDetail, TrackingRunFailureStage, TrackingRunFailureUserAction, TrackingRunLifecyclePhase, TrackingRunPhaseTimingStatus, TrackingRunResult, TrackingRunRetryFinalResult, TrackingRunRetryStrategy, TrackingRunRetrySuppressedReason, TrackingStderrLineCountBucket, TrackingTestResult, TrackingTokenCountSource } from './shared-enums.js';
-import type { TrackingFileVersionSource, TrackingPluginImportSource, TrackingSessionMode, TrackingSettingsArea } from './ui-click.js';
+import type { ConversationForkAnalyticsContext, TrackingFileVersionSource, TrackingPluginImportSource, TrackingSessionMode, TrackingSettingsArea } from './ui-click.js';
 // ---- Result events -------------------------------------------------------
 
 // Final outcome for the paid provider submission. Keep this envelope free of
@@ -837,6 +837,24 @@ export interface FeedbackSubmitResultProps {
   has_custom_reason: boolean;
   custom_reason?: string;
   result: TrackingResult;
+}
+
+export type TrackingConversationForkErrorCode =
+  | 'bad_request'
+  | 'permission_denied'
+  | 'fork_source_not_found'
+  | 'payload_too_large'
+  | 'server_error'
+  | 'http_error'
+  | 'network_error'
+  | 'empty_response'
+  | 'unknown_error';
+
+export interface ConversationForkResultProps extends ConversationForkAnalyticsContext {
+  target_conversation_id: string | null;
+  result: TrackingResult;
+  error_code?: TrackingConversationForkErrorCode;
+  duration_ms: number;
 }
 
 interface AssistantFeedbackBase {
