@@ -407,6 +407,12 @@ interface LiveOwnerCodexRunnerResult {
   stdout: string;
 }
 
+interface ExistingCodexMcpRegistration {
+  args: string[];
+  command: string;
+  env: Record<string, string>;
+}
+
 export interface RepairCodexMcpRegistrationOptions {
   fetchImpl?: typeof fetch;
   run?: (
@@ -441,6 +447,70 @@ function parseLiveOwnerMcpInstallPayload(value: unknown): LiveOwnerMcpInstallPay
     command: payload.command,
     env: payload.env,
   };
+}
+
+function parseExistingCodexMcpRegistration(
+  stdout: string,
+): ExistingCodexMcpRegistration {
+  let value: unknown;
+  try {
+    value = JSON.parse(stdout);
+  } catch {
+    throw new Error("codex mcp get returned invalid JSON for open-design");
+  }
+  if (value == null || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("codex mcp get returned an invalid open-design registration");
+  }
+  const transport = (value as { transport?: unknown }).transport;
+  if (transport == null || typeof transport !== "object" || Array.isArray(transport)) {
+    throw new Error("codex mcp get returned an incomplete open-design registration");
+  }
+  const candidate = transport as {
+    type?: unknown;
+    command?: unknown;
+    args?: unknown;
+    env?: unknown;
+  };
+  if (
+    candidate.type !== "stdio"
+    || typeof candidate.command !== "string"
+    || candidate.command.length === 0
+    || !Array.isArray(candidate.args)
+    || !candidate.args.every((entry) => typeof entry === "string")
+    || !isStringRecord(candidate.env)
+  ) {
+    throw new Error("codex mcp get returned an unsupported open-design registration");
+  }
+  return {
+    args: candidate.args,
+    command: candidate.command,
+    env: candidate.env,
+  };
+}
+
+function codexMcpAddArgs(
+  registration: ExistingCodexMcpRegistration,
+): string[] {
+  const args = ["mcp", "add", "open-design"];
+  for (const [key, value] of Object.entries(registration.env)) {
+    args.push("--env", `${key}=${value}`);
+  }
+  args.push("--", registration.command, ...registration.args);
+  return args;
+}
+
+function codexMcpFailureDetail(result: LiveOwnerCodexRunnerResult): string {
+  return result.stderr.trim()
+    || result.stdout.trim()
+    || `exit ${result.exitCode}`;
+}
+
+function codexMcpRegistrationIsMissing(
+  result: LiveOwnerCodexRunnerResult,
+): boolean {
+  return /no mcp server named .* found|mcp server .* not found/iu.test(
+    `${result.stderr}\n${result.stdout}`,
+  );
 }
 
 async function runCodexMcpRepair(
@@ -505,18 +575,39 @@ export async function repairCodexMcpRegistrationViaLiveOwner(
     );
   }
   const payload = parseLiveOwnerMcpInstallPayload(await response.json());
-  const registrationEnv = { ...payload.env, CODEX_BIN: codexBin };
-  const args = ["mcp", "add", "open-design"];
-  for (const [key, value] of Object.entries(registrationEnv)) {
-    args.push("--env", `${key}=${value}`);
+  const run = options.run ?? runCodexMcpRepair;
+  const current = await run(codexBin, ["mcp", "get", "open-design", "--json"]);
+  if (current.exitCode !== 0 && !codexMcpRegistrationIsMissing(current)) {
+    throw new Error(`codex mcp get failed: ${codexMcpFailureDetail(current)}`);
   }
-  args.push("--", payload.command, ...payload.args);
-  const result = await (options.run ?? runCodexMcpRepair)(codexBin, args);
+  const previous = current.exitCode === 0
+    ? parseExistingCodexMcpRegistration(current.stdout)
+    : null;
+  if (previous) {
+    const removed = await run(codexBin, ["mcp", "remove", "open-design"]);
+    if (removed.exitCode !== 0) {
+      throw new Error(`codex mcp remove failed: ${codexMcpFailureDetail(removed)}`);
+    }
+  }
+
+  const replacement: ExistingCodexMcpRegistration = {
+    args: payload.args,
+    command: payload.command,
+    env: { ...payload.env, CODEX_BIN: codexBin },
+  };
+  const result = await run(codexBin, codexMcpAddArgs(replacement));
   if (result.exitCode !== 0) {
-    const detail = result.stderr.trim()
-      || result.stdout.trim()
-      || `exit ${result.exitCode}`;
-    throw new Error(`codex mcp add failed: ${detail}`);
+    if (previous) {
+      await run(codexBin, ["mcp", "remove", "open-design"]);
+      const restored = await run(codexBin, codexMcpAddArgs(previous));
+      if (restored.exitCode !== 0) {
+        throw new Error(
+          `codex mcp add failed: ${codexMcpFailureDetail(result)}; `
+          + `restoring the prior registration also failed: ${codexMcpFailureDetail(restored)}`,
+        );
+      }
+    }
+    throw new Error(`codex mcp add failed: ${codexMcpFailureDetail(result)}`);
   }
   process.stdout.write(" Open Design MCP repaired through the running owner\n");
 }

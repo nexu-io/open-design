@@ -217,12 +217,60 @@ describe("acquirePackagedHeadlessStartup", () => {
 });
 
 describe('repairCodexMcpRegistrationViaLiveOwner', () => {
-  it('rebuilds the live owner registration with the current exact CODEX_BIN', async () => {
-    const run = vi.fn(async (_command: string, _args: string[]) => ({
-      exitCode: 0,
-      stdout: '',
-      stderr: '',
+  it('adds the registration directly when no previous entry exists', async () => {
+    const run = vi.fn(async (_command: string, args: string[]) => (
+      args[1] === 'get'
+        ? {
+            exitCode: 1,
+            stdout: '',
+            stderr: "Error: No MCP server named 'open-design' found.",
+          }
+        : { exitCode: 0, stdout: '', stderr: '' }
+    ));
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+      command: 'C:\\Program Files\\Open Design\\Open Design.exe',
+      args: ['C:\\Program Files\\Open Design\\daemon-cli.mjs', 'mcp'],
+      env: {},
+    }), {
+      headers: { 'Content-Type': 'application/json' },
+      status: 200,
     }));
+
+    await repairCodexMcpRegistrationViaLiveOwner(
+      'http://127.0.0.1:7456',
+      'C:\\RR-ESW\\bin\\codex.exe',
+      { fetchImpl, run },
+    );
+
+    expect(run).toHaveBeenCalledTimes(2);
+    expect(run.mock.calls[1]?.[1]?.slice(0, 4)).toEqual([
+      'mcp',
+      'add',
+      'open-design',
+      '--env',
+    ]);
+  });
+
+  it('rebuilds the live owner registration with the current exact CODEX_BIN', async () => {
+    const run = vi.fn(async (_command: string, args: string[]) => {
+      if (args[1] === 'get') {
+        return {
+          exitCode: 0,
+          stdout: JSON.stringify({
+            name: 'open-design',
+            enabled: true,
+            transport: {
+              type: 'stdio',
+              command: 'C:\\Old Open Design\\Open Design.exe',
+              args: ['C:\\Old Open Design\\daemon-cli.mjs', 'mcp'],
+              env: { CODEX_BIN: 'C:\\stale\\codex.exe' },
+            },
+          }),
+          stderr: '',
+        };
+      }
+      return { exitCode: 0, stdout: '', stderr: '' };
+    });
     const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
       command: 'C:\\Program Files\\Open Design\\Open Design.exe',
       args: [
@@ -249,8 +297,10 @@ describe('repairCodexMcpRegistrationViaLiveOwner', () => {
     expect(fetchImpl).toHaveBeenCalledWith(
       'http://127.0.0.1:7456/api/mcp/install-info',
     );
-    expect(run).toHaveBeenCalledOnce();
-    const [command, args] = run.mock.calls[0] ?? [];
+    expect(run).toHaveBeenCalledTimes(3);
+    expect(run.mock.calls[0]?.[1]).toEqual(['mcp', 'get', 'open-design', '--json']);
+    expect(run.mock.calls[1]?.[1]).toEqual(['mcp', 'remove', 'open-design']);
+    const [command, args] = run.mock.calls[2] ?? [];
     expect(command).toBe('C:\\RR-ESW\\bin\\codex.exe');
     expect(args).toContain('CODEX_BIN=C:\\RR-ESW\\bin\\codex.exe');
     expect(args).not.toContain('CODEX_BIN=C:\\stale\\codex.exe');
@@ -259,5 +309,80 @@ describe('repairCodexMcpRegistrationViaLiveOwner', () => {
       'C:\\Program Files\\Open Design\\resources\\app\\prebundled\\daemon\\daemon-cli.mjs',
       'mcp',
     ]);
+  });
+
+  it('restores the previous registration when replacement add fails', async () => {
+    const oldCommand = 'C:\\Old Open Design\\Open Design.exe';
+    const oldArgs = ['C:\\Old Open Design\\daemon-cli.mjs', 'mcp'];
+    let addAttempt = 0;
+    const run = vi.fn(async (_command: string, args: string[]) => {
+      if (args[1] === 'get') {
+        return {
+          exitCode: 0,
+          stdout: JSON.stringify({
+            name: 'open-design',
+            enabled: true,
+            transport: {
+              type: 'stdio',
+              command: oldCommand,
+              args: oldArgs,
+              env: { CODEX_BIN: 'C:\\stale\\codex.exe' },
+            },
+          }),
+          stderr: '',
+        };
+      }
+      if (args[1] === 'add') {
+        addAttempt += 1;
+        if (addAttempt === 1) {
+          return { exitCode: 1, stdout: '', stderr: 'replacement rejected' };
+        }
+      }
+      return { exitCode: 0, stdout: '', stderr: '' };
+    });
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+      command: 'C:\\Program Files\\Open Design\\Open Design.exe',
+      args: ['C:\\Program Files\\Open Design\\daemon-cli.mjs', 'mcp'],
+      env: { CODEX_BIN: 'C:\\stale\\codex.exe' },
+    }), {
+      headers: { 'Content-Type': 'application/json' },
+      status: 200,
+    }));
+
+    await expect(repairCodexMcpRegistrationViaLiveOwner(
+      'http://127.0.0.1:7456',
+      'C:\\RR-ESW\\bin\\codex.exe',
+      { fetchImpl, run },
+    )).rejects.toThrow(/replacement rejected/);
+
+    expect(run).toHaveBeenCalledTimes(5);
+    expect(run.mock.calls[3]?.[1]).toEqual(['mcp', 'remove', 'open-design']);
+    const restoreArgs = run.mock.calls[4]?.[1] ?? [];
+    expect(restoreArgs).toContain('CODEX_BIN=C:\\stale\\codex.exe');
+    expect(restoreArgs.slice(-3)).toEqual([oldCommand, ...oldArgs]);
+  });
+
+  it('fails closed when the existing registration cannot be inspected', async () => {
+    const run = vi.fn(async () => ({
+      exitCode: 1,
+      stdout: '',
+      stderr: 'permission denied',
+    }));
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+      command: 'C:\\Program Files\\Open Design\\Open Design.exe',
+      args: ['C:\\Program Files\\Open Design\\daemon-cli.mjs', 'mcp'],
+      env: {},
+    }), {
+      headers: { 'Content-Type': 'application/json' },
+      status: 200,
+    }));
+
+    await expect(repairCodexMcpRegistrationViaLiveOwner(
+      'http://127.0.0.1:7456',
+      'C:\\RR-ESW\\bin\\codex.exe',
+      { fetchImpl, run },
+    )).rejects.toThrow(/mcp get failed.*permission denied/i);
+
+    expect(run).toHaveBeenCalledOnce();
   });
 });
