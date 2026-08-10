@@ -384,6 +384,7 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
       expectPathInside(install.dmgPath, join(outputNamespaceRoot, 'dmg'));
       expectPathInside(install.installedAppPath, join(outputNamespaceRoot, 'install', 'Applications'));
       await assertMacInviteProtocolRegistration(install.installedAppPath);
+      await registerMacAppWithLaunchServices(install.installedAppPath);
 
       await seedPackagedOnboardingComplete();
       if (!shellAbsorbsStandaloneAcceptance) await seedConfiguredPackagedClosure();
@@ -487,6 +488,7 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
         expect(reinstallStop.remainingPids).toEqual([]);
         const reinstall = await runToolsPackJson<MacInstallResult>('install');
         expect(reinstall.installedAppPath).toBe(install.installedAppPath);
+        await registerMacAppWithLaunchServices(reinstall.installedAppPath);
         const reinstallStart = await runToolsPackJson<MacStartResult>('start');
         started = true;
         expect(reinstallStart.pid).not.toBe(start.pid);
@@ -3036,6 +3038,16 @@ async function assertMacInviteProtocolRegistration(installedAppPath: string): Pr
     (entry) => entry.CFBundleURLSchemes ?? [],
   );
   expect(schemes).toContain('opendesign');
+}
+
+async function registerMacAppWithLaunchServices(installedAppPath: string): Promise<void> {
+  // A real Finder drag-install registers the copied bundle. The tools-pack
+  // harness uses `ditto` into an isolated Applications directory, so perform
+  // that missing OS step explicitly before testing cold protocol delivery.
+  await execFileAsync(
+    '/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister',
+    ['-f', installedAppPath],
+  );
 }
 
 async function invokeMacInviteDeeplink(
