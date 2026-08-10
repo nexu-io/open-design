@@ -292,8 +292,8 @@ describe('run cross-project conversation ownership', () => {
     const convA = await firstConversationId(url, projectA);
     expect(convA).toBeTruthy();
 
-    // Seed an assistant message referencing a run the daemon does not know
-    // (already finished / forgotten) — a retry should be able to rebind it.
+    // Seed an assistant message owned by a TERMINAL (finished) run — a retry
+    // should be able to rebind it via the atomic claim.
     const assistantId = `assistant_active_${randomUUID()}`;
     const seed = await fetch(
       `${url}/api/projects/${projectA}/conversations/${convA}/messages/${assistantId}`,
@@ -305,7 +305,7 @@ describe('run cross-project conversation ownership', () => {
           role: 'assistant',
           content: 'old attempt',
           runId: 'run-finished',
-          runStatus: 'running',
+          runStatus: 'canceled',
           events: [{ kind: 'text', text: 'old attempt' }],
         }),
       },
@@ -313,7 +313,7 @@ describe('run cross-project conversation ownership', () => {
     expect(seed.status).toBe(200);
 
     // A run submitted with this assistantMessageId must not be rejected as
-    // RUN_IN_PROGRESS — the daemon has no active run for `run-finished`.
+    // RUN_IN_PROGRESS — the terminal old run is rebindable.
     const resp = await fetch(`${url}/api/runs`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },

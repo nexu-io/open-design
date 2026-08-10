@@ -1,0 +1,207 @@
+// #6418 acceptance gate: the run creation must atomically claim the assistant
+// message. Two concurrent runs sharing an assistantMessageId can never both
+// claim it — exactly one succeeds, the other is rejected with RUN_IN_PROGRESS
+// and its run is dropped (no child process spawned).
+
+import type { Server } from 'node:http';
+import { randomUUID } from 'node:crypto';
+import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { afterEach, describe, expect, it } from 'vitest';
+
+import { startServer } from '../src/server.js';
+
+type StartedServer = { url: string; server: Server; shutdown?: () => Promise<void> | void };
+
+describe('run creation atomic assistant-message ownership (#6418)', () => {
+  let started: StartedServer | null = null;
+  let binDir: string | null = null;
+
+  afterEach(async () => {
+    await Promise.resolve(started?.shutdown?.());
+    if (started?.server) {
+      await new Promise<void>((resolve) => started?.server.close(() => resolve()));
+    }
+    started = null;
+    if (binDir) await rm(binDir, { recursive: true, force: true });
+    binDir = null;
+  });
+
+  async function startWithHangingClaude() {
+    delete process.env.POSTHOG_KEY;
+    delete process.env.POSTHOG_HOST;
+    delete process.env.LANGFUSE_PUBLIC_KEY;
+    delete process.env.LANGFUSE_SECRET_KEY;
+    delete process.env.LANGFUSE_BASE_URL;
+    delete process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL;
+
+    binDir = await mkdtemp(path.join(os.tmpdir(), 'od-atomic-bin-'));
+    const bin = path.join(binDir, 'claude');
+    const invocationPath = path.join(binDir, 'invocations.jsonl');
+    await writeFile(
+      bin,
+      `#!/usr/bin/env node
+const fs = require('node:fs');
+const invocationPath = ${JSON.stringify(invocationPath)};
+if (process.argv.includes('--version')) { console.log('claude-code 1.0.0'); process.exit(0); }
+if (process.argv.includes('--help')) { console.log('Usage: claude -p'); process.exit(0); }
+fs.appendFileSync(invocationPath, 'x\\n');
+setInterval(() => {}, 1000);
+`,
+      'utf8',
+    );
+    await chmod(bin, 0o755);
+
+    started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
+    const response = await fetch(`${started.url}/api/app-config`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        agentId: 'claude',
+        agentCliEnv: { claude: { CLAUDE_BIN: bin } },
+        telemetry: { metrics: false, content: false, artifactManifest: false },
+        privacyDecisionAt: Date.now(),
+      }),
+    });
+    expect(response.status).toBe(200);
+    return { url: started.url, invocationPath };
+  }
+
+  async function createProject(url: string) {
+    const projectId = `atomic_${randomUUID()}`;
+    const project = await fetch(`${url}/api/projects`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Atomic smoke',
+        metadata: { kind: 'prototype' },
+        skipDiscoveryBrief: true,
+      }),
+    });
+    expect(project.status).toBe(200);
+    const body = (await project.json()) as { conversationId: string };
+    return { projectId, conversationId: body.conversationId };
+  }
+
+  async function postRun(url: string, body: Record<string, unknown>) {
+    return fetch(`${url}/api/runs`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  }
+
+  async function fetchAssistantMessage(
+    url: string,
+    projectId: string,
+    conversationId: string,
+    messageId: string,
+  ) {
+    const response = await fetch(
+      `${url}/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages`,
+    );
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { messages: Array<Record<string, unknown>> };
+    return body.messages.find((m) => m.id === messageId);
+  }
+
+  async function waitForInvocation(invocationPath: string): Promise<string> {
+    const deadline = Date.now() + 5_000;
+    while (Date.now() < deadline) {
+      try {
+        const raw = await readFile(invocationPath, 'utf8');
+        if (raw.trim()) return raw;
+      } catch {
+        // file not written yet — the daemon spawns the child asynchronously
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    throw new Error('winning run never spawned the agent CLI');
+  }
+
+  it('atomically lets only one of two concurrent runs claim the assistant message', async () => {
+    const { url, invocationPath } = await startWithHangingClaude();
+    const { projectId, conversationId } = await createProject(url);
+
+    const assistantMessageId = `assistant_concurrent_${randomUUID()}`;
+    const base = {
+      projectId,
+      conversationId,
+      assistantMessageId,
+      agentId: 'claude',
+      message: 'M',
+      currentPrompt: 'M',
+    };
+    const body1 = { ...base, clientRequestId: `c1_${randomUUID()}` };
+    const body2 = { ...base, clientRequestId: `c2_${randomUUID()}` };
+
+    const [r1, r2] = await Promise.all([
+      postRun(url, body1),
+      postRun(url, body2),
+    ]);
+
+    const statuses = [r1.status, r2.status].sort();
+    expect(statuses).toEqual([202, 409]);
+    const loser = r1.status === 409 ? r1 : r2;
+    expect((await loser.json())).toMatchObject({ error: { code: 'RUN_IN_PROGRESS' } });
+
+    // Only the winning run spawned a child process.
+    const raw = await waitForInvocation(invocationPath);
+    expect(raw.trim().split('\n').filter(Boolean)).toHaveLength(1);
+  });
+
+  it('keeps a web-persisted placeholder startedAt through the first claim', async () => {
+    const { url } = await startWithHangingClaude();
+    const { projectId, conversationId } = await createProject(url);
+
+    const assistantMessageId = `assistant_placeholder_${randomUUID()}`;
+    const startedAt = Date.now();
+
+    // Web persists a runId-less assistant placeholder with its own startedAt.
+    const seed = await fetch(
+      `${url}/api/projects/${projectId}/conversations/${conversationId}/messages/${assistantMessageId}`,
+      {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          id: assistantMessageId,
+          role: 'assistant',
+          content: '',
+          runStatus: 'running',
+          startedAt,
+        }),
+      },
+    );
+    expect(seed.status).toBe(200);
+
+    // First run claims the placeholder (202); its startedAt survives.
+    const r1 = await postRun(url, {
+      projectId,
+      conversationId,
+      assistantMessageId,
+      agentId: 'claude',
+      message: 'M',
+      currentPrompt: 'M',
+      clientRequestId: `p1_${randomUUID()}`,
+    });
+    expect(r1.status).toBe(202);
+
+    const msg = await fetchAssistantMessage(url, projectId, conversationId, assistantMessageId);
+    expect(msg?.startedAt).toBe(startedAt);
+
+    // A second concurrent run with the same assistantMessageId is rejected.
+    const r2 = await postRun(url, {
+      projectId,
+      conversationId,
+      assistantMessageId,
+      agentId: 'claude',
+      message: 'M',
+      currentPrompt: 'M',
+      clientRequestId: `p2_${randomUUID()}`,
+    });
+    expect(r2.status).toBe(409);
+    expect((await r2.json())).toMatchObject({ error: { code: 'RUN_IN_PROGRESS' } });
+  });
+});

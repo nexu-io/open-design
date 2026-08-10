@@ -304,114 +304,98 @@ function liveArtifactRefreshPhase(value: unknown): 'started' | 'succeeded' | 'fa
   return 'started';
 }
 
-export function pinAssistantMessageOnRunCreate(db: SqliteDb, run: ChatRunMessageState): void {
-  if (!run.conversationId || !run.assistantMessageId) return;
-  // Scope the lookup to the run's own conversation AND to assistant rows: a
-  // run request for conversation B must never rebind (and potentially wipe) an
-  // assistant message that belongs to conversation A, and a user/other-role row
-  // in the same conversation must never be generation-reset (nettee P1 on
-  // #6418). The route also rejects mis-scoped ids, this is defense in depth.
-  const existing = db
-    .prepare(
-      `SELECT id, run_id AS runId, run_status AS runStatus FROM messages
-        WHERE id = ? AND conversation_id = ? AND role = 'assistant'`,
-    )
-    .get(run.assistantMessageId, run.conversationId) as
-    | { id: string; runId: string | null; runStatus: string | null }
-    | undefined;
-  if (existing) {
-    if (existing.runId === run.id) {
-      // Same run re-pinned (AMR recharge-resume): refresh status/context and
-      // clear the prior failure's ended_at so the resumed completion records a
-      // fresh terminal timestamp; the partial persisted transcript must survive
-      // (mrcfps P2 + nettee P2 on #6418).
-      db.prepare(
-        `UPDATE messages
-            SET run_status = ?,
-                session_mode = ?,
-                run_context_json = ?,
-                ended_at = NULL
-          WHERE id = ? AND conversation_id = ?`,
-      ).run(
-        run.status,
-        run.sessionMode ?? null,
-        run.context ? JSON.stringify(run.context) : null,
-        run.assistantMessageId,
-        run.conversationId,
-      );
-      return;
+export function pinAssistantMessageOnRunCreate(
+  db: SqliteDb,
+  run: ChatRunMessageState,
+): { ok: boolean; reason?: 'active' | 'scope' } {
+  // Headless / omit-pin runs with no assistant message have nothing to claim.
+  if (!run.conversationId || !run.assistantMessageId) return { ok: true };
+
+  // Atomic ownership claim (#6418). The claim is a single conditional UPDATE
+  // inside an immediate transaction: the create -> claim stretch is synchronous
+  // on the single better-sqlite3 connection, so two concurrent runs sharing an
+  // assistantMessageId can never both claim the row. `changes > 0` means THIS
+  // run owns the message; `0` means another active run holds it (or it is out
+  // of scope) and the run must not start — the caller drops the just-created
+  // run and rejects the request.
+  const claim = db.transaction((): { ok: boolean; reason?: 'active' | 'scope' } => {
+    const existing = db
+      .prepare(
+        `SELECT run_id AS runId, run_status AS runStatus, role, conversation_id AS conversationId
+           FROM messages WHERE id = ?`,
+      )
+      .get(run.assistantMessageId) as
+      | { runId: string | null; runStatus: string | null; role: string; conversationId: string }
+      | undefined;
+    if (!existing) {
+      // Fresh id: insert the assistant row bound to this run (we own it).
+      upsertMessage(db, run.conversationId!, {
+        id: run.assistantMessageId!,
+        role: 'assistant',
+        content: '',
+        agentId: run.agentId ?? undefined,
+        events: [],
+        runId: run.id,
+        runStatus: run.status,
+        sessionMode: run.sessionMode ?? undefined,
+        runContext: run.context ?? undefined,
+        startedAt: run.createdAt,
+      });
+      return { ok: true };
     }
-    // Defense in depth: never generation-reset a row owned by a STILL-ACTIVE
-    // run — two concurrent runs sharing the assistantMessageId would otherwise
-    // clear each other's in-flight events/content and corrupt the transcript.
-    // The route rejects this case; this skip keeps the destructive reset from
-    // firing on a race that slips past it. A runId-less web placeholder
-    // (runStatus set, no run bound yet) is the normal pre-run flow and stays
-    // rebindable (nettee on #6418).
+    // Scope guard (defense in depth; the route pre-filters these cases).
+    if (existing.role !== 'assistant' || existing.conversationId !== run.conversationId) {
+      return { ok: false, reason: 'scope' };
+    }
+    const isSameRun = existing.runId === run.id;
+    // Clean early verdict for the common concurrency case (the UPDATE's WHERE
+    // gate below re-asserts it at the DB level so the guarantee survives
+    // refactors).
     if (
-      existing.runId &&
-      (existing.runStatus === 'queued' || existing.runStatus === 'running')
+      existing.runId
+      && !isSameRun
+      && (existing.runStatus === 'queued' || existing.runStatus === 'running')
     ) {
-      return;
+      return { ok: false, reason: 'active' };
     }
-    // Generation boundary: rebinding an existing assistant message to a NEW
-    // run id (first pin, or a same-message retry reusing the failed
-    // assistant's id) resets the run-owned fields to this run's start — the
-    // old attempt's terminal status, events, content, timestamps, and event
-    // cursor must not survive into the new generation (mrcfps P1 on #6418),
-    // otherwise the retry's final web PUT stays stuck on the old failure and a
-    // reattach resumes from the superseded run's last-run-event cursor.
-    //
-    // startedAt: a retry rebinding an OLD-run row resets to the new run's
-    // createdAt; a runId-less web placeholder (the normal pre-run flow, where
-    // the UI already persisted the turn's own startedAt) keeps that
-    // web-persisted start time.
-    db.prepare(
+    const result = db.prepare(
       `UPDATE messages
           SET run_id = ?,
               run_status = ?,
               session_mode = ?,
               run_context_json = ?,
-              events_json = NULL,
-              content = '',
+              events_json = CASE WHEN run_id = ? THEN events_json ELSE NULL END,
+              content = CASE WHEN run_id = ? THEN content ELSE '' END,
               ended_at = NULL,
-              last_run_event_id = NULL,
+              last_run_event_id = CASE WHEN run_id = ? THEN last_run_event_id ELSE NULL END,
               started_at = CASE
-                WHEN ? THEN ?
-                ELSE COALESCE(started_at, ?)
+                WHEN run_id = ? THEN started_at
+                WHEN ? THEN COALESCE(started_at, ?)
+                ELSE ?
               END
-        WHERE id = ? AND conversation_id = ?`,
+        WHERE id = ?
+          AND conversation_id = ?
+          AND role = 'assistant'
+          AND (run_id IS NULL OR run_id = ? OR run_status IN ('succeeded','failed','canceled'))`,
     ).run(
       run.id,
       run.status,
       run.sessionMode ?? null,
       run.context ? JSON.stringify(run.context) : null,
-      existing.runId ? 1 : 0,
+      run.id, // same-run: preserve events_json
+      run.id, // same-run: preserve content
+      run.id, // same-run: preserve last_run_event_id
+      run.id, // same-run: preserve started_at
+      existing.runId ? 0 : 1, // placeholder -> keep web-persisted startedAt
       run.createdAt,
-      run.createdAt,
+      run.createdAt, // terminal rebind -> reset to this run's start
       run.assistantMessageId,
       run.conversationId,
+      run.id, // same-run gate in WHERE
     );
-    return;
-  }
-  // No row in this run's conversation. If the id already exists in ANOTHER
-  // conversation, the run's assistantMessageId is mis-scoped — `upsertMessage`
-  // keys by id only, so writing here would rebind/wipe the other
-  // conversation's message. Never touch it (nettee P1 on #6418).
-  const elsewhere = db
-    .prepare(`SELECT id FROM messages WHERE id = ?`)
-    .get(run.assistantMessageId);
-  if (elsewhere) return;
-  upsertMessage(db, run.conversationId, {
-    id: run.assistantMessageId,
-    role: 'assistant',
-    content: '',
-    agentId: run.agentId ?? undefined,
-    events: [],
-    runId: run.id,
-    runStatus: run.status,
-    sessionMode: run.sessionMode ?? undefined,
-    runContext: run.context ?? undefined,
-    startedAt: run.createdAt,
+    return result.changes > 0
+      ? { ok: true }
+      : { ok: false, reason: 'active' as const };
   });
+  return claim.immediate();
 }

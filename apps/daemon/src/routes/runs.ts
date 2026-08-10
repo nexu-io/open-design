@@ -407,6 +407,8 @@ interface ChatRunService {
     run: ChatRun,
     origin?: NonNullable<ChatRunStatusResponse['cancelOrigin']>,
   ): Promise<ChatRunStatusResponse>;
+  /** Undo an optimistically-created run (e.g. a failed ownership claim). */
+  drop(run: ChatRun): void;
   isTerminal(status: ChatRunStatus): boolean;
   emit?(run: ChatRun, event: string, data: unknown): RunEventRecord;
   setAnalyticsRecovery?(run: ChatRun, recovery: {
@@ -534,7 +536,10 @@ export interface RegisterRunRoutesDeps {
     runRetryEventsForAnalytics: (events: RunEventRecord[]) => RunRetryAnalyticsEvent[];
   };
   messages: {
-    pinAssistantMessageOnRunCreate: (db: SqliteDb, run: ChatRun) => void;
+    pinAssistantMessageOnRunCreate: (
+      db: SqliteDb,
+      run: ChatRun,
+    ) => { ok: boolean; reason?: 'active' | 'scope' };
     reconcileAssistantMessageOnRunEnd: (
       db: SqliteDb,
       runs: ChatRunService,
@@ -1629,34 +1634,6 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           'assistantMessageId belongs to a different conversation',
         );
       }
-      // An existing row bound to a run the daemon STILL has active must not be
-      // rebound — two concurrent runs sharing the assistantMessageId would
-      // reset each other's generation and corrupt the transcript (nettee). A
-      // runId-less web placeholder, a run the daemon has already finished
-      // (normal retry), or a same-clientRequestId idempotent retry (the daemon
-      // reuses the original run) stays rebindable — the message row's own
-      // runStatus is not authoritative for concurrency.
-      if (
-        existingAssistantPin
-        && typeof existingAssistantPin.runId === 'string'
-        && existingAssistantPin.runId.length > 0
-      ) {
-        const daemonRun = design.runs.get(existingAssistantPin.runId);
-        const daemonRunActive =
-          daemonRun && !TERMINAL_RUN_STATUSES.has(daemonRun.status);
-        const idempotentRetry =
-          daemonRun
-          && typeof meta.clientRequestId === 'string'
-          && daemonRun.clientRequestId === meta.clientRequestId;
-        if (daemonRunActive && !idempotentRetry) {
-          return sendApiError(
-            res,
-            409,
-            'RUN_IN_PROGRESS',
-            'assistantMessageId is already bound to an active run',
-          );
-        }
-      }
     }
     let runUserSeed: {
       id: string;
@@ -1793,10 +1770,28 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         console.warn('[runs] api client user message pin failed', err);
       }
     }
-    try {
-      pinAssistantMessageOnRunCreate(db, run);
-    } catch (err) {
-      console.warn('[runs] message create pin failed', err);
+    // Atomic ownership claim: the run only proceeds if it acquires the
+    // assistant message. A claim failure (another active run holds it) drops
+    // the just-created run and rejects, so two runs can never write through
+    // the same message id (#6418).
+    if (creation.kind === 'created' || resumed) {
+      let claimed: { ok: boolean; reason?: 'active' | 'scope' };
+      try {
+        claimed = pinAssistantMessageOnRunCreate(db, run);
+      } catch (err) {
+        // Never let an unclaimed run start.
+        design.runs.drop(run);
+        throw err;
+      }
+      if (!claimed.ok) {
+        design.runs.drop(run);
+        return sendApiError(
+          res,
+          409,
+          'RUN_IN_PROGRESS',
+          'assistantMessageId is already bound to an active run',
+        );
+      }
     }
     const declaredClient = String(req.get('x-od-client') ?? '').toLowerCase();
     if (requestAnalyticsContext?.clientType === 'external_mcp') {
@@ -3112,32 +3107,6 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           'assistantMessageId belongs to a different conversation',
         );
       }
-      // An existing row bound to a run the daemon STILL has active must not be
-      // rebound — two concurrent runs sharing the assistantMessageId would
-      // reset each other's generation and corrupt the transcript (nettee). A
-      // runId-less web placeholder, a finished run (retry), or a
-      // same-clientRequestId idempotent retry stays rebindable.
-      if (
-        existingAssistantPin
-        && typeof existingAssistantPin.runId === 'string'
-        && existingAssistantPin.runId.length > 0
-      ) {
-        const daemonRun = design.runs.get(existingAssistantPin.runId);
-        const daemonRunActive =
-          daemonRun && !TERMINAL_RUN_STATUSES.has(daemonRun.status);
-        const idempotentRetry =
-          daemonRun
-          && typeof meta.clientRequestId === 'string'
-          && daemonRun.clientRequestId === meta.clientRequestId;
-        if (daemonRunActive && !idempotentRetry) {
-          return sendApiError(
-            res,
-            409,
-            'RUN_IN_PROGRESS',
-            'assistantMessageId is already bound to an active run',
-          );
-        }
-      }
     }
     if (typeof meta.projectId === 'string' && meta.projectId) {
       const preparedWorkspaceScope =
@@ -3185,10 +3154,23 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       design.runs.stream(run, req, res);
       return;
     }
+    // Atomic ownership claim (#6418): a created run must acquire the assistant
+    // message before streaming — otherwise drop the run and reject.
+    let claimed: { ok: boolean; reason?: 'active' | 'scope' };
     try {
-      pinAssistantMessageOnRunCreate(db, run);
+      claimed = pinAssistantMessageOnRunCreate(db, run);
     } catch (err) {
-      console.warn('[chat] message create pin failed', err);
+      design.runs.drop(run);
+      throw err;
+    }
+    if (!claimed.ok) {
+      design.runs.drop(run);
+      return sendApiError(
+        res,
+        409,
+        'RUN_IN_PROGRESS',
+        'assistantMessageId is already bound to an active run',
+      );
     }
     design.runs.stream(run, req, res);
     reconcileAssistantMessageOnRunEnd(db, design.runs, run);
