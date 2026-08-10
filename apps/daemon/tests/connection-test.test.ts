@@ -3951,7 +3951,7 @@ console.log(JSON.stringify({ jsonrpc: '2.0', method: 'session/update', params: {
   // The fake agy writes the caller-supplied log body to whatever
   // `--log-file` path the daemon passes, then exits 0 with no stdout —
   // exactly the not-logged-in / quota shape captured from the real CLI.
-  const fakeAgyScript = (logBody: string) => `
+  const fakeAgyScript = (logBody: string, stderrBody = '') => `
 const fs = require('node:fs');
 const args = process.argv.slice(2);
 if (args[0] === '--version') {
@@ -3968,19 +3968,19 @@ process.stdin.on('end', () => {
   if (logPath && body) {
     try { fs.writeFileSync(logPath, body); } catch {}
   }
+  const stderr = ${JSON.stringify(stderrBody)};
+  if (stderr) process.stderr.write(stderr);
   // Silent clean exit — no assistant text on stdout, matching agy's
   // real print-mode behavior when it cannot establish a connection.
   process.exit(0);
 });
 `;
 
-  it('surfaces antigravity missing-auth as agent_auth_required instead of "exit 0" (#4281)', async () => {
+  it('surfaces direct antigravity missing-auth evidence despite noisy background polling logs', async () => {
     await withFakeAntigravity(
       fakeAgyScript(
-        [
-          'Propagating selected model override to backend: label="Gemini 3.1 Pro (High)"',
-          'error getting token source: You are not logged into Antigravity',
-        ].join('\n'),
+        'Failed to poll ListExperiments: error getting token source: You are not logged into Antigravity',
+        'Authentication required. Please visit the URL to log in: https://accounts.google.com/o/oauth2/auth?client_id=test&redirect_uri=antigravity\n',
       ),
       async () => {
         const result = await testAgentConnection({ agentId: 'antigravity' });
@@ -3990,6 +3990,20 @@ process.stdin.on('end', () => {
         // The old bug surfaced the bare process-exit line as the detail.
         expect(result.detail).not.toBe('exit 0');
         expect(result.detail).toContain('sign in');
+      },
+    );
+  });
+
+  it('does not treat antigravity background-poll auth noise as session auth failure', async () => {
+    await withFakeAntigravity(
+      fakeAgyScript(
+        'Failed to poll ListExperiments: error getting token source: You are not logged into Antigravity',
+      ),
+      async () => {
+        const result = await testAgentConnection({ agentId: 'antigravity' });
+        expect(result.ok).toBe(false);
+        expect(result.kind).toBe('unknown');
+        expect(result.detail).not.toContain('sign in');
       },
     );
   });
@@ -4011,14 +4025,12 @@ process.stdin.on('end', () => {
     );
   });
 
-  it('falls back to agent_auth_required when antigravity exits silently with no log signal (#4281)', async () => {
+  it('reports an unknown failure when antigravity exits silently with no auth evidence', async () => {
     await withFakeAntigravity(fakeAgyScript(''), async () => {
       const result = await testAgentConnection({ agentId: 'antigravity' });
       expect(result.ok).toBe(false);
-      // A silent clean exit almost always means missing OAuth; it must
-      // never regress back to the opaque `unknown` / "exit 0" result.
-      expect(result.kind).toBe('agent_auth_required');
-      expect(result.kind).not.toBe('unknown');
+      expect(result.kind).toBe('unknown');
+      expect(result.detail).not.toContain('sign in');
     });
   });
 

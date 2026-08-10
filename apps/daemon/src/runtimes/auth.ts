@@ -266,6 +266,34 @@ export function classifyAgentServiceFailure(
   return null;
 }
 
+/**
+ * Classifies a silent Antigravity run without allowing background diagnostic
+ * polling to establish authentication state. `directText` is child
+ * stdout/stderr; `diagnosticText` may additionally contain agy's default or
+ * per-run log tail. Quota and upstream signals remain useful from either
+ * source, while auth requires evidence on the run's own process channels.
+ */
+export function classifySilentAntigravityFailure(input: {
+  directText: string;
+  diagnosticText?: string;
+}): {
+  authFailure: AgentAuthProbeResult | null;
+  serviceFailure: AgentServiceFailureCode | null;
+} {
+  const directText = String(input.directText || '');
+  const diagnosticText = String(input.diagnosticText ?? directText);
+  const authFailure = classifyAgentAuthFailure('antigravity', directText);
+  const directServiceFailure = classifyAgentServiceFailure(directText);
+  const diagnosticServiceFailure = classifyAgentServiceFailure(diagnosticText);
+  return {
+    authFailure,
+    serviceFailure:
+      diagnosticServiceFailure === 'AGENT_AUTH_REQUIRED'
+        ? directServiceFailure
+        : diagnosticServiceFailure,
+  };
+}
+
 // Tail length matches the smoke-test sink so the diagnostics block
 // stays compact when it folds probe output back into its overrides.
 const PROBE_TAIL_BYTES = 400;

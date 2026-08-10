@@ -46,6 +46,7 @@ import {
   antigravityQuotaGuidance,
   classifyAgentAuthFailure,
   classifyAgentServiceFailure,
+  classifySilentAntigravityFailure,
   cursorAuthGuidance,
   probeAgentAuthStatus,
 } from './runtimes/auth.js';
@@ -2638,40 +2639,33 @@ async function testAgentConnectionInternal(
           });
         }
       }
-      // Antigravity print-mode empty-output guard. agy exits cleanly
-      // (code 0) with no assistant text for BOTH missing-auth and
-      // quota-exhausted failures, so without this the connection test
-      // collapses every such failure into a useless `unknown` / "Test
-      // failed: exit 0" (#4281). Mirror the chat-run guard in
-      // server.ts: fold agy's `--log-file` tail into the classifier
-      // input and route to the specific auth / quota result so Settings
-      // can show actionable re-authentication or quota guidance. Only
-      // runs when agy produced no visible text — a healthy `ok` reply
-      // returns above before reaching here.
+      // Antigravity print-mode empty-output guard. Use direct stdout/stderr for
+      // auth, while allowing the diagnostic log to contribute quota/upstream
+      // signals. agy's background polling writes auth-looking noise even for
+      // authenticated sessions, so log-only text cannot prove missing auth
+      // (#4121). A healthy visible reply returns above before reaching here.
       if (input.agentId === 'antigravity' && !visibleText) {
-        let combinedDetail = `${stderrTail}\n${rawStdoutTail}`;
+        const directDetail = `${stderrTail}\n${rawStdoutTail}`;
+        let diagnosticDetail = directDetail;
         if (antigravityLogFilePath) {
           try {
             const logContent = await fsp.readFile(antigravityLogFilePath, 'utf8');
-            // Keep the last 8 KB — quota / auth lines land near the tail,
-            // after the spawn / model-config preamble.
-            combinedDetail = `${combinedDetail}\n${logContent.slice(-8192)}`;
+            // Keep the last 8 KB — quota / upstream lines land near the tail,
+            // after the spawn / model-config preamble. Auth remains direct-only.
+            diagnosticDetail = `${diagnosticDetail}\n${logContent.slice(-8192)}`;
           } catch {
             // Missing log file (agy never wrote it, read-only tmp, etc.)
-            // is fine — fall through to the clean-exit auth fallback below.
+            // is fine — fall through to the generic exit detail below.
           }
         }
-        const antigravityAuth = classifyAgentAuthFailure('antigravity', combinedDetail);
-        const serviceFailure = classifyAgentServiceFailure(combinedDetail);
-        // Empirically a silent agy print-mode exit almost always means
-        // missing OAuth; quota is the only other silent path and it is
-        // caught by the log-file grep above. Apply the auth fallback only
-        // on a clean exit so a genuine crash still reports as a spawn
-        // failure with its exit code.
+        const { authFailure: antigravityAuth, serviceFailure } =
+          classifySilentAntigravityFailure({
+            directText: directDetail,
+            diagnosticText: diagnosticDetail,
+          });
         const isAuth =
           antigravityAuth?.status === 'missing' ||
-          serviceFailure === 'AGENT_AUTH_REQUIRED' ||
-          (!antigravityAuth && !serviceFailure && exitedCleanly);
+          serviceFailure === 'AGENT_AUTH_REQUIRED';
         if (isAuth) {
           console.warn(
             `[test:agent] ${def.name} → auth_required (silent exit ${winner.code ?? 'null'})`,
