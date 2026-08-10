@@ -307,9 +307,15 @@ function liveArtifactRefreshPhase(value: unknown): 'started' | 'succeeded' | 'fa
 export function pinAssistantMessageOnRunCreate(
   db: SqliteDb,
   run: ChatRunMessageState,
+  opts?: { status?: string },
 ): { ok: boolean; reason?: 'active' | 'scope' } {
   // Headless / omit-pin runs with no assistant message have nothing to claim.
   if (!run.conversationId || !run.assistantMessageId) return { ok: true };
+
+  // A resume claim writes the post-restart intent (queued) while the run
+  // object is still terminal (failed) — prepareRestart flips it afterwards
+  // (#6418).
+  const claimStatus = opts?.status ?? run.status;
 
   // Atomic ownership claim (#6418). The claim is a single conditional UPDATE
   // inside an immediate transaction: the create -> claim stretch is synchronous
@@ -336,7 +342,7 @@ export function pinAssistantMessageOnRunCreate(
         agentId: run.agentId ?? undefined,
         events: [],
         runId: run.id,
-        runStatus: run.status,
+        runStatus: claimStatus,
         sessionMode: run.sessionMode ?? undefined,
         runContext: run.context ?? undefined,
         startedAt: run.createdAt,
@@ -379,7 +385,7 @@ export function pinAssistantMessageOnRunCreate(
           AND (run_id IS NULL OR run_id = ? OR run_status IN ('succeeded','failed','canceled'))`,
     ).run(
       run.id,
-      run.status,
+      claimStatus,
       run.sessionMode ?? null,
       run.context ? JSON.stringify(run.context) : null,
       run.id, // same-run: preserve events_json

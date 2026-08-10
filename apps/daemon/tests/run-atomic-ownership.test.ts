@@ -107,6 +107,15 @@ setInterval(() => {}, 1000);
     return body.messages.find((m) => m.id === messageId);
   }
 
+  async function listMessages(url: string, projectId: string, conversationId: string) {
+    const response = await fetch(
+      `${url}/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages`,
+    );
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { messages: Array<{ id: string; role: string }> };
+    return body.messages;
+  }
+
   async function waitForInvocation(invocationPath: string): Promise<string> {
     const deadline = Date.now() + 5_000;
     while (Date.now() < deadline) {
@@ -150,6 +159,41 @@ setInterval(() => {}, 1000);
     // Only the winning run spawned a child process.
     const raw = await waitForInvocation(invocationPath);
     expect(raw.trim().split('\n').filter(Boolean)).toHaveLength(1);
+  });
+
+  it('a rejected concurrent run leaves no orphan user turn', async () => {
+    // nettee 8/10 on #6418: the claim must precede user-message seeding, so a
+    // rejected (loser) concurrent run never leaves its user row behind.
+    const { url } = await startWithHangingClaude();
+    const { projectId, conversationId } = await createProject(url);
+
+    const assistantMessageId = `assistant_orphan_${randomUUID()}`;
+    const body1 = {
+      projectId,
+      conversationId,
+      assistantMessageId,
+      userMessageId: `u1_${randomUUID()}`,
+      agentId: 'claude',
+      message: 'M',
+      currentPrompt: 'M',
+      clientRequestId: `o1_${randomUUID()}`,
+    };
+    const body2 = {
+      ...body1,
+      userMessageId: `u2_${randomUUID()}`,
+      clientRequestId: `o2_${randomUUID()}`,
+    };
+
+    const [r1, r2] = await Promise.all([postRun(url, body1), postRun(url, body2)]);
+    const statuses = [r1.status, r2.status].sort();
+    expect(statuses).toEqual([202, 409]);
+    const winner = r1.status === 202 ? body1 : body2;
+    const loser = r1.status === 409 ? body1 : body2;
+
+    const messages = await listMessages(url, projectId, conversationId);
+    const userMessageIds = messages.filter((m) => m.role === 'user').map((m) => m.id);
+    expect(userMessageIds).toContain(winner.userMessageId);
+    expect(userMessageIds).not.toContain(loser.userMessageId);
   });
 
   it('keeps a web-persisted placeholder startedAt through the first claim', async () => {

@@ -351,15 +351,32 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
     // only when the daemon confirms the run genuinely failed (it writes that
     // via reconcileAssistantMessageOnRunEnd); otherwise discard it so the
     // resumed run does not relatch the old failure (nettee on #6418).
+    // Terminal-write arbitration across ALL client terminal statuses, keyed on
+    // what the daemon positively knows (nettee 8/10 on #6418):
+    //   1. Daemon has no record of the run (mock/client-owned row) -> the
+    //      client is the writer; accept its terminal write.
+    //   2. Daemon still owns the run and hasn't reached terminal -> the client
+    //      write is a stale pre-terminal snapshot (or premature); preserve the
+    //      daemon-owned fields so the row can't be latched wrong or reopened
+    //      for a competing claim while the daemon is still writing.
+    //   3. Daemon is terminal and disagrees with the client's terminal -> the
+    //      daemon is authoritative (reconcileAssistantMessageOnRunEnd writes
+    //      its outcome); preserve. Terminal agreement falls through.
+    const incomingIsTerminal =
+      incomingStatus !== null && TERMINAL_RUN_STATUSES.has(incomingStatus);
     if (
-      incomingStatus === 'failed' &&
+      incomingIsTerminal &&
       stored.runStatus !== undefined &&
       !TERMINAL_RUN_STATUSES.has(stored.runStatus)
     ) {
       const daemonRun = stored.runId ? design.runs.get(stored.runId) : null;
-      const daemonConfirmedFailure =
-        daemonRun !== null && daemonRun !== undefined && daemonRun.status === 'failed';
-      if (!daemonConfirmedFailure) {
+      const daemonKnown = daemonRun !== null && daemonRun !== undefined;
+      const daemonTerminal =
+        daemonKnown && TERMINAL_RUN_STATUSES.has(daemonRun!.status);
+      if (
+        (daemonKnown && !daemonTerminal) ||
+        (daemonKnown && daemonTerminal && incomingStatus !== daemonRun!.status)
+      ) {
         return {
           ...incoming,
           runId: stored.runId,

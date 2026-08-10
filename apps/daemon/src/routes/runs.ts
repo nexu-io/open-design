@@ -539,6 +539,7 @@ export interface RegisterRunRoutesDeps {
     pinAssistantMessageOnRunCreate: (
       db: SqliteDb,
       run: ChatRun,
+      opts?: { status?: string },
     ) => { ok: boolean; reason?: 'active' | 'scope' };
     reconcileAssistantMessageOnRunEnd: (
       db: SqliteDb,
@@ -1733,7 +1734,28 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           ...(run.pluginId ? { pluginId: run.pluginId } : {}),
         });
       }
-      if (!rechargeFailure || !design.runs.prepareRestart(run)) {
+      if (!rechargeFailure) {
+        return sendApiError(
+          res,
+          409,
+          'RUN_NOT_RECHARGE_RESUMABLE',
+          'Only a failed Open Design Cloud run waiting for recharge can be resumed with the same request',
+        );
+      }
+      // Claim BEFORE arming the restart. On a conflict the reused run stays
+      // terminal + resumable (never dropped) and the request is rejected —
+      // the claim writes the post-restart `queued` intent so the message row
+      // does not stay terminal while the run is being resumed (#6418).
+      const resumeClaim = pinAssistantMessageOnRunCreate(db, run, { status: 'queued' });
+      if (!resumeClaim.ok) {
+        return sendApiError(
+          res,
+          409,
+          'RUN_IN_PROGRESS',
+          'assistantMessageId is already bound to an active run',
+        );
+      }
+      if (!design.runs.prepareRestart(run)) {
         return sendApiError(
           res,
           409,
@@ -1742,6 +1764,29 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         );
       }
       resumed = true;
+    }
+    // Atomic ownership claim runs BEFORE any message seeding: a rejected run
+    // never leaves an orphan user turn (nettee on #6418). Only a freshly
+    // created run is dropped on failure — a resumed loser is the client's own
+    // idempotent run and must survive.
+    if (creation.kind === 'created') {
+      let claimed: { ok: boolean; reason?: 'active' | 'scope' };
+      try {
+        claimed = pinAssistantMessageOnRunCreate(db, run);
+      } catch (err) {
+        // Never let an unclaimed run start.
+        design.runs.drop(run);
+        throw err;
+      }
+      if (!claimed.ok) {
+        design.runs.drop(run);
+        return sendApiError(
+          res,
+          409,
+          'RUN_IN_PROGRESS',
+          'assistantMessageId is already bound to an active run',
+        );
+      }
     }
     if (creation.kind === 'created' && runUserSeed) {
       try {
@@ -1768,29 +1813,6 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         }
       } catch (err) {
         console.warn('[runs] api client user message pin failed', err);
-      }
-    }
-    // Atomic ownership claim: the run only proceeds if it acquires the
-    // assistant message. A claim failure (another active run holds it) drops
-    // the just-created run and rejects, so two runs can never write through
-    // the same message id (#6418).
-    if (creation.kind === 'created' || resumed) {
-      let claimed: { ok: boolean; reason?: 'active' | 'scope' };
-      try {
-        claimed = pinAssistantMessageOnRunCreate(db, run);
-      } catch (err) {
-        // Never let an unclaimed run start.
-        design.runs.drop(run);
-        throw err;
-      }
-      if (!claimed.ok) {
-        design.runs.drop(run);
-        return sendApiError(
-          res,
-          409,
-          'RUN_IN_PROGRESS',
-          'assistantMessageId is already bound to an active run',
-        );
       }
     }
     const declaredClient = String(req.get('x-od-client') ?? '').toLowerCase();
