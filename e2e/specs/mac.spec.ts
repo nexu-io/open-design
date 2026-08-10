@@ -509,7 +509,7 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
         expect(protocolStop.status).not.toBe('partial');
         expect(protocolStop.remainingPids).toEqual([]);
 
-        await invokeMacInviteDeeplink(install.installedAppPath);
+        await invokeMacInviteDeeplink(install.installedAppPath, { forceNewInstance: true });
         started = true;
         const protocolColdInspect = await waitForHealthyDesktop();
         expect(protocolColdInspect.status?.state).toBe('running');
@@ -3018,10 +3018,22 @@ async function assertMacInviteProtocolRegistration(installedAppPath: string): Pr
   expect(schemes).toContain('opendesign');
 }
 
-async function invokeMacInviteDeeplink(installedAppPath: string): Promise<void> {
+async function invokeMacInviteDeeplink(
+  installedAppPath: string,
+  options: { forceNewInstance?: boolean } = {},
+): Promise<void> {
   // `-a` pins delivery to this namespace's installed test bundle instead of a
   // developer's stable Open Design app that may own the same global scheme.
-  await execFileAsync('/usr/bin/open', ['-a', installedAppPath, packagedInviteDeeplink]);
+  // LaunchServices may briefly retain the connection to a just-terminated app
+  // after tools-pack has proved that all of its PIDs are gone. For the cold
+  // assertion, `-n` requires a new application process while still delivering
+  // the URL through the installed bundle's OS protocol entry.
+  await execFileAsync('/usr/bin/open', [
+    ...(options.forceNewInstance === true ? ['-n'] : []),
+    '-a',
+    installedAppPath,
+    packagedInviteDeeplink,
+  ]);
 }
 
 async function pathExists(filePath: string): Promise<boolean> {
