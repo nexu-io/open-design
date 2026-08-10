@@ -360,7 +360,10 @@ export function buildManualEditBridge(enabled: boolean): string {
     var computed = window.getComputedStyle(el);
     var styles = {};
     styleProps.forEach(function(prop){ styles[prop] = el.style[prop] || computed[prop] || ''; });
-    if (!el.style.textTransform && styles.textTransform === 'none') styles.textTransform = '';
+    if (!el.style.textTransform && styles.textTransform === 'none') {
+      var parentTextTransform = el.parentElement ? window.getComputedStyle(el.parentElement).textTransform : 'none';
+      if (parentTextTransform === 'none') styles.textTransform = '';
+    }
     // Gesture math (move/resize) adds pointer deltas to these values, so they
     // must be RESOLVED px — an authored 'left: 43%' would otherwise be read as
     // 43px and teleport the element on the first drag. Computed left/top are

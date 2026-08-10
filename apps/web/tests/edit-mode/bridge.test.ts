@@ -553,6 +553,33 @@ describe('manual edit bridge target normalization', () => {
     dom.window.close();
   });
 
+  it('preserves a stylesheet-authored none text transform override', async () => {
+    const dom = new JSDOM(
+      `<style>.parent { text-transform: uppercase; } .child { text-transform: none; }</style><main class="parent"><h1 class="child" data-od-id="hero">Two words</h1></main>${buildManualEditBridge(true)}`,
+      { runScripts: 'dangerously', url: 'http://localhost' },
+    );
+    const title = dom.window.document.querySelector('[data-od-id="hero"]') as HTMLElement;
+    title.getBoundingClientRect = () => ({
+      x: 0, y: 0, width: 160, height: 32,
+      top: 0, right: 160, bottom: 32, left: 0,
+      toJSON: () => ({}),
+    } as DOMRect);
+    const postMessage = vi.spyOn(dom.window.parent, 'postMessage');
+
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      data: { type: 'od-edit-mode', enabled: true },
+    }));
+    await new Promise((resolve) => dom.window.setTimeout(resolve, 0));
+    expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'od-edit-targets',
+      targets: expect.arrayContaining([expect.objectContaining({
+        id: 'hero', styles: expect.objectContaining({ textTransform: 'none' }),
+      })]),
+    }), '*');
+
+    dom.window.close();
+  });
+
   it('preserves inherited text transform when a local override is cleared', async () => {
     const dom = new JSDOM(
       `<main style="text-transform: uppercase"><h1 data-od-id="hero">Two words</h1></main>${buildManualEditBridge(true)}`,
