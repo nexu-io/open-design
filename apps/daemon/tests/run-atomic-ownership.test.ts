@@ -161,6 +161,66 @@ setInterval(() => {}, 1000);
     expect(raw.trim().split('\n').filter(Boolean)).toHaveLength(1);
   });
 
+  it('a status-less stale snapshot cannot null the status or reopen a claim', async () => {
+    // nettee 8/10 on #6418: a whole-message PUT that omits runStatus must not
+    // null the daemon-owned status column (which would open the terminal gate),
+    // and a premature terminal PUT against an active daemon run must be
+    // discarded so the row cannot be re-claimed while the run is still writing.
+    const { url } = await startWithHangingClaude();
+    const { projectId, conversationId } = await createProject(url);
+    const assistantMessageId = `assistant_statusless_${randomUUID()}`;
+
+    // run #1 claims the message (daemon keeps it active).
+    const r1 = await postRun(url, {
+      projectId,
+      conversationId,
+      assistantMessageId,
+      agentId: 'claude',
+      message: 'M',
+      currentPrompt: 'M',
+      clientRequestId: `s1_${randomUUID()}`,
+    });
+    expect(r1.status).toBe(202);
+
+    // A stale whole-message PUT omits runStatus — must not null the column.
+    const statusless = await fetch(
+      `${url}/api/projects/${projectId}/conversations/${conversationId}/messages/${assistantMessageId}`,
+      {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id: assistantMessageId, role: 'assistant', content: 'stale', events: [] }),
+      },
+    );
+    expect(statusless.status).toBe(200);
+    const afterStatusless = await fetchAssistantMessage(url, projectId, conversationId, assistantMessageId);
+    expect(afterStatusless?.runStatus).toBeDefined();
+
+    // A premature terminal PUT must be discarded (daemon still active).
+    const premature = await fetch(
+      `${url}/api/projects/${projectId}/conversations/${conversationId}/messages/${assistantMessageId}`,
+      {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id: assistantMessageId, role: 'assistant', content: 'done', runStatus: 'succeeded', events: [] }),
+      },
+    );
+    expect(premature.status).toBe(200);
+    const afterPremature = await fetchAssistantMessage(url, projectId, conversationId, assistantMessageId);
+    expect(afterPremature?.runStatus).not.toBe('succeeded');
+
+    // A second run with the same assistantMessageId must still be rejected.
+    const r2 = await postRun(url, {
+      projectId,
+      conversationId,
+      assistantMessageId,
+      agentId: 'claude',
+      message: 'M',
+      currentPrompt: 'M',
+      clientRequestId: `s2_${randomUUID()}`,
+    });
+    expect(r2.status).toBe(409);
+  });
+
   it('a rejected concurrent run leaves no orphan user turn', async () => {
     // nettee 8/10 on #6418: the claim must precede user-message seeding, so a
     // rejected (loser) concurrent run never leaves its user row behind.

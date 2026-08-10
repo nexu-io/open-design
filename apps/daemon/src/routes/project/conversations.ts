@@ -364,11 +364,14 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
     //      its outcome); preserve. Terminal agreement falls through.
     const incomingIsTerminal =
       incomingStatus !== null && TERMINAL_RUN_STATUSES.has(incomingStatus);
-    if (
-      incomingIsTerminal &&
-      stored.runStatus !== undefined &&
-      !TERMINAL_RUN_STATUSES.has(stored.runStatus)
-    ) {
+    // A stale whole-message PUT can omit `runStatus` entirely (which would
+    // otherwise null the DB column), so arbitration must not depend on the
+    // stored status being defined — a terminal snapshot against any
+    // non-terminal (or status-less) stored row is keyed on what the daemon
+    // positively knows (nettee 8/10 on #6418).
+    const storedNonTerminal =
+      stored.runStatus === undefined || !TERMINAL_RUN_STATUSES.has(stored.runStatus);
+    if (incomingIsTerminal && storedNonTerminal) {
       const daemonRun = stored.runId ? design.runs.get(stored.runId) : null;
       const daemonKnown = daemonRun !== null && daemonRun !== undefined;
       const daemonTerminal =
@@ -402,7 +405,18 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
         ...incoming,
         role: stored.role,
         runId: stored.runId,
+        // Preserve the stored run status when the snapshot omits it, so a
+        // stale whole-message PUT cannot null the daemon-owned status column
+        // and open the terminal-arbitration gate (nettee 8/10 on #6418);
+        // an explicitly carried status still flows.
+        runStatus: incoming.runStatus ?? stored.runStatus,
         startedAt: stored.startedAt ?? incoming.startedAt,
+        // endedAt is a monotonic watermark: never regress the daemon's value.
+        endedAt:
+          typeof incoming.endedAt === 'number' &&
+          (typeof stored.endedAt !== 'number' || incoming.endedAt >= stored.endedAt)
+            ? incoming.endedAt
+            : stored.endedAt,
       };
     }
     // Daemon-written lifecycle timestamps. startedAt is the daemon's first
