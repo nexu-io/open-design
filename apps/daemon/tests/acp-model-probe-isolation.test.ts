@@ -1,9 +1,19 @@
 import assert from 'node:assert/strict';
-import { chmodSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  lstatSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { beforeEach, test } from 'vitest';
+import { basename, dirname, join, parse } from 'node:path';
+import { beforeEach, test, vi } from 'vitest';
 import { acpProbeCwd, clearAcpModelCache, detectAcpModels } from '../src/agent-protocol/index.js';
+import { ACP_PROBE_DIR_NAME } from '../src/agent-protocol/acp/constants.js';
 
 // A fake ACP agent that records every `session/new` it receives — the request
 // `cwd`, and the cwd the probe subprocess itself was spawned in — so a test can
@@ -139,5 +149,46 @@ test('ACP model detection still honours an explicit probe cwd', async () => {
   } finally {
     rmSync(dir, { recursive: true, force: true });
     rmSync(projectDir, { recursive: true, force: true });
+  }
+});
+
+test('ACP probe cwd does not follow a hostile fixed-name symlink in the temp directory', async () => {
+  const hostileTmpDir = mkdtempSync(join(tmpdir(), 'od-acp-hostile-tmp-'));
+  const rootDir = parse(hostileTmpDir).root;
+  const predictableProbePath = join(hostileTmpDir, ACP_PROBE_DIR_NAME);
+  const previousTmpEnv = {
+    TMPDIR: process.env.TMPDIR,
+    TMP: process.env.TMP,
+    TEMP: process.env.TEMP,
+  };
+
+  try {
+    symlinkSync(rootDir, predictableProbePath, process.platform === 'win32' ? 'junction' : 'dir');
+    process.env.TMPDIR = hostileTmpDir;
+    process.env.TMP = hostileTmpDir;
+    process.env.TEMP = hostileTmpDir;
+
+    vi.resetModules();
+    const { acpProbeCwd: isolatedAcpProbeCwd } = await import(
+      '../src/agent-protocol/acp/models.js'
+    );
+    const probeDir = isolatedAcpProbeCwd();
+    const probeStat = lstatSync(probeDir);
+
+    assert.equal(dirname(probeDir), hostileTmpDir);
+    assert.match(basename(probeDir), new RegExp(`^${ACP_PROBE_DIR_NAME}-`));
+    assert.notEqual(probeDir, predictableProbePath);
+    assert.equal(probeStat.isDirectory(), true);
+    assert.equal(probeStat.isSymbolicLink(), false);
+    assert.notEqual(realpathSync(probeDir), realpathSync(rootDir));
+    if (process.platform !== 'win32') {
+      assert.equal(probeStat.mode & 0o777, 0o700);
+    }
+  } finally {
+    for (const [name, value] of Object.entries(previousTmpEnv)) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+    rmSync(hostileTmpDir, { recursive: true, force: true });
   }
 });

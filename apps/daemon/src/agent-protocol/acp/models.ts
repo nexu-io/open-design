@@ -50,22 +50,22 @@ export interface DetectAcpModelsOptions {
 
 let probeCwd: string | null = null;
 /**
- * Returns the working directory ACP model-detection probes run in, creating it
- * on first use. Probes must not inherit the daemon's cwd: the desktop app
- * launches the daemon with cwd `/`, and agents that persist sessions would
- * record a workspace covering the entire filesystem.
+ * Returns the private working directory ACP model-detection probes run in,
+ * creating it atomically on first use. Probes must not inherit the daemon's
+ * cwd: the desktop app launches the daemon with cwd `/`, and agents that
+ * persist sessions would record a workspace covering the entire filesystem.
  *
- * @returns An absolute path to the probe directory, falling back to the OS temp dir when it cannot be created.
+ * `mkdtempSync` both chooses an unpredictable suffix and atomically creates the
+ * directory (with owner-only permissions on POSIX). It therefore cannot accept
+ * a pre-existing fixed-name symlink. Creation failures are intentionally
+ * surfaced rather than falling back to the shared temp root, which would
+ * weaken the isolation invariant this helper owns.
+ *
+ * @returns An absolute path to the process-private probe directory.
  */
 export function acpProbeCwd(): string {
   if (probeCwd) return probeCwd;
-  const dir = path.join(os.tmpdir(), ACP_PROBE_DIR_NAME);
-  try {
-    fs.mkdirSync(dir, { recursive: true });
-    probeCwd = dir;
-  } catch {
-    probeCwd = os.tmpdir();
-  }
+  probeCwd = fs.mkdtempSync(path.join(os.tmpdir(), `${ACP_PROBE_DIR_NAME}-`));
   return probeCwd;
 }
 

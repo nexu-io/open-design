@@ -47,7 +47,7 @@ export const MODEL_CONFIG_OPTION_IDS = new Set(['model', 'models', 'modelid', 'm
 // whole filesystem. Probe inside a dedicated directory instead, and cache
 // the result so a burst of `detectAgents()` calls opens one session, not one
 // per call.
-/** Directory name, created under the OS temp dir, used as the working directory for ACP model-detection probes. */
+/** Prefix for the process-private directory used as the working directory for ACP model-detection probes. */
 export const ACP_PROBE_DIR_NAME = 'open-design-acp-probe';
 /** How long a successful ACP model-detection result is reused before the probe re-opens a session on the agent. */
 export const ACP_MODEL_CACHE_TTL_MS = 5 * 60 * 1000;
