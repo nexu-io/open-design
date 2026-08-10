@@ -2857,18 +2857,117 @@ test('[P1] project detail assistant completion actions support copy, fork, and f
   const forkBody = forkRequest.postDataJSON() as {
     forkAfterMessageId?: string;
     seedFromConversationId?: string;
-    seedMessages?: Array<{ id?: string; role?: string }>;
+    seedMessages?: unknown;
   };
   expect(forkBody.seedFromConversationId).toBe(conversationId);
   expect(forkBody.forkAfterMessageId).toBe(assistantMessageId);
-  expect(
-    forkBody.seedMessages?.some((message) => {
-      return message.id === assistantMessageId && message.role === 'assistant';
-    }),
-  ).toBe(true);
+  expect(forkBody.seedMessages).toBeUndefined();
   await expect
     .poll(() => getProjectContextFromUrl(page).conversationId)
     .not.toBe(conversationId);
+});
+
+test('[P1] project detail forks histories larger than the daemon JSON body limit', async ({ page }) => {
+  test.setTimeout(T.xlong);
+  const { projectId, conversationId, expectedContents } =
+    await seedProjectWithLargeAssistantHistory(page);
+
+  await page.goto(`/projects/${projectId}/conversations/${conversationId}`);
+  await expectWorkspaceReady(page);
+  await expect(page.getByTestId('assistant-fork-button')).toHaveCount(3, {
+    timeout: T.long,
+  });
+
+  const forkResponsePromise = page.waitForResponse((response) => {
+    return response.request().method() === 'POST'
+      && response.url().endsWith(`/api/projects/${projectId}/conversations`);
+  });
+  await page.getByTestId('assistant-fork-button').last().click();
+  const forkResponse = await forkResponsePromise;
+  expect(
+    forkResponse.ok(),
+    `fork large conversation: ${await forkResponse.text()}`,
+  ).toBe(true);
+  const forkRequestBody = forkResponse.request().postDataJSON() as {
+    seedMessages?: unknown;
+  };
+  expect(forkRequestBody.seedMessages).toBeUndefined();
+
+  await expect
+    .poll(() => getProjectContextFromUrl(page).conversationId)
+    .not.toBe(conversationId);
+  const forkConversationId = getProjectContextFromUrl(page).conversationId;
+  expect(forkConversationId).toBeTruthy();
+  const forkRequestHeaders = forkResponse.request().headers();
+  const workspaceHeaders = Object.fromEntries(
+    ['x-od-workspace-id', 'x-od-workspace-member-id']
+      .map((name) => [name, forkRequestHeaders[name]] as const)
+      .filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
+  );
+  const forkMessagesResponse = await page.request.get(
+    `/api/projects/${projectId}/conversations/${forkConversationId}/messages`,
+    { headers: workspaceHeaders },
+  );
+  expect(
+    forkMessagesResponse.ok(),
+    `load forked messages: ${await forkMessagesResponse.text()}`,
+  ).toBe(true);
+  const forkMessagesBody = (await forkMessagesResponse.json()) as {
+    messages: Array<{ content: string }>;
+  };
+  expect(forkMessagesBody.messages.map((message) => message.content)).toEqual(expectedContents);
+});
+
+test('[P1] read-only project viewers do not see conversation fork actions', async ({ page }) => {
+  const { projectId, conversationId } = await seedProjectWithAssistantCompletion(page);
+  const readonlyTeamContext = {
+    ...AMR_PERSONAL_WORKSPACE_CONTEXT,
+    workspaceId: 'workspace-readonly-fork',
+    workspaceType: 'team',
+    workspaceMemberId: 'member-readonly-fork',
+    role: 'member',
+    teamId: 'team-readonly-fork',
+    permissions: {
+      ...AMR_PERSONAL_WORKSPACE_CONTEXT.permissions,
+      canWriteSyncedFiles: false,
+    },
+  };
+  await page.route(`**/api/projects/${projectId}/workspace-scope`, async (route) => {
+    await route.fulfill({
+      json: {
+        scope: {
+          kind: 'team',
+          projectId,
+          workspaceId: readonlyTeamContext.workspaceId,
+          visibility: 'team',
+          context: readonlyTeamContext,
+        },
+      },
+    });
+  });
+  await page.route(`**/api/projects/${projectId}/collab/status`, async (route) => {
+    await route.fulfill({
+      json: {
+        publishedVersion: 1,
+        materializedVersion: 1,
+        syncState: 'synced',
+        ownerMemberId: 'member-project-owner',
+      },
+    });
+  });
+
+  await page.goto(`/projects/${projectId}/conversations/${conversationId}`);
+  await page
+    .getByText('Loading Open Design…')
+    .waitFor({ state: 'hidden', timeout: T.long })
+    .catch(() => {});
+  const expandConversation = page.getByRole('button', { name: 'Expand the conversation pane' });
+  if (await expandConversation.isVisible()) {
+    await expandConversation.click();
+  }
+  await expect(page.getByTestId('chat-composer-input')).toBeVisible({ timeout: T.long });
+  await expect(page.getByTestId('chat-composer-input')).toHaveAttribute('aria-readonly', 'true');
+  await expect(page.getByTestId('assistant-fork-button')).toHaveCount(0);
 });
 
 test('[P1] project detail conversations menu supports new chat, search, counts, and run duration metadata', async ({ page }) => {
@@ -3786,6 +3885,72 @@ async function seedProjectWithAssistantCompletion(
   expect(assistantResponse.ok(), `seed assistant message: ${await assistantResponse.text()}`).toBeTruthy();
 
   return { projectId, conversationId, assistantMessageId, assistantText };
+}
+
+async function seedProjectWithLargeAssistantHistory(
+  page: Page,
+): Promise<{
+  projectId: string;
+  conversationId: string;
+  expectedContents: string[];
+}> {
+  const projectId = `assistant-large-fork-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const projectResponse = await page.request.post('/api/projects', {
+    data: {
+      id: projectId,
+      name: 'Large Conversation Fork',
+      skillId: null,
+      designSystemId: null,
+      metadata: {
+        kind: 'prototype',
+        nameSource: 'user',
+      },
+    },
+  });
+  expect(projectResponse.ok(), `create project: ${await projectResponse.text()}`).toBeTruthy();
+  const { conversationId } = (await projectResponse.json()) as { conversationId: string };
+  const expectedContents: string[] = [];
+
+  for (let index = 1; index <= 3; index += 1) {
+    const userMessageId = `large-user-${index}`;
+    const userContent = `Large fork request ${index}`;
+    const userResponse = await page.request.put(
+      `/api/projects/${projectId}/conversations/${conversationId}/messages/${userMessageId}`,
+      {
+        data: {
+          id: userMessageId,
+          role: 'user',
+          content: userContent,
+          createdAt: Date.now() + index * 2,
+        },
+      },
+    );
+    expect(userResponse.ok(), `seed user ${index}: ${await userResponse.text()}`).toBeTruthy();
+    expectedContents.push(userContent);
+
+    const assistantMessageId = `large-assistant-${index}`;
+    const assistantContent = `Large fork point ${index}`;
+    const assistantResponse = await page.request.put(
+      `/api/projects/${projectId}/conversations/${conversationId}/messages/${assistantMessageId}`,
+      {
+        data: {
+          id: assistantMessageId,
+          role: 'assistant',
+          content: assistantContent,
+          runStatus: 'succeeded',
+          events: [{ kind: 'raw', line: 'x'.repeat(1_500_000) }],
+          createdAt: Date.now() + index * 2 + 1,
+        },
+      },
+    );
+    expect(
+      assistantResponse.ok(),
+      `seed assistant ${index}: ${await assistantResponse.text()}`,
+    ).toBeTruthy();
+    expectedContents.push(assistantContent);
+  }
+
+  return { projectId, conversationId, expectedContents };
 }
 
 type ConversationHistoryFixture = {

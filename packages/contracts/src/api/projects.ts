@@ -628,6 +628,20 @@ export interface CreateConversationRequest {
    */
   forkAfterMessageId?: string | null;
   /**
+   * One compact client-side message used only when `forkAfterMessageId` is not
+   * present in the source conversation's persisted history. The daemon appends
+   * it to the persisted prefix, which preserves an errored/unpersisted final
+   * assistant turn without making normal forks upload the entire transcript.
+   */
+  forkFallbackMessage?: ChatMessage;
+  /**
+   * The persisted message immediately before `forkFallbackMessage`, or null
+   * when the fallback is the first message. The daemon cuts persisted history
+   * at this boundary before appending the fallback, so later turns cannot leak
+   * into a fork from an older unpersisted assistant message.
+   */
+  forkFallbackPredecessorMessageId?: string | null;
+  /**
    * Client-supplied snapshot of the messages to seed the fork with, in order,
    * up to and including the fork point. When present, the daemon copies these
    * instead of reading the source conversation from the database by id. This
@@ -636,6 +650,10 @@ export interface CreateConversationRequest {
    * message reached the database. Without it, such a fork would 404 on
    * `forkAfterMessageId` and silently fail. When absent, the daemon falls back
    * to copying from `seedFromConversationId` (the original Side Chat path).
+   *
+   * @deprecated Retained for older clients. New clients should first fork from
+   * persisted history and use `forkFallbackMessage` only after a missing fork
+   * point response.
    */
   seedMessages?: ChatMessage[];
 }

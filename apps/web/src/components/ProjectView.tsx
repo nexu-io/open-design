@@ -8914,7 +8914,7 @@ export function ProjectView({
 
   const handleForkFromMessage = useCallback(
     async (assistantMessage: ChatMessage) => {
-      if (!activeConversationId || forkingMessageId) return;
+      if (!activeConversationId || forkingMessageId || projectCollab.viewerOnly) return;
       setForkingMessageId(assistantMessage.id);
       setConversationLoadError(null);
       try {
@@ -8922,21 +8922,19 @@ export function ProjectView({
         const forkTitle = sourceTitle
           ? t('chat.forkedConversationTitle', { title: sourceTitle })
           : undefined;
-        // Seed the fork from the messages the user is actually looking at,
-        // up to and including the fork point. A run that errored or had its
-        // connection reset before its assistant message was persisted leaves
-        // that message in memory only; copying from the database by id would
-        // 404 and silently drop the fork. Sending the in-memory snapshot makes
-        // the fork resilient to that gap.
-        const forkIndex = messages.findIndex((m) => m.id === assistantMessage.id);
-        const seedMessages =
-          forkIndex >= 0 ? messages.slice(0, forkIndex + 1) : [...messages, assistantMessage];
+        const forkIndex = messages.findIndex((message) => message.id === assistantMessage.id);
+        const forkFallbackPredecessorMessageId = forkIndex < 0
+          ? undefined
+          : (messages[forkIndex - 1]?.id ?? null);
         const fresh = await createConversation(project.id, forkTitle, {
           seedFromConversationId: activeConversationId,
           forkAfterMessageId: assistantMessage.id,
           sessionMode: activeSessionMode,
-          seedMessages,
+          forkFallbackMessage:
+            forkFallbackPredecessorMessageId === undefined ? undefined : assistantMessage,
+          forkFallbackPredecessorMessageId,
           workspaceContext: projectRunWorkspaceContext,
+          throwOnError: true,
         });
         if (!fresh) throw new Error(t('chat.forkConversationFailed'));
         setMessages([]);
@@ -8981,6 +8979,7 @@ export function ProjectView({
       onProjectsRefresh,
       openTabsState.active,
       project.id,
+      projectCollab.viewerOnly,
       t,
     ],
   );
@@ -10667,7 +10666,9 @@ export function ProjectView({
               onAssistantFeedback={handleAssistantFeedback}
               onArtifactShare={handleArtifactShare}
               onArtifactDownload={handleArtifactDownload}
-              onForkFromMessage={handleForkFromMessage}
+              onForkFromMessage={
+                projectCollab.viewerOnly ? undefined : handleForkFromMessage
+              }
               forkingMessageId={forkingMessageId}
               onNewConversation={handleNewConversation}
               newConversationDisabled={newConversationDisabled}

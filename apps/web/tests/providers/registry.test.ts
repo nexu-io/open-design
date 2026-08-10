@@ -32,6 +32,8 @@ import {
   fetchLiveArtifacts,
   fetchSkillExample,
   invalidateProjectFilesCache,
+  importSkill,
+  installSkill,
   isDeployProviderId,
   openFolderDialog,
   patchPreviewCommentSortKey,
@@ -41,6 +43,55 @@ import {
   upsertPreviewComment,
   writeProjectTextFileDetailed,
 } from '../../src/providers/registry';
+
+describe('skill operation diagnostics', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('preserves the top-level remote-install error code and status', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      error: 'Skill download failed',
+      code: 'FETCH_FAILED',
+    }), { status: 502 })));
+
+    await expect(installSkill({ source: 'github:owner/repo' })).resolves.toEqual({
+      error: {
+        code: 'FETCH_FAILED',
+        message: 'Skill download failed',
+        status: 502,
+      },
+    });
+  });
+
+  it('preserves a nested import error envelope', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      error: { code: 'VALIDATION_FAILED', message: 'Invalid SKILL.md' },
+    }), { status: 400 })));
+
+    await expect(importSkill({ name: 'broken', body: 'broken' })).resolves.toEqual({
+      error: {
+        code: 'VALIDATION_FAILED',
+        message: 'Invalid SKILL.md',
+        status: 400,
+      },
+    });
+  });
+
+  it('drops a syntactically valid but unknown import error code', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      error: { code: 'UPSTREAM_abc123', message: 'Unknown upstream failure' },
+    }), { status: 503 })));
+
+    await expect(importSkill({ name: 'broken', body: 'broken' })).resolves.toEqual({
+      error: {
+        message: 'Unknown upstream failure',
+        status: 503,
+      },
+    });
+  });
+});
 
 function personalWorkspaceContext(): WorkspaceCollabContext {
   return {
