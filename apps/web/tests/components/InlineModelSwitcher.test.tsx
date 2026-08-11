@@ -4858,4 +4858,111 @@ describe('InlineModelSwitcher AMR row', () => {
 
     vi.useRealTimers();
   });
+
+  it('rejects a held passive read that started before an account-row sign-in began', async () => {
+    // Regression (review thread): the open/agents passive read passed
+    // `amrAuthAttemptIdRef.current ?? undefined` as its guard. When the ref is
+    // null (panel just opened, no attempt captured yet), `?? undefined` turned
+    // it into an OMITTED attempt guard — `refreshAmrStatus` skipped the
+    // attempt comparison for that request. An account-row sign-in
+    // (`handleAmrSignIn`) sets a provisional attempt id without advancing the
+    // poll generation, so a passive read held across that boundary still
+    // committed its response and started a poll for the new login. The passive
+    // read must reject once the ref stops being null.
+    let statusCall = 0;
+    let releasePassiveRead!: (response: Response) => void;
+    const passiveReadResponse = new Promise<Response>((resolve) => {
+      releasePassiveRead = resolve;
+    });
+    let releaseLoginStart!: (response: Response) => void;
+    const heldLoginStart = new Promise<Response>((resolve) => {
+      releaseLoginStart = resolve;
+    });
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === '/api/integrations/vela/status') {
+        statusCall += 1;
+        // Call 1 is the panel-open passive read; hold it while the sign-in
+        // begins. Later reads are in-flight for the new attempt.
+        if (statusCall === 1) {
+          return passiveReadResponse;
+        }
+        return new Response(
+          JSON.stringify({
+            loggedIn: false,
+            loginInFlight: true,
+            profile: 'default',
+            user: null,
+            configPath: '/Users/test/.amr/config.json',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url === '/api/integrations/vela/login' && init?.method === 'POST') {
+        return heldLoginStart;
+      }
+      if (
+        url.startsWith('/api/integrations/vela/wallet') ||
+        url.startsWith('/api/workspace/')
+      ) {
+        return new Response(JSON.stringify({}), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderSwitcher({ agentId: 'amr' }, [amrAgent], {}, { compact: true });
+
+    vi.useFakeTimers();
+    // Open the agent panel: the passive read (call 1) suspends, ref is null.
+    fireEvent.click(screen.getByTestId('inline-model-switcher-chip-agent'));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(statusCall).toBe(1);
+
+    // Account-row sign-in: `handleAmrSignIn` sets the provisional attempt id
+    // (ref becomes non-null) and holds the spawn POST — the poll generation
+    // has NOT advanced, so a generation-only guard cannot reject the stale
+    // read. The panel stays open (no `setPanel(null)` on this path).
+    fireEvent.click(screen.getByTestId('inline-model-switcher-account-action'));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // The stale passive read resolves in-flight. It must NOT commit or start
+    // a poll: after advancing intervals, no new status read should come from
+    // it (the only poll would be the rejected read's adoption).
+    await act(async () => {
+      releasePassiveRead(new Response(
+        JSON.stringify({
+          loggedIn: false,
+          loginInFlight: true,
+          profile: 'default',
+          user: null,
+          configPath: '/Users/test/.amr/config.json',
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ));
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    const callsAfterRelease = statusCall;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AMR_LOGIN_POLL_INTERVAL_MS * 3);
+    });
+    // A rejected passive read leaves statusCalls flat; the buggy `?? undefined`
+    // form adopted the stale read and started a poll (delta 3 over 3 intervals).
+    expect(statusCall).toBe(callsAfterRelease);
+
+    vi.useRealTimers();
+  });
 });

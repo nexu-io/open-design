@@ -129,6 +129,13 @@ export function CloudSignInTip() {
     }
     const result = await startVelaLogin();
     if (cancelledRef.current || !mountedRef.current) return;
+    // The daemon's canonical attempt id may not be observable from a status
+    // read until the first poll tick (2s later). Copy it into the ref as soon
+    // as the spawn resolves — including the alreadyRunning/409 response — so a
+    // Cancel pressed before the first poll (or the timeout path) targets the
+    // real attempt instead of falling back to the legacy no-body cancellation
+    // that could terminate a newer login.
+    if (result.authAttemptId) authAttemptIdRef.current = result.authAttemptId;
     if (!result.ok && !result.alreadyRunning) {
       console.error('[amr-login] startVelaLogin failed', result);
       setState('error');

@@ -514,7 +514,6 @@ export function InlineModelSwitcher({
       }
       if (
         guard.authAttemptId !== undefined &&
-        guard.authAttemptId !== null &&
         guard.authAttemptId !== amrAuthAttemptIdRef.current
       ) {
         return null;
@@ -1088,9 +1087,15 @@ export function InlineModelSwitcher({
       // panel was opened after another surface started login, or a previous
       // follow-up read only saw a transient null): the compact cancel/retry
       // UI needs a real attempt id and a poll to observe the outcome.
+      // `authAttemptId` here is deliberately NOT `?? undefined`: `null` is an
+      // explicit expected owner (no attempt captured yet). Passing the raw
+      // ref keeps `refreshAmrStatus`'s attempt comparison active even when it
+      // is null — a local sign-in that sets a provisional attempt id while
+      // this read is in flight then rejects the stale response, which the
+      // `?? undefined` form would skip.
       void refreshAmrStatus({
         generation: amrPollGenerationRef.current,
-        authAttemptId: amrAuthAttemptIdRef.current ?? undefined,
+        authAttemptId: amrAuthAttemptIdRef.current,
       }).then((next) => {
         if (next?.loginInFlight && amrPollRef.current === null) {
           amrLoginStartedAtRef.current ??= Date.now();

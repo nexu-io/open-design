@@ -259,6 +259,81 @@ describe('CloudSignInTip', () => {
       window.removeEventListener(AMR_LOGIN_STATUS_EVENT, onStatusChange);
     }
   });
+
+  it('targets the spawn-returned attempt id when cancelled before the first poll', async () => {
+    // Regression (review thread): `authAttemptIdRef` was populated only from
+    // status reads — never from `startVelaLogin()`'s response. When the
+    // pre-login status read carries no attempt id (login not in flight yet)
+    // and the user cancels after the spawn resolves but before the first
+    // 2-second poll tick, both `cancel()` and the timeout path called
+    // `cancelVelaLogin(undefined)`, invoking the daemon's legacy no-body
+    // cancellation that can terminate a newer login. The spawn-returned id
+    // (including the alreadyRunning/409 response) must be adopted immediately.
+    const attemptId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+    const cancelBodies: Array<{ authAttemptId?: string } | null> = [];
+    const broadcastAttemptIds: Array<string | null | undefined> = [];
+    const onStatusChange = (event: Event) => {
+      const detail = (event as CustomEvent<{ reason?: string; authAttemptId?: string | null }>).detail;
+      if (detail?.reason === 'login-canceled') {
+        broadcastAttemptIds.push(detail.authAttemptId);
+      }
+    };
+    window.addEventListener(AMR_LOGIN_STATUS_EVENT, onStatusChange);
+    try {
+      const fetchMock = vi.fn(async (input, init) => {
+        const url = typeof input === 'string' ? input : (input as URL).toString();
+        if (url.endsWith('/api/integrations/vela/status')) {
+          // Pre-login read: no attempt id, nothing in flight.
+          return jsonResponse({
+            body: {
+              loggedIn: false,
+              loginInFlight: false,
+              profile: 'prod',
+              user: null,
+              configPath: '/x',
+            },
+          });
+        }
+        if (url.endsWith('/api/integrations/vela/login') && init?.method === 'POST') {
+          return jsonResponse({
+            status: 202,
+            body: { pid: 4242, authAttemptId: attemptId },
+          });
+        }
+        if (url.endsWith('/api/integrations/vela/login/cancel') && init?.method === 'POST') {
+          cancelBodies.push(
+            init?.body ? (JSON.parse(String(init.body)) as { authAttemptId?: string }) : null,
+          );
+          return jsonResponse({ body: { canceled: true, pids: [4242] } });
+        }
+        throw new Error(`unexpected fetch: ${url}`);
+      });
+      globalThis.fetch = fetchMock as typeof fetch;
+
+      renderTip();
+      const card = await screen.findByTestId('entry-cloud-signin-tip');
+      fireEvent.click(card);
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      // Cancel before any poll tick has run.
+      const cancelButton = await screen.findByRole('button', { name: 'Cancel sign-in' });
+      fireEvent.click(cancelButton);
+      await waitFor(() => {
+        expect(cancelBodies).not.toHaveLength(0);
+      });
+
+      // The cancel must target the spawn-returned attempt, not the legacy
+      // no-body form, and the broadcast must carry it.
+      expect(cancelBodies).toEqual([{ authAttemptId: attemptId }]);
+      expect(broadcastAttemptIds).toContain(attemptId);
+    } finally {
+      window.removeEventListener(AMR_LOGIN_STATUS_EVENT, onStatusChange);
+    }
+  });
 });
 
 // recvqgpXSYFNTq: "退出登录后再登录，左下角的头像加载的有些慢" — the rail's
