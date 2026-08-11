@@ -539,7 +539,7 @@ export interface RegisterRunRoutesDeps {
     pinAssistantMessageOnRunCreate: (
       db: SqliteDb,
       run: ChatRun,
-      opts?: { status?: string },
+      opts?: { status?: string; beforeFreshInsert?: () => void },
     ) => { ok: boolean; reason?: 'active' | 'scope' };
     reconcileAssistantMessageOnRunEnd: (
       db: SqliteDb,
@@ -1687,6 +1687,30 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         };
       }
     }
+    const seedRunUserMessage = () => {
+      if (!runUserSeed) return;
+      const now = Date.now();
+      upsertMessage(db, runUserSeed.conversationId, {
+        id: runUserSeed.id,
+        role: 'user',
+        content: runUserSeed.content,
+        startedAt: now,
+        endedAt: now,
+        // Same turn metadata the web client writes via PUT /messages so
+        // reload/retry keep sessionMode, runContext, and applied plugin.
+        ...runUserSeed.turnMetadata,
+        // Preserve request attachments/commentAttachments on the seeded user
+        // turn so reload/listMessages still show chips and annotation context
+        // for omit-pin / headless clients (same columns as PUT /messages).
+        ...runUserSeed.attachments,
+      });
+      // Bump parent project updatedAt so listProjects reorders (same as
+      // PUT /messages). Headless/API turns that never hit that route would
+      // otherwise leave the project buried under more recent activity.
+      if (typeof meta.projectId === 'string' && meta.projectId) {
+        updateProject(db, meta.projectId, {});
+      }
+    };
     meta.requestFingerprint = runRequestFingerprint(
       meta,
       resolvedSnapshot?.ok ? resolvedSnapshot.snapshot : null,
@@ -1771,8 +1795,17 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     // idempotent run and must survive.
     if (creation.kind === 'created') {
       let claimed: { ok: boolean; reason?: 'active' | 'scope' };
+      let seededDuringFreshClaim = false;
       try {
-        claimed = pinAssistantMessageOnRunCreate(db, run);
+        const claimOptions = runUserSeed
+          ? {
+              beforeFreshInsert: () => {
+                seedRunUserMessage();
+                seededDuringFreshClaim = true;
+              },
+            }
+          : undefined;
+        claimed = pinAssistantMessageOnRunCreate(db, run, claimOptions);
       } catch (err) {
         // Never let an unclaimed run start.
         design.runs.drop(run);
@@ -1787,30 +1820,11 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           'assistantMessageId is already bound to an active run',
         );
       }
+      if (seededDuringFreshClaim) runUserSeed = null;
     }
     if (creation.kind === 'created' && runUserSeed) {
       try {
-        const now = Date.now();
-        upsertMessage(db, runUserSeed.conversationId, {
-          id: runUserSeed.id,
-          role: 'user',
-          content: runUserSeed.content,
-          startedAt: now,
-          endedAt: now,
-          // Same turn metadata the web client writes via PUT /messages so
-          // reload/retry keep sessionMode, runContext, and applied plugin.
-          ...runUserSeed.turnMetadata,
-          // Preserve request attachments/commentAttachments on the seeded user
-          // turn so reload/listMessages still show chips and annotation context
-          // for omit-pin / headless clients (same columns as PUT /messages).
-          ...runUserSeed.attachments,
-        });
-        // Bump parent project updatedAt so listProjects reorders (same as
-        // PUT /messages). Headless/API turns that never hit that route would
-        // otherwise leave the project buried under more recent activity.
-        if (typeof meta.projectId === 'string' && meta.projectId) {
-          updateProject(db, meta.projectId, {});
-        }
+        seedRunUserMessage();
       } catch (err) {
         console.warn('[runs] api client user message pin failed', err);
       }

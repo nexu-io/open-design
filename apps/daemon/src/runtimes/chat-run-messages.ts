@@ -307,7 +307,7 @@ function liveArtifactRefreshPhase(value: unknown): 'started' | 'succeeded' | 'fa
 export function pinAssistantMessageOnRunCreate(
   db: SqliteDb,
   run: ChatRunMessageState,
-  opts?: { status?: string },
+  opts?: { status?: string; beforeFreshInsert?: () => void },
 ): { ok: boolean; reason?: 'active' | 'scope' } {
   // Headless / omit-pin runs with no assistant message have nothing to claim.
   if (!run.conversationId || !run.assistantMessageId) return { ok: true };
@@ -335,6 +335,7 @@ export function pinAssistantMessageOnRunCreate(
       | undefined;
     if (!existing) {
       // Fresh id: insert the assistant row bound to this run (we own it).
+      opts?.beforeFreshInsert?.();
       upsertMessage(db, run.conversationId!, {
         id: run.assistantMessageId!,
         role: 'assistant',
