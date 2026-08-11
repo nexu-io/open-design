@@ -508,6 +508,12 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
     try {
       const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
       const configuredEnv = agentCliEnvForAgent(appConfig.agentCliEnv, 'amr');
+      const amrDef = getAgentDef('amr');
+      const amrLaunch = amrDef ? resolveAgentLaunch(amrDef, configuredEnv) : null;
+      if (!(amrLaunch?.launchPath ?? amrLaunch?.selectedPath)) {
+        res.status(503).json({ error: 'amr-runtime-unavailable' });
+        return;
+      }
       const refresh = _req.query.refresh === '1' || _req.query.refresh === 'true';
       const status = readVelaLoginStatus(mergeVelaEnv(env, configuredEnv));
       // Reported on every response, signed in or not: the client builds console
