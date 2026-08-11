@@ -667,6 +667,151 @@ describe('CloudSignInTip', () => {
       window.removeEventListener(AMR_LOGIN_STATUS_EVENT, onStatusChange);
     }
   });
+
+  it('does not broadcast a stale cancel after a newer run starts', async () => {
+    // Regression (review thread): `cancel()` broadcast `login-canceled` after
+    // its `await cancelVelaLogin(...)` without re-checking the run token. A
+    // cancel for attempt A that was held, while the user immediately started
+    // attempt B, still broadcast `login-canceled(A)` — and because this card
+    // does not emit `login-started`, App's last observed attempt is still A,
+    // so the stale broadcast clears B's retry. The broadcast must be dropped
+    // once a newer run owns the card.
+    const attemptA = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const attemptB = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+    const broadcastReasons: string[] = [];
+    const onStatusChange = (event: Event) => {
+      const detail = (event as CustomEvent<{ reason?: string }>).detail;
+      broadcastReasons.push(detail?.reason ?? 'status-changed');
+    };
+    window.addEventListener(AMR_LOGIN_STATUS_EVENT, onStatusChange);
+    try {
+      let releaseCancel!: (response: Response) => void;
+      const heldCancel = new Promise<Response>((resolve) => {
+        releaseCancel = resolve;
+      });
+      let loginCalls = 0;
+      let loginAttemptId = attemptA;
+      const fetchMock = vi.fn(async (input, init) => {
+        const url = typeof input === 'string' ? input : (input as URL).toString();
+        if (url.endsWith('/api/integrations/vela/status')) {
+          return jsonResponse({
+            body: {
+              loggedIn: false,
+              loginInFlight: true,
+              authAttemptId: loginAttemptId,
+              profile: 'prod',
+              user: null,
+              configPath: '/x',
+            },
+          });
+        }
+        if (url.endsWith('/api/integrations/vela/login') && init?.method === 'POST') {
+          loginCalls += 1;
+          return jsonResponse({ status: 202, body: { pid: 4242, authAttemptId: loginAttemptId } });
+        }
+        if (url.endsWith('/api/integrations/vela/login/cancel') && init?.method === 'POST') {
+          return heldCancel;
+        }
+        throw new Error(`unexpected fetch: ${url}`);
+      });
+      globalThis.fetch = fetchMock as typeof fetch;
+
+      renderTip();
+      const card = await screen.findByTestId('entry-cloud-signin-tip');
+      vi.useFakeTimers();
+      // Run A: click, spawn resolves with A's id.
+      fireEvent.click(card);
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      // Cancel A; the cancel request is held in flight.
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel sign-in' }));
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      // Run B starts immediately with a different attempt id.
+      loginAttemptId = attemptB;
+      fireEvent.click(card);
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(loginCalls).toBe(2);
+
+      // A's held cancel resolves; the stale continuation must NOT broadcast
+      // login-canceled (a newer run owns the card now).
+      await act(async () => {
+        releaseCancel(jsonResponse({ body: { canceled: true, pids: [4242] } }));
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(broadcastReasons).not.toContain('login-canceled');
+
+      vi.useRealTimers();
+    } finally {
+      window.removeEventListener(AMR_LOGIN_STATUS_EVENT, onStatusChange);
+    }
+  });
+
+  it('announces login-started with the spawn-returned attempt id so App can adopt it', async () => {
+    // Regression (full-chain review): this card never broadcast `login-started`
+    // after a successful spawn, so App could not synchronously adopt the
+    // attempt — its `amrStatusAttemptIdRef` stayed on the previous attempt and
+    // a later cancel's id gate had no way to distinguish the newer login. The
+    // spawn success path now announces the started attempt.
+    const attemptId = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
+    const startedBroadcasts: Array<string | null | undefined> = [];
+    const onStatusChange = (event: Event) => {
+      const detail = (event as CustomEvent<{ reason?: string; authAttemptId?: string | null }>).detail;
+      if (detail?.reason === 'login-started') {
+        startedBroadcasts.push(detail.authAttemptId);
+      }
+    };
+    window.addEventListener(AMR_LOGIN_STATUS_EVENT, onStatusChange);
+    try {
+      const fetchMock = vi.fn(async (input, init) => {
+        const url = typeof input === 'string' ? input : (input as URL).toString();
+        if (url.endsWith('/api/integrations/vela/status')) {
+          return jsonResponse({
+            body: {
+              loggedIn: false,
+              loginInFlight: true,
+              authAttemptId: attemptId,
+              profile: 'prod',
+              user: null,
+              configPath: '/x',
+            },
+          });
+        }
+        if (url.endsWith('/api/integrations/vela/login') && init?.method === 'POST') {
+          return jsonResponse({ status: 202, body: { pid: 4242, authAttemptId: attemptId } });
+        }
+        throw new Error(`unexpected fetch: ${url}`);
+      });
+      globalThis.fetch = fetchMock as typeof fetch;
+
+      renderTip();
+      const card = await screen.findByTestId('entry-cloud-signin-tip');
+      fireEvent.click(card);
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(startedBroadcasts).toContain(attemptId);
+    } finally {
+      window.removeEventListener(AMR_LOGIN_STATUS_EVENT, onStatusChange);
+    }
+  });
 });
 
 // recvqgpXSYFNTq: "退出登录后再登录，左下角的头像加载的有些慢" — the rail's

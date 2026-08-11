@@ -847,6 +847,16 @@ export function AmrLoginPill({
         }
         return;
       }
+      if (loginStartPending) {
+        // The daemon confirmed the cancel of an attempt whose spawn POST is
+        // still resolving. Preserve the cancel intent so `handleLogin`'s
+        // continuation (which owns the resolved attempt) issues the terminal
+        // login-canceled + clears state instead of broadcasting login-started
+        // and resurrecting a login the user just canceled.
+        loginCancelRequestedRef.current = true;
+        setPending('cancel');
+        return;
+      }
       if (authAttemptId) {
         resolveAmrAuthTracking(analytics.track, 'cancelled', undefined, {
           authAttemptId,

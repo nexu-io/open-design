@@ -2759,6 +2759,11 @@ function OnboardingView({
         setAmrLoginError(loginResult.error || t('settings.amrLoginErrorCompact'));
         return;
       }
+      // Announce the started login so App and other AMR surfaces can adopt the
+      // attempt synchronously (their `login-canceled` id gates and retry
+      // lifecycle depend on observing it). This flow polls on its own loop and
+      // does not re-adopt the broadcast.
+      notifyAmrLoginStatusChanged('login-started', authAttemptId);
       if (await pollAmrLoginCompletion()) {
         continueAfterCloudSignIn();
       }

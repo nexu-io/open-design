@@ -105,8 +105,10 @@ export function CloudSignInTip() {
   // `startVelaLogin()` resolves, so the intent is preserved and the spawn
   // continuation issues `cancelVelaLogin(result.authAttemptId)` — instead of
   // the legacy no-body cancellation, which cannot target the just-spawned
-  // child and can terminate a newer login on another surface.
-  const cancelRequestedRef = useRef(false);
+  // child and can terminate a newer login on another surface. Stores the run
+  // token of the `begin()` the cancel targeted, so a spawn continuation for a
+  // different run (a re-click after the cancel) cannot consume this intent.
+  const cancelRequestedRunRef = useRef<number | null>(null);
   // Monotonic identity of the current `begin()` run. `cancelledRef` alone is
   // not an ownership guard: a cancel sets it true, but a re-click resets it to
   // false before a stale continuation's await resolves — so the old run would
@@ -161,9 +163,11 @@ export function CloudSignInTip() {
     if (cancelledRef.current || !mountedRef.current || loginRun !== loginRunRef.current) {
       // Cancel intent preserved (spawn was pending when `cancel()` ran): issue
       // the canonical cancel for the just-resolved attempt now that we know
-      // its id, and broadcast with it — never the legacy no-body form.
-      if (cancelRequestedRef.current && spawnId) {
-        cancelRequestedRef.current = false;
+      // its id, and broadcast with it — never the legacy no-body form. Only
+      // consume the intent when it was targeted at THIS run (a re-click after
+      // the cancel belongs to a newer run and must not reset it).
+      if (cancelRequestedRunRef.current === loginRun && spawnId) {
+        cancelRequestedRunRef.current = null;
         void cancelVelaLogin(spawnId);
         notifyAmrLoginStatusChanged('login-canceled', spawnId);
       }
@@ -174,6 +178,13 @@ export function CloudSignInTip() {
       console.error('[amr-login] startVelaLogin failed', result);
       setState('error');
       return;
+    }
+    // Announce the started login so App and other AMR surfaces can adopt the
+    // attempt synchronously (their `login-canceled` id gates and retry
+    // lifecycle depend on observing it). This card keeps polling on its own
+    // run token and does not re-adopt the broadcast.
+    if (spawnId) {
+      notifyAmrLoginStatusChanged('login-started', spawnId);
     }
     const startedAt = Date.now();
     while (!cancelledRef.current && mountedRef.current) {
@@ -226,23 +237,29 @@ export function CloudSignInTip() {
   async function cancel() {
     // Terminate every in-flight `begin()` continuation of this card: a
     // re-click after this must start a fresh run, never resume the old one.
+    const cancelRun = loginRunRef.current;
     loginRunRef.current += 1;
     cancelledRef.current = true;
     // Target the attempt this tip observed (ref, never `status` state — the
     // state may still hold the previous frame). When no attempt has been
     // observed yet (the spawn POST is still pending), preserve the cancel
-    // intent instead of firing the legacy no-body cancellation: the spawn
-    // continuation adopts the resolved attempt id and issues the targeted
-    // cancel + broadcast with it.
+    // intent for the run being canceled so the spawn continuation issues the
+    // targeted cancel + broadcast — never the legacy no-body form.
     const authAttemptId = authAttemptIdRef.current;
     setState('idle');
     setStatus(null);
     if (authAttemptId) {
       await cancelVelaLogin(authAttemptId);
-      notifyAmrLoginStatusChanged('login-canceled', authAttemptId);
+      // This run may have been superseded while the cancel was in flight (a
+      // re-click started a new run). Only broadcast if no newer run started —
+      // a stale `login-canceled` for an attempt App has not yet adopted
+      // would otherwise clear the newer login's retry.
+      if (loginRunRef.current === cancelRun + 1) {
+        notifyAmrLoginStatusChanged('login-canceled', authAttemptId);
+      }
       return;
     }
-    cancelRequestedRef.current = true;
+    cancelRequestedRunRef.current = cancelRun;
   }
 
   const signing = state === 'signing';

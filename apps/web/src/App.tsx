@@ -1872,12 +1872,20 @@ function AppInner() {
   // unmounted before their poll settled.
   useEffect(() => {
     let cancelled = false;
+    // Sync generation: each `sync()` captures the current value, and a newer
+    // sync — or a `login-started` adoption that bumps it — invalidates any
+    // still-in-flight older response. Without this, a sync started before
+    // `login-started(B)` could resolve afterward and overwrite
+    // `amrStatusAttemptIdRef` back to A, letting a delayed `login-canceled(A)`
+    // match and clear B's retry.
+    let syncGeneration = 0;
     const sync = async (
       options: { refresh?: boolean } = {},
       restartOnSignIn = false,
     ) => {
+      const gen = syncGeneration;
       const status = await fetchVelaLoginStatus(options);
-      if (!cancelled && status) {
+      if (!cancelled && gen === syncGeneration && status) {
         applyAmrLoginStatus(status, {
           forceModelRefresh: options.refresh === true,
           restartOnSignIn,
@@ -1891,7 +1899,10 @@ function AppInner() {
         // Adopt the started attempt SYNCHRONOUSLY, before any status read: a
         // delayed `login-canceled` from the previously observed attempt must
         // not match `amrStatusAttemptIdRef` and clear a retry armed for the
-        // just-started login while its status fetch is still in flight.
+        // just-started login while its status fetch is still in flight. Bump
+        // the sync generation so any older in-flight status response is
+        // discarded rather than overwriting this adoption.
+        syncGeneration += 1;
         const startedId = amrLoginStatusEventAuthAttemptId(event);
         if (startedId) amrStatusAttemptIdRef.current = startedId;
       } else if (reason === 'login-canceled') {

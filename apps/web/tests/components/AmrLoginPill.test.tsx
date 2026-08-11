@@ -1700,4 +1700,100 @@ describe('AmrLoginPill', () => {
 
     vi.useRealTimers();
   });
+
+  it('does not resurrect a confirmed-canceled login whose spawn resolves late', async () => {
+    // Regression (review thread): `handleCancelLogin` reached its confirmed
+    // terminal branch while the spawn POST was still in flight (daemon already
+    // spawned the child), cleared local state and broadcast login-canceled but
+    // never set `loginCancelRequestedRef`. When the spawn resolved, `handleLogin`'s
+    // continuation saw the flag false and broadcast login-started, resurrecting
+    // the login the user just canceled and making every surface poll it.
+    const canonicalAuthAttemptId = '66666666-6666-4666-8666-666666666666';
+    let releaseLogin!: (response: Response) => void;
+    const heldLoginResponse = new Promise<Response>((resolve) => {
+      releaseLogin = resolve;
+    });
+    const statusEvents: string[] = [];
+    const onStatusEvent = (event: Event) => {
+      statusEvents.push(
+        (event as CustomEvent<{ reason?: string }>).detail?.reason ?? 'status-changed',
+      );
+    };
+    window.addEventListener(AMR_LOGIN_STATUS_EVENT, onStatusEvent);
+    const fetchMock = vi.fn(async (input, init) => {
+      const url = typeof input === 'string' ? input : (input as URL).toString();
+      if (url.endsWith('/api/integrations/vela/login') && init?.method === 'POST') {
+        return heldLoginResponse;
+      }
+      if (url.endsWith('/api/integrations/vela/status')) {
+        return jsonResponse({
+          body: {
+            loggedIn: false,
+            loginInFlight: false,
+            authAttemptId: canonicalAuthAttemptId,
+            profile: 'prod',
+            user: null,
+            configPath: '/x',
+          },
+        });
+      }
+      if (
+        url.endsWith('/api/integrations/vela/login/cancel') &&
+        init?.method === 'POST'
+      ) {
+        return jsonResponse({ body: { canceled: true, pids: [4242] } });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+    try {
+      renderPill({
+        skipInitialRefresh: true,
+        revealPendingCancelAction: true,
+        initialStatus: {
+          loggedIn: false,
+          loginInFlight: false,
+          profile: 'prod',
+          user: null,
+          configPath: '/x',
+        },
+      });
+
+      vi.useFakeTimers();
+      fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      // Cancel while the spawn POST is in flight; the daemon confirms
+      // (`canceled: true`). The intent must survive into the spawn continuation.
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      // The spawn resolves successfully. The continuation must NOT broadcast
+      // login-started — the login was canceled.
+      releaseLogin(jsonResponse({
+        status: 202,
+        body: { pid: 123, authAttemptId: canonicalAuthAttemptId },
+      }));
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(statusEvents).not.toContain('login-started');
+    } finally {
+      window.removeEventListener(AMR_LOGIN_STATUS_EVENT, onStatusEvent);
+      vi.useRealTimers();
+    }
+  });
 });
