@@ -4,7 +4,7 @@ import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { copyFile, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
@@ -89,6 +89,8 @@ const updateFixtureMode = resolveUpdateFixtureMode(process.env.OD_PACKAGED_E2E_W
 const releaseChannel = process.env.OD_PACKAGED_E2E_RELEASE_CHANNEL;
 const releaseVersion = process.env.OD_PACKAGED_E2E_RELEASE_VERSION;
 const shellVersion = process.env.OD_PACKAGED_E2E_SHELL_VERSION;
+const shellSmokeProof = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_SHELL_SMOKE_PROOF);
+const verifyPublicImmutableArtifacts = shellSmokeProof === 'public-immutable-artifacts';
 const packagedInviteDeeplink =
   'opendesign://workspace/invite/continue?workspace_id=packaged-smoke-workspace&member_id=packaged-smoke-member&invite_id=packaged-smoke-invite&nonce=packaged-smoke-nonce';
 const updateScenario = resolvePackagedUpdateScenario({ releaseChannel, releaseVersion, shellVersion });
@@ -96,6 +98,11 @@ const installIdentity = resolvePackagedWinInstallIdentity({ namespace, releaseVe
 
 const outputNamespaceRoot = join(toolsPackDir, 'out', 'win', 'namespaces', namespace);
 const runtimeNamespaceRoot = join(toolsPackDir, 'runtime', 'win', 'namespaces', namespace);
+const nativeProductUserDataRoot = join(
+  process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming'),
+  'Open Design',
+);
+const nativeRuntimeNamespaceRoot = join(nativeProductUserDataRoot, 'namespaces', namespace);
 const portableNsisLogPath = join(
   tmpdir(),
   'Open Design',
@@ -490,8 +497,32 @@ type DirectInstallerResult = {
 
 type UpdateFixtureMode = 'installer' | 'payload';
 
+type WinProtocolDebugCase = 'off' | 'protocol-prime' | 'protocol-direct' | 'protocol-shell' | 'protocol-all';
+
+function resolveWinProtocolDebugCase(raw: string | undefined): WinProtocolDebugCase {
+  const value = raw?.trim() ?? '';
+  if (value === '') return 'off';
+  if (
+    value === 'protocol-prime'
+    || value === 'protocol-direct'
+    || value === 'protocol-shell'
+    || value === 'protocol-all'
+  ) return value;
+  throw new Error(
+    `unsupported OD_PACKAGED_E2E_WIN_DEBUG_CASE ${JSON.stringify(raw)}; expected protocol-prime, protocol-direct, protocol-shell, protocol-all, or empty`,
+  );
+}
+
 const shouldRunPackagedWinSmoke = process.platform === 'win32' && process.env.OD_PACKAGED_E2E_WIN === '1';
-const winDescribe = shouldRunPackagedWinSmoke && hasPackagedSmokeLane(smokeLanes, 'shell')
+const winProtocolDebugCase = resolveWinProtocolDebugCase(process.env.OD_PACKAGED_E2E_WIN_DEBUG_CASE);
+const winDescribe = shouldRunPackagedWinSmoke
+  && hasPackagedSmokeLane(smokeLanes, 'shell')
+  && winProtocolDebugCase === 'off'
+  ? describe
+  : describe.skip;
+const winProtocolDebugDescribe = shouldRunPackagedWinSmoke
+  && hasPackagedSmokeLane(smokeLanes, 'shell')
+  && winProtocolDebugCase !== 'off'
   ? describe
   : describe.skip;
 const shellAbsorbsStandaloneAcceptance = hasPackagedSmokeLane(smokeLanes, 'shell')
@@ -541,6 +572,13 @@ winDescribe('packaged windows runtime smoke', () => {
     let localUpdateFixture: Awaited<ReturnType<typeof resolveLocalUpdateFixture>> | null = null;
     const updateEnv = captureUpdateEnv();
     try {
+      if (verifyPublicImmutableArtifacts) {
+        // Public acceptance runs against immutable staged objects before the
+        // channel pointer moves. Make that exact feed an explicit invariant of
+        // the suite rather than relying on the caller's inherited environment;
+        // every child launch in this test, including tools-pack, now sees it.
+        process.env.OD_UPDATE_METADATA_URL = resolveNativeAcceptanceMetadataUrl();
+      }
       if (!verifyCoreOnly && updateScenario.channel === 'beta') {
         expect(namespace).toBe('release-beta-win');
       }
@@ -597,9 +635,23 @@ winDescribe('packaged windows runtime smoke', () => {
       // launch, which a plain start before the fixture is wired would bypass.
       if (verifyCoreOnly) {
         await resetPackagedRuntimeDataRoot();
-        const firstRunStart = await measureSmokeStep(timings, 'start unseeded first run', async () =>
-          runToolsPackJson<WinStartResult>('start'),
-        );
+        // Public acceptance runs before `latest` activation. Prime the real
+        // AppData-backed runtime with the exact staged metadata URL so the
+        // later URL-protocol cold start exercises the same Closure Store a
+        // normal Windows launch uses. A tools-pack launch injects an isolated
+        // namespace base root and cannot prove that OS launch boundary.
+        const firstRunStart = await measureSmokeStep(timings, 'start unseeded first run', async () => {
+          if (!verifyPublicImmutableArtifacts) return runToolsPackJson<WinStartResult>('start');
+          const launch = await launchNativeWindowsAcceptance(install.installDir);
+          return {
+            executablePath: join(install.installDir, 'Open Design.exe'),
+            logPath: join(nativeRuntimeNamespaceRoot, 'logs', 'desktop', 'latest.log'),
+            namespace,
+            pid: launch.pid,
+            source: 'installed' as const,
+            status: null,
+          };
+        });
         started = true;
         expect(firstRunStart.source).toBe('installed');
         const firstRunInspect = await measureSmokeStep(timings, 'wait healthy unseeded first run', async () =>
@@ -630,6 +682,7 @@ winDescribe('packaged windows runtime smoke', () => {
         started = false;
         expect(firstRunStop.status).not.toBe('partial');
         expect(firstRunStop.remainingPids).toEqual([]);
+        if (verifyPublicImmutableArtifacts) await waitForDesktopStopped();
         // Clear both the daemon data root and the Electron user-data partition
         // so phase 2's seed lands on a true clean slate and no localStorage
         // residue from this phase can ratchet into it.
@@ -637,6 +690,7 @@ winDescribe('packaged windows runtime smoke', () => {
       }
 
       await seedPackagedOnboardingComplete();
+      if (verifyPublicImmutableArtifacts) await seedNativePackagedOnboardingComplete();
 
       const startDesktop = async (step: string): Promise<WinStartResult> => {
         const nextStart = await measureSmokeStep(timings, step, async () => runToolsPackJson<WinStartResult>('start'));
@@ -703,7 +757,14 @@ winDescribe('packaged windows runtime smoke', () => {
         );
       }
 
-      const inspect = await measureSmokeStep(timings, 'wait healthy inspect eval', async () => waitForHealthyDesktop());
+      const inspect = await measureSmokeStep(timings, 'wait healthy inspect eval', async () =>
+        // Public immutable acceptance now primes the native AppData Store
+        // first. The tools-pack Store reached here is therefore independently
+        // cold and must receive the same bounded materialization budget; every
+        // later restart in either Store remains on the 90-second steady-state
+        // budget.
+        waitForHealthyDesktop(verifyPublicImmutableArtifacts ? maxStartDurationMs : 90_000),
+      );
       expect(inspect.status?.state).toBe('running');
       if (inspect.desktopIpcUnavailable) expectWindowsFallbackWebUrl(inspect.status?.url);
       else expectWindowsPackagedRouteUrl(inspect.status?.url);
@@ -1321,6 +1382,46 @@ winDescribe('packaged windows runtime smoke', () => {
       }
     }
   }, 720_000);
+});
+
+winProtocolDebugDescribe('packaged windows invite protocol debug', () => {
+  test('[debug] cold-starts an existing materialized install through the selected protocol layer', async () => {
+    const installDir = join(runtimeNamespaceRoot, 'install', 'Open Design');
+    await assertWindowsInviteProtocolRegistration(installDir);
+
+    const stopBeforeLaunch = async (): Promise<void> => {
+      const stop = await runToolsPackJson<WinStopResult>('stop');
+      expect(stop.status).not.toBe('partial');
+      expect(stop.remainingPids).toEqual([]);
+      await waitForDesktopStopped();
+    };
+    const verifyColdLaunch = async (invoke: () => Promise<void>, timeoutMs = 90_000): Promise<void> => {
+      await stopBeforeLaunch();
+      await invoke();
+      const inspect = await waitForHealthyDesktop(timeoutMs);
+      expect(inspect.status?.state).toBe('running');
+      expect(inspect.status?.pid).toBeGreaterThan(0);
+    };
+
+    try {
+      if (winProtocolDebugCase === 'protocol-prime' || winProtocolDebugCase === 'protocol-all') {
+        await verifyColdLaunch(
+          () => launchNativeWindowsAcceptance(installDir).then(() => undefined),
+          maxStartDurationMs,
+        );
+      }
+      if (winProtocolDebugCase === 'protocol-direct' || winProtocolDebugCase === 'protocol-all') {
+        await verifyColdLaunch(() => invokeWindowsInviteDeeplinkDirect(installDir));
+      }
+      if (winProtocolDebugCase === 'protocol-shell' || winProtocolDebugCase === 'protocol-all') {
+        await verifyColdLaunch(invokeWindowsInviteDeeplink);
+      }
+    } finally {
+      await runToolsPackJson<WinStopResult>('stop').catch((error: unknown) => {
+        console.error('failed to stop packaged windows app during protocol debug cleanup', error);
+      });
+    }
+  }, 300_000);
 });
 
 winClosureDescribe('packaged Windows Standalone Closure release acceptance', () => {
@@ -2393,6 +2494,25 @@ async function waitForHealthyDesktop(timeoutMs = 90_000): Promise<WinInspectResu
   throw new Error(`packaged windows runtime did not become healthy: ${formatUnknown(lastResult)}`);
 }
 
+async function waitForDesktopStopped(timeoutMs = 15_000): Promise<void> {
+  const startedAt = Date.now();
+  let lastResult: unknown = null;
+  while (Date.now() - startedAt < timeoutMs) {
+    const inspect = await runToolsPackJson<WinInspectResult>('inspect').catch((error: unknown) => {
+      lastResult = error;
+      return null;
+    });
+    if (inspect == null) {
+      await delay(150);
+      continue;
+    }
+    lastResult = inspect;
+    if (inspect.status == null && inspect.statusError?.includes('ENOENT')) return;
+    await delay(150);
+  }
+  throw new Error(`packaged windows Desktop IPC remained available after stop: ${formatUnknown(lastResult)}`);
+}
+
 async function waitForCommittedPackagedClosureFixture(
   input: Parameters<typeof readCommittedPackagedClosureFixture>[0],
 ): Promise<PackagedClosureFixture> {
@@ -2746,6 +2866,10 @@ async function printPackagedLogs(): Promise<void> {
     console.error(`[${app}] ${entry.logPath}`);
     console.error(entry.lines.join('\n') || '(no log lines)');
   }
+  const nativeDesktopLogPath = join(nativeRuntimeNamespaceRoot, 'logs', 'desktop', 'latest.log');
+  const nativeDesktopLog = await readFile(nativeDesktopLogPath, 'utf8').catch(() => '');
+  console.error(`[native-desktop] ${nativeDesktopLogPath}`);
+  console.error(nativeDesktopLog.trim().split(/\r?\n/).slice(-200).join('\n') || '(no log lines)');
   await printUpdaterHelperLogs();
   await printLauncherRuntimeSnapshot();
 }
@@ -2955,13 +3079,82 @@ async function assertWindowsInviteProtocolRegistration(installDir: string): Prom
 }
 
 async function invokeWindowsInviteDeeplink(): Promise<void> {
-  const escaped = packagedInviteDeeplink.replaceAll("'", "''");
-  await execFileAsync('powershell.exe', [
+  await invokeWindowsProtocolProcess(packagedInviteDeeplink);
+}
+
+async function invokeWindowsInviteDeeplinkDirect(installDir: string): Promise<void> {
+  await invokeWindowsProtocolProcess(join(installDir, 'Open Design.exe'), packagedInviteDeeplink);
+}
+
+type WindowsProtocolLaunchObservation = {
+  exited: boolean;
+  exitCode: number | null;
+  pid: number;
+};
+
+async function launchNativeWindowsAcceptance(installDir: string): Promise<WindowsProtocolLaunchObservation> {
+  return await invokeWindowsProtocolProcess(join(installDir, 'Open Design.exe'), undefined, {
+    OD_UPDATE_METADATA_URL: resolveNativeAcceptanceMetadataUrl(),
+  });
+}
+
+function resolveNativeAcceptanceMetadataUrl(): string {
+  const version = normalizeOptionalEnv(releaseVersion);
+  if (version == null) throw new Error('native Windows acceptance requires OD_PACKAGED_E2E_RELEASE_VERSION');
+  const channel = updateScenario.channel;
+  const expectedPath = `/${channel}/versions/${encodeURIComponent(version)}/metadata.json`;
+  const candidate = normalizeOptionalEnv(process.env.OD_UPDATE_METADATA_URL)
+    ?? `https://releases.open-design.ai${expectedPath}`;
+  const parsed = new URL(candidate);
+  if (!parsed.pathname.endsWith(expectedPath)) {
+    throw new Error(
+      `native Windows acceptance requires exact version metadata ${expectedPath}, got ${candidate}`,
+    );
+  }
+  return candidate;
+}
+
+async function invokeWindowsProtocolProcess(
+  target: string,
+  argument?: string,
+  extraEnv: NodeJS.ProcessEnv = {},
+): Promise<WindowsProtocolLaunchObservation> {
+  const { stdout } = await execFileAsync('powershell.exe', [
     '-NoProfile',
     '-NonInteractive',
     '-Command',
-    `Start-Process -FilePath '${escaped}'`,
-  ]);
+    [
+      '$process = if ([string]::IsNullOrEmpty($env:OD_PROTOCOL_LAUNCH_ARGUMENT)) {',
+      '  Start-Process -FilePath $env:OD_PROTOCOL_LAUNCH_TARGET -PassThru',
+      '} else {',
+      '  Start-Process -FilePath $env:OD_PROTOCOL_LAUNCH_TARGET -ArgumentList @($env:OD_PROTOCOL_LAUNCH_ARGUMENT) -PassThru',
+      '}',
+      '$exited = $process.WaitForExit(3000)',
+      '$exitCode = if ($exited) { $process.ExitCode } else { $null }',
+      '[pscustomobject]@{ pid = $process.Id; exited = $exited; exitCode = $exitCode } | ConvertTo-Json -Compress',
+    ].join('\n'),
+  ], {
+    env: {
+      ...process.env,
+      ...extraEnv,
+      OD_PROTOCOL_LAUNCH_ARGUMENT: argument ?? '',
+      OD_PROTOCOL_LAUNCH_TARGET: target,
+    },
+  });
+  const observation = JSON.parse(stdout) as Partial<WindowsProtocolLaunchObservation>;
+  if (
+    typeof observation.exited !== 'boolean'
+    || (observation.exitCode !== null && typeof observation.exitCode !== 'number')
+    || typeof observation.pid !== 'number'
+  ) {
+    throw new Error(`windows protocol launch returned an invalid process observation: ${stdout}`);
+  }
+  if (observation.exited === true && observation.exitCode !== 0) {
+    throw new Error(
+      `windows protocol launch process exited before Desktop startup: pid=${String(observation.pid)} exitCode=${String(observation.exitCode)}`,
+    );
+  }
+  return observation as WindowsProtocolLaunchObservation;
 }
 
 type InviteContinuationResult = {
@@ -3052,6 +3245,12 @@ async function seedPackagedOnboardingComplete(): Promise<void> {
   // the app stuck on onboarding once the Skip button was removed. This mirrors
   // the macOS smoke's seed, which already writes under runtimeNamespaceRoot.
   const configPath = join(runtimeNamespaceRoot, 'data', 'app-config.json');
+  await mkdir(dirname(configPath), { recursive: true });
+  await writeFile(configPath, `${JSON.stringify({ onboardingCompleted: true }, null, 2)}\n`, 'utf8');
+}
+
+async function seedNativePackagedOnboardingComplete(): Promise<void> {
+  const configPath = join(nativeRuntimeNamespaceRoot, 'data', 'app-config.json');
   await mkdir(dirname(configPath), { recursive: true });
   await writeFile(configPath, `${JSON.stringify({ onboardingCompleted: true }, null, 2)}\n`, 'utf8');
 }
