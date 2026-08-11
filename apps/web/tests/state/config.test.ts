@@ -46,7 +46,11 @@ describe('KNOWN_PROVIDERS', () => {
     const moonshot = KNOWN_PROVIDERS.find((provider) => provider.label === 'Moonshot');
     const moonshotPreset = BYOK_PROVIDER_PRESETS.find((preset) => preset.id === 'moonshot');
 
+    // kimi-k3 is the newest Kimi model and the recommended Moonshot default,
+    // so it holds the first-slot position that defaultKnownProviderModel() reads.
+    expect(moonshot?.preferredModels?.[0]).toBe('kimi-k3');
     expect(moonshot?.preferredModels).toEqual(expect.arrayContaining([
+      'kimi-k3',
       'kimi-k2.6',
       'kimi-k2.7-code',
     ]));
@@ -1028,11 +1032,13 @@ describe('loadConfig', () => {
 
     const config = loadConfig();
 
-    expect(config.model).toBe('kimi-k2.6');
-    expect(config.apiProtocolConfigs?.openai?.model).toBe('kimi-k2.6');
+    // kimi-k3 is the first-slot Moonshot preferred model, so retired ids
+    // (kimi-k2-0711-preview) migrate to it via defaultKnownProviderModel().
+    expect(config.model).toBe('kimi-k3');
+    expect(config.apiProtocolConfigs?.openai?.model).toBe('kimi-k3');
     expect(
       config.byokProviderConfigDrafts?.[`openai:${moonshotBaseUrl}`]?.apiConfig.model,
-    ).toBe('kimi-k2.6');
+    ).toBe('kimi-k3');
     expect(config.configMigrationVersion).toBe(3);
   });
 

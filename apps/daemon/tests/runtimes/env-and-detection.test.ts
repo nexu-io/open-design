@@ -608,9 +608,10 @@ fsTest('detectAgents keeps Kimi available when ACP model discovery fails', async
       assert.equal(kimi.available, true);
       assert.equal(kimi.version, 'kimi 0.6.0');
       assert.equal(kimi.models[0]?.id, 'default');
-      assert.equal(kimi.models[1]?.id, 'kimi-k2-turbo-preview');
-      assert.equal(kimi.models[2]?.id, 'moonshot-v1-8k');
-      assert.equal(kimi.models[3]?.id, 'moonshot-v1-32k');
+      assert.equal(kimi.models[1]?.id, 'kimi-k3');
+      assert.equal(kimi.models[2]?.id, 'kimi-k2-turbo-preview');
+      assert.equal(kimi.models[3]?.id, 'moonshot-v1-8k');
+      assert.equal(kimi.models[4]?.id, 'moonshot-v1-32k');
     });
   } finally {
     rmSync(dir, { recursive: true, force: true });
