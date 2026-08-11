@@ -50,6 +50,10 @@ export function clearAnonymousState(storage: Storage): void {
 
 export async function isAmrLoggedIn(): Promise<boolean> {
   const response = await fetch('/api/integrations/vela/status', { cache: 'no-store' });
+  if (response.status === 503) {
+    const payload = (await response.clone().json().catch(() => null)) as { error?: string } | null;
+    if (payload?.error === 'amr-runtime-unavailable') return false;
+  }
   if (!response.ok) throw new Error(`AMR status failed: ${response.status}`);
   const payload = (await response.json()) as { loggedIn?: boolean };
   return payload.loggedIn === true;
