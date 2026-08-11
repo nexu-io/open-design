@@ -7,6 +7,12 @@ const version = "0.19.0-beta.10";
 
 function metadata(artifactUrl = `${publicOrigin}/beta/artifacts/Open%20Design.dmg`) {
   return {
+    r2: {
+      publicOrigin,
+      report: {
+        url: `${publicOrigin}/beta/versions/${version}/report/`,
+      },
+    },
     releaseTargets: {
       mac_arm64: {
         artifacts: {
@@ -45,6 +51,11 @@ describe("public feed observation", () => {
       status: 200,
       url: `${publicOrigin}/beta/artifacts/Open%20Design.dmg`,
     }]);
+    expect(fetchImpl).not.toHaveBeenCalledWith(publicOrigin, expect.anything());
+    expect(fetchImpl).not.toHaveBeenCalledWith(
+      `${publicOrigin}/beta/versions/${version}/report/`,
+      expect.anything(),
+    );
   });
 
   it("rejects non-canonical artifact URLs as an observation failure", async () => {

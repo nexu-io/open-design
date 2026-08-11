@@ -35,12 +35,13 @@ function collectPublicFileUrls(value: unknown, publicOrigin: string): string[] {
   const urls = new Set<string>();
   const visit = (current: unknown): void => {
     if (typeof current === "string" && /^https?:\/\//.test(current)) {
+      const parsed = new URL(current);
+      if (parsed.origin !== origin || parsed.pathname.endsWith("/")) return;
       const normalized = normalizePublicUrl(current);
       if (normalized !== current) {
         throw new Error(`public metadata contains a non-canonical URL: ${current}`);
       }
-      const parsed = new URL(current);
-      if (parsed.origin === origin && !parsed.pathname.endsWith("/")) urls.add(current);
+      urls.add(current);
       return;
     }
     if (Array.isArray(current)) {
