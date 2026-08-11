@@ -139,6 +139,11 @@ export function CloudSignInTip() {
     // Own this run: a newer `begin()` (re-click after cancel) or `cancel()`
     // bumps the token, so every continuation of THIS run bails post-await.
     const loginRun = ++loginRunRef.current;
+    // Reset the shared ref for this run: a previous run's canceled/failed
+    // attempt must not leak into the new login. Without this, a retry B whose
+    // preflight status carries no id still sees A here, so a cancel while B's
+    // spawn POST is pending targets A and never records B's cancel intent.
+    authAttemptIdRef.current = null;
     setState('signing');
     setStatus(null);
     const current = await fetchVelaLoginStatus();

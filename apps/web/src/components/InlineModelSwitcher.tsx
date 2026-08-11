@@ -1121,11 +1121,6 @@ export function InlineModelSwitcher({
   useEffect(() => {
     const onStatusChange = (event: Event) => {
       const reason = amrLoginStatusEventReason(event);
-      // Continuity guard for the follow-up read below: captured before the
-      // fetch, so a response that resolves after a restart (new poll
-      // generation or a newer attempt) is rejected before committing status.
-      const statusGeneration = amrPollGenerationRef.current;
-      const statusAttemptId = amrAuthAttemptIdRef.current;
       if (reason === 'login-started') {
         // Intentionally NOT gated on the broadcast attempt id, unlike
         // `login-canceled` below: `login-started` is an ADOPT signal — it may
@@ -1136,6 +1131,11 @@ export function InlineModelSwitcher({
         // every spawn continuation (InlineModelSwitcher, AmrLoginPill,
         // EntryShell) validates it still owns the attempt before emitting,
         // and the timeout-cancel continuation gates its own broadcast.
+        // Adopt the event's canonical id into the ref so the follow-up guard
+        // and any poll target the STARTED attempt, not the previously observed
+        // one (which may be a superseded attempt A while B just started).
+        const startedId = amrLoginStatusEventAuthAttemptId(event);
+        if (startedId) amrAuthAttemptIdRef.current = startedId;
         const startedAt = Date.now();
         amrLoginStartedAtRef.current = startedAt;
         setAmrLoginError(null);
@@ -1162,6 +1162,12 @@ export function InlineModelSwitcher({
           setAmrLoginPending(false);
         }
       }
+      // Continuity guard for the follow-up read below: captured AFTER the
+      // login-started/login-canceled branches so the guard uses the attempt id
+      // adopted from the login-started event (not the pre-event ref, which may
+      // still hold a superseded attempt A) and the post-reset poll generation.
+      const statusGeneration = amrPollGenerationRef.current;
+      const statusAttemptId = amrAuthAttemptIdRef.current;
       void refreshAmrStatus({
         generation: statusGeneration,
         authAttemptId: statusAttemptId ?? undefined,
@@ -1190,7 +1196,7 @@ export function InlineModelSwitcher({
           }
           return;
         }
-        if (next?.loginInFlight) {
+        if (next?.loginInFlight && amrLoginStartedAtRef.current !== null) {
           startAmrPolling(
             amrLoginStartedAtRef.current ?? Date.now(),
             next.authAttemptId ?? null,

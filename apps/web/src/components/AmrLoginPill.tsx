@@ -513,11 +513,18 @@ export function AmrLoginPill({
     const onStatusChange = (event: Event) => {
       const reason = amrLoginStatusEventReason(event);
       if (reason === 'login-started') {
+        // Seed the poll with the event's canonical attempt id (when carried):
+        // the ref may still hold a superseded attempt A while B just started on
+        // another surface, and polling under A would discard B's status and let
+        // a delayed login-canceled(A) stop B's poll. The no-id legacy form
+        // keeps the previous behavior.
+        const startedId = amrLoginStatusEventAuthAttemptId(event);
+        if (startedId) authAttemptIdRef.current = startedId;
         const startedAt = Date.now();
         loginStartedAtRef.current = startedAt;
         setErrorMessage(null);
         setPending('login');
-        startPolling(startedAt);
+        startPolling(startedAt, startedId ?? undefined);
       } else if (reason === 'login-canceled') {
         const broadcastAttemptId = amrLoginStatusEventAuthAttemptId(event);
         // Only a broadcast that still owns the current attempt may

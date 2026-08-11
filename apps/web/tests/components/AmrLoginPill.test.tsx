@@ -1796,4 +1796,87 @@ describe('AmrLoginPill', () => {
       vi.useRealTimers();
     }
   });
+
+  it('seeds the poll from a login-started event attempt id instead of a superseded ref', async () => {
+    // Regression (review thread): the login-started event handler called
+    // `startPolling(startedAt)` without the event's canonical attempt id. When
+    // the ref still held a superseded attempt A while B started on another
+    // surface, the poll ran under A — and a stale `login-canceled(A)` matched
+    // the ref and stopped B's poll before any status read could repoint it.
+    // The poll must be seeded from the event id so the ref targets the started
+    // attempt immediately.
+    const attemptA = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const attemptB = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+    let statusCall = 0;
+    const fetchMock = vi.fn(async (input, init) => {
+      const url = typeof input === 'string' ? input : (input as URL).toString();
+      if (url.endsWith('/api/integrations/vela/status')) {
+        statusCall += 1;
+        // loginInFlight but WITHOUT an attempt id: the poll must not rely on
+        // the status read repointing the ref to B — the event seed already did.
+        return jsonResponse({
+          body: {
+            loggedIn: false,
+            loginInFlight: true,
+            profile: 'prod',
+            user: null,
+            configPath: '/x',
+          },
+        });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    renderPill({
+      skipInitialRefresh: true,
+      initialStatus: {
+        loggedIn: false,
+        loginInFlight: false,
+        authAttemptId: attemptA,
+        profile: 'prod',
+        user: null,
+        configPath: '/x',
+      },
+    });
+
+    vi.useFakeTimers();
+    // B starts on another surface; the ref still holds A.
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent(AMR_LOGIN_STATUS_EVENT, {
+          detail: { reason: 'login-started', authAttemptId: attemptB },
+        }),
+      );
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // A stale login-canceled(A) must NOT stop B's poll (the ref now targets B).
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent(AMR_LOGIN_STATUS_EVENT, {
+          detail: { reason: 'login-canceled', authAttemptId: attemptA },
+        }),
+      );
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // B's poll keeps running (status reads continue).
+    const callsAfter = statusCall;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AMR_LOGIN_POLL_INTERVAL_MS);
+    });
+    expect(statusCall).toBeGreaterThan(callsAfter);
+    expect(screen.getByText('Signing in…')).toBeTruthy();
+
+    vi.useRealTimers();
+  });
 });

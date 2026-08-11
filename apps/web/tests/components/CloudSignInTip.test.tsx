@@ -812,6 +812,108 @@ describe('CloudSignInTip', () => {
       window.removeEventListener(AMR_LOGIN_STATUS_EVENT, onStatusChange);
     }
   });
+
+  it('targets the retry attempt when a new begin() run starts after a cancel', async () => {
+    // Regression (review thread): `authAttemptIdRef` was not cleared when a new
+    // `begin()` run started, so a retry B whose preflight status carried no id
+    // still saw the canceled attempt A in the ref. A cancel while B's spawn
+    // POST was pending then targeted A (or the no-body legacy form) and never
+    // recorded B's cancel intent — B stayed alive on the daemon and the next
+    // retry hit alreadyRunning. The ref must reset per run so B's own cancel
+    // intent is preserved and its spawn resolves to a targeted cancel.
+    const attemptA = 'aaaa1111-1111-4111-8111-111111111111';
+    const attemptB = 'bbbb2222-2222-4222-8222-222222222222';
+    const cancelBodies: Array<{ authAttemptId?: string } | null> = [];
+    try {
+      let releaseLoginB!: (response: Response) => void;
+      const heldLoginB = new Promise<Response>((resolve) => {
+        releaseLoginB = resolve;
+      });
+      let loginCalls = 0;
+      const fetchMock = vi.fn(async (input, init) => {
+        const url = typeof input === 'string' ? input : (input as URL).toString();
+        if (url.endsWith('/api/integrations/vela/status')) {
+          // Run A's preflight carries A; run B's preflight carries NO id.
+          return jsonResponse({
+            body: {
+              loggedIn: false,
+              loginInFlight: false,
+              authAttemptId: loginCalls === 0 ? attemptA : undefined,
+              profile: 'prod',
+              user: null,
+              configPath: '/x',
+            },
+          });
+        }
+        if (url.endsWith('/api/integrations/vela/login') && init?.method === 'POST') {
+          loginCalls += 1;
+          if (loginCalls === 1) {
+            return jsonResponse({ status: 202, body: { pid: 1, authAttemptId: attemptA } });
+          }
+          return heldLoginB;
+        }
+        if (url.endsWith('/api/integrations/vela/login/cancel') && init?.method === 'POST') {
+          cancelBodies.push(
+            init?.body ? (JSON.parse(String(init.body)) as { authAttemptId?: string }) : null,
+          );
+          return jsonResponse({ body: { canceled: true, pids: [1] } });
+        }
+        throw new Error(`unexpected fetch: ${url}`);
+      });
+      globalThis.fetch = fetchMock as typeof fetch;
+
+      renderTip();
+      const card = await screen.findByTestId('entry-cloud-signin-tip');
+      vi.useFakeTimers();
+      // Run A: spawn resolves with A.
+      fireEvent.click(card);
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      // Cancel A (ref=A → targeted cancel A).
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel sign-in' }));
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      // Run B: preflight carries no id (ref was reset by begin), B's spawn is
+      // held. Cancel while B's spawn POST is pending — the ref is null so the
+      // intent is preserved for B's run, not consumed by a stale A.
+      fireEvent.click(card);
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel sign-in' }));
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      // B's spawn resolves with B; the preserved intent must issue a targeted
+      // cancel for B (never the legacy no-body form, never A).
+      await act(async () => {
+        releaseLoginB(jsonResponse({ status: 202, body: { pid: 2, authAttemptId: attemptB } }));
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(cancelBodies[cancelBodies.length - 1]).toEqual({
+        authAttemptId: attemptB,
+      });
+
+      vi.useRealTimers();
+    } finally {
+      cleanup();
+    }
+  });
 });
 
 // recvqgpXSYFNTq: "退出登录后再登录，左下角的头像加载的有些慢" — the rail's
