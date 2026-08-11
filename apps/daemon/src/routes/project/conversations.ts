@@ -411,6 +411,7 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
         // and open the terminal-arbitration gate (nettee 8/10 on #6418);
         // an explicitly carried status still flows.
         runStatus: incoming.runStatus ?? stored.runStatus,
+        lastRunEventId: mergeLastRunEventId(stored.lastRunEventId, incoming.lastRunEventId),
         startedAt: stored.startedAt ?? incoming.startedAt,
         // endedAt is a monotonic watermark: never regress the daemon's value.
         endedAt:
@@ -443,6 +444,26 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
           ? incomingEndedAt
           : stored.endedAt,
     };
+  };
+
+  const parseRunEventCursor = (value: unknown): number | null => {
+    if (typeof value !== 'string' && typeof value !== 'number') return null;
+    const cursor = Number(value);
+    return Number.isFinite(cursor) && cursor >= 0 ? cursor : null;
+  };
+
+  const mergeLastRunEventId = (
+    stored: unknown,
+    incoming: unknown,
+  ): unknown => {
+    if (incoming === null || incoming === undefined || incoming === '') return stored;
+    if (stored === null || stored === undefined || stored === '') return incoming;
+    const storedCursor = parseRunEventCursor(stored);
+    const incomingCursor = parseRunEventCursor(incoming);
+    if (storedCursor !== null && incomingCursor !== null) {
+      return incomingCursor >= storedCursor ? incoming : stored;
+    }
+    return incoming;
   };
 
   app.put('/api/projects/:id/conversations/:cid/messages/:mid', async (req, res) => {

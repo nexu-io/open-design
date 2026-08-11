@@ -242,6 +242,112 @@ describe('stale web message snapshot does not wipe daemon-owned run events', () 
     expect(after?.runId).toBe(before?.runId);
   });
 
+  it('preserves the stored event cursor on equal-length stale snapshots', async () => {
+    // nettee review (#6418): the accepted merge path must not let an
+    // equal-length snapshot omit or rewind lastRunEventId, or reattach can
+    // replay from the wrong cursor.
+    delete process.env.POSTHOG_KEY;
+    delete process.env.POSTHOG_HOST;
+    delete process.env.LANGFUSE_PUBLIC_KEY;
+    delete process.env.LANGFUSE_SECRET_KEY;
+    delete process.env.LANGFUSE_BASE_URL;
+    delete process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL;
+
+    started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
+    await putConfig(started.url, {
+      agentId: 'claude',
+      telemetry: { metrics: true, content: false, artifactManifest: false },
+      privacyDecisionAt: Date.now(),
+    });
+
+    const { projectId, conversationId } = await createConversation(started.url);
+    const messageId = `cursor_${randomUUID()}`;
+    const url = `${started.url}/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}`;
+
+    const seeded = await fetch(url, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: messageId,
+        role: 'assistant',
+        content: 'model output',
+        runId: 'run-cursor',
+        runStatus: 'running',
+        lastRunEventId: '5',
+        events: [
+          { kind: 'status', label: 'model' },
+          { kind: 'text', text: 'model output' },
+        ],
+      }),
+    });
+    expect(seeded.status).toBe(200);
+
+    const equalLengthWithoutCursor = await fetch(url, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: messageId,
+        role: 'assistant',
+        content: 'model output',
+        runId: 'run-cursor',
+        runStatus: 'running',
+        events: [
+          { kind: 'status', label: 'model' },
+          { kind: 'text', text: 'model output' },
+        ],
+      }),
+    });
+    expect(equalLengthWithoutCursor.status).toBe(200);
+    expect(
+      (await fetchAssistantMessage(started.url, projectId, conversationId, messageId))
+        ?.lastRunEventId,
+    ).toBe('5');
+
+    const equalLengthOlderCursor = await fetch(url, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: messageId,
+        role: 'assistant',
+        content: 'model output',
+        runId: 'run-cursor',
+        runStatus: 'running',
+        lastRunEventId: '3',
+        events: [
+          { kind: 'status', label: 'model' },
+          { kind: 'text', text: 'model output' },
+        ],
+      }),
+    });
+    expect(equalLengthOlderCursor.status).toBe(200);
+    expect(
+      (await fetchAssistantMessage(started.url, projectId, conversationId, messageId))
+        ?.lastRunEventId,
+    ).toBe('5');
+
+    const equalLengthNewerCursor = await fetch(url, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: messageId,
+        role: 'assistant',
+        content: 'model output',
+        runId: 'run-cursor',
+        runStatus: 'running',
+        lastRunEventId: '6',
+        events: [
+          { kind: 'status', label: 'model' },
+          { kind: 'text', text: 'model output' },
+        ],
+      }),
+    });
+    expect(equalLengthNewerCursor.status).toBe(200);
+    expect(
+      (await fetchAssistantMessage(started.url, projectId, conversationId, messageId))
+        ?.lastRunEventId,
+    ).toBe('6');
+  });
+
   it('lets a metadata update write a fresh endedAt while preserving daemon events', async () => {
     // The retry flow persists the completion timestamp as a metadata update
     // whose events array is empty (the web never carries the daemon's detailed
