@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -15,8 +15,15 @@ import {
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  createStandaloneLauncherBootstrapEnv,
+  readStandaloneLauncherBootstrap,
+  resolveStandaloneBodyBootloaderPath,
+  validateStandaloneLauncherBootstrap,
+} from "../src/launcher-bootstrap.js";
+import {
   connectStandaloneBodyBridge,
   exposeStandaloneBodyBridge,
+  launchStandaloneBodyBridge,
   resolveStandaloneShellBridgeService,
 } from "../src/process-bridge.js";
 
@@ -109,6 +116,25 @@ function fakeHandle(descriptor: StandaloneHandoffDescriptor): StandaloneHandle {
 }
 
 describe("Standalone process bridge", () => {
+  it("round-trips a strict launcher bootstrap without Shell capabilities", async () => {
+    const binding = await descriptor();
+    const env = createStandaloneLauncherBootstrapEnv({
+      descriptor: binding,
+    });
+
+    expect(readStandaloneLauncherBootstrap(env)).toEqual({
+      descriptor: binding,
+      schemaVersion: 1,
+    });
+    expect(resolveStandaloneBodyBootloaderPath(binding)).toBe(
+      join(binding.paths.installationRoot, "body", "bootloader.mjs"),
+    );
+    expect(() => validateStandaloneLauncherBootstrap({
+      ...readStandaloneLauncherBootstrap(env),
+      capabilities: {},
+    })).toThrow(/unsupported fields/u);
+  });
+
   it("round-trips Shell capabilities and body lifecycle through Sidecar methods", async () => {
     const binding = await descriptor();
     const capabilityInputs: unknown[] = [];
@@ -211,5 +237,113 @@ describe("Standalone process bridge", () => {
     } finally {
       await body.close();
     }
+  });
+
+  it("launches the bundled launcher.mjs in a real Node body process", async () => {
+    const binding = await descriptor();
+    const bodyBootloaderPath = resolveStandaloneBodyBootloaderPath(binding);
+    await mkdir(join(binding.paths.installationRoot, "body"), { recursive: true });
+    await writeFile(bodyBootloaderPath, `
+export async function handoff(request) {
+  let terminalResolve;
+  const terminal = new Promise((resolve) => { terminalResolve = resolve; });
+  await request.capabilities.invoke({
+    attachmentId: request.attachment.id,
+    capability: "open-design.real-process.v1",
+    handoff: request.handoff,
+    input: { process: "body" },
+    requestId: "real-process-capability",
+    schemaVersion: 1,
+  });
+  let status = {
+    daemonUrl: "http://127.0.0.1:44101",
+    handoff: request.handoff,
+    pid: process.pid,
+    schemaVersion: 1,
+    state: "running",
+    webUrl: "http://127.0.0.1:44102",
+  };
+  return {
+    async close() {
+      if (status.state === "running") {
+        status = {
+          handoff: request.handoff,
+          pid: process.pid,
+          schemaVersion: 1,
+          state: "stopped",
+        };
+        terminalResolve(status);
+      }
+      return status;
+    },
+    async invoke(command) {
+      return {
+        attachmentId: command.attachmentId,
+        handoff: command.handoff,
+        outcome: "completed",
+        output: { bodyPid: process.pid },
+        requestId: command.requestId,
+        schemaVersion: command.schemaVersion,
+      };
+    },
+    async readStatus() { return status; },
+    async waitForTerminal() { return await terminal; },
+  };
+}
+`, "utf8");
+    const capabilityInputs: unknown[] = [];
+    const capabilities = {
+      async invoke(request: StandaloneShellCapabilityRequest) {
+        capabilityInputs.push(request.input);
+        return {
+          attachmentId: request.attachmentId,
+          handoff: request.handoff,
+          outcome: "completed" as const,
+          output: { accepted: true },
+          requestId: request.requestId,
+          schemaVersion: request.schemaVersion,
+        };
+      },
+    };
+    const launch = {
+      executable: process.execPath,
+      launcherPath: join(import.meta.dirname, "..", "dist", "launcher.mjs"),
+      readyTimeoutMs: 5_000,
+    };
+    const first = await launchStandaloneBodyBridge({
+      capabilities,
+      descriptor: binding,
+      launch,
+    });
+    const sibling = {
+      ...binding,
+      attachment: (await descriptor("electron-b", binding.handoff.scope.generation)).attachment,
+    };
+    const second = await launchStandaloneBodyBridge({
+      capabilities,
+      descriptor: sibling,
+      launch,
+    });
+
+    expect(capabilityInputs).toEqual([{ process: "body" }, { process: "body" }]);
+    const firstStatus = await first.readStatus();
+    const secondStatus = await second.readStatus();
+    expect(firstStatus).toMatchObject({ state: "running" });
+    expect(firstStatus.pid).not.toBe(process.pid);
+    expect(secondStatus.pid).toBe(firstStatus.pid);
+    await expect(first.invoke({
+      attachmentId: binding.attachment.id,
+      command: "open-design.real-process.v1",
+      handoff: binding.handoff,
+      input: null,
+      requestId: "real-process-command",
+      schemaVersion: STANDALONE_HANDOFF_SCHEMA_VERSION,
+    })).resolves.toMatchObject({
+      outcome: "completed",
+      output: { bodyPid: firstStatus.pid },
+    });
+    await expect(first.close()).resolves.toMatchObject({ state: "stopped" });
+    await expect(second.readStatus()).resolves.toMatchObject({ state: "running" });
+    await expect(second.close()).resolves.toMatchObject({ state: "stopped" });
   });
 });
