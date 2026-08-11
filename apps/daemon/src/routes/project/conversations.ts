@@ -376,6 +376,33 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
       const daemonKnown = daemonRun !== null && daemonRun !== undefined;
       const daemonTerminal =
         daemonKnown && TERMINAL_RUN_STATUSES.has(daemonRun!.status);
+      if (!daemonKnown) {
+        const incomingEndedAt =
+          typeof incoming.endedAt === 'number' ? incoming.endedAt : null;
+        const storedEndedAt =
+          typeof stored.endedAt === 'number' ? stored.endedAt : null;
+        return {
+          ...incoming,
+          role: stored.role,
+          runId: stored.runId,
+          runStatus: incomingStatus,
+          events: incomingEvents,
+          content:
+            typeof incoming.content === 'string'
+              ? incoming.content
+              : stored.content ?? '',
+          lastRunEventId: mergeLastRunEventId(
+            stored.lastRunEventId,
+            incoming.lastRunEventId,
+          ),
+          startedAt: stored.startedAt ?? incoming.startedAt,
+          endedAt:
+            incomingEndedAt !== null &&
+            (storedEndedAt === null || incomingEndedAt >= storedEndedAt)
+              ? incomingEndedAt
+              : stored.endedAt,
+        };
+      }
       if (
         (daemonKnown && !daemonTerminal) ||
         (daemonKnown && daemonTerminal && incomingStatus !== daemonRun!.status)

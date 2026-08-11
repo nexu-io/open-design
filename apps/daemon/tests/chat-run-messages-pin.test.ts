@@ -159,13 +159,17 @@ describe('pinAssistantMessageOnRunCreate generation boundary (#6418)', () => {
       startedAt: 100,
     });
 
-    pinAssistantMessageOnRunCreate(db, {
-      id: 'run-b',
-      conversationId: 'conv-a',
-      assistantMessageId: 'msg-1',
-      status: 'queued',
-      createdAt: 300,
-    });
+    pinAssistantMessageOnRunCreate(
+      db,
+      {
+        id: 'run-b',
+        conversationId: 'conv-a',
+        assistantMessageId: 'msg-1',
+        status: 'queued',
+        createdAt: 300,
+      },
+      { isRunActive: (runId) => runId === 'run-a' },
+    );
 
     const m = readMessage(db, 'msg-1');
     // Untouched: still owned by run-a with its in-flight transcript.
@@ -175,6 +179,46 @@ describe('pinAssistantMessageOnRunCreate generation boundary (#6418)', () => {
     expect(m.eventsJson).not.toBeNull();
     expect(m.lastRunEventId).toBe('evt-3');
     expect(m.startedAt).toBe(100);
+  });
+
+  it('rebinds a stale active-looking row when the daemon no longer owns its run', () => {
+    // nettee on #6418: SQLite run_status is not authoritative after a daemon
+    // restart. A row can be left as running while the daemon has no live run;
+    // retrying that assistant id must recover instead of returning
+    // RUN_IN_PROGRESS forever.
+    const db = createDb();
+    db.prepare(`INSERT INTO conversations (id) VALUES ('conv-a')`).run();
+    seedMessage(db, {
+      id: 'msg-1',
+      conversationId: 'conv-a',
+      content: 'stale partial',
+      events: [{ kind: 'text', text: 'stale partial' }],
+      runId: 'gone-run',
+      runStatus: 'running',
+      lastRunEventId: 'evt-3',
+      startedAt: 100,
+    });
+
+    const claim = pinAssistantMessageOnRunCreate(
+      db,
+      {
+        id: 'run-b',
+        conversationId: 'conv-a',
+        assistantMessageId: 'msg-1',
+        status: 'queued',
+        createdAt: 300,
+      },
+      { isRunActive: () => false },
+    );
+
+    expect(claim.ok).toBe(true);
+    const m = readMessage(db, 'msg-1');
+    expect(m.runId).toBe('run-b');
+    expect(m.runStatus).toBe('queued');
+    expect(m.content).toBe('');
+    expect(m.eventsJson).toBeNull();
+    expect(m.lastRunEventId).toBeNull();
+    expect(m.startedAt).toBe(300);
   });
 
   it('binds a runId-less web placeholder (normal pre-run flow)', () => {

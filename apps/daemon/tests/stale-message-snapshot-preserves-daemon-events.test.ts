@@ -607,6 +607,76 @@ describe('stale web message snapshot does not wipe daemon-owned run events', () 
     ]);
   });
 
+  it('lets a client-owned terminal snapshot with fewer events finalize the row', async () => {
+    // nettee on #6418: if the daemon has no live record for the run, the
+    // client/mock path is the writer. A terminal PUT with fewer/omitted events
+    // must be able to finalize status/content instead of preserving a stale
+    // non-terminal row forever.
+    delete process.env.POSTHOG_KEY;
+    delete process.env.POSTHOG_HOST;
+    delete process.env.LANGFUSE_PUBLIC_KEY;
+    delete process.env.LANGFUSE_SECRET_KEY;
+    delete process.env.LANGFUSE_BASE_URL;
+    delete process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL;
+
+    started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
+    await putConfig(started.url, {
+      agentId: 'claude',
+      telemetry: { metrics: true, content: false, artifactManifest: false },
+      privacyDecisionAt: Date.now(),
+    });
+
+    const { projectId, conversationId } = await createConversation(started.url);
+    const messageId = `client_terminal_${randomUUID()}`;
+    const url = `${started.url}/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}`;
+
+    const seeded = await fetch(url, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: messageId,
+        role: 'assistant',
+        content: 'client partial',
+        runId: 'mock-unknown',
+        runStatus: 'running',
+        lastRunEventId: '2',
+        events: [
+          { kind: 'status', label: 'starting', detail: 'mock' },
+          { kind: 'text', text: 'client partial' },
+        ],
+      }),
+    });
+    expect(seeded.status).toBe(200);
+
+    const terminal = await fetch(url, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: messageId,
+        role: 'assistant',
+        content: 'client failed result',
+        runId: 'mock-unknown',
+        runStatus: 'failed',
+        lastRunEventId: '1',
+        events: [],
+        endedAt: 5000,
+      }),
+    });
+    expect(terminal.status).toBe(200);
+
+    const stored = await fetchAssistantMessage(
+      started.url,
+      projectId,
+      conversationId,
+      messageId,
+    );
+    expect(stored?.runStatus).toBe('failed');
+    expect(stored?.content).toBe('client failed result');
+    expect(stored?.events).toEqual([]);
+    expect(stored?.lastRunEventId).toBe('2');
+    expect(stored?.endedAt).toBe(5000);
+  });
+
   it('does not let a stale pre-run snapshot clear the pinned runId', async () => {
     // nettee review (#6418): a daemon-backed row pinned by /api/runs (runId
     // set, runStatus queued, no events yet) followed by a stale web snapshot

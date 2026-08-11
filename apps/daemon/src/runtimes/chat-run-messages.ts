@@ -307,7 +307,11 @@ function liveArtifactRefreshPhase(value: unknown): 'started' | 'succeeded' | 'fa
 export function pinAssistantMessageOnRunCreate(
   db: SqliteDb,
   run: ChatRunMessageState,
-  opts?: { status?: string; beforeFreshInsert?: () => void },
+  opts?: {
+    status?: string;
+    beforeFreshInsert?: () => void;
+    isRunActive?: (runId: string) => boolean;
+  },
 ): { ok: boolean; reason?: 'active' | 'scope' } {
   // Headless / omit-pin runs with no assistant message have nothing to claim.
   if (!run.conversationId || !run.assistantMessageId) return { ok: true };
@@ -355,16 +359,20 @@ export function pinAssistantMessageOnRunCreate(
       return { ok: false, reason: 'scope' };
     }
     const isSameRun = existing.runId === run.id;
+    const activeLookingExistingRun =
+      existing.runId !== null &&
+      !isSameRun &&
+      (existing.runStatus === 'queued' || existing.runStatus === 'running');
+    const existingRunStillActive =
+      activeLookingExistingRun &&
+      (opts?.isRunActive ? opts.isRunActive(existing.runId!) : true);
     // Clean early verdict for the common concurrency case (the UPDATE's WHERE
     // gate below re-asserts it at the DB level so the guarantee survives
     // refactors).
-    if (
-      existing.runId
-      && !isSameRun
-      && (existing.runStatus === 'queued' || existing.runStatus === 'running')
-    ) {
+    if (existingRunStillActive) {
       return { ok: false, reason: 'active' };
     }
+    const allowStaleActiveRebind = activeLookingExistingRun && !existingRunStillActive;
     const result = db.prepare(
       `UPDATE messages
           SET run_id = ?,
@@ -383,7 +391,12 @@ export function pinAssistantMessageOnRunCreate(
         WHERE id = ?
           AND conversation_id = ?
           AND role = 'assistant'
-          AND (run_id IS NULL OR run_id = ? OR run_status IN ('succeeded','failed','canceled'))`,
+          AND (
+            run_id IS NULL
+            OR run_id = ?
+            OR run_status IN ('succeeded','failed','canceled')
+            OR ?
+          )`,
     ).run(
       run.id,
       claimStatus,
@@ -399,6 +412,7 @@ export function pinAssistantMessageOnRunCreate(
       run.assistantMessageId,
       run.conversationId,
       run.id, // same-run gate in WHERE
+      allowStaleActiveRebind ? 1 : 0,
     );
     return result.changes > 0
       ? { ok: true }

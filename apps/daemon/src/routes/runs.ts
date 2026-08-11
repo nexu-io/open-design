@@ -539,7 +539,11 @@ export interface RegisterRunRoutesDeps {
     pinAssistantMessageOnRunCreate: (
       db: SqliteDb,
       run: ChatRun,
-      opts?: { status?: string; beforeFreshInsert?: () => void },
+      opts?: {
+        status?: string;
+        beforeFreshInsert?: () => void;
+        isRunActive?: (runId: string) => boolean;
+      },
     ) => { ok: boolean; reason?: 'active' | 'scope' };
     reconcileAssistantMessageOnRunEnd: (
       db: SqliteDb,
@@ -1575,8 +1579,18 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     }
     if (clientUserMessageId && typeof meta.conversationId === 'string') {
       const existingUserPin = db
-        .prepare(`SELECT conversation_id AS conversationId FROM messages WHERE id = ?`)
-        .get(clientUserMessageId) as { conversationId?: unknown } | undefined;
+        .prepare(`SELECT role, conversation_id AS conversationId FROM messages WHERE id = ?`)
+        .get(clientUserMessageId) as
+        | { role?: unknown; conversationId?: unknown }
+        | undefined;
+      if (existingUserPin && existingUserPin.role !== 'user') {
+        return sendApiError(
+          res,
+          409,
+          'INVALID_USER_MESSAGE',
+          'userMessageId must reference a user message',
+        );
+      }
       if (
         existingUserPin
         && existingUserPin.conversationId !== meta.conversationId
@@ -1734,6 +1748,10 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         updateProject(db, meta.projectId, {});
       }
     };
+    const isRunActiveForAssistantClaim = (runId: string): boolean => {
+      const existingRun = design.runs.get(runId);
+      return Boolean(existingRun && !TERMINAL_RUN_STATUSES.has(existingRun.status));
+    };
     meta.requestFingerprint = runRequestFingerprint(
       meta,
       resolvedSnapshot?.ok ? resolvedSnapshot.snapshot : null,
@@ -1793,7 +1811,10 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       // terminal + resumable (never dropped) and the request is rejected —
       // the claim writes the post-restart `queued` intent so the message row
       // does not stay terminal while the run is being resumed (#6418).
-      const resumeClaim = pinAssistantMessageOnRunCreate(db, run, { status: 'queued' });
+      const resumeClaim = pinAssistantMessageOnRunCreate(db, run, {
+        status: 'queued',
+        isRunActive: isRunActiveForAssistantClaim,
+      });
       if (!resumeClaim.ok) {
         return sendApiError(
           res,
@@ -1826,8 +1847,9 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
                 seedRunUserMessage();
                 seededDuringFreshClaim = true;
               },
+              isRunActive: isRunActiveForAssistantClaim,
             }
-          : undefined;
+          : { isRunActive: isRunActiveForAssistantClaim };
         claimed = pinAssistantMessageOnRunCreate(db, run, claimOptions);
       } catch (err) {
         // Never let an unclaimed run start.
@@ -3224,11 +3246,17 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       design.runs.stream(run, req, res);
       return;
     }
+    const isRunActiveForAssistantClaim = (runId: string): boolean => {
+      const existingRun = design.runs.get(runId);
+      return Boolean(existingRun && !TERMINAL_RUN_STATUSES.has(existingRun.status));
+    };
     // Atomic ownership claim (#6418): a created run must acquire the assistant
     // message before streaming — otherwise drop the run and reject.
     let claimed: { ok: boolean; reason?: 'active' | 'scope' };
     try {
-      claimed = pinAssistantMessageOnRunCreate(db, run);
+      claimed = pinAssistantMessageOnRunCreate(db, run, {
+        isRunActive: isRunActiveForAssistantClaim,
+      });
     } catch (err) {
       design.runs.drop(run);
       throw err;

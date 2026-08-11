@@ -288,6 +288,66 @@ setInterval(() => {}, 1000);
     await expect(readFile(invocationPath, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
+  it('rejects an existing non-user userMessageId before seeding', async () => {
+    // nettee on #6418: seedRunUserMessage upserts by id. If a malformed
+    // API/MCP request points userMessageId at an existing assistant row, the
+    // seed would otherwise convert and overwrite that assistant transcript
+    // before the fresh assistant row is inserted.
+    const { url, invocationPath } = await startWithHangingClaude();
+    const { projectId, conversationId } = await createProject(url);
+    const existingAssistantId = `assistant_as_user_${randomUUID()}`;
+    const newAssistantId = `assistant_fresh_${randomUUID()}`;
+
+    const seed = await fetch(
+      `${url}/api/projects/${projectId}/conversations/${conversationId}/messages/${existingAssistantId}`,
+      {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          id: existingAssistantId,
+          role: 'assistant',
+          content: 'old assistant transcript',
+          runId: 'old-run',
+          runStatus: 'succeeded',
+          events: [{ kind: 'text', text: 'old assistant transcript' }],
+        }),
+      },
+    );
+    expect(seed.status).toBe(200);
+
+    const response = await postRun(url, {
+      projectId,
+      conversationId,
+      userMessageId: existingAssistantId,
+      assistantMessageId: newAssistantId,
+      agentId: 'claude',
+      message: 'new prompt',
+      currentPrompt: 'new prompt',
+      clientRequestId: `role_${randomUUID()}`,
+    });
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      error: { code: 'INVALID_USER_MESSAGE' },
+    });
+
+    const oldMessage = await fetchAssistantMessage(
+      url,
+      projectId,
+      conversationId,
+      existingAssistantId,
+    );
+    expect(oldMessage).toMatchObject({
+      role: 'assistant',
+      content: 'old assistant transcript',
+      runId: 'old-run',
+      runStatus: 'succeeded',
+    });
+    expect(await fetchAssistantMessage(url, projectId, conversationId, newAssistantId))
+      .toBeUndefined();
+    await expect(readFile(invocationPath, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
   it('keeps a web-persisted placeholder startedAt through the first claim', async () => {
     const { url } = await startWithHangingClaude();
     const { projectId, conversationId } = await createProject(url);
