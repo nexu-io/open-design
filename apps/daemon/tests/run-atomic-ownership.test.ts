@@ -256,6 +256,38 @@ setInterval(() => {}, 1000);
     expect(userMessageIds).not.toContain(loser.userMessageId);
   });
 
+  it('rejects equal user and assistant message ids before claiming the run', async () => {
+    // PerishCode on #6418: a malformed API/MCP request must not let the
+    // fresh-claim ordering path seed a user row and then overwrite it with the
+    // assistant row under the same primary key.
+    const { url, invocationPath } = await startWithHangingClaude();
+    const { projectId, conversationId } = await createProject(url);
+    const sharedMessageId = `shared_${randomUUID()}`;
+
+    const response = await postRun(url, {
+      projectId,
+      conversationId,
+      userMessageId: sharedMessageId,
+      assistantMessageId: sharedMessageId,
+      agentId: 'claude',
+      message: 'M',
+      currentPrompt: 'M',
+      clientRequestId: `same_${randomUUID()}`,
+    });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: {
+        code: 'BAD_REQUEST',
+        message: 'userMessageId and assistantMessageId must be distinct',
+      },
+    });
+
+    const messages = await listMessages(url, projectId, conversationId);
+    expect(messages).toEqual([]);
+    await expect(readFile(invocationPath, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
   it('keeps a web-persisted placeholder startedAt through the first claim', async () => {
     const { url } = await startWithHangingClaude();
     const { projectId, conversationId } = await createProject(url);

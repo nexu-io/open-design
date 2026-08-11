@@ -1602,6 +1602,18 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     if (clientAssistantMessageId && !isSafeId(clientAssistantMessageId)) {
       return sendApiError(res, 400, 'BAD_REQUEST', 'assistantMessageId is invalid');
     }
+    if (
+      clientUserMessageId
+      && clientAssistantMessageId
+      && clientUserMessageId === clientAssistantMessageId
+    ) {
+      return sendApiError(
+        res,
+        400,
+        'BAD_REQUEST',
+        'userMessageId and assistantMessageId must be distinct',
+      );
+    }
     if (clientAssistantMessageId) {
       // Without a resolvable conversation there is nothing to validate the
       // assistantMessageId against — the run would mutate a row it does not
