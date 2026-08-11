@@ -192,7 +192,14 @@ async function routeBootstrapApis(
 async function openDesignSystemsSettings(page: Page) {
   await gotoEntryHome(page);
   const dialog = await openSettingsDialog(page);
-  await dialog.getByRole('button', { name: /Design systems|设计系统|設計系統/i }).click();
+  const designSystemsNav = dialog.getByRole('button', { name: /Design systems|设计系统|設計系統/i });
+  const reachable = await designSystemsNav.isVisible({ timeout: 1_000 }).catch(() => false);
+  test.fail(
+    !reachable,
+    'Design Systems still renders in Settings but #5517 removed its navigation entry; local import and rename are unreachable.',
+  );
+  await expect(designSystemsNav).toBeVisible({ timeout: 1_000 });
+  await designSystemsNav.click();
   await expect(dialog.getByRole('heading', { name: /Design systems|设计系统|設計系統/i })).toBeVisible();
   return dialog;
 }

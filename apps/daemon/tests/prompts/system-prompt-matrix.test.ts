@@ -68,7 +68,6 @@ const SECTION_MARKERS = [
   ['maybe-deck-framework', '## If this brief is a slide deck / keynote / presentation'],
   ['media-generation-contract', '## Media generation contract'],
   ['media-dispatch-hint', '## Media generation (if asked)'],
-  ['codex-imagegen-override', '## Codex built-in imagegen override'],
   ['critique-panel', '## Panelist role definitions'],
   ['active-ds-visual-direction-override', '## Active design system visual direction'],
   ['filesystem-handoff-override', '## Filesystem handoff'],
@@ -259,10 +258,10 @@ const SCENARIOS: ReadonlyArray<[name: string, input: ComposeInput]> = [
     { metadata: { kind: 'prototype', skipDiscoveryBrief: true }, executionProfile: 'filesystem' },
   ],
   [
-    'codex-imagegen',
+    'codex-image-dispatcher',
     {
       agentId: 'codex',
-      metadata: { kind: 'image', imageModel: 'gpt-image-2' },
+      metadata: { kind: 'image', imageModel: 'vela/gpt-image-2' },
       executionProfile: 'filesystem',
     },
   ],

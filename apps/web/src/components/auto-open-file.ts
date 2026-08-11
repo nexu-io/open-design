@@ -112,15 +112,20 @@ function isMarkdownPreviewFile(file: CandidateFile): boolean {
   return /\.(md|markdown)$/i.test(path);
 }
 
+function isMediaPreviewFile(file: CandidateFile): boolean {
+  return file.kind === 'image' || file.kind === 'video' || file.kind === 'audio';
+}
+
 // Auto-open priority for a turn's produced files. Higher wins. HTML is the
 // primary visual deliverable, so when a turn writes both an HTML page and a
 // markdown note (e.g. index.html + README.md) the page takes focus; markdown
-// is the next-best previewable artifact; everything else (decks, images, raw
-// text) has no in-place reshape preview worth stealing focus for and is left
-// for the user to open from the produced-files chips.
+// is the next-best previewable artifact. Image, video, and audio files are the
+// fallback for media-only turns; non-previewable outputs such as decks and raw
+// text are left for the user to open from the produced-files chips.
 function autoOpenPreviewRank(file: CandidateFile): number {
-  if (isHtmlPreviewFile(file)) return 2;
-  if (isMarkdownPreviewFile(file)) return 1;
+  if (isHtmlPreviewFile(file)) return 3;
+  if (isMarkdownPreviewFile(file)) return 2;
+  if (isMediaPreviewFile(file)) return 1;
   return 0;
 }
 

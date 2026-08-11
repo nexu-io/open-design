@@ -36,6 +36,10 @@ interface State {
   roundsClosed: number;
   shipSeen: boolean;
   designerArtifactInRound1: boolean;
+  // Non-final rounds must contain a real critic-vs-specialist disagreement.
+  // Keep the emitted directives by role until ROUND_END can validate that
+  // cross-panelist invariant.
+  roundMustFixes: Map<PanelistRole, string[]>;
   lastAdvance: number;
   /** Optional side-channel; see ShipArtifactCallback in ../parser.ts.
    *  Spelled `| undefined` (rather than `?:`) so the State literal can
@@ -69,6 +73,7 @@ export async function* parseV1(
     roundsClosed: 0,
     shipSeen: false,
     designerArtifactInRound1: false,
+    roundMustFixes: new Map(),
     lastAdvance: 0,
     onArtifact: opts.onArtifact,
   };
@@ -144,6 +149,7 @@ function* drain(state: State): Generator<PanelEvent> {
       }
       const a = parseAttrs(roundMatch[1] ?? '');
       state.currentRound = Number(a['n']);
+      state.roundMustFixes.clear();
       cursor += roundMatch[0].length;
       state.lastAdvance = state.consumed + cursor;
       continue;
@@ -277,6 +283,7 @@ function* drain(state: State): Generator<PanelEvent> {
       const attrs = parseAttrs(slice.slice('<ROUND_END'.length, headEnd));
       const inner = slice.slice(headEnd + 1, closeIdx);
       const reason = (inner.match(/<REASON>([\s\S]*?)<\/REASON>/)?.[1] ?? '').trim();
+      const decision = attrs['decision'] === 'ship' ? 'ship' : 'continue';
 
       // The wire protocol (spec § Wire protocol parser invariants) requires the
       // designer to emit exactly one <ARTIFACT> in round 1. Subsequent rounds may
@@ -289,13 +296,22 @@ function* drain(state: State): Generator<PanelEvent> {
         );
       }
 
+      if (decision === 'continue' && !hasRequiredDebateDisagreement(state.roundMustFixes)) {
+        yield {
+          type: 'parser_warning',
+          runId: state.runId,
+          kind: 'weak_debate',
+          position: state.consumed + cursor,
+        };
+      }
+
       yield {
         type: 'round_end',
         runId: state.runId,
         round: Number(attrs['n']),
         composite: Number(attrs['composite'] ?? '0'),
         mustFix: Number(attrs['must_fix'] ?? '0'),
-        decision: attrs['decision'] === 'ship' ? 'ship' : 'continue',
+        decision,
         reason,
       };
       state.currentRound = null;
@@ -519,12 +535,16 @@ function* emitInner(
   MUST_FIX_RE.lastIndex = 0;
   let mf: RegExpExecArray | null;
   while ((mf = MUST_FIX_RE.exec(inner)) !== null) {
+    const text = (mf[1] ?? '').trim();
+    const roleMustFixes = state.roundMustFixes.get(role) ?? [];
+    roleMustFixes.push(text);
+    state.roundMustFixes.set(role, roleMustFixes);
     yield {
       type: 'panelist_must_fix',
       runId: state.runId,
       round,
       role,
-      text: (mf[1] ?? '').trim(),
+      text,
     };
   }
 
@@ -533,6 +553,30 @@ function* emitInner(
   if (role === 'designer' && round === 1 && /<ARTIFACT\b/.test(inner)) {
     state.designerArtifactInRound1 = true;
   }
+}
+
+function normalizeMustFixTarget(text: string): string {
+  return text.trim().toLocaleLowerCase().replace(/\s+/gu, ' ');
+}
+
+function hasRequiredDebateDisagreement(
+  roundMustFixes: ReadonlyMap<PanelistRole, readonly string[]>,
+): boolean {
+  const criticTargets = new Set(
+    (roundMustFixes.get('critic') ?? [])
+      .map(normalizeMustFixTarget)
+      .filter(Boolean),
+  );
+  const specialistTargets = new Set(
+    (['brand', 'a11y', 'copy'] as const)
+      .flatMap((role) => roundMustFixes.get(role) ?? [])
+      .map(normalizeMustFixTarget)
+      .filter(Boolean),
+  );
+  return criticTargets.size > 0
+    && specialistTargets.size > 0
+    && (criticTargets.size !== specialistTargets.size
+      || [...criticTargets].some((target) => !specialistTargets.has(target)));
 }
 
 function parseAttrs(s: string): Record<string, string> {

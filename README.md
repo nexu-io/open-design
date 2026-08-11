@@ -341,7 +341,7 @@ cd open-design/deploy
 cp .env.example .env
 echo "OD_API_TOKEN=$(openssl rand -hex 32)" >> .env
 docker compose up -d
-# open http://localhost:7456
+# open http://127.0.0.1:7456
 ```
 
 If the browser asks for credentials, use `open-design` as the username and the

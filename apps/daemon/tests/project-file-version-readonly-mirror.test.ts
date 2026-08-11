@@ -44,6 +44,7 @@ import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { startServer } from '../src/server.js';
+import { openDatabase, updateWorkspaceProject } from '../src/db.js';
 
 const WORKSPACE_ID = 'ws-readonly-mirror';
 const OWNER_MEMBER_ID = 'member-owner-readonly-mirror';
@@ -89,10 +90,9 @@ describe('version history on a readonly shared mirror', () => {
   }
 
   /**
-   * A team-bound project owned by `OWNER_MEMBER_ID`, seeded only through the
-   * production create endpoint so the workspace binding is the one the daemon
-   * writes itself (`created_by_workspace_member_id = OWNER_MEMBER_ID`) rather
-   * than a row a test reached into sqlite to forge.
+   * A team-bound project owned by `OWNER_MEMBER_ID`. The production create
+   * endpoint establishes the exact owner binding first; the fixture then marks
+   * that same row as a pulled Team mirror without invoking the remote hub.
    *
    * Content is then written straight to the project directory instead of
    * through the file-write API, because that API bootstraps a version of its
@@ -109,6 +109,15 @@ describe('version history on a readonly shared mirror', () => {
     });
     expect(created.status).toBe(200);
     projectsToClean.push(id);
+
+    const dataDir = process.env.OD_DATA_DIR;
+    if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+    const db = openDatabase(projectsRoot(), { dataDir });
+    expect(updateWorkspaceProject(db, WORKSPACE_ID, id, {
+      visibility: 'team',
+      syncState: 'synced',
+      resourceHubResourceId: `hub-${id}`,
+    })).not.toBeNull();
 
     const dir = path.join(projectsRoot(), id);
     await fs.mkdir(dir, { recursive: true });

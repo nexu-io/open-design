@@ -102,6 +102,22 @@ describe('agent runtime tool environment', () => {
     expect(env.OD_TOOL_TOKEN).toBeUndefined();
   });
 
+  it('does not expose the broad daemon API token to run-scoped agent sessions', () => {
+    const env = createAgentRuntimeEnv(
+      {
+        PATH: '/bin',
+        OD_API_TOKEN: 'broad-daemon-token',
+        Od_Api_Token: 'windows-cased-broad-token',
+      },
+      'http://100.64.0.10:7456',
+      { token: 'run-scoped-token' },
+      '/opt/open-design/bin/node',
+    );
+
+    expect(env.OD_TOOL_TOKEN).toBe('run-scoped-token');
+    expect(Object.keys(env).some((key) => key.toUpperCase() === 'OD_API_TOKEN')).toBe(false);
+  });
+
   it('pins the daemon runtime data dir into agent sessions', () => {
     const env = createAgentRuntimeEnv(
       { PATH: '/bin' },

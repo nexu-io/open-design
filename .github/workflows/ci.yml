@@ -326,25 +326,34 @@ jobs:
             fi
           fi
 
-      - name: Probe watcher environment
-        if: ${{ needs.scopes.outputs.daemon_tests_required == 'true' }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          node -e "const os=require('node:os'); console.log(JSON.stringify({node:process.version, platform:process.platform, arch:process.arch, tmpdir:os.tmpdir(), env:{NODE_ENV:process.env.NODE_ENV, VITEST:process.env.VITEST, CHOKIDAR_USEPOLLING:process.env.CHOKIDAR_USEPOLLING, CHOKIDAR_INTERVAL:process.env.CHOKIDAR_INTERVAL}}, null, 2))"
-          df -T /tmp "$RUNNER_TEMP" "$GITHUB_WORKSPACE" || true
-          mount | grep -E ' /tmp |/home/runner|_work' || true
-          cat /proc/sys/fs/inotify/max_user_watches /proc/sys/fs/inotify/max_user_instances || true
 
-      - name: Prebuild daemon entrypoint declarations
-        if: ${{ needs.scopes.outputs.daemon_tests_required == 'true' }}
-        run: pnpm --filter @open-design/daemon build
+  daemon_unit_tests:
+    name: Daemon tests (${{ matrix.shard }}/4)
+    needs: [scopes, runners]
+    if: ${{ needs.scopes.outputs.daemon_tests_required == 'true' }}
+    runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).workspace_unit }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
 
-      - name: Daemon workspace tests
-        if: ${{ needs.scopes.outputs.daemon_tests_required == 'true' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Configure CI parallelism
+        uses: ./.github/actions/configure-ci-parallelism
+
+      - name: Setup workspace
+        uses: ./.github/actions/setup-workspace
+        with:
+          runner-labels: ${{ toJSON(fromJSON(needs.runners.outputs.runs_on).workspace_unit) }}
+
+      - name: Run daemon test shard
         env:
           OD_WATCHER_TEST_DEBUG: "1"
-        run: pnpm --filter @open-design/daemon exec vitest run -c vitest.config.ts tests/project-watchers.test.ts
+        run: pnpm --filter @open-design/daemon test --shard=${{ matrix.shard }}/4
 
   windows_tools_pack_payload_tests:
     name: Windows tools-pack payload tests
@@ -648,6 +657,7 @@ jobs:
       - static_gate
       - preflight
       - workspace_unit_tests
+      - daemon_unit_tests
       - windows_tools_pack_payload_tests
       - web_workspace_tests
       - e2e_vitest
@@ -694,6 +704,7 @@ jobs:
               ["scopes", "static_gate"]
               + when($out.run_preflight == "true"; ["preflight"])
               + when($out.run_workspace_unit_tests == "true"; ["workspace_unit_tests"])
+              + when($out.daemon_tests_required == "true"; ["daemon_unit_tests"])
               + when($out.run_windows_tools_pack_payload_tests == "true"; ["windows_tools_pack_payload_tests"])
               + when($out.run_web_workspace_tests == "true"; ["web_workspace_tests"])
               + when($out.run_e2e_vitest == "true"; ["e2e_vitest"])

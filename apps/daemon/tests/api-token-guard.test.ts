@@ -203,4 +203,55 @@ describe('browser authentication for non-loopback Docker peers', () => {
       );
     }
   });
+
+  it('keeps the documented Docker browser host separate from powered previews', async () => {
+    if (shutdown) await Promise.resolve(shutdown());
+    if (server) await new Promise<void>((resolve) => server!.close(() => resolve()));
+    server = undefined;
+    shutdown = undefined;
+    if (!staticDir) throw new Error('Expected Docker browser static fixture directory');
+
+    const started = (await startServer({
+      port: 0,
+      host: '0.0.0.0',
+      returnServer: true,
+      staticDir,
+    })) as {
+      url: string;
+      server: http.Server;
+      shutdown?: () => Promise<void> | void;
+    };
+    baseUrl = started.url;
+    server = started.server;
+    shutdown = started.shutdown;
+    makeConnectionsAppearNonLoopback(server);
+
+    const port = new URL(baseUrl).port;
+    const credentials = Buffer.from('open-design:secret-test-token').toString('base64');
+    const browserHeaders = {
+      authorization: `Basic ${credentials}`,
+      'sec-fetch-dest': 'empty',
+      'sec-fetch-mode': 'cors',
+      'sec-fetch-site': 'same-origin',
+    };
+
+    const documentedHost = await fetch(`${baseUrl}/api/plugins`, {
+      headers: {
+        ...browserHeaders,
+        host: `127.0.0.1:${port}`,
+      },
+    });
+    expect(documentedHost.status).toBe(200);
+
+    const poweredPreviewHost = await fetch(`${baseUrl}/api/plugins`, {
+      headers: {
+        ...browserHeaders,
+        host: `localhost:${port}`,
+      },
+    });
+    expect(poweredPreviewHost.status).toBe(403);
+    await expect(poweredPreviewHost.json()).resolves.toEqual({
+      error: 'Powered preview origin cannot access this API route',
+    });
+  });
 });

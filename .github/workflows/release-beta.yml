@@ -194,6 +194,11 @@ on:
         required: false
         type: boolean
         default: false
+      promote:
+        description: "Promote this build to beta/latest after publishing versioned platform artifacts."
+        required: false
+        type: boolean
+        default: true
       release_version:
         required: false
         type: string
@@ -285,16 +290,22 @@ on:
         value: ${{ jobs.metadata.outputs.previous_commit }}
       release_state:
         description: "complete | partial | failed."
-        value: ${{ jobs.publish.outputs.release_state }}
+        value: ${{ jobs.publish.outputs.release_state || (jobs.metadata.outputs.promote == 'false' && 'partial') }}
       version_metadata_url:
         description: "Public URL of this build's version metadata.json."
         value: ${{ jobs.publish.outputs.version_metadata_url }}
       mac_arm64_url:
         description: "macOS arm64 dmg download URL."
-        value: ${{ jobs.publish.outputs.mac_arm64_url }}
+        value: ${{ jobs.publish.outputs.mac_arm64_url || jobs.build_mac_arm64.outputs.mac_arm64_url }}
       win_x64_url:
         description: "Windows x64 installer download URL."
-        value: ${{ jobs.publish.outputs.win_x64_url }}
+        value: ${{ jobs.publish.outputs.win_x64_url || jobs.build_win_x64.outputs.win_x64_url }}
+      mac_arm64_smoke_result:
+        description: "macOS arm64 packaged smoke outcome; advisory to publication."
+        value: ${{ jobs.build_mac_arm64.outputs.smoke_result }}
+      win_x64_smoke_result:
+        description: "Windows x64 packaged smoke outcome; advisory to publication."
+        value: ${{ jobs.build_win_x64.outputs.smoke_result }}
       mac_x64_url:
         description: "macOS x64 dmg download URL."
         value: ${{ jobs.publish.outputs.mac_x64_url }}
@@ -330,7 +341,7 @@ env:
   #
   # Secrets read here: VELA_WEB_URL_FEATURE_TEST, VELA_WEB_URL_TEST.
   OD_VELA_WEB_URL: ${{ inputs.amr_profile == 'feature-test' && secrets.VELA_WEB_URL_FEATURE_TEST || inputs.amr_profile == 'test' && secrets.VELA_WEB_URL_TEST || '' }}
-  RELEASE_BRANCH: ${{ github.ref_name }}
+  RELEASE_BRANCH: ${{ inputs.ref != '' && inputs.ref || github.ref_name }}
   RELEASE_REPOSITORY: ${{ github.repository }}
   RELEASE_RUN_ATTEMPT: ${{ github.run_attempt }}
   RELEASE_RUN_ID: ${{ github.run_id }}
@@ -348,9 +359,10 @@ jobs:
       asset_version_suffix: ${{ steps.beta.outputs.asset_version_suffix }}
       base_version: ${{ steps.beta.outputs.base_version }}
       beta_version: ${{ inputs.release_version != '' && inputs.release_version || steps.beta.outputs.beta_version }}
-      branch: ${{ steps.beta.outputs.branch }}
-      commit: ${{ steps.beta.outputs.commit }}
+      branch: ${{ steps.identity.outputs.branch }}
+      commit: ${{ steps.identity.outputs.commit }}
       previous_commit: ${{ steps.prev.outputs.previous_commit }}
+      promote: ${{ inputs.promote }}
       release_name: ${{ steps.beta.outputs.release_name }}
       state_source: ${{ steps.beta.outputs.state_source }}
     steps:
@@ -373,8 +385,33 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Resolve built commit
-        run: echo "BUILT_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+      - name: Resolve built identity
+        id: identity
+        env:
+          BUILD_REF: ${{ inputs.ref != '' && inputs.ref || github.ref_name }}
+        run: |
+          set -euo pipefail
+          built_sha="$(git rev-parse HEAD)"
+          echo "BUILT_SHA=$built_sha" >> "$GITHUB_ENV"
+          {
+            echo "branch=$BUILD_REF"
+            echo "commit=$built_sha"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Validate shared beta publisher
+        if: ${{ inputs.publish }}
+        run: |
+          set -euo pipefail
+          built_sha="$(git rev-parse HEAD)"
+          main_sha="$(git ls-remote origin refs/heads/main | awk '{print $1}')"
+          if [ -z "$main_sha" ]; then
+            echo "Could not resolve the current main commit; refusing shared beta publication." >&2
+            exit 1
+          fi
+          if [ "$built_sha" != "$main_sha" ]; then
+            echo "Shared beta publication is restricted to the current main commit ($main_sha); got $built_sha. Re-run this ref with publish=false for dogfood artifacts." >&2
+            exit 1
+          fi
 
       - name: Capture previous beta commit
         id: prev
@@ -427,6 +464,9 @@ jobs:
     needs: metadata
     if: ${{ inputs.enable_mac_arm64 }}
     runs-on: macos-14
+    outputs:
+      mac_arm64_url: ${{ steps.mac_arm64_platform_outputs.outputs.dmg_url }}
+      smoke_result: ${{ steps.mac_arm64_smoke.outcome }}
     env:
       RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
     steps:
@@ -660,7 +700,9 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Smoke beta mac_arm64 packaged runtime
+        id: mac_arm64_smoke
         if: ${{ inputs.mac_arm64_smoke_mode != 'skip' }}
+        continue-on-error: true
         working-directory: e2e
         env:
           OD_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}/release-build/mac_arm64/build.json
@@ -767,6 +809,16 @@ jobs:
           RELEASE_TARGET: mac_arm64
           RELEASE_VERSION: ${{ needs.metadata.outputs.beta_version }}
         run: pnpm exec tools-release publish-platform
+
+      - name: Read mac_arm64 platform outputs
+        id: mac_arm64_platform_outputs
+        if: ${{ inputs.publish }}
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require("fs");
+            const outputs = JSON.parse(fs.readFileSync(`${process.env.RUNNER_TEMP}/release-platform-outputs/mac_arm64.json`, "utf8"));
+            for (const [key, value] of Object.entries(outputs)) core.setOutput(key, String(value));
 
       - name: Upload mac_arm64 publish manifest
         if: ${{ inputs.publish }}
@@ -1049,6 +1101,9 @@ jobs:
     needs: metadata
     if: ${{ inputs.enable_win_x64 }}
     runs-on: windows-latest
+    outputs:
+      smoke_result: ${{ steps.win_x64_smoke.outcome }}
+      win_x64_url: ${{ steps.win_x64_platform_outputs.outputs.installer_url }}
     env:
       RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
     steps:
@@ -1232,7 +1287,9 @@ jobs:
           pnpm.cmd exec tools-pack win validate-payload --namespace release-beta-win --payload-path $updateBuild.payloadPath --expected-version $updateVersion --json
 
       - name: Smoke beta win_x64 packaged runtime
+        id: win_x64_smoke
         if: ${{ inputs.win_x64_smoke_mode != 'skip' }}
+        continue-on-error: true
         working-directory: e2e
         env:
           OD_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}\release-build\win_x64\build.json
@@ -1331,6 +1388,16 @@ jobs:
           RELEASE_TARGET: win_x64
           RELEASE_VERSION: ${{ needs.metadata.outputs.beta_version }}
         run: pnpm exec tools-release publish-platform
+
+      - name: Read win_x64 platform outputs
+        id: win_x64_platform_outputs
+        if: ${{ inputs.publish }}
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require("fs");
+            const outputs = JSON.parse(fs.readFileSync(`${process.env.RUNNER_TEMP}/release-platform-outputs/win_x64.json`, "utf8"));
+            for (const [key, value] of Object.entries(outputs)) core.setOutput(key, String(value));
 
       - name: Upload win_x64 publish manifest
         if: ${{ inputs.publish }}
@@ -1466,6 +1533,7 @@ jobs:
         always() &&
         !cancelled() &&
         inputs.publish &&
+        inputs.promote &&
         needs.metadata.result == 'success' &&
         (inputs.enable_mac_arm64 || inputs.enable_win_x64 || inputs.enable_mac_x64 || inputs.enable_linux_x64) &&
         (!inputs.enable_mac_arm64 || needs.build_mac_arm64.result == 'success') &&

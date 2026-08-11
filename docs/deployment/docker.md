@@ -81,7 +81,7 @@ Success looks like:
 ## Step 6: Open Open Design in Your Browser
 
 Open:
-- `http://localhost:7456/`
+- `http://127.0.0.1:7456/`
 
 If the browser displays a sign-in dialog, enter `open-design` as the username
 and the `OD_API_TOKEN` value from `deploy/.env` as the password. You should then

@@ -134,6 +134,12 @@ export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | '
   verifyWorkspaceReadAuthority?: VerifyWorkspaceRequestAuthority;
   /** Authoritative verifier for every Workspace-bound project mutation. */
   verifyWorkspaceRequestAuthority?: VerifyWorkspaceRequestAuthority;
+  /**
+   * Cached-only authority verifier for deleting a personal, local-only
+   * project. It must never start network I/O; all other mutations continue
+   * through `verifyWorkspaceRequestAuthority`.
+   */
+  verifyPersonalProjectDeleteLeaseAuthority?: VerifyWorkspaceRequestAuthority;
   /** Shared fresh exact authority gate for all project data-plane routes. */
   authorizeProjectRequest?: AuthorizeProjectRequest;
   /** Startup-hydrated O(1) quarantine lookup for stale Team mirrors. */
@@ -298,10 +304,11 @@ function projectAccess(
 
 /**
  * Build the project-flavored authoritative mutation gate. Every bound project
- * requires an exact Workspace/member pair and a fresh directory-backed
- * verifier result; request role/permission claims and daemon-global
- * active/current/last-known state are never authority. The exported factory is
- * shared with run/chat routes so all project mutations fail closed identically.
+ * requires an exact Workspace/member pair; request role/permission claims and
+ * daemon-global active/current/last-known state are never authority. Mutations
+ * use fresh directory authority except the narrow personal local-only delete
+ * lease below. The exported factory is shared with run/chat routes so all
+ * project mutations fail closed identically.
  */
 /**
  * The non-rejecting counterpart of `createEnforceWorkspaceProjectMutation`,
@@ -332,6 +339,7 @@ export function createWorkspaceProjectWriteAuthorityCheck(
 
 export function createEnforceWorkspaceProjectMutation(
   verifyWorkspaceRequestAuthority?: VerifyWorkspaceRequestAuthority,
+  verifyPersonalProjectDeleteLeaseAuthority?: VerifyWorkspaceRequestAuthority,
 ) {
   return async function enforceWorkspaceProjectMutation(
     req: any,
@@ -354,8 +362,37 @@ export function createEnforceWorkspaceProjectMutation(
       projectId,
       capability,
       verifyWorkspaceRequestAuthority,
+      capability === 'delete' && verifyPersonalProjectDeleteLeaseAuthority
+        ? {
+            authorityLease: {
+              verify: verifyPersonalProjectDeleteLeaseAuthority,
+              allow: personalLocalProjectDeleteLeaseAllowed,
+            },
+          }
+        : {},
     );
   };
+}
+
+/**
+ * A short-lived directory lease may authorize this one local-only cleanup.
+ * Hub-backed or Team resources, stale ownership, locked membership and every
+ * non-delete mutation still require a fresh control-plane read.
+ */
+export function personalLocalProjectDeleteLeaseAllowed(
+  row: WorkspaceProjectAccessInput,
+  context: WorkspaceCollabContext,
+): boolean {
+  return context.workspaceType === 'personal'
+    && context.memberStatus === 'active'
+    && context.lifecycleState === 'active'
+    && context.permissions.canWriteSyncedFiles
+    && row.workspaceId === context.workspaceId
+    && row.visibility === 'personal'
+    && row.resourceState === 'active'
+    && row.createdByWorkspaceMemberId === context.workspaceMemberId
+    && row.syncState === 'local_only'
+    && !row.resourceHubResourceId;
 }
 
 function projectDetailResolvedDir(
@@ -1699,6 +1736,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
   const { collabSync, teamProjectCatalog, workspaceTypes } = ctx;
   const enforceWorkspaceProjectMutation = createEnforceWorkspaceProjectMutation(
     ctx.verifyWorkspaceRequestAuthority,
+    ctx.verifyPersonalProjectDeleteLeaseAuthority,
   );
   const verifyWorkspaceProjectReadAuthority =
     ctx.verifyWorkspaceReadAuthority ?? ctx.verifyWorkspaceRequestAuthority;

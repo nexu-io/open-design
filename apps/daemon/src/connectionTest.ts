@@ -54,6 +54,7 @@ import {
   buildLegacyMaxTokensParam,
   buildMaxCompletionTokensParam,
   buildOpenAIChatTokenParam,
+  isAzureOpenAIHostname,
   isUnsupportedMaxTokensError,
 } from './integrations/openai-chat-token-params.js';
 import { aihubmixHeaders } from './integrations/aihubmix.js';
@@ -1192,6 +1193,8 @@ function openAIChatCompletionsProviderCall(
   apiKey: string,
   model: string,
 ): ProviderCallShape {
+  const messages = [{ role: 'user', content: SMOKE_PROMPT }];
+  const isAzureHosted = isAzureOpenAIHostname(new URL(baseUrl).hostname);
   return {
     url: appendVersionedApiPath(baseUrl, '/chat/completions'),
     headers: {
@@ -1205,9 +1208,17 @@ function openAIChatCompletionsProviderCall(
     body: {
       model,
       ...buildOpenAIChatTokenParam(model, PROVIDER_MAX_TOKENS),
-      messages: [{ role: 'user', content: SMOKE_PROMPT }],
+      messages,
       stream: false,
     },
+    ...(isAzureHosted ? {
+      retryBodyOnUnsupportedMaxTokens: {
+        model,
+        ...buildMaxCompletionTokensParam(PROVIDER_MAX_TOKENS),
+        messages,
+        stream: false,
+      },
+    } : {}),
     extractText: extractOpenAIMessageText,
   };
 }

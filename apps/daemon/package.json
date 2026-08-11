@@ -29,6 +29,7 @@
     "daemon": "pnpm run build && node dist/cli.js --no-open",
     "dev": "pnpm run build && node dist/cli.js --no-open",
     "start": "pnpm run build && node dist/cli.js",
+    "pretest": "pnpm --filter '@open-design/daemon^...' --workspace-concurrency=4 --if-present run build",
     "test": "vitest run -c vitest.config.ts",
     "typecheck": "pnpm --filter @open-design/contracts build && pnpm --filter @open-design/registry-protocol build && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
   },

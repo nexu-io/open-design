@@ -43,6 +43,27 @@ const DECK_PLUGIN = {
   },
 } as const;
 
+const PROTOTYPE_PLUGIN = {
+  ...DECK_PLUGIN,
+  id: 'mapping-product-prototype',
+  title: 'Mapping Product Prototype',
+  source: '/tmp/mapping-product-prototype',
+  fsPath: '/tmp/mapping-product-prototype',
+  manifest: {
+    ...DECK_PLUGIN.manifest,
+    name: 'mapping-product-prototype',
+    title: 'Mapping Product Prototype',
+    description: 'A high-fidelity product prototype.',
+    tags: ['prototype'],
+    od: {
+      ...DECK_PLUGIN.manifest.od,
+      mode: 'prototype',
+      category: 'product-prototype',
+      useCase: { query: { en: 'Create a high-fidelity product prototype.' } },
+    },
+  },
+} as const;
+
 function makeApplyResult(pluginId: string) {
   return {
     ok: true,
@@ -77,7 +98,7 @@ function makeApplyResult(pluginId: string) {
 
 async function routeMappingFixtures(page: Page) {
   await page.route('**/api/plugins', async (route) => {
-    await route.fulfill({ json: { plugins: [DECK_PLUGIN] } });
+    await route.fulfill({ json: { plugins: [DECK_PLUGIN, PROTOTYPE_PLUGIN] } });
   });
   await page.route(`**/api/plugins/${DECK_PLUGIN.id}/preview`, async (route) => {
     await route.fulfill({
@@ -154,4 +175,17 @@ test('[P1] community Use hands into Home and the active template chip opens the 
   await page.getByRole('button', { name: 'Close preview' }).click();
   await expect(page.locator('.community-template-preview')).toHaveCount(0);
   await expect(page.getByTestId('home-hero-active-plugin')).toBeVisible();
+});
+
+test('[P1] community category tabs filter the current template catalog', async ({ page }) => {
+  await gotoCommunity(page);
+
+  const cards = page.locator('article.community-template-card');
+  await expect(cards).toHaveCount(1);
+  await expect(cards.locator('.community-template-card__foot')).toContainText('Slides');
+
+  await page.getByRole('button', { name: 'Prototype', exact: true }).click();
+
+  await expect(cards).toHaveCount(1);
+  await expect(cards.locator('.community-template-card__foot')).toContainText('Prototype');
 });

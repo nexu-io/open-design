@@ -34,7 +34,7 @@ OPEN_DESIGN_IMAGE=ghcr.io/nexu-io/od:latest docker compose up -d --no-build
 Use `ghcr.io/nexu-io/od:latest` for the latest stable image, or
 `ghcr.io/nexu-io/od:<version>` to pin a supported release.
 
-Open `http://localhost:7456`. When Docker's bridge makes the browser appear as a
+Open `http://127.0.0.1:7456`. When Docker's bridge makes the browser appear as a
 non-loopback peer, the browser displays its native sign-in dialog. Enter
 `open-design` as the username and the `OD_API_TOKEN` value from `.env` as the
 password. The browser reuses those credentials for same-origin API requests;
