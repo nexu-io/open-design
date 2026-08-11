@@ -5,6 +5,7 @@ import {
   STANDALONE_HANDOFF_SCHEMA_VERSION,
   STANDALONE_PROTOCOL_VERSION,
   STANDALONE_SHELL_CAPABILITIES,
+  STANDALONE_UPDATER_SCHEMA_VERSION,
   compareStandaloneVersions,
   createStandaloneHandoffEnvelope,
   validateStandaloneHandoffRequest,
@@ -15,6 +16,11 @@ import {
   validateStandaloneShellCapabilityResult,
   validateStandaloneShellCapabilityInput,
   validateStandaloneShellCapabilityOutput,
+  validateStandaloneUpdaterActionRequest,
+  validateStandaloneUpdaterActionResult,
+  validateStandaloneUpdaterProviderDescriptor,
+  validateStandaloneUpdaterSnapshot,
+  validateStandaloneUpdaterWaitRequest,
   type StandaloneHandoffRequest,
 } from "../src/index.js";
 
@@ -225,5 +231,134 @@ describe("Standalone bootloader protocol", () => {
       handoff,
       requestId: command.requestId,
     })).toThrow(/requestId/);
+  });
+});
+
+describe("Standalone updater provider protocol", () => {
+  const handoff = request().handoff;
+  const standaloneProvider = {
+    handoff,
+    incarnation: "standalone-update-1",
+    owner: "standalone",
+    providerId: "standalone-update",
+    schemaVersion: STANDALONE_UPDATER_SCHEMA_VERSION,
+  } as const;
+  const shellProvider = {
+    attachmentId: "electron-a",
+    handoff,
+    hostScope: "electron-updater-a",
+    incarnation: "electron-update-1",
+    owner: "shell",
+    providerId: "electron-update",
+    schemaVersion: STANDALONE_UPDATER_SCHEMA_VERSION,
+  } as const;
+
+  it("separates namespace-shared Standalone and attachment-local Shell providers", () => {
+    expect(validateStandaloneUpdaterProviderDescriptor(standaloneProvider)).toEqual(standaloneProvider);
+    expect(validateStandaloneUpdaterProviderDescriptor(shellProvider)).toEqual(shellProvider);
+    expect(() => validateStandaloneUpdaterProviderDescriptor({
+      ...shellProvider,
+      attachmentId: undefined,
+    })).toThrow(/attachmentId/u);
+    expect(() => validateStandaloneUpdaterProviderDescriptor({
+      ...standaloneProvider,
+      attachmentId: "electron-a",
+    })).toThrow(/attachment/u);
+    expect(() => validateStandaloneUpdaterProviderDescriptor({
+      ...shellProvider,
+      installerPath: "/private/provider-state/OpenDesign.dmg",
+    })).toThrow(/unsupported fields/u);
+  });
+
+  it("projects progress and opaque presentation without exposing action semantics", () => {
+    const snapshot = validateStandaloneUpdaterSnapshot({
+      actions: [{
+        emphasis: "primary",
+        id: "apply-current-update",
+        label: "Install and restart",
+      }],
+      presentation: {
+        detail: "Open Design 0.19.1 is ready.",
+        title: "Update ready",
+      },
+      progress: { completed: 40, total: 100 },
+      provider: standaloneProvider,
+      revision: 4,
+      schemaVersion: STANDALONE_UPDATER_SCHEMA_VERSION,
+      state: "ready",
+    }, { provider: standaloneProvider });
+
+    expect(snapshot.actions[0]).toEqual({
+      emphasis: "primary",
+      id: "apply-current-update",
+      label: "Install and restart",
+    });
+    expect(snapshot.progress).toEqual({ completed: 40, total: 100 });
+    expect(snapshot).not.toHaveProperty("restart");
+    expect(snapshot).not.toHaveProperty("installerPath");
+  });
+
+  it("bounds wait-for-change and fences actions to one provider incarnation", () => {
+    expect(validateStandaloneUpdaterWaitRequest({
+      afterRevision: 4,
+      provider: shellProvider,
+      schemaVersion: STANDALONE_UPDATER_SCHEMA_VERSION,
+      timeoutMs: 30_000,
+    }, { provider: shellProvider })).toMatchObject({ afterRevision: 4, timeoutMs: 30_000 });
+    expect(() => validateStandaloneUpdaterWaitRequest({
+      afterRevision: 4,
+      provider: shellProvider,
+      schemaVersion: STANDALONE_UPDATER_SCHEMA_VERSION,
+      timeoutMs: 30_001,
+    })).toThrow(/timeoutMs/u);
+
+    const action = validateStandaloneUpdaterActionRequest({
+      actionId: "open-installer",
+      provider: shellProvider,
+      requestId: "update-action-1",
+      schemaVersion: STANDALONE_UPDATER_SCHEMA_VERSION,
+    }, { provider: shellProvider });
+    expect(validateStandaloneUpdaterActionResult({
+      actionId: action.actionId,
+      operationId: "installer-handoff-1",
+      outcome: "accepted",
+      provider: shellProvider,
+      requestId: action.requestId,
+      schemaVersion: STANDALONE_UPDATER_SCHEMA_VERSION,
+    }, {
+      actionId: action.actionId,
+      provider: shellProvider,
+      requestId: action.requestId,
+    })).toMatchObject({ outcome: "accepted", operationId: "installer-handoff-1" });
+    expect(() => validateStandaloneUpdaterActionResult({
+      actionId: action.actionId,
+      outcome: "unsupported",
+      provider: { ...shellProvider, incarnation: "electron-update-2" },
+      requestId: action.requestId,
+      schemaVersion: STANDALONE_UPDATER_SCHEMA_VERSION,
+    }, {
+      actionId: action.actionId,
+      provider: shellProvider,
+      requestId: action.requestId,
+    })).toThrow(/provider/u);
+  });
+
+  it("treats handed-off as terminal after an accepted destructive action", () => {
+    expect(validateStandaloneUpdaterSnapshot({
+      actions: [],
+      presentation: { title: "Installer opened" },
+      provider: shellProvider,
+      revision: 5,
+      schemaVersion: STANDALONE_UPDATER_SCHEMA_VERSION,
+      state: "handed-off",
+    })).toMatchObject({ revision: 5, state: "handed-off" });
+    expect(() => validateStandaloneUpdaterSnapshot({
+      actions: [{ emphasis: "primary", id: "again", label: "Open again" }],
+      presentation: { title: "Installer opened" },
+      provider: shellProvider,
+      revision: 5,
+      schemaVersion: STANDALONE_UPDATER_SCHEMA_VERSION,
+      state: "handed-off",
+    })).toThrow(/terminal/u);
   });
 });

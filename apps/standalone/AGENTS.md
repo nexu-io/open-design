@@ -9,6 +9,7 @@ Follow the root `AGENTS.md` and `apps/AGENTS.md` first. This app owns the deploy
 - Composition of Web and daemon adapters into one product closure.
 - Product lifecycle composition over semantic `@open-design/sidecar` launch/connect/stop operations.
 - Product-facing exposure of common readiness, health, diagnostics, and shutdown.
+- Composition of validated Standalone-owned and attachment-local Shell updater provider ports into one opaque projection; it must not interpret provider action ids.
 
 ## Does not own
 

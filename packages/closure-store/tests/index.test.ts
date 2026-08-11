@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { cp, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import {
   CLOSURE_ARCHIVE_ENTRY_PATH,
@@ -18,6 +19,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   commitStoredClosureCandidate,
   commitVerifiedStoredClosureCandidate,
+  consumeClosureDistributionTarget,
   readClosureBindingDescriptor,
   resolveClosureStorePaths,
   resolveClosureStoreVersionPaths,
@@ -27,6 +29,9 @@ import {
 } from "../src/index.js";
 
 const roots: string[] = [];
+const distributionFixturePath = fileURLToPath(
+  new URL("../../closure-proto/fixtures/distribution-v2.json", import.meta.url),
+);
 
 afterEach(async () => {
   await Promise.all(roots.splice(0).map(async (root) => await rm(root, { force: true, recursive: true })));
@@ -105,6 +110,38 @@ describe("Closure store paths", () => {
       .toThrow(/absolute path/u);
     expect(() => resolveClosureStorePaths({ channel: "beta", namespace: "../beta", root: "/tmp/od" }))
       .toThrow();
+  });
+});
+
+describe("layered Closure distribution consumer", () => {
+  it("accepts the producer fixture and resolves only one target's cold-start set", async () => {
+    const fixture = JSON.parse(await readFile(distributionFixturePath, "utf8")) as unknown;
+    const consumed = consumeClosureDistributionTarget(fixture, "win32-x64");
+
+    expect(consumed.manifest.identity).toMatchObject({
+      channel: "beta",
+      digest: "sha256:26da5882716a574c67d2dbcf487488cfcb09ea78a4bc0c3d33c95ead30d132f8",
+      version: "0.19.0-beta.10",
+    });
+    expect(consumed.target.required.runtime.entryPath).toBe("node.exe");
+    expect(consumed.target.resources).toEqual([
+      expect.objectContaining({ id: "design-system-core", title: "Open Design Core" }),
+    ]);
+    expect(consumed.target.requiredBlobs).toHaveLength(4);
+    expect(consumed.target.requiredBlobs.map((blob) => blob.digest)).not.toContain(
+      consumed.target.resources[0]?.blob,
+    );
+  });
+
+  it("rejects a valid-looking graph whose sealed identity was mutated", async () => {
+    const fixture = JSON.parse(await readFile(distributionFixturePath, "utf8")) as {
+      identity: Record<string, unknown>;
+    };
+
+    expect(() => consumeClosureDistributionTarget({
+      ...fixture,
+      identity: { ...fixture.identity, version: "0.19.0-beta.11" },
+    }, "win32-x64")).toThrow(/canonical digest/u);
   });
 });
 

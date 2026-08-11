@@ -1,26 +1,39 @@
+import { createHash } from "node:crypto";
+
 import { describe, expect, it } from "vitest";
 
 import {
   CLOSURE_ARCHIVE_ENTRY_PATH,
   CLOSURE_ARCHIVE_MEDIA_TYPE,
+  CLOSURE_DISTRIBUTION_SCHEMA_VERSION,
   CLOSURE_INVENTORY_SCHEMA_VERSION,
+  CLOSURE_LAUNCHER_ENTRY_PATH,
   CLOSURE_PROTOCOL_VERSION,
   CLOSURE_SCHEMA_VERSION,
   CLOSURE_SIGNATURE_ALGORITHM,
   CLOSURE_SIGNATURE_SCHEMA_VERSION,
   ClosureProtocolError,
   bindClosureCandidateIdentity,
+  createClosureDistributionManifest,
+  resolveClosureDistributionTarget,
   serializeClosureCandidateManifestForSigning,
   validateClosureBindingIdentity,
   validateClosureCandidateIdentity,
   validateClosureCandidateManifest,
   validateClosureCandidateSignature,
+  validateClosureDistributionManifest,
   validateClosureFileInventory,
   type ClosureCandidateIdentity,
   type ClosureCandidateManifest,
+  type ClosureDigest,
+  type ClosureDistributionManifestDraft,
 } from "../src/index.js";
 
 const digest = `sha256:${"a".repeat(64)}` as const;
+
+function digestCanonical(value: string) {
+  return `sha256:${createHash("sha256").update(value).digest("hex")}` as const;
+}
 
 const candidate: ClosureCandidateIdentity = {
   channel: "beta",
@@ -46,6 +59,65 @@ const manifest: ClosureCandidateManifest = {
   },
   identity: candidate,
   schemaVersion: CLOSURE_SCHEMA_VERSION,
+};
+
+const distributionDigests = {
+  body: `sha256:${"b".repeat(64)}`,
+  launcher: `sha256:${"c".repeat(64)}`,
+  nativeMac: `sha256:${"d".repeat(64)}`,
+  nativeWin: `sha256:${"e".repeat(64)}`,
+  resource: `sha256:${"f".repeat(64)}`,
+  runtimeMac: `sha256:${"1".repeat(64)}`,
+  runtimeWin: `sha256:${"2".repeat(64)}`,
+} as const;
+
+function blob(digestValue: ClosureDigest, mediaType = "application/zip") {
+  return {
+    digest: digestValue,
+    mediaType,
+    size: 1024,
+    url: `https://releases.open-design.ai/beta/blobs/${digestValue}`,
+  };
+}
+
+const distributionDraft: ClosureDistributionManifestDraft = {
+  blobs: Object.fromEntries(Object.values(distributionDigests).map((value) => [value, blob(value)])),
+  compatibility: {
+    shell: {
+      electron: { version: { min: "0.19.0-beta.4" } },
+    },
+  },
+  identity: {
+    channel: "beta",
+    protocolVersion: CLOSURE_PROTOCOL_VERSION,
+    version: "0.19.0-beta.10",
+  },
+  required: {
+    body: {
+      blob: distributionDigests.body,
+      entryPath: CLOSURE_ARCHIVE_ENTRY_PATH,
+    },
+    launcher: {
+      blob: distributionDigests.launcher,
+      entryPath: CLOSURE_LAUNCHER_ENTRY_PATH,
+    },
+    targets: {
+      "win32-x64": {
+        native: { blob: distributionDigests.nativeWin },
+        runtime: { blob: distributionDigests.runtimeWin, entryPath: "node.exe" },
+      },
+      "darwin-arm64": {
+        native: { blob: distributionDigests.nativeMac },
+        runtime: { blob: distributionDigests.runtimeMac, entryPath: "bin/node" },
+      },
+    },
+  },
+  resources: [{
+    blob: distributionDigests.resource,
+    id: "design-system-core",
+    title: "Open Design Core",
+  }],
+  schemaVersion: CLOSURE_DISTRIBUTION_SCHEMA_VERSION,
 };
 
 describe("closure candidate identity", () => {
@@ -250,5 +322,104 @@ describe("closure candidate signatures", () => {
       value: "ZmFrZS1zaWduYXR1cmU",
       [field]: value,
     })).toThrow(ClosureProtocolError);
+  });
+});
+
+describe("layered Closure distribution manifest", () => {
+  it("lets an independent producer seal one version across multiple targets", () => {
+    const produced = createClosureDistributionManifest(distributionDraft, digestCanonical);
+
+    expect(produced.identity).toMatchObject({
+      channel: "beta",
+      protocolVersion: CLOSURE_PROTOCOL_VERSION,
+      version: "0.19.0-beta.10",
+    });
+    expect(produced.identity.digest).toMatch(/^sha256:[0-9a-f]{64}$/u);
+    expect(Object.keys(produced.required.targets)).toEqual(["darwin-arm64", "win32-x64"]);
+    expect(validateClosureDistributionManifest(produced, digestCanonical)).toEqual(produced);
+  });
+
+  it("lets a target consumer resolve the complete cold-start set and lazy resources", () => {
+    const produced = createClosureDistributionManifest(distributionDraft, digestCanonical);
+    const target = resolveClosureDistributionTarget(produced, "darwin-arm64");
+
+    expect(target.required).toEqual({
+      body: produced.required.body,
+      launcher: produced.required.launcher,
+      native: produced.required.targets["darwin-arm64"]?.native,
+      runtime: produced.required.targets["darwin-arm64"]?.runtime,
+    });
+    expect(target.resources).toEqual(produced.resources.map((resource) => ({
+      ...resource,
+      artifact: produced.blobs[resource.blob],
+    })));
+    expect(target.requiredBlobs.map((entry) => entry.digest)).toEqual([
+      distributionDigests.body,
+      distributionDigests.launcher,
+      distributionDigests.nativeMac,
+      distributionDigests.runtimeMac,
+    ].sort());
+    expect(target.requiredBlobs.map((entry) => entry.digest)).not.toContain(distributionDigests.resource);
+  });
+
+  it("keeps resource identity content-addressed across release versions", () => {
+    const first = createClosureDistributionManifest(distributionDraft, digestCanonical);
+    const second = createClosureDistributionManifest({
+      ...distributionDraft,
+      identity: { ...distributionDraft.identity, version: "0.19.1-beta.1" },
+    }, digestCanonical);
+
+    expect(first.identity.digest).not.toBe(second.identity.digest);
+    expect(first.resources[0]?.blob).toBe(second.resources[0]?.blob);
+  });
+
+  it("rejects graph drift, dangling blobs and target ambiguity", () => {
+    const produced = createClosureDistributionManifest(distributionDraft, digestCanonical);
+    expect(() => validateClosureDistributionManifest({
+      ...produced,
+      identity: { ...produced.identity, version: "0.19.0-beta.11" },
+    }, digestCanonical)).toThrow(/canonical digest/u);
+    expect(() => createClosureDistributionManifest({
+      ...distributionDraft,
+      required: {
+        ...distributionDraft.required,
+        body: { ...distributionDraft.required.body, blob: `sha256:${"9".repeat(64)}` },
+      },
+    }, digestCanonical)).toThrow(/unknown blob/u);
+    expect(() => resolveClosureDistributionTarget(produced, "darwin-x64")).toThrow(/target/u);
+  });
+
+  it("rejects unused blob mappings and non-canonical entry paths", () => {
+    expect(() => createClosureDistributionManifest({
+      ...distributionDraft,
+      blobs: {
+        ...distributionDraft.blobs,
+        [`sha256:${"3".repeat(64)}`]: blob(`sha256:${"3".repeat(64)}`),
+      },
+    }, digestCanonical)).toThrow(/unused blob/u);
+    expect(() => createClosureDistributionManifest({
+      ...distributionDraft,
+      required: {
+        ...distributionDraft.required,
+        launcher: { ...distributionDraft.required.launcher, entryPath: "standalone-launcher.mjs" },
+      },
+    }, digestCanonical)).toThrow(/launcher entry path/u);
+  });
+
+  it("rejects unknown fields instead of silently dropping local or Shell-owned state", () => {
+    expect(() => createClosureDistributionManifest({
+      ...distributionDraft,
+      shellBytes: { electron: "not-part-of-closure" },
+    }, digestCanonical)).toThrow(/unsupported fields: shellBytes/u);
+    expect(() => createClosureDistributionManifest({
+      ...distributionDraft,
+      required: {
+        ...distributionDraft.required,
+        launcher: {
+          ...distributionDraft.required.launcher,
+          namespace: "release-beta",
+        },
+      },
+    }, digestCanonical)).toThrow(/unsupported fields: namespace/u);
   });
 });

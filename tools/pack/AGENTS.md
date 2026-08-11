@@ -7,7 +7,7 @@ Read `tools/pack/CACHE.md` before changing any build-cache node key, adding a ca
 ## Owns
 
 - Local packaging orchestration for packaged Open Design artifacts.
-- Namespace-neutral Standalone Closure archive construction for platform-native Web + daemon bytes, manifest, inventory, and provenance.
+- Namespace-neutral Standalone Closure construction, including the canonical version-wide distribution manifest and its target-specific required component sets.
 - mac build/install/start/stop/logs/uninstall/cleanup smoke commands.
 - Windows NSIS build/install/start/stop/logs/uninstall/cleanup/list/reset smoke commands.
 - Windows registry observation/cleanup must go through `reg.exe` and stay scoped to entries matching the namespace install/uninstaller paths.
@@ -29,7 +29,8 @@ Read `tools/pack/CACHE.md` before changing any build-cache node key, adding a ca
 - Public release artifacts must use channel-specific app identity: stable uses `Open Design`, beta uses `Open Design Beta`, prerelease uses `Open Design Prerelease`, and preview uses `Open Design Preview`. Local tools-pack installs may still use namespace-scoped install paths only as a developer multi-instance validation convention.
 - Do not let namespace-named `.app` installs change data/log/runtime/cache path conventions.
 - `--dir` controls tools-pack output/runtime/install validation roots only. It must not be treated as the cache root. The default workspace tools-pack cache is the hot path. `--cache-dir` is a special-case escape hatch for cache isolation or cold-cache validation, not a routine QA/build parameter.
-- `tools-pack closure build` is namespace-neutral: its output coordinates are channel + platform + version, and neither the archive nor its candidate manifest may contain a local namespace, launcher pointer, Desktop IPC state, or shell bytes.
+- `tools-pack closure build` is namespace-neutral: neither a component nor its distribution manifest may contain a local namespace, local activation pointer, Desktop IPC state, or shell bytes. The distribution identity is version-wide and target-neutral; target selection belongs in its required component map.
+- The layered manifest producer seals canonical metadata only. Cold start requires `launcher`, official runtime, native pack, and body for one target; resources stay lazy and content-addressed. Do not flatten those two groups back into one eager download list.
 - Closure archives expose the protocol-fixed `bootloader.mjs` entry and explicit Web/daemon layout. Keep Desktop, packaged launch, updater selection, and publication metadata out of this build determinant.
 - Use `--portable` for public/release artifacts so packaged config does not bake local tools-pack runtime roots from the build machine.
 - Model release and Shell compatibility versions independently: `--release-version` is the user-visible release binding, while `--shell-version` identifies reusable Electron Shell bytes. A release-only version bump must not change the Shell source digest or force another signed/notarized build.

@@ -1,0 +1,99 @@
+{
+  "blobs": {
+    "sha256:1111111111111111111111111111111111111111111111111111111111111111": {
+      "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      "mediaType": "application/zip",
+      "size": 1024,
+      "url": "https://releases.open-design.ai/beta/blobs/sha256:1111111111111111111111111111111111111111111111111111111111111111"
+    },
+    "sha256:2222222222222222222222222222222222222222222222222222222222222222": {
+      "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      "mediaType": "application/zip",
+      "size": 1024,
+      "url": "https://releases.open-design.ai/beta/blobs/sha256:2222222222222222222222222222222222222222222222222222222222222222"
+    },
+    "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb": {
+      "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "mediaType": "application/zip",
+      "size": 1024,
+      "url": "https://releases.open-design.ai/beta/blobs/sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc": {
+      "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "mediaType": "application/zip",
+      "size": 1024,
+      "url": "https://releases.open-design.ai/beta/blobs/sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd": {
+      "digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "mediaType": "application/zip",
+      "size": 1024,
+      "url": "https://releases.open-design.ai/beta/blobs/sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    },
+    "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee": {
+      "digest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "mediaType": "application/zip",
+      "size": 1024,
+      "url": "https://releases.open-design.ai/beta/blobs/sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    },
+    "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff": {
+      "digest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "mediaType": "application/zip",
+      "size": 1024,
+      "url": "https://releases.open-design.ai/beta/blobs/sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    }
+  },
+  "compatibility": {
+    "shell": {
+      "electron": {
+        "version": {
+          "min": "0.19.0-beta.4"
+        }
+      }
+    }
+  },
+  "identity": {
+    "channel": "beta",
+    "protocolVersion": 1,
+    "version": "0.19.0-beta.10",
+    "digest": "sha256:26da5882716a574c67d2dbcf487488cfcb09ea78a4bc0c3d33c95ead30d132f8"
+  },
+  "required": {
+    "body": {
+      "blob": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "entryPath": "bootloader.mjs"
+    },
+    "launcher": {
+      "blob": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "entryPath": "launcher.mjs"
+    },
+    "targets": {
+      "darwin-arm64": {
+        "native": {
+          "blob": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        },
+        "runtime": {
+          "blob": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+          "entryPath": "bin/node"
+        }
+      },
+      "win32-x64": {
+        "native": {
+          "blob": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        },
+        "runtime": {
+          "blob": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+          "entryPath": "node.exe"
+        }
+      }
+    }
+  },
+  "resources": [
+    {
+      "blob": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "id": "design-system-core",
+      "title": "Open Design Core"
+    }
+  ],
+  "schemaVersion": 2
+}

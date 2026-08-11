@@ -6,12 +6,17 @@ import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import {
   CLOSURE_ARCHIVE_ENTRY_PATH,
   bindClosureCandidateIdentity,
+  resolveClosureDistributionTarget,
   validateClosureBindingIdentity,
   validateClosureCandidateManifest,
+  validateClosureDistributionManifest,
   validateClosureFileInventory,
   type ClosureBindingIdentity,
   type ClosureCandidateManifest,
+  type ClosureDigest,
+  type ClosureDistributionManifest,
   type ClosureFileInventory,
+  type ResolvedClosureDistributionTarget,
 } from "@open-design/closure-proto";
 import { isReleaseChannel, type ReleaseChannel } from "@open-design/release";
 import { writeJsonFile } from "@open-design/sidecar";
@@ -79,6 +84,29 @@ export class ClosureStoreError extends Error {
     super(message);
     this.name = "ClosureStoreError";
   }
+}
+
+function sha256CanonicalDistribution(value: string): ClosureDigest {
+  return `sha256:${createHash("sha256").update(value).digest("hex")}`;
+}
+
+/**
+ * Consume one sealed distribution graph without selecting a release or
+ * exposing Store layout. Materialization may stage the returned target, but a
+ * later Store commit still publishes the generation atomically.
+ */
+export function consumeClosureDistributionTarget(
+  value: unknown,
+  target: string,
+): {
+  manifest: ClosureDistributionManifest;
+  target: ResolvedClosureDistributionTarget;
+} {
+  const manifest = validateClosureDistributionManifest(value, sha256CanonicalDistribution);
+  return {
+    manifest,
+    target: resolveClosureDistributionTarget(manifest, target),
+  };
 }
 
 function normalizeRoot(value: string): string {
