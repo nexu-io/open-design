@@ -691,6 +691,10 @@ export function InlineModelSwitcher({
     if (amrLoginCancelRequestedRef.current) {
       if (result.ok || result.alreadyRunning) {
         const cancelResult = await cancelVelaLogin(authAttemptId);
+        // Stale continuation: a newer attempt took over while the cancel was
+        // in flight — it owns polling/pending/error/handoff now. Do not clear
+        // its state or surface an error over it from this superseded context.
+        if (authAttemptId !== amrAuthAttemptIdRef.current) return;
         if (!cancelResult.ok) {
           amrLoginCancelRequestedRef.current = false;
           amrLoginStartedAtRef.current = null;

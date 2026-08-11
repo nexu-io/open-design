@@ -676,12 +676,38 @@ export function AmrLoginPill({
             return;
           }
           if (cancelResult.canceled !== true) {
-            const next = await refresh({ authAttemptId });
+            const statusGeneration = pollGenerationRef.current;
+            const next = await refresh({
+              generation: statusGeneration,
+              authAttemptId,
+            });
+            // Post-refresh ownership: bail before clearing/restarting
+            // bookkeeping for a flow a newer attempt/poll has taken over.
+            // A rejected/transient read (`!next`) is NOT a takeover — the
+            // keep-alive branch below must still run, or the pill stays
+            // "Signing in…" with no interval and a dead cancel button.
+            if (
+              authAttemptId !== authAttemptIdRef.current ||
+              statusGeneration !== pollGenerationRef.current
+            ) {
+              return;
+            }
             loginCancelRequestedRef.current = false;
-            if (next?.loginInFlight) {
+            // The daemon did not confirm the cancel, and the follow-up status
+            // is either in-flight, a transient null, or `loginInFlight: false`
+            // inside the startup settle window. `stopPolling()` already killed
+            // the only interval, so without restarting here a later
+            // signed-in/canceled status is never observed and the pill stays
+            // "Signing in…" forever. Keep the attempt alive while it is still
+            // believed pending (mirrors InlineModelSwitcher's
+            // handleAmrCancelLogin).
+            if (loginStartedAtRef.current !== null) {
               loginPendingRef.current = true;
               setPending('login');
-              startPolling(startedAt, next.authAttemptId ?? authAttemptId);
+              startPolling(
+                loginStartedAtRef.current,
+                next?.authAttemptId ?? authAttemptId,
+              );
             } else {
               loginStartedAtRef.current = null;
               loginPendingRef.current = false;
@@ -777,22 +803,47 @@ export function AmrLoginPill({
       }
       if (result.canceled !== true) {
         setPending(null);
+        const statusGeneration = pollGenerationRef.current;
         const next = await refresh({
+          generation: statusGeneration,
           authAttemptId: authAttemptId ?? undefined,
         });
+        // Post-refresh ownership: a newer attempt/poll may have taken over
+        // while the status read was in flight. Bail before touching any
+        // ref/state — writing A's terminal bookkeeping here could erase the
+        // newer flow's lifecycle. Deliberately NOT part of the bail: a
+        // rejected/transient read (`!next`). The cancel-intent branch below
+        // must still run when a spawn is resolving, or the canonical cancel
+        // for the returned attempt is never issued.
+        if (
+          (authAttemptId && authAttemptId !== authAttemptIdRef.current) ||
+          statusGeneration !== pollGenerationRef.current
+        ) {
+          return;
+        }
         if (loginStartPending && next?.loginInFlight !== true) {
           loginCancelRequestedRef.current = true;
           setPending('cancel');
           return;
         }
-        if (next?.loginInFlight) {
-          const startedAt = loginStartedAtRef.current ?? Date.now();
+        // The daemon did not confirm the cancel, and the follow-up status is
+        // either in-flight, a transient null, or `loginInFlight: false` inside
+        // the startup settle window. `stopPolling()` already killed the only
+        // interval, so without restarting here a later signed-in/canceled
+        // status is never observed and the pill stays "Signing in…" forever.
+        // Keep the attempt alive while it is still believed pending (mirrors
+        // InlineModelSwitcher's handleAmrCancelLogin).
+        if (loginStartedAtRef.current !== null) {
           loginPendingRef.current = true;
           setPending('login');
-          startPolling(startedAt, next.authAttemptId ?? null);
+          startPolling(
+            loginStartedAtRef.current,
+            next?.authAttemptId ?? authAttemptId,
+          );
         } else {
           loginStartedAtRef.current = null;
           loginPendingRef.current = false;
+          setPending(null);
         }
         return;
       }

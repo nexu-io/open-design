@@ -4664,4 +4664,198 @@ describe('InlineModelSwitcher AMR row', () => {
       screen.queryByTestId('inline-model-switcher-agent-amr'),
     ).toBeNull();
   });
+
+  it('does not clobber a newly adopted AMR attempt when the canonical cancel for a superseded attempt fails', async () => {
+    // Regression (audit gap D): `handleAmrSignIn`'s cancel-intent
+    // `!cancelResult.ok` branch is the ONLY cancel continuation without a
+    // post-await ownership re-check — every sibling (:709, :818, :839) bails
+    // when a newer attempt took over during the await. Here the canonical
+    // cancel for the provisional attempt A is still in flight when the
+    // login-started event path adopts attempt B; when the cancel resolves
+    // `ok: false`, the stale continuation must not clear B's pending/handoff
+    // or surface an error that reopens the panel over B.
+    const authAttemptA = '66666666-6666-4666-8666-666666666666';
+    const authAttemptB = '77777777-7777-4777-8777-777777777777';
+    let loginStarted = false;
+    let statusCall = 0;
+    let cancelCalls = 0;
+    let reportB = false;
+    let releaseLoginStart!: (response: Response) => void;
+    const loginStartResponse = new Promise<Response>((resolve) => {
+      releaseLoginStart = resolve;
+    });
+    let releaseCanonicalCancel!: (response: Response) => void;
+    const canonicalCancelResponse = new Promise<Response>((resolve) => {
+      releaseCanonicalCancel = resolve;
+    });
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === '/api/integrations/vela/status') {
+        statusCall += 1;
+        // Signed-out baseline until the login-started event turns on the
+        // in-flight report for attempt B (the event path adopts B).
+        if (!reportB) {
+          return new Response(
+            JSON.stringify({
+              loggedIn: false,
+              loginInFlight: false,
+              profile: 'default',
+              user: null,
+              configPath: '/Users/test/.amr/config.json',
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          );
+        }
+        return new Response(
+          JSON.stringify({
+            loggedIn: false,
+            loginInFlight: true,
+            authAttemptId: authAttemptB,
+            profile: 'default',
+            user: null,
+            configPath: '/Users/test/.amr/config.json',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url === '/api/integrations/vela/login' && init?.method === 'POST') {
+        loginStarted = true;
+        return loginStartResponse;
+      }
+      if (url === '/api/integrations/vela/login/cancel' && init?.method === 'POST') {
+        cancelCalls += 1;
+        if (cancelCalls === 1) {
+          // The provisional attempt cannot be cancelled yet (spawn pending):
+          // `cancelVelaLogin` maps a non-2xx response to `ok: false`.
+          return new Response(JSON.stringify({ canceled: false }), {
+            status: 500,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        // The canonical cancel (for A) is held in flight while B is adopted.
+        return canonicalCancelResponse;
+      }
+      if (
+        url.startsWith('/api/integrations/vela/wallet') ||
+        url.startsWith('/api/workspace/')
+      ) {
+        return new Response(JSON.stringify({}), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    function StatefulCompact() {
+      const [config, setConfig] = useState<AppConfig>({
+        ...baseConfig,
+        agentId: 'amr',
+        agentModels: {},
+      });
+      return (
+        <InlineModelSwitcher
+          config={config}
+          agents={[amrAgent]}
+          providerModelsCache={{}}
+          compact
+          daemonLive
+          onModeChange={(mode) => setConfig((c) => ({ ...c, mode }))}
+          onAgentChange={(id) =>
+            setConfig((c) => ({ ...c, agentId: id, mode: 'daemon' }))
+          }
+          onAgentModelChange={vi.fn()}
+          onApiProtocolChange={vi.fn()}
+          onApiModelChange={vi.fn()}
+          onOpenSettings={vi.fn()}
+        />
+      );
+    }
+
+    render(<StatefulCompact />);
+
+    vi.useFakeTimers();
+    // Open the agent panel and pick AMR — the spawn POST is held in flight.
+    fireEvent.click(screen.getByTestId('inline-model-switcher-chip-agent'));
+    fireEvent.click(screen.getByTestId('inline-model-switcher-agent-amr'));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(loginStarted).toBe(true);
+    expect(screen.queryByTestId('inline-model-switcher-popover')).toBeNull();
+
+    // Cancel while the spawn is in flight; the provisional cancel fails
+    // (`ok: false`). The intent must be preserved so the spawn continuation
+    // issues the canonical cancel.
+    fireEvent.click(screen.getByTestId('inline-model-switcher-chip-agent'));
+    fireEvent.click(screen.getByTestId('inline-model-switcher-agent-amr'));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(cancelCalls).toBe(1);
+
+    // The spawn resolves ok with A; the preserved intent triggers the
+    // canonical cancel for A, which is HELD in flight.
+    await act(async () => {
+      releaseLoginStart(
+        new Response(JSON.stringify({ pid: 42, authAttemptId: authAttemptA }), {
+          status: 202,
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(cancelCalls).toBe(2);
+
+    // While the canonical cancel for A is in flight, another surface's
+    // login-started arrives and the event path adopts attempt B (poll B
+    // starts, ref repoints to B).
+    reportB = true;
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent(AMR_LOGIN_STATUS_EVENT, { detail: { reason: 'login-started' } }),
+      );
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // The stale canonical cancel for A resolves `ok: false`. It must not
+    // clear B's pending state, drop B's handoff, or surface an error over B.
+    await act(async () => {
+      releaseCanonicalCancel(
+        new Response(JSON.stringify({ canceled: false }), {
+          status: 500,
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // B's poll must stay alive (new status reads keep coming).
+    const callsBefore = statusCall;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AMR_LOGIN_POLL_INTERVAL_MS);
+    });
+    expect(statusCall).toBeGreaterThan(callsBefore);
+
+    // The stale cancel must not surface an error over B (its error would be
+    // the only reason the compact agent panel reopens here).
+    expect(document.body.textContent).not.toContain('Sign-in failed.');
+
+    vi.useRealTimers();
+  });
 });

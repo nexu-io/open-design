@@ -2703,6 +2703,11 @@ function OnboardingView({
           }
           if (cancelResult.canceled !== true) {
             const nextStatus = await fetchVelaLoginStatus();
+            // Post-refresh ownership: a newer attempt took over while the
+            // status read was in flight — it owns the ref/pending/error now.
+            // Do not repoint `amrAuthAttemptIdRef` or commit status onto it
+            // from this superseded continuation.
+            if (authAttemptId !== amrAuthAttemptIdRef.current) return;
             if (nextStatus) {
               setAmrStatus(nextStatus);
               if (nextStatus.authAttemptId) {
@@ -2787,6 +2792,11 @@ function OnboardingView({
     }
     if (result.canceled !== true) {
       const nextStatus = await fetchVelaLoginStatus();
+      // Post-refresh ownership: a newer attempt took over while the status
+      // read was in flight — it owns the ref/pending/error now. Do not
+      // repoint `amrAuthAttemptIdRef` or commit status onto it from this
+      // superseded continuation.
+      if (authAttemptId !== amrAuthAttemptIdRef.current) return;
       if (nextStatus) {
         setAmrStatus(nextStatus);
         if (nextStatus.authAttemptId) {
@@ -2827,12 +2837,20 @@ function OnboardingView({
         window.setTimeout(resolve, AMR_LOGIN_POLL_INTERVAL_MS),
       );
       if (amrLoginPollCancelledRef.current) return false;
+      // Capture the attempt id BEFORE the await: a cancel landing while this
+      // read is in flight must not have its terminal broadcasts attributed to
+      // whatever attempt the mutable ref points at after the fetch.
+      const authAttemptId = amrAuthAttemptIdRef.current;
       const nextStatus = await fetchVelaLoginStatus();
+      // Post-fetch cancel guard: a user cancel issued while the status read
+      // was in flight already flipped `amrLoginPollCancelledRef`. Bail before
+      // committing status/analytics or broadcasting a terminal outcome that
+      // would fight the cancel's own cleanup.
+      if (amrLoginPollCancelledRef.current) return false;
       if (nextStatus) {
         setAmrStatus(nextStatus);
         onAmrLoginStatusChange?.(nextStatus);
       }
-      const authAttemptId = amrAuthAttemptIdRef.current;
       if (nextStatus && authAttemptId) {
         observeAmrAuthTracking(analytics.track, nextStatus, authAttemptId);
       }

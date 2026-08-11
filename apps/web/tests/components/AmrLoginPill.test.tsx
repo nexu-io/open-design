@@ -1526,4 +1526,178 @@ describe('AmrLoginPill', () => {
     expect(screen.getByRole('button', { name: 'Sign in' })).toBeTruthy();
     expect(statusCalls).toBe(callsAfterLogout);
   });
+
+  it('keeps the attempt alive when a cancel is not confirmed and the follow-up status is transient (spawn-cancel path)', async () => {
+    // Regression (same class as InlineModelSwitcher #46): a cancel issued
+    // while the login spawn is in flight that the daemon does not confirm
+    // (`canceled !== true`), followed by a transient status read, must NOT
+    // bail the `handleLogin` continuation into a dead state. Before the
+    // fix the post-refresh bail still included `!next`, so the pill stopped
+    // polling with `loginCancelRequestedRef`/`loginPendingRef` stuck and the
+    // cancel button dead. The attempt must stay alive (poll restarts) until
+    // the daemon confirms it settled.
+    const canonicalAuthAttemptId = '44444444-4444-4444-8444-444444444444';
+    let releaseLogin!: (response: Response) => void;
+    const heldLoginResponse = new Promise<Response>((resolve) => {
+      releaseLogin = resolve;
+    });
+    let statusCalls = 0;
+    const fetchMock = vi.fn(async (input, init) => {
+      const url = typeof input === 'string' ? input : (input as URL).toString();
+      if (url.endsWith('/api/integrations/vela/login') && init?.method === 'POST') {
+        return heldLoginResponse;
+      }
+      if (url.endsWith('/api/integrations/vela/status')) {
+        statusCalls += 1;
+        return jsonResponse({ status: 503, body: { error: 'unavailable' } });
+      }
+      if (
+        url.endsWith('/api/integrations/vela/login/cancel') &&
+        init?.method === 'POST'
+      ) {
+        return jsonResponse({ body: { canceled: false } });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    renderPill({
+      skipInitialRefresh: true,
+      revealPendingCancelAction: true,
+      initialStatus: {
+        loggedIn: false,
+        loginInFlight: false,
+        profile: 'prod',
+        user: null,
+        configPath: '/x',
+      },
+    });
+
+    vi.useFakeTimers();
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    // Cancel while the spawn is in flight; the daemon does not confirm.
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // The spawn resolves; the canonical cancel is also not confirmed, and the
+    // follow-up status read fails transiently. The attempt must stay alive.
+    releaseLogin(jsonResponse({
+      status: 202,
+      body: { pid: 123, authAttemptId: canonicalAuthAttemptId },
+    }));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const callsAfter = statusCalls;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AMR_LOGIN_POLL_INTERVAL_MS * 2);
+    });
+    // A restarted poll keeps issuing reads; without the keep-alive the pill
+    // would be dead (no new status calls) and stuck on the cancel state.
+    expect(statusCalls).toBeGreaterThan(callsAfter);
+
+    vi.useRealTimers();
+  });
+
+  it('keeps the attempt alive when a user cancel is not confirmed and the follow-up status is transient', async () => {
+    // Regression (mirrors InlineModelSwitcher #46): `handleCancelLogin`
+    // calls `stopPolling()` up front, and its `canceled !== true` branch used
+    // to return early on a transient null (`if (!next) return`), leaving
+    // `loginPendingRef` active with no interval — a later signed-in was never
+    // observed and the pill stayed "Signing in…" forever. The attempt must
+    // stay alive (poll restarts) while it is still believed pending.
+    const attemptId = '55555555-5555-4555-8555-555555555555';
+    let statusMode: 'in-flight' | 'null' | 'signed-in' = 'in-flight';
+    let statusCalls = 0;
+    const fetchMock = vi.fn(async (input, init) => {
+      const url = typeof input === 'string' ? input : (input as URL).toString();
+      if (url.endsWith('/api/integrations/vela/status')) {
+        statusCalls += 1;
+        if (statusMode === 'null') {
+          return jsonResponse({ status: 503, body: { error: 'unavailable' } });
+        }
+        return jsonResponse({
+          body: {
+            loggedIn: statusMode === 'signed-in',
+            loginInFlight: statusMode === 'in-flight',
+            authAttemptId: attemptId,
+            profile: 'prod',
+            user: statusMode === 'signed-in' ? { id: 'u', email: 'a@b.c' } : null,
+            configPath: '/x',
+          },
+        });
+      }
+      if (
+        url.endsWith('/api/integrations/vela/login') &&
+        init?.method === 'POST'
+      ) {
+        return jsonResponse({
+          status: 202,
+          body: { pid: 4242, authAttemptId: attemptId },
+        });
+      }
+      if (
+        url.endsWith('/api/integrations/vela/login/cancel') &&
+        init?.method === 'POST'
+      ) {
+        return jsonResponse({ body: { canceled: false, pids: [] } });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    renderPill({
+      skipInitialRefresh: true,
+      revealPendingCancelAction: true,
+      initialStatus: {
+        loggedIn: false,
+        loginInFlight: false,
+        profile: 'prod',
+        user: null,
+        configPath: '/x',
+      },
+    });
+
+    vi.useFakeTimers();
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.getByText('Signing in…')).toBeTruthy();
+
+    // The daemon does not confirm the cancel; the follow-up status read
+    // fails transiently. The attempt must stay alive (poll restarts).
+    statusMode = 'null';
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const callsAfter = statusCalls;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AMR_LOGIN_POLL_INTERVAL_MS * 2);
+    });
+    expect(statusCalls).toBeGreaterThan(callsAfter);
+
+    vi.useRealTimers();
+  });
 });

@@ -99,6 +99,13 @@ export function CloudSignInTip() {
   const [status, setStatus] = useState<VelaLoginStatus | null>(null);
   const cancelledRef = useRef(false);
   const mountedRef = useRef(true);
+  // The attempt id this tip has observed from status reads. Kept in a ref
+  // (not `status` state) because `finishSignedIn()`/`cancel()` run in the
+  // same synchronous tick as `setStatus(next)` — the state still holds the
+  // previous frame, which is null on a first success or an older attempt.
+  // Every cancel/timeout path targets this id and every broadcast carries
+  // it, so a superseded card can never cancel or reset a newer login.
+  const authAttemptIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -114,6 +121,7 @@ export function CloudSignInTip() {
     setState('signing');
     setStatus(null);
     const current = await fetchVelaLoginStatus();
+    if (current?.authAttemptId) authAttemptIdRef.current = current.authAttemptId;
     if (cancelledRef.current || !mountedRef.current) return;
     if (current?.loggedIn) {
       finishSignedIn();
@@ -131,6 +139,7 @@ export function CloudSignInTip() {
       await new Promise((resolve) => window.setTimeout(resolve, AMR_LOGIN_POLL_INTERVAL_MS));
       if (cancelledRef.current || !mountedRef.current) return;
       const next = await fetchVelaLoginStatus();
+      if (next?.authAttemptId) authAttemptIdRef.current = next.authAttemptId;
       if (cancelledRef.current || !mountedRef.current) return;
       if (next) setStatus(next);
       const outcome = amrLoginPollOutcome(next, startedAt);
@@ -144,7 +153,9 @@ export function CloudSignInTip() {
         // the daemon still sees a login in flight and a retry click 409s as
         // alreadyRunning instead of spawning a fresh one, so no new browser
         // tab ever opens. Mirrors AmrLoginPill / InlineModelSwitcher / EntryShell.
-        if (outcome === 'timed-out') void cancelVelaLogin();
+        if (outcome === 'timed-out') {
+          void cancelVelaLogin(authAttemptIdRef.current ?? undefined);
+        }
         console.error('[amr-login] poll did not reach a signed-in status', { outcome, next });
         setState('error');
         return;
@@ -153,7 +164,7 @@ export function CloudSignInTip() {
   }
 
   function finishSignedIn() {
-    notifyAmrLoginStatusChanged('status-changed', status?.authAttemptId);
+    notifyAmrLoginStatusChanged('status-changed', authAttemptIdRef.current);
     notifyWorkspaceContextRefresh();
     notifyWorkspaceBillingRefresh();
     notifyTeamProjectsChanged();
@@ -162,12 +173,14 @@ export function CloudSignInTip() {
 
   async function cancel() {
     cancelledRef.current = true;
-    // Carry the attempt id this tip observed so a stale cancel broadcast
-    // from a superseded attempt cannot reset a newer login on receivers.
-    const authAttemptId = status?.authAttemptId;
+    // Target the attempt this tip observed (ref, never `status` state — the
+    // state may still hold the previous frame). Null falls back to the
+    // legacy no-body form; a captured id prevents a superseded card from
+    // cancelling a newer login.
+    const authAttemptId = authAttemptIdRef.current;
     setState('idle');
     setStatus(null);
-    await cancelVelaLogin();
+    await cancelVelaLogin(authAttemptId ?? undefined);
     notifyAmrLoginStatusChanged('login-canceled', authAttemptId);
   }
 

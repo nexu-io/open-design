@@ -11,7 +11,7 @@
  * a new browser tab.
  */
 
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -19,7 +19,10 @@ import {
   RailAccountSyncTip,
   resetCloudSignInTipDismissal,
 } from '../../src/components/CloudSignInTip';
-import { AMR_LOGIN_TIMEOUT_MS } from '../../src/components/amrLoginPolling';
+import {
+  AMR_LOGIN_STATUS_EVENT,
+  AMR_LOGIN_TIMEOUT_MS,
+} from '../../src/components/amrLoginPolling';
 import { I18nProvider } from '../../src/i18n';
 
 const DISMISSED_KEY = 'od.entry.cloudSignInTip.dismissed';
@@ -148,6 +151,113 @@ describe('CloudSignInTip', () => {
 
     resetCloudSignInTipDismissal();
     expect(window.localStorage.getItem(DISMISSED_KEY)).toBeNull();
+  });
+
+  it('broadcasts the observed attempt id on sign-in success even when status state is still the previous frame', async () => {
+    // Regression (ownership closure, mirroring AmrLoginPill/InlineModelSwitcher):
+    // `finishSignedIn()` runs in the same synchronous tick as the status read
+    // that detected signed-in, so the `status` state still holds the previous
+    // frame (null on a first success). The broadcast must carry the attempt id
+    // this tip observed (ref), not the stale `status` — receivers gate on it.
+    const attemptId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const broadcastAttemptIds: Array<string | null | undefined> = [];
+    const onStatusChange = (event: Event) => {
+      broadcastAttemptIds.push(
+        (event as CustomEvent<{ authAttemptId?: string | null }>).detail?.authAttemptId,
+      );
+    };
+    window.addEventListener(AMR_LOGIN_STATUS_EVENT, onStatusChange);
+    try {
+      globalThis.fetch = vi.fn(async () =>
+        jsonResponse({
+          body: {
+            loggedIn: true,
+            authAttemptId: attemptId,
+            profile: 'prod',
+            user: { id: 'u', email: 'a@b.c', plan: 'free' },
+            configPath: '/x',
+          },
+        }),
+      ) as typeof fetch;
+
+      renderTip();
+      const card = await screen.findByTestId('entry-cloud-signin-tip');
+      fireEvent.click(card);
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(broadcastAttemptIds).toContain(attemptId);
+    } finally {
+      window.removeEventListener(AMR_LOGIN_STATUS_EVENT, onStatusChange);
+    }
+  });
+
+  it('targets the observed attempt id when cancelling, even when status state has not committed the poll frame yet', async () => {
+    // Regression (ownership closure): `cancel()` must cancel and broadcast the
+    // attempt this tip observed (ref, populated from the pre-login status read),
+    // not the `status` state — a superseded card cancelling a newer login with
+    // the no-id legacy form is exactly the bug the id-matched receivers gate on.
+    const attemptId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+    const cancelBodies: Array<{ authAttemptId?: string } | null> = [];
+    const broadcastAttemptIds: Array<string | null | undefined> = [];
+    const onStatusChange = (event: Event) => {
+      const detail = (event as CustomEvent<{ reason?: string; authAttemptId?: string | null }>).detail;
+      if (detail?.reason === 'login-canceled') {
+        broadcastAttemptIds.push(detail.authAttemptId);
+      }
+    };
+    window.addEventListener(AMR_LOGIN_STATUS_EVENT, onStatusChange);
+    try {
+      const fetchMock = vi.fn(async (input, init) => {
+        const url = typeof input === 'string' ? input : (input as URL).toString();
+        if (url.endsWith('/api/integrations/vela/status')) {
+          return jsonResponse({
+            body: {
+              loggedIn: false,
+              loginInFlight: false,
+              authAttemptId: attemptId,
+              profile: 'prod',
+              user: null,
+              configPath: '/x',
+            },
+          });
+        }
+        if (url.endsWith('/api/integrations/vela/login') && init?.method === 'POST') {
+          return jsonResponse({ status: 202, body: { pid: 4242 } });
+        }
+        if (url.endsWith('/api/integrations/vela/login/cancel') && init?.method === 'POST') {
+          cancelBodies.push(
+            init?.body ? (JSON.parse(String(init.body)) as { authAttemptId?: string }) : null,
+          );
+          return jsonResponse({ body: { canceled: true, pids: [4242] } });
+        }
+        throw new Error(`unexpected fetch: ${url}`);
+      });
+      globalThis.fetch = fetchMock as typeof fetch;
+
+      renderTip();
+      const card = await screen.findByTestId('entry-cloud-signin-tip');
+      fireEvent.click(card);
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      const cancelButton = await screen.findByRole('button', { name: 'Cancel sign-in' });
+      fireEvent.click(cancelButton);
+      await waitFor(() => {
+        expect(cancelBodies).not.toHaveLength(0);
+      });
+
+      expect(cancelBodies).toEqual([{ authAttemptId: attemptId }]);
+      expect(broadcastAttemptIds).toContain(attemptId);
+    } finally {
+      window.removeEventListener(AMR_LOGIN_STATUS_EVENT, onStatusChange);
+    }
   });
 });
 
