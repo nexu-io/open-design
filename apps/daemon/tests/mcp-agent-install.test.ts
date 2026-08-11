@@ -197,7 +197,7 @@ describe('JSON-config agents', () => {
     expect(plan.kind).toBe('manual');
     if (plan.kind !== 'manual') throw new Error('expected manual');
     expect(plan.configPath).toBeNull();
-    expect(plan.reason).toContain('only supported on macOS and Windows');
+    expect(plan.reason).toContain('Automatic MCP configuration');
   });
 });
 

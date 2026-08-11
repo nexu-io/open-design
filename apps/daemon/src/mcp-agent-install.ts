@@ -309,8 +309,8 @@ export function planAgentInstall(
           configPath: null,
           snippet: genericMcpServersSnippet(spec, serverName),
           reason:
-            'Claude Desktop is only supported on macOS and Windows. ' +
-            'This platform is not supported.',
+            'Automatic MCP configuration for Claude Desktop is ' +
+            'currently supported only on macOS and Windows.',
         };
       }
       return {
