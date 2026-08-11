@@ -14,7 +14,7 @@ import type { ReleaseChannel } from '@open-design/release';
 import type { ArtifactOriginEntrySurface, ArtifactOriginStatus } from '../../api/files.js';
 import type { TrackingDesignSystemEditSurface, TrackingDesignSystemKind, TrackingDesignSystemLengthBucket, TrackingDesignSystemOrigin, TrackingDesignSystemRunEntryFrom } from './design-systems.js';
 import type { TrackingSettingsPage } from './event-names.js';
-import type { TrackingAmrOpenCodeErrorPhase, TrackingAmrOpenCodeLastEventType, TrackingAmrOpenCodeLastToolKind, TrackingAmrOpenCodeLastToolStatus, TrackingArtifactKind, TrackingArtifactWriteSource, TrackingArtifactWriteStatus, TrackingByokPreflightBlockReason, TrackingByokProviderId, TrackingCliProviderId, TrackingDesignSystemSource, TrackingExecutionMode, TrackingExportFormat, TrackingExportResult, TrackingFeedbackAction, TrackingFeedbackProviderId, TrackingFeedbackRating, TrackingFeedbackRatingWithNone, TrackingFeedbackReasonCode, TrackingFidelity, TrackingFileSizeBucket, TrackingFileType, TrackingFirstModelEventType, TrackingLangfuseDeliveryStatus, TrackingLangfuseDropReason, TrackingLangfuseReportResult, TrackingLangfuseReportSkipReason, TrackingProjectKind, TrackingProjectSource, TrackingResult, TrackingRunCancelOrigin, TrackingRunCloseReason, TrackingRunDiagnosticSource, TrackingRunFailureCategory, TrackingRunFailureDetail, TrackingRunFailureStage, TrackingRunFailureUserAction, TrackingRunLifecyclePhase, TrackingRunPhaseTimingStatus, TrackingRunResult, TrackingRunRetryFinalResult, TrackingRunRetryStrategy, TrackingRunRetrySuppressedReason, TrackingRunTerminalTrigger, TrackingStderrLineCountBucket, TrackingTestResult, TrackingTokenCountSource } from './shared-enums.js';
+import type { TrackingAmrOpenCodeErrorPhase, TrackingAmrOpenCodeLastEventType, TrackingAmrOpenCodeLastToolKind, TrackingAmrOpenCodeLastToolStatus, TrackingArtifactKind, TrackingArtifactWriteSource, TrackingArtifactWriteStatus, TrackingByokPreflightBlockReason, TrackingByokProviderId, TrackingCliProviderId, TrackingDesignSystemSource, TrackingExecutionMode, TrackingExportFormat, TrackingExportResult, TrackingFeedbackAction, TrackingFeedbackProviderId, TrackingFeedbackRating, TrackingFeedbackRatingWithNone, TrackingFeedbackReasonCode, TrackingFidelity, TrackingFileSizeBucket, TrackingFileType, TrackingFirstModelEventType, TrackingLangfuseDeliveryStatus, TrackingLangfuseDropReason, TrackingLangfuseReportResult, TrackingLangfuseReportSkipReason, TrackingProjectKind, TrackingProjectSource, TrackingPublishErrorCode, TrackingResult, TrackingRunCancelOrigin, TrackingRunCloseReason, TrackingRunDiagnosticSource, TrackingRunFailureCategory, TrackingRunFailureDetail, TrackingRunFailureStage, TrackingRunFailureUserAction, TrackingRunLifecyclePhase, TrackingRunPhaseTimingStatus, TrackingRunResult, TrackingRunRetryFinalResult, TrackingRunRetryStrategy, TrackingRunRetrySuppressedReason, TrackingRunTerminalTrigger, TrackingStderrLineCountBucket, TrackingTestResult, TrackingTokenCountSource } from './shared-enums.js';
 import type { ConversationForkAnalyticsContext, TrackingFileVersionSource, TrackingPluginImportSource, TrackingSessionMode, TrackingSettingsArea } from './ui-click.js';
 // ---- Result events -------------------------------------------------------
 
@@ -788,6 +788,27 @@ export interface ArtifactDeployResultProps {
   first_configure: boolean;
   error_code?: string;
   deploy_duration_ms: number;
+  project_id: string;
+  project_kind: TrackingProjectKind | null;
+}
+
+// Fired when a "Publish this file for everyone" attempt from the Share tab
+// resolves — publishing and unpublishing share the event, split by `action`.
+// Fires when the daemon call settles (success once the public URL is returned
+// for publish, or removal is confirmed for unpublish), regardless of whether a
+// newer request superseded this one in the UI. Clicking the publish button
+// reports separately as ui_click element 'publish_file'.
+export interface ArtifactPublishResultProps {
+  page_name: 'artifact';
+  area: 'share_option_popover';
+  artifact_id: string;
+  artifact_kind: TrackingArtifactKind;
+  action: 'publish' | 'unpublish';
+  result: TrackingExportResult;
+  // 'workspace_identity_required' when the workspace context could not be
+  // confirmed (the one actionable failure), 'publish_failed' otherwise.
+  error_code?: TrackingPublishErrorCode;
+  publish_duration_ms: number;
   project_id: string;
   project_kind: TrackingProjectKind | null;
 }

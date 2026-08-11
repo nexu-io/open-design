@@ -28,6 +28,7 @@ import {
 import {
   anonymizeArtifactId,
   artifactKindToTracking,
+  type ArtifactPublishResultProps,
   type TrackingFileVersionSource,
   type TrackingArtifactKind,
   type TrackingProjectKind,
@@ -36,6 +37,7 @@ import {
 import { useAnalytics } from '../analytics/provider';
 import { exportErrorCode } from '../analytics/export-error-code';
 import { deployErrorCode } from '../analytics/deploy-error-code';
+import { publishErrorCode } from '../analytics/publish-error-code';
 import {
   reportPreviewIframeMessage,
   subscribePreviewIframeMessages,
@@ -44,6 +46,7 @@ import {
 import {
   trackArtifactExportResult,
   trackArtifactDeployResult,
+  trackArtifactPublishResult,
   trackArtifactHeaderClick,
   trackArtifactToolbarClick,
   trackCommentPopoverClick,
@@ -1897,6 +1900,7 @@ export const FileViewer = memo(function FileViewer({
     return (
       <ReactComponentViewer
         projectId={projectId}
+        projectKind={projectKind}
         file={file}
         onOpenFileReplacing={onOpenFileReplacing}
         projectName={projectName}
@@ -1907,6 +1911,7 @@ export const FileViewer = memo(function FileViewer({
         metricsConsent={metricsConsent}
         installationId={installationId}
         viewerOnly={viewerOnly}
+        workspaceActive={workspaceActive}
       />
     );
   }
@@ -6298,6 +6303,7 @@ function ReactModulePointer({
 
 function ReactComponentViewer({
   projectId,
+  projectKind,
   file,
   onOpenFileReplacing,
   projectName,
@@ -6308,8 +6314,10 @@ function ReactComponentViewer({
   metricsConsent = false,
   installationId,
   viewerOnly = false,
+  workspaceActive = true,
 }: {
   projectId: string;
+  projectKind: TrackingProjectKind;
   file: ProjectFile;
   onOpenFileReplacing?: (openName: string, closeName: string) => void;
   projectName?: string;
@@ -6320,8 +6328,16 @@ function ReactComponentViewer({
   metricsConsent?: boolean;
   installationId?: string | null;
   viewerOnly?: boolean;
+  workspaceActive?: boolean;
 }) {
   const t = useT();
+  const analytics = useAnalytics();
+  // `FileWorkspace` keeps a non-active viewer mounted, so an in-flight publish
+  // can settle after the user has switched away. The ref carries the LIVE value
+  // into those continuations; the captured prop would still read the
+  // render-time `true`.
+  const workspaceActiveRef = useRef(workspaceActive);
+  workspaceActiveRef.current = workspaceActive;
   const { workspaceContext } = useProjectCollabContext();
   const [mode, setMode] = useState<'preview' | 'source'>('preview');
   const [source, setSource] = useState<string | null>(null);
@@ -6490,16 +6506,70 @@ function ReactComponentViewer({
     // render as unpublished.
   }, [projectId, file.name, canPublishPublic, viewerOnly]);
 
+  // Shared identity fields for the publish-flow events (ReactComponentViewer copy).
+  // `artifactKindToTracking` only recognises HTML through the renderer id — a React
+  // component's `file.kind` is `code`, which would degrade to `unknown` — and this
+  // viewer is reached only through the `react-component` renderer match, so its
+  // renderer identity is a constant.
+  function publishTrackingIdentity() {
+    return {
+      artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
+      artifact_kind: artifactKindToTracking({
+        rendererId: 'react-component',
+        fileKind: file.kind ?? null,
+      }),
+      project_id: projectId,
+      project_kind: projectKind,
+    } as const;
+  }
+
+  // Retained (inert) viewers must never report analytics — same rule the
+  // HtmlViewer copy of this flow follows. Only the tracking is gated; the
+  // publish/unpublish calls themselves stay unconditional.
+  const firePublishFlowClick = (element: 'publish_file' | 'copy_publish_link') => {
+    if (!workspaceActive) return;
+    trackShareOptionPopoverClick(analytics.track, {
+      page_name: 'artifact',
+      area: 'share_option_popover',
+      element,
+      ...publishTrackingIdentity(),
+    });
+  };
+
+  const firePublishResult = (
+    outcome: Pick<
+      ArtifactPublishResultProps,
+      'action' | 'result' | 'error_code' | 'publish_duration_ms'
+    >,
+  ) => {
+    // Read the live ref, not the captured prop: a request can start while this
+    // viewer is active and settle after the user switches tabs.
+    if (!workspaceActiveRef.current) return;
+    trackArtifactPublishResult(analytics.track, {
+      page_name: 'artifact',
+      area: 'share_option_popover',
+      ...outcome,
+      ...publishTrackingIdentity(),
+    });
+  };
+
   async function publishCurrentFilePublic() {
     if (viewerOnly || publishingPublicFile) return;
     const requestProjectId = projectId;
     const requestFileName = file.name;
     const requestSeq = ++publicFileRequestSeqRef.current;
+    firePublishFlowClick('publish_file');
+    const publishStarted = performance.now();
     setPublishingPublicFile(true);
     setPublishLinkFeedback(null);
     setPublishFailureKey(null);
     try {
       const response = await publishProjectFilePublic(requestProjectId, requestFileName, workspaceContext);
+      firePublishResult({
+        action: 'publish',
+        result: 'success',
+        publish_duration_ms: Math.round(performance.now() - publishStarted),
+      });
       const current = publicFileIdentityRef.current;
       if (
         publicFileRequestSeqRef.current !== requestSeq ||
@@ -6512,6 +6582,12 @@ function ReactComponentViewer({
       setPublishedFileSlug(response.slug);
     } catch (error) {
       console.warn('[FileViewer] failed to publish public file', error);
+      firePublishResult({
+        action: 'publish',
+        result: 'failed',
+        error_code: publishErrorCode(error),
+        publish_duration_ms: Math.round(performance.now() - publishStarted),
+      });
       if (publicFileRequestSeqRef.current === requestSeq) {
         setPublishLinkFeedback('failed');
         setPublishFailureKey(publicFilePublishFailureKey(error));
@@ -6527,11 +6603,17 @@ function ReactComponentViewer({
     const requestFileName = file.name;
     const requestSlug = publishedFileSlug;
     const requestSeq = ++publicFileRequestSeqRef.current;
+    const unpublishStarted = performance.now();
     setPublishingPublicFile(true);
     setPublishLinkFeedback(null);
     setPublishFailureKey(null);
     try {
       await unpublishProjectFilePublic(requestProjectId, requestFileName, requestSlug, workspaceContext);
+      firePublishResult({
+        action: 'unpublish',
+        result: 'success',
+        publish_duration_ms: Math.round(performance.now() - unpublishStarted),
+      });
       const current = publicFileIdentityRef.current;
       if (
         publicFileRequestSeqRef.current !== requestSeq ||
@@ -6544,6 +6626,12 @@ function ReactComponentViewer({
       setPublishedFileSlug('');
     } catch (error) {
       console.warn('[FileViewer] failed to unpublish public file', error);
+      firePublishResult({
+        action: 'unpublish',
+        result: 'failed',
+        error_code: publishErrorCode(error),
+        publish_duration_ms: Math.round(performance.now() - unpublishStarted),
+      });
       if (publicFileRequestSeqRef.current === requestSeq) {
         setPublishLinkFeedback('failed');
         setPublishFailureKey(publicFilePublishFailureKey(error));
@@ -6554,6 +6642,7 @@ function ReactComponentViewer({
   }
 
   async function copyPublishedFileLink() {
+    firePublishFlowClick('copy_publish_link');
     let ok = false;
     try {
       if (publishedFileUrl && typeof navigator !== 'undefined' && navigator.clipboard) {
@@ -7843,16 +7932,71 @@ function HtmlViewer({
     sourceAuthorizationScopeKey,
   ]);
 
+  // Shared identity fields for the publish-flow events (HtmlViewer copy).
+  // `artifactKindToTracking` only recognises HTML through the renderer id — an HTML
+  // artifact's `file.kind` is `html`, which would degrade to `unknown` — and this
+  // viewer is reached only through the `html` / `deck-html` renderer matches, which
+  // is exactly what the `isDeck` prop is derived from.
+  function publishTrackingIdentity() {
+    return {
+      artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
+      artifact_kind: artifactKindToTracking({
+        rendererId: isDeck ? 'deck-html' : 'html',
+        fileKind: file.kind ?? null,
+      }),
+      project_id: projectId,
+      project_kind: projectKind,
+    } as const;
+  }
+
+  // Background (inert) HtmlViewer instances must never report analytics, same
+  // as every other emission site in this component. Only the tracking is
+  // gated — the publish/unpublish calls themselves stay unconditional.
+  const firePublishFlowClick = (element: 'publish_file' | 'copy_publish_link') => {
+    if (!workspaceActive) return;
+    trackShareOptionPopoverClick(analytics.track, {
+      page_name: 'artifact',
+      area: 'share_option_popover',
+      element,
+      ...publishTrackingIdentity(),
+    });
+  };
+
+  const firePublishResult = (
+    outcome: Pick<
+      ArtifactPublishResultProps,
+      'action' | 'result' | 'error_code' | 'publish_duration_ms'
+    >,
+  ) => {
+    // Read the live ref, not the captured prop: a publish/unpublish request can
+    // start while this viewer is active and settle after the user switches tabs,
+    // and the in-flight continuation still holds the render-time `true`.
+    if (!workspaceActiveRef.current) return;
+    trackArtifactPublishResult(analytics.track, {
+      page_name: 'artifact',
+      area: 'share_option_popover',
+      ...outcome,
+      ...publishTrackingIdentity(),
+    });
+  };
+
   async function publishCurrentFilePublic() {
     if (viewerOnly || publishingPublicFile) return;
     const requestProjectId = projectId;
     const requestFileName = file.name;
     const requestSeq = ++publicFileRequestSeqRef.current;
+    firePublishFlowClick('publish_file');
+    const publishStarted = performance.now();
     setPublishingPublicFile(true);
     setPublishLinkFeedback(null);
     setPublishFailureKey(null);
     try {
       const response = await publishProjectFilePublic(requestProjectId, requestFileName, workspaceContext);
+      firePublishResult({
+        action: 'publish',
+        result: 'success',
+        publish_duration_ms: Math.round(performance.now() - publishStarted),
+      });
       const current = publicFileIdentityRef.current;
       if (
         publicFileRequestSeqRef.current !== requestSeq ||
@@ -7865,6 +8009,12 @@ function HtmlViewer({
       setPublishedFileSlug(response.slug);
     } catch (error) {
       console.warn('[FileViewer] failed to publish public file', error);
+      firePublishResult({
+        action: 'publish',
+        result: 'failed',
+        error_code: publishErrorCode(error),
+        publish_duration_ms: Math.round(performance.now() - publishStarted),
+      });
       if (publicFileRequestSeqRef.current === requestSeq) {
         setPublishLinkFeedback('failed');
         setPublishFailureKey(publicFilePublishFailureKey(error));
@@ -7880,11 +8030,17 @@ function HtmlViewer({
     const requestFileName = file.name;
     const requestSlug = publishedFileSlug;
     const requestSeq = ++publicFileRequestSeqRef.current;
+    const unpublishStarted = performance.now();
     setPublishingPublicFile(true);
     setPublishLinkFeedback(null);
     setPublishFailureKey(null);
     try {
       await unpublishProjectFilePublic(requestProjectId, requestFileName, requestSlug, workspaceContext);
+      firePublishResult({
+        action: 'unpublish',
+        result: 'success',
+        publish_duration_ms: Math.round(performance.now() - unpublishStarted),
+      });
       const current = publicFileIdentityRef.current;
       if (
         publicFileRequestSeqRef.current !== requestSeq ||
@@ -7897,6 +8053,12 @@ function HtmlViewer({
       setPublishedFileSlug('');
     } catch (error) {
       console.warn('[FileViewer] failed to unpublish public file', error);
+      firePublishResult({
+        action: 'unpublish',
+        result: 'failed',
+        error_code: publishErrorCode(error),
+        publish_duration_ms: Math.round(performance.now() - unpublishStarted),
+      });
       if (publicFileRequestSeqRef.current === requestSeq) {
         setPublishLinkFeedback('failed');
         setPublishFailureKey(publicFilePublishFailureKey(error));
@@ -7907,6 +8069,7 @@ function HtmlViewer({
   }
 
   async function copyPublishedFileLink() {
+    firePublishFlowClick('copy_publish_link');
     let ok = false;
     try {
       if (publishedFileUrl && typeof navigator !== 'undefined' && navigator.clipboard) {
