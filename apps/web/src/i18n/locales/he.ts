@@ -1097,7 +1097,7 @@ export const he: Dict = {
   'useEverywhere.section.overview.snippet3': 'הכנס חפצים סטנדרטיים לפני האתחול',
   'useEverywhere.section.overview.footer': 'הדמון כותב אל `./.od/` (project-local) כברירת מחדל. הגדר \'OD_DATA_DIR=~/.open-design\' כדי לשתף נתונים בין פרויקטים.',
   'useEverywhere.section.cli.tab': 'CLI · od',
-  'useEverywhere.section.cli.heading': 'Drive Open Design מכל מעטפת',
+  'useEverywhere.section.cli.heading': 'השתמש ב-Open Design בכל מעטפת',
   'useEverywhere.section.cli.intro': 'ה-\'od\' bin נשלח עם הדמון והוא אותו בינארי המשמש את קלוד קוד/קודקס כאשר הם מנהלים דור. רוב פקודות המשנה הן לקוחות דקים שמפרסמים את הדמון המקומי, כך שהן פועלות אותו הדבר בין אם הפעלת אותו באמצעות `pnpm tools-dev` או כאפליקציה ארוזה.',
   'useEverywhere.section.cli.bullet1': '`od` (ללא args) - מאתחל את הדמון ופותח את ממשק המשתמש של האינטרנט.',
   'useEverywhere.section.cli.bullet2': '`od media create ...` - הפקת בתים של תמונה / וידאו / אודיו באמצעות פרוטוקול המדיה המאוחד.',
