@@ -8,6 +8,23 @@ import { ManualEditPanel, emptyManualEditDraft, manualEditPatchSummary, normaliz
 import type { ProjectDesignTokenSuggestion, ProjectDesignTokenSuggestionProp } from '../../src/providers/registry';
 import { emptyManualEditStyles, type ManualEditPatch, type ManualEditStyles, type ManualEditTarget } from '../../src/edit-mode/types';
 
+const localizedLabelOverride = vi.hoisted(() => ({ enabled: false }));
+
+vi.mock('../../src/i18n', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/i18n')>();
+  return {
+    ...actual,
+    useT: () => {
+      const t = actual.useT();
+      return (key: Parameters<typeof t>[0], vars?: Parameters<typeof t>[1]) => {
+        if (localizedLabelOverride.enabled && key === 'manualEdit.textTransform') return 'Localized transform';
+        if (localizedLabelOverride.enabled && key === 'manualEdit.wordSpacing') return 'Localized word spacing';
+        return t(key, vars);
+      };
+    },
+  };
+});
+
 // The rewritten panel renders ONE localized "Parameters" list instead of the
 // old hardcoded CONTENT / TYPOGRAPHY / SIZE / LAYOUT / BOX group headers, so
 // tests address controls by their translated row label rather than by group.
@@ -75,6 +92,19 @@ describe('ManualEditPanel', () => {
       expect(sectionHeads()).not.toContain(legacyHead);
     }
     expect(host.textContent).not.toContain('Advanced');
+  });
+
+  it('localizes transform and word spacing labels through t', () => {
+    localizedLabelOverride.enabled = true;
+    try {
+      renderPanel();
+
+      const parameters = sectionByTitle(PARAMETERS);
+      expect(parameters.textContent).toContain('Localized transform');
+      expect(parameters.textContent).toContain('Localized word spacing');
+    } finally {
+      localizedLabelOverride.enabled = false;
+    }
   });
 
   it('shows a readable selected element name in the titlebar', () => {

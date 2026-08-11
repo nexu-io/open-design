@@ -818,11 +818,11 @@ function StyleInspector({
             substitute for a typographic nudge. */}
         <PairRow>
           <UnitRow label={t('manualEdit.lineHeight')} value={styles.lineHeight} placeholder={summary?.lineHeight} onChange={(v) => u('lineHeight', v)} unit="" onFocus={() => activate('lineHeight', t('manualEdit.lineHeight'))} />
-          <DropdownRow label="Transform" value={styles.textTransform} onChange={(v) => u('textTransform', v)} options={TEXT_TRANSFORM_OPTS} />
+          <DropdownRow label={t('manualEdit.textTransform')} value={styles.textTransform} onChange={(v) => u('textTransform', v)} options={TEXT_TRANSFORM_OPTS} />
         </PairRow>
         <PairRow>
           <UnitRow label={t('manualEdit.letterSpacing')} value={styles.letterSpacing} placeholder={summary?.letterSpacing} onChange={(v) => u('letterSpacing', v)} unit="px" autoUnit onFocus={() => activate('letterSpacing', t('manualEdit.letterSpacing'))} />
-          <UnitRow label="Word spacing" value={styles.wordSpacing} onChange={(v) => u('wordSpacing', v)} unit="px" autoUnit />
+          <UnitRow label={t('manualEdit.wordSpacing')} value={styles.wordSpacing} onChange={(v) => u('wordSpacing', v)} unit="px" autoUnit />
         </PairRow>
         <UnitRow label={t('manualEdit.radius')} value={styles.borderRadius} placeholder={summary?.borderRadius} onChange={(v) => u('borderRadius', v)} unit="px" autoUnit onFocus={() => activate('borderRadius', t('manualEdit.radius'))} />
         <PairRow>
