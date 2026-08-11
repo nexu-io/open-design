@@ -4012,6 +4012,7 @@ process.stdin.on('end', () => {
     await withFakeAntigravity(
       fakeAgyScript(
         [
+          'Authentication required while polling ListExperiments',
           'Propagating selected model override to backend: label="Gemini 3.1 Pro (High)"',
           'upstream error: code = 429 RESOURCE_EXHAUSTED: Individual quota reached',
         ].join('\n'),

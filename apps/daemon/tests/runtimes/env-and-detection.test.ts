@@ -1253,6 +1253,8 @@ test('antigravity auth matcher covers agy print-mode + log-file auth signals', a
   // current run lacks credentials.
   const pollNoise =
     'Failed to poll ListExperiments: error getting token source: You are not logged into Antigravity';
+  const classifiedPollAuthNoise =
+    `${pollNoise}\nAuthentication required while polling ListExperiments`;
   assert.deepEqual(
     classifySilentAntigravityFailure({ directText: '', diagnosticText: pollNoise }),
     { authFailure: null, serviceFailure: null },
@@ -1260,10 +1262,23 @@ test('antigravity auth matcher covers agy print-mode + log-file auth signals', a
   assert.equal(
     classifySilentAntigravityFailure({
       directText: '',
-      diagnosticText: `${pollNoise}\nRESOURCE_EXHAUSTED: Individual quota reached`,
+      diagnosticText: `${classifiedPollAuthNoise}\nRESOURCE_EXHAUSTED: Individual quota reached`,
     }).serviceFailure,
     'RATE_LIMITED',
   );
+  assert.equal(
+    classifySilentAntigravityFailure({
+      directText: '',
+      diagnosticText: `${classifiedPollAuthNoise}\n503 Service temporarily unavailable`,
+    }).serviceFailure,
+    'UPSTREAM_UNAVAILABLE',
+  );
+  const directAuthWithDiagnosticQuota = classifySilentAntigravityFailure({
+    directText: 'Authentication required. Please visit the URL to log in: https://example',
+    diagnosticText: `${classifiedPollAuthNoise}\nRESOURCE_EXHAUSTED: Individual quota reached`,
+  });
+  assert.equal(directAuthWithDiagnosticQuota.authFailure?.status, 'missing');
+  assert.equal(directAuthWithDiagnosticQuota.serviceFailure, 'AGENT_AUTH_REQUIRED');
   assert.equal(
     classifySilentAntigravityFailure({
       directText: 'Authentication required. Please visit the URL to log in: https://example',

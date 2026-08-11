@@ -214,6 +214,10 @@ export type AgentServiceFailureCode =
   | 'AGENT_AUTH_REQUIRED'
   | 'RATE_LIMITED'
   | 'UPSTREAM_UNAVAILABLE';
+type AgentNonAuthServiceFailureCode = Exclude<
+  AgentServiceFailureCode,
+  'AGENT_AUTH_REQUIRED'
+>;
 
 // A bare HTTP status number (`500`, `429`, …) is too noisy to trust on its own
 // — agent stderr is full of unrelated numbers (`line 500`, `read 502 bytes`,
@@ -250,6 +254,16 @@ const AGENT_UPSTREAM_FAILURE_RE = new RegExp(
   'i',
 );
 
+function classifyAgentNonAuthServiceFailure(
+  text: string,
+): AgentNonAuthServiceFailureCode | null {
+  const value = String(text || '');
+  if (!value.trim()) return null;
+  if (AGENT_RATE_FAILURE_RE.test(value)) return 'RATE_LIMITED';
+  if (AGENT_UPSTREAM_FAILURE_RE.test(value)) return 'UPSTREAM_UNAVAILABLE';
+  return null;
+}
+
 // Returns the model-service failure class implied by an agent's combined
 // stdout/stderr/error text, or null when the text looks like an ordinary
 // process failure. Auth is checked before rate/upstream so a `401` is never
@@ -261,9 +275,7 @@ export function classifyAgentServiceFailure(
   const value = String(text || '');
   if (!value.trim()) return null;
   if (AGENT_AUTH_FAILURE_RE.test(value)) return 'AGENT_AUTH_REQUIRED';
-  if (AGENT_RATE_FAILURE_RE.test(value)) return 'RATE_LIMITED';
-  if (AGENT_UPSTREAM_FAILURE_RE.test(value)) return 'UPSTREAM_UNAVAILABLE';
-  return null;
+  return classifyAgentNonAuthServiceFailure(value);
 }
 
 /**
@@ -284,13 +296,11 @@ export function classifySilentAntigravityFailure(input: {
   const diagnosticText = String(input.diagnosticText ?? directText);
   const authFailure = classifyAgentAuthFailure('antigravity', directText);
   const directServiceFailure = classifyAgentServiceFailure(directText);
-  const diagnosticServiceFailure = classifyAgentServiceFailure(diagnosticText);
+  const diagnosticNonAuthServiceFailure =
+    classifyAgentNonAuthServiceFailure(diagnosticText);
   return {
     authFailure,
-    serviceFailure:
-      diagnosticServiceFailure === 'AGENT_AUTH_REQUIRED'
-        ? directServiceFailure
-        : diagnosticServiceFailure,
+    serviceFailure: directServiceFailure ?? diagnosticNonAuthServiceFailure,
   };
 }
 
