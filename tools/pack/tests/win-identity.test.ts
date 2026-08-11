@@ -200,6 +200,25 @@ describe("resolveWinInstallIdentity", () => {
     expect(source).toContain("$(RunningInstancesDetectionFailed)");
   });
 
+  it("fail-closes when the install-section recheck cannot detect running instances", async () => {
+    const source = await readFile(new URL("../src/win/custom-installer.ts", import.meta.url), "utf8");
+    const functionStart = source.indexOf("Function GuardRunningInstancesBeforeInstall");
+    const functionEnd = source.indexOf("FunctionEnd", functionStart);
+    const guard = source.slice(functionStart, functionEnd);
+    const closeIndex = guard.indexOf("Call CloseRunningInstances");
+    const recheckIndex = guard.indexOf("Call DetectRunningInstances", closeIndex);
+    const failureIndex = guard.indexOf('\\${If} $RunningInstancesDetectionFailed == "1"', recheckIndex);
+    const outputIndex = guard.indexOf('\\${If} $RunningInstancesOutput != ""', recheckIndex);
+
+    expect(functionStart).toBeGreaterThanOrEqual(0);
+    expect(functionEnd).toBeGreaterThan(functionStart);
+    expect(closeIndex).toBeGreaterThanOrEqual(0);
+    expect(recheckIndex).toBeGreaterThan(closeIndex);
+    expect(failureIndex).toBeGreaterThan(recheckIndex);
+    expect(outputIndex).toBeGreaterThan(failureIndex);
+    expect(guard.slice(failureIndex, outputIndex)).toContain('Abort "$(RunningInstancesDetectionFailed)"');
+  });
+
   it("writes runtime installer diagnostics under the packaged namespace data root", async () => {
     const source = await readFile(new URL("../src/win/custom-installer.ts", import.meta.url), "utf8");
 

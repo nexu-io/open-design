@@ -850,6 +850,11 @@ detect_running_instances:
   Call LogInstallerEvent
   Call CloseRunningInstances
   Call DetectRunningInstances
+  \${If} $RunningInstancesDetectionFailed == "1"
+    Push "install aborted: running instance detection failed after install-section close"
+    Call LogInstallerEvent
+    Abort "$(RunningInstancesDetectionFailed)"
+  \${EndIf}
   \${If} $RunningInstancesOutput != ""
     Push "install aborted: running instances still detected before file changes: $RunningInstancesOutput"
     Call LogInstallerEvent
