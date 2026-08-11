@@ -61,7 +61,7 @@ import { exportArtifact } from '../../src/main/artifact-export.js';
 import { renderDeckSlides } from '../../src/main/deck-capture.js';
 
 const execFileP = promisify(execFile);
-const desktopRoot = fileURLToPath(new URL('../..', import.meta.url));
+const shellRoot = fileURLToPath(new URL('../..', import.meta.url));
 const legacyBaseHref = 'https://external.invalid/legacy/';
 const scopedBaseHref = 'http://127.0.0.1:43123/preview/export-scope/';
 const sourceHtml = `<!doctype html>
@@ -174,10 +174,10 @@ app.whenReady().then(async () => {
 
   try {
     const electronRelativePath = (await readFile(
-      join(desktopRoot, 'node_modules', 'electron', 'path.txt'),
+      join(shellRoot, 'node_modules', 'electron', 'path.txt'),
       'utf8',
     )).trim();
-    const electronPath = join(desktopRoot, 'node_modules', 'electron', 'dist', electronRelativePath);
+    const electronPath = join(shellRoot, 'node_modules', 'electron', 'dist', electronRelativePath);
     const electronArgs = [probeDir, '--no-sandbox', '--disable-gpu'];
     const command = process.platform === 'linux' ? 'xvfb-run' : electronPath;
     const args = process.platform === 'linux' ? ['-a', electronPath, ...electronArgs] : electronArgs;
