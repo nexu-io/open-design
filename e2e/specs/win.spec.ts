@@ -603,7 +603,11 @@ winDescribe('packaged windows runtime smoke', () => {
         started = true;
         expect(firstRunStart.source).toBe('installed');
         const firstRunInspect = await measureSmokeStep(timings, 'wait healthy unseeded first run', async () =>
-          waitForHealthyDesktop(),
+          // A public immutable Shell has no bundled Closure. Its genuine first
+          // run must download, verify, extract, bind, and launch the Closure
+          // before Desktop can become healthy, so use the cold-start budget
+          // rather than the shorter steady-state health budget here.
+          waitForHealthyDesktop(maxStartDurationMs),
         );
         expect(firstRunInspect.status?.state).toBe('running');
         if (!firstRunInspect.desktopIpcUnavailable) {
@@ -2352,8 +2356,7 @@ function restoreUpdateEnv(previous: Partial<Record<(typeof UPDATE_ENV_KEYS)[numb
   }
 }
 
-async function waitForHealthyDesktop(): Promise<WinInspectResult> {
-  const timeoutMs = 90_000;
+async function waitForHealthyDesktop(timeoutMs = 90_000): Promise<WinInspectResult> {
   const startedAt = Date.now();
   let lastResult: unknown = null;
 
