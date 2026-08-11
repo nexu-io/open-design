@@ -511,6 +511,19 @@ export function SkillsSection({ cfg, setCfg, onSkillsRefresh, onSkillsChanged }:
     setCreating(false);
     setDraft(EMPTY_DRAFT);
     setDraftIdentity(null);
+    setFilesLoadingId(updated.id);
+    try {
+      const files = await fetchSkillFiles(updated.id, issuedContext);
+      if (
+        currentWorkspaceAccountGeneration() !== issuedGeneration
+        || workspaceCatalogIdentityRef.current !== issuedIdentity
+      ) return;
+      setFilesById((cur) => ({ ...cur, [updated.id]: files }));
+    } finally {
+      if (workspaceCatalogIdentityRef.current === issuedIdentity) {
+        setFilesLoadingId((cur) => (cur === updated.id ? null : cur));
+      }
+    }
     onSkillsChanged?.(updated.id);
   }, [
     draft,
