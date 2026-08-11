@@ -533,6 +533,138 @@ describe('CloudSignInTip', () => {
       window.removeEventListener(AMR_LOGIN_STATUS_EVENT, onStatusChange);
     }
   });
+
+  it('does not let a superseded poll read overwrite the shared attempt ref', async () => {
+    // Regression (review thread): `begin()` wrote the shared `authAttemptIdRef`
+    // from each read BEFORE checking the run token, so a superseded run's
+    // stale poll response could repoint the ref back to its own (older)
+    // attempt id while a newer run was active — and a later `cancel()` would
+    // then target that stale id instead of the current login's. Reads now keep
+    // their id local until ownership is validated, so a later cancel must use
+    // the newer run's id.
+    const attemptA = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const attemptB = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+    const cancelBodies: Array<{ authAttemptId?: string } | null> = [];
+    const onStatusChange = (event: Event) => {
+      const detail = (event as CustomEvent<{ reason?: string }>).detail;
+      if (detail?.reason === 'login-canceled') {
+        // no-op; we only assert on cancelBodies
+      }
+    };
+    window.addEventListener(AMR_LOGIN_STATUS_EVENT, onStatusChange);
+    try {
+      let releasePollRead!: (response: Response) => void;
+      const heldPollRead = new Promise<Response>((resolve) => {
+        releasePollRead = resolve;
+      });
+      let statusCalls = 0;
+      let holdPoll = false;
+      let loginCalls = 0;
+      let loginAttemptId = attemptA;
+      const fetchMock = vi.fn(async (input, init) => {
+        const url = typeof input === 'string' ? input : (input as URL).toString();
+        if (url.endsWith('/api/integrations/vela/status')) {
+          statusCalls += 1;
+          if (holdPoll && statusCalls === 2) {
+            return heldPollRead;
+          }
+          return jsonResponse({
+            body: {
+              loggedIn: false,
+              loginInFlight: true,
+              authAttemptId: loginAttemptId,
+              profile: 'prod',
+              user: null,
+              configPath: '/x',
+            },
+          });
+        }
+        if (url.endsWith('/api/integrations/vela/login') && init?.method === 'POST') {
+          loginCalls += 1;
+          return jsonResponse({ status: 202, body: { pid: 4242, authAttemptId: loginAttemptId } });
+        }
+        if (url.endsWith('/api/integrations/vela/login/cancel') && init?.method === 'POST') {
+          cancelBodies.push(
+            init?.body ? (JSON.parse(String(init.body)) as { authAttemptId?: string }) : null,
+          );
+          return jsonResponse({ body: { canceled: true, pids: [4242] } });
+        }
+        throw new Error(`unexpected fetch: ${url}`);
+      });
+      globalThis.fetch = fetchMock as typeof fetch;
+
+      renderTip();
+      const card = await screen.findByTestId('entry-cloud-signin-tip');
+      vi.useFakeTimers();
+      // Run A: click, spawn resolves, first poll read is held.
+      fireEvent.click(card);
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      holdPoll = true;
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(AMR_LOGIN_POLL_INTERVAL_MS);
+        await Promise.resolve();
+      });
+
+      // Cancel run A; re-click starts run B with a different attempt id. Run
+      // A's held poll read is still in flight.
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel sign-in' }));
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      holdPoll = false;
+      loginAttemptId = attemptB;
+      fireEvent.click(card);
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(loginCalls).toBe(2);
+
+      // Release run A's stale poll read carrying A's id. Run A must NOT
+      // repoint the shared ref back to A (the token guard rejects it).
+      await act(async () => {
+        releasePollRead(jsonResponse({
+          body: {
+            loggedIn: false,
+            loginInFlight: true,
+            authAttemptId: attemptA,
+            profile: 'prod',
+            user: null,
+            configPath: '/x',
+          },
+        }));
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      // Cancel run B: the target must be B's id, not A's — proving the stale
+      // poll read did not overwrite the shared ref. (Run A's cancel earlier
+      // already targeted A; the LAST cancel is the one that matters.)
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel sign-in' }));
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(cancelBodies[cancelBodies.length - 1]).toEqual({
+        authAttemptId: attemptB,
+      });
+
+      vi.useRealTimers();
+    } finally {
+      window.removeEventListener(AMR_LOGIN_STATUS_EVENT, onStatusChange);
+    }
+  });
 });
 
 // recvqgpXSYFNTq: "退出登录后再登录，左下角的头像加载的有些慢" — the rail's

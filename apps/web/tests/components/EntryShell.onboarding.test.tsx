@@ -1466,6 +1466,116 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     vi.useRealTimers();
   });
 
+  it('does not broadcast a canceled attempt sign-in success when a newer attempt restarts before the read resolves', async () => {
+    // Regression (review thread): the poll loop's post-fetch guard checked
+    // only `amrLoginPollCancelledRef`. A cancel while attempt A's read was in
+    // flight flipped the flag, but a restart (attempt B) resets it while
+    // updating `amrAuthAttemptIdRef` — so A's response passed the flag check
+    // and committed `setAmrStatus`/analytics/terminal broadcasts into B's
+    // state. The post-fetch guard must also require that A still owns the
+    // current attempt ref.
+    const { WORKSPACE_CONTEXT_REFRESH_EVENT } = await import(
+      '../../src/collab/useWorkspaceContext'
+    );
+    const contextRefresh = vi.fn();
+    window.addEventListener(WORKSPACE_CONTEXT_REFRESH_EVENT, contextRefresh);
+    const statusEvents: string[] = [];
+    const onStatusEvent = ((event: CustomEvent) => {
+      statusEvents.push(event.detail?.reason);
+    }) as EventListener;
+    window.addEventListener(AMR_LOGIN_STATUS_EVENT, onStatusEvent);
+    let loginCalls = 0;
+    let holdStatusRead = false;
+    let releaseStatusRead!: (response: Response) => void;
+    const heldStatusRead = new Promise<Response>((resolve) => {
+      releaseStatusRead = resolve;
+    });
+    const fetchMock = vi.fn(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/api/integrations/vela/status')) {
+        // Hold a poll read in flight so the cancel + restart can land mid-read.
+        if (holdStatusRead) {
+          return heldStatusRead;
+        }
+        return jsonResponse({
+          loggedIn: false,
+          loginInFlight: true,
+          profile: 'prod',
+          user: null,
+          configPath: '/x',
+        });
+      }
+      if (url.endsWith('/api/integrations/vela/login') && init?.method === 'POST') {
+        loginCalls += 1;
+        return jsonResponse({ pid: 123 }, 202);
+      }
+      if (url.endsWith('/api/integrations/vela/login/cancel') && init?.method === 'POST') {
+        return jsonResponse({ canceled: true, pids: [123] });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+    const props = renderOnboarding();
+
+    const signIn = await findCloudSignInButton();
+    vi.useFakeTimers();
+    fireEvent.click(signIn);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.getByText('Signing in…')).toBeTruthy();
+
+    // Attempt A's first poll status read is held in flight.
+    holdStatusRead = true;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AMR_LOGIN_POLL_INTERVAL_MS);
+      await Promise.resolve();
+    });
+
+    // Cancel A, then immediately restart as B — the restart resets the cancel
+    // flag and re-arms the ref for a newer attempt.
+    fireEvent.click(screen.getByRole('button', { name: /Cancel sign-in/i }));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    holdStatusRead = false;
+    fireEvent.click(screen.getByRole('button', { name: /Sign in to Open Design/i }));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(loginCalls).toBe(2);
+
+    // A's held read resolves signed-in. It belongs to the canceled attempt,
+    // not the current one — the post-fetch ownership check must suppress the
+    // success broadcast and workspace refresh.
+    await act(async () => {
+      releaseStatusRead(jsonResponse({
+        loggedIn: true,
+        profile: 'prod',
+        user: { id: 'u', email: 'user@example.com' },
+        configPath: '/x',
+      }));
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(statusEvents).not.toContain('status-changed');
+    expect(contextRefresh).not.toHaveBeenCalled();
+    expect(props.onCompleteOnboarding).not.toHaveBeenCalled();
+
+    window.removeEventListener(AMR_LOGIN_STATUS_EVENT, onStatusEvent);
+    window.removeEventListener(WORKSPACE_CONTEXT_REFRESH_EVENT, contextRefresh);
+    vi.useRealTimers();
+  });
+
   it('refreshes workspace context, billing, and team projects as soon as onboarding sign-in completes', async () => {
     // Onboarding's embedded AMR sign-in step (pollAmrLoginCompletion) used to
     // fire only notifyAmrLoginStatusChanged() on success — unlike

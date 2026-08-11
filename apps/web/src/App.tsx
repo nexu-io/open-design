@@ -1886,7 +1886,15 @@ function AppInner() {
     };
     void sync();
     const onStatusEvent = (event: Event) => {
-      if (amrLoginStatusEventReason(event) === 'login-canceled') {
+      const reason = amrLoginStatusEventReason(event);
+      if (reason === 'login-started') {
+        // Adopt the started attempt SYNCHRONOUSLY, before any status read: a
+        // delayed `login-canceled` from the previously observed attempt must
+        // not match `amrStatusAttemptIdRef` and clear a retry armed for the
+        // just-started login while its status fetch is still in flight.
+        const startedId = amrLoginStatusEventAuthAttemptId(event);
+        if (startedId) amrStatusAttemptIdRef.current = startedId;
+      } else if (reason === 'login-canceled') {
         // Only a broadcast that still owns the current attempt may clear the
         // inline-auth retry continuation. A stale `login-canceled` for a
         // superseded attempt (or one this tab never observed) must not drop a

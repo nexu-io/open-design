@@ -3416,6 +3416,67 @@ describe('App project creation routing', () => {
     });
   });
 
+  it('adopts a login-started attempt synchronously so a stale cancel for the prior attempt cannot clear the retry', async () => {
+    // Regression (review thread): `amrStatusAttemptIdRef` was updated only by
+    // the asynchronous status sync. A `login-started(B)` event did not adopt
+    // B's id before the cancel handler ran, so a delayed `login-canceled(A)`
+    // (A being the previously observed attempt) still matched the ref and
+    // cleared a retry armed for B while B's status fetch was in flight.
+    stubWorkspaceContext('ws-1', 'wm-1');
+    mockedListProjects.mockResolvedValue([{
+      ...existingProject,
+      workspaceId: 'ws-1',
+    }]);
+    const attemptA = 'aaaa1111-1111-4111-8111-111111111111';
+    const attemptB = 'bbbb2222-2222-4222-8222-222222222222';
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const pathname = new URL(String(input), 'http://d.local').pathname;
+        return {
+          ok: true,
+          json: async () =>
+            pathname.endsWith('/workspace/directory')
+              ? workspaceDirectoryFixture([workspaceContext('ws-1', 'wm-1')])
+              : pathname.endsWith('/workspace/context')
+                ? workspaceContextPayload('ws-1', 'wm-1')
+                : pathname.endsWith('/integrations/vela/status')
+                  ? {
+                      loggedIn: true,
+                      authAttemptId: attemptA,
+                      profile: 'test',
+                      user: { id: 'account-a', email: 'a@example.com', plan: 'free' },
+                      configPath: '',
+                    }
+                  : {},
+        } as Response;
+      }),
+    );
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Open Existing project' }));
+    await screen.findByTestId('project-view');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Arm auth continuation' }));
+    await waitFor(() => {
+      expect(screen.getByTestId('project-auth-continuation').textContent).toBe(
+        'assistant-auth-failure',
+      );
+    });
+
+    // A newer login-started(B) arrives; the handler must adopt B synchronously
+    // so the stale cancel below no longer matches the ref.
+    act(() => notifyAmrLoginStatusChanged('login-started', attemptB));
+
+    // A delayed login-canceled for the PRIOR attempt must not clear the retry.
+    act(() => notifyAmrLoginStatusChanged('login-canceled', attemptA));
+    await waitFor(() => {
+      expect(screen.getByTestId('project-auth-continuation').textContent).toBe(
+        'assistant-auth-failure',
+      );
+    });
+  });
+
   it('preserves an exact retry through Settings and returns to its project after sign-in', async () => {
     mockedListProjects.mockResolvedValue([{
       ...existingProject,

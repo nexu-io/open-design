@@ -2842,11 +2842,18 @@ function OnboardingView({
       // whatever attempt the mutable ref points at after the fetch.
       const authAttemptId = amrAuthAttemptIdRef.current;
       const nextStatus = await fetchVelaLoginStatus();
-      // Post-fetch cancel guard: a user cancel issued while the status read
-      // was in flight already flipped `amrLoginPollCancelledRef`. Bail before
-      // committing status/analytics or broadcasting a terminal outcome that
-      // would fight the cancel's own cleanup.
-      if (amrLoginPollCancelledRef.current) return false;
+      // Post-fetch ownership: a user cancel issued while the status read was
+      // in flight already flipped `amrLoginPollCancelledRef`, and a newer
+      // attempt that started while this read was awaiting has replaced the ref
+      // (and reset the cancel flag). Bail before committing status/analytics or
+      // broadcasting a terminal outcome that would fight the newer flow — the
+      // attempt this poll belongs to no longer owns the current ref.
+      if (
+        amrLoginPollCancelledRef.current ||
+        (authAttemptId && authAttemptId !== amrAuthAttemptIdRef.current)
+      ) {
+        return false;
+      }
       if (nextStatus) {
         setAmrStatus(nextStatus);
         onAmrLoginStatusChange?.(nextStatus);

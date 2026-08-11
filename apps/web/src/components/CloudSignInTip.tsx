@@ -140,8 +140,12 @@ export function CloudSignInTip() {
     setState('signing');
     setStatus(null);
     const current = await fetchVelaLoginStatus();
-    if (current?.authAttemptId) authAttemptIdRef.current = current.authAttemptId;
+    // Keep this run's observed id LOCAL until ownership is validated below —
+    // writing the shared ref before the token check would let a superseded
+    // run overwrite the current attempt's identity with its own stale read.
+    const observedCurrentId = current?.authAttemptId ?? null;
     if (cancelledRef.current || !mountedRef.current || loginRun !== loginRunRef.current) return;
+    if (observedCurrentId) authAttemptIdRef.current = observedCurrentId;
     if (current?.loggedIn) {
       finishSignedIn();
       return;
@@ -149,23 +153,23 @@ export function CloudSignInTip() {
     const result = await startVelaLogin();
     // The daemon's canonical attempt id may not be observable from a status
     // read until the first poll tick (2s later). Record it the moment the
-    // spawn resolves — including the alreadyRunning/409 response — BEFORE any
-    // early return, so a Cancel that landed while the POST was pending (and
-    // could not yet see the id) still lets this continuation issue the
-    // targeted cancellation below instead of discarding the id.
-    if (result.authAttemptId) authAttemptIdRef.current = result.authAttemptId;
+    // spawn resolves — including the alreadyRunning/409 response. The id is
+    // kept local so a Cancel that landed while the POST was pending still lets
+    // this continuation issue the targeted cancellation below without first
+    // mutating the shared ref.
+    const spawnId = result.authAttemptId ?? null;
     if (cancelledRef.current || !mountedRef.current || loginRun !== loginRunRef.current) {
       // Cancel intent preserved (spawn was pending when `cancel()` ran): issue
       // the canonical cancel for the just-resolved attempt now that we know
       // its id, and broadcast with it — never the legacy no-body form.
-      if (cancelRequestedRef.current && result.authAttemptId) {
+      if (cancelRequestedRef.current && spawnId) {
         cancelRequestedRef.current = false;
-        const id = result.authAttemptId;
-        void cancelVelaLogin(id);
-        notifyAmrLoginStatusChanged('login-canceled', id);
+        void cancelVelaLogin(spawnId);
+        notifyAmrLoginStatusChanged('login-canceled', spawnId);
       }
       return;
     }
+    if (spawnId) authAttemptIdRef.current = spawnId;
     if (!result.ok && !result.alreadyRunning) {
       console.error('[amr-login] startVelaLogin failed', result);
       setState('error');
@@ -176,8 +180,11 @@ export function CloudSignInTip() {
       await new Promise((resolve) => window.setTimeout(resolve, AMR_LOGIN_POLL_INTERVAL_MS));
       if (cancelledRef.current || !mountedRef.current || loginRun !== loginRunRef.current) return;
       const next = await fetchVelaLoginStatus();
-      if (next?.authAttemptId) authAttemptIdRef.current = next.authAttemptId;
+      // Same ordering as above: validate ownership before adopting this read's
+      // id into the shared ref.
+      const nextId = next?.authAttemptId ?? null;
       if (cancelledRef.current || !mountedRef.current || loginRun !== loginRunRef.current) return;
+      if (nextId) authAttemptIdRef.current = nextId;
       if (next) setStatus(next);
       const outcome = amrLoginPollOutcome(next, startedAt);
       if (outcome === 'signed-in') {
@@ -190,8 +197,8 @@ export function CloudSignInTip() {
         // the daemon still sees a login in flight and a retry click 409s as
         // alreadyRunning instead of spawning a fresh one, so no new browser
         // tab ever opens. Mirrors AmrLoginPill / InlineModelSwitcher / EntryShell.
-        // Target the attempt this run observed (captured now — the mutable ref
-        // may have moved on to a newer login while the read was in flight).
+        // Target this run's attempt (captured — the mutable ref may have moved
+        // on to a newer login while the read was in flight).
         const observedAttemptId = authAttemptIdRef.current;
         if (outcome === 'timed-out') {
           void cancelVelaLogin(observedAttemptId ?? undefined);
