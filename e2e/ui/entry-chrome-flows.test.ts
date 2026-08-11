@@ -393,9 +393,8 @@ test('[P1] entry top navigation matches the current home tab structure', async (
   await expect(page.locator('.entry-nav-rail__footer').getByTestId('entry-nav-plugins')).toHaveCount(0);
 
   await expect(page.getByTestId('home-hero-template-picker')).toBeVisible();
-  // Nothing is applied on a fresh Home: no template pill reset, no plugin
-  // chip, no template-driven footer options or presets.
-  await expect(page.getByTestId('home-hero-template-reset')).toHaveCount(0);
+  // Nothing is applied on a fresh Home: no plugin chip, no template-driven
+  // footer options or presets.
   await expect(page.getByTestId('home-hero-active-plugin')).toHaveCount(0);
   await expect(page.getByTestId('home-hero-footer-options')).toHaveCount(0);
   await expect(page.getByTestId('home-hero-plugin-presets')).toHaveCount(0);

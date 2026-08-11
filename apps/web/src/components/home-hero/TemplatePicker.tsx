@@ -6,7 +6,7 @@
 // selection (back to None).
 //
 // Selection is the existing `activeChipId`: picking a row calls `onPick(chip)`
-// (the same handler the rail uses) and the trigger's reset calls `onClear()`.
+// (the same handler the rail uses). Clearing the selected type was removed.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { HomeHeroChip } from './chips';
@@ -30,7 +30,6 @@ interface Props {
   // Localized label for a chip id (reuses HomeHero's chip copy).
   labelFor: (chipId: string) => string;
   onPick: (chip: HomeHeroChip) => void;
-  onClear: () => void;
 }
 
 // Rendered menu width (see .home-hero__template-list) — used to clamp the
@@ -49,7 +48,6 @@ export function TemplatePicker({
   pickDisabled = false,
   labelFor,
   onPick,
-  onClear,
 }: Props) {
   const t = useT();
   const [open, setOpen] = useState(false);
@@ -200,28 +198,10 @@ export function TemplatePicker({
             {valueLabel}
           </span>
         ) : null}
-        {/* Once a template is chosen the dropdown chevron gives way to a
-            hairline divider before the clear (×) control. */}
-        {hasSelection ? null : <Icon name="chevron-down" size={16} aria-hidden />}
+        {/* The chevron stays on the pill in every state — clearing the type
+            was removed (per product), so there is no × to give way to. */}
+        <Icon name="chevron-down" size={16} aria-hidden />
       </button>
-      {hasSelection ? <span className="home-hero__template-divider" aria-hidden /> : null}
-      {hasSelection ? (
-        <button
-          type="button"
-          className="home-hero__template-reset od-tooltip"
-          data-testid="home-hero-template-reset"
-          aria-label={t('common.clear')}
-          title={t('common.clear')}
-          data-tooltip={t('common.clear')}
-          onClick={(event) => {
-            event.stopPropagation();
-            setOpen(false);
-            onClear();
-          }}
-        >
-          <Icon name="close" size={16} strokeWidth={2.2} />
-        </button>
-      ) : null}
       {open ? createPortal(
         <div
           ref={menuRef}
@@ -235,33 +215,6 @@ export function TemplatePicker({
               : undefined
           }
         >
-          {/* Clear row first — the list counterpart of the old radial's
-              center disc; checked while nothing is selected. Its testid keeps
-              the historical "radial-clear" name so the existing unit/e2e
-              coverage keeps driving it unchanged. */}
-          <button
-            type="button"
-            className={`home-hero__template-list-item home-hero__template-list-item--clear${hasSelection ? '' : ' is-active'}`}
-            role="option"
-            aria-selected={!hasSelection}
-            data-testid="home-hero-template-radial-clear"
-            onClick={() => {
-              onClear();
-              setOpen(false);
-            }}
-          >
-            <span className="home-hero__template-list-head">
-              <span className="home-hero__template-list-icon" aria-hidden>
-                <Icon name="close" size={16} />
-              </span>
-              <span className="home-hero__template-list-title">{t('common.clear')}</span>
-              {hasSelection ? null : (
-                <span className="home-hero__template-list-check" aria-hidden>
-                  <Icon name="check" size={14} />
-                </span>
-              )}
-            </span>
-          </button>
           {visibleTemplates.map((chip) => {
             const isActive = chip.id === activeChipId;
             return (

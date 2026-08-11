@@ -389,7 +389,9 @@ export function chipsForGroup(group: ChipGroup): HomeHeroChip[] {
 // plugin. Any create chip not listed keeps its catalog order after the explicit
 // entries (see `orderedCreateChips`).
 export const CREATE_RAIL_ORDER = [
-  'web-clone',
+  // Slide deck leads (per product: 幻灯片 is the row's first, default-selected
+  // type); Website clone trails the whole list so at typical widths it lives
+  // in the 全部 overflow popover rather than the visible pill row.
   'deck',
   'prototype',
   'wireframe',
@@ -401,6 +403,7 @@ export const CREATE_RAIL_ORDER = [
   'image',
   'video',
   'audio',
+  'web-clone',
 ] as const;
 
 // Chip ids the onboarding "build a design system" teaser intentionally omits.

@@ -799,6 +799,21 @@ export function EntryTopRightCluster({
       {createPortal(
         <div className="entry-top-right-cluster">
           {leadingSlot}
+          {/* GitHub star chip: its own option in the cluster, right after the
+              campaign badge (per product) — it used to live in the account
+              menu's social row. */}
+          <a
+            className="entry-top-right-github"
+            href={REPO_URL}
+            {...externalLinkProps}
+            aria-label={`GitHub · ${githubStars == null ? GITHUB_STARS_FALLBACK_LABEL : formatStars(githubStars)} stars`}
+            title={`GitHub · ${githubStars == null ? GITHUB_STARS_FALLBACK_LABEL : formatStars(githubStars)} stars`}
+            data-testid="entry-top-right-github"
+            onClick={() => trackAccountAction('github')}
+          >
+            <Icon name="github-filled" size={14} />
+            <span>{githubStars == null ? GITHUB_STARS_FALLBACK_LABEL : formatStars(githubStars)}</span>
+          </a>
           {/* One shared capsule for the account module (per product: 头像和积分
               合并成一个胶囊): credits segment on the left (same availability
               rule as the menu's billing card; clicking jumps to B's billing
@@ -991,26 +1006,10 @@ export function EntryTopRightCluster({
                     >
                       <Icon name="sparkles" size={15} /> {t('entry.accountFeatureRequest')}
                     </a>
-                    {/* #5517: the GitHub/Discord/X/mail badges move off the rail
-                        footer into a compact social row inside the account menu. */}
+                    {/* #5517: the Discord/X/mail badges move off the rail footer
+                        into a compact social row inside the account menu. GitHub
+                        left the row for its own top-right cluster chip. */}
                     <div className="entry-nav-rail__menu-social">
-                      <a
-                        className="entry-nav-rail__menu-social-btn"
-                        role="menuitem"
-                        href={REPO_URL}
-                        {...externalLinkProps}
-                        aria-label={`GitHub · ${githubStars == null ? GITHUB_STARS_FALLBACK_LABEL : formatStars(githubStars)} stars`}
-                        title={`GitHub · ${githubStars == null ? GITHUB_STARS_FALLBACK_LABEL : formatStars(githubStars)} stars`}
-                        onClick={() => {
-                          trackAccountAction('github');
-                          setAccountOpen(false);
-                        }}
-                      >
-                        <Icon name="github-filled" size={15} />
-                        <span className="entry-nav-rail__menu-social-count">
-                          {githubStars == null ? GITHUB_STARS_FALLBACK_LABEL : formatStars(githubStars)}
-                        </span>
-                      </a>
                       <a
                         className="entry-nav-rail__menu-social-btn"
                         role="menuitem"

@@ -6003,6 +6003,35 @@
    比头像高出一圈). */
 /* Credits and the avatar read as two separate controls (per product): the
    wrapper is a bare flex row — each child paints its own surface. */
+/* Standalone GitHub star chip in the top-right cluster, sitting between the
+   campaign badge and the account capsule. Same pill material as the capsule
+   so the three read as one row of chips. */
+.entry-top-right-github {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 0 11px;
+  border: 1px solid var(--material-separator);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--bg-elevated) 86%, transparent);
+  box-shadow: var(--shadow-xs);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: var(--text-strong);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.entry-top-right-github svg {
+  color: var(--text-soft);
+}
+.entry-top-right-github:hover {
+  border-color: var(--border-strong);
+}
+
 .entry-top-right-account-pill {
   display: inline-flex;
   align-items: center;
