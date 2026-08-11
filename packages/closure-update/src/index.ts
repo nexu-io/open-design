@@ -394,13 +394,13 @@ async function releaseUpdateLock(lock: UpdateLock): Promise<void> {
 }
 
 function sameCandidate(
-  pointer: Pick<ClosureRuntimePointer, "channel" | "digest" | "namespace" | "platform" | "protocolVersion" | "version">,
+  pointer: Pick<ClosureRuntimePointer, "channel" | "digest" | "namespace" | "protocolVersion" | "target" | "version">,
   binding: ReturnType<typeof bindClosureCandidateIdentity>,
 ): boolean {
   return pointer.channel === binding.channel
     && pointer.digest === binding.digest
     && pointer.namespace === binding.namespace
-    && pointer.platform === binding.platform
+    && pointer.target === binding.platform
     && pointer.protocolVersion === binding.protocolVersion
     && pointer.version === binding.version;
 }

@@ -25,7 +25,7 @@ import { isReleaseChannel, type ReleaseChannel } from "@open-design/release";
 import { writeJsonFile } from "@open-design/sidecar";
 import { normalizeNamespace } from "@open-design/sidecar-proto";
 
-export const CLOSURE_BINDING_SCHEMA_VERSION = 1 as const;
+export const CLOSURE_BINDING_SCHEMA_VERSION = 2 as const;
 
 export type ClosureStoreRequest = {
   channel: string;
@@ -93,8 +93,9 @@ export type ClosureStoreVersionPaths = ClosureStorePaths & {
   versionRoot: string;
 };
 
-export type ClosureRuntimePointer = ClosureBindingIdentity & {
+export type ClosureRuntimePointer = Omit<ClosureBindingIdentity, "platform"> & {
   generation: number;
+  target: string;
 };
 
 export type CommittedClosureBinding = {
@@ -366,14 +367,36 @@ function normalizePointer(
     "digest",
     "generation",
     "namespace",
-    "platform",
     "protocolVersion",
+    "target",
     "version",
   ], "Closure runtime pointer");
+  const binding = validateClosureBindingIdentity({
+    ...pointer,
+    platform: pointer.target,
+  }, expected);
   return {
-    ...validateClosureBindingIdentity(pointer, expected),
+    channel: binding.channel,
+    digest: binding.digest,
     generation: normalizeGeneration(pointer.generation),
+    namespace: binding.namespace,
+    protocolVersion: binding.protocolVersion,
+    target: binding.platform,
+    version: binding.version,
   };
+}
+
+export function closureBindingIdentityFromRuntimePointer(
+  pointer: ClosureRuntimePointer,
+): ClosureBindingIdentity {
+  return validateClosureBindingIdentity({
+    channel: pointer.channel,
+    digest: pointer.digest,
+    namespace: pointer.namespace,
+    platform: pointer.target,
+    protocolVersion: pointer.protocolVersion,
+    version: pointer.version,
+  });
 }
 
 function normalizeCommittedBinding(
@@ -682,7 +705,15 @@ export async function commitVerifiedStoredClosureCandidate(
   }
   const current = await readClosureBindingDescriptor(paths);
   const generation = current.nextGeneration;
-  const pointer: ClosureRuntimePointer = { ...binding, generation };
+  const pointer: ClosureRuntimePointer = {
+    channel: binding.channel,
+    digest: binding.digest,
+    generation,
+    namespace: binding.namespace,
+    protocolVersion: binding.protocolVersion,
+    target: binding.platform,
+    version: binding.version,
+  };
   const committed: CommittedClosureBinding = {
     releaseVersion: normalizeReleaseVersion(releaseVersion),
     standalone: pointer,

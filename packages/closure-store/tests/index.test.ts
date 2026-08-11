@@ -270,7 +270,15 @@ describe("Closure committed binding", () => {
 
     expect(result.committed).toEqual({
       releaseVersion: "0.19.0-beta.1",
-      standalone: { ...binding, generation: 0 },
+      standalone: {
+        channel: binding.channel,
+        digest: binding.digest,
+        generation: 0,
+        namespace: binding.namespace,
+        protocolVersion: binding.protocolVersion,
+        target: binding.platform,
+        version: binding.version,
+      },
     });
     expect(await readClosureBindingDescriptor(paths)).toEqual(result.descriptor);
     expect(paths.bindingPath).toMatch(/binding\.json$/u);
@@ -283,7 +291,15 @@ describe("Closure committed binding", () => {
 
     const result = await commitVerifiedStoredClosureCandidate(paths, verification, "0.19.0-beta.1");
 
-    expect(result.committed.standalone).toEqual({ ...binding, generation: 0 });
+    expect(result.committed.standalone).toEqual({
+      channel: binding.channel,
+      digest: binding.digest,
+      generation: 0,
+      namespace: binding.namespace,
+      protocolVersion: binding.protocolVersion,
+      target: binding.platform,
+      version: binding.version,
+    });
     await expect(commitVerifiedStoredClosureCandidate(paths, {
       ...verification,
       paths: { ...verification.paths, versionRoot: join(paths.stagingRoot, "candidate") },
@@ -314,7 +330,7 @@ describe("Closure committed binding", () => {
       namespace: paths.namespace,
       nextGeneration: 0,
       port: 7456,
-      schemaVersion: 1,
+      schemaVersion: 2,
       updatedAt: new Date().toISOString(),
     })}\n`);
 

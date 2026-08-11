@@ -18,7 +18,7 @@ vi.mock("@open-design/closure-store", async (importOriginal) => ({
     committed: null,
     namespace: "release-beta",
     nextGeneration: 0,
-    schemaVersion: 1,
+    schemaVersion: 2,
     updatedAt: new Date(0).toISOString(),
   })),
 }));
@@ -115,14 +115,14 @@ describe("packaged Closure update adapter", () => {
           digest: `sha256:${"a".repeat(64)}`,
           generation: 0,
           namespace: "release-beta",
-          platform: "darwin-arm64",
           protocolVersion: 1,
+          target: "darwin-arm64",
           version: "0.19.0-beta.1",
         },
       },
       namespace: "release-beta",
       nextGeneration: 1,
-      schemaVersion: 1,
+      schemaVersion: 2,
       updatedAt: new Date(0).toISOString(),
     });
 

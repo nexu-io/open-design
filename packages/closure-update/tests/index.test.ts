@@ -112,8 +112,8 @@ function pointer(version: string, digest = DIGEST): ClosureRuntimePointer {
     digest,
     generation: 0,
     namespace: "release-beta",
-    platform: "darwin-arm64",
     protocolVersion: 1,
+    target: "darwin-arm64",
     version,
   };
 }
@@ -127,7 +127,7 @@ function descriptor(
     committed: standalone == null ? null : { releaseVersion, standalone },
     namespace: "release-beta",
     nextGeneration: standalone == null ? 0 : 1,
-    schemaVersion: 1,
+    schemaVersion: 2,
     updatedAt: new Date(0).toISOString(),
   };
 }
@@ -317,7 +317,13 @@ describe("Closure release update application", () => {
     const binding = await readClosureBindingDescriptor(paths);
     expect(binding.committed).toMatchObject({
       releaseVersion: fixture.candidate.releaseVersion,
-      standalone: fixture.candidate.manifest.identity,
+      standalone: {
+        channel: fixture.candidate.manifest.identity.channel,
+        digest: fixture.candidate.manifest.identity.digest,
+        protocolVersion: fixture.candidate.manifest.identity.protocolVersion,
+        target: fixture.candidate.manifest.identity.platform,
+        version: fixture.candidate.manifest.identity.version,
+      },
     });
     const verified = await verifyStoredClosureCandidate(paths, {
       ...fixture.candidate.manifest.identity,

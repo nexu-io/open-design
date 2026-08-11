@@ -94,7 +94,7 @@ export async function readCommittedPackagedClosureFixture(input: {
     || pointer.channel !== binding.channel
     || pointer.digest !== binding.digest
     || pointer.namespace !== binding.namespace
-    || pointer.platform !== binding.platform
+    || pointer.target !== binding.platform
     || pointer.protocolVersion !== binding.protocolVersion
     || pointer.version !== binding.version
   ) {

@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import { compareStandaloneVersions, STANDALONE_PROTOCOL_VERSION } from "@open-design/standalone-proto";
 import {
+  closureBindingIdentityFromRuntimePointer,
   readClosureBindingDescriptor,
   resolveClosureStorePaths,
   verifyStoredClosureCandidate,
@@ -93,16 +94,19 @@ export async function resolveElectronStandaloneBinding(input: Readonly<{
     );
   }
   const { releaseVersion, standalone: pointer } = descriptor.committed;
-  if (pointer.platform !== platform) {
+  if (pointer.target !== platform) {
     throw new ElectronStandaloneBindingError(
       "standalone-invalid",
-      `Committed Standalone platform ${pointer.platform} does not match ${platform}`,
+      `Committed Standalone target ${pointer.target} does not match ${platform}`,
     );
   }
 
   let verification: StoredClosureVerification;
   try {
-    verification = await verifyStoredClosureCandidate(storePaths, pointer);
+    verification = await verifyStoredClosureCandidate(
+      storePaths,
+      closureBindingIdentityFromRuntimePointer(pointer),
+    );
   } catch (error) {
     throw new ElectronStandaloneBindingError(
       "standalone-invalid",
