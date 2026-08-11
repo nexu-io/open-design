@@ -59,6 +59,15 @@ export type StopProcessesOptions = {
   killGraceMs?: number;
 };
 
+export type ListProcessSnapshotsOptions = {
+  /** Override the host platform for deterministic tooling tests. */
+  platform?: NodeJS.Platform;
+  /** Bound the OS process-enumeration command. Defaults to 10 seconds. */
+  timeoutMs?: number;
+};
+
+const PROCESS_SNAPSHOT_TIMEOUT_MS = 10_000;
+
 function normalizedGraceMs(value: number | undefined): number | undefined {
   return typeof value === "number" && Number.isFinite(value) && value >= 0
     ? Math.floor(value)
@@ -334,27 +343,38 @@ function parsePsOutput(stdout: string): ProcessSnapshot[] {
 }
 
 /** @internal Enumerate process snapshots on POSIX via `ps`. */
-async function listPosixProcessSnapshots(): Promise<ProcessSnapshot[]> {
+async function listPosixProcessSnapshots(timeoutMs: number): Promise<ProcessSnapshot[]> {
   const stdout = await new Promise<string>((resolveList, rejectList) => {
-    execFile("ps", ["-axo", "pid=,ppid=,command="], { encoding: "utf8", maxBuffer: 8 * 1024 * 1024 }, (error, out) => {
-      if (error) rejectList(error);
-      else resolveList(out);
-    });
+    execFile(
+      "ps",
+      ["-axo", "pid=,ppid=,command="],
+      { encoding: "utf8", maxBuffer: 8 * 1024 * 1024, timeout: timeoutMs },
+      (error, out) => {
+        if (error) rejectList(error);
+        else resolveList(out);
+      },
+    );
   });
   return parsePsOutput(stdout);
 }
 
 /** @internal Enumerate process snapshots on Windows via `Get-CimInstance Win32_Process` JSON. */
-async function listWindowsProcessSnapshots(): Promise<ProcessSnapshot[]> {
+async function listWindowsProcessSnapshots(timeoutMs: number): Promise<ProcessSnapshot[]> {
+  const operationTimeoutSeconds = Math.max(1, Math.ceil(timeoutMs / 1000));
   const command = [
     "$ErrorActionPreference = 'Stop'",
-    "Get-CimInstance Win32_Process | Select-Object ProcessId, ParentProcessId, CommandLine | ConvertTo-Json -Compress",
+    `Get-CimInstance Win32_Process -OperationTimeoutSec ${operationTimeoutSeconds} | Select-Object ProcessId, ParentProcessId, CommandLine | ConvertTo-Json -Compress`,
   ].join("; ");
   const stdout = await new Promise<string>((resolveList, rejectList) => {
-    execFile("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", command], { encoding: "utf8", maxBuffer: 8 * 1024 * 1024 }, (error, out) => {
-      if (error) rejectList(error);
-      else resolveList(out);
-    });
+    execFile(
+      "powershell.exe",
+      ["-NoProfile", "-NonInteractive", "-Command", command],
+      { encoding: "utf8", maxBuffer: 8 * 1024 * 1024, timeout: timeoutMs },
+      (error, out) => {
+        if (error) rejectList(error);
+        else resolveList(out);
+      },
+    );
   });
   const payload = stdout.trim();
   if (!payload) return [];
@@ -376,11 +396,16 @@ async function listWindowsProcessSnapshots(): Promise<ProcessSnapshot[]> {
  *
  * @returns The current process snapshots (empty on error).
  */
-export async function listProcessSnapshots(): Promise<ProcessSnapshot[]> {
+export async function listProcessSnapshots(options: ListProcessSnapshotsOptions = {}): Promise<ProcessSnapshot[]> {
+  const timeoutMs = typeof options.timeoutMs === "number"
+    && Number.isFinite(options.timeoutMs)
+    && options.timeoutMs > 0
+    ? Math.floor(options.timeoutMs)
+    : PROCESS_SNAPSHOT_TIMEOUT_MS;
   try {
-    return process.platform === "win32"
-      ? await listWindowsProcessSnapshots()
-      : await listPosixProcessSnapshots();
+    return (options.platform ?? process.platform) === "win32"
+      ? await listWindowsProcessSnapshots(timeoutMs)
+      : await listPosixProcessSnapshots(timeoutMs);
   } catch {
     return [];
   }

@@ -57,6 +57,10 @@ const namespace = resolvePackagedSmokeNamespace('win');
 const toolsPackBin = join(workspaceRoot, 'tools', 'pack', 'bin', 'tools-pack.mjs');
 const maxInstallDurationMs = Number.parseInt(process.env.OD_PACKAGED_E2E_WIN_MAX_INSTALL_MS ?? '120000', 10);
 const maxStartDurationMs = Number.parseInt(process.env.OD_PACKAGED_E2E_WIN_MAX_START_MS ?? '300000', 10);
+const maxToolsPackActionDurationMs = Number.parseInt(
+  process.env.OD_PACKAGED_E2E_WIN_TOOLS_PACK_ACTION_MAX_MS ?? '360000',
+  10,
+);
 // `??` would keep an EMPTY value, and the release workflows can hand one down
 // — see `resolvePackagedSmokeProfile` for why all three layers have to agree
 // that empty means unset. An empty value surviving here reads as "not core"
@@ -2090,15 +2094,21 @@ async function runToolsPackJsonForVersion<T>(
     '--json',
     ...extraArgs,
   ];
+  const startedAt = Date.now();
+  console.info(`[windows tools-pack] action:start action=${action}`);
   const result = await execFileAsync(process.execPath, args, {
     cwd: workspaceRoot,
     env: process.env,
     maxBuffer: 20 * 1024 * 1024,
+    timeout: maxToolsPackActionDurationMs,
+  }).then((value) => {
+    console.info(`[windows tools-pack] action:done action=${action} durationMs=${Date.now() - startedAt}`);
+    return value;
   }).catch((error: unknown) => {
     if (isExecError(error)) {
       throw new Error(
         [
-          `tools-pack win ${action} failed`,
+          `tools-pack win ${action} failed after ${Date.now() - startedAt}ms`,
           `message:\n${error.message}`,
           `stdout:\n${error.stdout}`,
           `stderr:\n${error.stderr}`,

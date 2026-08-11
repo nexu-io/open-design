@@ -131,6 +131,7 @@ async function runVitest(spec: string, resultPath: string): Promise<{ exitCode: 
     spec,
     '--reporter=default',
     '--reporter=json',
+    '--disableConsoleIntercept',
     `--outputFile.json=${resultPath}`,
   ], {
     cwd: e2eRoot,
