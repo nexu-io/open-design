@@ -465,6 +465,77 @@ describe('stale web message snapshot does not wipe daemon-owned run events', () 
     ).toBe('model output');
   });
 
+  it('preserves fuller daemon content when a stale snapshot has more events', async () => {
+    // #6418 review: event growth is not a freshness proof for content. A delayed
+    // whole-message snapshot can carry one additional client/status event while
+    // still holding older partial text.
+    binDir = await mkdtemp(path.join(os.tmpdir(), 'od-event-growth-content-bin-'));
+    const fakeClaude = await writeCleanClaude(binDir, 'claude-event-growth-content');
+
+    delete process.env.POSTHOG_KEY;
+    delete process.env.POSTHOG_HOST;
+    delete process.env.LANGFUSE_PUBLIC_KEY;
+    delete process.env.LANGFUSE_SECRET_KEY;
+    delete process.env.LANGFUSE_BASE_URL;
+    delete process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL;
+
+    started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
+    await putConfig(started.url, {
+      agentId: 'claude',
+      agentCliEnv: { claude: { CLAUDE_BIN: fakeClaude } },
+      telemetry: { metrics: true, content: false, artifactManifest: false },
+      privacyDecisionAt: Date.now(),
+    });
+
+    const { projectId, conversationId } = await createConversation(started.url);
+    const { assistantMessageId, status } = await sendRunAndWait(
+      started.url,
+      projectId,
+      conversationId,
+    );
+    expect(status.status).toBe('succeeded');
+
+    const before = await fetchAssistantMessage(
+      started.url,
+      projectId,
+      conversationId,
+      assistantMessageId,
+    );
+    expect(before?.runId).toBeTypeOf('string');
+    expect(before?.content).toBe('Hello from the model.');
+    expect(before?.events?.length).toBeGreaterThan(0);
+
+    const staleSnapshot = await fetch(
+      `${started.url}/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(assistantMessageId)}`,
+      {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          id: assistantMessageId,
+          role: 'assistant',
+          content: 'Hello',
+          runId: before?.runId,
+          runStatus: before?.runStatus,
+          lastRunEventId: before?.lastRunEventId,
+          events: [
+            ...(before?.events ?? []),
+            { kind: 'status', label: 'client-only-status' },
+          ],
+        }),
+      },
+    );
+    expect(staleSnapshot.status).toBe(200);
+
+    const after = await fetchAssistantMessage(
+      started.url,
+      projectId,
+      conversationId,
+      assistantMessageId,
+    );
+    expect(after?.content).toBe('Hello from the model.');
+    expect(after?.events?.length).toBe((before?.events?.length ?? 0) + 1);
+  });
+
   it('lets a metadata update write a fresh endedAt while preserving daemon events', async () => {
     // The retry flow persists the completion timestamp as a metadata update
     // whose events array is empty (the web never carries the daemon's detailed

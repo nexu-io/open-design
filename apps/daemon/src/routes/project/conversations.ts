@@ -346,6 +346,8 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
       stored.runStatus !== undefined &&
       TERMINAL_RUN_STATUSES.has(stored.runStatus) &&
       incomingStatus !== stored.runStatus;
+    const daemonRun = stored.runId ? design.runs.get(stored.runId) : null;
+    const daemonKnown = daemonRun !== null && daemonRun !== undefined;
     // After a same-run resume the stored row is non-terminal, so a terminal
     // `failed` snapshot may be a stale copy from BEFORE the resume. Accept it
     // only when the daemon confirms the run genuinely failed (it writes that
@@ -372,8 +374,6 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
     const storedNonTerminal =
       stored.runStatus === undefined || !TERMINAL_RUN_STATUSES.has(stored.runStatus);
     if (incomingIsTerminal && storedNonTerminal) {
-      const daemonRun = stored.runId ? design.runs.get(stored.runId) : null;
-      const daemonKnown = daemonRun !== null && daemonRun !== undefined;
       const daemonTerminal =
         daemonKnown && TERMINAL_RUN_STATUSES.has(daemonRun!.status);
       if (!daemonKnown) {
@@ -425,12 +425,24 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
       const eventsGrew = incomingEvents.length > storedEventCount;
       const incomingText = typeof incoming.content === 'string' ? incoming.content : null;
       const storedText = typeof stored.content === 'string' ? stored.content : null;
-      const mergedContent =
-        eventsGrew && incomingText !== null && incomingText.length > 0
+      const incomingTextIsStrictlyLonger =
+        incomingText !== null &&
+        (storedText === null || incomingText.length > storedText.length);
+      let mergedContent: string;
+      if (daemonKnown) {
+        mergedContent = incomingTextIsStrictlyLonger
           ? incomingText
           : storedText !== null && storedText.length > 0
             ? storedText
             : incomingText ?? storedText ?? '';
+      } else {
+        mergedContent =
+          eventsGrew && incomingText !== null && incomingText.length > 0
+            ? incomingText
+            : storedText !== null && storedText.length > 0
+              ? storedText
+              : incomingText ?? storedText ?? '';
+      }
       // A pinned-but-event-less daemon-backed row can still be hit by a stale
       // pre-run snapshot that omits `runId` (the web persisted the assistant
       // placeholder before /api/runs assigned ownership). Preserve the
