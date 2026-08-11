@@ -12,7 +12,7 @@
 // the "refuse 0.0.0.0 without token" path is exercised by a separate
 // negative case that constructs the start call directly).
 
-import type http from 'node:http';
+import { request as httpRequest, type OutgoingHttpHeaders, type Server } from 'node:http';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -24,17 +24,47 @@ const PREVIOUS_TOKEN = process.env.OD_API_TOKEN;
 const PREVIOUS_HOST  = process.env.OD_BIND_HOST;
 const PREVIOUS_DISABLE_API_AUTH = process.env.OD_DISABLE_API_AUTH;
 
-let server: http.Server | undefined;
+let server: Server | undefined;
 let baseUrl = '';
 let shutdown: (() => Promise<void> | void) | undefined;
 let staticDir: string | undefined;
 
-function makeConnectionsAppearNonLoopback(target: http.Server): void {
+function makeConnectionsAppearNonLoopback(target: Server): void {
   target.prependListener('connection', (socket) => {
     Object.defineProperty(socket, 'remoteAddress', {
       configurable: true,
       value: '172.18.0.1',
     });
+  });
+}
+
+function requestWithBrowserHeaders(
+  url: string,
+  headers: OutgoingHttpHeaders,
+): Promise<{ body: string; status: number | undefined }> {
+  const target = new URL(url);
+  return new Promise((resolve, reject) => {
+    const req = httpRequest(
+      {
+        hostname: target.hostname,
+        port: target.port,
+        path: target.pathname + target.search,
+        method: 'GET',
+        headers,
+      },
+      (res) => {
+        const chunks: Buffer[] = [];
+        res.on('data', (chunk: Buffer) => chunks.push(chunk));
+        res.on('end', () => {
+          resolve({
+            body: Buffer.concat(chunks).toString('utf8'),
+            status: res.statusCode,
+          });
+        });
+      },
+    );
+    req.on('error', reject);
+    req.end();
   });
 }
 
@@ -66,7 +96,7 @@ describe('bound-API-token guard', () => {
     // by setting the env var; the assertion is that startup succeeds.
     const started = (await startServer({ port: 0, host: '127.0.0.1', returnServer: true })) as {
       url: string;
-      server: http.Server;
+      server: Server;
       shutdown?: () => Promise<void> | void;
     };
     server = started.server;
@@ -79,7 +109,7 @@ describe('bound-API-token guard', () => {
     delete process.env.OD_API_TOKEN;
     process.env.OD_DISABLE_API_AUTH = '1';
     const started = (await startServer({ port: 0, host: '0.0.0.0', returnServer: true })) as {
-      server: http.Server;
+      server: Server;
       shutdown?: () => Promise<void> | void;
     };
     server = started.server;
@@ -92,7 +122,7 @@ describe('bearer middleware', () => {
     process.env.OD_API_TOKEN = 'secret-test-token';
     const started = (await startServer({ port: 0, host: '127.0.0.1', returnServer: true })) as {
       url: string;
-      server: http.Server;
+      server: Server;
       shutdown?: () => Promise<void> | void;
     };
     baseUrl = started.url;
@@ -144,7 +174,7 @@ describe('browser authentication for non-loopback Docker peers', () => {
       staticDir,
     })) as {
       url: string;
-      server: http.Server;
+      server: Server;
       shutdown?: () => Promise<void> | void;
     };
     baseUrl = started.url;
@@ -218,7 +248,7 @@ describe('browser authentication for non-loopback Docker peers', () => {
       staticDir,
     })) as {
       url: string;
-      server: http.Server;
+      server: Server;
       shutdown?: () => Promise<void> | void;
     };
     baseUrl = started.url;
@@ -235,22 +265,18 @@ describe('browser authentication for non-loopback Docker peers', () => {
       'sec-fetch-site': 'same-origin',
     };
 
-    const documentedHost = await fetch(`${baseUrl}/api/plugins`, {
-      headers: {
-        ...browserHeaders,
-        host: `127.0.0.1:${port}`,
-      },
+    const documentedHost = await requestWithBrowserHeaders(`${baseUrl}/api/plugins`, {
+      ...browserHeaders,
+      host: `127.0.0.1:${port}`,
     });
     expect(documentedHost.status).toBe(200);
 
-    const poweredPreviewHost = await fetch(`${baseUrl}/api/plugins`, {
-      headers: {
-        ...browserHeaders,
-        host: `localhost:${port}`,
-      },
+    const poweredPreviewHost = await requestWithBrowserHeaders(`${baseUrl}/api/plugins`, {
+      ...browserHeaders,
+      host: `localhost:${port}`,
     });
     expect(poweredPreviewHost.status).toBe(403);
-    await expect(poweredPreviewHost.json()).resolves.toEqual({
+    expect(JSON.parse(poweredPreviewHost.body)).toEqual({
       error: 'Powered preview origin cannot access this API route',
     });
   });
