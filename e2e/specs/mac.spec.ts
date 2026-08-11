@@ -383,8 +383,7 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
       expect(install.detached).toBe(true);
       expectPathInside(install.dmgPath, join(outputNamespaceRoot, 'dmg'));
       expectPathInside(install.installedAppPath, join(outputNamespaceRoot, 'install', 'Applications'));
-      const protocolBundleIdentifier = await assertMacInviteProtocolRegistration(install.installedAppPath);
-      await registerMacAppWithLaunchServices(install.installedAppPath);
+      await assertMacInviteProtocolRegistration(install.installedAppPath);
 
       await seedPackagedOnboardingComplete();
       if (!shellAbsorbsStandaloneAcceptance) await seedConfiguredPackagedClosure();
@@ -488,8 +487,6 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
         expect(reinstallStop.remainingPids).toEqual([]);
         const reinstall = await runToolsPackJson<MacInstallResult>('install');
         expect(reinstall.installedAppPath).toBe(install.installedAppPath);
-        expect(await assertMacInviteProtocolRegistration(reinstall.installedAppPath)).toBe(protocolBundleIdentifier);
-        await registerMacAppWithLaunchServices(reinstall.installedAppPath);
         const reinstallStart = await runToolsPackJson<MacStartResult>('start');
         started = true;
         expect(reinstallStart.pid).not.toBe(start.pid);
@@ -502,7 +499,7 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
       }
 
       const protocolHotPid = protocolBaseInspect.status?.pid ?? start.pid;
-      await invokeMacInviteDeeplink(protocolBundleIdentifier);
+      await invokeMacInviteDeeplink(install.installedAppPath);
       const protocolHotInspect = await waitForHealthyDesktop();
       expect(protocolHotInspect.status?.pid).toBe(protocolHotPid);
 
@@ -512,15 +509,9 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
         expect(protocolStop.status).not.toBe('partial');
         expect(protocolStop.remainingPids).toEqual([]);
 
-        await invokeMacInviteDeeplink(protocolBundleIdentifier, { forceNewInstance: true });
+        await invokeMacInviteDeeplink(install.installedAppPath);
         started = true;
-        const protocolColdInspect = await waitForHealthyDesktop(releaseVersion, async () => {
-          // LaunchServices can accept `open -n` while it is still retiring the
-          // just-stopped application record, without creating a new process.
-          // Retry the same OS-protocol launch; never fall back to starting the
-          // executable directly, so a healthy PID still proves cold routing.
-          await invokeMacInviteDeeplink(protocolBundleIdentifier, { forceNewInstance: true });
-        });
+        const protocolColdInspect = await waitForHealthyDesktop();
         expect(protocolColdInspect.status?.state).toBe('running');
         expect(protocolColdInspect.status?.pid).not.toBe(protocolHotPid);
       }
@@ -2520,12 +2511,9 @@ async function readDesktopLocalCliSnapshot(
 
 async function waitForHealthyDesktop(
   releaseVersionOverride: string | null | undefined = releaseVersion,
-  retryUnavailableLaunch?: () => Promise<void>,
 ): Promise<MacInspectResult> {
   const timeoutMs = 90_000;
-  const launchRetryIntervalMs = 5_000;
   const startedAt = Date.now();
-  let lastLaunchRetryAt = startedAt;
   let lastResult: unknown = null;
 
   while (Date.now() - startedAt < timeoutMs) {
@@ -2545,17 +2533,6 @@ async function waitForHealthyDesktop(
       }
     } catch (error) {
       lastResult = error;
-    }
-    if (
-      retryUnavailableLaunch != null
-      && Date.now() - lastLaunchRetryAt >= launchRetryIntervalMs
-    ) {
-      try {
-        await retryUnavailableLaunch();
-      } catch (error) {
-        lastResult = error;
-      }
-      lastLaunchRetryAt = Date.now();
     }
     await delay(1000);
   }
@@ -3023,7 +3000,7 @@ function expectPathInside(filePath: string, expectedRoot: string): void {
   ).toBe(true);
 }
 
-async function assertMacInviteProtocolRegistration(installedAppPath: string): Promise<string> {
+async function assertMacInviteProtocolRegistration(installedAppPath: string): Promise<void> {
   const plistPath = join(installedAppPath, 'Contents', 'Info.plist');
   const { stdout } = await execFileAsync('/usr/bin/plutil', [
     '-convert',
@@ -3033,44 +3010,18 @@ async function assertMacInviteProtocolRegistration(installedAppPath: string): Pr
     plistPath,
   ]);
   const plist = JSON.parse(stdout) as {
-    CFBundleIdentifier?: string;
     CFBundleURLTypes?: Array<{ CFBundleURLSchemes?: string[] }>;
   };
   const schemes = (plist.CFBundleURLTypes ?? []).flatMap(
     (entry) => entry.CFBundleURLSchemes ?? [],
   );
   expect(schemes).toContain('opendesign');
-  expect(plist.CFBundleIdentifier).toEqual(expect.any(String));
-  return plist.CFBundleIdentifier!;
 }
 
-async function registerMacAppWithLaunchServices(installedAppPath: string): Promise<void> {
-  // A real Finder drag-install registers the copied bundle. The tools-pack
-  // harness uses `ditto` into an isolated Applications directory, so perform
-  // that missing OS step explicitly before testing cold protocol delivery.
-  await execFileAsync(
-    '/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister',
-    ['-f', installedAppPath],
-  );
-}
-
-async function invokeMacInviteDeeplink(
-  bundleIdentifier: string,
-  options: { forceNewInstance?: boolean } = {},
-): Promise<void> {
-  // `-b` routes through the registered bundle identity instead of interpreting
-  // a nested .app path as an application name. The channel-specific bundle ID
-  // also avoids a developer's stable Open Design app that owns the same scheme.
-  // LaunchServices may briefly retain the connection to a just-terminated app
-  // after tools-pack has proved that all of its PIDs are gone. For the cold
-  // assertion, `-n` requires a new application process while still delivering
-  // the URL through the installed bundle's OS protocol entry.
-  await execFileAsync('/usr/bin/open', [
-    ...(options.forceNewInstance === true ? ['-n'] : []),
-    '-b',
-    bundleIdentifier,
-    packagedInviteDeeplink,
-  ]);
+async function invokeMacInviteDeeplink(installedAppPath: string): Promise<void> {
+  // `-a` pins delivery to this namespace's installed test bundle instead of a
+  // developer's stable Open Design app that may own the same global scheme.
+  await execFileAsync('/usr/bin/open', ['-a', installedAppPath, packagedInviteDeeplink]);
 }
 
 async function pathExists(filePath: string): Promise<boolean> {
