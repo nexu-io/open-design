@@ -186,7 +186,7 @@ describe('pinAssistantMessageOnRunCreate generation boundary (#6418)', () => {
     seedMessage(db, {
       id: 'msg-1',
       conversationId: 'conv-a',
-      content: '',
+      content: 'placeholder',
       runStatus: 'running',
       startedAt: 100,
     });
@@ -202,6 +202,7 @@ describe('pinAssistantMessageOnRunCreate generation boundary (#6418)', () => {
     const m = readMessage(db, 'msg-1');
     expect(m.runId).toBe('run-b');
     expect(m.runStatus).toBe('queued');
+    expect(m.content).toBe('placeholder');
     // The web-persisted placeholder start time survives (retry-after-stop e2e).
     expect(m.startedAt).toBe(100);
   });

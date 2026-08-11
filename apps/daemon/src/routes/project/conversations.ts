@@ -429,12 +429,18 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
     // genuinely advances endedAt (e.g. the retry flow) still lands.
     const incomingEndedAt = typeof incoming.endedAt === 'number' ? incoming.endedAt : null;
     const storedEndedAt = typeof stored.endedAt === 'number' ? stored.endedAt : null;
+    const mergedContent =
+      typeof stored.content === 'string' && stored.content
+        ? stored.content
+        : incomingStatus === stored.runStatus && typeof incoming.content === 'string'
+          ? incoming.content
+          : stored.content ?? '';
     return {
       ...incoming,
       role: stored.role,
       runId: stored.runId,
       events: stored.events ?? [],
-      content: stored.content ?? '',
+      content: mergedContent,
       lastRunEventId: stored.lastRunEventId,
       runStatus: stored.runStatus,
       startedAt: stored.startedAt,
