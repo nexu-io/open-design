@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
@@ -124,10 +124,25 @@ export async function publishLatestMetadataWithCas(input: {
   if (parseCountedVersion(input.releaseVersion, input.channel) == null) {
     throw new Error(`invalid ${input.channel} version for latest CAS: ${input.releaseVersion}`);
   }
+  const targetBytes = readFileSync(input.metadataPath);
+  let targetReleaseVersion = "";
+  try {
+    const parsed = JSON.parse(targetBytes.toString("utf8").replace(/^\uFEFF/u, "")) as { releaseVersion?: unknown };
+    targetReleaseVersion = typeof parsed.releaseVersion === "string" ? parsed.releaseVersion : "";
+  } catch (error) {
+    throw new Error(`target metadata is invalid JSON: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  if (targetReleaseVersion !== input.releaseVersion) {
+    throw new Error(
+      `target metadata releaseVersion ${targetReleaseVersion || "<missing>"} does not match ${input.releaseVersion}`,
+    );
+  }
 
   for (let attempt = 1; attempt <= 5; attempt += 1) {
     const latest = await getStorageObject({ ...input.storage, objectKey });
     const headers: Record<string, string> = {};
+    let observedReleaseVersion = "<absent>";
+    let observedEtag = "<absent>";
     if (latest == null) {
       headers["if-none-match"] = "*";
     } else {
@@ -146,10 +161,18 @@ export async function publishLatestMetadataWithCas(input: {
           `refusing to move ${input.channel} latest backward from ${latestReleaseVersion} to ${input.releaseVersion}`,
         );
       }
+      observedReleaseVersion = latestReleaseVersion || "<missing>";
+      observedEtag = latest.etag;
+      if (latest.bytes.equals(targetBytes)) return;
+      if (latestReleaseVersion === input.releaseVersion) {
+        throw new Error(
+          `${input.channel} latest already names ${input.releaseVersion} with different metadata bytes`,
+        );
+      }
       if (latest.etag.length === 0) {
         throw new Error("latest metadata GET did not return an ETag for CAS update");
       }
-      headers["if-match"] = latest.etag;
+      headers["if-match"] = strongIfMatchEtag(latest.etag);
     }
 
     const result = await putStorageObjectWithStatus({
@@ -167,10 +190,25 @@ export async function publishLatestMetadataWithCas(input: {
         + `${result.body.length > 0 ? `: ${result.body}` : ""}`,
       );
     }
-    console.log(`latest metadata CAS conflict on attempt ${attempt}; retrying`);
+    if (attempt < 5) {
+      const delayMs = 250 * 2 ** (attempt - 1);
+      console.warn(
+        `latest metadata CAS conflict on attempt ${attempt}; current=${observedReleaseVersion}`
+        + ` etag=${observedEtag}; retrying in ${delayMs}ms`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
   }
 
   throw new Error(`failed to update latest metadata with CAS after 5 attempts: ${objectKey}`);
+}
+
+function strongIfMatchEtag(etag: string): string {
+  const normalized = etag.trim().replace(/^W\/(?=")/iu, "");
+  if (normalized.length < 2 || !normalized.startsWith('"') || !normalized.endsWith('"')) {
+    throw new Error(`latest metadata GET returned an invalid ETag for CAS update: ${etag}`);
+  }
+  return normalized;
 }
 
 export async function publishLatestPlatformObjects(input: {
