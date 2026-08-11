@@ -331,7 +331,7 @@ cd open-design/deploy
 cp .env.example .env
 echo "OD_API_TOKEN=$(openssl rand -hex 32)" >> .env
 docker compose up -d
-# open http://localhost:7456
+# open http://127.0.0.1:7456
 ```
 
 若瀏覽器要求登入，使用者名稱請輸入 `open-design`，密碼則使用 `deploy/.env` 中的 `OD_API_TOKEN`。Docker bridge 流量會保持驗證，不再需要啟用 host networking。

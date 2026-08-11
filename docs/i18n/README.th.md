@@ -322,7 +322,7 @@ cd open-design/deploy
 cp .env.example .env
 echo "OD_API_TOKEN=$(openssl rand -hex 32)" >> .env
 docker compose up -d
-# open http://localhost:7456
+# open http://127.0.0.1:7456
 ```
 
 หากเบราว์เซอร์ขอข้อมูลเข้าสู่ระบบ ให้ใช้ `open-design` เป็นชื่อผู้ใช้ และใช้ค่า `OD_API_TOKEN` จาก `deploy/.env` เป็นรหัสผ่าน ทราฟฟิกผ่าน Docker bridge จะยังมีการยืนยันตัวตนโดยไม่ต้องเปิด host networking
