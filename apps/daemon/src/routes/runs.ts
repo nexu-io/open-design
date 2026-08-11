@@ -1621,6 +1621,17 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       if (typeof meta.conversationId !== 'string' || !meta.conversationId) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'assistantMessageId requires a conversation');
       }
+      const chatConversation = getConversation(db, meta.conversationId);
+      if (
+        !chatConversation
+        || (
+          typeof meta.projectId === 'string'
+          && meta.projectId
+          && chatConversation.projectId !== meta.projectId
+        )
+      ) {
+        return sendApiError(res, 404, 'CONVERSATION_NOT_FOUND', 'conversation not found for project');
+      }
       const existingAssistantPin = db
         .prepare(
           `SELECT role, conversation_id AS conversationId, run_id AS runId, run_status AS runStatus FROM messages WHERE id = ?`,
@@ -3128,6 +3139,17 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       // own via the id-only writers (nettee on #6418).
       if (typeof meta.conversationId !== 'string' || !meta.conversationId) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'assistantMessageId requires a conversation');
+      }
+      const chatConversation = getConversation(db, meta.conversationId);
+      if (
+        !chatConversation
+        || (
+          typeof meta.projectId === 'string'
+          && meta.projectId
+          && chatConversation.projectId !== meta.projectId
+        )
+      ) {
+        return sendApiError(res, 404, 'CONVERSATION_NOT_FOUND', 'conversation not found for project');
       }
       const existingAssistantPin = db
         .prepare(

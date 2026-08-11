@@ -278,6 +278,36 @@ describe('run cross-project conversation ownership', () => {
     });
   });
 
+  it('rejects a supplied assistantMessageId when the chat conversation is missing', async () => {
+    // nettee on #6418: /api/chat must validate a supplied conversationId
+    // before atomic claim, otherwise a fresh assistantMessageId inserts a row
+    // with a nonexistent conversation foreign key and returns a raw 500.
+    started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
+    const url = started.url;
+
+    const projectA = `xown_missing_conv_${randomUUID()}`;
+    await createProject(url, projectA, 'Missing conversation A');
+
+    const assistantId = `assistant_missing_conv_${randomUUID()}`;
+    const resp = await fetch(`${url}/api/chat`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        projectId: projectA,
+        conversationId: `missing-conversation-${randomUUID()}`,
+        assistantMessageId: assistantId,
+        clientRequestId: `cr_missing_conv_${randomUUID()}`,
+        agentId: 'claude',
+        message: 'M',
+        currentPrompt: 'M',
+      }),
+    });
+    expect(resp.status).toBe(404);
+    expect(await resp.json()).toMatchObject({
+      error: { code: 'CONVERSATION_NOT_FOUND' },
+    });
+  });
+
   it('lets a retry rebind an assistantMessageId the daemon no longer owns', async () => {
     // nettee on #6418: the concurrency guard must reject only when the daemon
     // STILL has the referenced run active — a normal retry rebinding a finished

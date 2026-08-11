@@ -469,7 +469,7 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
     if (storedCursor !== null && incomingCursor !== null) {
       return incomingCursor >= storedCursor ? incoming : stored;
     }
-    return incoming;
+    return stored;
   };
 
   app.put('/api/projects/:id/conversations/:cid/messages/:mid', async (req, res) => {

@@ -346,6 +346,42 @@ describe('stale web message snapshot does not wipe daemon-owned run events', () 
       (await fetchAssistantMessage(started.url, projectId, conversationId, messageId))
         ?.lastRunEventId,
     ).toBe('6');
+
+    const opaqueMessageId = `cursor_opaque_${randomUUID()}`;
+    const opaqueUrl = `${started.url}/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(opaqueMessageId)}`;
+    const opaqueSeed = await fetch(opaqueUrl, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: opaqueMessageId,
+        role: 'assistant',
+        content: 'model output',
+        runId: 'run-cursor-opaque',
+        runStatus: 'running',
+        lastRunEventId: 'evt-5',
+        events: [{ kind: 'text', text: 'model output' }],
+      }),
+    });
+    expect(opaqueSeed.status).toBe(200);
+
+    const equalLengthOpaqueOlderCursor = await fetch(opaqueUrl, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: opaqueMessageId,
+        role: 'assistant',
+        content: 'model output',
+        runId: 'run-cursor-opaque',
+        runStatus: 'running',
+        lastRunEventId: 'evt-3',
+        events: [{ kind: 'text', text: 'model output' }],
+      }),
+    });
+    expect(equalLengthOpaqueOlderCursor.status).toBe(200);
+    expect(
+      (await fetchAssistantMessage(started.url, projectId, conversationId, opaqueMessageId))
+        ?.lastRunEventId,
+    ).toBe('evt-5');
   });
 
   it('lets a metadata update write a fresh endedAt while preserving daemon events', async () => {
