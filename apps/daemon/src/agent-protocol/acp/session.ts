@@ -110,12 +110,16 @@ const ACP_SESSION_LOAD_MISS_KINDS = new Set([
   'session_not_found',
 ]);
 const ACP_SESSION_NOT_FOUND_ERROR_CODE = -32002;
+const ACP_SESSION_SUBJECT_MISSING_PATTERN =
+  /\bsession(?:\s+id)?\s+(?:(?:is|was)\s+)?(?:not found|missing|does not exist|unknown)\b/u;
+const ACP_MISSING_SESSION_SUBJECT_PATTERN =
+  /\b(?:(?:missing|unknown)\s+session|no such session)(?:\s+id)?\b/u;
 
 function sessionMissingMessage(value: unknown): boolean {
   if (typeof value !== 'string') return false;
   const normalized = value.trim().toLowerCase();
-  return /(?:session.{0,40}(?:not found|missing|does not exist|unknown)|(?:not found|missing|unknown).{0,40}session)/u
-    .test(normalized);
+  return ACP_SESSION_SUBJECT_MISSING_PATTERN.test(normalized)
+    || ACP_MISSING_SESSION_SUBJECT_PATTERN.test(normalized);
 }
 
 function isSessionLoadMiss(errorCode: unknown, errorMessage: unknown, details: unknown): boolean {
