@@ -239,6 +239,14 @@ async function readPackagedVersion(): Promise<string> {
   return packageJson.version;
 }
 
+function nextMinorBaseVersion(version: string): string {
+  const match = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.exec(version);
+  if (match == null) {
+    throw new Error(`shell version must be x.y.z; got ${version}`);
+  }
+  return `${match[1]}.${Number(match[2]) + 1}.0`;
+}
+
 async function runScopesPrint(eventName: string, eventPayload: unknown, changedFiles: string[] = []): Promise<Record<string, unknown>> {
   const tempDir = await mkdtemp(join(tmpdir(), "od-scopes-"));
   const eventPath = join(tempDir, "event.json");
@@ -1520,8 +1528,7 @@ process.stdin.on("end", () => {
     for (const [start, end] of [
       ["  build_mac:", "  build_mac_intel:"],
       ["  build_mac_intel:", "  build_win:"],
-      ["  build_win:", "  build_linux:"],
-      ["  build_linux:", "  publish:"],
+      ["  build_win:", "  publish:"],
     ] as const) {
       const buildJob = sectionBetween(prerelease, start, end);
       expect(buildJob).toContain("needs: [metadata, functional_e2e, daemon_unit_tests, verify]");
@@ -2022,13 +2029,14 @@ process.stdin.on("end", () => {
 
   it("[P1] lets the daily main build recover a shared beta advanced by a feature branch", async () => {
     const packagedVersion = await readPackagedVersion();
+    const foreignBaseVersion = nextMinorBaseVersion(packagedVersion);
     const objects: Record<string, unknown> = {
       "beta/latest/metadata.json": {
-        baseVersion: "0.19.0",
+        baseVersion: foreignBaseVersion,
         channel: "beta",
         github: { branch: "feat/standalone-closure" },
         releaseNumber: 9,
-        releaseVersion: "0.19.0-beta.9",
+        releaseVersion: `${foreignBaseVersion}-beta.9`,
       },
     };
     const fixture = await startStablePrereleaseMetadataServer(objects);
@@ -2125,7 +2133,7 @@ process.stdin.on("end", () => {
     expect(macJob).toContain("continue-on-error: true");
     expect(macJob).toContain("id: mac_arm64_platform_outputs");
 
-    const winJob = sectionBetween(betaWorkflow, "  build_win_x64:", "  build_linux_x64:");
+    const winJob = sectionBetween(betaWorkflow, "  build_win_x64:", "  publish:");
     expect(winJob).toContain("smoke_result: ${{ steps.win_x64_smoke.outcome }}");
     expect(winJob).toContain("win_x64_url: ${{ steps.win_x64_platform_outputs.outputs.installer_url }}");
     expect(winJob).toContain("id: win_x64_smoke");
@@ -2274,7 +2282,7 @@ process.stdin.on("end", () => {
     expect(macSmoke).toContain("id: mac_smoke");
     expect(macSmoke).toContain("continue-on-error: true");
 
-    const winJob = sectionBetween(prerelease, "  build_win:", "  build_linux:");
+    const winJob = sectionBetween(prerelease, "  build_win:", "  publish:");
     const winSmokeFixture = sectionBetween(
       winJob,
       "      - name: Build prerelease win_x64 update fixture",
