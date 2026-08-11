@@ -14,6 +14,9 @@ import {
   type ClosureBindingIdentity,
   type ClosureCandidateManifest,
   type ClosureDigest,
+  type ClosureDistributionBlob,
+  type ClosureDistributionEntrypointComponent,
+  type ClosureDistributionIdentity,
   type ClosureDistributionManifest,
   type ClosureFileInventory,
   type ResolvedClosureDistributionTarget,
@@ -32,9 +35,11 @@ export type ClosureStoreRequest = {
 
 export type ClosureStorePaths = {
   bindingPath: string;
+  blobsRoot: string;
   channel: ReleaseChannel;
   channelRoot: string;
   closureRoot: string;
+  generationsRoot: string;
   namespace: string;
   namespaceRoot: string;
   root: string;
@@ -42,6 +47,41 @@ export type ClosureStorePaths = {
   stateRoot: string;
   versionsRoot: string;
 };
+
+export type ClosureDistributionComponentPlan = Readonly<{
+  artifact: ClosureDistributionBlob;
+  blobPath: string;
+  componentRoot: string;
+}>;
+
+export type ClosureDistributionEntrypointPlan = ClosureDistributionComponentPlan & Readonly<{
+  entryPath: string;
+  resolvedEntryPath: string;
+}>;
+
+export type ClosureDistributionResourcePlan = Readonly<{
+  artifact: ClosureDistributionBlob;
+  blobPath: string;
+  id: string;
+  title: string;
+}>;
+
+export type ClosureDistributionGenerationPlan = Readonly<{
+  generation: number;
+  generationRoot: string;
+  identity: ClosureDistributionIdentity;
+  installationRoot: string;
+  manifestPath: string;
+  required: Readonly<{
+    body: ClosureDistributionEntrypointPlan;
+    launcher: ClosureDistributionEntrypointPlan;
+    native: ClosureDistributionComponentPlan;
+    runtime: ClosureDistributionEntrypointPlan;
+  }>;
+  requiredBlobPaths: readonly string[];
+  resources: readonly ClosureDistributionResourcePlan[];
+  target: string;
+}>;
 
 export type ClosureStoreVersionPaths = ClosureStorePaths & {
   archivePath: string;
@@ -109,6 +149,119 @@ export function consumeClosureDistributionTarget(
   };
 }
 
+function resolveDistributionBlobPath(paths: ClosureStorePaths, digest: ClosureDigest): string {
+  return assertUnderRoot(paths.root, join(paths.blobsRoot, digest.slice("sha256:".length)));
+}
+
+function planDistributionComponent(
+  paths: ClosureStorePaths,
+  generationRoot: string,
+  componentName: "native",
+  component: Readonly<{ blob: ClosureDigest }>,
+  manifest: ClosureDistributionManifest,
+): ClosureDistributionComponentPlan;
+function planDistributionComponent(
+  paths: ClosureStorePaths,
+  generationRoot: string,
+  componentName: "body" | "launcher" | "runtime",
+  component: ClosureDistributionEntrypointComponent,
+  manifest: ClosureDistributionManifest,
+): ClosureDistributionEntrypointPlan;
+function planDistributionComponent(
+  paths: ClosureStorePaths,
+  generationRoot: string,
+  componentName: "body" | "launcher" | "native" | "runtime",
+  component: Readonly<{ blob: ClosureDigest; entryPath?: string }>,
+  manifest: ClosureDistributionManifest,
+): ClosureDistributionComponentPlan | ClosureDistributionEntrypointPlan {
+  const artifact = manifest.blobs[component.blob];
+  if (artifact == null) {
+    throw new ClosureStoreError(`Closure distribution component ${componentName} references an unknown blob`);
+  }
+  const componentRoot = assertUnderRoot(paths.root, join(generationRoot, componentName));
+  const common = {
+    artifact,
+    blobPath: resolveDistributionBlobPath(paths, component.blob),
+    componentRoot,
+  };
+  if (component.entryPath == null) return common;
+  return {
+    ...common,
+    entryPath: component.entryPath,
+    resolvedEntryPath: assertUnderRoot(paths.root, join(componentRoot, component.entryPath)),
+  };
+}
+
+/**
+ * Resolve the immutable local shape for one validated distribution target.
+ *
+ * This is intentionally a plan, not an extractor: Store/update code may
+ * populate a private staging tree from the channel-level CAS, but exactly this
+ * namespace generation root is the unit that later becomes visible. Lazy
+ * resources retain only their CAS locations and never enter installationRoot.
+ */
+export function planClosureDistributionGeneration(
+  paths: ClosureStorePaths,
+  generationInput: number,
+  value: unknown,
+  targetInput: string,
+): ClosureDistributionGenerationPlan {
+  const generation = normalizeGeneration(generationInput);
+  const consumed = consumeClosureDistributionTarget(value, targetInput);
+  if (consumed.manifest.identity.channel !== paths.channel) {
+    throw new ClosureStoreError("Closure distribution channel does not match its Store");
+  }
+  const generationRoot = assertUnderRoot(paths.root, join(paths.generationsRoot, String(generation)));
+  const required = {
+    body: planDistributionComponent(
+      paths,
+      generationRoot,
+      "body",
+      consumed.target.required.body,
+      consumed.manifest,
+    ),
+    launcher: planDistributionComponent(
+      paths,
+      generationRoot,
+      "launcher",
+      consumed.target.required.launcher,
+      consumed.manifest,
+    ),
+    native: planDistributionComponent(
+      paths,
+      generationRoot,
+      "native",
+      consumed.target.required.native,
+      consumed.manifest,
+    ),
+    runtime: planDistributionComponent(
+      paths,
+      generationRoot,
+      "runtime",
+      consumed.target.required.runtime,
+      consumed.manifest,
+    ),
+  };
+  return Object.freeze({
+    generation,
+    generationRoot,
+    identity: consumed.manifest.identity,
+    installationRoot: generationRoot,
+    manifestPath: assertUnderRoot(paths.root, join(generationRoot, "closure.json")),
+    required: Object.freeze(required),
+    requiredBlobPaths: Object.freeze(
+      consumed.target.requiredBlobs.map((blob) => resolveDistributionBlobPath(paths, blob.digest)),
+    ),
+    resources: Object.freeze(consumed.target.resources.map((resource) => Object.freeze({
+      artifact: resource.artifact,
+      blobPath: resolveDistributionBlobPath(paths, resource.blob),
+      id: resource.id,
+      title: resource.title,
+    }))),
+    target: consumed.target.target,
+  });
+}
+
 function normalizeRoot(value: string): string {
   if (value.length === 0 || value.includes("\0") || !isAbsolute(value)) {
     throw new ClosureStoreError(`Closure store root must be a non-empty absolute path: ${value}`);
@@ -147,9 +300,11 @@ export function resolveClosureStorePaths(request: ClosureStoreRequest): ClosureS
   const stateRoot = assertUnderRoot(root, join(namespaceRoot, "state"));
   return {
     bindingPath: assertUnderRoot(root, join(stateRoot, "binding.json")),
+    blobsRoot: assertUnderRoot(root, join(channelRoot, "blobs")),
     channel,
     channelRoot,
     closureRoot,
+    generationsRoot: assertUnderRoot(root, join(namespaceRoot, "generations")),
     namespace,
     namespaceRoot,
     root,

@@ -20,6 +20,7 @@ import {
   commitStoredClosureCandidate,
   commitVerifiedStoredClosureCandidate,
   consumeClosureDistributionTarget,
+  planClosureDistributionGeneration,
   readClosureBindingDescriptor,
   resolveClosureStorePaths,
   resolveClosureStoreVersionPaths,
@@ -142,6 +143,51 @@ describe("layered Closure distribution consumer", () => {
       ...fixture,
       identity: { ...fixture.identity, version: "0.19.0-beta.11" },
     }, "win32-x64")).toThrow(/canonical digest/u);
+  });
+
+  it("plans one committed generation view while resources remain lazy channel blobs", async () => {
+    const fixture = JSON.parse(await readFile(distributionFixturePath, "utf8")) as unknown;
+    const root = await mkdtemp(join(tmpdir(), "od-closure-store-plan-"));
+    roots.push(root);
+    const left = resolveClosureStorePaths({ channel: "beta", namespace: "team-a", root });
+    const right = resolveClosureStorePaths({ channel: "beta", namespace: "team-b", root });
+
+    const leftPlan = planClosureDistributionGeneration(left, 7, fixture, "darwin-arm64");
+    const rightPlan = planClosureDistributionGeneration(right, 2, fixture, "darwin-arm64");
+
+    expect(leftPlan.installationRoot).toBe(join(left.generationsRoot, "7"));
+    expect(leftPlan.required.body.resolvedEntryPath).toBe(
+      join(leftPlan.installationRoot, "body", "bootloader.mjs"),
+    );
+    expect(leftPlan.required.launcher.resolvedEntryPath).toBe(
+      join(leftPlan.installationRoot, "launcher", "launcher.mjs"),
+    );
+    expect(leftPlan.required.runtime.resolvedEntryPath).toBe(
+      join(leftPlan.installationRoot, "runtime", "bin", "node"),
+    );
+    expect(leftPlan.required.native.componentRoot).toBe(join(leftPlan.installationRoot, "native"));
+    expect(leftPlan.requiredBlobPaths).toHaveLength(4);
+    expect(leftPlan.resources).toEqual([
+      expect.objectContaining({ id: "design-system-core", title: "Open Design Core" }),
+    ]);
+    expect(leftPlan.requiredBlobPaths).not.toContain(leftPlan.resources[0]?.blobPath);
+    expect(leftPlan.resources[0]?.blobPath).toBe(rightPlan.resources[0]?.blobPath);
+    expect(leftPlan.required.body.blobPath).toBe(rightPlan.required.body.blobPath);
+    expect(leftPlan.installationRoot).not.toBe(rightPlan.installationRoot);
+  });
+
+  it("rejects a distribution from another channel before planning local paths", async () => {
+    const fixture = JSON.parse(await readFile(distributionFixturePath, "utf8")) as unknown;
+    const paths = resolveClosureStorePaths({
+      channel: "preview",
+      namespace: "release-preview",
+      root: "/tmp/open-design-closure-plan",
+    });
+
+    expect(() => planClosureDistributionGeneration(paths, 0, fixture, "darwin-arm64"))
+      .toThrow(/channel does not match/u);
+    expect(() => planClosureDistributionGeneration(paths, -1, fixture, "darwin-arm64"))
+      .toThrow(/non-negative safe integer/u);
   });
 });
 
