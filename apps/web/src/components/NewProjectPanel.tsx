@@ -367,7 +367,10 @@ export function NewProjectPanel({
   const [audioKind, setAudioKind] = useState<AudioKind>('speech');
   const [audioModel, setAudioModel] = useState(DEFAULT_AUDIO_MODEL.speech);
   const [audioDuration, setAudioDuration] = useState(10);
-  const [voice, setVoice] = useState('');
+  const [avatarId, setAvatarId] = useState('');
+  const [voiceId, setVoiceId] = useState('');
+  const [customVoice, setCustomVoice] = useState(false);
+  const [customAvatar, setCustomAvatar] = useState(false);
   // Per-surface curated prompt template the user picked. Tracked
   // independently for image vs video so flipping tabs doesn't clobber the
   // other one's pick. The body is editable in-line and the edited copy is
@@ -426,6 +429,8 @@ export function NewProjectPanel({
   }, [tab, skills, startTemplateId, designTemplates]);
   const showDesignSystemPicker =
     tabSupportsDesignSystem && !tabDefaultSkillForcesNoDs;
+
+
 
   useEffect(() => {
     if (dsSelectionTouched) return;
@@ -742,7 +747,10 @@ export function NewProjectPanel({
       audioKind,
       audioModel,
       audioDuration,
-      voice,
+      avatarId,
+      voiceId,
+      customVoice,
+      customAvatar,
       inspirationIds: inspirations,
       promptTemplate: promptTemplatePick,
     });
@@ -1071,10 +1079,14 @@ export function NewProjectPanel({
             videoModel={videoModel}
             videoAspect={videoAspect}
             videoLength={videoLength}
+            voice={avatarId}
             mediaProviders={mediaProviders}
             onVideoModel={handleVideoModel}
             onVideoAspect={setVideoAspect}
             onVideoLength={setVideoLength}
+            onVoice={setAvatarId}
+            customVoice={customAvatar}
+            onCustomVoice={setCustomAvatar}
           />
         ) : null}
 
@@ -1084,7 +1096,7 @@ export function NewProjectPanel({
             audioKind={audioKind}
             audioModel={audioModel}
             audioDuration={audioDuration}
-            voice={voice}
+            voice={voiceId}
             mediaProviders={mediaProviders}
             onAudioKind={(kind) => {
               setAudioKind(kind);
@@ -1095,7 +1107,9 @@ export function NewProjectPanel({
             }}
             onAudioModel={setAudioModel}
             onAudioDuration={setAudioDuration}
-            onVoice={setVoice}
+            onVoice={setVoiceId}
+            customVoice={customVoice}
+            onCustomVoice={setCustomVoice}
           />
         ) : null}
 
@@ -2643,6 +2657,10 @@ function MediaProjectOptions(props:
       onVideoModel: (value: string) => void;
       onVideoAspect: (value: MediaAspect) => void;
       onVideoLength: (value: number) => void;
+      voice: string;
+      onVoice: (value: string) => void;
+      customVoice: boolean;
+      onCustomVoice: (value: boolean) => void;
     }
   | {
       surface: 'audio';
@@ -2655,6 +2673,8 @@ function MediaProjectOptions(props:
       onAudioModel: (value: string) => void;
       onAudioDuration: (value: number) => void;
       onVoice: (value: string) => void;
+      customVoice: boolean;
+      onCustomVoice: (value: boolean) => void;
     }
 ) {
   const t = useT();
@@ -2704,6 +2724,24 @@ function MediaProjectOptions(props:
             ))}
           </select>
         </label>
+        {props.videoModel === 'a2e-avatar-video' ? (
+          <div className="newproj-media-field">
+            <label className="newproj-label">
+              <span>{t('newproj.voiceLabel')}</span>
+              <input
+                value={props.voice}
+                placeholder={t('newproj.voicePlaceholder')}
+                onChange={(e) => props.onVoice(e.target.value)}
+              />
+            </label>
+            <CompactToggle
+              label={t('newproj.customAvatarToggle')}
+              hint={t('newproj.customAvatarToggleHint')}
+              checked={props.customVoice}
+              onChange={props.onCustomVoice}
+            />
+          </div>
+        ) : null}
       </div>
     );
   }
@@ -2744,14 +2782,24 @@ function MediaProjectOptions(props:
         </select>
       </label>
       {props.audioKind === 'speech' ? (
-        <label className="newproj-label">
-          <span>{t('newproj.voiceLabel')}</span>
-          <input
-            value={props.voice}
-            placeholder={t('newproj.voicePlaceholder')}
-            onChange={(e) => props.onVoice(e.target.value)}
-          />
-        </label>
+        <div className="newproj-media-field">
+          <label className="newproj-label">
+            <span>{t('newproj.voiceLabel')}</span>
+            <input
+              value={props.voice}
+              placeholder={t('newproj.voicePlaceholder')}
+              onChange={(e) => props.onVoice(e.target.value)}
+            />
+          </label>
+          {props.audioModel === 'a2e-tts' ? (
+            <CompactToggle
+              label={t('newproj.customVoiceToggle')}
+              hint={t('newproj.customVoiceToggleHint')}
+              checked={props.customVoice}
+              onChange={props.onCustomVoice}
+            />
+          ) : null}
+        </div>
       ) : null}
     </div>
   );
@@ -2759,9 +2807,9 @@ function MediaProjectOptions(props:
 
 export function supportedModels(surface: 'image' | 'video' | 'audio', models: MediaModel[]): MediaModel[] {
   const supportedProviders: Record<'image' | 'video' | 'audio', Set<string>> = {
-    image: new Set(['openai', 'codex', 'volcengine', 'grok', 'nanobanana', 'openrouter', 'imagerouter', 'leonardo', 'custom-image', 'aihubmix', 'minimax']),
-    video: new Set(['volcengine', 'hyperframes', 'grok', 'openrouter', 'imagerouter', 'aihubmix']),
-    audio: new Set(['minimax', 'fishaudio', 'senseaudio', 'elevenlabs', 'openai', 'volcengine', 'aihubmix']),
+    image: new Set(['openai', 'codex', 'volcengine', 'grok', 'nanobanana', 'openrouter', 'imagerouter', 'leonardo', 'custom-image', 'aihubmix']),
+    video: new Set(['volcengine', 'hyperframes', 'grok', 'openrouter', 'imagerouter', 'aihubmix', 'a2e']),
+    audio: new Set(['minimax', 'fishaudio', 'senseaudio', 'elevenlabs', 'openai', 'volcengine', 'aihubmix', 'a2e', 'grok']),
   };
   return models.filter((model) => {
     const provider = findProvider(model.provider);
@@ -3090,7 +3138,10 @@ function buildMetadata(input: {
   audioKind: AudioKind;
   audioModel: string;
   audioDuration: number;
-  voice: string;
+  avatarId: string;
+  voiceId: string;
+  customVoice: boolean;
+  customAvatar: boolean;
   inspirationIds: string[];
   promptTemplate: PromptTemplatePick | null;
 }): ProjectMetadata {
@@ -3158,23 +3209,30 @@ function buildMetadata(input: {
     }
     if (input.mediaSurface === 'video') {
       const videoModel = input.videoModel.trim();
+      const finalVoice = (videoModel === 'a2e-avatar-video' && input.customAvatar && input.avatarId.trim())
+        ? `custom:${input.avatarId.trim()}`
+        : (videoModel === 'a2e-avatar-video' ? input.avatarId.trim() : '');
       return {
         kind,
         ...(videoModel ? { videoModel } : {}),
         videoAspect: input.videoAspect,
         videoLength: input.videoLength,
+        ...(finalVoice ? { voice: finalVoice } : {}),
         ...buildPromptTemplateMetadata(input.promptTemplate),
         ...inspirations,
       };
     }
     const audioModel = input.audioModel.trim();
+    const finalVoice = (audioModel === 'a2e-tts' && input.customVoice && input.voiceId.trim())
+      ? `custom:${input.voiceId.trim()}`
+      : input.voiceId.trim();
     return {
       kind,
       audioKind: input.audioKind,
       ...(audioModel ? { audioModel } : {}),
       audioDuration: input.audioDuration,
-      ...(input.audioKind === 'speech' && input.voice.trim()
-        ? { voice: input.voice.trim() }
+      ...(input.audioKind === 'speech' && finalVoice
+        ? { voice: finalVoice }
         : {}),
       ...inspirations,
     };

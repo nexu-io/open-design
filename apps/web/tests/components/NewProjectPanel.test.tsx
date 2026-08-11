@@ -695,6 +695,334 @@ describe('NewProjectPanel design system defaults', () => {
       }),
     );
   });
+
+  it('saves A2E video creation with the selected aspect, duration and voice/avatar id metadata', () => {
+    const onCreate = vi.fn();
+    render(
+      <NewProjectPanel
+        skills={skills}
+        designSystems={designSystems}
+        defaultDesignSystemId="clay"
+        templates={[]}
+        onDeleteTemplate={vi.fn()}
+        promptTemplates={[]}
+        onCreate={onCreate}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Media' }));
+    fireEvent.click(screen.getByTestId('new-project-media-surface-video'));
+    fireEvent.change(screen.getByTestId('new-project-name'), {
+      target: { value: 'A2E Video payload metadata' },
+    });
+    
+    // Select A2E video model
+    fireEvent.click(screen.getByTestId('model-picker-trigger'));
+    fireEvent.click(screen.getByTestId('model-picker-option-a2e-avatar-video'));
+
+    // Input A2E voice/avatar id
+    fireEvent.change(screen.getByPlaceholderText('Provider voice id, optional'), {
+      target: { value: 'my-avatar-anchor-id' },
+    });
+
+    fireEvent.click(screen.getByTestId('create-project'));
+
+    expect(onCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'A2E Video payload metadata',
+        designSystemId: null,
+        metadata: expect.objectContaining({
+          kind: 'video',
+          videoModel: 'a2e-avatar-video',
+          voice: 'my-avatar-anchor-id',
+        }),
+      }),
+    );
+  });
+
+  it('saves A2E video creation with a custom/cloned avatar when Custom avatar checkbox is enabled', () => {
+    const onCreate = vi.fn();
+    render(
+      <NewProjectPanel
+        skills={skills}
+        designSystems={designSystems}
+        defaultDesignSystemId="clay"
+        templates={[]}
+        onDeleteTemplate={vi.fn()}
+        promptTemplates={[]}
+        onCreate={onCreate}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Media' }));
+    fireEvent.click(screen.getByTestId('new-project-media-surface-video'));
+    fireEvent.change(screen.getByTestId('new-project-name'), {
+      target: { value: 'A2E Custom Video payload metadata' },
+    });
+    
+    // Select A2E video model
+    fireEvent.click(screen.getByTestId('model-picker-trigger'));
+    fireEvent.click(screen.getByTestId('model-picker-option-a2e-avatar-video'));
+
+    // Input A2E voice/avatar id
+    fireEvent.change(screen.getByPlaceholderText('Provider voice id, optional'), {
+      target: { value: 'my-custom-avatar-anchor-id' },
+    });
+
+    // Check Custom avatar toggle
+    fireEvent.click(screen.getByRole('button', { name: /Custom avatar/i }));
+
+    fireEvent.click(screen.getByTestId('create-project'));
+
+    expect(onCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'A2E Custom Video payload metadata',
+        designSystemId: null,
+        metadata: expect.objectContaining({
+          kind: 'video',
+          videoModel: 'a2e-avatar-video',
+          voice: 'custom:my-custom-avatar-anchor-id',
+        }),
+      }),
+    );
+  });
+
+  it('normalizes/removes custom: prefix from voice when switching model away from A2E-TTS', () => {
+    const onCreate = vi.fn();
+    render(
+      <NewProjectPanel
+        skills={skills}
+        designSystems={designSystems}
+        defaultDesignSystemId="clay"
+        templates={[]}
+        onDeleteTemplate={vi.fn()}
+        promptTemplates={[]}
+        onCreate={onCreate}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Media' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Audio' }));
+    
+    // Select A2E audio model
+    fireEvent.click(screen.getByTestId('model-picker-trigger'));
+    fireEvent.click(screen.getByTestId('model-picker-option-a2e-tts'));
+
+    // Input A2E voice id
+    fireEvent.change(screen.getByPlaceholderText('Provider voice id, optional'), {
+      target: { value: 'my-custom-voice-id' },
+    });
+
+    // Check Custom voice toggle
+    fireEvent.click(screen.getByRole('button', { name: /Custom voice/i }));
+
+    // Switch model away from a2e-tts
+    fireEvent.click(screen.getByTestId('model-picker-trigger'));
+    fireEvent.click(screen.getByTestId('model-picker-option-minimax-tts'));
+
+    fireEvent.click(screen.getByTestId('create-project'));
+
+    expect(onCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          audioModel: 'minimax-tts',
+          voice: 'my-custom-voice-id',
+        }),
+      }),
+    );
+  });
+
+  it('does not carry avatarId to a non-A2E video model after switching away from A2E Video', () => {
+    // Previously the old shared `voice` state caused the avatar id (only
+    // meaningful for a2e-avatar-video) to bleed into create requests for
+    // other video models.  After the fix, avatarId is only emitted when
+    // a2e-avatar-video is the selected model.
+    const onCreate = vi.fn();
+    render(
+      <NewProjectPanel
+        skills={skills}
+        designSystems={designSystems}
+        defaultDesignSystemId="clay"
+        templates={[]}
+        onDeleteTemplate={vi.fn()}
+        promptTemplates={[]}
+        onCreate={onCreate}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Media' }));
+    fireEvent.click(screen.getByTestId('new-project-media-surface-video'));
+
+    // Select A2E video model
+    fireEvent.click(screen.getByTestId('model-picker-trigger'));
+    fireEvent.click(screen.getByTestId('model-picker-option-a2e-avatar-video'));
+
+    // Input A2E voice/avatar id
+    fireEvent.change(screen.getByPlaceholderText('Provider voice id, optional'), {
+      target: { value: 'my-custom-avatar-id' },
+    });
+
+    // Check Custom avatar toggle
+    fireEvent.click(screen.getByRole('button', { name: /Custom avatar/i }));
+
+    // Switch model away from a2e-avatar-video
+    fireEvent.click(screen.getByTestId('model-picker-trigger'));
+    fireEvent.click(screen.getByTestId('model-picker-option-doubao-seedance-2-0-260128'));
+
+    fireEvent.click(screen.getByTestId('create-project'));
+
+    expect(onCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          videoModel: 'doubao-seedance-2-0-260128',
+        }),
+      }),
+    );
+    // avatarId must NOT bleed into the non-A2E video request
+    expect(onCreate.mock.calls[0]?.[0].metadata).not.toHaveProperty('voice');
+  });
+
+  it('does not leak avatarId into an A2E-TTS audio request when the user switches surfaces', () => {
+    // Regression test for reviewer-reported state leak: the old shared `voice`
+    // state caused an avatar/anchor id typed in the video surface to bleed into
+    // the subsequent TTS audio create request (and vice versa).
+    const onCreate = vi.fn();
+    render(
+      <NewProjectPanel
+        skills={skills}
+        designSystems={designSystems}
+        defaultDesignSystemId="clay"
+        templates={[]}
+        onDeleteTemplate={vi.fn()}
+        promptTemplates={[]}
+        onCreate={onCreate}
+      />,
+    );
+
+    // 1. Go to Video surface, pick A2E video model, type an avatar id.
+    fireEvent.click(screen.getByRole('tab', { name: 'Media' }));
+    fireEvent.click(screen.getByTestId('new-project-media-surface-video'));
+    fireEvent.click(screen.getByTestId('model-picker-trigger'));
+    fireEvent.click(screen.getByTestId('model-picker-option-a2e-avatar-video'));
+    fireEvent.change(screen.getByPlaceholderText('Provider voice id, optional'), {
+      target: { value: 'stale-avatar-id-should-not-bleed' },
+    });
+
+    // 2. Switch to Audio surface, pick A2E TTS, create WITHOUT setting a voice.
+    fireEvent.click(screen.getByRole('tab', { name: 'Audio' }));
+    fireEvent.click(screen.getByTestId('model-picker-trigger'));
+    fireEvent.click(screen.getByTestId('model-picker-option-a2e-tts'));
+
+    fireEvent.change(screen.getByTestId('new-project-name'), {
+      target: { value: 'No bleed test' },
+    });
+    fireEvent.click(screen.getByTestId('create-project'));
+
+    // The audio metadata must NOT carry the video avatar id.
+    expect(onCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          audioModel: 'a2e-tts',
+        }),
+      }),
+    );
+    expect(onCreate.mock.calls[0]?.[0].metadata).not.toHaveProperty('voice');
+  });
+
+  it('does not leak voiceId into an A2E video request when the user switches surfaces', () => {
+    // Mirror of the above: voice id typed in the audio surface must not bleed
+    // into the video avatar field.
+    const onCreate = vi.fn();
+    render(
+      <NewProjectPanel
+        skills={skills}
+        designSystems={designSystems}
+        defaultDesignSystemId="clay"
+        templates={[]}
+        onDeleteTemplate={vi.fn()}
+        promptTemplates={[]}
+        onCreate={onCreate}
+      />,
+    );
+
+    // 1. Go to Audio surface, pick A2E TTS, type a voice id.
+    fireEvent.click(screen.getByRole('tab', { name: 'Media' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Audio' }));
+    fireEvent.click(screen.getByTestId('model-picker-trigger'));
+    fireEvent.click(screen.getByTestId('model-picker-option-a2e-tts'));
+    fireEvent.change(screen.getByPlaceholderText('Provider voice id, optional'), {
+      target: { value: 'stale-voice-id-should-not-bleed' },
+    });
+
+    // 2. Switch to Video surface, pick A2E video model, create WITHOUT an avatar id.
+    fireEvent.click(screen.getByTestId('new-project-media-surface-video'));
+    fireEvent.click(screen.getByTestId('model-picker-trigger'));
+    fireEvent.click(screen.getByTestId('model-picker-option-a2e-avatar-video'));
+
+    fireEvent.change(screen.getByTestId('new-project-name'), {
+      target: { value: 'No bleed video test' },
+    });
+    fireEvent.click(screen.getByTestId('create-project'));
+
+    // The video metadata must NOT carry the audio voice id.
+    expect(onCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          videoModel: 'a2e-avatar-video',
+        }),
+      }),
+    );
+    expect(onCreate.mock.calls[0]?.[0].metadata).not.toHaveProperty('voice');
+  });
+
+  it('preserves custom voice setting when switching away and back to A2E-TTS', () => {
+    const onCreate = vi.fn();
+    render(
+      <NewProjectPanel
+        skills={skills}
+        designSystems={designSystems}
+        defaultDesignSystemId="clay"
+        templates={[]}
+        onDeleteTemplate={vi.fn()}
+        promptTemplates={[]}
+        onCreate={onCreate}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Media' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Audio' }));
+    
+    // Select A2E audio model
+    fireEvent.click(screen.getByTestId('model-picker-trigger'));
+    fireEvent.click(screen.getByTestId('model-picker-option-a2e-tts'));
+
+    // Input A2E voice id
+    fireEvent.change(screen.getByPlaceholderText('Provider voice id, optional'), {
+      target: { value: 'my-custom-voice-id' },
+    });
+
+    // Check Custom voice toggle
+    fireEvent.click(screen.getByRole('button', { name: /Custom voice/i }));
+
+    // Switch model away from a2e-tts
+    fireEvent.click(screen.getByTestId('model-picker-trigger'));
+    fireEvent.click(screen.getByTestId('model-picker-option-minimax-tts'));
+
+    // Switch back to a2e-tts
+    fireEvent.click(screen.getByTestId('model-picker-trigger'));
+    fireEvent.click(screen.getByTestId('model-picker-option-a2e-tts'));
+
+    fireEvent.click(screen.getByTestId('create-project'));
+
+    expect(onCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          audioModel: 'a2e-tts',
+          voice: 'custom:my-custom-voice-id',
+        }),
+      }),
+    );
+  });
 });
 
 describe('NewProjectPanel working directory picker', () => {

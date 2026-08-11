@@ -2427,6 +2427,10 @@ export interface Dict {
   'newproj.audioDurationSeconds': string;
   'newproj.voiceLabel': string;
   'newproj.voicePlaceholder': string;
+  'newproj.customAvatarToggle': string;
+  'newproj.customAvatarToggleHint': string;
+  'newproj.customVoiceToggle': string;
+  'newproj.customVoiceToggleHint': string;
   'newproj.connectorsLabel': string;
   'newproj.connectorsHint': string;
   'newproj.connectorsEmptyTitle': string;

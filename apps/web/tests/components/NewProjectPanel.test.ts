@@ -30,4 +30,22 @@ describe('NewProjectPanel image provider visibility', () => {
     const models = supportedModels('video', VIDEO_MODELS);
     expect(models.some((model) => model.provider === 'openrouter')).toBe(true);
   });
+
+  it('shows A2E in supported video models', () => {
+    const models = supportedModels('video', VIDEO_MODELS);
+    expect(models.some((model) => model.provider === 'a2e')).toBe(true);
+    expect(models.some((model) => model.id === 'a2e-avatar-video')).toBe(true);
+  });
+
+  it('shows A2E in supported audio models', () => {
+    const models = supportedModels('audio', AUDIO_MODELS_BY_KIND.speech);
+    expect(models.some((model) => model.provider === 'a2e')).toBe(true);
+    expect(models.some((model) => model.id === 'a2e-tts')).toBe(true);
+  });
+
+  it('shows Grok in supported audio models', () => {
+    const models = supportedModels('audio', AUDIO_MODELS_BY_KIND.speech);
+    expect(models.some((model) => model.provider === 'grok')).toBe(true);
+    expect(models.some((model) => model.id === 'grok-tts')).toBe(true);
+  });
 });

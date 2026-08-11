@@ -33,6 +33,7 @@ export type MediaProviderId =
   | 'vela'
   | 'volcengine'
   | 'grok'
+  | 'a2e'
   | 'hyperframes'
   | 'nanobanana'
   | 'imagerouter'
@@ -124,6 +125,14 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
     integrated: true,
     defaultBaseUrl: 'https://api.x.ai/v1',
     docsUrl: 'https://docs.x.ai/developers/model-capabilities/video/generation',
+  },
+  {
+    id: 'a2e',
+    label: 'A2E.ai',
+    hint: 'Avatar Lipsync / Premium Voice and Video',
+    integrated: true,
+    defaultBaseUrl: 'https://video.a2e.ai',
+    docsUrl: 'https://video.a2e.ai/dev',
   },
   {
     id: 'hyperframes',
@@ -602,6 +611,13 @@ export const VIDEO_MODELS: MediaModel[] = [
     provider: 'grok',
     caps: ['t2v', 'i2v', 'audio'],
   },
+  {
+    id: 'a2e-avatar-video',
+    label: 'a2e-avatar-video',
+    hint: 'A2E · Avatar Lipsync video generation',
+    provider: 'a2e',
+    caps: ['t2v', 'audio'],
+  },
 
   // OpenRouter video models.
   { id: 'openrouter/bytedance/seedance-2.0:1080p', label: 'seedance-2.0 1080p (OR)', hint: 'OpenRouter · ByteDance · 1080p', provider: 'openrouter', caps: ['t2v', 'i2v'], default: true },
@@ -672,7 +688,9 @@ export const AUDIO_MODELS_BY_KIND: Record<AudioKind, MediaModel[]> = {
     { id: 'senseaudio-tts', label: 'senseaudio-tts', hint: 'SenseAudio', provider: 'senseaudio', caps: ['tts', 'voice-clone'] },
     { id: 'doubao-tts', label: 'doubao-tts', hint: 'Volcengine', provider: 'volcengine', caps: ['tts'] },
     { id: 'gpt-4o-mini-tts', label: 'gpt-4o-mini-tts', hint: 'OpenAI', provider: 'openai', caps: ['tts'] },
+    { id: 'a2e-tts', label: 'a2e-tts', hint: 'A2E · High-fidelity text-to-speech', provider: 'a2e', caps: ['tts'] },
     { id: 'aihubmix-tts-1', label: 'tts-1 (AIHubMix)', hint: 'AIHubMix · OpenAI tts-1', provider: 'aihubmix', caps: ['tts'] },
+    { id: 'grok-tts', label: 'grok-tts', hint: 'xAI · multilingual · uses Grok subscription', provider: 'grok', caps: ['tts'] },
   ],
   sfx: [
     { id: 'elevenlabs-sfx', label: 'elevenlabs-sfx', hint: 'ElevenLabs SFX', provider: 'elevenlabs', caps: ['sfx'], default: true },
