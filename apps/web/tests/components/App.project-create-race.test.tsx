@@ -3358,6 +3358,64 @@ describe('App project creation routing', () => {
     });
   });
 
+  it('keeps the AMR auth continuation across a login-canceled for a superseded attempt, clearing it only for a matching or legacy broadcast', async () => {
+    stubWorkspaceContext('ws-1', 'wm-1');
+    mockedListProjects.mockResolvedValue([{
+      ...existingProject,
+      workspaceId: 'ws-1',
+    }]);
+    const currentAttemptId = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const pathname = new URL(String(input), 'http://d.local').pathname;
+        return {
+          ok: true,
+          json: async () =>
+            pathname.endsWith('/workspace/directory')
+              ? workspaceDirectoryFixture([workspaceContext('ws-1', 'wm-1')])
+              : pathname.endsWith('/workspace/context')
+                ? workspaceContextPayload('ws-1', 'wm-1')
+                : pathname.endsWith('/integrations/vela/status')
+                  ? {
+                      loggedIn: true,
+                      authAttemptId: currentAttemptId,
+                      profile: 'test',
+                      user: { id: 'account-a', email: 'a@example.com', plan: 'free' },
+                      configPath: '',
+                    }
+                  : {},
+        } as Response;
+      }),
+    );
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Open Existing project' }));
+    await screen.findByTestId('project-view');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Arm auth continuation' }));
+    await waitFor(() => {
+      expect(screen.getByTestId('project-auth-continuation').textContent).toBe(
+        'assistant-auth-failure',
+      );
+    });
+
+    // A login-canceled for a SUPERSEDED attempt (different id than the one
+    // this tab observed) must not clear the retry armed for the newer login.
+    act(() => notifyAmrLoginStatusChanged('login-canceled', '11111111-1111-4111-8111-111111111111'));
+    await waitFor(() => {
+      expect(screen.getByTestId('project-auth-continuation').textContent).toBe(
+        'assistant-auth-failure',
+      );
+    });
+
+    // A login-canceled carrying the attempt this tab observed still clears it.
+    act(() => notifyAmrLoginStatusChanged('login-canceled', currentAttemptId));
+    await waitFor(() => {
+      expect(screen.getByTestId('project-auth-continuation').textContent).toBe('none');
+    });
+  });
+
   it('preserves an exact retry through Settings and returns to its project after sign-in', async () => {
     mockedListProjects.mockResolvedValue([{
       ...existingProject,

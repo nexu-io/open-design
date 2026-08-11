@@ -20,6 +20,7 @@ import {
   resetCloudSignInTipDismissal,
 } from '../../src/components/CloudSignInTip';
 import {
+  AMR_LOGIN_POLL_INTERVAL_MS,
   AMR_LOGIN_STATUS_EVENT,
   AMR_LOGIN_TIMEOUT_MS,
 } from '../../src/components/amrLoginPolling';
@@ -330,6 +331,204 @@ describe('CloudSignInTip', () => {
       // no-body form, and the broadcast must carry it.
       expect(cancelBodies).toEqual([{ authAttemptId: attemptId }]);
       expect(broadcastAttemptIds).toContain(attemptId);
+    } finally {
+      window.removeEventListener(AMR_LOGIN_STATUS_EVENT, onStatusChange);
+    }
+  });
+
+  it('issues a targeted cancel with the spawn-returned id when cancelled while the login POST is pending', async () => {
+    // Regression (review thread): `begin()` adopted the spawn-returned id only
+    // AFTER the `cancelledRef` early return. A cancel clicked while the login
+    // POST was still pending captured a null ref and fired the legacy no-body
+    // `cancelVelaLogin(undefined)`; the canonical id returned by the spawn was
+    // then discarded, so the just-spawned login could stay active or the
+    // no-body cancel could terminate a newer attempt. The cancel intent must
+    // be preserved until the spawn resolves and the continuation must issue
+    // `cancelVelaLogin(result.authAttemptId)` + broadcast with that id.
+    const attemptId = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+    const cancelBodies: Array<{ authAttemptId?: string } | null> = [];
+    const broadcastAttemptIds: Array<string | null | undefined> = [];
+    const onStatusChange = (event: Event) => {
+      const detail = (event as CustomEvent<{ reason?: string; authAttemptId?: string | null }>).detail;
+      if (detail?.reason === 'login-canceled') {
+        broadcastAttemptIds.push(detail.authAttemptId);
+      }
+    };
+    window.addEventListener(AMR_LOGIN_STATUS_EVENT, onStatusChange);
+    try {
+      let releaseLogin!: (response: Response) => void;
+      const heldLoginResponse = new Promise<Response>((resolve) => {
+        releaseLogin = resolve;
+      });
+      const fetchMock = vi.fn(async (input, init) => {
+        const url = typeof input === 'string' ? input : (input as URL).toString();
+        if (url.endsWith('/api/integrations/vela/status')) {
+          // Pre-login read: no attempt id, nothing in flight.
+          return jsonResponse({
+            body: {
+              loggedIn: false,
+              loginInFlight: false,
+              profile: 'prod',
+              user: null,
+              configPath: '/x',
+            },
+          });
+        }
+        if (url.endsWith('/api/integrations/vela/login') && init?.method === 'POST') {
+          return heldLoginResponse;
+        }
+        if (url.endsWith('/api/integrations/vela/login/cancel') && init?.method === 'POST') {
+          cancelBodies.push(
+            init?.body ? (JSON.parse(String(init.body)) as { authAttemptId?: string }) : null,
+          );
+          return jsonResponse({ body: { canceled: true, pids: [4242] } });
+        }
+        throw new Error(`unexpected fetch: ${url}`);
+      });
+      globalThis.fetch = fetchMock as typeof fetch;
+
+      renderTip();
+      const card = await screen.findByTestId('entry-cloud-signin-tip');
+      fireEvent.click(card);
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      // Cancel while the spawn POST is still pending — the ref has no id yet.
+      const cancelButton = await screen.findByRole('button', { name: 'Cancel sign-in' });
+      fireEvent.click(cancelButton);
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      // No legacy no-body cancel fires yet (no attempt known to target).
+      expect(cancelBodies).toHaveLength(0);
+
+      // Resolve the spawn with the canonical id; the preserved intent must
+      // trigger the targeted cancel for it, not the legacy no-body form.
+      releaseLogin(jsonResponse({ status: 202, body: { pid: 4242, authAttemptId: attemptId } }));
+      await waitFor(() => {
+        expect(cancelBodies).not.toHaveLength(0);
+      });
+      expect(cancelBodies).toEqual([{ authAttemptId: attemptId }]);
+      expect(broadcastAttemptIds).toContain(attemptId);
+    } finally {
+      window.removeEventListener(AMR_LOGIN_STATUS_EVENT, onStatusChange);
+    }
+  });
+
+  it('does not let a superseded begin() continuation finish or cancel a newer login', async () => {
+    // Regression (full-surface audit gap): `begin()` guarded its continuations
+    // only with `cancelledRef` — a shared boolean that a re-click resets to
+    // false. A cancel → re-click while run A's poll read was in flight let A's
+    // stale continuation through: it could `setStatus` over the newer run,
+    // broadcast a false signed-in via `finishSignedIn`, or on a stale timeout
+    // cancel the newer attempt with the mutable ref. Each `begin()` run now
+    // owns a monotonic token that `cancel()`/a new `begin()` bumps, so run A's
+    // continuations bail once A is superseded.
+    const attemptId = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+    const statusBroadcastReasons: string[] = [];
+    const cancelBodies: Array<{ authAttemptId?: string } | null> = [];
+    const onStatusChange = (event: Event) => {
+      const detail = (event as CustomEvent<{ reason?: string }>).detail;
+      statusBroadcastReasons.push(detail?.reason ?? 'status-changed');
+    };
+    window.addEventListener(AMR_LOGIN_STATUS_EVENT, onStatusChange);
+    try {
+      let releasePollRead!: (response: Response) => void;
+      const heldPollRead = new Promise<Response>((resolve) => {
+        releasePollRead = resolve;
+      });
+      let statusCalls = 0;
+      let holdPoll = false;
+      let loginCalls = 0;
+      const fetchMock = vi.fn(async (input, init) => {
+        const url = typeof input === 'string' ? input : (input as URL).toString();
+        if (url.endsWith('/api/integrations/vela/status')) {
+          statusCalls += 1;
+          if (holdPoll && statusCalls === 2) {
+            return heldPollRead;
+          }
+          return jsonResponse({
+            body: {
+              loggedIn: false,
+              loginInFlight: true,
+              authAttemptId: attemptId,
+              profile: 'prod',
+              user: null,
+              configPath: '/x',
+            },
+          });
+        }
+        if (url.endsWith('/api/integrations/vela/login') && init?.method === 'POST') {
+          loginCalls += 1;
+          return jsonResponse({ status: 202, body: { pid: 4242, authAttemptId: attemptId } });
+        }
+        if (url.endsWith('/api/integrations/vela/login/cancel') && init?.method === 'POST') {
+          cancelBodies.push(
+            init?.body ? (JSON.parse(String(init.body)) as { authAttemptId?: string }) : null,
+          );
+          return jsonResponse({ body: { canceled: true, pids: [4242] } });
+        }
+        throw new Error(`unexpected fetch: ${url}`);
+      });
+      globalThis.fetch = fetchMock as typeof fetch;
+
+      renderTip();
+      const card = await screen.findByTestId('entry-cloud-signin-tip');
+      vi.useFakeTimers();
+      // Run A: click, spawn resolves, first poll read is held.
+      fireEvent.click(card);
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      holdPoll = true;
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(AMR_LOGIN_POLL_INTERVAL_MS);
+        await Promise.resolve();
+      });
+
+      // Cancel run A, then immediately re-click to start run B. Run A's held
+      // poll read is still in flight.
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel sign-in' }));
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      holdPoll = false;
+      fireEvent.click(card);
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(loginCalls).toBe(2);
+
+      // Release run A's stale poll read as signed-in. Run A must NOT
+      // broadcast success for a login that was cancelled and superseded.
+      await act(async () => {
+        releasePollRead(jsonResponse({
+          body: {
+            loggedIn: true,
+            profile: 'prod',
+            user: { id: 'u', email: 'a@b.c' },
+            configPath: '/x',
+          },
+        }));
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(statusBroadcastReasons).not.toContain('status-changed');
+
+      vi.useRealTimers();
     } finally {
       window.removeEventListener(AMR_LOGIN_STATUS_EVENT, onStatusChange);
     }

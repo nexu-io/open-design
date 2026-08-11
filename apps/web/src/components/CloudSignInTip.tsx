@@ -99,6 +99,22 @@ export function CloudSignInTip() {
   const [status, setStatus] = useState<VelaLoginStatus | null>(null);
   const cancelledRef = useRef(false);
   const mountedRef = useRef(true);
+  // Set by `cancel()` when the user cancels BEFORE the card has observed any
+  // attempt id (the spawn POST is still pending, or no status read has carried
+  // one yet). In that window the daemon's canonical id is only knowable once
+  // `startVelaLogin()` resolves, so the intent is preserved and the spawn
+  // continuation issues `cancelVelaLogin(result.authAttemptId)` — instead of
+  // the legacy no-body cancellation, which cannot target the just-spawned
+  // child and can terminate a newer login on another surface.
+  const cancelRequestedRef = useRef(false);
+  // Monotonic identity of the current `begin()` run. `cancelledRef` alone is
+  // not an ownership guard: a cancel sets it true, but a re-click resets it to
+  // false before a stale continuation's await resolves — so the old run would
+  // pass the check and write over the newer login (setStatus, a second spawn,
+  // a stale timeout cancel, a false signed-in broadcast). Every continuation
+  // captures the token at start and bails once a newer `begin()`/`cancel()`
+  // bumped it, mirroring the attempt/generation guards of the other surfaces.
+  const loginRunRef = useRef(0);
   // The attempt id this tip has observed from status reads. Kept in a ref
   // (not `status` state) because `finishSignedIn()`/`cancel()` run in the
   // same synchronous tick as `setStatus(next)` — the state still holds the
@@ -118,24 +134,38 @@ export function CloudSignInTip() {
   async function begin() {
     if (state === 'signing') return;
     cancelledRef.current = false;
+    // Own this run: a newer `begin()` (re-click after cancel) or `cancel()`
+    // bumps the token, so every continuation of THIS run bails post-await.
+    const loginRun = ++loginRunRef.current;
     setState('signing');
     setStatus(null);
     const current = await fetchVelaLoginStatus();
     if (current?.authAttemptId) authAttemptIdRef.current = current.authAttemptId;
-    if (cancelledRef.current || !mountedRef.current) return;
+    if (cancelledRef.current || !mountedRef.current || loginRun !== loginRunRef.current) return;
     if (current?.loggedIn) {
       finishSignedIn();
       return;
     }
     const result = await startVelaLogin();
-    if (cancelledRef.current || !mountedRef.current) return;
     // The daemon's canonical attempt id may not be observable from a status
-    // read until the first poll tick (2s later). Copy it into the ref as soon
-    // as the spawn resolves — including the alreadyRunning/409 response — so a
-    // Cancel pressed before the first poll (or the timeout path) targets the
-    // real attempt instead of falling back to the legacy no-body cancellation
-    // that could terminate a newer login.
+    // read until the first poll tick (2s later). Record it the moment the
+    // spawn resolves — including the alreadyRunning/409 response — BEFORE any
+    // early return, so a Cancel that landed while the POST was pending (and
+    // could not yet see the id) still lets this continuation issue the
+    // targeted cancellation below instead of discarding the id.
     if (result.authAttemptId) authAttemptIdRef.current = result.authAttemptId;
+    if (cancelledRef.current || !mountedRef.current || loginRun !== loginRunRef.current) {
+      // Cancel intent preserved (spawn was pending when `cancel()` ran): issue
+      // the canonical cancel for the just-resolved attempt now that we know
+      // its id, and broadcast with it — never the legacy no-body form.
+      if (cancelRequestedRef.current && result.authAttemptId) {
+        cancelRequestedRef.current = false;
+        const id = result.authAttemptId;
+        void cancelVelaLogin(id);
+        notifyAmrLoginStatusChanged('login-canceled', id);
+      }
+      return;
+    }
     if (!result.ok && !result.alreadyRunning) {
       console.error('[amr-login] startVelaLogin failed', result);
       setState('error');
@@ -144,10 +174,10 @@ export function CloudSignInTip() {
     const startedAt = Date.now();
     while (!cancelledRef.current && mountedRef.current) {
       await new Promise((resolve) => window.setTimeout(resolve, AMR_LOGIN_POLL_INTERVAL_MS));
-      if (cancelledRef.current || !mountedRef.current) return;
+      if (cancelledRef.current || !mountedRef.current || loginRun !== loginRunRef.current) return;
       const next = await fetchVelaLoginStatus();
       if (next?.authAttemptId) authAttemptIdRef.current = next.authAttemptId;
-      if (cancelledRef.current || !mountedRef.current) return;
+      if (cancelledRef.current || !mountedRef.current || loginRun !== loginRunRef.current) return;
       if (next) setStatus(next);
       const outcome = amrLoginPollOutcome(next, startedAt);
       if (outcome === 'signed-in') {
@@ -160,8 +190,11 @@ export function CloudSignInTip() {
         // the daemon still sees a login in flight and a retry click 409s as
         // alreadyRunning instead of spawning a fresh one, so no new browser
         // tab ever opens. Mirrors AmrLoginPill / InlineModelSwitcher / EntryShell.
+        // Target the attempt this run observed (captured now — the mutable ref
+        // may have moved on to a newer login while the read was in flight).
+        const observedAttemptId = authAttemptIdRef.current;
         if (outcome === 'timed-out') {
-          void cancelVelaLogin(authAttemptIdRef.current ?? undefined);
+          void cancelVelaLogin(observedAttemptId ?? undefined);
         }
         console.error('[amr-login] poll did not reach a signed-in status', { outcome, next });
         setState('error');
@@ -179,16 +212,25 @@ export function CloudSignInTip() {
   }
 
   async function cancel() {
+    // Terminate every in-flight `begin()` continuation of this card: a
+    // re-click after this must start a fresh run, never resume the old one.
+    loginRunRef.current += 1;
     cancelledRef.current = true;
     // Target the attempt this tip observed (ref, never `status` state — the
-    // state may still hold the previous frame). Null falls back to the
-    // legacy no-body form; a captured id prevents a superseded card from
-    // cancelling a newer login.
+    // state may still hold the previous frame). When no attempt has been
+    // observed yet (the spawn POST is still pending), preserve the cancel
+    // intent instead of firing the legacy no-body cancellation: the spawn
+    // continuation adopts the resolved attempt id and issues the targeted
+    // cancel + broadcast with it.
     const authAttemptId = authAttemptIdRef.current;
     setState('idle');
     setStatus(null);
-    await cancelVelaLogin(authAttemptId ?? undefined);
-    notifyAmrLoginStatusChanged('login-canceled', authAttemptId);
+    if (authAttemptId) {
+      await cancelVelaLogin(authAttemptId);
+      notifyAmrLoginStatusChanged('login-canceled', authAttemptId);
+      return;
+    }
+    cancelRequestedRef.current = true;
   }
 
   const signing = state === 'signing';

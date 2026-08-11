@@ -94,6 +94,7 @@ import {
 } from './providers/daemon';
 import {
   AMR_LOGIN_STATUS_EVENT,
+  amrLoginStatusEventAuthAttemptId,
   amrLoginStatusEventReason,
 } from './components/amrLoginPolling';
 import { CollabDemoView } from './collab/CollabDemoView';
@@ -1627,6 +1628,11 @@ function AppInner() {
   // snapshot updates `agents`, which makes Settings fetch status again and
   // creates a status -> models -> agents request loop.
   const amrLoginStatusRef = useRef<VelaLoginStatus | null>(null);
+  // The last attempt id this tab observed from a daemon status read. The
+  // `login-canceled` receiver below uses it to ignore a broadcast for a
+  // superseded attempt — matching the id gates of the other AMR surfaces —
+  // while still honoring the legacy no-id form (an attempt this tab never saw).
+  const amrStatusAttemptIdRef = useRef<string | null>(null);
   const applyAmrLoginStatus = useCallback((
     status: VelaLoginStatus,
     options: { forceModelRefresh?: boolean; restartOnSignIn?: boolean } = {},
@@ -1649,6 +1655,7 @@ function AppInner() {
       clearAmrAuthRetryContinuation(pendingRetry);
     }
     amrLoginStatusRef.current = status;
+    if (status.authAttemptId) amrStatusAttemptIdRef.current = status.authAttemptId;
     setAmrLoginStatus(status);
     const currentRoute = routeRef.current;
     if (
@@ -1880,7 +1887,19 @@ function AppInner() {
     void sync();
     const onStatusEvent = (event: Event) => {
       if (amrLoginStatusEventReason(event) === 'login-canceled') {
-        clearAmrAuthRetryContinuation();
+        // Only a broadcast that still owns the current attempt may clear the
+        // inline-auth retry continuation. A stale `login-canceled` for a
+        // superseded attempt (or one this tab never observed) must not drop a
+        // retry armed for the newer login — mirroring the id gates on the
+        // AmrLoginPill / InlineModelSwitcher receivers. Broadcasts without an
+        // attempt id keep the legacy behavior.
+        const broadcastAttemptId = amrLoginStatusEventAuthAttemptId(event);
+        if (
+          broadcastAttemptId === undefined ||
+          broadcastAttemptId === amrStatusAttemptIdRef.current
+        ) {
+          clearAmrAuthRetryContinuation();
+        }
       }
       void sync({}, true);
     };
