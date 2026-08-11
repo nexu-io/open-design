@@ -147,7 +147,7 @@ export function CloudSignInTip() {
     if (cancelledRef.current || !mountedRef.current || loginRun !== loginRunRef.current) return;
     if (observedCurrentId) authAttemptIdRef.current = observedCurrentId;
     if (current?.loggedIn) {
-      finishSignedIn();
+      finishSignedIn(observedCurrentId);
       return;
     }
     const result = await startVelaLogin();
@@ -188,7 +188,7 @@ export function CloudSignInTip() {
       if (next) setStatus(next);
       const outcome = amrLoginPollOutcome(next, startedAt);
       if (outcome === 'signed-in') {
-        finishSignedIn();
+        finishSignedIn(nextId);
         return;
       }
       if (outcome === 'stopped' || outcome === 'timed-out') {
@@ -198,10 +198,12 @@ export function CloudSignInTip() {
         // alreadyRunning instead of spawning a fresh one, so no new browser
         // tab ever opens. Mirrors AmrLoginPill / InlineModelSwitcher / EntryShell.
         // Target this run's attempt (captured — the mutable ref may have moved
-        // on to a newer login while the read was in flight).
+        // on to a newer login while the read was in flight). Only cancel when
+        // an id is known: the legacy no-body form would hit an unspecified
+        // child and could terminate a newer login on another surface.
         const observedAttemptId = authAttemptIdRef.current;
-        if (outcome === 'timed-out') {
-          void cancelVelaLogin(observedAttemptId ?? undefined);
+        if (outcome === 'timed-out' && observedAttemptId) {
+          void cancelVelaLogin(observedAttemptId);
         }
         console.error('[amr-login] poll did not reach a signed-in status', { outcome, next });
         setState('error');
@@ -210,8 +212,11 @@ export function CloudSignInTip() {
     }
   }
 
-  function finishSignedIn() {
-    notifyAmrLoginStatusChanged('status-changed', authAttemptIdRef.current);
+  function finishSignedIn(attemptId: string | null) {
+    // Broadcast the attempt this run observed (passed in by the caller after
+    // ownership was validated) — never the mutable ref, so a stale run cannot
+    // attribute its success to a newer login's id.
+    notifyAmrLoginStatusChanged('status-changed', attemptId);
     notifyWorkspaceContextRefresh();
     notifyWorkspaceBillingRefresh();
     notifyTeamProjectsChanged();

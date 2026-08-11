@@ -70,6 +70,7 @@ describe('CloudSignInTip', () => {
   it('cancels a timed-out login so a retry click can start a fresh vela login', async () => {
     let loginStarted = false;
     let spawnCount = 0;
+    const attemptId = '00000000-0000-4000-8000-000000000001';
     const fetchMock = vi.fn(async (input, init) => {
       const url = typeof input === 'string' ? input : (input as URL).toString();
       if (url.endsWith('/api/integrations/vela/status')) {
@@ -77,6 +78,7 @@ describe('CloudSignInTip', () => {
           body: {
             loggedIn: false,
             loginInFlight: loginStarted,
+            authAttemptId: attemptId,
             profile: 'prod',
             user: null,
             configPath: '/x',
@@ -86,7 +88,7 @@ describe('CloudSignInTip', () => {
       if (url.endsWith('/api/integrations/vela/login') && init?.method === 'POST') {
         spawnCount += 1;
         loginStarted = true;
-        return jsonResponse({ status: 202, body: { pid: 4242 } });
+        return jsonResponse({ status: 202, body: { pid: 4242, authAttemptId: attemptId } });
       }
       if (url.endsWith('/api/integrations/vela/login/cancel') && init?.method === 'POST') {
         loginStarted = false;
