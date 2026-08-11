@@ -310,6 +310,35 @@ describe("inspectPackedWinApp", () => {
     }
   });
 
+  it("reports namespace-owned processes only when explicitly requested", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-win-lifecycle-"));
+    const config = createConfig(root);
+    const payloadDesktop = { command: "payload-desktop --od-namespace=test", pid: 4242, ppid: 1 };
+
+    try {
+      requestJsonIpc.mockReset();
+      requestJsonIpc.mockRejectedValue(new Error("not running"));
+      listProcessSnapshots.mockReset();
+      listProcessSnapshots.mockResolvedValue([payloadDesktop]);
+      matchesStampedProcess.mockReset();
+      matchesStampedProcess.mockImplementation((processInfo, criteria) => (
+        processInfo.command === payloadDesktop.command
+        && (criteria as { namespace?: string }).namespace === config.namespace
+      ));
+
+      const result = await inspectPackedWinApp(config, { includeManagedProcesses: true });
+
+      expect(result.managedProcessPids).toEqual([payloadDesktop.pid]);
+      expect(listProcessSnapshots).toHaveBeenCalledOnce();
+    } finally {
+      listProcessSnapshots.mockReset();
+      listProcessSnapshots.mockResolvedValue([]);
+      matchesStampedProcess.mockReset();
+      matchesStampedProcess.mockReturnValue(false);
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
   it("diagnoses Windows IPC by polling status during repeated fresh starts", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-win-lifecycle-"));
     const config = createConfig(root);

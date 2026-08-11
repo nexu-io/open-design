@@ -629,13 +629,16 @@ async function pollWinInspectStatus(config: ToolPackConfig, count: number, inter
 
 export async function inspectPackedWinApp(
   config: ToolPackConfig,
-  options: { expr?: string; path?: string; statusPollCount?: string | number; statusPollIntervalMs?: string | number; updateAction?: string },
+  options: { expr?: string; includeManagedProcesses?: boolean; path?: string; statusPollCount?: string | number; statusPollIntervalMs?: string | number; updateAction?: string },
 ): Promise<WinInspectResult> {
   const stamp = desktopStamp(config);
-  const [desktopSnapshot, daemonSnapshot, webSnapshot] = await Promise.all([
+  const [desktopSnapshot, daemonSnapshot, webSnapshot, managedProcessPids] = await Promise.all([
     requestStatusSnapshot<DesktopStatusSnapshot>(stamp.ipc),
     requestStatusSnapshot<DaemonStatusSnapshot>(appIpcPath(config, APP_KEYS.DAEMON)),
     requestStatusSnapshot<WebStatusSnapshot>(appIpcPath(config, APP_KEYS.WEB)),
+    options.includeManagedProcesses === true
+      ? findManagedDesktopProcessTree(config)
+      : Promise.resolve(null),
   ]);
   const updateAction = resolveUpdateAction(options.updateAction);
   const statusPollCount = resolveOptionalPositiveInteger(options.statusPollCount, "--status-poll-count");
@@ -654,6 +657,7 @@ export async function inspectPackedWinApp(
       note: "launcher snapshot is read from the tools-pack runtime root; user-installed launcher state is reported by the running desktop status and its AppData paths",
       root: launcher.root,
     },
+    ...(managedProcessPids == null ? {} : { managedProcessPids }),
     updateCache,
     updateCacheSource: {
       kind: "tools-pack-runtime",

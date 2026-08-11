@@ -334,6 +334,7 @@ type WinInspectResult = {
     ok: boolean;
     value?: unknown;
   };
+  managedProcessPids?: number[];
   screenshot?: {
     path: string;
   };
@@ -2658,12 +2659,16 @@ async function waitForDesktopGone(label: string, timeoutMs = 120_000): Promise<v
   let lastResult: unknown = null;
   while (Date.now() - startedAt < timeoutMs) {
     try {
-      const inspect = await runToolsPackJson<WinInspectResult>('inspect');
+      const inspect = await runToolsPackJson<WinInspectResult>('inspect', ['--include-managed-processes']);
       lastResult = inspect;
-      if (inspect.status == null || inspect.status.state !== 'running') return;
-    } catch {
-      // A dead desktop IPC socket is exactly the expected terminal state.
-      return;
+      if (
+        (inspect.status == null || inspect.status.state !== 'running')
+        && inspect.managedProcessPids?.length === 0
+      ) return;
+    } catch (error) {
+      // An inspect failure does not prove process death; retain it as timeout
+      // evidence and keep polling the read-only process oracle.
+      lastResult = error;
     }
     await delay(1000);
   }

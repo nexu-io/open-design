@@ -57,6 +57,7 @@ function addSharedOptions(command: CacCommand) {
     .option("--json", "print JSON")
     .option("--namespace <name>", "runtime namespace")
     .option("--expr <expression>", "desktop inspect eval expression")
+    .option("--include-managed-processes", "inspect: enumerate processes owned by this namespace")
     .option("--path <path>", "desktop inspect screenshot path")
     .option("--shell <shell>", "launcher shell (default: electron)")
     .option("--status-poll-count <count>", "inspect: poll the shell-owned runtime status projection this many times")

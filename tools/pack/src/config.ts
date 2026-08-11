@@ -34,6 +34,7 @@ export type ToolPackCliOptions = {
   diagnoseAttempts?: string | number;
   expectedVersion?: string;
   expr?: string;
+  includeManagedProcesses?: boolean;
   json?: boolean;
   macCompression?: string;
   minShellVersion?: string;

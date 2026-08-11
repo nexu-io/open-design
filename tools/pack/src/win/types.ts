@@ -375,6 +375,7 @@ export type WinInspectResult = {
     note: string;
     root: string;
   };
+  managedProcessPids?: number[];
   screenshot?: DesktopScreenshotResult;
   status: DesktopStatusSnapshot | null;
   statusError?: string;
