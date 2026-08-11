@@ -111,15 +111,38 @@ const ACP_SESSION_LOAD_MISS_KINDS = new Set([
 ]);
 const ACP_SESSION_NOT_FOUND_ERROR_CODE = -32002;
 
-function isSessionLoadMiss(errorCode: unknown, details: unknown): boolean {
-  if (errorCode === ACP_SESSION_NOT_FOUND_ERROR_CODE) return true;
+function sessionMissingMessage(value: unknown): boolean {
+  if (typeof value !== 'string') return false;
+  const normalized = value.trim().toLowerCase();
+  return /(?:session.{0,40}(?:not found|missing|does not exist|unknown)|(?:not found|missing|unknown).{0,40}session)/u
+    .test(normalized);
+}
+
+function isSessionLoadMiss(errorCode: unknown, errorMessage: unknown, details: unknown): boolean {
   const value = asObject(details);
-  if (!value) return false;
-  const kind = typeof value.kind === 'string' ? value.kind.trim().toLowerCase() : '';
-  const code = typeof value.code === 'string' ? value.code.trim().toLowerCase() : value.code;
-  return ACP_SESSION_LOAD_MISS_KINDS.has(kind)
-    || ACP_SESSION_LOAD_MISS_KINDS.has(String(code))
-    || code === ACP_SESSION_NOT_FOUND_ERROR_CODE;
+  const kind = typeof value?.kind === 'string' ? value.kind.trim().toLowerCase() : '';
+  const code = typeof value?.code === 'string' ? value.code.trim().toLowerCase() : value?.code;
+  if (ACP_SESSION_LOAD_MISS_KINDS.has(kind) || ACP_SESSION_LOAD_MISS_KINDS.has(String(code))) {
+    return true;
+  }
+  const hasResourceNotFoundCode =
+    errorCode === ACP_SESSION_NOT_FOUND_ERROR_CODE
+    || code === ACP_SESSION_NOT_FOUND_ERROR_CODE
+    || code === String(ACP_SESSION_NOT_FOUND_ERROR_CODE);
+  if (!hasResourceNotFoundCode) return false;
+
+  const resourceFields = [
+    value?.resource,
+    value?.resourceType,
+    value?.entity,
+    value?.entityType,
+    value?.target,
+    value?.targetType,
+  ].filter((entry): entry is string => typeof entry === 'string');
+  if (resourceFields.length > 0) {
+    return resourceFields.some((entry) => entry.trim().toLowerCase() === 'session');
+  }
+  return sessionMissingMessage(errorMessage) || sessionMissingMessage(value?.message);
 }
 /**
  * Attaches an ACP protocol session to an already-spawned child process and
@@ -717,10 +740,13 @@ export function attachAcpSession({
         return;
       }
       const details = rpcErrorData(obj);
-      if (obj.id === sessionLoadRequestId && isSessionLoadMiss(error?.code, details)) {
-        // Only the standard ACP missing-session code or an adapter's structured
-        // missing-session signal authorizes the caller to discard the durable
-        // handle. Auth, MCP, configuration, and transient failures preserve it.
+      if (
+        obj.id === sessionLoadRequestId
+        && isSessionLoadMiss(error?.code, error?.message, details)
+      ) {
+        // Only an explicit adapter signal or a generic resource-not-found code
+        // that identifies the session authorizes discarding the durable handle.
+        // Auth, MCP, configuration, and transient failures preserve it.
         resumeFailed = true;
       }
       const promotedPayload = promotedOpenCodeSessionErrorPayload(details, rpcErr);
